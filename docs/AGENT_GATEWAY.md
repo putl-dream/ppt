@@ -125,6 +125,7 @@ Supported variables:
 | `OPENAI_API_KEY` | OpenAI credential |
 | `OPENAI_MODEL` | OpenAI-specific model fallback |
 | `OPENAI_BASE_URL` | OpenAI-compatible endpoint override |
+| `OPENAI_API_MODE` | `responses` or `chat-completions`; custom endpoints default to Chat Completions |
 | `ANTHROPIC_API_KEY` | Anthropic credential |
 | `ANTHROPIC_MODEL` | Anthropic-specific model fallback |
 | `ANTHROPIC_BASE_URL` | Anthropic endpoint override |
@@ -214,6 +215,14 @@ Run one file while developing:
 ```powershell
 npx.cmd vitest run tests/openai-gateway-adapter.test.ts
 ```
+
+Run the real provider integration tests with the credentials and compatible endpoints in `.env.example`:
+
+```powershell
+npm.cmd run test:integration:agent
+```
+
+The integration suite makes billable network requests. It is excluded from the normal `npm.cmd test` command.
 
 ## 8. Adding Another Provider
 
