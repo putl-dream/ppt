@@ -2038,6 +2038,7 @@ aside {
   cursor: pointer;
   transition: var(--transition-smooth);
   user-select: none;
+  z-index: 101;
 }
 
 .slideshow-nav-arrow:hover:not(:disabled) {
@@ -2100,6 +2101,26 @@ aside {
   width: 100%;
   overflow: hidden;
   transition: var(--transition-panel);
+}
+
+.chat-workspace-column {
+  transition: opacity 0.35s cubic-bezier(0.16, 1, 0.3, 1), transform 0.45s cubic-bezier(0.16, 1, 0.3, 1), padding 0.45s cubic-bezier(0.16, 1, 0.3, 1), margin 0.45s cubic-bezier(0.16, 1, 0.3, 1);
+  min-width: 0;
+}
+
+/* PPT 镜像放大展开模式 */
+.workspace-canvas-content.mirror-expanded {
+  grid-template-columns: 0px 1fr !important;
+}
+
+.workspace-canvas-content.mirror-expanded .chat-workspace-column {
+  opacity: 0 !important;
+  pointer-events: none !important;
+  transform: translateX(-20px);
+}
+
+.workspace-canvas-content.mirror-expanded .mirror-panel {
+  border-left: none !important;
 }
 
 /* 沉浸式焦点模式 */

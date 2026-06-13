@@ -40,6 +40,7 @@ export function App() {
   const [selectedSlideId, setSelectedSlideId] = useState<string>("");
   const [selectedElementId, setSelectedElementId] = useState<string | null>(null);
   const [isFocusMode, setIsFocusMode] = useState(false);
+  const [isMirrorExpanded, setIsMirrorExpanded] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [maxRevision, setMaxRevision] = useState(0);
 
@@ -835,7 +836,9 @@ export function App() {
 
             {/* 右侧大圆角容器 - Agent 协作与实时画布 */}
             <div className="rounded-canvas">
-              <div className={`workspace-canvas-content ${chatMessages.length === 1 && chatMessages[0].id === "init" ? "new-session-layout" : ""}`}>
+              <div className={`workspace-canvas-content ${
+                chatMessages.length === 1 && chatMessages[0].id === "init" ? "new-session-layout" : ""
+              } ${isMirrorExpanded ? "mirror-expanded" : ""}`}>
                 {/* 中间栏：AI Chat 对话与大纲核心区 */}
                 <ChatWorkspace
                   chatMessages={chatMessages}
@@ -885,6 +888,8 @@ export function App() {
                     logoUrl={logoUrl}
                     onOptimizePresentation={handleOptimizePresentationLocally}
                     highlightSlideId={highlightSlideId}
+                    isExpanded={isMirrorExpanded}
+                    onToggleExpand={() => setIsMirrorExpanded(!isMirrorExpanded)}
                   />
                 )}
               </div>

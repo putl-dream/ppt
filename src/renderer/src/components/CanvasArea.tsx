@@ -214,32 +214,35 @@ export const CanvasArea: React.FC<CanvasAreaProps> = ({
         titleColor = "#0f172a";
         bodyColor = "#334155";
         fontClass = "font-serif";
+        borderStyle = { border: "1px solid rgba(15, 23, 42, 0.08)" };
         break;
       case "midnight":
         slideBg = "#0e1115";
         titleColor = "#f8fafc";
         bodyColor = "#94a3b8";
         fontClass = "font-mono";
-        borderStyle = { border: "1px solid rgba(255,255,255,0.06)" };
+        borderStyle = { border: "1px solid rgba(255, 255, 255, 0.08)" };
         break;
       case "ocean":
         slideBg = "linear-gradient(135deg, #0f172a 0%, #1e293b 100%)";
         titleColor = "#f8fafc";
         bodyColor = "#cbd5e1";
         fontClass = "font-sans";
+        borderStyle = { border: "1px solid rgba(14, 165, 233, 0.25)" };
         break;
       case "sunset":
         slideBg = "linear-gradient(135deg, #fffcf4 0%, #fff3e3 100%)";
         titleColor = "#3c2a21";
         bodyColor = "#776b5d";
         fontClass = "font-serif";
+        borderStyle = { border: "1px solid rgba(120, 80, 40, 0.15)" };
         break;
       case "purple":
         slideBg = "radial-gradient(circle at top, #1c1537 0%, #0d091a 100%)";
         titleColor = "#f8fafc";
         bodyColor = "#b4befe";
         fontClass = "font-sans";
-        borderStyle = { border: "1px solid rgba(168, 85, 247, 0.15)" };
+        borderStyle = { border: "1px solid rgba(168, 85, 247, 0.25)" };
         break;
     }
 
