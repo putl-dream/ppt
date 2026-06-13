@@ -1,8 +1,7 @@
 import { Annotation, Command, interrupt, MemorySaver, StateGraph } from "@langchain/langgraph";
-import type { CommandBus } from "@shared/commands";
-import { presentationCommandSchema, type PresentationCommand } from "@shared/commands";
+import { executeCommand, presentationCommandSchema, type CommandBus, type PresentationCommand } from "@shared/commands";
 import type { AgentRunResult } from "@shared/ipc";
-import type { AgentModelSelection } from "@shared/agent";
+import type { AgentExecutionStrategy, AgentModelSelection } from "@shared/agent";
 import {
   createDeterministicPresentationPlanner,
   type AgentPlanner,
@@ -11,6 +10,7 @@ import {
 const AgentState = Annotation.Root({
   request: Annotation<string>(),
   model: Annotation<AgentModelSelection | undefined>(),
+  executionStrategy: Annotation<AgentExecutionStrategy>(),
   summary: Annotation<string>(),
   commands: Annotation<PresentationCommand[]>({
     reducer: (_, update) => update,
@@ -20,20 +20,19 @@ const AgentState = Annotation.Root({
     reducer: (_, update) => update,
     default: () => [],
   }),
+  attempt: Annotation<number>({
+    reducer: (_, update) => update,
+    default: () => 0,
+  }),
 });
 
 type AgentStateType = typeof AgentState.State;
 
-function validateCommands(state: AgentStateType): Partial<AgentStateType> {
-  const errors = state.commands.flatMap((command) => {
-    const parsed = presentationCommandSchema.safeParse(command);
-    return parsed.success ? [] : [parsed.error.message];
-  });
-  return { errors };
-}
-
-function routeAfterValidation(state: AgentStateType): "approval" | "__end__" {
-  return state.errors.length > 0 ? "__end__" : "approval";
+function routeAfterValidation(
+  state: AgentStateType,
+): "propose" | "approval" | "apply" | "fail" {
+  if (state.errors.length > 0) return state.attempt >= 3 ? "fail" : "propose";
+  return state.executionStrategy === "AUTO" ? "apply" : "approval";
 }
 
 function approvalNode(state: AgentStateType): Command {
@@ -46,16 +45,54 @@ function approvalNode(state: AgentStateType): Command {
 
 export function createAgentWorkflow(commandBus: CommandBus, planner: AgentPlanner) {
   const proposeCommands = async (state: AgentStateType): Promise<Partial<AgentStateType>> => {
-    return planner.plan({
-      request: state.request,
-      presentation: commandBus.getSnapshot(),
-      model: state.model,
-    });
+    const attempt = state.attempt + 1;
+    try {
+      const plan = await planner.plan({
+        request: state.request,
+        presentation: commandBus.getSnapshot(),
+        model: state.model,
+        feedback: state.errors,
+        attempt,
+      });
+      return { ...plan, errors: [], attempt };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return {
+        summary: `Planning attempt ${attempt} failed.`,
+        commands: [],
+        errors: [message],
+        attempt,
+      };
+    }
+  };
+
+  const validateCommands = (state: AgentStateType): Partial<AgentStateType> => {
+    if (state.commands.length === 0 && state.errors.length > 0) return {};
+
+    let stagedPresentation = commandBus.getSnapshot();
+    const errors: string[] = [];
+    for (const command of state.commands) {
+      const parsed = presentationCommandSchema.safeParse(command);
+      if (!parsed.success) {
+        errors.push(parsed.error.message);
+        continue;
+      }
+      try {
+        stagedPresentation = executeCommand(stagedPresentation, parsed.data).presentation;
+      } catch (error) {
+        errors.push(error instanceof Error ? error.message : String(error));
+      }
+    }
+    return { errors };
   };
 
   const applyCommands = (state: AgentStateType): Partial<AgentStateType> => {
     commandBus.executeMany(state.commands);
     return {};
+  };
+
+  const failPlanning = (state: AgentStateType): never => {
+    throw new Error(`Agent could not produce a valid plan after ${state.attempt} attempts: ${state.errors.join(" | ")}`);
   };
 
   return new StateGraph(AgentState)
@@ -64,6 +101,7 @@ export function createAgentWorkflow(commandBus: CommandBus, planner: AgentPlanne
     .addNode("approval", approvalNode, { ends: ["apply", "reject"] })
     .addNode("apply", applyCommands)
     .addNode("reject", () => ({}))
+    .addNode("fail", failPlanning)
     .addEdge("__start__", "propose")
     .addEdge("propose", "validate")
     .addConditionalEdges("validate", routeAfterValidation)
@@ -82,10 +120,14 @@ export class AgentService {
     this.graph = createAgentWorkflow(commandBus, planner);
   }
 
-  async start(request: string, model?: AgentModelSelection): Promise<AgentRunResult> {
+  async start(
+    request: string,
+    model?: AgentModelSelection,
+    executionStrategy: AgentExecutionStrategy = "REQUEST_APPROVAL",
+  ): Promise<AgentRunResult> {
     const threadId = crypto.randomUUID();
     const result = await this.graph.invoke(
-      { request, model },
+      { request, model, executionStrategy },
       { configurable: { thread_id: threadId } },
     );
 

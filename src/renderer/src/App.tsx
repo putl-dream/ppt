@@ -380,6 +380,7 @@ export function App() {
       const result = await window.desktopApi.startAgentRun(
         activeRequest,
         toAgentModelSettings(selectedModel),
+        executionStrategy,
       );
       clearInterval(thoughtInterval);
       clearInterval(stepInterval);

@@ -10,7 +10,8 @@
     "preview": "electron-vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "test": "vitest run --exclude tests/*.integration.test.ts",
-    "test:integration:agent": "vitest run tests/agent-gateway.integration.test.ts"
+    "test:integration:agent": "vitest run tests/agent-gateway.integration.test.ts",
+    "test:integration:workflow": "vitest run tests/agent-workflow.integration.test.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.104.1",

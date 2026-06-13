@@ -3,7 +3,12 @@ import { app, BrowserWindow, ipcMain, Menu } from "electron";
 import { CommandBus, type PresentationCommand } from "@shared/commands";
 import { createStarterPresentation } from "@shared/presentation";
 import { AgentService } from "./agent/workflow";
-import { agentModelSettingsSchema, type AgentModelSettings } from "@shared/agent";
+import {
+  agentExecutionStrategySchema,
+  agentModelSettingsSchema,
+  type AgentExecutionStrategy,
+  type AgentModelSettings,
+} from "@shared/agent";
 import { AgentGateway } from "./agent/gateway";
 import { createModelPresentationPlanner } from "./agent/planner";
 
@@ -46,10 +51,11 @@ app.whenReady().then(() => {
   ipcMain.handle("presentation:execute", (_, command: PresentationCommand) =>
     commandBus.execute(command),
   );
-  ipcMain.handle("agent:start", (_, request: string, input?: AgentModelSettings) => {
+  ipcMain.handle("agent:start", (_, request: string, input?: AgentModelSettings, strategy?: AgentExecutionStrategy) => {
     const settings = input ? agentModelSettingsSchema.parse(input) : undefined;
+    const executionStrategy = strategy ? agentExecutionStrategySchema.parse(strategy) : "REQUEST_APPROVAL";
     const selection = settings ? agentGateway.configure(settings) : undefined;
-    return agentService.start(request, selection);
+    return agentService.start(request, selection, executionStrategy);
   });
   ipcMain.handle("agent:resume", (_, threadId: string, approved: boolean) =>
     agentService.resume(threadId, approved),

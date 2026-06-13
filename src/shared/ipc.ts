@@ -1,6 +1,6 @@
 import type { Presentation } from "./presentation";
 import type { PresentationCommand } from "./commands";
-import type { AgentModelSettings } from "./agent";
+import type { AgentExecutionStrategy, AgentModelSettings } from "./agent";
 
 export interface AgentApprovalRequest {
   threadId: string;
@@ -15,7 +15,11 @@ export type AgentRunResult =
 
 export interface DesktopApi {
   getPresentation(): Promise<Presentation>;
-  startAgentRun(request: string, model?: AgentModelSettings): Promise<AgentRunResult>;
+  startAgentRun(
+    request: string,
+    model?: AgentModelSettings,
+    executionStrategy?: AgentExecutionStrategy,
+  ): Promise<AgentRunResult>;
   resumeAgentRun(threadId: string, approved: boolean): Promise<AgentRunResult>;
   undo(): Promise<Presentation>;
   redo(): Promise<Presentation>;
