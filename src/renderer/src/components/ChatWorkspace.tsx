@@ -2,8 +2,6 @@ import React, { useState, useRef, useEffect } from "react";
 import { AgentApprovalRequest } from "@shared/ipc";
 import {
   BrainIcon,
-  SendIcon,
-  SparklesIcon,
   ChevronDownIcon,
   ChevronRightIcon,
   UndoIcon,
@@ -14,6 +12,7 @@ import {
   CompressIcon,
   FileIcon,
 } from "./Icons";
+import { UnifiedAgentInput } from "./UnifiedAgentInput";
 
 interface ChatMessage {
   id: string;
@@ -46,6 +45,15 @@ interface ChatWorkspaceProps {
   onClearContextTag: () => void;
   onUpdateMessageContent: (msgId: string, newContent: string) => void;
   onProposePrompt: (prompt: string) => void;
+
+  // Bound settings for UnifiedAgentInput
+  selectedModel: string;
+  setSelectedModel: (val: string) => void;
+  executionStrategy: "REQUEST_APPROVAL" | "AUTO";
+  setExecutionStrategy: (val: "REQUEST_APPROVAL" | "AUTO") => void;
+  localStoragePath: string;
+  setLocalStoragePath: (val: string) => void;
+  triggerToast: (msg: string) => void;
 }
 
 export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
@@ -70,6 +78,15 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
   onClearContextTag,
   onUpdateMessageContent,
   onProposePrompt,
+  
+  // Bound props
+  selectedModel,
+  setSelectedModel,
+  executionStrategy,
+  setExecutionStrategy,
+  localStoragePath,
+  setLocalStoragePath,
+  triggerToast,
 }) => {
   const [showThought, setShowThought] = useState(true);
   const [showSlashMenu, setShowSlashMenu] = useState(false);
@@ -77,7 +94,10 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
   const [editingText, setEditingText] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // 监听输入，显示斜杠命令菜单
+  // Check if we are in the initial new session state (State A: Center Focal Mode)
+  const isNewSession = chatMessages.length === 1 && chatMessages[0].id === "init";
+
+  // Listen to input slash commands
   useEffect(() => {
     if (request === "/" || request.startsWith("/")) {
       setShowSlashMenu(true);
@@ -89,13 +109,6 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [chatMessages, thoughtProcess, thoughtProgress, busy]);
-
-  const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      onSubmitRequest();
-    }
-  };
 
   const slashCommands = [
     { cmd: "/theme 商务蔚蓝", desc: "更改设计模板风格为商务蔚蓝" },
@@ -117,13 +130,13 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
     setShowSlashMenu(false);
   };
 
-  // 开始编辑 AI 的单行内容
+  // Start editing single line
   const handleStartEdit = (msgId: string, lineIndex: number, currentText: string) => {
     setEditingLine({ msgId, lineIndex });
     setEditingText(currentText);
   };
 
-  // 保存修改并合并回大纲文本
+  // Save edits back into the chat block content
   const handleSaveEdit = (msgId: string, lineIndex: number, originalLines: string[]) => {
     const updatedLines = [...originalLines];
     updatedLines[lineIndex] = editingText;
@@ -131,8 +144,81 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
     setEditingLine(null);
   };
 
+  // Render State A: Center Focal Mode (新建会话阶段 —— “居中巨幕控制台”)
+  if (isNewSession) {
+    return (
+      <section className="canvas-column chat-workspace-column center-focal-wrapper" style={{ background: "var(--bg-app)", height: "100%", display: "flex", flexDirection: "column" }}>
+        
+        {/* Top Header */}
+        <div className="panel-header canvas-header" style={{ borderBottom: "none", background: "transparent" }}>
+          <div className="canvas-header-left">
+            <span className="revision-pill">AI 新建会话</span>
+          </div>
+          <div className="canvas-header-right">
+            <button
+              className="action-icon-btn theme-toggle-btn"
+              onClick={onToggleThemeMode}
+              title={themeMode === "light" ? "切换为深色框架" : "切换为浅色框架"}
+            >
+              {themeMode === "light" ? <MoonIcon size={16} /> : <SunIcon size={16} />}
+            </button>
+          </div>
+        </div>
+
+        {/* Center content container */}
+        <div className="center-focal-content-area" style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", padding: "40px 20px" }}>
+          
+          <UnifiedAgentInput
+            request={request}
+            onChangeRequest={onChangeRequest}
+            onSubmitRequest={onSubmitRequest}
+            busy={busy}
+            selectedModel={selectedModel}
+            setSelectedModel={setSelectedModel}
+            executionStrategy={executionStrategy}
+            setExecutionStrategy={setExecutionStrategy}
+            localStoragePath={localStoragePath}
+            setLocalStoragePath={setLocalStoragePath}
+            layoutMode="center"
+            triggerToast={triggerToast}
+            selectedSlideIndex={selectedSlideIndex}
+            onClearContextTag={onClearContextTag}
+          />
+
+          {/* Quick recommendations suggestions below */}
+          <div className="center-suggestions" style={{ marginTop: "28px", maxWidth: "680px", display: "flex", flexWrap: "wrap", gap: "10px", justifyContent: "center" }}>
+            {promptSuggestions.map((suggestion, index) => (
+              <button
+                key={index}
+                className="suggestion-chip"
+                onClick={() => onProposePrompt(suggestion)}
+                style={{
+                  background: "var(--bg-input-field)",
+                  border: "1px solid var(--border-glass)",
+                  padding: "8px 16px",
+                  borderRadius: "20px",
+                  fontSize: "12px",
+                  color: "var(--text-secondary)",
+                  cursor: "pointer",
+                  transition: "var(--transition-smooth)",
+                  boxShadow: "0 2px 6px rgba(0,0,0,0.01)"
+                }}
+              >
+                ✨ {suggestion}
+              </button>
+            ))}
+          </div>
+
+        </div>
+
+      </section>
+    );
+  }
+
+  // Render State B: Bottom-Anchored Split View (伴随式会话与双轨生成阶段 —— “底部承托控制台”)
   return (
     <section className="canvas-column chat-workspace-column" style={{ background: "var(--bg-app)" }}>
+      
       {/* 顶部中央状态控制栏 */}
       <div className="panel-header canvas-header">
         <div className="canvas-header-left">
@@ -158,7 +244,7 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
         </div>
 
         <div className="canvas-header-right">
-          {/* ☀️ / 🌙 主题框架切换 */}
+          {/* 主题切换 */}
           <button
             className="action-icon-btn theme-toggle-btn"
             onClick={onToggleThemeMode}
@@ -191,7 +277,7 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
               </div>
               <div className="chat-bubble-content" style={{ flex: 1 }}>
                 
-                {/* AI 回复段落或 Markdown 树大纲，支持使用双击和微型编辑气泡修改 */}
+                {/* AI 回复段落或 Markdown 树大纲 */}
                 <div className="chat-bubble-text" style={{ padding: "12px 18px", width: "100%" }}>
                   {lines.map((line, idx) => {
                     const isLineEditing = editingLine?.msgId === msg.id && editingLine?.lineIndex === idx;
@@ -317,7 +403,7 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
           );
         })}
 
-        {/* 动态的 AI 思考状态表示 */}
+        {/* AI 思考状态 */}
         {busy && (
           <div className="chat-message assistant active-thinking" style={{ maxWidth: "100%" }}>
             <div className="chat-avatar animate-pulse">
@@ -330,7 +416,6 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
                   : "指令编排完毕，等待指令确认执行..."}
               </div>
 
-              {/* 实时思考步骤 */}
               {thoughtProcess.length > 0 && (
                 <div className="thought-container">
                   <div className="thought-header">
@@ -347,7 +432,6 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
                 </div>
               )}
 
-              {/* 渐变进度条 */}
               <div className="progress-bar-container">
                 <div className="progress-bar-track">
                   <div
@@ -364,12 +448,12 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
         <div ref={messagesEndRef} />
       </div>
 
-      {/* 底部控制台输入区 */}
-      <div className="right-panel-footer chat-workspace-footer" style={{ borderTop: "1px solid var(--border-glass)" }}>
+      {/* 底部统一控制台输入区 */}
+      <div className="right-panel-footer chat-workspace-footer-unified" style={{ borderTop: "1px solid var(--border-glass)", padding: "16px 20px", position: "relative" }}>
         
-        {/* 斜杠指令弹出推荐卡片 */}
+        {/* 斜杠弹出指令 */}
         {showSlashMenu && (
-          <div className="slash-menu-popup">
+          <div className="slash-menu-popup" style={{ bottom: "100%", left: "20px", right: "20px", marginBottom: "10px", position: "absolute", zIndex: 100 }}>
             <div className="slash-menu-header">💡 斜杠快捷指令集</div>
             {slashCommands.map((command, index) => (
               <div
@@ -384,65 +468,24 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
           </div>
         )}
 
-        {/* 上下文标签 Chip (已选中第 X 页) */}
-        {selectedSlideIndex !== null && (
-          <div className="context-chip-row">
-            <span className="context-slide-chip animate-fade-in">
-              📍 选中上下文: 第 {selectedSlideIndex + 1} 页
-              <button
-                className="close-chip"
-                onClick={onClearContextTag}
-                title="清除上下文锚定"
-              >
-                ✕
-              </button>
-            </span>
-          </div>
-        )}
-
-        {/* 智能推荐 chips (无上下文时显示) */}
-        {!busy && selectedSlideIndex === null && (
-          <div className="suggestion-chips-container">
-            {promptSuggestions.map((suggestion, index) => (
-              <button
-                key={index}
-                className="suggestion-chip"
-                onClick={() => onProposePrompt(suggestion)}
-              >
-                {suggestion}
-              </button>
-            ))}
-          </div>
-        )}
-
-        {/* 文本输入框 */}
-        <div className="chat-input-box">
-          <textarea
-            value={request}
-            onChange={(e) => onChangeRequest(e.target.value)}
-            onKeyDown={handleKeyPress}
-            placeholder={
-              selectedSlideIndex !== null
-                ? `输入对第 ${selectedSlideIndex + 1} 页的局部指令（如：“把背景换成白色”、“增大字号”）...`
-                : "输入修改意图，支持输入斜杠 / 唤醒快捷排版指令..."
-            }
-            disabled={busy}
-            rows={2}
-            className="chat-textarea"
-          />
-          <button
-            onClick={onSubmitRequest}
-            disabled={busy || !request.trim()}
-            className="send-btn-circle"
-            title="提议排版意图"
-          >
-            <SendIcon size={16} />
-          </button>
-        </div>
-        <div className="chat-input-tips">
-          <span>💡 回车发送命令。支持 \ 命令控制（如 /theme 商务蔚蓝 ）。</span>
-        </div>
+        <UnifiedAgentInput
+          request={request}
+          onChangeRequest={onChangeRequest}
+          onSubmitRequest={onSubmitRequest}
+          busy={busy}
+          selectedModel={selectedModel}
+          setSelectedModel={setSelectedModel}
+          executionStrategy={executionStrategy}
+          setExecutionStrategy={setExecutionStrategy}
+          localStoragePath={localStoragePath}
+          setLocalStoragePath={setLocalStoragePath}
+          layoutMode="bottom"
+          triggerToast={triggerToast}
+          selectedSlideIndex={selectedSlideIndex}
+          onClearContextTag={onClearContextTag}
+        />
       </div>
+
     </section>
   );
 };

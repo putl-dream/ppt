@@ -44,6 +44,7 @@ export function App() {
   const [autoCloudSync, setAutoCloudSync] = useState(false);
   const [localStoragePath, setLocalStoragePath] = useState("D:/Coding/ppt/workspace");
   const [defaultRatio, setDefaultRatio] = useState<"16:9" | "4:3">("16:9");
+  const [executionStrategy, setExecutionStrategy] = useState<"REQUEST_APPROVAL" | "AUTO">("REQUEST_APPROVAL");
 
   // 外观定制与视效控制阀
   const [themeMode, setThemeMode] = useState<"light" | "dark" | "system">("light");
@@ -277,6 +278,18 @@ export function App() {
   async function startAgent(customRequest?: string) {
     const activeRequest = customRequest || request;
     if (!activeRequest.trim() || busy) return;
+
+    // “输入即配置”数据打包，输出复合 Context 对象给控制台并进行请求
+    console.log("Packaging Agent context payload:", {
+      prompt: activeRequest,
+      executionStrategy: executionStrategy,
+      modelTier: selectedModel,
+      context: {
+        projectFolder: localStoragePath.split("/").pop() || "ppt_workspace",
+        runtimeMode: "LOCAL",
+        gitBranch: "master"
+      }
+    });
 
     setBusy(true);
     setApproval(undefined);
@@ -763,7 +776,7 @@ export function App() {
 
             {/* 右侧大圆角容器 - Agent 协作与实时画布 */}
             <div className="rounded-canvas">
-              <div className="workspace-canvas-content">
+              <div className={`workspace-canvas-content ${chatMessages.length === 1 && chatMessages[0].id === "init" ? "new-session-layout" : ""}`}>
                 {/* 中间栏：AI Chat 对话与大纲核心区 */}
                 <ChatWorkspace
                   chatMessages={chatMessages}
@@ -787,22 +800,33 @@ export function App() {
                   onClearContextTag={() => setSelectedSlideId("")}
                   onUpdateMessageContent={handleUpdateMessageContent}
                   onProposePrompt={handleSuggestPrompt}
+                  
+                  // Bound settings for UnifiedAgentInput
+                  selectedModel={selectedModel}
+                  setSelectedModel={setSelectedModel}
+                  executionStrategy={executionStrategy}
+                  setExecutionStrategy={setExecutionStrategy}
+                  localStoragePath={localStoragePath}
+                  setLocalStoragePath={setLocalStoragePath}
+                  triggerToast={triggerToast}
                 />
 
                 {/* 右栏：PPT 纵向滚动镜像 */}
-                <PPTMirror
-                  presentation={presentation}
-                  selectedSlideId={selectedSlideId}
-                  onSelectSlide={(id) => {
-                    setSelectedSlideId(id);
-                    setSelectedElementId(null);
-                  }}
-                  selectedTheme={selectedTheme}
-                  selectedPalette={selectedPalette}
-                  logoUrl={logoUrl}
-                  onOptimizePresentation={handleOptimizePresentationLocally}
-                  highlightSlideId={highlightSlideId}
-                />
+                {!(chatMessages.length === 1 && chatMessages[0].id === "init") && (
+                  <PPTMirror
+                    presentation={presentation}
+                    selectedSlideId={selectedSlideId}
+                    onSelectSlide={(id) => {
+                      setSelectedSlideId(id);
+                      setSelectedElementId(null);
+                    }}
+                    selectedTheme={selectedTheme}
+                    selectedPalette={selectedPalette}
+                    logoUrl={logoUrl}
+                    onOptimizePresentation={handleOptimizePresentationLocally}
+                    highlightSlideId={highlightSlideId}
+                  />
+                )}
               </div>
             </div>
           </>
