@@ -468,7 +468,7 @@ aside {
 }
 
 .mini-line.w-full { width: 90%; }
-.mini-line.w-3/4 { width: 65%; }
+.mini-line.w-3-4 { width: 65%; }
 
 .slide-count-badge {
   font-size: 10px;
@@ -1220,7 +1220,7 @@ aside {
 .status-dot {
   width: 7px; height: 7px;
   border-radius: 50%;
-  background: #22c55e;
+  background-color: #22c55e;
 }
 
 .status-dot.active {

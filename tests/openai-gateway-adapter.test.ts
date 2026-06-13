@@ -2,12 +2,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const openaiMock = vi.hoisted(() => ({
   constructorOptions: undefined as unknown,
-  create: vi.fn(),
+  createResponse: vi.fn(),
+  createChatCompletion: vi.fn(),
 }));
 
 vi.mock("openai", () => ({
   default: class OpenAI {
-    responses = { create: openaiMock.create };
+    responses = { create: openaiMock.createResponse };
+    chat = { completions: { create: openaiMock.createChatCompletion } };
 
     constructor(options: unknown) {
       openaiMock.constructorOptions = options;
@@ -28,12 +30,13 @@ const config = {
 
 describe("generateWithOpenAI", () => {
   beforeEach(() => {
-    openaiMock.create.mockReset();
+    openaiMock.createResponse.mockReset();
+    openaiMock.createChatCompletion.mockReset();
     openaiMock.constructorOptions = undefined;
   });
 
   it("calls the Responses API and normalizes its response", async () => {
-    openaiMock.create.mockResolvedValue({
+    openaiMock.createResponse.mockResolvedValue({
       output_text: "  generated text  ",
       _request_id: "req-openai",
     });
@@ -49,7 +52,7 @@ describe("generateWithOpenAI", () => {
       timeout: 1234,
       maxRetries: 2,
     });
-    expect(openaiMock.create).toHaveBeenCalledWith({
+    expect(openaiMock.createResponse).toHaveBeenCalledWith({
       model: "openai-test",
       instructions: "System instruction",
       input: "User prompt",
@@ -63,8 +66,36 @@ describe("generateWithOpenAI", () => {
     });
   });
 
+  it("calls Chat Completions for OpenAI-compatible endpoints", async () => {
+    openaiMock.createChatCompletion.mockResolvedValue({
+      choices: [{ message: { content: " compatible text " }, finish_reason: "stop" }],
+      _request_id: "req-compatible",
+    });
+
+    const response = await generateWithOpenAI(
+      { ...config, openaiApiMode: "chat-completions" },
+      { systemPrompt: "System instruction", prompt: "User prompt" },
+    );
+
+    expect(openaiMock.createChatCompletion).toHaveBeenCalledWith({
+      model: "openai-test",
+      messages: [
+        { role: "system", content: "System instruction" },
+        { role: "user", content: "User prompt" },
+      ],
+      max_tokens: 321,
+    });
+    expect(response).toEqual({
+      provider: "openai",
+      model: "openai-test",
+      text: "compatible text",
+      requestId: "req-compatible",
+      stopReason: "stop",
+    });
+  });
+
   it("rejects an empty model response", async () => {
-    openaiMock.create.mockResolvedValue({ output_text: "   ", _request_id: null });
+    openaiMock.createResponse.mockResolvedValue({ output_text: "   ", _request_id: null });
 
     await expect(generateWithOpenAI(config, { prompt: "User prompt" })).rejects.toMatchObject({
       code: "empty-response",
@@ -73,7 +104,7 @@ describe("generateWithOpenAI", () => {
   });
 
   it("normalizes provider authentication errors", async () => {
-    openaiMock.create.mockRejectedValue(Object.assign(new Error("bad key"), { status: 401 }));
+    openaiMock.createResponse.mockRejectedValue(Object.assign(new Error("bad key"), { status: 401 }));
 
     await expect(generateWithOpenAI(config, { prompt: "User prompt" })).rejects.toMatchObject({
       code: "authentication",

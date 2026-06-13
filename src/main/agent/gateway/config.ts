@@ -28,6 +28,24 @@ function inferProvider(env: NodeJS.ProcessEnv): AgentProvider {
   return env.ANTHROPIC_API_KEY && !env.OPENAI_API_KEY ? "anthropic" : "openai";
 }
 
+function resolveOpenAIApiMode(
+  provider: AgentProvider,
+  baseURL: string | undefined,
+  env: NodeJS.ProcessEnv,
+): "responses" | "chat-completions" | undefined {
+  if (provider !== "openai") return undefined;
+  const configured = env.OPENAI_API_MODE?.trim().toLowerCase();
+  if (configured === "responses" || configured === "chat-completions") return configured;
+  if (configured) {
+    throw new AgentGatewayError(
+      `Unsupported OPENAI_API_MODE: ${configured}. Expected responses or chat-completions.`,
+      "configuration",
+      "openai",
+    );
+  }
+  return baseURL ? "chat-completions" : "responses";
+}
+
 export function resolveAgentModelConfig(
   selection: AgentModelSelection | undefined,
   runtimeSettings: Partial<Record<AgentProvider, AgentModelSettings>>,
@@ -56,6 +74,7 @@ export function resolveAgentModelConfig(
     model,
     apiKey,
     baseURL,
+    openaiApiMode: resolveOpenAIApiMode(provider, baseURL, env),
     timeoutMs: positiveInteger(env.AGENT_TIMEOUT_MS, 60_000, "AGENT_TIMEOUT_MS"),
     maxOutputTokens: positiveInteger(env.AGENT_MAX_OUTPUT_TOKENS, 2_048, "AGENT_MAX_OUTPUT_TOKENS"),
   };

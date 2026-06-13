@@ -48,6 +48,7 @@ describe("resolveAgentModelConfig", () => {
       model: "selected-model",
       apiKey: "env-key",
       baseURL: "https://anthropic.example.test",
+      openaiApiMode: undefined,
       timeoutMs: 15000,
       maxOutputTokens: 4096,
     });
@@ -74,6 +75,46 @@ describe("resolveAgentModelConfig", () => {
     const config = resolveAgentModelConfig(undefined, {}, { OPENAI_API_KEY: "env-key" });
 
     expect(config.model).toBe(DEFAULT_AGENT_MODELS.openai);
+  });
+
+  it("uses Chat Completions for a custom OpenAI-compatible endpoint", () => {
+    const config = resolveAgentModelConfig(
+      { provider: "openai", model: "compatible-model" },
+      {},
+      {
+        OPENAI_API_KEY: "env-key",
+        OPENAI_BASE_URL: "https://compatible.example.test",
+      },
+    );
+
+    expect(config.openaiApiMode).toBe("chat-completions");
+  });
+
+  it("allows the OpenAI API mode to be selected explicitly", () => {
+    const config = resolveAgentModelConfig(
+      { provider: "openai", model: "compatible-model" },
+      {},
+      {
+        OPENAI_API_KEY: "env-key",
+        OPENAI_BASE_URL: "https://compatible.example.test",
+        OPENAI_API_MODE: "responses",
+      },
+    );
+
+    expect(config.openaiApiMode).toBe("responses");
+  });
+
+  it("rejects an unsupported OpenAI API mode", () => {
+    expect(() =>
+      resolveAgentModelConfig(
+        { provider: "openai", model: "compatible-model" },
+        {},
+        {
+          OPENAI_API_KEY: "env-key",
+          OPENAI_API_MODE: "legacy",
+        },
+      ),
+    ).toThrow("Unsupported OPENAI_API_MODE");
   });
 
   it("rejects unsupported providers", () => {

@@ -16,6 +16,7 @@ export interface AgentModelResponse {
 export interface ResolvedAgentModelConfig extends AgentModelSelection {
   apiKey: string;
   baseURL?: string;
+  openaiApiMode?: "responses" | "chat-completions";
   timeoutMs: number;
   maxOutputTokens: number;
 }

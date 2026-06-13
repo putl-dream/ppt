@@ -38,7 +38,7 @@ export const UnifiedAgentInput: React.FC<UnifiedAgentInputProps> = ({
   onClearContextTag,
 }) => {
   const [isVoiceActive, setIsVoiceActive] = useState(false);
-  const voiceTimer = useRef<NodeJS.Timeout | null>(null);
+  const voiceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Extract folder name from path for display
   const folderName = localStoragePath.split("/").pop() || localStoragePath.split("\\").pop() || "ppt_workspace";
