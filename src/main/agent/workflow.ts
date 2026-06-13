@@ -6,6 +6,7 @@ import {
   createDeterministicPresentationPlanner,
   type AgentPlanner,
 } from "./planner";
+import { AgentGatewayError } from "./gateway";
 
 const AgentState = Annotation.Root({
   request: Annotation<string>(),
@@ -56,6 +57,7 @@ export function createAgentWorkflow(commandBus: CommandBus, planner: AgentPlanne
       });
       return { ...plan, errors: [], attempt };
     } catch (error) {
+      if (error instanceof AgentGatewayError) throw error;
       const message = error instanceof Error ? error.message : String(error);
       return {
         summary: `Planning attempt ${attempt} failed.`,

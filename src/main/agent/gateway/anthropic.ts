@@ -2,6 +2,45 @@ import Anthropic from "@anthropic-ai/sdk";
 import { AgentGatewayError, normalizeProviderError } from "./errors";
 import type { AgentModelRequest, AgentModelResponse, ResolvedAgentModelConfig } from "./types";
 
+interface AnthropicLikeResponse {
+  content?: unknown;
+  output_text?: unknown;
+  message?: { content?: unknown };
+  choices?: Array<{ message?: { content?: unknown } }>;
+  _request_id?: string | null;
+  stop_reason?: string | null;
+}
+
+function textFromValue(value: unknown): string[] {
+  if (typeof value === "string") return value.trim() ? [value] : [];
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((block) => {
+    if (typeof block === "string") return block.trim() ? [block] : [];
+    if (!block || typeof block !== "object") return [];
+    const candidate = block as { type?: unknown; text?: unknown; content?: unknown };
+    if (candidate.type && candidate.type !== "text" && candidate.type !== "output_text") return [];
+    if (typeof candidate.text === "string") return candidate.text.trim() ? [candidate.text] : [];
+    return textFromValue(candidate.content);
+  });
+}
+
+function extractResponseText(response: AnthropicLikeResponse): string {
+  return [
+    ...textFromValue(response.content),
+    ...textFromValue(response.output_text),
+    ...textFromValue(response.message?.content),
+    ...textFromValue(response.choices?.[0]?.message?.content),
+  ].join("\n").trim();
+}
+
+function hasThinkingContent(response: AnthropicLikeResponse): boolean {
+  return Array.isArray(response.content) && response.content.some((block) => {
+    if (!block || typeof block !== "object") return false;
+    const type = (block as { type?: unknown }).type;
+    return type === "thinking" || type === "reasoning";
+  });
+}
+
 export async function generateWithAnthropic(
   config: ResolvedAgentModelConfig,
   request: AgentModelRequest,
@@ -14,19 +53,39 @@ export async function generateWithAnthropic(
   });
 
   try {
-    const response = await client.messages.create({
+    let maxTokens = config.maxOutputTokens;
+    let response = await client.messages.create({
       model: config.model,
-      max_tokens: config.maxOutputTokens,
+      max_tokens: maxTokens,
       system: request.systemPrompt,
       messages: [{ role: "user", content: request.prompt }],
     });
-    const text = response.content
-      .filter((block) => block.type === "text")
-      .map((block) => block.text)
-      .join("\n")
-      .trim();
+    let text = extractResponseText(response);
+
+    const exhaustedDuringThinking = !text &&
+      (response.stop_reason === "max_tokens" || hasThinkingContent(response));
+    if (exhaustedDuringThinking && maxTokens < 8_192) {
+      maxTokens = Math.min(maxTokens * 2, 8_192);
+      response = await client.messages.create({
+        model: config.model,
+        max_tokens: maxTokens,
+        system: request.systemPrompt,
+        messages: [{ role: "user", content: request.prompt }],
+      });
+      text = extractResponseText(response);
+    }
+
     if (!text) {
-      throw new AgentGatewayError("Anthropic returned an empty response.", "empty-response", "anthropic");
+      const contentTypes = Array.isArray(response.content)
+        ? response.content.map((block) =>
+          block && typeof block === "object" ? String((block as { type?: unknown }).type ?? "unknown") : typeof block,
+        ).join(", ")
+        : typeof response.content;
+      throw new AgentGatewayError(
+        `Anthropic returned no usable text (stop_reason=${response.stop_reason ?? "unknown"}, content=${contentTypes}).`,
+        "empty-response",
+        "anthropic",
+      );
     }
     return {
       provider: "anthropic",

@@ -32,10 +32,6 @@ function createWindow(): void {
   window.webContents.on("did-fail-load", (_, errorCode, errorDescription, validatedUrl) => {
     console.error("Renderer failed to load", { errorCode, errorDescription, validatedUrl });
   });
-  window.webContents.on("console-message", (_, level, message) => {
-    if (level >= 2) console.error("Renderer error:", message);
-  });
-
   if (process.env.ELECTRON_RENDERER_URL) {
     void window.loadURL(process.env.ELECTRON_RENDERER_URL);
   } else {

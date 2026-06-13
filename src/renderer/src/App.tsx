@@ -374,6 +374,27 @@ export function App() {
       }
     }, 600);
 
+    const waitNoticeTimers = [
+      setTimeout(() => {
+        setThoughtProcess((prev) => [
+          ...prev,
+          "正在等待模型返回结构化策划方案，复杂大纲通常需要 10-30 秒...",
+        ]);
+      }, 5_000),
+      setTimeout(() => {
+        setThoughtProcess((prev) => [
+          ...prev,
+          "模型仍在生成完整内容，请保持应用开启；请求超时后会自动返回错误。",
+        ]);
+      }, 20_000),
+    ];
+
+    const clearAgentTimers = () => {
+      clearInterval(thoughtInterval);
+      clearInterval(stepInterval);
+      waitNoticeTimers.forEach((timer) => clearTimeout(timer));
+    };
+
     try {
       // 提交到后端
       if (!selectedModel) throw new Error("请先在设置中配置一个可用模型。");
@@ -382,8 +403,7 @@ export function App() {
         toAgentModelSettings(selectedModel),
         executionStrategy,
       );
-      clearInterval(thoughtInterval);
-      clearInterval(stepInterval);
+      clearAgentTimers();
       setThoughtProgress(100);
 
       if (result.status === "approval-required") {
@@ -418,8 +438,7 @@ export function App() {
         triggerToast("✨ 演示文稿已成功更新！");
       }
     } catch (err) {
-      clearInterval(thoughtInterval);
-      clearInterval(stepInterval);
+      clearAgentTimers();
       setChatMessages((prev) => [
         ...prev,
         {
@@ -429,6 +448,7 @@ export function App() {
         },
       ]);
     } finally {
+      clearAgentTimers();
       setBusy(false);
       setThoughtProcess([]);
       setThoughtProgress(0);

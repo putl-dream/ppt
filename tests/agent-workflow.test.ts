@@ -3,6 +3,7 @@ import { AgentService } from "../src/main/agent/workflow";
 import { CommandBus } from "../src/shared/commands";
 import { createStarterPresentation } from "../src/shared/presentation";
 import type { AgentPlanner } from "../src/main/agent/planner";
+import { AgentGatewayError } from "../src/main/agent/gateway";
 
 describe("AgentService", () => {
   it("pauses for approval and applies commands after resume", async () => {
@@ -96,5 +97,22 @@ describe("AgentService", () => {
     await expect(agent.start("Impossible plan", undefined, "AUTO")).rejects.toThrow(
       "after 3 attempts",
     );
+  });
+
+  it("does not retry provider failures", async () => {
+    const bus = new CommandBus(createStarterPresentation());
+    let attempts = 0;
+    const planner: AgentPlanner = {
+      async plan() {
+        attempts += 1;
+        throw new AgentGatewayError("Provider request timed out", "timeout", "openai");
+      },
+    };
+    const agent = new AgentService(bus, planner);
+
+    await expect(agent.start("Provider failure", undefined, "AUTO")).rejects.toThrow(
+      "Provider request timed out",
+    );
+    expect(attempts).toBe(1);
   });
 });

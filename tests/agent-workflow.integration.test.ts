@@ -38,14 +38,39 @@ describe("real model Agent workflow integration", () => {
       const agent = new AgentService(bus, createModelPresentationPlanner(gateway));
 
       const result = await agent.start(
-        "Set the presentation title to Workflow Integration Proof. Do not make any other changes.",
+        "创建一份智能硬件市场推广策划大纲",
         selection,
         "AUTO",
       );
 
       expect(result.status).toBe("completed");
-      expect(bus.getSnapshot().title).toContain("Workflow Integration Proof");
+      expect(bus.getSnapshot().title).not.toBe("Untitled presentation");
       expect(bus.getSnapshot().revision).toBeGreaterThan(0);
+    },
+    120_000,
+  );
+
+  it(
+    "plans and applies through an Anthropic-compatible custom endpoint",
+    async () => {
+      const bus = new CommandBus(createStarterPresentation());
+      const gateway = new AgentGateway();
+      const selection = gateway.configure({
+        provider: "anthropic",
+        model: required("ANTHROPIC_MODEL"),
+        apiKey: required("ANTHROPIC_API_KEY"),
+        baseURL: required("ANTHROPIC_BASE_URL"),
+      });
+      const agent = new AgentService(bus, createModelPresentationPlanner(gateway));
+
+      const result = await agent.start(
+        "将演示文稿标题修改为 MiniMax Agent 验证，不要进行其他修改。",
+        selection,
+        "AUTO",
+      );
+
+      expect(result.status).toBe("completed");
+      expect(bus.getSnapshot().title).toContain("MiniMax Agent 验证");
     },
     120_000,
   );

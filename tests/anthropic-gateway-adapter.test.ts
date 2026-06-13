@@ -69,9 +69,29 @@ describe("generateWithAnthropic", () => {
     });
   });
 
-  it("rejects a response without text content", async () => {
+  it("retries with a larger output budget when thinking consumes the response", async () => {
+    anthropicMock.create
+      .mockResolvedValueOnce({
+        content: [{ type: "thinking", thinking: "hidden" }],
+        _request_id: null,
+        stop_reason: "max_tokens",
+      })
+      .mockResolvedValueOnce({
+        content: [{ type: "text", text: "final answer" }],
+        _request_id: "req-retry",
+        stop_reason: "end_turn",
+      });
+
+    const response = await generateWithAnthropic(config, { prompt: "User prompt" });
+
+    expect(anthropicMock.create).toHaveBeenCalledTimes(2);
+    expect(anthropicMock.create.mock.calls[1][0]).toMatchObject({ max_tokens: 1308 });
+    expect(response.text).toBe("final answer");
+  });
+
+  it("rejects a response without any usable content", async () => {
     anthropicMock.create.mockResolvedValue({
-      content: [{ type: "thinking", thinking: "hidden" }],
+      content: [],
       _request_id: null,
       stop_reason: "end_turn",
     });
@@ -80,6 +100,18 @@ describe("generateWithAnthropic", () => {
       code: "empty-response",
       provider: "anthropic",
     });
+  });
+
+  it("accepts a string content field from a compatible endpoint", async () => {
+    anthropicMock.create.mockResolvedValue({
+      content: "compatible response",
+      _request_id: "req-compatible",
+      stop_reason: "end_turn",
+    });
+
+    const response = await generateWithAnthropic(config, { prompt: "User prompt" });
+
+    expect(response.text).toBe("compatible response");
   });
 
   it("normalizes provider rate-limit errors", async () => {
