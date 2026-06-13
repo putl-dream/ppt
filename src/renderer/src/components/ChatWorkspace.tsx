@@ -13,6 +13,7 @@ import {
   FileIcon,
 } from "./Icons";
 import { UnifiedAgentInput } from "./UnifiedAgentInput";
+import type { ManagedModel } from "../modelCatalog";
 
 interface ChatMessage {
   id: string;
@@ -47,8 +48,9 @@ interface ChatWorkspaceProps {
   onProposePrompt: (prompt: string) => void;
 
   // Bound settings for UnifiedAgentInput
-  selectedModel: string;
-  setSelectedModel: (val: string) => void;
+  models: ManagedModel[];
+  selectedModelId: string;
+  setSelectedModelId: (val: string) => void;
   executionStrategy: "REQUEST_APPROVAL" | "AUTO";
   setExecutionStrategy: (val: "REQUEST_APPROVAL" | "AUTO") => void;
   localStoragePath: string;
@@ -80,8 +82,9 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
   onProposePrompt,
   
   // Bound props
-  selectedModel,
-  setSelectedModel,
+  models,
+  selectedModelId,
+  setSelectedModelId,
   executionStrategy,
   setExecutionStrategy,
   localStoragePath,
@@ -173,8 +176,9 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
             onChangeRequest={onChangeRequest}
             onSubmitRequest={onSubmitRequest}
             busy={busy}
-            selectedModel={selectedModel}
-            setSelectedModel={setSelectedModel}
+            models={models}
+            selectedModelId={selectedModelId}
+            setSelectedModelId={setSelectedModelId}
             executionStrategy={executionStrategy}
             setExecutionStrategy={setExecutionStrategy}
             localStoragePath={localStoragePath}
@@ -473,8 +477,9 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
           onChangeRequest={onChangeRequest}
           onSubmitRequest={onSubmitRequest}
           busy={busy}
-          selectedModel={selectedModel}
-          setSelectedModel={setSelectedModel}
+          models={models}
+          selectedModelId={selectedModelId}
+          setSelectedModelId={setSelectedModelId}
           executionStrategy={executionStrategy}
           setExecutionStrategy={setExecutionStrategy}
           localStoragePath={localStoragePath}

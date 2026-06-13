@@ -71,6 +71,29 @@ describe("resolveAgentModelConfig", () => {
     expect(config.model).toBe("selected-model");
   });
 
+  it("prefers a frontend runtime endpoint and API mode over environment defaults", () => {
+    const config = resolveAgentModelConfig(
+      { provider: "openai", model: "custom-model" },
+      {
+        openai: {
+          provider: "openai",
+          model: "custom-model",
+          apiKey: "runtime-key",
+          baseURL: "https://runtime.example.test/v1",
+          openaiApiMode: "chat-completions",
+        },
+      },
+      {
+        OPENAI_API_KEY: "environment-key",
+        OPENAI_BASE_URL: "https://environment.example.test/v1",
+        OPENAI_API_MODE: "responses",
+      },
+    );
+
+    expect(config.baseURL).toBe("https://runtime.example.test/v1");
+    expect(config.openaiApiMode).toBe("chat-completions");
+  });
+
   it("uses the provider default model when no model override is supplied", () => {
     const config = resolveAgentModelConfig(undefined, {}, { OPENAI_API_KEY: "env-key" });
 

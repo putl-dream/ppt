@@ -1,9 +1,9 @@
 import React from "react";
-import { SettingsIcon, UserIcon, PaletteIcon } from "./Icons";
+import { BrainIcon, SettingsIcon, UserIcon, PaletteIcon } from "./Icons";
 
 interface SettingsSidebarProps {
-  activeCategory: "profile" | "workflow" | "appearance";
-  onSelectCategory: (category: "profile" | "workflow" | "appearance") => void;
+  activeCategory: "profile" | "models" | "workflow" | "appearance";
+  onSelectCategory: (category: "profile" | "models" | "workflow" | "appearance") => void;
   onBackToWorkspace: () => void;
 }
 
@@ -38,6 +38,19 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = ({
             <div className="nav-text">
               <span className="nav-title">账户与 Token 额度</span>
               <span className="nav-desc">个人 Profile 与算力消耗监控</span>
+            </div>
+          </button>
+
+          <button
+            className={`settings-nav-item ${activeCategory === "models" ? "active" : ""}`}
+            onClick={() => onSelectCategory("models")}
+          >
+            <div className="nav-icon-wrapper">
+              <BrainIcon size={18} />
+            </div>
+            <div className="nav-text">
+              <span className="nav-title">自定义模型</span>
+              <span className="nav-desc">添加、配置与切换 Agent 模型</span>
             </div>
           </button>
           

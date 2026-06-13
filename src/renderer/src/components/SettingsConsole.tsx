@@ -1,14 +1,15 @@
-import React, { useState } from "react";
-import { SparklesIcon, PlusIcon, TrashIcon } from "./Icons";
+import React from "react";
+import { SparklesIcon } from "./Icons";
+import type { ManagedModel } from "../modelCatalog";
+import { ModelManagement } from "./ModelManagement";
 
 interface SettingsConsoleProps {
-  activeCategory: "profile" | "workflow" | "appearance";
-  
-  // API Key & Model
-  apiKey: string;
-  setApiKey: (val: string) => void;
-  selectedModel: string;
-  setSelectedModel: (val: string) => void;
+  activeCategory: "profile" | "models" | "workflow" | "appearance";
+  models: ManagedModel[];
+  selectedModelId: string;
+  onSelectModel: (id: string) => void;
+  onSaveModel: (model: ManagedModel) => void;
+  onDeleteModel: (id: string) => void;
   
   // Styles & Templates
   selectedTheme: string;
@@ -43,10 +44,11 @@ interface SettingsConsoleProps {
 
 export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
   activeCategory,
-  apiKey,
-  setApiKey,
-  selectedModel,
-  setSelectedModel,
+  models,
+  selectedModelId,
+  onSelectModel,
+  onSaveModel,
+  onDeleteModel,
   selectedTheme,
   setSelectedTheme,
   selectedPalette,
@@ -71,8 +73,6 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
   onBackToWorkspace,
   triggerToast,
 }) => {
-  const [showApiKey, setShowApiKey] = useState(false);
-
   // Mock Token data
   const totalTokens = 1000000;
   const usedTokens = 354200;
@@ -124,11 +124,13 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
         <div>
           <h2 style={{ margin: 0, fontSize: "22px", fontWeight: "600", fontFamily: "var(--font-display)" }}>
             {activeCategory === "profile" && "👤 账户资产与算力配额"}
+            {activeCategory === "models" && "自定义模型与连接配置"}
             {activeCategory === "workflow" && "⚙️ 工作流逻辑与文件存储偏好"}
             {activeCategory === "appearance" && "🎨 界面个性化与物理主题"}
           </h2>
           <p style={{ margin: "4px 0 0 0", fontSize: "13px", color: "var(--text-muted)" }}>
             {activeCategory === "profile" && "监控智能体算力消耗与 Token 额度走势"}
+            {activeCategory === "models" && "管理 Agent 可用模型，并连接 OpenAI 或 Anthropic 兼容服务"}
             {activeCategory === "workflow" && "配置生成 PPT 后的自动化行为与默认画布偏好"}
             {activeCategory === "appearance" && "微调应用圆角收缩比例与双层背景对比度"}
           </p>
@@ -255,69 +257,33 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
 
             </div>
 
-            {/* API Key Management */}
             <div className="settings-card">
-              <h4 style={{ margin: "0 0 16px 0", fontSize: "14px", fontWeight: "600" }}>AI 模型接口与凭证</h4>
-              <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-                
-                <div className="config-group">
-                  <label className="config-label">
-                    <span>模型 API Key 密钥凭证</span>
-                  </label>
-                  <div style={{ display: "flex", gap: "10px", width: "100%" }}>
-                    <input
-                      type={showApiKey ? "text" : "password"}
-                      placeholder="sk-................................"
-                      className="config-input"
-                      value={apiKey}
-                      onChange={(e) => setApiKey(e.target.value)}
-                      style={{ flex: 1 }}
-                    />
-                    <button
-                      type="button"
-                      className="secondary-btn"
-                      onClick={() => setShowApiKey(!showApiKey)}
-                      style={{ fontSize: "12px", minWidth: "60px", padding: "8px" }}
-                    >
-                      {showApiKey ? "隐藏" : "显示"}
-                    </button>
-                  </div>
-                  <span className="config-help">此 API Key 仅保存在本地客户端，用于解析排版大纲与坐标计算。</span>
-                </div>
-
-                <div className="config-group">
-                  <label className="config-label">智能体默认排版模型</label>
-                  <div className="select-wrapper">
-                    <select
-                      value={selectedModel}
-                      onChange={(e) => setSelectedModel(e.target.value)}
-                      className="model-select"
-                    >
-                      <option value="gpt-5.5">OpenAI GPT-5.5</option>
-                      <option value="gpt-5-mini">OpenAI GPT-5 mini</option>
-                      <option value="claude-sonnet-4-6">Anthropic Claude Sonnet 4.6</option>
-                      <option value="claude-opus-4-6">Anthropic Claude Opus 4.6</option>
-                    </select>
-                  </div>
-                </div>
-
-                {/* Account Actions */}
-                <div style={{ display: "flex", gap: "10px", marginTop: "8px", borderTop: "1px solid var(--border-glass)", paddingTop: "16px" }}>
-                  <button className="optimize-slide-btn" style={{ margin: 0, padding: "8px 16px" }} onClick={() => triggerToast("⚡ 正在前往额度中心充值...")}>
-                    充值算力配额
-                  </button>
-                  <button className="secondary-btn" style={{ margin: 0, padding: "8px 16px" }} onClick={() => triggerToast("💎 正在获取升级方案...")}>
-                    升级订阅计划
-                  </button>
-                  <button className="secondary-btn" style={{ margin: 0, padding: "8px 16px" }} onClick={() => triggerToast("📋 已拉取近期详细消费清单")}>
-                    查询消费账单
-                  </button>
-                </div>
-
+              <h4 style={{ margin: "0 0 12px 0", fontSize: "14px", fontWeight: "600" }}>账户操作</h4>
+              <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                <button className="optimize-slide-btn" style={{ margin: 0, padding: "8px 16px" }} onClick={() => triggerToast("⚡ 正在前往额度中心充值...")}>
+                  充值算力配额
+                </button>
+                <button className="secondary-btn" style={{ margin: 0, padding: "8px 16px" }} onClick={() => triggerToast("💎 正在获取升级方案...")}>
+                  升级订阅计划
+                </button>
+                <button className="secondary-btn" style={{ margin: 0, padding: "8px 16px" }} onClick={() => triggerToast("📋 已拉取近期详细消费清单")}>
+                  查询消费账单
+                </button>
               </div>
             </div>
 
           </div>
+        )}
+
+        {activeCategory === "models" && (
+          <ModelManagement
+            models={models}
+            selectedModelId={selectedModelId}
+            onSelectModel={onSelectModel}
+            onSaveModel={onSaveModel}
+            onDeleteModel={onDeleteModel}
+            triggerToast={triggerToast}
+          />
         )}
 
         {/* ==================== 2. 常规设置：生成工作流偏好 ==================== */}

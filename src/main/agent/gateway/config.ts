@@ -31,9 +31,11 @@ function inferProvider(env: NodeJS.ProcessEnv): AgentProvider {
 function resolveOpenAIApiMode(
   provider: AgentProvider,
   baseURL: string | undefined,
+  runtimeMode: AgentModelSettings["openaiApiMode"],
   env: NodeJS.ProcessEnv,
 ): "responses" | "chat-completions" | undefined {
   if (provider !== "openai") return undefined;
+  if (runtimeMode) return runtimeMode;
   const configured = env.OPENAI_API_MODE?.trim().toLowerCase();
   if (configured === "responses" || configured === "chat-completions") return configured;
   if (configured) {
@@ -67,14 +69,15 @@ export function resolveAgentModelConfig(
 
   const providerModel = provider === "openai" ? env.OPENAI_MODEL : env.ANTHROPIC_MODEL;
   const model = selection?.model || runtime?.model || env.AGENT_MODEL || providerModel || DEFAULT_AGENT_MODELS[provider];
-  const baseURL = provider === "openai" ? env.OPENAI_BASE_URL : env.ANTHROPIC_BASE_URL;
+  const environmentBaseURL = provider === "openai" ? env.OPENAI_BASE_URL : env.ANTHROPIC_BASE_URL;
+  const baseURL = runtime?.baseURL ?? environmentBaseURL;
 
   return {
     provider,
     model,
     apiKey,
     baseURL,
-    openaiApiMode: resolveOpenAIApiMode(provider, baseURL, env),
+    openaiApiMode: resolveOpenAIApiMode(provider, baseURL, runtime?.openaiApiMode, env),
     timeoutMs: positiveInteger(env.AGENT_TIMEOUT_MS, 60_000, "AGENT_TIMEOUT_MS"),
     maxOutputTokens: positiveInteger(env.AGENT_MAX_OUTPUT_TOKENS, 2_048, "AGENT_MAX_OUTPUT_TOKENS"),
   };

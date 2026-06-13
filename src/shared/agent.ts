@@ -6,6 +6,8 @@ export const agentModelSettingsSchema = z.object({
   provider: agentProviderSchema,
   model: z.string().trim().min(1),
   apiKey: z.string().trim().min(1).optional(),
+  baseURL: z.string().trim().url().optional(),
+  openaiApiMode: z.enum(["responses", "chat-completions"]).optional(),
 });
 
 export type AgentProvider = z.infer<typeof agentProviderSchema>;

@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import { SendIcon, SparklesIcon } from "./Icons";
+import type { ManagedModel } from "../modelCatalog";
 
 interface UnifiedAgentInputProps {
   request: string;
@@ -8,8 +9,9 @@ interface UnifiedAgentInputProps {
   busy: boolean;
   
   // Bound settings
-  selectedModel: string;
-  setSelectedModel: (val: string) => void;
+  models: ManagedModel[];
+  selectedModelId: string;
+  setSelectedModelId: (val: string) => void;
   executionStrategy: "REQUEST_APPROVAL" | "AUTO";
   setExecutionStrategy: (val: "REQUEST_APPROVAL" | "AUTO") => void;
   localStoragePath: string;
@@ -26,8 +28,9 @@ export const UnifiedAgentInput: React.FC<UnifiedAgentInputProps> = ({
   onChangeRequest,
   onSubmitRequest,
   busy,
-  selectedModel,
-  setSelectedModel,
+  models,
+  selectedModelId,
+  setSelectedModelId,
   executionStrategy,
   setExecutionStrategy,
   localStoragePath,
@@ -50,7 +53,7 @@ export const UnifiedAgentInput: React.FC<UnifiedAgentInputProps> = ({
     const compositePayload = {
       prompt: request,
       executionStrategy: executionStrategy,
-      modelTier: selectedModel,
+      modelTier: models.find((model) => model.id === selectedModelId)?.model,
       context: {
         projectFolder: folderName,
         runtimeMode: "LOCAL",
@@ -177,15 +180,15 @@ export const UnifiedAgentInput: React.FC<UnifiedAgentInputProps> = ({
           <div className="functional-right" style={{ display: "flex", alignItems: "center", gap: "10px" }}>
             <div className="model-tier-select-wrapper">
               <select
-                value={selectedModel}
-                onChange={(e) => setSelectedModel(e.target.value)}
+                value={selectedModelId}
+                onChange={(e) => setSelectedModelId(e.target.value)}
                 className="mini-model-select"
                 title="智能体模型级别"
                 disabled={busy}
               >
-                <option value="gpt-5.5">GPT-5.5 (算力高)</option>
-                <option value="gpt-5-mini">GPT-5 mini (流畅)</option>
-                <option value="claude-sonnet-4-6">Sonnet 4.6</option>
+                {models.map((model) => (
+                  <option key={model.id} value={model.id}>{model.name}</option>
+                ))}
               </select>
             </div>
 

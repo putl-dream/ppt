@@ -6,6 +6,14 @@ import { ChatWorkspace } from "./components/ChatWorkspace";
 import { PPTMirror } from "./components/PPTMirror";
 import { SettingsSidebar } from "./components/SettingsSidebar";
 import { SettingsConsole } from "./components/SettingsConsole";
+import {
+  DEFAULT_MODELS,
+  MODEL_STORAGE_KEY,
+  SELECTED_MODEL_STORAGE_KEY,
+  loadManagedModels,
+  toAgentModelSettings,
+  type ManagedModel,
+} from "./modelCatalog";
 
 interface ChatMessage {
   id: string;
@@ -37,7 +45,7 @@ export function App() {
 
   // 双模态同构布局模式控制
   const [activeMode, setActiveMode] = useState<"workspace" | "settings">("workspace");
-  const [settingsCategory, setSettingsCategory] = useState<"profile" | "workflow" | "appearance">("profile");
+  const [settingsCategory, setSettingsCategory] = useState<"profile" | "models" | "workflow" | "appearance">("profile");
 
   // 常规设置：常规/工作流与文件系统
   const [autoDownload, setAutoDownload] = useState(true);
@@ -56,8 +64,39 @@ export function App() {
   const [selectedTheme, setSelectedTheme] = useState<string>("nordic");
   const [selectedPalette, setSelectedPalette] = useState<string>("cyan");
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
-  const [selectedModel, setSelectedModel] = useState<string>("gpt-5.5");
-  const [apiKey, setApiKey] = useState<string>("");
+  const [models, setModels] = useState<ManagedModel[]>(loadManagedModels);
+  const [selectedModelId, setSelectedModelId] = useState(
+    () => window.localStorage.getItem(SELECTED_MODEL_STORAGE_KEY) ?? DEFAULT_MODELS[0].id,
+  );
+  const selectedModel = models.find((model) => model.id === selectedModelId) ?? models[0];
+
+  useEffect(() => {
+    window.localStorage.setItem(MODEL_STORAGE_KEY, JSON.stringify(models));
+    if (!models.some((model) => model.id === selectedModelId) && models[0]) {
+      setSelectedModelId(models[0].id);
+    }
+  }, [models, selectedModelId]);
+
+  useEffect(() => {
+    window.localStorage.setItem(SELECTED_MODEL_STORAGE_KEY, selectedModelId);
+  }, [selectedModelId]);
+
+  const handleSaveModel = (model: ManagedModel) => {
+    setModels((current) => {
+      const exists = current.some((item) => item.id === model.id);
+      return exists
+        ? current.map((item) => (item.id === model.id ? model : item))
+        : [...current, model];
+    });
+  };
+
+  const handleDeleteModel = (id: string) => {
+    setModels((current) => current.filter((model) => model.id !== id));
+    if (selectedModelId === id) {
+      const fallback = models.find((model) => model.id !== id);
+      if (fallback) setSelectedModelId(fallback.id);
+    }
+  };
 
   // 系统主题跟随与计算
   useEffect(() => {
@@ -283,7 +322,7 @@ export function App() {
     console.log("Packaging Agent context payload:", {
       prompt: activeRequest,
       executionStrategy: executionStrategy,
-      modelTier: selectedModel,
+      modelTier: selectedModel?.model,
       context: {
         projectFolder: localStoragePath.split("/").pop() || "ppt_workspace",
         runtimeMode: "LOCAL",
@@ -337,12 +376,11 @@ export function App() {
 
     try {
       // 提交到后端
-      const provider = selectedModel.startsWith("claude-") ? "anthropic" : "openai";
-      const result = await window.desktopApi.startAgentRun(activeRequest, {
-        provider,
-        model: selectedModel,
-        apiKey: apiKey.trim() || undefined,
-      });
+      if (!selectedModel) throw new Error("请先在设置中配置一个可用模型。");
+      const result = await window.desktopApi.startAgentRun(
+        activeRequest,
+        toAgentModelSettings(selectedModel),
+      );
       clearInterval(thoughtInterval);
       clearInterval(stepInterval);
       setThoughtProgress(100);
@@ -802,8 +840,9 @@ export function App() {
                   onProposePrompt={handleSuggestPrompt}
                   
                   // Bound settings for UnifiedAgentInput
-                  selectedModel={selectedModel}
-                  setSelectedModel={setSelectedModel}
+                  models={models}
+                  selectedModelId={selectedModelId}
+                  setSelectedModelId={setSelectedModelId}
                   executionStrategy={executionStrategy}
                   setExecutionStrategy={setExecutionStrategy}
                   localStoragePath={localStoragePath}
@@ -843,10 +882,11 @@ export function App() {
             <div className="rounded-canvas">
               <SettingsConsole
                 activeCategory={settingsCategory}
-                apiKey={apiKey}
-                setApiKey={setApiKey}
-                selectedModel={selectedModel}
-                setSelectedModel={setSelectedModel}
+                models={models}
+                selectedModelId={selectedModelId}
+                onSelectModel={setSelectedModelId}
+                onSaveModel={handleSaveModel}
+                onDeleteModel={handleDeleteModel}
                 selectedTheme={selectedTheme}
                 setSelectedTheme={setSelectedTheme}
                 selectedPalette={selectedPalette}
