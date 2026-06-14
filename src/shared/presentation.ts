@@ -9,6 +9,9 @@ export const textElementSchema = z.object({
   height: z.number().positive(),
   text: z.string(),
   fontSize: z.number().positive().default(32),
+  bold: z.boolean().optional(),
+  color: z.string().optional(),
+  align: z.enum(["left", "center", "right"]).optional(),
 });
 
 export const imageElementSchema = z.object({
@@ -45,6 +48,7 @@ export const slideSchema = z.object({
   id: z.string(),
   title: z.string(),
   elements: z.array(slideElementSchema),
+  layout: z.string().optional(),
 });
 
 export const presentationSchema = z.object({
@@ -52,6 +56,8 @@ export const presentationSchema = z.object({
   title: z.string(),
   revision: z.number().int().nonnegative(),
   slides: z.array(slideSchema),
+  theme: z.string().optional(),
+  palette: z.string().optional(),
 });
 
 export type TextElement = z.infer<typeof textElementSchema>;

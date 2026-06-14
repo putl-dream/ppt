@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { Presentation, Slide } from "./presentation";
 import { slideSchema, slideElementSchema } from "./presentation";
+import { applyLayout } from "./layout";
 
 export const presentationCommandSchema = z.discriminatedUnion("type", [
   z.object({
@@ -43,6 +44,50 @@ export const presentationCommandSchema = z.discriminatedUnion("type", [
     slideId: z.string(),
     elementId: z.string(),
     element: slideElementSchema,
+  }),
+  z.object({
+    id: z.string(),
+    type: z.literal("set-theme"),
+    theme: z.string().min(1),
+    palette: z.string().min(1).optional(),
+  }),
+  z.object({
+    id: z.string(),
+    type: z.literal("update-slide-layout"),
+    slideId: z.string(),
+    layout: z.enum(["cover", "section", "concept", "comparison", "process", "architecture", "case", "summary"]),
+  }),
+  z.object({
+    id: z.string(),
+    type: z.literal("update-text-style"),
+    slideId: z.string(),
+    elementId: z.string(),
+    fontSize: z.number().positive().optional(),
+    bold: z.boolean().optional(),
+    color: z.string().optional(),
+    align: z.enum(["left", "center", "right"]).optional(),
+  }),
+  z.object({
+    id: z.string(),
+    type: z.literal("move-element"),
+    slideId: z.string(),
+    elementId: z.string(),
+    x: z.number(),
+    y: z.number(),
+  }),
+  z.object({
+    id: z.string(),
+    type: z.literal("resize-element"),
+    slideId: z.string(),
+    elementId: z.string(),
+    width: z.number().positive(),
+    height: z.number().positive(),
+  }),
+  z.object({
+    id: z.string(),
+    type: z.literal("restore-slide-elements"),
+    slideId: z.string(),
+    elements: z.array(slideElementSchema),
   }),
 ]);
 
@@ -197,6 +242,194 @@ export function executeCommand(
           slideId: command.slideId,
           elementId: command.elementId,
           element: targetElement,
+        },
+      },
+    };
+  }
+
+  if (command.type === "set-theme") {
+    return {
+      presentation: nextRevision({
+        ...presentation,
+        theme: command.theme,
+        palette: command.palette || presentation.palette,
+      }),
+      executed: {
+        command,
+        inverse: {
+          id: crypto.randomUUID(),
+          type: "set-theme",
+          theme: presentation.theme || "nordic",
+          palette: presentation.palette || "cyan",
+        },
+      },
+    };
+  }
+
+  if (command.type === "update-slide-layout") {
+    const slideIndex = presentation.slides.findIndex((s) => s.id === command.slideId);
+    if (slideIndex < 0) throw new Error(`Slide not found: ${command.slideId}`);
+    const targetSlide = presentation.slides[slideIndex];
+
+    const updatedSlide = applyLayout(
+      targetSlide,
+      command.layout,
+      presentation.theme || "nordic",
+      presentation.palette || "cyan"
+    );
+
+    const slides = presentation.slides.map((s) =>
+      s.id === command.slideId ? updatedSlide : s
+    );
+
+    return {
+      presentation: nextRevision({ ...presentation, slides }),
+      executed: {
+        command,
+        inverse: {
+          id: crypto.randomUUID(),
+          type: "restore-slide-elements",
+          slideId: command.slideId,
+          elements: targetSlide.elements,
+        },
+      },
+    };
+  }
+
+  if (command.type === "restore-slide-elements") {
+    const slideIndex = presentation.slides.findIndex((s) => s.id === command.slideId);
+    if (slideIndex < 0) throw new Error(`Slide not found: ${command.slideId}`);
+    const targetSlide = presentation.slides[slideIndex];
+
+    const slides = presentation.slides.map((s) =>
+      s.id === command.slideId ? { ...s, elements: command.elements } : s
+    );
+
+    return {
+      presentation: nextRevision({ ...presentation, slides }),
+      executed: {
+        command,
+        inverse: {
+          id: crypto.randomUUID(),
+          type: "restore-slide-elements",
+          slideId: command.slideId,
+          elements: targetSlide.elements,
+        },
+      },
+    };
+  }
+
+  if (command.type === "update-text-style") {
+    const slideIndex = presentation.slides.findIndex((s) => s.id === command.slideId);
+    if (slideIndex < 0) throw new Error(`Slide not found: ${command.slideId}`);
+    const targetSlide = presentation.slides[slideIndex];
+    const elementIndex = targetSlide.elements.findIndex((el) => el.id === command.elementId);
+    if (elementIndex < 0) throw new Error(`Element not found: ${command.elementId}`);
+    const targetElement = targetSlide.elements[elementIndex];
+    if (targetElement.type !== "text") throw new Error(`Element is not text: ${command.elementId}`);
+
+    const updatedElement = {
+      ...targetElement,
+      fontSize: command.fontSize !== undefined ? command.fontSize : targetElement.fontSize,
+      bold: command.bold !== undefined ? command.bold : targetElement.bold,
+      color: command.color !== undefined ? command.color : targetElement.color,
+      align: command.align !== undefined ? command.align : targetElement.align,
+    };
+
+    const elements = targetSlide.elements.map((el) =>
+      el.id === command.elementId ? updatedElement : el
+    );
+    const slides = presentation.slides.map((s) =>
+      s.id === command.slideId ? { ...s, elements } : s
+    );
+
+    return {
+      presentation: nextRevision({ ...presentation, slides }),
+      executed: {
+        command,
+        inverse: {
+          id: crypto.randomUUID(),
+          type: "update-text-style",
+          slideId: command.slideId,
+          elementId: command.elementId,
+          fontSize: targetElement.fontSize,
+          bold: targetElement.bold,
+          color: targetElement.color,
+          align: targetElement.align,
+        },
+      },
+    };
+  }
+
+  if (command.type === "move-element") {
+    const slideIndex = presentation.slides.findIndex((s) => s.id === command.slideId);
+    if (slideIndex < 0) throw new Error(`Slide not found: ${command.slideId}`);
+    const targetSlide = presentation.slides[slideIndex];
+    const elementIndex = targetSlide.elements.findIndex((el) => el.id === command.elementId);
+    if (elementIndex < 0) throw new Error(`Element not found: ${command.elementId}`);
+    const targetElement = targetSlide.elements[elementIndex];
+
+    const updatedElement = {
+      ...targetElement,
+      x: command.x,
+      y: command.y,
+    };
+
+    const elements = targetSlide.elements.map((el) =>
+      el.id === command.elementId ? updatedElement : el
+    );
+    const slides = presentation.slides.map((s) =>
+      s.id === command.slideId ? { ...s, elements } : s
+    );
+
+    return {
+      presentation: nextRevision({ ...presentation, slides }),
+      executed: {
+        command,
+        inverse: {
+          id: crypto.randomUUID(),
+          type: "move-element",
+          slideId: command.slideId,
+          elementId: command.elementId,
+          x: targetElement.x,
+          y: targetElement.y,
+        },
+      },
+    };
+  }
+
+  if (command.type === "resize-element") {
+    const slideIndex = presentation.slides.findIndex((s) => s.id === command.slideId);
+    if (slideIndex < 0) throw new Error(`Slide not found: ${command.slideId}`);
+    const targetSlide = presentation.slides[slideIndex];
+    const elementIndex = targetSlide.elements.findIndex((el) => el.id === command.elementId);
+    if (elementIndex < 0) throw new Error(`Element not found: ${command.elementId}`);
+    const targetElement = targetSlide.elements[elementIndex];
+
+    const updatedElement = {
+      ...targetElement,
+      width: command.width,
+      height: command.height,
+    };
+
+    const elements = targetSlide.elements.map((el) =>
+      el.id === command.elementId ? updatedElement : el
+    );
+    const slides = presentation.slides.map((s) =>
+      s.id === command.slideId ? { ...s, elements } : s
+    );
+
+    return {
+      presentation: nextRevision({ ...presentation, slides }),
+      executed: {
+        command,
+        inverse: {
+          id: crypto.randomUUID(),
+          type: "resize-element",
+          slideId: command.slideId,
+          elementId: command.elementId,
+          width: targetElement.width,
+          height: targetElement.height,
         },
       },
     };

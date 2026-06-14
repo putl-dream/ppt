@@ -28,7 +28,10 @@ export async function exportToPptx(
   let bodyColor = "#475569";
   let fontFace = "Arial";
 
-  switch (options.theme) {
+  const presentationTheme = (presentation as any).theme || options.theme || "nordic";
+  const presentationPalette = (presentation as any).palette || options.palette || "cyan";
+
+  switch (presentationTheme) {
     case "nordic":
       slideBg = "#fbfbfa";
       titleColor = "#0f172a";
@@ -62,7 +65,7 @@ export async function exportToPptx(
   }
 
   let accentColor = "#0ea5e9";
-  switch (options.palette) {
+  switch (presentationPalette) {
     case "cyan":
       accentColor = "#0ea5e9";
       break;
@@ -169,8 +172,10 @@ export async function exportToPptx(
           w,
           h,
           fontSize: element.fontSize * 0.75,
-          color: cleanBodyColor,
+          color: element.color ? cleanColor(element.color) : cleanBodyColor,
           fontFace,
+          bold: !!element.bold,
+          align: element.align || "left",
           valign: "middle",
         });
       } else if (element.type === "image") {

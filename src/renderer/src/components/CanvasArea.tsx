@@ -380,15 +380,17 @@ export const CanvasArea: React.FC<CanvasAreaProps> = ({
               </div>
 
               {/* 幻灯片大标题 */}
-              <div
-                className="slide-header-text"
-                style={{
-                  color: styles.titleColor,
-                  borderBottom: `2px solid ${styles.accentColor}`,
-                }}
-              >
-                {activeSlide.title}
-              </div>
+              {activeSlide.layout !== "cover" && activeSlide.layout !== "section" && (
+                <div
+                  className="slide-header-text"
+                  style={{
+                    color: styles.titleColor,
+                    borderBottom: `2px solid ${styles.accentColor}`,
+                  }}
+                >
+                  {activeSlide.title}
+                </div>
+              )}
 
               {/* 页内图层列表 */}
               {activeSlide.elements.map((element) => {
@@ -420,7 +422,9 @@ export const CanvasArea: React.FC<CanvasAreaProps> = ({
                             className="element-text-editor"
                             style={{
                               fontSize: element.fontSize,
-                              color: styles.bodyColor,
+                              color: (element as any).color || styles.bodyColor,
+                              fontWeight: (element as any).bold ? "bold" : "normal",
+                              textAlign: (element as any).align || "left",
                             }}
                             value={editingText.text}
                             onChange={(e) =>
@@ -439,7 +443,10 @@ export const CanvasArea: React.FC<CanvasAreaProps> = ({
                           <p
                             style={{
                               fontSize: element.fontSize,
-                              color: styles.bodyColor,
+                              color: (element as any).color || styles.bodyColor,
+                              fontWeight: (element as any).bold ? "bold" : "normal",
+                              textAlign: (element as any).align || "left",
+                              whiteSpace: "pre-wrap",
                               margin: 0,
                             }}
                           >

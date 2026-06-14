@@ -310,15 +310,17 @@ export const PPTMirror: React.FC<PPTMirrorProps> = ({
                   </div>
 
                   {/* 标题 */}
-                  <div
-                    className="slide-header-text"
-                    style={{
-                      color: themeStyles.titleColor,
-                      borderBottom: `2px solid ${themeStyles.accentColor}`,
-                    }}
-                  >
-                    {slide.title}
-                  </div>
+                  {slide.layout !== "cover" && slide.layout !== "section" && (
+                    <div
+                      className="slide-header-text"
+                      style={{
+                        color: themeStyles.titleColor,
+                        borderBottom: `2px solid ${themeStyles.accentColor}`,
+                      }}
+                    >
+                      {slide.title}
+                    </div>
+                  )}
 
                   {/* 元素 */}
                   {slide.elements.map((element) => (
@@ -338,9 +340,12 @@ export const PPTMirror: React.FC<PPTMirrorProps> = ({
                         <p
                           style={{
                             fontSize: element.fontSize,
-                            color: themeStyles.bodyColor,
+                            color: (element as any).color || themeStyles.bodyColor,
+                            fontWeight: (element as any).bold ? "bold" : "normal",
+                            textAlign: (element as any).align || "left",
                             margin: 0,
                             lineHeight: 1.4,
+                            whiteSpace: "pre-wrap",
                           }}
                         >
                           {element.text}
@@ -460,15 +465,17 @@ export const PPTMirror: React.FC<PPTMirrorProps> = ({
                   </div>
 
                   {/* 标题 */}
-                  <div
-                    className="slide-header-text"
-                    style={{
-                      color: themeStyles.titleColor,
-                      borderBottom: `2px solid ${themeStyles.accentColor}`,
-                    }}
-                  >
-                    {slides[fullscreenIndex].title}
-                  </div>
+                  {slides[fullscreenIndex].layout !== "cover" && slides[fullscreenIndex].layout !== "section" && (
+                    <div
+                      className="slide-header-text"
+                      style={{
+                        color: themeStyles.titleColor,
+                        borderBottom: `2px solid ${themeStyles.accentColor}`,
+                      }}
+                    >
+                      {slides[fullscreenIndex].title}
+                    </div>
+                  )}
 
                   {/* 元素 */}
                   {slides[fullscreenIndex].elements.map((element) => (
@@ -488,9 +495,12 @@ export const PPTMirror: React.FC<PPTMirrorProps> = ({
                         <p
                           style={{
                             fontSize: element.fontSize,
-                            color: themeStyles.bodyColor,
+                            color: (element as any).color || themeStyles.bodyColor,
+                            fontWeight: (element as any).bold ? "bold" : "normal",
+                            textAlign: (element as any).align || "left",
                             margin: 0,
                             lineHeight: 1.4,
+                            whiteSpace: "pre-wrap",
                           }}
                         >
                           {element.text}

@@ -131,6 +131,17 @@ export function App() {
     }
   }, [computedTheme, colorContrastOffset]);
 
+  useEffect(() => {
+    if (presentation) {
+      if (presentation.theme && presentation.theme !== selectedTheme) {
+        setSelectedTheme(presentation.theme);
+      }
+      if (presentation.palette && presentation.palette !== selectedPalette) {
+        setSelectedPalette(presentation.palette);
+      }
+    }
+  }, [presentation]);
+
   // 对话流与 Agent 编排状态
   const [request, setRequest] = useState("创建一份智能硬件市场推广策划大纲");
   const [approval, setApproval] = useState<AgentApprovalRequest>();

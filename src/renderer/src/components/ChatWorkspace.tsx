@@ -431,9 +431,62 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
                             {cmd.type === "add-element" && "添加画布元素"}
                             {cmd.type === "remove-element" && "移除画布元素"}
                             {cmd.type === "update-element" && "更新图层属性"}
+                            {cmd.type === "set-theme" && "应用设计主题"}
+                            {cmd.type === "update-slide-layout" && "更新页面布局"}
+                            {cmd.type === "update-text-style" && "调整文字样式"}
+                            {cmd.type === "move-element" && "移动图层位置"}
+                            {cmd.type === "resize-element" && "调整图层大小"}
+                            {cmd.type === "restore-slide-elements" && "还原图层状态"}
                           </span>
                           {"title" in cmd && <span className="cmd-val">“{cmd.title}”</span>}
                           {"index" in cmd && <span className="cmd-val">位置: 第 {cmd.index === 2147483647 ? "尾" : cmd.index} 页</span>}
+                          {"theme" in cmd && (
+                            <span className="cmd-val">
+                              主题: {
+                                cmd.theme === "nordic" ? "北欧极简" :
+                                cmd.theme === "midnight" ? "黑客帝国" :
+                                cmd.theme === "ocean" ? "商务蔚蓝" :
+                                cmd.theme === "sunset" ? "落日余晖" :
+                                cmd.theme === "purple" ? "流光极光" : cmd.theme
+                              }
+                              {cmd.palette && ` (色调: ${
+                                cmd.palette === "cyan" ? "湖蓝" :
+                                cmd.palette === "green" ? "科技绿" :
+                                cmd.palette === "purple" ? "薰衣紫" :
+                                cmd.palette === "orange" ? "珊瑚橙" : cmd.palette
+                              })`}
+                            </span>
+                          )}
+                          {"layout" in cmd && (
+                            <span className="cmd-val">
+                              布局: {
+                                cmd.layout === "cover" ? "封面布局" :
+                                cmd.layout === "section" ? "过渡页布局" :
+                                cmd.layout === "concept" ? "概念排版" :
+                                cmd.layout === "comparison" ? "左右对比" :
+                                cmd.layout === "process" ? "流程步骤" :
+                                cmd.layout === "architecture" ? "分层架构" :
+                                cmd.layout === "case" ? "案例展示" :
+                                cmd.layout === "summary" ? "总结要点" : cmd.layout
+                              }
+                            </span>
+                          )}
+                          {cmd.type === "update-text-style" && (
+                            <span className="cmd-val">
+                              {cmd.fontSize && `字号: ${cmd.fontSize}px `}
+                              {cmd.bold !== undefined && `加粗: ${cmd.bold ? "是" : "否"} `}
+                              {cmd.align && `对齐: ${
+                                cmd.align === "left" ? "左" :
+                                cmd.align === "center" ? "中" : "右"
+                              }`}
+                            </span>
+                          )}
+                          {(cmd.type === "move-element" || cmd.type === "resize-element") && (
+                            <span className="cmd-val">
+                              {"x" in cmd && `坐标: (${Math.round(cmd.x)}, ${Math.round(cmd.y)}) `}
+                              {"width" in cmd && `尺寸: ${Math.round(cmd.width)}x${Math.round(cmd.height)}`}
+                            </span>
+                          )}
                         </div>
                       ))}
                     </div>

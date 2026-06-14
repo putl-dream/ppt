@@ -46,11 +46,44 @@ const agentActionSchema = z.discriminatedUnion("type", [
     slideId: z.string().trim().min(1),
     elementId: z.string().trim().min(1),
   }),
+  z.object({
+    type: z.literal("set-theme"),
+    theme: z.string().trim().min(1),
+    palette: z.string().trim().min(1).optional(),
+  }),
+  z.object({
+    type: z.literal("update-slide-layout"),
+    slideId: z.string().trim().min(1),
+    layout: z.enum(["cover", "section", "concept", "comparison", "process", "architecture", "case", "summary"]),
+  }),
+  z.object({
+    type: z.literal("update-text-style"),
+    slideId: z.string().trim().min(1),
+    elementId: z.string().trim().min(1),
+    fontSize: z.number().positive().optional(),
+    bold: z.boolean().optional(),
+    color: z.string().trim().min(1).optional(),
+    align: z.enum(["left", "center", "right"]).optional(),
+  }),
+  z.object({
+    type: z.literal("move-element"),
+    slideId: z.string().trim().min(1),
+    elementId: z.string().trim().min(1),
+    x: z.number(),
+    y: z.number(),
+  }),
+  z.object({
+    type: z.literal("resize-element"),
+    slideId: z.string().trim().min(1),
+    elementId: z.string().trim().min(1),
+    width: z.number().positive(),
+    height: z.number().positive(),
+  }),
 ]);
 
 const modelProposalSchema = z.object({
   summary: z.string().trim().min(1),
-  actions: z.array(agentActionSchema).min(1).max(20),
+  actions: z.array(agentActionSchema).min(1).max(50),
 });
 
 type AgentAction = z.infer<typeof agentActionSchema>;
@@ -154,6 +187,54 @@ function actionToCommand(action: AgentAction, presentation: Presentation): Prese
       },
     };
   }
+  if (action.type === "set-theme") {
+    return {
+      id: crypto.randomUUID(),
+      type: "set-theme",
+      theme: action.theme,
+      palette: action.palette,
+    };
+  }
+  if (action.type === "update-slide-layout") {
+    return {
+      id: crypto.randomUUID(),
+      type: "update-slide-layout",
+      slideId: action.slideId,
+      layout: action.layout,
+    };
+  }
+  if (action.type === "update-text-style") {
+    return {
+      id: crypto.randomUUID(),
+      type: "update-text-style",
+      slideId: action.slideId,
+      elementId: action.elementId,
+      fontSize: action.fontSize,
+      bold: action.bold,
+      color: action.color,
+      align: action.align,
+    };
+  }
+  if (action.type === "move-element") {
+    return {
+      id: crypto.randomUUID(),
+      type: "move-element",
+      slideId: action.slideId,
+      elementId: action.elementId,
+      x: action.x,
+      y: action.y,
+    };
+  }
+  if (action.type === "resize-element") {
+    return {
+      id: crypto.randomUUID(),
+      type: "resize-element",
+      slideId: action.slideId,
+      elementId: action.elementId,
+      width: action.width,
+      height: action.height,
+    };
+  }
   return {
     id: crypto.randomUUID(),
     type: "remove-element",
@@ -176,14 +257,25 @@ function compactPresentation(presentation: Presentation) {
   return {
     title: presentation.title,
     revision: presentation.revision,
+    theme: presentation.theme,
+    palette: presentation.palette,
     slides: presentation.slides.map((slide, index) => ({
       index,
       id: slide.id,
       title: slide.title,
+      layout: slide.layout,
       elements: slide.elements.map((element) => ({
         id: element.id,
         type: element.type,
+        x: element.x,
+        y: element.y,
+        width: element.width,
+        height: element.height,
         text: element.type === "text" ? element.text : undefined,
+        fontSize: element.type === "text" ? element.fontSize : undefined,
+        bold: element.type === "text" ? (element as any).bold : undefined,
+        color: element.type === "text" ? (element as any).color : undefined,
+        align: element.type === "text" ? (element as any).align : undefined,
       })),
     })),
   };
@@ -196,17 +288,42 @@ export function createModelPresentationPlanner(gateway: AgentModelGateway): Agen
         {
           systemPrompt: [
             "You are an autonomous presentation editing agent.",
-            "Choose the smallest useful sequence of actions that satisfies the user request.",
-            "Return only one JSON object with summary and actions. Do not use markdown.",
-            "Allowed action types:",
+            "You MUST plan presentations in a TWO-STAGE workflow:",
+            "  1. Content Skeleton: Add slides, set titles, and populate body texts using add-slide/add-text.",
+            "  2. Style Optimization: Transform the skeleton slides into visual presentations using design intents.",
+            "",
+            "Choose a theme and palette using set-theme based on content direction:",
+            "  - Technical tutorial: Theme 'ocean'/'midnight'/'nordic', Palette 'green'/'cyan'. Clean, rational.",
+            "  - Product plan: Theme 'nordic'/'ocean'/'sunset', Palette 'cyan'/'orange'. Fresh, highlighted.",
+            "  - Business report: Theme 'ocean'/'nordic', Palette 'cyan'/'purple'/'orange'. Trustworthy, simple.",
+            "  - Knowledge popularization: Theme 'sunset'/'purple', Palette 'orange'/'purple'. Visual, educational.",
+            "  - Personal growth: Theme 'sunset'/'nordic', Palette 'purple'. Restrained, emotional.",
+            "",
+            "Assign each slide a visual structure using update-slide-layout based on content type:",
+            "  - 'cover': Opening cover slides.",
+            "  - 'section': Agenda, directory, or section transitions.",
+            "  - 'concept': Prominent single definitions or core messages.",
+            "  - 'comparison': Left/right side-by-side columns.",
+            "  - 'process': Horizontal Pipeline, steps, sequence of cards.",
+            "  - 'architecture': Vertical systems architecture or layered diagrams.",
+            "  - 'case': Case study details on left, key metrics/numbers on right.",
+            "  - 'summary': Vertical summary stacks or key takeaways.",
+            "",
+            "Allowed actions:",
             '- {"type":"set-presentation-title","title":"..."}',
             '- {"type":"add-slide","title":"...","body":"...","index":0}',
-            '- {"type":"remove-slide","slideId":"existing-slide-id"}',
-            '- {"type":"set-slide-title","slideId":"existing-slide-id","title":"..."}',
-            '- {"type":"add-text","slideId":"existing-slide-id","text":"...","x":120,"y":260,"width":1040,"height":240,"fontSize":28}',
-            '- {"type":"update-text","slideId":"existing-slide-id","elementId":"existing-element-id","text":"...","fontSize":28}',
-            '- {"type":"remove-element","slideId":"existing-slide-id","elementId":"existing-element-id"}',
-            "Use only IDs present in the current presentation. Omit optional numeric fields when unnecessary.",
+            '- {"type":"remove-slide","slideId":"slide-id"}',
+            '- {"type":"set-slide-title","slideId":"slide-id","title":"..."}',
+            '- {"type":"add-text","slideId":"slide-id","text":"...","x":120,"y":260,"width":1040,"height":240,"fontSize":28}',
+            '- {"type":"update-text","slideId":"slide-id","elementId":"element-id","text":"...","fontSize":28}',
+            '- {"type":"remove-element","slideId":"slide-id","elementId":"element-id"}',
+            '- {"type":"set-theme","theme":"nordic|midnight|ocean|sunset|purple","palette":"cyan|green|purple|orange"}',
+            '- {"type":"update-slide-layout","slideId":"slide-id","layout":"cover|section|concept|comparison|process|architecture|case|summary"}',
+            '- {"type":"update-text-style","slideId":"slide-id","elementId":"element-id","fontSize":24,"bold":true|false,"color":"#ffffff","align":"left|center|right"}',
+            '- {"type":"move-element","slideId":"slide-id","elementId":"element-id","x":100,"y":200}',
+            '- {"type":"resize-element","slideId":"slide-id","elementId":"element-id","width":500,"height":300}',
+            "",
+            "Write response in valid JSON with 'summary' and 'actions' fields. Use exact slide and element IDs. Do not use markdown fencings.",
           ].join("\n"),
           prompt: [
             `User request: ${input.request}`,
