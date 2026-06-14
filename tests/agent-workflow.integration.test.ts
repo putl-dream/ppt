@@ -4,6 +4,7 @@ import { parseEnv } from "node:util";
 import { beforeAll, describe, expect, it } from "vitest";
 import { AgentGateway } from "../src/main/agent/gateway";
 import { createModelPresentationPlanner } from "../src/main/agent/planner";
+import { createModelOutlinePlanner } from "../src/main/agent/outline-planner";
 import { AgentService } from "../src/main/agent/workflow";
 import { CommandBus } from "../src/shared/commands";
 import { createStarterPresentation } from "../src/shared/presentation";
@@ -35,13 +36,20 @@ describe("real model Agent workflow integration", () => {
         model: required("OPENAI_MODEL"),
         apiKey: required("OPENAI_API_KEY"),
       });
-      const agent = new AgentService(bus, createModelPresentationPlanner(gateway));
+      const agent = new AgentService(
+        bus,
+        createModelPresentationPlanner(gateway),
+        createModelOutlinePlanner(gateway),
+      );
 
-      const result = await agent.start(
+      const outlineResult = await agent.start(
         "创建一份智能硬件市场推广策划大纲",
         selection,
         "AUTO",
       );
+      expect(outlineResult.status).toBe("outline-required");
+      if (outlineResult.status !== "outline-required") throw new Error("Expected outline request");
+      const result = await agent.confirmOutline(outlineResult.outlineRequest.threadId);
 
       expect(result.status).toBe("completed");
       expect(bus.getSnapshot().title).not.toBe("Untitled presentation");
@@ -61,7 +69,11 @@ describe("real model Agent workflow integration", () => {
         apiKey: required("ANTHROPIC_API_KEY"),
         baseURL: required("ANTHROPIC_BASE_URL"),
       });
-      const agent = new AgentService(bus, createModelPresentationPlanner(gateway));
+      const agent = new AgentService(
+        bus,
+        createModelPresentationPlanner(gateway),
+        createModelOutlinePlanner(gateway),
+      );
 
       const result = await agent.start(
         "将演示文稿标题修改为 MiniMax Agent 验证，不要进行其他修改。",

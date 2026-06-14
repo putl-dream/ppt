@@ -1,5 +1,10 @@
-import { useEffect, useState } from "react";
-import type { AgentApprovalRequest } from "@shared/ipc";
+import { useEffect, useRef, useState } from "react";
+import type {
+  AgentApprovalRequest,
+  AgentOutlineRequest,
+  AgentRunResult,
+  AgentStreamEvent,
+} from "@shared/ipc";
 import type { Presentation, SlideElement } from "@shared/presentation";
 import {
   createSessionPresentation,
@@ -129,11 +134,45 @@ export function App() {
   // 对话流与 Agent 编排状态
   const [request, setRequest] = useState("创建一份智能硬件市场推广策划大纲");
   const [approval, setApproval] = useState<AgentApprovalRequest>();
+  const [outlineRequest, setOutlineRequest] = useState<AgentOutlineRequest>();
   const [busy, setBusy] = useState(false);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [thoughtProcess, setThoughtProcess] = useState<string[]>([]);
   const [thoughtProgress, setThoughtProgress] = useState(0);
   const [highlightSlideId, setHighlightSlideId] = useState<string | null>(null);
+  const activeRunIdRef = useRef<string | null>(null);
+  const activeRunStepsRef = useRef<string[]>([]);
+  const streamMessageIdsRef = useRef(new Map<string, string>());
+
+  useEffect(() => window.desktopApi.onAgentStream((event: AgentStreamEvent) => {
+    if (event.runId !== activeRunIdRef.current) return;
+
+    if (event.type === "workflow-progress") {
+      activeRunStepsRef.current = [...activeRunStepsRef.current, event.message];
+      setThoughtProcess(activeRunStepsRef.current);
+      setThoughtProgress(event.progress);
+      return;
+    }
+
+    setThoughtProcess([]);
+    setThoughtProgress(0);
+    let messageId = streamMessageIdsRef.current.get(event.runId);
+    if (!messageId) {
+      messageId = crypto.randomUUID();
+      streamMessageIdsRef.current.set(event.runId, messageId);
+      setChatMessages((prev) => [
+        ...prev,
+        { id: messageId!, role: "assistant", content: event.delta },
+      ]);
+      return;
+    }
+
+    setChatMessages((prev) => prev.map((message) =>
+      message.id === messageId
+        ? { ...message, content: `${message.content}${event.delta}` }
+        : message,
+    ));
+  }), []);
 
   // 会话状态由 Electron 主进程持久化，渲染进程只保留当前快照
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
@@ -169,7 +208,9 @@ export function App() {
     setActiveSessionId(snapshot.session.id);
     setPresentation(snapshot.presentation);
     setChatMessages(snapshot.messages);
-    setApproval(undefined);
+    const latestMessage = snapshot.messages.at(-1);
+    setApproval(latestMessage?.approval);
+    setOutlineRequest(latestMessage?.outlineRequest);
     setRequest("");
     setSelectedSlideId(snapshot.presentation.slides[0]?.id ?? "");
     setSelectedElementId(null);
@@ -216,13 +257,14 @@ export function App() {
   useEffect(() => {
     if (!sessionLoaded || !activeSessionId) return;
     const messages: SessionChatMessage[] = chatMessages.map(
-      ({ id, role, content, thought, progress, approval }) => ({
+      ({ id, role, content, thought, progress, approval, outlineRequest }) => ({
         id,
         role,
         content,
         thought,
         progress,
         approval,
+        outlineRequest,
       }),
     );
     const timer = setTimeout(() => {
@@ -258,6 +300,7 @@ export function App() {
     setPresentation(presentation);
     setChatMessages([createWelcomeMessage()]);
     setApproval(undefined);
+    setOutlineRequest(undefined);
     setRequest("");
     setSelectedSlideId(presentation.slides[0]?.id ?? "");
     setSelectedElementId(null);
@@ -302,7 +345,76 @@ export function App() {
     }
   };
 
-  // 提交意图大纲到 Agent
+  function applyAgentResult(result: AgentRunResult, steps: string[], runId?: string) {
+    if (result.status === "chat") {
+      const messageId = runId ? streamMessageIdsRef.current.get(runId) : undefined;
+      if (messageId) {
+        setChatMessages((prev) => prev.map((message) =>
+          message.id === messageId ? { ...message, content: result.message } : message,
+        ));
+      } else {
+        setChatMessages((prev) => [
+          ...prev,
+          { id: crypto.randomUUID(), role: "assistant", content: result.message },
+        ]);
+      }
+      return;
+    }
+
+    if (result.status === "outline-required") {
+      setOutlineRequest(result.outlineRequest);
+      setApproval(undefined);
+      setChatMessages((prev) => [
+        ...prev,
+        {
+          id: crypto.randomUUID(),
+          role: "assistant",
+          content: result.outlineRequest.message,
+          thought: steps,
+          outlineRequest: result.outlineRequest,
+        },
+      ]);
+      triggerToast("大纲已整理，请确认或继续调整");
+      return;
+    }
+
+    setOutlineRequest(undefined);
+    if (result.status === "approval-required") {
+      setApproval(result.approval);
+      setChatMessages((prev) => [
+        ...prev,
+        {
+          id: crypto.randomUUID(),
+          role: "assistant",
+          content: "已根据确认的大纲生成排版方案，请审核指令后执行。",
+          thought: steps,
+          approval: result.approval,
+        },
+      ]);
+      triggerToast("AI 已提出排版变更方案，请进行审核");
+      return;
+    }
+
+    setPresentation(result.presentation);
+    if (result.presentation.slides.length > 0) {
+      const lastId = result.presentation.slides[result.presentation.slides.length - 1].id;
+      setSelectedSlideId(lastId);
+      setHighlightSlideId(lastId);
+      setTimeout(() => setHighlightSlideId(null), 2500);
+    }
+    setIsMirrorOpen(true);
+    setChatMessages((prev) => [
+      ...prev,
+      {
+        id: crypto.randomUUID(),
+        role: "assistant",
+        content: result.status === "rejected" ? "已放弃排版变更提案。" : "已根据确认的大纲生成并应用演示文稿。",
+      },
+    ]);
+    triggerToast(result.status === "rejected" ? "变更已取消" : "演示文稿已成功更新");
+  }
+
+  // 提交需求或继续当前大纲对话
   async function startAgent(customRequest?: string) {
     const activeRequest = customRequest || request;
     if (!activeRequest.trim() || busy) return;
@@ -331,8 +443,11 @@ export function App() {
     });
 
     setApproval(undefined);
-    setThoughtProgress(5);
-    setThoughtProcess(["解析用户指令与语义意图...", "提取排版策略元数据..."]);
+    setThoughtProgress(0);
+    setThoughtProcess([]);
+    const runId = crypto.randomUUID();
+    activeRunIdRef.current = runId;
+    activeRunStepsRef.current = [];
 
     const userMsgId = crypto.randomUUID();
     setChatMessages((prev) => [
@@ -344,101 +459,17 @@ export function App() {
       setRequest("");
     }
 
-    // 进度条模拟
-    const thoughtInterval = setInterval(() => {
-      setThoughtProgress((p) => {
-        if (p >= 90) {
-          clearInterval(thoughtInterval);
-          return 90;
-        }
-        return p + Math.floor(Math.random() * 15) + 5;
-      });
-    }, 450);
-
-    const steps = [
-      "分析意图并生成排版指令中...",
-      "连接 LangGraph 智能体节点链...",
-      "计算幻灯片布局安全边界...",
-      "校验排版指令与坐标合理性...",
-      "构建修改指令确认单...",
-    ];
-
-    let stepIdx = 0;
-    const stepInterval = setInterval(() => {
-      if (stepIdx < steps.length) {
-        setThoughtProcess((prev) => [...prev, steps[stepIdx]]);
-        stepIdx++;
-      } else {
-        clearInterval(stepInterval);
-      }
-    }, 600);
-
-    const waitNoticeTimers = [
-      setTimeout(() => {
-        setThoughtProcess((prev) => [
-          ...prev,
-          "正在等待模型返回结构化策划方案，复杂大纲通常需要 10-30 秒...",
-        ]);
-      }, 5_000),
-      setTimeout(() => {
-        setThoughtProcess((prev) => [
-          ...prev,
-          "模型仍在生成完整内容，请保持应用开启；请求超时后会自动返回错误。",
-        ]);
-      }, 20_000),
-    ];
-
-    const clearAgentTimers = () => {
-      clearInterval(thoughtInterval);
-      clearInterval(stepInterval);
-      waitNoticeTimers.forEach((timer) => clearTimeout(timer));
-    };
-
     try {
-      // 提交到后端
-      if (!selectedModel) throw new Error("请先在设置中配置一个可用模型。");
-      const result = await window.desktopApi.startAgentRun(
-        activeRequest,
-        toAgentModelSettings(selectedModel),
-        executionStrategy,
-      );
-      clearAgentTimers();
-      setThoughtProgress(100);
-
-      if (result.status === "approval-required") {
-        setApproval(result.approval);
-        setChatMessages((prev) => [
-          ...prev,
-          {
-            id: crypto.randomUUID(),
-            role: "assistant",
-            content: `我已为您草拟了演示文稿的更新方案，请在中间对话区查看排版指令列表进行确认：`,
-            thought: [...steps, "指令规划生成完毕，等待审批。"],
-            approval: result.approval,
-          },
-        ]);
-        triggerToast("⚠️ AI 已提出排版变更方案，请及时进行审核！");
-      } else {
-        setPresentation(result.presentation);
-        if (result.presentation.slides.length > 0) {
-          const lastId = result.presentation.slides[result.presentation.slides.length - 1].id;
-          setSelectedSlideId(lastId);
-          setHighlightSlideId(lastId); // 自动高亮镜像
-          setTimeout(() => setHighlightSlideId(null), 2500);
-        }
-        setIsMirrorOpen(true);
-        setChatMessages((prev) => [
-          ...prev,
-          {
-            id: crypto.randomUUID(),
-            role: "assistant",
-            content: `排版指令已执行完毕，修改已成功应用！`,
-          },
-        ]);
-        triggerToast("✨ 演示文稿已成功更新！");
-      }
+      const result = outlineRequest
+        ? await window.desktopApi.continueAgentRun(outlineRequest.threadId, activeRequest, runId)
+        : await window.desktopApi.startAgentRun(
+          activeRequest,
+          selectedModel ? toAgentModelSettings(selectedModel) : undefined,
+          executionStrategy,
+          runId,
+        );
+      applyAgentResult(result, activeRunStepsRef.current, runId);
     } catch (err) {
-      clearAgentTimers();
       setChatMessages((prev) => [
         ...prev,
         {
@@ -448,7 +479,37 @@ export function App() {
         },
       ]);
     } finally {
-      clearAgentTimers();
+      activeRunIdRef.current = null;
+      streamMessageIdsRef.current.delete(runId);
+      setBusy(false);
+      setThoughtProcess([]);
+      setThoughtProgress(0);
+    }
+  }
+
+  async function confirmOutline() {
+    if (!outlineRequest?.outline || busy) return;
+    setBusy(true);
+    setThoughtProgress(0);
+    setThoughtProcess([]);
+    const runId = crypto.randomUUID();
+    activeRunIdRef.current = runId;
+    activeRunStepsRef.current = [];
+    try {
+      const result = await window.desktopApi.confirmAgentOutline(outlineRequest.threadId, runId);
+      applyAgentResult(result, activeRunStepsRef.current, runId);
+    } catch (err) {
+      setChatMessages((prev) => [
+        ...prev,
+        {
+          id: crypto.randomUUID(),
+          role: "assistant",
+          content: `确认大纲时发生错误：${err instanceof Error ? err.message : String(err)}`,
+        },
+      ]);
+    } finally {
+      activeRunIdRef.current = null;
+      streamMessageIdsRef.current.delete(runId);
       setBusy(false);
       setThoughtProcess([]);
       setThoughtProgress(0);
@@ -480,7 +541,7 @@ export function App() {
       clearInterval(progressInterval);
       setThoughtProgress(100);
 
-      if (result.status !== "approval-required") {
+      if (result.status === "completed" || result.status === "rejected") {
         setPresentation(result.presentation);
         setApproval(undefined);
         if (result.presentation.slides.length > 0 && approved) {
@@ -852,6 +913,8 @@ export function App() {
                   onSubmitRequest={() => void startAgent()}
                   busy={busy}
                   approval={approval}
+                  outlineRequest={outlineRequest}
+                  onConfirmOutline={() => void confirmOutline()}
                   onResolveApproval={resolveApproval}
                   themeMode={computedTheme}
                   onToggleThemeMode={() => setThemeMode(computedTheme === "light" ? "dark" : "light")}

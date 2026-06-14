@@ -7,6 +7,13 @@ import {
   type AgentPlanner,
 } from "./planner";
 import { AgentGatewayError } from "./gateway";
+import {
+  createDeterministicOutlinePlanner,
+  outlineToRequest,
+  type AgentOutlinePlanner,
+  type OutlineConversationMessage,
+  type PresentationOutline,
+} from "./outline-planner";
 
 const AgentState = Annotation.Root({
   request: Annotation<string>(),
@@ -28,6 +35,20 @@ const AgentState = Annotation.Root({
 });
 
 type AgentStateType = typeof AgentState.State;
+
+export type AgentServiceEvent =
+  | { type: "workflow-progress"; message: string; progress: number }
+  | { type: "text-delta"; delta: string };
+
+type AgentEventListener = (event: AgentServiceEvent) => void;
+
+async function streamAssistantMessage(message: string, listener?: AgentEventListener): Promise<void> {
+  if (!listener) return;
+  for (const delta of message.match(/[\s\S]{1,3}/g) ?? []) {
+    listener({ type: "text-delta", delta });
+    await new Promise((resolve) => setTimeout(resolve, 18));
+  }
+}
 
 function routeAfterValidation(
   state: AgentStateType,
@@ -114,10 +135,17 @@ export function createAgentWorkflow(commandBus: CommandBus, planner: AgentPlanne
 
 export class AgentService {
   private readonly graph;
+  private readonly outlineConversations = new Map<string, {
+    messages: OutlineConversationMessage[];
+    model?: AgentModelSelection;
+    executionStrategy: AgentExecutionStrategy;
+    outline?: PresentationOutline;
+  }>();
 
   constructor(
     private readonly commandBus: CommandBus,
     planner: AgentPlanner = createDeterministicPresentationPlanner(),
+    private readonly outlinePlanner: AgentOutlinePlanner = createDeterministicOutlinePlanner(),
   ) {
     this.graph = createAgentWorkflow(commandBus, planner);
   }
@@ -126,12 +154,167 @@ export class AgentService {
     request: string,
     model?: AgentModelSelection,
     executionStrategy: AgentExecutionStrategy = "REQUEST_APPROVAL",
+    listener?: AgentEventListener,
+  ): Promise<AgentRunResult> {
+    const messages: OutlineConversationMessage[] = [{ role: "user", content: request }];
+    const decision = await this.outlinePlanner.review({
+      messages,
+      presentation: this.commandBus.getSnapshot(),
+      model,
+    });
+
+    if (decision.mode === "chat") {
+      await streamAssistantMessage(decision.assistantMessage, listener);
+      return { status: "chat", message: decision.assistantMessage };
+    }
+
+    listener?.({
+      type: "workflow-progress",
+      message: "已识别为 PPT 创建或编辑请求。",
+      progress: 20,
+    });
+
+    if (decision.mode === "ready") {
+      listener?.({
+        type: "workflow-progress",
+        message: "已确认大纲与执行条件，正在规划排版指令...",
+        progress: 45,
+      });
+      return this.runCommandWorkflow(
+        decision.outline ? outlineToRequest(decision.outline) : request,
+        model,
+        executionStrategy,
+        listener,
+      );
+    }
+
+    listener?.({
+      type: "workflow-progress",
+      message: "已整理演示目标、受众与页面结构。",
+      progress: 75,
+    });
+    listener?.({
+      type: "workflow-progress",
+      message: "已生成大纲草案，等待继续补充或确认。",
+      progress: 100,
+    });
+
+    const threadId = crypto.randomUUID();
+    this.outlineConversations.set(threadId, {
+      messages: [...messages, { role: "assistant", content: decision.assistantMessage }],
+      model,
+      executionStrategy,
+      outline: decision.outline,
+    });
+    return {
+      status: "outline-required",
+      outlineRequest: {
+        threadId,
+        message: decision.assistantMessage,
+        outline: decision.outline,
+        missingInformation: decision.missingInformation,
+      },
+    };
+  }
+
+  async continueOutline(
+    threadId: string,
+    request: string,
+    listener?: AgentEventListener,
+  ): Promise<AgentRunResult> {
+    const conversation = this.outlineConversations.get(threadId);
+    if (!conversation) throw new Error("Outline conversation not found or already completed.");
+
+    conversation.messages.push({ role: "user", content: request });
+    const decision = await this.outlinePlanner.review({
+      messages: conversation.messages,
+      presentation: this.commandBus.getSnapshot(),
+      model: conversation.model,
+      draftOutline: conversation.outline,
+    });
+
+    if (decision.mode === "chat") {
+      conversation.messages.push({ role: "assistant", content: decision.assistantMessage });
+      await streamAssistantMessage(decision.assistantMessage, listener);
+      return { status: "chat", message: decision.assistantMessage };
+    }
+
+    listener?.({
+      type: "workflow-progress",
+      message: "已识别为大纲补充或修改请求。",
+      progress: 25,
+    });
+
+    if (decision.mode === "ready") {
+      this.outlineConversations.delete(threadId);
+      return this.runCommandWorkflow(
+        decision.outline ? outlineToRequest(decision.outline) : request,
+        conversation.model,
+        conversation.executionStrategy,
+        listener,
+      );
+    }
+
+    listener?.({
+      type: "workflow-progress",
+      message: "已结合上一版草案更新页面结构。",
+      progress: 75,
+    });
+    listener?.({
+      type: "workflow-progress",
+      message: "已更新大纲草案，等待继续补充或确认。",
+      progress: 100,
+    });
+
+    conversation.messages.push({ role: "assistant", content: decision.assistantMessage });
+    conversation.outline = decision.outline ?? conversation.outline;
+    return {
+      status: "outline-required",
+      outlineRequest: {
+        threadId,
+        message: decision.assistantMessage,
+        outline: conversation.outline,
+        missingInformation: decision.missingInformation,
+      },
+    };
+  }
+
+  async confirmOutline(threadId: string, listener?: AgentEventListener): Promise<AgentRunResult> {
+    const conversation = this.outlineConversations.get(threadId);
+    if (!conversation) throw new Error("Outline conversation not found or already completed.");
+    if (!conversation.outline) throw new Error("The outline is incomplete and cannot be generated yet.");
+
+    this.outlineConversations.delete(threadId);
+    listener?.({
+      type: "workflow-progress",
+      message: "大纲已确认，正在生成排版指令...",
+      progress: 30,
+    });
+    return this.runCommandWorkflow(
+      outlineToRequest(conversation.outline),
+      conversation.model,
+      conversation.executionStrategy,
+      listener,
+    );
+  }
+
+  private async runCommandWorkflow(
+    request: string,
+    model: AgentModelSelection | undefined,
+    executionStrategy: AgentExecutionStrategy,
+    listener?: AgentEventListener,
   ): Promise<AgentRunResult> {
     const threadId = crypto.randomUUID();
     const result = await this.graph.invoke(
       { request, model, executionStrategy },
       { configurable: { thread_id: threadId } },
     );
+
+    listener?.({
+      type: "workflow-progress",
+      message: "排版指令规划与校验已完成。",
+      progress: 100,
+    });
 
     return this.toResult(threadId, result);
   }

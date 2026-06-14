@@ -2,6 +2,21 @@ import { z } from "zod";
 import { presentationSchema, type Presentation } from "./presentation";
 import { presentationCommandSchema } from "./commands";
 
+const persistedOutlineSchema = z.object({
+  threadId: z.string(),
+  message: z.string(),
+  outline: z.object({
+    title: z.string(),
+    audience: z.string().optional(),
+    objective: z.string().optional(),
+    slides: z.array(z.object({
+      title: z.string(),
+      keyPoints: z.array(z.string()),
+    })),
+  }).optional(),
+  missingInformation: z.array(z.string()),
+});
+
 const persistedApprovalSchema = z.object({
   threadId: z.string(),
   summary: z.string(),
@@ -15,6 +30,7 @@ export const sessionChatMessageSchema = z.object({
   thought: z.array(z.string()).optional(),
   progress: z.number().optional(),
   approval: persistedApprovalSchema.optional(),
+  outlineRequest: persistedOutlineSchema.optional(),
 });
 
 export const sessionSummarySchema = z.object({

@@ -3,13 +3,45 @@ import type { PresentationCommand } from "./commands";
 import type { AgentExecutionStrategy, AgentModelSettings } from "./agent";
 import type { SessionBootstrap, SessionChatMessage } from "./session";
 
+export interface PresentationOutline {
+  title: string;
+  audience?: string;
+  objective?: string;
+  slides: Array<{
+    title: string;
+    keyPoints: string[];
+  }>;
+}
+
 export interface AgentApprovalRequest {
   threadId: string;
   summary: string;
   commands: PresentationCommand[];
 }
 
+export interface AgentOutlineRequest {
+  threadId: string;
+  message: string;
+  outline?: PresentationOutline;
+  missingInformation: string[];
+}
+
+export type AgentStreamEvent =
+  | {
+    runId: string;
+    type: "workflow-progress";
+    message: string;
+    progress: number;
+  }
+  | {
+    runId: string;
+    type: "text-delta";
+    delta: string;
+  };
+
 export type AgentRunResult =
+  | { status: "chat"; message: string }
+  | { status: "outline-required"; outlineRequest: AgentOutlineRequest }
   | { status: "approval-required"; approval: AgentApprovalRequest }
   | { status: "completed"; presentation: Presentation }
   | { status: "rejected"; presentation: Presentation };
@@ -25,7 +57,11 @@ export interface DesktopApi {
     request: string,
     model?: AgentModelSettings,
     executionStrategy?: AgentExecutionStrategy,
+    runId?: string,
   ): Promise<AgentRunResult>;
+  continueAgentRun(threadId: string, request: string, runId?: string): Promise<AgentRunResult>;
+  confirmAgentOutline(threadId: string, runId?: string): Promise<AgentRunResult>;
+  onAgentStream(listener: (event: AgentStreamEvent) => void): () => void;
   resumeAgentRun(threadId: string, approved: boolean): Promise<AgentRunResult>;
   undo(): Promise<Presentation>;
   redo(): Promise<Presentation>;
@@ -41,4 +77,3 @@ export interface ExportPresentationOptions {
   palette: string;
   logoUrl?: string | null;
 }
-

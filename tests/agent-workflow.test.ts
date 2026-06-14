@@ -4,11 +4,58 @@ import { CommandBus } from "../src/shared/commands";
 import { createStarterPresentation } from "../src/shared/presentation";
 import type { AgentPlanner } from "../src/main/agent/planner";
 import { AgentGatewayError } from "../src/main/agent/gateway";
+import type { AgentOutlinePlanner } from "../src/main/agent/outline-planner";
+
+const readyOutlinePlanner: AgentOutlinePlanner = {
+  async review() {
+    return {
+      mode: "ready",
+      intent: "edit-presentation",
+      assistantMessage: "Ready to execute.",
+      missingInformation: [],
+    };
+  },
+};
 
 describe("AgentService", () => {
+  it("streams small talk without emitting presentation workflow progress", async () => {
+    const bus = new CommandBus(createStarterPresentation());
+    const events: Array<{ type: string; delta?: string }> = [];
+    const agent = new AgentService(bus);
+
+    const result = await agent.start("hello", undefined, "AUTO", (event) => events.push(event));
+
+    expect(result).toEqual({
+      status: "chat",
+      message: "你好！我可以陪你聊聊，也可以帮你制作或修改 PPT。",
+    });
+    if (result.status !== "chat") throw new Error("Expected chat result");
+    expect(events.every((event) => event.type === "text-delta")).toBe(true);
+    expect(events.map((event) => event.delta ?? "").join("")).toBe(result.message);
+    expect(bus.getSnapshot().revision).toBe(0);
+  });
+
+  it("emits workflow progress only after a presentation intent is confirmed", async () => {
+    const bus = new CommandBus(createStarterPresentation());
+    const events: Array<{ type: string; message?: string }> = [];
+    const agent = new AgentService(bus);
+
+    const result = await agent.start(
+      "Create a presentation about AI products",
+      undefined,
+      "AUTO",
+      (event) => events.push(event),
+    );
+
+    expect(result.status).toBe("outline-required");
+    expect(events.length).toBeGreaterThan(0);
+    expect(events.every((event) => event.type === "workflow-progress")).toBe(true);
+    expect(events.at(-1)?.message).toContain("大纲草案");
+  });
+
   it("pauses for approval and applies commands after resume", async () => {
     const bus = new CommandBus(createStarterPresentation());
-    const agent = new AgentService(bus);
+    const agent = new AgentService(bus, undefined, readyOutlinePlanner);
 
     const pending = await agent.start("Quarterly product strategy");
     expect(pending.status).toBe("approval-required");
@@ -25,7 +72,7 @@ describe("AgentService", () => {
   it("leaves the presentation unchanged after rejection", async () => {
     const bus = new CommandBus(createStarterPresentation());
     const original = bus.getSnapshot();
-    const agent = new AgentService(bus);
+    const agent = new AgentService(bus, undefined, readyOutlinePlanner);
 
     const pending = await agent.start("Rejected plan");
     if (pending.status !== "approval-required") throw new Error("Expected approval request");
@@ -37,7 +84,7 @@ describe("AgentService", () => {
 
   it("executes immediately when the workflow uses AUTO strategy", async () => {
     const bus = new CommandBus(createStarterPresentation());
-    const agent = new AgentService(bus);
+    const agent = new AgentService(bus, undefined, readyOutlinePlanner);
 
     const completed = await agent.start("Automatic strategy", undefined, "AUTO");
 
@@ -68,7 +115,7 @@ describe("AgentService", () => {
         };
       },
     };
-    const agent = new AgentService(bus, planner);
+    const agent = new AgentService(bus, planner, readyOutlinePlanner);
 
     const completed = await agent.start("Repair the plan", undefined, "AUTO");
 
@@ -92,7 +139,7 @@ describe("AgentService", () => {
         };
       },
     };
-    const agent = new AgentService(bus, planner);
+    const agent = new AgentService(bus, planner, readyOutlinePlanner);
 
     await expect(agent.start("Impossible plan", undefined, "AUTO")).rejects.toThrow(
       "after 3 attempts",
@@ -108,11 +155,67 @@ describe("AgentService", () => {
         throw new AgentGatewayError("Provider request timed out", "timeout", "openai");
       },
     };
-    const agent = new AgentService(bus, planner);
+    const agent = new AgentService(bus, planner, readyOutlinePlanner);
 
     await expect(agent.start("Provider failure", undefined, "AUTO")).rejects.toThrow(
       "Provider request timed out",
     );
     expect(attempts).toBe(1);
+  });
+
+  it("asks for outline confirmation before generating a vague presentation request", async () => {
+    const bus = new CommandBus(createStarterPresentation());
+    const agent = new AgentService(bus);
+
+    const result = await agent.start("Create a presentation about AI products", undefined, "AUTO");
+
+    expect(result.status).toBe("outline-required");
+    expect(bus.getSnapshot().revision).toBe(0);
+    if (result.status !== "outline-required") throw new Error("Expected outline request");
+    expect(result.outlineRequest.outline?.slides).toHaveLength(3);
+  });
+
+  it("generates commands only after the proposed outline is confirmed", async () => {
+    const bus = new CommandBus(createStarterPresentation());
+    const agent = new AgentService(bus);
+
+    const outline = await agent.start("Create a presentation about AI products");
+    if (outline.status !== "outline-required") throw new Error("Expected outline request");
+
+    const pending = await agent.confirmOutline(outline.outlineRequest.threadId);
+    expect(pending.status).toBe("approval-required");
+    expect(bus.getSnapshot().revision).toBe(0);
+  });
+
+  it("passes the current draft outline into each follow-up turn", async () => {
+    const bus = new CommandBus(createStarterPresentation());
+    const seenDrafts: Array<unknown> = [];
+    const outlinePlanner: AgentOutlinePlanner = {
+      async review(input) {
+        seenDrafts.push(input.draftOutline);
+        return {
+          mode: "outline-proposal",
+          intent: "create-presentation",
+          assistantMessage: "Review the updated outline.",
+          outline: {
+            title: "AI products",
+            slides: [
+              { title: "Context", keyPoints: ["Market"] },
+              { title: "Products", keyPoints: ["Portfolio"] },
+              { title: "Roadmap", keyPoints: ["Delivery"] },
+            ],
+          },
+          missingInformation: [],
+        };
+      },
+    };
+    const agent = new AgentService(bus, undefined, outlinePlanner);
+
+    const first = await agent.start("Create an AI product deck");
+    if (first.status !== "outline-required") throw new Error("Expected outline request");
+    await agent.continueOutline(first.outlineRequest.threadId, "Replace the second slide");
+
+    expect(seenDrafts[0]).toBeUndefined();
+    expect(seenDrafts[1]).toEqual(first.outlineRequest.outline);
   });
 });

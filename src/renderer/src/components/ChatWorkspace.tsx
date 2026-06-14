@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
-import { AgentApprovalRequest } from "@shared/ipc";
+import type { AgentApprovalRequest, AgentOutlineRequest } from "@shared/ipc";
 import {
   BrainIcon,
   ChevronDownIcon,
@@ -22,6 +22,7 @@ interface ChatMessage {
   thought?: string[];
   progress?: number;
   approval?: AgentApprovalRequest;
+  outlineRequest?: AgentOutlineRequest;
 }
 
 interface ChatWorkspaceProps {
@@ -33,6 +34,8 @@ interface ChatWorkspaceProps {
   onSubmitRequest: () => void;
   busy: boolean;
   approval: AgentApprovalRequest | undefined;
+  outlineRequest: AgentOutlineRequest | undefined;
+  onConfirmOutline: () => void;
   onResolveApproval: (approved: boolean) => void;
   themeMode: "light" | "dark";
   onToggleThemeMode: () => void;
@@ -67,6 +70,8 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
   onSubmitRequest,
   busy,
   approval,
+  outlineRequest,
+  onConfirmOutline,
   onResolveApproval,
   themeMode,
   onToggleThemeMode,
@@ -187,6 +192,7 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
             triggerToast={triggerToast}
             selectedSlideIndex={selectedSlideIndex}
             onClearContextTag={onClearContextTag}
+            submitLabel={outlineRequest ? "继续" : "生成"}
           />
 
           {/* Quick recommendations suggestions below */}
@@ -357,6 +363,52 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
                   </div>
                 )}
 
+                {msg.outlineRequest?.outline && (
+                  <div className="approval-card" style={{ maxWidth: 620 }}>
+                    <div className="approval-card-title">
+                      <span>待确认的演示文稿大纲</span>
+                    </div>
+                    <p className="approval-summary">{msg.outlineRequest.outline.title}</p>
+                    {(msg.outlineRequest.outline.audience || msg.outlineRequest.outline.objective) && (
+                      <div className="approval-commands-list">
+                        {msg.outlineRequest.outline.audience && (
+                          <div className="approval-command-item">目标受众：{msg.outlineRequest.outline.audience}</div>
+                        )}
+                        {msg.outlineRequest.outline.objective && (
+                          <div className="approval-command-item">演示目标：{msg.outlineRequest.outline.objective}</div>
+                        )}
+                      </div>
+                    )}
+                    <div className="approval-commands-list">
+                      {msg.outlineRequest.outline.slides.map((slide, index) => (
+                        <div key={`${slide.title}-${index}`} className="approval-command-item" style={{ alignItems: "flex-start" }}>
+                          <span className="cmd-type">{index + 1}. {slide.title}</span>
+                          <span className="cmd-val">{slide.keyPoints.join("；")}</span>
+                        </div>
+                      ))}
+                    </div>
+                    {msg.outlineRequest.missingInformation.length > 0 && (
+                      <p className="approval-summary">
+                        可继续补充：{msg.outlineRequest.missingInformation.join("、")}
+                      </p>
+                    )}
+                    {outlineRequest?.threadId === msg.outlineRequest.threadId && (
+                      <div className="approval-buttons">
+                        <span className="approval-summary" style={{ margin: 0 }}>
+                          继续输入可修改大纲
+                        </span>
+                        <button
+                          disabled={busy}
+                          onClick={onConfirmOutline}
+                          className="btn-apply"
+                        >
+                          确认大纲并生成
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {/* 指令提交卡片 (Approval) */}
                 {msg.approval && (
                   <div className="approval-card" style={{ maxWidth: 540 }}>
@@ -408,7 +460,7 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
         })}
 
         {/* AI 思考状态 */}
-        {busy && (
+        {busy && thoughtProcess.length > 0 && (
           <div className="chat-message assistant active-thinking" style={{ maxWidth: "100%" }}>
             <div className="chat-avatar animate-pulse">
               <BrainIcon size={14} />
@@ -488,6 +540,7 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
           triggerToast={triggerToast}
           selectedSlideIndex={selectedSlideIndex}
           onClearContextTag={onClearContextTag}
+          submitLabel={outlineRequest ? "继续" : "生成"}
         />
       </div>
 

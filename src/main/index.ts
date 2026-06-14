@@ -1,11 +1,11 @@
 import { join } from "node:path";
 import { writeFile } from "node:fs/promises";
-import { app, BrowserWindow, ipcMain, Menu, dialog } from "electron";
+import { app, BrowserWindow, ipcMain, Menu, dialog, type MessageBoxOptions } from "electron";
 import { CommandBus, type PresentationCommand } from "@shared/commands";
 import type { Presentation } from "@shared/presentation";
 import type { ExportPresentationOptions } from "@shared/ipc";
 import { exportToPptx } from "./ppt-exporter";
-import { AgentService } from "./agent/workflow";
+import { AgentService, type AgentServiceEvent } from "./agent/workflow";
 import {
   agentExecutionStrategySchema,
   agentModelSettingsSchema,
@@ -14,6 +14,7 @@ import {
 } from "@shared/agent";
 import { AgentGateway } from "./agent/gateway";
 import { createModelPresentationPlanner } from "./agent/planner";
+import { createModelOutlinePlanner } from "./agent/outline-planner";
 import { FileSessionStore } from "./session-store";
 import type { SessionChatMessage, SessionSnapshot } from "@shared/session";
 
@@ -28,7 +29,11 @@ function createSessionRuntime(snapshot: SessionSnapshot): SessionRuntime {
   const commandBus = new CommandBus(snapshot.presentation);
   return {
     commandBus,
-    agentService: new AgentService(commandBus, createModelPresentationPlanner(agentGateway)),
+    agentService: new AgentService(
+      commandBus,
+      createModelPresentationPlanner(agentGateway),
+      createModelOutlinePlanner(agentGateway),
+    ),
   };
 }
 
@@ -95,14 +100,17 @@ app.whenReady().then(async () => {
   });
   ipcMain.handle("session:delete", async (event, sessionId: string) => {
     const window = BrowserWindow.fromWebContents(event.sender);
-    const { response } = await dialog.showMessageBox(window || undefined, {
+    const messageBoxOptions: MessageBoxOptions = {
       type: "question",
       buttons: ["确定", "取消"],
       defaultId: 1,
       title: "确认删除",
       message: "确定要删除该会话吗？",
       cancelId: 1,
-    });
+    };
+    const { response } = window
+      ? await dialog.showMessageBox(window, messageBoxOptions)
+      : await dialog.showMessageBox(messageBoxOptions);
     if (response === 1) {
       return sessionStore.getBootstrap();
     }
@@ -169,10 +177,11 @@ app.whenReady().then(async () => {
   ipcMain.handle(
     "agent:start",
     async (
-      _,
+      event,
       request: string,
       input?: AgentModelSettings,
       strategy?: AgentExecutionStrategy,
+      runId?: string,
     ) => {
       const sessionId = activeSessionId;
       const runtime = getActiveRuntime();
@@ -181,13 +190,38 @@ app.whenReady().then(async () => {
         ? agentExecutionStrategySchema.parse(strategy)
         : "REQUEST_APPROVAL";
       const selection = settings ? agentGateway.configure(settings) : undefined;
-      const result = await runtime.agentService.start(request, selection, executionStrategy);
-      if (result.status !== "approval-required") {
+      const emit = (streamEvent: AgentServiceEvent) => {
+        if (runId) event.sender.send("agent:stream", { ...streamEvent, runId });
+      };
+      const result = await runtime.agentService.start(request, selection, executionStrategy, emit);
+      if (result.status === "completed" || result.status === "rejected") {
         await persistPresentation(sessionId, runtime);
       }
       return result;
     },
   );
+  ipcMain.handle("agent:continue", async (event, threadId: string, request: string, runId?: string) => {
+    const sessionId = activeSessionId;
+    const runtime = getActiveRuntime();
+    const result = await runtime.agentService.continueOutline(threadId, request, (streamEvent) => {
+      if (runId) event.sender.send("agent:stream", { ...streamEvent, runId });
+    });
+    if (result.status === "completed" || result.status === "rejected") {
+      await persistPresentation(sessionId, runtime);
+    }
+    return result;
+  });
+  ipcMain.handle("agent:confirm-outline", async (event, threadId: string, runId?: string) => {
+    const sessionId = activeSessionId;
+    const runtime = getActiveRuntime();
+    const result = await runtime.agentService.confirmOutline(threadId, (streamEvent) => {
+      if (runId) event.sender.send("agent:stream", { ...streamEvent, runId });
+    });
+    if (result.status === "completed" || result.status === "rejected") {
+      await persistPresentation(sessionId, runtime);
+    }
+    return result;
+  });
   ipcMain.handle("agent:resume", async (_, threadId: string, approved: boolean) => {
     const sessionId = activeSessionId;
     const runtime = getActiveRuntime();

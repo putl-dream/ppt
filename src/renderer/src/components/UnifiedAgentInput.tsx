@@ -21,6 +21,7 @@ interface UnifiedAgentInputProps {
   triggerToast: (msg: string) => void;
   selectedSlideIndex: number | null;
   onClearContextTag: () => void;
+  submitLabel?: string;
 }
 
 export const UnifiedAgentInput: React.FC<UnifiedAgentInputProps> = ({
@@ -39,6 +40,7 @@ export const UnifiedAgentInput: React.FC<UnifiedAgentInputProps> = ({
   triggerToast,
   selectedSlideIndex,
   onClearContextTag,
+  submitLabel = "生成",
 }) => {
   const [isVoiceActive, setIsVoiceActive] = useState(false);
   const voiceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -208,7 +210,7 @@ export const UnifiedAgentInput: React.FC<UnifiedAgentInputProps> = ({
               title="启动智能体工作流"
             >
               <SendIcon size={14} />
-              <span>生成</span>
+              <span>{submitLabel}</span>
             </button>
           </div>
         </div>

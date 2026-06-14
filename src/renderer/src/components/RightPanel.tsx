@@ -432,7 +432,7 @@ export const RightPanel: React.FC<RightPanelProps> = ({
             ))}
 
             {/* 动态的 AI 思考状态表示 */}
-            {busy && (
+            {busy && thoughtProcess.length > 0 && (
               <div className="chat-message assistant active-thinking">
                 <div className="chat-avatar animate-pulse">
                   <BrainIcon size={14} />
