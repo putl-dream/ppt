@@ -28,13 +28,34 @@ interface SessionRuntime {
 
 function createSessionRuntime(snapshot: SessionSnapshot): SessionRuntime {
   const commandBus = new CommandBus(snapshot.presentation);
+  const agentService = new AgentService(
+    commandBus,
+    createModelPresentationPlanner(agentGateway),
+    createModelOutlinePlanner(agentGateway),
+  );
+  const pendingOutline = snapshot.messages.at(-1)?.outlineRequest;
+  if (pendingOutline) {
+    const messages = [] as Array<{ role: "user" | "assistant"; content: string }>;
+    for (let index = snapshot.messages.length - 1; index >= 0; index -= 1) {
+      const message = snapshot.messages[index];
+      if (message.role === "assistant") {
+        if (message.outlineRequest?.threadId !== pendingOutline.threadId) break;
+      }
+      if (message.id !== "init" && message.content.trim()) {
+        messages.unshift({ role: message.role, content: message.content });
+      }
+    }
+    agentService.restoreOutlineConversation(
+      pendingOutline.threadId,
+      messages,
+      pendingOutline.outline,
+      pendingOutline.model,
+      pendingOutline.executionStrategy,
+    );
+  }
   return {
     commandBus,
-    agentService: new AgentService(
-      commandBus,
-      createModelPresentationPlanner(agentGateway),
-      createModelOutlinePlanner(agentGateway),
-    ),
+    agentService,
   };
 }
 

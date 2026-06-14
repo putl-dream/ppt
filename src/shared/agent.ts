@@ -10,8 +10,9 @@ export const agentModelSettingsSchema = z.object({
   baseURL: z.string().trim().url().optional(),
   openaiApiMode: z.enum(["responses", "chat-completions"]).optional(),
 });
+export const agentModelSelectionSchema = agentModelSettingsSchema.omit({ apiKey: true });
 
 export type AgentProvider = z.infer<typeof agentProviderSchema>;
 export type AgentExecutionStrategy = z.infer<typeof agentExecutionStrategySchema>;
 export type AgentModelSettings = z.infer<typeof agentModelSettingsSchema>;
-export type AgentModelSelection = Omit<AgentModelSettings, "apiKey">;
+export type AgentModelSelection = z.infer<typeof agentModelSelectionSchema>;

@@ -226,6 +226,30 @@ export class AgentService {
     this.graph = createAgentWorkflow(commandBus, planner);
   }
 
+  restoreOutlineConversation(
+    threadId: string,
+    messages: OutlineConversationMessage[],
+    outline: PresentationOutline | undefined,
+    model?: AgentModelSelection,
+    executionStrategy: AgentExecutionStrategy = "REQUEST_APPROVAL",
+  ): void {
+    if (messages.length === 0) return;
+    this.outlineConversations.set(threadId, {
+      messages: structuredClone(messages),
+      model,
+      executionStrategy,
+      outline: outline ? structuredClone(outline) : undefined,
+    });
+    agentLogger.info("conversation.outline.restored", {
+      threadId,
+      messageCount: messages.length,
+      outlineSlideCount: outline?.slides.length ?? 0,
+      provider: model?.provider,
+      model: model?.model,
+      executionStrategy,
+    });
+  }
+
   async start(
     request: string,
     model?: AgentModelSelection,
@@ -313,6 +337,8 @@ export class AgentService {
         message: decision.assistantMessage,
         outline: decision.outline,
         missingInformation: decision.missingInformation,
+        model,
+        executionStrategy,
       },
     };
   }
@@ -393,6 +419,8 @@ export class AgentService {
         message: decision.assistantMessage,
         outline: conversation.outline,
         missingInformation: decision.missingInformation,
+        model: conversation.model,
+        executionStrategy: conversation.executionStrategy,
       },
     };
   }

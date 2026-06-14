@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { presentationSchema, type Presentation } from "./presentation";
 import { presentationCommandSchema } from "./commands";
+import { agentExecutionStrategySchema, agentModelSelectionSchema } from "./agent";
 
 const persistedOutlineSchema = z.object({
   threadId: z.string(),
@@ -15,6 +16,8 @@ const persistedOutlineSchema = z.object({
     })),
   }).optional(),
   missingInformation: z.array(z.string()),
+  model: agentModelSelectionSchema.optional(),
+  executionStrategy: agentExecutionStrategySchema.optional(),
 });
 
 const persistedApprovalSchema = z.object({

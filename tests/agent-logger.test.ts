@@ -39,6 +39,19 @@ describe("agentLogger", () => {
 
     expect(debug).not.toHaveBeenCalled();
   });
+
+  it("escapes Unicode so Windows console code pages cannot corrupt log text", () => {
+    const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
+
+    agentLogger.info("conversation.outline.continued", { requestPreview: "啊？你是哪个？" });
+
+    const line = String(info.mock.calls[0][0]);
+    expect(line).not.toContain("啊？你是哪个？");
+    expect(line).toContain("\\u554a");
+    expect(JSON.parse(line.slice(line.indexOf("{")))).toMatchObject({
+      requestPreview: "啊？你是哪个？",
+    });
+  });
 });
 
 describe("requestSummary", () => {

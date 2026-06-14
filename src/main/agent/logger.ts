@@ -46,7 +46,13 @@ function write(level: AgentLogLevel, event: string, data: AgentLogData = {}): vo
     event,
     ...(serializeValue(data) as AgentLogData),
   };
-  const line = `[agent] ${JSON.stringify(entry)}`;
+  // Keep console output ASCII-only so Windows terminals using a legacy code page
+  // cannot reinterpret UTF-8 log bytes as mojibake. JSON parsers restore the
+  // original Unicode text from these escape sequences.
+  const json = JSON.stringify(entry).replace(/[\u007f-\uffff]/g, (character) =>
+    `\\u${character.charCodeAt(0).toString(16).padStart(4, "0")}`,
+  );
+  const line = `[agent] ${json}`;
 
   if (level === "error") {
     console.error(line);

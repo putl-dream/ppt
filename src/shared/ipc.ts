@@ -1,6 +1,6 @@
 import type { Presentation } from "./presentation";
 import type { PresentationCommand } from "./commands";
-import type { AgentExecutionStrategy, AgentModelSettings } from "./agent";
+import type { AgentExecutionStrategy, AgentModelSelection, AgentModelSettings } from "./agent";
 import type { SessionBootstrap, SessionChatMessage } from "./session";
 
 export interface PresentationOutline {
@@ -24,6 +24,8 @@ export interface AgentOutlineRequest {
   message: string;
   outline?: PresentationOutline;
   missingInformation: string[];
+  model?: AgentModelSelection;
+  executionStrategy?: AgentExecutionStrategy;
 }
 
 export type AgentStreamEvent =
