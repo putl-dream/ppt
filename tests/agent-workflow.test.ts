@@ -255,4 +255,52 @@ describe("AgentService", () => {
     expect(seenDrafts[0]).toBeUndefined();
     expect(seenDrafts[1]).toEqual(first.outlineRequest.outline);
   });
+
+  it("restores a persisted outline conversation after the runtime restarts", async () => {
+    const bus = new CommandBus(createStarterPresentation());
+    const seenMessages: Array<unknown> = [];
+    const seenDrafts: Array<unknown> = [];
+    const outlinePlanner: AgentOutlinePlanner = {
+      async review(input) {
+        seenMessages.push(structuredClone(input.messages));
+        seenDrafts.push(input.draftOutline);
+        return {
+          mode: "outline-proposal",
+          intent: "create-presentation",
+          assistantMessage: "Updated restored outline.",
+          outline: input.draftOutline,
+          missingInformation: [],
+        };
+      },
+    };
+    const agent = new AgentService(bus, undefined, outlinePlanner);
+    const outline = {
+      title: "Restored deck",
+      slides: [
+        { title: "Context", keyPoints: ["Market"] },
+        { title: "Plan", keyPoints: ["Product"] },
+        { title: "Next", keyPoints: ["Roadmap"] },
+      ],
+    };
+
+    agent.restoreOutlineConversation(
+      "persisted-thread",
+      [
+        { role: "user", content: "Create a deck" },
+        { role: "assistant", content: "Please review this outline." },
+      ],
+      outline,
+      { provider: "anthropic", model: "test-model" },
+      "AUTO",
+    );
+    const result = await agent.continueOutline("persisted-thread", "Change the second slide");
+
+    expect(result.status).toBe("outline-required");
+    expect(seenMessages[0]).toEqual([
+      { role: "user", content: "Create a deck" },
+      { role: "assistant", content: "Please review this outline." },
+      { role: "user", content: "Change the second slide" },
+    ]);
+    expect(seenDrafts[0]).toEqual(outline);
+  });
 });

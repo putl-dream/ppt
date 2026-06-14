@@ -85,6 +85,39 @@ describe("FileSessionStore", () => {
     expect(message.content).toContain("审批请求已随应用重启失效");
   });
 
+  it("preserves pending outline recovery metadata after an application restart", async () => {
+    const { store, filePath } = await createStore();
+    const sessionId = store.getBootstrap().activeSession.session.id;
+    await store.saveMessages(sessionId, [
+      {
+        id: "outline-1",
+        role: "assistant",
+        content: "请确认大纲",
+        outlineRequest: {
+          threadId: "thread-1",
+          message: "请确认大纲",
+          outline: {
+            title: "测试大纲",
+            slides: [{ title: "第一页", keyPoints: ["要点"] }],
+          },
+          missingInformation: [],
+          model: { provider: "anthropic", model: "test-model" },
+          executionStrategy: "AUTO",
+        },
+      },
+    ]);
+
+    const restored = new FileSessionStore(filePath);
+    await restored.initialize();
+    const outlineRequest = restored.getBootstrap().activeSession.messages[0].outlineRequest;
+
+    expect(outlineRequest).toMatchObject({
+      threadId: "thread-1",
+      model: { provider: "anthropic", model: "test-model" },
+      executionStrategy: "AUTO",
+    });
+  });
+
   it("deletes a session and updates state", async () => {
     const { store } = await createStore();
     const state1 = store.getBootstrap();
