@@ -24,7 +24,10 @@ import { toToolCard } from "../src/main/agent/tools/tool-card";
 import { ToolLoader } from "../src/main/agent/tools/tool-loader";
 import { SystemPromptBuilder } from "../src/main/agent/runtime/system-prompt";
 import { RuntimeNormalizer } from "../src/main/agent/runtime/runtime-normalizer";
-import { AgentRuntime } from "../src/main/agent/runtime/agent-runtime";
+import {
+  AgentRuntime,
+  parseAgentJsonResponse,
+} from "../src/main/agent/runtime/agent-runtime";
 import { CommitGate } from "../src/main/agent/gate/commit-gate";
 import { RiskPolicy } from "../src/main/agent/gate/risk-policy";
 import { DesignPolicy } from "../src/main/agent/design/design-policy";
@@ -43,13 +46,36 @@ function createSequenceGateway(responses: unknown[]): AgentModelGateway {
       return {
         provider: "openai",
         model: "test-model",
-        text: JSON.stringify(value),
+        text: typeof value === "string" ? value : JSON.stringify(value),
       };
     },
   };
 }
 
 describe("Agent Architecture Skeletons & Types", () => {
+  it("extracts the first complete JSON object from model output", () => {
+    expect(parseAgentJsonResponse(
+      '```json\n{"type":"message","content":"包含 { 大括号 } 的文本"}\n```',
+    )).toEqual({
+      type: "message",
+      content: "包含 { 大括号 } 的文本",
+    });
+
+    expect(parseAgentJsonResponse(
+      '{"type":"message","content":"first"}\n{"type":"message","content":"second"}',
+    )).toEqual({
+      type: "message",
+      content: "first",
+    });
+
+    expect(parseAgentJsonResponse(
+      '模型输出如下： {"type":"message","content":"ok"} 后续解释包含 {braces}',
+    )).toEqual({
+      type: "message",
+      content: "ok",
+    });
+  });
+
   it("creates the production registry with Core and Deferred Tools", () => {
     const registry = createDefaultToolRegistry();
     expect(registry.get("ReadPresentationSnapshot")?.loadPolicy).toBe("core");
@@ -197,6 +223,32 @@ describe("Agent Architecture Skeletons & Types", () => {
       expect(result.commands[0].type).toBe("set-presentation-title");
       expect(result.assumptions).toEqual(["Only the title changes"]);
     }
+  });
+
+  it("retries malformed JSON instead of failing the session", async () => {
+    const registry = new ToolRegistry();
+    registry.register(submitCommandsTool);
+    const runtime = new AgentRuntime(registry, createSequenceGateway([
+      "这不是 JSON",
+      {
+        type: "tool_call",
+        toolName: "SubmitCommands",
+        args: {
+          summary: "Update title",
+          commands: [{ id: "cmd-json-retry", type: "set-presentation-title", title: "Retry title" }],
+          risk: "low",
+        },
+      },
+    ]));
+
+    const result = await runtime.run({
+      threadId: "test-json-retry",
+      request: "Create title",
+      presentationSnapshot: createStarterPresentation(),
+      selectedElementIds: [],
+    });
+
+    expect(result.type).toBe("command_proposal");
   });
 
   it("requires Deferred Tools to be discovered in the same session before execution", async () => {

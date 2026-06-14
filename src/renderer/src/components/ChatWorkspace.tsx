@@ -100,7 +100,7 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
 }) => {
   const [showThought, setShowThought] = useState(true);
   const [showSlashMenu, setShowSlashMenu] = useState(false);
-  const [editingLine, setEditingLine] = useState<{ msgId: string; lineIndex: number } | null>(null);
+  const [editingMsgId, setEditingMsgId] = useState<string | null>(null);
   const [editingText, setEditingText] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -140,18 +140,16 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
     setShowSlashMenu(false);
   };
 
-  // Start editing single line
-  const handleStartEdit = (msgId: string, lineIndex: number, currentText: string) => {
-    setEditingLine({ msgId, lineIndex });
+  // Start editing message
+  const handleStartEdit = (msgId: string, currentText: string) => {
+    setEditingMsgId(msgId);
     setEditingText(currentText);
   };
 
   // Save edits back into the chat block content
-  const handleSaveEdit = (msgId: string, lineIndex: number, originalLines: string[]) => {
-    const updatedLines = [...originalLines];
-    updatedLines[lineIndex] = editingText;
-    onUpdateMessageContent(msgId, updatedLines.join("\n"));
-    setEditingLine(null);
+  const handleSaveEdit = (msgId: string) => {
+    onUpdateMessageContent(msgId, editingText);
+    setEditingMsgId(null);
   };
 
   // Render State A: Center Focal Mode (新建会话阶段 —— “居中巨幕控制台”)
@@ -290,62 +288,84 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
               <div className="chat-bubble-content" style={{ flex: 1 }}>
                 
                 {/* AI 回复段落或 Markdown 树大纲 */}
-                <div className="chat-bubble-text" style={{ padding: "12px 18px", width: "100%" }}>
-                  {lines.map((line, idx) => {
-                    const isLineEditing = editingLine?.msgId === msg.id && editingLine?.lineIndex === idx;
-
-                    return (
-                      <div key={idx} className="chat-message-line-container">
-                        {isLineEditing ? (
-                          <div className="flex gap-2 items-center" style={{ margin: "4px 0" }}>
-                            <input
-                              type="text"
-                              className="title-input"
-                              style={{ fontSize: 13, padding: "4px 8px" }}
-                              value={editingText}
-                              onChange={(e) => setEditingText(e.target.value)}
-                              onBlur={() => handleSaveEdit(msg.id, idx, lines)}
-                              onKeyDown={(e) => {
-                                if (e.key === "Enter") handleSaveEdit(msg.id, idx, lines);
-                              }}
-                              autoFocus
-                            />
-                            <button
-                              onClick={() => handleSaveEdit(msg.id, idx, lines)}
-                              className="secondary-btn"
-                              style={{ padding: "4px 8px", fontSize: 11 }}
-                            >
-                              保存
-                            </button>
-                          </div>
-                        ) : (
-                          <div
-                            className="chat-hover-line-wrapper flex justify-between items-center group"
-                            style={{ position: "relative", minHeight: 22 }}
-                          >
-                            <span style={{ fontSize: 13.5, lineHeight: 1.6 }}>{line}</span>
-                            {msg.role === "user" && line.trim().length > 0 && (
-                              <button
-                                className="edit-line-btn opacity-0 group-hover:opacity-100 transition-opacity"
-                                onClick={() => handleStartEdit(msg.id, idx, line)}
-                                title="点击此按钮编辑指令并重新运行"
-                                style={{
-                                  background: "none",
-                                  border: "none",
-                                  color: "var(--accent-cyan)",
-                                  cursor: "pointer",
-                                  fontSize: 11,
-                                  marginLeft: 8
-                                }}
-                              >
-                                ✏️
-                              </button>
-                            )}
-                          </div>
-                        )}
+                <div className="chat-bubble-text" style={{ padding: "12px 18px", width: "100%", position: "relative" }}>
+                  {editingMsgId === msg.id ? (
+                    <div style={{ display: "flex", flexDirection: "column", gap: "8px", minWidth: "350px", maxWidth: "100%" }}>
+                      <textarea
+                        className="chat-message-textarea"
+                        value={editingText}
+                        onChange={(e) => {
+                          setEditingText(e.target.value);
+                          e.target.style.height = "auto";
+                          e.target.style.height = `${e.target.scrollHeight}px`;
+                        }}
+                        ref={(el) => {
+                          if (el) {
+                            el.style.height = "auto";
+                            el.style.height = `${el.scrollHeight}px`;
+                          }
+                        }}
+                        style={{
+                          width: "100%",
+                          background: "var(--bg-darker)",
+                          border: "1px solid var(--border-glass-focused)",
+                          borderRadius: "4px",
+                          color: "var(--text-primary)",
+                          fontFamily: "inherit",
+                          fontSize: "13.5px",
+                          padding: "8px",
+                          resize: "none",
+                          outline: "none",
+                          overflow: "hidden",
+                          boxSizing: "border-box"
+                        }}
+                        autoFocus
+                      />
+                      <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px" }}>
+                        <button
+                          onClick={() => setEditingMsgId(null)}
+                          className="secondary-btn"
+                          style={{ padding: "4px 10px", fontSize: 12, borderRadius: "4px", cursor: "pointer" }}
+                        >
+                          取消
+                        </button>
+                        <button
+                          onClick={() => handleSaveEdit(msg.id)}
+                          className="primary-btn"
+                          style={{
+                            padding: "4px 10px",
+                            fontSize: 12,
+                            borderRadius: "4px",
+                            background: "var(--accent-cyan)",
+                            border: "none",
+                            color: "#fff",
+                            cursor: "pointer"
+                          }}
+                        >
+                          保存并重新生成
+                        </button>
                       </div>
-                    );
-                  })}
+                    </div>
+                  ) : (
+                    <>
+                      {lines.map((line, idx) => (
+                        <div key={idx} style={{ minHeight: 22, fontSize: 13.5, lineHeight: 1.6 }}>
+                          {line}
+                        </div>
+                      ))}
+                      {msg.role === "user" && (
+                        <div className="edit-btn-container" style={{ display: "flex", justifyContent: "flex-end", marginTop: "4px" }}>
+                          <button
+                            className="edit-message-btn"
+                            onClick={() => handleStartEdit(msg.id, msg.content)}
+                            title="编辑指令并重新运行"
+                          >
+                            ✏️ 编辑
+                          </button>
+                        </div>
+                      )}
+                    </>
+                  )}
                 </div>
 
                 {/* 展开的思考轨迹 */}

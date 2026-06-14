@@ -11,12 +11,47 @@ type ToolCall = {
   args: unknown;
 };
 
-function parseJsonResponse(text: string): unknown {
-  const stripped = text.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
-  const start = stripped.indexOf("{");
-  const end = stripped.lastIndexOf("}");
-  if (start < 0 || end < start) throw new Error("Agent Runtime expected a JSON object.");
-  return JSON.parse(stripped.slice(start, end + 1));
+export function parseAgentJsonResponse(text: string): unknown {
+  for (let start = text.indexOf("{"); start >= 0; start = text.indexOf("{", start + 1)) {
+    const closingTokens: string[] = [];
+    let inString = false;
+    let escaped = false;
+
+    for (let index = start; index < text.length; index += 1) {
+      const token = text[index];
+
+      if (inString) {
+        if (escaped) {
+          escaped = false;
+        } else if (token === "\\") {
+          escaped = true;
+        } else if (token === '"') {
+          inString = false;
+        }
+        continue;
+      }
+
+      if (token === '"') {
+        inString = true;
+      } else if (token === "{") {
+        closingTokens.push("}");
+      } else if (token === "[") {
+        closingTokens.push("]");
+      } else if (token === "}" || token === "]") {
+        if (closingTokens.pop() !== token) break;
+
+        if (closingTokens.length === 0) {
+          try {
+            return JSON.parse(text.slice(start, index + 1));
+          } catch {
+            break;
+          }
+        }
+      }
+    }
+  }
+
+  throw new Error("Agent Runtime expected one complete JSON object.");
 }
 
 function isToolCall(value: unknown): value is ToolCall {
@@ -73,7 +108,19 @@ export class AgentRuntime {
         },
         options.model,
       );
-      const parsed = parseJsonResponse(response.text);
+      let parsed: unknown;
+      try {
+        parsed = parseAgentJsonResponse(response.text);
+      } catch (error) {
+        transcript.push({
+          role: "assistant",
+          raw: response.text.slice(0, 2_000),
+          error: error instanceof Error
+            ? `${error.message} Return exactly one complete JSON object.`
+            : "Invalid JSON response. Return exactly one complete JSON object.",
+        });
+        continue;
+      }
 
       if (!isToolCall(parsed)) {
         if (

@@ -2054,6 +2054,34 @@ aside {
   opacity: 1 !important;
 }
 
+/* 消息编辑按钮样式 */
+.chat-bubble-text .edit-btn-container {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease-in-out;
+}
+
+.chat-bubble-text:hover .edit-btn-container {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.chat-bubble-text .edit-message-btn {
+  background: var(--bg-darker);
+  border: 1px solid var(--border-glass-focused);
+  border-radius: 4px;
+  color: var(--accent-cyan);
+  cursor: pointer;
+  font-size: 11px;
+  padding: 2px 6px;
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.chat-bubble-text .edit-message-btn:hover {
+  background: var(--bg-input-field);
+  border-color: var(--accent-cyan);
+}
+
 .chat-line-editor {
   background: var(--bg-input-field);
   border: 1px solid var(--accent-cyan);
