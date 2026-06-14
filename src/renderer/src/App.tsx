@@ -139,40 +139,72 @@ export function App() {
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [thoughtProcess, setThoughtProcess] = useState<string[]>([]);
   const [thoughtProgress, setThoughtProgress] = useState(0);
+  const [agentActivityMode, setAgentActivityMode] = useState<"idle" | "request" | "workflow">("idle");
   const [highlightSlideId, setHighlightSlideId] = useState<string | null>(null);
   const activeRunIdRef = useRef<string | null>(null);
   const activeRunStepsRef = useRef<string[]>([]);
   const streamMessageIdsRef = useRef(new Map<string, string>());
+  const statusTypingTimerRef = useRef<number | null>(null);
 
-  useEffect(() => window.desktopApi.onAgentStream((event: AgentStreamEvent) => {
-    if (event.runId !== activeRunIdRef.current) return;
+  useEffect(() => {
+    const stopStatusTyping = () => {
+      if (statusTypingTimerRef.current !== null) {
+        window.clearInterval(statusTypingTimerRef.current);
+        statusTypingTimerRef.current = null;
+      }
+    };
+    const unsubscribe = window.desktopApi.onAgentStream((event: AgentStreamEvent) => {
+      if (event.runId !== activeRunIdRef.current) return;
 
-    if (event.type === "workflow-progress") {
-      activeRunStepsRef.current = [...activeRunStepsRef.current, event.message];
-      setThoughtProcess(activeRunStepsRef.current);
-      setThoughtProgress(event.progress);
-      return;
-    }
+      if (event.type === "request-status") {
+        stopStatusTyping();
+        setAgentActivityMode("request");
+        setThoughtProgress(event.progress);
+        let visibleLength = 1;
+        setThoughtProcess([event.message.slice(0, visibleLength)]);
+        statusTypingTimerRef.current = window.setInterval(() => {
+          visibleLength += 1;
+          setThoughtProcess([event.message.slice(0, visibleLength)]);
+          if (visibleLength >= event.message.length) stopStatusTyping();
+        }, 28);
+        return;
+      }
 
-    setThoughtProcess([]);
-    setThoughtProgress(0);
-    let messageId = streamMessageIdsRef.current.get(event.runId);
-    if (!messageId) {
-      messageId = crypto.randomUUID();
-      streamMessageIdsRef.current.set(event.runId, messageId);
-      setChatMessages((prev) => [
-        ...prev,
-        { id: messageId!, role: "assistant", content: event.delta },
-      ]);
-      return;
-    }
+      if (event.type === "workflow-progress") {
+        stopStatusTyping();
+        setAgentActivityMode("workflow");
+        activeRunStepsRef.current = [...activeRunStepsRef.current, event.message];
+        setThoughtProcess(activeRunStepsRef.current);
+        setThoughtProgress(event.progress);
+        return;
+      }
 
-    setChatMessages((prev) => prev.map((message) =>
-      message.id === messageId
-        ? { ...message, content: `${message.content}${event.delta}` }
-        : message,
-    ));
-  }), []);
+      stopStatusTyping();
+      setAgentActivityMode("idle");
+      setThoughtProcess([]);
+      setThoughtProgress(0);
+      let messageId = streamMessageIdsRef.current.get(event.runId);
+      if (!messageId) {
+        messageId = crypto.randomUUID();
+        streamMessageIdsRef.current.set(event.runId, messageId);
+        setChatMessages((prev) => [
+          ...prev,
+          { id: messageId!, role: "assistant", content: event.delta },
+        ]);
+        return;
+      }
+
+      setChatMessages((prev) => prev.map((message) =>
+        message.id === messageId
+          ? { ...message, content: `${message.content}${event.delta}` }
+          : message,
+      ));
+    });
+    return () => {
+      stopStatusTyping();
+      unsubscribe();
+    };
+  }, []);
 
   // 会话状态由 Electron 主进程持久化，渲染进程只保留当前快照
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
@@ -445,6 +477,7 @@ export function App() {
     setApproval(undefined);
     setThoughtProgress(0);
     setThoughtProcess([]);
+    setAgentActivityMode("idle");
     const runId = crypto.randomUUID();
     activeRunIdRef.current = runId;
     activeRunStepsRef.current = [];
@@ -481,7 +514,12 @@ export function App() {
     } finally {
       activeRunIdRef.current = null;
       streamMessageIdsRef.current.delete(runId);
+      if (statusTypingTimerRef.current !== null) {
+        window.clearInterval(statusTypingTimerRef.current);
+        statusTypingTimerRef.current = null;
+      }
       setBusy(false);
+      setAgentActivityMode("idle");
       setThoughtProcess([]);
       setThoughtProgress(0);
     }
@@ -492,6 +530,7 @@ export function App() {
     setBusy(true);
     setThoughtProgress(0);
     setThoughtProcess([]);
+    setAgentActivityMode("idle");
     const runId = crypto.randomUUID();
     activeRunIdRef.current = runId;
     activeRunStepsRef.current = [];
@@ -510,7 +549,12 @@ export function App() {
     } finally {
       activeRunIdRef.current = null;
       streamMessageIdsRef.current.delete(runId);
+      if (statusTypingTimerRef.current !== null) {
+        window.clearInterval(statusTypingTimerRef.current);
+        statusTypingTimerRef.current = null;
+      }
       setBusy(false);
+      setAgentActivityMode("idle");
       setThoughtProcess([]);
       setThoughtProgress(0);
     }
@@ -908,6 +952,7 @@ export function App() {
                   chatMessages={chatMessages}
                   thoughtProcess={thoughtProcess}
                   thoughtProgress={thoughtProgress}
+                  agentActivityMode={agentActivityMode}
                   request={request}
                   onChangeRequest={setRequest}
                   onSubmitRequest={() => void startAgent()}

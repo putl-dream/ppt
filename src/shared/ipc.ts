@@ -29,6 +29,12 @@ export interface AgentOutlineRequest {
 export type AgentStreamEvent =
   | {
     runId: string;
+    type: "request-status";
+    message: string;
+    progress: number;
+  }
+  | {
+    runId: string;
     type: "workflow-progress";
     message: string;
     progress: number;

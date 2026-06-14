@@ -30,8 +30,10 @@ describe("AgentService", () => {
       message: "你好！我可以陪你聊聊，也可以帮你制作或修改 PPT。",
     });
     if (result.status !== "chat") throw new Error("Expected chat result");
-    expect(events.every((event) => event.type === "text-delta")).toBe(true);
-    expect(events.map((event) => event.delta ?? "").join("")).toBe(result.message);
+    expect(events.some((event) => event.type === "request-status")).toBe(true);
+    expect(events.some((event) => event.type === "workflow-progress")).toBe(false);
+    expect(events.filter((event) => event.type === "text-delta").map((event) => event.delta ?? "").join(""))
+      .toBe(result.message);
     expect(bus.getSnapshot().revision).toBe(0);
   });
 
@@ -49,8 +51,43 @@ describe("AgentService", () => {
 
     expect(result.status).toBe("outline-required");
     expect(events.length).toBeGreaterThan(0);
-    expect(events.every((event) => event.type === "workflow-progress")).toBe(true);
+    expect(events[0]?.type).toBe("request-status");
+    expect(events.every((event) => event.type !== "text-delta")).toBe(true);
     expect(events.at(-1)?.message).toContain("大纲草案");
+  });
+
+  it("emits a request status before waiting for the outline model", async () => {
+    const bus = new CommandBus(createStarterPresentation());
+    const events: Array<{ type: string; message?: string }> = [];
+    let resolveReview!: (decision: Awaited<ReturnType<AgentOutlinePlanner["review"]>>) => void;
+    const outlinePlanner: AgentOutlinePlanner = {
+      review: () => new Promise((resolve) => {
+        resolveReview = resolve;
+      }),
+    };
+    const agent = new AgentService(bus, undefined, outlinePlanner);
+
+    const pending = agent.start("Create an AI deck", undefined, "AUTO", (event) => events.push(event));
+
+    expect(events[0]).toMatchObject({
+      type: "request-status",
+      message: "正在理解你的需求...",
+    });
+    resolveReview({
+      mode: "outline-proposal",
+      intent: "create-presentation",
+      assistantMessage: "Please confirm the outline.",
+      outline: {
+        title: "AI deck",
+        slides: [
+          { title: "Context", keyPoints: ["Market"] },
+          { title: "Plan", keyPoints: ["Product"] },
+          { title: "Next", keyPoints: ["Roadmap"] },
+        ],
+      },
+      missingInformation: [],
+    });
+    await pending;
   });
 
   it("pauses for approval and applies commands after resume", async () => {

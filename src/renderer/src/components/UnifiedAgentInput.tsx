@@ -44,6 +44,7 @@ export const UnifiedAgentInput: React.FC<UnifiedAgentInputProps> = ({
 }) => {
   const [isVoiceActive, setIsVoiceActive] = useState(false);
   const voiceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Extract folder name from path for display
   const folderName = localStoragePath.split("/").pop() || localStoragePath.split("\\").pop() || "ppt_workspace";
@@ -64,6 +65,11 @@ export const UnifiedAgentInput: React.FC<UnifiedAgentInputProps> = ({
     };
     
     onSubmitRequest(compositePayload);
+
+    // Refocus the textarea immediately after submitting request to prevent focus loss
+    setTimeout(() => {
+      textareaRef.current?.focus();
+    }, 0);
   };
 
   const handleKeyPress = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -130,6 +136,7 @@ export const UnifiedAgentInput: React.FC<UnifiedAgentInputProps> = ({
         {/* Row 1: Content Input Area (Textarea) */}
         <div className="input-textarea-row" style={{ padding: "14px 16px 8px 16px", background: "var(--bg-input-field)" }}>
           <textarea
+            ref={textareaRef}
             value={request}
             onChange={(e) => onChangeRequest(e.target.value)}
             onKeyDown={handleKeyPress}
@@ -138,10 +145,20 @@ export const UnifiedAgentInput: React.FC<UnifiedAgentInputProps> = ({
                 ? `输入对第 ${selectedSlideIndex + 1} 页的局部指令（如：“把背景换成白色”、“增大字号”）...`
                 : "输入修改意图，支持输入斜杠 / 唤醒快捷排版指令..."
             }
-            disabled={busy}
+            readOnly={busy}
+            autoFocus
             rows={layoutMode === "center" ? 2 : 1}
             className="input-textarea"
-            style={{ width: "100%", border: "none", resize: "none", outline: "none", fontSize: "14px", cursor: "text" }}
+            style={{
+              width: "100%",
+              border: "none",
+              resize: "none",
+              outline: "none",
+              fontSize: "14px",
+              cursor: busy ? "not-allowed" : "text",
+              opacity: busy ? 0.75 : 1,
+              transition: "opacity 0.2s ease"
+            }}
           />
         </div>
 

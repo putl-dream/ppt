@@ -37,10 +37,29 @@ const AgentState = Annotation.Root({
 type AgentStateType = typeof AgentState.State;
 
 export type AgentServiceEvent =
+  | { type: "request-status"; message: string; progress: number }
   | { type: "workflow-progress"; message: string; progress: number }
   | { type: "text-delta"; delta: string };
 
 type AgentEventListener = (event: AgentServiceEvent) => void;
+
+function startRequestStatusUpdates(
+  listener: AgentEventListener | undefined,
+  messages: [string, string, string],
+): () => void {
+  if (!listener) return () => undefined;
+
+  listener({ type: "request-status", message: messages[0], progress: 6 });
+  const timers = [
+    setTimeout(() => {
+      listener({ type: "request-status", message: messages[1], progress: 12 });
+    }, 1_200),
+    setTimeout(() => {
+      listener({ type: "request-status", message: messages[2], progress: 18 });
+    }, 3_500),
+  ];
+  return () => timers.forEach((timer) => clearTimeout(timer));
+}
 
 async function streamAssistantMessage(message: string, listener?: AgentEventListener): Promise<void> {
   if (!listener) return;
@@ -157,11 +176,16 @@ export class AgentService {
     listener?: AgentEventListener,
   ): Promise<AgentRunResult> {
     const messages: OutlineConversationMessage[] = [{ role: "user", content: request }];
+    const stopStatusUpdates = startRequestStatusUpdates(listener, [
+      "正在理解你的需求...",
+      "正在判断最合适的响应方式...",
+      "正在组织回复内容，请稍候...",
+    ]);
     const decision = await this.outlinePlanner.review({
       messages,
       presentation: this.commandBus.getSnapshot(),
       model,
-    });
+    }).finally(stopStatusUpdates);
 
     if (decision.mode === "chat") {
       await streamAssistantMessage(decision.assistantMessage, listener);
@@ -226,12 +250,17 @@ export class AgentService {
     if (!conversation) throw new Error("Outline conversation not found or already completed.");
 
     conversation.messages.push({ role: "user", content: request });
+    const stopStatusUpdates = startRequestStatusUpdates(listener, [
+      "正在理解你对大纲的补充...",
+      "正在结合已有内容判断调整方向...",
+      "正在整理更新后的回复，请稍候...",
+    ]);
     const decision = await this.outlinePlanner.review({
       messages: conversation.messages,
       presentation: this.commandBus.getSnapshot(),
       model: conversation.model,
       draftOutline: conversation.outline,
-    });
+    }).finally(stopStatusUpdates);
 
     if (decision.mode === "chat") {
       conversation.messages.push({ role: "assistant", content: decision.assistantMessage });

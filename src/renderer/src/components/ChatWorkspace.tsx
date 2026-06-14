@@ -29,6 +29,7 @@ interface ChatWorkspaceProps {
   chatMessages: ChatMessage[];
   thoughtProcess: string[];
   thoughtProgress: number;
+  agentActivityMode: "idle" | "request" | "workflow";
   request: string;
   onChangeRequest: (val: string) => void;
   onSubmitRequest: () => void;
@@ -65,6 +66,7 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
   chatMessages,
   thoughtProcess,
   thoughtProgress,
+  agentActivityMode,
   request,
   onChangeRequest,
   onSubmitRequest,
@@ -467,12 +469,14 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
             </div>
             <div className="chat-bubble-content" style={{ flex: 1 }}>
               <div className="chat-bubble-text" style={{ padding: "12px 18px" }}>
-                {thoughtProgress < 100
-                  ? "AI 正在编排排版指令流..."
-                  : "指令编排完毕，等待指令确认执行..."}
+                {agentActivityMode === "request"
+                  ? thoughtProcess.at(-1)
+                  : thoughtProgress < 100
+                    ? "AI 正在编排排版指令流..."
+                    : "指令编排完毕，等待指令确认执行..."}
               </div>
 
-              {thoughtProcess.length > 0 && (
+              {agentActivityMode === "workflow" && thoughtProcess.length > 0 && (
                 <div className="thought-container">
                   <div className="thought-header">
                     <span>Agent 思考推理轨迹</span>
