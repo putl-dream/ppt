@@ -6,6 +6,8 @@
  */
 
 import type { PresentationCommand } from "@shared/commands";
+import type { AgentModelSelection } from "@shared/agent";
+import type { Presentation } from "@shared/presentation";
 
 export type AgentRuntimeRisk = "low" | "medium" | "high";
 
@@ -32,3 +34,17 @@ export type AgentRuntimeResult =
       risk: AgentRuntimeRisk;
       assumptions?: string[];
     };
+
+/**
+ * Agent Runtime 启动选项输入契约
+ */
+export interface AgentRuntimeOptions {
+  threadId: string;
+  request: string;
+  presentationSnapshot: Presentation;
+  currentSlideId?: string;
+  selectedElementIds: string[];
+  model?: AgentModelSelection;
+  messageHistory?: Array<{ role: "user" | "assistant"; content: string }>;
+  maxSteps?: number;
+}

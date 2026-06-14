@@ -5,9 +5,8 @@
  * approval/apply/reject/fail 的生命周期路由，不负责意图分类、工具实现、
  * 风险计算或真实命令执行细节。
  *
- * 当前状态：旧的 planner、outline review、validate 与 AgentService 仍在本文件中。
- * 本轮只建立目标目录和职责说明，不改变现有运行行为；后续按 docs 中的能力串联
- * 指南逐步迁移。
+ * 当前状态：本文件保留旧 workflow 供历史测试和迁移对照使用。生产主进程已经改用
+ * service.ts + AgentRuntime + CommitGate；不要再从新业务入口依赖本文件的 AgentService。
  */
 import { Annotation, Command, interrupt, MemorySaver, StateGraph } from "@langchain/langgraph";
 import { executeCommand, presentationCommandSchema, type CommandBus, type PresentationCommand } from "@shared/commands";

@@ -390,6 +390,7 @@ export function App() {
 
   function applyAgentResult(result: AgentRunResult, steps: string[], runId?: string) {
     if (result.status === "chat") {
+      setOutlineRequest(undefined);
       const messageId = runId ? streamMessageIdsRef.current.get(runId) : undefined;
       if (messageId) {
         setChatMessages((prev) => prev.map((message) =>
@@ -521,12 +522,24 @@ export function App() {
 
     try {
       const result = useOutlineRequest
-        ? await window.desktopApi.continueAgentRun(useOutlineRequest.threadId, activeRequest, runId)
+        ? await window.desktopApi.continueAgentRun(
+          useOutlineRequest.threadId,
+          activeRequest,
+          runId,
+          {
+            currentSlideId: selectedSlideId || undefined,
+            selectedElementIds: selectedElementId ? [selectedElementId] : [],
+          },
+        )
         : await window.desktopApi.startAgentRun(
           activeRequest,
           selectedModel ? toAgentModelSettings(selectedModel) : undefined,
           executionStrategy,
           runId,
+          {
+            currentSlideId: selectedSlideId || undefined,
+            selectedElementIds: selectedElementId ? [selectedElementId] : [],
+          },
         );
       applyAgentResult(result, activeRunStepsRef.current, runId);
     } catch (err) {

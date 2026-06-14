@@ -418,6 +418,21 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
                       <span>📋 待审核的排版更新单</span>
                     </div>
                     <p className="approval-summary">{msg.approval.summary}</p>
+                    {msg.approval.risk && (
+                      <p className="approval-summary">
+                        风险等级：{msg.approval.risk === "high" ? "高" : msg.approval.risk === "medium" ? "中" : "低"}
+                      </p>
+                    )}
+                    {msg.approval.diff && (
+                      <p className="approval-summary">
+                        影响范围：{msg.approval.diff.affectedSlideIds.length} 页，新增元素 {msg.approval.diff.elementChanges.addedCount} 个，删除元素 {msg.approval.diff.elementChanges.removedCount} 个，更新元素 {msg.approval.diff.elementChanges.updatedCount} 个
+                      </p>
+                    )}
+                    {msg.approval.assumptions && msg.approval.assumptions.length > 0 && (
+                      <p className="approval-summary">
+                        默认假设：{msg.approval.assumptions.join("；")}
+                      </p>
+                    )}
                     
                     <div className="approval-commands-list">
                       {msg.approval.commands.map((cmd) => (

@@ -9,10 +9,10 @@ const api: DesktopApi = {
   saveSessionMessages: (sessionId, messages) =>
     ipcRenderer.invoke("session:save-messages", sessionId, messages),
   getPresentation: () => ipcRenderer.invoke("presentation:get"),
-  startAgentRun: (request, model, executionStrategy, runId) =>
-    ipcRenderer.invoke("agent:start", request, model, executionStrategy, runId),
-  continueAgentRun: (threadId, request, runId) =>
-    ipcRenderer.invoke("agent:continue", threadId, request, runId),
+  startAgentRun: (request, model, executionStrategy, runId, editorContext) =>
+    ipcRenderer.invoke("agent:start", request, model, executionStrategy, runId, editorContext),
+  continueAgentRun: (threadId, request, runId, editorContext) =>
+    ipcRenderer.invoke("agent:continue", threadId, request, runId, editorContext),
   confirmAgentOutline: (threadId, runId) =>
     ipcRenderer.invoke("agent:confirm-outline", threadId, runId),
   onAgentStream: (listener) => {

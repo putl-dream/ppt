@@ -3,9 +3,9 @@ import { writeFile } from "node:fs/promises";
 import { app, BrowserWindow, ipcMain, Menu, dialog, type MessageBoxOptions } from "electron";
 import { CommandBus, type PresentationCommand } from "@shared/commands";
 import type { Presentation } from "@shared/presentation";
-import type { AgentRunResult, ExportPresentationOptions } from "@shared/ipc";
+import type { AgentEditorContext, AgentRunResult, ExportPresentationOptions } from "@shared/ipc";
 import { exportToPptx } from "./ppt-exporter";
-import { AgentService, type AgentServiceEvent } from "./agent/workflow";
+import { AgentService, type AgentServiceEvent } from "./agent/service";
 import {
   agentExecutionStrategySchema,
   agentModelSettingsSchema,
@@ -13,8 +13,10 @@ import {
   type AgentModelSettings,
 } from "@shared/agent";
 import { AgentGateway } from "./agent/gateway";
-import { createModelPresentationPlanner } from "./agent/planner";
-import { createModelOutlinePlanner } from "./agent/outline-planner";
+import { AgentRuntime } from "./agent/runtime/agent-runtime";
+import { createDefaultToolRegistry } from "./agent/tools/tool-registry";
+import { CommitGate } from "./agent/gate/commit-gate";
+import { RiskPolicy } from "./agent/gate/risk-policy";
 import { agentLogger, requestSummary } from "./agent/logger";
 import { FileSessionStore } from "./session-store";
 import type { SessionChatMessage, SessionSnapshot } from "@shared/session";
@@ -28,10 +30,11 @@ interface SessionRuntime {
 
 function createSessionRuntime(snapshot: SessionSnapshot): SessionRuntime {
   const commandBus = new CommandBus(snapshot.presentation);
+  const registry = createDefaultToolRegistry();
   const agentService = new AgentService(
     commandBus,
-    createModelPresentationPlanner(agentGateway),
-    createModelOutlinePlanner(agentGateway),
+    new AgentRuntime(registry, agentGateway),
+    new CommitGate(new RiskPolicy()),
   );
   const pendingOutline = snapshot.messages.at(-1)?.outlineRequest;
   if (pendingOutline) {
@@ -240,6 +243,7 @@ app.whenReady().then(async () => {
       input?: AgentModelSettings,
       strategy?: AgentExecutionStrategy,
       runId?: string,
+      editorContext?: AgentEditorContext,
     ) => {
       const sessionId = activeSessionId;
       const runtime = getActiveRuntime();
@@ -267,6 +271,7 @@ app.whenReady().then(async () => {
             selection,
             executionStrategy,
             emit,
+            editorContext,
           );
           if (runResult.status === "completed" || runResult.status === "rejected") {
             await persistPresentation(sessionId, runtime);
@@ -277,7 +282,13 @@ app.whenReady().then(async () => {
       return result;
     },
   );
-  ipcMain.handle("agent:continue", async (event, threadId: string, request: string, runId?: string) => {
+  ipcMain.handle("agent:continue", async (
+    event,
+    threadId: string,
+    request: string,
+    runId?: string,
+    editorContext?: AgentEditorContext,
+  ) => {
     const sessionId = activeSessionId;
     const runtime = getActiveRuntime();
     const result = await runAgentOperation(
@@ -292,6 +303,7 @@ app.whenReady().then(async () => {
           (streamEvent) => {
             if (runId) event.sender.send("agent:stream", { ...streamEvent, runId });
           },
+          editorContext,
         );
         if (runResult.status === "completed" || runResult.status === "rejected") {
           await persistPresentation(sessionId, runtime);

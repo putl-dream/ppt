@@ -17,6 +17,23 @@ export interface AgentApprovalRequest {
   threadId: string;
   summary: string;
   commands: PresentationCommand[];
+  risk?: "low" | "medium" | "high";
+  assumptions?: string[];
+  diff?: {
+    titleChanged: boolean;
+    oldTitle: string;
+    newTitle: string;
+    themeChanged: boolean;
+    slidesAddedCount: number;
+    slidesRemovedCount: number;
+    affectedSlideIds: string[];
+    elementChanges: {
+      addedCount: number;
+      removedCount: number;
+      updatedCount: number;
+    };
+  };
+  preview?: Presentation;
 }
 
 export interface AgentOutlineRequest {
@@ -26,6 +43,11 @@ export interface AgentOutlineRequest {
   missingInformation: string[];
   model?: AgentModelSelection;
   executionStrategy?: AgentExecutionStrategy;
+}
+
+export interface AgentEditorContext {
+  currentSlideId?: string;
+  selectedElementIds: string[];
 }
 
 export type AgentStreamEvent =
@@ -66,8 +88,14 @@ export interface DesktopApi {
     model?: AgentModelSettings,
     executionStrategy?: AgentExecutionStrategy,
     runId?: string,
+    editorContext?: AgentEditorContext,
   ): Promise<AgentRunResult>;
-  continueAgentRun(threadId: string, request: string, runId?: string): Promise<AgentRunResult>;
+  continueAgentRun(
+    threadId: string,
+    request: string,
+    runId?: string,
+    editorContext?: AgentEditorContext,
+  ): Promise<AgentRunResult>;
   confirmAgentOutline(threadId: string, runId?: string): Promise<AgentRunResult>;
   onAgentStream(listener: (event: AgentStreamEvent) => void): () => void;
   resumeAgentRun(threadId: string, approved: boolean): Promise<AgentRunResult>;

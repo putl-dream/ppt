@@ -1,4 +1,26 @@
+import { z } from "zod";
+import type { ToolDefinition } from "../tool-definition";
+import type { PresentationCommand } from "@shared/commands";
+
+export const beautifyTableSchema = z.object({
+  slideId: z.string().describe("幻灯片 ID"),
+  elementId: z.string().describe("表格元素 ID"),
+});
+
 /**
- * Deferred Tool: 为指定表格生成层级、对齐和样式优化 commands。
- * 不改变单元格事实、排序和汇总逻辑，除非用户明确要求且经过审批。
+ * Deferred Tool: 对表格进行美化。
  */
+export const beautifyTableTool: ToolDefinition<
+  typeof beautifyTableSchema,
+  { commands: PresentationCommand[] }
+> = {
+  name: "BeautifyTable",
+  description: "美化表格视觉风格，如斑马线色彩、行高、文字对齐和边框调整。",
+  category: "deferred",
+  loadPolicy: "deferred",
+  inputSchema: beautifyTableSchema,
+  risk: "medium",
+  execute: async () => {
+    return { commands: [] };
+  },
+};

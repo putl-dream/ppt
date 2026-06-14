@@ -4,20 +4,22 @@
 
 本文把 `PLAN.md` 中的目标架构映射到当前仓库，说明各目录如何协作、哪些能力可以被模型调用、哪些能力必须留在系统内部。
 
-本次只建立能力边界和文件骨架，不实现 Tool Registry、Agent Runtime、Commit Gate 或新的前端交互。新增 `.ts` 文件目前只包含稳定类型契约和职责说明，不应被生产运行链路导入。
+当前仓库已经完成首版运行链路：主进程使用 `AgentService + AgentRuntime + ToolRegistry + CommitGate`，并通过现有文本 Gateway 执行严格 JSON 协议的工具循环。
 
 ## 2. 当前落点
 
 计划中的 `src/agent` 按本仓库现有结构落在 `src/main/agent`：Agent、模型网关、Session 与 Electron 主进程在同一可信边界内运行。
 
-现有实现仍然有效：
+当前生产实现：
 
-- `src/main/agent/workflow.ts`：当前包含旧 workflow、outline review、planner、validate、approval、apply 与 `AgentService`。
-- `src/main/agent/planner.ts`：当前把模型输出转换为 `PresentationCommand`。
+- `src/main/agent/service.ts`：处理 Runtime 结果、Commit Gate、审批暂存、revision 校验与真实应用。
+- `src/main/agent/runtime/agent-runtime.ts`：通过 Gateway 执行有步数上限的 JSON tool loop。
+- `src/main/agent/tools`：提供默认 Registry、Core Tools、Deferred Tools 发现与执行隔离。
+- `src/main/agent/gate`：执行最终 schema 校验、沙箱试运行、diff 与风险策略。
 - `src/shared/commands.ts`：当前提供命令 schema、纯 `executeCommand` 与真实 `CommandBus`。
 - `src/shared/presentation.ts`：当前定义 Presentation、Slide 与 Element 数据模型。
 
-新增目录描述目标边界，不代表能力已接线完成。
+`src/main/agent/workflow.ts` 与旧 planner/outline planner 暂时保留给历史测试和迁移对照，不再是主进程生产入口。
 
 ## 3. 能力分层
 
@@ -186,15 +188,16 @@ User Request -> Agent Runtime -> message -> end
 
 每一步都应保持现有测试可运行，并新增对应边界测试；不要一次性替换整个 Agent 链路。
 
-## 11. 本轮完成定义
+## 11. 当前实现范围
 
-本轮完成的是目录、文件职责和能力串联说明。以下事项明确不在本轮范围：
+当前已经实现：
 
-- 不实现工具 schema、Registry 或 ToolCard 搜索。
-- 不调用模型或改造 gateway。
-- 不改写现有 workflow 行为。
-- 不新增真实 PPT 修改能力。
-- 不改变 IPC 返回协议或前端 UI。
-- 不实现导出、文件写入和审批预览。
+- Core/Deferred/Runtime 工具加载边界与 Registry 搜索。
+- 当前 thread 已发现工具集合，以及 Search 后才能 Execute 的强制约束。
+- Gateway 驱动的 JSON tool loop 和三类 Runtime 结果。
+- 可选 PreviewCommands 与强制 Commit Gate 的双层校验。
+- REQUEST_APPROVAL、AUTO 低风险应用、审批暂存、拒绝和 revision 过期保护。
+- 审批 risk、diff、assumptions 与沙箱 preview 协议。
+- 当前页面和选中元素从渲染进程传入只读 ToolContext。
 
-后续开发应以这些边界为准，逐文件替换说明性骨架，并同步补充测试。
+仍需逐步增强的部分包括更丰富的 Deferred Tool 算法、前端预览版本切换，以及在供应商支持稳定后评估原生 function calling。当前文本 Gateway 通过严格 JSON 协议承载工具循环。
