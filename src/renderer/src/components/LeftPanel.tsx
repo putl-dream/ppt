@@ -1,16 +1,9 @@
 import React from "react";
+import type { SessionSummary } from "@shared/session";
 import { PlusIcon, SettingsIcon, FileIcon, UserIcon } from "./Icons";
 
-interface SessionItem {
-  id: string;
-  title: string;
-  timestamp: string;
-  slideCount: number;
-  revision: number;
-}
-
 interface LeftPanelProps {
-  sessions: SessionItem[];
+  sessions: SessionSummary[];
   activeSessionId: string;
   onSelectSession: (id: string) => void;
   onNewSession: () => void;
@@ -53,7 +46,14 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
             >
               <div className="history-card-header">
                 <span className="history-ver">Rev {session.revision}</span>
-                <span className="history-time">{session.timestamp}</span>
+                <span className="history-time">
+                  {new Date(session.updatedAt).toLocaleString([], {
+                    month: "2-digit",
+                    day: "2-digit",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+                </span>
               </div>
               <div className="history-card-title flex items-center gap-2">
                 <FileIcon size={14} className="text-muted" />

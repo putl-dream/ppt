@@ -1,6 +1,13 @@
 import { useEffect, useState } from "react";
 import type { AgentApprovalRequest } from "@shared/ipc";
 import type { Presentation, SlideElement } from "@shared/presentation";
+import {
+  createSessionPresentation,
+  createWelcomeMessage,
+  type SessionBootstrap,
+  type SessionChatMessage,
+  type SessionSummary,
+} from "@shared/session";
 import { LeftPanel } from "./components/LeftPanel";
 import { ChatWorkspace } from "./components/ChatWorkspace";
 import { PPTMirror } from "./components/PPTMirror";
@@ -15,22 +22,7 @@ import {
   type ManagedModel,
 } from "./modelCatalog";
 
-interface ChatMessage {
-  id: string;
-  role: "user" | "assistant";
-  content: string;
-  thought?: string[];
-  progress?: number;
-  approval?: AgentApprovalRequest;
-}
-
-interface SessionItem {
-  id: string;
-  title: string;
-  timestamp: string;
-  slideCount: number;
-  revision: number;
-}
+type ChatMessage = SessionChatMessage;
 
 export function App() {
   const [presentation, setPresentation] = useState<Presentation>();
@@ -138,29 +130,16 @@ export function App() {
   const [request, setRequest] = useState("创建一份智能硬件市场推广策划大纲");
   const [approval, setApproval] = useState<AgentApprovalRequest>();
   const [busy, setBusy] = useState(false);
-  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
-    {
-      id: "init",
-      role: "assistant",
-      content: "您好！我是您的 Agent PPT 协同设计助手。请告诉我想制作什么样的幻灯片（例如：'添加一页关于竞品分析的幻灯片' 或 '制作一份技术战略演示文稿'），我将为您生成排版指令方案。",
-    },
-  ]);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [thoughtProcess, setThoughtProcess] = useState<string[]>([]);
   const [thoughtProgress, setThoughtProgress] = useState(0);
   const [highlightSlideId, setHighlightSlideId] = useState<string | null>(null);
 
-  // 会话列表与缓存
-  const [sessions, setSessions] = useState<SessionItem[]>([
-    {
-      id: "session-1",
-      title: "关于智能硬件的推广大纲",
-      timestamp: "00:00:01",
-      slideCount: 1,
-      revision: 0,
-    },
-  ]);
-  const [activeSessionId, setActiveSessionId] = useState("session-1");
-  const [sessionPresentationCache, setSessionPresentationCache] = useState<Record<string, Presentation>>({});
+  // 会话状态由 Electron 主进程持久化，渲染进程只保留当前快照
+  const [sessions, setSessions] = useState<SessionSummary[]>([]);
+  const [activeSessionId, setActiveSessionId] = useState("");
+  const [sessionLoaded, setSessionLoaded] = useState(false);
+  const [isDraftSession, setIsDraftSession] = useState(false);
 
   // 全局焦点模式快捷键监听 (Cmd+Option+F 或 Ctrl+Alt+F)
   useEffect(() => {
@@ -184,35 +163,38 @@ export function App() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
-  // 获取初始 PPT 数据并初始化缓存
+  const applySessionState = (state: SessionBootstrap) => {
+    const snapshot = state.activeSession;
+    setSessions(state.sessions);
+    setActiveSessionId(snapshot.session.id);
+    setPresentation(snapshot.presentation);
+    setChatMessages(snapshot.messages);
+    setApproval(undefined);
+    setRequest("");
+    setSelectedSlideId(snapshot.presentation.slides[0]?.id ?? "");
+    setSelectedElementId(null);
+    setMaxRevision(snapshot.presentation.revision);
+    setSessionLoaded(true);
+    setIsDraftSession(false);
+  };
+
+  // 从主进程恢复最近一次激活的会话
   useEffect(() => {
     if (!window.desktopApi) {
       setStartupError("桌面通信桥接加载失败，请重启应用程序。");
       return;
     }
     void window.desktopApi
-      .getPresentation()
-      .then((pres) => {
-        setPresentation(pres);
-        if (pres.slides.length > 0) {
-          setSelectedSlideId(pres.slides[0].id);
-        }
-      })
+      .getSessionState()
+      .then(applySessionState)
       .catch((error: unknown) => {
         setStartupError(error instanceof Error ? error.message : "无法打开本地工作区。");
       });
   }, []);
 
-  // 同步历史修改快照与会话缓存
+  // 即时刷新会话列表元信息；主进程会在文稿变更时同步落盘
   useEffect(() => {
     if (presentation && activeSessionId) {
-      // 写入对应会话的快照缓存
-      setSessionPresentationCache((prev) => ({
-        ...prev,
-        [activeSessionId]: presentation,
-      }));
-
-      // 更新会话列表元信息
       setSessions((prev) =>
         prev.map((s) =>
           s.id === activeSessionId
@@ -221,12 +203,34 @@ export function App() {
                 title: presentation.title || s.title,
                 slideCount: presentation.slides.length,
                 revision: presentation.revision,
+                updatedAt: new Date().toISOString(),
               }
             : s
         )
       );
     }
   }, [presentation, activeSessionId]);
+
+  // 对话内容采用短防抖保存，避免流式 UI 更新造成频繁磁盘写入
+  useEffect(() => {
+    if (!sessionLoaded || !activeSessionId) return;
+    const messages: SessionChatMessage[] = chatMessages.map(
+      ({ id, role, content, thought, progress, approval }) => ({
+        id,
+        role,
+        content,
+        thought,
+        progress,
+        approval,
+      }),
+    );
+    const timer = setTimeout(() => {
+      void window.desktopApi.saveSessionMessages(activeSessionId, messages).catch((error) => {
+        console.error("保存会话消息失败:", error);
+      });
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [activeSessionId, chatMessages, sessionLoaded]);
 
   // 追踪最大版本号以推导 canRedo
   useEffect(() => {
@@ -241,83 +245,58 @@ export function App() {
     setTimeout(() => setToastMessage(null), 3000);
   };
 
-  // 新建会话分支
+  // 新建仅打开草稿窗口；首次发送消息后才会创建持久化会话
   const handleNewSession = () => {
-    const newId = `session-${crypto.randomUUID()}`;
-    const newSession: SessionItem = {
-      id: newId,
-      title: `新幻灯片会话 ${sessions.length + 1}`,
-      timestamp: new Date().toLocaleTimeString(),
-      slideCount: 1,
-      revision: 0,
-    };
-    setSessions((prev) => [newSession, ...prev]);
-    setActiveSessionId(newId);
-
-    if (presentation) {
-      const starter: Presentation = {
-        id: crypto.randomUUID(),
-        title: newSession.title,
-        revision: 0,
-        slides: [
-          {
-            id: crypto.randomUUID(),
-            title: "新建会话封面",
-            elements: [
-              {
-                id: crypto.randomUUID(),
-                type: "text",
-                x: 120,
-                y: 220,
-                width: 1040,
-                height: 180,
-                text: newSession.title,
-                fontSize: 52,
-              },
-            ],
-          },
-        ],
-      };
-      setPresentation(starter);
-      setSelectedSlideId(starter.slides[0].id);
-      setSelectedElementId(null);
+    if (busy) {
+      triggerToast("当前任务执行中，请稍后再新建会话");
+      return;
     }
-
-    setChatMessages([
-      {
-        id: "init",
-        role: "assistant",
-        content: `您好！已为您开启新的会话分支【${newSession.title}】。请告诉我您的排版大纲，我将为您生成排版命令。`,
-      },
-    ]);
-    triggerToast("➕ 已开启新会话分支");
+    const presentation = createSessionPresentation("新演示文稿");
+    setIsDraftSession(true);
+    setActiveSessionId("");
+    setPresentation(presentation);
+    setChatMessages([createWelcomeMessage()]);
+    setApproval(undefined);
+    setRequest("");
+    setSelectedSlideId(presentation.slides[0]?.id ?? "");
+    setSelectedElementId(null);
+    setMaxRevision(0);
+    setSessionLoaded(true);
+    triggerToast("已打开新会话草稿，发送消息后才会保存");
   };
 
-  // 切换会话分支并载入对应 presentation 数据
-  const handleSelectSession = (sessionId: string) => {
-    setActiveSessionId(sessionId);
-    const cached = sessionPresentationCache[sessionId];
-    if (cached) {
-      setPresentation(cached);
-      if (cached.slides.length > 0) {
-        setSelectedSlideId(cached.slides[0].id);
-      }
-      setSelectedElementId(null);
+  // 切换会话并从主进程载入完整持久化快照
+  const handleSelectSession = async (sessionId: string) => {
+    if (sessionId === activeSessionId) return;
+    if (busy) {
+      triggerToast("当前任务执行中，请稍后再切换会话");
+      return;
     }
-    setChatMessages([
-      {
-        id: "init",
-        role: "assistant",
-        content: "已切回到当前会话分支，大纲状态与幻灯片历史已对齐。请继续下达微调指令。",
-      },
-    ]);
-    triggerToast("📂 已载入会话分支数据");
+    setSessionLoaded(false);
+    try {
+      applySessionState(await window.desktopApi.selectSession(sessionId));
+      triggerToast("已恢复会话内容");
+    } catch (error) {
+      setSessionLoaded(true);
+      triggerToast(error instanceof Error ? error.message : "切换会话失败");
+    }
   };
 
   // 提交意图大纲到 Agent
   async function startAgent(customRequest?: string) {
     const activeRequest = customRequest || request;
     if (!activeRequest.trim() || busy) return;
+
+    setBusy(true);
+    if (isDraftSession) {
+      try {
+        applySessionState(await window.desktopApi.createSession());
+      } catch (error) {
+        setBusy(false);
+        triggerToast(error instanceof Error ? error.message : "创建会话失败");
+        return;
+      }
+    }
 
     // “输入即配置”数据打包，输出复合 Context 对象给控制台并进行请求
     console.log("Packaging Agent context payload:", {
@@ -331,7 +310,6 @@ export function App() {
       }
     });
 
-    setBusy(true);
     setApproval(undefined);
     setThoughtProgress(5);
     setThoughtProcess(["解析用户指令与语义意图...", "提取排版策略元数据..."]);

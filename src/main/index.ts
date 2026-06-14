@@ -1,7 +1,6 @@
 import { join } from "node:path";
 import { app, BrowserWindow, ipcMain, Menu } from "electron";
 import { CommandBus, type PresentationCommand } from "@shared/commands";
-import { createStarterPresentation } from "@shared/presentation";
 import { AgentService } from "./agent/workflow";
 import {
   agentExecutionStrategySchema,
@@ -11,10 +10,23 @@ import {
 } from "@shared/agent";
 import { AgentGateway } from "./agent/gateway";
 import { createModelPresentationPlanner } from "./agent/planner";
+import { FileSessionStore } from "./session-store";
+import type { SessionChatMessage, SessionSnapshot } from "@shared/session";
 
-const commandBus = new CommandBus(createStarterPresentation());
 const agentGateway = new AgentGateway();
-const agentService = new AgentService(commandBus, createModelPresentationPlanner(agentGateway));
+
+interface SessionRuntime {
+  commandBus: CommandBus;
+  agentService: AgentService;
+}
+
+function createSessionRuntime(snapshot: SessionSnapshot): SessionRuntime {
+  const commandBus = new CommandBus(snapshot.presentation);
+  return {
+    commandBus,
+    agentService: new AgentService(commandBus, createModelPresentationPlanner(agentGateway)),
+  };
+}
 
 function createWindow(): void {
   const window = new BrowserWindow({
@@ -39,23 +51,98 @@ function createWindow(): void {
   }
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   Menu.setApplicationMenu(null);
-  ipcMain.handle("presentation:get", () => commandBus.getSnapshot());
-  ipcMain.handle("presentation:undo", () => commandBus.undo());
-  ipcMain.handle("presentation:redo", () => commandBus.redo());
-  ipcMain.handle("presentation:execute", (_, command: PresentationCommand) =>
-    commandBus.execute(command),
-  );
-  ipcMain.handle("agent:start", (_, request: string, input?: AgentModelSettings, strategy?: AgentExecutionStrategy) => {
-    const settings = input ? agentModelSettingsSchema.parse(input) : undefined;
-    const executionStrategy = strategy ? agentExecutionStrategySchema.parse(strategy) : "REQUEST_APPROVAL";
-    const selection = settings ? agentGateway.configure(settings) : undefined;
-    return agentService.start(request, selection, executionStrategy);
+  const sessionStore = new FileSessionStore(join(app.getPath("userData"), "sessions.json"));
+  await sessionStore.initialize();
+
+  const runtimes = new Map<string, SessionRuntime>();
+  let activeSessionId = sessionStore.getBootstrap().activeSession.session.id;
+
+  const ensureRuntime = (snapshot: SessionSnapshot): SessionRuntime => {
+    const existing = runtimes.get(snapshot.session.id);
+    if (existing) return existing;
+    const runtime = createSessionRuntime(snapshot);
+    runtimes.set(snapshot.session.id, runtime);
+    return runtime;
+  };
+
+  const getActiveRuntime = (): SessionRuntime =>
+    ensureRuntime(sessionStore.getSession(activeSessionId));
+
+  const persistPresentation = async (sessionId: string, runtime: SessionRuntime) => {
+    const presentation = runtime.commandBus.getSnapshot();
+    await sessionStore.savePresentation(sessionId, presentation);
+    return presentation;
+  };
+
+  ipcMain.handle("session:get-state", () => sessionStore.getBootstrap());
+  ipcMain.handle("session:create", async () => {
+    const state = await sessionStore.createSession();
+    activeSessionId = state.activeSession.session.id;
+    ensureRuntime(state.activeSession);
+    return state;
   });
-  ipcMain.handle("agent:resume", (_, threadId: string, approved: boolean) =>
-    agentService.resume(threadId, approved),
+  ipcMain.handle("session:select", async (_, sessionId: string) => {
+    const state = await sessionStore.selectSession(sessionId);
+    activeSessionId = state.activeSession.session.id;
+    ensureRuntime(state.activeSession);
+    return state;
+  });
+  ipcMain.handle(
+    "session:save-messages",
+    (_, sessionId: string, messages: SessionChatMessage[]) =>
+      sessionStore.saveMessages(sessionId, messages),
   );
+
+  ipcMain.handle("presentation:get", () => getActiveRuntime().commandBus.getSnapshot());
+  ipcMain.handle("presentation:undo", async () => {
+    const sessionId = activeSessionId;
+    const runtime = getActiveRuntime();
+    runtime.commandBus.undo();
+    return persistPresentation(sessionId, runtime);
+  });
+  ipcMain.handle("presentation:redo", async () => {
+    const sessionId = activeSessionId;
+    const runtime = getActiveRuntime();
+    runtime.commandBus.redo();
+    return persistPresentation(sessionId, runtime);
+  });
+  ipcMain.handle("presentation:execute", async (_, command: PresentationCommand) => {
+    const sessionId = activeSessionId;
+    const runtime = getActiveRuntime();
+    runtime.commandBus.execute(command);
+    return persistPresentation(sessionId, runtime);
+  });
+  ipcMain.handle(
+    "agent:start",
+    async (
+      _,
+      request: string,
+      input?: AgentModelSettings,
+      strategy?: AgentExecutionStrategy,
+    ) => {
+      const sessionId = activeSessionId;
+      const runtime = getActiveRuntime();
+      const settings = input ? agentModelSettingsSchema.parse(input) : undefined;
+      const executionStrategy = strategy
+        ? agentExecutionStrategySchema.parse(strategy)
+        : "REQUEST_APPROVAL";
+      const selection = settings ? agentGateway.configure(settings) : undefined;
+      const result = await runtime.agentService.start(request, selection, executionStrategy);
+      if (result.status !== "approval-required") {
+        await persistPresentation(sessionId, runtime);
+      }
+      return result;
+    },
+  );
+  ipcMain.handle("agent:resume", async (_, threadId: string, approved: boolean) => {
+    const sessionId = activeSessionId;
+    const runtime = getActiveRuntime();
+    const result = await runtime.agentService.resume(threadId, approved);
+    await persistPresentation(sessionId, runtime);
+    return result;
+  });
 
   createWindow();
   app.on("activate", () => {

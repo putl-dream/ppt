@@ -168,7 +168,7 @@ export const PPTMirror: React.FC<PPTMirrorProps> = ({
       <div className="panel-header right-header">
         <div className="right-header-title">
           <FileIcon size={16} className="text-secondary" />
-          <span>PPT 实时预览 (镜像)</span>
+          <span>PPT 实时预览</span>
         </div>
         <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
           <button

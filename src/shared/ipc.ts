@@ -1,6 +1,7 @@
 import type { Presentation } from "./presentation";
 import type { PresentationCommand } from "./commands";
 import type { AgentExecutionStrategy, AgentModelSettings } from "./agent";
+import type { SessionBootstrap, SessionChatMessage } from "./session";
 
 export interface AgentApprovalRequest {
   threadId: string;
@@ -14,6 +15,10 @@ export type AgentRunResult =
   | { status: "rejected"; presentation: Presentation };
 
 export interface DesktopApi {
+  getSessionState(): Promise<SessionBootstrap>;
+  createSession(): Promise<SessionBootstrap>;
+  selectSession(sessionId: string): Promise<SessionBootstrap>;
+  saveSessionMessages(sessionId: string, messages: SessionChatMessage[]): Promise<void>;
   getPresentation(): Promise<Presentation>;
   startAgentRun(
     request: string,

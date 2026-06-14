@@ -2,6 +2,11 @@ import { contextBridge, ipcRenderer } from "electron";
 import type { DesktopApi } from "@shared/ipc";
 
 const api: DesktopApi = {
+  getSessionState: () => ipcRenderer.invoke("session:get-state"),
+  createSession: () => ipcRenderer.invoke("session:create"),
+  selectSession: (sessionId) => ipcRenderer.invoke("session:select", sessionId),
+  saveSessionMessages: (sessionId, messages) =>
+    ipcRenderer.invoke("session:save-messages", sessionId, messages),
   getPresentation: () => ipcRenderer.invoke("presentation:get"),
   startAgentRun: (request, model, executionStrategy) =>
     ipcRenderer.invoke("agent:start", request, model, executionStrategy),
