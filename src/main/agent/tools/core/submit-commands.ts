@@ -20,7 +20,9 @@ export const submitCommandsTool: ToolDefinition<
   AgentRuntimeResult
 > = {
   name: "SubmitCommands",
-  description: "提交最终生成的命令提案（Command Proposal）给系统校验关闸。",
+  description:
+    "基础 PPT 创建与编辑入口：可直接提交 add-slide、add-element、set-theme 等 PresentationCommand，"
+    + "形成最终 Command Proposal 并进入系统校验关闸。基础创建无需搜索额外工具。",
   category: "core",
   loadPolicy: "core",
   inputSchema: submitCommandsSchema,

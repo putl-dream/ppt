@@ -15,7 +15,7 @@ export const searchExtraToolsSchema = z.object({
  */
 export const searchExtraToolsTool: ToolDefinition<
   typeof searchExtraToolsSchema,
-  { tools: ToolCard[] }
+  { tools: ToolCard[]; baseEditingAvailable: true; guidance: string }
 > = {
   name: "SearchExtraTools",
   description: "发现并搜索其他未默认加载的延迟工具（Deferred Tools）。",
@@ -32,6 +32,12 @@ export const searchExtraToolsTool: ToolDefinition<
       context.discoverySession.discoveredToolNames.add(match.name);
     }
 
-    return { tools: matches };
+    return {
+      tools: matches,
+      baseEditingAvailable: true,
+      guidance: matches.length > 0
+        ? "Deferred tools are optional enhancements. Create and edit slides directly with PresentationCommand through SubmitCommands."
+        : "No matching Deferred Tool was found. This does not block PPT creation: use add-slide, add-element, set-theme and other PresentationCommand values through SubmitCommands.",
+    };
   },
 };

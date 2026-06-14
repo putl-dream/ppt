@@ -64,7 +64,7 @@ export class AgentService {
     editorContext?: AgentEditorContext,
   ): Promise<AgentRunResult> {
     const threadId = crypto.randomUUID();
-    return this.run(threadId, request, model, executionStrategy, [], listener, editorContext);
+    return this.run(threadId, request, model, executionStrategy, [], listener, editorContext, "any");
   }
 
   async continueOutline(
@@ -83,6 +83,7 @@ export class AgentService {
       conversation.messages,
       listener,
       editorContext,
+      "command_proposal",
     );
   }
 
@@ -103,6 +104,7 @@ export class AgentService {
     messageHistory: Array<{ role: "user" | "assistant"; content: string }>,
     listener?: AgentServiceEventListener,
     editorContext?: AgentEditorContext,
+    requiredOutcome: "any" | "command_proposal" = "any",
   ): Promise<AgentRunResult> {
     listener?.({ type: "request-status", message: "正在处理您的请求...", progress: 10 });
     const before = this.commandBus.getSnapshot();
@@ -114,6 +116,7 @@ export class AgentService {
       selectedElementIds: editorContext?.selectedElementIds ?? [],
       model,
       messageHistory,
+      requiredOutcome,
     });
 
     if (runtimeResult.type === "message") {

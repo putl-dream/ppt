@@ -16,7 +16,9 @@ export const askUserTool: ToolDefinition<
   { type: "ask_user"; message: string; missingFields?: string[] }
 > = {
   name: "AskUser",
-  description: "在缺少必要信息或指令存在高度歧义时，向用户提问以作澄清。",
+  description:
+    "仅在缺少由用户决定的必要内容信息或指令存在高影响歧义时提问。"
+    + "不得询问用户工具名、接口、环境能力或系统实现方式。",
   category: "core",
   loadPolicy: "core",
   inputSchema: askUserSchema,

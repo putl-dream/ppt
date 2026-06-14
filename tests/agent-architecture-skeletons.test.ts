@@ -153,6 +153,10 @@ describe("Agent Architecture Skeletons & Types", () => {
     
     expect(prompt).toContain("AskUser");
     expect(prompt).toContain("slide-123");
+    expect(prompt).toContain('"type":"add-slide"');
+    expect(prompt).toContain("创建幻灯片、文本框、图片、形状、主题和布局");
+    expect(prompt).toContain("不需要也不应该先搜索额外工具");
+    expect(prompt).toContain("不能询问用户工具名称");
   });
 
   it("RuntimeNormalizer validates response schemas", () => {
@@ -251,6 +255,101 @@ describe("Agent Architecture Skeletons & Types", () => {
     expect(result.type).toBe("command_proposal");
   });
 
+  it("does not let an action continuation end with a narrative message", async () => {
+    const registry = new ToolRegistry();
+    registry.register(searchExtraToolsTool);
+    registry.register(submitCommandsTool);
+    const runtime = new AgentRuntime(registry, createSequenceGateway([
+      {
+        type: "tool_call",
+        toolName: "SearchExtraTools",
+        args: { query: "theme layout" },
+      },
+      {
+        type: "message",
+        content: "我先搜索一下高级工具，然后再开始生成。",
+      },
+      {
+        type: "tool_call",
+        toolName: "SubmitCommands",
+        args: {
+          summary: "Create the presentation",
+          commands: [{ id: "cmd-action-continuation", type: "set-presentation-title", title: "Vibe Coding" }],
+          risk: "low",
+        },
+      },
+    ]));
+
+    const result = await runtime.run({
+      threadId: "test-action-continuation",
+      request: "按默认方案",
+      presentationSnapshot: createStarterPresentation(),
+      selectedElementIds: [],
+      messageHistory: [
+        { role: "user", content: "生成 30 页 Vibe Coding 分享 PPT" },
+        { role: "assistant", content: "请确认语言、时长和代码示例。" },
+      ],
+      requiredOutcome: "command_proposal",
+    });
+
+    expect(result.type).toBe("command_proposal");
+  });
+
+  it("keeps AskUser context until the continued action reaches a proposal", async () => {
+    const registry = new ToolRegistry();
+    registry.register(askUserTool);
+    registry.register(searchExtraToolsTool);
+    registry.register(submitCommandsTool);
+    const runtime = new AgentRuntime(registry, createSequenceGateway([
+      {
+        type: "tool_call",
+        toolName: "AskUser",
+        args: {
+          message: "请确认语言、时长和代码示例。",
+          missingFields: ["language", "duration", "codeExamples"],
+        },
+      },
+      {
+        type: "tool_call",
+        toolName: "SearchExtraTools",
+        args: { query: "theme layout" },
+      },
+      {
+        type: "message",
+        content: "我先搜索一下高级工具，然后再开始生成。",
+      },
+      {
+        type: "tool_call",
+        toolName: "SubmitCommands",
+        args: {
+          summary: "Create the Vibe Coding presentation",
+          commands: [{ id: "cmd-service-context", type: "set-presentation-title", title: "Vibe Coding" }],
+          risk: "low",
+          assumptions: ["中文为主，关键术语保留英文"],
+        },
+      },
+    ]));
+    const service = new RefactoredAgentService(
+      new CommandBus(createStarterPresentation()),
+      runtime,
+      new CommitGate(new RiskPolicy()),
+    );
+
+    const clarification = await service.start("生成 30 页 Vibe Coding 技术分享 PPT");
+    expect(clarification.status).toBe("outline-required");
+    if (clarification.status !== "outline-required") throw new Error("Expected clarification");
+
+    const proposal = await service.continueOutline(
+      clarification.outlineRequest.threadId,
+      "按默认方案",
+    );
+
+    expect(proposal.status).toBe("approval-required");
+    if (proposal.status === "approval-required") {
+      expect(proposal.approval.assumptions).toEqual(["中文为主，关键术语保留英文"]);
+    }
+  });
+
   it("requires Deferred Tools to be discovered in the same session before execution", async () => {
     const registry = new ToolRegistry();
     registry.register(searchExtraToolsTool);
@@ -271,6 +370,10 @@ describe("Agent Architecture Skeletons & Types", () => {
 
     const search = await searchExtraToolsTool.execute({ query: "DetectRepeatedTitles" }, context);
     expect(search.tools.map((tool) => tool.name)).toContain("DetectRepeatedTitles");
+    const emptySearch = await searchExtraToolsTool.execute({ query: "create-new-slide-tool" }, context);
+    expect(emptySearch.tools).toEqual([]);
+    expect(emptySearch.baseEditingAvailable).toBe(true);
+    expect(emptySearch.guidance).toContain("add-slide");
     const execution = await executeExtraToolTool.execute({
       toolName: "DetectRepeatedTitles",
       toolArgs: {},

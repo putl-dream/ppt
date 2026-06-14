@@ -22,6 +22,7 @@ describe("resolveAgentModelConfig", () => {
     expect(config.provider).toBe("openai");
     expect(config.model).toBe("test-openai-model");
     expect(config.apiKey).toBe("runtime-key");
+    expect(config.maxOutputTokens).toBe(16_384);
   });
 
   it("infers Anthropic when only its environment key is present", () => {

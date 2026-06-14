@@ -4,6 +4,7 @@ import { toToolCard } from "../tools/tool-card";
 export interface SystemPromptOptions {
   coreTools: ToolDefinition<any, any>[];
   currentSlideId?: string;
+  requiredOutcome?: "any" | "command_proposal";
 }
 
 /**
@@ -38,6 +39,24 @@ ${toolsDescription}
 4. **局部操作限制**：
    - 如果用户要求编辑或格式化特定范围（例如：“这页”、“选中的文字”），你必须首先通过 \`GetSelection\` 或 \`ReadCurrentSlide\` 获取特定上下文，且生成的命令只能局限于对应的页面或元素，不得外溢修改其他页面。
 
+## 内置基础编辑能力
+
+\`SubmitCommands\` 本身就是创建和编辑 PPT 的基础写入入口，不只是一个结果包装器。
+创建幻灯片、文本框、图片、形状、主题和布局时，不需要也不应该先搜索额外工具。
+\`SearchExtraTools\` 只用于自动排版、整套风格分析、内容压缩等可选增强能力；搜索不到 Deferred Tool 不影响基础 PPT 创建。
+\`AskUser\` 只能询问由用户决定且确实缺失的内容要求，不能询问用户工具名称、接口、系统实现方式或如何发现工具。
+
+可提交的 PresentationCommand 包括：
+- 设置演示标题：{"id":"cmd-title","type":"set-presentation-title","title":"演示标题"}
+- 删除已有页：{"id":"cmd-remove","type":"remove-slide","slideId":"existing-slide-id"}
+- 创建完整幻灯片：{"id":"cmd-slide-1","type":"add-slide","slide":{"id":"slide-1","title":"页面标题","layout":"concept","elements":[{"id":"text-1","type":"text","x":80,"y":80,"width":1120,"height":100,"text":"页面标题","fontSize":44,"bold":true,"color":"#111827"},{"id":"text-2","type":"text","x":100,"y":210,"width":1080,"height":380,"text":"正文内容","fontSize":26,"color":"#374151"}]},"index":0}
+- 添加文本或形状：{"id":"cmd-element","type":"add-element","slideId":"slide-1","element":{"id":"shape-1","type":"shape","x":80,"y":600,"width":1120,"height":8,"shapeType":"rectangle","fillColor":"#2563eb","strokeColor":"#2563eb"}}
+- 设置主题：{"id":"cmd-theme","type":"set-theme","theme":"modern-tech","palette":"blue-violet"}
+- 设置页面布局：{"id":"cmd-layout","type":"update-slide-layout","slideId":"slide-1","layout":"architecture"}
+
+布局值可使用 cover、section、concept、comparison、process、architecture、case、summary。
+画布按 1280x720 规划。所有 command、slide 和 element ID 必须唯一。批量创建时，把全部命令放入一次 \`SubmitCommands\` 调用。
+
 ## 响应协议
 
 每一步只能返回一个 JSON 对象，不要输出 Markdown 或额外解释：
@@ -48,6 +67,15 @@ ${toolsDescription}
 - 提交修改：必须调用 SubmitCommands，不要直接伪造 command_proposal。
 
 收到工具结果后，根据结果继续调用工具或输出最终协议。不要直接调用 Deferred Tool；必须通过 SearchExtraTools 和 ExecuteExtraTool。
+
+${options.requiredOutcome === "command_proposal"
+  ? `## 当前回合终止约束
+
+这是一个已经向用户澄清过、等待实际执行的行动请求。你不能用 message 描述“准备执行”“将要搜索”或重复确认用户意图。
+- 如果信息仍不足：调用 AskUser。
+- 如果可以执行：完成必要的读取、搜索和预览后，调用 SubmitCommands。
+- 工具搜索只是中间步骤，SearchExtraTools 或 ExecuteExtraTool 之后必须继续工作，不能用 message 结束。`
+  : ""}
 
 当前上下文信息：
 - 活跃幻灯片 ID: ${options.currentSlideId || "未选择幻灯片"}

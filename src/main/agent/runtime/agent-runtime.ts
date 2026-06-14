@@ -90,6 +90,7 @@ export class AgentRuntime {
     const systemPrompt = SystemPromptBuilder.build({
       coreTools,
       currentSlideId: options.currentSlideId,
+      requiredOutcome: options.requiredOutcome,
     });
     const transcript: Array<Record<string, unknown>> = [
       { role: "user", content: options.request },
@@ -134,7 +135,30 @@ export class AgentRuntime {
           });
           continue;
         }
-        return RuntimeNormalizer.normalize(parsed);
+        let normalized: AgentRuntimeResult;
+        try {
+          normalized = RuntimeNormalizer.normalize(parsed);
+        } catch (error) {
+          transcript.push({
+            role: "assistant",
+            response: parsed,
+            error: error instanceof Error ? error.message : String(error),
+          });
+          continue;
+        }
+
+        if (normalized.type === "message" && options.requiredOutcome === "command_proposal") {
+          transcript.push({
+            role: "assistant",
+            response: normalized,
+            error:
+              "This is an unresolved presentation action. Do not narrate future work. "
+              + "Call AskUser if information is still missing, otherwise continue tools and finish with SubmitCommands.",
+          });
+          continue;
+        }
+
+        return normalized;
       }
 
       const tool = this.registry.get(parsed.toolName);
@@ -166,6 +190,13 @@ export class AgentRuntime {
           error: error instanceof Error ? error.message : String(error),
         });
       }
+    }
+
+    if (options.requiredOutcome === "command_proposal") {
+      throw new Error(
+        "Agent reached the tool-step limit before resolving the presentation action. "
+        + "The conversation remains active and can be continued.",
+      );
     }
 
     return {

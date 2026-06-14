@@ -79,6 +79,6 @@ export function resolveAgentModelConfig(
     baseURL,
     openaiApiMode: resolveOpenAIApiMode(provider, baseURL, runtime?.openaiApiMode, env),
     timeoutMs: positiveInteger(env.AGENT_TIMEOUT_MS, 60_000, "AGENT_TIMEOUT_MS"),
-    maxOutputTokens: positiveInteger(env.AGENT_MAX_OUTPUT_TOKENS, 2_048, "AGENT_MAX_OUTPUT_TOKENS"),
+    maxOutputTokens: positiveInteger(env.AGENT_MAX_OUTPUT_TOKENS, 16_384, "AGENT_MAX_OUTPUT_TOKENS"),
   };
 }

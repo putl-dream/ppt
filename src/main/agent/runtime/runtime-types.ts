@@ -46,5 +46,10 @@ export interface AgentRuntimeOptions {
   selectedElementIds: string[];
   model?: AgentModelSelection;
   messageHistory?: Array<{ role: "user" | "assistant"; content: string }>;
+  /**
+   * ask_user 后的继续回合必须解决原行动请求：信息仍不足时再次 ask_user，
+   * 否则必须通过 SubmitCommands 形成 command_proposal，不能用叙述性 message 提前结束。
+   */
+  requiredOutcome?: "any" | "command_proposal";
   maxSteps?: number;
 }

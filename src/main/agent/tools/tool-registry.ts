@@ -89,7 +89,7 @@ export class ToolRegistry {
     const words = trimmed.toLowerCase().split(/\s+/).filter(Boolean);
     return deferred.filter((tool) => {
       const searchable = `${tool.name} ${tool.description}`.toLowerCase();
-      return words.every((word) => searchable.includes(word));
+      return words.some((word) => searchable.includes(word));
     });
   }
 }
