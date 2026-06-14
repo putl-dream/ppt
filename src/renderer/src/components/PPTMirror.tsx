@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Presentation, SlideElement } from "@shared/presentation";
-import { SparklesIcon, ExpandIcon, CompressIcon, PlayIcon, FileIcon } from "./Icons";
+import { SparklesIcon, ExpandIcon, CompressIcon, PlayIcon, FileIcon, DownloadIcon } from "./Icons";
 
 
 interface PPTMirrorProps {
@@ -15,6 +15,7 @@ interface PPTMirrorProps {
   highlightSlideId: string | null; // AI 当前正在更新的页面 ID
   isExpanded?: boolean;
   onToggleExpand?: () => void;
+  triggerToast?: (msg: string) => void;
 }
 
 export const PPTMirror: React.FC<PPTMirrorProps> = ({
@@ -28,11 +29,33 @@ export const PPTMirror: React.FC<PPTMirrorProps> = ({
   highlightSlideId,
   isExpanded = false,
   onToggleExpand,
+  triggerToast,
 }) => {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [fullscreenIndex, setFullscreenIndex] = useState(0);
+  const [isExporting, setIsExporting] = useState(false);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const cardRefs = useRef<Record<string, HTMLDivElement | null>>({});
+
+  const handleDownload = async () => {
+    if (isExporting) return;
+    setIsExporting(true);
+    try {
+      const savedPath = await window.desktopApi.exportPresentation(presentation, {
+        theme: selectedTheme,
+        palette: selectedPalette,
+        logoUrl: logoUrl,
+      });
+      if (savedPath) {
+        triggerToast?.(`🎉 成功导出至: ${savedPath}`);
+      }
+    } catch (error) {
+      console.error(error);
+      triggerToast?.(`❌ 导出失败: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   const slides = presentation.slides;
 
@@ -187,6 +210,15 @@ export const PPTMirror: React.FC<PPTMirrorProps> = ({
             title="放映演示文稿"
           >
             <PlayIcon size={14} />
+          </button>
+          <button
+            onClick={handleDownload}
+            className="action-icon-btn"
+            style={{ padding: 6, margin: 0, display: "flex", alignItems: "center", justifyContent: "center", opacity: isExporting ? 0.6 : 1 }}
+            disabled={isExporting}
+            title="下载 PPT"
+          >
+            <DownloadIcon size={14} />
           </button>
           <button
             onClick={onToggleExpand}

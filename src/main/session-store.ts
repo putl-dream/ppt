@@ -86,6 +86,24 @@ export class FileSessionStore {
     return this.getBootstrap();
   }
 
+  async deleteSession(sessionId: string): Promise<SessionBootstrap> {
+    const data = this.requireData();
+    const index = data.sessions.findIndex((item) => item.session.id === sessionId);
+    if (index === -1) {
+      throw new Error(`Session not found: ${sessionId}`);
+    }
+    data.sessions.splice(index, 1);
+    if (data.sessions.length === 0) {
+      const initial = this.createInitialData();
+      data.sessions = initial.sessions;
+      data.activeSessionId = initial.activeSessionId;
+    } else if (data.activeSessionId === sessionId) {
+      data.activeSessionId = data.sessions[0].session.id;
+    }
+    await this.persist();
+    return this.getBootstrap();
+  }
+
   async savePresentation(sessionId: string, presentation: Presentation): Promise<void> {
     const snapshot = this.findSession(sessionId);
     snapshot.presentation = structuredClone(presentation);

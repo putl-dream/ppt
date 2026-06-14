@@ -84,4 +84,26 @@ describe("FileSessionStore", () => {
     expect(message.approval).toBeUndefined();
     expect(message.content).toContain("审批请求已随应用重启失效");
   });
+
+  it("deletes a session and updates state", async () => {
+    const { store } = await createStore();
+    const state1 = store.getBootstrap();
+    const id1 = state1.activeSession.session.id;
+
+    // Create a second session
+    const state2 = await store.createSession();
+    const id2 = state2.activeSession.session.id;
+    expect(state2.sessions).toHaveLength(2);
+    expect(state2.activeSession.session.id).toBe(id2);
+
+    // Delete the second session (active)
+    const state3 = await store.deleteSession(id2);
+    expect(state3.sessions).toHaveLength(1);
+    expect(state3.activeSession.session.id).toBe(id1);
+
+    // Delete the only remaining session (recreates initial session)
+    const state4 = await store.deleteSession(id1);
+    expect(state4.sessions).toHaveLength(1);
+    expect(state4.activeSession.session.id).not.toBe(id1);
+  });
 });

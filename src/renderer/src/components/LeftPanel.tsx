@@ -1,6 +1,6 @@
 import React from "react";
 import type { SessionSummary } from "@shared/session";
-import { PlusIcon, SettingsIcon, FileIcon, UserIcon } from "./Icons";
+import { PlusIcon, SettingsIcon, FileIcon, UserIcon, TrashIcon } from "./Icons";
 
 interface LeftPanelProps {
   sessions: SessionSummary[];
@@ -8,6 +8,7 @@ interface LeftPanelProps {
   onSelectSession: (id: string) => void;
   onNewSession: () => void;
   onToggleSettings: () => void;
+  onDeleteSession: (id: string) => void;
 }
 
 export const LeftPanel: React.FC<LeftPanelProps> = ({
@@ -16,7 +17,20 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
   onSelectSession,
   onNewSession,
   onToggleSettings,
+  onDeleteSession,
 }) => {
+  const [contextMenu, setContextMenu] = React.useState<{
+    x: number;
+    y: number;
+    sessionId: string;
+  } | null>(null);
+
+  React.useEffect(() => {
+    const handleClose = () => setContextMenu(null);
+    window.addEventListener("click", handleClose);
+    return () => window.removeEventListener("click", handleClose);
+  }, []);
+
   return (
     <aside className="left-panel">
       {/* 顶部新建会话 */}
@@ -43,6 +57,14 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
                 activeSessionId === session.id ? "active" : ""
               }`}
               onClick={() => onSelectSession(session.id)}
+              onContextMenu={(e) => {
+                e.preventDefault();
+                setContextMenu({
+                  x: e.clientX,
+                  y: e.clientY,
+                  sessionId: session.id,
+                });
+              }}
             >
               <div className="history-card-header">
                 <span className="history-ver">Rev {session.revision}</span>
@@ -87,6 +109,26 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
           <SettingsIcon size={18} className="text-secondary hover:text-primary transition-colors" />
         </button>
       </div>
+
+      {contextMenu && (
+        <div
+          className="custom-context-menu"
+          style={{ top: contextMenu.y, left: contextMenu.x }}
+          onContextMenu={(e) => e.preventDefault()}
+        >
+          <div
+            className="custom-context-menu-item danger"
+            onClick={(e) => {
+              e.stopPropagation();
+              setContextMenu(null);
+              onDeleteSession(contextMenu.sessionId);
+            }}
+          >
+            <TrashIcon size={14} />
+            <span>删除会话</span>
+          </div>
+        </div>
+      )}
     </aside>
   );
 };

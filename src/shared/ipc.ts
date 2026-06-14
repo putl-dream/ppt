@@ -18,6 +18,7 @@ export interface DesktopApi {
   getSessionState(): Promise<SessionBootstrap>;
   createSession(): Promise<SessionBootstrap>;
   selectSession(sessionId: string): Promise<SessionBootstrap>;
+  deleteSession(sessionId: string): Promise<SessionBootstrap>;
   saveSessionMessages(sessionId: string, messages: SessionChatMessage[]): Promise<void>;
   getPresentation(): Promise<Presentation>;
   startAgentRun(
@@ -29,4 +30,15 @@ export interface DesktopApi {
   undo(): Promise<Presentation>;
   redo(): Promise<Presentation>;
   executeCommand(command: PresentationCommand): Promise<Presentation>;
+  exportPresentation(
+    presentation: Presentation,
+    options: ExportPresentationOptions,
+  ): Promise<string | null>;
 }
+
+export interface ExportPresentationOptions {
+  theme: string;
+  palette: string;
+  logoUrl?: string | null;
+}
+

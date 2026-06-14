@@ -1,6 +1,10 @@
 import { join } from "node:path";
-import { app, BrowserWindow, ipcMain, Menu } from "electron";
+import { writeFile } from "node:fs/promises";
+import { app, BrowserWindow, ipcMain, Menu, dialog } from "electron";
 import { CommandBus, type PresentationCommand } from "@shared/commands";
+import type { Presentation } from "@shared/presentation";
+import type { ExportPresentationOptions } from "@shared/ipc";
+import { exportToPptx } from "./ppt-exporter";
 import { AgentService } from "./agent/workflow";
 import {
   agentExecutionStrategySchema,
@@ -89,6 +93,25 @@ app.whenReady().then(async () => {
     ensureRuntime(state.activeSession);
     return state;
   });
+  ipcMain.handle("session:delete", async (event, sessionId: string) => {
+    const window = BrowserWindow.fromWebContents(event.sender);
+    const { response } = await dialog.showMessageBox(window || undefined, {
+      type: "question",
+      buttons: ["确定", "取消"],
+      defaultId: 1,
+      title: "确认删除",
+      message: "确定要删除该会话吗？",
+      cancelId: 1,
+    });
+    if (response === 1) {
+      return sessionStore.getBootstrap();
+    }
+    const state = await sessionStore.deleteSession(sessionId);
+    runtimes.delete(sessionId);
+    activeSessionId = state.activeSession.session.id;
+    ensureRuntime(state.activeSession);
+    return state;
+  });
   ipcMain.handle(
     "session:save-messages",
     (_, sessionId: string, messages: SessionChatMessage[]) =>
@@ -114,6 +137,35 @@ app.whenReady().then(async () => {
     runtime.commandBus.execute(command);
     return persistPresentation(sessionId, runtime);
   });
+  ipcMain.handle(
+    "presentation:export",
+    async (_, presentation: Presentation, options: ExportPresentationOptions) => {
+      const window = BrowserWindow.getFocusedWindow();
+      const dialogOptions = {
+        title: "导出幻灯片",
+        defaultPath: `${presentation.title || "未命名演示文稿"}.pptx`,
+        filters: [
+          { name: "PowerPoint 演示文稿 (*.pptx)", extensions: ["pptx"] },
+          { name: "JSON 原始数据 (*.json)", extensions: ["json"] },
+        ],
+      };
+      const { filePath, canceled } = window
+        ? await dialog.showSaveDialog(window, dialogOptions)
+        : await dialog.showSaveDialog(dialogOptions);
+
+      if (canceled || !filePath) {
+        return null;
+      }
+
+      if (filePath.endsWith(".json")) {
+        await writeFile(filePath, JSON.stringify(presentation, null, 2), "utf8");
+      } else {
+        await exportToPptx(presentation, options, filePath);
+      }
+
+      return filePath;
+    },
+  );
   ipcMain.handle(
     "agent:start",
     async (

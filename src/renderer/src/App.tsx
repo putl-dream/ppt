@@ -282,6 +282,24 @@ export function App() {
     }
   };
 
+  // 删除会话
+  const handleDeleteSession = async (sessionId: string) => {
+    if (busy) {
+      triggerToast("当前任务执行中，请稍后再删除会话");
+      return;
+    }
+    try {
+      const state = await window.desktopApi.deleteSession(sessionId);
+      const isDeleted = !state.sessions.some((s) => s.id === sessionId);
+      applySessionState(state);
+      if (isDeleted) {
+        triggerToast("会话已删除");
+      }
+    } catch (error) {
+      triggerToast(error instanceof Error ? error.message : "删除会话失败");
+    }
+  };
+
   // 提交意图大纲到 Agent
   async function startAgent(customRequest?: string) {
     const activeRequest = customRequest || request;
@@ -810,6 +828,7 @@ export function App() {
                 setActiveMode("settings");
                 setSettingsCategory("profile");
               }}
+              onDeleteSession={handleDeleteSession}
             />
 
             {/* 右侧大圆角容器 - Agent 协作与实时画布 */}
@@ -868,6 +887,7 @@ export function App() {
                     highlightSlideId={highlightSlideId}
                     isExpanded={isMirrorExpanded}
                     onToggleExpand={() => setIsMirrorExpanded(!isMirrorExpanded)}
+                    triggerToast={triggerToast}
                   />
                 )}
               </div>
