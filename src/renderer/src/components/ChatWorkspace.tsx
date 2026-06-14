@@ -349,24 +349,25 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
                   ) : (
                     <>
                       {lines.map((line, idx) => (
-                        <div key={idx} style={{ minHeight: 22, fontSize: 13.5, lineHeight: 1.6 }}>
+                        <div key={idx} style={{ fontSize: 13.5, lineHeight: 1.6 }}>
                           {line}
                         </div>
                       ))}
-                      {msg.role === "user" && (
-                        <div className="edit-btn-container" style={{ display: "flex", justifyContent: "flex-end", marginTop: "4px" }}>
-                          <button
-                            className="edit-message-btn"
-                            onClick={() => handleStartEdit(msg.id, msg.content)}
-                            title="编辑指令并重新运行"
-                          >
-                            ✏️ 编辑
-                          </button>
-                        </div>
-                      )}
                     </>
                   )}
                 </div>
+
+                {msg.role === "user" && editingMsgId !== msg.id && (
+                  <div className="edit-btn-container">
+                    <button
+                      className="edit-message-btn"
+                      onClick={() => handleStartEdit(msg.id, msg.content)}
+                      title="编辑指令并重新运行"
+                    >
+                      ✏️ 编辑
+                    </button>
+                  </div>
+                )}
 
                 {/* 展开的思考轨迹 */}
                 {msg.thought && msg.thought.length > 0 && (
