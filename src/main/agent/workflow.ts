@@ -1,3 +1,14 @@
+/**
+ * Agent 生命周期编排的现有实现与迁移入口。
+ *
+ * 目标边界：本文件最终只负责 start -> agentRuntime -> commitGate ->
+ * approval/apply/reject/fail 的生命周期路由，不负责意图分类、工具实现、
+ * 风险计算或真实命令执行细节。
+ *
+ * 当前状态：旧的 planner、outline review、validate 与 AgentService 仍在本文件中。
+ * 本轮只建立目标目录和职责说明，不改变现有运行行为；后续按 docs 中的能力串联
+ * 指南逐步迁移。
+ */
 import { Annotation, Command, interrupt, MemorySaver, StateGraph } from "@langchain/langgraph";
 import { executeCommand, presentationCommandSchema, type CommandBus, type PresentationCommand } from "@shared/commands";
 import type { AgentRunResult } from "@shared/ipc";
