@@ -324,11 +324,11 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
                             style={{ position: "relative", minHeight: 22 }}
                           >
                             <span style={{ fontSize: 13.5, lineHeight: 1.6 }}>{line}</span>
-                            {msg.role === "assistant" && line.trim().length > 0 && (
+                            {msg.role === "user" && line.trim().length > 0 && (
                               <button
                                 className="edit-line-btn opacity-0 group-hover:opacity-100 transition-opacity"
                                 onClick={() => handleStartEdit(msg.id, idx, line)}
-                                title="双击或点击此按钮编辑此行内容"
+                                title="点击此按钮编辑指令并重新运行"
                                 style={{
                                   background: "none",
                                   border: "none",

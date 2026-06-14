@@ -3,7 +3,7 @@ import { writeFile } from "node:fs/promises";
 import { app, BrowserWindow, ipcMain, Menu, dialog, type MessageBoxOptions } from "electron";
 import { CommandBus, type PresentationCommand } from "@shared/commands";
 import type { Presentation } from "@shared/presentation";
-import type { ExportPresentationOptions } from "@shared/ipc";
+import type { AgentRunResult, ExportPresentationOptions } from "@shared/ipc";
 import { exportToPptx } from "./ppt-exporter";
 import { AgentService, type AgentServiceEvent } from "./agent/workflow";
 import {
@@ -15,6 +15,7 @@ import {
 import { AgentGateway } from "./agent/gateway";
 import { createModelPresentationPlanner } from "./agent/planner";
 import { createModelOutlinePlanner } from "./agent/outline-planner";
+import { agentLogger, requestSummary } from "./agent/logger";
 import { FileSessionStore } from "./session-store";
 import type { SessionChatMessage, SessionSnapshot } from "@shared/session";
 
@@ -83,6 +84,42 @@ app.whenReady().then(async () => {
     const presentation = runtime.commandBus.getSnapshot();
     await sessionStore.savePresentation(sessionId, presentation);
     return presentation;
+  };
+
+  const runAgentOperation = async (
+    operation: string,
+    sessionId: string,
+    runId: string | undefined,
+    details: Record<string, unknown>,
+    task: () => Promise<AgentRunResult>,
+  ): Promise<AgentRunResult> => {
+    const startedAt = Date.now();
+    agentLogger.info("session.operation.started", {
+      operation,
+      sessionId,
+      runId,
+      ...details,
+    });
+    try {
+      const result = await task();
+      agentLogger.info("session.operation.completed", {
+        operation,
+        sessionId,
+        runId,
+        status: result.status,
+        durationMs: Date.now() - startedAt,
+      });
+      return result;
+    } catch (error) {
+      agentLogger.error("session.operation.failed", {
+        operation,
+        sessionId,
+        runId,
+        durationMs: Date.now() - startedAt,
+        error,
+      });
+      throw error;
+    }
   };
 
   ipcMain.handle("session:get-state", () => sessionStore.getBootstrap());
@@ -193,40 +230,90 @@ app.whenReady().then(async () => {
       const emit = (streamEvent: AgentServiceEvent) => {
         if (runId) event.sender.send("agent:stream", { ...streamEvent, runId });
       };
-      const result = await runtime.agentService.start(request, selection, executionStrategy, emit);
-      if (result.status === "completed" || result.status === "rejected") {
-        await persistPresentation(sessionId, runtime);
-      }
+      const result = await runAgentOperation(
+        "start",
+        sessionId,
+        runId,
+        {
+          ...requestSummary(request),
+          provider: selection?.provider,
+          model: selection?.model,
+          executionStrategy,
+        },
+        async () => {
+          const runResult = await runtime.agentService.start(
+            request,
+            selection,
+            executionStrategy,
+            emit,
+          );
+          if (runResult.status === "completed" || runResult.status === "rejected") {
+            await persistPresentation(sessionId, runtime);
+          }
+          return runResult;
+        },
+      );
       return result;
     },
   );
   ipcMain.handle("agent:continue", async (event, threadId: string, request: string, runId?: string) => {
     const sessionId = activeSessionId;
     const runtime = getActiveRuntime();
-    const result = await runtime.agentService.continueOutline(threadId, request, (streamEvent) => {
-      if (runId) event.sender.send("agent:stream", { ...streamEvent, runId });
-    });
-    if (result.status === "completed" || result.status === "rejected") {
-      await persistPresentation(sessionId, runtime);
-    }
+    const result = await runAgentOperation(
+      "continue-outline",
+      sessionId,
+      runId,
+      { threadId, ...requestSummary(request) },
+      async () => {
+        const runResult = await runtime.agentService.continueOutline(
+          threadId,
+          request,
+          (streamEvent) => {
+            if (runId) event.sender.send("agent:stream", { ...streamEvent, runId });
+          },
+        );
+        if (runResult.status === "completed" || runResult.status === "rejected") {
+          await persistPresentation(sessionId, runtime);
+        }
+        return runResult;
+      },
+    );
     return result;
   });
   ipcMain.handle("agent:confirm-outline", async (event, threadId: string, runId?: string) => {
     const sessionId = activeSessionId;
     const runtime = getActiveRuntime();
-    const result = await runtime.agentService.confirmOutline(threadId, (streamEvent) => {
-      if (runId) event.sender.send("agent:stream", { ...streamEvent, runId });
-    });
-    if (result.status === "completed" || result.status === "rejected") {
-      await persistPresentation(sessionId, runtime);
-    }
+    const result = await runAgentOperation(
+      "confirm-outline",
+      sessionId,
+      runId,
+      { threadId },
+      async () => {
+        const runResult = await runtime.agentService.confirmOutline(threadId, (streamEvent) => {
+          if (runId) event.sender.send("agent:stream", { ...streamEvent, runId });
+        });
+        if (runResult.status === "completed" || runResult.status === "rejected") {
+          await persistPresentation(sessionId, runtime);
+        }
+        return runResult;
+      },
+    );
     return result;
   });
   ipcMain.handle("agent:resume", async (_, threadId: string, approved: boolean) => {
     const sessionId = activeSessionId;
     const runtime = getActiveRuntime();
-    const result = await runtime.agentService.resume(threadId, approved);
-    await persistPresentation(sessionId, runtime);
+    const result = await runAgentOperation(
+      "resume",
+      sessionId,
+      undefined,
+      { threadId, approved },
+      async () => {
+        const runResult = await runtime.agentService.resume(threadId, approved);
+        await persistPresentation(sessionId, runtime);
+        return runResult;
+      },
+    );
     return result;
   });
 

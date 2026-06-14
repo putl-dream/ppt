@@ -447,7 +447,7 @@ export function App() {
   }
 
   // 提交需求或继续当前大纲对话
-  async function startAgent(customRequest?: string) {
+  async function startAgent(customRequest?: string, isEditOfMsgId?: string) {
     const activeRequest = customRequest || request;
     if (!activeRequest.trim() || busy) return;
 
@@ -482,19 +482,35 @@ export function App() {
     activeRunIdRef.current = runId;
     activeRunStepsRef.current = [];
 
-    const userMsgId = crypto.randomUUID();
-    setChatMessages((prev) => [
-      ...prev,
-      { id: userMsgId, role: "user", content: activeRequest },
-    ]);
+    if (isEditOfMsgId) {
+      setChatMessages((prev) => {
+        const idx = prev.findIndex((m) => m.id === isEditOfMsgId);
+        if (idx === -1) return prev;
+        const truncated = prev.slice(0, idx + 1);
+        truncated[idx] = { ...truncated[idx], content: activeRequest };
+        return truncated;
+      });
+    } else {
+      const userMsgId = crypto.randomUUID();
+      setChatMessages((prev) => [
+        ...prev,
+        { id: userMsgId, role: "user", content: activeRequest },
+      ]);
+    }
     
     if (!customRequest) {
       setRequest("");
     }
 
+    let useOutlineRequest = outlineRequest;
+    if (isEditOfMsgId) {
+      setOutlineRequest(undefined);
+      useOutlineRequest = undefined;
+    }
+
     try {
-      const result = outlineRequest
-        ? await window.desktopApi.continueAgentRun(outlineRequest.threadId, activeRequest, runId)
+      const result = useOutlineRequest
+        ? await window.desktopApi.continueAgentRun(useOutlineRequest.threadId, activeRequest, runId)
         : await window.desktopApi.startAgentRun(
           activeRequest,
           selectedModel ? toAgentModelSettings(selectedModel) : undefined,
@@ -890,12 +906,20 @@ export function App() {
     }, 1200);
   };
 
-  // 修改 AI 产生的信息大纲文本
+  // 修改会话消息文本内容
   const handleUpdateMessageContent = (msgId: string, newContent: string) => {
-    setChatMessages((prev) =>
-      prev.map((msg) => (msg.id === msgId ? { ...msg, content: newContent } : msg))
-    );
-    triggerToast("✏️ 大纲文本修改已更新");
+    const targetMsg = chatMessages.find((msg) => msg.id === msgId);
+    if (!targetMsg) return;
+
+    if (targetMsg.role === "user") {
+      void startAgent(newContent, msgId);
+      triggerToast("✏️ 已更新指令并重新生成");
+    } else {
+      setChatMessages((prev) =>
+        prev.map((msg) => (msg.id === msgId ? { ...msg, content: newContent } : msg))
+      );
+      triggerToast("✏️ 消息内容已更新");
+    }
   };
 
   const handleSimulateLogoUpload = () => {
