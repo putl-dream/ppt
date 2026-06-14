@@ -10,7 +10,9 @@ export async function generateWithOpenAI(
     apiKey: config.apiKey,
     baseURL: config.baseURL,
     timeout: config.timeoutMs,
-    maxRetries: 2,
+    // Keep provider failures visible to the Runtime instead of silently
+    // multiplying the configured timeout inside the SDK.
+    maxRetries: 0,
   });
 
   try {

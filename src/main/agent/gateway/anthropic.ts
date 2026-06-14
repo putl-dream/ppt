@@ -49,7 +49,9 @@ export async function generateWithAnthropic(
     apiKey: config.apiKey,
     baseURL: config.baseURL,
     timeout: config.timeoutMs,
-    maxRetries: 2,
+    // Runtime-level retries have conversation context; SDK retries only repeat
+    // the same long-running request and can multiply the configured timeout.
+    maxRetries: 0,
   });
 
   try {

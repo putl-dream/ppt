@@ -52,7 +52,7 @@ describe("generateWithAnthropic", () => {
       apiKey: "secret",
       baseURL: "https://anthropic.example.test",
       timeout: 2345,
-      maxRetries: 2,
+      maxRetries: 0,
     });
     expect(anthropicMock.create).toHaveBeenCalledWith({
       model: "anthropic-test",

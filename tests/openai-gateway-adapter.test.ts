@@ -50,7 +50,7 @@ describe("generateWithOpenAI", () => {
       apiKey: "secret",
       baseURL: "https://openai.example.test",
       timeout: 1234,
-      maxRetries: 2,
+      maxRetries: 0,
     });
     expect(openaiMock.createResponse).toHaveBeenCalledWith({
       model: "openai-test",
