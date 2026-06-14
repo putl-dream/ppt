@@ -31,7 +31,7 @@ export function App() {
   // UI 状态控制
   const [selectedSlideId, setSelectedSlideId] = useState<string>("");
   const [selectedElementId, setSelectedElementId] = useState<string | null>(null);
-  const [isFocusMode, setIsFocusMode] = useState(false);
+  const [isMirrorOpen, setIsMirrorOpen] = useState(false);
   const [isMirrorExpanded, setIsMirrorExpanded] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [maxRevision, setMaxRevision] = useState(0);
@@ -141,20 +141,20 @@ export function App() {
   const [sessionLoaded, setSessionLoaded] = useState(false);
   const [isDraftSession, setIsDraftSession] = useState(false);
 
-  // 全局焦点模式快捷键监听 (Cmd+Option+F 或 Ctrl+Alt+F)
+  // 实时预览面板快捷键监听 (Cmd+Option+P 或 Ctrl+Alt+P)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const isMac = navigator.platform.toUpperCase().indexOf("MAC") >= 0;
-      const pressedF = e.key.toLowerCase() === "f";
+      const pressedP = e.key.toLowerCase() === "p";
       const matches = isMac
-        ? e.metaKey && e.altKey && pressedF
-        : e.ctrlKey && e.altKey && pressedF;
+        ? e.metaKey && e.altKey && pressedP
+        : e.ctrlKey && e.altKey && pressedP;
 
       if (matches) {
         e.preventDefault();
-        setIsFocusMode((prev) => {
+        setIsMirrorOpen((prev) => {
           const next = !prev;
-          triggerToast(next ? "全局焦点模式已开启 (侧边栏已隐藏)" : "全局焦点模式已关闭");
+          triggerToast(next ? "已打开右侧预览" : "已关闭右侧预览");
           return next;
         });
       }
@@ -176,6 +176,7 @@ export function App() {
     setMaxRevision(snapshot.presentation.revision);
     setSessionLoaded(true);
     setIsDraftSession(false);
+    setIsMirrorOpen(snapshot.presentation.revision > 0);
   };
 
   // 从主进程恢复最近一次激活的会话
@@ -262,6 +263,7 @@ export function App() {
     setSelectedElementId(null);
     setMaxRevision(0);
     setSessionLoaded(true);
+    setIsMirrorOpen(false);
     triggerToast("已打开新会话草稿，发送消息后才会保存");
   };
 
@@ -424,6 +426,7 @@ export function App() {
           setHighlightSlideId(lastId); // 自动高亮镜像
           setTimeout(() => setHighlightSlideId(null), 2500);
         }
+        setIsMirrorOpen(true);
         setChatMessages((prev) => [
           ...prev,
           {
@@ -485,6 +488,9 @@ export function App() {
           setSelectedSlideId(lastId);
           setHighlightSlideId(lastId);
           setTimeout(() => setHighlightSlideId(null), 2500);
+        }
+        if (approved) {
+          setIsMirrorOpen(true);
         }
         setChatMessages((prev) => [
           ...prev,
@@ -815,7 +821,7 @@ export function App() {
       {toastMessage && <div className="floating-toast-alert">{toastMessage}</div>}
 
       {/* 三栏/双模态同构容器 */}
-      <div className={`workspace-container ${isFocusMode ? "focus-mode" : ""} mode-${activeMode}`}>
+      <div className={`workspace-container mode-${activeMode}`}>
         {activeMode === "workspace" ? (
           <>
             {/* 左栏：会话管理列表 */}
@@ -834,7 +840,7 @@ export function App() {
             {/* 右侧大圆角容器 - Agent 协作与实时画布 */}
             <div className="rounded-canvas">
               <div className={`workspace-canvas-content ${
-                chatMessages.length === 1 && chatMessages[0].id === "init" ? "new-session-layout" : ""
+                isMirrorOpen ? "ppt-mirror-open" : "ppt-mirror-closed"
               } ${isMirrorExpanded ? "mirror-expanded" : ""}`}>
                 {/* 中间栏：AI Chat 对话与大纲核心区 */}
                 <ChatWorkspace
@@ -849,8 +855,8 @@ export function App() {
                   onResolveApproval={resolveApproval}
                   themeMode={computedTheme}
                   onToggleThemeMode={() => setThemeMode(computedTheme === "light" ? "dark" : "light")}
-                  isFocusMode={isFocusMode}
-                  onToggleFocusMode={() => setIsFocusMode(!isFocusMode)}
+                  isMirrorOpen={isMirrorOpen}
+                  onToggleMirror={() => setIsMirrorOpen(!isMirrorOpen)}
                   onUndo={() => void handleHistory("undo")}
                   onRedo={() => void handleHistory("redo")}
                   canUndo={presentation.revision > 0}
@@ -872,24 +878,22 @@ export function App() {
                 />
 
                 {/* 右栏：PPT 纵向滚动镜像 */}
-                {!(chatMessages.length === 1 && chatMessages[0].id === "init") && (
-                  <PPTMirror
-                    presentation={presentation}
-                    selectedSlideId={selectedSlideId}
-                    onSelectSlide={(id) => {
-                      setSelectedSlideId(id);
-                      setSelectedElementId(null);
-                    }}
-                    selectedTheme={selectedTheme}
-                    selectedPalette={selectedPalette}
-                    logoUrl={logoUrl}
-                    onOptimizePresentation={handleOptimizePresentationLocally}
-                    highlightSlideId={highlightSlideId}
-                    isExpanded={isMirrorExpanded}
-                    onToggleExpand={() => setIsMirrorExpanded(!isMirrorExpanded)}
-                    triggerToast={triggerToast}
-                  />
-                )}
+                <PPTMirror
+                  presentation={presentation}
+                  selectedSlideId={selectedSlideId}
+                  onSelectSlide={(id) => {
+                    setSelectedSlideId(id);
+                    setSelectedElementId(null);
+                  }}
+                  selectedTheme={selectedTheme}
+                  selectedPalette={selectedPalette}
+                  logoUrl={logoUrl}
+                  onOptimizePresentation={handleOptimizePresentationLocally}
+                  highlightSlideId={highlightSlideId}
+                  isExpanded={isMirrorExpanded}
+                  onToggleExpand={() => setIsMirrorExpanded(!isMirrorExpanded)}
+                  triggerToast={triggerToast}
+                />
               </div>
             </div>
           </>

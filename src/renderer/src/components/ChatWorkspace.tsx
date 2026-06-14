@@ -36,8 +36,8 @@ interface ChatWorkspaceProps {
   onResolveApproval: (approved: boolean) => void;
   themeMode: "light" | "dark";
   onToggleThemeMode: () => void;
-  isFocusMode: boolean;
-  onToggleFocusMode: () => void;
+  isMirrorOpen: boolean;
+  onToggleMirror: () => void;
   onUndo: () => void;
   onRedo: () => void;
   canUndo: boolean;
@@ -70,8 +70,8 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
   onResolveApproval,
   themeMode,
   onToggleThemeMode,
-  isFocusMode,
-  onToggleFocusMode,
+  isMirrorOpen,
+  onToggleMirror,
   onUndo,
   onRedo,
   canUndo,
@@ -258,13 +258,13 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
             {themeMode === "light" ? <MoonIcon size={16} /> : <SunIcon size={16} />}
           </button>
 
-          {/* 收缩三栏沉浸模式 */}
+          {/* 打开/关闭右侧预览 */}
           <button
             className="action-icon-btn focus-toggle-btn"
-            onClick={onToggleFocusMode}
-            title={isFocusMode ? "显示侧边栏" : "隐藏侧栏进入全局焦点模式"}
+            onClick={onToggleMirror}
+            title={isMirrorOpen ? "关闭右侧预览" : "打开右侧预览"}
           >
-            {isFocusMode ? <CompressIcon size={16} /> : <ExpandIcon size={16} />}
+            {isMirrorOpen ? <CompressIcon size={16} /> : <ExpandIcon size={16} />}
           </button>
         </div>
       </div>

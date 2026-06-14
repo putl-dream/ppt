@@ -36,8 +36,8 @@ interface CanvasAreaProps {
   onDeleteSlide: (slideId: string) => void;
   onOptimizeSlide: (slideId: string) => void;
   onAddElement: (type: "text" | "image" | "shape") => void;
-  isFocusMode: boolean;
-  onToggleFocusMode: () => void;
+  isMirrorOpen: boolean;
+  onToggleMirror: () => void;
   themeMode: "light" | "dark";
   onToggleThemeMode: () => void;
   onUndo: () => void;
@@ -63,8 +63,8 @@ export const CanvasArea: React.FC<CanvasAreaProps> = ({
   onDeleteSlide,
   onOptimizeSlide,
   onAddElement,
-  isFocusMode,
-  onToggleFocusMode,
+  isMirrorOpen,
+  onToggleMirror,
   themeMode,
   onToggleThemeMode,
   onUndo,
@@ -112,7 +112,7 @@ export const CanvasArea: React.FC<CanvasAreaProps> = ({
       window.removeEventListener("resize", updateScale);
       clearTimeout(timer);
     };
-  }, [isFocusMode, activeSlide]);
+  }, [isMirrorOpen, activeSlide]);
 
   const handleSlideSelect = (index: number) => {
     if (slides[index]) {
@@ -339,13 +339,13 @@ export const CanvasArea: React.FC<CanvasAreaProps> = ({
             {themeMode === "light" ? <MoonIcon size={16} /> : <SunIcon size={16} />}
           </button>
 
-          {/* 焦点模式收缩按钮 */}
+          {/* 实时预览显示/隐藏按钮 */}
           <button
             className="action-icon-btn focus-toggle-btn"
-            onClick={onToggleFocusMode}
-            title={isFocusMode ? "显示侧边栏" : "隐藏侧边栏 (开启全局沉浸焦点模式)"}
+            onClick={onToggleMirror}
+            title={isMirrorOpen ? "关闭右侧预览" : "打开右侧预览"}
           >
-            {isFocusMode ? <CompressIcon size={16} /> : <ExpandIcon size={16} />}
+            {isMirrorOpen ? <CompressIcon size={16} /> : <ExpandIcon size={16} />}
           </button>
         </div>
       </div>
