@@ -42,6 +42,18 @@ import {
 
 type ChatMessage = SessionChatMessage;
 
+function toSessionChatMessages(messages: ChatMessage[]): SessionChatMessage[] {
+  return messages.map(({ id, role, content, thought, progress, approval, outlineRequest }) => ({
+    id,
+    role,
+    content,
+    thought,
+    progress,
+    approval,
+    outlineRequest,
+  }));
+}
+
 export function App() {
   const initializeProject = useProjectStore((state) => state.initializeProject);
   const currentStage = useProjectStore((state) => state.currentStage);
@@ -322,17 +334,7 @@ export function App() {
   // 对话内容采用短防抖保存，避免流式 UI 更新造成频繁磁盘写入
   useEffect(() => {
     if (!sessionLoaded || !activeSessionId) return;
-    const messages: SessionChatMessage[] = chatMessages.map(
-      ({ id, role, content, thought, progress, approval, outlineRequest }) => ({
-        id,
-        role,
-        content,
-        thought,
-        progress,
-        approval,
-        outlineRequest,
-      }),
-    );
+    const messages = toSessionChatMessages(chatMessages);
     const timer = setTimeout(() => {
       void window.desktopApi.saveSessionMessages(activeSessionId, messages).catch((error) => {
         console.error("保存会话消息失败:", error);
@@ -532,15 +534,19 @@ export function App() {
     const runId = crypto.randomUUID();
     activeRunIdRef.current = runId;
     activeRunStepsRef.current = [];
+    let forkedMessages: ChatMessage[] | undefined;
 
     if (isEditOfMsgId) {
-      setChatMessages((prev) => {
-        const idx = prev.findIndex((m) => m.id === isEditOfMsgId);
-        if (idx === -1) return prev;
-        const truncated = prev.slice(0, idx + 1);
-        truncated[idx] = { ...truncated[idx], content: activeRequest };
-        return truncated;
-      });
+      const idx = chatMessages.findIndex((m) => m.id === isEditOfMsgId);
+      if (idx !== -1) {
+        forkedMessages = chatMessages.slice(0, idx + 1);
+        forkedMessages[idx] = {
+          ...forkedMessages[idx],
+          id: crypto.randomUUID(),
+          content: activeRequest,
+        };
+        setChatMessages(forkedMessages);
+      }
     } else {
       const userMsgId = crypto.randomUUID();
       setChatMessages((prev) => [
@@ -560,6 +566,12 @@ export function App() {
     }
 
     try {
+      if (forkedMessages && activeSessionId) {
+        await window.desktopApi.saveSessionMessages(
+          activeSessionId,
+          toSessionChatMessages(forkedMessages),
+        );
+      }
       const result = useOutlineRequest
         ? await window.desktopApi.continueAgentRun(
           useOutlineRequest.threadId,

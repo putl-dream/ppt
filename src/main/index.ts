@@ -20,7 +20,7 @@ import { RiskPolicy } from "./agent/gate/risk-policy";
 import { agentLogger, requestSummary } from "./agent/logger";
 import { FileSessionStore } from "./session-store";
 import type { SessionChatMessage, SessionSnapshot } from "@shared/session";
-import { findRecoverableOutlineConversation } from "@shared/session-recovery";
+import type { RecoverableOutlineConversation } from "@shared/session-recovery";
 
 const agentGateway = new AgentGateway();
 
@@ -29,7 +29,10 @@ interface SessionRuntime {
   agentService: AgentService;
 }
 
-function createSessionRuntime(snapshot: SessionSnapshot): SessionRuntime {
+function createSessionRuntime(
+  snapshot: SessionSnapshot,
+  pendingOutline?: RecoverableOutlineConversation,
+): SessionRuntime {
   const commandBus = new CommandBus(snapshot.presentation);
   const registry = createDefaultToolRegistry();
   const agentService = new AgentService(
@@ -37,7 +40,6 @@ function createSessionRuntime(snapshot: SessionSnapshot): SessionRuntime {
     new AgentRuntime(registry, agentGateway),
     new CommitGate(new RiskPolicy()),
   );
-  const pendingOutline = findRecoverableOutlineConversation(snapshot.messages);
   if (pendingOutline) {
     agentService.restoreOutlineConversation(
       pendingOutline.outlineRequest.threadId,
@@ -84,16 +86,21 @@ app.whenReady().then(async () => {
   const runtimes = new Map<string, SessionRuntime>();
   let activeSessionId = sessionStore.getBootstrap().activeSession.session.id;
 
-  const ensureRuntime = (snapshot: SessionSnapshot): SessionRuntime => {
+  const ensureRuntime = async (snapshot: SessionSnapshot): Promise<SessionRuntime> => {
     const existing = runtimes.get(snapshot.session.id);
     if (existing) return existing;
-    const runtime = createSessionRuntime(snapshot);
+    const pendingOutline = await sessionStore.getRecoverableOutlineConversation(
+      snapshot.session.id,
+    );
+    const runtime = createSessionRuntime(snapshot, pendingOutline);
     runtimes.set(snapshot.session.id, runtime);
     return runtime;
   };
 
-  const getActiveRuntime = (): SessionRuntime =>
+  const getActiveRuntime = (): Promise<SessionRuntime> =>
     ensureRuntime(sessionStore.getSession(activeSessionId));
+
+  await ensureRuntime(sessionStore.getSession(activeSessionId));
 
   const persistPresentation = async (sessionId: string, runtime: SessionRuntime) => {
     const presentation = runtime.commandBus.getSnapshot();
@@ -141,13 +148,13 @@ app.whenReady().then(async () => {
   ipcMain.handle("session:create", async () => {
     const state = await sessionStore.createSession();
     activeSessionId = state.activeSession.session.id;
-    ensureRuntime(state.activeSession);
+    await ensureRuntime(state.activeSession);
     return state;
   });
   ipcMain.handle("session:select", async (_, sessionId: string) => {
     const state = await sessionStore.selectSession(sessionId);
     activeSessionId = state.activeSession.session.id;
-    ensureRuntime(state.activeSession);
+    await ensureRuntime(state.activeSession);
     return state;
   });
   ipcMain.handle("session:delete", async (event, sessionId: string) => {
@@ -169,7 +176,7 @@ app.whenReady().then(async () => {
     const state = await sessionStore.deleteSession(sessionId);
     runtimes.delete(sessionId);
     activeSessionId = state.activeSession.session.id;
-    ensureRuntime(state.activeSession);
+    await ensureRuntime(state.activeSession);
     return state;
   });
   ipcMain.handle(
@@ -178,22 +185,24 @@ app.whenReady().then(async () => {
       sessionStore.saveMessages(sessionId, messages),
   );
 
-  ipcMain.handle("presentation:get", () => getActiveRuntime().commandBus.getSnapshot());
+  ipcMain.handle("presentation:get", async () =>
+    (await getActiveRuntime()).commandBus.getSnapshot(),
+  );
   ipcMain.handle("presentation:undo", async () => {
     const sessionId = activeSessionId;
-    const runtime = getActiveRuntime();
+    const runtime = await getActiveRuntime();
     runtime.commandBus.undo();
     return persistPresentation(sessionId, runtime);
   });
   ipcMain.handle("presentation:redo", async () => {
     const sessionId = activeSessionId;
-    const runtime = getActiveRuntime();
+    const runtime = await getActiveRuntime();
     runtime.commandBus.redo();
     return persistPresentation(sessionId, runtime);
   });
   ipcMain.handle("presentation:execute", async (_, command: PresentationCommand) => {
     const sessionId = activeSessionId;
-    const runtime = getActiveRuntime();
+    const runtime = await getActiveRuntime();
     runtime.commandBus.execute(command);
     return persistPresentation(sessionId, runtime);
   });
@@ -237,7 +246,7 @@ app.whenReady().then(async () => {
       editorContext?: AgentEditorContext,
     ) => {
       const sessionId = activeSessionId;
-      const runtime = getActiveRuntime();
+      const runtime = await getActiveRuntime();
       const settings = input ? agentModelSettingsSchema.parse(input) : undefined;
       const executionStrategy = strategy
         ? agentExecutionStrategySchema.parse(strategy)
@@ -283,7 +292,7 @@ app.whenReady().then(async () => {
     editorContext?: AgentEditorContext,
   ) => {
     const sessionId = activeSessionId;
-    const runtime = getActiveRuntime();
+    const runtime = await getActiveRuntime();
     const result = await runAgentOperation(
       "continue-outline",
       sessionId,
@@ -308,7 +317,7 @@ app.whenReady().then(async () => {
   });
   ipcMain.handle("agent:confirm-outline", async (event, threadId: string, runId?: string) => {
     const sessionId = activeSessionId;
-    const runtime = getActiveRuntime();
+    const runtime = await getActiveRuntime();
     const result = await runAgentOperation(
       "confirm-outline",
       sessionId,
@@ -328,7 +337,7 @@ app.whenReady().then(async () => {
   });
   ipcMain.handle("agent:resume", async (_, threadId: string, approved: boolean) => {
     const sessionId = activeSessionId;
-    const runtime = getActiveRuntime();
+    const runtime = await getActiveRuntime();
     const result = await runAgentOperation(
       "resume",
       sessionId,

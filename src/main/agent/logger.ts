@@ -1,5 +1,7 @@
 type AgentLogLevel = "debug" | "info" | "warn" | "error";
 
+type LogDetail = "minimal" | "full";
+
 type AgentLogData = Record<string, unknown>;
 
 const levelPriority: Record<AgentLogLevel, number> = {
@@ -14,7 +16,31 @@ function configuredLevel(): AgentLogLevel {
   return value === "debug" || value === "warn" || value === "error" ? value : "info";
 }
 
-function serializeValue(value: unknown): unknown {
+function configuredDetail(): LogDetail {
+  const value = process.env.AGENT_LOG_DETAIL?.trim().toLowerCase();
+  return value === "full" ? "full" : "minimal";
+}
+
+function redactSensitiveValue(key: string, value: unknown): unknown {
+  const sensitiveKeys = [
+    "apiKey",
+    "api_key",
+    "apikey",
+    "authorization",
+    "password",
+    "secret",
+    "token",
+    "bearer",
+  ];
+
+  if (typeof value === "string" && sensitiveKeys.some((k) => key.toLowerCase().includes(k))) {
+    return value.length > 8 ? `${value.slice(0, 4)}...${value.slice(-4)}` : "***";
+  }
+
+  return value;
+}
+
+function serializeValue(value: unknown, parentKey = ""): unknown {
   if (value instanceof Error) {
     const details = value as Error & { code?: unknown; provider?: unknown };
     return {
@@ -25,15 +51,15 @@ function serializeValue(value: unknown): unknown {
       provider: details.provider,
     };
   }
-  if (Array.isArray(value)) return value.map(serializeValue);
+  if (Array.isArray(value)) return value.map((item) => serializeValue(item, parentKey));
   if (value && typeof value === "object") {
     return Object.fromEntries(
       Object.entries(value)
         .filter(([, entry]) => entry !== undefined)
-        .map(([key, entry]) => [key, serializeValue(entry)]),
+        .map(([key, entry]) => [key, redactSensitiveValue(key, serializeValue(entry, key))]),
     );
   }
-  return value;
+  return redactSensitiveValue(parentKey, value);
 }
 
 function write(level: AgentLogLevel, event: string, data: AgentLogData = {}): void {

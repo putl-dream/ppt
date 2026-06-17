@@ -14,7 +14,12 @@ import {
   type SessionSummary,
 } from "@shared/session";
 import { deserializeSessionMessages } from "@shared/transcript";
-import { toAgentMessageHistory, type AgentConversationMessage } from "@shared/session-recovery";
+import {
+  findRecoverableOutlineConversation,
+  toAgentMessageHistory,
+  type AgentConversationMessage,
+  type RecoverableOutlineConversation,
+} from "@shared/session-recovery";
 import { type ArtifactDiff } from "./project/artifact-diff";
 import {
   ProjectFileService,
@@ -37,6 +42,7 @@ export class FileSessionStore {
   private writeQueue = Promise.resolve();
   private readonly projectFileService: ProjectFileService;
   private readonly transcriptStore = new TranscriptStore();
+  private readonly expiredApprovalMessageIds = new Set<string>();
 
   constructor(private readonly filePath: string, projectRootPath?: string) {
     this.projectFileService = new ProjectFileService(
@@ -89,6 +95,32 @@ export class FileSessionStore {
     currentRequest?: string,
   ): AgentConversationMessage[] {
     return toAgentMessageHistory(this.findSession(sessionId).messages, currentRequest);
+  }
+
+  async getRecoverableOutlineConversation(
+    sessionId: string,
+  ): Promise<RecoverableOutlineConversation | undefined> {
+    const snapshot = this.findSession(sessionId);
+    const changed = await this.hydrateMessagesFromTranscript(snapshot);
+    if (changed) await this.persist();
+    return findRecoverableOutlineConversation(snapshot.messages);
+  }
+
+  async switchLeaf(sessionId: string, leafMessageUuid: string): Promise<SessionSnapshot> {
+    const snapshot = this.findSession(sessionId);
+    if (!snapshot.project || !snapshot.transcript) {
+      throw new Error("Session transcript has not been initialized.");
+    }
+    await this.transcriptStore.loadConversationChain(
+      sessionId,
+      snapshot.project.rootPath,
+      leafMessageUuid,
+    );
+    snapshot.transcript.leafMessageUuid = leafMessageUuid;
+    await this.hydrateMessagesFromTranscript(snapshot);
+    snapshot.session.updatedAt = new Date().toISOString();
+    await this.persist();
+    return structuredClone(snapshot);
   }
 
   async createSession(): Promise<SessionBootstrap> {
@@ -253,7 +285,11 @@ export class FileSessionStore {
       return true;
     }
 
-    const messages = deserializeSessionMessages(chain);
+    const messages = deserializeSessionMessages(chain).map((message) =>
+      this.expiredApprovalMessageIds.has(message.id)
+        ? this.toExpiredApprovalMessage(message)
+        : message,
+    );
     const leafMessageUuid = chain.at(-1)?.uuid;
     const changed =
       JSON.stringify(snapshot.messages) !== JSON.stringify(messages) ||
@@ -324,14 +360,23 @@ export class FileSessionStore {
       snapshot.messages = snapshot.messages.map((message) => {
         if (!message.approval) return message;
         changed = true;
-        const { approval: _, ...rest } = message;
-        return {
-          ...rest,
-          content: `${message.content}\n\n该审批请求已随应用重启失效，请重新提交指令。`,
-        };
+        this.expiredApprovalMessageIds.add(message.id);
+        return this.toExpiredApprovalMessage(message);
       });
     }
     return changed;
+  }
+
+  private toExpiredApprovalMessage(message: SessionChatMessage): SessionChatMessage {
+    if (!message.approval) return message;
+    const { approval: _, ...rest } = message;
+    const expirationNotice = "该审批请求已随应用重启失效，请重新提交指令。";
+    return {
+      ...rest,
+      content: message.content.includes(expirationNotice)
+        ? message.content
+        : `${message.content}\n\n${expirationNotice}`,
+    };
   }
 
   private toSummary(

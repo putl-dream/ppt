@@ -340,6 +340,7 @@ describe("FileSessionStore", () => {
 
     const restored = new FileSessionStore(filePath);
     await restored.initialize();
+    await restored.getRecoverableOutlineConversation(sessionId);
     const message = restored.getBootstrap().activeSession.messages[0];
 
     expect(message.approval).toBeUndefined();
@@ -377,6 +378,99 @@ describe("FileSessionStore", () => {
       model: { provider: "anthropic", model: "test-model" },
       executionStrategy: "AUTO",
     });
+  });
+
+  it("recovers pending outline conversations from the transcript when the snapshot cache is stale", async () => {
+    const { store, filePath } = await createStore();
+    const sessionId = store.getBootstrap().activeSession.session.id;
+    await store.saveMessages(sessionId, [
+      { id: "u1", role: "user", content: "创建一份 Agent 架构 PPT" },
+      {
+        id: "outline-1",
+        role: "assistant",
+        content: "请确认大纲",
+        outlineRequest: {
+          threadId: "thread-1",
+          message: "请确认大纲",
+          outline: {
+            title: "Agent 架构",
+            slides: [{ title: "架构演进", keyPoints: ["ReAct", "Workflow"] }],
+          },
+          missingInformation: [],
+        },
+      },
+    ]);
+
+    const persisted = JSON.parse(await readFile(filePath, "utf8"));
+    persisted.sessions[0].messages = [
+      { id: "stale", role: "assistant", content: "过期的终局回复" },
+    ];
+    await writeFile(filePath, `${JSON.stringify(persisted, null, 2)}\n`, "utf8");
+
+    const restored = new FileSessionStore(filePath);
+    await restored.initialize();
+    const recovered = await restored.getRecoverableOutlineConversation(sessionId);
+
+    expect(recovered?.outlineRequest).toMatchObject({
+      threadId: "thread-1",
+      message: "请确认大纲",
+    });
+    expect(recovered?.messages).toEqual([
+      { role: "user", content: "创建一份 Agent 架构 PPT" },
+      { role: "assistant", content: "请确认大纲" },
+    ]);
+  });
+
+  it("records edited messages as a new transcript branch and can switch leaves", async () => {
+    const { store, filePath } = await createStore();
+    const sessionId = store.getBootstrap().activeSession.session.id;
+
+    await store.saveMessages(sessionId, [
+      { id: "u1", role: "user", content: "创建 PPT" },
+      { id: "a1", role: "assistant", content: "初版大纲" },
+      { id: "u2", role: "user", content: "走企业风" },
+      { id: "a2", role: "assistant", content: "企业风方案" },
+    ]);
+    await store.saveMessages(sessionId, [
+      { id: "u1", role: "user", content: "创建 PPT" },
+      { id: "a1", role: "assistant", content: "初版大纲" },
+      { id: "u3", role: "user", content: "改成发布会风格" },
+    ]);
+
+    const snapshot = store.getSession(sessionId);
+    expect(snapshot.transcript?.leafMessageUuid).toBe("u3");
+    expect(snapshot.messages.map((message) => [message.id, message.content])).toEqual([
+      ["u1", "创建 PPT"],
+      ["a1", "初版大纲"],
+      ["u3", "改成发布会风格"],
+    ]);
+
+    const lines = (await readFile(snapshot.transcript!.path, "utf8")).trim().split(/\r?\n/);
+    const transcriptMessages = lines.map((line) => JSON.parse(line));
+    expect(transcriptMessages.map((message) => message.uuid)).toEqual([
+      "init",
+      "u1",
+      "a1",
+      "u2",
+      "a2",
+      "u3",
+    ]);
+    expect(transcriptMessages.find((message) => message.uuid === "u3")).toMatchObject({
+      parentUuid: "a1",
+      content: "改成发布会风格",
+    });
+
+    await store.switchLeaf(sessionId, "a2");
+    expect(store.getSession(sessionId).messages.map((message) => message.id)).toEqual([
+      "u1",
+      "a1",
+      "u2",
+      "a2",
+    ]);
+
+    const restored = new FileSessionStore(filePath);
+    await restored.initialize();
+    expect(restored.getSession(sessionId).transcript?.leafMessageUuid).toBe("a2");
   });
 
   it("deletes a session and updates state", async () => {
