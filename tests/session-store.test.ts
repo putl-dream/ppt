@@ -42,6 +42,9 @@ describe("FileSessionStore", () => {
 
     const projectRoot = initial.activeSession.project?.rootPath;
     expect(projectRoot).toBeTruthy();
+    expect(initial.activeSession.transcript?.path).toBe(
+      join(projectRoot!, "transcripts", `${initial.activeSession.session.id}.jsonl`),
+    );
     expect(await readFile(join(projectRoot!, "brief.md"), "utf8")).toContain("## 目的");
     expect(await readFile(join(projectRoot!, "outline.md"), "utf8")).toContain("## 章节结构");
     expect(await readFile(join(projectRoot!, "slides", "001-title.md"), "utf8")).toContain(
@@ -110,8 +113,111 @@ describe("FileSessionStore", () => {
     const migrated = restored.getBootstrap().activeSession;
 
     expect(migrated.project?.rootPath).toContain(`session-${migrated.session.id}`);
+    expect(migrated.transcript?.path).toBe(
+      join(migrated.project!.rootPath, "transcripts", `${migrated.session.id}.jsonl`),
+    );
     expect(await readFile(join(migrated.project!.rootPath, "research", "notes.md"), "utf8"))
       .toContain("## 事实");
+  });
+
+  it("records saved chat messages into an append-only transcript chain", async () => {
+    const { store, filePath } = await createStore();
+    const sessionId = store.getBootstrap().activeSession.session.id;
+
+    await store.saveMessages(sessionId, [
+      { id: "u1", role: "user", content: "创建一份产品发布 PPT" },
+    ]);
+    await store.saveMessages(sessionId, [
+      { id: "u1", role: "user", content: "创建一份产品发布 PPT" },
+      {
+        id: "a1",
+        role: "assistant",
+        content: "请确认大纲",
+        outlineRequest: {
+          threadId: "thread-1",
+          message: "请确认大纲",
+          missingInformation: [],
+        },
+      },
+    ]);
+    await store.saveMessages(sessionId, [
+      { id: "u1", role: "user", content: "创建一份产品发布 PPT" },
+      {
+        id: "a1",
+        role: "assistant",
+        content: "请确认大纲",
+        outlineRequest: {
+          threadId: "thread-1",
+          message: "请确认大纲",
+          missingInformation: [],
+        },
+      },
+    ]);
+
+    const snapshot = store.getSession(sessionId);
+    const transcriptPath = snapshot.transcript?.path;
+    expect(transcriptPath).toBeTruthy();
+    expect(snapshot.transcript?.leafMessageUuid).toBe("a1");
+
+    const lines = (await readFile(transcriptPath!, "utf8")).trim().split(/\r?\n/);
+    expect(lines).toHaveLength(3);
+    const transcriptMessages = lines.map((line) => JSON.parse(line));
+    expect(transcriptMessages[0]).toMatchObject({
+      uuid: "init",
+      role: "assistant",
+      kind: "message",
+    });
+    expect(transcriptMessages[1]).not.toHaveProperty("parentUuid");
+    expect(transcriptMessages.slice(1)).toMatchObject([
+      {
+        uuid: "u1",
+        sessionId,
+        role: "user",
+        kind: "message",
+        content: "创建一份产品发布 PPT",
+      },
+      {
+        uuid: "a1",
+        parentUuid: "u1",
+        sessionId,
+        role: "assistant",
+        kind: "outline",
+        content: "请确认大纲",
+        threadId: "thread-1",
+      },
+    ]);
+
+    const restored = new FileSessionStore(filePath);
+    await restored.initialize();
+    expect(restored.getSession(sessionId).transcript?.leafMessageUuid).toBe("a1");
+  });
+
+  it("restores messages from the transcript instead of the session snapshot cache", async () => {
+    const { store, filePath } = await createStore();
+    const sessionId = store.getBootstrap().activeSession.session.id;
+    await store.saveMessages(sessionId, [
+      { id: "u1", role: "user", content: "真实用户消息" },
+      { id: "a1", role: "assistant", content: "真实助手回复" },
+    ]);
+
+    const persisted = JSON.parse(await readFile(filePath, "utf8"));
+    persisted.sessions[0].messages = [
+      { id: "stale", role: "assistant", content: "过期快照缓存" },
+    ];
+    await writeFile(filePath, `${JSON.stringify(persisted, null, 2)}\n`, "utf8");
+
+    const restored = new FileSessionStore(filePath);
+    await restored.initialize();
+    const restoredSession = restored.getSession(sessionId);
+
+    expect(restoredSession.messages.map((message) => message.content)).toEqual([
+      "真实用户消息",
+      "真实助手回复",
+    ]);
+    expect(restored.getAgentMessageHistory(sessionId)).toEqual([
+      { role: "user", content: "真实用户消息" },
+      { role: "assistant", content: "真实助手回复" },
+    ]);
   });
 
   it("reads and writes project artifacts inside the sandbox", async () => {

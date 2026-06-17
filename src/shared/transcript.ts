@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { sessionChatMessageSchema, type SessionChatMessage } from "./session";
 
 export const transcriptRoleSchema = z.enum(["user", "assistant", "tool", "system"]);
 
@@ -122,4 +123,28 @@ export function deserializeMessages(chain: TranscriptMessage[]): AgentContextMes
   }
 
   return contextMessages;
+}
+
+export function deserializeSessionMessages(chain: TranscriptMessage[]): SessionChatMessage[] {
+  return chain
+    .filter((message) => !message.isSidechain)
+    .filter((message) => message.role === "user" || message.role === "assistant")
+    .filter((message) =>
+      message.kind === "message" ||
+      message.kind === "outline" ||
+      message.kind === "approval" ||
+      message.kind === "compact_boundary",
+    )
+    .map((message) => {
+      const metadata = message.metadata ?? {};
+      return sessionChatMessageSchema.parse({
+        id: message.uuid,
+        role: message.role,
+        content: contentToText(message.content),
+        thought: metadata.thought,
+        progress: metadata.progress,
+        approval: metadata.approval,
+        outlineRequest: metadata.outlineRequest,
+      });
+    });
 }

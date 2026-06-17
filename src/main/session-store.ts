@@ -13,12 +13,15 @@ import {
   type SessionSnapshot,
   type SessionSummary,
 } from "@shared/session";
+import { deserializeSessionMessages } from "@shared/transcript";
+import { toAgentMessageHistory, type AgentConversationMessage } from "@shared/session-recovery";
 import { type ArtifactDiff } from "./project/artifact-diff";
 import {
   ProjectFileService,
   type ProjectArtifactReadResult,
   type ProjectArtifactWriteResult,
 } from "./project/project-file-service";
+import { TranscriptStore, type TranscriptMessageInput } from "./transcript-store";
 
 const storedSessionSchema = sessionSnapshotSchema;
 const sessionFileSchema = z.object({
@@ -33,6 +36,7 @@ export class FileSessionStore {
   private data?: SessionFile;
   private writeQueue = Promise.resolve();
   private readonly projectFileService: ProjectFileService;
+  private readonly transcriptStore = new TranscriptStore();
 
   constructor(private readonly filePath: string, projectRootPath?: string) {
     this.projectFileService = new ProjectFileService(
@@ -50,9 +54,12 @@ export class FileSessionStore {
       this.data = activeExists
         ? parsed
         : { ...parsed, activeSessionId: parsed.sessions[0].session.id };
-      const expiredApprovals = this.expirePendingApprovals();
       const projectChanged = await this.materializeProjectSandboxes();
-      if (expiredApprovals || projectChanged || !activeExists) await this.persist();
+      const transcriptChanged = await this.hydrateMessagesFromTranscripts();
+      const expiredApprovals = this.expirePendingApprovals();
+      if (expiredApprovals || transcriptChanged || projectChanged || !activeExists) {
+        await this.persist();
+      }
     } catch (error) {
       const code = (error as NodeJS.ErrnoException).code;
       if (code !== "ENOENT" && !(error instanceof SyntaxError) && !(error instanceof z.ZodError)) {
@@ -60,6 +67,7 @@ export class FileSessionStore {
       }
       this.data = this.createInitialData();
       await this.materializeProjectSandboxes();
+      await this.hydrateMessagesFromTranscripts();
       await this.persist();
     }
   }
@@ -76,6 +84,13 @@ export class FileSessionStore {
     return structuredClone(this.findSession(sessionId));
   }
 
+  getAgentMessageHistory(
+    sessionId: string,
+    currentRequest?: string,
+  ): AgentConversationMessage[] {
+    return toAgentMessageHistory(this.findSession(sessionId).messages, currentRequest);
+  }
+
   async createSession(): Promise<SessionBootstrap> {
     const data = this.requireData();
     const title = `新 PPT 项目 ${data.sessions.length + 1}`;
@@ -87,6 +102,7 @@ export class FileSessionStore {
       messages: [createWelcomeMessage(title)],
     };
     await this.materializeProjectSandbox(snapshot);
+    await this.recordTranscriptMessages(snapshot, snapshot.messages);
     data.sessions.unshift(snapshot);
     data.activeSessionId = snapshot.session.id;
     await this.persist();
@@ -135,7 +151,10 @@ export class FileSessionStore {
 
   async saveMessages(sessionId: string, messages: SessionChatMessage[]): Promise<void> {
     const snapshot = this.findSession(sessionId);
-    snapshot.messages = sessionChatMessageSchema.array().parse(structuredClone(messages));
+    const parsedMessages = sessionChatMessageSchema.array().parse(structuredClone(messages));
+    await this.materializeProjectSandbox(snapshot);
+    await this.recordTranscriptMessages(snapshot, parsedMessages);
+    await this.hydrateMessagesFromTranscript(snapshot);
     snapshot.session.updatedAt = new Date().toISOString();
     await this.persist();
   }
@@ -209,8 +228,94 @@ export class FileSessionStore {
     return changed;
   }
 
+  private async hydrateMessagesFromTranscripts(): Promise<boolean> {
+    let changed = false;
+    for (const snapshot of this.requireData().sessions) {
+      changed = (await this.hydrateMessagesFromTranscript(snapshot)) || changed;
+    }
+    return changed;
+  }
+
+  private async hydrateMessagesFromTranscript(snapshot: SessionSnapshot): Promise<boolean> {
+    if (!snapshot.project || !snapshot.transcript) {
+      throw new Error("Session transcript has not been initialized.");
+    }
+
+    const chain = await this.transcriptStore.loadConversationChain(
+      snapshot.session.id,
+      snapshot.project.rootPath,
+      snapshot.transcript.leafMessageUuid,
+    );
+
+    if (chain.length === 0) {
+      if (snapshot.messages.length === 0) return false;
+      await this.recordTranscriptMessages(snapshot, snapshot.messages);
+      return true;
+    }
+
+    const messages = deserializeSessionMessages(chain);
+    const leafMessageUuid = chain.at(-1)?.uuid;
+    const changed =
+      JSON.stringify(snapshot.messages) !== JSON.stringify(messages) ||
+      snapshot.transcript.leafMessageUuid !== leafMessageUuid;
+    snapshot.messages = messages;
+    snapshot.transcript.leafMessageUuid = leafMessageUuid;
+    return changed;
+  }
+
   private async materializeProjectSandbox(snapshot: SessionSnapshot): Promise<boolean> {
-    return this.projectFileService.ensureProjectSandbox(snapshot);
+    const projectChanged = await this.projectFileService.ensureProjectSandbox(snapshot);
+    const transcriptChanged = this.materializeTranscript(snapshot);
+    return projectChanged || transcriptChanged;
+  }
+
+  private materializeTranscript(snapshot: SessionSnapshot): boolean {
+    if (!snapshot.project) throw new Error("Project sandbox has not been initialized.");
+    const path = this.transcriptStore.getTranscriptPath(
+      snapshot.session.id,
+      snapshot.project.rootPath,
+    );
+    if (snapshot.transcript?.path === path) return false;
+    snapshot.transcript = {
+      path,
+      leafMessageUuid: snapshot.transcript?.leafMessageUuid,
+    };
+    return true;
+  }
+
+  private async recordTranscriptMessages(
+    snapshot: SessionSnapshot,
+    messages: SessionChatMessage[],
+  ): Promise<void> {
+    if (!snapshot.project || !snapshot.transcript) {
+      throw new Error("Session transcript has not been initialized.");
+    }
+
+    const transcriptMessages = messages.map((message): TranscriptMessageInput => {
+      const metadata: Record<string, unknown> = {};
+      if (message.thought) metadata.thought = message.thought;
+      if (message.progress !== undefined) metadata.progress = message.progress;
+      if (message.approval) metadata.approval = message.approval;
+      if (message.outlineRequest) metadata.outlineRequest = message.outlineRequest;
+
+      return {
+        uuid: message.id,
+        role: message.role,
+        kind: message.approval ? "approval" : message.outlineRequest ? "outline" : "message",
+        content: message.content,
+        cwd: snapshot.project!.rootPath,
+        threadId: message.approval?.threadId ?? message.outlineRequest?.threadId,
+        metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
+      };
+    });
+
+    const inserted = await this.transcriptStore.insertMessageChain({
+      sessionId: snapshot.session.id,
+      projectDir: snapshot.project.rootPath,
+      cwd: snapshot.project.rootPath,
+      messages: transcriptMessages,
+    });
+    snapshot.transcript.leafMessageUuid = inserted.at(-1)?.uuid;
   }
 
   private expirePendingApprovals(): boolean {

@@ -1,6 +1,7 @@
 import { appendFile, mkdir, readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import {
+  buildConversationChain,
   transcriptMessageSchema,
   type TranscriptKind,
   type TranscriptMessage,
@@ -64,6 +65,18 @@ export class TranscriptStore {
           );
         }
       });
+  }
+
+  async loadConversationChain(
+    sessionId: string,
+    projectDir: string,
+    leafMessageUuid?: string,
+  ): Promise<TranscriptMessage[]> {
+    const messages = await this.loadTranscriptFile(sessionId, projectDir);
+    if (messages.length === 0) return [];
+    const leafUuid = leafMessageUuid ?? messages.at(-1)?.uuid;
+    if (!leafUuid) return [];
+    return buildConversationChain(messages, leafUuid);
   }
 
   async insertMessageChain(options: InsertMessageChainOptions): Promise<TranscriptMessage[]> {
