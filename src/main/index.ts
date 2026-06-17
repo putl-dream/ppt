@@ -20,7 +20,7 @@ import { RiskPolicy } from "./agent/gate/risk-policy";
 import { agentLogger, requestSummary } from "./agent/logger";
 import { FileSessionStore } from "./session-store";
 import type { SessionChatMessage, SessionSnapshot } from "@shared/session";
-import { findRecoverableOutlineConversation } from "@shared/session-recovery";
+import { findRecoverableOutlineConversation, toAgentMessageHistory } from "@shared/session-recovery";
 
 const agentGateway = new AgentGateway();
 
@@ -257,12 +257,14 @@ app.whenReady().then(async () => {
           executionStrategy,
         },
         async () => {
+          const messageHistory = toAgentMessageHistory(sessionStore.getSession(sessionId).messages, request);
           const runResult = await runtime.agentService.start(
             request,
             selection,
             executionStrategy,
             emit,
             editorContext,
+            messageHistory,
           );
           if (runResult.status === "completed" || runResult.status === "rejected") {
             await persistPresentation(sessionId, runtime);

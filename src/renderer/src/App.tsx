@@ -30,6 +30,7 @@ import { DesignThemeSelector } from "./components/DesignThemeSelector";
 import { DiffReviewZone } from "./components/DiffReviewZone";
 import { ContextualAgentPanel } from "./components/ContextualAgentPanel";
 import { CanvasArea } from "./components/CanvasArea";
+import { UnifiedAgentInput } from "./components/UnifiedAgentInput";
 import {
   DEFAULT_MODELS,
   MODEL_STORAGE_KEY,
@@ -166,6 +167,7 @@ export function App() {
   const [outlineRequest, setOutlineRequest] = useState<AgentOutlineRequest>();
   const [busy, setBusy] = useState(false);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const isNewSession = chatMessages.length === 1 && chatMessages[0].id === "init";
   const [thoughtProcess, setThoughtProcess] = useState<string[]>([]);
   const [thoughtProgress, setThoughtProgress] = useState(0);
   const [agentActivityMode, setAgentActivityMode] = useState<"idle" | "request" | "workflow">("idle");
@@ -1027,7 +1029,7 @@ export function App() {
       <div className={`workspace-container mode-${activeMode}`}>
         {activeMode === "workspace" ? (
           <>
-            {/* 左栏：会话管理列表 */}
+            {/* 左栏：工作台导航 */}
             <LeftPanel
               sessions={sessions}
               activeSessionId={activeSessionId}
@@ -1042,78 +1044,163 @@ export function App() {
 
             {/* 右侧大圆角容器 - Agent 协作与实时工作台 */}
             <div className="rounded-canvas" style={{ flex: 1, display: "flex", overflow: "hidden", position: "relative" }}>
-              <div className="workspace-canvas-content" style={{ display: "flex", flex: 1, width: "100%", height: "100%", overflow: "hidden" }}>
-                
-                {/* 中间栏：各阶段的产物画布/编辑器区域 */}
-                <div className="workspace-canvas-middle" style={{ flex: 1, height: "100%", position: "relative", display: "flex", flexDirection: "column", minWidth: 0 }}>
-                  {proposedPatch && <DiffReviewZone />}
-                  
-                  {!proposedPatch && currentStage === "brief" && <BriefFormCollector />}
-                  {!proposedPatch && currentStage === "outline" && <DraggableOutlineTree />}
-                  {!proposedPatch && currentStage === "research" && <ResearchNotesCollector />}
-                  {!proposedPatch && currentStage === "design" && <DesignThemeSelector />}
-                  {!proposedPatch && currentStage === "slides" && <StoryboardGrid />}
-                  
-                  {!proposedPatch && currentStage === "deck" && (
-                    <CanvasArea
-                      presentation={presentation}
-                      selectedSlideId={selectedSlideId}
-                      onSelectSlide={(id) => {
-                        setSelectedSlideId(id);
-                        setSelectedElementId(null);
-                      }}
-                      selectedElementId={selectedElementId}
-                      onSelectElement={setSelectedElementId}
-                      selectedTheme={selectedTheme}
-                      selectedPalette={selectedPalette}
-                      logoUrl={logoUrl}
-                      onUpdateElement={handleUpdateElement}
-                      onUpdateElementPosition={handleUpdateElementPosition}
-                      onAddSlide={handleAddSlideLocally}
-                      onDuplicateSlide={handleDuplicateSlideLocally}
-                      onDeleteSlide={handleDeleteSlideLocally}
-                      onOptimizeSlide={handleOptimizePresentationLocally}
-                      onAddElement={handleAddElementLocally}
-                      isMirrorOpen={isMirrorOpen}
-                      onToggleMirror={() => setIsMirrorOpen(!isMirrorOpen)}
-                      themeMode={computedTheme}
-                      onToggleThemeMode={() => setThemeMode(computedTheme === "light" ? "dark" : "light")}
-                      onUndo={() => void handleHistory("undo")}
-                      onRedo={() => void handleHistory("redo")}
-                      canUndo={presentation.revision > 0}
-                      canRedo={presentation ? presentation.revision < maxRevision : false}
-                      onProposePrompt={handleSuggestPrompt}
+              {isNewSession ? (
+                <div className="center-focal-container" style={{
+                  flex: 1,
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  height: "100%",
+                  width: "100%",
+                  padding: "40px 20px",
+                  position: "relative",
+                  zIndex: 5
+                }}>
+                  {/* Header inside center mode */}
+                  <div style={{ position: "absolute", top: "24px", right: "24px" }}>
+                    <button
+                      className="action-icon-btn theme-toggle-btn"
+                      onClick={() => setThemeMode(computedTheme === "light" ? "dark" : "light")}
+                      title={computedTheme === "light" ? "切换为深色框架" : "切换为浅色框架"}
+                      style={{ background: "rgba(255,255,255,0.05)", border: "1px solid var(--border-glass)", borderRadius: "8px", padding: "8px", color: "var(--text-primary)", cursor: "pointer" }}
+                    >
+                      {computedTheme === "light" ? "🌙" : "☀️"}
+                    </button>
+                  </div>
+
+                  <div style={{ textAlign: "center", marginBottom: "32px" }}>
+                    <h1 style={{ fontSize: "36px", fontWeight: 700, fontFamily: "var(--font-display)", color: "var(--text-primary)", margin: "0 0 8px 0", letterSpacing: "-0.02em" }}>
+                      AI 协同 PPT 创作工作台
+                    </h1>
+                    <p style={{ fontSize: "16px", color: "var(--text-secondary)", margin: 0 }}>
+                      基于文件原生创作沙箱，先明确 Brief，再推进 Outline、Research 并导出 PPT。
+                    </p>
+                  </div>
+
+                  <div style={{ width: "100%", maxWidth: "720px", display: "flex", flexDirection: "column", alignItems: "center" }}>
+                    <UnifiedAgentInput
+                      request={request}
+                      onChangeRequest={setRequest}
+                      onSubmitRequest={() => void startAgent()}
+                      busy={busy}
+                      models={models}
+                      selectedModelId={selectedModelId}
+                      setSelectedModelId={setSelectedModelId}
+                      executionStrategy={executionStrategy}
+                      setExecutionStrategy={setExecutionStrategy}
+                      localStoragePath={localStoragePath}
+                      setLocalStoragePath={setLocalStoragePath}
+                      layoutMode="center"
+                      triggerToast={triggerToast}
+                      selectedSlideIndex={null}
+                      onClearContextTag={() => {}}
+                      submitLabel="生成项目"
                     />
-                  )}
+
+                    <div className="center-suggestions" style={{ marginTop: "28px", display: "flex", flexWrap: "wrap", gap: "10px", justifyContent: "center" }}>
+                      {[
+                        "设计一份智能硬件推广策划大纲",
+                        "制作年度团队复盘与展望规划",
+                        "制作一份商业路演PPT大纲",
+                        "编写一份前沿AI技术分享课件"
+                      ].map((suggestion, index) => (
+                        <button
+                          key={index}
+                          className="suggestion-chip"
+                          onClick={() => handleSuggestPrompt(suggestion)}
+                          style={{
+                            background: "var(--bg-input-field)",
+                            border: "1px solid var(--border-glass)",
+                            padding: "8px 16px",
+                            borderRadius: "20px",
+                            fontSize: "12px",
+                            color: "var(--text-secondary)",
+                            cursor: "pointer",
+                            transition: "var(--transition-smooth)",
+                            boxShadow: "0 2px 6px rgba(0,0,0,0.01)"
+                          }}
+                        >
+                          ✨ {suggestion}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 </div>
-
-                {/* 右栏：智能助手对话面板 */}
-                <ContextualAgentPanel
-                  chatMessages={chatMessages}
-                  thoughtProcess={thoughtProcess}
-                  thoughtProgress={thoughtProgress}
-                  agentActivityMode={agentActivityMode}
-                  request={request}
-                  onChangeRequest={setRequest}
-                  onSubmitRequest={() => void startAgent()}
-                  busy={busy}
-                  onConfirmOutline={() => void confirmOutline()}
-                  onResolveApproval={resolveApproval}
+              ) : (
+                <div className="workspace-canvas-content" style={{ display: "flex", flex: 1, width: "100%", height: "100%", overflow: "hidden" }}>
                   
-                  models={models}
-                  selectedModelId={selectedModelId}
-                  setSelectedModelId={setSelectedModelId}
-                  executionStrategy={executionStrategy}
-                  setExecutionStrategy={setExecutionStrategy}
-                  localStoragePath={localStoragePath}
-                  setLocalStoragePath={setLocalStoragePath}
-                  triggerToast={triggerToast}
-                  onUpdateMessageContent={handleUpdateMessageContent}
-                  selectedSlideIndex={activeSlideIndexValue}
-                  onClearContextTag={() => setSelectedSlideId("")}
-                />
+                  {/* 中间栏：各阶段的产物画布/编辑器区域 */}
+                  <div className="workspace-canvas-middle" style={{ flex: 1, height: "100%", position: "relative", display: "flex", flexDirection: "column", minWidth: 0 }}>
+                    {proposedPatch && <DiffReviewZone />}
+                    
+                    {!proposedPatch && currentStage === "brief" && <BriefFormCollector />}
+                    {!proposedPatch && currentStage === "outline" && <DraggableOutlineTree />}
+                    {!proposedPatch && currentStage === "research" && <ResearchNotesCollector />}
+                    {!proposedPatch && currentStage === "design" && <DesignThemeSelector />}
+                    {!proposedPatch && currentStage === "slides" && <StoryboardGrid />}
+                    
+                    {!proposedPatch && currentStage === "deck" && (
+                      <CanvasArea
+                        presentation={presentation}
+                        selectedSlideId={selectedSlideId}
+                        onSelectSlide={(id) => {
+                          setSelectedSlideId(id);
+                          setSelectedElementId(null);
+                        }}
+                        selectedElementId={selectedElementId}
+                        onSelectElement={setSelectedElementId}
+                        selectedTheme={selectedTheme}
+                        selectedPalette={selectedPalette}
+                        logoUrl={logoUrl}
+                        onUpdateElement={handleUpdateElement}
+                        onUpdateElementPosition={handleUpdateElementPosition}
+                        onAddSlide={handleAddSlideLocally}
+                        onDuplicateSlide={handleDuplicateSlideLocally}
+                        onDeleteSlide={handleDeleteSlideLocally}
+                        onOptimizeSlide={handleOptimizePresentationLocally}
+                        onAddElement={handleAddElementLocally}
+                        isMirrorOpen={isMirrorOpen}
+                        onToggleMirror={() => setIsMirrorOpen(!isMirrorOpen)}
+                        themeMode={computedTheme}
+                        onToggleThemeMode={() => setThemeMode(computedTheme === "light" ? "dark" : "light")}
+                        onUndo={() => void handleHistory("undo")}
+                        onRedo={() => void handleHistory("redo")}
+                        canUndo={presentation.revision > 0}
+                        canRedo={presentation ? presentation.revision < maxRevision : false}
+                        onProposePrompt={handleSuggestPrompt}
+                      />
+                    )}
+                  </div>
 
-              </div>
+                  {/* 右栏：智能助手对话面板 */}
+                  <ContextualAgentPanel
+                    chatMessages={chatMessages}
+                    thoughtProcess={thoughtProcess}
+                    thoughtProgress={thoughtProgress}
+                    agentActivityMode={agentActivityMode}
+                    request={request}
+                    onChangeRequest={setRequest}
+                    onSubmitRequest={() => void startAgent()}
+                    busy={busy}
+                    onConfirmOutline={() => void confirmOutline()}
+                    onResolveApproval={resolveApproval}
+                    
+                    models={models}
+                    selectedModelId={selectedModelId}
+                    setSelectedModelId={setSelectedModelId}
+                    executionStrategy={executionStrategy}
+                    setExecutionStrategy={setExecutionStrategy}
+                    localStoragePath={localStoragePath}
+                    setLocalStoragePath={setLocalStoragePath}
+                    triggerToast={triggerToast}
+                    onUpdateMessageContent={handleUpdateMessageContent}
+                    selectedSlideIndex={activeSlideIndexValue}
+                    onClearContextTag={() => setSelectedSlideId("")}
+                  />
+
+                </div>
+              )}
             </div>
           </>
         ) : (

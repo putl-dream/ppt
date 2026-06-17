@@ -409,6 +409,46 @@ describe("Agent Architecture Skeletons & Types", () => {
     ]);
   });
 
+  it("passes restored chat history into a normal start request", async () => {
+    let promptPayload: {
+      request: string;
+      conversation: Array<{ role: "user" | "assistant"; content: string }>;
+    } | undefined;
+    const service = new RefactoredAgentService(
+      new CommandBus(createStarterPresentation()),
+      new AgentRuntime(createDefaultToolRegistry(), {
+        async generateText(request) {
+          promptPayload = JSON.parse(request.prompt);
+          return {
+            provider: "openai",
+            model: "test-model",
+            text: JSON.stringify({
+              type: "message",
+              content: "你刚才说的是 Agent 范式与架构演进。",
+            }),
+          };
+        },
+      }),
+      new CommitGate(new RiskPolicy()),
+    );
+
+    const result = await service.start(
+      "我刚才说了什么？",
+      undefined,
+      "REQUEST_APPROVAL",
+      undefined,
+      undefined,
+      [
+        { role: "user", content: "Agent 范式与架构演进：从 ReAct / Plan / Workflow 看智能体设计" },
+      ],
+    );
+
+    expect(result.status).toBe("chat");
+    expect(promptPayload?.conversation).toEqual([
+      { role: "user", content: "Agent 范式与架构演进：从 ReAct / Plan / Workflow 看智能体设计" },
+    ]);
+  });
+
   it("requires Deferred Tools to be discovered in the same session before execution", async () => {
     const registry = new ToolRegistry();
     registry.register(searchExtraToolsTool);

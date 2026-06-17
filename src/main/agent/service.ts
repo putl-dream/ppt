@@ -3,6 +3,7 @@ import type { CommandBus, PresentationCommand } from "@shared/commands";
 import type { AgentRunResult } from "@shared/ipc";
 import type { PresentationOutline } from "@shared/ipc";
 import type { AgentEditorContext } from "@shared/ipc";
+import type { AgentConversationMessage } from "@shared/session-recovery";
 import { CommitGate, type CommitGateResult } from "./gate/commit-gate";
 import { AgentRuntime } from "./runtime/agent-runtime";
 import { outlineToRequest } from "./outline-planner";
@@ -24,7 +25,7 @@ type PendingApproval = {
 };
 
 type ContinuedConversation = {
-  messages: Array<{ role: "user" | "assistant"; content: string }>;
+  messages: AgentConversationMessage[];
   model?: AgentModelSelection;
   executionStrategy: AgentExecutionStrategy;
   outline?: PresentationOutline;
@@ -43,7 +44,7 @@ export class AgentService {
 
   restoreOutlineConversation(
     threadId: string,
-    messages: Array<{ role: "user" | "assistant"; content: string }>,
+    messages: AgentConversationMessage[],
     outline: PresentationOutline | undefined,
     model?: AgentModelSelection,
     executionStrategy: AgentExecutionStrategy = "REQUEST_APPROVAL",
@@ -62,9 +63,10 @@ export class AgentService {
     executionStrategy: AgentExecutionStrategy = "REQUEST_APPROVAL",
     listener?: AgentServiceEventListener,
     editorContext?: AgentEditorContext,
+    messageHistory: AgentConversationMessage[] = [],
   ): Promise<AgentRunResult> {
     const threadId = crypto.randomUUID();
-    return this.run(threadId, request, model, executionStrategy, [], listener, editorContext, "any");
+    return this.run(threadId, request, model, executionStrategy, messageHistory, listener, editorContext, "any");
   }
 
   async continueOutline(
@@ -103,7 +105,7 @@ export class AgentService {
     request: string,
     model: AgentModelSelection | undefined,
     executionStrategy: AgentExecutionStrategy,
-    messageHistory: Array<{ role: "user" | "assistant"; content: string }>,
+    messageHistory: AgentConversationMessage[],
     listener?: AgentServiceEventListener,
     editorContext?: AgentEditorContext,
     requiredOutcome: "any" | "command_proposal" = "any",

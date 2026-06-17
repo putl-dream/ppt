@@ -6,9 +6,32 @@ export interface RecoverableOutlineConversation {
   messages: Array<{ role: "user" | "assistant"; content: string }>;
 }
 
+export type AgentConversationMessage = { role: "user" | "assistant"; content: string };
+
 function isGeneratedAgentError(message: SessionChatMessage): boolean {
   return message.role === "assistant" &&
     (/^(?:执行指令|确认大纲)时发生错误：/.test(message.content.trim()));
+}
+
+function isConversationMessage(message: SessionChatMessage): boolean {
+  return message.id !== "init" &&
+    Boolean(message.content.trim()) &&
+    !isGeneratedAgentError(message);
+}
+
+export function toAgentMessageHistory(
+  messages: SessionChatMessage[],
+  currentRequest?: string,
+): AgentConversationMessage[] {
+  const history = messages
+    .filter(isConversationMessage)
+    .map((message) => ({ role: message.role, content: message.content }));
+  const normalizedRequest = currentRequest?.trim();
+  const last = history.at(-1);
+  if (normalizedRequest && last?.role === "user" && last.content.trim() === normalizedRequest) {
+    return history.slice(0, -1);
+  }
+  return history;
 }
 
 export function findRecoverableOutlineConversation(
@@ -42,10 +65,6 @@ export function findRecoverableOutlineConversation(
 
   return {
     outlineRequest,
-    messages: messages.slice(startIndex)
-      .filter((message) => message.id !== "init")
-      .filter((message) => message.content.trim())
-      .filter((message) => !isGeneratedAgentError(message))
-      .map((message) => ({ role: message.role, content: message.content })),
+    messages: toAgentMessageHistory(messages.slice(startIndex)),
   };
 }

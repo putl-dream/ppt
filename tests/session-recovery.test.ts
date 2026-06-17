@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { findRecoverableOutlineConversation } from "../src/shared/session-recovery";
+import {
+  findRecoverableOutlineConversation,
+  toAgentMessageHistory,
+} from "../src/shared/session-recovery";
 import type { SessionChatMessage } from "../src/shared/session";
 
 const outlineRequest = {
@@ -11,6 +14,19 @@ const outlineRequest = {
 };
 
 describe("findRecoverableOutlineConversation", () => {
+  it("builds model history from persisted chat messages", () => {
+    const messages: SessionChatMessage[] = [
+      { id: "init", role: "assistant", content: "welcome" },
+      { id: "u1", role: "user", content: "Agent 范式与架构演进：从 ReAct / Plan / Workflow 看智能体设计" },
+      { id: "a1", role: "assistant", content: "执行指令时发生错误：timeout" },
+      { id: "u2", role: "user", content: "我刚才说了什么？" },
+    ];
+
+    expect(toAgentMessageHistory(messages, "我刚才说了什么？")).toEqual([
+      { role: "user", content: "Agent 范式与架构演进：从 ReAct / Plan / Workflow 看智能体设计" },
+    ]);
+  });
+
   it("recovers a pending outline even when later turns ended in an app error", () => {
     const messages: SessionChatMessage[] = [
       { id: "init", role: "assistant", content: "welcome" },
