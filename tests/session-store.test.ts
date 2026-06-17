@@ -114,6 +114,112 @@ describe("FileSessionStore", () => {
       .toContain("## 事实");
   });
 
+  it("reads and writes project artifacts inside the sandbox", async () => {
+    const { store } = await createStore();
+    const sessionId = store.getBootstrap().activeSession.session.id;
+
+    const outline = await store.readProjectArtifact(sessionId, "outline");
+    expect(outline).toMatchObject({
+      path: "outline.md",
+      type: "file",
+    });
+    expect(outline.content).toContain("## 章节结构");
+
+    const slides = await store.readProjectArtifact(sessionId, "slides");
+    expect(slides).toMatchObject({
+      path: "slides/",
+      type: "directory",
+    });
+    expect(slides.entries).toContain("slides/001-title.md");
+
+    const writeResult = await store.writeProjectArtifact(
+      sessionId,
+      "research/notes.md",
+      "# Research Notes\n\n- 新增事实\n",
+    );
+    expect(writeResult).toMatchObject({
+      changed: true,
+      changedArtifactId: "research",
+    });
+    expect(writeResult.staleArtifactIds).toEqual(["slides", "deck", "history"]);
+
+    const updated = await store.readProjectArtifact(sessionId, "research/notes.md");
+    expect(updated.content).toContain("新增事实");
+  });
+
+  it("marks downstream artifacts as stale when an upstream artifact changes", async () => {
+    const { store } = await createStore();
+    const sessionId = store.getBootstrap().activeSession.session.id;
+    for (const artifactId of [
+      "brief",
+      "outline",
+      "research",
+      "design",
+      "slides",
+      "deck",
+      "history",
+    ]) {
+      await store.markProjectArtifactStatus(sessionId, artifactId, "ready");
+    }
+
+    const result = await store.writeProjectArtifact(
+      sessionId,
+      "brief.md",
+      "# Brief\n\n## 目的\n- 更新项目目标\n",
+    );
+
+    expect(result.staleArtifactIds).toEqual([
+      "outline",
+      "research",
+      "slides",
+      "design",
+      "deck",
+      "history",
+    ]);
+    const statusById = new Map(
+      store.listProjectArtifacts(sessionId).map((artifact) => [artifact.id, artifact.status]),
+    );
+    expect(statusById.get("brief")).toBe("draft");
+    expect(statusById.get("outline")).toBe("stale");
+    expect(statusById.get("research")).toBe("stale");
+    expect(statusById.get("design")).toBe("stale");
+    expect(statusById.get("slides")).toBe("stale");
+    expect(statusById.get("deck")).toBe("stale");
+    expect(statusById.get("history")).toBe("stale");
+  });
+
+  it("rejects project artifact paths outside the sandbox", async () => {
+    const { store } = await createStore();
+    const sessionId = store.getBootstrap().activeSession.session.id;
+
+    await expect(store.readProjectArtifact(sessionId, "../sessions.json")).rejects.toThrow(
+      "outside the sandbox",
+    );
+    await expect(store.writeProjectArtifact(sessionId, "../escape.md", "nope")).rejects.toThrow(
+      "outside the sandbox",
+    );
+    await expect(
+      store.getProjectArtifactDiff(sessionId, "../escape.md", "nope"),
+    ).rejects.toThrow("outside the sandbox");
+  });
+
+  it("returns a diff preview before writing project artifact content", async () => {
+    const { store } = await createStore();
+    const sessionId = store.getBootstrap().activeSession.session.id;
+
+    const diff = await store.getProjectArtifactDiff(
+      sessionId,
+      "outline.md",
+      "# Outline\n\n## 新结构\n",
+    );
+
+    expect(diff.changed).toBe(true);
+    expect(diff.before).toContain("## 章节结构");
+    expect(diff.after).toContain("## 新结构");
+    expect(diff.unifiedDiff).toContain("--- a/outline.md");
+    expect(diff.unifiedDiff).toContain("+++ b/outline.md");
+  });
+
   it("expires pending approvals after an application restart", async () => {
     const { store, filePath } = await createStore();
     const sessionId = store.getBootstrap().activeSession.session.id;

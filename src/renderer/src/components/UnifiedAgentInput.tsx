@@ -22,6 +22,7 @@ interface UnifiedAgentInputProps {
   selectedSlideIndex: number | null;
   onClearContextTag: () => void;
   submitLabel?: string;
+  placeholder?: string;
 }
 
 export const UnifiedAgentInput: React.FC<UnifiedAgentInputProps> = ({
@@ -41,6 +42,7 @@ export const UnifiedAgentInput: React.FC<UnifiedAgentInputProps> = ({
   selectedSlideIndex,
   onClearContextTag,
   submitLabel = "生成",
+  placeholder,
 }) => {
   const [isVoiceActive, setIsVoiceActive] = useState(false);
   const voiceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -141,9 +143,11 @@ export const UnifiedAgentInput: React.FC<UnifiedAgentInputProps> = ({
             onChange={(e) => onChangeRequest(e.target.value)}
             onKeyDown={handleKeyPress}
             placeholder={
+              placeholder || (
               selectedSlideIndex !== null
                 ? `输入对第 ${selectedSlideIndex + 1} 页的局部指令（如：“把背景换成白色”、“增大字号”）...`
                 : "输入修改意图，支持输入斜杠 / 唤醒快捷排版指令..."
+              )
             }
             readOnly={busy}
             autoFocus

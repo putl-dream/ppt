@@ -1,6 +1,7 @@
 import React from "react";
 import type { SessionSummary } from "@shared/session";
 import { PlusIcon, SettingsIcon, FileIcon, UserIcon, TrashIcon } from "./Icons";
+import { ProjectNavigator } from "./ProjectNavigator";
 
 interface LeftPanelProps {
   sessions: SessionSummary[];
@@ -19,6 +20,7 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
   onToggleSettings,
   onDeleteSession,
 }) => {
+  const [activeTab, setActiveTab] = React.useState<"pipeline" | "sessions">("pipeline");
   const [contextMenu, setContextMenu] = React.useState<{
     x: number;
     y: number;
@@ -38,55 +40,101 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
         <div className="title-section">
           <span className="eyebrow">AGENT PPT</span>
           <h2 className="project-title" style={{ cursor: "default" }}>
-            <span>会话管理</span>
+            <span>工作台导航</span>
           </h2>
         </div>
         <button className="new-slide-btn" onClick={onNewSession} title="新建会话分支">
           <PlusIcon size={16} />
-          <span>新建会话</span>
+          <span>新建</span>
         </button>
       </div>
 
-      {/* 纯粹的会话历史列表 */}
-      <div className="sections-container flex-1">
-        <div className="history-list">
-          {sessions.map((session) => (
-            <div
-              key={session.id}
-              className={`history-card session-card ${
-                activeSessionId === session.id ? "active" : ""
-              }`}
-              onClick={() => onSelectSession(session.id)}
-              onContextMenu={(e) => {
-                e.preventDefault();
-                setContextMenu({
-                  x: e.clientX,
-                  y: e.clientY,
-                  sessionId: session.id,
-                });
-              }}
-            >
-              <div className="history-card-header">
-                <span className="history-ver">Rev {session.revision}</span>
-                <span className="history-time">
-                  {new Date(session.updatedAt).toLocaleString([], {
-                    month: "2-digit",
-                    day: "2-digit",
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })}
-                </span>
+      {/* 选项卡导航 */}
+      <div className="sidebar-tabs" style={{
+        display: "flex",
+        borderBottom: "1px solid var(--border-glass)",
+        padding: "0 18px",
+        gap: "12px",
+        marginBottom: "8px"
+      }}>
+        <button
+          onClick={() => setActiveTab("pipeline")}
+          style={{
+            background: "transparent",
+            border: "none",
+            borderBottom: activeTab === "pipeline" ? "2px solid var(--accent-cyan)" : "2px solid transparent",
+            color: activeTab === "pipeline" ? "var(--text-primary)" : "var(--text-muted)",
+            padding: "8px 4px",
+            fontSize: "12.5px",
+            fontWeight: 600,
+            cursor: "pointer",
+            transition: "all 0.2s ease"
+          }}
+        >
+          项目产物
+        </button>
+        <button
+          onClick={() => setActiveTab("sessions")}
+          style={{
+            background: "transparent",
+            border: "none",
+            borderBottom: activeTab === "sessions" ? "2px solid var(--accent-cyan)" : "2px solid transparent",
+            color: activeTab === "sessions" ? "var(--text-primary)" : "var(--text-muted)",
+            padding: "8px 4px",
+            fontSize: "12.5px",
+            fontWeight: 600,
+            cursor: "pointer",
+            transition: "all 0.2s ease"
+          }}
+        >
+          历史分支
+        </button>
+      </div>
+
+      {/* 纯粹的会话历史列表 或 项目路线图 */}
+      <div className="sections-container flex-1" style={{ overflowY: "auto" }}>
+        {activeTab === "pipeline" ? (
+          <ProjectNavigator onToggleSettings={onToggleSettings} />
+        ) : (
+          <div className="history-list">
+            {sessions.map((session) => (
+              <div
+                key={session.id}
+                className={`history-card session-card ${
+                  activeSessionId === session.id ? "active" : ""
+                }`}
+                onClick={() => onSelectSession(session.id)}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  setContextMenu({
+                    x: e.clientX,
+                    y: e.clientY,
+                    sessionId: session.id,
+                  });
+                }}
+              >
+                <div className="history-card-header">
+                  <span className="history-ver">Rev {session.revision}</span>
+                  <span className="history-time">
+                    {new Date(session.updatedAt).toLocaleString([], {
+                      month: "2-digit",
+                      day: "2-digit",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </span>
+                </div>
+                <div className="history-card-title flex items-center gap-2">
+                  <FileIcon size={14} className="text-muted" />
+                  <span className="truncate">{session.title}</span>
+                </div>
+                <div className="history-snapshot" style={{ marginTop: 6, justifyContent: "flex-end" }}>
+                  <span className="slide-count-badge">{session.slideCount} 页幻灯片</span>
+                </div>
               </div>
-              <div className="history-card-title flex items-center gap-2">
-                <FileIcon size={14} className="text-muted" />
-                <span className="truncate">{session.title}</span>
-              </div>
-              <div className="history-snapshot" style={{ marginTop: 6, justifyContent: "flex-end" }}>
-                <span className="slide-count-badge">{session.slideCount} 页幻灯片</span>
-              </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* 左下角固定的设置按钮 */}

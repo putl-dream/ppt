@@ -1,0 +1,253 @@
+import { join } from "node:path";
+import type { Presentation } from "@shared/presentation";
+import type { ProjectArtifact, ProjectSandbox, SessionSnapshot } from "@shared/session";
+
+export const defaultProjectArtifacts: ProjectArtifact[] = [
+  {
+    id: "brief",
+    title: "目的、方向与受众",
+    path: "brief.md",
+    kind: "brief",
+    status: "draft",
+    dependsOn: [],
+  },
+  {
+    id: "outline",
+    title: "内容大纲",
+    path: "outline.md",
+    kind: "outline",
+    status: "draft",
+    dependsOn: ["brief"],
+  },
+  {
+    id: "research",
+    title: "资料与素材",
+    path: "research/",
+    kind: "research",
+    status: "draft",
+    dependsOn: ["outline"],
+  },
+  {
+    id: "slides",
+    title: "逐页内容与设计方案",
+    path: "slides/",
+    kind: "slide-plan",
+    status: "draft",
+    dependsOn: ["outline", "research", "design"],
+  },
+  {
+    id: "design",
+    title: "设计系统与版式偏好",
+    path: "design/",
+    kind: "design",
+    status: "draft",
+    dependsOn: ["brief"],
+  },
+  {
+    id: "deck",
+    title: "PPT 结构化快照与导出物",
+    path: "deck/",
+    kind: "deck",
+    status: "draft",
+    dependsOn: ["slides", "design"],
+  },
+  {
+    id: "history",
+    title: "关键版本记录",
+    path: "history/",
+    kind: "history",
+    status: "draft",
+    dependsOn: ["brief", "outline", "slides", "deck"],
+  },
+];
+
+export interface ProjectFileTemplate {
+  path: string;
+  content: string;
+}
+
+export function createProjectSandbox(
+  snapshot: SessionSnapshot,
+  projectRootPath: string,
+): ProjectSandbox {
+  const rootPath =
+    snapshot.project?.rootPath ?? join(projectRootPath, `session-${snapshot.session.id}`);
+  const existingStatusById = new Map(
+    snapshot.project?.artifacts.map((artifact) => [artifact.id, artifact.status]),
+  );
+  const artifacts = defaultProjectArtifacts.map((artifact) => ({
+    ...artifact,
+    status: existingStatusById.get(artifact.id) ?? artifact.status,
+  }));
+
+  return { rootPath, artifacts };
+}
+
+export function createDefaultProjectFiles(snapshot: SessionSnapshot): ProjectFileTemplate[] {
+  return [
+    {
+      path: "brief.md",
+      content: createBriefTemplate(snapshot.session.title),
+    },
+    {
+      path: "outline.md",
+      content: createOutlineTemplate(snapshot.session.title),
+    },
+    {
+      path: "research/sources.md",
+      content: createResearchSourcesTemplate(),
+    },
+    {
+      path: "research/notes.md",
+      content: createResearchNotesTemplate(),
+    },
+    {
+      path: "research/assets/.gitkeep",
+      content: "",
+    },
+    {
+      path: "slides/README.md",
+      content: createSlidesReadmeTemplate(),
+    },
+    {
+      path: "slides/001-title.md",
+      content: createTitleSlideTemplate(snapshot.session.title),
+    },
+    {
+      path: "design/theme.json",
+      content: `${JSON.stringify(createThemeTemplate(), null, 2)}\n`,
+    },
+    {
+      path: "design/layout-notes.md",
+      content: createLayoutNotesTemplate(),
+    },
+    {
+      path: "deck/snapshot.json",
+      content: `${JSON.stringify(snapshot.presentation, null, 2)}\n`,
+    },
+    {
+      path: "history/README.md",
+      content: createHistoryReadmeTemplate(),
+    },
+  ];
+}
+
+export function createDeckSnapshotContent(presentation: Presentation): string {
+  return `${JSON.stringify(presentation, null, 2)}\n`;
+}
+
+function createBriefTemplate(title: string): string {
+  return `# Brief: ${title}
+
+## 目的
+- 这份 PPT 要促成什么决定、理解或行动？
+
+## 受众
+- 面向谁？他们已知什么、关心什么、抗拒什么？
+
+## 场景
+- 汇报、路演、培训、销售、复盘或其他？
+
+## 方向
+- 期望语气、视觉风格、内容深度和时长。
+`;
+}
+
+function createOutlineTemplate(title: string): string {
+  return `# Outline: ${title}
+
+## 核心观点
+- 
+
+## 章节结构
+1. 开场与背景
+2. 问题或机会
+3. 方案或论证
+4. 结论与行动
+
+## 待确认问题
+- 
+`;
+}
+
+function createResearchSourcesTemplate(): string {
+  return `# Sources
+
+记录外部资料、链接、访谈、数据来源和使用约束。
+`;
+}
+
+function createResearchNotesTemplate(): string {
+  return `# Research Notes
+
+## 事实
+- 
+
+## 观点
+- 
+
+## 可用素材
+- 
+`;
+}
+
+function createSlidesReadmeTemplate(): string {
+  return `# Slide Plans
+
+每页一个 Markdown 文件，例如 \`001-title.md\`。记录页面目标、内容要点、素材引用和设计意图。
+`;
+}
+
+function createTitleSlideTemplate(title: string): string {
+  return `# 001 - 标题页
+
+## 页面目标
+- 建立主题和语境。
+
+## 内容
+- 标题：${title}
+- 副标题：
+
+## 设计意图
+- 清晰表达主题，避免在封面堆叠过多信息。
+
+## 依赖素材
+- 
+`;
+}
+
+function createThemeTemplate() {
+  return {
+    tone: "professional",
+    typography: {
+      heading: "system-ui",
+      body: "system-ui",
+    },
+    palette: {
+      primary: "#2563eb",
+      accent: "#10b981",
+      background: "#f8fafc",
+      text: "#111827",
+    },
+    layout: {
+      ratio: "16:9",
+      density: "balanced",
+    },
+  };
+}
+
+function createLayoutNotesTemplate(): string {
+  return `# Layout Notes
+
+- 每页先明确一个信息任务，再选择版式。
+- 内容页优先保证扫描效率和层级清晰。
+- 图表、图片和表格必须能追溯到 \`research/\` 中的来源。
+`;
+}
+
+function createHistoryReadmeTemplate(): string {
+  return `# History
+
+记录关键版本、决策变化和重要导出结果。不要在这里存放密钥或临时凭证。
+`;
+}

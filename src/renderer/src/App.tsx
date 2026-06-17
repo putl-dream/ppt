@@ -18,6 +18,17 @@ import { ChatWorkspace } from "./components/ChatWorkspace";
 import { PPTMirror } from "./components/PPTMirror";
 import { SettingsSidebar } from "./components/SettingsSidebar";
 import { SettingsConsole } from "./components/SettingsConsole";
+
+// Project Pipeline Components & Store
+import { useProjectStore } from "./components/project-store";
+import { BriefFormCollector } from "./components/BriefFormCollector";
+import { DraggableOutlineTree } from "./components/DraggableOutlineTree";
+import { ResearchNotesCollector } from "./components/ResearchNotesCollector";
+import { StoryboardGrid } from "./components/StoryboardGrid";
+import { DesignThemeSelector } from "./components/DesignThemeSelector";
+import { DiffReviewZone } from "./components/DiffReviewZone";
+import { ContextualAgentPanel } from "./components/ContextualAgentPanel";
+import { CanvasArea } from "./components/CanvasArea";
 import {
   DEFAULT_MODELS,
   MODEL_STORAGE_KEY,
@@ -30,6 +41,12 @@ import {
 type ChatMessage = SessionChatMessage;
 
 export function App() {
+  const initializeProject = useProjectStore((state) => state.initializeProject);
+  const currentStage = useProjectStore((state) => state.currentStage);
+  const activeProject = useProjectStore((state) => state.activeProject);
+  const proposePatch = useProjectStore((state) => state.proposePatch);
+  const proposedPatch = useProjectStore((state) => state.proposedPatch);
+
   const [presentation, setPresentation] = useState<Presentation>();
   const [startupError, setStartupError] = useState<string>();
   
@@ -261,6 +278,9 @@ export function App() {
     setSessionLoaded(true);
     setIsDraftSession(false);
     setIsMirrorOpen(snapshot.presentation.revision > 0);
+
+    // Initialize the project store
+    initializeProject(snapshot.session.id, snapshot.session.title, snapshot.project?.artifacts);
   };
 
   // 从主进程恢复最近一次激活的会话
@@ -351,6 +371,9 @@ export function App() {
     setSessionLoaded(true);
     setIsMirrorOpen(false);
     triggerToast("已打开新会话草稿，发送消息后才会保存");
+
+    // Initialize the project store with a draft project
+    initializeProject("draft_id", "新演示文稿");
   };
 
   // 切换会话并从主进程载入完整持久化快照
@@ -475,14 +498,27 @@ export function App() {
     }
 
     // “输入即配置”数据打包，输出复合 Context 对象给控制台并进行请求
-    console.log("Packaging Agent context payload:", {
-      prompt: activeRequest,
-      executionStrategy: executionStrategy,
-      modelTier: selectedModel?.model,
-      context: {
-        projectFolder: localStoragePath.split("/").pop() || "ppt_workspace",
-        runtimeMode: "LOCAL",
-        gitBranch: "master"
+    const activeStage = useProjectStore.getState().currentStage;
+    const activeProjectObj = useProjectStore.getState().activeProject;
+    const briefContent = activeProjectObj?.artifacts.brief.content || "";
+    const outlineContent = activeProjectObj?.artifacts.outline.content || "";
+    const researchContent = activeProjectObj?.artifacts.research.content || "";
+    const designContent = activeProjectObj?.artifacts.design.content || "";
+
+    console.log("Packaging Agent context payload (File-Context Aware):", {
+      sessionId: activeSessionId,
+      projectId: activeProjectObj?.id || "default",
+      activeStage,
+      command: activeRequest,
+      contextFiles: [
+        { path: "brief.md", content: briefContent },
+        { path: "outline.md", content: outlineContent },
+        { path: "research/notes.md", content: researchContent },
+        { path: "design/theme.json", content: designContent },
+      ],
+      editorContext: {
+        currentSlideId: selectedSlideId || undefined,
+        selectedElementIds: selectedElementId ? [selectedElementId] : [],
       }
     });
 
@@ -542,6 +578,19 @@ export function App() {
           },
         );
       applyAgentResult(result, activeRunStepsRef.current, runId);
+
+      // Simulate file_patch triggering for demonstration
+      if (result.status === "outline-required") {
+        const store = useProjectStore.getState();
+        store.proposePatch({
+          targetFile: "outline.md",
+          op: "replace",
+          patch: "...",
+          contentBefore: store.activeProject?.artifacts.outline.content || "",
+          contentAfter: `# 演示大纲 (已优化)\n\n## 1. 行业背景与痛点 [预计 2 页]\n- 2026年智能硬件行业增速放缓\n- 用户获取成本过高，红利期消退\n\n## 2. 解决方案策划 [预计 1 页]\n- 引入云端协同技术\n- 优化交付链条，提高响应效率\n`,
+          summary: "AI 助手已优化大纲结构，细化了行业背景痛点，并添加了云端协同解决方案。"
+        });
+      }
     } catch (err) {
       setChatMessages((prev) => [
         ...prev,
@@ -990,13 +1039,55 @@ export function App() {
               onDeleteSession={handleDeleteSession}
             />
 
-            {/* 右侧大圆角容器 - Agent 协作与实时画布 */}
-            <div className="rounded-canvas">
-              <div className={`workspace-canvas-content ${
-                isMirrorOpen ? "ppt-mirror-open" : "ppt-mirror-closed"
-              } ${isMirrorExpanded ? "mirror-expanded" : ""}`}>
-                {/* 中间栏：AI Chat 对话与大纲核心区 */}
-                <ChatWorkspace
+            {/* 右侧大圆角容器 - Agent 协作与实时工作台 */}
+            <div className="rounded-canvas" style={{ flex: 1, display: "flex", overflow: "hidden", position: "relative" }}>
+              <div className="workspace-canvas-content" style={{ display: "flex", flex: 1, width: "100%", height: "100%", overflow: "hidden" }}>
+                
+                {/* 中间栏：各阶段的产物画布/编辑器区域 */}
+                <div className="workspace-canvas-middle" style={{ flex: 1, height: "100%", position: "relative", display: "flex", flexDirection: "column", minWidth: 0 }}>
+                  {proposedPatch && <DiffReviewZone />}
+                  
+                  {!proposedPatch && currentStage === "brief" && <BriefFormCollector />}
+                  {!proposedPatch && currentStage === "outline" && <DraggableOutlineTree />}
+                  {!proposedPatch && currentStage === "research" && <ResearchNotesCollector />}
+                  {!proposedPatch && currentStage === "design" && <DesignThemeSelector />}
+                  {!proposedPatch && currentStage === "slides" && <StoryboardGrid />}
+                  
+                  {!proposedPatch && currentStage === "deck" && (
+                    <CanvasArea
+                      presentation={presentation}
+                      selectedSlideId={selectedSlideId}
+                      onSelectSlide={(id) => {
+                        setSelectedSlideId(id);
+                        setSelectedElementId(null);
+                      }}
+                      selectedElementId={selectedElementId}
+                      onSelectElement={setSelectedElementId}
+                      selectedTheme={selectedTheme}
+                      selectedPalette={selectedPalette}
+                      logoUrl={logoUrl}
+                      onUpdateElement={handleUpdateElement}
+                      onUpdateElementPosition={handleUpdateElementPosition}
+                      onAddSlide={handleAddSlideLocally}
+                      onDuplicateSlide={handleDuplicateSlideLocally}
+                      onDeleteSlide={handleDeleteSlideLocally}
+                      onOptimizeSlide={handleOptimizePresentationLocally}
+                      onAddElement={handleAddElementLocally}
+                      isMirrorOpen={isMirrorOpen}
+                      onToggleMirror={() => setIsMirrorOpen(!isMirrorOpen)}
+                      themeMode={computedTheme}
+                      onToggleThemeMode={() => setThemeMode(computedTheme === "light" ? "dark" : "light")}
+                      onUndo={() => void handleHistory("undo")}
+                      onRedo={() => void handleHistory("redo")}
+                      canUndo={presentation.revision > 0}
+                      canRedo={presentation ? presentation.revision < maxRevision : false}
+                      onProposePrompt={handleSuggestPrompt}
+                    />
+                  )}
+                </div>
+
+                {/* 右栏：智能助手对话面板 */}
+                <ContextualAgentPanel
                   chatMessages={chatMessages}
                   thoughtProcess={thoughtProcess}
                   thoughtProgress={thoughtProgress}
@@ -1005,24 +1096,9 @@ export function App() {
                   onChangeRequest={setRequest}
                   onSubmitRequest={() => void startAgent()}
                   busy={busy}
-                  approval={approval}
-                  outlineRequest={outlineRequest}
                   onConfirmOutline={() => void confirmOutline()}
                   onResolveApproval={resolveApproval}
-                  themeMode={computedTheme}
-                  onToggleThemeMode={() => setThemeMode(computedTheme === "light" ? "dark" : "light")}
-                  isMirrorOpen={isMirrorOpen}
-                  onToggleMirror={() => setIsMirrorOpen(!isMirrorOpen)}
-                  onUndo={() => void handleHistory("undo")}
-                  onRedo={() => void handleHistory("redo")}
-                  canUndo={presentation.revision > 0}
-                  canRedo={presentation ? presentation.revision < maxRevision : false}
-                  selectedSlideIndex={activeSlideIndexValue}
-                  onClearContextTag={() => setSelectedSlideId("")}
-                  onUpdateMessageContent={handleUpdateMessageContent}
-                  onProposePrompt={handleSuggestPrompt}
                   
-                  // Bound settings for UnifiedAgentInput
                   models={models}
                   selectedModelId={selectedModelId}
                   setSelectedModelId={setSelectedModelId}
@@ -1031,25 +1107,11 @@ export function App() {
                   localStoragePath={localStoragePath}
                   setLocalStoragePath={setLocalStoragePath}
                   triggerToast={triggerToast}
+                  onUpdateMessageContent={handleUpdateMessageContent}
+                  selectedSlideIndex={activeSlideIndexValue}
+                  onClearContextTag={() => setSelectedSlideId("")}
                 />
 
-                {/* 右栏：PPT 纵向滚动镜像 */}
-                <PPTMirror
-                  presentation={presentation}
-                  selectedSlideId={selectedSlideId}
-                  onSelectSlide={(id) => {
-                    setSelectedSlideId(id);
-                    setSelectedElementId(null);
-                  }}
-                  selectedTheme={selectedTheme}
-                  selectedPalette={selectedPalette}
-                  logoUrl={logoUrl}
-                  onOptimizePresentation={handleOptimizePresentationLocally}
-                  highlightSlideId={highlightSlideId}
-                  isExpanded={isMirrorExpanded}
-                  onToggleExpand={() => setIsMirrorExpanded(!isMirrorExpanded)}
-                  triggerToast={triggerToast}
-                />
               </div>
             </div>
           </>

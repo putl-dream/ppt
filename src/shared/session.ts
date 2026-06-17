@@ -84,6 +84,7 @@ export const sessionBootstrapSchema = z.object({
 });
 
 export type SessionChatMessage = z.infer<typeof sessionChatMessageSchema>;
+export type ProjectArtifactStatus = z.infer<typeof projectArtifactStatusSchema>;
 export type ProjectArtifact = z.infer<typeof projectArtifactSchema>;
 export type ProjectSandbox = z.infer<typeof projectSandboxSchema>;
 export type SessionSummary = z.infer<typeof sessionSummarySchema>;
