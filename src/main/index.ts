@@ -20,6 +20,7 @@ import { RiskPolicy } from "./agent/gate/risk-policy";
 import { agentLogger, requestSummary } from "./agent/logger";
 import { FileSessionStore } from "./session-store";
 import type { SessionChatMessage, SessionSnapshot } from "@shared/session";
+import { findRecoverableOutlineConversation } from "@shared/session-recovery";
 
 const agentGateway = new AgentGateway();
 
@@ -36,24 +37,14 @@ function createSessionRuntime(snapshot: SessionSnapshot): SessionRuntime {
     new AgentRuntime(registry, agentGateway),
     new CommitGate(new RiskPolicy()),
   );
-  const pendingOutline = snapshot.messages.at(-1)?.outlineRequest;
+  const pendingOutline = findRecoverableOutlineConversation(snapshot.messages);
   if (pendingOutline) {
-    const messages = [] as Array<{ role: "user" | "assistant"; content: string }>;
-    for (let index = snapshot.messages.length - 1; index >= 0; index -= 1) {
-      const message = snapshot.messages[index];
-      if (message.role === "assistant") {
-        if (message.outlineRequest?.threadId !== pendingOutline.threadId) break;
-      }
-      if (message.id !== "init" && message.content.trim()) {
-        messages.unshift({ role: message.role, content: message.content });
-      }
-    }
     agentService.restoreOutlineConversation(
-      pendingOutline.threadId,
-      messages,
-      pendingOutline.outline,
-      pendingOutline.model,
-      pendingOutline.executionStrategy,
+      pendingOutline.outlineRequest.threadId,
+      pendingOutline.messages,
+      pendingOutline.outlineRequest.outline,
+      pendingOutline.outlineRequest.model,
+      pendingOutline.outlineRequest.executionStrategy,
     );
   }
   return {

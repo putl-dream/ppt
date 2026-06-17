@@ -129,7 +129,7 @@ Supported variables:
 | `ANTHROPIC_API_KEY` | Anthropic credential |
 | `ANTHROPIC_MODEL` | Anthropic-specific model fallback |
 | `ANTHROPIC_BASE_URL` | Anthropic endpoint override |
-| `AGENT_TIMEOUT_MS` | Request timeout; default `60000` |
+| `AGENT_TIMEOUT_MS` | Request timeout; default `180000` |
 | `AGENT_MAX_OUTPUT_TOKENS` | Output limit; default `2048` |
 
 The application does not currently load `.env` files itself. `.env.example` documents available variables; set them in the launching process or add an explicit environment loader later.

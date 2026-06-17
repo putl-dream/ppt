@@ -13,6 +13,7 @@ import {
   type SessionChatMessage,
   type SessionSummary,
 } from "@shared/session";
+import { findRecoverableOutlineConversation } from "@shared/session-recovery";
 import { LeftPanel } from "./components/LeftPanel";
 import { ChatWorkspace } from "./components/ChatWorkspace";
 import { PPTMirror } from "./components/PPTMirror";
@@ -270,7 +271,7 @@ export function App() {
     setChatMessages(snapshot.messages);
     const latestMessage = snapshot.messages.at(-1);
     setApproval(latestMessage?.approval);
-    setOutlineRequest(latestMessage?.outlineRequest);
+    setOutlineRequest(findRecoverableOutlineConversation(snapshot.messages)?.outlineRequest);
     setRequest("");
     setSelectedSlideId(snapshot.presentation.slides[0]?.id ?? "");
     setSelectedElementId(null);

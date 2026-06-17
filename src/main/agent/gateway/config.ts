@@ -7,6 +7,8 @@ export const DEFAULT_AGENT_MODELS: Record<AgentProvider, string> = {
   anthropic: "claude-sonnet-4-6",
 };
 
+export const DEFAULT_AGENT_TIMEOUT_MS = 180_000;
+
 function positiveInteger(value: string | undefined, fallback: number, name: string): number {
   if (!value) return fallback;
   const parsed = Number(value);
@@ -78,7 +80,7 @@ export function resolveAgentModelConfig(
     apiKey,
     baseURL,
     openaiApiMode: resolveOpenAIApiMode(provider, baseURL, runtime?.openaiApiMode, env),
-    timeoutMs: positiveInteger(env.AGENT_TIMEOUT_MS, 60_000, "AGENT_TIMEOUT_MS"),
+    timeoutMs: positiveInteger(env.AGENT_TIMEOUT_MS, DEFAULT_AGENT_TIMEOUT_MS, "AGENT_TIMEOUT_MS"),
     maxOutputTokens: positiveInteger(env.AGENT_MAX_OUTPUT_TOKENS, 16_384, "AGENT_MAX_OUTPUT_TOKENS"),
   };
 }

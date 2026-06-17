@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  DEFAULT_AGENT_TIMEOUT_MS,
   DEFAULT_AGENT_MODELS,
   resolveAgentModelConfig,
 } from "../src/main/agent/gateway/config";
@@ -22,6 +23,7 @@ describe("resolveAgentModelConfig", () => {
     expect(config.provider).toBe("openai");
     expect(config.model).toBe("test-openai-model");
     expect(config.apiKey).toBe("runtime-key");
+    expect(config.timeoutMs).toBe(DEFAULT_AGENT_TIMEOUT_MS);
     expect(config.maxOutputTokens).toBe(16_384);
   });
 

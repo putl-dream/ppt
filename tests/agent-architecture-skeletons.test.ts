@@ -35,7 +35,7 @@ import { LayoutPolicy } from "../src/main/agent/design/layout-policy";
 import { RefactoredAgentService } from "../src/main/agent/service";
 import { createStarterPresentation } from "../src/shared/presentation";
 import { CommandBus } from "../src/shared/commands";
-import type { AgentModelGateway } from "../src/main/agent/gateway";
+import { AgentGatewayError, type AgentModelGateway } from "../src/main/agent/gateway";
 
 function createSequenceGateway(responses: unknown[]): AgentModelGateway {
   let index = 0;
@@ -43,6 +43,7 @@ function createSequenceGateway(responses: unknown[]): AgentModelGateway {
     async generateText() {
       const value = responses[index++];
       if (value === undefined) throw new Error("Unexpected gateway call");
+      if (value instanceof Error) throw value;
       return {
         provider: "openai",
         model: "test-model",
@@ -348,6 +349,64 @@ describe("Agent Architecture Skeletons & Types", () => {
     if (proposal.status === "approval-required") {
       expect(proposal.approval.assumptions).toEqual(["中文为主，关键术语保留英文"]);
     }
+  });
+
+  it("keeps a failed continuation request in the next runtime context", async () => {
+    const prompts: Array<{
+      request: string;
+      conversation: Array<{ role: "user" | "assistant"; content: string }>;
+    }> = [];
+    const gateway: AgentModelGateway = {
+      async generateText(request) {
+        prompts.push(JSON.parse(request.prompt));
+        if (prompts.length === 1) {
+          return {
+            provider: "openai",
+            model: "test-model",
+            text: JSON.stringify({
+              type: "ask_user",
+              message: "请补充具体主题。",
+              missingFields: ["topic"],
+            }),
+          };
+        }
+        if (prompts.length === 2) {
+          throw new AgentGatewayError("Provider request timed out", "timeout", "openai");
+        }
+        return {
+          provider: "openai",
+          model: "test-model",
+          text: JSON.stringify({
+            type: "ask_user",
+            message: "上一条是 Agent 范式与架构演进。",
+            missingFields: ["confirmation"],
+          }),
+        };
+      },
+    };
+    const service = new RefactoredAgentService(
+      new CommandBus(createStarterPresentation()),
+      new AgentRuntime(createDefaultToolRegistry(), gateway),
+      new CommitGate(new RiskPolicy()),
+    );
+
+    const first = await service.start("帮我做一份 PPT");
+    expect(first.status).toBe("outline-required");
+    if (first.status !== "outline-required") throw new Error("Expected clarification");
+
+    await expect(service.continueOutline(
+      first.outlineRequest.threadId,
+      "Agent 范式与架构演进：从 ReAct / Plan / Workflow 看智能体设计",
+    )).rejects.toThrow("Provider request timed out");
+
+    await service.continueOutline(first.outlineRequest.threadId, "我刚才说了什么？");
+
+    expect(prompts[2].conversation).toEqual([
+      { role: "user", content: "帮我做一份 PPT" },
+      { role: "assistant", content: "请补充具体主题。" },
+      { role: "user", content: "Agent 范式与架构演进：从 ReAct / Plan / Workflow 看智能体设计" },
+      { role: "user", content: "我刚才说了什么？" },
+    ]);
   });
 
   it("requires Deferred Tools to be discovered in the same session before execution", async () => {

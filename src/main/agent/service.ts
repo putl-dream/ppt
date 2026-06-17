@@ -75,6 +75,7 @@ export class AgentService {
   ): Promise<AgentRunResult> {
     const conversation = this.conversations.get(threadId);
     if (!conversation) throw new Error("Agent conversation not found or already completed.");
+    conversation.messages.push({ role: "user", content: request });
     return this.run(
       threadId,
       request,
@@ -84,6 +85,7 @@ export class AgentService {
       listener,
       editorContext,
       "command_proposal",
+      true,
     );
   }
 
@@ -105,6 +107,7 @@ export class AgentService {
     listener?: AgentServiceEventListener,
     editorContext?: AgentEditorContext,
     requiredOutcome: "any" | "command_proposal" = "any",
+    requestAlreadyInHistory = false,
   ): Promise<AgentRunResult> {
     listener?.({ type: "request-status", message: "正在处理您的请求...", progress: 10 });
     const before = this.commandBus.getSnapshot();
@@ -129,7 +132,7 @@ export class AgentService {
       this.conversations.set(threadId, {
         messages: [
           ...messageHistory,
-          { role: "user", content: request },
+          ...(requestAlreadyInHistory ? [] : [{ role: "user" as const, content: request }]),
           { role: "assistant", content: runtimeResult.message },
         ],
         model,

@@ -34,7 +34,12 @@ export function normalizeProviderError(provider: AgentProvider, error: unknown):
     return new AgentGatewayError(`${provider} rate limit exceeded: ${message}`, "rate-limit", provider, error);
   }
   if (status === 408 || /timeout/i.test(name) || /timed out/i.test(message)) {
-    return new AgentGatewayError(`${provider} request timed out: ${message}`, "timeout", provider, error);
+    return new AgentGatewayError(
+      `${provider} request timed out: ${message}. Increase AGENT_TIMEOUT_MS if this model or endpoint needs more time.`,
+      "timeout",
+      provider,
+      error,
+    );
   }
   return new AgentGatewayError(`${provider} request failed: ${message}`, "provider-error", provider, error);
 }
