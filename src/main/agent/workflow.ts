@@ -24,7 +24,9 @@ import {
   type OutlineConversationMessage,
   type PresentationOutline,
 } from "./outline-planner";
-import { agentLogger, requestSummary } from "./logger";
+import { createModuleLogger, requestSummary } from "./logger";
+
+const logger = createModuleLogger("workflow");
 
 const AgentState = Annotation.Root({
   threadId: Annotation<string>(),
@@ -89,7 +91,7 @@ function routeAfterValidation(
 }
 
 function approvalNode(state: AgentStateType): Command {
-  agentLogger.info("workflow.approval.waiting", {
+  logger.info("workflow.approval.waiting", {
     threadId: state.threadId,
     commandCount: state.commands.length,
     summary: state.summary,
@@ -98,7 +100,7 @@ function approvalNode(state: AgentStateType): Command {
     summary: state.summary,
     commands: state.commands,
   }) as { approved: boolean };
-  agentLogger.info("workflow.approval.received", {
+  logger.info("workflow.approval.received", {
     threadId: state.threadId,
     approved: decision.approved,
   });
@@ -109,7 +111,7 @@ export function createAgentWorkflow(commandBus: CommandBus, planner: AgentPlanne
   const proposeCommands = async (state: AgentStateType): Promise<Partial<AgentStateType>> => {
     const attempt = state.attempt + 1;
     const startedAt = Date.now();
-    agentLogger.info("workflow.planning.started", {
+    logger.info("workflow.planning.started", {
       threadId: state.threadId,
       attempt,
       provider: state.model?.provider,
@@ -123,7 +125,7 @@ export function createAgentWorkflow(commandBus: CommandBus, planner: AgentPlanne
         feedback: state.errors,
         attempt,
       });
-      agentLogger.info("workflow.planning.completed", {
+      logger.info("workflow.planning.completed", {
         threadId: state.threadId,
         attempt,
         commandCount: plan.commands.length,
@@ -133,7 +135,7 @@ export function createAgentWorkflow(commandBus: CommandBus, planner: AgentPlanne
       return { ...plan, errors: [], attempt };
     } catch (error) {
       if (error instanceof AgentGatewayError) {
-        agentLogger.error("workflow.planning.failed", {
+        logger.error("workflow.planning.failed", {
           threadId: state.threadId,
           attempt,
           retryable: false,
@@ -143,7 +145,7 @@ export function createAgentWorkflow(commandBus: CommandBus, planner: AgentPlanne
         throw error;
       }
       const message = error instanceof Error ? error.message : String(error);
-      agentLogger.warn("workflow.planning.failed", {
+      logger.warn("workflow.planning.failed", {
         threadId: state.threadId,
         attempt,
         retryable: true,
@@ -176,7 +178,7 @@ export function createAgentWorkflow(commandBus: CommandBus, planner: AgentPlanne
         errors.push(error instanceof Error ? error.message : String(error));
       }
     }
-    agentLogger.info("workflow.validation.completed", {
+    logger.info("workflow.validation.completed", {
       threadId: state.threadId,
       attempt: state.attempt,
       commandCount: state.commands.length,
@@ -187,13 +189,13 @@ export function createAgentWorkflow(commandBus: CommandBus, planner: AgentPlanne
   };
 
   const applyCommands = (state: AgentStateType): Partial<AgentStateType> => {
-    agentLogger.info("workflow.commands.applying", {
+    logger.info("workflow.commands.applying", {
       threadId: state.threadId,
       commandCount: state.commands.length,
       commandTypes: state.commands.map((command) => command.type),
     });
     commandBus.executeMany(state.commands);
-    agentLogger.info("workflow.commands.applied", {
+    logger.info("workflow.commands.applied", {
       threadId: state.threadId,
       presentationRevision: commandBus.getSnapshot().revision,
     });
@@ -250,7 +252,7 @@ export class AgentService {
       executionStrategy,
       outline: outline ? structuredClone(outline) : undefined,
     });
-    agentLogger.info("conversation.outline.restored", {
+    logger.info("conversation.outline.restored", {
       threadId,
       messageCount: messages.length,
       outlineSlideCount: outline?.slides.length ?? 0,
@@ -267,7 +269,7 @@ export class AgentService {
     listener?: AgentEventListener,
   ): Promise<AgentRunResult> {
     const startedAt = Date.now();
-    agentLogger.info("conversation.review.started", {
+    logger.info("conversation.review.started", {
       ...requestSummary(request),
       provider: model?.provider,
       model: model?.model,
@@ -284,7 +286,7 @@ export class AgentService {
       presentation: this.commandBus.getSnapshot(),
       model,
     }).finally(stopStatusUpdates);
-    agentLogger.info("conversation.review.completed", {
+    logger.info("conversation.review.completed", {
       mode: decision.mode,
       intent: decision.intent,
       outlineSlideCount: decision.outline?.slides.length ?? 0,
@@ -335,7 +337,7 @@ export class AgentService {
       executionStrategy,
       outline: decision.outline,
     });
-    agentLogger.info("conversation.outline.waiting", {
+    logger.info("conversation.outline.waiting", {
       threadId,
       outlineSlideCount: decision.outline?.slides.length ?? 0,
       missingInformation: decision.missingInformation,
@@ -362,7 +364,7 @@ export class AgentService {
     if (!conversation) throw new Error("Outline conversation not found or already completed.");
 
     const startedAt = Date.now();
-    agentLogger.info("conversation.outline.continued", {
+    logger.info("conversation.outline.continued", {
       threadId,
       ...requestSummary(request),
       messageCount: conversation.messages.length + 1,
@@ -379,7 +381,7 @@ export class AgentService {
       model: conversation.model,
       draftOutline: conversation.outline,
     }).finally(stopStatusUpdates);
-    agentLogger.info("conversation.outline.reviewed", {
+    logger.info("conversation.outline.reviewed", {
       threadId,
       mode: decision.mode,
       intent: decision.intent,
@@ -440,7 +442,7 @@ export class AgentService {
     if (!conversation) throw new Error("Outline conversation not found or already completed.");
     if (!conversation.outline) throw new Error("The outline is incomplete and cannot be generated yet.");
 
-    agentLogger.info("conversation.outline.confirmed", {
+    logger.info("conversation.outline.confirmed", {
       threadId,
       outlineSlideCount: conversation.outline.slides.length,
     });
@@ -466,7 +468,7 @@ export class AgentService {
   ): Promise<AgentRunResult> {
     const threadId = crypto.randomUUID();
     const startedAt = Date.now();
-    agentLogger.info("workflow.started", {
+    logger.info("workflow.started", {
       threadId,
       ...requestSummary(request),
       provider: model?.provider,
@@ -486,14 +488,14 @@ export class AgentService {
       });
 
       const runResult = this.toResult(threadId, result);
-      agentLogger.info("workflow.finished", {
+      logger.info("workflow.finished", {
         threadId,
         status: runResult.status,
         durationMs: Date.now() - startedAt,
       });
       return runResult;
     } catch (error) {
-      agentLogger.error("workflow.failed", {
+      logger.error("workflow.failed", {
         threadId,
         durationMs: Date.now() - startedAt,
         error,
@@ -504,7 +506,7 @@ export class AgentService {
 
   async resume(threadId: string, approved: boolean): Promise<AgentRunResult> {
     const startedAt = Date.now();
-    agentLogger.info("workflow.resume.started", { threadId, approved });
+    logger.info("workflow.resume.started", { threadId, approved });
     try {
       const result = await this.graph.invoke(new Command({ resume: { approved } }), {
         configurable: { thread_id: threadId },
@@ -513,7 +515,7 @@ export class AgentService {
       const runResult = !approved
         ? { status: "rejected" as const, presentation: this.commandBus.getSnapshot() }
         : this.toResult(threadId, result);
-      agentLogger.info("workflow.resume.finished", {
+      logger.info("workflow.resume.finished", {
         threadId,
         approved,
         status: runResult.status,
@@ -521,7 +523,7 @@ export class AgentService {
       });
       return runResult;
     } catch (error) {
-      agentLogger.error("workflow.resume.failed", {
+      logger.error("workflow.resume.failed", {
         threadId,
         approved,
         durationMs: Date.now() - startedAt,

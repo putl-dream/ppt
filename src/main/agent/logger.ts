@@ -1,3 +1,50 @@
+import { createStream } from "rotating-file-stream";
+import path from "node:path";
+import fs from "node:fs";
+import os from "node:os";
+
+type AgentLogLevel = "debug" | "info" | "warn" | "error";
+
+type LogDetail = "minimal" | "full";
+
+type AgentLogData = Record<string, unknown>;
+
+// Lazy-initialized log file stream
+let logFileStream: ReturnType<typeof createStream> | null = null;
+
+function getLogFileStream() {
+  if (logFileStream !== null) return logFileStream;
+
+  const shouldWriteToFile = process.env.AGENT_LOG_FILE !== "false";
+  if (!shouldWriteToFile) {
+    logFileStream = null;
+    return null;
+  }
+
+  const logDir = path.join(os.homedir(), ".agent-ppt", "logs");
+
+  try {
+    fs.mkdirSync(logDir, { recursive: true });
+
+    logFileStream = createStream("agent.log", {
+      interval: "1d",        // Rotate daily
+      maxFiles: 7,           // Keep 7 days
+      path: logDir,
+      compress: "gzip",      // Compress old logs
+    });
+
+    logFileStream.on("error", (error) => {
+      console.error("[agent] Failed to write to log file:", error);
+    });
+
+    return logFileStream;
+  } catch (error) {
+    console.error("[agent] Failed to initialize log file stream:", error);
+    logFileStream = null;
+    return null;
+  }
+}
+
 type AgentLogLevel = "debug" | "info" | "warn" | "error";
 
 type LogDetail = "minimal" | "full";
@@ -80,6 +127,7 @@ function write(level: AgentLogLevel, event: string, data: AgentLogData = {}): vo
   );
   const line = `[agent] ${json}`;
 
+  // Console output (with Unicode escaping for terminal compatibility)
   if (level === "error") {
     console.error(line);
   } else if (level === "warn") {
@@ -88,6 +136,13 @@ function write(level: AgentLogLevel, event: string, data: AgentLogData = {}): vo
     console.debug(line);
   } else {
     console.info(line);
+  }
+
+  // File output (with original Unicode, no escaping needed)
+  const fileStream = getLogFileStream();
+  if (fileStream) {
+    const fileJson = JSON.stringify(entry);
+    fileStream.write(fileJson + "\n");
   }
 }
 
@@ -98,10 +153,26 @@ export const agentLogger = {
   error: (event: string, data?: AgentLogData) => write("error", event, data),
 };
 
-export function requestSummary(request: string): { requestLength: number; requestPreview: string } {
+export function createModuleLogger(module: string) {
+  return {
+    debug: (event: string, data?: AgentLogData) => write("debug", event, { ...data, module }),
+    info: (event: string, data?: AgentLogData) => write("info", event, { ...data, module }),
+    warn: (event: string, data?: AgentLogData) => write("warn", event, { ...data, module }),
+    error: (event: string, data?: AgentLogData) => write("error", event, { ...data, module }),
+  };
+}
+
+export function requestSummary(
+  request: string,
+  forceDetail?: LogDetail,
+): { requestLength: number; requestPreview: string; requestFull?: string } {
+  const detail = forceDetail ?? configuredDetail();
   const normalized = request.replace(/\s+/g, " ").trim();
+  const preview = normalized.length > 160 ? `${normalized.slice(0, 157)}...` : normalized;
+
   return {
     requestLength: request.length,
-    requestPreview: normalized.length > 160 ? `${normalized.slice(0, 157)}...` : normalized,
+    requestPreview: preview,
+    ...(detail === "full" && { requestFull: request }),
   };
 }

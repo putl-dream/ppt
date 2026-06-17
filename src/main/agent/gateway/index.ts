@@ -3,7 +3,9 @@ import { generateWithAnthropic } from "./anthropic";
 import { resolveAgentModelConfig } from "./config";
 import { generateWithOpenAI } from "./openai";
 import type { AgentModelGateway, AgentModelRequest, AgentModelResponse } from "./types";
-import { agentLogger } from "../logger";
+import { createModuleLogger } from "../logger";
+
+const logger = createModuleLogger("gateway");
 
 export class AgentGateway implements AgentModelGateway {
   private readonly runtimeSettings: Partial<Record<AgentProvider, AgentModelSettings>> = {};
@@ -22,7 +24,7 @@ export class AgentGateway implements AgentModelGateway {
 
     try {
       const config = resolveAgentModelConfig(selection, this.runtimeSettings);
-      agentLogger.info("model.request.started", {
+      logger.info("model.request.started", {
         gatewayRequestId,
         provider: config.provider,
         model: config.model,
@@ -37,7 +39,7 @@ export class AgentGateway implements AgentModelGateway {
         ? await generateWithOpenAI(config, request)
         : await generateWithAnthropic(config, request);
 
-      agentLogger.info("model.request.completed", {
+      logger.info("model.request.completed", {
         gatewayRequestId,
         provider: response.provider,
         model: response.model,
@@ -48,7 +50,7 @@ export class AgentGateway implements AgentModelGateway {
       });
       return response;
     } catch (error) {
-      agentLogger.error("model.request.failed", {
+      logger.error("model.request.failed", {
         gatewayRequestId,
         provider: selection?.provider,
         model: selection?.model,

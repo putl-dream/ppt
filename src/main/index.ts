@@ -17,11 +17,12 @@ import { AgentRuntime } from "./agent/runtime/agent-runtime";
 import { createDefaultToolRegistry } from "./agent/tools/tool-registry";
 import { CommitGate } from "./agent/gate/commit-gate";
 import { RiskPolicy } from "./agent/gate/risk-policy";
-import { agentLogger, requestSummary } from "./agent/logger";
+import { createModuleLogger, requestSummary } from "./agent/logger";
 import { FileSessionStore } from "./session-store";
 import type { SessionChatMessage, SessionSnapshot } from "@shared/session";
 import type { RecoverableOutlineConversation } from "@shared/session-recovery";
 
+const logger = createModuleLogger("main");
 const agentGateway = new AgentGateway();
 
 interface SessionRuntime {
@@ -116,7 +117,7 @@ app.whenReady().then(async () => {
     task: () => Promise<AgentRunResult>,
   ): Promise<AgentRunResult> => {
     const startedAt = Date.now();
-    agentLogger.info("session.operation.started", {
+    logger.info("session.operation.started", {
       operation,
       sessionId,
       runId,
@@ -124,7 +125,7 @@ app.whenReady().then(async () => {
     });
     try {
       const result = await task();
-      agentLogger.info("session.operation.completed", {
+      logger.info("session.operation.completed", {
         operation,
         sessionId,
         runId,
@@ -133,7 +134,7 @@ app.whenReady().then(async () => {
       });
       return result;
     } catch (error) {
-      agentLogger.error("session.operation.failed", {
+      logger.error("session.operation.failed", {
         operation,
         sessionId,
         runId,
