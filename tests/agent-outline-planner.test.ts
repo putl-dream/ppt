@@ -25,6 +25,10 @@ describe("model outline planner", () => {
           }),
         };
       },
+      async *generateTextStream() {
+        yield { type: "content" as const, text: "" };
+        yield { type: "complete" as const, text: "" };
+      },
     });
 
     const result = await planner.review({
@@ -54,6 +58,10 @@ describe("model outline planner", () => {
           }),
         };
       },
+      async *generateTextStream() {
+        yield { type: "content" as const, text: "" };
+        yield { type: "complete" as const, text: "" };
+      },
     });
 
     const result = await planner.review({
@@ -77,6 +85,10 @@ describe("model outline planner", () => {
             missingInformation: ["PPT 主题"],
           }),
         };
+      },
+      async *generateTextStream() {
+        yield { type: "content" as const, text: "" };
+        yield { type: "complete" as const, text: "" };
       },
     });
 

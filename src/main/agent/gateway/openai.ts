@@ -1,6 +1,11 @@
 import OpenAI from "openai";
 import { AgentGatewayError, normalizeProviderError } from "./errors";
-import type { AgentModelRequest, AgentModelResponse, ResolvedAgentModelConfig } from "./types";
+import type {
+  AgentModelRequest,
+  AgentModelResponse,
+  AgentModelStreamChunk,
+  ResolvedAgentModelConfig,
+} from "./types";
 
 export async function generateWithOpenAI(
   config: ResolvedAgentModelConfig,
@@ -56,6 +61,57 @@ export async function generateWithOpenAI(
       requestId,
       stopReason,
     };
+  } catch (error) {
+    throw normalizeProviderError("openai", error);
+  }
+}
+
+/**
+ * 流式生成文本（OpenAI）
+ * 注意：Responses API 暂不支持流式，会降级为非流式后一次性返回
+ */
+export async function* generateStreamWithOpenAI(
+  config: ResolvedAgentModelConfig,
+  request: AgentModelRequest,
+): AsyncGenerator<AgentModelStreamChunk> {
+  const client = new OpenAI({
+    apiKey: config.apiKey,
+    baseURL: config.baseURL,
+    timeout: config.timeoutMs,
+    maxRetries: 0,
+  });
+
+  try {
+    const mode = config.openaiApiMode ?? "responses";
+
+    if (mode === "responses") {
+      // Responses API 暂不支持流式，降级到非流式
+      const response = await generateWithOpenAI(config, request);
+      yield { type: "content", text: response.text };
+      yield { type: "complete", text: "" };
+    } else {
+      // Chat Completions API 支持流式
+      const stream = await client.chat.completions.create({
+        model: config.model,
+        messages: [
+          ...(request.systemPrompt
+            ? [{ role: "system" as const, content: request.systemPrompt }]
+            : []),
+          { role: "user", content: request.prompt },
+        ],
+        max_tokens: config.maxOutputTokens,
+        stream: true,
+      });
+
+      for await (const chunk of stream) {
+        const content = chunk.choices[0]?.delta?.content;
+        if (content) {
+          yield { type: "content", text: content };
+        }
+      }
+
+      yield { type: "complete", text: "" };
+    }
   } catch (error) {
     throw normalizeProviderError("openai", error);
   }

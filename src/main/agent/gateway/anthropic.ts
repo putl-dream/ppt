@@ -1,6 +1,11 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { AgentGatewayError, normalizeProviderError } from "./errors";
-import type { AgentModelRequest, AgentModelResponse, ResolvedAgentModelConfig } from "./types";
+import type {
+  AgentModelRequest,
+  AgentModelResponse,
+  AgentModelStreamChunk,
+  ResolvedAgentModelConfig,
+} from "./types";
 
 interface AnthropicLikeResponse {
   content?: unknown;
@@ -95,6 +100,46 @@ export async function generateWithAnthropic(
       text,
       requestId: response._request_id ?? undefined,
       stopReason: response.stop_reason ?? undefined,
+    };
+  } catch (error) {
+    throw normalizeProviderError("anthropic", error);
+  }
+}
+
+/**
+ * 流式生成文本（Anthropic Messages API）
+ */
+export async function* generateStreamWithAnthropic(
+  config: ResolvedAgentModelConfig,
+  request: AgentModelRequest,
+): AsyncGenerator<AgentModelStreamChunk> {
+  const client = new Anthropic({
+    apiKey: config.apiKey,
+    baseURL: config.baseURL,
+    timeout: config.timeoutMs,
+    maxRetries: 0,
+  });
+
+  try {
+    const stream = client.messages.stream({
+      model: config.model,
+      max_tokens: config.maxOutputTokens,
+      system: request.systemPrompt,
+      messages: [{ role: "user", content: request.prompt }],
+    });
+
+    for await (const event of stream) {
+      if (event.type === "content_block_delta") {
+        if (event.delta.type === "text_delta") {
+          yield { type: "content", text: event.delta.text };
+        }
+      }
+    }
+
+    const finalMessage = await stream.finalMessage();
+    yield {
+      type: "complete",
+      text: "",
     };
   } catch (error) {
     throw normalizeProviderError("anthropic", error);

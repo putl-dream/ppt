@@ -50,6 +50,14 @@ function createSequenceGateway(responses: unknown[]): AgentModelGateway {
         text: typeof value === "string" ? value : JSON.stringify(value),
       };
     },
+    async *generateTextStream() {
+      const value = responses[index++];
+      if (value === undefined) throw new Error("Unexpected gateway call");
+      if (value instanceof Error) throw value;
+      const text = typeof value === "string" ? value : JSON.stringify(value);
+      yield { type: "content" as const, text };
+      yield { type: "complete" as const, text: "" };
+    },
   };
 }
 
@@ -383,6 +391,10 @@ describe("Agent Architecture Skeletons & Types", () => {
           }),
         };
       },
+      async *generateTextStream() {
+        yield { type: "content" as const, text: "" };
+        yield { type: "complete" as const, text: "" };
+      },
     };
     const service = new RefactoredAgentService(
       new CommandBus(createStarterPresentation()),
@@ -427,6 +439,10 @@ describe("Agent Architecture Skeletons & Types", () => {
               content: "你刚才说的是 Agent 范式与架构演进。",
             }),
           };
+        },
+        async *generateTextStream() {
+          yield { type: "content" as const, text: "" };
+          yield { type: "complete" as const, text: "" };
         },
       }),
       new CommitGate(new RiskPolicy()),

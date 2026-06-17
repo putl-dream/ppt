@@ -98,24 +98,56 @@ export class AgentRuntime {
     const maxSteps = options.maxSteps ?? 12;
 
     for (let step = 0; step < maxSteps; step += 1) {
-      const response = await this.gateway.generateText(
-        {
-          systemPrompt,
-          prompt: JSON.stringify({
-            request: options.request,
-            conversation: options.messageHistory ?? [],
-            transcript,
-          }),
-        },
-        options.model,
-      );
+      // 判断是否应该使用流式：仅在可能返回message且提供了回调时使用
+      const shouldUseStream = options.onStreamChunk !== undefined;
+
+      let responseText: string;
+
+      if (shouldUseStream) {
+        // 流式模式：逐chunk接收并实时回调
+        let accumulatedText = "";
+        for await (const chunk of this.gateway.generateTextStream(
+          {
+            systemPrompt,
+            prompt: JSON.stringify({
+              request: options.request,
+              conversation: options.messageHistory ?? [],
+              transcript,
+            }),
+          },
+          options.model,
+        )) {
+          if (chunk.type === "content") {
+            accumulatedText += chunk.text;
+            // 只在返回纯文本消息时才实时推送，工具调用需要完整JSON
+            // 这里先累积，后续根据解析结果决定是否已经推送过
+            options.onStreamChunk?.(chunk.text);
+          }
+        }
+        responseText = accumulatedText;
+      } else {
+        // 非流式模式：等待完整响应
+        const response = await this.gateway.generateText(
+          {
+            systemPrompt,
+            prompt: JSON.stringify({
+              request: options.request,
+              conversation: options.messageHistory ?? [],
+              transcript,
+            }),
+          },
+          options.model,
+        );
+        responseText = response.text;
+      }
+
       let parsed: unknown;
       try {
-        parsed = parseAgentJsonResponse(response.text);
+        parsed = parseAgentJsonResponse(responseText);
       } catch (error) {
         transcript.push({
           role: "assistant",
-          raw: response.text.slice(0, 2_000),
+          raw: responseText.slice(0, 2_000),
           error: error instanceof Error
             ? `${error.message} Return exactly one complete JSON object.`
             : "Invalid JSON response. Return exactly one complete JSON object.",

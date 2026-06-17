@@ -18,6 +18,10 @@ describe("model presentation planner", () => {
           }),
         };
       },
+      async *generateTextStream() {
+        yield { type: "content" as const, text: "" };
+        yield { type: "complete" as const, text: "" };
+      },
     });
 
     const plan = await planner.plan({
@@ -55,6 +59,10 @@ describe("model presentation planner", () => {
             ],
           }),
         };
+      },
+      async *generateTextStream() {
+        yield { type: "content" as const, text: "" };
+        yield { type: "complete" as const, text: "" };
       },
     });
 

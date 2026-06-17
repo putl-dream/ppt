@@ -1,8 +1,13 @@
 import type { AgentModelSelection, AgentModelSettings, AgentProvider } from "@shared/agent";
-import { generateWithAnthropic } from "./anthropic";
+import { generateWithAnthropic, generateStreamWithAnthropic } from "./anthropic";
 import { resolveAgentModelConfig } from "./config";
-import { generateWithOpenAI } from "./openai";
-import type { AgentModelGateway, AgentModelRequest, AgentModelResponse } from "./types";
+import { generateWithOpenAI, generateStreamWithOpenAI } from "./openai";
+import type {
+  AgentModelGateway,
+  AgentModelRequest,
+  AgentModelResponse,
+  AgentModelStreamChunk,
+} from "./types";
 import { createModuleLogger } from "../logger";
 
 const logger = createModuleLogger("gateway");
@@ -60,7 +65,58 @@ export class AgentGateway implements AgentModelGateway {
       throw error;
     }
   }
+
+  async *generateTextStream(
+    request: AgentModelRequest,
+    selection?: Pick<AgentModelSettings, "provider" | "model">,
+  ): AsyncGenerator<AgentModelStreamChunk> {
+    const gatewayRequestId = crypto.randomUUID();
+    const startedAt = Date.now();
+
+    try {
+      const config = resolveAgentModelConfig(selection, this.runtimeSettings);
+      logger.info("model.stream.started", {
+        gatewayRequestId,
+        provider: config.provider,
+        model: config.model,
+        apiMode: config.openaiApiMode,
+        promptLength: request.prompt.length,
+        systemPromptLength: request.systemPrompt?.length ?? 0,
+        timeoutMs: config.timeoutMs,
+        maxOutputTokens: config.maxOutputTokens,
+      });
+
+      let totalLength = 0;
+      const generator = config.provider === "openai"
+        ? generateStreamWithOpenAI(config, request)
+        : generateStreamWithAnthropic(config, request);
+
+      for await (const chunk of generator) {
+        if (chunk.type === "content") {
+          totalLength += chunk.text.length;
+        }
+        yield chunk;
+      }
+
+      logger.info("model.stream.completed", {
+        gatewayRequestId,
+        provider: config.provider,
+        model: config.model,
+        totalLength,
+        durationMs: Date.now() - startedAt,
+      });
+    } catch (error) {
+      logger.error("model.stream.failed", {
+        gatewayRequestId,
+        provider: selection?.provider,
+        model: selection?.model,
+        durationMs: Date.now() - startedAt,
+        error,
+      });
+      throw error;
+    }
+  }
 }
 
-export type { AgentModelGateway, AgentModelRequest, AgentModelResponse } from "./types";
+export type { AgentModelGateway, AgentModelRequest, AgentModelResponse, AgentModelStreamChunk } from "./types";
 export { AgentGatewayError } from "./errors";

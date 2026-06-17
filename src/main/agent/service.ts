@@ -11,7 +11,7 @@ import { outlineToRequest } from "./outline-planner";
 export type AgentServiceEvent =
   | { type: "request-status"; message: string; progress: number }
   | { type: "workflow-progress"; message: string; progress: number }
-  | { type: "text-delta"; delta: string };
+  | { type: "text-chunk"; chunk: string };
 
 export type AgentServiceEventListener = (event: AgentServiceEvent) => void;
 
@@ -122,11 +122,14 @@ export class AgentService {
       model,
       messageHistory,
       requiredOutcome,
+      onStreamChunk: (chunk: string) => {
+        listener?.({ type: "text-chunk", chunk });
+      },
     });
 
     if (runtimeResult.type === "message") {
       this.conversations.delete(threadId);
-      listener?.({ type: "text-delta", delta: runtimeResult.content });
+      // 流式内容已经通过 onStreamChunk 实时发送，这里不再发送
       return { status: "chat", message: runtimeResult.content };
     }
 

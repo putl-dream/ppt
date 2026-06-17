@@ -222,26 +222,29 @@ export function App() {
         return;
       }
 
-      stopStatusTyping();
-      setAgentActivityMode("idle");
-      setThoughtProcess([]);
-      setThoughtProgress(0);
-      let messageId = streamMessageIdsRef.current.get(event.runId);
-      if (!messageId) {
-        messageId = crypto.randomUUID();
-        streamMessageIdsRef.current.set(event.runId, messageId);
-        setChatMessages((prev) => [
-          ...prev,
-          { id: messageId!, role: "assistant", content: event.delta },
-        ]);
+      if (event.type === "text-chunk") {
+        // 真正的流式：逐chunk累积显示
+        stopStatusTyping();
+        setAgentActivityMode("idle");
+        setThoughtProcess([]);
+        setThoughtProgress(0);
+        let messageId = streamMessageIdsRef.current.get(event.runId);
+        if (!messageId) {
+          messageId = crypto.randomUUID();
+          streamMessageIdsRef.current.set(event.runId, messageId);
+          setChatMessages((prev) => [
+            ...prev,
+            { id: messageId!, role: "assistant", content: event.chunk },
+          ]);
+        } else {
+          setChatMessages((prev) => prev.map((message) =>
+            message.id === messageId
+              ? { ...message, content: message.content + event.chunk }
+              : message,
+          ));
+        }
         return;
       }
-
-      setChatMessages((prev) => prev.map((message) =>
-        message.id === messageId
-          ? { ...message, content: `${message.content}${event.delta}` }
-          : message,
-      ));
     });
     return () => {
       stopStatusTyping();

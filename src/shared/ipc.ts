@@ -65,8 +65,8 @@ export type AgentStreamEvent =
   }
   | {
     runId: string;
-    type: "text-delta";
-    delta: string;
+    type: "text-chunk";
+    chunk: string;
   };
 
 export type AgentRunResult =

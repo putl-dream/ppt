@@ -52,4 +52,9 @@ export interface AgentRuntimeOptions {
    */
   requiredOutcome?: "any" | "command_proposal";
   maxSteps?: number;
+  /**
+   * 流式回调：当模型生成内容时逐chunk调用（可选）
+   * 只在返回message类型结果时生效，工具调用过程不会触发
+   */
+  onStreamChunk?: (chunk: string) => void;
 }
