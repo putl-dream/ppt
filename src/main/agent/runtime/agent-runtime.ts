@@ -4,6 +4,7 @@ import { ToolRegistry } from "../tools/tool-registry";
 import { RuntimeNormalizer } from "./runtime-normalizer";
 import { SystemPromptBuilder } from "./system-prompt";
 import type { AgentRuntimeOptions, AgentRuntimeResult } from "./runtime-types";
+import { JsonStreamExtractor } from "./json-stream-extractor";
 
 type ToolCall = {
   type: "tool_call";
@@ -104,8 +105,12 @@ export class AgentRuntime {
       let responseText: string;
 
       if (shouldUseStream) {
-        // 流式模式：逐chunk接收并实时回调
+        // 流式模式：逐chunk接收并实时回调，使用 JsonStreamExtractor 提取纯文本内容
         let accumulatedText = "";
+        const extractor = new JsonStreamExtractor((text) => {
+          options.onStreamChunk?.(text);
+        });
+
         for await (const chunk of this.gateway.generateTextStream(
           {
             systemPrompt,
@@ -119,9 +124,7 @@ export class AgentRuntime {
         )) {
           if (chunk.type === "content") {
             accumulatedText += chunk.text;
-            // 只在返回纯文本消息时才实时推送，工具调用需要完整JSON
-            // 这里先累积，后续根据解析结果决定是否已经推送过
-            options.onStreamChunk?.(chunk.text);
+            extractor.feed(chunk.text);
           }
         }
         responseText = accumulatedText;

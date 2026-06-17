@@ -420,9 +420,10 @@ export function App() {
   };
 
   function applyAgentResult(result: AgentRunResult, steps: string[], runId?: string) {
+    const messageId = runId ? streamMessageIdsRef.current.get(runId) : undefined;
+
     if (result.status === "chat") {
       setOutlineRequest(undefined);
-      const messageId = runId ? streamMessageIdsRef.current.get(runId) : undefined;
       if (messageId) {
         setChatMessages((prev) => prev.map((message) =>
           message.id === messageId ? { ...message, content: result.message } : message,
@@ -439,16 +440,29 @@ export function App() {
     if (result.status === "outline-required") {
       setOutlineRequest(result.outlineRequest);
       setApproval(undefined);
-      setChatMessages((prev) => [
-        ...prev,
-        {
-          id: crypto.randomUUID(),
-          role: "assistant",
-          content: result.outlineRequest.message,
-          thought: steps,
-          outlineRequest: result.outlineRequest,
-        },
-      ]);
+      if (messageId) {
+        setChatMessages((prev) => prev.map((message) =>
+          message.id === messageId
+            ? {
+                ...message,
+                content: result.outlineRequest.message,
+                thought: steps,
+                outlineRequest: result.outlineRequest,
+              }
+            : message
+        ));
+      } else {
+        setChatMessages((prev) => [
+          ...prev,
+          {
+            id: crypto.randomUUID(),
+            role: "assistant",
+            content: result.outlineRequest.message,
+            thought: steps,
+            outlineRequest: result.outlineRequest,
+          },
+        ]);
+      }
       triggerToast("大纲已整理，请确认或继续调整");
       return;
     }
@@ -456,16 +470,29 @@ export function App() {
     setOutlineRequest(undefined);
     if (result.status === "approval-required") {
       setApproval(result.approval);
-      setChatMessages((prev) => [
-        ...prev,
-        {
-          id: crypto.randomUUID(),
-          role: "assistant",
-          content: "已根据确认的大纲生成排版方案，请审核指令后执行。",
-          thought: steps,
-          approval: result.approval,
-        },
-      ]);
+      if (messageId) {
+        setChatMessages((prev) => prev.map((message) =>
+          message.id === messageId
+            ? {
+                ...message,
+                content: "已根据确认的大纲生成排版方案，请审核指令后执行。",
+                thought: steps,
+                approval: result.approval,
+              }
+            : message
+        ));
+      } else {
+        setChatMessages((prev) => [
+          ...prev,
+          {
+            id: crypto.randomUUID(),
+            role: "assistant",
+            content: "已根据确认的大纲生成排版方案，请审核指令后执行。",
+            thought: steps,
+            approval: result.approval,
+          },
+        ]);
+      }
       triggerToast("AI 已提出排版变更方案，请进行审核");
       return;
     }
@@ -478,14 +505,24 @@ export function App() {
       setTimeout(() => setHighlightSlideId(null), 2500);
     }
     setIsMirrorOpen(true);
-    setChatMessages((prev) => [
-      ...prev,
-      {
-        id: crypto.randomUUID(),
-        role: "assistant",
-        content: result.status === "rejected" ? "已放弃排版变更提案。" : "已根据确认的大纲生成并应用演示文稿。",
-      },
-    ]);
+
+    const finalContent = result.status === "rejected" ? "已放弃排版变更提案。" : "已根据确认的大纲生成并应用演示文稿。";
+    if (messageId) {
+      setChatMessages((prev) => prev.map((message) =>
+        message.id === messageId
+          ? { ...message, content: finalContent }
+          : message
+      ));
+    } else {
+      setChatMessages((prev) => [
+        ...prev,
+        {
+          id: crypto.randomUUID(),
+          role: "assistant",
+          content: finalContent,
+        },
+      ]);
+    }
     triggerToast(result.status === "rejected" ? "变更已取消" : "演示文稿已成功更新");
   }
 
