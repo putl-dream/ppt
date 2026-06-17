@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it } from "vitest";
@@ -30,6 +30,23 @@ describe("FileSessionStore", () => {
 
     expect(initial.sessions).toHaveLength(1);
     expect(initial.activeSession.presentation.slides).toHaveLength(1);
+    expect(initial.activeSession.project?.artifacts.map((artifact) => artifact.id)).toEqual([
+      "brief",
+      "outline",
+      "research",
+      "slides",
+      "design",
+      "deck",
+      "history",
+    ]);
+
+    const projectRoot = initial.activeSession.project?.rootPath;
+    expect(projectRoot).toBeTruthy();
+    expect(await readFile(join(projectRoot!, "brief.md"), "utf8")).toContain("## 目的");
+    expect(await readFile(join(projectRoot!, "outline.md"), "utf8")).toContain("## 章节结构");
+    expect(await readFile(join(projectRoot!, "slides", "001-title.md"), "utf8")).toContain(
+      "## 页面目标",
+    );
 
     const restored = new FileSessionStore(filePath);
     await restored.initialize();
@@ -62,7 +79,39 @@ describe("FileSessionStore", () => {
     expect(saved.presentation.title).toBe("持久化测试");
     expect(saved.presentation.revision).toBe(3);
     expect(saved.messages[0].content).toBe("恢复这条消息");
+    expect(saved.project).toBeDefined();
+    const deckSnapshot = JSON.parse(
+      await readFile(join(saved.project!.rootPath, "deck", "snapshot.json"), "utf8"),
+    );
+    expect(deckSnapshot.title).toBe("持久化测试");
+    expect(deckSnapshot.revision).toBe(3);
     expect(JSON.parse(await readFile(filePath, "utf8")).version).toBe(1);
+  });
+
+  it("migrates existing sessions into project sandboxes", async () => {
+    const { store, filePath } = await createStore();
+    const legacyState = store.getBootstrap();
+    const legacySnapshot = {
+      ...legacyState.activeSession,
+      project: undefined,
+    };
+    await writeFile(
+      filePath,
+      `${JSON.stringify({
+        version: 1,
+        activeSessionId: legacySnapshot.session.id,
+        sessions: [legacySnapshot],
+      })}\n`,
+      "utf8",
+    );
+
+    const restored = new FileSessionStore(filePath);
+    await restored.initialize();
+    const migrated = restored.getBootstrap().activeSession;
+
+    expect(migrated.project?.rootPath).toContain(`session-${migrated.session.id}`);
+    expect(await readFile(join(migrated.project!.rootPath, "research", "notes.md"), "utf8"))
+      .toContain("## 事实");
   });
 
   it("expires pending approvals after an application restart", async () => {

@@ -3,6 +3,32 @@ import { presentationSchema, type Presentation } from "./presentation";
 import { presentationCommandSchema } from "./commands";
 import { agentExecutionStrategySchema, agentModelSelectionSchema } from "./agent";
 
+export const projectArtifactKindSchema = z.enum([
+  "brief",
+  "outline",
+  "research",
+  "slide-plan",
+  "design",
+  "deck",
+  "history",
+]);
+
+export const projectArtifactStatusSchema = z.enum(["draft", "ready", "stale"]);
+
+export const projectArtifactSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  path: z.string(),
+  kind: projectArtifactKindSchema,
+  status: projectArtifactStatusSchema,
+  dependsOn: z.array(z.string()),
+});
+
+export const projectSandboxSchema = z.object({
+  rootPath: z.string(),
+  artifacts: z.array(projectArtifactSchema),
+});
+
 const persistedOutlineSchema = z.object({
   threadId: z.string(),
   message: z.string(),
@@ -47,6 +73,7 @@ export const sessionSummarySchema = z.object({
 
 export const sessionSnapshotSchema = z.object({
   session: sessionSummarySchema,
+  project: projectSandboxSchema.optional(),
   presentation: presentationSchema,
   messages: z.array(sessionChatMessageSchema),
 });
@@ -57,6 +84,8 @@ export const sessionBootstrapSchema = z.object({
 });
 
 export type SessionChatMessage = z.infer<typeof sessionChatMessageSchema>;
+export type ProjectArtifact = z.infer<typeof projectArtifactSchema>;
+export type ProjectSandbox = z.infer<typeof projectSandboxSchema>;
 export type SessionSummary = z.infer<typeof sessionSummarySchema>;
 export type SessionSnapshot = z.infer<typeof sessionSnapshotSchema>;
 export type SessionBootstrap = z.infer<typeof sessionBootstrapSchema>;
@@ -69,17 +98,28 @@ export function createSessionPresentation(title: string): Presentation {
     slides: [
       {
         id: crypto.randomUUID(),
-        title: "新建会话封面",
+        title: "项目起点",
         elements: [
           {
             id: crypto.randomUUID(),
             type: "text",
             x: 120,
-            y: 220,
+            y: 156,
             width: 1040,
+            height: 96,
+            text: "PPT 项目工作台",
+            fontSize: 58,
+            bold: true,
+          },
+          {
+            id: crypto.randomUUID(),
+            type: "text",
+            x: 150,
+            y: 292,
+            width: 980,
             height: 180,
-            text: title,
-            fontSize: 52,
+            text: `当前项目：${title}\n先明确目的、受众和方向，再沉淀大纲、资料、逐页方案，最后生成 PPT。`,
+            fontSize: 28,
           },
         ],
       },
@@ -92,7 +132,7 @@ export function createWelcomeMessage(title?: string): SessionChatMessage {
     id: "init",
     role: "assistant",
     content: title
-      ? `您好！已为您开启新的会话【${title}】。请告诉我您的排版大纲，我将为您生成排版命令。`
-      : "您好！我是您的 Agent PPT 协同设计助手。请告诉我想制作什么样的幻灯片，我将为您生成排版指令方案。",
+      ? `已为您创建 PPT 项目【${title}】。这个会话现在以项目目录为沙箱：先整理 brief.md 的目的、受众和方向，再推进 outline.md、research/、slides/、design/ 与 deck/。`
+      : "已初始化一个 PPT 项目沙箱。我们会先明确目的、方向和受众，再沉淀大纲、资料、逐页方案，最后制作 PPT。",
   };
 }
