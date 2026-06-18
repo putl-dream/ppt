@@ -122,9 +122,11 @@ export class AgentService {
       model,
       messageHistory,
       requiredOutcome,
-      onStreamChunk: (chunk: string) => {
-        listener?.({ type: "text-chunk", chunk });
-      },
+      ...(listener && {
+        onStreamChunk: (chunk: string) => {
+          listener({ type: "text-chunk", chunk });
+        },
+      }),
     });
 
     if (runtimeResult.type === "message") {

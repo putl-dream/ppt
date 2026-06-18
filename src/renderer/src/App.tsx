@@ -56,6 +56,7 @@ function toSessionChatMessages(messages: ChatMessage[]): SessionChatMessage[] {
 
 export function App() {
   const initializeProject = useProjectStore((state) => state.initializeProject);
+  const hydrateProjectArtifacts = useProjectStore((state) => state.hydrateProjectArtifacts);
   const currentStage = useProjectStore((state) => state.currentStage);
   const activeProject = useProjectStore((state) => state.activeProject);
   const proposePatch = useProjectStore((state) => state.proposePatch);
@@ -297,8 +298,11 @@ export function App() {
     setIsDraftSession(false);
     setIsMirrorOpen(snapshot.presentation.revision > 0);
 
-    // Initialize the project store
     initializeProject(snapshot.session.id, snapshot.session.title, snapshot.project?.artifacts);
+    void hydrateProjectArtifacts(snapshot.session.id).catch((error) => {
+      console.error("加载项目产物失败:", error);
+      triggerToast(error instanceof Error ? error.message : "加载项目产物失败");
+    });
   };
 
   // 从主进程恢复最近一次激活的会话

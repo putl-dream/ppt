@@ -1,7 +1,16 @@
 import { create } from "zustand";
+import type { ProjectArtifact, ProjectArtifactStatus } from "@shared/session";
+import type { ProjectArtifactWriteResult } from "@shared/ipc";
+import {
+  getPrimaryProjectArtifactPath,
+  isProjectStageId,
+  primaryProjectArtifactPaths,
+  projectStageIds,
+  type ProjectStageId,
+} from "@shared/project";
 
-export type ArtifactId = "brief" | "outline" | "research" | "slides" | "design" | "deck";
-export type ArtifactStatus = "draft" | "ready" | "stale";
+export type ArtifactId = ProjectStageId;
+export type ArtifactStatus = ProjectArtifactStatus;
 
 export interface Artifact {
   id: ArtifactId;
@@ -9,10 +18,12 @@ export interface Artifact {
   path: string;
   status: ArtifactStatus;
   version: string;
-  content: string; // Markdown or JSON string
+  content: string;
   upstreamDependencies: ArtifactId[];
   lastUpdatedBy: "user" | "agent";
   updatedAt: number;
+  isHydrated: boolean;
+  lastWriteError?: string;
 }
 
 export interface ProposedPatch {
@@ -41,9 +52,9 @@ interface ProjectState {
   activeProject: ActiveProject | null;
   currentStage: ArtifactId;
   proposedPatch: ProposedPatch | null;
-  
-  // Actions
-  initializeProject: (id: string, name: string, backendArtifacts?: any[]) => void;
+
+  initializeProject: (id: string, name: string, backendArtifacts?: ProjectArtifact[]) => void;
+  hydrateProjectArtifacts: (sessionId?: string) => Promise<void>;
   setStage: (stage: ArtifactId) => void;
   updateArtifactContent: (id: ArtifactId, content: string, by?: "user" | "agent") => void;
   markStageReady: (id: ArtifactId) => void;
@@ -53,11 +64,11 @@ interface ProjectState {
   resetProject: () => void;
 }
 
-const DEFAULT_ARTIFACTS: Record<ArtifactId, Omit<Artifact, "content">> = {
+const DEFAULT_ARTIFACTS: Record<ArtifactId, Omit<Artifact, "content" | "isHydrated">> = {
   brief: {
     id: "brief",
     name: "目的、方向与受众 (Brief)",
-    path: "brief.md",
+    path: primaryProjectArtifactPaths.brief,
     status: "draft",
     version: "1.0.0",
     upstreamDependencies: [],
@@ -67,7 +78,7 @@ const DEFAULT_ARTIFACTS: Record<ArtifactId, Omit<Artifact, "content">> = {
   outline: {
     id: "outline",
     name: "内容大纲 (Outline)",
-    path: "outline.md",
+    path: primaryProjectArtifactPaths.outline,
     status: "draft",
     version: "1.0.0",
     upstreamDependencies: ["brief"],
@@ -77,7 +88,7 @@ const DEFAULT_ARTIFACTS: Record<ArtifactId, Omit<Artifact, "content">> = {
   research: {
     id: "research",
     name: "资料与素材 (Research)",
-    path: "research/notes.md",
+    path: primaryProjectArtifactPaths.research,
     status: "draft",
     version: "1.0.0",
     upstreamDependencies: ["outline"],
@@ -87,7 +98,7 @@ const DEFAULT_ARTIFACTS: Record<ArtifactId, Omit<Artifact, "content">> = {
   slides: {
     id: "slides",
     name: "逐页方案 (Slides Plan)",
-    path: "slides/storyboard.json",
+    path: primaryProjectArtifactPaths.slides,
     status: "draft",
     version: "1.0.0",
     upstreamDependencies: ["outline", "research", "design"],
@@ -97,7 +108,7 @@ const DEFAULT_ARTIFACTS: Record<ArtifactId, Omit<Artifact, "content">> = {
   design: {
     id: "design",
     name: "设计系统与偏好 (Design)",
-    path: "design/theme.json",
+    path: primaryProjectArtifactPaths.design,
     status: "draft",
     version: "1.0.0",
     upstreamDependencies: ["brief"],
@@ -107,7 +118,7 @@ const DEFAULT_ARTIFACTS: Record<ArtifactId, Omit<Artifact, "content">> = {
   deck: {
     id: "deck",
     name: "PPT 预览与导出 (Deck)",
-    path: "deck/snapshot.json",
+    path: primaryProjectArtifactPaths.deck,
     status: "draft",
     version: "1.0.0",
     upstreamDependencies: ["slides", "design"],
@@ -120,44 +131,95 @@ const DEFAULT_CONTENTS: Record<ArtifactId, string> = {
   brief: `# 演示文稿 Brief\n\n- **项目名称**: 新演示文稿\n- **核心目的**: 汇报\n- **目标听众**: 团队成员\n- **演讲时长**: 20分钟\n- **讲稿配置**: 需要\n- **期望风格**: 专业简洁\n`,
   outline: `# 演示大纲\n\n## 1. 行业背景与痛点 [预计 1 页]\n- 行业增速放缓\n- 痛点分析\n\n## 2. 解决方案 [预计 1 页]\n- 产品定位\n- 核心竞争力\n\n## 3. 发展规划 [预计 1 页]\n- 下一步里程碑\n- 商业价值\n`,
   research: `# 研究资料与素材\n\n- **行业数据**: 2026年市场增长率约为12%。\n- **竞品分析**: A产品优势在价格，B产品优势在服务。\n`,
-  slides: JSON.stringify([
-    { title: "封面页", layout: "cover", keyPoints: ["智能硬件市场推广", "主讲人: AI 助手"], quote: "无" },
-    { title: "行业背景", layout: "concept", keyPoints: ["痛点一：获客成本高", "痛点二：转化率低"], quote: "行业数据：2026年市场增长率约为12%" },
-    { title: "解决方案", layout: "comparison", keyPoints: ["以客户为中心的产品矩阵", "全渠道智能化触达"], quote: "无" },
-  ], null, 2),
-  design: JSON.stringify({
-    theme: "nordic",
-    palette: "cyan",
-    logoUrl: null,
-    ratio: "16:9",
-  }, null, 2),
-  deck: JSON.stringify({
-    title: "新演示文稿",
-    slidesCount: 3,
-  }, null, 2),
+  slides: JSON.stringify(
+    [
+      {
+        title: "封面页",
+        layout: "cover",
+        keyPoints: ["智能硬件市场推广", "主讲人: AI 助手"],
+        quote: "",
+      },
+    ],
+    null,
+    2,
+  ),
+  design: JSON.stringify(
+    {
+      tone: "professional",
+      typography: {
+        heading: "system-ui",
+        body: "system-ui",
+      },
+      palette: {
+        primary: "#2563eb",
+        accent: "#10b981",
+        background: "#f8fafc",
+        text: "#111827",
+      },
+      layout: {
+        ratio: "16:9",
+        density: "balanced",
+      },
+    },
+    null,
+    2,
+  ),
+  deck: JSON.stringify(
+    {
+      title: "新演示文稿",
+      slides: [],
+    },
+    null,
+    2,
+  ),
 };
 
 const DEPENDENCY_MAP: Record<ArtifactId, ArtifactId[]> = {
   brief: ["outline", "design", "slides", "deck"],
   outline: ["slides", "deck"],
-  research: ["slides"],
-  design: ["deck"],
+  research: ["slides", "deck"],
+  design: ["slides", "deck"],
   slides: ["deck"],
   deck: [],
 };
 
-// Helper to update downstream statuses to 'stale'
-const propagateStale = (
+const writeTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+function getDesktopApi() {
+  return typeof window === "undefined" ? undefined : window.desktopApi;
+}
+
+function createArtifactShell(
+  id: ArtifactId,
+  backendArtifacts?: ProjectArtifact[],
+): Artifact {
+  const backend = backendArtifacts?.find((artifact) => artifact.id === id);
+  const dependencies = (backend?.dependsOn ?? DEFAULT_ARTIFACTS[id].upstreamDependencies)
+    .filter(isProjectStageId);
+
+  return {
+    ...DEFAULT_ARTIFACTS[id],
+    name: backend?.title ?? DEFAULT_ARTIFACTS[id].name,
+    path: backend ? getPrimaryProjectArtifactPath(backend) : DEFAULT_ARTIFACTS[id].path,
+    status: backend?.status ?? DEFAULT_ARTIFACTS[id].status,
+    upstreamDependencies: dependencies,
+    content: DEFAULT_CONTENTS[id],
+    updatedAt: Date.now(),
+    isHydrated: false,
+  };
+}
+
+function propagateStale(
   artifacts: Record<ArtifactId, Artifact>,
-  startId: ArtifactId
-): Record<ArtifactId, Artifact> => {
+  startId: ArtifactId,
+): Record<ArtifactId, Artifact> {
   const nextArtifacts = { ...artifacts };
   const queue = [...(DEPENDENCY_MAP[startId] || [])];
   const visited = new Set<ArtifactId>();
 
   while (queue.length > 0) {
-    const current = queue.shift()!;
-    if (visited.has(current)) continue;
+    const current = queue.shift();
+    if (!current || visited.has(current)) continue;
     visited.add(current);
 
     nextArtifacts[current] = {
@@ -166,38 +228,60 @@ const propagateStale = (
       updatedAt: Date.now(),
     };
 
-    const nextDeps = DEPENDENCY_MAP[current] || [];
-    queue.push(...nextDeps);
+    queue.push(...(DEPENDENCY_MAP[current] || []));
   }
 
   return nextArtifacts;
-};
+}
 
-export const useProjectStore = create<ProjectState>((set) => ({
+function applyWriteResult(
+  artifacts: Record<ArtifactId, Artifact>,
+  result: ProjectArtifactWriteResult,
+): Record<ArtifactId, Artifact> {
+  const nextArtifacts = { ...artifacts };
+  const changedId = result.changedArtifactId;
+  const now = Date.now();
+
+  if (changedId && isProjectStageId(changedId)) {
+    const current = nextArtifacts[changedId];
+    nextArtifacts[changedId] = {
+      ...current,
+      status: current.status === "ready" ? "draft" : current.status,
+      updatedAt: now,
+      lastWriteError: undefined,
+    };
+  }
+
+  for (const artifactId of result.staleArtifactIds) {
+    if (!isProjectStageId(artifactId)) continue;
+    nextArtifacts[artifactId] = {
+      ...nextArtifacts[artifactId],
+      status: "stale",
+      updatedAt: now,
+      lastWriteError: undefined,
+    };
+  }
+
+  return nextArtifacts;
+}
+
+function findArtifactIdByPath(targetFile: string): ArtifactId | undefined {
+  const normalized = targetFile.replace(/\\/g, "/");
+  return projectStageIds.find((id) => {
+    const primaryPath = primaryProjectArtifactPaths[id];
+    return normalized === primaryPath || normalized.includes(id) || normalized.startsWith(`${id}/`);
+  });
+}
+
+export const useProjectStore = create<ProjectState>((set, get) => ({
   activeProject: null,
   currentStage: "brief",
   proposedPatch: null,
 
   initializeProject: (id, name, backendArtifacts) => {
-    const artifacts: Record<ArtifactId, Artifact> = {} as any;
-    
-    (Object.keys(DEFAULT_ARTIFACTS) as ArtifactId[]).forEach((key) => {
-      let status: ArtifactStatus = "draft";
-      if (backendArtifacts) {
-        const matching = backendArtifacts.find((ba) => ba.kind === key || ba.id === key);
-        if (matching) status = matching.status;
-      }
-
-      // Restore content from localStorage if available, else use default content
-      const cachedContent = localStorage.getItem(`ppt_proj_${id}_art_${key}`);
-
-      artifacts[key] = {
-        ...DEFAULT_ARTIFACTS[key],
-        status,
-        content: cachedContent || DEFAULT_CONTENTS[key],
-        updatedAt: Date.now(),
-      };
-    });
+    const artifacts = Object.fromEntries(
+      projectStageIds.map((stageId) => [stageId, createArtifactShell(stageId, backendArtifacts)]),
+    ) as Record<ArtifactId, Artifact>;
 
     set({
       activeProject: {
@@ -212,114 +296,228 @@ export const useProjectStore = create<ProjectState>((set) => ({
     });
   },
 
-  setStage: (stage) => set({ currentStage: stage }),
+  hydrateProjectArtifacts: async (sessionId) => {
+    const project = get().activeProject;
+    const targetSessionId = sessionId ?? project?.id;
+    const api = getDesktopApi();
+    if (!project || !targetSessionId || targetSessionId === "draft_id" || !api) return;
 
-  updateArtifactContent: (id, content, by = "user") => {
+    const loadedEntries = await Promise.all(
+      projectStageIds.map(async (stageId) => {
+        const artifact = get().activeProject?.artifacts[stageId];
+        if (!artifact) return [stageId, undefined] as const;
+        try {
+          const result = await api.readProjectArtifact(targetSessionId, artifact.path);
+          return [stageId, result.type === "file" ? result.content ?? "" : ""] as const;
+        } catch (error) {
+          console.error(`读取项目产物失败: ${artifact.path}`, error);
+          return [stageId, undefined] as const;
+        }
+      }),
+    );
+
     set((state) => {
-      if (!state.activeProject) return {};
-
-      const currentArtifact = state.activeProject.artifacts[id];
-      const updatedArtifact = {
-        ...currentArtifact,
-        content,
-        lastUpdatedBy: by,
-        updatedAt: Date.now(),
-      };
-
-      let newArtifacts = {
-        ...state.activeProject.artifacts,
-        [id]: updatedArtifact,
-      };
-
-      // Propagate stale status downstream if user edited it
-      newArtifacts = propagateStale(newArtifacts, id);
-
-      // Persist to localStorage
-      localStorage.setItem(`ppt_proj_${state.activeProject.id}_art_${id}`, content);
-
+      if (!state.activeProject || state.activeProject.id !== targetSessionId) return {};
+      const artifacts = { ...state.activeProject.artifacts };
+      for (const [stageId, content] of loadedEntries) {
+        if (content === undefined) continue;
+        artifacts[stageId] = {
+          ...artifacts[stageId],
+          content,
+          isHydrated: true,
+          lastWriteError: undefined,
+          updatedAt: Date.now(),
+        };
+      }
       return {
         activeProject: {
           ...state.activeProject,
-          artifacts: newArtifacts,
+          artifacts,
         },
       };
     });
   },
 
-  markStageReady: (id) => {
+  setStage: (stage) => set((state) => ({
+    currentStage: stage,
+    activeProject: state.activeProject
+      ? {
+          ...state.activeProject,
+          currentStage: stage,
+        }
+      : state.activeProject,
+  })),
+
+  updateArtifactContent: (id, content, by = "user") => {
+    const project = get().activeProject;
+    if (!project) return;
+
+    const artifact = project.artifacts[id];
     set((state) => {
       if (!state.activeProject) return {};
 
-      const currentArtifact = state.activeProject.artifacts[id];
       const updatedArtifact = {
-        ...currentArtifact,
-        status: "ready" as const,
+        ...state.activeProject.artifacts[id],
+        content,
+        lastUpdatedBy: by,
         updatedAt: Date.now(),
+        lastWriteError: undefined,
       };
 
-      const newArtifacts = {
-        ...state.activeProject.artifacts,
-        [id]: updatedArtifact,
-      };
+      const artifacts = propagateStale(
+        {
+          ...state.activeProject.artifacts,
+          [id]: updatedArtifact,
+        },
+        id,
+      );
 
       return {
         activeProject: {
           ...state.activeProject,
-          artifacts: newArtifacts,
+          artifacts,
         },
       };
     });
+
+    const api = getDesktopApi();
+    if (!api || project.id === "draft_id") return;
+
+    const timerKey = `${project.id}:${id}`;
+    const existingTimer = writeTimers.get(timerKey);
+    if (existingTimer) window.clearTimeout(existingTimer);
+
+    writeTimers.set(
+      timerKey,
+      window.setTimeout(() => {
+        writeTimers.delete(timerKey);
+        void api
+          .writeProjectArtifact(project.id, artifact.path, content)
+          .then((result) => {
+            set((state) => {
+              if (!state.activeProject || state.activeProject.id !== project.id) return {};
+              return {
+                activeProject: {
+                  ...state.activeProject,
+                  artifacts: applyWriteResult(state.activeProject.artifacts, result),
+                },
+              };
+            });
+          })
+          .catch((error: unknown) => {
+            const message = error instanceof Error ? error.message : "写入项目产物失败";
+            console.error(`写入项目产物失败: ${artifact.path}`, error);
+            set((state) => {
+              if (!state.activeProject || state.activeProject.id !== project.id) return {};
+              const current = state.activeProject.artifacts[id];
+              return {
+                activeProject: {
+                  ...state.activeProject,
+                  artifacts: {
+                    ...state.activeProject.artifacts,
+                    [id]: {
+                      ...current,
+                      lastWriteError: message,
+                    },
+                  },
+                },
+              };
+            });
+          });
+      }, 400),
+    );
+  },
+
+  markStageReady: (id) => {
+    const project = get().activeProject;
+    if (!project) return;
+
+    set((state) => {
+      if (!state.activeProject) return {};
+      const currentArtifact = state.activeProject.artifacts[id];
+      return {
+        activeProject: {
+          ...state.activeProject,
+          artifacts: {
+            ...state.activeProject.artifacts,
+            [id]: {
+              ...currentArtifact,
+              status: "ready",
+              updatedAt: Date.now(),
+              lastWriteError: undefined,
+            },
+          },
+        },
+      };
+    });
+
+    const api = getDesktopApi();
+    if (!api || project.id === "draft_id") return;
+
+    const artifact = project.artifacts[id];
+    const timerKey = `${project.id}:${id}`;
+    const existingTimer = writeTimers.get(timerKey);
+    if (existingTimer) {
+      window.clearTimeout(existingTimer);
+      writeTimers.delete(timerKey);
+    }
+
+    void api
+      .writeProjectArtifact(project.id, artifact.path, artifact.content)
+      .then((result) => {
+        set((state) => {
+          if (!state.activeProject || state.activeProject.id !== project.id) return {};
+          return {
+            activeProject: {
+              ...state.activeProject,
+              artifacts: applyWriteResult(state.activeProject.artifacts, result),
+            },
+          };
+        });
+        return api.markProjectArtifactStatus(project.id, id, "ready");
+      })
+      .then((artifact) => {
+        set((state) => {
+          if (!state.activeProject || state.activeProject.id !== project.id) return {};
+          return {
+            activeProject: {
+              ...state.activeProject,
+              artifacts: {
+                ...state.activeProject.artifacts,
+                [id]: {
+                  ...state.activeProject.artifacts[id],
+                  status: artifact.status,
+                  updatedAt: Date.now(),
+                },
+              },
+            },
+          };
+        });
+      })
+      .catch((error) => {
+        console.error(`标记项目产物状态失败: ${id}`, error);
+      });
   },
 
   proposePatch: (patch) => set({ proposedPatch: patch }),
 
   acceptPatch: () => {
-    set((state) => {
-      if (!state.activeProject || !state.proposedPatch) return {};
-      const { targetFile, contentAfter } = state.proposedPatch;
-      
-      // Map filepath/target to ArtifactId
-      let targetId: ArtifactId | null = null;
-      if (targetFile.includes("brief")) targetId = "brief";
-      else if (targetFile.includes("outline")) targetId = "outline";
-      else if (targetFile.includes("research")) targetId = "research";
-      else if (targetFile.includes("slides")) targetId = "slides";
-      else if (targetFile.includes("design")) targetId = "design";
-      else if (targetFile.includes("deck")) targetId = "deck";
-
-      if (!targetId) return { proposedPatch: null };
-
-      const currentArtifact = state.activeProject.artifacts[targetId];
-      const updatedArtifact = {
-        ...currentArtifact,
-        content: contentAfter,
-        status: "ready" as const, // auto-mark ready on accepted agent patch
-        lastUpdatedBy: "agent" as const,
-        updatedAt: Date.now(),
-      };
-
-      let newArtifacts = {
-        ...state.activeProject.artifacts,
-        [targetId]: updatedArtifact,
-      };
-
-      // Propagate stale status downstream
-      newArtifacts = propagateStale(newArtifacts, targetId);
-
-      // Save to cache
-      localStorage.setItem(`ppt_proj_${state.activeProject.id}_art_${targetId}`, contentAfter);
-
-      return {
-        activeProject: {
-          ...state.activeProject,
-          artifacts: newArtifacts,
-        },
-        proposedPatch: null,
-      };
-    });
+    const state = get();
+    if (!state.activeProject || !state.proposedPatch) return;
+    const targetId = findArtifactIdByPath(state.proposedPatch.targetFile);
+    const contentAfter = state.proposedPatch.contentAfter;
+    set({ proposedPatch: null });
+    if (!targetId) return;
+    get().updateArtifactContent(targetId, contentAfter, "agent");
   },
 
   rejectPatch: () => set({ proposedPatch: null }),
 
-  resetProject: () => set({ activeProject: null, proposedPatch: null, currentStage: "brief" }),
+  resetProject: () => {
+    for (const timer of writeTimers.values()) {
+      window.clearTimeout(timer);
+    }
+    writeTimers.clear();
+    set({ activeProject: null, proposedPatch: null, currentStage: "brief" });
+  },
 }));

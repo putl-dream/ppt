@@ -20,6 +20,7 @@ import { RiskPolicy } from "./agent/gate/risk-policy";
 import { createModuleLogger, requestSummary } from "./agent/logger";
 import { FileSessionStore } from "./session-store";
 import type { SessionChatMessage, SessionSnapshot } from "@shared/session";
+import { projectArtifactStatusSchema } from "@shared/session";
 import type { RecoverableOutlineConversation } from "@shared/session-recovery";
 
 const logger = createModuleLogger("main");
@@ -184,6 +185,32 @@ app.whenReady().then(async () => {
     "session:save-messages",
     (_, sessionId: string, messages: SessionChatMessage[]) =>
       sessionStore.saveMessages(sessionId, messages),
+  );
+
+  ipcMain.handle("project:list-artifacts", (_, sessionId: string) =>
+    sessionStore.listProjectArtifacts(sessionId),
+  );
+  ipcMain.handle("project:read-artifact", (_, sessionId: string, artifactIdOrPath: string) =>
+    sessionStore.readProjectArtifact(sessionId, artifactIdOrPath),
+  );
+  ipcMain.handle(
+    "project:write-artifact",
+    (_, sessionId: string, relativePath: string, content: string) =>
+      sessionStore.writeProjectArtifact(sessionId, relativePath, content),
+  );
+  ipcMain.handle(
+    "project:get-artifact-diff",
+    (_, sessionId: string, relativePath: string, nextContent: string) =>
+      sessionStore.getProjectArtifactDiff(sessionId, relativePath, nextContent),
+  );
+  ipcMain.handle(
+    "project:mark-artifact-status",
+    (_, sessionId: string, artifactId: string, status: unknown) =>
+      sessionStore.markProjectArtifactStatus(
+        sessionId,
+        artifactId,
+        projectArtifactStatusSchema.parse(status),
+      ),
   );
 
   ipcMain.handle("presentation:get", async () =>

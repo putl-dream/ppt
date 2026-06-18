@@ -1,65 +1,7 @@
 import { join } from "node:path";
 import type { Presentation } from "@shared/presentation";
-import type { ProjectArtifact, ProjectSandbox, SessionSnapshot } from "@shared/session";
-
-export const defaultProjectArtifacts: ProjectArtifact[] = [
-  {
-    id: "brief",
-    title: "目的、方向与受众",
-    path: "brief.md",
-    kind: "brief",
-    status: "draft",
-    dependsOn: [],
-  },
-  {
-    id: "outline",
-    title: "内容大纲",
-    path: "outline.md",
-    kind: "outline",
-    status: "draft",
-    dependsOn: ["brief"],
-  },
-  {
-    id: "research",
-    title: "资料与素材",
-    path: "research/",
-    kind: "research",
-    status: "draft",
-    dependsOn: ["outline"],
-  },
-  {
-    id: "slides",
-    title: "逐页内容与设计方案",
-    path: "slides/",
-    kind: "slide-plan",
-    status: "draft",
-    dependsOn: ["outline", "research", "design"],
-  },
-  {
-    id: "design",
-    title: "设计系统与版式偏好",
-    path: "design/",
-    kind: "design",
-    status: "draft",
-    dependsOn: ["brief"],
-  },
-  {
-    id: "deck",
-    title: "PPT 结构化快照与导出物",
-    path: "deck/",
-    kind: "deck",
-    status: "draft",
-    dependsOn: ["slides", "design"],
-  },
-  {
-    id: "history",
-    title: "关键版本记录",
-    path: "history/",
-    kind: "history",
-    status: "draft",
-    dependsOn: ["brief", "outline", "slides", "deck"],
-  },
-];
+import type { ProjectSandbox, SessionSnapshot } from "@shared/session";
+import { defaultProjectArtifacts } from "@shared/project";
 
 export interface ProjectFileTemplate {
   path: string;
@@ -112,6 +54,10 @@ export function createDefaultProjectFiles(snapshot: SessionSnapshot): ProjectFil
     {
       path: "slides/001-title.md",
       content: createTitleSlideTemplate(snapshot.session.title),
+    },
+    {
+      path: "slides/storyboard.json",
+      content: `${JSON.stringify(createStoryboardTemplate(snapshot.session.title), null, 2)}\n`,
     },
     {
       path: "design/theme.json",
@@ -234,6 +180,17 @@ function createThemeTemplate() {
       density: "balanced",
     },
   };
+}
+
+function createStoryboardTemplate(title: string) {
+  return [
+    {
+      title: "标题页",
+      layout: "cover",
+      keyPoints: [title],
+      quote: "",
+    },
+  ];
 }
 
 function createLayoutNotesTemplate(): string {

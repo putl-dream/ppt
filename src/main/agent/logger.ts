@@ -45,12 +45,6 @@ function getLogFileStream() {
   }
 }
 
-type AgentLogLevel = "debug" | "info" | "warn" | "error";
-
-type LogDetail = "minimal" | "full";
-
-type AgentLogData = Record<string, unknown>;
-
 const levelPriority: Record<AgentLogLevel, number> = {
   debug: 10,
   info: 20,

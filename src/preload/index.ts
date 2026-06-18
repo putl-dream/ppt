@@ -8,6 +8,15 @@ const api: DesktopApi = {
   deleteSession: (sessionId) => ipcRenderer.invoke("session:delete", sessionId),
   saveSessionMessages: (sessionId, messages) =>
     ipcRenderer.invoke("session:save-messages", sessionId, messages),
+  listProjectArtifacts: (sessionId) => ipcRenderer.invoke("project:list-artifacts", sessionId),
+  readProjectArtifact: (sessionId, artifactIdOrPath) =>
+    ipcRenderer.invoke("project:read-artifact", sessionId, artifactIdOrPath),
+  writeProjectArtifact: (sessionId, relativePath, content) =>
+    ipcRenderer.invoke("project:write-artifact", sessionId, relativePath, content),
+  getProjectArtifactDiff: (sessionId, relativePath, nextContent) =>
+    ipcRenderer.invoke("project:get-artifact-diff", sessionId, relativePath, nextContent),
+  markProjectArtifactStatus: (sessionId, artifactId, status) =>
+    ipcRenderer.invoke("project:mark-artifact-status", sessionId, artifactId, status),
   getPresentation: () => ipcRenderer.invoke("presentation:get"),
   startAgentRun: (request, model, executionStrategy, runId, editorContext) =>
     ipcRenderer.invoke("agent:start", request, model, executionStrategy, runId, editorContext),
