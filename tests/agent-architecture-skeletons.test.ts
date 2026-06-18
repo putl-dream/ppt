@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createDefaultToolRegistry, ToolRegistry } from "../src/main/agent/tools/tool-registry";
 import { askUserTool } from "../src/main/agent/tools/core/ask-user";
 import { searchExtraToolsTool } from "../src/main/agent/tools/core/search-extra-tools";
@@ -632,5 +632,143 @@ describe("Agent Architecture Skeletons & Types", () => {
       "changed after preview",
     );
     expect(bus.getSnapshot().title).toBe("Newer title");
+  });
+
+  it("proposes and applies an artifact patch successfully", async () => {
+    const registry = new ToolRegistry();
+    const runtime = new AgentRuntime(
+      registry,
+      createSequenceGateway([
+        {
+          type: "artifact_patch",
+          targetPath: "brief.md",
+          patch: "# Patched Content",
+          summary: "Updated brief with target audience",
+          risk: "low",
+        },
+      ]),
+    );
+
+    const mockFileStore = {
+      readProjectArtifact: vi.fn().mockResolvedValue({ content: "# Before Content" }),
+      writeProjectArtifact: vi.fn().mockResolvedValue({
+        changed: true,
+        staleArtifactIds: ["outline", "deck"],
+        changedArtifactId: "brief",
+      }),
+      getProjectArtifactDiff: vi.fn().mockResolvedValue({
+        path: "brief.md",
+        before: "# Before Content",
+        after: "# Patched Content",
+        changed: true,
+        unifiedDiff: "--- before\n+++ after\n",
+      }),
+    };
+
+    const bus = new CommandBus(createStarterPresentation());
+    const service = new RefactoredAgentService(
+      bus,
+      runtime,
+      new CommitGate(new RiskPolicy()),
+      "session-123",
+      mockFileStore,
+    );
+
+    const result = await service.start("Edit brief please", undefined, "REQUEST_APPROVAL");
+    expect(result.status).toBe("artifact-patch-required");
+    if (result.status !== "artifact-patch-required") throw new Error("Expected patch proposal");
+
+    expect(result.patch.targetPath).toBe("brief.md");
+    expect(result.patch.summary).toBe("Updated brief with target audience");
+    expect(result.patch.before).toBe("# Before Content");
+    expect(result.patch.after).toBe("# Patched Content");
+    expect(result.patch.diff.unifiedDiff).toBe("--- before\n+++ after\n");
+
+    expect(mockFileStore.readProjectArtifact).toHaveBeenCalledWith("session-123", "brief.md");
+    expect(mockFileStore.getProjectArtifactDiff).toHaveBeenCalledWith(
+      "session-123",
+      "brief.md",
+      "# Patched Content",
+    );
+
+    // Now resume and approve
+    const resumeResult = await service.resume(result.patch.threadId, true);
+    expect(resumeResult.status).toBe("artifact-updated");
+    if (resumeResult.status !== "artifact-updated") throw new Error("Expected updated");
+
+    expect(mockFileStore.writeProjectArtifact).toHaveBeenCalledWith(
+      "session-123",
+      "brief.md",
+      "# Patched Content",
+    );
+    expect(resumeResult.write).toEqual({
+      path: "brief.md",
+      changed: true,
+      changedArtifactId: "brief",
+      staleArtifactIds: ["outline", "deck"],
+    });
+  });
+
+  it("proposes and rejects an artifact patch successfully", async () => {
+    const registry = new ToolRegistry();
+    const runtime = new AgentRuntime(
+      registry,
+      createSequenceGateway([
+        {
+          type: "artifact_patch",
+          targetPath: "brief.md",
+          patch: "# Patched Content",
+          summary: "Updated brief with target audience",
+          risk: "low",
+        },
+      ]),
+    );
+
+    const mockFileStore = {
+      readProjectArtifact: vi.fn().mockResolvedValue({ content: "# Before Content" }),
+      writeProjectArtifact: vi.fn(),
+      getProjectArtifactDiff: vi.fn().mockResolvedValue({
+        path: "brief.md",
+        before: "# Before Content",
+        after: "# Patched Content",
+        changed: true,
+        unifiedDiff: "--- before\n+++ after\n",
+      }),
+    };
+
+    const bus = new CommandBus(createStarterPresentation());
+    const service = new RefactoredAgentService(
+      bus,
+      runtime,
+      new CommitGate(new RiskPolicy()),
+      "session-123",
+      mockFileStore,
+    );
+
+    const result = await service.start("Edit brief please", undefined, "REQUEST_APPROVAL");
+    expect(result.status).toBe("artifact-patch-required");
+    if (result.status !== "artifact-patch-required") throw new Error("Expected patch proposal");
+    const resumeResult = await service.resume(result.patch.threadId, false);
+    expect(resumeResult.status).toBe("rejected");
+    expect(mockFileStore.writeProjectArtifact).not.toHaveBeenCalled();
+  });
+
+  it("aborts production RefactoredAgentService execution immediately when aborted signal is passed", async () => {
+    const bus = new CommandBus(createStarterPresentation());
+    const mockRuntime = {
+      run: vi.fn(),
+      clearSession: vi.fn(),
+    } as any;
+    const service = new RefactoredAgentService(
+      bus,
+      mockRuntime,
+      new CommitGate(new RiskPolicy()),
+    );
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(
+      service.start("Hello", undefined, "AUTO", undefined, undefined, [], controller.signal)
+    ).rejects.toThrow("Run aborted by user.");
   });
 });

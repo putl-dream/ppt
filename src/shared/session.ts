@@ -57,6 +57,12 @@ const persistedApprovalSchema = z.object({
   commands: z.array(presentationCommandSchema),
 });
 
+const persistedPatchSchema = z.object({
+  threadId: z.string(),
+  targetPath: z.string(),
+  summary: z.string(),
+});
+
 export const sessionChatMessageSchema = z.object({
   id: z.string(),
   role: z.enum(["user", "assistant"]),
@@ -64,6 +70,7 @@ export const sessionChatMessageSchema = z.object({
   thought: z.array(z.string()).optional(),
   progress: z.number().optional(),
   approval: persistedApprovalSchema.optional(),
+  patch: persistedPatchSchema.optional(),
   threadId: z.string().optional(),
 });
 

@@ -35,6 +35,8 @@ const api: DesktopApi = {
   executeCommand: (command) => ipcRenderer.invoke("presentation:execute", command),
   exportPresentation: (presentation, options) =>
     ipcRenderer.invoke("presentation:export", presentation, options),
+  selectDirectory: (defaultPath) => ipcRenderer.invoke("dialog:select-directory", defaultPath),
+  cancelAgentRun: (runId) => ipcRenderer.invoke("agent:cancel", runId),
 };
 
 contextBridge.exposeInMainWorld("desktopApi", api);

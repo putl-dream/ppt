@@ -10,7 +10,6 @@ interface ChatMessage {
   content: string;
   thought?: string[];
   progress?: number;
-  outlineRequest?: any;
   approval?: any;
 }
 
@@ -23,6 +22,9 @@ interface ContextualAgentPanelProps {
   onChangeRequest: (val: string) => void;
   onSubmitRequest: () => void;
   busy: boolean;
+  activeRunId: string | null;
+  onCancelRun: () => void;
+  onRetry: (msgId: string) => void;
   onResolveApproval: (approved: boolean) => void;
   
   models: ManagedModel[];
@@ -65,6 +67,9 @@ export const ContextualAgentPanel: React.FC<ContextualAgentPanelProps> = ({
   onChangeRequest,
   onSubmitRequest,
   busy,
+  activeRunId,
+  onCancelRun,
+  onRetry,
   onResolveApproval,
   models,
   selectedModelId,
@@ -226,6 +231,25 @@ export const ContextualAgentPanel: React.FC<ContextualAgentPanelProps> = ({
                 </button>
               )}
 
+              {msg.role === "assistant" && msg.content.includes("发生错误") && (
+                <button
+                  onClick={() => onRetry(msg.id)}
+                  style={{
+                    background: "transparent",
+                    border: "none",
+                    cursor: "pointer",
+                    color: "var(--accent-cyan)",
+                    fontSize: "11px",
+                    marginTop: "4px",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "4px"
+                  }}
+                >
+                  🔄 重试该指令
+                </button>
+              )}
+
               {/* Accordion for agent thoughts */}
               {msg.thought && msg.thought.length > 0 && (
                 <div style={{ marginTop: "8px" }}>
@@ -254,10 +278,29 @@ export const ContextualAgentPanel: React.FC<ContextualAgentPanelProps> = ({
             </div>
             <div style={{ flex: 1 }}>
               <div style={{ background: "rgba(255, 255, 255, 0.02)", border: "1px solid var(--border-glass)", borderRadius: "12px", padding: "10px 14px", fontSize: "13px", color: "var(--text-primary)" }}>
-                {agentActivityMode === "request" ? thoughtProcess.at(-1) : "AI 正在编排方案..."}
+                {thoughtProcess.at(-1) || "AI 正在编排方案..."}
               </div>
-              <div style={{ marginTop: "8px", height: "4px", background: "var(--border-glass)", borderRadius: "2px", overflow: "hidden" }}>
-                <div style={{ width: `${thoughtProgress}%`, height: "100%", background: "var(--accent-cyan)", transition: "width 0.2s ease" }} />
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "8px" }}>
+                <div style={{ flex: 1, height: "4px", background: "var(--border-glass)", borderRadius: "2px", overflow: "hidden" }}>
+                  <div style={{ width: `${thoughtProgress}%`, height: "100%", background: "var(--accent-cyan)", transition: "width 0.2s ease" }} />
+                </div>
+                {activeRunId && (
+                  <button
+                    onClick={onCancelRun}
+                    style={{
+                      border: "none",
+                      color: "#ef4444",
+                      fontSize: "11px",
+                      cursor: "pointer",
+                      marginLeft: "12px",
+                      padding: "2px 6px",
+                      borderRadius: "4px",
+                      background: "rgba(239, 68, 68, 0.08)"
+                    }}
+                  >
+                    🚫 取消
+                  </button>
+                )}
               </div>
             </div>
           </div>

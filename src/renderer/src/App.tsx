@@ -118,6 +118,7 @@ export function App() {
   const [selectedTheme, setSelectedTheme] = useState<string>("nordic");
   const [selectedPalette, setSelectedPalette] = useState<string>("cyan");
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
+  const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [models, setModels] = useState<ManagedModel[]>(loadManagedModels);
   const [selectedModelId, setSelectedModelId] = useState(
     () => window.localStorage.getItem(SELECTED_MODEL_STORAGE_KEY) ?? DEFAULT_MODELS[0].id,
@@ -243,6 +244,54 @@ export function App() {
         activeRunStepsRef.current = [...activeRunStepsRef.current, event.message];
         setThoughtProcess(activeRunStepsRef.current);
         setThoughtProgress(event.progress);
+        return;
+      }
+
+      if (event.type === "stage-started") {
+        stopStatusTyping();
+        setAgentActivityMode("workflow");
+        activeRunStepsRef.current = [...activeRunStepsRef.current, `🚀 启动阶段: ${event.message}`];
+        setThoughtProcess(activeRunStepsRef.current);
+        return;
+      }
+
+      if (event.type === "artifact-read") {
+        stopStatusTyping();
+        setAgentActivityMode("workflow");
+        activeRunStepsRef.current = [...activeRunStepsRef.current, `📖 读取文件: ${event.path}`];
+        setThoughtProcess(activeRunStepsRef.current);
+        return;
+      }
+
+      if (event.type === "artifact-diff-ready") {
+        stopStatusTyping();
+        setAgentActivityMode("workflow");
+        activeRunStepsRef.current = [...activeRunStepsRef.current, `🔍 比对差异: ${event.path}`];
+        setThoughtProcess(activeRunStepsRef.current);
+        return;
+      }
+
+      if (event.type === "tool-started") {
+        stopStatusTyping();
+        setAgentActivityMode("workflow");
+        activeRunStepsRef.current = [...activeRunStepsRef.current, `🛠️ 运行工具: ${event.toolName}`];
+        setThoughtProcess(activeRunStepsRef.current);
+        return;
+      }
+
+      if (event.type === "tool-finished") {
+        stopStatusTyping();
+        setAgentActivityMode("workflow");
+        activeRunStepsRef.current = [...activeRunStepsRef.current, `✅ 工具 ${event.toolName} 运行完毕`];
+        setThoughtProcess(activeRunStepsRef.current);
+        return;
+      }
+
+      if (event.type === "approval-waiting") {
+        stopStatusTyping();
+        setAgentActivityMode("workflow");
+        activeRunStepsRef.current = [...activeRunStepsRef.current, `⏳ 等待用户审批`];
+        setThoughtProcess(activeRunStepsRef.current);
         return;
       }
 
@@ -489,6 +538,70 @@ export function App() {
       triggerToast("AI 已提出排版变更方案，请进行审核");
       return;
     }
+    if (result.status === "artifact-patch-required") {
+      useProjectStore.getState().proposePatch({
+        targetFile: result.patch.targetPath,
+        op: "patch",
+        patch: result.patch.diff.unifiedDiff,
+        contentBefore: result.patch.before,
+        contentAfter: result.patch.after,
+        summary: result.patch.summary,
+        threadId: result.patch.threadId,
+      });
+
+      const promptContent = "已提出内容修改方案，请在上方审核后应用。";
+      if (messageId) {
+        setChatMessages((prev) => prev.map((message) =>
+          message.id === messageId
+            ? {
+                ...message,
+                content: promptContent,
+                thought: steps,
+                patch: {
+                  threadId: result.patch.threadId,
+                  targetPath: result.patch.targetPath,
+                  summary: result.patch.summary,
+                },
+              }
+            : message
+        ));
+      } else {
+        setChatMessages((prev) => [
+          ...prev,
+          {
+            id: crypto.randomUUID(),
+            role: "assistant",
+            content: promptContent,
+            thought: steps,
+            patch: {
+              threadId: result.patch.threadId,
+              targetPath: result.patch.targetPath,
+              summary: result.patch.summary,
+            },
+          },
+        ]);
+      }
+      triggerToast("AI 已提出修改变更方案，请进行审核");
+      return;
+    }
+
+    if (result.status === "artifact-updated") {
+      useProjectStore.getState().hydrateProjectArtifacts(activeSessionId || undefined);
+
+      const promptContent = "修改已接受，相关产物文件已成功更新。";
+      if (messageId) {
+        setChatMessages((prev) => prev.map((message) =>
+          message.id === messageId ? { ...message, content: promptContent } : message,
+        ));
+      } else {
+        setChatMessages((prev) => [
+          ...prev,
+          { id: crypto.randomUUID(), role: "assistant", content: promptContent },
+        ]);
+      }
+      triggerToast("✅ 变更已应用");
+      return;
+    }
 
     const nextPresentation = (result.status === "completed" || result.status === "rejected") ? result.presentation : undefined;
     if (nextPresentation) {
@@ -582,6 +695,7 @@ export function App() {
     setAgentActivityMode("idle");
     const runId = crypto.randomUUID();
     activeRunIdRef.current = runId;
+    setActiveRunId(runId);
     activeRunStepsRef.current = [];
     let forkedMessages: ChatMessage[] | undefined;
 
@@ -633,6 +747,7 @@ export function App() {
       ]);
     } finally {
       activeRunIdRef.current = null;
+      setActiveRunId(null);
       streamMessageIdsRef.current.delete(runId);
       if (statusTypingTimerRef.current !== null) {
         window.clearInterval(statusTypingTimerRef.current);
@@ -644,6 +759,27 @@ export function App() {
       setThoughtProgress(0);
     }
   }
+
+  const handleCancelRun = async () => {
+    if (activeRunIdRef.current) {
+      const cancelled = await window.desktopApi.cancelAgentRun(activeRunIdRef.current);
+      if (cancelled) {
+        triggerToast("🚫 任务已取消");
+      }
+    }
+  };
+
+  const handleRetryMessage = (msgId: string) => {
+    const idx = chatMessages.findIndex((m) => m.id === msgId);
+    if (idx === -1) return;
+    const priorUserMsg = chatMessages
+      .slice(0, idx)
+      .reverse()
+      .find((m) => m.role === "user");
+    if (priorUserMsg) {
+      void startAgent(priorUserMsg.content);
+    }
+  };
 
 
 
@@ -687,6 +823,7 @@ export function App() {
             setIsMirrorOpen(true);
           }
         }
+        useProjectStore.getState().hydrateProjectArtifacts(activeSessionId || undefined);
         setChatMessages((prev) => [
           ...prev,
           {
@@ -945,39 +1082,7 @@ export function App() {
 
   // 全体一键 AI 美化
   const handleOptimizePresentationLocally = () => {
-    setBusy(true);
-    setThoughtProgress(10);
-    setThoughtProcess([
-      "分析整套幻灯片大纲框架...",
-      "评估横向对齐率与风格模版协调性...",
-      "重构全局坐标轴比例...",
-    ]);
-
-    const progressTimer = setInterval(() => {
-      setThoughtProgress((p) => (p >= 85 ? 85 : p + 25));
-    }, 300);
-
-    setTimeout(() => {
-      clearInterval(progressTimer);
-      setThoughtProgress(100);
-      
-      if (presentation) {
-        const updatedSlides = presentation.slides.map((s) => {
-          const elements = s.elements.map((el) => {
-            return {
-              ...el,
-              x: 120,
-              width: 1040,
-            };
-          });
-          return { ...s, elements };
-        });
-        setPresentation({ ...presentation, slides: updatedSlides });
-      }
-      setBusy(false);
-      setThoughtProcess([]);
-      triggerToast("✨ 全局演示文稿一键美化优化完成！");
-    }, 1200);
+    void startAgent("一键美化全局演示文稿，微调排版比例与风格一致性");
   };
 
   // 修改会话消息文本内容
@@ -996,8 +1101,8 @@ export function App() {
     }
   };
 
-  const handleSimulateLogoUpload = () => {
-    setLogoUrl("https://www.google.com/images/branding/googlelogo/1x/googlelogo_light_color_272x92dp.png");
+  const handleLogoUpload = (url: string) => {
+    setLogoUrl(url);
     triggerToast("🖼️ 品牌 Logo 已应用至演示文稿模板");
   };
 
@@ -1181,6 +1286,9 @@ export function App() {
                     onChangeRequest={setRequest}
                     onSubmitRequest={() => void startAgent()}
                     busy={busy}
+                    activeRunId={activeRunId}
+                    onCancelRun={handleCancelRun}
+                    onRetry={handleRetryMessage}
                     onResolveApproval={resolveApproval}
                     
                     models={models}
@@ -1223,7 +1331,7 @@ export function App() {
                 selectedPalette={selectedPalette}
                 setSelectedPalette={setSelectedPalette}
                 logoUrl={logoUrl}
-                onSimulateLogoUpload={handleSimulateLogoUpload}
+                onLogoUpload={handleLogoUpload}
                 onRemoveLogo={handleRemoveLogo}
                 
                 autoDownload={autoDownload}

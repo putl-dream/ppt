@@ -18,8 +18,31 @@ export class RuntimeNormalizer {
     }
 
     const type = raw.type;
-    if (type !== "message" && type !== "ask_user" && type !== "command_proposal") {
-      throw new Error(`Invalid model response type: '${type}'. Expected 'message', 'ask_user' or 'command_proposal'.`);
+    if (type !== "message" && type !== "ask_user" && type !== "command_proposal" && type !== "artifact_patch") {
+      throw new Error(`Invalid model response type: '${type}'. Expected 'message', 'ask_user', 'command_proposal' or 'artifact_patch'.`);
+    }
+
+    if (type === "artifact_patch") {
+      if (typeof raw.targetPath !== "string" || raw.targetPath.trim() === "") {
+        throw new Error("Validation error: 'artifact_patch' response must contain a non-empty string in 'targetPath'.");
+      }
+      if (typeof raw.patch !== "string" || raw.patch.trim() === "") {
+        throw new Error("Validation error: 'artifact_patch' response must contain a non-empty string in 'patch'.");
+      }
+      if (typeof raw.summary !== "string" || raw.summary.trim() === "") {
+        throw new Error("Validation error: 'artifact_patch' response must contain a non-empty string in 'summary'.");
+      }
+      const risk = raw.risk ?? "low";
+      if (risk !== "low" && risk !== "medium" && risk !== "high") {
+        throw new Error(`Validation error: 'artifact_patch' contains invalid risk level: '${risk}'. Expected 'low', 'medium' or 'high'.`);
+      }
+      return {
+        type: "artifact_patch",
+        targetPath: raw.targetPath,
+        patch: raw.patch,
+        summary: raw.summary,
+        risk: risk,
+      };
     }
 
     if (type === "message") {

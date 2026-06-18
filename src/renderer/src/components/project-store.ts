@@ -33,6 +33,7 @@ export interface ProposedPatch {
   contentBefore: string;
   contentAfter: string;
   summary?: string;
+  threadId?: string;
 }
 
 export interface ActiveProject {
@@ -183,10 +184,10 @@ const DEPENDENCY_MAP: Record<ArtifactId, ArtifactId[]> = {
   deck: [],
 };
 
-const writeTimers = new Map<string, ReturnType<typeof setTimeout>>();
+const writeTimers = new Map<string, any>();
 
 function getDesktopApi() {
-  return typeof window === "undefined" ? undefined : window.desktopApi;
+  return typeof window === "undefined" ? undefined : (window as any).desktopApi;
 }
 
 function createArtifactShell(
@@ -393,7 +394,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         writeTimers.delete(timerKey);
         void api
           .writeProjectArtifact(project.id, artifact.path, content)
-          .then((result) => {
+          .then((result: ProjectArtifactWriteResult) => {
             set((state) => {
               if (!state.activeProject || state.activeProject.id !== project.id) return {};
               return {
@@ -464,7 +465,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 
     void api
       .writeProjectArtifact(project.id, artifact.path, artifact.content)
-      .then((result) => {
+      .then((result: ProjectArtifactWriteResult) => {
         set((state) => {
           if (!state.activeProject || state.activeProject.id !== project.id) return {};
           return {
@@ -476,7 +477,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         });
         return api.markProjectArtifactStatus(project.id, id, "ready");
       })
-      .then((artifact) => {
+      .then((artifact: ProjectArtifact) => {
         set((state) => {
           if (!state.activeProject || state.activeProject.id !== project.id) return {};
           return {
@@ -494,24 +495,48 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
           };
         });
       })
-      .catch((error) => {
+      .catch((error: unknown) => {
         console.error(`标记项目产物状态失败: ${id}`, error);
       });
   },
 
   proposePatch: (patch) => set({ proposedPatch: patch }),
 
-  acceptPatch: () => {
+  acceptPatch: async () => {
     const state = get();
     if (!state.activeProject || !state.proposedPatch) return;
     const targetId = findArtifactIdByPath(state.proposedPatch.targetFile);
     const contentAfter = state.proposedPatch.contentAfter;
+    const threadId = state.proposedPatch.threadId;
     set({ proposedPatch: null });
     if (!targetId) return;
     get().updateArtifactContent(targetId, contentAfter, "agent");
+
+    const api = getDesktopApi();
+    if (api && threadId) {
+      try {
+        await api.resumeAgentRun(threadId, true);
+      } catch (error) {
+        console.error("Failed to resume agent run after accepting patch:", error);
+      }
+    }
   },
 
-  rejectPatch: () => set({ proposedPatch: null }),
+  rejectPatch: async () => {
+    const state = get();
+    if (!state.proposedPatch) return;
+    const threadId = state.proposedPatch.threadId;
+    set({ proposedPatch: null });
+
+    const api = getDesktopApi();
+    if (api && threadId) {
+      try {
+        await api.resumeAgentRun(threadId, false);
+      } catch (error) {
+        console.error("Failed to resume agent run after rejecting patch:", error);
+      }
+    }
+  },
 
   resetProject: () => {
     for (const timer of writeTimers.values()) {

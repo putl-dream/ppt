@@ -17,7 +17,7 @@ interface SettingsConsoleProps {
   selectedPalette: string;
   setSelectedPalette: (val: string) => void;
   logoUrl: string | null;
-  onSimulateLogoUpload: () => void;
+  onLogoUpload: (url: string) => void;
   onRemoveLogo: () => void;
 
   // Workflow options
@@ -54,7 +54,7 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
   selectedPalette,
   setSelectedPalette,
   logoUrl,
-  onSimulateLogoUpload,
+  onLogoUpload,
   onRemoveLogo,
   autoDownload,
   setAutoDownload,
@@ -103,18 +103,40 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
   const pathD = `M ${points.map(p => `${p.x} ${p.y}`).join(" L ")}`;
   const areaD = `${pathD} L ${points[points.length - 1].x} ${chartHeight} L ${points[0].x} ${chartHeight} Z`;
 
-  // Custom directory path choice simulation
-  const handleBrowsePath = () => {
-    const pathChoice = prompt("请输入您想自定义的本地默认保存路径：", localStoragePath);
-    if (pathChoice !== null) {
-      setLocalStoragePath(pathChoice);
-      triggerToast(`📁 路径已更新为: ${pathChoice}`);
+  // Custom directory path choice via native dialogue
+  const handleBrowsePath = async () => {
+    try {
+      const pathChoice = await window.desktopApi.selectDirectory(localStoragePath);
+      if (pathChoice) {
+        setLocalStoragePath(pathChoice);
+        triggerToast(`📁 保存路径已更新为: ${pathChoice}`);
+      }
+    } catch (err) {
+      triggerToast(`📁 选择路径失败: ${err instanceof Error ? err.message : String(err)}`);
     }
   };
 
   const handleResetPath = () => {
     setLocalStoragePath("D:/Coding/ppt/workspace");
     triggerToast("📁 保存路径已重置为默认路径");
+  };
+
+  const logoFileInputRef = React.useRef<HTMLInputElement>(null);
+
+  const handleLogoUploadReal = () => {
+    logoFileInputRef.current?.click();
+  };
+
+  const handleLogoFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const result = event.target?.result as string;
+        onLogoUpload(result);
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
   return (
@@ -260,14 +282,14 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
             <div className="settings-card">
               <h4 style={{ margin: "0 0 12px 0", fontSize: "14px", fontWeight: "600" }}>账户操作</h4>
               <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-                <button className="optimize-slide-btn" style={{ margin: 0, padding: "8px 16px" }} onClick={() => triggerToast("⚡ 正在前往额度中心充值...")}>
-                  充值算力配额
+                <button className="optimize-slide-btn" style={{ margin: 0, padding: "8px 16px", opacity: 0.5, cursor: "not-allowed" }} disabled={true}>
+                  充值算力配额 (暂未开放)
                 </button>
-                <button className="secondary-btn" style={{ margin: 0, padding: "8px 16px" }} onClick={() => triggerToast("💎 正在获取升级方案...")}>
-                  升级订阅计划
+                <button className="secondary-btn" style={{ margin: 0, padding: "8px 16px", opacity: 0.5, cursor: "not-allowed" }} disabled={true}>
+                  升级订阅计划 (暂未开放)
                 </button>
-                <button className="secondary-btn" style={{ margin: 0, padding: "8px 16px" }} onClick={() => triggerToast("📋 已拉取近期详细消费清单")}>
-                  查询消费账单
+                <button className="secondary-btn" style={{ margin: 0, padding: "8px 16px", opacity: 0.5, cursor: "not-allowed" }} disabled={true}>
+                  查询消费账单 (暂未开放)
                 </button>
               </div>
             </div>
@@ -312,16 +334,16 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
                 </div>
 
                 {/* Cloud sync */}
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: "1px solid var(--border-glass)", paddingTop: "14px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: "1px solid var(--border-glass)", paddingTop: "14px", opacity: 0.6 }}>
                   <div>
-                    <div style={{ fontSize: "13px", fontWeight: "500", color: "var(--text-primary)" }}>自动同步备份至云端空间</div>
-                    <div style={{ fontSize: "11px", color: "var(--text-muted)" }}>实时将每一次 Rev 快照与大纲文档上传至安全的加密云备份底座。</div>
+                    <div style={{ fontSize: "13px", fontWeight: "500", color: "var(--text-primary)" }}>自动同步备份至云端空间 (云端功能暂不可用)</div>
+                    <div style={{ fontSize: "11px", color: "var(--text-muted)" }}>实时将每一次 Rev 快照与大纲文档上传至安全的加密云备份底座。（本功能暂不可用）</div>
                   </div>
-                  <label className="toggle-switch">
+                  <label className="toggle-switch" style={{ pointerEvents: "none" }}>
                     <input
                       type="checkbox"
-                      checked={autoCloudSync}
-                      onChange={(e) => setAutoCloudSync(e.target.checked)}
+                      checked={false}
+                      disabled={true}
                     />
                     <span className="toggle-slider"></span>
                   </label>
@@ -456,9 +478,16 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
                       </button>
                     </div>
                   ) : (
-                    <div className="logo-dropzone" onClick={onSimulateLogoUpload} style={{ padding: "16px", width: "100%" }}>
+                    <div className="logo-dropzone" onClick={handleLogoUploadReal} style={{ padding: "16px", width: "100%" }}>
+                      <input
+                        type="file"
+                        ref={logoFileInputRef}
+                        onChange={handleLogoFileChange}
+                        accept="image/*"
+                        style={{ display: "none" }}
+                      />
                       <SparklesIcon size={20} className="upload-icon" />
-                      <span>点击一键注入默认标志 (Google Watermark)</span>
+                      <span>点击选择并上传品牌 Logo 标志</span>
                       <span className="sub">Agent 自动排版时将置于页面右上角</span>
                     </div>
                   )}

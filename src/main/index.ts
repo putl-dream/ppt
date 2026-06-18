@@ -45,6 +45,8 @@ function createSessionRuntime(
     commandBus,
     new AgentRuntime(registry, agentGateway),
     new CommitGate(new RiskPolicy()),
+    snapshot.session.id,
+    sessionStore,
   );
   return {
     commandBus,
@@ -96,12 +98,16 @@ function formatArtifactContext(path: string, content: string): string {
   ].join("\n");
 }
 
+let sessionStore: FileSessionStore;
+
 app.whenReady().then(async () => {
   Menu.setApplicationMenu(null);
-  const sessionStore = new FileSessionStore(join(app.getPath("userData"), "sessions.json"));
+  sessionStore = new FileSessionStore(join(app.getPath("userData"), "sessions.json"));
   await sessionStore.initialize();
 
   const runtimes = new Map<string, SessionRuntime>();
+  const sessionActiveRuns = new Map<string, string>(); // sessionId -> runId
+  const activeRuns = new Map<string, AbortController>(); // runId -> AbortController
   let activeSessionId = sessionStore.getBootstrap().activeSession.session.id;
 
   const ensureRuntime = async (snapshot: SessionSnapshot): Promise<SessionRuntime> => {
@@ -181,18 +187,50 @@ app.whenReady().then(async () => {
   };
 
   const buildStructuredAgentPrompt = async (request: AgentRunRequest): Promise<string> => {
-    const targetPath = request.targetPath
-      ?? (request.targetArtifactId ? resolvePrimaryArtifactPath(request.targetArtifactId) : undefined)
-      ?? primaryProjectArtifactPaths[request.stage];
-    const target = targetPath
-      ? await readAgentArtifactContext(request.sessionId, targetPath)
-      : undefined;
-    const referenceKeys = [...new Set(request.referencedArtifactIds ?? [])]
-      .map(resolvePrimaryArtifactPath)
-      .filter((path) => path !== target?.path);
-    const references = await Promise.all(
-      referenceKeys.map((path) => readAgentArtifactContext(request.sessionId, path)),
-    );
+    let target: { path: string; content: string } | undefined = undefined;
+    let references: Array<{ path: string; content: string }> = [];
+
+    if (request.stage === "deck") {
+      const targetPath = "deck/snapshot.json";
+      try {
+        target = await readAgentArtifactContext(request.sessionId, targetPath);
+      } catch (e) {
+        // ignore if not present
+      }
+
+      const upstreams = [
+        "brief.md",
+        "outline.md",
+        "research/notes.md",
+        "slides/storyboard.json",
+        "design/theme.json",
+      ];
+      const loadedRefs = await Promise.all(
+        upstreams.map(async (path) => {
+          try {
+            return await readAgentArtifactContext(request.sessionId, path);
+          } catch (e) {
+            return undefined;
+          }
+        })
+      );
+      references = loadedRefs.filter((r): r is { path: string; content: string } => r !== undefined);
+    } else {
+      const targetPath = request.targetPath
+        ?? (request.targetArtifactId ? resolvePrimaryArtifactPath(request.targetArtifactId) : undefined)
+        ?? primaryProjectArtifactPaths[request.stage];
+      target = targetPath
+        ? await readAgentArtifactContext(request.sessionId, targetPath)
+        : undefined;
+
+      const referenceKeys = [...new Set(request.referencedArtifactIds ?? [])]
+        .map(resolvePrimaryArtifactPath)
+        .filter((path) => path !== target?.path);
+      const loadedRefs = await Promise.all(
+        referenceKeys.map((path) => readAgentArtifactContext(request.sessionId, path)),
+      );
+      references = loadedRefs;
+    }
 
     return [
       "You are operating inside a file-native PPT creation workspace.",
@@ -226,8 +264,8 @@ app.whenReady().then(async () => {
           ]
         : []),
       request.stage === "deck"
-        ? "For deck work, propose PresentationCommand changes for review."
-        : "For artifact work, reason about the target file. Artifact patch generation is handled by the artifact patch protocol.",
+        ? "For deck work, you MUST only return a command_proposal containing PresentationCommands. You are not allowed to return artifact_patch or ordinary message content as the final outcome."
+        : "For artifact work, you MUST return an artifact_patch containing the proposed changes. Do not return command_proposal."
     ].join("\n");
   };
 
@@ -348,6 +386,31 @@ app.whenReady().then(async () => {
       return filePath;
     },
   );
+  ipcMain.handle("dialog:select-directory", async (event, defaultPath?: string) => {
+    const window = BrowserWindow.fromWebContents(event.sender);
+    const { filePaths, canceled } = window
+      ? await dialog.showOpenDialog(window, {
+          properties: ["openDirectory"],
+          defaultPath,
+        })
+      : await dialog.showOpenDialog({
+          properties: ["openDirectory"],
+          defaultPath,
+        });
+    if (canceled || !filePaths || filePaths.length === 0) return null;
+    return filePaths[0];
+  });
+
+  ipcMain.handle("agent:cancel", async (_, runId: string) => {
+    const controller = activeRuns.get(runId);
+    if (controller) {
+      controller.abort();
+      logger.info("agent.run.cancelled", { runId });
+      return true;
+    }
+    return false;
+  });
+
   ipcMain.handle(
     "agent:start",
     async (
@@ -359,6 +422,17 @@ app.whenReady().then(async () => {
     ) => {
       const request = agentRunRequestSchema.parse(rawRequest);
       const sessionId = request.sessionId;
+
+      const activeRunId = sessionActiveRuns.get(sessionId);
+      if (activeRunId && activeRuns.has(activeRunId)) {
+        throw new Error("Concurrency Conflict: An active agent run is already in progress in this session.");
+      }
+
+      const currentRunId = runId || crypto.randomUUID();
+      const controller = new AbortController();
+      activeRuns.set(currentRunId, controller);
+      sessionActiveRuns.set(sessionId, currentRunId);
+
       const runtime = await getRuntimeForSession(sessionId);
       const settings = input ? agentModelSettingsSchema.parse(input) : undefined;
       const executionStrategy = strategy
@@ -366,43 +440,56 @@ app.whenReady().then(async () => {
         : "REQUEST_APPROVAL";
       const selection = settings ? agentGateway.configure(settings) : undefined;
       const emit = (streamEvent: AgentServiceEvent) => {
-        if (runId) event.sender.send("agent:stream", { ...streamEvent, runId });
+        if (currentRunId) event.sender.send("agent:stream", { ...streamEvent, runId: currentRunId });
       };
-      const result = await runAgentOperation(
-        "start",
-        sessionId,
-        runId,
-        {
-          ...requestSummary(request.prompt),
-          stage: request.stage,
-          intent: request.intent,
-          targetPath: request.targetPath,
-          targetArtifactId: request.targetArtifactId,
-          referencedArtifactIds: request.referencedArtifactIds,
-          provider: selection?.provider,
-          model: selection?.model,
-          executionStrategy,
-        },
-        async () => {
-          const structuredPrompt = await buildStructuredAgentPrompt(request);
-          const messageHistory = sessionStore.getAgentMessageHistory(sessionId, request.prompt);
-          const runResult = await runtime.agentService.start(
-            structuredPrompt,
-            selection,
+
+      try {
+        const result = await runAgentOperation(
+          "start",
+          sessionId,
+          currentRunId,
+          {
+            ...requestSummary(request.prompt),
+            stage: request.stage,
+            intent: request.intent,
+            targetPath: request.targetPath,
+            targetArtifactId: request.targetArtifactId,
+            referencedArtifactIds: request.referencedArtifactIds,
+            provider: selection?.provider,
+            model: selection?.model,
             executionStrategy,
-            emit,
-            request.editorContext,
-            messageHistory,
-          );
-          if (runResult.status === "completed" || runResult.status === "rejected") {
-            await persistPresentation(sessionId, runtime);
-          }
-          return runResult;
-        },
-      );
-      return result;
+          },
+          async () => {
+            const structuredPrompt = await buildStructuredAgentPrompt(request);
+            const messageHistory = sessionStore.getAgentMessageHistory(sessionId, request.prompt);
+            const runResult = await runtime.agentService.start(
+              structuredPrompt,
+              selection,
+              executionStrategy,
+              emit,
+              request.editorContext,
+              messageHistory,
+              controller.signal,
+            );
+            if (runResult.status === "completed") {
+              await persistPresentation(sessionId, runtime);
+              await sessionStore.markProjectArtifactStatus(sessionId, "deck", "ready");
+            } else if (runResult.status === "rejected") {
+              await persistPresentation(sessionId, runtime);
+            }
+            return runResult;
+          },
+        );
+        return result;
+      } finally {
+        activeRuns.delete(currentRunId);
+        if (sessionActiveRuns.get(sessionId) === currentRunId) {
+          sessionActiveRuns.delete(sessionId);
+        }
+      }
     },
   );
+
   ipcMain.handle("agent:continue", async (
     event,
     threadId: string,
@@ -411,37 +498,61 @@ app.whenReady().then(async () => {
   ) => {
     const request = agentRunRequestSchema.parse(rawRequest);
     const sessionId = request.sessionId;
+
+    const activeRunId = sessionActiveRuns.get(sessionId);
+    if (activeRunId && activeRuns.has(activeRunId)) {
+      throw new Error("Concurrency Conflict: An active agent run is already in progress in this session.");
+    }
+
+    const currentRunId = runId || crypto.randomUUID();
+    const controller = new AbortController();
+    activeRuns.set(currentRunId, controller);
+    sessionActiveRuns.set(sessionId, currentRunId);
+
     const runtime = await getRuntimeForSession(sessionId);
-    const result = await runAgentOperation(
-      "continue-outline",
-      sessionId,
-      runId,
-      {
-        threadId,
-        ...requestSummary(request.prompt),
-        stage: request.stage,
-        intent: request.intent,
-        targetPath: request.targetPath,
-        targetArtifactId: request.targetArtifactId,
-        referencedArtifactIds: request.referencedArtifactIds,
-      },
-      async () => {
-        const structuredPrompt = await buildStructuredAgentPrompt(request);
-        const runResult = await runtime.agentService.continueAgentRun(
+    const emit = (streamEvent: AgentServiceEvent) => {
+      if (currentRunId) event.sender.send("agent:stream", { ...streamEvent, runId: currentRunId });
+    };
+
+    try {
+      const result = await runAgentOperation(
+        "continue-agent-run",
+        sessionId,
+        currentRunId,
+        {
           threadId,
-          structuredPrompt,
-          (streamEvent) => {
-            if (runId) event.sender.send("agent:stream", { ...streamEvent, runId });
-          },
-          request.editorContext,
-        );
-        if (runResult.status === "completed" || runResult.status === "rejected") {
-          await persistPresentation(sessionId, runtime);
-        }
-        return runResult;
-      },
-    );
-    return result;
+          ...requestSummary(request.prompt),
+          stage: request.stage,
+          intent: request.intent,
+          targetPath: request.targetPath,
+          targetArtifactId: request.targetArtifactId,
+          referencedArtifactIds: request.referencedArtifactIds,
+        },
+        async () => {
+          const structuredPrompt = await buildStructuredAgentPrompt(request);
+          const runResult = await runtime.agentService.continueAgentRun(
+            threadId,
+            structuredPrompt,
+            emit,
+            request.editorContext,
+            controller.signal,
+          );
+          if (runResult.status === "completed") {
+            await persistPresentation(sessionId, runtime);
+            await sessionStore.markProjectArtifactStatus(sessionId, "deck", "ready");
+          } else if (runResult.status === "rejected") {
+            await persistPresentation(sessionId, runtime);
+          }
+          return runResult;
+        },
+      );
+      return result;
+    } finally {
+      activeRuns.delete(currentRunId);
+      if (sessionActiveRuns.get(sessionId) === currentRunId) {
+        sessionActiveRuns.delete(sessionId);
+      }
+    }
   });
   ipcMain.handle("agent:resume", async (_, threadId: string, approved: boolean) => {
     const sessionId = activeSessionId;
@@ -453,7 +564,12 @@ app.whenReady().then(async () => {
       { threadId, approved },
       async () => {
         const runResult = await runtime.agentService.resume(threadId, approved);
-        await persistPresentation(sessionId, runtime);
+        if (runResult.status === "completed") {
+          await persistPresentation(sessionId, runtime);
+          await sessionStore.markProjectArtifactStatus(sessionId, "deck", "ready");
+        } else {
+          await persistPresentation(sessionId, runtime);
+        }
         return runResult;
       },
     );

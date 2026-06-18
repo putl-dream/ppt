@@ -200,7 +200,7 @@ describe("AgentService", () => {
     expect(attempts).toBe(1);
   });
 
-  it("asks for outline confirmation before generating a vague presentation request", async () => {
+  it("asks for confirmation before generating a vague presentation request", async () => {
     const bus = new CommandBus(createStarterPresentation());
     const agent = new AgentService(bus);
 
@@ -212,7 +212,7 @@ describe("AgentService", () => {
     expect(result.threadId).toBeDefined();
   });
 
-  it("generates commands only after the proposed outline is confirmed", async () => {
+  it("generates commands only after the proposed structure is confirmed", async () => {
     const bus = new CommandBus(createStarterPresentation());
     const agent = new AgentService(bus);
 
@@ -233,7 +233,7 @@ describe("AgentService", () => {
     expect(bus.getSnapshot().revision).toBe(0);
   });
 
-  it("passes the current draft outline into each follow-up turn", async () => {
+  it("passes the current draft structure into each follow-up turn", async () => {
     const bus = new CommandBus(createStarterPresentation());
     const seenDrafts: Array<unknown> = [];
     const outlinePlanner: AgentOutlinePlanner = {
@@ -272,7 +272,7 @@ describe("AgentService", () => {
     });
   });
 
-  it("restores a persisted outline conversation after the runtime restarts", async () => {
+  it("restores a persisted structure conversation after the runtime restarts", async () => {
     const bus = new CommandBus(createStarterPresentation());
     const seenMessages: Array<unknown> = [];
     const seenDrafts: Array<unknown> = [];

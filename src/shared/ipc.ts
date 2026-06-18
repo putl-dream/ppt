@@ -10,16 +10,6 @@ import type {
 } from "./session";
 import { projectStageIds } from "./project";
 
-export interface PresentationOutline {
-  title: string;
-  audience?: string;
-  objective?: string;
-  slides: Array<{
-    title: string;
-    keyPoints: string[];
-  }>;
-}
-
 export interface AgentApprovalRequest {
   threadId: string;
   summary: string;
@@ -41,15 +31,6 @@ export interface AgentApprovalRequest {
     };
   };
   preview?: Presentation;
-}
-
-export interface AgentOutlineRequest {
-  threadId: string;
-  message: string;
-  outline?: PresentationOutline;
-  missingInformation: string[];
-  model?: AgentModelSelection;
-  executionStrategy?: AgentExecutionStrategy;
 }
 
 export interface AgentEditorContext {
@@ -113,6 +94,41 @@ export type AgentStreamEvent =
     runId: string;
     type: "text-chunk";
     chunk: string;
+  }
+  | {
+    runId: string;
+    type: "stage-started";
+    message: string;
+    stage: string;
+  }
+  | {
+    runId: string;
+    type: "artifact-read";
+    message: string;
+    path: string;
+  }
+  | {
+    runId: string;
+    type: "artifact-diff-ready";
+    message: string;
+    path: string;
+  }
+  | {
+    runId: string;
+    type: "tool-started";
+    message: string;
+    toolName: string;
+  }
+  | {
+    runId: string;
+    type: "tool-finished";
+    message: string;
+    toolName: string;
+  }
+  | {
+    runId: string;
+    type: "approval-waiting";
+    message: string;
   };
 
 export type AgentRunResult =
@@ -204,6 +220,8 @@ export interface DesktopApi {
     presentation: Presentation,
     options: ExportPresentationOptions,
   ): Promise<string | null>;
+  selectDirectory(defaultPath?: string): Promise<string | null>;
+  cancelAgentRun(runId: string): Promise<boolean>;
 }
 
 export interface ExportPresentationOptions {

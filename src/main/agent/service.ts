@@ -1,17 +1,21 @@
 import type { AgentExecutionStrategy, AgentModelSelection } from "@shared/agent";
 import type { CommandBus, PresentationCommand } from "@shared/commands";
-import type { AgentRunResult } from "@shared/ipc";
-import type { PresentationOutline } from "@shared/ipc";
-import type { AgentEditorContext } from "@shared/ipc";
+import type { AgentEditorContext, AgentRunResult, ArtifactDiff } from "@shared/ipc";
+import type { ProjectArtifact } from "@shared/session";
 import type { AgentConversationMessage } from "@shared/session-recovery";
 import { CommitGate, type CommitGateResult } from "./gate/commit-gate";
 import { AgentRuntime } from "./runtime/agent-runtime";
-import { outlineToRequest } from "./outline-planner";
 
 export type AgentServiceEvent =
   | { type: "request-status"; message: string; progress: number }
   | { type: "workflow-progress"; message: string; progress: number }
-  | { type: "text-chunk"; chunk: string };
+  | { type: "text-chunk"; chunk: string }
+  | { type: "stage-started"; message: string; stage: string }
+  | { type: "artifact-read"; message: string; path: string }
+  | { type: "artifact-diff-ready"; message: string; path: string }
+  | { type: "tool-started"; message: string; toolName: string }
+  | { type: "tool-finished"; message: string; toolName: string }
+  | { type: "approval-waiting"; message: string };
 
 export type AgentServiceEventListener = (event: AgentServiceEvent) => void;
 
@@ -31,14 +35,30 @@ type ContinuedConversation = {
 };
 
 /** Coordinates Runtime, Commit Gate, approval persistence and CommandBus writes. */
+export type PendingPatch = {
+  targetPath: string;
+  summary: string;
+  before: string;
+  after: string;
+  risk?: "low" | "medium" | "high";
+};
+
+/** Coordinates Runtime, Commit Gate, approval persistence and CommandBus writes. */
 export class AgentService {
   private readonly pendingApprovals = new Map<string, PendingApproval>();
+  private readonly pendingPatches = new Map<string, PendingPatch>();
   private readonly conversations = new Map<string, ContinuedConversation>();
 
   constructor(
     private readonly commandBus: CommandBus,
     private readonly runtime: AgentRuntime,
     private readonly commitGate: CommitGate,
+    private readonly sessionId?: string,
+    private readonly fileStore?: {
+      readProjectArtifact(sessionId: string, artifactIdOrPath: string): Promise<{ content?: string }>;
+      writeProjectArtifact(sessionId: string, relativePath: string, content: string): Promise<{ changed: boolean; staleArtifactIds: string[]; changedArtifactId?: string }>;
+      getProjectArtifactDiff(sessionId: string, relativePath: string, nextContent: string): Promise<ArtifactDiff>;
+    },
   ) {}
 
   restoreAgentRunConversation(
@@ -61,9 +81,10 @@ export class AgentService {
     listener?: AgentServiceEventListener,
     editorContext?: AgentEditorContext,
     messageHistory: AgentConversationMessage[] = [],
+    signal?: AbortSignal,
   ): Promise<AgentRunResult> {
     const threadId = crypto.randomUUID();
-    return this.run(threadId, request, model, executionStrategy, messageHistory, listener, editorContext, "any");
+    return this.run(threadId, request, model, executionStrategy, messageHistory, listener, editorContext, "any", false, signal);
   }
 
   async continueAgentRun(
@@ -71,6 +92,7 @@ export class AgentService {
     request: string,
     listener?: AgentServiceEventListener,
     editorContext?: AgentEditorContext,
+    signal?: AbortSignal,
   ): Promise<AgentRunResult> {
     const conversation = this.conversations.get(threadId);
     if (!conversation) throw new Error("Agent conversation not found or already completed.");
@@ -85,6 +107,7 @@ export class AgentService {
       editorContext,
       "any",
       true,
+      signal,
     );
   }
 
@@ -98,8 +121,16 @@ export class AgentService {
     editorContext?: AgentEditorContext,
     requiredOutcome: "any" | "command_proposal" = "any",
     requestAlreadyInHistory = false,
+    signal?: AbortSignal,
   ): Promise<AgentRunResult> {
-    listener?.({ type: "request-status", message: "正在处理您的请求...", progress: 10 });
+    if (signal?.aborted) {
+      throw new Error("Run aborted by user.");
+    }
+    listener?.({
+      type: "stage-started",
+      message: `开始处理您的请求...`,
+      stage: requiredOutcome,
+    });
     const before = this.commandBus.getSnapshot();
     const runtimeResult = await this.runtime.run({
       threadId,
@@ -110,6 +141,10 @@ export class AgentService {
       model,
       messageHistory,
       requiredOutcome,
+      signal,
+      onProgress: (ev) => {
+        listener?.(ev as any);
+      },
       ...(listener && {
         onStreamChunk: (chunk: string) => {
           listener({ type: "text-chunk", chunk });
@@ -140,6 +175,56 @@ export class AgentService {
       };
     }
 
+    if (runtimeResult.type === "artifact_patch") {
+      if (!this.fileStore || !this.sessionId) {
+        throw new Error("File store or session ID is not configured for project artifact operations.");
+      }
+
+      listener?.({
+        type: "artifact-read",
+        message: `读取文件: ${runtimeResult.targetPath}`,
+        path: runtimeResult.targetPath,
+      });
+      const beforeResult = await this.fileStore.readProjectArtifact(this.sessionId, runtimeResult.targetPath);
+      const beforeContent = beforeResult.content ?? "";
+
+      listener?.({
+        type: "artifact-diff-ready",
+        message: `对比文件差异: ${runtimeResult.targetPath}`,
+        path: runtimeResult.targetPath,
+      });
+      const diffResult = await this.fileStore.getProjectArtifactDiff(
+        this.sessionId,
+        runtimeResult.targetPath,
+        runtimeResult.patch,
+      );
+
+      this.pendingPatches.set(threadId, {
+        targetPath: runtimeResult.targetPath,
+        summary: runtimeResult.summary,
+        before: beforeContent,
+        after: runtimeResult.patch,
+        risk: runtimeResult.risk,
+      });
+
+      this.conversations.delete(threadId);
+      listener?.({ type: "approval-waiting", message: "内容修改方案等待确认。" });
+
+      return {
+        status: "artifact-patch-required",
+        patch: {
+          threadId,
+          targetPath: runtimeResult.targetPath,
+          summary: runtimeResult.summary,
+          before: beforeContent,
+          after: runtimeResult.patch,
+          diff: diffResult,
+          risk: runtimeResult.risk,
+          staleArtifactIds: [],
+        },
+      };
+    }
+
     listener?.({ type: "workflow-progress", message: "正在进行安全校验...", progress: 70 });
     const gate = await this.commitGate.evaluate(before, runtimeResult.commands, runtimeResult.risk);
     if (!gate.success || !gate.preview) {
@@ -164,7 +249,7 @@ export class AgentService {
       gate,
     });
     this.conversations.delete(threadId);
-    listener?.({ type: "workflow-progress", message: "修改方案等待确认。", progress: 100 });
+    listener?.({ type: "approval-waiting", message: "修改方案等待确认。" });
     return {
       status: "approval-required",
       approval: {
@@ -180,34 +265,67 @@ export class AgentService {
   }
 
   async resume(threadId: string, approved: boolean): Promise<AgentRunResult> {
-    const pending = this.pendingApprovals.get(threadId);
-    if (!pending) throw new Error("Approval request not found or already completed.");
+    const pendingApproval = this.pendingApprovals.get(threadId);
+    if (pendingApproval) {
+      if (!approved) {
+        this.pendingApprovals.delete(threadId);
+        this.runtime.clearSession(threadId);
+        this.conversations.delete(threadId);
+        return { status: "rejected", presentation: this.commandBus.getSnapshot() };
+      }
 
-    if (!approved) {
+      const current = this.commandBus.getSnapshot();
+      if (current.revision !== pendingApproval.baseRevision) {
+        this.pendingApprovals.delete(threadId);
+        this.runtime.clearSession(threadId);
+        throw new Error("The presentation changed after preview. Generate a new proposal before applying.");
+      }
+      const gate = await this.commitGate.evaluate(current, pendingApproval.commands, pendingApproval.modelRisk);
+      if (!gate.success) {
+        this.pendingApprovals.delete(threadId);
+        this.runtime.clearSession(threadId);
+        throw new Error(`Commit Gate rejected approved proposal: ${gate.errors.join("; ")}`);
+      }
+
+      this.commandBus.executeMany(pendingApproval.commands);
       this.pendingApprovals.delete(threadId);
       this.runtime.clearSession(threadId);
       this.conversations.delete(threadId);
-      return { status: "rejected", presentation: this.commandBus.getSnapshot() };
+      return { status: "completed", presentation: this.commandBus.getSnapshot() };
     }
 
-    const current = this.commandBus.getSnapshot();
-    if (current.revision !== pending.baseRevision) {
-      this.pendingApprovals.delete(threadId);
+    const pendingPatch = this.pendingPatches.get(threadId);
+    if (pendingPatch) {
+      this.pendingPatches.delete(threadId);
       this.runtime.clearSession(threadId);
-      throw new Error("The presentation changed after preview. Generate a new proposal before applying.");
-    }
-    const gate = await this.commitGate.evaluate(current, pending.commands, pending.modelRisk);
-    if (!gate.success) {
-      this.pendingApprovals.delete(threadId);
-      this.runtime.clearSession(threadId);
-      throw new Error(`Commit Gate rejected approved proposal: ${gate.errors.join("; ")}`);
+      this.conversations.delete(threadId);
+
+      if (!approved) {
+        return { status: "rejected", presentation: this.commandBus.getSnapshot() };
+      }
+
+      if (!this.fileStore || !this.sessionId) {
+        throw new Error("File store or session ID is not configured for project artifact operations.");
+      }
+
+      const writeResult = await this.fileStore.writeProjectArtifact(
+        this.sessionId,
+        pendingPatch.targetPath,
+        pendingPatch.after,
+      );
+
+      return {
+        status: "artifact-updated",
+        write: {
+          path: pendingPatch.targetPath,
+          changed: writeResult.changed,
+          changedArtifactId: writeResult.changedArtifactId,
+          staleArtifactIds: writeResult.staleArtifactIds,
+        },
+      };
     }
 
-    this.commandBus.executeMany(pending.commands);
-    this.pendingApprovals.delete(threadId);
-    this.runtime.clearSession(threadId);
-    this.conversations.delete(threadId);
-    return { status: "completed", presentation: this.commandBus.getSnapshot() };
+    throw new Error("Approval request or pending patch not found or already completed.");
   }
 }
 

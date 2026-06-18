@@ -33,6 +33,13 @@ export type AgentRuntimeResult =
       commands: PresentationCommand[];
       risk: AgentRuntimeRisk;
       assumptions?: string[];
+    }
+  | {
+      type: "artifact_patch";
+      targetPath: string;
+      patch: string;
+      summary: string;
+      risk?: AgentRuntimeRisk;
     };
 
 /**
@@ -57,4 +64,6 @@ export interface AgentRuntimeOptions {
    * 只在返回message类型结果时生效，工具调用过程不会触发
    */
   onStreamChunk?: (chunk: string) => void;
+  signal?: AbortSignal;
+  onProgress?: (event: { type: string; message: string; [key: string]: any }) => void;
 }

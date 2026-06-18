@@ -99,6 +99,10 @@ export class AgentRuntime {
     const maxSteps = options.maxSteps ?? 12;
 
     for (let step = 0; step < maxSteps; step += 1) {
+      if (options.signal?.aborted) {
+        throw new Error("Run aborted by user.");
+      }
+
       // 判断是否应该使用流式：仅在可能返回message且提供了回调时使用
       const shouldUseStream = options.onStreamChunk !== undefined;
 
@@ -122,6 +126,9 @@ export class AgentRuntime {
           },
           options.model,
         )) {
+          if (options.signal?.aborted) {
+            throw new Error("Run aborted by user.");
+          }
           if (chunk.type === "content") {
             accumulatedText += chunk.text;
             extractor.feed(chunk.text);
@@ -213,12 +220,30 @@ export class AgentRuntime {
       }
 
       try {
+        options.onProgress?.({
+          type: "tool-started",
+          message: `正在调用工具 ${tool.name}...`,
+          toolName: tool.name,
+        });
+
         const result = await tool.execute(args.data, context);
+
+        options.onProgress?.({
+          type: "tool-finished",
+          message: `工具 ${tool.name} 执行完成。`,
+          toolName: tool.name,
+        });
+
         if (tool.name === "AskUser" || tool.name === "SubmitCommands") {
           return RuntimeNormalizer.normalize(result);
         }
         transcript.push({ role: "tool", toolName: tool.name, result });
       } catch (error) {
+        options.onProgress?.({
+          type: "tool-finished",
+          message: `工具 ${tool.name} 执行失败: ${error instanceof Error ? error.message : String(error)}`,
+          toolName: tool.name,
+        });
         transcript.push({
           role: "tool",
           toolName: tool.name,

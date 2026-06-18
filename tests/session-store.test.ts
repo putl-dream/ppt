@@ -466,4 +466,35 @@ describe("FileSessionStore", () => {
     expect(state4.sessions).toHaveLength(1);
     expect(state4.activeSession.session.id).not.toBe(id1);
   });
+
+  it("maintains presentation and deck/snapshot.json consistency", async () => {
+    const { store, filePath } = await createStore();
+    const sessionId = store.getBootstrap().activeSession.session.id;
+
+    const newPresentation = {
+      id: "pres-id",
+      title: "New Title Value",
+      revision: 42,
+      slides: [
+        {
+          id: "slide-1",
+          title: "Slide One Title",
+          elements: [],
+        },
+      ],
+    };
+
+    // Save presentation
+    await store.savePresentation(sessionId, newPresentation);
+
+    // Retrieve active session state
+    const session = store.getSession(sessionId);
+    expect(session.presentation).toEqual(newPresentation);
+
+    // Check deck snapshot file on disk
+    const deckSnapshot = JSON.parse(
+      await readFile(join(session.project!.rootPath, "deck", "snapshot.json"), "utf8"),
+    );
+    expect(deckSnapshot).toEqual(newPresentation);
+  });
 });

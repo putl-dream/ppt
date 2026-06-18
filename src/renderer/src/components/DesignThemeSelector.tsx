@@ -46,11 +46,25 @@ export const DesignThemeSelector: React.FC = () => {
     saveSettings({ ...settings, ratio });
   };
 
-  const handleLogoUploadSimulate = () => {
-    saveSettings({
-      ...settings,
-      logoUrl: "https://www.google.com/images/branding/googlelogo/1x/googlelogo_light_color_272x92dp.png"
-    });
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
+
+  const handleLogoUploadReal = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleLogoFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const result = event.target?.result as string;
+        saveSettings({
+          ...settings,
+          logoUrl: result
+        });
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
   const handleRemoveLogo = () => {
@@ -233,12 +247,19 @@ export const DesignThemeSelector: React.FC = () => {
             ) : (
               <>
                 <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>未应用任何品牌 Logo</span>
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  onChange={handleLogoFileChange}
+                  accept="image/*"
+                  style={{ display: "none" }}
+                />
                 <button
-                  onClick={handleLogoUploadSimulate}
+                  onClick={handleLogoUploadReal}
                   className="secondary-btn"
                   style={{ padding: "6px 12px", fontSize: "12px" }}
                 >
-                  模拟上传 Logo
+                  上传品牌 Logo
                 </button>
               </>
             )}

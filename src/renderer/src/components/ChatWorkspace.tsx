@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
-import type { AgentApprovalRequest, AgentOutlineRequest } from "@shared/ipc";
+import type { AgentApprovalRequest } from "@shared/ipc";
 import {
   BrainIcon,
   ChevronDownIcon,
@@ -22,7 +22,6 @@ interface ChatMessage {
   thought?: string[];
   progress?: number;
   approval?: AgentApprovalRequest;
-  outlineRequest?: AgentOutlineRequest;
 }
 
 interface ChatWorkspaceProps {
@@ -378,38 +377,6 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
                           <li key={idx}>{step}</li>
                         ))}
                       </ul>
-                    )}
-                  </div>
-                )}
-
-                {msg.outlineRequest?.outline && (
-                  <div className="approval-card" style={{ maxWidth: 620 }}>
-                    <div className="approval-card-title">
-                      <span>待确认的演示文稿大纲</span>
-                    </div>
-                    <p className="approval-summary">{msg.outlineRequest.outline.title}</p>
-                    {(msg.outlineRequest.outline.audience || msg.outlineRequest.outline.objective) && (
-                      <div className="approval-commands-list">
-                        {msg.outlineRequest.outline.audience && (
-                          <div className="approval-command-item">目标受众：{msg.outlineRequest.outline.audience}</div>
-                        )}
-                        {msg.outlineRequest.outline.objective && (
-                          <div className="approval-command-item">演示目标：{msg.outlineRequest.outline.objective}</div>
-                        )}
-                      </div>
-                    )}
-                    <div className="approval-commands-list">
-                      {msg.outlineRequest.outline.slides.map((slide, index) => (
-                        <div key={`${slide.title}-${index}`} className="approval-command-item" style={{ alignItems: "flex-start" }}>
-                          <span className="cmd-type">{index + 1}. {slide.title}</span>
-                          <span className="cmd-val">{slide.keyPoints.join("；")}</span>
-                        </div>
-                      ))}
-                    </div>
-                    {msg.outlineRequest.missingInformation.length > 0 && (
-                      <p className="approval-summary">
-                        可继续补充：{msg.outlineRequest.missingInformation.join("、")}
-                      </p>
                     )}
                   </div>
                 )}

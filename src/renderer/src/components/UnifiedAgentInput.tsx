@@ -44,8 +44,6 @@ export const UnifiedAgentInput: React.FC<UnifiedAgentInputProps> = ({
   submitLabel = "生成",
   placeholder,
 }) => {
-  const [isVoiceActive, setIsVoiceActive] = useState(false);
-  const voiceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Extract folder name from path for display
@@ -65,45 +63,6 @@ export const UnifiedAgentInput: React.FC<UnifiedAgentInputProps> = ({
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSend();
-    }
-  };
-
-  const simulateSpeechToText = () => {
-    if (isVoiceActive) {
-      setIsVoiceActive(false);
-      if (voiceTimer.current) clearInterval(voiceTimer.current);
-      triggerToast("🎤 语音录入结束");
-    } else {
-      setIsVoiceActive(true);
-      triggerToast("🎤 正在聆听您的 PPT 创作要求...");
-      let counter = 0;
-      const phrases = [
-        " 帮我添加一页关于商业模式的分析大纲",
-        " 并且将整体颜色风格替换为商务蔚蓝",
-        " 优化排版对齐比例"
-      ];
-      voiceTimer.current = setInterval(() => {
-        if (counter < phrases.length) {
-          onChangeRequest(request + phrases[counter]);
-          counter++;
-        } else {
-          setIsVoiceActive(false);
-          if (voiceTimer.current) clearInterval(voiceTimer.current);
-          triggerToast("✨ 语音转文字识别已完成！");
-        }
-      }, 1500);
-    }
-  };
-
-  const handleUploadClick = () => {
-    triggerToast("➕ 正在模拟上传外部参考大纲 (支持 Word、PDF、PNG/JPG)...");
-  };
-
-  const handleSelectFolder = () => {
-    const newPath = prompt("请输入您要锚定的项目空间文件夹目录：", localStoragePath);
-    if (newPath) {
-      setLocalStoragePath(newPath);
-      triggerToast(`📁 已锚定新的项目空间环境: ${newPath}`);
     }
   };
 
