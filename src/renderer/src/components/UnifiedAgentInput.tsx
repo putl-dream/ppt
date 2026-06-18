@@ -5,7 +5,7 @@ import type { ManagedModel } from "../modelCatalog";
 interface UnifiedAgentInputProps {
   request: string;
   onChangeRequest: (val: string) => void;
-  onSubmitRequest: (compositePayload?: any) => void;
+  onSubmitRequest: () => void;
   busy: boolean;
   
   // Bound settings
@@ -53,20 +53,7 @@ export const UnifiedAgentInput: React.FC<UnifiedAgentInputProps> = ({
 
   const handleSend = () => {
     if (busy || !request.trim()) return;
-    
-    // Assemble the composite context payload
-    const compositePayload = {
-      prompt: request,
-      executionStrategy: executionStrategy,
-      modelTier: models.find((model) => model.id === selectedModelId)?.model,
-      context: {
-        projectFolder: folderName,
-        runtimeMode: "LOCAL",
-        gitBranch: "master",
-      }
-    };
-    
-    onSubmitRequest(compositePayload);
+    onSubmitRequest();
 
     // Refocus the textarea immediately after submitting request to prevent focus loss
     setTimeout(() => {
@@ -178,10 +165,10 @@ export const UnifiedAgentInput: React.FC<UnifiedAgentInputProps> = ({
           {/* Left functions */}
           <div className="functional-left" style={{ display: "flex", alignItems: "center", gap: "10px" }}>
             <button
-              onClick={handleUploadClick}
               className="action-icon-btn upload-btn"
-              title="上传外部参考资料 (Word, PDF, 素材)"
-              disabled={busy}
+              title="上传外部参考资料 (暂未接入)"
+              disabled={true}
+              style={{ opacity: 0.4, cursor: "not-allowed" }}
             >
               ➕
             </button>
@@ -216,10 +203,10 @@ export const UnifiedAgentInput: React.FC<UnifiedAgentInputProps> = ({
             </div>
 
             <button
-              onClick={simulateSpeechToText}
-              className={`action-icon-btn mic-btn ${isVoiceActive ? "voice-listening-active" : ""}`}
-              title={isVoiceActive ? "正在录音，再次点击停止" : "语音录入要求"}
-              disabled={busy}
+              className="action-icon-btn mic-btn"
+              title="语音输入 (暂未接入)"
+              disabled={true}
+              style={{ opacity: 0.4, cursor: "not-allowed" }}
             >
               🎤
             </button>
@@ -244,9 +231,8 @@ export const UnifiedAgentInput: React.FC<UnifiedAgentInputProps> = ({
               {/* Project folder space anchor tag */}
               <button
                 className="context-anchor-tag"
-                onClick={handleSelectFolder}
-                title={`会话大纲与记忆将存放在此目录下: ${localStoragePath}`}
-                disabled={busy}
+                title={`项目存储目录已锁定制: ${localStoragePath}`}
+                disabled={true}
                 style={{
                   background: "transparent",
                   border: "1px solid var(--border-glass)",
@@ -255,16 +241,16 @@ export const UnifiedAgentInput: React.FC<UnifiedAgentInputProps> = ({
                   fontSize: "11px",
                   padding: "3px 10px",
                   borderRadius: "12px",
-                  cursor: "pointer",
+                  cursor: "not-allowed",
                   display: "inline-flex",
                   alignItems: "center",
                   gap: "6px",
-                  opacity: 0.65,
+                  opacity: 0.4,
                   transition: "var(--transition-smooth)",
                   boxShadow: "none"
                 }}
               >
-                📁 项目存储目录: {folderName} <span>∨</span>
+                📁 项目存储目录: {folderName}
               </button>
             </div>
 

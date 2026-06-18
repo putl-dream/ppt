@@ -324,10 +324,6 @@ describe("Agent Architecture Skeletons & Types", () => {
         args: { query: "theme layout" },
       },
       {
-        type: "message",
-        content: "我先搜索一下高级工具，然后再开始生成。",
-      },
-      {
         type: "tool_call",
         toolName: "SubmitCommands",
         args: {
@@ -345,11 +341,11 @@ describe("Agent Architecture Skeletons & Types", () => {
     );
 
     const clarification = await service.start("生成 30 页 Vibe Coding 技术分享 PPT");
-    expect(clarification.status).toBe("outline-required");
-    if (clarification.status !== "outline-required") throw new Error("Expected clarification");
+    expect(clarification.status).toBe("chat");
+    if (clarification.status !== "chat") throw new Error("Expected clarification");
 
-    const proposal = await service.continueOutline(
-      clarification.outlineRequest.threadId,
+    const proposal = await service.continueAgentRun(
+      clarification.threadId!,
       "按默认方案",
     );
 
@@ -403,15 +399,15 @@ describe("Agent Architecture Skeletons & Types", () => {
     );
 
     const first = await service.start("帮我做一份 PPT");
-    expect(first.status).toBe("outline-required");
-    if (first.status !== "outline-required") throw new Error("Expected clarification");
+    expect(first.status).toBe("chat");
+    if (first.status !== "chat") throw new Error("Expected clarification");
 
-    await expect(service.continueOutline(
-      first.outlineRequest.threadId,
+    await expect(service.continueAgentRun(
+      first.threadId!,
       "Agent 范式与架构演进：从 ReAct / Plan / Workflow 看智能体设计",
     )).rejects.toThrow("Provider request timed out");
 
-    await service.continueOutline(first.outlineRequest.threadId, "我刚才说了什么？");
+    await service.continueAgentRun(first.threadId!, "我刚才说了什么？");
 
     expect(prompts[2].conversation).toEqual([
       { role: "user", content: "帮我做一份 PPT" },

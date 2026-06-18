@@ -1,8 +1,7 @@
-import type { AgentOutlineRequest } from "./ipc";
 import type { SessionChatMessage } from "./session";
 
-export interface RecoverableOutlineConversation {
-  outlineRequest: AgentOutlineRequest;
+export interface RecoverableConversation {
+  threadId: string;
   messages: Array<{ role: "user" | "assistant"; content: string }>;
 }
 
@@ -34,37 +33,38 @@ export function toAgentMessageHistory(
   return history;
 }
 
-export function findRecoverableOutlineConversation(
+export function findRecoverableConversation(
   messages: SessionChatMessage[],
-): RecoverableOutlineConversation | undefined {
-  let outlineIndex = -1;
-  let outlineRequest: AgentOutlineRequest | undefined;
+): RecoverableConversation | undefined {
+  let threadIndex = -1;
+  let threadId: string | undefined;
 
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     const message = messages[index];
     if (message.role === "user" || isGeneratedAgentError(message)) continue;
     if (message.approval) return undefined;
-    if (message.outlineRequest) {
-      outlineIndex = index;
-      outlineRequest = message.outlineRequest;
+    if (message.threadId) {
+      threadIndex = index;
+      threadId = message.threadId;
       break;
     }
     if (message.role === "assistant") return undefined;
   }
 
-  if (!outlineRequest) return undefined;
+  if (!threadId) return undefined;
 
   let startIndex = 0;
-  for (let index = outlineIndex - 1; index >= 0; index -= 1) {
+  for (let index = threadIndex - 1; index >= 0; index -= 1) {
     const message = messages[index];
-    if (message.role === "assistant" && message.outlineRequest?.threadId !== outlineRequest.threadId) {
+    if (message.role === "assistant" && message.threadId !== threadId) {
       startIndex = index + 1;
       break;
     }
   }
 
   return {
-    outlineRequest,
+    threadId,
     messages: toAgentMessageHistory(messages.slice(startIndex)),
   };
 }
+

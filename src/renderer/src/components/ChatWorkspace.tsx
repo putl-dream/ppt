@@ -35,8 +35,6 @@ interface ChatWorkspaceProps {
   onSubmitRequest: () => void;
   busy: boolean;
   approval: AgentApprovalRequest | undefined;
-  outlineRequest: AgentOutlineRequest | undefined;
-  onConfirmOutline: () => void;
   onResolveApproval: (approved: boolean) => void;
   themeMode: "light" | "dark";
   onToggleThemeMode: () => void;
@@ -72,8 +70,6 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
   onSubmitRequest,
   busy,
   approval,
-  outlineRequest,
-  onConfirmOutline,
   onResolveApproval,
   themeMode,
   onToggleThemeMode,
@@ -192,7 +188,7 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
             triggerToast={triggerToast}
             selectedSlideIndex={selectedSlideIndex}
             onClearContextTag={onClearContextTag}
-            submitLabel={outlineRequest ? "继续" : "生成"}
+            submitLabel="生成"
           />
 
           {/* Quick recommendations suggestions below */}
@@ -415,20 +411,6 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
                         可继续补充：{msg.outlineRequest.missingInformation.join("、")}
                       </p>
                     )}
-                    {outlineRequest?.threadId === msg.outlineRequest.threadId && (
-                      <div className="approval-buttons">
-                        <span className="approval-summary" style={{ margin: 0 }}>
-                          继续输入可修改大纲
-                        </span>
-                        <button
-                          disabled={busy}
-                          onClick={onConfirmOutline}
-                          className="btn-apply"
-                        >
-                          确认大纲并生成
-                        </button>
-                      </div>
-                    )}
                   </div>
                 )}
 
@@ -633,7 +615,7 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
           triggerToast={triggerToast}
           selectedSlideIndex={selectedSlideIndex}
           onClearContextTag={onClearContextTag}
-          submitLabel={outlineRequest ? "继续" : "生成"}
+          submitLabel="生成"
         />
       </div>
 

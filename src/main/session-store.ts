@@ -15,10 +15,8 @@ import {
 } from "@shared/session";
 import { deserializeSessionMessages } from "@shared/transcript";
 import {
-  findRecoverableOutlineConversation,
   toAgentMessageHistory,
   type AgentConversationMessage,
-  type RecoverableOutlineConversation,
 } from "@shared/session-recovery";
 import { type ArtifactDiff } from "./project/artifact-diff";
 import {
@@ -97,14 +95,7 @@ export class FileSessionStore {
     return toAgentMessageHistory(this.findSession(sessionId).messages, currentRequest);
   }
 
-  async getRecoverableOutlineConversation(
-    sessionId: string,
-  ): Promise<RecoverableOutlineConversation | undefined> {
-    const snapshot = this.findSession(sessionId);
-    const changed = await this.hydrateMessagesFromTranscript(snapshot);
-    if (changed) await this.persist();
-    return findRecoverableOutlineConversation(snapshot.messages);
-  }
+
 
   async switchLeaf(sessionId: string, leafMessageUuid: string): Promise<SessionSnapshot> {
     const snapshot = this.findSession(sessionId);
@@ -332,15 +323,15 @@ export class FileSessionStore {
       if (message.thought) metadata.thought = message.thought;
       if (message.progress !== undefined) metadata.progress = message.progress;
       if (message.approval) metadata.approval = message.approval;
-      if (message.outlineRequest) metadata.outlineRequest = message.outlineRequest;
+      if (message.threadId) metadata.threadId = message.threadId;
 
       return {
         uuid: message.id,
         role: message.role,
-        kind: message.approval ? "approval" : message.outlineRequest ? "outline" : "message",
+        kind: message.approval ? "approval" : "message",
         content: message.content,
         cwd: snapshot.project!.rootPath,
-        threadId: message.approval?.threadId ?? message.outlineRequest?.threadId,
+        threadId: message.approval?.threadId ?? message.threadId,
         metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
       };
     });

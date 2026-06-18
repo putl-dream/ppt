@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import type {
   AgentApprovalRequest,
-  AgentOutlineRequest,
+  AgentIntent,
+  AgentRunRequest,
   AgentRunResult,
   AgentStreamEvent,
 } from "@shared/ipc";
@@ -13,7 +14,6 @@ import {
   type SessionChatMessage,
   type SessionSummary,
 } from "@shared/session";
-import { findRecoverableOutlineConversation } from "@shared/session-recovery";
 import { LeftPanel } from "./components/LeftPanel";
 import { ChatWorkspace } from "./components/ChatWorkspace";
 import { PPTMirror } from "./components/PPTMirror";
@@ -21,7 +21,7 @@ import { SettingsSidebar } from "./components/SettingsSidebar";
 import { SettingsConsole } from "./components/SettingsConsole";
 
 // Project Pipeline Components & Store
-import { useProjectStore } from "./components/project-store";
+import { useProjectStore, type ActiveProject, type ArtifactId } from "./components/project-store";
 import { BriefFormCollector } from "./components/BriefFormCollector";
 import { DraggableOutlineTree } from "./components/DraggableOutlineTree";
 import { ResearchNotesCollector } from "./components/ResearchNotesCollector";
@@ -42,15 +42,39 @@ import {
 
 type ChatMessage = SessionChatMessage;
 
+const REFERENCED_ARTIFACTS_BY_STAGE: Record<ArtifactId, ArtifactId[]> = {
+  brief: [],
+  outline: ["brief"],
+  research: ["brief", "outline"],
+  design: ["brief"],
+  slides: ["brief", "outline", "research", "design"],
+  deck: ["brief", "outline", "research", "design", "slides"],
+};
+
+function inferAgentIntent(
+  stage: ArtifactId,
+  project: ActiveProject | null,
+  presentation: Presentation | undefined,
+): AgentIntent {
+  if (stage === "deck") {
+    return presentation && (presentation.revision > 0 || presentation.slides.length > 0)
+      ? "revise-deck"
+      : "generate-deck";
+  }
+
+  const artifact = project?.artifacts[stage];
+  return artifact?.content.trim() ? "revise-artifact" : "generate-artifact";
+}
+
 function toSessionChatMessages(messages: ChatMessage[]): SessionChatMessage[] {
-  return messages.map(({ id, role, content, thought, progress, approval, outlineRequest }) => ({
+  return messages.map(({ id, role, content, thought, progress, approval, threadId }) => ({
     id,
     role,
     content,
     thought,
     progress,
     approval,
-    outlineRequest,
+    threadId,
   }));
 }
 
@@ -177,7 +201,6 @@ export function App() {
   // 对话流与 Agent 编排状态
   const [request, setRequest] = useState("创建一份智能硬件市场推广策划大纲");
   const [approval, setApproval] = useState<AgentApprovalRequest>();
-  const [outlineRequest, setOutlineRequest] = useState<AgentOutlineRequest>();
   const [busy, setBusy] = useState(false);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const isNewSession = chatMessages.length === 1 && chatMessages[0].id === "init";
@@ -289,7 +312,6 @@ export function App() {
     setChatMessages(snapshot.messages);
     const latestMessage = snapshot.messages.at(-1);
     setApproval(latestMessage?.approval);
-    setOutlineRequest(findRecoverableOutlineConversation(snapshot.messages)?.outlineRequest);
     setRequest("");
     setSelectedSlideId(snapshot.presentation.slides[0]?.id ?? "");
     setSelectedElementId(null);
@@ -375,7 +397,6 @@ export function App() {
     setPresentation(presentation);
     setChatMessages([createWelcomeMessage()]);
     setApproval(undefined);
-    setOutlineRequest(undefined);
     setRequest("");
     setSelectedSlideId(presentation.slides[0]?.id ?? "");
     setSelectedElementId(null);
@@ -427,7 +448,6 @@ export function App() {
     const messageId = runId ? streamMessageIdsRef.current.get(runId) : undefined;
 
     if (result.status === "chat") {
-      setOutlineRequest(undefined);
       if (messageId) {
         setChatMessages((prev) => prev.map((message) =>
           message.id === messageId ? { ...message, content: result.message } : message,
@@ -441,37 +461,6 @@ export function App() {
       return;
     }
 
-    if (result.status === "outline-required") {
-      setOutlineRequest(result.outlineRequest);
-      setApproval(undefined);
-      if (messageId) {
-        setChatMessages((prev) => prev.map((message) =>
-          message.id === messageId
-            ? {
-                ...message,
-                content: result.outlineRequest.message,
-                thought: steps,
-                outlineRequest: result.outlineRequest,
-              }
-            : message
-        ));
-      } else {
-        setChatMessages((prev) => [
-          ...prev,
-          {
-            id: crypto.randomUUID(),
-            role: "assistant",
-            content: result.outlineRequest.message,
-            thought: steps,
-            outlineRequest: result.outlineRequest,
-          },
-        ]);
-      }
-      triggerToast("大纲已整理，请确认或继续调整");
-      return;
-    }
-
-    setOutlineRequest(undefined);
     if (result.status === "approval-required") {
       setApproval(result.approval);
       if (messageId) {
@@ -479,7 +468,7 @@ export function App() {
           message.id === messageId
             ? {
                 ...message,
-                content: "已根据确认的大纲生成排版方案，请审核指令后执行。",
+                content: "已提出排版更新方案，请在下方审核后应用。",
                 thought: steps,
                 approval: result.approval,
               }
@@ -491,7 +480,7 @@ export function App() {
           {
             id: crypto.randomUUID(),
             role: "assistant",
-            content: "已根据确认的大纲生成排版方案，请审核指令后执行。",
+            content: "已提出排版更新方案，请在下方审核后应用。",
             thought: steps,
             approval: result.approval,
           },
@@ -501,14 +490,17 @@ export function App() {
       return;
     }
 
-    setPresentation(result.presentation);
-    if (result.presentation.slides.length > 0) {
-      const lastId = result.presentation.slides[result.presentation.slides.length - 1].id;
-      setSelectedSlideId(lastId);
-      setHighlightSlideId(lastId);
-      setTimeout(() => setHighlightSlideId(null), 2500);
+    const nextPresentation = (result.status === "completed" || result.status === "rejected") ? result.presentation : undefined;
+    if (nextPresentation) {
+      setPresentation(nextPresentation);
+      if (nextPresentation.slides.length > 0) {
+        const lastId = nextPresentation.slides[nextPresentation.slides.length - 1].id;
+        setSelectedSlideId(lastId);
+        setHighlightSlideId(lastId);
+        setTimeout(() => setHighlightSlideId(null), 2500);
+      }
+      setIsMirrorOpen(true);
     }
-    setIsMirrorOpen(true);
 
     const finalContent = result.status === "rejected" ? "已放弃排版变更提案。" : "已根据确认的大纲生成并应用演示文稿。";
     if (messageId) {
@@ -536,9 +528,12 @@ export function App() {
     if (!activeRequest.trim() || busy) return;
 
     setBusy(true);
+    let agentSessionId = activeSessionId;
     if (isDraftSession) {
       try {
-        applySessionState(await window.desktopApi.createSession());
+        const state = await window.desktopApi.createSession();
+        applySessionState(state);
+        agentSessionId = state.activeSession.session.id;
       } catch (error) {
         setBusy(false);
         triggerToast(error instanceof Error ? error.message : "创建会话失败");
@@ -546,29 +541,39 @@ export function App() {
       }
     }
 
-    // “输入即配置”数据打包，输出复合 Context 对象给控制台并进行请求
     const activeStage = useProjectStore.getState().currentStage;
     const activeProjectObj = useProjectStore.getState().activeProject;
-    const briefContent = activeProjectObj?.artifacts.brief.content || "";
-    const outlineContent = activeProjectObj?.artifacts.outline.content || "";
-    const researchContent = activeProjectObj?.artifacts.research.content || "";
-    const designContent = activeProjectObj?.artifacts.design.content || "";
+    if (!agentSessionId || !activeProjectObj) {
+      setBusy(false);
+      triggerToast("项目会话尚未准备好，请稍后再试");
+      return;
+    }
 
-    console.log("Packaging Agent context payload (File-Context Aware):", {
-      sessionId: activeSessionId,
-      projectId: activeProjectObj?.id || "default",
-      activeStage,
-      command: activeRequest,
-      contextFiles: [
-        { path: "brief.md", content: briefContent },
-        { path: "outline.md", content: outlineContent },
-        { path: "research/notes.md", content: researchContent },
-        { path: "design/theme.json", content: designContent },
-      ],
+    const editorContext = {
+      currentSlideId: selectedSlideId || undefined,
+      selectedElementIds: selectedElementId ? [selectedElementId] : [],
+    };
+    const agentRequest: AgentRunRequest = {
+      prompt: activeRequest,
+      sessionId: agentSessionId,
+      stage: activeStage,
+      intent: inferAgentIntent(activeStage, activeProjectObj, presentation),
+      targetArtifactId: activeStage === "deck" ? undefined : activeStage,
+      targetPath: activeProjectObj.artifacts[activeStage]?.path,
+      referencedArtifactIds: REFERENCED_ARTIFACTS_BY_STAGE[activeStage],
+      editorContext,
+    };
+
+    console.info("Starting structured Agent run", {
+      sessionId: agentRequest.sessionId,
+      stage: agentRequest.stage,
+      intent: agentRequest.intent,
+      targetPath: agentRequest.targetPath,
+      referencedArtifactIds: agentRequest.referencedArtifactIds,
       editorContext: {
         currentSlideId: selectedSlideId || undefined,
         selectedElementIds: selectedElementId ? [selectedElementId] : [],
-      }
+      },
     });
 
     setApproval(undefined);
@@ -603,53 +608,20 @@ export function App() {
       setRequest("");
     }
 
-    let useOutlineRequest = outlineRequest;
-    if (isEditOfMsgId) {
-      setOutlineRequest(undefined);
-      useOutlineRequest = undefined;
-    }
-
     try {
-      if (forkedMessages && activeSessionId) {
+      if (forkedMessages && agentSessionId) {
         await window.desktopApi.saveSessionMessages(
-          activeSessionId,
+          agentSessionId,
           toSessionChatMessages(forkedMessages),
         );
       }
-      const result = useOutlineRequest
-        ? await window.desktopApi.continueAgentRun(
-          useOutlineRequest.threadId,
-          activeRequest,
-          runId,
-          {
-            currentSlideId: selectedSlideId || undefined,
-            selectedElementIds: selectedElementId ? [selectedElementId] : [],
-          },
-        )
-        : await window.desktopApi.startAgentRun(
-          activeRequest,
-          selectedModel ? toAgentModelSettings(selectedModel) : undefined,
-          executionStrategy,
-          runId,
-          {
-            currentSlideId: selectedSlideId || undefined,
-            selectedElementIds: selectedElementId ? [selectedElementId] : [],
-          },
-        );
+      const result = await window.desktopApi.startAgentRun(
+        agentRequest,
+        selectedModel ? toAgentModelSettings(selectedModel) : undefined,
+        executionStrategy,
+        runId,
+      );
       applyAgentResult(result, activeRunStepsRef.current, runId);
-
-      // Simulate file_patch triggering for demonstration
-      if (result.status === "outline-required") {
-        const store = useProjectStore.getState();
-        store.proposePatch({
-          targetFile: "outline.md",
-          op: "replace",
-          patch: "...",
-          contentBefore: store.activeProject?.artifacts.outline.content || "",
-          contentAfter: `# 演示大纲 (已优化)\n\n## 1. 行业背景与痛点 [预计 2 页]\n- 2026年智能硬件行业增速放缓\n- 用户获取成本过高，红利期消退\n\n## 2. 解决方案策划 [预计 1 页]\n- 引入云端协同技术\n- 优化交付链条，提高响应效率\n`,
-          summary: "AI 助手已优化大纲结构，细化了行业背景痛点，并添加了云端协同解决方案。"
-        });
-      }
     } catch (err) {
       setChatMessages((prev) => [
         ...prev,
@@ -673,40 +645,7 @@ export function App() {
     }
   }
 
-  async function confirmOutline() {
-    if (!outlineRequest?.outline || busy) return;
-    setBusy(true);
-    setThoughtProgress(0);
-    setThoughtProcess([]);
-    setAgentActivityMode("idle");
-    const runId = crypto.randomUUID();
-    activeRunIdRef.current = runId;
-    activeRunStepsRef.current = [];
-    try {
-      const result = await window.desktopApi.confirmAgentOutline(outlineRequest.threadId, runId);
-      applyAgentResult(result, activeRunStepsRef.current, runId);
-    } catch (err) {
-      setChatMessages((prev) => [
-        ...prev,
-        {
-          id: crypto.randomUUID(),
-          role: "assistant",
-          content: `确认大纲时发生错误：${err instanceof Error ? err.message : String(err)}`,
-        },
-      ]);
-    } finally {
-      activeRunIdRef.current = null;
-      streamMessageIdsRef.current.delete(runId);
-      if (statusTypingTimerRef.current !== null) {
-        window.clearInterval(statusTypingTimerRef.current);
-        statusTypingTimerRef.current = null;
-      }
-      setBusy(false);
-      setAgentActivityMode("idle");
-      setThoughtProcess([]);
-      setThoughtProgress(0);
-    }
-  }
+
 
   // 推荐指令点击快捷处理
   const handleSuggestPrompt = (prompt: string) => {
@@ -734,16 +673,19 @@ export function App() {
       setThoughtProgress(100);
 
       if (result.status === "completed" || result.status === "rejected") {
-        setPresentation(result.presentation);
-        setApproval(undefined);
-        if (result.presentation.slides.length > 0 && approved) {
-          const lastId = result.presentation.slides[result.presentation.slides.length - 1].id;
-          setSelectedSlideId(lastId);
-          setHighlightSlideId(lastId);
-          setTimeout(() => setHighlightSlideId(null), 2500);
-        }
-        if (approved) {
-          setIsMirrorOpen(true);
+        const nextPresentation = result.presentation ?? presentation;
+        if (nextPresentation) {
+          setPresentation(nextPresentation);
+          setApproval(undefined);
+          if (nextPresentation.slides.length > 0 && approved) {
+            const lastId = nextPresentation.slides[nextPresentation.slides.length - 1].id;
+            setSelectedSlideId(lastId);
+            setHighlightSlideId(lastId);
+            setTimeout(() => setHighlightSlideId(null), 2500);
+          }
+          if (approved) {
+            setIsMirrorOpen(true);
+          }
         }
         setChatMessages((prev) => [
           ...prev,
@@ -1239,7 +1181,6 @@ export function App() {
                     onChangeRequest={setRequest}
                     onSubmitRequest={() => void startAgent()}
                     busy={busy}
-                    onConfirmOutline={() => void confirmOutline()}
                     onResolveApproval={resolveApproval}
                     
                     models={models}

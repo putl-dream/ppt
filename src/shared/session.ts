@@ -64,7 +64,7 @@ export const sessionChatMessageSchema = z.object({
   thought: z.array(z.string()).optional(),
   progress: z.number().optional(),
   approval: persistedApprovalSchema.optional(),
-  outlineRequest: persistedOutlineSchema.optional(),
+  threadId: z.string().optional(),
 });
 
 export const sessionSummarySchema = z.object({

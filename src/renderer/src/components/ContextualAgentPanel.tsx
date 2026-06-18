@@ -23,7 +23,6 @@ interface ContextualAgentPanelProps {
   onChangeRequest: (val: string) => void;
   onSubmitRequest: () => void;
   busy: boolean;
-  onConfirmOutline: () => void;
   onResolveApproval: (approved: boolean) => void;
   
   models: ManagedModel[];
@@ -66,7 +65,6 @@ export const ContextualAgentPanel: React.FC<ContextualAgentPanelProps> = ({
   onChangeRequest,
   onSubmitRequest,
   busy,
-  onConfirmOutline,
   onResolveApproval,
   models,
   selectedModelId,

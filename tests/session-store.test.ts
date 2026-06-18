@@ -133,11 +133,7 @@ describe("FileSessionStore", () => {
         id: "a1",
         role: "assistant",
         content: "请确认大纲",
-        outlineRequest: {
-          threadId: "thread-1",
-          message: "请确认大纲",
-          missingInformation: [],
-        },
+        threadId: "thread-1",
       },
     ]);
     await store.saveMessages(sessionId, [
@@ -146,11 +142,7 @@ describe("FileSessionStore", () => {
         id: "a1",
         role: "assistant",
         content: "请确认大纲",
-        outlineRequest: {
-          threadId: "thread-1",
-          message: "请确认大纲",
-          missingInformation: [],
-        },
+        threadId: "thread-1",
       },
     ]);
 
@@ -181,7 +173,7 @@ describe("FileSessionStore", () => {
         parentUuid: "u1",
         sessionId,
         role: "assistant",
-        kind: "outline",
+        kind: "message",
         content: "请确认大纲",
         threadId: "thread-1",
       },
@@ -340,14 +332,13 @@ describe("FileSessionStore", () => {
 
     const restored = new FileSessionStore(filePath);
     await restored.initialize();
-    await restored.getRecoverableOutlineConversation(sessionId);
     const message = restored.getBootstrap().activeSession.messages[0];
 
     expect(message.approval).toBeUndefined();
     expect(message.content).toContain("审批请求已随应用重启失效");
   });
 
-  it("preserves pending outline recovery metadata after an application restart", async () => {
+  it("preserves pending threadId metadata after an application restart", async () => {
     const { store, filePath } = await createStore();
     const sessionId = store.getBootstrap().activeSession.session.id;
     await store.saveMessages(sessionId, [
@@ -355,32 +346,18 @@ describe("FileSessionStore", () => {
         id: "outline-1",
         role: "assistant",
         content: "请确认大纲",
-        outlineRequest: {
-          threadId: "thread-1",
-          message: "请确认大纲",
-          outline: {
-            title: "测试大纲",
-            slides: [{ title: "第一页", keyPoints: ["要点"] }],
-          },
-          missingInformation: [],
-          model: { provider: "anthropic", model: "test-model" },
-          executionStrategy: "AUTO",
-        },
+        threadId: "thread-1",
       },
     ]);
 
     const restored = new FileSessionStore(filePath);
     await restored.initialize();
-    const outlineRequest = restored.getBootstrap().activeSession.messages[0].outlineRequest;
+    const threadId = restored.getBootstrap().activeSession.messages[0].threadId;
 
-    expect(outlineRequest).toMatchObject({
-      threadId: "thread-1",
-      model: { provider: "anthropic", model: "test-model" },
-      executionStrategy: "AUTO",
-    });
+    expect(threadId).toBe("thread-1");
   });
 
-  it("recovers pending outline conversations from the transcript when the snapshot cache is stale", async () => {
+  it("recovers pending thread conversations from the transcript when the snapshot cache is stale", async () => {
     const { store, filePath } = await createStore();
     const sessionId = store.getBootstrap().activeSession.session.id;
     await store.saveMessages(sessionId, [
@@ -389,15 +366,7 @@ describe("FileSessionStore", () => {
         id: "outline-1",
         role: "assistant",
         content: "请确认大纲",
-        outlineRequest: {
-          threadId: "thread-1",
-          message: "请确认大纲",
-          outline: {
-            title: "Agent 架构",
-            slides: [{ title: "架构演进", keyPoints: ["ReAct", "Workflow"] }],
-          },
-          missingInformation: [],
-        },
+        threadId: "thread-1",
       },
     ]);
 
@@ -409,16 +378,19 @@ describe("FileSessionStore", () => {
 
     const restored = new FileSessionStore(filePath);
     await restored.initialize();
-    const recovered = await restored.getRecoverableOutlineConversation(sessionId);
+    const restoredSession = restored.getSession(sessionId);
 
-    expect(recovered?.outlineRequest).toMatchObject({
-      threadId: "thread-1",
-      message: "请确认大纲",
+    expect(restoredSession.messages[0]).toMatchObject({
+      id: "u1",
+      role: "user",
+      content: "创建一份 Agent 架构 PPT",
     });
-    expect(recovered?.messages).toEqual([
-      { role: "user", content: "创建一份 Agent 架构 PPT" },
-      { role: "assistant", content: "请确认大纲" },
-    ]);
+    expect(restoredSession.messages[1]).toMatchObject({
+      id: "outline-1",
+      role: "assistant",
+      content: "请确认大纲",
+      threadId: "thread-1",
+    });
   });
 
   it("records edited messages as a new transcript branch and can switch leaves", async () => {

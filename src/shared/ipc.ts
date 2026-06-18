@@ -1,12 +1,14 @@
 import type { Presentation } from "./presentation";
 import type { PresentationCommand } from "./commands";
 import type { AgentExecutionStrategy, AgentModelSelection, AgentModelSettings } from "./agent";
+import { z } from "zod";
 import type {
   ProjectArtifact,
   ProjectArtifactStatus,
   SessionBootstrap,
   SessionChatMessage,
 } from "./session";
+import { projectStageIds } from "./project";
 
 export interface PresentationOutline {
   title: string;
@@ -55,6 +57,45 @@ export interface AgentEditorContext {
   selectedElementIds: string[];
 }
 
+export const agentIntentSchema = z.enum([
+  "chat",
+  "generate-artifact",
+  "revise-artifact",
+  "generate-deck",
+  "revise-deck",
+]);
+
+export const agentStageSchema = z.enum(projectStageIds);
+
+export const agentEditorContextSchema = z.object({
+  currentSlideId: z.string().optional(),
+  selectedElementIds: z.array(z.string()),
+});
+
+export const agentAttachmentSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  path: z.string(),
+  mimeType: z.string().optional(),
+});
+
+export const agentRunRequestSchema = z.object({
+  prompt: z.string().trim().min(1),
+  sessionId: z.string().trim().min(1),
+  intent: agentIntentSchema,
+  stage: agentStageSchema,
+  targetArtifactId: z.string().optional(),
+  targetPath: z.string().optional(),
+  referencedArtifactIds: z.array(z.string()).optional(),
+  editorContext: agentEditorContextSchema.optional(),
+  attachments: z.array(agentAttachmentSchema).optional(),
+});
+
+export type AgentIntent = z.infer<typeof agentIntentSchema>;
+export type AgentStage = z.infer<typeof agentStageSchema>;
+export type AgentAttachment = z.infer<typeof agentAttachmentSchema>;
+export type AgentRunRequest = z.infer<typeof agentRunRequestSchema>;
+
 export type AgentStreamEvent =
   | {
     runId: string;
@@ -75,11 +116,12 @@ export type AgentStreamEvent =
   };
 
 export type AgentRunResult =
-  | { status: "chat"; message: string }
-  | { status: "outline-required"; outlineRequest: AgentOutlineRequest }
+  | { status: "chat"; message: string; threadId?: string }
+  | { status: "artifact-patch-required"; patch: AgentArtifactPatchRequest }
   | { status: "approval-required"; approval: AgentApprovalRequest }
   | { status: "completed"; presentation: Presentation }
-  | { status: "rejected"; presentation: Presentation };
+  | { status: "artifact-updated"; write: ProjectArtifactWriteResult }
+  | { status: "rejected"; presentation?: Presentation };
 
 export interface ProjectArtifactReadResult {
   path: string;
@@ -101,6 +143,18 @@ export interface ProjectArtifactWriteResult {
   changed: boolean;
   changedArtifactId?: string;
   staleArtifactIds: string[];
+}
+
+export interface AgentArtifactPatchRequest {
+  threadId: string;
+  targetPath: string;
+  summary: string;
+  before: string;
+  after: string;
+  diff: ArtifactDiff;
+  changedArtifactId?: string;
+  staleArtifactIds: string[];
+  risk?: "low" | "medium" | "high";
 }
 
 export interface DesktopApi {
@@ -131,19 +185,16 @@ export interface DesktopApi {
   ): Promise<ProjectArtifact>;
   getPresentation(): Promise<Presentation>;
   startAgentRun(
-    request: string,
+    request: AgentRunRequest,
     model?: AgentModelSettings,
     executionStrategy?: AgentExecutionStrategy,
     runId?: string,
-    editorContext?: AgentEditorContext,
   ): Promise<AgentRunResult>;
   continueAgentRun(
     threadId: string,
-    request: string,
+    request: AgentRunRequest,
     runId?: string,
-    editorContext?: AgentEditorContext,
   ): Promise<AgentRunResult>;
-  confirmAgentOutline(threadId: string, runId?: string): Promise<AgentRunResult>;
   onAgentStream(listener: (event: AgentStreamEvent) => void): () => void;
   resumeAgentRun(threadId: string, approved: boolean): Promise<AgentRunResult>;
   undo(): Promise<Presentation>;

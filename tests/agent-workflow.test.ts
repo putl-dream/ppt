@@ -4,7 +4,7 @@ import { CommandBus } from "../src/shared/commands";
 import { createStarterPresentation } from "../src/shared/presentation";
 import type { AgentPlanner } from "../src/main/agent/planner";
 import { AgentGatewayError } from "../src/main/agent/gateway";
-import type { AgentOutlinePlanner } from "../src/main/agent/outline-planner";
+import { outlineToRequest, type AgentOutlinePlanner } from "../src/main/agent/outline-planner";
 
 const readyOutlinePlanner: AgentOutlinePlanner = {
   async review() {
@@ -49,7 +49,7 @@ describe("AgentService", () => {
       (event) => events.push(event),
     );
 
-    expect(result.status).toBe("outline-required");
+    expect(result.status).toBe("chat");
     expect(events.length).toBeGreaterThan(0);
     expect(events[0]?.type).toBe("request-status");
     expect(events.every((event) => event.type !== "text-delta")).toBe(true);
@@ -206,10 +206,10 @@ describe("AgentService", () => {
 
     const result = await agent.start("Create a presentation about AI products", undefined, "AUTO");
 
-    expect(result.status).toBe("outline-required");
+    expect(result.status).toBe("chat");
     expect(bus.getSnapshot().revision).toBe(0);
-    if (result.status !== "outline-required") throw new Error("Expected outline request");
-    expect(result.outlineRequest.outline?.slides).toHaveLength(3);
+    if (result.status !== "chat") throw new Error("Expected outline request");
+    expect(result.threadId).toBeDefined();
   });
 
   it("generates commands only after the proposed outline is confirmed", async () => {
@@ -217,9 +217,18 @@ describe("AgentService", () => {
     const agent = new AgentService(bus);
 
     const outline = await agent.start("Create a presentation about AI products");
-    if (outline.status !== "outline-required") throw new Error("Expected outline request");
+    if (outline.status !== "chat") throw new Error("Expected outline request");
 
-    const pending = await agent.confirmOutline(outline.outlineRequest.threadId);
+    const confirmedRequest = outlineToRequest({
+      title: "Create a presentation about AI products",
+      slides: [
+        { title: "背景与目标", keyPoints: ["说明主题背景和演示目标"] },
+        { title: "核心内容", keyPoints: ["展开关键观点与主要方案"] },
+        { title: "行动与总结", keyPoints: ["归纳结论并给出下一步行动"] },
+      ],
+    });
+
+    const pending = await agent.continueAgentRun(outline.threadId!, confirmedRequest);
     expect(pending.status).toBe("approval-required");
     expect(bus.getSnapshot().revision).toBe(0);
   });
@@ -249,11 +258,18 @@ describe("AgentService", () => {
     const agent = new AgentService(bus, undefined, outlinePlanner);
 
     const first = await agent.start("Create an AI product deck");
-    if (first.status !== "outline-required") throw new Error("Expected outline request");
-    await agent.continueOutline(first.outlineRequest.threadId, "Replace the second slide");
+    if (first.status !== "chat") throw new Error("Expected outline request");
+    await agent.continueAgentRun(first.threadId!, "Replace the second slide");
 
     expect(seenDrafts[0]).toBeUndefined();
-    expect(seenDrafts[1]).toEqual(first.outlineRequest.outline);
+    expect(seenDrafts[1]).toEqual({
+      title: "AI products",
+      slides: [
+        { title: "Context", keyPoints: ["Market"] },
+        { title: "Products", keyPoints: ["Portfolio"] },
+        { title: "Roadmap", keyPoints: ["Delivery"] },
+      ],
+    });
   });
 
   it("restores a persisted outline conversation after the runtime restarts", async () => {
@@ -283,7 +299,7 @@ describe("AgentService", () => {
       ],
     };
 
-    agent.restoreOutlineConversation(
+    agent.restoreAgentRunConversation(
       "persisted-thread",
       [
         { role: "user", content: "Create a deck" },
@@ -293,9 +309,9 @@ describe("AgentService", () => {
       { provider: "anthropic", model: "test-model" },
       "AUTO",
     );
-    const result = await agent.continueOutline("persisted-thread", "Change the second slide");
+    const result = await agent.continueAgentRun("persisted-thread", "Change the second slide");
 
-    expect(result.status).toBe("outline-required");
+    expect(result.status).toBe("chat");
     expect(seenMessages[0]).toEqual([
       { role: "user", content: "Create a deck" },
       { role: "assistant", content: "Please review this outline." },

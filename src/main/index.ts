@@ -3,7 +3,12 @@ import { writeFile } from "node:fs/promises";
 import { app, BrowserWindow, ipcMain, Menu, dialog, type MessageBoxOptions } from "electron";
 import { CommandBus, type PresentationCommand } from "@shared/commands";
 import type { Presentation } from "@shared/presentation";
-import type { AgentEditorContext, AgentRunResult, ExportPresentationOptions } from "@shared/ipc";
+import {
+  agentRunRequestSchema,
+  type AgentRunRequest,
+  type AgentRunResult,
+  type ExportPresentationOptions,
+} from "@shared/ipc";
 import { exportToPptx } from "./ppt-exporter";
 import { AgentService, type AgentServiceEvent } from "./agent/service";
 import {
@@ -21,7 +26,7 @@ import { createModuleLogger, requestSummary } from "./agent/logger";
 import { FileSessionStore } from "./session-store";
 import type { SessionChatMessage, SessionSnapshot } from "@shared/session";
 import { projectArtifactStatusSchema } from "@shared/session";
-import type { RecoverableOutlineConversation } from "@shared/session-recovery";
+import { isProjectStageId, primaryProjectArtifactPaths } from "@shared/project";
 
 const logger = createModuleLogger("main");
 const agentGateway = new AgentGateway();
@@ -33,7 +38,6 @@ interface SessionRuntime {
 
 function createSessionRuntime(
   snapshot: SessionSnapshot,
-  pendingOutline?: RecoverableOutlineConversation,
 ): SessionRuntime {
   const commandBus = new CommandBus(snapshot.presentation);
   const registry = createDefaultToolRegistry();
@@ -42,15 +46,6 @@ function createSessionRuntime(
     new AgentRuntime(registry, agentGateway),
     new CommitGate(new RiskPolicy()),
   );
-  if (pendingOutline) {
-    agentService.restoreOutlineConversation(
-      pendingOutline.outlineRequest.threadId,
-      pendingOutline.messages,
-      pendingOutline.outlineRequest.outline,
-      pendingOutline.outlineRequest.model,
-      pendingOutline.outlineRequest.executionStrategy,
-    );
-  }
   return {
     commandBus,
     agentService,
@@ -80,6 +75,27 @@ function createWindow(): void {
   }
 }
 
+const ARTIFACT_CONTEXT_CHAR_LIMIT = 8_000;
+
+function resolvePrimaryArtifactPath(artifactIdOrPath: string): string {
+  return isProjectStageId(artifactIdOrPath)
+    ? primaryProjectArtifactPaths[artifactIdOrPath]
+    : artifactIdOrPath;
+}
+
+function truncateArtifactContent(content: string): string {
+  if (content.length <= ARTIFACT_CONTEXT_CHAR_LIMIT) return content;
+  return `${content.slice(0, ARTIFACT_CONTEXT_CHAR_LIMIT)}\n\n[content truncated]`;
+}
+
+function formatArtifactContext(path: string, content: string): string {
+  return [
+    `\`\`\`${path}`,
+    truncateArtifactContent(content),
+    "```",
+  ].join("\n");
+}
+
 app.whenReady().then(async () => {
   Menu.setApplicationMenu(null);
   const sessionStore = new FileSessionStore(join(app.getPath("userData"), "sessions.json"));
@@ -91,16 +107,16 @@ app.whenReady().then(async () => {
   const ensureRuntime = async (snapshot: SessionSnapshot): Promise<SessionRuntime> => {
     const existing = runtimes.get(snapshot.session.id);
     if (existing) return existing;
-    const pendingOutline = await sessionStore.getRecoverableOutlineConversation(
-      snapshot.session.id,
-    );
-    const runtime = createSessionRuntime(snapshot, pendingOutline);
+    const runtime = createSessionRuntime(snapshot);
     runtimes.set(snapshot.session.id, runtime);
     return runtime;
   };
 
   const getActiveRuntime = (): Promise<SessionRuntime> =>
     ensureRuntime(sessionStore.getSession(activeSessionId));
+
+  const getRuntimeForSession = (sessionId: string): Promise<SessionRuntime> =>
+    ensureRuntime(sessionStore.getSession(sessionId));
 
   await ensureRuntime(sessionStore.getSession(activeSessionId));
 
@@ -144,6 +160,75 @@ app.whenReady().then(async () => {
       });
       throw error;
     }
+  };
+
+  const readAgentArtifactContext = async (
+    sessionId: string,
+    artifactIdOrPath: string,
+  ): Promise<{ path: string; content: string }> => {
+    const artifactPath = resolvePrimaryArtifactPath(artifactIdOrPath);
+    const artifact = await sessionStore.readProjectArtifact(sessionId, artifactPath);
+    if (artifact.type === "directory") {
+      return {
+        path: artifact.path,
+        content: `Directory entries:\n${(artifact.entries ?? []).join("\n")}`,
+      };
+    }
+    return {
+      path: artifact.path,
+      content: artifact.content ?? "",
+    };
+  };
+
+  const buildStructuredAgentPrompt = async (request: AgentRunRequest): Promise<string> => {
+    const targetPath = request.targetPath
+      ?? (request.targetArtifactId ? resolvePrimaryArtifactPath(request.targetArtifactId) : undefined)
+      ?? primaryProjectArtifactPaths[request.stage];
+    const target = targetPath
+      ? await readAgentArtifactContext(request.sessionId, targetPath)
+      : undefined;
+    const referenceKeys = [...new Set(request.referencedArtifactIds ?? [])]
+      .map(resolvePrimaryArtifactPath)
+      .filter((path) => path !== target?.path);
+    const references = await Promise.all(
+      referenceKeys.map((path) => readAgentArtifactContext(request.sessionId, path)),
+    );
+
+    return [
+      "You are operating inside a file-native PPT creation workspace.",
+      "Use the structured context below as the source of truth. Do not assume the renderer state is authoritative.",
+      "",
+      "User prompt:",
+      request.prompt,
+      "",
+      "Run metadata:",
+      `- sessionId: ${request.sessionId}`,
+      `- stage: ${request.stage}`,
+      `- intent: ${request.intent}`,
+      `- targetArtifactId: ${request.targetArtifactId ?? "none"}`,
+      `- targetPath: ${target?.path ?? "none"}`,
+      `- referencedArtifactIds: ${(request.referencedArtifactIds ?? []).join(", ") || "none"}`,
+      "",
+      ...(target
+        ? [
+            "Target artifact content:",
+            formatArtifactContext(target.path, target.content),
+            "",
+          ]
+        : []),
+      ...(references.length > 0
+        ? [
+            "Referenced artifact content:",
+            ...references.flatMap((artifact) => [
+              formatArtifactContext(artifact.path, artifact.content),
+              "",
+            ]),
+          ]
+        : []),
+      request.stage === "deck"
+        ? "For deck work, propose PresentationCommand changes for review."
+        : "For artifact work, reason about the target file. Artifact patch generation is handled by the artifact patch protocol.",
+    ].join("\n");
   };
 
   ipcMain.handle("session:get-state", () => sessionStore.getBootstrap());
@@ -267,14 +352,14 @@ app.whenReady().then(async () => {
     "agent:start",
     async (
       event,
-      request: string,
+      rawRequest: unknown,
       input?: AgentModelSettings,
       strategy?: AgentExecutionStrategy,
       runId?: string,
-      editorContext?: AgentEditorContext,
     ) => {
-      const sessionId = activeSessionId;
-      const runtime = await getActiveRuntime();
+      const request = agentRunRequestSchema.parse(rawRequest);
+      const sessionId = request.sessionId;
+      const runtime = await getRuntimeForSession(sessionId);
       const settings = input ? agentModelSettingsSchema.parse(input) : undefined;
       const executionStrategy = strategy
         ? agentExecutionStrategySchema.parse(strategy)
@@ -288,19 +373,25 @@ app.whenReady().then(async () => {
         sessionId,
         runId,
         {
-          ...requestSummary(request),
+          ...requestSummary(request.prompt),
+          stage: request.stage,
+          intent: request.intent,
+          targetPath: request.targetPath,
+          targetArtifactId: request.targetArtifactId,
+          referencedArtifactIds: request.referencedArtifactIds,
           provider: selection?.provider,
           model: selection?.model,
           executionStrategy,
         },
         async () => {
-          const messageHistory = sessionStore.getAgentMessageHistory(sessionId, request);
+          const structuredPrompt = await buildStructuredAgentPrompt(request);
+          const messageHistory = sessionStore.getAgentMessageHistory(sessionId, request.prompt);
           const runResult = await runtime.agentService.start(
-            request,
+            structuredPrompt,
             selection,
             executionStrategy,
             emit,
-            editorContext,
+            request.editorContext,
             messageHistory,
           );
           if (runResult.status === "completed" || runResult.status === "rejected") {
@@ -315,46 +406,35 @@ app.whenReady().then(async () => {
   ipcMain.handle("agent:continue", async (
     event,
     threadId: string,
-    request: string,
+    rawRequest: unknown,
     runId?: string,
-    editorContext?: AgentEditorContext,
   ) => {
-    const sessionId = activeSessionId;
-    const runtime = await getActiveRuntime();
+    const request = agentRunRequestSchema.parse(rawRequest);
+    const sessionId = request.sessionId;
+    const runtime = await getRuntimeForSession(sessionId);
     const result = await runAgentOperation(
       "continue-outline",
       sessionId,
       runId,
-      { threadId, ...requestSummary(request) },
+      {
+        threadId,
+        ...requestSummary(request.prompt),
+        stage: request.stage,
+        intent: request.intent,
+        targetPath: request.targetPath,
+        targetArtifactId: request.targetArtifactId,
+        referencedArtifactIds: request.referencedArtifactIds,
+      },
       async () => {
-        const runResult = await runtime.agentService.continueOutline(
+        const structuredPrompt = await buildStructuredAgentPrompt(request);
+        const runResult = await runtime.agentService.continueAgentRun(
           threadId,
-          request,
+          structuredPrompt,
           (streamEvent) => {
             if (runId) event.sender.send("agent:stream", { ...streamEvent, runId });
           },
-          editorContext,
+          request.editorContext,
         );
-        if (runResult.status === "completed" || runResult.status === "rejected") {
-          await persistPresentation(sessionId, runtime);
-        }
-        return runResult;
-      },
-    );
-    return result;
-  });
-  ipcMain.handle("agent:confirm-outline", async (event, threadId: string, runId?: string) => {
-    const sessionId = activeSessionId;
-    const runtime = await getActiveRuntime();
-    const result = await runAgentOperation(
-      "confirm-outline",
-      sessionId,
-      runId,
-      { threadId },
-      async () => {
-        const runResult = await runtime.agentService.confirmOutline(threadId, (streamEvent) => {
-          if (runId) event.sender.send("agent:stream", { ...streamEvent, runId });
-        });
         if (runResult.status === "completed" || runResult.status === "rejected") {
           await persistPresentation(sessionId, runtime);
         }

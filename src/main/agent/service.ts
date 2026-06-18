@@ -28,7 +28,6 @@ type ContinuedConversation = {
   messages: AgentConversationMessage[];
   model?: AgentModelSelection;
   executionStrategy: AgentExecutionStrategy;
-  outline?: PresentationOutline;
 };
 
 /** Coordinates Runtime, Commit Gate, approval persistence and CommandBus writes. */
@@ -42,10 +41,9 @@ export class AgentService {
     private readonly commitGate: CommitGate,
   ) {}
 
-  restoreOutlineConversation(
+  restoreAgentRunConversation(
     threadId: string,
     messages: AgentConversationMessage[],
-    outline: PresentationOutline | undefined,
     model?: AgentModelSelection,
     executionStrategy: AgentExecutionStrategy = "REQUEST_APPROVAL",
   ): void {
@@ -53,7 +51,6 @@ export class AgentService {
       messages: structuredClone(messages),
       model,
       executionStrategy,
-      outline: outline ? structuredClone(outline) : undefined,
     });
   }
 
@@ -69,7 +66,7 @@ export class AgentService {
     return this.run(threadId, request, model, executionStrategy, messageHistory, listener, editorContext, "any");
   }
 
-  async continueOutline(
+  async continueAgentRun(
     threadId: string,
     request: string,
     listener?: AgentServiceEventListener,
@@ -86,18 +83,9 @@ export class AgentService {
       conversation.messages,
       listener,
       editorContext,
-      "command_proposal",
+      "any",
       true,
     );
-  }
-
-  async confirmOutline(threadId: string, listener?: AgentServiceEventListener): Promise<AgentRunResult> {
-    const conversation = this.conversations.get(threadId);
-    if (!conversation) throw new Error("Agent conversation not found or already completed.");
-    const request = conversation.outline
-      ? outlineToRequest(conversation.outline)
-      : "请根据当前已确认的信息继续执行。";
-    return this.continueOutline(threadId, request, listener);
   }
 
   private async run(
@@ -146,14 +134,9 @@ export class AgentService {
         executionStrategy,
       });
       return {
-        status: "outline-required",
-        outlineRequest: {
-          threadId,
-          message: runtimeResult.message,
-          missingInformation: runtimeResult.missingFields ?? [],
-          model,
-          executionStrategy,
-        },
+        status: "chat",
+        message: runtimeResult.message,
+        threadId,
       };
     }
 

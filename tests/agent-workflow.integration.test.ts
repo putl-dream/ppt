@@ -47,9 +47,9 @@ describe("real model Agent workflow integration", () => {
         selection,
         "AUTO",
       );
-      expect(outlineResult.status).toBe("outline-required");
-      if (outlineResult.status !== "outline-required") throw new Error("Expected outline request");
-      const result = await agent.confirmOutline(outlineResult.outlineRequest.threadId);
+      expect(outlineResult.status).toBe("chat");
+      if (outlineResult.status !== "chat") throw new Error("Expected outline request");
+      const result = await agent.continueAgentRun(outlineResult.threadId!, "确认大纲，生成 PPT");
 
       expect(result.status).toBe("completed");
       expect(bus.getSnapshot().title).not.toBe("Untitled presentation");
