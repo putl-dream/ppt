@@ -1,4 +1,9 @@
 import React, { useState, useEffect } from "react";
+import {
+  parseDesignTheme,
+  serializeDesignTheme,
+  type ProjectDesignTheme,
+} from "@shared/project-artifacts";
 import { useProjectStore } from "./project-store";
 
 export const DesignThemeSelector: React.FC = () => {
@@ -10,28 +15,16 @@ export const DesignThemeSelector: React.FC = () => {
 
   const designArtifact = activeProject.artifacts.design;
 
-  const parseDesignJson = (content: string) => {
-    try {
-      return JSON.parse(content);
-    } catch {
-      return {
-        theme: "nordic",
-        palette: "cyan",
-        logoUrl: null,
-        ratio: "16:9"
-      };
-    }
-  };
-
-  const [settings, setSettings] = useState(() => parseDesignJson(designArtifact.content));
+  const [settings, setSettings] = useState<ProjectDesignTheme>(() => parseDesignTheme(designArtifact.content));
 
   useEffect(() => {
-    setSettings(parseDesignJson(designArtifact.content));
+    setSettings(parseDesignTheme(designArtifact.content));
   }, [designArtifact.content]);
 
-  const saveSettings = (nextSettings: typeof settings) => {
-    setSettings(nextSettings);
-    updateArtifactContent("design", JSON.stringify(nextSettings, null, 2));
+  const saveSettings = (nextSettings: ProjectDesignTheme) => {
+    const normalized = parseDesignTheme(serializeDesignTheme(nextSettings));
+    setSettings(normalized);
+    updateArtifactContent("design", serializeDesignTheme(normalized).trimEnd());
   };
 
   const selectTheme = (theme: string) => {
@@ -42,8 +35,8 @@ export const DesignThemeSelector: React.FC = () => {
     saveSettings({ ...settings, palette });
   };
 
-  const selectRatio = (ratio: string) => {
-    saveSettings({ ...settings, ratio });
+  const selectRatio = (ratio: "16:9" | "4:3") => {
+    saveSettings({ ...settings, ratio, layout: { ...settings.layout, ratio } });
   };
 
   const fileInputRef = React.useRef<HTMLInputElement>(null);
@@ -194,7 +187,7 @@ export const DesignThemeSelector: React.FC = () => {
             演示文稿尺寸比例
           </label>
           <div style={{ display: "flex", gap: "12px" }}>
-            {["16:9", "4:3"].map((r) => {
+            {(["16:9", "4:3"] as const).map((r) => {
               const isSelected = settings.ratio === r;
               return (
                 <button

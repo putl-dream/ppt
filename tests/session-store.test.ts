@@ -45,8 +45,8 @@ describe("FileSessionStore", () => {
     expect(initial.activeSession.transcript?.path).toBe(
       join(projectRoot!, "transcripts", `${initial.activeSession.session.id}.jsonl`),
     );
-    expect(await readFile(join(projectRoot!, "brief.md"), "utf8")).toContain("## 目的");
-    expect(await readFile(join(projectRoot!, "outline.md"), "utf8")).toContain("## 章节结构");
+    expect(await readFile(join(projectRoot!, "brief.md"), "utf8")).toContain("**项目名称**");
+    expect(await readFile(join(projectRoot!, "outline.md"), "utf8")).toContain("## 1.");
     expect(await readFile(join(projectRoot!, "slides", "001-title.md"), "utf8")).toContain(
       "## 页面目标",
     );
@@ -117,7 +117,7 @@ describe("FileSessionStore", () => {
       join(migrated.project!.rootPath, "transcripts", `${migrated.session.id}.jsonl`),
     );
     expect(await readFile(join(migrated.project!.rootPath, "research", "notes.md"), "utf8"))
-      .toContain("## 事实");
+      .toContain("**行业数据**");
   });
 
   it("records saved chat messages into an append-only transcript chain", async () => {
@@ -221,7 +221,7 @@ describe("FileSessionStore", () => {
       path: "outline.md",
       type: "file",
     });
-    expect(outline.content).toContain("## 章节结构");
+    expect(outline.content).toContain("## 1.");
 
     const slides = await store.readProjectArtifact(sessionId, "slides");
     expect(slides).toMatchObject({
@@ -312,7 +312,7 @@ describe("FileSessionStore", () => {
     );
 
     expect(diff.changed).toBe(true);
-    expect(diff.before).toContain("## 章节结构");
+    expect(diff.before).toContain("## 1.");
     expect(diff.after).toContain("## 新结构");
     expect(diff.unifiedDiff).toContain("--- a/outline.md");
     expect(diff.unifiedDiff).toContain("+++ b/outline.md");

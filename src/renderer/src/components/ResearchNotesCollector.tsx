@@ -1,11 +1,10 @@
 import React, { useState, useEffect } from "react";
+import {
+  parseResearchNotes,
+  serializeResearchNotes,
+  type ResearchNote,
+} from "@shared/project-artifacts";
 import { useProjectStore } from "./project-store";
-
-interface ResearchNote {
-  id: string;
-  source: string;
-  quote: string;
-}
 
 export const ResearchNotesCollector: React.FC = () => {
   const activeProject = useProjectStore((state) => state.activeProject);
@@ -16,41 +15,15 @@ export const ResearchNotesCollector: React.FC = () => {
 
   const researchArtifact = activeProject.artifacts.research;
 
-  const parseResearchMarkdown = (md: string): ResearchNote[] => {
-    const notes: ResearchNote[] = [];
-    const lines = md.split("\n");
-    let currentSource = "外部来源";
-    
-    lines.forEach((line) => {
-      const sourceMatch = line.match(/^-\s+\*\*(.*?)\*\*:\s*(.*)$/);
-      if (sourceMatch) {
-        notes.push({
-          id: Math.random().toString(36).substr(2, 9),
-          source: sourceMatch[1].trim(),
-          quote: sourceMatch[2].trim()
-        });
-      }
-    });
-
-    if (notes.length === 0) {
-      return [
-        { id: "1", source: "行业背景数据", quote: "2026年全球智能硬件出货量增长预计达到15%。" }
-      ];
-    }
-
-    return notes;
-  };
-
-  const [notes, setNotes] = useState<ResearchNote[]>(() => parseResearchMarkdown(researchArtifact.content));
+  const [notes, setNotes] = useState<ResearchNote[]>(() => parseResearchNotes(researchArtifact.content));
 
   useEffect(() => {
-    setNotes(parseResearchMarkdown(researchArtifact.content));
+    setNotes(parseResearchNotes(researchArtifact.content));
   }, [researchArtifact.content]);
 
   const saveNotes = (newNotes: ResearchNote[]) => {
     setNotes(newNotes);
-    const markdown = `# 研究资料与素材\n\n` + newNotes.map((n) => `- **${n.source}**: ${n.quote}`).join("\n") + "\n";
-    updateArtifactContent("research", markdown);
+    updateArtifactContent("research", serializeResearchNotes(newNotes).trimEnd());
   };
 
   const handleUpdateNote = (id: string, field: "source" | "quote", val: string) => {

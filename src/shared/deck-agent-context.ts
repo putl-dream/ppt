@@ -2,6 +2,7 @@ import type { AgentEditorContext } from "./ipc";
 import type { DeckValidationIssue } from "./deck-validation";
 import type { DesignConstraints } from "./deck-persistence";
 import { designConstraintsSchema } from "./deck-persistence";
+import { normalizeDesignTheme, parseBriefFields } from "./project-artifacts";
 
 export interface DeckAgentContextSlideSpec {
   storyboardId: string;
@@ -60,43 +61,13 @@ export interface BriefSummary {
 }
 
 export function parseBriefSummary(content: string): BriefSummary {
-  const summary: BriefSummary = {};
-
-  const formPatterns: Array<[keyof BriefSummary, RegExp]> = [
-    ["title", /-\s+\*\*项目名称\*\*:\s*(.*)/],
-    ["purpose", /-\s+\*\*核心目的\*\*:\s*(.*)/],
-    ["audience", /-\s+\*\*目标听众\*\*:\s*(.*)/],
-    ["style", /-\s+\*\*期望风格\*\*:\s*(.*)/],
-  ];
-
-  for (const [key, pattern] of formPatterns) {
-    const match = content.match(pattern);
-    if (match?.[1]?.trim()) summary[key] = match[1].trim();
-  }
-
-  const sectionPatterns: Array<[keyof BriefSummary, RegExp]> = [
-    ["purpose", /##\s*目的\s*\n([\s\S]*?)(?=\n##|\n$)/i],
-    ["audience", /##\s*受众\s*\n([\s\S]*?)(?=\n##|\n$)/i],
-    ["style", /##\s*方向\s*\n([\s\S]*?)(?=\n##|\n$)/i],
-  ];
-
-  for (const [key, pattern] of sectionPatterns) {
-    if (summary[key]) continue;
-    const match = content.match(pattern);
-    if (!match?.[1]) continue;
-    const line = match[1]
-      .split("\n")
-      .map((item) => item.replace(/^-\s*/, "").trim())
-      .find(Boolean);
-    if (line) summary[key] = line.slice(0, 200);
-  }
-
-  const titleMatch = content.match(/^#\s*(?:Brief:\s*)?(.+)$/m);
-  if (!summary.title && titleMatch?.[1]?.trim()) {
-    summary.title = titleMatch[1].trim();
-  }
-
-  return summary;
+  const fields = parseBriefFields(content);
+  return {
+    title: fields.title,
+    purpose: fields.purpose,
+    audience: fields.audience,
+    style: fields.style,
+  };
 }
 
 export function extractOutlineTitles(content: string): string[] {
@@ -119,9 +90,9 @@ export function extractOutlineTitles(content: string): string[] {
 export function parseThemeArtifact(content: string): Record<string, unknown> {
   try {
     const parsed = JSON.parse(content);
-    return typeof parsed === "object" && parsed !== null ? parsed as Record<string, unknown> : {};
+    return normalizeDesignTheme(parsed) as unknown as Record<string, unknown>;
   } catch {
-    return {};
+    return normalizeDesignTheme({}) as unknown as Record<string, unknown>;
   }
 }
 

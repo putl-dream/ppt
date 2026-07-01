@@ -8,6 +8,13 @@ import {
   projectStageIds,
   type ProjectStageId,
 } from "@shared/project";
+import {
+  createDefaultBriefMarkdown,
+  createDefaultDesignTheme,
+  createDefaultOutlineMarkdown,
+  createDefaultResearchMarkdown,
+  serializeDesignTheme,
+} from "@shared/project-artifacts";
 
 export type ArtifactId = ProjectStageId;
 export type ArtifactStatus = ProjectArtifactStatus;
@@ -129,9 +136,9 @@ const DEFAULT_ARTIFACTS: Record<ArtifactId, Omit<Artifact, "content" | "isHydrat
 };
 
 export const DEFAULT_CONTENTS: Record<ArtifactId, string> = {
-  brief: `# 演示文稿 Brief\n\n- **项目名称**: 新演示文稿\n- **核心目的**: 汇报\n- **目标听众**: 团队成员\n- **演讲时长**: 20分钟\n- **讲稿配置**: 需要\n- **期望风格**: 专业简洁\n`,
-  outline: `# 演示大纲\n\n## 1. 行业背景与痛点 [预计 1 页]\n- 行业增速放缓\n- 痛点分析\n\n## 2. 解决方案 [预计 1 页]\n- 产品定位\n- 核心竞争力\n\n## 3. 发展规划 [预计 1 页]\n- 下一步里程碑\n- 商业价值\n`,
-  research: `# 研究资料与素材\n\n- **行业数据**: 2026年市场增长率约为12%。\n- **竞品分析**: A产品优势在价格，B产品优势在服务。\n`,
+  brief: createDefaultBriefMarkdown(),
+  outline: createDefaultOutlineMarkdown(),
+  research: createDefaultResearchMarkdown(),
   slides: JSON.stringify(
     [
       {
@@ -144,27 +151,7 @@ export const DEFAULT_CONTENTS: Record<ArtifactId, string> = {
     null,
     2,
   ),
-  design: JSON.stringify(
-    {
-      tone: "professional",
-      typography: {
-        heading: "system-ui",
-        body: "system-ui",
-      },
-      palette: {
-        primary: "#2563eb",
-        accent: "#10b981",
-        background: "#f8fafc",
-        text: "#111827",
-      },
-      layout: {
-        ratio: "16:9",
-        density: "balanced",
-      },
-    },
-    null,
-    2,
-  ),
+  design: serializeDesignTheme(createDefaultDesignTheme()).trimEnd(),
   deck: JSON.stringify(
     {
       title: "新演示文稿",

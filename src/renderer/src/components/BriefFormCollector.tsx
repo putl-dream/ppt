@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { parseBriefFields, serializeBriefMarkdown } from "@shared/project-artifacts";
 import { useProjectStore } from "./project-store";
 
 export const BriefFormCollector: React.FC = () => {
@@ -10,24 +11,7 @@ export const BriefFormCollector: React.FC = () => {
 
   const briefArtifact = activeProject.artifacts.brief;
   
-  // Parse initial fields from markdown content if possible, otherwise use defaults
-  const parseBriefMarkdown = (md: string) => {
-    const titleMatch = md.match(/-\s+\*\*项目名称\*\*:\s*(.*)/);
-    const purposeMatch = md.match(/-\s+\*\*核心目的\*\*:\s*(.*)/);
-    const audienceMatch = md.match(/-\s+\*\*目标听众\*\*:\s*(.*)/);
-    const durationMatch = md.match(/-\s+\*\*演讲时长\*\*:\s*(.*)/);
-    const scriptMatch = md.match(/-\s+\*\*讲稿配置\*\*:\s*(.*)/);
-    const styleMatch = md.match(/-\s+\*\*期望风格\*\*:\s*(.*)/);
-
-    return {
-      title: titleMatch ? titleMatch[1].trim() : activeProject.name || "新演示文稿",
-      purpose: purposeMatch ? purposeMatch[1].trim() : "汇报",
-      audience: audienceMatch ? audienceMatch[1].trim() : "团队成员",
-      duration: durationMatch ? durationMatch[1].trim() : "20分钟",
-      script: scriptMatch ? scriptMatch[1].trim() : "需要",
-      style: styleMatch ? styleMatch[1].trim() : "专业简洁",
-    };
-  };
+  const parseBriefMarkdown = (md: string) => parseBriefFields(md, activeProject.name || "新演示文稿");
 
   const [fields, setFields] = useState(() => parseBriefMarkdown(briefArtifact.content));
 
@@ -40,8 +24,7 @@ export const BriefFormCollector: React.FC = () => {
     const newFields = { ...fields, [key]: value };
     setFields(newFields);
 
-    // Generate new Markdown
-    const markdown = `# 演示文稿 Brief\n\n- **项目名称**: ${newFields.title}\n- **核心目的**: ${newFields.purpose}\n- **目标听众**: ${newFields.audience}\n- **演讲时长**: ${newFields.duration}\n- **讲稿配置**: ${newFields.script}\n- **期望风格**: ${newFields.style}\n`;
+    const markdown = serializeBriefMarkdown(newFields);
     
     updateArtifactContent("brief", markdown);
   };

@@ -3,6 +3,13 @@ import type { Presentation } from "@shared/presentation";
 import type { ProjectSandbox, SessionSnapshot } from "@shared/session";
 import { defaultProjectArtifacts } from "@shared/project";
 import {
+  createDefaultBriefMarkdown,
+  createDefaultDesignTheme,
+  createDefaultOutlineMarkdown,
+  createDefaultResearchMarkdown,
+  serializeDesignTheme,
+} from "@shared/project-artifacts";
+import {
   createDefaultDesignConstraints,
   createDefaultExportHistoryFile,
   createDefaultGenerationJobsFile,
@@ -67,7 +74,7 @@ export function createDefaultProjectFiles(snapshot: SessionSnapshot): ProjectFil
     },
     {
       path: "design/theme.json",
-      content: `${JSON.stringify(createThemeTemplate(), null, 2)}\n`,
+      content: serializeDesignTheme(createThemeTemplate()),
     },
     {
       path: "design/constraints.json",
@@ -101,37 +108,11 @@ export function createDeckSnapshotContent(presentation: Presentation): string {
 }
 
 function createBriefTemplate(title: string): string {
-  return `# Brief: ${title}
-
-## 目的
-- 这份 PPT 要促成什么决定、理解或行动？
-
-## 受众
-- 面向谁？他们已知什么、关心什么、抗拒什么？
-
-## 场景
-- 汇报、路演、培训、销售、复盘或其他？
-
-## 方向
-- 期望语气、视觉风格、内容深度和时长。
-`;
+  return createDefaultBriefMarkdown(title);
 }
 
 function createOutlineTemplate(title: string): string {
-  return `# Outline: ${title}
-
-## 核心观点
-- 
-
-## 章节结构
-1. 开场与背景
-2. 问题或机会
-3. 方案或论证
-4. 结论与行动
-
-## 待确认问题
-- 
-`;
+  return createDefaultOutlineMarkdown(title);
 }
 
 function createResearchSourcesTemplate(): string {
@@ -142,17 +123,7 @@ function createResearchSourcesTemplate(): string {
 }
 
 function createResearchNotesTemplate(): string {
-  return `# Research Notes
-
-## 事实
-- 
-
-## 观点
-- 
-
-## 可用素材
-- 
-`;
+  return createDefaultResearchMarkdown();
 }
 
 function createSlidesReadmeTemplate(): string {
@@ -181,23 +152,7 @@ function createTitleSlideTemplate(title: string): string {
 }
 
 function createThemeTemplate() {
-  return {
-    tone: "professional",
-    typography: {
-      heading: "system-ui",
-      body: "system-ui",
-    },
-    palette: {
-      primary: "#2563eb",
-      accent: "#10b981",
-      background: "#f8fafc",
-      text: "#111827",
-    },
-    layout: {
-      ratio: "16:9",
-      density: "balanced",
-    },
-  };
+  return createDefaultDesignTheme();
 }
 
 function createDesignConstraintsTemplate() {

@@ -15,7 +15,6 @@ import {
   type SessionSummary,
 } from "@shared/session";
 import { LeftPanel } from "./components/LeftPanel";
-import { ChatWorkspace } from "./components/ChatWorkspace";
 import { PPTMirror } from "./components/PPTMirror";
 import { SettingsSidebar } from "./components/SettingsSidebar";
 import { SettingsConsole } from "./components/SettingsConsole";
@@ -31,7 +30,6 @@ import { DesignThemeSelector } from "./components/DesignThemeSelector";
 import { DiffReviewZone } from "./components/DiffReviewZone";
 import { ContextualAgentPanel } from "./components/ContextualAgentPanel";
 import { CanvasArea } from "./components/CanvasArea";
-import { UnifiedAgentInput } from "./components/UnifiedAgentInput";
 import {
   DEFAULT_MODELS,
   MODEL_STORAGE_KEY,
@@ -205,7 +203,6 @@ export function App() {
   const [approval, setApproval] = useState<AgentApprovalRequest>();
   const [busy, setBusy] = useState(false);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
-  const isNewSession = chatMessages.length === 1 && chatMessages[0].id === "init";
   const [thoughtProcess, setThoughtProcess] = useState<string[]>([]);
   const [thoughtProgress, setThoughtProgress] = useState(0);
   const [agentActivityMode, setAgentActivityMode] = useState<"idle" | "request" | "workflow">("idle");
@@ -1189,94 +1186,25 @@ export function App() {
 
             {/* 右侧大圆角容器 - Agent 协作与实时工作台 */}
             <div className="rounded-canvas" style={{ flex: 1, display: "flex", overflow: "hidden", position: "relative" }}>
-              {isNewSession ? (
-                <div className="center-focal-container" style={{
-                  flex: 1,
-                  display: "flex",
-                  flexDirection: "column",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  height: "100%",
-                  width: "100%",
-                  padding: "40px 20px",
-                  position: "relative",
-                  zIndex: 5
-                }}>
-                  {/* Header inside center mode */}
-                  <div style={{ position: "absolute", top: "24px", right: "24px" }}>
-                    <button
-                      className="action-icon-btn theme-toggle-btn"
-                      onClick={() => setThemeMode(computedTheme === "light" ? "dark" : "light")}
-                      title={computedTheme === "light" ? "切换为深色框架" : "切换为浅色框架"}
-                      style={{ background: "rgba(255,255,255,0.05)", border: "1px solid var(--border-glass)", borderRadius: "8px", padding: "8px", color: "var(--text-primary)", cursor: "pointer" }}
-                    >
-                      {computedTheme === "light" ? "🌙" : "☀️"}
-                    </button>
-                  </div>
-
-                  <div style={{ textAlign: "center", marginBottom: "32px" }}>
-                    <h1 style={{ fontSize: "36px", fontWeight: 700, fontFamily: "var(--font-display)", color: "var(--text-primary)", margin: "0 0 8px 0", letterSpacing: "-0.02em" }}>
-                      AI 协同 PPT 创作工作台
-                    </h1>
-                    <p style={{ fontSize: "16px", color: "var(--text-secondary)", margin: 0 }}>
-                      基于文件原生创作沙箱，先明确 Brief，再推进 Outline、Research 并导出 PPT。
-                    </p>
-                  </div>
-
-                  <div style={{ width: "100%", maxWidth: "720px", display: "flex", flexDirection: "column", alignItems: "center" }}>
-                    <UnifiedAgentInput
-                      request={request}
-                      onChangeRequest={setRequest}
-                      onSubmitRequest={() => void startAgent()}
-                      busy={busy}
-                      models={models}
-                      selectedModelId={selectedModelId}
-                      setSelectedModelId={setSelectedModelId}
-                      executionStrategy={executionStrategy}
-                      setExecutionStrategy={setExecutionStrategy}
-                      localStoragePath={localStoragePath}
-                      setLocalStoragePath={setLocalStoragePath}
-                      layoutMode="center"
-                      triggerToast={triggerToast}
-                      selectedSlideIndex={null}
-                      onClearContextTag={() => {}}
-                      submitLabel="生成项目"
-                    />
-
-                    <div className="center-suggestions" style={{ marginTop: "28px", display: "flex", flexWrap: "wrap", gap: "10px", justifyContent: "center" }}>
-                      {[
-                        "设计一份智能硬件推广策划大纲",
-                        "制作年度团队复盘与展望规划",
-                        "制作一份商业路演PPT大纲",
-                        "编写一份前沿AI技术分享课件"
-                      ].map((suggestion, index) => (
-                        <button
-                          key={index}
-                          className="suggestion-chip"
-                          onClick={() => handleSuggestPrompt(suggestion)}
-                          style={{
-                            background: "var(--bg-input-field)",
-                            border: "1px solid var(--border-glass)",
-                            padding: "8px 16px",
-                            borderRadius: "20px",
-                            fontSize: "12px",
-                            color: "var(--text-secondary)",
-                            cursor: "pointer",
-                            transition: "var(--transition-smooth)",
-                            boxShadow: "0 2px 6px rgba(0,0,0,0.01)"
-                          }}
-                        >
-                          ✨ {suggestion}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              ) : (
                 <div className="workspace-canvas-content" style={{ display: "flex", flex: 1, width: "100%", height: "100%", overflow: "hidden" }}>
                   
                   {/* 中间栏：各阶段的产物画布/编辑器区域 */}
                   <div className="workspace-canvas-middle" style={{ flex: 1, height: "100%", position: "relative", display: "flex", flexDirection: "column", minWidth: 0 }}>
+                    {isDraftSession && (
+                      <div
+                        style={{
+                          margin: "12px 16px 0",
+                          padding: "10px 14px",
+                          borderRadius: "10px",
+                          border: "1px solid var(--border-glass)",
+                          background: "rgba(14, 165, 233, 0.08)",
+                          fontSize: "12px",
+                          color: "var(--text-secondary)",
+                        }}
+                      >
+                        当前为未保存草稿：可先编辑左侧 Pipeline 各阶段内容；发送第一条消息后才会创建持久化会话。
+                      </div>
+                    )}
                     {proposedPatch && <DiffReviewZone />}
                     
                     {!proposedPatch && currentStage === "brief" && <BriefFormCollector />}
@@ -1360,7 +1288,6 @@ export function App() {
                   />
 
                 </div>
-              )}
             </div>
           </>
         ) : (

@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from "react";
+import {
+  parseOutlineItems,
+  serializeOutlineMarkdown,
+  type OutlineItem,
+} from "@shared/project-artifacts";
 import { useProjectStore } from "./project-store";
 
-interface OutlineItem {
-  id: string;
-  title: string;
-  pages: number;
-  points: string[];
-}
+interface OutlineItemState extends OutlineItem {}
 
 export const DraggableOutlineTree: React.FC = () => {
   const activeProject = useProjectStore((state) => state.activeProject);
@@ -17,59 +17,15 @@ export const DraggableOutlineTree: React.FC = () => {
 
   const outlineArtifact = activeProject.artifacts.outline;
 
-  // Simple parser for outline markdown
-  const parseOutlineMarkdown = (md: string): OutlineItem[] => {
-    const items: OutlineItem[] = [];
-    const lines = md.split("\n");
-    let currentItem: OutlineItem | null = null;
-
-    lines.forEach((line) => {
-      const headerMatch = line.match(/^##\s+\d*\.?\s*(.*?)\s*(?:\[预计\s*(\d+)\s*页\])?\s*$/);
-      if (headerMatch) {
-        if (currentItem) items.push(currentItem);
-        currentItem = {
-          id: Math.random().toString(36).substr(2, 9),
-          title: headerMatch[1].trim(),
-          pages: headerMatch[2] ? parseInt(headerMatch[2]) : 1,
-          points: []
-        };
-      } else {
-        const pointMatch = line.match(/^[-*]\s*(.*)$/);
-        if (pointMatch && currentItem) {
-          currentItem.points.push(pointMatch[1].trim());
-        }
-      }
-    });
-
-    if (currentItem) items.push(currentItem);
-
-    // Fallback if empty
-    if (items.length === 0) {
-      return [
-        { id: "1", title: "行业背景与痛点", pages: 1, points: ["痛点一", "痛点二"] }
-      ];
-    }
-
-    return items;
-  };
-
-  const [items, setItems] = useState<OutlineItem[]>(() => parseOutlineMarkdown(outlineArtifact.content));
+  const [items, setItems] = useState<OutlineItemState[]>(() => parseOutlineItems(outlineArtifact.content));
 
   useEffect(() => {
-    setItems(parseOutlineMarkdown(outlineArtifact.content));
+    setItems(parseOutlineItems(outlineArtifact.content));
   }, [outlineArtifact.content]);
 
-  // Compile back to Markdown and save
-  const saveItems = (newItems: OutlineItem[]) => {
+  const saveItems = (newItems: OutlineItemState[]) => {
     setItems(newItems);
-    const markdown = `# 演示大纲\n\n` + newItems.map((item, index) => {
-      let head = `## ${index + 1}. ${item.title}`;
-      if (item.pages) head += ` [预计 ${item.pages} 页]`;
-      const points = item.points.map((p) => `- ${p}`).join("\n");
-      return `${head}\n${points}`;
-    }).join("\n\n") + "\n";
-
-    updateArtifactContent("outline", markdown);
+    updateArtifactContent("outline", serializeOutlineMarkdown(newItems));
   };
 
   const updateItemTitle = (id: string, newTitle: string) => {
@@ -116,7 +72,7 @@ export const DraggableOutlineTree: React.FC = () => {
   };
 
   const addNewSection = () => {
-    const newItem: OutlineItem = {
+    const newItem: OutlineItemState = {
       id: Math.random().toString(36).substr(2, 9),
       title: "新大纲章节",
       pages: 1,
