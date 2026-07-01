@@ -113,6 +113,7 @@ function createRichPresentation(): Presentation {
             width: 340,
             height: 240,
             url: TINY_PNG_DATA_URL,
+            borderRadius: 0,
           },
           {
             id: crypto.randomUUID(),
@@ -184,6 +185,21 @@ describe("ppt-exporter", () => {
             fontSize: 32,
           },
         ],
+      },
+    });
+    bus.execute({
+      id: crypto.randomUUID(),
+      type: "add-element",
+      slideId: firstSlideId,
+      element: {
+        id: crypto.randomUUID(),
+        type: "text",
+        x: 120,
+        y: 220,
+        width: 1040,
+        height: 200,
+        text: "Key takeaway from the deck",
+        fontSize: 24,
       },
     });
     bus.execute({

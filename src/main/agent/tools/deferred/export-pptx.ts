@@ -1,5 +1,7 @@
 import { z } from "zod";
 import type { ToolDefinition } from "../tool-definition";
+import type { DeckExportResult } from "@shared/ipc";
+import { deckExportService } from "../../../deck/deck-export-service";
 
 export const exportPptxSchema = z.object({
   format: z.enum(["pptx", "pdf"]).default("pptx").describe("导出的文件格式"),
@@ -11,7 +13,7 @@ export const exportPptxSchema = z.object({
  */
 export const exportPptxTool: ToolDefinition<
   typeof exportPptxSchema,
-  { success: boolean; filePath: string }
+  DeckExportResult & { success: boolean }
 > = {
   name: "ExportPptx",
   description: "将当前 PPT 文稿渲染并导出为外部格式（PPTX 或 PDF）文件。",
@@ -19,10 +21,23 @@ export const exportPptxTool: ToolDefinition<
   loadPolicy: "deferred",
   inputSchema: exportPptxSchema,
   risk: "medium",
-  execute: async (args) => {
+  execute: async (args, context) => {
+    if (args.format === "pdf") {
+      throw new Error("PDF export is not supported yet; use format 'pptx'.");
+    }
+
+    const presentation = context.presentation;
+    const result = await deckExportService.exportDeck({
+      presentation,
+      options: {
+        theme: presentation.theme ?? "nordic",
+        palette: presentation.palette ?? "cyan",
+      },
+    });
+
     return {
       success: true,
-      filePath: `/mock/exports/presentation.${args.format}`,
+      ...result,
     };
   },
 };

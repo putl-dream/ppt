@@ -229,3 +229,16 @@ export interface ExportPresentationOptions {
   palette: string;
   logoUrl?: string | null;
 }
+
+/** 数据层：一批 slides 生成完成后的结果（与文件导出解耦） */
+export interface DeckGenerationResult {
+  presentation: Presentation;
+  batchIndex: number;
+  done: boolean;
+}
+
+/** 文件层：Presentation 导出为外部文件后的结果 */
+export interface DeckExportResult {
+  filePath: string;
+  slideCount: number;
+}

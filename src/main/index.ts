@@ -1,5 +1,4 @@
 import { join } from "node:path";
-import { writeFile } from "node:fs/promises";
 import { app, BrowserWindow, ipcMain, Menu, dialog, type MessageBoxOptions } from "electron";
 import { CommandBus, type PresentationCommand } from "@shared/commands";
 import type { Presentation } from "@shared/presentation";
@@ -9,7 +8,7 @@ import {
   type AgentRunResult,
   type ExportPresentationOptions,
 } from "@shared/ipc";
-import { exportToPptx } from "./ppt-exporter";
+import { deckExportService } from "./deck/deck-export-service";
 import { AgentService, type AgentServiceEvent } from "./agent/service";
 import {
   agentExecutionStrategySchema,
@@ -377,13 +376,13 @@ app.whenReady().then(async () => {
         return null;
       }
 
-      if (filePath.endsWith(".json")) {
-        await writeFile(filePath, JSON.stringify(presentation, null, 2), "utf8");
-      } else {
-        await exportToPptx(presentation, options, filePath);
-      }
+      const result = await deckExportService.exportDeck({
+        presentation,
+        options,
+        filePath,
+      });
 
-      return filePath;
+      return result.filePath;
     },
   );
   ipcMain.handle("dialog:select-directory", async (event, defaultPath?: string) => {
