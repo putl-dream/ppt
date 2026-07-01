@@ -85,9 +85,14 @@ export async function exportToPptx(
   const cleanBodyColor = cleanColor(bodyColor);
   const cleanAccentColor = cleanColor(accentColor);
 
+  // Canvas is 1280x720 px; PPT slide is 10x5.625 in → divide by 128.
+  const px = (value: number) => value / 128;
+
   for (let i = 0; i < presentation.slides.length; i++) {
     const slideData = presentation.slides[i];
     const slide = pptx.addSlide();
+    const showChromeHeader =
+      slideData.layout !== "cover" && slideData.layout !== "section";
 
     // Set background
     slide.background = { fill: cleanBg };
@@ -126,44 +131,53 @@ export async function exportToPptx(
 
     // 2. Slide Number
     slide.addText((i + 1).toString(), {
-      x: 9.2,
-      y: 5.1,
-      w: 0.5,
-      h: 0.3,
+      x: px(1160),
+      y: px(650),
+      w: px(80),
+      h: px(40),
       fontSize: 11,
       color: cleanBodyColor,
       fontFace,
       align: "right",
     });
 
-    // 3. Slide Title
-    slide.addText(slideData.title, {
-      x: 0.94,
-      y: 0.39,
-      w: 8.12,
-      h: 0.625,
-      fontSize: 36, // 48px * 0.75
-      color: cleanTitleColor,
-      fontFace,
-      bold: true,
-      valign: "middle",
-    });
+    // 3. Chrome header (matches PPTMirror .slide-header-text — not used on cover/section)
+    if (showChromeHeader) {
+      slide.addText(slideData.title, {
+        x: px(120),
+        y: px(50),
+        w: px(1040),
+        h: px(60),
+        fontSize: 36,
+        color: cleanTitleColor,
+        fontFace,
+        bold: true,
+        valign: "bottom",
+      });
 
-    // Title accent line:
-    slide.addShape((pptx as any).shapes.LINE, {
-      x: 0.94,
-      y: 1.01,
-      w: 8.12,
-      h: 0.01,
-      line: { color: cleanAccentColor, width: 2 },
-    });
+      slide.addShape((pptx as any).shapes.LINE, {
+        x: px(120),
+        y: px(112),
+        w: px(1040),
+        h: 0.01,
+        line: { color: cleanAccentColor, width: 2 },
+      });
+    }
 
-    // 4. Slide Elements
-    for (const element of slideData.elements) {
-      const x = element.x / 128;
-      const y = element.y / 128;
-      const w = element.width / 128;
-      const h = element.height / 128;
+    // 4. Slide Elements (skip text that duplicates chrome title)
+    const exportElements = showChromeHeader
+      ? slideData.elements.filter(
+          (element) =>
+            element.type !== "text" ||
+            element.text.trim() !== slideData.title.trim(),
+        )
+      : slideData.elements;
+
+    for (const element of exportElements) {
+      const x = px(element.x);
+      const y = px(element.y);
+      const w = px(element.width);
+      const h = px(element.height);
 
       if (element.type === "text") {
         slide.addText(element.text, {

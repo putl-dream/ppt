@@ -103,15 +103,14 @@ export function applyLayout(
     return slide;
   }
 
-  // Find slide title
-  let titleEl = textElements.find(
-    (el) => el.text.trim() === slide.title.trim() || el.fontSize >= 36
+  // Find an explicit in-slide title element (must match slide title or use heading size).
+  const titleEl = textElements.find(
+    (el) => el.text.trim() === slide.title.trim() || el.fontSize >= 36,
   );
-  if (!titleEl) {
-    titleEl = textElements[0];
-  }
 
-  const bodyTexts = textElements.filter((el) => el.id !== titleEl?.id);
+  const bodyTexts = titleEl
+    ? textElements.filter((el) => el.id !== titleEl.id)
+    : textElements;
   const elements: SlideElement[] = [];
 
   const createCard = (x: number, y: number, w: number, h: number): ShapeElement => ({
@@ -126,77 +125,63 @@ export function applyLayout(
     strokeColor: colors.cardStroke,
   });
 
-  if (layout === "cover") {
-    titleEl.x = 120;
-    titleEl.y = 200;
-    titleEl.width = 1040;
-    titleEl.height = 160;
-    titleEl.fontSize = 56;
-    titleEl.bold = true;
-    titleEl.color = colors.title;
-    titleEl.align = "center";
-    elements.push(titleEl);
-
-    if (bodyTexts[0]) {
-      const sub = bodyTexts[0];
-      sub.x = 120;
-      sub.y = 380;
-      sub.width = 1040;
-      sub.height = 100;
-      sub.fontSize = 28;
-      sub.bold = false;
-      sub.color = colors.body;
-      sub.align = "center";
-      elements.push(sub);
+  if (layout === "cover" || layout === "section") {
+    const coverTitleEl = titleEl ?? bodyTexts[0];
+    if (!coverTitleEl) {
+      return slide;
     }
-  } else if (layout === "section") {
-    titleEl.x = 120;
-    titleEl.y = 240;
-    titleEl.width = 1040;
-    titleEl.height = 120;
-    titleEl.fontSize = 48;
-    titleEl.bold = true;
-    titleEl.color = colors.title;
-    titleEl.align = "center";
-    elements.push(titleEl);
+    const coverBodyTexts = titleEl ? bodyTexts : bodyTexts.slice(1);
 
-    if (bodyTexts[0]) {
-      const sub = bodyTexts[0];
-      sub.x = 120;
-      sub.y = 380;
-      sub.width = 1040;
-      sub.height = 140;
-      sub.fontSize = 24;
-      sub.bold = false;
-      sub.color = colors.body;
-      sub.align = "center";
-      elements.push(sub);
+    if (layout === "cover") {
+      coverTitleEl.x = 120;
+      coverTitleEl.y = 200;
+      coverTitleEl.width = 1040;
+      coverTitleEl.height = 160;
+      coverTitleEl.fontSize = 56;
+      coverTitleEl.bold = true;
+      coverTitleEl.color = colors.title;
+      coverTitleEl.align = "center";
+      elements.push(coverTitleEl);
+
+      if (coverBodyTexts[0]) {
+        const sub = coverBodyTexts[0];
+        sub.x = 120;
+        sub.y = 380;
+        sub.width = 1040;
+        sub.height = 100;
+        sub.fontSize = 28;
+        sub.bold = false;
+        sub.color = colors.body;
+        sub.align = "center";
+        elements.push(sub);
+      }
+    } else {
+      coverTitleEl.x = 120;
+      coverTitleEl.y = 240;
+      coverTitleEl.width = 1040;
+      coverTitleEl.height = 120;
+      coverTitleEl.fontSize = 48;
+      coverTitleEl.bold = true;
+      coverTitleEl.color = colors.title;
+      coverTitleEl.align = "center";
+      elements.push(coverTitleEl);
+
+      if (coverBodyTexts[0]) {
+        const sub = coverBodyTexts[0];
+        sub.x = 120;
+        sub.y = 380;
+        sub.width = 1040;
+        sub.height = 140;
+        sub.fontSize = 24;
+        sub.bold = false;
+        sub.color = colors.body;
+        sub.align = "center";
+        elements.push(sub);
+      }
     }
   } else {
-    // Add title element
-    titleEl.x = 120;
-    titleEl.y = 80;
-    titleEl.width = 1040;
-    titleEl.height = 80;
-    titleEl.fontSize = 40;
-    titleEl.bold = true;
-    titleEl.color = colors.title;
-    titleEl.align = "left";
-    elements.push(titleEl);
-
-    // Render title divider line
-    elements.unshift({
-      id: `line-${generateId()}`,
-      type: "shape",
-      shapeType: "line",
-      x: 120,
-      y: 165,
-      width: 1040,
-      height: 2,
-      fillColor: colors.accent,
-      strokeColor: colors.accent,
-    });
-
+    // slide.title is rendered in chrome (Canvas / PPTMirror / export header).
+    // Only body elements belong on the canvas here.
     const contentY = 200;
     const contentH = 430;
 
