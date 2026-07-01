@@ -2,6 +2,11 @@ import { join } from "node:path";
 import type { Presentation } from "@shared/presentation";
 import type { ProjectSandbox, SessionSnapshot } from "@shared/session";
 import { defaultProjectArtifacts } from "@shared/project";
+import {
+  createDefaultDesignConstraints,
+  createDefaultExportHistoryFile,
+  createDefaultGenerationJobsFile,
+} from "@shared/deck-persistence";
 
 export interface ProjectFileTemplate {
   path: string;
@@ -64,6 +69,10 @@ export function createDefaultProjectFiles(snapshot: SessionSnapshot): ProjectFil
       content: `${JSON.stringify(createThemeTemplate(), null, 2)}\n`,
     },
     {
+      path: "design/constraints.json",
+      content: `${JSON.stringify(createDesignConstraintsTemplate(), null, 2)}\n`,
+    },
+    {
       path: "design/layout-notes.md",
       content: createLayoutNotesTemplate(),
     },
@@ -72,8 +81,16 @@ export function createDefaultProjectFiles(snapshot: SessionSnapshot): ProjectFil
       content: `${JSON.stringify(snapshot.presentation, null, 2)}\n`,
     },
     {
+      path: "deck/generation-jobs.json",
+      content: `${JSON.stringify(createGenerationJobsTemplate(), null, 2)}\n`,
+    },
+    {
       path: "history/README.md",
       content: createHistoryReadmeTemplate(),
+    },
+    {
+      path: "history/exports.json",
+      content: `${JSON.stringify(createExportHistoryTemplate(), null, 2)}\n`,
     },
   ];
 }
@@ -180,6 +197,18 @@ function createThemeTemplate() {
       density: "balanced",
     },
   };
+}
+
+function createDesignConstraintsTemplate() {
+  return createDefaultDesignConstraints();
+}
+
+function createGenerationJobsTemplate() {
+  return createDefaultGenerationJobsFile();
+}
+
+function createExportHistoryTemplate() {
+  return createDefaultExportHistoryFile();
 }
 
 function createStoryboardTemplate(title: string) {

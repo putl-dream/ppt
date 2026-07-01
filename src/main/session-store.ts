@@ -24,6 +24,11 @@ import {
   type ProjectArtifactReadResult,
   type ProjectArtifactWriteResult,
 } from "./project/project-file-service";
+import {
+  ExportHistoryService,
+  GenerationJobsService,
+} from "./deck/deck-persistence-services";
+import type { DeckExportRecord, DeckGenerationJobsFile } from "@shared/deck-persistence";
 import { TranscriptStore, type TranscriptMessageInput } from "./transcript-store";
 
 const storedSessionSchema = sessionSnapshotSchema;
@@ -39,6 +44,8 @@ export class FileSessionStore {
   private data?: SessionFile;
   private writeQueue = Promise.resolve();
   private readonly projectFileService: ProjectFileService;
+  private readonly generationJobsService: GenerationJobsService;
+  private readonly exportHistoryService: ExportHistoryService;
   private readonly transcriptStore = new TranscriptStore();
   private readonly expiredApprovalMessageIds = new Set<string>();
 
@@ -46,6 +53,8 @@ export class FileSessionStore {
     this.projectFileService = new ProjectFileService(
       projectRootPath ?? join(dirname(filePath), "projects"),
     );
+    this.generationJobsService = new GenerationJobsService(this.projectFileService);
+    this.exportHistoryService = new ExportHistoryService(this.projectFileService);
   }
 
   async initialize(): Promise<void> {
@@ -168,8 +177,36 @@ export class FileSessionStore {
       new Date().toISOString(),
       presentation,
     );
-    await this.projectFileService.writeDeckSnapshot(snapshot);
+    await this.projectFileService.writeDeckSnapshot(snapshot, { markStale: false });
     await this.persist();
+  }
+
+  async recordDeckExport(
+    sessionId: string,
+    record: Omit<DeckExportRecord, "exportedAt"> & { exportedAt?: string },
+  ): Promise<void> {
+    const snapshot = this.findSession(sessionId);
+    await this.exportHistoryService.appendExport(snapshot, {
+      ...record,
+      exportedAt: record.exportedAt ?? new Date().toISOString(),
+    });
+    snapshot.session.updatedAt = new Date().toISOString();
+    await this.persist();
+  }
+
+  readGenerationJobs(sessionId: string) {
+    return this.generationJobsService.read(this.findSession(sessionId));
+  }
+
+  async writeGenerationJobs(sessionId: string, file: DeckGenerationJobsFile): Promise<void> {
+    const snapshot = this.findSession(sessionId);
+    await this.generationJobsService.save(snapshot, file);
+    snapshot.session.updatedAt = new Date().toISOString();
+    await this.persist();
+  }
+
+  readExportHistory(sessionId: string) {
+    return this.exportHistoryService.read(this.findSession(sessionId));
   }
 
   async saveMessages(sessionId: string, messages: SessionChatMessage[]): Promise<void> {

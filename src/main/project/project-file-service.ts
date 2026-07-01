@@ -136,7 +136,7 @@ export class ProjectFileService {
       snapshot,
       "deck/snapshot.json",
       createDeckSnapshotContent(snapshot.presentation),
-      options,
+      { markStale: false, ...options },
     );
   }
 

@@ -359,6 +359,7 @@ app.whenReady().then(async () => {
   ipcMain.handle(
     "presentation:export",
     async (_, presentation: Presentation, options: ExportPresentationOptions) => {
+      const sessionId = activeSessionId;
       const window = BrowserWindow.getFocusedWindow();
       const dialogOptions = {
         title: "导出幻灯片",
@@ -381,6 +382,15 @@ app.whenReady().then(async () => {
         options,
         filePath,
       });
+
+      if (filePath.endsWith(".pptx")) {
+        await sessionStore.recordDeckExport(sessionId, {
+          revision: presentation.revision,
+          filePath: result.filePath,
+          theme: presentation.theme ?? options.theme,
+          palette: presentation.palette ?? options.palette,
+        });
+      }
 
       return result.filePath;
     },

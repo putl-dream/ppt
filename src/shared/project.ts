@@ -1,7 +1,11 @@
 import type { ProjectArtifact } from "./session";
+import { projectArtifactFilePaths } from "./deck-persistence";
 
 export const projectStageIds = ["brief", "outline", "research", "slides", "design", "deck"] as const;
 export type ProjectStageId = (typeof projectStageIds)[number];
+
+/** 目录型 artifact 下的关键子文件路径 */
+export { projectArtifactFilePaths };
 
 export const defaultProjectArtifacts: ProjectArtifact[] = [
   {
