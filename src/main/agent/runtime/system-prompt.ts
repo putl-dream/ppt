@@ -1,3 +1,5 @@
+import type { DeckAgentContext } from "@shared/deck-agent-context";
+import { formatDeckAgentContextForSystemPrompt } from "@shared/deck-agent-context";
 import type { ToolDefinition } from "../tools/tool-definition";
 import { toToolCard } from "../tools/tool-card";
 
@@ -5,6 +7,7 @@ export interface SystemPromptOptions {
   coreTools: ToolDefinition<any, any>[];
   currentSlideId?: string;
   requiredOutcome?: "any" | "command_proposal";
+  deckAgentContext?: DeckAgentContext;
 }
 
 /**
@@ -79,6 +82,7 @@ ${options.requiredOutcome === "command_proposal"
 
 当前上下文信息：
 - 活跃幻灯片 ID: ${options.currentSlideId || "未选择幻灯片"}
+${options.deckAgentContext ? `\n${formatDeckAgentContextForSystemPrompt(options.deckAgentContext)}` : ""}
 `;
   }
 }

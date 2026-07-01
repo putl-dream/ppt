@@ -1,6 +1,7 @@
 import type { AgentExecutionStrategy, AgentModelSelection } from "@shared/agent";
 import type { CommandBus, PresentationCommand } from "@shared/commands";
 import type { AgentEditorContext, AgentRunResult, ArtifactDiff } from "@shared/ipc";
+import type { DeckAgentContext } from "@shared/deck-agent-context";
 import type { ProjectArtifact } from "@shared/session";
 import type { AgentConversationMessage } from "@shared/session-recovery";
 import { CommitGate, type CommitGateResult } from "./gate/commit-gate";
@@ -82,9 +83,10 @@ export class AgentService {
     editorContext?: AgentEditorContext,
     messageHistory: AgentConversationMessage[] = [],
     signal?: AbortSignal,
+    deckAgentContext?: DeckAgentContext,
   ): Promise<AgentRunResult> {
     const threadId = crypto.randomUUID();
-    return this.run(threadId, request, model, executionStrategy, messageHistory, listener, editorContext, "any", false, signal);
+    return this.run(threadId, request, model, executionStrategy, messageHistory, listener, editorContext, "any", false, signal, deckAgentContext);
   }
 
   async continueAgentRun(
@@ -93,6 +95,7 @@ export class AgentService {
     listener?: AgentServiceEventListener,
     editorContext?: AgentEditorContext,
     signal?: AbortSignal,
+    deckAgentContext?: DeckAgentContext,
   ): Promise<AgentRunResult> {
     const conversation = this.conversations.get(threadId);
     if (!conversation) throw new Error("Agent conversation not found or already completed.");
@@ -108,6 +111,7 @@ export class AgentService {
       "any",
       true,
       signal,
+      deckAgentContext,
     );
   }
 
@@ -122,6 +126,7 @@ export class AgentService {
     requiredOutcome: "any" | "command_proposal" = "any",
     requestAlreadyInHistory = false,
     signal?: AbortSignal,
+    deckAgentContext?: DeckAgentContext,
   ): Promise<AgentRunResult> {
     if (signal?.aborted) {
       throw new Error("Run aborted by user.");
@@ -142,6 +147,7 @@ export class AgentService {
       messageHistory,
       requiredOutcome,
       signal,
+      deckAgentContext,
       onProgress: (ev) => {
         listener?.(ev as any);
       },

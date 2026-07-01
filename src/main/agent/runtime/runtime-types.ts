@@ -7,6 +7,7 @@
 
 import type { PresentationCommand } from "@shared/commands";
 import type { AgentModelSelection } from "@shared/agent";
+import type { DeckAgentContext } from "@shared/deck-agent-context";
 import type { Presentation } from "@shared/presentation";
 
 export type AgentRuntimeRisk = "low" | "medium" | "high";
@@ -58,6 +59,7 @@ export interface AgentRuntimeOptions {
    * 否则必须通过 SubmitCommands 形成 command_proposal，不能用叙述性 message 提前结束。
    */
   requiredOutcome?: "any" | "command_proposal";
+  deckAgentContext?: DeckAgentContext;
   maxSteps?: number;
   /**
    * 流式回调：当模型生成内容时逐chunk调用（可选）

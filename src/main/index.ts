@@ -33,6 +33,13 @@ import { FileSessionStore } from "./session-store";
 import type { SessionChatMessage, SessionSnapshot } from "@shared/session";
 import { projectArtifactStatusSchema } from "@shared/session";
 import { isProjectStageId, primaryProjectArtifactPaths } from "@shared/project";
+import { mergeEditorContext } from "@shared/deck-agent-context";
+import type { DeckBatchPlan } from "./deck/deck-batch-planner";
+import {
+  buildDeckAgentStructuredPrompt,
+  createArtifactReader,
+  deckContextBuilder,
+} from "./deck/deck-context-builder";
 
 const logger = createModuleLogger("main");
 const agentGateway = new AgentGateway();
@@ -213,6 +220,13 @@ app.whenReady().then(async () => {
       agentService: options.runtime.agentService,
       store: context.store,
       readStoryboard: context.readStoryboard,
+      readArtifact: createArtifactReader(async (path) => {
+        try {
+          return await readAgentArtifactContext(options.sessionId, path);
+        } catch {
+          return undefined;
+        }
+      }),
       persistPresentation: context.persistPresentation,
       model: options.model,
       executionStrategy: options.executionStrategy,
@@ -295,50 +309,51 @@ app.whenReady().then(async () => {
   };
 
   const buildStructuredAgentPrompt = async (request: AgentRunRequest): Promise<string> => {
+    if (request.stage === "deck") {
+      const runtime = await getRuntimeForSession(request.sessionId);
+      const storyboard = await sessionStore.readStoryboard(request.sessionId);
+      const artifactReader = createArtifactReader(async (path) => {
+        try {
+          return await readAgentArtifactContext(request.sessionId, path);
+        } catch {
+          return undefined;
+        }
+      });
+      const context = mergeEditorContext(
+        await deckContextBuilder.build({
+          presentation: runtime.commandBus.getSnapshot(),
+          storyboard,
+          editorContext: request.editorContext,
+          readArtifact: artifactReader,
+        }),
+        request.editorContext,
+      );
+      return buildDeckAgentStructuredPrompt(request.prompt, context, {
+        sessionId: request.sessionId,
+        stage: request.stage,
+        intent: request.intent,
+        targetArtifactId: request.targetArtifactId,
+        targetPath: request.targetPath ?? "deck/snapshot.json",
+      });
+    }
+
     let target: { path: string; content: string } | undefined = undefined;
     let references: Array<{ path: string; content: string }> = [];
 
-    if (request.stage === "deck") {
-      const targetPath = "deck/snapshot.json";
-      try {
-        target = await readAgentArtifactContext(request.sessionId, targetPath);
-      } catch (e) {
-        // ignore if not present
-      }
+    const targetPath = request.targetPath
+      ?? (request.targetArtifactId ? resolvePrimaryArtifactPath(request.targetArtifactId) : undefined)
+      ?? primaryProjectArtifactPaths[request.stage];
+    target = targetPath
+      ? await readAgentArtifactContext(request.sessionId, targetPath)
+      : undefined;
 
-      const upstreams = [
-        "brief.md",
-        "outline.md",
-        "research/notes.md",
-        "slides/storyboard.json",
-        "design/theme.json",
-      ];
-      const loadedRefs = await Promise.all(
-        upstreams.map(async (path) => {
-          try {
-            return await readAgentArtifactContext(request.sessionId, path);
-          } catch (e) {
-            return undefined;
-          }
-        })
-      );
-      references = loadedRefs.filter((r): r is { path: string; content: string } => r !== undefined);
-    } else {
-      const targetPath = request.targetPath
-        ?? (request.targetArtifactId ? resolvePrimaryArtifactPath(request.targetArtifactId) : undefined)
-        ?? primaryProjectArtifactPaths[request.stage];
-      target = targetPath
-        ? await readAgentArtifactContext(request.sessionId, targetPath)
-        : undefined;
-
-      const referenceKeys = [...new Set(request.referencedArtifactIds ?? [])]
-        .map(resolvePrimaryArtifactPath)
-        .filter((path) => path !== target?.path);
-      const loadedRefs = await Promise.all(
-        referenceKeys.map((path) => readAgentArtifactContext(request.sessionId, path)),
-      );
-      references = loadedRefs;
-    }
+    const referenceKeys = [...new Set(request.referencedArtifactIds ?? [])]
+      .map(resolvePrimaryArtifactPath)
+      .filter((path) => path !== target?.path);
+    const loadedRefs = await Promise.all(
+      referenceKeys.map((path) => readAgentArtifactContext(request.sessionId, path)),
+    );
+    references = loadedRefs;
 
     return [
       "You are operating inside a file-native PPT creation workspace.",
@@ -371,10 +386,30 @@ app.whenReady().then(async () => {
             ]),
           ]
         : []),
-      request.stage === "deck"
-        ? "For deck work, you MUST only return a command_proposal containing PresentationCommands. You are not allowed to return artifact_patch or ordinary message content as the final outcome."
-        : "For artifact work, you MUST return an artifact_patch containing the proposed changes. Do not return command_proposal."
+      "For artifact work, you MUST return an artifact_patch containing the proposed changes. Do not return command_proposal."
     ].join("\n");
+  };
+
+  const buildDeckAgentContextForRequest = async (request: AgentRunRequest, batch?: DeckBatchPlan) => {
+    const runtime = await getRuntimeForSession(request.sessionId);
+    const storyboard = await sessionStore.readStoryboard(request.sessionId);
+    const artifactReader = createArtifactReader(async (path) => {
+      try {
+        return await readAgentArtifactContext(request.sessionId, path);
+      } catch {
+        return undefined;
+      }
+    });
+    return mergeEditorContext(
+      await deckContextBuilder.build({
+        presentation: runtime.commandBus.getSnapshot(),
+        storyboard,
+        batch,
+        editorContext: request.editorContext,
+        readArtifact: artifactReader,
+      }),
+      request.editorContext,
+    );
   };
 
   ipcMain.handle("session:get-state", () => sessionStore.getBootstrap());
@@ -596,6 +631,9 @@ app.whenReady().then(async () => {
             }
 
             const structuredPrompt = await buildStructuredAgentPrompt(request);
+            const deckAgentContext = request.stage === "deck"
+              ? await buildDeckAgentContextForRequest(request)
+              : undefined;
             const messageHistory = sessionStore.getAgentMessageHistory(sessionId, request.prompt);
             const runResult = await runtime.agentService.start(
               structuredPrompt,
@@ -605,6 +643,7 @@ app.whenReady().then(async () => {
               request.editorContext,
               messageHistory,
               controller.signal,
+              deckAgentContext,
             );
             if (runResult.status === "completed") {
               await persistPresentation(sessionId, runtime);
@@ -665,12 +704,16 @@ app.whenReady().then(async () => {
         },
         async () => {
           const structuredPrompt = await buildStructuredAgentPrompt(request);
+          const deckAgentContext = request.stage === "deck"
+            ? await buildDeckAgentContextForRequest(request)
+            : undefined;
           const runResult = await runtime.agentService.continueAgentRun(
             threadId,
             structuredPrompt,
             emit,
             request.editorContext,
             controller.signal,
+            deckAgentContext,
           );
           if (runResult.status === "completed") {
             await persistPresentation(sessionId, runtime);

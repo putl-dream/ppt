@@ -1,5 +1,6 @@
 import type { AgentExecutionStrategy, AgentModelSelection } from "@shared/agent";
 import type { AgentRunResult } from "@shared/ipc";
+import type { DeckAgentContext } from "@shared/deck-agent-context";
 import type { DeckGenerationJob } from "@shared/deck-persistence";
 import type { StoryboardSlideSpec } from "@shared/storyboard";
 import { parseStoryboard } from "@shared/storyboard";
@@ -7,7 +8,12 @@ import type { CommandBus } from "@shared/commands";
 import type { Presentation } from "@shared/presentation";
 import type { AgentService, AgentServiceEventListener } from "../agent/service";
 import {
-  buildDeckBatchPrompt,
+  buildDeckAgentStructuredPrompt,
+  createArtifactReader,
+  deckContextBuilder,
+  type DeckContextArtifactReader,
+} from "./deck-context-builder";
+import {
   DeckGenerationService,
   deckGenerationService,
   type DeckGenerationJobStore,
@@ -64,6 +70,7 @@ export interface RunDeckGenerationJobInput {
   agentService: AgentService;
   store: DeckGenerationJobStore;
   readStoryboard: () => Promise<StoryboardSlideSpec[]>;
+  readArtifact: DeckContextArtifactReader;
   persistPresentation: () => Promise<Presentation>;
   model?: AgentModelSelection;
   executionStrategy?: AgentExecutionStrategy;
@@ -160,7 +167,18 @@ export class DeckGenerationJobRunner {
         message: `正在生成第 ${batch.batchIndex + 1}/${job.totalBatches} 批（slides ${batch.slideIndices.map((index) => index + 1).join(", ")}）...`,
       });
 
-      const batchPrompt = buildDeckBatchPrompt(batch, storyboard, input.userPrompt);
+      const deckAgentContext: DeckAgentContext = await deckContextBuilder.build({
+        presentation: input.commandBus.getSnapshot(),
+        storyboard,
+        batch,
+        readArtifact: input.readArtifact,
+      });
+      const batchPrompt = buildDeckAgentStructuredPrompt(input.userPrompt, deckAgentContext, {
+        sessionId: input.sessionId,
+        stage: "deck",
+        intent: "generate-deck",
+        targetPath: "deck/snapshot.json",
+      });
       const result = await input.agentService.start(
         batchPrompt,
         input.model,
@@ -169,6 +187,7 @@ export class DeckGenerationJobRunner {
         undefined,
         [],
         input.signal,
+        deckAgentContext,
       );
 
       if (result.status === "approval-required") {
