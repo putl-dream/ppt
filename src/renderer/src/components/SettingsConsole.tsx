@@ -354,8 +354,8 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
 
             {/* Local Storage Directory */}
             <div className="settings-card">
-              <h4 style={{ margin: "0 0 6px 0", fontSize: "14px", fontWeight: "600" }}>本地文件默认保存路径 (Local Storage Directory)</h4>
-              <p style={{ margin: "0 0 16px 0", fontSize: "11px", color: "var(--text-muted)" }}>修改 PPT 导出以及本地会话快照的存储目录归宿。</p>
+              <h4 style={{ margin: "0 0 6px 0", fontSize: "14px", fontWeight: "600" }}>项目工作空间沙箱路径 (Workspace Sandbox Directory)</h4>
+              <p style={{ margin: "0 0 16px 0", fontSize: "11px", color: "var(--text-muted)" }}>当前会话的工作空间物理路径（由后台会话自动隔离管理）。</p>
               
               <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
                 <div className="path-display-box" style={{

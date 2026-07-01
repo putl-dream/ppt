@@ -21,7 +21,7 @@ import { SettingsSidebar } from "./components/SettingsSidebar";
 import { SettingsConsole } from "./components/SettingsConsole";
 
 // Project Pipeline Components & Store
-import { useProjectStore, type ActiveProject, type ArtifactId } from "./components/project-store";
+import { useProjectStore, DEFAULT_CONTENTS, type ActiveProject, type ArtifactId } from "./components/project-store";
 import { BriefFormCollector } from "./components/BriefFormCollector";
 import { DraggableOutlineTree } from "./components/DraggableOutlineTree";
 import { ResearchNotesCollector } from "./components/ResearchNotesCollector";
@@ -389,6 +389,9 @@ export function App() {
     setSessionLoaded(true);
     setIsDraftSession(false);
     setIsMirrorOpen(snapshot.presentation.revision > 0);
+    if (snapshot.project?.rootPath) {
+      setLocalStoragePath(snapshot.project.rootPath);
+    }
 
     initializeProject(snapshot.session.id, snapshot.session.title, snapshot.project?.artifacts);
     void hydrateProjectArtifacts(snapshot.session.id).catch((error) => {
@@ -665,9 +668,27 @@ export function App() {
     let agentSessionId = activeSessionId;
     if (isDraftSession) {
       try {
+        const draftProject = useProjectStore.getState().activeProject;
         const state = await window.desktopApi.createSession();
+        const newSessionId = state.activeSession.session.id;
+
+        // Write draft changes to the newly created session sandbox before applying state
+        if (draftProject) {
+          const api = window.desktopApi;
+          for (const stageId of Object.keys(draftProject.artifacts) as ArtifactId[]) {
+            const artifact = draftProject.artifacts[stageId];
+            if (artifact && artifact.content !== DEFAULT_CONTENTS[stageId]) {
+              try {
+                await api.writeProjectArtifact(newSessionId, artifact.path, artifact.content);
+              } catch (writeErr) {
+                console.error(`Failed to write draft artifact ${stageId} on session creation:`, writeErr);
+              }
+            }
+          }
+        }
+
         applySessionState(state);
-        agentSessionId = state.activeSession.session.id;
+        agentSessionId = newSessionId;
       } catch (error) {
         setBusy(false);
         triggerToast(error instanceof Error ? error.message : "创建会话失败");
