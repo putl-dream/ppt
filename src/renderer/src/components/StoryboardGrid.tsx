@@ -1,12 +1,9 @@
 import React, { useState, useEffect } from "react";
 import { useProjectStore } from "./project-store";
 
-interface SlidePlan {
-  title: string;
-  layout: string;
-  keyPoints: string[];
-  quote: string;
-}
+import { createDefaultStoryboardSlide, normalizeStoryboardSlide, serializeStoryboard, type StoryboardSlideSpec } from "@shared/storyboard";
+
+interface SlidePlan extends StoryboardSlideSpec {}
 
 export const StoryboardGrid: React.FC = () => {
   const activeProject = useProjectStore((state) => state.activeProject);
@@ -19,11 +16,11 @@ export const StoryboardGrid: React.FC = () => {
 
   const parseSlidesJson = (content: string): SlidePlan[] => {
     try {
-      return JSON.parse(content);
+      const raw = JSON.parse(content);
+      if (!Array.isArray(raw)) throw new Error("invalid");
+      return raw.map((item, index) => normalizeStoryboardSlide(item, index));
     } catch {
-      return [
-        { title: "封面", layout: "cover", keyPoints: ["智能硬件市场推广", "主讲人: AI 助手"], quote: "" }
-      ];
+      return [createDefaultStoryboardSlide("封面", 0)];
     }
   };
 
@@ -35,12 +32,15 @@ export const StoryboardGrid: React.FC = () => {
 
   const saveSlides = (newSlides: SlidePlan[]) => {
     setSlides(newSlides);
-    updateArtifactContent("slides", JSON.stringify(newSlides, null, 2));
+    updateArtifactContent("slides", serializeStoryboard(newSlides).trimEnd());
   };
 
   const updateSlideField = (index: number, field: keyof SlidePlan, val: any) => {
     const next = [...slides];
     next[index] = { ...next[index], [field]: val };
+    if (field === "layout") {
+      next[index].suggestedLayout = val;
+    }
     saveSlides(next);
   };
 
@@ -65,12 +65,7 @@ export const StoryboardGrid: React.FC = () => {
   };
 
   const addSlide = () => {
-    const newSlide: SlidePlan = {
-      title: "新幻灯片页",
-      layout: "concept",
-      keyPoints: ["核心信息点描述"],
-      quote: ""
-    };
+    const newSlide = createDefaultStoryboardSlide("新幻灯片页", slides.length);
     saveSlides([...slides, newSlide]);
   };
 
@@ -157,6 +152,7 @@ export const StoryboardGrid: React.FC = () => {
               <span style={{ fontSize: "11px", fontWeight: 700, color: "var(--accent-cyan)" }}>
                 SLIDE {(index + 1).toString().padStart(2, "0")}
               </span>
+              <span style={{ fontSize: "10px", color: "var(--text-muted)" }}>{slide.status ?? "pending"}</span>
               <button
                 onClick={() => removeSlide(index)}
                 style={{
@@ -196,7 +192,7 @@ export const StoryboardGrid: React.FC = () => {
             <div>
               <label style={{ fontSize: "11px", color: "var(--text-muted)", display: "block", marginBottom: "4px" }}>选择布局结构</label>
               <select
-                value={slide.layout}
+                value={slide.layout ?? slide.suggestedLayout ?? "concept"}
                 onChange={(e) => updateSlideField(index, "layout", e.target.value)}
                 style={{
                   background: "var(--bg-darker)",

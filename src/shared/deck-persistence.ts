@@ -30,11 +30,13 @@ export const deckGenerationJobSchema = z.object({
   id: z.string(),
   sessionId: z.string(),
   storyboardPath: z.literal("slides/storyboard.json"),
-  batchSize: z.union([z.literal(2), z.literal(3)]),
+  batchSize: z.union([z.literal(1), z.literal(2), z.literal(3)]).default(2),
   completedBatches: z.number().int().nonnegative(),
   totalBatches: z.number().int().nonnegative(),
   status: z.enum(["pending", "running", "paused", "failed", "done"]),
   lastRevision: z.number().int().nonnegative(),
+  pendingBatchIndex: z.number().int().nonnegative().optional(),
+  updatedAt: z.string().optional(),
   errors: z
     .array(
       z.object({

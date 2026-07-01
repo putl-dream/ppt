@@ -1,0 +1,156 @@
+import { LayoutPolicy } from "../../agent/design/layout-policy";
+import type { DeckValidationIssue } from "@shared/deck-validation";
+import type { DesignConstraints } from "@shared/deck-persistence";
+import { createDefaultDesignConstraints } from "@shared/deck-persistence";
+import type { Presentation, Slide, SlideElement, TextElement } from "@shared/presentation";
+
+function isLayoutCard(element: SlideElement): boolean {
+  return element.type === "shape" && element.shapeType === "rectangle";
+}
+
+function shouldCheckOverlap(left: SlideElement, right: SlideElement): boolean {
+  if (isLayoutCard(left) || isLayoutCard(right)) return false;
+  return true;
+}
+
+export interface LayoutValidatorOptions {
+  constraints?: DesignConstraints;
+  slideIds?: string[];
+}
+
+const CONTENT_LAYOUTS = new Set([
+  "concept",
+  "comparison",
+  "process",
+  "architecture",
+  "case",
+  "summary",
+]);
+
+export class LayoutValidator {
+  validate(presentation: Presentation, options: LayoutValidatorOptions = {}): DeckValidationIssue[] {
+    const constraints = options.constraints ?? createDefaultDesignConstraints();
+    const slideIdSet = options.slideIds ? new Set(options.slideIds) : undefined;
+    const issues: DeckValidationIssue[] = [];
+
+    for (const slide of presentation.slides) {
+      if (slideIdSet && !slideIdSet.has(slide.id)) continue;
+      issues.push(...this.validateSlide(slide, constraints));
+    }
+
+    return issues;
+  }
+
+  private validateSlide(slide: Slide, constraints: DesignConstraints): DeckValidationIssue[] {
+    const issues: DeckValidationIssue[] = [];
+
+    if (slide.elements.length === 0 && slide.layout && CONTENT_LAYOUTS.has(slide.layout)) {
+      issues.push({
+        slideId: slide.id,
+        category: "layout",
+        severity: "error",
+        message: `Slide '${slide.title}' uses layout '${slide.layout}' but has no canvas elements.`,
+        fixHint: "Add body content or run AutoLayoutSlide for this slide.",
+      });
+    } else if (slide.elements.length === 0) {
+      issues.push({
+        slideId: slide.id,
+        category: "layout",
+        severity: "warning",
+        message: `Slide '${slide.title}' has no canvas elements.`,
+        fixHint: "Add content elements or choose an appropriate layout.",
+      });
+    }
+
+    if (slide.elements.length > constraints.layout.maxElementsPerSlide) {
+      issues.push({
+        slideId: slide.id,
+        category: "layout",
+        severity: "warning",
+        message: `Slide '${slide.title}' has ${slide.elements.length} elements, exceeding the recommended maximum of ${constraints.layout.maxElementsPerSlide}.`,
+        fixHint: "Split content across slides or simplify the layout.",
+      });
+    }
+
+    for (const element of slide.elements) {
+      if (!LayoutPolicy.isWithinSafeZone(element)) {
+        issues.push({
+          slideId: slide.id,
+          category: "layout",
+          severity: "error",
+          message: `Element '${element.id}' (${element.type}) on slide '${slide.title}' is outside the safe margin.`,
+          fixHint: "Move or resize the element to stay within the canvas safe zone.",
+        });
+      }
+    }
+
+    for (let i = 0; i < slide.elements.length; i += 1) {
+      for (let j = i + 1; j < slide.elements.length; j += 1) {
+        const left = slide.elements[i];
+        const right = slide.elements[j];
+        if (!shouldCheckOverlap(left, right)) continue;
+        if (LayoutPolicy.isOverlapping(left, right)) {
+          issues.push({
+            slideId: slide.id,
+            category: "layout",
+            severity: "warning",
+            message: `Elements '${left.id}' and '${right.id}' overlap on slide '${slide.title}'.`,
+            fixHint: "Adjust positions or rerun AutoLayoutSlide.",
+          });
+        }
+      }
+    }
+
+    if (slide.layout === "comparison") {
+      issues.push(...this.validateComparisonLayout(slide));
+    }
+
+    return issues;
+  }
+
+  private validateComparisonLayout(slide: Slide): DeckValidationIssue[] {
+    const textElements = slide.elements.filter((element): element is TextElement => element.type === "text");
+    if (textElements.length < 2) {
+      return [
+        {
+          slideId: slide.id,
+          category: "layout",
+          severity: "error",
+          message: `Comparison layout on slide '${slide.title}' requires at least two body text columns.`,
+          fixHint: "Add left and right column content before applying comparison layout.",
+        },
+      ];
+    }
+
+    const midpoint = LayoutPolicy.CANVAS_WIDTH / 2;
+    const leftTexts = textElements.filter((element) => element.x + element.width / 2 < midpoint);
+    const rightTexts = textElements.filter((element) => element.x + element.width / 2 >= midpoint);
+    const issues: DeckValidationIssue[] = [];
+
+    if (leftTexts.length === 0 || rightTexts.length === 0) {
+      issues.push({
+        slideId: slide.id,
+        category: "layout",
+        severity: "error",
+        message: `Comparison layout on slide '${slide.title}' has an empty column.`,
+        fixHint: "Place body text in both the left and right columns.",
+      });
+    }
+
+    for (const element of textElements) {
+      if (!element.text.trim()) {
+        issues.push({
+          slideId: slide.id,
+          category: "layout",
+          severity: "warning",
+          message: `Comparison column text element '${element.id}' on slide '${slide.title}' is empty.`,
+          fixHint: "Fill the column or remove the unused text box.",
+        });
+      }
+    }
+
+    return issues;
+  }
+}
+
+export const layoutValidator = new LayoutValidator();

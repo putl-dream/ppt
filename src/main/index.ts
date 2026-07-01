@@ -6,9 +6,16 @@ import {
   agentRunRequestSchema,
   type AgentRunRequest,
   type AgentRunResult,
+  type AgentStreamEvent,
   type ExportPresentationOptions,
 } from "@shared/ipc";
 import { deckExportService } from "./deck/deck-export-service";
+import {
+  continueDeckBatchAfterApproval,
+  deckGenerationJobRunner,
+  type DeckGenerationStreamEvent,
+} from "./deck/deck-generation-job-runner";
+import { deckGenerationService } from "./deck/deck-generation-service";
 import { AgentService, type AgentServiceEvent } from "./agent/service";
 import {
   agentExecutionStrategySchema,
@@ -99,6 +106,17 @@ function formatArtifactContext(path: string, content: string): string {
 
 let sessionStore: FileSessionStore;
 
+type PendingDeckBatch = {
+  sessionId: string;
+  jobId: string;
+  batchIndex: number;
+  userPrompt: string;
+  model?: AgentModelSettings;
+  executionStrategy: AgentExecutionStrategy;
+};
+
+const pendingDeckBatchByThread = new Map<string, PendingDeckBatch>();
+
 app.whenReady().then(async () => {
   Menu.setApplicationMenu(null);
   sessionStore = new FileSessionStore(join(app.getPath("userData"), "sessions.json"));
@@ -129,6 +147,97 @@ app.whenReady().then(async () => {
     const presentation = runtime.commandBus.getSnapshot();
     await sessionStore.savePresentation(sessionId, presentation);
     return presentation;
+  };
+
+  const createDeckJobContext = (
+    sessionId: string,
+    runtime: SessionRuntime,
+    currentRunId: string,
+    sendStream: (event: AgentStreamEvent) => void,
+  ) => {
+    const store = sessionStore.createDeckGenerationJobStore(sessionId);
+    const deckListener = (event: DeckGenerationStreamEvent) => {
+      sendStream({ ...event, runId: currentRunId });
+    };
+    return {
+      store,
+      deckListener,
+      readStoryboard: () => sessionStore.readStoryboard(sessionId),
+      persistPresentation: () => persistPresentation(sessionId, runtime),
+    };
+  };
+
+  const mapDeckRunResultToAgentResult = (deckResult: Awaited<ReturnType<typeof deckGenerationJobRunner.run>>): AgentRunResult => {
+    if (deckResult.status === "completed") {
+      return { status: "completed", presentation: deckResult.presentation };
+    }
+    if (deckResult.status === "paused") {
+      return deckResult.approval;
+    }
+    if (deckResult.status === "chat") {
+      return { status: "chat", message: deckResult.message, threadId: deckResult.threadId };
+    }
+    return {
+      status: "chat",
+      message: deckResult.message,
+    };
+  };
+
+  const runDeckGenerationJob = async (options: {
+    sessionId: string;
+    runtime: SessionRuntime;
+    request: AgentRunRequest;
+    model?: AgentModelSettings;
+    executionStrategy: AgentExecutionStrategy;
+    currentRunId: string;
+    emit: (streamEvent: AgentServiceEvent) => void;
+    sendStream: (event: AgentStreamEvent) => void;
+    signal?: AbortSignal;
+    resumeJobId?: string;
+  }): Promise<AgentRunResult> => {
+    const context = createDeckJobContext(
+      options.sessionId,
+      options.runtime,
+      options.currentRunId,
+      options.sendStream,
+    );
+    const storyboard = await sessionStore.readStoryboard(options.sessionId);
+    if (storyboard.length === 0) {
+      throw new Error("Storyboard is empty. Complete slides/storyboard.json before generating the deck.");
+    }
+
+    const deckResult = await deckGenerationJobRunner.run({
+      sessionId: options.sessionId,
+      userPrompt: options.request.prompt,
+      commandBus: options.runtime.commandBus,
+      agentService: options.runtime.agentService,
+      store: context.store,
+      readStoryboard: context.readStoryboard,
+      persistPresentation: context.persistPresentation,
+      model: options.model,
+      executionStrategy: options.executionStrategy,
+      listener: options.emit,
+      deckListener: context.deckListener,
+      signal: options.signal,
+      resumeJobId: options.resumeJobId,
+    });
+
+    if (deckResult.status === "paused" && deckResult.approval.status === "approval-required") {
+      pendingDeckBatchByThread.set(deckResult.approval.approval.threadId, {
+        sessionId: options.sessionId,
+        jobId: deckResult.job.id,
+        batchIndex: deckResult.job.pendingBatchIndex ?? deckResult.job.completedBatches,
+        userPrompt: options.request.prompt,
+        model: options.model,
+        executionStrategy: options.executionStrategy,
+      });
+    }
+
+    const agentResult = mapDeckRunResultToAgentResult(deckResult);
+    if (agentResult.status === "completed") {
+      await sessionStore.markProjectArtifactStatus(options.sessionId, "deck", "ready");
+    }
+    return agentResult;
   };
 
   const runAgentOperation = async (
@@ -448,8 +557,11 @@ app.whenReady().then(async () => {
         ? agentExecutionStrategySchema.parse(strategy)
         : "REQUEST_APPROVAL";
       const selection = settings ? agentGateway.configure(settings) : undefined;
+      const sendStream = (streamEvent: AgentStreamEvent) => {
+        event.sender.send("agent:stream", streamEvent);
+      };
       const emit = (streamEvent: AgentServiceEvent) => {
-        if (currentRunId) event.sender.send("agent:stream", { ...streamEvent, runId: currentRunId });
+        sendStream({ ...streamEvent, runId: currentRunId });
       };
 
       try {
@@ -469,6 +581,20 @@ app.whenReady().then(async () => {
             executionStrategy,
           },
           async () => {
+            if (request.intent === "generate-deck" && request.stage === "deck") {
+              return runDeckGenerationJob({
+                sessionId,
+                runtime,
+                request,
+                model: selection,
+                executionStrategy,
+                currentRunId,
+                emit,
+                sendStream,
+                signal: controller.signal,
+              });
+            }
+
             const structuredPrompt = await buildStructuredAgentPrompt(request);
             const messageHistory = sessionStore.getAgentMessageHistory(sessionId, request.prompt);
             const runResult = await runtime.agentService.start(
@@ -563,9 +689,10 @@ app.whenReady().then(async () => {
       }
     }
   });
-  ipcMain.handle("agent:resume", async (_, threadId: string, approved: boolean) => {
+  ipcMain.handle("agent:resume", async (event, threadId: string, approved: boolean) => {
     const sessionId = activeSessionId;
     const runtime = await getActiveRuntime();
+    const pendingDeck = pendingDeckBatchByThread.get(threadId);
     const result = await runAgentOperation(
       "resume",
       sessionId,
@@ -575,15 +702,145 @@ app.whenReady().then(async () => {
         const runResult = await runtime.agentService.resume(threadId, approved);
         if (runResult.status === "completed") {
           await persistPresentation(sessionId, runtime);
-          await sessionStore.markProjectArtifactStatus(sessionId, "deck", "ready");
+          if (!pendingDeck) {
+            await sessionStore.markProjectArtifactStatus(sessionId, "deck", "ready");
+          }
         } else {
           await persistPresentation(sessionId, runtime);
         }
         return runResult;
       },
     );
-    return result;
+
+    if (!pendingDeck) {
+      return result;
+    }
+
+    pendingDeckBatchByThread.delete(threadId);
+
+    if (!approved || result.status !== "completed") {
+      return result;
+    }
+
+    const currentRunId = crypto.randomUUID();
+    const sendStream = (streamEvent: AgentStreamEvent) => {
+      event.sender.send("agent:stream", streamEvent);
+    };
+    const emit = (streamEvent: AgentServiceEvent) => {
+      sendStream({ ...streamEvent, runId: currentRunId });
+    };
+    const context = createDeckJobContext(sessionId, runtime, currentRunId, sendStream);
+    const store = context.store;
+
+    await continueDeckBatchAfterApproval(deckGenerationService, {
+      sessionId,
+      jobId: pendingDeck.jobId,
+      batchIndex: pendingDeck.batchIndex,
+      commandBus: runtime.commandBus,
+      store,
+      readStoryboard: context.readStoryboard,
+      persistPresentation: context.persistPresentation,
+      deckListener: context.deckListener,
+    });
+
+    return runDeckGenerationJob({
+      sessionId,
+      runtime,
+      request: {
+        prompt: pendingDeck.userPrompt,
+        sessionId,
+        intent: "generate-deck",
+        stage: "deck",
+      },
+      model: pendingDeck.model,
+      executionStrategy: pendingDeck.executionStrategy,
+      currentRunId,
+      emit,
+      sendStream,
+      resumeJobId: pendingDeck.jobId,
+    });
   });
+
+  ipcMain.handle("deck:generation-status", async (_, sessionId: string) => {
+    const store = sessionStore.createDeckGenerationJobStore(sessionId);
+    const storyboard = await sessionStore.readStoryboard(sessionId);
+    const job = await deckGenerationService.getActiveJob(store, sessionId);
+    return {
+      job: job ?? null,
+      storyboard,
+      doneSlides: storyboard.filter((slide) => slide.status === "done").length,
+      pendingSlides: storyboard.filter((slide) => slide.status === "pending").length,
+      failedSlides: storyboard.filter((slide) => slide.status === "failed").length,
+    };
+  });
+
+  ipcMain.handle(
+    "deck:generation-resume",
+    async (
+      event,
+      sessionId: string,
+      jobId?: string,
+      model?: AgentModelSettings,
+      strategy?: AgentExecutionStrategy,
+      runId?: string,
+    ) => {
+      const activeRunId = sessionActiveRuns.get(sessionId);
+      if (activeRunId && activeRuns.has(activeRunId)) {
+        throw new Error("Concurrency Conflict: An active agent run is already in progress in this session.");
+      }
+
+      const currentRunId = runId || crypto.randomUUID();
+      const controller = new AbortController();
+      activeRuns.set(currentRunId, controller);
+      sessionActiveRuns.set(sessionId, currentRunId);
+
+      const runtime = await getRuntimeForSession(sessionId);
+      const settings = model ? agentModelSettingsSchema.parse(model) : undefined;
+      const executionStrategy = strategy
+        ? agentExecutionStrategySchema.parse(strategy)
+        : "REQUEST_APPROVAL";
+      const selection = settings ? agentGateway.configure(settings) : undefined;
+      const sendStream = (streamEvent: AgentStreamEvent) => {
+        event.sender.send("agent:stream", streamEvent);
+      };
+      const emit = (streamEvent: AgentServiceEvent) => {
+        sendStream({ ...streamEvent, runId: currentRunId });
+      };
+
+      try {
+        const store = sessionStore.createDeckGenerationJobStore(sessionId);
+        const activeJob =
+          (jobId ? await deckGenerationService.getJob(store, sessionId, jobId) : undefined) ??
+          (await deckGenerationService.getActiveJob(store, sessionId));
+        if (!activeJob) {
+          throw new Error("No active deck generation job to resume.");
+        }
+
+        return await runDeckGenerationJob({
+          sessionId,
+          runtime,
+          request: {
+            prompt: "Continue deck generation from the last checkpoint.",
+            sessionId,
+            intent: "generate-deck",
+            stage: "deck",
+          },
+          model: selection,
+          executionStrategy,
+          currentRunId,
+          emit,
+          sendStream,
+          signal: controller.signal,
+          resumeJobId: activeJob.id,
+        });
+      } finally {
+        activeRuns.delete(currentRunId);
+        if (sessionActiveRuns.get(sessionId) === currentRunId) {
+          sessionActiveRuns.delete(sessionId);
+        }
+      }
+    },
+  );
 
   createWindow();
   app.on("activate", () => {

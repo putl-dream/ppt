@@ -26,6 +26,7 @@ import { BriefFormCollector } from "./components/BriefFormCollector";
 import { DraggableOutlineTree } from "./components/DraggableOutlineTree";
 import { ResearchNotesCollector } from "./components/ResearchNotesCollector";
 import { StoryboardGrid } from "./components/StoryboardGrid";
+import { DeckGenerationPanel } from "./components/DeckGenerationPanel";
 import { DesignThemeSelector } from "./components/DesignThemeSelector";
 import { DiffReviewZone } from "./components/DiffReviewZone";
 import { ContextualAgentPanel } from "./components/ContextualAgentPanel";
@@ -284,6 +285,26 @@ export function App() {
         setAgentActivityMode("workflow");
         activeRunStepsRef.current = [...activeRunStepsRef.current, `✅ 工具 ${event.toolName} 运行完毕`];
         setThoughtProcess(activeRunStepsRef.current);
+        return;
+      }
+
+      if (
+        event.type === "deck-job-started" ||
+        event.type === "deck-batch-started" ||
+        event.type === "deck-batch-validated" ||
+        event.type === "deck-job-progress" ||
+        event.type === "deck-job-finished"
+      ) {
+        stopStatusTyping();
+        setAgentActivityMode("workflow");
+        activeRunStepsRef.current = [...activeRunStepsRef.current, event.message];
+        setThoughtProcess(activeRunStepsRef.current);
+        if (event.type === "deck-job-progress") {
+          setThoughtProgress(Math.min(95, Math.round((event.completedBatches / event.totalBatches) * 100)));
+        }
+        if (event.type === "deck-job-finished") {
+          setThoughtProgress(event.status === "done" ? 100 : 80);
+        }
         return;
       }
 
@@ -1244,7 +1265,19 @@ export function App() {
                     {!proposedPatch && currentStage === "slides" && <StoryboardGrid />}
                     
                     {!proposedPatch && currentStage === "deck" && (
-                      <CanvasArea
+                      <>
+                        <DeckGenerationPanel
+                          sessionId={activeSessionId || undefined}
+                          busy={busy}
+                          executionStrategy={executionStrategy}
+                          modelSettings={selectedModel ? toAgentModelSettings(selectedModel) : undefined}
+                          onRefreshPresentation={async () => {
+                            const next = await window.desktopApi.getPresentation();
+                            setPresentation(next);
+                          }}
+                          triggerToast={triggerToast}
+                        />
+                        <CanvasArea
                         presentation={presentation}
                         selectedSlideId={selectedSlideId}
                         onSelectSlide={(id) => {
@@ -1273,6 +1306,7 @@ export function App() {
                         canRedo={presentation ? presentation.revision < maxRevision : false}
                         onProposePrompt={handleSuggestPrompt}
                       />
+                      </>
                     )}
                   </div>
 

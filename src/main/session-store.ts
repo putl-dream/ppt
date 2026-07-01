@@ -29,6 +29,7 @@ import {
   GenerationJobsService,
 } from "./deck/deck-persistence-services";
 import type { DeckExportRecord, DeckGenerationJobsFile } from "@shared/deck-persistence";
+import { parseStoryboard, serializeStoryboard, type StoryboardSlideSpec } from "@shared/storyboard";
 import { TranscriptStore, type TranscriptMessageInput } from "./transcript-store";
 
 const storedSessionSchema = sessionSnapshotSchema;
@@ -207,6 +208,27 @@ export class FileSessionStore {
 
   readExportHistory(sessionId: string) {
     return this.exportHistoryService.read(this.findSession(sessionId));
+  }
+
+  async readStoryboard(sessionId: string): Promise<StoryboardSlideSpec[]> {
+    const artifact = await this.readProjectArtifact(sessionId, "slides/storyboard.json");
+    return parseStoryboard(artifact.content ?? "[]");
+  }
+
+  async writeStoryboard(sessionId: string, storyboard: StoryboardSlideSpec[]): Promise<void> {
+    await this.writeProjectArtifact(sessionId, "slides/storyboard.json", serializeStoryboard(storyboard));
+  }
+
+  createDeckGenerationJobStore(_sessionId: string) {
+    return {
+      readJobs: async (sessionId: string) => this.readGenerationJobs(sessionId),
+      writeJobs: async (sessionId: string, file: DeckGenerationJobsFile) => {
+        await this.writeGenerationJobs(sessionId, file);
+      },
+      writeStoryboard: async (sessionId: string, storyboard: StoryboardSlideSpec[]) => {
+        await this.writeStoryboard(sessionId, storyboard);
+      },
+    };
   }
 
   async saveMessages(sessionId: string, messages: SessionChatMessage[]): Promise<void> {

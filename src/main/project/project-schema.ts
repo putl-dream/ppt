@@ -7,6 +7,7 @@ import {
   createDefaultExportHistoryFile,
   createDefaultGenerationJobsFile,
 } from "@shared/deck-persistence";
+import { createDefaultStoryboardSlide } from "@shared/storyboard";
 
 export interface ProjectFileTemplate {
   path: string;
@@ -212,14 +213,7 @@ function createExportHistoryTemplate() {
 }
 
 function createStoryboardTemplate(title: string) {
-  return [
-    {
-      title: "标题页",
-      layout: "cover",
-      keyPoints: [title],
-      quote: "",
-    },
-  ];
+  return [createDefaultStoryboardSlide(title, 0)];
 }
 
 function createLayoutNotesTemplate(): string {

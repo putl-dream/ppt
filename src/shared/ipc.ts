@@ -1,6 +1,8 @@
 import type { Presentation } from "./presentation";
 import type { PresentationCommand } from "./commands";
 import type { AgentExecutionStrategy, AgentModelSelection, AgentModelSettings } from "./agent";
+import type { DeckGenerationJob } from "./deck-persistence";
+import type { StoryboardSlideSpec } from "./storyboard";
 import { z } from "zod";
 import type {
   ProjectArtifact,
@@ -129,6 +131,46 @@ export type AgentStreamEvent =
     runId: string;
     type: "approval-waiting";
     message: string;
+  }
+  | {
+    runId: string;
+    type: "deck-job-started";
+    jobId: string;
+    totalBatches: number;
+    message: string;
+  }
+  | {
+    runId: string;
+    type: "deck-batch-started";
+    jobId: string;
+    batchIndex: number;
+    totalBatches: number;
+    message: string;
+  }
+  | {
+    runId: string;
+    type: "deck-batch-validated";
+    jobId: string;
+    batchIndex: number;
+    errorCount: number;
+    warningCount: number;
+    message: string;
+  }
+  | {
+    runId: string;
+    type: "deck-job-progress";
+    jobId: string;
+    completedBatches: number;
+    totalBatches: number;
+    status: DeckGenerationJob["status"];
+    message: string;
+  }
+  | {
+    runId: string;
+    type: "deck-job-finished";
+    jobId: string;
+    status: DeckGenerationJob["status"];
+    message: string;
   };
 
 export type AgentRunResult =
@@ -222,6 +264,14 @@ export interface DesktopApi {
   ): Promise<string | null>;
   selectDirectory(defaultPath?: string): Promise<string | null>;
   cancelAgentRun(runId: string): Promise<boolean>;
+  getDeckGenerationStatus(sessionId: string): Promise<DeckGenerationStatus | null>;
+  resumeDeckGeneration(
+    sessionId: string,
+    jobId?: string,
+    model?: AgentModelSettings,
+    executionStrategy?: AgentExecutionStrategy,
+    runId?: string,
+  ): Promise<AgentRunResult>;
 }
 
 export interface ExportPresentationOptions {
@@ -241,4 +291,12 @@ export interface DeckGenerationResult {
 export interface DeckExportResult {
   filePath: string;
   slideCount: number;
+}
+
+export interface DeckGenerationStatus {
+  job: DeckGenerationJob | null;
+  storyboard: StoryboardSlideSpec[];
+  doneSlides: number;
+  pendingSlides: number;
+  failedSlides: number;
 }
