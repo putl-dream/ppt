@@ -11,7 +11,7 @@ import {
   DuplicateIcon,
   SunIcon,
   MoonIcon,
-} from "./Icons";
+} from "../Icons";
 
 interface CanvasAreaProps {
   presentation: Presentation;

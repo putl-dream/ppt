@@ -16,6 +16,8 @@ import { LeftPanel } from "./components/LeftPanel";
 import { SettingsSidebar } from "./components/SettingsSidebar";
 import { SettingsConsole } from "./components/SettingsConsole";
 import { ChatWorkspace } from "./components/ChatWorkspace";
+import { PPTMirror } from "./components/PPTMirror";
+import { DeckPreviewModal } from "./components/DeckPreviewModal";
 
 import { useProjectStore, type ActiveProject } from "./components/project-store";
 import { normalizeWorkspacePath, getWorkspaceLabel } from "@shared/workspace";
@@ -23,7 +25,17 @@ import {
   buildAgentRunPlan,
   artifactContentsFromRecord,
 } from "@shared/agent-run-plan";
-import { projectStageIds } from "@shared/project";
+import {
+  artifactStageToInlineCardType,
+  isExportPrompt,
+  isPreviewPrompt,
+  mergeInlineCardRefs,
+  parseBriefForCard,
+  parseOutlineForCard,
+  resolveMessageInlineCards,
+  type InlineCardRef,
+} from "@shared/inline-artifact-cards";
+import { projectStageIds, isProjectStageId } from "@shared/project";
 import {
   DEFAULT_MODELS,
   MODEL_STORAGE_KEY,
@@ -54,7 +66,7 @@ function buildArtifactContents(project: ActiveProject) {
 }
 
 function toSessionChatMessages(messages: ChatMessage[]): SessionChatMessage[] {
-  return messages.map(({ id, role, content, thought, reasoning, progress, approval, patch, threadId }) => ({
+  return messages.map(({
     id,
     role,
     content,
@@ -63,8 +75,30 @@ function toSessionChatMessages(messages: ChatMessage[]): SessionChatMessage[] {
     progress,
     approval,
     patch,
+    inlineCards,
+    threadId,
+  }) => ({
+    id,
+    role,
+    content,
+    thought,
+    reasoning,
+    progress,
+    approval,
+    patch,
+    inlineCards,
     threadId,
   }));
+}
+
+function attachInlineCards(
+  message: ChatMessage,
+  additions: Array<"brief" | "outline" | "deck">,
+): ChatMessage {
+  return {
+    ...message,
+    inlineCards: mergeInlineCardRefs(message.inlineCards, additions),
+  };
 }
 
 export function App() {
@@ -80,6 +114,8 @@ export function App() {
   const [selectedElementId, setSelectedElementId] = useState<string | null>(null);
   const [isMirrorOpen, setIsMirrorOpen] = useState(false);
   const [isMirrorExpanded, setIsMirrorExpanded] = useState(false);
+  const [isDeckPreviewOpen, setIsDeckPreviewOpen] = useState(false);
+  const [isExportingDeck, setIsExportingDeck] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [maxRevision, setMaxRevision] = useState(0);
 
@@ -637,15 +673,28 @@ export function App() {
     if (result.status === "artifact-updated") {
       useProjectStore.getState().hydrateProjectArtifacts(activeSessionId || undefined);
 
+      const changedId = result.write.changedArtifactId;
+      const cardType = changedId && isProjectStageId(changedId)
+        ? artifactStageToInlineCardType(changedId)
+        : undefined;
       const promptContent = "修改已接受，相关产物文件已成功更新。";
+      const applyUpdate = (message: ChatMessage): ChatMessage => {
+        const next = { ...message, content: promptContent };
+        return cardType ? attachInlineCards(next, [cardType]) : next;
+      };
+
       if (messageId) {
         setChatMessages((prev) => prev.map((message) =>
-          message.id === messageId ? { ...message, content: promptContent } : message,
+          message.id === messageId ? applyUpdate(message) : message,
         ));
       } else {
         setChatMessages((prev) => [
           ...prev,
-          { id: crypto.randomUUID(), role: "assistant", content: promptContent },
+          applyUpdate({
+            id: crypto.randomUUID(),
+            role: "assistant",
+            content: promptContent,
+          }),
         ]);
       }
       triggerToast("✅ 变更已应用");
@@ -665,20 +714,24 @@ export function App() {
     }
 
     const finalContent = result.status === "rejected" ? "已放弃排版变更提案。" : "已根据确认的大纲生成并应用演示文稿。";
+    const applyCompletion = (message: ChatMessage): ChatMessage => (
+      result.status === "completed"
+        ? attachInlineCards({ ...message, content: finalContent }, ["deck"])
+        : { ...message, content: finalContent }
+    );
+
     if (messageId) {
       setChatMessages((prev) => prev.map((message) =>
-        message.id === messageId
-          ? { ...message, content: finalContent }
-          : message
+        message.id === messageId ? applyCompletion(message) : message
       ));
     } else {
       setChatMessages((prev) => [
         ...prev,
-        {
+        applyCompletion({
           id: crypto.randomUUID(),
           role: "assistant",
           content: finalContent,
-        },
+        }),
       ]);
     }
     triggerToast(result.status === "rejected" ? "变更已取消" : "演示文稿已成功更新");
@@ -688,6 +741,39 @@ export function App() {
   async function startAgent(customRequest?: string, isEditOfMsgId?: string) {
     const activeRequest = customRequest || request;
     if (!activeRequest.trim() || busy) return;
+
+    if (presentation && isExportPrompt(activeRequest)) {
+      const userMsgId = crypto.randomUUID();
+      setChatMessages((prev) => [
+        ...prev,
+        { id: userMsgId, role: "user", content: activeRequest },
+      ]);
+      if (!customRequest) setRequest("");
+      await handleExportDeck(activeRequest);
+      return;
+    }
+
+    if (presentation && isPreviewPrompt(activeRequest)) {
+      const userMsgId = crypto.randomUUID();
+      setChatMessages((prev) => [
+        ...prev,
+        { id: userMsgId, role: "user", content: activeRequest },
+      ]);
+      if (!customRequest) setRequest("");
+      setIsDeckPreviewOpen(true);
+      setIsMirrorOpen(true);
+      setChatMessages((prev) => [
+        ...prev,
+        {
+          id: crypto.randomUUID(),
+          role: "assistant",
+          content: "已打开演示文稿预览，你可以在右侧或弹窗中查看全部页面。",
+          inlineCards: [{ type: "deck" }],
+        },
+      ]);
+      triggerToast("已打开演示文稿预览");
+      return;
+    }
 
     setBusy(true);
     let agentSessionId = activeSessionId;
@@ -949,6 +1035,20 @@ export function App() {
                 ...item.patch!,
                 resolved: approved ? "accepted" : "rejected",
               },
+              ...(approved && result.status === "artifact-updated"
+                ? {
+                    inlineCards: mergeInlineCardRefs(
+                      item.inlineCards,
+                      (() => {
+                        const changedId = result.write.changedArtifactId;
+                        const cardType = changedId && isProjectStageId(changedId)
+                          ? artifactStageToInlineCardType(changedId)
+                          : undefined;
+                        return cardType ? [cardType] : [];
+                      })(),
+                    ),
+                  }
+                : {}),
             }
           : item
       ));
@@ -1233,6 +1333,107 @@ export function App() {
     triggerToast("🗑️ 品牌 Logo 已移除");
   };
 
+  const resolveInlineCardContext = () => {
+    const project = useProjectStore.getState().activeProject;
+    return {
+      briefContent: project?.artifacts.brief?.content,
+      outlineContent: project?.artifacts.outline?.content,
+      presentation,
+      projectTitle: project?.name,
+    };
+  };
+
+  const getInlineCardData = (message: ChatMessage) => {
+    const context = resolveInlineCardContext();
+    const refs = resolveMessageInlineCards(message.content, message.inlineCards, context);
+    return {
+      refs,
+      briefFields: refs.some((card) => card.type === "brief")
+        ? parseBriefForCard(context.briefContent ?? "", context.projectTitle)
+        : undefined,
+      outlineItems: refs.some((card) => card.type === "outline")
+        ? parseOutlineForCard(context.outlineContent ?? "")
+        : undefined,
+      presentation: refs.some((card) => card.type === "deck") ? presentation : undefined,
+    };
+  };
+
+  const markInlineCardResolved = (
+    messageId: string,
+    type: InlineCardRef["type"],
+    resolved: InlineCardRef["resolved"],
+  ) => {
+    setChatMessages((prev) => prev.map((message) => {
+      if (message.id !== messageId) return message;
+      const inlineCards = (message.inlineCards ?? [{ type }]).map((card) =>
+        card.type === type ? { ...card, resolved } : card,
+      );
+      return { ...message, inlineCards };
+    }));
+  };
+
+  const handleConfirmBrief = (messageId: string) => {
+    void useProjectStore.getState().markStageReady("brief");
+    markInlineCardResolved(messageId, "brief", "confirmed");
+    triggerToast("✅ Brief 已确认");
+  };
+
+  const handleConfirmOutline = (messageId: string) => {
+    void useProjectStore.getState().markStageReady("outline");
+    markInlineCardResolved(messageId, "outline", "confirmed");
+    triggerToast("✅ 大纲已确认");
+  };
+
+  const handleReviseOutline = (messageId: string) => {
+    markInlineCardResolved(messageId, "outline", "dismissed");
+    void startAgent("请根据当前反馈继续修改大纲结构");
+  };
+
+  const handleOpenDeckPreview = () => {
+    setIsDeckPreviewOpen(true);
+    setIsMirrorOpen(true);
+  };
+
+  const handleExportDeck = async (sourcePrompt?: string) => {
+    if (!presentation || isExportingDeck) return;
+    setIsExportingDeck(true);
+    try {
+      const savedPath = await window.desktopApi.exportPresentation(presentation, {
+        theme: selectedTheme,
+        palette: selectedPalette,
+        logoUrl,
+      });
+      const exportMessage = savedPath
+        ? `演示文稿已导出至：${savedPath}`
+        : "已取消导出。";
+      setChatMessages((prev) => [
+        ...prev,
+        {
+          id: crypto.randomUUID(),
+          role: "assistant",
+          content: sourcePrompt ? exportMessage : exportMessage,
+          inlineCards: savedPath ? [{ type: "deck" as const }] : undefined,
+        },
+      ]);
+      if (savedPath) {
+        triggerToast(`🎉 成功导出至: ${savedPath}`);
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setChatMessages((prev) => [
+        ...prev,
+        {
+          id: crypto.randomUUID(),
+          role: "assistant",
+          content: `导出失败：${message}`,
+        },
+      ]);
+      triggerToast(`❌ 导出失败: ${message}`);
+    } finally {
+      setIsExportingDeck(false);
+    }
+  };
+
   if (startupError) return <main className="loading error">{startupError}</main>;
   if (!presentation) return <main className="loading">正在打开本地演示文稿工作区...</main>;
 
@@ -1271,8 +1472,12 @@ export function App() {
 
             <div className="rounded-canvas" style={{ flex: 1, display: "flex", overflow: "hidden", position: "relative" }}>
               <div
-                className="workspace-canvas-content workspace-canvas-content-chat-only"
-                style={{ display: "flex", flex: 1, width: "100%", height: "100%", overflow: "hidden" }}
+                className={[
+                  "workspace-canvas-content",
+                  isMirrorOpen ? "ppt-mirror-open" : "ppt-mirror-closed workspace-canvas-content-chat-only",
+                  isMirrorExpanded ? "mirror-expanded" : "",
+                ].filter(Boolean).join(" ")}
+                style={{ display: isMirrorOpen ? undefined : "flex", flex: 1, width: "100%", height: "100%", overflow: "hidden" }}
               >
                 <ChatWorkspace
                   chatMessages={chatMessages}
@@ -1286,6 +1491,15 @@ export function App() {
                   busy={busy}
                   onResolveApproval={resolveApproval}
                   onResolvePatch={resolvePatch}
+                  getInlineCardData={getInlineCardData}
+                  onConfirmBrief={handleConfirmBrief}
+                  onConfirmOutline={handleConfirmOutline}
+                  onReviseOutline={handleReviseOutline}
+                  onOpenDeckPreview={handleOpenDeckPreview}
+                  onExportDeck={() => void handleExportDeck()}
+                  isExportingDeck={isExportingDeck}
+                  selectedTheme={selectedTheme}
+                  selectedPalette={selectedPalette}
                   activeRunId={activeRunId}
                   onCancelRun={handleCancelRun}
                   onRetry={handleRetryMessage}
@@ -1310,7 +1524,34 @@ export function App() {
                   setLocalStoragePath={setLocalStoragePath}
                   triggerToast={triggerToast}
                 />
+
+                {isMirrorOpen && (
+                  <PPTMirror
+                    presentation={presentation}
+                    selectedSlideId={selectedSlideId}
+                    onSelectSlide={setSelectedSlideId}
+                    selectedTheme={selectedTheme}
+                    selectedPalette={selectedPalette}
+                    logoUrl={logoUrl}
+                    onOptimizePresentation={handleOptimizePresentationLocally}
+                    highlightSlideId={highlightSlideId}
+                    isExpanded={isMirrorExpanded}
+                    onToggleExpand={() => setIsMirrorExpanded((value) => !value)}
+                    triggerToast={triggerToast}
+                  />
+                )}
               </div>
+
+              <DeckPreviewModal
+                open={isDeckPreviewOpen}
+                presentation={presentation}
+                selectedSlideId={selectedSlideId}
+                selectedTheme={selectedTheme}
+                selectedPalette={selectedPalette}
+                logoUrl={logoUrl}
+                onSelectSlide={setSelectedSlideId}
+                onClose={() => setIsDeckPreviewOpen(false)}
+              />
             </div>
           </>
         ) : (

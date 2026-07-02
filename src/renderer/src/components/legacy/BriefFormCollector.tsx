@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { parseBriefFields, serializeBriefMarkdown } from "@shared/project-artifacts";
-import { useProjectStore } from "./project-store";
+import { useProjectStore } from "../project-store";
 
 export const BriefFormCollector: React.FC = () => {
   const activeProject = useProjectStore((state) => state.activeProject);

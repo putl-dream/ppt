@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useProjectStore } from "./project-store";
+import { useProjectStore } from "../project-store";
 
 import { createDefaultStoryboardSlide, normalizeStoryboardSlide, serializeStoryboard, type StoryboardSlideSpec } from "@shared/storyboard";
 

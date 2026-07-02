@@ -1,8 +1,8 @@
 import React, { useState, useRef, useEffect } from "react";
-import { useProjectStore, ArtifactId } from "./project-store";
-import { BrainIcon, ChevronDownIcon, ChevronRightIcon } from "./Icons";
-import { UnifiedAgentInput } from "./UnifiedAgentInput";
-import type { ManagedModel } from "../modelCatalog";
+import { useProjectStore, ArtifactId } from "../project-store";
+import { BrainIcon, ChevronDownIcon, ChevronRightIcon } from "../Icons";
+import { UnifiedAgentInput } from "../UnifiedAgentInput";
+import type { ManagedModel } from "../../modelCatalog";
 
 interface ChatMessage {
   id: string;

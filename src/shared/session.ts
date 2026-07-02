@@ -84,6 +84,11 @@ const persistedPatchSchema = z.object({
   resolved: z.enum(["accepted", "rejected"]).optional(),
 });
 
+const persistedInlineCardSchema = z.object({
+  type: z.enum(["brief", "outline", "deck"]),
+  resolved: z.enum(["confirmed", "dismissed"]).optional(),
+});
+
 export const sessionChatMessageSchema = z.object({
   id: z.string(),
   role: z.enum(["user", "assistant"]),
@@ -93,6 +98,7 @@ export const sessionChatMessageSchema = z.object({
   progress: z.number().optional(),
   approval: persistedApprovalSchema.optional(),
   patch: persistedPatchSchema.optional(),
+  inlineCards: z.array(persistedInlineCardSchema).optional(),
   threadId: z.string().optional(),
 });
 

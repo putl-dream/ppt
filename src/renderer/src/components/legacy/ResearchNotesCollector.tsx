@@ -4,7 +4,7 @@ import {
   serializeResearchNotes,
   type ResearchNote,
 } from "@shared/project-artifacts";
-import { useProjectStore } from "./project-store";
+import { useProjectStore } from "../project-store";
 
 export const ResearchNotesCollector: React.FC = () => {
   const activeProject = useProjectStore((state) => state.activeProject);

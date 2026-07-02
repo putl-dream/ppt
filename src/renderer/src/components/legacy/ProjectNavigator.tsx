@@ -1,5 +1,5 @@
 import React from "react";
-import { useProjectStore, ArtifactId, ArtifactStatus } from "./project-store";
+import { useProjectStore, ArtifactId, ArtifactStatus } from "../project-store";
 
 interface ProjectNavigatorProps {
   onToggleSettings?: () => void;

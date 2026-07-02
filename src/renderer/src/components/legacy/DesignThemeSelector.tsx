@@ -4,7 +4,7 @@ import {
   serializeDesignTheme,
   type ProjectDesignTheme,
 } from "@shared/project-artifacts";
-import { useProjectStore } from "./project-store";
+import { useProjectStore } from "../project-store";
 
 export const DesignThemeSelector: React.FC = () => {
   const activeProject = useProjectStore((state) => state.activeProject);

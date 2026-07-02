@@ -16,11 +16,25 @@ import {
 } from "./Icons";
 import { UnifiedAgentInput } from "./UnifiedAgentInput";
 import { PatchReviewCard } from "./PatchReviewCard";
+import { BriefCard } from "./BriefCard";
+import { OutlineCard } from "./OutlineCard";
+import { DeckPreviewCard } from "./DeckPreviewCard";
 import { AgentThinkingLoader } from "./AgentThinkingLoader";
 import { ReasoningBlock } from "./ReasoningBlock";
 import type { ManagedModel } from "../modelCatalog";
+import type { Presentation } from "@shared/presentation";
+import type { InlineCardRef } from "@shared/inline-artifact-cards";
+import type { BriefFields } from "@shared/project-artifacts";
+import type { OutlineItem } from "@shared/project-artifacts";
 
 type ChatMessage = SessionChatMessage;
+
+export interface InlineCardData {
+  refs: InlineCardRef[];
+  briefFields?: BriefFields;
+  outlineItems?: OutlineItem[];
+  presentation?: Presentation;
+}
 
 interface ChatWorkspaceProps {
   chatMessages: ChatMessage[];
@@ -34,6 +48,15 @@ interface ChatWorkspaceProps {
   busy: boolean;
   onResolveApproval: (approved: boolean, approval: AgentApprovalRequest, messageId: string) => void;
   onResolvePatch: (messageId: string, approved: boolean) => void;
+  getInlineCardData: (message: ChatMessage) => InlineCardData;
+  onConfirmBrief: (messageId: string) => void;
+  onConfirmOutline: (messageId: string) => void;
+  onReviseOutline: (messageId: string) => void;
+  onOpenDeckPreview: () => void;
+  onExportDeck: () => void;
+  isExportingDeck?: boolean;
+  selectedTheme: string;
+  selectedPalette: string;
   activeRunId?: string | null;
   onCancelRun?: () => void;
   onRetry?: (msgId: string) => void;
@@ -73,6 +96,15 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
   busy,
   onResolveApproval,
   onResolvePatch,
+  getInlineCardData,
+  onConfirmBrief,
+  onConfirmOutline,
+  onReviseOutline,
+  onOpenDeckPreview,
+  onExportDeck,
+  isExportingDeck,
+  selectedTheme,
+  selectedPalette,
   activeRunId,
   onCancelRun,
   onRetry,
@@ -291,6 +323,7 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
           <div className="chat-stream">
         {chatMessages.map((msg) => {
           const lines = msg.content.split("\n");
+          const inlineCardData = msg.role === "assistant" ? getInlineCardData(msg) : null;
 
           return (
             <div key={msg.id} className={`chat-message ${msg.role}`}>
@@ -535,6 +568,50 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
                     </div>
                   </div>
                 )}
+
+                {/* 产物内联预览卡片 */}
+                {inlineCardData?.refs.map((card) => {
+                  if (card.type === "brief" && inlineCardData.briefFields) {
+                    return (
+                      <BriefCard
+                        key={`${msg.id}-brief`}
+                        fields={inlineCardData.briefFields}
+                        resolved={card.resolved}
+                        onConfirm={card.resolved ? undefined : () => onConfirmBrief(msg.id)}
+                      />
+                    );
+                  }
+
+                  if (card.type === "outline" && inlineCardData.outlineItems?.length) {
+                    return (
+                      <OutlineCard
+                        key={`${msg.id}-outline`}
+                        items={inlineCardData.outlineItems}
+                        resolved={card.resolved}
+                        busy={busy}
+                        onConfirm={card.resolved ? undefined : () => onConfirmOutline(msg.id)}
+                        onRevise={card.resolved ? undefined : () => onReviseOutline(msg.id)}
+                      />
+                    );
+                  }
+
+                  if (card.type === "deck" && inlineCardData.presentation) {
+                    return (
+                      <DeckPreviewCard
+                        key={`${msg.id}-deck`}
+                        presentation={inlineCardData.presentation}
+                        selectedTheme={selectedTheme}
+                        selectedPalette={selectedPalette}
+                        isExporting={isExportingDeck}
+                        resolved={card.resolved}
+                        onPreview={onOpenDeckPreview}
+                        onExport={onExportDeck}
+                      />
+                    );
+                  }
+
+                  return null;
+                })}
                 </>
               )}
             </div>

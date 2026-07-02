@@ -4,7 +4,7 @@ import {
   serializeOutlineMarkdown,
   type OutlineItem,
 } from "@shared/project-artifacts";
-import { useProjectStore } from "./project-store";
+import { useProjectStore } from "../project-store";
 
 interface OutlineItemState extends OutlineItem {}
 
