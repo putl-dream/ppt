@@ -497,4 +497,35 @@ describe("FileSessionStore", () => {
     );
     expect(deckSnapshot).toEqual(newPresentation);
   });
+
+  it("creates sessions in a user-selected workspace directory", async () => {
+    const { store } = await createStore();
+    const workspaceDir = join(tmpdir(), "agent-ppt-workspace-shared");
+    temporaryDirectories.push(workspaceDir);
+
+    const created = await store.createSession({ rootPath: workspaceDir, title: "共享目录项目" });
+    const normalize = (value: string) => value.replace(/\\/g, "/").toLowerCase();
+    expect(normalize(created.activeSession.project?.rootPath ?? "")).toBe(normalize(workspaceDir));
+    expect(normalize(created.sessions[0].workspacePath ?? "")).toBe(normalize(workspaceDir));
+    expect(await readFile(join(workspaceDir, "brief.md"), "utf8")).toContain("**项目名称**");
+  });
+
+  it("opens an existing workspace and reuses its latest session", async () => {
+    const { store } = await createStore();
+    const workspaceDir = join(tmpdir(), "agent-ppt-workspace-open");
+    temporaryDirectories.push(workspaceDir);
+
+    const first = await store.createSession({ rootPath: workspaceDir, title: "对话一" });
+    const second = await store.createSession({ rootPath: workspaceDir, title: "对话二" });
+
+    const opened = await store.openWorkspace(workspaceDir);
+    expect(opened.activeSession.session.id).toBe(second.activeSession.session.id);
+    const normalize = (value: string) => value.replace(/\\/g, "/").toLowerCase();
+    expect(
+      opened.sessions.filter(
+        (session) => normalize(session.workspacePath ?? "") === normalize(workspaceDir),
+      ),
+    ).toHaveLength(2);
+    expect(first.activeSession.session.id).not.toBe(opened.activeSession.session.id);
+  });
 });

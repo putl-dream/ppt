@@ -12,6 +12,11 @@ import type {
 } from "./session";
 import { projectStageIds } from "./project";
 
+export interface CreateSessionOptions {
+  rootPath?: string;
+  title?: string;
+}
+
 export interface AgentApprovalRequest {
   threadId: string;
   summary: string;
@@ -217,7 +222,8 @@ export interface AgentArtifactPatchRequest {
 
 export interface DesktopApi {
   getSessionState(): Promise<SessionBootstrap>;
-  createSession(): Promise<SessionBootstrap>;
+  createSession(options?: CreateSessionOptions): Promise<SessionBootstrap>;
+  openWorkspace(rootPath: string): Promise<SessionBootstrap>;
   selectSession(sessionId: string): Promise<SessionBootstrap>;
   deleteSession(sessionId: string): Promise<SessionBootstrap>;
   saveSessionMessages(sessionId: string, messages: SessionChatMessage[]): Promise<void>;

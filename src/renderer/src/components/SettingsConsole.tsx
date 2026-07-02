@@ -26,7 +26,7 @@ interface SettingsConsoleProps {
   autoCloudSync: boolean;
   setAutoCloudSync: (val: boolean) => void;
   localStoragePath: string;
-  setLocalStoragePath: (val: string) => void;
+  onOpenWorkspace: () => void;
   defaultRatio: "16:9" | "4:3";
   setDefaultRatio: (val: "16:9" | "4:3") => void;
 
@@ -61,7 +61,7 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
   autoCloudSync,
   setAutoCloudSync,
   localStoragePath,
-  setLocalStoragePath,
+  onOpenWorkspace,
   defaultRatio,
   setDefaultRatio,
   themeMode,
@@ -103,22 +103,13 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
   const pathD = `M ${points.map(p => `${p.x} ${p.y}`).join(" L ")}`;
   const areaD = `${pathD} L ${points[points.length - 1].x} ${chartHeight} L ${points[0].x} ${chartHeight} Z`;
 
-  // Custom directory path choice via native dialogue
-  const handleBrowsePath = async () => {
+  // Open project workspace via native directory dialog
+  const handleOpenWorkspace = async () => {
     try {
-      const pathChoice = await window.desktopApi.selectDirectory(localStoragePath);
-      if (pathChoice) {
-        setLocalStoragePath(pathChoice);
-        triggerToast(`📁 保存路径已更新为: ${pathChoice}`);
-      }
+      onOpenWorkspace();
     } catch (err) {
-      triggerToast(`📁 选择路径失败: ${err instanceof Error ? err.message : String(err)}`);
+      triggerToast(`打开目录失败: ${err instanceof Error ? err.message : String(err)}`);
     }
-  };
-
-  const handleResetPath = () => {
-    setLocalStoragePath("D:/Coding/ppt/workspace");
-    triggerToast("📁 保存路径已重置为默认路径");
   };
 
   const logoFileInputRef = React.useRef<HTMLInputElement>(null);
@@ -354,8 +345,10 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
 
             {/* Local Storage Directory */}
             <div className="settings-card">
-              <h4 style={{ margin: "0 0 6px 0", fontSize: "14px", fontWeight: "600" }}>项目工作空间沙箱路径 (Workspace Sandbox Directory)</h4>
-              <p style={{ margin: "0 0 16px 0", fontSize: "11px", color: "var(--text-muted)" }}>当前会话的工作空间物理路径（由后台会话自动隔离管理）。</p>
+              <h4 style={{ margin: "0 0 6px 0", fontSize: "14px", fontWeight: "600" }}>项目工作目录</h4>
+              <p style={{ margin: "0 0 16px 0", fontSize: "11px", color: "var(--text-muted)" }}>
+                打开本地文件夹作为 PPT 项目沙箱。同一目录下的多条对话共享 brief、大纲、设计等产物文件。
+              </p>
               
               <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
                 <div className="path-display-box" style={{
@@ -370,11 +363,16 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
                   fontFamily: "var(--font-mono)",
                   color: "var(--text-secondary)"
                 }}>
-                  <span className="truncate" style={{ marginRight: "12px" }}>{localStoragePath}</span>
-                  <div style={{ display: "flex", gap: "8px", flexShrink: 0 }}>
-                    <button className="secondary-btn" onClick={handleBrowsePath} style={{ padding: "4px 10px", fontSize: "11px" }}>浏览选择</button>
-                    <button className="secondary-btn" onClick={handleResetPath} style={{ padding: "4px 10px", fontSize: "11px" }}>重置默认</button>
-                  </div>
+                  <span className="truncate" style={{ marginRight: "12px" }}>
+                    {localStoragePath || "尚未打开项目目录"}
+                  </span>
+                  <button
+                    className="secondary-btn"
+                    onClick={() => void handleOpenWorkspace()}
+                    style={{ padding: "4px 10px", fontSize: "11px", flexShrink: 0 }}
+                  >
+                    打开目录
+                  </button>
                 </div>
               </div>
             </div>

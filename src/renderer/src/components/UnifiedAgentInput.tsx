@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import { SendIcon, SparklesIcon } from "./Icons";
 import type { ManagedModel } from "../modelCatalog";
+import { getWorkspaceLabel } from "@shared/workspace";
 
 interface UnifiedAgentInputProps {
   request: string;
@@ -15,7 +16,7 @@ interface UnifiedAgentInputProps {
   executionStrategy: "REQUEST_APPROVAL" | "AUTO";
   setExecutionStrategy: (val: "REQUEST_APPROVAL" | "AUTO") => void;
   localStoragePath: string;
-  setLocalStoragePath: (val: string) => void;
+  setLocalStoragePath?: (val: string) => void;
 
   layoutMode: "center" | "bottom";
   triggerToast: (msg: string) => void;
@@ -47,7 +48,8 @@ export const UnifiedAgentInput: React.FC<UnifiedAgentInputProps> = ({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Extract folder name from path for display
-  const folderName = localStoragePath.split("/").pop() || localStoragePath.split("\\").pop() || "ppt_workspace";
+  const folderName = getWorkspaceLabel(localStoragePath || undefined);
+  const hasWorkspace = Boolean(localStoragePath);
 
   const handleSend = () => {
     if (busy || !request.trim()) return;
@@ -182,34 +184,33 @@ export const UnifiedAgentInput: React.FC<UnifiedAgentInputProps> = ({
           </div>
         </div>
 
-        {/* Lower Deck: Context Infrastructure Bar (仅在居中巨幕模式下渲染，且使用静默浅灰效果弱化注意力) */}
+        {/* Lower Deck: workspace context */}
         {layoutMode === "center" && (
           <div className="lower-deck-bar" style={{ background: "rgba(0, 0, 0, 0.015)", borderTop: "1px solid var(--border-glass)" }}>
             
             <div className="context-left">
-              {/* Project folder space anchor tag */}
               <button
                 className="context-anchor-tag"
-                title={`项目存储目录已锁定制: ${localStoragePath}`}
+                title={hasWorkspace ? `项目目录: ${localStoragePath}` : "请先打开项目目录"}
                 disabled={true}
                 style={{
                   background: "transparent",
                   border: "1px solid var(--border-glass)",
-                  color: "var(--text-muted)",
+                  color: hasWorkspace ? "var(--text-muted)" : "#f59e0b",
                   fontFamily: "var(--font-body)",
                   fontSize: "11px",
                   padding: "3px 10px",
                   borderRadius: "12px",
-                  cursor: "not-allowed",
+                  cursor: "default",
                   display: "inline-flex",
                   alignItems: "center",
                   gap: "6px",
-                  opacity: 0.4,
+                  opacity: hasWorkspace ? 0.85 : 1,
                   transition: "var(--transition-smooth)",
                   boxShadow: "none"
                 }}
               >
-                📁 项目存储目录: {folderName}
+                📁 {hasWorkspace ? `项目目录: ${folderName}` : "未打开项目目录"}
               </button>
             </div>
 

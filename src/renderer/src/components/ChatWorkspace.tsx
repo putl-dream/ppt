@@ -35,6 +35,9 @@ interface ChatWorkspaceProps {
   busy: boolean;
   approval: AgentApprovalRequest | undefined;
   onResolveApproval: (approved: boolean) => void;
+  activeRunId?: string | null;
+  onCancelRun?: () => void;
+  onRetry?: (msgId: string) => void;
   themeMode: "light" | "dark";
   onToggleThemeMode: () => void;
   isMirrorOpen: boolean;
@@ -70,6 +73,9 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
   busy,
   approval,
   onResolveApproval,
+  activeRunId,
+  onCancelRun,
+  onRetry,
   themeMode,
   onToggleThemeMode,
   isMirrorOpen,
@@ -364,6 +370,25 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
                   </div>
                 )}
 
+                {msg.role === "assistant" && onRetry && msg.content.includes("发生错误") && (
+                  <button
+                    onClick={() => onRetry(msg.id)}
+                    style={{
+                      background: "transparent",
+                      border: "none",
+                      cursor: "pointer",
+                      color: "var(--accent-cyan)",
+                      fontSize: "11px",
+                      marginTop: "4px",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "4px",
+                    }}
+                  >
+                    🔄 重试该指令
+                  </button>
+                )}
+
                 {/* 展开的思考轨迹 */}
                 {msg.thought && msg.thought.length > 0 && (
                   <div className="thought-container">
@@ -538,6 +563,23 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
                   ></div>
                 </div>
                 <span className="progress-percentage">{Math.round(thoughtProgress)}%</span>
+                {activeRunId && onCancelRun && (
+                  <button
+                    onClick={onCancelRun}
+                    style={{
+                      border: "none",
+                      color: "#ef4444",
+                      fontSize: "11px",
+                      cursor: "pointer",
+                      marginLeft: "12px",
+                      padding: "2px 8px",
+                      borderRadius: "4px",
+                      background: "rgba(239, 68, 68, 0.08)",
+                    }}
+                  >
+                    取消
+                  </button>
+                )}
               </div>
             </div>
           </div>

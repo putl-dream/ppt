@@ -8,28 +8,18 @@ import type {
 } from "@shared/ipc";
 import type { Presentation, SlideElement } from "@shared/presentation";
 import {
-  createSessionPresentation,
   createWelcomeMessage,
   type SessionBootstrap,
   type SessionChatMessage,
   type SessionSummary,
 } from "@shared/session";
 import { LeftPanel } from "./components/LeftPanel";
-import { PPTMirror } from "./components/PPTMirror";
 import { SettingsSidebar } from "./components/SettingsSidebar";
 import { SettingsConsole } from "./components/SettingsConsole";
+import { ChatWorkspace } from "./components/ChatWorkspace";
 
-// Project Pipeline Components & Store
-import { useProjectStore, DEFAULT_CONTENTS, type ActiveProject, type ArtifactId } from "./components/project-store";
-import { BriefFormCollector } from "./components/BriefFormCollector";
-import { DraggableOutlineTree } from "./components/DraggableOutlineTree";
-import { ResearchNotesCollector } from "./components/ResearchNotesCollector";
-import { StoryboardGrid } from "./components/StoryboardGrid";
-import { DeckGenerationPanel } from "./components/DeckGenerationPanel";
-import { DesignThemeSelector } from "./components/DesignThemeSelector";
-import { DiffReviewZone } from "./components/DiffReviewZone";
-import { ContextualAgentPanel } from "./components/ContextualAgentPanel";
-import { CanvasArea } from "./components/CanvasArea";
+import { useProjectStore, type ActiveProject, type ArtifactId } from "./components/project-store";
+import { normalizeWorkspacePath, getWorkspaceLabel } from "@shared/workspace";
 import {
   DEFAULT_MODELS,
   MODEL_STORAGE_KEY,
@@ -80,10 +70,8 @@ function toSessionChatMessages(messages: ChatMessage[]): SessionChatMessage[] {
 export function App() {
   const initializeProject = useProjectStore((state) => state.initializeProject);
   const hydrateProjectArtifacts = useProjectStore((state) => state.hydrateProjectArtifacts);
-  const currentStage = useProjectStore((state) => state.currentStage);
   const activeProject = useProjectStore((state) => state.activeProject);
   const proposePatch = useProjectStore((state) => state.proposePatch);
-  const proposedPatch = useProjectStore((state) => state.proposedPatch);
 
   const [presentation, setPresentation] = useState<Presentation>();
   const [startupError, setStartupError] = useState<string>();
@@ -103,7 +91,9 @@ export function App() {
   // 常规设置：常规/工作流与文件系统
   const [autoDownload, setAutoDownload] = useState(true);
   const [autoCloudSync, setAutoCloudSync] = useState(false);
-  const [localStoragePath, setLocalStoragePath] = useState("D:/Coding/ppt/workspace");
+  const [workspacePath, setWorkspacePath] = useState("");
+  /** @deprecated 与 workspacePath 同步，供 UnifiedAgentInput 等遗留组件使用 */
+  const [localStoragePath, setLocalStoragePath] = useState("");
   const [defaultRatio, setDefaultRatio] = useState<"16:9" | "4:3">("16:9");
   const [executionStrategy, setExecutionStrategy] = useState<"REQUEST_APPROVAL" | "AUTO">("REQUEST_APPROVAL");
 
@@ -347,7 +337,6 @@ export function App() {
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [activeSessionId, setActiveSessionId] = useState("");
   const [sessionLoaded, setSessionLoaded] = useState(false);
-  const [isDraftSession, setIsDraftSession] = useState(false);
 
   // 实时预览面板快捷键监听 (Cmd+Option+P 或 Ctrl+Alt+P)
   useEffect(() => {
@@ -384,10 +373,11 @@ export function App() {
     setSelectedElementId(null);
     setMaxRevision(snapshot.presentation.revision);
     setSessionLoaded(true);
-    setIsDraftSession(false);
     setIsMirrorOpen(snapshot.presentation.revision > 0);
     if (snapshot.project?.rootPath) {
-      setLocalStoragePath(snapshot.project.rootPath);
+      const normalized = normalizeWorkspacePath(snapshot.project.rootPath);
+      setWorkspacePath(normalized);
+      setLocalStoragePath(normalized);
     }
 
     initializeProject(snapshot.session.id, snapshot.session.title, snapshot.project?.artifacts);
@@ -455,28 +445,46 @@ export function App() {
     setTimeout(() => setToastMessage(null), 3000);
   };
 
-  // 新建仅打开草稿窗口；首次发送消息后才会创建持久化会话
-  const handleNewSession = () => {
+  const handleOpenWorkspace = async () => {
+    if (busy) {
+      triggerToast("当前任务执行中，请稍后再打开目录");
+      return;
+    }
+    try {
+      const selectedPath = await window.desktopApi.selectDirectory(workspacePath || undefined);
+      if (!selectedPath) return;
+
+      setSessionLoaded(false);
+      const state = await window.desktopApi.openWorkspace(selectedPath);
+      applySessionState(state);
+      triggerToast(`已打开项目目录：${getWorkspaceLabel(selectedPath)}`);
+    } catch (error) {
+      setSessionLoaded(true);
+      triggerToast(error instanceof Error ? error.message : "打开项目目录失败");
+    }
+  };
+
+  // 在当前工作区新建对话
+  const handleNewSession = async () => {
     if (busy) {
       triggerToast("当前任务执行中，请稍后再新建会话");
       return;
     }
-    const presentation = createSessionPresentation("新演示文稿");
-    setIsDraftSession(true);
-    setActiveSessionId("");
-    setPresentation(presentation);
-    setChatMessages([createWelcomeMessage()]);
-    setApproval(undefined);
-    setRequest("");
-    setSelectedSlideId(presentation.slides[0]?.id ?? "");
-    setSelectedElementId(null);
-    setMaxRevision(0);
-    setSessionLoaded(true);
-    setIsMirrorOpen(false);
-    triggerToast("已打开新会话草稿，发送消息后才会保存");
+    if (!workspacePath) {
+      triggerToast("请先打开项目目录");
+      void handleOpenWorkspace();
+      return;
+    }
 
-    // Initialize the project store with a draft project
-    initializeProject("draft_id", "新演示文稿");
+    setSessionLoaded(false);
+    try {
+      const state = await window.desktopApi.createSession({ rootPath: workspacePath });
+      applySessionState(state);
+      triggerToast("已新建对话");
+    } catch (error) {
+      setSessionLoaded(true);
+      triggerToast(error instanceof Error ? error.message : "新建对话失败");
+    }
   };
 
   // 切换会话并从主进程载入完整持久化快照
@@ -663,29 +671,17 @@ export function App() {
 
     setBusy(true);
     let agentSessionId = activeSessionId;
-    if (isDraftSession) {
+    if (!agentSessionId) {
+      if (!workspacePath) {
+        setBusy(false);
+        triggerToast("请先打开项目目录");
+        void handleOpenWorkspace();
+        return;
+      }
       try {
-        const draftProject = useProjectStore.getState().activeProject;
-        const state = await window.desktopApi.createSession();
-        const newSessionId = state.activeSession.session.id;
-
-        // Write draft changes to the newly created session sandbox before applying state
-        if (draftProject) {
-          const api = window.desktopApi;
-          for (const stageId of Object.keys(draftProject.artifacts) as ArtifactId[]) {
-            const artifact = draftProject.artifacts[stageId];
-            if (artifact && artifact.content !== DEFAULT_CONTENTS[stageId]) {
-              try {
-                await api.writeProjectArtifact(newSessionId, artifact.path, artifact.content);
-              } catch (writeErr) {
-                console.error(`Failed to write draft artifact ${stageId} on session creation:`, writeErr);
-              }
-            }
-          }
-        }
-
+        const state = await window.desktopApi.createSession({ rootPath: workspacePath });
         applySessionState(state);
-        agentSessionId = newSessionId;
+        agentSessionId = state.activeSession.session.id;
       } catch (error) {
         setBusy(false);
         triggerToast(error instanceof Error ? error.message : "创建会话失败");
@@ -1175,8 +1171,10 @@ export function App() {
             <LeftPanel
               sessions={sessions}
               activeSessionId={activeSessionId}
+              workspacePath={workspacePath || undefined}
               onSelectSession={handleSelectSession}
-              onNewSession={handleNewSession}
+              onNewSession={() => void handleNewSession()}
+              onOpenWorkspace={() => void handleOpenWorkspace()}
               onToggleSettings={() => {
                 setActiveMode("settings");
                 setSettingsCategory("profile");
@@ -1184,110 +1182,47 @@ export function App() {
               onDeleteSession={handleDeleteSession}
             />
 
-            {/* 右侧大圆角容器 - Agent 协作与实时工作台 */}
             <div className="rounded-canvas" style={{ flex: 1, display: "flex", overflow: "hidden", position: "relative" }}>
-                <div className="workspace-canvas-content" style={{ display: "flex", flex: 1, width: "100%", height: "100%", overflow: "hidden" }}>
-                  
-                  {/* 中间栏：各阶段的产物画布/编辑器区域 */}
-                  <div className="workspace-canvas-middle" style={{ flex: 1, height: "100%", position: "relative", display: "flex", flexDirection: "column", minWidth: 0 }}>
-                    {isDraftSession && (
-                      <div
-                        style={{
-                          margin: "12px 16px 0",
-                          padding: "10px 14px",
-                          borderRadius: "10px",
-                          border: "1px solid var(--border-glass)",
-                          background: "rgba(14, 165, 233, 0.08)",
-                          fontSize: "12px",
-                          color: "var(--text-secondary)",
-                        }}
-                      >
-                        当前为未保存草稿：可先编辑左侧 Pipeline 各阶段内容；发送第一条消息后才会创建持久化会话。
-                      </div>
-                    )}
-                    {proposedPatch && <DiffReviewZone />}
-                    
-                    {!proposedPatch && currentStage === "brief" && <BriefFormCollector />}
-                    {!proposedPatch && currentStage === "outline" && <DraggableOutlineTree />}
-                    {!proposedPatch && currentStage === "research" && <ResearchNotesCollector />}
-                    {!proposedPatch && currentStage === "design" && <DesignThemeSelector />}
-                    {!proposedPatch && currentStage === "slides" && <StoryboardGrid />}
-                    
-                    {!proposedPatch && currentStage === "deck" && (
-                      <>
-                        <DeckGenerationPanel
-                          sessionId={activeSessionId || undefined}
-                          busy={busy}
-                          executionStrategy={executionStrategy}
-                          modelSettings={selectedModel ? toAgentModelSettings(selectedModel) : undefined}
-                          onRefreshPresentation={async () => {
-                            const next = await window.desktopApi.getPresentation();
-                            setPresentation(next);
-                          }}
-                          triggerToast={triggerToast}
-                        />
-                        <CanvasArea
-                        presentation={presentation}
-                        selectedSlideId={selectedSlideId}
-                        onSelectSlide={(id) => {
-                          setSelectedSlideId(id);
-                          setSelectedElementId(null);
-                        }}
-                        selectedElementId={selectedElementId}
-                        onSelectElement={setSelectedElementId}
-                        selectedTheme={selectedTheme}
-                        selectedPalette={selectedPalette}
-                        logoUrl={logoUrl}
-                        onUpdateElement={handleUpdateElement}
-                        onUpdateElementPosition={handleUpdateElementPosition}
-                        onAddSlide={handleAddSlideLocally}
-                        onDuplicateSlide={handleDuplicateSlideLocally}
-                        onDeleteSlide={handleDeleteSlideLocally}
-                        onOptimizeSlide={handleOptimizePresentationLocally}
-                        onAddElement={handleAddElementLocally}
-                        isMirrorOpen={isMirrorOpen}
-                        onToggleMirror={() => setIsMirrorOpen(!isMirrorOpen)}
-                        themeMode={computedTheme}
-                        onToggleThemeMode={() => setThemeMode(computedTheme === "light" ? "dark" : "light")}
-                        onUndo={() => void handleHistory("undo")}
-                        onRedo={() => void handleHistory("redo")}
-                        canUndo={presentation.revision > 0}
-                        canRedo={presentation ? presentation.revision < maxRevision : false}
-                        onProposePrompt={handleSuggestPrompt}
-                      />
-                      </>
-                    )}
-                  </div>
-
-                  {/* 右栏：智能助手对话面板 */}
-                  <ContextualAgentPanel
-                    chatMessages={chatMessages}
-                    thoughtProcess={thoughtProcess}
-                    thoughtProgress={thoughtProgress}
-                    agentActivityMode={agentActivityMode}
-                    request={request}
-                    onChangeRequest={setRequest}
-                    onSubmitRequest={() => void startAgent()}
-                    busy={busy}
-                    activeRunId={activeRunId}
-                    onCancelRun={handleCancelRun}
-                    onRetry={handleRetryMessage}
-                    onResolveApproval={resolveApproval}
-                    
-                    models={models}
-                    selectedModelId={selectedModelId}
-                    setSelectedModelId={setSelectedModelId}
-                    executionStrategy={executionStrategy}
-                    setExecutionStrategy={setExecutionStrategy}
-                    localStoragePath={localStoragePath}
-                    setLocalStoragePath={setLocalStoragePath}
-                    triggerToast={triggerToast}
-                    onUpdateMessageContent={handleUpdateMessageContent}
-                    selectedSlideIndex={activeSlideIndexValue}
-                    onClearContextTag={() => setSelectedSlideId("")}
-                  />
-
-                </div>
+              <div
+                className="workspace-canvas-content workspace-canvas-content-chat-only"
+                style={{ display: "flex", flex: 1, width: "100%", height: "100%", overflow: "hidden" }}
+              >
+                <ChatWorkspace
+                  chatMessages={chatMessages}
+                  thoughtProcess={thoughtProcess}
+                  thoughtProgress={thoughtProgress}
+                  agentActivityMode={agentActivityMode}
+                  request={request}
+                  onChangeRequest={setRequest}
+                  onSubmitRequest={() => void startAgent()}
+                  busy={busy}
+                  approval={approval}
+                  onResolveApproval={resolveApproval}
+                  activeRunId={activeRunId}
+                  onCancelRun={handleCancelRun}
+                  onRetry={handleRetryMessage}
+                  themeMode={computedTheme}
+                  onToggleThemeMode={() => setThemeMode(computedTheme === "light" ? "dark" : "light")}
+                  isMirrorOpen={isMirrorOpen}
+                  onToggleMirror={() => setIsMirrorOpen(!isMirrorOpen)}
+                  onUndo={() => void handleHistory("undo")}
+                  onRedo={() => void handleHistory("redo")}
+                  canUndo={presentation ? presentation.revision > 0 : false}
+                  canRedo={presentation ? presentation.revision < maxRevision : false}
+                  selectedSlideIndex={activeSlideIndexValue}
+                  onClearContextTag={() => setSelectedSlideId("")}
+                  onUpdateMessageContent={handleUpdateMessageContent}
+                  onProposePrompt={handleSuggestPrompt}
+                  models={models}
+                  selectedModelId={selectedModelId}
+                  setSelectedModelId={setSelectedModelId}
+                  executionStrategy={executionStrategy}
+                  setExecutionStrategy={setExecutionStrategy}
+                  localStoragePath={localStoragePath}
+                  setLocalStoragePath={setLocalStoragePath}
+                  triggerToast={triggerToast}
+                />
+              </div>
             </div>
           </>
         ) : (
@@ -1321,7 +1256,7 @@ export function App() {
                 autoCloudSync={autoCloudSync}
                 setAutoCloudSync={setAutoCloudSync}
                 localStoragePath={localStoragePath}
-                setLocalStoragePath={setLocalStoragePath}
+                onOpenWorkspace={() => void handleOpenWorkspace()}
                 defaultRatio={defaultRatio}
                 setDefaultRatio={setDefaultRatio}
                 

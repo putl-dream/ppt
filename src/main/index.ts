@@ -7,6 +7,7 @@ import {
   type AgentRunRequest,
   type AgentRunResult,
   type AgentStreamEvent,
+  type CreateSessionOptions,
   type ExportPresentationOptions,
 } from "@shared/ipc";
 import { deckExportService } from "./deck/deck-export-service";
@@ -413,8 +414,14 @@ app.whenReady().then(async () => {
   };
 
   ipcMain.handle("session:get-state", () => sessionStore.getBootstrap());
-  ipcMain.handle("session:create", async () => {
-    const state = await sessionStore.createSession();
+  ipcMain.handle("session:create", async (_, options?: CreateSessionOptions) => {
+    const state = await sessionStore.createSession(options);
+    activeSessionId = state.activeSession.session.id;
+    await ensureRuntime(state.activeSession);
+    return state;
+  });
+  ipcMain.handle("workspace:open", async (_, rootPath: string) => {
+    const state = await sessionStore.openWorkspace(rootPath);
     activeSessionId = state.activeSession.session.id;
     await ensureRuntime(state.activeSession);
     return state;

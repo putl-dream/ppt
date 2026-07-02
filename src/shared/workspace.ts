@@ -1,0 +1,58 @@
+/**
+ * Normalize workspace paths for stable comparison across platforms.
+ */
+export function normalizeWorkspacePath(path: string): string {
+  const normalized = path.trim().replace(/\\/g, "/").replace(/\/+$/, "");
+  if (/^[a-zA-Z]:/.test(normalized)) {
+    return normalized.charAt(0).toLowerCase() + normalized.slice(1);
+  }
+  return normalized;
+}
+
+export function getWorkspaceLabel(path?: string): string {
+  if (!path) return "未打开项目目录";
+  const segments = path.replace(/\\/g, "/").split("/").filter(Boolean);
+  return segments.at(-1) ?? path;
+}
+
+export function sessionsForWorkspace<T extends { workspacePath?: string }>(
+  sessions: T[],
+  workspacePath?: string,
+): T[] {
+  if (!workspacePath) return sessions;
+  const normalized = normalizeWorkspacePath(workspacePath);
+  return sessions.filter(
+    (session) =>
+      session.workspacePath &&
+      normalizeWorkspacePath(session.workspacePath) === normalized,
+  );
+}
+
+export function groupSessionsByWorkspace<T extends { workspacePath?: string }>(
+  sessions: T[],
+): Array<{ workspacePath: string; sessions: T[] }> {
+  const groups = new Map<string, T[]>();
+  for (const session of sessions) {
+    const key = session.workspacePath
+      ? normalizeWorkspacePath(session.workspacePath)
+      : "__unknown__";
+    const bucket = groups.get(key) ?? [];
+    bucket.push(session);
+    groups.set(key, bucket);
+  }
+
+  return [...groups.entries()]
+    .sort(([left], [right]) => {
+      if (left === "__unknown__") return 1;
+      if (right === "__unknown__") return -1;
+      return left.localeCompare(right);
+    })
+    .map(([workspacePath, groupedSessions]) => ({
+      workspacePath,
+      sessions: groupedSessions.sort((a, b) =>
+        ("updatedAt" in b && "updatedAt" in a
+          ? String(b.updatedAt).localeCompare(String(a.updatedAt))
+          : 0),
+      ),
+    }));
+}

@@ -3,7 +3,8 @@ import type { AgentStreamEvent, DesktopApi } from "@shared/ipc";
 
 const api: DesktopApi = {
   getSessionState: () => ipcRenderer.invoke("session:get-state"),
-  createSession: () => ipcRenderer.invoke("session:create"),
+  createSession: (options) => ipcRenderer.invoke("session:create", options),
+  openWorkspace: (rootPath) => ipcRenderer.invoke("workspace:open", rootPath),
   selectSession: (sessionId) => ipcRenderer.invoke("session:select", sessionId),
   deleteSession: (sessionId) => ipcRenderer.invoke("session:delete", sessionId),
   saveSessionMessages: (sessionId, messages) =>

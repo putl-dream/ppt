@@ -81,6 +81,7 @@ export const sessionSummarySchema = z.object({
   updatedAt: z.string(),
   slideCount: z.number().int().nonnegative(),
   revision: z.number().int().nonnegative(),
+  workspacePath: z.string().optional(),
 });
 
 export const sessionSnapshotSchema = z.object({

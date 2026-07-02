@@ -31,6 +31,9 @@ import {
 import type { DeckExportRecord, DeckGenerationJobsFile } from "@shared/deck-persistence";
 import { parseStoryboard, serializeStoryboard, type StoryboardSlideSpec } from "@shared/storyboard";
 import { TranscriptStore, type TranscriptMessageInput } from "./transcript-store";
+import { defaultProjectArtifacts } from "@shared/project";
+import type { CreateSessionOptions } from "@shared/ipc";
+import { normalizeWorkspacePath } from "@shared/workspace";
 
 const storedSessionSchema = sessionSnapshotSchema;
 const sessionFileSchema = z.object({
@@ -124,9 +127,9 @@ export class FileSessionStore {
     return structuredClone(snapshot);
   }
 
-  async createSession(): Promise<SessionBootstrap> {
+  async createSession(options?: CreateSessionOptions): Promise<SessionBootstrap> {
     const data = this.requireData();
-    const title = `新 PPT 项目 ${data.sessions.length + 1}`;
+    const title = options?.title ?? `新 PPT 项目 ${data.sessions.length + 1}`;
     const now = new Date().toISOString();
     const presentation = createSessionPresentation(title);
     const snapshot: SessionSnapshot = {
@@ -134,12 +137,38 @@ export class FileSessionStore {
       presentation,
       messages: [createWelcomeMessage(title)],
     };
+
+    if (options?.rootPath) {
+      snapshot.project = {
+        rootPath: normalizeWorkspacePath(options.rootPath),
+        artifacts: defaultProjectArtifacts.map((artifact) => ({ ...artifact })),
+      };
+    }
+
     await this.materializeProjectSandbox(snapshot);
     await this.recordTranscriptMessages(snapshot, snapshot.messages);
     data.sessions.unshift(snapshot);
     data.activeSessionId = snapshot.session.id;
     await this.persist();
     return this.getBootstrap();
+  }
+
+  async openWorkspace(rootPath: string): Promise<SessionBootstrap> {
+    const normalized = normalizeWorkspacePath(rootPath);
+    const matches = this.requireData().sessions.filter(
+      (snapshot) =>
+        snapshot.project?.rootPath &&
+        normalizeWorkspacePath(snapshot.project.rootPath) === normalized,
+    );
+
+    if (matches.length > 0) {
+      const latest = [...matches].sort((left, right) =>
+        right.session.updatedAt.localeCompare(left.session.updatedAt),
+      )[0];
+      return this.selectSession(latest.session.id);
+    }
+
+    return this.createSession({ rootPath: normalized });
   }
 
   async selectSession(sessionId: string): Promise<SessionBootstrap> {
@@ -448,7 +477,10 @@ export class FileSessionStore {
   private listSummaries(data: SessionFile): SessionSummary[] {
     return [...data.sessions]
       .sort((a, b) => b.session.updatedAt.localeCompare(a.session.updatedAt))
-      .map((item) => structuredClone(item.session));
+      .map((item) => ({
+        ...structuredClone(item.session),
+        workspacePath: item.project?.rootPath,
+      }));
   }
 
   private findSession(sessionId: string): SessionSnapshot {
