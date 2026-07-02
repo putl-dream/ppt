@@ -35,6 +35,7 @@ import {
   resolveMessageInlineCards,
   type InlineCardRef,
 } from "@shared/inline-artifact-cards";
+import { findRecoverableConversation } from "@shared/session-recovery";
 import { projectStageIds, isProjectStageId } from "@shared/project";
 import {
   DEFAULT_MODELS,
@@ -48,13 +49,7 @@ import {
 type ChatMessage = SessionChatMessage;
 
 function findActiveThreadId(messages: ChatMessage[]): string | undefined {
-  for (let i = messages.length - 1; i >= 0; i--) {
-    const message = messages[i];
-    if (message.role === "assistant" && message.threadId && !message.approval && !message.patch) {
-      return message.threadId;
-    }
-  }
-  return undefined;
+  return findRecoverableConversation(messages)?.threadId;
 }
 
 function buildArtifactContents(project: ActiveProject) {
@@ -587,7 +582,7 @@ export function App() {
                 ...message,
                 content: result.message,
                 reasoning: message.reasoning ?? reasoningSnapshot,
-                threadId: result.threadId ?? message.threadId,
+                threadId: result.threadId,
               }
             : message,
         ));

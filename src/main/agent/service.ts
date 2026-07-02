@@ -63,6 +63,10 @@ export class AgentService {
     },
   ) {}
 
+  hasActiveConversation(threadId: string): boolean {
+    return this.conversations.has(threadId);
+  }
+
   restoreAgentRunConversation(
     threadId: string,
     messages: AgentConversationMessage[],

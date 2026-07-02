@@ -40,6 +40,10 @@ import {
   type ArtifactContentMap,
 } from "@shared/agent-run-plan";
 import { mergeEditorContext } from "@shared/deck-agent-context";
+import {
+  findRecoverableConversation,
+  toAgentMessageHistory,
+} from "@shared/session-recovery";
 import type { DeckBatchPlan } from "./deck/deck-batch-planner";
 import {
   buildDeckAgentStructuredPrompt,
@@ -779,11 +783,45 @@ app.whenReady().then(async () => {
           const deckAgentContext = resolvedRequest.stage === "deck"
             ? await buildDeckAgentContextForRequest(resolvedRequest)
             : undefined;
-          const runResult = await runtime.agentService.continueAgentRun(
-            threadId,
+
+          if (!runtime.agentService.hasActiveConversation(threadId)) {
+            const recovered = findRecoverableConversation(
+              sessionStore.getSession(sessionId).messages,
+            );
+            if (recovered?.threadId === threadId) {
+              runtime.agentService.restoreAgentRunConversation(
+                threadId,
+                toAgentMessageHistory(recovered.messages, resolvedRequest.prompt),
+              );
+            }
+          }
+
+          if (runtime.agentService.hasActiveConversation(threadId)) {
+            const runResult = await runtime.agentService.continueAgentRun(
+              threadId,
+              structuredPrompt,
+              emit,
+              resolvedRequest.editorContext,
+              controller.signal,
+              deckAgentContext,
+            );
+            if (runResult.status === "completed") {
+              await persistPresentation(sessionId, runtime);
+              await sessionStore.markProjectArtifactStatus(sessionId, "deck", "ready");
+            } else if (runResult.status === "rejected") {
+              await persistPresentation(sessionId, runtime);
+            }
+            return runResult;
+          }
+
+          const messageHistory = sessionStore.getAgentMessageHistory(sessionId, resolvedRequest.prompt);
+          const runResult = await runtime.agentService.start(
             structuredPrompt,
+            undefined,
+            "REQUEST_APPROVAL",
             emit,
             resolvedRequest.editorContext,
+            messageHistory,
             controller.signal,
             deckAgentContext,
           );
