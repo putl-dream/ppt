@@ -5,6 +5,7 @@ import type { Presentation } from "@shared/presentation";
 import {
   agentRunRequestSchema,
   type AgentRunRequest,
+  type ResolvedAgentRunRequest,
   type AgentRunResult,
   type AgentStreamEvent,
   type CreateSessionOptions,
@@ -33,7 +34,11 @@ import { createModuleLogger, requestSummary } from "./agent/logger";
 import { FileSessionStore } from "./session-store";
 import type { SessionChatMessage, SessionSnapshot } from "@shared/session";
 import { projectArtifactStatusSchema } from "@shared/session";
-import { isProjectStageId, primaryProjectArtifactPaths } from "@shared/project";
+import { isProjectStageId, primaryProjectArtifactPaths, projectStageIds } from "@shared/project";
+import {
+  buildAgentRunPlan,
+  type ArtifactContentMap,
+} from "@shared/agent-run-plan";
 import { mergeEditorContext } from "@shared/deck-agent-context";
 import type { DeckBatchPlan } from "./deck/deck-batch-planner";
 import {
@@ -309,7 +314,44 @@ app.whenReady().then(async () => {
     };
   };
 
-  const buildStructuredAgentPrompt = async (request: AgentRunRequest): Promise<string> => {
+  const loadArtifactContentsForSession = async (sessionId: string): Promise<ArtifactContentMap> => {
+    const entries = await Promise.all(
+      projectStageIds.map(async (stageId) => {
+        try {
+          const artifact = await readAgentArtifactContext(sessionId, primaryProjectArtifactPaths[stageId]);
+          return [stageId, artifact.content] as const;
+        } catch {
+          return [stageId, ""] as const;
+        }
+      }),
+    );
+    return Object.fromEntries(entries) as ArtifactContentMap;
+  };
+
+  const resolveAgentRunRequest = async (
+    request: AgentRunRequest,
+    presentation: Presentation,
+  ): Promise<ResolvedAgentRunRequest> => {
+    if (request.stage !== "auto") return request as ResolvedAgentRunRequest;
+
+    const artifactContents = await loadArtifactContentsForSession(request.sessionId);
+    const plan = buildAgentRunPlan({
+      prompt: request.prompt,
+      artifactContents,
+      presentation,
+    });
+
+    return {
+      ...request,
+      stage: plan.stage,
+      intent: plan.intent,
+      targetArtifactId: plan.targetArtifactId,
+      targetPath: plan.targetPath,
+      referencedArtifactIds: plan.referencedArtifactIds,
+    };
+  };
+
+  const buildStructuredAgentPrompt = async (request: ResolvedAgentRunRequest): Promise<string> => {
     if (request.stage === "deck") {
       const runtime = await getRuntimeForSession(request.sessionId);
       const storyboard = await sessionStore.readStoryboard(request.sessionId);
@@ -391,7 +433,7 @@ app.whenReady().then(async () => {
     ].join("\n");
   };
 
-  const buildDeckAgentContextForRequest = async (request: AgentRunRequest, batch?: DeckBatchPlan) => {
+  const buildDeckAgentContextForRequest = async (request: ResolvedAgentRunRequest, batch?: DeckBatchPlan) => {
     const runtime = await getRuntimeForSession(request.sessionId);
     const storyboard = await sessionStore.readStoryboard(request.sessionId);
     const artifactReader = createArtifactReader(async (path) => {
@@ -594,6 +636,10 @@ app.whenReady().then(async () => {
       sessionActiveRuns.set(sessionId, currentRunId);
 
       const runtime = await getRuntimeForSession(sessionId);
+      const resolvedRequest = await resolveAgentRunRequest(
+        request,
+        runtime.commandBus.getSnapshot(),
+      );
       const settings = input ? agentModelSettingsSchema.parse(input) : undefined;
       const executionStrategy = strategy
         ? agentExecutionStrategySchema.parse(strategy)
@@ -612,22 +658,22 @@ app.whenReady().then(async () => {
           sessionId,
           currentRunId,
           {
-            ...requestSummary(request.prompt),
-            stage: request.stage,
-            intent: request.intent,
-            targetPath: request.targetPath,
-            targetArtifactId: request.targetArtifactId,
-            referencedArtifactIds: request.referencedArtifactIds,
+            ...requestSummary(resolvedRequest.prompt),
+            stage: resolvedRequest.stage,
+            intent: resolvedRequest.intent,
+            targetPath: resolvedRequest.targetPath,
+            targetArtifactId: resolvedRequest.targetArtifactId,
+            referencedArtifactIds: resolvedRequest.referencedArtifactIds,
             provider: selection?.provider,
             model: selection?.model,
             executionStrategy,
           },
           async () => {
-            if (request.intent === "generate-deck" && request.stage === "deck") {
+            if (resolvedRequest.intent === "generate-deck" && resolvedRequest.stage === "deck") {
               return runDeckGenerationJob({
                 sessionId,
                 runtime,
-                request,
+                request: resolvedRequest,
                 model: selection,
                 executionStrategy,
                 currentRunId,
@@ -637,17 +683,17 @@ app.whenReady().then(async () => {
               });
             }
 
-            const structuredPrompt = await buildStructuredAgentPrompt(request);
-            const deckAgentContext = request.stage === "deck"
-              ? await buildDeckAgentContextForRequest(request)
+            const structuredPrompt = await buildStructuredAgentPrompt(resolvedRequest);
+            const deckAgentContext = resolvedRequest.stage === "deck"
+              ? await buildDeckAgentContextForRequest(resolvedRequest)
               : undefined;
-            const messageHistory = sessionStore.getAgentMessageHistory(sessionId, request.prompt);
+            const messageHistory = sessionStore.getAgentMessageHistory(sessionId, resolvedRequest.prompt);
             const runResult = await runtime.agentService.start(
               structuredPrompt,
               selection,
               executionStrategy,
               emit,
-              request.editorContext,
+              resolvedRequest.editorContext,
               messageHistory,
               controller.signal,
               deckAgentContext,
@@ -691,6 +737,10 @@ app.whenReady().then(async () => {
     sessionActiveRuns.set(sessionId, currentRunId);
 
     const runtime = await getRuntimeForSession(sessionId);
+    const resolvedRequest = await resolveAgentRunRequest(
+      request,
+      runtime.commandBus.getSnapshot(),
+    );
     const emit = (streamEvent: AgentServiceEvent) => {
       if (currentRunId) event.sender.send("agent:stream", { ...streamEvent, runId: currentRunId });
     };
@@ -702,23 +752,23 @@ app.whenReady().then(async () => {
         currentRunId,
         {
           threadId,
-          ...requestSummary(request.prompt),
-          stage: request.stage,
-          intent: request.intent,
-          targetPath: request.targetPath,
-          targetArtifactId: request.targetArtifactId,
-          referencedArtifactIds: request.referencedArtifactIds,
+          ...requestSummary(resolvedRequest.prompt),
+          stage: resolvedRequest.stage,
+          intent: resolvedRequest.intent,
+          targetPath: resolvedRequest.targetPath,
+          targetArtifactId: resolvedRequest.targetArtifactId,
+          referencedArtifactIds: resolvedRequest.referencedArtifactIds,
         },
         async () => {
-          const structuredPrompt = await buildStructuredAgentPrompt(request);
-          const deckAgentContext = request.stage === "deck"
-            ? await buildDeckAgentContextForRequest(request)
+          const structuredPrompt = await buildStructuredAgentPrompt(resolvedRequest);
+          const deckAgentContext = resolvedRequest.stage === "deck"
+            ? await buildDeckAgentContextForRequest(resolvedRequest)
             : undefined;
           const runResult = await runtime.agentService.continueAgentRun(
             threadId,
             structuredPrompt,
             emit,
-            request.editorContext,
+            resolvedRequest.editorContext,
             controller.signal,
             deckAgentContext,
           );

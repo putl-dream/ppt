@@ -83,7 +83,7 @@ export const ContextualAgentPanel: React.FC<ContextualAgentPanelProps> = ({
   selectedSlideIndex,
   onClearContextTag,
 }) => {
-  const currentStage = useProjectStore((state) => state.currentStage);
+  const currentStage = "brief" as const;
   const activeProject = useProjectStore((state) => state.activeProject);
   
   const [showThought, setShowThought] = useState(true);

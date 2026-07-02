@@ -10,7 +10,7 @@ import type {
   SessionBootstrap,
   SessionChatMessage,
 } from "./session";
-import { projectStageIds } from "./project";
+import { projectStageIds, type ProjectStageId } from "./project";
 
 export interface CreateSessionOptions {
   rootPath?: string;
@@ -53,7 +53,7 @@ export const agentIntentSchema = z.enum([
   "revise-deck",
 ]);
 
-export const agentStageSchema = z.enum(projectStageIds);
+export const agentStageSchema = z.enum([...projectStageIds, "auto"] as const);
 
 export const agentEditorContextSchema = z.object({
   currentSlideId: z.string().optional(),
@@ -83,6 +83,7 @@ export type AgentIntent = z.infer<typeof agentIntentSchema>;
 export type AgentStage = z.infer<typeof agentStageSchema>;
 export type AgentAttachment = z.infer<typeof agentAttachmentSchema>;
 export type AgentRunRequest = z.infer<typeof agentRunRequestSchema>;
+export type ResolvedAgentRunRequest = Omit<AgentRunRequest, "stage"> & { stage: ProjectStageId };
 
 export type AgentStreamEvent =
   | {

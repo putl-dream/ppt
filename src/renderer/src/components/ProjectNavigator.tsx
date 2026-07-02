@@ -9,8 +9,8 @@ export const ProjectNavigator: React.FC<ProjectNavigatorProps> = ({
   onToggleSettings,
 }) => {
   const activeProject = useProjectStore((state) => state.activeProject);
-  const currentStage = useProjectStore((state) => state.currentStage);
-  const setStage = useProjectStore((state) => state.setStage);
+  const currentStage: ArtifactId = "brief";
+  const setStage = (_stage: ArtifactId) => {};
 
   if (!activeProject) {
     return (

@@ -36,7 +36,6 @@ export interface Artifact {
 export interface ActiveProject {
   id: string;
   name: string;
-  currentStage: ArtifactId;
   artifacts: Record<ArtifactId, Artifact>;
   history: {
     commitId: string;
@@ -48,11 +47,9 @@ export interface ActiveProject {
 
 interface ProjectState {
   activeProject: ActiveProject | null;
-  currentStage: ArtifactId;
 
   initializeProject: (id: string, name: string, backendArtifacts?: ProjectArtifact[]) => void;
   hydrateProjectArtifacts: (sessionId?: string) => Promise<void>;
-  setStage: (stage: ArtifactId) => void;
   updateArtifactContent: (id: ArtifactId, content: string, by?: "user" | "agent") => void;
   markStageReady: (id: ArtifactId) => void;
   resetProject: () => void;
@@ -241,7 +238,6 @@ function applyWriteResult(
 
 export const useProjectStore = create<ProjectState>((set, get) => ({
   activeProject: null,
-  currentStage: "brief",
 
   initializeProject: (id, name, backendArtifacts) => {
     const artifacts = Object.fromEntries(
@@ -252,11 +248,9 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       activeProject: {
         id,
         name,
-        currentStage: "brief",
         artifacts,
         history: [],
       },
-      currentStage: "brief",
     });
   },
 
@@ -301,16 +295,6 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       };
     });
   },
-
-  setStage: (stage) => set((state) => ({
-    currentStage: stage,
-    activeProject: state.activeProject
-      ? {
-          ...state.activeProject,
-          currentStage: stage,
-        }
-      : state.activeProject,
-  })),
 
   updateArtifactContent: (id, content, by = "user") => {
     const project = get().activeProject;
@@ -468,6 +452,6 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       window.clearTimeout(timer);
     }
     writeTimers.clear();
-    set({ activeProject: null, currentStage: "brief" });
+    set({ activeProject: null });
   },
 }));

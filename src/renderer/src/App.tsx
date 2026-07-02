@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type {
   AgentApprovalRequest,
-  AgentIntent,
   AgentRunRequest,
   AgentRunResult,
   AgentStreamEvent,
@@ -18,8 +17,13 @@ import { SettingsSidebar } from "./components/SettingsSidebar";
 import { SettingsConsole } from "./components/SettingsConsole";
 import { ChatWorkspace } from "./components/ChatWorkspace";
 
-import { useProjectStore, type ActiveProject, type ArtifactId } from "./components/project-store";
+import { useProjectStore, type ActiveProject } from "./components/project-store";
 import { normalizeWorkspacePath, getWorkspaceLabel } from "@shared/workspace";
+import {
+  buildAgentRunPlan,
+  artifactContentsFromRecord,
+} from "@shared/agent-run-plan";
+import { projectStageIds } from "@shared/project";
 import {
   DEFAULT_MODELS,
   MODEL_STORAGE_KEY,
@@ -31,28 +35,22 @@ import {
 
 type ChatMessage = SessionChatMessage;
 
-const REFERENCED_ARTIFACTS_BY_STAGE: Record<ArtifactId, ArtifactId[]> = {
-  brief: [],
-  outline: ["brief"],
-  research: ["brief", "outline"],
-  design: ["brief"],
-  slides: ["brief", "outline", "research", "design"],
-  deck: ["brief", "outline", "research", "design", "slides"],
-};
-
-function inferAgentIntent(
-  stage: ArtifactId,
-  project: ActiveProject | null,
-  presentation: Presentation | undefined,
-): AgentIntent {
-  if (stage === "deck") {
-    return presentation && (presentation.revision > 0 || presentation.slides.length > 0)
-      ? "revise-deck"
-      : "generate-deck";
+function findActiveThreadId(messages: ChatMessage[]): string | undefined {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const message = messages[i];
+    if (message.role === "assistant" && message.threadId && !message.approval && !message.patch) {
+      return message.threadId;
+    }
   }
+  return undefined;
+}
 
-  const artifact = project?.artifacts[stage];
-  return artifact?.content.trim() ? "revise-artifact" : "generate-artifact";
+function buildArtifactContents(project: ActiveProject) {
+  return artifactContentsFromRecord(
+    Object.fromEntries(
+      projectStageIds.map((stageId) => [stageId, project.artifacts[stageId]?.content ?? ""]),
+    ),
+  );
 }
 
 function toSessionChatMessages(messages: ChatMessage[]): SessionChatMessage[] {
@@ -711,7 +709,6 @@ export function App() {
       }
     }
 
-    const activeStage = useProjectStore.getState().currentStage;
     const activeProjectObj = useProjectStore.getState().activeProject;
     if (!agentSessionId || !activeProjectObj) {
       setBusy(false);
@@ -723,19 +720,25 @@ export function App() {
       currentSlideId: selectedSlideId || undefined,
       selectedElementIds: selectedElementId ? [selectedElementId] : [],
     };
+    const runPlan = buildAgentRunPlan({
+      prompt: activeRequest,
+      artifactContents: buildArtifactContents(activeProjectObj),
+      presentation,
+    });
     const agentRequest: AgentRunRequest = {
       prompt: activeRequest,
       sessionId: agentSessionId,
-      stage: activeStage,
-      intent: inferAgentIntent(activeStage, activeProjectObj, presentation),
-      targetArtifactId: activeStage === "deck" ? undefined : activeStage,
-      targetPath: activeProjectObj.artifacts[activeStage]?.path,
-      referencedArtifactIds: REFERENCED_ARTIFACTS_BY_STAGE[activeStage],
+      stage: "auto",
+      intent: runPlan.intent,
+      targetArtifactId: runPlan.targetArtifactId,
+      targetPath: runPlan.targetPath,
+      referencedArtifactIds: runPlan.referencedArtifactIds,
       editorContext,
     };
 
     console.info("Starting structured Agent run", {
       sessionId: agentRequest.sessionId,
+      inferredStage: runPlan.stage,
       stage: agentRequest.stage,
       intent: agentRequest.intent,
       targetPath: agentRequest.targetPath,
@@ -787,12 +790,19 @@ export function App() {
           toSessionChatMessages(forkedMessages),
         );
       }
-      const result = await window.desktopApi.startAgentRun(
-        agentRequest,
-        selectedModel ? toAgentModelSettings(selectedModel) : undefined,
-        executionStrategy,
-        runId,
-      );
+      const activeThreadId = findActiveThreadId(forkedMessages ?? chatMessages);
+      const result = activeThreadId
+        ? await window.desktopApi.continueAgentRun(
+            activeThreadId,
+            agentRequest,
+            runId,
+          )
+        : await window.desktopApi.startAgentRun(
+            agentRequest,
+            selectedModel ? toAgentModelSettings(selectedModel) : undefined,
+            executionStrategy,
+            runId,
+          );
       applyAgentResult(result, activeRunStepsRef.current, runId);
     } catch (err) {
       setChatMessages((prev) => [

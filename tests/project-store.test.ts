@@ -30,7 +30,6 @@ describe("project-store zustand store", () => {
     expect(state.activeProject).not.toBeNull();
     expect(state.activeProject?.id).toBe("test-session");
     expect(state.activeProject?.name).toBe("Test Project");
-    expect(state.currentStage).toBe("brief");
 
     const briefArtifact = state.activeProject?.artifacts.brief;
     expect(briefArtifact?.id).toBe("brief");
@@ -38,14 +37,13 @@ describe("project-store zustand store", () => {
     expect(briefArtifact?.content).toContain("演示文稿 Brief");
   });
 
-  it("sets stage correctly", () => {
+  it("initializes all artifact shells with default template content", () => {
     const store = useProjectStore.getState();
     store.initializeProject("test-session", "Test Project");
 
-    store.setStage("outline");
     const state = useProjectStore.getState();
-    expect(state.currentStage).toBe("outline");
-    expect(state.activeProject?.currentStage).toBe("outline");
+    expect(state.activeProject?.artifacts.outline.content).toContain("演示大纲");
+    expect(state.activeProject?.artifacts.deck.content).toContain("新演示文稿");
   });
 
   it("hydrates project artifacts correctly from backend", async () => {
