@@ -468,6 +468,21 @@ app.whenReady().then(async () => {
     await ensureRuntime(state.activeSession);
     return state;
   });
+  ipcMain.handle("workspace:list-sessions", async (_, rootPath: string) =>
+    sessionStore.listWorkspaceSessions(rootPath),
+  );
+  ipcMain.handle(
+    "workspace:migrate-legacy",
+    async (_, sessionId: string, targetRootPath: string) => {
+      const state = await sessionStore.migrateLegacySessionToWorkspace(
+        sessionId,
+        targetRootPath,
+      );
+      activeSessionId = state.activeSession.session.id;
+      await ensureRuntime(state.activeSession);
+      return state;
+    },
+  );
   ipcMain.handle("session:select", async (_, sessionId: string) => {
     const state = await sessionStore.selectSession(sessionId);
     activeSessionId = state.activeSession.session.id;

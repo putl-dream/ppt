@@ -528,4 +528,84 @@ describe("FileSessionStore", () => {
     ).toHaveLength(2);
     expect(first.activeSession.session.id).not.toBe(opened.activeSession.session.id);
   });
+
+  it("persists workspace session index and snapshot files under .agent-ppt", async () => {
+    const { store } = await createStore();
+    const workspaceDir = join(tmpdir(), "agent-ppt-workspace-index");
+    temporaryDirectories.push(workspaceDir);
+
+    const created = await store.createSession({ rootPath: workspaceDir, title: "索引测试" });
+    const sessionId = created.activeSession.session.id;
+
+    const index = JSON.parse(
+      await readFile(join(workspaceDir, ".agent-ppt", "sessions.index.json"), "utf8"),
+    );
+    expect(index.activeSessionId).toBe(sessionId);
+    expect(index.sessions).toHaveLength(1);
+    expect(index.sessions[0].title).toBe("索引测试");
+
+    const projectMeta = JSON.parse(
+      await readFile(join(workspaceDir, ".agent-ppt", "project.json"), "utf8"),
+    );
+    expect(projectMeta.version).toBe(1);
+
+    const snapshot = JSON.parse(
+      await readFile(join(workspaceDir, ".agent-ppt", "sessions", `${sessionId}.json`), "utf8"),
+    );
+    expect(snapshot.session.id).toBe(sessionId);
+    expect(snapshot.presentation.title).toBe("索引测试");
+  });
+
+  it("lists workspace sessions from the local index", async () => {
+    const { store } = await createStore();
+    const workspaceDir = join(tmpdir(), "agent-ppt-workspace-list");
+    temporaryDirectories.push(workspaceDir);
+
+    await store.createSession({ rootPath: workspaceDir, title: "对话一" });
+    await store.createSession({ rootPath: workspaceDir, title: "对话二" });
+
+    const listed = await store.listWorkspaceSessions(workspaceDir);
+    expect(listed).toHaveLength(2);
+    expect(listed.map((session) => session.title).sort()).toEqual(["对话一", "对话二"]);
+  });
+
+  it("hydrates workspace sessions from index when global store is empty", async () => {
+    const { store, filePath } = await createStore();
+    const workspaceDir = join(tmpdir(), "agent-ppt-workspace-hydrate");
+    temporaryDirectories.push(workspaceDir);
+
+    const created = await store.createSession({ rootPath: workspaceDir, title: "离线恢复" });
+    const sessionId = created.activeSession.session.id;
+
+    const fresh = new FileSessionStore(filePath);
+    await fresh.initialize();
+    const opened = await fresh.openWorkspace(workspaceDir);
+
+    expect(opened.activeSession.session.id).toBe(sessionId);
+    expect(opened.activeSession.session.title).toBe("离线恢复");
+  });
+
+  it("migrates legacy projects/session-{id} sandboxes into a workspace directory", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "agent-ppt-legacy-migrate-"));
+    temporaryDirectories.push(directory);
+    const targetWorkspace = await mkdtemp(join(tmpdir(), "agent-ppt-target-workspace-"));
+    temporaryDirectories.push(targetWorkspace);
+    const filePath = join(directory, "sessions.json");
+    const projectsRoot = join(directory, "projects");
+    const store = new FileSessionStore(filePath, projectsRoot);
+    await store.initialize();
+
+    const legacySessionId = store.getBootstrap().activeSession.session.id;
+
+    await store.migrateLegacySessionToWorkspace(legacySessionId, targetWorkspace);
+
+    const migrated = store.getSession(legacySessionId);
+    const normalize = (value: string) => value.replace(/\\/g, "/").toLowerCase();
+    expect(normalize(migrated.project?.rootPath ?? "")).toBe(normalize(targetWorkspace));
+    expect(await readFile(join(targetWorkspace, "brief.md"), "utf8")).toContain("**项目名称**");
+    expect(
+      JSON.parse(await readFile(join(targetWorkspace, ".agent-ppt", "sessions.index.json"), "utf8"))
+        .sessions,
+    ).toHaveLength(1);
+  });
 });

@@ -5,6 +5,9 @@ const api: DesktopApi = {
   getSessionState: () => ipcRenderer.invoke("session:get-state"),
   createSession: (options) => ipcRenderer.invoke("session:create", options),
   openWorkspace: (rootPath) => ipcRenderer.invoke("workspace:open", rootPath),
+  listWorkspaceSessions: (rootPath) => ipcRenderer.invoke("workspace:list-sessions", rootPath),
+  migrateLegacySessionToWorkspace: (sessionId, targetRootPath) =>
+    ipcRenderer.invoke("workspace:migrate-legacy", sessionId, targetRootPath),
   selectSession: (sessionId) => ipcRenderer.invoke("session:select", sessionId),
   deleteSession: (sessionId) => ipcRenderer.invoke("session:delete", sessionId),
   saveSessionMessages: (sessionId, messages) =>

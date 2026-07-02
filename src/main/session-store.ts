@@ -1,4 +1,4 @@
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { cp, mkdir, readdir, readFile, rename, stat, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { z } from "zod";
 import type { Presentation } from "@shared/presentation";
@@ -33,7 +33,13 @@ import { parseStoryboard, serializeStoryboard, type StoryboardSlideSpec } from "
 import { TranscriptStore, type TranscriptMessageInput } from "./transcript-store";
 import { defaultProjectArtifacts } from "@shared/project";
 import type { CreateSessionOptions } from "@shared/ipc";
-import { normalizeWorkspacePath } from "@shared/workspace";
+import {
+  isLegacyProjectSandboxPath,
+  type WorkspaceSessionIndexEntry,
+  type WorkspaceSessionsIndex,
+} from "@shared/workspace-meta";
+import { getWorkspaceLabel, normalizeWorkspacePath } from "@shared/workspace";
+import { WorkspaceIndexStore } from "./workspace-index-store";
 
 const storedSessionSchema = sessionSnapshotSchema;
 const sessionFileSchema = z.object({
@@ -47,16 +53,17 @@ type SessionFile = z.infer<typeof sessionFileSchema>;
 export class FileSessionStore {
   private data?: SessionFile;
   private writeQueue = Promise.resolve();
+  private readonly projectsRootPath: string;
   private readonly projectFileService: ProjectFileService;
   private readonly generationJobsService: GenerationJobsService;
   private readonly exportHistoryService: ExportHistoryService;
   private readonly transcriptStore = new TranscriptStore();
+  private readonly workspaceIndexStore = new WorkspaceIndexStore();
   private readonly expiredApprovalMessageIds = new Set<string>();
 
   constructor(private readonly filePath: string, projectRootPath?: string) {
-    this.projectFileService = new ProjectFileService(
-      projectRootPath ?? join(dirname(filePath), "projects"),
-    );
+    this.projectsRootPath = projectRootPath ?? join(dirname(filePath), "projects");
+    this.projectFileService = new ProjectFileService(this.projectsRootPath);
     this.generationJobsService = new GenerationJobsService(this.projectFileService);
     this.exportHistoryService = new ExportHistoryService(this.projectFileService);
   }
@@ -150,31 +157,82 @@ export class FileSessionStore {
     data.sessions.unshift(snapshot);
     data.activeSessionId = snapshot.session.id;
     await this.persist();
+    await this.syncWorkspacePersistence(snapshot, { active: true });
     return this.getBootstrap();
   }
 
   async openWorkspace(rootPath: string): Promise<SessionBootstrap> {
     const normalized = normalizeWorkspacePath(rootPath);
-    const matches = this.requireData().sessions.filter(
-      (snapshot) =>
-        snapshot.project?.rootPath &&
-        normalizeWorkspacePath(snapshot.project.rootPath) === normalized,
+    await this.workspaceIndexStore.ensureProjectMeta(
+      normalized,
+      getWorkspaceLabel(normalized),
     );
 
-    if (matches.length > 0) {
-      const latest = [...matches].sort((left, right) =>
-        right.session.updatedAt.localeCompare(left.session.updatedAt),
-      )[0];
-      return this.selectSession(latest.session.id);
+    let index = await this.workspaceIndexStore.readSessionsIndex(normalized);
+    if (!index) {
+      index = await this.buildWorkspaceIndexFromGlobal(normalized);
+    }
+
+    if (index && index.sessions.length > 0) {
+      await this.hydrateGlobalSessionsFromWorkspaceIndex(normalized, index);
+      return this.selectSession(index.activeSessionId);
     }
 
     return this.createSession({ rootPath: normalized });
   }
 
+  async listWorkspaceSessions(rootPath: string): Promise<SessionSummary[]> {
+    const normalized = normalizeWorkspacePath(rootPath);
+    let index = await this.workspaceIndexStore.readSessionsIndex(normalized);
+    if (!index) {
+      index = await this.buildWorkspaceIndexFromGlobal(normalized);
+    }
+    if (!index) return [];
+
+    return index.sessions.map((entry) => ({
+      id: entry.id,
+      title: entry.title,
+      createdAt: entry.createdAt,
+      updatedAt: entry.updatedAt,
+      slideCount: entry.slideCount,
+      revision: entry.revision,
+      workspacePath: normalized,
+    }));
+  }
+
+  async migrateLegacySessionToWorkspace(
+    sessionId: string,
+    targetRootPath: string,
+  ): Promise<SessionBootstrap> {
+    const snapshot = this.findSession(sessionId);
+    if (!snapshot.project) {
+      throw new Error("Session does not have a project sandbox to migrate.");
+    }
+
+    const legacyPath = normalizeWorkspacePath(snapshot.project.rootPath);
+    if (!isLegacyProjectSandboxPath(legacyPath, this.projectsRootPath)) {
+      throw new Error("Session is not using a legacy projects/session-{id} sandbox.");
+    }
+
+    const normalizedTarget = normalizeWorkspacePath(targetRootPath);
+    await mkdir(normalizedTarget, { recursive: true });
+    await copyDirectoryMerge(legacyPath, normalizedTarget);
+
+    snapshot.project.rootPath = normalizedTarget;
+    await this.materializeProjectSandbox(snapshot);
+    await this.syncWorkspacePersistence(snapshot, { active: true });
+    await this.persist();
+    return this.getBootstrap();
+  }
+
   async selectSession(sessionId: string): Promise<SessionBootstrap> {
     const data = this.requireData();
-    this.findSession(sessionId);
+    const snapshot = this.findSession(sessionId);
     data.activeSessionId = sessionId;
+    const rootPath = snapshot.project?.rootPath;
+    if (rootPath && this.isWorkspaceBoundRoot(rootPath)) {
+      await this.workspaceIndexStore.setActiveSession(rootPath, sessionId);
+    }
     await this.persist();
     return this.getBootstrap();
   }
@@ -185,6 +243,8 @@ export class FileSessionStore {
     if (index === -1) {
       throw new Error(`Session not found: ${sessionId}`);
     }
+    const removed = data.sessions[index];
+    const rootPath = removed.project?.rootPath;
     data.sessions.splice(index, 1);
     if (data.sessions.length === 0) {
       const initial = this.createInitialData();
@@ -193,6 +253,9 @@ export class FileSessionStore {
       await this.materializeProjectSandboxes();
     } else if (data.activeSessionId === sessionId) {
       data.activeSessionId = data.sessions[0].session.id;
+    }
+    if (rootPath && this.isWorkspaceBoundRoot(rootPath)) {
+      await this.workspaceIndexStore.removeSession(rootPath, sessionId);
     }
     await this.persist();
     return this.getBootstrap();
@@ -209,6 +272,7 @@ export class FileSessionStore {
     );
     await this.projectFileService.writeDeckSnapshot(snapshot, { markStale: false });
     await this.persist();
+    await this.syncWorkspacePersistence(snapshot);
   }
 
   async recordDeckExport(
@@ -268,6 +332,7 @@ export class FileSessionStore {
     await this.hydrateMessagesFromTranscript(snapshot);
     snapshot.session.updatedAt = new Date().toISOString();
     await this.persist();
+    await this.syncWorkspacePersistence(snapshot);
   }
 
   listProjectArtifacts(sessionId: string) {
@@ -303,6 +368,7 @@ export class FileSessionStore {
     if (result.changed) {
       snapshot.session.updatedAt = new Date().toISOString();
       await this.persist();
+      await this.syncWorkspacePersistence(snapshot);
     }
     return result;
   }
@@ -316,6 +382,7 @@ export class FileSessionStore {
     const artifact = this.projectFileService.markArtifactStatus(snapshot, artifactId, status);
     snapshot.session.updatedAt = new Date().toISOString();
     await this.persist();
+    await this.syncWorkspacePersistence(snapshot);
     return artifact;
   }
 
@@ -518,6 +585,112 @@ export class FileSessionStore {
     return this.data;
   }
 
+  private isWorkspaceBoundRoot(rootPath: string): boolean {
+    return !isLegacyProjectSandboxPath(
+      normalizeWorkspacePath(rootPath),
+      this.projectsRootPath,
+    );
+  }
+
+  private async syncWorkspacePersistence(
+    snapshot: SessionSnapshot,
+    options?: { active?: boolean },
+  ): Promise<void> {
+    const rootPath = snapshot.project?.rootPath;
+    if (!rootPath || !this.isWorkspaceBoundRoot(rootPath)) return;
+
+    await this.workspaceIndexStore.ensureProjectMeta(
+      rootPath,
+      getWorkspaceLabel(rootPath),
+    );
+    await this.workspaceIndexStore.upsertSession(rootPath, snapshot, {
+      active: options?.active ?? this.requireData().activeSessionId === snapshot.session.id,
+    });
+  }
+
+  private async buildWorkspaceIndexFromGlobal(
+    rootPath: string,
+  ): Promise<WorkspaceSessionsIndex | null> {
+    const normalized = normalizeWorkspacePath(rootPath);
+    const matches = this.requireData().sessions.filter(
+      (snapshot) =>
+        snapshot.project?.rootPath &&
+        normalizeWorkspacePath(snapshot.project.rootPath) === normalized,
+    );
+    if (matches.length === 0) return null;
+
+    const latest = [...matches].sort((left, right) =>
+      right.session.updatedAt.localeCompare(left.session.updatedAt),
+    )[0];
+    const index: WorkspaceSessionsIndex = {
+      version: 1,
+      activeSessionId: latest.session.id,
+      sessions: matches.map((snapshot) => this.workspaceIndexStore.entryFromSnapshot(snapshot)),
+    };
+
+    await this.workspaceIndexStore.writeSessionsIndex(normalized, index);
+    for (const snapshot of matches) {
+      await this.workspaceIndexStore.upsertSession(normalized, snapshot, {
+        active: snapshot.session.id === index.activeSessionId,
+      });
+    }
+    return index;
+  }
+
+  private async hydrateGlobalSessionsFromWorkspaceIndex(
+    rootPath: string,
+    index: WorkspaceSessionsIndex,
+  ): Promise<void> {
+    const data = this.requireData();
+    for (const entry of index.sessions) {
+      if (data.sessions.some((item) => item.session.id === entry.id)) continue;
+
+      const stored = await this.workspaceIndexStore.readSessionSnapshot(rootPath, entry.id);
+      if (stored) {
+        data.sessions.push(
+          this.workspaceIndexStore.sessionFromWorkspaceSnapshot(stored, rootPath),
+        );
+        continue;
+      }
+
+      data.sessions.push(await this.rebuildSessionFromIndexEntry(entry, rootPath));
+    }
+  }
+
+  private async rebuildSessionFromIndexEntry(
+    entry: WorkspaceSessionIndexEntry,
+    rootPath: string,
+  ): Promise<SessionSnapshot> {
+    const presentation = createSessionPresentation(entry.title);
+    presentation.revision = entry.revision;
+    const snapshot: SessionSnapshot = {
+      session: {
+        id: entry.id,
+        title: entry.title,
+        createdAt: entry.createdAt,
+        updatedAt: entry.updatedAt,
+        slideCount: entry.slideCount,
+        revision: entry.revision,
+        workspacePath: rootPath,
+      },
+      project: {
+        rootPath,
+        artifacts: defaultProjectArtifacts.map((artifact) => ({ ...artifact })),
+      },
+      presentation,
+      messages: [createWelcomeMessage(entry.title)],
+      transcript: {
+        path: entry.transcriptPath,
+        leafMessageUuid: entry.leafMessageUuid,
+      },
+    };
+
+    await this.materializeProjectSandbox(snapshot);
+    await this.hydrateMessagesFromTranscript(snapshot);
+    await this.workspaceIndexStore.upsertSession(rootPath, snapshot, { active: false });
+    return snapshot;
+  }
+
   private async persist(): Promise<void> {
     const payload = `${JSON.stringify(this.requireData(), null, 2)}\n`;
     this.writeQueue = this.writeQueue.then(async () => {
@@ -526,5 +699,28 @@ export class FileSessionStore {
       await rename(temporaryPath, this.filePath);
     });
     await this.writeQueue;
+  }
+}
+
+async function copyDirectoryMerge(source: string, target: string): Promise<void> {
+  await mkdir(target, { recursive: true });
+  for (const entry of await readdir(source, { withFileTypes: true })) {
+    const sourcePath = join(source, entry.name);
+    const targetPath = join(target, entry.name);
+    if (entry.isDirectory()) {
+      await copyDirectoryMerge(sourcePath, targetPath);
+      continue;
+    }
+    if (!entry.isFile()) continue;
+    try {
+      await stat(targetPath);
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code === "ENOENT") {
+        await cp(sourcePath, targetPath);
+        continue;
+      }
+      throw error;
+    }
   }
 }

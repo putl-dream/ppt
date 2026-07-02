@@ -9,6 +9,7 @@ import type {
   ProjectArtifactStatus,
   SessionBootstrap,
   SessionChatMessage,
+  SessionSummary,
 } from "./session";
 import { projectStageIds, type ProjectStageId } from "./project";
 
@@ -230,6 +231,11 @@ export interface DesktopApi {
   getSessionState(): Promise<SessionBootstrap>;
   createSession(options?: CreateSessionOptions): Promise<SessionBootstrap>;
   openWorkspace(rootPath: string): Promise<SessionBootstrap>;
+  listWorkspaceSessions(rootPath: string): Promise<SessionSummary[]>;
+  migrateLegacySessionToWorkspace(
+    sessionId: string,
+    targetRootPath: string,
+  ): Promise<SessionBootstrap>;
   selectSession(sessionId: string): Promise<SessionBootstrap>;
   deleteSession(sessionId: string): Promise<SessionBootstrap>;
   saveSessionMessages(sessionId: string, messages: SessionChatMessage[]): Promise<void>;
