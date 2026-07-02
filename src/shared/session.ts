@@ -51,16 +51,37 @@ const persistedOutlineSchema = z.object({
   executionStrategy: agentExecutionStrategySchema.optional(),
 });
 
+const persistedApprovalDiffSchema = z.object({
+  titleChanged: z.boolean(),
+  oldTitle: z.string(),
+  newTitle: z.string(),
+  themeChanged: z.boolean(),
+  slidesAddedCount: z.number().int().nonnegative(),
+  slidesRemovedCount: z.number().int().nonnegative(),
+  affectedSlideIds: z.array(z.string()),
+  elementChanges: z.object({
+    addedCount: z.number().int().nonnegative(),
+    removedCount: z.number().int().nonnegative(),
+    updatedCount: z.number().int().nonnegative(),
+  }),
+});
+
 const persistedApprovalSchema = z.object({
   threadId: z.string(),
   summary: z.string(),
   commands: z.array(presentationCommandSchema),
+  risk: z.enum(["low", "medium", "high"]).optional(),
+  assumptions: z.array(z.string()).optional(),
+  diff: persistedApprovalDiffSchema.optional(),
 });
 
 const persistedPatchSchema = z.object({
   threadId: z.string(),
   targetPath: z.string(),
   summary: z.string(),
+  contentBefore: z.string().optional(),
+  contentAfter: z.string().optional(),
+  resolved: z.enum(["accepted", "rejected"]).optional(),
 });
 
 export const sessionChatMessageSchema = z.object({

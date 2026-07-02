@@ -156,33 +156,4 @@ describe("project-store zustand store", () => {
       "ready",
     );
   });
-
-  it("proposes, accepts, and rejects patches correctly", () => {
-    const store = useProjectStore.getState();
-    store.initializeProject("test-session", "Test Project");
-
-    const patch = {
-      targetFile: "brief.md",
-      op: "replace",
-      patch: "diff-placeholder",
-      contentBefore: "# Brief",
-      contentAfter: "# Patched Brief Content",
-      summary: "Make brief professional",
-    };
-
-    store.proposePatch(patch);
-    let state = useProjectStore.getState();
-    expect(state.proposedPatch).toEqual(patch);
-
-    store.rejectPatch();
-    state = useProjectStore.getState();
-    expect(state.proposedPatch).toBeNull();
-    expect(state.activeProject?.artifacts.brief.content).not.toBe("# Patched Brief Content");
-
-    store.proposePatch(patch);
-    store.acceptPatch();
-    state = useProjectStore.getState();
-    expect(state.proposedPatch).toBeNull();
-    expect(state.activeProject?.artifacts.brief.content).toBe("# Patched Brief Content");
-  });
 });

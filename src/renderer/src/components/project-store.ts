@@ -33,16 +33,6 @@ export interface Artifact {
   lastWriteError?: string;
 }
 
-export interface ProposedPatch {
-  targetFile: string;
-  op: string;
-  patch: string;
-  contentBefore: string;
-  contentAfter: string;
-  summary?: string;
-  threadId?: string;
-}
-
 export interface ActiveProject {
   id: string;
   name: string;
@@ -59,16 +49,12 @@ export interface ActiveProject {
 interface ProjectState {
   activeProject: ActiveProject | null;
   currentStage: ArtifactId;
-  proposedPatch: ProposedPatch | null;
 
   initializeProject: (id: string, name: string, backendArtifacts?: ProjectArtifact[]) => void;
   hydrateProjectArtifacts: (sessionId?: string) => Promise<void>;
   setStage: (stage: ArtifactId) => void;
   updateArtifactContent: (id: ArtifactId, content: string, by?: "user" | "agent") => void;
   markStageReady: (id: ArtifactId) => void;
-  proposePatch: (patch: ProposedPatch) => void;
-  acceptPatch: () => void;
-  rejectPatch: () => void;
   resetProject: () => void;
 }
 
@@ -253,18 +239,9 @@ function applyWriteResult(
   return nextArtifacts;
 }
 
-function findArtifactIdByPath(targetFile: string): ArtifactId | undefined {
-  const normalized = targetFile.replace(/\\/g, "/");
-  return projectStageIds.find((id) => {
-    const primaryPath = primaryProjectArtifactPaths[id];
-    return normalized === primaryPath || normalized.includes(id) || normalized.startsWith(`${id}/`);
-  });
-}
-
 export const useProjectStore = create<ProjectState>((set, get) => ({
   activeProject: null,
   currentStage: "brief",
-  proposedPatch: null,
 
   initializeProject: (id, name, backendArtifacts) => {
     const artifacts = Object.fromEntries(
@@ -280,7 +257,6 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         history: [],
       },
       currentStage: "brief",
-      proposedPatch: null,
     });
   },
 
@@ -487,49 +463,11 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       });
   },
 
-  proposePatch: (patch) => set({ proposedPatch: patch }),
-
-  acceptPatch: async () => {
-    const state = get();
-    if (!state.activeProject || !state.proposedPatch) return;
-    const targetId = findArtifactIdByPath(state.proposedPatch.targetFile);
-    const contentAfter = state.proposedPatch.contentAfter;
-    const threadId = state.proposedPatch.threadId;
-    set({ proposedPatch: null });
-    if (!targetId) return;
-    get().updateArtifactContent(targetId, contentAfter, "agent");
-
-    const api = getDesktopApi();
-    if (api && threadId) {
-      try {
-        await api.resumeAgentRun(threadId, true);
-      } catch (error) {
-        console.error("Failed to resume agent run after accepting patch:", error);
-      }
-    }
-  },
-
-  rejectPatch: async () => {
-    const state = get();
-    if (!state.proposedPatch) return;
-    const threadId = state.proposedPatch.threadId;
-    set({ proposedPatch: null });
-
-    const api = getDesktopApi();
-    if (api && threadId) {
-      try {
-        await api.resumeAgentRun(threadId, false);
-      } catch (error) {
-        console.error("Failed to resume agent run after rejecting patch:", error);
-      }
-    }
-  },
-
   resetProject: () => {
     for (const timer of writeTimers.values()) {
       window.clearTimeout(timer);
     }
     writeTimers.clear();
-    set({ activeProject: null, proposedPatch: null, currentStage: "brief" });
+    set({ activeProject: null, currentStage: "brief" });
   },
 }));

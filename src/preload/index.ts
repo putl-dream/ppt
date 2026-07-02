@@ -30,7 +30,8 @@ const api: DesktopApi = {
     ipcRenderer.on("agent:stream", handler);
     return () => ipcRenderer.removeListener("agent:stream", handler);
   },
-  resumeAgentRun: (threadId, approved) => ipcRenderer.invoke("agent:resume", threadId, approved),
+  resumeAgentRun: (sessionId, threadId, approved) =>
+    ipcRenderer.invoke("agent:resume", sessionId, threadId, approved),
   undo: () => ipcRenderer.invoke("presentation:undo"),
   redo: () => ipcRenderer.invoke("presentation:redo"),
   executeCommand: (command) => ipcRenderer.invoke("presentation:execute", command),

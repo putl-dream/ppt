@@ -411,6 +411,7 @@ export class FileSessionStore {
       if (message.thought) metadata.thought = message.thought;
       if (message.progress !== undefined) metadata.progress = message.progress;
       if (message.approval) metadata.approval = message.approval;
+      if (message.patch) metadata.patch = message.patch;
       if (message.threadId) metadata.threadId = message.threadId;
 
       return {
@@ -437,13 +438,35 @@ export class FileSessionStore {
     let changed = false;
     for (const snapshot of this.requireData().sessions) {
       snapshot.messages = snapshot.messages.map((message) => {
-        if (!message.approval) return message;
-        changed = true;
-        this.expiredApprovalMessageIds.add(message.id);
-        return this.toExpiredApprovalMessage(message);
+        let next = message;
+        if (message.approval) {
+          changed = true;
+          this.expiredApprovalMessageIds.add(message.id);
+          next = this.toExpiredApprovalMessage(next);
+        }
+        if (message.patch && !message.patch.resolved) {
+          changed = true;
+          next = this.toExpiredPatchMessage(next);
+        }
+        return next;
       });
     }
     return changed;
+  }
+
+  private toExpiredPatchMessage(message: SessionChatMessage): SessionChatMessage {
+    if (!message.patch || message.patch.resolved) return message;
+    const expirationNotice = "该 Patch 审核请求已随应用重启失效，请重新提交指令。";
+    return {
+      ...message,
+      content: message.content.includes(expirationNotice)
+        ? message.content
+        : `${message.content}\n\n${expirationNotice}`,
+      patch: {
+        ...message.patch,
+        resolved: "rejected",
+      },
+    };
   }
 
   private toExpiredApprovalMessage(message: SessionChatMessage): SessionChatMessage {

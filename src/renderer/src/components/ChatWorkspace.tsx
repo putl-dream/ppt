@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import type { AgentApprovalRequest } from "@shared/ipc";
+import type { SessionChatMessage } from "@shared/session";
 import {
   BrainIcon,
   ChevronDownIcon,
@@ -13,16 +14,10 @@ import {
   FileIcon,
 } from "./Icons";
 import { UnifiedAgentInput } from "./UnifiedAgentInput";
+import { PatchReviewCard } from "./PatchReviewCard";
 import type { ManagedModel } from "../modelCatalog";
 
-interface ChatMessage {
-  id: string;
-  role: "user" | "assistant";
-  content: string;
-  thought?: string[];
-  progress?: number;
-  approval?: AgentApprovalRequest;
-}
+type ChatMessage = SessionChatMessage;
 
 interface ChatWorkspaceProps {
   chatMessages: ChatMessage[];
@@ -33,8 +28,8 @@ interface ChatWorkspaceProps {
   onChangeRequest: (val: string) => void;
   onSubmitRequest: () => void;
   busy: boolean;
-  approval: AgentApprovalRequest | undefined;
-  onResolveApproval: (approved: boolean) => void;
+  onResolveApproval: (approved: boolean, approval: AgentApprovalRequest, messageId: string) => void;
+  onResolvePatch: (messageId: string, approved: boolean) => void;
   activeRunId?: string | null;
   onCancelRun?: () => void;
   onRetry?: (msgId: string) => void;
@@ -71,8 +66,8 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
   onChangeRequest,
   onSubmitRequest,
   busy,
-  approval,
   onResolveApproval,
+  onResolvePatch,
   activeRunId,
   onCancelRun,
   onRetry,
@@ -406,11 +401,21 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
                   </div>
                 )}
 
-                {/* 指令提交卡片 (Approval) */}
+                {/* 产物 Patch 审核卡片 */}
+                {msg.patch && (
+                  <PatchReviewCard
+                    patch={msg.patch}
+                    busy={busy}
+                    onAccept={() => onResolvePatch(msg.id, true)}
+                    onReject={() => onResolvePatch(msg.id, false)}
+                  />
+                )}
+
+                {/* Deck 排版审批卡片 */}
                 {msg.approval && (
                   <div className="approval-card" style={{ maxWidth: 540 }}>
                     <div className="approval-card-title">
-                      <span>📋 待审核的排版更新单</span>
+                      <span>📋 待审核的排版更新</span>
                     </div>
                     <p className="approval-summary">{msg.approval.summary}</p>
                     {msg.approval.risk && (
@@ -504,14 +509,14 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
                     <div className="approval-buttons">
                       <button
                         disabled={busy}
-                        onClick={() => onResolveApproval(false)}
+                        onClick={() => onResolveApproval(false, msg.approval!, msg.id)}
                         className="btn-reject"
                       >
                         拒绝变更
                       </button>
                       <button
                         disabled={busy}
-                        onClick={() => onResolveApproval(true)}
+                        onClick={() => onResolveApproval(true, msg.approval!, msg.id)}
                         className="btn-apply"
                       >
                         确认执行修改

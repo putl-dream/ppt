@@ -260,7 +260,7 @@ export interface DesktopApi {
     runId?: string,
   ): Promise<AgentRunResult>;
   onAgentStream(listener: (event: AgentStreamEvent) => void): () => void;
-  resumeAgentRun(threadId: string, approved: boolean): Promise<AgentRunResult>;
+  resumeAgentRun(sessionId: string, threadId: string, approved: boolean): Promise<AgentRunResult>;
   undo(): Promise<Presentation>;
   redo(): Promise<Presentation>;
   executeCommand(command: PresentationCommand): Promise<Presentation>;

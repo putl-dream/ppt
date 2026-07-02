@@ -56,13 +56,14 @@ function inferAgentIntent(
 }
 
 function toSessionChatMessages(messages: ChatMessage[]): SessionChatMessage[] {
-  return messages.map(({ id, role, content, thought, progress, approval, threadId }) => ({
+  return messages.map(({ id, role, content, thought, progress, approval, patch, threadId }) => ({
     id,
     role,
     content,
     thought,
     progress,
     approval,
+    patch,
     threadId,
   }));
 }
@@ -71,7 +72,6 @@ export function App() {
   const initializeProject = useProjectStore((state) => state.initializeProject);
   const hydrateProjectArtifacts = useProjectStore((state) => state.hydrateProjectArtifacts);
   const activeProject = useProjectStore((state) => state.activeProject);
-  const proposePatch = useProjectStore((state) => state.proposePatch);
 
   const [presentation, setPresentation] = useState<Presentation>();
   const [startupError, setStartupError] = useState<string>();
@@ -190,7 +190,6 @@ export function App() {
 
   // 对话流与 Agent 编排状态
   const [request, setRequest] = useState("创建一份智能硬件市场推广策划大纲");
-  const [approval, setApproval] = useState<AgentApprovalRequest>();
   const [busy, setBusy] = useState(false);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [thoughtProcess, setThoughtProcess] = useState<string[]>([]);
@@ -366,8 +365,6 @@ export function App() {
     setActiveSessionId(snapshot.session.id);
     setPresentation(snapshot.presentation);
     setChatMessages(snapshot.messages);
-    const latestMessage = snapshot.messages.at(-1);
-    setApproval(latestMessage?.approval);
     setRequest("");
     setSelectedSlideId(snapshot.presentation.slides[0]?.id ?? "");
     setSelectedElementId(null);
@@ -540,7 +537,6 @@ export function App() {
     }
 
     if (result.status === "approval-required") {
-      setApproval(result.approval);
       if (messageId) {
         setChatMessages((prev) => prev.map((message) =>
           message.id === messageId
@@ -568,17 +564,15 @@ export function App() {
       return;
     }
     if (result.status === "artifact-patch-required") {
-      useProjectStore.getState().proposePatch({
-        targetFile: result.patch.targetPath,
-        op: "patch",
-        patch: result.patch.diff.unifiedDiff,
+      const patchPayload = {
+        threadId: result.patch.threadId,
+        targetPath: result.patch.targetPath,
+        summary: result.patch.summary,
         contentBefore: result.patch.before,
         contentAfter: result.patch.after,
-        summary: result.patch.summary,
-        threadId: result.patch.threadId,
-      });
+      };
+      const promptContent = "已提出内容修改方案，请在下方审核后应用。";
 
-      const promptContent = "已提出内容修改方案，请在上方审核后应用。";
       if (messageId) {
         setChatMessages((prev) => prev.map((message) =>
           message.id === messageId
@@ -586,11 +580,7 @@ export function App() {
                 ...message,
                 content: promptContent,
                 thought: steps,
-                patch: {
-                  threadId: result.patch.threadId,
-                  targetPath: result.patch.targetPath,
-                  summary: result.patch.summary,
-                },
+                patch: patchPayload,
               }
             : message
         ));
@@ -602,11 +592,7 @@ export function App() {
             role: "assistant",
             content: promptContent,
             thought: steps,
-            patch: {
-              threadId: result.patch.threadId,
-              targetPath: result.patch.targetPath,
-              summary: result.patch.summary,
-            },
+            patch: patchPayload,
           },
         ]);
       }
@@ -724,7 +710,6 @@ export function App() {
       },
     });
 
-    setApproval(undefined);
     setThoughtProgress(0);
     setThoughtProcess([]);
     setAgentActivityMode("idle");
@@ -824,9 +809,13 @@ export function App() {
     void startAgent(prompt);
   };
 
-  // 确认或拒绝变更方案
-  async function resolveApproval(approved: boolean) {
-    if (!approval || busy) return;
+  // 确认或拒绝 Deck 排版变更方案
+  async function resolveApproval(
+    approved: boolean,
+    approvalRequest: AgentApprovalRequest,
+    messageId: string,
+  ) {
+    if (!approvalRequest || busy || !activeSessionId) return;
     setBusy(true);
     setThoughtProgress(20);
     setThoughtProcess([
@@ -839,15 +828,20 @@ export function App() {
     }, 200);
 
     try {
-      const result = await window.desktopApi.resumeAgentRun(approval.threadId, approved);
+      const result = await window.desktopApi.resumeAgentRun(
+        activeSessionId,
+        approvalRequest.threadId,
+        approved,
+      );
       clearInterval(progressInterval);
       setThoughtProgress(100);
+
+      const resolvedContent = approved ? "已成功应用变更方案。" : "已放弃排版变更提案。";
 
       if (result.status === "completed" || result.status === "rejected") {
         const nextPresentation = result.presentation ?? presentation;
         if (nextPresentation) {
           setPresentation(nextPresentation);
-          setApproval(undefined);
           if (nextPresentation.slides.length > 0 && approved) {
             const lastId = nextPresentation.slides[nextPresentation.slides.length - 1].id;
             setSelectedSlideId(lastId);
@@ -858,15 +852,12 @@ export function App() {
             setIsMirrorOpen(true);
           }
         }
-        useProjectStore.getState().hydrateProjectArtifacts(activeSessionId || undefined);
-        setChatMessages((prev) => [
-          ...prev,
-          {
-            id: crypto.randomUUID(),
-            role: "assistant",
-            content: approved ? "已成功应用变更方案。" : "已放弃排版变更提案。",
-          },
-        ]);
+        await hydrateProjectArtifacts(activeSessionId);
+        setChatMessages((prev) => prev.map((message) =>
+          message.id === messageId
+            ? { ...message, approval: undefined, content: resolvedContent }
+            : message
+        ));
         triggerToast(approved ? "✅ 变更已应用" : "❌ 变更已取消");
       }
     } catch (err) {
@@ -883,6 +874,52 @@ export function App() {
       setBusy(false);
       setThoughtProcess([]);
       setThoughtProgress(0);
+    }
+  }
+
+  // 确认或拒绝产物 Patch 变更方案
+  async function resolvePatch(messageId: string, approved: boolean) {
+    const message = chatMessages.find((item) => item.id === messageId);
+    if (!message?.patch || message.patch.resolved || busy || !activeSessionId) return;
+
+    const { threadId } = message.patch;
+    setBusy(true);
+    try {
+      const result = await window.desktopApi.resumeAgentRun(activeSessionId, threadId, approved);
+      const resolvedContent = approved
+        ? "修改已接受，相关产物文件已成功更新。"
+        : "已放弃内容修改提案。";
+
+      setChatMessages((prev) => prev.map((item) =>
+        item.id === messageId
+          ? {
+              ...item,
+              content: resolvedContent,
+              patch: {
+                ...item.patch!,
+                resolved: approved ? "accepted" : "rejected",
+              },
+            }
+          : item
+      ));
+
+      if (approved && result.status === "artifact-updated") {
+        await hydrateProjectArtifacts(activeSessionId);
+        triggerToast("✅ 变更已应用");
+      } else if (!approved || result.status === "rejected") {
+        triggerToast("❌ 变更已取消");
+      }
+    } catch (err) {
+      setChatMessages((prev) => [
+        ...prev,
+        {
+          id: crypto.randomUUID(),
+          role: "assistant",
+          content: `确认变更时发生异常：${err instanceof Error ? err.message : String(err)}`,
+        },
+      ]);
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -1196,8 +1233,8 @@ export function App() {
                   onChangeRequest={setRequest}
                   onSubmitRequest={() => void startAgent()}
                   busy={busy}
-                  approval={approval}
                   onResolveApproval={resolveApproval}
+                  onResolvePatch={resolvePatch}
                   activeRunId={activeRunId}
                   onCancelRun={handleCancelRun}
                   onRetry={handleRetryMessage}

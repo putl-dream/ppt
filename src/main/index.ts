@@ -739,9 +739,8 @@ app.whenReady().then(async () => {
       }
     }
   });
-  ipcMain.handle("agent:resume", async (event, threadId: string, approved: boolean) => {
-    const sessionId = activeSessionId;
-    const runtime = await getActiveRuntime();
+  ipcMain.handle("agent:resume", async (event, sessionId: string, threadId: string, approved: boolean) => {
+    const runtime = await getRuntimeForSession(sessionId);
     const pendingDeck = pendingDeckBatchByThread.get(threadId);
     const result = await runAgentOperation(
       "resume",
@@ -754,6 +753,14 @@ app.whenReady().then(async () => {
           await persistPresentation(sessionId, runtime);
           if (!pendingDeck) {
             await sessionStore.markProjectArtifactStatus(sessionId, "deck", "ready");
+          }
+        } else if (runResult.status === "artifact-updated") {
+          if (runResult.write.changedArtifactId) {
+            await sessionStore.markProjectArtifactStatus(
+              sessionId,
+              runResult.write.changedArtifactId,
+              "ready",
+            );
           }
         } else {
           await persistPresentation(sessionId, runtime);
