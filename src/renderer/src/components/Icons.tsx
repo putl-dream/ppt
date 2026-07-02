@@ -82,6 +82,8 @@ export const DuplicateIcon = ({ size = 18, className, ...props }: IconProps) => 
   </svg>
 );
 
+export const CopyIcon = DuplicateIcon;
+
 export const LayoutIcon = ({ size = 20, className, ...props }: IconProps) => (
   <svg
     xmlns="http://www.w3.org/2000/svg"

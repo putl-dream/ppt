@@ -4,6 +4,8 @@ import type { SessionChatMessage } from "@shared/session";
 import {
   ChevronDownIcon,
   ChevronRightIcon,
+  CopyIcon,
+  Edit3Icon,
   UndoIcon,
   RedoIcon,
   SunIcon,
@@ -149,6 +151,15 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
   const handleSaveEdit = (msgId: string) => {
     onUpdateMessageContent(msgId, editingText);
     setEditingMsgId(null);
+  };
+
+  const handleCopyMessage = async (content: string) => {
+    try {
+      await navigator.clipboard.writeText(content);
+      triggerToast("已复制到剪贴板");
+    } catch {
+      triggerToast("复制失败，请重试");
+    }
   };
 
   // Render State A: Center Focal Mode (新建会话阶段 —— “居中巨幕控制台”)
@@ -305,24 +316,16 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
                       />
                       <div className="user-message-edit-actions">
                         <button
+                          type="button"
                           onClick={() => setEditingMsgId(null)}
-                          className="secondary-btn"
-                          style={{ padding: "4px 10px", fontSize: 12, borderRadius: "4px", cursor: "pointer" }}
+                          className="message-action-btn"
                         >
                           取消
                         </button>
                         <button
+                          type="button"
                           onClick={() => handleSaveEdit(msg.id)}
-                          className="primary-btn"
-                          style={{
-                            padding: "4px 10px",
-                            fontSize: 12,
-                            borderRadius: "4px",
-                            background: "var(--accent-cyan)",
-                            border: "none",
-                            color: "#fff",
-                            cursor: "pointer"
-                          }}
+                          className="message-action-btn message-action-btn--primary"
                         >
                           保存并重新生成
                         </button>
@@ -337,13 +340,24 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
                   )}
 
                   {editingMsgId !== msg.id && (
-                    <div className="edit-btn-container">
+                    <div className="user-message-actions">
                       <button
-                        className="edit-message-btn"
+                        type="button"
+                        className="message-action-btn"
+                        onClick={() => void handleCopyMessage(msg.content)}
+                        title="复制内容"
+                      >
+                        <CopyIcon size={13} />
+                        <span>复制</span>
+                      </button>
+                      <button
+                        type="button"
+                        className="message-action-btn"
                         onClick={() => handleStartEdit(msg.id, msg.content)}
                         title="编辑指令并重新运行"
                       >
-                        ✏️ 编辑
+                        <Edit3Icon size={13} />
+                        <span>编辑</span>
                       </button>
                     </div>
                   )}

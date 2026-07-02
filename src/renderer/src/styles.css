@@ -1323,13 +1323,14 @@ aside {
 
 .user-message-bubble {
   width: 100%;
-  padding: 12px 16px;
+  padding: 0;
   border: 1px solid var(--border-glass-focused);
-  border-radius: 12px;
+  border-radius: calc(12px * var(--border-radius-scale));
   background: var(--bg-input-field);
   color: var(--text-primary);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
+  box-shadow: var(--shadow-premium);
   box-sizing: border-box;
+  overflow: hidden;
 }
 
 .user-message-text {
@@ -1337,33 +1338,87 @@ aside {
   line-height: 1.6;
   white-space: pre-wrap;
   word-break: break-word;
+  padding: 12px 16px;
 }
 
 .user-message-edit {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  padding: 12px 16px 0;
 }
 
 .user-message-edit .chat-message-textarea {
   width: 100%;
   background: var(--bg-darker);
-  border: 1px solid var(--border-glass-focused);
-  border-radius: 4px;
+  border: 1px solid var(--border-glass);
+  border-radius: 8px;
   color: var(--text-primary);
-  font-family: inherit;
+  font-family: var(--font-body);
   font-size: 13.5px;
-  padding: 8px;
+  line-height: 1.6;
+  padding: 10px 12px;
   resize: none;
   outline: none;
   overflow: hidden;
   box-sizing: border-box;
+  transition: var(--transition-smooth);
+}
+
+.user-message-edit .chat-message-textarea:focus {
+  border-color: var(--accent-cyan);
+  box-shadow: 0 0 0 1px var(--accent-cyan-glow);
 }
 
 .user-message-edit-actions {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
+  padding: 0 16px 12px;
+}
+
+.user-message-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border-top: 1px solid var(--border-glass);
+  background: var(--bg-darker);
+}
+
+.message-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 9px;
+  border: 1px solid var(--border-glass);
+  border-radius: 6px;
+  background: var(--bg-input-field);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-family: var(--font-body);
+  font-weight: 500;
+  cursor: pointer;
+  transition: var(--transition-smooth);
+}
+
+.message-action-btn:hover {
+  background: var(--bg-glass-hover);
+  border-color: var(--border-glass-focused);
+  color: var(--text-secondary);
+}
+
+.message-action-btn--primary {
+  background: var(--accent-cyan);
+  border-color: transparent;
+  color: #fff;
+  box-shadow: 0 2px 8px var(--accent-cyan-glow);
+}
+
+.message-action-btn--primary:hover {
+  background: #0284c7;
+  color: #fff;
+  border-color: transparent;
 }
 
 .chat-bubble-content {
@@ -2375,28 +2430,7 @@ aside {
   opacity: 1 !important;
 }
 
-/* 消息编辑按钮样式 */
-.user-message-bubble .edit-btn-container {
-  display: flex;
-  justify-content: flex-start;
-  margin-top: 4px;
-}
-
-.user-message-bubble .edit-message-btn {
-  background: var(--bg-darker);
-  border: 1px solid var(--border-glass-focused);
-  border-radius: 4px;
-  color: var(--accent-cyan);
-  cursor: pointer;
-  font-size: 11px;
-  padding: 2px 6px;
-  transition: background 0.2s ease, border-color 0.2s ease;
-}
-
-.user-message-bubble .edit-message-btn:hover {
-  background: var(--bg-input-field);
-  border-color: var(--accent-cyan);
-}
+/* 消息操作按钮（用户气泡底部） */
 
 .chat-line-editor {
   background: var(--bg-input-field);
@@ -2698,7 +2732,7 @@ aside {
 .double-deck-panel-card {
   background: var(--bg-input-field);
   border: 1px solid var(--border-glass-focused);
-  border-radius: calc(14px * var(--border-radius-scale));
+  border-radius: calc(12px * var(--border-radius-scale));
   box-shadow: var(--shadow-premium);
   overflow: hidden;
   display: flex;
@@ -2709,6 +2743,79 @@ aside {
 .double-deck-panel-card:focus-within {
   border-color: var(--accent-cyan);
   box-shadow: 0 0 0 1px var(--accent-cyan-glow), var(--shadow-premium);
+}
+
+.center-welcome-header {
+  margin-bottom: 24px;
+  text-align: center;
+}
+
+.center-welcome-title {
+  font-size: 26px;
+  font-weight: 700;
+  margin: 0;
+  font-family: var(--font-display);
+  color: var(--text-primary);
+}
+
+.input-textarea-row {
+  padding: 16px 16px 10px;
+  background: var(--bg-input-field);
+}
+
+/* 主文本域 Textarea */
+.input-textarea {
+  display: block;
+  width: 100%;
+  background: transparent;
+  border: none;
+  resize: none;
+  font-family: var(--font-body);
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text-primary);
+  min-height: 52px;
+  max-height: 160px;
+  padding: 2px 0;
+  outline: none;
+  cursor: text !important;
+  box-sizing: border-box;
+}
+
+.unified-agent-input-container.center-focal-mode .input-textarea {
+  min-height: 72px;
+}
+
+.functional-control-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px 12px;
+  background: var(--bg-darker);
+  border-top: 1px solid var(--border-glass);
+}
+
+.functional-left,
+.functional-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.functional-right {
+  flex-shrink: 0;
+}
+
+.input-textarea--busy {
+  opacity: 0.75;
+  cursor: not-allowed;
+}
+
+.context-anchor-tag--warning {
+  color: var(--accent-orange);
+  border-color: rgba(234, 88, 12, 0.35);
 }
 
 /* 上层：意图捕获与执行流控制 Row */
@@ -2726,23 +2833,6 @@ aside {
   gap: 8px;
   margin-top: 4px;
   flex-shrink: 0;
-}
-
-/* 主文本域 Textarea */
-.input-textarea {
-  flex: 1;
-  background: transparent;
-  border: none;
-  resize: none;
-  font-family: var(--font-body);
-  font-size: 13.5px;
-  line-height: 1.6;
-  color: var(--text-primary);
-  min-height: 40px;
-  max-height: 160px;
-  padding: 4px 0;
-  outline: none;
-  cursor: text !important;
 }
 
 .input-textarea::placeholder {
@@ -2785,29 +2875,16 @@ aside {
 
 /* 文件夹锚定 Tag */
 .context-anchor-tag {
-  background: var(--bg-darker);
+  background: var(--bg-input-field);
   border: 1px solid var(--border-glass);
   color: var(--text-secondary);
   font-family: var(--font-mono);
   font-size: 10.5px;
-  padding: 2px 8px;
+  padding: 3px 10px;
   border-radius: 12px;
-  cursor: pointer;
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  transition: var(--transition-smooth);
-}
-
-.context-anchor-tag:hover {
-  background: var(--border-glass);
-  color: var(--text-primary);
-  border-color: var(--border-glass-focused);
-}
-
-.context-anchor-tag span {
-  font-size: 8px;
-  opacity: 0.7;
 }
 
 .context-divider {
@@ -2846,6 +2923,7 @@ aside {
 
 .context-global-pill {
   color: var(--text-muted);
+  font-size: 10.5px;
   font-weight: 500;
 }
 
@@ -2914,7 +2992,7 @@ aside {
 /* 底部输入框在伴随视图下的样式微调 */
 .chat-workspace-footer-unified {
   background: var(--bg-app);
-  border-top: 1px solid var(--border-glass);
+  border-top: none;
   padding: 16px 0;
   flex-shrink: 0;
 }
