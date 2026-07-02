@@ -132,6 +132,8 @@ export async function* generateStreamWithAnthropic(
       if (event.type === "content_block_delta") {
         if (event.delta.type === "text_delta") {
           yield { type: "content", text: event.delta.text };
+        } else if (event.delta.type === "thinking_delta") {
+          yield { type: "thinking", text: event.delta.thinking };
         }
       }
     }

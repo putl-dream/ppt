@@ -2,7 +2,6 @@ import React, { useState, useRef, useEffect } from "react";
 import type { AgentApprovalRequest } from "@shared/ipc";
 import type { SessionChatMessage } from "@shared/session";
 import {
-  BrainIcon,
   ChevronDownIcon,
   ChevronRightIcon,
   UndoIcon,
@@ -15,6 +14,8 @@ import {
 } from "./Icons";
 import { UnifiedAgentInput } from "./UnifiedAgentInput";
 import { PatchReviewCard } from "./PatchReviewCard";
+import { AgentThinkingLoader } from "./AgentThinkingLoader";
+import { ReasoningBlock } from "./ReasoningBlock";
 import type { ManagedModel } from "../modelCatalog";
 
 type ChatMessage = SessionChatMessage;
@@ -23,7 +24,8 @@ interface ChatWorkspaceProps {
   chatMessages: ChatMessage[];
   thoughtProcess: string[];
   thoughtProgress: number;
-  agentActivityMode: "idle" | "request" | "workflow";
+  modelReasoning: string;
+  agentActivityMode: "idle" | "request" | "workflow" | "reasoning";
   request: string;
   onChangeRequest: (val: string) => void;
   onSubmitRequest: () => void;
@@ -61,6 +63,7 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
   chatMessages,
   thoughtProcess,
   thoughtProgress,
+  modelReasoning,
   agentActivityMode,
   request,
   onChangeRequest,
@@ -114,7 +117,7 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [chatMessages, thoughtProcess, thoughtProgress, busy]);
+  }, [chatMessages, thoughtProcess, thoughtProgress, modelReasoning, busy]);
 
   const slashCommands = [
     { cmd: "/theme 商务蔚蓝", desc: "更改设计模板风格为商务蔚蓝" },
@@ -272,21 +275,18 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
       </div>
 
       {/* 核心 AI 对话信息流 */}
-      <div className="chat-stream" style={{ background: "transparent" }}>
+      <div className="chat-scroll-viewport">
+        <div className="chat-conversation-shell">
+          <div className="chat-stream">
         {chatMessages.map((msg) => {
           const lines = msg.content.split("\n");
 
           return (
-            <div key={msg.id} className={`chat-message ${msg.role}`} style={{ maxWidth: "100%" }}>
-              <div className="chat-avatar">
-                {msg.role === "user" ? "我" : <BrainIcon size={14} />}
-              </div>
-              <div className="chat-bubble-content" style={{ flex: 1 }}>
-                
-                {/* AI 回复段落或 Markdown 树大纲 */}
-                <div className="chat-bubble-text" style={{ padding: "12px 18px", width: "100%", position: "relative" }}>
+            <div key={msg.id} className={`chat-message ${msg.role}`}>
+              {msg.role === "user" ? (
+                <div className="user-message-bubble">
                   {editingMsgId === msg.id ? (
-                    <div style={{ display: "flex", flexDirection: "column", gap: "8px", minWidth: "350px", maxWidth: "100%" }}>
+                    <div className="user-message-edit">
                       <textarea
                         className="chat-message-textarea"
                         value={editingText}
@@ -301,23 +301,9 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
                             el.style.height = `${el.scrollHeight}px`;
                           }
                         }}
-                        style={{
-                          width: "100%",
-                          background: "var(--bg-darker)",
-                          border: "1px solid var(--border-glass-focused)",
-                          borderRadius: "4px",
-                          color: "var(--text-primary)",
-                          fontFamily: "inherit",
-                          fontSize: "13.5px",
-                          padding: "8px",
-                          resize: "none",
-                          outline: "none",
-                          overflow: "hidden",
-                          boxSizing: "border-box"
-                        }}
                         autoFocus
                       />
-                      <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px" }}>
+                      <div className="user-message-edit-actions">
                         <button
                           onClick={() => setEditingMsgId(null)}
                           className="secondary-btn"
@@ -343,29 +329,40 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
                       </div>
                     </div>
                   ) : (
-                    <>
+                    <div className="user-message-text">
                       {lines.map((line, idx) => (
-                        <div key={idx} style={{ fontSize: 13.5, lineHeight: 1.6 }}>
-                          {line}
-                        </div>
+                        <div key={idx}>{line}</div>
                       ))}
-                    </>
+                    </div>
+                  )}
+
+                  {editingMsgId !== msg.id && (
+                    <div className="edit-btn-container">
+                      <button
+                        className="edit-message-btn"
+                        onClick={() => handleStartEdit(msg.id, msg.content)}
+                        title="编辑指令并重新运行"
+                      >
+                        ✏️ 编辑
+                      </button>
+                    </div>
                   )}
                 </div>
+              ) : (
+                <>
+                  {msg.reasoning && (
+                    <ReasoningBlock content={msg.reasoning} />
+                  )}
 
-                {msg.role === "user" && editingMsgId !== msg.id && (
-                  <div className="edit-btn-container">
-                    <button
-                      className="edit-message-btn"
-                      onClick={() => handleStartEdit(msg.id, msg.content)}
-                      title="编辑指令并重新运行"
-                    >
-                      ✏️ 编辑
-                    </button>
+                  <div className="assistant-response">
+                    {lines.map((line, idx) => (
+                      <div key={idx} className="assistant-response-line">
+                        {line || "\u00A0"}
+                      </div>
+                    ))}
                   </div>
-                )}
 
-                {msg.role === "assistant" && onRetry && msg.content.includes("发生错误") && (
+                  {onRetry && msg.content.includes("发生错误") && (
                   <button
                     onClick={() => onRetry(msg.id)}
                     style={{
@@ -524,77 +521,38 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
                     </div>
                   </div>
                 )}
-              </div>
+                </>
+              )}
             </div>
           );
         })}
 
-        {/* AI 思考状态 */}
-        {busy && thoughtProcess.length > 0 && (
-          <div className="chat-message assistant active-thinking" style={{ maxWidth: "100%" }}>
-            <div className="chat-avatar animate-pulse">
-              <BrainIcon size={14} />
-            </div>
-            <div className="chat-bubble-content" style={{ flex: 1 }}>
-              <div className="chat-bubble-text" style={{ padding: "12px 18px" }}>
-                {agentActivityMode === "request"
-                  ? thoughtProcess.at(-1)
-                  : thoughtProgress < 100
-                    ? "AI 正在编排排版指令流..."
-                    : "指令编排完毕，等待指令确认执行..."}
-              </div>
-
-              {agentActivityMode === "workflow" && thoughtProcess.length > 0 && (
-                <div className="thought-container">
-                  <div className="thought-header">
-                    <span>Agent 思考推理轨迹</span>
-                    <ChevronDownIcon size={12} />
-                  </div>
-                  <ul className="thought-list">
-                    {thoughtProcess.map((step, idx) => (
-                      <li key={idx} className={idx === thoughtProcess.length - 1 ? "typing" : ""}>
-                        {step}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-
-              <div className="progress-bar-container">
-                <div className="progress-bar-track">
-                  <div
-                    className="progress-bar-fill"
-                    style={{ width: `${thoughtProgress}%` }}
-                  ></div>
-                </div>
-                <span className="progress-percentage">{Math.round(thoughtProgress)}%</span>
-                {activeRunId && onCancelRun && (
-                  <button
-                    onClick={onCancelRun}
-                    style={{
-                      border: "none",
-                      color: "#ef4444",
-                      fontSize: "11px",
-                      cursor: "pointer",
-                      marginLeft: "12px",
-                      padding: "2px 8px",
-                      borderRadius: "4px",
-                      background: "rgba(239, 68, 68, 0.08)",
-                    }}
-                  >
-                    取消
-                  </button>
-                )}
-              </div>
-            </div>
+        {/* 模型思考流式展示（文本输出前） */}
+        {busy && agentActivityMode === "reasoning" && modelReasoning && (
+          <div className="chat-message assistant reasoning-live">
+            <ReasoningBlock
+              content={modelReasoning}
+              defaultExpanded
+              isStreaming
+            />
           </div>
         )}
 
+        {/* Agent 工作流思考状态 */}
+        <AgentThinkingLoader
+          busy={busy}
+          agentActivityMode={agentActivityMode}
+          thoughtProcess={thoughtProcess}
+        />
+
         <div ref={messagesEndRef} />
+          </div>
+        </div>
       </div>
 
       {/* 底部统一控制台输入区 */}
-      <div className="right-panel-footer chat-workspace-footer-unified" style={{ borderTop: "1px solid var(--border-glass)", padding: "16px 20px", position: "relative" }}>
+      <div className="right-panel-footer chat-workspace-footer-unified">
+        <div className="chat-conversation-shell chat-conversation-footer">
         
         {/* 斜杠弹出指令 */}
         {showSlashMenu && (
@@ -631,6 +589,7 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
           onClearContextTag={onClearContextTag}
           submitLabel="生成"
         />
+        </div>
       </div>
 
     </section>

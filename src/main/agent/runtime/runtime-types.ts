@@ -66,6 +66,8 @@ export interface AgentRuntimeOptions {
    * 只在返回message类型结果时生效，工具调用过程不会触发
    */
   onStreamChunk?: (chunk: string) => void;
+  /** 模型思考流式回调（extended thinking / reasoning） */
+  onThinkingChunk?: (chunk: string) => void;
   signal?: AbortSignal;
   onProgress?: (event: { type: string; message: string; [key: string]: any }) => void;
 }

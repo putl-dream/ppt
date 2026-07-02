@@ -104,6 +104,11 @@ export type AgentStreamEvent =
   }
   | {
     runId: string;
+    type: "thinking-chunk";
+    chunk: string;
+  }
+  | {
+    runId: string;
     type: "stage-started";
     message: string;
     stage: string;

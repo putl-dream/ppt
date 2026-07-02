@@ -89,6 +89,7 @@ export const sessionChatMessageSchema = z.object({
   role: z.enum(["user", "assistant"]),
   content: z.string(),
   thought: z.array(z.string()).optional(),
+  reasoning: z.string().optional(),
   progress: z.number().optional(),
   approval: persistedApprovalSchema.optional(),
   patch: persistedPatchSchema.optional(),

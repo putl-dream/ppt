@@ -409,6 +409,7 @@ export class FileSessionStore {
     const transcriptMessages = messages.map((message): TranscriptMessageInput => {
       const metadata: Record<string, unknown> = {};
       if (message.thought) metadata.thought = message.thought;
+      if (message.reasoning) metadata.reasoning = message.reasoning;
       if (message.progress !== undefined) metadata.progress = message.progress;
       if (message.approval) metadata.approval = message.approval;
       if (message.patch) metadata.patch = message.patch;

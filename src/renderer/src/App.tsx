@@ -56,11 +56,12 @@ function inferAgentIntent(
 }
 
 function toSessionChatMessages(messages: ChatMessage[]): SessionChatMessage[] {
-  return messages.map(({ id, role, content, thought, progress, approval, patch, threadId }) => ({
+  return messages.map(({ id, role, content, thought, reasoning, progress, approval, patch, threadId }) => ({
     id,
     role,
     content,
     thought,
+    reasoning,
     progress,
     approval,
     patch,
@@ -194,10 +195,12 @@ export function App() {
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [thoughtProcess, setThoughtProcess] = useState<string[]>([]);
   const [thoughtProgress, setThoughtProgress] = useState(0);
-  const [agentActivityMode, setAgentActivityMode] = useState<"idle" | "request" | "workflow">("idle");
+  const [modelReasoning, setModelReasoning] = useState("");
+  const [agentActivityMode, setAgentActivityMode] = useState<"idle" | "request" | "workflow" | "reasoning">("idle");
   const [highlightSlideId, setHighlightSlideId] = useState<string | null>(null);
   const activeRunIdRef = useRef<string | null>(null);
   const activeRunStepsRef = useRef<string[]>([]);
+  const activeRunReasoningRef = useRef("");
   const streamMessageIdsRef = useRef(new Map<string, string>());
   const statusTypingTimerRef = useRef<number | null>(null);
 
@@ -302,24 +305,43 @@ export function App() {
         return;
       }
 
+      if (event.type === "thinking-chunk") {
+        stopStatusTyping();
+        setAgentActivityMode("reasoning");
+        activeRunReasoningRef.current += event.chunk;
+        setModelReasoning(activeRunReasoningRef.current);
+        return;
+      }
+
       if (event.type === "text-chunk") {
         // 真正的流式：逐chunk累积显示
         stopStatusTyping();
         setAgentActivityMode("idle");
         setThoughtProcess([]);
         setThoughtProgress(0);
+        const reasoningSnapshot = activeRunReasoningRef.current.trim() || undefined;
+        setModelReasoning("");
         let messageId = streamMessageIdsRef.current.get(event.runId);
         if (!messageId) {
           messageId = crypto.randomUUID();
           streamMessageIdsRef.current.set(event.runId, messageId);
           setChatMessages((prev) => [
             ...prev,
-            { id: messageId!, role: "assistant", content: event.chunk },
+            {
+              id: messageId!,
+              role: "assistant",
+              content: event.chunk,
+              reasoning: reasoningSnapshot,
+            },
           ]);
         } else {
           setChatMessages((prev) => prev.map((message) =>
             message.id === messageId
-              ? { ...message, content: message.content + event.chunk }
+              ? {
+                  ...message,
+                  content: message.content + event.chunk,
+                  reasoning: message.reasoning ?? reasoningSnapshot,
+                }
               : message,
           ));
         }
@@ -521,16 +543,30 @@ export function App() {
 
   function applyAgentResult(result: AgentRunResult, steps: string[], runId?: string) {
     const messageId = runId ? streamMessageIdsRef.current.get(runId) : undefined;
+    const reasoningSnapshot = activeRunReasoningRef.current.trim() || undefined;
 
     if (result.status === "chat") {
       if (messageId) {
         setChatMessages((prev) => prev.map((message) =>
-          message.id === messageId ? { ...message, content: result.message } : message,
+          message.id === messageId
+            ? {
+                ...message,
+                content: result.message,
+                reasoning: message.reasoning ?? reasoningSnapshot,
+                threadId: result.threadId ?? message.threadId,
+              }
+            : message,
         ));
       } else {
         setChatMessages((prev) => [
           ...prev,
-          { id: crypto.randomUUID(), role: "assistant", content: result.message },
+          {
+            id: crypto.randomUUID(),
+            role: "assistant",
+            content: result.message,
+            reasoning: reasoningSnapshot,
+            threadId: result.threadId,
+          },
         ]);
       }
       return;
@@ -711,12 +747,14 @@ export function App() {
     });
 
     setThoughtProgress(0);
-    setThoughtProcess([]);
-    setAgentActivityMode("idle");
+    setThoughtProcess(["AI 正在思考中..."]);
+    setModelReasoning("");
+    setAgentActivityMode("request");
     const runId = crypto.randomUUID();
     activeRunIdRef.current = runId;
     setActiveRunId(runId);
     activeRunStepsRef.current = [];
+    activeRunReasoningRef.current = "";
     let forkedMessages: ChatMessage[] | undefined;
 
     if (isEditOfMsgId) {
@@ -777,6 +815,8 @@ export function App() {
       setAgentActivityMode("idle");
       setThoughtProcess([]);
       setThoughtProgress(0);
+      setModelReasoning("");
+      activeRunReasoningRef.current = "";
     }
   }
 
@@ -1228,6 +1268,7 @@ export function App() {
                   chatMessages={chatMessages}
                   thoughtProcess={thoughtProcess}
                   thoughtProgress={thoughtProgress}
+                  modelReasoning={modelReasoning}
                   agentActivityMode={agentActivityMode}
                   request={request}
                   onChangeRequest={setRequest}

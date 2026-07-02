@@ -130,7 +130,9 @@ export class AgentRuntime {
           if (options.signal?.aborted) {
             throw new Error("Run aborted by user.");
           }
-          if (chunk.type === "content") {
+          if (chunk.type === "thinking") {
+            options.onThinkingChunk?.(chunk.text);
+          } else if (chunk.type === "content") {
             accumulatedText += chunk.text;
             extractor.feed(chunk.text);
           }
