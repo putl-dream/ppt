@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type {
   AgentApprovalRequest,
   AgentRunRequest,
@@ -52,6 +52,7 @@ import {
   appendToolStart,
   finishTool,
   markTraceComplete,
+  preferActivityTrace,
   updateStepText,
 } from "@shared/agent-activity";
 
@@ -244,10 +245,27 @@ export function App() {
   const streamMessageIdsRef = useRef(new Map<string, string>());
   const statusTypingTimerRef = useRef<number | null>(null);
 
-  const syncActivityTrace = (next: AgentActivityItem[]) => {
+  const syncActivityTrace = useCallback((next: AgentActivityItem[]) => {
     activeRunTraceRef.current = next;
     setActivityTrace(next);
-  };
+
+    const runId = activeRunIdRef.current;
+    if (!runId) return;
+    const messageId = streamMessageIdsRef.current.get(runId);
+    if (!messageId) return;
+
+    const snapshot = markTraceComplete(next);
+    if (snapshot.length === 0) return;
+
+    setChatMessages((prev) => prev.map((message) =>
+      message.id === messageId
+        ? {
+            ...message,
+            activityTrace: preferActivityTrace(message.activityTrace, snapshot),
+          }
+        : message,
+    ));
+  }, []);
 
   useEffect(() => {
     const stopStatusTyping = () => {
@@ -385,13 +403,9 @@ export function App() {
       }
 
       if (event.type === "text-chunk") {
-        // 真正的流式：逐chunk累积显示
+        // summary 流式输出：保留完整 activityTrace，后续 tool-finished / workflow 仍会继续追加
         stopStatusTyping();
-        setAgentActivityMode("idle");
-        setActiveToolName(null);
         const traceSnapshot = markTraceComplete(activeRunTraceRef.current);
-        syncActivityTrace([]);
-        setThoughtProgress(0);
         requestStatusStepIdRef.current = null;
         let messageId = streamMessageIdsRef.current.get(event.runId);
         if (!messageId) {
@@ -412,12 +426,14 @@ export function App() {
               ? {
                   ...message,
                   content: message.content + event.chunk,
-                  activityTrace: message.activityTrace ?? (traceSnapshot.length > 0 ? traceSnapshot : undefined),
+                  activityTrace: preferActivityTrace(
+                    message.activityTrace,
+                    traceSnapshot.length > 0 ? traceSnapshot : undefined,
+                  ),
                 }
               : message,
           ));
         }
-        activeRunTraceRef.current = [];
         return;
       }
     });
@@ -425,7 +441,7 @@ export function App() {
       stopStatusTyping();
       unsubscribe();
     };
-  }, []);
+  }, [syncActivityTrace]);
 
   // 会话状态由 Electron 主进程持久化，渲染进程只保留当前快照
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
@@ -722,7 +738,7 @@ export function App() {
             ? {
                 ...message,
                 content: result.message,
-                activityTrace: message.activityTrace ?? activityTrace,
+                activityTrace: preferActivityTrace(message.activityTrace, activityTrace),
                 threadId: result.threadId,
               }
             : message,
@@ -749,7 +765,7 @@ export function App() {
             ? {
                 ...message,
                 content: "已提出排版更新方案，请在下方审核后应用。",
-                activityTrace,
+                activityTrace: preferActivityTrace(message.activityTrace, activityTrace),
                 approval: result.approval,
               }
             : message
@@ -785,7 +801,7 @@ export function App() {
             ? {
                 ...message,
                 content: promptContent,
-                activityTrace,
+                activityTrace: preferActivityTrace(message.activityTrace, activityTrace),
                 patch: patchPayload,
               }
             : message
@@ -1593,6 +1609,10 @@ export function App() {
 
   const selectedSlideIndex = presentation?.slides.findIndex((s) => s.id === selectedSlideId) ?? -1;
   const activeSlideIndexValue = selectedSlideIndex >= 0 ? selectedSlideIndex : null;
+  const streamingMessageId =
+    busy && activeRunId
+      ? streamMessageIdsRef.current.get(activeRunId) ?? null
+      : null;
 
   return (
     <main className={`app-shell ${computedTheme === "dark" ? "dark-theme" : ""}`}>
@@ -1634,6 +1654,7 @@ export function App() {
                   thoughtProgress={thoughtProgress}
                   agentActivityMode={agentActivityMode}
                   activeToolName={activeToolName}
+                  streamingMessageId={streamingMessageId}
                   request={request}
                   onChangeRequest={setRequest}
                   onSubmitRequest={() => void startAgent()}

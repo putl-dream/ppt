@@ -137,6 +137,16 @@ export function markTraceComplete(trace: AgentActivityItem[]): AgentActivityItem
   });
 }
 
+/** 取更完整的时间线快照，避免 text-chunk 早快照覆盖后续工具步骤 */
+export function preferActivityTrace(
+  existing: AgentActivityItem[] | undefined,
+  incoming: AgentActivityItem[] | undefined,
+): AgentActivityItem[] | undefined {
+  if (!incoming?.length) return existing;
+  if (!existing?.length) return incoming;
+  return incoming.length >= existing.length ? incoming : existing;
+}
+
 export function resolveActivityTrace(input: {
   activityTrace?: AgentActivityItem[];
   thought?: string[];

@@ -44,6 +44,7 @@ interface ChatWorkspaceProps {
   thoughtProgress: number;
   agentActivityMode: "idle" | "request" | "workflow" | "reasoning";
   activeToolName?: string | null;
+  streamingMessageId?: string | null;
   request: string;
   onChangeRequest: (val: string) => void;
   onSubmitRequest: () => void;
@@ -93,6 +94,7 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
   thoughtProgress,
   agentActivityMode,
   activeToolName = null,
+  streamingMessageId = null,
   request,
   onChangeRequest,
   onSubmitRequest,
@@ -421,12 +423,15 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
               ) : (
                 <>
                   {(() => {
+                    const useLiveTrace = busy && streamingMessageId === msg.id;
                     const trace = resolveActivityTrace({
-                      activityTrace: msg.activityTrace,
-                      thought: msg.thought,
-                      reasoning: msg.reasoning,
+                      activityTrace: useLiveTrace ? activityTrace : msg.activityTrace,
+                      thought: useLiveTrace ? undefined : msg.thought,
+                      reasoning: useLiveTrace ? undefined : msg.reasoning,
                     });
-                    return trace.length > 0 ? <AgentActivityTrace items={trace} /> : null;
+                    return trace.length > 0 ? (
+                      <AgentActivityTrace items={trace} live={useLiveTrace} />
+                    ) : null;
                   })()}
 
                   <MessageMarkdown content={msg.content} className="assistant-response" />
@@ -629,6 +634,7 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
           agentActivityMode={agentActivityMode}
           activityTrace={activityTrace}
           activeToolName={activeToolName}
+          suppressTrace={Boolean(streamingMessageId)}
         />
 
         <div ref={messagesEndRef} />

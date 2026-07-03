@@ -7,6 +7,8 @@ interface AgentThinkingLoaderProps {
   agentActivityMode: "idle" | "request" | "workflow" | "reasoning";
   activityTrace: AgentActivityItem[];
   activeToolName?: string | null;
+  /** 已有流式回复消息时，时间线改挂在消息上，避免重复展示 */
+  suppressTrace?: boolean;
 }
 
 function getStatusLabel(
@@ -35,10 +37,11 @@ export const AgentThinkingLoader: React.FC<AgentThinkingLoaderProps> = ({
   agentActivityMode,
   activityTrace,
   activeToolName = null,
+  suppressTrace = false,
 }) => {
   if (!busy || agentActivityMode === "idle") return null;
 
-  const hasTrace = activityTrace.length > 0;
+  const hasTrace = !suppressTrace && activityTrace.length > 0;
   const statusLabel = getStatusLabel(agentActivityMode, activeToolName, activityTrace);
 
   return (

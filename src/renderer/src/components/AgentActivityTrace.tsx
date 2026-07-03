@@ -1,5 +1,6 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import type { AgentActivityItem } from "@shared/agent-activity";
+import { ChevronDownIcon, ChevronRightIcon } from "./Icons";
 import { ReasoningBlock } from "./ReasoningBlock";
 
 interface AgentActivityTraceProps {
@@ -16,24 +17,40 @@ function ToolCallBlock({
   live: boolean;
 }) {
   const isRunning = item.status === "running";
-  const label = isRunning
+  const [expanded, setExpanded] = useState(isRunning || live);
+
+  useEffect(() => {
+    if (isRunning && live) {
+      setExpanded(true);
+    }
+  }, [isRunning, live]);
+
+  const headerLabel = isRunning
     ? `调用工具：${item.toolName}`
-    : `工具完成：${item.toolName}`;
+    : `工具调用：${item.toolName}`;
 
   return (
-    <div className={`agent-tool-block${isRunning ? " agent-tool-block--running" : ""}`}>
-      <div className="agent-tool-block-header">
+    <div className={`reasoning-block agent-tool-block${isRunning && live ? " reasoning-block--streaming" : ""}`}>
+      <button
+        type="button"
+        className="reasoning-block-header"
+        onClick={() => setExpanded((value) => !value)}
+        aria-expanded={expanded}
+      >
         {isRunning && live && <span className="step-spinner" aria-hidden="true" />}
-        <span className="agent-tool-block-label">{label}</span>
-      </div>
-      <div className="agent-tool-block-body">
-        <div className={`agent-tool-block-step${isRunning ? " running" : " done"}`}>
-          {item.label}
+        <span className="reasoning-block-label">{headerLabel}</span>
+        {expanded ? <ChevronDownIcon size={12} /> : <ChevronRightIcon size={12} />}
+      </button>
+      {expanded && (
+        <div className="agent-tool-block-body">
+          <div className={`agent-tool-block-step${isRunning ? " running" : " done"}`}>
+            {item.label}
+          </div>
+          {item.finishedLabel && (
+            <div className="agent-tool-block-step done">{item.finishedLabel}</div>
+          )}
         </div>
-        {item.finishedLabel && (
-          <div className="agent-tool-block-step done">{item.finishedLabel}</div>
-        )}
-      </div>
+      )}
     </div>
   );
 }
