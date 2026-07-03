@@ -1,6 +1,7 @@
 import type { Presentation } from "./presentation";
 import type { PresentationCommand } from "./commands";
 import type { AgentExecutionStrategy, AgentModelSettings } from "./agent";
+import type { AgentStepLimits } from "./agent-step-limits";
 import type { AgentTodoItem } from "./agent-todo";
 import { z } from "zod";
 import type {
@@ -157,11 +158,13 @@ export interface DesktopApi {
     request: AgentRunRequest,
     model?: AgentModelSettings,
     executionStrategy?: AgentExecutionStrategy,
+    stepLimits?: AgentStepLimits,
     runId?: string,
   ): Promise<AgentRunResult>;
   continueAgentRun(
     threadId: string,
     request: AgentRunRequest,
+    stepLimits?: AgentStepLimits,
     runId?: string,
   ): Promise<AgentRunResult>;
   onAgentStream(listener: (event: AgentStreamEvent) => void): () => void;

@@ -1,7 +1,13 @@
 import type { AgentModelGateway } from "../gateway";
 import type { AgentModelSelection } from "@shared/agent";
+import type { AgentStepLimits } from "@shared/agent-step-limits";
 import type { SubAgentProgressListener } from "@shared/subagent-progress";
 import { formatSubAgentToolLabel } from "@shared/subagent-progress";
+import {
+  buildSubStepLimitMessage,
+  getEffectiveSubMaxSteps,
+  resolveAgentStepLimits,
+} from "@shared/agent-step-limits";
 import { parseAgentJsonResponse } from "../runtime/agent-runtime";
 import { RuntimeNormalizer } from "../runtime/runtime-normalizer";
 import { ensureDefaultHooks } from "../runtime/default-hooks";
@@ -27,6 +33,7 @@ export interface SpawnSubAgentOptions {
   gateway: AgentModelGateway;
   model?: AgentModelSelection;
   maxSteps?: number;
+  agentStepLimits?: AgentStepLimits;
   signal?: AbortSignal;
   requestToolApproval?: ToolApprovalHandler;
   taskId?: string;
@@ -90,7 +97,8 @@ async function generateSubAgentResponse(
  */
 export async function spawnSubAgent(options: SpawnSubAgentOptions): Promise<string> {
   ensureDefaultHooks();
-  const maxSteps = options.maxSteps ?? 12;
+  const stepLimits = resolveAgentStepLimits(options.agentStepLimits);
+  const maxSteps = options.maxSteps ?? getEffectiveSubMaxSteps(stepLimits);
   const systemPrompt = buildSubAgentSystemPrompt(SUB_AGENT_TOOLS);
   const transcript: Array<Record<string, unknown>> = [
     { role: "user", content: options.description },
@@ -254,7 +262,7 @@ export async function spawnSubAgent(options: SpawnSubAgentOptions): Promise<stri
     }
   }
 
-  return finish("Sub-agent reached the step limit before producing a conclusion.", "step_limit");
+  return finish(buildSubStepLimitMessage(stepLimits), "step_limit");
 }
 
 /**

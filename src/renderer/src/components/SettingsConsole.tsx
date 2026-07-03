@@ -2,6 +2,7 @@ import React from "react";
 import { SparklesIcon } from "./Icons";
 import type { ManagedModel } from "../modelCatalog";
 import { ModelManagement } from "./ModelManagement";
+import type { AgentStepLimits } from "@shared/agent-step-limits";
 
 interface SettingsConsoleProps {
   activeCategory: "profile" | "models" | "workflow" | "appearance";
@@ -29,6 +30,8 @@ interface SettingsConsoleProps {
   onOpenWorkspace: () => void;
   defaultRatio: "16:9" | "4:3";
   setDefaultRatio: (val: "16:9" | "4:3") => void;
+  agentStepLimits: AgentStepLimits;
+  setAgentStepLimits: (val: AgentStepLimits) => void;
 
   // Aesthetics settings
   themeMode: "light" | "dark" | "system";
@@ -64,6 +67,8 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
   onOpenWorkspace,
   defaultRatio,
   setDefaultRatio,
+  agentStepLimits,
+  setAgentStepLimits,
   themeMode,
   setThemeMode,
   borderRadiusScale,
@@ -302,6 +307,86 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
         {/* ==================== 2. 常规设置：生成工作流偏好 ==================== */}
         {activeCategory === "workflow" && (
           <div className="settings-panel-fade" style={{ display: "grid", gap: "20px" }}>
+
+            {/* Agent step limits */}
+            <div className="settings-card">
+              <h4 style={{ margin: "0 0 6px 0", fontSize: "14px", fontWeight: "600" }}>Agent 模型调用次数限制</h4>
+              <p style={{ margin: "0 0 16px 0", fontSize: "11px", color: "var(--text-muted)" }}>
+                开启后，单次请求在主 Agent 与子 Agent 两层分别限制模型调用轮数；关闭后仅保留内部安全上限。
+              </p>
+              <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <div>
+                    <div style={{ fontSize: "13px", fontWeight: "500", color: "var(--text-primary)" }}>启用调用次数限制</div>
+                    <div style={{ fontSize: "11px", color: "var(--text-muted)" }}>关闭后主 Agent 最多 100 次、子 Agent 最多 50 次（安全兜底）。</div>
+                  </div>
+                  <label className="toggle-switch">
+                    <input
+                      type="checkbox"
+                      checked={agentStepLimits.enabled}
+                      onChange={(e) => setAgentStepLimits({ ...agentStepLimits, enabled: e.target.checked })}
+                    />
+                    <span className="toggle-slider"></span>
+                  </label>
+                </div>
+
+                <div className="config-group" style={{ opacity: agentStepLimits.enabled ? 1 : 0.5 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
+                    <label className="config-label" style={{ margin: 0 }}>主 Agent 单次上限</label>
+                    <span style={{ fontSize: "12px", fontWeight: "600", color: "var(--accent-cyan)" }}>
+                      {agentStepLimits.mainMaxSteps} 次
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min="8"
+                    max="80"
+                    step="1"
+                    value={agentStepLimits.mainMaxSteps}
+                    disabled={!agentStepLimits.enabled}
+                    onChange={(e) => setAgentStepLimits({
+                      ...agentStepLimits,
+                      mainMaxSteps: parseInt(e.target.value, 10),
+                    })}
+                    style={{
+                      width: "100%",
+                      accentColor: "var(--accent-cyan)",
+                      cursor: agentStepLimits.enabled ? "pointer" : "not-allowed",
+                      height: "6px",
+                    }}
+                  />
+                  <span className="config-help">主对话每轮模型请求 + 工具调用的循环次数。</span>
+                </div>
+
+                <div className="config-group" style={{ opacity: agentStepLimits.enabled ? 1 : 0.5 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
+                    <label className="config-label" style={{ margin: 0 }}>子 Agent 单次上限</label>
+                    <span style={{ fontSize: "12px", fontWeight: "600", color: "var(--accent-cyan)" }}>
+                      {agentStepLimits.subMaxSteps} 次
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min="4"
+                    max="40"
+                    step="1"
+                    value={agentStepLimits.subMaxSteps}
+                    disabled={!agentStepLimits.enabled}
+                    onChange={(e) => setAgentStepLimits({
+                      ...agentStepLimits,
+                      subMaxSteps: parseInt(e.target.value, 10),
+                    })}
+                    style={{
+                      width: "100%",
+                      accentColor: "var(--accent-cyan)",
+                      cursor: agentStepLimits.enabled ? "pointer" : "not-allowed",
+                      height: "6px",
+                    }}
+                  />
+                  <span className="config-help">Task 委派时，每个子 Agent 独立的模型调用轮数上限。</span>
+                </div>
+              </div>
+            </div>
             
             {/* Automation Toggles */}
             <div className="settings-card">

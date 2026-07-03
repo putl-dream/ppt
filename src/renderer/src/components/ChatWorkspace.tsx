@@ -20,7 +20,9 @@ import { AgentThinkingLoader } from "./AgentThinkingLoader";
 import { AgentActivityTrace } from "./AgentActivityTrace";
 import { MessageMarkdown } from "./MessageMarkdown";
 import type { AgentActivityItem } from "@shared/agent-activity";
-import { findPendingToolApproval, resolveActivityTrace, filterTraceForDisplay } from "@shared/agent-activity";
+import { findPendingToolApproval, resolveActivityTrace, filterTraceForDisplay, extractLatestTodos } from "@shared/agent-activity";
+import { isTodoPlanActive } from "@shared/agent-todo";
+import { TaskPlanCard } from "./TaskPlanCard";
 import type { ManagedModel } from "../modelCatalog";
 import type { Presentation } from "@shared/presentation";
 import type { InlineCardRef } from "@shared/inline-artifact-cards";
@@ -153,6 +155,17 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
         detail: pendingToolApproval.detail,
       }
     : null;
+
+  const sessionGoal = chatMessages.find((message) => message.role === "user")?.content.trim() || null;
+  const messageTraces = chatMessages
+    .map((message) => message.activityTrace)
+    .filter((trace): trace is NonNullable<typeof trace> => Boolean(trace?.length));
+  const latestTodos = extractLatestTodos(
+    busy ? activityTrace : undefined,
+    ...messageTraces.slice().reverse(),
+  );
+  const activeTodos = latestTodos ?? [];
+  const showTaskPlan = isTodoPlanActive(activeTodos);
 
   const scrollToBottom = useCallback((instant: boolean) => {
     const viewport = scrollViewportRef.current;
@@ -669,26 +682,35 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
           </div>
         )}
 
-        <UnifiedAgentInput
-          request={request}
-          onChangeRequest={onChangeRequest}
-          onSubmitRequest={onSubmitRequest}
-          busy={busy}
-          models={models}
-          selectedModelId={selectedModelId}
-          setSelectedModelId={setSelectedModelId}
-          executionStrategy={executionStrategy}
-          setExecutionStrategy={setExecutionStrategy}
-          localStoragePath={localStoragePath}
-          onSelectWorkspace={onSelectWorkspace}
-          layoutMode="bottom"
-          triggerToast={triggerToast}
-          selectedSlideIndex={selectedSlideIndex}
-          onClearContextTag={onClearContextTag}
-          submitLabel="生成"
-          pendingToolApproval={pendingApprovalProps}
-          onResolveToolApproval={onResolveToolApproval}
-        />
+        <div className={showTaskPlan ? "chat-input-stack" : undefined}>
+          {showTaskPlan && (
+            <TaskPlanCard
+              goal={sessionGoal}
+              todos={activeTodos}
+              live={busy}
+            />
+          )}
+          <UnifiedAgentInput
+            request={request}
+            onChangeRequest={onChangeRequest}
+            onSubmitRequest={onSubmitRequest}
+            busy={busy}
+            models={models}
+            selectedModelId={selectedModelId}
+            setSelectedModelId={setSelectedModelId}
+            executionStrategy={executionStrategy}
+            setExecutionStrategy={setExecutionStrategy}
+            localStoragePath={localStoragePath}
+            onSelectWorkspace={onSelectWorkspace}
+            layoutMode="bottom"
+            triggerToast={triggerToast}
+            selectedSlideIndex={selectedSlideIndex}
+            onClearContextTag={onClearContextTag}
+            submitLabel="生成"
+            pendingToolApproval={pendingApprovalProps}
+            onResolveToolApproval={onResolveToolApproval}
+          />
+        </div>
         </div>
       </div>
 

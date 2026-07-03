@@ -1,66 +1,11 @@
 import React, { useEffect, useState } from "react";
 import type { AgentActivityItem } from "@shared/agent-activity";
-import type { AgentTodoItem } from "@shared/agent-todo";
-import { summarizeTodoProgress } from "@shared/agent-todo";
 import { ChevronDownIcon, ChevronRightIcon } from "./Icons";
 import { ReasoningBlock } from "./ReasoningBlock";
-
 interface AgentActivityTraceProps {
   items: AgentActivityItem[];
   /** 实时流式展示时默认展开当前段 */
   live?: boolean;
-}
-
-function TodoStatusIcon({ status }: { status: AgentTodoItem["status"] }) {
-  if (status === "completed") return <span className="agent-todo-icon done" aria-hidden="true">✓</span>;
-  if (status === "in_progress") return <span className="step-spinner agent-todo-spinner" aria-hidden="true" />;
-  if (status === "cancelled") return <span className="agent-todo-icon cancelled" aria-hidden="true">—</span>;
-  return <span className="agent-todo-icon pending" aria-hidden="true">○</span>;
-}
-
-function TodoBlock({
-  item,
-  live,
-}: {
-  item: Extract<AgentActivityItem, { kind: "todo" }>;
-  live: boolean;
-}) {
-  const hasActive = item.todos.some((todo) => todo.status === "in_progress");
-  const [expanded, setExpanded] = useState(live || hasActive);
-
-  useEffect(() => {
-    if (hasActive && live) {
-      setExpanded(true);
-    }
-  }, [hasActive, live]);
-
-  return (
-    <div className={`agent-todo-block${hasActive && live ? " agent-todo-block--active" : ""}`}>
-      <button
-        type="button"
-        className="agent-todo-block-header"
-        onClick={() => setExpanded((value) => !value)}
-        aria-expanded={expanded}
-      >
-        <span className="agent-todo-block-title">任务计划</span>
-        <span className="agent-todo-block-summary">{summarizeTodoProgress(item.todos)}</span>
-        {expanded ? <ChevronDownIcon size={12} /> : <ChevronRightIcon size={12} />}
-      </button>
-      {expanded && (
-        <ul className="agent-todo-list">
-          {item.todos.map((todo) => (
-            <li
-              key={todo.id}
-              className={`agent-todo-item agent-todo-item--${todo.status}`}
-            >
-              <TodoStatusIcon status={todo.status} />
-              <span>{todo.content}</span>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  );
 }
 
 function ToolCallBlock({
@@ -268,7 +213,7 @@ export const AgentActivityTrace: React.FC<AgentActivityTraceProps> = ({
           return <TaskBlock key={item.id} item={item} live={live} />;
         }
         if (item.kind === "todo") {
-          return <TodoBlock key={item.id} item={item} live={live} />;
+          return null;
         }
         return <WorkflowStepBlock key={item.id} item={item} live={live} />;
       })}

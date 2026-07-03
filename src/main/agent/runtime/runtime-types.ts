@@ -4,6 +4,7 @@
 
 import type { PresentationCommand } from "@shared/commands";
 import type { AgentModelSelection } from "@shared/agent";
+import type { AgentStepLimits } from "@shared/agent-step-limits";
 import type { Presentation } from "@shared/presentation";
 import type { ToolApprovalHandler } from "./permission-check";
 
@@ -38,6 +39,7 @@ export interface AgentRuntimeOptions {
   requiredOutcome?: "any" | "command_proposal";
   workspaceRoot?: string;
   maxSteps?: number;
+  agentStepLimits?: AgentStepLimits;
   onStreamChunk?: (chunk: string, source: "message" | "tool-summary") => void;
   onThinkingChunk?: (chunk: string, modelStep: number) => void;
   signal?: AbortSignal;

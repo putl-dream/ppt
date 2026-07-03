@@ -5,7 +5,7 @@ import {
   spawnSubAgent,
   spawnSubAgentsParallel,
 } from "../../subagent/spawn-subagent";
-
+import { getEffectiveSubMaxSteps, resolveAgentStepLimits } from "@shared/agent-step-limits";
 export const taskSchema = z.object({
   description: z.string().optional().describe("Single focused subtask for a sub-agent"),
   descriptions: z.array(z.string()).optional().describe(
@@ -58,6 +58,8 @@ export function createTaskTool(deps: {
       const spawn = deps.spawn ?? spawnSubAgent;
       const spawnParallel = deps.spawnParallel ?? spawnSubAgentsParallel;
       const onProgress = context.onSubAgentProgress;
+      const stepLimits = resolveAgentStepLimits(context.agentStepLimits);
+      const maxSteps = getEffectiveSubMaxSteps(stepLimits);
       const shared = {
         workspaceRoot,
         gateway: context.gateway,
@@ -65,8 +67,9 @@ export function createTaskTool(deps: {
         signal: context.signal,
         requestToolApproval: context.requestToolApproval,
         onProgress,
+        maxSteps,
+        agentStepLimits: stepLimits,
       };
-
       if (args.descriptions?.length) {
         const descriptions = args.descriptions.map((item) => item.trim()).filter(Boolean);
         const conclusions = await spawnParallel(descriptions, shared);

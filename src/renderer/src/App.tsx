@@ -40,6 +40,8 @@ import {
   toAgentModelSettings,
   type ManagedModel,
 } from "./modelCatalog";
+import { loadAgentStepLimits, saveAgentStepLimits } from "./agentStepLimits";
+import type { AgentStepLimits } from "@shared/agent-step-limits";
 import {
   type AgentActivityItem,
   appendReasoningChunk,
@@ -136,6 +138,7 @@ export function App() {
   const [localStoragePath, setLocalStoragePath] = useState("");
   const [defaultRatio, setDefaultRatio] = useState<"16:9" | "4:3">("16:9");
   const [executionStrategy, setExecutionStrategy] = useState<"REQUEST_APPROVAL" | "AUTO">("REQUEST_APPROVAL");
+  const [agentStepLimits, setAgentStepLimits] = useState<AgentStepLimits>(loadAgentStepLimits);
 
   // 外观定制与视效控制阀
   const [themeMode, setThemeMode] = useState<"light" | "dark" | "system">("light");
@@ -164,6 +167,10 @@ export function App() {
   useEffect(() => {
     window.localStorage.setItem(SELECTED_MODEL_STORAGE_KEY, selectedModelId);
   }, [selectedModelId]);
+
+  useEffect(() => {
+    saveAgentStepLimits(agentStepLimits);
+  }, [agentStepLimits]);
 
   const handleSaveModel = (model: ManagedModel) => {
     setModels((current) => {
@@ -1067,12 +1074,14 @@ export function App() {
         ? await window.desktopApi.continueAgentRun(
             activeThreadId,
             agentRequest,
+            agentStepLimits,
             runId,
           )
         : await window.desktopApi.startAgentRun(
             agentRequest,
             selectedModel ? toAgentModelSettings(selectedModel) : undefined,
             executionStrategy,
+            agentStepLimits,
             runId,
           );
       await new Promise<void>((resolve) => queueMicrotask(resolve));
@@ -1723,6 +1732,8 @@ export function App() {
                 onOpenWorkspace={() => void handleOpenWorkspace()}
                 defaultRatio={defaultRatio}
                 setDefaultRatio={setDefaultRatio}
+                agentStepLimits={agentStepLimits}
+                setAgentStepLimits={setAgentStepLimits}
                 
                 themeMode={themeMode}
                 setThemeMode={setThemeMode}

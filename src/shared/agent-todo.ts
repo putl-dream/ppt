@@ -48,6 +48,27 @@ export function summarizeTodoProgress(items: AgentTodoItem[]): string {
   return parts.join(" · ");
 }
 
+/** 折叠态摘要：突出当前执行步骤位置 */
+export function formatTodoPosition(items: AgentTodoItem[]): string {
+  if (items.length === 0) return "暂无任务";
+  const inProgressIndex = items.findIndex((item) => item.status === "in_progress");
+  if (inProgressIndex >= 0) {
+    const current = items[inProgressIndex]!;
+    return `步骤 ${inProgressIndex + 1}/${items.length} · ${current.content}`;
+  }
+  const completed = items.filter((item) => item.status === "completed").length;
+  if (completed === items.length) {
+    return `全部完成 · ${completed}/${items.length}`;
+  }
+  return summarizeTodoProgress(items);
+}
+
+/** 计划是否仍在执行中（有待办或进行中步骤） */
+export function isTodoPlanActive(items: AgentTodoItem[]): boolean {
+  if (items.length === 0) return false;
+  return items.some((item) => item.status === "pending" || item.status === "in_progress");
+}
+
 export function buildTodoReminder(items: AgentTodoItem[]): string {
   const progress = summarizeTodoProgress(items);
   const list = items.length > 0

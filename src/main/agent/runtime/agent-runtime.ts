@@ -17,6 +17,11 @@ import {
   buildTodoReminder,
   TODO_WRITE_REMINDER_THRESHOLD,
 } from "@shared/agent-todo";
+import {
+  buildMainStepLimitMessage,
+  getEffectiveMainMaxSteps,
+  resolveAgentStepLimits,
+} from "@shared/agent-step-limits";
 
 type ToolCall = {
   type: "tool_call";
@@ -102,6 +107,9 @@ export class AgentRuntime {
     const skillSession = this.skillSessions.get(options.threadId) ?? createSkillSession();
     this.skillSessions.set(options.threadId, skillSession);
 
+    const stepLimits = resolveAgentStepLimits(options.agentStepLimits);
+    const maxSteps = options.maxSteps ?? getEffectiveMainMaxSteps(stepLimits);
+
     const context: ToolContext = {
       presentation: structuredClone(options.presentationSnapshot),
       currentSlideId: options.currentSlideId,
@@ -131,6 +139,7 @@ export class AgentRuntime {
       onSubAgentProgress: options.onProgress
         ? (event) => options.onProgress?.(event)
         : undefined,
+      agentStepLimits: stepLimits,
       skillRegistry: this.skillRegistry,
       skillSession,
     };
@@ -140,11 +149,11 @@ export class AgentRuntime {
       skillCatalog: this.skillRegistry.listCards(),
       currentSlideId: options.currentSlideId,
       requiredOutcome: options.requiredOutcome,
+      stepLimits,
     });
     const transcript: Array<Record<string, unknown>> = [
       { role: "user", content: options.request },
     ];
-    const maxSteps = options.maxSteps ?? 12;
 
     const finish = async (
       result: AgentRuntimeResult,
@@ -429,7 +438,7 @@ export class AgentRuntime {
 
     return finish({
       type: "message",
-      content: "本次请求的工具调用步骤超过上限，请缩小修改范围后重试。",
+      content: buildMainStepLimitMessage(stepLimits),
     }, "step_limit");
   }
 

@@ -1,12 +1,14 @@
 import type { ToolDefinition } from "../tools/tool-definition";
 import { toToolCard } from "../tools/tool-card";
 import type { SkillCard } from "../skills/skill-types";
+import type { AgentStepLimits } from "@shared/agent-step-limits";
 
 export interface SystemPromptOptions {
   coreTools: ToolDefinition<any, any>[];
   skillCatalog?: SkillCard[];
   currentSlideId?: string;
   requiredOutcome?: "any" | "command_proposal";
+  stepLimits?: AgentStepLimits;
 }
 
 function formatSkillCatalog(skills: SkillCard[]): string {
@@ -39,13 +41,17 @@ export class SystemPromptBuilder {
       .map((tool) => JSON.stringify(toToolCard(tool)))
       .join("\n");
 
+    const stepBudgetLine = options.stepLimits?.enabled
+      ? `3. **步数预算**：单次请求主 Agent 模型调用上限约 ${options.stepLimits.mainMaxSteps} 次；子 Agent 约 ${options.stepLimits.subMaxSteps} 次。合并操作、避免重复 LoadSkill。`
+      : "3. **效率优先**：合并操作；能一次 SubmitCommands 就不要分批；简单任务不要用 TodoWrite。";
+
     return `你是一个专业的 PPT 智能助手 (PPT Agent)。你的唯一目标是帮助用户创作**简洁、可用**的演示文稿——这是 PPT，不是写论文。
 
 ## 核心原则
 
 1. **轻量优先**：用户意图清晰时，直接 \`ReadPresentationSnapshot\` → \`SubmitCommands\`，跳过 brief/outline/storyboard 等中间文件。只有从零做大型 deck（约 15 页以上）或用户明确要求规划时，才走完整 workspace 流程。
 2. **少即是多**：每页 3–5 条短要点（每条 ≤15 字），不堆砌段落、不重复解释。主对话只回传 2–4 句摘要，不粘贴中间产物全文。
-3. **步数预算**：单次请求工具调用上限约 12 步。合并操作：能一次 \`SubmitCommands\` 就不要分批；能跳过 \`LoadSkill\` 就不要加载；简单任务不要用 \`TodoWrite\`。
+${stepBudgetLine}
 4. **子任务委派**：确需 workspace 中间产物时，用 \`Task\` 委派。子 Agent 只回传简短结论；互不依赖的子任务可用 \`descriptions\` 并发。
 5. **幻灯片写入**：所有幻灯片改动必须通过 \`SubmitCommands\`。了解现状用 \`ReadPresentationSnapshot\` / \`ReadCurrentSlide\` / \`GetSelection\` / \`ListSlides\`。
 6. **任务规划**：仅当任务含 3 个以上独立阶段时才 \`TodoWrite\`；简单改页、加页、换主题无需 Todo。

@@ -313,8 +313,25 @@ export function findPendingToolApproval(
 
 export function filterTraceForDisplay(trace: AgentActivityItem[]): AgentActivityItem[] {
   return trace.filter(
-    (item) => !(item.kind === "tool-approval" && item.status === "pending"),
+    (item) =>
+      item.kind !== "todo" &&
+      !(item.kind === "tool-approval" && item.status === "pending"),
   );
+}
+
+export function extractLatestTodos(
+  ...traces: Array<AgentActivityItem[] | undefined>
+): AgentTodoItem[] | null {
+  for (const trace of traces) {
+    if (!trace?.length) continue;
+    for (let index = trace.length - 1; index >= 0; index -= 1) {
+      const item = trace[index];
+      if (item?.kind === "todo" && item.todos.length > 0) {
+        return item.todos;
+      }
+    }
+  }
+  return null;
 }
 
 type TaskStep = Extract<AgentActivityItem, { kind: "task" }>["steps"][number];

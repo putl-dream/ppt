@@ -18,6 +18,7 @@ import {
   type AgentExecutionStrategy,
   type AgentModelSettings,
 } from "@shared/agent";
+import { agentStepLimitsSchema, type AgentStepLimits } from "@shared/agent-step-limits";
 import { AgentGateway } from "./agent/gateway";
 import { AgentRuntime } from "./agent/runtime/agent-runtime";
 import { ToolApprovalBroker } from "./agent/runtime/tool-approval-broker";
@@ -388,6 +389,7 @@ app.whenReady().then(async () => {
       rawRequest: unknown,
       input?: AgentModelSettings,
       strategy?: AgentExecutionStrategy,
+      rawStepLimits?: AgentStepLimits,
       runId?: string,
     ) => {
       const request = agentRunRequestSchema.parse(rawRequest);
@@ -408,6 +410,9 @@ app.whenReady().then(async () => {
       const executionStrategy = strategy
         ? agentExecutionStrategySchema.parse(strategy)
         : "REQUEST_APPROVAL";
+      const agentStepLimits = rawStepLimits
+        ? agentStepLimitsSchema.parse(rawStepLimits)
+        : undefined;
       const selection: AgentModelSelection | undefined = settings
         ? agentGateway.configure(settings)
         : undefined;
@@ -438,6 +443,7 @@ app.whenReady().then(async () => {
               sessionStore.getAgentMessageHistory(sessionId, request.prompt),
               controller.signal,
               currentRunId,
+              agentStepLimits,
             ),
           ),
         );
@@ -454,6 +460,7 @@ app.whenReady().then(async () => {
     event,
     threadId: string,
     rawRequest: unknown,
+    rawStepLimits?: AgentStepLimits,
     runId?: string,
   ) => {
     const request = agentRunRequestSchema.parse(rawRequest);
@@ -470,6 +477,9 @@ app.whenReady().then(async () => {
     sessionActiveRuns.set(sessionId, currentRunId);
 
     const runtime = await getRuntimeForSession(sessionId);
+    const agentStepLimits = rawStepLimits
+      ? agentStepLimitsSchema.parse(rawStepLimits)
+      : undefined;
     const emit = (streamEvent: AgentServiceEvent) => {
       event.sender.send("agent:stream", { ...streamEvent, runId: currentRunId });
     };
@@ -501,6 +511,7 @@ app.whenReady().then(async () => {
                 request.editorContext,
                 controller.signal,
                 currentRunId,
+                agentStepLimits,
               )
             : runtime.agentService.start(
                 request.prompt,
@@ -511,6 +522,7 @@ app.whenReady().then(async () => {
                 sessionStore.getAgentMessageHistory(sessionId, request.prompt),
                 controller.signal,
                 currentRunId,
+                agentStepLimits,
               );
 
           return finalizeAgentResult(sessionId, runtime, await run);

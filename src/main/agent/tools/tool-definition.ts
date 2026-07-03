@@ -1,5 +1,7 @@
 import { z } from "zod";
 import type { AgentModelSelection } from "@shared/agent";
+import type { AgentStepLimits } from "@shared/agent-step-limits";
+import type { AgentTodoItem } from "@shared/agent-todo";
 import type { Presentation } from "@shared/presentation";
 import type { AgentModelGateway } from "../gateway";
 import type { ToolApprovalHandler } from "../runtime/permission-check";
@@ -64,6 +66,8 @@ export interface ToolContext {
   readonly skillRegistry?: SkillRegistry;
   /** Per-run loaded skill tracking (Layer 2). */
   readonly skillSession?: SkillSession;
+  /** Step limit config for Task sub-agents. */
+  readonly agentStepLimits?: AgentStepLimits;
 }
 
 /**
