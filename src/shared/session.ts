@@ -86,8 +86,9 @@ const persistedPatchSchema = z.object({
 });
 
 const persistedInlineCardSchema = z.object({
-  type: z.enum(["brief", "outline", "deck"]),
+  type: z.enum(["brief", "outline", "layout", "deck"]),
   resolved: z.enum(["confirmed", "dismissed"]).optional(),
+  layoutMode: z.enum(["template", "creative"]).optional(),
 });
 
 export const sessionChatMessageSchema = z.object({

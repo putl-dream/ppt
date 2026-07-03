@@ -2922,6 +2922,113 @@ aside {
   cursor: not-allowed;
 }
 
+.layout-choice-card {
+  padding-bottom: 0;
+}
+
+.layout-choice-summary {
+  margin: 0;
+  padding: 12px 14px 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+.layout-choice-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+}
+
+.layout-choice-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-glass);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: var(--transition-smooth);
+}
+
+.layout-choice-option.is-selected {
+  border-color: var(--accent-cyan);
+  background: var(--accent-cyan-glow);
+}
+
+.layout-choice-option input {
+  margin-top: 3px;
+  accent-color: var(--accent-cyan);
+}
+
+.layout-choice-option-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.layout-choice-option-body strong {
+  font-size: 12px;
+  color: var(--text-primary);
+}
+
+.layout-choice-option-body span {
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-secondary);
+}
+
+.layout-choice-themes {
+  padding: 0 14px 12px;
+}
+
+.layout-choice-themes-label {
+  display: block;
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+
+.layout-choice-theme-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.layout-choice-theme-chip {
+  padding: 5px 10px;
+  font-size: 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border-glass);
+  background: var(--bg-glass);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: var(--transition-smooth);
+}
+
+.layout-choice-theme-chip.is-active {
+  border-color: var(--accent-cyan);
+  color: var(--accent-cyan);
+  background: var(--accent-cyan-glow);
+}
+
+.layout-choice-theme-chip[data-theme="ocean"].is-active {
+  background: rgba(15, 23, 42, 0.12);
+}
+
+.layout-choice-theme-chip[data-theme="midnight"].is-active {
+  background: rgba(14, 17, 21, 0.15);
+}
+
+.layout-choice-theme-chip[data-theme="sunset"].is-active {
+  background: rgba(249, 115, 22, 0.1);
+}
+
+.layout-choice-theme-chip[data-theme="purple"].is-active {
+  background: rgba(168, 85, 247, 0.1);
+}
+
 .deck-preview-modal-overlay {
   position: fixed;
   inset: 0;

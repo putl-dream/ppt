@@ -11,7 +11,7 @@ when_to_use: 用户要从零做完整 PPT、不确定下一步、或要求「一
 | 场景 | 路径 | 步骤 |
 |------|------|------|
 | 改页/加页/换主题/用户已给内容 | **轻量** | ReadPresentationSnapshot → SubmitCommands |
-| 小型新建（≤10 页，需求清晰） | **轻量** | AskUser（若缺信息）→ SubmitCommands 直接建稿 |
+| 小型新建（≤10 页，需求清晰） | **两阶段** | 内容草稿 → LayoutChoiceCard → 视觉排版 |
 | 大型新建（>10 页）或用户要求先规划 | **完整** | 见下表 |
 
 ## 完整路径阶段（按需跳过可选项）
@@ -22,15 +22,17 @@ when_to_use: 用户要从零做完整 PPT、不确定下一步、或要求「一
 | 1 需求 | `ppt-brief` | `brief.md` | Task |
 | 2 大纲 | `ppt-outline` | `outline.md` | Task |
 | 3 分镜 | `ppt-storyboard` | `slides/storyboard.json` | Task |
-| 4 建稿 | `ppt-build` | 幻灯片实体 | SubmitCommands |
-| 5 美化/导出 | `ppt-beautify` / `ppt-export` | 可选 | 仅用户要求 |
+| 4 内容草稿 | `ppt-build` | add-slide（无排版） | SubmitCommands |
+| 4b 排版选择 | — | LayoutChoiceCard | 用户 |
+| 5 视觉排版 | `ppt-layout` | set-theme + update-slide-layout | SubmitCommands |
+| 6 美化/导出 | `ppt-beautify` / `ppt-export` | 可选 | 仅用户要求 |
 
 **默认跳过**：research（`ppt-research`）、独立 design 文件（主题可直接 set-theme）、deck-review。
 
 ## 主 Agent 职责
 
-1. 先选路径；轻量路径**不要** LoadSkill、TodoWrite、Task。
-2. 完整路径每步：LoadSkill → Task 或 SubmitCommands → 摘要 2–3 句。
+1. 先选路径；单页修改**不要** TodoWrite、两阶段。
+2. 新建/批量加页：内容草稿完成后停止，等待 LayoutChoiceCard；用户确认后再 LoadSkill `ppt-layout`。
 3. workspace 文件一律 Task 委派；幻灯片改动 SubmitCommands。
 4. 控制步数：合并 SubmitCommands；不重复 LoadSkill；TodoWrite 只在完整路径开始时用一次。
 

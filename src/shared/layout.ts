@@ -93,7 +93,7 @@ export function applyLayout(
   const colors = getThemePaletteColors(theme, palette);
 
   // Separate elements by type
-  const textElements = slide.elements.filter((el): el is TextElement => el.type === "text");
+  let textElements = slide.elements.filter((el): el is TextElement => el.type === "text");
   const imageElements = slide.elements.filter((el) => el.type === "image");
   
   // Keep non-rectangle shapes (like custom lines or circles added by user)
@@ -103,10 +103,21 @@ export function applyLayout(
     return slide;
   }
 
-  // Find an explicit in-slide title element (must match slide title or use heading size).
-  const titleEl = textElements.find(
-    (el) => el.text.trim() === slide.title.trim() || el.fontSize >= 36,
-  );
+  const isChromeLayout = layout === "cover" || layout === "section";
+  const normalizedTitle = slide.title.trim();
+
+  // Drop canvas text that duplicates the chrome header title on content slides.
+  if (!isChromeLayout) {
+    textElements = textElements.filter(
+      (el) => el.text.trim() !== normalizedTitle && el.fontSize < 36,
+    );
+  }
+
+  const titleEl = isChromeLayout
+    ? textElements.find(
+        (el) => el.text.trim() === normalizedTitle || el.fontSize >= 36,
+      )
+    : undefined;
 
   const bodyTexts = titleEl
     ? textElements.filter((el) => el.id !== titleEl.id)
@@ -123,6 +134,30 @@ export function applyLayout(
     height: h,
     fillColor: colors.cardBg,
     strokeColor: colors.cardStroke,
+  });
+
+  const createAccentBar = (x: number, y: number, w: number): ShapeElement => ({
+    id: `accent-${generateId()}`,
+    type: "shape",
+    shapeType: "rectangle",
+    x,
+    y,
+    width: w,
+    height: 4,
+    fillColor: colors.accent,
+    strokeColor: colors.accent,
+  });
+
+  const createProcessArrow = (x: number, y: number, w: number, h: number): ShapeElement => ({
+    id: `arrow-${generateId()}`,
+    type: "shape",
+    shapeType: "arrow",
+    x,
+    y,
+    width: w,
+    height: h,
+    fillColor: colors.accent,
+    strokeColor: colors.accent,
   });
 
   if (layout === "cover" || layout === "section") {
@@ -237,10 +272,13 @@ export function applyLayout(
       const cardGap = 24;
       const totalW = 1040;
       const colW = (totalW - (N - 1) * cardGap) / N;
+      const cardTop = contentY + 40;
+      const cardH = contentH - 80;
 
       steps.forEach((el, idx) => {
         const colX = 120 + idx * (colW + cardGap);
-        elements.unshift(createCard(colX, contentY + 40, colW, contentH - 80));
+        elements.unshift(createCard(colX, cardTop, colW, cardH));
+        elements.push(createAccentBar(colX + 16, cardTop + 12, colW - 32));
 
         el.x = colX + 16;
         el.y = contentY + 60;
@@ -251,6 +289,12 @@ export function applyLayout(
         el.color = colors.body;
         el.align = "center";
         elements.push(el);
+
+        if (idx < N - 1) {
+          const arrowX = colX + colW + 4;
+          const arrowY = cardTop + cardH / 2 - 12;
+          elements.push(createProcessArrow(arrowX, arrowY, cardGap - 8, 24));
+        }
       });
     } else if (layout === "architecture") {
       const layers = bodyTexts.slice(0, 4);
@@ -316,6 +360,7 @@ export function applyLayout(
       bodyTexts.forEach((el, idx) => {
         const colX = 120 + idx * (colW + cardGap);
         elements.unshift(createCard(colX, contentY, colW, contentH));
+        elements.push(createAccentBar(colX + 20, contentY + 16, colW - 40));
 
         el.x = colX + 20;
         el.y = contentY + 20;
@@ -335,6 +380,17 @@ export function applyLayout(
       bodyTexts.forEach((el, idx) => {
         const rowY = contentY + idx * (rowH + rowGap);
         elements.unshift(createCard(120, rowY, 1040, rowH));
+        elements.push({
+          id: `accent-${generateId()}`,
+          type: "shape",
+          shapeType: "rectangle",
+          x: 130,
+          y: rowY + 12,
+          width: 4,
+          height: rowH - 24,
+          fillColor: colors.accent,
+          strokeColor: colors.accent,
+        });
 
         el.x = 150;
         el.y = rowY + 10;

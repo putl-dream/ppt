@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { Presentation } from "./presentation";
+import { presentationNeedsLayoutChoice } from "./presentation-draft";
 import type { ProjectStageId } from "./project";
 import {
   hasMeaningfulArtifactContent,
@@ -8,18 +9,23 @@ import {
 import type { BriefFields, OutlineItem } from "./project-artifacts";
 import { parseBriefFields, parseOutlineItems } from "./project-artifacts";
 
-export const inlineCardTypeSchema = z.enum(["brief", "outline", "deck"]);
+export const inlineCardTypeSchema = z.enum(["brief", "outline", "layout", "deck"]);
 export type InlineCardType = z.infer<typeof inlineCardTypeSchema>;
+
+export const layoutVisualModeSchema = z.enum(["template", "creative"]);
+export type LayoutVisualMode = z.infer<typeof layoutVisualModeSchema>;
 
 export const inlineCardRefSchema = z.object({
   type: inlineCardTypeSchema,
   resolved: z.enum(["confirmed", "dismissed"]).optional(),
+  layoutMode: layoutVisualModeSchema.optional(),
 });
 export type InlineCardRef = z.infer<typeof inlineCardRefSchema>;
 
 const ARTIFACT_REF_PATTERNS: Record<InlineCardType, RegExp[]> = {
   brief: [/\bbrief\.md\b/i, /\bbrief\b/i, /需求简报/, /目的.*受众/],
   outline: [/\boutline\.md\b/i, /\boutline\b/i, /内容大纲/, /章节结构/, /大纲/],
+  layout: [/排版方式/, /视觉呈现/, /内容草稿已就绪/, /请选择.*排版/, /layout-choice/i],
   deck: [/\bdeck\//i, /演示文稿/, /\bppt\b/i, /幻灯片/, /导出/],
 };
 
@@ -87,9 +93,12 @@ export function shouldShowInlineCard(
       return hasMeaningfulArtifactContent("brief", context.briefContent);
     case "outline":
       return hasMeaningfulArtifactContent("outline", context.outlineContent);
+    case "layout":
+      return presentationNeedsLayoutChoice(context.presentation);
     case "deck":
       return Boolean(
         context.presentation
+        && !presentationNeedsLayoutChoice(context.presentation)
         && (context.presentation.revision > 0 || context.presentation.slides.length > 1
           || (context.presentation.slides.length === 1
             && context.presentation.slides[0]?.title !== "项目起点")),

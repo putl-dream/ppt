@@ -8,6 +8,7 @@ import {
   resolveMessageInlineCards,
   shouldShowInlineCard,
 } from "../src/shared/inline-artifact-cards";
+import { applyLayout } from "../src/shared/layout";
 import { createDefaultBriefMarkdown, createDefaultOutlineMarkdown } from "../src/shared/project-artifacts";
 import { createSessionPresentation } from "../src/shared/session";
 
@@ -15,6 +16,7 @@ describe("inline-artifact-cards", () => {
   it("parses artifact references from assistant content", () => {
     expect(parseInlineCardsFromContent("我已更新 brief.md，请确认受众与目的。")).toEqual(["brief"]);
     expect(parseInlineCardsFromContent("这是 outline.md 的章节结构。")).toEqual(["outline"]);
+    expect(parseInlineCardsFromContent("内容草稿已就绪，请选择排版方式。")).toEqual(["layout"]);
     expect(parseInlineCardsFromContent("演示文稿已生成，可导出 PPT。")).toEqual(["deck"]);
   });
 
@@ -29,6 +31,7 @@ describe("inline-artifact-cards", () => {
       { type: "brief" },
       { type: "outline" },
     ]);
+    expect(mergeInlineCardRefs(undefined, ["layout"])).toEqual([{ type: "layout" }]);
   });
 
   it("maps artifact stages to inline card types", () => {
@@ -39,11 +42,26 @@ describe("inline-artifact-cards", () => {
   it("resolves visible cards from persisted refs and content", () => {
     const presentation = createSessionPresentation("测试项目");
     presentation.revision = 1;
-    presentation.slides.push({
+    const secondSlide = {
       id: "slide-2",
       title: "第二页",
-      elements: [],
-    });
+      layout: "summary" as const,
+      elements: [
+        {
+          id: "point-1",
+          type: "text" as const,
+          x: 0,
+          y: 0,
+          width: 200,
+          height: 40,
+          text: "要点",
+          fontSize: 20,
+        },
+      ],
+    };
+    const laidOutSlide = applyLayout(secondSlide, "summary", "ocean", "cyan");
+    presentation.slides = [laidOutSlide];
+    presentation.revision = 1;
 
     const refs = resolveMessageInlineCards(
       "请查看 outline.md",

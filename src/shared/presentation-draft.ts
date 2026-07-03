@@ -1,0 +1,29 @@
+import type { Presentation, Slide } from "./presentation";
+
+const CHROME_LAYOUTS = new Set(["cover", "section"]);
+
+function slideHasLayoutCards(slide: Slide): boolean {
+  return slide.elements.some(
+    (element) => element.type === "shape" && element.shapeType === "rectangle" && element.id.startsWith("card-"),
+  );
+}
+
+function slideHasBodyText(slide: Slide): boolean {
+  return slide.elements.some((element) => element.type === "text" && element.text.trim().length > 0);
+}
+
+export function slideNeedsLayoutChoice(slide: Slide): boolean {
+  if (CHROME_LAYOUTS.has(slide.layout ?? "")) return false;
+  return slideHasBodyText(slide) && !slideHasLayoutCards(slide);
+}
+
+/** True when deck has content slides that have not been through applyLayout yet. */
+export function presentationNeedsLayoutChoice(presentation: Presentation | undefined): boolean {
+  if (!presentation || presentation.slides.length === 0) return false;
+  return presentation.slides.some((slide) => slideNeedsLayoutChoice(slide));
+}
+
+export function countSlidesNeedingLayout(presentation: Presentation | undefined): number {
+  if (!presentation) return 0;
+  return presentation.slides.filter((slide) => slideNeedsLayoutChoice(slide)).length;
+}

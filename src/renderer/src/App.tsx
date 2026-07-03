@@ -31,6 +31,15 @@ import {
   resolveMessageInlineCards,
   type InlineCardRef,
 } from "@shared/inline-artifact-cards";
+import {
+  buildLayoutPhasePrompt,
+  saveLayoutVisualMode,
+  type LayoutVisualMode,
+} from "@shared/layout-preference";
+import {
+  countSlidesNeedingLayout,
+  presentationNeedsLayoutChoice,
+} from "@shared/presentation-draft";
 import { findRecoverableConversation } from "@shared/session-recovery";
 import {
   DEFAULT_MODELS,
@@ -100,12 +109,32 @@ function toSessionChatMessages(messages: ChatMessage[]): SessionChatMessage[] {
 
 function attachInlineCards(
   message: ChatMessage,
-  additions: Array<"brief" | "outline" | "deck">,
+  additions: Array<"brief" | "outline" | "layout" | "deck">,
 ): ChatMessage {
   return {
     ...message,
     inlineCards: mergeInlineCardRefs(message.inlineCards, additions),
   };
+}
+
+function buildLayoutDraftContent(slideCount: number): string {
+  return `内容草稿已就绪（${slideCount} 页待排版），请选择排版方式后继续。`;
+}
+
+function finalizeAgentMessage(
+  message: ChatMessage,
+  presentation: Presentation | undefined,
+  fallbackContent: string,
+): ChatMessage {
+  if (presentation && presentationNeedsLayoutChoice(presentation)) {
+    const slideCount = countSlidesNeedingLayout(presentation);
+    return attachInlineCards(
+      { ...message, content: buildLayoutDraftContent(slideCount) },
+      ["layout"],
+    );
+  }
+
+  return attachInlineCards({ ...message, content: fallbackContent }, ["deck"]);
 }
 
 export function App() {
@@ -898,12 +927,15 @@ export function App() {
       }
     }
 
-    const finalContent = result.status === "rejected" ? "已放弃排版变更提案。" : "已根据确认的大纲生成并应用演示文稿。";
-    const applyCompletion = (message: ChatMessage): ChatMessage => (
-      result.status === "completed"
-        ? attachInlineCards({ ...message, content: finalContent }, ["deck"])
-        : { ...message, content: finalContent }
-    );
+    const finalContent = result.status === "rejected"
+      ? "已放弃排版变更提案。"
+      : "已根据确认的大纲生成并应用演示文稿。";
+    const applyCompletion = (message: ChatMessage): ChatMessage => {
+      if (result.status !== "completed") {
+        return { ...message, content: finalContent };
+      }
+      return finalizeAgentMessage(message, result.presentation, finalContent);
+    };
 
     if (messageId) {
       setChatMessages((prev) => prev.map((message) =>
@@ -919,7 +951,13 @@ export function App() {
         }),
       ]);
     }
-    triggerToast(result.status === "rejected" ? "变更已取消" : "演示文稿已成功更新");
+    triggerToast(
+      result.status === "rejected"
+        ? "变更已取消"
+        : result.presentation && presentationNeedsLayoutChoice(result.presentation)
+          ? "内容草稿已就绪，请选择排版方式"
+          : "演示文稿已成功更新",
+    );
   }
 
   // 提交需求或继续当前大纲对话
@@ -1198,11 +1236,20 @@ export function App() {
           highlightSlide: approved,
         });
         await hydrateProjectArtifacts(activeSessionId);
-        setChatMessages((prev) => prev.map((message) =>
-          message.id === messageId
-            ? { ...message, approval: undefined, content: resolvedContent }
-            : message
-        ));
+        const syncedPresentation = await window.desktopApi.getPresentation();
+        setChatMessages((prev) => prev.map((message) => {
+          if (message.id !== messageId) return message;
+          if (!approved) {
+            return { ...message, approval: undefined, content: resolvedContent };
+          }
+          return {
+            ...finalizeAgentMessage(
+              { ...message, approval: undefined },
+              syncedPresentation,
+              resolvedContent,
+            ),
+          };
+        }));
         triggerToast(approved ? "✅ 变更已应用" : "❌ 变更已取消");
       }
     } catch (err) {
@@ -1446,6 +1493,20 @@ export function App() {
 
   // 全体一键 AI 美化
   const handleOptimizePresentationLocally = () => {
+    if (presentation && presentationNeedsLayoutChoice(presentation)) {
+      const slideCount = countSlidesNeedingLayout(presentation);
+      setChatMessages((prev) => [
+        ...prev,
+        {
+          id: crypto.randomUUID(),
+          role: "assistant",
+          content: buildLayoutDraftContent(slideCount),
+          inlineCards: [{ type: "layout" }],
+        },
+      ]);
+      triggerToast("请选择排版方式");
+      return;
+    }
     void startAgent("一键美化全局演示文稿，微调排版比例与风格一致性");
   };
 
@@ -1497,6 +1558,10 @@ export function App() {
         ? parseOutlineForCard(context.outlineContent ?? "")
         : undefined,
       presentation: refs.some((card) => card.type === "deck") ? presentation : undefined,
+      layoutSlideCount: refs.some((card) => card.type === "layout")
+        ? countSlidesNeedingLayout(presentation)
+        : undefined,
+      layoutMode: refs.find((card) => card.type === "layout")?.layoutMode,
     };
   };
 
@@ -1504,11 +1569,14 @@ export function App() {
     messageId: string,
     type: InlineCardRef["type"],
     resolved: InlineCardRef["resolved"],
+    layoutMode?: LayoutVisualMode,
   ) => {
     setChatMessages((prev) => prev.map((message) => {
       if (message.id !== messageId) return message;
       const inlineCards = (message.inlineCards ?? [{ type }]).map((card) =>
-        card.type === type ? { ...card, resolved } : card,
+        card.type === type
+          ? { ...card, resolved, ...(layoutMode ? { layoutMode } : {}) }
+          : card,
       );
       return { ...message, inlineCards };
     }));
@@ -1529,6 +1597,20 @@ export function App() {
   const handleReviseOutline = (messageId: string) => {
     markInlineCardResolved(messageId, "outline", "dismissed");
     void startAgent("请根据当前反馈继续修改大纲结构");
+  };
+
+  const handleConfirmLayout = (
+    messageId: string,
+    mode: LayoutVisualMode,
+    theme: string,
+    palette: string,
+  ) => {
+    saveLayoutVisualMode(mode);
+    setSelectedTheme(theme);
+    setSelectedPalette(palette);
+    markInlineCardResolved(messageId, "layout", "confirmed", mode);
+    triggerToast(mode === "creative" ? "🎨 开始创意装饰排版" : "📐 开始标准排版");
+    void startAgent(buildLayoutPhasePrompt(mode, theme, palette));
   };
 
   const handleOpenDeckPreview = () => {
@@ -1638,6 +1720,7 @@ export function App() {
                   getInlineCardData={getInlineCardData}
                   onConfirmBrief={handleConfirmBrief}
                   onConfirmOutline={handleConfirmOutline}
+                  onConfirmLayout={handleConfirmLayout}
                   onReviseOutline={handleReviseOutline}
                   onOpenDeckPreview={handleOpenDeckPreview}
                   onExportDeck={() => void handleExportDeck()}

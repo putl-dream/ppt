@@ -26,12 +26,12 @@ export const selectStyleStrategyTool: ToolDefinition<
     let fontStack = "Outfit, Inter, sans-serif";
 
     if (args.targetAudience.includes("高管") || args.targetAudience.includes("商务")) {
-      recommendedTheme = "business-clean";
-      recommendedPalette = "warm-gray";
+      recommendedTheme = "nordic";
+      recommendedPalette = "cyan";
       fontStack = "Georgia, serif";
     } else if (args.targetAudience.includes("技术") || args.targetAudience.includes("研发")) {
-      recommendedTheme = "tech-blue";
-      recommendedPalette = "electric-blue";
+      recommendedTheme = "ocean";
+      recommendedPalette = "cyan";
       fontStack = "JetBrains Mono, Outfit, sans-serif";
     }
 

@@ -16,6 +16,7 @@ import { UnifiedAgentInput } from "./UnifiedAgentInput";
 import { BriefCard } from "./BriefCard";
 import { OutlineCard } from "./OutlineCard";
 import { DeckPreviewCard } from "./DeckPreviewCard";
+import { LayoutChoiceCard } from "./LayoutChoiceCard";
 import { AgentThinkingLoader } from "./AgentThinkingLoader";
 import { AgentActivityTrace } from "./AgentActivityTrace";
 import { MessageMarkdown } from "./MessageMarkdown";
@@ -26,8 +27,8 @@ import { TaskPlanCard } from "./TaskPlanCard";
 import type { ManagedModel } from "../modelCatalog";
 import type { Presentation } from "@shared/presentation";
 import type { InlineCardRef } from "@shared/inline-artifact-cards";
-import type { BriefFields } from "@shared/project-artifacts";
-import type { OutlineItem } from "@shared/project-artifacts";
+import type { BriefFields, OutlineItem } from "@shared/project-artifacts";
+import type { LayoutVisualMode } from "@shared/layout-preference";
 
 type ChatMessage = SessionChatMessage;
 
@@ -36,6 +37,8 @@ export interface InlineCardData {
   briefFields?: BriefFields;
   outlineItems?: OutlineItem[];
   presentation?: Presentation;
+  layoutSlideCount?: number;
+  layoutMode?: LayoutVisualMode;
 }
 
 interface ChatWorkspaceProps {
@@ -55,6 +58,7 @@ interface ChatWorkspaceProps {
   getInlineCardData: (message: ChatMessage) => InlineCardData;
   onConfirmBrief: (messageId: string) => void;
   onConfirmOutline: (messageId: string) => void;
+  onConfirmLayout: (messageId: string, mode: LayoutVisualMode, theme: string, palette: string) => void;
   onReviseOutline: (messageId: string) => void;
   onOpenDeckPreview: () => void;
   onExportDeck: () => void;
@@ -105,6 +109,7 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
   getInlineCardData,
   onConfirmBrief,
   onConfirmOutline,
+  onConfirmLayout,
   onReviseOutline,
   onOpenDeckPreview,
   onExportDeck,
@@ -620,6 +625,22 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
                         busy={busy}
                         onConfirm={card.resolved ? undefined : () => onConfirmOutline(msg.id)}
                         onRevise={card.resolved ? undefined : () => onReviseOutline(msg.id)}
+                      />
+                    );
+                  }
+
+                  if (card.type === "layout") {
+                    return (
+                      <LayoutChoiceCard
+                        key={`${msg.id}-layout`}
+                        slideCount={inlineCardData.layoutSlideCount ?? 1}
+                        resolved={card.resolved}
+                        layoutMode={inlineCardData.layoutMode ?? card.layoutMode}
+                        selectedTheme={selectedTheme}
+                        selectedPalette={selectedPalette}
+                        onConfirm={card.resolved
+                          ? undefined
+                          : (mode, theme, palette) => onConfirmLayout(msg.id, mode, theme, palette)}
                       />
                     );
                   }

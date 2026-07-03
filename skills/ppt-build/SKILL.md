@@ -19,29 +19,45 @@ allowed-tools:
 
 1. `ReadPresentationSnapshot` 了解当前 revision、已有 slide ID。
 2. Task 读取 `slides/storyboard.json`（主 Agent 不直接读 workspace 文件）。
-3. 若尚无主题，先提交 `set-theme`（见 ppt-design）。
+3. **内容草稿阶段**不提交 `set-theme`；主题在排版阶段（ppt-layout）设置。
 
 ## 画布与约束
 
 - 画布：**1280 × 720**，安全边距 **40px**（元素需在安全区内）。
-- `slide.title` 由 UI 渲染在页眉；画布上只放正文元素。
+- `slide.title` 由 UI 渲染在页眉；画布上只放正文元素；**禁止** fontSize≥36 的画布文本。
 - 布局枚举：`cover` `section` `concept` `comparison` `process` `architecture` `case` `summary`。
 - 元素类型：`text` | `image` | `shape`（`rectangle` `circle` `arrow` `line`）。
 
-## 推荐命令序列（每页）
+## 两阶段职责
+
+| 阶段 | 本 Skill 角色 |
+|------|--------------|
+| 内容草稿 | 只 add-slide + text elements + layout 字段；**不** update-slide-layout |
+| 视觉排版 | set-theme + 全部 update-slide-layout（用户选完排版方式后） |
+
+## 推荐命令序列
+
+**内容草稿（第一阶段）**
 
 ```json
 [
-  {"id":"cmd-1","type":"add-slide","index":0,"slide":{"id":"slide-cover","title":"封面","layout":"cover","elements":[
-    {"id":"el-sub","type":"text","x":120,"y":380,"width":1040,"height":100,"text":"副标题","fontSize":28,"align":"center"}
-  ]}},
-  {"id":"cmd-2","type":"update-slide-layout","slideId":"slide-cover","layout":"cover"}
+  {"id":"cmd-1","type":"add-slide","index":0,"slide":{"id":"slide-1","title":"页面标题","layout":"concept","elements":[
+    {"id":"el-1","type":"text","x":0,"y":0,"width":100,"height":40,"text":"要点一","fontSize":20}
+  ]}}
 ]
 ```
 
-- 新建页：`add-slide` → `update-slide-layout`（触发自动排版）。
-- 已有页改内容：`update-element` / `add-element` / `set-slide-title`。
-- 批量创建：**一次 SubmitCommands** 提交全部命令，按 index 从低到高。
+**视觉排版（第二阶段，用户确认后）**
+
+```json
+[
+  {"id":"cmd-theme","type":"set-theme","theme":"ocean","palette":"cyan"},
+  {"id":"cmd-layout","type":"update-slide-layout","slideId":"slide-1","layout":"concept"}
+]
+```
+
+- 内容草稿：仅 `add-slide`（设 layout 字段 + 独立 text elements）。
+- 视觉排版：`set-theme` → 全部 `update-slide-layout`。
 
 ## 布局与 body 元素数量
 
@@ -60,15 +76,16 @@ allowed-tools:
 ## 工作流
 
 1. 从 storyboard 映射 slide.id（与 storyboard id 一致）。
-2. 首批一次 SubmitCommands：`set-presentation-title` + `set-theme` + 全部 `add-slide` + `update-slide-layout`。
-3. PreviewCommands 自检；修正后 SubmitCommands。
-4. 摘要：新建页数 + 需用户确认的占位项。
+2. **内容草稿**：一次 SubmitCommands 提交全部 add-slide（含 layout 字段），**不含** update-slide-layout。
+3. message 告知「内容草稿已就绪，请选择排版方式」。
+4. **视觉排版**（用户确认后，LoadSkill `ppt-layout`）：set-theme + 全部 update-slide-layout。
+5. PreviewCommands 自检；修正后 SubmitCommands。
 
 ## 禁止
 
 - 不凭记忆编造 ID；改已有页先 ReadPresentationSnapshot。
 - 基础创建不用 Deferred Tool。
-- 简单新建（≤10 页）可跳过 storyboard，主 Agent 直接 SubmitCommands。
+- **内容草稿阶段禁止 update-slide-layout**（排版由 ppt-layout 第二阶段完成）。
 
 ## 衔接
 
