@@ -326,7 +326,7 @@ export const ContextualAgentPanel: React.FC<ContextualAgentPanelProps> = ({
           executionStrategy={executionStrategy}
           setExecutionStrategy={setExecutionStrategy}
           localStoragePath={localStoragePath}
-          setLocalStoragePath={setLocalStoragePath}
+          onSelectWorkspace={() => {}}
           layoutMode="bottom"
           triggerToast={triggerToast}
           placeholder={placeholder}

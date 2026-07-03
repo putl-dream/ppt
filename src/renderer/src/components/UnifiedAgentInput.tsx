@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from "react";
-import { PlusIcon, SendIcon } from "./Icons";
+import { FolderIcon, PlusIcon, SendIcon } from "./Icons";
 import type { ManagedModel } from "../modelCatalog";
 import { getWorkspaceLabel } from "@shared/workspace";
 
@@ -15,7 +15,7 @@ interface UnifiedAgentInputProps {
   executionStrategy: "REQUEST_APPROVAL" | "AUTO";
   setExecutionStrategy: (val: "REQUEST_APPROVAL" | "AUTO") => void;
   localStoragePath: string;
-  setLocalStoragePath?: (val: string) => void;
+  onSelectWorkspace?: () => void;
 
   layoutMode: "center" | "bottom";
   triggerToast: (msg: string) => void;
@@ -43,6 +43,7 @@ export const UnifiedAgentInput: React.FC<UnifiedAgentInputProps> = ({
   executionStrategy,
   setExecutionStrategy,
   localStoragePath,
+  onSelectWorkspace,
   layoutMode,
   selectedSlideIndex,
   onClearContextTag,
@@ -83,6 +84,19 @@ export const UnifiedAgentInput: React.FC<UnifiedAgentInputProps> = ({
     resizeTextarea(textarea);
   }, [request, layoutMode]);
 
+  const workspacePicker = (
+    <button
+      type="button"
+      className={`workspace-picker-btn${hasWorkspace ? "" : " workspace-picker-btn--empty"}`}
+      onClick={onSelectWorkspace}
+      disabled={busy || !onSelectWorkspace}
+      title={hasWorkspace ? localStoragePath : "选择项目目录作为沙箱"}
+    >
+      <FolderIcon size={13} />
+      <span>{hasWorkspace ? folderName : "选择项目目录"}</span>
+    </button>
+  );
+
   return (
     <div className={`unified-agent-input-container ${layoutMode === "center" ? "center-focal-mode" : "bottom-anchored-mode"}`}>
       {layoutMode === "center" && (
@@ -101,7 +115,7 @@ export const UnifiedAgentInput: React.FC<UnifiedAgentInputProps> = ({
             placeholder={
               placeholder || (
                 selectedSlideIndex !== null
-                  ? `输入对第 ${selectedSlideIndex + 1} 页的局部指令（如：“把背景换成白色”、“增大字号”）...`
+                  ? `输入对第 ${selectedSlideIndex + 1} 页的局部指令（如："把背景换成白色"、"增大字号"）...`
                   : "输入修改意图，支持输入斜杠 / 唤醒快捷排版指令..."
               )
             }
@@ -122,6 +136,7 @@ export const UnifiedAgentInput: React.FC<UnifiedAgentInputProps> = ({
             >
               <PlusIcon size={14} />
             </button>
+            {layoutMode === "bottom" ? workspacePicker : null}
             <div className="select-strategy-wrapper">
               <select
                 value={executionStrategy}
@@ -167,9 +182,7 @@ export const UnifiedAgentInput: React.FC<UnifiedAgentInputProps> = ({
         {layoutMode === "center" && (
           <div className="lower-deck-bar">
             <div className="context-left">
-              <span className={`context-anchor-tag${hasWorkspace ? "" : " context-anchor-tag--warning"}`}>
-                {hasWorkspace ? `项目目录: ${folderName}` : "未打开项目目录"}
-              </span>
+              {workspacePicker}
             </div>
 
             <div className="context-right">

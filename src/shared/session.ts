@@ -122,7 +122,7 @@ export const sessionSnapshotSchema = z.object({
 
 export const sessionBootstrapSchema = z.object({
   sessions: z.array(sessionSummarySchema),
-  activeSession: sessionSnapshotSchema,
+  activeSession: sessionSnapshotSchema.optional(),
 });
 
 export type SessionChatMessage = z.infer<typeof sessionChatMessageSchema>;

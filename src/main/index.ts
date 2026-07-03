@@ -142,7 +142,7 @@ app.whenReady().then(async () => {
   const runtimes = new Map<string, SessionRuntime>();
   const sessionActiveRuns = new Map<string, string>(); // sessionId -> runId
   const activeRuns = new Map<string, AbortController>(); // runId -> AbortController
-  let activeSessionId = sessionStore.getBootstrap().activeSession.session.id;
+  let activeSessionId = sessionStore.getBootstrap().activeSession?.session.id ?? "";
 
   const ensureRuntime = async (snapshot: SessionSnapshot): Promise<SessionRuntime> => {
     const existing = runtimes.get(snapshot.session.id);
@@ -152,13 +152,20 @@ app.whenReady().then(async () => {
     return runtime;
   };
 
-  const getActiveRuntime = (): Promise<SessionRuntime> =>
-    ensureRuntime(sessionStore.getSession(activeSessionId));
+  const getActiveRuntime = async (): Promise<SessionRuntime> => {
+    if (!activeSessionId) {
+      throw new Error("No active session.");
+    }
+    return ensureRuntime(sessionStore.getSession(activeSessionId));
+  };
 
   const getRuntimeForSession = (sessionId: string): Promise<SessionRuntime> =>
     ensureRuntime(sessionStore.getSession(sessionId));
 
-  await ensureRuntime(sessionStore.getSession(activeSessionId));
+  const initialBootstrap = sessionStore.getBootstrap();
+  if (initialBootstrap.activeSession) {
+    await ensureRuntime(initialBootstrap.activeSession);
+  }
 
   const persistPresentation = async (sessionId: string, runtime: SessionRuntime) => {
     const presentation = runtime.commandBus.getSnapshot();
@@ -462,14 +469,18 @@ app.whenReady().then(async () => {
   ipcMain.handle("session:get-state", () => sessionStore.getBootstrap());
   ipcMain.handle("session:create", async (_, options?: CreateSessionOptions) => {
     const state = await sessionStore.createSession(options);
-    activeSessionId = state.activeSession.session.id;
-    await ensureRuntime(state.activeSession);
+    activeSessionId = state.activeSession?.session.id ?? "";
+    if (state.activeSession) {
+      await ensureRuntime(state.activeSession);
+    }
     return state;
   });
   ipcMain.handle("workspace:open", async (_, rootPath: string) => {
     const state = await sessionStore.openWorkspace(rootPath);
-    activeSessionId = state.activeSession.session.id;
-    await ensureRuntime(state.activeSession);
+    activeSessionId = state.activeSession?.session.id ?? "";
+    if (state.activeSession) {
+      await ensureRuntime(state.activeSession);
+    }
     return state;
   });
   ipcMain.handle("workspace:list-sessions", async (_, rootPath: string) =>
@@ -482,15 +493,19 @@ app.whenReady().then(async () => {
         sessionId,
         targetRootPath,
       );
-      activeSessionId = state.activeSession.session.id;
-      await ensureRuntime(state.activeSession);
+      activeSessionId = state.activeSession?.session.id ?? "";
+      if (state.activeSession) {
+        await ensureRuntime(state.activeSession);
+      }
       return state;
     },
   );
   ipcMain.handle("session:select", async (_, sessionId: string) => {
     const state = await sessionStore.selectSession(sessionId);
-    activeSessionId = state.activeSession.session.id;
-    await ensureRuntime(state.activeSession);
+    activeSessionId = state.activeSession?.session.id ?? "";
+    if (state.activeSession) {
+      await ensureRuntime(state.activeSession);
+    }
     return state;
   });
   ipcMain.handle("session:delete", async (event, sessionId: string) => {
@@ -511,8 +526,10 @@ app.whenReady().then(async () => {
     }
     const state = await sessionStore.deleteSession(sessionId);
     runtimes.delete(sessionId);
-    activeSessionId = state.activeSession.session.id;
-    await ensureRuntime(state.activeSession);
+    activeSessionId = state.activeSession?.session.id ?? "";
+    if (state.activeSession) {
+      await ensureRuntime(state.activeSession);
+    }
     return state;
   });
   ipcMain.handle(

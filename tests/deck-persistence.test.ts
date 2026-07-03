@@ -28,7 +28,8 @@ afterEach(async () => {
 describe("deck persistence (problem 2)", () => {
   it("materializes design constraints, generation jobs, and export history templates", async () => {
     const { store } = await createStore();
-    const sessionId = store.getBootstrap().activeSession.session.id;
+    const created = await store.createSession();
+    const sessionId = created.activeSession!.session.id;
     const rootPath = store.getSession(sessionId).project!.rootPath;
 
     const constraints = JSON.parse(
@@ -50,7 +51,8 @@ describe("deck persistence (problem 2)", () => {
 
   it("syncs deck/snapshot.json on savePresentation without marking history stale", async () => {
     const { store } = await createStore();
-    const sessionId = store.getBootstrap().activeSession.session.id;
+    const created = await store.createSession();
+    const sessionId = created.activeSession!.session.id;
     const rootPath = store.getSession(sessionId).project!.rootPath;
 
     const presentation = {
@@ -75,7 +77,8 @@ describe("deck persistence (problem 2)", () => {
 
   it("persists generation jobs through GenerationJobsService", async () => {
     const { store } = await createStore();
-    const sessionId = store.getBootstrap().activeSession.session.id;
+    const created = await store.createSession();
+    const sessionId = created.activeSession!.session.id;
     const rootPath = store.getSession(sessionId).project!.rootPath;
 
     const job: DeckGenerationJob = {
@@ -100,7 +103,8 @@ describe("deck persistence (problem 2)", () => {
 
   it("appends export records to history/exports.json", async () => {
     const { store } = await createStore();
-    const sessionId = store.getBootstrap().activeSession.session.id;
+    const created = await store.createSession();
+    const sessionId = created.activeSession!.session.id;
     const rootPath = store.getSession(sessionId).project!.rootPath;
     const presentation = store.getSession(sessionId).presentation;
 

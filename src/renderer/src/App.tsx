@@ -20,7 +20,7 @@ import { PPTMirror } from "./components/PPTMirror";
 import { DeckPreviewModal } from "./components/DeckPreviewModal";
 
 import { useProjectStore, type ActiveProject } from "./components/project-store";
-import { normalizeWorkspacePath, getWorkspaceLabel } from "@shared/workspace";
+import { getWorkspaceLabel, normalizeWorkspacePath, resolveWorkspacePath } from "@shared/workspace";
 import {
   buildAgentRunPlan,
   artifactContentsFromRecord,
@@ -219,7 +219,7 @@ export function App() {
   }, [presentation]);
 
   // 对话流与 Agent 编排状态
-  const [request, setRequest] = useState("创建一份智能硬件市场推广策划大纲");
+  const [request, setRequest] = useState("");
   const [busy, setBusy] = useState(false);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [thoughtProcess, setThoughtProcess] = useState<string[]>([]);
@@ -387,6 +387,8 @@ export function App() {
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [activeSessionId, setActiveSessionId] = useState("");
   const [sessionLoaded, setSessionLoaded] = useState(false);
+  /** 居中放大初始化页（发送首条消息前） */
+  const [isDraftChat, setIsDraftChat] = useState(true);
 
   // 实时预览面板快捷键监听 (Cmd+Option+P 或 Ctrl+Alt+P)
   useEffect(() => {
@@ -410,9 +412,73 @@ export function App() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
+  type PresentationSyncOptions = {
+    preferredSlideId?: string;
+    selectLastSlide?: boolean;
+    openMirror?: boolean;
+    highlightSlide?: boolean;
+  };
+
+  /** 从 Main CommandBus 拉取演示稿快照，作为 renderer 侧唯一同步入口 */
+  async function syncPresentation(options: PresentationSyncOptions = {}) {
+    try {
+      const snapshot = await window.desktopApi.getPresentation();
+      setPresentation(snapshot);
+      setMaxRevision(snapshot.revision);
+
+      let nextSlideId = options.preferredSlideId;
+      if (options.selectLastSlide && snapshot.slides.length > 0) {
+        nextSlideId = snapshot.slides[snapshot.slides.length - 1].id;
+      }
+      if (nextSlideId && snapshot.slides.some((slide) => slide.id === nextSlideId)) {
+        setSelectedSlideId(nextSlideId);
+      } else if (snapshot.slides.length > 0) {
+        setSelectedSlideId(snapshot.slides[0].id);
+      } else {
+        setSelectedSlideId("");
+      }
+
+      if (options.highlightSlide && nextSlideId) {
+        setHighlightSlideId(nextSlideId);
+        setTimeout(() => setHighlightSlideId(null), 2500);
+      }
+
+      if (options.openMirror) {
+        setIsMirrorOpen(true);
+      }
+
+      return snapshot;
+    } catch (error) {
+      console.error("同步演示文稿失败:", error);
+      return undefined;
+    }
+  }
+
+  const enterDraftChat = (workspaceDir?: string) => {
+    setIsDraftChat(true);
+    setActiveSessionId("");
+    setChatMessages([]);
+    setPresentation(undefined);
+    setRequest("");
+    setSelectedSlideId("");
+    setSelectedElementId(null);
+    setMaxRevision(0);
+    setIsMirrorOpen(false);
+    setWorkspacePath("");
+    setLocalStoragePath(workspaceDir ? normalizeWorkspacePath(workspaceDir) : "");
+    useProjectStore.getState().resetProject();
+  };
+
   const applySessionState = (state: SessionBootstrap) => {
-    const snapshot = state.activeSession;
     setSessions(state.sessions);
+    if (!state.activeSession) {
+      enterDraftChat();
+      setSessionLoaded(true);
+      return;
+    }
+
+    const snapshot = state.activeSession;
+    setIsDraftChat(snapshot.messages.length === 0);
     setActiveSessionId(snapshot.session.id);
     setPresentation(snapshot.presentation);
     setChatMessages(snapshot.messages);
@@ -423,15 +489,30 @@ export function App() {
     setSessionLoaded(true);
     setIsMirrorOpen(snapshot.presentation.revision > 0);
     if (snapshot.project?.rootPath) {
-      const normalized = normalizeWorkspacePath(snapshot.project.rootPath);
-      setWorkspacePath(normalized);
-      setLocalStoragePath(normalized);
+      const resolved = resolveWorkspacePath({
+        workspacePath: snapshot.session.workspacePath,
+        projectRootPath: snapshot.project.rootPath,
+      });
+      if (resolved) {
+        setWorkspacePath(resolved);
+        setLocalStoragePath(resolved);
+      } else {
+        setWorkspacePath("");
+        setLocalStoragePath("");
+      }
+    } else {
+      setWorkspacePath("");
+      setLocalStoragePath("");
     }
 
     initializeProject(snapshot.session.id, snapshot.session.title, snapshot.project?.artifacts);
     void hydrateProjectArtifacts(snapshot.session.id).catch((error) => {
       console.error("加载项目产物失败:", error);
       triggerToast(error instanceof Error ? error.message : "加载项目产物失败");
+    });
+    void syncPresentation({
+      preferredSlideId: snapshot.presentation.slides[0]?.id,
+      openMirror: snapshot.presentation.revision > 0,
     });
   };
 
@@ -493,13 +574,33 @@ export function App() {
     setTimeout(() => setToastMessage(null), 3000);
   };
 
+  const handleSelectWorkspaceFolder = async () => {
+    if (busy) {
+      triggerToast("当前任务执行中，请稍后再选择目录");
+      return;
+    }
+    try {
+      const selectedPath = await window.desktopApi.selectDirectory(
+        localStoragePath || workspacePath || undefined,
+      );
+      if (!selectedPath) return;
+      const normalized = normalizeWorkspacePath(selectedPath);
+      setLocalStoragePath(normalized);
+      triggerToast(`已选择目录：${getWorkspaceLabel(normalized)}`);
+    } catch (error) {
+      triggerToast(error instanceof Error ? error.message : "选择目录失败");
+    }
+  };
+
   const handleOpenWorkspace = async () => {
     if (busy) {
       triggerToast("当前任务执行中，请稍后再打开目录");
       return;
     }
     try {
-      const selectedPath = await window.desktopApi.selectDirectory(workspacePath || undefined);
+      const selectedPath = await window.desktopApi.selectDirectory(
+        workspacePath || localStoragePath || undefined,
+      );
       if (!selectedPath) return;
 
       setSessionLoaded(false);
@@ -512,27 +613,22 @@ export function App() {
     }
   };
 
-  // 在当前工作区新建对话
-  const handleNewSession = async () => {
+  // 新建会话：仅进入居中放大初始化页，发送首条消息后再创建会话
+  const handleNewSession = () => {
     if (busy) {
       triggerToast("当前任务执行中，请稍后再新建会话");
       return;
     }
-    if (!workspacePath) {
-      triggerToast("请先打开项目目录");
-      void handleOpenWorkspace();
+    enterDraftChat();
+  };
+
+  // 在指定目录下新建：预填目录，仍停留在初始化页
+  const handleNewSessionInWorkspace = (targetWorkspacePath: string) => {
+    if (busy) {
+      triggerToast("当前任务执行中，请稍后再新建会话");
       return;
     }
-
-    setSessionLoaded(false);
-    try {
-      const state = await window.desktopApi.createSession({ rootPath: workspacePath });
-      applySessionState(state);
-      triggerToast("已新建对话");
-    } catch (error) {
-      setSessionLoaded(true);
-      triggerToast(error instanceof Error ? error.message : "新建对话失败");
-    }
+    enterDraftChat(targetWorkspacePath);
   };
 
   // 切换会话并从主进程载入完整持久化快照
@@ -570,7 +666,7 @@ export function App() {
     }
   };
 
-  function applyAgentResult(result: AgentRunResult, steps: string[], runId?: string) {
+  async function applyAgentResult(result: AgentRunResult, steps: string[], runId?: string) {
     const messageId = runId ? streamMessageIdsRef.current.get(runId) : undefined;
     const reasoningSnapshot = activeRunReasoningRef.current.trim() || undefined;
 
@@ -696,16 +792,12 @@ export function App() {
       return;
     }
 
-    const nextPresentation = (result.status === "completed" || result.status === "rejected") ? result.presentation : undefined;
-    if (nextPresentation) {
-      setPresentation(nextPresentation);
-      if (nextPresentation.slides.length > 0) {
-        const lastId = nextPresentation.slides[nextPresentation.slides.length - 1].id;
-        setSelectedSlideId(lastId);
-        setHighlightSlideId(lastId);
-        setTimeout(() => setHighlightSlideId(null), 2500);
-      }
-      setIsMirrorOpen(true);
+    if (result.status === "completed" || result.status === "rejected") {
+      await syncPresentation({
+        selectLastSlide: result.status === "completed",
+        openMirror: result.status === "completed",
+        highlightSlide: result.status === "completed",
+      });
     }
 
     const finalContent = result.status === "rejected" ? "已放弃排版变更提案。" : "已根据确认的大纲生成并应用演示文稿。";
@@ -771,21 +863,47 @@ export function App() {
     }
 
     setBusy(true);
+    setIsDraftChat(false);
     let agentSessionId = activeSessionId;
+    let sessionCreatedWithWorkspace = false;
+
+    if (!localStoragePath) {
+      setBusy(false);
+      setIsDraftChat(true);
+      triggerToast("请先选择项目目录");
+      return;
+    }
+
     if (!agentSessionId) {
-      if (!workspacePath) {
-        setBusy(false);
-        triggerToast("请先打开项目目录");
-        void handleOpenWorkspace();
-        return;
-      }
       try {
-        const state = await window.desktopApi.createSession({ rootPath: workspacePath });
+        const state = await window.desktopApi.createSession(
+          localStoragePath ? { rootPath: localStoragePath } : undefined,
+        );
+        sessionCreatedWithWorkspace = Boolean(localStoragePath);
         applySessionState(state);
-        agentSessionId = state.activeSession.session.id;
+        setIsDraftChat(false);
+        agentSessionId = state.activeSession!.session.id;
       } catch (error) {
         setBusy(false);
+        setIsDraftChat(true);
         triggerToast(error instanceof Error ? error.message : "创建会话失败");
+        return;
+      }
+    }
+
+    if (!sessionCreatedWithWorkspace && !workspacePath && localStoragePath) {
+      try {
+        const state = await window.desktopApi.migrateLegacySessionToWorkspace(
+          agentSessionId,
+          localStoragePath,
+        );
+        applySessionState(state);
+        setIsDraftChat(false);
+        agentSessionId = state.activeSession!.session.id;
+      } catch (error) {
+        setBusy(false);
+        setIsDraftChat(chatMessages.length === 0);
+        triggerToast(error instanceof Error ? error.message : "绑定项目目录失败");
         return;
       }
     }
@@ -884,7 +1002,7 @@ export function App() {
             executionStrategy,
             runId,
           );
-      applyAgentResult(result, activeRunStepsRef.current, runId);
+      await applyAgentResult(result, activeRunStepsRef.current, runId);
     } catch (err) {
       setChatMessages((prev) => [
         ...prev,
@@ -970,19 +1088,11 @@ export function App() {
       const resolvedContent = approved ? "已成功应用变更方案。" : "已放弃排版变更提案。";
 
       if (result.status === "completed" || result.status === "rejected") {
-        const nextPresentation = result.presentation ?? presentation;
-        if (nextPresentation) {
-          setPresentation(nextPresentation);
-          if (nextPresentation.slides.length > 0 && approved) {
-            const lastId = nextPresentation.slides[nextPresentation.slides.length - 1].id;
-            setSelectedSlideId(lastId);
-            setHighlightSlideId(lastId);
-            setTimeout(() => setHighlightSlideId(null), 2500);
-          }
-          if (approved) {
-            setIsMirrorOpen(true);
-          }
-        }
+        await syncPresentation({
+          selectLastSlide: approved,
+          openMirror: approved,
+          highlightSlide: approved,
+        });
         await hydrateProjectArtifacts(activeSessionId);
         setChatMessages((prev) => prev.map((message) =>
           message.id === messageId
@@ -1072,11 +1182,8 @@ export function App() {
   async function handleHistory(action: "undo" | "redo") {
     setBusy(true);
     try {
-      const updated = await window.desktopApi[action]();
-      setPresentation(updated);
-      if (updated.slides.length > 0) {
-        setSelectedSlideId(updated.slides[updated.slides.length - 1].id);
-      }
+      await window.desktopApi[action]();
+      await syncPresentation({ selectLastSlide: true });
       setSelectedElementId(null);
       triggerToast(`${action === "undo" ? "⏪ 已撤销" : "⏩ 已重做"} 上一步修改`);
     } finally {
@@ -1097,18 +1204,17 @@ export function App() {
     setPresentation({ ...presentation, slides: updatedSlides });
 
     try {
-      const updated = await window.desktopApi.executeCommand({
+      await window.desktopApi.executeCommand({
         id: crypto.randomUUID(),
         type: "update-element",
         slideId,
         elementId,
         element: updatedElement,
       });
-      setPresentation(updated);
-      setHighlightSlideId(slideId); // 指令执行完成，高亮并平滑定位卡片
-      setTimeout(() => setHighlightSlideId(null), 2000);
+      await syncPresentation({ preferredSlideId: slideId, highlightSlide: true });
     } catch (err) {
       console.error("更新页面元素失败:", err);
+      void syncPresentation({ preferredSlideId: slideId });
     }
   };
 
@@ -1137,16 +1243,17 @@ export function App() {
     setPresentation({ ...presentation, slides: updatedSlides });
 
     try {
-      const updated = await window.desktopApi.executeCommand({
+      await window.desktopApi.executeCommand({
         id: crypto.randomUUID(),
         type: "update-element",
         slideId,
         elementId,
         element: updatedElement,
       });
-      setPresentation(updated);
+      await syncPresentation({ preferredSlideId: slideId });
     } catch (err) {
       console.error("更新元素坐标失败:", err);
+      void syncPresentation({ preferredSlideId: slideId });
     }
   };
 
@@ -1171,20 +1278,18 @@ export function App() {
     };
 
     try {
-      const updated = await window.desktopApi.executeCommand({
+      await window.desktopApi.executeCommand({
         id: crypto.randomUUID(),
         type: "add-slide",
         slide: newSlide,
         index: presentation.slides.length,
       });
-      setPresentation(updated);
-      setSelectedSlideId(newSlideId);
+      await syncPresentation({ preferredSlideId: newSlideId, highlightSlide: true });
       setSelectedElementId(null);
-      setHighlightSlideId(newSlideId);
-      setTimeout(() => setHighlightSlideId(null), 2500);
       triggerToast("➕ 已新建空白幻灯片");
     } catch (err) {
       console.error("新增幻灯片失败:", err);
+      void syncPresentation();
     }
   };
 
@@ -1200,20 +1305,18 @@ export function App() {
     };
 
     try {
-      const updated = await window.desktopApi.executeCommand({
+      await window.desktopApi.executeCommand({
         id: crypto.randomUUID(),
         type: "add-slide",
         slide: duplicatedSlide,
         index: idx + 1,
       });
-      setPresentation(updated);
-      setSelectedSlideId(newSlideId);
+      await syncPresentation({ preferredSlideId: newSlideId, highlightSlide: true });
       setSelectedElementId(null);
-      setHighlightSlideId(newSlideId);
-      setTimeout(() => setHighlightSlideId(null), 2500);
       triggerToast("📂 已复制当前幻灯片");
     } catch (err) {
       console.error("复制幻灯片失败:", err);
+      void syncPresentation();
     }
   };
 
@@ -1223,20 +1326,19 @@ export function App() {
     const idx = presentation.slides.findIndex((s) => s.id === slideId);
 
     try {
-      const updated = await window.desktopApi.executeCommand({
+      await window.desktopApi.executeCommand({
         id: crypto.randomUUID(),
         type: "remove-slide",
         slideId,
       });
-      setPresentation(updated);
       const nextIdx = Math.max(0, idx - 1);
-      if (updated.slides[nextIdx]) {
-        setSelectedSlideId(updated.slides[nextIdx].id);
-      }
+      const preferredSlideId = presentation.slides[nextIdx]?.id;
+      await syncPresentation({ preferredSlideId });
       setSelectedElementId(null);
       triggerToast("🗑️ 已删除当前幻灯片");
     } catch (err) {
       console.error("删除幻灯片失败:", err);
+      void syncPresentation();
     }
   };
 
@@ -1283,17 +1385,18 @@ export function App() {
     }
 
     try {
-      const updated = await window.desktopApi.executeCommand({
+      await window.desktopApi.executeCommand({
         id: crypto.randomUUID(),
         type: "add-element",
         slideId: selectedSlideId,
         element: newElement,
       });
-      setPresentation(updated);
+      await syncPresentation({ preferredSlideId: selectedSlideId });
       setSelectedElementId(id);
       triggerToast("➕ 已新增画布元素");
     } catch (err) {
       console.error("添加元素失败:", err);
+      void syncPresentation({ preferredSlideId: selectedSlideId });
     }
   };
 
@@ -1430,9 +1533,9 @@ export function App() {
   };
 
   if (startupError) return <main className="loading error">{startupError}</main>;
-  if (!presentation) return <main className="loading">正在打开本地演示文稿工作区...</main>;
+  if (!sessionLoaded) return <main className="loading">正在打开本地演示文稿工作区...</main>;
 
-  const selectedSlideIndex = presentation.slides.findIndex((s) => s.id === selectedSlideId);
+  const selectedSlideIndex = presentation?.slides.findIndex((s) => s.id === selectedSlideId) ?? -1;
   const activeSlideIndexValue = selectedSlideIndex >= 0 ? selectedSlideIndex : null;
 
   return (
@@ -1454,10 +1557,9 @@ export function App() {
             <LeftPanel
               sessions={sessions}
               activeSessionId={activeSessionId}
-              workspacePath={workspacePath || undefined}
               onSelectSession={handleSelectSession}
               onNewSession={() => void handleNewSession()}
-              onOpenWorkspace={() => void handleOpenWorkspace()}
+              onNewSessionInWorkspace={(path) => void handleNewSessionInWorkspace(path)}
               onToggleSettings={() => {
                 setActiveMode("settings");
                 setSettingsCategory("profile");
@@ -1469,12 +1571,14 @@ export function App() {
               <div
                 className={[
                   "workspace-canvas-content",
-                  isMirrorOpen ? "ppt-mirror-open" : "ppt-mirror-closed workspace-canvas-content-chat-only",
+                  isDraftChat ? "new-session-layout" : "",
+                  isMirrorOpen && presentation ? "ppt-mirror-open" : "ppt-mirror-closed workspace-canvas-content-chat-only",
                   isMirrorExpanded ? "mirror-expanded" : "",
                 ].filter(Boolean).join(" ")}
                 style={{ display: isMirrorOpen ? undefined : "flex", flex: 1, width: "100%", height: "100%", overflow: "hidden" }}
               >
                 <ChatWorkspace
+                  isNewChat={isDraftChat}
                   chatMessages={chatMessages}
                   thoughtProcess={thoughtProcess}
                   thoughtProgress={thoughtProgress}
@@ -1516,11 +1620,11 @@ export function App() {
                   executionStrategy={executionStrategy}
                   setExecutionStrategy={setExecutionStrategy}
                   localStoragePath={localStoragePath}
-                  setLocalStoragePath={setLocalStoragePath}
+                  onSelectWorkspace={() => void handleSelectWorkspaceFolder()}
                   triggerToast={triggerToast}
                 />
 
-                {isMirrorOpen && (
+                {isMirrorOpen && presentation ? (
                   <PPTMirror
                     presentation={presentation}
                     selectedSlideId={selectedSlideId}
@@ -1534,12 +1638,12 @@ export function App() {
                     onToggleExpand={() => setIsMirrorExpanded((value) => !value)}
                     triggerToast={triggerToast}
                   />
-                )}
+                ) : null}
               </div>
 
               <DeckPreviewModal
-                open={isDeckPreviewOpen}
-                presentation={presentation}
+                open={isDeckPreviewOpen && Boolean(presentation)}
+                presentation={presentation ?? { id: "", title: "", revision: 0, slides: [] }}
                 selectedSlideId={selectedSlideId}
                 selectedTheme={selectedTheme}
                 selectedPalette={selectedPalette}

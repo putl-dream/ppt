@@ -34,18 +34,25 @@ import { TranscriptStore, type TranscriptMessageInput } from "./transcript-store
 import { defaultProjectArtifacts } from "@shared/project";
 import type { CreateSessionOptions } from "@shared/ipc";
 import {
+  getSessionSandboxPath,
+  isFlatWorkspaceSandboxPath,
   isLegacyProjectSandboxPath,
   type WorkspaceSessionIndexEntry,
   type WorkspaceSessionsIndex,
 } from "@shared/workspace-meta";
-import { getWorkspaceLabel, normalizeWorkspacePath } from "@shared/workspace";
+import {
+  getWorkspaceLabel,
+  normalizeWorkspacePath,
+  resolveWorkspacePath,
+  sessionBelongsToWorkspace,
+} from "@shared/workspace";
 import { WorkspaceIndexStore } from "./workspace-index-store";
 
 const storedSessionSchema = sessionSnapshotSchema;
 const sessionFileSchema = z.object({
   version: z.literal(1),
   activeSessionId: z.string(),
-  sessions: z.array(storedSessionSchema).min(1),
+  sessions: z.array(storedSessionSchema),
 });
 
 type SessionFile = z.infer<typeof sessionFileSchema>;
@@ -75,9 +82,13 @@ export class FileSessionStore {
       const activeExists = parsed.sessions.some(
         (item) => item.session.id === parsed.activeSessionId,
       );
-      this.data = activeExists
-        ? parsed
-        : { ...parsed, activeSessionId: parsed.sessions[0].session.id };
+      if (parsed.sessions.length === 0) {
+        this.data = { ...parsed, activeSessionId: "" };
+      } else if (!activeExists) {
+        this.data = { ...parsed, activeSessionId: parsed.sessions[0].session.id };
+      } else {
+        this.data = parsed;
+      }
       const projectChanged = await this.materializeProjectSandboxes();
       const transcriptChanged = await this.hydrateMessagesFromTranscripts();
       const expiredApprovals = this.expirePendingApprovals();
@@ -98,9 +109,10 @@ export class FileSessionStore {
 
   getBootstrap(): SessionBootstrap {
     const data = this.requireData();
+    const activeSession = this.findActiveSession(data);
     return {
       sessions: this.listSummaries(data),
-      activeSession: structuredClone(this.findSession(data.activeSessionId)),
+      activeSession: activeSession ? structuredClone(activeSession) : undefined,
     };
   }
 
@@ -142,12 +154,14 @@ export class FileSessionStore {
     const snapshot: SessionSnapshot = {
       session: this.toSummary(crypto.randomUUID(), now, now, presentation),
       presentation,
-      messages: [createWelcomeMessage(title)],
+      messages: [],
     };
 
     if (options?.rootPath) {
+      const workspaceRoot = normalizeWorkspacePath(options.rootPath);
+      snapshot.session.workspacePath = workspaceRoot;
       snapshot.project = {
-        rootPath: normalizeWorkspacePath(options.rootPath),
+        rootPath: getSessionSandboxPath(workspaceRoot, snapshot.session.id),
         artifacts: defaultProjectArtifacts.map((artifact) => ({ ...artifact })),
       };
     }
@@ -216,9 +230,12 @@ export class FileSessionStore {
 
     const normalizedTarget = normalizeWorkspacePath(targetRootPath);
     await mkdir(normalizedTarget, { recursive: true });
-    await copyDirectoryMerge(legacyPath, normalizedTarget);
+    const sessionSandbox = getSessionSandboxPath(normalizedTarget, sessionId);
+    await mkdir(sessionSandbox, { recursive: true });
+    await copyDirectoryMerge(legacyPath, sessionSandbox);
 
-    snapshot.project.rootPath = normalizedTarget;
+    snapshot.project.rootPath = sessionSandbox;
+    snapshot.session.workspacePath = normalizedTarget;
     await this.materializeProjectSandbox(snapshot);
     await this.syncWorkspacePersistence(snapshot, { active: true });
     await this.persist();
@@ -229,9 +246,9 @@ export class FileSessionStore {
     const data = this.requireData();
     const snapshot = this.findSession(sessionId);
     data.activeSessionId = sessionId;
-    const rootPath = snapshot.project?.rootPath;
-    if (rootPath && this.isWorkspaceBoundRoot(rootPath)) {
-      await this.workspaceIndexStore.setActiveSession(rootPath, sessionId);
+    const workspaceRoot = this.getWorkspaceRoot(snapshot);
+    if (workspaceRoot) {
+      await this.workspaceIndexStore.setActiveSession(workspaceRoot, sessionId);
     }
     await this.persist();
     return this.getBootstrap();
@@ -244,18 +261,15 @@ export class FileSessionStore {
       throw new Error(`Session not found: ${sessionId}`);
     }
     const removed = data.sessions[index];
-    const rootPath = removed.project?.rootPath;
+    const workspaceRoot = this.getWorkspaceRoot(removed);
     data.sessions.splice(index, 1);
     if (data.sessions.length === 0) {
-      const initial = this.createInitialData();
-      data.sessions = initial.sessions;
-      data.activeSessionId = initial.activeSessionId;
-      await this.materializeProjectSandboxes();
+      data.activeSessionId = "";
     } else if (data.activeSessionId === sessionId) {
       data.activeSessionId = data.sessions[0].session.id;
     }
-    if (rootPath && this.isWorkspaceBoundRoot(rootPath)) {
-      await this.workspaceIndexStore.removeSession(rootPath, sessionId);
+    if (workspaceRoot) {
+      await this.workspaceIndexStore.removeSession(workspaceRoot, sessionId);
     }
     await this.persist();
     return this.getBootstrap();
@@ -387,15 +401,12 @@ export class FileSessionStore {
   }
 
   private createInitialData(): SessionFile {
-    const now = new Date().toISOString();
-    const title = "未命名演示文稿";
-    const presentation = createSessionPresentation(title);
-    const snapshot: SessionSnapshot = {
-      session: this.toSummary(crypto.randomUUID(), now, now, presentation),
-      presentation,
-      messages: [createWelcomeMessage()],
-    };
-    return { version: 1, activeSessionId: snapshot.session.id, sessions: [snapshot] };
+    return { version: 1, activeSessionId: "", sessions: [] };
+  }
+
+  private findActiveSession(data: SessionFile): SessionSnapshot | undefined {
+    if (!data.activeSessionId) return undefined;
+    return data.sessions.find((item) => item.session.id === data.activeSessionId);
   }
 
   private async materializeProjectSandboxes(): Promise<boolean> {
@@ -446,9 +457,38 @@ export class FileSessionStore {
   }
 
   private async materializeProjectSandbox(snapshot: SessionSnapshot): Promise<boolean> {
+    const migrated = await this.migrateFlatWorkspaceSandbox(snapshot);
     const projectChanged = await this.projectFileService.ensureProjectSandbox(snapshot);
     const transcriptChanged = this.materializeTranscript(snapshot);
-    return projectChanged || transcriptChanged;
+    return migrated || projectChanged || transcriptChanged;
+  }
+
+  private async migrateFlatWorkspaceSandbox(snapshot: SessionSnapshot): Promise<boolean> {
+    const project = snapshot.project;
+    if (!project || !this.isWorkspaceBoundRoot(project.rootPath)) return false;
+    if (!isFlatWorkspaceSandboxPath(project.rootPath, this.projectsRootPath)) return false;
+
+    const workspaceRoot = normalizeWorkspacePath(project.rootPath);
+    const sessionSandbox = getSessionSandboxPath(workspaceRoot, snapshot.session.id);
+    const briefAtRoot = join(workspaceRoot, "brief.md");
+
+    let hasFlatArtifacts = false;
+    try {
+      await stat(briefAtRoot);
+      hasFlatArtifacts = true;
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code !== "ENOENT") throw error;
+    }
+
+    if (hasFlatArtifacts) {
+      await mkdir(sessionSandbox, { recursive: true });
+      await migrateFlatWorkspaceArtifacts(workspaceRoot, sessionSandbox);
+    }
+
+    project.rootPath = sessionSandbox;
+    snapshot.session.workspacePath = workspaceRoot;
+    return true;
   }
 
   private materializeTranscript(snapshot: SessionSnapshot): boolean {
@@ -570,8 +610,20 @@ export class FileSessionStore {
       .sort((a, b) => b.session.updatedAt.localeCompare(a.session.updatedAt))
       .map((item) => ({
         ...structuredClone(item.session),
-        workspacePath: item.project?.rootPath,
+        workspacePath: this.getWorkspaceRoot(item),
       }));
+  }
+
+  private getWorkspaceRoot(snapshot: SessionSnapshot): string | undefined {
+    const resolved = resolveWorkspacePath(
+      {
+        workspacePath: snapshot.session.workspacePath,
+        projectRootPath: snapshot.project?.rootPath,
+      },
+      this.projectsRootPath,
+    );
+    if (!resolved || !snapshot.project?.rootPath) return undefined;
+    return this.isWorkspaceBoundRoot(snapshot.project.rootPath) ? resolved : undefined;
   }
 
   private findSession(sessionId: string): SessionSnapshot {
@@ -596,14 +648,14 @@ export class FileSessionStore {
     snapshot: SessionSnapshot,
     options?: { active?: boolean },
   ): Promise<void> {
-    const rootPath = snapshot.project?.rootPath;
-    if (!rootPath || !this.isWorkspaceBoundRoot(rootPath)) return;
+    const workspaceRoot = this.getWorkspaceRoot(snapshot);
+    if (!workspaceRoot) return;
 
     await this.workspaceIndexStore.ensureProjectMeta(
-      rootPath,
-      getWorkspaceLabel(rootPath),
+      workspaceRoot,
+      getWorkspaceLabel(workspaceRoot),
     );
-    await this.workspaceIndexStore.upsertSession(rootPath, snapshot, {
+    await this.workspaceIndexStore.upsertSession(workspaceRoot, snapshot, {
       active: options?.active ?? this.requireData().activeSessionId === snapshot.session.id,
     });
   }
@@ -612,10 +664,15 @@ export class FileSessionStore {
     rootPath: string,
   ): Promise<WorkspaceSessionsIndex | null> {
     const normalized = normalizeWorkspacePath(rootPath);
-    const matches = this.requireData().sessions.filter(
-      (snapshot) =>
-        snapshot.project?.rootPath &&
-        normalizeWorkspacePath(snapshot.project.rootPath) === normalized,
+    const matches = this.requireData().sessions.filter((snapshot) =>
+      sessionBelongsToWorkspace(
+        {
+          workspacePath: snapshot.session.workspacePath,
+          projectRootPath: snapshot.project?.rootPath,
+        },
+        normalized,
+        this.projectsRootPath,
+      ),
     );
     if (matches.length === 0) return null;
 
@@ -674,7 +731,7 @@ export class FileSessionStore {
         workspacePath: rootPath,
       },
       project: {
-        rootPath,
+        rootPath: getSessionSandboxPath(rootPath, entry.id),
         artifacts: defaultProjectArtifacts.map((artifact) => ({ ...artifact })),
       },
       presentation,
@@ -699,6 +756,47 @@ export class FileSessionStore {
       await rename(temporaryPath, this.filePath);
     });
     await this.writeQueue;
+  }
+}
+
+async function migrateFlatWorkspaceArtifacts(workspaceRoot: string, sessionSandbox: string): Promise<void> {
+  const reservedNames = new Set([
+    ".agent-ppt",
+    "sandboxes",
+    "node_modules",
+    ".git",
+  ]);
+  const artifactNames = new Set([
+    "brief.md",
+    "outline.md",
+    "research",
+    "slides",
+    "design",
+    "deck",
+    "history",
+    "transcripts",
+  ]);
+
+  for (const entry of await readdir(workspaceRoot, { withFileTypes: true })) {
+    if (reservedNames.has(entry.name) || !artifactNames.has(entry.name)) continue;
+    const sourcePath = join(workspaceRoot, entry.name);
+    const targetPath = join(sessionSandbox, entry.name);
+    if (entry.isDirectory()) {
+      await copyDirectoryMerge(sourcePath, targetPath);
+      continue;
+    }
+    if (entry.isFile()) {
+      try {
+        await stat(targetPath);
+      } catch (error) {
+        const code = (error as NodeJS.ErrnoException).code;
+        if (code === "ENOENT") {
+          await cp(sourcePath, targetPath);
+          continue;
+        }
+        throw error;
+      }
+    }
   }
 }
 

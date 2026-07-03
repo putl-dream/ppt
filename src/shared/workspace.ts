@@ -1,3 +1,5 @@
+import { resolveWorkspaceRootFromProjectPath } from "./workspace-meta";
+
 /**
  * Normalize workspace paths for stable comparison across platforms.
  */
@@ -15,6 +17,21 @@ export function getWorkspaceLabel(path?: string): string {
   return segments.at(-1) ?? path;
 }
 
+export function resolveWorkspacePath(
+  session: { workspacePath?: string; projectRootPath?: string },
+  projectsRootPath?: string,
+): string | undefined {
+  if (session.workspacePath) {
+    return normalizeWorkspacePath(session.workspacePath);
+  }
+  if (session.projectRootPath) {
+    return normalizeWorkspacePath(
+      resolveWorkspaceRootFromProjectPath(session.projectRootPath, projectsRootPath),
+    );
+  }
+  return undefined;
+}
+
 export function sessionsForWorkspace<T extends { workspacePath?: string }>(
   sessions: T[],
   workspacePath?: string,
@@ -26,6 +43,15 @@ export function sessionsForWorkspace<T extends { workspacePath?: string }>(
       session.workspacePath &&
       normalizeWorkspacePath(session.workspacePath) === normalized,
   );
+}
+
+export function sessionBelongsToWorkspace(
+  session: { workspacePath?: string; projectRootPath?: string },
+  workspacePath: string,
+  projectsRootPath?: string,
+): boolean {
+  const resolved = resolveWorkspacePath(session, projectsRootPath);
+  return resolved === normalizeWorkspacePath(workspacePath);
 }
 
 export function groupSessionsByWorkspace<T extends { workspacePath?: string }>(

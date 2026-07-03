@@ -38,6 +38,7 @@ export interface InlineCardData {
 }
 
 interface ChatWorkspaceProps {
+  isNewChat?: boolean;
   chatMessages: ChatMessage[];
   thoughtProcess: string[];
   thoughtProgress: number;
@@ -81,11 +82,12 @@ interface ChatWorkspaceProps {
   executionStrategy: "REQUEST_APPROVAL" | "AUTO";
   setExecutionStrategy: (val: "REQUEST_APPROVAL" | "AUTO") => void;
   localStoragePath: string;
-  setLocalStoragePath: (val: string) => void;
+  onSelectWorkspace: () => void;
   triggerToast: (msg: string) => void;
 }
 
 export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
+  isNewChat = false,
   chatMessages,
   thoughtProcess,
   thoughtProgress,
@@ -129,7 +131,7 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
   executionStrategy,
   setExecutionStrategy,
   localStoragePath,
-  setLocalStoragePath,
+  onSelectWorkspace,
   triggerToast,
 }) => {
   const [showThought, setShowThought] = useState(true);
@@ -138,8 +140,8 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
   const [editingText, setEditingText] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Check if we are in the initial new session state (State A: Center Focal Mode)
-  const isNewSession = chatMessages.length === 1 && chatMessages[0].id === "init";
+  // 居中放大初始化页 vs 底部对话页，由 isNewChat 单独控制
+  const showInitChat = isNewChat;
 
   // Listen to input slash commands
   useEffect(() => {
@@ -196,7 +198,7 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
   };
 
   // Render State A: Center Focal Mode (新建会话阶段 —— “居中巨幕控制台”)
-  if (isNewSession) {
+  if (showInitChat) {
     return (
       <section className="canvas-column chat-workspace-column center-focal-wrapper" style={{ background: "var(--bg-app)", height: "100%", display: "flex", flexDirection: "column" }}>
         
@@ -230,7 +232,7 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
             executionStrategy={executionStrategy}
             setExecutionStrategy={setExecutionStrategy}
             localStoragePath={localStoragePath}
-            setLocalStoragePath={setLocalStoragePath}
+            onSelectWorkspace={onSelectWorkspace}
             layoutMode="center"
             triggerToast={triggerToast}
             selectedSlideIndex={selectedSlideIndex}
@@ -663,7 +665,7 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
           executionStrategy={executionStrategy}
           setExecutionStrategy={setExecutionStrategy}
           localStoragePath={localStoragePath}
-          setLocalStoragePath={setLocalStoragePath}
+          onSelectWorkspace={onSelectWorkspace}
           layoutMode="bottom"
           triggerToast={triggerToast}
           selectedSlideIndex={selectedSlideIndex}
