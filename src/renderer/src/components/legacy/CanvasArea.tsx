@@ -1,5 +1,8 @@
 import React, { useRef, useState, useEffect } from "react";
 import { Presentation, Slide, SlideElement, TextElement } from "@shared/presentation";
+import { fontFamilyToCss, resolveElementFontFamily } from "@shared/typography";
+import { resolveSlideBackground, resolveSlideBackgroundVariant } from "@shared/slide-background";
+import { ShapeElementView } from "../ShapeElementView";
 import {
   UndoIcon,
   RedoIcon,
@@ -267,6 +270,13 @@ export const CanvasArea: React.FC<CanvasAreaProps> = ({
   };
 
   const styles = getThemeStyles();
+  const activeSlideBg = activeSlide
+    ? resolveSlideBackground(
+        selectedTheme,
+        selectedPalette,
+        resolveSlideBackgroundVariant(activeSlide),
+      ).slideBg
+    : styles.slideBg;
 
   return (
     <section className="canvas-column" onClick={() => onSelectElement(null)}>
@@ -361,7 +371,7 @@ export const CanvasArea: React.FC<CanvasAreaProps> = ({
             <div
               className={`slide-viewport ${styles.fontClass}`}
               style={{
-                background: styles.slideBg,
+                background: activeSlideBg,
                 transform: `scale(${scale})`,
                 transformOrigin: "top left",
                 ...styles.borderStyle,
@@ -422,9 +432,12 @@ export const CanvasArea: React.FC<CanvasAreaProps> = ({
                             className="element-text-editor"
                             style={{
                               fontSize: element.fontSize,
-                              color: (element as any).color || styles.bodyColor,
-                              fontWeight: (element as any).bold ? "bold" : "normal",
-                              textAlign: (element as any).align || "left",
+                              color: element.color || styles.bodyColor,
+                              fontWeight: element.bold ? "bold" : "normal",
+                              textAlign: element.align || "left",
+                              fontFamily: fontFamilyToCss(
+                                resolveElementFontFamily(element, selectedTheme),
+                              ),
                             }}
                             value={editingText.text}
                             onChange={(e) =>
@@ -443,9 +456,12 @@ export const CanvasArea: React.FC<CanvasAreaProps> = ({
                           <p
                             style={{
                               fontSize: element.fontSize,
-                              color: (element as any).color || styles.bodyColor,
-                              fontWeight: (element as any).bold ? "bold" : "normal",
-                              textAlign: (element as any).align || "left",
+                              color: element.color || styles.bodyColor,
+                              fontWeight: element.bold ? "bold" : "normal",
+                              textAlign: element.align || "left",
+                              fontFamily: fontFamilyToCss(
+                                resolveElementFontFamily(element, selectedTheme),
+                              ),
                               whiteSpace: "pre-wrap",
                               margin: 0,
                             }}
@@ -462,25 +478,14 @@ export const CanvasArea: React.FC<CanvasAreaProps> = ({
                           style={{
                             width: "100%",
                             height: "100%",
-                            objectFit: "cover",
+                            objectFit: element.objectFit || "cover",
                             borderRadius: `${element.borderRadius || 0}px`,
                             pointerEvents: "none",
                           }}
                         />
                       )}
 
-                      {element.type === "shape" && (
-                        <div
-                          style={{
-                            width: "100%",
-                            height: "100%",
-                            backgroundColor: element.fillColor || "#3b82f6",
-                            border: `2px solid ${element.strokeColor || "#1d4ed8"}`,
-                            borderRadius: element.shapeType === "circle" ? "50%" : "0px",
-                            pointerEvents: "none",
-                          }}
-                        />
-                      )}
+                      {element.type === "shape" && <ShapeElementView element={element} />}
                     </div>
 
                     {/* 手工选中后的调节边框与操纵手柄 */}
@@ -662,7 +667,16 @@ export const CanvasArea: React.FC<CanvasAreaProps> = ({
             onClick={() => handleSlideSelect(index)}
           >
             <div className="thumb-idx">{index + 1}</div>
-            <div className="thumb-preview-box" style={{ background: styles.slideBg }}>
+            <div
+              className="thumb-preview-box"
+              style={{
+                background: resolveSlideBackground(
+                  selectedTheme,
+                  selectedPalette,
+                  resolveSlideBackgroundVariant(slide),
+                ).slideBg,
+              }}
+            >
               <span className="thumb-text-title" style={{ color: styles.titleColor }}>
                 {slide.title || "未命名页面"}
               </span>

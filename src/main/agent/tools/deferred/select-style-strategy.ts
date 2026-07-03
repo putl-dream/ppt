@@ -25,10 +25,26 @@ export const selectStyleStrategyTool: ToolDefinition<
     let recommendedPalette = "cyan";
     let fontStack = "Outfit, Inter, sans-serif";
 
-    if (args.targetAudience.includes("高管") || args.targetAudience.includes("商务")) {
+    if (
+      args.targetAudience.includes("竞聘")
+      || args.coreMessage.includes("竞聘")
+      || args.coreMessage.includes("工作汇报")
+    ) {
       recommendedTheme = "nordic";
       recommendedPalette = "cyan";
       fontStack = "Georgia, serif";
+    } else if (
+      args.targetAudience.includes("人文")
+      || args.targetAudience.includes("杂志")
+      || args.coreMessage.includes("故事")
+    ) {
+      recommendedTheme = "nordic";
+      recommendedPalette = "cyan";
+      fontStack = "Georgia, serif";
+    } else if (args.targetAudience.includes("高管") || args.targetAudience.includes("商务")) {
+      recommendedTheme = "ocean";
+      recommendedPalette = "cyan";
+      fontStack = "Outfit, Inter, sans-serif";
     } else if (args.targetAudience.includes("技术") || args.targetAudience.includes("研发")) {
       recommendedTheme = "ocean";
       recommendedPalette = "cyan";

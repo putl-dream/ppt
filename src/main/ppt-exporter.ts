@@ -1,6 +1,11 @@
 import pptxgen from "pptxgenjs";
 import type { Presentation } from "@shared/presentation";
 import type { ExportPresentationOptions } from "@shared/ipc";
+import { fontFamilyToPptxFace, resolveElementFontFamily } from "@shared/typography";
+import {
+  resolveSlideBackground,
+  resolveSlideBackgroundVariant,
+} from "@shared/slide-background";
 
 // Helper to clean colors (e.g. #ffffff -> ffffff)
 function cleanColor(colorStr: string): string {
@@ -23,7 +28,6 @@ export async function exportToPptx(
   const pptx = new pptxgen();
 
   // Determine theme styling properties (matching PPTMirror.tsx)
-  let slideBg = "#ffffff";
   let titleColor = "#1e293b";
   let bodyColor = "#475569";
   let fontFace = "Arial";
@@ -33,31 +37,26 @@ export async function exportToPptx(
 
   switch (presentationTheme) {
     case "nordic":
-      slideBg = "#fbfbfa";
       titleColor = "#0f172a";
       bodyColor = "#334155";
       fontFace = "Georgia";
       break;
     case "midnight":
-      slideBg = "#0e1115";
       titleColor = "#f8fafc";
       bodyColor = "#94a3b8";
       fontFace = "Courier New";
       break;
     case "ocean":
-      slideBg = "#0f172a"; // Solid fallback for gradient
       titleColor = "#f8fafc";
       bodyColor = "#cbd5e1";
       fontFace = "Arial";
       break;
     case "sunset":
-      slideBg = "#fffcf4"; // Solid fallback for gradient
       titleColor = "#3c2a21";
       bodyColor = "#776b5d";
       fontFace = "Georgia";
       break;
     case "purple":
-      slideBg = "#1c1537"; // Solid fallback for gradient
       titleColor = "#f8fafc";
       bodyColor = "#b4befe";
       fontFace = "Arial";
@@ -80,7 +79,6 @@ export async function exportToPptx(
       break;
   }
 
-  const cleanBg = cleanColor(slideBg);
   const cleanTitleColor = cleanColor(titleColor);
   const cleanBodyColor = cleanColor(bodyColor);
   const cleanAccentColor = cleanColor(accentColor);
@@ -93,6 +91,13 @@ export async function exportToPptx(
     const slide = pptx.addSlide();
     const showChromeHeader =
       slideData.layout !== "cover" && slideData.layout !== "section";
+
+    const slideBackground = resolveSlideBackground(
+      presentationTheme,
+      presentationPalette,
+      resolveSlideBackgroundVariant(slideData),
+    );
+    const cleanBg = cleanColor(slideBackground.exportFill);
 
     // Set background
     slide.background = { fill: cleanBg };
@@ -180,6 +185,7 @@ export async function exportToPptx(
       const h = px(element.height);
 
       if (element.type === "text") {
+        const elementFont = resolveElementFontFamily(element, presentationTheme);
         slide.addText(element.text, {
           x,
           y,
@@ -187,7 +193,7 @@ export async function exportToPptx(
           h,
           fontSize: element.fontSize * 0.75,
           color: element.color ? cleanColor(element.color) : cleanBodyColor,
-          fontFace,
+          fontFace: fontFamilyToPptxFace(elementFont),
           bold: !!element.bold,
           align: element.align || "left",
           valign: "middle",
@@ -220,26 +226,34 @@ export async function exportToPptx(
           console.error("Failed to add slide element image:", e);
         }
       } else if (element.type === "shape") {
-        let shapeType = (pptx as any).shapes.RECTANGLE;
-        if (element.shapeType === "circle") {
-          shapeType = (pptx as any).shapes.OVAL;
-        } else if (element.shapeType === "arrow") {
-          shapeType = (pptx as any).shapes.RIGHT_ARROW;
-        } else if (element.shapeType === "line") {
-          shapeType = (pptx as any).shapes.LINE;
-        }
-
         const cleanFill = cleanColor(element.fillColor);
         const cleanStroke = cleanColor(element.strokeColor);
 
-        slide.addShape(shapeType, {
-          x,
-          y,
-          w,
-          h,
-          fill: { color: cleanFill },
-          line: { color: cleanStroke, width: 2 },
-        });
+        if (element.shapeType === "line") {
+          slide.addShape((pptx as any).shapes.LINE, {
+            x,
+            y: y + h / 2,
+            w,
+            h: 0,
+            line: { color: cleanStroke, width: Math.max(1, h * 0.75) },
+          });
+        } else {
+          let shapeType = (pptx as any).shapes.RECTANGLE;
+          if (element.shapeType === "circle") {
+            shapeType = (pptx as any).shapes.OVAL;
+          } else if (element.shapeType === "arrow") {
+            shapeType = (pptx as any).shapes.RIGHT_ARROW;
+          }
+
+          slide.addShape(shapeType, {
+            x,
+            y,
+            w,
+            h,
+            fill: { color: cleanFill },
+            line: { color: cleanStroke, width: 2 },
+          });
+        }
       }
     }
   }

@@ -1,6 +1,8 @@
 import React, { useEffect } from "react";
 import { createPortal } from "react-dom";
 import type { Presentation } from "@shared/presentation";
+import { resolveSlideBackground, resolveSlideBackgroundVariant } from "@shared/slide-background";
+import { ShapeElementView } from "./ShapeElementView";
 import { CompressIcon } from "./Icons";
 
 interface DeckPreviewModalProps {
@@ -92,6 +94,13 @@ export const DeckPreviewModal: React.FC<DeckPreviewModalProps> = ({
     presentation.slides.findIndex((slide) => slide.id === selectedSlideId),
   );
   const activeSlide = presentation.slides[activeIndex] ?? presentation.slides[0];
+  const activeSlideBg = activeSlide
+    ? resolveSlideBackground(
+        selectedTheme,
+        selectedPalette,
+        resolveSlideBackgroundVariant(activeSlide),
+      ).slideBg
+    : themeStyles.slideBg;
 
   return createPortal(
     <div className="deck-preview-modal-overlay" onClick={onClose}>
@@ -126,7 +135,7 @@ export const DeckPreviewModal: React.FC<DeckPreviewModalProps> = ({
               <div
                 className="deck-preview-modal-slide"
                 style={{
-                  background: themeStyles.slideBg,
+                  background: activeSlideBg,
                 }}
               >
                 {logoUrl && (
@@ -182,22 +191,12 @@ export const DeckPreviewModal: React.FC<DeckPreviewModalProps> = ({
                         style={{
                           width: "100%",
                           height: "100%",
-                          objectFit: "cover",
+                          objectFit: element.objectFit || "cover",
                           borderRadius: `${element.borderRadius || 0}px`,
                         }}
                       />
                     )}
-                    {element.type === "shape" && (
-                      <div
-                        style={{
-                          width: "100%",
-                          height: "100%",
-                          backgroundColor: element.fillColor || "#3b82f6",
-                          border: `2px solid ${element.strokeColor || "#1d4ed8"}`,
-                          borderRadius: element.shapeType === "circle" ? "50%" : "0px",
-                        }}
-                      />
-                    )}
+                    {element.type === "shape" && <ShapeElementView element={element} />}
                   </div>
                 ))}
               </div>

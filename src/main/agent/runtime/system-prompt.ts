@@ -97,7 +97,7 @@ ${WORKSPACE_FILES.map((line) => `- ${line}`).join("\n")}
 4. message 结尾含「内容草稿已就绪，请选择排版方式」
 
 **视觉排版（第二阶段，用户已选排版方式）**
-- 标准排版：LoadSkill \`ppt-layout\` → set-theme → 全部 update-slide-layout
+- 标准排版：LoadSkill \`ppt-layout\`（含 guizang 节奏/风格规则）→ set-theme → 全部 update-slide-layout → deck-review
 - 创意装饰：LoadSkill \`ppt-layout\` + \`ppt-beautify\` → set-theme → update-slide-layout → shape 装饰
 
 **轻量单页修改**

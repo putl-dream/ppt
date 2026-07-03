@@ -21,11 +21,15 @@ allowed-tools:
 
 **调色板**：`cyan` `green` `purple` `orange`
 
-| 场景 | 推荐 |
-|------|------|
-| 商务 | nordic + cyan |
-| 技术 | ocean + cyan |
-| 创意 | sunset + orange |
+| 场景 | 推荐 | 参考 |
+|------|------|------|
+| 简约商务 / 部门汇报 | ocean + cyan | 简约商务模板 |
+| 竞聘 / 正式工作汇报 | nordic + cyan | 商务汇报模板 |
+| 技术方案 | ocean + cyan | — |
+| 温暖品牌 | sunset + orange | — |
+| 深色演示 | midnight + cyan | — |
+
+详细色板与 guizang 预设对照见 `ppt-layout/style-modes.md` 与 reference-templates.md。
 
 ## 工作流
 

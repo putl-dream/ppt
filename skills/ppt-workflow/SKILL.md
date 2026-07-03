@@ -1,6 +1,6 @@
 ---
 name: ppt-workflow
-description: 端到端演示创作流程编排；默认走轻量路径，完整路径仅用于大型新建
+description: 端到端演示创作流程；融合 guizang 需求澄清与叙事弧，默认轻量路径
 when_to_use: 用户要从零做完整 PPT、不确定下一步、或要求「一条龙」完成演示时
 ---
 
@@ -24,10 +24,13 @@ when_to_use: 用户要从零做完整 PPT、不确定下一步、或要求「一
 | 3 分镜 | `ppt-storyboard` | `slides/storyboard.json` | Task |
 | 4 内容草稿 | `ppt-build` | add-slide（无排版） | SubmitCommands |
 | 4b 排版选择 | — | LayoutChoiceCard | 用户 |
-| 5 视觉排版 | `ppt-layout` | set-theme + update-slide-layout | SubmitCommands |
+| 5 视觉排版 | `ppt-layout` | set-theme + update-slide-layout + 节奏核对 | SubmitCommands |
+| 5b 质检 | `deck-review` | 对照 ppt-layout/checklist | 报告 |
 | 6 美化/导出 | `ppt-beautify` / `ppt-export` | 可选 | 仅用户要求 |
 
-**默认跳过**：research（`ppt-research`）、独立 design 文件（主题可直接 set-theme）、deck-review。
+**设计思路来源**：[guizang-ppt-skill](https://github.com/op7418/guizang-ppt-skill) 已适配至 `ppt-layout/`（style-modes、narrative-arc、checklist）。HTML/WebGL 规则不适用本项目。
+
+**默认跳过**：research（`ppt-research`）、独立 design 文件（主题可直接 set-theme）。
 
 ## 主 Agent 职责
 

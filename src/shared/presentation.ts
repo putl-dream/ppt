@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { FONT_FAMILIES, TEXT_ROLES } from "./typography";
+import { BACKGROUND_VARIANTS } from "./slide-background";
 
 export const textElementSchema = z.object({
   id: z.string(),
@@ -12,6 +14,8 @@ export const textElementSchema = z.object({
   bold: z.boolean().optional(),
   color: z.string().optional(),
   align: z.enum(["left", "center", "right"]).optional(),
+  textRole: z.enum(TEXT_ROLES).optional(),
+  fontFamily: z.enum(FONT_FAMILIES).optional(),
 });
 
 export const imageElementSchema = z.object({
@@ -23,6 +27,8 @@ export const imageElementSchema = z.object({
   height: z.number().positive(),
   url: z.string(),
   borderRadius: z.number().optional().default(0),
+  imageSlot: z.string().optional(),
+  objectFit: z.enum(["cover", "contain"]).optional(),
 });
 
 export const shapeElementSchema = z.object({
@@ -49,6 +55,7 @@ export const slideSchema = z.object({
   title: z.string(),
   elements: z.array(slideElementSchema),
   layout: z.string().optional(),
+  backgroundVariant: z.enum(BACKGROUND_VARIANTS).optional(),
 });
 
 export const presentationSchema = z.object({

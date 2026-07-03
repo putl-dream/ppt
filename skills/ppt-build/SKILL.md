@@ -61,6 +61,8 @@ allowed-tools:
 
 ## 布局与 body 元素数量
 
+选 layout 见 `ppt-layout` 的 layout-catalog.md。下表为引擎硬性约束：
+
 | layout | body 文本建议 | 说明 |
 |--------|--------------|------|
 | cover / section | 0–1 条副标题 | 标题用 slide.title |

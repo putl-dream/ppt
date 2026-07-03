@@ -1,4 +1,10 @@
-import type { Slide, SlideElement, TextElement, ShapeElement } from "./presentation";
+import type { Slide, SlideElement, TextElement, ShapeElement, ImageElement } from "./presentation";
+import {
+  resolveCoverTitleFont,
+  resolveFontFamily,
+  type TextRole,
+} from "./typography";
+import { resolveLayoutBackgroundVariant, type BackgroundVariant } from "./slide-background";
 
 interface ThemeColors {
   bg: string;
@@ -160,6 +166,43 @@ export function applyLayout(
     strokeColor: colors.accent,
   });
 
+  const placedImageIds = new Set<string>();
+
+  const assignTextRole = (el: TextElement, role: TextRole): TextElement => ({
+    ...el,
+    textRole: role,
+    fontFamily: resolveFontFamily(el.fontFamily, role, theme),
+  });
+
+  const placeImageInSlot = (
+    image: ImageElement,
+    rect: { x: number; y: number; width: number; height: number },
+    slotName: string,
+  ): ImageElement => {
+    placedImageIds.add(image.id);
+    return {
+      ...image,
+      x: rect.x,
+      y: rect.y,
+      width: rect.width,
+      height: rect.height,
+      imageSlot: slotName,
+      objectFit: image.objectFit ?? "cover",
+    };
+  };
+
+  const pickImageForSlot = (
+    slotName: string,
+    fallbackUnslottedOnly = false,
+  ): ImageElement | undefined => {
+    const slotted = imageElements.find((img) => img.imageSlot === slotName);
+    if (slotted) return slotted;
+    if (fallbackUnslottedOnly) {
+      return imageElements.find((img) => !img.imageSlot && !placedImageIds.has(img.id));
+    }
+    return undefined;
+  };
+
   if (layout === "cover" || layout === "section") {
     const coverTitleEl = titleEl ?? bodyTexts[0];
     if (!coverTitleEl) {
@@ -176,10 +219,11 @@ export function applyLayout(
       coverTitleEl.bold = true;
       coverTitleEl.color = colors.title;
       coverTitleEl.align = "center";
+      coverTitleEl.fontFamily = resolveCoverTitleFont(theme);
       elements.push(coverTitleEl);
 
       if (coverBodyTexts[0]) {
-        const sub = coverBodyTexts[0];
+        const sub = assignTextRole(coverBodyTexts[0], "body");
         sub.x = 120;
         sub.y = 380;
         sub.width = 1040;
@@ -190,6 +234,21 @@ export function applyLayout(
         sub.align = "center";
         elements.push(sub);
       }
+
+      const heroImage =
+        pickImageForSlot("hero") ??
+        (imageElements.length === 1 && !imageElements[0].imageSlot
+          ? imageElements[0]
+          : undefined);
+      if (heroImage) {
+        elements.push(
+          placeImageInSlot(
+            heroImage,
+            { x: 200, y: 500, width: 880, height: 160 },
+            "hero",
+          ),
+        );
+      }
     } else {
       coverTitleEl.x = 120;
       coverTitleEl.y = 240;
@@ -199,10 +258,11 @@ export function applyLayout(
       coverTitleEl.bold = true;
       coverTitleEl.color = colors.title;
       coverTitleEl.align = "center";
+      coverTitleEl.fontFamily = resolveCoverTitleFont(theme);
       elements.push(coverTitleEl);
 
       if (coverBodyTexts[0]) {
-        const sub = coverBodyTexts[0];
+        const sub = assignTextRole(coverBodyTexts[0], "kicker");
         sub.x = 120;
         sub.y = 380;
         sub.width = 1040;
@@ -239,15 +299,16 @@ export function applyLayout(
         const textH = contentH - 40;
         const textItemH = textH / leftCols.length;
         leftCols.forEach((el, idx) => {
-          el.x = leftX + 24;
-          el.y = contentY + 20 + idx * textItemH;
-          el.width = colW - 48;
-          el.height = textItemH;
-          el.fontSize = leftCols.length > 2 ? 18 : 22;
-          el.bold = idx === 0;
-          el.color = colors.body;
-          el.align = "left";
-          elements.push(el);
+          const styled = assignTextRole(el, idx === 0 ? "kicker" : "body");
+          styled.x = leftX + 24;
+          styled.y = contentY + 20 + idx * textItemH;
+          styled.width = colW - 48;
+          styled.height = textItemH;
+          styled.fontSize = leftCols.length > 2 ? 18 : 22;
+          styled.bold = idx === 0;
+          styled.color = colors.body;
+          styled.align = "left";
+          elements.push(styled);
         });
       }
 
@@ -255,15 +316,16 @@ export function applyLayout(
         const textH = contentH - 40;
         const textItemH = textH / rightCols.length;
         rightCols.forEach((el, idx) => {
-          el.x = rightX + 24;
-          el.y = contentY + 20 + idx * textItemH;
-          el.width = colW - 48;
-          el.height = textItemH;
-          el.fontSize = rightCols.length > 2 ? 18 : 22;
-          el.bold = idx === 0;
-          el.color = colors.body;
-          el.align = "left";
-          elements.push(el);
+          const styled = assignTextRole(el, idx === 0 ? "kicker" : "body");
+          styled.x = rightX + 24;
+          styled.y = contentY + 20 + idx * textItemH;
+          styled.width = colW - 48;
+          styled.height = textItemH;
+          styled.fontSize = rightCols.length > 2 ? 18 : 22;
+          styled.bold = idx === 0;
+          styled.color = colors.body;
+          styled.align = "left";
+          elements.push(styled);
         });
       }
     } else if (layout === "process") {
@@ -280,15 +342,16 @@ export function applyLayout(
         elements.unshift(createCard(colX, cardTop, colW, cardH));
         elements.push(createAccentBar(colX + 16, cardTop + 12, colW - 32));
 
-        el.x = colX + 16;
-        el.y = contentY + 60;
-        el.width = colW - 32;
-        el.height = contentH - 120;
-        el.fontSize = 20;
-        el.bold = false;
-        el.color = colors.body;
-        el.align = "center";
-        elements.push(el);
+        const styled = assignTextRole(el, "body");
+        styled.x = colX + 16;
+        styled.y = contentY + 60;
+        styled.width = colW - 32;
+        styled.height = contentH - 120;
+        styled.fontSize = 20;
+        styled.bold = false;
+        styled.color = colors.body;
+        styled.align = "center";
+        elements.push(styled);
 
         if (idx < N - 1) {
           const arrowX = colX + colW + 4;
@@ -306,15 +369,16 @@ export function applyLayout(
         const rowY = contentY + idx * (layerH + layerGap);
         elements.unshift(createCard(120, rowY, 1040, layerH));
 
-        el.x = 140;
-        el.y = rowY + 10;
-        el.width = 1000;
-        el.height = layerH - 20;
-        el.fontSize = 22;
-        el.bold = true;
-        el.color = colors.title;
-        el.align = "center";
-        elements.push(el);
+        const styled = assignTextRole(el, "kicker");
+        styled.x = 140;
+        styled.y = rowY + 10;
+        styled.width = 1000;
+        styled.height = layerH - 20;
+        styled.fontSize = 22;
+        styled.bold = true;
+        styled.color = colors.title;
+        styled.align = "center";
+        elements.push(styled);
       });
     } else if (layout === "case") {
       const descText = bodyTexts[0];
@@ -324,53 +388,102 @@ export function applyLayout(
       const leftW = 600;
       const rightX = 760;
       const rightW = 400;
+      const pad = 24;
 
       elements.unshift(createCard(leftX, contentY, leftW, contentH));
       elements.unshift(createCard(rightX, contentY, rightW, contentH));
 
       if (descText) {
-        descText.x = leftX + 24;
-        descText.y = contentY + 24;
-        descText.width = leftW - 48;
-        descText.height = contentH - 48;
-        descText.fontSize = 20;
-        descText.bold = false;
-        descText.color = colors.body;
-        descText.align = "left";
-        elements.push(descText);
+        const styled = assignTextRole(descText, "body");
+        styled.x = leftX + pad;
+        styled.y = contentY + pad;
+        styled.width = leftW - pad * 2;
+        styled.height = contentH - pad * 2;
+        styled.fontSize = 20;
+        styled.bold = false;
+        styled.color = colors.body;
+        styled.align = "left";
+        elements.push(styled);
       }
 
-      if (metricText) {
-        metricText.x = rightX + 24;
-        metricText.y = contentY + 40;
-        metricText.width = rightW - 48;
-        metricText.height = contentH - 80;
-        metricText.fontSize = 32;
-        metricText.bold = true;
-        metricText.color = colors.accent;
-        metricText.align = "center";
-        elements.push(metricText);
+      const sideImage =
+        pickImageForSlot("side") ??
+        (imageElements.length === 1 && !imageElements[0].imageSlot
+          ? imageElements[0]
+          : pickImageForSlot("side", true));
+
+      if (sideImage) {
+        elements.push(
+          placeImageInSlot(
+            sideImage,
+            {
+              x: rightX + pad,
+              y: contentY + pad,
+              width: rightW - pad * 2,
+              height: contentH - pad * 2,
+            },
+            "side",
+          ),
+        );
+      } else if (metricText) {
+        const styled = assignTextRole(metricText, "metric");
+        styled.x = rightX + pad;
+        styled.y = contentY + 40;
+        styled.width = rightW - pad * 2;
+        styled.height = contentH - 80;
+        styled.fontSize = 32;
+        styled.bold = true;
+        styled.color = colors.accent;
+        styled.align = "center";
+        elements.push(styled);
       }
     } else if (layout === "concept") {
       const N = bodyTexts.length || 1;
       const cardGap = 24;
       const totalW = 1040;
       const colW = (totalW - (N - 1) * cardGap) / N;
+      const imageAreaH = 100;
+      const unslottedImages = imageElements.filter(
+        (img) => !img.imageSlot && !placedImageIds.has(img.id),
+      );
 
       bodyTexts.forEach((el, idx) => {
         const colX = 120 + idx * (colW + cardGap);
+        const slotKey = `grid-${idx}`;
+        const cardImage =
+          pickImageForSlot(slotKey) ?? unslottedImages.shift();
+
         elements.unshift(createCard(colX, contentY, colW, contentH));
         elements.push(createAccentBar(colX + 20, contentY + 16, colW - 40));
 
-        el.x = colX + 20;
-        el.y = contentY + 20;
-        el.width = colW - 40;
-        el.height = contentH - 40;
-        el.fontSize = 20;
-        el.bold = idx === 0;
-        el.color = idx === 0 ? colors.title : colors.body;
-        el.align = "left";
-        elements.push(el);
+        const hasImage = Boolean(cardImage);
+        const textH = hasImage ? contentH - imageAreaH - 36 : contentH - 40;
+
+        const styled = assignTextRole(el, idx === 0 ? "kicker" : "body");
+        styled.x = colX + 20;
+        styled.y = contentY + 20;
+        styled.width = colW - 40;
+        styled.height = textH;
+        styled.fontSize = 20;
+        styled.bold = idx === 0;
+        styled.color = idx === 0 ? colors.title : colors.body;
+        styled.align = "left";
+        elements.push(styled);
+
+        if (cardImage) {
+          elements.push(
+            placeImageInSlot(
+              cardImage,
+              {
+                x: colX + 20,
+                y: contentY + contentH - imageAreaH - 16,
+                width: colW - 40,
+                height: imageAreaH,
+              },
+              slotKey,
+            ),
+          );
+        }
       });
     } else {
       const N = bodyTexts.length || 1;
@@ -392,26 +505,29 @@ export function applyLayout(
           strokeColor: colors.accent,
         });
 
-        el.x = 150;
-        el.y = rowY + 10;
-        el.width = 980;
-        el.height = rowH - 20;
-        el.fontSize = 20;
-        el.bold = false;
-        el.color = colors.body;
-        el.align = "left";
-        elements.push(el);
+        const styled = assignTextRole(el, "body");
+        styled.x = 150;
+        styled.y = rowY + 10;
+        styled.width = 980;
+        styled.height = rowH - 20;
+        styled.fontSize = 20;
+        styled.bold = false;
+        styled.color = colors.body;
+        styled.align = "left";
+        elements.push(styled);
       });
     }
   }
 
-  // Re-append images and custom user shapes
-  elements.push(...imageElements);
+  // Re-append unplaced images and custom user shapes
+  const remainingImages = imageElements.filter((img) => !placedImageIds.has(img.id));
+  elements.push(...remainingImages);
   elements.push(...userShapes);
 
   return {
     ...slide,
     layout,
+    backgroundVariant: resolveLayoutBackgroundVariant(layout) as BackgroundVariant,
     elements,
   };
 }

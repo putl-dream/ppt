@@ -1,6 +1,9 @@
 import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Presentation, SlideElement } from "@shared/presentation";
+import { fontFamilyToCss, resolveElementFontFamily } from "@shared/typography";
+import { resolveSlideBackground, resolveSlideBackgroundVariant } from "@shared/slide-background";
+import { ShapeElementView } from "./ShapeElementView";
 import { SparklesIcon, ExpandIcon, CompressIcon, PlayIcon, FileIcon, DownloadIcon } from "./Icons";
 
 
@@ -178,6 +181,14 @@ export const PPTMirror: React.FC<PPTMirrorProps> = ({
   };
 
   const themeStyles = getThemeStyles();
+  const fullscreenSlide = slides[fullscreenIndex];
+  const fullscreenSlideBg = fullscreenSlide
+    ? resolveSlideBackground(
+        selectedTheme,
+        selectedPalette,
+        resolveSlideBackgroundVariant(fullscreenSlide),
+      ).slideBg
+    : themeStyles.slideBg;
 
   const handleFullscreenOpen = () => {
     const idx = slides.findIndex((s) => s.id === selectedSlideId);
@@ -252,6 +263,12 @@ export const PPTMirror: React.FC<PPTMirrorProps> = ({
           const cardHeight = isExpanded ? 180 : 157.5;
           const scale = cardWidth / 1280;
 
+          const slideBg = resolveSlideBackground(
+            selectedTheme,
+            selectedPalette,
+            resolveSlideBackgroundVariant(slide),
+          ).slideBg;
+
           return (
             <div
               key={slide.id}
@@ -288,7 +305,7 @@ export const PPTMirror: React.FC<PPTMirrorProps> = ({
                   style={{
                     width: 1280,
                     height: 720,
-                    background: themeStyles.slideBg,
+                    background: slideBg,
                     transform: `scale(${scale})`,
                     transformOrigin: "top left",
                     position: "absolute",
@@ -340,9 +357,12 @@ export const PPTMirror: React.FC<PPTMirrorProps> = ({
                         <p
                           style={{
                             fontSize: element.fontSize,
-                            color: (element as any).color || themeStyles.bodyColor,
-                            fontWeight: (element as any).bold ? "bold" : "normal",
-                            textAlign: (element as any).align || "left",
+                            color: element.color || themeStyles.bodyColor,
+                            fontWeight: element.bold ? "bold" : "normal",
+                            textAlign: element.align || "left",
+                            fontFamily: fontFamilyToCss(
+                              resolveElementFontFamily(element, selectedTheme),
+                            ),
                             margin: 0,
                             lineHeight: 1.4,
                             whiteSpace: "pre-wrap",
@@ -359,23 +379,13 @@ export const PPTMirror: React.FC<PPTMirrorProps> = ({
                           style={{
                             width: "100%",
                             height: "100%",
-                            objectFit: "cover",
+                            objectFit: element.objectFit || "cover",
                             borderRadius: `${element.borderRadius || 0}px`,
                           }}
                         />
                       )}
 
-                      {element.type === "shape" && (
-                        <div
-                          style={{
-                            width: "100%",
-                            height: "100%",
-                            backgroundColor: element.fillColor || "#3b82f6",
-                            border: `2px solid ${element.strokeColor || "#1d4ed8"}`,
-                            borderRadius: element.shapeType === "circle" ? "50%" : "0px",
-                          }}
-                        />
-                      )}
+                      {element.type === "shape" && <ShapeElementView element={element} />}
                     </div>
                   ))}
                 </div>
@@ -443,7 +453,7 @@ export const PPTMirror: React.FC<PPTMirrorProps> = ({
                   style={{
                     width: 1280,
                     height: 720,
-                    background: themeStyles.slideBg,
+                    background: fullscreenSlideBg,
                     boxShadow: themeStyles.isDarkOverlay ? "0 25px 60px rgba(0,0,0,0.8)" : "0 25px 60px rgba(15,23,42,0.15)",
                     borderRadius: 8,
                     position: "relative",
@@ -495,9 +505,12 @@ export const PPTMirror: React.FC<PPTMirrorProps> = ({
                         <p
                           style={{
                             fontSize: element.fontSize,
-                            color: (element as any).color || themeStyles.bodyColor,
-                            fontWeight: (element as any).bold ? "bold" : "normal",
-                            textAlign: (element as any).align || "left",
+                            color: element.color || themeStyles.bodyColor,
+                            fontWeight: element.bold ? "bold" : "normal",
+                            textAlign: element.align || "left",
+                            fontFamily: fontFamilyToCss(
+                              resolveElementFontFamily(element, selectedTheme),
+                            ),
                             margin: 0,
                             lineHeight: 1.4,
                             whiteSpace: "pre-wrap",
@@ -514,23 +527,13 @@ export const PPTMirror: React.FC<PPTMirrorProps> = ({
                           style={{
                             width: "100%",
                             height: "100%",
-                            objectFit: "cover",
+                            objectFit: element.objectFit || "cover",
                             borderRadius: `${element.borderRadius || 0}px`,
                           }}
                         />
                       )}
 
-                      {element.type === "shape" && (
-                        <div
-                          style={{
-                            width: "100%",
-                            height: "100%",
-                            backgroundColor: element.fillColor || "#3b82f6",
-                            border: `2px solid ${element.strokeColor || "#1d4ed8"}`,
-                            borderRadius: element.shapeType === "circle" ? "50%" : "0px",
-                          }}
-                        />
-                      )}
+                      {element.type === "shape" && <ShapeElementView element={element} />}
                     </div>
                   ))}
                 </div>

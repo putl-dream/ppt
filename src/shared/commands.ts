@@ -53,6 +53,12 @@ export const presentationCommandSchema = z.discriminatedUnion("type", [
   }),
   z.object({
     id: z.string(),
+    type: z.literal("set-slide-background"),
+    slideId: z.string(),
+    backgroundVariant: z.enum(["default", "hero", "muted"]),
+  }),
+  z.object({
+    id: z.string(),
     type: z.literal("update-slide-layout"),
     slideId: z.string(),
     layout: z.enum(["cover", "section", "concept", "comparison", "process", "architecture", "case", "summary"]),
@@ -66,6 +72,8 @@ export const presentationCommandSchema = z.discriminatedUnion("type", [
     bold: z.boolean().optional(),
     color: z.string().optional(),
     align: z.enum(["left", "center", "right"]).optional(),
+    textRole: z.enum(["kicker", "body", "metric", "caption"]).optional(),
+    fontFamily: z.enum(["serif", "sans", "mono"]).optional(),
   }),
   z.object({
     id: z.string(),
@@ -266,6 +274,29 @@ export function executeCommand(
     };
   }
 
+  if (command.type === "set-slide-background") {
+    const slideIndex = presentation.slides.findIndex((s) => s.id === command.slideId);
+    if (slideIndex < 0) throw new Error(`Slide not found: ${command.slideId}`);
+    const targetSlide = presentation.slides[slideIndex];
+    const slides = presentation.slides.map((s) =>
+      s.id === command.slideId
+        ? { ...s, backgroundVariant: command.backgroundVariant }
+        : s,
+    );
+    return {
+      presentation: nextRevision({ ...presentation, slides }),
+      executed: {
+        command,
+        inverse: {
+          id: crypto.randomUUID(),
+          type: "set-slide-background",
+          slideId: command.slideId,
+          backgroundVariant: targetSlide.backgroundVariant ?? "default",
+        },
+      },
+    };
+  }
+
   if (command.type === "update-slide-layout") {
     const slideIndex = presentation.slides.findIndex((s) => s.id === command.slideId);
     if (slideIndex < 0) throw new Error(`Slide not found: ${command.slideId}`);
@@ -334,6 +365,8 @@ export function executeCommand(
       bold: command.bold !== undefined ? command.bold : targetElement.bold,
       color: command.color !== undefined ? command.color : targetElement.color,
       align: command.align !== undefined ? command.align : targetElement.align,
+      textRole: command.textRole !== undefined ? command.textRole : targetElement.textRole,
+      fontFamily: command.fontFamily !== undefined ? command.fontFamily : targetElement.fontFamily,
     };
 
     const elements = targetSlide.elements.map((el) =>
@@ -356,6 +389,8 @@ export function executeCommand(
           bold: targetElement.bold,
           color: targetElement.color,
           align: targetElement.align,
+          textRole: targetElement.textRole,
+          fontFamily: targetElement.fontFamily,
         },
       },
     };
