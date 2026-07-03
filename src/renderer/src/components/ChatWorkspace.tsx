@@ -21,6 +21,7 @@ import { OutlineCard } from "./OutlineCard";
 import { DeckPreviewCard } from "./DeckPreviewCard";
 import { AgentThinkingLoader } from "./AgentThinkingLoader";
 import { ReasoningBlock } from "./ReasoningBlock";
+import { MessageMarkdown } from "./MessageMarkdown";
 import type { ManagedModel } from "../modelCatalog";
 import type { Presentation } from "@shared/presentation";
 import type { InlineCardRef } from "@shared/inline-artifact-cards";
@@ -322,7 +323,6 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
         <div className="chat-conversation-shell">
           <div className="chat-stream">
         {chatMessages.map((msg) => {
-          const lines = msg.content.split("\n");
           const inlineCardData = msg.role === "assistant" ? getInlineCardData(msg) : null;
 
           return (
@@ -365,11 +365,7 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
                       </div>
                     </div>
                   ) : (
-                    <div className="user-message-text">
-                      {lines.map((line, idx) => (
-                        <div key={idx}>{line}</div>
-                      ))}
-                    </div>
+                    <MessageMarkdown content={msg.content} className="user-message-text" />
                   )}
 
                   {editingMsgId !== msg.id && (
@@ -401,13 +397,7 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
                     <ReasoningBlock content={msg.reasoning} />
                   )}
 
-                  <div className="assistant-response">
-                    {lines.map((line, idx) => (
-                      <div key={idx} className="assistant-response-line">
-                        {line || "\u00A0"}
-                      </div>
-                    ))}
-                  </div>
+                  <MessageMarkdown content={msg.content} className="assistant-response" />
 
                   {onRetry && msg.content.includes("发生错误") && (
                   <button

@@ -1407,7 +1407,7 @@ export function App() {
           id: crypto.randomUUID(),
           role: "assistant",
           content: sourcePrompt ? exportMessage : exportMessage,
-          inlineCards: savedPath ? [{ type: "deck" as const }] : undefined,
+          inlineCards: savedPath ? [{ type: "deck" as const, resolved: "confirmed" as const }] : undefined,
         },
       ]);
       if (savedPath) {

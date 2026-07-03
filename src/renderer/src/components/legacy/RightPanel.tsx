@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import { AgentApprovalRequest } from "@shared/ipc";
 import { SlideElement } from "@shared/presentation";
-import { BrainIcon, SendIcon, SparklesIcon, ChevronDownIcon, ChevronRightIcon, FileIcon } from "./Icons";
+import { BrainIcon, SendIcon, SparklesIcon, ChevronDownIcon, ChevronRightIcon, FileIcon } from "../Icons";
 
 interface ChatMessage {
   id: string;

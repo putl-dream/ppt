@@ -34,6 +34,7 @@ export const DeckPreviewCard: React.FC<DeckPreviewCardProps> = ({
   selectedTheme,
   selectedPalette,
   isExporting,
+  resolved,
   onPreview,
   onExport,
 }) => {
@@ -45,7 +46,10 @@ export const DeckPreviewCard: React.FC<DeckPreviewCardProps> = ({
       <div className="inline-artifact-card-header">
         <span className="inline-artifact-badge">DECK</span>
         <span className="inline-artifact-title">{presentation.title || "演示文稿"}</span>
-        <span className="deck-preview-count">{presentation.slides.length} 页</span>
+        <span className="deck-preview-count">
+          {presentation.slides.length} 页
+          {resolved === "confirmed" && " · 已导出"}
+        </span>
       </div>
 
       <div className="deck-preview-thumbnails">
