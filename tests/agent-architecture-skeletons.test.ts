@@ -32,7 +32,7 @@ import { CommitGate } from "../src/main/agent/gate/commit-gate";
 import { RiskPolicy } from "../src/main/agent/gate/risk-policy";
 import { DesignPolicy } from "../src/main/agent/design/design-policy";
 import { LayoutPolicy } from "../src/main/agent/design/layout-policy";
-import { RefactoredAgentService } from "../src/main/agent/service";
+import { AgentService } from "../src/main/agent/service";
 import { createStarterPresentation } from "../src/shared/presentation";
 import { CommandBus } from "../src/shared/commands";
 import { AgentGatewayError, type AgentModelGateway } from "../src/main/agent/gateway";
@@ -334,7 +334,7 @@ describe("Agent Architecture Skeletons & Types", () => {
         },
       },
     ]));
-    const service = new RefactoredAgentService(
+    const service = new AgentService(
       new CommandBus(createStarterPresentation()),
       runtime,
       new CommitGate(new RiskPolicy()),
@@ -392,7 +392,7 @@ describe("Agent Architecture Skeletons & Types", () => {
         yield { type: "complete" as const, text: "" };
       },
     };
-    const service = new RefactoredAgentService(
+    const service = new AgentService(
       new CommandBus(createStarterPresentation()),
       new AgentRuntime(createDefaultToolRegistry(), gateway),
       new CommitGate(new RiskPolicy()),
@@ -422,7 +422,7 @@ describe("Agent Architecture Skeletons & Types", () => {
       request: string;
       conversation: Array<{ role: "user" | "assistant"; content: string }>;
     } | undefined;
-    const service = new RefactoredAgentService(
+    const service = new AgentService(
       new CommandBus(createStarterPresentation()),
       new AgentRuntime(createDefaultToolRegistry(), {
         async generateText(request) {
@@ -580,7 +580,7 @@ describe("Agent Architecture Skeletons & Types", () => {
     const presentation = createStarterPresentation();
     const bus = new CommandBus(presentation);
 
-    const service = new RefactoredAgentService(bus, runtime, commitGate);
+    const service = new AgentService(bus, runtime, commitGate);
     const result = await service.start("Make a title presentation", undefined, "REQUEST_APPROVAL");
 
     expect(result.status).toBe("approval-required");
@@ -604,7 +604,7 @@ describe("Agent Architecture Skeletons & Types", () => {
       },
     }]));
     const bus = new CommandBus(createStarterPresentation());
-    const service = new RefactoredAgentService(bus, runtime, new CommitGate(new RiskPolicy()));
+    const service = new AgentService(bus, runtime, new CommitGate(new RiskPolicy()));
     const result = await service.start("Update title", undefined, "AUTO");
     expect(result.status).toBe("completed");
     expect(bus.getSnapshot().title).toBe("Auto title");
@@ -623,7 +623,7 @@ describe("Agent Architecture Skeletons & Types", () => {
       },
     }]));
     const bus = new CommandBus(createStarterPresentation());
-    const service = new RefactoredAgentService(bus, runtime, new CommitGate(new RiskPolicy()));
+    const service = new AgentService(bus, runtime, new CommitGate(new RiskPolicy()));
     const result = await service.start("Update title", undefined, "REQUEST_APPROVAL");
     if (result.status !== "approval-required") throw new Error("Expected approval");
     bus.execute({ id: "external-change", type: "set-presentation-title", title: "Newer title" });
@@ -666,7 +666,7 @@ describe("Agent Architecture Skeletons & Types", () => {
     };
 
     const bus = new CommandBus(createStarterPresentation());
-    const service = new RefactoredAgentService(
+    const service = new AgentService(
       bus,
       runtime,
       new CommitGate(new RiskPolicy()),
@@ -737,7 +737,7 @@ describe("Agent Architecture Skeletons & Types", () => {
     };
 
     const bus = new CommandBus(createStarterPresentation());
-    const service = new RefactoredAgentService(
+    const service = new AgentService(
       bus,
       runtime,
       new CommitGate(new RiskPolicy()),
@@ -753,13 +753,13 @@ describe("Agent Architecture Skeletons & Types", () => {
     expect(mockFileStore.writeProjectArtifact).not.toHaveBeenCalled();
   });
 
-  it("aborts production RefactoredAgentService execution immediately when aborted signal is passed", async () => {
+  it("aborts production AgentService execution immediately when aborted signal is passed", async () => {
     const bus = new CommandBus(createStarterPresentation());
     const mockRuntime = {
       run: vi.fn(),
       clearSession: vi.fn(),
     } as any;
-    const service = new RefactoredAgentService(
+    const service = new AgentService(
       bus,
       mockRuntime,
       new CommitGate(new RiskPolicy()),

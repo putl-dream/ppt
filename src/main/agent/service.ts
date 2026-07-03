@@ -343,5 +343,3 @@ export class AgentService {
     throw new Error("Approval request or pending patch not found or already completed.");
   }
 }
-
-export { AgentService as RefactoredAgentService };
