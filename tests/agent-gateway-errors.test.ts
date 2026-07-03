@@ -35,4 +35,24 @@ describe("normalizeProviderError", () => {
 
     expect(normalizeProviderError("openai", source)).toBe(source);
   });
+
+  it("maps terminated stream errors to connection guidance", () => {
+    const source = Object.assign(new Error("terminated"), { name: "AnthropicError" });
+    const error = normalizeProviderError("anthropic", source);
+
+    expect(error.code).toBe("provider-error");
+    expect(error.message).toContain("connection terminated");
+  });
+
+  it("maps abort-like errors when the run signal is already aborted", () => {
+    const controller = new AbortController();
+    controller.abort();
+    const error = normalizeProviderError(
+      "anthropic",
+      Object.assign(new Error("terminated"), { name: "AnthropicError" }),
+      controller.signal,
+    );
+
+    expect(error.message).toBe("Run aborted by user.");
+  });
 });

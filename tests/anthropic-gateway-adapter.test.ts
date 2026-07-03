@@ -59,7 +59,7 @@ describe("generateWithAnthropic", () => {
       max_tokens: 654,
       system: "System instruction",
       messages: [{ role: "user", content: "User prompt" }],
-    });
+    }, { signal: undefined });
     expect(response).toEqual({
       provider: "anthropic",
       model: "anthropic-test",

@@ -78,6 +78,7 @@ export async function spawnSubAgent(options: SpawnSubAgentOptions): Promise<stri
       {
         systemPrompt,
         prompt: JSON.stringify({ task: options.description, transcript }),
+        signal: options.signal,
       },
       options.model,
     );

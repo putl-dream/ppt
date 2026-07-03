@@ -3,6 +3,7 @@ import type { AgentModelSelection, AgentProvider } from "@shared/agent";
 export interface AgentModelRequest {
   prompt: string;
   systemPrompt?: string;
+  signal?: AbortSignal;
 }
 
 export interface AgentModelResponse {

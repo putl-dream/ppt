@@ -32,7 +32,7 @@ export async function generateWithOpenAI(
         instructions: request.systemPrompt,
         input: request.prompt,
         max_output_tokens: config.maxOutputTokens,
-      });
+      }, { signal: request.signal });
       text = response.output_text.trim();
       requestId = response._request_id ?? undefined;
     } else {
@@ -45,7 +45,7 @@ export async function generateWithOpenAI(
           { role: "user", content: request.prompt },
         ],
         max_tokens: config.maxOutputTokens,
-      });
+      }, { signal: request.signal });
       text = (response.choices[0]?.message.content ?? "").trim();
       requestId = response._request_id ?? undefined;
       stopReason = response.choices[0]?.finish_reason ?? undefined;
@@ -62,7 +62,7 @@ export async function generateWithOpenAI(
       stopReason,
     };
   } catch (error) {
-    throw normalizeProviderError("openai", error);
+    throw normalizeProviderError("openai", error, request.signal);
   }
 }
 
@@ -101,7 +101,7 @@ export async function* generateStreamWithOpenAI(
         ],
         max_tokens: config.maxOutputTokens,
         stream: true,
-      });
+      }, { signal: request.signal });
 
       for await (const chunk of stream) {
         const content = chunk.choices[0]?.delta?.content;
@@ -113,6 +113,6 @@ export async function* generateStreamWithOpenAI(
       yield { type: "complete", text: "" };
     }
   } catch (error) {
-    throw normalizeProviderError("openai", error);
+    throw normalizeProviderError("openai", error, request.signal);
   }
 }

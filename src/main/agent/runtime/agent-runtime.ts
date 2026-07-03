@@ -212,6 +212,7 @@ export class AgentRuntime {
               conversation: options.messageHistory ?? [],
               transcript,
             }),
+            signal: options.signal,
           },
           options.model,
         )) {
@@ -236,6 +237,7 @@ export class AgentRuntime {
               conversation: options.messageHistory ?? [],
               transcript,
             }),
+            signal: options.signal,
           },
           options.model,
         );

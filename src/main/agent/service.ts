@@ -5,6 +5,7 @@ import type { AgentEditorContext, AgentRunResult } from "@shared/ipc";
 import type { AgentConversationMessage } from "@shared/session-recovery";
 import { CommitGate, type CommitGateResult } from "./gate/commit-gate";
 import { AgentRuntime } from "./runtime/agent-runtime";
+import { formatRecoverableAgentError } from "./gateway/errors";
 import type { ToolApprovalHandler } from "./runtime/permission-check";
 import type { ToolApprovalBroker } from "./runtime/tool-approval-broker";
 
@@ -149,30 +150,43 @@ export class AgentService {
       stage: requiredOutcome,
     });
     const before = this.commandBus.getSnapshot();
-    const runtimeResult = await this.runtime.run({
-      threadId,
-      request,
-      presentationSnapshot: before,
-      currentSlideId: editorContext?.currentSlideId,
-      selectedElementIds: editorContext?.selectedElementIds ?? [],
-      model,
-      messageHistory,
-      requiredOutcome,
-      signal,
-      workspaceRoot: this.workspaceRoot,
-      requestToolApproval: this.resolveToolApprovalHandler(executionStrategy, runId, listener),
-      onProgress: (ev) => {
-        listener?.(ev as AgentServiceEvent);
-      },
-      ...(listener && {
-        onStreamChunk: (chunk: string, source: "message" | "tool-summary") => {
-          listener({ type: "text-chunk", chunk, source });
+    let runtimeResult;
+    try {
+      runtimeResult = await this.runtime.run({
+        threadId,
+        request,
+        presentationSnapshot: before,
+        currentSlideId: editorContext?.currentSlideId,
+        selectedElementIds: editorContext?.selectedElementIds ?? [],
+        model,
+        messageHistory,
+        requiredOutcome,
+        signal,
+        workspaceRoot: this.workspaceRoot,
+        requestToolApproval: this.resolveToolApprovalHandler(executionStrategy, runId, listener),
+        onProgress: (ev) => {
+          listener?.(ev as AgentServiceEvent);
         },
-        onThinkingChunk: (chunk: string, modelStep: number) => {
-          listener({ type: "thinking-chunk", chunk, modelStep });
-        },
-      }),
-    });
+        ...(listener && {
+          onStreamChunk: (chunk: string, source: "message" | "tool-summary") => {
+            listener({ type: "text-chunk", chunk, source });
+          },
+          onThinkingChunk: (chunk: string, modelStep: number) => {
+            listener({ type: "thinking-chunk", chunk, modelStep });
+          },
+        }),
+      });
+    } catch (error) {
+      const recoveryMessage = formatRecoverableAgentError(error, signal);
+      if (recoveryMessage) {
+        return {
+          status: "chat",
+          message: recoveryMessage,
+          ...(this.conversations.has(threadId) ? { threadId } : {}),
+        };
+      }
+      throw error;
+    }
 
     if (runtimeResult.type === "message") {
       this.conversations.delete(threadId);

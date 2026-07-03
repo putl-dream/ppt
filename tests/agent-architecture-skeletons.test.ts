@@ -399,10 +399,15 @@ describe("Agent Architecture Skeletons & Types", () => {
     expect(first.status).toBe("chat");
     if (first.status !== "chat") throw new Error("Expected clarification");
 
-    await expect(service.continueAgentRun(
+    const failed = await service.continueAgentRun(
       first.threadId!,
       "Agent 范式与架构演进：从 ReAct / Plan / Workflow 看智能体设计",
-    )).rejects.toThrow("Provider request timed out");
+    );
+    expect(failed.status).toBe("chat");
+    if (failed.status === "chat") {
+      expect(failed.message).toContain("Provider request timed out");
+      expect(failed.threadId).toBe(first.threadId);
+    }
 
     await service.continueAgentRun(first.threadId!, "我刚才说了什么？");
 

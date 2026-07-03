@@ -66,7 +66,7 @@ export async function generateWithAnthropic(
       max_tokens: maxTokens,
       system: request.systemPrompt,
       messages: [{ role: "user", content: request.prompt }],
-    });
+    }, { signal: request.signal });
     let text = extractResponseText(response);
 
     const exhaustedDuringThinking = !text &&
@@ -78,7 +78,7 @@ export async function generateWithAnthropic(
         max_tokens: maxTokens,
         system: request.systemPrompt,
         messages: [{ role: "user", content: request.prompt }],
-      });
+      }, { signal: request.signal });
       text = extractResponseText(response);
     }
 
@@ -102,7 +102,7 @@ export async function generateWithAnthropic(
       stopReason: response.stop_reason ?? undefined,
     };
   } catch (error) {
-    throw normalizeProviderError("anthropic", error);
+    throw normalizeProviderError("anthropic", error, request.signal);
   }
 }
 
@@ -126,7 +126,7 @@ export async function* generateStreamWithAnthropic(
       max_tokens: config.maxOutputTokens,
       system: request.systemPrompt,
       messages: [{ role: "user", content: request.prompt }],
-    });
+    }, { signal: request.signal });
 
     for await (const event of stream) {
       if (event.type === "content_block_delta") {
@@ -144,6 +144,6 @@ export async function* generateStreamWithAnthropic(
       text: "",
     };
   } catch (error) {
-    throw normalizeProviderError("anthropic", error);
+    throw normalizeProviderError("anthropic", error, request.signal);
   }
 }
