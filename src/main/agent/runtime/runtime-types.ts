@@ -60,6 +60,8 @@ export interface AgentRuntimeOptions {
    */
   requiredOutcome?: "any" | "command_proposal";
   deckAgentContext?: DeckAgentContext;
+  /** Session project sandbox root; required for Task sub-agent delegation */
+  workspaceRoot?: string;
   maxSteps?: number;
   /**
    * 流式回调：当模型生成内容时逐chunk调用（可选）

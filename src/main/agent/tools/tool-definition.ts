@@ -1,5 +1,7 @@
 import { z } from "zod";
+import type { AgentModelSelection } from "@shared/agent";
 import type { Presentation } from "@shared/presentation";
+import type { AgentModelGateway } from "../gateway";
 import type { ToolRegistry } from "./tool-registry";
 
 /**
@@ -37,6 +39,13 @@ export interface ToolContext {
   readonly registry: ToolRegistry;
   /** 历史消息上下文 */
   readonly messageHistory: Array<{ role: "user" | "assistant"; content: string }>;
+  /** Session project sandbox root for Task sub-agents */
+  readonly workspaceRoot?: string;
+  /** Model gateway for Task sub-agent delegation */
+  readonly gateway?: AgentModelGateway;
+  /** Active model selection for Task sub-agent delegation */
+  readonly model?: AgentModelSelection;
+  readonly signal?: AbortSignal;
 }
 
 /**

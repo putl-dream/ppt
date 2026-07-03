@@ -69,6 +69,7 @@ function createSessionRuntime(
     new AgentRuntime(registry, agentGateway),
     new CommitGate(new RiskPolicy()),
     snapshot.session.id,
+    snapshot.project?.rootPath,
     sessionStore,
   );
   return {

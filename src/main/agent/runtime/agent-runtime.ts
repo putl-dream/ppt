@@ -86,6 +86,10 @@ export class AgentRuntime {
       discoverySession,
       registry: this.registry,
       messageHistory: options.messageHistory ?? [],
+      workspaceRoot: options.workspaceRoot,
+      gateway: this.gateway,
+      model: options.model,
+      signal: options.signal,
     };
     const coreTools = this.registry.getCoreTools();
     const systemPrompt = SystemPromptBuilder.build({

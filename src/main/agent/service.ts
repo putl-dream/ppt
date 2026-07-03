@@ -57,6 +57,7 @@ export class AgentService {
     private readonly runtime: AgentRuntime,
     private readonly commitGate: CommitGate,
     private readonly sessionId?: string,
+    private readonly workspaceRoot?: string,
     private readonly fileStore?: {
       readProjectArtifact(sessionId: string, artifactIdOrPath: string): Promise<{ content?: string }>;
       writeProjectArtifact(sessionId: string, relativePath: string, content: string): Promise<{ changed: boolean; staleArtifactIds: string[]; changedArtifactId?: string }>;
@@ -154,6 +155,7 @@ export class AgentService {
       requiredOutcome,
       signal,
       deckAgentContext,
+      workspaceRoot: this.workspaceRoot,
       onProgress: (ev) => {
         listener?.(ev as any);
       },

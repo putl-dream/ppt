@@ -33,6 +33,8 @@ export class SystemPromptBuilder {
 2. **工具加载与发现规则**：
    - 你当前默认仅能直接调用以下 **Core Tools**:
 ${toolsDescription}
+   - \`Task\` 用于把聚焦的子任务委派给子 Agent。子 Agent 拥有独立上下文，只向主流程回传结论；主对话历史不会被清除。
+   - 子 Agent 不能再次调用 \`Task\`。并行的独立子任务可通过 \`Task\` 的 \`descriptions\` 数组触发。
    - 如果你需要执行其他高级分析、大范围修饰（如检测标题重复、自动排版、应用风格主题等），这些工具默认对你不可见。你必须先通过调用 \`SearchExtraTools\` 搜索它们。
    - 搜出相应的工具卡片 (Tool Card) 后，将其名称记录在当前会话中。你必须且仅能使用 \`ExecuteExtraTool\` 来调用这些已被你搜索发现过的延迟加载工具 (Deferred Tools)。
    - **严禁凭空猜测工具名**或尝试执行未被搜索返回过的任何工具，这会遭到系统的安全拒绝。

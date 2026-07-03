@@ -9,6 +9,7 @@ import { readCurrentSlideTool } from "./core/read-current-slide";
 import { readPresentationSnapshotTool } from "./core/read-presentation-snapshot";
 import { searchExtraToolsTool } from "./core/search-extra-tools";
 import { submitCommandsTool } from "./core/submit-commands";
+import { taskTool } from "./core/task";
 import { analyzeDeckConsistencyTool } from "./deferred/analyze-deck-consistency";
 import { applyThemeStyleTool } from "./deferred/apply-theme-style";
 import { autoLayoutSlideTool } from "./deferred/auto-layout-slide";
@@ -106,6 +107,7 @@ export function createDefaultToolRegistry(): ToolRegistry {
     readPresentationSnapshotTool,
     searchExtraToolsTool,
     submitCommandsTool,
+    taskTool,
     analyzeDeckConsistencyTool,
     applyThemeStyleTool,
     autoLayoutSlideTool,
