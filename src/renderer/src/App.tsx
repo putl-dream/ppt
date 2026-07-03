@@ -54,6 +54,7 @@ import {
   mergeActivityTraces,
   sealAllReasoning,
   updateStepText,
+  upsertTodoTrace,
 } from "@shared/agent-activity";
 
 type ChatMessage = SessionChatMessage;
@@ -378,6 +379,13 @@ export function App() {
             detail: event.detail,
           }),
         );
+        return;
+      }
+
+      if (event.type === "todo-updated") {
+        stopStatusTyping();
+        setAgentActivityMode("workflow");
+        syncActivityTrace(upsertTodoTrace(activeRunTraceRef.current, event.todos));
         return;
       }
 

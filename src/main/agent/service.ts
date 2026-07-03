@@ -1,4 +1,5 @@
 import type { AgentExecutionStrategy, AgentModelSelection } from "@shared/agent";
+import type { AgentTodoItem } from "@shared/agent-todo";
 import type { CommandBus, PresentationCommand } from "@shared/commands";
 import type { AgentEditorContext, AgentRunResult } from "@shared/ipc";
 import type { AgentConversationMessage } from "@shared/session-recovery";
@@ -24,7 +25,8 @@ export type AgentServiceEvent =
       toolName: string;
       reason: string;
       detail: string;
-    };
+    }
+  | { type: "todo-updated"; message: string; todos: AgentTodoItem[] };
 
 export type AgentServiceEventListener = (event: AgentServiceEvent) => void;
 

@@ -3,6 +3,7 @@ import type { AgentModelSelection } from "@shared/agent";
 import type { Presentation } from "@shared/presentation";
 import type { AgentModelGateway } from "../gateway";
 import type { ToolApprovalHandler } from "../runtime/permission-check";
+import type { AgentTodoItem } from "@shared/agent-todo";
 import type { ToolRegistry } from "./tool-registry";
 
 /**
@@ -48,6 +49,13 @@ export interface ToolContext {
   readonly model?: AgentModelSelection;
   readonly signal?: AbortSignal;
   readonly requestToolApproval?: ToolApprovalHandler;
+  /** In-memory task plan for the current run (TodoWrite). */
+  readonly todoSession?: {
+    getItems: () => AgentTodoItem[];
+    applyUpdate: (merge: boolean, todos: AgentTodoItem[]) => AgentTodoItem[];
+  };
+  /** Emits todo list updates to the UI after TodoWrite. */
+  readonly notifyTodoUpdated?: (todos: AgentTodoItem[]) => void;
 }
 
 /**

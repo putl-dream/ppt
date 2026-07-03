@@ -33,6 +33,7 @@ export class SystemPromptBuilder {
 3. **并发子任务**：互不依赖的子任务可用 \`Task\` 的 \`descriptions\` 数组并发执行。
 4. **幻灯片写入**：你没有 PPT 的直接可写引用。所有幻灯片改动必须通过 \`SubmitCommands\` 提交命令。
 5. **只读快照**：了解当前幻灯片状态用 \`ReadPresentationSnapshot\` / \`ReadCurrentSlide\` / \`GetSelection\` / \`ListSlides\`。
+6. **任务规划**：复杂或多步任务必须先 \`TodoWrite\` 列出步骤（全 pending），再逐步执行并更新状态。TodoWrite 不执行任何实际操作，只跟踪计划与进度。
 
 ## Core Tools
 
@@ -59,11 +60,15 @@ ${WORKSPACE_FILES.map((line) => `- ${line}`).join("\n")}
 
 ## 推荐工作流
 
-1. 澄清需求（AskUser，若必要）
-2. Task 起草 brief → Task 起草 outline → Task 写 storyboard（可并发独立段）
-3. ReadPresentationSnapshot 了解现状
-4. SubmitCommands 创建/修改幻灯片
-5. 可选：SearchExtraTools 做美化增强
+1. TodoWrite 列出完整步骤计划（merge=false，全 pending）
+2. 澄清需求（AskUser，若必要）
+3. 逐步执行：TodoWrite 标 in_progress → 执行工具 → TodoWrite 标 completed
+4. Task 起草 brief → Task 起草 outline → Task 写 storyboard（可并发独立段）
+5. ReadPresentationSnapshot 了解现状
+6. SubmitCommands 创建/修改幻灯片
+7. 可选：SearchExtraTools 做美化增强
+
+每完成一步或切换步骤时调用 TodoWrite（merge=true）更新进度，避免偏离用户最初目标。
 
 ## 响应协议
 

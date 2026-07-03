@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { agentTodoItemSchema, TODO_TRACE_ID, type AgentTodoItem } from "./agent-todo";
 
 export const agentActivityItemSchema = z.discriminatedUnion("kind", [
   z.object({
@@ -29,6 +30,11 @@ export const agentActivityItemSchema = z.discriminatedUnion("kind", [
     kind: z.literal("step"),
     text: z.string(),
     status: z.enum(["typing", "running", "done"]).optional(),
+  }),
+  z.object({
+    id: z.string(),
+    kind: z.literal("todo"),
+    todos: z.array(agentTodoItemSchema),
   }),
   z.object({
     id: z.string(),
@@ -98,6 +104,25 @@ export function appendStep(
       status,
     },
   ];
+}
+
+export function upsertTodoTrace(
+  trace: AgentActivityItem[],
+  todos: AgentTodoItem[],
+): AgentActivityItem[] {
+  const sealed = finalizeReasoning(trace);
+  const existingIndex = sealed.findIndex((item) => item.kind === "todo");
+  const nextItem = {
+    id: existingIndex >= 0 ? sealed[existingIndex]!.id : TODO_TRACE_ID,
+    kind: "todo" as const,
+    todos: todos.map((item) => ({ ...item })),
+  };
+
+  if (existingIndex >= 0) {
+    return sealed.map((item, index) => (index === existingIndex ? nextItem : item));
+  }
+
+  return [...sealed, nextItem];
 }
 
 export function updateStepText(

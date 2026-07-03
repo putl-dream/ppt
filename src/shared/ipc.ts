@@ -1,6 +1,7 @@
 import type { Presentation } from "./presentation";
 import type { PresentationCommand } from "./commands";
 import type { AgentExecutionStrategy, AgentModelSettings } from "./agent";
+import type { AgentTodoItem } from "./agent-todo";
 import { z } from "zod";
 import type {
   ProjectArtifact,
@@ -83,7 +84,8 @@ export type AgentStreamEvent =
       toolName: string;
       reason: string;
       detail: string;
-    };
+    }
+  | { runId: string; type: "todo-updated"; message: string; todos: AgentTodoItem[] };
 
 export type AgentRunResult =
   | { status: "chat"; message: string; threadId?: string }
