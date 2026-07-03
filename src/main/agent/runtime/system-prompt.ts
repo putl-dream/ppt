@@ -1,10 +1,25 @@
 import type { ToolDefinition } from "../tools/tool-definition";
 import { toToolCard } from "../tools/tool-card";
+import type { SkillCard } from "../skills/skill-types";
 
 export interface SystemPromptOptions {
   coreTools: ToolDefinition<any, any>[];
+  skillCatalog?: SkillCard[];
   currentSlideId?: string;
   requiredOutcome?: "any" | "command_proposal";
+}
+
+function formatSkillCatalog(skills: SkillCard[]): string {
+  if (skills.length === 0) {
+    return "（当前无已注册技能）";
+  }
+
+  return skills
+    .map((skill) => {
+      const whenToUse = skill.whenToUse ? ` | 适用: ${skill.whenToUse}` : "";
+      return `- \`${skill.name}\`: ${skill.description}${whenToUse}`;
+    })
+    .join("\n");
 }
 
 const WORKSPACE_FILES = [
@@ -34,12 +49,18 @@ export class SystemPromptBuilder {
 4. **幻灯片写入**：你没有 PPT 的直接可写引用。所有幻灯片改动必须通过 \`SubmitCommands\` 提交命令。
 5. **只读快照**：了解当前幻灯片状态用 \`ReadPresentationSnapshot\` / \`ReadCurrentSlide\` / \`GetSelection\` / \`ListSlides\`。
 6. **任务规划**：复杂或多步任务必须先 \`TodoWrite\` 列出步骤（全 pending），再逐步执行并更新状态。TodoWrite 不执行任何实际操作，只跟踪计划与进度。
+7. **按需加载技能**：下方目录列出可用技能（仅名称与描述）。需要某技能的完整指引时，先调用 \`LoadSkill\`，再按返回内容执行；不要凭记忆臆造技能细节。
+
+## Available Skills
+
+${formatSkillCatalog(options.skillCatalog ?? [])}
 
 ## Core Tools
 
 ${toolsDescription}
 
 - \`Task\`：委派聚焦子任务。子 Agent 可读写 workspace 文件（bash/read/write/edit/glob），但不能再次调用 Task。
+- \`LoadSkill\`：加载技能的完整 SKILL.md 正文（按需，仅通过注册表名称查找）。
 - \`SearchExtraTools\` + \`ExecuteExtraTool\`：可选增强能力（自动排版、风格分析等）。基础创建无需搜索。
 - \`AskUser\`：仅询问由用户决定且确实缺失的内容，不能问工具名或系统实现。
 

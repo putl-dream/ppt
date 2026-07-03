@@ -5,6 +5,8 @@ import type { AgentModelGateway } from "../gateway";
 import type { ToolApprovalHandler } from "../runtime/permission-check";
 import type { AgentTodoItem } from "@shared/agent-todo";
 import type { ToolRegistry } from "./tool-registry";
+import type { SkillRegistry } from "../skills/loadSkillsDir";
+import type { SkillSession } from "../skills/skill-types";
 
 /**
  * 工具加载策略。
@@ -56,6 +58,10 @@ export interface ToolContext {
   };
   /** Emits todo list updates to the UI after TodoWrite. */
   readonly notifyTodoUpdated?: (todos: AgentTodoItem[]) => void;
+  /** Skills catalog scanned at harness startup (Layer 1). */
+  readonly skillRegistry?: SkillRegistry;
+  /** Per-run loaded skill tracking (Layer 2). */
+  readonly skillSession?: SkillSession;
 }
 
 /**

@@ -9,6 +9,9 @@ import { ensureDefaultHooks } from "./default-hooks";
 import { triggerHooks } from "./hook-registry";
 import type { PostToolUseBlock, StopBlock, UserPromptSubmitBlock } from "./hook-blocks";
 import { createTodoRunState, type TodoRunState } from "./todo-run-state";
+import type { SkillRegistry } from "../skills/loadSkillsDir";
+import { createEmptySkillRegistry } from "../skills/loadSkillsDir";
+import { createSkillSession, type SkillSession } from "../skills/skill-types";
 import {
   applyTodoUpdate,
   buildTodoReminder,
@@ -77,10 +80,12 @@ function isToolCall(value: unknown): value is ToolCall {
 export class AgentRuntime {
   private readonly discoverySessions = new Map<string, ToolDiscoverySession>();
   private readonly todoSessions = new Map<string, TodoRunState>();
+  private readonly skillSessions = new Map<string, SkillSession>();
 
   constructor(
     private readonly registry: ToolRegistry,
     private readonly gateway: AgentModelGateway,
+    private readonly skillRegistry: SkillRegistry = createEmptySkillRegistry(),
   ) {}
 
   async run(options: AgentRuntimeOptions): Promise<AgentRuntimeResult> {
@@ -93,6 +98,9 @@ export class AgentRuntime {
 
     const todoState = this.todoSessions.get(options.threadId) ?? createTodoRunState();
     this.todoSessions.set(options.threadId, todoState);
+
+    const skillSession = this.skillSessions.get(options.threadId) ?? createSkillSession();
+    this.skillSessions.set(options.threadId, skillSession);
 
     const context: ToolContext = {
       presentation: structuredClone(options.presentationSnapshot),
@@ -120,10 +128,13 @@ export class AgentRuntime {
           todos,
         });
       },
+      skillRegistry: this.skillRegistry,
+      skillSession,
     };
     const coreTools = this.registry.getCoreTools();
     const systemPrompt = SystemPromptBuilder.build({
       coreTools,
+      skillCatalog: this.skillRegistry.listCards(),
       currentSlideId: options.currentSlideId,
       requiredOutcome: options.requiredOutcome,
     });
@@ -420,5 +431,6 @@ export class AgentRuntime {
   clearSession(threadId: string): void {
     this.discoverySessions.delete(threadId);
     this.todoSessions.delete(threadId);
+    this.skillSessions.delete(threadId);
   }
 }

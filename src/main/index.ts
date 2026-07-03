@@ -23,6 +23,8 @@ import { AgentRuntime } from "./agent/runtime/agent-runtime";
 import { ToolApprovalBroker } from "./agent/runtime/tool-approval-broker";
 import { createDefaultToolRegistry } from "./agent/tools/tool-registry";
 import { CommitGate } from "./agent/gate/commit-gate";
+import { scanSkills, type SkillRegistry } from "./agent/skills/loadSkillsDir";
+import { createEmptySkillRegistry } from "./agent/skills/loadSkillsDir";
 import { RiskPolicy } from "./agent/gate/risk-policy";
 import { createModuleLogger, requestSummary } from "./agent/logger";
 import { FileSessionStore } from "./session-store";
@@ -37,17 +39,35 @@ const logger = createModuleLogger("main");
 const agentGateway = new AgentGateway();
 const toolApprovalBroker = new ToolApprovalBroker();
 
+async function resolveSkillRegistry(): Promise<SkillRegistry> {
+  const candidates = [
+    join(process.cwd(), "skills"),
+    join(app.getAppPath(), "skills"),
+    join(__dirname, "../../skills"),
+  ];
+
+  for (const skillsDir of candidates) {
+    const registry = await scanSkills(skillsDir);
+    if (registry.size > 0) {
+      logger.info("skills.registry.loaded", { skillsDir, count: registry.size });
+      return registry;
+    }
+  }
+
+  return createEmptySkillRegistry();
+}
+
 interface SessionRuntime {
   commandBus: CommandBus;
   agentService: AgentService;
 }
 
-function createSessionRuntime(snapshot: SessionSnapshot): SessionRuntime {
+function createSessionRuntime(snapshot: SessionSnapshot, skillRegistry: SkillRegistry): SessionRuntime {
   const commandBus = new CommandBus(snapshot.presentation);
   const registry = createDefaultToolRegistry();
   const agentService = new AgentService(
     commandBus,
-    new AgentRuntime(registry, agentGateway),
+    new AgentRuntime(registry, agentGateway, skillRegistry),
     new CommitGate(new RiskPolicy()),
     snapshot.project?.rootPath,
     toolApprovalBroker,
@@ -85,6 +105,8 @@ app.whenReady().then(async () => {
   sessionStore = new FileSessionStore(join(app.getPath("userData"), "sessions.json"));
   await sessionStore.initialize();
 
+  const skillRegistry = await resolveSkillRegistry();
+
   const runtimes = new Map<string, SessionRuntime>();
   const sessionActiveRuns = new Map<string, string>(); // sessionId -> runId
   const activeRuns = new Map<string, AbortController>(); // runId -> AbortController
@@ -93,7 +115,7 @@ app.whenReady().then(async () => {
   const ensureRuntime = async (snapshot: SessionSnapshot): Promise<SessionRuntime> => {
     const existing = runtimes.get(snapshot.session.id);
     if (existing) return existing;
-    const runtime = createSessionRuntime(snapshot);
+    const runtime = createSessionRuntime(snapshot, skillRegistry);
     runtimes.set(snapshot.session.id, runtime);
     return runtime;
   };
