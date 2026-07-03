@@ -49,6 +49,7 @@ interface ChatWorkspaceProps {
   onSubmitRequest: () => void;
   busy: boolean;
   onResolveApproval: (approved: boolean, approval: AgentApprovalRequest, messageId: string) => void;
+  onResolveToolApproval?: (approvalId: string, approved: boolean) => void;
   getInlineCardData: (message: ChatMessage) => InlineCardData;
   onConfirmBrief: (messageId: string) => void;
   onConfirmOutline: (messageId: string) => void;
@@ -98,6 +99,7 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
   onSubmitRequest,
   busy,
   onResolveApproval,
+  onResolveToolApproval,
   getInlineCardData,
   onConfirmBrief,
   onConfirmOutline,
@@ -427,7 +429,11 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
                       reasoning: useLiveTrace ? undefined : msg.reasoning,
                     });
                     return trace.length > 0 ? (
-                      <AgentActivityTrace items={trace} live={useLiveTrace} />
+                      <AgentActivityTrace
+                        items={trace}
+                        live={useLiveTrace}
+                        onResolveToolApproval={onResolveToolApproval}
+                      />
                     ) : null;
                   })()}
 
@@ -622,6 +628,7 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
           activityTrace={activityTrace}
           activeToolName={activeToolName}
           suppressTrace={Boolean(streamingMessageId)}
+          onResolveToolApproval={onResolveToolApproval}
         />
 
         <div ref={messagesEndRef} />

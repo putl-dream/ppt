@@ -74,7 +74,16 @@ export type AgentStreamEvent =
   | { runId: string; type: "tool-started"; message: string; toolName: string }
   | { runId: string; type: "tool-finished"; message: string; toolName: string }
   | { runId: string; type: "tool-validation-failed"; message: string; toolName: string; error: string }
-  | { runId: string; type: "approval-waiting"; message: string };
+  | { runId: string; type: "approval-waiting"; message: string }
+  | {
+      runId: string;
+      type: "tool-approval-waiting";
+      message: string;
+      approvalId: string;
+      toolName: string;
+      reason: string;
+      detail: string;
+    };
 
 export type AgentRunResult =
   | { status: "chat"; message: string; threadId?: string }
@@ -159,6 +168,7 @@ export interface DesktopApi {
   ): Promise<string | null>;
   selectDirectory(defaultPath?: string): Promise<string | null>;
   cancelAgentRun(runId: string): Promise<boolean>;
+  resolveToolApproval(runId: string, approvalId: string, approved: boolean): Promise<boolean>;
 }
 
 export interface ExportPresentationOptions {

@@ -20,6 +20,7 @@ import {
 } from "@shared/agent";
 import { AgentGateway } from "./agent/gateway";
 import { AgentRuntime } from "./agent/runtime/agent-runtime";
+import { ToolApprovalBroker } from "./agent/runtime/tool-approval-broker";
 import { createDefaultToolRegistry } from "./agent/tools/tool-registry";
 import { CommitGate } from "./agent/gate/commit-gate";
 import { RiskPolicy } from "./agent/gate/risk-policy";
@@ -34,6 +35,7 @@ import type { AgentModelSelection } from "@shared/agent";
 
 const logger = createModuleLogger("main");
 const agentGateway = new AgentGateway();
+const toolApprovalBroker = new ToolApprovalBroker();
 
 interface SessionRuntime {
   commandBus: CommandBus;
@@ -48,6 +50,7 @@ function createSessionRuntime(snapshot: SessionSnapshot): SessionRuntime {
     new AgentRuntime(registry, agentGateway),
     new CommitGate(new RiskPolicy()),
     snapshot.project?.rootPath,
+    toolApprovalBroker,
   );
   return { commandBus, agentService };
 }
@@ -340,6 +343,7 @@ app.whenReady().then(async () => {
   });
 
   ipcMain.handle("agent:cancel", async (_, runId: string) => {
+    toolApprovalBroker.cancelForRun(runId);
     const controller = activeRuns.get(runId);
     if (controller) {
       controller.abort();
@@ -348,6 +352,12 @@ app.whenReady().then(async () => {
     }
     return false;
   });
+
+  ipcMain.handle(
+    "agent:resolve-tool-approval",
+    async (_, runId: string, approvalId: string, approved: boolean) =>
+      toolApprovalBroker.resolve(approvalId, approved),
+  );
 
   ipcMain.handle(
     "agent:start",
@@ -405,6 +415,7 @@ app.whenReady().then(async () => {
               request.editorContext,
               sessionStore.getAgentMessageHistory(sessionId, request.prompt),
               controller.signal,
+              currentRunId,
             ),
           ),
         );
@@ -467,6 +478,7 @@ app.whenReady().then(async () => {
                 emit,
                 request.editorContext,
                 controller.signal,
+                currentRunId,
               )
             : runtime.agentService.start(
                 request.prompt,
@@ -476,6 +488,7 @@ app.whenReady().then(async () => {
                 request.editorContext,
                 sessionStore.getAgentMessageHistory(sessionId, request.prompt),
                 controller.signal,
+                currentRunId,
               );
 
           return finalizeAgentResult(sessionId, runtime, await run);

@@ -9,6 +9,7 @@ interface AgentThinkingLoaderProps {
   activeToolName?: string | null;
   /** 已有流式回复消息时，时间线改挂在消息上，避免重复展示 */
   suppressTrace?: boolean;
+  onResolveToolApproval?: (approvalId: string, approved: boolean) => void;
 }
 
 function getStatusLabel(
@@ -23,6 +24,12 @@ function getStatusLabel(
     return "模型思考中…";
   }
   if (agentActivityMode === "workflow") {
+    const pendingApproval = [...activityTrace].reverse().find(
+      (item) => item.kind === "tool-approval" && item.status === "pending",
+    );
+    if (pendingApproval?.kind === "tool-approval") {
+      return `等待确认工具操作：${pendingApproval.toolName}`;
+    }
     return "正在执行工作流…";
   }
   if (agentActivityMode === "request") {
@@ -38,6 +45,7 @@ export const AgentThinkingLoader: React.FC<AgentThinkingLoaderProps> = ({
   activityTrace,
   activeToolName = null,
   suppressTrace = false,
+  onResolveToolApproval,
 }) => {
   if (!busy || agentActivityMode === "idle") return null;
 
@@ -55,7 +63,13 @@ export const AgentThinkingLoader: React.FC<AgentThinkingLoaderProps> = ({
         <span className="agent-activity-status-label">{statusLabel}</span>
       </div>
 
-      {hasTrace && <AgentActivityTrace items={activityTrace} live />}
+      {hasTrace && (
+        <AgentActivityTrace
+          items={activityTrace}
+          live
+          onResolveToolApproval={onResolveToolApproval}
+        />
+      )}
     </div>
   );
 };

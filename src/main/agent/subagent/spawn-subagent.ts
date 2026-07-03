@@ -2,6 +2,10 @@ import type { AgentModelGateway } from "../gateway";
 import type { AgentModelSelection } from "@shared/agent";
 import { parseAgentJsonResponse } from "../runtime/agent-runtime";
 import { RuntimeNormalizer } from "../runtime/runtime-normalizer";
+import { ensureDefaultHooks } from "../runtime/default-hooks";
+import { triggerHooks } from "../runtime/hook-registry";
+import type { PostToolUseBlock, StopBlock } from "../runtime/hook-blocks";
+import type { ToolApprovalHandler } from "../runtime/permission-check";
 import { buildSubAgentSystemPrompt } from "./sub-system-prompt";
 import {
   SUB_AGENT_TOOL_HANDLERS,
@@ -22,6 +26,7 @@ export interface SpawnSubAgentOptions {
   model?: AgentModelSelection;
   maxSteps?: number;
   signal?: AbortSignal;
+  requestToolApproval?: ToolApprovalHandler;
 }
 
 function isToolCall(value: unknown): value is SubAgentToolCall {
@@ -41,6 +46,7 @@ function extractTextFromNormalized(result: { type: string; content?: string; mes
  * is returned to the caller; intermediate messages are discarded.
  */
 export async function spawnSubAgent(options: SpawnSubAgentOptions): Promise<string> {
+  ensureDefaultHooks();
   const maxSteps = options.maxSteps ?? 30;
   const systemPrompt = buildSubAgentSystemPrompt(SUB_AGENT_TOOLS);
   const transcript: Array<Record<string, unknown>> = [
@@ -48,6 +54,19 @@ export async function spawnSubAgent(options: SpawnSubAgentOptions): Promise<stri
   ];
   const toolContext: SubAgentToolContext = {
     workspaceRoot: options.workspaceRoot,
+  };
+
+  const finish = async (
+    result: string,
+    reason: StopBlock["reason"] = "completed",
+  ): Promise<string> => {
+    await triggerHooks("Stop", {
+      event: "Stop",
+      scope: "subagent",
+      result,
+      reason,
+    } satisfies StopBlock);
+    return result;
   };
 
   for (let step = 0; step < maxSteps; step += 1) {
@@ -80,7 +99,7 @@ export async function spawnSubAgent(options: SpawnSubAgentOptions): Promise<stri
     if (!isToolCall(parsed)) {
       try {
         const normalized = RuntimeNormalizer.normalize(parsed);
-        return extractTextFromNormalized(normalized);
+        return finish(extractTextFromNormalized(normalized));
       } catch (error) {
         transcript.push({
           role: "assistant",
@@ -112,18 +131,53 @@ export async function spawnSubAgent(options: SpawnSubAgentOptions): Promise<stri
     }
 
     try {
+      const preToolStop = await triggerHooks("PreToolUse", {
+        event: "PreToolUse",
+        toolName: tool.name,
+        args: args.data,
+        scope: "subagent",
+        workspaceRoot: options.workspaceRoot,
+        requestToolApproval: options.requestToolApproval,
+      });
+      if (preToolStop?.toolDenied) {
+        transcript.push({
+          role: "tool",
+          toolName: tool.name,
+          error: preToolStop.reason,
+        });
+        continue;
+      }
+      if (preToolStop) {
+        return finish(preToolStop.reason);
+      }
+
       const output = await tool.execute(args.data, toolContext);
+      await triggerHooks("PostToolUse", {
+        event: "PostToolUse",
+        toolName: tool.name,
+        args: args.data,
+        scope: "subagent",
+        result: output,
+      } satisfies PostToolUseBlock);
       transcript.push({ role: "tool", toolName: tool.name, result: output });
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      await triggerHooks("PostToolUse", {
+        event: "PostToolUse",
+        toolName: tool.name,
+        args: args.data,
+        scope: "subagent",
+        error: errorMessage,
+      } satisfies PostToolUseBlock);
       transcript.push({
         role: "tool",
         toolName: tool.name,
-        error: error instanceof Error ? error.message : String(error),
+        error: errorMessage,
       });
     }
   }
 
-  return "Sub-agent reached the step limit before producing a conclusion.";
+  return finish("Sub-agent reached the step limit before producing a conclusion.", "step_limit");
 }
 
 /**

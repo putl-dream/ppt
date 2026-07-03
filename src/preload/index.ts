@@ -42,6 +42,8 @@ const api: DesktopApi = {
     ipcRenderer.invoke("presentation:export", presentation, options),
   selectDirectory: (defaultPath) => ipcRenderer.invoke("dialog:select-directory", defaultPath),
   cancelAgentRun: (runId) => ipcRenderer.invoke("agent:cancel", runId),
+  resolveToolApproval: (runId, approvalId, approved) =>
+    ipcRenderer.invoke("agent:resolve-tool-approval", runId, approvalId, approved),
 };
 
 contextBridge.exposeInMainWorld("desktopApi", api);

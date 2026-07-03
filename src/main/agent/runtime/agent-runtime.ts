@@ -5,6 +5,9 @@ import { RuntimeNormalizer } from "./runtime-normalizer";
 import { SystemPromptBuilder } from "./system-prompt";
 import type { AgentRuntimeOptions, AgentRuntimeResult } from "./runtime-types";
 import { JsonStreamExtractor } from "./json-stream-extractor";
+import { ensureDefaultHooks } from "./default-hooks";
+import { triggerHooks } from "./hook-registry";
+import type { PostToolUseBlock, StopBlock, UserPromptSubmitBlock } from "./hook-blocks";
 
 type ToolCall = {
   type: "tool_call";
@@ -74,6 +77,8 @@ export class AgentRuntime {
   ) {}
 
   async run(options: AgentRuntimeOptions): Promise<AgentRuntimeResult> {
+    ensureDefaultHooks();
+
     const discoverySession = this.discoverySessions.get(options.threadId) ?? {
       discoveredToolNames: new Set<string>(),
     };
@@ -90,6 +95,7 @@ export class AgentRuntime {
       gateway: this.gateway,
       model: options.model,
       signal: options.signal,
+      requestToolApproval: options.requestToolApproval,
     };
     const coreTools = this.registry.getCoreTools();
     const systemPrompt = SystemPromptBuilder.build({
@@ -101,6 +107,34 @@ export class AgentRuntime {
       { role: "user", content: options.request },
     ];
     const maxSteps = options.maxSteps ?? 12;
+
+    const finish = async (
+      result: AgentRuntimeResult,
+      reason: StopBlock["reason"] = "completed",
+    ): Promise<AgentRuntimeResult> => {
+      await triggerHooks("Stop", {
+        event: "Stop",
+        threadId: options.threadId,
+        scope: "main",
+        result,
+        reason,
+      } satisfies StopBlock);
+      return result;
+    };
+
+    const promptBlock: UserPromptSubmitBlock = {
+      event: "UserPromptSubmit",
+      threadId: options.threadId,
+      request: options.request,
+      messageHistory: options.messageHistory,
+    };
+    const promptStop = await triggerHooks("UserPromptSubmit", promptBlock);
+    if (promptStop) {
+      return finish({
+        type: "message",
+        content: promptStop.reason,
+      });
+    }
 
     for (let step = 0; step < maxSteps; step += 1) {
       if (options.signal?.aborted) {
@@ -206,7 +240,7 @@ export class AgentRuntime {
           continue;
         }
 
-        return normalized;
+        return finish(normalized);
       }
 
       const tool = this.registry.get(parsed.toolName);
@@ -244,7 +278,45 @@ export class AgentRuntime {
           toolName: tool.name,
         });
 
+        const preToolStop = await triggerHooks("PreToolUse", {
+          event: "PreToolUse",
+          toolName: tool.name,
+          args: args.data,
+          scope: "main",
+          workspaceRoot: options.workspaceRoot,
+          threadId: options.threadId,
+          requestToolApproval: options.requestToolApproval,
+        });
+        if (preToolStop?.toolDenied) {
+          options.onProgress?.({
+            type: "tool-finished",
+            message: `工具 ${tool.name} 被拒绝: ${preToolStop.reason}`,
+            toolName: tool.name,
+          });
+          transcript.push({
+            role: "tool",
+            toolName: tool.name,
+            error: preToolStop.reason,
+          });
+          continue;
+        }
+        if (preToolStop) {
+          return finish({
+            type: "message",
+            content: preToolStop.reason,
+          });
+        }
+
         const result = await tool.execute(args.data, context);
+
+        await triggerHooks("PostToolUse", {
+          event: "PostToolUse",
+          toolName: tool.name,
+          args: args.data,
+          scope: "main",
+          result,
+          threadId: options.threadId,
+        } satisfies PostToolUseBlock);
 
         options.onProgress?.({
           type: "tool-finished",
@@ -253,19 +325,28 @@ export class AgentRuntime {
         });
 
         if (tool.name === "AskUser" || tool.name === "SubmitCommands") {
-          return RuntimeNormalizer.normalize(result);
+          return finish(RuntimeNormalizer.normalize(result));
         }
         transcript.push({ role: "tool", toolName: tool.name, result });
       } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        await triggerHooks("PostToolUse", {
+          event: "PostToolUse",
+          toolName: tool.name,
+          args: args.data,
+          scope: "main",
+          error: errorMessage,
+          threadId: options.threadId,
+        } satisfies PostToolUseBlock);
         options.onProgress?.({
           type: "tool-finished",
-          message: `工具 ${tool.name} 执行失败: ${error instanceof Error ? error.message : String(error)}`,
+          message: `工具 ${tool.name} 执行失败: ${errorMessage}`,
           toolName: tool.name,
         });
         transcript.push({
           role: "tool",
           toolName: tool.name,
-          error: error instanceof Error ? error.message : String(error),
+          error: errorMessage,
         });
       }
     }
@@ -277,10 +358,10 @@ export class AgentRuntime {
       );
     }
 
-    return {
+    return finish({
       type: "message",
       content: "本次请求的工具调用步骤超过上限，请缩小修改范围后重试。",
-    };
+    }, "step_limit");
   }
 
   clearSession(threadId: string): void {

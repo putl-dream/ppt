@@ -2155,6 +2155,37 @@ aside {
   transition: var(--transition-smooth);
 }
 
+.tool-approval-card {
+  margin: 8px 0;
+}
+
+.tool-approval-detail {
+  margin: 8px 0 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.04);
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 160px;
+  overflow: auto;
+}
+
+[data-theme="dark"] .tool-approval-detail {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.approval-buttons button.primary {
+  background: var(--accent-primary, #2563eb);
+  border: 1px solid transparent;
+  color: #fff;
+}
+
+.approval-buttons button.primary:hover {
+  filter: brightness(1.05);
+}
+
 .btn-reject {
   background: rgba(239, 68, 68, 0.08);
   border: 1px solid rgba(239, 68, 68, 0.2);

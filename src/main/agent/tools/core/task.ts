@@ -63,6 +63,7 @@ export function createTaskTool(deps: {
         gateway: context.gateway,
         model: context.model,
         signal: context.signal,
+        requestToolApproval: context.requestToolApproval,
       };
 
       if (args.descriptions?.length) {

@@ -5,6 +5,7 @@
 import type { PresentationCommand } from "@shared/commands";
 import type { AgentModelSelection } from "@shared/agent";
 import type { Presentation } from "@shared/presentation";
+import type { ToolApprovalHandler } from "./permission-check";
 
 export type AgentRuntimeRisk = "low" | "medium" | "high";
 
@@ -41,4 +42,5 @@ export interface AgentRuntimeOptions {
   onThinkingChunk?: (chunk: string, modelStep: number) => void;
   signal?: AbortSignal;
   onProgress?: (event: { type: string; message: string; [key: string]: unknown }) => void;
+  requestToolApproval?: ToolApprovalHandler;
 }

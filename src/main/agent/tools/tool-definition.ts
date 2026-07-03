@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { AgentModelSelection } from "@shared/agent";
 import type { Presentation } from "@shared/presentation";
 import type { AgentModelGateway } from "../gateway";
+import type { ToolApprovalHandler } from "../runtime/permission-check";
 import type { ToolRegistry } from "./tool-registry";
 
 /**
@@ -46,6 +47,7 @@ export interface ToolContext {
   /** Active model selection for Task sub-agent delegation */
   readonly model?: AgentModelSelection;
   readonly signal?: AbortSignal;
+  readonly requestToolApproval?: ToolApprovalHandler;
 }
 
 /**

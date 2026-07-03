@@ -30,6 +30,15 @@ export const agentActivityItemSchema = z.discriminatedUnion("kind", [
     text: z.string(),
     status: z.enum(["typing", "running", "done"]).optional(),
   }),
+  z.object({
+    id: z.string(),
+    kind: z.literal("tool-approval"),
+    approvalId: z.string(),
+    toolName: z.string(),
+    reason: z.string(),
+    detail: z.string(),
+    status: z.enum(["pending", "approved", "denied"]),
+  }),
 ]);
 
 export type AgentActivityItem = z.infer<typeof agentActivityItemSchema>;
@@ -183,6 +192,41 @@ export function appendToolStart(
       status: "running",
     },
   ];
+}
+
+export function appendToolApprovalWaiting(
+  trace: AgentActivityItem[],
+  input: {
+    approvalId: string;
+    toolName: string;
+    reason: string;
+    detail: string;
+  },
+): AgentActivityItem[] {
+  return [
+    ...finalizeReasoning(trace),
+    {
+      id: crypto.randomUUID(),
+      kind: "tool-approval",
+      approvalId: input.approvalId,
+      toolName: input.toolName,
+      reason: input.reason,
+      detail: input.detail,
+      status: "pending",
+    },
+  ];
+}
+
+export function resolveToolApprovalItem(
+  trace: AgentActivityItem[],
+  approvalId: string,
+  status: "approved" | "denied",
+): AgentActivityItem[] {
+  return trace.map((item) =>
+    item.kind === "tool-approval" && item.approvalId === approvalId
+      ? { ...item, status }
+      : item,
+  );
 }
 
 export function finishTool(

@@ -51,6 +51,7 @@ describe("Task sub-agent routing", () => {
       description: "Draft brief.md for an AI agent talk",
       workspaceRoot,
       gateway,
+      requestToolApproval: async () => true,
     });
 
     expect(conclusion).toBe("Created brief.md with audience and purpose.");
@@ -138,6 +139,7 @@ describe("Task sub-agent routing", () => {
       presentationSnapshot: createStarterPresentation(),
       selectedElementIds: [],
       workspaceRoot,
+      requestToolApproval: async () => true,
     });
 
     expect(spawn).toHaveBeenCalledOnce();
@@ -203,6 +205,7 @@ describe("Task sub-agent routing", () => {
       description: "Rename outline title",
       workspaceRoot,
       gateway,
+      requestToolApproval: async () => true,
     });
 
     expect(await readFile(join(workspaceRoot, "outline.md"), "utf8")).toBe("# New title");

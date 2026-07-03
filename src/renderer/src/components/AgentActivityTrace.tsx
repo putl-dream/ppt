@@ -7,6 +7,7 @@ interface AgentActivityTraceProps {
   items: AgentActivityItem[];
   /** 实时流式展示时默认展开当前段 */
   live?: boolean;
+  onResolveToolApproval?: (approvalId: string, approved: boolean) => void;
 }
 
 function ToolCallBlock({
@@ -58,6 +59,43 @@ function ToolCallBlock({
   );
 }
 
+function ToolApprovalBlock({
+  item,
+  onResolve,
+}: {
+  item: Extract<AgentActivityItem, { kind: "tool-approval" }>;
+  onResolve?: (approvalId: string, approved: boolean) => void;
+}) {
+  const statusLabel = item.status === "pending"
+    ? "等待确认"
+    : item.status === "approved"
+      ? "已允许"
+      : "已拒绝";
+
+  return (
+    <div className="approval-card tool-approval-card">
+      <div className="approval-card-title">
+        工具操作确认 · {item.toolName}
+      </div>
+      <p className="approval-summary">{item.reason}</p>
+      {item.detail && (
+        <pre className="tool-approval-detail">{item.detail}</pre>
+      )}
+      <p className="approval-summary">状态：{statusLabel}</p>
+      {item.status === "pending" && onResolve && (
+        <div className="approval-buttons">
+          <button type="button" onClick={() => onResolve(item.approvalId, false)}>
+            拒绝
+          </button>
+          <button type="button" className="primary" onClick={() => onResolve(item.approvalId, true)}>
+            允许
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function WorkflowStepBlock({
   item,
   live,
@@ -83,6 +121,7 @@ function WorkflowStepBlock({
 export const AgentActivityTrace: React.FC<AgentActivityTraceProps> = ({
   items,
   live = false,
+  onResolveToolApproval,
 }) => {
   if (items.length === 0) return null;
 
@@ -118,6 +157,15 @@ export const AgentActivityTrace: React.FC<AgentActivityTraceProps> = ({
               </div>
               <pre className="agent-tool-summary-preview-text">{item.content}</pre>
             </div>
+          );
+        }
+        if (item.kind === "tool-approval") {
+          return (
+            <ToolApprovalBlock
+              key={item.id}
+              item={item}
+              onResolve={onResolveToolApproval}
+            />
           );
         }
         return <WorkflowStepBlock key={item.id} item={item} live={live} />;

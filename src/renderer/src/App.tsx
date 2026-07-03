@@ -47,6 +47,8 @@ import {
   appendToolValidationFailed,
   appendToolStart,
   appendToolSummaryChunk,
+  appendToolApprovalWaiting,
+  resolveToolApprovalItem,
   finishTool,
   markTraceComplete,
   mergeActivityTraces,
@@ -361,6 +363,21 @@ export function App() {
         stopStatusTyping();
         setAgentActivityMode("workflow");
         syncActivityTrace(appendStep(activeRunTraceRef.current, "⏳ 等待用户审批", "done"));
+        return;
+      }
+
+      if (event.type === "tool-approval-waiting") {
+        stopStatusTyping();
+        setAgentActivityMode("workflow");
+        setActiveToolName(event.toolName);
+        syncActivityTrace(
+          appendToolApprovalWaiting(activeRunTraceRef.current, {
+            approvalId: event.approvalId,
+            toolName: event.toolName,
+            reason: event.reason,
+            detail: event.detail,
+          }),
+        );
         return;
       }
 
@@ -1039,6 +1056,16 @@ export function App() {
     void startAgent(prompt);
   };
 
+  // 确认或拒绝运行中的工具操作（权限闸门 3）
+  async function resolveToolApproval(approvalId: string, approved: boolean) {
+    const runId = activeRunIdRef.current;
+    if (!runId || !busy) return;
+    syncActivityTrace(
+      resolveToolApprovalItem(activeRunTraceRef.current, approvalId, approved ? "approved" : "denied"),
+    );
+    await window.desktopApi.resolveToolApproval(runId, approvalId, approved);
+  }
+
   // 确认或拒绝 Deck 排版变更方案
   async function resolveApproval(
     approved: boolean,
@@ -1519,6 +1546,9 @@ export function App() {
                   onSubmitRequest={() => void startAgent()}
                   busy={busy}
                   onResolveApproval={resolveApproval}
+                  onResolveToolApproval={(approvalId, approved) => {
+                    void resolveToolApproval(approvalId, approved);
+                  }}
                   getInlineCardData={getInlineCardData}
                   onConfirmBrief={handleConfirmBrief}
                   onConfirmOutline={handleConfirmOutline}
