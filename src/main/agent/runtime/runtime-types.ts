@@ -65,7 +65,7 @@ export interface AgentRuntimeOptions {
    * 流式回调：当模型生成内容时逐chunk调用（可选）
    * 只在返回message类型结果时生效，工具调用过程不会触发
    */
-  onStreamChunk?: (chunk: string) => void;
+  onStreamChunk?: (chunk: string, source: "message" | "tool-summary") => void;
   /** 模型思考流式回调（extended thinking / reasoning） */
   onThinkingChunk?: (chunk: string, modelStep: number) => void;
   signal?: AbortSignal;

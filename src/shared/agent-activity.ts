@@ -14,7 +14,15 @@ export const agentActivityItemSchema = z.discriminatedUnion("kind", [
     toolName: z.string(),
     label: z.string(),
     finishedLabel: z.string().optional(),
+    summary: z.string().optional(),
     status: z.enum(["running", "done"]),
+  }),
+  z.object({
+    id: z.string(),
+    kind: z.literal("tool-summary"),
+    toolName: z.string(),
+    content: z.string(),
+    streaming: z.boolean().optional(),
   }),
   z.object({
     id: z.string(),
@@ -95,18 +103,83 @@ export function updateStepText(
   );
 }
 
+export function collectToolSummary(
+  trace: AgentActivityItem[],
+  toolName: string,
+): { trace: AgentActivityItem[]; summary: string } {
+  const summary = trace
+    .filter((item): item is Extract<AgentActivityItem, { kind: "tool-summary" }> =>
+      item.kind === "tool-summary" && item.toolName === toolName)
+    .map((item) => item.content)
+    .join("");
+  const cleaned = trace.filter((item) => item.kind !== "tool-summary" || item.toolName !== toolName);
+  return { trace: cleaned, summary };
+}
+
+export function appendToolSummaryChunk(
+  trace: AgentActivityItem[],
+  chunk: string,
+  toolName = "SubmitCommands",
+): AgentActivityItem[] {
+  const sealed = sealAllReasoning(trace);
+  const last = sealed.at(-1);
+  if (
+    last?.kind === "tool-summary" &&
+    last.toolName === toolName &&
+    last.streaming
+  ) {
+    return [...sealed.slice(0, -1), { ...last, content: last.content + chunk }];
+  }
+  return [
+    ...sealed,
+    {
+      id: crypto.randomUUID(),
+      kind: "tool-summary",
+      toolName,
+      content: chunk,
+      streaming: true,
+    },
+  ];
+}
+
+export function appendToolValidationFailed(
+  trace: AgentActivityItem[],
+  toolName: string,
+  errorMessage: string,
+): AgentActivityItem[] {
+  const { trace: cleaned, summary } = collectToolSummary(trace, toolName);
+  const shortError = errorMessage.length > 160
+    ? `${errorMessage.slice(0, 157)}...`
+    : errorMessage;
+
+  return [
+    ...finalizeReasoning(cleaned),
+    {
+      id: crypto.randomUUID(),
+      kind: "tool",
+      toolName,
+      label: `🛠️ 尝试调用: ${toolName}`,
+      summary: summary || undefined,
+      finishedLabel: `❌ 参数校验失败：${shortError}`,
+      status: "done",
+    },
+  ];
+}
+
 export function appendToolStart(
   trace: AgentActivityItem[],
   toolName: string,
   label: string,
 ): AgentActivityItem[] {
+  const { trace: cleaned, summary } = collectToolSummary(trace, toolName);
   return [
-    ...finalizeReasoning(trace),
+    ...finalizeReasoning(cleaned),
     {
       id: crypto.randomUUID(),
       kind: "tool",
       toolName,
       label,
+      summary: summary || undefined,
       status: "running",
     },
   ];
@@ -156,6 +229,9 @@ export function markTraceComplete(trace: AgentActivityItem[]): AgentActivityItem
     if (item.kind === "step" && item.status && item.status !== "done") {
       return { ...item, status: "done" as const };
     }
+    if (item.kind === "tool-summary" && item.streaming) {
+      return { ...item, streaming: false };
+    }
     return item;
   });
 }
@@ -183,7 +259,7 @@ export function resolveActivityTrace(input: {
   reasoning?: string;
 }): AgentActivityItem[] {
   if (input.activityTrace && input.activityTrace.length > 0) {
-    return markTraceComplete(input.activityTrace);
+    return markTraceComplete(input.activityTrace).filter((item) => item.kind !== "tool-summary");
   }
 
   const legacy: AgentActivityItem[] = [];

@@ -49,7 +49,9 @@ import {
   type AgentActivityItem,
   appendReasoningChunk,
   appendStep,
+  appendToolValidationFailed,
   appendToolStart,
+  appendToolSummaryChunk,
   finishTool,
   markTraceComplete,
   mergeActivityTraces,
@@ -368,6 +370,20 @@ export function App() {
         return;
       }
 
+      if (event.type === "tool-validation-failed") {
+        stopStatusTyping();
+        setAgentActivityMode("workflow");
+        setActiveToolName(null);
+        syncActivityTrace(
+          appendToolValidationFailed(
+            activeRunTraceRef.current,
+            event.toolName,
+            event.error,
+          ),
+        );
+        return;
+      }
+
       if (
         event.type === "deck-job-started" ||
         event.type === "deck-batch-started" ||
@@ -408,12 +424,33 @@ export function App() {
       }
 
       if (event.type === "text-chunk") {
-        // summary 流式输出：封存当前思考段，保留 trace 供后续 tool-finished / workflow 继续追加
         stopStatusTyping();
+        requestStatusStepIdRef.current = null;
+
+        if (event.source === "tool-summary") {
+          syncActivityTrace(
+            appendToolSummaryChunk(activeRunTraceRef.current, event.chunk),
+          );
+          if (!streamMessageIdsRef.current.has(event.runId)) {
+            const messageId = crypto.randomUUID();
+            streamMessageIdsRef.current.set(event.runId, messageId);
+            const sealedTrace = sealAllReasoning(activeRunTraceRef.current);
+            setChatMessages((prev) => [
+              ...prev,
+              {
+                id: messageId,
+                role: "assistant",
+                content: "",
+                activityTrace: sealedTrace.length > 0 ? sealedTrace : undefined,
+              },
+            ]);
+          }
+          return;
+        }
+
         const sealedTrace = sealAllReasoning(activeRunTraceRef.current);
         activeRunTraceRef.current = sealedTrace;
         setActivityTrace(sealedTrace);
-        requestStatusStepIdRef.current = null;
         let messageId = streamMessageIdsRef.current.get(event.runId);
         if (!messageId) {
           messageId = crypto.randomUUID();

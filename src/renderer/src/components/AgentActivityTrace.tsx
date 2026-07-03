@@ -46,6 +46,9 @@ function ToolCallBlock({
           <div className={`agent-tool-block-step${isRunning ? " running" : " done"}`}>
             {item.label}
           </div>
+          {item.summary && (
+            <div className="agent-tool-block-summary">{item.summary}</div>
+          )}
           {item.finishedLabel && (
             <div className="agent-tool-block-step done">{item.finishedLabel}</div>
           )}
@@ -87,12 +90,11 @@ export const AgentActivityTrace: React.FC<AgentActivityTraceProps> = ({
     <div className={`agent-activity-trace${live ? " agent-activity-trace--live" : ""}`}>
       {items.map((item, index) => {
         if (item.kind === "reasoning") {
-          const reasoningIndex = items
-            .slice(0, index + 1)
-            .filter((entry) => entry.kind === "reasoning").length;
           const reasoningTotal = items.filter((entry) => entry.kind === "reasoning").length;
-          const reasoningLabel = reasoningTotal > 1
-            ? (live && item.streaming ? `思考中 ${reasoningIndex}` : `思考过程 ${reasoningIndex}`)
+          const reasoningRound = (item.modelStep ?? 0) + 1;
+          const showRound = reasoningTotal > 1 || (item.modelStep ?? 0) > 0;
+          const reasoningLabel = showRound
+            ? (live && item.streaming ? `思考中 · 第 ${reasoningRound} 轮` : `思考过程 · 第 ${reasoningRound} 轮`)
             : undefined;
 
           return (
@@ -107,6 +109,16 @@ export const AgentActivityTrace: React.FC<AgentActivityTraceProps> = ({
         }
         if (item.kind === "tool") {
           return <ToolCallBlock key={item.id} item={item} live={live} />;
+        }
+        if (item.kind === "tool-summary") {
+          return (
+            <div key={item.id} className="agent-tool-summary-preview">
+              <div className="agent-tool-summary-preview-label">
+                {live && item.streaming ? "方案摘要（生成中）" : "方案摘要"}
+              </div>
+              <pre className="agent-tool-summary-preview-text">{item.content}</pre>
+            </div>
+          );
         }
         return <WorkflowStepBlock key={item.id} item={item} live={live} />;
       })}

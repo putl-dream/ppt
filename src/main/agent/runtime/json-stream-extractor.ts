@@ -16,7 +16,9 @@ export class JsonStreamExtractor {
   private valueEndIndex = -1;
   private rawStreamedLength = 0;
 
-  constructor(private readonly onChunk: (text: string) => void) {}
+  constructor(
+    private readonly onChunk: (text: string, source: "message" | "tool-summary") => void,
+  ) {}
 
   feed(chunk: string) {
     this.accumulated += chunk;
@@ -38,7 +40,7 @@ export class JsonStreamExtractor {
       // Plain text mode: stream everything directly
       const delta = this.accumulated.slice(this.rawStreamedLength);
       if (delta.length > 0) {
-        this.onChunk(delta);
+        this.onChunk(delta, "message");
         this.rawStreamedLength = this.accumulated.length;
       }
       return;
@@ -53,7 +55,7 @@ export class JsonStreamExtractor {
           this.isJson = false;
           const delta = this.accumulated.slice(this.rawStreamedLength);
           if (delta.length > 0) {
-            this.onChunk(delta);
+            this.onChunk(delta, "message");
             this.rawStreamedLength = this.accumulated.length;
           }
         }
@@ -142,7 +144,8 @@ export class JsonStreamExtractor {
           const rawToConsume = rawUnprocessed.slice(0, consumeLength);
           const decoded = this.unescape(rawToConsume);
           if (decoded.length > 0) {
-            this.onChunk(decoded);
+            const source = this.targetKey === "summary" ? "tool-summary" : "message";
+            this.onChunk(decoded, source);
           }
           this.rawStreamedLength += consumeLength;
         }

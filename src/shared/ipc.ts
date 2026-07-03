@@ -103,6 +103,7 @@ export type AgentStreamEvent =
     runId: string;
     type: "text-chunk";
     chunk: string;
+    source?: "message" | "tool-summary";
   }
   | {
     runId: string;
@@ -139,6 +140,13 @@ export type AgentStreamEvent =
     type: "tool-finished";
     message: string;
     toolName: string;
+  }
+  | {
+    runId: string;
+    type: "tool-validation-failed";
+    message: string;
+    toolName: string;
+    error: string;
   }
   | {
     runId: string;

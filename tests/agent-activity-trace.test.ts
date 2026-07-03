@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   appendReasoningChunk,
   appendToolStart,
+  appendToolValidationFailed,
   finishTool,
   markTraceComplete,
   mergeActivityTraces,
@@ -57,6 +58,53 @@ describe("agent activity trace", () => {
     expect(trace).toHaveLength(2);
     expect(trace[0]).toMatchObject({ kind: "reasoning", content: "first", modelStep: 0, streaming: false });
     expect(trace[1]).toMatchObject({ kind: "reasoning", content: "second", modelStep: 1, streaming: true });
+  });
+
+  it("records failed tool attempts with streamed summary", () => {
+    const trace: AgentActivityItem[] = [
+      {
+        id: "preview",
+        kind: "tool-summary",
+        toolName: "SubmitCommands",
+        content: "准备提交方案",
+        streaming: true,
+      },
+    ];
+
+    const failed = appendToolValidationFailed(
+      trace,
+      "SubmitCommands",
+      "assumptions must be array",
+    );
+
+    expect(failed).toHaveLength(1);
+    expect(failed[0]).toMatchObject({
+      kind: "tool",
+      toolName: "SubmitCommands",
+      summary: "准备提交方案",
+      status: "done",
+    });
+    expect(failed[0].kind === "tool" && failed[0].finishedLabel).toContain("参数校验失败");
+  });
+
+  it("absorbs tool-summary into tool block on start", () => {
+    let trace: AgentActivityItem[] = [
+      {
+        id: "preview",
+        kind: "tool-summary",
+        toolName: "SubmitCommands",
+        content: "方案说明",
+        streaming: true,
+      },
+    ];
+    trace = appendToolStart(trace, "SubmitCommands", "run");
+    expect(trace).toHaveLength(1);
+    expect(trace[0]).toMatchObject({
+      kind: "tool",
+      toolName: "SubmitCommands",
+      summary: "方案说明",
+      status: "running",
+    });
   });
 
   it("attaches finishedLabel even if tool was prematurely marked done", () => {

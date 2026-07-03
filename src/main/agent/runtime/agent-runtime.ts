@@ -112,8 +112,8 @@ export class AgentRuntime {
       if (shouldUseStream) {
         // 流式模式：逐chunk接收并实时回调，使用 JsonStreamExtractor 提取纯文本内容
         let accumulatedText = "";
-        const extractor = new JsonStreamExtractor((text) => {
-          options.onStreamChunk?.(text);
+        const extractor = new JsonStreamExtractor((text, source) => {
+          options.onStreamChunk?.(text, source);
         });
 
         for await (const chunk of this.gateway.generateTextStream(
@@ -208,6 +208,12 @@ export class AgentRuntime {
 
       const tool = this.registry.get(parsed.toolName);
       if (!tool || tool.category !== "core" || tool.loadPolicy !== "core") {
+        options.onProgress?.({
+          type: "tool-validation-failed",
+          toolName: parsed.toolName,
+          message: `工具 ${parsed.toolName} 无法直接调用`,
+          error: "Only registered Core Tools can be called directly.",
+        });
         transcript.push({
           role: "tool",
           toolName: parsed.toolName,
@@ -218,6 +224,12 @@ export class AgentRuntime {
 
       const args = tool.inputSchema.safeParse(parsed.args ?? {});
       if (!args.success) {
+        options.onProgress?.({
+          type: "tool-validation-failed",
+          toolName: tool.name,
+          message: `工具 ${tool.name} 参数校验失败`,
+          error: args.error.message,
+        });
         transcript.push({ role: "tool", toolName: tool.name, error: args.error.message });
         continue;
       }
