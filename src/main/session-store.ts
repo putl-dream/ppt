@@ -517,6 +517,7 @@ export class FileSessionStore {
       const metadata: Record<string, unknown> = {};
       if (message.thought) metadata.thought = message.thought;
       if (message.reasoning) metadata.reasoning = message.reasoning;
+      if (message.activityTrace) metadata.activityTrace = message.activityTrace;
       if (message.progress !== undefined) metadata.progress = message.progress;
       if (message.approval) metadata.approval = message.approval;
       if (message.patch) metadata.patch = message.patch;

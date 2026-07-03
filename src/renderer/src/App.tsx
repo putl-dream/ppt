@@ -45,6 +45,15 @@ import {
   toAgentModelSettings,
   type ManagedModel,
 } from "./modelCatalog";
+import {
+  type AgentActivityItem,
+  appendReasoningChunk,
+  appendStep,
+  appendToolStart,
+  finishTool,
+  markTraceComplete,
+  updateStepText,
+} from "@shared/agent-activity";
 
 type ChatMessage = SessionChatMessage;
 
@@ -67,6 +76,7 @@ function toSessionChatMessages(messages: ChatMessage[]): SessionChatMessage[] {
     content,
     thought,
     reasoning,
+    activityTrace,
     progress,
     approval,
     patch,
@@ -78,6 +88,7 @@ function toSessionChatMessages(messages: ChatMessage[]): SessionChatMessage[] {
     content,
     thought,
     reasoning,
+    activityTrace,
     progress,
     approval,
     patch,
@@ -195,15 +206,15 @@ export function App() {
   useEffect(() => {
     const isDark = computedTheme === "dark";
     if (isDark) {
-      const appL = Math.max(2, 5 - colorContrastOffset);
-      const canvasL = Math.min(25, 8 + colorContrastOffset);
-      document.documentElement.style.setProperty("--bg-app", `hsl(220, 30%, ${appL}%)`);
-      document.documentElement.style.setProperty("--bg-canvas", `hsl(220, 29%, ${canvasL}%)`);
+      const lightness = Math.max(8, 12 - colorContrastOffset);
+      document.documentElement.style.setProperty("--bg-app", `hsl(0, 0%, ${lightness}%)`);
+      document.documentElement.style.setProperty("--bg-canvas", `hsl(0, 0%, ${lightness}%)`);
+      document.documentElement.style.setProperty("--bg-glass", `hsl(0, 0%, ${lightness}%)`);
     } else {
-      const appL = Math.min(99, 95 + colorContrastOffset);
-      const canvasL = Math.max(85, 93 - colorContrastOffset);
-      document.documentElement.style.setProperty("--bg-app", `hsl(220, 16%, ${appL}%)`);
-      document.documentElement.style.setProperty("--bg-canvas", `hsl(220, 15%, ${canvasL}%)`);
+      const lightness = Math.min(100, 100 - colorContrastOffset);
+      document.documentElement.style.setProperty("--bg-app", `hsl(0, 0%, ${lightness}%)`);
+      document.documentElement.style.setProperty("--bg-canvas", `hsl(0, 0%, ${lightness}%)`);
+      document.documentElement.style.setProperty("--bg-glass", `hsl(0, 0%, ${lightness}%)`);
     }
   }, [computedTheme, colorContrastOffset]);
 
@@ -222,16 +233,21 @@ export function App() {
   const [request, setRequest] = useState("");
   const [busy, setBusy] = useState(false);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
-  const [thoughtProcess, setThoughtProcess] = useState<string[]>([]);
+  const [activityTrace, setActivityTrace] = useState<AgentActivityItem[]>([]);
   const [thoughtProgress, setThoughtProgress] = useState(0);
-  const [modelReasoning, setModelReasoning] = useState("");
   const [agentActivityMode, setAgentActivityMode] = useState<"idle" | "request" | "workflow" | "reasoning">("idle");
+  const [activeToolName, setActiveToolName] = useState<string | null>(null);
   const [highlightSlideId, setHighlightSlideId] = useState<string | null>(null);
   const activeRunIdRef = useRef<string | null>(null);
-  const activeRunStepsRef = useRef<string[]>([]);
-  const activeRunReasoningRef = useRef("");
+  const activeRunTraceRef = useRef<AgentActivityItem[]>([]);
+  const requestStatusStepIdRef = useRef<string | null>(null);
   const streamMessageIdsRef = useRef(new Map<string, string>());
   const statusTypingTimerRef = useRef<number | null>(null);
+
+  const syncActivityTrace = (next: AgentActivityItem[]) => {
+    activeRunTraceRef.current = next;
+    setActivityTrace(next);
+  };
 
   useEffect(() => {
     const stopStatusTyping = () => {
@@ -247,11 +263,32 @@ export function App() {
         stopStatusTyping();
         setAgentActivityMode("request");
         setThoughtProgress(event.progress);
+        if (!requestStatusStepIdRef.current) {
+          const stepId = crypto.randomUUID();
+          requestStatusStepIdRef.current = stepId;
+          syncActivityTrace([
+            ...activeRunTraceRef.current,
+            {
+              id: stepId,
+              kind: "step",
+              text: event.message.slice(0, 1),
+              status: "typing",
+            },
+          ]);
+        }
         let visibleLength = 1;
-        setThoughtProcess([event.message.slice(0, visibleLength)]);
         statusTypingTimerRef.current = window.setInterval(() => {
           visibleLength += 1;
-          setThoughtProcess([event.message.slice(0, visibleLength)]);
+          const stepId = requestStatusStepIdRef.current;
+          if (stepId) {
+            syncActivityTrace(
+              updateStepText(
+                activeRunTraceRef.current,
+                stepId,
+                event.message.slice(0, visibleLength),
+              ),
+            );
+          }
           if (visibleLength >= event.message.length) stopStatusTyping();
         }, 28);
         return;
@@ -260,8 +297,7 @@ export function App() {
       if (event.type === "workflow-progress") {
         stopStatusTyping();
         setAgentActivityMode("workflow");
-        activeRunStepsRef.current = [...activeRunStepsRef.current, event.message];
-        setThoughtProcess(activeRunStepsRef.current);
+        syncActivityTrace(appendStep(activeRunTraceRef.current, event.message, "done"));
         setThoughtProgress(event.progress);
         return;
       }
@@ -269,40 +305,49 @@ export function App() {
       if (event.type === "stage-started") {
         stopStatusTyping();
         setAgentActivityMode("workflow");
-        activeRunStepsRef.current = [...activeRunStepsRef.current, `🚀 启动阶段: ${event.message}`];
-        setThoughtProcess(activeRunStepsRef.current);
+        syncActivityTrace(appendStep(activeRunTraceRef.current, `🚀 启动阶段: ${event.message}`, "done"));
         return;
       }
 
       if (event.type === "artifact-read") {
         stopStatusTyping();
         setAgentActivityMode("workflow");
-        activeRunStepsRef.current = [...activeRunStepsRef.current, `📖 读取文件: ${event.path}`];
-        setThoughtProcess(activeRunStepsRef.current);
+        syncActivityTrace(appendStep(activeRunTraceRef.current, `📖 读取文件: ${event.path}`, "done"));
         return;
       }
 
       if (event.type === "artifact-diff-ready") {
         stopStatusTyping();
         setAgentActivityMode("workflow");
-        activeRunStepsRef.current = [...activeRunStepsRef.current, `🔍 比对差异: ${event.path}`];
-        setThoughtProcess(activeRunStepsRef.current);
+        syncActivityTrace(appendStep(activeRunTraceRef.current, `🔍 比对差异: ${event.path}`, "done"));
         return;
       }
 
       if (event.type === "tool-started") {
         stopStatusTyping();
         setAgentActivityMode("workflow");
-        activeRunStepsRef.current = [...activeRunStepsRef.current, `🛠️ 运行工具: ${event.toolName}`];
-        setThoughtProcess(activeRunStepsRef.current);
+        setActiveToolName(event.toolName);
+        syncActivityTrace(
+          appendToolStart(
+            activeRunTraceRef.current,
+            event.toolName,
+            `🛠️ 运行工具: ${event.toolName}`,
+          ),
+        );
         return;
       }
 
       if (event.type === "tool-finished") {
         stopStatusTyping();
         setAgentActivityMode("workflow");
-        activeRunStepsRef.current = [...activeRunStepsRef.current, `✅ 工具 ${event.toolName} 运行完毕`];
-        setThoughtProcess(activeRunStepsRef.current);
+        setActiveToolName(null);
+        syncActivityTrace(
+          finishTool(
+            activeRunTraceRef.current,
+            event.toolName,
+            `✅ 工具 ${event.toolName} 运行完毕`,
+          ),
+        );
         return;
       }
 
@@ -315,8 +360,7 @@ export function App() {
       ) {
         stopStatusTyping();
         setAgentActivityMode("workflow");
-        activeRunStepsRef.current = [...activeRunStepsRef.current, event.message];
-        setThoughtProcess(activeRunStepsRef.current);
+        syncActivityTrace(appendStep(activeRunTraceRef.current, event.message, "done"));
         if (event.type === "deck-job-progress") {
           setThoughtProgress(Math.min(95, Math.round((event.completedBatches / event.totalBatches) * 100)));
         }
@@ -329,16 +373,14 @@ export function App() {
       if (event.type === "approval-waiting") {
         stopStatusTyping();
         setAgentActivityMode("workflow");
-        activeRunStepsRef.current = [...activeRunStepsRef.current, `⏳ 等待用户审批`];
-        setThoughtProcess(activeRunStepsRef.current);
+        syncActivityTrace(appendStep(activeRunTraceRef.current, "⏳ 等待用户审批", "done"));
         return;
       }
 
       if (event.type === "thinking-chunk") {
         stopStatusTyping();
         setAgentActivityMode("reasoning");
-        activeRunReasoningRef.current += event.chunk;
-        setModelReasoning(activeRunReasoningRef.current);
+        syncActivityTrace(appendReasoningChunk(activeRunTraceRef.current, event.chunk));
         return;
       }
 
@@ -346,10 +388,11 @@ export function App() {
         // 真正的流式：逐chunk累积显示
         stopStatusTyping();
         setAgentActivityMode("idle");
-        setThoughtProcess([]);
+        setActiveToolName(null);
+        const traceSnapshot = markTraceComplete(activeRunTraceRef.current);
+        syncActivityTrace([]);
         setThoughtProgress(0);
-        const reasoningSnapshot = activeRunReasoningRef.current.trim() || undefined;
-        setModelReasoning("");
+        requestStatusStepIdRef.current = null;
         let messageId = streamMessageIdsRef.current.get(event.runId);
         if (!messageId) {
           messageId = crypto.randomUUID();
@@ -360,7 +403,7 @@ export function App() {
               id: messageId!,
               role: "assistant",
               content: event.chunk,
-              reasoning: reasoningSnapshot,
+              activityTrace: traceSnapshot.length > 0 ? traceSnapshot : undefined,
             },
           ]);
         } else {
@@ -369,11 +412,12 @@ export function App() {
               ? {
                   ...message,
                   content: message.content + event.chunk,
-                  reasoning: message.reasoning ?? reasoningSnapshot,
+                  activityTrace: message.activityTrace ?? (traceSnapshot.length > 0 ? traceSnapshot : undefined),
                 }
               : message,
           ));
         }
+        activeRunTraceRef.current = [];
         return;
       }
     });
@@ -666,9 +710,10 @@ export function App() {
     }
   };
 
-  async function applyAgentResult(result: AgentRunResult, steps: string[], runId?: string) {
+  async function applyAgentResult(result: AgentRunResult, trace: AgentActivityItem[], runId?: string) {
     const messageId = runId ? streamMessageIdsRef.current.get(runId) : undefined;
-    const reasoningSnapshot = activeRunReasoningRef.current.trim() || undefined;
+    const traceSnapshot = markTraceComplete(trace);
+    const activityTrace = traceSnapshot.length > 0 ? traceSnapshot : undefined;
 
     if (result.status === "chat") {
       if (messageId) {
@@ -677,7 +722,7 @@ export function App() {
             ? {
                 ...message,
                 content: result.message,
-                reasoning: message.reasoning ?? reasoningSnapshot,
+                activityTrace: message.activityTrace ?? activityTrace,
                 threadId: result.threadId,
               }
             : message,
@@ -689,7 +734,7 @@ export function App() {
             id: crypto.randomUUID(),
             role: "assistant",
             content: result.message,
-            reasoning: reasoningSnapshot,
+            activityTrace,
             threadId: result.threadId,
           },
         ]);
@@ -704,7 +749,7 @@ export function App() {
             ? {
                 ...message,
                 content: "已提出排版更新方案，请在下方审核后应用。",
-                thought: steps,
+                activityTrace,
                 approval: result.approval,
               }
             : message
@@ -716,7 +761,7 @@ export function App() {
             id: crypto.randomUUID(),
             role: "assistant",
             content: "已提出排版更新方案，请在下方审核后应用。",
-            thought: steps,
+            activityTrace,
             approval: result.approval,
           },
         ]);
@@ -740,7 +785,7 @@ export function App() {
             ? {
                 ...message,
                 content: promptContent,
-                thought: steps,
+                activityTrace,
                 patch: patchPayload,
               }
             : message
@@ -752,7 +797,7 @@ export function App() {
             id: crypto.randomUUID(),
             role: "assistant",
             content: promptContent,
-            thought: steps,
+            activityTrace,
             patch: patchPayload,
           },
         ]);
@@ -949,14 +994,14 @@ export function App() {
     });
 
     setThoughtProgress(0);
-    setThoughtProcess(["AI 正在思考中..."]);
-    setModelReasoning("");
+    syncActivityTrace([]);
+    setActiveToolName(null);
     setAgentActivityMode("request");
     const runId = crypto.randomUUID();
     activeRunIdRef.current = runId;
     setActiveRunId(runId);
-    activeRunStepsRef.current = [];
-    activeRunReasoningRef.current = "";
+    activeRunTraceRef.current = [];
+    requestStatusStepIdRef.current = null;
     let forkedMessages: ChatMessage[] | undefined;
 
     if (isEditOfMsgId) {
@@ -1002,7 +1047,7 @@ export function App() {
             executionStrategy,
             runId,
           );
-      await applyAgentResult(result, activeRunStepsRef.current, runId);
+      await applyAgentResult(result, activeRunTraceRef.current, runId);
     } catch (err) {
       setChatMessages((prev) => [
         ...prev,
@@ -1022,10 +1067,11 @@ export function App() {
       }
       setBusy(false);
       setAgentActivityMode("idle");
-      setThoughtProcess([]);
+      setActiveToolName(null);
+      syncActivityTrace([]);
       setThoughtProgress(0);
-      setModelReasoning("");
-      activeRunReasoningRef.current = "";
+      requestStatusStepIdRef.current = null;
+      activeRunTraceRef.current = [];
     }
   }
 
@@ -1067,9 +1113,19 @@ export function App() {
     if (!approvalRequest || busy || !activeSessionId) return;
     setBusy(true);
     setThoughtProgress(20);
-    setThoughtProcess([
-      approved ? "正在应用排版变更方案到工作台..." : "正在撤销已草拟的排版方案...",
-      "同步客户端最新数据状态...",
+    syncActivityTrace([
+      {
+        id: crypto.randomUUID(),
+        kind: "step",
+        text: approved ? "正在应用排版变更方案到工作台..." : "正在撤销已草拟的排版方案...",
+        status: "running",
+      },
+      {
+        id: crypto.randomUUID(),
+        kind: "step",
+        text: "同步客户端最新数据状态...",
+        status: "typing",
+      },
     ]);
 
     const progressInterval = setInterval(() => {
@@ -1113,7 +1169,7 @@ export function App() {
       ]);
     } finally {
       setBusy(false);
-      setThoughtProcess([]);
+      syncActivityTrace([]);
       setThoughtProgress(0);
     }
   }
@@ -1540,12 +1596,6 @@ export function App() {
 
   return (
     <main className={`app-shell ${computedTheme === "dark" ? "dark-theme" : ""}`}>
-      {/* 渐变微光 */}
-      <div className="app-bg-glow">
-        <div className="glow-orb-1"></div>
-        <div className="glow-orb-2"></div>
-      </div>
-
       {/* 浮动提示通知 */}
       {toastMessage && <div className="floating-toast-alert">{toastMessage}</div>}
 
@@ -1580,10 +1630,10 @@ export function App() {
                 <ChatWorkspace
                   isNewChat={isDraftChat}
                   chatMessages={chatMessages}
-                  thoughtProcess={thoughtProcess}
+                  activityTrace={activityTrace}
                   thoughtProgress={thoughtProgress}
-                  modelReasoning={modelReasoning}
                   agentActivityMode={agentActivityMode}
+                  activeToolName={activeToolName}
                   request={request}
                   onChangeRequest={setRequest}
                   onSubmitRequest={() => void startAgent()}

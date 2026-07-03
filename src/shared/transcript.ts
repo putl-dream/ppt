@@ -143,6 +143,7 @@ export function deserializeSessionMessages(chain: TranscriptMessage[]): SessionC
         content: contentToText(message.content),
         thought: metadata.thought,
         reasoning: metadata.reasoning as string | undefined,
+        activityTrace: metadata.activityTrace,
         progress: metadata.progress,
         approval: metadata.approval,
         patch: metadata.patch,

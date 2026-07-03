@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { agentActivityItemSchema } from "./agent-activity";
 import { presentationSchema, type Presentation } from "./presentation";
 import { presentationCommandSchema } from "./commands";
 import { agentExecutionStrategySchema, agentModelSelectionSchema } from "./agent";
@@ -95,6 +96,7 @@ export const sessionChatMessageSchema = z.object({
   content: z.string(),
   thought: z.array(z.string()).optional(),
   reasoning: z.string().optional(),
+  activityTrace: z.array(agentActivityItemSchema).optional(),
   progress: z.number().optional(),
   approval: persistedApprovalSchema.optional(),
   patch: persistedPatchSchema.optional(),

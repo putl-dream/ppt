@@ -1,14 +1,15 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 
 :root {
+  color-scheme: light;
   /* ==========================================================================
      默认浅色主题变量 (Light Mode)
      ========================================================================== */
-  --bg-app: #f3f5f8;
-  --bg-glass: rgba(255, 255, 255, 0.75);
-  --bg-glass-hover: rgba(0, 0, 0, 0.025);
-  --bg-glass-active: rgba(0, 0, 0, 0.05);
-  --border-glass: rgba(0, 0, 0, 0.06);
+  --bg-app: #ffffff;
+  --bg-glass: #ffffff;
+  --bg-glass-hover: rgba(0, 0, 0, 0.04);
+  --bg-glass-active: rgba(0, 0, 0, 0.06);
+  --border-glass: rgba(0, 0, 0, 0.08);
   --border-glass-focused: rgba(0, 0, 0, 0.12);
   
   --text-primary: #0f172a;
@@ -23,7 +24,7 @@
   --accent-purple-glow: rgba(124, 58, 237, 0.15);
   --accent-orange: #ea580c;
   
-  --bg-canvas: #ebedf2;
+  --bg-canvas: #ffffff;
   --font-display: "Outfit", "Inter", sans-serif;
   --font-body: "Inter", sans-serif;
   --font-serif: "Georgia", serif;
@@ -38,20 +39,19 @@
   /* 输入控件与内部卡片背景 */
   --bg-input-field: #ffffff;
   --bg-darker: rgba(0, 0, 0, 0.03);
-  --bg-glow-orb-1: radial-gradient(circle, rgba(14, 165, 233, 0.08) 0%, rgba(14, 165, 233, 0) 70%);
-  --bg-glow-orb-2: radial-gradient(circle, rgba(249, 115, 22, 0.05) 0%, rgba(249, 115, 22, 0) 70%);
   --scrollbar-thumb-color: rgba(0, 0, 0, 0.15);
 }
 
 .dark-theme {
+  color-scheme: dark;
   /* ==========================================================================
      深色主题变量覆盖 (Dark Mode)
      ========================================================================== */
-  --bg-app: #07090d;
-  --bg-glass: rgba(15, 18, 25, 0.7);
-  --bg-glass-hover: rgba(255, 255, 255, 0.035);
-  --bg-glass-active: rgba(255, 255, 255, 0.06);
-  --border-glass: rgba(255, 255, 255, 0.07);
+  --bg-app: #1e1e1e;
+  --bg-glass: #1e1e1e;
+  --bg-glass-hover: rgba(255, 255, 255, 0.05);
+  --bg-glass-active: rgba(255, 255, 255, 0.08);
+  --border-glass: rgba(255, 255, 255, 0.1);
   --border-glass-focused: rgba(255, 255, 255, 0.15);
   
   --text-primary: #f8fafc;
@@ -66,15 +66,13 @@
   --accent-purple-glow: rgba(168, 85, 247, 0.25);
   --accent-orange: #f97316;
   
-  --bg-canvas: #0c0f16;
+  --bg-canvas: #1e1e1e;
   
   --shadow-premium: 0 20px 50px -15px rgba(0, 0, 0, 0.6);
   --shadow-glow: 0 0 25px rgba(14, 165, 233, 0.15);
 
-  --bg-input-field: #11131a;
-  --bg-darker: rgba(0, 0, 0, 0.2);
-  --bg-glow-orb-1: radial-gradient(circle, rgba(14, 165, 233, 0.12) 0%, rgba(14, 165, 233, 0) 70%);
-  --bg-glow-orb-2: radial-gradient(circle, rgba(168, 85, 247, 0.08) 0%, rgba(168, 85, 247, 0) 70%);
+  --bg-input-field: #2d2d2d;
+  --bg-darker: rgba(255, 255, 255, 0.05);
   --scrollbar-thumb-color: rgba(255, 255, 255, 0.1);
 }
 
@@ -110,51 +108,13 @@ body {
   background: rgba(255, 255, 255, 0.25);
 }
 
-/* 页面外部背景装饰微光 */
-.app-bg-glow {
-  position: fixed;
-  top: 0; left: 0; right: 0; bottom: 0;
-  z-index: -10;
-  background: var(--bg-app);
-  overflow: hidden;
-  transition: background-color var(--transition-panel);
-}
-
-.glow-orb-1 {
-  position: absolute;
-  top: -10%; left: -10%;
-  width: 55%; height: 55%;
-  border-radius: 50%;
-  background: var(--bg-glow-orb-1);
-  filter: blur(80px);
-  animation: float-orb 25s infinite alternate ease-in-out;
-}
-
-.glow-orb-2 {
-  position: absolute;
-  bottom: -10%; right: -10%;
-  width: 60%; height: 60%;
-  border-radius: 50%;
-  background: var(--bg-glow-orb-2);
-  filter: blur(90px);
-  animation: float-orb-rev 30s infinite alternate ease-in-out;
-}
-
-@keyframes float-orb {
-  0% { transform: translate(0, 0) scale(1); }
-  100% { transform: translate(8%, 10%) scale(1.15); }
-}
-@keyframes float-orb-rev {
-  0% { transform: translate(0, 0) scale(1.1); }
-  100% { transform: translate(-10%, -8%) scale(0.9); }
-}
-
 /* 应用主壳容器 */
 .app-shell {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
   position: relative;
+  background-color: var(--bg-app);
 }
 
 /* 三栏/双模态布局核心容器 */
@@ -170,9 +130,7 @@ body {
 /* 侧边栏基础样式 */
 aside {
   height: 100%;
-  background: var(--bg-glass);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  background: var(--bg-app);
   border-right: 1px solid var(--border-glass);
   display: flex;
   flex-direction: column;
@@ -426,8 +384,14 @@ aside {
 
 .cursor-sidebar-list {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   padding: 4px 8px 12px;
+}
+
+.cursor-sidebar .left-footer {
+  flex-shrink: 0;
+  margin-top: auto;
 }
 
 .cursor-sidebar-empty {
@@ -1419,6 +1383,7 @@ aside {
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
+  overflow-anchor: none;
   scrollbar-gutter: stable;
   scrollbar-width: thin;
   scrollbar-color: rgba(0, 0, 0, 0.1) transparent;
@@ -1828,7 +1793,23 @@ aside {
 
 .reasoning-block-body {
   padding: 0 12px 10px;
-  position: relative;
+}
+
+.reasoning-block-scroll {
+  max-height: 280px;
+  overflow-y: auto;
+  overflow-anchor: none;
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb-color) transparent;
+}
+
+.reasoning-block-scroll::-webkit-scrollbar {
+  width: 5px;
+}
+
+.reasoning-block-scroll::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb-color);
+  border-radius: 3px;
 }
 
 .reasoning-block-text {
@@ -1839,8 +1820,6 @@ aside {
   white-space: pre-wrap;
   word-break: break-word;
   font-family: inherit;
-  max-height: 280px;
-  overflow-y: auto;
 }
 
 .reasoning-cursor {
@@ -1853,11 +1832,157 @@ aside {
   animation: cursor-blink 1s infinite;
 }
 
-.reasoning-live {
-  opacity: 0.95;
+.thought-container--live {
+  margin-top: 0;
 }
 
-/* 思考过程 */
+.thought-header--static {
+  cursor: default;
+}
+
+.agent-activity-status-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border-glass-focused);
+  background: var(--bg-input-field);
+  box-shadow: 0 0 0 1px var(--accent-cyan-glow);
+  animation: activity-bar-pulse 2s ease-in-out infinite;
+}
+
+@keyframes activity-bar-pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 1px var(--accent-cyan-glow);
+    border-color: var(--border-glass-focused);
+  }
+  50% {
+    box-shadow: 0 0 12px var(--accent-cyan-glow);
+    border-color: var(--accent-cyan);
+  }
+}
+
+.agent-activity-status-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.thought-list li.running {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--accent-cyan);
+  font-weight: 500;
+}
+
+.step-spinner {
+  width: 10px;
+  height: 10px;
+  border: 2px solid var(--accent-cyan-glow);
+  border-top-color: var(--accent-cyan);
+  border-radius: 50%;
+  flex-shrink: 0;
+  animation: step-spin 0.8s linear infinite;
+}
+
+@keyframes step-spin {
+  to { transform: rotate(360deg); }
+}
+
+.agent-activity-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.agent-activity-trace {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.agent-activity-trace--live .reasoning-block--streaming {
+  margin-top: 0;
+}
+
+.agent-tool-block {
+  border: 1px solid var(--border-glass);
+  border-radius: 8px;
+  background: var(--bg-darker);
+  overflow: hidden;
+}
+
+.agent-tool-block--running {
+  border-color: rgba(14, 165, 233, 0.35);
+}
+
+.agent-tool-block-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--border-glass);
+}
+
+.agent-tool-block-label {
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+
+.agent-tool-block-body {
+  padding: 8px 12px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.agent-tool-block-step {
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+.agent-tool-block-step.running {
+  color: var(--accent-cyan);
+  font-weight: 500;
+}
+
+.agent-tool-block-step.done {
+  opacity: 0.85;
+}
+
+.agent-step-block {
+  border: 1px solid var(--border-glass);
+  border-radius: 8px;
+  background: var(--bg-darker);
+  padding: 8px 12px;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+.agent-step-block--active {
+  border-color: rgba(14, 165, 233, 0.25);
+}
+
+.agent-step-block-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.thought-list li.done {
+  opacity: 0.85;
+}
+
+.thinking-dots-container--inline {
+  transform: scale(0.85);
+}
+
 .thought-container {
   border: 1px solid var(--border-glass);
   border-radius: 8px;

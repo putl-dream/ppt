@@ -135,30 +135,32 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
         </button>
       </div>
 
-      {hasSessionList ? (
-        <div className="cursor-sidebar-list">
-          {orphanSessions.map((session) => (
-            <SessionRow
-              key={session.id}
-              session={session}
-              isActive={activeSessionId === session.id}
-              onSelect={() => onSelectSession(session.id)}
-              onContextMenu={(event) => handleContextMenu(event, session.id)}
-            />
-          ))}
-          {workspaceGroups.map((group) => (
-            <WorkspaceSection
-              key={group.workspacePath}
-              workspaceKey={group.workspacePath}
-              workspaceSessions={group.sessions}
-              activeSessionId={activeSessionId}
-              onNewSessionInWorkspace={onNewSessionInWorkspace}
-              onSelectSession={onSelectSession}
-              onContextMenu={handleContextMenu}
-            />
-          ))}
-        </div>
-      ) : null}
+      <div className="cursor-sidebar-list">
+        {hasSessionList ? (
+          <>
+            {orphanSessions.map((session) => (
+              <SessionRow
+                key={session.id}
+                session={session}
+                isActive={activeSessionId === session.id}
+                onSelect={() => onSelectSession(session.id)}
+                onContextMenu={(event) => handleContextMenu(event, session.id)}
+              />
+            ))}
+            {workspaceGroups.map((group) => (
+              <WorkspaceSection
+                key={group.workspacePath}
+                workspaceKey={group.workspacePath}
+                workspaceSessions={group.sessions}
+                activeSessionId={activeSessionId}
+                onNewSessionInWorkspace={onNewSessionInWorkspace}
+                onSelectSession={onSelectSession}
+                onContextMenu={handleContextMenu}
+              />
+            ))}
+          </>
+        ) : null}
+      </div>
 
       <div className="panel-footer left-footer flex justify-between items-center" style={{ padding: "12px 18px" }}>
         <div className="profile-badge flex-1">

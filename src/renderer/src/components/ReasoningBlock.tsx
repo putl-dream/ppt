@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ChevronDownIcon, ChevronRightIcon } from "./Icons";
 
 interface ReasoningBlockProps {
@@ -14,6 +14,7 @@ export const ReasoningBlock: React.FC<ReasoningBlockProps> = ({
   isStreaming = false,
 }) => {
   const [expanded, setExpanded] = useState(defaultExpanded || isStreaming);
+  const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (isStreaming) {
@@ -22,6 +23,30 @@ export const ReasoningBlock: React.FC<ReasoningBlockProps> = ({
       setExpanded(false);
     }
   }, [isStreaming, defaultExpanded]);
+
+  const scrollToBottom = useCallback(() => {
+    const scrollEl = scrollRef.current;
+    if (!scrollEl) return;
+    scrollEl.scrollTop = scrollEl.scrollHeight;
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!isStreaming || !expanded) return;
+    scrollToBottom();
+  }, [content, isStreaming, expanded, scrollToBottom]);
+
+  useEffect(() => {
+    if (!isStreaming || !expanded) return;
+    const scrollEl = scrollRef.current;
+    const contentEl = scrollEl?.firstElementChild;
+    if (!scrollEl || !contentEl) return;
+
+    const observer = new ResizeObserver(() => {
+      scrollToBottom();
+    });
+    observer.observe(contentEl);
+    return () => observer.disconnect();
+  }, [isStreaming, expanded, scrollToBottom]);
 
   if (!content.trim()) return null;
 
@@ -40,8 +65,12 @@ export const ReasoningBlock: React.FC<ReasoningBlockProps> = ({
       </button>
       {expanded && (
         <div className="reasoning-block-body">
-          <pre className="reasoning-block-text">{content}</pre>
-          {isStreaming && <span className="reasoning-cursor" aria-hidden="true" />}
+          <div ref={scrollRef} className="reasoning-block-scroll">
+            <pre className="reasoning-block-text">
+              {content}
+              {isStreaming && <span className="reasoning-cursor" aria-hidden="true" />}
+            </pre>
+          </div>
         </div>
       )}
     </div>

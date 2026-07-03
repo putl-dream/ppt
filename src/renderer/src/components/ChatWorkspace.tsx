@@ -1,9 +1,7 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { AgentApprovalRequest } from "@shared/ipc";
 import type { SessionChatMessage } from "@shared/session";
 import {
-  ChevronDownIcon,
-  ChevronRightIcon,
   CopyIcon,
   Edit3Icon,
   UndoIcon,
@@ -20,8 +18,10 @@ import { BriefCard } from "./BriefCard";
 import { OutlineCard } from "./OutlineCard";
 import { DeckPreviewCard } from "./DeckPreviewCard";
 import { AgentThinkingLoader } from "./AgentThinkingLoader";
-import { ReasoningBlock } from "./ReasoningBlock";
+import { AgentActivityTrace } from "./AgentActivityTrace";
 import { MessageMarkdown } from "./MessageMarkdown";
+import type { AgentActivityItem } from "@shared/agent-activity";
+import { resolveActivityTrace } from "@shared/agent-activity";
 import type { ManagedModel } from "../modelCatalog";
 import type { Presentation } from "@shared/presentation";
 import type { InlineCardRef } from "@shared/inline-artifact-cards";
@@ -40,10 +40,10 @@ export interface InlineCardData {
 interface ChatWorkspaceProps {
   isNewChat?: boolean;
   chatMessages: ChatMessage[];
-  thoughtProcess: string[];
+  activityTrace: AgentActivityItem[];
   thoughtProgress: number;
-  modelReasoning: string;
   agentActivityMode: "idle" | "request" | "workflow" | "reasoning";
+  activeToolName?: string | null;
   request: string;
   onChangeRequest: (val: string) => void;
   onSubmitRequest: () => void;
@@ -89,10 +89,10 @@ interface ChatWorkspaceProps {
 export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
   isNewChat = false,
   chatMessages,
-  thoughtProcess,
+  activityTrace,
   thoughtProgress,
-  modelReasoning,
   agentActivityMode,
+  activeToolName = null,
   request,
   onChangeRequest,
   onSubmitRequest,
@@ -134,11 +134,22 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
   onSelectWorkspace,
   triggerToast,
 }) => {
-  const [showThought, setShowThought] = useState(true);
   const [showSlashMenu, setShowSlashMenu] = useState(false);
   const [editingMsgId, setEditingMsgId] = useState<string | null>(null);
   const [editingText, setEditingText] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const scrollViewportRef = useRef<HTMLDivElement>(null);
+  const chatStreamRef = useRef<HTMLDivElement>(null);
+
+  const scrollToBottom = useCallback((instant: boolean) => {
+    const viewport = scrollViewportRef.current;
+    if (!viewport) return;
+    if (instant) {
+      viewport.scrollTop = viewport.scrollHeight;
+      return;
+    }
+    viewport.scrollTo({ top: viewport.scrollHeight, behavior: "smooth" });
+  }, []);
 
   // 居中放大初始化页 vs 底部对话页，由 isNewChat 单独控制
   const showInitChat = isNewChat;
@@ -152,9 +163,23 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
     }
   }, [request]);
 
+  useLayoutEffect(() => {
+    scrollToBottom(busy);
+  }, [chatMessages, activityTrace, thoughtProgress, busy, agentActivityMode, scrollToBottom]);
+
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [chatMessages, thoughtProcess, thoughtProgress, modelReasoning, busy]);
+    const stream = chatStreamRef.current;
+    const viewport = scrollViewportRef.current;
+    if (!stream || !viewport) return;
+
+    const observer = new ResizeObserver(() => {
+      if (busy) {
+        viewport.scrollTop = viewport.scrollHeight;
+      }
+    });
+    observer.observe(stream);
+    return () => observer.disconnect();
+  }, [busy]);
 
   const slashCommands = [
     { cmd: "/theme 商务蔚蓝", desc: "更改设计模板风格为商务蔚蓝" },
@@ -321,9 +346,9 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
       </div>
 
       {/* 核心 AI 对话信息流 */}
-      <div className="chat-scroll-viewport">
+      <div className="chat-scroll-viewport" ref={scrollViewportRef}>
         <div className="chat-conversation-shell">
-          <div className="chat-stream">
+          <div className="chat-stream" ref={chatStreamRef}>
         {chatMessages.map((msg) => {
           const inlineCardData = msg.role === "assistant" ? getInlineCardData(msg) : null;
 
@@ -395,9 +420,14 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
                 </div>
               ) : (
                 <>
-                  {msg.reasoning && (
-                    <ReasoningBlock content={msg.reasoning} />
-                  )}
+                  {(() => {
+                    const trace = resolveActivityTrace({
+                      activityTrace: msg.activityTrace,
+                      thought: msg.thought,
+                      reasoning: msg.reasoning,
+                    });
+                    return trace.length > 0 ? <AgentActivityTrace items={trace} /> : null;
+                  })()}
 
                   <MessageMarkdown content={msg.content} className="assistant-response" />
 
@@ -418,23 +448,6 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
                   >
                     🔄 重试该指令
                   </button>
-                )}
-
-                {/* 展开的思考轨迹 */}
-                {msg.thought && msg.thought.length > 0 && (
-                  <div className="thought-container">
-                    <div className="thought-header" onClick={() => setShowThought(!showThought)}>
-                      <span>Agent 思考推理轨迹</span>
-                      {showThought ? <ChevronDownIcon size={12} /> : <ChevronRightIcon size={12} />}
-                    </div>
-                    {showThought && (
-                      <ul className="thought-list">
-                        {msg.thought.map((step, idx) => (
-                          <li key={idx}>{step}</li>
-                        ))}
-                      </ul>
-                    )}
-                  </div>
                 )}
 
                 {/* 产物 Patch 审核卡片 */}
@@ -610,22 +623,12 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
           );
         })}
 
-        {/* 模型思考流式展示（文本输出前） */}
-        {busy && agentActivityMode === "reasoning" && modelReasoning && (
-          <div className="chat-message assistant reasoning-live">
-            <ReasoningBlock
-              content={modelReasoning}
-              defaultExpanded
-              isStreaming
-            />
-          </div>
-        )}
-
-        {/* Agent 工作流思考状态 */}
+        {/* Agent 实时思考：工具调用列表 + 模型推理流 */}
         <AgentThinkingLoader
           busy={busy}
           agentActivityMode={agentActivityMode}
-          thoughtProcess={thoughtProcess}
+          activityTrace={activityTrace}
+          activeToolName={activeToolName}
         />
 
         <div ref={messagesEndRef} />
