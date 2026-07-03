@@ -3,7 +3,7 @@ import type { AgentModelSelection } from "@shared/agent";
 import type { Presentation } from "@shared/presentation";
 import type { AgentModelGateway } from "../gateway";
 import type { ToolApprovalHandler } from "../runtime/permission-check";
-import type { AgentTodoItem } from "@shared/agent-todo";
+import type { SubAgentProgressListener } from "@shared/subagent-progress";
 import type { ToolRegistry } from "./tool-registry";
 import type { SkillRegistry } from "../skills/loadSkillsDir";
 import type { SkillSession } from "../skills/skill-types";
@@ -51,6 +51,8 @@ export interface ToolContext {
   readonly model?: AgentModelSelection;
   readonly signal?: AbortSignal;
   readonly requestToolApproval?: ToolApprovalHandler;
+  /** Streams sub-agent progress to the UI during Task delegation. */
+  readonly onSubAgentProgress?: SubAgentProgressListener;
   /** In-memory task plan for the current run (TodoWrite). */
   readonly todoSession?: {
     getItems: () => AgentTodoItem[];

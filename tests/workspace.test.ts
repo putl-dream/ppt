@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  compareSessionsByActivity,
   getWorkspaceLabel,
   groupSessionsByWorkspace,
   normalizeWorkspacePath,
@@ -30,12 +31,28 @@ describe("workspace helpers", () => {
 
   it("groups sessions by workspace", () => {
     const groups = groupSessionsByWorkspace([
-      { id: "a", workspacePath: "d:/Projects/A", updatedAt: "2026-01-02" },
-      { id: "b", workspacePath: "d:/Projects/B", updatedAt: "2026-01-03" },
-      { id: "c", updatedAt: "2026-01-01" },
+      { id: "a", workspacePath: "d:/Projects/A", createdAt: "2026-01-02" },
+      { id: "b", workspacePath: "d:/Projects/B", createdAt: "2026-01-03" },
+      { id: "c", createdAt: "2026-01-01" },
     ]);
 
     expect(groups).toHaveLength(3);
     expect(groups.find((group) => group.workspacePath === "__unknown__")?.sessions).toHaveLength(1);
+  });
+
+  it("sorts sessions by last message time, falling back to creation time", () => {
+    expect(
+      compareSessionsByActivity(
+        { createdAt: "2026-01-01", lastMessageAt: "2026-01-05" },
+        { createdAt: "2026-01-02" },
+      ),
+    ).toBeLessThan(0);
+
+    expect(
+      compareSessionsByActivity(
+        { createdAt: "2026-01-03" },
+        { createdAt: "2026-01-02", lastMessageAt: "2026-01-01" },
+      ),
+    ).toBeLessThan(0);
   });
 });

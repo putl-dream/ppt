@@ -14,7 +14,7 @@ import {
   type WorkspaceSessionSnapshot,
 } from "@shared/workspace-meta";
 import type { SessionSnapshot } from "@shared/session";
-import { normalizeWorkspacePath } from "@shared/workspace";
+import { normalizeWorkspacePath, compareSessionsByActivity } from "@shared/workspace";
 
 export class WorkspaceIndexStore {
   async ensureProjectMeta(rootPath: string, title: string): Promise<WorkspaceProjectMeta> {
@@ -86,6 +86,7 @@ export class WorkspaceIndexStore {
       title: snapshot.session.title,
       createdAt: snapshot.session.createdAt,
       updatedAt: snapshot.session.updatedAt,
+      lastMessageAt: snapshot.session.lastMessageAt,
       slideCount: snapshot.session.slideCount,
       revision: snapshot.session.revision,
       transcriptPath: snapshot.transcript.path,
@@ -144,7 +145,7 @@ export class WorkspaceIndexStore {
     const sessions = [
       entry,
       ...existing.sessions.filter((item) => item.id !== entry.id),
-    ].sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+    ].sort((left, right) => compareSessionsByActivity(left, right));
 
     const next: WorkspaceSessionsIndex = {
       version: 1,

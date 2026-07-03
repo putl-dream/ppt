@@ -59,17 +59,16 @@ allowed-tools:
 
 ## 工作流
 
-1. 从 storyboard 映射：每页生成唯一 `slide.id`（与 storyboard `id` 一致便于追溯）。
-2. 首批：`set-presentation-title` + `set-theme` + 全部 `add-slide` + `update-slide-layout`。
-3. 调用 `PreviewCommands`；若有 errors，修正后重试。
-4. `SubmitCommands`，`risk` 新建 deck 用 `low`，大批量覆盖用 `medium`。
-5. 摘要：新建页数、主题、需用户确认的占位图/数据。
+1. 从 storyboard 映射 slide.id（与 storyboard id 一致）。
+2. 首批一次 SubmitCommands：`set-presentation-title` + `set-theme` + 全部 `add-slide` + `update-slide-layout`。
+3. PreviewCommands 自检；修正后 SubmitCommands。
+4. 摘要：新建页数 + 需用户确认的占位项。
 
 ## 禁止
 
-- 不凭记忆编造 slide/element ID；改已有页必须先 `ReadPresentationSnapshot`。
-- 不在未 Preview 的情况下一次提交超过 15 条命令（分批提交）。
-- 不用 Deferred Tool 做基础创建；`add-slide` 等 Core 命令即可。
+- 不凭记忆编造 ID；改已有页先 ReadPresentationSnapshot。
+- 基础创建不用 Deferred Tool。
+- 简单新建（≤10 页）可跳过 storyboard，主 Agent 直接 SubmitCommands。
 
 ## 衔接
 

@@ -1,5 +1,6 @@
 import React from "react";
 import type { AgentActivityItem } from "@shared/agent-activity";
+import { filterTraceForDisplay, findPendingToolApproval } from "@shared/agent-activity";
 import { AgentActivityTrace } from "./AgentActivityTrace";
 
 interface AgentThinkingLoaderProps {
@@ -9,7 +10,6 @@ interface AgentThinkingLoaderProps {
   activeToolName?: string | null;
   /** 已有流式回复消息时，时间线改挂在消息上，避免重复展示 */
   suppressTrace?: boolean;
-  onResolveToolApproval?: (approvalId: string, approved: boolean) => void;
 }
 
 function getStatusLabel(
@@ -17,6 +17,24 @@ function getStatusLabel(
   activeToolName: string | null | undefined,
   activityTrace: AgentActivityItem[],
 ): string {
+  const pendingApproval = findPendingToolApproval(activityTrace);
+  if (pendingApproval) {
+    return `等待授权：${pendingApproval.reason}`;
+  }
+
+  const runningTask = [...activityTrace].reverse().find(
+    (item) => item.kind === "task" && item.status === "running",
+  );
+  if (runningTask?.kind === "task") {
+    const activeStep = [...runningTask.steps].reverse().find(
+      (step) => step.status === "running" || step.streaming,
+    );
+    if (activeStep) {
+      return activeStep.text;
+    }
+    return `子任务：${runningTask.description}`;
+  }
+
   if (activeToolName) {
     return `正在调用工具：${activeToolName}`;
   }
@@ -24,12 +42,6 @@ function getStatusLabel(
     return "模型思考中…";
   }
   if (agentActivityMode === "workflow") {
-    const pendingApproval = [...activityTrace].reverse().find(
-      (item) => item.kind === "tool-approval" && item.status === "pending",
-    );
-    if (pendingApproval?.kind === "tool-approval") {
-      return `等待确认工具操作：${pendingApproval.toolName}`;
-    }
     return "正在执行工作流…";
   }
   if (agentActivityMode === "request") {
@@ -45,29 +57,31 @@ export const AgentThinkingLoader: React.FC<AgentThinkingLoaderProps> = ({
   activityTrace,
   activeToolName = null,
   suppressTrace = false,
-  onResolveToolApproval,
 }) => {
   if (!busy || agentActivityMode === "idle") return null;
 
-  const hasTrace = !suppressTrace && activityTrace.length > 0;
+  const displayTrace = filterTraceForDisplay(activityTrace);
+  const hasTrace = !suppressTrace && displayTrace.length > 0;
   const statusLabel = getStatusLabel(agentActivityMode, activeToolName, activityTrace);
+  const showSpinner = !findPendingToolApproval(activityTrace);
 
   return (
     <div className="chat-message assistant thinking-message agent-activity-panel">
       <div className="agent-activity-status-bar">
-        <div className="thinking-dots-container">
-          <span className="thinking-dot" />
-          <span className="thinking-dot" />
-          <span className="thinking-dot" />
-        </div>
+        {showSpinner && (
+          <div className="thinking-dots-container">
+            <span className="thinking-dot" />
+            <span className="thinking-dot" />
+            <span className="thinking-dot" />
+          </div>
+        )}
         <span className="agent-activity-status-label">{statusLabel}</span>
       </div>
 
       {hasTrace && (
         <AgentActivityTrace
-          items={activityTrace}
+          items={displayTrace}
           live
-          onResolveToolApproval={onResolveToolApproval}
         />
       )}
     </div>

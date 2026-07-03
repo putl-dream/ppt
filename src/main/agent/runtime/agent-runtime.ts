@@ -128,6 +128,9 @@ export class AgentRuntime {
           todos,
         });
       },
+      onSubAgentProgress: options.onProgress
+        ? (event) => options.onProgress?.(event)
+        : undefined,
       skillRegistry: this.skillRegistry,
       skillSession,
     };

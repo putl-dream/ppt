@@ -21,7 +21,7 @@ export interface LoadSkillResult {
 export const loadSkillTool: ToolDefinition<typeof loadSkillSchema, LoadSkillResult> = {
   name: "LoadSkill",
   description:
-    "Load the full instructions for a registered skill. Call when a task matches a skill in the Available Skills catalog.",
+    "Load full instructions for a registered skill. Only call when entering a stage that needs it—not for simple slide edits.",
   category: "core",
   loadPolicy: "core",
   inputSchema: loadSkillSchema,
@@ -52,8 +52,8 @@ export const loadSkillTool: ToolDefinition<typeof loadSkillSchema, LoadSkillResu
       content: entry.body,
       alreadyLoaded,
       guidance: alreadyLoaded
-        ? "Skill was already loaded this run. Follow its instructions; additional resources may be accessed via Task sub-agents."
-        : "Follow the skill instructions above. Use Task to read or write workspace files referenced by the skill.",
+        ? "Skill already loaded. Follow it; keep tool use minimal."
+        : "Follow the skill above. Use Task only for workspace files; prefer direct action over extra reads.",
     };
   },
 };

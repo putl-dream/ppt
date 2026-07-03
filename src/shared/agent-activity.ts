@@ -45,6 +45,21 @@ export const agentActivityItemSchema = z.discriminatedUnion("kind", [
     detail: z.string(),
     status: z.enum(["pending", "approved", "denied"]),
   }),
+  z.object({
+    id: z.string(),
+    kind: z.literal("task"),
+    taskId: z.string(),
+    description: z.string(),
+    status: z.enum(["running", "done"]),
+    steps: z.array(z.object({
+      id: z.string(),
+      type: z.enum(["reasoning", "tool"]),
+      text: z.string(),
+      toolName: z.string().optional(),
+      status: z.enum(["running", "done"]),
+      streaming: z.boolean().optional(),
+    })),
+  }),
 ]);
 
 export type AgentActivityItem = z.infer<typeof agentActivityItemSchema>;
@@ -287,6 +302,147 @@ export function finishTool(
   );
 }
 
+export function findPendingToolApproval(
+  trace: AgentActivityItem[],
+): Extract<AgentActivityItem, { kind: "tool-approval" }> | undefined {
+  return [...trace].reverse().find(
+    (item): item is Extract<AgentActivityItem, { kind: "tool-approval" }> =>
+      item.kind === "tool-approval" && item.status === "pending",
+  );
+}
+
+export function filterTraceForDisplay(trace: AgentActivityItem[]): AgentActivityItem[] {
+  return trace.filter(
+    (item) => !(item.kind === "tool-approval" && item.status === "pending"),
+  );
+}
+
+type TaskStep = Extract<AgentActivityItem, { kind: "task" }>["steps"][number];
+
+function upsertTask(
+  trace: AgentActivityItem[],
+  taskId: string,
+  updater: (task: Extract<AgentActivityItem, { kind: "task" }>) => Extract<AgentActivityItem, { kind: "task" }>,
+): AgentActivityItem[] {
+  const index = trace.findIndex((item) => item.kind === "task" && item.taskId === taskId);
+  if (index < 0) return trace;
+  return trace.map((item, i) => (i === index ? updater(item as Extract<AgentActivityItem, { kind: "task" }>) : item));
+}
+
+export function upsertTaskStarted(
+  trace: AgentActivityItem[],
+  input: { taskId: string; description: string },
+): AgentActivityItem[] {
+  const existing = trace.find((item) => item.kind === "task" && item.taskId === input.taskId);
+  if (existing?.kind === "task") {
+    return upsertTask(trace, input.taskId, (task) => ({
+      ...task,
+      description: input.description,
+      status: "running",
+    }));
+  }
+  return [
+    ...finalizeReasoning(trace),
+    {
+      id: crypto.randomUUID(),
+      kind: "task",
+      taskId: input.taskId,
+      description: input.description,
+      status: "running",
+      steps: [],
+    },
+  ];
+}
+
+export function appendTaskReasoningChunk(
+  trace: AgentActivityItem[],
+  taskId: string,
+  chunk: string,
+): AgentActivityItem[] {
+  return upsertTask(trace, taskId, (task) => {
+    const steps = [...task.steps];
+    const last = steps.at(-1);
+    if (last?.type === "reasoning" && last.streaming) {
+      steps[steps.length - 1] = { ...last, text: last.text + chunk };
+    } else {
+      steps.push({
+        id: crypto.randomUUID(),
+        type: "reasoning",
+        text: chunk,
+        status: "running",
+        streaming: true,
+      });
+    }
+    return { ...task, steps };
+  });
+}
+
+export function appendTaskToolStart(
+  trace: AgentActivityItem[],
+  taskId: string,
+  toolName: string,
+  message: string,
+): AgentActivityItem[] {
+  return upsertTask(trace, taskId, (task) => {
+    const steps = task.steps.map((step): TaskStep =>
+      step.streaming ? { ...step, streaming: false, status: "done" } : step,
+    );
+    steps.push({
+      id: crypto.randomUUID(),
+      type: "tool",
+      text: message,
+      toolName,
+      status: "running",
+    });
+    return { ...task, steps };
+  });
+}
+
+export function finishTaskTool(
+  trace: AgentActivityItem[],
+  taskId: string,
+  toolName: string,
+  message: string,
+): AgentActivityItem[] {
+  return upsertTask(trace, taskId, (task) => {
+    let matched = false;
+    const steps = [...task.steps];
+    for (let index = steps.length - 1; index >= 0; index -= 1) {
+      const step = steps[index]!;
+      if (step.type === "tool" && step.toolName === toolName && step.status === "running") {
+        steps[index] = { ...step, text: message, status: "done" };
+        matched = true;
+        break;
+      }
+    }
+    if (!matched) {
+      steps.push({
+        id: crypto.randomUUID(),
+        type: "tool",
+        text: message,
+        toolName,
+        status: "done",
+      });
+    }
+    return { ...task, steps };
+  });
+}
+
+export function finishTask(
+  trace: AgentActivityItem[],
+  taskId: string,
+): AgentActivityItem[] {
+  return upsertTask(trace, taskId, (task) => ({
+    ...task,
+    status: "done",
+    steps: task.steps.map((step): TaskStep =>
+      step.streaming || step.status === "running"
+        ? { ...step, streaming: false, status: "done" }
+        : step,
+    ),
+  }));
+}
+
 export function markTraceComplete(trace: AgentActivityItem[]): AgentActivityItem[] {
   return trace.map((item) => {
     if (item.kind === "reasoning") {
@@ -300,6 +456,17 @@ export function markTraceComplete(trace: AgentActivityItem[]): AgentActivityItem
     }
     if (item.kind === "tool-summary" && item.streaming) {
       return { ...item, streaming: false };
+    }
+    if (item.kind === "task" && item.status === "running") {
+      return {
+        ...item,
+        status: "done" as const,
+        steps: item.steps.map((step) =>
+          step.streaming || step.status === "running"
+            ? { ...step, streaming: false, status: "done" as const }
+            : step,
+        ),
+      };
     }
     return item;
   });

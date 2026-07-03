@@ -3,7 +3,7 @@ import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { promisify } from "node:util";
 import { z } from "zod";
-import { resolveWorkspacePath } from "./workspace-path";
+import { resolveAgentPath } from "./workspace-path";
 
 const execFileAsync = promisify(execFile);
 
@@ -46,7 +46,7 @@ export const readFileTool: SubAgentToolDefinition<typeof readFileSchema> = {
   description: "Read a text file from the workspace.",
   inputSchema: readFileSchema,
   async execute(args, context) {
-    const filePath = resolveWorkspacePath(context.workspaceRoot, args.path);
+    const filePath = resolveAgentPath(context.workspaceRoot, args.path);
     return await readFile(filePath, "utf8");
   },
 };
@@ -56,7 +56,7 @@ export const writeFileTool: SubAgentToolDefinition<typeof writeFileSchema> = {
   description: "Write or overwrite a text file in the workspace.",
   inputSchema: writeFileSchema,
   async execute(args, context) {
-    const filePath = resolveWorkspacePath(context.workspaceRoot, args.path);
+    const filePath = resolveAgentPath(context.workspaceRoot, args.path);
     await mkdir(dirname(filePath), { recursive: true });
     await writeFile(filePath, args.content, "utf8");
     return `Wrote ${args.path} (${args.content.length} chars).`;
@@ -68,7 +68,7 @@ export const editFileTool: SubAgentToolDefinition<typeof editFileSchema> = {
   description: "Replace the first occurrence of old_string with new_string in a file.",
   inputSchema: editFileSchema,
   async execute(args, context) {
-    const filePath = resolveWorkspacePath(context.workspaceRoot, args.path);
+    const filePath = resolveAgentPath(context.workspaceRoot, args.path);
     const content = await readFile(filePath, "utf8");
     const index = content.indexOf(args.old_string);
     if (index < 0) {
@@ -138,7 +138,7 @@ async function globWorkspace(workspaceRoot: string, pattern: string): Promise<st
   const results: string[] = [];
 
   async function walk(relativeDir: string): Promise<void> {
-    const absoluteDir = resolveWorkspacePath(workspaceRoot, relativeDir || ".");
+    const absoluteDir = resolveAgentPath(workspaceRoot, relativeDir || ".");
     const entries = await readdir(absoluteDir, { withFileTypes: true });
     for (const entry of entries) {
       const relativePath = relativeDir ? `${relativeDir}/${entry.name}` : entry.name;

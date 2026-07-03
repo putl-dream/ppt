@@ -27,6 +27,7 @@ export const workspaceSessionIndexEntrySchema = z.object({
   title: z.string(),
   createdAt: z.string(),
   updatedAt: z.string(),
+  lastMessageAt: z.string().optional(),
   slideCount: z.number().int().nonnegative(),
   revision: z.number().int().nonnegative(),
   transcriptPath: z.string(),

@@ -54,6 +54,19 @@ export function sessionBelongsToWorkspace(
   return resolved === normalizeWorkspacePath(workspacePath);
 }
 
+export function getSessionActivityTime(session: {
+  lastMessageAt?: string;
+  createdAt: string;
+}): string {
+  return session.lastMessageAt ?? session.createdAt;
+}
+
+export function compareSessionsByActivity<
+  T extends { lastMessageAt?: string; createdAt: string },
+>(left: T, right: T): number {
+  return getSessionActivityTime(right).localeCompare(getSessionActivityTime(left));
+}
+
 export function groupSessionsByWorkspace<T extends { workspacePath?: string }>(
   sessions: T[],
 ): Array<{ workspacePath: string; sessions: T[] }> {
@@ -76,9 +89,12 @@ export function groupSessionsByWorkspace<T extends { workspacePath?: string }>(
     .map(([workspacePath, groupedSessions]) => ({
       workspacePath,
       sessions: groupedSessions.sort((a, b) =>
-        ("updatedAt" in b && "updatedAt" in a
-          ? String(b.updatedAt).localeCompare(String(a.updatedAt))
-          : 0),
+        "createdAt" in a && "createdAt" in b
+          ? compareSessionsByActivity(
+              a as T & { lastMessageAt?: string; createdAt: string },
+              b as T & { lastMessageAt?: string; createdAt: string },
+            )
+          : 0,
       ),
     }));
 }

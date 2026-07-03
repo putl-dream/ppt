@@ -52,10 +52,22 @@ function extractFilePath(args: unknown): string {
   return typeof path === "string" ? path : "";
 }
 
-function isPathOutsideWorkspace(workspaceRoot: string | undefined, relativePath: string): boolean {
-  if (!workspaceRoot || !relativePath) return false;
+function extractGlobPattern(args: unknown): string {
+  if (!args || typeof args !== "object") return "";
+  const pattern = (args as { pattern?: unknown }).pattern;
+  return typeof pattern === "string" ? pattern : "";
+}
+
+function isPathOutsideWorkspace(workspaceRoot: string | undefined, path: string): boolean {
+  if (!workspaceRoot || !path.trim()) return false;
+  if (isAbsolute(path)) {
+    const root = resolve(workspaceRoot);
+    const filePath = resolve(path);
+    const pathFromRoot = relative(root, filePath);
+    return pathFromRoot.startsWith("..") || isAbsolute(pathFromRoot);
+  }
   const root = resolve(workspaceRoot);
-  const filePath = resolve(root, relativePath);
+  const filePath = resolve(root, path);
   const pathFromRoot = relative(root, filePath);
   return pathFromRoot.startsWith("..") || isAbsolute(pathFromRoot);
 }
@@ -77,11 +89,26 @@ function matchContextRule(block: PreToolUseBlock): string | null {
   const { toolName, args, workspaceRoot } = block;
   const filePath = extractFilePath(args);
 
+  if (toolName === "read_file") {
+    if (isPathOutsideWorkspace(workspaceRoot, filePath)) {
+      return `访问工作区外的文件：${filePath}`;
+    }
+    return null;
+  }
+
+  if (toolName === "glob") {
+    const pattern = extractGlobPattern(args);
+    if (isPathOutsideWorkspace(workspaceRoot, pattern)) {
+      return `访问工作区外的目录：${pattern}`;
+    }
+    return null;
+  }
+
   if (toolName === "write_file" || toolName === "edit_file") {
     if (isPathOutsideWorkspace(workspaceRoot, filePath)) {
       return `尝试写入工作区外路径：${filePath}`;
     }
-    return `文件修改操作：${filePath || "(unknown path)"}`;
+    return null;
   }
 
   if (toolName === "bash") {
@@ -90,7 +117,7 @@ function matchContextRule(block: PreToolUseBlock): string | null {
     if (/\brm\b/i.test(command)) {
       return `删除命令：${command}`;
     }
-    return `Shell 命令：${command}`;
+    return null;
   }
 
   return null;

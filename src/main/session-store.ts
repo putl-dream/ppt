@@ -41,6 +41,7 @@ import {
   type WorkspaceSessionsIndex,
 } from "@shared/workspace-meta";
 import {
+  compareSessionsByActivity,
   getWorkspaceLabel,
   normalizeWorkspacePath,
   resolveWorkspacePath,
@@ -208,6 +209,7 @@ export class FileSessionStore {
       title: entry.title,
       createdAt: entry.createdAt,
       updatedAt: entry.updatedAt,
+      lastMessageAt: entry.lastMessageAt,
       slideCount: entry.slideCount,
       revision: entry.revision,
       workspacePath: normalized,
@@ -278,12 +280,15 @@ export class FileSessionStore {
   async savePresentation(sessionId: string, presentation: Presentation): Promise<void> {
     const snapshot = this.findSession(sessionId);
     snapshot.presentation = structuredClone(presentation);
-    snapshot.session = this.toSummary(
-      snapshot.session.id,
-      snapshot.session.createdAt,
-      new Date().toISOString(),
-      presentation,
-    );
+    snapshot.session = {
+      ...this.toSummary(
+        snapshot.session.id,
+        snapshot.session.createdAt,
+        new Date().toISOString(),
+        presentation,
+      ),
+      lastMessageAt: snapshot.session.lastMessageAt,
+    };
     await this.projectFileService.writeDeckSnapshot(snapshot, { markStale: false });
     await this.persist();
     await this.syncWorkspacePersistence(snapshot);
@@ -341,10 +346,14 @@ export class FileSessionStore {
   async saveMessages(sessionId: string, messages: SessionChatMessage[]): Promise<void> {
     const snapshot = this.findSession(sessionId);
     const parsedMessages = sessionChatMessageSchema.array().parse(structuredClone(messages));
+    const messagesChanged = this.messagesChanged(snapshot.messages, parsedMessages);
     await this.materializeProjectSandbox(snapshot);
     await this.recordTranscriptMessages(snapshot, parsedMessages);
     await this.hydrateMessagesFromTranscript(snapshot);
     snapshot.session.updatedAt = new Date().toISOString();
+    if (messagesChanged && this.hasConversationMessages(parsedMessages)) {
+      snapshot.session.lastMessageAt = new Date().toISOString();
+    }
     await this.persist();
     await this.syncWorkspacePersistence(snapshot);
   }
@@ -578,6 +587,17 @@ export class FileSessionStore {
     };
   }
 
+  private messagesChanged(
+    before: SessionChatMessage[],
+    after: SessionChatMessage[],
+  ): boolean {
+    return JSON.stringify(before) !== JSON.stringify(after);
+  }
+
+  private hasConversationMessages(messages: SessionChatMessage[]): boolean {
+    return messages.some((message) => message.role === "user");
+  }
+
   private toExpiredApprovalMessage(message: SessionChatMessage): SessionChatMessage {
     if (!message.approval) return message;
     const { approval: _, ...rest } = message;
@@ -608,7 +628,7 @@ export class FileSessionStore {
 
   private listSummaries(data: SessionFile): SessionSummary[] {
     return [...data.sessions]
-      .sort((a, b) => b.session.updatedAt.localeCompare(a.session.updatedAt))
+      .sort((a, b) => compareSessionsByActivity(a.session, b.session))
       .map((item) => ({
         ...structuredClone(item.session),
         workspacePath: this.getWorkspaceRoot(item),
@@ -678,7 +698,7 @@ export class FileSessionStore {
     if (matches.length === 0) return null;
 
     const latest = [...matches].sort((left, right) =>
-      right.session.updatedAt.localeCompare(left.session.updatedAt),
+      compareSessionsByActivity(left.session, right.session),
     )[0];
     const index: WorkspaceSessionsIndex = {
       version: 1,
@@ -727,6 +747,7 @@ export class FileSessionStore {
         title: entry.title,
         createdAt: entry.createdAt,
         updatedAt: entry.updatedAt,
+        lastMessageAt: entry.lastMessageAt,
         slideCount: entry.slideCount,
         revision: entry.revision,
         workspacePath: rootPath,

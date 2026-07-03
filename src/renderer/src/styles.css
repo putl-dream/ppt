@@ -2271,6 +2271,189 @@ aside {
   background: rgba(255, 255, 255, 0.06);
 }
 
+.tool-approval-card--resolved {
+  opacity: 0.85;
+}
+
+/* 输入框授权覆盖层 */
+.unified-agent-input-shell {
+  position: relative;
+}
+
+.tool-approval-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: flex-end;
+  padding: 12px;
+  background: rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(4px);
+  border-radius: inherit;
+}
+
+.tool-approval-overlay-card {
+  width: 100%;
+  background: var(--bg-input-field);
+  border: 1px solid var(--accent-cyan);
+  border-radius: 10px;
+  padding: 16px;
+  box-shadow: var(--shadow-premium);
+}
+
+.tool-approval-overlay-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.tool-approval-overlay-icon {
+  font-size: 20px;
+  line-height: 1;
+}
+
+.tool-approval-overlay-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.tool-approval-overlay-subtitle {
+  margin: 2px 0 0;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.tool-approval-overlay-reason {
+  margin: 0 0 8px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+.tool-approval-overlay-detail {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.04);
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 120px;
+  overflow: auto;
+}
+
+[data-theme="dark"] .tool-approval-overlay-detail {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.tool-approval-overlay-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.tool-approval-overlay-btn {
+  padding: 8px 18px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: var(--transition-smooth);
+}
+
+.tool-approval-overlay-btn--deny {
+  background: transparent;
+  border: 1px solid var(--border-glass);
+  color: var(--text-secondary);
+}
+
+.tool-approval-overlay-btn--deny:hover {
+  background: rgba(239, 68, 68, 0.08);
+  border-color: rgba(239, 68, 68, 0.3);
+  color: #ef4444;
+}
+
+.tool-approval-overlay-btn--allow {
+  background: var(--accent-cyan);
+  border: 1px solid transparent;
+  color: #fff;
+}
+
+.tool-approval-overlay-btn--allow:hover {
+  filter: brightness(1.05);
+}
+
+/* 子任务流式活动块 */
+.agent-task-block {
+  margin: 6px 0;
+  border: 1px solid var(--border-glass);
+  border-radius: 8px;
+  background: var(--bg-input-field);
+  overflow: hidden;
+}
+
+.agent-task-block--active {
+  border-color: var(--accent-cyan-glow);
+}
+
+.agent-task-block-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 12px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  color: var(--text-primary);
+  font-size: 12px;
+}
+
+.agent-task-block-title {
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.agent-task-block-description {
+  flex: 1;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+}
+
+.agent-task-block-body {
+  padding: 0 12px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.agent-task-block-body--empty {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.agent-task-step {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  padding: 4px 0;
+}
+
+.agent-task-step--running {
+  color: var(--text-primary);
+}
+
 .approval-buttons button.primary {
   background: var(--accent-primary, #2563eb);
   border: 1px solid transparent;

@@ -1,5 +1,7 @@
 import type { AgentModelGateway } from "../gateway";
 import type { AgentModelSelection } from "@shared/agent";
+import type { SubAgentProgressListener } from "@shared/subagent-progress";
+import { formatSubAgentToolLabel } from "@shared/subagent-progress";
 import { parseAgentJsonResponse } from "../runtime/agent-runtime";
 import { RuntimeNormalizer } from "../runtime/runtime-normalizer";
 import { ensureDefaultHooks } from "../runtime/default-hooks";
@@ -27,6 +29,8 @@ export interface SpawnSubAgentOptions {
   maxSteps?: number;
   signal?: AbortSignal;
   requestToolApproval?: ToolApprovalHandler;
+  taskId?: string;
+  onProgress?: SubAgentProgressListener;
 }
 
 function isToolCall(value: unknown): value is SubAgentToolCall {
@@ -41,13 +45,52 @@ function extractTextFromNormalized(result: { type: string; content?: string; mes
   return JSON.stringify(result);
 }
 
+function emitProgress(options: SpawnSubAgentOptions, event: Parameters<SubAgentProgressListener>[0]): void {
+  if (!options.taskId || !options.onProgress) return;
+  options.onProgress(event);
+}
+
+async function generateSubAgentResponse(
+  options: SpawnSubAgentOptions,
+  systemPrompt: string,
+  transcript: Array<Record<string, unknown>>,
+): Promise<string> {
+  const request = {
+    systemPrompt,
+    prompt: JSON.stringify({ task: options.description, transcript }),
+    signal: options.signal,
+  };
+
+  if (options.onProgress && options.taskId) {
+    let accumulatedText = "";
+    for await (const chunk of options.gateway.generateTextStream(request, options.model)) {
+      if (options.signal?.aborted) {
+        throw new Error("Sub-agent run aborted.");
+      }
+      if (chunk.type === "thinking" && chunk.text) {
+        emitProgress(options, {
+          type: "subagent-thinking-chunk",
+          taskId: options.taskId,
+          chunk: chunk.text,
+        });
+      } else if (chunk.type === "content") {
+        accumulatedText += chunk.text;
+      }
+    }
+    return accumulatedText;
+  }
+
+  const response = await options.gateway.generateText(request, options.model);
+  return response.text;
+}
+
 /**
  * Spawn a sub-agent with a fresh internal transcript. Only the final conclusion
  * is returned to the caller; intermediate messages are discarded.
  */
 export async function spawnSubAgent(options: SpawnSubAgentOptions): Promise<string> {
   ensureDefaultHooks();
-  const maxSteps = options.maxSteps ?? 30;
+  const maxSteps = options.maxSteps ?? 12;
   const systemPrompt = buildSubAgentSystemPrompt(SUB_AGENT_TOOLS);
   const transcript: Array<Record<string, unknown>> = [
     { role: "user", content: options.description },
@@ -56,10 +99,21 @@ export async function spawnSubAgent(options: SpawnSubAgentOptions): Promise<stri
     workspaceRoot: options.workspaceRoot,
   };
 
+  if (options.taskId) {
+    emitProgress(options, {
+      type: "subagent-started",
+      taskId: options.taskId,
+      description: options.description,
+    });
+  }
+
   const finish = async (
     result: string,
     reason: StopBlock["reason"] = "completed",
   ): Promise<string> => {
+    if (options.taskId) {
+      emitProgress(options, { type: "subagent-finished", taskId: options.taskId });
+    }
     await triggerHooks("Stop", {
       event: "Stop",
       scope: "subagent",
@@ -74,22 +128,15 @@ export async function spawnSubAgent(options: SpawnSubAgentOptions): Promise<stri
       throw new Error("Sub-agent run aborted.");
     }
 
-    const response = await options.gateway.generateText(
-      {
-        systemPrompt,
-        prompt: JSON.stringify({ task: options.description, transcript }),
-        signal: options.signal,
-      },
-      options.model,
-    );
+    const responseText = await generateSubAgentResponse(options, systemPrompt, transcript);
 
     let parsed: unknown;
     try {
-      parsed = parseAgentJsonResponse(response.text);
+      parsed = parseAgentJsonResponse(responseText);
     } catch (error) {
       transcript.push({
         role: "assistant",
-        raw: response.text.slice(0, 2_000),
+        raw: responseText.slice(0, 2_000),
         error: error instanceof Error
           ? `${error.message} Return exactly one complete JSON object.`
           : "Invalid JSON response.",
@@ -152,7 +199,26 @@ export async function spawnSubAgent(options: SpawnSubAgentOptions): Promise<stri
         return finish(preToolStop.reason);
       }
 
+      if (options.taskId) {
+        emitProgress(options, {
+          type: "subagent-tool-started",
+          taskId: options.taskId,
+          toolName: tool.name,
+          message: formatSubAgentToolLabel(tool.name, args.data),
+        });
+      }
+
       const output = await tool.execute(args.data, toolContext);
+
+      if (options.taskId) {
+        emitProgress(options, {
+          type: "subagent-tool-finished",
+          taskId: options.taskId,
+          toolName: tool.name,
+          message: `完成 ${tool.name}`,
+        });
+      }
+
       await triggerHooks("PostToolUse", {
         event: "PostToolUse",
         toolName: tool.name,
@@ -163,6 +229,16 @@ export async function spawnSubAgent(options: SpawnSubAgentOptions): Promise<stri
       transcript.push({ role: "tool", toolName: tool.name, result: output });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
+
+      if (options.taskId) {
+        emitProgress(options, {
+          type: "subagent-tool-finished",
+          taskId: options.taskId,
+          toolName: tool.name,
+          message: `失败：${errorMessage}`,
+        });
+      }
+
       await triggerHooks("PostToolUse", {
         event: "PostToolUse",
         toolName: tool.name,
@@ -189,7 +265,13 @@ export async function spawnSubAgentsParallel(
   descriptions: string[],
   shared: Omit<SpawnSubAgentOptions, "description">,
 ): Promise<string[]> {
-  return Promise.all(descriptions.map((description) => spawnSubAgent({ ...shared, description })));
+  return Promise.all(
+    descriptions.map((description, index) => spawnSubAgent({
+      ...shared,
+      description,
+      taskId: shared.taskId ? `${shared.taskId}:${index}` : crypto.randomUUID(),
+    })),
+  );
 }
 
 export function formatParallelSubAgentResults(descriptions: string[], conclusions: string[]): string {

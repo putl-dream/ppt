@@ -109,6 +109,7 @@ export const sessionSummarySchema = z.object({
   title: z.string(),
   createdAt: z.string(),
   updatedAt: z.string(),
+  lastMessageAt: z.string().optional(),
   slideCount: z.number().int().nonnegative(),
   revision: z.number().int().nonnegative(),
   workspacePath: z.string().optional(),

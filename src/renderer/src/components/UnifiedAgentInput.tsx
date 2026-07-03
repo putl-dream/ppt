@@ -2,6 +2,7 @@ import React, { useEffect, useRef } from "react";
 import { FolderIcon, PlusIcon, SendIcon } from "./Icons";
 import type { ManagedModel } from "../modelCatalog";
 import { getWorkspaceLabel } from "@shared/workspace";
+import { ToolApprovalOverlay, type PendingToolApproval } from "./ToolApprovalOverlay";
 
 interface UnifiedAgentInputProps {
   request: string;
@@ -23,6 +24,8 @@ interface UnifiedAgentInputProps {
   onClearContextTag: () => void;
   submitLabel?: string;
   placeholder?: string;
+  pendingToolApproval?: PendingToolApproval | null;
+  onResolveToolApproval?: (approvalId: string, approved: boolean) => void;
 }
 
 function resizeTextarea(textarea: HTMLTextAreaElement) {
@@ -49,6 +52,8 @@ export const UnifiedAgentInput: React.FC<UnifiedAgentInputProps> = ({
   onClearContextTag,
   submitLabel = "生成",
   placeholder,
+  pendingToolApproval = null,
+  onResolveToolApproval,
 }) => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const folderName = getWorkspaceLabel(localStoragePath || undefined);
@@ -105,7 +110,13 @@ export const UnifiedAgentInput: React.FC<UnifiedAgentInputProps> = ({
         </div>
       )}
 
-      <div className="double-deck-panel-card">
+      <div className="double-deck-panel-card unified-agent-input-shell">
+        {pendingToolApproval && onResolveToolApproval && (
+          <ToolApprovalOverlay
+            approval={pendingToolApproval}
+            onResolve={onResolveToolApproval}
+          />
+        )}
         <div className="input-textarea-row">
           <textarea
             ref={textareaRef}

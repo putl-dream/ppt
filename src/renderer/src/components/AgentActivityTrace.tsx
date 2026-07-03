@@ -9,7 +9,6 @@ interface AgentActivityTraceProps {
   items: AgentActivityItem[];
   /** 实时流式展示时默认展开当前段 */
   live?: boolean;
-  onResolveToolApproval?: (approvalId: string, approved: boolean) => void;
 }
 
 function TodoStatusIcon({ status }: { status: AgentTodoItem["status"] }) {
@@ -113,37 +112,87 @@ function ToolCallBlock({
   );
 }
 
-function ToolApprovalBlock({
+function ToolApprovalStatusBlock({
   item,
-  onResolve,
 }: {
   item: Extract<AgentActivityItem, { kind: "tool-approval" }>;
-  onResolve?: (approvalId: string, approved: boolean) => void;
 }) {
-  const statusLabel = item.status === "pending"
-    ? "等待确认"
-    : item.status === "approved"
-      ? "已允许"
-      : "已拒绝";
+  if (item.status === "pending") return null;
+
+  const statusLabel = item.status === "approved" ? "已允许" : "已拒绝";
 
   return (
-    <div className="approval-card tool-approval-card">
+    <div className="approval-card tool-approval-card tool-approval-card--resolved">
       <div className="approval-card-title">
-        工具操作确认 · {item.toolName}
+        工具操作 · {item.toolName}
       </div>
       <p className="approval-summary">{item.reason}</p>
-      {item.detail && (
-        <pre className="tool-approval-detail">{item.detail}</pre>
-      )}
       <p className="approval-summary">状态：{statusLabel}</p>
-      {item.status === "pending" && onResolve && (
-        <div className="approval-buttons">
-          <button type="button" onClick={() => onResolve(item.approvalId, false)}>
-            拒绝
-          </button>
-          <button type="button" className="primary" onClick={() => onResolve(item.approvalId, true)}>
-            允许
-          </button>
+    </div>
+  );
+}
+
+function TaskBlock({
+  item,
+  live,
+}: {
+  item: Extract<AgentActivityItem, { kind: "task" }>;
+  live: boolean;
+}) {
+  const isRunning = item.status === "running";
+  const [expanded, setExpanded] = useState(isRunning || live);
+
+  useEffect(() => {
+    if (isRunning && live) {
+      setExpanded(true);
+    }
+  }, [isRunning, live]);
+
+  return (
+    <div className={`agent-task-block${isRunning && live ? " agent-task-block--active" : ""}`}>
+      <button
+        type="button"
+        className="agent-task-block-header"
+        onClick={() => setExpanded((value) => !value)}
+        aria-expanded={expanded}
+      >
+        {isRunning && live && <span className="step-spinner" aria-hidden="true" />}
+        <span className="agent-task-block-title">
+          {isRunning && live ? "子任务执行中" : "子任务"}
+        </span>
+        <span className="agent-task-block-description">{item.description}</span>
+        {expanded ? <ChevronDownIcon size={12} /> : <ChevronRightIcon size={12} />}
+      </button>
+      {expanded && item.steps.length > 0 && (
+        <div className="agent-task-block-body">
+          {item.steps.map((step) => {
+            if (step.type === "reasoning") {
+              return (
+                <ReasoningBlock
+                  key={step.id}
+                  content={step.text}
+                  label={live && step.streaming ? "子任务思考中" : "子任务思考"}
+                  defaultExpanded={live}
+                  isStreaming={live && Boolean(step.streaming)}
+                />
+              );
+            }
+            const stepRunning = step.status === "running";
+            return (
+              <div
+                key={step.id}
+                className={`agent-task-step${stepRunning && live ? " agent-task-step--running" : ""}`}
+              >
+                {stepRunning && live && <span className="step-spinner" aria-hidden="true" />}
+                <span>{step.text}</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+      {expanded && item.steps.length === 0 && isRunning && live && (
+        <div className="agent-task-block-body agent-task-block-body--empty">
+          正在准备子任务…
         </div>
       )}
     </div>
@@ -175,7 +224,6 @@ function WorkflowStepBlock({
 export const AgentActivityTrace: React.FC<AgentActivityTraceProps> = ({
   items,
   live = false,
-  onResolveToolApproval,
 }) => {
   if (items.length === 0) return null;
 
@@ -214,13 +262,10 @@ export const AgentActivityTrace: React.FC<AgentActivityTraceProps> = ({
           );
         }
         if (item.kind === "tool-approval") {
-          return (
-            <ToolApprovalBlock
-              key={item.id}
-              item={item}
-              onResolve={onResolveToolApproval}
-            />
-          );
+          return <ToolApprovalStatusBlock key={item.id} item={item} />;
+        }
+        if (item.kind === "task") {
+          return <TaskBlock key={item.id} item={item} live={live} />;
         }
         if (item.kind === "todo") {
           return <TodoBlock key={item.id} item={item} live={live} />;

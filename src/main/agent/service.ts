@@ -27,7 +27,12 @@ export type AgentServiceEvent =
       reason: string;
       detail: string;
     }
-  | { type: "todo-updated"; message: string; todos: AgentTodoItem[] };
+  | { type: "todo-updated"; message: string; todos: AgentTodoItem[] }
+  | { type: "subagent-started"; taskId: string; description: string }
+  | { type: "subagent-thinking-chunk"; taskId: string; chunk: string }
+  | { type: "subagent-tool-started"; taskId: string; toolName: string; message: string }
+  | { type: "subagent-tool-finished"; taskId: string; toolName: string; message: string }
+  | { type: "subagent-finished"; taskId: string };
 
 export type AgentServiceEventListener = (event: AgentServiceEvent) => void;
 

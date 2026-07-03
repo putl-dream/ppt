@@ -39,9 +39,8 @@ export function createTaskTool(deps: {
   return {
     name: "Task",
     description:
-      "Launch a sub-agent to handle a focused subtask. The sub-agent runs in an isolated context "
-      + "and returns only its final conclusion. Use for intermediate work (draft brief, research notes, "
-      + "storyboard pages) so the main conversation stays focused on the overall PPT goal. "
+      "Launch a sub-agent for a focused workspace subtask (brief, outline, storyboard). "
+      + "Returns only a short conclusion—use sparingly; skip for simple slide edits the main agent can SubmitCommands directly. "
       + "Pass descriptions[] to run independent subtasks concurrently.",
     category: "core",
     loadPolicy: "core",
@@ -58,12 +57,14 @@ export function createTaskTool(deps: {
 
       const spawn = deps.spawn ?? spawnSubAgent;
       const spawnParallel = deps.spawnParallel ?? spawnSubAgentsParallel;
+      const onProgress = context.onSubAgentProgress;
       const shared = {
         workspaceRoot,
         gateway: context.gateway,
         model: context.model,
         signal: context.signal,
         requestToolApproval: context.requestToolApproval,
+        onProgress,
       };
 
       if (args.descriptions?.length) {
@@ -76,7 +77,8 @@ export function createTaskTool(deps: {
       }
 
       const description = args.description!.trim();
-      const conclusion = await spawn({ ...shared, description });
+      const taskId = crypto.randomUUID();
+      const conclusion = await spawn({ ...shared, description, taskId });
       return { conclusion, subtaskCount: 1 };
     },
   };

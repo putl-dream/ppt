@@ -85,7 +85,12 @@ export type AgentStreamEvent =
       reason: string;
       detail: string;
     }
-  | { runId: string; type: "todo-updated"; message: string; todos: AgentTodoItem[] };
+  | { runId: string; type: "todo-updated"; message: string; todos: AgentTodoItem[] }
+  | { runId: string; type: "subagent-started"; taskId: string; description: string }
+  | { runId: string; type: "subagent-thinking-chunk"; taskId: string; chunk: string }
+  | { runId: string; type: "subagent-tool-started"; taskId: string; toolName: string; message: string }
+  | { runId: string; type: "subagent-tool-finished"; taskId: string; toolName: string; message: string }
+  | { runId: string; type: "subagent-finished"; taskId: string };
 
 export type AgentRunResult =
   | { status: "chat"; message: string; threadId?: string }

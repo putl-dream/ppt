@@ -73,15 +73,23 @@ describe("Permission gates", () => {
     }))).toEqual({ type: "deny", reason: "禁止删除根目录" });
   });
 
-  it("gate 2 requires approval for file writes and rm", () => {
+  it("allows in-workspace writes and shell without approval", () => {
     expect(evaluatePermission(createBlock({
       toolName: "write_file",
       args: { path: "notes.md", content: "hello" },
-    }))).toEqual({
-      type: "require_approval",
-      reason: "文件修改操作：notes.md",
-    });
+    }))).toEqual({ type: "allow" });
 
+    expect(evaluatePermission(createBlock({
+      toolName: "edit_file",
+      args: { path: "notes.md", old_string: "a", new_string: "b" },
+    }))).toEqual({ type: "allow" });
+
+    expect(evaluatePermission(createBlock({
+      args: { command: "echo hi" },
+    }))).toEqual({ type: "allow" });
+  });
+
+  it("requires approval for delete commands", () => {
     expect(evaluatePermission(createBlock({
       args: { command: "rm notes.md" },
     }))).toEqual({
@@ -90,7 +98,7 @@ describe("Permission gates", () => {
     });
   });
 
-  it("gate 2 flags writes outside workspace", () => {
+  it("requires approval for outside-workspace file access", () => {
     expect(evaluatePermission(createBlock({
       toolName: "write_file",
       args: { path: "../outside.txt", content: "x" },
@@ -99,9 +107,27 @@ describe("Permission gates", () => {
       type: "require_approval",
       reason: "尝试写入工作区外路径：../outside.txt",
     });
+
+    expect(evaluatePermission(createBlock({
+      toolName: "read_file",
+      args: { path: "../outside.txt" },
+      workspaceRoot: awaitableWorkspace(),
+    }))).toEqual({
+      type: "require_approval",
+      reason: "访问工作区外的文件：../outside.txt",
+    });
+
+    expect(evaluatePermission(createBlock({
+      toolName: "glob",
+      args: { pattern: "../**/*.pptx" },
+      workspaceRoot: awaitableWorkspace(),
+    }))).toEqual({
+      type: "require_approval",
+      reason: "访问工作区外的目录：../**/*.pptx",
+    });
   });
 
-  it("allows read-only operations without approval", () => {
+  it("allows read-only operations inside workspace without approval", () => {
     expect(evaluatePermission(createBlock({
       toolName: "read_file",
       args: { path: "notes.md" },
@@ -113,15 +139,14 @@ describe("Permission gates", () => {
     }))).toEqual({ type: "allow" });
   });
 
-  it("gate 3 denies when approval handler is missing", async () => {
+  it("gate 3 denies when approval handler is missing for protected ops", async () => {
     const hook = createPermissionPreToolUseHook();
     const result = await hook(createBlock({
-      toolName: "write_file",
-      args: { path: "a.md", content: "x" },
+      args: { command: "rm notes.md" },
     }));
     expect(result).toEqual({
       type: "stop",
-      reason: "操作需要用户确认：文件修改操作：a.md",
+      reason: "操作需要用户确认：删除命令：rm notes.md",
       toolDenied: true,
     });
   });
@@ -129,8 +154,7 @@ describe("Permission gates", () => {
   it("gate 3 respects user approval decision", async () => {
     const hook = createPermissionPreToolUseHook();
     const denied = await hook(createBlock({
-      toolName: "bash",
-      args: { command: "echo hi" },
+      args: { command: "rm notes.md" },
       requestToolApproval: async () => false,
     }));
     expect(denied).toEqual({
@@ -140,8 +164,7 @@ describe("Permission gates", () => {
     });
 
     const approved = await hook(createBlock({
-      toolName: "bash",
-      args: { command: "echo hi" },
+      args: { command: "rm notes.md" },
       requestToolApproval: async () => true,
     }));
     expect(approved).toBeNull();
@@ -199,7 +222,7 @@ describe("Sub-agent permission integration", () => {
     expect(conclusion).toBe("Stopped after deny.");
   });
 
-  it("executes write_file when user approves gate 2", async () => {
+  it("executes write_file without approval inside workspace", async () => {
     const workspaceRoot = await mkdtemp(join(tmpdir(), "ppt-hook-approve-"));
     let gatewayCalls = 0;
     const gateway: AgentModelGateway = {
@@ -233,14 +256,13 @@ describe("Sub-agent permission integration", () => {
       workspaceRoot,
       gateway,
       maxSteps: 3,
-      requestToolApproval: async (req) => {
+      requestToolApproval: async () => {
         approvalAsked = true;
-        expect(req.toolName).toBe("write_file");
         return true;
       },
     });
 
-    expect(approvalAsked).toBe(true);
+    expect(approvalAsked).toBe(false);
     expect(conclusion).toBe("Write complete.");
   });
 });

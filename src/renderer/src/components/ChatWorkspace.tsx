@@ -20,7 +20,7 @@ import { AgentThinkingLoader } from "./AgentThinkingLoader";
 import { AgentActivityTrace } from "./AgentActivityTrace";
 import { MessageMarkdown } from "./MessageMarkdown";
 import type { AgentActivityItem } from "@shared/agent-activity";
-import { resolveActivityTrace } from "@shared/agent-activity";
+import { findPendingToolApproval, resolveActivityTrace, filterTraceForDisplay } from "@shared/agent-activity";
 import type { ManagedModel } from "../modelCatalog";
 import type { Presentation } from "@shared/presentation";
 import type { InlineCardRef } from "@shared/inline-artifact-cards";
@@ -141,6 +141,18 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollViewportRef = useRef<HTMLDivElement>(null);
   const chatStreamRef = useRef<HTMLDivElement>(null);
+
+  const pendingToolApproval = busy
+    ? findPendingToolApproval(activityTrace)
+    : undefined;
+  const pendingApprovalProps = pendingToolApproval
+    ? {
+        approvalId: pendingToolApproval.approvalId,
+        toolName: pendingToolApproval.toolName,
+        reason: pendingToolApproval.reason,
+        detail: pendingToolApproval.detail,
+      }
+    : null;
 
   const scrollToBottom = useCallback((instant: boolean) => {
     const viewport = scrollViewportRef.current;
@@ -264,6 +276,8 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
             selectedSlideIndex={selectedSlideIndex}
             onClearContextTag={onClearContextTag}
             submitLabel="生成"
+            pendingToolApproval={pendingApprovalProps}
+            onResolveToolApproval={onResolveToolApproval}
           />
 
           {/* Quick recommendations suggestions below */}
@@ -423,16 +437,15 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
                 <>
                   {(() => {
                     const useLiveTrace = busy && streamingMessageId === msg.id;
-                    const trace = resolveActivityTrace({
+                    const trace = filterTraceForDisplay(resolveActivityTrace({
                       activityTrace: useLiveTrace ? activityTrace : msg.activityTrace,
                       thought: useLiveTrace ? undefined : msg.thought,
                       reasoning: useLiveTrace ? undefined : msg.reasoning,
-                    });
+                    }));
                     return trace.length > 0 ? (
                       <AgentActivityTrace
                         items={trace}
                         live={useLiveTrace}
-                        onResolveToolApproval={onResolveToolApproval}
                       />
                     ) : null;
                   })()}
@@ -628,7 +641,6 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
           activityTrace={activityTrace}
           activeToolName={activeToolName}
           suppressTrace={Boolean(streamingMessageId)}
-          onResolveToolApproval={onResolveToolApproval}
         />
 
         <div ref={messagesEndRef} />
@@ -674,6 +686,8 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
           selectedSlideIndex={selectedSlideIndex}
           onClearContextTag={onClearContextTag}
           submitLabel="生成"
+          pendingToolApproval={pendingApprovalProps}
+          onResolveToolApproval={onResolveToolApproval}
         />
         </div>
       </div>

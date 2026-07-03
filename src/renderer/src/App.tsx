@@ -55,6 +55,11 @@ import {
   sealAllReasoning,
   updateStepText,
   upsertTodoTrace,
+  upsertTaskStarted,
+  appendTaskReasoningChunk,
+  appendTaskToolStart,
+  finishTaskTool,
+  finishTask,
 } from "@shared/agent-activity";
 
 type ChatMessage = SessionChatMessage;
@@ -322,13 +327,15 @@ export function App() {
         stopStatusTyping();
         setAgentActivityMode("workflow");
         setActiveToolName(event.toolName);
-        syncActivityTrace(
-          appendToolStart(
-            activeRunTraceRef.current,
-            event.toolName,
-            `🛠️ 运行工具: ${event.toolName}`,
-          ),
-        );
+        if (event.toolName !== "Task") {
+          syncActivityTrace(
+            appendToolStart(
+              activeRunTraceRef.current,
+              event.toolName,
+              `🛠️ 运行工具: ${event.toolName}`,
+            ),
+          );
+        }
         return;
       }
 
@@ -336,13 +343,23 @@ export function App() {
         stopStatusTyping();
         setAgentActivityMode("workflow");
         setActiveToolName(null);
-        syncActivityTrace(
-          finishTool(
-            activeRunTraceRef.current,
-            event.toolName,
-            `✅ 工具 ${event.toolName} 运行完毕`,
-          ),
-        );
+        if (event.toolName === "Task") {
+          let trace = activeRunTraceRef.current;
+          for (const item of trace) {
+            if (item.kind === "task" && item.status === "running") {
+              trace = finishTask(trace, item.taskId);
+            }
+          }
+          syncActivityTrace(trace);
+        } else {
+          syncActivityTrace(
+            finishTool(
+              activeRunTraceRef.current,
+              event.toolName,
+              `✅ 工具 ${event.toolName} 运行完毕`,
+            ),
+          );
+        }
         return;
       }
 
@@ -386,6 +403,59 @@ export function App() {
         stopStatusTyping();
         setAgentActivityMode("workflow");
         syncActivityTrace(upsertTodoTrace(activeRunTraceRef.current, event.todos));
+        return;
+      }
+
+      if (event.type === "subagent-started") {
+        stopStatusTyping();
+        setAgentActivityMode("workflow");
+        setActiveToolName("Task");
+        syncActivityTrace(
+          upsertTaskStarted(activeRunTraceRef.current, {
+            taskId: event.taskId,
+            description: event.description,
+          }),
+        );
+        return;
+      }
+
+      if (event.type === "subagent-thinking-chunk") {
+        setAgentActivityMode("reasoning");
+        syncActivityTrace(
+          appendTaskReasoningChunk(activeRunTraceRef.current, event.taskId, event.chunk),
+        );
+        return;
+      }
+
+      if (event.type === "subagent-tool-started") {
+        setAgentActivityMode("workflow");
+        setActiveToolName(event.toolName);
+        syncActivityTrace(
+          appendTaskToolStart(
+            activeRunTraceRef.current,
+            event.taskId,
+            event.toolName,
+            event.message,
+          ),
+        );
+        return;
+      }
+
+      if (event.type === "subagent-tool-finished") {
+        setActiveToolName(null);
+        syncActivityTrace(
+          finishTaskTool(
+            activeRunTraceRef.current,
+            event.taskId,
+            event.toolName,
+            event.message,
+          ),
+        );
+        return;
+      }
+
+      if (event.type === "subagent-finished") {
+        syncActivityTrace(finishTask(activeRunTraceRef.current, event.taskId));
         return;
       }
 
@@ -621,7 +691,6 @@ export function App() {
                 title: presentation.title || s.title,
                 slideCount: presentation.slides.length,
                 revision: presentation.revision,
-                updatedAt: new Date().toISOString(),
               }
             : s
         )
