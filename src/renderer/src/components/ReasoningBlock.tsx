@@ -6,12 +6,14 @@ interface ReasoningBlockProps {
   /** 流式思考中默认展开，结束后默认折叠 */
   defaultExpanded?: boolean;
   isStreaming?: boolean;
+  label?: string;
 }
 
 export const ReasoningBlock: React.FC<ReasoningBlockProps> = ({
   content,
   defaultExpanded = false,
   isStreaming = false,
+  label,
 }) => {
   const [expanded, setExpanded] = useState(defaultExpanded || isStreaming);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -59,7 +61,7 @@ export const ReasoningBlock: React.FC<ReasoningBlockProps> = ({
         aria-expanded={expanded}
       >
         <span className="reasoning-block-label">
-          {isStreaming ? "思考中" : "思考过程"}
+          {label ?? (isStreaming ? "思考中" : "思考过程")}
         </span>
         {expanded ? <ChevronDownIcon size={12} /> : <ChevronRightIcon size={12} />}
       </button>

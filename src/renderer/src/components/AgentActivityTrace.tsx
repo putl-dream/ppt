@@ -85,12 +85,21 @@ export const AgentActivityTrace: React.FC<AgentActivityTraceProps> = ({
 
   return (
     <div className={`agent-activity-trace${live ? " agent-activity-trace--live" : ""}`}>
-      {items.map((item) => {
+      {items.map((item, index) => {
         if (item.kind === "reasoning") {
+          const reasoningIndex = items
+            .slice(0, index + 1)
+            .filter((entry) => entry.kind === "reasoning").length;
+          const reasoningTotal = items.filter((entry) => entry.kind === "reasoning").length;
+          const reasoningLabel = reasoningTotal > 1
+            ? (live && item.streaming ? `思考中 ${reasoningIndex}` : `思考过程 ${reasoningIndex}`)
+            : undefined;
+
           return (
             <ReasoningBlock
               key={item.id}
               content={item.content}
+              label={reasoningLabel}
               defaultExpanded={live}
               isStreaming={live && Boolean(item.streaming)}
             />

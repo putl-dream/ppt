@@ -52,7 +52,8 @@ import {
   appendToolStart,
   finishTool,
   markTraceComplete,
-  preferActivityTrace,
+  mergeActivityTraces,
+  sealAllReasoning,
   updateStepText,
 } from "@shared/agent-activity";
 
@@ -253,15 +254,13 @@ export function App() {
     if (!runId) return;
     const messageId = streamMessageIdsRef.current.get(runId);
     if (!messageId) return;
-
-    const snapshot = markTraceComplete(next);
-    if (snapshot.length === 0) return;
+    if (next.length === 0) return;
 
     setChatMessages((prev) => prev.map((message) =>
       message.id === messageId
         ? {
             ...message,
-            activityTrace: preferActivityTrace(message.activityTrace, snapshot),
+            activityTrace: mergeActivityTraces(message.activityTrace, next),
           }
         : message,
     ));
@@ -398,14 +397,22 @@ export function App() {
       if (event.type === "thinking-chunk") {
         stopStatusTyping();
         setAgentActivityMode("reasoning");
-        syncActivityTrace(appendReasoningChunk(activeRunTraceRef.current, event.chunk));
+        syncActivityTrace(
+          appendReasoningChunk(
+            activeRunTraceRef.current,
+            event.chunk,
+            event.modelStep ?? 0,
+          ),
+        );
         return;
       }
 
       if (event.type === "text-chunk") {
-        // summary 流式输出：保留完整 activityTrace，后续 tool-finished / workflow 仍会继续追加
+        // summary 流式输出：封存当前思考段，保留 trace 供后续 tool-finished / workflow 继续追加
         stopStatusTyping();
-        const traceSnapshot = markTraceComplete(activeRunTraceRef.current);
+        const sealedTrace = sealAllReasoning(activeRunTraceRef.current);
+        activeRunTraceRef.current = sealedTrace;
+        setActivityTrace(sealedTrace);
         requestStatusStepIdRef.current = null;
         let messageId = streamMessageIdsRef.current.get(event.runId);
         if (!messageId) {
@@ -417,7 +424,7 @@ export function App() {
               id: messageId!,
               role: "assistant",
               content: event.chunk,
-              activityTrace: traceSnapshot.length > 0 ? traceSnapshot : undefined,
+              activityTrace: sealedTrace.length > 0 ? sealedTrace : undefined,
             },
           ]);
         } else {
@@ -426,10 +433,7 @@ export function App() {
               ? {
                   ...message,
                   content: message.content + event.chunk,
-                  activityTrace: preferActivityTrace(
-                    message.activityTrace,
-                    traceSnapshot.length > 0 ? traceSnapshot : undefined,
-                  ),
+                  activityTrace: mergeActivityTraces(message.activityTrace, sealedTrace),
                 }
               : message,
           ));
@@ -728,8 +732,13 @@ export function App() {
 
   async function applyAgentResult(result: AgentRunResult, trace: AgentActivityItem[], runId?: string) {
     const messageId = runId ? streamMessageIdsRef.current.get(runId) : undefined;
-    const traceSnapshot = markTraceComplete(trace);
-    const activityTrace = traceSnapshot.length > 0 ? traceSnapshot : undefined;
+    const finalizeTrace = (existing?: AgentActivityItem[]) => markTraceComplete(
+      mergeActivityTraces(existing, trace, activeRunTraceRef.current) ?? [],
+    );
+    const resolvedTrace = (existing?: AgentActivityItem[]) => {
+      const merged = finalizeTrace(existing);
+      return merged.length > 0 ? merged : undefined;
+    };
 
     if (result.status === "chat") {
       if (messageId) {
@@ -738,7 +747,7 @@ export function App() {
             ? {
                 ...message,
                 content: result.message,
-                activityTrace: preferActivityTrace(message.activityTrace, activityTrace),
+                activityTrace: resolvedTrace(message.activityTrace),
                 threadId: result.threadId,
               }
             : message,
@@ -750,7 +759,7 @@ export function App() {
             id: crypto.randomUUID(),
             role: "assistant",
             content: result.message,
-            activityTrace,
+            activityTrace: resolvedTrace(),
             threadId: result.threadId,
           },
         ]);
@@ -765,7 +774,7 @@ export function App() {
             ? {
                 ...message,
                 content: "已提出排版更新方案，请在下方审核后应用。",
-                activityTrace: preferActivityTrace(message.activityTrace, activityTrace),
+                activityTrace: resolvedTrace(message.activityTrace),
                 approval: result.approval,
               }
             : message
@@ -777,7 +786,7 @@ export function App() {
             id: crypto.randomUUID(),
             role: "assistant",
             content: "已提出排版更新方案，请在下方审核后应用。",
-            activityTrace,
+            activityTrace: resolvedTrace(),
             approval: result.approval,
           },
         ]);
@@ -801,7 +810,7 @@ export function App() {
             ? {
                 ...message,
                 content: promptContent,
-                activityTrace: preferActivityTrace(message.activityTrace, activityTrace),
+                activityTrace: resolvedTrace(message.activityTrace),
                 patch: patchPayload,
               }
             : message
@@ -813,7 +822,7 @@ export function App() {
             id: crypto.randomUUID(),
             role: "assistant",
             content: promptContent,
-            activityTrace,
+            activityTrace: resolvedTrace(),
             patch: patchPayload,
           },
         ]);
@@ -1063,6 +1072,7 @@ export function App() {
             executionStrategy,
             runId,
           );
+      await new Promise<void>((resolve) => queueMicrotask(resolve));
       await applyAgentResult(result, activeRunTraceRef.current, runId);
     } catch (err) {
       setChatMessages((prev) => [

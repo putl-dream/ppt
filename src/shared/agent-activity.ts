@@ -6,6 +6,7 @@ export const agentActivityItemSchema = z.discriminatedUnion("kind", [
     kind: z.literal("reasoning"),
     content: z.string(),
     streaming: z.boolean().optional(),
+    modelStep: z.number().int().nonnegative().optional(),
   }),
   z.object({
     id: z.string(),
@@ -25,6 +26,14 @@ export const agentActivityItemSchema = z.discriminatedUnion("kind", [
 
 export type AgentActivityItem = z.infer<typeof agentActivityItemSchema>;
 
+export function sealAllReasoning(trace: AgentActivityItem[]): AgentActivityItem[] {
+  return trace.map((item) =>
+    item.kind === "reasoning" && item.streaming
+      ? { ...item, streaming: false }
+      : item,
+  );
+}
+
 export function finalizeReasoning(trace: AgentActivityItem[]): AgentActivityItem[] {
   const last = trace.at(-1);
   if (last?.kind === "reasoning" && last.streaming) {
@@ -33,18 +42,27 @@ export function finalizeReasoning(trace: AgentActivityItem[]): AgentActivityItem
   return trace;
 }
 
-export function appendReasoningChunk(trace: AgentActivityItem[], chunk: string): AgentActivityItem[] {
+export function appendReasoningChunk(
+  trace: AgentActivityItem[],
+  chunk: string,
+  modelStep = 0,
+): AgentActivityItem[] {
   const last = trace.at(-1);
-  if (last?.kind === "reasoning" && last.streaming) {
+  if (
+    last?.kind === "reasoning" &&
+    last.streaming &&
+    (last.modelStep ?? 0) === modelStep
+  ) {
     return [...trace.slice(0, -1), { ...last, content: last.content + chunk }];
   }
   return [
-    ...finalizeReasoning(trace),
+    ...sealAllReasoning(trace),
     {
       id: crypto.randomUUID(),
       kind: "reasoning",
       content: chunk,
       streaming: true,
+      modelStep,
     },
   ];
 }
@@ -99,27 +117,32 @@ export function finishTool(
   toolName: string,
   finishedLabel: string,
 ): AgentActivityItem[] {
-  let matched = false;
-  const updated = trace.map((item) => {
+  let matchedIndex = -1;
+  for (let index = trace.length - 1; index >= 0; index -= 1) {
+    const item = trace[index];
     if (
-      !matched &&
       item.kind === "tool" &&
       item.toolName === toolName &&
-      item.status === "running"
+      (item.status === "running" || !item.finishedLabel)
     ) {
-      matched = true;
-      return {
-        ...item,
-        status: "done" as const,
-        finishedLabel,
-      };
+      matchedIndex = index;
+      break;
     }
-    return item;
-  });
-  if (!matched) {
-    return appendStep(updated, finishedLabel, "done");
   }
-  return updated;
+
+  if (matchedIndex === -1) {
+    return appendStep(trace, finishedLabel, "done");
+  }
+
+  return trace.map((item, index) =>
+    index === matchedIndex && item.kind === "tool"
+      ? {
+          ...item,
+          status: "done" as const,
+          finishedLabel,
+        }
+      : item,
+  );
 }
 
 export function markTraceComplete(trace: AgentActivityItem[]): AgentActivityItem[] {
@@ -137,14 +160,21 @@ export function markTraceComplete(trace: AgentActivityItem[]): AgentActivityItem
   });
 }
 
-/** 取更完整的时间线快照，避免 text-chunk 早快照覆盖后续工具步骤 */
+/** 合并多份时间线快照，取条目最多的一份（并列时取后者） */
+export function mergeActivityTraces(
+  ...traces: Array<AgentActivityItem[] | undefined>
+): AgentActivityItem[] | undefined {
+  const valid = traces.filter((trace): trace is AgentActivityItem[] => Boolean(trace?.length));
+  if (valid.length === 0) return undefined;
+  return valid.reduce((best, trace) => (trace.length >= best.length ? trace : best));
+}
+
+/** @deprecated 使用 mergeActivityTraces */
 export function preferActivityTrace(
   existing: AgentActivityItem[] | undefined,
   incoming: AgentActivityItem[] | undefined,
 ): AgentActivityItem[] | undefined {
-  if (!incoming?.length) return existing;
-  if (!existing?.length) return incoming;
-  return incoming.length >= existing.length ? incoming : existing;
+  return mergeActivityTraces(existing, incoming);
 }
 
 export function resolveActivityTrace(input: {

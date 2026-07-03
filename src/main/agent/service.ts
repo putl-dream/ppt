@@ -11,7 +11,7 @@ export type AgentServiceEvent =
   | { type: "request-status"; message: string; progress: number }
   | { type: "workflow-progress"; message: string; progress: number }
   | { type: "text-chunk"; chunk: string }
-  | { type: "thinking-chunk"; chunk: string }
+  | { type: "thinking-chunk"; chunk: string; modelStep?: number }
   | { type: "stage-started"; message: string; stage: string }
   | { type: "artifact-read"; message: string; path: string }
   | { type: "artifact-diff-ready"; message: string; path: string }
@@ -160,8 +160,8 @@ export class AgentService {
         onStreamChunk: (chunk: string) => {
           listener({ type: "text-chunk", chunk });
         },
-        onThinkingChunk: (chunk: string) => {
-          listener({ type: "thinking-chunk", chunk });
+        onThinkingChunk: (chunk: string, modelStep: number) => {
+          listener({ type: "thinking-chunk", chunk, modelStep });
         },
       }),
     });

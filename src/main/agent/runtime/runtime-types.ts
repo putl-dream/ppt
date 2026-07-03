@@ -67,7 +67,7 @@ export interface AgentRuntimeOptions {
    */
   onStreamChunk?: (chunk: string) => void;
   /** 模型思考流式回调（extended thinking / reasoning） */
-  onThinkingChunk?: (chunk: string) => void;
+  onThinkingChunk?: (chunk: string, modelStep: number) => void;
   signal?: AbortSignal;
   onProgress?: (event: { type: string; message: string; [key: string]: any }) => void;
 }

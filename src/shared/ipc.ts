@@ -108,6 +108,7 @@ export type AgentStreamEvent =
     runId: string;
     type: "thinking-chunk";
     chunk: string;
+    modelStep?: number;
   }
   | {
     runId: string;
