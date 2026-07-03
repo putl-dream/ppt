@@ -3,7 +3,6 @@ import { applyLayout } from "../src/shared/layout";
 import type { Presentation, Slide } from "../src/shared/presentation";
 import { LayoutValidator } from "../src/main/deck/validators/layout-validator";
 import { StyleValidator } from "../src/main/deck/validators/style-validator";
-import { deckGenerationService } from "../src/main/deck/deck-generation-service";
 
 function createPresentation(slides: Slide[], overrides: Partial<Presentation> = {}): Presentation {
   return {
@@ -191,48 +190,5 @@ describe("StyleValidator", () => {
 
     const issues = validator.validate(createPresentation([slide]));
     expect(issues.filter((issue) => issue.message.includes("duplicates the chrome title"))).toEqual([]);
-  });
-});
-
-describe("DeckGenerationService.validateAfterBatch", () => {
-  it("runs layout and style validators for a batch scope", () => {
-    const batchSlide = applyLayout(
-      {
-        id: "batch-slide",
-        title: "Batch Slide",
-        elements: [
-          {
-            id: "body",
-            type: "text",
-            x: 0,
-            y: 0,
-            width: 700,
-            height: 300,
-            text: "Batch content",
-            fontSize: 24,
-          },
-        ],
-      },
-      "concept",
-      "ocean",
-      "cyan",
-    );
-    const otherSlide: Slide = {
-      id: "other-slide",
-      title: "Broken",
-      layout: "comparison",
-      elements: [],
-    };
-
-    const result = deckGenerationService.validateAfterBatch({
-      presentation: createPresentation([batchSlide, otherSlide]),
-      batchIndex: 2,
-      slideIds: ["batch-slide"],
-    });
-
-    expect(result.batchIndex).toBe(2);
-    expect(result.valid).toBe(true);
-    expect(result.issues.every((issue) => issue.slideId === "batch-slide" || !issue.slideId)).toBe(true);
-    expect(result.issues.some((issue) => issue.slideId === "other-slide")).toBe(false);
   });
 });

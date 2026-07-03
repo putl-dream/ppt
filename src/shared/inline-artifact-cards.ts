@@ -4,7 +4,7 @@ import type { ProjectStageId } from "./project";
 import {
   hasMeaningfulArtifactContent,
   isDefaultArtifactContent,
-} from "./agent-run-plan";
+} from "./project-artifact-state";
 import type { BriefFields, OutlineItem } from "./project-artifacts";
 import { parseBriefFields, parseOutlineItems } from "./project-artifacts";
 

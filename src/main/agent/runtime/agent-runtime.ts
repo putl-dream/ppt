@@ -96,7 +96,6 @@ export class AgentRuntime {
       coreTools,
       currentSlideId: options.currentSlideId,
       requiredOutcome: options.requiredOutcome,
-      deckAgentContext: options.deckAgentContext,
     });
     const transcript: Array<Record<string, unknown>> = [
       { role: "user", content: options.request },

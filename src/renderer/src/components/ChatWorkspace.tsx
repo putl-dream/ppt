@@ -13,7 +13,6 @@ import {
   FileIcon,
 } from "./Icons";
 import { UnifiedAgentInput } from "./UnifiedAgentInput";
-import { PatchReviewCard } from "./PatchReviewCard";
 import { BriefCard } from "./BriefCard";
 import { OutlineCard } from "./OutlineCard";
 import { DeckPreviewCard } from "./DeckPreviewCard";
@@ -50,7 +49,6 @@ interface ChatWorkspaceProps {
   onSubmitRequest: () => void;
   busy: boolean;
   onResolveApproval: (approved: boolean, approval: AgentApprovalRequest, messageId: string) => void;
-  onResolvePatch: (messageId: string, approved: boolean) => void;
   getInlineCardData: (message: ChatMessage) => InlineCardData;
   onConfirmBrief: (messageId: string) => void;
   onConfirmOutline: (messageId: string) => void;
@@ -100,7 +98,6 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
   onSubmitRequest,
   busy,
   onResolveApproval,
-  onResolvePatch,
   getInlineCardData,
   onConfirmBrief,
   onConfirmOutline,
@@ -453,16 +450,6 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
                   >
                     🔄 重试该指令
                   </button>
-                )}
-
-                {/* 产物 Patch 审核卡片 */}
-                {msg.patch && (
-                  <PatchReviewCard
-                    patch={msg.patch}
-                    busy={busy}
-                    onAccept={() => onResolvePatch(msg.id, true)}
-                    onReject={() => onResolvePatch(msg.id, false)}
-                  />
                 )}
 
                 {/* Deck 排版审批卡片 */}

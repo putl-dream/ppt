@@ -1,83 +1,51 @@
 import type { AgentRuntimeResult } from "./runtime-types";
 import { presentationCommandSchema } from "@shared/commands";
 
-/**
- * 模型最终响应的协议归一化与校验判定。
- *
- * 负责把供应商响应解析并校验为合法的 message、ask_user 或 command_proposal，
- * 拒绝缺少关键字段、包含非法风险等级或无法识别的结构。
- */
 export class RuntimeNormalizer {
-  /**
-   * 校验并归一化模型返回的原始响应结构。
-   * 如果不符合规范，则抛出校验异常，迫使 Runtime 重新生成或进行错误反馈。
-   */
-  static normalize(raw: any): AgentRuntimeResult {
+  static normalize(raw: unknown): AgentRuntimeResult {
     if (!raw || typeof raw !== "object") {
       throw new Error("Invalid model response: response must be a non-null object.");
     }
 
-    const type = raw.type;
-    if (type !== "message" && type !== "ask_user" && type !== "command_proposal" && type !== "artifact_patch") {
-      throw new Error(`Invalid model response type: '${type}'. Expected 'message', 'ask_user', 'command_proposal' or 'artifact_patch'.`);
-    }
-
-    if (type === "artifact_patch") {
-      if (typeof raw.targetPath !== "string" || raw.targetPath.trim() === "") {
-        throw new Error("Validation error: 'artifact_patch' response must contain a non-empty string in 'targetPath'.");
-      }
-      if (typeof raw.patch !== "string" || raw.patch.trim() === "") {
-        throw new Error("Validation error: 'artifact_patch' response must contain a non-empty string in 'patch'.");
-      }
-      if (typeof raw.summary !== "string" || raw.summary.trim() === "") {
-        throw new Error("Validation error: 'artifact_patch' response must contain a non-empty string in 'summary'.");
-      }
-      const risk = raw.risk ?? "low";
-      if (risk !== "low" && risk !== "medium" && risk !== "high") {
-        throw new Error(`Validation error: 'artifact_patch' contains invalid risk level: '${risk}'. Expected 'low', 'medium' or 'high'.`);
-      }
-      return {
-        type: "artifact_patch",
-        targetPath: raw.targetPath,
-        patch: raw.patch,
-        summary: raw.summary,
-        risk: risk,
-      };
+    const type = (raw as { type?: unknown }).type;
+    if (type !== "message" && type !== "ask_user" && type !== "command_proposal") {
+      throw new Error(`Invalid model response type: '${String(type)}'. Expected 'message', 'ask_user' or 'command_proposal'.`);
     }
 
     if (type === "message") {
-      if (typeof raw.content !== "string" || raw.content.trim() === "") {
+      const content = (raw as { content?: unknown }).content;
+      if (typeof content !== "string" || content.trim() === "") {
         throw new Error("Validation error: 'message' response must contain a non-empty string in 'content'.");
       }
-      return {
-        type: "message",
-        content: raw.content,
-      };
+      return { type: "message", content };
     }
 
     if (type === "ask_user") {
-      if (typeof raw.message !== "string" || raw.message.trim() === "") {
+      const message = (raw as { message?: unknown }).message;
+      if (typeof message !== "string" || message.trim() === "") {
         throw new Error("Validation error: 'ask_user' response must contain a non-empty string in 'message'.");
       }
+      const missingFields = (raw as { missingFields?: unknown }).missingFields;
       return {
         type: "ask_user",
-        message: raw.message,
-        missingFields: Array.isArray(raw.missingFields) ? raw.missingFields.map(String) : undefined,
+        message,
+        missingFields: Array.isArray(missingFields) ? missingFields.map(String) : undefined,
       };
     }
 
-    // type === "command_proposal"
-    if (typeof raw.summary !== "string" || raw.summary.trim() === "") {
+    const summary = (raw as { summary?: unknown }).summary;
+    if (typeof summary !== "string" || summary.trim() === "") {
       throw new Error("Validation error: 'command_proposal' response must contain a non-empty string in 'summary'.");
     }
 
-    if (!Array.isArray(raw.commands)) {
+    const commandsRaw = (raw as { commands?: unknown }).commands;
+    if (!Array.isArray(commandsRaw)) {
       throw new Error("Validation error: 'command_proposal' response must contain an array of 'commands'.");
     }
-    if (raw.commands.length === 0) {
+    if (commandsRaw.length === 0) {
       throw new Error("Validation error: 'command_proposal' must contain at least one command.");
     }
-    const commands = raw.commands.map((command: unknown, index: number) => {
+    const commands = commandsRaw.map((command: unknown, index: number) => {
       const parsed = presentationCommandSchema.safeParse(command);
       if (!parsed.success) {
         throw new Error(`Validation error: command ${index} is invalid: ${parsed.error.message}`);
@@ -85,17 +53,18 @@ export class RuntimeNormalizer {
       return parsed.data;
     });
 
-    const risk = raw.risk;
+    const risk = (raw as { risk?: unknown }).risk;
     if (risk !== "low" && risk !== "medium" && risk !== "high") {
-      throw new Error(`Validation error: 'command_proposal' contains invalid risk level: '${risk}'. Expected 'low', 'medium' or 'high'.`);
+      throw new Error(`Validation error: 'command_proposal' contains invalid risk level: '${String(risk)}'.`);
     }
 
+    const assumptions = (raw as { assumptions?: unknown }).assumptions;
     return {
       type: "command_proposal",
-      summary: raw.summary,
+      summary,
       commands,
-      risk: risk,
-      assumptions: Array.isArray(raw.assumptions) ? raw.assumptions.map(String) : undefined,
+      risk,
+      assumptions: Array.isArray(assumptions) ? assumptions.map(String) : undefined,
     };
   }
 }

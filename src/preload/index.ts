@@ -42,9 +42,6 @@ const api: DesktopApi = {
     ipcRenderer.invoke("presentation:export", presentation, options),
   selectDirectory: (defaultPath) => ipcRenderer.invoke("dialog:select-directory", defaultPath),
   cancelAgentRun: (runId) => ipcRenderer.invoke("agent:cancel", runId),
-  getDeckGenerationStatus: (sessionId) => ipcRenderer.invoke("deck:generation-status", sessionId),
-  resumeDeckGeneration: (sessionId, jobId, model, executionStrategy, runId) =>
-    ipcRenderer.invoke("deck:generation-resume", sessionId, jobId, model, executionStrategy, runId),
 };
 
 contextBridge.exposeInMainWorld("desktopApi", api);

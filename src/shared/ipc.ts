@@ -1,8 +1,6 @@
 import type { Presentation } from "./presentation";
 import type { PresentationCommand } from "./commands";
-import type { AgentExecutionStrategy, AgentModelSelection, AgentModelSettings } from "./agent";
-import type { DeckGenerationJob } from "./deck-persistence";
-import type { StoryboardSlideSpec } from "./storyboard";
+import type { AgentExecutionStrategy, AgentModelSettings } from "./agent";
 import { z } from "zod";
 import type {
   ProjectArtifact,
@@ -11,7 +9,6 @@ import type {
   SessionChatMessage,
   SessionSummary,
 } from "./session";
-import { projectStageIds, type ProjectStageId } from "./project";
 
 export interface CreateSessionOptions {
   rootPath?: string;
@@ -46,16 +43,6 @@ export interface AgentEditorContext {
   selectedElementIds: string[];
 }
 
-export const agentIntentSchema = z.enum([
-  "chat",
-  "generate-artifact",
-  "revise-artifact",
-  "generate-deck",
-  "revise-deck",
-]);
-
-export const agentStageSchema = z.enum([...projectStageIds, "auto"] as const);
-
 export const agentEditorContextSchema = z.object({
   currentSlideId: z.string().optional(),
   selectedElementIds: z.array(z.string()),
@@ -71,135 +58,28 @@ export const agentAttachmentSchema = z.object({
 export const agentRunRequestSchema = z.object({
   prompt: z.string().trim().min(1),
   sessionId: z.string().trim().min(1),
-  intent: agentIntentSchema,
-  stage: agentStageSchema,
-  targetArtifactId: z.string().optional(),
-  targetPath: z.string().optional(),
-  referencedArtifactIds: z.array(z.string()).optional(),
   editorContext: agentEditorContextSchema.optional(),
   attachments: z.array(agentAttachmentSchema).optional(),
 });
 
-export type AgentIntent = z.infer<typeof agentIntentSchema>;
-export type AgentStage = z.infer<typeof agentStageSchema>;
 export type AgentAttachment = z.infer<typeof agentAttachmentSchema>;
 export type AgentRunRequest = z.infer<typeof agentRunRequestSchema>;
-export type ResolvedAgentRunRequest = Omit<AgentRunRequest, "stage"> & { stage: ProjectStageId };
 
 export type AgentStreamEvent =
-  | {
-    runId: string;
-    type: "request-status";
-    message: string;
-    progress: number;
-  }
-  | {
-    runId: string;
-    type: "workflow-progress";
-    message: string;
-    progress: number;
-  }
-  | {
-    runId: string;
-    type: "text-chunk";
-    chunk: string;
-    source?: "message" | "tool-summary";
-  }
-  | {
-    runId: string;
-    type: "thinking-chunk";
-    chunk: string;
-    modelStep?: number;
-  }
-  | {
-    runId: string;
-    type: "stage-started";
-    message: string;
-    stage: string;
-  }
-  | {
-    runId: string;
-    type: "artifact-read";
-    message: string;
-    path: string;
-  }
-  | {
-    runId: string;
-    type: "artifact-diff-ready";
-    message: string;
-    path: string;
-  }
-  | {
-    runId: string;
-    type: "tool-started";
-    message: string;
-    toolName: string;
-  }
-  | {
-    runId: string;
-    type: "tool-finished";
-    message: string;
-    toolName: string;
-  }
-  | {
-    runId: string;
-    type: "tool-validation-failed";
-    message: string;
-    toolName: string;
-    error: string;
-  }
-  | {
-    runId: string;
-    type: "approval-waiting";
-    message: string;
-  }
-  | {
-    runId: string;
-    type: "deck-job-started";
-    jobId: string;
-    totalBatches: number;
-    message: string;
-  }
-  | {
-    runId: string;
-    type: "deck-batch-started";
-    jobId: string;
-    batchIndex: number;
-    totalBatches: number;
-    message: string;
-  }
-  | {
-    runId: string;
-    type: "deck-batch-validated";
-    jobId: string;
-    batchIndex: number;
-    errorCount: number;
-    warningCount: number;
-    message: string;
-  }
-  | {
-    runId: string;
-    type: "deck-job-progress";
-    jobId: string;
-    completedBatches: number;
-    totalBatches: number;
-    status: DeckGenerationJob["status"];
-    message: string;
-  }
-  | {
-    runId: string;
-    type: "deck-job-finished";
-    jobId: string;
-    status: DeckGenerationJob["status"];
-    message: string;
-  };
+  | { runId: string; type: "request-status"; message: string; progress: number }
+  | { runId: string; type: "workflow-progress"; message: string; progress: number }
+  | { runId: string; type: "text-chunk"; chunk: string; source?: "message" | "tool-summary" }
+  | { runId: string; type: "thinking-chunk"; chunk: string; modelStep?: number }
+  | { runId: string; type: "stage-started"; message: string; stage: string }
+  | { runId: string; type: "tool-started"; message: string; toolName: string }
+  | { runId: string; type: "tool-finished"; message: string; toolName: string }
+  | { runId: string; type: "tool-validation-failed"; message: string; toolName: string; error: string }
+  | { runId: string; type: "approval-waiting"; message: string };
 
 export type AgentRunResult =
   | { status: "chat"; message: string; threadId?: string }
-  | { status: "artifact-patch-required"; patch: AgentArtifactPatchRequest }
   | { status: "approval-required"; approval: AgentApprovalRequest }
   | { status: "completed"; presentation: Presentation }
-  | { status: "artifact-updated"; write: ProjectArtifactWriteResult }
   | { status: "rejected"; presentation?: Presentation };
 
 export interface ProjectArtifactReadResult {
@@ -222,18 +102,6 @@ export interface ProjectArtifactWriteResult {
   changed: boolean;
   changedArtifactId?: string;
   staleArtifactIds: string[];
-}
-
-export interface AgentArtifactPatchRequest {
-  threadId: string;
-  targetPath: string;
-  summary: string;
-  before: string;
-  after: string;
-  diff: ArtifactDiff;
-  changedArtifactId?: string;
-  staleArtifactIds: string[];
-  risk?: "low" | "medium" | "high";
 }
 
 export interface DesktopApi {
@@ -291,14 +159,6 @@ export interface DesktopApi {
   ): Promise<string | null>;
   selectDirectory(defaultPath?: string): Promise<string | null>;
   cancelAgentRun(runId: string): Promise<boolean>;
-  getDeckGenerationStatus(sessionId: string): Promise<DeckGenerationStatus | null>;
-  resumeDeckGeneration(
-    sessionId: string,
-    jobId?: string,
-    model?: AgentModelSettings,
-    executionStrategy?: AgentExecutionStrategy,
-    runId?: string,
-  ): Promise<AgentRunResult>;
 }
 
 export interface ExportPresentationOptions {
@@ -307,23 +167,7 @@ export interface ExportPresentationOptions {
   logoUrl?: string | null;
 }
 
-/** 数据层：一批 slides 生成完成后的结果（与文件导出解耦） */
-export interface DeckGenerationResult {
-  presentation: Presentation;
-  batchIndex: number;
-  done: boolean;
-}
-
-/** 文件层：Presentation 导出为外部文件后的结果 */
 export interface DeckExportResult {
   filePath: string;
   slideCount: number;
-}
-
-export interface DeckGenerationStatus {
-  job: DeckGenerationJob | null;
-  storyboard: StoryboardSlideSpec[];
-  doneSlides: number;
-  pendingSlides: number;
-  failedSlides: number;
 }

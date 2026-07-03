@@ -22,10 +22,6 @@ import { DeckPreviewModal } from "./components/DeckPreviewModal";
 import { useProjectStore, type ActiveProject } from "./components/project-store";
 import { getWorkspaceLabel, normalizeWorkspacePath, resolveWorkspacePath } from "@shared/workspace";
 import {
-  buildAgentRunPlan,
-  artifactContentsFromRecord,
-} from "@shared/agent-run-plan";
-import {
   artifactStageToInlineCardType,
   isExportPrompt,
   isPreviewPrompt,
@@ -36,7 +32,6 @@ import {
   type InlineCardRef,
 } from "@shared/inline-artifact-cards";
 import { findRecoverableConversation } from "@shared/session-recovery";
-import { projectStageIds, isProjectStageId } from "@shared/project";
 import {
   DEFAULT_MODELS,
   MODEL_STORAGE_KEY,
@@ -63,14 +58,6 @@ type ChatMessage = SessionChatMessage;
 
 function findActiveThreadId(messages: ChatMessage[]): string | undefined {
   return findRecoverableConversation(messages)?.threadId;
-}
-
-function buildArtifactContents(project: ActiveProject) {
-  return artifactContentsFromRecord(
-    Object.fromEntries(
-      projectStageIds.map((stageId) => [stageId, project.artifacts[stageId]?.content ?? ""]),
-    ),
-  );
 }
 
 function toSessionChatMessages(messages: ChatMessage[]): SessionChatMessage[] {
@@ -328,20 +315,6 @@ export function App() {
         return;
       }
 
-      if (event.type === "artifact-read") {
-        stopStatusTyping();
-        setAgentActivityMode("workflow");
-        syncActivityTrace(appendStep(activeRunTraceRef.current, `📖 读取文件: ${event.path}`, "done"));
-        return;
-      }
-
-      if (event.type === "artifact-diff-ready") {
-        stopStatusTyping();
-        setAgentActivityMode("workflow");
-        syncActivityTrace(appendStep(activeRunTraceRef.current, `🔍 比对差异: ${event.path}`, "done"));
-        return;
-      }
-
       if (event.type === "tool-started") {
         stopStatusTyping();
         setAgentActivityMode("workflow");
@@ -381,25 +354,6 @@ export function App() {
             event.error,
           ),
         );
-        return;
-      }
-
-      if (
-        event.type === "deck-job-started" ||
-        event.type === "deck-batch-started" ||
-        event.type === "deck-batch-validated" ||
-        event.type === "deck-job-progress" ||
-        event.type === "deck-job-finished"
-      ) {
-        stopStatusTyping();
-        setAgentActivityMode("workflow");
-        syncActivityTrace(appendStep(activeRunTraceRef.current, event.message, "done"));
-        if (event.type === "deck-job-progress") {
-          setThoughtProgress(Math.min(95, Math.round((event.completedBatches / event.totalBatches) * 100)));
-        }
-        if (event.type === "deck-job-finished") {
-          setThoughtProgress(event.status === "done" ? 100 : 80);
-        }
         return;
       }
 
@@ -831,73 +785,6 @@ export function App() {
       triggerToast("AI 已提出排版变更方案，请进行审核");
       return;
     }
-    if (result.status === "artifact-patch-required") {
-      const patchPayload = {
-        threadId: result.patch.threadId,
-        targetPath: result.patch.targetPath,
-        summary: result.patch.summary,
-        contentBefore: result.patch.before,
-        contentAfter: result.patch.after,
-      };
-      const promptContent = "已提出内容修改方案，请在下方审核后应用。";
-
-      if (messageId) {
-        setChatMessages((prev) => prev.map((message) =>
-          message.id === messageId
-            ? {
-                ...message,
-                content: promptContent,
-                activityTrace: resolvedTrace(message.activityTrace),
-                patch: patchPayload,
-              }
-            : message
-        ));
-      } else {
-        setChatMessages((prev) => [
-          ...prev,
-          {
-            id: crypto.randomUUID(),
-            role: "assistant",
-            content: promptContent,
-            activityTrace: resolvedTrace(),
-            patch: patchPayload,
-          },
-        ]);
-      }
-      triggerToast("AI 已提出修改变更方案，请进行审核");
-      return;
-    }
-
-    if (result.status === "artifact-updated") {
-      useProjectStore.getState().hydrateProjectArtifacts(activeSessionId || undefined);
-
-      const changedId = result.write.changedArtifactId;
-      const cardType = changedId && isProjectStageId(changedId)
-        ? artifactStageToInlineCardType(changedId)
-        : undefined;
-      const promptContent = "修改已接受，相关产物文件已成功更新。";
-      const applyUpdate = (message: ChatMessage): ChatMessage => {
-        const next = { ...message, content: promptContent };
-        return cardType ? attachInlineCards(next, [cardType]) : next;
-      };
-
-      if (messageId) {
-        setChatMessages((prev) => prev.map((message) =>
-          message.id === messageId ? applyUpdate(message) : message,
-        ));
-      } else {
-        setChatMessages((prev) => [
-          ...prev,
-          applyUpdate({
-            id: crypto.randomUUID(),
-            role: "assistant",
-            content: promptContent,
-          }),
-        ]);
-      }
-      triggerToast("✅ 变更已应用");
-      return;
-    }
 
     if (result.status === "completed" || result.status === "rejected") {
       await syncPresentation({
@@ -905,6 +792,9 @@ export function App() {
         openMirror: result.status === "completed",
         highlightSlide: result.status === "completed",
       });
+      if (result.status === "completed") {
+        await hydrateProjectArtifacts(activeSessionId || undefined);
+      }
     }
 
     const finalContent = result.status === "rejected" ? "已放弃排版变更提案。" : "已根据确认的大纲生成并应用演示文稿。";
@@ -1026,33 +916,15 @@ export function App() {
       currentSlideId: selectedSlideId || undefined,
       selectedElementIds: selectedElementId ? [selectedElementId] : [],
     };
-    const runPlan = buildAgentRunPlan({
-      prompt: activeRequest,
-      artifactContents: buildArtifactContents(activeProjectObj),
-      presentation,
-    });
     const agentRequest: AgentRunRequest = {
       prompt: activeRequest,
       sessionId: agentSessionId,
-      stage: "auto",
-      intent: runPlan.intent,
-      targetArtifactId: runPlan.targetArtifactId,
-      targetPath: runPlan.targetPath,
-      referencedArtifactIds: runPlan.referencedArtifactIds,
       editorContext,
     };
 
-    console.info("Starting structured Agent run", {
+    console.info("Starting unified Agent run", {
       sessionId: agentRequest.sessionId,
-      inferredStage: runPlan.stage,
-      stage: agentRequest.stage,
-      intent: agentRequest.intent,
-      targetPath: agentRequest.targetPath,
-      referencedArtifactIds: agentRequest.referencedArtifactIds,
-      editorContext: {
-        currentSlideId: selectedSlideId || undefined,
-        selectedElementIds: selectedElementId ? [selectedElementId] : [],
-      },
+      editorContext,
     });
 
     setThoughtProgress(0);
@@ -1234,66 +1106,6 @@ export function App() {
       setBusy(false);
       syncActivityTrace([]);
       setThoughtProgress(0);
-    }
-  }
-
-  // 确认或拒绝产物 Patch 变更方案
-  async function resolvePatch(messageId: string, approved: boolean) {
-    const message = chatMessages.find((item) => item.id === messageId);
-    if (!message?.patch || message.patch.resolved || busy || !activeSessionId) return;
-
-    const { threadId } = message.patch;
-    setBusy(true);
-    try {
-      const result = await window.desktopApi.resumeAgentRun(activeSessionId, threadId, approved);
-      const resolvedContent = approved
-        ? "修改已接受，相关产物文件已成功更新。"
-        : "已放弃内容修改提案。";
-
-      setChatMessages((prev) => prev.map((item) =>
-        item.id === messageId
-          ? {
-              ...item,
-              content: resolvedContent,
-              patch: {
-                ...item.patch!,
-                resolved: approved ? "accepted" : "rejected",
-              },
-              ...(approved && result.status === "artifact-updated"
-                ? {
-                    inlineCards: mergeInlineCardRefs(
-                      item.inlineCards,
-                      (() => {
-                        const changedId = result.write.changedArtifactId;
-                        const cardType = changedId && isProjectStageId(changedId)
-                          ? artifactStageToInlineCardType(changedId)
-                          : undefined;
-                        return cardType ? [cardType] : [];
-                      })(),
-                    ),
-                  }
-                : {}),
-            }
-          : item
-      ));
-
-      if (approved && result.status === "artifact-updated") {
-        await hydrateProjectArtifacts(activeSessionId);
-        triggerToast("✅ 变更已应用");
-      } else if (!approved || result.status === "rejected") {
-        triggerToast("❌ 变更已取消");
-      }
-    } catch (err) {
-      setChatMessages((prev) => [
-        ...prev,
-        {
-          id: crypto.randomUUID(),
-          role: "assistant",
-          content: `确认变更时发生异常：${err instanceof Error ? err.message : String(err)}`,
-        },
-      ]);
-    } finally {
-      setBusy(false);
     }
   }
 
@@ -1707,7 +1519,6 @@ export function App() {
                   onSubmitRequest={() => void startAgent()}
                   busy={busy}
                   onResolveApproval={resolveApproval}
-                  onResolvePatch={resolvePatch}
                   getInlineCardData={getInlineCardData}
                   onConfirmBrief={handleConfirmBrief}
                   onConfirmOutline={handleConfirmOutline}
