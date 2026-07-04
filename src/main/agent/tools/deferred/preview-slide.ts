@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { ToolDefinition } from "../tool-definition";
-import type { Slide, TextElement, ImageElement } from "@shared/presentation";
+import type { Slide, TextElement, ImageElement, ShapeElement } from "@shared/presentation";
 import { resolveSlideBackgroundWithVariant } from "@shared/slide-variant";
 import { listLayoutSlots } from "@shared/layout-slots";
 import { fontFamilyToCss, resolveElementFontFamily } from "@shared/typography";
@@ -57,13 +57,23 @@ export interface SlidePreviewSummary {
   description: string;
 }
 
-function describeSlide(slide: Slide, theme: string): string {
+function describeSlide(slide: Slide, _theme: string): string {
   const texts = slide.elements.filter((el): el is TextElement => el.type === "text");
   const images = slide.elements.filter((el): el is ImageElement => el.type === "image");
+  const shapes = slide.elements.filter((el): el is ShapeElement => el.type === "shape");
+  const cardCount = shapes.filter((el) => el.id.startsWith("card-")).length;
+  const shadowCount = shapes.filter((el) => el.shadow).length;
+  const roundedCount = shapes.filter(
+    (el) => el.shapeType === "roundedRect" || el.cornerRadius != null,
+  ).length;
+
   const parts = [
     `Layout: ${slide.layout ?? "unset"}`,
-    `${texts.length} text, ${images.length} image`,
+    `${texts.length} text, ${images.length} image, ${shapes.length} shape`,
   ];
+  if (cardCount > 0) parts.push(`${cardCount} cards`);
+  if (shadowCount > 0) parts.push(`${shadowCount} shadow`);
+  if (roundedCount > 0) parts.push(`${roundedCount} rounded`);
   if (slide.layout === "case") {
     const metric = texts.find((el) => el.textRole === "metric");
     if (metric) parts.push(`KPI: ${metric.text}`);

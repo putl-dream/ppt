@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { ToolDefinition } from "../tool-definition";
 import type { PresentationCommand } from "@shared/commands";
 import { getThemePaletteColors } from "@shared/layout";
+import { cardShadow, VISUAL_TOKENS } from "@shared/visual-tokens";
 
 export const addLayoutDecorationsSchema = z.object({
   slideId: z.string().describe("幻灯片 ID"),
@@ -45,13 +46,16 @@ export const addLayoutDecorationsTool: ToolDefinition<
         element: {
           id: `deco-divider-${crypto.randomUUID()}`,
           type: "shape",
-          shapeType: "line",
-          x: 632,
+          shapeType: "roundedRect",
+          x: 628,
           y: 220,
-          width: 16,
+          width: 8,
           height: 390,
-          fillColor: colors.cardStroke,
+          fillColor: colors.accent,
           strokeColor: colors.accent,
+          cornerRadius: VISUAL_TOKENS.radii.pill,
+          fillOpacity: 0.2,
+          shadow: cardShadow("sm"),
         },
       });
     }
@@ -78,6 +82,7 @@ export const addLayoutDecorationsTool: ToolDefinition<
             height: 28,
             fillColor: colors.accent,
             strokeColor: colors.accent,
+            shadow: cardShadow("sm"),
           },
         });
       });
@@ -91,13 +96,15 @@ export const addLayoutDecorationsTool: ToolDefinition<
         element: {
           id: `deco-toc-rule-${crypto.randomUUID()}`,
           type: "shape",
-          shapeType: "line",
+          shapeType: "roundedRect",
           x: 168,
           y: 200,
-          width: 2,
+          width: 4,
           height: 430,
-          fillColor: colors.cardStroke,
-          strokeColor: colors.cardStroke,
+          fillColor: colors.accent,
+          strokeColor: colors.accent,
+          cornerRadius: VISUAL_TOKENS.radii.pill,
+          fillOpacity: 0.25,
         },
       });
     }

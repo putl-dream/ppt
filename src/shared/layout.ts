@@ -8,6 +8,7 @@ import {
 } from "./typography";
 import { resolveLayoutBackgroundVariant, type BackgroundVariant } from "./slide-background";
 import { cardShadow, VISUAL_TOKENS } from "./visual-tokens";
+import { isUserPreservedShape } from "./layout-shape-utils";
 import "./layout-register-builtin";
 import { layoutRegistry } from "./layout-registry";
 
@@ -191,8 +192,8 @@ export function applyLayout(
   let textElements = slide.elements.filter((el): el is TextElement => el.type === "text");
   const imageElements = slide.elements.filter((el) => el.type === "image");
   
-  // Keep non-rectangle shapes (like custom lines or circles added by user)
-  const userShapes = slide.elements.filter((el) => el.type === "shape" && el.shapeType !== "rectangle");
+  // Keep user-added shapes (lines, circles, arrows) — not layout-generated cards/badges.
+  const userShapes = slide.elements.filter(isUserPreservedShape);
 
   if (textElements.length === 0 && layout !== "image-grid") {
     return slide;
@@ -256,6 +257,19 @@ export function applyLayout(
 
   const createAccentBar = (x: number, y: number, w: number): ShapeElement =>
     createAccentBlock(x, y, w, 6, { opacity: 1, radius: VISUAL_TOKENS.radii.pill });
+
+  const createStepBadge = (x: number, y: number, size: number): ShapeElement => ({
+    id: `badge-${generateId()}`,
+    type: "shape",
+    shapeType: "circle",
+    x,
+    y,
+    width: size,
+    height: size,
+    fillColor: colors.accent,
+    strokeColor: colors.accent,
+    shadow: cardShadow("sm"),
+  });
 
   const createProcessArrow = (x: number, y: number, w: number, h: number): ShapeElement => ({
     id: `arrow-${generateId()}`,
@@ -447,18 +461,47 @@ export function applyLayout(
       const colW = (totalW - (N - 1) * cardGap) / N;
       const cardTop = contentY + CARD_PAD_SM;
       const cardH = contentH - CARD_PAD * 2;
+      const badgeSize = 32;
+      const accentOffset = 48;
 
       steps.forEach((el, idx) => {
         const colX = CANVAS_CONTENT_X + idx * (colW + cardGap);
         elements.unshift(createCard(colX, cardTop, colW, cardH));
         elements.push(createAccentBar(colX + CARD_PAD_SM, cardTop + CARD_PAD_SM, colW - CARD_PAD_SM * 2));
 
+        const badgeX = colX + colW / 2 - badgeSize / 2;
+        const badgeY = cardTop + CARD_PAD_SM + 4;
+        elements.push(createStepBadge(badgeX, badgeY, badgeSize));
+        elements.push(
+          assignTextRole(
+            {
+              id: `num-${generateId()}`,
+              type: "text",
+              x: badgeX,
+              y: badgeY,
+              width: badgeSize,
+              height: badgeSize,
+              text: String(idx + 1),
+              fontSize: 16,
+              bold: true,
+              color: colors.bg,
+              align: "center",
+            },
+            "caption",
+          ),
+        );
+
         const styled = assignTextRole(el, "body");
         styled.x = colX + CARD_PAD_SM;
-        styled.y = contentY + CARD_PAD + 8;
+        styled.y = cardTop + accentOffset;
         styled.width = colW - CARD_PAD_SM * 2;
-        styled.height = contentH - CARD_PAD * 2 - 16;
-        styled.fontSize = fitFontSize(styled.text, colW - CARD_PAD_SM * 2, contentH - CARD_PAD * 2 - 16, 20);
+        styled.height = cardH - accentOffset - CARD_PAD_SM;
+        styled.fontSize = fitFontSize(
+          styled.text,
+          colW - CARD_PAD_SM * 2,
+          cardH - accentOffset - CARD_PAD_SM,
+          20,
+        );
         styled.bold = false;
         styled.color = colors.body;
         styled.align = "center";
@@ -475,17 +518,27 @@ export function applyLayout(
       const N = layers.length || 1;
       const layerGap = CARD_GAP - 12;
       const layerH = (contentH - (N - 1) * layerGap) / N;
+      const accentW = 6;
 
       layers.forEach((el, idx) => {
         const rowY = contentY + idx * (layerH + layerGap);
         elements.unshift(createCard(CANVAS_CONTENT_X, rowY, CANVAS_CONTENT_W, layerH));
+        elements.push(
+          createAccentBlock(
+            CANVAS_CONTENT_X + CARD_PAD_SM,
+            rowY + CARD_PAD_SM,
+            accentW,
+            layerH - CARD_PAD_SM * 2,
+            { opacity: 1, radius: VISUAL_TOKENS.radii.pill },
+          ),
+        );
 
         const styled = assignTextRole(el, "kicker");
-        styled.x = 140;
+        styled.x = CANVAS_CONTENT_X + CARD_PAD_SM + accentW + 16;
         styled.y = rowY + 10;
-        styled.width = 1000;
+        styled.width = CANVAS_CONTENT_W - CARD_PAD_SM * 2 - accentW - 16;
         styled.height = layerH - 20;
-        styled.fontSize = fitFontSize(styled.text, 1000, layerH - 20, 22);
+        styled.fontSize = fitFontSize(styled.text, styled.width, layerH - 20, 22);
         styled.bold = true;
         styled.color = colors.title;
         styled.align = "center";
@@ -569,21 +622,18 @@ export function applyLayout(
       const textX = 180;
       const textW = 960;
 
+      elements.unshift(
+        createAccentBlock(168, contentY, 4, contentH, {
+          opacity: 0.25,
+          radius: VISUAL_TOKENS.radii.pill,
+        }),
+      );
+
       items.forEach((el, idx) => {
         const rowY = contentY + idx * (rowH + rowGap);
         elements.unshift(createCard(120, rowY, 1040, rowH));
 
-        elements.push({
-          id: `badge-${generateId()}`,
-          type: "shape",
-          shapeType: "circle",
-          x: 140,
-          y: rowY + (rowH - badgeSize) / 2,
-          width: badgeSize,
-          height: badgeSize,
-          fillColor: colors.accent,
-          strokeColor: colors.accent,
-        });
+        elements.push(createStepBadge(140, rowY + (rowH - badgeSize) / 2, badgeSize));
 
         const numLabel = assignTextRole(
           {
@@ -616,24 +666,30 @@ export function applyLayout(
       });
     } else if (layout === "quote") {
       const quoteText = bodyTexts[0];
-      // Last body is attribution; everything between quote and attribution
-      // folds into the quote body so no content is dropped.
       const attribution = bodyTexts.length > 1 ? bodyTexts[bodyTexts.length - 1] : undefined;
       const quoteExtras = bodyTexts
         .slice(1, bodyTexts.length - 1)
         .map((el) => el.text.trim())
         .filter(Boolean);
 
+      elements.unshift(createCard(140, contentY + 20, 1000, contentH - 40));
+      elements.unshift(
+        createAccentBlock(160, contentY + 36, 80, 80, {
+          opacity: 0.1,
+          radius: VISUAL_TOKENS.radii.lg,
+        }),
+      );
+
       if (quoteText) {
         const styled = assignTextRole(quoteText, "kicker");
-        styled.x = 160;
-        styled.y = contentY + 40;
-        styled.width = 960;
-        styled.height = contentH - 120;
+        styled.x = 180;
+        styled.y = contentY + 56;
+        styled.width = 920;
+        styled.height = contentH - 160;
         if (quoteExtras.length > 0) {
           styled.text = [styled.text.trim(), ...quoteExtras].join("\n");
         }
-        styled.fontSize = fitFontSize(styled.text, 960, contentH - 120, 36);
+        styled.fontSize = fitFontSize(styled.text, 920, contentH - 160, 36);
         styled.bold = false;
         styled.color = colors.title;
         styled.align = "center";
@@ -641,13 +697,18 @@ export function applyLayout(
         elements.push(styled);
       }
 
-      elements.push(createAccentBar(440, contentY + contentH - 48, 400));
+      elements.push(
+        createAccentBlock(440, contentY + contentH - 56, 400, 8, {
+          opacity: 0.5,
+          radius: VISUAL_TOKENS.radii.pill,
+        }),
+      );
 
       if (attribution) {
         const styled = assignTextRole(attribution, "caption");
-        styled.x = 160;
-        styled.y = contentY + contentH - 72;
-        styled.width = 960;
+        styled.x = 180;
+        styled.y = contentY + contentH - 80;
+        styled.width = 920;
         styled.height = 48;
         styled.fontSize = 18;
         styled.bold = false;
@@ -669,6 +730,8 @@ export function applyLayout(
         const rect = getImageGridSlotRect(idx, gridCount);
         if (!rect) continue;
 
+        elements.unshift(createCard(rect.x, rect.y, rect.width, rect.height));
+
         const cardImage =
           pickImageForSlot(slotKey) ?? unslottedImages.shift();
         if (cardImage) {
@@ -676,10 +739,10 @@ export function applyLayout(
             placeImageInSlot(
               cardImage,
               {
-                x: rect.x + 8,
-                y: rect.y + 8,
-                width: rect.width - 16,
-                height: rect.height - (bodyTexts[idx] ? 48 : 16),
+                x: rect.x + 12,
+                y: rect.y + 12,
+                width: rect.width - 24,
+                height: rect.height - (bodyTexts[idx] ? 52 : 24),
               },
               slotKey,
             ),
@@ -688,11 +751,11 @@ export function applyLayout(
 
         if (bodyTexts[idx]) {
           const styled = assignTextRole(bodyTexts[idx], "caption");
-          styled.x = rect.x + 8;
-          styled.y = rect.y + rect.height - 40;
-          styled.width = rect.width - 16;
+          styled.x = rect.x + 12;
+          styled.y = rect.y + rect.height - 44;
+          styled.width = rect.width - 24;
           styled.height = 32;
-          styled.fontSize = fitFontSize(styled.text, rect.width - 16, 32, 16);
+          styled.fontSize = fitFontSize(styled.text, rect.width - 24, 32, 16);
           styled.bold = false;
           styled.color = colors.body;
           styled.align = "center";

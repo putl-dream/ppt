@@ -3,14 +3,15 @@ import type { DeckValidationIssue } from "@shared/deck-validation";
 import type { DesignConstraints } from "@shared/deck-persistence";
 import { createDefaultDesignConstraints } from "@shared/deck-persistence";
 import type { Presentation, Slide, SlideElement, TextElement } from "@shared/presentation";
+import { isLayoutCard } from "@shared/layout-shape-utils";
 import { CONTENT_LAYOUTS, type SlideLayoutType } from "@shared/slide-layouts";
 
-function isLayoutCard(element: SlideElement): boolean {
-  return element.type === "shape" && element.shapeType === "rectangle";
+function isLayoutCardElement(element: SlideElement): boolean {
+  return isLayoutCard(element);
 }
 
 function shouldCheckOverlap(left: SlideElement, right: SlideElement): boolean {
-  if (isLayoutCard(left) || isLayoutCard(right)) return false;
+  if (isLayoutCardElement(left) || isLayoutCardElement(right)) return false;
   return true;
 }
 

@@ -1,11 +1,10 @@
 import type { Presentation, Slide } from "./presentation";
+import { isLayoutCard } from "./layout-shape-utils";
 
 const CHROME_LAYOUTS = new Set(["cover", "section"]);
 
 function slideHasLayoutCards(slide: Slide): boolean {
-  return slide.elements.some(
-    (element) => element.type === "shape" && element.shapeType === "rectangle" && element.id.startsWith("card-"),
-  );
+  return slide.elements.some(isLayoutCard);
 }
 
 function slideHasBodyText(slide: Slide): boolean {
