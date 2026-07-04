@@ -22,10 +22,10 @@ const api: DesktopApi = {
   markProjectArtifactStatus: (sessionId, artifactId, status) =>
     ipcRenderer.invoke("project:mark-artifact-status", sessionId, artifactId, status),
   getPresentation: () => ipcRenderer.invoke("presentation:get"),
-  startAgentRun: (request, model, executionStrategy, stepLimits, runId) =>
-    ipcRenderer.invoke("agent:start", request, model, executionStrategy, stepLimits, runId),
-  continueAgentRun: (threadId, request, stepLimits, runId) =>
-    ipcRenderer.invoke("agent:continue", threadId, request, stepLimits, runId),
+  startAgentRun: (request, model, executionStrategy, stepLimits, gatewayConfig, runId) =>
+    ipcRenderer.invoke("agent:start", request, model, executionStrategy, stepLimits, gatewayConfig, runId),
+  continueAgentRun: (threadId, request, stepLimits, gatewayConfig, runId) =>
+    ipcRenderer.invoke("agent:continue", threadId, request, stepLimits, gatewayConfig, runId),
   onAgentStream: (listener) => {
     const handler = (_event: Electron.IpcRendererEvent, streamEvent: AgentStreamEvent) => {
       listener(streamEvent);

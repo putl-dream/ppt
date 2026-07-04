@@ -150,13 +150,13 @@ export function ModelManagement({
           <label className="config-group model-form-span">
             <span className="config-label">Base URL（可选）</span>
             <input className="config-input" value={draft.baseURL} placeholder={draft.provider === "openai" ? "https://api.openai.com/v1" : "https://api.anthropic.com"} onChange={(event) => setDraft({ ...draft, baseURL: event.target.value })} />
-            <span className="config-help">留空时使用后端环境变量中的默认地址。</span>
+            <span className="config-help">第三方兼容端点在此填写；留空则使用各服务商官方地址。</span>
           </label>
 
           <label className="config-group model-form-span">
             <span className="config-label">API Key</span>
             <div className="model-secret-row">
-              <input className="config-input" type={showApiKey ? "text" : "password"} value={draft.apiKey} placeholder="留空则使用后端环境变量" onChange={(event) => setDraft({ ...draft, apiKey: event.target.value })} />
+              <input className="config-input" type={showApiKey ? "text" : "password"} value={draft.apiKey} placeholder="必填，仅保存在本机" onChange={(event) => setDraft({ ...draft, apiKey: event.target.value })} />
               <button type="button" className="secondary-btn" onClick={() => setShowApiKey((value) => !value)}>{showApiKey ? "隐藏" : "显示"}</button>
             </div>
           </label>

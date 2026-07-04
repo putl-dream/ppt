@@ -50,6 +50,12 @@ import {
   type ManagedModel,
 } from "./modelCatalog";
 import { loadAgentStepLimits, saveAgentStepLimits } from "./agentStepLimits";
+import {
+  buildAgentGatewayConfig,
+  loadAgentGatewayPreferences,
+  saveAgentGatewayPreferences,
+} from "./agentGatewayConfig";
+import type { AgentGatewayPreferences } from "@shared/agent-gateway-config";
 import type { AgentStepLimits } from "@shared/agent-step-limits";
 import {
   type AgentActivityItem,
@@ -168,6 +174,9 @@ export function App() {
   const [defaultRatio, setDefaultRatio] = useState<"16:9" | "4:3">("16:9");
   const [executionStrategy, setExecutionStrategy] = useState<"REQUEST_APPROVAL" | "AUTO">("REQUEST_APPROVAL");
   const [agentStepLimits, setAgentStepLimits] = useState<AgentStepLimits>(loadAgentStepLimits);
+  const [agentGatewayPreferences, setAgentGatewayPreferences] = useState<AgentGatewayPreferences>(
+    loadAgentGatewayPreferences,
+  );
 
   // 外观定制与视效控制阀
   const [themeMode, setThemeMode] = useState<"light" | "dark" | "system">("light");
@@ -200,6 +209,10 @@ export function App() {
   useEffect(() => {
     saveAgentStepLimits(agentStepLimits);
   }, [agentStepLimits]);
+
+  useEffect(() => {
+    saveAgentGatewayPreferences(agentGatewayPreferences);
+  }, [agentGatewayPreferences]);
 
   const handleSaveModel = (model: ManagedModel) => {
     setModels((current) => {
@@ -1107,12 +1120,14 @@ export function App() {
           toSessionChatMessages(forkedMessages),
         );
       }
+      const gatewayConfig = buildAgentGatewayConfig(agentGatewayPreferences, models);
       const activeThreadId = findActiveThreadId(forkedMessages ?? chatMessages);
       const result = activeThreadId
         ? await window.desktopApi.continueAgentRun(
             activeThreadId,
             agentRequest,
             agentStepLimits,
+            gatewayConfig,
             runId,
           )
         : await window.desktopApi.startAgentRun(
@@ -1120,6 +1135,7 @@ export function App() {
             selectedModel ? toAgentModelSettings(selectedModel) : undefined,
             executionStrategy,
             agentStepLimits,
+            gatewayConfig,
             runId,
           );
       await new Promise<void>((resolve) => queueMicrotask(resolve));
@@ -1817,6 +1833,8 @@ export function App() {
                 setDefaultRatio={setDefaultRatio}
                 agentStepLimits={agentStepLimits}
                 setAgentStepLimits={setAgentStepLimits}
+                agentGatewayPreferences={agentGatewayPreferences}
+                setAgentGatewayPreferences={setAgentGatewayPreferences}
                 
                 themeMode={themeMode}
                 setThemeMode={setThemeMode}

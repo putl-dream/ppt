@@ -20,6 +20,7 @@ import {
   type AgentModelSettings,
 } from "@shared/agent";
 import { agentStepLimitsSchema, type AgentStepLimits } from "@shared/agent-step-limits";
+import { agentGatewayConfigSchema, type AgentGatewayConfig } from "@shared/agent-gateway-config";
 import { AgentGateway } from "./agent/gateway";
 import { AgentRuntime } from "./agent/runtime/agent-runtime";
 import { ToolApprovalBroker } from "./agent/runtime/tool-approval-broker";
@@ -392,6 +393,7 @@ app.whenReady().then(async () => {
       input?: AgentModelSettings,
       strategy?: AgentExecutionStrategy,
       rawStepLimits?: AgentStepLimits,
+      rawGatewayConfig?: AgentGatewayConfig,
       runId?: string,
     ) => {
       const request = agentRunRequestSchema.parse(rawRequest);
@@ -415,9 +417,15 @@ app.whenReady().then(async () => {
       const agentStepLimits = rawStepLimits
         ? agentStepLimitsSchema.parse(rawStepLimits)
         : undefined;
-      const selection: AgentModelSelection | undefined = settings
-        ? agentGateway.configure(settings)
+      const gatewayConfig = rawGatewayConfig
+        ? agentGatewayConfigSchema.parse(rawGatewayConfig)
         : undefined;
+      let selection: AgentModelSelection | undefined;
+      if (settings) {
+        selection = agentGateway.configure(settings, gatewayConfig);
+      } else if (gatewayConfig) {
+        agentGateway.applyGatewayConfig(gatewayConfig);
+      }
       const emit = (streamEvent: AgentServiceEvent) => {
         event.sender.send("agent:stream", { ...streamEvent, runId: currentRunId });
       };
@@ -463,6 +471,7 @@ app.whenReady().then(async () => {
     threadId: string,
     rawRequest: unknown,
     rawStepLimits?: AgentStepLimits,
+    rawGatewayConfig?: AgentGatewayConfig,
     runId?: string,
   ) => {
     const request = agentRunRequestSchema.parse(rawRequest);
@@ -482,6 +491,12 @@ app.whenReady().then(async () => {
     const agentStepLimits = rawStepLimits
       ? agentStepLimitsSchema.parse(rawStepLimits)
       : undefined;
+    const gatewayConfig = rawGatewayConfig
+      ? agentGatewayConfigSchema.parse(rawGatewayConfig)
+      : undefined;
+    if (gatewayConfig) {
+      agentGateway.applyGatewayConfig(gatewayConfig);
+    }
     const emit = (streamEvent: AgentServiceEvent) => {
       event.sender.send("agent:stream", { ...streamEvent, runId: currentRunId });
     };

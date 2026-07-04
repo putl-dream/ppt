@@ -15,17 +15,14 @@ A local-first desktop presentation editor powered by Electron, React, TypeScript
 
 Choose an OpenAI or Anthropic model in the settings dialog and enter its API key. The key is kept in main-process memory for the current app session and is not added to LangGraph state.
 
-For development, credentials can also be supplied through the process environment:
+For development, credentials can also be supplied through the process environment (see [.env.example](.env.example) for optional CI overrides).
 
 ```powershell
-$env:AGENT_PROVIDER="openai"
 $env:OPENAI_API_KEY="..."
 npm.cmd run dev
 ```
 
-See [.env.example](.env.example) for optional model, endpoint, timeout, and output-token overrides.
-
-See [docs/AGENT_GATEWAY.md](docs/AGENT_GATEWAY.md) for the gateway architecture, configuration priority, usage, errors, tests, and provider-extension guide.
+Open **Settings → 模型** to configure API keys, endpoints, timeout, output limits, and fallback models. These values are stored locally and sent to the main process per request—not committed to `.env`.
 
 ## Commands
 

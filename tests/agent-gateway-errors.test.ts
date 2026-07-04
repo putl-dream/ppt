@@ -28,7 +28,7 @@ describe("normalizeProviderError", () => {
 
     expect(error.code).toBe("timeout");
     expect(error.provider).toBe("anthropic");
-    expect(error.message).toContain("AGENT_TIMEOUT_MS");
+    expect(error.message).toContain("Settings");
   });
 
   it("does not wrap an existing gateway error", () => {

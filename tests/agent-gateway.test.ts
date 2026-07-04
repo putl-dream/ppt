@@ -3,6 +3,7 @@ import {
   DEFAULT_AGENT_TIMEOUT_MS,
   DEFAULT_AGENT_MODELS,
   resolveAgentModelConfig,
+  resolveFallbackModelSelection,
 } from "../src/main/agent/gateway/config";
 import { AgentGatewayError } from "../src/main/agent/gateway/errors";
 
@@ -165,6 +166,41 @@ describe("resolveAgentModelConfig", () => {
     ).toThrow(`${name} must be a positive integer`);
   });
 
+  it("prefers runtime gateway config over environment timeout and token limits", () => {
+    const config = resolveAgentModelConfig(
+      { provider: "openai", model: "selected-model" },
+      { openai: { provider: "openai", model: "selected-model", apiKey: "runtime-key" } },
+      {
+        AGENT_TIMEOUT_MS: "15000",
+        AGENT_MAX_OUTPUT_TOKENS: "4096",
+      },
+      {
+        timeoutMs: 600_000,
+        maxOutputTokens: 32_768,
+      },
+    );
+
+    expect(config.timeoutMs).toBe(600_000);
+    expect(config.maxOutputTokens).toBe(32_768);
+  });
+
+  it("resolves fallback model from gateway config", () => {
+    const fallback = resolveFallbackModelSelection(
+      { provider: "openai", model: "gpt-5.5" },
+      {
+        timeoutMs: 180_000,
+        maxOutputTokens: 16_384,
+        fallbackModel: {
+          provider: "anthropic",
+          model: "claude-sonnet-4-6",
+          apiKey: "secret",
+        },
+      },
+    );
+
+    expect(fallback).toEqual({ provider: "anthropic", model: "claude-sonnet-4-6" });
+  });
+
   it("reports a clear configuration error when no key is available", () => {
     try {
       resolveAgentModelConfig({ provider: "openai", model: "test-model" }, {}, {});
@@ -175,7 +211,7 @@ describe("resolveAgentModelConfig", () => {
         code: "configuration",
         provider: "openai",
       });
-      expect((error as Error).message).toContain("No API key configured for openai");
+      expect((error as Error).message).toContain("Settings");
     }
   });
 });

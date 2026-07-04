@@ -1,4 +1,5 @@
 import type { AgentModelSelection } from "@shared/agent";
+import { resolveAgentGatewayConfig, type AgentGatewayConfig } from "@shared/agent-gateway-config";
 import type { AgentModelGateway, AgentModelStreamChunk } from "../gateway/types";
 import { resolveFallbackModelSelection } from "../gateway/config";
 import {
@@ -14,10 +15,14 @@ import { createModuleLogger } from "../logger";
 const logger = createModuleLogger("model-call-recovery");
 
 const MAX_RECOVERY_ATTEMPTS = 8;
-const DEFAULT_OUTPUT_TOKENS = 16_384;
 const TOKEN_UPGRADE_8K = 8_192;
 const TOKEN_UPGRADE_64K = 65_536;
 const CONSECUTIVE_OVERLOAD_SWITCH = 2;
+
+function readGatewayConfig(gateway: AgentModelGateway): AgentGatewayConfig {
+  const reader = gateway as AgentModelGateway & { getGatewayConfig?: () => AgentGatewayConfig };
+  return reader.getGatewayConfig?.() ?? resolveAgentGatewayConfig();
+}
 
 export interface ModelPromptPayload {
   request?: string;
@@ -110,6 +115,8 @@ export async function callModelWithRecovery(
   options: ModelCallRecoveryOptions,
 ): Promise<ModelCallRecoveryResult> {
   const recoveryNotes: string[] = [];
+  const gatewayConfig = readGatewayConfig(options.gateway);
+  const defaultOutputTokens = gatewayConfig.maxOutputTokens;
   let payload: ModelPromptPayload = structuredClone(options.promptPayload);
   let modelSelection = options.model;
   let maxOutputTokens: number | undefined;
@@ -151,7 +158,7 @@ export async function callModelWithRecovery(
       }
 
       if (isOutputTruncated(response.stopReason)) {
-        const currentTokens = maxOutputTokens ?? DEFAULT_OUTPUT_TOKENS;
+        const currentTokens = maxOutputTokens ?? defaultOutputTokens;
         const nextTokens = nextOutputTokenUpgrade(currentTokens);
         if (nextTokens !== undefined) {
           maxOutputTokens = nextTokens;
@@ -203,7 +210,7 @@ export async function callModelWithRecovery(
         consecutiveOverloaded >= CONSECUTIVE_OVERLOAD_SWITCH
         && modelSelection
       ) {
-        const fallback = resolveFallbackModelSelection(modelSelection);
+        const fallback = resolveFallbackModelSelection(modelSelection, gatewayConfig);
         if (fallback) {
           modelSelection = fallback;
           consecutiveOverloaded = 0;

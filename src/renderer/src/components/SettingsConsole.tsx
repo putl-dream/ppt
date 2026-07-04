@@ -3,6 +3,8 @@ import { SparklesIcon } from "./Icons";
 import type { ManagedModel } from "../modelCatalog";
 import { ModelManagement } from "./ModelManagement";
 import type { AgentStepLimits } from "@shared/agent-step-limits";
+import type { AgentGatewayPreferences } from "@shared/agent-gateway-config";
+import { DEFAULT_AGENT_GATEWAY_CONFIG } from "@shared/agent-gateway-config";
 
 interface SettingsConsoleProps {
   activeCategory: "profile" | "models" | "workflow" | "appearance";
@@ -32,6 +34,8 @@ interface SettingsConsoleProps {
   setDefaultRatio: (val: "16:9" | "4:3") => void;
   agentStepLimits: AgentStepLimits;
   setAgentStepLimits: (val: AgentStepLimits) => void;
+  agentGatewayPreferences: AgentGatewayPreferences;
+  setAgentGatewayPreferences: (val: AgentGatewayPreferences) => void;
 
   // Aesthetics settings
   themeMode: "light" | "dark" | "system";
@@ -69,6 +73,8 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
   setDefaultRatio,
   agentStepLimits,
   setAgentStepLimits,
+  agentGatewayPreferences,
+  setAgentGatewayPreferences,
   themeMode,
   setThemeMode,
   borderRadiusScale,
@@ -294,14 +300,84 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
         )}
 
         {activeCategory === "models" && (
-          <ModelManagement
-            models={models}
-            selectedModelId={selectedModelId}
-            onSelectModel={onSelectModel}
-            onSaveModel={onSaveModel}
-            onDeleteModel={onDeleteModel}
-            triggerToast={triggerToast}
-          />
+          <div className="settings-panel-fade" style={{ display: "grid", gap: "20px" }}>
+            <ModelManagement
+              models={models}
+              selectedModelId={selectedModelId}
+              onSelectModel={onSelectModel}
+              onSaveModel={onSaveModel}
+              onDeleteModel={onDeleteModel}
+              triggerToast={triggerToast}
+            />
+
+            <div className="settings-card">
+              <h4 style={{ margin: "0 0 6px 0", fontSize: "14px", fontWeight: "600" }}>模型网关参数</h4>
+              <p style={{ margin: "0 0 16px 0", fontSize: "11px", color: "var(--text-muted)" }}>
+                请求超时、输出 token 上限与过载备用模型。配置保存在本机，随每次 Agent 请求传给后端。
+              </p>
+              <div style={{ display: "grid", gap: "16px" }}>
+                <label className="config-group">
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
+                    <span className="config-label" style={{ margin: 0 }}>请求超时</span>
+                    <span style={{ fontSize: "12px", fontWeight: 600, color: "var(--accent-cyan)" }}>
+                      {Math.round(agentGatewayPreferences.timeoutMs / 1000)} 秒
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min={60}
+                    max={900}
+                    step={30}
+                    value={Math.round(agentGatewayPreferences.timeoutMs / 1000)}
+                    onChange={(event) => setAgentGatewayPreferences({
+                      ...agentGatewayPreferences,
+                      timeoutMs: parseInt(event.target.value, 10) * 1000,
+                    })}
+                  />
+                  <span className="config-help">默认 {DEFAULT_AGENT_GATEWAY_CONFIG.timeoutMs / 1000} 秒。长思考模型可适当增大。</span>
+                </label>
+
+                <label className="config-group">
+                  <span className="config-label">单次输出 token 上限</span>
+                  <input
+                    className="config-input"
+                    type="number"
+                    min={1024}
+                    max={131072}
+                    step={1024}
+                    value={agentGatewayPreferences.maxOutputTokens}
+                    onChange={(event) => setAgentGatewayPreferences({
+                      ...agentGatewayPreferences,
+                      maxOutputTokens: parseInt(event.target.value, 10) || DEFAULT_AGENT_GATEWAY_CONFIG.maxOutputTokens,
+                    })}
+                  />
+                  <span className="config-help">输出被截断时系统会自动尝试升至 64K。</span>
+                </label>
+
+                <label className="config-group">
+                  <span className="config-label">过载备用模型（529）</span>
+                  <select
+                    className="model-select"
+                    value={agentGatewayPreferences.fallbackModelId ?? ""}
+                    onChange={(event) => setAgentGatewayPreferences({
+                      ...agentGatewayPreferences,
+                      fallbackModelId: event.target.value || undefined,
+                    })}
+                  >
+                    <option value="">不启用</option>
+                    {models
+                      .filter((model) => model.id !== selectedModelId)
+                      .map((model) => (
+                        <option key={model.id} value={model.id}>
+                          {model.name} ({model.model})
+                        </option>
+                      ))}
+                  </select>
+                  <span className="config-help">连续过载时自动切换；请确保备用模型已填写 API Key。</span>
+                </label>
+              </div>
+            </div>
+          </div>
         )}
 
         {/* ==================== 2. 常规设置：生成工作流偏好 ==================== */}

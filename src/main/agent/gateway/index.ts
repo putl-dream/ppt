@@ -1,4 +1,6 @@
 import type { AgentModelSelection, AgentModelSettings, AgentProvider } from "@shared/agent";
+import type { AgentGatewayConfig } from "@shared/agent-gateway-config";
+import { resolveAgentGatewayConfig } from "@shared/agent-gateway-config";
 import { generateWithAnthropic, generateStreamWithAnthropic } from "./anthropic";
 import { resolveAgentModelConfig } from "./config";
 import { generateWithOpenAI, generateStreamWithOpenAI } from "./openai";
@@ -14,10 +16,39 @@ const logger = createModuleLogger("gateway");
 
 export class AgentGateway implements AgentModelGateway {
   private readonly runtimeSettings: Partial<Record<AgentProvider, AgentModelSettings>> = {};
+  private gatewayConfig: AgentGatewayConfig = resolveAgentGatewayConfig();
 
-  configure(settings: AgentModelSettings): AgentModelSelection {
+  configure(
+    settings: AgentModelSettings,
+    gatewayConfig?: AgentGatewayConfig,
+  ): AgentModelSelection {
     this.runtimeSettings[settings.provider] = { ...settings };
+    if (gatewayConfig) {
+      this.gatewayConfig = resolveAgentGatewayConfig(gatewayConfig);
+      if (gatewayConfig.fallbackModel) {
+        const fallback = gatewayConfig.fallbackModel;
+        this.runtimeSettings[fallback.provider] = { ...fallback };
+      }
+    }
     return { provider: settings.provider, model: settings.model };
+  }
+
+  applyGatewayConfig(gatewayConfig: AgentGatewayConfig): void {
+    this.gatewayConfig = resolveAgentGatewayConfig(gatewayConfig);
+    if (gatewayConfig.fallbackModel) {
+      const fallback = gatewayConfig.fallbackModel;
+      this.runtimeSettings[fallback.provider] = { ...fallback };
+    }
+  }
+
+  getGatewayConfig(): AgentGatewayConfig {
+    return this.gatewayConfig;
+  }
+
+  private resolveConfig(
+    selection?: Pick<AgentModelSettings, "provider" | "model">,
+  ) {
+    return resolveAgentModelConfig(selection, this.runtimeSettings, process.env, this.gatewayConfig);
   }
 
   async generateText(
@@ -28,7 +59,7 @@ export class AgentGateway implements AgentModelGateway {
     const startedAt = Date.now();
 
     try {
-      const config = resolveAgentModelConfig(selection, this.runtimeSettings);
+      const config = this.resolveConfig(selection);
       logger.info("model.request.started", {
         gatewayRequestId,
         provider: config.provider,
@@ -74,7 +105,7 @@ export class AgentGateway implements AgentModelGateway {
     const startedAt = Date.now();
 
     try {
-      const config = resolveAgentModelConfig(selection, this.runtimeSettings);
+      const config = this.resolveConfig(selection);
       logger.info("model.stream.started", {
         gatewayRequestId,
         provider: config.provider,

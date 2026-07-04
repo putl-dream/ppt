@@ -63,7 +63,7 @@ export function formatRecoverableAgentError(error: unknown, signal?: AbortSignal
   if (error instanceof AgentGatewayError) {
     switch (error.code) {
       case "timeout":
-        return `${error.message} 请重试，或在设置 / 环境变量中增大 AGENT_TIMEOUT_MS。`;
+        return `${error.message} 请重试，或在设置 → 工作流中增大请求超时时间。`;
       case "rate-limit":
       case "overloaded":
         return `${error.message} 请稍后再试。`;
@@ -73,7 +73,7 @@ export function formatRecoverableAgentError(error: unknown, signal?: AbortSignal
         return `${error.message} 请检查 API Key 与代理地址。`;
       case "provider-error":
         if (isConnectionTerminated(error) || isConnectionTerminated(error.cause)) {
-          return "与模型的连接中断（terminated）。常见于长时间思考无输出、代理超时或网络波动。请直接重试；若反复出现，可增大 AGENT_TIMEOUT_MS 或更换直连端点。";
+          return "与模型的连接中断（terminated）。常见于长时间思考无输出、代理超时或网络波动。请直接重试；若反复出现，可在设置中增大请求超时或更换端点。";
         }
         return `${error.message} 请重试；若持续失败，请检查网络与模型配置。`;
       default:
@@ -121,7 +121,7 @@ export function normalizeProviderError(
   }
   if (status === 408 || /timeout/i.test(name) || /timed out/i.test(message)) {
     return new AgentGatewayError(
-      `${provider} request timed out: ${message}. Increase AGENT_TIMEOUT_MS if this model or endpoint needs more time.`,
+      `${provider} request timed out: ${message}. Increase the request timeout in Settings → 工作流 if this model needs more time.`,
       "timeout",
       provider,
       error,
