@@ -45,12 +45,12 @@ Design Agent（`ppt-design-layout`）与 deck-review 共用本 Rubric。
 
 ## D. 克制与一致性（必过）
 
-| # | 标准 |
-|---|------|
-| D1 | 全 deck **一套 theme + palette** |
-| D2 | 单条 ≤15 字，单页 ≤5 条 |
-| D3 | creative 装饰仅 process/comparison，每页 shape ≤3 |
-| D4 | 不手填 x/y；依赖 layout + InsertSlideImage 槽位 |
+| # | 标准 | 适用阶段 |
+|---|------|----------|
+| D1 | 全 deck **一套 theme + palette** | 设计 + 执行 |
+| D2 | 单条 ≤15 字，单页 ≤5 条 | **内容草稿 / deck-review**（设计阶段不管） |
+| D3 | creative 装饰仅 process/comparison，每页 shape ≤3 | 执行 |
+| D4 | 不手填 x/y；依赖 layout + InsertSlideImage 槽位 | 设计 + 执行 |
 
 ## E. 反模式清单（出现即需 redesign）
 

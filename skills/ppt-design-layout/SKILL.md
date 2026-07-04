@@ -16,6 +16,19 @@ allowed-tools:
 
 主 Agent 在阶段 4c 委派 Task 给本子 Agent；阶段 5 由主 Agent 按 plan 执行（LoadSkill `ppt-layout` Executor 模式）。
 
+## 设计阶段边界（重要）
+
+**本 Skill 只管视觉决策，不管内容密度。**
+
+| 属于设计阶段 | **不属于**设计阶段（内容阶段已做完） |
+|-------------|--------------------------------------|
+| 每页选 layout / slideVariant | 「共 N 页，简洁明了」 |
+| theme + palette | 「每条 ≤15 字，每页 3–5 条」 |
+| enhancements（chart/icon/image） | 增删 slide、改写要点、压缩文案 |
+| 节奏 Rubric（section/toc/多样性） | 重新规划 storyboard 页数 |
+
+**硬性规则**：layout-plan 的 `slides[]` 必须与 snapshot **一一对应**（相同 slideId、相同页数）。不得因 Rubric 建议 toc/section 而**新增**页面——若缺 toc/section，在 rationale 注明「建议用户补页」，或把现有页改 layout（如第 2 页改 toc）。
+
 ## 输入
 
 1. `ReadPresentationSnapshot` 或 workspace `slides/storyboard.json`（完整路径时）
@@ -132,11 +145,11 @@ allowed-tools:
 
 ```
 LoadSkill ppt-design-layout，然后 Task：
-「读取当前 presentation snapshot（或 slides/storyboard.json）。
-按 ppt-design-layout Rubric 为每页选定 layout、slideVariant、enhancements。
+「读取当前 presentation snapshot（slide 列表与 id）。
+**页数与文案已冻结**——为每一现有 slide 选定 layout、slideVariant、enhancements，不得增删页或提内容密度要求。
+按 ppt-design-layout Rubric（仅版式节奏）写入 slides/layout-plan.json。
 用户选择排版方式：{template|creative}。
-写入 slides/layout-plan.json。
-禁止 SubmitCommands；只输出 layout-plan + 1 句设计摘要。」
+禁止 SubmitCommands；结论 1 句：路径 + layout 种类数。」
 ```
 
 ## 禁止事项
@@ -145,6 +158,7 @@ LoadSkill ppt-design-layout，然后 Task：
 - ❌ 改写 slide.title 或 body text
 - ❌ 手填 x/y 坐标
 - ❌ 长篇分析（结论 ≤3 句）
+- ❌ **复述内容阶段约束**（「15 字以内」「3–5 条」「共 N 页简洁」）——那是 ppt-build / storyboard 的职责
 
 ## 验收自检（写入 plan 前）
 

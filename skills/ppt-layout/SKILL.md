@@ -28,7 +28,7 @@ allowed-tools:
 
 ## 前置
 
-用户已在 LayoutChoiceCard 选择排版方式。本阶段**只处理视觉层**，不改写要点文案。
+用户已在 LayoutChoiceCard 选择排版方式。本阶段**只处理视觉层**，不改写要点文案、不调整页数、不重复内容密度约束（15 字 / 3–5 条属于内容阶段）。
 
 **Executor 模式**：先读取 `slides/layout-plan.json`（workspace）或主 Agent 传入的 plan 摘要；每页 layout / slideVariant / theme 以 plan 为准。
 
@@ -104,7 +104,7 @@ allowed-tools:
 | quote | 金句居中 | 1–2 |
 | image-grid | 2–4 图网格 | 0–4 caption |
 
-单条中文 ≤15 字；单页 bullet ≤5。comparison 至少 2 条且左右列均非空。
+> 上表「要点数」是**引擎 layout 容量**（内容阶段参考），非设计阶段改写依据。Executor 以 snapshot 现有元素为准，不强制删改 bullet。
 
 ## Deck 结构建议（参考商务模板）
 

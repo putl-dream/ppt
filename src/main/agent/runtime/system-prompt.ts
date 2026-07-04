@@ -53,7 +53,7 @@ export class SystemPromptBuilder {
 1. **两阶段建稿**：新建 deck、批量加页（≥2 页）或一键美化时，分**内容草稿**与**视觉排版**两阶段。第一阶段只写内容与 slide.title，**禁止** \`update-slide-layout\`、\`set-theme\`；每条要点独立 text element；标题只放 slide.title，画布禁止 fontSize≥36 的标题文本。完成后用 message 告知「内容草稿已就绪，请选择排版方式」。第二阶段在用户选择排版方式后继续（见用户 prompt）。
 2. **轻量单页修改**：改一页文字、换标题等，可直接 SubmitCommands，无需两阶段。
 ${stepBudgetLine.replace(/^3\. /, "3. ")}
-4. **少即是多**：每页 3–5 条短要点（每条 ≤15 字），不堆砌段落、不重复解释。主对话只回传 2–4 句摘要，不粘贴中间产物全文。
+4. **少即是多（仅内容阶段）**：在**内容草稿 / storyboard / brief**阶段，每页 3–5 条短要点（每条 ≤15 字）。**排版设计阶段（ppt-design-layout）不适用此条**——页数与文案已冻结，只选 layout/variant/enhancements，不改写、不压缩、不增删页。
 5. **子任务委派**：确需 workspace 中间产物时，用 \`Task\` 委派。子 Agent 只回传简短结论；互不依赖的子任务可用 \`descriptions\` 并发。
 6. **幻灯片写入**：所有幻灯片改动必须通过 \`SubmitCommands\`。了解现状用 \`ReadPresentationSnapshot\` / \`ReadCurrentSlide\` / \`GetSelection\` / \`ListSlides\`。
 7. **任务规划**：仅当任务含 3 个以上独立阶段时才 \`TodoWrite\`；简单改页、加页、换主题无需 Todo。
@@ -99,6 +99,7 @@ ${WORKSPACE_FILES.map((line) => `- ${line}`).join("\n")}
 4. message 结尾含「内容草稿已就绪，请选择排版方式」
 
 **视觉排版（第二阶段，用户已选排版方式）**
+- **页数与文案已冻结**：以 ReadPresentationSnapshot 现有 slide 为准；设计阶段**禁止**再提「共 N 页」「15 字以内」「每页 3–5 条」等内容约束。
 - **推荐**：LoadSkill \`ppt-design-layout\` → Task 产出 \`slides/layout-plan.json\` → LoadSkill \`ppt-layout\`（Executor）按 plan 执行 → deck-review
 - 标准排版：set-theme → 全部 update-slide-layout（+ update-slide-variant）→ plan.enhancements 经 ExecuteExtraTool
 - 创意装饰：plan.styleMode=creative 时 AddLayoutDecorations

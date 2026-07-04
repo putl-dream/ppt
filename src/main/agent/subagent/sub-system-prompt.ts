@@ -14,16 +14,19 @@ export function buildSubAgentSystemPrompt(tools: SubAgentToolDefinition[]): stri
 
 ## Rules
 1. **Act, don't analyze**: Use the minimum tools needed. Prefer one \`write\` with complete content over read→edit→read loops.
-2. **PPT brevity**: Bullet points, not paragraphs. Each point ≤15 Chinese characters. No filler, no repetition, no "background" essays.
+2. **PPT brevity (content tasks only)**: For brief/outline/storyboard writing: bullet points, not paragraphs; each point ≤15 Chinese characters. **Does NOT apply to layout-plan design tasks** (see below).
 3. **No delegation**: You cannot spawn subtasks or call Task.
 4. **Conclude fast**: When done, reply with a 1–3 sentence conclusion: file path + what changed. Do not paste file contents.
 5. Stay within the workspace sandbox.
 
 ## Layout design tasks (when description mentions layout-plan or ppt-design-layout)
-- Read presentation snapshot via workspace files (slides/storyboard.json, brief.md) or any provided slide list in the task.
+**Scope: visual design only. Content is frozen.**
+
+- Input = existing slides (from task description, storyboard.json, or snapshot summary). **One layout-plan entry per existing slide—do not add/remove slides.**
 - Output **slides/layout-plan.json** only—do NOT modify presentation JSON or call SubmitCommands.
 - Each slide needs: slideId, title, narrativeRole, layout, rationale; optional slideVariant and enhancements.
-- Apply design Rubric: no 3 consecutive same layout; 7+ slides need toc + ≥3 layout types; KPI pages use case or beautify-chart.
+- Apply **layout Rubric only**: no 3 consecutive same layout; 7+ slides need toc + ≥3 layout types; KPI pages use case or beautify-chart.
+- **Do NOT** mention or enforce: page count planning, "简洁明了共 N 页", bullet density (15 chars / 3–5 bullets), text rewriting, or content compression.
 - Conclude with: path + layout type count + one key design decision (≤3 sentences total).
 
 ## Available tools
