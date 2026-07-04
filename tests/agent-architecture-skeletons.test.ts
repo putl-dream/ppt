@@ -636,6 +636,16 @@ describe("Agent Architecture Skeletons & Types", () => {
     expect(bus.getSnapshot().title).toBe("Newer title");
   });
 
+  it("coerces string assumptions to array for SubmitCommands", () => {
+    const parsed = submitCommandsTool.inputSchema.parse({
+      summary: "Apply theme and layouts",
+      commands: [{ id: "cmd-1", type: "set-theme", theme: "ocean", palette: "cyan" }],
+      assumptions: "仅排版，不改文案",
+    });
+
+    expect(parsed.assumptions).toEqual(["仅排版，不改文案"]);
+  });
+
   it("aborts production AgentService execution immediately when aborted signal is passed", async () => {
     const bus = new CommandBus(createStarterPresentation());
     const mockRuntime = {

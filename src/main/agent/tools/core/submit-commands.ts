@@ -3,11 +3,25 @@ import type { ToolDefinition } from "../tool-definition";
 import { presentationCommandSchema } from "@shared/commands";
 import type { AgentRuntimeResult } from "../../runtime/runtime-types";
 
+/** Models often pass a single string; coerce to string[]. */
+export const assumptionsSchema = z.preprocess(
+  (value) => {
+    if (value === undefined || value === null) return undefined;
+    if (Array.isArray(value)) return value.map(String).filter(Boolean);
+    if (typeof value === "string") {
+      const trimmed = value.trim();
+      return trimmed ? [trimmed] : undefined;
+    }
+    return undefined;
+  },
+  z.array(z.string()).optional(),
+);
+
 export const submitCommandsSchema = z.object({
   summary: z.string().describe("该方案的改动摘要说明"),
   commands: z.array(presentationCommandSchema).describe("要提交执行的命令列表"),
   risk: z.enum(["low", "medium", "high"]).default("low").describe("模型评估建议的风险等级"),
-  assumptions: z.array(z.string()).optional().describe("模型生成修改方案时采用的假设条件"),
+  assumptions: assumptionsSchema.describe("模型生成修改方案时采用的假设条件（字符串数组；单条也可）"),
 });
 
 /**
