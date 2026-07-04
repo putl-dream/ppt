@@ -26,28 +26,63 @@ const generateId = (): string => {
   return Math.random().toString(36).substring(2, 15);
 };
 
+const PALETTE_BASE_ACCENT: Record<string, string> = {
+  cyan: "#0ea5e9",
+  green: "#10b981",
+  purple: "#a855f7",
+  orange: "#f97316",
+};
+
+/**
+ * Theme-adapted accent per palette. Dark themes get brighter variants, light
+ * themes get more saturated ones, so all 4 palettes read distinctly instead of
+ * only `cyan` being tuned. `cyan` values preserve prior behavior exactly.
+ */
+const THEME_ACCENT: Record<string, Record<string, string>> = {
+  nordic: { cyan: "#0ea5e9", green: "#059669", purple: "#9333ea", orange: "#ea580c" },
+  midnight: { cyan: "#58a6ff", green: "#3fb950", purple: "#bc8cff", orange: "#ffa657" },
+  ocean: { cyan: "#38bdf8", green: "#34d399", purple: "#c084fc", orange: "#fb923c" },
+  sunset: { cyan: "#e65100", green: "#059669", purple: "#9333ea", orange: "#ea580c" },
+  purple: { cyan: "#c084fc", green: "#34d399", purple: "#c084fc", orange: "#fb923c" },
+};
+
+/** Resolve the accent color for a theme + palette pair. Shared by canvas + chrome. */
+export function resolveThemeAccent(theme: string, palette: string): string {
+  return (
+    THEME_ACCENT[theme]?.[palette] ??
+    PALETTE_BASE_ACCENT[palette] ??
+    PALETTE_BASE_ACCENT.cyan
+  );
+}
+
+function clampChannel(value: number): number {
+  return Math.max(0, Math.min(255, Math.round(value)));
+}
+
+/** Linear blend of two #RRGGBB colors; `t` is the weight of `b` (0..1). */
+function mixHex(a: string, b: string, t: number): string {
+  const parse = (hex: string): [number, number, number] => {
+    const clean = hex.replace("#", "");
+    return [
+      parseInt(clean.slice(0, 2), 16),
+      parseInt(clean.slice(2, 4), 16),
+      parseInt(clean.slice(4, 6), 16),
+    ];
+  };
+  const [ar, ag, ab] = parse(a);
+  const [br, bg, bb] = parse(b);
+  const to2 = (n: number) => clampChannel(n).toString(16).padStart(2, "0");
+  return `#${to2(ar + (br - ar) * t)}${to2(ag + (bg - ag) * t)}${to2(ab + (bb - ab) * t)}`;
+}
+
 export function getThemePaletteColors(theme: string, palette: string): ThemeColors {
   let bg = "#ffffff";
   let title = "#1e293b";
   let body = "#475569";
-  let accent = "#0ea5e9";
   let cardBg = "#f8fafc";
-  let cardStroke = "#e2e8f0";
+  let baseStroke = "#e2e8f0";
 
-  switch (palette) {
-    case "cyan":
-      accent = "#0ea5e9";
-      break;
-    case "green":
-      accent = "#10b981";
-      break;
-    case "purple":
-      accent = "#a855f7";
-      break;
-    case "orange":
-      accent = "#f97316";
-      break;
-  }
+  const accent = resolveThemeAccent(theme, palette);
 
   switch (theme) {
     case "nordic":
@@ -55,43 +90,82 @@ export function getThemePaletteColors(theme: string, palette: string): ThemeColo
       title = "#0f172a";
       body = "#334155";
       cardBg = "#f1f1f0";
-      cardStroke = "#e1e1e0";
+      baseStroke = "#e1e1e0";
       break;
     case "midnight":
       bg = "#0e1115";
       title = "#f8fafc";
       body = "#94a3b8";
       cardBg = "#161b22";
-      cardStroke = "#30363d";
-      if (palette === "cyan") accent = "#58a6ff";
+      baseStroke = "#30363d";
       break;
     case "ocean":
       bg = "#0f172a";
       title = "#f8fafc";
       body = "#cbd5e1";
       cardBg = "#1e293b";
-      cardStroke = "#334155";
-      if (palette === "cyan") accent = "#38bdf8";
+      baseStroke = "#334155";
       break;
     case "sunset":
       bg = "#fffcf4";
       title = "#3c2a21";
       body = "#776b5d";
       cardBg = "#fff8eb";
-      cardStroke = "#ffe8cc";
-      if (palette === "cyan") accent = "#e65100";
+      baseStroke = "#ffe8cc";
       break;
     case "purple":
       bg = "#1c1537";
       title = "#f8fafc";
       body = "#b4befe";
       cardBg = "#2b2050";
-      cardStroke = "#44357a";
-      if (palette === "cyan") accent = "#c084fc";
+      baseStroke = "#44357a";
       break;
   }
 
+  // Tint the card stroke toward the accent so palette choice reads on borders too.
+  const cardStroke = mixHex(baseStroke, accent, 0.3);
+
   return { bg, title, body, accent, cardBg, cardStroke };
+}
+
+/** Approximate rendered width of a string in em units (CJK ≈ 1.0, others ≈ 0.55). */
+export function estimateTextWidthUnits(text: string): number {
+  let units = 0;
+  for (const ch of text) {
+    units += /[⺀-鿿豈-﫿＀-￯　-〿]/.test(ch)
+      ? 1.0
+      : 0.55;
+  }
+  return units;
+}
+
+/**
+ * Estimate the largest fontSize (stepping down by 2 from baseSize) at which `text`
+ * fits within a boxW × boxH box, honoring explicit newlines. Pure geometry — mirrors
+ * the renderers' `line-height: 1.4` + `pre-wrap` behavior; never measures real glyphs.
+ * Returns baseSize when the text already fits; never below minSize.
+ */
+export function fitFontSize(
+  text: string,
+  boxW: number,
+  boxH: number,
+  baseSize: number,
+  minSize = 12,
+): number {
+  if (!text.trim() || boxW <= 0 || boxH <= 0) return baseSize;
+  const paragraphs = text.split("\n");
+  for (let size = baseSize; size > minSize; size -= 2) {
+    const unitsPerLine = boxW / size;
+    if (unitsPerLine <= 0) continue;
+    const maxLines = Math.max(1, Math.floor(boxH / (size * 1.4)));
+    let linesNeeded = 0;
+    for (const paragraph of paragraphs) {
+      const units = estimateTextWidthUnits(paragraph);
+      linesNeeded += Math.max(1, Math.ceil(units / unitsPerLine));
+    }
+    if (linesNeeded <= maxLines) return size;
+  }
+  return minSize;
 }
 
 export function applyLayout(
@@ -308,7 +382,7 @@ export function applyLayout(
           styled.y = contentY + 20 + idx * textItemH;
           styled.width = colW - 48;
           styled.height = textItemH;
-          styled.fontSize = leftCols.length > 2 ? 18 : 22;
+          styled.fontSize = fitFontSize(styled.text, colW - 48, textItemH, leftCols.length > 2 ? 18 : 22);
           styled.bold = idx === 0;
           styled.color = colors.body;
           styled.align = "left";
@@ -325,7 +399,7 @@ export function applyLayout(
           styled.y = contentY + 20 + idx * textItemH;
           styled.width = colW - 48;
           styled.height = textItemH;
-          styled.fontSize = rightCols.length > 2 ? 18 : 22;
+          styled.fontSize = fitFontSize(styled.text, colW - 48, textItemH, rightCols.length > 2 ? 18 : 22);
           styled.bold = idx === 0;
           styled.color = colors.body;
           styled.align = "left";
@@ -333,7 +407,7 @@ export function applyLayout(
         });
       }
     } else if (layout === "process") {
-      const steps = bodyTexts.slice(0, 4);
+      const steps = bodyTexts;
       const N = steps.length || 1;
       const cardGap = 24;
       const totalW = 1040;
@@ -351,7 +425,7 @@ export function applyLayout(
         styled.y = contentY + 60;
         styled.width = colW - 32;
         styled.height = contentH - 120;
-        styled.fontSize = 20;
+        styled.fontSize = fitFontSize(styled.text, colW - 32, contentH - 120, 20);
         styled.bold = false;
         styled.color = colors.body;
         styled.align = "center";
@@ -364,7 +438,7 @@ export function applyLayout(
         }
       });
     } else if (layout === "architecture") {
-      const layers = bodyTexts.slice(0, 4);
+      const layers = bodyTexts;
       const N = layers.length || 1;
       const layerGap = 20;
       const layerH = (contentH - (N - 1) * layerGap) / N;
@@ -378,7 +452,7 @@ export function applyLayout(
         styled.y = rowY + 10;
         styled.width = 1000;
         styled.height = layerH - 20;
-        styled.fontSize = 22;
+        styled.fontSize = fitFontSize(styled.text, 1000, layerH - 20, 22);
         styled.bold = true;
         styled.color = colors.title;
         styled.align = "center";
@@ -397,24 +471,35 @@ export function applyLayout(
       elements.unshift(createCard(leftX, contentY, leftW, contentH));
       elements.unshift(createCard(rightX, contentY, rightW, contentH));
 
+      const sideImage =
+        pickImageForSlot("side") ??
+        (imageElements.length === 1 && !imageElements[0].imageSlot
+          ? imageElements[0]
+          : pickImageForSlot("side", true));
+
+      // Never drop body text: the right column holds one image OR one metric.
+      // Overflow bullets fold into the left desc so no content is lost.
+      const foldStart = sideImage ? 1 : 2;
+      const foldedExtras = bodyTexts
+        .slice(foldStart)
+        .map((el) => el.text.trim())
+        .filter(Boolean);
+
       if (descText) {
         const styled = assignTextRole(descText, "body");
         styled.x = leftX + pad;
         styled.y = contentY + pad;
         styled.width = leftW - pad * 2;
         styled.height = contentH - pad * 2;
-        styled.fontSize = 20;
+        if (foldedExtras.length > 0) {
+          styled.text = [styled.text.trim(), ...foldedExtras].join("\n");
+        }
+        styled.fontSize = fitFontSize(styled.text, leftW - pad * 2, contentH - pad * 2, 20);
         styled.bold = false;
         styled.color = colors.body;
         styled.align = "left";
         elements.push(styled);
       }
-
-      const sideImage =
-        pickImageForSlot("side") ??
-        (imageElements.length === 1 && !imageElements[0].imageSlot
-          ? imageElements[0]
-          : pickImageForSlot("side", true));
 
       if (sideImage) {
         elements.push(
@@ -435,14 +520,14 @@ export function applyLayout(
         styled.y = contentY + 40;
         styled.width = rightW - pad * 2;
         styled.height = contentH - 80;
-        styled.fontSize = 32;
+        styled.fontSize = fitFontSize(styled.text, rightW - pad * 2, contentH - 80, 32, 20);
         styled.bold = true;
         styled.color = colors.accent;
         styled.align = "center";
         elements.push(styled);
       }
     } else if (layout === "toc") {
-      const items = bodyTexts.slice(0, 8);
+      const items = bodyTexts;
       const N = items.length || 1;
       const rowGap = 12;
       const rowH = (contentH - (N - 1) * rowGap) / N;
@@ -489,7 +574,7 @@ export function applyLayout(
         styled.y = rowY + 8;
         styled.width = textW;
         styled.height = rowH - 16;
-        styled.fontSize = 22;
+        styled.fontSize = fitFontSize(styled.text, textW, rowH - 16, 22);
         styled.bold = false;
         styled.color = colors.body;
         styled.align = "left";
@@ -497,7 +582,13 @@ export function applyLayout(
       });
     } else if (layout === "quote") {
       const quoteText = bodyTexts[0];
-      const attribution = bodyTexts[1];
+      // Last body is attribution; everything between quote and attribution
+      // folds into the quote body so no content is dropped.
+      const attribution = bodyTexts.length > 1 ? bodyTexts[bodyTexts.length - 1] : undefined;
+      const quoteExtras = bodyTexts
+        .slice(1, bodyTexts.length - 1)
+        .map((el) => el.text.trim())
+        .filter(Boolean);
 
       if (quoteText) {
         const styled = assignTextRole(quoteText, "kicker");
@@ -505,7 +596,10 @@ export function applyLayout(
         styled.y = contentY + 40;
         styled.width = 960;
         styled.height = contentH - 120;
-        styled.fontSize = 36;
+        if (quoteExtras.length > 0) {
+          styled.text = [styled.text.trim(), ...quoteExtras].join("\n");
+        }
+        styled.fontSize = fitFontSize(styled.text, 960, contentH - 120, 36);
         styled.bold = false;
         styled.color = colors.title;
         styled.align = "center";
@@ -564,7 +658,7 @@ export function applyLayout(
           styled.y = rect.y + rect.height - 40;
           styled.width = rect.width - 16;
           styled.height = 32;
-          styled.fontSize = 16;
+          styled.fontSize = fitFontSize(styled.text, rect.width - 16, 32, 16);
           styled.bold = false;
           styled.color = colors.body;
           styled.align = "center";
@@ -598,7 +692,7 @@ export function applyLayout(
         styled.y = contentY + 20;
         styled.width = colW - 40;
         styled.height = textH;
-        styled.fontSize = 20;
+        styled.fontSize = fitFontSize(styled.text, colW - 40, textH, 20);
         styled.bold = idx === 0;
         styled.color = idx === 0 ? colors.title : colors.body;
         styled.align = "left";
@@ -644,7 +738,7 @@ export function applyLayout(
         styled.y = rowY + 10;
         styled.width = 980;
         styled.height = rowH - 20;
-        styled.fontSize = 20;
+        styled.fontSize = fitFontSize(styled.text, 980, rowH - 20, 20);
         styled.bold = false;
         styled.color = colors.body;
         styled.align = "left";

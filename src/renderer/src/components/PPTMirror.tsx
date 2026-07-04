@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Presentation, SlideElement } from "@shared/presentation";
 import { resolveSlideBackgroundWithVariant } from "@shared/slide-variant";
+import { resolveThemeAccent } from "@shared/layout";
 import { SlideElementRenderer } from "./SlideElementRenderer";
 import { SparklesIcon, ExpandIcon, CompressIcon, PlayIcon, FileIcon, DownloadIcon } from "./Icons";
 
@@ -160,21 +161,7 @@ export const PPTMirror: React.FC<PPTMirrorProps> = ({
         break;
     }
 
-    let accentColor = "#0ea5e9";
-    switch (selectedPalette) {
-      case "cyan":
-        accentColor = "#0ea5e9";
-        break;
-      case "green":
-        accentColor = "#10b981";
-        break;
-      case "purple":
-        accentColor = "#a855f7";
-        break;
-      case "orange":
-        accentColor = "#f97316";
-        break;
-    }
+    const accentColor = resolveThemeAccent(selectedTheme, selectedPalette);
 
     return { slideBg, titleColor, bodyColor, fontClass, borderStyle, accentColor, slideshowOverlayBg, isDarkOverlay };
   };

@@ -1,6 +1,12 @@
 import type { AgentModelSelection } from "@shared/agent";
 import { resolveAgentGatewayConfig, type AgentGatewayConfig } from "@shared/agent-gateway-config";
-import type { AgentModelGateway, AgentModelStreamChunk } from "../gateway/types";
+import type {
+  AgentModelGateway,
+  AgentModelMessage,
+  AgentModelStreamChunk,
+  AgentModelToolCall,
+  AgentToolSchema,
+} from "../gateway/types";
 import { resolveFallbackModelSelection } from "../gateway/config";
 import {
   AgentGatewayError,
@@ -39,6 +45,13 @@ export interface ModelCallRecoveryOptions {
   workspaceRoot?: string;
   threadId?: string;
   signal?: AbortSignal;
+  /**
+   * 原生 tool-use 工具清单。提供时透传给 gateway 激活 tool-use 分支；
+   * 省略则维持文本 JSON 协议。
+   */
+  tools?: AgentToolSchema[];
+  /** 原生 tool-use 多轮消息；与 tools 配套使用。 */
+  messages?: AgentModelMessage[];
   stream?: {
     onChunk?: (chunk: AgentModelStreamChunk) => void;
     onThinkingChunk?: (text: string) => void;
@@ -51,6 +64,8 @@ export interface ModelCallRecoveryResult {
   stopReason?: string;
   modelUsed?: AgentModelSelection;
   recoveryNotes: string[];
+  /** 原生 tool-use 返回的工具调用；文本路径下为空。 */
+  toolCalls?: AgentModelToolCall[];
 }
 
 function buildPrompt(payload: ModelPromptPayload): string {
@@ -85,13 +100,16 @@ async function invokeGateway(
     prompt: string;
     signal?: AbortSignal;
     maxOutputTokens?: number;
+    tools?: AgentToolSchema[];
+    messages?: AgentModelMessage[];
   },
   model: AgentModelSelection | undefined,
   stream?: ModelCallRecoveryOptions["stream"],
-): Promise<{ text: string; stopReason?: string }> {
+): Promise<{ text: string; stopReason?: string; toolCalls?: AgentModelToolCall[] }> {
   if (stream?.onChunk || stream?.onThinkingChunk) {
     let text = "";
     let stopReason: string | undefined;
+    let toolCalls: AgentModelToolCall[] | undefined;
     for await (const chunk of gateway.generateTextStream(request, model)) {
       if (chunk.type === "thinking" && chunk.text) {
         stream.onThinkingChunk?.(chunk.text);
@@ -100,13 +118,14 @@ async function invokeGateway(
         stream.onChunk?.(chunk);
       } else if (chunk.type === "complete") {
         stopReason = chunk.stopReason;
+        if (chunk.toolCalls?.length) toolCalls = chunk.toolCalls;
       }
     }
-    return { text, stopReason };
+    return { text, stopReason, toolCalls };
   }
 
   const response = await gateway.generateText(request, model);
-  return { text: response.text, stopReason: response.stopReason };
+  return { text: response.text, stopReason: response.stopReason, toolCalls: response.toolCalls };
 }
 
 /**
@@ -167,10 +186,23 @@ export async function callModelWithRecovery(
           prompt,
           signal: options.signal,
           maxOutputTokens,
+          tools: options.tools,
+          messages: options.messages,
         },
         modelSelection,
         continuationPartial ? undefined : options.stream,
       );
+
+      // 原生 tool-use：返回工具调用即视为完整响应，跳过文本截断/续写逻辑。
+      if (response.toolCalls?.length) {
+        return {
+          text: response.text,
+          stopReason: response.stopReason,
+          toolCalls: response.toolCalls,
+          modelUsed: modelSelection,
+          recoveryNotes,
+        };
+      }
 
       if (!response.text.trim()) {
         throw new AgentGatewayError("Model returned an empty response.", "empty-response");
@@ -194,6 +226,7 @@ export async function callModelWithRecovery(
       return {
         text: response.text,
         stopReason: response.stopReason,
+        toolCalls: response.toolCalls,
         modelUsed: modelSelection,
         recoveryNotes,
       };

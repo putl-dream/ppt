@@ -123,7 +123,8 @@ function buildCorePrinciples(stage: PromptStage, stepLimits?: AgentStepLimits): 
     content: [
       "",
       "### 本阶段（内容撰写）",
-      "- **充分写内容**：要点可完整表达，不必强行压到 15 字或每页 3–5 条；信息准确优先。",
+      "- **充分写内容**：要点可完整表达，不必强行压到 15 字；信息准确优先。",
+      "- **按 layout 容量组织**：case=叙述+1 数字、process/architecture=2–4 项、quote=1–2、toc=3–8、concept=3–4、comparison=偶数条。超出不再丢弃（引擎会折叠+缩字），但观感下降——超容量应拆页而非硬塞。",
       "- 只 `add-slide` + text elements + layout 字段；**禁止** `set-theme`、`update-slide-layout`。",
       "- 标题放 `slide.title`；画布不放 fontSize≥36 的标题文本。",
       "- 完成后 message 含「内容草稿已就绪，请选择排版方式」。",

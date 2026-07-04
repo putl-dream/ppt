@@ -18,6 +18,8 @@ import {
 } from "@shared/agent-step-limits";
 import { callModelWithRecovery } from "./model-call-recovery";
 import { createTaskStore } from "../task/task-store";
+import { toToolSchemas } from "../tools/tool-schema";
+import type { AgentModelMessage } from "../gateway/types";
 
 type ToolCall = {
   type: "tool_call";
@@ -154,6 +156,23 @@ export class AgentRuntime {
       { role: "user", content: options.request },
     ];
 
+    // 原生 tool-use：gateway 声明支持时激活。工具 schema 每回合不变，一次构造；
+    // nativeMessages 承载多轮 tool_use / tool_result，替代把 transcript 塞进 prompt。
+    const useNativeToolUse = this.gateway.supportsNativeToolUse?.() === true;
+    const toolSchemas = useNativeToolUse ? toToolSchemas(coreTools) : undefined;
+    const nativeMessages: AgentModelMessage[] = [
+      ...(options.messageHistory ?? []).map((entry) => ({
+        role: entry.role,
+        content: entry.content,
+      })),
+      { role: "user", content: options.request },
+    ];
+    // 承接上一次工具执行结果，下一回合作为 tool_result 追加。
+    // 用 holder 对象而非裸 let，规避闭包赋值下的控制流窄化。
+    const pendingToolResult: { current: { id: string; content: string; isError?: boolean } | null } = {
+      current: null,
+    };
+
     const finish = async (
       result: AgentRuntimeResult,
       reason: StopBlock["reason"] = "completed",
@@ -189,7 +208,6 @@ export class AgentRuntime {
 
       // 判断是否应该使用流式：仅在可能返回message且提供了回调时使用
       const shouldUseStream = options.onStreamChunk !== undefined;
-      let responseText: string;
 
       const promptPayload = {
         request: options.request,
@@ -197,61 +215,94 @@ export class AgentRuntime {
         transcript,
       };
 
-      if (shouldUseStream) {
-        const extractor = new JsonStreamExtractor((text, source) => {
-          options.onStreamChunk?.(text, source);
+      // native 模式：把上一回合的工具结果作为 tool_result 追加到消息序列。
+      if (useNativeToolUse && pendingToolResult.current) {
+        nativeMessages.push({
+          role: "user",
+          toolResults: [{
+            toolCallId: pendingToolResult.current.id,
+            content: pendingToolResult.current.content,
+            isError: pendingToolResult.current.isError,
+          }],
         });
-        const modelResult = await callModelWithRecovery({
-          gateway: this.gateway,
-          systemPrompt,
-          promptPayload,
-          model: options.model,
-          workspaceRoot: options.workspaceRoot,
-          threadId: options.threadId,
-          signal: options.signal,
-          stream: {
-            onChunk: (chunk) => {
-              if (chunk.type === "content" && chunk.text) {
-                extractor.feed(chunk.text);
-              }
-            },
-            onThinkingChunk: (chunk) => {
-              options.onThinkingChunk?.(chunk, step);
-            },
-          },
-          onRecovery: (message) => {
-            options.onProgress?.({ type: "request-status", message, progress: 0 });
-          },
-        });
-        responseText = modelResult.text;
-      } else {
-        const modelResult = await callModelWithRecovery({
-          gateway: this.gateway,
-          systemPrompt,
-          promptPayload,
-          model: options.model,
-          workspaceRoot: options.workspaceRoot,
-          threadId: options.threadId,
-          signal: options.signal,
-          onRecovery: (message) => {
-            options.onProgress?.({ type: "request-status", message, progress: 0 });
-          },
-        });
-        responseText = modelResult.text;
+        pendingToolResult.current = null;
       }
 
+      const extractor = shouldUseStream
+        ? new JsonStreamExtractor((text, source) => options.onStreamChunk?.(text, source))
+        : null;
+
+      const modelResult = await callModelWithRecovery({
+        gateway: this.gateway,
+        systemPrompt,
+        promptPayload,
+        model: options.model,
+        workspaceRoot: options.workspaceRoot,
+        threadId: options.threadId,
+        signal: options.signal,
+        tools: toolSchemas,
+        messages: useNativeToolUse ? nativeMessages : undefined,
+        stream: shouldUseStream
+          ? {
+              onChunk: (chunk) => {
+                if (chunk.type === "content" && chunk.text) {
+                  // native 模式文本非 JSON，直接作为 message 流出；文本模式走抽取器。
+                  if (useNativeToolUse) {
+                    options.onStreamChunk?.(chunk.text, "message");
+                  } else {
+                    extractor?.feed(chunk.text);
+                  }
+                }
+              },
+              onThinkingChunk: (chunk) => {
+                options.onThinkingChunk?.(chunk, step);
+              },
+            }
+          : undefined,
+        onRecovery: (message) => {
+          options.onProgress?.({ type: "request-status", message, progress: 0 });
+        },
+      });
+      const responseText = modelResult.text;
+
       let parsed: unknown;
-      try {
-        parsed = parseAgentJsonResponse(responseText);
-      } catch (error) {
-        transcript.push({
+
+      // native 分支：把结构化 toolCall 归一成与文本协议一致的 parsed 形状，
+      // 下游校验/hooks/执行/finish 全部原样复用。
+      const nativeCall = useNativeToolUse ? modelResult.toolCalls?.[0] : undefined;
+      // native 模式下每个 tool_use 必须回配一个 tool_result，否则下一次调用报错。
+      // 该闭包在任何 continue 前记录待回传结果；文本模式为 no-op。
+      const recordToolResult = (content: string, isError = false): void => {
+        if (nativeCall) {
+          pendingToolResult.current = { id: nativeCall.id, content, isError };
+        }
+      };
+      if (nativeCall) {
+        nativeMessages.push({
           role: "assistant",
-          raw: responseText.slice(0, 2_000),
-          error: error instanceof Error
-            ? `${error.message} Return exactly one complete JSON object.`
-            : "Invalid JSON response. Return exactly one complete JSON object.",
+          content: responseText || undefined,
+          toolCalls: [{ id: nativeCall.id, name: nativeCall.name, args: nativeCall.args }],
         });
-        continue;
+        parsed = { type: "tool_call", toolName: nativeCall.name, args: nativeCall.args };
+      } else if (useNativeToolUse) {
+        // 无工具调用即为最终文本回复。
+        if (responseText.trim()) {
+          nativeMessages.push({ role: "assistant", content: responseText });
+        }
+        parsed = { type: "message", content: responseText };
+      } else {
+        try {
+          parsed = parseAgentJsonResponse(responseText);
+        } catch (error) {
+          transcript.push({
+            role: "assistant",
+            raw: responseText.slice(0, 2_000),
+            error: error instanceof Error
+              ? `${error.message} Return exactly one complete JSON object.`
+              : "Invalid JSON response. Return exactly one complete JSON object.",
+          });
+          continue;
+        }
       }
 
       if (!isToolCall(parsed)) {
@@ -279,13 +330,18 @@ export class AgentRuntime {
         }
 
         if (normalized.type === "message" && options.requiredOutcome === "command_proposal") {
+          const guidance =
+            "This is an unresolved presentation action. Do not narrate future work. "
+            + "Call AskUser if information is still missing, otherwise continue tools and finish with SubmitCommands.";
           transcript.push({
             role: "assistant",
             response: normalized,
-            error:
-              "This is an unresolved presentation action. Do not narrate future work. "
-              + "Call AskUser if information is still missing, otherwise continue tools and finish with SubmitCommands.",
+            error: guidance,
           });
+          // native 模式此处无 tool_use（是纯文本回复），用 user 消息回喂纠偏。
+          if (useNativeToolUse) {
+            nativeMessages.push({ role: "user", content: guidance });
+          }
           continue;
         }
 
@@ -305,6 +361,7 @@ export class AgentRuntime {
           toolName: parsed.toolName,
           error: "Only registered Core Tools can be called directly.",
         });
+        recordToolResult("Only registered Core Tools can be called directly.", true);
         continue;
       }
 
@@ -317,6 +374,7 @@ export class AgentRuntime {
           error: args.error.message,
         });
         transcript.push({ role: "tool", toolName: tool.name, error: args.error.message });
+        recordToolResult(args.error.message, true);
         continue;
       }
 
@@ -347,6 +405,7 @@ export class AgentRuntime {
             toolName: tool.name,
             error: preToolStop.reason,
           });
+          recordToolResult(preToolStop.reason ?? "Tool call denied.", true);
           continue;
         }
         if (preToolStop) {
@@ -377,6 +436,7 @@ export class AgentRuntime {
           return finish(RuntimeNormalizer.normalize(result));
         }
         transcript.push({ role: "tool", toolName: tool.name, result });
+        recordToolResult(JSON.stringify(result ?? null));
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
         await triggerHooks("PostToolUse", {
@@ -397,6 +457,7 @@ export class AgentRuntime {
           toolName: tool.name,
           error: errorMessage,
         });
+        recordToolResult(errorMessage, true);
       }
 
     }

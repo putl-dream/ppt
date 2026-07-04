@@ -46,6 +46,7 @@ Task 子 Agent 写 `slides/storyboard.json`，驱动 SubmitCommands。
 - **充分写要点**：每条 bullet 表达完整意思，不强行 ≤15 字。
 - 单页要点数量按内容需要，不必压到 3–5 条。
 - 不写 intent/notes 长段；复杂对比用 comparison，流程用 process。
+- **按版式容量分页**：case 每页 1 叙述 + 1 数字；process/architecture 每页 2–4 步；concept 3–4 条；toc 3–8 项。超出就**多开一页**，不要把 6 个步骤塞进一页 process。引擎会缩字兜底但观感下降。
 
 ## 衔接
 

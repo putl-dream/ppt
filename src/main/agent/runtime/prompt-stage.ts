@@ -43,8 +43,12 @@ const LIGHT_EDIT_PATTERNS = [
 ];
 
 const NEW_DECK_PATTERNS = [
-  /新建|创建|做(?:一|个).{0,6}(?:ppt|演示|deck)/i,
-  /从零|一条龙|完整.{0,4}(?:ppt|演示)/i,
+  /新建|创建/,
+  /做(?:一|个).{0,6}(?:ppt|演示|deck|幻灯片)/i,
+  /从零|一条龙/,
+  /完整.{0,4}(?:ppt|演示|汇报|方案)/i,
+  /(?:整理|做|制作|生成|写).{0,4}成.{0,6}(?:ppt|演示|汇报|幻灯片|deck)/i,
+  /一[套份].{0,8}(?:ppt|演示|汇报|幻灯片|deck)/i,
 ];
 
 function isLayoutPhaseRequest(request: string): boolean {
@@ -74,7 +78,9 @@ function isAwaitingLayoutChoice(
 }
 
 function suggestsLargeNewDeck(request: string, artifacts: WorkspaceArtifacts): boolean {
-  if (artifacts.brief || artifacts.outline || artifacts.storyboard) return false;
+  // Only a finished storyboard means we've genuinely entered content authoring;
+  // a stray brief/outline should not block re-planning a fresh full deck.
+  if (artifacts.storyboard) return false;
   return NEW_DECK_PATTERNS.some((pattern) => pattern.test(request));
 }
 
@@ -105,6 +111,13 @@ export function resolvePromptStage(input: PromptStageResolveInput): PromptStage 
     return "layout-choice";
   }
 
+  // An explicit "build a full deck" request re-enters planning even when stray
+  // slides exist — suggestsLargeNewDeck already bails once a storyboard is present,
+  // so genuine in-progress content is never bounced back.
+  if (suggestsLargeNewDeck(input.request, input.artifacts)) {
+    return "planning";
+  }
+
   if (slideCount > 0 && !hasTheme) {
     return "content";
   }
@@ -115,10 +128,6 @@ export function resolvePromptStage(input: PromptStageResolveInput): PromptStage 
 
   if (input.artifacts.brief) {
     return "content";
-  }
-
-  if (suggestsLargeNewDeck(input.request, input.artifacts)) {
-    return "planning";
   }
 
   if (slideCount > 0) {

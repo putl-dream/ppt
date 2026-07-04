@@ -1,11 +1,58 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { AgentGatewayError, normalizeProviderError } from "./errors";
 import type {
+  AgentModelMessage,
   AgentModelRequest,
   AgentModelResponse,
   AgentModelStreamChunk,
+  AgentModelToolCall,
   ResolvedAgentModelConfig,
 } from "./types";
+
+/** Build Anthropic messages from structured multi-turn messages (native tool-use path). */
+function toAnthropicMessages(messages: AgentModelMessage[]): Anthropic.MessageParam[] {
+  return messages.map((message): Anthropic.MessageParam => {
+    if (message.role === "assistant") {
+      const blocks: Anthropic.ContentBlockParam[] = [];
+      if (message.content?.trim()) {
+        blocks.push({ type: "text", text: message.content });
+      }
+      for (const call of message.toolCalls ?? []) {
+        blocks.push({ type: "tool_use", id: call.id, name: call.name, input: call.args });
+      }
+      return { role: "assistant", content: blocks };
+    }
+
+    if (message.toolResults?.length) {
+      const blocks: Anthropic.ContentBlockParam[] = message.toolResults.map((result) => ({
+        type: "tool_result",
+        tool_use_id: result.toolCallId,
+        content: result.content,
+        ...(result.isError ? { is_error: true } : {}),
+      }));
+      return { role: "user", content: blocks };
+    }
+
+    return { role: "user", content: message.content ?? "" };
+  });
+}
+
+/** Extract tool_use blocks from an Anthropic response. */
+function extractToolCalls(content: unknown): AgentModelToolCall[] {
+  if (!Array.isArray(content)) return [];
+  const calls: AgentModelToolCall[] = [];
+  for (const block of content) {
+    if (block && typeof block === "object" && (block as { type?: unknown }).type === "tool_use") {
+      const tool = block as { id?: unknown; name?: unknown; input?: unknown };
+      calls.push({
+        id: String(tool.id ?? ""),
+        name: String(tool.name ?? ""),
+        args: (tool.input && typeof tool.input === "object" ? tool.input : {}) as Record<string, unknown>,
+      });
+    }
+  }
+  return calls;
+}
 
 interface AnthropicLikeResponse {
   content?: unknown;
@@ -60,6 +107,41 @@ export async function generateWithAnthropic(
   });
 
   try {
+    // 原生 tool-use 分支：提供 tools 时透传，用结构化 messages 承载多轮对话。
+    if (request.tools?.length) {
+      const response = await client.messages.create({
+        model: config.model,
+        max_tokens: request.maxOutputTokens ?? config.maxOutputTokens,
+        system: request.systemPrompt,
+        messages: request.messages
+          ? toAnthropicMessages(request.messages)
+          : [{ role: "user", content: request.prompt }],
+        tools: request.tools.map((tool) => ({
+          name: tool.name,
+          description: tool.description,
+          input_schema: tool.inputSchema as Anthropic.Tool.InputSchema,
+        })),
+      }, { signal: request.signal });
+
+      const toolCalls = extractToolCalls(response.content);
+      const text = extractResponseText(response);
+      if (!text && toolCalls.length === 0) {
+        throw new AgentGatewayError(
+          `Anthropic returned no usable content (stop_reason=${response.stop_reason ?? "unknown"}).`,
+          "empty-response",
+          "anthropic",
+        );
+      }
+      return {
+        provider: "anthropic",
+        model: config.model,
+        text,
+        toolCalls,
+        requestId: response._request_id ?? undefined,
+        stopReason: response.stop_reason ?? undefined,
+      };
+    }
+
     let maxTokens = request.maxOutputTokens ?? config.maxOutputTokens;
     let response = await client.messages.create({
       model: config.model,
@@ -121,11 +203,23 @@ export async function* generateStreamWithAnthropic(
   });
 
   try {
+    const useTools = Boolean(request.tools?.length);
     const stream = client.messages.stream({
       model: config.model,
       max_tokens: request.maxOutputTokens ?? config.maxOutputTokens,
       system: request.systemPrompt,
-      messages: [{ role: "user", content: request.prompt }],
+      messages: useTools && request.messages
+        ? toAnthropicMessages(request.messages)
+        : [{ role: "user", content: request.prompt }],
+      ...(useTools
+        ? {
+            tools: request.tools!.map((tool) => ({
+              name: tool.name,
+              description: tool.description,
+              input_schema: tool.inputSchema as Anthropic.Tool.InputSchema,
+            })),
+          }
+        : {}),
     }, { signal: request.signal });
 
     for await (const event of stream) {
@@ -139,10 +233,12 @@ export async function* generateStreamWithAnthropic(
     }
 
     const finalMessage = await stream.finalMessage();
+    const toolCalls = extractToolCalls(finalMessage.content);
     yield {
       type: "complete",
       text: "",
       stopReason: finalMessage.stop_reason ?? undefined,
+      ...(toolCalls.length ? { toolCalls } : {}),
     };
   } catch (error) {
     throw normalizeProviderError("anthropic", error, request.signal);

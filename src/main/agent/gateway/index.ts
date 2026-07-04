@@ -18,6 +18,10 @@ export class AgentGateway implements AgentModelGateway {
   private readonly runtimeSettings: Partial<Record<AgentProvider, AgentModelSettings>> = {};
   private gatewayConfig: AgentGatewayConfig = resolveAgentGatewayConfig();
 
+  supportsNativeToolUse(): boolean {
+    return true;
+  }
+
   configure(
     settings: AgentModelSettings,
     gatewayConfig?: AgentGatewayConfig,

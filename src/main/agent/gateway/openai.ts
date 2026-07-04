@@ -1,11 +1,63 @@
 import OpenAI from "openai";
 import { AgentGatewayError, normalizeProviderError } from "./errors";
 import type {
+  AgentModelMessage,
   AgentModelRequest,
   AgentModelResponse,
   AgentModelStreamChunk,
+  AgentModelToolCall,
   ResolvedAgentModelConfig,
 } from "./types";
+
+/** Build Chat Completions messages from structured multi-turn messages. */
+function toChatMessages(
+  messages: AgentModelMessage[],
+): OpenAI.Chat.Completions.ChatCompletionMessageParam[] {
+  const out: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [];
+  for (const message of messages) {
+    if (message.role === "assistant") {
+      out.push({
+        role: "assistant",
+        content: message.content ?? "",
+        ...(message.toolCalls?.length
+          ? {
+              tool_calls: message.toolCalls.map((call) => ({
+                id: call.id,
+                type: "function" as const,
+                function: { name: call.name, arguments: JSON.stringify(call.args) },
+              })),
+            }
+          : {}),
+      });
+    } else if (message.toolResults?.length) {
+      for (const result of message.toolResults) {
+        out.push({ role: "tool", tool_call_id: result.toolCallId, content: result.content });
+      }
+    } else {
+      out.push({ role: "user", content: message.content ?? "" });
+    }
+  }
+  return out;
+}
+
+/** Parse Chat Completions tool_calls into the gateway shape. */
+function parseChatToolCalls(
+  toolCalls: OpenAI.Chat.Completions.ChatCompletionMessageToolCall[] | undefined,
+): AgentModelToolCall[] {
+  if (!toolCalls?.length) return [];
+  const out: AgentModelToolCall[] = [];
+  for (const call of toolCalls) {
+    if (call.type !== "function") continue;
+    let args: Record<string, unknown> = {};
+    try {
+      args = call.function.arguments ? JSON.parse(call.function.arguments) : {};
+    } catch {
+      args = {};
+    }
+    out.push({ id: call.id, name: call.function.name, args });
+  }
+  return out;
+}
 
 export async function generateWithOpenAI(
   config: ResolvedAgentModelConfig,
@@ -27,6 +79,49 @@ export async function generateWithOpenAI(
     let stopReason: string | undefined;
 
     const maxOutputTokens = request.maxOutputTokens ?? config.maxOutputTokens;
+    let toolCalls: AgentModelToolCall[] = [];
+
+    // 原生 tool-use：Responses 模式的 tool schema 结构差异较大，统一走
+    // Chat Completions 承载 tool-use，纯文本仍按配置模式。
+    if (request.tools?.length) {
+      const response = await client.chat.completions.create({
+        model: config.model,
+        messages: [
+          ...(request.systemPrompt
+            ? [{ role: "system" as const, content: request.systemPrompt }]
+            : []),
+          ...(request.messages
+            ? toChatMessages(request.messages)
+            : [{ role: "user" as const, content: request.prompt }]),
+        ],
+        max_tokens: maxOutputTokens,
+        tools: request.tools.map((tool) => ({
+          type: "function" as const,
+          function: {
+            name: tool.name,
+            description: tool.description,
+            parameters: tool.inputSchema,
+          },
+        })),
+      }, { signal: request.signal });
+      const choice = response.choices[0];
+      text = (choice?.message.content ?? "").trim();
+      toolCalls = parseChatToolCalls(choice?.message.tool_calls);
+      requestId = response._request_id ?? undefined;
+      stopReason = choice?.finish_reason ?? undefined;
+
+      if (!text && toolCalls.length === 0) {
+        throw new AgentGatewayError("OpenAI returned an empty response.", "empty-response", "openai");
+      }
+      return {
+        provider: "openai",
+        model: config.model,
+        text,
+        toolCalls,
+        requestId,
+        stopReason,
+      };
+    }
 
     if (mode === "responses") {
       const response = await client.responses.create({
@@ -85,6 +180,22 @@ export async function* generateStreamWithOpenAI(
 
   try {
     const mode = config.openaiApiMode ?? "responses";
+
+    // 原生 tool-use 走非流式（tool_calls 的增量拼接不适合逐块回显），
+    // 一次性拿到结果后按 chunk 形态回吐，工具调用挂在 complete chunk。
+    if (request.tools?.length) {
+      const response = await generateWithOpenAI(config, request);
+      if (response.text) {
+        yield { type: "content", text: response.text };
+      }
+      yield {
+        type: "complete",
+        text: "",
+        stopReason: response.stopReason,
+        ...(response.toolCalls?.length ? { toolCalls: response.toolCalls } : {}),
+      };
+      return;
+    }
 
     if (mode === "responses") {
       // Responses API 暂不支持流式，降级到非流式
