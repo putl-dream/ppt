@@ -57,7 +57,7 @@ function isConnectionTerminated(error: unknown): boolean {
 
 export function formatRecoverableAgentError(error: unknown, signal?: AbortSignal): string | null {
   if (signal?.aborted || errorMessage(error) === "Run aborted by user.") {
-    return "任务已取消。";
+    return "会话已中断。";
   }
 
   if (error instanceof AgentGatewayError) {
@@ -82,7 +82,7 @@ export function formatRecoverableAgentError(error: unknown, signal?: AbortSignal
   }
 
   if (isAbortLike(error, signal)) {
-    return "任务已取消。";
+    return "会话已中断。";
   }
 
   if (isConnectionTerminated(error)) {

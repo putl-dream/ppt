@@ -158,7 +158,11 @@ export class AgentService {
     agentStepLimits?: AgentStepLimits,
   ): Promise<AgentRunResult> {
     if (signal?.aborted) {
-      throw new Error("Run aborted by user.");
+      return {
+        status: "chat",
+        message: "会话已中断。",
+        ...(this.conversations.has(threadId) ? { threadId } : {}),
+      };
     }
     listener?.({
       type: "stage-started",

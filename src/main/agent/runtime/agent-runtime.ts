@@ -2,7 +2,7 @@ import type { AgentModelGateway } from "../gateway";
 import type { ToolContext, ToolDiscoverySession } from "../tools/tool-definition";
 import { ToolRegistry } from "../tools/tool-registry";
 import { RuntimeNormalizer } from "./runtime-normalizer";
-import { SystemPromptBuilder } from "./system-prompt";
+import { buildSystemPromptContext, clearSystemPromptCache, getSystemPrompt } from "./system-prompt";
 import type { AgentRuntimeOptions, AgentRuntimeResult } from "./runtime-types";
 import { JsonStreamExtractor } from "./json-stream-extractor";
 import { ensureDefaultHooks } from "./default-hooks";
@@ -136,13 +136,15 @@ export class AgentRuntime {
       taskGraphOwner,
     };
     const coreTools = this.registry.getCoreTools();
-    const systemPrompt = SystemPromptBuilder.build({
+    const promptContext = await buildSystemPromptContext({
       coreTools,
       skillCatalog: this.skillRegistry.listCards(),
+      workspaceRoot: options.workspaceRoot,
       currentSlideId: options.currentSlideId,
       requiredOutcome: options.requiredOutcome,
       stepLimits,
     });
+    const { text: systemPrompt } = getSystemPrompt(promptContext, options.threadId);
     const transcript: Array<Record<string, unknown>> = [
       { role: "user", content: options.request },
     ];
@@ -415,5 +417,6 @@ export class AgentRuntime {
   clearSession(threadId: string): void {
     this.discoverySessions.delete(threadId);
     this.skillSessions.delete(threadId);
+    clearSystemPromptCache(threadId);
   }
 }

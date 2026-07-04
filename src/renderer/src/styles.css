@@ -1845,6 +1845,7 @@ aside {
 .agent-activity-status-bar {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 10px;
   padding: 8px 12px;
   border-radius: 8px;
@@ -1869,6 +1870,40 @@ aside {
   font-size: 13px;
   font-weight: 600;
   color: var(--text-primary);
+}
+
+.agent-activity-status-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex: 1;
+}
+
+.agent-activity-stop-btn {
+  flex-shrink: 0;
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: 6px;
+  color: #ef4444;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 10px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  transition: var(--transition-smooth);
+}
+
+.agent-activity-stop-btn:hover:not(:disabled) {
+  background: rgba(239, 68, 68, 0.18);
+  border-color: rgba(239, 68, 68, 0.5);
+}
+
+.agent-activity-stop-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .thought-list li.running {
@@ -4263,6 +4298,33 @@ aside {
   opacity: 0.4;
   cursor: not-allowed;
   box-shadow: none;
+}
+
+.stop-cta-btn {
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  border-radius: 6px;
+  color: #ef4444;
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: var(--transition-smooth);
+}
+
+.stop-cta-btn:hover:not(:disabled) {
+  background: rgba(239, 68, 68, 0.2);
+  border-color: rgba(239, 68, 68, 0.55);
+  transform: translateY(-0.5px);
+}
+
+.stop-cta-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 /* Microphone listening styling */

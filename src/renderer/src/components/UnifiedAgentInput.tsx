@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from "react";
-import { FolderIcon, PlusIcon, SendIcon } from "./Icons";
+import { FolderIcon, PlusIcon, SendIcon, StopIcon } from "./Icons";
 import type { ManagedModel } from "../modelCatalog";
 import { getWorkspaceLabel } from "@shared/workspace";
 import { ToolApprovalOverlay, type PendingToolApproval } from "./ToolApprovalOverlay";
@@ -26,6 +26,9 @@ interface UnifiedAgentInputProps {
   placeholder?: string;
   pendingToolApproval?: PendingToolApproval | null;
   onResolveToolApproval?: (approvalId: string, approved: boolean) => void;
+  canCancelRun?: boolean;
+  onCancelRun?: () => void;
+  isCancellingRun?: boolean;
 }
 
 function resizeTextarea(textarea: HTMLTextAreaElement) {
@@ -54,6 +57,9 @@ export const UnifiedAgentInput: React.FC<UnifiedAgentInputProps> = ({
   placeholder,
   pendingToolApproval = null,
   onResolveToolApproval,
+  canCancelRun = false,
+  onCancelRun,
+  isCancellingRun = false,
 }) => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const folderName = getWorkspaceLabel(localStoragePath || undefined);
@@ -179,13 +185,22 @@ export const UnifiedAgentInput: React.FC<UnifiedAgentInputProps> = ({
 
             <button
               type="button"
-              onClick={handleSend}
-              disabled={busy || !request.trim()}
-              className="send-cta-btn"
-              title="启动智能体工作流"
+              onClick={canCancelRun && onCancelRun ? onCancelRun : handleSend}
+              disabled={canCancelRun ? isCancellingRun : busy || !request.trim()}
+              className={canCancelRun ? "stop-cta-btn" : "send-cta-btn"}
+              title={canCancelRun ? "中断当前 Agent 会话" : "启动智能体工作流"}
             >
-              <SendIcon size={14} />
-              <span>{submitLabel}</span>
+              {canCancelRun ? (
+                <>
+                  <StopIcon size={14} />
+                  <span>{isCancellingRun ? "中断中…" : "停止"}</span>
+                </>
+              ) : (
+                <>
+                  <SendIcon size={14} />
+                  <span>{submitLabel}</span>
+                </>
+              )}
             </button>
           </div>
         </div>

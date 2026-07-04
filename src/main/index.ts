@@ -379,6 +379,19 @@ app.whenReady().then(async () => {
     return false;
   });
 
+  ipcMain.handle("agent:cancel-session", async (_, sessionId: string) => {
+    const runId = sessionActiveRuns.get(sessionId);
+    if (!runId) return false;
+    toolApprovalBroker.cancelForRun(runId);
+    const controller = activeRuns.get(runId);
+    if (controller) {
+      controller.abort();
+      logger.info("agent.session.cancelled", { sessionId, runId });
+      return true;
+    }
+    return false;
+  });
+
   ipcMain.handle(
     "agent:resolve-tool-approval",
     async (_, runId: string, approvalId: string, approved: boolean) =>

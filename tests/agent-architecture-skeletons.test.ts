@@ -661,7 +661,11 @@ describe("Agent Architecture Skeletons & Types", () => {
     controller.abort();
 
     await expect(
-      service.start("Hello", undefined, "AUTO", undefined, undefined, [], controller.signal)
-    ).rejects.toThrow("Run aborted by user.");
+      service.start("Hello", undefined, "AUTO", undefined, undefined, [], controller.signal),
+    ).resolves.toEqual({
+      status: "chat",
+      message: "会话已中断。",
+    });
+    expect(mockRuntime.run).not.toHaveBeenCalled();
   });
 });

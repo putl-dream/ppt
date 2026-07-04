@@ -2,6 +2,7 @@ import React from "react";
 import type { AgentActivityItem } from "@shared/agent-activity";
 import { filterTraceForDisplay, findPendingToolApproval } from "@shared/agent-activity";
 import { AgentActivityTrace } from "./AgentActivityTrace";
+import { StopIcon } from "./Icons";
 
 interface AgentThinkingLoaderProps {
   busy: boolean;
@@ -10,6 +11,9 @@ interface AgentThinkingLoaderProps {
   activeToolName?: string | null;
   /** 已有流式回复消息时，时间线改挂在消息上，避免重复展示 */
   suppressTrace?: boolean;
+  canCancelRun?: boolean;
+  onCancelRun?: () => void;
+  isCancellingRun?: boolean;
 }
 
 function getStatusLabel(
@@ -57,6 +61,9 @@ export const AgentThinkingLoader: React.FC<AgentThinkingLoaderProps> = ({
   activityTrace,
   activeToolName = null,
   suppressTrace = false,
+  canCancelRun = false,
+  onCancelRun,
+  isCancellingRun = false,
 }) => {
   if (!busy || agentActivityMode === "idle") return null;
 
@@ -68,14 +75,30 @@ export const AgentThinkingLoader: React.FC<AgentThinkingLoaderProps> = ({
   return (
     <div className="chat-message assistant thinking-message agent-activity-panel">
       <div className="agent-activity-status-bar">
-        {showSpinner && (
-          <div className="thinking-dots-container">
-            <span className="thinking-dot" />
-            <span className="thinking-dot" />
-            <span className="thinking-dot" />
-          </div>
+        <div className="agent-activity-status-left">
+          {showSpinner && (
+            <div className="thinking-dots-container">
+              <span className="thinking-dot" />
+              <span className="thinking-dot" />
+              <span className="thinking-dot" />
+            </div>
+          )}
+          <span className="agent-activity-status-label">
+            {isCancellingRun ? "正在中断会话…" : statusLabel}
+          </span>
+        </div>
+        {canCancelRun && onCancelRun && (
+          <button
+            type="button"
+            className="agent-activity-stop-btn"
+            onClick={onCancelRun}
+            disabled={isCancellingRun}
+            title="中断当前 Agent 会话"
+          >
+            <StopIcon size={12} />
+            <span>{isCancellingRun ? "中断中…" : "停止"}</span>
+          </button>
         )}
-        <span className="agent-activity-status-label">{statusLabel}</span>
       </div>
 
       {hasTrace && (

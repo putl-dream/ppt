@@ -42,6 +42,7 @@ const api: DesktopApi = {
     ipcRenderer.invoke("presentation:export", presentation, options),
   selectDirectory: (defaultPath) => ipcRenderer.invoke("dialog:select-directory", defaultPath),
   cancelAgentRun: (runId) => ipcRenderer.invoke("agent:cancel", runId),
+  cancelAgentSession: (sessionId) => ipcRenderer.invoke("agent:cancel-session", sessionId),
   resolveToolApproval: (runId, approvalId, approved) =>
     ipcRenderer.invoke("agent:resolve-tool-approval", runId, approvalId, approved),
 };

@@ -187,6 +187,7 @@ export interface DesktopApi {
   ): Promise<string | null>;
   selectDirectory(defaultPath?: string): Promise<string | null>;
   cancelAgentRun(runId: string): Promise<boolean>;
+  cancelAgentSession(sessionId: string): Promise<boolean>;
   resolveToolApproval(runId: string, approvalId: string, approved: boolean): Promise<boolean>;
 }
 

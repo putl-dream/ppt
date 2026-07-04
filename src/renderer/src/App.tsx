@@ -291,6 +291,10 @@ export function App() {
   const requestStatusStepIdRef = useRef<string | null>(null);
   const streamMessageIdsRef = useRef(new Map<string, string>());
   const statusTypingTimerRef = useRef<number | null>(null);
+  const [isCancellingRun, setIsCancellingRun] = useState(false);
+
+  const isRunAbortedMessage = (message: string) =>
+    message === "会话已中断。" || message === "任务已取消。";
 
   const syncActivityTrace = useCallback((next: AgentActivityItem[]) => {
     activeRunTraceRef.current = next;
@@ -880,12 +884,19 @@ export function App() {
     };
 
     if (result.status === "chat") {
+      const interrupted = isRunAbortedMessage(result.message);
+      const resolveInterruptedContent = (existingContent: string) => {
+        if (!interrupted) return result.message;
+        const trimmed = existingContent.trim();
+        return trimmed ? `${trimmed}\n\n---\n\n*会话已中断*` : "会话已中断。";
+      };
+
       if (messageId) {
         setChatMessages((prev) => prev.map((message) =>
           message.id === messageId
             ? {
                 ...message,
-                content: result.message,
+                content: resolveInterruptedContent(message.content),
                 activityTrace: resolvedTrace(message.activityTrace),
                 threadId: result.threadId,
               }
@@ -897,11 +908,14 @@ export function App() {
           {
             id: crypto.randomUUID(),
             role: "assistant",
-            content: result.message,
+            content: interrupted ? "会话已中断。" : result.message,
             activityTrace: resolvedTrace(),
             threadId: result.threadId,
           },
         ]);
+      }
+      if (interrupted) {
+        triggerToast("会话已中断");
       }
       return;
     }
@@ -1146,17 +1160,49 @@ export function App() {
       await new Promise<void>((resolve) => queueMicrotask(resolve));
       await applyAgentResult(result, activeRunTraceRef.current, runId);
     } catch (err) {
-      setChatMessages((prev) => [
-        ...prev,
-        {
-          id: crypto.randomUUID(),
-          role: "assistant",
-          content: `执行指令时发生错误：${err instanceof Error ? err.message : String(err)}`,
-        },
-      ]);
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      const interrupted = /aborted by user|会话已中断|任务已取消/i.test(errorMessage);
+      if (interrupted) {
+        const runMessageId = streamMessageIdsRef.current.get(runId);
+        const interruptedTrace = markTraceComplete(activeRunTraceRef.current);
+        if (runMessageId) {
+          setChatMessages((prev) => prev.map((message) =>
+            message.id === runMessageId
+              ? {
+                  ...message,
+                  content: message.content.trim()
+                    ? `${message.content.trim()}\n\n---\n\n*会话已中断*`
+                    : "会话已中断。",
+                  activityTrace: interruptedTrace.length > 0 ? interruptedTrace : message.activityTrace,
+                }
+              : message,
+          ));
+        } else {
+          setChatMessages((prev) => [
+            ...prev,
+            {
+              id: crypto.randomUUID(),
+              role: "assistant",
+              content: "会话已中断。",
+              activityTrace: interruptedTrace.length > 0 ? interruptedTrace : undefined,
+            },
+          ]);
+        }
+        triggerToast("会话已中断");
+      } else {
+        setChatMessages((prev) => [
+          ...prev,
+          {
+            id: crypto.randomUUID(),
+            role: "assistant",
+            content: `执行指令时发生错误：${errorMessage}`,
+          },
+        ]);
+      }
     } finally {
       activeRunIdRef.current = null;
       setActiveRunId(null);
+      setIsCancellingRun(false);
       streamMessageIdsRef.current.delete(runId);
       if (statusTypingTimerRef.current !== null) {
         window.clearInterval(statusTypingTimerRef.current);
@@ -1173,11 +1219,30 @@ export function App() {
   }
 
   const handleCancelRun = async () => {
-    if (activeRunIdRef.current) {
-      const cancelled = await window.desktopApi.cancelAgentRun(activeRunIdRef.current);
-      if (cancelled) {
-        triggerToast("🚫 任务已取消");
+    if (!activeRunIdRef.current || isCancellingRun) return;
+
+    setIsCancellingRun(true);
+    syncActivityTrace(
+      appendStep(activeRunTraceRef.current, "正在中断当前会话…", "running"),
+    );
+
+    try {
+      let cancelled = await window.desktopApi.cancelAgentRun(activeRunIdRef.current);
+      if (!cancelled && activeSessionId) {
+        cancelled = await window.desktopApi.cancelAgentSession(activeSessionId);
       }
+      if (cancelled) {
+        triggerToast("正在中断会话…");
+      } else {
+        setIsCancellingRun(false);
+        syncActivityTrace(
+          appendStep(activeRunTraceRef.current, "中断请求未能送达，请稍后重试", "done"),
+        );
+        triggerToast("当前没有可中断的任务");
+      }
+    } catch (error) {
+      setIsCancellingRun(false);
+      triggerToast(error instanceof Error ? error.message : "中断会话失败");
     }
   };
 
@@ -1749,7 +1814,8 @@ export function App() {
                   selectedTheme={selectedTheme}
                   selectedPalette={selectedPalette}
                   activeRunId={activeRunId}
-                  onCancelRun={handleCancelRun}
+                  onCancelRun={() => void handleCancelRun()}
+                  isCancellingRun={isCancellingRun}
                   onRetry={handleRetryMessage}
                   themeMode={computedTheme}
                   onToggleThemeMode={() => setThemeMode(computedTheme === "light" ? "dark" : "light")}

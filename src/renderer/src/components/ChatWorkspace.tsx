@@ -67,6 +67,7 @@ interface ChatWorkspaceProps {
   selectedPalette: string;
   activeRunId?: string | null;
   onCancelRun?: () => void;
+  isCancellingRun?: boolean;
   onRetry?: (msgId: string) => void;
   themeMode: "light" | "dark";
   onToggleThemeMode: () => void;
@@ -118,6 +119,7 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
   selectedPalette,
   activeRunId,
   onCancelRun,
+  isCancellingRun = false,
   onRetry,
   themeMode,
   onToggleThemeMode,
@@ -172,6 +174,8 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
   const activeTasks = latestPlan?.tasks ?? [];
   const planGoal = latestPlan?.goal ?? sessionGoal;
   const showTaskPlan = isTaskPlanActive(activeTasks);
+
+  const canCancelRun = Boolean(busy && activeRunId && onCancelRun);
 
   const scrollToBottom = useCallback((instant: boolean) => {
     const viewport = scrollViewportRef.current;
@@ -297,6 +301,9 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
             submitLabel="生成"
             pendingToolApproval={pendingApprovalProps}
             onResolveToolApproval={onResolveToolApproval}
+            canCancelRun={canCancelRun}
+            onCancelRun={onCancelRun}
+            isCancellingRun={isCancellingRun}
           />
 
           {/* Quick recommendations suggestions below */}
@@ -676,6 +683,9 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
           activityTrace={activityTrace}
           activeToolName={activeToolName}
           suppressTrace={Boolean(streamingMessageId)}
+          canCancelRun={canCancelRun}
+          onCancelRun={onCancelRun}
+          isCancellingRun={isCancellingRun}
         />
 
         <div ref={messagesEndRef} />
@@ -731,6 +741,9 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
             submitLabel="生成"
             pendingToolApproval={pendingApprovalProps}
             onResolveToolApproval={onResolveToolApproval}
+            canCancelRun={canCancelRun}
+            onCancelRun={onCancelRun}
+            isCancellingRun={isCancellingRun}
           />
         </div>
         </div>
