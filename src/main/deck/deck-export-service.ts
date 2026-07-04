@@ -10,6 +10,7 @@ export interface DeckExportInput {
   presentation: Presentation;
   options: ExportPresentationOptions;
   filePath?: string;
+  format?: "pptx" | "json" | "html";
 }
 
 function sanitizeFileName(title: string): string {
@@ -34,9 +35,10 @@ function resolveExportOptions(
 export class DeckExportService {
   async exportDeck(input: DeckExportInput): Promise<DeckExportResult> {
     const mergedOptions = resolveExportOptions(input.presentation, input.options);
+    const format = input.format ?? "pptx";
     const filePath =
       input.filePath ??
-      (await this.createDefaultExportPath(input.presentation, "pptx"));
+      (await this.createDefaultExportPath(input.presentation, format));
 
     if (filePath.endsWith(".json")) {
       await writeFile(filePath, JSON.stringify(input.presentation, null, 2), "utf8");

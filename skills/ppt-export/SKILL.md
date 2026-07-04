@@ -8,7 +8,7 @@ allowed-tools:
   - ExecuteExtraTool
 ---
 
-# 导出 PPTX
+# 导出 PPTX / HTML
 
 ## 目标
 
@@ -18,7 +18,7 @@ allowed-tools:
 
 1. `ReadPresentationSnapshot`：slides 非空、title 已设、theme 已应用。
 2. 可选 LoadSkill `deck-review`，严重问题为 0 再导出。
-3. 向用户确认导出格式（当前仅支持 **pptx**，pdf 尚未实现）。
+3. 向用户确认导出格式：**pptx**（默认）或 **html**（网页预览）；pdf 尚未实现。
 
 ## 工作流
 
@@ -26,6 +26,12 @@ allowed-tools:
 
 ```json
 {"format": "pptx"}
+```
+
+或 HTML：
+
+```json
+{"format": "html"}
 ```
 
 2. 将返回的 `filePath`、`revision` 告知用户。

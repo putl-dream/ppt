@@ -174,5 +174,6 @@ describe("P1 deferred tools", () => {
     expect(result.preview?.layout).toBe("cover");
     expect(result.preview?.backgroundVariant).toBe("hero");
     expect(result.preview?.textElements.length).toBe(1);
+    expect(result.thumbnail).toBeNull();
   });
 });

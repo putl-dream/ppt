@@ -49,4 +49,24 @@ describe("ExportPptx deferred tool", () => {
       "PDF export is not supported yet",
     );
   });
+
+  it("exports html format", async () => {
+    const presentation = createStarterPresentation();
+    const registry = createDefaultToolRegistry();
+    const context = {
+      presentation,
+      selectedElementIds: [],
+      discoverySession: { discoveredToolNames: new Set<string>() },
+      registry,
+      messageHistory: [],
+    };
+
+    const result = await exportPptxTool.execute({ format: "html" }, context);
+
+    expect(result.success).toBe(true);
+    expect(result.filePath.endsWith(".html")).toBe(true);
+    expect(result.slideCount).toBe(presentation.slides.length);
+
+    tempExportDirs.push(join(result.filePath, ".."));
+  });
 });

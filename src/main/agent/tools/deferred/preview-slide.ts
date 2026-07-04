@@ -4,10 +4,23 @@ import type { Slide, TextElement, ImageElement } from "@shared/presentation";
 import { resolveSlideBackgroundWithVariant } from "@shared/slide-variant";
 import { listLayoutSlots } from "@shared/layout-slots";
 import { fontFamilyToCss, resolveElementFontFamily } from "@shared/typography";
+import { slideThumbnailService } from "../../../deck/slide-thumbnail-service";
 
 export const previewSlideSchema = z.object({
   slideId: z.string().describe("要预览的幻灯片 ID"),
+  includeThumbnail: z
+    .boolean()
+    .optional()
+    .default(true)
+    .describe("是否生成 PNG 缩略图（640×360 base64）；非 Electron 环境自动跳过"),
 });
+
+export interface SlidePreviewThumbnail {
+  pngBase64: string;
+  width: number;
+  height: number;
+  mimeType: "image/png";
+}
 
 export interface SlidePreviewSummary {
   slideId: string;
@@ -63,17 +76,17 @@ function describeSlide(slide: Slide, theme: string): string {
  */
 export const previewSlideTool: ToolDefinition<
   typeof previewSlideSchema,
-  { preview: SlidePreviewSummary | null }
+  { preview: SlidePreviewSummary | null; thumbnail: SlidePreviewThumbnail | null }
 > = {
   name: "PreviewSlide",
-  description: "获取单页幻灯片的视觉摘要（layout、槽位、元素位置、背景），用于排版后自检。",
+  description: "获取单页幻灯片的视觉摘要（layout、槽位、元素位置、背景）及 PNG 缩略图，用于排版后自检。",
   category: "deferred",
   loadPolicy: "deferred",
   inputSchema: previewSlideSchema,
   risk: "low",
   execute: async (args, context) => {
     const slide = context.presentation.slides.find((item) => item.id === args.slideId);
-    if (!slide) return { preview: null };
+    if (!slide) return { preview: null, thumbnail: null };
 
     const theme = context.presentation.theme || "nordic";
     const palette = context.presentation.palette || "cyan";
@@ -121,6 +134,15 @@ export const previewSlideTool: ToolDefinition<
       description: describeSlide(slide, theme),
     };
 
-    return { preview };
+    let thumbnail: SlidePreviewThumbnail | null = null;
+    if (args.includeThumbnail) {
+      try {
+        thumbnail = await slideThumbnailService.captureSlide(slide, theme, palette);
+      } catch {
+        thumbnail = null;
+      }
+    }
+
+    return { preview, thumbnail };
   },
 };

@@ -1,7 +1,7 @@
 # PPT 样式表达能力与能力建设方案
 
 > 版本：2026-07-04  
-> 状态：P0–P2 引擎已实现；**Agent 排版设计专责角色待建**（见 [ppt-capability-status-plan.md](./ppt-capability-status-plan.md)）
+> 状态：P0–P2 引擎已实现；**Design Agent（Phase E）已落地**（见 [ppt-capability-status-plan.md](./ppt-capability-status-plan.md)）
 > 关联：`skills/ppt-layout/`、参考模板 `Documents/PPT/layout/`、[guizang-ppt-skill](https://github.com/op7418/guizang-ppt-skill)
 
 ## 1. 背景与目标
@@ -25,52 +25,51 @@ Agent PPT 采用 **Presentation JSON + SubmitCommands** 两阶段建稿（内容
 | 维度 | 能力 | 实现 |
 |------|------|------|
 | 全局配色 | 5 theme × 4 palette | `set-theme` → `getThemePaletteColors` |
-| 版式结构 | 8 种 layout | `update-slide-layout` → `applyLayout` |
-| 文本 | fontSize、bold、color、align | text element / `update-text-style` |
-| 形状 | rectangle、circle、arrow、line | shape element |
-| 图片 | url、borderRadius | `add-element`（手动坐标） |
-| 页眉 | slide.title + accent 线 | 渲染层 chrome（非画布） |
-| 导出 | 基础 PPTX | `ppt-exporter.ts`（渐变 theme 退化为纯色） |
-| Agent 流程 | 两阶段 + LayoutChoiceCard | `ppt-workflow`、`ppt-layout` skill |
+| 版式结构 | **11 种 layout** | `update-slide-layout` → `applyLayout` |
+| 文本 | fontSize、bold、color、align、textRole、fontFamily | text element / `update-text-style` |
+| 形状 | rectangle、circle、arrow、line | shape element（P0-5 渲染对齐） |
+| 图片 | url、borderRadius、imageSlot、objectFit | InsertSlideImage 入槽 |
+| 数据元素 | chart / table / icon | P2 元素 + BeautifyChart/Table |
+| 页背景 | backgroundVariant + slideVariant | light/dark/hero 页级节奏 |
+| 页眉 | slide.title + accent 线 | 渲染层 chrome |
+| 导出 | PPTX + HTML + JSON | `deck-export-service.ts` |
+| Agent 流程 | 两阶段 + Design Agent + Executor | `ppt-workflow`、`ppt-design-layout`、`ppt-layout` |
 
-**8 种 layout**：`cover` `section` `concept` `comparison` `process` `architecture` `case` `summary`
+**11 种 layout**：`cover` `section` `concept` `comparison` `process` `architecture` `case` `summary` `toc` `quote` `image-grid`
 
 **5 种 theme**：`nordic` `midnight` `ocean` `sunset` `purple`
 
 ### 2.2 能力边界（真实上限）
 
-当前稳定产出：**统一主题的卡片式商务 PPT**——矩形卡片 + 顶/侧 accent 条 + 固定字号层级。
+当前稳定产出：**统一主题的商务卡片风 PPT**——语义 layout + 主题 + 卡片风 + chart/table/icon 点缀；Design Agent 按 Rubric 选版式与节奏。
 
-`applyLayout` 负责全部自动排版；Agent 在排版阶段应依赖 `set-theme` + `update-slide-layout`，而非手画坐标。
+`applyLayout` 负责全部自动排版；Agent 在排版阶段应依赖 layout-plan → set-theme + update-slide-layout + update-slide-variant，而非手画坐标。
 
-### 2.3 表达不了的样式（缺口）
+### 2.3 剩余缺口
 
 | 参考 / guizang 能力 | 现状 | 严重度 |
 |---------------------|------|--------|
-| 衬线标题 + 无衬线正文 + 等宽 meta | theme 仅在 UI 加 font 类，JSON 无 `fontFamily` | 高 |
-| 每页 light/dark/hero 背景节奏 | 全 deck 同一 slide 背景 | 中 |
-| 左文右图、图片网格、主视觉图 | `applyLayout` 无 image 槽位 | 高 |
-| KPI 塔、横条图、可视化时间轴 | 无 chart 元素；`BeautifyChart` 空实现 | 高 |
-| 表格 | 无 table 元素；`BeautifyTable` 空实现 | 中 |
-| 图标（Lucide 等） | 无 icon 元素 | 中 |
-| 目录页、编号徽章、装饰线/点阵 | 无专用 layout | 中 |
-| arrow/line shape 视觉 | 画布渲染近似矩形，与 PPTX 导出不一致 | 低 |
-| 22+ 瑞士 / 10 杂志 HTML 版式 | 仅 8 种语义映射（skill 层） | 中 |
-| 入场动效 | 不支持 | 低 |
+| 像素级等价参考 `.pptx` 模板 | 语义 layout，非像素级 | 低（非目标） |
+| 22+ 瑞士 HTML 版式 | 11 种语义 layout | 低（非目标） |
+| PreviewSlide 缩略图 | ✅ 640×360 PNG base64（Electron） |
+| Chart PPTX 原生图表 | SVG rasterize 为图片 | 低 |
+| Icon 全量 Lucide | 24 内置 | 低 |
+| HTML guizang 桥接 | 自研简单模板 | 低 |
+| 入场动效 | 不支持 | 低（非目标） |
 
-### 2.4 Skill 与引擎断层
+### 2.4 Skill 与引擎对齐（Phase A 已完成）
 
 ```
 ┌─────────────────────────────────────────┐
-│ guizang / 参考 PPT 视觉目标              │  ← Skill 已描述，引擎未覆盖
+│ guizang / 参考 PPT 视觉目标              │  ← Skill 语义映射 + Rubric
 ├─────────────────────────────────────────┤
-│ 叙事 + layout 选择 + theme              │  ← Agent Skill 能指导
+│ Design Agent → layout-plan → Executor   │  ← Phase E 流程
 ├─────────────────────────────────────────┤
-│ 8 layout + 5 theme 卡片风               │  ← 当前真实上限
+│ 11 layout + P2 元素 + slideVariant      │  ← 当前引擎上限
 └─────────────────────────────────────────┘
 ```
 
-**结论**：需扩展**数据模型 + layout 引擎 + Deferred Tool**，不能仅靠 Skill 文案提升视觉效果。
+**结论**：引擎 P0–P2 与 Skill 已同步；下一优先级为 Phase C（PreviewSlide 缩略图）以支持设计验收。
 
 ---
 
@@ -255,25 +254,27 @@ P2 按产品需求选型
 
 ---
 
-## 11. Agent 排版设计专责（Phase E · 待实施）
+## 11. Agent 排版设计专责（Phase E · 已完成）
 
 > 详见 [ppt-capability-status-plan.md](./ppt-capability-status-plan.md) §1.1–§1.2、Phase E。
 
-**问题**：P0–P2 解决的是**引擎能做什么**；当前体验瓶颈是**谁来做设计决策**。主 Agent 在排版阶段大量思考，却常产出 concept 卡片堆砌、无 section/toc/case 节奏的单调解。
+**已落地**：
 
-**方案**：新增 **Design Agent**（Task 委派），在内容草稿与用户确认排版方式之后：
-
-1. 读取 snapshot / storyboard  
-2. 按 **设计 Rubric**（叙事节奏、版式匹配、视觉层级、反模式）产出 `layout-plan.json`  
-3. 主 Agent 或 Executor **只执行 plan**（set-theme、update-slide-layout、Beautify*），不再 freestyle 选 layout  
+1. `skills/ppt-design-layout/SKILL.md` — Design Agent 专责 Skill（Rubric + layout-plan 格式）
+2. `src/shared/layout-plan.ts` — layout-plan 解析、Rubric 校验、Executor 命令生成
+3. `ppt-workflow` 阶段 4c Design + 5 Execute 分离
+4. `sub-system-prompt.ts` — Design Task 禁止 SubmitCommands
+5. `ppt-layout` Executor 模式 — 严格按 plan 执行
+6. `deck-review` — Rubric A–E 验收
+7. `tests/fixtures/layout-plan-tech-evolution.json` — 示例 redesign fixture
 
 **与现有 Skill 关系**：
 
-| Skill | 定位调整 |
-|-------|----------|
-| `ppt-design` | 保留 theme 速查；deck 级 theme 写入 layout-plan |
-| `ppt-design-layout`（新建） | Design Agent 专责：Rubric + layout-plan 格式 |
-| `ppt-layout` | 降为 **Executor**：按 plan 批量 SubmitCommands |
+| Skill | 定位 |
+|-------|------|
+| `ppt-design` | theme 速查；deck 级 theme 写入 layout-plan |
+| `ppt-design-layout` | Design Agent 专责：Rubric + layout-plan 格式 |
+| `ppt-layout` | **Executor**：按 plan 批量 SubmitCommands |
 | `deck-review` | 验收 Rubric + ValidateDeckLayout |
 
 ---
@@ -285,4 +286,4 @@ P2 按产品需求选型
 | 2026-07-04 | 初版：能力评估 + P0/P1/P2 方案 |
 | 2026-07-04 | P0 验收通过；P1 实现 toc/quote/image-grid + 5 个 deferred tools |
 | 2026-07-04 | P2 实现：slide variant、chart/table/icon 元素、HTML 导出、layout 注册表 |
-| 2026-07-04 | 新增 §11 Design Agent 专责方案；链至 ppt-capability-status-plan |
+| 2026-07-04 | Phase E Design Agent 落地；§2 能力评估刷新；Phase B 导出/html |

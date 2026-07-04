@@ -11,6 +11,7 @@ import {
   type ExportPresentationOptions,
 } from "@shared/ipc";
 import { deckExportService } from "./deck/deck-export-service";
+import { slideThumbnailService } from "./deck/slide-thumbnail-service";
 import { AgentService, type AgentServiceEvent } from "./agent/service";
 import {
   agentExecutionStrategySchema,
@@ -321,6 +322,7 @@ app.whenReady().then(async () => {
         defaultPath: `${presentation.title || "未命名演示文稿"}.pptx`,
         filters: [
           { name: "PowerPoint 演示文稿 (*.pptx)", extensions: ["pptx"] },
+          { name: "HTML 网页 (*.html)", extensions: ["html"] },
           { name: "JSON 原始数据 (*.json)", extensions: ["json"] },
         ],
       };
@@ -559,4 +561,8 @@ app.whenReady().then(async () => {
 
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();
+});
+
+app.on("will-quit", () => {
+  slideThumbnailService.dispose();
 });

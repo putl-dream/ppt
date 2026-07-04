@@ -31,8 +31,9 @@ allowed-tools:
 | 图片入槽 | InsertSlideImage | add/update image（自动坐标） |
 | 创意装饰 | AddLayoutDecorations | shape 装饰 commands |
 | 字体角色 | ApplyTypography | update-text-style 批量 |
-| 单页预览 | PreviewSlide | 视觉摘要（layout/槽位/元素） |
+| 单页预览 | PreviewSlide | 结构化摘要 + PNG 缩略图（base64） |
 | 版式节奏 | ValidateDeckLayout | 连续 layout / 多样性报告 |
+| 页级背景节奏 | UpdateSlideVariant | `update-slide-variant` commands |
 | 一致性分析 | AnalyzeDeckConsistency | 报告（不直接改 deck） |
 
 ## P2 元素能力

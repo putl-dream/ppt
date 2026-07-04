@@ -1,7 +1,7 @@
 # PPT 样式能力现状与后续计划
 
 > 版本：2026-07-04  
-> 状态：**P0–P2 引擎最小化实现已完成**；**Agent 排版设计角色缺失**是当前主要瓶颈  
+> 状态：**P0–P2 引擎已实现**；**Phase E/A/B 已完成**；**Phase C-1 PreviewSlide 缩略图已完成**  
 > 关联：[ppt-style-capability-plan.md](./ppt-style-capability-plan.md)（原始分阶段方案）
 
 ---
@@ -20,7 +20,7 @@
 | 像素级等价参考 `.pptx` 模板 | ❌ 未达成 |
 | guizang HTML/WebGL 全栈 | ❌ 非目标；仅基础 HTML 导出 |
 | 22+ 瑞士版式 | ❌ 非目标；11 种语义 layout |
-| **排版设计有专责 Agent** | ❌ **未达成——当前最大体验瓶颈** |
+| **排版设计有专责 Agent** | ✅ **Phase E 已落地**（`ppt-design-layout` + layout-plan + Executor 流程） |
 
 ### 1.1 核心瓶颈：排版设计无专责 Agent
 
@@ -174,7 +174,7 @@
 | P1-2 | AddLayoutDecorations | ✅ | `add-layout-decorations.ts` |
 | P1-3 | InsertSlideImage | ✅ | 槽位 + 比例；无需手填 x/y |
 | P1-4 | ApplyTypography | ✅ | 批量 `update-text-style` |
-| P1-5 | PreviewSlide | ⚠️ | **结构化 JSON 摘要**，非截图 / 缩略图 IPC |
+| P1-5 | PreviewSlide | ✅ | 结构化 JSON + **640×360 PNG 缩略图**（Electron capturePage） |
 
 **P1 验收**：10 页商务 deck、KPI 页、InsertSlideImage 入槽、ValidateDeckLayout 节奏校验 — 均可达成。
 
@@ -243,11 +243,10 @@ type: "chart" | "table" | "icon";
 | InsertSlideImage | P1 | ✅ | |
 | AddLayoutDecorations | P1 | ✅ | |
 | ApplyTypography | P1 | ✅ | |
-| PreviewSlide | P1 | ✅ | 结构化摘要，非截图 |
+| PreviewSlide | P1 | ✅ | JSON 摘要 + PNG 缩略图 base64 |
 | ValidateDeckLayout | P1 | ✅ | |
-| ExportPptx | 已有 | ✅ | 仅 pptx；不含 html |
-
-**缺失（可选）**：`UpdateSlideVariant` 专用工具（当前需手写 `update-slide-variant` command）。
+| ExportPptx | 已有 | ✅ | pptx + html；pdf 未实现 |
+| UpdateSlideVariant | B-2 | ✅ | 单页 slideVariant 命令 |
 
 ---
 
@@ -257,14 +256,14 @@ type: "chart" | "table" | "icon";
 
 | 资产 | 状态 | 问题 |
 |------|------|------|
-| `skills/ppt-layout/layout-catalog.md` | ✅ P0/P1 | 缺 P2 chart/table/icon/slideVariant |
-| `skills/ppt-layout/style-modes.md` | ⚠️ | 第 31 行仍写「concept 暂无 image 槽位」——已过时 |
-| `skills/ppt-layout/checklist.md` | ⚠️ | 「P2」指文案密度，与引擎 P2 无关 |
-| `skills/ppt-beautify/SKILL.md` | ⚠️ | 未描述 chart/table/icon 元素能力 |
-| `skills/deck-review/SKILL.md` | ⚠️ | 未含 P2 元素类型审查项 |
-| `docs/ppt-style-capability-plan.md` | ⚠️ | 顶部仍标「规划」；§2 能力评估未刷新 |
-
-**影响**：Agent 可能不知道可使用 chart / table / icon / slideVariant，引擎能力调用不稳定。
+| `skills/ppt-layout/layout-catalog.md` | ✅ | 含 P2 chart/table/icon/slideVariant |
+| `skills/ppt-layout/style-modes.md` | ✅ | slideVariant 与 guizang 节奏映射已补充 |
+| `skills/ppt-layout/checklist.md` | ✅ | 区分文案 P2 与引擎 P2 |
+| `skills/ppt-beautify/SKILL.md` | ✅ | chart/table/icon + UpdateSlideVariant |
+| `skills/deck-review/SKILL.md` | ✅ | Rubric A–E + P2 元素审查 |
+| `skills/ppt-design-layout/SKILL.md` | ✅ | Design Agent 专责 Skill |
+| `skills/ppt-layout/design-principles.md` | ✅ | Rubric A–E 单一来源 |
+| `docs/ppt-style-capability-plan.md` | ✅ | §2 能力评估已刷新 |
 
 ---
 
@@ -307,13 +306,13 @@ type: "chart" | "table" | "icon";
 | Chart 导出 | SVG  rasterize 为图片，非 PPTX 原生图表 |
 | Icon 覆盖 | 24 个内置名，非 npm lucide 全库 |
 | Layout 注册表 | 仅元数据；`applyLayout` 仍为 ~670 行单体 |
-| PreviewSlide | JSON 摘要，Agent 不能「看」缩略图 |
+| PreviewSlide | ✅ JSON 摘要 + PNG 缩略图 |
 | HTML 导出 | 自研简单模板，非 guizang 桥接 |
 | UI 入口 | 画布仅 text/image/shape 手动添加；chart/table/icon 仅 Agent 路径 |
-| ExportPptx 工具 | 不支持 html；pdf 未实现 |
-| Skill 滞后 | P2 能力未写入 Agent Skill，调用依赖模型自行推断 |
-| **无 Design Agent** | 主 Agent 兼设计+执行，易过度思考且版式单调 |
-| **设计 Rubric 未落地** | 原则在 design-principles.md，未绑定 Task/Skill/验收 |
+| ExportPptx 工具 | 支持 pptx + html；pdf 未实现 |
+| Skill 滞后 | ✅ Phase A 已同步 |
+| **无 Design Agent** | ✅ Phase E 已落地 |
+| **设计 Rubric 未落地** | ✅ design-principles.md + deck-review |
 
 ---
 
@@ -321,82 +320,45 @@ type: "chart" | "table" | "icon";
 
 > **最高优先级**：Phase E（Design Agent）解决「引擎够用、设计不理想」的主矛盾；Phase A 与之并行推进 Skill/Rubric 落地。
 
-### Phase E — Design Agent 专责排版设计（最高优先级，1–2 迭代）
+### Phase E — Design Agent 专责排版设计 ✅ 已完成
 
-> 目标：将「什么是好设计」从主 Agent 推理中剥离，形成**先设计、后执行**的固定流程。
-
-| # | 任务 | 产出 | 说明 |
-|---|------|------|------|
-| E-1 | 新建 `skills/ppt-design-layout/SKILL.md` | Design Agent 专责 Skill | 内含 §1.2 Rubric、layout-plan 输出格式、禁止事项 |
-| E-2 | 定义 `layout-plan` 产物 | `slides/layout-plan.json` 或扩展 storyboard | 每页：`layout`、`slideVariant`、`theme`（deck 级）、`enhancements`（chart/icon/InsertSlideImage） |
-| E-3 | 升级 `ppt-workflow` | 阶段 4c Design + 5 Execute 分离 | 主 Agent Task 委派 Design Agent；自身只做 Executor |
-| E-4 | Design 专用子 Agent prompt | `sub-system-prompt` 或 Task description 模板 | **禁止** SubmitCommands；**只** 输出 layout-plan + 简短设计说明 |
-| E-5 | Layout Executor  checklist | 嵌入 `ppt-layout` | 严格按 plan 执行；不得擅自改 layout |
-| E-6 | deck-review 对齐 Rubric | `deck-review/SKILL.md` | 增加 §1.2 A–E 检查项；与 ValidateDeckLayout 合并报告 |
-| E-7 | 示例 layout-plan | 文档 + 测试 fixture | 含「技术演进」类 deck 的 redesign 对照（concept 滥用→process/case/toc） |
-
-**layout-plan 单页字段（草案）**：
-
-```json
-{
-  "slideId": "...",
-  "title": "趋势一：大模型规模化",
-  "narrativeRole": "content",
-  "layout": "process",
-  "slideVariant": "default",
-  "rationale": "四条为演进阶段，非并列概念",
-  "enhancements": []
-}
-```
-
-**验收**：
-
-1. 同一内容草稿，经 Design Agent 后 layout 种类 ≥3（7 页 deck ≥3）
-2. 含 KPI/案例的 deck 至少 1 页 `case` 或 chart
-3. 主 Agent 排版阶段模型调用步骤数下降（设计决策不再重复推理）
-4. deck-review Rubric A1–A5 通过率提升
+| # | 任务 | 状态 |
+|---|------|------|
+| E-1 | `skills/ppt-design-layout/SKILL.md` | ✅ |
+| E-2 | `layout-plan` 产物 + `src/shared/layout-plan.ts` | ✅ |
+| E-3 | `ppt-workflow` 阶段 4c Design + 5 Execute | ✅ |
+| E-4 | Design 专用子 Agent prompt | ✅ `sub-system-prompt.ts` |
+| E-5 | Layout Executor checklist | ✅ `ppt-layout/SKILL.md` |
+| E-6 | deck-review 对齐 Rubric | ✅ |
+| E-7 | 示例 layout-plan fixture | ✅ `tests/fixtures/layout-plan-tech-evolution.json` |
 
 ---
 
-### Phase A — 文档与 Skill 同步（高 ROI，1 迭代）
+### Phase A — 文档与 Skill 同步 ✅ 已完成
 
-> 目标：让 Agent 稳定调用已有引擎能力，避免「实现了但用不了」。
-
-| # | 任务 | 产出 |
+| # | 任务 | 状态 |
 |---|------|------|
-| A-1 | 更新 `layout-catalog.md` | 增加 P2：chart/table/icon、slideVariant 用法与示例 commands |
-| A-2 | 修正 `style-modes.md` | 删除过时「无 image 槽位」；补充 slideVariant 与 guizang 节奏映射 |
-| A-3 | 更新 `ppt-beautify/SKILL.md` | BeautifyChart/Table 新行为（转元素而非仅改样式） |
-| A-4 | 更新 `checklist.md` | 区分「文案 P2」与「引擎 P2」；增加 chart/table 检查项 |
-| A-5 | 刷新 `ppt-style-capability-plan.md` | 状态改为「P0–P2 引擎已实现」；§2 能力评估对齐现状 |
-| A-6 | 更新 `deck-review/SKILL.md` | 增加 P2 元素类型与 slideVariant 审查 |
-| A-7 | 将 §1.2 Rubric 写入 `design-principles.md` | 与 Design Agent Skill 单一来源 |
-
-**验收**：LoadSkill `ppt-design-layout` + `ppt-layout` 后，Agent 可正确选用 chart/table/icon/slideVariant，并按 Rubric 选 layout。
+| A-1 ~ A-7 | layout-catalog / style-modes / beautify / checklist / deck-review / design-principles / ppt-style-capability-plan | ✅ |
 
 ---
 
-### Phase B — 工具与导出打通（中 ROI，1 迭代）
+### Phase B — 工具与导出打通 ✅ 已完成
 
-| # | 任务 | 说明 |
+| # | 任务 | 状态 |
 |---|------|------|
-| B-1 | ExportPptx 支持 `html` format | 或新增 ExportHtml deferred tool |
-| B-2 | 可选：`UpdateSlideVariant` 工具 | 简化 Agent 调用页级节奏 |
-| B-3 | UI 导出对话框 | 支持 `.html` 选项（若产品需要网页 PPT） |
-
-**验收**：Agent 或用户可一键导出 HTML，无需手写文件路径。
+| B-1 | ExportPptx 支持 `html` format | ✅ |
+| B-2 | `UpdateSlideVariant` 工具 | ✅ |
+| B-3 | UI 导出对话框 `.html` 选项 | ✅ |
 
 ---
 
-### Phase C — 预览与体验补强（按需，1–2 迭代）
+### Phase C — 预览与体验补强（进行中）
 
-| # | 任务 | 说明 |
+| # | 任务 | 状态 |
 |---|------|------|
-| C-1 | PreviewSlide 缩略图 | 截图 API 或 renderer IPC 返回 base64 PNG |
-| C-2 | UI 添加 chart/table/icon | 画布工具栏扩展元素类型 |
-| C-3 | Icon 扩展 | 接入 lucide 子集或按需动态 SVG |
-
-**验收**：P1-5 原文「排版后可看到结果」可真正满足。
+| C-1 | PreviewSlide 缩略图 | ✅ `slide-thumbnail-service.ts` + base64 PNG |
+| C-2 | UI 添加 chart/table/icon | 待做 |
+| C-3 | Icon 扩展 | 待做 |
 
 ---
 
@@ -414,13 +376,11 @@ type: "chart" | "table" | "icon";
 ## 10. 建议实施顺序
 
 ```
-Phase E（Design Agent）   ← 最高优先级，解决设计不理想主矛盾
-    ‖ 并行
-Phase A（Skill + Rubric 落地）
+Phase E（Design Agent）   ✅ 已完成
+Phase A（Skill + Rubric） ✅ 已完成
+Phase B（导出/工具打通）  ✅ 已完成
     ↓
-Phase B（导出/工具打通）
-    ↓
-Phase C（PreviewSlide 缩略图 — 设计验收关键依赖）
+Phase C（PreviewSlide 缩略图）  ✅ C-1 已完成；C-2/C-3 待做
     ↓
 Phase D（引擎深化）
 ```
@@ -442,14 +402,15 @@ Phase D（引擎深化）
 | Layout 注册表 | `src/shared/layout-registry.ts`、`layout-register-builtin.ts` |
 | 页级 variant | `src/shared/slide-variant.ts` |
 | Chart / Icon 工具 | `src/shared/chart-utils.ts`、`icon-registry.ts` |
-| HTML 导出 | `src/shared/html-exporter.ts` |
+| 缩略图服务 | `src/main/deck/slide-thumbnail-service.ts` |
+| Slide HTML 渲染 | `src/shared/slide-html-render.ts` |
 | PPTX 导出 | `src/main/ppt-exporter.ts` |
 | Agent 工具 | `src/main/agent/tools/deferred/` |
 | P0 测试 | `tests/layout.test.ts`、`tests/slide-background.test.ts` |
 | P1 测试 | `tests/p1-layout.test.ts` |
 | P2 测试 | `tests/p2-capabilities.test.ts` |
 | Skill | `skills/ppt-layout/`、`skills/ppt-beautify/` |
-| Design Agent（待建） | `skills/ppt-design-layout/`（Phase E） |
+| Design Agent | `skills/ppt-design-layout/` |
 | 工作流 | `skills/ppt-workflow/SKILL.md` |
 | 设计 Rubric | 本文档 §1.2；落地目标 `design-principles.md` |
 
@@ -460,4 +421,4 @@ Phase D（引擎深化）
 | 日期 | 说明 |
 |------|------|
 | 2026-07-04 | 初版：P0–P2 最小实现现状梳理 + Phase A–D 后续计划 |
-| 2026-07-04 | 补充 §1.1–1.2：Design Agent 瓶颈、好设计 Rubric、Phase E 计划 |
+| 2026-07-04 | Phase C-1 PreviewSlide PNG 缩略图 |
