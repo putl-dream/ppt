@@ -34,6 +34,10 @@ function getStatusLabel(
       (step) => step.status === "running" || step.streaming,
     );
     if (activeStep) {
+      // 思考步骤的文本已在下方 ReasoningBlock 中完整展示，状态栏只给出概括标签，避免重复
+      if (activeStep.type === "reasoning") {
+        return "子任务思考中…";
+      }
       return activeStep.text;
     }
     return `子任务：${runningTask.description}`;
