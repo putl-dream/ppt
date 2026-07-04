@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { agentTodoItemSchema, TODO_TRACE_ID, type AgentTodoItem } from "./agent-todo";
+import { agentTaskNodeSchema, TASK_GRAPH_TRACE_ID, type AgentTaskNode } from "./agent-task-graph";
 
 export const agentActivityItemSchema = z.discriminatedUnion("kind", [
   z.object({
@@ -33,8 +33,9 @@ export const agentActivityItemSchema = z.discriminatedUnion("kind", [
   }),
   z.object({
     id: z.string(),
-    kind: z.literal("todo"),
-    todos: z.array(agentTodoItemSchema),
+    kind: z.literal("taskgraph"),
+    tasks: z.array(agentTaskNodeSchema),
+    goal: z.string().nullable().optional(),
   }),
   z.object({
     id: z.string(),
@@ -121,16 +122,17 @@ export function appendStep(
   ];
 }
 
-export function upsertTodoTrace(
+export function upsertTaskGraphTrace(
   trace: AgentActivityItem[],
-  todos: AgentTodoItem[],
+  input: { tasks: AgentTaskNode[]; goal?: string | null },
 ): AgentActivityItem[] {
   const sealed = finalizeReasoning(trace);
-  const existingIndex = sealed.findIndex((item) => item.kind === "todo");
+  const existingIndex = sealed.findIndex((item) => item.kind === "taskgraph");
   const nextItem = {
-    id: existingIndex >= 0 ? sealed[existingIndex]!.id : TODO_TRACE_ID,
-    kind: "todo" as const,
-    todos: todos.map((item) => ({ ...item })),
+    id: existingIndex >= 0 ? sealed[existingIndex]!.id : TASK_GRAPH_TRACE_ID,
+    kind: "taskgraph" as const,
+    tasks: input.tasks.map((task) => ({ ...task })),
+    goal: input.goal ?? null,
   };
 
   if (existingIndex >= 0) {
@@ -314,20 +316,20 @@ export function findPendingToolApproval(
 export function filterTraceForDisplay(trace: AgentActivityItem[]): AgentActivityItem[] {
   return trace.filter(
     (item) =>
-      item.kind !== "todo" &&
+      item.kind !== "taskgraph" &&
       !(item.kind === "tool-approval" && item.status === "pending"),
   );
 }
 
-export function extractLatestTodos(
+export function extractLatestTaskGraph(
   ...traces: Array<AgentActivityItem[] | undefined>
-): AgentTodoItem[] | null {
+): { tasks: AgentTaskNode[]; goal?: string | null } | null {
   for (const trace of traces) {
     if (!trace?.length) continue;
     for (let index = trace.length - 1; index >= 0; index -= 1) {
       const item = trace[index];
-      if (item?.kind === "todo" && item.todos.length > 0) {
-        return item.todos;
+      if (item?.kind === "taskgraph" && item.tasks.length > 0) {
+        return { tasks: item.tasks, goal: item.goal ?? null };
       }
     }
   }

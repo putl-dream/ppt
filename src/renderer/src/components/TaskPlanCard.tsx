@@ -1,30 +1,29 @@
 import React, { useState } from "react";
-import type { AgentTodoItem } from "@shared/agent-todo";
-import { formatTodoPosition } from "@shared/agent-todo";
+import type { AgentTaskNode } from "@shared/agent-task-graph";
+import { formatTaskPlanPosition } from "@shared/agent-task-graph";
 import { ChevronDownIcon, ChevronRightIcon } from "./Icons";
 
-function TodoStatusIcon({ status }: { status: AgentTodoItem["status"] }) {
+function TaskStatusIcon({ status }: { status: AgentTaskNode["status"] }) {
   if (status === "completed") return <span className="agent-todo-icon done" aria-hidden="true">✓</span>;
   if (status === "in_progress") return <span className="step-spinner agent-todo-spinner" aria-hidden="true" />;
-  if (status === "cancelled") return <span className="agent-todo-icon cancelled" aria-hidden="true">—</span>;
   return <span className="agent-todo-icon pending" aria-hidden="true">○</span>;
 }
 
 interface TaskPlanCardProps {
   goal?: string | null;
-  todos: AgentTodoItem[];
+  tasks: AgentTaskNode[];
   live?: boolean;
 }
 
 export const TaskPlanCard: React.FC<TaskPlanCardProps> = ({
   goal,
-  todos,
+  tasks,
   live = false,
 }) => {
   const [expanded, setExpanded] = useState(false);
-  const hasActive = todos.some((todo) => todo.status === "in_progress");
+  const hasActive = tasks.some((task) => task.status === "in_progress");
 
-  if (todos.length === 0) return null;
+  if (tasks.length === 0) return null;
 
   return (
     <div className={`task-plan-card${hasActive && live ? " task-plan-card--active" : ""}`}>
@@ -35,7 +34,7 @@ export const TaskPlanCard: React.FC<TaskPlanCardProps> = ({
         aria-expanded={expanded}
       >
         <span className="task-plan-card-title">任务计划</span>
-        <span className="task-plan-card-position">{formatTodoPosition(todos)}</span>
+        <span className="task-plan-card-position">{formatTaskPlanPosition(tasks)}</span>
         {expanded ? <ChevronDownIcon size={12} /> : <ChevronRightIcon size={12} />}
       </button>
       {expanded && (
@@ -46,19 +45,20 @@ export const TaskPlanCard: React.FC<TaskPlanCardProps> = ({
               <p className="task-plan-card-goal-text">{goal}</p>
             </div>
           )}
-          {todos.length > 0 && (
+          {tasks.length > 0 && (
             <ul className="agent-todo-list">
-              {todos.map((todo, index) => (
+              {tasks.map((task, index) => (
                 <li
-                  key={todo.id}
-                  className={`agent-todo-item agent-todo-item--${todo.status}`}
+                  key={task.id}
+                  className={`agent-todo-item agent-todo-item--${task.status}`}
                 >
-                  <TodoStatusIcon status={todo.status} />
+                  <TaskStatusIcon status={task.status} />
                   <span>
-                    {todo.status === "in_progress" && (
+                    {task.status === "in_progress" && (
                       <span className="task-plan-step-marker">步骤 {index + 1} · </span>
                     )}
-                    {todo.content}
+                    {task.subject}
+                    {task.owner ? ` · ${task.owner}` : ""}
                   </span>
                 </li>
               ))}

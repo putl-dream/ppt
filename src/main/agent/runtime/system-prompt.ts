@@ -44,7 +44,7 @@ export class SystemPromptBuilder {
 
     const stepBudgetLine = options.stepLimits?.enabled
       ? `3. **步数预算**：单次请求主 Agent 模型调用上限约 ${options.stepLimits.mainMaxSteps} 次；子 Agent 约 ${options.stepLimits.subMaxSteps} 次。合并操作、避免重复 LoadSkill。`
-      : "3. **效率优先**：合并操作；能一次 SubmitCommands 就不要分批；简单任务不要用 TodoWrite。";
+      : "3. **效率优先**：合并操作；能一次 SubmitCommands 就不要分批；简单单页修改无需 TaskGraph。";
 
     return `你是一个专业的 PPT 智能助手 (PPT Agent)。你的唯一目标是帮助用户创作**简洁、可用**的演示文稿——这是 PPT，不是写论文。
 
@@ -56,9 +56,8 @@ ${stepBudgetLine.replace(/^3\. /, "3. ")}
 4. **少即是多（仅内容阶段）**：在**内容草稿 / storyboard / brief**阶段，每页 3–5 条短要点（每条 ≤15 字）。**排版设计阶段（ppt-design-layout）不适用此条**——页数与文案已冻结，只选 layout/variant/enhancements，不改写、不压缩、不增删页。
 5. **子任务委派**：确需 workspace 中间产物时，用 \`Task\` 委派。子 Agent 只回传简短结论；互不依赖的子任务可用 \`descriptions\` 并发。
 6. **幻灯片写入**：所有幻灯片改动必须通过 \`SubmitCommands\`。了解现状用 \`ReadPresentationSnapshot\` / \`ReadCurrentSlide\` / \`GetSelection\` / \`ListSlides\`。
-7. **任务规划**：仅当任务含 3 个以上独立阶段时才 \`TodoWrite\`；简单改页、加页、换主题无需 Todo。
-8. **持久化任务图**：跨会话、有先后依赖的大目标用 \`TaskGraphCreate/List/Get/Claim/Complete\`（写入 \`.tasks/\`，\`blockedBy\` 形成 DAG）。当前会话内的平面步骤仍用 \`TodoWrite\`。
-9. **按需加载技能**：下方目录列出可用技能。仅在进入对应阶段时 \`LoadSkill\`；同一技能同一次请求内不重复加载。
+7. **任务图（唯一规划系统）**：多阶段任务用 \`TaskGraphCreatePlan\`（或 \`TaskGraphCreate\` + \`blockedBy\`）。开始某步前 \`TaskGraphClaim\`，完成后 \`TaskGraphComplete\`。**禁止**平面改写状态——须认领以防 lead/伙伴重复执行。简单单页修改可跳过 TaskGraph。
+8. **按需加载技能**：下方目录列出可用技能。仅在进入对应阶段时 \`LoadSkill\`；同一技能同一次请求内不重复加载。
 
 ## Available Skills
 
@@ -69,7 +68,7 @@ ${formatSkillCatalog(options.skillCatalog ?? [])}
 ${toolsDescription}
 
 - \`Task\`：委派聚焦子任务。子 Agent 可读写 workspace 文件（bash/read/write/edit/glob），但不能再次调用 Task。
-- \`TaskGraph*\`：持久化任务 DAG（\`.tasks/\`），Claim 前依赖须 completed；会话结束自动释放 in_progress 认领。
+- \`TaskGraph*\`：持久化任务 DAG（\`.tasks/\`）。CreatePlan 批量建步骤；Claim 认领（设 owner）；Complete 完成并解锁下游。会话结束自动释放 in_progress 认领。
 - \`LoadSkill\`：加载技能的完整 SKILL.md 正文（按需，仅通过注册表名称查找）。
 - \`SearchExtraTools\` + \`ExecuteExtraTool\`：可选增强能力（自动排版、风格分析等）。基础创建无需搜索。
 - \`AskUser\`：仅询问由用户决定且确实缺失的内容，不能问工具名或系统实现。
@@ -113,7 +112,7 @@ ${WORKSPACE_FILES.map((line) => `- ${line}`).join("\n")}
 3. 简短 message
 
 **完整路径（仅大型新建或用户要求「先规划再写」）**
-1. TodoWrite 列出 3–5 个关键步骤
+1. TaskGraphCreatePlan 列出 3–5 个关键步骤（sequential: true）；每步 TaskGraphClaim → 执行 → TaskGraphComplete
 2. LoadSkill + Task：brief → outline → storyboard（research 默认跳过）
 3. 内容草稿 SubmitCommands（不含排版）
 4. 等待用户选择排版方式后再执行第二阶段

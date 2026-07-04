@@ -1,6 +1,6 @@
 import type { AgentExecutionStrategy, AgentModelSelection } from "@shared/agent";
 import type { AgentStepLimits } from "@shared/agent-step-limits";
-import type { AgentTodoItem } from "@shared/agent-todo";
+import type { AgentTaskNode } from "@shared/agent-task-graph";
 import type { CommandBus, PresentationCommand } from "@shared/commands";
 import type { AgentEditorContext, AgentRunResult } from "@shared/ipc";
 import type { AgentConversationMessage } from "@shared/session-recovery";
@@ -28,7 +28,12 @@ export type AgentServiceEvent =
       reason: string;
       detail: string;
     }
-  | { type: "todo-updated"; message: string; todos: AgentTodoItem[] }
+  | {
+      type: "task-graph-updated";
+      message: string;
+      tasks: AgentTaskNode[];
+      goal?: string | null;
+    }
   | { type: "subagent-started"; taskId: string; description: string }
   | { type: "subagent-thinking-chunk"; taskId: string; chunk: string }
   | { type: "subagent-tool-started"; taskId: string; toolName: string; message: string }

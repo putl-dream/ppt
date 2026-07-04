@@ -71,7 +71,7 @@ import {
   mergeActivityTraces,
   sealAllReasoning,
   updateStepText,
-  upsertTodoTrace,
+  upsertTaskGraphTrace,
   upsertTaskStarted,
   appendTaskReasoningChunk,
   appendTaskToolStart,
@@ -448,10 +448,15 @@ export function App() {
         return;
       }
 
-      if (event.type === "todo-updated") {
+      if (event.type === "task-graph-updated") {
         stopStatusTyping();
         setAgentActivityMode("workflow");
-        syncActivityTrace(upsertTodoTrace(activeRunTraceRef.current, event.todos));
+        syncActivityTrace(
+          upsertTaskGraphTrace(activeRunTraceRef.current, {
+            tasks: event.tasks,
+            goal: event.goal,
+          }),
+        );
         return;
       }
 

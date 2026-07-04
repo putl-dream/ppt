@@ -18,7 +18,7 @@ when_to_use: 用户要从零做完整 PPT、不确定下一步、或要求「一
 
 | 阶段 | LoadSkill | 产出 | 执行者 |
 |------|-----------|------|--------|
-| 0 规划 | — | TodoWrite（3–5 步） | 主 Agent |
+| 0 规划 | — | TaskGraphCreatePlan（3–5 步，sequential） | 主 Agent |
 | 1 需求 | `ppt-brief` | `brief.md` | Task |
 | 2 大纲 | `ppt-outline` | `outline.md` | Task |
 | 3 分镜 | `ppt-storyboard` | `slides/storyboard.json` | Task |
@@ -35,7 +35,7 @@ when_to_use: 用户要从零做完整 PPT、不确定下一步、或要求「一
 
 ## 主 Agent 职责
 
-1. 先选路径；单页修改**不要** TodoWrite、两阶段。
+1. 先选路径；单页修改**不要** TaskGraph、两阶段。
 2. 新建/批量加页：内容草稿完成后停止，等待 LayoutChoiceCard。
 3. 用户确认排版方式后：**先** LoadSkill `ppt-design-layout` + Task 产出 layout-plan；**再** LoadSkill `ppt-layout` 按 plan 执行（禁止 freestyle 改 layout）。
 4. workspace 文件一律 Task 委派；幻灯片改动 SubmitCommands。

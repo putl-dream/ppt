@@ -8,15 +8,9 @@ import { JsonStreamExtractor } from "./json-stream-extractor";
 import { ensureDefaultHooks } from "./default-hooks";
 import { triggerHooks } from "./hook-registry";
 import type { PostToolUseBlock, StopBlock, UserPromptSubmitBlock } from "./hook-blocks";
-import { createTodoRunState, type TodoRunState } from "./todo-run-state";
 import type { SkillRegistry } from "../skills/loadSkillsDir";
 import { createEmptySkillRegistry } from "../skills/loadSkillsDir";
 import { createSkillSession, type SkillSession } from "../skills/skill-types";
-import {
-  applyTodoUpdate,
-  buildTodoReminder,
-  TODO_WRITE_REMINDER_THRESHOLD,
-} from "@shared/agent-todo";
 import {
   buildMainStepLimitMessage,
   getEffectiveMainMaxSteps,
@@ -86,7 +80,6 @@ function isToolCall(value: unknown): value is ToolCall {
  */
 export class AgentRuntime {
   private readonly discoverySessions = new Map<string, ToolDiscoverySession>();
-  private readonly todoSessions = new Map<string, TodoRunState>();
   private readonly skillSessions = new Map<string, SkillSession>();
 
   constructor(
@@ -102,9 +95,6 @@ export class AgentRuntime {
       discoveredToolNames: new Set<string>(),
     };
     this.discoverySessions.set(options.threadId, discoverySession);
-
-    const todoState = this.todoSessions.get(options.threadId) ?? createTodoRunState();
-    this.todoSessions.set(options.threadId, todoState);
 
     const skillSession = this.skillSessions.get(options.threadId) ?? createSkillSession();
     this.skillSessions.set(options.threadId, skillSession);
@@ -128,18 +118,12 @@ export class AgentRuntime {
       model: options.model,
       signal: options.signal,
       requestToolApproval: options.requestToolApproval,
-      todoSession: {
-        getItems: () => todoState.items,
-        applyUpdate: (merge, todos) => {
-          todoState.items = applyTodoUpdate(todoState.items, merge, todos);
-          return [...todoState.items];
-        },
-      },
-      notifyTodoUpdated: (todos) => {
+      notifyTaskGraphUpdated: ({ tasks, goal }) => {
         options.onProgress?.({
-          type: "todo-updated",
-          message: "任务计划已更新",
-          todos,
+          type: "task-graph-updated",
+          message: "任务图已更新",
+          tasks,
+          goal,
         });
       },
       onSubAgentProgress: options.onProgress
@@ -195,22 +179,6 @@ export class AgentRuntime {
       if (options.signal?.aborted) {
         throw new Error("Run aborted by user.");
       }
-
-      if (todoState.roundsSinceWrite >= TODO_WRITE_REMINDER_THRESHOLD) {
-        transcript.push({
-          role: "reminder",
-          content: buildTodoReminder(todoState.items),
-        });
-      }
-
-      let usedTodoWriteThisStep = false;
-      const finalizeRound = () => {
-        if (usedTodoWriteThisStep) {
-          todoState.roundsSinceWrite = 0;
-        } else {
-          todoState.roundsSinceWrite += 1;
-        }
-      };
 
       // 判断是否应该使用流式：仅在可能返回message且提供了回调时使用
       const shouldUseStream = options.onStreamChunk !== undefined;
@@ -276,7 +244,6 @@ export class AgentRuntime {
             ? `${error.message} Return exactly one complete JSON object.`
             : "Invalid JSON response. Return exactly one complete JSON object.",
         });
-        finalizeRound();
         continue;
       }
 
@@ -290,7 +257,6 @@ export class AgentRuntime {
             role: "tool",
             error: "Command proposals must be submitted through SubmitCommands.",
           });
-          finalizeRound();
           continue;
         }
         let normalized: AgentRuntimeResult;
@@ -302,7 +268,6 @@ export class AgentRuntime {
             response: parsed,
             error: error instanceof Error ? error.message : String(error),
           });
-          finalizeRound();
           continue;
         }
 
@@ -314,7 +279,6 @@ export class AgentRuntime {
               "This is an unresolved presentation action. Do not narrate future work. "
               + "Call AskUser if information is still missing, otherwise continue tools and finish with SubmitCommands.",
           });
-          finalizeRound();
           continue;
         }
 
@@ -334,7 +298,6 @@ export class AgentRuntime {
           toolName: parsed.toolName,
           error: "Only registered Core Tools can be called directly.",
         });
-        finalizeRound();
         continue;
       }
 
@@ -347,7 +310,6 @@ export class AgentRuntime {
           error: args.error.message,
         });
         transcript.push({ role: "tool", toolName: tool.name, error: args.error.message });
-        finalizeRound();
         continue;
       }
 
@@ -378,7 +340,6 @@ export class AgentRuntime {
             toolName: tool.name,
             error: preToolStop.reason,
           });
-          finalizeRound();
           continue;
         }
         if (preToolStop) {
@@ -389,10 +350,6 @@ export class AgentRuntime {
         }
 
         const result = await tool.execute(args.data, context);
-
-        if (tool.name === "TodoWrite") {
-          usedTodoWriteThisStep = true;
-        }
 
         await triggerHooks("PostToolUse", {
           event: "PostToolUse",
@@ -435,7 +392,6 @@ export class AgentRuntime {
         });
       }
 
-      finalizeRound();
     }
 
     if (options.requiredOutcome === "command_proposal") {
@@ -458,7 +414,6 @@ export class AgentRuntime {
 
   clearSession(threadId: string): void {
     this.discoverySessions.delete(threadId);
-    this.todoSessions.delete(threadId);
     this.skillSessions.delete(threadId);
   }
 }

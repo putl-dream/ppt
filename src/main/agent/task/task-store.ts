@@ -13,16 +13,38 @@ import {
 import { resolveAgentPath } from "../subagent/workspace-path";
 
 const META_FILE = "_meta.json";
+const PLAN_FILE = "_plan.json";
 
 type TaskMeta = {
   idCounter: number;
+};
+
+type PlanMeta = {
+  planId: string;
+  goal?: string;
+  updatedAt: string;
 };
 
 export type CreateTaskInput = {
   subject: string;
   description?: string;
   blockedBy?: string[];
+  planId?: string;
 };
+
+export type CreatePlanInput = {
+  goal?: string;
+  steps: Array<{
+    subject: string;
+    description?: string;
+    blockedBy?: string[];
+  }>;
+  sequential?: boolean;
+};
+
+export type CreatePlanResult =
+  | { ok: true; planId: string; goal?: string; tasks: AgentTaskNode[] }
+  | { ok: false; error: string };
 
 export type CreateTaskResult =
   | { ok: true; task: AgentTaskNode }
@@ -64,6 +86,7 @@ export class TaskStore {
       status: "pending",
       owner: null,
       blockedBy,
+      ...(input.planId ? { planId: input.planId } : {}),
       createdAt: now,
       updatedAt: now,
     };
@@ -76,13 +99,57 @@ export class TaskStore {
     return { ok: true, task: candidate };
   }
 
+  async createPlan(input: CreatePlanInput): Promise<CreatePlanResult> {
+    const planId = `plan_${Date.now()}_${randomBytes(2).toString("hex")}`;
+    const goal = input.goal?.trim() || undefined;
+    if (goal) {
+      await this.savePlanMeta({ planId, goal, updatedAt: new Date().toISOString() });
+    }
+
+    const created: AgentTaskNode[] = [];
+    let previousId: string | undefined;
+
+    for (const step of input.steps) {
+      const blockedBy = [...(step.blockedBy ?? [])];
+      if (input.sequential && previousId && blockedBy.length === 0) {
+        blockedBy.push(previousId);
+      }
+
+      const result = await this.createTask({
+        subject: step.subject,
+        description: step.description,
+        blockedBy: blockedBy.length > 0 ? [...new Set(blockedBy)] : undefined,
+        planId,
+      });
+      if (!result.ok) {
+        return { ok: false, error: result.error };
+      }
+
+      created.push(result.task);
+      if (input.sequential) {
+        previousId = result.task.id;
+      }
+    }
+
+    return { ok: true, planId, goal, tasks: created };
+  }
+
+  async getPlanMeta(): Promise<PlanMeta | null> {
+    try {
+      const raw = await readFile(this.planPath(), "utf8");
+      return JSON.parse(raw) as PlanMeta;
+    } catch {
+      return null;
+    }
+  }
+
   async listTasks(): Promise<AgentTaskNode[]> {
     await this.ensureTasksDir();
     const entries = await readdir(this.tasksDir, { withFileTypes: true });
     const tasks: AgentTaskNode[] = [];
 
     for (const entry of entries) {
-      if (!entry.isFile() || !entry.name.endsWith(".json") || entry.name === META_FILE) {
+      if (!entry.isFile() || !entry.name.endsWith(".json") || entry.name.startsWith("_")) {
         continue;
       }
       tasks.push(await this.loadTask(entry.name.replace(/\.json$/, "")));
@@ -174,6 +241,15 @@ export class TaskStore {
     return join(this.tasksDir, META_FILE);
   }
 
+  private planPath(): string {
+    return join(this.tasksDir, PLAN_FILE);
+  }
+
+  private async savePlanMeta(meta: PlanMeta): Promise<void> {
+    await this.ensureTasksDir();
+    await writeFile(this.planPath(), JSON.stringify(meta, null, 2), "utf8");
+  }
+
   private async loadMeta(): Promise<TaskMeta> {
     try {
       const raw = await readFile(this.metaPath(), "utf8");
@@ -200,7 +276,8 @@ export class TaskStore {
 
   private async loadTask(taskId: string): Promise<AgentTaskNode> {
     const raw = await readFile(this.taskPath(taskId), "utf8");
-    return agentTaskNodeSchema.parse(JSON.parse(raw));
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    return agentTaskNodeSchema.parse(parsed);
   }
 
   private async saveTask(task: AgentTaskNode): Promise<void> {

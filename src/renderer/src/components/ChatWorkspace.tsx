@@ -21,8 +21,8 @@ import { AgentThinkingLoader } from "./AgentThinkingLoader";
 import { AgentActivityTrace } from "./AgentActivityTrace";
 import { MessageMarkdown } from "./MessageMarkdown";
 import type { AgentActivityItem } from "@shared/agent-activity";
-import { findPendingToolApproval, resolveActivityTrace, filterTraceForDisplay, extractLatestTodos } from "@shared/agent-activity";
-import { isTodoPlanActive } from "@shared/agent-todo";
+import { findPendingToolApproval, resolveActivityTrace, filterTraceForDisplay, extractLatestTaskGraph } from "@shared/agent-activity";
+import { isTaskPlanActive } from "@shared/agent-task-graph";
 import { TaskPlanCard } from "./TaskPlanCard";
 import type { ManagedModel } from "../modelCatalog";
 import type { Presentation } from "@shared/presentation";
@@ -165,12 +165,13 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
   const messageTraces = chatMessages
     .map((message) => message.activityTrace)
     .filter((trace): trace is NonNullable<typeof trace> => Boolean(trace?.length));
-  const latestTodos = extractLatestTodos(
+  const latestPlan = extractLatestTaskGraph(
     busy ? activityTrace : undefined,
     ...messageTraces.slice().reverse(),
   );
-  const activeTodos = latestTodos ?? [];
-  const showTaskPlan = isTodoPlanActive(activeTodos);
+  const activeTasks = latestPlan?.tasks ?? [];
+  const planGoal = latestPlan?.goal ?? sessionGoal;
+  const showTaskPlan = isTaskPlanActive(activeTasks);
 
   const scrollToBottom = useCallback((instant: boolean) => {
     const viewport = scrollViewportRef.current;
@@ -706,8 +707,8 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
         <div className={showTaskPlan ? "chat-input-stack" : undefined}>
           {showTaskPlan && (
             <TaskPlanCard
-              goal={sessionGoal}
-              todos={activeTodos}
+              goal={planGoal}
+              tasks={activeTasks}
               live={busy}
             />
           )}

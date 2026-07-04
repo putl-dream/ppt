@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { AgentModelSelection } from "@shared/agent";
 import type { AgentStepLimits } from "@shared/agent-step-limits";
-import type { AgentTodoItem } from "@shared/agent-todo";
+import type { AgentTaskNode } from "@shared/agent-task-graph";
 import type { Presentation } from "@shared/presentation";
 import type { AgentModelGateway } from "../gateway";
 import type { ToolApprovalHandler } from "../runtime/permission-check";
@@ -56,23 +56,21 @@ export interface ToolContext {
   readonly requestToolApproval?: ToolApprovalHandler;
   /** Streams sub-agent progress to the UI during Task delegation. */
   readonly onSubAgentProgress?: SubAgentProgressListener;
-  /** In-memory task plan for the current run (TodoWrite). */
-  readonly todoSession?: {
-    getItems: () => AgentTodoItem[];
-    applyUpdate: (merge: boolean, todos: AgentTodoItem[]) => AgentTodoItem[];
-  };
-  /** Emits todo list updates to the UI after TodoWrite. */
-  readonly notifyTodoUpdated?: (todos: AgentTodoItem[]) => void;
+  /** Emits task graph updates to the UI after TaskGraph* mutations. */
+  readonly notifyTaskGraphUpdated?: (input: {
+    tasks: AgentTaskNode[];
+    goal?: string | null;
+  }) => void;
+  /** File-backed task graph store (`.tasks/` under workspace). */
+  readonly taskStore?: TaskStore;
+  /** Owner id used by TaskGraphClaim when args.owner is omitted. */
+  readonly taskGraphOwner?: string;
   /** Skills catalog scanned at harness startup (Layer 1). */
   readonly skillRegistry?: SkillRegistry;
   /** Per-run loaded skill tracking (Layer 2). */
   readonly skillSession?: SkillSession;
   /** Step limit config for Task sub-agents. */
   readonly agentStepLimits?: AgentStepLimits;
-  /** File-backed task graph store (`.tasks/` under workspace). */
-  readonly taskStore?: TaskStore;
-  /** Owner id used by TaskGraphClaim when args.owner is omitted. */
-  readonly taskGraphOwner?: string;
 }
 
 /**

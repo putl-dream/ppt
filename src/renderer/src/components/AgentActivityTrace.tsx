@@ -212,7 +212,7 @@ export const AgentActivityTrace: React.FC<AgentActivityTraceProps> = ({
         if (item.kind === "task") {
           return <TaskBlock key={item.id} item={item} live={live} />;
         }
-        if (item.kind === "todo") {
+        if (item.kind === "taskgraph") {
           return null;
         }
         return <WorkflowStepBlock key={item.id} item={item} live={live} />;

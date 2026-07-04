@@ -1,19 +1,22 @@
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createDefaultToolRegistry } from "../src/main/agent/tools/tool-registry";
 import {
   taskGraphClaimTool,
   taskGraphCompleteTool,
+  taskGraphCreatePlanTool,
   taskGraphCreateTool,
 } from "../src/main/agent/tools/core/task-graph-tools";
 import { TaskStore } from "../src/main/agent/task/task-store";
 import {
   canStartTask,
   hasDependencyCycle,
+  isTaskPlanActive,
   type AgentTaskNode,
 } from "../src/shared/agent-task-graph";
+import { upsertTaskGraphTrace } from "../src/shared/agent-activity";
 import { createStarterPresentation } from "../src/shared/presentation";
 
 const tempDirs: string[] = [];
@@ -28,7 +31,7 @@ async function makeWorkspace(): Promise<string> {
   return dir;
 }
 
-function baseContext(workspaceRoot: string) {
+function baseContext(workspaceRoot: string, onUpdated?: ReturnType<typeof vi.fn>) {
   return {
     presentation: createStarterPresentation(),
     selectedElementIds: [],
@@ -38,6 +41,7 @@ function baseContext(workspaceRoot: string) {
     workspaceRoot,
     taskStore: new TaskStore(workspaceRoot),
     taskGraphOwner: "test-agent",
+    notifyTaskGraphUpdated: onUpdated,
   };
 }
 
@@ -160,10 +164,12 @@ describe("TaskStore", () => {
 });
 
 describe("TaskGraph tools", () => {
-  it("registers TaskGraph tools as core low-risk", () => {
+  it("registers TaskGraph tools and removes TodoWrite", () => {
     const registry = createDefaultToolRegistry();
+    expect(registry.get("TodoWrite")).toBeUndefined();
     for (const name of [
       "TaskGraphCreate",
+      "TaskGraphCreatePlan",
       "TaskGraphList",
       "TaskGraphGet",
       "TaskGraphClaim",
@@ -174,6 +180,54 @@ describe("TaskGraph tools", () => {
       expect(tool?.loadPolicy).toBe("core");
       expect(tool?.risk).toBe("low");
     }
+  });
+
+  it("creates sequential plans and notifies UI", async () => {
+    const workspaceRoot = await makeWorkspace();
+    const onUpdated = vi.fn();
+    const context = baseContext(workspaceRoot, onUpdated);
+
+    const plan = await taskGraphCreatePlanTool.execute(
+      {
+        goal: "Build deck",
+        sequential: true,
+        steps: [
+          { subject: "Read brief" },
+          { subject: "Create outline" },
+        ],
+      },
+      context,
+    );
+
+    expect(plan.tasks).toHaveLength(2);
+    expect(plan.tasks[1]?.blockedBy).toContain(plan.tasks[0]?.id);
+    expect(onUpdated).toHaveBeenCalled();
+    expect(isTaskPlanActive(plan.tasks)).toBe(true);
+
+    const planMeta = JSON.parse(
+      await readFile(join(workspaceRoot, ".tasks", "_plan.json"), "utf8"),
+    );
+    expect(planMeta.goal).toBe("Build deck");
+  });
+
+  it("upserts a single taskgraph block in the activity trace", () => {
+    const task: AgentTaskNode = {
+      id: "task_1",
+      subject: "step",
+      description: "",
+      status: "pending",
+      owner: null,
+      blockedBy: [],
+      createdAt: "",
+      updatedAt: "",
+    };
+    let trace = upsertTaskGraphTrace([], { tasks: [task], goal: "Goal" });
+    trace = upsertTaskGraphTrace(trace, {
+      tasks: [{ ...task, status: "in_progress", owner: "lead" }],
+      goal: "Goal",
+    });
+    expect(trace.filter((item) => item.kind === "taskgraph")).toHaveLength(1);
+    expect(trace[0]?.kind === "taskgraph" && trace[0].tasks[0]?.owner).toBe("lead");
   });
 
   it("runs create → claim → complete with dependency unlock", async () => {

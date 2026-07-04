@@ -11,6 +11,7 @@ export const agentTaskNodeSchema = z.object({
   status: agentTaskStatusSchema,
   owner: z.string().nullable(),
   blockedBy: z.array(z.string()),
+  planId: z.string().optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });
@@ -81,4 +82,45 @@ export function getIncompleteBlockedBy(
     const dep = tasksById.get(depId);
     return !dep || dep.status !== "completed";
   });
+}
+
+export const TASK_GRAPH_TRACE_ID = "agent-task-graph";
+
+export function summarizeTaskGraphProgress(tasks: AgentTaskNode[]): string {
+  if (tasks.length === 0) return "暂无任务";
+  const completed = tasks.filter((task) => task.status === "completed").length;
+  const inProgress = tasks.find((task) => task.status === "in_progress");
+  const pending = tasks.filter((task) => task.status === "pending").length;
+  const parts = [`${completed}/${tasks.length} 已完成`];
+  if (inProgress) parts.push(`进行中: ${inProgress.subject}`);
+  else if (pending > 0) parts.push(`${pending} 项待认领`);
+  return parts.join(" · ");
+}
+
+/** 折叠态摘要：突出当前执行步骤位置 */
+export function formatTaskPlanPosition(tasks: AgentTaskNode[]): string {
+  if (tasks.length === 0) return "暂无任务";
+  const inProgressIndex = tasks.findIndex((task) => task.status === "in_progress");
+  if (inProgressIndex >= 0) {
+    const current = tasks[inProgressIndex]!;
+    const owner = current.owner ? ` · ${current.owner}` : "";
+    return `步骤 ${inProgressIndex + 1}/${tasks.length} · ${current.subject}${owner}`;
+  }
+  const completed = tasks.filter((task) => task.status === "completed").length;
+  if (completed === tasks.length) {
+    return `全部完成 · ${completed}/${tasks.length}`;
+  }
+  return summarizeTaskGraphProgress(tasks);
+}
+
+/** 计划是否仍在执行中（有待办或进行中步骤） */
+export function isTaskPlanActive(tasks: AgentTaskNode[]): boolean {
+  if (tasks.length === 0) return false;
+  return tasks.some((task) => task.status === "pending" || task.status === "in_progress");
+}
+
+/** 按 planId 过滤；无 planId 时返回全部任务 */
+export function filterTasksByPlan(tasks: AgentTaskNode[], planId?: string): AgentTaskNode[] {
+  if (!planId) return tasks;
+  return tasks.filter((task) => task.planId === planId);
 }
