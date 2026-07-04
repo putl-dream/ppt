@@ -1,0 +1,221 @@
+import { describe, expect, it } from "vitest";
+import type { PresentationCommand } from "@shared/commands";
+import type { Presentation } from "@shared/presentation";
+import {
+  applyCommandsToDraft,
+  collectAffectedSlideIds,
+  hasLayoutVisualCommands,
+} from "../src/main/agent/runtime/layout-command-utils";
+import {
+  buildRenderFeedback,
+  formatRenderFeedbackMessage,
+  shouldOfferRenderFeedback,
+} from "../src/main/agent/runtime/render-feedback-loop";
+import type { ToolContext } from "../src/main/agent/tools/tool-definition";
+import { createDefaultToolRegistry } from "../src/main/agent/tools/tool-registry";
+import { AgentRuntime } from "../src/main/agent/runtime/agent-runtime";
+import type {
+  AgentModelGateway,
+  AgentModelRequest,
+  AgentModelResponse,
+  AgentModelToolCall,
+} from "../src/main/agent/gateway/types";
+
+function makePresentation(): Presentation {
+  const slideId = crypto.randomUUID();
+  return {
+    id: crypto.randomUUID(),
+    title: "Test Deck",
+    revision: 1,
+    slides: [{
+      id: slideId,
+      title: "Intro",
+      layout: "concept",
+      elements: [{
+        id: crypto.randomUUID(),
+        type: "text",
+        x: 100,
+        y: 100,
+        width: 400,
+        height: 80,
+        text: "Hello",
+        fontSize: 32,
+      }],
+    }],
+  };
+}
+
+describe("layout-command-utils", () => {
+  it("detects layout-visual commands", () => {
+    const layoutCommands: PresentationCommand[] = [
+      { id: "c1", type: "set-theme", theme: "nordic", palette: "cyan" },
+      { id: "c2", type: "update-slide-layout", slideId: "s1", layout: "cover" },
+    ];
+    expect(hasLayoutVisualCommands(layoutCommands)).toBe(true);
+    expect(hasLayoutVisualCommands([
+      { id: "c3", type: "set-presentation-title", title: "New title" },
+    ])).toBe(false);
+  });
+
+  it("applies commands to a draft presentation", () => {
+    const presentation = makePresentation();
+    const slideId = presentation.slides[0].id;
+    const draft = applyCommandsToDraft(presentation, [
+      { id: "c1", type: "set-theme", theme: "nordic", palette: "cyan" },
+      { id: "c2", type: "update-slide-layout", slideId, layout: "cover" },
+    ]);
+    expect(draft.theme).toBe("nordic");
+    expect(draft.slides[0].layout).toBe("cover");
+  });
+
+  it("collects affected slide ids and expands on set-theme", () => {
+    const presentation = makePresentation();
+    const slideId = presentation.slides[0].id;
+    const draft = applyCommandsToDraft(presentation, [
+      { id: "c1", type: "set-theme", theme: "nordic" },
+    ]);
+    expect(collectAffectedSlideIds([
+      { id: "c1", type: "set-theme", theme: "nordic" },
+    ], draft)).toEqual([slideId]);
+  });
+});
+
+describe("render-feedback-loop", () => {
+  it("offers feedback only once in layout stages with visual commands", () => {
+    const commands: PresentationCommand[] = [
+      { id: "c1", type: "update-slide-layout", slideId: "s1", layout: "cover" },
+    ];
+    expect(shouldOfferRenderFeedback("layout-exec", commands, false)).toBe(true);
+    expect(shouldOfferRenderFeedback("layout-exec", commands, true)).toBe(false);
+    expect(shouldOfferRenderFeedback("content", commands, false)).toBe(false);
+  });
+
+  it("builds structured feedback without thumbnails outside Electron", async () => {
+    const presentation = makePresentation();
+    const slideId = presentation.slides[0].id;
+    const registry = createDefaultToolRegistry();
+    const context: ToolContext = {
+      presentation,
+      currentSlideId: slideId,
+      selectedElementIds: [],
+      discoverySession: { discoveredToolNames: new Set() },
+      registry,
+      messageHistory: [],
+      skillSession: { loadedSkillNames: new Set() },
+      promptStage: "layout-exec",
+    };
+
+    const payload = await buildRenderFeedback({
+      presentation,
+      commands: [
+        { id: "c1", type: "set-theme", theme: "nordic", palette: "cyan" },
+        { id: "c2", type: "update-slide-layout", slideId, layout: "cover" },
+      ],
+      proposalSummary: "Apply cover layout",
+      context,
+    });
+
+    expect(payload.slides.length).toBe(1);
+    expect(payload.slides[0].layout).toBe("cover");
+    expect(payload.hasThumbnails).toBe(false);
+    expect(formatRenderFeedbackMessage(payload)).toContain("排版视觉反馈");
+  });
+});
+
+function createNativeGateway(
+  turns: Array<{ text?: string; toolCalls?: AgentModelToolCall[] }>,
+): AgentModelGateway & { requests: AgentModelRequest[] } {
+  let index = 0;
+  const requests: AgentModelRequest[] = [];
+  return {
+    requests,
+    supportsNativeToolUse() {
+      return true;
+    },
+    async generateText(request): Promise<AgentModelResponse> {
+      requests.push(request);
+      const turn = turns[index++];
+      if (!turn) throw new Error("Unexpected gateway call");
+      return {
+        provider: "anthropic",
+        model: "test-model",
+        text: turn.text ?? "",
+        toolCalls: turn.toolCalls,
+      };
+    },
+    async *generateTextStream() {
+      const turn = turns[index++];
+      if (!turn) throw new Error("Unexpected gateway call");
+      yield { type: "complete" as const, text: "", toolCalls: turn.toolCalls };
+    },
+  };
+}
+
+describe("render feedback runtime integration", () => {
+  it("defers finish after layout SubmitCommands and continues for visual review", async () => {
+    const registry = createDefaultToolRegistry();
+
+    const presentation = makePresentation();
+    const slideId = presentation.slides[0].id;
+
+    const gateway = createNativeGateway([
+      {
+        toolCalls: [{
+          id: "call-1",
+          name: "SubmitCommands",
+          args: {
+            summary: "Apply theme and cover layout",
+            commands: [
+              { id: "c1", type: "set-theme", theme: "nordic", palette: "cyan" },
+              { id: "c2", type: "update-slide-layout", slideId, layout: "cover" },
+            ],
+            risk: "low",
+          },
+        }],
+      },
+      {
+        toolCalls: [{
+          id: "call-2",
+          name: "SubmitCommands",
+          args: {
+            summary: "Visual review passed",
+            commands: [
+              { id: "c3", type: "set-theme", theme: "nordic", palette: "cyan" },
+            ],
+            risk: "low",
+          },
+        }],
+      },
+    ]);
+
+    const runtime = new AgentRuntime(registry, gateway);
+    const progressEvents: string[] = [];
+
+    const result = await runtime.run({
+      threadId: "render-feedback-thread",
+      request: "执行标准排版",
+      presentationSnapshot: presentation,
+      currentSlideId: slideId,
+      selectedElementIds: [],
+      stageHint: "layout-exec",
+      onProgress: (event) => {
+        if (event.type === "render-feedback" || event.type === "render-feedback-ready") {
+          progressEvents.push(event.type);
+        }
+      },
+    });
+
+    expect(progressEvents).toEqual(["render-feedback", "render-feedback-ready"]);
+    expect(gateway.requests.length).toBe(2);
+    expect(result.type).toBe("command_proposal");
+    if (result.type === "command_proposal") {
+      expect(result.summary).toBe("Visual review passed");
+    }
+
+    const feedbackTurn = gateway.requests[1];
+    const feedbackMessage = feedbackTurn.messages?.find(
+      (message) => message.toolResults?.some((entry) => entry.content.includes("排版视觉反馈")),
+    );
+    expect(feedbackMessage?.toolResults?.[0].content).toContain("排版视觉反馈");
+  });
+});

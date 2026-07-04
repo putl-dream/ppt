@@ -1,13 +1,43 @@
 import OpenAI from "openai";
 import { AgentGatewayError, normalizeProviderError } from "./errors";
 import type {
+  AgentModelImageBlock,
   AgentModelMessage,
   AgentModelRequest,
   AgentModelResponse,
   AgentModelStreamChunk,
   AgentModelToolCall,
+  AgentModelToolResult,
   ResolvedAgentModelConfig,
 } from "./types";
+
+function toOpenAiImageUrl(image: AgentModelImageBlock): string {
+  return `data:${image.mediaType};base64,${image.data}`;
+}
+
+function toOpenAiUserContent(
+  text: string | undefined,
+  images: AgentModelImageBlock[] | undefined,
+): OpenAI.Chat.Completions.ChatCompletionContentPart[] | string {
+  const parts: OpenAI.Chat.Completions.ChatCompletionContentPart[] = [];
+  if (text?.trim()) {
+    parts.push({ type: "text", text });
+  }
+  for (const image of images ?? []) {
+    parts.push({
+      type: "image_url",
+      image_url: { url: toOpenAiImageUrl(image) },
+    });
+  }
+  if (parts.length === 0) return text ?? "";
+  if (parts.length === 1 && parts[0].type === "text") return text ?? "";
+  return parts;
+}
+
+function toOpenAiToolResultContent(result: AgentModelToolResult): string {
+  if (!result.images?.length) return result.content;
+  return `${result.content}\n\n[${result.images.length} slide thumbnail(s) attached in a follow-up user message]`;
+}
 
 /** Build Chat Completions messages from structured multi-turn messages. */
 function toChatMessages(
@@ -31,10 +61,29 @@ function toChatMessages(
       });
     } else if (message.toolResults?.length) {
       for (const result of message.toolResults) {
-        out.push({ role: "tool", tool_call_id: result.toolCallId, content: result.content });
+        out.push({
+          role: "tool",
+          tool_call_id: result.toolCallId,
+          content: toOpenAiToolResultContent(result),
+        });
+      }
+      if (message.content?.trim() || message.images?.length) {
+        out.push({
+          role: "user",
+          content: toOpenAiUserContent(message.content, message.images),
+        });
+      } else if (message.toolResults.some((result) => result.images?.length)) {
+        const images = message.toolResults.flatMap((result) => result.images ?? []);
+        out.push({
+          role: "user",
+          content: toOpenAiUserContent("Slide thumbnails from the previous tool result:", images),
+        });
       }
     } else {
-      out.push({ role: "user", content: message.content ?? "" });
+      out.push({
+        role: "user",
+        content: toOpenAiUserContent(message.content, message.images),
+      });
     }
   }
   return out;

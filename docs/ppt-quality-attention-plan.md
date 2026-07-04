@@ -1,7 +1,7 @@
 # PPT 生成质量与模型注意力改进计划
 
 > 版本：2026-07-05
-> 状态：**P0-1 原生 tool-use 已落地**；P0-2 及 P1/P2 待排期
+> 状态：**P0-1 原生 tool-use 已落地**；**P0-2 渲染反馈闭环已落地**；P1/P2 待排期
 > 关联：[ppt-capability-status-plan.md](./ppt-capability-status-plan.md)（能力现状）、[ppt-style-capability-plan.md](./ppt-style-capability-plan.md)（样式方案）
 
 ---
@@ -90,7 +90,7 @@ AgentRuntime.run()
 | 优先级 | 改动 | 解决什么 | 主要触及 |
 |--------|------|----------|----------|
 | ~~**P0-1**~~ ✅ | 改用**原生 tool-use** 替代文本 JSON 协议 | 消除"大量思考"与 JSON 崩溃重试 | `agent-runtime.ts`、`gateway/*` |
-| **P0-2** | 引入**渲染反馈闭环**：排版后自动 `preview-slide` 截图回喂模型，做一轮 critique → fix | 打破质量天花板 | `preview-slide`、runtime 回合 |
+| ~~**P0-2**~~ ✅ | 引入**渲染反馈闭环**：排版后自动 `preview-slide` 截图回喂模型，做一轮 critique → fix | 打破质量天花板 | `preview-slide`、runtime 回合 |
 | **P1-1** | 提升引擎 layout 模板视觉质量（间距/层级/配色） | 抬高枚举驱动上限 | `design/layout-policy.ts`、渲染 |
 | **P1-2** | 内容与版式**联合决策**（storyboard 阶段即标注 narrativeRole/layout 意图） | 减少排版阶段硬塞溢出 | `ppt-storyboard`、`prompt-stage` |
 | **P2-1** | 合并阶段、给模型更多全局视野 | 减少窄窗口局部决策 | `prompt-stage.ts`、`prompt-sections.ts` |
@@ -132,8 +132,41 @@ AgentRuntime.run()
 
 ---
 
+## 6.2 P0-2 落地记录（2026-07-05）
+
+**策略**：在 `layout-exec` / `review` / `light-edit` 阶段，首次含视觉排版命令的 `SubmitCommands` **不立即 finish**——系统在沙箱中应用命令、调用 `PreviewSlide` 生成结构化摘要 + PNG 缩略图（Electron），通过 `tool_result`（native）或 transcript（文本协议）回喂模型，给予一轮视觉质检机会；第二次 `SubmitCommands` 正常 finish。
+
+**改动清单**：
+
+| 文件 | 改动 |
+|------|------|
+| `runtime/layout-command-utils.ts`（新增） | 识别视觉排版命令、沙箱 applyCommandsToDraft、收集受影响 slideId |
+| `runtime/render-feedback-loop.ts`（新增） | `shouldOfferRenderFeedback` / `buildRenderFeedback` / 反馈文案格式化；每轮最多 6 页缩略图 |
+| `gateway/types.ts` | `AgentModelImageBlock`；`AgentModelMessage.images`；`AgentModelToolResult.images` |
+| `gateway/anthropic.ts` | tool_result / user 消息支持 text + image 混合 content blocks |
+| `gateway/openai.ts` | tool_result 后追加带 `image_url` 的 user 消息（Chat Completions 限制） |
+| `agent-runtime.ts` | 拦截首次排版 SubmitCommands → 生成反馈 → continue；`stageHint` 测试入口 |
+| `prompt-sections.ts` | layout-exec 阶段说明自动视觉质检 |
+| `runtime-types.ts` | `AgentRuntimeOptions.stageHint` |
+
+**关键设计**：
+
+- **每 run 仅一轮**：`renderFeedbackUsed` 标志，避免无限循环。
+- **沙箱预览**：命令 apply 到 draft，不改变 `context.presentation` 或 CommandBus。
+- **双协议**：native 路径把缩略图附在 `tool_result.images`；文本路径 push user 消息到 transcript。
+- **非 Electron**：缩略图为 null，仍回传结构化 JSON 摘要。
+
+**测试**：新增 `tests/render-feedback-loop.test.ts`（utils + 反馈构建 + runtime 两跳 SubmitCommands 集成）。
+
+**遗留**：
+
+1. OpenAI Chat Completions 不支持 tool 消息内嵌图像，缩略图以独立 user 消息追加（Anthropic 原生 inline）。
+2. `PreviewSlide` 仍为 Deferred Tool——自动反馈走 runtime 内部调用，模型手动调用仍需 Search→Execute 两跳（P2-2 可提升为 Core）。
+
+---
+
 ## 7. 待确认问题
 
-1. 当前 gateway（`gateway/anthropic.ts`、`gateway/openai.ts`）是否已支持原生 tool-use 的请求/响应结构？改造范围需据此评估。
-2. `preview-slide` 截图能力当前完成度如何（能否稳定产出可回喂模型的图像）？决定 P0-2 的启动成本。
+1. ~~当前 gateway 是否已支持原生 tool-use~~ → P0-1 已落地。
+2. ~~`preview-slide` 截图能否稳定回喂模型~~ → P0-2 已落地（Electron 640×360 PNG；vitest 降级为 JSON 摘要）。
 3. 是否接受在 storyboard 阶段引入轻量版式意图标注，作为 P1-2 的前置？

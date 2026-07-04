@@ -6,6 +6,7 @@ import type { PresentationCommand } from "@shared/commands";
 import type { AgentModelSelection } from "@shared/agent";
 import type { AgentStepLimits } from "@shared/agent-step-limits";
 import type { Presentation } from "@shared/presentation";
+import type { PromptStage } from "./prompt-stage";
 import type { ToolApprovalHandler } from "./permission-check";
 
 export type AgentRuntimeRisk = "low" | "medium" | "high";
@@ -47,4 +48,6 @@ export interface AgentRuntimeOptions {
   signal?: AbortSignal;
   onProgress?: (event: { type: string; message: string; [key: string]: unknown }) => void;
   requestToolApproval?: ToolApprovalHandler;
+  /** Test/harness override for prompt stage resolution. */
+  stageHint?: PromptStage;
 }

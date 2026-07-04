@@ -25,8 +25,10 @@ export type AgentModelThinkingBlock =
  */
 export interface AgentModelMessage {
   role: "user" | "assistant";
-  /** 纯文本内容；与 toolCalls / toolResults 互补。 */
+  /** 纯文本内容；与 toolCalls / toolResults / images 互补。 */
   content?: string;
+  /** user 轮附带的图像（如渲染反馈缩略图）。 */
+  images?: AgentModelImageBlock[];
   /** assistant 轮发起的工具调用。 */
   toolCalls?: AgentModelToolCall[];
   /** user 轮回传的工具执行结果。 */
@@ -46,11 +48,19 @@ export interface AgentModelToolCall {
   args: Record<string, unknown>;
 }
 
+/** Base64 图像块，用于视觉反馈等多模态 user / tool_result 内容。 */
+export interface AgentModelImageBlock {
+  mediaType: "image/png" | "image/jpeg" | "image/webp" | "image/gif";
+  data: string;
+}
+
 /** 一次工具执行结果，回传给模型。 */
 export interface AgentModelToolResult {
   /** 对应 AgentModelToolCall.id。 */
   toolCallId: string;
   content: string;
+  /** 可选图像附件（如排版后缩略图），与 content 一并回传。 */
+  images?: AgentModelImageBlock[];
   isError?: boolean;
 }
 

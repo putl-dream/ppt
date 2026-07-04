@@ -148,6 +148,7 @@ function buildCorePrinciples(stage: PromptStage, stepLimits?: AgentStepLimits): 
       "- 按 layout-plan（或用户已选主题）执行：`set-theme` → `update-slide-layout` → variant。",
       "- **文案精简**：溢出或过长要点用 `ppt-beautify` / `compress-text` 等 Deferred 工具处理，不大幅改写结构。",
       "- plan.enhancements 经 ExecuteExtraTool；完成后可 `deck-review`。",
+      "- **首次排版 SubmitCommands 后**，系统会自动渲染缩略图回喂一轮视觉质检；请对照后修正或确认再提交。",
     ],
     review: [
       "",

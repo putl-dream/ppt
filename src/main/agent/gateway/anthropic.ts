@@ -1,14 +1,36 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { AgentGatewayError, normalizeProviderError } from "./errors";
 import type {
+  AgentModelImageBlock,
   AgentModelMessage,
   AgentModelRequest,
   AgentModelResponse,
   AgentModelStreamChunk,
   AgentModelThinkingBlock,
   AgentModelToolCall,
+  AgentModelToolResult,
   ResolvedAgentModelConfig,
 } from "./types";
+
+function toAnthropicImageBlock(image: AgentModelImageBlock): Anthropic.ContentBlockParam {
+  return {
+    type: "image",
+    source: {
+      type: "base64",
+      media_type: image.mediaType,
+      data: image.data,
+    },
+  };
+}
+
+function toAnthropicToolResultContent(result: AgentModelToolResult): Anthropic.ToolResultBlockParam["content"] {
+  if (!result.images?.length) return result.content;
+  const blocks: Anthropic.ToolResultBlockParam["content"] & Array<unknown> = [
+    { type: "text", text: result.content },
+    ...result.images.map(toAnthropicImageBlock),
+  ];
+  return blocks as Anthropic.ToolResultBlockParam["content"];
+}
 
 /** Build Anthropic messages from structured multi-turn messages (native tool-use path). */
 function toAnthropicMessages(messages: AgentModelMessage[]): Anthropic.MessageParam[] {
@@ -33,14 +55,23 @@ function toAnthropicMessages(messages: AgentModelMessage[]): Anthropic.MessagePa
       return { role: "assistant", content: blocks };
     }
 
-    if (message.toolResults?.length) {
-      const blocks: Anthropic.ContentBlockParam[] = message.toolResults.map((result) => ({
+    const userBlocks: Anthropic.ContentBlockParam[] = [];
+    for (const result of message.toolResults ?? []) {
+      userBlocks.push({
         type: "tool_result",
         tool_use_id: result.toolCallId,
-        content: result.content,
+        content: toAnthropicToolResultContent(result),
         ...(result.isError ? { is_error: true } : {}),
-      }));
-      return { role: "user", content: blocks };
+      });
+    }
+    if (message.content?.trim()) {
+      userBlocks.push({ type: "text", text: message.content });
+    }
+    for (const image of message.images ?? []) {
+      userBlocks.push(toAnthropicImageBlock(image));
+    }
+    if (userBlocks.length) {
+      return { role: "user", content: userBlocks };
     }
 
     return { role: "user", content: message.content ?? "" };

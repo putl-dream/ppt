@@ -19,8 +19,14 @@ import {
 import { callModelWithRecovery } from "./model-call-recovery";
 import { createTaskStore } from "../task/task-store";
 import { toToolSchemas } from "../tools/tool-schema";
-import type { AgentModelMessage } from "../gateway/types";
+import type { AgentModelImageBlock, AgentModelMessage } from "../gateway/types";
 import type { SubAgentProgressEvent } from "@shared/subagent-progress";
+import {
+  buildRenderFeedback,
+  extractFeedbackImages,
+  formatRenderFeedbackMessage,
+  shouldOfferRenderFeedback,
+} from "./render-feedback-loop";
 
 type ToolCall = {
   type: "tool_call";
@@ -137,6 +143,7 @@ export class AgentRuntime {
       messageHistory: options.messageHistory,
       requiredOutcome: options.requiredOutcome,
       stepLimits,
+      stageHint: options.stageHint,
     });
     const { text: systemPrompt } = getSystemPrompt(promptContext, options.threadId);
 
@@ -190,9 +197,17 @@ export class AgentRuntime {
     ];
     // 承接上一次工具执行结果，下一回合作为 tool_result 追加。
     // 用 holder 对象而非裸 let，规避闭包赋值下的控制流窄化。
-    const pendingToolResult: { current: { id: string; content: string; isError?: boolean } | null } = {
+    const pendingToolResult: {
+      current: {
+        id: string;
+        content: string;
+        isError?: boolean;
+        images?: AgentModelImageBlock[];
+      } | null;
+    } = {
       current: null,
     };
+    let renderFeedbackUsed = false;
 
     const finish = async (
       result: AgentRuntimeResult,
@@ -244,6 +259,7 @@ export class AgentRuntime {
             toolCallId: pendingToolResult.current.id,
             content: pendingToolResult.current.content,
             isError: pendingToolResult.current.isError,
+            images: pendingToolResult.current.images,
           }],
         });
         pendingToolResult.current = null;
@@ -293,9 +309,13 @@ export class AgentRuntime {
       const nativeCall = useNativeToolUse ? modelResult.toolCalls?.[0] : undefined;
       // native 模式下每个 tool_use 必须回配一个 tool_result，否则下一次调用报错。
       // 该闭包在任何 continue 前记录待回传结果；文本模式为 no-op。
-      const recordToolResult = (content: string, isError = false): void => {
+      const recordToolResult = (
+        content: string,
+        isError = false,
+        images?: AgentModelImageBlock[],
+      ): void => {
         if (nativeCall) {
-          pendingToolResult.current = { id: nativeCall.id, content, isError };
+          pendingToolResult.current = { id: nativeCall.id, content, isError, images };
         }
       };
       if (nativeCall) {
@@ -460,9 +480,62 @@ export class AgentRuntime {
           toolName: tool.name,
         });
 
-        if (tool.name === "AskUser" || tool.name === "SubmitCommands") {
+        if (tool.name === "AskUser") {
           return finish(RuntimeNormalizer.normalize(result));
         }
+
+        if (tool.name === "SubmitCommands") {
+          const proposal = RuntimeNormalizer.normalize(result);
+          if (
+            proposal.type === "command_proposal" &&
+            shouldOfferRenderFeedback(context.promptStage, proposal.commands, renderFeedbackUsed)
+          ) {
+            renderFeedbackUsed = true;
+            options.onProgress?.({
+              type: "render-feedback",
+              message: "正在生成排版视觉预览…",
+              progress: 0,
+            });
+
+            const feedback = await buildRenderFeedback({
+              presentation: context.presentation,
+              commands: proposal.commands,
+              proposalSummary: proposal.summary,
+              context,
+            });
+            const feedbackMessage = formatRenderFeedbackMessage(feedback);
+            const feedbackImages = extractFeedbackImages(feedback);
+
+            options.onProgress?.({
+              type: "render-feedback-ready",
+              message: feedback.hasThumbnails
+                ? `已生成 ${feedback.slides.length} 页视觉预览（含缩略图）`
+                : `已生成 ${feedback.slides.length} 页结构化预览`,
+              progress: 0,
+            });
+
+            transcript.push({
+              role: "tool",
+              toolName: tool.name,
+              result: proposal,
+              renderFeedback: feedback,
+            });
+
+            if (useNativeToolUse) {
+              recordToolResult(feedbackMessage, false, feedbackImages);
+            } else {
+              transcript.push({
+                role: "user",
+                content: feedbackMessage,
+                renderFeedback: true,
+              });
+            }
+            continue;
+          }
+
+          return finish(proposal);
+        }
+
         transcript.push({ role: "tool", toolName: tool.name, result });
         recordToolResult(JSON.stringify(result ?? null));
       } catch (error) {
