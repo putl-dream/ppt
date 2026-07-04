@@ -7,6 +7,8 @@ import {
   type TextRole,
 } from "./typography";
 import { resolveLayoutBackgroundVariant, type BackgroundVariant } from "./slide-background";
+import "./layout-register-builtin";
+import { layoutRegistry } from "./layout-registry";
 
 interface ThemeColors {
   bg: string;
@@ -651,15 +653,21 @@ export function applyLayout(
     }
   }
 
-  // Re-append unplaced images and custom user shapes
+  // Re-append unplaced images, custom user shapes, and data/icon elements
   const remainingImages = imageElements.filter((img) => !placedImageIds.has(img.id));
+  const userDataElements = slide.elements.filter(
+    (el) => el.type === "chart" || el.type === "table" || el.type === "icon",
+  );
   elements.push(...remainingImages);
   elements.push(...userShapes);
+  elements.push(...userDataElements);
 
   return {
     ...slide,
     layout,
-    backgroundVariant: resolveLayoutBackgroundVariant(layout) as BackgroundVariant,
+    backgroundVariant: (layoutRegistry.get(layout)?.defaultBackgroundVariant ??
+      resolveLayoutBackgroundVariant(layout)) as BackgroundVariant,
+    slideVariant: slide.slideVariant ?? layoutRegistry.get(layout)?.defaultSlideVariant,
     elements,
   };
 }

@@ -2,10 +2,9 @@ import pptxgen from "pptxgenjs";
 import type { Presentation } from "@shared/presentation";
 import type { ExportPresentationOptions } from "@shared/ipc";
 import { fontFamilyToPptxFace, resolveElementFontFamily } from "@shared/typography";
-import {
-  resolveSlideBackground,
-  resolveSlideBackgroundVariant,
-} from "@shared/slide-background";
+import { resolveSlideBackgroundWithVariant } from "@shared/slide-variant";
+import { chartDataToSvgString, chartSvgToDataUri } from "@shared/chart-utils";
+import { iconToSvgString, iconSvgToDataUri } from "@shared/icon-registry";
 
 // Helper to clean colors (e.g. #ffffff -> ffffff)
 function cleanColor(colorStr: string): string {
@@ -92,10 +91,10 @@ export async function exportToPptx(
     const showChromeHeader =
       slideData.layout !== "cover" && slideData.layout !== "section";
 
-    const slideBackground = resolveSlideBackground(
+    const slideBackground = resolveSlideBackgroundWithVariant(
       presentationTheme,
       presentationPalette,
-      resolveSlideBackgroundVariant(slideData),
+      slideData,
     );
     const cleanBg = cleanColor(slideBackground.exportFill);
 
@@ -253,6 +252,54 @@ export async function exportToPptx(
             fill: { color: cleanFill },
             line: { color: cleanStroke, width: 2 },
           });
+        }
+      } else if (element.type === "chart") {
+        try {
+          const svg = chartDataToSvgString(element, accentColor);
+          slide.addImage({
+            data: chartSvgToDataUri(svg),
+            x,
+            y,
+            w,
+            h,
+          });
+        } catch (e) {
+          console.error("Failed to add chart element:", e);
+        }
+      } else if (element.type === "table") {
+        try {
+          const tableRows = element.rows.map((row) =>
+            row.map((cell) => ({ text: cell, options: { fontFace, fontSize: 12, color: cleanBodyColor } })),
+          );
+          slide.addTable(tableRows, {
+            x,
+            y,
+            w,
+            h,
+            border: { type: "solid", color: cleanBodyColor, pt: 1 },
+            autoPage: false,
+          });
+        } catch (e) {
+          console.error("Failed to add table element:", e);
+        }
+      } else if (element.type === "icon") {
+        try {
+          const svg = iconToSvgString(
+            element.name,
+            element.color ?? accentColor,
+            element.strokeWidth ?? 2,
+          );
+          if (svg) {
+            slide.addImage({
+              data: iconSvgToDataUri(svg),
+              x,
+              y,
+              w,
+              h,
+            });
+          }
+        } catch (e) {
+          console.error("Failed to add icon element:", e);
         }
       }
     }

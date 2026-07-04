@@ -4,18 +4,18 @@ import type { PresentationCommand } from "@shared/commands";
 
 export const beautifyTableSchema = z.object({
   slideId: z.string().describe("幻灯片 ID"),
-  elementId: z.string().describe("表格状文本元素 ID（多行内容）"),
+  elementId: z.string().describe("表格文本或 table 元素 ID"),
 });
 
 /**
- * Deferred Tool: 将表格状文本降级为 concept 卡片组排版。
+ * Deferred Tool: 将多行文本转为 table 元素，或降级为 concept 卡片组。
  */
 export const beautifyTableTool: ToolDefinition<
   typeof beautifyTableSchema,
   { commands: PresentationCommand[] }
 > = {
   name: "BeautifyTable",
-  description: "将多行表格文本拆分为独立要点并应用 concept 卡片排版。",
+  description: "将表格文本转为 table 元素（带斑马纹），或多行文本降级为 concept 卡片。",
   category: "deferred",
   loadPolicy: "deferred",
   inputSchema: beautifyTableSchema,
@@ -25,21 +25,49 @@ export const beautifyTableTool: ToolDefinition<
     if (!slide) return { commands: [] };
 
     const element = slide.elements.find((item) => item.id === args.elementId);
-    if (!element || element.type !== "text") return { commands: [] };
+    if (!element) return { commands: [] };
 
-    const rows = element.text
-      .split(/\r?\n/)
+    if (element.type === "table") {
+      return { commands: [] };
+    }
+
+    if (element.type !== "text") return { commands: [] };
+
+    const lines = element.text
+      .split("\n")
       .map((line) => line.trim())
       .filter(Boolean);
 
-    if (rows.length < 2) {
+    if (lines.length === 0) return { commands: [] };
+
+    const pipeRows = lines
+      .map((line) => line.split("|").map((cell) => cell.trim()))
+      .filter((row) => row.some(Boolean));
+
+    if (pipeRows.length >= 2 && pipeRows[0].length >= 2) {
       return {
         commands: [
           {
             id: crypto.randomUUID(),
-            type: "update-slide-layout",
+            type: "remove-element",
             slideId: args.slideId,
-            layout: "concept",
+            elementId: args.elementId,
+          },
+          {
+            id: crypto.randomUUID(),
+            type: "add-element",
+            slideId: args.slideId,
+            element: {
+              id: crypto.randomUUID(),
+              type: "table",
+              x: element.x,
+              y: element.y,
+              width: element.width,
+              height: element.height,
+              rows: pipeRows,
+              headerRow: true,
+              zebraStripe: true,
+            },
           },
         ],
       };
@@ -50,11 +78,11 @@ export const beautifyTableTool: ToolDefinition<
         id: crypto.randomUUID(),
         type: "remove-element",
         slideId: args.slideId,
-        elementId: element.id,
+        elementId: args.elementId,
       },
     ];
 
-    for (const row of rows.slice(0, 4)) {
+    for (const line of lines.slice(0, 4)) {
       commands.push({
         id: crypto.randomUUID(),
         type: "add-element",
@@ -62,13 +90,12 @@ export const beautifyTableTool: ToolDefinition<
         element: {
           id: crypto.randomUUID(),
           type: "text",
-          x: 0,
-          y: 0,
-          width: 400,
-          height: 80,
-          text: row,
+          x: element.x,
+          y: element.y,
+          width: element.width,
+          height: 60,
+          text: line,
           fontSize: 20,
-          textRole: "body",
         },
       });
     }

@@ -5,18 +5,18 @@ import { getThemePaletteColors } from "@shared/layout";
 
 export const beautifyChartSchema = z.object({
   slideId: z.string().describe("幻灯片 ID"),
-  elementId: z.string().describe("图表或 KPI 文本元素 ID"),
+  elementId: z.string().describe("图表或 KPI 文本/图表元素 ID"),
 });
 
 /**
- * Deferred Tool: 对图表 / KPI 数字进行美化。
+ * Deferred Tool: 对图表 / KPI 数字进行美化，或创建 chart 元素。
  */
 export const beautifyChartTool: ToolDefinition<
   typeof beautifyChartSchema,
   { commands: PresentationCommand[] }
 > = {
   name: "BeautifyChart",
-  description: "强化 KPI / 指标数字的视觉展现（大字号、强调色、metric 角色）。",
+  description: "强化 KPI / 指标数字的视觉展现，或将文本指标转为 chart 元素（kpi-tower / bar）。",
   category: "deferred",
   loadPolicy: "deferred",
   inputSchema: beautifyChartSchema,
@@ -26,11 +26,28 @@ export const beautifyChartTool: ToolDefinition<
     if (!slide) return { commands: [] };
 
     const element = slide.elements.find((item) => item.id === args.elementId);
-    if (!element || element.type !== "text") return { commands: [] };
+    if (!element) return { commands: [] };
 
     const theme = context.presentation.theme || "nordic";
     const palette = context.presentation.palette || "cyan";
     const colors = getThemePaletteColors(theme, palette);
+
+    if (element.type === "chart") {
+      return {
+        commands: [
+          {
+            id: crypto.randomUUID(),
+            type: "update-element",
+            slideId: args.slideId,
+            elementId: args.elementId,
+            element: { ...element, accentColor: colors.accent },
+          },
+        ],
+      };
+    }
+
+    if (element.type !== "text") return { commands: [] };
+
     const isMetricLayout = slide.layout === "case";
     const numericHint = /[\d%$¥€]/.test(element.text);
 
@@ -38,20 +55,36 @@ export const beautifyChartTool: ToolDefinition<
       return { commands: [] };
     }
 
-    const commands: PresentationCommand[] = [
-      {
-        id: crypto.randomUUID(),
-        type: "update-text-style",
-        slideId: args.slideId,
-        elementId: args.elementId,
-        textRole: "metric",
-        fontSize: 48,
-        bold: true,
-        color: colors.accent,
-        align: "center",
-      },
-    ];
+    const parsedValue = parseFloat(element.text.replace(/[^\d.]/g, ""));
+    const chartType = isMetricLayout ? "kpi-tower" : "bar";
 
-    return { commands };
+    return {
+      commands: [
+        {
+          id: crypto.randomUUID(),
+          type: "remove-element",
+          slideId: args.slideId,
+          elementId: args.elementId,
+        },
+        {
+          id: crypto.randomUUID(),
+          type: "add-element",
+          slideId: args.slideId,
+          element: {
+            id: crypto.randomUUID(),
+            type: "chart",
+            x: element.x,
+            y: element.y,
+            width: element.width,
+            height: element.height,
+            chartType,
+            data: {
+              items: [{ label: element.text, value: Number.isFinite(parsedValue) ? parsedValue : 100 }],
+            },
+            accentColor: colors.accent,
+          },
+        },
+      ],
+    };
   },
 };

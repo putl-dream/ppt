@@ -3,6 +3,7 @@ import type { Presentation, Slide } from "./presentation";
 import { slideSchema, slideElementSchema } from "./presentation";
 import { applyLayout } from "./layout";
 import { SLIDE_LAYOUTS } from "./slide-layouts";
+import { SLIDE_VARIANTS } from "./slide-variant";
 
 export const presentationCommandSchema = z.discriminatedUnion("type", [
   z.object({
@@ -57,6 +58,12 @@ export const presentationCommandSchema = z.discriminatedUnion("type", [
     type: z.literal("set-slide-background"),
     slideId: z.string(),
     backgroundVariant: z.enum(["default", "hero", "muted"]),
+  }),
+  z.object({
+    id: z.string(),
+    type: z.literal("update-slide-variant"),
+    slideId: z.string(),
+    slideVariant: z.enum(SLIDE_VARIANTS).optional(),
   }),
   z.object({
     id: z.string(),
@@ -293,6 +300,32 @@ export function executeCommand(
           type: "set-slide-background",
           slideId: command.slideId,
           backgroundVariant: targetSlide.backgroundVariant ?? "default",
+        },
+      },
+    };
+  }
+
+  if (command.type === "update-slide-variant") {
+    const slideIndex = presentation.slides.findIndex((s) => s.id === command.slideId);
+    if (slideIndex < 0) throw new Error(`Slide not found: ${command.slideId}`);
+    const targetSlide = presentation.slides[slideIndex];
+    const slides = presentation.slides.map((s) => {
+      if (s.id !== command.slideId) return s;
+      if (command.slideVariant === undefined) {
+        const { slideVariant: _removed, ...rest } = s;
+        return rest as Slide;
+      }
+      return { ...s, slideVariant: command.slideVariant };
+    });
+    return {
+      presentation: nextRevision({ ...presentation, slides }),
+      executed: {
+        command,
+        inverse: {
+          id: crypto.randomUUID(),
+          type: "update-slide-variant",
+          slideId: command.slideId,
+          slideVariant: targetSlide.slideVariant,
         },
       },
     };

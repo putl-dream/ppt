@@ -126,14 +126,14 @@ Agent PPT 采用 **Presentation JSON + SubmitCommands** 两阶段建稿（内容
 > 目标：数据可视化、页级节奏、可选 HTML 导出。  
 > 预估：3+ 迭代，按需求取舍
 
-| # | 能力 | 类型 | 说明 |
-|---|------|------|------|
-| P2-1 | **Slide variant** | 模型 | 每页 `light` / `dark` / `hero`（映射 guizang 主题节奏） |
-| P2-2 | **Chart 元素** | 模型 | bar、h-bar、timeline、kpi-tower；数据 JSON 绑定 |
-| P2-3 | **Icon 元素** | 模型 | Lucide name → SVG 或内置 shape 集 |
-| P2-4 | **Table 元素** | 模型 | 行列 + 主题色斑马线 |
-| P2-5 | **HTML 导出通道**（可选） | 导出 | 与 guizang template 桥接，服务「网页 PPT」场景 |
-| P2-6 | **布局注册表** | 引擎 | 可扩展 layout 插件（类似 guizang S01–S22 登记），避免硬编码 monolith |
+| # | 能力 | 类型 | 说明 | 状态 |
+|---|------|------|------|------|
+| P2-1 | **Slide variant** | 模型 | 每页 `light` / `dark` / `hero`（映射 guizang 主题节奏） | ✅ |
+| P2-2 | **Chart 元素** | 模型 | bar、h-bar、timeline、kpi-tower；数据 JSON 绑定 | ✅ |
+| P2-3 | **Icon 元素** | 模型 | Lucide name → SVG 或内置 shape 集 | ✅ |
+| P2-4 | **Table 元素** | 模型 | 行列 + 主题色斑马线 | ✅ |
+| P2-5 | **HTML 导出通道**（可选） | 导出 | 与 guizang template 桥接，服务「网页 PPT」场景 | ✅ |
+| P2-6 | **布局注册表** | 引擎 | 可扩展 layout 插件（类似 guizang S01–S22 登记），避免硬编码 monolith | ✅ |
 
 ---
 
@@ -260,3 +260,4 @@ P2 按产品需求选型
 |------|------|
 | 2026-07-04 | 初版：能力评估 + P0/P1/P2 方案 |
 | 2026-07-04 | P0 验收通过；P1 实现 toc/quote/image-grid + 5 个 deferred tools |
+| 2026-07-04 | P2 实现：slide variant、chart/table/icon 元素、HTML 导出、layout 注册表 |

@@ -1,6 +1,54 @@
 import { z } from "zod";
 import { FONT_FAMILIES, TEXT_ROLES } from "./typography";
 import { BACKGROUND_VARIANTS } from "./slide-background";
+import { SLIDE_VARIANTS } from "./slide-variant";
+import { ICON_NAMES } from "./icon-registry";
+
+export const CHART_TYPES = ["bar", "h-bar", "timeline", "kpi-tower"] as const;
+
+export const chartDataSchema = z.object({
+  labels: z.array(z.string()).optional(),
+  values: z.array(z.number()).optional(),
+  items: z
+    .array(z.object({ label: z.string(), value: z.number() }))
+    .optional(),
+});
+
+export const chartElementSchema = z.object({
+  id: z.string(),
+  type: z.literal("chart"),
+  x: z.number(),
+  y: z.number(),
+  width: z.number().positive(),
+  height: z.number().positive(),
+  chartType: z.enum(CHART_TYPES),
+  data: chartDataSchema,
+  accentColor: z.string().optional(),
+});
+
+export const tableElementSchema = z.object({
+  id: z.string(),
+  type: z.literal("table"),
+  x: z.number(),
+  y: z.number(),
+  width: z.number().positive(),
+  height: z.number().positive(),
+  rows: z.array(z.array(z.string())).min(1),
+  headerRow: z.boolean().optional().default(true),
+  zebraStripe: z.boolean().optional().default(true),
+});
+
+export const iconElementSchema = z.object({
+  id: z.string(),
+  type: z.literal("icon"),
+  x: z.number(),
+  y: z.number(),
+  width: z.number().positive(),
+  height: z.number().positive(),
+  name: z.enum(ICON_NAMES),
+  color: z.string().optional(),
+  strokeWidth: z.number().positive().optional().default(2),
+});
 
 export const textElementSchema = z.object({
   id: z.string(),
@@ -47,6 +95,9 @@ export const slideElementSchema = z.discriminatedUnion("type", [
   textElementSchema,
   imageElementSchema,
   shapeElementSchema,
+  chartElementSchema,
+  tableElementSchema,
+  iconElementSchema,
 ]);
 
 
@@ -56,6 +107,7 @@ export const slideSchema = z.object({
   elements: z.array(slideElementSchema),
   layout: z.string().optional(),
   backgroundVariant: z.enum(BACKGROUND_VARIANTS).optional(),
+  slideVariant: z.enum(SLIDE_VARIANTS).optional(),
 });
 
 export const presentationSchema = z.object({
@@ -70,7 +122,11 @@ export const presentationSchema = z.object({
 export type TextElement = z.infer<typeof textElementSchema>;
 export type ImageElement = z.infer<typeof imageElementSchema>;
 export type ShapeElement = z.infer<typeof shapeElementSchema>;
+export type ChartElement = z.infer<typeof chartElementSchema>;
+export type TableElement = z.infer<typeof tableElementSchema>;
+export type IconElement = z.infer<typeof iconElementSchema>;
 export type SlideElement = z.infer<typeof slideElementSchema>;
+export type ChartData = z.infer<typeof chartDataSchema>;
 export type Slide = z.infer<typeof slideSchema>;
 export type Presentation = z.infer<typeof presentationSchema>;
 

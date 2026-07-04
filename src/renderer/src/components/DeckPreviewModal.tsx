@@ -1,8 +1,8 @@
 import React, { useEffect } from "react";
 import { createPortal } from "react-dom";
 import type { Presentation } from "@shared/presentation";
-import { resolveSlideBackground, resolveSlideBackgroundVariant } from "@shared/slide-background";
-import { ShapeElementView } from "./ShapeElementView";
+import { resolveSlideBackgroundWithVariant } from "@shared/slide-variant";
+import { SlideElementRenderer } from "./SlideElementRenderer";
 import { CompressIcon } from "./Icons";
 
 interface DeckPreviewModalProps {
@@ -95,11 +95,7 @@ export const DeckPreviewModal: React.FC<DeckPreviewModalProps> = ({
   );
   const activeSlide = presentation.slides[activeIndex] ?? presentation.slides[0];
   const activeSlideBg = activeSlide
-    ? resolveSlideBackground(
-        selectedTheme,
-        selectedPalette,
-        resolveSlideBackgroundVariant(activeSlide),
-      ).slideBg
+    ? resolveSlideBackgroundWithVariant(selectedTheme, selectedPalette, activeSlide).slideBg
     : themeStyles.slideBg;
 
   return createPortal(
@@ -169,34 +165,12 @@ export const DeckPreviewModal: React.FC<DeckPreviewModalProps> = ({
                       alignItems: "center",
                     }}
                   >
-                    {element.type === "text" && (
-                      <p
-                        style={{
-                          fontSize: element.fontSize,
-                          color: element.color || themeStyles.bodyColor,
-                          fontWeight: element.bold ? "bold" : "normal",
-                          textAlign: element.align || "left",
-                          margin: 0,
-                          lineHeight: 1.4,
-                          whiteSpace: "pre-wrap",
-                        }}
-                      >
-                        {element.text}
-                      </p>
-                    )}
-                    {element.type === "image" && (
-                      <img
-                        src={element.url}
-                        alt=""
-                        style={{
-                          width: "100%",
-                          height: "100%",
-                          objectFit: element.objectFit || "cover",
-                          borderRadius: `${element.borderRadius || 0}px`,
-                        }}
-                      />
-                    )}
-                    {element.type === "shape" && <ShapeElementView element={element} />}
+                    <SlideElementRenderer
+                      element={element}
+                      theme={selectedTheme}
+                      bodyColor={themeStyles.bodyColor}
+                      accentColor={themeStyles.accentColor}
+                    />
                   </div>
                 ))}
               </div>

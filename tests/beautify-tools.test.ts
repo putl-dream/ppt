@@ -60,12 +60,11 @@ describe("beautify deferred tools", () => {
       makeContext(presentation),
     );
 
-    expect(result.commands.length).toBe(1);
-    expect(result.commands[0]?.type).toBe("update-text-style");
-    if (result.commands[0]?.type === "update-text-style") {
-      expect(result.commands[0].textRole).toBe("metric");
-      expect(result.commands[0].fontSize).toBe(48);
-      expect(result.commands[0].bold).toBe(true);
+    expect(result.commands.length).toBe(2);
+    expect(result.commands[0]?.type).toBe("remove-element");
+    expect(result.commands[1]?.type).toBe("add-element");
+    if (result.commands[1]?.type === "add-element") {
+      expect(result.commands[1].element.type).toBe("chart");
     }
   });
 

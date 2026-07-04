@@ -77,6 +77,22 @@ describe("DeckExportService", () => {
     expect(saved.slides).toHaveLength(presentation.slides.length);
   });
 
+  it("exports presentation to html when file path ends with .html", async () => {
+    const presentation = createStarterPresentation();
+    const filePath = await createTempExportPath("deck-export-html-", "html");
+
+    const result = await service.exportDeck({
+      presentation,
+      options: defaultExportOptions,
+      filePath,
+    });
+
+    expect(result.filePath).toBe(filePath);
+    const html = await readFile(filePath, "utf8");
+    expect(html).toContain("<!DOCTYPE html>");
+    expect(html).toContain(presentation.title);
+  });
+
   it("generates a default export path when filePath is omitted", async () => {
     const presentation = createStarterPresentation();
 

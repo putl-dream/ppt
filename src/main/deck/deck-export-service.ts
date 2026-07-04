@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import type { Presentation } from "@shared/presentation";
 import type { DeckExportResult, ExportPresentationOptions } from "@shared/ipc";
 import { exportToPptx } from "../ppt-exporter";
+import { exportToHtml } from "@shared/html-exporter";
 
 export interface DeckExportInput {
   presentation: Presentation;
@@ -39,9 +40,12 @@ export class DeckExportService {
 
     if (filePath.endsWith(".json")) {
       await writeFile(filePath, JSON.stringify(input.presentation, null, 2), "utf8");
+    } else if (filePath.endsWith(".html")) {
+      const html = exportToHtml(input.presentation, mergedOptions);
+      await writeFile(filePath, html, "utf8");
     } else {
       if (!filePath.endsWith(".pptx")) {
-        throw new Error("Unsupported export format; only .pptx and .json are supported.");
+        throw new Error("Unsupported export format; only .pptx, .json, and .html are supported.");
       }
       await exportToPptx(input.presentation, mergedOptions, filePath);
     }
@@ -54,7 +58,7 @@ export class DeckExportService {
 
   private async createDefaultExportPath(
     presentation: Presentation,
-    format: "pptx" | "json",
+    format: "pptx" | "json" | "html",
   ): Promise<string> {
     const dir = join(tmpdir(), "agent-ppt-exports");
     await mkdir(dir, { recursive: true });

@@ -1,8 +1,9 @@
 import React, { useRef, useState, useEffect } from "react";
 import { Presentation, Slide, SlideElement, TextElement } from "@shared/presentation";
 import { fontFamilyToCss, resolveElementFontFamily } from "@shared/typography";
-import { resolveSlideBackground, resolveSlideBackgroundVariant } from "@shared/slide-background";
+import { resolveSlideBackgroundWithVariant } from "@shared/slide-variant";
 import { ShapeElementView } from "../ShapeElementView";
+import { SlideElementRenderer } from "../SlideElementRenderer";
 import {
   UndoIcon,
   RedoIcon,
@@ -271,11 +272,7 @@ export const CanvasArea: React.FC<CanvasAreaProps> = ({
 
   const styles = getThemeStyles();
   const activeSlideBg = activeSlide
-    ? resolveSlideBackground(
-        selectedTheme,
-        selectedPalette,
-        resolveSlideBackgroundVariant(activeSlide),
-      ).slideBg
+    ? resolveSlideBackgroundWithVariant(selectedTheme, selectedPalette, activeSlide).slideBg
     : styles.slideBg;
 
   return (
@@ -486,6 +483,17 @@ export const CanvasArea: React.FC<CanvasAreaProps> = ({
                       )}
 
                       {element.type === "shape" && <ShapeElementView element={element} />}
+
+                      {(element.type === "chart" ||
+                        element.type === "table" ||
+                        element.type === "icon") && (
+                        <SlideElementRenderer
+                          element={element}
+                          theme={selectedTheme}
+                          bodyColor={styles.bodyColor}
+                          accentColor={styles.accentColor}
+                        />
+                      )}
                     </div>
 
                     {/* 手工选中后的调节边框与操纵手柄 */}
@@ -670,10 +678,10 @@ export const CanvasArea: React.FC<CanvasAreaProps> = ({
             <div
               className="thumb-preview-box"
               style={{
-                background: resolveSlideBackground(
+                background: resolveSlideBackgroundWithVariant(
                   selectedTheme,
                   selectedPalette,
-                  resolveSlideBackgroundVariant(slide),
+                  slide,
                 ).slideBg,
               }}
             >

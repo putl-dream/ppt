@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { ToolDefinition } from "../tool-definition";
 import type { Slide, TextElement, ImageElement } from "@shared/presentation";
-import { resolveSlideBackground, resolveSlideBackgroundVariant } from "@shared/slide-background";
+import { resolveSlideBackgroundWithVariant } from "@shared/slide-variant";
 import { listLayoutSlots } from "@shared/layout-slots";
 import { fontFamilyToCss, resolveElementFontFamily } from "@shared/typography";
 
@@ -14,6 +14,7 @@ export interface SlidePreviewSummary {
   title: string;
   layout?: string;
   backgroundVariant: string;
+  slideVariant?: string;
   backgroundCss: string;
   imageSlots: string[];
   textElements: Array<{
@@ -37,6 +38,9 @@ export interface SlidePreviewSummary {
     height: number;
   }>;
   shapeCount: number;
+  chartCount: number;
+  tableCount: number;
+  iconCount: number;
   description: string;
 }
 
@@ -73,14 +77,14 @@ export const previewSlideTool: ToolDefinition<
 
     const theme = context.presentation.theme || "nordic";
     const palette = context.presentation.palette || "cyan";
-    const variant = resolveSlideBackgroundVariant(slide);
-    const bg = resolveSlideBackground(theme, palette, variant);
+    const bg = resolveSlideBackgroundWithVariant(theme, palette, slide);
 
     const preview: SlidePreviewSummary = {
       slideId: slide.id,
       title: slide.title,
       layout: slide.layout,
-      backgroundVariant: variant,
+      backgroundVariant: slide.backgroundVariant ?? "default",
+      slideVariant: slide.slideVariant,
       backgroundCss: bg.slideBg,
       imageSlots: listLayoutSlots(slide.layout ?? ""),
       textElements: slide.elements
@@ -111,6 +115,9 @@ export const previewSlideTool: ToolDefinition<
           height: el.height,
         })),
       shapeCount: slide.elements.filter((el) => el.type === "shape").length,
+      chartCount: slide.elements.filter((el) => el.type === "chart").length,
+      tableCount: slide.elements.filter((el) => el.type === "table").length,
+      iconCount: slide.elements.filter((el) => el.type === "icon").length,
       description: describeSlide(slide, theme),
     };
 

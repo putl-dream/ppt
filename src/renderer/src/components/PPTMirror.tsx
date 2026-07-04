@@ -1,9 +1,8 @@
 import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Presentation, SlideElement } from "@shared/presentation";
-import { fontFamilyToCss, resolveElementFontFamily } from "@shared/typography";
-import { resolveSlideBackground, resolveSlideBackgroundVariant } from "@shared/slide-background";
-import { ShapeElementView } from "./ShapeElementView";
+import { resolveSlideBackgroundWithVariant } from "@shared/slide-variant";
+import { SlideElementRenderer } from "./SlideElementRenderer";
 import { SparklesIcon, ExpandIcon, CompressIcon, PlayIcon, FileIcon, DownloadIcon } from "./Icons";
 
 
@@ -183,11 +182,7 @@ export const PPTMirror: React.FC<PPTMirrorProps> = ({
   const themeStyles = getThemeStyles();
   const fullscreenSlide = slides[fullscreenIndex];
   const fullscreenSlideBg = fullscreenSlide
-    ? resolveSlideBackground(
-        selectedTheme,
-        selectedPalette,
-        resolveSlideBackgroundVariant(fullscreenSlide),
-      ).slideBg
+    ? resolveSlideBackgroundWithVariant(selectedTheme, selectedPalette, fullscreenSlide).slideBg
     : themeStyles.slideBg;
 
   const handleFullscreenOpen = () => {
@@ -263,10 +258,10 @@ export const PPTMirror: React.FC<PPTMirrorProps> = ({
           const cardHeight = isExpanded ? 180 : 157.5;
           const scale = cardWidth / 1280;
 
-          const slideBg = resolveSlideBackground(
+          const slideBg = resolveSlideBackgroundWithVariant(
             selectedTheme,
             selectedPalette,
-            resolveSlideBackgroundVariant(slide),
+            slide,
           ).slideBg;
 
           return (
@@ -353,39 +348,12 @@ export const PPTMirror: React.FC<PPTMirrorProps> = ({
                         alignItems: "center",
                       }}
                     >
-                      {element.type === "text" && (
-                        <p
-                          style={{
-                            fontSize: element.fontSize,
-                            color: element.color || themeStyles.bodyColor,
-                            fontWeight: element.bold ? "bold" : "normal",
-                            textAlign: element.align || "left",
-                            fontFamily: fontFamilyToCss(
-                              resolveElementFontFamily(element, selectedTheme),
-                            ),
-                            margin: 0,
-                            lineHeight: 1.4,
-                            whiteSpace: "pre-wrap",
-                          }}
-                        >
-                          {element.text}
-                        </p>
-                      )}
-
-                      {element.type === "image" && (
-                        <img
-                          src={element.url}
-                          alt="image"
-                          style={{
-                            width: "100%",
-                            height: "100%",
-                            objectFit: element.objectFit || "cover",
-                            borderRadius: `${element.borderRadius || 0}px`,
-                          }}
-                        />
-                      )}
-
-                      {element.type === "shape" && <ShapeElementView element={element} />}
+                      <SlideElementRenderer
+                        element={element}
+                        theme={selectedTheme}
+                        bodyColor={themeStyles.bodyColor}
+                        accentColor={themeStyles.accentColor}
+                      />
                     </div>
                   ))}
                 </div>
@@ -501,39 +469,12 @@ export const PPTMirror: React.FC<PPTMirrorProps> = ({
                         alignItems: "center",
                       }}
                     >
-                      {element.type === "text" && (
-                        <p
-                          style={{
-                            fontSize: element.fontSize,
-                            color: element.color || themeStyles.bodyColor,
-                            fontWeight: element.bold ? "bold" : "normal",
-                            textAlign: element.align || "left",
-                            fontFamily: fontFamilyToCss(
-                              resolveElementFontFamily(element, selectedTheme),
-                            ),
-                            margin: 0,
-                            lineHeight: 1.4,
-                            whiteSpace: "pre-wrap",
-                          }}
-                        >
-                          {element.text}
-                        </p>
-                      )}
-
-                      {element.type === "image" && (
-                        <img
-                          src={element.url}
-                          alt="image"
-                          style={{
-                            width: "100%",
-                            height: "100%",
-                            objectFit: element.objectFit || "cover",
-                            borderRadius: `${element.borderRadius || 0}px`,
-                          }}
-                        />
-                      )}
-
-                      {element.type === "shape" && <ShapeElementView element={element} />}
+                      <SlideElementRenderer
+                        element={element}
+                        theme={selectedTheme}
+                        bodyColor={themeStyles.bodyColor}
+                        accentColor={themeStyles.accentColor}
+                      />
                     </div>
                   ))}
                 </div>
