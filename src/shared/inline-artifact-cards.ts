@@ -96,12 +96,11 @@ export function shouldShowInlineCard(
     case "layout":
       return presentationNeedsLayoutChoice(context.presentation);
     case "deck":
+      // 新项目从空 deck 起步，任何存在的幻灯片都是真实内容
       return Boolean(
         context.presentation
         && !presentationNeedsLayoutChoice(context.presentation)
-        && (context.presentation.revision > 0 || context.presentation.slides.length > 1
-          || (context.presentation.slides.length === 1
-            && context.presentation.slides[0]?.title !== "项目起点")),
+        && (context.presentation.revision > 0 || context.presentation.slides.length > 0),
       );
     default:
       return false;
