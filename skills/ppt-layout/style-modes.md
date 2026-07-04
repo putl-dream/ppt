@@ -27,8 +27,8 @@
 | 1 开场封面 | `cover` | 副标题 1 条 |
 | 2 章节幕封 | `section` | 每大章前 |
 | 3 数据大字报 | `case` | 右栏大数字 |
-| 4 左文右图 | `case` 或 `concept` | 2 条 body |
-| 5 图片网格 | `concept` | 暂无 image 槽位，用要点代替 |
+| 4 左文右图 | `case`（side 槽）或 `image-grid` | 有图时 InsertSlideImage |
+| 5 图片网格 | `image-grid` | 2–4 图；grid-0…grid-3 槽位 |
 | 6 Pipeline | `process` | 2–4 步 |
 | 7 悬念/问题页 | `section` 或 `summary` | 单句收束 |
 | 8 大引用 | `concept`（1 条）或 `section` | 金句页 |
@@ -74,3 +74,16 @@ guizang 不允许自定义 hex；本项目用固定 theme/palette，语义对齐
 | `muted` | 密集内容页（可选） | 更柔和的底色 |
 
 nordic 示例：hero `#fbfbfa`，正文 `#ffffff`；ocean 示例：hero 渐变，正文 `#0f172a`。
+
+## 页级 slideVariant（P2-1）
+
+`slideVariant` 覆盖全 deck 背景节奏，映射 guizang light/dark/hero：
+
+| slideVariant | 典型页面 | 视觉 | 命令 |
+|--------------|----------|------|------|
+| `hero` | cover、section | 品牌渐变 | `update-slide-variant` |
+| `light` | 正文、summary | 浅色底 | 同上 |
+| `dark` | quote、强调页 | 深色底 | 同上 |
+
+layout-plan 中指定 slideVariant；Executor 阶段批量 `update-slide-variant`。
+未指定时：cover/section→hero，quote→light，其余由 backgroundVariant 推断。

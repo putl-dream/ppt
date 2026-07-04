@@ -1,0 +1,247 @@
+import { z } from "zod";
+
+import { validateDeckRhythm, type DeckRhythmIssue } from "./deck-rhythm";
+import { SLIDE_LAYOUTS } from "./slide-layouts";
+import { SLIDE_VARIANTS } from "./slide-variant";
+import type { PresentationCommand } from "./commands";
+
+export const LAYOUT_PLAN_PATH = "slides/layout-plan.json";
+
+export const NARRATIVE_ROLES = [
+  "cover",
+  "toc",
+  "section",
+  "content",
+  "data",
+  "comparison",
+  "quote",
+  "summary",
+] as const;
+
+export const STYLE_MODES = ["template", "creative"] as const;
+
+export const layoutPlanEnhancementSchema = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("beautify-chart"),
+    chartType: z.enum(["bar", "h-bar", "timeline", "kpi-tower"]).optional(),
+  }),
+  z.object({ type: z.literal("beautify-table") }),
+  z.object({
+    type: z.literal("insert-image"),
+    slot: z.string(),
+    url: z.string(),
+    aspectRatio: z.enum(["16:9", "4:3", "1:1"]).optional(),
+  }),
+  z.object({
+    type: z.literal("add-decorations"),
+    mode: z.enum(["creative"]).optional(),
+  }),
+  z.object({
+    type: z.literal("add-icon"),
+    name: z.string(),
+  }),
+]);
+
+export const layoutPlanSlideSchema = z.object({
+  slideId: z.string(),
+  title: z.string(),
+  narrativeRole: z.enum(NARRATIVE_ROLES),
+  layout: z.enum(SLIDE_LAYOUTS),
+  slideVariant: z.enum(SLIDE_VARIANTS).optional(),
+  rationale: z.string(),
+  enhancements: z.array(layoutPlanEnhancementSchema).default([]),
+});
+
+export const layoutPlanSchema = z.object({
+  version: z.literal(1).default(1),
+  theme: z.enum(["nordic", "midnight", "ocean", "sunset", "purple"]),
+  palette: z.enum(["cyan", "green", "purple", "orange"]),
+  styleMode: z.enum(STYLE_MODES).default("template"),
+  designNotes: z.string().optional(),
+  slides: z.array(layoutPlanSlideSchema).min(1),
+});
+
+export type LayoutPlanEnhancement = z.infer<typeof layoutPlanEnhancementSchema>;
+export type LayoutPlanSlide = z.infer<typeof layoutPlanSlideSchema>;
+export type LayoutPlan = z.infer<typeof layoutPlanSchema>;
+
+export interface LayoutPlanValidationIssue {
+  slideId?: string;
+  severity: "info" | "warning" | "error";
+  message: string;
+  fixHint?: string;
+}
+
+export function parseLayoutPlan(content: string): LayoutPlan {
+  return layoutPlanSchema.parse(JSON.parse(content));
+}
+
+export function serializeLayoutPlan(plan: LayoutPlan): string {
+  const normalized = layoutPlanSchema.parse(plan);
+  return `${JSON.stringify(normalized, null, 2)}\n`;
+}
+
+/** Validate a layout plan against design Rubric (A–D) before execution. */
+export function validateLayoutPlan(plan: LayoutPlan): LayoutPlanValidationIssue[] {
+  const issues: LayoutPlanValidationIssue[] = [];
+  const slides = plan.slides;
+  const count = slides.length;
+  const layouts = slides.map((slide) => slide.layout);
+  const slideIds = slides.map((slide) => slide.slideId);
+  const uniqueIds = new Set(slideIds);
+
+  if (uniqueIds.size !== slideIds.length) {
+    issues.push({
+      severity: "error",
+      message: "Duplicate slideId entries in layout plan.",
+      fixHint: "Each slide must have a unique slideId.",
+    });
+  }
+
+  if (!layouts.includes("cover") && count >= 3) {
+    issues.push({
+      severity: "warning",
+      message: "Layout plan has no cover slide (Rubric A1).",
+      fixHint: "First slide should use layout cover.",
+    });
+  }
+
+  if (count >= 5 && !layouts.includes("summary")) {
+    issues.push({
+      severity: "warning",
+      message: "Layout plan has no summary slide (Rubric A1).",
+      fixHint: "Add a summary slide at the end.",
+    });
+  }
+
+  if (count >= 8 && !layouts.includes("section")) {
+    issues.push({
+      severity: "warning",
+      message: "8+ slide plan lacks section divider (Rubric A2).",
+      fixHint: "Insert section before each major chapter.",
+    });
+  }
+
+  if (count >= 7 && !layouts.includes("toc")) {
+    issues.push({
+      severity: "info",
+      message: "7+ slide business deck has no toc (Rubric anti-pattern: no toc).",
+      fixHint: "Add toc as page 2.",
+    });
+  }
+
+  for (let i = 0; i < layouts.length - 2; i += 1) {
+    const a = layouts[i];
+    const b = layouts[i + 1];
+    const c = layouts[i + 2];
+    if (a === b && b === c) {
+      issues.push({
+        slideId: slides[i + 2]?.slideId,
+        severity: "error",
+        message: `Three consecutive '${a}' layouts in plan (Rubric A3).`,
+        fixHint: "Alternate process, concept, case, or section.",
+      });
+    }
+  }
+
+  const uniqueLayouts = new Set(layouts);
+  const minDistinct = count >= 10 ? 5 : count >= 7 ? 3 : 0;
+  if (minDistinct > 0 && uniqueLayouts.size < minDistinct) {
+    issues.push({
+      severity: "warning",
+      message: `${count}-slide plan uses only ${uniqueLayouts.size} layouts (need ≥${minDistinct}, Rubric A4).`,
+      fixHint: "Introduce case, process, comparison, toc, or section.",
+    });
+  }
+
+  const variants = slides.map((slide) => slide.slideVariant).filter(Boolean);
+  const uniqueVariants = new Set(variants);
+  if (count >= 5 && uniqueVariants.size < 2) {
+    issues.push({
+      severity: "info",
+      message: "Plan uses only one slideVariant (Rubric A5).",
+      fixHint: "Alternate hero (cover/section), default (content), muted (quote).",
+    });
+  }
+
+  const hasDataPage = layouts.some((layout) =>
+    layout === "case" || layout === "process" || layout === "comparison",
+  );
+  if (count >= 5 && !hasDataPage) {
+    issues.push({
+      severity: "warning",
+      message: "Plan lacks data/flow page — case, process, or comparison (Rubric C1–C2).",
+      fixHint: "Use case for KPI; process for trends; comparison for A vs B.",
+    });
+  }
+
+  for (const slide of slides) {
+    if (slide.narrativeRole === "data" && slide.layout !== "case" && slide.layout !== "process") {
+      issues.push({
+        slideId: slide.slideId,
+        severity: "info",
+        message: `Slide '${slide.title}' marked data but layout is ${slide.layout}.`,
+        fixHint: "Data highlights should use case or process.",
+      });
+    }
+    if (slide.narrativeRole === "comparison" && slide.layout !== "comparison") {
+      issues.push({
+        slideId: slide.slideId,
+        severity: "warning",
+        message: `Slide '${slide.title}' marked comparison but layout is ${slide.layout}.`,
+        fixHint: "Use comparison layout for A vs B content.",
+      });
+    }
+  }
+
+  return issues;
+}
+
+/** Simulate deck rhythm from a layout plan (pre-execution check). */
+export function validateLayoutPlanRhythm(plan: LayoutPlan): DeckRhythmIssue[] {
+  const pseudoPresentation = {
+    id: "layout-plan-check",
+    title: "Layout Plan Check",
+    revision: 0,
+    theme: plan.theme,
+    palette: plan.palette,
+    slides: plan.slides.map((slide) => ({
+      id: slide.slideId,
+      title: slide.title,
+      layout: slide.layout,
+      elements: [],
+    })),
+  };
+  return validateDeckRhythm(pseudoPresentation);
+}
+
+/** Build core presentation commands from a validated layout plan (Executor step 1). */
+export function buildLayoutPlanCommands(plan: LayoutPlan): PresentationCommand[] {
+  const commands: PresentationCommand[] = [
+    {
+      id: `cmd-theme-${plan.theme}`,
+      type: "set-theme",
+      theme: plan.theme,
+      palette: plan.palette,
+    },
+  ];
+
+  for (const slide of plan.slides) {
+    commands.push({
+      id: `cmd-layout-${slide.slideId}`,
+      type: "update-slide-layout",
+      slideId: slide.slideId,
+      layout: slide.layout,
+    });
+    if (slide.slideVariant) {
+      commands.push({
+        id: `cmd-variant-${slide.slideId}`,
+        type: "update-slide-variant",
+        slideId: slide.slideId,
+        slideVariant: slide.slideVariant,
+      });
+    }
+  }
+
+  return commands;
+}

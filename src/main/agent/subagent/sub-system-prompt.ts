@@ -19,6 +19,13 @@ export function buildSubAgentSystemPrompt(tools: SubAgentToolDefinition[]): stri
 4. **Conclude fast**: When done, reply with a 1–3 sentence conclusion: file path + what changed. Do not paste file contents.
 5. Stay within the workspace sandbox.
 
+## Layout design tasks (when description mentions layout-plan or ppt-design-layout)
+- Read presentation snapshot via workspace files (slides/storyboard.json, brief.md) or any provided slide list in the task.
+- Output **slides/layout-plan.json** only—do NOT modify presentation JSON or call SubmitCommands.
+- Each slide needs: slideId, title, narrativeRole, layout, rationale; optional slideVariant and enhancements.
+- Apply design Rubric: no 3 consecutive same layout; 7+ slides need toc + ≥3 layout types; KPI pages use case or beautify-chart.
+- Conclude with: path + layout type count + one key design decision (≤3 sentences total).
+
 ## Available tools
 ${tools.map(formatToolCard).join("\n\n")}
 

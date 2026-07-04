@@ -11,7 +11,7 @@ when_to_use: 用户要从零做完整 PPT、不确定下一步、或要求「一
 | 场景 | 路径 | 步骤 |
 |------|------|------|
 | 改页/加页/换主题/用户已给内容 | **轻量** | ReadPresentationSnapshot → SubmitCommands |
-| 小型新建（≤10 页，需求清晰） | **两阶段** | 内容草稿 → LayoutChoiceCard → 视觉排版 |
+| 小型新建（≤10 页，需求清晰） | **两阶段** | 内容草稿 → LayoutChoiceCard → **设计 → 执行** |
 | 大型新建（>10 页）或用户要求先规划 | **完整** | 见下表 |
 
 ## 完整路径阶段（按需跳过可选项）
@@ -24,20 +24,38 @@ when_to_use: 用户要从零做完整 PPT、不确定下一步、或要求「一
 | 3 分镜 | `ppt-storyboard` | `slides/storyboard.json` | Task |
 | 4 内容草稿 | `ppt-build` | add-slide（无排版） | SubmitCommands |
 | 4b 排版选择 | — | LayoutChoiceCard | 用户 |
-| 5 视觉排版 | `ppt-layout` | set-theme + update-slide-layout + 节奏核对 | SubmitCommands |
-| 5b 质检 | `deck-review` | 对照 ppt-layout/checklist | 报告 |
+| **4c 排版设计** | **`ppt-design-layout`** | **`slides/layout-plan.json`** | **Task（Design Agent）** |
+| 5 视觉执行 | `ppt-layout` | 按 plan 执行 commands + 增强 | SubmitCommands |
+| 5b 质检 | `deck-review` | Rubric + ValidateDeckLayout | 报告 |
 | 6 美化/导出 | `ppt-beautify` / `ppt-export` | 可选 | 仅用户要求 |
 
 **设计思路来源**：[guizang-ppt-skill](https://github.com/op7418/guizang-ppt-skill) 已适配至 `ppt-layout/`（style-modes、narrative-arc、checklist）。HTML/WebGL 规则不适用本项目。
 
-**默认跳过**：research（`ppt-research`）、独立 design 文件（主题可直接 set-theme）。
+**默认跳过**：research（`ppt-research`）、独立 design/theme.json（主题写入 layout-plan）。
 
 ## 主 Agent 职责
 
 1. 先选路径；单页修改**不要** TodoWrite、两阶段。
-2. 新建/批量加页：内容草稿完成后停止，等待 LayoutChoiceCard；用户确认后再 LoadSkill `ppt-layout`。
-3. workspace 文件一律 Task 委派；幻灯片改动 SubmitCommands。
-4. 控制步数：合并 SubmitCommands；不重复 LoadSkill；TodoWrite 只在完整路径开始时用一次。
+2. 新建/批量加页：内容草稿完成后停止，等待 LayoutChoiceCard。
+3. 用户确认排版方式后：**先** LoadSkill `ppt-design-layout` + Task 产出 layout-plan；**再** LoadSkill `ppt-layout` 按 plan 执行（禁止 freestyle 改 layout）。
+4. workspace 文件一律 Task 委派；幻灯片改动 SubmitCommands。
+5. 控制步数：设计决策在 Task 内完成；执行阶段合并 SubmitCommands；不重复 LoadSkill。
+
+## 阶段 4c → 5 衔接
+
+```
+LayoutChoiceCard 确认
+    ↓
+LoadSkill ppt-design-layout
+Task → slides/layout-plan.json
+    ↓
+LoadSkill ppt-layout（Executor 模式）
+ReadPresentationSnapshot + 读取 layout-plan
+SubmitCommands：set-theme → update-slide-layout → update-slide-variant
+ExecuteExtraTool：plan.enhancements（BeautifyChart / InsertSlideImage 等）
+    ↓
+LoadSkill deck-review
+```
 
 ## 分支
 
@@ -45,3 +63,4 @@ when_to_use: 用户要从零做完整 PPT、不确定下一步、或要求「一
 - 已有 brief 无 outline → 从 outline 开始
 - 已有 storyboard → 直接 ppt-build
 - 只要导出 → ppt-export
+- 用户拒绝 Design Agent → 可降级为 ppt-layout 自主选 layout（质量不保证）

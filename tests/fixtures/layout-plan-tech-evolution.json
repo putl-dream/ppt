@@ -1,0 +1,80 @@
+{
+  "version": 1,
+  "theme": "ocean",
+  "palette": "cyan",
+  "styleMode": "template",
+  "designNotes": "Redesign of 7-slide tech evolution deck: replace concept abuse with process/case/toc rhythm.",
+  "slides": [
+    {
+      "slideId": "slide-1",
+      "title": "2025 技术演进与商业落地",
+      "narrativeRole": "cover",
+      "layout": "cover",
+      "slideVariant": "hero",
+      "rationale": "Opening title page; hero variant for brand impact.",
+      "enhancements": []
+    },
+    {
+      "slideId": "slide-2",
+      "title": "目录",
+      "narrativeRole": "toc",
+      "layout": "toc",
+      "rationale": "7+ page business deck needs agenda (Rubric A2 anti-pattern fix).",
+      "enhancements": []
+    },
+    {
+      "slideId": "slide-3",
+      "title": "技术趋势概览",
+      "narrativeRole": "section",
+      "layout": "section",
+      "slideVariant": "hero",
+      "rationale": "Chapter breathing page before trend content.",
+      "enhancements": []
+    },
+    {
+      "slideId": "slide-4",
+      "title": "趋势一：大模型规模化",
+      "narrativeRole": "content",
+      "layout": "process",
+      "rationale": "Four evolution stages are sequential, not parallel concepts.",
+      "enhancements": []
+    },
+    {
+      "slideId": "slide-5",
+      "title": "趋势二：多模态融合",
+      "narrativeRole": "content",
+      "layout": "case",
+      "rationale": "Narrative + key metric; avoids third consecutive concept page.",
+      "enhancements": [
+        { "type": "beautify-chart", "chartType": "kpi-tower" }
+      ]
+    },
+    {
+      "slideId": "slide-6",
+      "title": "机遇与挑战",
+      "narrativeRole": "comparison",
+      "layout": "comparison",
+      "rationale": "A vs B structure; not two-column concept text boxes.",
+      "enhancements": []
+    },
+    {
+      "slideId": "slide-7",
+      "title": "行业案例",
+      "narrativeRole": "data",
+      "layout": "case",
+      "rationale": "Case study with KPI anchor (Rubric C1).",
+      "enhancements": [
+        { "type": "beautify-chart", "chartType": "kpi-tower" }
+      ]
+    },
+    {
+      "slideId": "slide-8",
+      "title": "总结与展望",
+      "narrativeRole": "summary",
+      "layout": "summary",
+      "slideVariant": "light",
+      "rationale": "Closing takeaway with left accent bar; distinct from concept cards.",
+      "enhancements": []
+    }
+  ]
+}

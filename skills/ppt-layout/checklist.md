@@ -21,39 +21,52 @@
 | 8 | layout 匹配内容 | 对照 [layout-catalog.md](layout-catalog.md) |
 | 9 | 无连续 3 页同 layout | 见 [narrative-arc.md](narrative-arc.md) |
 | 10 | 8 页+ 有 section | 至少 1 个章节分隔 |
-| 11 | 版式多样性 | 10 页+ 至少 5 种 layout |
+| 11 | 版式多样性 | 7 页+ ≥3 种；10 页+ ≥5 种 layout |
 | 12 | title/body 不语义重复 | 见 narrative-arc chrome/kicker 表 |
 | 13 | 有 cover + summary | 完整 deck 首尾齐全 |
+| 14 | layout-plan 一致 | Executor 模式：实际 layout 与 plan 一致 |
 
-## P2 · 文案与密度
+## P2-copy · 文案与密度
+
+> 注：此处 P2 指**文案密度**，与引擎 P2（chart/table/icon）不同。
 
 | # | 检查项 | 标准 |
 |---|--------|------|
-| 14 | 单条字数 | 中文 ≤15 字 |
-| 15 | 单页条数 | ≤5 条 |
-| 16 | 叙事完整 | 含 Hook 与 Takeaway（cover + summary） |
-| 17 | 数据页真实 | `case` 右栏是数字/结论，非空泛形容词 |
+| 15 | 单条字数 | 中文 ≤15 字 |
+| 16 | 单页条数 | ≤5 条 |
+| 17 | 叙事完整 | 含 Hook 与 Takeaway（cover + summary） |
+| 18 | 数据页真实 | `case` 右栏是数字/结论，非空泛形容词 |
+
+## P2-engine · 数据元素（引擎 P2）
+
+| # | 检查项 | 标准 |
+|---|--------|------|
+| 19 | chart 元素 | KPI 页有 kpi-tower/bar；数据绑定非空 |
+| 20 | table 元素 | headerRow + 斑马纹可读 |
+| 21 | icon 元素 | name 在内置 24 图标内 |
+| 22 | slideVariant | 5 页+ deck 至少 2 种 variant |
 
 ## P3 · 创意模式额外项
 
 | # | 检查项 | 标准 |
 |---|--------|------|
-| 18 | 装饰克制 | 每页 shape ≤3（不含 layout 卡片） |
-| 19 | 装饰范围 | 仅 process/comparison |
-| 20 | 不盖内容 | shape 不遮挡 text |
+| 23 | 装饰克制 | 每页 shape ≤3（不含 layout 卡片） |
+| 24 | 装饰范围 | 仅 process/comparison |
+| 25 | 不盖内容 | shape 不遮挡 text |
 
 ## 快速命令序列
 
 ```
-ReadPresentationSnapshot → 对照本清单 → 问题页 SubmitCommands 修复 → deck-review
+ReadPresentationSnapshot → ValidateDeckLayout → 对照本清单 → deck-review
 ```
 
 ## 不过清单时的修复策略
 
 | 问题 | 修复 |
 |------|------|
-| layout 错 | `update-slide-layout` 改 layout（不改 text） |
+| layout 错 | 回到 layout-plan redesign，或 `update-slide-layout` |
 | 标题重复 | 删画布重复 text |
 | 要点合并 | 拆成多个 text element（内容草稿阶段） |
-| 缺 section | `add-slide` section 页（需用户确认改结构） |
-| 未排版 | 批量 `update-slide-layout` + `set-theme` |
+| 缺 section/toc | redesign layout-plan 后重新执行 |
+| 未排版 | 按 layout-plan 批量 `update-slide-layout` + `set-theme` |
+| 缺 chart/KPI | BeautifyChart 或 layout-plan enhancement |

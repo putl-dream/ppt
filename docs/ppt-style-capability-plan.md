@@ -1,7 +1,7 @@
 # PPT 样式表达能力与能力建设方案
 
 > 版本：2026-07-04  
-> 状态：规划  
+> 状态：P0–P2 引擎已实现；**Agent 排版设计专责角色待建**（见 [ppt-capability-status-plan.md](./ppt-capability-status-plan.md)）
 > 关联：`skills/ppt-layout/`、参考模板 `Documents/PPT/layout/`、[guizang-ppt-skill](https://github.com/op7418/guizang-ppt-skill)
 
 ## 1. 背景与目标
@@ -240,6 +240,7 @@ P2 按产品需求选型
 | layout 膨胀难维护 | P2 引入 layout 注册表；P1 新增不超过 3 种 |
 | 图片路径/导出失败 | InsertSlideImage 统一校验；PPTX 导出已有 path/data 分支 |
 | Agent 仍手画坐标 | Skill + validator 禁止内容阶段以外手动 x/y |
+| **主 Agent 兼设计+执行，版式单调** | 引入 **Design Agent** + layout-plan；见 status-plan §1.1–E |
 | 与 guizang 预期落差 | 文档明确「语义映射 ≠ 视觉等价」；HTML 导出放 P2 可选 |
 | 破坏现有 deck | 新字段均可选；`applyLayout` 向后兼容 |
 
@@ -254,10 +255,34 @@ P2 按产品需求选型
 
 ---
 
-## 10. 变更记录
+## 11. Agent 排版设计专责（Phase E · 待实施）
+
+> 详见 [ppt-capability-status-plan.md](./ppt-capability-status-plan.md) §1.1–§1.2、Phase E。
+
+**问题**：P0–P2 解决的是**引擎能做什么**；当前体验瓶颈是**谁来做设计决策**。主 Agent 在排版阶段大量思考，却常产出 concept 卡片堆砌、无 section/toc/case 节奏的单调解。
+
+**方案**：新增 **Design Agent**（Task 委派），在内容草稿与用户确认排版方式之后：
+
+1. 读取 snapshot / storyboard  
+2. 按 **设计 Rubric**（叙事节奏、版式匹配、视觉层级、反模式）产出 `layout-plan.json`  
+3. 主 Agent 或 Executor **只执行 plan**（set-theme、update-slide-layout、Beautify*），不再 freestyle 选 layout  
+
+**与现有 Skill 关系**：
+
+| Skill | 定位调整 |
+|-------|----------|
+| `ppt-design` | 保留 theme 速查；deck 级 theme 写入 layout-plan |
+| `ppt-design-layout`（新建） | Design Agent 专责：Rubric + layout-plan 格式 |
+| `ppt-layout` | 降为 **Executor**：按 plan 批量 SubmitCommands |
+| `deck-review` | 验收 Rubric + ValidateDeckLayout |
+
+---
+
+## 12. 变更记录
 
 | 日期 | 说明 |
 |------|------|
 | 2026-07-04 | 初版：能力评估 + P0/P1/P2 方案 |
 | 2026-07-04 | P0 验收通过；P1 实现 toc/quote/image-grid + 5 个 deferred tools |
 | 2026-07-04 | P2 实现：slide variant、chart/table/icon 元素、HTML 导出、layout 注册表 |
+| 2026-07-04 | 新增 §11 Design Agent 专责方案；链至 ppt-capability-status-plan |

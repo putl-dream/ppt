@@ -29,6 +29,7 @@ const WORKSPACE_FILES = [
   "outline.md — 内容大纲",
   "research/notes.md — 资料与素材",
   "slides/storyboard.json — 逐页分镜",
+  "slides/layout-plan.json — 排版设计决策（Design Agent 产出）",
   "design/theme.json — 设计系统与版式",
 ];
 
@@ -85,7 +86,8 @@ ${WORKSPACE_FILES.map((line) => `- ${line}`).join("\n")}
 - 排版：{"id":"cmd-layout","type":"update-slide-layout","slideId":"slide-1","layout":"concept"}
 
 主题值：nordic、midnight、ocean、sunset、purple。调色板：cyan、green、purple、orange。
-布局值：cover、section、concept、comparison、process、architecture、case、summary。
+布局值：cover、section、concept、comparison、process、architecture、case、summary、toc、quote、image-grid。
+页级节奏：slideVariant 可选 light、dark、hero（命令 update-slide-variant）。
 画布 1280x720。ID 必须唯一。批量创建时一次 SubmitCommands 提交全部命令。
 
 ## 工作流（按场景选一条，不要叠加）
@@ -97,8 +99,10 @@ ${WORKSPACE_FILES.map((line) => `- ${line}`).join("\n")}
 4. message 结尾含「内容草稿已就绪，请选择排版方式」
 
 **视觉排版（第二阶段，用户已选排版方式）**
-- 标准排版：LoadSkill \`ppt-layout\`（含 guizang 节奏/风格规则）→ set-theme → 全部 update-slide-layout → deck-review
-- 创意装饰：LoadSkill \`ppt-layout\` + \`ppt-beautify\` → set-theme → update-slide-layout → shape 装饰
+- **推荐**：LoadSkill \`ppt-design-layout\` → Task 产出 \`slides/layout-plan.json\` → LoadSkill \`ppt-layout\`（Executor）按 plan 执行 → deck-review
+- 标准排版：set-theme → 全部 update-slide-layout（+ update-slide-variant）→ plan.enhancements 经 ExecuteExtraTool
+- 创意装饰：plan.styleMode=creative 时 AddLayoutDecorations
+- **降级**（无 Design Agent）：LoadSkill \`ppt-layout\` Legacy 模式自主选 layout
 
 **轻量单页修改**
 1. ReadPresentationSnapshot

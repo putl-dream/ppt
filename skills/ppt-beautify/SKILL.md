@@ -26,14 +26,30 @@ allowed-tools:
 | 风格推荐 | SelectStyleStrategy | 建议 theme/palette（不直接改 deck） |
 | 长文精简 | CompressText | 压缩后文本（需再 update-element） |
 | 改写字风 | RewriteSlideContent | `update-element` |
-| 图表样式 | BeautifyChart | commands |
-| 表格样式 | BeautifyTable | commands |
+| 图表样式 | BeautifyChart | P2：文本 KPI → chart 元素（kpi-tower/bar/timeline） |
+| 表格样式 | BeautifyTable | P2：`\|` 分隔文本 → table 元素 |
 | 图片入槽 | InsertSlideImage | add/update image（自动坐标） |
 | 创意装饰 | AddLayoutDecorations | shape 装饰 commands |
 | 字体角色 | ApplyTypography | update-text-style 批量 |
 | 单页预览 | PreviewSlide | 视觉摘要（layout/槽位/元素） |
 | 版式节奏 | ValidateDeckLayout | 连续 layout / 多样性报告 |
 | 一致性分析 | AnalyzeDeckConsistency | 报告（不直接改 deck） |
+
+## P2 元素能力
+
+BeautifyChart / BeautifyTable 在 P2 后**创建 chart/table 元素**，而非仅改样式：
+
+- **BeautifyChart**：case 页 metric 或数值文本 → `chart` 元素（chartType: kpi-tower / bar / h-bar / timeline）
+- **BeautifyTable**：结构化或 `|` 分隔文本 → `table` 元素（headerRow + zebraStripe）
+- **icon 元素**：经 `add-element` 添加，`name` 为内置 24 Lucide 兼容图标之一
+- **slideVariant**：经 `update-slide-variant` 设置页级 light/dark/hero 节奏
+
+典型命令序列（KPI 页）：
+
+```
+BeautifyChart(slideId) → SubmitCommands
+update-slide-variant(slideId, hero|light|dark) → SubmitCommands
+```
 
 ## 工作流
 
