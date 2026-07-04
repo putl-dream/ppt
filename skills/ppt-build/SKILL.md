@@ -22,6 +22,7 @@ allowed-tools:
 1. `ReadPresentationSnapshot` 了解当前 revision、已有 slide ID。
 2. Task 读取 `slides/storyboard.json`（若有）。
 3. **本阶段不提交** `set-theme`、`update-slide-layout`。
+4. 落盘时沿用 storyboard 的 `layout`（或 `narrativeRole` 推导值）作为 `slide.layout` 占位。
 
 ## 画布与结构
 

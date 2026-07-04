@@ -1,7 +1,7 @@
 # PPT 生成质量与模型注意力改进计划
 
 > 版本：2026-07-05
-> 状态：**P0-1 原生 tool-use 已落地**；**P0-2 渲染反馈闭环已落地**；P1/P2 待排期
+> 状态：**P0–P2 路线项均已落地**（P2-1 为轻量版：全流程概览注入，未合并阶段机）
 > 关联：[ppt-capability-status-plan.md](./ppt-capability-status-plan.md)（能力现状）、[ppt-style-capability-plan.md](./ppt-style-capability-plan.md)（样式方案）
 
 ---
@@ -91,10 +91,10 @@ AgentRuntime.run()
 |--------|------|----------|----------|
 | ~~**P0-1**~~ ✅ | 改用**原生 tool-use** 替代文本 JSON 协议 | 消除"大量思考"与 JSON 崩溃重试 | `agent-runtime.ts`、`gateway/*` |
 | ~~**P0-2**~~ ✅ | 引入**渲染反馈闭环**：排版后自动 `preview-slide` 截图回喂模型，做一轮 critique → fix | 打破质量天花板 | `preview-slide`、runtime 回合 |
-| **P1-1** | 提升引擎 layout 模板视觉质量（间距/层级/配色） | 抬高枚举驱动上限 | `design/layout-policy.ts`、渲染 |
-| **P1-2** | 内容与版式**联合决策**（storyboard 阶段即标注 narrativeRole/layout 意图） | 减少排版阶段硬塞溢出 | `ppt-storyboard`、`prompt-stage` |
-| **P2-1** | 合并阶段、给模型更多全局视野 | 减少窄窗口局部决策 | `prompt-stage.ts`、`prompt-sections.ts` |
-| **P2-2** | 高频 Deferred 工具直接提升为 Core | 减少发现-执行两跳 | `tool-registry.ts` |
+| ~~**P1-1**~~ ✅ | 提升引擎 layout 模板视觉质量（间距/层级/配色） | 抬高枚举驱动上限 | `layout.ts` |
+| ~~**P1-2**~~ ✅ | 内容与版式**联合决策**（storyboard 阶段即标注 narrativeRole/layout 意图） | 减少排版阶段硬塞溢出 | `storyboard.ts`、`ppt-storyboard` |
+| ~~**P2-1**~~ ✅（轻量） | 合并阶段、给模型更多全局视野 | 减少窄窗口局部决策 | `prompt-sections.ts` 全流程概览 |
+| ~~**P2-2**~~ ✅ | 高频 Deferred 工具直接提升为 Core | 减少发现-执行两跳 | `preview-slide.ts`、`validate-deck-layout.ts` |
 
 ---
 
@@ -161,7 +161,19 @@ AgentRuntime.run()
 **遗留**：
 
 1. OpenAI Chat Completions 不支持 tool 消息内嵌图像，缩略图以独立 user 消息追加（Anthropic 原生 inline）。
-2. `PreviewSlide` 仍为 Deferred Tool——自动反馈走 runtime 内部调用，模型手动调用仍需 Search→Execute 两跳（P2-2 可提升为 Core）。
+
+---
+
+## 6.3 P1/P2 落地记录（2026-07-05）
+
+| 项 | 改动摘要 |
+|----|----------|
+| **P1-1** | `layout.ts` 统一 `BODY_CONTENT_Y/H`、`CARD_GAP=32`、`CARD_PAD=28`、`ROW_GAP=24`；concept/process/comparison/summary 间距加宽 |
+| **P1-2** | `storyboard.ts` 新增 `narrativeRole` + `NARRATIVE_ROLE_DEFAULT_LAYOUT`；`ppt-storyboard` / `ppt-build` skill 同步 |
+| **P2-1** | `prompt-sections.ts` 各阶段注入全流程概览（未改 `prompt-stage.ts` 九阶段机） |
+| **P2-2** | `PreviewSlide`、`ValidateDeckLayout` 提升为 Core Tool，layout/review 可直接调用 |
+
+**测试**：`tests/storyboard-narrative-role.test.ts`；`agent-architecture-skeletons` 断言 Core 注册。
 
 ---
 
@@ -169,4 +181,4 @@ AgentRuntime.run()
 
 1. ~~当前 gateway 是否已支持原生 tool-use~~ → P0-1 已落地。
 2. ~~`preview-slide` 截图能否稳定回喂模型~~ → P0-2 已落地（Electron 640×360 PNG；vitest 降级为 JSON 摘要）。
-3. 是否接受在 storyboard 阶段引入轻量版式意图标注，作为 P1-2 的前置？
+3. ~~storyboard 轻量版式意图标注~~ → P1-2 已落地（`narrativeRole`）。

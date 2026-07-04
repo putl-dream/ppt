@@ -33,6 +33,16 @@ const PALETTE_BASE_ACCENT: Record<string, string> = {
   orange: "#f97316",
 };
 
+/** Body layout region below slide chrome (1280×720 canvas). P1-1 spacing tune. */
+const CANVAS_CONTENT_X = 120;
+const CANVAS_CONTENT_W = 1040;
+const BODY_CONTENT_Y = 188;
+const BODY_CONTENT_H = 448;
+const CARD_GAP = 32;
+const CARD_PAD = 28;
+const CARD_PAD_SM = 24;
+const ROW_GAP = 24;
+
 /**
  * Theme-adapted accent per palette. Dark themes get brighter variants, light
  * themes get more saturated ones, so all 4 palettes read distinctly instead of
@@ -355,8 +365,8 @@ export function applyLayout(
   } else {
     // slide.title is rendered in chrome (Canvas / PPTMirror / export header).
     // Only body elements belong on the canvas here.
-    const contentY = 200;
-    const contentH = 430;
+    const contentY = BODY_CONTENT_Y;
+    const contentH = BODY_CONTENT_H;
 
     if (layout === "comparison") {
       const leftCols: TextElement[] = [];
@@ -367,22 +377,22 @@ export function applyLayout(
       });
 
       const colW = 480;
-      const leftX = 120;
+      const leftX = CANVAS_CONTENT_X;
       const rightX = 680;
 
       elements.unshift(createCard(leftX, contentY, colW, contentH));
       elements.unshift(createCard(rightX, contentY, colW, contentH));
 
       if (leftCols.length > 0) {
-        const textH = contentH - 40;
+        const textH = contentH - CARD_PAD * 2;
         const textItemH = textH / leftCols.length;
         leftCols.forEach((el, idx) => {
           const styled = assignTextRole(el, idx === 0 ? "kicker" : "body");
-          styled.x = leftX + 24;
-          styled.y = contentY + 20 + idx * textItemH;
-          styled.width = colW - 48;
+          styled.x = leftX + CARD_PAD_SM;
+          styled.y = contentY + CARD_PAD_SM + idx * textItemH;
+          styled.width = colW - CARD_PAD_SM * 2;
           styled.height = textItemH;
-          styled.fontSize = fitFontSize(styled.text, colW - 48, textItemH, leftCols.length > 2 ? 18 : 22);
+          styled.fontSize = fitFontSize(styled.text, colW - CARD_PAD_SM * 2, textItemH, leftCols.length > 2 ? 18 : 22);
           styled.bold = idx === 0;
           styled.color = colors.body;
           styled.align = "left";
@@ -391,15 +401,15 @@ export function applyLayout(
       }
 
       if (rightCols.length > 0) {
-        const textH = contentH - 40;
+        const textH = contentH - CARD_PAD * 2;
         const textItemH = textH / rightCols.length;
         rightCols.forEach((el, idx) => {
           const styled = assignTextRole(el, idx === 0 ? "kicker" : "body");
-          styled.x = rightX + 24;
-          styled.y = contentY + 20 + idx * textItemH;
-          styled.width = colW - 48;
+          styled.x = rightX + CARD_PAD_SM;
+          styled.y = contentY + CARD_PAD_SM + idx * textItemH;
+          styled.width = colW - CARD_PAD_SM * 2;
           styled.height = textItemH;
-          styled.fontSize = fitFontSize(styled.text, colW - 48, textItemH, rightCols.length > 2 ? 18 : 22);
+          styled.fontSize = fitFontSize(styled.text, colW - CARD_PAD_SM * 2, textItemH, rightCols.length > 2 ? 18 : 22);
           styled.bold = idx === 0;
           styled.color = colors.body;
           styled.align = "left";
@@ -409,23 +419,23 @@ export function applyLayout(
     } else if (layout === "process") {
       const steps = bodyTexts;
       const N = steps.length || 1;
-      const cardGap = 24;
-      const totalW = 1040;
+      const cardGap = CARD_GAP;
+      const totalW = CANVAS_CONTENT_W;
       const colW = (totalW - (N - 1) * cardGap) / N;
-      const cardTop = contentY + 40;
-      const cardH = contentH - 80;
+      const cardTop = contentY + CARD_PAD_SM;
+      const cardH = contentH - CARD_PAD * 2;
 
       steps.forEach((el, idx) => {
-        const colX = 120 + idx * (colW + cardGap);
+        const colX = CANVAS_CONTENT_X + idx * (colW + cardGap);
         elements.unshift(createCard(colX, cardTop, colW, cardH));
-        elements.push(createAccentBar(colX + 16, cardTop + 12, colW - 32));
+        elements.push(createAccentBar(colX + CARD_PAD_SM, cardTop + CARD_PAD_SM, colW - CARD_PAD_SM * 2));
 
         const styled = assignTextRole(el, "body");
-        styled.x = colX + 16;
-        styled.y = contentY + 60;
-        styled.width = colW - 32;
-        styled.height = contentH - 120;
-        styled.fontSize = fitFontSize(styled.text, colW - 32, contentH - 120, 20);
+        styled.x = colX + CARD_PAD_SM;
+        styled.y = contentY + CARD_PAD + 8;
+        styled.width = colW - CARD_PAD_SM * 2;
+        styled.height = contentH - CARD_PAD * 2 - 16;
+        styled.fontSize = fitFontSize(styled.text, colW - CARD_PAD_SM * 2, contentH - CARD_PAD * 2 - 16, 20);
         styled.bold = false;
         styled.color = colors.body;
         styled.align = "center";
@@ -440,12 +450,12 @@ export function applyLayout(
     } else if (layout === "architecture") {
       const layers = bodyTexts;
       const N = layers.length || 1;
-      const layerGap = 20;
+      const layerGap = CARD_GAP - 12;
       const layerH = (contentH - (N - 1) * layerGap) / N;
 
       layers.forEach((el, idx) => {
         const rowY = contentY + idx * (layerH + layerGap);
-        elements.unshift(createCard(120, rowY, 1040, layerH));
+        elements.unshift(createCard(CANVAS_CONTENT_X, rowY, CANVAS_CONTENT_W, layerH));
 
         const styled = assignTextRole(el, "kicker");
         styled.x = 140;
@@ -667,8 +677,8 @@ export function applyLayout(
       }
     } else if (layout === "concept") {
       const N = bodyTexts.length || 1;
-      const cardGap = 24;
-      const totalW = 1040;
+      const cardGap = CARD_GAP;
+      const totalW = CANVAS_CONTENT_W;
       const colW = (totalW - (N - 1) * cardGap) / N;
       const imageAreaH = 100;
       const unslottedImages = imageElements.filter(
@@ -676,23 +686,23 @@ export function applyLayout(
       );
 
       bodyTexts.forEach((el, idx) => {
-        const colX = 120 + idx * (colW + cardGap);
+        const colX = CANVAS_CONTENT_X + idx * (colW + cardGap);
         const slotKey = `grid-${idx}`;
         const cardImage =
           pickImageForSlot(slotKey) ?? unslottedImages.shift();
 
         elements.unshift(createCard(colX, contentY, colW, contentH));
-        elements.push(createAccentBar(colX + 20, contentY + 16, colW - 40));
+        elements.push(createAccentBar(colX + CARD_PAD, contentY + CARD_PAD_SM, colW - CARD_PAD * 2));
 
         const hasImage = Boolean(cardImage);
-        const textH = hasImage ? contentH - imageAreaH - 36 : contentH - 40;
+        const textH = hasImage ? contentH - imageAreaH - CARD_PAD * 2 : contentH - CARD_PAD * 2;
 
         const styled = assignTextRole(el, idx === 0 ? "kicker" : "body");
-        styled.x = colX + 20;
-        styled.y = contentY + 20;
-        styled.width = colW - 40;
+        styled.x = colX + CARD_PAD;
+        styled.y = contentY + CARD_PAD_SM;
+        styled.width = colW - CARD_PAD * 2;
         styled.height = textH;
-        styled.fontSize = fitFontSize(styled.text, colW - 40, textH, 20);
+        styled.fontSize = fitFontSize(styled.text, colW - CARD_PAD * 2, textH, 20);
         styled.bold = idx === 0;
         styled.color = idx === 0 ? colors.title : colors.body;
         styled.align = "left";
@@ -703,9 +713,9 @@ export function applyLayout(
             placeImageInSlot(
               cardImage,
               {
-                x: colX + 20,
-                y: contentY + contentH - imageAreaH - 16,
-                width: colW - 40,
+                x: colX + CARD_PAD,
+                y: contentY + contentH - imageAreaH - CARD_PAD_SM,
+                width: colW - CARD_PAD * 2,
                 height: imageAreaH,
               },
               slotKey,
@@ -715,30 +725,30 @@ export function applyLayout(
       });
     } else {
       const N = bodyTexts.length || 1;
-      const rowGap = 16;
+      const rowGap = ROW_GAP;
       const rowH = (contentH - (N - 1) * rowGap) / N;
 
       bodyTexts.forEach((el, idx) => {
         const rowY = contentY + idx * (rowH + rowGap);
-        elements.unshift(createCard(120, rowY, 1040, rowH));
+        elements.unshift(createCard(CANVAS_CONTENT_X, rowY, CANVAS_CONTENT_W, rowH));
         elements.push({
           id: `accent-${generateId()}`,
           type: "shape",
           shapeType: "rectangle",
-          x: 130,
-          y: rowY + 12,
+          x: CANVAS_CONTENT_X + 10,
+          y: rowY + CARD_PAD_SM,
           width: 4,
-          height: rowH - 24,
+          height: rowH - CARD_PAD_SM * 2,
           fillColor: colors.accent,
           strokeColor: colors.accent,
         });
 
         const styled = assignTextRole(el, "body");
-        styled.x = 150;
-        styled.y = rowY + 10;
-        styled.width = 980;
-        styled.height = rowH - 20;
-        styled.fontSize = fitFontSize(styled.text, 980, rowH - 20, 20);
+        styled.x = CANVAS_CONTENT_X + 30;
+        styled.y = rowY + CARD_PAD_SM;
+        styled.width = CANVAS_CONTENT_W - 40;
+        styled.height = rowH - CARD_PAD_SM * 2;
+        styled.fontSize = fitFontSize(styled.text, CANVAS_CONTENT_W - 40, rowH - CARD_PAD_SM * 2, 20);
         styled.bold = false;
         styled.color = colors.body;
         styled.align = "left";

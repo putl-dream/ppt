@@ -72,7 +72,8 @@ function describeSlide(slide: Slide, theme: string): string {
 }
 
 /**
- * Deferred Tool: 返回幻灯片结构化视觉摘要，供 Agent 排版后自检。
+ * Core Tool: 返回幻灯片结构化视觉摘要，供 Agent 排版后自检。
+ * P2-2：从 Deferred 提升为 Core，layout/review 阶段可直接调用。
  */
 export const previewSlideTool: ToolDefinition<
   typeof previewSlideSchema,
@@ -80,8 +81,8 @@ export const previewSlideTool: ToolDefinition<
 > = {
   name: "PreviewSlide",
   description: "获取单页幻灯片的视觉摘要（layout、槽位、元素位置、背景）及 PNG 缩略图，用于排版后自检。",
-  category: "deferred",
-  loadPolicy: "deferred",
+  category: "core",
+  loadPolicy: "core",
   inputSchema: previewSlideSchema,
   risk: "low",
   execute: async (args, context) => {

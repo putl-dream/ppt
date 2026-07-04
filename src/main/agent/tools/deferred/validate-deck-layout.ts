@@ -5,7 +5,8 @@ import { validateDeckRhythm } from "@shared/deck-rhythm";
 export const validateDeckLayoutSchema = z.object({});
 
 /**
- * Deferred Tool: 程序化校验 deck 版式节奏与多样性（guizang 规则）。
+ * Core Tool: 程序化校验 deck 版式节奏与多样性（guizang 规则）。
+ * P2-2：从 Deferred 提升为 Core，layout/review 阶段可直接调用。
  */
 export const validateDeckLayoutTool: ToolDefinition<
   typeof validateDeckLayoutSchema,
@@ -27,8 +28,8 @@ export const validateDeckLayoutTool: ToolDefinition<
 > = {
   name: "ValidateDeckLayout",
   description: "校验 deck 版式节奏：无连续 3 页同 layout、多样性、cover/section/summary 覆盖。",
-  category: "deferred",
-  loadPolicy: "deferred",
+  category: "core",
+  loadPolicy: "core",
   inputSchema: validateDeckLayoutSchema,
   risk: "low",
   execute: async (_, context) => {

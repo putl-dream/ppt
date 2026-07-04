@@ -90,6 +90,18 @@ function buildRequiredOutcomeBlock(requiredOutcome?: "any" | "command_proposal")
 - 可执行：读取必要上下文后 SubmitCommands`;
 }
 
+function buildWorkflowOverview(stage: PromptStage): string {
+  if (stage === "routing") return "";
+  return [
+    "",
+    "## 全流程概览（当前仅执行本阶段）",
+    "",
+    "`routing` → `planning` → `content` → `layout-choice` → `layout-design` → `layout-exec` → `review` → `export`",
+    "",
+    "轻量单页修改可跳过 planning / layout-design。两阶段建稿：内容草稿 → 视觉排版。",
+  ].join("\n");
+}
+
 function buildCorePrinciples(stage: PromptStage, stepLimits?: AgentStepLimits): string {
   const shared = [
     "你是一个专业的 PPT 智能助手 (PPT Agent)。帮助用户创作**可用**的演示文稿。",
@@ -97,6 +109,7 @@ function buildCorePrinciples(stage: PromptStage, stepLimits?: AgentStepLimits): 
     "## 阶段原则",
     "",
     `- **当前阶段**：${describePromptStage(stage)}（\`${stage}\`）`,
+    buildWorkflowOverview(stage),
     "- **两阶段建稿**：先内容草稿，再视觉排版。内容阶段不写主题/版式命令；排版阶段再精简与定稿视觉。",
     "- **幻灯片写入**：改动经 `SubmitCommands`；读现状用 `ReadPresentationSnapshot` / `ReadCurrentSlide` / `ListSlides`。",
     "- **子任务委派**：workspace 中间产物用 `Task`；子 Agent 只回传简短结论。",
@@ -149,12 +162,13 @@ function buildCorePrinciples(stage: PromptStage, stepLimits?: AgentStepLimits): 
       "- **文案精简**：溢出或过长要点用 `ppt-beautify` / `compress-text` 等 Deferred 工具处理，不大幅改写结构。",
       "- plan.enhancements 经 ExecuteExtraTool；完成后可 `deck-review`。",
       "- **首次排版 SubmitCommands 后**，系统会自动渲染缩略图回喂一轮视觉质检；请对照后修正或确认再提交。",
+      "- **Core 工具**：`PreviewSlide`（单页缩略图）、`ValidateDeckLayout`（版式节奏校验）可直接调用，无需 SearchExtraTools。",
     ],
     review: [
       "",
       "### 本阶段（质检）",
-      "- LoadSkill `deck-review`；对照 Rubric 与 ValidateDeckLayout。",
-      "- 可建议排版阶段修复项；大改需用户确认。",
+      "- LoadSkill `deck-review`；对照 Rubric 与 `ValidateDeckLayout`。",
+      "- 可用 `PreviewSlide` 查看单页缩略图；大改需用户确认。",
     ],
     "light-edit": [
       "",
@@ -254,7 +268,8 @@ ${toolsDescription}
 - \`Task\`：委派 workspace 子任务（brief/outline/storyboard/layout-plan）。
 - \`TaskGraph*\`：持久化任务 DAG（\`.tasks/\`）。
 - \`LoadSkill\`：仅加载上方目录中的技能；其他技能在本阶段不可用。
-- \`SearchExtraTools\` + \`ExecuteExtraTool\`：排版/美化阶段的增强能力。
+- \`PreviewSlide\` / \`ValidateDeckLayout\`：排版与质检 Core 工具，可直接调用。
+- \`SearchExtraTools\` + \`ExecuteExtraTool\`：美化/压缩等增强能力（非必需）。
 - \`AskUser\`：仅询问用户决策项，不问工具名或系统实现。`;
 }
 
@@ -280,6 +295,7 @@ function commandExamplesForStage(stage: PromptStage): string {
     return `- 设置主题：{"id":"cmd-theme","type":"set-theme","theme":"ocean","palette":"cyan"}
 - 排版：{"id":"cmd-layout","type":"update-slide-layout","slideId":"slide-1","layout":"concept"}
 - 页级节奏：update-slide-variant（light / dark / hero）
+- 视觉自检：PreviewSlide(slideId) / ValidateDeckLayout()
 主题值：nordic、midnight、ocean、sunset、purple。调色板：cyan、green、purple、orange。
 布局值：cover、section、concept、comparison、process、architecture、case、summary、toc、quote、image-grid。`;
   }

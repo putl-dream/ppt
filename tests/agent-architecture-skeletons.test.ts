@@ -18,6 +18,8 @@ import { compressTextTool } from "../src/main/agent/tools/deferred/compress-text
 import { detectOverflowTextTool } from "../src/main/agent/tools/deferred/detect-overflow-text";
 import { detectRepeatedTitlesTool } from "../src/main/agent/tools/deferred/detect-repeated-titles";
 import { exportPptxTool } from "../src/main/agent/tools/deferred/export-pptx";
+import { previewSlideTool } from "../src/main/agent/tools/deferred/preview-slide";
+import { validateDeckLayoutTool } from "../src/main/agent/tools/deferred/validate-deck-layout";
 import { rewriteSlideContentTool } from "../src/main/agent/tools/deferred/rewrite-slide-content";
 import { selectStyleStrategyTool } from "../src/main/agent/tools/deferred/select-style-strategy";
 import { toToolCard } from "../src/main/agent/tools/tool-card";
@@ -90,6 +92,8 @@ describe("Agent Architecture Skeletons & Types", () => {
     expect(registry.get("ReadPresentationSnapshot")?.loadPolicy).toBe("core");
     expect(registry.get("Task")?.loadPolicy).toBe("core");
     expect(registry.get("AutoLayoutSlide")?.loadPolicy).toBe("deferred");
+    expect(registry.get("PreviewSlide")?.loadPolicy).toBe("core");
+    expect(registry.get("ValidateDeckLayout")?.loadPolicy).toBe("core");
     expect(registry.getCoreTools().length).toBeGreaterThan(0);
     expect(registry.getDeferredTools().length).toBeGreaterThan(0);
   });
@@ -107,6 +111,8 @@ describe("Agent Architecture Skeletons & Types", () => {
     registry.register(readCurrentSlideTool);
     registry.register(readPresentationSnapshotTool);
     registry.register(submitCommandsTool);
+    registry.register(previewSlideTool);
+    registry.register(validateDeckLayoutTool);
 
     // Register Deferred Tools
     registry.register(analyzeDeckConsistencyTool);
@@ -124,8 +130,11 @@ describe("Agent Architecture Skeletons & Types", () => {
     // Assertions
     expect(registry.get("AskUser")).toBe(askUserTool);
     expect(registry.getCoreTools()).toContain(askUserTool);
+    expect(registry.getCoreTools()).toContain(previewSlideTool);
+    expect(registry.getCoreTools()).toContain(validateDeckLayoutTool);
     expect(registry.getCoreTools()).not.toContain(autoLayoutSlideTool);
     expect(registry.getDeferredTools()).toContain(autoLayoutSlideTool);
+    expect(registry.getDeferredTools()).not.toContain(previewSlideTool);
     expect(registry.getDeferredTools()).not.toContain(askUserTool);
 
     // Registry search
