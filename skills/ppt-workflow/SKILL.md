@@ -1,7 +1,9 @@
 ---
 name: ppt-workflow
-description: 端到端演示创作流程；融合 guizang 需求澄清与叙事弧，默认轻量路径
+description: 端到端演示创作流程；默认轻量路径，完整路径按需分阶段
 when_to_use: 用户要从零做完整 PPT、不确定下一步、或要求「一条龙」完成演示时
+stages:
+  - routing
 ---
 
 # 端到端工作流

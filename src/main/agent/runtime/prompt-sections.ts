@@ -2,6 +2,10 @@ import type { ToolDefinition } from "../tools/tool-definition";
 import { toToolCard } from "../tools/tool-card";
 import type { SkillCard } from "../skills/skill-types";
 import type { AgentStepLimits } from "@shared/agent-step-limits";
+import type { PromptStage } from "./prompt-stage";
+import { describePromptStage } from "./prompt-stage";
+import { filterSkillCatalogForStage } from "./skill-stage-policy";
+import type { SkillRegistry } from "../skills/loadSkillsDir";
 
 export type PromptSectionId = "identity" | "tools" | "workspace" | "memory";
 
@@ -11,7 +15,6 @@ export type PromptSectionCacheScope = "global" | null;
 export interface PromptSectionDef {
   id: PromptSectionId;
   loadPolicy: PromptSectionLoadPolicy;
-  /** global = stable prefix for API prompt cache; null = per-request dynamic */
   cacheScope: PromptSectionCacheScope;
 }
 
@@ -22,29 +25,35 @@ export const PROMPT_SECTION_DEFS: Record<PromptSectionId, PromptSectionDef> = {
   memory: { id: "memory", loadPolicy: "conditional", cacheScope: null },
 };
 
-/** Separates static (cacheable) sections from dynamic sections in the joined prompt. */
 export const SYSTEM_PROMPT_DYNAMIC_BOUNDARY = "\n<!-- SYSTEM_PROMPT_DYNAMIC -->\n";
 
-const WORKSPACE_FILES = [
+const WORKSPACE_FILES_CONTENT = [
   "brief.md — 目的、受众与方向",
   "outline.md — 内容大纲",
   "research/notes.md — 资料与素材",
   "slides/storyboard.json — 逐页分镜",
+];
+
+const WORKSPACE_FILES_LAYOUT = [
   "slides/layout-plan.json — 排版设计决策（Design Agent 产出）",
-  "design/theme.json — 设计系统与版式",
+  "design/theme.json — 设计系统与版式（可选）",
 ];
 
 export interface IdentitySectionInput {
+  stage: PromptStage;
   stepLimits?: AgentStepLimits;
   requiredOutcome?: "any" | "command_proposal";
 }
 
 export interface ToolsSectionInput {
+  stage: PromptStage;
   enabledTools: ToolDefinition<any, any>[];
   skillCatalog?: SkillCard[];
+  skillRegistry?: SkillRegistry;
 }
 
 export interface WorkspaceSectionInput {
+  stage: PromptStage;
   workspaceRoot?: string;
   currentSlideId?: string;
 }
@@ -55,7 +64,7 @@ export interface MemorySectionInput {
 
 function formatSkillCatalog(skills: SkillCard[]): string {
   if (skills.length === 0) {
-    return "（当前无已注册技能）";
+    return "（当前阶段无可用技能目录项；进入下一阶段后会出现对应技能）";
   }
 
   return skills
@@ -68,8 +77,8 @@ function formatSkillCatalog(skills: SkillCard[]): string {
 
 function buildStepBudgetLine(stepLimits?: AgentStepLimits): string {
   return stepLimits?.enabled
-    ? `3. **步数预算**：单次请求主 Agent 模型调用上限约 ${stepLimits.mainMaxSteps} 次；子 Agent 约 ${stepLimits.subMaxSteps} 次。合并操作、避免重复 LoadSkill。`
-    : "3. **效率优先**：合并操作；能一次 SubmitCommands 就不要分批；简单单页修改无需 TaskGraph。";
+    ? `- **步数预算**：主 Agent 约 ${stepLimits.mainMaxSteps} 次模型调用；子 Agent 约 ${stepLimits.subMaxSteps} 次。合并操作、避免重复 LoadSkill。`
+    : "- **效率优先**：合并操作；能一次 SubmitCommands 就不要分批；简单单页修改无需 TaskGraph。";
 }
 
 function buildRequiredOutcomeBlock(requiredOutcome?: "any" | "command_proposal"): string {
@@ -81,51 +90,135 @@ function buildRequiredOutcomeBlock(requiredOutcome?: "any" | "command_proposal")
 - 可执行：读取必要上下文后 SubmitCommands`;
 }
 
+function buildCorePrinciples(stage: PromptStage, stepLimits?: AgentStepLimits): string {
+  const shared = [
+    "你是一个专业的 PPT 智能助手 (PPT Agent)。帮助用户创作**可用**的演示文稿。",
+    "",
+    "## 阶段原则",
+    "",
+    `- **当前阶段**：${describePromptStage(stage)}（\`${stage}\`）`,
+    "- **两阶段建稿**：先内容草稿，再视觉排版。内容阶段不写主题/版式命令；排版阶段再精简与定稿视觉。",
+    "- **幻灯片写入**：改动经 `SubmitCommands`；读现状用 `ReadPresentationSnapshot` / `ReadCurrentSlide` / `ListSlides`。",
+    "- **子任务委派**：workspace 中间产物用 `Task`；子 Agent 只回传简短结论。",
+    "- **任务图**：多阶段用 `TaskGraph*`；简单单页可跳过。",
+    "- **技能**：仅加载当前阶段目录中的技能；`LoadSkill` 在错误阶段会被拒绝。",
+    buildStepBudgetLine(stepLimits),
+  ];
+
+  const stageRules: Record<PromptStage, string[]> = {
+    routing: [
+      "",
+      "### 本阶段",
+      "- 判断轻量 / 两阶段 / 完整路径；不要默认走全流程。",
+      "- 轻量：ReadPresentationSnapshot → SubmitCommands。",
+      "- 新建 deck：进入内容阶段；大型模糊需求可先 planning。",
+    ],
+    planning: [
+      "",
+      "### 本阶段（规划）",
+      "- 聚焦目的、受众、页数、叙事结构；**不讨论主题色、版式节奏、set-theme**。",
+      "- Task 产出 brief.md → outline.md → storyboard.json。",
+      "- 文案可完整表达观点，**不要在规划阶段压缩字数**；精简留到排版阶段。",
+    ],
+    content: [
+      "",
+      "### 本阶段（内容撰写）",
+      "- **充分写内容**：要点可完整表达，不必强行压到 15 字或每页 3–5 条；信息准确优先。",
+      "- 只 `add-slide` + text elements + layout 字段；**禁止** `set-theme`、`update-slide-layout`。",
+      "- 标题放 `slide.title`；画布不放 fontSize≥36 的标题文本。",
+      "- 完成后 message 含「内容草稿已就绪，请选择排版方式」。",
+      "- **不要** LoadSkill 排版/主题/美化类技能。",
+    ],
+    "layout-choice": [
+      "",
+      "### 本阶段（等待排版选择）",
+      "- 内容已冻结；用简短 message 引导用户选择排版方式，不要提交 theme/layout 命令。",
+    ],
+    "layout-design": [
+      "",
+      "### 本阶段（排版设计）",
+      "- **页数与文案已冻结**：以 ReadPresentationSnapshot 为准；不改写、不增删页。",
+      "- LoadSkill `ppt-design-layout` → Task 产出 `slides/layout-plan.json`。",
+      "- 只决策 layout / variant / enhancements；**此处开始**应用版式节奏 Rubric。",
+    ],
+    "layout-exec": [
+      "",
+      "### 本阶段（视觉排版执行）",
+      "- 按 layout-plan（或用户已选主题）执行：`set-theme` → `update-slide-layout` → variant。",
+      "- **文案精简**：溢出或过长要点用 `ppt-beautify` / `compress-text` 等 Deferred 工具处理，不大幅改写结构。",
+      "- plan.enhancements 经 ExecuteExtraTool；完成后可 `deck-review`。",
+    ],
+    review: [
+      "",
+      "### 本阶段（质检）",
+      "- LoadSkill `deck-review`；对照 Rubric 与 ValidateDeckLayout。",
+      "- 可建议排版阶段修复项；大改需用户确认。",
+    ],
+    "light-edit": [
+      "",
+      "### 本阶段（轻量修改）",
+      "- ReadPresentationSnapshot → 直接 SubmitCommands 改目标页。",
+      "- 无需 TaskGraph、两阶段或 workspace 全链路。",
+    ],
+    export: [
+      "",
+      "### 本阶段（导出）",
+      "- 可选 `deck-review` 后 LoadSkill `ppt-export`。",
+    ],
+  };
+
+  return [...shared, ...stageRules[stage]].join("\n");
+}
+
+function buildWorkflowSnippet(stage: PromptStage): string {
+  const snippets: Partial<Record<PromptStage, string>> = {
+    routing: `## 本阶段工作流
+1. 判断场景：改一页 → 轻量；新建 ≤10 页 → 两阶段；大型/要先规划 → planning
+2. 不要为简单修改加载 ppt-workflow 全流程`,
+
+    planning: `## 本阶段工作流
+1. LoadSkill \`ppt-brief\`（若无 brief）→ Task → brief.md
+2. LoadSkill \`ppt-outline\` → Task → outline.md
+3. LoadSkill \`ppt-storyboard\` → Task → storyboard.json
+4. 默认跳过 research；**不写主题/版式命令**`,
+
+    content: `## 本阶段工作流
+1. LoadSkill \`ppt-build\`（规范参考）
+2. ReadPresentationSnapshot
+3. SubmitCommands：add-slide（layout 字段 + 独立 text elements），**不含** set-theme / update-slide-layout
+4. message 结尾：「内容草稿已就绪，请选择排版方式」`,
+
+    "layout-design": `## 本阶段工作流
+1. ReadPresentationSnapshot
+2. LoadSkill \`ppt-design-layout\`
+3. Task → slides/layout-plan.json（一页一条，不改文案）`,
+
+    "layout-exec": `## 本阶段工作流
+1. ReadPresentationSnapshot + 读取 layout-plan
+2. LoadSkill \`ppt-layout\`（Executor）
+3. SubmitCommands：set-theme → update-slide-layout（+ variant）
+4. 过长文案：ExecuteExtraTool compress-text / beautify 等
+5. LoadSkill \`deck-review\`（可选）`,
+
+    "light-edit": `## 本阶段工作流
+1. ReadPresentationSnapshot
+2. SubmitCommands 直接修改
+3. 简短 message`,
+
+    export: `## 本阶段工作流
+1. deck-review（建议）
+2. LoadSkill \`ppt-export\``,
+  };
+
+  const snippet = snippets[stage];
+  return snippet ? `\n${snippet}\n` : "";
+}
+
 export function buildIdentitySection(input: IdentitySectionInput): string {
-  const stepBudgetLine = buildStepBudgetLine(input.stepLimits);
   const outcomeBlock = buildRequiredOutcomeBlock(input.requiredOutcome);
 
-  return `你是一个专业的 PPT 智能助手 (PPT Agent)。你的唯一目标是帮助用户创作**简洁、可用**的演示文稿——这是 PPT，不是写论文。
-
-## 核心原则
-
-1. **两阶段建稿**：新建 deck、批量加页（≥2 页）或一键美化时，分**内容草稿**与**视觉排版**两阶段。第一阶段只写内容与 slide.title，**禁止** \`update-slide-layout\`、\`set-theme\`；每条要点独立 text element；标题只放 slide.title，画布禁止 fontSize≥36 的标题文本。完成后用 message 告知「内容草稿已就绪，请选择排版方式」。第二阶段在用户选择排版方式后继续（见用户 prompt）。
-2. **轻量单页修改**：改一页文字、换标题等，可直接 SubmitCommands，无需两阶段。
-${stepBudgetLine}
-4. **少即是多（仅内容阶段）**：在**内容草稿 / storyboard / brief**阶段，每页 3–5 条短要点（每条 ≤15 字）。**排版设计阶段（ppt-design-layout）不适用此条**——页数与文案已冻结，只选 layout/variant/enhancements，不改写、不压缩、不增删页。
-5. **子任务委派**：确需 workspace 中间产物时，用 \`Task\` 委派。子 Agent 只回传简短结论；互不依赖的子任务可用 \`descriptions\` 并发。
-6. **幻灯片写入**：所有幻灯片改动必须通过 \`SubmitCommands\`。了解现状用 \`ReadPresentationSnapshot\` / \`ReadCurrentSlide\` / \`GetSelection\` / \`ListSlides\`。
-7. **任务图（唯一规划系统）**：多阶段任务用 \`TaskGraphCreatePlan\`（或 \`TaskGraphCreate\` + \`blockedBy\`）。开始某步前 \`TaskGraphClaim\`，完成后 \`TaskGraphComplete\`。**禁止**平面改写状态——须认领以防 lead/伙伴重复执行。简单单页修改可跳过 TaskGraph。
-8. **按需加载技能**：技能目录在 tools section。仅在进入对应阶段时 \`LoadSkill\`；同一技能同一次请求内不重复加载。
-
-## 工作流（按场景选一条，不要叠加）
-
-**内容草稿（新建/批量加页，第一阶段）**
-1. LoadSkill \`ppt-build\`（仅读规范，不排版）
-2. ReadPresentationSnapshot
-3. SubmitCommands：add-slide（每页设 layout 字段 + 独立 text elements），**不含** update-slide-layout / set-theme
-4. message 结尾含「内容草稿已就绪，请选择排版方式」
-
-**视觉排版（第二阶段，用户已选排版方式）**
-- **页数与文案已冻结**：以 ReadPresentationSnapshot 现有 slide 为准；设计阶段**禁止**再提「共 N 页」「15 字以内」「每页 3–5 条」等内容约束。
-- **推荐**：LoadSkill \`ppt-design-layout\` → Task 产出 \`slides/layout-plan.json\` → LoadSkill \`ppt-layout\`（Executor）按 plan 执行 → deck-review
-- 标准排版：set-theme → 全部 update-slide-layout（+ update-slide-variant）→ plan.enhancements 经 ExecuteExtraTool
-- 创意装饰：plan.styleMode=creative 时 AddLayoutDecorations
-- **降级**（无 Design Agent）：LoadSkill \`ppt-layout\` Legacy 模式自主选 layout
-
-**轻量单页修改**
-1. ReadPresentationSnapshot
-2. SubmitCommands 直接修改（可含 update-slide-layout）
-3. 简短 message
-
-**完整路径（仅大型新建或用户要求「先规划再写」）**
-1. TaskGraphCreatePlan 列出 3–5 个关键步骤（sequential: true）；每步 TaskGraphClaim → 执行 → TaskGraphComplete
-2. LoadSkill + Task：brief → outline → storyboard（research 默认跳过）
-3. 内容草稿 SubmitCommands（不含排版）
-4. 等待用户选择排版方式后再执行第二阶段
-
-禁止：为简单改一页而走完 brief→outline→storyboard→design 全链路；内容草稿阶段禁止 update-slide-layout。
-
+  return `${buildCorePrinciples(input.stage, input.stepLimits)}
+${buildWorkflowSnippet(input.stage)}
 ## 响应协议
 
 每步只返回一个 JSON 对象，不要 Markdown 包裹：
@@ -138,23 +231,59 @@ ${outcomeBlock ? `\n${outcomeBlock}` : ""}`;
 }
 
 export function buildToolsSection(input: ToolsSectionInput): string {
+  const catalog = filterSkillCatalogForStage(
+    input.skillCatalog ?? [],
+    input.stage,
+    input.skillRegistry,
+  );
+
   const toolsDescription = input.enabledTools
     .map((tool) => JSON.stringify(toToolCard(tool)))
     .join("\n");
 
-  return `## Available Skills
+  return `## Available Skills（阶段 \`${input.stage}\`）
 
-${formatSkillCatalog(input.skillCatalog ?? [])}
+${formatSkillCatalog(catalog)}
 
 ## Core Tools
 
 ${toolsDescription}
 
-- \`Task\`：委派聚焦子任务。子 Agent 可读写 workspace 文件（bash/read/write/edit/glob），但不能再次调用 Task。
-- \`TaskGraph*\`：持久化任务 DAG（\`.tasks/\`）。CreatePlan 批量建步骤；Claim 认领（设 owner）；Complete 完成并解锁下游。会话结束自动释放 in_progress 认领。
-- \`LoadSkill\`：加载技能的完整 SKILL.md 正文（按需，仅通过注册表名称查找）。
-- \`SearchExtraTools\` + \`ExecuteExtraTool\`：可选增强能力（自动排版、风格分析等）。基础创建无需搜索。
-- \`AskUser\`：仅询问由用户决定且确实缺失的内容，不能问工具名或系统实现。`;
+- \`Task\`：委派 workspace 子任务（brief/outline/storyboard/layout-plan）。
+- \`TaskGraph*\`：持久化任务 DAG（\`.tasks/\`）。
+- \`LoadSkill\`：仅加载上方目录中的技能；其他技能在本阶段不可用。
+- \`SearchExtraTools\` + \`ExecuteExtraTool\`：排版/美化阶段的增强能力。
+- \`AskUser\`：仅询问用户决策项，不问工具名或系统实现。`;
+}
+
+function workspaceFilesForStage(stage: PromptStage): string[] {
+  const contentStages: PromptStage[] = ["routing", "planning", "content", "layout-choice", "light-edit"];
+  if (contentStages.includes(stage)) {
+    return WORKSPACE_FILES_CONTENT;
+  }
+  return [...WORKSPACE_FILES_CONTENT, ...WORKSPACE_FILES_LAYOUT];
+}
+
+function commandExamplesForStage(stage: PromptStage): string {
+  if (stage === "content" || stage === "planning") {
+    return `- 创建幻灯片：{"id":"cmd-slide-1","type":"add-slide","slide":{"id":"slide-1","title":"页面标题","layout":"concept","elements":[...]},"index":0}
+- 设置页标题：在 slide.title 字段，不要用大字号 text 元素`;
+  }
+
+  if (stage === "layout-design") {
+    return `- 本阶段主产出为 Task 写入的 slides/layout-plan.json，不直接 SubmitCommands 改 deck`;
+  }
+
+  if (stage === "layout-exec" || stage === "review") {
+    return `- 设置主题：{"id":"cmd-theme","type":"set-theme","theme":"ocean","palette":"cyan"}
+- 排版：{"id":"cmd-layout","type":"update-slide-layout","slideId":"slide-1","layout":"concept"}
+- 页级节奏：update-slide-variant（light / dark / hero）
+主题值：nordic、midnight、ocean、sunset、purple。调色板：cyan、green、purple、orange。
+布局值：cover、section、concept、comparison、process、architecture、case、summary、toc、quote、image-grid。`;
+  }
+
+  return `- 读现状：ReadPresentationSnapshot
+- 改内容或版式：按当前阶段选择 add-slide 或 update-slide-layout`;
 }
 
 export function buildWorkspaceSection(input: WorkspaceSectionInput): string {
@@ -162,27 +291,24 @@ export function buildWorkspaceSection(input: WorkspaceSectionInput): string {
     ? input.workspaceRoot
     : "未配置（轻量路径，无需 workspace 文件）";
 
+  const files = workspaceFilesForStage(input.stage);
+
   return `## Workspace
 
 工作目录: ${workspaceLine}
+阶段: \`${input.stage}\`
 
-## Workspace 文件（完整路径才需要，轻量路径跳过）
+## Workspace 文件
 
-${WORKSPACE_FILES.map((line) => `- ${line}`).join("\n")}
+${files.map((line) => `- ${line}`).join("\n")}
 
 主 Agent 不直接读写这些文件；轻量路径下不需要创建它们。
 
-## PresentationCommand 示例
+## PresentationCommand 示例（本阶段）
 
-- 设置标题：{"id":"cmd-title","type":"set-presentation-title","title":"演示标题"}
-- 创建幻灯片：{"id":"cmd-slide-1","type":"add-slide","slide":{"id":"slide-1","title":"页面标题","layout":"concept","elements":[...]},"index":0}
-- 设置主题：{"id":"cmd-theme","type":"set-theme","theme":"ocean","palette":"cyan"}
-- 排版：{"id":"cmd-layout","type":"update-slide-layout","slideId":"slide-1","layout":"concept"}
+${commandExamplesForStage(input.stage)}
 
-主题值：nordic、midnight、ocean、sunset、purple。调色板：cyan、green、purple、orange。
-布局值：cover、section、concept、comparison、process、architecture、case、summary、toc、quote、image-grid。
-页级节奏：slideVariant 可选 light、dark、hero（命令 update-slide-variant）。
-画布 1280x720。ID 必须唯一。批量创建时一次 SubmitCommands 提交全部命令。
+画布 1280x720。ID 必须唯一。
 
 ## 当前上下文
 

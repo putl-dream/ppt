@@ -105,6 +105,20 @@ export class AgentRuntime {
     try {
     const stepLimits = resolveAgentStepLimits(options.agentStepLimits);
     const maxSteps = options.maxSteps ?? getEffectiveMainMaxSteps(stepLimits);
+    const coreTools = this.registry.getCoreTools();
+    const promptContext = await buildSystemPromptContext({
+      request: options.request,
+      presentation: options.presentationSnapshot,
+      coreTools,
+      skillCatalog: this.skillRegistry.listCards(),
+      skillRegistry: this.skillRegistry,
+      workspaceRoot: options.workspaceRoot,
+      currentSlideId: options.currentSlideId,
+      messageHistory: options.messageHistory,
+      requiredOutcome: options.requiredOutcome,
+      stepLimits,
+    });
+    const { text: systemPrompt } = getSystemPrompt(promptContext, options.threadId);
 
     const context: ToolContext = {
       presentation: structuredClone(options.presentationSnapshot),
@@ -132,19 +146,10 @@ export class AgentRuntime {
       agentStepLimits: stepLimits,
       skillRegistry: this.skillRegistry,
       skillSession,
+      promptStage: promptContext.stage,
       taskStore,
       taskGraphOwner,
     };
-    const coreTools = this.registry.getCoreTools();
-    const promptContext = await buildSystemPromptContext({
-      coreTools,
-      skillCatalog: this.skillRegistry.listCards(),
-      workspaceRoot: options.workspaceRoot,
-      currentSlideId: options.currentSlideId,
-      requiredOutcome: options.requiredOutcome,
-      stepLimits,
-    });
-    const { text: systemPrompt } = getSystemPrompt(promptContext, options.threadId);
     const transcript: Array<Record<string, unknown>> = [
       { role: "user", content: options.request },
     ];

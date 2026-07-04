@@ -1,3 +1,5 @@
+import type { PromptStage } from "../runtime/prompt-stage";
+
 /**
  * Skill catalog and session types for the two-layer load_skill design.
  *
@@ -9,6 +11,8 @@ export interface SkillFrontmatter {
   name: string;
   description: string;
   when_to_use?: string;
+  /** Prompt stages where this skill may appear in catalog and LoadSkill is allowed. */
+  stages?: PromptStage[];
   /** Tool names the skill may auto-allow when applied */
   allowedTools?: string[];
   context?: "inline" | "fork";

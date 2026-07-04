@@ -1,5 +1,6 @@
 import { readdir, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
+import { PROMPT_STAGES, type PromptStage } from "../runtime/prompt-stage";
 import type { SkillCard, SkillEntry, SkillFrontmatter } from "./skill-types";
 import {
   parseSkillFrontmatterFields,
@@ -7,6 +8,14 @@ import {
   readFrontmatterString,
   readFrontmatterStringList,
 } from "./parseSkillFrontmatterFields";
+
+function readFrontmatterStages(frontmatter: Record<string, unknown>): PromptStage[] | undefined {
+  const raw = readFrontmatterStringList(frontmatter, "stages");
+  if (!raw?.length) return undefined;
+  const allowed = new Set<string>(PROMPT_STAGES);
+  const stages = raw.filter((item): item is PromptStage => allowed.has(item));
+  return stages.length > 0 ? stages : undefined;
+}
 
 const SKILL_FILE = "SKILL.md";
 
@@ -23,6 +32,7 @@ function buildFrontmatter(
     name,
     description,
     when_to_use: whenToUse,
+    stages: readFrontmatterStages(raw),
     allowedTools: readFrontmatterStringList(raw, "allowed-tools"),
     context: readFrontmatterString(raw, "context") === "fork" ? "fork" : "inline",
     model: readFrontmatterString(raw, "model"),

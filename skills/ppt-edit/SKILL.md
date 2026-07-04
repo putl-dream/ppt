@@ -2,6 +2,9 @@
 name: ppt-edit
 description: 对已有幻灯片做增量修改，包括改标题、改文案、增删元素与调布局
 when_to_use: deck 已存在，用户要求改某一页、某段文字、替换图片或调整顺序时
+stages:
+  - content
+  - light-edit
 allowed-tools:
   - ReadPresentationSnapshot
   - ReadCurrentSlide

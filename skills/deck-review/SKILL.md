@@ -2,6 +2,10 @@
 name: deck-review
 description: 审查 deck 一致性、版式节奏与 guizang 式质检项；对照 design-principles Rubric A–E
 when_to_use: deck 已有较多页面，排版后质检、用户要求审阅、或 layout-plan 执行后验收时
+stages:
+  - layout-exec
+  - review
+  - export
 ---
 
 # Deck 审查

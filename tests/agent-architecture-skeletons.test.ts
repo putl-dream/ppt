@@ -157,12 +157,14 @@ describe("Agent Architecture Skeletons & Types", () => {
 
   it("SystemPromptBuilder builds prompt containing core tools description", () => {
     const prompt = SystemPromptBuilder.build({
+      request: "你好",
+      presentation: createStarterPresentation(),
       coreTools: [askUserTool],
       currentSlideId: "slide-123",
     });
     
     expect(prompt).toContain("AskUser");
-    expect(prompt).toContain("不能问工具名");
+    expect(prompt).toContain("不问工具名");
   });
 
   it("RuntimeNormalizer validates response schemas", () => {

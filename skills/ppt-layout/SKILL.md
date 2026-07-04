@@ -1,7 +1,10 @@
 ---
 name: ppt-layout
-description: 第二阶段视觉排版；融合 guizang 叙事/风格思路，为内容页选 layout、set-theme 与 update-slide-layout，产出简洁可用演示
-when_to_use: 用户已确认排版方式（标准排版或创意装饰），需要对内容草稿应用视觉层、选版式、定风格或统一 deck 节奏时
+description: 视觉排版执行；按 layout-plan 应用 theme/layout，并在本阶段精简过长文案
+when_to_use: layout-plan 已就绪或用户已确认排版方式，需要 set-theme 与 update-slide-layout 时
+stages:
+  - layout-design
+  - layout-exec
 allowed-tools:
   - ReadPresentationSnapshot
   - ListSlides

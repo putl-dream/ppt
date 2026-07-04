@@ -10,6 +10,7 @@ import type { ToolRegistry } from "./tool-registry";
 import type { SkillRegistry } from "../skills/loadSkillsDir";
 import type { SkillSession } from "../skills/skill-types";
 import type { TaskStore } from "../task/task-store";
+import type { PromptStage } from "../runtime/prompt-stage";
 
 /**
  * 工具加载策略。
@@ -69,6 +70,8 @@ export interface ToolContext {
   readonly skillRegistry?: SkillRegistry;
   /** Per-run loaded skill tracking (Layer 2). */
   readonly skillSession?: SkillSession;
+  /** Active prompt stage for LoadSkill gating and stage-aware behavior. */
+  readonly promptStage?: PromptStage;
   /** Step limit config for Task sub-agents. */
   readonly agentStepLimits?: AgentStepLimits;
 }

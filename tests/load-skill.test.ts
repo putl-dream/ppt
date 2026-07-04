@@ -14,6 +14,7 @@ import {
 } from "../src/main/agent/skills/loadSkillsDir";
 import { loadSkillTool } from "../src/main/agent/tools/core/load-skill";
 import { createSkillSession } from "../src/main/agent/skills/skill-types";
+import { createStarterPresentation } from "../src/shared/presentation";
 import { SystemPromptBuilder } from "../src/main/agent/runtime/system-prompt";
 import { askUserTool } from "../src/main/agent/tools/core/ask-user";
 import { createDefaultToolRegistry } from "../src/main/agent/tools/tool-registry";
@@ -22,6 +23,9 @@ const SAMPLE_SKILL = `---
 name: code-review
 description: Review code changes for bugs and style issues
 when_to_use: User asks for a PR or code review
+stages:
+  - content
+  - routing
 allowed-tools:
   - Read
   - Grep
@@ -64,13 +68,14 @@ describe("load_skill two-layer design", () => {
 
     const skillSession = createSkillSession();
     const context = {
-      presentation: { title: "", slides: [], revision: 0 },
+      presentation: createStarterPresentation(),
       selectedElementIds: [],
       discoverySession: { discoveredToolNames: new Set<string>() },
       registry: createDefaultToolRegistry(),
       messageHistory: [],
       skillRegistry: registry,
       skillSession,
+      promptStage: "content" as const,
     };
 
     const result = await loadSkillTool.execute({ skillName: "pdf" }, context as any);
@@ -91,8 +96,12 @@ describe("load_skill two-layer design", () => {
     registerSkillFromContent(registry, "/tmp/pdf", "pdf", SAMPLE_SKILL.replace("code-review", "pdf"));
 
     const prompt = SystemPromptBuilder.build({
+      request: "写幻灯片",
+      presentation: createStarterPresentation(),
       coreTools: [askUserTool],
       skillCatalog: registry.listCards(),
+      skillRegistry: registry,
+      stageHint: "content",
     });
 
     expect(prompt).toContain("## Available Skills");

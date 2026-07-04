@@ -56,16 +56,20 @@ export function assembleSystemPrompt(context: SystemPromptContext): AssembledSys
   };
 
   push("identity", buildIdentitySection({
+    stage: context.stage,
     stepLimits: context.stepLimits,
     requiredOutcome: context.requiredOutcome,
   }));
 
   push("tools", buildToolsSection({
+    stage: context.stage,
     enabledTools: context.coreTools,
     skillCatalog: context.skillCatalog,
+    skillRegistry: context.skillRegistry,
   }));
 
   push("workspace", buildWorkspaceSection({
+    stage: context.stage,
     workspaceRoot: context.workspaceRoot,
     currentSlideId: context.currentSlideId,
   }));

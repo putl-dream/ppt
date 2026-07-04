@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { ToolDefinition } from "../tool-definition";
+import { formatSkillStageRejection, isSkillAllowedForStage } from "../../runtime/skill-stage-policy";
 
 export const loadSkillSchema = z.object({
   skillName: z.string().describe("Registered skill name from the Available Skills catalog"),
@@ -34,12 +35,20 @@ export const loadSkillTool: ToolDefinition<typeof loadSkillSchema, LoadSkillResu
 
     const entry = registry.get(args.skillName);
     if (!entry) {
-      const available = registry.listCards().map((card) => card.name);
+      const stage = context.promptStage ?? "routing";
+      const available = registry.listCards()
+        .filter((card) => isSkillAllowedForStage(card.name, stage, registry.get(card.name)))
+        .map((card) => card.name);
       throw new Error(
         available.length > 0
-          ? `Unknown skill '${args.skillName}'. Available: ${available.join(", ")}`
+          ? `Unknown skill '${args.skillName}'. Available in stage '${stage}': ${available.join(", ")}`
           : `Unknown skill '${args.skillName}'. No skills are registered.`,
       );
+    }
+
+    const stage = context.promptStage ?? "routing";
+    if (!isSkillAllowedForStage(entry.name, stage, entry)) {
+      throw new Error(formatSkillStageRejection(entry.name, stage, entry));
     }
 
     const alreadyLoaded = context.skillSession?.loadedSkillNames.has(entry.name) ?? false;

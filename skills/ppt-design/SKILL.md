@@ -2,6 +2,9 @@
 name: ppt-design
 description: 选定主题与配色并 set-theme（可跳过独立 design 文件，直接 SubmitCommands）
 when_to_use: 需要确定视觉风格、应用主题时
+stages:
+  - layout-design
+  - layout-exec
 allowed-tools:
   - ReadPresentationSnapshot
   - SearchExtraTools

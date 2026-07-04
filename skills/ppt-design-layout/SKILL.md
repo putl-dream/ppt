@@ -1,7 +1,9 @@
 ---
 name: ppt-design-layout
-description: Design Agent 专责排版设计；读取 snapshot/storyboard，按 Rubric 产出 layout-plan.json，禁止 SubmitCommands
-when_to_use: 内容草稿完成且用户已确认排版方式后，需要逐页版式/节奏/视觉层级设计决策时（阶段 4c）
+description: Design Agent 专责排版设计；按 Rubric 产出 layout-plan.json，禁止 SubmitCommands
+when_to_use: 内容草稿完成且用户已确认排版方式后，需要逐页版式/节奏设计时
+stages:
+  - layout-design
 allowed-tools:
   - ReadPresentationSnapshot
   - ListSlides

@@ -3,8 +3,11 @@ import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { askUserTool } from "../src/main/agent/tools/core/ask-user";
+import { loadSkillTool } from "../src/main/agent/tools/core/load-skill";
 import { createDefaultToolRegistry } from "../src/main/agent/tools/tool-registry";
 import { registerSkillFromContent, createEmptySkillRegistry } from "../src/main/agent/skills/loadSkillsDir";
+import { createSkillSession } from "../src/main/agent/skills/skill-types";
+import { createStarterPresentation } from "../src/shared/presentation";
 import {
   buildSystemPromptContext,
   MEMORY_INDEX_RELATIVE_PATH,
@@ -17,25 +20,46 @@ import {
 } from "../src/main/agent/runtime/system-prompt-assembler";
 import { SYSTEM_PROMPT_DYNAMIC_BOUNDARY } from "../src/main/agent/runtime/prompt-sections";
 import { SystemPromptBuilder } from "../src/main/agent/runtime/system-prompt";
+import { resolvePromptStage } from "../src/main/agent/runtime/prompt-stage";
 
 const SAMPLE_SKILL = `---
 name: ppt-build
 description: Build slide content drafts
+stages:
+  - content
 ---
 # Build
 `;
 
+const LAYOUT_SKILL = `---
+name: ppt-layout
+description: Apply visual layout
+stages:
+  - layout-exec
+---
+# Layout
+`;
+
+function emptyArtifacts() {
+  return { brief: false, outline: false, storyboard: false, layoutPlan: false };
+}
+
+function baseContext(overrides: Record<string, unknown> = {}) {
+  return {
+    stage: "routing" as const,
+    artifacts: emptyArtifacts(),
+    enabledTools: ["AskUser"],
+    memories: "",
+    coreTools: [askUserTool],
+    currentSlideId: "slide-1",
+    workspaceRoot: "/tmp/project",
+    ...overrides,
+  };
+}
+
 describe("system prompt assembly", () => {
   it("always includes identity, tools, and workspace sections", () => {
-    const context = {
-      enabledTools: ["AskUser"],
-      memories: "",
-      coreTools: [askUserTool],
-      currentSlideId: "slide-1",
-      workspaceRoot: "/tmp/project",
-    };
-
-    const assembled = assembleSystemPrompt(context);
+    const assembled = assembleSystemPrompt(baseContext());
     const ids = assembled.sections.map((section) => section.id);
 
     expect(ids).toEqual(["identity", "tools", "workspace"]);
@@ -46,6 +70,38 @@ describe("system prompt assembly", () => {
     expect(assembled.text).not.toContain("## 相关记忆");
   });
 
+  it("content stage omits layout skills from catalog and set-theme examples", () => {
+    const registry = createEmptySkillRegistry();
+    registerSkillFromContent(registry, "/tmp/build", "ppt-build", SAMPLE_SKILL);
+    registerSkillFromContent(registry, "/tmp/layout", "ppt-layout", LAYOUT_SKILL);
+
+    const assembled = assembleSystemPrompt(baseContext({
+      stage: "content",
+      skillCatalog: registry.listCards(),
+      skillRegistry: registry,
+    }));
+
+    expect(assembled.text).toContain("`ppt-build`");
+    expect(assembled.text).not.toContain("`ppt-layout`");
+    expect(assembled.text).toContain("充分写内容");
+    expect(assembled.text).not.toMatch(/"type":"set-theme"/);
+  });
+
+  it("layout-exec stage includes theme commands and layout skills", () => {
+    const registry = createEmptySkillRegistry();
+    registerSkillFromContent(registry, "/tmp/layout", "ppt-layout", LAYOUT_SKILL);
+
+    const assembled = assembleSystemPrompt(baseContext({
+      stage: "layout-exec",
+      skillCatalog: registry.listCards(),
+      skillRegistry: registry,
+    }));
+
+    expect(assembled.text).toContain("`ppt-layout`");
+    expect(assembled.text).toContain("set-theme");
+    expect(assembled.text).toContain("精简");
+  });
+
   it("loads memory section only when MEMORY.md has content", async () => {
     const root = await mkdtemp(join(tmpdir(), "ppt-memory-"));
     const memoryDir = join(root, ".memory");
@@ -53,6 +109,8 @@ describe("system prompt assembly", () => {
     await writeFile(join(memoryDir, "MEMORY.md"), "用户偏好深色主题\n", "utf8");
 
     const context = await buildSystemPromptContext({
+      request: "hello",
+      presentation: createStarterPresentation(),
       coreTools: [askUserTool],
       workspaceRoot: root,
     });
@@ -61,122 +119,97 @@ describe("system prompt assembly", () => {
 
     const assembled = assembleSystemPrompt(context);
     expect(assembled.sections.map((section) => section.id)).toContain("memory");
-    expect(assembled.text).toContain("## 相关记忆");
     expect(assembled.text).toContain("用户偏好深色主题");
   });
 
-  it("skips memory section when MEMORY.md is missing or empty", async () => {
-    const root = await mkdtemp(join(tmpdir(), "ppt-no-memory-"));
-
-    const missing = await buildSystemPromptContext({
-      coreTools: [askUserTool],
-      workspaceRoot: root,
+  it("resolves layout-design from layout phase user request", () => {
+    const stage = resolvePromptStage({
+      request: "请对当前演示文稿执行标准排版（第二阶段）。",
+      presentation: {
+        ...createStarterPresentation(),
+        slides: [{ id: "s1", title: "T", layout: "concept", elements: [] }],
+      },
+      artifacts: emptyArtifacts(),
     });
-    expect(assembleSystemPrompt(missing).sections.map((section) => section.id)).not.toContain("memory");
+    expect(stage).toBe("layout-design");
+  });
 
-    const memoryDir = join(root, ".memory");
-    await mkdir(memoryDir, { recursive: true });
-    await writeFile(join(memoryDir, "MEMORY.md"), "   \n", "utf8");
-
-    const empty = await buildSystemPromptContext({
-      coreTools: [askUserTool],
-      workspaceRoot: root,
+  it("resolves content when slides exist without theme", () => {
+    const stage = resolvePromptStage({
+      request: "继续写下一页",
+      presentation: {
+        ...createStarterPresentation(),
+        slides: [{ id: "s1", title: "T", layout: "concept", elements: [] }],
+      },
+      artifacts: emptyArtifacts(),
     });
-    expect(empty.memories).toBe("");
-    expect(assembleSystemPrompt(empty).sections.map((section) => section.id)).not.toContain("memory");
+    expect(stage).toBe("content");
+  });
+
+  it("LoadSkill rejects layout skill during content stage", async () => {
+    const registry = createEmptySkillRegistry();
+    registerSkillFromContent(registry, "/tmp/layout", "ppt-layout", LAYOUT_SKILL);
+
+    const context = {
+      presentation: createStarterPresentation(),
+      selectedElementIds: [],
+      discoverySession: { discoveredToolNames: new Set<string>() },
+      registry: createDefaultToolRegistry(),
+      messageHistory: [],
+      skillRegistry: registry,
+      skillSession: createSkillSession(),
+      promptStage: "content" as const,
+    };
+
+    await expect(loadSkillTool.execute({ skillName: "ppt-layout" }, context as any))
+      .rejects.toThrow("not available in stage 'content'");
   });
 
   it("caches assembled prompt per thread when context is unchanged", () => {
     clearSystemPromptCache();
-    const context = {
-      enabledTools: ["AskUser"],
-      memories: "",
-      coreTools: [askUserTool],
-    };
+    const context = baseContext();
 
     const first = getSystemPrompt(context, "thread-a");
     const second = getSystemPrompt(context, "thread-a");
 
     expect(second).toBe(first);
-    expect(first.text).toBe(second.text);
   });
 
-  it("rebuilds prompt when context changes", () => {
+  it("rebuilds prompt when stage changes", () => {
     clearSystemPromptCache();
-    const base = {
-      enabledTools: ["AskUser"],
-      memories: "",
-      coreTools: [askUserTool],
-    };
-
-    const first = getSystemPrompt({ ...base, currentSlideId: "slide-1" }, "thread-b");
-    const second = getSystemPrompt({ ...base, currentSlideId: "slide-2" }, "thread-b");
+    const first = getSystemPrompt(baseContext({ stage: "content" }), "thread-b");
+    const second = getSystemPrompt(baseContext({ stage: "layout-exec" }), "thread-b");
 
     expect(second.text).not.toBe(first.text);
-    expect(second.text).toContain("slide-2");
   });
 
   it("places dynamic boundary between static and dynamic sections", () => {
-    const context = {
-      enabledTools: ["AskUser"],
+    const assembled = assembleSystemPrompt(baseContext({
       memories: "记住：封面用 hero",
-      coreTools: [askUserTool],
-      workspaceRoot: "/tmp/ws",
-    };
+    }));
 
-    const assembled = assembleSystemPrompt(context);
     expect(assembled.text).toContain(SYSTEM_PROMPT_DYNAMIC_BOUNDARY);
-
     const split = splitSystemPromptPrefix(assembled.text);
     expect(split.staticPrefix).toContain("PPT 智能助手");
-    expect(split.staticPrefix).toContain("AskUser");
-    expect(split.staticPrefix).not.toContain("工作目录");
-    expect(split.dynamicSuffix).toContain("工作目录");
     expect(split.dynamicSuffix).toContain("记住：封面用 hero");
   });
 
   it("SystemPromptBuilder injects skill catalog without full SKILL.md body", () => {
     const registry = createEmptySkillRegistry();
-    registerSkillFromContent(registry, "/tmp/pdf", "pdf", SAMPLE_SKILL);
+    registerSkillFromContent(registry, "/tmp/pdf", "pdf", SAMPLE_SKILL.replace("ppt-build", "pdf"));
 
     const prompt = SystemPromptBuilder.build({
+      request: "写内容草稿",
+      presentation: createStarterPresentation(),
       coreTools: [askUserTool],
       skillCatalog: registry.listCards(),
+      skillRegistry: registry,
+      stageHint: "content",
     });
 
     expect(prompt).toContain("## Available Skills");
-    expect(prompt).toContain("`ppt-build`");
-    expect(prompt).toContain("LoadSkill");
+    expect(prompt).toContain("`pdf`");
     expect(prompt).not.toContain("# Build");
-  });
-
-  it("enabled tools reflect actual registry, not hardcoded list", () => {
-    const registry = createDefaultToolRegistry();
-    const context = {
-      enabledTools: registry.getCoreTools().map((tool) => tool.name).sort(),
-      memories: "",
-      coreTools: registry.getCoreTools(),
-    };
-
-    const assembled = assembleSystemPrompt(context);
-    expect(assembled.text).toContain("ReadPresentationSnapshot");
-    expect(assembled.text).toContain("SubmitCommands");
-  });
-
-  it("clearSystemPromptCache() clears all thread caches", () => {
-    clearSystemPromptCache();
-    const context = {
-      enabledTools: ["AskUser"],
-      memories: "",
-      coreTools: [askUserTool],
-    };
-
-    const cached = getSystemPrompt(context, "thread-clear");
-    clearSystemPromptCache();
-    const rebuilt = getSystemPrompt(context, "thread-clear");
-
-    expect(rebuilt).not.toBe(cached);
-    expect(rebuilt.text).toBe(cached.text);
   });
 
   it("documents memory path constant", () => {

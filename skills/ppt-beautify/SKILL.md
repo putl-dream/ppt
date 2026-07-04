@@ -2,6 +2,9 @@
 name: ppt-beautify
 description: 用 Deferred Tools 做自动排版、文本压缩、图表表格美化与文风改写
 when_to_use: 基础 deck 已生成，需要排版优化、精简文案、统一风格或单页润色时
+stages:
+  - layout-exec
+  - review
 allowed-tools:
   - ReadPresentationSnapshot
   - ReadCurrentSlide
