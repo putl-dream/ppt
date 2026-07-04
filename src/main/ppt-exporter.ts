@@ -4,6 +4,7 @@ import type { ExportPresentationOptions } from "@shared/ipc";
 import { fontFamilyToPptxFace, resolveElementFontFamily } from "@shared/typography";
 import { resolveSlideBackgroundWithVariant } from "@shared/slide-variant";
 import { chartDataToSvgString, chartSvgToDataUri } from "@shared/chart-utils";
+import { renderGradientToPng } from "@shared/gradient-export";
 import { iconToSvgString, iconSvgToDataUri } from "@shared/icon-registry";
 
 // Helper to clean colors (e.g. #ffffff -> ffffff)
@@ -96,10 +97,13 @@ export async function exportToPptx(
       presentationPalette,
       slideData,
     );
-    const cleanBg = cleanColor(slideBackground.exportFill);
 
-    // Set background
-    slide.background = { fill: cleanBg };
+    if (slideBackground.gradient) {
+      const bgPng = renderGradientToPng(slideBackground.gradient);
+      slide.background = { data: bgPng };
+    } else {
+      slide.background = { fill: cleanColor(slideBackground.exportFill) };
+    }
 
     // 1. Logo (if any)
     if (options.logoUrl) {
@@ -227,6 +231,8 @@ export async function exportToPptx(
       } else if (element.type === "shape") {
         const cleanFill = cleanColor(element.fillColor);
         const cleanStroke = cleanColor(element.strokeColor);
+        const fillTransparency =
+          element.fillOpacity != null ? (1 - element.fillOpacity) * 100 : 0;
 
         if (element.shapeType === "line") {
           slide.addShape((pptx as any).shapes.LINE, {
@@ -242,16 +248,35 @@ export async function exportToPptx(
             shapeType = (pptx as any).shapes.OVAL;
           } else if (element.shapeType === "arrow") {
             shapeType = (pptx as any).shapes.RIGHT_ARROW;
+          } else if (element.shapeType === "roundedRect" || element.cornerRadius != null) {
+            shapeType = (pptx as any).shapes.ROUNDED_RECTANGLE;
           }
 
-          slide.addShape(shapeType, {
+          const shapeOpts: Record<string, unknown> = {
             x,
             y,
             w,
             h,
-            fill: { color: cleanFill },
+            fill: { color: cleanFill, transparency: fillTransparency },
             line: { color: cleanStroke, width: 2 },
-          });
+          };
+
+          if (element.cornerRadius != null) {
+            shapeOpts.rectRadius = px(element.cornerRadius);
+          }
+
+          if (element.shadow) {
+            shapeOpts.shadow = {
+              type: "outer",
+              color: cleanColor(element.shadow.color),
+              blur: element.shadow.blur,
+              offset: element.shadow.offsetY,
+              angle: 90,
+              opacity: element.shadow.opacity,
+            };
+          }
+
+          slide.addShape(shapeType, shapeOpts);
         }
       } else if (element.type === "chart") {
         try {

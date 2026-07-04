@@ -7,6 +7,7 @@ import {
   type TextRole,
 } from "./typography";
 import { resolveLayoutBackgroundVariant, type BackgroundVariant } from "./slide-background";
+import { cardShadow, VISUAL_TOKENS } from "./visual-tokens";
 import "./layout-register-builtin";
 import { layoutRegistry } from "./layout-registry";
 
@@ -221,26 +222,40 @@ export function applyLayout(
   const createCard = (x: number, y: number, w: number, h: number): ShapeElement => ({
     id: `card-${generateId()}`,
     type: "shape",
-    shapeType: "rectangle",
+    shapeType: "roundedRect",
     x,
     y,
     width: w,
     height: h,
     fillColor: colors.cardBg,
     strokeColor: colors.cardStroke,
+    cornerRadius: VISUAL_TOKENS.radii.md,
+    shadow: cardShadow("md"),
   });
 
-  const createAccentBar = (x: number, y: number, w: number): ShapeElement => ({
+  const createAccentBlock = (
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+    opts: { opacity?: number; radius?: number } = {},
+  ): ShapeElement => ({
     id: `accent-${generateId()}`,
     type: "shape",
-    shapeType: "rectangle",
+    shapeType: "roundedRect",
     x,
     y,
     width: w,
-    height: 4,
+    height: h,
     fillColor: colors.accent,
     strokeColor: colors.accent,
+    cornerRadius: opts.radius ?? VISUAL_TOKENS.radii.lg,
+    fillOpacity: opts.opacity ?? 0.15,
+    shadow: cardShadow("sm"),
   });
+
+  const createAccentBar = (x: number, y: number, w: number): ShapeElement =>
+    createAccentBlock(x, y, w, 6, { opacity: 1, radius: VISUAL_TOKENS.radii.pill });
 
   const createProcessArrow = (x: number, y: number, w: number, h: number): ShapeElement => ({
     id: `arrow-${generateId()}`,
@@ -299,11 +314,13 @@ export function applyLayout(
     const coverBodyTexts = titleEl ? bodyTexts : bodyTexts.slice(1);
 
     if (layout === "cover") {
+      elements.unshift(createAccentBlock(-60, 140, 180, 440, { opacity: 0.12 }));
+
       coverTitleEl.x = 120;
-      coverTitleEl.y = 200;
+      coverTitleEl.y = 180;
       coverTitleEl.width = 1040;
-      coverTitleEl.height = 160;
-      coverTitleEl.fontSize = 56;
+      coverTitleEl.height = 180;
+      coverTitleEl.fontSize = 64;
       coverTitleEl.bold = true;
       coverTitleEl.color = colors.title;
       coverTitleEl.align = "center";
@@ -313,10 +330,10 @@ export function applyLayout(
       if (coverBodyTexts[0]) {
         const sub = assignTextRole(coverBodyTexts[0], "body");
         sub.x = 120;
-        sub.y = 380;
+        sub.y = 400;
         sub.width = 1040;
-        sub.height = 100;
-        sub.fontSize = 28;
+        sub.height = 80;
+        sub.fontSize = 24;
         sub.bold = false;
         sub.color = colors.body;
         sub.align = "center";
@@ -338,11 +355,13 @@ export function applyLayout(
         );
       }
     } else {
+      elements.unshift(createAccentBlock(520, 60, 240, 8, { opacity: 0.35, radius: VISUAL_TOKENS.radii.pill }));
+
       coverTitleEl.x = 120;
-      coverTitleEl.y = 240;
+      coverTitleEl.y = 220;
       coverTitleEl.width = 1040;
-      coverTitleEl.height = 120;
-      coverTitleEl.fontSize = 48;
+      coverTitleEl.height = 140;
+      coverTitleEl.fontSize = 52;
       coverTitleEl.bold = true;
       coverTitleEl.color = colors.title;
       coverTitleEl.align = "center";
@@ -352,10 +371,10 @@ export function applyLayout(
       if (coverBodyTexts[0]) {
         const sub = assignTextRole(coverBodyTexts[0], "kicker");
         sub.x = 120;
-        sub.y = 380;
+        sub.y = 400;
         sub.width = 1040;
-        sub.height = 140;
-        sub.fontSize = 24;
+        sub.height = 120;
+        sub.fontSize = 22;
         sub.bold = false;
         sub.color = colors.body;
         sub.align = "center";
@@ -382,15 +401,19 @@ export function applyLayout(
 
       elements.unshift(createCard(leftX, contentY, colW, contentH));
       elements.unshift(createCard(rightX, contentY, colW, contentH));
+      elements.push(createAccentBlock(leftX + CARD_PAD_SM, contentY + CARD_PAD_SM, 48, 48, { opacity: 1, radius: VISUAL_TOKENS.radii.md }));
+      elements.push(createAccentBlock(rightX + CARD_PAD_SM, contentY + CARD_PAD_SM, 48, 48, { opacity: 1, radius: VISUAL_TOKENS.radii.md }));
+
+      const accentHeaderH = 56;
 
       if (leftCols.length > 0) {
-        const textH = contentH - CARD_PAD * 2;
+        const textH = contentH - CARD_PAD * 2 - accentHeaderH;
         const textItemH = textH / leftCols.length;
         leftCols.forEach((el, idx) => {
           const styled = assignTextRole(el, idx === 0 ? "kicker" : "body");
-          styled.x = leftX + CARD_PAD_SM;
-          styled.y = contentY + CARD_PAD_SM + idx * textItemH;
-          styled.width = colW - CARD_PAD_SM * 2;
+          styled.x = leftX + CARD_PAD_SM + 56;
+          styled.y = contentY + CARD_PAD_SM + accentHeaderH + idx * textItemH;
+          styled.width = colW - CARD_PAD_SM * 2 - 56;
           styled.height = textItemH;
           styled.fontSize = fitFontSize(styled.text, colW - CARD_PAD_SM * 2, textItemH, leftCols.length > 2 ? 18 : 22);
           styled.bold = idx === 0;
@@ -401,13 +424,13 @@ export function applyLayout(
       }
 
       if (rightCols.length > 0) {
-        const textH = contentH - CARD_PAD * 2;
+        const textH = contentH - CARD_PAD * 2 - accentHeaderH;
         const textItemH = textH / rightCols.length;
         rightCols.forEach((el, idx) => {
           const styled = assignTextRole(el, idx === 0 ? "kicker" : "body");
-          styled.x = rightX + CARD_PAD_SM;
-          styled.y = contentY + CARD_PAD_SM + idx * textItemH;
-          styled.width = colW - CARD_PAD_SM * 2;
+          styled.x = rightX + CARD_PAD_SM + 56;
+          styled.y = contentY + CARD_PAD_SM + accentHeaderH + idx * textItemH;
+          styled.width = colW - CARD_PAD_SM * 2 - 56;
           styled.height = textItemH;
           styled.fontSize = fitFontSize(styled.text, colW - CARD_PAD_SM * 2, textItemH, rightCols.length > 2 ? 18 : 22);
           styled.bold = idx === 0;
@@ -480,6 +503,7 @@ export function applyLayout(
 
       elements.unshift(createCard(leftX, contentY, leftW, contentH));
       elements.unshift(createCard(rightX, contentY, rightW, contentH));
+      elements.push(createAccentBlock(leftX + pad, contentY + pad, 6, 80, { opacity: 1, radius: VISUAL_TOKENS.radii.pill }));
 
       const sideImage =
         pickImageForSlot("side") ??
@@ -497,9 +521,9 @@ export function applyLayout(
 
       if (descText) {
         const styled = assignTextRole(descText, "body");
-        styled.x = leftX + pad;
+        styled.x = leftX + pad + 16;
         styled.y = contentY + pad;
-        styled.width = leftW - pad * 2;
+        styled.width = leftW - pad * 2 - 16;
         styled.height = contentH - pad * 2;
         if (foldedExtras.length > 0) {
           styled.text = [styled.text.trim(), ...foldedExtras].join("\n");
@@ -692,14 +716,17 @@ export function applyLayout(
           pickImageForSlot(slotKey) ?? unslottedImages.shift();
 
         elements.unshift(createCard(colX, contentY, colW, contentH));
-        elements.push(createAccentBar(colX + CARD_PAD, contentY + CARD_PAD_SM, colW - CARD_PAD * 2));
+        elements.push(createAccentBlock(colX + CARD_PAD, contentY + CARD_PAD_SM, colW - CARD_PAD * 2, 8, { opacity: 0.85, radius: VISUAL_TOKENS.radii.pill }));
 
         const hasImage = Boolean(cardImage);
-        const textH = hasImage ? contentH - imageAreaH - CARD_PAD * 2 : contentH - CARD_PAD * 2;
+        const accentOffset = 20;
+        const textH = hasImage
+          ? contentH - imageAreaH - CARD_PAD * 2 - accentOffset
+          : contentH - CARD_PAD * 2 - accentOffset;
 
         const styled = assignTextRole(el, idx === 0 ? "kicker" : "body");
         styled.x = colX + CARD_PAD;
-        styled.y = contentY + CARD_PAD_SM;
+        styled.y = contentY + CARD_PAD_SM + accentOffset;
         styled.width = colW - CARD_PAD * 2;
         styled.height = textH;
         styled.fontSize = fitFontSize(styled.text, colW - CARD_PAD * 2, textH, 20);
@@ -731,17 +758,7 @@ export function applyLayout(
       bodyTexts.forEach((el, idx) => {
         const rowY = contentY + idx * (rowH + rowGap);
         elements.unshift(createCard(CANVAS_CONTENT_X, rowY, CANVAS_CONTENT_W, rowH));
-        elements.push({
-          id: `accent-${generateId()}`,
-          type: "shape",
-          shapeType: "rectangle",
-          x: CANVAS_CONTENT_X + 10,
-          y: rowY + CARD_PAD_SM,
-          width: 4,
-          height: rowH - CARD_PAD_SM * 2,
-          fillColor: colors.accent,
-          strokeColor: colors.accent,
-        });
+        elements.push(createAccentBlock(CANVAS_CONTENT_X + 10, rowY + CARD_PAD_SM, 6, rowH - CARD_PAD_SM * 2, { opacity: 1, radius: VISUAL_TOKENS.radii.pill }));
 
         const styled = assignTextRole(el, "body");
         styled.x = CANVAS_CONTENT_X + 30;

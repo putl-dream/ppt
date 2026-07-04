@@ -81,6 +81,14 @@ export function resolveSlideBackgroundWithVariant(
     return {
       slideBg: `linear-gradient(135deg, ${accent.from} 0%, ${accent.to} 100%)`,
       exportFill: accent.from,
+      gradient: {
+        type: "linear",
+        angle: 135,
+        stops: [
+          { color: accent.from, pos: 0 },
+          { color: accent.to, pos: 100 },
+        ],
+      },
     };
   }
 

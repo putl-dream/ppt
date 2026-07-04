@@ -1,9 +1,25 @@
+import { VISUAL_TOKENS } from "@shared/visual-tokens";
+
 export interface ColorPalette {
   primary: string;
   secondary: string;
   background: string;
   text: string;
   accent: string;
+}
+
+export interface ShadowToken {
+  color: string;
+  blur: number;
+  offsetX: number;
+  offsetY: number;
+  opacity: number;
+}
+
+export interface GradientToken {
+  type: "linear" | "radial";
+  angle?: number;
+  stops: Array<{ color: string; pos: number }>;
 }
 
 export interface StyleStrategy {
@@ -15,6 +31,18 @@ export interface StyleStrategy {
     padding: number;
     gap: number;
   };
+  radii: {
+    sm: number;
+    md: number;
+    lg: number;
+    pill: number;
+  };
+  elevation: {
+    sm: ShadowToken;
+    md: ShadowToken;
+    lg: ShadowToken;
+  };
+  gradient?: GradientToken;
 }
 
 /**
@@ -22,6 +50,13 @@ export interface StyleStrategy {
  *
  * 声明描述 tech-blue、business-clean 等策略的主题属性、配色板、字型与边距规范。
  */
+const DEFAULT_RADII = VISUAL_TOKENS.radii;
+const DEFAULT_ELEVATION = {
+  sm: VISUAL_TOKENS.elevation.sm!,
+  md: VISUAL_TOKENS.elevation.md!,
+  lg: VISUAL_TOKENS.elevation.lg!,
+};
+
 export class StyleStrategies {
   private static readonly STRATEGIES = new Map<string, StyleStrategy>([
     [
@@ -31,13 +66,23 @@ export class StyleStrategies {
         paletteName: "cyan",
         fontFamily: "JetBrains Mono, Outfit, sans-serif",
         colors: {
-          primary: "#0284c7", // sky-600
-          secondary: "#0f172a", // slate-900
+          primary: "#0284c7",
+          secondary: "#0f172a",
           background: "#0f172a",
           text: "#f8fafc",
           accent: "#38bdf8",
         },
         spacing: { padding: 40, gap: 24 },
+        radii: DEFAULT_RADII,
+        elevation: DEFAULT_ELEVATION,
+        gradient: {
+          type: "linear",
+          angle: 135,
+          stops: [
+            { color: "#0f172a", pos: 0 },
+            { color: "#1e293b", pos: 100 },
+          ],
+        },
       },
     ],
     [
@@ -47,13 +92,23 @@ export class StyleStrategies {
         paletteName: "warm-gray",
         fontFamily: "Georgia, serif",
         colors: {
-          primary: "#1e293b", // slate-800
-          secondary: "#64748b", // slate-500
-          background: "#f8fafc", // slate-50
-          text: "#0f172a", // slate-900
-          accent: "#b45309", // amber-700
+          primary: "#1e293b",
+          secondary: "#64748b",
+          background: "#f8fafc",
+          text: "#0f172a",
+          accent: "#b45309",
         },
         spacing: { padding: 50, gap: 32 },
+        radii: DEFAULT_RADII,
+        elevation: DEFAULT_ELEVATION,
+        gradient: {
+          type: "linear",
+          angle: 135,
+          stops: [
+            { color: "#fbfbfa", pos: 0 },
+            { color: "#f0f0ef", pos: 100 },
+          ],
+        },
       },
     ],
   ]);

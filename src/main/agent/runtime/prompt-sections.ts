@@ -119,7 +119,7 @@ function buildCorePrinciples(stage: PromptStage, stepLimits?: AgentStepLimits): 
     "- **两阶段建稿**：先内容草稿（author），再视觉排版（design → style）。author 阶段不写主题/版式命令。",
     "- **幻灯片写入**：改动经 `SubmitCommands`；读现状用 `ReadPresentationSnapshot` / `ReadCurrentSlide` / `ListSlides`。",
     "- **子任务委派**：workspace 中间产物用 `Task`；子 Agent 只回传简短结论。",
-    "- **任务图**：多阶段用 `TaskGraph*`；简单单页可跳过 discover/design。",
+    "- **任务图**：完整路径或多阶段任务（≥3 步）**必须**先 `TaskGraphCreatePlan`(sequential) 落盘计划，再逐步 Claim/Complete；仅简单单页修改可跳过。",
     "- **技能**：仅加载当前阶段目录中的技能；`LoadSkill` 在错误阶段会被拒绝。",
     buildStepBudgetLine(stepLimits),
   ];
@@ -130,7 +130,7 @@ function buildCorePrinciples(stage: PromptStage, stepLimits?: AgentStepLimits): 
       "### 本阶段（discover = 路径 + 规划）",
       "- 判断轻量 / 两阶段 / 完整路径；不要默认走全流程。",
       "- 轻量单页修改 → 可跳过 discover，直接 edit。",
-      "- 完整路径：Task 产出 brief.md → outline.md → storyboard.json。",
+      "- 完整路径：**先 `TaskGraphCreatePlan`(3–5 步, sequential) 建计划**，再 Task 产出 brief.md → outline.md → storyboard.json。",
       "- 聚焦目的、受众、页数、叙事结构；**不讨论主题色、版式节奏、set-theme**。",
       "- 文案可完整表达观点；字数精简留到 style 阶段。",
     ],
@@ -180,8 +180,9 @@ function buildWorkflowSnippet(stage: PromptStage): string {
   const snippets: Partial<Record<PromptStage, string>> = {
     discover: `## 本阶段工作流
 1. 判断场景：改一页 → edit；新建 ≤10 页 → author；大型/要先规划 → discover 全流程
-2. LoadSkill \`ppt-brief\` → outline → storyboard（按需）
-3. **不写主题/版式命令**`,
+2. **多阶段(≥3 步)或完整路径**：先 \`TaskGraphCreatePlan\`(sequential=true)建计划,再逐步 Claim → 执行 → Complete
+3. LoadSkill \`ppt-brief\` → outline → storyboard（按需）
+4. **不写主题/版式命令**`,
 
     author: `## 本阶段工作流
 1. LoadSkill \`ppt-build\`（规范参考）

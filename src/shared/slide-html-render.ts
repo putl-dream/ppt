@@ -3,6 +3,11 @@ import { fontFamilyToCss, resolveElementFontFamily } from "./typography";
 import { resolveSlideBackgroundWithVariant } from "./slide-variant";
 import { resolveIconPath } from "./icon-registry";
 import { getThemePaletteColors } from "./layout";
+import {
+  shapeBorderRadius,
+  shapeBoxShadow,
+  shapeFillColor,
+} from "./shape-render-utils";
 
 export const SLIDE_WIDTH = 1280;
 export const SLIDE_HEIGHT = 720;
@@ -44,8 +49,16 @@ export function renderElementHtml(element: SlideElement, theme: string): string 
     if (element.shapeType === "line") {
       return `<div style="${style}border-top:2px solid ${element.strokeColor}"></div>`;
     }
-    const radius = element.shapeType === "circle" ? "50%" : "0";
-    return `<div style="${style}background:${element.fillColor};border:2px solid ${element.strokeColor};border-radius:${radius}"></div>`;
+    const fill = shapeFillColor(element);
+    const radius = shapeBorderRadius(element);
+    const shadow = shapeBoxShadow(element);
+    const hasStroke =
+      element.strokeColor &&
+      element.strokeColor !== "transparent" &&
+      element.strokeColor !== element.fillColor;
+    const border = hasStroke ? `border:2px solid ${element.strokeColor};` : "";
+    const shadowCss = shadow ? `box-shadow:${shadow};` : "";
+    return `<div style="${style}background:${fill};${border}border-radius:${radius};${shadowCss}"></div>`;
   }
 
   if (element.type === "table") {

@@ -79,6 +79,14 @@ export const imageElementSchema = z.object({
   objectFit: z.enum(["cover", "contain"]).optional(),
 });
 
+export const shadowSchema = z.object({
+  color: z.string().default("#000000"),
+  blur: z.number().default(12),
+  offsetX: z.number().default(0),
+  offsetY: z.number().default(4),
+  opacity: z.number().min(0).max(1).default(0.15),
+});
+
 export const shapeElementSchema = z.object({
   id: z.string(),
   type: z.literal("shape"),
@@ -86,9 +94,12 @@ export const shapeElementSchema = z.object({
   y: z.number(),
   width: z.number().positive(),
   height: z.number().positive(),
-  shapeType: z.enum(["rectangle", "circle", "arrow", "line"]),
+  shapeType: z.enum(["rectangle", "circle", "arrow", "line", "roundedRect"]),
   fillColor: z.string().default("#3b82f6"),
   strokeColor: z.string().default("#1d4ed8"),
+  cornerRadius: z.number().optional(),
+  fillOpacity: z.number().min(0).max(1).optional(),
+  shadow: shadowSchema.optional(),
 });
 
 export const slideElementSchema = z.discriminatedUnion("type", [

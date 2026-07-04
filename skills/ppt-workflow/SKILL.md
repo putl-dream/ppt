@@ -37,7 +37,7 @@ stages:
 
 ## 主 Agent 职责
 
-1. 先选路径；单页修改**不要** TaskGraph、两阶段。
+1. 先选路径；完整/多阶段(≥3 步)**必须**先 `TaskGraphCreatePlan`(sequential) 建计划再执行；单页修改**不要** TaskGraph、两阶段。
 2. 新建/批量加页：内容草稿完成后停止，等待 LayoutChoiceCard。
 3. 用户确认排版方式后：**先** LoadSkill `ppt-design-layout` + Task 产出 layout-plan；**再** LoadSkill `ppt-layout` 按 plan 执行（禁止 freestyle 改 layout）。
 4. workspace 文件一律 Task 委派；幻灯片改动 SubmitCommands。

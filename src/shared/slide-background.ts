@@ -1,11 +1,24 @@
 export const BACKGROUND_VARIANTS = ["default", "hero", "muted"] as const;
 export type BackgroundVariant = (typeof BACKGROUND_VARIANTS)[number];
 
+export interface GradientStop {
+  color: string;
+  pos: number;
+}
+
+export interface BackgroundGradient {
+  type: "linear" | "radial";
+  angle?: number;
+  stops: GradientStop[];
+}
+
 export interface SlideBackgroundStyle {
   /** CSS background for canvas / mirror */
   slideBg: string;
-  /** Solid fill for PPTX export (gradients degrade to base color) */
+  /** Solid fill for PPTX export fallback */
   exportFill: string;
+  /** Structured gradient for rasterized PPTX export */
+  gradient?: BackgroundGradient;
 }
 
 /** Infer background variant from layout when slide has no explicit variant. */
@@ -48,6 +61,14 @@ export function resolveSlideBackground(
         return {
           slideBg: "linear-gradient(135deg, #0f172a 0%, #1e293b 100%)",
           exportFill: "#0f172a",
+          gradient: {
+            type: "linear",
+            angle: 135,
+            stops: [
+              { color: "#0f172a", pos: 0 },
+              { color: "#1e293b", pos: 100 },
+            ],
+          },
         };
       }
       if (variant === "muted") {
@@ -59,6 +80,14 @@ export function resolveSlideBackground(
         return {
           slideBg: "linear-gradient(135deg, #fffcf4 0%, #fff3e3 100%)",
           exportFill: "#fffcf4",
+          gradient: {
+            type: "linear",
+            angle: 135,
+            stops: [
+              { color: "#fffcf4", pos: 0 },
+              { color: "#fff3e3", pos: 100 },
+            ],
+          },
         };
       }
       if (variant === "muted") {
@@ -70,6 +99,13 @@ export function resolveSlideBackground(
         return {
           slideBg: "radial-gradient(circle at top, #1c1537 0%, #0d091a 100%)",
           exportFill: "#1c1537",
+          gradient: {
+            type: "radial",
+            stops: [
+              { color: "#1c1537", pos: 0 },
+              { color: "#0d091a", pos: 100 },
+            ],
+          },
         };
       }
       if (variant === "muted") {
