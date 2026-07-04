@@ -23,6 +23,7 @@ import {
   resolveAgentStepLimits,
 } from "@shared/agent-step-limits";
 import { callModelWithRecovery } from "./model-call-recovery";
+import { createTaskStore } from "../task/task-store";
 
 type ToolCall = {
   type: "tool_call";
@@ -108,6 +109,10 @@ export class AgentRuntime {
     const skillSession = this.skillSessions.get(options.threadId) ?? createSkillSession();
     this.skillSessions.set(options.threadId, skillSession);
 
+    const taskStore = createTaskStore(options.workspaceRoot);
+    const taskGraphOwner = options.taskGraphOwner ?? "agent";
+
+    try {
     const stepLimits = resolveAgentStepLimits(options.agentStepLimits);
     const maxSteps = options.maxSteps ?? getEffectiveMainMaxSteps(stepLimits);
 
@@ -143,6 +148,8 @@ export class AgentRuntime {
       agentStepLimits: stepLimits,
       skillRegistry: this.skillRegistry,
       skillSession,
+      taskStore,
+      taskGraphOwner,
     };
     const coreTools = this.registry.getCoreTools();
     const systemPrompt = SystemPromptBuilder.build({
@@ -442,6 +449,11 @@ export class AgentRuntime {
       type: "message",
       content: buildMainStepLimitMessage(stepLimits),
     }, "step_limit");
+    } finally {
+      if (taskStore) {
+        await taskStore.unassignInProgressByOwner(taskGraphOwner);
+      }
+    }
   }
 
   clearSession(threadId: string): void {

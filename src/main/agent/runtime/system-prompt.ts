@@ -57,7 +57,8 @@ ${stepBudgetLine.replace(/^3\. /, "3. ")}
 5. **子任务委派**：确需 workspace 中间产物时，用 \`Task\` 委派。子 Agent 只回传简短结论；互不依赖的子任务可用 \`descriptions\` 并发。
 6. **幻灯片写入**：所有幻灯片改动必须通过 \`SubmitCommands\`。了解现状用 \`ReadPresentationSnapshot\` / \`ReadCurrentSlide\` / \`GetSelection\` / \`ListSlides\`。
 7. **任务规划**：仅当任务含 3 个以上独立阶段时才 \`TodoWrite\`；简单改页、加页、换主题无需 Todo。
-8. **按需加载技能**：下方目录列出可用技能。仅在进入对应阶段时 \`LoadSkill\`；同一技能同一次请求内不重复加载。
+8. **持久化任务图**：跨会话、有先后依赖的大目标用 \`TaskGraphCreate/List/Get/Claim/Complete\`（写入 \`.tasks/\`，\`blockedBy\` 形成 DAG）。当前会话内的平面步骤仍用 \`TodoWrite\`。
+9. **按需加载技能**：下方目录列出可用技能。仅在进入对应阶段时 \`LoadSkill\`；同一技能同一次请求内不重复加载。
 
 ## Available Skills
 
@@ -68,6 +69,7 @@ ${formatSkillCatalog(options.skillCatalog ?? [])}
 ${toolsDescription}
 
 - \`Task\`：委派聚焦子任务。子 Agent 可读写 workspace 文件（bash/read/write/edit/glob），但不能再次调用 Task。
+- \`TaskGraph*\`：持久化任务 DAG（\`.tasks/\`），Claim 前依赖须 completed；会话结束自动释放 in_progress 认领。
 - \`LoadSkill\`：加载技能的完整 SKILL.md 正文（按需，仅通过注册表名称查找）。
 - \`SearchExtraTools\` + \`ExecuteExtraTool\`：可选增强能力（自动排版、风格分析等）。基础创建无需搜索。
 - \`AskUser\`：仅询问由用户决定且确实缺失的内容，不能问工具名或系统实现。

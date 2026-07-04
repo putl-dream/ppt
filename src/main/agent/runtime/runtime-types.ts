@@ -38,6 +38,8 @@ export interface AgentRuntimeOptions {
   messageHistory?: Array<{ role: "user" | "assistant"; content: string }>;
   requiredOutcome?: "any" | "command_proposal";
   workspaceRoot?: string;
+  /** Owner label for TaskGraphClaim / shutdown unassign. Defaults to "agent". */
+  taskGraphOwner?: string;
   maxSteps?: number;
   agentStepLimits?: AgentStepLimits;
   onStreamChunk?: (chunk: string, source: "message" | "tool-summary") => void;

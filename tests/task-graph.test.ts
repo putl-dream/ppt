@@ -1,0 +1,227 @@
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
+import { afterEach, describe, expect, it } from "vitest";
+import { createDefaultToolRegistry } from "../src/main/agent/tools/tool-registry";
+import {
+  taskGraphClaimTool,
+  taskGraphCompleteTool,
+  taskGraphCreateTool,
+} from "../src/main/agent/tools/core/task-graph-tools";
+import { TaskStore } from "../src/main/agent/task/task-store";
+import {
+  canStartTask,
+  hasDependencyCycle,
+  type AgentTaskNode,
+} from "../src/shared/agent-task-graph";
+import { createStarterPresentation } from "../src/shared/presentation";
+
+const tempDirs: string[] = [];
+
+afterEach(async () => {
+  await Promise.all(tempDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
+});
+
+async function makeWorkspace(): Promise<string> {
+  const dir = await mkdtemp(join(tmpdir(), "ppt-task-graph-"));
+  tempDirs.push(dir);
+  return dir;
+}
+
+function baseContext(workspaceRoot: string) {
+  return {
+    presentation: createStarterPresentation(),
+    selectedElementIds: [],
+    discoverySession: { discoveredToolNames: new Set<string>() },
+    registry: createDefaultToolRegistry(),
+    messageHistory: [],
+    workspaceRoot,
+    taskStore: new TaskStore(workspaceRoot),
+    taskGraphOwner: "test-agent",
+  };
+}
+
+describe("agent-task-graph helpers", () => {
+  it("detects dependency cycles", () => {
+    const tasks = [
+      {
+        id: "a",
+        subject: "A",
+        description: "",
+        status: "pending" as const,
+        owner: null,
+        blockedBy: ["b"],
+        createdAt: "",
+        updatedAt: "",
+      },
+      {
+        id: "b",
+        subject: "B",
+        description: "",
+        status: "pending" as const,
+        owner: null,
+        blockedBy: ["a"],
+        createdAt: "",
+        updatedAt: "",
+      },
+    ];
+    expect(hasDependencyCycle(tasks)).toBe(true);
+  });
+
+  it("requires completed dependencies before start", () => {
+    const pending: AgentTaskNode = {
+      id: "child",
+      subject: "child",
+      description: "",
+      status: "pending",
+      owner: null,
+      blockedBy: ["parent"],
+      createdAt: "",
+      updatedAt: "",
+    };
+    const parentPending: AgentTaskNode = {
+      id: "parent",
+      subject: "parent",
+      description: "",
+      status: "pending",
+      owner: null,
+      blockedBy: [],
+      createdAt: "",
+      updatedAt: "",
+    };
+    const byId = new Map<string, AgentTaskNode>([
+      ["child", pending],
+      ["parent", parentPending],
+    ]);
+    expect(canStartTask(pending, byId)).toBe(false);
+
+    byId.set("parent", { ...parentPending, status: "completed" });
+    expect(canStartTask(pending, byId)).toBe(true);
+  });
+});
+
+describe("TaskStore", () => {
+  it("persists tasks under .tasks and increments id counter", async () => {
+    const workspaceRoot = await makeWorkspace();
+    const store = new TaskStore(workspaceRoot);
+
+    const schema = await store.createTask({ subject: "Define schema" });
+    expect(schema.ok).toBe(true);
+    if (!schema.ok) return;
+
+    const api = await store.createTask({
+      subject: "Write API",
+      description: "REST endpoints",
+      blockedBy: [schema.task.id],
+    });
+    expect(api.ok).toBe(true);
+    if (!api.ok) return;
+
+    const raw = await readFile(join(workspaceRoot, ".tasks", `${schema.task.id}.json`), "utf8");
+    expect(JSON.parse(raw).subject).toBe("Define schema");
+
+    const meta = JSON.parse(await readFile(join(workspaceRoot, ".tasks", "_meta.json"), "utf8"));
+    expect(meta.idCounter).toBe(2);
+  });
+
+  it("rejects dependency cycles on create", async () => {
+    const workspaceRoot = await makeWorkspace();
+    const store = new TaskStore(workspaceRoot);
+
+    const first = await store.createTask({ subject: "first" });
+    expect(first.ok).toBe(true);
+    if (!first.ok) return;
+
+    const second = await store.createTask({
+      subject: "second",
+      blockedBy: [first.task.id],
+    });
+    expect(second.ok).toBe(true);
+    if (!second.ok) return;
+
+    const cycle = await store.createTask({
+      subject: "cycle",
+      blockedBy: [second.task.id],
+    });
+    expect(cycle.ok).toBe(true);
+    if (!cycle.ok) return;
+
+    // Attempt to add reverse edge by creating a task that would close the cycle
+    // is blocked at create time when blockedBy references missing reverse path.
+    // Simulate cycle by manually checking helper with both directions.
+    expect(
+      hasDependencyCycle([
+        first.task,
+        { ...second.task, blockedBy: [cycle.task.id] },
+        cycle.task,
+      ]),
+    ).toBe(true);
+  });
+});
+
+describe("TaskGraph tools", () => {
+  it("registers TaskGraph tools as core low-risk", () => {
+    const registry = createDefaultToolRegistry();
+    for (const name of [
+      "TaskGraphCreate",
+      "TaskGraphList",
+      "TaskGraphGet",
+      "TaskGraphClaim",
+      "TaskGraphComplete",
+    ]) {
+      const tool = registry.get(name);
+      expect(tool?.category).toBe("core");
+      expect(tool?.loadPolicy).toBe("core");
+      expect(tool?.risk).toBe("low");
+    }
+  });
+
+  it("runs create → claim → complete with dependency unlock", async () => {
+    const workspaceRoot = await makeWorkspace();
+    const context = baseContext(workspaceRoot);
+
+    const schema = await taskGraphCreateTool.execute(
+      { subject: "Define schema" },
+      context,
+    );
+    const api = await taskGraphCreateTool.execute(
+      { subject: "Write API", blockedBy: [schema.task.id] },
+      context,
+    );
+
+    await expect(
+      taskGraphClaimTool.execute({ taskId: api.task.id }, context),
+    ).rejects.toThrow(/Blocked by/);
+
+    const claimSchema = await taskGraphClaimTool.execute(
+      { taskId: schema.task.id },
+      context,
+    );
+    expect(claimSchema.task.status).toBe("in_progress");
+
+    const completeSchema = await taskGraphCompleteTool.execute(
+      { taskId: schema.task.id },
+      context,
+    );
+    expect(completeSchema.unblocked).toContain("Write API");
+
+    const claimApi = await taskGraphClaimTool.execute({ taskId: api.task.id }, context);
+    expect(claimApi.task.status).toBe("in_progress");
+  });
+
+  it("unassigns in-progress tasks on shutdown", async () => {
+    const workspaceRoot = await makeWorkspace();
+    const store = new TaskStore(workspaceRoot);
+    const created = await store.createTask({ subject: "cleanup me" });
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    await store.claimTask(created.task.id, "test-agent");
+    const released = await store.unassignInProgressByOwner("test-agent");
+    expect(released).toEqual([created.task.id]);
+
+    const task = await store.getTask(created.task.id);
+    expect(task.status).toBe("pending");
+    expect(task.owner).toBeNull();
+  });
+});

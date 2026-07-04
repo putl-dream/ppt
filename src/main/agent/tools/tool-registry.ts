@@ -11,6 +11,7 @@ import { searchExtraToolsTool } from "./core/search-extra-tools";
 import { submitCommandsTool } from "./core/submit-commands";
 import { taskTool } from "./core/task";
 import { todoWriteTool } from "./core/todo-write";
+import { taskGraphTools } from "./core/task-graph-tools";
 import { loadSkillTool } from "./core/load-skill";
 import { analyzeDeckConsistencyTool } from "./deferred/analyze-deck-consistency";
 import { applyThemeStyleTool } from "./deferred/apply-theme-style";
@@ -117,6 +118,7 @@ export function createDefaultToolRegistry(): ToolRegistry {
     submitCommandsTool,
     taskTool,
     todoWriteTool,
+    ...taskGraphTools,
     loadSkillTool,
     analyzeDeckConsistencyTool,
     applyThemeStyleTool,

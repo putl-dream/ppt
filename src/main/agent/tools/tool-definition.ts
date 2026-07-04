@@ -9,6 +9,7 @@ import type { SubAgentProgressListener } from "@shared/subagent-progress";
 import type { ToolRegistry } from "./tool-registry";
 import type { SkillRegistry } from "../skills/loadSkillsDir";
 import type { SkillSession } from "../skills/skill-types";
+import type { TaskStore } from "../task/task-store";
 
 /**
  * 工具加载策略。
@@ -68,6 +69,10 @@ export interface ToolContext {
   readonly skillSession?: SkillSession;
   /** Step limit config for Task sub-agents. */
   readonly agentStepLimits?: AgentStepLimits;
+  /** File-backed task graph store (`.tasks/` under workspace). */
+  readonly taskStore?: TaskStore;
+  /** Owner id used by TaskGraphClaim when args.owner is omitted. */
+  readonly taskGraphOwner?: string;
 }
 
 /**
