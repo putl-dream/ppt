@@ -26,7 +26,7 @@ const SAMPLE_SKILL = `---
 name: ppt-build
 description: Build slide content drafts
 stages:
-  - content
+  - author
 ---
 # Build
 `;
@@ -35,7 +35,7 @@ const LAYOUT_SKILL = `---
 name: ppt-layout
 description: Apply visual layout
 stages:
-  - layout-exec
+  - style
 ---
 # Layout
 `;
@@ -46,7 +46,7 @@ function emptyArtifacts() {
 
 function baseContext(overrides: Record<string, unknown> = {}) {
   return {
-    stage: "routing" as const,
+    stage: "discover" as const,
     artifacts: emptyArtifacts(),
     enabledTools: ["AskUser"],
     memories: "",
@@ -70,13 +70,13 @@ describe("system prompt assembly", () => {
     expect(assembled.text).not.toContain("## 相关记忆");
   });
 
-  it("content stage omits layout skills from catalog and set-theme examples", () => {
+  it("author stage omits layout skills from catalog and set-theme examples", () => {
     const registry = createEmptySkillRegistry();
     registerSkillFromContent(registry, "/tmp/build", "ppt-build", SAMPLE_SKILL);
     registerSkillFromContent(registry, "/tmp/layout", "ppt-layout", LAYOUT_SKILL);
 
     const assembled = assembleSystemPrompt(baseContext({
-      stage: "content",
+      stage: "author",
       skillCatalog: registry.listCards(),
       skillRegistry: registry,
     }));
@@ -87,19 +87,24 @@ describe("system prompt assembly", () => {
     expect(assembled.text).not.toMatch(/"type":"set-theme"/);
   });
 
-  it("layout-exec stage includes theme commands and layout skills", () => {
+  it("style stage includes theme commands and layout skills", () => {
     const registry = createEmptySkillRegistry();
     registerSkillFromContent(registry, "/tmp/layout", "ppt-layout", LAYOUT_SKILL);
 
     const assembled = assembleSystemPrompt(baseContext({
-      stage: "layout-exec",
+      stage: "style",
       skillCatalog: registry.listCards(),
       skillRegistry: registry,
     }));
 
     expect(assembled.text).toContain("`ppt-layout`");
     expect(assembled.text).toContain("set-theme");
-    expect(assembled.text).toContain("精简");
+    expect(assembled.text).toContain("视觉排版");
+  });
+
+  it("includes six-stage workflow overview in every stage", () => {
+    const assembled = assembleSystemPrompt(baseContext({ stage: "discover" }));
+    expect(assembled.text).toContain("`discover` → `author` → `design` → `style` → `export`");
   });
 
   it("loads memory section only when MEMORY.md has content", async () => {
@@ -122,7 +127,7 @@ describe("system prompt assembly", () => {
     expect(assembled.text).toContain("用户偏好深色主题");
   });
 
-  it("resolves layout-design from layout phase user request", () => {
+  it("resolves design from layout phase user request", () => {
     const stage = resolvePromptStage({
       request: "请对当前演示文稿执行标准排版（第二阶段）。",
       presentation: {
@@ -131,10 +136,10 @@ describe("system prompt assembly", () => {
       },
       artifacts: emptyArtifacts(),
     });
-    expect(stage).toBe("layout-design");
+    expect(stage).toBe("design");
   });
 
-  it("resolves content when slides exist without theme", () => {
+  it("resolves author when slides exist without theme", () => {
     const stage = resolvePromptStage({
       request: "继续写下一页",
       presentation: {
@@ -143,10 +148,10 @@ describe("system prompt assembly", () => {
       },
       artifacts: emptyArtifacts(),
     });
-    expect(stage).toBe("content");
+    expect(stage).toBe("author");
   });
 
-  it("LoadSkill rejects layout skill during content stage", async () => {
+  it("LoadSkill rejects layout skill during author stage", async () => {
     const registry = createEmptySkillRegistry();
     registerSkillFromContent(registry, "/tmp/layout", "ppt-layout", LAYOUT_SKILL);
 
@@ -158,11 +163,11 @@ describe("system prompt assembly", () => {
       messageHistory: [],
       skillRegistry: registry,
       skillSession: createSkillSession(),
-      promptStage: "content" as const,
+      promptStage: "author" as const,
     };
 
     await expect(loadSkillTool.execute({ skillName: "ppt-layout" }, context as any))
-      .rejects.toThrow("not available in stage 'content'");
+      .rejects.toThrow("not available in stage 'author'");
   });
 
   it("caches assembled prompt per thread when context is unchanged", () => {
@@ -177,8 +182,8 @@ describe("system prompt assembly", () => {
 
   it("rebuilds prompt when stage changes", () => {
     clearSystemPromptCache();
-    const first = getSystemPrompt(baseContext({ stage: "content" }), "thread-b");
-    const second = getSystemPrompt(baseContext({ stage: "layout-exec" }), "thread-b");
+    const first = getSystemPrompt(baseContext({ stage: "author" }), "thread-b");
+    const second = getSystemPrompt(baseContext({ stage: "style" }), "thread-b");
 
     expect(second.text).not.toBe(first.text);
   });
@@ -204,7 +209,7 @@ describe("system prompt assembly", () => {
       coreTools: [askUserTool],
       skillCatalog: registry.listCards(),
       skillRegistry: registry,
-      stageHint: "content",
+      stageHint: "author",
     });
 
     expect(prompt).toContain("## Available Skills");

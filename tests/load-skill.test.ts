@@ -24,8 +24,8 @@ name: code-review
 description: Review code changes for bugs and style issues
 when_to_use: User asks for a PR or code review
 stages:
-  - content
-  - routing
+  - author
+  - discover
 allowed-tools:
   - Read
   - Grep
@@ -75,7 +75,7 @@ describe("load_skill two-layer design", () => {
       messageHistory: [],
       skillRegistry: registry,
       skillSession,
-      promptStage: "content" as const,
+      promptStage: "author" as const,
     };
 
     const result = await loadSkillTool.execute({ skillName: "pdf" }, context as any);
@@ -101,7 +101,7 @@ describe("load_skill two-layer design", () => {
       coreTools: [askUserTool],
       skillCatalog: registry.listCards(),
       skillRegistry: registry,
-      stageHint: "content",
+      stageHint: "author",
     });
 
     expect(prompt).toContain("## Available Skills");

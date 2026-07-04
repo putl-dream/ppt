@@ -3,8 +3,8 @@ name: ppt-outline
 description: 根据 brief 起草 outline.md，含叙事弧章节骨架（完整路径时使用）
 when_to_use: brief 已就绪、大型新建需要结构化大纲时
 stages:
-  - planning
-  - content
+  - discover
+  - author
 ---
 
 # PPT Outline 大纲

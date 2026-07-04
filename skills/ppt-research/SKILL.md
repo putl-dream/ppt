@@ -3,8 +3,8 @@ name: ppt-research
 description: 整理调研素材到 research/notes.md（默认跳过，仅用户明确要求调研时）
 when_to_use: 用户明确要求收集资料、或提供了大量外部素材需要整理时
 stages:
-  - planning
-  - content
+  - discover
+  - author
 ---
 
 # 调研笔记

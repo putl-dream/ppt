@@ -3,8 +3,8 @@ name: ppt-storyboard
 description: 根据 outline 生成 storyboard.json，规划每页标题、叙事角色与版式意图（完整路径）
 when_to_use: outline 已就绪，完整路径中需要逐页分镜时
 stages:
-  - planning
-  - content
+  - discover
+  - author
 ---
 
 # Storyboard 分镜

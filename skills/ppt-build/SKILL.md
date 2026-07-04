@@ -3,7 +3,7 @@ name: ppt-build
 description: 根据 storyboard 用 SubmitCommands 创建内容草稿（不含主题与排版命令）
 when_to_use: 需要把分镜或用户内容落成幻灯片内容草稿时
 stages:
-  - content
+  - author
 allowed-tools:
   - ReadPresentationSnapshot
   - ListSlides
@@ -75,4 +75,4 @@ allowed-tools:
 
 ## 衔接
 
-用户选择排版方式后进入 layout-design / layout-exec；届时再精简文案与定主题版式。
+用户选择排版方式后进入 design / style；届时再精简文案与定主题版式。

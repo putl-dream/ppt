@@ -12,9 +12,8 @@ import {
 
 /** Stages where a single automatic visual review round is offered. */
 const RENDER_FEEDBACK_STAGES = new Set<PromptStage>([
-  "layout-exec",
-  "review",
-  "light-edit",
+  "style",
+  "edit",
 ]);
 
 /** Cap thumbnails per feedback round to control token cost. */

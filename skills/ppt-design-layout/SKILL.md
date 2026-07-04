@@ -3,7 +3,7 @@ name: ppt-design-layout
 description: Design Agent 专责排版设计；按 Rubric 产出 layout-plan.json，禁止 SubmitCommands
 when_to_use: 内容草稿完成且用户已确认排版方式后，需要逐页版式/节奏设计时
 stages:
-  - layout-design
+  - design
 allowed-tools:
   - ReadPresentationSnapshot
   - ListSlides

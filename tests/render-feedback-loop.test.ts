@@ -85,9 +85,9 @@ describe("render-feedback-loop", () => {
     const commands: PresentationCommand[] = [
       { id: "c1", type: "update-slide-layout", slideId: "s1", layout: "cover" },
     ];
-    expect(shouldOfferRenderFeedback("layout-exec", commands, false)).toBe(true);
-    expect(shouldOfferRenderFeedback("layout-exec", commands, true)).toBe(false);
-    expect(shouldOfferRenderFeedback("content", commands, false)).toBe(false);
+    expect(shouldOfferRenderFeedback("style", commands, false)).toBe(true);
+    expect(shouldOfferRenderFeedback("style", commands, true)).toBe(false);
+    expect(shouldOfferRenderFeedback("author", commands, false)).toBe(false);
   });
 
   it("builds structured feedback without thumbnails outside Electron", async () => {
@@ -102,7 +102,7 @@ describe("render-feedback-loop", () => {
       registry,
       messageHistory: [],
       skillSession: { loadedSkillNames: new Set() },
-      promptStage: "layout-exec",
+      promptStage: "style",
     };
 
     const payload = await buildRenderFeedback({
@@ -197,7 +197,7 @@ describe("render feedback runtime integration", () => {
       presentationSnapshot: presentation,
       currentSlideId: slideId,
       selectedElementIds: [],
-      stageHint: "layout-exec",
+      stageHint: "style",
       onProgress: (event) => {
         if (event.type === "render-feedback" || event.type === "render-feedback-ready") {
           progressEvents.push(event.type);

@@ -3,8 +3,8 @@ name: ppt-layout
 description: 视觉排版执行；按 layout-plan 应用 theme/layout，并在本阶段精简过长文案
 when_to_use: layout-plan 已就绪或用户已确认排版方式，需要 set-theme 与 update-slide-layout 时
 stages:
-  - layout-design
-  - layout-exec
+  - design
+  - style
 allowed-tools:
   - ReadPresentationSnapshot
   - ListSlides

@@ -1,29 +1,30 @@
 import type { SkillCard, SkillEntry } from "../skills/skill-types";
 import type { PromptStage } from "./prompt-stage";
+import { normalizePromptStage } from "./prompt-stage";
 
 /** Default stage allow-list per skill (overridable via SKILL.md `stages:` frontmatter). */
 export const DEFAULT_SKILL_STAGES: Record<string, PromptStage[]> = {
-  "ppt-workflow": ["routing"],
-  "ppt-brief": ["routing", "planning"],
-  "ppt-outline": ["planning", "content"],
-  "ppt-storyboard": ["planning", "content"],
-  "ppt-research": ["planning", "content"],
-  "ppt-build": ["content"],
-  "ppt-edit": ["content", "light-edit"],
-  "ppt-design": ["layout-design", "layout-exec"],
-  "ppt-design-layout": ["layout-design"],
-  "ppt-layout": ["layout-design", "layout-exec"],
-  "ppt-beautify": ["layout-exec", "review"],
-  "deck-review": ["layout-exec", "review", "export"],
-  "ppt-export": ["export", "review"],
+  "ppt-workflow": ["discover"],
+  "ppt-brief": ["discover"],
+  "ppt-outline": ["discover", "author"],
+  "ppt-storyboard": ["discover", "author"],
+  "ppt-research": ["discover", "author"],
+  "ppt-build": ["author"],
+  "ppt-edit": ["author", "edit"],
+  "ppt-design": ["design", "style"],
+  "ppt-design-layout": ["design"],
+  "ppt-layout": ["design", "style"],
+  "ppt-beautify": ["style"],
+  "deck-review": ["style", "export"],
+  "ppt-export": ["export", "style"],
 };
 
 export function resolveSkillStages(entry: SkillEntry): PromptStage[] {
   const fromFrontmatter = entry.frontmatter.stages;
   if (fromFrontmatter && fromFrontmatter.length > 0) {
-    return fromFrontmatter;
+    return fromFrontmatter.map((stage) => normalizePromptStage(stage));
   }
-  return DEFAULT_SKILL_STAGES[entry.name] ?? ["routing"];
+  return DEFAULT_SKILL_STAGES[entry.name] ?? ["discover"];
 }
 
 export function isSkillAllowedForStage(

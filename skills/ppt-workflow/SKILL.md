@@ -3,7 +3,7 @@ name: ppt-workflow
 description: 端到端演示创作流程；默认轻量路径，完整路径按需分阶段
 when_to_use: 用户要从零做完整 PPT、不确定下一步、或要求「一条龙」完成演示时
 stages:
-  - routing
+  - discover
 ---
 
 # 端到端工作流
@@ -25,10 +25,10 @@ stages:
 | 2 大纲 | `ppt-outline` | `outline.md` | Task |
 | 3 分镜 | `ppt-storyboard` | `slides/storyboard.json` | Task |
 | 4 内容草稿 | `ppt-build` | add-slide（无排版） | SubmitCommands |
-| 4b 排版选择 | — | LayoutChoiceCard | 用户 |
-| **4c 排版设计** | **`ppt-design-layout`** | **`slides/layout-plan.json`** | **Task（Design Agent）** |
-| 5 视觉执行 | `ppt-layout` | 按 plan 执行 commands + 增强 | SubmitCommands |
-| 5b 质检 | `deck-review` | Rubric + ValidateDeckLayout | 报告 |
+| 4b 排版选择 | — | LayoutChoiceCard | 用户（author 子状态） |
+| **4c 排版设计** | **`ppt-design-layout`** | **`slides/layout-plan.json`** | **Task（Design Agent，design 阶段）** |
+| 5 视觉执行 | `ppt-layout` | 按 plan 执行 commands + 增强 | SubmitCommands（style 阶段） |
+| 5b 质检 | `deck-review` | Rubric + ValidateDeckLayout | style 阶段 |
 | 6 美化/导出 | `ppt-beautify` / `ppt-export` | 可选 | 仅用户要求 |
 
 **设计思路来源**：[guizang-ppt-skill](https://github.com/op7418/guizang-ppt-skill) 已适配至 `ppt-layout/`（style-modes、narrative-arc、checklist）。HTML/WebGL 规则不适用本项目。

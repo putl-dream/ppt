@@ -29,7 +29,7 @@ export interface SystemPromptContextInput {
   stepLimits?: AgentStepLimits;
   memories?: string;
   artifacts?: WorkspaceArtifacts;
-  stageHint?: PromptStage;
+  stageHint?: string;
 }
 
 export interface SystemPromptContext {

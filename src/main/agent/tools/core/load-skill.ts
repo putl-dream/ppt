@@ -35,7 +35,7 @@ export const loadSkillTool: ToolDefinition<typeof loadSkillSchema, LoadSkillResu
 
     const entry = registry.get(args.skillName);
     if (!entry) {
-      const stage = context.promptStage ?? "routing";
+      const stage = context.promptStage ?? "discover";
       const available = registry.listCards()
         .filter((card) => isSkillAllowedForStage(card.name, stage, registry.get(card.name)))
         .map((card) => card.name);
@@ -46,7 +46,7 @@ export const loadSkillTool: ToolDefinition<typeof loadSkillSchema, LoadSkillResu
       );
     }
 
-    const stage = context.promptStage ?? "routing";
+    const stage = context.promptStage ?? "discover";
     if (!isSkillAllowedForStage(entry.name, stage, entry)) {
       throw new Error(formatSkillStageRejection(entry.name, stage, entry));
     }

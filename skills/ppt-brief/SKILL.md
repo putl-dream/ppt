@@ -3,8 +3,7 @@ name: ppt-brief
 description: 起草 brief.md，澄清目的、受众、时长与页数（大型新建时使用）
 when_to_use: 大型新建（>10 页）且 workspace 尚无 brief.md，或用户只给模糊主题需对齐方向时
 stages:
-  - routing
-  - planning
+  - discover
 ---
 
 # PPT Brief 起草

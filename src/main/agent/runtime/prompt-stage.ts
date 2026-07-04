@@ -2,27 +2,57 @@ import type { Presentation } from "@shared/presentation";
 
 import type { WorkspaceArtifacts } from "./workspace-artifacts";
 
+/**
+ * Merged prompt stages (6). Replaces the former 9-stage machine:
+ *
+ * | New       | Former |
+ * |-----------|--------|
+ * | discover  | routing + planning |
+ * | author    | content + layout-choice |
+ * | design    | layout-design |
+ * | style     | layout-exec + review |
+ * | edit      | light-edit |
+ * | export    | export |
+ */
 export const PROMPT_STAGES = [
-  "routing",
-  "planning",
-  "content",
-  "layout-choice",
-  "layout-design",
-  "layout-exec",
-  "review",
-  "light-edit",
+  "discover",
+  "author",
+  "design",
+  "style",
+  "edit",
   "export",
 ] as const;
 
 export type PromptStage = (typeof PROMPT_STAGES)[number];
+
+/** Former 9-stage identifiers → merged stage (for tests, stageHint, old SKILL frontmatter). */
+export const LEGACY_PROMPT_STAGE_MAP: Record<string, PromptStage> = {
+  routing: "discover",
+  planning: "discover",
+  content: "author",
+  "layout-choice": "author",
+  "layout-design": "design",
+  "layout-exec": "style",
+  review: "style",
+  "light-edit": "edit",
+};
+
+export function normalizePromptStage(stage: string): PromptStage {
+  if ((PROMPT_STAGES as readonly string[]).includes(stage)) {
+    return stage as PromptStage;
+  }
+  const legacy = LEGACY_PROMPT_STAGE_MAP[stage];
+  if (legacy) return legacy;
+  throw new Error(`Unknown prompt stage: ${stage}`);
+}
 
 export interface PromptStageResolveInput {
   request: string;
   presentation: Presentation;
   artifacts: WorkspaceArtifacts;
   messageHistory?: Array<{ role: "user" | "assistant"; content: string }>;
-  /** Explicit override from harness (e.g. tests). */
-  stageHint?: PromptStage;
+  /** Explicit override from harness (e.g. tests). Accepts legacy stage names. */
+  stageHint?: string;
 }
 
 const LAYOUT_PHASE_PATTERNS = [
@@ -78,8 +108,6 @@ function isAwaitingLayoutChoice(
 }
 
 function suggestsLargeNewDeck(request: string, artifacts: WorkspaceArtifacts): boolean {
-  // Only a finished storyboard means we've genuinely entered content authoring;
-  // a stray brief/outline should not block re-planning a fresh full deck.
   if (artifacts.storyboard) return false;
   return NEW_DECK_PATTERNS.some((pattern) => pattern.test(request));
 }
@@ -88,7 +116,7 @@ function suggestsLargeNewDeck(request: string, artifacts: WorkspaceArtifacts): b
  * Resolve the active prompt stage from runtime facts (artifacts, deck state, request class).
  */
 export function resolvePromptStage(input: PromptStageResolveInput): PromptStage {
-  if (input.stageHint) return input.stageHint;
+  if (input.stageHint) return normalizePromptStage(input.stageHint);
 
   const slideCount = input.presentation.slides?.length ?? 0;
   const hasTheme = Boolean(input.presentation.theme?.trim());
@@ -96,58 +124,61 @@ export function resolvePromptStage(input: PromptStageResolveInput): PromptStage 
   if (isExportRequest(input.request)) return "export";
 
   if (isLayoutPhaseRequest(input.request)) {
-    return input.artifacts.layoutPlan ? "layout-exec" : "layout-design";
+    return input.artifacts.layoutPlan ? "style" : "design";
   }
 
   if (input.artifacts.layoutPlan && slideCount > 0 && !hasTheme) {
-    return "layout-exec";
+    return "style";
   }
 
   if (isLightEditRequest(input.request, slideCount) && hasTheme) {
-    return "light-edit";
+    return "edit";
   }
 
+  // layout-choice merged into author — same stage, different sub-mode via message history
   if (slideCount > 0 && !hasTheme && isAwaitingLayoutChoice(input.messageHistory)) {
-    return "layout-choice";
+    return "author";
   }
 
-  // An explicit "build a full deck" request re-enters planning even when stray
-  // slides exist — suggestsLargeNewDeck already bails once a storyboard is present,
-  // so genuine in-progress content is never bounced back.
   if (suggestsLargeNewDeck(input.request, input.artifacts)) {
-    return "planning";
+    return "discover";
   }
 
   if (slideCount > 0 && !hasTheme) {
-    return "content";
+    return "author";
   }
 
   if (input.artifacts.storyboard || input.artifacts.outline) {
-    return "content";
+    return "author";
   }
 
   if (input.artifacts.brief) {
-    return "content";
+    return "author";
   }
 
   if (slideCount > 0) {
-    return hasTheme ? "light-edit" : "content";
+    return hasTheme ? "edit" : "author";
   }
 
-  return "routing";
+  return "discover";
 }
 
 export function describePromptStage(stage: PromptStage): string {
   const labels: Record<PromptStage, string> = {
-    routing: "路径选择",
-    planning: "规划（brief/outline/storyboard）",
-    content: "内容撰写与草稿落盘",
-    "layout-choice": "等待用户选择排版方式",
-    "layout-design": "排版设计（layout-plan）",
-    "layout-exec": "视觉排版执行",
-    review: "质检与润色",
-    "light-edit": "轻量单页修改",
+    discover: "路径选择与规划（brief / outline / storyboard）",
+    author: "内容撰写与草稿落盘（含等待排版选择）",
+    design: "排版设计（layout-plan）",
+    style: "视觉排版执行与质检",
+    edit: "轻量单页修改",
     export: "导出交付",
   };
   return labels[stage];
+}
+
+/** Whether author stage is waiting for the user to pick a layout mode (former layout-choice). */
+export function isAuthorAwaitingLayoutChoice(
+  stage: PromptStage,
+  messageHistory?: Array<{ role: "user" | "assistant"; content: string }>,
+): boolean {
+  return stage === "author" && isAwaitingLayoutChoice(messageHistory);
 }

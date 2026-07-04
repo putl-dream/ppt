@@ -26,7 +26,7 @@ export function buildSubAgentSystemPrompt(tools: SubAgentToolDefinition[]): stri
 - Output **slides/layout-plan.json** only—do NOT modify presentation JSON or call SubmitCommands.
 - Each slide needs: slideId, title, narrativeRole, layout, rationale; optional slideVariant and enhancements.
 - Apply **layout Rubric only**: no 3 consecutive same layout; 7+ slides need toc + ≥3 layout types; KPI pages use case or beautify-chart.
-- **Do NOT** rewrite, compress, or change bullet text. Overflow trimming is for the layout-exec phase.
+- **Do NOT** rewrite, compress, or change bullet text. Overflow trimming is for the style phase.
 
 ## Available tools
 ${tools.map(formatToolCard).join("\n\n")}

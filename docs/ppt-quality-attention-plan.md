@@ -1,7 +1,7 @@
 # PPT 生成质量与模型注意力改进计划
 
 > 版本：2026-07-05
-> 状态：**P0–P2 路线项均已落地**（P2-1 为轻量版：全流程概览注入，未合并阶段机）
+> 状态：**P0–P2 路线项均已落地**；**六阶段机**已替代原九阶段（见 §6.4）
 > 关联：[ppt-capability-status-plan.md](./ppt-capability-status-plan.md)（能力现状）、[ppt-style-capability-plan.md](./ppt-style-capability-plan.md)（样式方案）
 
 ---
@@ -15,7 +15,7 @@
 
 经排查，这两个问题**都是架构层面的结构性成因，不是模型能力问题**。本文档梳理根因并按性价比给出改进路线。
 
-**结论**：流程能生成 PPT，但质量被四个结构性因素锁死；注意力问题主要由文本 JSON 协议与九阶段窄窗口造成。最高性价比的两项改动是 **原生 tool-use 改造** 与 **渲染反馈闭环**。
+**结论**：流程能生成 PPT，但质量被四个结构性因素锁死；注意力问题主要由文本 JSON 协议与阶段窄窗口造成（已合并为六阶段，见 §6.4）。
 
 ---
 
@@ -24,7 +24,7 @@
 ```
 AgentRuntime.run()
   ├─ probeWorkspaceArtifacts()   探测 brief/outline/storyboard/layout-plan
-  ├─ resolvePromptStage()        计算 9 个阶段之一
+  ├─ resolvePromptStage()        计算 6 个阶段之一
   ├─ assembleSystemPrompt()      拼装 identity/tools/workspace/memory 四段
   └─ for step in maxSteps:
         模型返回单个文本 JSON → parseAgentJsonResponse 手写扫描
@@ -32,7 +32,7 @@ AgentRuntime.run()
         message   → 结束（command_proposal 会拦截"口头描述未来工作"）
 ```
 
-- **阶段机**：`prompt-stage.ts` 基于 deck 快照 + workspace 文件 + 请求分类推断 9 个阶段，每步重算。
+- **阶段机**：`prompt-stage.ts` 六阶段（discover / author / design / style / edit / export），每步重算；legacy 九阶段名经 `normalizePromptStage()` 映射。
 - **提示词**：`prompt-sections.ts` 按阶段注入规则、技能白名单、命令示例；静态段（identity/tools）可缓存，动态段（workspace/memory）每次重算。
 - **工具分层**：core 可直调；deferred 须发现后执行；runtime 仅系统内部。
 - **两阶段建稿**：内容阶段禁 `set-theme`/`update-slide-layout`；排版阶段禁改写文案。
@@ -93,7 +93,7 @@ AgentRuntime.run()
 | ~~**P0-2**~~ ✅ | 引入**渲染反馈闭环**：排版后自动 `preview-slide` 截图回喂模型，做一轮 critique → fix | 打破质量天花板 | `preview-slide`、runtime 回合 |
 | ~~**P1-1**~~ ✅ | 提升引擎 layout 模板视觉质量（间距/层级/配色） | 抬高枚举驱动上限 | `layout.ts` |
 | ~~**P1-2**~~ ✅ | 内容与版式**联合决策**（storyboard 阶段即标注 narrativeRole/layout 意图） | 减少排版阶段硬塞溢出 | `storyboard.ts`、`ppt-storyboard` |
-| ~~**P2-1**~~ ✅（轻量） | 合并阶段、给模型更多全局视野 | 减少窄窗口局部决策 | `prompt-sections.ts` 全流程概览 |
+| ~~**P2-1**~~ ✅ | 合并阶段、给模型更多全局视野 | 减少窄窗口局部决策 | 九阶段 → **六阶段** + 全流程概览 |
 | ~~**P2-2**~~ ✅ | 高频 Deferred 工具直接提升为 Core | 减少发现-执行两跳 | `preview-slide.ts`、`validate-deck-layout.ts` |
 
 ---
@@ -134,7 +134,7 @@ AgentRuntime.run()
 
 ## 6.2 P0-2 落地记录（2026-07-05）
 
-**策略**：在 `layout-exec` / `review` / `light-edit` 阶段，首次含视觉排版命令的 `SubmitCommands` **不立即 finish**——系统在沙箱中应用命令、调用 `PreviewSlide` 生成结构化摘要 + PNG 缩略图（Electron），通过 `tool_result`（native）或 transcript（文本协议）回喂模型，给予一轮视觉质检机会；第二次 `SubmitCommands` 正常 finish。
+**策略**：在 `style` / `edit` 阶段，首次含视觉排版命令的 `SubmitCommands` **不立即 finish**——系统在沙箱中应用命令、调用 `PreviewSlide` 生成结构化摘要 + PNG 缩略图（Electron），通过 `tool_result`（native）或 transcript（文本协议）回喂模型，给予一轮视觉质检机会；第二次 `SubmitCommands` 正常 finish。
 
 **改动清单**：
 
@@ -170,10 +170,29 @@ AgentRuntime.run()
 |----|----------|
 | **P1-1** | `layout.ts` 统一 `BODY_CONTENT_Y/H`、`CARD_GAP=32`、`CARD_PAD=28`、`ROW_GAP=24`；concept/process/comparison/summary 间距加宽 |
 | **P1-2** | `storyboard.ts` 新增 `narrativeRole` + `NARRATIVE_ROLE_DEFAULT_LAYOUT`；`ppt-storyboard` / `ppt-build` skill 同步 |
-| **P2-1** | `prompt-sections.ts` 各阶段注入全流程概览（未改 `prompt-stage.ts` 九阶段机） |
+| **P2-1** | `prompt-sections.ts` 各阶段注入六阶段全流程概览 |
 | **P2-2** | `PreviewSlide`、`ValidateDeckLayout` 提升为 Core Tool，layout/review 可直接调用 |
 
 **测试**：`tests/storyboard-narrative-role.test.ts`；`agent-architecture-skeletons` 断言 Core 注册。
+
+---
+
+## 6.4 六阶段机合并（2026-07-05）
+
+原九阶段窄窗口合并为 **6 阶段**，减少模型「只见树木」：
+
+| 新阶段 | 合并自 | 职责 |
+|--------|--------|------|
+| `discover` | routing + planning | 路径判断、brief / outline / storyboard |
+| `author` | content + layout-choice | 内容草稿；等待用户选排版方式（子状态，同阶段） |
+| `design` | layout-design | layout-plan（Design Agent） |
+| `style` | layout-exec + review | 视觉排版执行 + 质检 |
+| `edit` | light-edit | 已有主题 deck 的轻量修改 |
+| `export` | export | 导出 |
+
+**改动**：`prompt-stage.ts`（含 `normalizePromptStage` / `LEGACY_PROMPT_STAGE_MAP`）、`prompt-sections.ts`、`skill-stage-policy.ts`、全部 SKILL.md `stages:`、`loadSkillsDir` 读 frontmatter 时自动映射 legacy 名。
+
+**测试**：`tests/prompt-stage-routing.test.ts`（含 legacy stageHint 兼容）。
 
 ---
 

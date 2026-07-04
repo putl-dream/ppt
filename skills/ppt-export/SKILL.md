@@ -4,7 +4,7 @@ description: 将完成的演示导出为 PPTX 文件，导出前做最终质检
 when_to_use: 用户要求导出、下载、生成 pptx 文件，或演示定稿交付时
 stages:
   - export
-  - review
+  - style
 allowed-tools:
   - ReadPresentationSnapshot
   - SearchExtraTools

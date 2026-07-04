@@ -13,7 +13,7 @@ export { buildSystemPromptContext, buildSystemPromptContextSync } from "./prompt
 export type { SystemPromptContext, SystemPromptContextInput } from "./prompt-context";
 export { SYSTEM_PROMPT_DYNAMIC_BOUNDARY } from "./prompt-sections";
 export type { PromptStage } from "./prompt-stage";
-export { resolvePromptStage, describePromptStage } from "./prompt-stage";
+export { resolvePromptStage, describePromptStage, normalizePromptStage } from "./prompt-stage";
 
 export interface SystemPromptOptions {
   request: string;
@@ -28,7 +28,7 @@ export interface SystemPromptOptions {
   workspaceRoot?: string;
   memories?: string;
   threadId?: string;
-  stageHint?: PromptStage;
+  stageHint?: string;
 }
 
 /**
