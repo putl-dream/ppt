@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import type { AgentActivityItem } from "@shared/agent-activity";
 import { ChevronDownIcon, ChevronRightIcon } from "./Icons";
 import { ReasoningBlock } from "./ReasoningBlock";
+import { TaskPlanCard } from "./TaskPlanCard";
 interface AgentActivityTraceProps {
   items: AgentActivityItem[];
   /** 实时流式展示时默认展开当前段 */
@@ -213,7 +214,15 @@ export const AgentActivityTrace: React.FC<AgentActivityTraceProps> = ({
           return <TaskBlock key={item.id} item={item} live={live} />;
         }
         if (item.kind === "taskgraph") {
-          return null;
+          if (item.tasks.length === 0) return null;
+          return (
+            <TaskPlanCard
+              key={item.id}
+              goal={item.goal}
+              tasks={item.tasks}
+              live={live}
+            />
+          );
         }
         return <WorkflowStepBlock key={item.id} item={item} live={live} />;
       })}

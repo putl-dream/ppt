@@ -463,11 +463,15 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
                 <>
                   {(() => {
                     const useLiveTrace = busy && streamingMessageId === msg.id;
-                    const trace = filterTraceForDisplay(resolveActivityTrace({
-                      activityTrace: useLiveTrace ? activityTrace : msg.activityTrace,
-                      thought: useLiveTrace ? undefined : msg.thought,
-                      reasoning: useLiveTrace ? undefined : msg.reasoning,
-                    }));
+                    // 实时消息的任务计划由输入框上方的浮动卡片展示，历史消息则内联到时间线中
+                    const trace = filterTraceForDisplay(
+                      resolveActivityTrace({
+                        activityTrace: useLiveTrace ? activityTrace : msg.activityTrace,
+                        thought: useLiveTrace ? undefined : msg.thought,
+                        reasoning: useLiveTrace ? undefined : msg.reasoning,
+                      }),
+                      { keepTaskGraph: !useLiveTrace },
+                    );
                     return trace.length > 0 ? (
                       <AgentActivityTrace
                         items={trace}

@@ -348,6 +348,13 @@ export const PPTMirror: React.FC<PPTMirrorProps> = ({
             </div>
           );
         })}
+
+        {slides.length === 0 && (
+          <div className="mirror-empty-state">
+            <p className="mirror-empty-title">还没有幻灯片</p>
+            <p className="mirror-empty-hint">在下方对话框描述你的需求，AI 会帮你生成第一页。</p>
+          </div>
+        )}
       </div>
 
       {/* 4. 全屏放映灯箱模态窗口 */}

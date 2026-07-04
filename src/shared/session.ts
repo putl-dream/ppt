@@ -139,39 +139,13 @@ export type SessionSnapshot = z.infer<typeof sessionSnapshotSchema>;
 export type SessionBootstrap = z.infer<typeof sessionBootstrapSchema>;
 
 export function createSessionPresentation(title: string): Presentation {
+  // 新项目从空 deck 起步：不预置占位页，避免 Agent 每次 ReadPresentationSnapshot
+  // 都读到无意义的占位内容。首页内容由 Agent 首次 add-slide 生成。
   return {
     id: crypto.randomUUID(),
     title,
     revision: 0,
-    slides: [
-      {
-        id: crypto.randomUUID(),
-        title: "项目起点",
-        elements: [
-          {
-            id: crypto.randomUUID(),
-            type: "text",
-            x: 120,
-            y: 156,
-            width: 1040,
-            height: 96,
-            text: "PPT 项目工作台",
-            fontSize: 58,
-            bold: true,
-          },
-          {
-            id: crypto.randomUUID(),
-            type: "text",
-            x: 150,
-            y: 292,
-            width: 980,
-            height: 180,
-            text: `当前项目：${title}\n先明确目的、受众和方向，再沉淀大纲、资料、逐页方案，最后生成 PPT。`,
-            fontSize: 28,
-          },
-        ],
-      },
-    ],
+    slides: [],
   };
 }
 

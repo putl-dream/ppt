@@ -313,10 +313,13 @@ export function findPendingToolApproval(
   );
 }
 
-export function filterTraceForDisplay(trace: AgentActivityItem[]): AgentActivityItem[] {
+export function filterTraceForDisplay(
+  trace: AgentActivityItem[],
+  options: { keepTaskGraph?: boolean } = {},
+): AgentActivityItem[] {
   return trace.filter(
     (item) =>
-      item.kind !== "taskgraph" &&
+      (options.keepTaskGraph || item.kind !== "taskgraph") &&
       !(item.kind === "tool-approval" && item.status === "pending"),
   );
 }
