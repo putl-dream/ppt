@@ -4,6 +4,8 @@ export interface AgentModelRequest {
   prompt: string;
   systemPrompt?: string;
   signal?: AbortSignal;
+  /** Per-request override; used by output-truncation recovery. */
+  maxOutputTokens?: number;
 }
 
 export interface AgentModelResponse {
@@ -21,6 +23,7 @@ export interface AgentModelStreamChunk {
   type: "content" | "thinking" | "complete";
   text: string;
   index?: number;
+  stopReason?: string;
 }
 
 /**

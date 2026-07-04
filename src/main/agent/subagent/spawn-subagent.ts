@@ -15,6 +15,7 @@ import { triggerHooks } from "../runtime/hook-registry";
 import type { PostToolUseBlock, StopBlock } from "../runtime/hook-blocks";
 import type { ToolApprovalHandler } from "../runtime/permission-check";
 import { buildSubAgentSystemPrompt } from "./sub-system-prompt";
+import { callModelWithRecovery } from "../runtime/model-call-recovery";
 import {
   SUB_AGENT_TOOL_HANDLERS,
   SUB_AGENT_TOOLS,
@@ -62,33 +63,38 @@ async function generateSubAgentResponse(
   systemPrompt: string,
   transcript: Array<Record<string, unknown>>,
 ): Promise<string> {
-  const request = {
+  const result = await callModelWithRecovery({
+    gateway: options.gateway,
     systemPrompt,
-    prompt: JSON.stringify({ task: options.description, transcript }),
+    promptPayload: {
+      task: options.description,
+      transcript,
+    },
+    model: options.model,
     signal: options.signal,
-  };
-
-  if (options.onProgress && options.taskId) {
-    let accumulatedText = "";
-    for await (const chunk of options.gateway.generateTextStream(request, options.model)) {
-      if (options.signal?.aborted) {
-        throw new Error("Sub-agent run aborted.");
-      }
-      if (chunk.type === "thinking" && chunk.text) {
+    stream: options.onProgress && options.taskId
+      ? {
+          onThinkingChunk: (chunk) => {
+            emitProgress(options, {
+              type: "subagent-thinking-chunk",
+              taskId: options.taskId!,
+              chunk,
+            });
+          },
+        }
+      : undefined,
+    onRecovery: (message) => {
+      if (options.taskId) {
         emitProgress(options, {
-          type: "subagent-thinking-chunk",
+          type: "subagent-tool-started",
           taskId: options.taskId,
-          chunk: chunk.text,
+          toolName: "recovery",
+          message,
         });
-      } else if (chunk.type === "content") {
-        accumulatedText += chunk.text;
       }
-    }
-    return accumulatedText;
-  }
-
-  const response = await options.gateway.generateText(request, options.model);
-  return response.text;
+    },
+  });
+  return result.text;
 }
 
 /**

@@ -26,12 +26,14 @@ export async function generateWithOpenAI(
     let requestId: string | undefined;
     let stopReason: string | undefined;
 
+    const maxOutputTokens = request.maxOutputTokens ?? config.maxOutputTokens;
+
     if (mode === "responses") {
       const response = await client.responses.create({
         model: config.model,
         instructions: request.systemPrompt,
         input: request.prompt,
-        max_output_tokens: config.maxOutputTokens,
+        max_output_tokens: maxOutputTokens,
       }, { signal: request.signal });
       text = response.output_text.trim();
       requestId = response._request_id ?? undefined;
@@ -44,7 +46,7 @@ export async function generateWithOpenAI(
             : []),
           { role: "user", content: request.prompt },
         ],
-        max_tokens: config.maxOutputTokens,
+        max_tokens: maxOutputTokens,
       }, { signal: request.signal });
       text = (response.choices[0]?.message.content ?? "").trim();
       requestId = response._request_id ?? undefined;
@@ -88,9 +90,9 @@ export async function* generateStreamWithOpenAI(
       // Responses API 暂不支持流式，降级到非流式
       const response = await generateWithOpenAI(config, request);
       yield { type: "content", text: response.text };
-      yield { type: "complete", text: "" };
+      yield { type: "complete", text: "", stopReason: response.stopReason };
     } else {
-      // Chat Completions API 支持流式
+      const maxOutputTokens = request.maxOutputTokens ?? config.maxOutputTokens;
       const stream = await client.chat.completions.create({
         model: config.model,
         messages: [
@@ -99,18 +101,22 @@ export async function* generateStreamWithOpenAI(
             : []),
           { role: "user", content: request.prompt },
         ],
-        max_tokens: config.maxOutputTokens,
+        max_tokens: maxOutputTokens,
         stream: true,
       }, { signal: request.signal });
 
+      let finishReason: string | undefined;
       for await (const chunk of stream) {
         const content = chunk.choices[0]?.delta?.content;
         if (content) {
           yield { type: "content", text: content };
         }
+        if (chunk.choices[0]?.finish_reason) {
+          finishReason = chunk.choices[0]?.finish_reason ?? undefined;
+        }
       }
 
-      yield { type: "complete", text: "" };
+      yield { type: "complete", text: "", stopReason: finishReason };
     }
   } catch (error) {
     throw normalizeProviderError("openai", error, request.signal);

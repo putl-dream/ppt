@@ -52,12 +52,15 @@ describe("generateWithOpenAI", () => {
       timeout: 1234,
       maxRetries: 0,
     });
-    expect(openaiMock.createResponse).toHaveBeenCalledWith({
-      model: "openai-test",
-      instructions: "System instruction",
-      input: "User prompt",
-      max_output_tokens: 321,
-    });
+    expect(openaiMock.createResponse).toHaveBeenCalledWith(
+      {
+        model: "openai-test",
+        instructions: "System instruction",
+        input: "User prompt",
+        max_output_tokens: 321,
+      },
+      { signal: undefined },
+    );
     expect(response).toEqual({
       provider: "openai",
       model: "openai-test",
@@ -77,14 +80,17 @@ describe("generateWithOpenAI", () => {
       { systemPrompt: "System instruction", prompt: "User prompt" },
     );
 
-    expect(openaiMock.createChatCompletion).toHaveBeenCalledWith({
-      model: "openai-test",
-      messages: [
-        { role: "system", content: "System instruction" },
-        { role: "user", content: "User prompt" },
-      ],
-      max_tokens: 321,
-    });
+    expect(openaiMock.createChatCompletion).toHaveBeenCalledWith(
+      {
+        model: "openai-test",
+        messages: [
+          { role: "system", content: "System instruction" },
+          { role: "user", content: "User prompt" },
+        ],
+        max_tokens: 321,
+      },
+      { signal: undefined },
+    );
     expect(response).toEqual({
       provider: "openai",
       model: "openai-test",

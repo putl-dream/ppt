@@ -22,6 +22,7 @@ import {
   getEffectiveMainMaxSteps,
   resolveAgentStepLimits,
 } from "@shared/agent-step-limits";
+import { callModelWithRecovery } from "./model-call-recovery";
 
 type ToolCall = {
   type: "tool_call";
@@ -206,54 +207,51 @@ export class AgentRuntime {
 
       // 判断是否应该使用流式：仅在可能返回message且提供了回调时使用
       const shouldUseStream = options.onStreamChunk !== undefined;
-
       let responseText: string;
 
+      const promptPayload = {
+        request: options.request,
+        conversation: options.messageHistory ?? [],
+        transcript,
+      };
+
       if (shouldUseStream) {
-        // 流式模式：逐chunk接收并实时回调，使用 JsonStreamExtractor 提取纯文本内容
-        let accumulatedText = "";
         const extractor = new JsonStreamExtractor((text, source) => {
           options.onStreamChunk?.(text, source);
         });
-
-        for await (const chunk of this.gateway.generateTextStream(
-          {
-            systemPrompt,
-            prompt: JSON.stringify({
-              request: options.request,
-              conversation: options.messageHistory ?? [],
-              transcript,
-            }),
-            signal: options.signal,
+        const modelResult = await callModelWithRecovery({
+          gateway: this.gateway,
+          systemPrompt,
+          promptPayload,
+          model: options.model,
+          signal: options.signal,
+          stream: {
+            onChunk: (chunk) => {
+              if (chunk.type === "content" && chunk.text) {
+                extractor.feed(chunk.text);
+              }
+            },
+            onThinkingChunk: (chunk) => {
+              options.onThinkingChunk?.(chunk, step);
+            },
           },
-          options.model,
-        )) {
-          if (options.signal?.aborted) {
-            throw new Error("Run aborted by user.");
-          }
-          if (chunk.type === "thinking") {
-            options.onThinkingChunk?.(chunk.text, step);
-          } else if (chunk.type === "content") {
-            accumulatedText += chunk.text;
-            extractor.feed(chunk.text);
-          }
-        }
-        responseText = accumulatedText;
+          onRecovery: (message) => {
+            options.onProgress?.({ type: "request-status", message, progress: 0 });
+          },
+        });
+        responseText = modelResult.text;
       } else {
-        // 非流式模式：等待完整响应
-        const response = await this.gateway.generateText(
-          {
-            systemPrompt,
-            prompt: JSON.stringify({
-              request: options.request,
-              conversation: options.messageHistory ?? [],
-              transcript,
-            }),
-            signal: options.signal,
+        const modelResult = await callModelWithRecovery({
+          gateway: this.gateway,
+          systemPrompt,
+          promptPayload,
+          model: options.model,
+          signal: options.signal,
+          onRecovery: (message) => {
+            options.onProgress?.({ type: "request-status", message, progress: 0 });
           },
-          options.model,
-        );
-        responseText = response.text;
+        });
+        responseText = modelResult.text;
       }
 
       let parsed: unknown;

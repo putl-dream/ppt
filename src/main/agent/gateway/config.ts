@@ -50,6 +50,22 @@ function resolveOpenAIApiMode(
   return baseURL ? "chat-completions" : "responses";
 }
 
+export function resolveFallbackModelSelection(
+  current: AgentModelSelection | undefined,
+  env: NodeJS.ProcessEnv = process.env,
+): AgentModelSelection | undefined {
+  const fallbackProvider = env.AGENT_FALLBACK_PROVIDER?.trim().toLowerCase();
+  const fallbackModel = env.AGENT_FALLBACK_MODEL?.trim();
+  if (fallbackProvider !== "openai" && fallbackProvider !== "anthropic") {
+    return undefined;
+  }
+  if (!fallbackModel) return undefined;
+  if (current?.provider === fallbackProvider && current.model === fallbackModel) {
+    return undefined;
+  }
+  return { provider: fallbackProvider, model: fallbackModel };
+}
+
 export function resolveAgentModelConfig(
   selection: AgentModelSelection | undefined,
   runtimeSettings: Partial<Record<AgentProvider, AgentModelSettings>>,

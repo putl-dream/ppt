@@ -4,9 +4,19 @@ export type AgentGatewayErrorCode =
   | "configuration"
   | "authentication"
   | "rate-limit"
+  | "overloaded"
+  | "prompt-too-long"
   | "timeout"
   | "empty-response"
   | "provider-error";
+
+export type GatewayRecoveryKind =
+  | "retry-backoff"
+  | "compact-context"
+  | "upgrade-output-tokens"
+  | "continue-output"
+  | "switch-fallback-model"
+  | "non-recoverable";
 
 export class AgentGatewayError extends Error {
   constructor(
@@ -55,7 +65,10 @@ export function formatRecoverableAgentError(error: unknown, signal?: AbortSignal
       case "timeout":
         return `${error.message} 请重试，或在设置 / 环境变量中增大 AGENT_TIMEOUT_MS。`;
       case "rate-limit":
+      case "overloaded":
         return `${error.message} 请稍后再试。`;
+      case "prompt-too-long":
+        return `${error.message} 上下文过长，系统已尝试压缩后重试。`;
       case "authentication":
         return `${error.message} 请检查 API Key 与代理地址。`;
       case "provider-error":
@@ -100,6 +113,12 @@ export function normalizeProviderError(
   if (status === 429) {
     return new AgentGatewayError(`${provider} rate limit exceeded: ${message}`, "rate-limit", provider, error);
   }
+  if (status === 529) {
+    return new AgentGatewayError(`${provider} service overloaded: ${message}`, "overloaded", provider, error);
+  }
+  if (status === 400 && isPromptTooLongMessage(message)) {
+    return new AgentGatewayError(`${provider} prompt too long: ${message}`, "prompt-too-long", provider, error);
+  }
   if (status === 408 || /timeout/i.test(name) || /timed out/i.test(message)) {
     return new AgentGatewayError(
       `${provider} request timed out: ${message}. Increase AGENT_TIMEOUT_MS if this model or endpoint needs more time.`,
@@ -116,5 +135,63 @@ export function normalizeProviderError(
       error,
     );
   }
+  if (isPromptTooLongMessage(message)) {
+    return new AgentGatewayError(`${provider} prompt too long: ${message}`, "prompt-too-long", provider, error);
+  }
   return new AgentGatewayError(`${provider} request failed: ${message}`, "provider-error", provider, error);
+}
+
+function isPromptTooLongMessage(message: string): boolean {
+  const normalized = message.toLowerCase();
+  return normalized.includes("prompt is too long")
+    || normalized.includes("prompt_too_long")
+    || normalized.includes("context length")
+    || normalized.includes("context_length")
+    || normalized.includes("maximum context")
+    || normalized.includes("too many tokens")
+    || normalized.includes("token limit")
+    || normalized.includes("exceeds the maximum");
+}
+
+export function isOutputTruncated(stopReason?: string): boolean {
+  if (!stopReason) return false;
+  const normalized = stopReason.toLowerCase();
+  return normalized === "max_tokens"
+    || normalized === "length"
+    || normalized === "model_length"
+    || normalized === "output_length";
+}
+
+export function classifyGatewayRecovery(error: unknown): GatewayRecoveryKind {
+  if (error instanceof AgentGatewayError) {
+    switch (error.code) {
+      case "rate-limit":
+      case "overloaded":
+        return "retry-backoff";
+      case "prompt-too-long":
+        return "compact-context";
+      case "timeout":
+        return "non-recoverable";
+      case "provider-error":
+        return "retry-backoff";
+      default:
+        return "non-recoverable";
+    }
+  }
+
+  const status = (error as { status?: number }).status;
+  if (status === 429 || status === 529) return "retry-backoff";
+  if (status === 408) return "retry-backoff";
+  if (isConnectionTerminated(error)) return "retry-backoff";
+
+  const message = errorMessage(error);
+  if (isPromptTooLongMessage(message)) return "compact-context";
+
+  return "non-recoverable";
+}
+
+export function isAbortError(error: unknown, signal?: AbortSignal): boolean {
+  if (signal?.aborted) return true;
+  if (errorMessage(error) === "Run aborted by user.") return true;
+  return isAbortLike(error, signal);
 }

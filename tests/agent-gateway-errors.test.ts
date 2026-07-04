@@ -9,6 +9,7 @@ describe("normalizeProviderError", () => {
     [401, "authentication"],
     [403, "authentication"],
     [429, "rate-limit"],
+    [529, "overloaded"],
     [408, "timeout"],
     [500, "provider-error"],
   ] as const)("maps HTTP %s to %s", (status, code) => {

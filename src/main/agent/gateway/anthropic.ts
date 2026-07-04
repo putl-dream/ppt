@@ -60,7 +60,7 @@ export async function generateWithAnthropic(
   });
 
   try {
-    let maxTokens = config.maxOutputTokens;
+    let maxTokens = request.maxOutputTokens ?? config.maxOutputTokens;
     let response = await client.messages.create({
       model: config.model,
       max_tokens: maxTokens,
@@ -123,7 +123,7 @@ export async function* generateStreamWithAnthropic(
   try {
     const stream = client.messages.stream({
       model: config.model,
-      max_tokens: config.maxOutputTokens,
+      max_tokens: request.maxOutputTokens ?? config.maxOutputTokens,
       system: request.systemPrompt,
       messages: [{ role: "user", content: request.prompt }],
     }, { signal: request.signal });
@@ -142,6 +142,7 @@ export async function* generateStreamWithAnthropic(
     yield {
       type: "complete",
       text: "",
+      stopReason: finalMessage.stop_reason ?? undefined,
     };
   } catch (error) {
     throw normalizeProviderError("anthropic", error, request.signal);
