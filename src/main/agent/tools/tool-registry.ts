@@ -23,6 +23,11 @@ import { detectRepeatedTitlesTool } from "./deferred/detect-repeated-titles";
 import { exportPptxTool } from "./deferred/export-pptx";
 import { rewriteSlideContentTool } from "./deferred/rewrite-slide-content";
 import { selectStyleStrategyTool } from "./deferred/select-style-strategy";
+import { insertSlideImageTool } from "./deferred/insert-slide-image";
+import { addLayoutDecorationsTool } from "./deferred/add-layout-decorations";
+import { applyTypographyTool } from "./deferred/apply-typography";
+import { previewSlideTool } from "./deferred/preview-slide";
+import { validateDeckLayoutTool } from "./deferred/validate-deck-layout";
 
 /**
  * 工具注册表与唯一查询入口。
@@ -123,6 +128,11 @@ export function createDefaultToolRegistry(): ToolRegistry {
     exportPptxTool,
     rewriteSlideContentTool,
     selectStyleStrategyTool,
+    insertSlideImageTool,
+    addLayoutDecorationsTool,
+    applyTypographyTool,
+    previewSlideTool,
+    validateDeckLayoutTool,
   ].forEach((tool) => registry.register(tool));
   return registry;
 }

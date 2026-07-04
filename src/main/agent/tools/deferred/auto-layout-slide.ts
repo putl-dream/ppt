@@ -1,10 +1,11 @@
 import { z } from "zod";
 import type { ToolDefinition } from "../tool-definition";
 import type { PresentationCommand } from "@shared/commands";
+import { SLIDE_LAYOUTS } from "@shared/slide-layouts";
 
 export const autoLayoutSlideSchema = z.object({
   slideId: z.string().describe("需要重排版幻灯片的 ID"),
-  layout: z.enum(["cover", "section", "concept", "comparison", "process", "architecture", "case", "summary"]).describe("目标版式名称"),
+  layout: z.enum(SLIDE_LAYOUTS).describe("目标版式名称"),
 });
 
 /**

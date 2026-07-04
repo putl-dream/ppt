@@ -28,6 +28,11 @@ allowed-tools:
 | 改写字风 | RewriteSlideContent | `update-element` |
 | 图表样式 | BeautifyChart | commands |
 | 表格样式 | BeautifyTable | commands |
+| 图片入槽 | InsertSlideImage | add/update image（自动坐标） |
+| 创意装饰 | AddLayoutDecorations | shape 装饰 commands |
+| 字体角色 | ApplyTypography | update-text-style 批量 |
+| 单页预览 | PreviewSlide | 视觉摘要（layout/槽位/元素） |
+| 版式节奏 | ValidateDeckLayout | 连续 layout / 多样性报告 |
 | 一致性分析 | AnalyzeDeckConsistency | 报告（不直接改 deck） |
 
 ## 工作流
@@ -43,6 +48,12 @@ allowed-tools:
 **全 deck 换肤**：SelectStyleStrategy → ApplyThemeStyle → SubmitCommands
 
 **单页排版乱了**：AutoLayoutSlide(slideId, layout) → SubmitCommands
+
+**图片放入槽位**：InsertSlideImage(slideId, url, slot) → SubmitCommands（无需 x/y）
+
+**排版后自检**：PreviewSlide(slideId) → ValidateDeckLayout → 修复后 SubmitCommands
+
+**创意模式装饰**：AddLayoutDecorations(slideId, mode: creative) → SubmitCommands
 
 **文字太长溢出**：DetectOverflowText（审查）→ CompressText → update-element 命令
 

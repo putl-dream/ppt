@@ -1,15 +1,8 @@
 import { z } from "zod";
 
-export const slideLayoutSchema = z.enum([
-  "cover",
-  "section",
-  "concept",
-  "comparison",
-  "process",
-  "architecture",
-  "case",
-  "summary",
-]);
+import { SLIDE_LAYOUTS } from "./slide-layouts";
+
+export const slideLayoutSchema = z.enum(SLIDE_LAYOUTS);
 
 export const storyboardSlideStatusSchema = z.enum([
   "pending",

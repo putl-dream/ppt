@@ -1,4 +1,6 @@
 import type { Slide, SlideElement, TextElement, ShapeElement, ImageElement } from "./presentation";
+import { getImageGridSlotRect } from "./layout-slots";
+import type { SlideLayoutType } from "./slide-layouts";
 import {
   resolveCoverTitleFont,
   resolveFontFamily,
@@ -92,7 +94,7 @@ export function getThemePaletteColors(theme: string, palette: string): ThemeColo
 
 export function applyLayout(
   slide: Slide,
-  layout: "cover" | "section" | "concept" | "comparison" | "process" | "architecture" | "case" | "summary",
+  layout: SlideLayoutType,
   theme: string,
   palette: string
 ): Slide {
@@ -105,7 +107,7 @@ export function applyLayout(
   // Keep non-rectangle shapes (like custom lines or circles added by user)
   const userShapes = slide.elements.filter((el) => el.type === "shape" && el.shapeType !== "rectangle");
 
-  if (textElements.length === 0) {
+  if (textElements.length === 0 && layout !== "image-grid") {
     return slide;
   }
 
@@ -119,7 +121,7 @@ export function applyLayout(
     );
   }
 
-  const titleEl = isChromeLayout
+  const titleEl = isChromeLayout && textElements.length > 0
     ? textElements.find(
         (el) => el.text.trim() === normalizedTitle || el.fontSize >= 36,
       )
@@ -436,6 +438,136 @@ export function applyLayout(
         styled.color = colors.accent;
         styled.align = "center";
         elements.push(styled);
+      }
+    } else if (layout === "toc") {
+      const items = bodyTexts.slice(0, 8);
+      const N = items.length || 1;
+      const rowGap = 12;
+      const rowH = (contentH - (N - 1) * rowGap) / N;
+      const badgeSize = 36;
+      const textX = 180;
+      const textW = 960;
+
+      items.forEach((el, idx) => {
+        const rowY = contentY + idx * (rowH + rowGap);
+        elements.unshift(createCard(120, rowY, 1040, rowH));
+
+        elements.push({
+          id: `badge-${generateId()}`,
+          type: "shape",
+          shapeType: "circle",
+          x: 140,
+          y: rowY + (rowH - badgeSize) / 2,
+          width: badgeSize,
+          height: badgeSize,
+          fillColor: colors.accent,
+          strokeColor: colors.accent,
+        });
+
+        const numLabel = assignTextRole(
+          {
+            id: `num-${generateId()}`,
+            type: "text",
+            x: 140,
+            y: rowY + (rowH - badgeSize) / 2,
+            width: badgeSize,
+            height: badgeSize,
+            text: String(idx + 1),
+            fontSize: 18,
+            bold: true,
+            color: colors.bg,
+            align: "center",
+          },
+          "caption",
+        );
+        elements.push(numLabel);
+
+        const styled = assignTextRole(el, "body");
+        styled.x = textX;
+        styled.y = rowY + 8;
+        styled.width = textW;
+        styled.height = rowH - 16;
+        styled.fontSize = 22;
+        styled.bold = false;
+        styled.color = colors.body;
+        styled.align = "left";
+        elements.push(styled);
+      });
+    } else if (layout === "quote") {
+      const quoteText = bodyTexts[0];
+      const attribution = bodyTexts[1];
+
+      if (quoteText) {
+        const styled = assignTextRole(quoteText, "kicker");
+        styled.x = 160;
+        styled.y = contentY + 40;
+        styled.width = 960;
+        styled.height = contentH - 120;
+        styled.fontSize = 36;
+        styled.bold = false;
+        styled.color = colors.title;
+        styled.align = "center";
+        styled.fontFamily = resolveCoverTitleFont(theme);
+        elements.push(styled);
+      }
+
+      elements.push(createAccentBar(440, contentY + contentH - 48, 400));
+
+      if (attribution) {
+        const styled = assignTextRole(attribution, "caption");
+        styled.x = 160;
+        styled.y = contentY + contentH - 72;
+        styled.width = 960;
+        styled.height = 48;
+        styled.fontSize = 18;
+        styled.bold = false;
+        styled.color = colors.body;
+        styled.align = "center";
+        elements.push(styled);
+      }
+    } else if (layout === "image-grid") {
+      const gridCount = Math.min(
+        Math.max(imageElements.length, bodyTexts.length, 1),
+        4,
+      );
+      const unslottedImages = imageElements.filter(
+        (img) => !img.imageSlot && !placedImageIds.has(img.id),
+      );
+
+      for (let idx = 0; idx < gridCount; idx += 1) {
+        const slotKey = `grid-${idx}`;
+        const rect = getImageGridSlotRect(idx, gridCount);
+        if (!rect) continue;
+
+        const cardImage =
+          pickImageForSlot(slotKey) ?? unslottedImages.shift();
+        if (cardImage) {
+          elements.push(
+            placeImageInSlot(
+              cardImage,
+              {
+                x: rect.x + 8,
+                y: rect.y + 8,
+                width: rect.width - 16,
+                height: rect.height - (bodyTexts[idx] ? 48 : 16),
+              },
+              slotKey,
+            ),
+          );
+        }
+
+        if (bodyTexts[idx]) {
+          const styled = assignTextRole(bodyTexts[idx], "caption");
+          styled.x = rect.x + 8;
+          styled.y = rect.y + rect.height - 40;
+          styled.width = rect.width - 16;
+          styled.height = 32;
+          styled.fontSize = 16;
+          styled.bold = false;
+          styled.color = colors.body;
+          styled.align = "center";
+          elements.push(styled);
+        }
       }
     } else if (layout === "concept") {
       const N = bodyTexts.length || 1;

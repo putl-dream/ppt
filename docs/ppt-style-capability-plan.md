@@ -91,11 +91,11 @@ Agent PPT 采用 **Presentation JSON + SubmitCommands** 两阶段建稿（内容
 
 **P0 验收标准**：
 
-- [ ] `case` 页可展示「左文 + 右图或右数字」，有图时 image 落入槽位
-- [ ] cover/section 与 concept 页背景可区分
-- [ ] theme 切换后标题/正文字体分工可见（至少 nordic 衬线 vs ocean 无衬线）
-- [ ] `BeautifyChart` 对 `case`/metric 页返回可执行 commands（非空数组）
-- [ ] deck-review checklist P0 项可在排版后通过
+- [x] `case` 页可展示「左文 + 右图或右数字」，有图时 image 落入槽位
+- [x] cover/section 与 concept 页背景可区分
+- [x] theme 切换后标题/正文字体分工可见（至少 nordic 衬线 vs ocean 无衬线）
+- [x] `BeautifyChart` 对 `case`/metric 页返回可执行 commands（非空数组）
+- [x] deck-review checklist P0 项可在排版后通过
 
 ---
 
@@ -114,10 +114,10 @@ Agent PPT 采用 **Presentation JSON + SubmitCommands** 两阶段建稿（内容
 
 **P1 验收标准**：
 
-- [ ] 10 页商务 deck 可含：cover、toc(concept/toc)、section×2、case、process、comparison、summary
-- [ ] 参考模板「76% / 89%」类 KPI 页视觉可辨认
-- [ ] Agent 可通过 InsertSlideImage 将图片放入正确槽位，无需手填 x/y
-- [ ] storyboard 中 guizang 节奏规则（无连续 3 页同 layout）可自动校验
+- [x] 10 页商务 deck 可含：cover、toc(concept/toc)、section×2、case、process、comparison、summary
+- [x] 参考模板「76% / 89%」类 KPI 页视觉可辨认
+- [x] Agent 可通过 InsertSlideImage 将图片放入正确槽位，无需手填 x/y
+- [x] storyboard 中 guizang 节奏规则（无连续 3 页同 layout）可自动校验
 
 ---
 
@@ -259,3 +259,4 @@ P2 按产品需求选型
 | 日期 | 说明 |
 |------|------|
 | 2026-07-04 | 初版：能力评估 + P0/P1/P2 方案 |
+| 2026-07-04 | P0 验收通过；P1 实现 toc/quote/image-grid + 5 个 deferred tools |

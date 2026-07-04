@@ -3,6 +3,7 @@ import type { DeckValidationIssue } from "@shared/deck-validation";
 import type { DesignConstraints } from "@shared/deck-persistence";
 import { createDefaultDesignConstraints } from "@shared/deck-persistence";
 import type { Presentation, Slide, SlideElement, TextElement } from "@shared/presentation";
+import { CONTENT_LAYOUTS, type SlideLayoutType } from "@shared/slide-layouts";
 
 function isLayoutCard(element: SlideElement): boolean {
   return element.type === "shape" && element.shapeType === "rectangle";
@@ -17,15 +18,6 @@ export interface LayoutValidatorOptions {
   constraints?: DesignConstraints;
   slideIds?: string[];
 }
-
-const CONTENT_LAYOUTS = new Set([
-  "concept",
-  "comparison",
-  "process",
-  "architecture",
-  "case",
-  "summary",
-]);
 
 export class LayoutValidator {
   validate(presentation: Presentation, options: LayoutValidatorOptions = {}): DeckValidationIssue[] {
@@ -44,7 +36,7 @@ export class LayoutValidator {
   private validateSlide(slide: Slide, constraints: DesignConstraints): DeckValidationIssue[] {
     const issues: DeckValidationIssue[] = [];
 
-    if (slide.elements.length === 0 && slide.layout && CONTENT_LAYOUTS.has(slide.layout)) {
+    if (slide.elements.length === 0 && slide.layout && CONTENT_LAYOUTS.has(slide.layout as SlideLayoutType)) {
       issues.push({
         slideId: slide.id,
         category: "layout",

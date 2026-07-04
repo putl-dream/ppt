@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { Presentation, Slide } from "./presentation";
 import { slideSchema, slideElementSchema } from "./presentation";
 import { applyLayout } from "./layout";
+import { SLIDE_LAYOUTS } from "./slide-layouts";
 
 export const presentationCommandSchema = z.discriminatedUnion("type", [
   z.object({
@@ -61,7 +62,7 @@ export const presentationCommandSchema = z.discriminatedUnion("type", [
     id: z.string(),
     type: z.literal("update-slide-layout"),
     slideId: z.string(),
-    layout: z.enum(["cover", "section", "concept", "comparison", "process", "architecture", "case", "summary"]),
+    layout: z.enum(SLIDE_LAYOUTS),
   }),
   z.object({
     id: z.string(),

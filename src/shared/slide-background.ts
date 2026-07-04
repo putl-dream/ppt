@@ -11,6 +11,7 @@ export interface SlideBackgroundStyle {
 /** Infer background variant from layout when slide has no explicit variant. */
 export function resolveLayoutBackgroundVariant(layout: string | undefined): BackgroundVariant {
   if (layout === "cover" || layout === "section") return "hero";
+  if (layout === "quote") return "muted";
   return "default";
 }
 
