@@ -5,6 +5,7 @@ import type {
   AgentModelRequest,
   AgentModelResponse,
   AgentModelStreamChunk,
+  AgentModelThinkingBlock,
   AgentModelToolCall,
   ResolvedAgentModelConfig,
 } from "./types";
@@ -14,6 +15,15 @@ function toAnthropicMessages(messages: AgentModelMessage[]): Anthropic.MessagePa
   return messages.map((message): Anthropic.MessageParam => {
     if (message.role === "assistant") {
       const blocks: Anthropic.ContentBlockParam[] = [];
+      // thinking 块必须置于 text / tool_use 之前，且原样保留 signature，
+      // 否则开启 thinking 的多轮 tool-use 请求会被 API 拒绝。
+      for (const block of message.thinkingBlocks ?? []) {
+        blocks.push(
+          block.type === "thinking"
+            ? { type: "thinking", thinking: block.thinking, signature: block.signature }
+            : { type: "redacted_thinking", data: block.data },
+        );
+      }
       if (message.content?.trim()) {
         blocks.push({ type: "text", text: message.content });
       }
@@ -35,6 +45,30 @@ function toAnthropicMessages(messages: AgentModelMessage[]): Anthropic.MessagePa
 
     return { role: "user", content: message.content ?? "" };
   });
+}
+
+/**
+ * Extract thinking / redacted_thinking blocks so they can be replayed on the
+ * next request. Anthropic rejects a follow-up tool-use turn whose preceding
+ * assistant message drops these blocks (or their signatures).
+ */
+function extractThinkingBlocks(content: unknown): AgentModelThinkingBlock[] {
+  if (!Array.isArray(content)) return [];
+  const blocks: AgentModelThinkingBlock[] = [];
+  for (const block of content) {
+    if (!block || typeof block !== "object") continue;
+    const candidate = block as { type?: unknown; thinking?: unknown; signature?: unknown; data?: unknown };
+    if (candidate.type === "thinking" && typeof candidate.thinking === "string") {
+      blocks.push({
+        type: "thinking",
+        thinking: candidate.thinking,
+        signature: typeof candidate.signature === "string" ? candidate.signature : "",
+      });
+    } else if (candidate.type === "redacted_thinking" && typeof candidate.data === "string") {
+      blocks.push({ type: "redacted_thinking", data: candidate.data });
+    }
+  }
+  return blocks;
 }
 
 /** Extract tool_use blocks from an Anthropic response. */
@@ -124,6 +158,7 @@ export async function generateWithAnthropic(
       }, { signal: request.signal });
 
       const toolCalls = extractToolCalls(response.content);
+      const thinkingBlocks = extractThinkingBlocks(response.content);
       const text = extractResponseText(response);
       if (!text && toolCalls.length === 0) {
         throw new AgentGatewayError(
@@ -137,6 +172,7 @@ export async function generateWithAnthropic(
         model: config.model,
         text,
         toolCalls,
+        ...(thinkingBlocks.length ? { thinkingBlocks } : {}),
         requestId: response._request_id ?? undefined,
         stopReason: response.stop_reason ?? undefined,
       };
@@ -234,11 +270,13 @@ export async function* generateStreamWithAnthropic(
 
     const finalMessage = await stream.finalMessage();
     const toolCalls = extractToolCalls(finalMessage.content);
+    const thinkingBlocks = extractThinkingBlocks(finalMessage.content);
     yield {
       type: "complete",
       text: "",
       stopReason: finalMessage.stop_reason ?? undefined,
       ...(toolCalls.length ? { toolCalls } : {}),
+      ...(thinkingBlocks.length ? { thinkingBlocks } : {}),
     };
   } catch (error) {
     throw normalizeProviderError("anthropic", error, request.signal);

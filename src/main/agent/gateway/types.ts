@@ -11,6 +11,15 @@ export interface AgentToolSchema {
 }
 
 /**
+ * 扩展思考模式返回的 thinking 块。开启 thinking 后，若 assistant 轮包含
+ * tool_use，Anthropic 要求下一次请求原样回传这些块（含 signature），
+ * 否则报错 `content[].thinking ... must be passed back`。
+ */
+export type AgentModelThinkingBlock =
+  | { type: "thinking"; thinking: string; signature: string }
+  | { type: "redacted_thinking"; data: string };
+
+/**
  * 单个多轮对话消息。原生 tool-use 路径用它承载 assistant 的 tool_use 与
  * user 的 tool_result，替代把整段 transcript 塞进 prompt 字符串的旧做法。
  */
@@ -22,6 +31,11 @@ export interface AgentModelMessage {
   toolCalls?: AgentModelToolCall[];
   /** user 轮回传的工具执行结果。 */
   toolResults?: AgentModelToolResult[];
+  /**
+   * assistant 轮的扩展思考块。回传时须置于其它块之前并保留 signature，
+   * 缺失会导致开启 thinking 的多轮 tool-use 请求被拒。
+   */
+  thinkingBlocks?: AgentModelThinkingBlock[];
 }
 
 /** 模型发起的一次工具调用（原生 tool-use）。 */
@@ -69,6 +83,8 @@ export interface AgentModelResponse {
    * 为空/未定义时回退到解析 text 中的 JSON。
    */
   toolCalls?: AgentModelToolCall[];
+  /** 扩展思考模式返回的 thinking 块，回传时须原样带回。 */
+  thinkingBlocks?: AgentModelThinkingBlock[];
 }
 
 /**
@@ -81,6 +97,8 @@ export interface AgentModelStreamChunk {
   stopReason?: string;
   /** 原生 tool-use 路径下，complete chunk 携带完整的工具调用列表。 */
   toolCalls?: AgentModelToolCall[];
+  /** complete chunk 携带的扩展思考块，回传时须原样带回。 */
+  thinkingBlocks?: AgentModelThinkingBlock[];
 }
 
 /**

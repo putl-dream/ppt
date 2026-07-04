@@ -303,12 +303,19 @@ export class AgentRuntime {
           role: "assistant",
           content: responseText || undefined,
           toolCalls: [{ id: nativeCall.id, name: nativeCall.name, args: nativeCall.args }],
+          // 开启 thinking 时，带 tool_use 的 assistant 轮须原样回传 thinking 块，
+          // 否则下一回合请求被 Anthropic 拒绝。
+          thinkingBlocks: modelResult.thinkingBlocks,
         });
         parsed = { type: "tool_call", toolName: nativeCall.name, args: nativeCall.args };
       } else if (useNativeToolUse) {
         // 无工具调用即为最终文本回复。
         if (responseText.trim()) {
-          nativeMessages.push({ role: "assistant", content: responseText });
+          nativeMessages.push({
+            role: "assistant",
+            content: responseText,
+            thinkingBlocks: modelResult.thinkingBlocks,
+          });
         }
         parsed = { type: "message", content: responseText };
       } else {

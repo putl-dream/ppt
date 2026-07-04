@@ -4,6 +4,7 @@ import type {
   AgentModelGateway,
   AgentModelMessage,
   AgentModelStreamChunk,
+  AgentModelThinkingBlock,
   AgentModelToolCall,
   AgentToolSchema,
 } from "../gateway/types";
@@ -66,6 +67,8 @@ export interface ModelCallRecoveryResult {
   recoveryNotes: string[];
   /** 原生 tool-use 返回的工具调用；文本路径下为空。 */
   toolCalls?: AgentModelToolCall[];
+  /** 扩展思考块，回传到下一回合的 assistant 消息以满足 API 校验。 */
+  thinkingBlocks?: AgentModelThinkingBlock[];
 }
 
 function buildPrompt(payload: ModelPromptPayload): string {
@@ -105,11 +108,17 @@ async function invokeGateway(
   },
   model: AgentModelSelection | undefined,
   stream?: ModelCallRecoveryOptions["stream"],
-): Promise<{ text: string; stopReason?: string; toolCalls?: AgentModelToolCall[] }> {
+): Promise<{
+  text: string;
+  stopReason?: string;
+  toolCalls?: AgentModelToolCall[];
+  thinkingBlocks?: AgentModelThinkingBlock[];
+}> {
   if (stream?.onChunk || stream?.onThinkingChunk) {
     let text = "";
     let stopReason: string | undefined;
     let toolCalls: AgentModelToolCall[] | undefined;
+    let thinkingBlocks: AgentModelThinkingBlock[] | undefined;
     for await (const chunk of gateway.generateTextStream(request, model)) {
       if (chunk.type === "thinking" && chunk.text) {
         stream.onThinkingChunk?.(chunk.text);
@@ -119,13 +128,19 @@ async function invokeGateway(
       } else if (chunk.type === "complete") {
         stopReason = chunk.stopReason;
         if (chunk.toolCalls?.length) toolCalls = chunk.toolCalls;
+        if (chunk.thinkingBlocks?.length) thinkingBlocks = chunk.thinkingBlocks;
       }
     }
-    return { text, stopReason, toolCalls };
+    return { text, stopReason, toolCalls, thinkingBlocks };
   }
 
   const response = await gateway.generateText(request, model);
-  return { text: response.text, stopReason: response.stopReason, toolCalls: response.toolCalls };
+  return {
+    text: response.text,
+    stopReason: response.stopReason,
+    toolCalls: response.toolCalls,
+    thinkingBlocks: response.thinkingBlocks,
+  };
 }
 
 /**
@@ -199,6 +214,7 @@ export async function callModelWithRecovery(
           text: response.text,
           stopReason: response.stopReason,
           toolCalls: response.toolCalls,
+          thinkingBlocks: response.thinkingBlocks,
           modelUsed: modelSelection,
           recoveryNotes,
         };
@@ -227,6 +243,7 @@ export async function callModelWithRecovery(
         text: response.text,
         stopReason: response.stopReason,
         toolCalls: response.toolCalls,
+        thinkingBlocks: response.thinkingBlocks,
         modelUsed: modelSelection,
         recoveryNotes,
       };
