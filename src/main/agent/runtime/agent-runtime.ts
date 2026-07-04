@@ -20,6 +20,7 @@ import { callModelWithRecovery } from "./model-call-recovery";
 import { createTaskStore } from "../task/task-store";
 import { toToolSchemas } from "../tools/tool-schema";
 import type { AgentModelMessage } from "../gateway/types";
+import type { SubAgentProgressEvent } from "@shared/subagent-progress";
 
 type ToolCall = {
   type: "tool_call";
@@ -68,6 +69,23 @@ export function parseAgentJsonResponse(text: string): unknown {
   }
 
   throw new Error("Agent Runtime expected one complete JSON object.");
+}
+
+/** Derive a display message for sub-agent progress events lacking one. */
+function subAgentProgressMessage(event: SubAgentProgressEvent): string {
+  switch (event.type) {
+    case "subagent-started":
+      return `子任务已开始：${event.description}`;
+    case "subagent-thinking-chunk":
+      return event.chunk;
+    case "subagent-tool-started":
+    case "subagent-tool-finished":
+      return event.message;
+    case "subagent-finished":
+      return "子任务已完成。";
+    default:
+      return "";
+  }
 }
 
 function isToolCall(value: unknown): value is ToolCall {
@@ -143,7 +161,10 @@ export class AgentRuntime {
         });
       },
       onSubAgentProgress: options.onProgress
-        ? (event) => options.onProgress?.(event)
+        ? (event) => options.onProgress?.({
+            ...event,
+            message: subAgentProgressMessage(event),
+          })
         : undefined,
       agentStepLimits: stepLimits,
       skillRegistry: this.skillRegistry,
