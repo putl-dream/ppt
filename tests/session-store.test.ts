@@ -44,7 +44,8 @@ describe("FileSessionStore", () => {
     const initial = store.getBootstrap();
 
     expect(initial.sessions).toHaveLength(1);
-    expect(initial.activeSession.presentation.slides).toHaveLength(1);
+    // 新会话从空 deck 起步，不再预置占位页
+    expect(initial.activeSession.presentation.slides).toHaveLength(0);
     expect(initial.activeSession.project?.artifacts.map((artifact) => artifact.id)).toEqual([
       "brief",
       "outline",
