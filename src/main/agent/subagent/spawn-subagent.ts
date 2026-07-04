@@ -71,6 +71,8 @@ async function generateSubAgentResponse(
       transcript,
     },
     model: options.model,
+    workspaceRoot: options.workspaceRoot,
+    threadId: options.taskId ?? "subagent",
     signal: options.signal,
     stream: options.onProgress && options.taskId
       ? {

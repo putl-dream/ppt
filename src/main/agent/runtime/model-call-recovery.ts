@@ -9,7 +9,7 @@ import {
   isOutputTruncated,
 } from "../gateway/errors";
 import { backoffBeforeRetry, extractRetryAfterMs } from "../gateway/withRetry";
-import { compactConversation, compactTranscript } from "./transcript-compact";
+import { emergencyTrimContext, prepareContext } from "./context-compact";
 import { createModuleLogger } from "../logger";
 
 const logger = createModuleLogger("model-call-recovery");
@@ -36,6 +36,8 @@ export interface ModelCallRecoveryOptions {
   systemPrompt: string;
   promptPayload: ModelPromptPayload;
   model?: AgentModelSelection;
+  workspaceRoot?: string;
+  threadId?: string;
   signal?: AbortSignal;
   stream?: {
     onChunk?: (chunk: AgentModelStreamChunk) => void;
@@ -120,7 +122,8 @@ export async function callModelWithRecovery(
   let payload: ModelPromptPayload = structuredClone(options.promptPayload);
   let modelSelection = options.model;
   let maxOutputTokens: number | undefined;
-  let compacted = false;
+  let emergencyTrimmed = false;
+  let compactHistoryFailures = 0;
   let continuationPartial: string | undefined;
   let consecutiveOverloaded = 0;
   let lastError: unknown;
@@ -134,6 +137,22 @@ export async function callModelWithRecovery(
   for (let attempt = 1; attempt <= MAX_RECOVERY_ATTEMPTS; attempt += 1) {
     if (options.signal?.aborted) {
       throw new Error("Run aborted by user.");
+    }
+
+    if (!continuationPartial) {
+      const prepared = await prepareContext({
+        payload,
+        systemPrompt: options.systemPrompt,
+        workspaceRoot: options.workspaceRoot,
+        threadId: options.threadId,
+        gateway: options.gateway,
+        model: modelSelection,
+        signal: options.signal,
+        compactHistoryFailures,
+        onProgress: notify,
+      });
+      payload = prepared.payload;
+      compactHistoryFailures = prepared.compactHistoryFailures;
     }
 
     const prompt = continuationPartial
@@ -195,14 +214,10 @@ export async function callModelWithRecovery(
         consecutiveOverloaded = 0;
       }
 
-      if (recovery === "compact-context" && !compacted) {
-        compacted = true;
-        payload = {
-          ...payload,
-          conversation: compactConversation(payload.conversation),
-          transcript: compactTranscript(payload.transcript),
-        };
-        notify("上下文超限，已压缩 transcript 后重试。");
+      if (recovery === "compact-context" && !emergencyTrimmed) {
+        emergencyTrimmed = true;
+        payload = emergencyTrimContext(payload);
+        notify("上下文超限，已应急裁剪后重试。");
         continue;
       }
 

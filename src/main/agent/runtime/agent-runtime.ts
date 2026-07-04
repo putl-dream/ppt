@@ -224,6 +224,8 @@ export class AgentRuntime {
           systemPrompt,
           promptPayload,
           model: options.model,
+          workspaceRoot: options.workspaceRoot,
+          threadId: options.threadId,
           signal: options.signal,
           stream: {
             onChunk: (chunk) => {
@@ -246,6 +248,8 @@ export class AgentRuntime {
           systemPrompt,
           promptPayload,
           model: options.model,
+          workspaceRoot: options.workspaceRoot,
+          threadId: options.threadId,
           signal: options.signal,
           onRecovery: (message) => {
             options.onProgress?.({ type: "request-status", message, progress: 0 });

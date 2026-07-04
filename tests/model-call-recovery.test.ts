@@ -108,7 +108,7 @@ describe("callModelWithRecovery", () => {
     vi.useRealTimers();
   });
 
-  it("compacts transcript on prompt-too-long before retrying", async () => {
+  it("emergency-trims transcript on prompt-too-long before retrying", async () => {
     const generateText = vi
       .fn()
       .mockRejectedValueOnce(
@@ -138,7 +138,7 @@ describe("callModelWithRecovery", () => {
     expect(result.text).toContain("ok");
     const retriedPrompt = JSON.parse(generateText.mock.calls[1][0].prompt);
     expect(retriedPrompt.transcript[0]).toMatchObject({ kind: "compact_boundary" });
-    expect(retriedPrompt.transcript).toHaveLength(7);
+    expect(retriedPrompt.transcript.length).toBeLessThanOrEqual(5);
   });
 
   it("upgrades max tokens before using continuation prompt", async () => {
