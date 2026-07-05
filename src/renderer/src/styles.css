@@ -2036,6 +2036,7 @@ aside {
 
 .process-trace-panel {
   margin-bottom: 4px;
+  min-width: 0;
 }
 
 .process-trace-panel--active .process-trace-panel-label {
@@ -2055,6 +2056,7 @@ aside {
   user-select: none;
   background: transparent;
   border: none;
+  min-width: 0;
 }
 
 .process-trace-panel-header:hover {
@@ -2066,10 +2068,15 @@ aside {
   align-items: center;
   gap: 6px;
   min-width: 0;
+  flex: 1;
 }
 
 .process-trace-panel-label {
   font-weight: 500;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .process-trace-panel-body {
@@ -2086,6 +2093,7 @@ aside {
   overscroll-behavior: contain;
   scrollbar-width: thin;
   scrollbar-color: var(--scrollbar-thumb-color) transparent;
+  padding-right: 4px;
 }
 
 .process-trace-panel-body--revealed {
@@ -2096,6 +2104,7 @@ aside {
 
 .process-trace-row {
   padding: 2px 0;
+  min-width: 0;
 }
 
 .process-trace-row--active .process-trace-row-title {
@@ -2116,6 +2125,7 @@ aside {
   border: none;
   cursor: pointer;
   text-align: left;
+  min-width: 0;
 }
 
 .process-trace-row-title:disabled {
@@ -2127,18 +2137,25 @@ aside {
 }
 
 .process-trace-row-caret {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   flex-shrink: 0;
-  width: 10px;
-  font-family: ui-monospace, monospace;
+  width: 12px;
+  height: 12px;
   color: var(--text-muted);
 }
 
 .process-trace-row-label {
   min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .process-trace-row-body {
   padding: 2px 0 6px 12px;
+  min-width: 0;
 }
 
 .process-trace-row-line {
@@ -2154,6 +2171,7 @@ aside {
   line-height: 1.55;
   color: var(--text-secondary);
   white-space: pre-wrap;
+  overflow-wrap: anywhere;
   font-family: inherit;
 }
 

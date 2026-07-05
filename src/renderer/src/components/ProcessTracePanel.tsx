@@ -47,15 +47,15 @@ export const ProcessTracePanel: React.FC<ProcessTracePanelProps> = ({
     body.scrollTop = body.scrollHeight;
   }, [open, revealed, rows]);
 
-  if (items.length === 0) return null;
-
-  const headerLabel = isActive ? "思考与执行中…" : summarizeProcessTrace(items);
-
   const revealPanel = useCallback(() => {
     userRevealedRef.current = true;
     setOpen(true);
     setRevealed(true);
   }, []);
+
+  if (items.length === 0 || rows.length === 0) return null;
+
+  const headerLabel = isActive ? "思考与执行中…" : summarizeProcessTrace(items);
 
   const handleHeaderClick = () => {
     if (!open || !revealed) {
@@ -79,6 +79,7 @@ export const ProcessTracePanel: React.FC<ProcessTracePanelProps> = ({
         className="process-trace-panel-header"
         onClick={handleHeaderClick}
         aria-expanded={open && revealed}
+        aria-label={open && revealed ? "收起执行过程" : "展开执行过程"}
       >
         <span className="process-trace-panel-header-left">
           {isActive && <span className="step-spinner" aria-hidden="true" />}

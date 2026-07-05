@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { ChevronDownIcon, ChevronRightIcon } from "./Icons";
 import type { ProcessTraceRow } from "./process-trace-rows";
 
 interface ProcessTraceItemProps {
@@ -17,6 +18,7 @@ export const ProcessTraceItem: React.FC<ProcessTraceItemProps> = ({
   const [expanded, setExpanded] = useState(defaultExpanded);
   const hasBody = Boolean(row.content?.trim() || (row.lines && row.lines.length > 0));
   const effectiveExpanded = hasBody && expanded;
+  const CaretIcon = effectiveExpanded ? ChevronDownIcon : ChevronRightIcon;
 
   const handleTitleClick = () => {
     if (!hasBody) return;
@@ -34,11 +36,12 @@ export const ProcessTraceItem: React.FC<ProcessTraceItemProps> = ({
         className="process-trace-row-title"
         onClick={handleTitleClick}
         aria-expanded={effectiveExpanded}
+        aria-label={effectiveExpanded ? `收起${row.title}` : `展开${row.title}`}
         disabled={!hasBody}
       >
         {row.active && <span className="step-spinner" aria-hidden="true" />}
         <span className="process-trace-row-caret" aria-hidden="true">
-          {effectiveExpanded ? "v" : ">"}
+          <CaretIcon size={12} />
         </span>
         <span className="process-trace-row-label">{row.title}</span>
       </button>
