@@ -193,16 +193,21 @@ describe("Sub-agent permission integration", () => {
             provider: "openai",
             model: "test",
             text: JSON.stringify({
-              type: "tool_call",
-              toolName: "bash",
-              args: { command: "rm -rf /" },
+              type: "tool.call",
+              data: {
+                toolName: "bash",
+                args: { command: "rm -rf /" },
+              },
             }),
           };
         }
         return {
           provider: "openai",
           model: "test",
-          text: JSON.stringify({ type: "message", content: "Stopped after deny." }),
+          text: JSON.stringify({
+            type: "assistant.message",
+            data: { content: "Stopped after deny." },
+          }),
         };
       },
       async *generateTextStream() {
@@ -233,16 +238,21 @@ describe("Sub-agent permission integration", () => {
             provider: "openai",
             model: "test",
             text: JSON.stringify({
-              type: "tool_call",
-              toolName: "write_file",
-              args: { path: "ok.md", content: "approved" },
+              type: "tool.call",
+              data: {
+                toolName: "write_file",
+                args: { path: "ok.md", content: "approved" },
+              },
             }),
           };
         }
         return {
           provider: "openai",
           model: "test",
-          text: JSON.stringify({ type: "message", content: "Write complete." }),
+          text: JSON.stringify({
+            type: "assistant.message",
+            data: { content: "Write complete." },
+          }),
         };
       },
       async *generateTextStream() {

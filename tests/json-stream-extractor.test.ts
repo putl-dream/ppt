@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { JsonStreamExtractor } from "../src/main/agent/runtime/json-stream-extractor";
 
 describe("JsonStreamExtractor", () => {
-  it("streams plain text directly", () => {
+  it("ignores plain text because model output must use the envelope protocol", () => {
     let result = "";
     const extractor = new JsonStreamExtractor((chunk, _source) => {
       result += chunk;
@@ -10,29 +10,29 @@ describe("JsonStreamExtractor", () => {
 
     extractor.feed("Hello ");
     extractor.feed("world!");
-    expect(result).toBe("Hello world!");
+    expect(result).toBe("");
   });
 
-  it("streams message content from type=message JSON objects", () => {
+  it("streams message content from assistant.message envelopes", () => {
     let result = "";
     const extractor = new JsonStreamExtractor((chunk, _source) => {
       result += chunk;
     });
 
-    const json = '{"type":"message","content":"Hello, how are you?","someOtherKey":true}';
+    const json = '{"type":"assistant.message","data":{"content":"Hello, how are you?"},"someOtherKey":true}';
     for (const char of json) {
       extractor.feed(char);
     }
     expect(result).toBe("Hello, how are you?");
   });
 
-  it("streams message from type=ask_user JSON objects", () => {
+  it("streams content from assistant.ask_user envelopes", () => {
     let result = "";
     const extractor = new JsonStreamExtractor((chunk, _source) => {
       result += chunk;
     });
 
-    const json = '{"type": "ask_user", "message": "What is the title?", "missingFields": ["title"]}';
+    const json = '{"type":"assistant.ask_user","data":{"content":"What is the title?","missingFields":["title"]}}';
     for (const char of json) {
       extractor.feed(char);
     }
@@ -47,7 +47,7 @@ describe("JsonStreamExtractor", () => {
       source = nextSource;
     });
 
-    const json = '{"type":"tool_call","toolName":"SubmitCommands","args":{"summary":"Creating a slide about AI.","commands":[]}}';
+    const json = '{"type":"tool.call","data":{"toolName":"SubmitCommands","args":{"summary":"Creating a slide about AI.","commands":[]}}}';
     for (const char of json) {
       extractor.feed(char);
     }
@@ -61,7 +61,7 @@ describe("JsonStreamExtractor", () => {
       result += chunk;
     });
 
-    const json = '{"type":"tool_call","toolName":"SearchExtraTools","args":{"query":"consistency"}}';
+    const json = '{"type":"tool.call","data":{"toolName":"SearchExtraTools","args":{"query":"consistency"}}}';
     for (const char of json) {
       extractor.feed(char);
     }
@@ -74,7 +74,7 @@ describe("JsonStreamExtractor", () => {
       result += chunk;
     });
 
-    const json = '{"type":"message","content":"Line 1\\nLine 2 with \\"quotes\\""}';
+    const json = '{"type":"assistant.message","data":{"content":"Line 1\\nLine 2 with \\"quotes\\""}}';
     for (const char of json) {
       extractor.feed(char);
     }
@@ -87,7 +87,7 @@ describe("JsonStreamExtractor", () => {
       result += chunk;
     });
 
-    const json = '```json\n{"type":"message","content":"Fenced message"}\n```';
+    const json = '```json\n{"type":"assistant.message","data":{"content":"Fenced message"}}\n```';
     for (const char of json) {
       extractor.feed(char);
     }

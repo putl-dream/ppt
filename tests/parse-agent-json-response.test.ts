@@ -10,13 +10,15 @@ describe("parseAgentJsonResponse", () => {
       "参考格式：",
       '{"toolName":"PreviewSlide","args":{"slideId":"s1"}}',
       "实际回复：",
-      '{"type":"tool_call","toolName":"ListSlides","args":{}}',
+      '{"type":"tool.call","data":{"toolName":"ListSlides","args":{}}}',
     ].join("\n");
 
     expect(parseAgentJsonResponse(text)).toEqual({
-      type: "tool_call",
-      toolName: "ListSlides",
-      args: {},
+      type: "tool.call",
+      data: {
+        toolName: "ListSlides",
+        args: {},
+      },
     });
   });
 

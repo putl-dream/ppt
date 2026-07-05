@@ -254,9 +254,9 @@ ${buildWorkflowSnippet(input.stage)}
 
 每步只返回一个 JSON 对象，不要 Markdown 包裹：
 
-- 调用工具：{"type":"tool_call","toolName":"ToolName","args":{}}
-- 普通回复：{"type":"message","content":"..."}
-- 请求补充：{"type":"ask_user","message":"...","missingFields":["..."]}
+- 调用工具：{"type":"tool.call","data":{"toolName":"ToolName","args":{}}}
+- 普通回复：{"type":"assistant.message","data":{"content":"..."}}
+- 请求补充：{"type":"assistant.ask_user","data":{"content":"...","missingFields":["..."]}}
 - 提交幻灯片修改：必须调用 SubmitCommands
 ${outcomeBlock ? `\n${outcomeBlock}` : ""}`;
 }

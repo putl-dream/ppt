@@ -1,6 +1,6 @@
 /**
  * A utility class to parse LLM JSON response streams incrementally and extract
- * natural language text fields (like `content` for message type, `message` for ask_user type,
+ * natural language text fields (like `data.content` for assistant messages/questions,
  * or `summary` for SubmitCommands tool calls) in real-time.
  * It prevents leaking technical JSON objects (like commands) or background tool calls to the chat UI.
  */
@@ -8,7 +8,7 @@ export class JsonStreamExtractor {
   private accumulated = "";
   private isJson = false;
   private hasCheckedFirstChar = false;
-  private targetKey: "content" | "message" | "summary" | null = null;
+  private targetKey: "content" | "summary" | null = null;
   private hasCheckedType = false;
   private hasCheckedToolName = false;
   private ignoreStreaming = false;
@@ -27,22 +27,20 @@ export class JsonStreamExtractor {
       const trimmed = this.accumulated.trimStart();
       if (trimmed.length === 0) return;
       const firstChar = trimmed[0];
-      // If it starts with JSON-like structure (e.g. brace, or backtick for markdown code blocks)
       if (firstChar === "{" || firstChar === "`") {
         this.isJson = true;
       } else {
-        this.isJson = false;
+        this.ignoreStreaming = true;
+        return;
       }
       this.hasCheckedFirstChar = true;
     }
 
+    if (this.ignoreStreaming) {
+      return;
+    }
+
     if (!this.isJson) {
-      // Plain text mode: stream everything directly
-      const delta = this.accumulated.slice(this.rawStreamedLength);
-      if (delta.length > 0) {
-        this.onChunk(delta, "message");
-        this.rawStreamedLength = this.accumulated.length;
-      }
       return;
     }
 
@@ -50,23 +48,17 @@ export class JsonStreamExtractor {
     if (!this.hasCheckedType) {
       const typeMatch = /"type"\s*:\s*["']([^"']+)["']/.exec(this.accumulated);
       if (!typeMatch) {
-        // Fallback to plain if no type is found after a long stream prefix (something is wrong)
         if (this.accumulated.length > 200) {
-          this.isJson = false;
-          const delta = this.accumulated.slice(this.rawStreamedLength);
-          if (delta.length > 0) {
-            this.onChunk(delta, "message");
-            this.rawStreamedLength = this.accumulated.length;
-          }
+          this.ignoreStreaming = true;
         }
         return;
       }
       const typeValue = typeMatch[1];
-      if (typeValue === "message") {
+      if (typeValue === "assistant.message") {
         this.targetKey = "content";
-      } else if (typeValue === "ask_user") {
-        this.targetKey = "message";
-      } else if (typeValue === "tool_call") {
+      } else if (typeValue === "assistant.ask_user") {
+        this.targetKey = "content";
+      } else if (typeValue === "tool.call") {
         this.targetKey = null; // Need to determine based on toolName next
       } else {
         this.ignoreStreaming = true;

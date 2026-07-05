@@ -1,9 +1,8 @@
 import type { AgentModelGateway } from "../gateway";
 import type { ToolContext, ToolDiscoverySession } from "../tools/tool-definition";
 import { ToolRegistry } from "../tools/tool-registry";
-import { RuntimeNormalizer } from "./runtime-normalizer";
 import { buildSystemPromptContext, clearSystemPromptCache, getSystemPrompt } from "./system-prompt";
-import type { AgentRuntimeOptions, AgentRuntimeResult } from "./runtime-types";
+import type { AgentProtocolEnvelope, AgentRuntimeOptions, AgentRuntimeResult } from "./runtime-types";
 import { JsonStreamExtractor } from "./json-stream-extractor";
 import { ensureDefaultHooks } from "./default-hooks";
 import { triggerHooks } from "./hook-registry";
@@ -31,14 +30,12 @@ import {
   buildAgentJsonRetryMessage,
   parseAgentJsonResponse,
 } from "./parse-agent-json-response";
+import {
+  normalizeAgentProtocolObject,
+  normalizeModelResponseToEnvelope,
+} from "./agent-message-normalizer";
 
 export { parseAgentJsonResponse } from "./parse-agent-json-response";
-
-type ToolCall = {
-  type: "tool_call";
-  toolName: string;
-  args: unknown;
-};
 
 /** Derive a display message for sub-agent progress events lacking one. */
 function subAgentProgressMessage(event: SubAgentProgressEvent): string {
@@ -55,12 +52,6 @@ function subAgentProgressMessage(event: SubAgentProgressEvent): string {
     default:
       return "";
   }
-}
-
-function isToolCall(value: unknown): value is ToolCall {
-  if (!value || typeof value !== "object") return false;
-  const candidate = value as Record<string, unknown>;
-  return candidate.type === "tool_call" && typeof candidate.toolName === "string";
 }
 
 /**
@@ -195,8 +186,8 @@ export class AgentRuntime {
     const promptStop = await triggerHooks("UserPromptSubmit", promptBlock);
     if (promptStop) {
       return finish({
-        type: "message",
-        content: promptStop.reason,
+        type: "assistant.message",
+        data: { content: promptStop.reason },
       });
     }
 
@@ -247,7 +238,7 @@ export class AgentRuntime {
               onChunk: (chunk) => {
                 if (chunk.type === "content" && chunk.text) {
                   // 即使走原生 tool-use，系统提示仍可能让模型用 JSON 协议回复。
-                  // 统一抽取自然语言字段，避免把 {"type":"message",...} 泄露到前端。
+                  // 统一抽取自然语言字段，避免把协议 envelope 泄露到前端。
                   extractor?.feed(chunk.text);
                 }
               },
@@ -262,10 +253,10 @@ export class AgentRuntime {
       });
       const responseText = modelResult.text;
 
-      let parsed: unknown;
+      let envelope: AgentProtocolEnvelope;
 
-      // native 分支：把结构化 toolCall 归一成与文本协议一致的 parsed 形状，
-      // 下游校验/hooks/执行/finish 全部原样复用。
+      // native 分支：把结构化 toolCall 或文本协议统一归一成 envelope，
+      // 下游只处理 { type, data }。
       const nativeCall = useNativeToolUse ? modelResult.toolCalls?.[0] : undefined;
       // native 模式下每个 tool_use 必须回配一个 tool_result，否则下一次调用报错。
       // 该闭包在任何 continue 前记录待回传结果；文本模式为 no-op。
@@ -287,7 +278,10 @@ export class AgentRuntime {
           // 否则下一回合请求被 Anthropic 拒绝。
           thinkingBlocks: modelResult.thinkingBlocks,
         });
-        parsed = { type: "tool_call", toolName: nativeCall.name, args: nativeCall.args };
+        envelope = normalizeModelResponseToEnvelope({
+          text: responseText,
+          toolCalls: [nativeCall],
+        });
       } else if (useNativeToolUse) {
         // 无结构化工具调用即为最终文本回复；兼容模型仍按文本 JSON 协议返回的情况。
         if (responseText.trim()) {
@@ -298,11 +292,19 @@ export class AgentRuntime {
           });
         }
         try {
-          parsed = parseAgentJsonResponse(responseText);
-        } catch {
-          parsed = { type: "message", content: responseText };
+          envelope = normalizeModelResponseToEnvelope({ text: responseText });
+        } catch (error) {
+          const guidance = buildAgentJsonRetryMessage(error);
+          transcript.push({
+            role: "assistant",
+            raw: responseText.slice(0, 2_000),
+            error: guidance,
+          });
+          nativeMessages.push({ role: "user", content: guidance });
+          continue;
         }
       } else {
+        let parsed: unknown;
         try {
           parsed = parseAgentJsonResponse(responseText);
         } catch (error) {
@@ -313,23 +315,8 @@ export class AgentRuntime {
           });
           continue;
         }
-      }
-
-      if (!isToolCall(parsed)) {
-        if (
-          parsed &&
-          typeof parsed === "object" &&
-          (parsed as { type?: unknown }).type === "command_proposal"
-        ) {
-          transcript.push({
-            role: "tool",
-            error: "Command proposals must be submitted through SubmitCommands.",
-          });
-          continue;
-        }
-        let normalized: AgentRuntimeResult;
         try {
-          normalized = RuntimeNormalizer.normalize(parsed);
+          envelope = normalizeAgentProtocolObject(parsed);
         } catch (error) {
           transcript.push({
             role: "assistant",
@@ -338,8 +325,19 @@ export class AgentRuntime {
           });
           continue;
         }
+      }
 
-        if (normalized.type === "message" && options.requiredOutcome === "command_proposal") {
+      if (envelope.type !== "tool.call") {
+        if (envelope.type === "deck.command_proposal") {
+          transcript.push({
+            role: "tool",
+            error: "Command proposals must be submitted through SubmitCommands.",
+          });
+          continue;
+        }
+        const normalized = envelope;
+
+        if (normalized.type === "assistant.message" && options.requiredOutcome === "command_proposal") {
           const guidance =
             "This is an unresolved presentation action. Do not narrate future work. "
             + "Call AskUser if information is still missing, otherwise continue tools and finish with SubmitCommands.";
@@ -358,24 +356,24 @@ export class AgentRuntime {
         return finish(normalized);
       }
 
-      const tool = this.registry.get(parsed.toolName);
+      const tool = this.registry.get(envelope.data.toolName);
       if (!tool || tool.category !== "core" || tool.loadPolicy !== "core") {
         options.onProgress?.({
           type: "tool-validation-failed",
-          toolName: parsed.toolName,
-          message: `工具 ${parsed.toolName} 无法直接调用`,
+          toolName: envelope.data.toolName,
+          message: `工具 ${envelope.data.toolName} 无法直接调用`,
           error: "Only registered Core Tools can be called directly.",
         });
         transcript.push({
           role: "tool",
-          toolName: parsed.toolName,
+          toolName: envelope.data.toolName,
           error: "Only registered Core Tools can be called directly.",
         });
         recordToolResult("Only registered Core Tools can be called directly.", true);
         continue;
       }
 
-      const args = tool.inputSchema.safeParse(parsed.args ?? {});
+      const args = tool.inputSchema.safeParse(envelope.data.args ?? {});
       if (!args.success) {
         options.onProgress?.({
           type: "tool-validation-failed",
@@ -420,8 +418,8 @@ export class AgentRuntime {
         }
         if (preToolStop) {
           return finish({
-            type: "message",
-            content: preToolStop.reason,
+            type: "assistant.message",
+            data: { content: preToolStop.reason },
           });
         }
 
@@ -443,14 +441,20 @@ export class AgentRuntime {
         });
 
         if (tool.name === "AskUser") {
-          return finish(RuntimeNormalizer.normalize(result));
+          const askUser = normalizeAgentProtocolObject(result);
+          if (askUser.type !== "assistant.ask_user") {
+            throw new Error("AskUser must return an assistant.ask_user envelope.");
+          }
+          return finish(askUser);
         }
 
         if (tool.name === "SubmitCommands") {
-          const proposal = RuntimeNormalizer.normalize(result);
+          const proposal = normalizeAgentProtocolObject(result);
+          if (proposal.type !== "deck.command_proposal") {
+            throw new Error("SubmitCommands must return a deck.command_proposal envelope.");
+          }
           if (
-            proposal.type === "command_proposal" &&
-            shouldOfferRenderFeedback(context.promptStage, proposal.commands, renderFeedbackUsed)
+            shouldOfferRenderFeedback(context.promptStage, proposal.data.commands, renderFeedbackUsed)
           ) {
             renderFeedbackUsed = true;
             options.onProgress?.({
@@ -461,8 +465,8 @@ export class AgentRuntime {
 
             const feedback = await buildRenderFeedback({
               presentation: context.presentation,
-              commands: proposal.commands,
-              proposalSummary: proposal.summary,
+              commands: proposal.data.commands,
+              proposalSummary: proposal.data.summary,
               context,
             });
             const feedbackMessage = formatRenderFeedbackMessage(feedback);
@@ -533,8 +537,8 @@ export class AgentRuntime {
     }
 
     return finish({
-      type: "message",
-      content: buildMainStepLimitMessage(stepLimits),
+      type: "assistant.message",
+      data: { content: buildMainStepLimitMessage(stepLimits) },
     }, "step_limit");
     } finally {
       if (taskStore) {

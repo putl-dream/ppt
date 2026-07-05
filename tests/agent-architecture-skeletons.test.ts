@@ -25,7 +25,7 @@ import { selectStyleStrategyTool } from "../src/main/agent/tools/deferred/select
 import { toToolCard } from "../src/main/agent/tools/tool-card";
 import { ToolLoader } from "../src/main/agent/tools/tool-loader";
 import { SystemPromptBuilder } from "../src/main/agent/runtime/system-prompt";
-import { RuntimeNormalizer } from "../src/main/agent/runtime/runtime-normalizer";
+import { normalizeAgentProtocolObject } from "../src/main/agent/runtime/agent-message-normalizer";
 import {
   AgentRuntime,
   parseAgentJsonResponse,
@@ -63,34 +63,49 @@ function createSequenceGateway(responses: unknown[]): AgentModelGateway {
   };
 }
 
+function modelToolCall(toolName: string, args: Record<string, unknown> = {}) {
+  return { type: "tool.call", data: { toolName, args } };
+}
+
+function modelMessage(content: string) {
+  return { type: "assistant.message", data: { content } };
+}
+
+function modelAskUser(content: string, missingFields?: string[]) {
+  return {
+    type: "assistant.ask_user",
+    data: { content, ...(missingFields ? { missingFields } : {}) },
+  };
+}
+
 describe("Agent Architecture Skeletons & Types", () => {
   it("extracts the first complete JSON object from model output", () => {
     expect(parseAgentJsonResponse(
-      '```json\n{"type":"message","content":"包含 { 大括号 } 的文本"}\n```',
+      '```json\n{"type":"assistant.message","data":{"content":"包含 { 大括号 } 的文本"}}\n```',
     )).toEqual({
-      type: "message",
-      content: "包含 { 大括号 } 的文本",
+      type: "assistant.message",
+      data: { content: "包含 { 大括号 } 的文本" },
     });
 
     expect(parseAgentJsonResponse(
-      '{"type":"message","content":"first"}\n{"type":"message","content":"second"}',
+      '{"type":"assistant.message","data":{"content":"first"}}\n{"type":"assistant.message","data":{"content":"second"}}',
     )).toEqual({
-      type: "message",
-      content: "first",
+      type: "assistant.message",
+      data: { content: "first" },
     });
 
     expect(parseAgentJsonResponse(
-      '模型输出如下： {"type":"message","content":"ok"} 后续解释包含 {braces}',
+      '模型输出如下： {"type":"assistant.message","data":{"content":"ok"}} 后续解释包含 {braces}',
     )).toEqual({
-      type: "message",
-      content: "ok",
+      type: "assistant.message",
+      data: { content: "ok" },
     });
 
     expect(parseAgentJsonResponse(
-      '例如：{"foo":"bar"} 请返回 {"type":"message","content":"done"}',
+      '例如：{"foo":"bar"} 请返回 {"type":"assistant.message","data":{"content":"done"}}',
     )).toEqual({
-      type: "message",
-      content: "done",
+      type: "assistant.message",
+      data: { content: "done" },
     });
   });
 
@@ -187,39 +202,50 @@ describe("Agent Architecture Skeletons & Types", () => {
     expect(prompt).toContain("不问工具名");
   });
 
-  it("RuntimeNormalizer validates response schemas", () => {
-    // Correct message response
-    const res1 = RuntimeNormalizer.normalize({
-      type: "message",
-      content: "Hello!",
+  it("normalizes model protocol objects into typed envelopes", () => {
+    const res1 = normalizeAgentProtocolObject({
+      type: "assistant.message",
+      data: { content: "Hello!" },
     });
-    expect(res1.type).toBe("message");
-
-    // Correct ask_user response
-    const res2 = RuntimeNormalizer.normalize({
-      type: "ask_user",
-      message: "Need input",
-      missingFields: ["theme"],
+    expect(res1).toEqual({
+      type: "assistant.message",
+      data: { content: "Hello!" },
     });
-    expect(res2.type).toBe("ask_user");
 
-    // Correct command_proposal response
-    const res3 = RuntimeNormalizer.normalize({
-      type: "command_proposal",
-      summary: "Update title",
-      commands: [{ id: "1", type: "set-presentation-title", title: "New" }],
-      risk: "low",
+    const res2 = normalizeAgentProtocolObject({
+      type: "assistant.ask_user",
+      data: { content: "Need input", missingFields: ["theme"] },
     });
-    expect(res3.type).toBe("command_proposal");
+    expect(res2).toEqual({
+      type: "assistant.ask_user",
+      data: { content: "Need input", missingFields: ["theme"] },
+    });
 
-    // Rejects invalid types
-    expect(() => RuntimeNormalizer.normalize({ type: "invalid" })).toThrow();
-    // Rejects invalid risk level
-    expect(() => RuntimeNormalizer.normalize({
-      type: "command_proposal",
-      summary: "Bad risk",
-      commands: [],
-      risk: "very-high",
+    const res3 = normalizeAgentProtocolObject({
+      type: "deck.command_proposal",
+      data: {
+        summary: "Update title",
+        commands: [{ id: "1", type: "set-presentation-title", title: "New" }],
+        risk: "low",
+      },
+    });
+    expect(res3).toEqual({
+      type: "deck.command_proposal",
+      data: {
+        summary: "Update title",
+        commands: [{ id: "1", type: "set-presentation-title", title: "New" }],
+        risk: "low",
+      },
+    });
+
+    expect(() => normalizeAgentProtocolObject({ type: "invalid" })).toThrow();
+    expect(() => normalizeAgentProtocolObject({
+      type: "deck.command_proposal",
+      data: {
+        summary: "Bad risk",
+        commands: [],
+        risk: "very-high",
+      },
     })).toThrow();
   });
 
@@ -228,17 +254,13 @@ describe("Agent Architecture Skeletons & Types", () => {
     registry.register(readPresentationSnapshotTool);
     registry.register(submitCommandsTool);
     const runtime = new AgentRuntime(registry, createSequenceGateway([
-      { type: "tool_call", toolName: "ReadPresentationSnapshot", args: {} },
-      {
-        type: "tool_call",
-        toolName: "SubmitCommands",
-        args: {
+      modelToolCall("ReadPresentationSnapshot"),
+      modelToolCall("SubmitCommands", {
           summary: "Update title",
           commands: [{ id: "cmd-runtime", type: "set-presentation-title", title: "Runtime title" }],
           risk: "low",
           assumptions: ["Only the title changes"],
-        },
-      },
+      }),
     ]));
     const presentation = createStarterPresentation();
 
@@ -249,11 +271,11 @@ describe("Agent Architecture Skeletons & Types", () => {
       selectedElementIds: [],
     });
 
-    expect(result.type).toBe("command_proposal");
-    if (result.type === "command_proposal") {
-      expect(result.commands.length).toBeGreaterThan(0);
-      expect(result.commands[0].type).toBe("set-presentation-title");
-      expect(result.assumptions).toEqual(["Only the title changes"]);
+    expect(result.type).toBe("deck.command_proposal");
+    if (result.type === "deck.command_proposal") {
+      expect(result.data.commands.length).toBeGreaterThan(0);
+      expect(result.data.commands[0].type).toBe("set-presentation-title");
+      expect(result.data.assumptions).toEqual(["Only the title changes"]);
     }
   });
 
@@ -262,15 +284,11 @@ describe("Agent Architecture Skeletons & Types", () => {
     registry.register(submitCommandsTool);
     const runtime = new AgentRuntime(registry, createSequenceGateway([
       "这不是 JSON",
-      {
-        type: "tool_call",
-        toolName: "SubmitCommands",
-        args: {
+      modelToolCall("SubmitCommands", {
           summary: "Update title",
           commands: [{ id: "cmd-json-retry", type: "set-presentation-title", title: "Retry title" }],
           risk: "low",
-        },
-      },
+      }),
     ]));
 
     const result = await runtime.run({
@@ -280,7 +298,7 @@ describe("Agent Architecture Skeletons & Types", () => {
       selectedElementIds: [],
     });
 
-    expect(result.type).toBe("command_proposal");
+    expect(result.type).toBe("deck.command_proposal");
   });
 
   it("does not let an action continuation end with a narrative message", async () => {
@@ -288,24 +306,13 @@ describe("Agent Architecture Skeletons & Types", () => {
     registry.register(searchExtraToolsTool);
     registry.register(submitCommandsTool);
     const runtime = new AgentRuntime(registry, createSequenceGateway([
-      {
-        type: "tool_call",
-        toolName: "SearchExtraTools",
-        args: { query: "theme layout" },
-      },
-      {
-        type: "message",
-        content: "我先搜索一下高级工具，然后再开始生成。",
-      },
-      {
-        type: "tool_call",
-        toolName: "SubmitCommands",
-        args: {
+      modelToolCall("SearchExtraTools", { query: "theme layout" }),
+      modelMessage("我先搜索一下高级工具，然后再开始生成。"),
+      modelToolCall("SubmitCommands", {
           summary: "Create the presentation",
           commands: [{ id: "cmd-action-continuation", type: "set-presentation-title", title: "Vibe Coding" }],
           risk: "low",
-        },
-      },
+      }),
     ]));
 
     const result = await runtime.run({
@@ -320,7 +327,7 @@ describe("Agent Architecture Skeletons & Types", () => {
       requiredOutcome: "command_proposal",
     });
 
-    expect(result.type).toBe("command_proposal");
+    expect(result.type).toBe("deck.command_proposal");
   });
 
   it("keeps AskUser context until the continued action reaches a proposal", async () => {
@@ -329,29 +336,17 @@ describe("Agent Architecture Skeletons & Types", () => {
     registry.register(searchExtraToolsTool);
     registry.register(submitCommandsTool);
     const runtime = new AgentRuntime(registry, createSequenceGateway([
-      {
-        type: "tool_call",
-        toolName: "AskUser",
-        args: {
+      modelToolCall("AskUser", {
           message: "请确认语言、时长和代码示例。",
           missingFields: ["language", "duration", "codeExamples"],
-        },
-      },
-      {
-        type: "tool_call",
-        toolName: "SearchExtraTools",
-        args: { query: "theme layout" },
-      },
-      {
-        type: "tool_call",
-        toolName: "SubmitCommands",
-        args: {
+      }),
+      modelToolCall("SearchExtraTools", { query: "theme layout" }),
+      modelToolCall("SubmitCommands", {
           summary: "Create the Vibe Coding presentation",
           commands: [{ id: "cmd-service-context", type: "set-presentation-title", title: "Vibe Coding" }],
           risk: "low",
           assumptions: ["中文为主，关键术语保留英文"],
-        },
-      },
+      }),
     ]));
     const service = new AgentService(
       new CommandBus(createStarterPresentation()),
@@ -384,13 +379,9 @@ describe("Agent Architecture Skeletons & Types", () => {
         prompts.push(JSON.parse(request.prompt));
         if (prompts.length === 1) {
           return {
-            provider: "openai",
-            model: "test-model",
-            text: JSON.stringify({
-              type: "ask_user",
-              message: "请补充具体主题。",
-              missingFields: ["topic"],
-            }),
+          provider: "openai",
+          model: "test-model",
+          text: JSON.stringify(modelAskUser("请补充具体主题。", ["topic"])),
           };
         }
         if (prompts.length === 2) {
@@ -399,11 +390,7 @@ describe("Agent Architecture Skeletons & Types", () => {
         return {
           provider: "openai",
           model: "test-model",
-          text: JSON.stringify({
-            type: "ask_user",
-            message: "上一条是 Agent 范式与架构演进。",
-            missingFields: ["confirmation"],
-          }),
+          text: JSON.stringify(modelAskUser("上一条是 Agent 范式与架构演进。", ["confirmation"])),
         };
       },
       async *generateTextStream() {
@@ -452,12 +439,9 @@ describe("Agent Architecture Skeletons & Types", () => {
         async generateText(request) {
           promptPayload = JSON.parse(request.prompt);
           return {
-            provider: "openai",
-            model: "test-model",
-            text: JSON.stringify({
-              type: "message",
-              content: "你刚才说的是 Agent 范式与架构演进。",
-            }),
+          provider: "openai",
+          model: "test-model",
+          text: JSON.stringify(modelMessage("你刚才说的是 Agent 范式与架构演进。")),
           };
         },
         async *generateTextStream() {
@@ -590,15 +574,13 @@ describe("Agent Architecture Skeletons & Types", () => {
     registry.register(askUserTool);
     registry.register(submitCommandsTool);
 
-    const runtime = new AgentRuntime(registry, createSequenceGateway([{
-      type: "tool_call",
-      toolName: "SubmitCommands",
-      args: {
+    const runtime = new AgentRuntime(registry, createSequenceGateway([
+      modelToolCall("SubmitCommands", {
         summary: "Update title",
         commands: [{ id: "cmd-service", type: "set-presentation-title", title: "Approved title" }],
         risk: "low",
-      },
-    }]));
+      }),
+    ]));
     const riskPolicy = new RiskPolicy();
     const commitGate = new CommitGate(riskPolicy);
     const presentation = createStarterPresentation();
@@ -618,15 +600,13 @@ describe("Agent Architecture Skeletons & Types", () => {
   it("AUTO applies only low-risk proposals", async () => {
     const registry = new ToolRegistry();
     registry.register(submitCommandsTool);
-    const runtime = new AgentRuntime(registry, createSequenceGateway([{
-      type: "tool_call",
-      toolName: "SubmitCommands",
-      args: {
+    const runtime = new AgentRuntime(registry, createSequenceGateway([
+      modelToolCall("SubmitCommands", {
         summary: "Update title",
         commands: [{ id: "cmd-auto", type: "set-presentation-title", title: "Auto title" }],
         risk: "low",
-      },
-    }]));
+      }),
+    ]));
     const bus = new CommandBus(createStarterPresentation());
     const service = new AgentService(bus, runtime, new CommitGate(new RiskPolicy()));
     const result = await service.start("Update title", undefined, "AUTO");
@@ -637,15 +617,13 @@ describe("Agent Architecture Skeletons & Types", () => {
   it("rejects an approved proposal when the presentation changed after preview", async () => {
     const registry = new ToolRegistry();
     registry.register(submitCommandsTool);
-    const runtime = new AgentRuntime(registry, createSequenceGateway([{
-      type: "tool_call",
-      toolName: "SubmitCommands",
-      args: {
+    const runtime = new AgentRuntime(registry, createSequenceGateway([
+      modelToolCall("SubmitCommands", {
         summary: "Update title",
         commands: [{ id: "cmd-stale", type: "set-presentation-title", title: "Stale title" }],
         risk: "low",
-      },
-    }]));
+      }),
+    ]));
     const bus = new CommandBus(createStarterPresentation());
     const service = new AgentService(bus, runtime, new CommitGate(new RiskPolicy()));
     const result = await service.start("Update title", undefined, "REQUEST_APPROVAL");

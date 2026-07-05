@@ -207,9 +207,9 @@ describe("render feedback runtime integration", () => {
 
     expect(progressEvents).toEqual(["render-feedback", "render-feedback-ready"]);
     expect(gateway.requests.length).toBe(2);
-    expect(result.type).toBe("command_proposal");
-    if (result.type === "command_proposal") {
-      expect(result.summary).toBe("Visual review passed");
+    expect(result.type).toBe("deck.command_proposal");
+    if (result.type === "deck.command_proposal") {
+      expect(result.data.summary).toBe("Visual review passed");
     }
 
     const feedbackTurn = gateway.requests[1];

@@ -43,11 +43,13 @@ export const submitCommandsTool: ToolDefinition<
   risk: "low",
   execute: async (args) => {
     return {
-      type: "command_proposal",
-      summary: args.summary,
-      commands: args.commands,
-      risk: args.risk,
-      assumptions: args.assumptions,
+      type: "deck.command_proposal",
+      data: {
+        summary: args.summary,
+        commands: args.commands,
+        risk: args.risk,
+        assumptions: args.assumptions,
+      },
     };
   },
 };

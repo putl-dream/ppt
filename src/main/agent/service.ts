@@ -215,38 +215,39 @@ export class AgentService {
       throw error;
     }
 
-    if (runtimeResult.type === "message") {
+    if (runtimeResult.type === "assistant.message") {
       this.runtime.clearSession(threadId);
       this.conversations.delete(threadId);
-      return { status: "chat", message: runtimeResult.content };
+      return { status: "chat", message: runtimeResult.data.content };
     }
 
-    if (runtimeResult.type === "ask_user") {
+    if (runtimeResult.type === "assistant.ask_user") {
       this.conversations.set(threadId, {
         messages: [
           ...messageHistory,
           ...(requestAlreadyInHistory ? [] : [{ role: "user" as const, content: request }]),
-          { role: "assistant", content: runtimeResult.message },
+          { role: "assistant", content: runtimeResult.data.content },
         ],
         model,
         executionStrategy,
       });
       return {
         status: "chat",
-        message: runtimeResult.message,
+        message: runtimeResult.data.content,
         threadId,
       };
     }
 
     listener?.({ type: "workflow-progress", message: "正在进行安全校验...", progress: 70 });
-    const gate = await this.commitGate.evaluate(before, runtimeResult.commands, runtimeResult.risk);
+    const proposal = runtimeResult.data;
+    const gate = await this.commitGate.evaluate(before, proposal.commands, proposal.risk);
     if (!gate.success || !gate.preview) {
       throw new Error(`Commit Gate rejected proposal: ${gate.errors.join("; ")}`);
     }
 
     const canAutoApply = executionStrategy === "AUTO" && gate.decision === "AUTO";
     if (canAutoApply) {
-      this.commandBus.executeMany(runtimeResult.commands);
+      this.commandBus.executeMany(proposal.commands);
       this.runtime.clearSession(threadId);
       this.conversations.delete(threadId);
       listener?.({ type: "workflow-progress", message: "修改已完成。", progress: 100 });
@@ -254,10 +255,10 @@ export class AgentService {
     }
 
     this.pendingApprovals.set(threadId, {
-      commands: structuredClone(runtimeResult.commands),
-      summary: runtimeResult.summary,
-      assumptions: runtimeResult.assumptions ? [...runtimeResult.assumptions] : undefined,
-      modelRisk: runtimeResult.risk,
+      commands: structuredClone(proposal.commands),
+      summary: proposal.summary,
+      assumptions: proposal.assumptions ? [...proposal.assumptions] : undefined,
+      modelRisk: proposal.risk,
       baseRevision: before.revision,
       gate,
     });
@@ -268,10 +269,10 @@ export class AgentService {
       status: "approval-required",
       approval: {
         threadId,
-        summary: runtimeResult.summary,
-        commands: runtimeResult.commands,
+        summary: proposal.summary,
+        commands: proposal.commands,
         risk: gate.risk,
-        assumptions: runtimeResult.assumptions,
+        assumptions: proposal.assumptions,
         diff: gate.diff,
         preview: gate.preview,
       },

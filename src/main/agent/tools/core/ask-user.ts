@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { ToolDefinition } from "../tool-definition";
+import type { AgentRuntimeResult } from "../../runtime/runtime-types";
 
 export const askUserSchema = z.object({
   message: z.string().describe("向用户提出的澄清问题内容"),
@@ -13,7 +14,7 @@ export const askUserSchema = z.object({
  */
 export const askUserTool: ToolDefinition<
   typeof askUserSchema,
-  { type: "ask_user"; message: string; missingFields?: string[] }
+  Extract<AgentRuntimeResult, { type: "assistant.ask_user" }>
 > = {
   name: "AskUser",
   description:
@@ -25,9 +26,11 @@ export const askUserTool: ToolDefinition<
   risk: "low",
   execute: async (args) => {
     return {
-      type: "ask_user",
-      message: args.message,
-      missingFields: args.missingFields,
+      type: "assistant.ask_user",
+      data: {
+        content: args.message,
+        missingFields: args.missingFields,
+      },
     };
   },
 };

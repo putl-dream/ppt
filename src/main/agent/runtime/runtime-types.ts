@@ -10,23 +10,27 @@ import type { ToolApprovalHandler } from "./permission-check";
 
 export type AgentRuntimeRisk = "low" | "medium" | "high";
 
+export interface AgentEnvelope<TType extends string, TData> {
+  type: TType;
+  data: TData;
+}
+
 export type AgentRuntimeResult =
-  | {
-      type: "message";
-      content: string;
-    }
-  | {
-      type: "ask_user";
-      message: string;
-      missingFields?: string[];
-    }
-  | {
-      type: "command_proposal";
-      summary: string;
-      commands: PresentationCommand[];
-      risk: AgentRuntimeRisk;
-      assumptions?: string[];
-    };
+  | AgentEnvelope<"assistant.message", { content: string }>
+  | AgentEnvelope<"assistant.ask_user", { content: string; missingFields?: string[] }>
+  | AgentEnvelope<
+      "deck.command_proposal",
+      {
+        summary: string;
+        commands: PresentationCommand[];
+        risk: AgentRuntimeRisk;
+        assumptions?: string[];
+      }
+    >;
+
+export type AgentProtocolEnvelope =
+  | AgentRuntimeResult
+  | AgentEnvelope<"tool.call", { toolName: string; args: unknown }>;
 
 export interface AgentRuntimeOptions {
   threadId: string;

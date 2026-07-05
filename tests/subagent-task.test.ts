@@ -32,19 +32,20 @@ function createSequenceGateway(responses: unknown[]): AgentModelGateway {
   };
 }
 
+function modelToolCall(toolName: string, args: Record<string, unknown> = {}) {
+  return { type: "tool.call", data: { toolName, args } };
+}
+
+function modelMessage(content: string) {
+  return { type: "assistant.message", data: { content } };
+}
+
 describe("Task sub-agent routing", () => {
   it("returns only the final conclusion and discards sub-agent transcript", async () => {
     const workspaceRoot = await mkdtemp(join(tmpdir(), "ppt-subagent-"));
     const gateway = createSequenceGateway([
-      {
-        type: "tool_call",
-        toolName: "write_file",
-        args: { path: "brief.md", content: "# Brief\nAudience: engineers" },
-      },
-      {
-        type: "message",
-        content: "Created brief.md with audience and purpose.",
-      },
+      modelToolCall("write_file", { path: "brief.md", content: "# Brief\nAudience: engineers" }),
+      modelMessage("Created brief.md with audience and purpose."),
     ]);
 
     const conclusion = await spawnSubAgent({
@@ -69,19 +70,13 @@ describe("Task sub-agent routing", () => {
           return {
             provider: "anthropic",
             model: "test-model",
-            text: JSON.stringify({
-              type: "message",
-              content: "Brief done.",
-            }),
+            text: JSON.stringify(modelMessage("Brief done.")),
           };
         }
         return {
           provider: "anthropic",
           model: "test-model",
-          text: JSON.stringify({
-            type: "message",
-            content: "Outline done.",
-          }),
+          text: JSON.stringify(modelMessage("Outline done.")),
         };
       },
       async *generateTextStream() {
@@ -103,20 +98,12 @@ describe("Task sub-agent routing", () => {
     const spawn = vi.fn(async () => "Sub-agent finished brief.md.");
     const taskTool = createTaskTool({ spawn });
     const gateway = createSequenceGateway([
-      {
-        type: "tool_call",
-        toolName: "Task",
-        args: { description: "Draft brief.md" },
-      },
-      {
-        type: "tool_call",
-        toolName: "SubmitCommands",
-        args: {
+      modelToolCall("Task", { description: "Draft brief.md" }),
+      modelToolCall("SubmitCommands", {
           summary: "Set title",
           commands: [{ id: "cmd-1", type: "set-presentation-title", title: "Agent PPT" }],
           risk: "low",
-        },
-      },
+      }),
     ]);
 
     const registry = new ToolRegistry();
@@ -143,7 +130,7 @@ describe("Task sub-agent routing", () => {
     });
 
     expect(spawn).toHaveBeenCalledOnce();
-    expect(result.type).toBe("command_proposal");
+    expect(result.type).toBe("deck.command_proposal");
     const secondPrompt = JSON.parse(prompts[1]!);
     expect(secondPrompt.transcript).toEqual([
       { role: "user", content: "Create an agent PPT" },
@@ -162,15 +149,8 @@ describe("Task sub-agent routing", () => {
   it("rejects sub-agent tool calls to task", async () => {
     const workspaceRoot = await mkdtemp(join(tmpdir(), "ppt-subagent-"));
     const gateway = createSequenceGateway([
-      {
-        type: "tool_call",
-        toolName: "task",
-        args: { description: "nested" },
-      },
-      {
-        type: "message",
-        content: "Completed without delegating.",
-      },
+      modelToolCall("task", { description: "nested" }),
+      modelMessage("Completed without delegating."),
     ]);
 
     const conclusion = await spawnSubAgent({
@@ -186,19 +166,12 @@ describe("Task sub-agent routing", () => {
     const workspaceRoot = await mkdtemp(join(tmpdir(), "ppt-subagent-"));
     await writeFile(join(workspaceRoot, "outline.md"), "# Old title", "utf8");
     const gateway = createSequenceGateway([
-      {
-        type: "tool_call",
-        toolName: "edit_file",
-        args: {
+      modelToolCall("edit_file", {
           path: "outline.md",
           old_string: "Old title",
           new_string: "New title",
-        },
-      },
-      {
-        type: "message",
-        content: "Updated outline title.",
-      },
+      }),
+      modelMessage("Updated outline title."),
     ]);
 
     await spawnSubAgent({

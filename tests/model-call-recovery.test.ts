@@ -78,7 +78,7 @@ describe("callModelWithRecovery", () => {
     const generateText = vi
       .fn()
       .mockRejectedValueOnce(Object.assign(new Error("rate limited"), { status: 429 }))
-      .mockResolvedValueOnce({ provider: "openai", model: "gpt", text: '{"type":"message","content":"ok"}' });
+      .mockResolvedValueOnce({ provider: "openai", model: "gpt", text: '{"type":"assistant.message","data":{"content":"ok"}}' });
 
     const gateway: AgentModelGateway = {
       generateText,
@@ -114,7 +114,7 @@ describe("callModelWithRecovery", () => {
       .mockRejectedValueOnce(
         Object.assign(new Error("prompt is too long"), { status: 400 }),
       )
-      .mockResolvedValueOnce({ provider: "openai", model: "gpt", text: '{"type":"message","content":"ok"}' });
+      .mockResolvedValueOnce({ provider: "openai", model: "gpt", text: '{"type":"assistant.message","data":{"content":"ok"}}' });
 
     const gateway: AgentModelGateway = {
       generateText,
@@ -147,13 +147,13 @@ describe("callModelWithRecovery", () => {
       .mockResolvedValueOnce({
         provider: "anthropic",
         model: "claude",
-        text: '{"type":"tool_call","toolName":"ReadPresentationSnapshot","args":{}}',
+        text: '{"type":"tool.call","data":{"toolName":"ReadPresentationSnapshot","args":{}}}',
         stopReason: "max_tokens",
       })
       .mockResolvedValueOnce({
         provider: "anthropic",
         model: "claude",
-        text: '{"type":"message","content":"done"}',
+        text: '{"type":"assistant.message","data":{"content":"done"}}',
         stopReason: "end_turn",
       });
 

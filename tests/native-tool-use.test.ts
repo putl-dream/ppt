@@ -89,9 +89,9 @@ describe("native tool-use runtime path", () => {
       selectedElementIds: [],
     });
 
-    expect(result.type).toBe("command_proposal");
-    if (result.type === "command_proposal") {
-      expect(result.commands[0].type).toBe("set-presentation-title");
+    expect(result.type).toBe("deck.command_proposal");
+    if (result.type === "deck.command_proposal") {
+      expect(result.data.commands[0].type).toBe("set-presentation-title");
     }
 
     // Every request carried native tool specs.
@@ -109,12 +109,12 @@ describe("native tool-use runtime path", () => {
     expect(toolResultTurn?.toolResults?.[0]?.toolCallId).toBe("call-1");
   });
 
-  it("returns a plain message when the model responds without tool calls", async () => {
+  it("returns an assistant.message envelope when the model responds without tool calls", async () => {
     const registry = new ToolRegistry();
     registry.register(submitCommandsTool);
 
     const gateway = createNativeGateway([
-      { text: "已完成，无需修改幻灯片。" },
+      { text: '{"type":"assistant.message","data":{"content":"已完成，无需修改幻灯片。"}}' },
     ]);
 
     const runtime = new AgentRuntime(registry, gateway);
@@ -125,18 +125,18 @@ describe("native tool-use runtime path", () => {
       selectedElementIds: [],
     });
 
-    expect(result.type).toBe("message");
-    if (result.type === "message") {
-      expect(result.content).toContain("已完成");
+    expect(result.type).toBe("assistant.message");
+    if (result.type === "assistant.message") {
+      expect(result.data.content).toContain("已完成");
     }
   });
 
-  it("unwraps JSON protocol messages returned on the native no-tool path", async () => {
+  it("streams content from assistant.message envelopes on the native no-tool path", async () => {
     const registry = new ToolRegistry();
     registry.register(submitCommandsTool);
 
     const gateway = createNativeGateway([
-      { text: '{"type":"message","content":"我是你的 PPT 智能助手。\\n\\n说说你的需求，我马上开干。"}' },
+      { text: '{"type":"assistant.message","data":{"content":"我是你的 PPT 智能助手。\\n\\n说说你的需求，我马上开干。"}}' },
     ]);
     let streamed = "";
 
@@ -151,9 +151,9 @@ describe("native tool-use runtime path", () => {
       },
     });
 
-    expect(result.type).toBe("message");
-    if (result.type === "message") {
-      expect(result.content).toBe("我是你的 PPT 智能助手。\n\n说说你的需求，我马上开干。");
+    expect(result.type).toBe("assistant.message");
+    if (result.type === "assistant.message") {
+      expect(result.data.content).toBe("我是你的 PPT 智能助手。\n\n说说你的需求，我马上开干。");
     }
     expect(streamed).toBe("我是你的 PPT 智能助手。\n\n说说你的需求，我马上开干。");
     expect(streamed).not.toContain('"type"');

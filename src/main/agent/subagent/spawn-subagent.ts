@@ -12,7 +12,10 @@ import {
   buildAgentJsonRetryMessage,
   parseAgentJsonResponse,
 } from "../runtime/parse-agent-json-response";
-import { RuntimeNormalizer } from "../runtime/runtime-normalizer";
+import {
+  normalizeAgentProtocolObject,
+} from "../runtime/agent-message-normalizer";
+import type { AgentProtocolEnvelope } from "../runtime/runtime-types";
 import { ensureDefaultHooks } from "../runtime/default-hooks";
 import { triggerHooks } from "../runtime/hook-registry";
 import type { PostToolUseBlock, StopBlock } from "../runtime/hook-blocks";
@@ -24,12 +27,6 @@ import {
   SUB_AGENT_TOOLS,
   type SubAgentToolContext,
 } from "./workspace-tools";
-
-type SubAgentToolCall = {
-  type: "tool_call";
-  toolName: string;
-  args: unknown;
-};
 
 export interface SpawnSubAgentOptions {
   description: string;
@@ -44,16 +41,17 @@ export interface SpawnSubAgentOptions {
   onProgress?: SubAgentProgressListener;
 }
 
-function isToolCall(value: unknown): value is SubAgentToolCall {
-  if (!value || typeof value !== "object") return false;
-  const candidate = value as Record<string, unknown>;
-  return candidate.type === "tool_call" && typeof candidate.toolName === "string";
-}
-
-function extractTextFromNormalized(result: { type: string; content?: string; message?: string }): string {
-  if (result.type === "message" && result.content) return result.content;
-  if (result.type === "ask_user" && result.message) return result.message;
-  return JSON.stringify(result);
+function extractTextFromEnvelope(envelope: AgentProtocolEnvelope): string {
+  switch (envelope.type) {
+    case "assistant.message":
+      return envelope.data.content;
+    case "assistant.ask_user":
+      return envelope.data.content;
+    case "deck.command_proposal":
+      return envelope.data.summary;
+    case "tool.call":
+      return JSON.stringify(envelope.data);
+  }
 }
 
 function emitProgress(options: SpawnSubAgentOptions, event: Parameters<SubAgentProgressListener>[0]): void {
@@ -161,31 +159,33 @@ export async function spawnSubAgent(options: SpawnSubAgentOptions): Promise<stri
       continue;
     }
 
-    if (!isToolCall(parsed)) {
-      try {
-        const normalized = RuntimeNormalizer.normalize(parsed);
-        return finish(extractTextFromNormalized(normalized));
-      } catch (error) {
-        transcript.push({
-          role: "assistant",
-          response: parsed,
-          error: error instanceof Error ? error.message : String(error),
-        });
-        continue;
-      }
-    }
-
-    const tool = SUB_AGENT_TOOL_HANDLERS.get(parsed.toolName);
-    if (!tool) {
+    let envelope: AgentProtocolEnvelope;
+    try {
+      envelope = normalizeAgentProtocolObject(parsed);
+    } catch (error) {
       transcript.push({
-        role: "tool",
-        toolName: parsed.toolName,
-        error: `Unknown tool: ${parsed.toolName}. Sub-agents cannot use task.`,
+        role: "assistant",
+        response: parsed,
+        error: error instanceof Error ? error.message : String(error),
       });
       continue;
     }
 
-    const args = tool.inputSchema.safeParse(parsed.args ?? {});
+    if (envelope.type !== "tool.call") {
+      return finish(extractTextFromEnvelope(envelope));
+    }
+
+    const tool = SUB_AGENT_TOOL_HANDLERS.get(envelope.data.toolName);
+    if (!tool) {
+      transcript.push({
+        role: "tool",
+        toolName: envelope.data.toolName,
+        error: `Unknown tool: ${envelope.data.toolName}. Sub-agents cannot use task.`,
+      });
+      continue;
+    }
+
+    const args = tool.inputSchema.safeParse(envelope.data.args ?? {});
     if (!args.success) {
       transcript.push({
         role: "tool",

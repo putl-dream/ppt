@@ -9,7 +9,7 @@ function isToolUseEntry(entry: TranscriptEntry): boolean {
   if (entry.kind === "tool_use") return true;
   if (entry.role !== "assistant") return false;
   const response = entry.response;
-  if (response && typeof response === "object" && (response as { type?: string }).type === "tool_call") {
+  if (response && typeof response === "object" && (response as { type?: string }).type === "tool.call") {
     return true;
   }
   return false;

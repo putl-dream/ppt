@@ -1,6 +1,7 @@
 export const AGENT_JSON_MISSING_TYPE_GUIDANCE =
   'Return exactly one complete JSON object with a "type" field '
-  + '(e.g. "message", "tool_call", "ask_user", or "command_proposal"). '
+  + '(e.g. "assistant.message", "tool.call", "assistant.ask_user", or "deck.command_proposal") '
+  + 'and put payload fields under "data". '
   + "Do not include other JSON examples or code snippets before the response object.";
 
 export const AGENT_JSON_PARSE_FAILURE_GUIDANCE =

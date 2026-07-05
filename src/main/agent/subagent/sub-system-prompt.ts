@@ -33,8 +33,8 @@ ${tools.map(formatToolCard).join("\n\n")}
 
 ## Response protocol
 Each step returns exactly one JSON object:
-- Call a tool: {"type":"tool_call","toolName":"tool_name","args":{}}
-- Final conclusion: {"type":"message","content":"..."}
+- Call a tool: {"type":"tool.call","data":{"toolName":"tool_name","args":{}}}
+- Final conclusion: {"type":"assistant.message","data":{"content":"..."}}
 
 Do not output Markdown fences or extra commentary outside the JSON object.`;
 }
