@@ -376,6 +376,38 @@ describe("FileSessionStore", () => {
     expect(threadId).toBe("thread-1");
   });
 
+  it("preserves structured question metadata after an application restart", async () => {
+    const { store, filePath } = await createStoreWithSession();
+    const sessionId = must(store.getBootstrap().activeSession).session.id;
+    await store.saveMessages(sessionId, [
+      {
+        id: "question-1",
+        role: "assistant",
+        content: "请选择排版方式",
+        threadId: "thread-1",
+        question: {
+          variant: "cards",
+          selectionMode: "single",
+          options: [
+            {
+              id: "template",
+              title: "标准排版",
+              description: "主题加模板，稳定快速",
+              value: "选择标准排版",
+            },
+          ],
+        },
+      },
+    ]);
+
+    const restored = new FileSessionStore(filePath);
+    await restored.initialize();
+    const question = must(restored.getBootstrap().activeSession).messages[0].question;
+
+    expect(question?.variant).toBe("cards");
+    expect(question?.options?.[0]?.value).toBe("选择标准排版");
+  });
+
   it("recovers pending thread conversations from the transcript when the snapshot cache is stale", async () => {
     const { store, filePath } = await createStoreWithSession();
     const sessionId = must(store.getBootstrap().activeSession).session.id;

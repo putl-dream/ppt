@@ -1,10 +1,14 @@
 import { z } from "zod";
+import { agentQuestionSchema } from "@shared/agent-question";
 import type { ToolDefinition } from "../tool-definition";
 import type { AgentRuntimeResult } from "../../runtime/runtime-types";
 
 export const askUserSchema = z.object({
   message: z.string().describe("向用户提出的澄清问题内容"),
   missingFields: z.array(z.string()).optional().describe("阻止安全执行的具体缺失信息"),
+  question: agentQuestionSchema.optional().describe(
+    "可选的追问展示结构。markdown 用于富文本说明；choices/cards 用于单选或多选项。",
+  ),
 });
 
 /**
@@ -25,14 +29,16 @@ export const askUserTool: ToolDefinition<
   inputSchema: askUserSchema,
   risk: "low",
   execute: async (args) => {
+    const data = {
+      content: args.message,
+      ...(args.missingFields ? { missingFields: args.missingFields } : {}),
+      ...(args.question ? { question: args.question } : {}),
+    };
     return {
       kind: "structured",
       format: "json",
       type: "assistant.ask_user",
-      data: {
-        content: args.message,
-        missingFields: args.missingFields,
-      },
+      data,
     };
   },
 };

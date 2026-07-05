@@ -1,5 +1,5 @@
-import React, { useEffect, useRef } from "react";
-import { FolderIcon, PlusIcon, SendIcon, StopIcon } from "./Icons";
+import React, { useEffect, useRef, useState } from "react";
+import { CheckIcon, ChevronDownIcon, FolderIcon, PlusIcon, SendIcon, StopIcon } from "./Icons";
 import type { ManagedModel } from "../modelCatalog";
 import { getWorkspaceLabel } from "@shared/workspace";
 import { ToolApprovalOverlay, type PendingToolApproval } from "./ToolApprovalOverlay";
@@ -58,8 +58,11 @@ export const UnifiedAgentInput: React.FC<UnifiedAgentInputProps> = ({
   isCancellingRun = false,
 }) => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const modelMenuRef = useRef<HTMLDivElement>(null);
+  const [modelMenuOpen, setModelMenuOpen] = useState(false);
   const folderName = getWorkspaceLabel(localStoragePath || undefined);
   const hasWorkspace = Boolean(localStoragePath);
+  const selectedModel = models.find((model) => model.id === selectedModelId) ?? models[0];
 
   const handleSend = () => {
     if (busy || !request.trim()) return;
@@ -90,6 +93,26 @@ export const UnifiedAgentInput: React.FC<UnifiedAgentInputProps> = ({
     }
     resizeTextarea(textarea);
   }, [request, layoutMode]);
+
+  useEffect(() => {
+    if (!modelMenuOpen) return;
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (modelMenuRef.current?.contains(event.target as Node)) return;
+      setModelMenuOpen(false);
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setModelMenuOpen(false);
+    };
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [modelMenuOpen]);
 
   const workspacePicker = (
     <button
@@ -153,18 +176,50 @@ export const UnifiedAgentInput: React.FC<UnifiedAgentInputProps> = ({
             </div>
 
             <div className="functional-right">
-              <div className="model-tier-select-wrapper">
-                <select
-                  value={selectedModelId}
-                  onChange={(e) => setSelectedModelId(e.target.value)}
+              <div
+                ref={modelMenuRef}
+                className={[
+                  "model-tier-select-wrapper",
+                  modelMenuOpen ? "is-open" : "",
+                  busy || models.length === 0 ? "is-disabled" : "",
+                ].filter(Boolean).join(" ")}
+              >
+                <button
+                  type="button"
                   className="mini-model-select"
                   title="智能体模型级别"
-                  disabled={busy}
+                  disabled={busy || models.length === 0}
+                  aria-haspopup="listbox"
+                  aria-expanded={modelMenuOpen}
+                  onClick={() => setModelMenuOpen((open) => !open)}
                 >
-                  {models.map((model) => (
-                    <option key={model.id} value={model.id}>{model.name}</option>
-                  ))}
-                </select>
+                  <span>{selectedModel?.name ?? "选择模型"}</span>
+                  <ChevronDownIcon size={12} className="model-tier-select-icon" />
+                </button>
+
+                {modelMenuOpen && !busy && models.length > 0 && (
+                  <div className="model-tier-menu" role="listbox" aria-label="智能体模型级别">
+                    {models.map((model) => {
+                      const selected = model.id === selectedModelId;
+                      return (
+                        <button
+                          key={model.id}
+                          type="button"
+                          role="option"
+                          aria-selected={selected}
+                          className={`model-tier-option${selected ? " is-selected" : ""}`}
+                          onClick={() => {
+                            setSelectedModelId(model.id);
+                            setModelMenuOpen(false);
+                          }}
+                        >
+                          <span className="model-tier-option-name">{model.name}</span>
+                          {selected && <CheckIcon size={13} className="model-tier-option-check" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
 
               <button

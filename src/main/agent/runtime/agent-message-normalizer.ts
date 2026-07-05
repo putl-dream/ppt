@@ -1,4 +1,5 @@
 import { presentationCommandSchema, type PresentationCommand } from "@shared/commands";
+import { agentQuestionSchema, type AgentQuestion } from "@shared/agent-question";
 import type { AgentModelToolCall } from "../gateway/types";
 import type {
   AgentProtocolEnvelope,
@@ -22,6 +23,15 @@ function assertObject(raw: unknown): Record<string, unknown> {
 
 function normalizeStringArray(value: unknown): string[] | undefined {
   return Array.isArray(value) ? value.map(String) : undefined;
+}
+
+function normalizeAgentQuestion(value: unknown): AgentQuestion | undefined {
+  if (value === undefined) return undefined;
+  const parsed = agentQuestionSchema.safeParse(value);
+  if (!parsed.success) {
+    throw new Error(`Validation error: 'assistant.ask_user' data.question is invalid: ${parsed.error.message}`);
+  }
+  return parsed.data;
 }
 
 function normalizeCommand(raw: unknown, index: number): PresentationCommand {
@@ -88,13 +98,16 @@ export function normalizeAgentProtocolObject(raw: unknown): AgentProtocolEnvelop
     if (typeof content !== "string" || content.trim() === "") {
       throw new Error("Validation error: 'assistant.ask_user' data must contain a non-empty string in 'content'.");
     }
+    const missingFields = normalizeStringArray(data.missingFields);
+    const question = normalizeAgentQuestion(data.question);
     return {
       kind: "structured",
       format: "json",
       type: "assistant.ask_user",
       data: {
         content,
-        missingFields: normalizeStringArray(data.missingFields),
+        ...(missingFields ? { missingFields } : {}),
+        ...(question ? { question } : {}),
       },
     };
   }

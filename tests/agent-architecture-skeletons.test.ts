@@ -283,6 +283,43 @@ describe("Agent Architecture Skeletons & Types", () => {
       type: "assistant.ask_user",
       data: { content: "Need input", missingFields: ["theme"] },
     });
+    const res2WithQuestion = normalizeAgentProtocolObject({
+      type: "assistant.ask_user",
+      data: {
+        content: "Choose a layout mode",
+        question: {
+          variant: "cards",
+          options: [
+            {
+              id: "template",
+              title: "标准排版",
+              description: "主题加模板，稳定快速",
+              value: "选择标准排版",
+            },
+          ],
+        },
+      },
+    });
+    expect(res2WithQuestion).toEqual({
+      kind: "structured",
+      format: "json",
+      type: "assistant.ask_user",
+      data: {
+        content: "Choose a layout mode",
+        question: {
+          variant: "cards",
+          selectionMode: "single",
+          options: [
+            {
+              id: "template",
+              title: "标准排版",
+              description: "主题加模板，稳定快速",
+              value: "选择标准排版",
+            },
+          ],
+        },
+      },
+    });
 
     const res3 = normalizeAgentProtocolObject({
       type: "deck.command_proposal",
@@ -462,6 +499,13 @@ describe("Agent Architecture Skeletons & Types", () => {
       modelToolCall("AskUser", {
           message: "请确认语言、时长和代码示例。",
           missingFields: ["language", "duration", "codeExamples"],
+          question: {
+            variant: "cards",
+            options: [
+              { id: "default", title: "按默认方案", value: "按默认方案" },
+              { id: "custom", title: "我补充细节", value: "我需要补充细节" },
+            ],
+          },
       }),
       modelToolCall("SearchExtraTools", { query: "theme layout" }),
       modelToolCall("SubmitCommands", {
@@ -480,6 +524,8 @@ describe("Agent Architecture Skeletons & Types", () => {
     const clarification = await service.start("生成 30 页 Vibe Coding 技术分享 PPT");
     expect(clarification.status).toBe("chat");
     if (clarification.status !== "chat") throw new Error("Expected clarification");
+    expect(clarification.question?.variant).toBe("cards");
+    expect(clarification.question?.options?.map((option) => option.id)).toEqual(["default", "custom"]);
 
     const proposal = await service.continueAgentRun(
       clarification.threadId!,

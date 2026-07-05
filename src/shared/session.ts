@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { agentQuestionSchema } from "./agent-question";
 import { agentActivityItemSchema } from "./agent-activity";
 import { presentationSchema, type Presentation } from "./presentation";
 import { presentationCommandSchema } from "./commands";
@@ -102,6 +103,7 @@ export const sessionChatMessageSchema = z.object({
   approval: persistedApprovalSchema.optional(),
   patch: persistedPatchSchema.optional(),
   inlineCards: z.array(persistedInlineCardSchema).optional(),
+  question: agentQuestionSchema.optional(),
   threadId: z.string().optional(),
 });
 

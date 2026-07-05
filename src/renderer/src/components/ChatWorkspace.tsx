@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { AgentApprovalRequest } from "@shared/ipc";
+import type { AgentQuestionResolved } from "@shared/agent-question";
 import type { SessionChatMessage } from "@shared/session";
 import {
   CopyIcon,
@@ -18,6 +19,7 @@ import { LayoutChoiceCard } from "./LayoutChoiceCard";
 import { AgentThinkingLoader } from "./AgentThinkingLoader";
 import { AgentActivityTrace } from "./AgentActivityTrace";
 import { MessageMarkdown } from "./MessageMarkdown";
+import { AgentQuestionCard } from "./AgentQuestionCard";
 import type { AgentActivityItem } from "@shared/agent-activity";
 import { findPendingToolApproval, resolveActivityTrace, filterTraceForDisplay, extractLatestTaskGraph } from "@shared/agent-activity";
 import { isTaskPlanActive } from "@shared/agent-task-graph";
@@ -53,6 +55,7 @@ interface ChatWorkspaceProps {
   onSubmitRequest: () => void;
   busy: boolean;
   onResolveApproval: (approved: boolean, approval: AgentApprovalRequest, messageId: string) => void;
+  onResolveQuestion: (messageId: string, resolved: AgentQuestionResolved) => void;
   onResolveToolApproval?: (approvalId: string, approved: boolean) => void;
   getInlineCardData: (message: ChatMessage) => InlineCardData;
   onConfirmBrief: (messageId: string) => void;
@@ -100,6 +103,7 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
   onSubmitRequest,
   busy,
   onResolveApproval,
+  onResolveQuestion,
   onResolveToolApproval,
   getInlineCardData,
   onConfirmBrief,
@@ -456,6 +460,14 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
                   })()}
 
                   <MessageMarkdown content={msg.content} className="assistant-response" />
+
+                  {msg.question && (
+                    <AgentQuestionCard
+                      question={msg.question}
+                      disabled={busy}
+                      onResolve={(resolved) => onResolveQuestion(msg.id, resolved)}
+                    />
+                  )}
 
                   {onRetry && msg.content.includes("发生错误") && (
                   <button

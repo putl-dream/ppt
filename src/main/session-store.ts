@@ -544,6 +544,7 @@ export class FileSessionStore {
       if (message.progress !== undefined) metadata.progress = message.progress;
       if (message.approval) metadata.approval = message.approval;
       if (message.patch) metadata.patch = message.patch;
+      if (message.question) metadata.question = message.question;
       if (message.threadId) metadata.threadId = message.threadId;
 
       return {

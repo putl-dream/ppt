@@ -235,6 +235,7 @@ export class AgentService {
         status: "chat",
         message: runtimeResult.data.content,
         threadId,
+        question: runtimeResult.data.question,
       };
     }
 

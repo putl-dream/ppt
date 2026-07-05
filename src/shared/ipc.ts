@@ -1,6 +1,7 @@
 import type { Presentation } from "./presentation";
 import type { PresentationCommand } from "./commands";
 import type { AgentExecutionStrategy, AgentModelSettings } from "./agent";
+import type { AgentQuestion } from "./agent-question";
 import type { AgentGatewayConfig } from "./agent-gateway-config";
 import type { AgentStepLimits } from "./agent-step-limits";
 import type { AgentTaskNode } from "./agent-task-graph";
@@ -101,7 +102,7 @@ export type AgentStreamEvent =
   | { runId: string; type: "subagent-finished"; taskId: string };
 
 export type AgentRunResult =
-  | { status: "chat"; message: string; threadId?: string }
+  | { status: "chat"; message: string; threadId?: string; question?: AgentQuestion }
   | { status: "approval-required"; approval: AgentApprovalRequest }
   | { status: "completed"; presentation: Presentation }
   | { status: "rejected"; presentation?: Presentation };

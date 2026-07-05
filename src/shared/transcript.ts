@@ -147,6 +147,7 @@ export function deserializeSessionMessages(chain: TranscriptMessage[]): SessionC
         progress: metadata.progress,
         approval: metadata.approval,
         patch: metadata.patch,
+        question: metadata.question,
         threadId: message.threadId ?? (metadata.threadId as string | undefined),
       });
     });

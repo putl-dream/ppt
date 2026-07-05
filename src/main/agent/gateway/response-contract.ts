@@ -14,6 +14,7 @@ export function buildAgentProtocolResponseContract(): string {
     "- `format: \"markdown\"` 表示 `data.content` 的渲染格式；Markdown 只能放在 content 字符串里，不能直接裸返回。",
     "- 调用工具：{\"type\":\"tool.call\",\"data\":{\"toolName\":\"ToolName\",\"args\":{}}}",
     "- 请求用户补充：必须调用 AskUser 工具，例如 {\"type\":\"tool.call\",\"data\":{\"toolName\":\"AskUser\",\"args\":{\"message\":\"...\",\"missingFields\":[\"...\"]}}}",
+    "- AskUser 支持可选的结构化追问 UI：{\"question\":{\"variant\":\"choices|cards|markdown\",\"selectionMode\":\"single|multiple\",\"options\":[{\"id\":\"...\",\"title\":\"...\",\"description\":\"...\",\"value\":\"用户选择后回传给 Agent 的文本\"}],\"allowFreeText\":true}}。只有确实需要用户在少量明确选项中选择时才使用 choices/cards。",
     "- 提交幻灯片修改：必须调用 SubmitCommands",
   ].join("\n");
 }

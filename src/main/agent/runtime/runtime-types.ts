@@ -3,6 +3,7 @@
  */
 
 import type { PresentationCommand } from "@shared/commands";
+import type { AgentQuestion } from "@shared/agent-question";
 import type { AgentModelSelection } from "@shared/agent";
 import type { AgentStepLimits } from "@shared/agent-step-limits";
 import type { Presentation } from "@shared/presentation";
@@ -36,7 +37,7 @@ export type AgentStructuredEnvelope =
   | AgentEnvelope<"tool.call", { toolName: string; args: unknown }, "structured", "json">
   | AgentEnvelope<
       "assistant.ask_user",
-      { content: string; missingFields?: string[] },
+      { content: string; missingFields?: string[]; question?: AgentQuestion },
       "structured",
       "json"
     >

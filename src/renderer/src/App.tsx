@@ -37,6 +37,7 @@ import {
   saveLayoutVisualMode,
   type LayoutVisualMode,
 } from "@shared/layout-preference";
+import type { AgentQuestionResolved } from "@shared/agent-question";
 import {
   countSlidesNeedingLayout,
   presentationNeedsLayoutChoice,
@@ -98,6 +99,7 @@ function toSessionChatMessages(messages: ChatMessage[]): SessionChatMessage[] {
     approval,
     patch,
     inlineCards,
+    question,
     threadId,
   }) => ({
     id,
@@ -110,6 +112,7 @@ function toSessionChatMessages(messages: ChatMessage[]): SessionChatMessage[] {
     approval,
     patch,
     inlineCards,
+    question,
     threadId,
   }));
 }
@@ -914,6 +917,7 @@ export function App() {
                 content: resolveInterruptedContent(message.content),
                 activityTrace: resolvedTrace(message.activityTrace),
                 threadId: result.threadId,
+                question: result.question,
               }
             : message,
         ));
@@ -926,6 +930,7 @@ export function App() {
             content: interrupted ? "会话已中断。" : result.message,
             activityTrace: resolvedTrace(),
             threadId: result.threadId,
+            question: result.question,
           },
         ]);
       }
@@ -1715,6 +1720,22 @@ export function App() {
     }));
   };
 
+  const handleResolveQuestion = (messageId: string, resolved: AgentQuestionResolved) => {
+    setChatMessages((prev) => prev.map((message) => {
+      if (message.id !== messageId || !message.question) return message;
+      return {
+        ...message,
+        question: {
+          ...message.question,
+          resolved,
+        },
+      };
+    }));
+    void startAgent(resolved.value, undefined, {
+      userDisplayContent: resolved.label ?? resolved.value,
+    });
+  };
+
   const handleConfirmBrief = (messageId: string) => {
     void useProjectStore.getState().markStageReady("brief");
     markInlineCardResolved(messageId, "brief", "confirmed");
@@ -1854,6 +1875,7 @@ export function App() {
                   onSubmitRequest={() => void startAgent()}
                   busy={busy}
                   onResolveApproval={resolveApproval}
+                  onResolveQuestion={handleResolveQuestion}
                   onResolveToolApproval={(approvalId, approved) => {
                     void resolveToolApproval(approvalId, approved);
                   }}

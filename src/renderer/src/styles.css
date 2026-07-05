@@ -3299,6 +3299,97 @@ aside {
   background: rgba(168, 85, 247, 0.1);
 }
 
+.agent-question-card {
+  padding-bottom: 0;
+}
+
+.agent-question-options {
+  padding: 12px 14px;
+  display: flex;
+  gap: 8px;
+}
+
+.agent-question-options--cards {
+  flex-direction: column;
+}
+
+.agent-question-options--choices {
+  flex-wrap: wrap;
+}
+
+.agent-question-option {
+  border: 1px solid var(--border-glass);
+  background: var(--bg-glass);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: var(--transition-smooth);
+  text-align: left;
+  font-family: var(--font-display);
+}
+
+.agent-question-option:disabled {
+  cursor: default;
+  opacity: 0.78;
+}
+
+.agent-question-option--choice {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 7px 11px;
+  border-radius: 999px;
+  font-size: 12px;
+}
+
+.agent-question-option--card {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 10px 12px;
+  border-radius: 8px;
+}
+
+.agent-question-option.is-selected {
+  border-color: var(--accent-cyan);
+  background: var(--accent-cyan-glow);
+}
+
+.agent-question-option-main {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.agent-question-option-main strong {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.agent-question-option-badge {
+  flex: 0 0 auto;
+  font-size: 10px;
+  line-height: 1;
+  padding: 3px 5px;
+  border-radius: 4px;
+  color: var(--accent-cyan);
+  background: rgba(14, 165, 233, 0.12);
+}
+
+.agent-question-option-description,
+.agent-question-option-detail {
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--text-secondary);
+}
+
+.agent-question-option-detail {
+  color: var(--text-muted);
+}
+
 .deck-preview-modal-overlay {
   position: fixed;
   inset: 0;
@@ -4361,7 +4452,7 @@ aside {
   border: 1px solid var(--border-glass-focused);
   border-radius: calc(12px * var(--border-radius-scale));
   box-shadow: var(--shadow-premium);
-  overflow: hidden;
+  overflow: visible;
   display: flex;
   flex-direction: column;
   transition: var(--transition-smooth);
@@ -4388,6 +4479,12 @@ aside {
 .input-textarea-row {
   padding: 16px 16px 10px;
   background: var(--bg-input-field);
+  border-radius: calc(12px * var(--border-radius-scale)) calc(12px * var(--border-radius-scale)) 0 0;
+}
+
+.chat-input-stack .task-plan-card + .unified-agent-input-container .input-textarea-row {
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
 }
 
 /* 主文本域 Textarea */
@@ -4420,7 +4517,8 @@ aside {
   gap: 12px;
   padding: 8px 12px 12px;
   background: var(--bg-input-field);
-  border-top: 1px solid var(--border-glass);
+  border-top: none;
+  border-radius: 0 0 calc(12px * var(--border-radius-scale)) calc(12px * var(--border-radius-scale));
 }
 
 .functional-left,
@@ -4565,25 +4663,21 @@ aside {
   align-items: center;
   min-height: 30px;
   border-radius: 6px;
-  background: var(--bg-darker);
+  background: transparent;
   transition: var(--transition-smooth);
-}
-
-.model-tier-select-wrapper::after {
-  content: "v";
-  position: absolute;
-  right: 8px;
-  top: 50%;
-  transform: translateY(-52%);
-  color: var(--text-muted);
-  font-size: 10px;
-  font-weight: 700;
-  line-height: 1;
-  pointer-events: none;
+  z-index: 5;
 }
 
 .model-tier-select-wrapper:hover {
-  background: var(--bg-glass-hover);
+  background: transparent;
+}
+
+.model-tier-select-wrapper.is-open {
+  background: transparent;
+}
+
+.model-tier-select-wrapper.is-disabled {
+  opacity: 0.55;
 }
 
 .mini-model-select {
@@ -4592,7 +4686,7 @@ aside {
   border-radius: 6px;
   min-height: 30px;
   max-width: 180px;
-  padding: 6px 24px 6px 10px;
+  padding: 6px 4px 6px 6px;
   color: var(--text-secondary);
   font-size: 11.5px;
   font-weight: 500;
@@ -4601,6 +4695,18 @@ aside {
   -webkit-appearance: none;
   -moz-appearance: none;
   transition: var(--transition-smooth);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  text-align: left;
+  font-family: var(--font-body);
+}
+
+.mini-model-select span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .mini-model-select:hover {
@@ -4609,6 +4715,87 @@ aside {
 
 .mini-model-select:disabled {
   cursor: default;
+}
+
+.model-tier-select-icon {
+  flex: 0 0 auto;
+  color: var(--text-muted);
+  transition: transform 0.14s ease, color 0.14s ease;
+}
+
+.model-tier-select-wrapper:hover .model-tier-select-icon,
+.model-tier-select-wrapper.is-open .model-tier-select-icon {
+  color: var(--text-primary);
+}
+
+.model-tier-select-wrapper.is-open .model-tier-select-icon {
+  transform: rotate(180deg);
+}
+
+.model-tier-menu {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 8px);
+  width: max-content;
+  min-width: 220px;
+  max-width: 280px;
+  max-height: 240px;
+  overflow-y: auto;
+  padding: 6px;
+  border: 1px solid var(--border-glass-focused);
+  border-radius: 8px;
+  background: var(--bg-input-field);
+  box-shadow: var(--shadow-premium);
+  z-index: 40;
+}
+
+.unified-agent-input-container.center-focal-mode .model-tier-menu {
+  top: calc(100% + 8px);
+  bottom: auto;
+}
+
+.model-tier-option {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: var(--font-body);
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.14s ease, color 0.14s ease;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+.model-tier-option:hover {
+  background: var(--bg-glass-hover);
+  color: var(--text-primary);
+}
+
+.model-tier-option.is-selected {
+  background: var(--bg-glass-active);
+  color: var(--text-primary);
+}
+
+.model-tier-option-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.model-tier-option-check {
+  flex: 0 0 auto;
+  color: var(--text-primary);
 }
 
 /* Send CTA button */
