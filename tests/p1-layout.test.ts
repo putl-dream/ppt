@@ -170,7 +170,7 @@ describe("P1 deferred tools", () => {
         },
       ],
     };
-    const result = await previewSlideTool.execute({ slideId }, makeContext(presentation));
+    const result = await previewSlideTool.execute({ slideId, includeThumbnail: false }, makeContext(presentation));
     expect(result.preview?.layout).toBe("cover");
     expect(result.preview?.backgroundVariant).toBe("hero");
     expect(result.preview?.textElements.length).toBe(1);

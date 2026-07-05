@@ -1,4 +1,5 @@
 import type { BackgroundGradient } from "./slide-background";
+import { bytesToBase64 } from "./base64";
 import { SLIDE_HEIGHT, SLIDE_WIDTH } from "./slide-html-render";
 
 function parseHex(color: string): [number, number, number] {
@@ -169,10 +170,7 @@ function rgbaToPngDataUri(
     offset += part.length;
   }
 
-  const base64 =
-    typeof Buffer !== "undefined"
-      ? Buffer.from(png).toString("base64")
-      : btoa(String.fromCharCode(...png));
+  const base64 = bytesToBase64(png);
   return `data:image/png;base64,${base64}`;
 }
 

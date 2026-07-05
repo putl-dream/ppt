@@ -13,7 +13,7 @@ import type {
   ResolvedAgentModelConfig,
 } from "./types";
 
-function toAnthropicImageBlock(image: AgentModelImageBlock): Anthropic.ContentBlockParam {
+function toAnthropicImageBlock(image: AgentModelImageBlock): Anthropic.ImageBlockParam {
   return {
     type: "image",
     source: {

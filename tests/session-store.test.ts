@@ -22,6 +22,11 @@ async function createStoreWithSession() {
   return result;
 }
 
+function must<T>(value: T | null | undefined): T {
+  expect(value).toBeDefined();
+  return value!;
+}
+
 afterEach(async () => {
   await Promise.all(
     temporaryDirectories.splice(0).map((directory) =>
@@ -42,11 +47,12 @@ describe("FileSessionStore", () => {
   it("creates and restores a new session", async () => {
     const { store, filePath } = await createStoreWithSession();
     const initial = store.getBootstrap();
+    const activeSession = must(initial.activeSession);
 
     expect(initial.sessions).toHaveLength(1);
     // 新会话从空 deck 起步，不再预置占位页
-    expect(initial.activeSession.presentation.slides).toHaveLength(0);
-    expect(initial.activeSession.project?.artifacts.map((artifact) => artifact.id)).toEqual([
+    expect(activeSession.presentation.slides).toHaveLength(0);
+    expect(activeSession.project?.artifacts.map((artifact) => artifact.id)).toEqual([
       "brief",
       "outline",
       "research",
@@ -56,10 +62,10 @@ describe("FileSessionStore", () => {
       "history",
     ]);
 
-    const projectRoot = initial.activeSession.project?.rootPath;
+    const projectRoot = activeSession.project?.rootPath;
     expect(projectRoot).toBeTruthy();
-    expect(initial.activeSession.transcript?.path).toBe(
-      join(projectRoot!, "transcripts", `${initial.activeSession.session.id}.jsonl`),
+    expect(activeSession.transcript?.path).toBe(
+      join(projectRoot!, "transcripts", `${activeSession.session.id}.jsonl`),
     );
     expect(await readFile(join(projectRoot!, "brief.md"), "utf8")).toContain("**项目名称**");
     expect(await readFile(join(projectRoot!, "outline.md"), "utf8")).toContain("## 1.");
@@ -74,11 +80,12 @@ describe("FileSessionStore", () => {
 
   it("persists new sessions, presentation changes, messages, and selection", async () => {
     const { store, filePath } = await createStoreWithSession();
-    const originalId = store.getBootstrap().activeSession.session.id;
+    const originalId = must(store.getBootstrap().activeSession).session.id;
     const created = await store.createSession();
-    const createdId = created.activeSession.session.id;
+    const createdSession = must(created.activeSession);
+    const createdId = createdSession.session.id;
     const presentation = {
-      ...created.activeSession.presentation,
+      ...createdSession.presentation,
       title: "持久化测试",
       revision: 3,
     };
@@ -94,7 +101,7 @@ describe("FileSessionStore", () => {
     const state = restored.getBootstrap();
     const saved = restored.getSession(createdId);
 
-    expect(state.activeSession.session.id).toBe(originalId);
+    expect(must(state.activeSession).session.id).toBe(originalId);
     expect(saved.presentation.title).toBe("持久化测试");
     expect(saved.presentation.revision).toBe(3);
     expect(saved.messages[0].content).toBe("恢复这条消息");
@@ -110,8 +117,9 @@ describe("FileSessionStore", () => {
   it("migrates existing sessions into project sandboxes", async () => {
     const { store, filePath } = await createStoreWithSession();
     const legacyState = store.getBootstrap();
+    const activeSession = must(legacyState.activeSession);
     const legacySnapshot = {
-      ...legacyState.activeSession,
+      ...activeSession,
       project: undefined,
     };
     await writeFile(
@@ -126,7 +134,7 @@ describe("FileSessionStore", () => {
 
     const restored = new FileSessionStore(filePath);
     await restored.initialize();
-    const migrated = restored.getBootstrap().activeSession;
+    const migrated = must(restored.getBootstrap().activeSession);
 
     expect(migrated.project?.rootPath).toContain(`session-${migrated.session.id}`);
     expect(migrated.transcript?.path).toBe(
@@ -138,7 +146,7 @@ describe("FileSessionStore", () => {
 
   it("records saved chat messages into an append-only transcript chain", async () => {
     const { store, filePath } = await createStoreWithSession();
-    const sessionId = store.getBootstrap().activeSession.session.id;
+    const sessionId = must(store.getBootstrap().activeSession).session.id;
 
     await store.saveMessages(sessionId, [
       { id: "u1", role: "user", content: "创建一份产品发布 PPT" },
@@ -197,7 +205,7 @@ describe("FileSessionStore", () => {
 
   it("restores messages from the transcript instead of the session snapshot cache", async () => {
     const { store, filePath } = await createStoreWithSession();
-    const sessionId = store.getBootstrap().activeSession.session.id;
+    const sessionId = must(store.getBootstrap().activeSession).session.id;
     await store.saveMessages(sessionId, [
       { id: "u1", role: "user", content: "真实用户消息" },
       { id: "a1", role: "assistant", content: "真实助手回复" },
@@ -225,7 +233,7 @@ describe("FileSessionStore", () => {
 
   it("reads and writes project artifacts inside the sandbox", async () => {
     const { store } = await createStoreWithSession();
-    const sessionId = store.getBootstrap().activeSession.session.id;
+    const sessionId = must(store.getBootstrap().activeSession).session.id;
 
     const outline = await store.readProjectArtifact(sessionId, "outline");
     expect(outline).toMatchObject({
@@ -258,7 +266,7 @@ describe("FileSessionStore", () => {
 
   it("marks downstream artifacts as stale when an upstream artifact changes", async () => {
     const { store } = await createStoreWithSession();
-    const sessionId = store.getBootstrap().activeSession.session.id;
+    const sessionId = must(store.getBootstrap().activeSession).session.id;
     for (const artifactId of [
       "brief",
       "outline",
@@ -299,7 +307,7 @@ describe("FileSessionStore", () => {
 
   it("rejects project artifact paths outside the sandbox", async () => {
     const { store } = await createStoreWithSession();
-    const sessionId = store.getBootstrap().activeSession.session.id;
+    const sessionId = must(store.getBootstrap().activeSession).session.id;
 
     await expect(store.readProjectArtifact(sessionId, "../sessions.json")).rejects.toThrow(
       "outside the sandbox",
@@ -314,7 +322,7 @@ describe("FileSessionStore", () => {
 
   it("returns a diff preview before writing project artifact content", async () => {
     const { store } = await createStoreWithSession();
-    const sessionId = store.getBootstrap().activeSession.session.id;
+    const sessionId = must(store.getBootstrap().activeSession).session.id;
 
     const diff = await store.getProjectArtifactDiff(
       sessionId,
@@ -331,7 +339,7 @@ describe("FileSessionStore", () => {
 
   it("expires pending approvals after an application restart", async () => {
     const { store, filePath } = await createStoreWithSession();
-    const sessionId = store.getBootstrap().activeSession.session.id;
+    const sessionId = must(store.getBootstrap().activeSession).session.id;
     await store.saveMessages(sessionId, [
       {
         id: "approval-1",
@@ -343,7 +351,7 @@ describe("FileSessionStore", () => {
 
     const restored = new FileSessionStore(filePath);
     await restored.initialize();
-    const message = restored.getBootstrap().activeSession.messages[0];
+    const message = must(restored.getBootstrap().activeSession).messages[0];
 
     expect(message.approval).toBeUndefined();
     expect(message.content).toContain("审批请求已随应用重启失效");
@@ -351,7 +359,7 @@ describe("FileSessionStore", () => {
 
   it("preserves pending threadId metadata after an application restart", async () => {
     const { store, filePath } = await createStoreWithSession();
-    const sessionId = store.getBootstrap().activeSession.session.id;
+    const sessionId = must(store.getBootstrap().activeSession).session.id;
     await store.saveMessages(sessionId, [
       {
         id: "outline-1",
@@ -363,14 +371,14 @@ describe("FileSessionStore", () => {
 
     const restored = new FileSessionStore(filePath);
     await restored.initialize();
-    const threadId = restored.getBootstrap().activeSession.messages[0].threadId;
+    const threadId = must(restored.getBootstrap().activeSession).messages[0].threadId;
 
     expect(threadId).toBe("thread-1");
   });
 
   it("recovers pending thread conversations from the transcript when the snapshot cache is stale", async () => {
     const { store, filePath } = await createStoreWithSession();
-    const sessionId = store.getBootstrap().activeSession.session.id;
+    const sessionId = must(store.getBootstrap().activeSession).session.id;
     await store.saveMessages(sessionId, [
       { id: "u1", role: "user", content: "创建一份 Agent 架构 PPT" },
       {
@@ -406,7 +414,7 @@ describe("FileSessionStore", () => {
 
   it("records edited messages as a new transcript branch and can switch leaves", async () => {
     const { store, filePath } = await createStoreWithSession();
-    const sessionId = store.getBootstrap().activeSession.session.id;
+    const sessionId = must(store.getBootstrap().activeSession).session.id;
 
     await store.saveMessages(sessionId, [
       { id: "u1", role: "user", content: "创建 PPT" },
@@ -458,18 +466,18 @@ describe("FileSessionStore", () => {
   it("deletes a session and updates state", async () => {
     const { store } = await createStoreWithSession();
     const state1 = store.getBootstrap();
-    const id1 = state1.activeSession!.session.id;
+    const id1 = must(state1.activeSession).session.id;
 
     // Create a second session
     const state2 = await store.createSession();
-    const id2 = state2.activeSession.session.id;
+    const id2 = must(state2.activeSession).session.id;
     expect(state2.sessions).toHaveLength(2);
-    expect(state2.activeSession.session.id).toBe(id2);
+    expect(must(state2.activeSession).session.id).toBe(id2);
 
     // Delete the second session (active)
     const state3 = await store.deleteSession(id2);
     expect(state3.sessions).toHaveLength(1);
-    expect(state3.activeSession.session.id).toBe(id1);
+    expect(must(state3.activeSession).session.id).toBe(id1);
 
     // Delete the only remaining session
     const state4 = await store.deleteSession(id1);
@@ -479,7 +487,7 @@ describe("FileSessionStore", () => {
 
   it("maintains presentation and deck/snapshot.json consistency", async () => {
     const { store, filePath } = await createStoreWithSession();
-    const sessionId = store.getBootstrap().activeSession.session.id;
+    const sessionId = must(store.getBootstrap().activeSession).session.id;
 
     const newPresentation = {
       id: "pres-id",
@@ -514,10 +522,11 @@ describe("FileSessionStore", () => {
     temporaryDirectories.push(workspaceDir);
 
     const created = await store.createSession({ rootPath: workspaceDir, title: "共享目录项目" });
-    const sessionId = created.activeSession.session.id;
+    const createdSession = must(created.activeSession);
+    const sessionId = createdSession.session.id;
     const sandboxDir = getSessionSandboxPath(workspaceDir, sessionId);
     const normalize = (value: string) => value.replace(/\\/g, "/").toLowerCase();
-    expect(normalize(created.activeSession.project?.rootPath ?? "")).toBe(normalize(sandboxDir));
+    expect(normalize(createdSession.project?.rootPath ?? "")).toBe(normalize(sandboxDir));
     expect(normalize(created.sessions[0].workspacePath ?? "")).toBe(normalize(workspaceDir));
     expect(await readFile(join(sandboxDir, "brief.md"), "utf8")).toContain("**项目名称**");
   });
@@ -529,14 +538,14 @@ describe("FileSessionStore", () => {
 
     const first = await store.createSession({ rootPath: workspaceDir, title: "对话一" });
     await store.writeProjectArtifact(
-      first.activeSession.session.id,
+      must(first.activeSession).session.id,
       "brief.md",
       "# 对话一专属 Brief\n",
     );
 
     const second = await store.createSession({ rootPath: workspaceDir, title: "对话二" });
-    const firstSandbox = getSessionSandboxPath(workspaceDir, first.activeSession.session.id);
-    const secondSandbox = getSessionSandboxPath(workspaceDir, second.activeSession.session.id);
+    const firstSandbox = getSessionSandboxPath(workspaceDir, must(first.activeSession).session.id);
+    const secondSandbox = getSessionSandboxPath(workspaceDir, must(second.activeSession).session.id);
 
     expect(firstSandbox).not.toBe(secondSandbox);
     expect(await readFile(join(firstSandbox, "brief.md"), "utf8")).toContain("对话一专属 Brief");
@@ -552,14 +561,14 @@ describe("FileSessionStore", () => {
     const second = await store.createSession({ rootPath: workspaceDir, title: "对话二" });
 
     const opened = await store.openWorkspace(workspaceDir);
-    expect(opened.activeSession.session.id).toBe(second.activeSession.session.id);
+    expect(must(opened.activeSession).session.id).toBe(must(second.activeSession).session.id);
     const normalize = (value: string) => value.replace(/\\/g, "/").toLowerCase();
     expect(
       opened.sessions.filter(
         (session) => normalize(session.workspacePath ?? "") === normalize(workspaceDir),
       ),
     ).toHaveLength(2);
-    expect(first.activeSession.session.id).not.toBe(opened.activeSession.session.id);
+    expect(must(first.activeSession).session.id).not.toBe(must(opened.activeSession).session.id);
   });
 
   it("persists workspace session index and snapshot files under .agent-ppt", async () => {
@@ -568,7 +577,7 @@ describe("FileSessionStore", () => {
     temporaryDirectories.push(workspaceDir);
 
     const created = await store.createSession({ rootPath: workspaceDir, title: "索引测试" });
-    const sessionId = created.activeSession.session.id;
+    const sessionId = must(created.activeSession).session.id;
 
     const index = JSON.parse(
       await readFile(join(workspaceDir, ".agent-ppt", "sessions.index.json"), "utf8"),
@@ -608,14 +617,14 @@ describe("FileSessionStore", () => {
     temporaryDirectories.push(workspaceDir);
 
     const created = await store.createSession({ rootPath: workspaceDir, title: "离线恢复" });
-    const sessionId = created.activeSession.session.id;
+    const sessionId = must(created.activeSession).session.id;
 
     const fresh = new FileSessionStore(filePath);
     await fresh.initialize();
     const opened = await fresh.openWorkspace(workspaceDir);
 
-    expect(opened.activeSession.session.id).toBe(sessionId);
-    expect(opened.activeSession.session.title).toBe("离线恢复");
+    expect(must(opened.activeSession).session.id).toBe(sessionId);
+    expect(must(opened.activeSession).session.title).toBe("离线恢复");
   });
 
   it("migrates legacy projects/session-{id} sandboxes into a workspace directory", async () => {

@@ -59,6 +59,7 @@ describe("layout visual vocabulary", () => {
           width: 200,
           height: 160,
           url: "https://example.com/a.png",
+          borderRadius: 0,
         },
       ],
     };

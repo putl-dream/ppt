@@ -1,4 +1,5 @@
 import type { ChartElement } from "./presentation";
+import { utf8ToBase64 } from "./base64";
 
 function normalizeChartData(element: ChartElement): { label: string; value: number }[] {
   const { data } = element;
@@ -54,5 +55,5 @@ export function chartDataToSvgString(
 }
 
 export function chartSvgToDataUri(svg: string): string {
-  return `data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}`;
+  return `data:image/svg+xml;base64,${utf8ToBase64(svg)}`;
 }

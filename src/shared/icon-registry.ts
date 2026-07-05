@@ -1,3 +1,5 @@
+import { utf8ToBase64 } from "./base64";
+
 /** Built-in Lucide-compatible icon paths (24×24 viewBox). */
 export const ICON_NAMES = [
   "star",
@@ -76,5 +78,5 @@ export function iconToSvgString(
 }
 
 export function iconSvgToDataUri(svg: string): string {
-  return `data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}`;
+  return `data:image/svg+xml;base64,${utf8ToBase64(svg)}`;
 }

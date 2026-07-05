@@ -21,6 +21,7 @@
     "src/preload/**/*.ts",
     "src/shared/**/*.ts",
     "src/renderer/src/components/project-store.ts",
+    "src/renderer/src/components/process-trace-rows.ts",
     "tests/**/*.ts"
   ]
 }
