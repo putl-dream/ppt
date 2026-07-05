@@ -81,8 +81,6 @@ interface ChatWorkspaceProps {
   models: ManagedModel[];
   selectedModelId: string;
   setSelectedModelId: (val: string) => void;
-  executionStrategy: "REQUEST_APPROVAL" | "AUTO";
-  setExecutionStrategy: (val: "REQUEST_APPROVAL" | "AUTO") => void;
   localStoragePath: string;
   onSelectWorkspace: () => void;
   triggerToast: (msg: string) => void;
@@ -130,8 +128,6 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
   models,
   selectedModelId,
   setSelectedModelId,
-  executionStrategy,
-  setExecutionStrategy,
   localStoragePath,
   onSelectWorkspace,
   triggerToast,
@@ -285,8 +281,6 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
             models={models}
             selectedModelId={selectedModelId}
             setSelectedModelId={setSelectedModelId}
-            executionStrategy={executionStrategy}
-            setExecutionStrategy={setExecutionStrategy}
             localStoragePath={localStoragePath}
             onSelectWorkspace={onSelectWorkspace}
             layoutMode="center"
@@ -712,8 +706,6 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
             models={models}
             selectedModelId={selectedModelId}
             setSelectedModelId={setSelectedModelId}
-            executionStrategy={executionStrategy}
-            setExecutionStrategy={setExecutionStrategy}
             localStoragePath={localStoragePath}
             onSelectWorkspace={onSelectWorkspace}
             layoutMode="bottom"

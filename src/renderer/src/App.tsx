@@ -173,7 +173,6 @@ export function App() {
   /** @deprecated 与 workspacePath 同步，供 UnifiedAgentInput 等遗留组件使用 */
   const [localStoragePath, setLocalStoragePath] = useState("");
   const [defaultRatio, setDefaultRatio] = useState<"16:9" | "4:3">("16:9");
-  const [executionStrategy, setExecutionStrategy] = useState<"REQUEST_APPROVAL" | "AUTO">("REQUEST_APPROVAL");
   const [agentStepLimits, setAgentStepLimits] = useState<AgentStepLimits>(loadAgentStepLimits);
   const [agentGatewayPreferences, setAgentGatewayPreferences] = useState<AgentGatewayPreferences>(
     loadAgentGatewayPreferences,
@@ -1182,7 +1181,7 @@ export function App() {
         : await window.desktopApi.startAgentRun(
             agentRequest,
             selectedModel ? toAgentModelSettings(selectedModel) : undefined,
-            executionStrategy,
+            "REQUEST_APPROVAL",
             agentStepLimits,
             gatewayConfig,
             runId,
@@ -1881,8 +1880,6 @@ export function App() {
                   models={models}
                   selectedModelId={selectedModelId}
                   setSelectedModelId={setSelectedModelId}
-                  executionStrategy={executionStrategy}
-                  setExecutionStrategy={setExecutionStrategy}
                   localStoragePath={localStoragePath}
                   onSelectWorkspace={() => void handleSelectWorkspaceFolder()}
                   triggerToast={triggerToast}

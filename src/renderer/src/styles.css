@@ -4350,6 +4350,12 @@ aside {
 }
 
 /* 双层面板容器卡片 (Double-Deck Container) */
+.unified-agent-input-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
 .double-deck-panel-card {
   background: var(--bg-input-field);
   border: 1px solid var(--border-glass-focused);
@@ -4413,7 +4419,7 @@ aside {
   align-items: center;
   gap: 12px;
   padding: 8px 12px 12px;
-  background: var(--bg-darker);
+  background: var(--bg-input-field);
   border-top: 1px solid var(--border-glass);
 }
 
@@ -4465,14 +4471,18 @@ aside {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 10px 16px;
-  background: rgba(0, 0, 0, 0.02);
-  border-top: 1px solid var(--border-glass);
+  padding: 0 4px;
+  background: transparent;
+  border-top: none;
   font-size: 11px;
 }
 
 .dark-theme .lower-deck-bar {
-  background: rgba(255, 255, 255, 0.015);
+  background: transparent;
+}
+
+.sandbox-control-bar .workspace-picker-btn {
+  background: transparent;
 }
 
 .context-left {
@@ -4549,7 +4559,7 @@ aside {
 }
 
 /* Dropdown styling */
-.strategy-select, .mini-model-select {
+.mini-model-select {
   background: var(--bg-darker);
   border: 1px solid var(--border-glass);
   border-radius: 6px;
@@ -4562,7 +4572,7 @@ aside {
   transition: var(--transition-smooth);
 }
 
-.strategy-select:hover, .mini-model-select:hover {
+.mini-model-select:hover {
   border-color: var(--border-glass-focused);
   color: var(--text-primary);
 }

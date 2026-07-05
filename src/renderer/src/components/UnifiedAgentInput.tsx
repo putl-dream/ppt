@@ -13,8 +13,6 @@ interface UnifiedAgentInputProps {
   models: ManagedModel[];
   selectedModelId: string;
   setSelectedModelId: (val: string) => void;
-  executionStrategy: "REQUEST_APPROVAL" | "AUTO";
-  setExecutionStrategy: (val: "REQUEST_APPROVAL" | "AUTO") => void;
   localStoragePath: string;
   onSelectWorkspace?: () => void;
 
@@ -46,8 +44,6 @@ export const UnifiedAgentInput: React.FC<UnifiedAgentInputProps> = ({
   models,
   selectedModelId,
   setSelectedModelId,
-  executionStrategy,
-  setExecutionStrategy,
   localStoragePath,
   onSelectWorkspace,
   layoutMode,
@@ -116,97 +112,86 @@ export const UnifiedAgentInput: React.FC<UnifiedAgentInputProps> = ({
         </div>
       )}
 
-      <div className="double-deck-panel-card unified-agent-input-shell">
-        {pendingToolApproval && onResolveToolApproval && (
-          <ToolApprovalOverlay
-            approval={pendingToolApproval}
-            onResolve={onResolveToolApproval}
-          />
-        )}
-        <div className="input-textarea-row">
-          <textarea
-            ref={textareaRef}
-            value={request}
-            onChange={handleChange}
-            onKeyDown={handleKeyPress}
-            placeholder={
-              placeholder || (
-                selectedSlideIndex !== null
-                  ? `输入对第 ${selectedSlideIndex + 1} 页的局部指令（如："把背景换成白色"、"增大字号"）...`
-                  : "输入修改意图，支持输入斜杠 / 唤醒快捷排版指令..."
-              )
-            }
-            readOnly={busy}
-            autoFocus
-            rows={layoutMode === "center" ? 3 : 2}
-            className={`input-textarea${busy ? " input-textarea--busy" : ""}`}
-          />
-        </div>
-
-        <div className="functional-control-bar">
-          <div className="functional-left">
-            <button
-              type="button"
-              className="action-icon-btn upload-btn"
-              title="上传外部参考资料 (暂未接入)"
-              disabled
-            >
-              <PlusIcon size={14} />
-            </button>
-            {layoutMode === "bottom" ? workspacePicker : null}
-            <div className="select-strategy-wrapper">
-              <select
-                value={executionStrategy}
-                onChange={(e) => setExecutionStrategy(e.target.value as "REQUEST_APPROVAL" | "AUTO")}
-                className="strategy-select"
-                title="Agent 自治执行策略"
-                disabled={busy}
-              >
-                <option value="REQUEST_APPROVAL">请求批准</option>
-                <option value="AUTO">全自动运行</option>
-              </select>
-            </div>
+      <div className="unified-agent-input-stack">
+        <div className="double-deck-panel-card unified-agent-input-shell">
+          {pendingToolApproval && onResolveToolApproval && (
+            <ToolApprovalOverlay
+              approval={pendingToolApproval}
+              onResolve={onResolveToolApproval}
+            />
+          )}
+          <div className="input-textarea-row">
+            <textarea
+              ref={textareaRef}
+              value={request}
+              onChange={handleChange}
+              onKeyDown={handleKeyPress}
+              placeholder={
+                placeholder || (
+                  selectedSlideIndex !== null
+                    ? `输入对第 ${selectedSlideIndex + 1} 页的局部指令（如："把背景换成白色"、"增大字号"）...`
+                    : "输入修改意图，支持输入斜杠 / 唤醒快捷排版指令..."
+                )
+              }
+              readOnly={busy}
+              autoFocus
+              rows={layoutMode === "center" ? 3 : 2}
+              className={`input-textarea${busy ? " input-textarea--busy" : ""}`}
+            />
           </div>
 
-          <div className="functional-right">
-            <div className="model-tier-select-wrapper">
-              <select
-                value={selectedModelId}
-                onChange={(e) => setSelectedModelId(e.target.value)}
-                className="mini-model-select"
-                title="智能体模型级别"
-                disabled={busy}
+          <div className="functional-control-bar">
+            <div className="functional-left">
+              <button
+                type="button"
+                className="action-icon-btn upload-btn"
+                title="上传外部参考资料 (暂未接入)"
+                disabled
               >
-                {models.map((model) => (
-                  <option key={model.id} value={model.id}>{model.name}</option>
-                ))}
-              </select>
+                <PlusIcon size={14} />
+              </button>
             </div>
 
-            <button
-              type="button"
-              onClick={canCancelRun && onCancelRun ? onCancelRun : handleSend}
-              disabled={canCancelRun ? isCancellingRun : busy || !request.trim()}
-              className={canCancelRun ? "stop-cta-btn" : "send-cta-btn"}
-              title={canCancelRun ? "中断当前 Agent 会话" : "启动智能体工作流"}
-            >
-              {canCancelRun ? (
-                <>
-                  <StopIcon size={14} />
-                  <span>{isCancellingRun ? "中断中…" : "停止"}</span>
-                </>
-              ) : (
-                <>
-                  <SendIcon size={14} />
-                  <span>{submitLabel}</span>
-                </>
-              )}
-            </button>
+            <div className="functional-right">
+              <div className="model-tier-select-wrapper">
+                <select
+                  value={selectedModelId}
+                  onChange={(e) => setSelectedModelId(e.target.value)}
+                  className="mini-model-select"
+                  title="智能体模型级别"
+                  disabled={busy}
+                >
+                  {models.map((model) => (
+                    <option key={model.id} value={model.id}>{model.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <button
+                type="button"
+                onClick={canCancelRun && onCancelRun ? onCancelRun : handleSend}
+                disabled={canCancelRun ? isCancellingRun : busy || !request.trim()}
+                className={canCancelRun ? "stop-cta-btn" : "send-cta-btn"}
+                title={canCancelRun ? "中断当前 Agent 会话" : "启动智能体工作流"}
+              >
+                {canCancelRun ? (
+                  <>
+                    <StopIcon size={14} />
+                    <span>{isCancellingRun ? "中断中…" : "停止"}</span>
+                  </>
+                ) : (
+                  <>
+                    <SendIcon size={14} />
+                    <span>{submitLabel}</span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
 
         {layoutMode === "center" && (
-          <div className="lower-deck-bar">
+          <div className="lower-deck-bar sandbox-control-bar">
             <div className="context-left">
               {workspacePicker}
             </div>

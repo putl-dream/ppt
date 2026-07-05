@@ -30,8 +30,6 @@ interface ContextualAgentPanelProps {
   models: ManagedModel[];
   selectedModelId: string;
   setSelectedModelId: (val: string) => void;
-  executionStrategy: "REQUEST_APPROVAL" | "AUTO";
-  setExecutionStrategy: (val: "REQUEST_APPROVAL" | "AUTO") => void;
   localStoragePath: string;
   setLocalStoragePath: (val: string) => void;
   triggerToast: (msg: string) => void;
@@ -74,8 +72,6 @@ export const ContextualAgentPanel: React.FC<ContextualAgentPanelProps> = ({
   models,
   selectedModelId,
   setSelectedModelId,
-  executionStrategy,
-  setExecutionStrategy,
   localStoragePath,
   setLocalStoragePath,
   triggerToast,
@@ -323,8 +319,6 @@ export const ContextualAgentPanel: React.FC<ContextualAgentPanelProps> = ({
           models={models}
           selectedModelId={selectedModelId}
           setSelectedModelId={setSelectedModelId}
-          executionStrategy={executionStrategy}
-          setExecutionStrategy={setExecutionStrategy}
           localStoragePath={localStoragePath}
           onSelectWorkspace={() => {}}
           layoutMode="bottom"
