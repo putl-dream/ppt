@@ -79,6 +79,17 @@ export function createDefaultBriefMarkdown(title = DEFAULT_BRIEF_FIELDS.title): 
   return serializeBriefMarkdown({ ...DEFAULT_BRIEF_FIELDS, title });
 }
 
+export function isDefaultBriefMarkdown(md: string): boolean {
+  const fields = parseBriefFields(md, DEFAULT_BRIEF_FIELDS.title);
+  const hasDefaultFields = fields.purpose === DEFAULT_BRIEF_FIELDS.purpose
+    && fields.audience === DEFAULT_BRIEF_FIELDS.audience
+    && fields.duration === DEFAULT_BRIEF_FIELDS.duration
+    && fields.script === DEFAULT_BRIEF_FIELDS.script
+    && fields.style === DEFAULT_BRIEF_FIELDS.style;
+  return hasDefaultFields
+    && normalizeMarkdownForComparison(md) === normalizeMarkdownForComparison(createDefaultBriefMarkdown(fields.title));
+}
+
 export function parseBriefFields(md: string, fallbackTitle = DEFAULT_BRIEF_FIELDS.title): BriefFields {
   const fields: BriefFields = { ...DEFAULT_BRIEF_FIELDS, title: fallbackTitle };
 
@@ -154,6 +165,14 @@ export function createDefaultOutlineMarkdown(title = "新演示文稿"): string 
       points: ["下一步里程碑", "商业价值"],
     },
   ], title);
+}
+
+export function isDefaultOutlineMarkdown(md: string): boolean {
+  return normalizeMarkdownForComparison(md) === normalizeMarkdownForComparison(createDefaultOutlineMarkdown());
+}
+
+function normalizeMarkdownForComparison(md: string): string {
+  return md.replace(/\r\n/g, "\n").trim();
 }
 
 const OUTLINE_META_SECTIONS = new Set(["核心观点", "章节结构", "待确认问题"]);

@@ -115,14 +115,16 @@ export function buildProcessTraceRows(
       continue;
     }
 
-    const status = item.status ?? "done";
-    const isActive = live && (status === "typing" || status === "running");
-    pushRow(rows, {
-      id: item.id,
-      title: "工作流步骤",
-      lines: [item.text],
-      active: isActive,
-    });
+    if (item.kind === "step") {
+      const status = item.status ?? "done";
+      const isActive = live && (status === "typing" || status === "running");
+      pushRow(rows, {
+        id: item.id,
+        title: "工作流步骤",
+        lines: [item.text],
+        active: isActive,
+      });
+    }
   }
 
   return rows;

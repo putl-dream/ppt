@@ -59,6 +59,17 @@ const sessionFileSchema = z.object({
 
 type SessionFile = z.infer<typeof sessionFileSchema>;
 
+const FLAT_WORKSPACE_ARTIFACT_NAMES = [
+  "brief.md",
+  "outline.md",
+  "research",
+  "slides",
+  "design",
+  "deck",
+  "history",
+  "transcripts",
+] as const;
+
 export class FileSessionStore {
   private data?: SessionFile;
   private writeQueue = Promise.resolve();
@@ -480,15 +491,17 @@ export class FileSessionStore {
 
     const workspaceRoot = normalizeWorkspacePath(project.rootPath);
     const sessionSandbox = getSessionSandboxPath(workspaceRoot, snapshot.session.id);
-    const briefAtRoot = join(workspaceRoot, "brief.md");
 
     let hasFlatArtifacts = false;
-    try {
-      await stat(briefAtRoot);
-      hasFlatArtifacts = true;
-    } catch (error) {
-      const code = (error as NodeJS.ErrnoException).code;
-      if (code !== "ENOENT") throw error;
+    for (const artifactName of FLAT_WORKSPACE_ARTIFACT_NAMES) {
+      try {
+        await stat(join(workspaceRoot, artifactName));
+        hasFlatArtifacts = true;
+        break;
+      } catch (error) {
+        const code = (error as NodeJS.ErrnoException).code;
+        if (code !== "ENOENT") throw error;
+      }
     }
 
     if (hasFlatArtifacts) {
@@ -789,16 +802,7 @@ async function migrateFlatWorkspaceArtifacts(workspaceRoot: string, sessionSandb
     "node_modules",
     ".git",
   ]);
-  const artifactNames = new Set([
-    "brief.md",
-    "outline.md",
-    "research",
-    "slides",
-    "design",
-    "deck",
-    "history",
-    "transcripts",
-  ]);
+  const artifactNames = new Set<string>(FLAT_WORKSPACE_ARTIFACT_NAMES);
 
   for (const entry of await readdir(workspaceRoot, { withFileTypes: true })) {
     if (reservedNames.has(entry.name) || !artifactNames.has(entry.name)) continue;

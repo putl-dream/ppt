@@ -126,3 +126,23 @@ export function createDefaultStoryboardSlide(title: string, index = 0): Storyboa
     status: "pending",
   });
 }
+
+export function isDefaultStoryboardContent(content: string): boolean {
+  try {
+    const slides = parseStoryboard(content);
+    if (slides.length !== 1) return false;
+
+    const slide = slides[0];
+    const title = slide.title.trim();
+    const layout = slide.layout ?? slide.suggestedLayout;
+    return title.length > 0
+      && slide.keyPoints.length === 1
+      && slide.keyPoints[0].trim() === title
+      && (slide.narrativeRole ?? "hook") === "hook"
+      && layout === "cover"
+      && !(slide.quote ?? "").trim()
+      && (slide.status ?? "pending") === "pending";
+  } catch {
+    return false;
+  }
+}

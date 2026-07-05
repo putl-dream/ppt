@@ -1,7 +1,12 @@
-import { access, constants } from "node:fs/promises";
+import { access, constants, readFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import { LAYOUT_PLAN_PATH } from "@shared/layout-plan";
+import {
+  isDefaultBriefMarkdown,
+  isDefaultOutlineMarkdown,
+} from "@shared/project-artifacts";
+import { isDefaultStoryboardContent } from "@shared/storyboard";
 
 export interface WorkspaceArtifacts {
   brief: boolean;
@@ -26,14 +31,35 @@ async function fileExists(path: string): Promise<boolean> {
   }
 }
 
+async function meaningfulMarkdownExists(
+  path: string,
+  isDefaultContent: (content: string) => boolean,
+): Promise<boolean> {
+  try {
+    const content = await readFile(path, "utf8");
+    return content.trim().length > 0 && !isDefaultContent(content);
+  } catch {
+    return false;
+  }
+}
+
+async function meaningfulStoryboardExists(path: string): Promise<boolean> {
+  try {
+    const content = await readFile(path, "utf8");
+    return content.trim().length > 0 && !isDefaultStoryboardContent(content);
+  } catch {
+    return false;
+  }
+}
+
 /** Probe workspace files — drives stage resolution, not message keywords. */
 export async function probeWorkspaceArtifacts(workspaceRoot?: string): Promise<WorkspaceArtifacts> {
   if (!workspaceRoot) return { ...EMPTY_ARTIFACTS };
 
   const [brief, outline, storyboard, layoutPlan] = await Promise.all([
-    fileExists(join(workspaceRoot, "brief.md")),
-    fileExists(join(workspaceRoot, "outline.md")),
-    fileExists(join(workspaceRoot, "slides/storyboard.json")),
+    meaningfulMarkdownExists(join(workspaceRoot, "brief.md"), isDefaultBriefMarkdown),
+    meaningfulMarkdownExists(join(workspaceRoot, "outline.md"), isDefaultOutlineMarkdown),
+    meaningfulStoryboardExists(join(workspaceRoot, "slides/storyboard.json")),
     fileExists(join(workspaceRoot, LAYOUT_PLAN_PATH)),
   ]);
 

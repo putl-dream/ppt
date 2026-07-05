@@ -2081,8 +2081,11 @@ aside {
 
 .process-trace-panel-body--preview {
   max-height: 120px;
-  overflow: hidden;
-  mask-image: linear-gradient(to bottom, #000 70%, transparent 100%);
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb-color) transparent;
 }
 
 .process-trace-panel-body--revealed {

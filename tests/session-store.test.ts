@@ -642,4 +642,39 @@ describe("FileSessionStore", () => {
         .sessions,
     ).toHaveLength(1);
   });
+
+  it("preserves root-level outline when migrating a flat workspace sandbox", async () => {
+    const { store, filePath } = await createStoreWithSession();
+    const workspaceDir = await mkdtemp(join(tmpdir(), "agent-ppt-flat-outline-"));
+    temporaryDirectories.push(workspaceDir);
+    const snapshot = store.getBootstrap().activeSession;
+    if (!snapshot?.project) throw new Error("Expected initialized session project.");
+    const sessionId = snapshot.session.id;
+
+    await writeFile(
+      join(workspaceDir, "outline.md"),
+      "# 演示大纲\n\n## 1. 根目录旧大纲 [预计 1 页]\n- 应迁移到独立沙箱\n",
+      "utf8",
+    );
+    snapshot.session.workspacePath = workspaceDir;
+    snapshot.project.rootPath = workspaceDir;
+    await writeFile(
+      filePath,
+      `${JSON.stringify({
+        version: 1,
+        activeSessionId: sessionId,
+        sessions: [snapshot],
+      })}\n`,
+      "utf8",
+    );
+
+    const restored = new FileSessionStore(filePath);
+    await restored.initialize();
+    const migrated = restored.getSession(sessionId);
+    const sessionSandbox = getSessionSandboxPath(workspaceDir, sessionId);
+    const normalize = (value: string) => value.replace(/\\/g, "/").toLowerCase();
+
+    expect(normalize(migrated.project?.rootPath ?? "")).toBe(normalize(sessionSandbox));
+    expect(await readFile(join(sessionSandbox, "outline.md"), "utf8")).toContain("根目录旧大纲");
+  });
 });

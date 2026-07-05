@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { AgentActivityItem } from "@shared/agent-activity";
 import { isProcessTraceActive, summarizeProcessTrace } from "@shared/agent-activity";
 import { ChevronDownIcon, ChevronRightIcon } from "./Icons";
@@ -15,37 +15,54 @@ export const ProcessTracePanel: React.FC<ProcessTracePanelProps> = ({
   live = false,
 }) => {
   const isActive = live && isProcessTraceActive(items);
-  const [open, setOpen] = useState(isActive);
+  const [open, setOpen] = useState(live && items.length > 0);
   const [revealed, setRevealed] = useState(false);
+  const bodyRef = useRef<HTMLDivElement | null>(null);
+  const userRevealedRef = useRef(false);
+  const wasLiveRef = useRef(live);
 
   useEffect(() => {
-    if (isActive) {
+    const wasLive = wasLiveRef.current;
+
+    if (live) {
+      if (!wasLive) {
+        userRevealedRef.current = false;
+        setRevealed(false);
+      }
       setOpen(true);
-      setRevealed(false);
-      return;
-    }
-    if (!live) {
+    } else if (!userRevealedRef.current) {
       setOpen(false);
       setRevealed(false);
     }
-  }, [isActive, live]);
+
+    wasLiveRef.current = live;
+  }, [live]);
 
   const rows = useMemo(() => buildProcessTraceRows(items, live), [items, live]);
+
+  useLayoutEffect(() => {
+    if (!open || revealed) return;
+    const body = bodyRef.current;
+    if (!body) return;
+    body.scrollTop = body.scrollHeight;
+  }, [open, revealed, rows]);
 
   if (items.length === 0) return null;
 
   const headerLabel = isActive ? "思考与执行中…" : summarizeProcessTrace(items);
 
+  const revealPanel = useCallback(() => {
+    userRevealedRef.current = true;
+    setOpen(true);
+    setRevealed(true);
+  }, []);
+
   const handleHeaderClick = () => {
-    if (!open) {
-      setOpen(true);
-      setRevealed(true);
+    if (!open || !revealed) {
+      revealPanel();
       return;
     }
-    if (!revealed) {
-      setRevealed(true);
-      return;
-    }
+
     setOpen(false);
     setRevealed(false);
   };
@@ -70,9 +87,15 @@ export const ProcessTracePanel: React.FC<ProcessTracePanelProps> = ({
         {open && revealed ? <ChevronDownIcon size={12} /> : <ChevronRightIcon size={12} />}
       </button>
       {open && (
-        <div className={bodyClassName}>
+        <div ref={bodyRef} className={bodyClassName}>
           {rows.map((row) => (
-            <ProcessTraceItem key={row.id} row={row} />
+            <ProcessTraceItem
+              key={row.id}
+              row={row}
+              defaultExpanded
+              panelRevealed={revealed}
+              onRequestPanelReveal={revealPanel}
+            />
           ))}
         </div>
       )}
