@@ -231,6 +231,7 @@ export class AgentRuntime {
       const modelResult = await callModelWithRecovery({
         gateway: this.gateway,
         systemPrompt,
+        responseContract: "agent-protocol",
         promptPayload,
         model: options.model,
         workspaceRoot: options.workspaceRoot,
@@ -314,21 +315,25 @@ export class AgentRuntime {
         try {
           parsed = parseAgentJsonResponse(responseText);
         } catch (error) {
+          const guidance = buildAgentJsonRetryMessage(error);
           transcript.push({
             role: "assistant",
             raw: responseText.slice(0, 2_000),
-            error: buildAgentJsonRetryMessage(error),
+            error: guidance,
           });
+          transcript.push({ role: "user", content: guidance });
           continue;
         }
         try {
           envelope = normalizeAgentProtocolObject(parsed);
         } catch (error) {
+          const guidance = buildAgentJsonRetryMessage(error, parsed);
           transcript.push({
             role: "assistant",
             response: parsed,
-            error: error instanceof Error ? error.message : String(error),
+            error: guidance,
           });
+          transcript.push({ role: "user", content: guidance });
           continue;
         }
       }

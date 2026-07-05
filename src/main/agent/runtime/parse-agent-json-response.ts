@@ -1,11 +1,14 @@
 export const AGENT_JSON_MISSING_TYPE_GUIDANCE =
-  'Return exactly one complete JSON object with a "type" field. '
+  'Return exactly one complete JSON object with a root "type" field and no surrounding prose. '
   + 'For assistant text, use {"kind":"text","format":"markdown","type":"assistant.message","data":{"content":"..."}}. '
   + 'For tool or action responses, use "tool.call", "assistant.ask_user", or "deck.command_proposal" and put payload fields under "data". '
-  + "Do not include other JSON examples or code snippets before the response object.";
+  + "Do not include other JSON examples or code snippets before the response object. "
+  + "Do not apologize, explain the correction, or wrap the object in a Markdown code fence.";
 
 export const AGENT_JSON_PARSE_FAILURE_GUIDANCE =
-  "Return exactly one complete JSON envelope.";
+  "Return exactly one complete JSON envelope and nothing else. "
+  + "Do not include apologies, reasoning text, Markdown fences, headings, or prose outside the JSON object. "
+  + "If the answer is Markdown, put it only in data.content as a JSON string.";
 
 export type AgentResponseConsumer = "structured" | "text";
 
@@ -121,5 +124,5 @@ export function buildAgentJsonRetryMessage(
     return `${AGENT_JSON_MISSING_TYPE_GUIDANCE}`;
   }
   const base = error instanceof Error ? error.message : "Invalid JSON response.";
-  return `${base} ${AGENT_JSON_PARSE_FAILURE_GUIDANCE}`;
+  return `${base} ${AGENT_JSON_PARSE_FAILURE_GUIDANCE} ${AGENT_JSON_MISSING_TYPE_GUIDANCE}`;
 }

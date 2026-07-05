@@ -1220,14 +1220,30 @@ export function App() {
         }
         triggerToast("会话已中断");
       } else {
-        setChatMessages((prev) => [
-          ...prev,
-          {
-            id: crypto.randomUUID(),
-            role: "assistant",
-            content: `执行指令时发生错误：${errorMessage}`,
-          },
-        ]);
+        const runMessageId = streamMessageIdsRef.current.get(runId);
+        const failedTrace = markTraceComplete(activeRunTraceRef.current);
+        const content = `执行指令时发生错误：${errorMessage}`;
+        if (runMessageId) {
+          setChatMessages((prev) => prev.map((message) =>
+            message.id === runMessageId
+              ? {
+                  ...message,
+                  content,
+                  activityTrace: failedTrace.length > 0 ? failedTrace : message.activityTrace,
+                }
+              : message,
+          ));
+        } else {
+          setChatMessages((prev) => [
+            ...prev,
+            {
+              id: crypto.randomUUID(),
+              role: "assistant",
+              content,
+              activityTrace: failedTrace.length > 0 ? failedTrace : undefined,
+            },
+          ]);
+        }
       }
     } finally {
       activeRunIdRef.current = null;

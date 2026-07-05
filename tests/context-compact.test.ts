@@ -115,8 +115,10 @@ describe("tool_result_budget", () => {
 describe("compact_history", () => {
   it("archives transcript and replaces active context with summary", async () => {
     const workspaceRoot = await createWorkspace();
+    let responseContract: string | undefined;
     const gateway: AgentModelGateway = {
-      async generateText() {
+      async generateText(request) {
+        responseContract = request.responseContract;
         return {
           provider: "openai",
           model: "gpt",
@@ -145,6 +147,7 @@ describe("compact_history", () => {
     });
 
     expect(result.skipped).toBe(false);
+    expect(responseContract).toBe("markdown-summary");
     expect(result.savedPath).toContain("thread-1-");
     expect(result.savedPath).toContain(".transcripts");
     expect(result.payload.transcript[0]).toMatchObject({

@@ -6,6 +6,7 @@ import type {
   AgentModelStreamChunk,
   AgentModelThinkingBlock,
   AgentModelToolCall,
+  AgentResponseContract,
   AgentToolSchema,
 } from "../gateway/types";
 import { resolveFallbackModelSelection } from "../gateway/config";
@@ -41,6 +42,7 @@ export interface ModelPromptPayload {
 export interface ModelCallRecoveryOptions {
   gateway: AgentModelGateway;
   systemPrompt: string;
+  responseContract?: AgentResponseContract;
   promptPayload: ModelPromptPayload;
   model?: AgentModelSelection;
   workspaceRoot?: string;
@@ -103,6 +105,7 @@ async function invokeGateway(
     prompt: string;
     signal?: AbortSignal;
     maxOutputTokens?: number;
+    responseContract?: AgentResponseContract;
     tools?: AgentToolSchema[];
     messages?: AgentModelMessage[];
   },
@@ -198,6 +201,7 @@ export async function callModelWithRecovery(
         options.gateway,
         {
           systemPrompt: options.systemPrompt,
+          responseContract: options.responseContract,
           prompt,
           signal: options.signal,
           maxOutputTokens,

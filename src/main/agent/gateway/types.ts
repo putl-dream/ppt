@@ -1,5 +1,7 @@
 import type { AgentModelSelection, AgentProvider } from "@shared/agent";
 
+export type AgentResponseContract = "agent-protocol" | "markdown-summary" | "none";
+
 /**
  * 原生 tool-use 的工具声明。inputSchema 为标准 JSON Schema（由 zod 转换而来），
  * 直接透传给 provider 的 tools 字段。
@@ -67,6 +69,12 @@ export interface AgentModelToolResult {
 export interface AgentModelRequest {
   prompt: string;
   systemPrompt?: string;
+  /**
+   * Output contract for the provider request. Runtime prompts may already
+   * include the contract text; adapters still apply this as a final guard when
+   * a specialized call uses a shorter system prompt.
+   */
+  responseContract?: AgentResponseContract;
   signal?: AbortSignal;
   /** Per-request override; used by output-truncation recovery. */
   maxOutputTokens?: number;

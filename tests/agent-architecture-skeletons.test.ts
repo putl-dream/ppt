@@ -37,12 +37,15 @@ import { LayoutPolicy } from "../src/main/agent/design/layout-policy";
 import { AgentService } from "../src/main/agent/service";
 import { createStarterPresentation } from "../src/shared/presentation";
 import { CommandBus } from "../src/shared/commands";
-import { AgentGatewayError, type AgentModelGateway } from "../src/main/agent/gateway";
+import { AgentGatewayError, type AgentModelGateway, type AgentModelRequest } from "../src/main/agent/gateway";
 
-function createSequenceGateway(responses: unknown[]): AgentModelGateway {
+function createSequenceGateway(responses: unknown[]): AgentModelGateway & { requests: AgentModelRequest[] } {
   let index = 0;
+  const requests: AgentModelRequest[] = [];
   return {
-    async generateText() {
+    requests,
+    async generateText(request) {
+      requests.push(request);
       const value = responses[index++];
       if (value === undefined) throw new Error("Unexpected gateway call");
       if (value instanceof Error) throw value;
@@ -52,7 +55,8 @@ function createSequenceGateway(responses: unknown[]): AgentModelGateway {
         text: typeof value === "string" ? value : JSON.stringify(value),
       };
     },
-    async *generateTextStream() {
+    async *generateTextStream(request) {
+      requests.push(request);
       const value = responses[index++];
       if (value === undefined) throw new Error("Unexpected gateway call");
       if (value instanceof Error) throw value;
@@ -124,6 +128,42 @@ describe("Agent Architecture Skeletons & Types", () => {
 
   it("rejects output with no agent protocol object", () => {
     expect(() => parseAgentJsonResponse('{"foo":"bar"}')).toThrow(/type/i);
+  });
+
+  it("feeds explicit JSON retry guidance after malformed text output", async () => {
+    const gateway = createSequenceGateway([
+      "## 结论\n\n可以先这样理解。",
+      modelMessage("可以先这样理解。"),
+    ]);
+    const runtime = new AgentRuntime(new ToolRegistry(), gateway);
+
+    const result = await runtime.run({
+      threadId: "json-retry-thread",
+      request: "先不做 PPT，解释一下这个概念",
+      presentationSnapshot: createStarterPresentation(),
+      selectedElementIds: [],
+      maxSteps: 2,
+    });
+
+    expect(result).toEqual({
+      kind: "text",
+      format: "markdown",
+      type: "assistant.message",
+      data: { content: "可以先这样理解。" },
+    });
+    expect(gateway.requests).toHaveLength(2);
+    expect(gateway.requests[0]!.responseContract).toBe("agent-protocol");
+
+    const retryPrompt = JSON.parse(gateway.requests[1]!.prompt);
+    expect(retryPrompt.transcript).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          role: "user",
+          content: expect.stringContaining("Do not apologize"),
+        }),
+      ]),
+    );
+    expect(JSON.stringify(retryPrompt.transcript)).toContain("Return exactly one complete JSON envelope");
   });
 
   it("creates the production registry with Core and Deferred Tools", () => {

@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { AgentGatewayError, normalizeProviderError } from "./errors";
+import { applyResponseContract } from "./response-contract";
 import type {
   AgentModelImageBlock,
   AgentModelMessage,
@@ -172,12 +173,14 @@ export async function generateWithAnthropic(
   });
 
   try {
+    const systemPrompt = applyResponseContract(request.systemPrompt, request.responseContract);
+
     // 原生 tool-use 分支：提供 tools 时透传，用结构化 messages 承载多轮对话。
     if (request.tools?.length) {
       const response = await client.messages.create({
         model: config.model,
         max_tokens: request.maxOutputTokens ?? config.maxOutputTokens,
-        system: request.systemPrompt,
+        system: systemPrompt,
         messages: request.messages
           ? toAnthropicMessages(request.messages)
           : [{ role: "user", content: request.prompt }],
@@ -213,7 +216,7 @@ export async function generateWithAnthropic(
     let response = await client.messages.create({
       model: config.model,
       max_tokens: maxTokens,
-      system: request.systemPrompt,
+      system: systemPrompt,
       messages: [{ role: "user", content: request.prompt }],
     }, { signal: request.signal });
     let text = extractResponseText(response);
@@ -225,7 +228,7 @@ export async function generateWithAnthropic(
       response = await client.messages.create({
         model: config.model,
         max_tokens: maxTokens,
-        system: request.systemPrompt,
+        system: systemPrompt,
         messages: [{ role: "user", content: request.prompt }],
       }, { signal: request.signal });
       text = extractResponseText(response);
@@ -271,10 +274,11 @@ export async function* generateStreamWithAnthropic(
 
   try {
     const useTools = Boolean(request.tools?.length);
+    const systemPrompt = applyResponseContract(request.systemPrompt, request.responseContract);
     const stream = client.messages.stream({
       model: config.model,
       max_tokens: request.maxOutputTokens ?? config.maxOutputTokens,
-      system: request.systemPrompt,
+      system: systemPrompt,
       messages: useTools && request.messages
         ? toAnthropicMessages(request.messages)
         : [{ role: "user", content: request.prompt }],

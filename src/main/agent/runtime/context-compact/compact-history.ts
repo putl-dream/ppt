@@ -68,6 +68,7 @@ async function requestHistorySummary(
   const response = await gateway.generateText(
     {
       systemPrompt: SUMMARY_SYSTEM_PROMPT,
+      responseContract: "markdown-summary",
       prompt: JSON.stringify({
         instruction: "Summarize this agent session history for continuation.",
         request: payload.request ?? payload.task,

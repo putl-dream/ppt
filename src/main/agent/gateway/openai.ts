@@ -1,5 +1,6 @@
 import OpenAI from "openai";
 import { AgentGatewayError, normalizeProviderError } from "./errors";
+import { applyResponseContract } from "./response-contract";
 import type {
   AgentModelImageBlock,
   AgentModelMessage,
@@ -129,6 +130,7 @@ export async function generateWithOpenAI(
 
     const maxOutputTokens = request.maxOutputTokens ?? config.maxOutputTokens;
     let toolCalls: AgentModelToolCall[] = [];
+    const systemPrompt = applyResponseContract(request.systemPrompt, request.responseContract);
 
     // 原生 tool-use：Responses 模式的 tool schema 结构差异较大，统一走
     // Chat Completions 承载 tool-use，纯文本仍按配置模式。
@@ -136,8 +138,8 @@ export async function generateWithOpenAI(
       const response = await client.chat.completions.create({
         model: config.model,
         messages: [
-          ...(request.systemPrompt
-            ? [{ role: "system" as const, content: request.systemPrompt }]
+          ...(systemPrompt
+            ? [{ role: "system" as const, content: systemPrompt }]
             : []),
           ...(request.messages
             ? toChatMessages(request.messages)
@@ -175,7 +177,7 @@ export async function generateWithOpenAI(
     if (mode === "responses") {
       const response = await client.responses.create({
         model: config.model,
-        instructions: request.systemPrompt,
+        instructions: systemPrompt,
         input: request.prompt,
         max_output_tokens: maxOutputTokens,
       }, { signal: request.signal });
@@ -185,8 +187,8 @@ export async function generateWithOpenAI(
       const response = await client.chat.completions.create({
         model: config.model,
         messages: [
-          ...(request.systemPrompt
-            ? [{ role: "system" as const, content: request.systemPrompt }]
+          ...(systemPrompt
+            ? [{ role: "system" as const, content: systemPrompt }]
             : []),
           { role: "user", content: request.prompt },
         ],
@@ -229,6 +231,7 @@ export async function* generateStreamWithOpenAI(
 
   try {
     const mode = config.openaiApiMode ?? "responses";
+    const systemPrompt = applyResponseContract(request.systemPrompt, request.responseContract);
 
     // 原生 tool-use 走非流式（tool_calls 的增量拼接不适合逐块回显），
     // 一次性拿到结果后按 chunk 形态回吐，工具调用挂在 complete chunk。
@@ -256,8 +259,8 @@ export async function* generateStreamWithOpenAI(
       const stream = await client.chat.completions.create({
         model: config.model,
         messages: [
-          ...(request.systemPrompt
-            ? [{ role: "system" as const, content: request.systemPrompt }]
+          ...(systemPrompt
+            ? [{ role: "system" as const, content: systemPrompt }]
             : []),
           { role: "user", content: request.prompt },
         ],

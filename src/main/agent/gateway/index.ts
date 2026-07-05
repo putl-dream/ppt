@@ -153,5 +153,11 @@ export class AgentGateway implements AgentModelGateway {
   }
 }
 
-export type { AgentModelGateway, AgentModelRequest, AgentModelResponse, AgentModelStreamChunk } from "./types";
+export type {
+  AgentModelGateway,
+  AgentModelRequest,
+  AgentModelResponse,
+  AgentModelStreamChunk,
+  AgentResponseContract,
+} from "./types";
 export { AgentGatewayError } from "./errors";

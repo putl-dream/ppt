@@ -6,8 +6,9 @@ import type { PromptStage } from "./prompt-stage";
 import { describePromptStage } from "./prompt-stage";
 import { filterSkillCatalogForStage } from "./skill-stage-policy";
 import type { SkillRegistry } from "../skills/loadSkillsDir";
+import { buildAgentProtocolResponseContract } from "../gateway/response-contract";
 
-export type PromptSectionId = "identity" | "tools" | "workspace" | "memory";
+export type PromptSectionId = "identity" | "responseProtocol" | "tools" | "workspace" | "memory";
 
 export type PromptSectionLoadPolicy = "always" | "conditional";
 export type PromptSectionCacheScope = "global" | null;
@@ -20,6 +21,7 @@ export interface PromptSectionDef {
 
 export const PROMPT_SECTION_DEFS: Record<PromptSectionId, PromptSectionDef> = {
   identity: { id: "identity", loadPolicy: "always", cacheScope: "global" },
+  responseProtocol: { id: "responseProtocol", loadPolicy: "always", cacheScope: "global" },
   tools: { id: "tools", loadPolicy: "always", cacheScope: "global" },
   workspace: { id: "workspace", loadPolicy: "always", cacheScope: null },
   memory: { id: "memory", loadPolicy: "conditional", cacheScope: null },
@@ -42,6 +44,9 @@ const WORKSPACE_FILES_LAYOUT = [
 export interface IdentitySectionInput {
   stage: PromptStage;
   stepLimits?: AgentStepLimits;
+}
+
+export interface ResponseProtocolSectionInput {
   requiredOutcome?: "any" | "command_proposal";
 }
 
@@ -262,20 +267,13 @@ function buildWorkflowSnippet(stage: PromptStage): string {
 }
 
 export function buildIdentitySection(input: IdentitySectionInput): string {
-  const outcomeBlock = buildRequiredOutcomeBlock(input.requiredOutcome);
-
   return `${buildCorePrinciples(input.stage, input.stepLimits)}
-${buildWorkflowSnippet(input.stage)}
-## 响应协议
+${buildWorkflowSnippet(input.stage)}`;
+}
 
-每次响应必须严格返回一个 JSON 对象，不要 Markdown 代码块包裹，不要在对象前后追加解释。
-
-- 普通最终回复：必须使用完整文本 envelope：{"kind":"text","format":"markdown","type":"assistant.message","data":{"content":"Markdown 内容"}}
-- \`format: "markdown"\` 表示 \`data.content\` 的渲染格式；Markdown 只能放在 content 字符串里，不能直接裸返回。
-- 调用工具：{"type":"tool.call","data":{"toolName":"ToolName","args":{}}}
-- 请求用户补充：必须调用 AskUser 工具，例如 {"type":"tool.call","data":{"toolName":"AskUser","args":{"message":"...","missingFields":["..."]}}}
-- 提交幻灯片修改：必须调用 SubmitCommands
-${outcomeBlock ? `\n${outcomeBlock}` : ""}`;
+export function buildResponseProtocolSection(input: ResponseProtocolSectionInput): string {
+  const outcomeBlock = buildRequiredOutcomeBlock(input.requiredOutcome);
+  return `${buildAgentProtocolResponseContract()}${outcomeBlock ? `\n\n${outcomeBlock}` : ""}`;
 }
 
 export function buildToolsSection(input: ToolsSectionInput): string {

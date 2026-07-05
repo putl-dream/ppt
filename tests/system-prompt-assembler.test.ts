@@ -62,7 +62,7 @@ describe("system prompt assembly", () => {
     const assembled = assembleSystemPrompt(baseContext());
     const ids = assembled.sections.map((section) => section.id);
 
-    expect(ids).toEqual(["identity", "tools", "workspace"]);
+    expect(ids).toEqual(["identity", "responseProtocol", "tools", "workspace"]);
     expect(assembled.text).toContain("PPT 智能助手");
     expect(assembled.text).toContain("AskUser");
     expect(assembled.text).toContain("工作目录: /tmp/project");
@@ -133,10 +133,22 @@ describe("system prompt assembly", () => {
   it("documents structured JSON actions and text envelopes", () => {
     const assembled = assembleSystemPrompt(baseContext({ stage: "discover" }));
 
-    expect(assembled.text).toContain("每次响应必须严格返回一个 JSON 对象");
+    expect(assembled.text).toContain("每次主 Agent 响应必须严格返回一个 JSON 对象");
+    expect(assembled.text).toContain("RESPONSE_CONTRACT:agent-protocol");
     expect(assembled.text).toContain('"kind":"text","format":"markdown","type":"assistant.message"');
     expect(assembled.text).toContain("Markdown 只能放在 content 字符串里");
     expect(assembled.text).toContain("请求用户补充：必须调用 AskUser 工具");
+  });
+
+  it("keeps the response protocol in the stable prompt prefix", () => {
+    const assembled = assembleSystemPrompt(baseContext({
+      memories: "记住：封面用 hero",
+    }));
+    const split = splitSystemPromptPrefix(assembled.text);
+
+    expect(split.staticPrefix).toContain("RESPONSE_CONTRACT:agent-protocol");
+    expect(split.staticPrefix).toContain("## Core Tools");
+    expect(split.dynamicSuffix).not.toContain("RESPONSE_CONTRACT:agent-protocol");
   });
 
   it("loads memory section only when MEMORY.md has content", async () => {

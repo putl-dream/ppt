@@ -4,6 +4,7 @@ import {
   SYSTEM_PROMPT_DYNAMIC_BOUNDARY,
   buildIdentitySection,
   buildMemorySection,
+  buildResponseProtocolSection,
   buildToolsSection,
   buildWorkspaceSection,
 } from "./prompt-sections";
@@ -58,6 +59,9 @@ export function assembleSystemPrompt(context: SystemPromptContext): AssembledSys
   push("identity", buildIdentitySection({
     stage: context.stage,
     stepLimits: context.stepLimits,
+  }));
+
+  push("responseProtocol", buildResponseProtocolSection({
     requiredOutcome: context.requiredOutcome,
   }));
 

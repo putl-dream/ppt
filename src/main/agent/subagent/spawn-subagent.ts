@@ -65,6 +65,7 @@ async function generateSubAgentResponse(
   const result = await callModelWithRecovery({
     gateway: options.gateway,
     systemPrompt,
+    responseContract: "agent-protocol",
     promptPayload: {
       task: options.description,
       transcript,
