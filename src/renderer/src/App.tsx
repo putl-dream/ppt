@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   AgentApprovalRequest,
   AgentRunRequest,
@@ -47,6 +47,7 @@ import {
   DEFAULT_MODELS,
   MODEL_STORAGE_KEY,
   SELECTED_MODEL_STORAGE_KEY,
+  isModelEnabled,
   loadManagedModels,
   toAgentModelSettings,
   type ManagedModel,
@@ -82,6 +83,31 @@ import {
 } from "@shared/agent-activity";
 
 type ChatMessage = SessionChatMessage;
+
+const UI_SETTINGS_STORAGE_KEY = "agent-ppt.ui-settings.v1";
+
+interface PersistedUiSettings {
+  autoDownload: boolean;
+  autoCloudSync: boolean;
+  defaultRatio: "16:9" | "4:3";
+  themeMode: "light" | "dark" | "system";
+  borderRadiusScale: number;
+  colorContrastOffset: number;
+  selectedTheme: string;
+  selectedPalette: string;
+  logoUrl: string | null;
+}
+
+function loadPersistedUiSettings(): Partial<PersistedUiSettings> {
+  try {
+    const stored = window.localStorage.getItem(UI_SETTINGS_STORAGE_KEY);
+    if (!stored) return {};
+    const parsed = JSON.parse(stored) as Partial<PersistedUiSettings>;
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
 
 function findActiveThreadId(messages: ChatMessage[]): string | undefined {
   return findRecoverableConversation(messages)?.threadId;
@@ -168,42 +194,57 @@ export function App() {
   // 双模态同构布局模式控制
   const [activeMode, setActiveMode] = useState<"workspace" | "settings">("workspace");
   const [settingsCategory, setSettingsCategory] = useState<"profile" | "models" | "workflow" | "appearance">("profile");
+  const [persistedUiSettings] = useState(loadPersistedUiSettings);
 
   // 常规设置：常规/工作流与文件系统
-  const [autoDownload, setAutoDownload] = useState(true);
-  const [autoCloudSync, setAutoCloudSync] = useState(false);
+  const [autoDownload, setAutoDownload] = useState(() => persistedUiSettings.autoDownload ?? true);
+  const [autoCloudSync, setAutoCloudSync] = useState(() => persistedUiSettings.autoCloudSync ?? false);
   const [workspacePath, setWorkspacePath] = useState("");
   /** @deprecated 与 workspacePath 同步，供 UnifiedAgentInput 等遗留组件使用 */
   const [localStoragePath, setLocalStoragePath] = useState("");
-  const [defaultRatio, setDefaultRatio] = useState<"16:9" | "4:3">("16:9");
+  const [defaultRatio, setDefaultRatio] = useState<"16:9" | "4:3">(
+    () => persistedUiSettings.defaultRatio === "4:3" ? "4:3" : "16:9",
+  );
   const [agentStepLimits, setAgentStepLimits] = useState<AgentStepLimits>(loadAgentStepLimits);
   const [agentGatewayPreferences, setAgentGatewayPreferences] = useState<AgentGatewayPreferences>(
     loadAgentGatewayPreferences,
   );
 
   // 外观定制与视效控制阀
-  const [themeMode, setThemeMode] = useState<"light" | "dark" | "system">("light");
-  const [borderRadiusScale, setBorderRadiusScale] = useState(1.0);
-  const [colorContrastOffset, setColorContrastOffset] = useState(0);
+  const [themeMode, setThemeMode] = useState<"light" | "dark" | "system">(() => {
+    const mode = persistedUiSettings.themeMode;
+    return mode === "dark" || mode === "system" ? mode : "light";
+  });
+  const [borderRadiusScale, setBorderRadiusScale] = useState(() =>
+    typeof persistedUiSettings.borderRadiusScale === "number" ? persistedUiSettings.borderRadiusScale : 1.0,
+  );
+  const [colorContrastOffset, setColorContrastOffset] = useState(() =>
+    typeof persistedUiSettings.colorContrastOffset === "number" ? persistedUiSettings.colorContrastOffset : 0,
+  );
   const [computedTheme, setComputedTheme] = useState<"light" | "dark">("light");
 
   // 编排属性
-  const [selectedTheme, setSelectedTheme] = useState<string>("nordic");
-  const [selectedPalette, setSelectedPalette] = useState<string>("cyan");
-  const [logoUrl, setLogoUrl] = useState<string | null>(null);
+  const [selectedTheme, setSelectedTheme] = useState<string>(() => persistedUiSettings.selectedTheme ?? "nordic");
+  const [selectedPalette, setSelectedPalette] = useState<string>(() => persistedUiSettings.selectedPalette ?? "cyan");
+  const [logoUrl, setLogoUrl] = useState<string | null>(() => persistedUiSettings.logoUrl ?? null);
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [models, setModels] = useState<ManagedModel[]>(loadManagedModels);
   const [selectedModelId, setSelectedModelId] = useState(
     () => window.localStorage.getItem(SELECTED_MODEL_STORAGE_KEY) ?? DEFAULT_MODELS[0].id,
   );
-  const selectedModel = models.find((model) => model.id === selectedModelId) ?? models[0];
+  const enabledModels = useMemo(() => models.filter(isModelEnabled), [models]);
+  const visibleModels = useMemo(
+    () => (enabledModels.length > 0 ? enabledModels : models),
+    [enabledModels, models],
+  );
+  const selectedModel = visibleModels.find((model) => model.id === selectedModelId) ?? visibleModels[0];
 
   useEffect(() => {
     window.localStorage.setItem(MODEL_STORAGE_KEY, JSON.stringify(models));
-    if (!models.some((model) => model.id === selectedModelId) && models[0]) {
-      setSelectedModelId(models[0].id);
+    if (!visibleModels.some((model) => model.id === selectedModelId) && visibleModels[0]) {
+      setSelectedModelId(visibleModels[0].id);
     }
-  }, [models, selectedModelId]);
+  }, [models, selectedModelId, visibleModels]);
 
   useEffect(() => {
     window.localStorage.setItem(SELECTED_MODEL_STORAGE_KEY, selectedModelId);
@@ -217,6 +258,30 @@ export function App() {
     saveAgentGatewayPreferences(agentGatewayPreferences);
   }, [agentGatewayPreferences]);
 
+  useEffect(() => {
+    window.localStorage.setItem(UI_SETTINGS_STORAGE_KEY, JSON.stringify({
+      autoDownload,
+      autoCloudSync,
+      defaultRatio,
+      themeMode,
+      borderRadiusScale,
+      colorContrastOffset,
+      selectedTheme,
+      selectedPalette,
+      logoUrl,
+    }));
+  }, [
+    autoDownload,
+    autoCloudSync,
+    defaultRatio,
+    themeMode,
+    borderRadiusScale,
+    colorContrastOffset,
+    selectedTheme,
+    selectedPalette,
+    logoUrl,
+  ]);
+
   const handleSaveModel = (model: ManagedModel) => {
     setModels((current) => {
       const exists = current.some((item) => item.id === model.id);
@@ -229,7 +294,7 @@ export function App() {
   const handleDeleteModel = (id: string) => {
     setModels((current) => current.filter((model) => model.id !== id));
     if (selectedModelId === id) {
-      const fallback = models.find((model) => model.id !== id);
+      const fallback = models.find((model) => model.id !== id && isModelEnabled(model));
       if (fallback) setSelectedModelId(fallback.id);
     }
   };
@@ -1173,7 +1238,7 @@ export function App() {
           toSessionChatMessages(forkedMessages),
         );
       }
-      const gatewayConfig = buildAgentGatewayConfig(agentGatewayPreferences, models);
+      const gatewayConfig = buildAgentGatewayConfig(agentGatewayPreferences, enabledModels);
       const modelSettings = selectedModel ? toAgentModelSettings(selectedModel) : undefined;
       const activeThreadId = findActiveThreadId(forkedMessages ?? chatMessages);
       const result = activeThreadId
@@ -1901,7 +1966,7 @@ export function App() {
                   onClearContextTag={() => setSelectedSlideId("")}
                   onUpdateMessageContent={handleUpdateMessageContent}
                   onProposePrompt={handleSuggestPrompt}
-                  models={models}
+                  models={visibleModels}
                   selectedModelId={selectedModelId}
                   setSelectedModelId={setSelectedModelId}
                   localStoragePath={localStoragePath}
@@ -1984,7 +2049,6 @@ export function App() {
                 setBorderRadiusScale={setBorderRadiusScale}
                 colorContrastOffset={colorContrastOffset}
                 setColorContrastOffset={setColorContrastOffset}
-                onBackToWorkspace={() => setActiveMode("workspace")}
                 triggerToast={triggerToast}
               />
             </div>

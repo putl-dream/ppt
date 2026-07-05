@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useMemo, useState, type KeyboardEvent } from "react";
 import type { ManagedModel } from "../modelCatalog";
-import { PlusIcon, TrashIcon } from "./Icons";
+import { isModelEnabled } from "../modelCatalog";
+import { ChevronRightIcon, KeyIcon, RefreshIcon, TrashIcon } from "./Icons";
 
 interface ModelManagementProps {
   models: ManagedModel[];
@@ -11,15 +12,24 @@ interface ModelManagementProps {
   triggerToast: (message: string) => void;
 }
 
-function createDraft(): ManagedModel {
+function slugifyModelName(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "") || "custom-model";
+}
+
+function createDraft(name: string): ManagedModel {
   return {
     id: `custom-${crypto.randomUUID()}`,
-    name: "",
+    name,
     provider: "openai",
-    model: "",
+    model: slugifyModelName(name),
     apiKey: "",
     baseURL: "",
     openaiApiMode: "chat-completions",
+    enabled: true,
   };
 }
 
@@ -31,156 +41,248 @@ export function ModelManagement({
   onDeleteModel,
   triggerToast,
 }: ModelManagementProps) {
-  const [editingId, setEditingId] = useState(models[0]?.id ?? "");
-  const [draft, setDraft] = useState<ManagedModel>(models[0] ?? createDraft());
-  const [showApiKey, setShowApiKey] = useState(false);
+  const [query, setQuery] = useState("");
+  const [apiKeysOpen, setApiKeysOpen] = useState(false);
 
-  useEffect(() => {
-    const model = models.find((item) => item.id === editingId);
-    if (model) setDraft({ ...model });
-  }, [editingId, models]);
+  const filteredModels = useMemo(() => {
+    const normalizedQuery = query.trim().toLowerCase();
+    if (!normalizedQuery) return models;
+    return models.filter((model) => {
+      return `${model.name} ${model.model}`.toLowerCase().includes(normalizedQuery);
+    });
+  }, [models, query]);
 
-  const beginCreate = () => {
-    const next = createDraft();
-    setEditingId(next.id);
-    setDraft(next);
-    setShowApiKey(false);
+  const selectedModel = models.find((model) => model.id === selectedModelId) ?? models[0];
+  const enabledCount = models.filter(isModelEnabled).length;
+
+  const updateModel = (model: ManagedModel, patch: Partial<ManagedModel>) => {
+    const next = { ...model, ...patch };
+    onSaveModel(next);
+    if (next.enabled !== false && selectedModelId === model.id) {
+      onSelectModel(next.id);
+    }
   };
 
-  const save = (): ManagedModel | undefined => {
-    if (!draft.name.trim() || !draft.model.trim()) {
-      triggerToast("请填写模型名称和模型标识");
+  const toggleModel = (model: ManagedModel) => {
+    const nextEnabled = !isModelEnabled(model);
+    if (!nextEnabled && enabledCount <= 1) {
+      triggerToast("至少保留一个可用模型");
       return;
     }
-    if (draft.baseURL.trim()) {
-      try {
-        new URL(draft.baseURL);
-      } catch {
-        triggerToast("Base URL 格式不正确");
-        return;
-      }
+
+    onSaveModel({ ...model, enabled: nextEnabled });
+
+    if (nextEnabled) {
+      onSelectModel(model.id);
+      return;
     }
-    const normalized = {
-      ...draft,
-      name: draft.name.trim(),
-      model: draft.model.trim(),
-      apiKey: draft.apiKey.trim(),
-      baseURL: draft.baseURL.trim().replace(/\/$/, ""),
-    };
-    onSaveModel(normalized);
-    setEditingId(normalized.id);
-    triggerToast("模型配置已保存");
-    return normalized;
+
+    if (selectedModelId === model.id) {
+      const fallback = models.find((item) => item.id !== model.id && isModelEnabled(item));
+      if (fallback) onSelectModel(fallback.id);
+    }
   };
 
-  const remove = (model: ManagedModel) => {
-    if (model.builtIn) return;
-    onDeleteModel(model.id);
-    const fallback = models.find((item) => item.id !== model.id);
-    if (fallback) setEditingId(fallback.id);
+  const handleQueryKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key !== "Enter") return;
+
+    const name = query.trim();
+    if (!name) return;
+
+    const exactMatch = models.find((model) => {
+      const normalized = name.toLowerCase();
+      return model.name.toLowerCase() === normalized || model.model.toLowerCase() === normalized;
+    });
+
+    if (exactMatch) {
+      onSelectModel(exactMatch.id);
+      setQuery("");
+      return;
+    }
+
+    const draft = createDraft(name);
+    onSaveModel(draft);
+    onSelectModel(draft.id);
+    setApiKeysOpen(true);
+    setQuery("");
+    triggerToast("模型已添加");
+  };
+
+  const deleteSelectedModel = () => {
+    if (!selectedModel || selectedModel.builtIn) return;
+    const fallback = models.find((model) => model.id !== selectedModel.id && isModelEnabled(model));
+    onDeleteModel(selectedModel.id);
+    if (fallback) onSelectModel(fallback.id);
     triggerToast("自定义模型已删除");
   };
 
   return (
     <div className="model-management-layout settings-panel-fade">
-      <section className="settings-card model-list-card">
-        <div className="model-card-heading">
-          <div>
-            <h3>模型目录</h3>
-            <p>{models.length} 个模型可用于 Agent 工作流</p>
-          </div>
-          <button className="secondary-btn model-add-btn" onClick={beginCreate}>
-            <PlusIcon size={15} /> 新增模型
+      <div className="cursor-model-heading">
+        <h3>Models</h3>
+      </div>
+
+      <section className="cursor-model-card">
+        <div className="cursor-model-search-row">
+          <input
+            className="cursor-model-search"
+            value={query}
+            placeholder="Add or search model"
+            onChange={(event) => setQuery(event.target.value)}
+            onKeyDown={handleQueryKeyDown}
+          />
+          <button
+            type="button"
+            className="cursor-model-icon-btn"
+            onClick={() => setQuery("")}
+            title="重置模型筛选"
+            aria-label="重置模型筛选"
+          >
+            <RefreshIcon size={16} />
           </button>
         </div>
 
-        <div className="managed-model-list">
-          {models.map((model) => (
-            <button
-              key={model.id}
-              className={`managed-model-item ${editingId === model.id ? "editing" : ""}`}
-              onClick={() => setEditingId(model.id)}
-            >
-              <span className={`provider-badge provider-${model.provider}`}>
-                {model.provider === "openai" ? "OA" : "AN"}
-              </span>
-              <span className="managed-model-copy">
-                <strong>{model.name}</strong>
-                <small>{model.model}</small>
-              </span>
-              {selectedModelId === model.id && <span className="active-model-badge">使用中</span>}
-            </button>
-          ))}
+        <div className="cursor-model-list">
+          {filteredModels.map((model) => {
+            const enabled = isModelEnabled(model);
+            const selected = selectedModelId === model.id;
+
+            return (
+              <div key={model.id} className={`cursor-model-row ${selected ? "selected" : ""}`}>
+                <button
+                  type="button"
+                  className="cursor-model-name-btn"
+                  onClick={() => {
+                    if (!enabled) toggleModel(model);
+                    onSelectModel(model.id);
+                  }}
+                >
+                  {model.name}
+                </button>
+                <label className="toggle-switch cursor-model-toggle" title={enabled ? "关闭模型" : "开启模型"}>
+                  <input
+                    type="checkbox"
+                    checked={enabled}
+                    onChange={() => toggleModel(model)}
+                  />
+                  <span className="toggle-slider"></span>
+                </label>
+              </div>
+            );
+          })}
+
+          {filteredModels.length === 0 && (
+            <div className="cursor-model-empty">按 Enter 添加 “{query.trim()}”</div>
+          )}
         </div>
+
+        <button
+          type="button"
+          className="cursor-model-view-all"
+          onClick={() => setQuery("")}
+        >
+          View All Models
+        </button>
       </section>
 
-      <section className="settings-card model-editor-card">
-        <div className="model-card-heading">
-          <div>
-            <h3>{draft.builtIn ? "配置内置模型" : models.some((item) => item.id === draft.id) ? "编辑自定义模型" : "新增自定义模型"}</h3>
-            <p>配置将保存在当前设备，并在发起 Agent 请求时传给后端。</p>
-          </div>
-          {models.some((item) => item.id === draft.id) && !draft.builtIn && (
-            <button className="model-delete-btn" onClick={() => remove(draft)} title="删除模型">
-              <TrashIcon size={16} />
-            </button>
-          )}
-        </div>
+      <section className="cursor-api-section">
+        <button
+          type="button"
+          className={`cursor-api-trigger ${apiKeysOpen ? "open" : ""}`}
+          onClick={() => setApiKeysOpen((open) => !open)}
+        >
+          <ChevronRightIcon size={16} />
+          <KeyIcon size={15} />
+          <span>API Keys</span>
+        </button>
 
-        <div className="model-form-grid">
-          <label className="config-group">
-            <span className="config-label">显示名称</span>
-            <input className="config-input" value={draft.name} placeholder="例如：公司内部 GPT" onChange={(event) => setDraft({ ...draft, name: event.target.value })} />
-          </label>
+        {apiKeysOpen && selectedModel && (
+          <div className="cursor-api-panel settings-card">
+            <div className="model-form-grid">
+              <label className="config-group">
+                <span className="config-label">显示名称</span>
+                <input
+                  className="config-input"
+                  value={selectedModel.name}
+                  onChange={(event) => updateModel(selectedModel, { name: event.target.value })}
+                />
+              </label>
 
-          <label className="config-group">
-            <span className="config-label">服务商协议</span>
-            <select className="model-select" value={draft.provider} onChange={(event) => setDraft({ ...draft, provider: event.target.value as ManagedModel["provider"] })}>
-              <option value="openai">OpenAI 兼容</option>
-              <option value="anthropic">Anthropic 兼容</option>
-            </select>
-          </label>
+              <label className="config-group">
+                <span className="config-label">服务商协议</span>
+                <select
+                  className="model-select"
+                  value={selectedModel.provider}
+                  onChange={(event) => updateModel(selectedModel, {
+                    provider: event.target.value as ManagedModel["provider"],
+                  })}
+                >
+                  <option value="openai">OpenAI 兼容</option>
+                  <option value="anthropic">Anthropic 兼容</option>
+                </select>
+              </label>
 
-          <label className="config-group model-form-span">
-            <span className="config-label">模型标识</span>
-            <input className="config-input" value={draft.model} placeholder="例如：gpt-4.1 / deepseek-chat / claude-sonnet-4" onChange={(event) => setDraft({ ...draft, model: event.target.value })} />
-            <span className="config-help">填写服务端实际接收的 model 参数。</span>
-          </label>
+              <label className="config-group model-form-span">
+                <span className="config-label">模型标识</span>
+                <input
+                  className="config-input"
+                  value={selectedModel.model}
+                  onChange={(event) => updateModel(selectedModel, { model: event.target.value })}
+                />
+              </label>
 
-          <label className="config-group model-form-span">
-            <span className="config-label">Base URL（可选）</span>
-            <input className="config-input" value={draft.baseURL} placeholder={draft.provider === "openai" ? "https://api.openai.com/v1" : "https://api.anthropic.com"} onChange={(event) => setDraft({ ...draft, baseURL: event.target.value })} />
-            <span className="config-help">第三方兼容端点在此填写；留空则使用各服务商官方地址。</span>
-          </label>
+              <label className="config-group model-form-span">
+                <span className="config-label">Base URL</span>
+                <input
+                  className="config-input"
+                  value={selectedModel.baseURL}
+                  placeholder={selectedModel.provider === "openai" ? "https://api.openai.com/v1" : "https://api.anthropic.com"}
+                  onChange={(event) => updateModel(selectedModel, {
+                    baseURL: event.target.value.trim().replace(/\/$/, ""),
+                  })}
+                />
+              </label>
 
-          <label className="config-group model-form-span">
-            <span className="config-label">API Key</span>
-            <div className="model-secret-row">
-              <input className="config-input" type={showApiKey ? "text" : "password"} value={draft.apiKey} placeholder="必填，仅保存在本机" onChange={(event) => setDraft({ ...draft, apiKey: event.target.value })} />
-              <button type="button" className="secondary-btn" onClick={() => setShowApiKey((value) => !value)}>{showApiKey ? "隐藏" : "显示"}</button>
+              <label className="config-group model-form-span">
+                <span className="config-label">API Key</span>
+                <input
+                  className="config-input"
+                  type="password"
+                  value={selectedModel.apiKey}
+                  onChange={(event) => updateModel(selectedModel, { apiKey: event.target.value.trim() })}
+                />
+              </label>
+
+              {selectedModel.provider === "openai" && (
+                <label className="config-group model-form-span">
+                  <span className="config-label">OpenAI API 模式</span>
+                  <select
+                    className="model-select"
+                    value={selectedModel.openaiApiMode}
+                    onChange={(event) => updateModel(selectedModel, {
+                      openaiApiMode: event.target.value as ManagedModel["openaiApiMode"],
+                    })}
+                  >
+                    <option value="responses">Responses API</option>
+                    <option value="chat-completions">Chat Completions 兼容模式</option>
+                  </select>
+                </label>
+              )}
             </div>
-          </label>
 
-          {draft.provider === "openai" && (
-            <label className="config-group model-form-span">
-              <span className="config-label">OpenAI API 模式</span>
-              <select className="model-select" value={draft.openaiApiMode} onChange={(event) => setDraft({ ...draft, openaiApiMode: event.target.value as ManagedModel["openaiApiMode"] })}>
-                <option value="responses">Responses API</option>
-                <option value="chat-completions">Chat Completions 兼容模式</option>
-              </select>
-            </label>
-          )}
-        </div>
-
-        <div className="model-editor-actions">
-          <button className="secondary-btn" onClick={save}>保存配置</button>
-          <button className="optimize-slide-btn" onClick={() => {
-            const saved = save();
-            if (saved) onSelectModel(saved.id);
-          }}>
-            保存并设为当前模型
-          </button>
-        </div>
+            {!selectedModel.builtIn && (
+              <button
+                type="button"
+                className="model-delete-btn cursor-api-delete"
+                onClick={deleteSelectedModel}
+                title="删除模型"
+                aria-label="删除模型"
+              >
+                <TrashIcon size={15} />
+              </button>
+            )}
+          </div>
+        )}
       </section>
     </div>
   );

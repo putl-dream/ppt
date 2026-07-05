@@ -1,6 +1,6 @@
 import React from "react";
 import { SparklesIcon } from "./Icons";
-import type { ManagedModel } from "../modelCatalog";
+import { isModelEnabled, type ManagedModel } from "../modelCatalog";
 import { ModelManagement } from "./ModelManagement";
 import type { AgentStepLimits } from "@shared/agent-step-limits";
 import type { AgentGatewayPreferences } from "@shared/agent-gateway-config";
@@ -45,7 +45,6 @@ interface SettingsConsoleProps {
   colorContrastOffset: number;
   setColorContrastOffset: (val: number) => void;
 
-  onBackToWorkspace: () => void;
   triggerToast: (msg: string) => void;
 }
 
@@ -81,7 +80,6 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
   setBorderRadiusScale,
   colorContrastOffset,
   setColorContrastOffset,
-  onBackToWorkspace,
   triggerToast,
 }) => {
   // Mock Token data
@@ -143,31 +141,6 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
 
   return (
     <div className="settings-console-container" style={{ padding: "30px", height: "100%", overflowY: "auto" }}>
-      {/* Page Header */}
-      <div className="settings-section-header" style={{ marginBottom: "24px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <div>
-          <h2 style={{ margin: 0, fontSize: "22px", fontWeight: "600", fontFamily: "var(--font-display)" }}>
-            {activeCategory === "profile" && "👤 账户资产与算力配额"}
-            {activeCategory === "models" && "自定义模型与连接配置"}
-            {activeCategory === "workflow" && "⚙️ 工作流逻辑与文件存储偏好"}
-            {activeCategory === "appearance" && "🎨 界面个性化与物理主题"}
-          </h2>
-          <p style={{ margin: "4px 0 0 0", fontSize: "13px", color: "var(--text-muted)" }}>
-            {activeCategory === "profile" && "监控智能体算力消耗与 Token 额度走势"}
-            {activeCategory === "models" && "管理 Agent 可用模型，并连接 OpenAI 或 Anthropic 兼容服务"}
-            {activeCategory === "workflow" && "配置生成 PPT 后的自动化行为与默认画布偏好"}
-            {activeCategory === "appearance" && "微调应用圆角收缩比例与双层背景对比度"}
-          </p>
-        </div>
-        <button
-          onClick={onBackToWorkspace}
-          className="secondary-btn"
-          style={{ fontSize: "12px", display: "flex", alignItems: "center", gap: "6px" }}
-        >
-          <span>保存并退出设置</span>
-        </button>
-      </div>
-
       <div className="settings-layout-grid" style={{ display: "grid", gap: "24px" }}>
         
         {/* ==================== 1. 个人信息 / 账户与配额 ==================== */}
@@ -281,21 +254,6 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
 
             </div>
 
-            <div className="settings-card">
-              <h4 style={{ margin: "0 0 12px 0", fontSize: "14px", fontWeight: "600" }}>账户操作</h4>
-              <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-                <button className="optimize-slide-btn" style={{ margin: 0, padding: "8px 16px", opacity: 0.5, cursor: "not-allowed" }} disabled={true}>
-                  充值算力配额 (暂未开放)
-                </button>
-                <button className="secondary-btn" style={{ margin: 0, padding: "8px 16px", opacity: 0.5, cursor: "not-allowed" }} disabled={true}>
-                  升级订阅计划 (暂未开放)
-                </button>
-                <button className="secondary-btn" style={{ margin: 0, padding: "8px 16px", opacity: 0.5, cursor: "not-allowed" }} disabled={true}>
-                  查询消费账单 (暂未开放)
-                </button>
-              </div>
-            </div>
-
           </div>
         )}
 
@@ -312,9 +270,6 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
 
             <div className="settings-card">
               <h4 style={{ margin: "0 0 6px 0", fontSize: "14px", fontWeight: "600" }}>模型网关参数</h4>
-              <p style={{ margin: "0 0 16px 0", fontSize: "11px", color: "var(--text-muted)" }}>
-                请求超时、输出 token 上限与过载备用模型。配置保存在本机，随每次 Agent 请求传给后端。
-              </p>
               <div style={{ display: "grid", gap: "16px" }}>
                 <label className="config-group">
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
@@ -334,7 +289,6 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
                       timeoutMs: parseInt(event.target.value, 10) * 1000,
                     })}
                   />
-                  <span className="config-help">默认 {DEFAULT_AGENT_GATEWAY_CONFIG.timeoutMs / 1000} 秒。长思考模型可适当增大。</span>
                 </label>
 
                 <label className="config-group">
@@ -351,7 +305,6 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
                       maxOutputTokens: parseInt(event.target.value, 10) || DEFAULT_AGENT_GATEWAY_CONFIG.maxOutputTokens,
                     })}
                   />
-                  <span className="config-help">输出被截断时系统会自动尝试升至 64K。</span>
                 </label>
 
                 <label className="config-group">
@@ -366,14 +319,13 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
                   >
                     <option value="">不启用</option>
                     {models
-                      .filter((model) => model.id !== selectedModelId)
+                      .filter((model) => model.id !== selectedModelId && isModelEnabled(model))
                       .map((model) => (
                         <option key={model.id} value={model.id}>
                           {model.name} ({model.model})
                         </option>
                       ))}
                   </select>
-                  <span className="config-help">连续过载时自动切换；请确保备用模型已填写 API Key。</span>
                 </label>
               </div>
             </div>
@@ -387,14 +339,10 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
             {/* Agent step limits */}
             <div className="settings-card">
               <h4 style={{ margin: "0 0 6px 0", fontSize: "14px", fontWeight: "600" }}>Agent 模型调用次数限制</h4>
-              <p style={{ margin: "0 0 16px 0", fontSize: "11px", color: "var(--text-muted)" }}>
-                开启后，单次请求在主 Agent 与子 Agent 两层分别限制模型调用轮数；关闭后仅保留内部安全上限。
-              </p>
               <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                   <div>
                     <div style={{ fontSize: "13px", fontWeight: "500", color: "var(--text-primary)" }}>启用调用次数限制</div>
-                    <div style={{ fontSize: "11px", color: "var(--text-muted)" }}>关闭后主 Agent 最多 100 次、子 Agent 最多 50 次（安全兜底）。</div>
                   </div>
                   <label className="toggle-switch">
                     <input
@@ -431,7 +379,6 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
                       height: "6px",
                     }}
                   />
-                  <span className="config-help">主对话每轮模型请求 + 工具调用的循环次数。</span>
                 </div>
 
                 <div className="config-group" style={{ opacity: agentStepLimits.enabled ? 1 : 0.5 }}>
@@ -459,7 +406,6 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
                       height: "6px",
                     }}
                   />
-                  <span className="config-help">Task 委派时，每个子 Agent 独立的模型调用轮数上限。</span>
                 </div>
               </div>
             </div>
@@ -473,7 +419,6 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                   <div>
                     <div style={{ fontSize: "13px", fontWeight: "500", color: "var(--text-primary)" }}>PPT 生成完成后立即自动触发下载</div>
-                    <div style={{ fontSize: "11px", color: "var(--text-muted)" }}>Agent 在全部指令执行并渲染结束后，自动向本地导出 .pptx 文件。</div>
                   </div>
                   <label className="toggle-switch">
                     <input
@@ -488,8 +433,7 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
                 {/* Cloud sync */}
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: "1px solid var(--border-glass)", paddingTop: "14px", opacity: 0.6 }}>
                   <div>
-                    <div style={{ fontSize: "13px", fontWeight: "500", color: "var(--text-primary)" }}>自动同步备份至云端空间 (云端功能暂不可用)</div>
-                    <div style={{ fontSize: "11px", color: "var(--text-muted)" }}>实时将每一次 Rev 快照与大纲文档上传至安全的加密云备份底座。（本功能暂不可用）</div>
+                    <div style={{ fontSize: "13px", fontWeight: "500", color: "var(--text-primary)" }}>自动同步备份至云端空间</div>
                   </div>
                   <label className="toggle-switch" style={{ pointerEvents: "none" }}>
                     <input
@@ -507,9 +451,6 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
             {/* Local Storage Directory */}
             <div className="settings-card">
               <h4 style={{ margin: "0 0 6px 0", fontSize: "14px", fontWeight: "600" }}>项目工作目录</h4>
-              <p style={{ margin: "0 0 16px 0", fontSize: "11px", color: "var(--text-muted)" }}>
-                打开本地文件夹作为 PPT 项目沙箱。同一目录下的多条对话共享 brief、大纲、设计等产物文件。
-              </p>
               
               <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
                 <div className="path-display-box" style={{
@@ -647,7 +588,6 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
                       />
                       <SparklesIcon size={20} className="upload-icon" />
                       <span>点击选择并上传品牌 Logo 标志</span>
-                      <span className="sub">Agent 自动排版时将置于页面右上角</span>
                     </div>
                   )}
                 </div>
@@ -780,7 +720,6 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
                       borderRadius: "3px"
                     }}
                   />
-                  <span className="config-help">缩小时边缘呈锐利硬角商务风，放大时呈现气泡圆角科技感。</span>
                 </div>
 
                 {/* Color Contrast offset slider */}
@@ -807,7 +746,6 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
                       borderRadius: "3px"
                     }}
                   />
-                  <span className="config-help">拉大对比度可让外壳与右侧画布的层级边界更清晰，反之趋于扁平一体化。</span>
                 </div>
 
               </div>
@@ -815,7 +753,6 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
 
             {/* Realtime aesthetic preview box */}
             <div className="settings-card" style={{ display: "flex", flexDirection: "column", gap: "10px", background: "var(--bg-darker)" }}>
-              <span style={{ fontSize: "11px", fontWeight: "600", textTransform: "uppercase", color: "var(--text-muted)", letterSpacing: "0.05em" }}>视效控制阀 实时预览：</span>
               <div style={{
                 display: "flex",
                 gap: "12px",
@@ -840,7 +777,6 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
                 </div>
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: "13px", fontWeight: "600", color: "var(--text-primary)" }}>Agent Canvas Card</div>
-                  <div style={{ fontSize: "11px", color: "var(--text-muted)" }}>随物理圆角滑块缩放的演示卡片</div>
                 </div>
                 <div style={{
                   padding: "4px 8px",

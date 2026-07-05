@@ -8,6 +8,7 @@ export interface ManagedModel {
   apiKey: string;
   baseURL: string;
   openaiApiMode: "responses" | "chat-completions";
+  enabled?: boolean;
   builtIn?: boolean;
 }
 
@@ -20,6 +21,7 @@ export const DEFAULT_MODELS: ManagedModel[] = [
     apiKey: "",
     baseURL: "",
     openaiApiMode: "responses",
+    enabled: true,
     builtIn: true,
   },
   {
@@ -30,6 +32,7 @@ export const DEFAULT_MODELS: ManagedModel[] = [
     apiKey: "",
     baseURL: "",
     openaiApiMode: "responses",
+    enabled: true,
     builtIn: true,
   },
   {
@@ -40,6 +43,7 @@ export const DEFAULT_MODELS: ManagedModel[] = [
     apiKey: "",
     baseURL: "",
     openaiApiMode: "responses",
+    enabled: true,
     builtIn: true,
   },
   {
@@ -50,6 +54,7 @@ export const DEFAULT_MODELS: ManagedModel[] = [
     apiKey: "",
     baseURL: "",
     openaiApiMode: "responses",
+    enabled: true,
     builtIn: true,
   },
 ];
@@ -66,10 +71,14 @@ export function loadManagedModels(): ManagedModel[] {
     return parsed.filter(
       (item) => item && item.id && item.name && item.model &&
         (item.provider === "openai" || item.provider === "anthropic"),
-    );
+    ).map((item) => ({ ...item, enabled: item.enabled !== false }));
   } catch {
     return DEFAULT_MODELS;
   }
+}
+
+export function isModelEnabled(model: ManagedModel): boolean {
+  return model.enabled !== false;
 }
 
 export function toAgentModelSettings(model: ManagedModel): AgentModelSettings {

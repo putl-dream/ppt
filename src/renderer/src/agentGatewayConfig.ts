@@ -4,7 +4,7 @@ import {
   type AgentGatewayPreferences,
 } from "@shared/agent-gateway-config";
 import type { ManagedModel } from "./modelCatalog";
-import { toAgentModelSettings } from "./modelCatalog";
+import { isModelEnabled, toAgentModelSettings } from "./modelCatalog";
 
 export const AGENT_GATEWAY_CONFIG_STORAGE_KEY = "agent-ppt.gateway-config.v1";
 
@@ -27,7 +27,7 @@ export function buildAgentGatewayConfig(
   models: ManagedModel[],
 ): AgentGatewayConfig {
   const fallbackModel = preferences.fallbackModelId
-    ? models.find((model) => model.id === preferences.fallbackModelId)
+    ? models.find((model) => model.id === preferences.fallbackModelId && isModelEnabled(model))
     : undefined;
 
   return {

@@ -37,7 +37,6 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = ({
             </div>
             <div className="nav-text">
               <span className="nav-title">账户与 Token 额度</span>
-              <span className="nav-desc">个人 Profile 与算力消耗监控</span>
             </div>
           </button>
 
@@ -50,7 +49,6 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = ({
             </div>
             <div className="nav-text">
               <span className="nav-title">自定义模型</span>
-              <span className="nav-desc">添加、配置与切换 Agent 模型</span>
             </div>
           </button>
           
@@ -63,7 +61,6 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = ({
             </div>
             <div className="nav-text">
               <span className="nav-title">常规与工作流偏好</span>
-              <span className="nav-desc">自动化下载、备份与默认模板</span>
             </div>
           </button>
 
@@ -76,7 +73,6 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = ({
             </div>
             <div className="nav-text">
               <span className="nav-title">外观与视觉控制</span>
-              <span className="nav-desc">暗光适配与界面物理圆角调节</span>
             </div>
           </button>
           
