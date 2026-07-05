@@ -1,10 +1,12 @@
 import type { AgentRuntimeResult } from "./runtime-types";
+import { normalizeMarkdownAssistantMessage } from "./agent-message-normalizer";
 
 export type PlainTextFallbackRequestType =
   | "greeting"
   | "informational"
   | "conversation-memory"
-  | "explicit-non-ppt";
+  | "explicit-non-ppt"
+  | "bare-topic";
 
 export const PLAIN_TEXT_ASSISTANT_FALLBACK_TYPES: ReadonlySet<PlainTextFallbackRequestType> =
   new Set([
@@ -12,6 +14,7 @@ export const PLAIN_TEXT_ASSISTANT_FALLBACK_TYPES: ReadonlySet<PlainTextFallbackR
     "informational",
     "conversation-memory",
     "explicit-non-ppt",
+    "bare-topic",
   ]);
 
 const EXPLICIT_NON_PPT_PATTERNS = [
@@ -24,6 +27,7 @@ const EXPLICIT_NON_PPT_PATTERNS = [
 ];
 
 const PRESENTATION_ACTION_PATTERNS = [
+  /\b(?:create|make|generate|update|edit|export|modify|change|delete|add|set)\b/i,
   /(?:做|制作|生成|创建|新建|整理|输出|产出).{0,12}(?:ppt|演示|幻灯片|deck|汇报)/i,
   /(?:做|整理).{0,6}成.{0,8}(?:ppt|演示|幻灯片|deck|汇报)/i,
   /(?:ppt|演示|幻灯片|deck).{0,12}(?:做|制作|生成|创建|新建|导出|下载|排版|修改|更新|调整)/i,
@@ -31,6 +35,12 @@ const PRESENTATION_ACTION_PATTERNS = [
   /(?:执行|开始).{0,8}(?:排版|第二阶段|导出)/,
   /(?:改|修改|调整|替换|删除|新增|加).{0,12}(?:第\s*\d+\s*页|这页|当前页|幻灯片|ppt)/i,
   /(?:layout-plan|update-slide-layout|set-theme|submitcommands)/i,
+];
+
+const ACTION_CONTINUATION_PATTERNS = [
+  /^(?:按)?默认方案[。.!！\s]*$/,
+  /^(?:可以|好的|确认|继续|开始|执行|生成吧|做吧|就这样)[。.!！\s]*$/,
+  /^(?:yes|ok|okay|continue|go ahead|start)$/i,
 ];
 
 const GREETING_PATTERNS = [
@@ -68,6 +78,12 @@ function looksLikeBrokenAgentProtocol(text: string): boolean {
   return /^\s*(?:```(?:json)?\s*)?\{\s*"type"\s*:/i.test(text);
 }
 
+function looksLikeBareTopic(request: string): boolean {
+  if (request.length < 2 || request.length > 40) return false;
+  if (/[？?。.！!，,；;]/.test(request)) return false;
+  return /^[\p{L}\p{N}\s《》“”"'·:：\-_/]+$/u.test(request);
+}
+
 export function classifyPlainTextFallbackRequest(
   request: string,
 ): PlainTextFallbackRequestType | null {
@@ -79,6 +95,10 @@ export function classifyPlainTextFallbackRequest(
   }
 
   if (hasAnyMatch(normalized, PRESENTATION_ACTION_PATTERNS)) {
+    return null;
+  }
+
+  if (hasAnyMatch(normalized, ACTION_CONTINUATION_PATTERNS)) {
     return null;
   }
 
@@ -94,6 +114,10 @@ export function classifyPlainTextFallbackRequest(
     return "informational";
   }
 
+  if (looksLikeBareTopic(normalized)) {
+    return "bare-topic";
+  }
+
   return null;
 }
 
@@ -101,6 +125,7 @@ export function canWrapPlainTextAssistantMessage(input: {
   request: string;
   responseText: string;
   requiredOutcome?: "any" | "command_proposal";
+  messageHistory?: Array<unknown>;
 }): boolean {
   if (input.requiredOutcome === "command_proposal") return false;
 
@@ -109,6 +134,9 @@ export function canWrapPlainTextAssistantMessage(input: {
   if (looksLikeBrokenAgentProtocol(content)) return false;
 
   const requestType = classifyPlainTextFallbackRequest(input.request);
+  if (requestType === "bare-topic" && (input.messageHistory?.length ?? 0) > 0) {
+    return false;
+  }
   return requestType !== null && PLAIN_TEXT_ASSISTANT_FALLBACK_TYPES.has(requestType);
 }
 
@@ -116,11 +144,11 @@ export function maybeWrapPlainTextAssistantMessage(input: {
   request: string;
   responseText: string;
   requiredOutcome?: "any" | "command_proposal";
+  messageHistory?: Array<unknown>;
 }): AgentRuntimeResult | null {
   if (!canWrapPlainTextAssistantMessage(input)) return null;
 
   return {
-    type: "assistant.message",
-    data: { content: input.responseText.trim() },
+    ...normalizeMarkdownAssistantMessage(input.responseText),
   };
 }

@@ -90,6 +90,8 @@ describe("native tool-use runtime path", () => {
     });
 
     expect(result.type).toBe("deck.command_proposal");
+    expect(result.kind).toBe("structured");
+    expect(result.format).toBe("json");
     if (result.type === "deck.command_proposal") {
       expect(result.data.commands[0].type).toBe("set-presentation-title");
     }
@@ -126,6 +128,8 @@ describe("native tool-use runtime path", () => {
     });
 
     expect(result.type).toBe("assistant.message");
+    expect(result.kind).toBe("text");
+    expect(result.format).toBe("markdown");
     if (result.type === "assistant.message") {
       expect(result.data.content).toContain("已完成");
     }
@@ -152,10 +156,41 @@ describe("native tool-use runtime path", () => {
     });
 
     expect(result.type).toBe("assistant.message");
+    expect(result.kind).toBe("text");
+    expect(result.format).toBe("markdown");
     if (result.type === "assistant.message") {
       expect(result.data.content).toBe("我是你的 PPT 智能助手。\n\n说说你的需求，我马上开干。");
     }
     expect(streamed).toBe("我是你的 PPT 智能助手。\n\n说说你的需求，我马上开干。");
     expect(streamed).not.toContain('"type"');
+  });
+
+  it("streams direct markdown assistant text on the native no-tool path", async () => {
+    const registry = new ToolRegistry();
+    registry.register(submitCommandsTool);
+
+    const gateway = createNativeGateway([
+      { text: "**可以。** 先讲概念，再决定是否制作 PPT。" },
+    ]);
+    let streamed = "";
+
+    const runtime = new AgentRuntime(registry, gateway);
+    const result = await runtime.run({
+      threadId: "native-markdown-message-thread",
+      request: "先不做 PPT，解释一下这个概念",
+      presentationSnapshot: createStarterPresentation(),
+      selectedElementIds: [],
+      onStreamChunk: (chunk) => {
+        streamed += chunk;
+      },
+    });
+
+    expect(result).toEqual({
+      kind: "text",
+      format: "markdown",
+      type: "assistant.message",
+      data: { content: "**可以。** 先讲概念，再决定是否制作 PPT。" },
+    });
+    expect(streamed).toBe("**可以。** 先讲概念，再决定是否制作 PPT。");
   });
 });

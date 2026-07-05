@@ -10,14 +10,36 @@ import type { ToolApprovalHandler } from "./permission-check";
 
 export type AgentRuntimeRisk = "low" | "medium" | "high";
 
-export interface AgentEnvelope<TType extends string, TData> {
+export type AgentEnvelopeKind = "structured" | "text";
+export type AgentEnvelopeFormat = "json" | "markdown";
+
+export interface AgentEnvelope<
+  TType extends string,
+  TData,
+  TKind extends AgentEnvelopeKind,
+  TFormat extends AgentEnvelopeFormat,
+> {
+  kind: TKind;
+  format: TFormat;
   type: TType;
   data: TData;
 }
 
-export type AgentRuntimeResult =
-  | AgentEnvelope<"assistant.message", { content: string }>
-  | AgentEnvelope<"assistant.ask_user", { content: string; missingFields?: string[] }>
+export type AgentTextEnvelope = AgentEnvelope<
+  "assistant.message",
+  { content: string },
+  "text",
+  "markdown"
+>;
+
+export type AgentStructuredEnvelope =
+  | AgentEnvelope<"tool.call", { toolName: string; args: unknown }, "structured", "json">
+  | AgentEnvelope<
+      "assistant.ask_user",
+      { content: string; missingFields?: string[] },
+      "structured",
+      "json"
+    >
   | AgentEnvelope<
       "deck.command_proposal",
       {
@@ -25,12 +47,18 @@ export type AgentRuntimeResult =
         commands: PresentationCommand[];
         risk: AgentRuntimeRisk;
         assumptions?: string[];
-      }
+      },
+      "structured",
+      "json"
     >;
+
+export type AgentRuntimeResult =
+  | AgentTextEnvelope
+  | Extract<AgentStructuredEnvelope, { type: "assistant.ask_user" | "deck.command_proposal" }>;
 
 export type AgentProtocolEnvelope =
   | AgentRuntimeResult
-  | AgentEnvelope<"tool.call", { toolName: string; args: unknown }>;
+  | Extract<AgentStructuredEnvelope, { type: "tool.call" }>;
 
 export interface AgentRuntimeOptions {
   threadId: string;

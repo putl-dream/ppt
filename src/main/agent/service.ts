@@ -215,13 +215,13 @@ export class AgentService {
       throw error;
     }
 
-    if (runtimeResult.type === "assistant.message") {
+    if (runtimeResult.kind === "text" && runtimeResult.type === "assistant.message") {
       this.runtime.clearSession(threadId);
       this.conversations.delete(threadId);
       return { status: "chat", message: runtimeResult.data.content };
     }
 
-    if (runtimeResult.type === "assistant.ask_user") {
+    if (runtimeResult.kind === "structured" && runtimeResult.type === "assistant.ask_user") {
       this.conversations.set(threadId, {
         messages: [
           ...messageHistory,
@@ -236,6 +236,10 @@ export class AgentService {
         message: runtimeResult.data.content,
         threadId,
       };
+    }
+
+    if (runtimeResult.kind !== "structured" || runtimeResult.type !== "deck.command_proposal") {
+      throw new Error(`Unexpected agent runtime result: ${runtimeResult.type}`);
     }
 
     listener?.({ type: "workflow-progress", message: "正在进行安全校验...", progress: 70 });

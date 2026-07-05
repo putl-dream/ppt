@@ -26,6 +26,8 @@ export const askUserTool: ToolDefinition<
   risk: "low",
   execute: async (args) => {
     return {
+      kind: "structured",
+      format: "json",
       type: "assistant.ask_user",
       data: {
         content: args.message,

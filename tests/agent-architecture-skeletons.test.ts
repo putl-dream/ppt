@@ -208,6 +208,8 @@ describe("Agent Architecture Skeletons & Types", () => {
       data: { content: "Hello!" },
     });
     expect(res1).toEqual({
+      kind: "text",
+      format: "markdown",
       type: "assistant.message",
       data: { content: "Hello!" },
     });
@@ -217,6 +219,8 @@ describe("Agent Architecture Skeletons & Types", () => {
       data: { content: "Need input", missingFields: ["theme"] },
     });
     expect(res2).toEqual({
+      kind: "structured",
+      format: "json",
       type: "assistant.ask_user",
       data: { content: "Need input", missingFields: ["theme"] },
     });
@@ -230,6 +234,8 @@ describe("Agent Architecture Skeletons & Types", () => {
       },
     });
     expect(res3).toEqual({
+      kind: "structured",
+      format: "json",
       type: "deck.command_proposal",
       data: {
         summary: "Update title",
@@ -321,18 +327,23 @@ describe("Agent Architecture Skeletons & Types", () => {
 
     const result = await runtime.run({
       threadId: "test-direct-answer-fallback",
-      request: "我想了解一下第五项修炼",
+      request: "第五项修炼",
       presentationSnapshot: createStarterPresentation(),
       selectedElementIds: [],
     });
 
-    expect(result).toEqual(modelMessage("《第五项修炼》是彼得·圣吉关于学习型组织的经典著作。"));
+    expect(result).toEqual({
+      kind: "text",
+      format: "markdown",
+      ...modelMessage("《第五项修炼》是彼得·圣吉关于学习型组织的经典著作。"),
+    });
     expect(calls).toBe(1);
   });
 
   it("keeps strict JSON retry for plain text on PPT action requests", async () => {
     const registry = new ToolRegistry();
     registry.register(submitCommandsTool);
+    let streamed = "";
     const runtime = new AgentRuntime(registry, createSequenceGateway([
       "我马上开始制作。",
       modelToolCall("SubmitCommands", {
@@ -347,9 +358,13 @@ describe("Agent Architecture Skeletons & Types", () => {
       request: "帮我做一份关于第五项修炼的 PPT",
       presentationSnapshot: createStarterPresentation(),
       selectedElementIds: [],
+      onStreamChunk: (chunk) => {
+        streamed += chunk;
+      },
     });
 
     expect(result.type).toBe("deck.command_proposal");
+    expect(streamed).not.toContain("我马上开始制作");
   });
 
   it("does not let an action continuation end with a narrative message", async () => {

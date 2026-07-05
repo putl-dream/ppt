@@ -3,8 +3,10 @@ import type { AgentModelToolCall } from "../gateway/types";
 import type {
   AgentProtocolEnvelope,
   AgentRuntimeResult,
+  AgentStructuredEnvelope,
+  AgentTextEnvelope,
 } from "./runtime-types";
-import { parseAgentJsonResponse } from "./parse-agent-json-response";
+import { parseAgentResponseForConsumer } from "./parse-agent-json-response";
 
 export interface NormalizeModelResponseOptions {
   text: string;
@@ -34,6 +36,19 @@ function dataObject(candidate: Record<string, unknown>): Record<string, unknown>
   return assertObject(candidate.data);
 }
 
+export function normalizeMarkdownAssistantMessage(content: string): AgentTextEnvelope {
+  const trimmed = content.trim();
+  if (!trimmed) {
+    throw new Error("Validation error: markdown assistant message must be non-empty.");
+  }
+  return {
+    kind: "text",
+    format: "markdown",
+    type: "assistant.message",
+    data: { content: trimmed },
+  };
+}
+
 export function normalizeAgentProtocolObject(raw: unknown): AgentProtocolEnvelope {
   const candidate = assertObject(raw);
   const type = candidate.type;
@@ -45,6 +60,8 @@ export function normalizeAgentProtocolObject(raw: unknown): AgentProtocolEnvelop
       throw new Error("Validation error: 'tool.call' data must contain a non-empty string in 'toolName'.");
     }
     return {
+      kind: "structured",
+      format: "json",
       type: "tool.call",
       data: {
         toolName,
@@ -58,7 +75,7 @@ export function normalizeAgentProtocolObject(raw: unknown): AgentProtocolEnvelop
     if (typeof content !== "string" || content.trim() === "") {
       throw new Error("Validation error: 'assistant.message' data must contain a non-empty string in 'content'.");
     }
-    return { type: "assistant.message", data: { content } };
+    return normalizeMarkdownAssistantMessage(content);
   }
 
   if (type === "assistant.ask_user") {
@@ -67,6 +84,8 @@ export function normalizeAgentProtocolObject(raw: unknown): AgentProtocolEnvelop
       throw new Error("Validation error: 'assistant.ask_user' data must contain a non-empty string in 'content'.");
     }
     return {
+      kind: "structured",
+      format: "json",
       type: "assistant.ask_user",
       data: {
         content,
@@ -95,6 +114,8 @@ export function normalizeAgentProtocolObject(raw: unknown): AgentProtocolEnvelop
     }
 
     return {
+      kind: "structured",
+      format: "json",
       type: "deck.command_proposal",
       data: {
         summary,
@@ -110,12 +131,38 @@ export function normalizeAgentProtocolObject(raw: unknown): AgentProtocolEnvelop
   );
 }
 
+export function normalizeStructuredAgentProtocolObject(raw: unknown): AgentStructuredEnvelope {
+  const envelope = normalizeAgentProtocolObject(raw);
+  if (envelope.kind !== "structured") {
+    throw new Error(`Invalid structured agent response type: '${envelope.type}'.`);
+  }
+  return envelope;
+}
+
+export function normalizeTextAgentResponse(text: string): AgentProtocolEnvelope {
+  const parsed = parseAgentResponseForConsumer(text, "text");
+  if (parsed.kind === "text") {
+    if (typeof parsed.value === "string") {
+      return normalizeMarkdownAssistantMessage(parsed.value);
+    }
+    return normalizeAgentProtocolObject(parsed.value);
+  }
+  return normalizeStructuredAgentProtocolObject(parsed.value);
+}
+
+export function normalizeStructuredAgentResponse(text: string): AgentStructuredEnvelope {
+  const parsed = parseAgentResponseForConsumer(text, "structured");
+  return normalizeStructuredAgentProtocolObject(parsed.value);
+}
+
 export function normalizeModelResponseToEnvelope(
   options: NormalizeModelResponseOptions,
 ): AgentProtocolEnvelope {
   const nativeCall = options.toolCalls?.[0];
   if (nativeCall) {
     return {
+      kind: "structured",
+      format: "json",
       type: "tool.call",
       data: {
         toolName: nativeCall.name,
@@ -124,7 +171,7 @@ export function normalizeModelResponseToEnvelope(
     };
   }
 
-  return normalizeAgentProtocolObject(parseAgentJsonResponse(options.text));
+  return normalizeStructuredAgentResponse(options.text);
 }
 
 export function isAgentRuntimeResult(envelope: AgentProtocolEnvelope): envelope is AgentRuntimeResult {

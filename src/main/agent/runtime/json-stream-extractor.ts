@@ -7,6 +7,7 @@
 export class JsonStreamExtractor {
   private accumulated = "";
   private isJson = false;
+  private isMarkdown = false;
   private hasCheckedFirstChar = false;
   private targetKey: "content" | "summary" | null = null;
   private hasCheckedType = false;
@@ -18,19 +19,54 @@ export class JsonStreamExtractor {
 
   constructor(
     private readonly onChunk: (text: string, source: "message" | "tool-summary") => void,
+    private readonly options: { streamMarkdown?: boolean } = {},
   ) {}
 
   feed(chunk: string) {
+    if (this.isMarkdown) {
+      if (this.options.streamMarkdown !== false) {
+        this.onChunk(chunk, "message");
+      }
+      return;
+    }
+
     this.accumulated += chunk;
 
     if (!this.hasCheckedFirstChar) {
       const trimmed = this.accumulated.trimStart();
       if (trimmed.length === 0) return;
       const firstChar = trimmed[0];
-      if (firstChar === "{" || firstChar === "`") {
+      if (firstChar === "{") {
         this.isJson = true;
+      } else if (firstChar === "`") {
+        const lower = trimmed.toLowerCase();
+        const couldBeJsonFence =
+          "```json\n".startsWith(lower)
+          || "```json ".startsWith(lower)
+          || "```json\r".startsWith(lower)
+          || "```\n".startsWith(lower)
+          || "``` ".startsWith(lower)
+          || "```\r".startsWith(lower);
+        if (/^```(?:json)?\s/i.test(trimmed)) {
+          this.isJson = true;
+        } else if (couldBeJsonFence) {
+          return;
+        } else {
+          this.isMarkdown = true;
+          this.hasCheckedFirstChar = true;
+          if (this.options.streamMarkdown !== false) {
+            this.onChunk(this.accumulated, "message");
+          }
+          this.accumulated = "";
+          return;
+        }
       } else {
-        this.ignoreStreaming = true;
+        this.isMarkdown = true;
+        this.hasCheckedFirstChar = true;
+        if (this.options.streamMarkdown !== false) {
+          this.onChunk(this.accumulated, "message");
+        }
+        this.accumulated = "";
         return;
       }
       this.hasCheckedFirstChar = true;

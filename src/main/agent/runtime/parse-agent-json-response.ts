@@ -7,10 +7,26 @@ export const AGENT_JSON_MISSING_TYPE_GUIDANCE =
 export const AGENT_JSON_PARSE_FAILURE_GUIDANCE =
   "Return exactly one complete JSON object.";
 
+export type AgentResponseConsumer = "structured" | "text";
+
+export type ParsedAgentResponse =
+  | { kind: "structured"; format: "json"; value: unknown }
+  | { kind: "text"; format: "markdown"; value: string | unknown };
+
 function isAgentProtocolObject(value: unknown): boolean {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const type = (value as { type?: unknown }).type;
   return typeof type === "string" && type.length > 0;
+}
+
+function protocolType(value: unknown): string | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const type = (value as { type?: unknown }).type;
+  return typeof type === "string" && type.length > 0 ? type : null;
+}
+
+function looksLikeBrokenAgentProtocol(text: string): boolean {
+  return /^\s*(?:```(?:json)?\s*)?\{\s*"type"\s*:/i.test(text);
 }
 
 function tryParseBalancedObject(text: string, start: number): unknown | null {
@@ -71,6 +87,36 @@ export function parseAgentJsonResponse(text: string): unknown {
   throw new Error(
     `Agent Runtime expected one complete JSON object with a "type" field.`,
   );
+}
+
+export function parseAgentResponseForConsumer(
+  text: string,
+  consumer: AgentResponseConsumer,
+): ParsedAgentResponse {
+  if (consumer === "structured") {
+    const parsed = parseAgentJsonResponse(text);
+    if (protocolType(parsed) === "assistant.message") {
+      throw new Error("Structured agent consumers do not accept assistant.message markdown text.");
+    }
+    return { kind: "structured", format: "json", value: parsed };
+  }
+
+  try {
+    const parsed = parseAgentJsonResponse(text);
+    if (protocolType(parsed) === "assistant.message") {
+      return { kind: "text", format: "markdown", value: parsed };
+    }
+    return { kind: "structured", format: "json", value: parsed };
+  } catch (error) {
+    if (looksLikeBrokenAgentProtocol(text)) {
+      throw error;
+    }
+    const content = text.trim();
+    if (!content) {
+      throw new Error("Agent Runtime expected non-empty markdown text.");
+    }
+    return { kind: "text", format: "markdown", value: content };
+  }
 }
 
 export function buildAgentJsonRetryMessage(

@@ -31,10 +31,14 @@ import {
   parseAgentJsonResponse,
 } from "./parse-agent-json-response";
 import {
+  normalizeMarkdownAssistantMessage,
   normalizeAgentProtocolObject,
   normalizeModelResponseToEnvelope,
 } from "./agent-message-normalizer";
-import { maybeWrapPlainTextAssistantMessage } from "./plain-text-assistant-fallback";
+import {
+  canWrapPlainTextAssistantMessage,
+  maybeWrapPlainTextAssistantMessage,
+} from "./plain-text-assistant-fallback";
 
 export { parseAgentJsonResponse } from "./parse-agent-json-response";
 
@@ -187,8 +191,7 @@ export class AgentRuntime {
     const promptStop = await triggerHooks("UserPromptSubmit", promptBlock);
     if (promptStop) {
       return finish({
-        type: "assistant.message",
-        data: { content: promptStop.reason },
+        ...normalizeMarkdownAssistantMessage(promptStop.reason),
       });
     }
 
@@ -221,7 +224,17 @@ export class AgentRuntime {
       }
 
       const extractor = shouldUseStream
-        ? new JsonStreamExtractor((text, source) => options.onStreamChunk?.(text, source))
+        ? new JsonStreamExtractor(
+            (text, source) => options.onStreamChunk?.(text, source),
+            {
+              streamMarkdown: canWrapPlainTextAssistantMessage({
+                request: options.request,
+                responseText: "markdown",
+                requiredOutcome: options.requiredOutcome,
+                messageHistory: options.messageHistory,
+              }),
+            },
+          )
         : null;
 
       const modelResult = await callModelWithRecovery({
@@ -293,12 +306,14 @@ export class AgentRuntime {
           });
         }
         try {
-          envelope = normalizeModelResponseToEnvelope({ text: responseText });
+          const parsed = parseAgentJsonResponse(responseText);
+          envelope = normalizeAgentProtocolObject(parsed);
         } catch (error) {
           const plainTextMessage = maybeWrapPlainTextAssistantMessage({
             request: options.request,
             responseText,
             requiredOutcome: options.requiredOutcome,
+            messageHistory: options.messageHistory,
           });
           if (plainTextMessage) {
             return finish(plainTextMessage);
@@ -322,6 +337,7 @@ export class AgentRuntime {
             request: options.request,
             responseText,
             requiredOutcome: options.requiredOutcome,
+            messageHistory: options.messageHistory,
           });
           if (plainTextMessage) {
             return finish(plainTextMessage);
@@ -437,8 +453,7 @@ export class AgentRuntime {
         }
         if (preToolStop) {
           return finish({
-            type: "assistant.message",
-            data: { content: preToolStop.reason },
+            ...normalizeMarkdownAssistantMessage(preToolStop.reason),
           });
         }
 
@@ -556,8 +571,7 @@ export class AgentRuntime {
     }
 
     return finish({
-      type: "assistant.message",
-      data: { content: buildMainStepLimitMessage(stepLimits) },
+      ...normalizeMarkdownAssistantMessage(buildMainStepLimitMessage(stepLimits)),
     }, "step_limit");
     } finally {
       if (taskStore) {

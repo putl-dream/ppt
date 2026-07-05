@@ -43,6 +43,8 @@ export const submitCommandsTool: ToolDefinition<
   risk: "low",
   execute: async (args) => {
     return {
+      kind: "structured",
+      format: "json",
       type: "deck.command_proposal",
       data: {
         summary: args.summary,

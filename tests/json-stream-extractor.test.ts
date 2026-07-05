@@ -2,11 +2,22 @@ import { describe, expect, it } from "vitest";
 import { JsonStreamExtractor } from "../src/main/agent/runtime/json-stream-extractor";
 
 describe("JsonStreamExtractor", () => {
-  it("ignores plain text because model output must use the envelope protocol", () => {
+  it("streams direct markdown text", () => {
     let result = "";
     const extractor = new JsonStreamExtractor((chunk, _source) => {
       result += chunk;
     });
+
+    extractor.feed("Hello ");
+    extractor.feed("world!");
+    expect(result).toBe("Hello world!");
+  });
+
+  it("can suppress direct markdown streaming", () => {
+    let result = "";
+    const extractor = new JsonStreamExtractor((chunk, _source) => {
+      result += chunk;
+    }, { streamMarkdown: false });
 
     extractor.feed("Hello ");
     extractor.feed("world!");
