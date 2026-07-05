@@ -1,6 +1,6 @@
 import React from "react";
 import type { Presentation } from "@shared/presentation";
-import { DownloadIcon, ExpandIcon } from "./Icons";
+import { DownloadIcon, OpenPreviewIcon } from "./Icons";
 
 interface DeckPreviewCardProps {
   presentation: Presentation;
@@ -74,7 +74,7 @@ export const DeckPreviewCard: React.FC<DeckPreviewCardProps> = ({
       <div className="inline-artifact-actions">
         {onPreview && (
           <button type="button" className="btn-reject" onClick={onPreview}>
-            <ExpandIcon size={13} />
+            <OpenPreviewIcon size={13} />
             <span>预览 PPT</span>
           </button>
         )}

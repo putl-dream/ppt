@@ -138,6 +138,41 @@ export type SessionSummary = z.infer<typeof sessionSummarySchema>;
 export type SessionSnapshot = z.infer<typeof sessionSnapshotSchema>;
 export type SessionBootstrap = z.infer<typeof sessionBootstrapSchema>;
 
+export const DEFAULT_SESSION_TITLE_PREFIX = "新 PPT 项目";
+const MAX_AUTO_SESSION_TITLE_LENGTH = 28;
+
+export function createDefaultSessionTitle(index: number): string {
+  return `${DEFAULT_SESSION_TITLE_PREFIX} ${index}`;
+}
+
+export function createSessionTitleFromPrompt(prompt: string, fallback = DEFAULT_SESSION_TITLE_PREFIX): string {
+  const normalized = prompt
+    .replace(/[\r\n\t]+/g, " ")
+    .replace(/\s+/g, " ")
+    .replace(/^[#>*\-\d.\s]+/g, "")
+    .trim();
+
+  if (!normalized) return fallback;
+
+  const withoutLeadIn = normalized
+    .replace(/^(?:请|麻烦你?)\s*/u, "")
+    .replace(/^(?:帮我|帮忙|给我|为我|我想|我要|需要)\s*/u, "")
+    .replace(/^(?:做一份|做一个|做个|制作|创建|生成|设计|整理)\s*/u, "")
+    .replace(/^(?:一份|一个|一套|一页|一篇)\s*/u, "")
+    .replace(/^(?:please\s+)?(?:create|make|generate|draft|build|design)\s+(?:a|an|the)?\s*/i, "")
+    .trim();
+  const candidate = (withoutLeadIn || normalized)
+    .replace(/[。！？!?；;，,：:、\s]+$/u, "")
+    .trim();
+
+  if (!candidate) return fallback;
+
+  const characters = Array.from(candidate);
+  return characters.length > MAX_AUTO_SESSION_TITLE_LENGTH
+    ? `${characters.slice(0, MAX_AUTO_SESSION_TITLE_LENGTH).join("")}...`
+    : candidate;
+}
+
 export function createSessionPresentation(title: string): Presentation {
   // 新项目从空 deck 起步：不预置占位页，避免 Agent 每次 ReadPresentationSnapshot
   // 都读到无意义的占位内容。首页内容由 Agent 首次 add-slide 生成。

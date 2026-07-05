@@ -1,7 +1,15 @@
 import React from "react";
 import type { SessionSummary } from "@shared/session";
 import { getWorkspaceLabel, groupSessionsByWorkspace } from "@shared/workspace";
-import { PlusIcon, SettingsIcon, UserIcon, TrashIcon, FolderIcon } from "./Icons";
+import {
+  ChevronDownIcon,
+  ChevronRightIcon,
+  PlusIcon,
+  SettingsIcon,
+  UserIcon,
+  TrashIcon,
+  FolderIcon,
+} from "./Icons";
 
 interface LeftPanelProps {
   sessions: SessionSummary[];
@@ -53,43 +61,60 @@ function WorkspaceSection({
   onContextMenu: (event: React.MouseEvent, sessionId: string) => void;
 }) {
   const label = getWorkspaceLabel(workspaceKey);
-  const [hovered, setHovered] = React.useState(false);
+  const [isCollapsed, setIsCollapsed] = React.useState(false);
+  const toggleCollapsed = () => setIsCollapsed((value) => !value);
 
   return (
     <div className="cursor-workspace-section">
       <div
         className="cursor-workspace-header"
-        onMouseEnter={() => setHovered(true)}
-        onMouseLeave={() => setHovered(false)}
+        role="button"
+        tabIndex={0}
+        aria-expanded={!isCollapsed}
         title={workspaceKey}
+        onClick={toggleCollapsed}
+        onKeyDown={(event) => {
+          if (event.target !== event.currentTarget) return;
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            toggleCollapsed();
+          }
+        }}
       >
         <FolderIcon size={14} className="cursor-workspace-icon" />
         <span className="cursor-workspace-label">{label}</span>
-        {hovered ? (
-          <button
-            type="button"
-            className="cursor-workspace-add-btn"
-            title="在此目录下新建会话"
-            onClick={(event) => {
-              event.stopPropagation();
-              onNewSessionInWorkspace(workspaceKey);
-            }}
-          >
-            <PlusIcon size={14} />
-          </button>
-        ) : null}
+        <span
+          className="cursor-workspace-toggle-btn"
+          title={isCollapsed ? "打开文件夹" : "折叠文件夹"}
+          aria-hidden="true"
+        >
+          {isCollapsed ? <ChevronRightIcon size={14} /> : <ChevronDownIcon size={14} />}
+        </span>
+        <button
+          type="button"
+          className="cursor-workspace-add-btn"
+          title="在此目录下新建会话"
+          onClick={(event) => {
+            event.stopPropagation();
+            onNewSessionInWorkspace(workspaceKey);
+          }}
+        >
+          <PlusIcon size={14} />
+        </button>
       </div>
-      <div className="cursor-session-list">
-        {workspaceSessions.map((session) => (
-          <SessionRow
-            key={session.id}
-            session={session}
-            isActive={activeSessionId === session.id}
-            onSelect={() => onSelectSession(session.id)}
-            onContextMenu={(event) => onContextMenu(event, session.id)}
-          />
-        ))}
-      </div>
+      {!isCollapsed ? (
+        <div className="cursor-session-list">
+          {workspaceSessions.map((session) => (
+            <SessionRow
+              key={session.id}
+              session={session}
+              isActive={activeSessionId === session.id}
+              onSelect={() => onSelectSession(session.id)}
+              onContextMenu={(event) => onContextMenu(event, session.id)}
+            />
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }

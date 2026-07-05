@@ -4,7 +4,7 @@ import { Presentation, SlideElement } from "@shared/presentation";
 import { resolveSlideBackgroundWithVariant } from "@shared/slide-variant";
 import { resolveThemeAccent } from "@shared/layout";
 import { SlideElementRenderer } from "./SlideElementRenderer";
-import { SparklesIcon, ExpandIcon, CompressIcon, PlayIcon, FileIcon, DownloadIcon } from "./Icons";
+import { SparklesIcon, OpenPreviewIcon, ClosePreviewIcon, PlayIcon, FileIcon, DownloadIcon } from "./Icons";
 
 
 interface PPTMirrorProps {
@@ -13,6 +13,7 @@ interface PPTMirrorProps {
   onSelectSlide: (slideId: string) => void;
   selectedTheme: string;
   selectedPalette: string;
+  themeMode: "light" | "dark";
   logoUrl: string | null;
   onOptimizePresentation: () => void;
   highlightSlideId: string | null; // AI 当前正在更新的页面 ID
@@ -27,6 +28,7 @@ export const PPTMirror: React.FC<PPTMirrorProps> = ({
   onSelectSlide,
   selectedTheme,
   selectedPalette,
+  themeMode,
   logoUrl,
   onOptimizePresentation,
   highlightSlideId,
@@ -110,8 +112,6 @@ export const PPTMirror: React.FC<PPTMirrorProps> = ({
     let bodyColor = "#475569";
     let fontClass = "font-sans";
     let borderStyle = {};
-    let slideshowOverlayBg = "rgba(4, 5, 8, 0.93)";
-    let isDarkOverlay = true;
 
     switch (selectedTheme) {
       case "nordic":
@@ -120,8 +120,6 @@ export const PPTMirror: React.FC<PPTMirrorProps> = ({
         bodyColor = "#334155";
         fontClass = "font-serif";
         borderStyle = { border: "1px solid rgba(15, 23, 42, 0.08)" };
-        slideshowOverlayBg = "rgba(240, 242, 245, 0.96)";
-        isDarkOverlay = false;
         break;
       case "midnight":
         slideBg = "#0e1115";
@@ -129,8 +127,6 @@ export const PPTMirror: React.FC<PPTMirrorProps> = ({
         bodyColor = "#94a3b8";
         fontClass = "font-mono";
         borderStyle = { border: "1px solid rgba(255, 255, 255, 0.08)" };
-        slideshowOverlayBg = "rgba(4, 5, 8, 0.95)";
-        isDarkOverlay = true;
         break;
       case "ocean":
         slideBg = "linear-gradient(135deg, #0f172a 0%, #1e293b 100%)";
@@ -138,8 +134,6 @@ export const PPTMirror: React.FC<PPTMirrorProps> = ({
         bodyColor = "#cbd5e1";
         fontClass = "font-sans";
         borderStyle = { border: "1px solid rgba(14, 165, 233, 0.25)" };
-        slideshowOverlayBg = "rgba(10, 15, 30, 0.95)";
-        isDarkOverlay = true;
         break;
       case "sunset":
         slideBg = "linear-gradient(135deg, #fffcf4 0%, #fff3e3 100%)";
@@ -147,8 +141,6 @@ export const PPTMirror: React.FC<PPTMirrorProps> = ({
         bodyColor = "#776b5d";
         fontClass = "font-serif";
         borderStyle = { border: "1px solid rgba(120, 80, 40, 0.15)" };
-        slideshowOverlayBg = "rgba(252, 248, 242, 0.96)";
-        isDarkOverlay = false;
         break;
       case "purple":
         slideBg = "radial-gradient(circle at top, #1c1537 0%, #0d091a 100%)";
@@ -156,14 +148,12 @@ export const PPTMirror: React.FC<PPTMirrorProps> = ({
         bodyColor = "#b4befe";
         fontClass = "font-sans";
         borderStyle = { border: "1px solid rgba(168, 85, 247, 0.25)" };
-        slideshowOverlayBg = "rgba(13, 9, 26, 0.95)";
-        isDarkOverlay = true;
         break;
     }
 
     const accentColor = resolveThemeAccent(selectedTheme, selectedPalette);
 
-    return { slideBg, titleColor, bodyColor, fontClass, borderStyle, accentColor, slideshowOverlayBg, isDarkOverlay };
+    return { slideBg, titleColor, bodyColor, fontClass, borderStyle, accentColor };
   };
 
   const themeStyles = getThemeStyles();
@@ -183,43 +173,39 @@ export const PPTMirror: React.FC<PPTMirrorProps> = ({
       {/* 顶部工具栏 */}
       <div className="panel-header right-header">
         <div className="right-header-title">
-          <FileIcon size={16} className="text-secondary" />
+          <FileIcon size={16} />
           <span>PPT 实时预览</span>
         </div>
-        <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+        <div className="mirror-header-actions">
           <button
             onClick={onOptimizePresentation}
-            className="optimize-slide-btn"
-            style={{ padding: "6px 10px", fontSize: 11, display: "flex", alignItems: "center", gap: "4px", margin: 0 }}
+            className="optimize-slide-btn mirror-header-cta"
             title="AI 重新排版润色全体幻灯片"
           >
-            <SparklesIcon size={12} />
+            <SparklesIcon size={14} />
             <span>AI美化</span>
           </button>
           <button
             onClick={handleFullscreenOpen}
-            className="action-icon-btn"
-            style={{ padding: 6, margin: 0, display: "flex", alignItems: "center", justifyContent: "center" }}
+            className="action-icon-btn mirror-header-icon-btn"
             title="放映演示文稿"
           >
-            <PlayIcon size={14} />
+            <PlayIcon size={16} />
           </button>
           <button
             onClick={handleDownload}
-            className="action-icon-btn"
-            style={{ padding: 6, margin: 0, display: "flex", alignItems: "center", justifyContent: "center", opacity: isExporting ? 0.6 : 1 }}
+            className="action-icon-btn mirror-header-icon-btn"
             disabled={isExporting}
             title="下载 PPT"
           >
-            <DownloadIcon size={14} />
+            <DownloadIcon size={16} />
           </button>
           <button
             onClick={onToggleExpand}
-            className="action-icon-btn"
-            style={{ padding: 6, margin: 0, display: "flex", alignItems: "center", justifyContent: "center" }}
+            className="action-icon-btn mirror-header-icon-btn"
             title={isExpanded ? "收缩预览" : "放大预览"}
           >
-            {isExpanded ? <CompressIcon size={14} /> : <ExpandIcon size={14} />}
+            {isExpanded ? <ClosePreviewIcon size={16} /> : <OpenPreviewIcon size={16} />}
           </button>
         </div>
       </div>
@@ -360,35 +346,19 @@ export const PPTMirror: React.FC<PPTMirrorProps> = ({
       {/* 4. 全屏放映灯箱模态窗口 */}
       {isFullscreen && createPortal(
         <div
-          className="slideshow-lightbox-overlay"
+          className={`slideshow-lightbox-overlay ${themeMode === "dark" ? "dark-theme" : ""}`}
           onClick={() => setIsFullscreen(false)}
-          style={{ background: themeStyles.slideshowOverlayBg }}
         >
           <div className="slideshow-lightbox-content" onClick={(e) => e.stopPropagation()}>
             {/* 顶栏控制 */}
-            <div
-              className="slideshow-top-bar"
-              style={{
-                color: themeStyles.isDarkOverlay ? "#fff" : "#0f172a",
-                borderBottom: themeStyles.isDarkOverlay ? "1px solid rgba(255, 255, 255, 0.08)" : "1px solid rgba(15, 23, 42, 0.08)",
-                background: themeStyles.isDarkOverlay ? "rgba(0, 0, 0, 0.4)" : "rgba(255, 255, 255, 0.4)",
-              }}
-            >
+            <div className="slideshow-top-bar">
               <span className="slideshow-title">{presentation.title}</span>
-              <span
-                className="slideshow-progress"
-                style={{ color: themeStyles.isDarkOverlay ? "#94a3b8" : "#475569" }}
-              >
+              <span className="slideshow-progress">
                 第 {fullscreenIndex + 1} 页 / 共 {slides.length} 页
               </span>
               <button
                 className="slideshow-close"
                 onClick={() => setIsFullscreen(false)}
-                style={{
-                  color: themeStyles.isDarkOverlay ? "#f8fafc" : "#0f172a",
-                  background: themeStyles.isDarkOverlay ? "rgba(255, 255, 255, 0.06)" : "rgba(15, 23, 42, 0.04)",
-                  borderColor: themeStyles.isDarkOverlay ? "rgba(255, 255, 255, 0.12)" : "rgba(15, 23, 42, 0.1)",
-                }}
               >
                 ✕ 关闭放映
               </button>
@@ -416,7 +386,7 @@ export const PPTMirror: React.FC<PPTMirrorProps> = ({
                     width: 1280,
                     height: 720,
                     background: fullscreenSlideBg,
-                    boxShadow: themeStyles.isDarkOverlay ? "0 25px 60px rgba(0,0,0,0.8)" : "0 25px 60px rgba(15,23,42,0.15)",
+                    boxShadow: "var(--slideshow-slide-shadow)",
                     borderRadius: 8,
                     position: "relative",
                     transform: `scale(${Math.min(window.innerWidth / 1380, window.innerHeight / 820)})`,
@@ -485,11 +455,6 @@ export const PPTMirror: React.FC<PPTMirrorProps> = ({
                 e.stopPropagation();
                 setFullscreenIndex((i) => Math.max(0, i - 1));
               }}
-              style={{
-                color: themeStyles.isDarkOverlay ? "#fff" : "#0f172a",
-                background: themeStyles.isDarkOverlay ? "rgba(255, 255, 255, 0.05)" : "rgba(15, 23, 42, 0.03)",
-                borderColor: themeStyles.isDarkOverlay ? "rgba(255, 255, 255, 0.1)" : "rgba(15, 23, 42, 0.06)",
-              }}
             >
               ‹
             </button>
@@ -499,11 +464,6 @@ export const PPTMirror: React.FC<PPTMirrorProps> = ({
               onClick={(e) => {
                 e.stopPropagation();
                 setFullscreenIndex((i) => Math.min(slides.length - 1, i + 1));
-              }}
-              style={{
-                color: themeStyles.isDarkOverlay ? "#fff" : "#0f172a",
-                background: themeStyles.isDarkOverlay ? "rgba(255, 255, 255, 0.05)" : "rgba(15, 23, 42, 0.03)",
-                borderColor: themeStyles.isDarkOverlay ? "rgba(255, 255, 255, 0.1)" : "rgba(15, 23, 42, 0.06)",
               }}
             >
               ›

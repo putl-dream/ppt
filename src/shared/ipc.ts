@@ -106,6 +106,8 @@ export type AgentRunResult =
   | { status: "completed"; presentation: Presentation }
   | { status: "rejected"; presentation?: Presentation };
 
+export type WindowThemeMode = "light" | "dark" | "system";
+
 export interface ProjectArtifactReadResult {
   path: string;
   type: "file" | "directory";
@@ -186,6 +188,7 @@ export interface DesktopApi {
     options: ExportPresentationOptions,
   ): Promise<string | null>;
   selectDirectory(defaultPath?: string): Promise<string | null>;
+  setWindowThemeMode(themeMode: WindowThemeMode): Promise<"light" | "dark">;
   cancelAgentRun(runId: string): Promise<boolean>;
   cancelAgentSession(sessionId: string): Promise<boolean>;
   resolveToolApproval(runId: string, approvalId: string, approved: boolean): Promise<boolean>;

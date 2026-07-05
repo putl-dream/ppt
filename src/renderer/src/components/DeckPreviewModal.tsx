@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import type { Presentation } from "@shared/presentation";
 import { resolveSlideBackgroundWithVariant } from "@shared/slide-variant";
 import { SlideElementRenderer } from "./SlideElementRenderer";
-import { CompressIcon } from "./Icons";
+import { ClosePreviewIcon } from "./Icons";
 
 interface DeckPreviewModalProps {
   open: boolean;
@@ -107,7 +107,7 @@ export const DeckPreviewModal: React.FC<DeckPreviewModalProps> = ({
             <p>只读预览 · 共 {presentation.slides.length} 页</p>
           </div>
           <button type="button" className="action-icon-btn" onClick={onClose} title="关闭预览">
-            <CompressIcon size={16} />
+            <ClosePreviewIcon size={16} />
           </button>
         </div>
 

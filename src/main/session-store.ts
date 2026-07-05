@@ -3,6 +3,7 @@ import { dirname, join } from "node:path";
 import { z } from "zod";
 import type { Presentation } from "@shared/presentation";
 import {
+  createDefaultSessionTitle,
   createSessionPresentation,
   createWelcomeMessage,
   type ProjectArtifactStatus,
@@ -149,7 +150,7 @@ export class FileSessionStore {
 
   async createSession(options?: CreateSessionOptions): Promise<SessionBootstrap> {
     const data = this.requireData();
-    const title = options?.title ?? `新 PPT 项目 ${data.sessions.length + 1}`;
+    const title = options?.title ?? createDefaultSessionTitle(data.sessions.length + 1);
     const now = new Date().toISOString();
     const presentation = createSessionPresentation(title);
     const snapshot: SessionSnapshot = {

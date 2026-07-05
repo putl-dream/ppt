@@ -41,6 +41,7 @@ const api: DesktopApi = {
   exportPresentation: (presentation, options) =>
     ipcRenderer.invoke("presentation:export", presentation, options),
   selectDirectory: (defaultPath) => ipcRenderer.invoke("dialog:select-directory", defaultPath),
+  setWindowThemeMode: (themeMode) => ipcRenderer.invoke("window:set-theme-mode", themeMode),
   cancelAgentRun: (runId) => ipcRenderer.invoke("agent:cancel", runId),
   cancelAgentSession: (sessionId) => ipcRenderer.invoke("agent:cancel-session", sessionId),
   resolveToolApproval: (runId, approvalId, approved) =>

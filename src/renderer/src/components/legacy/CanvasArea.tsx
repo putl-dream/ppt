@@ -8,8 +8,8 @@ import {
   UndoIcon,
   RedoIcon,
   SparklesIcon,
-  ExpandIcon,
-  CompressIcon,
+  OpenPreviewIcon,
+  ClosePreviewIcon,
   PlusIcon,
   TrashIcon,
   DuplicateIcon,
@@ -352,7 +352,7 @@ export const CanvasArea: React.FC<CanvasAreaProps> = ({
             onClick={onToggleMirror}
             title={isMirrorOpen ? "关闭右侧预览" : "打开右侧预览"}
           >
-            {isMirrorOpen ? <CompressIcon size={16} /> : <ExpandIcon size={16} />}
+            {isMirrorOpen ? <ClosePreviewIcon size={16} /> : <OpenPreviewIcon size={16} />}
           </button>
         </div>
       </div>

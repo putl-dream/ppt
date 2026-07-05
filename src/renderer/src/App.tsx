@@ -7,6 +7,7 @@ import type {
 } from "@shared/ipc";
 import type { Presentation, SlideElement } from "@shared/presentation";
 import {
+  createSessionTitleFromPrompt,
   createWelcomeMessage,
   type SessionBootstrap,
   type SessionChatMessage,
@@ -245,6 +246,18 @@ export function App() {
       setComputedTheme(themeMode);
     }
   }, [themeMode]);
+
+  useEffect(() => {
+    document.documentElement.style.colorScheme = computedTheme;
+    const desktopApi = window.desktopApi;
+    if (!desktopApi?.setWindowThemeMode) return;
+
+    void desktopApi
+      .setWindowThemeMode(themeMode === "system" ? "system" : computedTheme)
+      .catch((error) => {
+        console.error("同步窗口主题失败:", error);
+      });
+  }, [computedTheme, themeMode]);
 
   // 实时外观视觉控制阀应用 (圆角与色彩对比度)
   useEffect(() => {
@@ -595,6 +608,7 @@ export function App() {
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [activeSessionId, setActiveSessionId] = useState("");
   const [sessionLoaded, setSessionLoaded] = useState(false);
+  const [isSessionSwitching, setIsSessionSwitching] = useState(false);
   /** 居中放大初始化页（发送首条消息前） */
   const [isDraftChat, setIsDraftChat] = useState(true);
 
@@ -841,17 +855,19 @@ export function App() {
   // 切换会话并从主进程载入完整持久化快照
   const handleSelectSession = async (sessionId: string) => {
     if (sessionId === activeSessionId) return;
+    if (isSessionSwitching) return;
     if (busy) {
       triggerToast("当前任务执行中，请稍后再切换会话");
       return;
     }
-    setSessionLoaded(false);
+    setIsSessionSwitching(true);
     try {
       applySessionState(await window.desktopApi.selectSession(sessionId));
       triggerToast("已恢复会话内容");
     } catch (error) {
-      setSessionLoaded(true);
       triggerToast(error instanceof Error ? error.message : "切换会话失败");
+    } finally {
+      setIsSessionSwitching(false);
     }
   };
 
@@ -1044,8 +1060,11 @@ export function App() {
 
     if (!agentSessionId) {
       try {
+        const sessionTitle = createSessionTitleFromPrompt(activeRequest);
         const state = await window.desktopApi.createSession(
-          localStoragePath ? { rootPath: localStoragePath } : undefined,
+          localStoragePath
+            ? { rootPath: localStoragePath, title: sessionTitle }
+            : { title: sessionTitle },
         );
         sessionCreatedWithWorkspace = Boolean(localStoragePath);
         applySessionState(state);
@@ -1753,6 +1772,10 @@ export function App() {
     busy && activeRunId
       ? streamMessageIdsRef.current.get(activeRunId) ?? null
       : null;
+  const activeSessionTitle =
+    sessions.find((session) => session.id === activeSessionId)?.title.trim()
+    || presentation?.title?.trim()
+    || (isDraftChat ? "AI 新建会话" : "当前对话");
 
   return (
     <main className={`app-shell ${computedTheme === "dark" ? "dark-theme" : ""}`}>
@@ -1789,6 +1812,7 @@ export function App() {
               >
                 <ChatWorkspace
                   isNewChat={isDraftChat}
+                  conversationTitle={activeSessionTitle}
                   chatMessages={chatMessages}
                   activityTrace={activityTrace}
                   thoughtProgress={thoughtProgress}
@@ -1821,10 +1845,6 @@ export function App() {
                   onToggleThemeMode={() => setThemeMode(computedTheme === "light" ? "dark" : "light")}
                   isMirrorOpen={isMirrorOpen}
                   onToggleMirror={() => setIsMirrorOpen(!isMirrorOpen)}
-                  onUndo={() => void handleHistory("undo")}
-                  onRedo={() => void handleHistory("redo")}
-                  canUndo={presentation ? presentation.revision > 0 : false}
-                  canRedo={presentation ? presentation.revision < maxRevision : false}
                   selectedSlideIndex={activeSlideIndexValue}
                   onClearContextTag={() => setSelectedSlideId("")}
                   onUpdateMessageContent={handleUpdateMessageContent}
@@ -1846,6 +1866,7 @@ export function App() {
                     onSelectSlide={setSelectedSlideId}
                     selectedTheme={selectedTheme}
                     selectedPalette={selectedPalette}
+                    themeMode={computedTheme}
                     logoUrl={logoUrl}
                     onOptimizePresentation={handleOptimizePresentationLocally}
                     highlightSlideId={highlightSlideId}

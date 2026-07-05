@@ -1,5 +1,13 @@
 import { join } from "node:path";
-import { app, BrowserWindow, ipcMain, Menu, dialog, type MessageBoxOptions } from "electron";
+import {
+  app,
+  BrowserWindow,
+  ipcMain,
+  Menu,
+  dialog,
+  nativeTheme,
+  type MessageBoxOptions,
+} from "electron";
 import type { Presentation } from "@shared/presentation";
 import { CommandBus, type PresentationCommand } from "@shared/commands";
 import {
@@ -9,6 +17,7 @@ import {
   type AgentStreamEvent,
   type CreateSessionOptions,
   type ExportPresentationOptions,
+  type WindowThemeMode,
 } from "@shared/ipc";
 import { deckExportService } from "./deck/deck-export-service";
 import { slideThumbnailService } from "./deck/slide-thumbnail-service";
@@ -84,6 +93,7 @@ function createWindow(): void {
     height: 900,
     minWidth: 1100,
     minHeight: 700,
+    backgroundColor: getWindowBackgroundColor(),
     webPreferences: {
       preload: join(__dirname, "../preload/index.cjs"),
       contextIsolation: true,
@@ -102,6 +112,42 @@ function createWindow(): void {
 }
 
 let sessionStore: FileSessionStore;
+
+const WINDOW_BACKGROUND_BY_THEME: Record<"light" | "dark", string> = {
+  light: "#ffffff",
+  dark: "#1e1e1e",
+};
+
+function resolveWindowThemeMode(): "light" | "dark" {
+  return nativeTheme.shouldUseDarkColors ? "dark" : "light";
+}
+
+function normalizeWindowThemeMode(themeMode: unknown): WindowThemeMode {
+  if (themeMode === "light" || themeMode === "dark" || themeMode === "system") {
+    return themeMode;
+  }
+  return "system";
+}
+
+function getWindowBackgroundColor(): string {
+  return WINDOW_BACKGROUND_BY_THEME[resolveWindowThemeMode()];
+}
+
+function applyWindowBackgroundColor(): void {
+  const backgroundColor = getWindowBackgroundColor();
+
+  for (const browserWindow of BrowserWindow.getAllWindows()) {
+    browserWindow.setBackgroundColor(backgroundColor);
+  }
+}
+
+function applyWindowThemeMode(themeMode: WindowThemeMode): "light" | "dark" {
+  nativeTheme.themeSource = themeMode;
+  const resolvedTheme = resolveWindowThemeMode();
+  applyWindowBackgroundColor();
+
+  return resolvedTheme;
+}
 
 app.whenReady().then(async () => {
   Menu.setApplicationMenu(null);
@@ -195,6 +241,9 @@ app.whenReady().then(async () => {
   };
 
   ipcMain.handle("session:get-state", () => sessionStore.getBootstrap());
+  ipcMain.handle("window:set-theme-mode", (_event, themeMode: unknown) =>
+    applyWindowThemeMode(normalizeWindowThemeMode(themeMode)),
+  );
   ipcMain.handle("session:create", async (_, options?: CreateSessionOptions) => {
     const state = await sessionStore.createSession(options);
     activeSessionId = state.activeSession?.session.id ?? "";

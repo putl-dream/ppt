@@ -4,12 +4,10 @@ import type { SessionChatMessage } from "@shared/session";
 import {
   CopyIcon,
   Edit3Icon,
-  UndoIcon,
-  RedoIcon,
   SunIcon,
   MoonIcon,
-  ExpandIcon,
-  CompressIcon,
+  OpenPreviewIcon,
+  ClosePreviewIcon,
   FileIcon,
 } from "./Icons";
 import { UnifiedAgentInput } from "./UnifiedAgentInput";
@@ -43,6 +41,7 @@ export interface InlineCardData {
 
 interface ChatWorkspaceProps {
   isNewChat?: boolean;
+  conversationTitle?: string;
   chatMessages: ChatMessage[];
   activityTrace: AgentActivityItem[];
   thoughtProgress: number;
@@ -73,10 +72,6 @@ interface ChatWorkspaceProps {
   onToggleThemeMode: () => void;
   isMirrorOpen: boolean;
   onToggleMirror: () => void;
-  onUndo: () => void;
-  onRedo: () => void;
-  canUndo: boolean;
-  canRedo: boolean;
   selectedSlideIndex: number | null; // 右侧选中的幻灯片序号
   onClearContextTag: () => void;
   onUpdateMessageContent: (msgId: string, newContent: string) => void;
@@ -95,6 +90,7 @@ interface ChatWorkspaceProps {
 
 export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
   isNewChat = false,
+  conversationTitle,
   chatMessages,
   activityTrace,
   thoughtProgress,
@@ -125,10 +121,6 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
   onToggleThemeMode,
   isMirrorOpen,
   onToggleMirror,
-  onUndo,
-  onRedo,
-  canUndo,
-  canRedo,
   selectedSlideIndex,
   onClearContextTag,
   onUpdateMessageContent,
@@ -174,6 +166,7 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
   const activeTasks = latestPlan?.tasks ?? [];
   const planGoal = latestPlan?.goal ?? sessionGoal;
   const showTaskPlan = isTaskPlanActive(activeTasks);
+  const displayConversationTitle = conversationTitle?.trim() || (isNewChat ? "AI 新建会话" : "当前对话");
 
   const canCancelRun = Boolean(busy && activeRunId && onCancelRun);
 
@@ -266,7 +259,9 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
         {/* Top Header */}
         <div className="panel-header canvas-header" style={{ borderBottom: "none", background: "transparent" }}>
           <div className="canvas-header-left">
-            <span className="revision-pill">AI 新建会话</span>
+            <div className="chat-session-title" title={displayConversationTitle}>
+              <span>{displayConversationTitle}</span>
+            </div>
           </div>
           <div className="canvas-header-right">
             <button
@@ -343,24 +338,8 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
       {/* 顶部中央状态控制栏 */}
       <div className="panel-header canvas-header">
         <div className="canvas-header-left">
-          <div className="history-undo-redo">
-            <button
-              onClick={onUndo}
-              disabled={!canUndo}
-              className="action-icon-btn"
-              title="撤销 (Undo)"
-            >
-              <UndoIcon size={16} />
-            </button>
-            <button
-              onClick={onRedo}
-              disabled={!canRedo}
-              className="action-icon-btn"
-              title="重做 (Redo)"
-            >
-              <RedoIcon size={16} />
-            </button>
-            <span className="revision-pill">AI 指令中心</span>
+          <div className="chat-session-title" title={displayConversationTitle}>
+            <span>{displayConversationTitle}</span>
           </div>
         </div>
 
@@ -381,7 +360,7 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
             onClick={onToggleMirror}
             title={isMirrorOpen ? "关闭右侧预览" : "打开右侧预览"}
           >
-            {isMirrorOpen ? <CompressIcon size={16} /> : <ExpandIcon size={16} />}
+            {isMirrorOpen ? <ClosePreviewIcon size={16} /> : <OpenPreviewIcon size={16} />}
           </button>
         </div>
       </div>
