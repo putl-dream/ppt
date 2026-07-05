@@ -324,6 +324,67 @@ export function filterTraceForDisplay(
   );
 }
 
+const PROCESS_TRACE_ITEM_KINDS = new Set<AgentActivityItem["kind"]>([
+  "reasoning",
+  "tool",
+  "tool-summary",
+  "step",
+  "task",
+  "tool-approval",
+]);
+
+export function isProcessTraceItem(item: AgentActivityItem): boolean {
+  return PROCESS_TRACE_ITEM_KINDS.has(item.kind);
+}
+
+export function splitTraceItems(trace: AgentActivityItem[]): {
+  processItems: AgentActivityItem[];
+  standaloneItems: AgentActivityItem[];
+} {
+  const processItems: AgentActivityItem[] = [];
+  const standaloneItems: AgentActivityItem[] = [];
+  for (const item of trace) {
+    if (item.kind === "taskgraph") {
+      standaloneItems.push(item);
+    } else if (isProcessTraceItem(item)) {
+      processItems.push(item);
+    }
+  }
+  return { processItems, standaloneItems };
+}
+
+export function isProcessTraceActive(items: AgentActivityItem[]): boolean {
+  return items.some((item) => {
+    if (item.kind === "reasoning" && item.streaming) return true;
+    if (item.kind === "tool" && item.status === "running") return true;
+    if (item.kind === "tool-summary" && item.streaming) return true;
+    if (item.kind === "step" && item.status !== "done") return true;
+    if (item.kind === "task") {
+      if (item.status === "running") return true;
+      return item.steps.some((step) => step.status === "running" || step.streaming);
+    }
+    return false;
+  });
+}
+
+export function summarizeProcessTrace(items: AgentActivityItem[]): string {
+  const reasoningCount = items.filter((item) => item.kind === "reasoning").length;
+  const toolCount = items.filter((item) => item.kind === "tool").length;
+  const stepCount = items.filter((item) => item.kind === "step").length;
+  const taskCount = items.filter((item) => item.kind === "task").length;
+  const approvalCount = items.filter((item) => item.kind === "tool-approval").length;
+
+  const parts: string[] = [];
+  if (reasoningCount > 0) parts.push(`${reasoningCount} 轮思考`);
+  if (toolCount > 0) parts.push(`${toolCount} 次工具调用`);
+  if (taskCount > 0) parts.push(`${taskCount} 个子任务`);
+  if (stepCount > 0) parts.push(`${stepCount} 个步骤`);
+  if (approvalCount > 0) parts.push(`${approvalCount} 次授权`);
+
+  if (parts.length === 0) return "执行过程";
+  return parts.join(" · ");
+}
+
 export function extractLatestTaskGraph(
   ...traces: Array<AgentActivityItem[] | undefined>
 ): { tasks: AgentTaskNode[]; goal?: string | null } | null {

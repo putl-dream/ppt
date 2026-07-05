@@ -375,65 +375,67 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
           return (
             <div key={msg.id} className={`chat-message ${msg.role}`}>
               {msg.role === "user" ? (
-                <div className="user-message-bubble">
-                  {editingMsgId === msg.id ? (
-                    <div className="user-message-edit">
-                      <textarea
-                        className="chat-message-textarea"
-                        value={editingText}
-                        onChange={(e) => {
-                          setEditingText(e.target.value);
-                          e.target.style.height = "auto";
-                          e.target.style.height = `${e.target.scrollHeight}px`;
-                        }}
-                        ref={(el) => {
-                          if (el) {
-                            el.style.height = "auto";
-                            el.style.height = `${el.scrollHeight}px`;
-                          }
-                        }}
-                        autoFocus
-                      />
-                      <div className="user-message-edit-actions">
-                        <button
-                          type="button"
-                          onClick={() => setEditingMsgId(null)}
-                          className="message-action-btn"
-                        >
-                          取消
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleSaveEdit(msg.id)}
-                          className="message-action-btn message-action-btn--primary"
-                        >
-                          保存并重新生成
-                        </button>
+                <div className="user-message-shell">
+                  <div className="user-message-bubble">
+                    {editingMsgId === msg.id ? (
+                      <div className="user-message-edit">
+                        <textarea
+                          className="chat-message-textarea"
+                          value={editingText}
+                          onChange={(e) => {
+                            setEditingText(e.target.value);
+                            e.target.style.height = "auto";
+                            e.target.style.height = `${e.target.scrollHeight}px`;
+                          }}
+                          ref={(el) => {
+                            if (el) {
+                              el.style.height = "auto";
+                              el.style.height = `${el.scrollHeight}px`;
+                            }
+                          }}
+                          autoFocus
+                        />
+                        <div className="user-message-edit-actions">
+                          <button
+                            type="button"
+                            onClick={() => setEditingMsgId(null)}
+                            className="message-action-btn"
+                          >
+                            取消
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleSaveEdit(msg.id)}
+                            className="message-action-btn message-action-btn--primary"
+                          >
+                            保存并重新生成
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                  ) : (
-                    <MessageMarkdown content={msg.content} className="user-message-text" />
-                  )}
+                    ) : (
+                      <MessageMarkdown content={msg.content} className="user-message-text" />
+                    )}
+                  </div>
 
                   {editingMsgId !== msg.id && (
                     <div className="user-message-actions">
                       <button
                         type="button"
-                        className="message-action-btn"
+                        className="message-action-btn message-action-btn--icon"
                         onClick={() => void handleCopyMessage(msg.content)}
                         title="复制内容"
+                        aria-label="复制内容"
                       >
                         <CopyIcon size={13} />
-                        <span>复制</span>
                       </button>
                       <button
                         type="button"
-                        className="message-action-btn"
+                        className="message-action-btn message-action-btn--icon"
                         onClick={() => handleStartEdit(msg.id, msg.content)}
                         title="编辑指令并重新运行"
+                        aria-label="编辑指令并重新运行"
                       >
                         <Edit3Icon size={13} />
-                        <span>编辑</span>
                       </button>
                     </div>
                   )}
@@ -665,11 +667,7 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
           busy={busy}
           agentActivityMode={agentActivityMode}
           activityTrace={activityTrace}
-          activeToolName={activeToolName}
           suppressTrace={Boolean(streamingMessageId)}
-          canCancelRun={canCancelRun}
-          onCancelRun={onCancelRun}
-          isCancellingRun={isCancellingRun}
         />
 
         <div ref={messagesEndRef} />

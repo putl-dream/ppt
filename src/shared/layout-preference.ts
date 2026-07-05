@@ -21,6 +21,7 @@ export function saveLayoutVisualMode(mode: LayoutVisualMode): void {
   window.localStorage.setItem(LAYOUT_PREFERENCE_STORAGE_KEY, mode);
 }
 
+/** Agent 内部执行指令（不直接展示在聊天气泡中）。 */
 export function buildLayoutPhasePrompt(mode: LayoutVisualMode, theme: string, palette: string): string {
   if (mode === "creative") {
     return [

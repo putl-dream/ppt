@@ -1009,9 +1009,20 @@ export function App() {
   }
 
   // 提交需求或继续当前大纲对话
-  async function startAgent(customRequest?: string, isEditOfMsgId?: string) {
+  async function startAgent(
+    customRequest?: string,
+    isEditOfMsgId?: string,
+    options?: { userDisplayContent?: string | false },
+  ) {
     const activeRequest = customRequest || request;
     if (!activeRequest.trim() || busy) return;
+
+    const resolveUserDisplayContent = (): string | null => {
+      if (options?.userDisplayContent === false) return null;
+      if (typeof options?.userDisplayContent === "string") return options.userDisplayContent;
+      return activeRequest;
+    };
+    const userDisplayContent = resolveUserDisplayContent();
 
     if (presentation && isExportPrompt(activeRequest)) {
       const userMsgId = crypto.randomUUID();
@@ -1135,15 +1146,15 @@ export function App() {
         forkedMessages[idx] = {
           ...forkedMessages[idx],
           id: crypto.randomUUID(),
-          content: activeRequest,
+          content: userDisplayContent ?? activeRequest,
         };
         setChatMessages(forkedMessages);
       }
-    } else {
+    } else if (userDisplayContent !== null) {
       const userMsgId = crypto.randomUUID();
       setChatMessages((prev) => [
         ...prev,
-        { id: userMsgId, role: "user", content: activeRequest },
+        { id: userMsgId, role: "user", content: userDisplayContent },
       ]);
     }
     
@@ -1715,7 +1726,9 @@ export function App() {
     setSelectedPalette(palette);
     markInlineCardResolved(messageId, "layout", "confirmed", mode);
     triggerToast(mode === "creative" ? "🎨 开始创意装饰排版" : "📐 开始标准排版");
-    void startAgent(buildLayoutPhasePrompt(mode, theme, palette));
+    void startAgent(buildLayoutPhasePrompt(mode, theme, palette), undefined, {
+      userDisplayContent: false,
+    });
   };
 
   const handleOpenDeckPreview = () => {
