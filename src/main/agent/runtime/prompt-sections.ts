@@ -108,6 +108,30 @@ function buildWorkflowOverview(stage: PromptStage): string {
   ].join("\n");
 }
 
+function buildConvergenceContract(stage: PromptStage): string {
+  const stageGoals: Record<PromptStage, string> = {
+    discover: "冻结规划：确定路径、页数口径、叙事骨架；不要同时保留多套互斥方案。",
+    author: "冻结内容：按已定大纲/分镜逐页写稿并做文案规范化；不要改页数、重排叙事。",
+    design: "冻结排版计划：为现有每一页选择 layout/variant/enhancements；不要改文案或增删页。",
+    style: "执行视觉方案：按 layout-plan 合并提交主题与版式命令；不要回头重做结构。",
+    edit: "局部收敛：只改用户指定范围；不要扩展成全流程重做。",
+    export: "交付收敛：只做必要复核与导出；不要重新设计 deck。",
+  };
+
+  return [
+    "",
+    "## 阶段契约：收敛而非发散",
+    "",
+    "- 每个阶段只交付本阶段产物；阶段完成后，上一阶段产物就是冻结输入。",
+    "- 决策时选择一个可执行方案并推进；除非用户明确要求重做，不输出多套互斥方案、不推翻已完成规划。",
+    "- 发现上一阶段缺陷时，优先在当前阶段做最小承接；必须改变目标、页数或叙事顺序时，先 AskUser 说明影响。",
+    "- 不提前加载后续阶段知识：design 前不讨论主题色、版式节奏或 Rubric；style 前不执行视觉排版命令。",
+    "- 冻结顺序：outline/storyboard（规划）→ slide content（页数与文案）→ content normalization（标题、术语、密度）→ layout-plan（排版决策）→ visual execution（主题与版式命令）。",
+    "",
+    `当前阶段收敛目标：${stageGoals[stage]}`,
+  ].join("\n");
+}
+
 function buildCorePrinciples(stage: PromptStage, stepLimits?: AgentStepLimits): string {
   const shared = [
     "你是一个专业的 PPT 智能助手 (PPT Agent)。帮助用户创作**可用**的演示文稿。",
@@ -116,6 +140,7 @@ function buildCorePrinciples(stage: PromptStage, stepLimits?: AgentStepLimits): 
     "",
     `- **当前阶段**：${describePromptStage(stage)}（\`${stage}\`）`,
     buildWorkflowOverview(stage),
+    buildConvergenceContract(stage),
     "- **两阶段建稿**：先内容草稿（author），再视觉排版（design → style）。author 阶段不写主题/版式命令。",
     "- **幻灯片写入**：改动经 `SubmitCommands`；读现状用 `ReadPresentationSnapshot` / `ReadCurrentSlide` / `ListSlides`。",
     "- **子任务委派**：workspace 中间产物用 `Task`；子 Agent 只回传简短结论。",
@@ -130,15 +155,18 @@ function buildCorePrinciples(stage: PromptStage, stepLimits?: AgentStepLimits): 
       "### 本阶段（discover = 路径 + 规划）",
       "- 判断轻量 / 两阶段 / 完整路径；不要默认走全流程。",
       "- 轻量单页修改 → 可跳过 discover，直接 edit。",
-      "- 完整路径：**先 `TaskGraphCreatePlan`(3–5 步, sequential) 建计划**，再 Task 产出 brief.md → outline.md → storyboard.json。",
-      "- 聚焦目的、受众、页数、叙事结构；**不讨论主题色、版式节奏、set-theme**。",
+      "- 完整路径：**先 `TaskGraphCreatePlan`(3–5 步, sequential) 建计划**，再 Task 产出 brief.md → outline.md → storyboard.json；一旦 outline/storyboard 就绪，规划冻结，后续不重新拆页。",
+      "- 聚焦目的、受众、页数、叙事结构；只保留一套可执行大纲，**不讨论主题色、版式节奏、set-theme**。",
       "- 文案可完整表达观点；字数精简留到 style 阶段。",
     ],
     author: [
       "",
       "### 本阶段（author = 内容 + 等待排版选择）",
+      "- **大纲/分镜已冻结**：若存在 outline.md 或 storyboard.json，按其页数与顺序逐页创作；不要增删页、合并页或重排章节。",
       "- **充分写内容**：要点可完整表达；信息准确优先。",
-      "- **按 layout 容量组织**：case=叙述+1 数字、process=2–4 步、concept=3–4 条；超容量应拆页。",
+      "- **按单页承载量组织**：每页 1 个主论点、3–4 条要点；流程类 2–4 步；案例类 1 段叙述 + 1 个关键数字。",
+      "- 若尚无冻结分镜且内容明显超载，可在 author 内拆页；若已有 outline/storyboard，保持页数，用更短句收敛。",
+      "- **内容规范化**：提交排版前统一标题语气、术语、数字口径和每页信息密度；仍然不改变页数与叙事顺序。",
       "- 只 `add-slide` + text elements + layout 字段；**禁止** `set-theme`、`update-slide-layout`。",
       "- 标题放 `slide.title`；画布不放 fontSize≥36 的标题文本。",
       "- 草稿完成后 message 含「内容草稿已就绪，请选择排版方式」——此时仍属 author，不提交 theme/layout。",
@@ -148,6 +176,7 @@ function buildCorePrinciples(stage: PromptStage, stepLimits?: AgentStepLimits): 
       "",
       "### 本阶段（design = layout-plan）",
       "- **页数与文案已冻结**：以 ReadPresentationSnapshot 为准；不改写、不增删页。",
+      "- layout-plan 的 slides[] 必须与当前 snapshot 一一对应：相同 slideId、相同页数、相同顺序。",
       "- LoadSkill `ppt-design-layout` → Task 产出 `slides/layout-plan.json`。",
       "- 只决策 layout / variant / enhancements；**此处开始**应用版式节奏 Rubric。",
     ],
@@ -155,7 +184,7 @@ function buildCorePrinciples(stage: PromptStage, stepLimits?: AgentStepLimits): 
       "",
       "### 本阶段（style = 视觉排版 + 质检）",
       "- 按 layout-plan（或用户已选主题）执行：`set-theme` → `update-slide-layout` → variant。",
-      "- **文案精简**：溢出或过长要点用 `ppt-beautify` / `compress-text` 等 Deferred 工具处理。",
+      "- **结构仍冻结**：不新增、删除、重排页面；只在溢出或过长时用 `ppt-beautify` / `compress-text` 做最小文案精简。",
       "- plan.enhancements 经 ExecuteExtraTool；完成后 LoadSkill `deck-review` 或 `ValidateDeckLayout`。",
       "- **首次排版 SubmitCommands 后**，系统自动渲染缩略图回喂一轮视觉质检；对照后修正或确认再提交。",
       "- **Core 工具**：`PreviewSlide`、`ValidateDeckLayout` 可直接调用。",

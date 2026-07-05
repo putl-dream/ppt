@@ -111,7 +111,7 @@ function isAwaitingLayoutChoice(
 }
 
 function suggestsLargeNewDeck(request: string, artifacts: WorkspaceArtifacts): boolean {
-  if (artifacts.storyboard) return false;
+  if (artifacts.outline || artifacts.storyboard) return false;
   return NEW_DECK_PATTERNS.some((pattern) => pattern.test(request));
 }
 

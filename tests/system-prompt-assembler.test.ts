@@ -84,7 +84,19 @@ describe("system prompt assembly", () => {
     expect(assembled.text).toContain("`ppt-build`");
     expect(assembled.text).not.toContain("`ppt-layout`");
     expect(assembled.text).toContain("充分写内容");
+    expect(assembled.text).toContain("大纲/分镜已冻结");
+    expect(assembled.text).toContain("内容规范化");
     expect(assembled.text).not.toMatch(/"type":"set-theme"/);
+  });
+
+  it("design stage freezes slide count and copy while planning layout", () => {
+    const assembled = assembleSystemPrompt(baseContext({
+      stage: "design",
+    }));
+
+    expect(assembled.text).toContain("页数与文案已冻结");
+    expect(assembled.text).toContain("slides[] 必须与当前 snapshot 一一对应");
+    expect(assembled.text).toContain("layout-plan");
   });
 
   it("style stage includes theme commands and layout skills", () => {
@@ -105,6 +117,7 @@ describe("system prompt assembly", () => {
   it("includes six-stage workflow overview in every stage", () => {
     const assembled = assembleSystemPrompt(baseContext({ stage: "discover" }));
     expect(assembled.text).toContain("`discover` → `author` → `design` → `style` → `export`");
+    expect(assembled.text).toContain("阶段契约：收敛而非发散");
   });
 
   it("loads memory section only when MEMORY.md has content", async () => {

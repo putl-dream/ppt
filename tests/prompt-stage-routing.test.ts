@@ -80,6 +80,15 @@ describe("resolvePromptStage (6-stage machine)", () => {
     expect(stage).toBe("author");
   });
 
+  it("does not restart planning once an outline exists", () => {
+    const stage = resolvePromptStage({
+      request: "创建一套完整演示",
+      presentation: deck(0),
+      artifacts: { ...emptyArtifacts, outline: true },
+    });
+    expect(stage).toBe("author");
+  });
+
   it("keeps edit for a small change on a themed deck", () => {
     const stage = resolvePromptStage({
       request: "改第 3 页标题",
