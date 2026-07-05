@@ -125,16 +125,17 @@ describe("system prompt assembly", () => {
 
     expect(assembled.text).toContain("意图优先：先回答用户当下问题");
     expect(assembled.text).toContain("先不做 PPT");
-    expect(assembled.text).toContain("直接用 Markdown 给出实质回答");
+    expect(assembled.text).toContain("Markdown 写在 data.content 中");
     expect(assembled.text).toContain("不要立刻收集使用场景、受众、页数");
     expect(assembled.text).toContain("不要声称“刚才已经讲解");
   });
 
-  it("documents structured JSON actions and markdown text responses", () => {
+  it("documents structured JSON actions and text envelopes", () => {
     const assembled = assembleSystemPrompt(baseContext({ stage: "discover" }));
 
-    expect(assembled.text).toContain("结构化动作必须严格返回一个 JSON 对象");
-    expect(assembled.text).toContain("普通最终回复直接返回 Markdown 文本");
+    expect(assembled.text).toContain("每次响应必须严格返回一个 JSON 对象");
+    expect(assembled.text).toContain('"kind":"text","format":"markdown","type":"assistant.message"');
+    expect(assembled.text).toContain("Markdown 只能放在 content 字符串里");
     expect(assembled.text).toContain("请求用户补充：必须调用 AskUser 工具");
   });
 

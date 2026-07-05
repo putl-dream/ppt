@@ -49,6 +49,15 @@ function createNativeGateway(
   };
 }
 
+function textEnvelope(content: string): string {
+  return JSON.stringify({
+    kind: "text",
+    format: "markdown",
+    type: "assistant.message",
+    data: { content },
+  });
+}
+
 describe("native tool-use runtime path", () => {
   it("converts a zod tool schema to a JSON Schema tool spec", () => {
     const spec = toToolSchema(submitCommandsTool);
@@ -116,7 +125,7 @@ describe("native tool-use runtime path", () => {
     registry.register(submitCommandsTool);
 
     const gateway = createNativeGateway([
-      { text: '{"type":"assistant.message","data":{"content":"已完成，无需修改幻灯片。"}}' },
+      { text: textEnvelope("已完成，无需修改幻灯片。") },
     ]);
 
     const runtime = new AgentRuntime(registry, gateway);
@@ -140,7 +149,7 @@ describe("native tool-use runtime path", () => {
     registry.register(submitCommandsTool);
 
     const gateway = createNativeGateway([
-      { text: '{"type":"assistant.message","data":{"content":"我是你的 PPT 智能助手。\\n\\n说说你的需求，我马上开干。"}}' },
+      { text: textEnvelope("我是你的 PPT 智能助手。\n\n说说你的需求，我马上开干。") },
     ]);
     let streamed = "";
 
@@ -165,12 +174,13 @@ describe("native tool-use runtime path", () => {
     expect(streamed).not.toContain('"type"');
   });
 
-  it("streams direct markdown assistant text on the native no-tool path", async () => {
+  it("retries direct markdown assistant text on the native no-tool path", async () => {
     const registry = new ToolRegistry();
     registry.register(submitCommandsTool);
 
     const gateway = createNativeGateway([
       { text: "**可以。** 先讲概念，再决定是否制作 PPT。" },
+      { text: textEnvelope("**可以。** 先讲概念，再决定是否制作 PPT。") },
     ]);
     let streamed = "";
 
@@ -192,5 +202,6 @@ describe("native tool-use runtime path", () => {
       data: { content: "**可以。** 先讲概念，再决定是否制作 PPT。" },
     });
     expect(streamed).toBe("**可以。** 先讲概念，再决定是否制作 PPT。");
+    expect(gateway.requests).toHaveLength(2);
   });
 });

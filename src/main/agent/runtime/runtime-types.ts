@@ -25,12 +25,12 @@ export interface AgentEnvelope<
   data: TData;
 }
 
-export type AgentTextEnvelope = AgentEnvelope<
-  "assistant.message",
-  { content: string },
-  "text",
-  "markdown"
->;
+export type AgentTextEnvelope = {
+  kind: "text";
+  format: "markdown";
+  type: "assistant.message";
+  data: { content: string };
+};
 
 export type AgentStructuredEnvelope =
   | AgentEnvelope<"tool.call", { toolName: string; args: unknown }, "structured", "json">

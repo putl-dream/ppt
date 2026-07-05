@@ -28,12 +28,9 @@ describe("parseAgentJsonResponse", () => {
       .toMatch(/type/i);
   });
 
-  it("classifies markdown text for text consumers", () => {
-    expect(parseAgentResponseForConsumer("## 结论\n\n可以先这样理解。", "text")).toEqual({
-      kind: "text",
-      format: "markdown",
-      value: "## 结论\n\n可以先这样理解。",
-    });
+  it("rejects bare markdown text for text consumers", () => {
+    expect(() => parseAgentResponseForConsumer("## 结论\n\n可以先这样理解。", "text"))
+      .toThrow(/JSON envelope/i);
   });
 
   it("classifies structured protocol JSON for structured consumers", () => {
@@ -58,14 +55,16 @@ describe("parseAgentJsonResponse", () => {
       .toThrow(/JSON object/i);
   });
 
-  it("treats legacy assistant.message JSON as markdown text", () => {
+  it("classifies full assistant.message envelopes as markdown text", () => {
     expect(parseAgentResponseForConsumer(
-      '{"type":"assistant.message","data":{"content":"**完成**"}}',
+      '{"kind":"text","format":"markdown","type":"assistant.message","data":{"content":"**完成**"}}',
       "text",
     )).toEqual({
       kind: "text",
       format: "markdown",
       value: {
+        kind: "text",
+        format: "markdown",
         type: "assistant.message",
         data: { content: "**完成**" },
       },

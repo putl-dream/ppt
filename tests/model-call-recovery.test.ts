@@ -9,6 +9,15 @@ import { compactTranscript } from "../src/main/agent/runtime/transcript-compact"
 import { callModelWithRecovery } from "../src/main/agent/runtime/model-call-recovery";
 import type { AgentModelGateway } from "../src/main/agent/gateway/types";
 
+function textEnvelope(content: string): string {
+  return JSON.stringify({
+    kind: "text",
+    format: "markdown",
+    type: "assistant.message",
+    data: { content },
+  });
+}
+
 describe("computeBackoffDelayMs", () => {
   it("follows exponential backoff with cap", () => {
     expect(computeBackoffDelayMs(1, 0)).toBeGreaterThanOrEqual(500);
@@ -78,7 +87,7 @@ describe("callModelWithRecovery", () => {
     const generateText = vi
       .fn()
       .mockRejectedValueOnce(Object.assign(new Error("rate limited"), { status: 429 }))
-      .mockResolvedValueOnce({ provider: "openai", model: "gpt", text: '{"type":"assistant.message","data":{"content":"ok"}}' });
+      .mockResolvedValueOnce({ provider: "openai", model: "gpt", text: textEnvelope("ok") });
 
     const gateway: AgentModelGateway = {
       generateText,
@@ -114,7 +123,7 @@ describe("callModelWithRecovery", () => {
       .mockRejectedValueOnce(
         Object.assign(new Error("prompt is too long"), { status: 400 }),
       )
-      .mockResolvedValueOnce({ provider: "openai", model: "gpt", text: '{"type":"assistant.message","data":{"content":"ok"}}' });
+      .mockResolvedValueOnce({ provider: "openai", model: "gpt", text: textEnvelope("ok") });
 
     const gateway: AgentModelGateway = {
       generateText,
@@ -153,7 +162,7 @@ describe("callModelWithRecovery", () => {
       .mockResolvedValueOnce({
         provider: "anthropic",
         model: "claude",
-        text: '{"type":"assistant.message","data":{"content":"done"}}',
+        text: textEnvelope("done"),
         stopReason: "end_turn",
       });
 

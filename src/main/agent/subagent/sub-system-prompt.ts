@@ -36,5 +36,8 @@ ${tools.map(formatToolCard).join("\n\n")}
 Tool steps must return exactly one JSON object:
 - Call a tool: {"type":"tool.call","data":{"toolName":"tool_name","args":{}}}
 
-Final conclusion must be plain Markdown text, not JSON.`;
+Final conclusion must return exactly one AgentTextEnvelope JSON object:
+{"kind":"text","format":"markdown","type":"assistant.message","data":{"content":"Markdown conclusion"}}
+
+Markdown belongs only inside data.content. Do not return bare Markdown text, and do not omit kind or format.`;
 }

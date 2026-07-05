@@ -219,6 +219,8 @@ describe("Sub-agent permission integration", () => {
           provider: "openai",
           model: "test",
           text: JSON.stringify({
+            kind: "text",
+            format: "markdown",
             type: "assistant.message",
             data: { content: "Stopped after deny." },
           }),
@@ -264,6 +266,8 @@ describe("Sub-agent permission integration", () => {
           provider: "openai",
           model: "test",
           text: JSON.stringify({
+            kind: "text",
+            format: "markdown",
             type: "assistant.message",
             data: { content: "Write complete." },
           }),

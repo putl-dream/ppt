@@ -71,6 +71,11 @@ export function normalizeAgentProtocolObject(raw: unknown): AgentProtocolEnvelop
   }
 
   if (type === "assistant.message") {
+    if (candidate.kind !== "text" || candidate.format !== "markdown") {
+      throw new Error(
+        "Validation error: 'assistant.message' must use the full AgentTextEnvelope shape with kind 'text' and format 'markdown'.",
+      );
+    }
     const content = data.content;
     if (typeof content !== "string" || content.trim() === "") {
       throw new Error("Validation error: 'assistant.message' data must contain a non-empty string in 'content'.");
@@ -142,9 +147,6 @@ export function normalizeStructuredAgentProtocolObject(raw: unknown): AgentStruc
 export function normalizeTextAgentResponse(text: string): AgentProtocolEnvelope {
   const parsed = parseAgentResponseForConsumer(text, "text");
   if (parsed.kind === "text") {
-    if (typeof parsed.value === "string") {
-      return normalizeMarkdownAssistantMessage(parsed.value);
-    }
     return normalizeAgentProtocolObject(parsed.value);
   }
   return normalizeStructuredAgentProtocolObject(parsed.value);

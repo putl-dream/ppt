@@ -30,11 +30,24 @@ describe("JsonStreamExtractor", () => {
       result += chunk;
     });
 
-    const json = '{"type":"assistant.message","data":{"content":"Hello, how are you?"},"someOtherKey":true}';
+    const json = '{"kind":"text","format":"markdown","type":"assistant.message","data":{"content":"Hello, how are you?"},"someOtherKey":true}';
     for (const char of json) {
       extractor.feed(char);
     }
     expect(result).toBe("Hello, how are you?");
+  });
+
+  it("does not stream legacy assistant.message shorthand", () => {
+    let result = "";
+    const extractor = new JsonStreamExtractor((chunk, _source) => {
+      result += chunk;
+    });
+
+    const json = '{"type":"assistant.message","data":{"content":"Legacy content should not leak."}}';
+    for (const char of json) {
+      extractor.feed(char);
+    }
+    expect(result).toBe("");
   });
 
   it("streams content from assistant.ask_user envelopes", () => {
@@ -85,7 +98,7 @@ describe("JsonStreamExtractor", () => {
       result += chunk;
     });
 
-    const json = '{"type":"assistant.message","data":{"content":"Line 1\\nLine 2 with \\"quotes\\""}}';
+    const json = '{"kind":"text","format":"markdown","type":"assistant.message","data":{"content":"Line 1\\nLine 2 with \\"quotes\\""}}';
     for (const char of json) {
       extractor.feed(char);
     }
@@ -98,7 +111,7 @@ describe("JsonStreamExtractor", () => {
       result += chunk;
     });
 
-    const json = '```json\n{"type":"assistant.message","data":{"content":"Fenced message"}}\n```';
+    const json = '```json\n{"kind":"text","format":"markdown","type":"assistant.message","data":{"content":"Fenced message"}}\n```';
     for (const char of json) {
       extractor.feed(char);
     }

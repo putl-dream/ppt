@@ -35,10 +35,6 @@ import {
   normalizeAgentProtocolObject,
   normalizeModelResponseToEnvelope,
 } from "./agent-message-normalizer";
-import {
-  canWrapPlainTextAssistantMessage,
-  maybeWrapPlainTextAssistantMessage,
-} from "./plain-text-assistant-fallback";
 
 export { parseAgentJsonResponse } from "./parse-agent-json-response";
 
@@ -227,12 +223,7 @@ export class AgentRuntime {
         ? new JsonStreamExtractor(
             (text, source) => options.onStreamChunk?.(text, source),
             {
-              streamMarkdown: canWrapPlainTextAssistantMessage({
-                request: options.request,
-                responseText: "markdown",
-                requiredOutcome: options.requiredOutcome,
-                messageHistory: options.messageHistory,
-              }),
+              streamMarkdown: false,
             },
           )
         : null;
@@ -297,7 +288,7 @@ export class AgentRuntime {
           toolCalls: [nativeCall],
         });
       } else if (useNativeToolUse) {
-        // 无结构化工具调用即为最终文本回复；兼容模型仍按文本 JSON 协议返回的情况。
+        // 无结构化工具调用即为最终文本回复；仍必须遵守 JSON envelope 协议。
         if (responseText.trim()) {
           nativeMessages.push({
             role: "assistant",
@@ -309,16 +300,6 @@ export class AgentRuntime {
           const parsed = parseAgentJsonResponse(responseText);
           envelope = normalizeAgentProtocolObject(parsed);
         } catch (error) {
-          const plainTextMessage = maybeWrapPlainTextAssistantMessage({
-            request: options.request,
-            responseText,
-            requiredOutcome: options.requiredOutcome,
-            messageHistory: options.messageHistory,
-          });
-          if (plainTextMessage) {
-            return finish(plainTextMessage);
-          }
-
           const guidance = buildAgentJsonRetryMessage(error);
           transcript.push({
             role: "assistant",
@@ -333,16 +314,6 @@ export class AgentRuntime {
         try {
           parsed = parseAgentJsonResponse(responseText);
         } catch (error) {
-          const plainTextMessage = maybeWrapPlainTextAssistantMessage({
-            request: options.request,
-            responseText,
-            requiredOutcome: options.requiredOutcome,
-            messageHistory: options.messageHistory,
-          });
-          if (plainTextMessage) {
-            return finish(plainTextMessage);
-          }
-
           transcript.push({
             role: "assistant",
             raw: responseText.slice(0, 2_000),

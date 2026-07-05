@@ -39,7 +39,12 @@ function modelToolCall(toolName: string, args: Record<string, unknown> = {}) {
 }
 
 function modelMessage(content: string) {
-  return { type: "assistant.message", data: { content } };
+  return {
+    kind: "text",
+    format: "markdown",
+    type: "assistant.message",
+    data: { content },
+  };
 }
 
 describe("Task sub-agent routing", () => {
@@ -47,7 +52,7 @@ describe("Task sub-agent routing", () => {
     const workspaceRoot = await mkdtemp(join(tmpdir(), "ppt-subagent-"));
     const gateway = createSequenceGateway([
       modelToolCall("write_file", { path: "brief.md", content: "# Brief\nAudience: engineers" }),
-      "**Created** brief.md with audience and purpose.",
+      modelMessage("**Created** brief.md with audience and purpose."),
     ]);
 
     const conclusion = await spawnSubAgent({
@@ -61,12 +66,12 @@ describe("Task sub-agent routing", () => {
     expect(await readFile(join(workspaceRoot, "brief.md"), "utf8")).toContain("Audience: engineers");
   });
 
-  it("retries malformed protocol JSON before accepting a markdown conclusion", async () => {
+  it("retries malformed protocol JSON before accepting a text envelope conclusion", async () => {
     const workspaceRoot = await mkdtemp(join(tmpdir(), "ppt-subagent-"));
     const gateway = createSequenceGateway([
       '{"type":"tool.call","data":',
       modelToolCall("write_file", { path: "brief.md", content: "# Brief\n" }),
-      "Wrote brief.md.",
+      modelMessage("Wrote brief.md."),
     ]);
 
     const conclusion = await spawnSubAgent({
@@ -80,11 +85,12 @@ describe("Task sub-agent routing", () => {
     expect(await readFile(join(workspaceRoot, "brief.md"), "utf8")).toBe("# Brief\n");
   });
 
-  it("documents JSON tool calls and markdown conclusions in the sub-agent prompt", () => {
+  it("documents JSON tool calls and text envelope conclusions in the sub-agent prompt", () => {
     const prompt = buildSubAgentSystemPrompt(SUB_AGENT_TOOLS);
 
     expect(prompt).toContain("Tool steps must return exactly one JSON object");
-    expect(prompt).toContain("Final conclusion must be plain Markdown text");
+    expect(prompt).toContain("Final conclusion must return exactly one AgentTextEnvelope JSON object");
+    expect(prompt).toContain("Do not return bare Markdown text");
   });
 
   it("creates parent directories when writing workspace files", async () => {

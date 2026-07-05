@@ -10,13 +10,9 @@ import {
 } from "@shared/agent-step-limits";
 import {
   buildAgentJsonRetryMessage,
-  parseAgentResponseForConsumer,
   parseAgentJsonResponse,
 } from "../runtime/parse-agent-json-response";
-import {
-  normalizeMarkdownAssistantMessage,
-  normalizeAgentProtocolObject,
-} from "../runtime/agent-message-normalizer";
+import { normalizeAgentProtocolObject } from "../runtime/agent-message-normalizer";
 import type { AgentProtocolEnvelope } from "../runtime/runtime-types";
 import { ensureDefaultHooks } from "../runtime/default-hooks";
 import { triggerHooks } from "../runtime/hook-registry";
@@ -153,17 +149,6 @@ export async function spawnSubAgent(options: SpawnSubAgentOptions): Promise<stri
     try {
       parsed = parseAgentJsonResponse(responseText);
     } catch (error) {
-      try {
-        const textResponse = parseAgentResponseForConsumer(responseText, "text");
-        if (textResponse.kind === "text") {
-          const envelope = typeof textResponse.value === "string"
-            ? normalizeMarkdownAssistantMessage(textResponse.value)
-            : normalizeAgentProtocolObject(textResponse.value);
-          return finish(extractTextFromEnvelope(envelope));
-        }
-      } catch {
-        // Keep the strict JSON retry below for malformed protocol attempts.
-      }
       transcript.push({
         role: "assistant",
         raw: responseText.slice(0, 2_000),

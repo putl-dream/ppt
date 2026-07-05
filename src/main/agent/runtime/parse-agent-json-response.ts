@@ -1,11 +1,11 @@
 export const AGENT_JSON_MISSING_TYPE_GUIDANCE =
-  'Return exactly one complete JSON object with a "type" field '
-  + '(e.g. "assistant.message", "tool.call", "assistant.ask_user", or "deck.command_proposal") '
-  + 'and put payload fields under "data". '
+  'Return exactly one complete JSON object with a "type" field. '
+  + 'For assistant text, use {"kind":"text","format":"markdown","type":"assistant.message","data":{"content":"..."}}. '
+  + 'For tool or action responses, use "tool.call", "assistant.ask_user", or "deck.command_proposal" and put payload fields under "data". '
   + "Do not include other JSON examples or code snippets before the response object.";
 
 export const AGENT_JSON_PARSE_FAILURE_GUIDANCE =
-  "Return exactly one complete JSON object.";
+  "Return exactly one complete JSON envelope.";
 
 export type AgentResponseConsumer = "structured" | "text";
 
@@ -108,14 +108,8 @@ export function parseAgentResponseForConsumer(
     }
     return { kind: "structured", format: "json", value: parsed };
   } catch (error) {
-    if (looksLikeBrokenAgentProtocol(text)) {
-      throw error;
-    }
-    const content = text.trim();
-    if (!content) {
-      throw new Error("Agent Runtime expected non-empty markdown text.");
-    }
-    return { kind: "text", format: "markdown", value: content };
+    if (looksLikeBrokenAgentProtocol(text)) throw error;
+    throw new Error("Agent Runtime expected one complete JSON envelope.");
   }
 }
 

@@ -91,6 +91,14 @@ export class JsonStreamExtractor {
       }
       const typeValue = typeMatch[1];
       if (typeValue === "assistant.message") {
+        const hasTextKind = /"kind"\s*:\s*["']text["']/.test(this.accumulated);
+        const hasMarkdownFormat = /"format"\s*:\s*["']markdown["']/.test(this.accumulated);
+        if (!hasTextKind || !hasMarkdownFormat) {
+          if (this.accumulated.length > 400) {
+            this.ignoreStreaming = true;
+          }
+          return;
+        }
         this.targetKey = "content";
       } else if (typeValue === "assistant.ask_user") {
         this.targetKey = "content";

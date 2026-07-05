@@ -68,7 +68,12 @@ function modelToolCall(toolName: string, args: Record<string, unknown> = {}) {
 }
 
 function modelMessage(content: string) {
-  return { type: "assistant.message", data: { content } };
+  return {
+    kind: "text",
+    format: "markdown",
+    type: "assistant.message",
+    data: { content },
+  };
 }
 
 function modelAskUser(content: string, missingFields?: string[]) {
@@ -81,29 +86,37 @@ function modelAskUser(content: string, missingFields?: string[]) {
 describe("Agent Architecture Skeletons & Types", () => {
   it("extracts the first complete JSON object from model output", () => {
     expect(parseAgentJsonResponse(
-      '```json\n{"type":"assistant.message","data":{"content":"包含 { 大括号 } 的文本"}}\n```',
+      '```json\n{"kind":"text","format":"markdown","type":"assistant.message","data":{"content":"包含 { 大括号 } 的文本"}}\n```',
     )).toEqual({
+      kind: "text",
+      format: "markdown",
       type: "assistant.message",
       data: { content: "包含 { 大括号 } 的文本" },
     });
 
     expect(parseAgentJsonResponse(
-      '{"type":"assistant.message","data":{"content":"first"}}\n{"type":"assistant.message","data":{"content":"second"}}',
+      '{"kind":"text","format":"markdown","type":"assistant.message","data":{"content":"first"}}\n{"kind":"text","format":"markdown","type":"assistant.message","data":{"content":"second"}}',
     )).toEqual({
+      kind: "text",
+      format: "markdown",
       type: "assistant.message",
       data: { content: "first" },
     });
 
     expect(parseAgentJsonResponse(
-      '模型输出如下： {"type":"assistant.message","data":{"content":"ok"}} 后续解释包含 {braces}',
+      '模型输出如下： {"kind":"text","format":"markdown","type":"assistant.message","data":{"content":"ok"}} 后续解释包含 {braces}',
     )).toEqual({
+      kind: "text",
+      format: "markdown",
       type: "assistant.message",
       data: { content: "ok" },
     });
 
     expect(parseAgentJsonResponse(
-      '例如：{"foo":"bar"} 请返回 {"type":"assistant.message","data":{"content":"done"}}',
+      '例如：{"foo":"bar"} 请返回 {"kind":"text","format":"markdown","type":"assistant.message","data":{"content":"done"}}',
     )).toEqual({
+      kind: "text",
+      format: "markdown",
       type: "assistant.message",
       data: { content: "done" },
     });
@@ -204,6 +217,8 @@ describe("Agent Architecture Skeletons & Types", () => {
 
   it("normalizes model protocol objects into typed envelopes", () => {
     const res1 = normalizeAgentProtocolObject({
+      kind: "text",
+      format: "markdown",
       type: "assistant.message",
       data: { content: "Hello!" },
     });
@@ -213,6 +228,10 @@ describe("Agent Architecture Skeletons & Types", () => {
       type: "assistant.message",
       data: { content: "Hello!" },
     });
+    expect(() => normalizeAgentProtocolObject({
+      type: "assistant.message",
+      data: { content: "Legacy shorthand" },
+    })).toThrow(/AgentTextEnvelope/);
 
     const res2 = normalizeAgentProtocolObject({
       type: "assistant.ask_user",
@@ -307,7 +326,7 @@ describe("Agent Architecture Skeletons & Types", () => {
     expect(result.type).toBe("deck.command_proposal");
   });
 
-  it("wraps plain text for direct-answer requests without a JSON retry", async () => {
+  it("retries plain text for direct-answer requests before accepting a text envelope", async () => {
     let calls = 0;
     const runtime = new AgentRuntime(new ToolRegistry(), {
       async generateText() {
@@ -315,7 +334,9 @@ describe("Agent Architecture Skeletons & Types", () => {
         return {
           provider: "openai",
           model: "test-model",
-          text: "《第五项修炼》是彼得·圣吉关于学习型组织的经典著作。",
+          text: calls === 1
+            ? "《第五项修炼》是彼得·圣吉关于学习型组织的经典著作。"
+            : JSON.stringify(modelMessage("《第五项修炼》是彼得·圣吉关于学习型组织的经典著作。")),
         };
       },
       async *generateTextStream() {
@@ -332,12 +353,8 @@ describe("Agent Architecture Skeletons & Types", () => {
       selectedElementIds: [],
     });
 
-    expect(result).toEqual({
-      kind: "text",
-      format: "markdown",
-      ...modelMessage("《第五项修炼》是彼得·圣吉关于学习型组织的经典著作。"),
-    });
-    expect(calls).toBe(1);
+    expect(result).toEqual(modelMessage("《第五项修炼》是彼得·圣吉关于学习型组织的经典著作。"));
+    expect(calls).toBe(2);
   });
 
   it("keeps strict JSON retry for plain text on PPT action requests", async () => {
