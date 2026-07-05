@@ -3,8 +3,16 @@ import { FONT_FAMILIES, TEXT_ROLES } from "./typography";
 import { BACKGROUND_VARIANTS } from "./slide-background";
 import { SLIDE_VARIANTS } from "./slide-variant";
 import { ICON_NAMES } from "./icon-registry";
+import {
+  CHART_STYLES,
+  IMAGE_TREATMENTS,
+  designTokensV1Schema,
+} from "./design-tokens";
 
 export const CHART_TYPES = ["bar", "h-bar", "timeline", "kpi-tower"] as const;
+export const ELEMENT_PROVENANCE = ["layout", "user", "agent", "asset"] as const;
+
+export const elementProvenanceSchema = z.enum(ELEMENT_PROVENANCE);
 
 export const chartDataSchema = z.object({
   labels: z.array(z.string()).optional(),
@@ -17,6 +25,7 @@ export const chartDataSchema = z.object({
 export const chartElementSchema = z.object({
   id: z.string(),
   type: z.literal("chart"),
+  provenance: elementProvenanceSchema.optional(),
   x: z.number(),
   y: z.number(),
   width: z.number().positive(),
@@ -24,11 +33,15 @@ export const chartElementSchema = z.object({
   chartType: z.enum(CHART_TYPES),
   data: chartDataSchema,
   accentColor: z.string().optional(),
+  chartStyle: z.enum(CHART_STYLES).optional(),
+  unit: z.string().optional(),
+  highlightIndex: z.number().int().nonnegative().optional(),
 });
 
 export const tableElementSchema = z.object({
   id: z.string(),
   type: z.literal("table"),
+  provenance: elementProvenanceSchema.optional(),
   x: z.number(),
   y: z.number(),
   width: z.number().positive(),
@@ -41,6 +54,7 @@ export const tableElementSchema = z.object({
 export const iconElementSchema = z.object({
   id: z.string(),
   type: z.literal("icon"),
+  provenance: elementProvenanceSchema.optional(),
   x: z.number(),
   y: z.number(),
   width: z.number().positive(),
@@ -53,6 +67,7 @@ export const iconElementSchema = z.object({
 export const textElementSchema = z.object({
   id: z.string(),
   type: z.literal("text"),
+  provenance: elementProvenanceSchema.optional(),
   x: z.number(),
   y: z.number(),
   width: z.number().positive(),
@@ -69,6 +84,7 @@ export const textElementSchema = z.object({
 export const imageElementSchema = z.object({
   id: z.string(),
   type: z.literal("image"),
+  provenance: elementProvenanceSchema.optional(),
   x: z.number(),
   y: z.number(),
   width: z.number().positive(),
@@ -77,6 +93,7 @@ export const imageElementSchema = z.object({
   borderRadius: z.number().optional().default(0),
   imageSlot: z.string().optional(),
   objectFit: z.enum(["cover", "contain"]).optional(),
+  imageTreatment: z.enum(IMAGE_TREATMENTS).optional(),
 });
 
 export const shadowSchema = z.object({
@@ -90,6 +107,7 @@ export const shadowSchema = z.object({
 export const shapeElementSchema = z.object({
   id: z.string(),
   type: z.literal("shape"),
+  provenance: elementProvenanceSchema.optional(),
   x: z.number(),
   y: z.number(),
   width: z.number().positive(),
@@ -117,6 +135,8 @@ export const slideSchema = z.object({
   title: z.string(),
   elements: z.array(slideElementSchema),
   layout: z.string().optional(),
+  grammarVariant: z.string().optional(),
+  designTokens: designTokensV1Schema.optional(),
   backgroundVariant: z.enum(BACKGROUND_VARIANTS).optional(),
   slideVariant: z.enum(SLIDE_VARIANTS).optional(),
 });
@@ -128,6 +148,7 @@ export const presentationSchema = z.object({
   slides: z.array(slideSchema),
   theme: z.string().optional(),
   palette: z.string().optional(),
+  designTokens: designTokensV1Schema.optional(),
 });
 
 export type TextElement = z.infer<typeof textElementSchema>;
@@ -140,6 +161,7 @@ export type SlideElement = z.infer<typeof slideElementSchema>;
 export type ChartData = z.infer<typeof chartDataSchema>;
 export type Slide = z.infer<typeof slideSchema>;
 export type Presentation = z.infer<typeof presentationSchema>;
+export type ElementProvenance = z.infer<typeof elementProvenanceSchema>;
 
 export function createStarterPresentation(): Presentation {
   return {

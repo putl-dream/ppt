@@ -33,6 +33,32 @@ export const VISUAL_TOKENS = {
       opacity: 0.14,
     },
   },
+  spacing: {
+    xs: 8,
+    sm: 12,
+    md: 20,
+    lg: 32,
+    xl: 48,
+  },
+  motif: {
+    bookmark: {
+      width: 18,
+      inset: 84,
+    },
+    chapterNumber: {
+      size: 104,
+      opacity: 0.08,
+    },
+    marginNote: {
+      width: 180,
+    },
+    pathLine: {
+      stroke: 4,
+    },
+    arc: {
+      stroke: 3,
+    },
+  },
 } as const;
 
 export type ElevationLevel = keyof typeof VISUAL_TOKENS.elevation;

@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { validateDeckRhythm, type DeckRhythmIssue } from "./deck-rhythm";
+import { designTokensV1Schema, resolveDesignTokens } from "./design-tokens";
 import { SLIDE_LAYOUTS } from "./slide-layouts";
 import { SLIDE_VARIANTS } from "./slide-variant";
 import type { PresentationCommand } from "./commands";
@@ -47,6 +48,8 @@ export const layoutPlanSlideSchema = z.object({
   title: z.string(),
   narrativeRole: z.enum(NARRATIVE_ROLES),
   layout: z.enum(SLIDE_LAYOUTS),
+  grammarVariant: z.string().optional(),
+  designTokens: designTokensV1Schema.optional(),
   slideVariant: z.enum(SLIDE_VARIANTS).optional(),
   rationale: z.string(),
   enhancements: z.array(layoutPlanEnhancementSchema).default([]),
@@ -57,6 +60,7 @@ export const layoutPlanSchema = z.object({
   theme: z.enum(["nordic", "midnight", "ocean", "sunset", "purple"]),
   palette: z.enum(["cyan", "green", "purple", "orange"]),
   styleMode: z.enum(STYLE_MODES).default("template"),
+  designTokens: designTokensV1Schema.optional(),
   designNotes: z.string().optional(),
   slides: z.array(layoutPlanSlideSchema).min(1),
 });
@@ -227,11 +231,15 @@ export function buildLayoutPlanCommands(plan: LayoutPlan): PresentationCommand[]
   ];
 
   for (const slide of plan.slides) {
+    const designTokens = slide.designTokens ??
+      (plan.designTokens ? resolveDesignTokens(plan.designTokens) : undefined);
     commands.push({
       id: `cmd-layout-${slide.slideId}`,
       type: "update-slide-layout",
       slideId: slide.slideId,
       layout: slide.layout,
+      grammarVariant: slide.grammarVariant,
+      designTokens,
     });
     if (slide.slideVariant) {
       commands.push({

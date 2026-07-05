@@ -117,4 +117,36 @@ describe("CommandBus", () => {
     bus.undo();
     expect(bus.getSnapshot().slides[0].elements).toHaveLength(1);
   });
+
+  it("undoes slide layout with layout metadata restored", () => {
+    const bus = new CommandBus(createStarterPresentation());
+    const original = bus.getSnapshot();
+    const slideId = original.slides[0].id;
+
+    bus.execute({
+      id: crypto.randomUUID(),
+      type: "update-slide-layout",
+      slideId,
+      layout: "cover",
+      grammarVariant: "signal-dark",
+      designTokens: {
+        version: 1,
+        palette: "tech-dark",
+        fontMood: "technical",
+        shapeLanguage: "geometric",
+        backgroundStyle: "dark",
+        motif: "arc",
+        density: "standard",
+        imageTreatment: "masked",
+        chartStyle: "dashboard",
+      },
+    });
+
+    expect(bus.getSnapshot().slides[0].layout).toBe("cover");
+    expect(bus.getSnapshot().slides[0].grammarVariant).toBe("signal-dark");
+    expect(bus.getSnapshot().slides[0].designTokens?.palette).toBe("tech-dark");
+
+    bus.undo();
+    expect(bus.getSnapshot().slides[0]).toEqual(original.slides[0]);
+  });
 });

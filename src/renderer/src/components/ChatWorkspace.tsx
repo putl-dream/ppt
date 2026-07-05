@@ -521,6 +521,7 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
                             {cmd.type === "move-element" && "移动图层位置"}
                             {cmd.type === "resize-element" && "调整图层大小"}
                             {cmd.type === "restore-slide-elements" && "还原图层状态"}
+                            {cmd.type === "restore-slide" && "还原页面状态"}
                           </span>
                           {"title" in cmd && <span className="cmd-val">“{cmd.title}”</span>}
                           {"index" in cmd && <span className="cmd-val">位置: 第 {cmd.index === 2147483647 ? "尾" : cmd.index} 页</span>}

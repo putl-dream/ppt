@@ -4,6 +4,7 @@ import { slideSchema, slideElementSchema } from "./presentation";
 import { applyLayout } from "./layout";
 import { SLIDE_LAYOUTS } from "./slide-layouts";
 import { SLIDE_VARIANTS } from "./slide-variant";
+import { designTokensV1Schema } from "./design-tokens";
 
 export const presentationCommandSchema = z.discriminatedUnion("type", [
   z.object({
@@ -70,6 +71,8 @@ export const presentationCommandSchema = z.discriminatedUnion("type", [
     type: z.literal("update-slide-layout"),
     slideId: z.string(),
     layout: z.enum(SLIDE_LAYOUTS),
+    grammarVariant: z.string().optional(),
+    designTokens: designTokensV1Schema.optional(),
   }),
   z.object({
     id: z.string(),
@@ -104,6 +107,11 @@ export const presentationCommandSchema = z.discriminatedUnion("type", [
     type: z.literal("restore-slide-elements"),
     slideId: z.string(),
     elements: z.array(slideElementSchema),
+  }),
+  z.object({
+    id: z.string(),
+    type: z.literal("restore-slide"),
+    slide: slideSchema,
   }),
 ]);
 
@@ -335,12 +343,17 @@ export function executeCommand(
     const slideIndex = presentation.slides.findIndex((s) => s.id === command.slideId);
     if (slideIndex < 0) throw new Error(`Slide not found: ${command.slideId}`);
     const targetSlide = presentation.slides[slideIndex];
+    const previousSlide = structuredClone(targetSlide);
 
     const updatedSlide = applyLayout(
       targetSlide,
       command.layout,
       presentation.theme || "nordic",
-      presentation.palette || "cyan"
+      presentation.palette || "cyan",
+      {
+        grammarVariant: command.grammarVariant,
+        designTokens: command.designTokens,
+      },
     );
 
     const slides = presentation.slides.map((s) =>
@@ -353,9 +366,30 @@ export function executeCommand(
         command,
         inverse: {
           id: crypto.randomUUID(),
-          type: "restore-slide-elements",
-          slideId: command.slideId,
-          elements: targetSlide.elements,
+          type: "restore-slide",
+          slide: previousSlide,
+        },
+      },
+    };
+  }
+
+  if (command.type === "restore-slide") {
+    const slideIndex = presentation.slides.findIndex((s) => s.id === command.slide.id);
+    if (slideIndex < 0) throw new Error(`Slide not found: ${command.slide.id}`);
+    const targetSlide = presentation.slides[slideIndex];
+
+    const slides = presentation.slides.map((s) =>
+      s.id === command.slide.id ? command.slide : s
+    );
+
+    return {
+      presentation: nextRevision({ ...presentation, slides }),
+      executed: {
+        command,
+        inverse: {
+          id: crypto.randomUUID(),
+          type: "restore-slide",
+          slide: targetSlide,
         },
       },
     };

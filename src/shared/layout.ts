@@ -2,6 +2,12 @@ import type { Slide, SlideElement, TextElement, ShapeElement, ImageElement } fro
 import { getImageGridSlotRect } from "./layout-slots";
 import type { SlideLayoutType } from "./slide-layouts";
 import {
+  resolveDesignTokenBackgroundVariant,
+  resolveDesignTokenColors,
+  resolveDesignTokens,
+  type DesignTokensV1,
+} from "./design-tokens";
+import {
   resolveCoverTitleFont,
   resolveFontFamily,
   type TextRole,
@@ -10,7 +16,9 @@ import { resolveLayoutBackgroundVariant, type BackgroundVariant } from "./slide-
 import { cardShadow, VISUAL_TOKENS } from "./visual-tokens";
 import { isUserPreservedShape } from "./layout-shape-utils";
 import "./layout-register-builtin";
+import "./layout-handlers/cover";
 import { layoutRegistry } from "./layout-registry";
+import { layoutGrammarRegistry } from "./layout-grammar";
 
 interface ThemeColors {
   bg: string;
@@ -19,6 +27,8 @@ interface ThemeColors {
   accent: string;
   cardBg: string;
   cardStroke: string;
+  muted?: string;
+  softAccent?: string;
 }
 
 const generateId = (): string => {
@@ -184,23 +194,35 @@ export function applyLayout(
   slide: Slide,
   layout: SlideLayoutType,
   theme: string,
-  palette: string
+  palette: string,
+  options: {
+    grammarVariant?: string;
+    designTokens?: Partial<DesignTokensV1> | null;
+  } = {},
 ): Slide {
-  const colors = getThemePaletteColors(theme, palette);
+  const requestedDesignTokens = options.designTokens ?? slide.designTokens;
+  const hasExplicitDesignTokens = Boolean(requestedDesignTokens);
+  const designTokens = resolveDesignTokens(requestedDesignTokens);
+  const baseColors = getThemePaletteColors(theme, palette);
+  const colors = hasExplicitDesignTokens
+    ? resolveDesignTokenColors(designTokens, baseColors)
+    : baseColors;
+  const grammarVariant = options.grammarVariant ?? slide.grammarVariant;
+  const workingSlide = structuredClone(slide);
 
   // Separate elements by type
-  let textElements = slide.elements.filter((el): el is TextElement => el.type === "text");
-  const imageElements = slide.elements.filter((el) => el.type === "image");
+  let textElements = workingSlide.elements.filter((el): el is TextElement => el.type === "text");
+  const imageElements = workingSlide.elements.filter((el) => el.type === "image");
   
   // Keep user-added shapes (lines, circles, arrows) — not layout-generated cards/badges.
-  const userShapes = slide.elements.filter(isUserPreservedShape);
+  const userShapes = workingSlide.elements.filter(isUserPreservedShape);
 
   if (textElements.length === 0 && layout !== "image-grid") {
     return slide;
   }
 
   const isChromeLayout = layout === "cover" || layout === "section";
-  const normalizedTitle = slide.title.trim();
+  const normalizedTitle = workingSlide.title.trim();
 
   // Drop canvas text that duplicates the chrome header title on content slides.
   if (!isChromeLayout) {
@@ -232,6 +254,7 @@ export function applyLayout(
     strokeColor: colors.cardStroke,
     cornerRadius: VISUAL_TOKENS.radii.md,
     shadow: cardShadow("md"),
+    provenance: "layout",
   });
 
   const createAccentBlock = (
@@ -253,6 +276,7 @@ export function applyLayout(
     cornerRadius: opts.radius ?? VISUAL_TOKENS.radii.lg,
     fillOpacity: opts.opacity ?? 0.15,
     shadow: cardShadow("sm"),
+    provenance: "layout",
   });
 
   const createAccentBar = (x: number, y: number, w: number): ShapeElement =>
@@ -269,6 +293,7 @@ export function applyLayout(
     fillColor: colors.accent,
     strokeColor: colors.accent,
     shadow: cardShadow("sm"),
+    provenance: "layout",
   });
 
   const createProcessArrow = (x: number, y: number, w: number, h: number): ShapeElement => ({
@@ -281,6 +306,7 @@ export function applyLayout(
     height: h,
     fillColor: colors.accent,
     strokeColor: colors.accent,
+    provenance: "layout",
   });
 
   const placedImageIds = new Set<string>();
@@ -320,7 +346,35 @@ export function applyLayout(
     return undefined;
   };
 
-  if (layout === "cover" || layout === "section") {
+  const grammarHandler = layoutGrammarRegistry.get(layout);
+  if (grammarHandler) {
+    grammarHandler.apply({
+      slide: workingSlide,
+      theme,
+      palette,
+      colors,
+      textElements,
+      imageElements,
+      userShapes,
+      titleEl,
+      bodyTexts,
+      elements,
+      placedImageIds,
+      theme_: theme,
+      helpers: {
+        createCard,
+        createAccentBlock,
+        createAccentBar,
+        createProcessArrow,
+        assignTextRole,
+        placeImageInSlot,
+        pickImageForSlot,
+      },
+      designTokens,
+      grammarVariant,
+      hasExplicitDesignTokens,
+    });
+  } else if (layout === "cover" || layout === "section") {
     const coverTitleEl = titleEl ?? bodyTexts[0];
     if (!coverTitleEl) {
       return slide;
@@ -486,6 +540,7 @@ export function applyLayout(
               bold: true,
               color: colors.bg,
               align: "center",
+              provenance: "layout",
             },
             "caption",
           ),
@@ -646,9 +701,10 @@ export function applyLayout(
             text: String(idx + 1),
             fontSize: 18,
             bold: true,
-            color: colors.bg,
-            align: "center",
-          },
+              color: colors.bg,
+              align: "center",
+              provenance: "layout",
+            },
           "caption",
         );
         elements.push(numLabel);
@@ -839,18 +895,25 @@ export function applyLayout(
 
   // Re-append unplaced images, custom user shapes, and data/icon elements
   const remainingImages = imageElements.filter((img) => !placedImageIds.has(img.id));
-  const userDataElements = slide.elements.filter(
+  const userDataElements = workingSlide.elements.filter(
     (el) => el.type === "chart" || el.type === "table" || el.type === "icon",
   );
   elements.push(...remainingImages);
   elements.push(...userShapes);
   elements.push(...userDataElements);
 
+  const defaultBackgroundVariant = (layoutRegistry.get(layout)?.defaultBackgroundVariant ??
+    resolveLayoutBackgroundVariant(layout)) as BackgroundVariant;
+  const backgroundVariant = hasExplicitDesignTokens
+    ? resolveDesignTokenBackgroundVariant(designTokens, defaultBackgroundVariant)
+    : defaultBackgroundVariant;
+
   return {
-    ...slide,
+    ...workingSlide,
     layout,
-    backgroundVariant: (layoutRegistry.get(layout)?.defaultBackgroundVariant ??
-      resolveLayoutBackgroundVariant(layout)) as BackgroundVariant,
+    grammarVariant,
+    designTokens: hasExplicitDesignTokens ? designTokens : slide.designTokens,
+    backgroundVariant,
     slideVariant: slide.slideVariant ?? layoutRegistry.get(layout)?.defaultSlideVariant,
     elements,
   };

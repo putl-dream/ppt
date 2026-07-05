@@ -303,4 +303,137 @@ describe("applyLayout", () => {
     expect(cover.backgroundVariant).toBe("hero");
     expect(concept.backgroundVariant).toBe("default");
   });
+
+  it("varies cover grammar with design tokens without changing layout id", () => {
+    const titleId = crypto.randomUUID();
+    const imageId = crypto.randomUUID();
+    const slide: Slide = {
+      id: crypto.randomUUID(),
+      title: "阅读笔记",
+      elements: [
+        {
+          id: titleId,
+          type: "text",
+          x: 0,
+          y: 0,
+          width: 800,
+          height: 120,
+          text: "阅读笔记",
+          fontSize: 56,
+        },
+        {
+          id: crypto.randomUUID(),
+          type: "text",
+          x: 0,
+          y: 0,
+          width: 700,
+          height: 80,
+          text: "从章节结构到关键洞察",
+          fontSize: 24,
+        },
+        {
+          id: imageId,
+          type: "image",
+          x: 0,
+          y: 0,
+          width: 200,
+          height: 120,
+          url: "https://example.com/book.png",
+          borderRadius: 0,
+        },
+      ],
+    };
+
+    const centered = applyLayout(slide, "cover", "nordic", "cyan", {
+      grammarVariant: "centered",
+      designTokens: {
+        palette: "business-blue",
+        fontMood: "formal",
+        shapeLanguage: "cards",
+        backgroundStyle: "clean",
+        motif: "none",
+        density: "standard",
+        imageTreatment: "plain",
+        chartStyle: "minimal",
+      },
+    });
+    const editorial = applyLayout(slide, "cover", "nordic", "cyan", {
+      grammarVariant: "editorial-hero",
+      designTokens: {
+        palette: "warm-paper",
+        fontMood: "editorial",
+        shapeLanguage: "annotation",
+        backgroundStyle: "paper",
+        motif: "bookmark",
+        density: "calm",
+        imageTreatment: "framed",
+        chartStyle: "minimal",
+      },
+    });
+    const tech = applyLayout(slide, "cover", "nordic", "cyan", {
+      grammarVariant: "signal-dark",
+      designTokens: {
+        palette: "tech-dark",
+        fontMood: "technical",
+        shapeLanguage: "geometric",
+        backgroundStyle: "dark",
+        motif: "arc",
+        density: "standard",
+        imageTreatment: "masked",
+        chartStyle: "dashboard",
+      },
+    });
+
+    const centeredTitle = centered.elements.find((element) => element.id === titleId);
+    const editorialTitle = editorial.elements.find((element) => element.id === titleId);
+    const techTitle = tech.elements.find((element) => element.id === titleId);
+    const editorialImage = editorial.elements.find((element) => element.id === imageId);
+
+    expect(centered.layout).toBe("cover");
+    expect(editorial.layout).toBe("cover");
+    expect(tech.layout).toBe("cover");
+    expect(centeredTitle?.x).not.toBe(editorialTitle?.x);
+    expect(editorialTitle?.type === "text" ? editorialTitle.align : undefined).toBe("left");
+    expect(techTitle?.type === "text" ? techTitle.fontFamily : undefined).toBe("mono");
+    expect(editorialImage?.type === "image" ? editorialImage.imageTreatment : undefined).toBe("framed");
+    expect(editorial.backgroundVariant).toBe("muted");
+    expect(tech.backgroundVariant).toBe("hero");
+    expect(editorial.elements.some((element) => element.type === "shape" && element.id.startsWith("motif-"))).toBe(true);
+  });
+
+  it("preserves user rectangles when reapplying layout", () => {
+    const shapeId = crypto.randomUUID();
+    const slide: Slide = {
+      id: crypto.randomUUID(),
+      title: "核心观点",
+      elements: [
+        {
+          id: crypto.randomUUID(),
+          type: "text",
+          x: 0,
+          y: 0,
+          width: 400,
+          height: 80,
+          text: "观点一",
+          fontSize: 20,
+        },
+        {
+          id: shapeId,
+          type: "shape",
+          provenance: "user",
+          shapeType: "roundedRect",
+          x: 40,
+          y: 40,
+          width: 120,
+          height: 80,
+          fillColor: "#ffffff",
+          strokeColor: "#111111",
+        },
+      ],
+    };
+
+    const laidOut = applyLayout(slide, "concept", "nordic", "cyan");
+
+    expect(laidOut.elements.some((element) => element.id === shapeId)).toBe(true);
+  });
 });

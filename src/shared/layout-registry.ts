@@ -28,6 +28,13 @@ export interface LayoutContext {
 
 export interface LayoutHelpers {
   createCard: (x: number, y: number, w: number, h: number) => import("./presentation").ShapeElement;
+  createAccentBlock: (
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+    opts?: { opacity?: number; radius?: number },
+  ) => import("./presentation").ShapeElement;
   createAccentBar: (x: number, y: number, w: number) => import("./presentation").ShapeElement;
   createProcessArrow: (x: number, y: number, w: number, h: number) => import("./presentation").ShapeElement;
   assignTextRole: (

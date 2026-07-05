@@ -8,12 +8,14 @@ export const LAYOUT_SHAPE_PREFIXES = [
   "arrow-",
   "num-",
   "deco-",
+  "motif-",
 ] as const;
 
 export function isLayoutGeneratedShape(element: SlideElement): boolean {
   return (
     element.type === "shape" &&
-    LAYOUT_SHAPE_PREFIXES.some((prefix) => element.id.startsWith(prefix))
+    (element.provenance === "layout" ||
+      LAYOUT_SHAPE_PREFIXES.some((prefix) => element.id.startsWith(prefix)))
   );
 }
 
@@ -29,6 +31,5 @@ export function isLayoutCard(element: SlideElement): boolean {
 export function isUserPreservedShape(element: SlideElement): element is ShapeElement {
   if (element.type !== "shape") return false;
   if (isLayoutGeneratedShape(element)) return false;
-  if (element.shapeType === "rectangle" || element.shapeType === "roundedRect") return false;
   return true;
 }

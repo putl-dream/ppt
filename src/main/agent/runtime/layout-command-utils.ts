@@ -9,6 +9,7 @@ export const LAYOUT_VISUAL_COMMAND_TYPES = new Set<PresentationCommand["type"]>(
   "update-slide-variant",
   "set-slide-background",
   "update-text-style",
+  "restore-slide",
 ]);
 
 export function hasLayoutVisualCommands(commands: PresentationCommand[]): boolean {
@@ -40,6 +41,9 @@ export function collectAffectedSlideIds(
     }
     if ("slideId" in command && typeof command.slideId === "string") {
       ids.add(command.slideId);
+    }
+    if (command.type === "restore-slide") {
+      ids.add(command.slide.id);
     }
   }
 

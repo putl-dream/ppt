@@ -32,7 +32,8 @@ export class RiskPolicy {
       } else if (
         cmd.type === "remove-element" ||
         cmd.type === "update-slide-layout" ||
-        cmd.type === "restore-slide-elements"
+        cmd.type === "restore-slide-elements" ||
+        cmd.type === "restore-slide"
       ) {
         if (assessedRisk !== "high") {
           assessedRisk = "medium";

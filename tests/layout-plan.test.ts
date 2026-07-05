@@ -17,11 +17,22 @@ describe("layout-plan", () => {
       theme: "ocean",
       palette: "cyan",
       styleMode: "template",
+      designTokens: {
+        palette: "warm-paper",
+        fontMood: "editorial",
+        shapeLanguage: "annotation",
+        backgroundStyle: "paper",
+        motif: "bookmark",
+        density: "calm",
+        imageTreatment: "framed",
+        chartStyle: "minimal",
+      },
       slides: [{
         slideId: "slide-1",
         title: "Cover",
         narrativeRole: "cover",
         layout: "cover",
+        grammarVariant: "editorial-hero",
         slideVariant: "hero",
         rationale: "Opening page.",
         enhancements: [],
@@ -29,6 +40,8 @@ describe("layout-plan", () => {
     }));
 
     expect(plan.theme).toBe("ocean");
+    expect(plan.designTokens?.version).toBe(1);
+    expect(plan.slides[0].grammarVariant).toBe("editorial-hero");
     expect(serializeLayoutPlan(plan)).toContain('"layout": "cover"');
   });
 
@@ -91,11 +104,22 @@ describe("layout-plan", () => {
       theme: "sunset",
       palette: "orange",
       styleMode: "template",
+      designTokens: {
+        palette: "tech-dark",
+        fontMood: "technical",
+        shapeLanguage: "geometric",
+        backgroundStyle: "dark",
+        motif: "arc",
+        density: "standard",
+        imageTreatment: "masked",
+        chartStyle: "dashboard",
+      },
       slides: [{
         slideId: "slide-1",
         title: "Cover",
         narrativeRole: "cover",
         layout: "cover",
+        grammarVariant: "signal-dark",
         slideVariant: "hero",
         rationale: "Opening.",
         enhancements: [],
@@ -106,7 +130,13 @@ describe("layout-plan", () => {
     expect(commands).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ type: "set-theme", theme: "sunset", palette: "orange" }),
-        expect.objectContaining({ type: "update-slide-layout", slideId: "slide-1", layout: "cover" }),
+        expect.objectContaining({
+          type: "update-slide-layout",
+          slideId: "slide-1",
+          layout: "cover",
+          grammarVariant: "signal-dark",
+          designTokens: expect.objectContaining({ palette: "tech-dark", version: 1 }),
+        }),
         expect.objectContaining({ type: "update-slide-variant", slideId: "slide-1", slideVariant: "hero" }),
       ]),
     );

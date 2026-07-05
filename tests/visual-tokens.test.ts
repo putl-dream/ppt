@@ -6,6 +6,8 @@ describe("visual tokens", () => {
   it("defines radii and elevation presets", () => {
     expect(VISUAL_TOKENS.radii.md).toBe(12);
     expect(VISUAL_TOKENS.elevation.md?.blur).toBe(16);
+    expect(VISUAL_TOKENS.spacing.lg).toBe(32);
+    expect(VISUAL_TOKENS.motif.bookmark.width).toBe(18);
   });
 
   it("style strategies include radii, elevation, and gradient", () => {
