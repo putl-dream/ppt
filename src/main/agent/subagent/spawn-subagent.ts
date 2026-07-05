@@ -8,7 +8,10 @@ import {
   getEffectiveSubMaxSteps,
   resolveAgentStepLimits,
 } from "@shared/agent-step-limits";
-import { parseAgentJsonResponse } from "../runtime/agent-runtime";
+import {
+  buildAgentJsonRetryMessage,
+  parseAgentJsonResponse,
+} from "../runtime/parse-agent-json-response";
 import { RuntimeNormalizer } from "../runtime/runtime-normalizer";
 import { ensureDefaultHooks } from "../runtime/default-hooks";
 import { triggerHooks } from "../runtime/hook-registry";
@@ -153,9 +156,7 @@ export async function spawnSubAgent(options: SpawnSubAgentOptions): Promise<stri
       transcript.push({
         role: "assistant",
         raw: responseText.slice(0, 2_000),
-        error: error instanceof Error
-          ? `${error.message} Return exactly one complete JSON object.`
-          : "Invalid JSON response.",
+        error: buildAgentJsonRetryMessage(error),
       });
       continue;
     }

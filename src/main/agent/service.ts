@@ -200,16 +200,23 @@ export class AgentService {
     } catch (error) {
       const recoveryMessage = formatRecoverableAgentError(error, signal);
       if (recoveryMessage) {
+        if (!this.conversations.has(threadId)) {
+          this.runtime.clearSession(threadId);
+        }
         return {
           status: "chat",
           message: recoveryMessage,
           ...(this.conversations.has(threadId) ? { threadId } : {}),
         };
       }
+      if (!this.conversations.has(threadId)) {
+        this.runtime.clearSession(threadId);
+      }
       throw error;
     }
 
     if (runtimeResult.type === "message") {
+      this.runtime.clearSession(threadId);
       this.conversations.delete(threadId);
       return { status: "chat", message: runtimeResult.content };
     }
@@ -254,6 +261,7 @@ export class AgentService {
       baseRevision: before.revision,
       gate,
     });
+    this.runtime.clearSession(threadId);
     this.conversations.delete(threadId);
     listener?.({ type: "approval-waiting", message: "修改方案等待确认。" });
     return {

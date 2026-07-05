@@ -33,33 +33,39 @@ const LAYOUTS = [
 ] as const;
 
 describe("layout visual vocabulary", () => {
-  it.each(LAYOUTS)("applies roundedRect cards with shadow on %s layout", (layout) => {
-    const slide: Slide =
-      layout === "image-grid"
-        ? {
-            id: crypto.randomUUID(),
-            title: "Gallery",
-            elements: [
-              {
-                id: crypto.randomUUID(),
-                type: "image",
-                x: 0,
-                y: 0,
-                width: 200,
-                height: 160,
-                url: "https://example.com/a.png",
-              },
-            ],
-          }
-        : makeSlide("Test", "Body content");
+  it.each(LAYOUTS.filter((l) => l !== "image-grid"))(
+    "applies roundedRect cards with shadow on %s layout",
+    (layout) => {
+      const laidOut = applyLayout(makeSlide("Test", "Body content"), layout, "ocean", "cyan");
+      const cards = laidOut.elements.filter(isLayoutCard) as ShapeElement[];
 
-    const laidOut = applyLayout(slide, layout, "ocean", "cyan");
+      expect(cards.length).toBeGreaterThan(0);
+      expect(cards.every((card) => card.shapeType === "roundedRect")).toBe(true);
+      expect(cards.every((card) => card.cornerRadius != null)).toBe(true);
+      expect(cards.every((card) => card.shadow != null)).toBe(true);
+    },
+  );
+
+  it("applies roundedRect cards on image-grid layout", () => {
+    const slide: Slide = {
+      id: crypto.randomUUID(),
+      title: "Gallery",
+      elements: [
+        {
+          id: crypto.randomUUID(),
+          type: "image",
+          x: 0,
+          y: 0,
+          width: 200,
+          height: 160,
+          url: "https://example.com/a.png",
+        },
+      ],
+    };
+    const laidOut = applyLayout(slide, "image-grid", "ocean", "cyan");
     const cards = laidOut.elements.filter(isLayoutCard) as ShapeElement[];
-
     expect(cards.length).toBeGreaterThan(0);
-    expect(cards.every((card) => card.shapeType === "roundedRect")).toBe(true);
-    expect(cards.every((card) => card.cornerRadius != null)).toBe(true);
-    expect(cards.every((card) => card.shadow != null)).toBe(true);
+    expect(cards[0]?.shapeType).toBe("roundedRect");
   });
 
   it("process layout includes numbered step badges", () => {

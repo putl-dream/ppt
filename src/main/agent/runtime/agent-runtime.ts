@@ -27,55 +27,18 @@ import {
   formatRenderFeedbackMessage,
   shouldOfferRenderFeedback,
 } from "./render-feedback-loop";
+import {
+  buildAgentJsonRetryMessage,
+  parseAgentJsonResponse,
+} from "./parse-agent-json-response";
+
+export { parseAgentJsonResponse } from "./parse-agent-json-response";
 
 type ToolCall = {
   type: "tool_call";
   toolName: string;
   args: unknown;
 };
-
-export function parseAgentJsonResponse(text: string): unknown {
-  for (let start = text.indexOf("{"); start >= 0; start = text.indexOf("{", start + 1)) {
-    const closingTokens: string[] = [];
-    let inString = false;
-    let escaped = false;
-
-    for (let index = start; index < text.length; index += 1) {
-      const token = text[index];
-
-      if (inString) {
-        if (escaped) {
-          escaped = false;
-        } else if (token === "\\") {
-          escaped = true;
-        } else if (token === '"') {
-          inString = false;
-        }
-        continue;
-      }
-
-      if (token === '"') {
-        inString = true;
-      } else if (token === "{") {
-        closingTokens.push("}");
-      } else if (token === "[") {
-        closingTokens.push("]");
-      } else if (token === "}" || token === "]") {
-        if (closingTokens.pop() !== token) break;
-
-        if (closingTokens.length === 0) {
-          try {
-            return JSON.parse(text.slice(start, index + 1));
-          } catch {
-            break;
-          }
-        }
-      }
-    }
-  }
-
-  throw new Error("Agent Runtime expected one complete JSON object.");
-}
 
 /** Derive a display message for sub-agent progress events lacking one. */
 function subAgentProgressMessage(event: SubAgentProgressEvent): string {
@@ -345,9 +308,7 @@ export class AgentRuntime {
           transcript.push({
             role: "assistant",
             raw: responseText.slice(0, 2_000),
-            error: error instanceof Error
-              ? `${error.message} Return exactly one complete JSON object.`
-              : "Invalid JSON response. Return exactly one complete JSON object.",
+            error: buildAgentJsonRetryMessage(error),
           });
           continue;
         }

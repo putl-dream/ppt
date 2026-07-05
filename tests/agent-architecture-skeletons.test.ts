@@ -85,6 +85,17 @@ describe("Agent Architecture Skeletons & Types", () => {
       type: "message",
       content: "ok",
     });
+
+    expect(parseAgentJsonResponse(
+      '例如：{"foo":"bar"} 请返回 {"type":"message","content":"done"}',
+    )).toEqual({
+      type: "message",
+      content: "done",
+    });
+  });
+
+  it("rejects output with no agent protocol object", () => {
+    expect(() => parseAgentJsonResponse('{"foo":"bar"}')).toThrow(/type/i);
   });
 
   it("creates the production registry with Core and Deferred Tools", () => {

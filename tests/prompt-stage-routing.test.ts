@@ -89,6 +89,24 @@ describe("resolvePromptStage (6-stage machine)", () => {
     expect(stage).toBe("edit");
   });
 
+  it("routes slide image swap on a themed deck to edit", () => {
+    const stage = resolvePromptStage({
+      request: "帮我把第三页的图换一下",
+      presentation: deck(5, "ocean"),
+      artifacts: emptyArtifacts,
+    });
+    expect(stage).toBe("edit");
+  });
+
+  it("routes replace text on a specific slide to edit", () => {
+    const stage = resolvePromptStage({
+      request: "把第2页的文字调整一下",
+      presentation: deck(4, "minimal"),
+      artifacts: emptyArtifacts,
+    });
+    expect(stage).toBe("edit");
+  });
+
   it("stays in author for a plain request on an unthemed deck", () => {
     const stage = resolvePromptStage({
       request: "补充一点说明",
