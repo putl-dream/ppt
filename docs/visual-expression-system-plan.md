@@ -1,8 +1,11 @@
 # PPT 视觉表达系统与 Layout Grammar 建设计划
 
 > 版本：2026-07-05  
-> 状态：规划中  
+> 状态：建设中（首个骨架已落地）  
 > 目标：先增强基础视觉表达能力与 Layout Grammar，让模型能够稳定看见并控制效果；随后再引入 `brand-profile.json` 做内容品牌推导。
+
+> 进度更新：2026-07-05  
+> 已完成首个系统骨架：`DesignTokensV1`、Layout Grammar registry、`cover` grammar handler 试点、layout-plan 契约扩展、元素 `provenance`、重排 undo 保护与相关单元测试。尚未完成多 layout handler、Agent skill 提示接入、结构化 render evaluation 与 brand-profile 推导。
 
 ---
 
@@ -44,38 +47,63 @@ Brand Profile
 
 ---
 
+## 2.1 当前完成情况
+
+| 状态 | 内容 | 对应文件 / 说明 |
+|------|------|-----------------|
+| 已完成 | `DesignTokensV1` schema 与解析工具 | `src/shared/design-tokens.ts` |
+| 已完成 | `layout-plan` 支持 deck/page 级 `designTokens` 与 `grammarVariant` | `src/shared/layout-plan.ts` |
+| 已完成 | `PresentationCommand.update-slide-layout` 可携带 tokens / variant | `src/shared/commands.ts` |
+| 已完成 | Slide / Presentation 增加 `designTokens`、Slide 增加 `grammarVariant` | `src/shared/presentation.ts` |
+| 已完成 | 元素增加 `provenance` 来源字段：layout / user / agent / asset | `src/shared/presentation.ts` |
+| 已完成 | 重排保护用户 shape，避免用户手工矩形被吞 | `src/shared/layout-shape-utils.ts` |
+| 已完成 | `update-slide-layout` undo 改为恢复整页状态 | `restore-slide` command |
+| 已完成 | `VISUAL_TOKENS` 扩展 spacing / motif 基础 token | `src/shared/visual-tokens.ts` |
+| 已完成 | Layout Grammar handler 接口与 registry | `src/shared/layout-grammar.ts` |
+| 已完成 | `cover` grammar handler 试点 | `centered` / `editorial-hero` / `signal-dark` |
+| 已完成 | motif primitives v1 | bookmark / arc / margin-note / path-line |
+| 已完成 | 同一 cover 内容在 3 套 tokens 下产生不同结构与气质 | 单元测试覆盖 |
+| 已验证 | 单元测试通过 | `npm test`：56 files / 348 tests |
+| 未完成 | `layout-slots` 与 handler 单一来源彻底合并 | 仍需后续处理 |
+| 未完成 | `section` / `toc` / `process` / `case` / `quote` grammar handler | P2 后续 |
+| 未完成 | Agent skill 输出 grammar + tokens | P3 后续 |
+| 未完成 | 结构化视觉评分与 render feedback 指标 | P3 后续 |
+| 未完成 | `brand-profile.json` 推导 | P4 后续 |
+
+---
+
 ## 3. 系统应接入的能力
 
 ### 3.1 视觉词汇能力
 
 需要先补齐或标准化这些基础表达：
 
-| 能力 | 当前状态 | 建议 |
-|------|----------|------|
-| 背景 | 已有 `slideVariant`、渐变导出 | 增加背景风格 token：paper / grid / gradient / clean / dark |
-| 形状 | 已有圆角、阴影、透明度 | 增加 motif 用形状：书签、侧栏、章节角标、色块带、弧线、路径线 |
-| 图片 | 已有 imageSlot / objectFit | 增加 imageTreatment：cover、contain、masked、framed、duotone、captioned |
-| 图表 | bar / h-bar / timeline / kpi-tower | 增加 chartStyle：minimal、dashboard、editorial、report；支持单位、标签、重点值 |
-| 图标 | 24 个内置 | 先扩到高频业务/教育/科技/阅读 icon；后续接 Lucide 子集 |
-| 字体 | serif / sans / mono | 增加 fontMood：formal、editorial、technical、warm、minimal |
-| 装饰 | 当前偏序号圆、线条 | 增加 motifSystem：每套 deck 一个可复用视觉母题 |
+| 能力 | 当前状态 | 建议 | 进度 |
+|------|----------|------|------|
+| 背景 | 已有 `slideVariant`、渐变导出 | 增加背景风格 token：paper / grid / gradient / clean / dark | 已有 token schema 与 cover 映射；背景渲染细化待做 |
+| 形状 | 已有圆角、阴影、透明度 | 增加 motif 用形状：书签、侧栏、章节角标、色块带、弧线、路径线 | 部分完成：bookmark / arc / margin-note / path-line |
+| 图片 | 已有 imageSlot / objectFit | 增加 imageTreatment：cover、contain、masked、framed、duotone、captioned | 部分完成：plain / framed / masked / captioned schema 与 cover 应用 |
+| 图表 | bar / h-bar / timeline / kpi-tower | 增加 chartStyle：minimal、dashboard、editorial、report；支持单位、标签、重点值 | 部分完成：schema 字段已加；渲染细化待做 |
+| 图标 | 24 个内置 | 先扩到高频业务/教育/科技/阅读 icon；后续接 Lucide 子集 | 未开始 |
+| 字体 | serif / sans / mono | 增加 fontMood：formal、editorial、technical、warm、minimal | 已完成 schema；cover 已接入 fontMood |
+| 装饰 | 当前偏序号圆、线条 | 增加 motifSystem：每套 deck 一个可复用视觉母题 | 部分完成：motif-system v1 |
 
 ### 3.2 Layout Grammar 能力
 
 Layout 不应继续等于固定模板，而应成为结构语法：
 
-| Grammar | 结构语义 | 可变视觉表达 |
-|---------|----------|--------------|
-| cover | title + subtitle + hero visual + motif | 大图、色块、侧栏、书签、曲线、留白 |
-| toc | chapter list + index motif | 编号目录、路径目录、卡片目录、边注目录 |
-| section | chapter marker + transition | 大号章节号、整页色块、主视觉曲线、纸本页签 |
-| concept | parallel points | 卡片、便签、图标列表、分栏、浮动块 |
-| process | path + nodes + annotations | 时间轴、阅读路径、弧线路径、阶梯、流程泳道 |
-| case | narrative + metric + evidence | KPI 大数字、右侧证据图、案例卡、数据栏 |
-| comparison | left/right semantic groups | 对照表、天平、分割线、冲突/解决结构 |
-| quote | quote + source + atmosphere | 大留白、书页引用、深色强调、注释框 |
-| image-grid | media + captions | 画廊、证据墙、产品截图网格 |
-| summary | takeaways + next action | 结论栏、行动清单、复盘页 |
+| Grammar | 结构语义 | 可变视觉表达 | 进度 |
+|---------|----------|--------------|------|
+| cover | title + subtitle + hero visual + motif | 大图、色块、侧栏、书签、曲线、留白 | 已完成试点 |
+| toc | chapter list + index motif | 编号目录、路径目录、卡片目录、边注目录 | 未开始 |
+| section | chapter marker + transition | 大号章节号、整页色块、主视觉曲线、纸本页签 | 未开始 |
+| concept | parallel points | 卡片、便签、图标列表、分栏、浮动块 | 未开始 grammar 化 |
+| process | path + nodes + annotations | 时间轴、阅读路径、弧线路径、阶梯、流程泳道 | 未开始 |
+| case | narrative + metric + evidence | KPI 大数字、右侧证据图、案例卡、数据栏 | 未开始 |
+| comparison | left/right semantic groups | 对照表、天平、分割线、冲突/解决结构 | 未开始 grammar 化 |
+| quote | quote + source + atmosphere | 大留白、书页引用、深色强调、注释框 | 未开始 |
+| image-grid | media + captions | 画廊、证据墙、产品截图网格 | 未开始 grammar 化 |
+| summary | takeaways + next action | 结论栏、行动清单、复盘页 | 未开始 grammar 化 |
 
 ### 3.3 模型接入能力
 
@@ -106,32 +134,32 @@ Layout 不应继续等于固定模板，而应成为结构语法：
 
 ### 4.1 现有接入点
 
-| 当前文件 / 模块 | 角色 | 改造方向 |
-|-----------------|------|----------|
-| `src/shared/presentation.ts` | 数据模型 | 增加可选 design token / element provenance 字段 |
-| `src/shared/visual-tokens.ts` | 基础视觉 token | 扩展为视觉词汇单一来源 |
-| `src/shared/layout.ts` | 集中式排版 | 拆成 layout grammar handlers |
-| `src/shared/layout-slots.ts` | 图片槽位 | 与 layout handler 合并为单一来源 |
-| `src/shared/layout-registry.ts` | layout 元数据 | 升级为 grammar registry |
-| `src/shared/layout-plan.ts` | Design Agent 输出 | 增加 `designTokens` 与 `grammarVariant` |
-| `src/shared/slide-background.ts` | 背景 | 由 tokens 决定背景风格 |
-| `src/shared/chart-utils.ts` | 图表 SVG | 接入 chartStyle 与主题 token |
-| `src/main/agent/runtime/render-feedback-loop.ts` | 缩略图反馈 | 增加可量化视觉评分 |
-| `src/main/deck/validators/*` | 规则校验 | 增加视觉表达与可编辑性校验 |
-| `skills/ppt-design-layout` | 设计决策 | 让模型输出 grammar + tokens |
-| `skills/ppt-layout` | 执行 | 按 grammar plan 执行，不 freestyle |
+| 当前文件 / 模块 | 角色 | 改造方向 | 进度 |
+|-----------------|------|----------|------|
+| `src/shared/presentation.ts` | 数据模型 | 增加可选 design token / element provenance 字段 | 已完成 |
+| `src/shared/visual-tokens.ts` | 基础视觉 token | 扩展为视觉词汇单一来源 | 部分完成 |
+| `src/shared/layout.ts` | 集中式排版 | 拆成 layout grammar handlers | 部分完成：cover 已接入 |
+| `src/shared/layout-slots.ts` | 图片槽位 | 与 layout handler 合并为单一来源 | 未完成 |
+| `src/shared/layout-registry.ts` | layout 元数据 | 升级为 grammar registry | 部分完成：新增独立 grammar registry |
+| `src/shared/layout-plan.ts` | Design Agent 输出 | 增加 `designTokens` 与 `grammarVariant` | 已完成 |
+| `src/shared/slide-background.ts` | 背景 | 由 tokens 决定背景风格 | 部分完成：cover backgroundVariant 映射 |
+| `src/shared/chart-utils.ts` | 图表 SVG | 接入 chartStyle 与主题 token | 未完成 |
+| `src/main/agent/runtime/render-feedback-loop.ts` | 缩略图反馈 | 增加可量化视觉评分 | 未完成 |
+| `src/main/deck/validators/*` | 规则校验 | 增加视觉表达与可编辑性校验 | 未完成 |
+| `skills/ppt-design-layout` | 设计决策 | 让模型输出 grammar + tokens | 未完成 |
+| `skills/ppt-layout` | 执行 | 按 grammar plan 执行，不 freestyle | 未完成 |
 
 ### 4.2 建议新增模块
 
-| 新模块 | 职责 |
-|--------|------|
-| `src/shared/design-tokens.ts` | 定义 DesignTokensV1 schema |
-| `src/shared/layout-grammar.ts` | 定义 grammar handler 接口、slot、content unit contract |
-| `src/shared/layout-handlers/` | 每个 layout 独立 handler |
-| `src/shared/motif-system.ts` | bookmark、arc、grid、annotation 等母题生成 |
-| `src/shared/visual-expression.ts` | 将 grammar + tokens 编译为 slide elements |
-| `src/shared/visual-evaluation.ts` | 结构化视觉评分，不依赖模型主观判断 |
-| `tests/fixtures/visual-expression/` | 多风格同内容对照 fixture |
+| 新模块 | 职责 | 进度 |
+|--------|------|------|
+| `src/shared/design-tokens.ts` | 定义 DesignTokensV1 schema | 已完成 |
+| `src/shared/layout-grammar.ts` | 定义 grammar handler 接口、slot、content unit contract | 已完成基础接口 |
+| `src/shared/layout-handlers/` | 每个 layout 独立 handler | 部分完成：`cover.ts` |
+| `src/shared/motif-system.ts` | bookmark、arc、grid、annotation 等母题生成 | 部分完成：bookmark / arc / margin-note / path-line |
+| `src/shared/visual-expression.ts` | 将 grammar + tokens 编译为 slide elements | 未开始 |
+| `src/shared/visual-evaluation.ts` | 结构化视觉评分，不依赖模型主观判断 | 未开始 |
+| `tests/fixtures/visual-expression/` | 多风格同内容对照 fixture | 未开始；当前用单元测试覆盖 |
 
 ---
 
@@ -282,11 +310,11 @@ render → evaluate → fix
 
 目标：让现有能力更可靠，为 Grammar 化做准备。
 
-1. `layout-slots` 与 `layout.ts` 坐标统一，槽位由 handler 单一来源导出。
-2. 增加 `provenance`，重排只清理 layout 生成物。
-3. `update-slide-layout` 的 inverse 恢复 layout / background / variant，不只恢复 elements。
-4. 将 `VISUAL_TOKENS` 扩展为 radii / elevation / spacing / motif 基础 token。
-5. 增加三渲染器一致性测试：PPTMirror、HTML thumbnail、PPTX exporter。
+1. [ ] `layout-slots` 与 `layout.ts` 坐标统一，槽位由 handler 单一来源导出。（进行中：cover handler 已独立，slot 单一来源未完成）
+2. [x] 增加 `provenance`，重排只清理 layout 生成物。
+3. [x] `update-slide-layout` 的 inverse 恢复 layout / background / variant，不只恢复 elements。
+4. [x] 将 `VISUAL_TOKENS` 扩展为 radii / elevation / spacing / motif 基础 token。
+5. [ ] 增加三渲染器一致性测试：PPTMirror、HTML thumbnail、PPTX exporter。
 
 验收：现有 deck 重排不吞用户元素；图片槽位与实际排版一致；导出和预览不漂移。
 
@@ -294,11 +322,11 @@ render → evaluate → fix
 
 目标：系统真的能画出更多风格。
 
-1. 增加 DesignTokensV1 schema。
-2. 增加 motif primitives：bookmark、chapter-number、margin-note、path-line、arc。
-3. 增加 backgroundStyle：paper、grid、clean、gradient、dark。
-4. 增加 imageTreatment：framed、captioned、masked。
-5. 升级 chartStyle：KPI、h-bar、timeline 支持单位、标签、重点值。
+1. [x] 增加 DesignTokensV1 schema。
+2. [ ] 增加 motif primitives：bookmark、chapter-number、margin-note、path-line、arc。（部分完成：bookmark / margin-note / path-line / arc）
+3. [ ] 增加 backgroundStyle：paper、grid、clean、gradient、dark。（schema 已完成，渲染细化待做）
+4. [ ] 增加 imageTreatment：framed、captioned、masked。（schema 已完成，cover 已部分应用）
+5. [ ] 升级 chartStyle：KPI、h-bar、timeline 支持单位、标签、重点值。（schema 字段已加，渲染待做）
 
 验收：同一页内容在 3 套 tokens 下，缩略图应有明显不同气质。
 
@@ -308,12 +336,12 @@ render → evaluate → fix
 
 优先改造 6 个高频 grammar：
 
-1. `cover`
-2. `toc`
-3. `section`
-4. `process`
-5. `case`
-6. `quote`
+1. [x] `cover`
+2. [ ] `toc`
+3. [ ] `section`
+4. [ ] `process`
+5. [ ] `case`
+6. [ ] `quote`
 
 每个 grammar handler 需要声明：
 
@@ -333,11 +361,11 @@ render → evaluate → fix
 
 目标：让模型开始使用系统。
 
-1. `layout-plan.ts` 支持 `designTokens` / `grammarVariant`。
-2. 更新 `ppt-design-layout`：Design Agent 输出 grammar + tokens。
-3. 更新 `ppt-layout`：Executor 按 plan 调用 grammar handler。
-4. Render feedback 回传视觉评分。
-5. deck-review 增加视觉表达项：母题一致、锚点、密度、页面差异度。
+1. [x] `layout-plan.ts` 支持 `designTokens` / `grammarVariant`。
+2. [ ] 更新 `ppt-design-layout`：Design Agent 输出 grammar + tokens。
+3. [ ] 更新 `ppt-layout`：Executor 按 plan 调用 grammar handler。（底层命令已支持，skill 未接入）
+4. [ ] Render feedback 回传视觉评分。
+5. [ ] deck-review 增加视觉表达项：母题一致、锚点、密度、页面差异度。
 
 验收：模型能在不依赖固定模板名的情况下，按内容选择视觉方向并通过缩略图反馈修正。
 
@@ -345,10 +373,10 @@ render → evaluate → fix
 
 目标：在底层可表达后，再做内容品牌推导。
 
-1. 新增 `brand-profile.json`：领域、受众、语气、情绪、视觉隐喻、禁忌风格。
-2. 新增 `brand-profile -> designTokens` 映射。
-3. 让 Agent 从内容自动推导品牌，再生成 layout-plan。
-4. 增加用户可控项：更商务 / 更学术 / 更温暖 / 更科技 / 更克制。
+1. [ ] 新增 `brand-profile.json`：领域、受众、语气、情绪、视觉隐喻、禁忌风格。
+2. [ ] 新增 `brand-profile -> designTokens` 映射。
+3. [ ] 让 Agent 从内容自动推导品牌，再生成 layout-plan。
+4. [ ] 增加用户可控项：更商务 / 更学术 / 更温暖 / 更科技 / 更克制。
 
 验收：同一主题不同品牌方向能生成明显不同的 deck；用户可以通过自然语言调整品牌气质。
 
@@ -358,14 +386,16 @@ render → evaluate → fix
 
 建议第一个 PR 不做品牌推导，只做基础系统骨架：
 
-1. 新增 `src/shared/design-tokens.ts`
-2. 新增 `src/shared/layout-grammar.ts`
-3. 给 `layout-plan.ts` 增加可选 `designTokens` / `grammarVariant`
-4. 把 `cover` 或 `section` 作为第一个 grammar handler 试点
-5. 修复 slot 单一来源问题
-6. 增加 fixture：同一 cover 内容，用 `business-blue` / `warm-paper` / `tech-dark` 三种 tokens 渲染
+1. [x] 新增 `src/shared/design-tokens.ts`
+2. [x] 新增 `src/shared/layout-grammar.ts`
+3. [x] 给 `layout-plan.ts` 增加可选 `designTokens` / `grammarVariant`
+4. [x] 把 `cover` 或 `section` 作为第一个 grammar handler 试点
+5. [ ] 修复 slot 单一来源问题
+6. [ ] 增加 fixture：同一 cover 内容，用 `business-blue` / `warm-paper` / `tech-dark` 三种 tokens 渲染。（已用单元测试验证三风格，fixture 待补）
 
 这个 PR 的目标是证明：**不换模板，只换 tokens + grammar variant，页面观感能显著变化。**
+
+当前状态：目标已通过 `cover` grammar 单元测试初步证明；正式 fixture 与截图验收仍待补齐。
 
 ---
 
@@ -397,4 +427,3 @@ render → evaluate → fix
 ## 12. 一句话路线
 
 先把系统从「固定 layout 模板」升级为「可组合视觉语法」，让模型能通过 tokens 和 grammar 控制真实画面；等底层表达足够丰富，再让 `brand-profile.json` 从内容中自动推导品牌气质。
-

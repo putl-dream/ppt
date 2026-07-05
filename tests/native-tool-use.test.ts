@@ -37,9 +37,13 @@ function createNativeGateway(
         toolCalls: turn.toolCalls,
       };
     },
-    async *generateTextStream() {
+    async *generateTextStream(request) {
+      requests.push(request);
       const turn = turns[index++];
       if (!turn) throw new Error("Unexpected gateway call");
+      if (turn.text) {
+        yield { type: "content" as const, text: turn.text };
+      }
       yield { type: "complete" as const, text: "", toolCalls: turn.toolCalls };
     },
   };
@@ -125,5 +129,33 @@ describe("native tool-use runtime path", () => {
     if (result.type === "message") {
       expect(result.content).toContain("已完成");
     }
+  });
+
+  it("unwraps JSON protocol messages returned on the native no-tool path", async () => {
+    const registry = new ToolRegistry();
+    registry.register(submitCommandsTool);
+
+    const gateway = createNativeGateway([
+      { text: '{"type":"message","content":"我是你的 PPT 智能助手。\\n\\n说说你的需求，我马上开干。"}' },
+    ]);
+    let streamed = "";
+
+    const runtime = new AgentRuntime(registry, gateway);
+    const result = await runtime.run({
+      threadId: "native-json-message-thread",
+      request: "你是谁？",
+      presentationSnapshot: createStarterPresentation(),
+      selectedElementIds: [],
+      onStreamChunk: (chunk) => {
+        streamed += chunk;
+      },
+    });
+
+    expect(result.type).toBe("message");
+    if (result.type === "message") {
+      expect(result.content).toBe("我是你的 PPT 智能助手。\n\n说说你的需求，我马上开干。");
+    }
+    expect(streamed).toBe("我是你的 PPT 智能助手。\n\n说说你的需求，我马上开干。");
+    expect(streamed).not.toContain('"type"');
   });
 });

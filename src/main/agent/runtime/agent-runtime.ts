@@ -246,12 +246,9 @@ export class AgentRuntime {
           ? {
               onChunk: (chunk) => {
                 if (chunk.type === "content" && chunk.text) {
-                  // native 模式文本非 JSON，直接作为 message 流出；文本模式走抽取器。
-                  if (useNativeToolUse) {
-                    options.onStreamChunk?.(chunk.text, "message");
-                  } else {
-                    extractor?.feed(chunk.text);
-                  }
+                  // 即使走原生 tool-use，系统提示仍可能让模型用 JSON 协议回复。
+                  // 统一抽取自然语言字段，避免把 {"type":"message",...} 泄露到前端。
+                  extractor?.feed(chunk.text);
                 }
               },
               onThinkingChunk: (chunk) => {
@@ -292,7 +289,7 @@ export class AgentRuntime {
         });
         parsed = { type: "tool_call", toolName: nativeCall.name, args: nativeCall.args };
       } else if (useNativeToolUse) {
-        // 无工具调用即为最终文本回复。
+        // 无结构化工具调用即为最终文本回复；兼容模型仍按文本 JSON 协议返回的情况。
         if (responseText.trim()) {
           nativeMessages.push({
             role: "assistant",
@@ -300,7 +297,11 @@ export class AgentRuntime {
             thinkingBlocks: modelResult.thinkingBlocks,
           });
         }
-        parsed = { type: "message", content: responseText };
+        try {
+          parsed = parseAgentJsonResponse(responseText);
+        } catch {
+          parsed = { type: "message", content: responseText };
+        }
       } else {
         try {
           parsed = parseAgentJsonResponse(responseText);
