@@ -1169,18 +1169,20 @@ export function App() {
         );
       }
       const gatewayConfig = buildAgentGatewayConfig(agentGatewayPreferences, models);
+      const modelSettings = selectedModel ? toAgentModelSettings(selectedModel) : undefined;
       const activeThreadId = findActiveThreadId(forkedMessages ?? chatMessages);
       const result = activeThreadId
         ? await window.desktopApi.continueAgentRun(
             activeThreadId,
             agentRequest,
+            modelSettings,
             agentStepLimits,
             gatewayConfig,
             runId,
           )
         : await window.desktopApi.startAgentRun(
             agentRequest,
-            selectedModel ? toAgentModelSettings(selectedModel) : undefined,
+            modelSettings,
             "REQUEST_APPROVAL",
             agentStepLimits,
             gatewayConfig,

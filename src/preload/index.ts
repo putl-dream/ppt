@@ -24,8 +24,8 @@ const api: DesktopApi = {
   getPresentation: () => ipcRenderer.invoke("presentation:get"),
   startAgentRun: (request, model, executionStrategy, stepLimits, gatewayConfig, runId) =>
     ipcRenderer.invoke("agent:start", request, model, executionStrategy, stepLimits, gatewayConfig, runId),
-  continueAgentRun: (threadId, request, stepLimits, gatewayConfig, runId) =>
-    ipcRenderer.invoke("agent:continue", threadId, request, stepLimits, gatewayConfig, runId),
+  continueAgentRun: (threadId, request, model, stepLimits, gatewayConfig, runId) =>
+    ipcRenderer.invoke("agent:continue", threadId, request, model, stepLimits, gatewayConfig, runId),
   onAgentStream: (listener) => {
     const handler = (_event: Electron.IpcRendererEvent, streamEvent: AgentStreamEvent) => {
       listener(streamEvent);

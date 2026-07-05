@@ -532,6 +532,7 @@ app.whenReady().then(async () => {
     event,
     threadId: string,
     rawRequest: unknown,
+    rawModelSettings?: AgentModelSettings,
     rawStepLimits?: AgentStepLimits,
     rawGatewayConfig?: AgentGatewayConfig,
     runId?: string,
@@ -550,13 +551,19 @@ app.whenReady().then(async () => {
     sessionActiveRuns.set(sessionId, currentRunId);
 
     const runtime = await getRuntimeForSession(sessionId);
+    const settings = rawModelSettings
+      ? agentModelSettingsSchema.parse(rawModelSettings)
+      : undefined;
     const agentStepLimits = rawStepLimits
       ? agentStepLimitsSchema.parse(rawStepLimits)
       : undefined;
     const gatewayConfig = rawGatewayConfig
       ? agentGatewayConfigSchema.parse(rawGatewayConfig)
       : undefined;
-    if (gatewayConfig) {
+    let selection: AgentModelSelection | undefined;
+    if (settings) {
+      selection = agentGateway.configure(settings, gatewayConfig);
+    } else if (gatewayConfig) {
       agentGateway.applyGatewayConfig(gatewayConfig);
     }
     const emit = (streamEvent: AgentServiceEvent) => {
@@ -594,7 +601,7 @@ app.whenReady().then(async () => {
               )
             : runtime.agentService.start(
                 request.prompt,
-                undefined,
+                selection,
                 "REQUEST_APPROVAL",
                 emit,
                 request.editorContext,

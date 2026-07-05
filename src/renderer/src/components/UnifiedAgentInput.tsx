@@ -172,18 +172,21 @@ export const UnifiedAgentInput: React.FC<UnifiedAgentInputProps> = ({
                 onClick={canCancelRun && onCancelRun ? onCancelRun : handleSend}
                 disabled={canCancelRun ? isCancellingRun : busy || !request.trim()}
                 className={canCancelRun ? "stop-cta-btn" : "send-cta-btn"}
-                title={canCancelRun ? "中断当前 Agent 会话" : "启动智能体工作流"}
+                title={
+                  canCancelRun
+                    ? isCancellingRun ? "正在中断当前 Agent 会话" : "中断当前 Agent 会话"
+                    : submitLabel
+                }
+                aria-label={
+                  canCancelRun
+                    ? isCancellingRun ? "正在中断当前 Agent 会话" : "中断当前 Agent 会话"
+                    : submitLabel
+                }
               >
                 {canCancelRun ? (
-                  <>
-                    <StopIcon size={14} />
-                    <span>{isCancellingRun ? "中断中…" : "停止"}</span>
-                  </>
+                  <StopIcon size={14} />
                 ) : (
-                  <>
-                    <SendIcon size={14} />
-                    <span>{submitLabel}</span>
-                  </>
+                  <SendIcon size={14} />
                 )}
               </button>
             </div>

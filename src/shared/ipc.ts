@@ -174,6 +174,7 @@ export interface DesktopApi {
   continueAgentRun(
     threadId: string,
     request: AgentRunRequest,
+    model?: AgentModelSettings,
     stepLimits?: AgentStepLimits,
     gatewayConfig?: AgentGatewayConfig,
     runId?: string,
