@@ -34,6 +34,7 @@ import {
   normalizeAgentProtocolObject,
   normalizeModelResponseToEnvelope,
 } from "./agent-message-normalizer";
+import { maybeWrapPlainTextAssistantMessage } from "./plain-text-assistant-fallback";
 
 export { parseAgentJsonResponse } from "./parse-agent-json-response";
 
@@ -294,6 +295,15 @@ export class AgentRuntime {
         try {
           envelope = normalizeModelResponseToEnvelope({ text: responseText });
         } catch (error) {
+          const plainTextMessage = maybeWrapPlainTextAssistantMessage({
+            request: options.request,
+            responseText,
+            requiredOutcome: options.requiredOutcome,
+          });
+          if (plainTextMessage) {
+            return finish(plainTextMessage);
+          }
+
           const guidance = buildAgentJsonRetryMessage(error);
           transcript.push({
             role: "assistant",
@@ -308,6 +318,15 @@ export class AgentRuntime {
         try {
           parsed = parseAgentJsonResponse(responseText);
         } catch (error) {
+          const plainTextMessage = maybeWrapPlainTextAssistantMessage({
+            request: options.request,
+            responseText,
+            requiredOutcome: options.requiredOutcome,
+          });
+          if (plainTextMessage) {
+            return finish(plainTextMessage);
+          }
+
           transcript.push({
             role: "assistant",
             raw: responseText.slice(0, 2_000),

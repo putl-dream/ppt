@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { describe, expect, it, vi } from "vitest";
@@ -57,6 +57,70 @@ describe("Task sub-agent routing", () => {
 
     expect(conclusion).toBe("Created brief.md with audience and purpose.");
     expect(await readFile(join(workspaceRoot, "brief.md"), "utf8")).toContain("Audience: engineers");
+  });
+
+  it("creates parent directories when writing workspace files", async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), "ppt-subagent-"));
+    const gateway = createSequenceGateway([
+      modelToolCall("write_file", {
+        path: "slides/layout-plan.json",
+        content: "{\"slides\":[]}\n",
+      }),
+      modelMessage("Wrote slides/layout-plan.json."),
+    ]);
+
+    const conclusion = await spawnSubAgent({
+      description: "Write a layout plan",
+      workspaceRoot,
+      gateway,
+      requestToolApproval: async () => true,
+    });
+
+    expect(conclusion).toBe("Wrote slides/layout-plan.json.");
+    expect(await readFile(join(workspaceRoot, "slides", "layout-plan.json"), "utf8"))
+      .toBe("{\"slides\":[]}\n");
+  });
+
+  it("supports idempotent ensure_dir in sub-agent tools", async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), "ppt-subagent-"));
+    const gateway = createSequenceGateway([
+      modelToolCall("ensure_dir", { path: "slides" }),
+      modelToolCall("ensure_dir", { path: "slides" }),
+      modelMessage("Ensured slides directory."),
+    ]);
+
+    const conclusion = await spawnSubAgent({
+      description: "Ensure slides directory exists",
+      workspaceRoot,
+      gateway,
+      requestToolApproval: async () => true,
+    });
+
+    expect(conclusion).toBe("Ensured slides directory.");
+    expect((await stat(join(workspaceRoot, "slides"))).isDirectory()).toBe(true);
+  });
+
+  it("routes simple mkdir -p bash calls through workspace file ops", async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), "ppt-subagent-"));
+    const gateway = createSequenceGateway([
+      modelToolCall("bash", { command: "mkdir -p slides" }),
+      modelToolCall("write_file", {
+        path: "slides/data.json",
+        content: "{\"ok\":true}\n",
+      }),
+      modelMessage("Wrote slides/data.json."),
+    ]);
+
+    const conclusion = await spawnSubAgent({
+      description: "Create slides directory, then write JSON",
+      workspaceRoot,
+      gateway,
+      requestToolApproval: async () => true,
+    });
+
+    expect(conclusion).toBe("Wrote slides/data.json.");
+    expect(await readFile(join(workspaceRoot, "slides", "data.json"), "utf8"))
+      .toBe("{\"ok\":true}\n");
   });
 
   it("runs concurrent sub-agents with isolated contexts", async () => {

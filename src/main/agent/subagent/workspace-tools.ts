@@ -1,9 +1,14 @@
 import { execFile } from "node:child_process";
-import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
-import { dirname } from "node:path";
 import { promisify } from "node:util";
 import { z } from "zod";
-import { resolveAgentPath } from "./workspace-path";
+import {
+  editWorkspaceText,
+  ensureWorkspaceDir,
+  globWorkspaceFiles,
+  readWorkspaceText,
+  writeWorkspaceText,
+} from "./workspace-file-ops";
+import { isOutsideWorkspace } from "./workspace-path";
 
 const execFileAsync = promisify(execFile);
 
@@ -27,6 +32,10 @@ const writeFileSchema = z.object({
   content: z.string().describe("Full file content to write"),
 });
 
+const ensureDirSchema = z.object({
+  path: z.string().describe("Workspace-relative directory path"),
+});
+
 const editFileSchema = z.object({
   path: z.string().describe("Workspace-relative file path"),
   old_string: z.string().describe("Exact text to replace"),
@@ -46,20 +55,27 @@ export const readFileTool: SubAgentToolDefinition<typeof readFileSchema> = {
   description: "Read a text file from the workspace.",
   inputSchema: readFileSchema,
   async execute(args, context) {
-    const filePath = resolveAgentPath(context.workspaceRoot, args.path);
-    return await readFile(filePath, "utf8");
+    return await readWorkspaceText(context.workspaceRoot, args.path);
   },
 };
 
 export const writeFileTool: SubAgentToolDefinition<typeof writeFileSchema> = {
   name: "write_file",
-  description: "Write or overwrite a text file in the workspace.",
+  description: "Write or overwrite a text file in the workspace. Parent directories are created automatically.",
   inputSchema: writeFileSchema,
   async execute(args, context) {
-    const filePath = resolveAgentPath(context.workspaceRoot, args.path);
-    await mkdir(dirname(filePath), { recursive: true });
-    await writeFile(filePath, args.content, "utf8");
+    await writeWorkspaceText(context.workspaceRoot, args.path, args.content);
     return `Wrote ${args.path} (${args.content.length} chars).`;
+  },
+};
+
+export const ensureDirTool: SubAgentToolDefinition<typeof ensureDirSchema> = {
+  name: "ensure_dir",
+  description: "Create a workspace directory if it does not already exist.",
+  inputSchema: ensureDirSchema,
+  async execute(args, context) {
+    await ensureWorkspaceDir(context.workspaceRoot, args.path);
+    return `Ensured directory ${args.path}.`;
   },
 };
 
@@ -68,14 +84,7 @@ export const editFileTool: SubAgentToolDefinition<typeof editFileSchema> = {
   description: "Replace the first occurrence of old_string with new_string in a file.",
   inputSchema: editFileSchema,
   async execute(args, context) {
-    const filePath = resolveAgentPath(context.workspaceRoot, args.path);
-    const content = await readFile(filePath, "utf8");
-    const index = content.indexOf(args.old_string);
-    if (index < 0) {
-      throw new Error(`old_string not found in ${args.path}`);
-    }
-    const updated = `${content.slice(0, index)}${args.new_string}${content.slice(index + args.old_string.length)}`;
-    await writeFile(filePath, updated, "utf8");
+    await editWorkspaceText(context.workspaceRoot, args.path, args.old_string, args.new_string);
     return `Updated ${args.path}.`;
   },
 };
@@ -85,16 +94,25 @@ export const globTool: SubAgentToolDefinition<typeof globSchema> = {
   description: "List workspace files matching a glob pattern.",
   inputSchema: globSchema,
   async execute(args, context) {
-    const matches = await globWorkspace(context.workspaceRoot, args.pattern);
+    const matches = await globWorkspaceFiles(context.workspaceRoot, args.pattern);
     return matches.length > 0 ? matches.join("\n") : "(no matches)";
   },
 };
 
 export const bashTool: SubAgentToolDefinition<typeof bashSchema> = {
   name: "bash",
-  description: "Run a shell command with the workspace as the working directory.",
+  description: "Run a non-file-system shell command with the workspace as the working directory.",
   inputSchema: bashSchema,
   async execute(args, context) {
+    const mkdirPath = parseSimpleMkdirCommand(args.command);
+    if (mkdirPath) {
+      if (isOutsideWorkspace(context.workspaceRoot, mkdirPath)) {
+        throw new Error(`mkdir path is outside the workspace sandbox: ${mkdirPath}`);
+      }
+      await ensureWorkspaceDir(context.workspaceRoot, mkdirPath);
+      return `Ensured directory ${mkdirPath}.`;
+    }
+
     const { stdout, stderr } = await execFileAsync(
       process.platform === "win32" ? "cmd.exe" : "/bin/sh",
       process.platform === "win32" ? ["/c", args.command] : ["-c", args.command],
@@ -111,48 +129,33 @@ export const bashTool: SubAgentToolDefinition<typeof bashSchema> = {
 };
 
 export const SUB_AGENT_TOOLS: SubAgentToolDefinition[] = [
-  bashTool,
   readFileTool,
   writeFileTool,
+  ensureDirTool,
   editFileTool,
   globTool,
+  bashTool,
 ];
 
 export const SUB_AGENT_TOOL_HANDLERS = new Map(
   SUB_AGENT_TOOLS.map((tool) => [tool.name, tool] as const),
 );
 
-function globToRegExp(pattern: string): RegExp {
-  const normalized = pattern.replace(/\\/g, "/");
-  const escaped = normalized
-    .replace(/[.+^${}()|[\]\\]/g, "\\$&")
-    .replace(/\*\*/g, "§§")
-    .replace(/\*/g, "[^/]*")
-    .replace(/§§/g, ".*")
-    .replace(/\?/g, "[^/]");
-  return new RegExp(`^${escaped}$`);
+function parseSimpleMkdirCommand(command: string): string | null {
+  const match = command.trim().match(/^mkdir(?:\s+-p)?\s+("[^"]+"|'[^']+'|[^\s"'<>|&;]+)\s*$/i);
+  if (!match) return null;
+  const rawPath = match[1]!;
+  const path = stripMatchingQuotes(rawPath);
+  if (!path.trim()) return null;
+  return path;
 }
 
-async function globWorkspace(workspaceRoot: string, pattern: string): Promise<string[]> {
-  const matcher = globToRegExp(pattern.replace(/\\/g, "/"));
-  const results: string[] = [];
-
-  async function walk(relativeDir: string): Promise<void> {
-    const absoluteDir = resolveAgentPath(workspaceRoot, relativeDir || ".");
-    const entries = await readdir(absoluteDir, { withFileTypes: true });
-    for (const entry of entries) {
-      const relativePath = relativeDir ? `${relativeDir}/${entry.name}` : entry.name;
-      if (entry.isDirectory()) {
-        await walk(relativePath);
-        continue;
-      }
-      const normalized = relativePath.replace(/\\/g, "/");
-      if (matcher.test(normalized)) {
-        results.push(normalized);
-      }
-    }
+function stripMatchingQuotes(value: string): string {
+  if (
+    (value.startsWith("\"") && value.endsWith("\""))
+    || (value.startsWith("'") && value.endsWith("'"))
+  ) {
+    return value.slice(1, -1);
   }
-
-  await walk("");
-  return results.sort((left, right) => left.localeCompare(right));
+  return value;
 }

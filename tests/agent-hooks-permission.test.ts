@@ -85,6 +85,11 @@ describe("Permission gates", () => {
     }))).toEqual({ type: "allow" });
 
     expect(evaluatePermission(createBlock({
+      toolName: "ensure_dir",
+      args: { path: "slides" },
+    }))).toEqual({ type: "allow" });
+
+    expect(evaluatePermission(createBlock({
       args: { command: "echo hi" },
     }))).toEqual({ type: "allow" });
   });
@@ -115,6 +120,15 @@ describe("Permission gates", () => {
     }))).toEqual({
       type: "require_approval",
       reason: "访问工作区外的文件：../outside.txt",
+    });
+
+    expect(evaluatePermission(createBlock({
+      toolName: "ensure_dir",
+      args: { path: "../outside" },
+      workspaceRoot: awaitableWorkspace(),
+    }))).toEqual({
+      type: "require_approval",
+      reason: "尝试写入工作区外路径：../outside",
     });
 
     expect(evaluatePermission(createBlock({

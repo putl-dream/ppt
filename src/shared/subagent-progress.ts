@@ -17,6 +17,9 @@ export function formatSubAgentToolLabel(toolName: string, args: unknown): string
   if (toolName === "write_file" && typeof record.path === "string") {
     return `写入文件 ${record.path}`;
   }
+  if (toolName === "ensure_dir" && typeof record.path === "string") {
+    return `创建目录 ${record.path}`;
+  }
   if (toolName === "edit_file" && typeof record.path === "string") {
     return `编辑文件 ${record.path}`;
   }

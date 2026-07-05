@@ -120,6 +120,16 @@ describe("system prompt assembly", () => {
     expect(assembled.text).toContain("阶段契约：收敛而非发散");
   });
 
+  it("allows informational detours before PPT production workflow", () => {
+    const assembled = assembleSystemPrompt(baseContext({ stage: "discover" }));
+
+    expect(assembled.text).toContain("意图优先：先回答用户当下问题");
+    expect(assembled.text).toContain("先不做 PPT");
+    expect(assembled.text).toContain("直接用 `assistant.message` 给出实质回答");
+    expect(assembled.text).toContain("不要立刻收集使用场景、受众、页数");
+    expect(assembled.text).toContain("不要声称“刚才已经讲解");
+  });
+
   it("loads memory section only when MEMORY.md has content", async () => {
     const root = await mkdtemp(join(tmpdir(), "ppt-memory-"));
     const memoryDir = join(root, ".memory");

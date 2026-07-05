@@ -132,9 +132,23 @@ function buildConvergenceContract(stage: PromptStage): string {
   ].join("\n");
 }
 
+function buildIntentFirstContract(): string {
+  return [
+    "",
+    "## 意图优先：先回答用户当下问题",
+    "",
+    "- 不要把所有输入都解释为“现在要制作 PPT”。用户问概念、背景、定义、方法、评价、示例，或明确说“先不做 PPT / 暂不做 PPT / 先讲解 / 先聊聊”时，直接用 `assistant.message` 给出实质回答。",
+    "- 回答这类非制作请求时，先完整回应用户问的内容；不要立刻收集使用场景、受众、页数、风格等 PPT 制作字段。",
+    "- 只有用户明确表示要开始制作、整理成 PPT、继续排版、导出或修改已有页面时，才进入对应阶段工具流程。",
+    "- 不要声称“刚才已经讲解/已经完成/已经创建”任何尚未在当前会话真实发生的内容；若用户指出漏答，先承认并补上答案。",
+    "- 可以在讲解末尾轻轻承接一句“之后可以基于这个内容做 PPT”，但不能用它替代本次讲解。",
+  ].join("\n");
+}
+
 function buildCorePrinciples(stage: PromptStage, stepLimits?: AgentStepLimits): string {
   const shared = [
     "你是一个专业的 PPT 智能助手 (PPT Agent)。帮助用户创作**可用**的演示文稿。",
+    buildIntentFirstContract(),
     "",
     "## 阶段原则",
     "",
@@ -153,6 +167,7 @@ function buildCorePrinciples(stage: PromptStage, stepLimits?: AgentStepLimits): 
     discover: [
       "",
       "### 本阶段（discover = 路径 + 规划）",
+      "- 若用户是在提问、要求讲解、讨论主题，或明确说先不做 PPT：直接回答问题，不进入需求收集。",
       "- 判断轻量 / 两阶段 / 完整路径；不要默认走全流程。",
       "- 轻量单页修改 → 可跳过 discover，直接 edit。",
       "- 完整路径：**先 `TaskGraphCreatePlan`(3–5 步, sequential) 建计划**，再 Task 产出 brief.md → outline.md → storyboard.json；一旦 outline/storyboard 就绪，规划冻结，后续不重新拆页。",
@@ -208,6 +223,7 @@ function buildCorePrinciples(stage: PromptStage, stepLimits?: AgentStepLimits): 
 function buildWorkflowSnippet(stage: PromptStage): string {
   const snippets: Partial<Record<PromptStage, string>> = {
     discover: `## 本阶段工作流
+0. 非制作请求（讲解/问答/讨论/先不做 PPT）→ 直接 \`assistant.message\` 回答内容
 1. 判断场景：改一页 → edit；新建 ≤10 页 → author；大型/要先规划 → discover 全流程
 2. **多阶段(≥3 步)或完整路径**：先 \`TaskGraphCreatePlan\`(sequential=true)建计划,再逐步 Claim → 执行 → Complete
 3. LoadSkill \`ppt-brief\` → outline → storyboard（按需）

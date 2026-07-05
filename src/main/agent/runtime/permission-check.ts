@@ -104,7 +104,7 @@ function matchContextRule(block: PreToolUseBlock): string | null {
     return null;
   }
 
-  if (toolName === "write_file" || toolName === "edit_file") {
+  if (toolName === "write_file" || toolName === "edit_file" || toolName === "ensure_dir") {
     if (isPathOutsideWorkspace(workspaceRoot, filePath)) {
       return `尝试写入工作区外路径：${filePath}`;
     }

@@ -301,6 +301,57 @@ describe("Agent Architecture Skeletons & Types", () => {
     expect(result.type).toBe("deck.command_proposal");
   });
 
+  it("wraps plain text for direct-answer requests without a JSON retry", async () => {
+    let calls = 0;
+    const runtime = new AgentRuntime(new ToolRegistry(), {
+      async generateText() {
+        calls += 1;
+        return {
+          provider: "openai",
+          model: "test-model",
+          text: "《第五项修炼》是彼得·圣吉关于学习型组织的经典著作。",
+        };
+      },
+      async *generateTextStream() {
+        calls += 1;
+        yield { type: "content" as const, text: "《第五项修炼》是彼得·圣吉关于学习型组织的经典著作。" };
+        yield { type: "complete" as const, text: "" };
+      },
+    });
+
+    const result = await runtime.run({
+      threadId: "test-direct-answer-fallback",
+      request: "我想了解一下第五项修炼",
+      presentationSnapshot: createStarterPresentation(),
+      selectedElementIds: [],
+    });
+
+    expect(result).toEqual(modelMessage("《第五项修炼》是彼得·圣吉关于学习型组织的经典著作。"));
+    expect(calls).toBe(1);
+  });
+
+  it("keeps strict JSON retry for plain text on PPT action requests", async () => {
+    const registry = new ToolRegistry();
+    registry.register(submitCommandsTool);
+    const runtime = new AgentRuntime(registry, createSequenceGateway([
+      "我马上开始制作。",
+      modelToolCall("SubmitCommands", {
+        summary: "Create the Fifth Discipline presentation",
+        commands: [{ id: "cmd-ppt-action-retry", type: "set-presentation-title", title: "第五项修炼" }],
+        risk: "low",
+      }),
+    ]));
+
+    const result = await runtime.run({
+      threadId: "test-ppt-action-stays-json",
+      request: "帮我做一份关于第五项修炼的 PPT",
+      presentationSnapshot: createStarterPresentation(),
+      selectedElementIds: [],
+    });
+
+    expect(result.type).toBe("deck.command_proposal");
+  });
+
   it("does not let an action continuation end with a narrative message", async () => {
     const registry = new ToolRegistry();
     registry.register(searchExtraToolsTool);

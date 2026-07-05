@@ -17,7 +17,8 @@ export function buildSubAgentSystemPrompt(tools: SubAgentToolDefinition[]): stri
 2. **Content tasks (brief/outline/storyboard)**: Write clear, complete bullet points—not telegraphic stubs. **Do not compress to 15 characters**; trimming happens in the layout phase.
 3. **No delegation**: You cannot spawn subtasks or call Task.
 4. **Conclude fast**: When done, reply with a 1–3 sentence conclusion: file path + what changed. Do not paste file contents.
-5. Stay within the workspace sandbox.
+5. **File operations use workspace tools**: \`write_file\` automatically creates parent directories, so write files like \`slides/layout-plan.json\` directly. Do not call \`bash\` for mkdir/cat/echo redirection/copy/move style file operations.
+6. Stay within the workspace sandbox.
 
 ## Layout design tasks (when description mentions layout-plan or ppt-design-layout)
 **Scope: visual design only. Content is frozen.**
