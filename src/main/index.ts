@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 import {
   app,
@@ -88,12 +89,14 @@ function createSessionRuntime(snapshot: SessionSnapshot, skillRegistry: SkillReg
 }
 
 function createWindow(): void {
+  const icon = resolveAppIconPath();
   const window = new BrowserWindow({
     width: 1440,
     height: 900,
     minWidth: 1100,
     minHeight: 700,
     backgroundColor: getWindowBackgroundColor(),
+    ...(icon ? { icon } : {}),
     webPreferences: {
       preload: join(__dirname, "../preload/index.cjs"),
       contextIsolation: true,
@@ -117,6 +120,19 @@ const WINDOW_BACKGROUND_BY_THEME: Record<"light" | "dark", string> = {
   light: "#ffffff",
   dark: "#1e1e1e",
 };
+
+function resolveAppIconPath(): string | undefined {
+  const candidates = [
+    join(process.cwd(), "build", "icon.ico"),
+    join(process.cwd(), "build", "icon.png"),
+    join(process.resourcesPath, "icon.ico"),
+    join(process.resourcesPath, "icon.png"),
+    join(app.getAppPath(), "build", "icon.ico"),
+    join(app.getAppPath(), "build", "icon.png"),
+  ];
+
+  return candidates.find((candidate) => existsSync(candidate));
+}
 
 function resolveWindowThemeMode(): "light" | "dark" {
   return nativeTheme.shouldUseDarkColors ? "dark" : "light";
@@ -150,6 +166,10 @@ function applyWindowThemeMode(themeMode: WindowThemeMode): "light" | "dark" {
 }
 
 app.whenReady().then(async () => {
+  if (process.platform === "win32") {
+    app.setAppUserModelId("com.agent-ppt.app");
+  }
+
   Menu.setApplicationMenu(null);
   sessionStore = new FileSessionStore(join(app.getPath("userData"), "sessions.json"));
   await sessionStore.initialize();
