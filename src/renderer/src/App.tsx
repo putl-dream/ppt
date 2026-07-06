@@ -193,7 +193,9 @@ export function App() {
 
   // 双模态同构布局模式控制
   const [activeMode, setActiveMode] = useState<"workspace" | "settings">("workspace");
-  const [settingsCategory, setSettingsCategory] = useState<"profile" | "models" | "workflow" | "appearance">("profile");
+  const [settingsCategory, setSettingsCategory] = useState<
+    "account" | "models" | "gateway" | "generation" | "project" | "appearance"
+  >("account");
   const [persistedUiSettings] = useState(loadPersistedUiSettings);
 
   // 常规设置：常规/工作流与文件系统
@@ -1911,7 +1913,7 @@ export function App() {
               onNewSessionInWorkspace={(path) => void handleNewSessionInWorkspace(path)}
               onToggleSettings={() => {
                 setActiveMode("settings");
-                setSettingsCategory("profile");
+                setSettingsCategory("account");
               }}
               onDeleteSession={handleDeleteSession}
             />
@@ -2006,7 +2008,7 @@ export function App() {
           </>
         ) : (
           <>
-            {/* 左栏：系统设置分类导航 */}
+            {/* 左栏：设置分类导航 */}
             <SettingsSidebar
               activeCategory={settingsCategory}
               onSelectCategory={setSettingsCategory}

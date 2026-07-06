@@ -119,7 +119,7 @@ export function ModelManagement({
   return (
     <div className="model-management-layout settings-panel-fade">
       <div className="cursor-model-heading">
-        <h3>Models</h3>
+        <h3>模型列表</h3>
       </div>
 
       <section className="cursor-model-card">
@@ -127,7 +127,7 @@ export function ModelManagement({
           <input
             className="cursor-model-search"
             value={query}
-            placeholder="Add or search model"
+            placeholder="添加或搜索模型"
             onChange={(event) => setQuery(event.target.value)}
             onKeyDown={handleQueryKeyDown}
           />
@@ -181,7 +181,7 @@ export function ModelManagement({
           className="cursor-model-view-all"
           onClick={() => setQuery("")}
         >
-          View All Models
+          查看全部模型
         </button>
       </section>
 
@@ -193,7 +193,7 @@ export function ModelManagement({
         >
           <ChevronRightIcon size={16} />
           <KeyIcon size={15} />
-          <span>API Keys</span>
+          <span>API 密钥</span>
         </button>
 
         {apiKeysOpen && selectedModel && (

@@ -1,9 +1,19 @@
 import React from "react";
-import { BrainIcon, SettingsIcon, UserIcon, PaletteIcon } from "./Icons";
+import {
+  BrainIcon,
+  ChevronRightIcon,
+  DownloadIcon,
+  FolderIcon,
+  KeyIcon,
+  PaletteIcon,
+  UserIcon,
+} from "./Icons";
+
+type SettingsCategory = "account" | "models" | "gateway" | "generation" | "project" | "appearance";
 
 interface SettingsSidebarProps {
-  activeCategory: "profile" | "models" | "workflow" | "appearance";
-  onSelectCategory: (category: "profile" | "models" | "workflow" | "appearance") => void;
+  activeCategory: SettingsCategory;
+  onSelectCategory: (category: SettingsCategory) => void;
   onBackToWorkspace: () => void;
 }
 
@@ -12,97 +22,46 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = ({
   onSelectCategory,
   onBackToWorkspace,
 }) => {
+  const navItems: Array<{
+    id: SettingsSidebarProps["activeCategory"];
+    title: string;
+    icon: React.ReactNode;
+  }> = [
+    { id: "account", title: "账户与额度", icon: <UserIcon size={17} /> },
+    { id: "models", title: "AI 模型", icon: <BrainIcon size={17} /> },
+    { id: "gateway", title: "生成参数", icon: <KeyIcon size={17} /> },
+    { id: "generation", title: "生成偏好", icon: <DownloadIcon size={17} /> },
+    { id: "project", title: "文件与模板", icon: <FolderIcon size={17} /> },
+    { id: "appearance", title: "外观", icon: <PaletteIcon size={17} /> },
+  ];
+
   return (
     <aside className="left-panel settings-sidebar">
-      {/* 顶部标题 */}
-      <div className="panel-header left-header">
-        <div className="title-section">
-          <span className="eyebrow">SYSTEM SETTINGS</span>
-          <h2 className="project-title" style={{ cursor: "default" }}>
-            <span>系统设置</span>
-          </h2>
-        </div>
-      </div>
-
-      {/* 分类导航列表 */}
       <div className="sections-container flex-1">
-        <div className="settings-nav-list" style={{ display: "flex", flexDirection: "column", gap: "8px", marginTop: "12px" }}>
-          
-          <button
-            className={`settings-nav-item ${activeCategory === "profile" ? "active" : ""}`}
-            onClick={() => onSelectCategory("profile")}
-          >
-            <div className="nav-icon-wrapper">
-              <UserIcon size={18} />
-            </div>
-            <div className="nav-text">
-              <span className="nav-title">账户与 Token 额度</span>
-            </div>
-          </button>
-
-          <button
-            className={`settings-nav-item ${activeCategory === "models" ? "active" : ""}`}
-            onClick={() => onSelectCategory("models")}
-          >
-            <div className="nav-icon-wrapper">
-              <BrainIcon size={18} />
-            </div>
-            <div className="nav-text">
-              <span className="nav-title">自定义模型</span>
-            </div>
-          </button>
-          
-          <button
-            className={`settings-nav-item ${activeCategory === "workflow" ? "active" : ""}`}
-            onClick={() => onSelectCategory("workflow")}
-          >
-            <div className="nav-icon-wrapper">
-              <SettingsIcon size={18} />
-            </div>
-            <div className="nav-text">
-              <span className="nav-title">常规与工作流偏好</span>
-            </div>
-          </button>
-
-          <button
-            className={`settings-nav-item ${activeCategory === "appearance" ? "active" : ""}`}
-            onClick={() => onSelectCategory("appearance")}
-          >
-            <div className="nav-icon-wrapper">
-              <PaletteIcon size={18} />
-            </div>
-            <div className="nav-text">
-              <span className="nav-title">外观与视觉控制</span>
-            </div>
-          </button>
-          
+        <div className="settings-nav-list">
+          {navItems.map((item) => (
+            <button
+              key={item.id}
+              className={`settings-nav-item ${activeCategory === item.id ? "active" : ""}`}
+              onClick={() => onSelectCategory(item.id)}
+            >
+              <div className="nav-icon-wrapper">{item.icon}</div>
+              <div className="nav-text">
+                <span className="nav-title">{item.title}</span>
+              </div>
+            </button>
+          ))}
         </div>
       </div>
 
-      {/* 底部返回工作区按钮 */}
-      <div className="panel-footer left-footer" style={{ padding: "16px 18px" }}>
+      <div className="panel-footer left-footer settings-sidebar-footer">
         <button
           className="back-workspace-btn"
           onClick={onBackToWorkspace}
-          style={{
-            width: "100%",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: "8px",
-            padding: "11px 14px",
-            borderRadius: "8px",
-            border: "1px solid var(--border-glass-focused)",
-            background: "var(--bg-input-field)",
-            color: "var(--text-primary)",
-            cursor: "pointer",
-            fontSize: "13px",
-            fontWeight: 600,
-            transition: "var(--transition-smooth)",
-            boxShadow: "0 2px 6px rgba(0,0,0,0.03)"
-          }}
+          aria-label="返回 Agent 工作区"
         >
-          <span>← 返回 Agent 工作区</span>
+          <ChevronRightIcon size={15} className="settings-back-icon" />
+          <span>返回 Agent 工作区</span>
         </button>
       </div>
     </aside>
