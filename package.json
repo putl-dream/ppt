@@ -60,6 +60,10 @@
       {
         "from": "build/icon.png",
         "to": "icon.png"
+      },
+      {
+        "from": "build/icon.icns",
+        "to": "icon.icns"
       }
     ],
     "win": {
@@ -80,6 +84,7 @@
       "createDesktopShortcut": true
     },
     "mac": {
+      "icon": "build/icon.icns",
       "target": [
         "dmg"
       ],
