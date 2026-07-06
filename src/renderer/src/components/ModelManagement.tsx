@@ -1,7 +1,7 @@
 import { useMemo, useState, type KeyboardEvent } from "react";
 import type { ManagedModel } from "../modelCatalog";
 import { isModelEnabled } from "../modelCatalog";
-import { ChevronRightIcon, KeyIcon, RefreshIcon, TrashIcon } from "./Icons";
+import { ChevronRightIcon, KeyIcon, PlusIcon, RefreshIcon, TrashIcon } from "./Icons";
 
 interface ModelManagementProps {
   models: ManagedModel[];
@@ -43,14 +43,14 @@ export function ModelManagement({
 }: ModelManagementProps) {
   const [query, setQuery] = useState("");
   const [apiKeysOpen, setApiKeysOpen] = useState(false);
+  const normalizedQuery = query.trim().toLowerCase();
 
   const filteredModels = useMemo(() => {
-    const normalizedQuery = query.trim().toLowerCase();
     if (!normalizedQuery) return models;
     return models.filter((model) => {
       return `${model.name} ${model.model}`.toLowerCase().includes(normalizedQuery);
     });
-  }, [models, query]);
+  }, [models, normalizedQuery]);
 
   const selectedModel = models.find((model) => model.id === selectedModelId) ?? models[0];
   const enabledCount = models.filter(isModelEnabled).length;
@@ -83,10 +83,8 @@ export function ModelManagement({
     }
   };
 
-  const handleQueryKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
-    if (event.key !== "Enter") return;
-
-    const name = query.trim();
+  const addOrSelectModel = (rawName: string) => {
+    const name = rawName.trim();
     if (!name) return;
 
     const exactMatch = models.find((model) => {
@@ -96,6 +94,7 @@ export function ModelManagement({
 
     if (exactMatch) {
       onSelectModel(exactMatch.id);
+      setApiKeysOpen(true);
       setQuery("");
       return;
     }
@@ -106,6 +105,16 @@ export function ModelManagement({
     setApiKeysOpen(true);
     setQuery("");
     triggerToast("模型已添加");
+  };
+
+  const handleQueryKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key !== "Enter") return;
+    addOrSelectModel(query);
+  };
+
+  const handleAddModel = () => {
+    const name = query.trim() || `自定义模型 ${models.length + 1}`;
+    addOrSelectModel(name);
   };
 
   const deleteSelectedModel = () => {
@@ -127,7 +136,7 @@ export function ModelManagement({
           <input
             className="cursor-model-search"
             value={query}
-            placeholder="添加或搜索模型"
+            placeholder="搜索模型，或输入名称后添加"
             onChange={(event) => setQuery(event.target.value)}
             onKeyDown={handleQueryKeyDown}
           />
@@ -141,6 +150,15 @@ export function ModelManagement({
             <RefreshIcon size={16} />
           </button>
         </div>
+
+        <button
+          type="button"
+          className="cursor-model-add-btn"
+          onClick={handleAddModel}
+        >
+          <PlusIcon size={14} />
+          <span>{query.trim() ? `添加 “${query.trim()}”` : "添加模型"}</span>
+        </button>
 
         <div className="cursor-model-list">
           {filteredModels.map((model) => {
@@ -176,13 +194,15 @@ export function ModelManagement({
           )}
         </div>
 
-        <button
-          type="button"
-          className="cursor-model-view-all"
-          onClick={() => setQuery("")}
-        >
-          查看全部模型
-        </button>
+        {normalizedQuery ? (
+          <button
+            type="button"
+            className="cursor-model-view-all"
+            onClick={() => setQuery("")}
+          >
+            查看全部模型
+          </button>
+        ) : null}
       </section>
 
       <section className="cursor-api-section">

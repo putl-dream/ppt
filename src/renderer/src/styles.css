@@ -5698,6 +5698,30 @@ aside {
   color: #a5a5a5;
 }
 
+.cursor-model-add-btn {
+  width: 100%;
+  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  margin-bottom: 6px;
+  border: 1px solid var(--border-glass);
+  border-radius: 7px;
+  background: var(--bg-input-field);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.14s ease, border-color 0.14s ease, color 0.14s ease;
+}
+
+.cursor-model-add-btn:hover {
+  background: var(--bg-glass-hover);
+  border-color: var(--border-glass-focused);
+}
+
 .cursor-model-icon-btn {
   width: 30px;
   height: 30px;

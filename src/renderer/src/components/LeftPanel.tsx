@@ -136,12 +136,43 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
   } | null>(null);
   const [isSearchOpen, setIsSearchOpen] = React.useState(false);
   const [sessionSearchQuery, setSessionSearchQuery] = React.useState("");
+  const searchAreaRef = React.useRef<HTMLDivElement>(null);
   const searchInputRef = React.useRef<HTMLInputElement>(null);
 
   React.useEffect(() => {
     if (isSearchOpen) {
       searchInputRef.current?.focus();
     }
+  }, [isSearchOpen]);
+
+  React.useEffect(() => {
+    if (!isSearchOpen) return;
+
+    const closeSearch = () => {
+      setIsSearchOpen(false);
+      setSessionSearchQuery("");
+    };
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (searchAreaRef.current?.contains(target)) return;
+      closeSearch();
+    };
+
+    const handleFocusIn = (event: FocusEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (searchAreaRef.current?.contains(target)) return;
+      closeSearch();
+    };
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("focusin", handleFocusIn);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("focusin", handleFocusIn);
+    };
   }, [isSearchOpen]);
 
   const visibleSessions = React.useMemo(() => {
@@ -184,29 +215,31 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
           <PlusIcon size={14} className="cursor-workspace-icon" />
           <span>新建会话</span>
         </button>
-        <button
-          type="button"
-          className={`cursor-sidebar-action-row ${isSearchOpen ? "active" : ""}`}
-          onClick={() => setIsSearchOpen((value) => !value)}
-        >
-          <SearchIcon size={14} className="cursor-workspace-icon" />
-          <span>搜索会话</span>
-        </button>
-        {isSearchOpen ? (
-          <input
-            ref={searchInputRef}
-            className="cursor-sidebar-search-input"
-            value={sessionSearchQuery}
-            placeholder="输入关键词"
-            onChange={(event) => setSessionSearchQuery(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Escape") {
-                setSessionSearchQuery("");
-                setIsSearchOpen(false);
-              }
-            }}
-          />
-        ) : null}
+        <div ref={searchAreaRef}>
+          <button
+            type="button"
+            className={`cursor-sidebar-action-row ${isSearchOpen ? "active" : ""}`}
+            onClick={() => setIsSearchOpen((value) => !value)}
+          >
+            <SearchIcon size={14} className="cursor-workspace-icon" />
+            <span>搜索会话</span>
+          </button>
+          {isSearchOpen ? (
+            <input
+              ref={searchInputRef}
+              className="cursor-sidebar-search-input"
+              value={sessionSearchQuery}
+              placeholder="输入关键词"
+              onChange={(event) => setSessionSearchQuery(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Escape") {
+                  setSessionSearchQuery("");
+                  setIsSearchOpen(false);
+                }
+              }}
+            />
+          ) : null}
+        </div>
       </div>
 
       <div className="cursor-sidebar-list">
