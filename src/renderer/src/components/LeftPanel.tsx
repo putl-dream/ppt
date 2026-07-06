@@ -5,6 +5,7 @@ import {
   ChevronDownIcon,
   ChevronRightIcon,
   PlusIcon,
+  SearchIcon,
   SettingsIcon,
   UserIcon,
   TrashIcon,
@@ -133,12 +134,37 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
     y: number;
     sessionId: string;
   } | null>(null);
+  const [isSearchOpen, setIsSearchOpen] = React.useState(false);
+  const [sessionSearchQuery, setSessionSearchQuery] = React.useState("");
+  const searchInputRef = React.useRef<HTMLInputElement>(null);
 
-  const groupedSessions = React.useMemo(() => groupSessionsByWorkspace(sessions), [sessions]);
+  React.useEffect(() => {
+    if (isSearchOpen) {
+      searchInputRef.current?.focus();
+    }
+  }, [isSearchOpen]);
+
+  const visibleSessions = React.useMemo(() => {
+    const query = sessionSearchQuery.trim().toLowerCase();
+    if (!query) return sessions;
+
+    return sessions.filter((session) => {
+      const titleMatches = session.title.toLowerCase().includes(query);
+      const workspacePath = session.workspacePath ?? "";
+      const workspaceLabel = getWorkspaceLabel(workspacePath).toLowerCase();
+      const workspaceMatches =
+        workspacePath.toLowerCase().includes(query) ||
+        workspaceLabel.includes(query);
+
+      return titleMatches || workspaceMatches;
+    });
+  }, [sessions, sessionSearchQuery]);
+
+  const groupedSessions = React.useMemo(() => groupSessionsByWorkspace(visibleSessions), [visibleSessions]);
   const workspaceGroups = groupedSessions.filter((group) => group.workspacePath !== "__unknown__");
   const orphanSessions =
     groupedSessions.find((group) => group.workspacePath === "__unknown__")?.sessions ?? [];
-  const hasSessionList = sessions.length > 0;
+  const hasSessionList = visibleSessions.length > 0;
 
   React.useEffect(() => {
     const handleClose = () => setContextMenu(null);
@@ -154,13 +180,37 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
   return (
     <aside className="left-panel cursor-sidebar">
       <div className="cursor-sidebar-top">
-        <button type="button" className="cursor-new-session-btn" onClick={onNewSession}>
-          <PlusIcon size={16} />
+        <button type="button" className="cursor-sidebar-action-row" onClick={onNewSession}>
+          <PlusIcon size={14} className="cursor-workspace-icon" />
           <span>新建会话</span>
         </button>
+        <button
+          type="button"
+          className={`cursor-sidebar-action-row ${isSearchOpen ? "active" : ""}`}
+          onClick={() => setIsSearchOpen((value) => !value)}
+        >
+          <SearchIcon size={14} className="cursor-workspace-icon" />
+          <span>搜索会话</span>
+        </button>
+        {isSearchOpen ? (
+          <input
+            ref={searchInputRef}
+            className="cursor-sidebar-search-input"
+            value={sessionSearchQuery}
+            placeholder="输入关键词"
+            onChange={(event) => setSessionSearchQuery(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") {
+                setSessionSearchQuery("");
+                setIsSearchOpen(false);
+              }
+            }}
+          />
+        ) : null}
       </div>
 
       <div className="cursor-sidebar-list">
+        <div className="cursor-sidebar-section-label">项目</div>
         {hasSessionList ? (
           <>
             {orphanSessions.map((session) => (
@@ -184,7 +234,11 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
               />
             ))}
           </>
-        ) : null}
+        ) : (
+          <div className="cursor-sidebar-empty">
+            {sessionSearchQuery.trim() ? "没有找到匹配会话" : "暂无会话"}
+          </div>
+        )}
       </div>
 
       <div className="panel-footer left-footer flex justify-between items-center" style={{ padding: "12px 18px" }}>
@@ -200,7 +254,7 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
         <button
           className="action-icon-btn settings-cog-btn"
           onClick={onToggleSettings}
-          title="系统设置"
+          title="设置"
           style={{ background: "transparent", border: "none" }}
         >
           <SettingsIcon size={18} className="text-secondary hover:text-primary transition-colors" />

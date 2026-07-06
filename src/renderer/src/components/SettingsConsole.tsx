@@ -648,13 +648,13 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
               <div className="settings-form-stack">
                 <label className="config-group">
                   <div className="settings-field-topline">
-                    <span className="config-label">外壳与画布圆角</span>
-                    <span className="settings-field-value">{borderRadiusScale.toFixed(2)}x · {Math.round(18 * borderRadiusScale)}px</span>
+                    <span className="config-label">内容区域圆角</span>
+                    <span className="settings-field-value">{Math.round(18 * borderRadiusScale)}px</span>
                   </div>
                   <input
                     className="settings-range"
                     type="range"
-                    min="0.4"
+                    min="0"
                     max="2.2"
                     step="0.1"
                     value={borderRadiusScale}
@@ -694,7 +694,7 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
                 </div>
                 <div>
                   <strong>Agent Canvas Card</strong>
-                  <span>当前圆角 {Math.round(12 * borderRadiusScale)}px</span>
+                  <span>内容区域圆角 {Math.round(18 * borderRadiusScale)}px</span>
                 </div>
                 <span className="settings-preview-badge">Active</span>
               </div>

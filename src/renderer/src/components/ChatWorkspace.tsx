@@ -254,7 +254,7 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
   // Render State A: Center Focal Mode (新建会话阶段 —— “居中巨幕控制台”)
   if (showInitChat) {
     return (
-      <section className="canvas-column chat-workspace-column center-focal-wrapper" style={{ background: "var(--bg-app)", height: "100%", display: "flex", flexDirection: "column" }}>
+      <section className="canvas-column chat-workspace-column center-focal-wrapper" style={{ background: "var(--bg-canvas)", height: "100%", display: "flex", flexDirection: "column" }}>
         
         {/* Top Header */}
         <div className="panel-header canvas-header" style={{ borderBottom: "none", background: "transparent" }}>
@@ -331,7 +331,7 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
 
   // Render State B: Bottom-Anchored Split View (伴随式会话与双轨生成阶段 —— “底部承托控制台”)
   return (
-    <section className="canvas-column chat-workspace-column" style={{ background: "var(--bg-app)" }}>
+    <section className="canvas-column chat-workspace-column" style={{ background: "var(--bg-canvas)" }}>
       
       {/* 顶部中央状态控制栏 */}
       <div className="panel-header canvas-header">

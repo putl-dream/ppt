@@ -5,7 +5,7 @@
   /* ==========================================================================
      默认浅色主题变量 (Light Mode)
      ========================================================================== */
-  --bg-app: #ffffff;
+  --bg-app: #e7e7e7;
   --bg-glass: #ffffff;
   --bg-glass-hover: rgba(0, 0, 0, 0.04);
   --bg-glass-active: rgba(0, 0, 0, 0.06);
@@ -35,6 +35,8 @@
   
   --transition-smooth: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
   --transition-panel: all 0.45s cubic-bezier(0.16, 1, 0.3, 1);
+  --border-radius-scale: 1;
+  --content-radius-scale: 1;
 
   /* 输入控件与内部卡片背景 */
   --bg-input-field: #ffffff;
@@ -47,7 +49,7 @@
   /* ==========================================================================
      深色主题变量覆盖 (Dark Mode)
      ========================================================================== */
-  --bg-app: #1e1e1e;
+  --bg-app: #141414;
   --bg-glass: #1e1e1e;
   --bg-glass-hover: rgba(255, 255, 255, 0.05);
   --bg-glass-active: rgba(255, 255, 255, 0.08);
@@ -352,34 +354,60 @@ aside {
 }
 
 .cursor-sidebar-top {
-  padding: 12px 12px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px 8px 8px;
   flex-shrink: 0;
 }
 
-.cursor-new-session-btn {
+.cursor-sidebar-action-row {
   width: 100%;
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 10px 14px;
-  border: 1px solid var(--border-glass);
-  border-radius: 10px;
-  background: var(--bg-input-field);
-  color: var(--text-primary);
+  gap: 6px;
+  min-height: 26px;
+  padding: 5px 8px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
   font-size: 13px;
   font-weight: 500;
+  text-align: left;
   cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease;
+  transition: background 0.12s ease, color 0.12s ease;
 }
 
-.cursor-new-session-btn:hover {
+.cursor-sidebar-action-row:hover,
+.cursor-sidebar-action-row.active {
   background: var(--border-glass);
-  border-color: rgba(0, 0, 0, 0.12);
+  color: var(--text-primary);
 }
 
-.dark-theme .cursor-new-session-btn:hover {
-  border-color: rgba(255, 255, 255, 0.15);
+.cursor-sidebar-search-input {
+  width: calc(100% - 8px);
+  height: 28px;
+  margin: 4px 4px 0;
+  padding: 0 9px;
+  border: 1px solid var(--border-glass);
+  border-radius: 7px;
+  background: var(--bg-input-field);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  font-size: 12px;
+}
+
+.cursor-sidebar-search-input::placeholder {
+  color: var(--text-muted);
+}
+
+.cursor-sidebar-section-label {
+  padding: 4px 8px 7px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
 }
 
 .cursor-sidebar-list {
@@ -402,16 +430,16 @@ aside {
 }
 
 .cursor-workspace-section {
-  margin-bottom: 12px;
+  margin-bottom: 6px;
 }
 
 .cursor-workspace-header {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 8px;
+  padding: 5px 8px;
   border-radius: 6px;
-  min-height: 28px;
+  min-height: 26px;
   cursor: pointer;
   transition: background 0.12s ease;
 }
@@ -430,7 +458,7 @@ aside {
   min-width: 0;
   font-size: 11px;
   font-weight: 600;
-  color: var(--text-muted);
+  color: var(--text-secondary);
   text-transform: uppercase;
   letter-spacing: 0.04em;
   overflow: hidden;
@@ -474,14 +502,14 @@ aside {
 .cursor-session-list {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  padding-left: 4px;
+  gap: 1px;
+  padding-left: 0;
 }
 
 .cursor-session-row {
   width: 100%;
   display: block;
-  padding: 8px 12px;
+  padding: 6px 12px 6px 32px;
   border: none;
   border-radius: 8px;
   background: transparent;
@@ -501,7 +529,7 @@ aside {
 .cursor-session-title {
   display: block;
   font-size: 13px;
-  color: var(--text-secondary);
+  color: var(--text-primary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -4131,7 +4159,7 @@ aside {
    ========================================================================== */
 .rounded-canvas {
   margin: 0;
-  border-radius: calc(18px * var(--border-radius-scale)) 0 0 calc(18px * var(--border-radius-scale));
+  border-radius: calc(18px * var(--content-radius-scale)) 0 0 calc(18px * var(--content-radius-scale));
   border-left: 1px solid var(--border-glass-focused);
   background: var(--bg-canvas);
   overflow: hidden;
@@ -4508,7 +4536,7 @@ aside {
 .settings-console-container {
   height: 100%;
   overflow-y: auto;
-  background: var(--bg-app);
+  background: var(--bg-canvas);
 }
 
 .settings-layout-grid {
@@ -5032,7 +5060,7 @@ aside {
   gap: 12px;
   padding: 14px;
   border: 1px solid var(--border-glass-focused);
-  border-radius: calc(12px * var(--border-radius-scale));
+  border-radius: calc(18px * var(--content-radius-scale));
   background: var(--bg-input-field);
 }
 
@@ -5609,7 +5637,7 @@ aside {
 
 /* 底部输入框在伴随视图下的样式微调 */
 .chat-workspace-footer-unified {
-  background: var(--bg-app);
+  background: var(--bg-canvas);
   border-top: none;
   padding: 16px 0;
   flex-shrink: 0;

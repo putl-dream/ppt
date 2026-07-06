@@ -330,21 +330,23 @@ export function App() {
 
   // 实时外观视觉控制阀应用 (圆角与色彩对比度)
   useEffect(() => {
-    document.documentElement.style.setProperty("--border-radius-scale", borderRadiusScale.toString());
+    document.documentElement.style.setProperty("--content-radius-scale", borderRadiusScale.toString());
   }, [borderRadiusScale]);
 
   useEffect(() => {
     const isDark = computedTheme === "dark";
     if (isDark) {
-      const lightness = Math.max(8, 12 - colorContrastOffset);
-      document.documentElement.style.setProperty("--bg-app", `hsl(0, 0%, ${lightness}%)`);
-      document.documentElement.style.setProperty("--bg-canvas", `hsl(0, 0%, ${lightness}%)`);
-      document.documentElement.style.setProperty("--bg-glass", `hsl(0, 0%, ${lightness}%)`);
+      const appLightness = Math.min(20, Math.max(6, 12 - colorContrastOffset * 0.45));
+      const canvasLightness = Math.min(24, Math.max(10, 18 - colorContrastOffset * 0.25));
+      document.documentElement.style.setProperty("--bg-app", `hsl(0, 0%, ${appLightness}%)`);
+      document.documentElement.style.setProperty("--bg-canvas", `hsl(0, 0%, ${canvasLightness}%)`);
+      document.documentElement.style.setProperty("--bg-glass", `hsl(0, 0%, ${canvasLightness}%)`);
     } else {
-      const lightness = Math.min(100, 100 - colorContrastOffset);
-      document.documentElement.style.setProperty("--bg-app", `hsl(0, 0%, ${lightness}%)`);
-      document.documentElement.style.setProperty("--bg-canvas", `hsl(0, 0%, ${lightness}%)`);
-      document.documentElement.style.setProperty("--bg-glass", `hsl(0, 0%, ${lightness}%)`);
+      const appLightness = Math.min(95, Math.max(84, 90.6 - colorContrastOffset));
+      const canvasLightness = Math.min(100, Math.max(94, 100 - Math.max(0, colorContrastOffset) * 0.25));
+      document.documentElement.style.setProperty("--bg-app", `hsl(0, 0%, ${appLightness}%)`);
+      document.documentElement.style.setProperty("--bg-canvas", `hsl(0, 0%, ${canvasLightness}%)`);
+      document.documentElement.style.setProperty("--bg-glass", `hsl(0, 0%, ${canvasLightness}%)`);
     }
   }, [computedTheme, colorContrastOffset]);
 
