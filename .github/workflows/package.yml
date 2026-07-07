@@ -92,7 +92,7 @@ jobs:
 
   release:
     name: Publish GitHub Release
-    if: startsWith(github.ref, 'refs/tags/')
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/') || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
     needs: package
     runs-on: ubuntu-latest
 
@@ -105,16 +105,59 @@ jobs:
         with:
           path: release-artifacts
 
+      - name: Resolve release target
+        id: release_target
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            {
+              echo "tag=${GITHUB_REF_NAME}"
+              echo "title=${GITHUB_REF_NAME}"
+              echo "prerelease=false"
+              echo "rolling=false"
+            } >> "$GITHUB_OUTPUT"
+          else
+            {
+              echo "tag=latest"
+              echo "title=Latest Build"
+              echo "prerelease=true"
+              echo "rolling=true"
+            } >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Check release files
         shell: bash
         run: |
           echo "Release files:"
           find release-artifacts -type f
 
+      - name: Move rolling release tag
+        if: steps.release_target.outputs.rolling == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.release_target.outputs.tag }}
+        shell: bash
+        run: |
+          if gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${RELEASE_TAG}" >/dev/null 2>&1; then
+            gh api \
+              --method PATCH \
+              "repos/${GITHUB_REPOSITORY}/git/refs/tags/${RELEASE_TAG}" \
+              -f sha="${GITHUB_SHA}" \
+              -F force=true
+          else
+            gh api \
+              --method POST \
+              "repos/${GITHUB_REPOSITORY}/git/refs" \
+              -f ref="refs/tags/${RELEASE_TAG}" \
+              -f sha="${GITHUB_SHA}"
+          fi
+
       - name: Create or update release
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG_NAME: ${{ github.ref_name }}
+          RELEASE_TAG: ${{ steps.release_target.outputs.tag }}
+          RELEASE_TITLE: ${{ steps.release_target.outputs.title }}
+          RELEASE_PRERELEASE: ${{ steps.release_target.outputs.prerelease }}
         shell: bash
         run: |
           mapfile -t files < <(find release-artifacts -type f)
@@ -124,8 +167,19 @@ jobs:
             exit 1
           fi
 
-          if gh release view "$TAG_NAME" >/dev/null 2>&1; then
-            gh release upload "$TAG_NAME" "${files[@]}" --clobber
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" "${files[@]}" --clobber
+            if [ "$RELEASE_PRERELEASE" = "true" ]; then
+              gh release edit "$RELEASE_TAG" \
+                --title "$RELEASE_TITLE" \
+                --notes "Rolling build from ${GITHUB_REF_NAME} (${GITHUB_SHA::7})." \
+                --prerelease
+            fi
+          elif [ "$RELEASE_PRERELEASE" = "true" ]; then
+            gh release create "$RELEASE_TAG" "${files[@]}" \
+              --title "$RELEASE_TITLE" \
+              --notes "Rolling build from ${GITHUB_REF_NAME} (${GITHUB_SHA::7})." \
+              --prerelease
           else
-            gh release create "$TAG_NAME" "${files[@]}" --title "$TAG_NAME" --generate-notes
+            gh release create "$RELEASE_TAG" "${files[@]}" --title "$RELEASE_TITLE" --generate-notes
           fi
