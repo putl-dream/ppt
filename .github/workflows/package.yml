@@ -167,19 +167,24 @@ jobs:
             exit 1
           fi
 
-          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            gh release upload "$RELEASE_TAG" "${files[@]}" --clobber
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" "${files[@]}" --clobber --repo "$GITHUB_REPOSITORY"
             if [ "$RELEASE_PRERELEASE" = "true" ]; then
               gh release edit "$RELEASE_TAG" \
                 --title "$RELEASE_TITLE" \
                 --notes "Rolling build from ${GITHUB_REF_NAME} (${GITHUB_SHA::7})." \
-                --prerelease
+                --prerelease \
+                --repo "$GITHUB_REPOSITORY"
             fi
           elif [ "$RELEASE_PRERELEASE" = "true" ]; then
             gh release create "$RELEASE_TAG" "${files[@]}" \
               --title "$RELEASE_TITLE" \
               --notes "Rolling build from ${GITHUB_REF_NAME} (${GITHUB_SHA::7})." \
-              --prerelease
+              --prerelease \
+              --repo "$GITHUB_REPOSITORY"
           else
-            gh release create "$RELEASE_TAG" "${files[@]}" --title "$RELEASE_TITLE" --generate-notes
+            gh release create "$RELEASE_TAG" "${files[@]}" \
+              --title "$RELEASE_TITLE" \
+              --generate-notes \
+              --repo "$GITHUB_REPOSITORY"
           fi
