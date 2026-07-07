@@ -55,7 +55,7 @@ jobs:
           test -f build/icon.icns
 
       - name: Package app
-        run: npm run build:${{ matrix.target }}
+        run: npm run build:${{ matrix.target }} -- --publish never
 
       - name: Upload package artifact
         uses: actions/upload-artifact@v4
