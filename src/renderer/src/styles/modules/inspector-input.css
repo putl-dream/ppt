@@ -255,7 +255,7 @@
 /* 浮动警告信息气泡 */
 .floating-toast-alert {
   position: fixed;
-  top: 24px;
+  top: 36px;
   left: 50%;
   transform: translateX(-50%);
   background: var(--bg-glass);
@@ -273,8 +273,8 @@
 }
 
 @keyframes slide-in-toast {
-  0% { top: 10px; opacity: 0; }
-  100% { top: 24px; opacity: 1; }
+  0% { top: 22px; opacity: 0; }
+  100% { top: 36px; opacity: 1; }
 }
 
 /* 全景加载态与异常态 */
