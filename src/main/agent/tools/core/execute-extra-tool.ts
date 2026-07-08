@@ -4,6 +4,9 @@ import type { ToolDefinition } from "../tool-definition";
 export const executeExtraToolSchema = z.object({
   toolName: z.string().describe("需要执行的目标延迟工具（Deferred Tool）的名称"),
   toolArgs: z.record(z.string(), z.any()).describe("传递给延迟工具的参数对象"),
+  run_in_background: z.boolean().optional().describe(
+    "Run a slow eligible deferred tool in the background; result returns later as task_notification.",
+  ),
 });
 
 /**

@@ -14,6 +14,10 @@ import type {
 import { ToolRegistry } from "../src/main/agent/tools/tool-registry";
 import type { ToolDefinition } from "../src/main/agent/tools/tool-definition";
 import { taskTool } from "../src/main/agent/tools/core/task";
+import { executeExtraToolTool } from "../src/main/agent/tools/core/execute-extra-tool";
+import { searchExtraToolsTool } from "../src/main/agent/tools/core/search-extra-tools";
+import { exportPptxTool } from "../src/main/agent/tools/deferred/export-pptx";
+import { previewSlideTool } from "../src/main/agent/tools/deferred/preview-slide";
 import { toToolSchema } from "../src/main/agent/tools/tool-schema";
 import { createStarterPresentation } from "../src/shared/presentation";
 
@@ -115,6 +119,20 @@ describe("AgentRuntime background Task path", () => {
     expect(properties).toHaveProperty("run_in_background");
   });
 
+  it("exposes run_in_background on slow core/deferred execution schemas", () => {
+    const executeSpec = toToolSchema(executeExtraToolTool);
+    expect(executeSpec.inputSchema.properties as Record<string, unknown>)
+      .toHaveProperty("run_in_background");
+
+    const exportSpec = toToolSchema(exportPptxTool);
+    expect(exportSpec.inputSchema.properties as Record<string, unknown>)
+      .toHaveProperty("run_in_background");
+
+    const previewSpec = toToolSchema(previewSlideTool);
+    expect(previewSpec.inputSchema.properties as Record<string, unknown>)
+      .toHaveProperty("run_in_background");
+  });
+
   it("continues the model loop while a background Task is running, then injects notification", async () => {
     const work = deferred<string>();
     const events: string[] = [];
@@ -195,5 +213,103 @@ describe("AgentRuntime background Task path", () => {
       message.role === "user" && message.content?.includes("<task_notification>"));
     expect(notificationTurn?.content).toContain("<task_id>bg_0001</task_id>");
     expect(notificationTurn?.content).toContain("Outline done.");
+  });
+
+  it("backgrounds ExecuteExtraTool when it runs ExportPptx", async () => {
+    const exportWork = deferred<{ success: boolean; filePath: string }>();
+    const events: string[] = [];
+    let exportResolved = false;
+
+    const exportSchema = z.object({
+      format: z.enum(["pptx", "html", "pdf"]).default("pptx"),
+      run_in_background: z.boolean().optional(),
+    });
+    const mockExportTool: ToolDefinition<typeof exportSchema, { success: boolean; filePath: string }> = {
+      name: "ExportPptx",
+      description: "Mock slow export",
+      category: "deferred",
+      loadPolicy: "deferred",
+      inputSchema: exportSchema,
+      risk: "medium",
+      execute: async () => {
+        events.push("export-start");
+        const result = await exportWork.promise;
+        exportResolved = true;
+        events.push("export-finish");
+        return result;
+      },
+    };
+
+    const gateway = createNativeGateway((_request, index) => {
+      if (index === 0) {
+        return {
+          provider: "anthropic",
+          model: "test-model",
+          text: "",
+          toolCalls: [modelToolCall("call-search", "SearchExtraTools", { query: "ExportPptx" })],
+        };
+      }
+      if (index === 1) {
+        return {
+          provider: "anthropic",
+          model: "test-model",
+          text: "",
+          toolCalls: [
+            modelToolCall("call-export", "ExecuteExtraTool", {
+              toolName: "ExportPptx",
+              toolArgs: { format: "pptx", run_in_background: true },
+            }),
+          ],
+        };
+      }
+      if (index === 2) {
+        events.push("third-model-call");
+        expect(exportResolved).toBe(false);
+        setTimeout(() => exportWork.resolve({ success: true, filePath: "deck.pptx" }), 0);
+        return {
+          provider: "anthropic",
+          model: "test-model",
+          text: textEnvelope("Trying to finish before export result."),
+        };
+      }
+      return {
+        provider: "anthropic",
+        model: "test-model",
+        text: textEnvelope("Finished after export notification."),
+      };
+    });
+
+    const registry = new ToolRegistry();
+    registry.register(searchExtraToolsTool);
+    registry.register(executeExtraToolTool);
+    registry.register(mockExportTool);
+    const runtime = new AgentRuntime(registry, gateway);
+
+    const result = await runtime.run({
+      threadId: "background-export-thread",
+      request: "Export deck",
+      presentationSnapshot: createStarterPresentation(),
+      selectedElementIds: [],
+    });
+
+    expect(result.type).toBe("assistant.message");
+    if (result.type === "assistant.message") {
+      expect(result.data.content).toContain("Finished after export");
+    }
+    expect(events).toEqual(["export-start", "third-model-call", "export-finish"]);
+    expect(gateway.requests).toHaveLength(4);
+
+    const thirdMessages = gateway.requests[2]!.messages!;
+    const placeholderTurn = thirdMessages.find((message) =>
+      message.toolResults?.some((result) => result.toolCallId === "call-export"));
+    expect(placeholderTurn?.toolResults?.[0]?.toolCallId).toBe("call-export");
+    expect(placeholderTurn?.toolResults?.[0]?.content).toContain("Background task bg_0001 started");
+
+    const fourthMessages = gateway.requests[3]!.messages!;
+    const notificationTurn = fourthMessages.find((message) =>
+      message.role === "user" && message.content?.includes("<task_notification>"));
+    expect(notificationTurn?.content).toContain("<tool>ExecuteExtraTool</tool>");
+    expect(notificationTurn?.content).toContain("ExportPptx: pptx");
+    expect(notificationTurn?.content).toContain("deck.pptx");
   });
 });

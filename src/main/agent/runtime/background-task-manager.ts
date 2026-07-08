@@ -89,8 +89,15 @@ export function shouldRunBackground(
   toolName: string,
   args: Record<string, unknown>,
 ): boolean {
+  if (toolName === "ExecuteExtraTool") {
+    const targetToolName = typeof args.toolName === "string" ? args.toolName : "";
+    const toolArgs = isRecord(args.toolArgs) ? args.toolArgs : {};
+    return targetToolName === "ExportPptx" &&
+      (args.run_in_background === true || toolArgs.run_in_background === true);
+  }
+
   if (args.run_in_background === true) {
-    return toolName === "Task";
+    return toolName === "Task" || toolName === "PreviewSlide";
   }
 
   if (toolName === "Task" && Array.isArray(args.descriptions)) {
@@ -104,6 +111,16 @@ export function describeBackgroundTask(
   toolName: string,
   args: Record<string, unknown>,
 ): string {
+  if (toolName === "ExecuteExtraTool") {
+    const targetToolName = typeof args.toolName === "string" ? args.toolName : "DeferredTool";
+    const toolArgs = isRecord(args.toolArgs) ? args.toolArgs : {};
+    if (targetToolName === "ExportPptx") {
+      const format = typeof toolArgs.format === "string" ? toolArgs.format : "pptx";
+      return `ExportPptx: ${format}`;
+    }
+    return `ExecuteExtraTool: ${targetToolName}`;
+  }
+
   if (toolName === "Task") {
     if (Array.isArray(args.descriptions)) {
       const count = args.descriptions.filter((item) => typeof item === "string" && item.trim()).length;
@@ -113,6 +130,11 @@ export function describeBackgroundTask(
       return `Task: ${truncateForNotification(args.description.trim(), 80)}`;
     }
   }
+
+  if (toolName === "PreviewSlide" && typeof args.slideId === "string") {
+    return `PreviewSlide: ${args.slideId}`;
+  }
+
   return toolName;
 }
 
@@ -154,4 +176,8 @@ function escapeXml(value: string): string {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&apos;");
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value));
 }

@@ -5,6 +5,9 @@ import { deckExportService } from "../../../deck/deck-export-service";
 
 export const exportPptxSchema = z.object({
   format: z.enum(["pptx", "html", "pdf"]).default("pptx").describe("导出的文件格式"),
+  run_in_background: z.boolean().optional().describe(
+    "Run this export in the background; result returns later as task_notification.",
+  ),
 });
 
 /**

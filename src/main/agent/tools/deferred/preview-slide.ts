@@ -13,6 +13,9 @@ export const previewSlideSchema = z.object({
     .optional()
     .default(true)
     .describe("是否生成 PNG 缩略图（640×360 base64）；非 Electron 环境自动跳过"),
+  run_in_background: z.boolean().optional().describe(
+    "Run thumbnail generation in the background; result returns later as task_notification.",
+  ),
 });
 
 export interface SlidePreviewThumbnail {
