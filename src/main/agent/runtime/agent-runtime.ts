@@ -36,6 +36,12 @@ import {
   normalizeAgentProtocolObject,
   normalizeModelResponseToEnvelope,
 } from "./agent-message-normalizer";
+import {
+  BackgroundTaskManager,
+  describeBackgroundTask,
+  formatBackgroundNotifications,
+  shouldRunBackground,
+} from "./background-task-manager";
 
 export { parseAgentJsonResponse } from "./parse-agent-json-response";
 
@@ -177,6 +183,55 @@ export class AgentRuntime {
       current: null,
     };
     let renderFeedbackUsed = false;
+    const backgroundTasks = new BackgroundTaskManager();
+
+    const appendNativeUserTurn = (input: {
+      content?: string;
+      toolResult?: NonNullable<typeof pendingToolResult.current>;
+    }): void => {
+      if (!useNativeToolUse) return;
+      const content = input.content?.trim();
+      if (!input.toolResult && !content) return;
+
+      if (!input.toolResult && content) {
+        const last = nativeMessages.at(-1);
+        if (last?.role === "user" && !last.toolResults?.length && !last.images?.length) {
+          last.content = [last.content, content].filter((part): part is string => Boolean(part?.trim()))
+            .join("\n\n");
+          return;
+        }
+      }
+
+      nativeMessages.push({
+        role: "user",
+        ...(content ? { content } : {}),
+        ...(input.toolResult
+          ? {
+              toolResults: [{
+                toolCallId: input.toolResult.id,
+                content: input.toolResult.content,
+                isError: input.toolResult.isError,
+                images: input.toolResult.images,
+              }],
+            }
+          : {}),
+      });
+    };
+
+    const flushNativeUserTurn = (content?: string): void => {
+      const toolResult = pendingToolResult.current ?? undefined;
+      appendNativeUserTurn({ content, toolResult });
+      if (toolResult) pendingToolResult.current = null;
+    };
+
+    const drainBackgroundForModel = async (instruction: string): Promise<boolean> => {
+      if (!useNativeToolUse) return false;
+      if (!backgroundTasks.hasRunning() && !backgroundTasks.hasPendingNotifications()) return false;
+      const notifications = await backgroundTasks.drain(options.signal);
+      if (notifications.length === 0) return false;
+      flushNativeUserTurn(`${formatBackgroundNotifications(notifications)}\n\n${instruction}`);
+      return true;
+    };
 
     const finish = async (
       result: AgentRuntimeResult,
@@ -219,18 +274,12 @@ export class AgentRuntime {
         transcript,
       };
 
-      // native 模式：把上一回合的工具结果作为 tool_result 追加到消息序列。
-      if (useNativeToolUse && pendingToolResult.current) {
-        nativeMessages.push({
-          role: "user",
-          toolResults: [{
-            toolCallId: pendingToolResult.current.id,
-            content: pendingToolResult.current.content,
-            isError: pendingToolResult.current.isError,
-            images: pendingToolResult.current.images,
-          }],
-        });
-        pendingToolResult.current = null;
+      // native 模式：把上一回合 tool_result 与已完成后台任务通知并入同一 user turn。
+      if (useNativeToolUse) {
+        const notifications = backgroundTasks.collect();
+        flushNativeUserTurn(
+          notifications.length > 0 ? formatBackgroundNotifications(notifications) : undefined,
+        );
       }
 
       const extractor = shouldUseStream
@@ -378,6 +427,12 @@ export class AgentRuntime {
           continue;
         }
 
+        if (await drainBackgroundForModel(
+          "Background tasks have completed. Use these results before giving the final response.",
+        )) {
+          continue;
+        }
+
         return finish(normalized);
       }
 
@@ -469,6 +524,94 @@ export class AgentRuntime {
           return finish({
             ...normalizeMarkdownAssistantMessage(preToolStop.reason),
           });
+        }
+
+        if (
+          useNativeToolUse
+          && (tool.name === "SubmitCommands" || tool.name === "AskUser")
+          && (backgroundTasks.hasRunning() || backgroundTasks.hasPendingNotifications())
+        ) {
+          const guidance =
+            `Paused ${tool.name} because background task results are not yet incorporated. `
+            + "Review the task_notification content, then call the appropriate finish tool again.";
+          transcript.push({
+            role: "tool",
+            toolName: tool.name,
+            result: { pausedForBackgroundTasks: true, guidance },
+          });
+          recordToolResult(guidance);
+          await drainBackgroundForModel(
+            "Background tasks have completed. Reconsider these results before calling a finish tool.",
+          );
+          options.onProgress?.({
+            type: "tool-finished",
+            message: `工具 ${tool.name} 已等待后台任务结果。`,
+            toolName: tool.name,
+          });
+          continue;
+        }
+
+        if (
+          useNativeToolUse
+          && shouldRunBackground(tool.name, args.data as Record<string, unknown>)
+        ) {
+          const label = describeBackgroundTask(tool.name, args.data as Record<string, unknown>);
+          let bgId = "";
+          bgId = backgroundTasks.start({
+            toolName: tool.name,
+            label,
+            run: async () => {
+              try {
+                const output = await tool.execute(args.data, context);
+                await triggerHooks("PostToolUse", {
+                  event: "PostToolUse",
+                  toolName: tool.name,
+                  args: args.data,
+                  scope: "main",
+                  result: output,
+                  threadId: options.threadId,
+                } satisfies PostToolUseBlock);
+                options.onProgress?.({
+                  type: "tool-finished",
+                  message: `后台任务 ${bgId} 已完成：${tool.name}`,
+                  toolName: tool.name,
+                });
+                return output;
+              } catch (error) {
+                const errorMessage = error instanceof Error ? error.message : String(error);
+                await triggerHooks("PostToolUse", {
+                  event: "PostToolUse",
+                  toolName: tool.name,
+                  args: args.data,
+                  scope: "main",
+                  error: errorMessage,
+                  threadId: options.threadId,
+                } satisfies PostToolUseBlock);
+                options.onProgress?.({
+                  type: "tool-finished",
+                  message: `后台任务 ${bgId} 执行失败：${errorMessage}`,
+                  toolName: tool.name,
+                });
+                throw error;
+              }
+            },
+          });
+
+          const placeholder =
+            `[Background task ${bgId} started: ${label}] `
+            + "Result will arrive later as task_notification. Continue with independent work.";
+          transcript.push({
+            role: "tool",
+            toolName: tool.name,
+            result: { backgroundTaskId: bgId, status: "running", label },
+          });
+          recordToolResult(placeholder);
+          options.onProgress?.({
+            type: "workflow-progress",
+            message: `后台任务 ${bgId} 已启动：${label}`,
+            progress: 0,
+          });
+          continue;
         }
 
         const result = await tool.execute(args.data, context);
@@ -575,6 +718,10 @@ export class AgentRuntime {
         recordToolResult(errorMessage, true);
       }
 
+    }
+
+    if (backgroundTasks.hasRunning()) {
+      await backgroundTasks.drain(options.signal);
     }
 
     if (options.requiredOutcome === "command_proposal") {

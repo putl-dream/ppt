@@ -11,6 +11,9 @@ export const taskSchema = z.object({
   descriptions: z.array(z.string()).optional().describe(
     "Multiple independent subtasks to run concurrently; each sub-agent gets isolated context",
   ),
+  run_in_background: z.boolean().optional().describe(
+    "Run this slow Task delegation in the background; result returns later as task_notification.",
+  ),
 }).superRefine((value, ctx) => {
   const hasDescription = Boolean(value.description?.trim());
   const hasDescriptions = Boolean(value.descriptions?.some((item) => item.trim()));
