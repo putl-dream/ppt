@@ -20,11 +20,11 @@ stages:
 
 | 阶段 | LoadSkill | 产出 | 执行者 |
 |------|-----------|------|--------|
-| 0 规划 | — | TaskGraphCreatePlan（3–5 步，sequential） | 主 Agent |
+| 0 规划 | — | TaskGraphCreatePlan（3–5 步，sequential） | 主 Agent（lead/orchestrator） |
 | 1 需求 | `ppt-brief` | `brief.md` | Task |
 | 2 大纲 | `ppt-outline` | `outline.md` | Task |
 | 3 分镜 | `ppt-storyboard` | `slides/storyboard.json` | Task |
-| 4 内容草稿 | `ppt-build` | add-slide（无排版） | SubmitCommands |
+| 4 内容草稿 | `ppt-build` | add-slide（无排版） | 主 Agent 整合冻结产物后 SubmitCommands |
 | 4b 排版选择 | — | LayoutChoiceCard | 用户（author 子状态） |
 | **4c 排版设计** | **`ppt-design-layout`** | **`slides/layout-plan.json`** | **Task（Design Agent，design 阶段）** |
 | 5 视觉执行 | `ppt-layout` | 按 plan 执行 commands + 增强 | SubmitCommands（style 阶段） |
@@ -37,11 +37,15 @@ stages:
 
 ## 主 Agent 职责
 
-1. 先选路径；完整/多阶段(≥3 步)**必须**先 `TaskGraphCreatePlan`(sequential) 建计划再执行；单页修改**不要** TaskGraph、两阶段。
-2. 新建/批量加页：内容草稿完成后停止，等待 LayoutChoiceCard。
-3. 用户确认排版方式后：**先** LoadSkill `ppt-design-layout` + Task 产出 layout-plan；**再** LoadSkill `ppt-layout` 按 plan 执行（禁止 freestyle 改 layout）。
-4. workspace 文件一律 Task 委派；幻灯片改动 SubmitCommands。
-5. 控制步数：设计决策在 Task 内完成；执行阶段合并 SubmitCommands；不重复 LoadSkill。
+主 Agent 是 lead/orchestrator，不是全流程生产工人。
+
+1. 先识别意图并选路径；完整/多阶段(≥3 步)**必须**先 `TaskGraphCreatePlan`(sequential) 建计划再执行；单页修改**不要** TaskGraph、两阶段。
+2. 任务计划系统只用 `TaskGraph*`；不要使用、恢复或维护临时、平面的任务列表。
+3. 每个计划步骤先 `TaskGraphClaim`，再委派对应 Task 或执行轻量动作；验收产物满足阶段契约后才 `TaskGraphComplete`。
+4. workspace 文件一律 Task 委派；主 Agent 只负责读取必要上下文、整合已冻结产物、提出用户决策、最终 SubmitCommands。
+5. 新建/批量加页：内容草稿完成后停止，等待 LayoutChoiceCard。
+6. 用户确认排版方式后：**先** LoadSkill `ppt-design-layout` + Task 产出 layout-plan；**再** LoadSkill `ppt-layout` 按 plan 执行（禁止 freestyle 改 layout）。
+7. 控制步数：设计决策在 Task 内完成；执行阶段合并 SubmitCommands；不重复 LoadSkill。
 
 ## 阶段 4c → 5 衔接
 

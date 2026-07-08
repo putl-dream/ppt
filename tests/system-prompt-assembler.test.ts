@@ -70,6 +70,17 @@ describe("system prompt assembly", () => {
     expect(assembled.text).not.toContain("## 相关记忆");
   });
 
+  it("frames the main agent as a lead orchestrator for task planning and delegation", () => {
+    const assembled = assembleSystemPrompt(baseContext());
+
+    expect(assembled.text).toContain("Lead Agent 职责边界");
+    expect(assembled.text).toContain("lead/orchestrator");
+    expect(assembled.text).toContain("维护 TaskGraph");
+    expect(assembled.text).toContain("委派子 Agent");
+    expect(assembled.text).toContain("不要创建临时、平面的任务列表");
+    expect(assembled.text).toContain("验收产物");
+  });
+
   it("author stage omits layout skills from catalog and set-theme examples", () => {
     const registry = createEmptySkillRegistry();
     registerSkillFromContent(registry, "/tmp/build", "ppt-build", SAMPLE_SKILL);

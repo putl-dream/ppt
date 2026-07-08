@@ -71,6 +71,24 @@ describe("resolvePromptStage (6-stage machine)", () => {
     expect(stage).toBe("discover");
   });
 
+  it("does not treat export capability descriptions as export actions", () => {
+    const stage = resolvePromptStage({
+      request: "全面展示 PPT Agent 从规划到导出的六阶段能力，约 15-18 页",
+      presentation: deck(0),
+      artifacts: emptyArtifacts,
+    });
+    expect(stage).toBe("discover");
+  });
+
+  it("routes explicit export commands to export", () => {
+    const stage = resolvePromptStage({
+      request: "请导出 PPT 文件",
+      presentation: deck(8, "ocean"),
+      artifacts: emptyArtifacts,
+    });
+    expect(stage).toBe("export");
+  });
+
   it("does not bounce genuine author work once a storyboard exists", () => {
     const stage = resolvePromptStage({
       request: "创建一套完整演示",

@@ -164,22 +164,28 @@ describe("TaskStore", () => {
 });
 
 describe("TaskGraph tools", () => {
-  it("registers TaskGraph tools and removes TodoWrite", () => {
+  it("registers TaskGraph as the only persistent planning tool family", () => {
     const registry = createDefaultToolRegistry();
-    expect(registry.get("TodoWrite")).toBeUndefined();
-    for (const name of [
+    const planningToolNames = [
       "TaskGraphCreate",
       "TaskGraphCreatePlan",
       "TaskGraphList",
       "TaskGraphGet",
       "TaskGraphClaim",
       "TaskGraphComplete",
-    ]) {
+    ];
+
+    for (const name of planningToolNames) {
       const tool = registry.get(name);
       expect(tool?.category).toBe("core");
       expect(tool?.loadPolicy).toBe("core");
       expect(tool?.risk).toBe("low");
     }
+    expect(
+      registry.getCoreTools()
+        .map((tool) => tool.name)
+        .filter((name) => name.toLowerCase().includes("taskgraph")),
+    ).toEqual(planningToolNames);
   });
 
   it("creates sequential plans and notifies UI", async () => {

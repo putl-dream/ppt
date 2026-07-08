@@ -113,7 +113,7 @@ export function formatTaskPlanPosition(tasks: AgentTaskNode[]): string {
   return summarizeTaskGraphProgress(tasks);
 }
 
-/** 计划是否仍在执行中（有待办或进行中步骤） */
+/** 计划是否仍在执行中（仍有未完成或进行中步骤） */
 export function isTaskPlanActive(tasks: AgentTaskNode[]): boolean {
   if (tasks.length === 0) return false;
   return tasks.some((task) => task.status === "pending" || task.status === "in_progress");

@@ -4,9 +4,9 @@ import { formatTaskPlanPosition } from "@shared/agent-task-graph";
 import { ChevronDownIcon, ChevronRightIcon } from "./Icons";
 
 function TaskStatusIcon({ status }: { status: AgentTaskNode["status"] }) {
-  if (status === "completed") return <span className="agent-todo-icon done" aria-hidden="true">✓</span>;
-  if (status === "in_progress") return <span className="step-spinner agent-todo-spinner" aria-hidden="true" />;
-  return <span className="agent-todo-icon pending" aria-hidden="true">○</span>;
+  if (status === "completed") return <span className="task-plan-icon done" aria-hidden="true">✓</span>;
+  if (status === "in_progress") return <span className="step-spinner task-plan-spinner" aria-hidden="true" />;
+  return <span className="task-plan-icon pending" aria-hidden="true">○</span>;
 }
 
 interface TaskPlanCardProps {
@@ -46,11 +46,11 @@ export const TaskPlanCard: React.FC<TaskPlanCardProps> = ({
             </div>
           )}
           {tasks.length > 0 && (
-            <ul className="agent-todo-list">
+            <ul className="task-plan-list">
               {tasks.map((task, index) => (
                 <li
                   key={task.id}
-                  className={`agent-todo-item agent-todo-item--${task.status}`}
+                  className={`task-plan-item task-plan-item--${task.status}`}
                 >
                   <TaskStatusIcon status={task.status} />
                   <span>

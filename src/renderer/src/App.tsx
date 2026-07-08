@@ -24,7 +24,6 @@ import { useProjectStore, type ActiveProject } from "./components/project-store"
 import { getWorkspaceLabel, normalizeWorkspacePath, resolveWorkspacePath } from "@shared/workspace";
 import {
   artifactStageToInlineCardType,
-  isExportPrompt,
   isPreviewPrompt,
   mergeInlineCardRefs,
   parseBriefForCard,
@@ -1172,17 +1171,6 @@ export function App() {
       return activeRequest;
     };
     const userDisplayContent = resolveUserDisplayContent();
-
-    if (presentation && isExportPrompt(activeRequest)) {
-      const userMsgId = crypto.randomUUID();
-      setChatMessages((prev) => [
-        ...prev,
-        { id: userMsgId, role: "user", content: activeRequest },
-      ]);
-      if (!customRequest) setRequest("");
-      await handleExportDeck();
-      return;
-    }
 
     if (presentation && isPreviewPrompt(activeRequest)) {
       const userMsgId = crypto.randomUUID();

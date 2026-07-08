@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   artifactStageToInlineCardType,
-  isExportPrompt,
   isPreviewPrompt,
   mergeInlineCardRefs,
   parseInlineCardsFromContent,
@@ -26,10 +25,9 @@ describe("inline-artifact-cards", () => {
     expect(parseInlineCardsFromContent("文件已保存。 [打开所在目录](#open-export-folder=C%3A%5Cdeck.pptx)")).toEqual([]);
   });
 
-  it("detects export and preview prompts", () => {
-    expect(isExportPrompt("请导出 PPT 文件")).toBe(true);
+  it("detects preview prompts", () => {
     expect(isPreviewPrompt("打开幻灯片预览")).toBe(true);
-    expect(isExportPrompt("继续修改大纲")).toBe(false);
+    expect(isPreviewPrompt("继续修改大纲")).toBe(false);
   });
 
   it("merges inline card refs without duplicates", () => {

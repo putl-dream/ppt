@@ -1,6 +1,7 @@
 import type { Presentation } from "@shared/presentation";
 
 import type { WorkspaceArtifacts } from "./workspace-artifacts";
+import { isExplicitExportPrompt } from "./export-intent";
 
 /**
  * Merged prompt stages (6). Replaces the former 9-stage machine:
@@ -63,8 +64,6 @@ const LAYOUT_PHASE_PATTERNS = [
   /set-theme/i,
 ];
 
-const EXPORT_PATTERNS = [/导出|下载|pptx|export/i];
-
 const LIGHT_EDIT_PATTERNS = [
   /改(?:一|这|某|第\s*\d+)页/,
   /第\s*\d+\s*页.{0,12}(?:换|改|调|删|加|移|替换)/,
@@ -89,7 +88,7 @@ function isLayoutPhaseRequest(request: string): boolean {
 }
 
 function isExportRequest(request: string): boolean {
-  return EXPORT_PATTERNS.some((pattern) => pattern.test(request));
+  return isExplicitExportPrompt(request);
 }
 
 function isLightEditRequest(request: string, slideCount: number): boolean {
