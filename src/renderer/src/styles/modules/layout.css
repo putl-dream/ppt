@@ -1,0 +1,20 @@
+/* 应用主壳容器 */
+.app-shell {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  background-color: var(--bg-app);
+}
+
+/* 三栏/双模态布局核心容器 */
+.workspace-container {
+  display: grid;
+  grid-template-columns: 290px 1fr;
+  height: 100vh;
+  overflow: hidden;
+  transition: var(--transition-panel);
+}
+
+
+

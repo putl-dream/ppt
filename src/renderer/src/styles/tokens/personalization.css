@@ -1,0 +1,72 @@
+/* ========================================================================== 
+   Personalization Tokens
+   ========================================================================== */
+
+:root {
+  /* User accent aliases: keep palette colors in theme.css, consume these in UI. */
+  --accent-primary: var(--accent-cyan);
+  --accent-primary-glow: var(--accent-cyan-glow);
+  --accent-primary-contrast: #ffffff;
+  --accent-primary-hover-shadow: rgba(14, 165, 233, 0.35);
+  --accent-selected-bg: var(--accent-primary-glow);
+  --accent-selected-border: var(--accent-primary);
+  --accent-selected-text: var(--accent-primary);
+
+  /* Component shape aliases for buttons, fields, chips, and cards. */
+  --control-radius-xs: calc(4px * var(--border-radius-scale));
+  --control-radius-sm: calc(6px * var(--border-radius-scale));
+  --control-radius-md: calc(8px * var(--border-radius-scale));
+  --control-radius-lg: calc(10px * var(--border-radius-scale));
+  --control-radius-xl: calc(12px * var(--border-radius-scale));
+  --control-radius-pill: 999px;
+  --field-border-radius: var(--control-radius-sm);
+  --button-border-radius: var(--control-radius-md);
+  --card-border-radius: var(--control-radius-lg);
+  --panel-border-radius: var(--control-radius-xl);
+}
+
+:root[data-accent="cyan"],
+[data-accent="cyan"] {
+  --accent-primary: var(--accent-cyan);
+  --accent-primary-glow: var(--accent-cyan-glow);
+  --accent-primary-hover-shadow: rgba(14, 165, 233, 0.35);
+}
+
+:root[data-accent="green"],
+[data-accent="green"] {
+  --accent-primary: var(--accent-green);
+  --accent-primary-glow: var(--accent-green-glow);
+  --accent-primary-hover-shadow: rgba(16, 185, 129, 0.32);
+}
+
+:root[data-accent="purple"],
+[data-accent="purple"] {
+  --accent-primary: var(--accent-purple);
+  --accent-primary-glow: var(--accent-purple-glow);
+  --accent-primary-hover-shadow: rgba(168, 85, 247, 0.32);
+}
+
+:root[data-accent="orange"],
+[data-accent="orange"] {
+  --accent-primary: var(--accent-orange);
+  --accent-primary-glow: rgba(249, 115, 22, 0.2);
+  --accent-primary-hover-shadow: rgba(249, 115, 22, 0.32);
+}
+
+:root[data-control-shape="sharp"],
+[data-control-shape="sharp"] {
+  --border-radius-scale: 0.55;
+  --content-radius-scale: 0;
+}
+
+:root[data-control-shape="soft"],
+[data-control-shape="soft"] {
+  --border-radius-scale: 1;
+  --content-radius-scale: 0.2;
+}
+
+:root[data-control-shape="round"],
+[data-control-shape="round"] {
+  --border-radius-scale: 1.45;
+  --content-radius-scale: 0.5;
+}

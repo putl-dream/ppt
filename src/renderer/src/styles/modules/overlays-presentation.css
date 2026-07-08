@@ -1,0 +1,499 @@
+/* ==========================================================================
+   V2.0 增设样式：斜杠快捷菜单/上下文标签/镜像卡片/放映/设置
+   ========================================================================== */
+
+/* 斜杠命令自动补全弹出浮层 */
+.slash-menu-popup {
+  position: absolute;
+  bottom: 84px;
+  left: 20px;
+  right: 20px;
+  background: var(--bg-glass);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--border-glass-focused);
+  border-radius: var(--button-border-radius);
+  box-shadow: var(--shadow-premium);
+  z-index: 1000;
+  padding: 8px 0;
+  max-height: 220px;
+  overflow-y: auto;
+  animation: slide-up-menu 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes slide-up-menu {
+  0% { transform: translateY(10px); opacity: 0; }
+  100% { transform: translateY(0); opacity: 1; }
+}
+
+.slash-menu-header {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-muted);
+  padding: 6px 16px;
+  border-bottom: 1px solid var(--border-glass);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.slash-menu-item {
+  padding: 10px 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+  transition: var(--transition-smooth);
+}
+
+.slash-menu-item:hover {
+  background: var(--bg-glass-hover);
+}
+
+.cmd-text {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent-primary);
+  font-family: var(--font-mono);
+}
+
+.cmd-desc {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* 上下文锚定标签 Chip */
+.context-chip-row {
+  margin-bottom: 8px;
+  display: flex;
+}
+
+.context-slide-chip {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent-primary);
+  background: var(--accent-primary-glow);
+  border: 1px solid var(--accent-primary);
+  padding: 4px 12px;
+  border-radius: 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  box-shadow: 0 2px 8px var(--accent-primary-glow);
+}
+
+.context-slide-chip .close-chip {
+  background: none;
+  border: none;
+  color: var(--accent-primary);
+  cursor: pointer;
+  font-weight: bold;
+  padding: 0;
+  font-size: 10px;
+  display: flex;
+  align-items: center;
+}
+
+.context-slide-chip .close-chip:hover {
+  color: var(--text-primary);
+}
+
+/* 右侧 PPT 预览镜像卡片 */
+.mirror-empty-state {
+  width: 100%;
+  margin: 48px auto;
+  padding: 32px 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  text-align: center;
+  border: 2px dashed rgba(148, 163, 184, 0.46);
+  border-radius: var(--panel-border-radius);
+  max-width: 360px;
+  background: color-mix(in srgb, var(--bg-input-field) 78%, transparent);
+}
+
+.mirror-empty-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.mirror-empty-hint {
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-muted);
+  margin: 0;
+}
+
+.mirror-slide-card-container {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  cursor: pointer;
+  transition: var(--transition-smooth);
+  width: 280px;
+  align-self: center;
+  border-radius: var(--button-border-radius);
+  padding: 4px;
+  background: color-mix(in srgb, var(--bg-input-field) 66%, transparent);
+  border: 1px solid var(--border-glass);
+}
+
+.mirror-slide-card-container:hover {
+  transform: translateY(-2px);
+  background: var(--bg-input-field);
+  border-color: var(--border-glass-focused);
+  box-shadow: var(--shadow-premium);
+}
+
+.mirror-card-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 4px;
+}
+
+.slide-number {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-muted);
+  font-family: var(--font-display);
+}
+
+.selected-tag {
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--accent-primary);
+  background: var(--accent-primary-glow);
+  padding: 1px 6px;
+  border-radius: var(--button-border-radius);
+  border: 1px solid var(--accent-primary);
+}
+
+/* 选中卡片的高亮样式 */
+.mirror-slide-card-container.selected .mirror-slide-wrapper {
+  border-color: rgba(2, 132, 199, 0.55) !important;
+  box-shadow: 0 14px 32px rgba(2, 132, 199, 0.18) !important;
+}
+
+/* AI 调整中卡片的边缘呼吸呼吸灯 */
+.mirror-slide-card-container.highlighted-pulse .mirror-slide-wrapper {
+  animation: border-pulse 1s infinite alternate cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes border-pulse {
+  0% {
+    border-color: var(--accent-green);
+    box-shadow: 0 0 5px var(--accent-green-glow);
+  }
+  100% {
+    border-color: var(--accent-primary);
+    box-shadow: 0 0 20px var(--accent-primary-glow);
+  }
+}
+
+/* 全屏放映灯箱模态窗口 */
+.slideshow-lightbox-overlay {
+  --slideshow-slide-shadow: 0 25px 60px rgba(15, 23, 42, 0.15);
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: color-mix(in srgb, var(--bg-app) 94%, transparent);
+  backdrop-filter: blur(15px);
+  -webkit-backdrop-filter: blur(15px);
+  z-index: 10000;
+  display: grid;
+  place-items: center;
+  color: var(--text-primary);
+}
+
+.slideshow-lightbox-overlay.dark-theme {
+  --slideshow-slide-shadow: 0 25px 60px rgba(0, 0, 0, 0.8);
+}
+
+.slideshow-lightbox-content {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+}
+
+.slideshow-top-bar {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 64px;
+  padding: 0 40px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: color-mix(in srgb, var(--bg-glass) 80%, transparent);
+  border-bottom: 1px solid var(--border-glass);
+  color: var(--text-primary);
+  z-index: 10;
+}
+
+.slideshow-title {
+  font-size: 15px;
+  font-weight: 600;
+  font-family: var(--font-display);
+}
+
+.slideshow-progress {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.slideshow-close {
+  background: var(--bg-input-field);
+  border: 1px solid var(--border-glass);
+  color: var(--text-primary);
+  padding: 6px 14px;
+  border-radius: var(--field-border-radius);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  font-family: var(--font-display);
+  transition: var(--transition-smooth);
+}
+
+.slideshow-close:hover {
+  background: var(--bg-glass-hover);
+}
+
+.slideshow-viewport-container {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  padding: 80px 40px 40px 40px;
+  overflow: hidden;
+}
+
+.slideshow-nav-arrow {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  background: var(--bg-input-field);
+  border: 1px solid var(--border-glass);
+  color: var(--text-primary);
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  font-size: 32px;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition: var(--transition-smooth);
+  user-select: none;
+  z-index: 101;
+}
+
+.slideshow-nav-arrow:hover:not(:disabled) {
+  background: var(--bg-glass-hover);
+  transform: translateY(-50%) scale(1.06);
+}
+
+.slideshow-nav-arrow:disabled {
+  opacity: 0.15;
+  cursor: not-allowed;
+}
+
+.slideshow-nav-arrow.left { left: 40px; }
+.slideshow-nav-arrow.right { right: 40px; }
+
+/* 侧边会话卡片文字截断 */
+.truncate {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 170px;
+  display: inline-block;
+}
+
+/* 双击直接编辑 AI 大纲行样式 */
+.chat-hover-line-wrapper:hover .edit-line-btn {
+  opacity: 1 !important;
+}
+
+/* 消息操作按钮（用户气泡底部） */
+
+.chat-line-editor {
+  background: var(--bg-input-field);
+  border: 1px solid var(--accent-primary);
+  border-radius: var(--control-radius-xs);
+  color: var(--text-primary);
+  font-size: 13.5px;
+  padding: 2px 6px;
+  width: 100%;
+}
+
+/* ==========================================================================
+   双模态同构画布 (Right Rounded Canvas)
+   ========================================================================== */
+.rounded-canvas {
+  --bg-canvas: #f6f8fb;
+  --bg-canvas-gradient-start: #f8fafc;
+  --bg-canvas-gradient-end: #eef3f8;
+  --bg-glass: #ffffff;
+  --bg-input-field: #ffffff;
+  --bg-darker: #eef3f8;
+  --bg-glass-hover: rgba(2, 132, 199, 0.07);
+  --bg-glass-active: rgba(2, 132, 199, 0.11);
+  --border-glass: rgba(148, 163, 184, 0.26);
+  --border-glass-focused: rgba(148, 163, 184, 0.42);
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-muted: #64748b;
+  --shadow-premium: 0 18px 46px rgba(15, 23, 42, 0.12);
+  margin: 0;
+  border-radius: calc(18px * var(--content-radius-scale)) 0 0 calc(18px * var(--content-radius-scale));
+  border-left: 1px solid var(--border-glass);
+  background: var(--bg-canvas);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  transition: var(--transition-panel);
+}
+
+.dark-theme .rounded-canvas {
+  --bg-canvas: #151515;
+  --bg-canvas-gradient-start: #171717;
+  --bg-canvas-gradient-end: #121212;
+  --bg-glass: #1e1e1e;
+  --bg-input-field: #202020;
+  --bg-darker: #1a1a1a;
+  --bg-glass-hover: rgba(255, 255, 255, 0.055);
+  --bg-glass-active: rgba(255, 255, 255, 0.08);
+  --border-glass: rgba(255, 255, 255, 0.1);
+  --border-glass-focused: rgba(255, 255, 255, 0.16);
+  --text-primary: #f8fafc;
+  --text-secondary: #cbd5e1;
+  --text-muted: #94a3b8;
+  --shadow-premium: 0 20px 48px rgba(0, 0, 0, 0.45);
+}
+
+.rounded-canvas .canvas-column,
+.rounded-canvas .settings-console-container {
+  background-color: var(--bg-canvas) !important;
+  background-image: linear-gradient(180deg, var(--bg-canvas-gradient-start) 0%, var(--bg-canvas-gradient-end) 100%);
+}
+
+.rounded-canvas .canvas-header,
+.rounded-canvas .chat-workspace-footer-unified {
+  background: var(--bg-canvas);
+  border-color: var(--border-glass);
+}
+
+.rounded-canvas .chat-scroll-viewport {
+  background: var(--bg-canvas);
+}
+
+.workspace-canvas-content {
+  background: var(--bg-canvas);
+  display: grid;
+  grid-template-columns: 1fr 370px;
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+  transition: var(--transition-panel);
+}
+
+.workspace-canvas-content-chat-only {
+  display: flex !important;
+  grid-template-columns: unset;
+}
+
+.workspace-canvas-content-chat-only .chat-workspace-column {
+  flex: 1;
+  width: 100%;
+  min-width: 0;
+  height: 100%;
+}
+
+/* PPT 镜像在无数据时关闭隐藏，有数据时动画打开 */
+.workspace-canvas-content.ppt-mirror-closed {
+  grid-template-columns: 1fr 0px !important;
+}
+
+.workspace-canvas-content.ppt-mirror-closed .mirror-panel {
+  width: 0 !important;
+  min-width: 0 !important;
+  max-width: 0 !important;
+  overflow: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  transform: translateX(30px);
+  border-left: none !important;
+}
+
+.workspace-canvas-content.ppt-mirror-open {
+  grid-template-columns: 1fr 370px;
+}
+
+.workspace-canvas-content.ppt-mirror-open .mirror-panel {
+  width: 370px;
+  min-width: 370px;
+  opacity: 1;
+  transform: translateX(0);
+  transition: var(--transition-panel);
+}
+
+.chat-workspace-column {
+  min-width: 0;
+}
+
+/* PPT 镜像放大展开模式 */
+.workspace-canvas-content.mirror-expanded {
+  grid-template-columns: 0px 1fr !important;
+}
+
+.workspace-canvas-content.mirror-expanded .chat-workspace-column {
+  opacity: 0 !important;
+  pointer-events: none !important;
+  transform: translateX(-20px);
+}
+
+.workspace-canvas-content.mirror-expanded .mirror-panel {
+  border-left: none !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: none !important;
+}
+
+.mirror-panel .panel-header {
+  height: 52px;
+  padding: 10px 14px;
+}
+
+.mirror-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.mirror-panel .panel-header .mirror-header-icon-btn {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  margin: 0;
+}
+
+.mirror-panel .panel-header .mirror-header-cta {
+  height: 30px;
+  margin: 0;
+  padding: 0 10px;
+  font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+
+
+

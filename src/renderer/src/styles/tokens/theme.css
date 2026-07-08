@@ -1,0 +1,77 @@
+:root {
+  color-scheme: light;
+  /* ==========================================================================
+     默认浅色主题变量 (Light Mode)
+     ========================================================================== */
+  --bg-app: #e7e7e7;
+  --bg-glass: #ffffff;
+  --bg-glass-hover: rgba(0, 0, 0, 0.04);
+  --bg-glass-active: rgba(0, 0, 0, 0.06);
+  --border-glass: rgba(0, 0, 0, 0.08);
+  --border-glass-focused: rgba(0, 0, 0, 0.12);
+  
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-muted: #64748b;
+  
+  --accent-cyan: #0284c7;
+  --accent-cyan-glow: rgba(2, 132, 199, 0.15);
+  --accent-green: #059669;
+  --accent-green-glow: rgba(5, 150, 105, 0.15);
+  --accent-purple: #7c3aed;
+  --accent-purple-glow: rgba(124, 58, 237, 0.15);
+  --accent-orange: #ea580c;
+  
+  --bg-canvas: #ffffff;
+  --font-display: "Outfit", "Inter", sans-serif;
+  --font-body: "Inter", sans-serif;
+  --font-serif: "Georgia", serif;
+  --font-mono: "JetBrains Mono", monospace;
+  
+  --shadow-premium: 0 15px 35px -10px rgba(0, 0, 0, 0.08);
+  --shadow-glow: 0 0 20px rgba(2, 132, 199, 0.1);
+  
+  --transition-smooth: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+  --transition-panel: all 0.45s cubic-bezier(0.16, 1, 0.3, 1);
+  --border-radius-scale: 1;
+  --content-radius-scale: 0;
+
+  /* 输入控件与内部卡片背景 */
+  --bg-input-field: #ffffff;
+  --bg-darker: rgba(0, 0, 0, 0.03);
+  --scrollbar-thumb-color: rgba(0, 0, 0, 0.15);
+}
+
+.dark-theme {
+  color-scheme: dark;
+  /* ==========================================================================
+     深色主题变量覆盖 (Dark Mode)
+     ========================================================================== */
+  --bg-app: #141414;
+  --bg-glass: #1e1e1e;
+  --bg-glass-hover: rgba(255, 255, 255, 0.05);
+  --bg-glass-active: rgba(255, 255, 255, 0.08);
+  --border-glass: rgba(255, 255, 255, 0.1);
+  --border-glass-focused: rgba(255, 255, 255, 0.15);
+  
+  --text-primary: #f8fafc;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+  
+  --accent-cyan: #0ea5e9;
+  --accent-cyan-glow: rgba(14, 165, 233, 0.25);
+  --accent-green: #10b981;
+  --accent-green-glow: rgba(16, 185, 129, 0.25);
+  --accent-purple: #a855f7;
+  --accent-purple-glow: rgba(168, 85, 247, 0.25);
+  --accent-orange: #f97316;
+  
+  --bg-canvas: #1e1e1e;
+  
+  --shadow-premium: 0 20px 50px -15px rgba(0, 0, 0, 0.6);
+  --shadow-glow: 0 0 25px rgba(14, 165, 233, 0.15);
+
+  --bg-input-field: #2d2d2d;
+  --bg-darker: rgba(255, 255, 255, 0.05);
+  --scrollbar-thumb-color: rgba(255, 255, 255, 0.1);
+}
