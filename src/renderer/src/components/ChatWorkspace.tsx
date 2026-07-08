@@ -8,7 +8,6 @@ import {
   SunIcon,
   MoonIcon,
   OpenPreviewIcon,
-  ClosePreviewIcon,
   FileIcon,
 } from "./Icons";
 import { UnifiedAgentInput } from "./UnifiedAgentInput";
@@ -352,14 +351,17 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
             {themeMode === "light" ? <MoonIcon size={16} /> : <SunIcon size={16} />}
           </button>
 
-          {/* 打开/关闭右侧预览 */}
-          <button
-            className="action-icon-btn focus-toggle-btn"
-            onClick={onToggleMirror}
-            title={isMirrorOpen ? "关闭右侧预览" : "打开右侧预览"}
-          >
-            {isMirrorOpen ? <ClosePreviewIcon size={16} /> : <OpenPreviewIcon size={16} />}
-          </button>
+          {/* 打开右侧预览；关闭入口固定在右侧 PPT 面板最右侧 */}
+          {!isMirrorOpen && (
+            <button
+              className="action-icon-btn focus-toggle-btn"
+              onClick={onToggleMirror}
+              aria-label="打开右侧预览"
+              title="打开右侧预览"
+            >
+              <OpenPreviewIcon size={16} />
+            </button>
+          )}
         </div>
       </div>
 

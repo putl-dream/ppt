@@ -4,7 +4,7 @@ import { Presentation, SlideElement } from "@shared/presentation";
 import { resolveSlideBackgroundWithVariant } from "@shared/slide-variant";
 import { resolveThemeAccent } from "@shared/layout";
 import { SlideElementRenderer } from "./SlideElementRenderer";
-import { SparklesIcon, OpenPreviewIcon, ClosePreviewIcon, PlayIcon, FileIcon, DownloadIcon } from "./Icons";
+import { ClosePreviewIcon, PlayIcon, DownloadIcon, ExpandIcon, CompressIcon } from "./Icons";
 
 
 interface PPTMirrorProps {
@@ -15,7 +15,7 @@ interface PPTMirrorProps {
   selectedPalette: string;
   themeMode: "light" | "dark";
   logoUrl: string | null;
-  onOptimizePresentation: () => void;
+  onCloseMirror: () => void;
   highlightSlideId: string | null; // AI 当前正在更新的页面 ID
   isExpanded?: boolean;
   onToggleExpand?: () => void;
@@ -30,7 +30,7 @@ export const PPTMirror: React.FC<PPTMirrorProps> = ({
   selectedPalette,
   themeMode,
   logoUrl,
-  onOptimizePresentation,
+  onCloseMirror,
   highlightSlideId,
   isExpanded = false,
   onToggleExpand,
@@ -171,23 +171,12 @@ export const PPTMirror: React.FC<PPTMirrorProps> = ({
   return (
     <aside className="right-panel mirror-panel">
       {/* 顶部工具栏 */}
-      <div className="panel-header right-header">
-        <div className="right-header-title">
-          <FileIcon size={16} />
-          <span>PPT 实时预览</span>
-        </div>
+      <div className="panel-header right-header mirror-header">
         <div className="mirror-header-actions">
-          <button
-            onClick={onOptimizePresentation}
-            className="optimize-slide-btn mirror-header-cta"
-            title="AI 重新排版润色全体幻灯片"
-          >
-            <SparklesIcon size={14} />
-            <span>AI美化</span>
-          </button>
           <button
             onClick={handleFullscreenOpen}
             className="action-icon-btn mirror-header-icon-btn"
+            aria-label="放映演示文稿"
             title="放映演示文稿"
           >
             <PlayIcon size={16} />
@@ -196,16 +185,26 @@ export const PPTMirror: React.FC<PPTMirrorProps> = ({
             onClick={handleDownload}
             className="action-icon-btn mirror-header-icon-btn"
             disabled={isExporting}
+            aria-label="下载 PPT"
             title="下载 PPT"
           >
             <DownloadIcon size={16} />
           </button>
           <button
             onClick={onToggleExpand}
-            className="action-icon-btn mirror-header-icon-btn"
+            className="action-icon-btn mirror-header-icon-btn mirror-expand-toggle-btn"
+            aria-label={isExpanded ? "收缩预览" : "放大预览"}
             title={isExpanded ? "收缩预览" : "放大预览"}
           >
-            {isExpanded ? <ClosePreviewIcon size={16} /> : <OpenPreviewIcon size={16} />}
+            {isExpanded ? <CompressIcon size={16} /> : <ExpandIcon size={16} />}
+          </button>
+          <button
+            onClick={onCloseMirror}
+            className="action-icon-btn mirror-header-icon-btn mirror-panel-close-btn"
+            aria-label="关闭右侧预览"
+            title="关闭右侧预览"
+          >
+            <ClosePreviewIcon size={16} />
           </button>
         </div>
       </div>

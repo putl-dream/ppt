@@ -492,11 +492,16 @@
   padding: 10px 14px;
 }
 
+.mirror-panel .mirror-header {
+  justify-content: flex-end;
+}
+
 .mirror-header-actions {
   display: flex;
   align-items: center;
   gap: 8px;
   flex: 0 0 auto;
+  margin-left: auto;
 }
 
 .mirror-panel .panel-header .mirror-header-icon-btn {
@@ -506,14 +511,14 @@
   margin: 0;
 }
 
-.mirror-panel .panel-header .mirror-header-cta {
-  height: 30px;
-  margin: 0;
-  padding: 0 10px;
-  font-size: 12px;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
+.mirror-panel .panel-header .mirror-expand-toggle-btn {
+  margin-left: 2px;
+}
+
+.mirror-panel .panel-header .mirror-panel-close-btn {
+  background: var(--bg-glass-active);
+  border-color: var(--border-glass-focused);
+  color: var(--text-primary);
 }
 
 

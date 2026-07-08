@@ -106,18 +106,6 @@
   color: var(--text-primary);
 }
 
-.mirror-panel .optimize-slide-btn {
-  background: var(--accent-primary-glow);
-  border-color: var(--accent-primary);
-  color: var(--accent-primary);
-  box-shadow: none;
-}
-
-.mirror-panel .optimize-slide-btn:hover {
-  background: var(--accent-primary-glow);
-  box-shadow: 0 8px 18px var(--accent-primary-glow);
-}
-
 .brain-glow-icon {
   color: var(--accent-primary);
   filter: drop-shadow(0 0 4px var(--accent-primary-glow));

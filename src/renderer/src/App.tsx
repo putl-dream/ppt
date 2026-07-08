@@ -1774,25 +1774,6 @@ export function App() {
     }
   };
 
-  // 全体一键 AI 美化
-  const handleOptimizePresentationLocally = () => {
-    if (presentation && presentationNeedsLayoutChoice(presentation)) {
-      const slideCount = countSlidesNeedingLayout(presentation);
-      setChatMessages((prev) => [
-        ...prev,
-        {
-          id: crypto.randomUUID(),
-          role: "assistant",
-          content: buildLayoutDraftContent(slideCount),
-          inlineCards: [{ type: "layout" }],
-        },
-      ]);
-      triggerToast("请选择排版方式");
-      return;
-    }
-    void startAgent("一键美化全局演示文稿，微调排版比例与风格一致性");
-  };
-
   // 修改会话消息文本内容
   const handleUpdateMessageContent = (msgId: string, newContent: string) => {
     const targetMsg = chatMessages.find((msg) => msg.id === msgId);
@@ -1916,6 +1897,19 @@ export function App() {
     });
   };
 
+  const handleOpenMirror = () => {
+    if (!presentation) {
+      triggerToast("暂无可预览的 PPT");
+      return;
+    }
+    setIsMirrorOpen(true);
+  };
+
+  const handleCloseMirror = () => {
+    setIsMirrorOpen(false);
+    setIsMirrorExpanded(false);
+  };
+
   const handleOpenDeckPreview = () => {
     setIsDeckPreviewOpen(true);
     setIsMirrorOpen(true);
@@ -1973,6 +1967,7 @@ export function App() {
     sessions.find((session) => session.id === activeSessionId)?.title.trim()
     || presentation?.title?.trim()
     || (isDraftChat ? "AI 新建会话" : "当前对话");
+  const isMirrorVisible = Boolean(isMirrorOpen && presentation);
 
   return (
     <main className={`app-shell ${computedTheme === "dark" ? "dark-theme" : ""}`}>
@@ -2007,10 +2002,10 @@ export function App() {
                 className={[
                   "workspace-canvas-content",
                   isDraftChat ? "new-session-layout" : "",
-                  isMirrorOpen && presentation ? "ppt-mirror-open" : "ppt-mirror-closed workspace-canvas-content-chat-only",
-                  isMirrorExpanded ? "mirror-expanded" : "",
+                  isMirrorVisible ? "ppt-mirror-open" : "ppt-mirror-closed workspace-canvas-content-chat-only",
+                  isMirrorVisible && isMirrorExpanded ? "mirror-expanded" : "",
                 ].filter(Boolean).join(" ")}
-                style={{ display: isMirrorOpen ? undefined : "flex", flex: 1, width: "100%", height: "100%", overflow: "hidden" }}
+                style={{ display: isMirrorVisible ? undefined : "flex", flex: 1, width: "100%", height: "100%", overflow: "hidden" }}
               >
                 <ChatWorkspace
                   isNewChat={isDraftChat}
@@ -2046,8 +2041,8 @@ export function App() {
                   onRetry={handleRetryMessage}
                   themeMode={computedTheme}
                   onToggleThemeMode={() => setThemeMode(computedTheme === "light" ? "dark" : "light")}
-                  isMirrorOpen={isMirrorOpen}
-                  onToggleMirror={() => setIsMirrorOpen(!isMirrorOpen)}
+                  isMirrorOpen={isMirrorVisible}
+                  onToggleMirror={handleOpenMirror}
                   selectedSlideIndex={activeSlideIndexValue}
                   onClearContextTag={() => setSelectedSlideId("")}
                   onUpdateMessageContent={handleUpdateMessageContent}
@@ -2060,7 +2055,7 @@ export function App() {
                   triggerToast={triggerToast}
                 />
 
-                {isMirrorOpen && presentation ? (
+                {isMirrorVisible && presentation ? (
                   <PPTMirror
                     presentation={presentation}
                     selectedSlideId={selectedSlideId}
@@ -2069,7 +2064,7 @@ export function App() {
                     selectedPalette={selectedPalette}
                     themeMode={computedTheme}
                     logoUrl={logoUrl}
-                    onOptimizePresentation={handleOptimizePresentationLocally}
+                    onCloseMirror={handleCloseMirror}
                     highlightSlideId={highlightSlideId}
                     isExpanded={isMirrorExpanded}
                     onToggleExpand={() => setIsMirrorExpanded((value) => !value)}
