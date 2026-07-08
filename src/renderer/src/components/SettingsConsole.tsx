@@ -17,6 +17,8 @@ import type { AgentGatewayPreferences } from "@shared/agent-gateway-config";
 import { DEFAULT_AGENT_GATEWAY_CONFIG } from "@shared/agent-gateway-config";
 
 type SettingsCategory = "account" | "models" | "gateway" | "generation" | "project" | "appearance";
+type UiAccentColor = "cyan" | "green" | "purple" | "orange";
+type UiControlShape = "sharp" | "soft" | "round";
 
 interface SettingsConsoleProps {
   activeCategory: SettingsCategory;
@@ -49,6 +51,10 @@ interface SettingsConsoleProps {
 
   themeMode: "light" | "dark" | "system";
   setThemeMode: (val: "light" | "dark" | "system") => void;
+  uiAccentColor: UiAccentColor;
+  setUiAccentColor: (val: UiAccentColor) => void;
+  uiControlShape: UiControlShape;
+  setUiControlShape: (val: UiControlShape) => void;
   borderRadiusScale: number;
   setBorderRadiusScale: (val: number) => void;
   colorContrastOffset: number;
@@ -81,7 +87,7 @@ const categoryMeta: Record<SettingsCategory, { title: string; description: strin
   },
   appearance: {
     title: "外观",
-    description: "调整应用主题、界面圆角和明暗对比。",
+    description: "管理应用主题、重点色、控件形状和明暗对比。",
   },
 };
 
@@ -142,6 +148,19 @@ function ThemePreview({ mode }: { mode: "light" | "dark" | "system" }) {
   );
 }
 
+const accentOptions: Array<{ value: UiAccentColor; label: string; color: string }> = [
+  { value: "cyan", label: "湖蓝", color: "#0ea5e9" },
+  { value: "green", label: "科技绿", color: "#10b981" },
+  { value: "purple", label: "薰衣紫", color: "#a855f7" },
+  { value: "orange", label: "珊瑚橙", color: "#f97316" },
+];
+
+const controlShapeOptions: Array<{ value: UiControlShape; label: string; radius: string }> = [
+  { value: "sharp", label: "利落", radius: "4px" },
+  { value: "soft", label: "柔和", radius: "8px" },
+  { value: "round", label: "圆润", radius: "14px" },
+];
+
 export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
   activeCategory,
   models,
@@ -170,6 +189,10 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
   setAgentGatewayPreferences,
   themeMode,
   setThemeMode,
+  uiAccentColor,
+  setUiAccentColor,
+  uiControlShape,
+  setUiControlShape,
   borderRadiusScale,
   setBorderRadiusScale,
   colorContrastOffset,
@@ -205,6 +228,8 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
   const areaD = `${pathD} L ${points[points.length - 1].x} ${chartHeight} L ${points[0].x} ${chartHeight} Z`;
   const enabledModelCount = models.filter(isModelEnabled).length;
   const currentMeta = categoryMeta[activeCategory];
+  const selectedAccentLabel = accentOptions.find((option) => option.value === uiAccentColor)?.label ?? "湖蓝";
+  const selectedShapeLabel = controlShapeOptions.find((option) => option.value === uiControlShape)?.label ?? "柔和";
   const logoFileInputRef = React.useRef<HTMLInputElement>(null);
 
   const handleOpenWorkspace = async () => {
@@ -296,14 +321,14 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
                 <svg width="100%" height={chartHeight} viewBox={`0 0 ${chartWidth} ${chartHeight}`} aria-hidden="true">
                   <defs>
                     <linearGradient id="settingsChartGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="var(--accent-cyan)" stopOpacity="0.18" />
-                      <stop offset="100%" stopColor="var(--accent-cyan)" stopOpacity="0" />
+                      <stop offset="0%" stopColor="var(--accent-primary)" stopOpacity="0.18" />
+                      <stop offset="100%" stopColor="var(--accent-primary)" stopOpacity="0" />
                     </linearGradient>
                   </defs>
                   <line x1="0" y1={chartHeight / 2} x2={chartWidth} y2={chartHeight / 2} stroke="var(--border-glass)" />
                   <line x1="0" y1={chartHeight} x2={chartWidth} y2={chartHeight} stroke="var(--border-glass)" />
                   <path d={areaD} fill="url(#settingsChartGrad)" />
-                  <path d={pathD} fill="none" stroke="var(--accent-cyan)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                  <path d={pathD} fill="none" stroke="var(--accent-primary)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
                   {points.map((point) => (
                     <circle
                       key={point.label}
@@ -311,7 +336,7 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
                       cy={point.y}
                       r="3.5"
                       fill="var(--bg-input-field)"
-                      stroke="var(--accent-cyan)"
+                      stroke="var(--accent-primary)"
                       strokeWidth="2"
                     />
                   ))}
@@ -643,6 +668,55 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
 
             <section className="settings-card">
               <SettingsCardHeader
+                icon={<PaletteIcon size={16} />}
+                title="界面重点色"
+                description="用于按钮选中态、导航高亮、焦点边框和运行状态。"
+                meta={<span>{selectedAccentLabel}</span>}
+              />
+
+              <div className="settings-accent-grid">
+                {accentOptions.map((option) => (
+                  <button
+                    key={option.value}
+                    className={`settings-accent-card ${uiAccentColor === option.value ? "active" : ""}`}
+                    onClick={() => setUiAccentColor(option.value)}
+                    aria-pressed={uiAccentColor === option.value}
+                  >
+                    <span className="settings-accent-swatch" style={{ background: option.color }} />
+                    <span>{option.label}</span>
+                  </button>
+                ))}
+              </div>
+            </section>
+
+            <section className="settings-card">
+              <SettingsCardHeader
+                icon={<SettingsIcon size={16} />}
+                title="控件形状"
+                description="统一按钮、输入框、下拉菜单、卡片等控件的圆角风格。"
+                meta={<span>{selectedShapeLabel}</span>}
+              />
+
+              <div className="settings-control-shape-grid">
+                {controlShapeOptions.map((option) => (
+                  <button
+                    key={option.value}
+                    className={`settings-control-shape-card ${uiControlShape === option.value ? "active" : ""}`}
+                    onClick={() => setUiControlShape(option.value)}
+                    aria-pressed={uiControlShape === option.value}
+                  >
+                    <span className="settings-shape-preview" style={{ borderRadius: option.radius }}>
+                      <span />
+                      <span />
+                    </span>
+                    <span>{option.label}</span>
+                  </button>
+                ))}
+              </div>
+            </section>
+
+            <section className="settings-card">
+              <SettingsCardHeader
                 icon={<SettingsIcon size={16} />}
                 title="界面参数"
                 description="微调外壳圆角和内容层级对比。"
@@ -697,7 +771,7 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
                 </div>
                 <div>
                   <strong>Agent Canvas Card</strong>
-                  <span>内容区域圆角 {Math.round(18 * borderRadiusScale)}px</span>
+                  <span>{selectedAccentLabel} · {selectedShapeLabel} · 内容圆角 {Math.round(18 * borderRadiusScale)}px</span>
                 </div>
                 <span className="settings-preview-badge">Active</span>
               </div>

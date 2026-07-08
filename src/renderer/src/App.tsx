@@ -85,12 +85,16 @@ import {
 type ChatMessage = SessionChatMessage;
 
 const UI_SETTINGS_STORAGE_KEY = "agent-ppt.ui-settings.v1";
+type UiAccentColor = "cyan" | "green" | "purple" | "orange";
+type UiControlShape = "sharp" | "soft" | "round";
 
 interface PersistedUiSettings {
   autoDownload: boolean;
   autoCloudSync: boolean;
   defaultRatio: "16:9" | "4:3";
   themeMode: "light" | "dark" | "system";
+  uiAccentColor: UiAccentColor;
+  uiControlShape: UiControlShape;
   borderRadiusScale: number;
   colorContrastOffset: number;
   selectedTheme: string;
@@ -219,6 +223,14 @@ export function App() {
     const mode = persistedUiSettings.themeMode;
     return mode === "dark" || mode === "system" ? mode : "light";
   });
+  const [uiAccentColor, setUiAccentColor] = useState<UiAccentColor>(() => {
+    const accent = persistedUiSettings.uiAccentColor;
+    return accent === "green" || accent === "purple" || accent === "orange" ? accent : "cyan";
+  });
+  const [uiControlShape, setUiControlShape] = useState<UiControlShape>(() => {
+    const shape = persistedUiSettings.uiControlShape;
+    return shape === "sharp" || shape === "round" ? shape : "soft";
+  });
   const [borderRadiusScale, setBorderRadiusScale] = useState(() =>
     typeof persistedUiSettings.borderRadiusScale === "number" ? persistedUiSettings.borderRadiusScale : 0,
   );
@@ -287,6 +299,8 @@ export function App() {
       autoCloudSync,
       defaultRatio,
       themeMode,
+      uiAccentColor,
+      uiControlShape,
       borderRadiusScale,
       colorContrastOffset,
       selectedTheme,
@@ -298,6 +312,8 @@ export function App() {
     autoCloudSync,
     defaultRatio,
     themeMode,
+    uiAccentColor,
+    uiControlShape,
     borderRadiusScale,
     colorContrastOffset,
     selectedTheme,
@@ -355,6 +371,14 @@ export function App() {
   useEffect(() => {
     document.documentElement.style.setProperty("--content-radius-scale", borderRadiusScale.toString());
   }, [borderRadiusScale]);
+
+  useEffect(() => {
+    document.documentElement.dataset.accent = uiAccentColor;
+  }, [uiAccentColor]);
+
+  useEffect(() => {
+    document.documentElement.dataset.controlShape = uiControlShape;
+  }, [uiControlShape]);
 
   useEffect(() => {
     const isDark = computedTheme === "dark";
@@ -2101,6 +2125,16 @@ export function App() {
                 setThemeMode={(value) => {
                   markSettingsSaving();
                   setThemeMode(value);
+                }}
+                uiAccentColor={uiAccentColor}
+                setUiAccentColor={(value) => {
+                  markSettingsSaving();
+                  setUiAccentColor(value);
+                }}
+                uiControlShape={uiControlShape}
+                setUiControlShape={(value) => {
+                  markSettingsSaving();
+                  setUiControlShape(value);
                 }}
                 borderRadiusScale={borderRadiusScale}
                 setBorderRadiusScale={(value) => {

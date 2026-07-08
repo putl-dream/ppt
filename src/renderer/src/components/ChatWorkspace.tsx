@@ -476,7 +476,7 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
                       background: "transparent",
                       border: "none",
                       cursor: "pointer",
-                      color: "var(--accent-cyan)",
+                      color: "var(--accent-primary)",
                       fontSize: "11px",
                       marginTop: "4px",
                       display: "inline-flex",
