@@ -189,6 +189,8 @@ export function App() {
   const [isDeckPreviewOpen, setIsDeckPreviewOpen] = useState(false);
   const [isExportingDeck, setIsExportingDeck] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [settingsSaveStatus, setSettingsSaveStatus] = useState<"saved" | "saving">("saved");
+  const settingsSaveTimerRef = useRef<number | null>(null);
   const [maxRevision, setMaxRevision] = useState(0);
 
   // 双模态同构布局模式控制
@@ -218,7 +220,7 @@ export function App() {
     return mode === "dark" || mode === "system" ? mode : "light";
   });
   const [borderRadiusScale, setBorderRadiusScale] = useState(() =>
-    typeof persistedUiSettings.borderRadiusScale === "number" ? persistedUiSettings.borderRadiusScale : 1.0,
+    typeof persistedUiSettings.borderRadiusScale === "number" ? persistedUiSettings.borderRadiusScale : 0,
   );
   const [colorContrastOffset, setColorContrastOffset] = useState(() =>
     typeof persistedUiSettings.colorContrastOffset === "number" ? persistedUiSettings.colorContrastOffset : 0,
@@ -240,6 +242,25 @@ export function App() {
     [enabledModels, models],
   );
   const selectedModel = visibleModels.find((model) => model.id === selectedModelId) ?? visibleModels[0];
+
+  const markSettingsSaving = useCallback(() => {
+    setSettingsSaveStatus("saving");
+    if (settingsSaveTimerRef.current !== null) {
+      window.clearTimeout(settingsSaveTimerRef.current);
+    }
+    settingsSaveTimerRef.current = window.setTimeout(() => {
+      setSettingsSaveStatus("saved");
+      settingsSaveTimerRef.current = null;
+    }, 500);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (settingsSaveTimerRef.current !== null) {
+        window.clearTimeout(settingsSaveTimerRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     window.localStorage.setItem(MODEL_STORAGE_KEY, JSON.stringify(models));
@@ -285,6 +306,7 @@ export function App() {
   ]);
 
   const handleSaveModel = (model: ManagedModel) => {
+    markSettingsSaving();
     setModels((current) => {
       const exists = current.some((item) => item.id === model.id);
       return exists
@@ -294,6 +316,7 @@ export function App() {
   };
 
   const handleDeleteModel = (id: string) => {
+    markSettingsSaving();
     setModels((current) => current.filter((model) => model.id !== id));
     if (selectedModelId === id) {
       const fallback = models.find((model) => model.id !== id && isModelEnabled(model));
@@ -898,6 +921,7 @@ export function App() {
       setSessionLoaded(false);
       const state = await window.desktopApi.openWorkspace(selectedPath);
       applySessionState(state);
+      markSettingsSaving();
       triggerToast(`已打开项目目录：${getWorkspaceLabel(selectedPath)}`);
     } catch (error) {
       setSessionLoaded(true);
@@ -1734,11 +1758,13 @@ export function App() {
   };
 
   const handleLogoUpload = (url: string) => {
+    markSettingsSaving();
     setLogoUrl(url);
     triggerToast("🖼️ 品牌 Logo 已应用至演示文稿模板");
   };
 
   const handleRemoveLogo = () => {
+    markSettingsSaving();
     setLogoUrl(null);
     triggerToast("🗑️ 品牌 Logo 已移除");
   };
@@ -2023,37 +2049,71 @@ export function App() {
                 activeCategory={settingsCategory}
                 models={models}
                 selectedModelId={selectedModelId}
-                onSelectModel={setSelectedModelId}
+                onSelectModel={(id) => {
+                  markSettingsSaving();
+                  setSelectedModelId(id);
+                }}
                 onSaveModel={handleSaveModel}
                 onDeleteModel={handleDeleteModel}
                 selectedTheme={selectedTheme}
-                setSelectedTheme={setSelectedTheme}
+                setSelectedTheme={(value) => {
+                  markSettingsSaving();
+                  setSelectedTheme(value);
+                }}
                 selectedPalette={selectedPalette}
-                setSelectedPalette={setSelectedPalette}
+                setSelectedPalette={(value) => {
+                  markSettingsSaving();
+                  setSelectedPalette(value);
+                }}
                 logoUrl={logoUrl}
                 onLogoUpload={handleLogoUpload}
                 onRemoveLogo={handleRemoveLogo}
                 
                 autoDownload={autoDownload}
-                setAutoDownload={setAutoDownload}
+                setAutoDownload={(value) => {
+                  markSettingsSaving();
+                  setAutoDownload(value);
+                }}
                 autoCloudSync={autoCloudSync}
-                setAutoCloudSync={setAutoCloudSync}
+                setAutoCloudSync={(value) => {
+                  markSettingsSaving();
+                  setAutoCloudSync(value);
+                }}
                 localStoragePath={localStoragePath}
                 onOpenWorkspace={() => void handleOpenWorkspace()}
                 defaultRatio={defaultRatio}
-                setDefaultRatio={setDefaultRatio}
+                setDefaultRatio={(value) => {
+                  markSettingsSaving();
+                  setDefaultRatio(value);
+                }}
                 agentStepLimits={agentStepLimits}
-                setAgentStepLimits={setAgentStepLimits}
+                setAgentStepLimits={(value) => {
+                  markSettingsSaving();
+                  setAgentStepLimits(value);
+                }}
                 agentGatewayPreferences={agentGatewayPreferences}
-                setAgentGatewayPreferences={setAgentGatewayPreferences}
+                setAgentGatewayPreferences={(value) => {
+                  markSettingsSaving();
+                  setAgentGatewayPreferences(value);
+                }}
                 
                 themeMode={themeMode}
-                setThemeMode={setThemeMode}
+                setThemeMode={(value) => {
+                  markSettingsSaving();
+                  setThemeMode(value);
+                }}
                 borderRadiusScale={borderRadiusScale}
-                setBorderRadiusScale={setBorderRadiusScale}
+                setBorderRadiusScale={(value) => {
+                  markSettingsSaving();
+                  setBorderRadiusScale(value);
+                }}
                 colorContrastOffset={colorContrastOffset}
-                setColorContrastOffset={setColorContrastOffset}
+                setColorContrastOffset={(value) => {
+                  markSettingsSaving();
+                  setColorContrastOffset(value);
+                }}
                 triggerToast={triggerToast}
+                saveStatus={settingsSaveStatus}
               />
             </div>
           </>

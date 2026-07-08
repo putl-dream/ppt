@@ -5,6 +5,7 @@ import {
   FolderIcon,
   MoonIcon,
   PaletteIcon,
+  RefreshIcon,
   SettingsIcon,
   SunIcon,
   UploadIcon,
@@ -54,6 +55,7 @@ interface SettingsConsoleProps {
   setColorContrastOffset: (val: number) => void;
 
   triggerToast: (msg: string) => void;
+  saveStatus?: "saved" | "saving";
 }
 
 const categoryMeta: Record<SettingsCategory, { title: string; description: string }> = {
@@ -173,6 +175,7 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
   colorContrastOffset,
   setColorContrastOffset,
   triggerToast,
+  saveStatus = "saved",
 }) => {
   const totalTokens = 1000000;
   const usedTokens = 354200;
@@ -236,9 +239,9 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
             <h1>{currentMeta.title}</h1>
             <p>{currentMeta.description}</p>
           </div>
-          <div className="settings-header-pill">
-            <CheckCircleIcon size={15} />
-            <span>本地已保存</span>
+          <div className={`settings-header-pill ${saveStatus === "saving" ? "is-saving" : ""}`}>
+            {saveStatus === "saving" ? <RefreshIcon size={15} /> : <CheckCircleIcon size={15} />}
+            <span>{saveStatus === "saving" ? "正在保存" : "本地已保存"}</span>
           </div>
         </header>
 

@@ -264,8 +264,8 @@ export const PPTMirror: React.FC<PPTMirrorProps> = ({
                   overflow: "hidden",
                   position: "relative",
                   borderRadius: 6,
-                  border: "1px solid var(--border-glass)",
-                  boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
+                  border: "1px solid rgba(15, 23, 42, 0.12)",
+                  boxShadow: "0 10px 24px rgba(15, 23, 42, 0.12)",
                 }}
               >
                 <div

@@ -1,7 +1,7 @@
 import { useMemo, useState, type KeyboardEvent } from "react";
 import type { ManagedModel } from "../modelCatalog";
 import { isModelEnabled } from "../modelCatalog";
-import { ChevronRightIcon, KeyIcon, PlusIcon, RefreshIcon, TrashIcon } from "./Icons";
+import { Edit3Icon, PlusIcon, RefreshIcon, TrashIcon } from "./Icons";
 
 interface ModelManagementProps {
   models: ManagedModel[];
@@ -42,7 +42,8 @@ export function ModelManagement({
   triggerToast,
 }: ModelManagementProps) {
   const [query, setQuery] = useState("");
-  const [apiKeysOpen, setApiKeysOpen] = useState(false);
+  const [dialogModel, setDialogModel] = useState<ManagedModel | null>(null);
+  const [dialogMode, setDialogMode] = useState<"create" | "edit">("create");
   const normalizedQuery = query.trim().toLowerCase();
 
   const filteredModels = useMemo(() => {
@@ -52,15 +53,20 @@ export function ModelManagement({
     });
   }, [models, normalizedQuery]);
 
-  const selectedModel = models.find((model) => model.id === selectedModelId) ?? models[0];
   const enabledCount = models.filter(isModelEnabled).length;
 
-  const updateModel = (model: ManagedModel, patch: Partial<ManagedModel>) => {
-    const next = { ...model, ...patch };
-    onSaveModel(next);
-    if (next.enabled !== false && selectedModelId === model.id) {
-      onSelectModel(next.id);
-    }
+  const openModelDialog = (mode: "create" | "edit", model: ManagedModel) => {
+    setDialogMode(mode);
+    setDialogModel({
+      ...model,
+      apiKey: model.apiKey ?? "",
+      baseURL: model.baseURL ?? "",
+      openaiApiMode: model.openaiApiMode ?? "chat-completions",
+    });
+  };
+
+  const updateDialogModel = (patch: Partial<ManagedModel>) => {
+    setDialogModel((current) => (current ? { ...current, ...patch } : current));
   };
 
   const toggleModel = (model: ManagedModel) => {
@@ -94,17 +100,12 @@ export function ModelManagement({
 
     if (exactMatch) {
       onSelectModel(exactMatch.id);
-      setApiKeysOpen(true);
+      openModelDialog("edit", exactMatch);
       setQuery("");
       return;
     }
 
-    const draft = createDraft(name);
-    onSaveModel(draft);
-    onSelectModel(draft.id);
-    setApiKeysOpen(true);
-    setQuery("");
-    triggerToast("模型已添加");
+    openModelDialog("create", createDraft(name));
   };
 
   const handleQueryKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
@@ -117,11 +118,42 @@ export function ModelManagement({
     addOrSelectModel(name);
   };
 
-  const deleteSelectedModel = () => {
-    if (!selectedModel || selectedModel.builtIn) return;
-    const fallback = models.find((model) => model.id !== selectedModel.id && isModelEnabled(model));
-    onDeleteModel(selectedModel.id);
+  const saveDialogModel = () => {
+    if (!dialogModel) return;
+    const name = dialogModel.name.trim();
+    const modelId = dialogModel.model.trim();
+
+    if (!name || !modelId) {
+      triggerToast("请填写模型名称和模型标识");
+      return;
+    }
+
+    const next: ManagedModel = {
+      ...dialogModel,
+      name,
+      model: modelId,
+      baseURL: dialogModel.baseURL.trim().replace(/\/$/, ""),
+      apiKey: dialogModel.apiKey.trim(),
+    };
+
+    onSaveModel(next);
+    if (next.enabled !== false) onSelectModel(next.id);
+    setDialogModel(null);
+    setQuery("");
+    triggerToast(dialogMode === "create" ? "模型已添加" : "模型已保存");
+  };
+
+  const deleteDialogModel = () => {
+    if (!dialogModel || dialogModel.builtIn) return;
+    if (isModelEnabled(dialogModel) && enabledCount <= 1) {
+      triggerToast("至少保留一个可用模型");
+      return;
+    }
+
+    const fallback = models.find((model) => model.id !== dialogModel.id && isModelEnabled(model));
+    onDeleteModel(dialogModel.id);
     if (fallback) onSelectModel(fallback.id);
+    setDialogModel(null);
     triggerToast("自定义模型已删除");
   };
 
@@ -177,6 +209,15 @@ export function ModelManagement({
                 >
                   {model.name}
                 </button>
+                <button
+                  type="button"
+                  className="cursor-model-edit-btn"
+                  onClick={() => openModelDialog("edit", model)}
+                  title="编辑模型"
+                  aria-label={`编辑模型 ${model.name}`}
+                >
+                  <Edit3Icon size={14} />
+                </button>
                 <label className="toggle-switch cursor-model-toggle" title={enabled ? "关闭模型" : "开启模型"}>
                   <input
                     type="checkbox"
@@ -205,26 +246,44 @@ export function ModelManagement({
         ) : null}
       </section>
 
-      <section className="cursor-api-section">
-        <button
-          type="button"
-          className={`cursor-api-trigger ${apiKeysOpen ? "open" : ""}`}
-          onClick={() => setApiKeysOpen((open) => !open)}
+      {dialogModel && (
+        <div
+          className="model-dialog-backdrop"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setDialogModel(null);
+          }}
         >
-          <ChevronRightIcon size={16} />
-          <KeyIcon size={15} />
-          <span>API 密钥</span>
-        </button>
+          <section
+            className="model-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="model-dialog-title"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <header className="model-dialog-header">
+              <div>
+                <h3 id="model-dialog-title">{dialogMode === "create" ? "新增模型" : "编辑模型"}</h3>
+                <p>{dialogModel.provider === "openai" ? "OpenAI 兼容服务" : "Anthropic 兼容服务"}</p>
+              </div>
+              <button
+                type="button"
+                className="model-dialog-close-btn"
+                onClick={() => setDialogModel(null)}
+                title="关闭"
+                aria-label="关闭模型表单"
+              >
+                <span aria-hidden="true">x</span>
+              </button>
+            </header>
 
-        {apiKeysOpen && selectedModel && (
-          <div className="cursor-api-panel settings-card">
             <div className="model-form-grid">
               <label className="config-group">
                 <span className="config-label">显示名称</span>
                 <input
                   className="config-input"
-                  value={selectedModel.name}
-                  onChange={(event) => updateModel(selectedModel, { name: event.target.value })}
+                  value={dialogModel.name}
+                  onChange={(event) => updateDialogModel({ name: event.target.value })}
                 />
               </label>
 
@@ -232,8 +291,8 @@ export function ModelManagement({
                 <span className="config-label">服务商协议</span>
                 <select
                   className="model-select"
-                  value={selectedModel.provider}
-                  onChange={(event) => updateModel(selectedModel, {
+                  value={dialogModel.provider}
+                  onChange={(event) => updateDialogModel({
                     provider: event.target.value as ManagedModel["provider"],
                   })}
                 >
@@ -246,8 +305,8 @@ export function ModelManagement({
                 <span className="config-label">模型标识</span>
                 <input
                   className="config-input"
-                  value={selectedModel.model}
-                  onChange={(event) => updateModel(selectedModel, { model: event.target.value })}
+                  value={dialogModel.model}
+                  onChange={(event) => updateDialogModel({ model: event.target.value })}
                 />
               </label>
 
@@ -255,9 +314,9 @@ export function ModelManagement({
                 <span className="config-label">Base URL</span>
                 <input
                   className="config-input"
-                  value={selectedModel.baseURL}
-                  placeholder={selectedModel.provider === "openai" ? "https://api.openai.com/v1" : "https://api.anthropic.com"}
-                  onChange={(event) => updateModel(selectedModel, {
+                  value={dialogModel.baseURL}
+                  placeholder={dialogModel.provider === "openai" ? "https://api.openai.com/v1" : "https://api.anthropic.com"}
+                  onChange={(event) => updateDialogModel({
                     baseURL: event.target.value.trim().replace(/\/$/, ""),
                   })}
                 />
@@ -268,18 +327,18 @@ export function ModelManagement({
                 <input
                   className="config-input"
                   type="password"
-                  value={selectedModel.apiKey}
-                  onChange={(event) => updateModel(selectedModel, { apiKey: event.target.value.trim() })}
+                  value={dialogModel.apiKey}
+                  onChange={(event) => updateDialogModel({ apiKey: event.target.value.trim() })}
                 />
               </label>
 
-              {selectedModel.provider === "openai" && (
+              {dialogModel.provider === "openai" && (
                 <label className="config-group model-form-span">
                   <span className="config-label">OpenAI API 模式</span>
                   <select
                     className="model-select"
-                    value={selectedModel.openaiApiMode}
-                    onChange={(event) => updateModel(selectedModel, {
+                    value={dialogModel.openaiApiMode}
+                    onChange={(event) => updateDialogModel({
                       openaiApiMode: event.target.value as ManagedModel["openaiApiMode"],
                     })}
                   >
@@ -290,20 +349,40 @@ export function ModelManagement({
               )}
             </div>
 
-            {!selectedModel.builtIn && (
-              <button
-                type="button"
-                className="model-delete-btn cursor-api-delete"
-                onClick={deleteSelectedModel}
-                title="删除模型"
-                aria-label="删除模型"
-              >
-                <TrashIcon size={15} />
-              </button>
-            )}
-          </div>
-        )}
-      </section>
+            <footer className="model-dialog-footer">
+              {!dialogModel.builtIn && dialogMode === "edit" ? (
+                <button
+                  type="button"
+                  className="model-dialog-danger-btn"
+                  onClick={deleteDialogModel}
+                >
+                  <TrashIcon size={15} />
+                  <span>删除模型</span>
+                </button>
+              ) : (
+                <span />
+              )}
+
+              <div className="model-dialog-actions">
+                <button
+                  type="button"
+                  className="settings-secondary-btn"
+                  onClick={() => setDialogModel(null)}
+                >
+                  取消
+                </button>
+                <button
+                  type="button"
+                  className="settings-primary-btn"
+                  onClick={saveDialogModel}
+                >
+                  {dialogMode === "create" ? "添加" : "保存"}
+                </button>
+              </div>
+            </footer>
+          </section>
+        </div>
+      )}
     </div>
   );
 }
