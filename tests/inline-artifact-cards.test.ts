@@ -20,6 +20,12 @@ describe("inline-artifact-cards", () => {
     expect(parseInlineCardsFromContent("演示文稿已生成，可导出 PPT。")).toEqual(["deck"]);
   });
 
+  it("does not create deck cards for export result messages", () => {
+    expect(parseInlineCardsFromContent("演示文稿已导出至：C:\\Users\\me\\Documents\\deck.pptx")).toEqual([]);
+    expect(parseInlineCardsFromContent("导出失败：文件被占用")).toEqual([]);
+    expect(parseInlineCardsFromContent("文件已保存。 [打开所在目录](#open-export-folder=C%3A%5Cdeck.pptx)")).toEqual([]);
+  });
+
   it("detects export and preview prompts", () => {
     expect(isExportPrompt("请导出 PPT 文件")).toBe(true);
     expect(isPreviewPrompt("打开幻灯片预览")).toBe(true);

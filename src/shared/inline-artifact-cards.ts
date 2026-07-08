@@ -26,11 +26,12 @@ const ARTIFACT_REF_PATTERNS: Record<InlineCardType, RegExp[]> = {
   brief: [/\bbrief\.md\b/i, /\bbrief\b/i, /需求简报/, /目的.*受众/],
   outline: [/\boutline\.md\b/i, /\boutline\b/i, /内容大纲/, /章节结构/, /大纲/],
   layout: [/排版方式/, /视觉呈现/, /内容草稿已就绪/, /请选择.*排版/, /layout-choice/i],
-  deck: [/\bdeck\//i, /演示文稿/, /\bppt\b/i, /幻灯片/, /导出/],
+  deck: [/\bdeck\//i, /演示文稿/, /\bppt\b/i, /幻灯片/],
 };
 
 const EXPORT_PROMPT_PATTERN = /(?:导出|下载|export).*(?:ppt|幻灯片|演示文稿)?|(?:ppt|幻灯片|演示文稿).*(?:导出|下载)/i;
 const PREVIEW_PROMPT_PATTERN = /预览.*(?:ppt|幻灯片|演示文稿)|(?:ppt|幻灯片|演示文稿).*预览|打开.*预览/i;
+const EXPORT_RESULT_PATTERN = /导出成功|已(?:成功)?导出(?:至|到|为|：|:)|已保存(?:至|到|为|：|:)|已取消导出|导出失败/;
 
 export function isExportPrompt(prompt: string): boolean {
   return EXPORT_PROMPT_PATTERN.test(prompt.trim());
@@ -51,7 +52,13 @@ export function artifactStageToInlineCardType(
 
 export function parseInlineCardsFromContent(content: string): InlineCardType[] {
   const found: InlineCardType[] = [];
+  const isExportResult = EXPORT_RESULT_PATTERN.test(content);
+
   for (const type of inlineCardTypeSchema.options) {
+    if (type === "deck" && isExportResult) {
+      continue;
+    }
+
     if (ARTIFACT_REF_PATTERNS[type].some((pattern) => pattern.test(content))) {
       found.push(type);
     }

@@ -7,6 +7,7 @@ import {
   Menu,
   dialog,
   nativeTheme,
+  shell,
   type MessageBoxOptions,
 } from "electron";
 import type { Presentation } from "@shared/presentation";
@@ -481,6 +482,14 @@ app.whenReady().then(async () => {
         });
     if (canceled || !filePaths || filePaths.length === 0) return null;
     return filePaths[0];
+  });
+  ipcMain.handle("shell:open-export-folder", async (_, filePath: string) => {
+    if (typeof filePath !== "string" || !filePath.trim()) {
+      return false;
+    }
+
+    shell.showItemInFolder(filePath);
+    return true;
   });
 
   ipcMain.handle("agent:cancel", async (_, runId: string) => {

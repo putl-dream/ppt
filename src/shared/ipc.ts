@@ -189,6 +189,7 @@ export interface DesktopApi {
     presentation: Presentation,
     options: ExportPresentationOptions,
   ): Promise<string | null>;
+  openExportFolder(filePath: string): Promise<boolean>;
   selectDirectory(defaultPath?: string): Promise<string | null>;
   setWindowThemeMode(themeMode: WindowThemeMode): Promise<"light" | "dark">;
   cancelAgentRun(runId: string): Promise<boolean>;

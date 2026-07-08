@@ -52,6 +52,7 @@ import {
   toAgentModelSettings,
   type ManagedModel,
 } from "./modelCatalog";
+import { createOpenExportFolderHref } from "@shared/export-links";
 import { loadAgentStepLimits, saveAgentStepLimits } from "./agentStepLimits";
 import {
   buildAgentGatewayConfig,
@@ -1179,7 +1180,7 @@ export function App() {
         { id: userMsgId, role: "user", content: activeRequest },
       ]);
       if (!customRequest) setRequest("");
-      await handleExportDeck(activeRequest);
+      await handleExportDeck();
       return;
     }
 
@@ -1920,7 +1921,7 @@ export function App() {
     setIsMirrorOpen(true);
   };
 
-  const handleExportDeck = async (sourcePrompt?: string) => {
+  const handleExportDeck = async () => {
     if (!presentation || isExportingDeck) return;
     setIsExportingDeck(true);
     try {
@@ -1930,15 +1931,14 @@ export function App() {
         logoUrl,
       });
       const exportMessage = savedPath
-        ? `演示文稿已导出至：${savedPath}`
+        ? `文件已保存。 [打开所在目录](${createOpenExportFolderHref(savedPath)})`
         : "已取消导出。";
       setChatMessages((prev) => [
         ...prev,
         {
           id: crypto.randomUUID(),
           role: "assistant",
-          content: sourcePrompt ? exportMessage : exportMessage,
-          inlineCards: savedPath ? [{ type: "deck" as const, resolved: "confirmed" as const }] : undefined,
+          content: exportMessage,
         },
       ]);
       if (savedPath) {

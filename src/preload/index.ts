@@ -40,6 +40,7 @@ const api: DesktopApi = {
   executeCommand: (command) => ipcRenderer.invoke("presentation:execute", command),
   exportPresentation: (presentation, options) =>
     ipcRenderer.invoke("presentation:export", presentation, options),
+  openExportFolder: (filePath) => ipcRenderer.invoke("shell:open-export-folder", filePath),
   selectDirectory: (defaultPath) => ipcRenderer.invoke("dialog:select-directory", defaultPath),
   setWindowThemeMode: (themeMode) => ipcRenderer.invoke("window:set-theme-mode", themeMode),
   cancelAgentRun: (runId) => ipcRenderer.invoke("agent:cancel", runId),
