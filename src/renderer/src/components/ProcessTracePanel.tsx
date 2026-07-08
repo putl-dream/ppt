@@ -84,8 +84,10 @@ export const ProcessTracePanel: React.FC<ProcessTracePanelProps> = ({
         <span className="process-trace-panel-header-left">
           {isActive && <span className="step-spinner" aria-hidden="true" />}
           <span className="process-trace-panel-label">{headerLabel}</span>
+          <span className="process-trace-panel-caret" aria-hidden="true">
+            {open && revealed ? <ChevronDownIcon size={12} /> : <ChevronRightIcon size={12} />}
+          </span>
         </span>
-        {open && revealed ? <ChevronDownIcon size={12} /> : <ChevronRightIcon size={12} />}
       </button>
       {open && (
         <div ref={bodyRef} className={bodyClassName}>

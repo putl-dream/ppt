@@ -2039,8 +2039,6 @@ export function App() {
                   onCancelRun={() => void handleCancelRun()}
                   isCancellingRun={isCancellingRun}
                   onRetry={handleRetryMessage}
-                  themeMode={computedTheme}
-                  onToggleThemeMode={() => setThemeMode(computedTheme === "light" ? "dark" : "light")}
                   isMirrorOpen={isMirrorVisible}
                   onToggleMirror={handleOpenMirror}
                   selectedSlideIndex={activeSlideIndexValue}

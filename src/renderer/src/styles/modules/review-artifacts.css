@@ -1,6 +1,9 @@
 /* AI 提案审查卡片 */
 .approval-card {
   margin-top: 8px;
+  width: 100%;
+  max-width: none;
+  box-sizing: border-box;
   background: var(--accent-primary-glow);
   border: 1px solid var(--accent-primary);
   border-radius: var(--button-border-radius);
@@ -312,11 +315,13 @@
 /* 产物 Patch 审核卡片 */
 .patch-review-card {
   margin-top: 8px;
+  width: 100%;
+  max-width: none;
+  box-sizing: border-box;
   background: rgba(245, 158, 11, 0.06);
   border: 1px solid rgba(245, 158, 11, 0.35);
   border-radius: var(--button-border-radius);
   padding: 14px;
-  max-width: 640px;
 }
 
 .patch-review-header {
@@ -465,7 +470,9 @@
 /* 内联产物预览卡片 */
 .inline-artifact-card {
   margin-top: 12px;
-  max-width: 540px;
+  width: 100%;
+  max-width: none;
+  box-sizing: border-box;
   border: 1px solid var(--border-glass);
   border-radius: var(--card-border-radius);
   background: var(--bg-input-field);

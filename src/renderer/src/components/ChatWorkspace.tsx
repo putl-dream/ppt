@@ -5,8 +5,6 @@ import type { SessionChatMessage } from "@shared/session";
 import {
   CopyIcon,
   Edit3Icon,
-  SunIcon,
-  MoonIcon,
   OpenPreviewIcon,
   FileIcon,
 } from "./Icons";
@@ -70,8 +68,6 @@ interface ChatWorkspaceProps {
   onCancelRun?: () => void;
   isCancellingRun?: boolean;
   onRetry?: (msgId: string) => void;
-  themeMode: "light" | "dark";
-  onToggleThemeMode: () => void;
   isMirrorOpen: boolean;
   onToggleMirror: () => void;
   selectedSlideIndex: number | null; // 右侧选中的幻灯片序号
@@ -118,8 +114,6 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
   onCancelRun,
   isCancellingRun = false,
   onRetry,
-  themeMode,
-  onToggleThemeMode,
   isMirrorOpen,
   onToggleMirror,
   selectedSlideIndex,
@@ -262,15 +256,7 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
               <span>{displayConversationTitle}</span>
             </div>
           </div>
-          <div className="canvas-header-right">
-            <button
-              className="action-icon-btn theme-toggle-btn"
-              onClick={onToggleThemeMode}
-              title={themeMode === "light" ? "切换为深色框架" : "切换为浅色框架"}
-            >
-              {themeMode === "light" ? <MoonIcon size={16} /> : <SunIcon size={16} />}
-            </button>
-          </div>
+          <div className="canvas-header-right" />
         </div>
 
         {/* Center content container */}
@@ -341,16 +327,6 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
         </div>
 
         <div className="canvas-header-right">
-          {/* 主题切换 */}
-          <button
-            className="action-icon-btn theme-toggle-btn"
-            onClick={onToggleThemeMode}
-            title={themeMode === "light" ? "切换为深色框架" : "切换为浅色框架"}
-            style={{ marginRight: 4 }}
-          >
-            {themeMode === "light" ? <MoonIcon size={16} /> : <SunIcon size={16} />}
-          </button>
-
           {/* 打开右侧预览；关闭入口固定在右侧 PPT 面板最右侧 */}
           {!isMirrorOpen && (
             <button
@@ -492,7 +468,7 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
 
                 {/* Deck 排版审批卡片 */}
                 {msg.approval && (
-                  <div className="approval-card" style={{ maxWidth: 540 }}>
+                  <div className="approval-card">
                     <div className="approval-card-title">
                       <span>📋 待审核的排版更新</span>
                     </div>
