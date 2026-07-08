@@ -8,6 +8,7 @@ import {
   taskGraphCompleteTool,
   taskGraphCreatePlanTool,
   taskGraphCreateTool,
+  taskGraphListTool,
 } from "../src/main/agent/tools/core/task-graph-tools";
 import { TaskStore } from "../src/main/agent/task/task-store";
 import {
@@ -214,6 +215,11 @@ describe("TaskGraph tools", () => {
       await readFile(join(workspaceRoot, ".tasks", "_plan.json"), "utf8"),
     );
     expect(planMeta.goal).toBe("Build deck");
+
+    onUpdated.mockClear();
+    const listed = await taskGraphListTool.execute({}, context);
+    expect(listed.tasks).toHaveLength(2);
+    expect(onUpdated).toHaveBeenCalled();
   });
 
   it("upserts a single taskgraph block in the activity trace", () => {

@@ -78,6 +78,7 @@ describe("system prompt assembly", () => {
     expect(assembled.text).toContain("维护 TaskGraph");
     expect(assembled.text).toContain("委派子 Agent");
     expect(assembled.text).toContain("不要创建临时、平面的任务列表");
+    expect(assembled.text).toContain("第一步必须先 `TaskGraphCreatePlan`");
     expect(assembled.text).toContain("验收产物");
   });
 

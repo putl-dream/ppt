@@ -15,6 +15,7 @@ import {
   getEffectiveMainMaxSteps,
   resolveAgentStepLimits,
 } from "@shared/agent-step-limits";
+import { isTaskPlanActive } from "@shared/agent-task-graph";
 import { callModelWithRecovery } from "./model-call-recovery";
 import { createTaskStore } from "../task/task-store";
 import { toToolSchemas } from "../tools/tool-schema";
@@ -53,6 +54,19 @@ function subAgentProgressMessage(event: SubAgentProgressEvent): string {
     default:
       return "";
   }
+}
+
+async function shouldRequireDiscoverTaskPlan(input: {
+  stage?: string;
+  toolName: string;
+  taskStore?: ReturnType<typeof createTaskStore>;
+}): Promise<boolean> {
+  if (input.stage !== "discover") return false;
+  if (!input.taskStore) return false;
+  if (input.toolName === "AskUser" || input.toolName.startsWith("TaskGraph")) return false;
+
+  const tasks = await input.taskStore.listTasks();
+  return !isTaskPlanActive(tasks);
 }
 
 /**
@@ -397,6 +411,30 @@ export class AgentRuntime {
         continue;
       }
 
+      if (await shouldRequireDiscoverTaskPlan({
+        stage: context.promptStage,
+        toolName: tool.name,
+        taskStore,
+      })) {
+        const guidance =
+          "Full or multi-step PPT creation in the discover stage must start with "
+          + "TaskGraphCreatePlan(sequential=true, 3-5 concrete steps) before LoadSkill, Task, "
+          + "ReadPresentationSnapshot, or other execution tools. Create the visible task plan first, "
+          + "then claim and complete each step as work progresses.";
+        options.onProgress?.({
+          type: "workflow-progress",
+          message: "正在先建立可见任务计划...",
+          progress: 0,
+        });
+        transcript.push({
+          role: "tool",
+          toolName: tool.name,
+          error: guidance,
+        });
+        recordToolResult(guidance, true);
+        continue;
+      }
+
       try {
         options.onProgress?.({
           type: "tool-started",
@@ -551,7 +589,17 @@ export class AgentRuntime {
     }, "step_limit");
     } finally {
       if (taskStore) {
-        await taskStore.unassignInProgressByOwner(taskGraphOwner);
+        const released = await taskStore.unassignInProgressByOwner(taskGraphOwner);
+        if (released.length > 0) {
+          const tasks = await taskStore.listTasks();
+          const plan = await taskStore.getPlanMeta();
+          options.onProgress?.({
+            type: "task-graph-updated",
+            message: "任务图已更新",
+            tasks,
+            goal: plan?.goal ?? null,
+          });
+        }
       }
     }
   }

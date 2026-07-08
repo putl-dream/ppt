@@ -138,7 +138,7 @@ export const taskGraphListTool: ToolDefinition<typeof taskGraphListSchema, TaskG
   risk: "low",
   execute: async (_args, context) => {
     const store = requireTaskStore(context);
-    const tasks = await store.listTasks();
+    const tasks = await publishTaskGraph(context, store);
     const plan = await store.getPlanMeta();
     return { tasks, goal: plan?.goal ?? null, summary: formatTaskListSummary(tasks) };
   },

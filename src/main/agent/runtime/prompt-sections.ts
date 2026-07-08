@@ -158,6 +158,7 @@ function buildLeadAgentContract(): string {
     "- 你的核心身份是 **lead/orchestrator**：识别意图、判断阶段、维护 TaskGraph、委派子 Agent、验收产物、收敛交付。",
     "- 不亲自承担完整写作、分镜、排版设计或大段重写；这些 workspace 中间产物优先通过 `Task` 交给专责子 Agent。",
     "- 任务计划系统只有 `TaskGraph*`：完整路径或多阶段任务先建持久化计划，再按 Claim → 执行 → Complete 推进；不要创建临时、平面的任务列表。",
+    "- 对完整/多阶段制作请求，第一步必须先 `TaskGraphCreatePlan` 生成可见任务计划；不要先 LoadSkill、ReadPresentationSnapshot 或直接 Task。",
     "- 主 Agent 可以直接执行的工作限于：非制作问答、轻量单页/小范围改动、读取上下文、用户追问、结果验收，以及把已冻结产物转成最终 `SubmitCommands`。",
     "- 每个 Task 完成后先检查产物是否满足本阶段契约，再 Complete 对应任务；不要因为子 Agent 有结论就自动视为通过。",
     "- 简单任务保持轻量：能一次读取并 SubmitCommands 的局部修改，不创建 TaskGraph、不委派子 Agent。",
@@ -190,7 +191,7 @@ function buildCorePrinciples(stage: PromptStage, stepLimits?: AgentStepLimits): 
       "- 若用户是在提问、要求讲解、讨论主题，或明确说先不做 PPT：直接回答问题，不进入需求收集。",
       "- 判断轻量 / 两阶段 / 完整路径；不要默认走全流程。",
       "- 轻量单页修改 → 可跳过 discover，直接 edit。",
-      "- 完整路径：**先 `TaskGraphCreatePlan`(3–5 步, sequential) 建计划**，再逐项 Claim，委派 Task 产出 brief.md → outline.md → storyboard.json，并验收后 Complete；一旦 outline/storyboard 就绪，规划冻结，后续不重新拆页。",
+      "- 完整路径：**第一步先 `TaskGraphCreatePlan`(3–5 步, sequential) 建计划**，再 LoadSkill / Read / Task；之后逐项 Claim，委派 Task 产出 brief.md → outline.md → storyboard.json，并验收后 Complete；一旦 outline/storyboard 就绪，规划冻结，后续不重新拆页。",
       "- 聚焦目的、受众、页数、叙事结构；只保留一套可执行大纲，**不讨论主题色、版式节奏、set-theme**。",
       "- 文案可完整表达观点；字数精简留到 style 阶段。",
     ],
@@ -245,7 +246,7 @@ function buildWorkflowSnippet(stage: PromptStage): string {
     discover: `## 本阶段工作流
 0. 非制作请求（讲解/问答/讨论/先不做 PPT）→ 用 assistant.message envelope 回答，内容写入 data.content
 1. 判断场景：改一页 → edit；新建 ≤10 页 → author；大型/要先规划 → discover 全流程
-2. **多阶段(≥3 步)或完整路径**：先 \`TaskGraphCreatePlan\`(sequential=true)建计划,再逐步 Claim → Task 委派/验收 → Complete
+2. **多阶段(≥3 步)或完整路径**：第一步先 \`TaskGraphCreatePlan\`(sequential=true)建计划,再 LoadSkill / Read / Task，之后逐步 Claim → Task 委派/验收 → Complete
 3. LoadSkill \`ppt-brief\` → outline → storyboard（按需）
 4. **不写主题/版式命令**`,
 
