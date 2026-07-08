@@ -107,7 +107,7 @@ export type AgentRunResult =
   | { status: "completed"; presentation: Presentation }
   | { status: "rejected"; presentation?: Presentation };
 
-export type WindowThemeMode = "light" | "dark" | "system";
+export type WindowThemeMode = "light" | "dark" | "cyan" | "orange" | "system";
 
 export interface ProjectArtifactReadResult {
   path: string;

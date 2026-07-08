@@ -51,6 +51,7 @@ import type { AgentModelSelection } from "@shared/agent";
 const logger = createModuleLogger("main");
 const agentGateway = new AgentGateway();
 const toolApprovalBroker = new ToolApprovalBroker();
+type WindowThemePreset = Exclude<WindowThemeMode, "system">;
 
 async function resolveSkillRegistry(): Promise<SkillRegistry> {
   const candidates = [
@@ -95,6 +96,9 @@ function createWindow(): void {
     height: 900,
     minWidth: 1100,
     minHeight: 700,
+    title: "Agent PPT",
+    titleBarStyle: "hidden",
+    titleBarOverlay: getWindowTitleBarOverlay(),
     backgroundColor: getWindowBackgroundColor(),
     ...(icon ? { icon } : {}),
     webPreferences: {
@@ -116,9 +120,29 @@ function createWindow(): void {
 
 let sessionStore: FileSessionStore;
 
-const WINDOW_BACKGROUND_BY_THEME: Record<"light" | "dark", string> = {
-  light: "#ffffff",
-  dark: "#1e1e1e",
+let activeWindowThemeMode: WindowThemeMode = "light";
+
+const WINDOW_FRAME_BY_THEME: Record<WindowThemePreset, { background: string; symbol: string; nativeTheme: "light" | "dark" }> = {
+  light: {
+    background: "#e7e7e7",
+    symbol: "#0f172a",
+    nativeTheme: "light",
+  },
+  dark: {
+    background: "#141414",
+    symbol: "#f8fafc",
+    nativeTheme: "dark",
+  },
+  cyan: {
+    background: "#d8edf0",
+    symbol: "#0f172a",
+    nativeTheme: "light",
+  },
+  orange: {
+    background: "#efe2cf",
+    symbol: "#0f172a",
+    nativeTheme: "light",
+  },
 };
 
 function resolveAppIconPath(): string | undefined {
@@ -134,32 +158,54 @@ function resolveAppIconPath(): string | undefined {
   return candidates.find((candidate) => existsSync(candidate));
 }
 
-function resolveWindowThemeMode(): "light" | "dark" {
-  return nativeTheme.shouldUseDarkColors ? "dark" : "light";
+function resolveWindowThemeMode(themeMode: WindowThemeMode = activeWindowThemeMode): WindowThemePreset {
+  if (themeMode === "system") {
+    return nativeTheme.shouldUseDarkColors ? "dark" : "light";
+  }
+  return themeMode;
 }
 
 function normalizeWindowThemeMode(themeMode: unknown): WindowThemeMode {
-  if (themeMode === "light" || themeMode === "dark" || themeMode === "system") {
+  if (
+    themeMode === "light"
+    || themeMode === "dark"
+    || themeMode === "cyan"
+    || themeMode === "orange"
+    || themeMode === "system"
+  ) {
     return themeMode;
   }
-  return "system";
+  return "light";
 }
 
 function getWindowBackgroundColor(): string {
-  return WINDOW_BACKGROUND_BY_THEME[resolveWindowThemeMode()];
+  return WINDOW_FRAME_BY_THEME[resolveWindowThemeMode()].background;
+}
+
+function getWindowTitleBarOverlay(): Electron.TitleBarOverlay {
+  const frame = WINDOW_FRAME_BY_THEME[resolveWindowThemeMode()];
+  return {
+    color: frame.background,
+    symbolColor: frame.symbol,
+    height: 30,
+  };
 }
 
 function applyWindowBackgroundColor(): void {
   const backgroundColor = getWindowBackgroundColor();
+  const titleBarOverlay = getWindowTitleBarOverlay();
 
   for (const browserWindow of BrowserWindow.getAllWindows()) {
     browserWindow.setBackgroundColor(backgroundColor);
+    browserWindow.setTitleBarOverlay(titleBarOverlay);
   }
 }
 
 function applyWindowThemeMode(themeMode: WindowThemeMode): "light" | "dark" {
-  nativeTheme.themeSource = themeMode;
-  const resolvedTheme = resolveWindowThemeMode();
+  activeWindowThemeMode = themeMode;
+  const resolvedMode = resolveWindowThemeMode(themeMode);
+  nativeTheme.themeSource = WINDOW_FRAME_BY_THEME[resolvedMode].nativeTheme;
+  const resolvedTheme = nativeTheme.shouldUseDarkColors ? "dark" : "light";
   applyWindowBackgroundColor();
 
   return resolvedTheme;

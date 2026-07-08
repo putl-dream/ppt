@@ -85,16 +85,19 @@ import {
 type ChatMessage = SessionChatMessage;
 
 const UI_SETTINGS_STORAGE_KEY = "agent-ppt.ui-settings.v1";
+type UiThemeMode = "light" | "dark" | "cyan" | "orange";
 type UiAccentColor = "cyan" | "green" | "purple" | "orange";
 type UiControlShape = "sharp" | "soft" | "round";
+type UiReadingTone = "classic" | "cyan" | "orange";
 
 interface PersistedUiSettings {
   autoDownload: boolean;
   autoCloudSync: boolean;
   defaultRatio: "16:9" | "4:3";
-  themeMode: "light" | "dark" | "system";
+  themeMode: UiThemeMode | "system";
   uiAccentColor: UiAccentColor;
   uiControlShape: UiControlShape;
+  uiReadingTone: UiReadingTone;
   borderRadiusScale: number;
   colorContrastOffset: number;
   selectedTheme: string;
@@ -219,10 +222,16 @@ export function App() {
   );
 
   // 外观定制与视效控制阀
-  const [themeMode, setThemeMode] = useState<"light" | "dark" | "system">(() => {
+  const [themeMode, setThemeMode] = useState<UiThemeMode>(() => {
     const mode = persistedUiSettings.themeMode;
-    return mode === "dark" || mode === "system" ? mode : "light";
+    if (mode === "dark" || mode === "cyan" || mode === "orange") return mode;
+    if (mode === "system") {
+      return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    }
+    const legacyTone = persistedUiSettings.uiReadingTone;
+    return legacyTone === "cyan" || legacyTone === "orange" ? legacyTone : "light";
   });
+  const uiReadingTone: UiReadingTone = themeMode === "cyan" || themeMode === "orange" ? themeMode : "classic";
   const [uiAccentColor, setUiAccentColor] = useState<UiAccentColor>(() => {
     const accent = persistedUiSettings.uiAccentColor;
     return accent === "green" || accent === "purple" || accent === "orange" ? accent : "cyan";
@@ -340,19 +349,9 @@ export function App() {
     }
   };
 
-  // 系统主题跟随与计算
+  // 主题计算：青色与橙色属于浅色阅读主题，暗色不再叠加阅读色。
   useEffect(() => {
-    if (themeMode === "system") {
-      const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
-      const handleChange = () => {
-        setComputedTheme(mediaQuery.matches ? "dark" : "light");
-      };
-      setComputedTheme(mediaQuery.matches ? "dark" : "light");
-      mediaQuery.addEventListener("change", handleChange);
-      return () => mediaQuery.removeEventListener("change", handleChange);
-    } else {
-      setComputedTheme(themeMode);
-    }
+    setComputedTheme(themeMode === "dark" ? "dark" : "light");
   }, [themeMode]);
 
   useEffect(() => {
@@ -361,7 +360,7 @@ export function App() {
     if (!desktopApi?.setWindowThemeMode) return;
 
     void desktopApi
-      .setWindowThemeMode(themeMode === "system" ? "system" : computedTheme)
+      .setWindowThemeMode(themeMode)
       .catch((error) => {
         console.error("同步窗口主题失败:", error);
       });
@@ -381,21 +380,49 @@ export function App() {
   }, [uiControlShape]);
 
   useEffect(() => {
+    document.documentElement.dataset.readingTone = uiReadingTone;
+  }, [uiReadingTone]);
+
+  useEffect(() => {
     const isDark = computedTheme === "dark";
+    const palette = {
+      classic: {
+        light: { hue: 0, saturation: 0, app: 90.6, canvas: 100, field: 100, darker: 95 },
+        dark: { hue: 0, saturation: 0, app: 12, canvas: 18, field: 18, darker: 12 },
+      },
+      cyan: {
+        light: { hue: 188, saturation: 28, app: 90, canvas: 97, field: 98, darker: 92 },
+        dark: { hue: 188, saturation: 18, app: 11, canvas: 15, field: 18, darker: 12 },
+      },
+      orange: {
+        light: { hue: 34, saturation: 34, app: 90, canvas: 97, field: 96, darker: 91 },
+        dark: { hue: 30, saturation: 18, app: 11, canvas: 15, field: 18, darker: 12 },
+      },
+    } satisfies Record<UiReadingTone, Record<"light" | "dark", { hue: number; saturation: number; app: number; canvas: number; field: number; darker: number }>>;
+
+    const tone = palette[uiReadingTone][isDark ? "dark" : "light"];
     if (isDark) {
-      const appLightness = Math.min(20, Math.max(6, 12 - colorContrastOffset * 0.45));
-      const canvasLightness = Math.min(24, Math.max(10, 18 - colorContrastOffset * 0.25));
-      document.documentElement.style.setProperty("--bg-app", `hsl(0, 0%, ${appLightness}%)`);
-      document.documentElement.style.setProperty("--bg-canvas", `hsl(0, 0%, ${canvasLightness}%)`);
-      document.documentElement.style.setProperty("--bg-glass", `hsl(0, 0%, ${canvasLightness}%)`);
+      const appLightness = Math.min(20, Math.max(6, tone.app - colorContrastOffset * 0.45));
+      const canvasLightness = Math.min(24, Math.max(10, tone.canvas - colorContrastOffset * 0.25));
+      const fieldLightness = Math.min(28, Math.max(12, tone.field - colorContrastOffset * 0.18));
+      const darkerLightness = Math.min(20, Math.max(8, tone.darker - colorContrastOffset * 0.18));
+      document.documentElement.style.setProperty("--bg-app", `hsl(${tone.hue}, ${tone.saturation}%, ${appLightness}%)`);
+      document.documentElement.style.setProperty("--bg-canvas", `hsl(${tone.hue}, ${tone.saturation}%, ${canvasLightness}%)`);
+      document.documentElement.style.setProperty("--bg-glass", `hsl(${tone.hue}, ${tone.saturation}%, ${canvasLightness}%)`);
+      document.documentElement.style.setProperty("--bg-input-field", `hsl(${tone.hue}, ${tone.saturation}%, ${fieldLightness}%)`);
+      document.documentElement.style.setProperty("--bg-darker", `hsl(${tone.hue}, ${tone.saturation}%, ${darkerLightness}%)`);
     } else {
-      const appLightness = Math.min(95, Math.max(84, 90.6 - colorContrastOffset));
-      const canvasLightness = Math.min(100, Math.max(94, 100 - Math.max(0, colorContrastOffset) * 0.25));
-      document.documentElement.style.setProperty("--bg-app", `hsl(0, 0%, ${appLightness}%)`);
-      document.documentElement.style.setProperty("--bg-canvas", `hsl(0, 0%, ${canvasLightness}%)`);
-      document.documentElement.style.setProperty("--bg-glass", `hsl(0, 0%, ${canvasLightness}%)`);
+      const appLightness = Math.min(95, Math.max(84, tone.app - colorContrastOffset));
+      const canvasLightness = Math.min(100, Math.max(94, tone.canvas - Math.max(0, colorContrastOffset) * 0.25));
+      const fieldLightness = Math.min(100, Math.max(92, tone.field - Math.max(0, colorContrastOffset) * 0.2));
+      const darkerLightness = Math.min(96, Math.max(86, tone.darker - Math.max(0, colorContrastOffset) * 0.25));
+      document.documentElement.style.setProperty("--bg-app", `hsl(${tone.hue}, ${tone.saturation}%, ${appLightness}%)`);
+      document.documentElement.style.setProperty("--bg-canvas", `hsl(${tone.hue}, ${tone.saturation}%, ${canvasLightness}%)`);
+      document.documentElement.style.setProperty("--bg-glass", `hsl(${tone.hue}, ${tone.saturation}%, ${fieldLightness}%)`);
+      document.documentElement.style.setProperty("--bg-input-field", `hsl(${tone.hue}, ${tone.saturation}%, ${fieldLightness}%)`);
+      document.documentElement.style.setProperty("--bg-darker", `hsl(${tone.hue}, ${tone.saturation}%, ${darkerLightness}%)`);
     }
-  }, [computedTheme, colorContrastOffset]);
+  }, [computedTheme, colorContrastOffset, uiReadingTone]);
 
   useEffect(() => {
     if (presentation) {
@@ -1949,6 +1976,11 @@ export function App() {
 
   return (
     <main className={`app-shell ${computedTheme === "dark" ? "dark-theme" : ""}`}>
+      <div className="window-titlebar">
+        <img className="window-titlebar-icon" src="./icon.png" alt="" />
+        <span className="window-titlebar-title">Agent PPT</span>
+      </div>
+
       {/* 浮动提示通知 */}
       {toastMessage && <div className="floating-toast-alert">{toastMessage}</div>}
 

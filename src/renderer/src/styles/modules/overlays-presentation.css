@@ -377,6 +377,28 @@
   --shadow-premium: 0 20px 48px rgba(0, 0, 0, 0.45);
 }
 
+[data-reading-tone="cyan"] .rounded-canvas {
+  --bg-canvas: #f4fbfb;
+  --bg-canvas-gradient-start: #f7fdfd;
+  --bg-canvas-gradient-end: #eaf6f7;
+  --bg-glass: #f3fbfc;
+  --bg-input-field: #eff9fa;
+  --bg-darker: #eaf4f5;
+  --border-glass: rgba(35, 115, 126, 0.16);
+  --border-glass-focused: rgba(35, 115, 126, 0.28);
+}
+
+[data-reading-tone="orange"] .rounded-canvas {
+  --bg-canvas: #fff8ef;
+  --bg-canvas-gradient-start: #fffaf3;
+  --bg-canvas-gradient-end: #f6ecdd;
+  --bg-glass: #fff7ec;
+  --bg-input-field: #fff3e3;
+  --bg-darker: #f4e9da;
+  --border-glass: rgba(148, 95, 37, 0.16);
+  --border-glass-focused: rgba(148, 95, 37, 0.28);
+}
+
 .rounded-canvas .canvas-column,
 .rounded-canvas .settings-console-container {
   background-color: var(--bg-canvas) !important;

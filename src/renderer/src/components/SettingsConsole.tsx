@@ -17,6 +17,7 @@ import type { AgentGatewayPreferences } from "@shared/agent-gateway-config";
 import { DEFAULT_AGENT_GATEWAY_CONFIG } from "@shared/agent-gateway-config";
 
 type SettingsCategory = "account" | "models" | "gateway" | "generation" | "project" | "appearance";
+type UiThemeMode = "light" | "dark" | "cyan" | "orange";
 type UiAccentColor = "cyan" | "green" | "purple" | "orange";
 type UiControlShape = "sharp" | "soft" | "round";
 
@@ -49,8 +50,8 @@ interface SettingsConsoleProps {
   agentGatewayPreferences: AgentGatewayPreferences;
   setAgentGatewayPreferences: (val: AgentGatewayPreferences) => void;
 
-  themeMode: "light" | "dark" | "system";
-  setThemeMode: (val: "light" | "dark" | "system") => void;
+  themeMode: UiThemeMode;
+  setThemeMode: (val: UiThemeMode) => void;
   uiAccentColor: UiAccentColor;
   setUiAccentColor: (val: UiAccentColor) => void;
   uiControlShape: UiControlShape;
@@ -64,42 +65,34 @@ interface SettingsConsoleProps {
   saveStatus?: "saved" | "saving";
 }
 
-const categoryMeta: Record<SettingsCategory, { title: string; description: string }> = {
+const categoryMeta: Record<SettingsCategory, { title: string }> = {
   account: {
     title: "账户与额度",
-    description: "查看当前账户状态、Token 用量和近期消耗。",
   },
   models: {
     title: "AI 模型",
-    description: "管理可用模型、启用状态和各模型的访问密钥。",
   },
   gateway: {
     title: "生成参数",
-    description: "设置生成等待时间、单次输出长度和服务繁忙时的备用模型。",
   },
   generation: {
     title: "生成偏好",
-    description: "控制 Agent 执行边界和生成完成后的自动动作。",
   },
   project: {
     title: "文件与模板",
-    description: "设置项目工作目录、默认画布比例、设计底座和品牌资产。",
   },
   appearance: {
     title: "外观",
-    description: "管理应用主题、重点色、控件形状和明暗对比。",
   },
 };
 
 function SettingsCardHeader({
   icon,
   title,
-  description,
   meta,
 }: {
   icon?: React.ReactNode;
   title: string;
-  description?: string;
   meta?: React.ReactNode;
 }) {
   return (
@@ -107,7 +100,6 @@ function SettingsCardHeader({
       {icon && <div className="settings-card-icon">{icon}</div>}
       <div className="settings-card-title-block">
         <h3>{title}</h3>
-        {description && <p>{description}</p>}
       </div>
       {meta && <div className="settings-card-meta">{meta}</div>}
     </div>
@@ -116,12 +108,10 @@ function SettingsCardHeader({
 
 function SettingRow({
   title,
-  description,
   muted = false,
   children,
 }: {
   title: string;
-  description?: string;
   muted?: boolean;
   children: React.ReactNode;
 }) {
@@ -129,14 +119,13 @@ function SettingRow({
     <div className={`setting-row ${muted ? "is-muted" : ""}`}>
       <div className="setting-row-copy">
         <div className="setting-row-title">{title}</div>
-        {description && <div className="setting-row-description">{description}</div>}
       </div>
       <div className="setting-row-control">{children}</div>
     </div>
   );
 }
 
-function ThemePreview({ mode }: { mode: "light" | "dark" | "system" }) {
+function ThemePreview({ mode }: { mode: UiThemeMode }) {
   return (
     <div className={`settings-theme-preview settings-theme-preview--${mode}`}>
       <span className="settings-theme-sidebar" />
@@ -159,6 +148,17 @@ const controlShapeOptions: Array<{ value: UiControlShape; label: string; radius:
   { value: "sharp", label: "利落", radius: "4px" },
   { value: "soft", label: "柔和", radius: "8px" },
   { value: "round", label: "圆润", radius: "14px" },
+];
+
+const themeModeOptions: Array<{
+  value: UiThemeMode;
+  label: string;
+  icon: React.ReactNode;
+}> = [
+  { value: "cyan", label: "青色主题", icon: <PaletteIcon size={14} /> },
+  { value: "orange", label: "橙色主题", icon: <PaletteIcon size={14} /> },
+  { value: "light", label: "浅色主题", icon: <SunIcon size={14} /> },
+  { value: "dark", label: "暗色主题", icon: <MoonIcon size={14} /> },
 ];
 
 export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
@@ -230,6 +230,7 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
   const currentMeta = categoryMeta[activeCategory];
   const selectedAccentLabel = accentOptions.find((option) => option.value === uiAccentColor)?.label ?? "湖蓝";
   const selectedShapeLabel = controlShapeOptions.find((option) => option.value === uiControlShape)?.label ?? "柔和";
+  const selectedThemeModeLabel = themeModeOptions.find((option) => option.value === themeMode)?.label ?? "浅色主题";
   const logoFileInputRef = React.useRef<HTMLInputElement>(null);
 
   const handleOpenWorkspace = async () => {
@@ -262,7 +263,6 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
         <header className="settings-page-header">
           <div>
             <h1>{currentMeta.title}</h1>
-            <p>{currentMeta.description}</p>
           </div>
           <div className={`settings-header-pill ${saveStatus === "saving" ? "is-saving" : ""}`}>
             {saveStatus === "saving" ? <RefreshIcon size={15} /> : <CheckCircleIcon size={15} />}
@@ -289,7 +289,6 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
               <SettingsCardHeader
                 icon={<BrainIcon size={16} />}
                 title="Token 用量"
-                description="当前周期额度统计。"
                 meta={<span>{usedPercentage.toFixed(1)}%</span>}
               />
               <div className="settings-progress-track" aria-label="Token 已用比例">
@@ -315,7 +314,6 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
               <SettingsCardHeader
                 icon={<PaletteIcon size={16} />}
                 title="近期消耗"
-                description="近 7 天 PPT 生成算力趋势。"
               />
               <div className="settings-trend-chart">
                 <svg width="100%" height={chartHeight} viewBox={`0 0 ${chartWidth} ${chartHeight}`} aria-hidden="true">
@@ -370,7 +368,6 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
               <SettingsCardHeader
                 icon={<SettingsIcon size={16} />}
                 title="生成参数"
-                description="控制等待时长、输出长度和服务繁忙时的备用模型。"
                 meta={<span>{enabledModelCount} 个可用</span>}
               />
 
@@ -441,7 +438,6 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
               <SettingsCardHeader
                 icon={<BrainIcon size={16} />}
                 title="Agent 调用限制"
-                description="为主 Agent 和子 Agent 设置单次任务边界。"
               />
 
               <SettingRow title="启用调用次数限制">
@@ -502,7 +498,6 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
               <SettingsCardHeader
                 icon={<FolderIcon size={16} />}
                 title="生成后动作"
-                description="控制 PPT 生成完成后的文件落地行为。"
               />
 
               <SettingRow title="生成完成后自动下载">
@@ -516,7 +511,7 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
                 </label>
               </SettingRow>
 
-              <SettingRow title="云端空间备份" description="当前版本保留入口，暂不主动同步。" muted>
+              <SettingRow title="云端空间备份" muted>
                 <label className="toggle-switch">
                   <input
                     type="checkbox"
@@ -537,7 +532,6 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
               <SettingsCardHeader
                 icon={<FolderIcon size={16} />}
                 title="项目工作目录"
-                description="选择当前项目文件、会话和导出产物的本地目录。"
               />
 
               <div className="settings-path-display">
@@ -553,7 +547,6 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
               <SettingsCardHeader
                 icon={<PaletteIcon size={16} />}
                 title="演示文稿默认模板"
-                description="用于新建会话的画布比例、设计底座和品牌资产。"
               />
 
               <div className="settings-choice-grid">
@@ -635,34 +628,22 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
             <section className="settings-card">
               <SettingsCardHeader
                 icon={<SunIcon size={16} />}
-                title="主题模式"
-                description="选择应用框架使用浅色、深色或跟随操作系统主题。"
+                title="主题色"
+                meta={<span>{selectedThemeModeLabel}</span>}
               />
 
               <div className="settings-theme-grid">
-                <button
-                  className={`settings-theme-card ${themeMode === "light" ? "active" : ""}`}
-                  onClick={() => setThemeMode("light")}
-                >
-                  <ThemePreview mode="light" />
-                  <span><SunIcon size={14} /> 浅色模式</span>
-                </button>
-
-                <button
-                  className={`settings-theme-card ${themeMode === "dark" ? "active" : ""}`}
-                  onClick={() => setThemeMode("dark")}
-                >
-                  <ThemePreview mode="dark" />
-                  <span><MoonIcon size={14} /> 深色模式</span>
-                </button>
-
-                <button
-                  className={`settings-theme-card ${themeMode === "system" ? "active" : ""}`}
-                  onClick={() => setThemeMode("system")}
-                >
-                  <ThemePreview mode="system" />
-                  <span><SettingsIcon size={14} /> 跟随系统</span>
-                </button>
+                {themeModeOptions.map((option) => (
+                  <button
+                    key={option.value}
+                    className={`settings-theme-card ${themeMode === option.value ? "active" : ""}`}
+                    onClick={() => setThemeMode(option.value)}
+                    aria-pressed={themeMode === option.value}
+                  >
+                    <ThemePreview mode={option.value} />
+                    <span>{option.icon} {option.label}</span>
+                  </button>
+                ))}
               </div>
             </section>
 
@@ -670,8 +651,6 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
               <SettingsCardHeader
                 icon={<PaletteIcon size={16} />}
                 title="界面重点色"
-                description="用于按钮选中态、导航高亮、焦点边框和运行状态。"
-                meta={<span>{selectedAccentLabel}</span>}
               />
 
               <div className="settings-accent-grid">
@@ -693,8 +672,6 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
               <SettingsCardHeader
                 icon={<SettingsIcon size={16} />}
                 title="控件形状"
-                description="统一按钮、输入框、下拉菜单、卡片等控件的圆角风格。"
-                meta={<span>{selectedShapeLabel}</span>}
               />
 
               <div className="settings-control-shape-grid">
@@ -719,7 +696,6 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
               <SettingsCardHeader
                 icon={<SettingsIcon size={16} />}
                 title="界面参数"
-                description="微调外壳圆角和内容层级对比。"
               />
 
               <div className="settings-form-stack">
@@ -763,7 +739,6 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
               <SettingsCardHeader
                 icon={<PaletteIcon size={16} />}
                 title="实时预览"
-                description="设置会立即应用到当前工作台。"
               />
               <div className="settings-preview-surface">
                 <div className="settings-preview-icon">
@@ -771,7 +746,7 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
                 </div>
                 <div>
                   <strong>Agent Canvas Card</strong>
-                  <span>{selectedAccentLabel} · {selectedShapeLabel} · 内容圆角 {Math.round(18 * borderRadiusScale)}px</span>
+                  <span>{selectedThemeModeLabel} · {selectedAccentLabel} · {selectedShapeLabel} · 内容圆角 {Math.round(18 * borderRadiusScale)}px</span>
                 </div>
                 <span className="settings-preview-badge">Active</span>
               </div>
