@@ -8,6 +8,7 @@ stages:
 allowed-tools:
   - ReadPresentationSnapshot
   - ListSlides
+  - ExecuteLayoutPlan
   - PreviewCommands
   - SubmitCommands
   - SearchExtraTools
@@ -22,7 +23,7 @@ allowed-tools:
 
 | 模式 | 何时 | 职责 |
 |------|------|------|
-| **Executor**（默认） | 存在 `slides/layout-plan.json` | **严格按 plan 执行**；不得擅自改 layout |
+| **Executor**（默认） | 存在 `slides/layout-plan.json` | **严格按 plan 执行**；优先 `ExecuteLayoutPlan`，不得擅自改 layout |
 | **Legacy** | 无 layout-plan 或用户降级 | 自主选 layout（不推荐新建 deck） |
 
 ## 设计目标
@@ -33,7 +34,7 @@ allowed-tools:
 
 用户已在 LayoutChoiceCard 选择排版方式。本阶段**只处理视觉层**，不改写要点文案、不调整页数、不重复内容密度约束（15 字 / 3–5 条属于内容阶段）。
 
-**Executor 模式**：先读取 `slides/layout-plan.json`（workspace）或主 Agent 传入的 plan 摘要；每页 layout / slideVariant / theme 以 plan 为准。
+**Executor 模式**：以 `slides/layout-plan.json` 为唯一事实源；每页 layout / slideVariant / theme 以 plan 为准。默认调用 `ExecuteLayoutPlan` 读取、校验并生成 command proposal，不手工重猜 layout。
 
 ## 风格选择（动手前）
 
@@ -42,11 +43,12 @@ allowed-tools:
 ## Executor 模式工作流
 
 1. `ReadPresentationSnapshot` + `ListSlides`
-2. 读取 layout-plan（workspace `slides/layout-plan.json` 或 Task 结论中的路径）
-3. 一批 `SubmitCommands`：
-   - `set-theme`（plan.theme / plan.palette）
-   - 对 plan 中**每一页** `update-slide-layout`（layout 取自 plan，非 snapshot）
-   - 若 plan 指定 `slideVariant`，追加 `update-slide-variant`
+2. 调用 `ExecuteLayoutPlan({ "path": "slides/layout-plan.json" })`
+   - 工具内部读取 plan
+   - 校验 plan 与 snapshot 页数 / slideId / 顺序一致
+   - 执行 `validateLayoutPlan` + `validateLayoutPlanRhythm`
+   - 由 `buildLayoutPlanCommands` 生成 `set-theme` / `update-slide-layout` / `update-slide-variant`
+3. 若 `ExecuteLayoutPlan` 返回 error：修复或重新生成 `slides/layout-plan.json` 后再执行；**禁止**从聊天上下文凭记忆重建 layout
 4. 对 plan.enhancements 逐项 `ExecuteExtraTool`：
    - `beautify-chart` → BeautifyChart
    - `beautify-table` → BeautifyTable
@@ -54,7 +56,7 @@ allowed-tools:
    - `add-decorations` → AddLayoutDecorations（仅 creative）
 5. `ValidateDeckLayout` 确认节奏；`LoadSkill deck-review`
 
-**Executor 禁止**：擅自改 plan 中的 layout；重新推理版式选择；改写 text。
+**Executor 禁止**：擅自改 plan 中的 layout；重新推理版式选择；手写 `set-theme` / `update-slide-layout` 绕过 `ExecuteLayoutPlan`；改写 text。
 
 ## Legacy 模式（无 plan 时）
 

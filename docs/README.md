@@ -3,6 +3,7 @@
 | 文档 | 说明 |
 |------|------|
 | [ppt-quality-attention-plan.md](./ppt-quality-attention-plan.md) | PPT 生成质量与模型注意力问题诊断及改进计划 |
+| [ppt-layout-state-machine-plan.md](./ppt-layout-state-machine-plan.md) | 排版流程状态机化：layout-plan 唯一事实源、校验器与执行器方案 |
 | [ppt-style-capability-plan.md](./ppt-style-capability-plan.md) | 样式表达能力评估与分阶段能力建设方案 |
 | [visual-expression-system-plan.md](./visual-expression-system-plan.md) | 视觉表达系统、Layout Grammar 与品牌化能力建设计划 |
 | [harness-teammate-message-bus-fix-plan.md](./harness-teammate-message-bus-fix-plan.md) | Harness 多 Agent 协作与消息总线 review 问题修复方案 |

@@ -5,6 +5,7 @@ import { designTokensV1Schema, resolveDesignTokens } from "./design-tokens";
 import { SLIDE_LAYOUTS } from "./slide-layouts";
 import { SLIDE_VARIANTS } from "./slide-variant";
 import type { PresentationCommand } from "./commands";
+import type { Presentation } from "./presentation";
 
 export const LAYOUT_PLAN_PATH = "slides/layout-plan.json";
 
@@ -194,6 +195,68 @@ export function validateLayoutPlan(plan: LayoutPlan): LayoutPlanValidationIssue[
         severity: "warning",
         message: `Slide '${slide.title}' marked comparison but layout is ${slide.layout}.`,
         fixHint: "Use comparison layout for A vs B content.",
+      });
+    }
+  }
+
+  const documentModeContentLayouts = new Set(
+    slides
+      .filter((slide) => !["cover", "toc", "section", "summary"].includes(slide.narrativeRole))
+      .map((slide) => slide.layout),
+  );
+  if (count >= 7 && count <= 9 && uniqueLayouts.size > 5) {
+    issues.push({
+      severity: "warning",
+      message: `${count}-slide document-mode plan uses ${uniqueLayouts.size} layout types; 3–5 is usually enough.`,
+      fixHint: "Reuse main content layouts and vary slideVariant for rhythm instead of changing every page.",
+    });
+  }
+  if (count >= 7 && uniqueLayouts.size === count) {
+    issues.push({
+      severity: "warning",
+      message: "Every slide uses a different layout; this can feel like a collage rather than one document.",
+      fixHint: "Keep repeated content on compatible layouts and reserve distinct layouts for cover/toc/section/summary.",
+    });
+  }
+  if (count >= 7 && documentModeContentLayouts.size > 3) {
+    issues.push({
+      severity: "warning",
+      message: `Main content pages use ${documentModeContentLayouts.size} layout types; keep document-mode content to ≤3.`,
+      fixHint: "Choose a small set of reusable content layouts, then use variants for subtle variation.",
+    });
+  }
+
+  return issues;
+}
+
+/** Validate that a layout plan is the executable counterpart of the current presentation snapshot. */
+export function validateLayoutPlanAgainstPresentation(
+  plan: LayoutPlan,
+  presentation: Presentation,
+): LayoutPlanValidationIssue[] {
+  const issues: LayoutPlanValidationIssue[] = [];
+  const planSlides = plan.slides;
+  const snapshotSlides = presentation.slides;
+
+  if (planSlides.length !== snapshotSlides.length) {
+    issues.push({
+      severity: "error",
+      message: `Layout plan slide count (${planSlides.length}) does not match snapshot slide count (${snapshotSlides.length}).`,
+      fixHint: "Regenerate slides/layout-plan.json from the current ReadPresentationSnapshot result.",
+    });
+  }
+
+  const max = Math.max(planSlides.length, snapshotSlides.length);
+  for (let index = 0; index < max; index += 1) {
+    const planned = planSlides[index];
+    const actual = snapshotSlides[index];
+    if (!planned || !actual) continue;
+    if (planned.slideId !== actual.id) {
+      issues.push({
+        slideId: planned.slideId,
+        severity: "error",
+        message: `Layout plan slide ${index + 1} targets '${planned.slideId}', but snapshot has '${actual.id}'.`,
+        fixHint: "Keep layout-plan slides[] in the same order and with the same slideId values as the snapshot.",
       });
     }
   }

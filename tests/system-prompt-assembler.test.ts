@@ -109,7 +109,7 @@ describe("system prompt assembly", () => {
     expect(assembled.text).toContain("页数与文案已冻结");
     expect(assembled.text).toContain("slides[] 必须与当前 snapshot 一一对应");
     expect(assembled.text).toContain("layout-plan");
-    expect(assembled.text).toContain("SubmitCommands");
+    expect(assembled.text).toContain("ExecuteLayoutPlan");
     expect(assembled.text).toContain("set-theme");
     expect(assembled.text).toContain("update-slide-layout");
     expect(assembled.text).toContain("不要再次输出");
@@ -127,7 +127,7 @@ describe("system prompt assembly", () => {
     }));
 
     expect(assembled.text).toContain("`ppt-layout`");
-    expect(assembled.text).toContain("set-theme");
+    expect(assembled.text).toContain("ExecuteLayoutPlan");
     expect(assembled.text).toContain("视觉排版");
   });
 

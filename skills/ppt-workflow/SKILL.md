@@ -27,7 +27,7 @@ stages:
 | 4 内容草稿 | `ppt-build` | add-slide（无排版） | 主 Agent 整合冻结产物后 SubmitCommands |
 | 4b 排版选择 | — | LayoutChoiceCard | 用户（author 子状态） |
 | **4c 排版设计** | **`ppt-design-layout`** | **`slides/layout-plan.json`** | **Task（Design Agent，design 阶段）** |
-| 5 视觉执行 | `ppt-layout` | 按 plan 执行 commands + 增强 | SubmitCommands（style 阶段） |
+| 5 视觉执行 | `ppt-layout` | ExecuteLayoutPlan 按 plan 执行 commands + 增强 | Core Tool（style 阶段） |
 | 5b 质检 | `deck-review` | Rubric + ValidateDeckLayout | style 阶段 |
 | 6 美化/导出 | `ppt-beautify` / `ppt-export` | 可选 | 仅用户要求 |
 
@@ -44,7 +44,7 @@ stages:
 3. 每个计划步骤先 `TaskGraphClaim`，再委派对应 Task 或执行轻量动作；验收产物满足阶段契约后才 `TaskGraphComplete`。
 4. workspace 文件一律 Task 委派；主 Agent 只负责读取必要上下文、整合已冻结产物、提出用户决策、最终 SubmitCommands。
 5. 新建/批量加页：内容草稿完成后停止，等待 LayoutChoiceCard。
-6. 用户确认排版方式后：**先** LoadSkill `ppt-design-layout` + Task 产出 layout-plan；**再** LoadSkill `ppt-layout` 按 plan 执行（禁止 freestyle 改 layout）。
+6. 用户确认排版方式后：**先** LoadSkill `ppt-design-layout` + Task 产出 layout-plan；**再** LoadSkill `ppt-layout` 并调用 `ExecuteLayoutPlan` 按 plan 执行（禁止 freestyle 改 layout）。
 7. 控制步数：设计决策在 Task 内完成；执行阶段合并 SubmitCommands；不重复 LoadSkill。
 
 ## 阶段 4c → 5 衔接
@@ -56,8 +56,8 @@ LoadSkill ppt-design-layout
 Task → slides/layout-plan.json
     ↓
 LoadSkill ppt-layout（Executor 模式）
-ReadPresentationSnapshot + 读取 layout-plan
-SubmitCommands：set-theme → update-slide-layout → update-slide-variant
+ReadPresentationSnapshot
+ExecuteLayoutPlan：读取 layout-plan → 校验 → 生成 set-theme/update-slide-layout/update-slide-variant
 ExecuteExtraTool：plan.enhancements（BeautifyChart / InsertSlideImage 等）
     ↓
 LoadSkill deck-review

@@ -2,6 +2,7 @@ import type { ToolDefinition } from "./tool-definition";
 import { ToolLoader } from "./tool-loader";
 import { askUserTool } from "./core/ask-user";
 import { executeExtraToolTool } from "./core/execute-extra-tool";
+import { executeLayoutPlanTool } from "./core/execute-layout-plan";
 import { getSelectionTool } from "./core/get-selection";
 import { listTeammatesTool } from "./core/list-teammates";
 import { listSlidesTool } from "./core/list-slides";
@@ -112,6 +113,7 @@ export function createDefaultToolRegistry(): ToolRegistry {
   [
     askUserTool,
     executeExtraToolTool,
+    executeLayoutPlanTool,
     getSelectionTool,
     listTeammatesTool,
     listSlidesTool,

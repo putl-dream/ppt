@@ -3,6 +3,7 @@ import { createDefaultToolRegistry, ToolRegistry } from "../src/main/agent/tools
 import { askUserTool } from "../src/main/agent/tools/core/ask-user";
 import { searchExtraToolsTool } from "../src/main/agent/tools/core/search-extra-tools";
 import { executeExtraToolTool } from "../src/main/agent/tools/core/execute-extra-tool";
+import { executeLayoutPlanTool } from "../src/main/agent/tools/core/execute-layout-plan";
 import { getSelectionTool } from "../src/main/agent/tools/core/get-selection";
 import { listSlidesTool } from "../src/main/agent/tools/core/list-slides";
 import { previewCommandsTool } from "../src/main/agent/tools/core/preview-commands";
@@ -173,6 +174,7 @@ describe("Agent Architecture Skeletons & Types", () => {
     expect(registry.get("AutoLayoutSlide")?.loadPolicy).toBe("deferred");
     expect(registry.get("PreviewSlide")?.loadPolicy).toBe("core");
     expect(registry.get("ValidateDeckLayout")?.loadPolicy).toBe("core");
+    expect(registry.get("ExecuteLayoutPlan")?.loadPolicy).toBe("core");
     expect(registry.getCoreTools().length).toBeGreaterThan(0);
     expect(registry.getDeferredTools().length).toBeGreaterThan(0);
   });
@@ -184,6 +186,7 @@ describe("Agent Architecture Skeletons & Types", () => {
     registry.register(askUserTool);
     registry.register(searchExtraToolsTool);
     registry.register(executeExtraToolTool);
+    registry.register(executeLayoutPlanTool);
     registry.register(getSelectionTool);
     registry.register(listSlidesTool);
     registry.register(previewCommandsTool);
@@ -211,6 +214,7 @@ describe("Agent Architecture Skeletons & Types", () => {
     expect(registry.getCoreTools()).toContain(askUserTool);
     expect(registry.getCoreTools()).toContain(previewSlideTool);
     expect(registry.getCoreTools()).toContain(validateDeckLayoutTool);
+    expect(registry.getCoreTools()).toContain(executeLayoutPlanTool);
     expect(registry.getCoreTools()).not.toContain(autoLayoutSlideTool);
     expect(registry.getDeferredTools()).toContain(autoLayoutSlideTool);
     expect(registry.getDeferredTools()).not.toContain(previewSlideTool);

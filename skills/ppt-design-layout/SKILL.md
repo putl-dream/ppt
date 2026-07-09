@@ -16,7 +16,7 @@ allowed-tools:
 
 **只做设计决策，不做执行。** 在引擎能力边界内产出可执行的逐页 `layout-plan.json`；不改写文案、不手填坐标、不调用 SubmitCommands。
 
-主 Agent 在阶段 4c 委派 Task 给本子 Agent；阶段 5 由主 Agent 按 plan 执行（LoadSkill `ppt-layout` Executor 模式）。
+主 Agent 在阶段 4c 委派 Task 给本子 Agent；阶段 5 由主 Agent 调用 `ExecuteLayoutPlan` 消费本 plan（LoadSkill `ppt-layout` Executor 模式），不得凭记忆重猜 layout。
 
 ## 设计阶段边界（重要）
 
@@ -39,7 +39,7 @@ allowed-tools:
 
 ## 输出
 
-写入 workspace **`slides/layout-plan.json`**，格式见下。Task 结论仅 1–3 句：路径 + layout 种类数 + 关键设计决策。
+写入 workspace **`slides/layout-plan.json`**，格式见下。Task 结论仅 1–3 句：路径 + layout 种类数 + “已写入可执行 plan”。不需要回传完整 JSON；后续由 `ExecuteLayoutPlan` 读取文件。
 
 ## layout-plan 格式
 
@@ -95,7 +95,7 @@ allowed-tools:
 | `add-decorations` | AddLayoutDecorations | 仅 creative + process/comparison |
 | `add-icon` | add-element icon | 关键列表点缀 |
 
-## 设计 Rubric（必过 A + B，强烈建议 C）
+## 设计 Rubric（必过 A + B，强烈建议 C + D）
 
 ### A. 叙事与节奏
 
@@ -133,6 +133,8 @@ allowed-tools:
 - 全 deck 一套 theme + palette
 - 不规划手填 x/y；图片用 insert-image 槽位
 - creative 装饰仅 process/comparison，每页 ≤3 shape
+- 文档模式 8 页建议 3–5 种 layout；不要为了凑多样性做成 8 页 8 种 layout
+- 主内容页优先复用同类 layout，通过 slideVariant 做轻微变化
 
 ### E. 反模式（出现即 redesign）
 
@@ -151,7 +153,7 @@ LoadSkill ppt-design-layout，然后 Task：
 **页数与文案已冻结**——为每一现有 slide 选定 layout、slideVariant、enhancements，不得增删页或提内容密度要求。
 按 ppt-design-layout Rubric（仅版式节奏）写入 slides/layout-plan.json。
 用户选择排版方式：{template|creative}。
-禁止 SubmitCommands；结论 1 句：路径 + layout 种类数。」
+禁止 SubmitCommands；结论 1 句：路径 + layout 种类数 + 已写入可执行 plan。」
 ```
 
 ## 禁止事项

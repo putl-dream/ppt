@@ -38,7 +38,7 @@ const WORKSPACE_FILES_CONTENT = [
 
 const WORKSPACE_FILES_LAYOUT = [
   "slides/layout-plan.json — 排版设计决策（Design Agent 产出）",
-  "design/theme.json — 设计系统与版式（可选）",
+  "validated-plan — 由 ExecuteLayoutPlan 内部生成，不依赖聊天记忆",
 ];
 
 export interface IdentitySectionInput {
@@ -117,8 +117,8 @@ function buildConvergenceContract(stage: PromptStage): string {
   const stageGoals: Record<PromptStage, string> = {
     discover: "冻结规划：确定路径、页数口径、叙事骨架；不要同时保留多套互斥方案。",
     author: "冻结内容：按已定大纲/分镜逐页写稿并做文案规范化；不要改页数、重排叙事。",
-    design: "执行已确认的排版选择：为现有每一页生成 layout-plan，并在同一回合提交主题与版式命令；不要再次要求用户选择排版。",
-    style: "执行视觉方案：按 layout-plan 合并提交主题与版式命令；不要回头重做结构。",
+    design: "执行已确认的排版选择：为现有每一页生成 layout-plan，并通过 ExecuteLayoutPlan 消费该产物；不要再次要求用户选择排版。",
+    style: "执行视觉方案：调用 ExecuteLayoutPlan 从 layout-plan 生成命令；不要回头重做结构或手工猜 layout。",
     edit: "局部收敛：只改用户指定范围；不要扩展成全流程重做。",
     export: "交付收敛：只做必要复核与导出；不要重新设计 deck。",
   };
@@ -159,7 +159,7 @@ function buildLeadAgentContract(): string {
     "- 不亲自承担完整写作、分镜、排版设计或大段重写；这些 workspace 中间产物优先通过 `Task` 交给专责子 Agent。",
     "- 任务计划系统只有 `TaskGraph*`：完整路径或多阶段任务先建持久化计划，再按 Claim → 执行 → Complete 推进；不要创建临时、平面的任务列表。",
     "- 对完整/多阶段制作请求，第一步必须先 `TaskGraphCreatePlan` 生成可见任务计划；不要先 LoadSkill、ReadPresentationSnapshot 或直接 Task。",
-    "- 主 Agent 可以直接执行的工作限于：非制作问答、轻量单页/小范围改动、读取上下文、用户追问、结果验收，以及把已冻结产物转成最终 `SubmitCommands`。",
+    "- 主 Agent 可以直接执行的工作限于：非制作问答、轻量单页/小范围改动、读取上下文、用户追问、结果验收，以及通过 `ExecuteLayoutPlan` 把已冻结 layout-plan 转成最终 command proposal。",
     "- 每个 Task 完成后先检查产物是否满足本阶段契约，再 Complete 对应任务；不要因为子 Agent 有结论就自动视为通过。",
     "- 简单任务保持轻量：能一次读取并 SubmitCommands 的局部修改，不创建 TaskGraph、不委派子 Agent。",
   ].join("\n");
@@ -215,14 +215,14 @@ function buildCorePrinciples(stage: PromptStage, stepLimits?: AgentStepLimits): 
       "- layout-plan 的 slides[] 必须与当前 snapshot 一一对应：相同 slideId、相同页数、相同顺序。",
       "- LoadSkill `ppt-design-layout` → Task 产出 `slides/layout-plan.json`。",
       "- 随后 LoadSkill `ppt-layout`（Executor）并继续执行，不要停在 layout-plan 产物说明。",
-      "- 必须用 SubmitCommands 提交 `set-theme` → `update-slide-layout`（+ `update-slide-variant`）等视觉排版命令。",
+      "- 必须调用 `ExecuteLayoutPlan` 读取、校验并执行 `slides/layout-plan.json`；不要手写 `set-theme` / `update-slide-layout` 来重猜版式。",
       "- **不要再次输出**「内容草稿已就绪 / 请选择排版方式」；用户已经完成排版方式选择。",
-      "- 如果 layout-plan 暂时不可用或执行受阻，说明具体阻塞并继续 style 执行路径，不要回到 author/layout-choice。",
+      "- 如果 `ExecuteLayoutPlan` 报错，修复或重新生成 layout-plan 后再调用它；不要从聊天上下文自由发挥版式。",
     ],
     style: [
       "",
       "### 本阶段（style = 视觉排版 + 质检）",
-      "- 按 layout-plan（或用户已选主题）执行：`set-theme` → `update-slide-layout` → variant。",
+      "- 按 layout-plan 执行：优先调用 `ExecuteLayoutPlan`，由工具生成 `set-theme` → `update-slide-layout` → variant。",
       "- **结构仍冻结**：不新增、删除、重排页面；只在溢出或过长时用 `ppt-beautify` / `compress-text` 做最小文案精简。",
       "- plan.enhancements 经 ExecuteExtraTool；完成后 LoadSkill `deck-review` 或 `ValidateDeckLayout`。",
       "- **首次排版 SubmitCommands 后**，系统自动渲染缩略图回喂一轮视觉质检；对照后修正或确认再提交。",
@@ -264,13 +264,13 @@ function buildWorkflowSnippet(stage: PromptStage): string {
 2. LoadSkill \`ppt-design-layout\`
 3. Task → slides/layout-plan.json（一页一条，不改文案）
 4. LoadSkill \`ppt-layout\`（Executor）
-5. SubmitCommands：set-theme → update-slide-layout（+ variant）
+5. ExecuteLayoutPlan：读取 layout-plan → 校验 → 生成 command proposal
 6. 不再提示用户选择排版方式`,
 
     style: `## 本阶段工作流
 1. ReadPresentationSnapshot + 读取 layout-plan
 2. LoadSkill \`ppt-layout\`（Executor）
-3. SubmitCommands：set-theme → update-slide-layout（+ variant）
+3. ExecuteLayoutPlan：从 layout-plan 生成 set-theme / update-slide-layout / variant 命令
 4. PreviewSlide / ValidateDeckLayout / deck-review
 5. 过长文案：ExecuteExtraTool compress-text / beautify 等`,
 
@@ -318,6 +318,7 @@ ${formatSkillCatalog(catalog)}
 ${toolsDescription}
 
 - \`Task\`：委派 workspace 子任务（brief/outline/storyboard/layout-plan）。
+- \`ExecuteLayoutPlan\`：读取并校验 \`slides/layout-plan.json\`，再生成受控 command proposal；排版执行默认用它。
 - \`TaskGraph*\`：持久化任务 DAG（\`.tasks/\`）。
 - \`LoadSkill\`：仅加载上方目录中的技能；其他技能在本阶段不可用。
 - \`PreviewSlide\` / \`ValidateDeckLayout\`：排版与质检 Core 工具，可直接调用。
@@ -340,16 +341,14 @@ function commandExamplesForStage(stage: PromptStage): string {
   }
 
   if (stage === "design") {
-    return `- 先产出 slides/layout-plan.json，再提交视觉排版命令，不回到排版选择
-- 设置主题：{"id":"cmd-theme","type":"set-theme","theme":"ocean","palette":"cyan"}
-- 排版：{"id":"cmd-layout","type":"update-slide-layout","slideId":"slide-1","layout":"concept"}
-- 页级节奏：update-slide-variant（light / dark / hero）`;
+    return `- 先产出 slides/layout-plan.json，再调用 ExecuteLayoutPlan，不回到排版选择
+- 执行唯一事实源：{"toolName":"ExecuteLayoutPlan","args":{"path":"slides/layout-plan.json"}}
+- 不手写 set-theme / update-slide-layout；这些命令由 ExecuteLayoutPlan 从 plan 生成`;
   }
 
   if (stage === "style") {
-    return `- 设置主题：{"id":"cmd-theme","type":"set-theme","theme":"ocean","palette":"cyan"}
-- 排版：{"id":"cmd-layout","type":"update-slide-layout","slideId":"slide-1","layout":"concept"}
-- 页级节奏：update-slide-variant（light / dark / hero）
+    return `- 执行唯一事实源：{"toolName":"ExecuteLayoutPlan","args":{"path":"slides/layout-plan.json"}}
+- ExecuteLayoutPlan 成功后会生成 set-theme / update-slide-layout / update-slide-variant
 - 视觉自检：PreviewSlide(slideId) / ValidateDeckLayout()
 主题值：nordic、midnight、ocean、sunset、purple。调色板：cyan、green、purple、orange。
 布局值：cover、section、concept、comparison、process、architecture、case、summary、toc、quote、image-grid。`;
@@ -375,7 +374,7 @@ export function buildWorkspaceSection(input: WorkspaceSectionInput): string {
 
 ${files.map((line) => `- ${line}`).join("\n")}
 
-主 Agent 不直接读写这些文件；轻量路径下不需要创建它们。
+主 Agent 不直接读写这些文件；layout-plan 由 Task 写入，再由 ExecuteLayoutPlan 读取执行。轻量路径下不需要创建它们。
 
 ## PresentationCommand 示例（本阶段）
 

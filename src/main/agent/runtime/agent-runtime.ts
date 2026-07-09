@@ -711,21 +711,19 @@ export class AgentRuntime {
           toolName: tool.name,
         });
 
-        if (tool.name === "AskUser") {
-          const askUser = normalizeAgentProtocolObject(result);
-          if (askUser.type !== "assistant.ask_user") {
-            throw new Error("AskUser must return an assistant.ask_user envelope.");
-          }
-          return finish(askUser);
-        }
-
-        if (tool.name === "SubmitCommands") {
+        const commandProposal = (() => {
+          if (!result || typeof result !== "object" || Array.isArray(result)) return undefined;
+          if ((result as { type?: unknown }).type !== "deck.command_proposal") return undefined;
           const proposal = normalizeAgentProtocolObject(result);
           if (proposal.type !== "deck.command_proposal") {
-            throw new Error("SubmitCommands must return a deck.command_proposal envelope.");
+            throw new Error(`${tool.name} returned an invalid deck.command_proposal envelope.`);
           }
+          return proposal;
+        })();
+
+        if (commandProposal) {
           if (
-            shouldOfferRenderFeedback(context.promptStage, proposal.data.commands, renderFeedbackUsed)
+            shouldOfferRenderFeedback(context.promptStage, commandProposal.data.commands, renderFeedbackUsed)
           ) {
             renderFeedbackUsed = true;
             options.onProgress?.({
@@ -736,8 +734,8 @@ export class AgentRuntime {
 
             const feedback = await buildRenderFeedback({
               presentation: context.presentation,
-              commands: proposal.data.commands,
-              proposalSummary: proposal.data.summary,
+              commands: commandProposal.data.commands,
+              proposalSummary: commandProposal.data.summary,
               context,
             });
             const feedbackMessage = formatRenderFeedbackMessage(feedback);
@@ -754,7 +752,7 @@ export class AgentRuntime {
             transcript.push({
               role: "tool",
               toolName: tool.name,
-              result: proposal,
+              result: commandProposal,
               renderFeedback: feedback,
             });
 
@@ -770,7 +768,19 @@ export class AgentRuntime {
             continue;
           }
 
-          return finish(proposal);
+          return finish(commandProposal);
+        }
+
+        if (tool.name === "AskUser") {
+          const askUser = normalizeAgentProtocolObject(result);
+          if (askUser.type !== "assistant.ask_user") {
+            throw new Error("AskUser must return an assistant.ask_user envelope.");
+          }
+          return finish(askUser);
+        }
+
+        if (tool.name === "SubmitCommands") {
+          throw new Error("SubmitCommands must return a deck.command_proposal envelope.");
         }
 
         transcript.push({ role: "tool", toolName: tool.name, result });
