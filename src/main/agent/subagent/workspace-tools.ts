@@ -9,6 +9,10 @@ import {
   writeWorkspaceText,
 } from "./workspace-file-ops";
 import { isOutsideWorkspace } from "./workspace-path";
+import {
+  SUB_AGENT_TOOL_PERMISSION_PROFILES,
+  type ToolPermissionProfile,
+} from "../runtime/tool-access-policy";
 
 const execFileAsync = promisify(execFile);
 
@@ -20,6 +24,7 @@ export interface SubAgentToolDefinition<TParams extends z.ZodObject<any> = z.Zod
   name: string;
   description: string;
   inputSchema: TParams;
+  permission: ToolPermissionProfile;
   execute: (args: z.infer<TParams>, context: SubAgentToolContext) => Promise<string>;
 }
 
@@ -54,6 +59,7 @@ export const readFileTool: SubAgentToolDefinition<typeof readFileSchema> = {
   name: "read_file",
   description: "Read a text file from the workspace.",
   inputSchema: readFileSchema,
+  permission: SUB_AGENT_TOOL_PERMISSION_PROFILES.read_file,
   async execute(args, context) {
     return await readWorkspaceText(context.workspaceRoot, args.path);
   },
@@ -63,6 +69,7 @@ export const writeFileTool: SubAgentToolDefinition<typeof writeFileSchema> = {
   name: "write_file",
   description: "Write or overwrite a text file in the workspace. Parent directories are created automatically.",
   inputSchema: writeFileSchema,
+  permission: SUB_AGENT_TOOL_PERMISSION_PROFILES.write_file,
   async execute(args, context) {
     await writeWorkspaceText(context.workspaceRoot, args.path, args.content);
     return `Wrote ${args.path} (${args.content.length} chars).`;
@@ -73,6 +80,7 @@ export const ensureDirTool: SubAgentToolDefinition<typeof ensureDirSchema> = {
   name: "ensure_dir",
   description: "Create a workspace directory if it does not already exist.",
   inputSchema: ensureDirSchema,
+  permission: SUB_AGENT_TOOL_PERMISSION_PROFILES.ensure_dir,
   async execute(args, context) {
     await ensureWorkspaceDir(context.workspaceRoot, args.path);
     return `Ensured directory ${args.path}.`;
@@ -83,6 +91,7 @@ export const editFileTool: SubAgentToolDefinition<typeof editFileSchema> = {
   name: "edit_file",
   description: "Replace the first occurrence of old_string with new_string in a file.",
   inputSchema: editFileSchema,
+  permission: SUB_AGENT_TOOL_PERMISSION_PROFILES.edit_file,
   async execute(args, context) {
     await editWorkspaceText(context.workspaceRoot, args.path, args.old_string, args.new_string);
     return `Updated ${args.path}.`;
@@ -93,6 +102,7 @@ export const globTool: SubAgentToolDefinition<typeof globSchema> = {
   name: "glob",
   description: "List workspace files matching a glob pattern.",
   inputSchema: globSchema,
+  permission: SUB_AGENT_TOOL_PERMISSION_PROFILES.glob,
   async execute(args, context) {
     const matches = await globWorkspaceFiles(context.workspaceRoot, args.pattern);
     return matches.length > 0 ? matches.join("\n") : "(no matches)";
@@ -103,6 +113,7 @@ export const bashTool: SubAgentToolDefinition<typeof bashSchema> = {
   name: "bash",
   description: "Run a non-file-system shell command with the workspace as the working directory.",
   inputSchema: bashSchema,
+  permission: SUB_AGENT_TOOL_PERMISSION_PROFILES.bash,
   async execute(args, context) {
     const mkdirPath = parseSimpleMkdirCommand(args.command);
     if (mkdirPath) {

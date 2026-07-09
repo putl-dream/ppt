@@ -5,6 +5,7 @@ import type { AgentTaskNode } from "@shared/agent-task-graph";
 import type { Presentation } from "@shared/presentation";
 import type { AgentModelGateway } from "../gateway";
 import type { ToolApprovalHandler } from "../runtime/permission-check";
+import type { ToolPermissionProfile, ToolRisk } from "../runtime/tool-access-policy";
 import type { SubAgentProgressListener } from "@shared/subagent-progress";
 import type { ToolRegistry } from "./tool-registry";
 import type { SkillRegistry } from "../skills/loadSkillsDir";
@@ -85,6 +86,7 @@ export interface ToolDefinition<TParams extends z.ZodObject<any> = z.ZodObject<a
   category: "core" | "deferred" | "runtime";
   loadPolicy: ToolLoadPolicy;
   inputSchema: TParams;
-  risk: "low" | "medium" | "high";
+  risk: ToolRisk;
+  permission?: ToolPermissionProfile;
   execute: (args: z.infer<TParams>, context: ToolContext) => Promise<TResult>;
 }

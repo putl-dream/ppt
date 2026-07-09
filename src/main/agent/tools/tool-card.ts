@@ -1,4 +1,5 @@
 import type { ToolDefinition } from "./tool-definition";
+import { isRiskApprovalHintRequired } from "../runtime/tool-access-policy";
 
 /**
  * Deferred Tool 的可发现摘要结构，提供给模型做发现决策。
@@ -35,7 +36,7 @@ export function toToolCard(definition: ToolDefinition<any, any>): ToolCard {
   }
 
   // 延迟工具默认在 high/medium 风险时需要审批
-  const approvalRequired = definition.risk === "high" || definition.risk === "medium";
+  const approvalRequired = isRiskApprovalHintRequired(definition.risk);
 
   return {
     name: definition.name,
