@@ -3,7 +3,6 @@ import {
   artifactStageToInlineCardType,
   isPreviewPrompt,
   mergeInlineCardRefs,
-  parseInlineCardsFromContent,
   resolveMessageInlineCards,
   shouldShowInlineCard,
 } from "../src/shared/inline-artifact-cards";
@@ -12,19 +11,6 @@ import { createDefaultBriefMarkdown, createDefaultOutlineMarkdown } from "../src
 import { createSessionPresentation } from "../src/shared/session";
 
 describe("inline-artifact-cards", () => {
-  it("parses artifact references from assistant content", () => {
-    expect(parseInlineCardsFromContent("我已更新 brief.md，请确认受众与目的。")).toEqual(["brief"]);
-    expect(parseInlineCardsFromContent("这是 outline.md 的章节结构。")).toEqual(["outline"]);
-    expect(parseInlineCardsFromContent("内容草稿已就绪，请选择排版方式。")).toEqual(["layout"]);
-    expect(parseInlineCardsFromContent("演示文稿已生成，可导出 PPT。")).toEqual(["deck"]);
-  });
-
-  it("does not create deck cards for export result messages", () => {
-    expect(parseInlineCardsFromContent("演示文稿已导出至：C:\\Users\\me\\Documents\\deck.pptx")).toEqual([]);
-    expect(parseInlineCardsFromContent("导出失败：文件被占用")).toEqual([]);
-    expect(parseInlineCardsFromContent("文件已保存。 [打开所在目录](#open-export-folder=C%3A%5Cdeck.pptx)")).toEqual([]);
-  });
-
   it("detects preview prompts", () => {
     expect(isPreviewPrompt("打开幻灯片预览")).toBe(true);
     expect(isPreviewPrompt("继续修改大纲")).toBe(false);
@@ -68,7 +54,6 @@ describe("inline-artifact-cards", () => {
     presentation.revision = 1;
 
     const refs = resolveMessageInlineCards(
-      "请查看 outline.md",
       [{ type: "outline" }, { type: "deck" }],
       {
         briefContent: createDefaultBriefMarkdown(),
@@ -84,5 +69,16 @@ describe("inline-artifact-cards", () => {
     expect(shouldShowInlineCard("outline", {
       outlineContent: createDefaultOutlineMarkdown(),
     })).toBe(false);
+  });
+
+  it("does not infer visible cards without explicit refs", () => {
+    const presentation = createSessionPresentation("测试项目");
+    presentation.revision = 1;
+
+    expect(resolveMessageInlineCards(undefined, {
+      briefContent: "# Brief\n\n## 目的\n- 测试",
+      outlineContent: "# 演示大纲\n\n## 1. 行业背景\n- 趋势",
+      presentation,
+    })).toEqual([]);
   });
 });

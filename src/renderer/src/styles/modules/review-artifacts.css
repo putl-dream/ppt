@@ -111,88 +111,53 @@
   inset: 0;
   z-index: 20;
   display: flex;
-  align-items: flex-end;
-  padding: 12px;
-  background: rgba(0, 0, 0, 0.35);
-  backdrop-filter: blur(4px);
+  align-items: stretch;
+  padding: 10px;
+  background: rgba(15, 23, 42, 0.18);
+  backdrop-filter: blur(8px);
   border-radius: inherit;
 }
 
 .tool-approval-overlay-card {
   width: 100%;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) 34px 34px;
+  gap: 8px;
   background: var(--bg-input-field);
   border: 1px solid var(--accent-primary);
-  border-radius: var(--card-border-radius);
-  padding: 16px;
+  border-radius: var(--button-border-radius);
+  padding: 10px;
   box-shadow: var(--shadow-premium);
 }
 
-.tool-approval-overlay-header {
+.tool-approval-overlay-description {
+  min-height: 0;
   display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  margin-bottom: 10px;
-}
-
-.tool-approval-overlay-icon {
-  font-size: 20px;
-  line-height: 1;
-}
-
-.tool-approval-overlay-title {
-  margin: 0;
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.tool-approval-overlay-subtitle {
-  margin: 2px 0 0;
-  font-size: 11px;
-  color: var(--text-muted);
-}
-
-.tool-approval-overlay-reason {
-  margin: 0 0 8px;
-  font-size: 13px;
-  line-height: 1.5;
+  align-items: center;
+  padding: 0 2px;
+  font-size: 12px;
+  line-height: 1.45;
   color: var(--text-secondary);
-}
-
-.tool-approval-overlay-detail {
-  margin: 0 0 12px;
-  padding: 10px 12px;
-  border-radius: var(--button-border-radius);
-  background: rgba(0, 0, 0, 0.04);
-  font-size: 11px;
-  line-height: 1.5;
   white-space: pre-wrap;
   word-break: break-word;
-  max-height: 120px;
   overflow: auto;
 }
 
-[data-theme="dark"] .tool-approval-overlay-detail {
-  background: rgba(255, 255, 255, 0.06);
-}
-
-.tool-approval-overlay-actions {
-  display: flex;
-  gap: 10px;
-  justify-content: flex-end;
-}
-
 .tool-approval-overlay-btn {
-  padding: 8px 18px;
+  width: 100%;
+  min-width: 0;
+  min-height: 34px;
+  padding: 0 12px;
   border-radius: var(--button-border-radius);
-  font-size: 13px;
-  font-weight: 500;
+  font-size: 12px;
+  font-weight: 600;
   cursor: pointer;
   transition: var(--transition-smooth);
 }
 
 .tool-approval-overlay-btn--deny {
-  background: transparent;
+  background: var(--bg-glass);
   border: 1px solid var(--border-glass);
   color: var(--text-secondary);
 }

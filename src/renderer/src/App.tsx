@@ -23,7 +23,6 @@ import { DeckPreviewModal } from "./components/DeckPreviewModal";
 import { useProjectStore, type ActiveProject } from "./components/project-store";
 import { getWorkspaceLabel, normalizeWorkspacePath, resolveWorkspacePath } from "@shared/workspace";
 import {
-  artifactStageToInlineCardType,
   isPreviewPrompt,
   mergeInlineCardRefs,
   parseBriefForCard,
@@ -1802,7 +1801,7 @@ export function App() {
 
   const getInlineCardData = (message: ChatMessage) => {
     const context = resolveInlineCardContext();
-    const refs = resolveMessageInlineCards(message.content, message.inlineCards, context);
+    const refs = resolveMessageInlineCards(message.inlineCards, context);
     return {
       refs,
       briefFields: refs.some((card) => card.type === "brief")

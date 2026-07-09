@@ -408,6 +408,25 @@ describe("FileSessionStore", () => {
     expect(question?.options?.[0]?.value).toBe("选择标准排版");
   });
 
+  it("preserves explicit inline card metadata after an application restart", async () => {
+    const { store, filePath } = await createStoreWithSession();
+    const sessionId = must(store.getBootstrap().activeSession).session.id;
+    await store.saveMessages(sessionId, [
+      {
+        id: "inline-card-1",
+        role: "assistant",
+        content: "请确认当前产物。",
+        inlineCards: [{ type: "outline" }],
+      },
+    ]);
+
+    const restored = new FileSessionStore(filePath);
+    await restored.initialize();
+    const inlineCards = must(restored.getBootstrap().activeSession).messages[0].inlineCards;
+
+    expect(inlineCards).toEqual([{ type: "outline" }]);
+  });
+
   it("recovers pending thread conversations from the transcript when the snapshot cache is stale", async () => {
     const { store, filePath } = await createStoreWithSession();
     const sessionId = must(store.getBootstrap().activeSession).session.id;
