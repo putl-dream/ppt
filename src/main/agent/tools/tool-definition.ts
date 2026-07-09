@@ -12,6 +12,8 @@ import type { SkillRegistry } from "../skills/loadSkillsDir";
 import type { SkillSession } from "../skills/skill-types";
 import type { TaskStore } from "../task/task-store";
 import type { PromptStage } from "../runtime/prompt-stage";
+import type { MessageBus } from "../teammate/message-bus";
+import type { TeammateManager } from "../teammate/spawn-teammate";
 
 /**
  * 工具加载策略。
@@ -75,6 +77,10 @@ export interface ToolContext {
   readonly promptStage?: PromptStage;
   /** Step limit config for Task sub-agents. */
   readonly agentStepLimits?: AgentStepLimits;
+  /** File-backed inbox bus for long-lived teammates. */
+  readonly messageBus?: MessageBus;
+  /** Long-lived teammate manager for spawn_teammate. */
+  readonly teammateManager?: TeammateManager;
 }
 
 /**

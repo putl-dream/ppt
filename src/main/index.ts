@@ -36,6 +36,8 @@ import { AgentGateway } from "./agent/gateway";
 import { AgentRuntime } from "./agent/runtime/agent-runtime";
 import { ToolApprovalBroker } from "./agent/runtime/tool-approval-broker";
 import { createDefaultToolRegistry } from "./agent/tools/tool-registry";
+import { formatMailboxMessagesForHistory, MessageBus } from "./agent/teammate/message-bus";
+import { TeammateManager } from "./agent/teammate/spawn-teammate";
 import { CommitGate } from "./agent/gate/commit-gate";
 import { scanSkills, type SkillRegistry } from "./agent/skills/loadSkillsDir";
 import { createEmptySkillRegistry } from "./agent/skills/loadSkillsDir";
@@ -75,19 +77,34 @@ async function resolveSkillRegistry(): Promise<SkillRegistry> {
 interface SessionRuntime {
   commandBus: CommandBus;
   agentService: AgentService;
+  messageBus?: MessageBus;
+  teammateManager?: TeammateManager;
+  workspaceRoot?: string;
 }
 
 function createSessionRuntime(snapshot: SessionSnapshot, skillRegistry: SkillRegistry): SessionRuntime {
   const commandBus = new CommandBus(snapshot.presentation);
   const registry = createDefaultToolRegistry();
+  const messageBus = snapshot.project?.rootPath
+    ? new MessageBus(MessageBus.defaultMailboxDir(snapshot.project.rootPath))
+    : undefined;
+  const teammateManager = messageBus ? new TeammateManager(messageBus) : undefined;
   const agentService = new AgentService(
     commandBus,
     new AgentRuntime(registry, agentGateway, skillRegistry),
     new CommitGate(new RiskPolicy()),
     snapshot.project?.rootPath,
     toolApprovalBroker,
+    messageBus,
+    teammateManager,
   );
-  return { commandBus, agentService };
+  return {
+    commandBus,
+    agentService,
+    messageBus,
+    teammateManager,
+    workspaceRoot: snapshot.project?.rootPath,
+  };
 }
 
 function createWindow(): void {
@@ -230,7 +247,7 @@ app.whenReady().then(async () => {
 
   const ensureRuntime = async (snapshot: SessionSnapshot): Promise<SessionRuntime> => {
     const existing = runtimes.get(snapshot.session.id);
-    if (existing) return existing;
+    if (existing && existing.workspaceRoot === snapshot.project?.rootPath) return existing;
     const runtime = createSessionRuntime(snapshot, skillRegistry);
     runtimes.set(snapshot.session.id, runtime);
     return runtime;
@@ -521,6 +538,19 @@ app.whenReady().then(async () => {
     async (_, runId: string, approvalId: string, approved: boolean) =>
       toolApprovalBroker.resolve(approvalId, approved),
   );
+
+  ipcMain.handle("agent:poll-lead-inbox", async (_, sessionId: string) => {
+    const runtime = await getRuntimeForSession(sessionId);
+    const messages = runtime.messageBus
+      ? await runtime.messageBus.peekInbox("lead")
+      : [];
+    return {
+      hasMessages: messages.length > 0,
+      count: messages.length,
+      preview: formatMailboxMessagesForHistory(messages.slice(0, 5)),
+      types: Array.from(new Set(messages.map((message) => message.type))),
+    };
+  });
 
   ipcMain.handle(
     "agent:start",

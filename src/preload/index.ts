@@ -47,6 +47,7 @@ const api: DesktopApi = {
   cancelAgentSession: (sessionId) => ipcRenderer.invoke("agent:cancel-session", sessionId),
   resolveToolApproval: (runId, approvalId, approved) =>
     ipcRenderer.invoke("agent:resolve-tool-approval", runId, approvalId, approved),
+  pollLeadInbox: (sessionId) => ipcRenderer.invoke("agent:poll-lead-inbox", sessionId),
 };
 
 contextBridge.exposeInMainWorld("desktopApi", api);

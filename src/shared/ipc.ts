@@ -107,6 +107,13 @@ export type AgentRunResult =
   | { status: "completed"; presentation: Presentation }
   | { status: "rejected"; presentation?: Presentation };
 
+export interface AgentInboxPollResult {
+  hasMessages: boolean;
+  count: number;
+  preview: string;
+  types: string[];
+}
+
 export type WindowThemeMode = "light" | "dark" | "cyan" | "orange" | "system";
 
 export interface ProjectArtifactReadResult {
@@ -195,6 +202,7 @@ export interface DesktopApi {
   cancelAgentRun(runId: string): Promise<boolean>;
   cancelAgentSession(sessionId: string): Promise<boolean>;
   resolveToolApproval(runId: string, approvalId: string, approved: boolean): Promise<boolean>;
+  pollLeadInbox(sessionId: string): Promise<AgentInboxPollResult>;
 }
 
 export interface ExportPresentationOptions {

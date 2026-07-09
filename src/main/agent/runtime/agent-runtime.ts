@@ -42,6 +42,10 @@ import {
   formatBackgroundNotifications,
   shouldRunBackground,
 } from "./background-task-manager";
+import {
+  formatMailboxMessagesForHistory,
+  type AgentMailboxMessage,
+} from "../teammate/message-bus";
 
 export { parseAgentJsonResponse } from "./parse-agent-json-response";
 
@@ -154,6 +158,8 @@ export class AgentRuntime {
       promptStage: promptContext.stage,
       taskStore,
       taskGraphOwner,
+      messageBus: options.messageBus,
+      teammateManager: options.teammateManager,
     };
     const transcript: Array<Record<string, unknown>> = [
       { role: "user", content: options.request },
@@ -224,6 +230,68 @@ export class AgentRuntime {
       if (toolResult) pendingToolResult.current = null;
     };
 
+    const handleLeadPermissionRequest = async (
+      message: AgentMailboxMessage,
+    ): Promise<string> => {
+      const payload = message.payload ?? {};
+      const requestId = typeof payload.requestId === "string" ? payload.requestId : "";
+      const toolName = typeof payload.toolName === "string" ? payload.toolName : "unknown";
+      const reason = typeof payload.reason === "string" ? payload.reason : message.content;
+      const args = payload.args;
+      const approved = options.requestToolApproval
+        ? await options.requestToolApproval({ toolName, args, reason })
+        : false;
+
+      await options.messageBus?.send({
+        from: "lead",
+        to: message.from,
+        type: "permission_response",
+        content: approved ? "Permission approved by lead." : "Permission denied by lead.",
+        payload: {
+          requestId,
+          approved,
+          toolName,
+          reason,
+        },
+      });
+
+      return `Permission request from ${message.from} for ${toolName} was ${approved ? "approved" : "denied"} and the response was sent.`;
+    };
+
+    const drainLeadInboxForModel = async (): Promise<string | undefined> => {
+      if (!options.messageBus) return undefined;
+      const inbox = await options.messageBus.readInbox("lead");
+      if (inbox.length === 0) return undefined;
+
+      const visibleMessages: AgentMailboxMessage[] = [];
+      const systemNotes: string[] = [];
+      for (const message of inbox) {
+        if (message.type === "permission_request") {
+          systemNotes.push(await handleLeadPermissionRequest(message));
+        } else {
+          visibleMessages.push(message);
+        }
+      }
+
+      const parts = [
+        visibleMessages.length > 0
+          ? `[Inbox]\n${formatMailboxMessagesForHistory(visibleMessages)}`
+          : "",
+        systemNotes.length > 0
+          ? `[Inbox permissions]\n${systemNotes.join("\n")}`
+          : "",
+      ].filter(Boolean);
+      if (parts.length === 0) return undefined;
+
+      const content = parts.join("\n\n");
+      transcript.push({
+        role: "user",
+        content,
+        inbox,
+      });
+      return content;
+    };
+
     const drainBackgroundForModel = async (instruction: string): Promise<boolean> => {
       if (!useNativeToolUse) return false;
       if (!backgroundTasks.hasRunning() && !backgroundTasks.hasPendingNotifications()) return false;
@@ -268,6 +336,8 @@ export class AgentRuntime {
       // 判断是否应该使用流式：仅在可能返回message且提供了回调时使用
       const shouldUseStream = options.onStreamChunk !== undefined;
 
+      const inboxContent = await drainLeadInboxForModel();
+
       const promptPayload = {
         request: options.request,
         conversation: options.messageHistory ?? [],
@@ -277,9 +347,11 @@ export class AgentRuntime {
       // native 模式：把上一回合 tool_result 与已完成后台任务通知并入同一 user turn。
       if (useNativeToolUse) {
         const notifications = backgroundTasks.collect();
-        flushNativeUserTurn(
-          notifications.length > 0 ? formatBackgroundNotifications(notifications) : undefined,
-        );
+        const nativeUserContent = [
+          notifications.length > 0 ? formatBackgroundNotifications(notifications) : "",
+          inboxContent ?? "",
+        ].filter((part) => part.trim()).join("\n\n");
+        flushNativeUserTurn(nativeUserContent || undefined);
       }
 
       const extractor = shouldUseStream
@@ -430,6 +502,14 @@ export class AgentRuntime {
         if (await drainBackgroundForModel(
           "Background tasks have completed. Use these results before giving the final response.",
         )) {
+          continue;
+        }
+
+        const finalInboxContent = await drainLeadInboxForModel();
+        if (finalInboxContent) {
+          if (useNativeToolUse) {
+            appendNativeUserTurn({ content: finalInboxContent });
+          }
           continue;
         }
 

@@ -8,6 +8,8 @@ import type { AgentModelSelection } from "@shared/agent";
 import type { AgentStepLimits } from "@shared/agent-step-limits";
 import type { Presentation } from "@shared/presentation";
 import type { ToolApprovalHandler } from "./permission-check";
+import type { MessageBus } from "../teammate/message-bus";
+import type { TeammateManager } from "../teammate/spawn-teammate";
 
 export type AgentRuntimeRisk = "low" | "medium" | "high";
 
@@ -80,6 +82,10 @@ export interface AgentRuntimeOptions {
   signal?: AbortSignal;
   onProgress?: (event: { type: string; message: string; [key: string]: unknown }) => void;
   requestToolApproval?: ToolApprovalHandler;
+  /** File-backed inbox bus used by lead and teammates. */
+  messageBus?: MessageBus;
+  /** Long-lived teammate manager exposed through spawn_teammate. */
+  teammateManager?: TeammateManager;
   /** Test/harness override; accepts merged or legacy stage names. */
   stageHint?: string;
 }

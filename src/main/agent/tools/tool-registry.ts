@@ -9,6 +9,7 @@ import { readCurrentSlideTool } from "./core/read-current-slide";
 import { readPresentationSnapshotTool } from "./core/read-presentation-snapshot";
 import { searchExtraToolsTool } from "./core/search-extra-tools";
 import { submitCommandsTool } from "./core/submit-commands";
+import { spawnTeammateTool } from "./core/spawn-teammate";
 import { taskTool } from "./core/task";
 import { taskGraphTools } from "./core/task-graph-tools";
 import { loadSkillTool } from "./core/load-skill";
@@ -114,6 +115,7 @@ export function createDefaultToolRegistry(): ToolRegistry {
     readCurrentSlideTool,
     readPresentationSnapshotTool,
     searchExtraToolsTool,
+    spawnTeammateTool,
     submitCommandsTool,
     taskTool,
     ...taskGraphTools,

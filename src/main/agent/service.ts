@@ -9,6 +9,8 @@ import { AgentRuntime } from "./runtime/agent-runtime";
 import { formatRecoverableAgentError } from "./gateway/errors";
 import type { ToolApprovalHandler } from "./runtime/permission-check";
 import type { ToolApprovalBroker } from "./runtime/tool-approval-broker";
+import type { MessageBus } from "./teammate/message-bus";
+import type { TeammateManager } from "./teammate/spawn-teammate";
 
 export type AgentServiceEvent =
   | { type: "request-status"; message: string; progress: number }
@@ -68,6 +70,8 @@ export class AgentService {
     private readonly commitGate: CommitGate,
     private readonly workspaceRoot?: string,
     private readonly toolApprovalBroker?: ToolApprovalBroker,
+    private readonly messageBus?: MessageBus,
+    private readonly teammateManager?: TeammateManager,
   ) {}
 
   hasActiveConversation(threadId: string): boolean {
@@ -184,6 +188,8 @@ export class AgentService {
         signal,
         workspaceRoot: this.workspaceRoot,
         agentStepLimits,
+        messageBus: this.messageBus,
+        teammateManager: this.teammateManager,
         requestToolApproval: this.resolveToolApprovalHandler(executionStrategy, runId, listener),
         onProgress: (ev) => {
           listener?.(ev as AgentServiceEvent);

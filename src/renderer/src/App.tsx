@@ -62,6 +62,7 @@ import {
   type UiThemeMode,
 } from "./app/appBootstrap";
 import { getComputedTheme, useAppearanceRuntime } from "./app/useAppearanceRuntime";
+import { useInboxPoller } from "./app/useInboxPoller";
 import {
   findActiveThreadId,
   finalizeAgentMessage,
@@ -1239,6 +1240,16 @@ export function App() {
       activeRunTraceRef.current = [];
     }
   }
+
+  useInboxPoller({
+    activeSessionId,
+    sessionLoaded,
+    busy,
+    onInboxTurn: (prompt) => startAgent(prompt, undefined, { userDisplayContent: false }),
+    onError: (error) => {
+      console.error("轮询队友收件箱失败:", error);
+    },
+  });
 
   const handleCancelRun = async () => {
     if (!activeRunIdRef.current || isCancellingRun) return;

@@ -1,0 +1,63 @@
+import { z } from "zod";
+import type { ToolDefinition } from "../tool-definition";
+
+export const spawnTeammateSchema = z.object({
+  name: z.string().optional().describe("Stable teammate name, e.g. researcher or layout_planner"),
+  role: z.string().describe("Short teammate role, e.g. researcher, editor, layout planner"),
+  prompt: z.string().describe("Initial task prompt for the teammate"),
+});
+
+export type SpawnTeammateToolResult = {
+  name: string;
+  role: string;
+  status: "running" | "idle" | "stopped" | "failed";
+  message: string;
+};
+
+export const spawnTeammateTool: ToolDefinition<typeof spawnTeammateSchema, SpawnTeammateToolResult> = {
+  name: "spawn_teammate",
+  description:
+    "Start a long-lived teammate agent in the shared workspace. "
+    + "The teammate runs asynchronously, can send messages through the inbox, and reports results back to lead.",
+  category: "core",
+  loadPolicy: "core",
+  inputSchema: spawnTeammateSchema,
+  risk: "low",
+  permission: {
+    profile: "teammate-spawn",
+    description: "Delegate work to a long-lived teammate agent.",
+    scopes: ["main"],
+    effects: ["workflow.delegate"],
+    sandbox: "workspace",
+    approval: "never",
+  },
+  async execute(args, context) {
+    if (!context.workspaceRoot) {
+      throw new Error("Workspace root is not configured for teammate agents.");
+    }
+    if (!context.gateway) {
+      throw new Error("Model gateway is not configured for teammate agents.");
+    }
+    if (!context.teammateManager) {
+      throw new Error("Teammate manager is not configured.");
+    }
+
+    const fallbackName = `${args.role.trim().toLowerCase().replace(/[^a-z0-9_.:-]+/g, "_") || "teammate"}_${crypto.randomUUID().slice(0, 8)}`;
+    const handle = context.teammateManager.spawn({
+      name: args.name?.trim() || fallbackName,
+      role: args.role,
+      prompt: args.prompt,
+      workspaceRoot: context.workspaceRoot,
+      gateway: context.gateway,
+      model: context.model,
+      agentStepLimits: context.agentStepLimits,
+    });
+
+    return {
+      name: handle.name,
+      role: handle.role,
+      status: handle.status,
+      message: `Started teammate ${handle.name} (${handle.role}). Results will arrive in lead inbox.`,
+    };
+  },
+};
