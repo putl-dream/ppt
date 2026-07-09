@@ -65,4 +65,39 @@ describe("presentation-draft", () => {
     expect(slideNeedsLayoutChoice(laidOut)).toBe(false);
     expect(laidOut.elements.some((el) => el.type === "shape" && el.shapeType === "arrow")).toBe(true);
   });
+
+  it("does not ask for layout again when creative layout decorations exist without cards", () => {
+    const slide: Slide = {
+      id: "s1",
+      title: "创意页",
+      layout: "comparison",
+      elements: [
+        {
+          id: "body",
+          type: "text",
+          x: 120,
+          y: 220,
+          width: 400,
+          height: 80,
+          text: "已排版内容",
+          fontSize: 20,
+        },
+        {
+          id: "deco-divider-1",
+          type: "shape",
+          provenance: "layout",
+          shapeType: "roundedRect",
+          x: 628,
+          y: 220,
+          width: 8,
+          height: 390,
+          fillColor: "#0ea5e9",
+          strokeColor: "#0ea5e9",
+        },
+      ],
+    };
+
+    expect(slideNeedsLayoutChoice(slide)).toBe(false);
+    expect(presentationNeedsLayoutChoice({ id: "p", title: "T", revision: 1, slides: [slide] })).toBe(false);
+  });
 });

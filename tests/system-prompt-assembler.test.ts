@@ -101,7 +101,7 @@ describe("system prompt assembly", () => {
     expect(assembled.text).not.toMatch(/"type":"set-theme"/);
   });
 
-  it("design stage freezes slide count and copy while planning layout", () => {
+  it("design stage freezes slide count and copy while executing confirmed layout", () => {
     const assembled = assembleSystemPrompt(baseContext({
       stage: "design",
     }));
@@ -109,6 +109,11 @@ describe("system prompt assembly", () => {
     expect(assembled.text).toContain("页数与文案已冻结");
     expect(assembled.text).toContain("slides[] 必须与当前 snapshot 一一对应");
     expect(assembled.text).toContain("layout-plan");
+    expect(assembled.text).toContain("SubmitCommands");
+    expect(assembled.text).toContain("set-theme");
+    expect(assembled.text).toContain("update-slide-layout");
+    expect(assembled.text).toContain("不要再次输出");
+    expect(assembled.text).not.toContain("不直接 SubmitCommands 改 deck");
   });
 
   it("style stage includes theme commands and layout skills", () => {

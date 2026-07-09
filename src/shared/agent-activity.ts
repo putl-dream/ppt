@@ -555,13 +555,37 @@ export function markTraceComplete(trace: AgentActivityItem[]): AgentActivityItem
   });
 }
 
-/** 合并多份时间线快照，取条目最多的一份（并列时取后者） */
+function findLatestTaskGraphItem(
+  traces: AgentActivityItem[][],
+): Extract<AgentActivityItem, { kind: "taskgraph" }> | undefined {
+  for (let traceIndex = traces.length - 1; traceIndex >= 0; traceIndex -= 1) {
+    const trace = traces[traceIndex]!;
+    for (let itemIndex = trace.length - 1; itemIndex >= 0; itemIndex -= 1) {
+      const item = trace[itemIndex];
+      if (item?.kind === "taskgraph") return item;
+    }
+  }
+  return undefined;
+}
+
+/** 合并多份时间线快照，保留最完整过程，并确保任务图使用最新快照。 */
 export function mergeActivityTraces(
   ...traces: Array<AgentActivityItem[] | undefined>
 ): AgentActivityItem[] | undefined {
   const valid = traces.filter((trace): trace is AgentActivityItem[] => Boolean(trace?.length));
   if (valid.length === 0) return undefined;
-  return valid.reduce((best, trace) => (trace.length >= best.length ? trace : best));
+  const base = valid.reduce((best, trace) => (trace.length >= best.length ? trace : best));
+  const latestTaskGraph = findLatestTaskGraphItem(valid);
+  if (!latestTaskGraph) return base;
+
+  let replaced = false;
+  const merged = base.map((item) => {
+    if (item.kind !== "taskgraph") return item;
+    replaced = true;
+    return latestTaskGraph;
+  });
+
+  return replaced ? merged : [...merged, latestTaskGraph];
 }
 
 /** @deprecated 使用 mergeActivityTraces */

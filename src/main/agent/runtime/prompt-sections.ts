@@ -104,7 +104,7 @@ function buildWorkflowOverview(stage: PromptStage): string {
     "",
     "- **discover**：路径判断 + brief / outline / storyboard",
     "- **author**：内容草稿落盘；草稿就绪后引导用户选排版方式",
-    "- **design**：layout-plan（Design Agent）",
+    "- **design**：用户确认排版后的 layout-plan + 首次视觉执行",
     "- **style**：set-theme / update-slide-layout + 视觉质检",
     "- **edit**：已有主题 deck 的轻量单页修改（可跳过 design/style）",
     "- **export**：导出交付",
@@ -117,7 +117,7 @@ function buildConvergenceContract(stage: PromptStage): string {
   const stageGoals: Record<PromptStage, string> = {
     discover: "冻结规划：确定路径、页数口径、叙事骨架；不要同时保留多套互斥方案。",
     author: "冻结内容：按已定大纲/分镜逐页写稿并做文案规范化；不要改页数、重排叙事。",
-    design: "冻结排版计划：为现有每一页选择 layout/variant/enhancements；不要改文案或增删页。",
+    design: "执行已确认的排版选择：为现有每一页生成 layout-plan，并在同一回合提交主题与版式命令；不要再次要求用户选择排版。",
     style: "执行视觉方案：按 layout-plan 合并提交主题与版式命令；不要回头重做结构。",
     edit: "局部收敛：只改用户指定范围；不要扩展成全流程重做。",
     export: "交付收敛：只做必要复核与导出；不要重新设计 deck。",
@@ -210,11 +210,14 @@ function buildCorePrinciples(stage: PromptStage, stepLimits?: AgentStepLimits): 
     ],
     design: [
       "",
-      "### 本阶段（design = layout-plan）",
+      "### 本阶段（design = 已确认排版后的 layout-plan + 首次执行）",
       "- **页数与文案已冻结**：以 ReadPresentationSnapshot 为准；不改写、不增删页。",
       "- layout-plan 的 slides[] 必须与当前 snapshot 一一对应：相同 slideId、相同页数、相同顺序。",
       "- LoadSkill `ppt-design-layout` → Task 产出 `slides/layout-plan.json`。",
-      "- 只决策 layout / variant / enhancements；**此处开始**应用版式节奏 Rubric。",
+      "- 随后 LoadSkill `ppt-layout`（Executor）并继续执行，不要停在 layout-plan 产物说明。",
+      "- 必须用 SubmitCommands 提交 `set-theme` → `update-slide-layout`（+ `update-slide-variant`）等视觉排版命令。",
+      "- **不要再次输出**「内容草稿已就绪 / 请选择排版方式」；用户已经完成排版方式选择。",
+      "- 如果 layout-plan 暂时不可用或执行受阻，说明具体阻塞并继续 style 执行路径，不要回到 author/layout-choice。",
     ],
     style: [
       "",
@@ -259,7 +262,10 @@ function buildWorkflowSnippet(stage: PromptStage): string {
     design: `## 本阶段工作流
 1. ReadPresentationSnapshot
 2. LoadSkill \`ppt-design-layout\`
-3. Task → slides/layout-plan.json（一页一条，不改文案）`,
+3. Task → slides/layout-plan.json（一页一条，不改文案）
+4. LoadSkill \`ppt-layout\`（Executor）
+5. SubmitCommands：set-theme → update-slide-layout（+ variant）
+6. 不再提示用户选择排版方式`,
 
     style: `## 本阶段工作流
 1. ReadPresentationSnapshot + 读取 layout-plan
@@ -334,7 +340,10 @@ function commandExamplesForStage(stage: PromptStage): string {
   }
 
   if (stage === "design") {
-    return `- 本阶段主产出为 Task 写入的 slides/layout-plan.json，不直接 SubmitCommands 改 deck`;
+    return `- 先产出 slides/layout-plan.json，再提交视觉排版命令，不回到排版选择
+- 设置主题：{"id":"cmd-theme","type":"set-theme","theme":"ocean","palette":"cyan"}
+- 排版：{"id":"cmd-layout","type":"update-slide-layout","slideId":"slide-1","layout":"concept"}
+- 页级节奏：update-slide-variant（light / dark / hero）`;
   }
 
   if (stage === "style") {

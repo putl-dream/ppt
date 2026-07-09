@@ -33,6 +33,50 @@ describe("agent activity trace", () => {
     expect(mergeActivityTraces(later, early)).toEqual(later);
   });
 
+  it("keeps the newest task graph snapshot even when an older trace is longer", () => {
+    const oldGraph: AgentActivityItem = {
+      id: "agent-task-graph",
+      kind: "taskgraph",
+      goal: "goal",
+      tasks: [
+        {
+          id: "task-1",
+          subject: "起草 Brief",
+          description: "",
+          status: "in_progress",
+          owner: "agent",
+          blockedBy: [],
+          createdAt: "2026-01-01T00:00:00.000Z",
+          updatedAt: "2026-01-01T00:00:00.000Z",
+        },
+      ],
+    };
+    const newerGraph: AgentActivityItem = {
+      ...oldGraph,
+      tasks: [
+        {
+          ...oldGraph.tasks[0],
+          status: "completed",
+          owner: null,
+          updatedAt: "2026-01-01T00:01:00.000Z",
+        },
+      ],
+    };
+    const longerExisting: AgentActivityItem[] = [
+      oldGraph,
+      { id: "step-1", kind: "step", text: "继续处理", status: "done" },
+    ];
+
+    const merged = mergeActivityTraces(longerExisting, [newerGraph]);
+    const graph = merged?.find((item) => item.kind === "taskgraph");
+
+    expect(merged).toHaveLength(2);
+    expect(graph).toMatchObject({
+      kind: "taskgraph",
+      tasks: [{ id: "task-1", status: "completed", owner: null }],
+    });
+  });
+
   it("interleaves reasoning and tools without dropping earlier tools", () => {
     let trace: AgentActivityItem[] = [];
     trace = appendReasoningChunk(trace, "plan", 0);

@@ -1,10 +1,17 @@
 import type { Presentation, Slide } from "./presentation";
-import { isLayoutCard } from "./layout-shape-utils";
+import { isLayoutCard, isLayoutGeneratedShape } from "./layout-shape-utils";
 
 const CHROME_LAYOUTS = new Set(["cover", "section"]);
 
 function slideHasLayoutCards(slide: Slide): boolean {
   return slide.elements.some(isLayoutCard);
+}
+
+function slideHasLayoutGeneratedElements(slide: Slide): boolean {
+  return slide.elements.some((element) => {
+    if (isLayoutGeneratedShape(element)) return true;
+    return element.type === "image" && Boolean(element.imageSlot);
+  });
 }
 
 function slideHasBodyText(slide: Slide): boolean {
@@ -13,7 +20,9 @@ function slideHasBodyText(slide: Slide): boolean {
 
 export function slideNeedsLayoutChoice(slide: Slide): boolean {
   if (CHROME_LAYOUTS.has(slide.layout ?? "")) return false;
-  return slideHasBodyText(slide) && !slideHasLayoutCards(slide);
+  return slideHasBodyText(slide)
+    && !slideHasLayoutCards(slide)
+    && !slideHasLayoutGeneratedElements(slide);
 }
 
 /** True when deck has content slides that have not been through applyLayout yet. */
