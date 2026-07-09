@@ -22,6 +22,8 @@ const generateId = (): string => {
   return Math.random().toString(36).substring(2, 15);
 };
 
+const LINE_MOTIF_HEIGHT = 2;
+
 function layoutShape(
   shape: Omit<ShapeElement, "id" | "type" | "provenance"> & { id?: string },
 ): ShapeElement {
@@ -104,7 +106,7 @@ export function createMarginNoteMotif(colors: MotifColors): ShapeElement[] {
       x: 972,
       y: 154,
       width: 132,
-      height: 0,
+      height: LINE_MOTIF_HEIGHT,
       fillColor: colors.accent,
       strokeColor: colors.accent,
       fillOpacity: 0.9,
@@ -119,7 +121,7 @@ export function createPathLineMotif(colors: MotifColors): ShapeElement[] {
       x: 160,
       y: 590,
       width: 820,
-      height: 0,
+      height: LINE_MOTIF_HEIGHT,
       fillColor: colors.accent,
       strokeColor: colors.accent,
       fillOpacity: 0.8,

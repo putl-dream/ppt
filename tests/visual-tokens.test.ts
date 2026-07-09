@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { StyleStrategies } from "../src/main/agent/design/style-strategies";
+import {
+  createMarginNoteMotif,
+  createPathLineMotif,
+  type MotifColors,
+} from "../src/shared/motif-system";
+import { slideElementSchema } from "../src/shared/presentation";
 import { VISUAL_TOKENS } from "../src/shared/visual-tokens";
 
 describe("visual tokens", () => {
@@ -16,5 +22,24 @@ describe("visual tokens", () => {
     expect(strategy?.radii.md).toBe(12);
     expect(strategy?.elevation.md.blur).toBe(16);
     expect(strategy?.gradient?.type).toBe("linear");
+  });
+
+  it("creates schema-valid motif line elements", () => {
+    const colors: MotifColors = {
+      bg: "#ffffff",
+      accent: "#0ea5e9",
+      cardBg: "#f8fafc",
+      cardStroke: "#cbd5e1",
+    };
+
+    const motifs = [
+      ...createMarginNoteMotif(colors),
+      ...createPathLineMotif(colors),
+    ];
+
+    expect(motifs.filter((element) => element.shapeType === "line")).toHaveLength(2);
+    for (const element of motifs) {
+      expect(slideElementSchema.safeParse(element).success).toBe(true);
+    }
   });
 });
