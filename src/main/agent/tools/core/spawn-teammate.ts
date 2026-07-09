@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { ToolDefinition } from "../tool-definition";
+import { sanitizeAgentName } from "../../teammate/message-bus";
 
 export const spawnTeammateSchema = z.object({
   name: z.string().optional().describe("Stable teammate name, e.g. researcher or layout_planner"),
@@ -42,7 +43,9 @@ export const spawnTeammateTool: ToolDefinition<typeof spawnTeammateSchema, Spawn
       throw new Error("Teammate manager is not configured.");
     }
 
-    const fallbackName = `${args.role.trim().toLowerCase().replace(/[^a-z0-9_.:-]+/g, "_") || "teammate"}_${crypto.randomUUID().slice(0, 8)}`;
+    const trimmedRole = args.role.trim().toLowerCase();
+    const roleName = trimmedRole ? sanitizeAgentName(trimmedRole) : "teammate";
+    const fallbackName = sanitizeAgentName(`${roleName}_${crypto.randomUUID().slice(0, 8)}`);
     const handle = context.teammateManager.spawn({
       name: args.name?.trim() || fallbackName,
       role: args.role,

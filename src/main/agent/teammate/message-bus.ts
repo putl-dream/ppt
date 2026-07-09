@@ -59,7 +59,7 @@ const LOCK_OPTIONS: LockOptions = {
 };
 
 export function sanitizeAgentName(name: string): string {
-  const sanitized = name.trim().replace(/[^a-zA-Z0-9_.:-]+/g, "_");
+  const sanitized = name.trim().replace(/[^a-zA-Z0-9_.-]+/g, "_");
   return sanitized || "agent";
 }
 

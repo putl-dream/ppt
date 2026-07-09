@@ -3,11 +3,14 @@ import { ToolLoader } from "./tool-loader";
 import { askUserTool } from "./core/ask-user";
 import { executeExtraToolTool } from "./core/execute-extra-tool";
 import { getSelectionTool } from "./core/get-selection";
+import { listTeammatesTool } from "./core/list-teammates";
 import { listSlidesTool } from "./core/list-slides";
 import { previewCommandsTool } from "./core/preview-commands";
 import { readCurrentSlideTool } from "./core/read-current-slide";
 import { readPresentationSnapshotTool } from "./core/read-presentation-snapshot";
 import { searchExtraToolsTool } from "./core/search-extra-tools";
+import { sendTeammateMessageTool } from "./core/send-teammate-message";
+import { shutdownTeammateTool } from "./core/shutdown-teammate";
 import { submitCommandsTool } from "./core/submit-commands";
 import { spawnTeammateTool } from "./core/spawn-teammate";
 import { taskTool } from "./core/task";
@@ -110,11 +113,14 @@ export function createDefaultToolRegistry(): ToolRegistry {
     askUserTool,
     executeExtraToolTool,
     getSelectionTool,
+    listTeammatesTool,
     listSlidesTool,
     previewCommandsTool,
     readCurrentSlideTool,
     readPresentationSnapshotTool,
     searchExtraToolsTool,
+    sendTeammateMessageTool,
+    shutdownTeammateTool,
     spawnTeammateTool,
     submitCommandsTool,
     taskTool,

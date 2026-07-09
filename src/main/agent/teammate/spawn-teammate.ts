@@ -41,6 +41,7 @@ export interface TeammateHandle {
   status: TeammateStatus;
   startedAt: number;
   lastActiveAt: number;
+  lastError?: string;
 }
 
 export interface SpawnTeammateThreadOptions {
@@ -59,6 +60,7 @@ export interface SpawnTeammateThreadOptions {
 type TeammateState = TeammateHandle & {
   controller: AbortController;
   done: Promise<void>;
+  lastError?: string;
 };
 
 const sendMessageSchema = z.object({
@@ -125,6 +127,22 @@ export class TeammateManager {
       ...options,
       name,
       role: state.role,
+    }).catch(async (error) => {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      state.status = "failed";
+      state.lastError = errorMessage;
+      state.lastActiveAt = Date.now();
+      try {
+        await this.bus.send({
+          from: state.name,
+          to: "lead",
+          type: "error",
+          content: errorMessage,
+        });
+      } catch (notifyError) {
+        const notifyMessage = notifyError instanceof Error ? notifyError.message : String(notifyError);
+        state.lastError = `${errorMessage}; failed to notify lead: ${notifyMessage}`;
+      }
     }).finally(() => {
       if (state.status !== "failed") state.status = "stopped";
       state.lastActiveAt = Date.now();
@@ -138,8 +156,20 @@ export class TeammateManager {
     return Array.from(this.teammates.values()).map((state) => this.toHandle(state));
   }
 
+  get(name: string): TeammateHandle | undefined {
+    const state = this.teammates.get(sanitizeAgentName(name));
+    return state ? this.toHandle(state) : undefined;
+  }
+
   async requestShutdown(name: string): Promise<void> {
     const agent = sanitizeAgentName(name);
+    const state = this.teammates.get(agent);
+    if (!state) {
+      throw new Error(`Unknown teammate: ${agent}`);
+    }
+    if (state.status === "stopped" || state.status === "failed") {
+      throw new Error(`Teammate ${agent} is ${state.status}.`);
+    }
     await this.bus.send({
       from: "lead",
       to: agent,
@@ -160,6 +190,7 @@ export class TeammateManager {
       status: state.status,
       startedAt: state.startedAt,
       lastActiveAt: state.lastActiveAt,
+      ...(state.lastError ? { lastError: state.lastError } : {}),
     };
   }
 
@@ -198,9 +229,11 @@ export class TeammateManager {
     });
 
     let modelSteps = 0;
+    let hasActiveAssignment = true;
+    let currentAssignment = options.prompt;
 
     try {
-      while (!state.controller.signal.aborted && modelSteps < maxSteps) {
+      while (!state.controller.signal.aborted) {
         const inboxMessages = await inbox.takeAll();
         if (inboxMessages.some((message) => message.type === "shutdown_request")) {
           break;
@@ -208,9 +241,30 @@ export class TeammateManager {
         if (inboxMessages.length > 0) {
           state.status = "running";
           state.lastActiveAt = Date.now();
-          transcript.push({ role: "user", content: formatInboxForTeammate(inboxMessages) });
-        } else if (state.status === "idle") {
+          currentAssignment = formatInboxForTeammate(inboxMessages);
+          transcript.push({ role: "user", content: currentAssignment });
+          modelSteps = 0;
+          hasActiveAssignment = true;
+        } else if (!hasActiveAssignment) {
+          state.status = "idle";
           await sleep(idlePollMs, state.controller.signal);
+          continue;
+        }
+
+        if (modelSteps >= maxSteps) {
+          await this.finishWithSummary(
+            state.name,
+            buildSubStepLimitMessage(stepLimits),
+            "step_limit",
+          );
+          await this.sendIdleNotification(
+            state.name,
+            `${state.name} hit the assignment step limit and is idle awaiting new instructions.`,
+          );
+          state.status = "idle";
+          state.lastActiveAt = Date.now();
+          modelSteps = 0;
+          hasActiveAssignment = false;
           continue;
         }
 
@@ -218,6 +272,7 @@ export class TeammateManager {
           options,
           systemPrompt,
           transcript,
+          task: currentAssignment,
           signal: state.controller.signal,
         });
         modelSteps += 1;
@@ -255,14 +310,11 @@ export class TeammateManager {
             type: "result",
             content: summary,
           });
-          await this.bus.send({
-            from: state.name,
-            to: "lead",
-            type: "idle_notification",
-            content: `${state.name} is idle and waiting for inbox messages.`,
-          });
+          await this.sendIdleNotification(state.name);
           state.status = "idle";
           state.lastActiveAt = Date.now();
+          modelSteps = 0;
+          hasActiveAssignment = false;
           continue;
         }
 
@@ -337,17 +389,9 @@ export class TeammateManager {
         }
       }
 
-      if (modelSteps >= maxSteps && state.status !== "idle") {
-        await this.finishWithSummary(state.name, buildSubStepLimitMessage(stepLimits), "step_limit");
-      }
     } catch (error) {
       state.status = "failed";
-      await this.bus.send({
-        from: state.name,
-        to: "lead",
-        type: "error",
-        content: error instanceof Error ? error.message : String(error),
-      });
+      state.lastError = error instanceof Error ? error.message : String(error);
       throw error;
     } finally {
       await triggerHooks("Stop", {
@@ -369,6 +413,18 @@ export class TeammateManager {
       from: name,
       to: "lead",
       type: reason === "step_limit" ? "error" : "result",
+      content,
+    });
+  }
+
+  private async sendIdleNotification(
+    name: string,
+    content = `${name} is idle and waiting for inbox messages.`,
+  ): Promise<void> {
+    await this.bus.send({
+      from: name,
+      to: "lead",
+      type: "idle_notification",
       content,
     });
   }
@@ -429,7 +485,10 @@ function createTeammateApprovalHandler(input: {
     while (!input.signal.aborted) {
       const messages = await input.inbox.takeAll();
       const shutdown = messages.some((message) => message.type === "shutdown_request");
-      if (shutdown) return false;
+      if (shutdown) {
+        input.inbox.pushBack(messages);
+        return false;
+      }
 
       const response = messages.find((message) =>
         message.type === "permission_response"
@@ -450,6 +509,7 @@ async function generateTeammateResponse(input: {
   options: SpawnTeammateThreadOptions;
   systemPrompt: string;
   transcript: Array<Record<string, unknown>>;
+  task: string;
   signal: AbortSignal;
 }): Promise<string> {
   const result = await callModelWithRecovery({
@@ -457,7 +517,7 @@ async function generateTeammateResponse(input: {
     systemPrompt: input.systemPrompt,
     responseContract: "agent-protocol",
     promptPayload: {
-      task: input.options.prompt,
+      task: input.task,
       transcript: input.transcript,
     },
     model: input.options.model,
