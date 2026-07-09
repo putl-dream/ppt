@@ -10,7 +10,6 @@ import {
   createSessionTitleFromPrompt,
   createWelcomeMessage,
   type SessionBootstrap,
-  type SessionChatMessage,
   type SessionSummary,
 } from "@shared/session";
 import { LeftPanel } from "./components/LeftPanel";
@@ -24,7 +23,6 @@ import { useProjectStore, type ActiveProject } from "./components/project-store"
 import { getWorkspaceLabel, normalizeWorkspacePath, resolveWorkspacePath } from "@shared/workspace";
 import {
   isPreviewPrompt,
-  mergeInlineCardRefs,
   parseBriefForCard,
   parseOutlineForCard,
   resolveMessageInlineCards,
@@ -40,25 +38,36 @@ import {
   countSlidesNeedingLayout,
   presentationNeedsLayoutChoice,
 } from "@shared/presentation-draft";
-import { findRecoverableConversation } from "@shared/session-recovery";
 import {
-  DEFAULT_MODELS,
   MODEL_STORAGE_KEY,
   SELECTED_MODEL_STORAGE_KEY,
   isModelEnabled,
-  loadManagedModels,
   toAgentModelSettings,
   type ManagedModel,
 } from "./modelCatalog";
 import { createOpenExportFolderHref } from "@shared/export-links";
-import { loadAgentStepLimits, saveAgentStepLimits } from "./agentStepLimits";
+import { saveAgentStepLimits } from "./agentStepLimits";
 import {
   buildAgentGatewayConfig,
-  loadAgentGatewayPreferences,
   saveAgentGatewayPreferences,
 } from "./agentGatewayConfig";
 import type { AgentGatewayPreferences } from "@shared/agent-gateway-config";
 import type { AgentStepLimits } from "@shared/agent-step-limits";
+import {
+  loadAppBootstrapSnapshot,
+  savePersistedUiSettings,
+  type UiAccentColor,
+  type UiControlShape,
+  type UiReadingTone,
+  type UiThemeMode,
+} from "./app/appBootstrap";
+import { getComputedTheme, useAppearanceRuntime } from "./app/useAppearanceRuntime";
+import {
+  findActiveThreadId,
+  finalizeAgentMessage,
+  toSessionChatMessages,
+  type ChatMessage,
+} from "./app/chatMessageRuntime";
 import {
   type AgentActivityItem,
   appendReasoningChunk,
@@ -81,108 +90,11 @@ import {
   finishTask,
 } from "@shared/agent-activity";
 
-type ChatMessage = SessionChatMessage;
-
-const UI_SETTINGS_STORAGE_KEY = "agent-ppt.ui-settings.v1";
-type UiThemeMode = "light" | "dark" | "cyan" | "orange";
-type UiAccentColor = "cyan" | "green" | "purple" | "orange";
-type UiControlShape = "sharp" | "soft" | "round";
-type UiReadingTone = "classic" | "cyan" | "orange";
-
-interface PersistedUiSettings {
-  autoDownload: boolean;
-  autoCloudSync: boolean;
-  defaultRatio: "16:9" | "4:3";
-  themeMode: UiThemeMode | "system";
-  uiAccentColor: UiAccentColor;
-  uiControlShape: UiControlShape;
-  uiReadingTone: UiReadingTone;
-  borderRadiusScale: number;
-  colorContrastOffset: number;
-  selectedTheme: string;
-  selectedPalette: string;
-  logoUrl: string | null;
-}
-
-function loadPersistedUiSettings(): Partial<PersistedUiSettings> {
-  try {
-    const stored = window.localStorage.getItem(UI_SETTINGS_STORAGE_KEY);
-    if (!stored) return {};
-    const parsed = JSON.parse(stored) as Partial<PersistedUiSettings>;
-    return parsed && typeof parsed === "object" ? parsed : {};
-  } catch {
-    return {};
-  }
-}
-
-function findActiveThreadId(messages: ChatMessage[]): string | undefined {
-  return findRecoverableConversation(messages)?.threadId;
-}
-
-function toSessionChatMessages(messages: ChatMessage[]): SessionChatMessage[] {
-  return messages.map(({
-    id,
-    role,
-    content,
-    thought,
-    reasoning,
-    activityTrace,
-    progress,
-    approval,
-    patch,
-    inlineCards,
-    question,
-    threadId,
-  }) => ({
-    id,
-    role,
-    content,
-    thought,
-    reasoning,
-    activityTrace,
-    progress,
-    approval,
-    patch,
-    inlineCards,
-    question,
-    threadId,
-  }));
-}
-
-function attachInlineCards(
-  message: ChatMessage,
-  additions: Array<"brief" | "outline" | "layout" | "deck">,
-): ChatMessage {
-  return {
-    ...message,
-    inlineCards: mergeInlineCardRefs(message.inlineCards, additions),
-  };
-}
-
-function buildLayoutDraftContent(slideCount: number): string {
-  return `内容草稿已就绪（${slideCount} 页待排版），请选择排版方式后继续。`;
-}
-
-function finalizeAgentMessage(
-  message: ChatMessage,
-  presentation: Presentation | undefined,
-  fallbackContent: string,
-): ChatMessage {
-  if (presentation && presentationNeedsLayoutChoice(presentation)) {
-    const slideCount = countSlidesNeedingLayout(presentation);
-    return attachInlineCards(
-      { ...message, content: buildLayoutDraftContent(slideCount) },
-      ["layout"],
-    );
-  }
-
-  return attachInlineCards({ ...message, content: fallbackContent }, ["deck"]);
-}
-
 export function App() {
   const initializeProject = useProjectStore((state) => state.initializeProject);
   const hydrateProjectArtifacts = useProjectStore((state) => state.hydrateProjectArtifacts);
-  const activeProject = useProjectStore((state) => state.activeProject);
+  const [bootstrap] = useState(loadAppBootstrapSnapshot);
+  const persistedUiSettings = bootstrap.persistedUiSettings;
 
   const [presentation, setPresentation] = useState<Presentation>();
   const [startupError, setStartupError] = useState<string>();
@@ -204,7 +116,6 @@ export function App() {
   const [settingsCategory, setSettingsCategory] = useState<
     "account" | "models" | "gateway" | "generation" | "project" | "appearance"
   >("account");
-  const [persistedUiSettings] = useState(loadPersistedUiSettings);
 
   // 常规设置：常规/工作流与文件系统
   const [autoDownload, setAutoDownload] = useState(() => persistedUiSettings.autoDownload ?? true);
@@ -215,21 +126,13 @@ export function App() {
   const [defaultRatio, setDefaultRatio] = useState<"16:9" | "4:3">(
     () => persistedUiSettings.defaultRatio === "4:3" ? "4:3" : "16:9",
   );
-  const [agentStepLimits, setAgentStepLimits] = useState<AgentStepLimits>(loadAgentStepLimits);
+  const [agentStepLimits, setAgentStepLimits] = useState<AgentStepLimits>(() => bootstrap.agentStepLimits);
   const [agentGatewayPreferences, setAgentGatewayPreferences] = useState<AgentGatewayPreferences>(
-    loadAgentGatewayPreferences,
+    () => bootstrap.agentGatewayPreferences,
   );
 
   // 外观定制与视效控制阀
-  const [themeMode, setThemeMode] = useState<UiThemeMode>(() => {
-    const mode = persistedUiSettings.themeMode;
-    if (mode === "dark" || mode === "cyan" || mode === "orange") return mode;
-    if (mode === "system") {
-      return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-    }
-    const legacyTone = persistedUiSettings.uiReadingTone;
-    return legacyTone === "cyan" || legacyTone === "orange" ? legacyTone : "light";
-  });
+  const [themeMode, setThemeMode] = useState<UiThemeMode>(() => bootstrap.initialThemeMode);
   const uiReadingTone: UiReadingTone = themeMode === "cyan" || themeMode === "orange" ? themeMode : "classic";
   const [uiAccentColor, setUiAccentColor] = useState<UiAccentColor>(() => {
     const accent = persistedUiSettings.uiAccentColor;
@@ -245,17 +148,15 @@ export function App() {
   const [colorContrastOffset, setColorContrastOffset] = useState(() =>
     typeof persistedUiSettings.colorContrastOffset === "number" ? persistedUiSettings.colorContrastOffset : 0,
   );
-  const [computedTheme, setComputedTheme] = useState<"light" | "dark">("light");
+  const computedTheme = getComputedTheme(themeMode);
 
   // 编排属性
   const [selectedTheme, setSelectedTheme] = useState<string>(() => persistedUiSettings.selectedTheme ?? "nordic");
   const [selectedPalette, setSelectedPalette] = useState<string>(() => persistedUiSettings.selectedPalette ?? "cyan");
   const [logoUrl, setLogoUrl] = useState<string | null>(() => persistedUiSettings.logoUrl ?? null);
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
-  const [models, setModels] = useState<ManagedModel[]>(loadManagedModels);
-  const [selectedModelId, setSelectedModelId] = useState(
-    () => window.localStorage.getItem(SELECTED_MODEL_STORAGE_KEY) ?? DEFAULT_MODELS[0].id,
-  );
+  const [models, setModels] = useState<ManagedModel[]>(() => bootstrap.models);
+  const [selectedModelId, setSelectedModelId] = useState(() => bootstrap.selectedModelId);
   const enabledModels = useMemo(() => models.filter(isModelEnabled), [models]);
   const visibleModels = useMemo(
     () => (enabledModels.length > 0 ? enabledModels : models),
@@ -302,19 +203,20 @@ export function App() {
   }, [agentGatewayPreferences]);
 
   useEffect(() => {
-    window.localStorage.setItem(UI_SETTINGS_STORAGE_KEY, JSON.stringify({
+    savePersistedUiSettings({
       autoDownload,
       autoCloudSync,
       defaultRatio,
       themeMode,
       uiAccentColor,
       uiControlShape,
+      uiReadingTone,
       borderRadiusScale,
       colorContrastOffset,
       selectedTheme,
       selectedPalette,
       logoUrl,
-    }));
+    });
   }, [
     autoDownload,
     autoCloudSync,
@@ -322,12 +224,23 @@ export function App() {
     themeMode,
     uiAccentColor,
     uiControlShape,
+    uiReadingTone,
     borderRadiusScale,
     colorContrastOffset,
     selectedTheme,
     selectedPalette,
     logoUrl,
   ]);
+
+  useAppearanceRuntime({
+    themeMode,
+    computedTheme,
+    borderRadiusScale,
+    colorContrastOffset,
+    uiAccentColor,
+    uiControlShape,
+    uiReadingTone,
+  });
 
   const handleSaveModel = (model: ManagedModel) => {
     markSettingsSaving();
@@ -347,81 +260,6 @@ export function App() {
       if (fallback) setSelectedModelId(fallback.id);
     }
   };
-
-  // 主题计算：青色与橙色属于浅色阅读主题，暗色不再叠加阅读色。
-  useEffect(() => {
-    setComputedTheme(themeMode === "dark" ? "dark" : "light");
-  }, [themeMode]);
-
-  useEffect(() => {
-    document.documentElement.style.colorScheme = computedTheme;
-    const desktopApi = window.desktopApi;
-    if (!desktopApi?.setWindowThemeMode) return;
-
-    void desktopApi
-      .setWindowThemeMode(themeMode)
-      .catch((error) => {
-        console.error("同步窗口主题失败:", error);
-      });
-  }, [computedTheme, themeMode]);
-
-  // 实时外观视觉控制阀应用 (圆角与色彩对比度)
-  useEffect(() => {
-    document.documentElement.style.setProperty("--content-radius-scale", borderRadiusScale.toString());
-  }, [borderRadiusScale]);
-
-  useEffect(() => {
-    document.documentElement.dataset.accent = uiAccentColor;
-  }, [uiAccentColor]);
-
-  useEffect(() => {
-    document.documentElement.dataset.controlShape = uiControlShape;
-  }, [uiControlShape]);
-
-  useEffect(() => {
-    document.documentElement.dataset.readingTone = uiReadingTone;
-  }, [uiReadingTone]);
-
-  useEffect(() => {
-    const isDark = computedTheme === "dark";
-    const palette = {
-      classic: {
-        light: { hue: 0, saturation: 0, app: 90.6, canvas: 100, field: 100, darker: 95 },
-        dark: { hue: 0, saturation: 0, app: 12, canvas: 18, field: 18, darker: 12 },
-      },
-      cyan: {
-        light: { hue: 188, saturation: 28, app: 90, canvas: 97, field: 98, darker: 92 },
-        dark: { hue: 188, saturation: 18, app: 11, canvas: 15, field: 18, darker: 12 },
-      },
-      orange: {
-        light: { hue: 34, saturation: 34, app: 90, canvas: 97, field: 96, darker: 91 },
-        dark: { hue: 30, saturation: 18, app: 11, canvas: 15, field: 18, darker: 12 },
-      },
-    } satisfies Record<UiReadingTone, Record<"light" | "dark", { hue: number; saturation: number; app: number; canvas: number; field: number; darker: number }>>;
-
-    const tone = palette[uiReadingTone][isDark ? "dark" : "light"];
-    if (isDark) {
-      const appLightness = Math.min(20, Math.max(6, tone.app - colorContrastOffset * 0.45));
-      const canvasLightness = Math.min(24, Math.max(10, tone.canvas - colorContrastOffset * 0.25));
-      const fieldLightness = Math.min(28, Math.max(12, tone.field - colorContrastOffset * 0.18));
-      const darkerLightness = Math.min(20, Math.max(8, tone.darker - colorContrastOffset * 0.18));
-      document.documentElement.style.setProperty("--bg-app", `hsl(${tone.hue}, ${tone.saturation}%, ${appLightness}%)`);
-      document.documentElement.style.setProperty("--bg-canvas", `hsl(${tone.hue}, ${tone.saturation}%, ${canvasLightness}%)`);
-      document.documentElement.style.setProperty("--bg-glass", `hsl(${tone.hue}, ${tone.saturation}%, ${canvasLightness}%)`);
-      document.documentElement.style.setProperty("--bg-input-field", `hsl(${tone.hue}, ${tone.saturation}%, ${fieldLightness}%)`);
-      document.documentElement.style.setProperty("--bg-darker", `hsl(${tone.hue}, ${tone.saturation}%, ${darkerLightness}%)`);
-    } else {
-      const appLightness = Math.min(95, Math.max(84, tone.app - colorContrastOffset));
-      const canvasLightness = Math.min(100, Math.max(94, tone.canvas - Math.max(0, colorContrastOffset) * 0.25));
-      const fieldLightness = Math.min(100, Math.max(92, tone.field - Math.max(0, colorContrastOffset) * 0.2));
-      const darkerLightness = Math.min(96, Math.max(86, tone.darker - Math.max(0, colorContrastOffset) * 0.25));
-      document.documentElement.style.setProperty("--bg-app", `hsl(${tone.hue}, ${tone.saturation}%, ${appLightness}%)`);
-      document.documentElement.style.setProperty("--bg-canvas", `hsl(${tone.hue}, ${tone.saturation}%, ${canvasLightness}%)`);
-      document.documentElement.style.setProperty("--bg-glass", `hsl(${tone.hue}, ${tone.saturation}%, ${fieldLightness}%)`);
-      document.documentElement.style.setProperty("--bg-input-field", `hsl(${tone.hue}, ${tone.saturation}%, ${fieldLightness}%)`);
-      document.documentElement.style.setProperty("--bg-darker", `hsl(${tone.hue}, ${tone.saturation}%, ${darkerLightness}%)`);
-    }
-  }, [computedTheme, colorContrastOffset, uiReadingTone]);
 
   useEffect(() => {
     if (presentation) {
