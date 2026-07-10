@@ -1,14 +1,14 @@
 import type { AgentModelSelection } from "@shared/agent";
 import { resolveAgentGatewayConfig, type AgentGatewayConfig } from "@shared/agent-gateway-config";
 import type {
+  AgentModelContentBlock,
   AgentModelGateway,
   AgentModelMessage,
   AgentModelStreamChunk,
-  AgentModelThinkingBlock,
-  AgentModelToolCall,
   AgentResponseContract,
   AgentToolSchema,
 } from "../gateway/types";
+import { textFromContentBlocks, toolUseBlocksFromContent } from "../gateway/content-blocks";
 import { resolveFallbackModelSelection } from "../gateway/config";
 import {
   AgentGatewayError,
@@ -19,14 +19,8 @@ import {
 import { backoffBeforeRetry, extractRetryAfterMs } from "../gateway/withRetry";
 import { emergencyTrimContext, prepareContext } from "./context-compact";
 import { createModuleLogger } from "../logger";
-import {
-  textFromContentBlocks,
-  thinkingFromContentBlocks,
-  toolCallsFromContentBlocks,
-} from "../gateway/content-blocks";
 
 const logger = createModuleLogger("model-call-recovery");
-
 const MAX_RECOVERY_ATTEMPTS = 8;
 const TOKEN_UPGRADE_8K = 8_192;
 const TOKEN_UPGRADE_64K = 65_536;
@@ -36,7 +30,6 @@ function readGatewayConfig(gateway: AgentModelGateway): AgentGatewayConfig {
   const reader = gateway as AgentModelGateway & { getGatewayConfig?: () => AgentGatewayConfig };
   return reader.getGatewayConfig?.() ?? resolveAgentGatewayConfig();
 }
-
 export interface ModelPromptPayload {
   request?: string;
   task?: string;
@@ -53,12 +46,7 @@ export interface ModelCallRecoveryOptions {
   workspaceRoot?: string;
   threadId?: string;
   signal?: AbortSignal;
-  /**
-   * 原生 tool-use 工具清单。提供时透传给 gateway 激活 tool-use 分支；
-   * 省略则维持文本 JSON 协议。
-   */
   tools?: AgentToolSchema[];
-  /** 原生 tool-use 多轮消息；与 tools 配套使用。 */
   messages?: AgentModelMessage[];
   stream?: {
     onChunk?: (chunk: AgentModelStreamChunk) => void;
@@ -68,14 +56,10 @@ export interface ModelCallRecoveryOptions {
 }
 
 export interface ModelCallRecoveryResult {
-  text: string;
+  content: AgentModelContentBlock[];
   stopReason?: string;
   modelUsed?: AgentModelSelection;
   recoveryNotes: string[];
-  /** 原生 tool-use 返回的工具调用；文本路径下为空。 */
-  toolCalls?: AgentModelToolCall[];
-  /** 扩展思考块，回传到下一回合的 assistant 消息以满足 API 校验。 */
-  thinkingBlocks?: AgentModelThinkingBlock[];
 }
 
 function buildPrompt(payload: ModelPromptPayload): string {
@@ -90,8 +74,8 @@ function buildContinuationPrompt(
     ...originalPayload,
     continuation: {
       instruction:
-        "Your previous response was truncated by max_tokens. Continue exactly where you left off. "
-        + "Do not repeat content already written. Return one complete JSON object.",
+        "Your previous text response was truncated by max_tokens. Continue exactly where you left off. "
+        + "Do not repeat content already written.",
       partialOutput,
     },
   });
@@ -116,49 +100,32 @@ async function invokeGateway(
   },
   model: AgentModelSelection | undefined,
   stream?: ModelCallRecoveryOptions["stream"],
-): Promise<{
-  text: string;
-  stopReason?: string;
-  toolCalls?: AgentModelToolCall[];
-  thinkingBlocks?: AgentModelThinkingBlock[];
-}> {
+): Promise<{ content: AgentModelContentBlock[]; stopReason?: string }> {
   if (stream?.onChunk || stream?.onThinkingChunk) {
-    let text = "";
+    let streamedText = "";
+    let content: AgentModelContentBlock[] = [];
     let stopReason: string | undefined;
-    let toolCalls: AgentModelToolCall[] | undefined;
-    let thinkingBlocks: AgentModelThinkingBlock[] | undefined;
     for await (const chunk of gateway.generateTextStream(request, model)) {
-      if (chunk.type === "thinking" && chunk.text) {
-        stream.onThinkingChunk?.(chunk.text);
-      } else if (chunk.type === "content" && chunk.text) {
-        text += chunk.text;
+      if (chunk.type === "thinking_delta") {
+        stream.onThinkingChunk?.(chunk.thinking);
+      } else if (chunk.type === "text_delta") {
+        streamedText += chunk.text;
         stream.onChunk?.(chunk);
-      } else if (chunk.type === "complete") {
+      } else {
+        content = chunk.content;
         stopReason = chunk.stopReason;
-        if (chunk.toolCalls?.length) toolCalls = chunk.toolCalls;
-        if (chunk.thinkingBlocks?.length) thinkingBlocks = chunk.thinkingBlocks;
       }
     }
-    return { text, stopReason, toolCalls, thinkingBlocks };
+    if (content.length === 0 && streamedText) {
+      content = [{ type: "text", text: streamedText }];
+    }
+    return { content, stopReason };
   }
 
   const response = await gateway.generateText(request, model);
-  return {
-    text: response.text || textFromContentBlocks(response.contentBlocks),
-    stopReason: response.stopReason,
-    toolCalls: response.toolCalls?.length
-      ? response.toolCalls
-      : toolCallsFromContentBlocks(response.contentBlocks),
-    thinkingBlocks: response.thinkingBlocks?.length
-      ? response.thinkingBlocks
-      : thinkingFromContentBlocks(response.contentBlocks),
-  };
+  return { content: response.content, stopReason: response.stopReason };
 }
 
-/**
- * Call the model with automatic recovery for transient API failures,
- * context overflow, and output truncation.
- */
 export async function callModelWithRecovery(
   options: ModelCallRecoveryOptions,
 ): Promise<ModelCallRecoveryResult> {
@@ -181,9 +148,7 @@ export async function callModelWithRecovery(
   };
 
   for (let attempt = 1; attempt <= MAX_RECOVERY_ATTEMPTS; attempt += 1) {
-    if (options.signal?.aborted) {
-      throw new Error("Run aborted by user.");
-    }
+    if (options.signal?.aborted) throw new Error("Run aborted by user.");
 
     if (!continuationPartial) {
       const prepared = await prepareContext({
@@ -221,20 +186,18 @@ export async function callModelWithRecovery(
         continuationPartial ? undefined : options.stream,
       );
 
-      // 原生 tool-use：返回工具调用即视为完整响应，跳过文本截断/续写逻辑。
-      if (response.toolCalls?.length) {
+      if (toolUseBlocksFromContent(response.content).length > 0) {
         return {
-          text: response.text,
+          content: response.content,
           stopReason: response.stopReason,
-          toolCalls: response.toolCalls,
-          thinkingBlocks: response.thinkingBlocks,
           modelUsed: modelSelection,
           recoveryNotes,
         };
       }
 
-      if (!response.text.trim()) {
-        throw new AgentGatewayError("Model returned an empty response.", "empty-response");
+      const text = textFromContentBlocks(response.content);
+      if (!text) {
+        throw new AgentGatewayError("Model returned no text or tool_use content.", "empty-response");
       }
 
       if (isOutputTruncated(response.stopReason)) {
@@ -246,17 +209,15 @@ export async function callModelWithRecovery(
           continue;
         }
         if (!continuationPartial) {
-          continuationPartial = response.text;
+          continuationPartial = text;
           notify("输出截断后启用续写提示重试。");
           continue;
         }
       }
 
       return {
-        text: response.text,
+        content: response.content,
         stopReason: response.stopReason,
-        toolCalls: response.toolCalls,
-        thinkingBlocks: response.thinkingBlocks,
         modelUsed: modelSelection,
         recoveryNotes,
       };
@@ -267,9 +228,7 @@ export async function callModelWithRecovery(
       }
 
       const recovery = classifyGatewayRecovery(error);
-      if (recovery === "non-recoverable") {
-        throw error;
-      }
+      if (recovery === "non-recoverable") throw error;
 
       if (error instanceof AgentGatewayError && error.code === "overloaded") {
         consecutiveOverloaded += 1;
@@ -284,10 +243,7 @@ export async function callModelWithRecovery(
         continue;
       }
 
-      if (
-        consecutiveOverloaded >= CONSECUTIVE_OVERLOAD_SWITCH
-        && modelSelection
-      ) {
+      if (consecutiveOverloaded >= CONSECUTIVE_OVERLOAD_SWITCH && modelSelection) {
         const fallback = resolveFallbackModelSelection(modelSelection, gatewayConfig);
         if (fallback) {
           modelSelection = fallback;
@@ -303,11 +259,7 @@ export async function callModelWithRecovery(
           ? `临时故障，按 Retry-After 等待后重试（第 ${attempt} 次）。`
           : `临时故障，指数退避后重试（第 ${attempt} 次）。`,
       );
-      await backoffBeforeRetry({
-        attempt,
-        retryAfterMs,
-        signal: options.signal,
-      });
+      await backoffBeforeRetry({ attempt, retryAfterMs, signal: options.signal });
     }
   }
 

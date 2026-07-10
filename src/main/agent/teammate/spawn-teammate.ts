@@ -1,5 +1,11 @@
 import { z } from "zod";
-import type { AgentModelGateway } from "../gateway";
+import type {
+  AgentModelContentBlock,
+  AgentModelGateway,
+  AgentModelMessage,
+  AgentModelToolResultBlock,
+  AgentToolSchema,
+} from "../gateway/types";
 import type { AgentModelSelection } from "@shared/agent";
 import type { AgentStepLimits } from "@shared/agent-step-limits";
 import {
@@ -7,13 +13,9 @@ import {
   getEffectiveSubMaxSteps,
   resolveAgentStepLimits,
 } from "@shared/agent-step-limits";
-import {
-  buildAgentJsonRetryMessage,
-  parseAgentJsonResponse,
-} from "../runtime/parse-agent-json-response";
-import { normalizeAgentProtocolObject } from "../runtime/agent-message-normalizer";
-import type { AgentProtocolEnvelope } from "../runtime/runtime-types";
 import { callModelWithRecovery } from "../runtime/model-call-recovery";
+import { textFromContentBlocks, toolUseBlocksFromContent } from "../gateway/content-blocks";
+import { ensureToolResultPairing } from "../gateway/message-pairing";
 import { ensureDefaultHooks } from "../runtime/default-hooks";
 import { triggerHooks } from "../runtime/hook-registry";
 import type { PostToolUseBlock, StopBlock } from "../runtime/hook-blocks";
@@ -32,6 +34,7 @@ import {
   sanitizeAgentName,
 } from "./message-bus";
 import { buildTeammateSystemPrompt } from "./teammate-system-prompt";
+import { toToolInputSchema } from "../tools/tool-schema";
 
 type TeammateStatus = "running" | "idle" | "stopped" | "failed";
 
@@ -217,6 +220,15 @@ export class TeammateManager {
     const transcript: Array<Record<string, unknown>> = [
       { role: "user", content: options.prompt },
     ];
+    const modelMessages: AgentModelMessage[] = [{
+      role: "user",
+      content: [{ type: "text", text: options.prompt }],
+    }];
+    const toolSchemas: AgentToolSchema[] = tools.map((tool) => ({
+      name: tool.name,
+      description: tool.description,
+      inputSchema: toToolInputSchema(tool.inputSchema),
+    }));
     const toolContext: SubAgentToolContext = {
       workspaceRoot: options.workspaceRoot,
     };
@@ -243,6 +255,10 @@ export class TeammateManager {
           state.lastActiveAt = Date.now();
           currentAssignment = formatInboxForTeammate(inboxMessages);
           transcript.push({ role: "user", content: currentAssignment });
+          modelMessages.push({
+            role: "user",
+            content: [{ type: "text", text: currentAssignment }],
+          });
           modelSteps = 0;
           hasActiveAssignment = true;
         } else if (!hasActiveAssignment) {
@@ -268,42 +284,21 @@ export class TeammateManager {
           continue;
         }
 
-        const responseText = await generateTeammateResponse({
+        const responseContent = await generateTeammateResponse({
           options,
           systemPrompt,
           transcript,
+          modelMessages,
+          tools: toolSchemas,
           task: currentAssignment,
           signal: state.controller.signal,
         });
         modelSteps += 1;
-
-        let parsed: unknown;
-        try {
-          parsed = parseAgentJsonResponse(responseText);
-        } catch (error) {
-          transcript.push({
-            role: "assistant",
-            raw: responseText.slice(0, 2_000),
-            error: buildAgentJsonRetryMessage(error),
-          });
-          continue;
-        }
-
-        let envelope: AgentProtocolEnvelope;
-        try {
-          envelope = normalizeAgentProtocolObject(parsed);
-        } catch (error) {
-          transcript.push({
-            role: "assistant",
-            response: parsed,
-            error: error instanceof Error ? error.message : String(error),
-          });
-          continue;
-        }
-
-        if (envelope.type !== "tool.call") {
-          const summary = extractTextFromEnvelope(envelope);
-          transcript.push({ role: "assistant", response: envelope });
+        modelMessages.push({ role: "assistant", content: responseContent });
+        const calls = toolUseBlocksFromContent(responseContent);
+        if (calls.length === 0) {
+          const summary = textFromContentBlocks(responseContent);
+          transcript.push({ role: "assistant", content: summary });
           await this.bus.send({
             from: state.name,
             to: "lead",
@@ -318,27 +313,36 @@ export class TeammateManager {
           continue;
         }
 
-        const tool = handlers.get(envelope.data.toolName);
-        if (!tool) {
-          transcript.push({
-            role: "tool",
-            toolName: envelope.data.toolName,
-            error: `Unknown tool: ${envelope.data.toolName}. Teammates cannot use task or spawn teammates.`,
-          });
-          continue;
-        }
+        const results: AgentModelToolResultBlock[] = [];
+        for (const call of calls) {
+          const record = (text: string, isError = false): void => {
+            results.push({
+              type: "tool_result",
+              toolUseId: call.id,
+              content: [{ type: "text", text }],
+              ...(isError ? { isError: true } : {}),
+            });
+          };
+          if (call.parseError) {
+            transcript.push({ role: "tool", toolName: call.name, error: call.parseError });
+            record(call.parseError, true);
+            continue;
+          }
+          const tool = handlers.get(call.name);
+          if (!tool) {
+            const error = `Unknown tool: ${call.name}. Teammates cannot use task or spawn teammates.`;
+            transcript.push({ role: "tool", toolName: call.name, error });
+            record(error, true);
+            continue;
+          }
+          const args = tool.inputSchema.safeParse(call.input);
+          if (!args.success) {
+            transcript.push({ role: "tool", toolName: tool.name, error: args.error.message });
+            record(args.error.message, true);
+            continue;
+          }
 
-        const args = tool.inputSchema.safeParse(envelope.data.args ?? {});
-        if (!args.success) {
-          transcript.push({
-            role: "tool",
-            toolName: tool.name,
-            error: args.error.message,
-          });
-          continue;
-        }
-
-        try {
+          try {
           const preToolStop = await triggerHooks("PreToolUse", {
             event: "PreToolUse",
             toolName: tool.name,
@@ -354,6 +358,7 @@ export class TeammateManager {
               toolName: tool.name,
               error: preToolStop.reason,
             });
+            record(preToolStop.reason ?? "Tool call denied.", true);
             continue;
           }
           if (preToolStop) {
@@ -371,7 +376,8 @@ export class TeammateManager {
             threadId: state.name,
           } satisfies PostToolUseBlock);
           transcript.push({ role: "tool", toolName: tool.name, result: output });
-        } catch (error) {
+          record(output);
+          } catch (error) {
           const errorMessage = error instanceof Error ? error.message : String(error);
           await triggerHooks("PostToolUse", {
             event: "PostToolUse",
@@ -386,7 +392,10 @@ export class TeammateManager {
             toolName: tool.name,
             error: errorMessage,
           });
+          record(errorMessage, true);
+          }
         }
+        modelMessages.push({ role: "user", content: results });
       }
 
     } catch (error) {
@@ -509,13 +518,14 @@ async function generateTeammateResponse(input: {
   options: SpawnTeammateThreadOptions;
   systemPrompt: string;
   transcript: Array<Record<string, unknown>>;
+  modelMessages: AgentModelMessage[];
+  tools: AgentToolSchema[];
   task: string;
   signal: AbortSignal;
-}): Promise<string> {
+}): Promise<AgentModelContentBlock[]> {
   const result = await callModelWithRecovery({
     gateway: input.options.gateway,
     systemPrompt: input.systemPrompt,
-    responseContract: "agent-protocol",
     promptPayload: {
       task: input.task,
       transcript: input.transcript,
@@ -524,21 +534,10 @@ async function generateTeammateResponse(input: {
     workspaceRoot: input.options.workspaceRoot,
     threadId: input.options.name,
     signal: input.signal,
+    tools: input.tools,
+    messages: ensureToolResultPairing(input.modelMessages),
   });
-  return result.text;
-}
-
-function extractTextFromEnvelope(envelope: AgentProtocolEnvelope): string {
-  switch (envelope.type) {
-    case "assistant.message":
-      return envelope.data.content;
-    case "assistant.ask_user":
-      return envelope.data.content;
-    case "deck.command_proposal":
-      return envelope.data.summary;
-    case "tool.call":
-      return JSON.stringify(envelope.data);
-  }
+  return result.content;
 }
 
 function formatInboxForTeammate(messages: AgentMailboxMessage[]): string {

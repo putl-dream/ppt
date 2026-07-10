@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 import { parseEnv } from "node:util";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { AgentGateway } from "../src/main/agent/gateway";
+import { textFromContentBlocks } from "../src/main/agent/gateway/content-blocks";
 
 const ENV_KEYS = [
   "OPENAI_BASE_URL",
@@ -61,7 +62,7 @@ describe.sequential("AgentGateway real provider integration", () => {
 
       expect(response.provider).toBe("openai");
       expect(response.model).toBe(required("OPENAI_MODEL"));
-      expect(response.text.length).toBeGreaterThan(0);
+      expect(textFromContentBlocks(response.content).length).toBeGreaterThan(0);
     },
     120_000,
   );
@@ -86,7 +87,7 @@ describe.sequential("AgentGateway real provider integration", () => {
 
       expect(response.provider).toBe("anthropic");
       expect(response.model).toBe(required("ANTHROPIC_MODEL"));
-      expect(response.text.length).toBeGreaterThan(0);
+      expect(textFromContentBlocks(response.content).length).toBeGreaterThan(0);
     },
     120_000,
   );

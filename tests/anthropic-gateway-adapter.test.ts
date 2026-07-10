@@ -63,8 +63,7 @@ describe("generateWithAnthropic", () => {
     expect(response).toEqual({
       provider: "anthropic",
       model: "anthropic-test",
-      text: "first\nsecond",
-      contentBlocks: [
+      content: [
         { type: "text", text: "first" },
         { type: "thinking", thinking: "hidden", signature: "" },
         { type: "text", text: "second" },
@@ -91,7 +90,7 @@ describe("generateWithAnthropic", () => {
 
     expect(anthropicMock.create).toHaveBeenCalledTimes(2);
     expect(anthropicMock.create.mock.calls[1][0]).toMatchObject({ max_tokens: 1308 });
-    expect(response.text).toBe("final answer");
+    expect(response.content).toEqual([{ type: "text", text: "final answer" }]);
   });
 
   it("rejects a response without any usable content", async () => {
@@ -116,7 +115,7 @@ describe("generateWithAnthropic", () => {
 
     const response = await generateWithAnthropic(config, { prompt: "User prompt" });
 
-    expect(response.text).toBe("compatible response");
+    expect(response.content).toEqual([{ type: "text", text: "compatible response" }]);
   });
 
   it("normalizes provider rate-limit errors", async () => {

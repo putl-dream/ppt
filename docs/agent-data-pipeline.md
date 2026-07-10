@@ -4,12 +4,14 @@
 
 ## 两套分类
 
-模型原生输出统一归一为 4 类 `AgentModelContentBlock`：
+模型原生输出统一为 4 类 `AgentModelContentBlock`：
 
 1. `text`：展示文本。
 2. `thinking` / `redacted_thinking`：需原样回放的思考块。
 3. `tool_use`：客户端工具调用，包含稳定 ID、名称和结构化输入。
 4. `server_tool`：MCP、Web Search、代码执行等 provider 托管块；用 `providerType + data` 保留原始语义。
+
+会话回放另外使用 `image` 与 `tool_result` 块；它们和上面四类共用同一个 `messages[].content[]` 容器，不存在平行的扁平字段。
 
 完整运行链路由 8 类数据组成：
 
@@ -24,7 +26,7 @@
 | 7. PPT/文件数据 | `Presentation`、commands、workspace artifacts | 真实业务数据与受控写入 |
 | 8. 持久化 | transcript JSONL、`.agent/tool-results/` | 会话恢复与大结果完整保存 |
 
-`AgentModelResponse.text/toolCalls/thinkingBlocks` 暂时保留为兼容字段；新 provider 适配器同时提供 `contentBlocks`。模型调用恢复层可以从内容块反推兼容字段，因此迁移不要求一次性修改全部调用方。
+`AgentModelResponse.content` 是模型响应的唯一事实源。项目不再定义或读取 `text`、`toolCalls`、`thinkingBlocks`、`contentBlocks` 等平行响应字段；`AgentModelMessage` 也不再提供 `toolCalls/toolResults/images` 属性。普通回复直接来自 `text` 块，不解析 JSON envelope。
 
 ## 工具调用闭环
 
@@ -39,7 +41,7 @@ provider stream / response
   -> PreparedToolResult<T>
        data: 本地富结构
        modelContent: 有预算的紧凑结果
-  -> tool_result(toolCallId === tool_use.id)
+  -> tool_result(toolUseId === tool_use.id)
   -> next user turn
 ```
 
@@ -50,6 +52,7 @@ provider stream / response
 - 每个调用 ID 必须恰好有一个结果；缺失结果补 synthetic error，孤立结果删除，重复 ID 去重。
 - OpenAI 工具参数 JSON 解析失败不会退化为可执行的空对象，而是生成 `isError` 结果让模型重试。
 - 工具异常、参数错误、权限拒绝和输出 Schema 错误都进入相同的错误结果通道。
+- 主 Agent、一次性子 Agent 和长驻 teammate 使用同一套 ContentBlock 消息与 ID 配对规则。
 
 ## 本地富结果与模型结果
 
@@ -78,9 +81,9 @@ mapResultToModelContent(result) {
 
 ## 关键实现
 
-- `src/main/agent/gateway/types.ts`：内容块、消息和 provider 兼容字段。
+- `src/main/agent/gateway/types.ts`：唯一内容块、消息和响应结构。
 - `src/main/agent/gateway/message-pairing.ts`：调用/结果配对修复。
-- `src/main/agent/gateway/content-blocks.ts`：内容块到兼容字段的投影。
+- `src/main/agent/gateway/content-blocks.ts`：内容块查询与构造辅助函数。
 - `src/main/agent/runtime/agent-runtime.ts`：批量调用编排、权限、执行和错误回填。
 - `src/main/agent/runtime/tool-result-data.ts`：富结果/模型结果分离与大结果持久化。
 - `src/main/agent/tools/tool-validation.ts`：中央输出 Schema 校验。

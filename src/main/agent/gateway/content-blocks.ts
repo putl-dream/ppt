@@ -1,7 +1,8 @@
 import type {
   AgentModelContentBlock,
   AgentModelThinkingBlock,
-  AgentModelToolCall,
+  AgentModelToolResultBlock,
+  AgentModelToolUseBlock,
 } from "./types";
 
 export function textFromContentBlocks(blocks: AgentModelContentBlock[] | undefined): string {
@@ -13,18 +14,12 @@ export function textFromContentBlocks(blocks: AgentModelContentBlock[] | undefin
     .trim();
 }
 
-export function toolCallsFromContentBlocks(
+export function toolUseBlocksFromContent(
   blocks: AgentModelContentBlock[] | undefined,
-): AgentModelToolCall[] {
+): AgentModelToolUseBlock[] {
   return (blocks ?? [])
     .filter((block): block is Extract<AgentModelContentBlock, { type: "tool_use" }> =>
-      block.type === "tool_use")
-    .map((block) => ({
-      id: block.id,
-      name: block.name,
-      args: block.input,
-      ...(block.parseError ? { parseError: block.parseError } : {}),
-    }));
+      block.type === "tool_use");
 }
 
 export function thinkingFromContentBlocks(
@@ -34,5 +29,17 @@ export function thinkingFromContentBlocks(
     (block): block is AgentModelThinkingBlock =>
       block.type === "thinking" || block.type === "redacted_thinking",
   );
+}
+
+export function toolResultBlocksFromContent(
+  blocks: AgentModelContentBlock[] | undefined,
+): AgentModelToolResultBlock[] {
+  return (blocks ?? []).filter(
+    (block): block is AgentModelToolResultBlock => block.type === "tool_result",
+  );
+}
+
+export function textBlock(text: string): AgentModelContentBlock {
+  return { type: "text", text };
 }
 

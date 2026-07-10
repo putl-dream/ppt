@@ -9,7 +9,7 @@ import type {
   AgentModelGateway,
   AgentModelRequest,
   AgentModelResponse,
-  AgentModelToolCall,
+  AgentModelToolUseBlock,
 } from "../src/main/agent/gateway/types";
 import { ToolRegistry } from "../src/main/agent/tools/tool-registry";
 import type { ToolDefinition } from "../src/main/agent/tools/tool-definition";
@@ -31,14 +31,7 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 
-function textEnvelope(content: string): string {
-  return JSON.stringify({
-    kind: "text",
-    format: "markdown",
-    type: "assistant.message",
-    data: { content },
-  });
-}
+const textContent = (text: string) => [{ type: "text" as const, text }];
 
 function createNativeGateway(
   handler: (request: AgentModelRequest, index: number) => AgentModelResponse | Promise<AgentModelResponse>,
@@ -47,9 +40,6 @@ function createNativeGateway(
   const requests: AgentModelRequest[] = [];
   return {
     requests,
-    supportsNativeToolUse() {
-      return true;
-    },
     async generateText(request): Promise<AgentModelResponse> {
       requests.push(request);
       const response = await handler(request, index);
@@ -60,14 +50,7 @@ function createNativeGateway(
       requests.push(request);
       const response = await handler(request, index);
       index += 1;
-      if (response.text) {
-        yield { type: "content" as const, text: response.text };
-      }
-      yield {
-        type: "complete" as const,
-        text: "",
-        toolCalls: response.toolCalls,
-      };
+      yield { type: "complete" as const, content: response.content };
     },
   };
 }
@@ -76,8 +59,8 @@ function modelToolCall(
   id: string,
   name: string,
   args: Record<string, unknown> = {},
-): AgentModelToolCall {
-  return { id, name, args };
+): AgentModelToolUseBlock {
+  return { type: "tool_use", id, name, input: args };
 }
 
 describe("background task manager", () => {
@@ -159,8 +142,7 @@ describe("AgentRuntime background Task path", () => {
         return {
           provider: "anthropic",
           model: "test-model",
-          text: "",
-          toolCalls: [
+          content: [
             modelToolCall("call-task", "Task", {
               description: "Draft outline",
               run_in_background: true,
@@ -175,13 +157,13 @@ describe("AgentRuntime background Task path", () => {
         return {
           provider: "anthropic",
           model: "test-model",
-          text: textEnvelope("Trying to finish before background result."),
+          content: textContent("Trying to finish before background result."),
         };
       }
       return {
         provider: "anthropic",
         model: "test-model",
-        text: textEnvelope("Finished after reading the background result."),
+        content: textContent("Finished after reading the background result."),
       };
     });
 
@@ -196,23 +178,29 @@ describe("AgentRuntime background Task path", () => {
       selectedElementIds: [],
     });
 
-    expect(result.type).toBe("assistant.message");
-    if (result.type === "assistant.message") {
-      expect(result.data.content).toContain("Finished after");
+    expect(result.type).toBe("message");
+    if (result.type === "message") {
+      expect(result.content).toContain("Finished after");
     }
     expect(events).toEqual(["task-start", "second-model-call", "task-finish"]);
     expect(gateway.requests).toHaveLength(3);
 
     const secondMessages = gateway.requests[1]!.messages!;
-    const placeholderTurn = secondMessages.find((message) => message.toolResults?.length);
-    expect(placeholderTurn?.toolResults?.[0]?.toolCallId).toBe("call-task");
-    expect(placeholderTurn?.toolResults?.[0]?.content).toContain("Background task bg_0001 started");
+    const placeholder = secondMessages.flatMap((message) => message.content)
+      .find((block) => block.type === "tool_result");
+    expect(placeholder).toMatchObject({ type: "tool_result", toolUseId: "call-task" });
+    if (placeholder?.type === "tool_result") {
+      expect(placeholder.content[0]).toMatchObject({ text: expect.stringContaining("Background task bg_0001 started") });
+    }
 
     const thirdMessages = gateway.requests[2]!.messages!;
     const notificationTurn = thirdMessages.find((message) =>
-      message.role === "user" && message.content?.includes("<task_notification>"));
-    expect(notificationTurn?.content).toContain("<task_id>bg_0001</task_id>");
-    expect(notificationTurn?.content).toContain("Outline done.");
+      message.role === "user" && message.content.some((block) =>
+        block.type === "text" && block.text.includes("<task_notification>")));
+    const notificationText = notificationTurn?.content
+      .filter((block) => block.type === "text").map((block) => block.text).join("\n") ?? "";
+    expect(notificationText).toContain("<task_id>bg_0001</task_id>");
+    expect(notificationText).toContain("Outline done.");
   });
 
   it("backgrounds ExecuteExtraTool when it runs ExportPptx", async () => {
@@ -245,16 +233,14 @@ describe("AgentRuntime background Task path", () => {
         return {
           provider: "anthropic",
           model: "test-model",
-          text: "",
-          toolCalls: [modelToolCall("call-search", "SearchExtraTools", { query: "ExportPptx" })],
+          content: [modelToolCall("call-search", "SearchExtraTools", { query: "ExportPptx" })],
         };
       }
       if (index === 1) {
         return {
           provider: "anthropic",
           model: "test-model",
-          text: "",
-          toolCalls: [
+          content: [
             modelToolCall("call-export", "ExecuteExtraTool", {
               toolName: "ExportPptx",
               toolArgs: { format: "pptx", run_in_background: true },
@@ -269,13 +255,13 @@ describe("AgentRuntime background Task path", () => {
         return {
           provider: "anthropic",
           model: "test-model",
-          text: textEnvelope("Trying to finish before export result."),
+          content: textContent("Trying to finish before export result."),
         };
       }
       return {
         provider: "anthropic",
         model: "test-model",
-        text: textEnvelope("Finished after export notification."),
+        content: textContent("Finished after export notification."),
       };
     });
 
@@ -292,24 +278,26 @@ describe("AgentRuntime background Task path", () => {
       selectedElementIds: [],
     });
 
-    expect(result.type).toBe("assistant.message");
-    if (result.type === "assistant.message") {
-      expect(result.data.content).toContain("Finished after export");
+    expect(result.type).toBe("message");
+    if (result.type === "message") {
+      expect(result.content).toContain("Finished after export");
     }
     expect(events).toEqual(["export-start", "third-model-call", "export-finish"]);
     expect(gateway.requests).toHaveLength(4);
 
     const thirdMessages = gateway.requests[2]!.messages!;
-    const placeholderTurn = thirdMessages.find((message) =>
-      message.toolResults?.some((result) => result.toolCallId === "call-export"));
-    expect(placeholderTurn?.toolResults?.[0]?.toolCallId).toBe("call-export");
-    expect(placeholderTurn?.toolResults?.[0]?.content).toContain("Background task bg_0001 started");
+    const exportPlaceholder = thirdMessages.flatMap((message) => message.content)
+      .find((block) => block.type === "tool_result" && block.toolUseId === "call-export");
+    expect(exportPlaceholder).toMatchObject({ type: "tool_result", toolUseId: "call-export" });
 
     const fourthMessages = gateway.requests[3]!.messages!;
     const notificationTurn = fourthMessages.find((message) =>
-      message.role === "user" && message.content?.includes("<task_notification>"));
-    expect(notificationTurn?.content).toContain("<tool>ExecuteExtraTool</tool>");
-    expect(notificationTurn?.content).toContain("ExportPptx: pptx");
-    expect(notificationTurn?.content).toContain("deck.pptx");
+      message.role === "user" && message.content.some((block) =>
+        block.type === "text" && block.text.includes("<task_notification>")));
+    const notificationText = notificationTurn?.content
+      .filter((block) => block.type === "text").map((block) => block.text).join("\n") ?? "";
+    expect(notificationText).toContain("<tool>ExecuteExtraTool</tool>");
+    expect(notificationText).toContain("ExportPptx: pptx");
+    expect(notificationText).toContain("deck.pptx");
   });
 });

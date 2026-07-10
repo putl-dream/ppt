@@ -6,270 +6,165 @@ import { listSlidesTool } from "../src/main/agent/tools/core/list-slides";
 import { submitCommandsTool } from "../src/main/agent/tools/core/submit-commands";
 import { toToolSchema } from "../src/main/agent/tools/tool-schema";
 import type {
+  AgentModelContentBlock,
   AgentModelGateway,
   AgentModelRequest,
   AgentModelResponse,
-  AgentModelToolCall,
 } from "../src/main/agent/gateway/types";
 import { createStarterPresentation } from "../src/shared/presentation";
 
-/**
- * Gateway mock that declares native tool-use support and replays a scripted
- * sequence of structured tool calls (instead of text JSON).
- */
-function createNativeGateway(
-  turns: Array<{ text?: string; toolCalls?: AgentModelToolCall[] }>,
-): AgentModelGateway & { requests: AgentModelRequest[] } {
+function createGateway(turns: AgentModelContentBlock[][]): AgentModelGateway & { requests: AgentModelRequest[] } {
   let index = 0;
   const requests: AgentModelRequest[] = [];
   return {
     requests,
-    supportsNativeToolUse() {
-      return true;
-    },
     async generateText(request): Promise<AgentModelResponse> {
       requests.push(request);
-      const turn = turns[index++];
-      if (!turn) throw new Error("Unexpected gateway call");
-      return {
-        provider: "anthropic",
-        model: "test-model",
-        text: turn.text ?? "",
-        toolCalls: turn.toolCalls,
-      };
+      const content = turns[index++];
+      if (!content) throw new Error("Unexpected gateway call");
+      return { provider: "anthropic", model: "test-model", content };
     },
     async *generateTextStream(request) {
       requests.push(request);
-      const turn = turns[index++];
-      if (!turn) throw new Error("Unexpected gateway call");
-      if (turn.text) {
-        yield { type: "content" as const, text: turn.text };
+      const content = turns[index++];
+      if (!content) throw new Error("Unexpected gateway call");
+      for (const block of content) {
+        if (block.type === "text") yield { type: "text_delta" as const, text: block.text };
       }
-      yield { type: "complete" as const, text: "", toolCalls: turn.toolCalls };
+      yield { type: "complete" as const, content };
     },
   };
 }
 
-function textEnvelope(content: string): string {
-  return JSON.stringify({
-    kind: "text",
-    format: "markdown",
-    type: "assistant.message",
-    data: { content },
-  });
-}
+const text = (value: string): AgentModelContentBlock[] => [{ type: "text", text: value }];
 
-describe("native tool-use runtime path", () => {
+describe("native ContentBlock runtime path", () => {
   it("converts a zod tool schema to a JSON Schema tool spec", () => {
     const spec = toToolSchema(submitCommandsTool);
     expect(spec.name).toBe("SubmitCommands");
     expect(spec.inputSchema.type).toBe("object");
-    const properties = spec.inputSchema.properties as Record<string, unknown>;
-    expect(properties).toHaveProperty("summary");
-    expect(properties).toHaveProperty("commands");
+    expect(spec.inputSchema.properties as Record<string, unknown>).toHaveProperty("commands");
   });
 
-  it("drives a tool loop from structured toolCalls and passes tools to the gateway", async () => {
+  it("drives the tool loop exclusively from tool_use blocks", async () => {
     const registry = new ToolRegistry();
     registry.register(readPresentationSnapshotTool);
     registry.register(submitCommandsTool);
-
-    const gateway = createNativeGateway([
-      {
-        toolCalls: [{ id: "call-1", name: "ReadPresentationSnapshot", args: {} }],
-      },
-      {
-        toolCalls: [{
-          id: "call-2",
-          name: "SubmitCommands",
-          args: {
-            summary: "Set title",
-            commands: [{ id: "cmd-1", type: "set-presentation-title", title: "Native title" }],
-            risk: "low",
-          },
-        }],
-      },
+    const gateway = createGateway([
+      [{ type: "tool_use", id: "call-1", name: "ReadPresentationSnapshot", input: {} }],
+      [{
+        type: "tool_use",
+        id: "call-2",
+        name: "SubmitCommands",
+        input: {
+          summary: "Set title",
+          commands: [{ id: "cmd-1", type: "set-presentation-title", title: "Native title" }],
+          risk: "low",
+        },
+      }],
     ]);
 
-    const runtime = new AgentRuntime(registry, gateway);
-    const result = await runtime.run({
+    const result = await new AgentRuntime(registry, gateway).run({
       threadId: "native-thread",
       request: "Create a title",
       presentationSnapshot: createStarterPresentation(),
       selectedElementIds: [],
     });
 
-    expect(result.type).toBe("deck.command_proposal");
-    expect(result.kind).toBe("structured");
-    expect(result.format).toBe("json");
-    if (result.type === "deck.command_proposal") {
-      expect(result.data.commands[0].type).toBe("set-presentation-title");
+    expect(result.type).toBe("command_proposal");
+    if (result.type === "command_proposal") {
+      expect(result.commands[0]?.type).toBe("set-presentation-title");
     }
-
-    // Every request carried native tool specs.
-    expect(gateway.requests.length).toBe(2);
-    for (const request of gateway.requests) {
-      expect(request.tools?.some((tool) => tool.name === "SubmitCommands")).toBe(true);
-      expect(request.messages?.length).toBeGreaterThan(0);
-    }
-
-    // The second request echoed the first tool_use + its tool_result.
+    expect(gateway.requests).toHaveLength(2);
     const secondMessages = gateway.requests[1]!.messages!;
-    const assistantTurn = secondMessages.find((message) => message.role === "assistant");
-    expect(assistantTurn?.toolCalls?.[0]?.name).toBe("ReadPresentationSnapshot");
-    const toolResultTurn = secondMessages.find((message) => message.toolResults?.length);
-    expect(toolResultTurn?.toolResults?.[0]?.toolCallId).toBe("call-1");
+    const resultBlock = secondMessages
+      .flatMap((message) => message.content)
+      .find((block) => block.type === "tool_result");
+    expect(resultBlock).toMatchObject({ type: "tool_result", toolUseId: "call-1" });
   });
 
-  it("returns an assistant.message envelope when the model responds without tool calls", async () => {
+  it("returns plain text blocks as the local message result", async () => {
     const registry = new ToolRegistry();
     registry.register(submitCommandsTool);
-
-    const gateway = createNativeGateway([
-      { text: textEnvelope("已完成，无需修改幻灯片。") },
-    ]);
-
-    const runtime = new AgentRuntime(registry, gateway);
-    const result = await runtime.run({
+    const gateway = createGateway([text("已完成，无需修改幻灯片。")]);
+    const result = await new AgentRuntime(registry, gateway).run({
       threadId: "native-message-thread",
       request: "解释一下当前进度",
       presentationSnapshot: createStarterPresentation(),
       selectedElementIds: [],
     });
-
-    expect(result.type).toBe("assistant.message");
-    expect(result.kind).toBe("text");
-    expect(result.format).toBe("markdown");
-    if (result.type === "assistant.message") {
-      expect(result.data.content).toContain("已完成");
-    }
+    expect(result).toEqual({ type: "message", content: "已完成，无需修改幻灯片。" });
   });
 
-  it("streams content from assistant.message envelopes on the native no-tool path", async () => {
+  it("streams direct Markdown text without exposing any envelope", async () => {
     const registry = new ToolRegistry();
     registry.register(submitCommandsTool);
-
-    const gateway = createNativeGateway([
-      { text: textEnvelope("我是你的 PPT 智能助手。\n\n说说你的需求，我马上开干。") },
-    ]);
+    const gateway = createGateway([text("我是你的 PPT 智能助手。\n\n说说你的需求，我马上开干。")]);
     let streamed = "";
-
-    const runtime = new AgentRuntime(registry, gateway);
-    const result = await runtime.run({
-      threadId: "native-json-message-thread",
+    const result = await new AgentRuntime(registry, gateway).run({
+      threadId: "native-stream-thread",
       request: "你是谁？",
       presentationSnapshot: createStarterPresentation(),
       selectedElementIds: [],
-      onStreamChunk: (chunk) => {
-        streamed += chunk;
-      },
+      onStreamChunk: (chunk) => { streamed += chunk; },
     });
-
-    expect(result.type).toBe("assistant.message");
-    expect(result.kind).toBe("text");
-    expect(result.format).toBe("markdown");
-    if (result.type === "assistant.message") {
-      expect(result.data.content).toBe("我是你的 PPT 智能助手。\n\n说说你的需求，我马上开干。");
-    }
+    expect(result.type).toBe("message");
     expect(streamed).toBe("我是你的 PPT 智能助手。\n\n说说你的需求，我马上开干。");
-    expect(streamed).not.toContain('"type"');
   });
 
-  it("retries direct markdown assistant text on the native no-tool path", async () => {
+  it("accepts direct Markdown on the first turn", async () => {
     const registry = new ToolRegistry();
     registry.register(submitCommandsTool);
-
-    const gateway = createNativeGateway([
-      { text: "**可以。** 先讲概念，再决定是否制作 PPT。" },
-      { text: textEnvelope("**可以。** 先讲概念，再决定是否制作 PPT。") },
-    ]);
-    let streamed = "";
-
-    const runtime = new AgentRuntime(registry, gateway);
-    const result = await runtime.run({
-      threadId: "native-markdown-message-thread",
+    const gateway = createGateway([text("**可以。** 先讲概念，再决定是否制作 PPT。")]);
+    const result = await new AgentRuntime(registry, gateway).run({
+      threadId: "native-markdown-thread",
       request: "先不做 PPT，解释一下这个概念",
       presentationSnapshot: createStarterPresentation(),
       selectedElementIds: [],
-      onStreamChunk: (chunk) => {
-        streamed += chunk;
-      },
     });
-
-    expect(result).toEqual({
-      kind: "text",
-      format: "markdown",
-      type: "assistant.message",
-      data: { content: "**可以。** 先讲概念，再决定是否制作 PPT。" },
-    });
-    expect(streamed).toBe("**可以。** 先讲概念，再决定是否制作 PPT。");
-    expect(gateway.requests).toHaveLength(2);
+    expect(result).toEqual({ type: "message", content: "**可以。** 先讲概念，再决定是否制作 PPT。" });
+    expect(gateway.requests).toHaveLength(1);
   });
 
-  it("executes every tool_use in one assistant turn and returns one paired result batch", async () => {
+  it("executes every tool_use in one assistant turn and returns one result batch", async () => {
     const registry = new ToolRegistry();
     registry.register(readPresentationSnapshotTool);
     registry.register(listSlidesTool);
-
-    const gateway = createNativeGateway([
-      {
-        toolCalls: [
-          { id: "call-read", name: "ReadPresentationSnapshot", args: {} },
-          { id: "call-list", name: "ListSlides", args: {} },
-        ],
-      },
-      { text: textEnvelope("两个只读工具均已执行。") },
+    const gateway = createGateway([
+      [
+        { type: "tool_use", id: "call-read", name: "ReadPresentationSnapshot", input: {} },
+        { type: "tool_use", id: "call-list", name: "ListSlides", input: {} },
+      ],
+      text("两个只读工具均已执行。"),
     ]);
-
-    const runtime = new AgentRuntime(registry, gateway);
-    const result = await runtime.run({
+    const result = await new AgentRuntime(registry, gateway).run({
       threadId: "native-batch-thread",
       request: "读取当前演示文稿",
       presentationSnapshot: createStarterPresentation(),
       selectedElementIds: [],
     });
-
-    expect(result.type).toBe("assistant.message");
-    expect(gateway.requests).toHaveLength(2);
-    const secondMessages = gateway.requests[1]!.messages!;
-    const assistantTurn = secondMessages.find((message) => message.toolCalls?.length);
-    expect(assistantTurn?.toolCalls?.map((call) => call.id)).toEqual(["call-read", "call-list"]);
-    const resultTurn = secondMessages.find((message) => message.toolResults?.length);
-    expect(resultTurn?.toolResults?.map((item) => item.toolCallId)).toEqual([
+    expect(result.type).toBe("message");
+    const results = gateway.requests[1]!.messages!
+      .flatMap((message) => message.content)
+      .filter((block) => block.type === "tool_result");
+    expect(results.map((block) => block.type === "tool_result" && block.toolUseId)).toEqual([
       "call-read",
       "call-list",
     ]);
-    expect(resultTurn?.toolResults?.every((item) => item.isError !== true)).toBe(true);
   });
 
-  it("rejects text tool.call envelopes in native mode because they have no provider call ID", async () => {
+  it("does not interpret JSON-looking text as the removed envelope protocol", async () => {
     const registry = new ToolRegistry();
     registry.register(listSlidesTool);
-
-    const gateway = createNativeGateway([
-      {
-        text: JSON.stringify({
-          kind: "structured",
-          format: "json",
-          type: "tool.call",
-          data: { toolName: "ListSlides", args: {} },
-        }),
-      },
-      { text: textEnvelope("已改用正确的原生工具协议。") },
-    ]);
-
-    const runtime = new AgentRuntime(registry, gateway);
-    const result = await runtime.run({
-      threadId: "native-text-tool-call-thread",
-      request: "读取页面",
+    const jsonLookingText = '{"type":"tool.call","data":{"toolName":"ListSlides","args":{}}}';
+    const gateway = createGateway([text(jsonLookingText)]);
+    const result = await new AgentRuntime(registry, gateway).run({
+      threadId: "no-envelope-thread",
+      request: "show raw text",
       presentationSnapshot: createStarterPresentation(),
       selectedElementIds: [],
     });
-
-    expect(result.type).toBe("assistant.message");
-    expect(gateway.requests).toHaveLength(2);
-    expect(gateway.requests[1]?.messages?.at(-1)?.content).toContain(
-      "requires a provider tool_use block",
-    );
+    expect(result).toEqual({ type: "message", content: jsonLookingText });
+    expect(gateway.requests).toHaveLength(1);
   });
 });

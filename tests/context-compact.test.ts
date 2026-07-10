@@ -122,11 +122,11 @@ describe("compact_history", () => {
         return {
           provider: "openai",
           model: "gpt",
-          text: "## Goal\nFinish slides.",
+          content: [{ type: "text", text: "## Goal\nFinish slides." }],
         };
       },
       async *generateTextStream() {
-        yield { type: "complete", text: "" };
+        yield { type: "complete" as const, content: [] };
       },
     };
 
@@ -163,7 +163,7 @@ describe("compact_history", () => {
         throw new Error("summary failed");
       },
       async *generateTextStream() {
-        yield { type: "complete", text: "" };
+        yield { type: "complete" as const, content: [] };
       },
     };
 
@@ -197,12 +197,12 @@ describe("prepareContext", () => {
     const generateText = vi.fn().mockResolvedValue({
       provider: "openai",
       model: "gpt",
-      text: "compressed summary",
+      content: [{ type: "text", text: "compressed summary" }],
     });
     const gateway: AgentModelGateway = {
       generateText,
       async *generateTextStream() {
-        yield { type: "complete", text: "" };
+        yield { type: "complete" as const, content: [] };
       },
     };
 

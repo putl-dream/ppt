@@ -221,36 +221,36 @@ export class AgentService {
       throw error;
     }
 
-    if (runtimeResult.kind === "text" && runtimeResult.type === "assistant.message") {
+    if (runtimeResult.type === "message") {
       this.runtime.clearSession(threadId);
       this.conversations.delete(threadId);
-      return { status: "chat", message: runtimeResult.data.content };
+      return { status: "chat", message: runtimeResult.content };
     }
 
-    if (runtimeResult.kind === "structured" && runtimeResult.type === "assistant.ask_user") {
+    if (runtimeResult.type === "ask_user") {
       this.conversations.set(threadId, {
         messages: [
           ...messageHistory,
           ...(requestAlreadyInHistory ? [] : [{ role: "user" as const, content: request }]),
-          { role: "assistant", content: runtimeResult.data.content },
+          { role: "assistant", content: runtimeResult.content },
         ],
         model,
         executionStrategy,
       });
       return {
         status: "chat",
-        message: runtimeResult.data.content,
+        message: runtimeResult.content,
         threadId,
-        question: runtimeResult.data.question,
+        question: runtimeResult.question,
       };
     }
 
-    if (runtimeResult.kind !== "structured" || runtimeResult.type !== "deck.command_proposal") {
+    if (runtimeResult.type !== "command_proposal") {
       throw new Error(`Unexpected agent runtime result: ${runtimeResult.type}`);
     }
 
     listener?.({ type: "workflow-progress", message: "正在进行安全校验...", progress: 70 });
-    const proposal = runtimeResult.data;
+    const proposal = runtimeResult;
     const gate = await this.commitGate.evaluate(before, proposal.commands, proposal.risk);
     if (!gate.success || !gate.preview) {
       throw new Error(`Commit Gate rejected proposal: ${gate.errors.join("; ")}`);

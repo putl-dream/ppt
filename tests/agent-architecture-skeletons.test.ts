@@ -26,11 +26,7 @@ import { selectStyleStrategyTool } from "../src/main/agent/tools/deferred/select
 import { toToolCard } from "../src/main/agent/tools/tool-card";
 import { ToolLoader } from "../src/main/agent/tools/tool-loader";
 import { SystemPromptBuilder } from "../src/main/agent/runtime/system-prompt";
-import { normalizeAgentProtocolObject } from "../src/main/agent/runtime/agent-message-normalizer";
-import {
-  AgentRuntime,
-  parseAgentJsonResponse,
-} from "../src/main/agent/runtime/agent-runtime";
+import { AgentRuntime } from "../src/main/agent/runtime/agent-runtime";
 import { CommitGate } from "../src/main/agent/gate/commit-gate";
 import { RiskPolicy } from "../src/main/agent/gate/risk-policy";
 import { DesignPolicy } from "../src/main/agent/design/design-policy";
@@ -39,8 +35,11 @@ import { AgentService } from "../src/main/agent/service";
 import { createStarterPresentation } from "../src/shared/presentation";
 import { CommandBus } from "../src/shared/commands";
 import { AgentGatewayError, type AgentModelGateway, type AgentModelRequest } from "../src/main/agent/gateway";
+import type { AgentModelContentBlock } from "../src/main/agent/gateway/types";
 
-function createSequenceGateway(responses: unknown[]): AgentModelGateway & { requests: AgentModelRequest[] } {
+function createSequenceGateway(
+  responses: Array<AgentModelContentBlock | Error>,
+): AgentModelGateway & { requests: AgentModelRequest[] } {
   let index = 0;
   const requests: AgentModelRequest[] = [];
   return {
@@ -53,7 +52,7 @@ function createSequenceGateway(responses: unknown[]): AgentModelGateway & { requ
       return {
         provider: "openai",
         model: "test-model",
-        text: typeof value === "string" ? value : JSON.stringify(value),
+        content: [value],
       };
     },
     async *generateTextStream(request) {
@@ -61,112 +60,30 @@ function createSequenceGateway(responses: unknown[]): AgentModelGateway & { requ
       const value = responses[index++];
       if (value === undefined) throw new Error("Unexpected gateway call");
       if (value instanceof Error) throw value;
-      const text = typeof value === "string" ? value : JSON.stringify(value);
-      yield { type: "content" as const, text };
-      yield { type: "complete" as const, text: "" };
+      if (value.type === "text") yield { type: "text_delta" as const, text: value.text };
+      yield { type: "complete" as const, content: [value] };
     },
   };
 }
 
 function modelToolCall(toolName: string, args: Record<string, unknown> = {}) {
-  return { type: "tool.call", data: { toolName, args } };
+  return {
+    type: "tool_use" as const,
+    id: crypto.randomUUID(),
+    name: toolName,
+    input: args,
+  };
 }
 
 function modelMessage(content: string) {
-  return {
-    kind: "text",
-    format: "markdown",
-    type: "assistant.message",
-    data: { content },
-  };
+  return { type: "text" as const, text: content };
 }
 
 function modelAskUser(content: string, missingFields?: string[]) {
-  return {
-    type: "assistant.ask_user",
-    data: { content, ...(missingFields ? { missingFields } : {}) },
-  };
+  return modelToolCall("AskUser", { message: content, missingFields });
 }
 
 describe("Agent Architecture Skeletons & Types", () => {
-  it("extracts the first complete JSON object from model output", () => {
-    expect(parseAgentJsonResponse(
-      '```json\n{"kind":"text","format":"markdown","type":"assistant.message","data":{"content":"包含 { 大括号 } 的文本"}}\n```',
-    )).toEqual({
-      kind: "text",
-      format: "markdown",
-      type: "assistant.message",
-      data: { content: "包含 { 大括号 } 的文本" },
-    });
-
-    expect(parseAgentJsonResponse(
-      '{"kind":"text","format":"markdown","type":"assistant.message","data":{"content":"first"}}\n{"kind":"text","format":"markdown","type":"assistant.message","data":{"content":"second"}}',
-    )).toEqual({
-      kind: "text",
-      format: "markdown",
-      type: "assistant.message",
-      data: { content: "first" },
-    });
-
-    expect(parseAgentJsonResponse(
-      '模型输出如下： {"kind":"text","format":"markdown","type":"assistant.message","data":{"content":"ok"}} 后续解释包含 {braces}',
-    )).toEqual({
-      kind: "text",
-      format: "markdown",
-      type: "assistant.message",
-      data: { content: "ok" },
-    });
-
-    expect(parseAgentJsonResponse(
-      '例如：{"foo":"bar"} 请返回 {"kind":"text","format":"markdown","type":"assistant.message","data":{"content":"done"}}',
-    )).toEqual({
-      kind: "text",
-      format: "markdown",
-      type: "assistant.message",
-      data: { content: "done" },
-    });
-  });
-
-  it("rejects output with no agent protocol object", () => {
-    expect(() => parseAgentJsonResponse('{"foo":"bar"}')).toThrow(/type/i);
-  });
-
-  it("feeds explicit JSON retry guidance after malformed text output", async () => {
-    const gateway = createSequenceGateway([
-      "## 结论\n\n可以先这样理解。",
-      modelMessage("可以先这样理解。"),
-    ]);
-    const runtime = new AgentRuntime(new ToolRegistry(), gateway);
-
-    const result = await runtime.run({
-      threadId: "json-retry-thread",
-      request: "先不做 PPT，解释一下这个概念",
-      presentationSnapshot: createStarterPresentation(),
-      selectedElementIds: [],
-      maxSteps: 2,
-    });
-
-    expect(result).toEqual({
-      kind: "text",
-      format: "markdown",
-      type: "assistant.message",
-      data: { content: "可以先这样理解。" },
-    });
-    expect(gateway.requests).toHaveLength(2);
-    expect(gateway.requests[0]!.responseContract).toBe("agent-protocol");
-
-    const retryPrompt = JSON.parse(gateway.requests[1]!.prompt);
-    expect(retryPrompt.transcript).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          role: "user",
-          content: expect.stringContaining("Do not apologize"),
-        }),
-      ]),
-    );
-    expect(JSON.stringify(retryPrompt.transcript)).toContain("Return exactly one complete JSON envelope");
-  });
-
   it("creates the production registry with Core and Deferred Tools", () => {
     const registry = createDefaultToolRegistry();
     expect(registry.get("ReadPresentationSnapshot")?.loadPolicy).toBe("core");
@@ -259,102 +176,6 @@ describe("Agent Architecture Skeletons & Types", () => {
     expect(prompt).toContain("不问工具名");
   });
 
-  it("normalizes model protocol objects into typed envelopes", () => {
-    const res1 = normalizeAgentProtocolObject({
-      kind: "text",
-      format: "markdown",
-      type: "assistant.message",
-      data: { content: "Hello!" },
-    });
-    expect(res1).toEqual({
-      kind: "text",
-      format: "markdown",
-      type: "assistant.message",
-      data: { content: "Hello!" },
-    });
-    expect(() => normalizeAgentProtocolObject({
-      type: "assistant.message",
-      data: { content: "Legacy shorthand" },
-    })).toThrow(/AgentTextEnvelope/);
-
-    const res2 = normalizeAgentProtocolObject({
-      type: "assistant.ask_user",
-      data: { content: "Need input", missingFields: ["theme"] },
-    });
-    expect(res2).toEqual({
-      kind: "structured",
-      format: "json",
-      type: "assistant.ask_user",
-      data: { content: "Need input", missingFields: ["theme"] },
-    });
-    const res2WithQuestion = normalizeAgentProtocolObject({
-      type: "assistant.ask_user",
-      data: {
-        content: "Choose a layout mode",
-        question: {
-          variant: "cards",
-          options: [
-            {
-              id: "template",
-              title: "标准排版",
-              description: "主题加模板，稳定快速",
-              value: "选择标准排版",
-            },
-          ],
-        },
-      },
-    });
-    expect(res2WithQuestion).toEqual({
-      kind: "structured",
-      format: "json",
-      type: "assistant.ask_user",
-      data: {
-        content: "Choose a layout mode",
-        question: {
-          variant: "cards",
-          selectionMode: "single",
-          options: [
-            {
-              id: "template",
-              title: "标准排版",
-              description: "主题加模板，稳定快速",
-              value: "选择标准排版",
-            },
-          ],
-        },
-      },
-    });
-
-    const res3 = normalizeAgentProtocolObject({
-      type: "deck.command_proposal",
-      data: {
-        summary: "Update title",
-        commands: [{ id: "1", type: "set-presentation-title", title: "New" }],
-        risk: "low",
-      },
-    });
-    expect(res3).toEqual({
-      kind: "structured",
-      format: "json",
-      type: "deck.command_proposal",
-      data: {
-        summary: "Update title",
-        commands: [{ id: "1", type: "set-presentation-title", title: "New" }],
-        risk: "low",
-      },
-    });
-
-    expect(() => normalizeAgentProtocolObject({ type: "invalid" })).toThrow();
-    expect(() => normalizeAgentProtocolObject({
-      type: "deck.command_proposal",
-      data: {
-        summary: "Bad risk",
-        commands: [],
-        risk: "very-high",
-      },
-    })).toThrow();
-  });
-
   it("AgentRuntime executes a Gateway-driven Core Tool loop", async () => {
     const registry = new ToolRegistry();
     registry.register(readPresentationSnapshotTool);
@@ -377,92 +198,12 @@ describe("Agent Architecture Skeletons & Types", () => {
       selectedElementIds: [],
     });
 
-    expect(result.type).toBe("deck.command_proposal");
-    if (result.type === "deck.command_proposal") {
-      expect(result.data.commands.length).toBeGreaterThan(0);
-      expect(result.data.commands[0].type).toBe("set-presentation-title");
-      expect(result.data.assumptions).toEqual(["Only the title changes"]);
+    expect(result.type).toBe("command_proposal");
+    if (result.type === "command_proposal") {
+      expect(result.commands.length).toBeGreaterThan(0);
+      expect(result.commands[0].type).toBe("set-presentation-title");
+      expect(result.assumptions).toEqual(["Only the title changes"]);
     }
-  });
-
-  it("retries malformed JSON instead of failing the session", async () => {
-    const registry = new ToolRegistry();
-    registry.register(submitCommandsTool);
-    const runtime = new AgentRuntime(registry, createSequenceGateway([
-      "这不是 JSON",
-      modelToolCall("SubmitCommands", {
-          summary: "Update title",
-          commands: [{ id: "cmd-json-retry", type: "set-presentation-title", title: "Retry title" }],
-          risk: "low",
-      }),
-    ]));
-
-    const result = await runtime.run({
-      threadId: "test-json-retry",
-      request: "Create title",
-      presentationSnapshot: createStarterPresentation(),
-      selectedElementIds: [],
-    });
-
-    expect(result.type).toBe("deck.command_proposal");
-  });
-
-  it("retries plain text for direct-answer requests before accepting a text envelope", async () => {
-    let calls = 0;
-    const runtime = new AgentRuntime(new ToolRegistry(), {
-      async generateText() {
-        calls += 1;
-        return {
-          provider: "openai",
-          model: "test-model",
-          text: calls === 1
-            ? "《第五项修炼》是彼得·圣吉关于学习型组织的经典著作。"
-            : JSON.stringify(modelMessage("《第五项修炼》是彼得·圣吉关于学习型组织的经典著作。")),
-        };
-      },
-      async *generateTextStream() {
-        calls += 1;
-        yield { type: "content" as const, text: "《第五项修炼》是彼得·圣吉关于学习型组织的经典著作。" };
-        yield { type: "complete" as const, text: "" };
-      },
-    });
-
-    const result = await runtime.run({
-      threadId: "test-direct-answer-fallback",
-      request: "第五项修炼",
-      presentationSnapshot: createStarterPresentation(),
-      selectedElementIds: [],
-    });
-
-    expect(result).toEqual(modelMessage("《第五项修炼》是彼得·圣吉关于学习型组织的经典著作。"));
-    expect(calls).toBe(2);
-  });
-
-  it("keeps strict JSON retry for plain text on PPT action requests", async () => {
-    const registry = new ToolRegistry();
-    registry.register(submitCommandsTool);
-    let streamed = "";
-    const runtime = new AgentRuntime(registry, createSequenceGateway([
-      "我马上开始制作。",
-      modelToolCall("SubmitCommands", {
-        summary: "Create the Fifth Discipline presentation",
-        commands: [{ id: "cmd-ppt-action-retry", type: "set-presentation-title", title: "第五项修炼" }],
-        risk: "low",
-      }),
-    ]));
-
-    const result = await runtime.run({
-      threadId: "test-ppt-action-stays-json",
-      request: "帮我做一份关于第五项修炼的 PPT",
-      presentationSnapshot: createStarterPresentation(),
-      selectedElementIds: [],
-      onStreamChunk: (chunk) => {
-        streamed += chunk;
-      },
-    });
-
-    expect(result.type).toBe("deck.command_proposal");
-    expect(streamed).not.toContain("我马上开始制作");
   });
 
   it("does not let an action continuation end with a narrative message", async () => {
@@ -491,7 +232,7 @@ describe("Agent Architecture Skeletons & Types", () => {
       requiredOutcome: "command_proposal",
     });
 
-    expect(result.type).toBe("deck.command_proposal");
+    expect(result.type).toBe("command_proposal");
   });
 
   it("keeps AskUser context until the continued action reaches a proposal", async () => {
@@ -554,7 +295,7 @@ describe("Agent Architecture Skeletons & Types", () => {
           return {
           provider: "openai",
           model: "test-model",
-          text: JSON.stringify(modelAskUser("请补充具体主题。", ["topic"])),
+          content: [modelAskUser("请补充具体主题。", ["topic"])],
           };
         }
         if (prompts.length === 2) {
@@ -563,12 +304,11 @@ describe("Agent Architecture Skeletons & Types", () => {
         return {
           provider: "openai",
           model: "test-model",
-          text: JSON.stringify(modelAskUser("上一条是 Agent 范式与架构演进。", ["confirmation"])),
+          content: [modelAskUser("上一条是 Agent 范式与架构演进。", ["confirmation"])],
         };
       },
       async *generateTextStream() {
-        yield { type: "content" as const, text: "" };
-        yield { type: "complete" as const, text: "" };
+        yield { type: "complete" as const, content: [] };
       },
     };
     const service = new AgentService(
@@ -614,12 +354,11 @@ describe("Agent Architecture Skeletons & Types", () => {
           return {
           provider: "openai",
           model: "test-model",
-          text: JSON.stringify(modelMessage("你刚才说的是 Agent 范式与架构演进。")),
+          content: [modelMessage("你刚才说的是 Agent 范式与架构演进。")],
           };
         },
         async *generateTextStream() {
-          yield { type: "content" as const, text: "" };
-          yield { type: "complete" as const, text: "" };
+          yield { type: "complete" as const, content: [] };
         },
       }),
       new CommitGate(new RiskPolicy()),

@@ -206,28 +206,22 @@ describe("Sub-agent permission integration", () => {
           return {
             provider: "openai",
             model: "test",
-            text: JSON.stringify({
-              type: "tool.call",
-              data: {
-                toolName: "bash",
-                args: { command: "rm -rf /" },
-              },
-            }),
+            content: [{
+              type: "tool_use",
+              id: "deny-call",
+              name: "bash",
+              input: { command: "rm -rf /" },
+            }],
           };
         }
         return {
           provider: "openai",
           model: "test",
-          text: JSON.stringify({
-            kind: "text",
-            format: "markdown",
-            type: "assistant.message",
-            data: { content: "Stopped after deny." },
-          }),
+          content: [{ type: "text", text: "Stopped after deny." }],
         };
       },
       async *generateTextStream() {
-        yield { type: "complete" as const, text: "" };
+        yield { type: "complete" as const, content: [] };
       },
     };
 
@@ -253,28 +247,22 @@ describe("Sub-agent permission integration", () => {
           return {
             provider: "openai",
             model: "test",
-            text: JSON.stringify({
-              type: "tool.call",
-              data: {
-                toolName: "write_file",
-                args: { path: "ok.md", content: "approved" },
-              },
-            }),
+            content: [{
+              type: "tool_use",
+              id: "write-call",
+              name: "write_file",
+              input: { path: "ok.md", content: "approved" },
+            }],
           };
         }
         return {
           provider: "openai",
           model: "test",
-          text: JSON.stringify({
-            kind: "text",
-            format: "markdown",
-            type: "assistant.message",
-            data: { content: "Write complete." },
-          }),
+          content: [{ type: "text", text: "Write complete." }],
         };
       },
       async *generateTextStream() {
-        yield { type: "complete" as const, text: "" };
+        yield { type: "complete" as const, content: [] };
       },
     };
 

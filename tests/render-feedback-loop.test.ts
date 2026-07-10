@@ -18,7 +18,7 @@ import type {
   AgentModelGateway,
   AgentModelRequest,
   AgentModelResponse,
-  AgentModelToolCall,
+  AgentModelToolUseBlock,
 } from "../src/main/agent/gateway/types";
 
 function makePresentation(): Presentation {
@@ -123,15 +123,12 @@ describe("render-feedback-loop", () => {
 });
 
 function createNativeGateway(
-  turns: Array<{ text?: string; toolCalls?: AgentModelToolCall[] }>,
+  turns: Array<{ text?: string; toolCalls?: AgentModelToolUseBlock[] }>,
 ): AgentModelGateway & { requests: AgentModelRequest[] } {
   let index = 0;
   const requests: AgentModelRequest[] = [];
   return {
     requests,
-    supportsNativeToolUse() {
-      return true;
-    },
     async generateText(request): Promise<AgentModelResponse> {
       requests.push(request);
       const turn = turns[index++];
@@ -139,14 +136,22 @@ function createNativeGateway(
       return {
         provider: "anthropic",
         model: "test-model",
-        text: turn.text ?? "",
-        toolCalls: turn.toolCalls,
+        content: [
+          ...(turn.text ? [{ type: "text" as const, text: turn.text }] : []),
+          ...(turn.toolCalls ?? []),
+        ],
       };
     },
     async *generateTextStream() {
       const turn = turns[index++];
       if (!turn) throw new Error("Unexpected gateway call");
-      yield { type: "complete" as const, text: "", toolCalls: turn.toolCalls };
+      yield {
+        type: "complete" as const,
+        content: [
+          ...(turn.text ? [{ type: "text" as const, text: turn.text }] : []),
+          ...(turn.toolCalls ?? []),
+        ],
+      };
     },
   };
 }
@@ -161,9 +166,10 @@ describe("render feedback runtime integration", () => {
     const gateway = createNativeGateway([
       {
         toolCalls: [{
+          type: "tool_use",
           id: "call-1",
           name: "SubmitCommands",
-          args: {
+          input: {
             summary: "Apply theme and cover layout",
             commands: [
               { id: "c1", type: "set-theme", theme: "nordic", palette: "cyan" },
@@ -175,9 +181,10 @@ describe("render feedback runtime integration", () => {
       },
       {
         toolCalls: [{
+          type: "tool_use",
           id: "call-2",
           name: "SubmitCommands",
-          args: {
+          input: {
             summary: "Visual review passed",
             commands: [
               { id: "c3", type: "set-theme", theme: "nordic", palette: "cyan" },
@@ -207,15 +214,16 @@ describe("render feedback runtime integration", () => {
 
     expect(progressEvents).toEqual(["render-feedback", "render-feedback-ready"]);
     expect(gateway.requests.length).toBe(2);
-    expect(result.type).toBe("deck.command_proposal");
-    if (result.type === "deck.command_proposal") {
-      expect(result.data.summary).toBe("Visual review passed");
+    expect(result.type).toBe("command_proposal");
+    if (result.type === "command_proposal") {
+      expect(result.summary).toBe("Visual review passed");
     }
 
     const feedbackTurn = gateway.requests[1];
-    const feedbackMessage = feedbackTurn.messages?.find(
-      (message) => message.toolResults?.some((entry) => entry.content.includes("排版视觉反馈")),
-    );
-    expect(feedbackMessage?.toolResults?.[0].content).toContain("排版视觉反馈");
+    const feedbackBlock = feedbackTurn.messages
+      ?.flatMap((message) => message.content)
+      .find((block) => block.type === "tool_result" && block.content.some((entry) =>
+        entry.type === "text" && entry.text.includes("排版视觉反馈")));
+    expect(feedbackBlock?.type).toBe("tool_result");
   });
 });

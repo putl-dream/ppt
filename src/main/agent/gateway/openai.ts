@@ -9,135 +9,137 @@ import type {
   AgentModelRequest,
   AgentModelResponse,
   AgentModelStreamChunk,
-  AgentModelToolCall,
-  AgentModelToolResult,
+  AgentModelToolResultBlock,
+  AgentModelToolUseBlock,
   ResolvedAgentModelConfig,
 } from "./types";
-
-function toContentBlocks(
-  text: string,
-  toolCalls: AgentModelToolCall[] = [],
-): AgentModelContentBlock[] {
-  return [
-    ...(text ? [{ type: "text" as const, text }] : []),
-    ...toolCalls.map((call) => ({
-      type: "tool_use" as const,
-      id: call.id,
-      name: call.name,
-      input: call.args,
-      ...(call.parseError ? { parseError: call.parseError } : {}),
-    })),
-  ];
-}
 
 function toOpenAiImageUrl(image: AgentModelImageBlock): string {
   return `data:${image.mediaType};base64,${image.data}`;
 }
+function textFromBlocks(blocks: AgentModelContentBlock[]): string {
+  return blocks
+    .filter((block): block is Extract<AgentModelContentBlock, { type: "text" }> =>
+      block.type === "text")
+    .map((block) => block.text)
+    .join("\n");
+}
 
 function toOpenAiUserContent(
-  text: string | undefined,
-  images: AgentModelImageBlock[] | undefined,
+  blocks: AgentModelContentBlock[],
 ): OpenAI.Chat.Completions.ChatCompletionContentPart[] | string {
   const parts: OpenAI.Chat.Completions.ChatCompletionContentPart[] = [];
-  if (text?.trim()) {
-    parts.push({ type: "text", text });
+  for (const block of blocks) {
+    if (block.type === "text" && block.text.trim()) {
+      parts.push({ type: "text", text: block.text });
+    } else if (block.type === "image") {
+      parts.push({ type: "image_url", image_url: { url: toOpenAiImageUrl(block) } });
+    }
   }
-  for (const image of images ?? []) {
-    parts.push({
-      type: "image_url",
-      image_url: { url: toOpenAiImageUrl(image) },
-    });
-  }
-  if (parts.length === 0) return text ?? "";
-  if (parts.length === 1 && parts[0].type === "text") return text ?? "";
+  if (parts.length === 0) return "";
+  if (parts.length === 1 && parts[0].type === "text") return parts[0].text;
   return parts;
 }
 
-function toOpenAiToolResultContent(result: AgentModelToolResult): string {
-  if (!result.images?.length) return result.content;
-  return `${result.content}\n\n[${result.images.length} slide thumbnail(s) attached in a follow-up user message]`;
+function toolResultText(result: AgentModelToolResultBlock): string {
+  const text = result.content
+    .filter((block): block is Extract<typeof block, { type: "text" }> => block.type === "text")
+    .map((block) => block.text)
+    .join("\n");
+  const images = result.content.filter((block) => block.type === "image");
+  return images.length > 0
+    ? `${text}\n\n[${images.length} image attachment(s) follow in a user message]`.trim()
+    : text;
 }
 
-/** Build Chat Completions messages from structured multi-turn messages. */
 function toChatMessages(
   messages: AgentModelMessage[],
 ): OpenAI.Chat.Completions.ChatCompletionMessageParam[] {
   const out: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [];
   for (const message of ensureToolResultPairing(messages)) {
     if (message.role === "assistant") {
+      const toolUses = message.content.filter(
+        (block): block is AgentModelToolUseBlock => block.type === "tool_use",
+      );
       out.push({
         role: "assistant",
-        content: message.content ?? "",
-        ...(message.toolCalls?.length
+        content: textFromBlocks(message.content),
+        ...(toolUses.length
           ? {
-              tool_calls: message.toolCalls.map((call) => ({
+              tool_calls: toolUses.map((call) => ({
                 id: call.id,
                 type: "function" as const,
-                function: { name: call.name, arguments: JSON.stringify(call.args) },
+                function: { name: call.name, arguments: JSON.stringify(call.input) },
               })),
             }
           : {}),
       });
-    } else if (message.toolResults?.length) {
-      for (const result of message.toolResults) {
-        out.push({
-          role: "tool",
-          tool_call_id: result.toolCallId,
-          content: toOpenAiToolResultContent(result),
-        });
-      }
-      if (message.content?.trim() || message.images?.length) {
-        out.push({
-          role: "user",
-          content: toOpenAiUserContent(message.content, message.images),
-        });
-      } else if (message.toolResults.some((result) => result.images?.length)) {
-        const images = message.toolResults.flatMap((result) => result.images ?? []);
-        out.push({
-          role: "user",
-          content: toOpenAiUserContent("Slide thumbnails from the previous tool result:", images),
-        });
-      }
-    } else {
+      continue;
+    }
+
+    const toolResults = message.content.filter(
+      (block): block is AgentModelToolResultBlock => block.type === "tool_result",
+    );
+    for (const result of toolResults) {
       out.push({
-        role: "user",
-        content: toOpenAiUserContent(message.content, message.images),
+        role: "tool",
+        tool_call_id: result.toolUseId,
+        content: toolResultText(result),
       });
+    }
+
+    const userBlocks = message.content.filter((block) =>
+      block.type === "text" || block.type === "image");
+    const resultImages = toolResults.flatMap((result) =>
+      result.content.filter((block): block is AgentModelImageBlock => block.type === "image"));
+    const combined = [...userBlocks, ...resultImages];
+    if (combined.length > 0) {
+      out.push({ role: "user", content: toOpenAiUserContent(combined) });
     }
   }
   return out;
 }
 
-/** Parse Chat Completions tool_calls into the gateway shape. */
 function parseChatToolCalls(
   toolCalls: OpenAI.Chat.Completions.ChatCompletionMessageToolCall[] | undefined,
-): AgentModelToolCall[] {
+): AgentModelToolUseBlock[] {
   if (!toolCalls?.length) return [];
-  const out: AgentModelToolCall[] = [];
+  const out: AgentModelToolUseBlock[] = [];
   for (const call of toolCalls) {
     if (call.type !== "function") continue;
-    let args: Record<string, unknown> = {};
+    let input: Record<string, unknown> = {};
     let parseError: string | undefined;
     try {
-      args = call.function.arguments ? JSON.parse(call.function.arguments) : {};
-      if (!args || typeof args !== "object" || Array.isArray(args)) {
+      const parsed = call.function.arguments ? JSON.parse(call.function.arguments) : {};
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
         parseError = "Tool arguments must decode to a JSON object.";
-        args = {};
+      } else {
+        input = parsed as Record<string, unknown>;
       }
     } catch (error) {
       parseError = `Invalid tool argument JSON: ${
         error instanceof Error ? error.message : String(error)
       }`;
-      args = {};
     }
     out.push({
+      type: "tool_use",
       id: call.id,
       name: call.function.name,
-      args,
+      input,
       ...(parseError ? { parseError } : {}),
     });
   }
   return out;
+}
+
+function contentFromChatChoice(
+  choice: OpenAI.Chat.Completions.ChatCompletion.Choice | undefined,
+): AgentModelContentBlock[] {
+  const text = (choice?.message.content ?? "").trim();
+  return [
+    ...(text ? [{ type: "text" as const, text }] : []),
+    ...parseChatToolCalls(choice?.message.tool_calls),
+  ];
 }
 
 export async function generateWithOpenAI(
@@ -148,109 +150,73 @@ export async function generateWithOpenAI(
     apiKey: config.apiKey,
     baseURL: config.baseURL,
     timeout: config.timeoutMs,
-    // Keep provider failures visible to the Runtime instead of silently
-    // multiplying the configured timeout inside the SDK.
     maxRetries: 0,
   });
 
   try {
     const mode = config.openaiApiMode ?? "responses";
-    let text: string;
-    let requestId: string | undefined;
-    let stopReason: string | undefined;
-
     const maxOutputTokens = request.maxOutputTokens ?? config.maxOutputTokens;
-    let toolCalls: AgentModelToolCall[] = [];
     const systemPrompt = applyResponseContract(request.systemPrompt, request.responseContract);
 
-    // 原生 tool-use：Responses 模式的 tool schema 结构差异较大，统一走
-    // Chat Completions 承载 tool-use，纯文本仍按配置模式。
-    if (request.tools?.length) {
+    if (request.tools?.length || mode === "chat-completions") {
       const response = await client.chat.completions.create({
         model: config.model,
         messages: [
-          ...(systemPrompt
-            ? [{ role: "system" as const, content: systemPrompt }]
-            : []),
+          ...(systemPrompt ? [{ role: "system" as const, content: systemPrompt }] : []),
           ...(request.messages
             ? toChatMessages(request.messages)
             : [{ role: "user" as const, content: request.prompt }]),
         ],
         max_tokens: maxOutputTokens,
-        tools: request.tools.map((tool) => ({
-          type: "function" as const,
-          function: {
-            name: tool.name,
-            description: tool.description,
-            parameters: tool.inputSchema,
-          },
-        })),
+        ...(request.tools?.length
+          ? {
+              tools: request.tools.map((tool) => ({
+                type: "function" as const,
+                function: {
+                  name: tool.name,
+                  description: tool.description,
+                  parameters: tool.inputSchema,
+                  strict: true,
+                },
+              })),
+            }
+          : {}),
       }, { signal: request.signal });
       const choice = response.choices[0];
-      text = (choice?.message.content ?? "").trim();
-      toolCalls = parseChatToolCalls(choice?.message.tool_calls);
-      requestId = response._request_id ?? undefined;
-      stopReason = choice?.finish_reason ?? undefined;
-
-      if (!text && toolCalls.length === 0) {
+      const content = contentFromChatChoice(choice);
+      if (content.length === 0) {
         throw new AgentGatewayError("OpenAI returned an empty response.", "empty-response", "openai");
       }
       return {
         provider: "openai",
         model: config.model,
-        text,
-        toolCalls,
-        contentBlocks: toContentBlocks(text, toolCalls),
-        requestId,
-        stopReason,
+        content,
+        requestId: response._request_id ?? undefined,
+        stopReason: choice?.finish_reason ?? undefined,
       };
     }
 
-    if (mode === "responses") {
-      const response = await client.responses.create({
-        model: config.model,
-        instructions: systemPrompt,
-        input: request.prompt,
-        max_output_tokens: maxOutputTokens,
-      }, { signal: request.signal });
-      text = response.output_text.trim();
-      requestId = response._request_id ?? undefined;
-    } else {
-      const response = await client.chat.completions.create({
-        model: config.model,
-        messages: [
-          ...(systemPrompt
-            ? [{ role: "system" as const, content: systemPrompt }]
-            : []),
-          { role: "user", content: request.prompt },
-        ],
-        max_tokens: maxOutputTokens,
-      }, { signal: request.signal });
-      text = (response.choices[0]?.message.content ?? "").trim();
-      requestId = response._request_id ?? undefined;
-      stopReason = response.choices[0]?.finish_reason ?? undefined;
-    }
-
+    const response = await client.responses.create({
+      model: config.model,
+      instructions: systemPrompt,
+      input: request.prompt,
+      max_output_tokens: maxOutputTokens,
+    }, { signal: request.signal });
+    const text = response.output_text.trim();
     if (!text) {
       throw new AgentGatewayError("OpenAI returned an empty response.", "empty-response", "openai");
     }
     return {
       provider: "openai",
       model: config.model,
-      text,
-      contentBlocks: toContentBlocks(text),
-      requestId,
-      stopReason,
+      content: [{ type: "text", text }],
+      requestId: response._request_id ?? undefined,
     };
   } catch (error) {
     throw normalizeProviderError("openai", error, request.signal);
   }
 }
 
-/**
- * 流式生成文本（OpenAI）
- * 注意：Responses API 暂不支持流式，会降级为非流式后一次性返回
- */
 export async function* generateStreamWithOpenAI(
   config: ResolvedAgentModelConfig,
   request: AgentModelRequest,
@@ -266,54 +232,43 @@ export async function* generateStreamWithOpenAI(
     const mode = config.openaiApiMode ?? "responses";
     const systemPrompt = applyResponseContract(request.systemPrompt, request.responseContract);
 
-    // 原生 tool-use 走非流式（tool_calls 的增量拼接不适合逐块回显），
-    // 一次性拿到结果后按 chunk 形态回吐，工具调用挂在 complete chunk。
-    if (request.tools?.length) {
+    if (request.tools?.length || mode === "responses") {
       const response = await generateWithOpenAI(config, request);
-      if (response.text) {
-        yield { type: "content", text: response.text };
-      }
-      yield {
-        type: "complete",
-        text: "",
-        stopReason: response.stopReason,
-        ...(response.toolCalls?.length ? { toolCalls: response.toolCalls } : {}),
-      };
+      const text = textFromBlocks(response.content);
+      if (text) yield { type: "text_delta", text };
+      yield { type: "complete", content: response.content, stopReason: response.stopReason };
       return;
     }
 
-    if (mode === "responses") {
-      // Responses API 暂不支持流式，降级到非流式
-      const response = await generateWithOpenAI(config, request);
-      yield { type: "content", text: response.text };
-      yield { type: "complete", text: "", stopReason: response.stopReason };
-    } else {
-      const maxOutputTokens = request.maxOutputTokens ?? config.maxOutputTokens;
-      const stream = await client.chat.completions.create({
-        model: config.model,
-        messages: [
-          ...(systemPrompt
-            ? [{ role: "system" as const, content: systemPrompt }]
-            : []),
-          { role: "user", content: request.prompt },
-        ],
-        max_tokens: maxOutputTokens,
-        stream: true,
-      }, { signal: request.signal });
+    const stream = await client.chat.completions.create({
+      model: config.model,
+      messages: [
+        ...(systemPrompt ? [{ role: "system" as const, content: systemPrompt }] : []),
+        ...(request.messages
+          ? toChatMessages(request.messages)
+          : [{ role: "user" as const, content: request.prompt }]),
+      ],
+      max_tokens: request.maxOutputTokens ?? config.maxOutputTokens,
+      stream: true,
+    }, { signal: request.signal });
 
-      let finishReason: string | undefined;
-      for await (const chunk of stream) {
-        const content = chunk.choices[0]?.delta?.content;
-        if (content) {
-          yield { type: "content", text: content };
-        }
-        if (chunk.choices[0]?.finish_reason) {
-          finishReason = chunk.choices[0]?.finish_reason ?? undefined;
-        }
+    let text = "";
+    let finishReason: string | undefined;
+    for await (const chunk of stream) {
+      const delta = chunk.choices[0]?.delta?.content;
+      if (delta) {
+        text += delta;
+        yield { type: "text_delta", text: delta };
       }
-
-      yield { type: "complete", text: "", stopReason: finishReason };
+      if (chunk.choices[0]?.finish_reason) {
+        finishReason = chunk.choices[0].finish_reason ?? undefined;
+      }
     }
+    yield {
+      type: "complete",
+      content: text ? [{ type: "text", text }] : [],
+      stopReason: finishReason,
+    };
   } catch (error) {
     throw normalizeProviderError("openai", error, request.signal);
   }

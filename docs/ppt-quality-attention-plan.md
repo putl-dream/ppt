@@ -1,5 +1,7 @@
 # PPT 生成质量与模型注意力改进计划
 
+> **协议说明（2026-07-11）**：本文记录的 `supportsNativeToolUse`、扁平 `toolCalls/toolResults` 和文本协议回退方案已废弃，不得作为当前实现依据。当前唯一协议见 [agent-data-pipeline.md](./agent-data-pipeline.md)：`AgentModelResponse.content` + `messages[].content[]` ContentBlock。
+
 > 版本：2026-07-05
 > 状态：**P0–P2 路线项均已落地**；**六阶段机**已替代原九阶段（见 §6.4）
 > 关联：[ppt-capability-status-plan.md](./ppt-capability-status-plan.md)（能力现状）、[ppt-style-capability-plan.md](./ppt-style-capability-plan.md)（样式方案）

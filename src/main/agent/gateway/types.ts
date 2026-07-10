@@ -1,6 +1,6 @@
 import type { AgentModelSelection, AgentProvider } from "@shared/agent";
 
-export type AgentResponseContract = "agent-protocol" | "markdown-summary" | "none";
+export type AgentResponseContract = "markdown-summary" | "none";
 
 /**
  * 原生 tool-use 的工具声明。inputSchema 为标准 JSON Schema（由 zod 转换而来），
@@ -17,24 +17,46 @@ export interface AgentToolSchema {
  * tool_use，Anthropic 要求下一次请求原样回传这些块（含 signature），
  * 否则报错 `content[].thinking ... must be passed back`。
  */
+export type AgentModelTextBlock = { type: "text"; text: string };
+
 export type AgentModelThinkingBlock =
   | { type: "thinking"; thinking: string; signature: string }
   | { type: "redacted_thinking"; data: string };
+
+/** Base64 image block used in user messages and tool results. */
+export interface AgentModelImageBlock {
+  type: "image";
+  mediaType: "image/png" | "image/jpeg" | "image/webp" | "image/gif";
+  data: string;
+}
+
+export interface AgentModelToolUseBlock {
+  type: "tool_use";
+  /** Provider call ID. A tool_result must reference this exact value. */
+  id: string;
+  name: string;
+  input: Record<string, unknown>;
+  /** Provider argument JSON could not be parsed; execution must return an error result. */
+  parseError?: string;
+}
+
+export interface AgentModelToolResultBlock {
+  type: "tool_result";
+  toolUseId: string;
+  content: Array<AgentModelTextBlock | AgentModelImageBlock>;
+  isError?: boolean;
+}
 
 /**
  * Provider-neutral model content protocol. It intentionally stays smaller
  * than local messages and tool execution records.
  */
 export type AgentModelContentBlock =
-  | { type: "text"; text: string }
+  | AgentModelTextBlock
   | AgentModelThinkingBlock
-  | {
-      type: "tool_use";
-      id: string;
-      name: string;
-      input: Record<string, unknown>;
-      parseError?: string;
-    }
+  | AgentModelImageBlock
+  | AgentModelToolUseBlock
+  | AgentModelToolResultBlock
   | {
       /** MCP, web-search, code-execution, or another provider-managed block. */
       type: "server_tool";
@@ -48,45 +70,8 @@ export type AgentModelContentBlock =
  */
 export interface AgentModelMessage {
   role: "user" | "assistant";
-  /** 纯文本内容；与 toolCalls / toolResults / images 互补。 */
-  content?: string;
-  /** user 轮附带的图像（如渲染反馈缩略图）。 */
-  images?: AgentModelImageBlock[];
-  /** assistant 轮发起的工具调用。 */
-  toolCalls?: AgentModelToolCall[];
-  /** user 轮回传的工具执行结果。 */
-  toolResults?: AgentModelToolResult[];
-  /**
-   * assistant 轮的扩展思考块。回传时须置于其它块之前并保留 signature，
-   * 缺失会导致开启 thinking 的多轮 tool-use 请求被拒。
-   */
-  thinkingBlocks?: AgentModelThinkingBlock[];
-}
-
-/** 模型发起的一次工具调用（原生 tool-use）。 */
-export interface AgentModelToolCall {
-  /** provider 侧的调用 ID，回传 tool_result 时须原样带回。 */
-  id: string;
-  name: string;
-  args: Record<string, unknown>;
-  /** Provider argument JSON could not be parsed; execute must return an error result. */
-  parseError?: string;
-}
-
-/** Base64 图像块，用于视觉反馈等多模态 user / tool_result 内容。 */
-export interface AgentModelImageBlock {
-  mediaType: "image/png" | "image/jpeg" | "image/webp" | "image/gif";
-  data: string;
-}
-
-/** 一次工具执行结果，回传给模型。 */
-export interface AgentModelToolResult {
-  /** 对应 AgentModelToolCall.id。 */
-  toolCallId: string;
-  content: string;
-  /** 可选图像附件（如排版后缩略图），与 content 一并回传。 */
-  images?: AgentModelImageBlock[];
-  isError?: boolean;
+  /** The sole message payload; there are no flattened compatibility fields. */
+  content: AgentModelContentBlock[];
 }
 
 export interface AgentModelRequest {
@@ -102,13 +87,13 @@ export interface AgentModelRequest {
   /** Per-request override; used by output-truncation recovery. */
   maxOutputTokens?: number;
   /**
-   * 原生 tool-use 工具清单。提供时 provider 走原生 tool-use 分支；
-   * 省略时保持纯文本 JSON 协议（向后兼容）。
+   * Native tool-use declarations. Tool calls are always returned as
+   * `tool_use` content blocks; text JSON tool calls are not supported.
    */
   tools?: AgentToolSchema[];
   /**
-   * 多轮对话消息。提供时替代 prompt 作为对话主体（原生 tool-use 路径）；
-   * 省略时使用 prompt 字符串（文本协议路径）。
+   * Canonical multi-turn ContentBlock messages. When omitted, `prompt` is
+   * converted to one user text block for specialized one-shot calls.
    */
   messages?: AgentModelMessage[];
 }
@@ -116,33 +101,23 @@ export interface AgentModelRequest {
 export interface AgentModelResponse {
   provider: AgentProvider;
   model: string;
-  text: string;
+  /** Sole model payload. */
+  content: AgentModelContentBlock[];
   requestId?: string;
   stopReason?: string;
-  /** Native output normalized into the four model-content categories. */
-  contentBlocks?: AgentModelContentBlock[];
-  /**
-   * 原生 tool-use 返回的工具调用列表。存在时 runtime 走 tool-use 分支；
-   * 为空/未定义时回退到解析 text 中的 JSON。
-   */
-  toolCalls?: AgentModelToolCall[];
-  /** 扩展思考模式返回的 thinking 块，回传时须原样带回。 */
-  thinkingBlocks?: AgentModelThinkingBlock[];
 }
 
 /**
  * 流式传输的单个chunk
  */
-export interface AgentModelStreamChunk {
-  type: "content" | "thinking" | "complete";
-  text: string;
-  index?: number;
-  stopReason?: string;
-  /** 原生 tool-use 路径下，complete chunk 携带完整的工具调用列表。 */
-  toolCalls?: AgentModelToolCall[];
-  /** complete chunk 携带的扩展思考块，回传时须原样带回。 */
-  thinkingBlocks?: AgentModelThinkingBlock[];
-}
+export type AgentModelStreamChunk =
+  | { type: "text_delta"; text: string; index?: number }
+  | { type: "thinking_delta"; thinking: string; index?: number }
+  | {
+      type: "complete";
+      content: AgentModelContentBlock[];
+      stopReason?: string;
+    };
 
 /**
  * 流式传输完成后的元数据
@@ -163,12 +138,6 @@ export interface ResolvedAgentModelConfig extends AgentModelSelection {
 }
 
 export interface AgentModelGateway {
-  /**
-   * 是否支持原生 tool-use。返回 true 时 runtime 传 tools + messages 并解析
-   * 结构化工具调用；未实现或返回 false 时回退到文本 JSON 协议。
-   */
-  supportsNativeToolUse?(): boolean;
-
   generateText(
     request: AgentModelRequest,
     selection?: AgentModelSelection,

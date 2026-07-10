@@ -14,6 +14,7 @@ vi.mock("../src/main/agent/gateway/anthropic", () => ({
 }));
 
 import { AgentGateway } from "../src/main/agent/gateway";
+import { textFromContentBlocks } from "../src/main/agent/gateway/content-blocks";
 
 describe("AgentGateway", () => {
   beforeEach(() => {
@@ -25,7 +26,7 @@ describe("AgentGateway", () => {
     providerMocks.openai.mockResolvedValue({
       provider: "openai",
       model: "openai-test",
-      text: "hello",
+      content: [{ type: "text", text: "hello" }],
     });
     const gateway = new AgentGateway();
     gateway.configure({ provider: "openai", model: "openai-test", apiKey: "secret" });
@@ -35,7 +36,7 @@ describe("AgentGateway", () => {
       { provider: "openai", model: "openai-test" },
     );
 
-    expect(response.text).toBe("hello");
+    expect(textFromContentBlocks(response.content)).toBe("hello");
     expect(providerMocks.openai).toHaveBeenCalledOnce();
     expect(providerMocks.anthropic).not.toHaveBeenCalled();
     expect(providerMocks.openai.mock.calls[0][0]).toMatchObject({
@@ -49,7 +50,7 @@ describe("AgentGateway", () => {
     providerMocks.anthropic.mockResolvedValue({
       provider: "anthropic",
       model: "anthropic-test",
-      text: "hello",
+      content: [{ type: "text", text: "hello" }],
     });
     const gateway = new AgentGateway();
     const selection = gateway.configure({

@@ -2,7 +2,7 @@ import { mkdtemp, stat } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { tmpdir } from "node:os";
 import { describe, expect, it } from "vitest";
-import type { AgentModelGateway } from "../src/main/agent/gateway";
+import type { AgentModelContentBlock, AgentModelGateway } from "../src/main/agent/gateway/types";
 import { AgentRuntime } from "../src/main/agent/runtime/agent-runtime";
 import { MessageBus } from "../src/main/agent/teammate/message-bus";
 import { TeammateManager } from "../src/main/agent/teammate/spawn-teammate";
@@ -10,7 +10,7 @@ import { createDefaultToolRegistry } from "../src/main/agent/tools/tool-registry
 import type { ToolContext } from "../src/main/agent/tools/tool-definition";
 import { createStarterPresentation } from "../src/shared/presentation";
 
-function createSequenceGateway(responses: unknown[]): AgentModelGateway {
+function createSequenceGateway(responses: AgentModelContentBlock[]): AgentModelGateway {
   let index = 0;
   return {
     async generateText() {
@@ -19,15 +19,14 @@ function createSequenceGateway(responses: unknown[]): AgentModelGateway {
       return {
         provider: "anthropic",
         model: "test-model",
-        text: typeof value === "string" ? value : JSON.stringify(value),
+        content: [value],
       };
     },
     async *generateTextStream() {
       const value = responses[index++];
       if (value === undefined) throw new Error("Unexpected gateway call");
-      const text = typeof value === "string" ? value : JSON.stringify(value);
-      yield { type: "content" as const, text };
-      yield { type: "complete" as const, text: "" };
+      if (value.type === "text") yield { type: "text_delta" as const, text: value.text };
+      yield { type: "complete" as const, content: [value] };
     },
   };
 }
@@ -44,16 +43,16 @@ function createFailingGateway(error: Error): AgentModelGateway {
 }
 
 function modelToolCall(toolName: string, args: Record<string, unknown> = {}) {
-  return { type: "tool.call", data: { toolName, args } };
+  return {
+    type: "tool_use" as const,
+    id: crypto.randomUUID(),
+    name: toolName,
+    input: args,
+  };
 }
 
 function modelMessage(content: string) {
-  return {
-    kind: "text",
-    format: "markdown",
-    type: "assistant.message",
-    data: { content },
-  };
+  return { type: "text" as const, text: content };
 }
 
 async function waitFor<T>(read: () => Promise<T | undefined>): Promise<T> {
@@ -359,7 +358,7 @@ describe("Lead inbox injection", () => {
       },
     });
 
-    expect(result.type).toBe("assistant.message");
+    expect(result.type).toBe("message");
     expect(approvalRequests).toEqual([
       {
         toolName: "bash",

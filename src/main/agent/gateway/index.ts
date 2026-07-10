@@ -11,16 +11,13 @@ import type {
   AgentModelStreamChunk,
 } from "./types";
 import { createModuleLogger } from "../logger";
+import { textFromContentBlocks } from "./content-blocks";
 
 const logger = createModuleLogger("gateway");
 
 export class AgentGateway implements AgentModelGateway {
   private readonly runtimeSettings: Partial<Record<AgentProvider, AgentModelSettings>> = {};
   private gatewayConfig: AgentGatewayConfig = resolveAgentGatewayConfig();
-
-  supportsNativeToolUse(): boolean {
-    return true;
-  }
 
   configure(
     settings: AgentModelSettings,
@@ -85,7 +82,7 @@ export class AgentGateway implements AgentModelGateway {
         model: response.model,
         providerRequestId: response.requestId,
         stopReason: response.stopReason,
-        responseLength: response.text.length,
+        responseLength: textFromContentBlocks(response.content).length,
         durationMs: Date.now() - startedAt,
       });
       return response;
@@ -127,7 +124,7 @@ export class AgentGateway implements AgentModelGateway {
         : generateStreamWithAnthropic(config, request);
 
       for await (const chunk of generator) {
-        if (chunk.type === "content") {
+        if (chunk.type === "text_delta") {
           totalLength += chunk.text.length;
         }
         yield chunk;

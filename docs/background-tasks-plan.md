@@ -1,5 +1,7 @@
 # 后台任务（Background Tasks）落地计划
 
+> **协议说明（2026-07-11）**：本文早期示例中的 `message.toolResults`、`message.content` 字符串和 `supportsNativeToolUse` 回退已被唯一 ContentBlock 协议替代。当前实现以 [agent-data-pipeline.md](./agent-data-pipeline.md) 为准。
+
 > 版本：2026-07-05
 > 状态：待评审
 > 关联：[ppt-quality-attention-plan.md](./ppt-quality-attention-plan.md)（原生 tool-use 已落地，本方案的前置）
@@ -317,4 +319,3 @@ return finish(normalized);
 ## 9. 一句话总结
 
 保留草案「占位 tool_result + 后续 task_notification 注入」的核心思想，但把 Python 多线程模型换成**单线程不 await 的 Promise + per-run 管理器**，去掉无意义的锁，按本域（`Task`/`ExportPptx`）重定义启发式，并用 **finish 前强制 drain** 保证「异步不丢结果」。首期只在原生 tool-use 路径、core 工具上启用，风险可控、可全绿增量落地。
-

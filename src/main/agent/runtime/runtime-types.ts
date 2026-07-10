@@ -2,8 +2,9 @@
  * Agent Runtime 的稳定协议类型边界。
  */
 
-import type { PresentationCommand } from "@shared/commands";
-import type { AgentQuestion } from "@shared/agent-question";
+import { presentationCommandSchema } from "@shared/commands";
+import { agentQuestionSchema } from "@shared/agent-question";
+import { z } from "zod";
 import type { AgentModelSelection } from "@shared/agent";
 import type { AgentStepLimits } from "@shared/agent-step-limits";
 import type { Presentation } from "@shared/presentation";
@@ -13,55 +14,33 @@ import type { TeammateManager } from "../teammate/spawn-teammate";
 
 export type AgentRuntimeRisk = "low" | "medium" | "high";
 
-export type AgentEnvelopeKind = "structured" | "text";
-export type AgentEnvelopeFormat = "json" | "markdown";
+export const agentMessageResultSchema = z.object({
+  type: z.literal("message"),
+  content: z.string().trim().min(1),
+});
 
-export interface AgentEnvelope<
-  TType extends string,
-  TData,
-  TKind extends AgentEnvelopeKind,
-  TFormat extends AgentEnvelopeFormat,
-> {
-  kind: TKind;
-  format: TFormat;
-  type: TType;
-  data: TData;
-}
+export const agentAskUserResultSchema = z.object({
+  type: z.literal("ask_user"),
+  content: z.string().trim().min(1),
+  missingFields: z.array(z.string()).optional(),
+  question: agentQuestionSchema.optional(),
+});
 
-export type AgentTextEnvelope = {
-  kind: "text";
-  format: "markdown";
-  type: "assistant.message";
-  data: { content: string };
-};
+export const agentCommandProposalResultSchema = z.object({
+  type: z.literal("command_proposal"),
+  summary: z.string().trim().min(1),
+  commands: z.array(presentationCommandSchema).min(1),
+  risk: z.enum(["low", "medium", "high"]),
+  assumptions: z.array(z.string()).optional(),
+});
 
-export type AgentStructuredEnvelope =
-  | AgentEnvelope<"tool.call", { toolName: string; args: unknown }, "structured", "json">
-  | AgentEnvelope<
-      "assistant.ask_user",
-      { content: string; missingFields?: string[]; question?: AgentQuestion },
-      "structured",
-      "json"
-    >
-  | AgentEnvelope<
-      "deck.command_proposal",
-      {
-        summary: string;
-        commands: PresentationCommand[];
-        risk: AgentRuntimeRisk;
-        assumptions?: string[];
-      },
-      "structured",
-      "json"
-    >;
-
+export type AgentMessageResult = z.infer<typeof agentMessageResultSchema>;
+export type AgentAskUserResult = z.infer<typeof agentAskUserResultSchema>;
+export type AgentCommandProposalResult = z.infer<typeof agentCommandProposalResultSchema>;
 export type AgentRuntimeResult =
-  | AgentTextEnvelope
-  | Extract<AgentStructuredEnvelope, { type: "assistant.ask_user" | "deck.command_proposal" }>;
-
-export type AgentProtocolEnvelope =
-  | AgentRuntimeResult
-  | Extract<AgentStructuredEnvelope, { type: "tool.call" }>;
+  | AgentMessageResult
+  | AgentAskUserResult
+  | AgentCommandProposalResult;
 
 export interface AgentRuntimeOptions {
   threadId: string;

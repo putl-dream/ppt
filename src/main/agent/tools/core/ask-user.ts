@@ -1,7 +1,10 @@
 import { z } from "zod";
 import { agentQuestionSchema } from "@shared/agent-question";
 import type { ToolDefinition } from "../tool-definition";
-import type { AgentRuntimeResult } from "../../runtime/runtime-types";
+import {
+  agentAskUserResultSchema,
+  type AgentAskUserResult,
+} from "../../runtime/runtime-types";
 
 export const askUserSchema = z.object({
   message: z.string().describe("向用户提出的澄清问题内容"),
@@ -18,7 +21,7 @@ export const askUserSchema = z.object({
  */
 export const askUserTool: ToolDefinition<
   typeof askUserSchema,
-  Extract<AgentRuntimeResult, { type: "assistant.ask_user" }>
+  AgentAskUserResult
 > = {
   name: "AskUser",
   description:
@@ -27,6 +30,7 @@ export const askUserTool: ToolDefinition<
   category: "core",
   loadPolicy: "core",
   inputSchema: askUserSchema,
+  outputSchema: agentAskUserResultSchema,
   risk: "low",
   execute: async (args) => {
     const data = {
@@ -35,10 +39,8 @@ export const askUserTool: ToolDefinition<
       ...(args.question ? { question: args.question } : {}),
     };
     return {
-      kind: "structured",
-      format: "json",
-      type: "assistant.ask_user",
-      data,
+      type: "ask_user",
+      ...data,
     };
   },
 };

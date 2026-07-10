@@ -64,8 +64,7 @@ describe("generateWithOpenAI", () => {
     expect(response).toEqual({
       provider: "openai",
       model: "openai-test",
-      text: "generated text",
-      contentBlocks: [{ type: "text", text: "generated text" }],
+      content: [{ type: "text", text: "generated text" }],
       requestId: "req-openai",
     });
   });
@@ -95,8 +94,7 @@ describe("generateWithOpenAI", () => {
     expect(response).toEqual({
       provider: "openai",
       model: "openai-test",
-      text: "compatible text",
-      contentBlocks: [{ type: "text", text: "compatible text" }],
+      content: [{ type: "text", text: "compatible text" }],
       requestId: "req-compatible",
       stopReason: "stop",
     });
@@ -128,11 +126,12 @@ describe("generateWithOpenAI", () => {
       }],
     });
 
-    expect(response.toolCalls).toEqual([
+    expect(response.content).toEqual([
       expect.objectContaining({
+        type: "tool_use",
         id: "call-invalid",
         name: "Read",
-        args: {},
+        input: {},
         parseError: expect.stringContaining("Invalid tool argument JSON"),
       }),
     ]);

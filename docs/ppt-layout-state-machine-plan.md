@@ -35,7 +35,7 @@ ExecuteLayoutPlan
   ├─ validateLayoutPlanRhythm
   └─ buildLayoutPlanCommands
       ↓
-deck.command_proposal
+command_proposal
       ↓
 render feedback / commit gate / deck-review
 ```
@@ -96,7 +96,7 @@ render feedback / commit gate / deck-review
 3. 校验 plan 与当前 presentation snapshot 对齐。
 4. 执行 Rubric 和节奏校验。
 5. 若存在 error，返回结构化阻断结果，要求修复或重建 plan。
-6. 若无 error，生成 `deck.command_proposal`。
+6. 若无 error，生成本地 `command_proposal` 结果。
 
 这样即使 Task 仍只返回短结论，主流程也能消费实际文件，而不是依赖聊天上下文。
 

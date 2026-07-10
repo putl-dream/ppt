@@ -74,10 +74,10 @@ function makeContext(workspaceRoot: string, presentation: Presentation): ToolCon
 }
 
 function modelToolCall(toolName: string, args: Record<string, unknown> = {}) {
-  return { type: "tool.call", data: { toolName, args } };
+  return { type: "tool_use" as const, id: crypto.randomUUID(), name: toolName, input: args };
 }
 
-function createSequenceGateway(responses: unknown[]): AgentModelGateway {
+function createSequenceGateway(responses: ReturnType<typeof modelToolCall>[]): AgentModelGateway {
   let index = 0;
   return {
     async generateText() {
@@ -86,15 +86,13 @@ function createSequenceGateway(responses: unknown[]): AgentModelGateway {
       return {
         provider: "anthropic",
         model: "test-model",
-        text: typeof value === "string" ? value : JSON.stringify(value),
+        content: [value],
       };
     },
     async *generateTextStream() {
       const value = responses[index++];
       if (value === undefined) throw new Error("Unexpected gateway call");
-      const text = typeof value === "string" ? value : JSON.stringify(value);
-      yield { type: "content" as const, text };
-      yield { type: "complete" as const, text: "" };
+      yield { type: "complete" as const, content: [value] };
     },
   };
 }
@@ -110,11 +108,11 @@ describe("ExecuteLayoutPlan", () => {
 
     const result = await executeLayoutPlanTool.execute({}, makeContext(workspaceRoot, presentation));
 
-    expect("type" in result ? result.type : undefined).toBe("deck.command_proposal");
-    if (!("type" in result) || result.type !== "deck.command_proposal") {
+    expect("type" in result ? result.type : undefined).toBe("command_proposal");
+    if (!("type" in result) || result.type !== "command_proposal") {
       throw new Error("Expected command proposal");
     }
-    expect(result.data.commands).toEqual(
+    expect(result.commands).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ type: "set-theme", theme: "sunset", palette: "orange" }),
         expect.objectContaining({ type: "update-slide-layout", slideId: "slide-1", layout: "cover" }),
@@ -150,11 +148,11 @@ describe("ExecuteLayoutPlan", () => {
 
     const result = await executeLayoutPlanTool.execute({}, makeContext(workspaceRoot, presentation));
 
-    expect("type" in result ? result.type : undefined).toBe("deck.command_proposal");
-    if (!("type" in result) || result.type !== "deck.command_proposal") {
+    expect("type" in result ? result.type : undefined).toBe("command_proposal");
+    if (!("type" in result) || result.type !== "command_proposal") {
       throw new Error("Expected command proposal");
     }
-    expect(result.data.summary).toContain("warning/info");
+    expect(result.summary).toContain("warning/info");
   });
 
   it("blocks three consecutive identical layouts", async () => {
@@ -197,9 +195,9 @@ describe("ExecuteLayoutPlan", () => {
       stageHint: "author",
     });
 
-    expect(result.type).toBe("deck.command_proposal");
-    if (result.type === "deck.command_proposal") {
-      expect(result.data.commands.some((command) => command.type === "update-slide-layout")).toBe(true);
+    expect(result.type).toBe("command_proposal");
+    if (result.type === "command_proposal") {
+      expect(result.commands.some((command) => command.type === "update-slide-layout")).toBe(true);
     }
   });
 });

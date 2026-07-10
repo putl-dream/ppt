@@ -9,11 +9,11 @@ import { SUB_AGENT_TOOLS } from "../src/main/agent/subagent/workspace-tools";
 import { createTaskTool } from "../src/main/agent/tools/core/task";
 import { ToolRegistry } from "../src/main/agent/tools/tool-registry";
 import { submitCommandsTool } from "../src/main/agent/tools/core/submit-commands";
-import type { AgentModelGateway } from "../src/main/agent/gateway";
+import type { AgentModelContentBlock, AgentModelGateway } from "../src/main/agent/gateway/types";
 import { createStarterPresentation } from "../src/shared/presentation";
 import { writeWorkspaceText } from "../src/main/agent/subagent/workspace-file-ops";
 
-function createSequenceGateway(responses: unknown[]): AgentModelGateway {
+function createSequenceGateway(responses: AgentModelContentBlock[]): AgentModelGateway {
   let index = 0;
   return {
     async generateText() {
@@ -22,30 +22,29 @@ function createSequenceGateway(responses: unknown[]): AgentModelGateway {
       return {
         provider: "anthropic",
         model: "test-model",
-        text: typeof value === "string" ? value : JSON.stringify(value),
+        content: [value],
       };
     },
     async *generateTextStream() {
       const value = responses[index++];
       if (value === undefined) throw new Error("Unexpected gateway call");
-      const text = typeof value === "string" ? value : JSON.stringify(value);
-      yield { type: "content" as const, text };
-      yield { type: "complete" as const, text: "" };
+      if (value.type === "text") yield { type: "text_delta" as const, text: value.text };
+      yield { type: "complete" as const, content: [value] };
     },
   };
 }
 
 function modelToolCall(toolName: string, args: Record<string, unknown> = {}) {
-  return { type: "tool.call", data: { toolName, args } };
+  return {
+    type: "tool_use" as const,
+    id: crypto.randomUUID(),
+    name: toolName,
+    input: args,
+  };
 }
 
 function modelMessage(content: string) {
-  return {
-    kind: "text",
-    format: "markdown",
-    type: "assistant.message",
-    data: { content },
-  };
+  return { type: "text" as const, text: content };
 }
 
 describe("Task sub-agent routing", () => {
@@ -67,12 +66,11 @@ describe("Task sub-agent routing", () => {
     expect(await readFile(join(workspaceRoot, "brief.md"), "utf8")).toContain("Audience: engineers");
   });
 
-  it("retries malformed protocol JSON before accepting a text envelope conclusion", async () => {
+  it("returns malformed JSON-looking text directly instead of parsing the removed protocol", async () => {
     const workspaceRoot = await mkdtemp(join(tmpdir(), "ppt-subagent-"));
+    const raw = '{"type":"tool.call","data":';
     const gateway = createSequenceGateway([
-      '{"type":"tool.call","data":',
-      modelToolCall("write_file", { path: "brief.md", content: "# Brief\n" }),
-      modelMessage("Wrote brief.md."),
+      modelMessage(raw),
     ]);
 
     const conclusion = await spawnSubAgent({
@@ -82,16 +80,15 @@ describe("Task sub-agent routing", () => {
       requestToolApproval: async () => true,
     });
 
-    expect(conclusion).toBe("Wrote brief.md.");
-    expect(await readFile(join(workspaceRoot, "brief.md"), "utf8")).toBe("# Brief\n");
+    expect(conclusion).toBe(raw);
   });
 
-  it("documents JSON tool calls and text envelope conclusions in the sub-agent prompt", () => {
+  it("documents native tools and direct text conclusions in the sub-agent prompt", () => {
     const prompt = buildSubAgentSystemPrompt(SUB_AGENT_TOOLS);
 
-    expect(prompt).toContain("Tool steps must return exactly one JSON object");
-    expect(prompt).toContain("Final conclusion must return exactly one AgentTextEnvelope JSON object");
-    expect(prompt).toContain("Do not return bare Markdown text");
+    expect(prompt).toContain("provider's native tool interface");
+    expect(prompt).toContain("directly as text");
+    expect(prompt).not.toContain("AgentTextEnvelope");
   });
 
   it("creates parent directories when writing workspace files", async () => {
@@ -180,17 +177,17 @@ describe("Task sub-agent routing", () => {
           return {
             provider: "anthropic",
             model: "test-model",
-            text: JSON.stringify(modelMessage("Brief done.")),
+            content: [modelMessage("Brief done.")],
           };
         }
         return {
           provider: "anthropic",
           model: "test-model",
-          text: JSON.stringify(modelMessage("Outline done.")),
+          content: [modelMessage("Outline done.")],
         };
       },
       async *generateTextStream() {
-        yield { type: "complete" as const, text: "" };
+        yield { type: "complete" as const, content: [] };
       },
     };
 
@@ -240,19 +237,17 @@ describe("Task sub-agent routing", () => {
     });
 
     expect(spawn).toHaveBeenCalledOnce();
-    expect(result.type).toBe("deck.command_proposal");
+    expect(result.type).toBe("command_proposal");
     const secondPrompt = JSON.parse(prompts[1]!);
-    expect(secondPrompt.transcript).toEqual([
-      { role: "user", content: "Create an agent PPT" },
-      {
-        role: "tool",
-        toolName: "Task",
-        result: {
-          conclusion: "Sub-agent finished brief.md.",
-          subtaskCount: 1,
-        },
+    expect(secondPrompt.transcript[0]).toEqual({ role: "user", content: "Create an agent PPT" });
+    expect(secondPrompt.transcript[1]).toMatchObject({
+      role: "tool",
+      toolName: "Task",
+      result: {
+        conclusion: "Sub-agent finished brief.md.",
+        subtaskCount: 1,
       },
-    ]);
+    });
     expect(JSON.stringify(secondPrompt.transcript)).not.toContain("Draft brief.md");
   });
 

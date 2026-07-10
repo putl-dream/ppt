@@ -9,13 +9,8 @@ import { compactTranscript } from "../src/main/agent/runtime/transcript-compact"
 import { callModelWithRecovery } from "../src/main/agent/runtime/model-call-recovery";
 import type { AgentModelGateway } from "../src/main/agent/gateway/types";
 
-function textEnvelope(content: string): string {
-  return JSON.stringify({
-    kind: "text",
-    format: "markdown",
-    type: "assistant.message",
-    data: { content },
-  });
+function textContent(text: string) {
+  return [{ type: "text" as const, text }];
 }
 
 describe("computeBackoffDelayMs", () => {
@@ -88,8 +83,7 @@ describe("callModelWithRecovery", () => {
         return {
           provider: "anthropic",
           model: "test",
-          text: "",
-          contentBlocks: [{
+          content: [{
             type: "tool_use",
             id: "call-from-block",
             name: "ReadPresentationSnapshot",
@@ -98,7 +92,7 @@ describe("callModelWithRecovery", () => {
         };
       },
       async *generateTextStream() {
-        yield { type: "complete", text: "" };
+        yield { type: "complete" as const, content: [] };
       },
     };
 
@@ -108,10 +102,11 @@ describe("callModelWithRecovery", () => {
       promptPayload: { transcript: [], request: "hello" },
     });
 
-    expect(result.toolCalls).toEqual([{
+    expect(result.content).toEqual([{
+      type: "tool_use",
       id: "call-from-block",
       name: "ReadPresentationSnapshot",
-      args: {},
+      input: {},
     }]);
   });
 
@@ -120,12 +115,12 @@ describe("callModelWithRecovery", () => {
     const generateText = vi
       .fn()
       .mockRejectedValueOnce(Object.assign(new Error("rate limited"), { status: 429 }))
-      .mockResolvedValueOnce({ provider: "openai", model: "gpt", text: textEnvelope("ok") });
+      .mockResolvedValueOnce({ provider: "openai", model: "gpt", content: textContent("ok") });
 
     const gateway: AgentModelGateway = {
       generateText,
       async *generateTextStream() {
-        yield { type: "complete", text: "" };
+        yield { type: "complete" as const, content: [] };
       },
     };
 
@@ -137,7 +132,7 @@ describe("callModelWithRecovery", () => {
 
     await vi.runAllTimersAsync();
     const result = await promise;
-    expect(result.text).toContain("ok");
+    expect(result.content).toEqual(textContent("ok"));
     expect(generateText).toHaveBeenCalledTimes(2);
     expect(JSON.parse(generateText.mock.calls[0][0].prompt)).toEqual({
       transcript: [],
@@ -156,12 +151,12 @@ describe("callModelWithRecovery", () => {
       .mockRejectedValueOnce(
         Object.assign(new Error("prompt is too long"), { status: 400 }),
       )
-      .mockResolvedValueOnce({ provider: "openai", model: "gpt", text: textEnvelope("ok") });
+      .mockResolvedValueOnce({ provider: "openai", model: "gpt", content: textContent("ok") });
 
     const gateway: AgentModelGateway = {
       generateText,
       async *generateTextStream() {
-        yield { type: "complete", text: "" };
+        yield { type: "complete" as const, content: [] };
       },
     };
 
@@ -177,7 +172,7 @@ describe("callModelWithRecovery", () => {
       promptPayload: { transcript, request: "hello" },
     });
 
-    expect(result.text).toContain("ok");
+    expect(result.content).toEqual(textContent("ok"));
     const retriedPrompt = JSON.parse(generateText.mock.calls[1][0].prompt);
     expect(retriedPrompt.transcript[0]).toMatchObject({ kind: "compact_boundary" });
     expect(retriedPrompt.transcript.length).toBeLessThanOrEqual(5);
@@ -189,20 +184,20 @@ describe("callModelWithRecovery", () => {
       .mockResolvedValueOnce({
         provider: "anthropic",
         model: "claude",
-        text: '{"type":"tool.call","data":{"toolName":"ReadPresentationSnapshot","args":{}}}',
+        content: textContent("partial response"),
         stopReason: "max_tokens",
       })
       .mockResolvedValueOnce({
         provider: "anthropic",
         model: "claude",
-        text: textEnvelope("done"),
+        content: textContent("done"),
         stopReason: "end_turn",
       });
 
     const gateway: AgentModelGateway = {
       generateText,
       async *generateTextStream() {
-        yield { type: "complete", text: "" };
+        yield { type: "complete" as const, content: [] };
       },
     };
 
@@ -213,7 +208,7 @@ describe("callModelWithRecovery", () => {
       model: { provider: "anthropic", model: "claude" },
     });
 
-    expect(result.text).toContain("done");
+    expect(result.content).toEqual(textContent("done"));
     expect(generateText.mock.calls[0][0].maxOutputTokens).toBeUndefined();
     expect(generateText.mock.calls[1][0].maxOutputTokens).toBe(65536);
     expect(JSON.parse(generateText.mock.calls[1][0].prompt)).toEqual({

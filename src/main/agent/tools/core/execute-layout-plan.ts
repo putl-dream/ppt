@@ -10,7 +10,7 @@ import {
   type LayoutPlan,
   type LayoutPlanValidationIssue,
 } from "@shared/layout-plan";
-import type { AgentRuntimeResult } from "../../runtime/runtime-types";
+import type { AgentCommandProposalResult } from "../../runtime/runtime-types";
 import { resolveWorkspacePath } from "../../subagent/workspace-path";
 import type { ToolDefinition } from "../tool-definition";
 
@@ -30,7 +30,7 @@ interface ExecuteLayoutPlanFailure {
   guidance: string;
 }
 
-type ExecuteLayoutPlanResult = AgentRuntimeResult | ExecuteLayoutPlanFailure;
+type ExecuteLayoutPlanResult = AgentCommandProposalResult | ExecuteLayoutPlanFailure;
 
 function failure(path: string, issues: LayoutPlanValidationIssue[]): ExecuteLayoutPlanFailure {
   const errorCount = issues.filter((issue) => issue.severity === "error").length;
@@ -122,21 +122,17 @@ export const executeLayoutPlanTool: ToolDefinition<
       + `validation passed with ${warningCount} warning/info issue(s).`;
 
     return {
-      kind: "structured",
-      format: "json",
-      type: "deck.command_proposal",
-      data: {
-        summary,
-        commands,
-        risk: "low",
-        assumptions: [
-          "slides/layout-plan.json is the single source of truth for layout decisions.",
-          "Only theme, layout, grammarVariant, designTokens, and slideVariant are executed in this step.",
-          enhancementCount > 0
-            ? `${enhancementCount} enhancement item(s) remain for ExecuteExtraTool.`
-            : "No layout-plan enhancements were requested.",
-        ],
-      },
+      type: "command_proposal",
+      summary,
+      commands,
+      risk: "low",
+      assumptions: [
+        "slides/layout-plan.json is the single source of truth for layout decisions.",
+        "Only theme, layout, grammarVariant, designTokens, and slideVariant are executed in this step.",
+        enhancementCount > 0
+          ? `${enhancementCount} enhancement item(s) remain for ExecuteExtraTool.`
+          : "No layout-plan enhancements were requested.",
+      ],
     };
   },
 };

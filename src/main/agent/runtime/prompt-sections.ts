@@ -6,7 +6,7 @@ import type { PromptStage } from "./prompt-stage";
 import { describePromptStage } from "./prompt-stage";
 import { filterSkillCatalogForStage } from "./skill-stage-policy";
 import type { SkillRegistry } from "../skills/loadSkillsDir";
-import { buildAgentProtocolResponseContract } from "../gateway/response-contract";
+import { buildContentBlockResponseGuidance } from "../gateway/response-contract";
 import type { WorkspaceArtifacts } from "./workspace-artifacts";
 
 export type PromptSectionId = "identity" | "responseProtocol" | "tools" | "workspace" | "memory";
@@ -144,7 +144,7 @@ function buildIntentFirstContract(): string {
     "",
     "## 意图优先：先回答用户当下问题",
     "",
-    "- 不要把所有输入都解释为“现在要制作 PPT”。用户问概念、背景、定义、方法、评价、示例，或明确说“先不做 PPT / 暂不做 PPT / 先讲解 / 先聊聊”时，用 assistant.message envelope 给出实质回答，Markdown 写在 data.content 中。",
+    "- 不要把所有输入都解释为“现在要制作 PPT”。用户问概念、背景、定义、方法、评价、示例，或明确说“先不做 PPT / 暂不做 PPT / 先讲解 / 先聊聊”时，直接用 Markdown 文本给出实质回答。",
     "- 回答这类非制作请求时，先完整回应用户问的内容；不要立刻收集使用场景、受众、页数、风格等 PPT 制作字段。",
     "- 只有用户明确表示要开始制作、整理成 PPT、继续排版、导出或修改已有页面时，才进入对应阶段工具流程。",
     "- 不要声称“刚才已经讲解/已经完成/已经创建”任何尚未在当前会话真实发生的内容；若用户指出漏答，先承认并补上答案。",
@@ -251,7 +251,7 @@ function buildCorePrinciples(stage: PromptStage, stepLimits?: AgentStepLimits): 
 function buildWorkflowSnippet(stage: PromptStage): string {
   const snippets: Partial<Record<PromptStage, string>> = {
     discover: `## 本阶段工作流
-0. 非制作请求（讲解/问答/讨论/先不做 PPT）→ 用 assistant.message envelope 回答，内容写入 data.content
+0. 非制作请求（讲解/问答/讨论/先不做 PPT）→ 直接输出 Markdown 文本
 1. 判断场景：改一页 → edit；新建 ≤10 页 → author；大型/要先规划 → discover 全流程
 2. **多阶段(≥3 步)或完整路径**：第一步先 \`TaskGraphCreatePlan\`(sequential=true)建计划,再 LoadSkill / Read / Task，之后逐步 Claim → Task 委派/验收 → Complete
 3. LoadSkill \`ppt-brief\` → outline → storyboard（按需）
@@ -299,7 +299,7 @@ ${buildWorkflowSnippet(input.stage)}`;
 
 export function buildResponseProtocolSection(input: ResponseProtocolSectionInput): string {
   const outcomeBlock = buildRequiredOutcomeBlock(input.requiredOutcome);
-  return `${buildAgentProtocolResponseContract()}${outcomeBlock ? `\n\n${outcomeBlock}` : ""}`;
+  return `${buildContentBlockResponseGuidance()}${outcomeBlock ? `\n\n${outcomeBlock}` : ""}`;
 }
 
 export function buildToolsSection(input: ToolsSectionInput): string {

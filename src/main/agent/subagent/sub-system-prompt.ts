@@ -33,11 +33,7 @@ export function buildSubAgentSystemPrompt(tools: SubAgentToolDefinition[]): stri
 ${tools.map(formatToolCard).join("\n\n")}
 
 ## Response protocol
-Tool steps must return exactly one JSON object:
-- Call a tool: {"type":"tool.call","data":{"toolName":"tool_name","args":{}}}
-
-Final conclusion must return exactly one AgentTextEnvelope JSON object:
-{"kind":"text","format":"markdown","type":"assistant.message","data":{"content":"Markdown conclusion"}}
-
-Markdown belongs only inside data.content. Do not return bare Markdown text, and do not omit kind or format.`;
+- Call tools only through the provider's native tool interface.
+- When finished, return the concise Markdown conclusion directly as text.
+- Never emit JSON envelopes or textual tool-call objects.`;
 }

@@ -6,18 +6,17 @@ describe("ensureToolResultPairing", () => {
   it("adds one synthetic error result for every missing tool result", () => {
     const messages: AgentModelMessage[] = [{
       role: "assistant",
-      toolCalls: [
-        { id: "call-1", name: "Read", args: {} },
-        { id: "call-2", name: "List", args: {} },
+      content: [
+        { type: "tool_use", id: "call-1", name: "Read", input: {} },
+        { type: "tool_use", id: "call-2", name: "List", input: {} },
       ],
     }];
 
     const repaired = ensureToolResultPairing(messages);
-
     expect(repaired).toHaveLength(2);
-    expect(repaired[1]?.toolResults).toEqual([
-      expect.objectContaining({ toolCallId: "call-1", isError: true }),
-      expect.objectContaining({ toolCallId: "call-2", isError: true }),
+    expect(repaired[1]?.content).toEqual([
+      expect.objectContaining({ type: "tool_result", toolUseId: "call-1", isError: true }),
+      expect.objectContaining({ type: "tool_result", toolUseId: "call-2", isError: true }),
     ]);
   });
 
@@ -25,45 +24,51 @@ describe("ensureToolResultPairing", () => {
     const messages: AgentModelMessage[] = [
       {
         role: "assistant",
-        toolCalls: [
-          { id: "call-1", name: "Read", args: {} },
-          { id: "call-2", name: "List", args: {} },
+        content: [
+          { type: "tool_use", id: "call-1", name: "Read", input: {} },
+          { type: "tool_use", id: "call-2", name: "List", input: {} },
         ],
       },
       {
         role: "user",
-        toolResults: [
-          { toolCallId: "call-2", content: "second" },
-          { toolCallId: "call-2", content: "duplicate" },
-          { toolCallId: "orphan", content: "orphan" },
-          { toolCallId: "call-1", content: "first" },
+        content: [
+          { type: "tool_result", toolUseId: "call-2", content: [{ type: "text", text: "second" }] },
+          { type: "tool_result", toolUseId: "call-2", content: [{ type: "text", text: "duplicate" }] },
+          { type: "tool_result", toolUseId: "orphan", content: [{ type: "text", text: "orphan" }] },
+          { type: "tool_result", toolUseId: "call-1", content: [{ type: "text", text: "first" }] },
         ],
       },
       {
         role: "user",
-        content: "keep this user message",
-        toolResults: [{ toolCallId: "orphan-2", content: "remove" }],
+        content: [
+          { type: "text", text: "keep this user message" },
+          { type: "tool_result", toolUseId: "orphan-2", content: [{ type: "text", text: "remove" }] },
+        ],
       },
     ];
 
     const repaired = ensureToolResultPairing(messages);
-
-    expect(repaired[1]?.toolResults).toEqual([
-      { toolCallId: "call-1", content: "first" },
-      { toolCallId: "call-2", content: "second" },
+    expect(repaired[1]?.content).toEqual([
+      { type: "tool_result", toolUseId: "call-1", content: [{ type: "text", text: "first" }] },
+      { type: "tool_result", toolUseId: "call-2", content: [{ type: "text", text: "second" }] },
     ]);
-    expect(repaired[2]).toEqual({ role: "user", content: "keep this user message", toolResults: undefined });
+    expect(repaired[2]).toEqual({
+      role: "user",
+      content: [{ type: "text", text: "keep this user message" }],
+    });
   });
 
   it("does not mutate the caller's message array", () => {
     const messages: AgentModelMessage[] = [{
       role: "user",
-      content: "hello",
-      toolResults: [{ toolCallId: "orphan", content: "remove" }],
+      content: [{
+        type: "tool_result",
+        toolUseId: "orphan",
+        content: [{ type: "text", text: "remove" }],
+      }],
     }];
 
     ensureToolResultPairing(messages);
-
-    expect(messages[0]?.toolResults).toHaveLength(1);
+    expect(messages[0]?.content).toHaveLength(1);
   });
 });

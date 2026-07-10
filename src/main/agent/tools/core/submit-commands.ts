@@ -1,7 +1,10 @@
 import { z } from "zod";
 import type { ToolDefinition } from "../tool-definition";
 import { presentationCommandSchema } from "@shared/commands";
-import type { AgentRuntimeResult } from "../../runtime/runtime-types";
+import {
+  agentCommandProposalResultSchema,
+  type AgentCommandProposalResult,
+} from "../../runtime/runtime-types";
 
 /** Models often pass a single string; coerce to string[]. */
 export const assumptionsSchema = z.preprocess(
@@ -31,7 +34,7 @@ export const submitCommandsSchema = z.object({
  */
 export const submitCommandsTool: ToolDefinition<
   typeof submitCommandsSchema,
-  AgentRuntimeResult
+  AgentCommandProposalResult
 > = {
   name: "SubmitCommands",
   description:
@@ -40,18 +43,15 @@ export const submitCommandsTool: ToolDefinition<
   category: "core",
   loadPolicy: "core",
   inputSchema: submitCommandsSchema,
+  outputSchema: agentCommandProposalResultSchema,
   risk: "low",
   execute: async (args) => {
     return {
-      kind: "structured",
-      format: "json",
-      type: "deck.command_proposal",
-      data: {
-        summary: args.summary,
-        commands: args.commands,
-        risk: args.risk,
-        assumptions: args.assumptions,
-      },
+      type: "command_proposal",
+      summary: args.summary,
+      commands: args.commands,
+      risk: args.risk,
+      assumptions: args.assumptions,
     };
   },
 };
