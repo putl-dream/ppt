@@ -66,6 +66,8 @@ describe("system prompt assembly", () => {
     expect(assembled.text).toContain("PPT 智能助手");
     expect(assembled.text).toContain("AskUser");
     expect(assembled.text).toContain("工作目录: /tmp/project");
+    expect(assembled.text).toContain("Workflow Artifact State");
+    expect(assembled.text).toContain("brief.md: missing/unverified");
     expect(assembled.text).toContain("slide-1");
     expect(assembled.text).not.toContain("## 相关记忆");
   });
@@ -78,7 +80,9 @@ describe("system prompt assembly", () => {
     expect(assembled.text).toContain("维护 TaskGraph");
     expect(assembled.text).toContain("委派子 Agent");
     expect(assembled.text).toContain("不要创建临时、平面的任务列表");
-    expect(assembled.text).toContain("第一步必须先 `TaskGraphCreatePlan`");
+    expect(assembled.text).toContain("覆盖当前用户目标的端到端计划");
+    expect(assembled.text).toContain("同一个用户目标只建一张 TaskGraph");
+    expect(assembled.text).toContain("不要因为进入 author/design/style 再调用 `TaskGraphCreatePlan`");
     expect(assembled.text).toContain("验收产物");
   });
 
@@ -96,6 +100,7 @@ describe("system prompt assembly", () => {
     expect(assembled.text).toContain("`ppt-build`");
     expect(assembled.text).not.toContain("`ppt-layout`");
     expect(assembled.text).toContain("充分写内容");
+    expect(assembled.text).toContain("不要新建 TaskGraphCreatePlan");
     expect(assembled.text).toContain("大纲/分镜已冻结");
     expect(assembled.text).toContain("内容规范化");
     expect(assembled.text).not.toMatch(/"type":"set-theme"/);

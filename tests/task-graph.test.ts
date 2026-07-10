@@ -222,6 +222,34 @@ describe("TaskGraph tools", () => {
     expect(onUpdated).toHaveBeenCalled();
   });
 
+  it("rejects creating a second plan while the current task graph is active", async () => {
+    const workspaceRoot = await makeWorkspace();
+    const context = baseContext(workspaceRoot);
+
+    await taskGraphCreatePlanTool.execute(
+      {
+        goal: "Build deck",
+        sequential: true,
+        steps: [
+          { subject: "Create brief" },
+          { subject: "Create outline" },
+        ],
+      },
+      context,
+    );
+
+    await expect(
+      taskGraphCreatePlanTool.execute(
+        {
+          goal: "Author deck",
+          sequential: true,
+          steps: [{ subject: "Draft slides" }],
+        },
+        context,
+      ),
+    ).rejects.toThrow("Active task plan already exists");
+  });
+
   it("upserts a single taskgraph block in the activity trace", () => {
     const task: AgentTaskNode = {
       id: "task_1",

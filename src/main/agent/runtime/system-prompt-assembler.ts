@@ -76,6 +76,7 @@ export function assembleSystemPrompt(context: SystemPromptContext): AssembledSys
     stage: context.stage,
     workspaceRoot: context.workspaceRoot,
     currentSlideId: context.currentSlideId,
+    artifacts: context.artifacts,
   }));
 
   if (shouldIncludeMemory(context)) {

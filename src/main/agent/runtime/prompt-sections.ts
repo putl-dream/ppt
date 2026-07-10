@@ -7,6 +7,7 @@ import { describePromptStage } from "./prompt-stage";
 import { filterSkillCatalogForStage } from "./skill-stage-policy";
 import type { SkillRegistry } from "../skills/loadSkillsDir";
 import { buildAgentProtocolResponseContract } from "../gateway/response-contract";
+import type { WorkspaceArtifacts } from "./workspace-artifacts";
 
 export type PromptSectionId = "identity" | "responseProtocol" | "tools" | "workspace" | "memory";
 
@@ -61,6 +62,7 @@ export interface WorkspaceSectionInput {
   stage: PromptStage;
   workspaceRoot?: string;
   currentSlideId?: string;
+  artifacts?: WorkspaceArtifacts;
 }
 
 export interface MemorySectionInput {
@@ -157,8 +159,9 @@ function buildLeadAgentContract(): string {
     "",
     "- 你的核心身份是 **lead/orchestrator**：识别意图、判断阶段、维护 TaskGraph、委派子 Agent、验收产物、收敛交付。",
     "- 不亲自承担完整写作、分镜、排版设计或大段重写；这些 workspace 中间产物优先通过 `Task` 交给专责子 Agent。",
-    "- 任务计划系统只有 `TaskGraph*`：完整路径或多阶段任务先建持久化计划，再按 Claim → 执行 → Complete 推进；不要创建临时、平面的任务列表。",
-    "- 对完整/多阶段制作请求，第一步必须先 `TaskGraphCreatePlan` 生成可见任务计划；不要先 LoadSkill、ReadPresentationSnapshot 或直接 Task。",
+    "- 任务计划系统只有 `TaskGraph*`：完整路径或多阶段任务先建一张持久化计划，再按 Claim → 执行 → Complete 推进；不要创建临时、平面的任务列表。",
+    "- 对完整/多阶段制作请求，第一步必须先 `TaskGraphCreatePlan` 生成覆盖当前用户目标的端到端计划；不要只为当前阶段建一张 discover-only 小计划。",
+    "- 同一个用户目标只建一张 TaskGraph：阶段切换、用户说“继续”、或 context compact 后恢复时，先依据 Workspace Artifact State 和 `TaskGraphList` 续跑；不要因为进入 author/design/style 再调用 `TaskGraphCreatePlan`。",
     "- 主 Agent 可以直接执行的工作限于：非制作问答、轻量单页/小范围改动、读取上下文、用户追问、结果验收，以及通过 `ExecuteLayoutPlan` 把已冻结 layout-plan 转成最终 command proposal。",
     "- 每个 Task 完成后先检查产物是否满足本阶段契约，再 Complete 对应任务；不要因为子 Agent 有结论就自动视为通过。",
     "- 简单任务保持轻量：能一次读取并 SubmitCommands 的局部修改，不创建 TaskGraph、不委派子 Agent。",
@@ -191,13 +194,14 @@ function buildCorePrinciples(stage: PromptStage, stepLimits?: AgentStepLimits): 
       "- 若用户是在提问、要求讲解、讨论主题，或明确说先不做 PPT：直接回答问题，不进入需求收集。",
       "- 判断轻量 / 两阶段 / 完整路径；不要默认走全流程。",
       "- 轻量单页修改 → 可跳过 discover，直接 edit。",
-      "- 完整路径：**第一步先 `TaskGraphCreatePlan`(3–5 步, sequential) 建计划**，再 LoadSkill / Read / Task；之后逐项 Claim，委派 Task 产出 brief.md → outline.md → storyboard.json，并验收后 Complete；一旦 outline/storyboard 就绪，规划冻结，后续不重新拆页。",
+      "- 完整路径：**第一步先 `TaskGraphCreatePlan`(3–5 步, sequential) 建端到端计划**，步骤覆盖 planning/artifacts → author draft → design/layout-plan → style/review/export；再逐项 Claim，委派 Task 产出 brief.md → outline.md → storyboard.json，并验收后 Complete；一旦 outline/storyboard 就绪，规划冻结，后续不重新拆页。",
       "- 聚焦目的、受众、页数、叙事结构；只保留一套可执行大纲，**不讨论主题色、版式节奏、set-theme**。",
       "- 文案可完整表达观点；字数精简留到 style 阶段。",
     ],
     author: [
       "",
       "### 本阶段（author = 内容 + 等待排版选择）",
+      "- 如果本轮来自用户“继续”或 compact 恢复，先使用 Workspace Artifact State / TaskGraphList 确认已有计划与冻结产物；不要新建 TaskGraphCreatePlan。",
       "- **大纲/分镜已冻结**：若存在 outline.md 或 storyboard.json，按其页数与顺序逐页创作；不要增删页、合并页或重排章节。",
       "- **充分写内容**：要点可完整表达；信息准确优先。",
       "- **按单页承载量组织**：每页 1 个主论点、3–4 条要点；流程类 2–4 步；案例类 1 段叙述 + 1 个关键数字。",
@@ -358,6 +362,20 @@ function commandExamplesForStage(stage: PromptStage): string {
 - 改内容或版式：按当前阶段选择 add-slide 或 update-slide-layout`;
 }
 
+function formatArtifactState(artifacts?: WorkspaceArtifacts): string {
+  if (!artifacts) return "";
+
+  const format = (ready: boolean) => ready ? "verified" : "missing/unverified";
+  return `## Workflow Artifact State
+
+- brief.md: ${format(artifacts.brief)}
+- outline.md: ${format(artifacts.outline)}
+- slides/storyboard.json: ${format(artifacts.storyboard)}
+- slides/layout-plan.json: ${format(artifacts.layoutPlan)}
+
+Use this filesystem-derived state as the source of truth after context compaction. Skip artifacts that are already verified unless the user explicitly asks to regenerate them.`;
+}
+
 export function buildWorkspaceSection(input: WorkspaceSectionInput): string {
   const workspaceLine = input.workspaceRoot
     ? input.workspaceRoot
@@ -375,6 +393,8 @@ export function buildWorkspaceSection(input: WorkspaceSectionInput): string {
 ${files.map((line) => `- ${line}`).join("\n")}
 
 主 Agent 不直接读写这些文件；layout-plan 由 Task 写入，再由 ExecuteLayoutPlan 读取执行。轻量路径下不需要创建它们。
+
+${formatArtifactState(input.artifacts)}
 
 ## PresentationCommand 示例（本阶段）
 

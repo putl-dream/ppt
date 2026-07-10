@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest";
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { probeWorkspaceArtifacts } from "../src/main/agent/runtime/workspace-artifacts";
+import {
+  probeWorkspaceArtifactDetails,
+  probeWorkspaceArtifacts,
+} from "../src/main/agent/runtime/workspace-artifacts";
 import {
   createDefaultBriefMarkdown,
   createDefaultOutlineMarkdown,
@@ -67,6 +70,103 @@ describe("workspace artifact probing", () => {
     expect(artifacts.brief).toBe(true);
     expect(artifacts.outline).toBe(false);
     expect(artifacts.storyboard).toBe(false);
+  });
+
+  it("does not treat invalid storyboard JSON as a usable artifact", async () => {
+    const root = await createWorkspace();
+    await writeDefaultScaffold(root);
+    await writeFile(
+      join(root, "slides/storyboard.json"),
+      JSON.stringify({ slides: [{ title: "缺字段", keyPoints: [] }] }, null, 2),
+      "utf8",
+    );
+
+    const artifacts = await probeWorkspaceArtifacts(root);
+    const details = await probeWorkspaceArtifactDetails(root);
+
+    expect(artifacts.storyboard).toBe(false);
+    expect(details.storyboard.status).toBe("invalid");
+    expect(details.storyboard.reason).toContain("lacks title, role, layout, or key points");
+  });
+
+  it("verifies generated storyboard objects with slides wrappers", async () => {
+    const root = await createWorkspace();
+    await writeDefaultScaffold(root);
+    await writeFile(
+      join(root, "slides/storyboard.json"),
+      JSON.stringify({
+        slides: [
+          {
+            slideId: "slide-cover",
+            title: "PPT 智能助手",
+            narrativeRole: "hook",
+            layout: "cover",
+            keyPoints: ["展示从一句话到完整演示的生成路径。"],
+          },
+          {
+            slideId: "slide-plan",
+            title: "智能规划",
+            narrativeRole: "core",
+            layout: "concept",
+            keyPoints: ["将 brief、outline 和 storyboard 串成稳定流程。"],
+          },
+        ],
+      }, null, 2),
+      "utf8",
+    );
+
+    const artifacts = await probeWorkspaceArtifacts(root);
+    const details = await probeWorkspaceArtifactDetails(root);
+
+    expect(artifacts.storyboard).toBe(true);
+    expect(details.storyboard.status).toBe("verified");
+  });
+
+  it("invalidates storyboard when its slide count drifts from the verified outline", async () => {
+    const root = await createWorkspace();
+    await writeDefaultScaffold(root);
+    await writeFile(
+      join(root, "outline.md"),
+      "# 演示大纲\n\n## 1. 开场 [预计 1 页]\n- 建立主题\n\n## 2. 总结 [预计 1 页]\n- 收束价值\n",
+      "utf8",
+    );
+    await writeFile(
+      join(root, "slides/storyboard.json"),
+      JSON.stringify({
+        slides: [
+          {
+            slideId: "slide-cover",
+            title: "开场",
+            narrativeRole: "hook",
+            layout: "cover",
+            keyPoints: ["建立主题。"],
+          },
+          {
+            slideId: "slide-extra",
+            title: "额外页面",
+            narrativeRole: "context",
+            layout: "concept",
+            keyPoints: ["这页没有出现在 outline 中。"],
+          },
+          {
+            slideId: "slide-summary",
+            title: "总结",
+            narrativeRole: "takeaway",
+            layout: "summary",
+            keyPoints: ["收束价值。"],
+          },
+        ],
+      }, null, 2),
+      "utf8",
+    );
+
+    const artifacts = await probeWorkspaceArtifacts(root);
+    const details = await probeWorkspaceArtifactDetails(root);
+
+    expect(artifacts.outline).toBe(true);
+    expect(artifacts.storyboard).toBe(false);
+    expect(details.storyboard.status).toBe("invalid");
+    expect(details.storyboard.reason).toContain("outline expects 2 pages");
   });
 
   it("keeps a greeting in discover when only default files exist", async () => {

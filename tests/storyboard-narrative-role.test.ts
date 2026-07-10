@@ -50,4 +50,35 @@ describe("storyboard narrativeRole (P1-2)", () => {
     expect(slides[0].layout).toBe(NARRATIVE_ROLE_DEFAULT_LAYOUT.hook);
     expect(slides[1].layout).toBe("comparison");
   });
+
+  it("accepts a slides wrapper and slideId aliases from generated storyboard files", () => {
+    const json = JSON.stringify({
+      slides: [
+        {
+          slideId: "slide-cover",
+          title: "PPT 智能助手",
+          narrativeRole: "hook",
+          layout: "cover",
+          keyPoints: ["展示从一句话到完整演示的生成路径。"],
+        },
+      ],
+    });
+
+    const slides = parseStoryboard(json);
+    expect(slides).toHaveLength(1);
+    expect(slides[0].id).toBe("slide-cover");
+    expect(slides[0].layout).toBe("cover");
+  });
+
+  it("normalizes common narrative arc aliases produced by planning agents", () => {
+    const json = JSON.stringify([
+      { title: "背景", narrativeRole: "context", keyPoints: ["建立用户痛点。"] },
+      { title: "转折", narrativeRole: "shift", keyPoints: ["从功能转向价值。"] },
+      { title: "结论", narrativeRole: "takeaway", keyPoints: ["收束核心价值。"] },
+    ]);
+
+    const slides = parseStoryboard(json);
+    expect(slides.map((slide) => slide.narrativeRole)).toEqual(["core", "core", "summary"]);
+    expect(slides.map((slide) => slide.layout)).toEqual(["concept", "concept", "summary"]);
+  });
 });

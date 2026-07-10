@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { describe, expect, it, vi } from "vitest";
@@ -11,6 +11,7 @@ import { ToolRegistry } from "../src/main/agent/tools/tool-registry";
 import { submitCommandsTool } from "../src/main/agent/tools/core/submit-commands";
 import type { AgentModelGateway } from "../src/main/agent/gateway";
 import { createStarterPresentation } from "../src/shared/presentation";
+import { writeWorkspaceText } from "../src/main/agent/subagent/workspace-file-ops";
 
 function createSequenceGateway(responses: unknown[]): AgentModelGateway {
   let index = 0;
@@ -113,6 +114,17 @@ describe("Task sub-agent routing", () => {
     expect(conclusion).toBe("Wrote slides/layout-plan.json.");
     expect(await readFile(join(workspaceRoot, "slides", "layout-plan.json"), "utf8"))
       .toBe("{\"slides\":[]}\n");
+  });
+
+  it("writes workspace files through a verified temp file and cleans it up", async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), "ppt-subagent-"));
+
+    await writeWorkspaceText(workspaceRoot, "slides/storyboard.json", "{\"slides\":[]}\n");
+
+    expect(await readFile(join(workspaceRoot, "slides", "storyboard.json"), "utf8"))
+      .toBe("{\"slides\":[]}\n");
+    expect((await readdir(join(workspaceRoot, "slides"))).filter((name) => name.endsWith(".tmp")))
+      .toEqual([]);
   });
 
   it("supports idempotent ensure_dir in sub-agent tools", async () => {

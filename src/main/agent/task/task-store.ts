@@ -7,6 +7,7 @@ import {
   findUnblockedPendingTasks,
   getIncompleteBlockedBy,
   hasDependencyCycle,
+  isTaskPlanActive,
   TASKS_DIR_NAME,
   type AgentTaskNode,
 } from "@shared/agent-task-graph";
@@ -100,6 +101,14 @@ export class TaskStore {
   }
 
   async createPlan(input: CreatePlanInput): Promise<CreatePlanResult> {
+    const existing = await this.listTasks();
+    if (isTaskPlanActive(existing)) {
+      return {
+        ok: false,
+        error: "Active task plan already exists; use TaskGraphList, TaskGraphClaim, or TaskGraphCreate to continue or extend it.",
+      };
+    }
+
     const planId = `plan_${Date.now()}_${randomBytes(2).toString("hex")}`;
     const goal = input.goal?.trim() || undefined;
     if (goal) {

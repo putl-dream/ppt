@@ -46,7 +46,8 @@ const legacyStoryboardItemSchema = z.object({
   bulletPoints: z.array(z.string()).optional(),
   quote: z.string().optional(),
   id: z.string().optional(),
-  narrativeRole: storyboardNarrativeRoleSchema.optional(),
+  slideId: z.string().optional(),
+  narrativeRole: z.string().optional(),
   suggestedLayout: slideLayoutSchema.optional(),
   status: storyboardSlideStatusSchema.optional(),
 });
@@ -72,16 +73,45 @@ export function resolveStoryboardLayout(
     ?? (slide.narrativeRole ? NARRATIVE_ROLE_DEFAULT_LAYOUT[slide.narrativeRole] : undefined);
 }
 
+function normalizeStoryboardNarrativeRole(
+  role: string | undefined,
+): StoryboardNarrativeRole | undefined {
+  if (!role) return undefined;
+  const normalized = role.trim().toLowerCase();
+  const aliases: Record<string, StoryboardNarrativeRole> = {
+    opening: "hook",
+    cover: "hook",
+    intro: "hook",
+    agenda: "section",
+    toc: "section",
+    transition: "section",
+    context: "core",
+    content: "core",
+    data: "evidence",
+    proof: "evidence",
+    comparison: "compare",
+    shift: "core",
+    takeaway: "summary",
+    conclusion: "summary",
+    closing: "summary",
+  };
+
+  if (storyboardNarrativeRoleSchema.safeParse(normalized).success) {
+    return normalized as StoryboardNarrativeRole;
+  }
+  return aliases[normalized];
+}
+
 export function normalizeStoryboardSlide(raw: unknown, index: number): StoryboardSlideSpec {
   const parsed = legacyStoryboardItemSchema.parse(raw);
   const keyPoints = parsed.keyPoints.length > 0
     ? parsed.keyPoints
     : (parsed.bulletPoints ?? []);
   const layout = (parsed.suggestedLayout ?? parsed.layout) as SlideLayout | undefined;
-  const narrativeRole = parsed.narrativeRole;
+  const narrativeRole = normalizeStoryboardNarrativeRole(parsed.narrativeRole);
 
   return storyboardSlideSpecSchema.parse({
-    id: parsed.id ?? `storyboard-slide-${index + 1}`,
+    id: parsed.id ?? parsed.slideId ?? `storyboard-slide-${index + 1}`,
     title: parsed.title,
     keyPoints,
     narrativeRole,
@@ -94,10 +124,15 @@ export function normalizeStoryboardSlide(raw: unknown, index: number): Storyboar
 
 export function parseStoryboard(content: string): StoryboardSlideSpec[] {
   const raw = JSON.parse(content);
-  if (!Array.isArray(raw)) {
-    throw new Error("Storyboard must be a JSON array.");
+  const items = Array.isArray(raw)
+    ? raw
+    : typeof raw === "object" && raw !== null && Array.isArray((raw as { slides?: unknown }).slides)
+      ? (raw as { slides: unknown[] }).slides
+      : null;
+  if (!items) {
+    throw new Error("Storyboard must be a JSON array or an object with a slides array.");
   }
-  return raw.map((item, index) => normalizeStoryboardSlide(item, index));
+  return items.map((item, index) => normalizeStoryboardSlide(item, index));
 }
 
 export function serializeStoryboard(slides: StoryboardSlideSpec[]): string {
