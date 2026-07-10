@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { AgentRuntime } from "../src/main/agent/runtime/agent-runtime";
 import { ToolRegistry } from "../src/main/agent/tools/tool-registry";
 import { readPresentationSnapshotTool } from "../src/main/agent/tools/core/read-presentation-snapshot";
+import { listSlidesTool } from "../src/main/agent/tools/core/list-slides";
 import { submitCommandsTool } from "../src/main/agent/tools/core/submit-commands";
 import { toToolSchema } from "../src/main/agent/tools/tool-schema";
 import type {
@@ -203,5 +204,72 @@ describe("native tool-use runtime path", () => {
     });
     expect(streamed).toBe("**可以。** 先讲概念，再决定是否制作 PPT。");
     expect(gateway.requests).toHaveLength(2);
+  });
+
+  it("executes every tool_use in one assistant turn and returns one paired result batch", async () => {
+    const registry = new ToolRegistry();
+    registry.register(readPresentationSnapshotTool);
+    registry.register(listSlidesTool);
+
+    const gateway = createNativeGateway([
+      {
+        toolCalls: [
+          { id: "call-read", name: "ReadPresentationSnapshot", args: {} },
+          { id: "call-list", name: "ListSlides", args: {} },
+        ],
+      },
+      { text: textEnvelope("两个只读工具均已执行。") },
+    ]);
+
+    const runtime = new AgentRuntime(registry, gateway);
+    const result = await runtime.run({
+      threadId: "native-batch-thread",
+      request: "读取当前演示文稿",
+      presentationSnapshot: createStarterPresentation(),
+      selectedElementIds: [],
+    });
+
+    expect(result.type).toBe("assistant.message");
+    expect(gateway.requests).toHaveLength(2);
+    const secondMessages = gateway.requests[1]!.messages!;
+    const assistantTurn = secondMessages.find((message) => message.toolCalls?.length);
+    expect(assistantTurn?.toolCalls?.map((call) => call.id)).toEqual(["call-read", "call-list"]);
+    const resultTurn = secondMessages.find((message) => message.toolResults?.length);
+    expect(resultTurn?.toolResults?.map((item) => item.toolCallId)).toEqual([
+      "call-read",
+      "call-list",
+    ]);
+    expect(resultTurn?.toolResults?.every((item) => item.isError !== true)).toBe(true);
+  });
+
+  it("rejects text tool.call envelopes in native mode because they have no provider call ID", async () => {
+    const registry = new ToolRegistry();
+    registry.register(listSlidesTool);
+
+    const gateway = createNativeGateway([
+      {
+        text: JSON.stringify({
+          kind: "structured",
+          format: "json",
+          type: "tool.call",
+          data: { toolName: "ListSlides", args: {} },
+        }),
+      },
+      { text: textEnvelope("已改用正确的原生工具协议。") },
+    ]);
+
+    const runtime = new AgentRuntime(registry, gateway);
+    const result = await runtime.run({
+      threadId: "native-text-tool-call-thread",
+      request: "读取页面",
+      presentationSnapshot: createStarterPresentation(),
+      selectedElementIds: [],
+    });
+
+    expect(result.type).toBe("assistant.message");
+    expect(gateway.requests).toHaveLength(2);
+    expect(gateway.requests[1]?.messages?.at(-1)?.content).toContain(
+      "requires a provider tool_use block",
+    );
   });
 });

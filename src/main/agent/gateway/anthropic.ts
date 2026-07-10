@@ -1,7 +1,9 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { AgentGatewayError, normalizeProviderError } from "./errors";
 import { applyResponseContract } from "./response-contract";
+import { ensureToolResultPairing } from "./message-pairing";
 import type {
+  AgentModelContentBlock,
   AgentModelImageBlock,
   AgentModelMessage,
   AgentModelRequest,
@@ -12,6 +14,43 @@ import type {
   AgentModelToolResult,
   ResolvedAgentModelConfig,
 } from "./types";
+
+function extractContentBlocks(content: unknown): AgentModelContentBlock[] {
+  if (typeof content === "string") {
+    return content.trim() ? [{ type: "text", text: content }] : [];
+  }
+  if (!Array.isArray(content)) return [];
+
+  const blocks: AgentModelContentBlock[] = [];
+  for (const value of content) {
+    if (!value || typeof value !== "object") continue;
+    const block = value as Record<string, unknown>;
+    const type = typeof block.type === "string" ? block.type : "unknown";
+    if (type === "text" && typeof block.text === "string") {
+      blocks.push({ type: "text", text: block.text });
+    } else if (type === "thinking" && typeof block.thinking === "string") {
+      blocks.push({
+        type: "thinking",
+        thinking: block.thinking,
+        signature: typeof block.signature === "string" ? block.signature : "",
+      });
+    } else if (type === "redacted_thinking" && typeof block.data === "string") {
+      blocks.push({ type: "redacted_thinking", data: block.data });
+    } else if (type === "tool_use") {
+      blocks.push({
+        type: "tool_use",
+        id: typeof block.id === "string" ? block.id : "",
+        name: typeof block.name === "string" ? block.name : "",
+        input: block.input && typeof block.input === "object" && !Array.isArray(block.input)
+          ? block.input as Record<string, unknown>
+          : {},
+      });
+    } else {
+      blocks.push({ type: "server_tool", providerType: type, data: value });
+    }
+  }
+  return blocks;
+}
 
 function toAnthropicImageBlock(image: AgentModelImageBlock): Anthropic.ImageBlockParam {
   return {
@@ -35,7 +74,7 @@ function toAnthropicToolResultContent(result: AgentModelToolResult): Anthropic.T
 
 /** Build Anthropic messages from structured multi-turn messages (native tool-use path). */
 function toAnthropicMessages(messages: AgentModelMessage[]): Anthropic.MessageParam[] {
-  return messages.map((message): Anthropic.MessageParam => {
+  return ensureToolResultPairing(messages).map((message): Anthropic.MessageParam => {
     if (message.role === "assistant") {
       const blocks: Anthropic.ContentBlockParam[] = [];
       // thinking 块必须置于 text / tool_use 之前，且原样保留 signature，
@@ -206,6 +245,7 @@ export async function generateWithAnthropic(
         model: config.model,
         text,
         toolCalls,
+        contentBlocks: extractContentBlocks(response.content),
         ...(thinkingBlocks.length ? { thinkingBlocks } : {}),
         requestId: response._request_id ?? undefined,
         stopReason: response.stop_reason ?? undefined,
@@ -250,6 +290,7 @@ export async function generateWithAnthropic(
       provider: "anthropic",
       model: config.model,
       text,
+      contentBlocks: extractContentBlocks(response.content),
       requestId: response._request_id ?? undefined,
       stopReason: response.stop_reason ?? undefined,
     };

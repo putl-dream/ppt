@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { ToolDefinition } from "../tool-definition";
+import { validateToolOutput } from "../tool-validation";
 
 export const executeExtraToolSchema = z.object({
   toolName: z.string().describe("需要执行的目标延迟工具（Deferred Tool）的名称"),
@@ -45,10 +46,15 @@ export const executeExtraToolTool: ToolDefinition<typeof executeExtraToolSchema,
       throw new Error(`Invalid arguments for '${args.toolName}': ${parsed.error.message}`);
     }
 
+    const result = validateToolOutput(
+      tool,
+      await tool.execute(parsed.data, context),
+    );
+
     return {
       toolName: args.toolName,
       risk: tool.risk,
-      result: await tool.execute(parsed.data, context),
+      result,
     };
   },
 };

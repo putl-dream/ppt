@@ -82,6 +82,39 @@ describe("compactTranscript", () => {
 });
 
 describe("callModelWithRecovery", () => {
+  it("projects provider-neutral content blocks into the compatibility result", async () => {
+    const gateway: AgentModelGateway = {
+      async generateText() {
+        return {
+          provider: "anthropic",
+          model: "test",
+          text: "",
+          contentBlocks: [{
+            type: "tool_use",
+            id: "call-from-block",
+            name: "ReadPresentationSnapshot",
+            input: {},
+          }],
+        };
+      },
+      async *generateTextStream() {
+        yield { type: "complete", text: "" };
+      },
+    };
+
+    const result = await callModelWithRecovery({
+      gateway,
+      systemPrompt: "system",
+      promptPayload: { transcript: [], request: "hello" },
+    });
+
+    expect(result.toolCalls).toEqual([{
+      id: "call-from-block",
+      name: "ReadPresentationSnapshot",
+      args: {},
+    }]);
+  });
+
   it("retries the same request on 429 without appending partial output", async () => {
     vi.useFakeTimers();
     const generateText = vi

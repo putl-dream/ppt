@@ -19,7 +19,15 @@ import { isTaskPlanActive } from "@shared/agent-task-graph";
 import { callModelWithRecovery } from "./model-call-recovery";
 import { createTaskStore } from "../task/task-store";
 import { toToolSchemas } from "../tools/tool-schema";
-import type { AgentModelImageBlock, AgentModelMessage } from "../gateway/types";
+import type {
+  AgentModelImageBlock,
+  AgentModelMessage,
+  AgentModelToolCall,
+  AgentModelToolResult,
+} from "../gateway/types";
+import { ensureToolResultPairing } from "../gateway/message-pairing";
+import { validateToolOutput } from "../tools/tool-validation";
+import { prepareToolResultData } from "./tool-result-data";
 import type { SubAgentProgressEvent } from "@shared/subagent-progress";
 import {
   buildRenderFeedback,
@@ -176,30 +184,24 @@ export class AgentRuntime {
       })),
       { role: "user", content: options.request },
     ];
-    // 承接上一次工具执行结果，下一回合作为 tool_result 追加。
-    // 用 holder 对象而非裸 let，规避闭包赋值下的控制流窄化。
-    const pendingToolResult: {
-      current: {
-        id: string;
-        content: string;
-        isError?: boolean;
-        images?: AgentModelImageBlock[];
-      } | null;
-    } = {
-      current: null,
-    };
+    // 同一 assistant 轮可以发出多个 tool_use。结果先按调用 ID 累积，
+    // 等整批调用串行执行完成后，再合并成一个 user tool_result 轮回填。
+    const pendingToolResults: { current: AgentModelToolResult[] } = { current: [] };
+    const queuedNativeCalls: AgentModelToolCall[] = [];
+    const pendingNativeUserContent: string[] = [];
     let renderFeedbackUsed = false;
     const backgroundTasks = new BackgroundTaskManager();
 
     const appendNativeUserTurn = (input: {
       content?: string;
-      toolResult?: NonNullable<typeof pendingToolResult.current>;
+      toolResults?: AgentModelToolResult[];
     }): void => {
       if (!useNativeToolUse) return;
       const content = input.content?.trim();
-      if (!input.toolResult && !content) return;
+      const toolResults = input.toolResults?.length ? input.toolResults : undefined;
+      if (!toolResults && !content) return;
 
-      if (!input.toolResult && content) {
+      if (!toolResults && content) {
         const last = nativeMessages.at(-1);
         if (last?.role === "user" && !last.toolResults?.length && !last.images?.length) {
           last.content = [last.content, content].filter((part): part is string => Boolean(part?.trim()))
@@ -211,23 +213,16 @@ export class AgentRuntime {
       nativeMessages.push({
         role: "user",
         ...(content ? { content } : {}),
-        ...(input.toolResult
-          ? {
-              toolResults: [{
-                toolCallId: input.toolResult.id,
-                content: input.toolResult.content,
-                isError: input.toolResult.isError,
-                images: input.toolResult.images,
-              }],
-            }
-          : {}),
+        ...(toolResults ? { toolResults } : {}),
       });
     };
 
     const flushNativeUserTurn = (content?: string): void => {
-      const toolResult = pendingToolResult.current ?? undefined;
-      appendNativeUserTurn({ content, toolResult });
-      if (toolResult) pendingToolResult.current = null;
+      const toolResults = pendingToolResults.current.length
+        ? [...pendingToolResults.current]
+        : undefined;
+      appendNativeUserTurn({ content, toolResults });
+      pendingToolResults.current = [];
     };
 
     const handleLeadPermissionRequest = async (
@@ -297,7 +292,14 @@ export class AgentRuntime {
       if (!backgroundTasks.hasRunning() && !backgroundTasks.hasPendingNotifications()) return false;
       const notifications = await backgroundTasks.drain(options.signal);
       if (notifications.length === 0) return false;
-      flushNativeUserTurn(`${formatBackgroundNotifications(notifications)}\n\n${instruction}`);
+      const content = `${formatBackgroundNotifications(notifications)}\n\n${instruction}`;
+      if (queuedNativeCalls.length > 0) {
+        // Keep the assistant batch contiguous: all tool results must be in the
+        // first user turn after it, even when a background task finishes early.
+        pendingNativeUserContent.push(content);
+      } else {
+        flushNativeUserTurn(content);
+      }
       return true;
     };
 
@@ -328,157 +330,199 @@ export class AgentRuntime {
       });
     }
 
-    for (let step = 0; step < maxSteps; step += 1) {
+    let modelStep = 0;
+    while (modelStep < maxSteps || queuedNativeCalls.length > 0) {
       if (options.signal?.aborted) {
         throw new Error("Run aborted by user.");
       }
 
-      // 判断是否应该使用流式：仅在可能返回message且提供了回调时使用
-      const shouldUseStream = options.onStreamChunk !== undefined;
+      let envelope: AgentProtocolEnvelope;
+      let nativeCall: AgentModelToolCall | undefined;
+      let responseText = "";
+      const queuedNativeCall = queuedNativeCalls.shift();
 
-      const inboxContent = await drainLeadInboxForModel();
+      if (queuedNativeCall) {
+        // Continue consuming the current assistant batch without another model call.
+        nativeCall = queuedNativeCall;
+        envelope = normalizeModelResponseToEnvelope({ text: "", toolCalls: [nativeCall] });
+      } else {
+        const currentModelStep = modelStep;
+        modelStep += 1;
 
-      const promptPayload = {
-        request: options.request,
-        conversation: options.messageHistory ?? [],
-        transcript,
-      };
+        // 判断是否应该使用流式：仅在可能返回 message 且提供了回调时使用。
+        const shouldUseStream = options.onStreamChunk !== undefined;
+        const inboxContent = await drainLeadInboxForModel();
+        const promptPayload = {
+          request: options.request,
+          conversation: options.messageHistory ?? [],
+          transcript,
+        };
 
-      // native 模式：把上一回合 tool_result 与已完成后台任务通知并入同一 user turn。
-      if (useNativeToolUse) {
-        const notifications = backgroundTasks.collect();
-        const nativeUserContent = [
-          notifications.length > 0 ? formatBackgroundNotifications(notifications) : "",
-          inboxContent ?? "",
-        ].filter((part) => part.trim()).join("\n\n");
-        flushNativeUserTurn(nativeUserContent || undefined);
+        // 只有上一批 tool_use 全部执行完，才允许回填结果并发起下一次模型请求。
+        if (useNativeToolUse) {
+          const notifications = backgroundTasks.collect();
+          const nativeUserContent = [
+            notifications.length > 0 ? formatBackgroundNotifications(notifications) : "",
+            ...pendingNativeUserContent.splice(0),
+            inboxContent ?? "",
+          ].filter((part) => part.trim()).join("\n\n");
+          flushNativeUserTurn(nativeUserContent || undefined);
+        }
+
+        const extractor = shouldUseStream
+          ? new JsonStreamExtractor(
+              (text, source) => options.onStreamChunk?.(text, source),
+              { streamMarkdown: false },
+            )
+          : null;
+
+        const modelResult = await callModelWithRecovery({
+          gateway: this.gateway,
+          systemPrompt,
+          responseContract: "agent-protocol",
+          promptPayload,
+          model: options.model,
+          workspaceRoot: options.workspaceRoot,
+          threadId: options.threadId,
+          signal: options.signal,
+          tools: toolSchemas,
+          messages: useNativeToolUse ? ensureToolResultPairing(nativeMessages) : undefined,
+          stream: shouldUseStream
+            ? {
+                onChunk: (chunk) => {
+                  if (chunk.type === "content" && chunk.text) {
+                    // 即使走原生 tool-use，系统提示仍可能让模型用 JSON 协议回复。
+                    // 统一抽取自然语言字段，避免把协议 envelope 泄露到前端。
+                    extractor?.feed(chunk.text);
+                  }
+                },
+                onThinkingChunk: (chunk) => {
+                  options.onThinkingChunk?.(chunk, currentModelStep);
+                },
+              }
+            : undefined,
+          onRecovery: (message) => {
+            options.onProgress?.({ type: "request-status", message, progress: 0 });
+          },
+        });
+        responseText = modelResult.text;
+
+        // 不依赖 stop_reason；内容里出现 tool_use 就进入工具分支。
+        const seenToolCallIds = new Set<string>();
+        const nativeCalls = useNativeToolUse
+          ? (modelResult.toolCalls ?? []).filter((call) => {
+              if (!call.id || !call.name || seenToolCallIds.has(call.id)) return false;
+              seenToolCallIds.add(call.id);
+              return true;
+            })
+          : [];
+        nativeCall = nativeCalls[0];
+        if (nativeCall) {
+          queuedNativeCalls.push(...nativeCalls.slice(1));
+          nativeMessages.push({
+            role: "assistant",
+            content: responseText || undefined,
+            toolCalls: nativeCalls,
+            // 开启 thinking 时，带 tool_use 的 assistant 轮须原样回传 thinking 块。
+            thinkingBlocks: modelResult.thinkingBlocks,
+          });
+          envelope = normalizeModelResponseToEnvelope({
+            text: responseText,
+            toolCalls: [nativeCall],
+          });
+        } else if (useNativeToolUse) {
+          // 无结构化工具调用即为最终文本回复；仍必须遵守 JSON envelope 协议。
+          if (responseText.trim()) {
+            nativeMessages.push({
+              role: "assistant",
+              content: responseText,
+              thinkingBlocks: modelResult.thinkingBlocks,
+            });
+          }
+          try {
+            const parsed = parseAgentJsonResponse(responseText);
+            envelope = normalizeAgentProtocolObject(parsed);
+            if (envelope.type === "tool.call") {
+              const guidance =
+                "Native tool mode requires a provider tool_use block with a stable call ID. "
+                + "Call the registered tool directly instead of returning a text tool.call envelope.";
+              transcript.push({
+                role: "assistant",
+                raw: responseText.slice(0, 2_000),
+                error: guidance,
+              });
+              nativeMessages.push({ role: "user", content: guidance });
+              continue;
+            }
+          } catch (error) {
+            const guidance = buildAgentJsonRetryMessage(error);
+            transcript.push({
+              role: "assistant",
+              raw: responseText.slice(0, 2_000),
+              error: guidance,
+            });
+            nativeMessages.push({ role: "user", content: guidance });
+            continue;
+          }
+        } else {
+          let parsed: unknown;
+          try {
+            parsed = parseAgentJsonResponse(responseText);
+          } catch (error) {
+            const guidance = buildAgentJsonRetryMessage(error);
+            transcript.push({
+              role: "assistant",
+              raw: responseText.slice(0, 2_000),
+              error: guidance,
+            });
+            transcript.push({ role: "user", content: guidance });
+            continue;
+          }
+          try {
+            envelope = normalizeAgentProtocolObject(parsed);
+          } catch (error) {
+            const guidance = buildAgentJsonRetryMessage(error, parsed);
+            transcript.push({
+              role: "assistant",
+              response: parsed,
+              error: guidance,
+            });
+            transcript.push({ role: "user", content: guidance });
+            continue;
+          }
+        }
       }
 
-      const extractor = shouldUseStream
-        ? new JsonStreamExtractor(
-            (text, source) => options.onStreamChunk?.(text, source),
-            {
-              streamMarkdown: false,
-            },
-          )
-        : null;
-
-      const modelResult = await callModelWithRecovery({
-        gateway: this.gateway,
-        systemPrompt,
-        responseContract: "agent-protocol",
-        promptPayload,
-        model: options.model,
-        workspaceRoot: options.workspaceRoot,
-        threadId: options.threadId,
-        signal: options.signal,
-        tools: toolSchemas,
-        messages: useNativeToolUse ? nativeMessages : undefined,
-        stream: shouldUseStream
-          ? {
-              onChunk: (chunk) => {
-                if (chunk.type === "content" && chunk.text) {
-                  // 即使走原生 tool-use，系统提示仍可能让模型用 JSON 协议回复。
-                  // 统一抽取自然语言字段，避免把协议 envelope 泄露到前端。
-                  extractor?.feed(chunk.text);
-                }
-              },
-              onThinkingChunk: (chunk) => {
-                options.onThinkingChunk?.(chunk, step);
-              },
-            }
-          : undefined,
-        onRecovery: (message) => {
-          options.onProgress?.({ type: "request-status", message, progress: 0 });
-        },
-      });
-      const responseText = modelResult.text;
-
-      let envelope: AgentProtocolEnvelope;
-
-      // native 分支：把结构化 toolCall 或文本协议统一归一成 envelope，
-      // 下游只处理 { type, data }。
-      const nativeCall = useNativeToolUse ? modelResult.toolCalls?.[0] : undefined;
       // native 模式下每个 tool_use 必须回配一个 tool_result，否则下一次调用报错。
-      // 该闭包在任何 continue 前记录待回传结果；文本模式为 no-op。
+      // 结果按调用 ID 累积；文本模式为 no-op。
       const recordToolResult = (
         content: string,
         isError = false,
         images?: AgentModelImageBlock[],
       ): void => {
         if (nativeCall) {
-          pendingToolResult.current = { id: nativeCall.id, content, isError, images };
+          const result: AgentModelToolResult = {
+            toolCallId: nativeCall.id,
+            content,
+            ...(isError ? { isError: true } : {}),
+            ...(images?.length ? { images } : {}),
+          };
+          const existingIndex = pendingToolResults.current.findIndex(
+            (item) => item.toolCallId === nativeCall?.id,
+          );
+          if (existingIndex >= 0) pendingToolResults.current[existingIndex] = result;
+          else pendingToolResults.current.push(result);
         }
       };
-      if (nativeCall) {
-        nativeMessages.push({
-          role: "assistant",
-          content: responseText || undefined,
-          toolCalls: [{ id: nativeCall.id, name: nativeCall.name, args: nativeCall.args }],
-          // 开启 thinking 时，带 tool_use 的 assistant 轮须原样回传 thinking 块，
-          // 否则下一回合请求被 Anthropic 拒绝。
-          thinkingBlocks: modelResult.thinkingBlocks,
-        });
-        envelope = normalizeModelResponseToEnvelope({
-          text: responseText,
-          toolCalls: [nativeCall],
-        });
-      } else if (useNativeToolUse) {
-        // 无结构化工具调用即为最终文本回复；仍必须遵守 JSON envelope 协议。
-        if (responseText.trim()) {
-          nativeMessages.push({
-            role: "assistant",
-            content: responseText,
-            thinkingBlocks: modelResult.thinkingBlocks,
-          });
-        }
-        try {
-          const parsed = parseAgentJsonResponse(responseText);
-          envelope = normalizeAgentProtocolObject(parsed);
-        } catch (error) {
-          const guidance = buildAgentJsonRetryMessage(error);
-          transcript.push({
-            role: "assistant",
-            raw: responseText.slice(0, 2_000),
-            error: guidance,
-          });
-          nativeMessages.push({ role: "user", content: guidance });
-          continue;
-        }
-      } else {
-        let parsed: unknown;
-        try {
-          parsed = parseAgentJsonResponse(responseText);
-        } catch (error) {
-          const guidance = buildAgentJsonRetryMessage(error);
-          transcript.push({
-            role: "assistant",
-            raw: responseText.slice(0, 2_000),
-            error: guidance,
-          });
-          transcript.push({ role: "user", content: guidance });
-          continue;
-        }
-        try {
-          envelope = normalizeAgentProtocolObject(parsed);
-        } catch (error) {
-          const guidance = buildAgentJsonRetryMessage(error, parsed);
-          transcript.push({
-            role: "assistant",
-            response: parsed,
-            error: guidance,
-          });
-          transcript.push({ role: "user", content: guidance });
-          continue;
-        }
-      }
 
       if (envelope.type !== "tool.call") {
         if (envelope.type === "deck.command_proposal") {
+          const guidance = "Command proposals must be submitted through SubmitCommands.";
           transcript.push({
             role: "tool",
-            error: "Command proposals must be submitted through SubmitCommands.",
+            error: guidance,
           });
+          if (useNativeToolUse) nativeMessages.push({ role: "user", content: guidance });
           continue;
         }
         const normalized = envelope;
@@ -514,6 +558,24 @@ export class AgentRuntime {
         }
 
         return finish(normalized);
+      }
+
+      if (nativeCall?.parseError) {
+        options.onProgress?.({
+          type: "tool-validation-failed",
+          toolName: nativeCall.name,
+          message: `工具 ${nativeCall.name} 参数 JSON 解析失败`,
+          error: nativeCall.parseError,
+        });
+        transcript.push({
+          role: "tool",
+          kind: "tool_result",
+          toolUseId: nativeCall.id,
+          toolName: nativeCall.name,
+          error: nativeCall.parseError,
+        });
+        recordToolResult(nativeCall.parseError, true);
+        continue;
       }
 
       const tool = this.registry.get(envelope.data.toolName);
@@ -642,7 +704,10 @@ export class AgentRuntime {
             label,
             run: async () => {
               try {
-                const output = await tool.execute(args.data, context);
+                const output = validateToolOutput(
+                  tool,
+                  await tool.execute(args.data, context),
+                );
                 await triggerHooks("PostToolUse", {
                   event: "PostToolUse",
                   toolName: tool.name,
@@ -656,7 +721,18 @@ export class AgentRuntime {
                   message: `后台任务 ${bgId} 已完成：${tool.name}`,
                   toolName: tool.name,
                 });
-                return output;
+                const modelContent = tool.mapResultToModelContent
+                  ? await tool.mapResultToModelContent(output, context)
+                  : undefined;
+                const prepared = await prepareToolResultData({
+                  data: output,
+                  modelContent,
+                  workspaceRoot: options.workspaceRoot,
+                  threadId: options.threadId,
+                  toolUseId: nativeCall?.id ?? `${tool.name}-background`,
+                  toolName: tool.name,
+                });
+                return prepared.modelContent;
               } catch (error) {
                 const errorMessage = error instanceof Error ? error.message : String(error);
                 await triggerHooks("PostToolUse", {
@@ -694,7 +770,10 @@ export class AgentRuntime {
           continue;
         }
 
-        const result = await tool.execute(args.data, context);
+        const result = validateToolOutput(
+          tool,
+          await tool.execute(args.data, context),
+        );
 
         await triggerHooks("PostToolUse", {
           event: "PostToolUse",
@@ -783,8 +862,34 @@ export class AgentRuntime {
           throw new Error("SubmitCommands must return a deck.command_proposal envelope.");
         }
 
-        transcript.push({ role: "tool", toolName: tool.name, result });
-        recordToolResult(JSON.stringify(result ?? null));
+        const modelContent = tool.mapResultToModelContent
+          ? await tool.mapResultToModelContent(result, context)
+          : undefined;
+        const prepared = await prepareToolResultData({
+          data: result,
+          modelContent,
+          workspaceRoot: options.workspaceRoot,
+          threadId: options.threadId,
+          toolUseId: nativeCall?.id ?? `${tool.name}-${modelStep}`,
+          toolName: tool.name,
+        });
+        transcript.push({
+          role: "tool",
+          toolName: tool.name,
+          result: prepared.data,
+          ...(nativeCall ? { toolUseId: nativeCall.id } : {}),
+          ...(prepared.truncated
+            ? {
+                modelResult: {
+                  truncated: true,
+                  originalChars: prepared.originalChars,
+                  persistedPath: prepared.persistedPath,
+                  persistenceError: prepared.persistenceError,
+                },
+              }
+            : {}),
+        });
+        recordToolResult(prepared.modelContent);
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
         await triggerHooks("PostToolUse", {

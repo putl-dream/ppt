@@ -64,6 +64,11 @@ describe("generateWithAnthropic", () => {
       provider: "anthropic",
       model: "anthropic-test",
       text: "first\nsecond",
+      contentBlocks: [
+        { type: "text", text: "first" },
+        { type: "thinking", thinking: "hidden", signature: "" },
+        { type: "text", text: "second" },
+      ],
       requestId: "req-anthropic",
       stopReason: "end_turn",
     });

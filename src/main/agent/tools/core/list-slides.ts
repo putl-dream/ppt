@@ -2,6 +2,13 @@ import { z } from "zod";
 import type { ToolDefinition } from "../tool-definition";
 
 export const listSlidesSchema = z.object({});
+export const listSlidesOutputSchema = z.object({
+  slides: z.array(z.object({
+    id: z.string(),
+    index: z.number().int().nonnegative(),
+    title: z.string(),
+  })),
+});
 
 /**
  * Core Tool: 轻量列出页面 id、顺序和标题。
@@ -17,6 +24,7 @@ export const listSlidesTool: ToolDefinition<
   category: "core",
   loadPolicy: "core",
   inputSchema: listSlidesSchema,
+  outputSchema: listSlidesOutputSchema,
   risk: "low",
   execute: async (_, context) => {
     const slides = context.presentation.slides.map((slide, index) => ({

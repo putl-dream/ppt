@@ -19,6 +19,11 @@ import {
 import { backoffBeforeRetry, extractRetryAfterMs } from "../gateway/withRetry";
 import { emergencyTrimContext, prepareContext } from "./context-compact";
 import { createModuleLogger } from "../logger";
+import {
+  textFromContentBlocks,
+  thinkingFromContentBlocks,
+  toolCallsFromContentBlocks,
+} from "../gateway/content-blocks";
 
 const logger = createModuleLogger("model-call-recovery");
 
@@ -139,10 +144,14 @@ async function invokeGateway(
 
   const response = await gateway.generateText(request, model);
   return {
-    text: response.text,
+    text: response.text || textFromContentBlocks(response.contentBlocks),
     stopReason: response.stopReason,
-    toolCalls: response.toolCalls,
-    thinkingBlocks: response.thinkingBlocks,
+    toolCalls: response.toolCalls?.length
+      ? response.toolCalls
+      : toolCallsFromContentBlocks(response.contentBlocks),
+    thinkingBlocks: response.thinkingBlocks?.length
+      ? response.thinkingBlocks
+      : thinkingFromContentBlocks(response.contentBlocks),
   };
 }
 

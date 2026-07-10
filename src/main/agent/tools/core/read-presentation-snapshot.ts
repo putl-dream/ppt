@@ -1,8 +1,11 @@
 import { z } from "zod";
 import type { ToolDefinition } from "../tool-definition";
-import type { Presentation } from "@shared/presentation";
+import { presentationSchema, type Presentation } from "@shared/presentation";
 
 export const readPresentationSnapshotSchema = z.object({});
+export const readPresentationSnapshotOutputSchema = z.object({
+  presentation: presentationSchema,
+});
 
 /**
  * Core Tool: 读取整套 PPT 的只读快照与摘要。
@@ -18,6 +21,7 @@ export const readPresentationSnapshotTool: ToolDefinition<
   category: "core",
   loadPolicy: "core",
   inputSchema: readPresentationSnapshotSchema,
+  outputSchema: readPresentationSnapshotOutputSchema,
   risk: "low",
   execute: async (_, context) => {
     return { presentation: context.presentation };

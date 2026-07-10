@@ -92,6 +92,13 @@ export interface ToolDefinition<TParams extends z.ZodObject<any> = z.ZodObject<a
   category: "core" | "deferred" | "runtime";
   loadPolicy: ToolLoadPolicy;
   inputSchema: TParams;
+  /** Optional runtime guard for the rich local result returned by execute(). */
+  outputSchema?: z.ZodType<TResult>;
+  /** Optional compact mapping for the result sent back to the model. */
+  mapResultToModelContent?: (
+    result: TResult,
+    context: ToolContext,
+  ) => string | Promise<string>;
   risk: ToolRisk;
   permission?: ToolPermissionProfile;
   execute: (args: z.infer<TParams>, context: ToolContext) => Promise<TResult>;

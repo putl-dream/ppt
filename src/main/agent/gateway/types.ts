@@ -22,6 +22,27 @@ export type AgentModelThinkingBlock =
   | { type: "redacted_thinking"; data: string };
 
 /**
+ * Provider-neutral model content protocol. It intentionally stays smaller
+ * than local messages and tool execution records.
+ */
+export type AgentModelContentBlock =
+  | { type: "text"; text: string }
+  | AgentModelThinkingBlock
+  | {
+      type: "tool_use";
+      id: string;
+      name: string;
+      input: Record<string, unknown>;
+      parseError?: string;
+    }
+  | {
+      /** MCP, web-search, code-execution, or another provider-managed block. */
+      type: "server_tool";
+      providerType: string;
+      data: unknown;
+    };
+
+/**
  * 单个多轮对话消息。原生 tool-use 路径用它承载 assistant 的 tool_use 与
  * user 的 tool_result，替代把整段 transcript 塞进 prompt 字符串的旧做法。
  */
@@ -48,6 +69,8 @@ export interface AgentModelToolCall {
   id: string;
   name: string;
   args: Record<string, unknown>;
+  /** Provider argument JSON could not be parsed; execute must return an error result. */
+  parseError?: string;
 }
 
 /** Base64 图像块，用于视觉反馈等多模态 user / tool_result 内容。 */
@@ -96,6 +119,8 @@ export interface AgentModelResponse {
   text: string;
   requestId?: string;
   stopReason?: string;
+  /** Native output normalized into the four model-content categories. */
+  contentBlocks?: AgentModelContentBlock[];
   /**
    * 原生 tool-use 返回的工具调用列表。存在时 runtime 走 tool-use 分支；
    * 为空/未定义时回退到解析 text 中的 JSON。

@@ -65,6 +65,7 @@ describe("generateWithOpenAI", () => {
       provider: "openai",
       model: "openai-test",
       text: "generated text",
+      contentBlocks: [{ type: "text", text: "generated text" }],
       requestId: "req-openai",
     });
   });
@@ -95,9 +96,46 @@ describe("generateWithOpenAI", () => {
       provider: "openai",
       model: "openai-test",
       text: "compatible text",
+      contentBlocks: [{ type: "text", text: "compatible text" }],
       requestId: "req-compatible",
       stopReason: "stop",
     });
+  });
+
+  it("preserves malformed native tool arguments as a runtime error instead of executing empty args", async () => {
+    openaiMock.createChatCompletion.mockResolvedValue({
+      choices: [{
+        message: {
+          content: null,
+          tool_calls: [{
+            id: "call-invalid",
+            type: "function",
+            function: { name: "Read", arguments: "{not-json" },
+          }],
+        },
+        finish_reason: "tool_calls",
+      }],
+      _request_id: "req-invalid-tool",
+    });
+
+    const response = await generateWithOpenAI(config, {
+      systemPrompt: "System instruction",
+      prompt: "User prompt",
+      tools: [{
+        name: "Read",
+        description: "Read data",
+        inputSchema: { type: "object", properties: {} },
+      }],
+    });
+
+    expect(response.toolCalls).toEqual([
+      expect.objectContaining({
+        id: "call-invalid",
+        name: "Read",
+        args: {},
+        parseError: expect.stringContaining("Invalid tool argument JSON"),
+      }),
+    ]);
   });
 
   it("rejects an empty model response", async () => {

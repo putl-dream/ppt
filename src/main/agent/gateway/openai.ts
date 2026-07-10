@@ -1,7 +1,9 @@
 import OpenAI from "openai";
 import { AgentGatewayError, normalizeProviderError } from "./errors";
 import { applyResponseContract } from "./response-contract";
+import { ensureToolResultPairing } from "./message-pairing";
 import type {
+  AgentModelContentBlock,
   AgentModelImageBlock,
   AgentModelMessage,
   AgentModelRequest,
@@ -11,6 +13,22 @@ import type {
   AgentModelToolResult,
   ResolvedAgentModelConfig,
 } from "./types";
+
+function toContentBlocks(
+  text: string,
+  toolCalls: AgentModelToolCall[] = [],
+): AgentModelContentBlock[] {
+  return [
+    ...(text ? [{ type: "text" as const, text }] : []),
+    ...toolCalls.map((call) => ({
+      type: "tool_use" as const,
+      id: call.id,
+      name: call.name,
+      input: call.args,
+      ...(call.parseError ? { parseError: call.parseError } : {}),
+    })),
+  ];
+}
 
 function toOpenAiImageUrl(image: AgentModelImageBlock): string {
   return `data:${image.mediaType};base64,${image.data}`;
@@ -45,7 +63,7 @@ function toChatMessages(
   messages: AgentModelMessage[],
 ): OpenAI.Chat.Completions.ChatCompletionMessageParam[] {
   const out: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [];
-  for (const message of messages) {
+  for (const message of ensureToolResultPairing(messages)) {
     if (message.role === "assistant") {
       out.push({
         role: "assistant",
@@ -99,12 +117,25 @@ function parseChatToolCalls(
   for (const call of toolCalls) {
     if (call.type !== "function") continue;
     let args: Record<string, unknown> = {};
+    let parseError: string | undefined;
     try {
       args = call.function.arguments ? JSON.parse(call.function.arguments) : {};
-    } catch {
+      if (!args || typeof args !== "object" || Array.isArray(args)) {
+        parseError = "Tool arguments must decode to a JSON object.";
+        args = {};
+      }
+    } catch (error) {
+      parseError = `Invalid tool argument JSON: ${
+        error instanceof Error ? error.message : String(error)
+      }`;
       args = {};
     }
-    out.push({ id: call.id, name: call.function.name, args });
+    out.push({
+      id: call.id,
+      name: call.function.name,
+      args,
+      ...(parseError ? { parseError } : {}),
+    });
   }
   return out;
 }
@@ -169,6 +200,7 @@ export async function generateWithOpenAI(
         model: config.model,
         text,
         toolCalls,
+        contentBlocks: toContentBlocks(text, toolCalls),
         requestId,
         stopReason,
       };
@@ -206,6 +238,7 @@ export async function generateWithOpenAI(
       provider: "openai",
       model: config.model,
       text,
+      contentBlocks: toContentBlocks(text),
       requestId,
       stopReason,
     };
