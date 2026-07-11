@@ -11,6 +11,7 @@ import {
   isTaskPlanActive,
   TASKS_DIR_NAME,
   type AgentTaskNode,
+  type AgentTaskExecutionTarget,
 } from "@shared/agent-task-graph";
 import { resolveAgentPath } from "../subagent/workspace-path";
 import { writeJsonFileAtomic } from "../persistence/atomic-json-file";
@@ -65,6 +66,7 @@ export type CreateTaskInput = {
   description?: string;
   blockedBy?: string[];
   planId?: string;
+  executionTarget?: AgentTaskExecutionTarget;
 };
 
 export type CreatePlanInput = {
@@ -73,6 +75,7 @@ export type CreatePlanInput = {
     subject: string;
     description?: string;
     blockedBy?: string[];
+    executionTarget?: AgentTaskExecutionTarget;
   }>;
   sequential?: boolean;
 };
@@ -91,6 +94,10 @@ export type ClaimTaskResult =
 
 export type CompleteTaskResult =
   | { ok: true; message: string; task: AgentTaskNode; unblocked: string[] }
+  | { ok: false; error: string };
+
+export type SubmitTaskResult =
+  | { ok: true; message: string; task: AgentTaskNode }
   | { ok: false; error: string };
 
 /** File-backed task graph stored under `{workspaceRoot}/.tasks/`. */
@@ -119,6 +126,7 @@ export class TaskStore {
       subject: input.subject.trim(),
       description: input.description?.trim() ?? "",
       status: "pending",
+      executionTarget: input.executionTarget ?? "teammate",
       owner: null,
       blockedBy,
       ...(input.planId ? { planId: input.planId } : {}),
@@ -162,6 +170,7 @@ export class TaskStore {
         subject: step.subject,
         description: step.description,
         blockedBy: blockedBy.length > 0 ? [...new Set(blockedBy)] : undefined,
+        executionTarget: step.executionTarget,
         planId,
       });
       if (!result.ok) {
@@ -219,6 +228,7 @@ export class TaskStore {
     return tasks.filter((task) =>
       task.status === "pending"
       && task.owner === null
+      && task.executionTarget === "teammate"
       && canStartTask(task, tasksById),
     );
   }
@@ -254,7 +264,7 @@ export class TaskStore {
   async completeTask(taskId: string, owner?: string): Promise<CompleteTaskResult> {
     return this.withTaskLock(taskId, async () => {
       const task = await this.loadTask(taskId);
-      if (task.status !== "in_progress") {
+      if (task.status !== "in_progress" && task.status !== "submitted") {
         return { ok: false, error: `Task ${taskId} is ${task.status}, cannot complete` };
       }
       if (owner && task.owner !== owner) {
@@ -274,6 +284,29 @@ export class TaskStore {
       }
 
       return { ok: true, message, task, unblocked };
+    });
+  }
+
+  /** Submit teammate-owned work for lead review without unlocking dependencies. */
+  async submitTask(taskId: string, owner: string): Promise<SubmitTaskResult> {
+    return this.withTaskLock(taskId, async () => {
+      const task = await this.loadTask(taskId);
+      if (task.status !== "in_progress") {
+        return { ok: false, error: `Task ${taskId} is ${task.status}, cannot submit` };
+      }
+      if (task.owner !== owner) {
+        return { ok: false, error: `Task ${taskId} is owned by ${task.owner ?? "nobody"}, not ${owner}` };
+      }
+
+      task.status = "submitted";
+      delete task.claimInstanceId;
+      task.updatedAt = new Date().toISOString();
+      await this.saveTask(task);
+      return {
+        ok: true,
+        message: `Submitted ${taskId} (${task.subject}) for lead review`,
+        task,
+      };
     });
   }
 

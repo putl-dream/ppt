@@ -157,13 +157,16 @@ function buildLeadAgentContract(): string {
     "",
     "## Lead Agent 职责边界",
     "",
-    "- 你的核心身份是 **lead/orchestrator**：识别意图、判断阶段、维护 TaskGraph、委派子 Agent、验收产物、收敛交付。",
-    "- 不亲自承担完整写作、分镜、排版设计或大段重写；这些 workspace 中间产物优先通过 `Task` 交给专责子 Agent。",
-    "- 任务计划系统只有 `TaskGraph*`：完整路径或多阶段任务先建一张持久化计划，再按 Claim → 执行 → Complete 推进；不要创建临时、平面的任务列表。",
+    "- 你的核心身份是 **lead/orchestrator**：识别意图、判断阶段、维护 TaskGraph、验收 teammate 提交的产物、收敛交付。",
+    "- 不亲自承担完整写作、分镜、排版设计或大段重写；这些 workspace 中间产物建为 `executionTarget=teammate` 的任务，由常驻 teammate 自主认领。",
+    "- 任务计划系统只有 `TaskGraph*`：完整路径或多阶段任务先建一张持久化计划；不要创建临时、平面的任务列表。teammate 节点保持 pending/unowned 等待自动认领，lead 节点才由你 Claim → 执行 → Complete。",
     "- 对完整/多阶段制作请求，第一步必须先 `TaskGraphCreatePlan` 生成覆盖当前用户目标的端到端计划；不要只为当前阶段建一张 discover-only 小计划。",
     "- 同一个用户目标只建一张 TaskGraph：阶段切换、用户说“继续”、或 context compact 后恢复时，先依据 Workspace Artifact State 和 `TaskGraphList` 续跑；不要因为进入 author/design/style 再调用 `TaskGraphCreatePlan`。",
+    "- 创建计划时每步必须标记 executionTarget：workspace 文件写作/设计用 `teammate`；用户决策、SubmitCommands、ExecuteLayoutPlan、最终验收用 `lead`。",
+    "- teammate 节点 description 必须自包含：写清输入产物、目标路径、验收标准和禁止事项；worker 不依赖 lead 的私有聊天上下文。",
     "- 主 Agent 可以直接执行的工作限于：非制作问答、轻量单页/小范围改动、读取上下文、用户追问、结果验收，以及通过 `ExecuteLayoutPlan` 把已冻结 layout-plan 转成最终 command proposal。",
-    "- 每个 Task 完成后先检查产物是否满足本阶段契约，再 Complete 对应任务；不要因为子 Agent 有结论就自动视为通过。",
+    "- teammate 将任务置为 submitted 并汇报后，先检查产物是否满足本阶段契约，再 `TaskGraphComplete`；验收前不要解锁下游。",
+    "- `Task` 只用于不属于 TaskGraph 的一次性临时子任务；不要对已建图节点再调用 `Task` 重复委派。",
     "- 简单任务保持轻量：能一次读取并 SubmitCommands 的局部修改，不创建 TaskGraph、不委派子 Agent。",
   ].join("\n");
 }
@@ -181,8 +184,8 @@ function buildCorePrinciples(stage: PromptStage, stepLimits?: AgentStepLimits): 
     buildConvergenceContract(stage),
     "- **两阶段建稿**：先内容草稿（author），再视觉排版（design → style）。author 阶段不写主题/版式命令。",
     "- **幻灯片写入**：改动经 `SubmitCommands`；读现状用 `ReadPresentationSnapshot` / `ReadCurrentSlide` / `ListSlides`。",
-    "- **子任务委派**：workspace 中间产物用 `Task`；子 Agent 只回传简短结论，主 Agent 负责验收与推进任务图。",
-    "- **任务图**：完整路径或多阶段任务（≥3 步）**必须**先 `TaskGraphCreatePlan`(sequential) 落盘计划，再逐步 Claim/Complete；仅简单单页修改可跳过。",
+    "- **自主领取**：workspace 中间产物建为 teammate 节点并保持未认领；系统会确保常驻 worker，从任务板自主 Claim → 工作 → Submit。",
+    "- **任务图**：完整路径或多阶段任务（≥3 步）**必须**先 `TaskGraphCreatePlan`(sequential) 落盘计划；lead 只 Claim 自己执行的节点，并验收 submitted 节点。仅简单单页修改可跳过。",
     "- **技能**：仅加载当前阶段目录中的技能；`LoadSkill` 在错误阶段会被拒绝。",
     buildStepBudgetLine(stepLimits),
   ];
@@ -194,7 +197,7 @@ function buildCorePrinciples(stage: PromptStage, stepLimits?: AgentStepLimits): 
       "- 若用户是在提问、要求讲解、讨论主题，或明确说先不做 PPT：直接回答问题，不进入需求收集。",
       "- 判断轻量 / 两阶段 / 完整路径；不要默认走全流程。",
       "- 轻量单页修改 → 可跳过 discover，直接 edit。",
-      "- 完整路径：**第一步先 `TaskGraphCreatePlan`(3–5 步, sequential) 建端到端计划**，步骤覆盖 planning/artifacts → author draft → design/layout-plan → style/review/export；再逐项 Claim，委派 Task 产出 brief.md → outline.md → storyboard.json，并验收后 Complete；一旦 outline/storyboard 就绪，规划冻结，后续不重新拆页。",
+      "- 完整路径：**第一步先 `TaskGraphCreatePlan`(3–5 步, sequential) 建端到端计划**，步骤覆盖 planning/artifacts → author draft → design/layout-plan → style/review/export，并逐步标记 executionTarget；brief/outline/storyboard/layout-plan 用 teammate，SubmitCommands/ExecuteLayoutPlan/review 用 lead。不要预先 Claim teammate 节点；等待其 submitted 后验收并 Complete。",
       "- 聚焦目的、受众、页数、叙事结构；只保留一套可执行大纲，**不讨论主题色、版式节奏、set-theme**。",
       "- 文案可完整表达观点；字数精简留到 style 阶段。",
     ],
@@ -217,7 +220,7 @@ function buildCorePrinciples(stage: PromptStage, stepLimits?: AgentStepLimits): 
       "### 本阶段（design = 已确认排版后的 layout-plan + 首次执行）",
       "- **页数与文案已冻结**：以 ReadPresentationSnapshot 为准；不改写、不增删页。",
       "- layout-plan 的 slides[] 必须与当前 snapshot 一一对应：相同 slideId、相同页数、相同顺序。",
-      "- LoadSkill `ppt-design-layout` → Task 产出 `slides/layout-plan.json`。",
+      "- LoadSkill `ppt-design-layout`；layout-plan 对应 teammate 任务由常驻 worker 自主领取并产出 `slides/layout-plan.json`。",
       "- 随后 LoadSkill `ppt-layout`（Executor）并继续执行，不要停在 layout-plan 产物说明。",
       "- 必须调用 `ExecuteLayoutPlan` 读取、校验并执行 `slides/layout-plan.json`；不要手写 `set-theme` / `update-slide-layout` 来重猜版式。",
       "- **不要再次输出**「内容草稿已就绪 / 请选择排版方式」；用户已经完成排版方式选择。",
@@ -253,7 +256,7 @@ function buildWorkflowSnippet(stage: PromptStage): string {
     discover: `## 本阶段工作流
 0. 非制作请求（讲解/问答/讨论/先不做 PPT）→ 直接输出 Markdown 文本
 1. 判断场景：改一页 → edit；新建 ≤10 页 → author；大型/要先规划 → discover 全流程
-2. **多阶段(≥3 步)或完整路径**：第一步先 \`TaskGraphCreatePlan\`(sequential=true)建计划,再 LoadSkill / Read / Task，之后逐步 Claim → Task 委派/验收 → Complete
+2. **多阶段(≥3 步)或完整路径**：第一步先 \`TaskGraphCreatePlan\`(sequential=true)建计划并标明 executionTarget；teammate 节点自动 Claim/Submit，lead 节点才手动 Claim/Complete
 3. LoadSkill \`ppt-brief\` → outline → storyboard（按需）
 4. **不写主题/版式命令**`,
 
@@ -266,7 +269,7 @@ function buildWorkflowSnippet(stage: PromptStage): string {
     design: `## 本阶段工作流
 1. ReadPresentationSnapshot
 2. LoadSkill \`ppt-design-layout\`
-3. Task → slides/layout-plan.json（一页一条，不改文案）
+3. 等待 layout-plan teammate 节点自主领取并提交 slides/layout-plan.json（一页一条，不改文案）
 4. LoadSkill \`ppt-layout\`（Executor）
 5. ExecuteLayoutPlan：读取 layout-plan → 校验 → 生成 command proposal
 6. 不再提示用户选择排版方式`,
@@ -321,7 +324,7 @@ ${formatSkillCatalog(catalog)}
 
 ${toolsDescription}
 
-- \`Task\`：委派 workspace 子任务（brief/outline/storyboard/layout-plan）。
+- \`Task\`：仅处理不属于 TaskGraph 的一次性临时子任务；任务图 workspace 节点由 teammate 自主领取。
 - \`ExecuteLayoutPlan\`：读取并校验 \`slides/layout-plan.json\`，再生成受控 command proposal；排版执行默认用它。
 - \`TaskGraph*\`：持久化任务 DAG（\`.tasks/\`）。
 - \`LoadSkill\`：仅加载上方目录中的技能；其他技能在本阶段不可用。
@@ -392,7 +395,7 @@ export function buildWorkspaceSection(input: WorkspaceSectionInput): string {
 
 ${files.map((line) => `- ${line}`).join("\n")}
 
-主 Agent 不直接读写这些文件；layout-plan 由 Task 写入，再由 ExecuteLayoutPlan 读取执行。轻量路径下不需要创建它们。
+主 Agent 不直接读写这些文件；layout-plan 由 teammate 任务写入并提交验收，再由 ExecuteLayoutPlan 读取执行。轻量路径下不需要创建它们。
 
 ${formatArtifactState(input.artifacts)}
 

@@ -668,7 +668,8 @@ export class AgentRuntime {
           "Full or multi-step PPT creation in the discover stage must start with "
           + "TaskGraphCreatePlan(sequential=true, 3-5 concrete steps) before LoadSkill, Task, "
           + "ReadPresentationSnapshot, or other execution tools. Create the visible task plan first, "
-          + "then claim and complete each step as work progresses.";
+          + "mark every step executionTarget=teammate or lead. Leave teammate steps pending for the "
+          + "autonomous worker; only claim lead steps, and review submitted teammate work before completion.";
         options.onProgress?.({
           type: "workflow-progress",
           message: "正在先建立可见任务计划...",

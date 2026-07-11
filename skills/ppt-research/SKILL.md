@@ -11,7 +11,7 @@ stages:
 
 ## 目标
 
-Task 子 Agent 维护精简的 `research/notes.md`——事实清单，不是报告。
+teammate 自主领取任务并维护精简的 `research/notes.md`——事实清单，不是报告。
 
 ## research/notes.md 结构
 
@@ -29,11 +29,11 @@ Task 子 Agent 维护精简的 `research/notes.md`——事实清单，不是报
 ## 工作流
 
 1. 仅当用户提供了资料或明确要求调研时才执行。
-2. Task 读取 `brief.md` 主题方向。
+2. teammate 读取 `brief.md` 主题方向。
 3. 需要外部事实或最新资料时使用 `web_search`；重要结论至少交叉核验两个来源。
    需要视觉素材候选时可设置 `include_images: true`；图片结果仅用于发现，必须保留来源并核对授权后才能进入 deck。
 4. 结构化写入 notes；每条事实标注来源 URL。
-5. 主 Agent 摘要：事实条数 + 待核实项。
+5. teammate submit_task，并摘要事实条数 + 待核实项；lead 验收后 Complete。
 
 ## 约束
 

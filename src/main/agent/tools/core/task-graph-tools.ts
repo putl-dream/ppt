@@ -1,6 +1,7 @@
 import { z } from "zod";
-import type { ToolDefinition } from "../tool-definition";
+import type { ToolContext, ToolDefinition } from "../tool-definition";
 import {
+  agentTaskExecutionTargetSchema,
   formatTaskListSummary,
   summarizeTaskGraphProgress,
   type AgentTaskNode,
@@ -33,6 +34,9 @@ export const taskGraphCreateSchema = z.object({
   subject: z.string().min(1).describe("任务标题"),
   description: z.string().optional().describe("详细说明，跨会话恢复时供 Agent 阅读"),
   blockedBy: blockedBySchema,
+  executionTarget: agentTaskExecutionTargetSchema.optional().describe(
+    "执行目标：workspace 产物用 teammate；仅 lead/core tool 能执行的步骤用 lead",
+  ),
 });
 
 export const taskGraphCreatePlanSchema = z.object({
@@ -41,6 +45,9 @@ export const taskGraphCreatePlanSchema = z.object({
     subject: z.string().min(1),
     description: z.string().optional(),
     blockedBy: blockedBySchema,
+    executionTarget: agentTaskExecutionTargetSchema.describe(
+      "执行目标：workspace 产物用 teammate；SubmitCommands/ExecuteLayoutPlan/用户决策用 lead",
+    ),
   })).min(1).describe("计划步骤列表"),
   sequential: z.boolean().optional().describe("true 时自动将每步 blockedBy 设为前一步（形成链式 DAG）"),
 });
@@ -77,15 +84,41 @@ export type TaskGraphCompleteResult = {
   tasks: AgentTaskNode[];
 };
 
+function ensureAutonomousTaskWorker(
+  context: ToolContext,
+  tasks: AgentTaskNode[],
+): string | undefined {
+  if (!tasks.some((task) => task.executionTarget === "teammate")) return undefined;
+  if (!context.teammateManager || !context.workspaceRoot || !context.gateway) return undefined;
+
+  const existing = context.teammateManager.list().find(
+    (teammate) => teammate.name === "task_worker"
+      && (teammate.status === "running" || teammate.status === "idle"),
+  );
+  if (existing) return existing.name;
+
+  return context.teammateManager.spawn({
+    name: "task_worker",
+    role: "autonomous PPT workspace task worker",
+    prompt: "Poll the shared task board and execute eligible teammate tasks.",
+    startIdle: true,
+    workspaceRoot: context.workspaceRoot,
+    gateway: context.gateway,
+    model: context.model,
+    agentStepLimits: context.agentStepLimits,
+    idleTimeoutMs: 300_000,
+  }).name;
+}
+
 /**
- * 持久化任务图：唯一任务规划系统。须 TaskGraphClaim 认领后再执行，TaskGraphComplete 完成。
+ * 持久化任务图：唯一任务规划系统。teammate 节点自主认领并提交；lead 验收或自执行后完成。
  * 禁止平面改写状态，避免 lead + 伙伴重复认领。
  */
 export const taskGraphCreateTool: ToolDefinition<typeof taskGraphCreateSchema, TaskGraphCreateResult> = {
   name: "TaskGraphCreate",
   description:
     "创建单个持久化任务节点（.tasks/{id}.json）。用 blockedBy 声明 DAG 依赖。"
-    + "开始工作前必须 TaskGraphClaim；完成后 TaskGraphComplete。",
+    + "teammate 节点会由常驻 worker 自动认领；lead 节点需主 Agent 手动认领。",
   category: "core",
   loadPolicy: "core",
   inputSchema: taskGraphCreateSchema,
@@ -94,11 +127,13 @@ export const taskGraphCreateTool: ToolDefinition<typeof taskGraphCreateSchema, T
     const store = requireTaskStore(context);
     const result = await store.createTask(args);
     if (!result.ok) throw new Error(result.error);
+    const worker = ensureAutonomousTaskWorker(context, [result.task]);
     const tasks = await publishTaskGraph(context, store);
     return {
       task: result.task,
       tasks,
-      summary: `Created ${result.task.id}: ${result.task.subject}`,
+      summary: `Created ${result.task.id}: ${result.task.subject}`
+        + (worker ? ` · autonomous worker: ${worker}` : ""),
     };
   },
 };
@@ -110,7 +145,7 @@ export const taskGraphCreatePlanTool: ToolDefinition<
   name: "TaskGraphCreatePlan",
   description:
     "批量创建计划步骤（可 sequential 串依赖）。多阶段任务（≥3 步）或 lead 分工场景优先用此工具。"
-    + "每步仍须 TaskGraphClaim → 执行 → TaskGraphComplete，不可跳过认领。",
+    + "teammate 步骤由常驻 worker 自动认领并提交验收；lead 步骤由 lead Claim → 执行 → Complete。",
   category: "core",
   loadPolicy: "core",
   inputSchema: taskGraphCreatePlanSchema,
@@ -119,19 +154,21 @@ export const taskGraphCreatePlanTool: ToolDefinition<
     const store = requireTaskStore(context);
     const result = await store.createPlan(args);
     if (!result.ok) throw new Error(result.error);
+    const worker = ensureAutonomousTaskWorker(context, result.tasks);
     const tasks = await publishTaskGraph(context, store);
     return {
       planId: result.planId,
       goal: result.goal,
       tasks,
-      summary: `Created plan ${result.planId} · ${result.tasks.length} tasks · ${summarizeTaskGraphProgress(tasks)}`,
+      summary: `Created plan ${result.planId} · ${result.tasks.length} tasks · ${summarizeTaskGraphProgress(tasks)}`
+        + (worker ? ` · autonomous worker: ${worker}` : ""),
     };
   },
 };
 
 export const taskGraphListTool: ToolDefinition<typeof taskGraphListSchema, TaskGraphListResult> = {
   name: "TaskGraphList",
-  description: "列出 .tasks/ 下全部持久化任务摘要（status、owner、blockedBy）。",
+  description: "列出 .tasks/ 下全部持久化任务摘要（status、executionTarget、owner、blockedBy）。",
   category: "core",
   loadPolicy: "core",
   inputSchema: taskGraphListSchema,
@@ -162,7 +199,7 @@ export const taskGraphClaimTool: ToolDefinition<typeof taskGraphClaimSchema, Tas
   name: "TaskGraphClaim",
   description:
     "认领任务：blockedBy 全部 completed 后 pending → in_progress 并设置 owner。"
-    + "已被认领或依赖未满足时拒绝（多 Agent 防重复认领）。",
+    + "主 Agent 只用它认领 executionTarget=lead 的节点；teammate 节点由 worker 自动认领。",
   category: "core",
   loadPolicy: "core",
   inputSchema: taskGraphClaimSchema,
@@ -170,6 +207,12 @@ export const taskGraphClaimTool: ToolDefinition<typeof taskGraphClaimSchema, Tas
   execute: async (args, context) => {
     const store = requireTaskStore(context);
     const owner = args.owner ?? context.taskGraphOwner ?? "agent";
+    const task = await store.getTask(args.taskId);
+    if (task.executionTarget === "teammate") {
+      throw new Error(
+        `Task ${args.taskId} targets teammate execution and must remain unowned for autonomous claim.`,
+      );
+    }
     const result = await store.claimTask(args.taskId, owner);
     if (!result.ok) throw new Error(result.error);
     const tasks = await publishTaskGraph(context, store);
@@ -179,7 +222,8 @@ export const taskGraphClaimTool: ToolDefinition<typeof taskGraphClaimSchema, Tas
 
 export const taskGraphCompleteTool: ToolDefinition<typeof taskGraphCompleteSchema, TaskGraphCompleteResult> = {
   name: "TaskGraphComplete",
-  description: "完成已认领任务：in_progress → completed，并返回刚解锁的下游任务。",
+  description:
+    "验收并完成任务：lead 自执行任务可从 in_progress 完成；teammate 提交任务从 submitted 完成，随后解锁下游。",
   category: "core",
   loadPolicy: "core",
   inputSchema: taskGraphCompleteSchema,

@@ -54,6 +54,7 @@ describe("agent-task-graph helpers", () => {
         subject: "A",
         description: "",
         status: "pending" as const,
+        executionTarget: "teammate" as const,
         owner: null,
         blockedBy: ["b"],
         createdAt: "",
@@ -64,6 +65,7 @@ describe("agent-task-graph helpers", () => {
         subject: "B",
         description: "",
         status: "pending" as const,
+        executionTarget: "teammate" as const,
         owner: null,
         blockedBy: ["a"],
         createdAt: "",
@@ -79,6 +81,7 @@ describe("agent-task-graph helpers", () => {
       subject: "child",
       description: "",
       status: "pending",
+      executionTarget: "teammate",
       owner: null,
       blockedBy: ["parent"],
       createdAt: "",
@@ -89,6 +92,7 @@ describe("agent-task-graph helpers", () => {
       subject: "parent",
       description: "",
       status: "pending",
+      executionTarget: "teammate",
       owner: null,
       blockedBy: [],
       createdAt: "",
@@ -204,6 +208,64 @@ describe("TaskStore", () => {
       .toEqual([child.task.id]);
   });
 
+  it("keeps lead tasks off the teammate claim queue", async () => {
+    const workspaceRoot = await makeWorkspace();
+    const store = new TaskStore(workspaceRoot);
+    const teammate = await store.createTask({
+      subject: "Write outline",
+      executionTarget: "teammate",
+    });
+    const lead = await store.createTask({
+      subject: "Submit slide commands",
+      executionTarget: "lead",
+    });
+    expect(teammate.ok && lead.ok).toBe(true);
+    if (!teammate.ok || !lead.ok) return;
+
+    expect((await store.scanUnclaimedTasks()).map((task) => task.id))
+      .toEqual([teammate.task.id]);
+  });
+
+  it("treats legacy tasks without executionTarget as lead-owned workflow", async () => {
+    const workspaceRoot = await makeWorkspace();
+    const store = new TaskStore(workspaceRoot);
+    const created = await store.createTask({ subject: "Legacy task" });
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    const taskPath = join(workspaceRoot, ".tasks", `${created.task.id}.json`);
+    const persisted = JSON.parse(await readFile(taskPath, "utf8"));
+    delete persisted.executionTarget;
+    await writeFile(taskPath, JSON.stringify(persisted), "utf8");
+
+    expect(await store.scanUnclaimedTasks()).toEqual([]);
+    expect((await store.getTask(created.task.id)).executionTarget).toBeUndefined();
+  });
+
+  it("submits teammate work for lead review before dependency unlock", async () => {
+    const workspaceRoot = await makeWorkspace();
+    const store = new TaskStore(workspaceRoot);
+    const draft = await store.createTask({ subject: "Write draft", executionTarget: "teammate" });
+    expect(draft.ok).toBe(true);
+    if (!draft.ok) return;
+    const publish = await store.createTask({
+      subject: "Publish draft",
+      executionTarget: "lead",
+      blockedBy: [draft.task.id],
+    });
+    expect(publish.ok).toBe(true);
+    if (!publish.ok) return;
+
+    await store.claimTask(draft.task.id, "writer");
+    const submitted = await store.submitTask(draft.task.id, "writer");
+    expect(submitted.ok && submitted.task.status).toBe("submitted");
+    expect(await store.canStart(publish.task.id)).toBe(false);
+
+    const completed = await store.completeTask(draft.task.id);
+    expect(completed.ok && completed.unblocked).toContain("Publish draft");
+    expect(await store.canStart(publish.task.id)).toBe(true);
+  });
+
   it("allows only one winner when separate stores claim the same task concurrently", async () => {
     const workspaceRoot = await makeWorkspace();
     const creator = new TaskStore(workspaceRoot);
@@ -258,8 +320,8 @@ describe("TaskGraph tools", () => {
         goal: "Build deck",
         sequential: true,
         steps: [
-          { subject: "Read brief" },
-          { subject: "Create outline" },
+          { subject: "Read brief", executionTarget: "lead" },
+          { subject: "Create outline", executionTarget: "teammate" },
         ],
       },
       context,
@@ -281,6 +343,31 @@ describe("TaskGraph tools", () => {
     expect(onUpdated).toHaveBeenCalled();
   });
 
+  it("starts an idle autonomous worker when a plan contains teammate tasks", async () => {
+    const workspaceRoot = await makeWorkspace();
+    const spawn = vi.fn(() => ({ name: "task_worker" }));
+    const context = {
+      ...baseContext(workspaceRoot),
+      gateway: {},
+      teammateManager: {
+        list: () => [],
+        spawn,
+      },
+    } as any;
+
+    await taskGraphCreatePlanTool.execute({
+      goal: "Build outline",
+      sequential: true,
+      steps: [{ subject: "Create outline", executionTarget: "teammate" }],
+    }, context);
+
+    expect(spawn).toHaveBeenCalledWith(expect.objectContaining({
+      name: "task_worker",
+      startIdle: true,
+      workspaceRoot,
+    }));
+  });
+
   it("rejects creating a second plan while the current task graph is active", async () => {
     const workspaceRoot = await makeWorkspace();
     const context = baseContext(workspaceRoot);
@@ -290,8 +377,8 @@ describe("TaskGraph tools", () => {
         goal: "Build deck",
         sequential: true,
         steps: [
-          { subject: "Create brief" },
-          { subject: "Create outline" },
+          { subject: "Create brief", executionTarget: "teammate" },
+          { subject: "Create outline", executionTarget: "teammate" },
         ],
       },
       context,
@@ -302,7 +389,7 @@ describe("TaskGraph tools", () => {
         {
           goal: "Author deck",
           sequential: true,
-          steps: [{ subject: "Draft slides" }],
+          steps: [{ subject: "Draft slides", executionTarget: "lead" }],
         },
         context,
       ),
@@ -315,6 +402,7 @@ describe("TaskGraph tools", () => {
       subject: "step",
       description: "",
       status: "pending",
+      executionTarget: "teammate",
       owner: null,
       blockedBy: [],
       createdAt: "",
@@ -334,11 +422,11 @@ describe("TaskGraph tools", () => {
     const context = baseContext(workspaceRoot);
 
     const schema = await taskGraphCreateTool.execute(
-      { subject: "Define schema" },
+      { subject: "Define schema", executionTarget: "lead" },
       context,
     );
     const api = await taskGraphCreateTool.execute(
-      { subject: "Write API", blockedBy: [schema.task.id] },
+      { subject: "Write API", executionTarget: "lead", blockedBy: [schema.task.id] },
       context,
     );
 
@@ -360,6 +448,18 @@ describe("TaskGraph tools", () => {
 
     const claimApi = await taskGraphClaimTool.execute({ taskId: api.task.id }, context);
     expect(claimApi.task.status).toBe("in_progress");
+  });
+
+  it("prevents lead from pre-claiming teammate tasks", async () => {
+    const workspaceRoot = await makeWorkspace();
+    const context = baseContext(workspaceRoot);
+    const task = await taskGraphCreateTool.execute(
+      { subject: "Write outline", executionTarget: "teammate" },
+      context,
+    );
+
+    await expect(taskGraphClaimTool.execute({ taskId: task.task.id }, context))
+      .rejects.toThrow("must remain unowned for autonomous claim");
   });
 
   it("unassigns in-progress tasks on shutdown", async () => {

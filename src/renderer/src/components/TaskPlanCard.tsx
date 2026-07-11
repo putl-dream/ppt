@@ -6,6 +6,7 @@ import { ChevronDownIcon, ChevronRightIcon } from "./Icons";
 function TaskStatusIcon({ status }: { status: AgentTaskNode["status"] }) {
   if (status === "completed") return <span className="task-plan-icon done" aria-hidden="true">✓</span>;
   if (status === "in_progress") return <span className="step-spinner task-plan-spinner" aria-hidden="true" />;
+  if (status === "submitted") return <span className="task-plan-icon submitted" aria-hidden="true">◇</span>;
   return <span className="task-plan-icon pending" aria-hidden="true">○</span>;
 }
 
@@ -21,7 +22,9 @@ export const TaskPlanCard: React.FC<TaskPlanCardProps> = ({
   live = false,
 }) => {
   const [expanded, setExpanded] = useState(false);
-  const hasActive = tasks.some((task) => task.status === "in_progress");
+  const hasActive = tasks.some(
+    (task) => task.status === "in_progress" || task.status === "submitted",
+  );
 
   if (tasks.length === 0) return null;
 
@@ -54,8 +57,10 @@ export const TaskPlanCard: React.FC<TaskPlanCardProps> = ({
                 >
                   <TaskStatusIcon status={task.status} />
                   <span>
-                    {task.status === "in_progress" && (
-                      <span className="task-plan-step-marker">步骤 {index + 1} · </span>
+                    {(task.status === "in_progress" || task.status === "submitted") && (
+                      <span className="task-plan-step-marker">
+                        {task.status === "submitted" ? "待验收" : `步骤 ${index + 1}`} ·{" "}
+                      </span>
                     )}
                     {task.subject}
                     {task.owner ? ` · ${task.owner}` : ""}

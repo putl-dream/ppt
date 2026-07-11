@@ -46,20 +46,20 @@ export function createTeammateTaskTools(
     },
   };
 
-  const completeTool: SubAgentToolDefinition<typeof taskIdSchema> = {
-    name: "complete_task",
+  const submitTool: SubAgentToolDefinition<typeof taskIdSchema> = {
+    name: "submit_task",
     description:
-      "Mark a task you own completed after its concrete work is finished, unlocking dependent tasks.",
+      "Submit a task you own for lead review after concrete work is finished. Submission does not unlock dependencies.",
     inputSchema: taskIdSchema,
     permission: TASK_TOOL_PERMISSION,
     async execute(args) {
-      const result = await store.completeTask(args.task_id, owner);
+      const result = await store.submitTask(args.task_id, owner);
       if (!result.ok) throw new Error(result.error);
-      return formatTaskResult(result.message, result.task, result.unblocked);
+      return formatTaskResult(result.message, result.task);
     },
   };
 
-  return [scanTool, claimTool, completeTool];
+  return [scanTool, claimTool, submitTool];
 }
 
 export async function claimNextUnclaimedTask(

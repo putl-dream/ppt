@@ -1062,6 +1062,10 @@
   color: var(--text-primary);
 }
 
+.task-plan-item--submitted {
+  color: var(--text-primary);
+}
+
 .task-plan-icon {
   flex-shrink: 0;
   width: 14px;
@@ -1075,6 +1079,10 @@
 
 .task-plan-icon.pending {
   opacity: 0.55;
+}
+
+.task-plan-icon.submitted {
+  color: #f59e0b;
 }
 
 .task-plan-spinner {

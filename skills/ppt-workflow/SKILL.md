@@ -21,12 +21,12 @@ stages:
 | 阶段 | LoadSkill | 产出 | 执行者 |
 |------|-----------|------|--------|
 | 0 规划 | — | TaskGraphCreatePlan（3–5 步，sequential） | 主 Agent（lead/orchestrator） |
-| 1 需求 | `ppt-brief` | `brief.md` | Task |
-| 2 大纲 | `ppt-outline` | `outline.md` | Task |
-| 3 分镜 | `ppt-storyboard` | `slides/storyboard.json` | Task |
+| 1 需求 | `ppt-brief` | `brief.md` | teammate 自主领取 |
+| 2 大纲 | `ppt-outline` | `outline.md` | teammate 自主领取 |
+| 3 分镜 | `ppt-storyboard` | `slides/storyboard.json` | teammate 自主领取 |
 | 4 内容草稿 | `ppt-build` | add-slide（无排版） | 主 Agent 整合冻结产物后 SubmitCommands |
 | 4b 排版选择 | — | LayoutChoiceCard | 用户（author 子状态） |
-| **4c 排版设计** | **`ppt-design-layout`** | **`slides/layout-plan.json`** | **Task（Design Agent，design 阶段）** |
+| **4c 排版设计** | **`ppt-design-layout`** | **`slides/layout-plan.json`** | **teammate 自主领取（design 阶段）** |
 | 5 视觉执行 | `ppt-layout` | ExecuteLayoutPlan 按 plan 执行 commands + 增强 | Core Tool（style 阶段） |
 | 5b 质检 | `deck-review` | Rubric + ValidateDeckLayout | style 阶段 |
 | 6 美化/导出 | `ppt-beautify` / `ppt-export` | 可选 | 仅用户要求 |
@@ -41,11 +41,12 @@ stages:
 
 1. 先识别意图并选路径；完整/多阶段(≥3 步)**必须**先 `TaskGraphCreatePlan`(sequential) 建计划再执行；单页修改**不要** TaskGraph、两阶段。
 2. 任务计划系统只用 `TaskGraph*`；不要使用、恢复或维护临时、平面的任务列表。
-3. 每个计划步骤先 `TaskGraphClaim`，再委派对应 Task 或执行轻量动作；验收产物满足阶段契约后才 `TaskGraphComplete`。
-4. workspace 文件一律 Task 委派；主 Agent 只负责读取必要上下文、整合已冻结产物、提出用户决策、最终 SubmitCommands。
-5. 新建/批量加页：内容草稿完成后停止，等待 LayoutChoiceCard。
-6. 用户确认排版方式后：**先** LoadSkill `ppt-design-layout` + Task 产出 layout-plan；**再** LoadSkill `ppt-layout` 并调用 `ExecuteLayoutPlan` 按 plan 执行（禁止 freestyle 改 layout）。
-7. 控制步数：设计决策在 Task 内完成；执行阶段合并 SubmitCommands；不重复 LoadSkill。
+3. 创建计划时每步标记 executionTarget：workspace 文件产物用 `teammate`，SubmitCommands / ExecuteLayoutPlan / 用户决策用 `lead`。
+4. teammate 节点 description 必须自包含输入、输出路径、验收标准和禁止事项；节点保持 pending/unowned，由常驻 worker 自主 Claim 并置为 submitted；主 Agent 验收后才 `TaskGraphComplete`。lead 节点才由主 Agent 主动 Claim。
+5. `Task` 仅用于不属于 TaskGraph 的一次性临时工作；不要对任务图节点重复委派 Task。
+6. 新建/批量加页：内容草稿完成后停止，等待 LayoutChoiceCard。
+7. 用户确认排版方式后：**先** LoadSkill `ppt-design-layout`，等待 teammate 产出并提交 layout-plan；**再**验收 Complete，LoadSkill `ppt-layout` 并调用 `ExecuteLayoutPlan` 按 plan 执行（禁止 freestyle 改 layout）。
+8. 控制步数：设计决策在 teammate 内完成；执行阶段合并 SubmitCommands；不重复 LoadSkill。
 
 ## 阶段 4c → 5 衔接
 
@@ -53,7 +54,7 @@ stages:
 LayoutChoiceCard 确认
     ↓
 LoadSkill ppt-design-layout
-Task → slides/layout-plan.json
+teammate 自主 Claim → slides/layout-plan.json → submitted → lead 验收 Complete
     ↓
 LoadSkill ppt-layout（Executor 模式）
 ReadPresentationSnapshot

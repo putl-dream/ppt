@@ -65,6 +65,8 @@ export interface SpawnTeammateThreadOptions {
   name: string;
   role: string;
   prompt: string;
+  /** Start by polling the shared board instead of executing prompt as a lead assignment. */
+  startIdle?: boolean;
   workspaceRoot: string;
   gateway: AgentModelGateway;
   model?: AgentModelSelection;
@@ -389,13 +391,12 @@ export class TeammateManager {
       role: state.role,
       tools,
     });
-    const transcript: Array<Record<string, unknown>> = [
-      { role: "user", content: options.prompt },
-    ];
-    const modelMessages: AgentModelMessage[] = [{
-      role: "user",
-      content: [{ type: "text", text: options.prompt }],
-    }];
+    const transcript: Array<Record<string, unknown>> = options.startIdle
+      ? []
+      : [{ role: "user", content: options.prompt }];
+    const modelMessages: AgentModelMessage[] = options.startIdle
+      ? []
+      : [{ role: "user", content: [{ type: "text", text: options.prompt }] }];
     const toolSchemas: AgentToolSchema[] = tools.map((tool) => ({
       name: tool.name,
       description: tool.description,
@@ -413,11 +414,11 @@ export class TeammateManager {
     });
 
     let modelSteps = 0;
-    let hasActiveAssignment = true;
-    let currentAssignment = options.prompt;
+    let hasActiveAssignment = !options.startIdle;
+    let currentAssignment = options.startIdle ? "" : options.prompt;
     let currentTaskId: string | undefined;
-    let idleSince: number | undefined;
-    let nextIdlePollAt: number | undefined;
+    let idleSince: number | undefined = options.startIdle ? Date.now() : undefined;
+    let nextIdlePollAt: number | undefined = options.startIdle ? Date.now() : undefined;
     const workSummaries: string[] = [];
 
     try {
@@ -560,7 +561,7 @@ export class TeammateManager {
             if (currentTask.status === "in_progress" && currentTask.owner === state.name) {
               const guidance =
                 `Task ${currentTaskId} is still in_progress. Finish its concrete work and call `
-                + `complete_task({"task_id":"${currentTaskId}"}) before returning a summary.`;
+                + `submit_task({"task_id":"${currentTaskId}"}) before returning a summary for lead review.`;
               transcript.push({ role: "user", content: guidance });
               modelMessages.push({
                 role: "user",
@@ -918,7 +919,7 @@ function formatClaimedTaskAssignment(task: AgentTaskNode): string {
   return `<task_assignment source="task_board" owner="${task.owner}">
 ${JSON.stringify(task, null, 2)}
 </task_assignment>
-This task has already been claimed for you. Complete the concrete work, then call complete_task with task_id "${task.id}" before returning your summary.`;
+This task has already been claimed for you. Complete the concrete work, then call submit_task with task_id "${task.id}" before returning your summary for lead review.`;
 }
 
 function withIdentityIfCompacted(

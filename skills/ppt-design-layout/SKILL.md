@@ -7,7 +7,8 @@ stages:
 allowed-tools:
   - ReadPresentationSnapshot
   - ListSlides
-  - Task
+  - TaskGraphList
+  - TaskGraphComplete
 ---
 
 # 排版设计专责（Design Agent）
@@ -16,7 +17,7 @@ allowed-tools:
 
 **只做设计决策，不做执行。** 在引擎能力边界内产出可执行的逐页 `layout-plan.json`；不改写文案、不手填坐标、不调用 SubmitCommands。
 
-主 Agent 在阶段 4c 委派 Task 给本子 Agent；阶段 5 由主 Agent 调用 `ExecuteLayoutPlan` 消费本 plan（LoadSkill `ppt-layout` Executor 模式），不得凭记忆重猜 layout。
+阶段 4c 的 layout-plan TaskGraph 节点由常驻 teammate 自主领取；主 Agent只负责验收 submitted 产物并 `TaskGraphComplete`。阶段 5 由主 Agent 调用 `ExecuteLayoutPlan` 消费本 plan（LoadSkill `ppt-layout` Executor 模式），不得凭记忆重猜 layout。
 
 ## 设计阶段边界（重要）
 
@@ -39,7 +40,7 @@ allowed-tools:
 
 ## 输出
 
-写入 workspace **`slides/layout-plan.json`**，格式见下。Task 结论仅 1–3 句：路径 + layout 种类数 + “已写入可执行 plan”。不需要回传完整 JSON；后续由 `ExecuteLayoutPlan` 读取文件。
+写入 workspace **`slides/layout-plan.json`**，格式见下。teammate 提交结论仅 1–3 句：路径 + layout 种类数 + “已写入可执行 plan”。不需要回传完整 JSON；后续由 `ExecuteLayoutPlan` 读取文件。
 
 ## layout-plan 格式
 
@@ -123,7 +124,7 @@ allowed-tools:
 
 ### 图片选材（P0 资产闭环）
 
-- 当页面确实需要主视觉或证据图片时，可让 Task 子 Agent 调用 `web_search`，设置 `include_images: true`。
+- 当页面确实需要主视觉或证据图片时，teammate 可调用 `web_search`，设置 `include_images: true`。
 - 搜索结果只是候选，不代表自动获得复用授权；优先 Pexels、Pixabay、Wikimedia Commons 等授权信息明确的来源。
 - `insert-image` enhancement 除 `url` / `slot` 外，应尽量记录 `provider`、`sourcePageUrl`、`description`、`attribution`、`license`。
 - 执行阶段的 InsertSlideImage 会把远程图片下载到 workspace `assets/images/`，并将来源元数据写入 image element，避免预览有图而 PPTX 丢图。
@@ -178,15 +179,15 @@ allowed-tools:
 | 案例页两栏文字 | case + beautify-chart |
 | 全程同色同构 | slideVariant 交替 |
 
-## Task 委派模板（主 Agent 使用）
+## TaskGraph teammate 节点描述模板（创建计划时使用）
 
 ```
-LoadSkill ppt-design-layout，然后 Task：
-「读取当前 presentation snapshot（slide 列表与 id）。
+executionTarget: teammate
+description: 「读取当前 presentation snapshot（slide 列表与 id）。
 **页数与文案已冻结**——为每一现有 slide 选定 layout、grammarVariant、slideVariant、designTokens、enhancements，不得增删页或提内容密度要求。
 按 ppt-design-layout Rubric（仅版式节奏）写入 slides/layout-plan.json。
 用户选择排版方式：{template|creative}。
-禁止 SubmitCommands；结论 1 句：路径 + layout 种类数 + 已写入可执行 plan。」
+禁止 SubmitCommands；完成后 submit_task，结论 1 句：路径 + layout 种类数 + 已写入可执行 plan。」
 ```
 
 ## 禁止事项

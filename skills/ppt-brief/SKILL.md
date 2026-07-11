@@ -10,7 +10,7 @@ stages:
 
 ## 目标
 
-Task 子 Agent 创建精简的 `brief.md`。信息已足则直接写；仅缺关键项时 AskUser **一次**（最多 1–3 问）。
+teammate 自主领取任务并创建精简的 `brief.md`。必要用户信息应由 lead 在建任务前 AskUser **一次**（最多 1–3 问）；worker 不自行猜测关键决策。
 
 ## 需求澄清（内容阶段 · 不涉及视觉）
 
@@ -51,8 +51,8 @@ Task 子 Agent 创建精简的 `brief.md`。信息已足则直接写；仅缺关
 ## 工作流
 
 1. 用户已给完整大纲 → 可跳过 brief，直接 outline/storyboard。
-2. 缺 1–2 项 → AskUser 一次；不要连环追问。
-3. 完成后主 Agent 摘要 2–3 句，不粘贴全文。
+2. 缺 1–2 项 → lead AskUser 一次；不要连环追问。
+3. teammate 写入后 submit_task，并用 2–3 句摘要回报，不粘贴全文；lead 验收后 Complete。
 
 ## 质量
 

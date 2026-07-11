@@ -1,14 +1,19 @@
 import { z } from "zod";
 
-export const agentTaskStatusSchema = z.enum(["pending", "in_progress", "completed"]);
+export const agentTaskStatusSchema = z.enum(["pending", "in_progress", "submitted", "completed"]);
+
+export const agentTaskExecutionTargetSchema = z.enum(["lead", "teammate"]);
 
 export type AgentTaskStatus = z.infer<typeof agentTaskStatusSchema>;
+export type AgentTaskExecutionTarget = z.infer<typeof agentTaskExecutionTargetSchema>;
 
 export const agentTaskNodeSchema = z.object({
   id: z.string().min(1),
   subject: z.string().min(1),
   description: z.string(),
   status: agentTaskStatusSchema,
+  /** Missing on legacy task files; treat as lead at scheduling boundaries. */
+  executionTarget: agentTaskExecutionTargetSchema.optional(),
   owner: z.string().nullable(),
   /** Process incarnation that owns an in-progress claim. */
   claimInstanceId: z.string().optional(),
@@ -26,7 +31,8 @@ export function summarizeTaskNode(task: AgentTaskNode): string {
   const blocked =
     task.blockedBy.length > 0 ? ` · blockedBy: ${task.blockedBy.join(", ")}` : "";
   const owner = task.owner ? ` · owner: ${task.owner}` : "";
-  return `[${task.status}] ${task.id}: ${task.subject}${owner}${blocked}`;
+  const target = ` · target: ${task.executionTarget ?? "lead"}`;
+  return `[${task.status}] ${task.id}: ${task.subject}${target}${owner}${blocked}`;
 }
 
 export function formatTaskListSummary(tasks: AgentTaskNode[]): string {
@@ -92,9 +98,11 @@ export function summarizeTaskGraphProgress(tasks: AgentTaskNode[]): string {
   if (tasks.length === 0) return "暂无任务";
   const completed = tasks.filter((task) => task.status === "completed").length;
   const inProgress = tasks.find((task) => task.status === "in_progress");
+  const submitted = tasks.filter((task) => task.status === "submitted").length;
   const pending = tasks.filter((task) => task.status === "pending").length;
   const parts = [`${completed}/${tasks.length} 已完成`];
   if (inProgress) parts.push(`进行中: ${inProgress.subject}`);
+  if (submitted > 0) parts.push(`${submitted} 项待验收`);
   else if (pending > 0) parts.push(`${pending} 项待认领`);
   return parts.join(" · ");
 }
@@ -108,6 +116,12 @@ export function formatTaskPlanPosition(tasks: AgentTaskNode[]): string {
     const owner = current.owner ? ` · ${current.owner}` : "";
     return `步骤 ${inProgressIndex + 1}/${tasks.length} · ${current.subject}${owner}`;
   }
+  const submittedIndex = tasks.findIndex((task) => task.status === "submitted");
+  if (submittedIndex >= 0) {
+    const current = tasks[submittedIndex]!;
+    const owner = current.owner ? ` · ${current.owner}` : "";
+    return `待验收 ${submittedIndex + 1}/${tasks.length} · ${current.subject}${owner}`;
+  }
   const completed = tasks.filter((task) => task.status === "completed").length;
   if (completed === tasks.length) {
     return `全部完成 · ${completed}/${tasks.length}`;
@@ -118,7 +132,9 @@ export function formatTaskPlanPosition(tasks: AgentTaskNode[]): string {
 /** 计划是否仍在执行中（仍有未完成或进行中步骤） */
 export function isTaskPlanActive(tasks: AgentTaskNode[]): boolean {
   if (tasks.length === 0) return false;
-  return tasks.some((task) => task.status === "pending" || task.status === "in_progress");
+  return tasks.some((task) =>
+    task.status === "pending" || task.status === "in_progress" || task.status === "submitted"
+  );
 }
 
 /** 按 planId 过滤；无 planId 时返回全部任务 */

@@ -62,7 +62,7 @@ function createBoardWorkerGateway(): AgentModelGateway {
         .join("\n");
       const taskId = text.match(/<task_assignment[\s\S]*?"id":\s*"([^"]+)"/)?.[1];
       if (!taskId) throw new Error("Auto-claimed task assignment was not injected.");
-      return modelToolCall("complete_task", { task_id: taskId });
+      return modelToolCall("submit_task", { task_id: taskId });
     }
     return modelMessage("Shared board task complete.");
   };
@@ -234,6 +234,46 @@ describe("ProtocolStateStore", () => {
 });
 
 describe("TeammateManager", () => {
+  it("starts idle and claims board work without an initial lead assignment", async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), "ppt-idle-worker-"));
+    const store = new TaskStore(workspaceRoot);
+    const created = await store.createTask({
+      subject: "Create outline",
+      executionTarget: "teammate",
+    });
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    const bus = new MessageBus(MessageBus.defaultMailboxDir(workspaceRoot));
+    const manager = new TeammateManager(bus);
+    manager.spawn({
+      name: "task_worker",
+      role: "autonomous task worker",
+      prompt: "Poll the shared board.",
+      startIdle: true,
+      workspaceRoot,
+      gateway: createSequenceGateway([
+        modelToolCall("submit_task", { task_id: created.task.id }),
+        modelMessage("Outline submitted for review."),
+      ]),
+      maxSteps: 2,
+      idlePollMs: 5,
+      idleTimeoutMs: 1_000,
+    });
+
+    await waitFor(async () =>
+      (await store.getTask(created.task.id)).status === "submitted" ? true : undefined,
+    );
+    expect(await bus.peekInbox("lead")).toContainEqual(expect.objectContaining({
+      from: "task_worker",
+      type: "result",
+      content: "Outline submitted for review.",
+    }));
+
+    await manager.requestShutdown("task_worker");
+    await manager.waitFor("task_worker");
+  });
+
   it("runs a teammate asynchronously and delivers result messages to lead", async () => {
     const workspaceRoot = await mkdtemp(join(tmpdir(), "ppt-teammate-"));
     const bus = new MessageBus(MessageBus.defaultMailboxDir(workspaceRoot));
@@ -441,9 +481,9 @@ describe("TeammateManager", () => {
       workspaceRoot,
       gateway: createSequenceGateway([
         modelMessage("Ready for board work."),
-        modelToolCall("complete_task", { task_id: first.task.id }),
+        modelToolCall("submit_task", { task_id: first.task.id }),
         modelMessage("Schema task complete."),
-        modelToolCall("complete_task", { task_id: second.task.id }),
+        modelToolCall("submit_task", { task_id: second.task.id }),
         modelMessage("API task complete."),
       ]),
       maxSteps: 3,
@@ -453,8 +493,8 @@ describe("TeammateManager", () => {
 
     await manager.waitFor("alice");
     expect(manager.get("alice")?.status).toBe("stopped");
-    expect((await store.getTask(first.task.id)).status).toBe("completed");
-    expect((await store.getTask(second.task.id)).status).toBe("completed");
+    expect((await store.getTask(first.task.id)).status).toBe("submitted");
+    expect((await store.getTask(second.task.id)).status).toBe("submitted");
     expect(await bus.readInbox("lead")).toContainEqual(expect.objectContaining({
       from: "alice",
       type: "result",
@@ -487,7 +527,7 @@ describe("TeammateManager", () => {
 
     await Promise.all([manager.waitFor("alice"), manager.waitFor("bob")]);
     const tasks = await store.listTasks();
-    expect(tasks.map((task) => task.status)).toEqual(["completed", "completed"]);
+    expect(tasks.map((task) => task.status)).toEqual(["submitted", "submitted"]);
     const results = (await bus.readInbox("lead"))
       .filter((message) => message.content === "Shared board task complete.");
     expect(new Set(results.map((message) => message.from))).toEqual(new Set(["alice", "bob"]));
