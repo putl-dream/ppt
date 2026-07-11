@@ -2,6 +2,7 @@ import OpenAI from "openai";
 import { AgentGatewayError, normalizeProviderError } from "./errors";
 import { applyResponseContract } from "./response-contract";
 import { ensureToolResultPairing } from "./message-pairing";
+import type { ProviderTokenUsage } from "@shared/token-usage";
 import type {
   AgentModelContentBlock,
   AgentModelImageBlock,
@@ -13,6 +14,36 @@ import type {
   AgentModelToolUseBlock,
   ResolvedAgentModelConfig,
 } from "./types";
+
+function tokenCount(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) && value > 0
+    ? Math.round(value)
+    : 0;
+}
+
+function extractOpenAIUsage(value: unknown): ProviderTokenUsage | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const usage = value as Record<string, unknown>;
+  const inputTokens = tokenCount(usage.prompt_tokens ?? usage.input_tokens);
+  const outputTokens = tokenCount(usage.completion_tokens ?? usage.output_tokens);
+  const totalTokens = tokenCount(usage.total_tokens) || inputTokens + outputTokens;
+  const details = usage.prompt_tokens_details ?? usage.input_tokens_details;
+  const cachedInputTokens = details && typeof details === "object"
+    ? tokenCount((details as Record<string, unknown>).cached_tokens)
+    : 0;
+  if (totalTokens === 0) return undefined;
+  return {
+    inputTokens,
+    outputTokens,
+    totalTokens,
+    ...(cachedInputTokens > 0 ? { cachedInputTokens } : {}),
+  };
+}
+
+function openAIUsageProperty(value: unknown): { usage?: ProviderTokenUsage } {
+  const usage = extractOpenAIUsage(value);
+  return usage ? { usage } : {};
+}
 
 function toOpenAiImageUrl(image: AgentModelImageBlock): string {
   return `data:${image.mediaType};base64,${image.data}`;
@@ -193,6 +224,7 @@ export async function generateWithOpenAI(
         content,
         requestId: response._request_id ?? undefined,
         stopReason: choice?.finish_reason ?? undefined,
+        ...openAIUsageProperty(response.usage),
       };
     }
 
@@ -211,6 +243,7 @@ export async function generateWithOpenAI(
       model: config.model,
       content: [{ type: "text", text }],
       requestId: response._request_id ?? undefined,
+      ...openAIUsageProperty(response.usage),
     };
   } catch (error) {
     throw normalizeProviderError("openai", error, request.signal);
@@ -236,7 +269,12 @@ export async function* generateStreamWithOpenAI(
       const response = await generateWithOpenAI(config, request);
       const text = textFromBlocks(response.content);
       if (text) yield { type: "text_delta", text };
-      yield { type: "complete", content: response.content, stopReason: response.stopReason };
+      yield {
+        type: "complete",
+        content: response.content,
+        stopReason: response.stopReason,
+        ...(response.usage ? { usage: response.usage } : {}),
+      };
       return;
     }
 
@@ -250,10 +288,12 @@ export async function* generateStreamWithOpenAI(
       ],
       max_tokens: request.maxOutputTokens ?? config.maxOutputTokens,
       stream: true,
+      stream_options: { include_usage: true },
     }, { signal: request.signal });
 
     let text = "";
     let finishReason: string | undefined;
+    let usage: ProviderTokenUsage | undefined;
     for await (const chunk of stream) {
       const delta = chunk.choices[0]?.delta?.content;
       if (delta) {
@@ -263,11 +303,13 @@ export async function* generateStreamWithOpenAI(
       if (chunk.choices[0]?.finish_reason) {
         finishReason = chunk.choices[0].finish_reason ?? undefined;
       }
+      usage = extractOpenAIUsage(chunk.usage) ?? usage;
     }
     yield {
       type: "complete",
       content: text ? [{ type: "text", text }] : [],
       stopReason: finishReason,
+      ...(usage ? { usage } : {}),
     };
   } catch (error) {
     throw normalizeProviderError("openai", error, request.signal);

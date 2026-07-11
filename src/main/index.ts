@@ -51,6 +51,7 @@ import {
   findRecoverableConversation,
 } from "@shared/session-recovery";
 import type { AgentModelSelection } from "@shared/agent";
+import { TokenUsageStore } from "./token-usage-store";
 
 const logger = createModuleLogger("main");
 const agentGateway = new AgentGateway();
@@ -138,6 +139,7 @@ function createWindow(): void {
 }
 
 let sessionStore: FileSessionStore;
+let tokenUsageStore: TokenUsageStore;
 
 let activeWindowThemeMode: WindowThemeMode = "light";
 
@@ -238,6 +240,9 @@ app.whenReady().then(async () => {
   Menu.setApplicationMenu(null);
   sessionStore = new FileSessionStore(join(app.getPath("userData"), "sessions.json"));
   await sessionStore.initialize();
+  tokenUsageStore = new TokenUsageStore(join(app.getPath("userData"), "token-usage.json"));
+  await tokenUsageStore.initialize();
+  agentGateway.setUsageRecorder((record) => tokenUsageStore.recordModelUsage(record));
 
   const skillRegistry = await resolveSkillRegistry();
 
@@ -326,10 +331,20 @@ app.whenReady().then(async () => {
         error,
       });
       throw error;
+    } finally {
+      await tokenUsageStore.recordTask(Date.now() - startedAt).catch((error) => {
+        logger.error("session.operation.usage-persist-failed", {
+          operation,
+          sessionId,
+          runId,
+          error,
+        });
+      });
     }
   };
 
   ipcMain.handle("session:get-state", () => sessionStore.getBootstrap());
+  ipcMain.handle("token-usage:get-stats", () => tokenUsageStore.getStats());
   ipcMain.handle("window:set-theme-mode", (_event, themeMode: unknown) =>
     applyWindowThemeMode(normalizeWindowThemeMode(themeMode)),
   );

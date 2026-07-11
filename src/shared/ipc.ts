@@ -14,6 +14,7 @@ import type {
   SessionChatMessage,
   SessionSummary,
 } from "./session";
+import type { TokenUsageStats } from "./token-usage";
 
 export interface CreateSessionOptions {
   rootPath?: string;
@@ -142,6 +143,7 @@ export interface ProjectArtifactWriteResult {
 
 export interface DesktopApi {
   getSessionState(): Promise<SessionBootstrap>;
+  getTokenUsageStats(): Promise<TokenUsageStats>;
   createSession(options?: CreateSessionOptions): Promise<SessionBootstrap>;
   openWorkspace(rootPath: string): Promise<SessionBootstrap>;
   listWorkspaceSessions(rootPath: string): Promise<SessionSummary[]>;

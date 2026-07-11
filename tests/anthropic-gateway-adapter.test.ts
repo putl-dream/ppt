@@ -41,6 +41,12 @@ describe("generateWithAnthropic", () => {
       ],
       _request_id: "req-anthropic",
       stop_reason: "end_turn",
+      usage: {
+        input_tokens: 100,
+        output_tokens: 40,
+        cache_read_input_tokens: 25,
+        cache_creation_input_tokens: 5,
+      },
     });
 
     const response = await generateWithAnthropic(config, {
@@ -70,6 +76,13 @@ describe("generateWithAnthropic", () => {
       ],
       requestId: "req-anthropic",
       stopReason: "end_turn",
+      usage: {
+        inputTokens: 100,
+        outputTokens: 40,
+        totalTokens: 170,
+        cachedInputTokens: 25,
+        cacheCreationInputTokens: 5,
+      },
     });
   });
 
@@ -79,11 +92,13 @@ describe("generateWithAnthropic", () => {
         content: [{ type: "thinking", thinking: "hidden" }],
         _request_id: null,
         stop_reason: "max_tokens",
+        usage: { input_tokens: 10, output_tokens: 20 },
       })
       .mockResolvedValueOnce({
         content: [{ type: "text", text: "final answer" }],
         _request_id: "req-retry",
         stop_reason: "end_turn",
+        usage: { input_tokens: 30, output_tokens: 40 },
       });
 
     const response = await generateWithAnthropic(config, { prompt: "User prompt" });
@@ -91,6 +106,11 @@ describe("generateWithAnthropic", () => {
     expect(anthropicMock.create).toHaveBeenCalledTimes(2);
     expect(anthropicMock.create.mock.calls[1][0]).toMatchObject({ max_tokens: 1308 });
     expect(response.content).toEqual([{ type: "text", text: "final answer" }]);
+    expect(response.usage).toEqual({
+      inputTokens: 40,
+      outputTokens: 60,
+      totalTokens: 100,
+    });
   });
 
   it("rejects a response without any usable content", async () => {

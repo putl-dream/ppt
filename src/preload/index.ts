@@ -3,6 +3,7 @@ import type { AgentStreamEvent, DesktopApi } from "@shared/ipc";
 
 const api: DesktopApi = {
   getSessionState: () => ipcRenderer.invoke("session:get-state"),
+  getTokenUsageStats: () => ipcRenderer.invoke("token-usage:get-stats"),
   createSession: (options) => ipcRenderer.invoke("session:create", options),
   openWorkspace: (rootPath) => ipcRenderer.invoke("workspace:open", rootPath),
   listWorkspaceSessions: (rootPath) => ipcRenderer.invoke("workspace:list-sessions", rootPath),

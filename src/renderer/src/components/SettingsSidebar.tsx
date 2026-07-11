@@ -27,7 +27,7 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = ({
     title: string;
     icon: React.ReactNode;
   }> = [
-    { id: "account", title: "账户与额度", icon: <UserIcon size={17} /> },
+    { id: "account", title: "Token 使用", icon: <UserIcon size={17} /> },
     { id: "generation", title: "生成与保存", icon: <DownloadIcon size={17} /> },
     { id: "project", title: "文件与模板", icon: <FolderIcon size={17} /> },
     { id: "appearance", title: "外观", icon: <PaletteIcon size={17} /> },

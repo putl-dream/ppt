@@ -506,6 +506,239 @@
   font-size: 10.5px;
 }
 
+.token-usage-shell {
+  display: grid;
+  gap: 22px;
+}
+
+.token-usage-metrics {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  overflow: hidden;
+  border: 1px solid var(--border-glass);
+  border-radius: var(--panel-border-radius);
+  background: var(--bg-input-field);
+}
+
+.token-usage-metric {
+  position: relative;
+  min-width: 0;
+  display: grid;
+  justify-items: center;
+  gap: 5px;
+  padding: 15px 10px 13px;
+  text-align: center;
+}
+
+.token-usage-metric + .token-usage-metric::before {
+  content: "";
+  position: absolute;
+  top: 12px;
+  bottom: 12px;
+  left: 0;
+  width: 1px;
+  background: var(--border-glass);
+}
+
+.token-usage-metric strong {
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.token-usage-metric span {
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.3;
+  white-space: nowrap;
+}
+
+.token-activity-card {
+  display: grid;
+  gap: 18px;
+  min-width: 0;
+  padding: 16px 0 4px;
+}
+
+.token-activity-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.token-activity-header h3 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.token-activity-header p {
+  margin: 5px 0 0;
+  color: var(--text-muted);
+  font-size: 10.5px;
+}
+
+.token-activity-actions,
+.token-view-tabs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.token-view-tabs button,
+.token-usage-refresh,
+.token-usage-state button {
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font-family: var(--font-body);
+  font-size: 11.5px;
+  font-weight: 550;
+  cursor: pointer;
+  transition: color 0.14s ease, background 0.14s ease;
+}
+
+.token-view-tabs button {
+  padding: 4px 6px;
+  border-radius: var(--field-border-radius);
+}
+
+.token-view-tabs button:hover,
+.token-view-tabs button.active {
+  color: var(--text-primary);
+}
+
+.token-view-tabs button.active {
+  background: var(--bg-input-field);
+}
+
+.token-usage-refresh {
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border-radius: var(--field-border-radius);
+}
+
+.token-usage-refresh:hover:not(:disabled) {
+  background: var(--bg-glass-hover);
+  color: var(--text-primary);
+}
+
+.token-usage-refresh:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.token-usage-refresh:disabled svg {
+  animation: settingsSavingSpin 0.9s linear infinite;
+}
+
+.token-heatmap-scroll {
+  min-width: 0;
+  overflow-x: auto;
+  padding: 0 0 8px;
+  scrollbar-width: none;
+}
+
+.token-heatmap-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.token-heatmap-scroll.is-loading {
+  opacity: 0.52;
+}
+
+.token-heatmap-months,
+.token-heatmap-grid {
+  min-width: 680px;
+  display: grid;
+  grid-template-columns: repeat(53, minmax(8px, 1fr));
+  column-gap: 3px;
+}
+
+.token-heatmap-months {
+  height: 19px;
+  align-items: start;
+  color: var(--text-muted);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.token-heatmap-months span {
+  transform: translateX(-1px);
+}
+
+.token-heatmap-grid {
+  grid-template-rows: repeat(7, 11px);
+  grid-auto-flow: column;
+  row-gap: 3px;
+}
+
+.token-heatmap-cell {
+  display: block;
+  width: 100%;
+  min-width: 8px;
+  height: 11px;
+  border-radius: 3px;
+  background: var(--bg-darker);
+  outline: 1px solid color-mix(in srgb, var(--border-glass) 45%, transparent);
+  outline-offset: -1px;
+}
+
+.token-heatmap-cell.level-1 {
+  background: color-mix(in srgb, var(--accent-primary) 28%, var(--bg-darker));
+}
+
+.token-heatmap-cell.level-2 {
+  background: color-mix(in srgb, var(--accent-primary) 46%, var(--bg-darker));
+}
+
+.token-heatmap-cell.level-3 {
+  background: color-mix(in srgb, var(--accent-primary) 68%, var(--bg-darker));
+}
+
+.token-heatmap-cell.level-4 {
+  background: var(--accent-primary);
+}
+
+.token-heatmap-cell.is-future {
+  opacity: 0.35;
+}
+
+.token-usage-state,
+.token-usage-empty {
+  margin: 0;
+  padding: 18px;
+  border: 1px dashed var(--border-glass);
+  border-radius: var(--button-border-radius);
+  color: var(--text-muted);
+  font-size: 11.5px;
+  text-align: center;
+}
+
+.token-usage-state button {
+  margin-left: 8px;
+  color: var(--accent-primary);
+}
+
+.token-usage-state.is-error {
+  color: #ef4444;
+}
+
+.token-usage-empty {
+  padding: 10px;
+  border: 0;
+}
+
 .settings-form-stack {
   display: grid;
   gap: 14px;
@@ -1010,6 +1243,27 @@
   .settings-accent-grid,
   .settings-control-shape-grid {
     grid-template-columns: 1fr;
+  }
+
+  .token-usage-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .token-usage-metric + .token-usage-metric::before {
+    display: none;
+  }
+
+  .token-usage-metric {
+    border-bottom: 1px solid var(--border-glass);
+  }
+
+  .token-activity-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .token-activity-actions {
+    justify-content: space-between;
   }
 }
 
