@@ -23,26 +23,41 @@ export const ToolApprovalOverlay: React.FC<ToolApprovalOverlayProps> = ({
   ].filter(Boolean).join("；");
 
   return (
-    <div className="tool-approval-overlay" role="dialog" aria-label="工具权限申请">
-      <div className="tool-approval-overlay-card">
-        <div className="tool-approval-overlay-description" title={description}>
-          {description}
-        </div>
+    <section
+      className="tool-approval-gate"
+      role="alertdialog"
+      aria-modal="true"
+      aria-labelledby={`tool-approval-title-${approval.approvalId}`}
+      aria-describedby={`tool-approval-detail-${approval.approvalId}`}
+    >
+      <div className="tool-approval-gate-heading">
+        <span className="tool-approval-gate-kicker">流程已暂停</span>
+        <strong id={`tool-approval-title-${approval.approvalId}`}>需要工具权限</strong>
+      </div>
+      <div
+        id={`tool-approval-detail-${approval.approvalId}`}
+        className="tool-approval-gate-description"
+        title={description}
+      >
+        {description}
+      </div>
+      <div className="tool-approval-gate-actions">
         <button
           type="button"
-          className="tool-approval-overlay-btn tool-approval-overlay-btn--allow"
+          className="tool-approval-gate-btn tool-approval-gate-btn--deny"
+          onClick={() => onResolve(approval.approvalId, false)}
+          autoFocus
+        >
+          拒绝并停止
+        </button>
+        <button
+          type="button"
+          className="tool-approval-gate-btn tool-approval-gate-btn--allow"
           onClick={() => onResolve(approval.approvalId, true)}
         >
-          同意
-        </button>
-        <button
-          type="button"
-          className="tool-approval-overlay-btn tool-approval-overlay-btn--deny"
-          onClick={() => onResolve(approval.approvalId, false)}
-        >
-          不同意
+          允许并继续
         </button>
       </div>
-    </div>
+    </section>
   );
 };

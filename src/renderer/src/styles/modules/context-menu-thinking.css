@@ -1,7 +1,7 @@
 /* 自定义右键上下文菜单 */
 .custom-context-menu {
   position: fixed;
-  z-index: 9999;
+  z-index: var(--z-overlay);
   background: var(--bg-input-field);
   border: 1px solid var(--border-glass);
   border-radius: var(--button-border-radius);

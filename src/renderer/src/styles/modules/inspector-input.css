@@ -252,12 +252,21 @@
   margin-top: 6px;
 }
 
-/* 浮动警告信息气泡 */
-.floating-toast-alert {
+/* 全局通知视口：独立于左右面板，始终避让系统标题栏。 */
+.toast-viewport {
   position: fixed;
-  top: 36px;
+  top: calc(var(--window-titlebar-height, 30px) + 8px);
   left: 50%;
   transform: translateX(-50%);
+  z-index: var(--z-toast);
+  width: min(560px, calc(100vw - 32px));
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.floating-toast-alert {
+  max-width: 100%;
   background: var(--bg-glass);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
@@ -268,13 +277,13 @@
   border-radius: 20px;
   font-size: 12px;
   font-weight: 500;
-  z-index: 10000;
+  pointer-events: auto;
   animation: slide-in-toast 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 @keyframes slide-in-toast {
-  0% { top: 22px; opacity: 0; }
-  100% { top: 36px; opacity: 1; }
+  0% { transform: translateY(-8px); opacity: 0; }
+  100% { transform: translateY(0); opacity: 1; }
 }
 
 /* 全景加载态与异常态 */

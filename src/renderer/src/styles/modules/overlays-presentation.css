@@ -5,16 +5,16 @@
 /* 斜杠命令自动补全弹出浮层 */
 .slash-menu-popup {
   position: absolute;
-  bottom: 84px;
-  left: 20px;
-  right: 20px;
+  bottom: calc(100% + 10px);
+  left: 0;
+  right: 0;
   background: var(--bg-glass);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   border: 1px solid var(--border-glass-focused);
   border-radius: var(--button-border-radius);
   box-shadow: var(--shadow-premium);
-  z-index: 1000;
+  z-index: var(--z-dropdown);
   padding: 8px 0;
   max-height: 220px;
   overflow-y: auto;
@@ -37,11 +37,16 @@
 }
 
 .slash-menu-item {
+  width: 100%;
   padding: 10px 16px;
   display: flex;
   justify-content: space-between;
   align-items: center;
   cursor: pointer;
+  border: none;
+  background: transparent;
+  text-align: left;
+  font: inherit;
   transition: var(--transition-smooth);
 }
 
@@ -202,7 +207,7 @@
   background: color-mix(in srgb, var(--bg-app) 94%, transparent);
   backdrop-filter: blur(15px);
   -webkit-backdrop-filter: blur(15px);
-  z-index: 10000;
+  z-index: var(--z-fullscreen);
   display: grid;
   place-items: center;
   color: var(--text-primary);
@@ -233,7 +238,7 @@
   background: color-mix(in srgb, var(--bg-glass) 80%, transparent);
   border-bottom: 1px solid var(--border-glass);
   color: var(--text-primary);
-  z-index: 10;
+  z-index: var(--z-sticky);
 }
 
 .slideshow-title {
@@ -289,7 +294,7 @@
   cursor: pointer;
   transition: var(--transition-smooth);
   user-select: none;
-  z-index: 101;
+  z-index: var(--z-dropdown);
 }
 
 .slideshow-nav-arrow:hover:not(:disabled) {
@@ -418,7 +423,7 @@
 .workspace-canvas-content {
   background: var(--bg-canvas);
   display: grid;
-  grid-template-columns: 1fr 370px;
+  grid-template-columns: minmax(560px, 1fr) 6px minmax(300px, var(--secondary-pane-width, 380px));
   height: 100%;
   width: 100%;
   overflow: hidden;
@@ -454,12 +459,12 @@
 }
 
 .workspace-canvas-content.ppt-mirror-open {
-  grid-template-columns: 1fr 370px;
+  grid-template-columns: minmax(560px, 1fr) 6px minmax(300px, var(--secondary-pane-width, 380px));
 }
 
 .workspace-canvas-content.ppt-mirror-open .mirror-panel {
-  width: 370px;
-  min-width: 370px;
+  width: 100%;
+  min-width: 300px;
   opacity: 1;
   transform: translateX(0);
   transition: var(--transition-panel);
@@ -471,7 +476,7 @@
 
 /* PPT 镜像放大展开模式 */
 .workspace-canvas-content.mirror-expanded {
-  grid-template-columns: 0px 1fr !important;
+  grid-template-columns: 0 0 minmax(0, 1fr) !important;
 }
 
 .workspace-canvas-content.mirror-expanded .chat-workspace-column {

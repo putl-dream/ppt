@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import type {
   AgentApprovalRequest,
   AgentRunRequest,
@@ -108,9 +108,31 @@ export function App() {
   const [isDeckPreviewOpen, setIsDeckPreviewOpen] = useState(false);
   const [isExportingDeck, setIsExportingDeck] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const toastTimerRef = useRef<number | null>(null);
   const [settingsSaveStatus, setSettingsSaveStatus] = useState<"saved" | "saving">("saved");
   const settingsSaveTimerRef = useRef<number | null>(null);
   const [maxRevision, setMaxRevision] = useState(0);
+
+  const [isPrimarySidebarCollapsed, setIsPrimarySidebarCollapsed] = useState(
+    () => window.localStorage.getItem("agent-ppt:primary-sidebar") === "collapsed",
+  );
+  const [primarySidebarWidth, setPrimarySidebarWidth] = useState(() => {
+    const value = Number(window.localStorage.getItem("agent-ppt:primary-sidebar-width"));
+    return Number.isFinite(value) && value >= 232 && value <= 360 ? value : 280;
+  });
+  const [secondaryPaneWidth, setSecondaryPaneWidth] = useState(() => {
+    const value = Number(window.localStorage.getItem("agent-ppt:secondary-pane-width"));
+    return Number.isFinite(value) && value >= 300 && value <= 560 ? value : 380;
+  });
+
+  const triggerToast = useCallback((message: string) => {
+    if (toastTimerRef.current !== null) window.clearTimeout(toastTimerRef.current);
+    setToastMessage(message);
+    toastTimerRef.current = window.setTimeout(() => {
+      setToastMessage(null);
+      toastTimerRef.current = null;
+    }, 3200);
+  }, []);
 
   // 双模态同构布局模式控制
   const [activeMode, setActiveMode] = useState<"workspace" | "settings">("workspace");
@@ -181,8 +203,26 @@ export function App() {
       if (settingsSaveTimerRef.current !== null) {
         window.clearTimeout(settingsSaveTimerRef.current);
       }
+      if (toastTimerRef.current !== null) {
+        window.clearTimeout(toastTimerRef.current);
+      }
     };
   }, []);
+
+  useEffect(() => {
+    window.localStorage.setItem(
+      "agent-ppt:primary-sidebar",
+      isPrimarySidebarCollapsed ? "collapsed" : "expanded",
+    );
+  }, [isPrimarySidebarCollapsed]);
+
+  useEffect(() => {
+    window.localStorage.setItem("agent-ppt:primary-sidebar-width", String(primarySidebarWidth));
+  }, [primarySidebarWidth]);
+
+  useEffect(() => {
+    window.localStorage.setItem("agent-ppt:secondary-pane-width", String(secondaryPaneWidth));
+  }, [secondaryPaneWidth]);
 
   useEffect(() => {
     window.localStorage.setItem(MODEL_STORAGE_KEY, JSON.stringify(models));
@@ -772,12 +812,6 @@ export function App() {
     }
   }, [presentation]);
 
-  // 提示信息气泡
-  const triggerToast = (msg: string) => {
-    setToastMessage(msg);
-    setTimeout(() => setToastMessage(null), 3000);
-  };
-
   const handleSelectWorkspaceFolder = async () => {
     if (busy) {
       triggerToast("当前任务执行中，请稍后再选择目录");
@@ -818,13 +852,21 @@ export function App() {
     }
   };
 
-  // 新建会话：仅进入居中放大初始化页，发送首条消息后再创建会话
-  const handleNewSession = () => {
+  // 新建会话前先确定不可变沙箱；会话建立后不再提供迁移入口。
+  const handleNewSession = async () => {
     if (busy) {
       triggerToast("当前任务执行中，请稍后再新建会话");
       return;
     }
-    enterDraftChat();
+    try {
+      const selectedPath = await window.desktopApi.selectDirectory(
+        localStoragePath || workspacePath || undefined,
+      );
+      if (!selectedPath) return;
+      enterDraftChat(normalizeWorkspacePath(selectedPath));
+    } catch (error) {
+      triggerToast(error instanceof Error ? error.message : "选择项目目录失败");
+    }
   };
 
   // 在指定目录下新建：预填目录，仍停留在初始化页
@@ -1089,7 +1131,6 @@ export function App() {
     }
 
     const editorContext = {
-      currentSlideId: selectedSlideId || undefined,
       selectedElementIds: selectedElementId ? [selectedElementId] : [],
     };
     const agentRequest: AgentRunRequest = {
@@ -1762,6 +1803,61 @@ export function App() {
     setIsMirrorExpanded(false);
   };
 
+  const startPanelResize = (panel: "primary" | "secondary", startClientX: number) => {
+    const startPrimaryWidth = primarySidebarWidth;
+    const startSecondaryWidth = secondaryPaneWidth;
+    document.documentElement.classList.add("is-resizing-panels");
+
+    const handlePointerMove = (event: PointerEvent) => {
+      if (panel === "primary") {
+        setPrimarySidebarWidth(Math.min(360, Math.max(232, startPrimaryWidth + event.clientX - startClientX)));
+        return;
+      }
+      const effectivePrimaryWidth = isPrimarySidebarCollapsed ? 56 : primarySidebarWidth;
+      const availableWidth = window.innerWidth - effectivePrimaryWidth - 560 - 18;
+      const maxWidth = Math.max(300, Math.min(560, availableWidth));
+      setSecondaryPaneWidth(
+        Math.min(maxWidth, Math.max(300, startSecondaryWidth - (event.clientX - startClientX))),
+      );
+    };
+
+    const handlePointerUp = () => {
+      document.documentElement.classList.remove("is-resizing-panels");
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerUp);
+    };
+
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", handlePointerUp);
+  };
+
+  useEffect(() => {
+    if (!isMirrorOpen || !presentation || isMirrorExpanded) return;
+    const reconcilePanelWidths = () => {
+      const expandedAvailable = window.innerWidth - primarySidebarWidth - secondaryPaneWidth - 18;
+      if (!isPrimarySidebarCollapsed && expandedAvailable < 560) {
+        setIsPrimarySidebarCollapsed(true);
+        return;
+      }
+      const effectivePrimaryWidth = isPrimarySidebarCollapsed ? 56 : primarySidebarWidth;
+      const maxSecondaryWidth = Math.max(
+        300,
+        Math.min(560, window.innerWidth - effectivePrimaryWidth - 560 - 18),
+      );
+      setSecondaryPaneWidth((width) => Math.min(width, maxSecondaryWidth));
+    };
+    reconcilePanelWidths();
+    window.addEventListener("resize", reconcilePanelWidths);
+    return () => window.removeEventListener("resize", reconcilePanelWidths);
+  }, [
+    isMirrorExpanded,
+    isMirrorOpen,
+    isPrimarySidebarCollapsed,
+    presentation,
+    primarySidebarWidth,
+    secondaryPaneWidth,
+  ]);
+
   const handleOpenDeckPreview = () => {
     setIsDeckPreviewOpen(true);
     setIsMirrorOpen(true);
@@ -1809,8 +1905,6 @@ export function App() {
   if (startupError) return <main className="loading error">{startupError}</main>;
   if (!sessionLoaded) return <main className="loading">正在打开本地演示文稿工作区...</main>;
 
-  const selectedSlideIndex = presentation?.slides.findIndex((s) => s.id === selectedSlideId) ?? -1;
-  const activeSlideIndexValue = selectedSlideIndex >= 0 ? selectedSlideIndex : null;
   const streamingMessageId =
     busy && activeRunId
       ? streamMessageIdsRef.current.get(activeRunId) ?? null
@@ -1820,6 +1914,12 @@ export function App() {
     || presentation?.title?.trim()
     || (isDraftChat ? "AI 新建会话" : "当前对话");
   const isMirrorVisible = Boolean(isMirrorOpen && presentation);
+  const effectivePrimarySidebarWidth =
+    activeMode === "workspace" && isPrimarySidebarCollapsed ? 56 : primarySidebarWidth;
+  const workspaceLayoutStyle = {
+    "--primary-sidebar-width": `${effectivePrimarySidebarWidth}px`,
+    "--secondary-pane-width": `${secondaryPaneWidth}px`,
+  } as CSSProperties;
 
   return (
     <main className={`app-shell ${computedTheme === "dark" ? "dark-theme" : ""}`}>
@@ -1829,27 +1929,49 @@ export function App() {
       </div>
 
       {/* 浮动提示通知 */}
-      {toastMessage && <div className="floating-toast-alert">{toastMessage}</div>}
+      <div className="toast-viewport" aria-live="polite" aria-atomic="true">
+        {toastMessage ? <div className="floating-toast-alert" role="status">{toastMessage}</div> : null}
+      </div>
 
       {/* 三栏/双模态同构容器 */}
-      <div className={`workspace-container mode-${activeMode}`}>
+      <div
+        className={`workspace-container mode-${activeMode}${activeMode === "workspace" && isPrimarySidebarCollapsed ? " primary-sidebar-collapsed" : ""}`}
+        style={workspaceLayoutStyle}
+      >
         {activeMode === "workspace" ? (
           <>
             {/* 左栏：工作台导航 */}
-            <LeftPanel
-              sessions={sessions}
-              activeSessionId={activeSessionId}
-              onSelectSession={handleSelectSession}
-              onNewSession={() => void handleNewSession()}
-              onNewSessionInWorkspace={(path) => void handleNewSessionInWorkspace(path)}
-              onToggleSettings={() => {
-                setActiveMode("settings");
-                setSettingsCategory("account");
-              }}
-              onDeleteSession={handleDeleteSession}
-            />
+            <div className="primary-sidebar-slot">
+              <LeftPanel
+                sessions={sessions}
+                activeSessionId={activeSessionId}
+                onSelectSession={handleSelectSession}
+                onNewSession={() => void handleNewSession()}
+                onNewSessionInWorkspace={(path) => void handleNewSessionInWorkspace(path)}
+                onToggleSettings={() => {
+                  setActiveMode("settings");
+                  setSettingsCategory("account");
+                }}
+                onDeleteSession={handleDeleteSession}
+                collapsed={isPrimarySidebarCollapsed}
+                onToggleCollapsed={() => setIsPrimarySidebarCollapsed((collapsed) => !collapsed)}
+              />
+            </div>
 
-            <div className="rounded-canvas" style={{ flex: 1, display: "flex", overflow: "hidden", position: "relative" }}>
+            {!isPrimarySidebarCollapsed ? (
+              <div
+                className="panel-resizer panel-resizer--primary"
+                role="separator"
+                aria-label="调整工作台侧栏宽度"
+                aria-orientation="vertical"
+                onPointerDown={(event) => {
+                  event.preventDefault();
+                  startPanelResize("primary", event.clientX);
+                }}
+              />
+            ) : <div className="panel-resizer-placeholder" />}
+
+            <div className="rounded-canvas workbench-main-surface">
               <div
                 className={[
                   "workspace-canvas-content",
@@ -1857,7 +1979,6 @@ export function App() {
                   isMirrorVisible ? "ppt-mirror-open" : "ppt-mirror-closed workspace-canvas-content-chat-only",
                   isMirrorVisible && isMirrorExpanded ? "mirror-expanded" : "",
                 ].filter(Boolean).join(" ")}
-                style={{ display: isMirrorVisible ? undefined : "flex", flex: 1, width: "100%", height: "100%", overflow: "hidden" }}
               >
                 <ChatWorkspace
                   isNewChat={isDraftChat}
@@ -1893,33 +2014,44 @@ export function App() {
                   onRetry={handleRetryMessage}
                   isMirrorOpen={isMirrorVisible}
                   onToggleMirror={handleOpenMirror}
-                  selectedSlideIndex={activeSlideIndexValue}
-                  onClearContextTag={() => setSelectedSlideId("")}
                   onUpdateMessageContent={handleUpdateMessageContent}
                   onProposePrompt={handleSuggestPrompt}
                   models={visibleModels}
                   selectedModelId={selectedModelId}
                   setSelectedModelId={setSelectedModelId}
-                  localStoragePath={localStoragePath}
-                  onSelectWorkspace={() => void handleSelectWorkspaceFolder()}
+                  workspaceReady={Boolean(localStoragePath)}
+                  onPrepareWorkspace={() => void handleSelectWorkspaceFolder()}
                   triggerToast={triggerToast}
                 />
 
                 {isMirrorVisible && presentation ? (
-                  <PPTMirror
-                    presentation={presentation}
-                    selectedSlideId={selectedSlideId}
-                    onSelectSlide={setSelectedSlideId}
-                    selectedTheme={selectedTheme}
-                    selectedPalette={selectedPalette}
-                    themeMode={computedTheme}
-                    logoUrl={logoUrl}
-                    onCloseMirror={handleCloseMirror}
-                    highlightSlideId={highlightSlideId}
-                    isExpanded={isMirrorExpanded}
-                    onToggleExpand={() => setIsMirrorExpanded((value) => !value)}
-                    triggerToast={triggerToast}
-                  />
+                  <>
+                    <div
+                      className={`panel-resizer panel-resizer--secondary${isMirrorExpanded ? " is-disabled" : ""}`}
+                      role="separator"
+                      aria-label="调整预览面板宽度"
+                      aria-orientation="vertical"
+                      onPointerDown={(event) => {
+                        if (isMirrorExpanded) return;
+                        event.preventDefault();
+                        startPanelResize("secondary", event.clientX);
+                      }}
+                    />
+                    <PPTMirror
+                      presentation={presentation}
+                      selectedSlideId={selectedSlideId}
+                      onSelectSlide={setSelectedSlideId}
+                      selectedTheme={selectedTheme}
+                      selectedPalette={selectedPalette}
+                      themeMode={computedTheme}
+                      logoUrl={logoUrl}
+                      onCloseMirror={handleCloseMirror}
+                      highlightSlideId={highlightSlideId}
+                      isExpanded={isMirrorExpanded}
+                      onToggleExpand={() => setIsMirrorExpanded((value) => !value)}
+                      triggerToast={triggerToast}
+                    />
+                  </>
                 ) : null}
               </div>
 
@@ -1938,10 +2070,22 @@ export function App() {
         ) : (
           <>
             {/* 左栏：设置分类导航 */}
-            <SettingsSidebar
-              activeCategory={settingsCategory}
-              onSelectCategory={setSettingsCategory}
-              onBackToWorkspace={() => setActiveMode("workspace")}
+            <div className="primary-sidebar-slot">
+              <SettingsSidebar
+                activeCategory={settingsCategory}
+                onSelectCategory={setSettingsCategory}
+                onBackToWorkspace={() => setActiveMode("workspace")}
+              />
+            </div>
+            <div
+              className="panel-resizer panel-resizer--primary"
+              role="separator"
+              aria-label="调整设置导航宽度"
+              aria-orientation="vertical"
+              onPointerDown={(event) => {
+                event.preventDefault();
+                startPanelResize("primary", event.clientX);
+              }}
             />
 
             {/* 右侧大圆角容器 - 设置项控制台 */}

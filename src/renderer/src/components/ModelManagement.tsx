@@ -1,4 +1,4 @@
-import { useMemo, useState, type KeyboardEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import type { ManagedModel } from "../modelCatalog";
 import { isModelEnabled } from "../modelCatalog";
 import { Edit3Icon, PlusIcon, RefreshIcon, TrashIcon } from "./Icons";
@@ -44,6 +44,8 @@ export function ModelManagement({
   const [query, setQuery] = useState("");
   const [dialogModel, setDialogModel] = useState<ManagedModel | null>(null);
   const [dialogMode, setDialogMode] = useState<"create" | "edit">("create");
+  const dialogRef = useRef<HTMLElement>(null);
+  const returnFocusRef = useRef<HTMLElement | null>(null);
   const normalizedQuery = query.trim().toLowerCase();
 
   const filteredModels = useMemo(() => {
@@ -56,6 +58,7 @@ export function ModelManagement({
   const enabledCount = models.filter(isModelEnabled).length;
 
   const openModelDialog = (mode: "create" | "edit", model: ManagedModel) => {
+    returnFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     setDialogMode(mode);
     setDialogModel({
       ...model,
@@ -64,6 +67,43 @@ export function ModelManagement({
       openaiApiMode: model.openaiApiMode ?? "chat-completions",
     });
   };
+
+  const closeModelDialog = () => {
+    setDialogModel(null);
+    window.setTimeout(() => returnFocusRef.current?.focus(), 0);
+  };
+
+  useEffect(() => {
+    if (!dialogModel) return;
+    window.setTimeout(() => dialogRef.current?.querySelector<HTMLElement>("input, select, button")?.focus(), 0);
+
+    const handleDialogKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closeModelDialog();
+        return;
+      }
+      if (event.key !== "Tab" || !dialogRef.current) return;
+      const focusable = Array.from(
+        dialogRef.current.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ),
+      );
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener("keydown", handleDialogKeyDown);
+    return () => document.removeEventListener("keydown", handleDialogKeyDown);
+  }, [Boolean(dialogModel)]);
 
   const updateDialogModel = (patch: Partial<ManagedModel>) => {
     setDialogModel((current) => (current ? { ...current, ...patch } : current));
@@ -138,7 +178,7 @@ export function ModelManagement({
 
     onSaveModel(next);
     if (next.enabled !== false) onSelectModel(next.id);
-    setDialogModel(null);
+    closeModelDialog();
     setQuery("");
     triggerToast(dialogMode === "create" ? "模型已添加" : "模型已保存");
   };
@@ -153,7 +193,7 @@ export function ModelManagement({
     const fallback = models.find((model) => model.id !== dialogModel.id && isModelEnabled(model));
     onDeleteModel(dialogModel.id);
     if (fallback) onSelectModel(fallback.id);
-    setDialogModel(null);
+    closeModelDialog();
     triggerToast("自定义模型已删除");
   };
 
@@ -251,11 +291,12 @@ export function ModelManagement({
           className="model-dialog-backdrop"
           role="presentation"
           onMouseDown={(event) => {
-            if (event.target === event.currentTarget) setDialogModel(null);
+            if (event.target === event.currentTarget) closeModelDialog();
           }}
         >
           <section
             className="model-dialog"
+            ref={dialogRef}
             role="dialog"
             aria-modal="true"
             aria-labelledby="model-dialog-title"
@@ -269,7 +310,7 @@ export function ModelManagement({
               <button
                 type="button"
                 className="model-dialog-close-btn"
-                onClick={() => setDialogModel(null)}
+                onClick={closeModelDialog}
                 title="关闭"
                 aria-label="关闭模型表单"
               >
@@ -367,7 +408,7 @@ export function ModelManagement({
                 <button
                   type="button"
                   className="settings-secondary-btn"
-                  onClick={() => setDialogModel(null)}
+                  onClick={closeModelDialog}
                 >
                   取消
                 </button>

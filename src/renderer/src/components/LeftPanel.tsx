@@ -20,6 +20,8 @@ interface LeftPanelProps {
   onNewSessionInWorkspace: (workspacePath: string) => void;
   onToggleSettings: () => void;
   onDeleteSession: (id: string) => void;
+  collapsed: boolean;
+  onToggleCollapsed: () => void;
 }
 
 function SessionRow({
@@ -128,6 +130,8 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
   onNewSessionInWorkspace,
   onToggleSettings,
   onDeleteSession,
+  collapsed,
+  onToggleCollapsed,
 }) => {
   const [contextMenu, setContextMenu] = React.useState<{
     x: number;
@@ -208,9 +212,65 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
     setContextMenu({ x: event.clientX, y: event.clientY, sessionId });
   };
 
+  if (collapsed) {
+    return (
+      <aside className="left-panel cursor-sidebar cursor-sidebar--rail" aria-label="折叠的工作台导航">
+        <button
+          type="button"
+          className="sidebar-rail-btn sidebar-rail-btn--primary"
+          onClick={onToggleCollapsed}
+          title="展开工作台"
+          aria-label="展开工作台"
+        >
+          <ChevronRightIcon size={17} />
+        </button>
+        <button
+          type="button"
+          className="sidebar-rail-btn"
+          onClick={onNewSession}
+          title="新建会话"
+          aria-label="新建会话"
+        >
+          <PlusIcon size={17} />
+        </button>
+        <button
+          type="button"
+          className="sidebar-rail-btn"
+          onClick={onToggleCollapsed}
+          title="查看项目和会话"
+          aria-label="查看项目和会话"
+        >
+          <FolderIcon size={17} />
+        </button>
+        <div className="sidebar-rail-spacer" />
+        <button
+          type="button"
+          className="sidebar-rail-btn"
+          onClick={onToggleSettings}
+          title="设置"
+          aria-label="设置"
+        >
+          <SettingsIcon size={18} />
+        </button>
+      </aside>
+    );
+  }
+
   return (
     <aside className="left-panel cursor-sidebar">
       <div className="cursor-sidebar-top">
+        <div className="cursor-sidebar-heading">
+          <span>工作台</span>
+          <button
+            type="button"
+            className="sidebar-collapse-btn"
+            onClick={onToggleCollapsed}
+            title="折叠工作台"
+            aria-label="折叠工作台"
+          >
+            <ChevronRightIcon size={15} />
+          </button>
+        </div>
         <button type="button" className="cursor-sidebar-action-row" onClick={onNewSession}>
           <PlusIcon size={14} className="cursor-workspace-icon" />
           <span>新建会话</span>
@@ -274,7 +334,7 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
         )}
       </div>
 
-      <div className="panel-footer left-footer flex justify-between items-center" style={{ padding: "12px 18px" }}>
+      <div className="panel-footer left-footer flex justify-between items-center">
         <div className="profile-badge flex-1">
           <div className="avatar-mock">
             <UserIcon size={16} />
@@ -288,7 +348,6 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
           className="action-icon-btn settings-cog-btn"
           onClick={onToggleSettings}
           title="设置"
-          style={{ background: "transparent", border: "none" }}
         >
           <SettingsIcon size={18} className="text-secondary hover:text-primary transition-colors" />
         </button>

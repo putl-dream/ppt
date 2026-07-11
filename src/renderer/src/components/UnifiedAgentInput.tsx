@@ -1,38 +1,30 @@
 import React, { useEffect, useRef, useState } from "react";
-import { CheckIcon, ChevronDownIcon, FolderIcon, PlusIcon, SendIcon, StopIcon } from "./Icons";
+import { CheckIcon, ChevronDownIcon, FolderIcon, SendIcon, StopIcon } from "./Icons";
 import type { ManagedModel } from "../modelCatalog";
-import { getWorkspaceLabel } from "@shared/workspace";
 import { ToolApprovalOverlay, type PendingToolApproval } from "./ToolApprovalOverlay";
 
 interface UnifiedAgentInputProps {
   request: string;
-  onChangeRequest: (val: string) => void;
+  onChangeRequest: (value: string) => void;
   onSubmitRequest: () => void;
   busy: boolean;
-
   models: ManagedModel[];
   selectedModelId: string;
-  setSelectedModelId: (val: string) => void;
-  localStoragePath: string;
-  onSelectWorkspace?: () => void;
-
+  setSelectedModelId: (value: string) => void;
   layoutMode: "center" | "bottom";
-  triggerToast: (msg: string) => void;
-  selectedSlideIndex: number | null;
-  onClearContextTag: () => void;
-  submitLabel?: string;
-  placeholder?: string;
   pendingToolApproval?: PendingToolApproval | null;
   onResolveToolApproval?: (approvalId: string, approved: boolean) => void;
   canCancelRun?: boolean;
   onCancelRun?: () => void;
   isCancellingRun?: boolean;
+  sandboxReady?: boolean;
+  onPrepareWorkspace?: () => void;
 }
 
 function resizeTextarea(textarea: HTMLTextAreaElement) {
   const minHeight = Number.parseFloat(getComputedStyle(textarea).minHeight) || 52;
   textarea.style.height = "auto";
-  const nextHeight = Math.min(Math.max(textarea.scrollHeight, minHeight), 160);
+  const nextHeight = Math.min(Math.max(textarea.scrollHeight, minHeight), 180);
   textarea.style.height = `${nextHeight}px`;
 }
 
@@ -44,44 +36,32 @@ export const UnifiedAgentInput: React.FC<UnifiedAgentInputProps> = ({
   models,
   selectedModelId,
   setSelectedModelId,
-  localStoragePath,
-  onSelectWorkspace,
   layoutMode,
-  selectedSlideIndex,
-  onClearContextTag,
-  submitLabel = "生成",
-  placeholder,
   pendingToolApproval = null,
   onResolveToolApproval,
   canCancelRun = false,
   onCancelRun,
   isCancellingRun = false,
+  sandboxReady = true,
+  onPrepareWorkspace,
 }) => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const modelMenuRef = useRef<HTMLDivElement>(null);
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
-  const folderName = getWorkspaceLabel(localStoragePath || undefined);
-  const hasWorkspace = Boolean(localStoragePath);
   const selectedModel = models.find((model) => model.id === selectedModelId) ?? models[0];
+  const isPermissionGateOpen = Boolean(pendingToolApproval && onResolveToolApproval);
 
   const handleSend = () => {
-    if (busy || !request.trim()) return;
+    if (busy || !sandboxReady || !request.trim()) return;
     onSubmitRequest();
-    setTimeout(() => {
-      textareaRef.current?.focus();
-    }, 0);
+    window.setTimeout(() => textareaRef.current?.focus(), 0);
   };
 
-  const handleKeyPress = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
       handleSend();
     }
-  };
-
-  const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    onChangeRequest(e.target.value);
-    resizeTextarea(e.target);
   };
 
   useEffect(() => {
@@ -92,178 +72,137 @@ export const UnifiedAgentInput: React.FC<UnifiedAgentInputProps> = ({
       return;
     }
     resizeTextarea(textarea);
-  }, [request, layoutMode]);
+  }, [layoutMode, request]);
 
   useEffect(() => {
     if (!modelMenuOpen) return;
-
     const handlePointerDown = (event: PointerEvent) => {
-      if (modelMenuRef.current?.contains(event.target as Node)) return;
-      setModelMenuOpen(false);
+      if (!modelMenuRef.current?.contains(event.target as Node)) setModelMenuOpen(false);
     };
-
-    const handleKeyDown = (event: KeyboardEvent) => {
+    const handleEscape = (event: KeyboardEvent) => {
       if (event.key === "Escape") setModelMenuOpen(false);
     };
-
     document.addEventListener("pointerdown", handlePointerDown);
-    document.addEventListener("keydown", handleKeyDown);
+    document.addEventListener("keydown", handleEscape);
     return () => {
       document.removeEventListener("pointerdown", handlePointerDown);
-      document.removeEventListener("keydown", handleKeyDown);
+      document.removeEventListener("keydown", handleEscape);
     };
   }, [modelMenuOpen]);
 
-  const workspacePicker = (
-    <button
-      type="button"
-      className={`workspace-picker-btn${hasWorkspace ? "" : " workspace-picker-btn--empty"}`}
-      onClick={onSelectWorkspace}
-      disabled={busy || !onSelectWorkspace}
-      title={hasWorkspace ? localStoragePath : "选择项目目录作为沙箱"}
-    >
-      <FolderIcon size={13} />
-      <span>{hasWorkspace ? folderName : "选择项目目录"}</span>
-    </button>
-  );
-
   return (
     <div className={`unified-agent-input-container ${layoutMode === "center" ? "center-focal-mode" : "bottom-anchored-mode"}`}>
-      {layoutMode === "center" && (
+      {layoutMode === "center" ? (
         <div className="center-welcome-header">
-          <h1 className="center-welcome-title">您今天想制作什么样的主题 PPT？</h1>
+          <span className="center-welcome-eyebrow">AI PRESENTATION WORKSPACE</span>
+          <h1 className="center-welcome-title">从一个清晰的目标开始</h1>
+          <p className="center-welcome-subtitle">描述受众、场景和希望传达的核心结论，其余工作交给 Agent。</p>
         </div>
-      )}
+      ) : null}
 
       <div className="unified-agent-input-stack">
-        <div className="double-deck-panel-card unified-agent-input-shell">
-          {pendingToolApproval && onResolveToolApproval && (
-            <ToolApprovalOverlay
-              approval={pendingToolApproval}
-              onResolve={onResolveToolApproval}
-            />
-          )}
-          <div className="input-textarea-row">
-            <textarea
-              ref={textareaRef}
-              value={request}
-              onChange={handleChange}
-              onKeyDown={handleKeyPress}
-              placeholder={
-                placeholder || (
-                  selectedSlideIndex !== null
-                    ? `输入对第 ${selectedSlideIndex + 1} 页的局部指令（如："把背景换成白色"、"增大字号"）...`
-                    : "输入修改意图，支持输入斜杠 / 唤醒快捷排版指令..."
-                )
-              }
-              readOnly={busy}
-              autoFocus
-              rows={layoutMode === "center" ? 3 : 2}
-              className={`input-textarea${busy ? " input-textarea--busy" : ""}`}
-            />
-          </div>
-
-          <div className="functional-control-bar">
-            <div className="functional-left">
-              <button
-                type="button"
-                className="action-icon-btn upload-btn"
-                title="上传外部参考资料 (暂未接入)"
-                disabled
-              >
-                <PlusIcon size={14} />
-              </button>
+        {!sandboxReady ? (
+          <section className="sandbox-preflight-card" aria-labelledby="sandbox-preflight-title">
+            <div className="sandbox-preflight-icon"><FolderIcon size={18} /></div>
+            <div className="sandbox-preflight-copy">
+              <strong id="sandbox-preflight-title">先确定项目沙箱</strong>
+              <span>新会话创建后将固定绑定到该目录，过程中不可更换。</span>
             </div>
+            <button type="button" className="sandbox-preflight-btn" onClick={onPrepareWorkspace}>
+              选择项目目录
+            </button>
+          </section>
+        ) : (
+          <div
+            className="double-deck-panel-card unified-agent-input-shell"
+            data-action-state={isPermissionGateOpen ? "permission" : busy ? "running" : "composing"}
+          >
+            {isPermissionGateOpen ? (
+              <ToolApprovalOverlay approval={pendingToolApproval!} onResolve={onResolveToolApproval!} />
+            ) : (
+              <>
+                <div className="input-textarea-row">
+                  <textarea
+                    ref={textareaRef}
+                    value={request}
+                    onChange={(event) => {
+                      onChangeRequest(event.target.value);
+                      resizeTextarea(event.target);
+                    }}
+                    onKeyDown={handleKeyDown}
+                    placeholder="描述你的目标或直接提出修改要求…"
+                    readOnly={busy}
+                    autoFocus
+                    rows={layoutMode === "center" ? 3 : 2}
+                    className={`input-textarea${busy ? " input-textarea--busy" : ""}`}
+                    aria-label="向演示文稿 Agent 输入指令"
+                  />
+                </div>
 
-            <div className="functional-right">
-              <div
-                ref={modelMenuRef}
-                className={[
-                  "model-tier-select-wrapper",
-                  modelMenuOpen ? "is-open" : "",
-                  busy || models.length === 0 ? "is-disabled" : "",
-                ].filter(Boolean).join(" ")}
-              >
-                <button
-                  type="button"
-                  className="mini-model-select"
-                  title="智能体模型级别"
-                  disabled={busy || models.length === 0}
-                  aria-haspopup="listbox"
-                  aria-expanded={modelMenuOpen}
-                  onClick={() => setModelMenuOpen((open) => !open)}
-                >
-                  <span>{selectedModel?.name ?? "选择模型"}</span>
-                  <ChevronDownIcon size={12} className="model-tier-select-icon" />
-                </button>
-
-                {modelMenuOpen && !busy && models.length > 0 && (
-                  <div className="model-tier-menu" role="listbox" aria-label="智能体模型级别">
-                    {models.map((model) => {
-                      const selected = model.id === selectedModelId;
-                      return (
-                        <button
-                          key={model.id}
-                          type="button"
-                          role="option"
-                          aria-selected={selected}
-                          className={`model-tier-option${selected ? " is-selected" : ""}`}
-                          onClick={() => {
-                            setSelectedModelId(model.id);
-                            setModelMenuOpen(false);
-                          }}
-                        >
-                          <span className="model-tier-option-name">{model.name}</span>
-                          {selected && <CheckIcon size={13} className="model-tier-option-check" />}
-                        </button>
-                      );
-                    })}
+                <div className="functional-control-bar">
+                  <div className="functional-left">
+                    <span className={`action-dock-status${busy ? " is-running" : ""}`}>
+                      <span className="action-dock-status-dot" aria-hidden="true" />
+                      {busy ? "Agent 正在执行" : "沙箱已锁定"}
+                    </span>
                   </div>
-                )}
-              </div>
 
-              <button
-                type="button"
-                onClick={canCancelRun && onCancelRun ? onCancelRun : handleSend}
-                disabled={canCancelRun ? isCancellingRun : busy || !request.trim()}
-                className={canCancelRun ? "stop-cta-btn" : "send-cta-btn"}
-                title={
-                  canCancelRun
-                    ? isCancellingRun ? "正在中断当前 Agent 会话" : "中断当前 Agent 会话"
-                    : submitLabel
-                }
-                aria-label={
-                  canCancelRun
-                    ? isCancellingRun ? "正在中断当前 Agent 会话" : "中断当前 Agent 会话"
-                    : submitLabel
-                }
-              >
-                {canCancelRun ? (
-                  <StopIcon size={14} />
-                ) : (
-                  <SendIcon size={14} />
-                )}
-              </button>
-            </div>
-          </div>
-        </div>
+                  <div className="functional-right">
+                    <div
+                      ref={modelMenuRef}
+                      className={`model-tier-select-wrapper${modelMenuOpen ? " is-open" : ""}${busy || models.length === 0 ? " is-disabled" : ""}`}
+                    >
+                      <button
+                        type="button"
+                        className="mini-model-select"
+                        disabled={busy || models.length === 0}
+                        aria-haspopup="listbox"
+                        aria-expanded={modelMenuOpen}
+                        onClick={() => setModelMenuOpen((open) => !open)}
+                      >
+                        <span>{selectedModel?.name ?? "选择模型"}</span>
+                        <ChevronDownIcon size={12} className="model-tier-select-icon" />
+                      </button>
 
-        {layoutMode === "center" && (
-          <div className="lower-deck-bar sandbox-control-bar">
-            <div className="context-left">
-              {workspacePicker}
-            </div>
+                      {modelMenuOpen && !busy && models.length > 0 ? (
+                        <div className="model-tier-menu" role="listbox" aria-label="选择智能体模型">
+                          {models.map((model) => {
+                            const selected = model.id === selectedModelId;
+                            return (
+                              <button
+                                key={model.id}
+                                type="button"
+                                role="option"
+                                aria-selected={selected}
+                                className={`model-tier-option${selected ? " is-selected" : ""}`}
+                                onClick={() => {
+                                  setSelectedModelId(model.id);
+                                  setModelMenuOpen(false);
+                                }}
+                              >
+                                <span className="model-tier-option-name">{model.name}</span>
+                                {selected ? <CheckIcon size={13} className="model-tier-option-check" /> : null}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      ) : null}
+                    </div>
 
-            <div className="context-right">
-              {selectedSlideIndex !== null ? (
-                <span className="active-context-slide-pill">
-                  选中范围: 第 {selectedSlideIndex + 1} 页
-                  <button type="button" className="close-slide-pill-btn" onClick={onClearContextTag}>✕</button>
-                </span>
-              ) : (
-                <span className="context-global-pill">全局文档设计</span>
-              )}
-            </div>
+                    <button
+                      type="button"
+                      onClick={canCancelRun && onCancelRun ? onCancelRun : handleSend}
+                      disabled={canCancelRun ? isCancellingRun : busy || !request.trim()}
+                      className={canCancelRun ? "stop-cta-btn" : "send-cta-btn"}
+                      aria-label={canCancelRun ? "中止当前 Agent 会话" : "发送指令"}
+                      title={canCancelRun ? "中止当前 Agent 会话" : "发送指令"}
+                    >
+                      {canCancelRun ? <StopIcon size={14} /> : <SendIcon size={14} />}
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         )}
       </div>

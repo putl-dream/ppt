@@ -282,7 +282,7 @@
   background: #fff;
   border: 2px solid var(--accent-primary);
   border-radius: 50%;
-  z-index: 5;
+  z-index: var(--z-sticky);
 }
 
 .handle-se { bottom: -4px; right: -4px; cursor: se-resize; }
@@ -301,7 +301,7 @@
   gap: 4px;
   padding: 4px;
   box-shadow: var(--shadow-premium);
-  z-index: 100;
+  z-index: var(--z-dropdown);
   pointer-events: auto;
 }
 

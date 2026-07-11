@@ -40,6 +40,15 @@
   --bg-input-field: #ffffff;
   --bg-darker: rgba(0, 0, 0, 0.03);
   --scrollbar-thumb-color: rgba(0, 0, 0, 0.15);
+
+  /* 全局层级系统：所有弹层必须使用令牌，禁止继续散落魔法数字。 */
+  --z-base: 0;
+  --z-sticky: 100;
+  --z-dropdown: 300;
+  --z-overlay: 600;
+  --z-modal: 900;
+  --z-toast: 1100;
+  --z-fullscreen: 1200;
 }
 
 .dark-theme {

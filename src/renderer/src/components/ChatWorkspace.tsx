@@ -71,8 +71,6 @@ interface ChatWorkspaceProps {
   onRetry?: (msgId: string) => void;
   isMirrorOpen: boolean;
   onToggleMirror: () => void;
-  selectedSlideIndex: number | null; // 右侧选中的幻灯片序号
-  onClearContextTag: () => void;
   onUpdateMessageContent: (msgId: string, newContent: string) => void;
   onProposePrompt: (prompt: string) => void;
 
@@ -80,8 +78,8 @@ interface ChatWorkspaceProps {
   models: ManagedModel[];
   selectedModelId: string;
   setSelectedModelId: (val: string) => void;
-  localStoragePath: string;
-  onSelectWorkspace: () => void;
+  workspaceReady: boolean;
+  onPrepareWorkspace: () => void;
   triggerToast: (msg: string) => void;
 }
 
@@ -117,8 +115,6 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
   onRetry,
   isMirrorOpen,
   onToggleMirror,
-  selectedSlideIndex,
-  onClearContextTag,
   onUpdateMessageContent,
   onProposePrompt,
   
@@ -126,8 +122,8 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
   models,
   selectedModelId,
   setSelectedModelId,
-  localStoragePath,
-  onSelectWorkspace,
+  workspaceReady,
+  onPrepareWorkspace,
   triggerToast,
 }) => {
   const [showSlashMenu, setShowSlashMenu] = useState(false);
@@ -271,18 +267,14 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
             models={models}
             selectedModelId={selectedModelId}
             setSelectedModelId={setSelectedModelId}
-            localStoragePath={localStoragePath}
-            onSelectWorkspace={onSelectWorkspace}
             layoutMode="center"
-            triggerToast={triggerToast}
-            selectedSlideIndex={selectedSlideIndex}
-            onClearContextTag={onClearContextTag}
-            submitLabel="生成"
             pendingToolApproval={pendingApprovalProps}
             onResolveToolApproval={onResolveToolApproval}
             canCancelRun={canCancelRun}
             onCancelRun={onCancelRun}
             isCancellingRun={isCancellingRun}
+            sandboxReady={workspaceReady}
+            onPrepareWorkspace={onPrepareWorkspace}
           />
 
           {/* Quick recommendations suggestions below */}
@@ -605,18 +597,19 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
         <div className="chat-conversation-shell chat-conversation-footer">
         
         {/* 斜杠弹出指令 */}
-        {showSlashMenu && (
-          <div className="slash-menu-popup" style={{ bottom: "100%", left: "20px", right: "20px", marginBottom: "10px", position: "absolute", zIndex: 100 }}>
+        {showSlashMenu && !pendingToolApproval && (
+          <div className="slash-menu-popup" role="listbox" aria-label="快捷指令">
             <div className="slash-menu-header">💡 斜杠快捷指令集</div>
             {slashCommands.map((command, index) => (
-              <div
+              <button
+                type="button"
                 key={index}
                 className="slash-menu-item"
                 onClick={() => handleSlashSelect(command.cmd)}
               >
                 <span className="cmd-text">{command.cmd}</span>
                 <span className="cmd-desc">{command.desc}</span>
-              </div>
+              </button>
             ))}
           </div>
         )}
@@ -637,18 +630,13 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
             models={models}
             selectedModelId={selectedModelId}
             setSelectedModelId={setSelectedModelId}
-            localStoragePath={localStoragePath}
-            onSelectWorkspace={onSelectWorkspace}
             layoutMode="bottom"
-            triggerToast={triggerToast}
-            selectedSlideIndex={selectedSlideIndex}
-            onClearContextTag={onClearContextTag}
-            submitLabel="生成"
             pendingToolApproval={pendingApprovalProps}
             onResolveToolApproval={onResolveToolApproval}
             canCancelRun={canCancelRun}
             onCancelRun={onCancelRun}
             isCancellingRun={isCancellingRun}
+            sandboxReady
           />
         </div>
         </div>
