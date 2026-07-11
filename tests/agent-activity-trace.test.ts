@@ -257,8 +257,46 @@ describe("process trace rows", () => {
     ], false);
 
     expect(rows).toHaveLength(2);
-    expect(rows[0]?.title).toBe("模型思考");
-    expect(rows[1]?.title).toBe("工具调用 · ReadPresentationSnapshot");
-    expect(rows[1]?.lines).toEqual(["read deck", "done"]);
+    expect(rows[0]).toMatchObject({ kind: "thought", title: "思考片刻" });
+    expect(rows[1]).toMatchObject({ kind: "tools", title: "读取 1 项" });
+    expect(rows[1]?.lines).toEqual(["ReadPresentationSnapshot · done"]);
+  });
+
+  it("groups consecutive tools and keeps progress as a direct work row", async () => {
+    const { buildProcessTraceRows } = await import("../src/renderer/src/components/process-trace-rows");
+    const rows = buildProcessTraceRows([
+      { id: "progress", kind: "step", text: "正在梳理相关组件", status: "done" },
+      {
+        id: "read",
+        kind: "tool",
+        toolName: "ReadPresentationSnapshot",
+        label: "运行读取工具",
+        status: "done",
+        finishedLabel: "读取完成",
+      },
+      {
+        id: "search",
+        kind: "tool",
+        toolName: "WebSearch",
+        label: "正在搜索",
+        status: "running",
+      },
+    ], true);
+
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toMatchObject({
+      kind: "progress",
+      title: "正在梳理相关组件",
+      active: false,
+    });
+    expect(rows[1]).toMatchObject({
+      kind: "tools",
+      title: "正在读取 1 项 · 搜索 1 次",
+      active: true,
+    });
+    expect(rows[1]?.lines).toEqual([
+      "ReadPresentationSnapshot · 读取完成",
+      "WebSearch · 正在搜索",
+    ]);
   });
 });

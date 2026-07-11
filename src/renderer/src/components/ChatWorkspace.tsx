@@ -134,6 +134,7 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollViewportRef = useRef<HTMLDivElement>(null);
   const chatStreamRef = useRef<HTMLDivElement>(null);
+  const shouldFollowOutputRef = useRef(true);
 
   const pendingToolApproval = busy
     ? findPendingToolApproval(activityTrace)
@@ -185,8 +186,23 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
   }, [request]);
 
   useLayoutEffect(() => {
-    scrollToBottom(busy);
+    if (shouldFollowOutputRef.current) {
+      scrollToBottom(busy);
+    }
   }, [chatMessages, activityTrace, thoughtProgress, busy, agentActivityMode, scrollToBottom]);
+
+  useEffect(() => {
+    const viewport = scrollViewportRef.current;
+    if (!viewport) return;
+
+    const updateFollowMode = () => {
+      const distanceFromBottom = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight;
+      shouldFollowOutputRef.current = distanceFromBottom <= 56;
+    };
+
+    viewport.addEventListener("scroll", updateFollowMode, { passive: true });
+    return () => viewport.removeEventListener("scroll", updateFollowMode);
+  }, []);
 
   useEffect(() => {
     const stream = chatStreamRef.current;
@@ -194,7 +210,7 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
     if (!stream || !viewport) return;
 
     const observer = new ResizeObserver(() => {
-      if (busy) {
+      if (busy && shouldFollowOutputRef.current) {
         viewport.scrollTop = viewport.scrollHeight;
       }
     });
@@ -417,23 +433,29 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
                   {(() => {
                     const useLiveTrace = busy && streamingMessageId === msg.id;
                     // 实时消息的任务计划由输入框上方的浮动卡片展示，历史消息则内联到时间线中
+                    const resolvedTrace = useLiveTrace
+                      ? activityTrace
+                      : resolveActivityTrace({
+                          activityTrace: msg.activityTrace,
+                          thought: msg.thought,
+                          reasoning: msg.reasoning,
+                        });
                     const trace = filterTraceForDisplay(
-                      resolveActivityTrace({
-                        activityTrace: useLiveTrace ? activityTrace : msg.activityTrace,
-                        thought: useLiveTrace ? undefined : msg.thought,
-                        reasoning: useLiveTrace ? undefined : msg.reasoning,
-                      }),
+                      resolvedTrace,
                       { keepTaskGraph: !useLiveTrace },
                     );
-                    return trace.length > 0 ? (
+                    return trace.length > 0 || (useLiveTrace && msg.content.trim()) ? (
                       <AgentActivityTrace
                         items={trace}
                         live={useLiveTrace}
+                        liveContent={useLiveTrace ? msg.content : undefined}
                       />
                     ) : null;
                   })()}
 
-                  <MessageMarkdown content={msg.content} className="assistant-response" />
+                  {!(busy && streamingMessageId === msg.id) && (
+                    <MessageMarkdown content={msg.content} className="assistant-response" />
+                  )}
 
                   {msg.question && (
                     <AgentQuestionCard

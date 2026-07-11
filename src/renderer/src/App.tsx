@@ -135,6 +135,7 @@ export function App() {
   const activeRunTraceRef = useRef<AgentActivityItem[]>([]);
   const requestStatusStepIdRef = useRef<string | null>(null);
   const streamMessageIdsRef = useRef(new Map<string, string>());
+  const pendingProgressTextRef = useRef("");
   const statusTypingTimerRef = useRef<number | null>(null);
   const [isCancellingRun, setIsCancellingRun] = useState(false);
 
@@ -160,6 +161,23 @@ export function App() {
         : message,
     ));
   }, []);
+
+  const flushPendingProgress = useCallback(() => {
+    const progressText = pendingProgressTextRef.current.trim();
+    if (!progressText) return;
+
+    pendingProgressTextRef.current = "";
+    syncActivityTrace(appendStep(activeRunTraceRef.current, progressText, "done"));
+
+    const runId = activeRunIdRef.current;
+    const messageId = runId ? streamMessageIdsRef.current.get(runId) : undefined;
+    if (!messageId) return;
+    setChatMessages((prev) => prev.map((message) =>
+      message.id === messageId
+        ? { ...message, content: "" }
+        : message,
+    ));
+  }, [syncActivityTrace]);
 
   useEffect(() => {
     const stopStatusTyping = () => {
@@ -206,8 +224,19 @@ export function App() {
         return;
       }
 
+      const requestStatusStepId = requestStatusStepIdRef.current;
+      if (requestStatusStepId) {
+        requestStatusStepIdRef.current = null;
+        syncActivityTrace(activeRunTraceRef.current.map((item) =>
+          item.kind === "step" && item.id === requestStatusStepId
+            ? { ...item, status: "done" as const }
+            : item,
+        ));
+      }
+
       if (event.type === "workflow-progress") {
         stopStatusTyping();
+        flushPendingProgress();
         setAgentActivityMode("workflow");
         syncActivityTrace(appendStep(activeRunTraceRef.current, event.message, "done"));
         setThoughtProgress(event.progress);
@@ -217,12 +246,12 @@ export function App() {
       if (event.type === "stage-started") {
         stopStatusTyping();
         setAgentActivityMode("workflow");
-        syncActivityTrace(appendStep(activeRunTraceRef.current, `🚀 启动阶段: ${event.message}`, "done"));
         return;
       }
 
       if (event.type === "tool-started") {
         stopStatusTyping();
+        flushPendingProgress();
         setAgentActivityMode("workflow");
         setActiveToolName(event.toolName);
         if (event.toolName !== "Task") {
@@ -263,6 +292,7 @@ export function App() {
 
       if (event.type === "tool-validation-failed") {
         stopStatusTyping();
+        flushPendingProgress();
         setAgentActivityMode("workflow");
         setActiveToolName(null);
         syncActivityTrace(
@@ -278,7 +308,7 @@ export function App() {
       if (event.type === "approval-waiting") {
         stopStatusTyping();
         setAgentActivityMode("workflow");
-        syncActivityTrace(appendStep(activeRunTraceRef.current, "⏳ 等待用户审批", "done"));
+        syncActivityTrace(appendStep(activeRunTraceRef.current, "等待用户审批", "done"));
         return;
       }
 
@@ -364,12 +394,23 @@ export function App() {
 
       if (event.type === "thinking-chunk") {
         stopStatusTyping();
+        const nextModelStep = event.modelStep ?? 0;
+        const latestReasoning = [...activeRunTraceRef.current].reverse().find(
+          (item) => item.kind === "reasoning",
+        );
+        if (
+          pendingProgressTextRef.current.trim()
+          && latestReasoning?.kind === "reasoning"
+          && (latestReasoning.modelStep ?? 0) !== nextModelStep
+        ) {
+          flushPendingProgress();
+        }
         setAgentActivityMode("reasoning");
         syncActivityTrace(
           appendReasoningChunk(
             activeRunTraceRef.current,
             event.chunk,
-            event.modelStep ?? 0,
+            nextModelStep,
           ),
         );
         return;
@@ -404,6 +445,7 @@ export function App() {
         activeRunTraceRef.current = sealedTrace;
         setActivityTrace(sealedTrace);
         let messageId = streamMessageIdsRef.current.get(event.runId);
+        pendingProgressTextRef.current += event.chunk;
         if (!messageId) {
           messageId = crypto.randomUUID();
           streamMessageIdsRef.current.set(event.runId, messageId);
@@ -434,7 +476,7 @@ export function App() {
       stopStatusTyping();
       unsubscribe();
     };
-  }, [syncActivityTrace]);
+  }, [flushPendingProgress, syncActivityTrace]);
 
   // 会话状态由 Electron 主进程持久化，渲染进程只保留当前快照
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
@@ -963,6 +1005,7 @@ export function App() {
     activeRunIdRef.current = runId;
     setActiveRunId(runId);
     activeRunTraceRef.current = [];
+    pendingProgressTextRef.current = "";
     requestStatusStepIdRef.current = null;
     streamMessageIdsRef.current.set(runId, streamMessageId);
     let forkedMessages: ChatMessage[] | undefined;
@@ -1105,6 +1148,7 @@ export function App() {
       setThoughtProgress(0);
       requestStatusStepIdRef.current = null;
       activeRunTraceRef.current = [];
+      pendingProgressTextRef.current = "";
     }
   }
 
