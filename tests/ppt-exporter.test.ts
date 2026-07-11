@@ -308,4 +308,54 @@ describe("ppt-exporter", () => {
 
     await assertValidPptxFile(filePath, 1);
   });
+
+  it("exports resolved grid, framed image and report chart treatments", async () => {
+    const filePath = await createTempPptxPath("ppt-export-design-system-");
+    const presentation: Presentation = {
+      id: crypto.randomUUID(),
+      title: "Resolved design system",
+      revision: 1,
+      designTokens: {
+        version: 1,
+        palette: "soft-academic",
+        fontMood: "editorial",
+        shapeLanguage: "cards",
+        backgroundStyle: "grid",
+        motif: "none",
+        density: "standard",
+        imageTreatment: "framed",
+        chartStyle: "report",
+      },
+      slides: [{
+        id: crypto.randomUUID(),
+        title: "Visual contract",
+        layout: "concept",
+        elements: [
+          {
+            id: crypto.randomUUID(),
+            type: "image",
+            x: 120,
+            y: 180,
+            width: 400,
+            height: 260,
+            url: TINY_PNG_DATA_URL,
+            borderRadius: 0,
+          },
+          {
+            id: crypto.randomUUID(),
+            type: "chart",
+            x: 620,
+            y: 180,
+            width: 500,
+            height: 260,
+            chartType: "kpi-tower",
+            data: { labels: ["A", "B"], values: [42, 75] },
+          },
+        ],
+      }],
+    };
+
+    await exportToPptx(presentation, defaultExportOptions, filePath);
+    await assertValidPptxFile(filePath, 1);
+  });
 });

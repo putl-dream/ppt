@@ -19,6 +19,12 @@ export interface SlideBackgroundStyle {
   exportFill: string;
   /** Structured gradient for rasterized PPTX export */
   gradient?: BackgroundGradient;
+  /** Structured pattern so canvas, HTML and PPTX can render the same surface. */
+  pattern?: {
+    type: "grid";
+    color: string;
+    size: number;
+  };
 }
 
 /** Infer background variant from layout when slide has no explicit variant. */

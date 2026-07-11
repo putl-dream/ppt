@@ -1,8 +1,8 @@
 import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Presentation, SlideElement } from "@shared/presentation";
-import { resolveSlideBackgroundWithVariant } from "@shared/slide-variant";
-import { resolveThemeAccent } from "@shared/layout";
+import type { Presentation } from "@shared/presentation";
+import { resolveSlideDesignSystem } from "@shared/resolved-design-system";
+import { resolveChromeTitleFontSize } from "@shared/slide-chrome";
 import { SlideElementRenderer } from "./SlideElementRenderer";
 import { ClosePreviewIcon, PlayIcon, DownloadIcon, ExpandIcon, CompressIcon } from "./Icons";
 
@@ -105,62 +105,13 @@ export const PPTMirror: React.FC<PPTMirrorProps> = ({
     }
   }, [fullscreenIndex, isFullscreen]);
 
-  // 根据模板计算页面样式
-  const getThemeStyles = () => {
-    let slideBg = "#fff";
-    let titleColor = "#1e293b";
-    let bodyColor = "#475569";
-    let fontClass = "font-sans";
-    let borderStyle = {};
-
-    switch (selectedTheme) {
-      case "nordic":
-        slideBg = "#fbfbfa";
-        titleColor = "#0f172a";
-        bodyColor = "#334155";
-        fontClass = "font-serif";
-        borderStyle = { border: "1px solid rgba(15, 23, 42, 0.08)" };
-        break;
-      case "midnight":
-        slideBg = "#0e1115";
-        titleColor = "#f8fafc";
-        bodyColor = "#94a3b8";
-        fontClass = "font-mono";
-        borderStyle = { border: "1px solid rgba(255, 255, 255, 0.08)" };
-        break;
-      case "ocean":
-        slideBg = "linear-gradient(135deg, #0f172a 0%, #1e293b 100%)";
-        titleColor = "#f8fafc";
-        bodyColor = "#cbd5e1";
-        fontClass = "font-sans";
-        borderStyle = { border: "1px solid rgba(14, 165, 233, 0.25)" };
-        break;
-      case "sunset":
-        slideBg = "linear-gradient(135deg, #fffcf4 0%, #fff3e3 100%)";
-        titleColor = "#3c2a21";
-        bodyColor = "#776b5d";
-        fontClass = "font-serif";
-        borderStyle = { border: "1px solid rgba(120, 80, 40, 0.15)" };
-        break;
-      case "purple":
-        slideBg = "radial-gradient(circle at top, #1c1537 0%, #0d091a 100%)";
-        titleColor = "#f8fafc";
-        bodyColor = "#b4befe";
-        fontClass = "font-sans";
-        borderStyle = { border: "1px solid rgba(168, 85, 247, 0.25)" };
-        break;
-    }
-
-    const accentColor = resolveThemeAccent(selectedTheme, selectedPalette);
-
-    return { slideBg, titleColor, bodyColor, fontClass, borderStyle, accentColor };
-  };
-
-  const themeStyles = getThemeStyles();
   const fullscreenSlide = slides[fullscreenIndex];
-  const fullscreenSlideBg = fullscreenSlide
-    ? resolveSlideBackgroundWithVariant(selectedTheme, selectedPalette, fullscreenSlide).slideBg
-    : themeStyles.slideBg;
+  const fullscreenSystem = fullscreenSlide
+    ? resolveSlideDesignSystem(
+        { theme: selectedTheme, palette: selectedPalette, designTokens: presentation.designTokens },
+        fullscreenSlide,
+      )
+    : undefined;
 
   const handleFullscreenOpen = () => {
     const idx = slides.findIndex((s) => s.id === selectedSlideId);
@@ -230,11 +181,14 @@ export const PPTMirror: React.FC<PPTMirrorProps> = ({
           const cardHeight = isExpanded ? 180 : 157.5;
           const scale = cardWidth / 1280;
 
-          const slideBg = resolveSlideBackgroundWithVariant(
-            selectedTheme,
-            selectedPalette,
+          const designSystem = resolveSlideDesignSystem(
+            {
+              theme: selectedTheme,
+              palette: selectedPalette,
+              designTokens: presentation.designTokens,
+            },
             slide,
-          ).slideBg;
+          );
 
           return (
             <div
@@ -268,17 +222,18 @@ export const PPTMirror: React.FC<PPTMirrorProps> = ({
                 }}
               >
                 <div
-                  className={`slide-viewport ${themeStyles.fontClass}`}
+                  className="slide-viewport"
                   style={{
                     width: 1280,
                     height: 720,
-                    background: slideBg,
+                    background: designSystem.background.slideBg,
+                    fontFamily: designSystem.fontCss,
                     transform: `scale(${scale})`,
                     transformOrigin: "top left",
                     position: "absolute",
                     top: 0,
                     left: 0,
-                    ...themeStyles.borderStyle,
+                    border: `1px solid ${designSystem.colors.cardStroke}`,
                   }}
                 >
                   {/* Logo */}
@@ -289,7 +244,7 @@ export const PPTMirror: React.FC<PPTMirrorProps> = ({
                   )}
 
                   {/* 页码 */}
-                  <div className="slide-page-number" style={{ color: themeStyles.bodyColor }}>
+                  <div className="slide-page-number" style={{ color: designSystem.colors.body }}>
                     {index + 1}
                   </div>
 
@@ -298,8 +253,9 @@ export const PPTMirror: React.FC<PPTMirrorProps> = ({
                     <div
                       className="slide-header-text"
                       style={{
-                        color: themeStyles.titleColor,
-                        borderBottom: `2px solid ${themeStyles.accentColor}`,
+                        color: designSystem.colors.title,
+                        borderBottom: `2px solid ${designSystem.colors.accent}`,
+                        fontSize: resolveChromeTitleFontSize(slide.title),
                       }}
                     >
                       {slide.title}
@@ -323,8 +279,13 @@ export const PPTMirror: React.FC<PPTMirrorProps> = ({
                       <SlideElementRenderer
                         element={element}
                         theme={selectedTheme}
-                        bodyColor={themeStyles.bodyColor}
-                        accentColor={themeStyles.accentColor}
+                        bodyColor={designSystem.colors.body}
+                        accentColor={designSystem.colors.accent}
+                        cardBg={designSystem.colors.cardBg}
+                        cardStroke={designSystem.colors.cardStroke}
+                        fontFamily={designSystem.fontFamily}
+                        imageTreatment={designSystem.imageTreatment}
+                        chartStyle={designSystem.chartStyle}
                       />
                     </div>
                   ))}
@@ -380,17 +341,20 @@ export const PPTMirror: React.FC<PPTMirrorProps> = ({
             >
               {slides[fullscreenIndex] ? (
                 <div
-                  className={`slide-viewport ${themeStyles.fontClass}`}
+                  className="slide-viewport"
                   style={{
                     width: 1280,
                     height: 720,
-                    background: fullscreenSlideBg,
+                    background: fullscreenSystem?.background.slideBg,
+                    fontFamily: fullscreenSystem?.fontCss,
                     boxShadow: "var(--slideshow-slide-shadow)",
                     borderRadius: 8,
                     position: "relative",
                     transform: `scale(${Math.min(window.innerWidth / 1380, window.innerHeight / 820)})`,
                     transformOrigin: "center center",
-                    ...themeStyles.borderStyle,
+                    border: fullscreenSystem
+                      ? `1px solid ${fullscreenSystem.colors.cardStroke}`
+                      : undefined,
                   }}
                 >
                   {/* Logo */}
@@ -401,7 +365,7 @@ export const PPTMirror: React.FC<PPTMirrorProps> = ({
                   )}
 
                   {/* 页码 */}
-                  <div className="slide-page-number" style={{ color: themeStyles.bodyColor }}>
+                  <div className="slide-page-number" style={{ color: fullscreenSystem?.colors.body }}>
                     {fullscreenIndex + 1}
                   </div>
 
@@ -410,8 +374,9 @@ export const PPTMirror: React.FC<PPTMirrorProps> = ({
                     <div
                       className="slide-header-text"
                       style={{
-                        color: themeStyles.titleColor,
-                        borderBottom: `2px solid ${themeStyles.accentColor}`,
+                        color: fullscreenSystem?.colors.title,
+                        borderBottom: `2px solid ${fullscreenSystem?.colors.accent}`,
+                        fontSize: resolveChromeTitleFontSize(slides[fullscreenIndex].title),
                       }}
                     >
                       {slides[fullscreenIndex].title}
@@ -435,8 +400,13 @@ export const PPTMirror: React.FC<PPTMirrorProps> = ({
                       <SlideElementRenderer
                         element={element}
                         theme={selectedTheme}
-                        bodyColor={themeStyles.bodyColor}
-                        accentColor={themeStyles.accentColor}
+                        bodyColor={fullscreenSystem?.colors.body}
+                        accentColor={fullscreenSystem?.colors.accent}
+                        cardBg={fullscreenSystem?.colors.cardBg}
+                        cardStroke={fullscreenSystem?.colors.cardStroke}
+                        fontFamily={fullscreenSystem?.fontFamily}
+                        imageTreatment={fullscreenSystem?.imageTreatment}
+                        chartStyle={fullscreenSystem?.chartStyle}
                       />
                     </div>
                   ))}

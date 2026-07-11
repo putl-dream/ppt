@@ -315,7 +315,7 @@ render → evaluate → fix
 2. [x] 增加 `provenance`，重排只清理 layout 生成物。
 3. [x] `update-slide-layout` 的 inverse 恢复 layout / background / variant，不只恢复 elements。
 4. [x] 将 `VISUAL_TOKENS` 扩展为 radii / elevation / spacing / motif 基础 token。
-5. [ ] 增加三渲染器一致性测试：PPTMirror、HTML thumbnail、PPTX exporter。
+5. [x] 增加三渲染器一致性测试：PPTMirror、HTML thumbnail、PPTX exporter。（统一由 `ResolvedDesignSystem` 解析）
 
 验收：现有 deck 重排不吞用户元素；图片槽位与实际排版一致；导出和预览不漂移。
 
@@ -325,11 +325,25 @@ render → evaluate → fix
 
 1. [x] 增加 DesignTokensV1 schema。
 2. [ ] 增加 motif primitives：bookmark、chapter-number、margin-note、path-line、arc。（部分完成：bookmark / margin-note / path-line / arc）
-3. [ ] 增加 backgroundStyle：paper、grid、clean、gradient、dark。（schema 已完成，渲染细化待做）
-4. [ ] 增加 imageTreatment：framed、captioned、masked。（schema 已完成，cover 已部分应用）
-5. [ ] 升级 chartStyle：KPI、h-bar、timeline 支持单位、标签、重点值。（schema 字段已加，渲染待做）
+3. [x] 增加 backgroundStyle：paper、grid、clean、gradient、dark。（编辑器 / HTML / PPTX 已接入，grid 在 PPTX 中保持原生线条）
+4. [ ] 增加 imageTreatment：framed、captioned、masked。（plain / framed / masked 三端已接入；captioned 当前采用 framed 视觉，等待独立 caption 内容模型）
+5. [x] 升级 chartStyle：KPI、h-bar、timeline 支持标签、重点值与 minimal / report / dashboard / editorial 默认样式。
 
 验收：同一页内容在 3 套 tokens 下，缩略图应有明显不同气质。
+
+### 当前实施批次 — Unified Design System
+
+目标：旧 `theme/palette` 与新 `designTokens` 只在一个地方合并，所有渲染器消费同一个确定结果。
+
+1. [x] 新增 `ResolvedDesignSystem`：统一颜色、字体、背景、密度、图片与图表默认值。
+2. [x] 页级 `light/dark` 同步调整背景、文字、卡片与描边，不再只换底色。
+3. [x] PPTMirror 与全屏/只读预览接入。
+4. [x] HTML thumbnail / deck HTML 接入。
+5. [x] PPTX exporter 接入，并覆盖 gradient / grid / image treatment / chart style。
+6. [x] `update-slide-variant` 重新编译布局颜色，inverse 改为完整恢复 slide。
+7. [x] 增加解析与三端导出契约测试。
+
+完成后的变化：同一页在编辑器、缩略图和导出文件中不再各自解释主题；新增视觉 token 只需扩展解析层及对应原语，而不需要在三条渲染路径重复维护主题 switch。
 
 ### P2 — Layout Grammar v1
 

@@ -169,10 +169,22 @@ export function resolveDesignTokens(
 export function resolveDesignTokenColors(
   tokens: DesignTokensV1,
   fallback?: Partial<DesignTokenColors>,
+  mode?: "light" | "dark",
 ): DesignTokenColors {
+  const palette = DESIGN_TOKEN_COLOR_SPECS[tokens.palette];
+  const modeBase = mode === "dark"
+    ? DESIGN_TOKEN_COLOR_SPECS["tech-dark"]
+    : mode === "light"
+      ? DESIGN_TOKEN_COLOR_SPECS["business-blue"]
+      : palette;
+
   return {
     ...(fallback ?? {}),
-    ...DESIGN_TOKEN_COLOR_SPECS[tokens.palette],
+    ...modeBase,
+    // A slide variant changes contrast mode, not the visual identity.
+    // Keep the selected palette's accent while adapting surfaces and text.
+    accent: palette.accent,
+    softAccent: mode == null ? palette.softAccent : modeBase.softAccent,
   };
 }
 

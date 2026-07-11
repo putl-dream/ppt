@@ -3,7 +3,9 @@ import { fileURLToPath } from "node:url";
 import type { Presentation } from "@shared/presentation";
 import type { ExportPresentationOptions } from "@shared/ipc";
 import { fontFamilyToPptxFace, resolveElementFontFamily } from "@shared/typography";
-import { resolveSlideBackgroundWithVariant } from "@shared/slide-variant";
+import { resolveSlideDesignSystem } from "@shared/resolved-design-system";
+import { resolveImageTreatmentStyle } from "@shared/image-treatment";
+import { resolveChromeTitleFontSize } from "@shared/slide-chrome";
 import { chartDataToSvgString, chartSvgToDataUri } from "@shared/chart-utils";
 import { renderGradientToPng } from "@shared/gradient-export";
 import { iconToSvgString, iconSvgToDataUri } from "@shared/icon-registry";
@@ -32,61 +34,8 @@ export async function exportToPptx(
 ): Promise<void> {
   const pptx = new pptxgen();
 
-  // Determine theme styling properties (matching PPTMirror.tsx)
-  let titleColor = "#1e293b";
-  let bodyColor = "#475569";
-  let fontFace = "Arial";
-
   const presentationTheme = (presentation as any).theme || options.theme || "nordic";
   const presentationPalette = (presentation as any).palette || options.palette || "cyan";
-
-  switch (presentationTheme) {
-    case "nordic":
-      titleColor = "#0f172a";
-      bodyColor = "#334155";
-      fontFace = "Georgia";
-      break;
-    case "midnight":
-      titleColor = "#f8fafc";
-      bodyColor = "#94a3b8";
-      fontFace = "Courier New";
-      break;
-    case "ocean":
-      titleColor = "#f8fafc";
-      bodyColor = "#cbd5e1";
-      fontFace = "Arial";
-      break;
-    case "sunset":
-      titleColor = "#3c2a21";
-      bodyColor = "#776b5d";
-      fontFace = "Georgia";
-      break;
-    case "purple":
-      titleColor = "#f8fafc";
-      bodyColor = "#b4befe";
-      fontFace = "Arial";
-      break;
-  }
-
-  let accentColor = "#0ea5e9";
-  switch (presentationPalette) {
-    case "cyan":
-      accentColor = "#0ea5e9";
-      break;
-    case "green":
-      accentColor = "#10b981";
-      break;
-    case "purple":
-      accentColor = "#a855f7";
-      break;
-    case "orange":
-      accentColor = "#f97316";
-      break;
-  }
-
-  const cleanTitleColor = cleanColor(titleColor);
-  const cleanBodyColor = cleanColor(bodyColor);
-  const cleanAccentColor = cleanColor(accentColor);
 
   // Canvas is 1280x720 px; PPT slide is 10x5.625 in → divide by 128.
   const px = (value: number) => value / 128;
@@ -94,20 +43,46 @@ export async function exportToPptx(
   for (let i = 0; i < presentation.slides.length; i++) {
     const slideData = presentation.slides[i];
     const slide = pptx.addSlide();
+    const designSystem = resolveSlideDesignSystem(
+      {
+        theme: presentationTheme,
+        palette: presentationPalette,
+        designTokens: presentation.designTokens,
+      },
+      slideData,
+    );
+    const { colors } = designSystem;
+    const fontFace = designSystem.fontFace;
+    const cleanTitleColor = cleanColor(colors.title);
+    const cleanBodyColor = cleanColor(colors.body);
+    const cleanAccentColor = cleanColor(colors.accent);
     const showChromeHeader =
       slideData.layout !== "cover" && slideData.layout !== "section";
 
-    const slideBackground = resolveSlideBackgroundWithVariant(
-      presentationTheme,
-      presentationPalette,
-      slideData,
-    );
+    const slideBackground = designSystem.background;
 
     if (slideBackground.gradient) {
       const bgPng = renderGradientToPng(slideBackground.gradient);
       slide.background = { data: bgPng };
     } else {
       slide.background = { fill: cleanColor(slideBackground.exportFill) };
+    }
+
+    if (slideBackground.pattern?.type === "grid") {
+      const gridSize = slideBackground.pattern.size;
+      const gridColor = cleanColor(slideBackground.pattern.color);
+      for (let x = gridSize; x < 1280; x += gridSize) {
+        slide.addShape((pptx as any).shapes.LINE, {
+          x: px(x), y: 0, w: 0, h: px(720),
+          line: { color: gridColor, width: 0.35, transparency: 45 },
+        });
+      }
+      for (let y = gridSize; y < 720; y += gridSize) {
+        slide.addShape((pptx as any).shapes.LINE, {
+          x: 0, y: px(y), w: px(1280), h: 0,
+          line: { color: gridColor, width: 0.35, transparency: 45 },
+        });
+      }
     }
 
     // 1. Logo (if any)
@@ -157,7 +132,7 @@ export async function exportToPptx(
         y: px(50),
         w: px(1040),
         h: px(60),
-        fontSize: 36,
+        fontSize: resolveChromeTitleFontSize(slideData.title),
         color: cleanTitleColor,
         fontFace,
         bold: true,
@@ -189,7 +164,11 @@ export async function exportToPptx(
       const h = px(element.height);
 
       if (element.type === "text") {
-        const elementFont = resolveElementFontFamily(element, presentationTheme);
+        const elementFont = element.fontFamily ?? (
+          element.textRole
+            ? resolveElementFontFamily(element, presentationTheme)
+            : designSystem.fontFamily
+        );
         slide.addText(element.text, {
           x,
           y,
@@ -204,18 +183,46 @@ export async function exportToPptx(
         });
       } else if (element.type === "image") {
         try {
+          const treatment = resolveImageTreatmentStyle(
+            element,
+            designSystem.imageTreatment,
+            colors,
+          );
+          if (treatment.treatment === "framed" || treatment.treatment === "captioned") {
+            slide.addShape((pptx as any).shapes.ROUNDED_RECTANGLE, {
+              x,
+              y,
+              w,
+              h,
+              fill: { color: cleanColor(treatment.backgroundColor) },
+              line: { color: cleanColor(treatment.borderColor), width: 1 },
+              shadow: {
+                type: "outer",
+                color: "0F172A",
+                blur: 2,
+                offset: 1,
+                angle: 90,
+                opacity: 0.12,
+              },
+            });
+          }
+          const inset = px(treatment.padding);
+          const imageX = x + inset;
+          const imageY = y + inset;
+          const imageW = Math.max(0.01, w - inset * 2);
+          const imageH = Math.max(0.01, h - inset * 2);
           const sizing = {
             type: element.objectFit ?? "cover",
-            w,
-            h,
+            w: imageW,
+            h: imageH,
           } as const;
           const imageOptions = {
-            x,
-            y,
-            w,
-            h,
+            x: imageX,
+            y: imageY,
+            w: imageW,
+            h: imageH,
             sizing,
-            ...(element.imageTreatment === "masked" ? { rounding: true } : {}),
+            ...(treatment.treatment === "masked" ? { rounding: true } : {}),
             ...(element.asset?.description ? { altText: element.asset.description } : {}),
           };
           if (element.url.startsWith("data:")) {
@@ -285,7 +292,12 @@ export async function exportToPptx(
         }
       } else if (element.type === "chart") {
         try {
-          const svg = chartDataToSvgString(element, accentColor);
+          const svg = chartDataToSvgString(
+            element,
+            colors.accent,
+            designSystem.chartStyle,
+            colors.body,
+          );
           slide.addImage({
             data: chartSvgToDataUri(svg),
             x,
@@ -299,14 +311,22 @@ export async function exportToPptx(
       } else if (element.type === "table") {
         try {
           const tableRows = element.rows.map((row) =>
-            row.map((cell) => ({ text: cell, options: { fontFace, fontSize: 12, color: cleanBodyColor } })),
+            row.map((cell) => ({
+              text: cell,
+              options: {
+                fontFace,
+                fontSize: 12,
+                color: cleanBodyColor,
+                fill: { color: cleanColor(colors.cardBg) },
+              },
+            })),
           );
           slide.addTable(tableRows, {
             x,
             y,
             w,
             h,
-            border: { type: "solid", color: cleanBodyColor, pt: 1 },
+            border: { type: "solid", color: cleanColor(colors.cardStroke), pt: 1 },
             autoPage: false,
           });
         } catch (e) {
@@ -316,7 +336,7 @@ export async function exportToPptx(
         try {
           const svg = iconToSvgString(
             element.name,
-            element.color ?? accentColor,
+            element.color ?? colors.accent,
             element.strokeWidth ?? 2,
           );
           if (svg) {

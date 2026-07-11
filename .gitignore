@@ -4,6 +4,7 @@ out/
 output/
 .vite/
 coverage/
+.tmp/
 *.tsbuildinfo
 
 # Logs

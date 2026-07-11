@@ -190,15 +190,20 @@ export function applyLayout(
     designTokens?: Partial<DesignTokensV1> | null;
   } = {},
 ): Slide {
+  const workingSlide = structuredClone(slide);
   const requestedDesignTokens = options.designTokens ?? slide.designTokens;
   const hasExplicitDesignTokens = Boolean(requestedDesignTokens);
   const designTokens = resolveDesignTokens(requestedDesignTokens);
   const baseColors = getThemePaletteColors(theme, palette);
+  const contrastMode = workingSlide.slideVariant === "dark"
+    ? "dark"
+    : workingSlide.slideVariant === "light"
+      ? "light"
+      : undefined;
   const colors = hasExplicitDesignTokens
-    ? resolveDesignTokenColors(designTokens, baseColors)
+    ? resolveDesignTokenColors(designTokens, baseColors, contrastMode)
     : baseColors;
   const grammarVariant = options.grammarVariant ?? slide.grammarVariant;
-  const workingSlide = structuredClone(slide);
 
   // Separate elements by type
   let textElements = workingSlide.elements.filter((el): el is TextElement => el.type === "text");

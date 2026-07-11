@@ -1,7 +1,8 @@
 import React, { useEffect } from "react";
 import { createPortal } from "react-dom";
 import type { Presentation } from "@shared/presentation";
-import { resolveSlideBackgroundWithVariant } from "@shared/slide-variant";
+import { resolveSlideDesignSystem } from "@shared/resolved-design-system";
+import { resolveChromeTitleFontSize } from "@shared/slide-chrome";
 import { SlideElementRenderer } from "./SlideElementRenderer";
 import { ClosePreviewIcon } from "./Icons";
 
@@ -14,57 +15,6 @@ interface DeckPreviewModalProps {
   logoUrl: string | null;
   onSelectSlide: (slideId: string) => void;
   onClose: () => void;
-}
-
-function getThemeStyles(theme: string, palette: string) {
-  let slideBg = "#fff";
-  let titleColor = "#1e293b";
-  let bodyColor = "#475569";
-  let accentColor = "#0ea5e9";
-
-  switch (theme) {
-    case "nordic":
-      slideBg = "#fbfbfa";
-      titleColor = "#0f172a";
-      bodyColor = "#334155";
-      break;
-    case "midnight":
-      slideBg = "#0e1115";
-      titleColor = "#f8fafc";
-      bodyColor = "#94a3b8";
-      break;
-    case "ocean":
-      slideBg = "linear-gradient(135deg, #0f172a 0%, #1e293b 100%)";
-      titleColor = "#f8fafc";
-      bodyColor = "#cbd5e1";
-      break;
-    case "sunset":
-      slideBg = "linear-gradient(135deg, #fffcf4 0%, #fff3e3 100%)";
-      titleColor = "#3c2a21";
-      bodyColor = "#776b5d";
-      break;
-    case "purple":
-      slideBg = "radial-gradient(circle at top, #1c1537 0%, #0d091a 100%)";
-      titleColor = "#f8fafc";
-      bodyColor = "#b4befe";
-      break;
-  }
-
-  switch (palette) {
-    case "green":
-      accentColor = "#10b981";
-      break;
-    case "purple":
-      accentColor = "#a855f7";
-      break;
-    case "orange":
-      accentColor = "#f97316";
-      break;
-    default:
-      accentColor = "#0ea5e9";
-  }
-
-  return { slideBg, titleColor, bodyColor, accentColor };
 }
 
 export const DeckPreviewModal: React.FC<DeckPreviewModalProps> = ({
@@ -88,15 +38,21 @@ export const DeckPreviewModal: React.FC<DeckPreviewModalProps> = ({
 
   if (!open) return null;
 
-  const themeStyles = getThemeStyles(selectedTheme, selectedPalette);
   const activeIndex = Math.max(
     0,
     presentation.slides.findIndex((slide) => slide.id === selectedSlideId),
   );
   const activeSlide = presentation.slides[activeIndex] ?? presentation.slides[0];
-  const activeSlideBg = activeSlide
-    ? resolveSlideBackgroundWithVariant(selectedTheme, selectedPalette, activeSlide).slideBg
-    : themeStyles.slideBg;
+  const designSystem = activeSlide
+    ? resolveSlideDesignSystem(
+        {
+          theme: selectedTheme,
+          palette: selectedPalette,
+          designTokens: presentation.designTokens,
+        },
+        activeSlide,
+      )
+    : undefined;
 
   return createPortal(
     <div className="deck-preview-modal-overlay" onClick={onClose}>
@@ -131,7 +87,8 @@ export const DeckPreviewModal: React.FC<DeckPreviewModalProps> = ({
               <div
                 className="deck-preview-modal-slide"
                 style={{
-                  background: activeSlideBg,
+                  background: designSystem?.background.slideBg,
+                  fontFamily: designSystem?.fontCss,
                 }}
               >
                 {logoUrl && (
@@ -144,8 +101,9 @@ export const DeckPreviewModal: React.FC<DeckPreviewModalProps> = ({
                   <div
                     className="slide-header-text"
                     style={{
-                      color: themeStyles.titleColor,
-                      borderBottom: `2px solid ${themeStyles.accentColor}`,
+                      color: designSystem?.colors.title,
+                      borderBottom: `2px solid ${designSystem?.colors.accent}`,
+                      fontSize: resolveChromeTitleFontSize(activeSlide.title),
                     }}
                   >
                     {activeSlide.title}
@@ -168,8 +126,13 @@ export const DeckPreviewModal: React.FC<DeckPreviewModalProps> = ({
                     <SlideElementRenderer
                       element={element}
                       theme={selectedTheme}
-                      bodyColor={themeStyles.bodyColor}
-                      accentColor={themeStyles.accentColor}
+                      bodyColor={designSystem?.colors.body}
+                      accentColor={designSystem?.colors.accent}
+                      cardBg={designSystem?.colors.cardBg}
+                      cardStroke={designSystem?.colors.cardStroke}
+                      fontFamily={designSystem?.fontFamily}
+                      imageTreatment={designSystem?.imageTreatment}
+                      chartStyle={designSystem?.chartStyle}
                     />
                   </div>
                 ))}

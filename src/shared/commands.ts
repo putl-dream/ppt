@@ -319,11 +319,29 @@ export function executeCommand(
     const targetSlide = presentation.slides[slideIndex];
     const slides = presentation.slides.map((s) => {
       if (s.id !== command.slideId) return s;
+      let variantSlide: Slide;
       if (command.slideVariant === undefined) {
         const { slideVariant: _removed, ...rest } = s;
-        return rest as Slide;
+        variantSlide = rest as Slide;
+      } else {
+        variantSlide = { ...s, slideVariant: command.slideVariant };
       }
-      return { ...s, slideVariant: command.slideVariant };
+      if (
+        variantSlide.layout &&
+        SLIDE_LAYOUTS.includes(variantSlide.layout as (typeof SLIDE_LAYOUTS)[number])
+      ) {
+        return applyLayout(
+          variantSlide,
+          variantSlide.layout as (typeof SLIDE_LAYOUTS)[number],
+          presentation.theme || "nordic",
+          presentation.palette || "cyan",
+          {
+            grammarVariant: variantSlide.grammarVariant,
+            designTokens: variantSlide.designTokens ?? presentation.designTokens,
+          },
+        );
+      }
+      return variantSlide;
     });
     return {
       presentation: nextRevision({ ...presentation, slides }),
@@ -331,9 +349,8 @@ export function executeCommand(
         command,
         inverse: {
           id: crypto.randomUUID(),
-          type: "update-slide-variant",
-          slideId: command.slideId,
-          slideVariant: targetSlide.slideVariant,
+          type: "restore-slide",
+          slide: structuredClone(targetSlide),
         },
       },
     };
@@ -352,7 +369,7 @@ export function executeCommand(
       presentation.palette || "cyan",
       {
         grammarVariant: command.grammarVariant,
-        designTokens: command.designTokens,
+        designTokens: command.designTokens ?? targetSlide.designTokens ?? presentation.designTokens,
       },
     );
 
