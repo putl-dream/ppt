@@ -12,12 +12,30 @@ import type {
 } from "./types";
 import { createModuleLogger } from "../logger";
 import { textFromContentBlocks } from "./content-blocks";
+import type { ModelUsageRecord } from "../../token-usage-store";
 
 const logger = createModuleLogger("gateway");
 
 export class AgentGateway implements AgentModelGateway {
   private readonly runtimeSettings: Partial<Record<AgentProvider, AgentModelSettings>> = {};
   private gatewayConfig: AgentGatewayConfig = resolveAgentGatewayConfig();
+  private usageRecorder?: (record: ModelUsageRecord) => Promise<void>;
+
+  setUsageRecorder(recorder: (record: ModelUsageRecord) => Promise<void>): void {
+    this.usageRecorder = recorder;
+  }
+
+  private async recordUsage(record: ModelUsageRecord): Promise<void> {
+    try {
+      await this.usageRecorder?.(record);
+    } catch (error) {
+      logger.error("model.usage.persist-failed", {
+        provider: record.provider,
+        model: record.model,
+        error,
+      });
+    }
+  }
 
   configure(
     settings: AgentModelSettings,
@@ -76,6 +94,14 @@ export class AgentGateway implements AgentModelGateway {
         ? await generateWithOpenAI(config, request)
         : await generateWithAnthropic(config, request);
 
+      if (response.usage) {
+        await this.recordUsage({
+          ...response.usage,
+          provider: response.provider,
+          model: response.model,
+        });
+      }
+
       logger.info("model.request.completed", {
         gatewayRequestId,
         provider: response.provider,
@@ -126,6 +152,12 @@ export class AgentGateway implements AgentModelGateway {
       for await (const chunk of generator) {
         if (chunk.type === "text_delta") {
           totalLength += chunk.text.length;
+        } else if (chunk.type === "complete" && chunk.usage) {
+          await this.recordUsage({
+            ...chunk.usage,
+            provider: config.provider,
+            model: config.model,
+          });
         }
         yield chunk;
       }

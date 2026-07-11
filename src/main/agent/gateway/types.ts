@@ -1,5 +1,6 @@
 import type { AgentModelSelection, AgentProvider } from "@shared/agent";
 import type { AgentGatewayConfig } from "@shared/agent-gateway-config";
+import type { ProviderTokenUsage } from "@shared/token-usage";
 
 export type AgentResponseContract = "markdown-summary" | "none";
 
@@ -106,6 +107,8 @@ export interface AgentModelResponse {
   content: AgentModelContentBlock[];
   requestId?: string;
   stopReason?: string;
+  /** Provider-reported usage for this exact API request. */
+  usage?: ProviderTokenUsage;
 }
 
 /**
@@ -118,6 +121,7 @@ export type AgentModelStreamChunk =
       type: "complete";
       content: AgentModelContentBlock[];
       stopReason?: string;
+      usage?: ProviderTokenUsage;
     };
 
 /**
@@ -128,6 +132,7 @@ export interface AgentModelStreamMetadata {
   model: string;
   requestId?: string;
   stopReason?: string;
+  usage?: ProviderTokenUsage;
 }
 
 export interface ResolvedAgentModelConfig extends AgentModelSelection {

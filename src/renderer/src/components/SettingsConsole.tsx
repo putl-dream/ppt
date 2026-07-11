@@ -15,6 +15,7 @@ import { ModelManagement } from "./ModelManagement";
 import type { AgentStepLimits } from "@shared/agent-step-limits";
 import type { AgentGatewayPreferences } from "@shared/agent-gateway-config";
 import { DEFAULT_AGENT_GATEWAY_CONFIG } from "@shared/agent-gateway-config";
+import { TokenUsageOverview } from "./TokenUsageOverview";
 
 type SettingsCategory = "account" | "models" | "gateway" | "generation" | "project" | "appearance";
 type UiThemeMode = "light" | "dark" | "cyan" | "orange";
@@ -67,7 +68,7 @@ interface SettingsConsoleProps {
 
 const categoryMeta: Record<SettingsCategory, { title: string }> = {
   account: {
-    title: "账户与额度",
+    title: "Token 使用",
   },
   models: {
     title: "AI 模型",
@@ -200,32 +201,6 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
   triggerToast,
   saveStatus = "saved",
 }) => {
-  const totalTokens = 1000000;
-  const usedTokens = 354200;
-  const remainingTokens = totalTokens - usedTokens;
-  const usedPercentage = (usedTokens / totalTokens) * 100;
-
-  const trendData = [
-    { label: "周一", val: 12000 },
-    { label: "周二", val: 34000 },
-    { label: "周三", val: 28000 },
-    { label: "周四", val: 95000 },
-    { label: "周五", val: 62000 },
-    { label: "周六", val: 118000 },
-    { label: "周日", val: 89000 },
-  ];
-
-  const chartHeight = 80;
-  const chartWidth = 320;
-  const maxVal = Math.max(...trendData.map((d) => d.val)) * 1.1;
-  const points = trendData.map((d, i) => {
-    const x = (i / (trendData.length - 1)) * chartWidth;
-    const y = chartHeight - (d.val / maxVal) * chartHeight;
-    return { x, y, ...d };
-  });
-
-  const pathD = `M ${points.map((p) => `${p.x} ${p.y}`).join(" L ")}`;
-  const areaD = `${pathD} L ${points[points.length - 1].x} ${chartHeight} L ${points[0].x} ${chartHeight} Z`;
   const enabledModelCount = models.filter(isModelEnabled).length;
   const currentMeta = categoryMeta[activeCategory];
   const selectedAccentLabel = accentOptions.find((option) => option.value === uiAccentColor)?.label ?? "湖蓝";
@@ -272,80 +247,7 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
 
         {activeCategory === "account" && (
           <div className="settings-panel-fade">
-            <section className="settings-card settings-profile-card">
-              <div className="settings-avatar-large">P</div>
-              <div className="settings-profile-copy">
-                <span className="settings-page-kicker">当前账户</span>
-                <h3>PPT 创作者</h3>
-                <p>Premium Enterprise · 创意设计部</p>
-              </div>
-              <div className="settings-profile-status">
-                <span>可用额度</span>
-                <strong>{Math.round(remainingTokens / 1000)}k</strong>
-              </div>
-            </section>
-
-            <section className="settings-card">
-              <SettingsCardHeader
-                icon={<BrainIcon size={16} />}
-                title="Token 用量"
-                meta={<span>{usedPercentage.toFixed(1)}%</span>}
-              />
-              <div className="settings-progress-track" aria-label="Token 已用比例">
-                <span className="settings-progress-bar" style={{ width: `${usedPercentage}%` }} />
-              </div>
-              <div className="settings-stat-grid">
-                <div>
-                  <span>已使用</span>
-                  <strong>{usedTokens.toLocaleString()} Tokens</strong>
-                </div>
-                <div>
-                  <span>剩余</span>
-                  <strong>{remainingTokens.toLocaleString()} Tokens</strong>
-                </div>
-                <div>
-                  <span>总额度</span>
-                  <strong>{totalTokens.toLocaleString()} Tokens</strong>
-                </div>
-              </div>
-            </section>
-
-            <section className="settings-card">
-              <SettingsCardHeader
-                icon={<PaletteIcon size={16} />}
-                title="近期消耗"
-              />
-              <div className="settings-trend-chart">
-                <svg width="100%" height={chartHeight} viewBox={`0 0 ${chartWidth} ${chartHeight}`} aria-hidden="true">
-                  <defs>
-                    <linearGradient id="settingsChartGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="var(--accent-primary)" stopOpacity="0.18" />
-                      <stop offset="100%" stopColor="var(--accent-primary)" stopOpacity="0" />
-                    </linearGradient>
-                  </defs>
-                  <line x1="0" y1={chartHeight / 2} x2={chartWidth} y2={chartHeight / 2} stroke="var(--border-glass)" />
-                  <line x1="0" y1={chartHeight} x2={chartWidth} y2={chartHeight} stroke="var(--border-glass)" />
-                  <path d={areaD} fill="url(#settingsChartGrad)" />
-                  <path d={pathD} fill="none" stroke="var(--accent-primary)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-                  {points.map((point) => (
-                    <circle
-                      key={point.label}
-                      cx={point.x}
-                      cy={point.y}
-                      r="3.5"
-                      fill="var(--bg-input-field)"
-                      stroke="var(--accent-primary)"
-                      strokeWidth="2"
-                    />
-                  ))}
-                </svg>
-                <div className="settings-chart-labels">
-                  {trendData.map((item) => (
-                    <span key={item.label}>{item.label}</span>
-                  ))}
-                </div>
-              </div>
-            </section>
+            <TokenUsageOverview />
           </div>
         )}
 

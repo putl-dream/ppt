@@ -2,6 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { AgentGatewayError, normalizeProviderError } from "./errors";
 import { applyResponseContract } from "./response-contract";
 import { ensureToolResultPairing } from "./message-pairing";
+import type { ProviderTokenUsage } from "@shared/token-usage";
 import type {
   AgentModelContentBlock,
   AgentModelImageBlock,
@@ -12,6 +13,53 @@ import type {
   AgentModelToolResultBlock,
   ResolvedAgentModelConfig,
 } from "./types";
+
+function tokenCount(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) && value > 0
+    ? Math.round(value)
+    : 0;
+}
+
+function extractAnthropicUsage(value: unknown): ProviderTokenUsage | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const usage = value as unknown as Record<string, unknown>;
+  const inputTokens = tokenCount(usage.input_tokens);
+  const outputTokens = tokenCount(usage.output_tokens);
+  const cachedInputTokens = tokenCount(usage.cache_read_input_tokens);
+  const cacheCreationInputTokens = tokenCount(usage.cache_creation_input_tokens);
+  const totalTokens = inputTokens + outputTokens + cachedInputTokens + cacheCreationInputTokens;
+  if (totalTokens === 0) return undefined;
+  return {
+    inputTokens,
+    outputTokens,
+    totalTokens,
+    ...(cachedInputTokens > 0 ? { cachedInputTokens } : {}),
+    ...(cacheCreationInputTokens > 0 ? { cacheCreationInputTokens } : {}),
+  };
+}
+
+function anthropicUsageProperty(value: unknown): { usage?: ProviderTokenUsage } {
+  const usage = extractAnthropicUsage(value);
+  return usage ? { usage } : {};
+}
+
+function combineUsage(
+  first: ProviderTokenUsage | undefined,
+  second: ProviderTokenUsage | undefined,
+): ProviderTokenUsage | undefined {
+  if (!first) return second;
+  if (!second) return first;
+  const cachedInputTokens = (first.cachedInputTokens ?? 0) + (second.cachedInputTokens ?? 0);
+  const cacheCreationInputTokens = (first.cacheCreationInputTokens ?? 0)
+    + (second.cacheCreationInputTokens ?? 0);
+  return {
+    inputTokens: first.inputTokens + second.inputTokens,
+    outputTokens: first.outputTokens + second.outputTokens,
+    totalTokens: first.totalTokens + second.totalTokens,
+    ...(cachedInputTokens > 0 ? { cachedInputTokens } : {}),
+    ...(cacheCreationInputTokens > 0 ? { cacheCreationInputTokens } : {}),
+  };
+}
 
 function toAnthropicImageBlock(image: AgentModelImageBlock): Anthropic.ImageBlockParam {
   return {
@@ -164,6 +212,7 @@ export async function generateWithAnthropic(
 
     let maxTokens = request.maxOutputTokens ?? config.maxOutputTokens;
     let response = await create(maxTokens);
+    let accumulatedUsage = extractAnthropicUsage(response.usage);
     let content = extractContentBlocks(response.content);
 
     if (
@@ -173,6 +222,7 @@ export async function generateWithAnthropic(
     ) {
       maxTokens = Math.min(maxTokens * 2, 8_192);
       response = await create(maxTokens);
+      accumulatedUsage = combineUsage(accumulatedUsage, extractAnthropicUsage(response.usage));
       content = extractContentBlocks(response.content);
     }
 
@@ -190,6 +240,7 @@ export async function generateWithAnthropic(
       content,
       requestId: response._request_id ?? undefined,
       stopReason: response.stop_reason ?? undefined,
+      ...(accumulatedUsage ? { usage: accumulatedUsage } : {}),
     };
   } catch (error) {
     throw normalizeProviderError("anthropic", error, request.signal);
@@ -241,6 +292,7 @@ export async function* generateStreamWithAnthropic(
       type: "complete",
       content: extractContentBlocks(finalMessage.content),
       stopReason: finalMessage.stop_reason ?? undefined,
+      ...anthropicUsageProperty(finalMessage.usage),
     };
   } catch (error) {
     throw normalizeProviderError("anthropic", error, request.signal);

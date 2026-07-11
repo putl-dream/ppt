@@ -39,6 +39,12 @@ describe("generateWithOpenAI", () => {
     openaiMock.createResponse.mockResolvedValue({
       output_text: "  generated text  ",
       _request_id: "req-openai",
+      usage: {
+        input_tokens: 120,
+        output_tokens: 30,
+        total_tokens: 150,
+        input_tokens_details: { cached_tokens: 20 },
+      },
     });
 
     const response = await generateWithOpenAI(config, {
@@ -66,6 +72,12 @@ describe("generateWithOpenAI", () => {
       model: "openai-test",
       content: [{ type: "text", text: "generated text" }],
       requestId: "req-openai",
+      usage: {
+        inputTokens: 120,
+        outputTokens: 30,
+        totalTokens: 150,
+        cachedInputTokens: 20,
+      },
     });
   });
 
