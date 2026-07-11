@@ -1,13 +1,11 @@
 import type { ImageElement, ShapeElement, TextElement } from "../presentation";
 import {
-  isDarkDesignTokens,
-  resolveDesignTokenFontFamily,
-} from "../design-tokens";
+  isDarkTokens,
+} from "@design-system";
 import type { LayoutGrammarContext, LayoutGrammarHandler } from "../layout-grammar";
 import { layoutGrammarRegistry } from "../layout-grammar";
 import { LAYOUT_GRAMMAR_VARIANTS } from "../layout-grammar-variants";
 import { createCoverMotif } from "../motif-system";
-import { resolveCoverTitleFont } from "../typography";
 import { VISUAL_TOKENS, cardShadow } from "../visual-tokens";
 
 type CoverVariant = "centered" | "editorial-hero" | "signal-dark";
@@ -17,12 +15,11 @@ function resolveCoverVariant(ctx: LayoutGrammarContext): CoverVariant {
   if (ctx.grammarVariant === "editorial-hero" || ctx.grammarVariant === "signal-dark") {
     return ctx.grammarVariant;
   }
-  if (!ctx.hasExplicitDesignTokens) return "centered";
-  if (isDarkDesignTokens(ctx.designTokens)) return "signal-dark";
+  if (isDarkTokens(ctx.style.tokens)) return "signal-dark";
   if (
-    ctx.designTokens.fontMood === "editorial" ||
-    ctx.designTokens.motif === "bookmark" ||
-    ctx.designTokens.shapeLanguage === "annotation"
+    ctx.style.tokens.fontMood === "editorial" ||
+    ctx.style.tokens.motif === "bookmark" ||
+    ctx.style.tokens.shapeLanguage === "annotation"
   ) {
     return "editorial-hero";
   }
@@ -30,9 +27,7 @@ function resolveCoverVariant(ctx: LayoutGrammarContext): CoverVariant {
 }
 
 function coverTitleFont(ctx: LayoutGrammarContext): "serif" | "sans" | "mono" {
-  const fallback = resolveCoverTitleFont(ctx.theme);
-  if (!ctx.hasExplicitDesignTokens) return fallback;
-  return resolveDesignTokenFontFamily(ctx.designTokens, fallback);
+  return ctx.style.typography.family;
 }
 
 function titleAndBody(ctx: LayoutGrammarContext): {
@@ -59,8 +54,7 @@ function applyImageTreatment(
   image: ImageElement,
   ctx: LayoutGrammarContext,
 ): ImageElement {
-  if (!ctx.hasExplicitDesignTokens) return image;
-  const treatment = ctx.designTokens.imageTreatment;
+  const treatment = ctx.style.image.treatment;
   return {
     ...image,
     borderRadius:
@@ -145,7 +139,7 @@ function applyEditorialCover(ctx: LayoutGrammarContext): void {
 
   ctx.elements.push(
     ...createCoverMotif({
-      motif: ctx.designTokens.motif,
+      motif: ctx.style.tokens.motif,
       colors: ctx.colors,
       variant: "editorial-hero",
     }),
@@ -204,7 +198,7 @@ function applySignalDarkCover(ctx: LayoutGrammarContext): void {
 
   ctx.elements.push(
     ...createCoverMotif({
-      motif: ctx.designTokens.motif,
+      motif: ctx.style.tokens.motif,
       colors: ctx.colors,
       variant: "signal-dark",
     }),

@@ -1,6 +1,6 @@
 ---
 name: ppt-build
-description: 根据 storyboard 用 SubmitCommands 创建内容草稿（不含主题与排版命令）
+description: 根据 storyboard 用 SubmitCommands 创建内容草稿（不含设计系统与排版命令）
 when_to_use: 需要把分镜或用户内容落成幻灯片内容草稿时
 stages:
   - author
@@ -21,7 +21,7 @@ allowed-tools:
 
 1. `ReadPresentationSnapshot` 了解当前 revision、已有 slide ID。
 2. Task 读取 `slides/storyboard.json`（若有）。
-3. **本阶段不提交** `set-theme`、`update-slide-layout`。
+3. **本阶段不提交** `set-design-system`、`set-slide-design`、`update-slide-layout`。
 4. 落盘时沿用 storyboard 的 `layout`（或 `narrativeRole` 推导值）作为 `slide.layout` 占位。
 
 ## 画布与结构
@@ -70,7 +70,7 @@ allowed-tools:
 ## 禁止
 
 - 不凭记忆编造 ID；改已有页先 ReadPresentationSnapshot。
-- **禁止 update-slide-layout / set-theme**（排版阶段再做）。
+- **禁止 update-slide-layout / set-design-system / set-slide-design**（排版阶段再做）。
 - 基础创建不用 Deferred Tool。
 
 ## 衔接

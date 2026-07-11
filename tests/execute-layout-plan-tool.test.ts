@@ -9,12 +9,14 @@ import type { ToolContext } from "../src/main/agent/tools/tool-definition";
 import { ToolRegistry } from "../src/main/agent/tools/tool-registry";
 import type { Presentation } from "../src/shared/presentation";
 import type { LayoutPlan } from "../src/shared/layout-plan";
+import { TEST_DESIGN_SYSTEM, testDesignSystem } from "./design-engine-test-utils";
 
 function makePresentation(slideIds: string[]): Presentation {
   return {
     id: "deck-1",
     title: "Deck",
     revision: 1,
+    designSystem: TEST_DESIGN_SYSTEM,
     slides: slideIds.map((id, index) => ({
       id,
       title: `Slide ${index + 1}`,
@@ -42,9 +44,8 @@ function makePlan(
 ): LayoutPlan {
   return {
     version: 1,
-    theme: "sunset",
-    palette: "orange",
     styleMode: "creative",
+    designSystem: testDesignSystem({ palette: "warm-paper" }),
     slides: slideIds.map((slideId, index) => ({
       slideId,
       title: `Slide ${index + 1}`,
@@ -98,7 +99,7 @@ function createSequenceGateway(responses: ReturnType<typeof modelToolCall>[]): A
 }
 
 describe("ExecuteLayoutPlan", () => {
-  it("reads layout-plan and builds theme, layout, and variant commands", async () => {
+  it("reads layout-plan and builds design, layout, and variant commands", async () => {
     const workspaceRoot = await mkdtemp(join(tmpdir(), "ppt-layout-plan-"));
     const presentation = makePresentation(["slide-1", "slide-2", "slide-3"]);
     await writePlan(workspaceRoot, makePlan(
@@ -114,7 +115,7 @@ describe("ExecuteLayoutPlan", () => {
     }
     expect(result.commands).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ type: "set-theme", theme: "sunset", palette: "orange" }),
+        expect.objectContaining({ type: "set-design-system" }),
         expect.objectContaining({ type: "update-slide-layout", slideId: "slide-1", layout: "cover" }),
         expect.objectContaining({ type: "update-slide-variant", slideId: "slide-1", slideVariant: "hero" }),
       ]),

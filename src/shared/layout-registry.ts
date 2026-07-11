@@ -2,19 +2,12 @@ import type { BackgroundVariant } from "./slide-background";
 import type { SlideLayoutType } from "./slide-layouts";
 import type { SlideVariant } from "./slide-variant";
 import type { Slide, SlideElement } from "./presentation";
+import type { ResolvedSlideStyle } from "@design-system";
 
 export interface LayoutContext {
   slide: Slide;
-  theme: string;
-  palette: string;
-  colors: {
-    bg: string;
-    title: string;
-    body: string;
-    accent: string;
-    cardBg: string;
-    cardStroke: string;
-  };
+  style: ResolvedSlideStyle;
+  colors: ResolvedSlideStyle["colors"];
   textElements: import("./presentation").TextElement[];
   imageElements: import("./presentation").ImageElement[];
   userShapes: import("./presentation").ShapeElement[];
@@ -22,7 +15,6 @@ export interface LayoutContext {
   bodyTexts: import("./presentation").TextElement[];
   elements: SlideElement[];
   placedImageIds: Set<string>;
-  theme_: string;
   helpers: LayoutHelpers;
 }
 

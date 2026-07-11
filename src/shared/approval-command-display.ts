@@ -5,21 +5,6 @@ export interface ApprovalCommandDisplay {
   detail?: string;
 }
 
-const THEME_LABELS: Record<string, string> = {
-  nordic: "北欧极简",
-  midnight: "黑客帝国",
-  ocean: "商务蔚蓝",
-  sunset: "落日余晖",
-  purple: "流光极光",
-};
-
-const PALETTE_LABELS: Record<string, string> = {
-  cyan: "湖蓝",
-  green: "科技绿",
-  purple: "薰衣紫",
-  orange: "珊瑚橙",
-};
-
 const LAYOUT_LABELS: Record<string, string> = {
   cover: "封面布局",
   section: "过渡页布局",
@@ -32,12 +17,6 @@ const LAYOUT_LABELS: Record<string, string> = {
   toc: "目录布局",
   quote: "金句引用",
   "image-grid": "图片矩阵",
-};
-
-const BACKGROUND_LABELS: Record<string, string> = {
-  default: "默认",
-  hero: "品牌页",
-  muted: "柔和强调",
 };
 
 const SLIDE_VARIANT_LABELS: Record<string, string> = {
@@ -75,20 +54,15 @@ export function formatApprovalCommand(command: PresentationCommand): ApprovalCom
       return { label: "移除画布元素" };
     case "update-element":
       return { label: "更新图层属性" };
-    case "set-theme":
+    case "set-design-system":
       return {
-        label: "应用设计主题",
-        detail: compact([
-          `主题: ${named(command.theme, THEME_LABELS)}`,
-          command.palette
-            ? `(色调: ${named(command.palette, PALETTE_LABELS)})`
-            : undefined,
-        ]),
+        label: "应用设计系统",
+        detail: `设计色板: ${command.designSystem.tokens.palette}`,
       };
-    case "set-slide-background":
+    case "set-slide-design":
       return {
-        label: "更新页面背景",
-        detail: `背景: ${named(command.backgroundVariant, BACKGROUND_LABELS)}`,
+        label: "更新页面设计",
+        detail: Object.keys(command.designOverride).join("、") || "清除页面覆盖",
       };
     case "update-slide-variant":
       return {

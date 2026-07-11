@@ -10,10 +10,10 @@ import {
 } from "@shared/project";
 import {
   createDefaultBriefMarkdown,
-  createDefaultDesignTheme,
+  createDefaultProjectDesignSystem,
   createDefaultOutlineMarkdown,
   createDefaultResearchMarkdown,
-  serializeDesignTheme,
+  serializeProjectDesignSystem,
 } from "@shared/project-artifacts";
 
 export type ArtifactId = ProjectStageId;
@@ -134,7 +134,7 @@ export const DEFAULT_CONTENTS: Record<ArtifactId, string> = {
     null,
     2,
   ),
-  design: serializeDesignTheme(createDefaultDesignTheme()).trimEnd(),
+  design: serializeProjectDesignSystem(createDefaultProjectDesignSystem()).trimEnd(),
   deck: JSON.stringify(
     {
       title: "新演示文稿",

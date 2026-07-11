@@ -12,9 +12,11 @@
     "types": ["vite/client"],
     "baseUrl": ".",
     "paths": {
-      "@shared/*": ["src/shared/*"]
+      "@shared/*": ["src/shared/*"],
+      "@design-system": ["src/design-system/index.ts"],
+      "@design-system/*": ["src/design-system/*"]
     }
   },
-  "include": ["src/renderer/**/*.ts", "src/renderer/**/*.tsx", "src/shared/**/*.ts"]
+  "include": ["src/renderer/**/*.ts", "src/renderer/**/*.tsx", "src/shared/**/*.ts", "src/design-system/**/*.ts"]
 }
 

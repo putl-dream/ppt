@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { designSystemV1Schema } from "@design-system";
 
 export const projectArtifactFilePaths = {
   designConstraints: "design/constraints.json",
@@ -55,8 +56,7 @@ export const deckExportRecordSchema = z.object({
   revision: z.number().int().nonnegative(),
   filePath: z.string(),
   exportedAt: z.string(),
-  theme: z.string(),
-  palette: z.string(),
+  designSystem: designSystemV1Schema,
 });
 
 export const deckExportHistoryFileSchema = z.object({

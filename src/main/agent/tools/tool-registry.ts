@@ -20,7 +20,7 @@ import { taskGraphTools } from "./core/task-graph-tools";
 import { loadSkillTool } from "./core/load-skill";
 import { webSearchTool } from "./core/web-search";
 import { analyzeDeckConsistencyTool } from "./deferred/analyze-deck-consistency";
-import { applyThemeStyleTool } from "./deferred/apply-theme-style";
+import { applyDesignSystemTool } from "./deferred/apply-design-system";
 import { autoLayoutSlideTool } from "./deferred/auto-layout-slide";
 import { beautifyChartTool } from "./deferred/beautify-chart";
 import { beautifyTableTool } from "./deferred/beautify-table";
@@ -133,7 +133,7 @@ export function createDefaultToolRegistry(): ToolRegistry {
     loadSkillTool,
     webSearchTool,
     analyzeDeckConsistencyTool,
-    applyThemeStyleTool,
+    applyDesignSystemTool,
     autoLayoutSlideTool,
     beautifyChartTool,
     beautifyTableTool,

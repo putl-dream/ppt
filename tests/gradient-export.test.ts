@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { renderGradientToPng } from "../src/shared/gradient-export";
-import { resolveSlideBackgroundWithVariant } from "../src/shared/slide-variant";
+import { resolveSlideStyle } from "@design-system";
+import { testDesignSystem } from "./design-engine-test-utils";
 
 describe("gradient-export", () => {
   it("produces a valid PNG data URI for linear gradient", () => {
@@ -27,10 +28,10 @@ describe("gradient-export", () => {
     expect(dataUri.startsWith("data:image/png;base64,")).toBe(true);
   });
 
-  it("hero slide variant includes structured gradient", () => {
-    const bg = resolveSlideBackgroundWithVariant("nordic", "cyan", {
-      layout: "cover",
-    });
+  it("design-engine gradient includes structured export stops", () => {
+    const bg = resolveSlideStyle(testDesignSystem({ backgroundStyle: "gradient" }), {
+      layout: "cover", slideVariant: "light",
+    }).background;
     expect(bg.gradient).toBeDefined();
     expect(bg.gradient?.type).toBe("linear");
     expect(bg.gradient?.stops.length).toBeGreaterThanOrEqual(2);

@@ -8,12 +8,13 @@ import {
   THUMBNAIL_WIDTH,
 } from "../src/shared/slide-html-render";
 import { exportToHtml } from "../src/shared/html-exporter";
+import { TEST_DESIGN_SYSTEM } from "./design-engine-test-utils";
 
 describe("slide-html-render", () => {
   it("exports single-slide HTML at native slide dimensions", () => {
     const presentation = createStarterPresentation();
     const slide = presentation.slides[0]!;
-    const html = exportSlideThumbnailHtml(slide, { theme: "nordic", palette: "cyan" });
+    const html = exportSlideThumbnailHtml(slide, { designSystem: TEST_DESIGN_SYSTEM });
 
     expect(html).toContain("<!DOCTYPE html>");
     expect(html).toContain(`width: ${SLIDE_WIDTH}px`);

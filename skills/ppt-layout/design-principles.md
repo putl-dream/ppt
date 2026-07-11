@@ -1,6 +1,6 @@
 # 设计原则与 Rubric（guizang 适配）
 
-来源：[guizang-ppt-skill](https://github.com/op7418/guizang-ppt-skill)。本项目用 `applyLayout` + 固定 theme + layout-plan 设计流程。
+来源：[guizang-ppt-skill](https://github.com/op7418/guizang-ppt-skill)。本项目用独立 DesignSystemV1 + `applyLayout` + layout-plan 设计流程。
 
 **好设计 = 满足下方 Rubric A–D + 通过 ValidateDeckLayout。**
 
@@ -47,7 +47,7 @@ Design Agent（`ppt-design-layout`）与 deck-review 共用本 Rubric。
 
 | # | 标准 | 适用阶段 |
 |---|------|----------|
-| D1 | 全 deck **一套 theme + palette** | 设计 + 执行 |
+| D1 | 全 deck **一套 DesignSystemV1**；页级 designOverride 克制 | 设计 + 执行 |
 | D2 | 单条 ≤15 字，单页 ≤5 条 | **内容草稿 / deck-review**（设计阶段不管） |
 | D3 | creative 装饰仅 process/comparison，每页 shape ≤3 | 执行 |
 | D4 | 不手填 x/y；依赖 layout + InsertSlideImage 槽位 | 设计 + 执行 |
@@ -84,7 +84,7 @@ Design Agent（`ppt-design-layout`）与 deck-review 共用本 Rubric。
 
 ## 风格 B · 瑞士/数据（template + ocean/midnight）
 
-1. **单一 accent** — 一份 deck 一套 palette
+1. **单一视觉身份** — 一份 deck 一套 DesignSystemV1，accent 由解析器统一给出
 2. **极致对比** — `case` 右栏数字是视觉锚点
 3. **网格至上** — 只用 `update-slide-layout`，禁止手动 x/y
 4. **数据专用版式** — KPI 用 `case` + chart；流程用 `process`

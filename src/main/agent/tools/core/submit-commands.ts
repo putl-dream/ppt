@@ -38,7 +38,7 @@ export const submitCommandsTool: ToolDefinition<
 > = {
   name: "SubmitCommands",
   description:
-    "基础 PPT 创建与编辑入口：可直接提交 add-slide、add-element、set-theme 等 PresentationCommand，"
+    "基础 PPT 创建与编辑入口：可直接提交 add-slide、add-element、set-design-system 等 PresentationCommand，"
     + "形成最终 Command Proposal 并进入系统校验关闸。基础创建无需搜索额外工具。",
   category: "core",
   loadPolicy: "core",

@@ -26,7 +26,7 @@ allowed-tools:
 | 属于设计阶段 | **不属于**设计阶段（内容阶段已做完） |
 |-------------|--------------------------------------|
 | 每页选 layout / slideVariant | 「共 N 页，简洁明了」 |
-| theme + palette | 「每条 ≤15 字，每页 3–5 条」 |
+| deck 级 designSystem + 页级 designOverride | 「每条 ≤15 字，每页 3–5 条」 |
 | enhancements（chart/icon/image） | 增删 slide、改写要点、压缩文案 |
 | 节奏 Rubric（section/toc/多样性） | 重新规划 storyboard 页数 |
 
@@ -47,19 +47,19 @@ allowed-tools:
 ```json
 {
   "version": 1,
-  "theme": "ocean",
-  "palette": "cyan",
   "styleMode": "template",
-  "designTokens": {
+  "designSystem": {
     "version": 1,
-    "palette": "business-blue",
-    "fontMood": "formal",
-    "shapeLanguage": "cards",
-    "backgroundStyle": "clean",
-    "motif": "none",
-    "density": "standard",
-    "imageTreatment": "plain",
-    "chartStyle": "report"
+    "tokens": {
+      "palette": "business-blue",
+      "fontMood": "formal",
+      "shapeLanguage": "cards",
+      "backgroundStyle": "clean",
+      "motif": "none",
+      "density": "standard",
+      "imageTreatment": "plain",
+      "chartStyle": "report"
+    }
   },
   "designNotes": "可选：整体节奏说明",
   "slides": [
@@ -70,6 +70,7 @@ allowed-tools:
       "layout": "cover",
       "grammarVariant": "editorial-hero",
       "slideVariant": "hero",
+      "designOverride": { "backgroundStyle": "gradient" },
       "rationale": "开场页，hero 背景",
       "enhancements": []
     }
@@ -81,13 +82,13 @@ allowed-tools:
 
 | 字段 | 必填 | 说明 |
 |------|------|------|
-| `theme` / `palette` | 是 | 全 deck 一套；见 style-modes 映射 |
+| `designSystem` | 是 | 全 deck 唯一 DesignSystemV1；见 style-modes 预设映射 |
 | `styleMode` | 是 | `template` 或 `creative`（与用户选择一致） |
 | `slideId` | 是 | 与 snapshot 中 slide.id 一致 |
 | `narrativeRole` | 是 | cover / toc / section / content / data / comparison / quote / summary |
 | `layout` | 是 | 11 种引擎 layout 之一 |
 | `grammarVariant` | 支持 Grammar 的 layout 建议填写 | 控制同一 layout 的具体视觉构图；只能使用下表枚举 |
-| `designTokens` | 建议 deck 级填写 | 控制 palette / fontMood / shapeLanguage / backgroundStyle / motif / density / imageTreatment / chartStyle |
+| `designOverride` | 否 | 仅覆盖本页确有叙事意义的 token；其余继承 deck 级 designSystem |
 | `slideVariant` | 否 | `hero` / `light` / `dark`；省略则由 layout 推断 |
 | `rationale` | 是 | 一句话：为何选此 layout（供 deck-review 对照） |
 | `enhancements` | 否 | 执行阶段用 Deferred Tool 处理的增强项 |
@@ -164,7 +165,7 @@ allowed-tools:
 
 ### D. 克制与一致性
 
-- 全 deck 一套 theme + palette
+- 全 deck 一套 designSystem；页级 override 只用于必要的叙事节奏
 - 不规划手填 x/y；图片用 insert-image 槽位
 - creative 装饰仅 process/comparison，每页 ≤3 shape
 - 文档模式 8 页建议 3–5 种 layout；不要为了凑多样性做成 8 页 8 种 layout
@@ -184,7 +185,7 @@ allowed-tools:
 ```
 executionTarget: teammate
 description: 「读取当前 presentation snapshot（slide 列表与 id）。
-**页数与文案已冻结**——为每一现有 slide 选定 layout、grammarVariant、slideVariant、designTokens、enhancements，不得增删页或提内容密度要求。
+**页数与文案已冻结**——为每一现有 slide 选定 layout、grammarVariant、slideVariant、designOverride、enhancements，并为 deck 选定唯一 designSystem；不得增删页或提内容密度要求。
 按 ppt-design-layout Rubric（仅版式节奏）写入 slides/layout-plan.json。
 用户选择排版方式：{template|creative}。
 禁止 SubmitCommands；完成后 submit_task，结论 1 句：路径 + layout 种类数 + 已写入可执行 plan。」
@@ -192,7 +193,7 @@ description: 「读取当前 presentation snapshot（slide 列表与 id）。
 
 ## 禁止事项
 
-- ❌ SubmitCommands / update-slide-layout / set-theme
+- ❌ SubmitCommands / update-slide-layout / set-design-system
 - ❌ 改写 slide.title 或 body text
 - ❌ 手填 x/y 坐标
 - ❌ 长篇分析（结论 ≤3 句）

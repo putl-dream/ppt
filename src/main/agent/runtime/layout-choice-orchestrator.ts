@@ -51,7 +51,7 @@ export async function prepareLayoutChoiceTask(input: {
         "<layout_plan_task>",
         "读取 slides/layout-choice.json 与 slides/layout-input.json。",
         "页数与文案已冻结：不得增删页、改写标题或正文。",
-        "按 ppt-design-layout Rubric 为每一现有 slide 选择 layout、grammarVariant、slideVariant、designTokens 和 enhancements。",
+        "按 ppt-design-layout Rubric 为每一现有 slide 选择 layout、grammarVariant、slideVariant、designOverride 和 enhancements。",
         "只写 slides/layout-plan.json，禁止修改 presentation JSON 或尝试 SubmitCommands。",
         "完成后 submit_task，并摘要输出路径、layout 种类数和自检结果。",
         "</layout_plan_task>",

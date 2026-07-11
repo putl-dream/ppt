@@ -1,5 +1,5 @@
 import type { ChartElement } from "./presentation";
-import type { ChartStyle } from "./design-tokens";
+import type { ChartStyle } from "@design-system";
 import { utf8ToBase64 } from "./base64";
 
 function normalizeChartData(element: ChartElement): { label: string; value: number }[] {

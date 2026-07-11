@@ -15,6 +15,7 @@ import { ModelManagement } from "./ModelManagement";
 import type { AgentStepLimits } from "@shared/agent-step-limits";
 import type { AgentGatewayPreferences } from "@shared/agent-gateway-config";
 import { DEFAULT_AGENT_GATEWAY_CONFIG } from "@shared/agent-gateway-config";
+import { DESIGN_PRESETS, type DesignSystemV1 } from "@design-system";
 
 type SettingsCategory = "account" | "models" | "gateway" | "generation" | "project" | "appearance";
 type UiThemeMode = "light" | "dark" | "cyan" | "orange";
@@ -29,10 +30,8 @@ interface SettingsConsoleProps {
   onSaveModel: (model: ManagedModel) => void;
   onDeleteModel: (id: string) => void;
 
-  selectedTheme: string;
-  setSelectedTheme: (val: string) => void;
-  selectedPalette: string;
-  setSelectedPalette: (val: string) => void;
+  selectedDesignSystem: DesignSystemV1;
+  setSelectedDesignSystem: (val: DesignSystemV1) => void;
   logoUrl: string | null;
   onLogoUpload: (url: string) => void;
   onRemoveLogo: () => void;
@@ -168,10 +167,8 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
   onSelectModel,
   onSaveModel,
   onDeleteModel,
-  selectedTheme,
-  setSelectedTheme,
-  selectedPalette,
-  setSelectedPalette,
+  selectedDesignSystem,
+  setSelectedDesignSystem,
   logoUrl,
   onLogoUpload,
   onRemoveLogo,
@@ -595,33 +592,24 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
 
               <div className="settings-inline-grid">
                 <label className="config-group">
-                  <span className="config-label">默认设计底座</span>
+                  <span className="config-label">默认设计系统</span>
                   <select
-                    value={selectedTheme}
-                    onChange={(event) => setSelectedTheme(event.target.value)}
+                    value={DESIGN_PRESETS.find((preset) => preset.system.tokens.palette === selectedDesignSystem.tokens.palette)?.id ?? DESIGN_PRESETS[0].id}
+                    onChange={(event) => {
+                      const preset = DESIGN_PRESETS.find((item) => item.id === event.target.value);
+                      if (preset) setSelectedDesignSystem(preset.system);
+                    }}
                     className="model-select"
                   >
-                    <option value="nordic">北欧极简 (Nordic Frost)</option>
-                    <option value="midnight">黑客帝国 (Midnight Matrix)</option>
-                    <option value="ocean">商务蔚蓝 (Business Ocean)</option>
-                    <option value="sunset">落日余晖 (Sunset Horizon)</option>
-                    <option value="purple">流光极光 (Aero Purple)</option>
+                    {DESIGN_PRESETS.map((preset) => (
+                      <option key={preset.id} value={preset.id}>{preset.label}</option>
+                    ))}
                   </select>
                 </label>
-
-                <label className="config-group">
-                  <span className="config-label">默认品牌主色</span>
-                  <select
-                    value={selectedPalette}
-                    onChange={(event) => setSelectedPalette(event.target.value)}
-                    className="model-select"
-                  >
-                    <option value="cyan">湖蓝色 (Teal Cyan)</option>
-                    <option value="green">科技绿 (Tech Green)</option>
-                    <option value="purple">薰衣紫 (Violet Purple)</option>
-                    <option value="orange">珊瑚橙 (Sunset Orange)</option>
-                  </select>
-                </label>
+                <div className="config-group">
+                  <span className="config-label">当前设计语言</span>
+                  <span>{selectedDesignSystem.tokens.palette} · {selectedDesignSystem.tokens.fontMood} · {selectedDesignSystem.tokens.backgroundStyle}</span>
+                </div>
               </div>
 
               <div className="config-group">

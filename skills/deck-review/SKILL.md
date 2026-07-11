@@ -1,6 +1,6 @@
 ---
 name: deck-review
-description: 审查 deck 一致性、版式节奏与 guizang 式质检项；对照 design-principles Rubric A–E
+description: 用设计引擎评分审查 deck 一致性、可读性、视觉锚点与版式节奏
 when_to_use: deck 已有较多页面，排版后质检、用户要求审阅、或 layout-plan 执行后验收时
 stages:
   - style
@@ -23,6 +23,7 @@ stages:
 3. **文本溢出**：DetectOverflowText
 4. **deck 一致性**：AnalyzeDeckConsistency
 5. **图片资产**：远程 URL 必须先本地化；检查来源页与 license 元数据
+6. **设计引擎评分**：检查 hierarchy/readability/density/visualAnchor/composition；整套检查 consistency/differentiation
 
 ### Rubric A · 叙事与节奏
 
@@ -48,7 +49,7 @@ stages:
 
 ### Rubric D · 克制
 
-- 全 deck 同一 theme/palette
+- 全 deck 同一 DesignSystemV1；页面只用少量、可解释的 designOverride
 - 单条 ≤15 字，单页 ≤5 条（**deck-review 检已有内容**；设计阶段 ppt-design-layout 不管）
 - creative 装饰每页 shape ≤3
 
@@ -74,20 +75,23 @@ stages:
 1. 每页实际 layout 与 plan 一致
 2. slideVariant 与 plan 一致
 3. plan.enhancements 已执行（chart/image 可见）
+4. plan.designSystem 与 presentation.designSystem 一致；页面 designOverride 与 plan 一致
 
 ## 工作流
 
 1. ReadPresentationSnapshot 获取全貌。
 2. ExecuteExtraTool ValidateDeckLayout。
-3. 对照 design-principles Rubric A–E 与 checklist P0/P1/P2-engine。
-4. 输出 Markdown 报告。
-5. 用户确认后再 SubmitCommands 修复。
+3. 读取自动视觉反馈分数；低于 70 的维度必须列为问题，低于 55 视为严重。
+4. 对照 design-principles Rubric A–E 与 checklist P0/P1/P2-engine。
+5. 输出 Markdown 报告。
+6. 用户确认后再 SubmitCommands 修复。
 
 ## 输出格式
 
 ```markdown
 ## 审查摘要
 - 总页数：N
+- 视觉总分：N/100（层级 / 可读性 / 密度 / 锚点 / 构图 / 一致性 / 差异度）
 - Rubric 通过：A✓ B✓ C△ D✓
 - 严重：X 项 | 建议：Y 项
 

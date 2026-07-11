@@ -32,10 +32,7 @@ export const exportPptxTool: ToolDefinition<
     const presentation = context.presentation;
     const result = await deckExportService.exportDeck({
       presentation,
-      options: {
-        theme: presentation.theme ?? "nordic",
-        palette: presentation.palette ?? "cyan",
-      },
+      options: {},
       format: args.format,
     });
 

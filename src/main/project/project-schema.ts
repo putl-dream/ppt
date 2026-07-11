@@ -4,10 +4,10 @@ import type { ProjectSandbox, SessionSnapshot } from "@shared/session";
 import { defaultProjectArtifacts } from "@shared/project";
 import {
   createDefaultBriefMarkdown,
-  createDefaultDesignTheme,
+  createDefaultProjectDesignSystem,
   createDefaultOutlineMarkdown,
   createDefaultResearchMarkdown,
-  serializeDesignTheme,
+  serializeProjectDesignSystem,
 } from "@shared/project-artifacts";
 import {
   createDefaultDesignConstraints,
@@ -73,8 +73,8 @@ export function createDefaultProjectFiles(snapshot: SessionSnapshot): ProjectFil
       content: `${JSON.stringify(createStoryboardTemplate(snapshot.session.title), null, 2)}\n`,
     },
     {
-      path: "design/theme.json",
-      content: serializeDesignTheme(createThemeTemplate()),
+      path: "design/system.json",
+      content: serializeProjectDesignSystem(createDesignSystemTemplate()),
     },
     {
       path: "design/constraints.json",
@@ -151,8 +151,8 @@ function createTitleSlideTemplate(title: string): string {
 `;
 }
 
-function createThemeTemplate() {
-  return createDefaultDesignTheme();
+function createDesignSystemTemplate() {
+  return createDefaultProjectDesignSystem();
 }
 
 function createDesignConstraintsTemplate() {

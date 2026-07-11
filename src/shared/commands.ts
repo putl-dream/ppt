@@ -4,7 +4,11 @@ import { slideSchema, slideElementSchema } from "./presentation";
 import { applyLayout } from "./layout";
 import { SLIDE_LAYOUTS } from "./slide-layouts";
 import { SLIDE_VARIANTS } from "./slide-variant";
-import { designTokensV1Schema } from "./design-tokens";
+import {
+  designSystemV1Schema,
+  resolveSlideStyle,
+  slideDesignOverrideSchema,
+} from "@design-system";
 
 export const presentationCommandSchema = z.discriminatedUnion("type", [
   z.object({
@@ -50,15 +54,14 @@ export const presentationCommandSchema = z.discriminatedUnion("type", [
   }),
   z.object({
     id: z.string(),
-    type: z.literal("set-theme"),
-    theme: z.string().min(1),
-    palette: z.string().min(1).optional(),
+    type: z.literal("set-design-system"),
+    designSystem: designSystemV1Schema,
   }),
   z.object({
     id: z.string(),
-    type: z.literal("set-slide-background"),
+    type: z.literal("set-slide-design"),
     slideId: z.string(),
-    backgroundVariant: z.enum(["default", "hero", "muted"]),
+    designOverride: slideDesignOverrideSchema,
   }),
   z.object({
     id: z.string(),
@@ -72,7 +75,7 @@ export const presentationCommandSchema = z.discriminatedUnion("type", [
     slideId: z.string(),
     layout: z.enum(SLIDE_LAYOUTS),
     grammarVariant: z.string().optional(),
-    designTokens: designTokensV1Schema.optional(),
+    designOverride: slideDesignOverrideSchema.optional(),
   }),
   z.object({
     id: z.string(),
@@ -271,43 +274,57 @@ export function executeCommand(
     };
   }
 
-  if (command.type === "set-theme") {
+  if (command.type === "set-design-system") {
+    const previousDesignSystem = presentation.designSystem;
+    const slides = presentation.slides.map((slide) => {
+      if (!slide.layout || !SLIDE_LAYOUTS.includes(slide.layout as (typeof SLIDE_LAYOUTS)[number])) {
+        return slide;
+      }
+      const style = resolveSlideStyle(command.designSystem, slide);
+      return applyLayout(slide, slide.layout as (typeof SLIDE_LAYOUTS)[number], style, {
+        grammarVariant: slide.grammarVariant,
+        designOverride: slide.designOverride,
+      });
+    });
     return {
       presentation: nextRevision({
         ...presentation,
-        theme: command.theme,
-        palette: command.palette || presentation.palette,
+        designSystem: command.designSystem,
+        slides,
       }),
       executed: {
         command,
         inverse: {
           id: crypto.randomUUID(),
-          type: "set-theme",
-          theme: presentation.theme || "nordic",
-          palette: presentation.palette || "cyan",
+          type: "set-design-system",
+          designSystem: previousDesignSystem,
         },
       },
     };
   }
 
-  if (command.type === "set-slide-background") {
+  if (command.type === "set-slide-design") {
     const slideIndex = presentation.slides.findIndex((s) => s.id === command.slideId);
     if (slideIndex < 0) throw new Error(`Slide not found: ${command.slideId}`);
     const targetSlide = presentation.slides[slideIndex];
-    const slides = presentation.slides.map((s) =>
-      s.id === command.slideId
-        ? { ...s, backgroundVariant: command.backgroundVariant }
-        : s,
-    );
+    const designedSlide = { ...targetSlide, designOverride: command.designOverride };
+    const updatedSlide = targetSlide.layout && SLIDE_LAYOUTS.includes(targetSlide.layout as (typeof SLIDE_LAYOUTS)[number])
+      ? applyLayout(
+          designedSlide,
+          targetSlide.layout as (typeof SLIDE_LAYOUTS)[number],
+          resolveSlideStyle(presentation.designSystem, designedSlide),
+          { grammarVariant: targetSlide.grammarVariant, designOverride: command.designOverride },
+        )
+      : designedSlide;
+    const slides = presentation.slides.map((s) => s.id === command.slideId ? updatedSlide : s);
     return {
       presentation: nextRevision({ ...presentation, slides }),
       executed: {
         command,
         inverse: {
           id: crypto.randomUUID(),
-          type: "set-slide-background",
-          slideId: command.slideId,
-          backgroundVariant: targetSlide.backgroundVariant ?? "default",
+          type: "restore-slide",
+          slide: structuredClone(targetSlide),
         },
       },
     };
@@ -330,14 +347,14 @@ export function executeCommand(
         variantSlide.layout &&
         SLIDE_LAYOUTS.includes(variantSlide.layout as (typeof SLIDE_LAYOUTS)[number])
       ) {
+        const style = resolveSlideStyle(presentation.designSystem, variantSlide);
         return applyLayout(
           variantSlide,
           variantSlide.layout as (typeof SLIDE_LAYOUTS)[number],
-          presentation.theme || "nordic",
-          presentation.palette || "cyan",
+          style,
           {
             grammarVariant: variantSlide.grammarVariant,
-            designTokens: variantSlide.designTokens ?? presentation.designTokens,
+            designOverride: variantSlide.designOverride,
           },
         );
       }
@@ -362,14 +379,16 @@ export function executeCommand(
     const targetSlide = presentation.slides[slideIndex];
     const previousSlide = structuredClone(targetSlide);
 
+    const designedSlide = command.designOverride
+      ? { ...targetSlide, designOverride: command.designOverride }
+      : targetSlide;
     const updatedSlide = applyLayout(
-      targetSlide,
+      designedSlide,
       command.layout,
-      presentation.theme || "nordic",
-      presentation.palette || "cyan",
+      resolveSlideStyle(presentation.designSystem, designedSlide),
       {
         grammarVariant: command.grammarVariant,
-        designTokens: command.designTokens ?? targetSlide.designTokens ?? presentation.designTokens,
+        designOverride: command.designOverride ?? targetSlide.designOverride,
       },
     );
 

@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 import { validateDeckRhythm, type DeckRhythmIssue } from "./deck-rhythm";
-import { designTokensV1Schema, resolveDesignTokens } from "./design-tokens";
+import { designSystemV1Schema, slideDesignOverrideSchema } from "@design-system";
 import { SLIDE_LAYOUTS } from "./slide-layouts";
 import { getSupportedGrammarVariants } from "./layout-grammar-variants";
 import { SLIDE_VARIANTS } from "./slide-variant";
@@ -56,7 +56,7 @@ export const layoutPlanSlideSchema = z.object({
   narrativeRole: z.enum(NARRATIVE_ROLES),
   layout: z.enum(SLIDE_LAYOUTS),
   grammarVariant: z.string().optional(),
-  designTokens: designTokensV1Schema.optional(),
+  designOverride: slideDesignOverrideSchema.optional(),
   slideVariant: z.enum(SLIDE_VARIANTS).optional(),
   rationale: z.string(),
   enhancements: z.array(layoutPlanEnhancementSchema).default([]),
@@ -64,10 +64,8 @@ export const layoutPlanSlideSchema = z.object({
 
 export const layoutPlanSchema = z.object({
   version: z.literal(1).default(1),
-  theme: z.enum(["nordic", "midnight", "ocean", "sunset", "purple"]),
-  palette: z.enum(["cyan", "green", "purple", "orange"]),
   styleMode: z.enum(STYLE_MODES).default("template"),
-  designTokens: designTokensV1Schema.optional(),
+  designSystem: designSystemV1Schema,
   designNotes: z.string().optional(),
   slides: z.array(layoutPlanSlideSchema).min(1),
 });
@@ -289,8 +287,7 @@ export function validateLayoutPlanRhythm(plan: LayoutPlan): DeckRhythmIssue[] {
     id: "layout-plan-check",
     title: "Layout Plan Check",
     revision: 0,
-    theme: plan.theme,
-    palette: plan.palette,
+    designSystem: plan.designSystem,
     slides: plan.slides.map((slide) => ({
       id: slide.slideId,
       title: slide.title,
@@ -305,23 +302,20 @@ export function validateLayoutPlanRhythm(plan: LayoutPlan): DeckRhythmIssue[] {
 export function buildLayoutPlanCommands(plan: LayoutPlan): PresentationCommand[] {
   const commands: PresentationCommand[] = [
     {
-      id: `cmd-theme-${plan.theme}`,
-      type: "set-theme",
-      theme: plan.theme,
-      palette: plan.palette,
+      id: "cmd-design-system",
+      type: "set-design-system",
+      designSystem: plan.designSystem,
     },
   ];
 
   for (const slide of plan.slides) {
-    const designTokens = slide.designTokens ??
-      (plan.designTokens ? resolveDesignTokens(plan.designTokens) : undefined);
     commands.push({
       id: `cmd-layout-${slide.slideId}`,
       type: "update-slide-layout",
       slideId: slide.slideId,
       layout: slide.layout,
       grammarVariant: slide.grammarVariant,
-      designTokens,
+      designOverride: slide.designOverride,
     });
     if (slide.slideVariant) {
       commands.push({

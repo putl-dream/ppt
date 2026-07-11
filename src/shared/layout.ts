@@ -1,14 +1,8 @@
 import type { Slide, SlideElement, TextElement, ShapeElement, ImageElement } from "./presentation";
 import { getImageGridSlotRect } from "./layout-slots";
 import type { SlideLayoutType } from "./slide-layouts";
+import type { ResolvedSlideStyle, SlideDesignOverride } from "@design-system";
 import {
-  resolveDesignTokenBackgroundVariant,
-  resolveDesignTokenColors,
-  resolveDesignTokens,
-  type DesignTokensV1,
-} from "./design-tokens";
-import {
-  resolveCoverTitleFont,
   resolveFontFamily,
   type TextRole,
 } from "./typography";
@@ -27,29 +21,11 @@ import { fitFontSize } from "./layout-text-fit";
 
 export { estimateTextWidthUnits, fitFontSize } from "./layout-text-fit";
 
-interface ThemeColors {
-  bg: string;
-  title: string;
-  body: string;
-  accent: string;
-  cardBg: string;
-  cardStroke: string;
-  muted?: string;
-  softAccent?: string;
-}
-
 const generateId = (): string => {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
     return crypto.randomUUID();
   }
   return Math.random().toString(36).substring(2, 15);
-};
-
-const PALETTE_BASE_ACCENT: Record<string, string> = {
-  cyan: "#0ea5e9",
-  green: "#10b981",
-  purple: "#a855f7",
-  orange: "#f97316",
 };
 
 /** Body layout region below slide chrome (1280×720 canvas). P1-1 spacing tune. */
@@ -85,124 +61,17 @@ function resolveVerticalStackMetrics(
   return { gap, rowHeight, inset };
 }
 
-/**
- * Theme-adapted accent per palette. Dark themes get brighter variants, light
- * themes get more saturated ones, so all 4 palettes read distinctly instead of
- * only `cyan` being tuned. `cyan` values preserve prior behavior exactly.
- */
-const THEME_ACCENT: Record<string, Record<string, string>> = {
-  nordic: { cyan: "#0ea5e9", green: "#059669", purple: "#9333ea", orange: "#ea580c" },
-  midnight: { cyan: "#58a6ff", green: "#3fb950", purple: "#bc8cff", orange: "#ffa657" },
-  ocean: { cyan: "#38bdf8", green: "#34d399", purple: "#c084fc", orange: "#fb923c" },
-  sunset: { cyan: "#e65100", green: "#059669", purple: "#9333ea", orange: "#ea580c" },
-  purple: { cyan: "#c084fc", green: "#34d399", purple: "#c084fc", orange: "#fb923c" },
-};
-
-/** Resolve the accent color for a theme + palette pair. Shared by canvas + chrome. */
-export function resolveThemeAccent(theme: string, palette: string): string {
-  return (
-    THEME_ACCENT[theme]?.[palette] ??
-    PALETTE_BASE_ACCENT[palette] ??
-    PALETTE_BASE_ACCENT.cyan
-  );
-}
-
-function clampChannel(value: number): number {
-  return Math.max(0, Math.min(255, Math.round(value)));
-}
-
-/** Linear blend of two #RRGGBB colors; `t` is the weight of `b` (0..1). */
-function mixHex(a: string, b: string, t: number): string {
-  const parse = (hex: string): [number, number, number] => {
-    const clean = hex.replace("#", "");
-    return [
-      parseInt(clean.slice(0, 2), 16),
-      parseInt(clean.slice(2, 4), 16),
-      parseInt(clean.slice(4, 6), 16),
-    ];
-  };
-  const [ar, ag, ab] = parse(a);
-  const [br, bg, bb] = parse(b);
-  const to2 = (n: number) => clampChannel(n).toString(16).padStart(2, "0");
-  return `#${to2(ar + (br - ar) * t)}${to2(ag + (bg - ag) * t)}${to2(ab + (bb - ab) * t)}`;
-}
-
-export function getThemePaletteColors(theme: string, palette: string): ThemeColors {
-  let bg = "#ffffff";
-  let title = "#1e293b";
-  let body = "#475569";
-  let cardBg = "#f8fafc";
-  let baseStroke = "#e2e8f0";
-
-  const accent = resolveThemeAccent(theme, palette);
-
-  switch (theme) {
-    case "nordic":
-      bg = "#fbfbfa";
-      title = "#0f172a";
-      body = "#334155";
-      cardBg = "#f1f1f0";
-      baseStroke = "#e1e1e0";
-      break;
-    case "midnight":
-      bg = "#0e1115";
-      title = "#f8fafc";
-      body = "#94a3b8";
-      cardBg = "#161b22";
-      baseStroke = "#30363d";
-      break;
-    case "ocean":
-      bg = "#0f172a";
-      title = "#f8fafc";
-      body = "#cbd5e1";
-      cardBg = "#1e293b";
-      baseStroke = "#334155";
-      break;
-    case "sunset":
-      bg = "#fffcf4";
-      title = "#3c2a21";
-      body = "#776b5d";
-      cardBg = "#fff8eb";
-      baseStroke = "#ffe8cc";
-      break;
-    case "purple":
-      bg = "#1c1537";
-      title = "#f8fafc";
-      body = "#b4befe";
-      cardBg = "#2b2050";
-      baseStroke = "#44357a";
-      break;
-  }
-
-  // Tint the card stroke toward the accent so palette choice reads on borders too.
-  const cardStroke = mixHex(baseStroke, accent, 0.3);
-
-  return { bg, title, body, accent, cardBg, cardStroke };
-}
-
 export function applyLayout(
   slide: Slide,
   layout: SlideLayoutType,
-  theme: string,
-  palette: string,
+  style: ResolvedSlideStyle,
   options: {
     grammarVariant?: string;
-    designTokens?: Partial<DesignTokensV1> | null;
+    designOverride?: SlideDesignOverride;
   } = {},
 ): Slide {
   const workingSlide = structuredClone(slide);
-  const requestedDesignTokens = options.designTokens ?? slide.designTokens;
-  const hasExplicitDesignTokens = Boolean(requestedDesignTokens);
-  const designTokens = resolveDesignTokens(requestedDesignTokens);
-  const baseColors = getThemePaletteColors(theme, palette);
-  const contrastMode = workingSlide.slideVariant === "dark"
-    ? "dark"
-    : workingSlide.slideVariant === "light"
-      ? "light"
-      : undefined;
-  const colors = hasExplicitDesignTokens
-    ? resolveDesignTokenColors(designTokens, baseColors, contrastMode)
-    : baseColors;
+  const colors = style.colors;
   const grammarVariant = options.grammarVariant ?? slide.grammarVariant;
 
   // Separate elements by type
@@ -309,7 +178,7 @@ export function applyLayout(
   const assignTextRole = (el: TextElement, role: TextRole): TextElement => ({
     ...el,
     textRole: role,
-    fontFamily: resolveFontFamily(el.fontFamily, role, theme),
+    fontFamily: resolveFontFamily(el.fontFamily, role, style.typography.family),
   });
 
   const placeImageInSlot = (
@@ -346,8 +215,7 @@ export function applyLayout(
   if (grammarHandler) {
     appliedGrammarVariant = grammarHandler.apply({
       slide: workingSlide,
-      theme,
-      palette,
+      style,
       colors,
       textElements,
       imageElements,
@@ -356,7 +224,6 @@ export function applyLayout(
       bodyTexts,
       elements,
       placedImageIds,
-      theme_: theme,
       helpers: {
         createCard,
         createAccentBlock,
@@ -367,9 +234,7 @@ export function applyLayout(
         placeImageInSlot,
         pickImageForSlot,
       },
-      designTokens,
       grammarVariant,
-      hasExplicitDesignTokens,
     }) ?? grammarVariant ?? grammarHandler.defaultVariant;
   } else if (layout === "cover" || layout === "section") {
     const coverTitleEl = titleEl ?? bodyTexts[0];
@@ -389,7 +254,7 @@ export function applyLayout(
       coverTitleEl.bold = true;
       coverTitleEl.color = colors.title;
       coverTitleEl.align = "center";
-      coverTitleEl.fontFamily = resolveCoverTitleFont(theme);
+      coverTitleEl.fontFamily = style.typography.family;
       elements.push(coverTitleEl);
 
       if (coverBodyTexts[0]) {
@@ -430,7 +295,7 @@ export function applyLayout(
       coverTitleEl.bold = true;
       coverTitleEl.color = colors.title;
       coverTitleEl.align = "center";
-      coverTitleEl.fontFamily = resolveCoverTitleFont(theme);
+      coverTitleEl.fontFamily = style.typography.family;
       elements.push(coverTitleEl);
 
       if (coverBodyTexts[0]) {
@@ -748,7 +613,7 @@ export function applyLayout(
         styled.bold = false;
         styled.color = colors.title;
         styled.align = "center";
-        styled.fontFamily = resolveCoverTitleFont(theme);
+        styled.fontFamily = style.typography.family;
         elements.push(styled);
       }
 
@@ -905,15 +770,13 @@ export function applyLayout(
 
   const defaultBackgroundVariant = (layoutRegistry.get(layout)?.defaultBackgroundVariant ??
     resolveLayoutBackgroundVariant(layout)) as BackgroundVariant;
-  const backgroundVariant = hasExplicitDesignTokens
-    ? resolveDesignTokenBackgroundVariant(designTokens, defaultBackgroundVariant)
-    : defaultBackgroundVariant;
+  const backgroundVariant = defaultBackgroundVariant;
 
   return {
     ...workingSlide,
     layout,
     grammarVariant: appliedGrammarVariant,
-    designTokens: hasExplicitDesignTokens ? designTokens : slide.designTokens,
+    designOverride: options.designOverride ?? slide.designOverride,
     backgroundVariant,
     slideVariant: slide.slideVariant ?? layoutRegistry.get(layout)?.defaultSlideVariant,
     elements,

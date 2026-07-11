@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { ToolDefinition } from "../tool-definition";
 import type { PresentationCommand } from "@shared/commands";
-import { getThemePaletteColors } from "@shared/layout";
+import { resolveSlideStyle } from "@design-system";
 import { cardShadow, VISUAL_TOKENS } from "@shared/visual-tokens";
 
 export const addLayoutDecorationsSchema = z.object({
@@ -29,9 +29,7 @@ export const addLayoutDecorationsTool: ToolDefinition<
     const slide = context.presentation.slides.find((item) => item.id === args.slideId);
     if (!slide) return { commands: [] };
 
-    const theme = context.presentation.theme || "nordic";
-    const palette = context.presentation.palette || "cyan";
-    const colors = getThemePaletteColors(theme, palette);
+    const colors = resolveSlideStyle(context.presentation.designSystem, slide).colors;
     const mode = args.mode ?? "creative";
     const commands: PresentationCommand[] = [];
 

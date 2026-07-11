@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { TEST_DESIGN_SYSTEM } from "./design-engine-test-utils";
 import {
   probeWorkspaceArtifactDetails,
   probeWorkspaceArtifacts,
@@ -179,6 +180,7 @@ describe("workspace artifact probing", () => {
         id: "presentation-1",
         title: "测试项目",
         revision: 0,
+        designSystem: TEST_DESIGN_SYSTEM,
         slides: [],
       },
       coreTools: [askUserTool],

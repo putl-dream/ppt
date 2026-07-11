@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { exportToPptx } from "../src/main/ppt-exporter";
 import { CommandBus } from "../src/shared/commands";
 import { createStarterPresentation } from "../src/shared/presentation";
+import { DESIGN_PRESETS } from "../src/design-system";
 
 const TINY_PNG_DATA_URL =
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
@@ -20,9 +21,8 @@ function buildSamplePresentation() {
     },
     {
       id: crypto.randomUUID(),
-      type: "set-theme",
-      theme: "ocean",
-      palette: "cyan",
+      type: "set-design-system",
+      designSystem: DESIGN_PRESETS.find((preset) => preset.id === "business")!.system,
     },
     {
       id: crypto.randomUUID(),
@@ -198,19 +198,12 @@ async function main(): Promise<void> {
 
   const presentation = buildSamplePresentation();
 
-  await exportToPptx(
-    presentation,
-    {
-      theme: presentation.theme ?? "ocean",
-      palette: presentation.palette ?? "cyan",
-    },
-    outputPath,
-  );
+  await exportToPptx(presentation, {}, outputPath);
 
   console.log(`已生成示例 PPT：${outputPath}`);
   console.log(`标题：${presentation.title}`);
   console.log(`页数：${presentation.slides.length}`);
-  console.log(`主题：${presentation.theme} / ${presentation.palette}`);
+  console.log(`设计系统：${presentation.designSystem.tokens.palette}`);
 }
 
 main().catch((error) => {

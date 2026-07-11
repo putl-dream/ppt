@@ -1,7 +1,7 @@
 ---
 name: ppt-layout
-description: 视觉排版执行；按 layout-plan 应用 theme/layout，并在本阶段精简过长文案
-when_to_use: layout-plan 已就绪或用户已确认排版方式，需要 set-theme 与 update-slide-layout 时
+description: 视觉排版执行；按 layout-plan 应用 designSystem/layout
+when_to_use: layout-plan 已就绪或用户已确认排版方式，需要 set-design-system 与 update-slide-layout 时
 stages:
   - design
   - style
@@ -24,7 +24,7 @@ allowed-tools:
 | 模式 | 何时 | 职责 |
 |------|------|------|
 | **Executor**（默认） | 存在 `slides/layout-plan.json` | **严格按 plan 执行**；优先 `ExecuteLayoutPlan`，不得擅自改 layout |
-| **Legacy** | 无 layout-plan 或用户降级 | 自主选 layout（不推荐新建 deck） |
+| **Direct** | 无 layout-plan 的轻量修改 | 基于现有 designSystem 调整单页 layout |
 
 ## 设计目标
 
@@ -34,11 +34,11 @@ allowed-tools:
 
 用户已在 LayoutChoiceCard 选择排版方式。本阶段**只处理视觉层**，不改写要点文案、不调整页数、不重复内容密度约束（15 字 / 3–5 条属于内容阶段）。
 
-**Executor 模式**：以 `slides/layout-plan.json` 为唯一事实源；每页 layout / slideVariant / theme 以 plan 为准。默认调用 `ExecuteLayoutPlan` 读取、校验并生成 command proposal，不手工重猜 layout。
+**Executor 模式**：以 `slides/layout-plan.json` 为唯一事实源；deck 级 designSystem 与每页 layout / slideVariant / designOverride 以 plan 为准。默认调用 `ExecuteLayoutPlan` 读取、校验并生成 command proposal，不手工重猜 layout。
 
 ## 风格选择（动手前）
 
-读 [style-modes.md](style-modes.md)：杂志人文(A)→template+nordic/sunset；数据瑞士(B)→template+ocean/midnight；流程装饰→creative。
+读 [style-modes.md](style-modes.md)：杂志人文→editorial；数据瑞士/商务→business 或 report；技术发布→technical；流程装饰→creative。
 
 ## Executor 模式工作流
 
@@ -47,7 +47,7 @@ allowed-tools:
    - 工具内部读取 plan
    - 校验 plan 与 snapshot 页数 / slideId / 顺序一致
    - 执行 `validateLayoutPlan` + `validateLayoutPlanRhythm`
-   - 由 `buildLayoutPlanCommands` 生成 `set-theme` / `update-slide-layout(grammarVariant + designTokens)` / `update-slide-variant`
+   - 由 `buildLayoutPlanCommands` 生成 `set-design-system` / `update-slide-layout(grammarVariant + designOverride)` / `update-slide-variant`
 3. 若 `ExecuteLayoutPlan` 返回 error：修复或重新生成 `slides/layout-plan.json` 后再执行；**禁止**从聊天上下文凭记忆重建 layout
 4. 对 plan.enhancements 逐项 `ExecuteExtraTool`：
    - `beautify-chart` → BeautifyChart
@@ -60,29 +60,28 @@ allowed-tools:
 
 Grammar handler 会把 token 推导出的实际变体写回 `slide.grammarVariant`，PreviewSlide 与 deck-review 应以实际值检查页面差异度。
 
-**Executor 禁止**：擅自改 plan 中的 layout；重新推理版式选择；手写 `set-theme` / `update-slide-layout` 绕过 `ExecuteLayoutPlan`；改写 text。
+**Executor 禁止**：擅自改 plan 中的 layout；重新推理版式选择；手写 `set-design-system` / `update-slide-layout` 绕过 `ExecuteLayoutPlan`；改写 text。
 
-## Legacy 模式（无 plan 时）
+## Direct 模式（无 plan 的轻量修改）
 
 1. `ReadPresentationSnapshot` + `ListSlides`
 2. 逐页核对 layout 与叙事角色（[layout-catalog.md](layout-catalog.md) + [narrative-arc.md](narrative-arc.md)）
 3. 检查节奏：无连续 3 页同 layout；8 页+ 含 section
 4. 若 layout 不合理，修正 `update-slide-layout` 参数，**不改 text**
-5. 选 theme/palette（用户已选则沿用；未指定见下表）
+5. 沿用 presentation.designSystem；只有用户明确要求换肤时才提交新的完整 DesignSystemV1
 
-| 场景 | theme | palette |
-|------|-------|---------|
-| 简约商务 / 工作汇报 | ocean | cyan |
-| 竞聘 / 正式汇报 | nordic | cyan |
-| 人文 / 杂志风 | nordic | cyan |
-| 技术 / 数据 / 瑞士风 | ocean | cyan |
-| 温暖品牌 | sunset | orange |
-| 深色大屏 | midnight | cyan |
+| 场景 | design preset |
+|------|---------------|
+| 简约商务 / 工作汇报 | business |
+| 竞聘 / 正式报告 | report |
+| 人文 / 杂志风 | editorial |
+| 技术 / 数据发布 | technical |
+| 学术 / 研究 | academic |
 
 ## 标准排版（template）
 
 1. 一批 `SubmitCommands`：
-   - `set-theme`（theme/palette 按上表或用户选择）
+   - `set-design-system`（完整 DesignSystemV1，通常由 layout-plan 提供）
    - 对**每一页** `update-slide-layout`（layout 取 slide 已有值；缺省 `summary`）
 2. **禁止**在画布放 `slide.title`；禁止手动坐标堆叠正文
 3. 封面/章节页（cover/section）由 `applyLayout` 自动居中标题区，无需额外 shape
@@ -91,7 +90,7 @@ Grammar handler 会把 token 推导出的实际变体写回 `slide.grammarVarian
 ## 创意装饰（creative）
 
 1. `LoadSkill ppt-beautify`
-2. 先执行标准排版（set-theme + 全部 update-slide-layout）
+2. 先执行标准排版（set-design-system + 全部 update-slide-layout）
 3. 仅对 `process` / `comparison` 页追加轻量 shape（arrow、accent line、circle 序号），**不**覆盖卡片底色
 4. 全 deck 装饰元素 ≤ 每页 3 个；禁止重复 `slide.title`
 

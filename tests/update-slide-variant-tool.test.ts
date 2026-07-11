@@ -2,12 +2,14 @@ import { describe, expect, it } from "vitest";
 import { updateSlideVariantTool } from "../src/main/agent/tools/deferred/update-slide-variant";
 import type { Presentation } from "../src/shared/presentation";
 import type { ToolContext } from "../src/main/agent/tools/tool-definition";
+import { TEST_DESIGN_SYSTEM } from "./design-engine-test-utils";
 
 function makeContext(): ToolContext {
   const presentation: Presentation = {
     id: "presentation-1",
     title: "Test",
     revision: 0,
+    designSystem: TEST_DESIGN_SYSTEM,
     slides: [],
   };
   return {

@@ -129,8 +129,7 @@ describe("CommandBus", () => {
       slideId,
       layout: "cover",
       grammarVariant: "signal-dark",
-      designTokens: {
-        version: 1,
+      designOverride: {
         palette: "tech-dark",
         fontMood: "technical",
         shapeLanguage: "geometric",
@@ -144,7 +143,7 @@ describe("CommandBus", () => {
 
     expect(bus.getSnapshot().slides[0].layout).toBe("cover");
     expect(bus.getSnapshot().slides[0].grammarVariant).toBe("signal-dark");
-    expect(bus.getSnapshot().slides[0].designTokens?.palette).toBe("tech-dark");
+    expect(bus.getSnapshot().slides[0].designOverride?.palette).toBe("tech-dark");
 
     bus.undo();
     expect(bus.getSnapshot().slides[0]).toEqual(original.slides[0]);

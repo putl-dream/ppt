@@ -107,7 +107,7 @@ function buildWorkflowOverview(stage: PromptStage): string {
     "- **discover**：路径判断 + brief / outline / storyboard",
     "- **author**：内容草稿落盘；草稿就绪后引导用户选排版方式",
     "- **design**：用户确认排版后的 layout-plan + 首次视觉执行",
-    "- **style**：set-theme / update-slide-layout + 视觉质检",
+    "- **style**：set-design-system / update-slide-layout + 视觉质检",
     "- **edit**：已有主题 deck 的轻量单页修改（可跳过 design/style）",
     "- **export**：导出交付",
     "",
@@ -198,7 +198,7 @@ function buildCorePrinciples(stage: PromptStage, stepLimits?: AgentStepLimits): 
       "- 判断轻量 / 两阶段 / 完整路径；不要默认走全流程。",
       "- 轻量单页修改 → 可跳过 discover，直接 edit。",
       "- 完整路径：**第一步先 `TaskGraphCreatePlan`(3–5 步, sequential) 建端到端计划**，步骤覆盖 planning/artifacts → author draft → design/layout-plan → style/review/export，并逐步标记 executionTarget；brief/outline/storyboard/layout-plan 用 teammate，SubmitCommands/ExecuteLayoutPlan/review 用 lead。不要预先 Claim teammate 节点；等待其 submitted 后验收并 Complete。",
-      "- 聚焦目的、受众、页数、叙事结构；只保留一套可执行大纲，**不讨论主题色、版式节奏、set-theme**。",
+      "- 聚焦目的、受众、页数、叙事结构；只保留一套可执行大纲，**不讨论设计系统、版式节奏、set-design-system**。",
       "- 文案可完整表达观点；字数精简留到 style 阶段。",
     ],
     author: [
@@ -210,9 +210,9 @@ function buildCorePrinciples(stage: PromptStage, stepLimits?: AgentStepLimits): 
       "- **按单页承载量组织**：每页 1 个主论点、3–4 条要点；流程类 2–4 步；案例类 1 段叙述 + 1 个关键数字。",
       "- 若尚无冻结分镜且内容明显超载，可在 author 内拆页；若已有 outline/storyboard，保持页数，用更短句收敛。",
       "- **内容规范化**：提交排版前统一标题语气、术语、数字口径和每页信息密度；仍然不改变页数与叙事顺序。",
-      "- 只 `add-slide` + text elements + layout 字段；**禁止** `set-theme`、`update-slide-layout`。",
+      "- 只 `add-slide` + text elements + layout 字段；**禁止** `set-design-system`、`update-slide-layout`。",
       "- 标题放 `slide.title`；画布不放 fontSize≥36 的标题文本。",
-      "- 草稿完成后 message 含「内容草稿已就绪，请选择排版方式」——此时仍属 author，不提交 theme/layout。",
+      "- 草稿完成后 message 含「内容草稿已就绪，请选择排版方式」——此时仍属 author，不提交 designSystem/layout。",
       "- **不要** LoadSkill 排版/主题/美化类技能。",
     ],
     design: [
@@ -222,14 +222,14 @@ function buildCorePrinciples(stage: PromptStage, stepLimits?: AgentStepLimits): 
       "- layout-plan 的 slides[] 必须与当前 snapshot 一一对应：相同 slideId、相同页数、相同顺序。",
       "- LoadSkill `ppt-design-layout`；layout-plan 对应 teammate 任务由常驻 worker 自主领取并产出 `slides/layout-plan.json`。",
       "- 随后 LoadSkill `ppt-layout`（Executor）并继续执行，不要停在 layout-plan 产物说明。",
-      "- 必须调用 `ExecuteLayoutPlan` 读取、校验并执行 `slides/layout-plan.json`；不要手写 `set-theme` / `update-slide-layout` 来重猜版式。",
+      "- 必须调用 `ExecuteLayoutPlan` 读取、校验并执行 `slides/layout-plan.json`；不要手写 `set-design-system` / `update-slide-layout` 来重猜版式。",
       "- **不要再次输出**「内容草稿已就绪 / 请选择排版方式」；用户已经完成排版方式选择。",
       "- 如果 `ExecuteLayoutPlan` 报错，修复或重新生成 layout-plan 后再调用它；不要从聊天上下文自由发挥版式。",
     ],
     style: [
       "",
       "### 本阶段（style = 视觉排版 + 质检）",
-      "- 按 layout-plan 执行：优先调用 `ExecuteLayoutPlan`，由工具生成 `set-theme` → `update-slide-layout` → variant。",
+      "- 按 layout-plan 执行：优先调用 `ExecuteLayoutPlan`，由工具生成 `set-design-system` → `update-slide-layout` → variant。",
       "- **结构仍冻结**：不新增、删除、重排页面；只在溢出或过长时用 `ppt-beautify` / `compress-text` 做最小文案精简。",
       "- plan.enhancements 经 ExecuteExtraTool；完成后 LoadSkill `deck-review` 或 `ValidateDeckLayout`。",
       "- **首次排版 SubmitCommands 后**，系统自动渲染缩略图回喂一轮视觉质检；对照后修正或确认再提交。",
@@ -263,7 +263,7 @@ function buildWorkflowSnippet(stage: PromptStage): string {
     author: `## 本阶段工作流
 1. LoadSkill \`ppt-build\`（规范参考）
 2. ReadPresentationSnapshot
-3. SubmitCommands：add-slide（layout + text elements），**不含** set-theme / update-slide-layout
+3. SubmitCommands：add-slide（layout + text elements），**不含** set-design-system / update-slide-layout
 4. message 结尾：「内容草稿已就绪，请选择排版方式」`,
 
     design: `## 本阶段工作流
@@ -277,7 +277,7 @@ function buildWorkflowSnippet(stage: PromptStage): string {
     style: `## 本阶段工作流
 1. ReadPresentationSnapshot + 读取 layout-plan
 2. LoadSkill \`ppt-layout\`（Executor）
-3. ExecuteLayoutPlan：从 layout-plan 生成 set-theme / update-slide-layout / variant 命令
+3. ExecuteLayoutPlan：从 layout-plan 生成 set-design-system / update-slide-layout / variant 命令
 4. PreviewSlide / ValidateDeckLayout / deck-review
 5. 过长文案：ExecuteExtraTool compress-text / beautify 等`,
 
@@ -350,12 +350,12 @@ function commandExamplesForStage(stage: PromptStage): string {
   if (stage === "design") {
     return `- 先产出 slides/layout-plan.json，再调用 ExecuteLayoutPlan，不回到排版选择
 - 执行唯一事实源：{"toolName":"ExecuteLayoutPlan","args":{"path":"slides/layout-plan.json"}}
-- 不手写 set-theme / update-slide-layout；这些命令由 ExecuteLayoutPlan 从 plan 生成`;
+- 不手写 set-design-system / update-slide-layout；这些命令由 ExecuteLayoutPlan 从 plan 生成`;
   }
 
   if (stage === "style") {
     return `- 执行唯一事实源：{"toolName":"ExecuteLayoutPlan","args":{"path":"slides/layout-plan.json"}}
-- ExecuteLayoutPlan 成功后会生成 set-theme / update-slide-layout / update-slide-variant
+- ExecuteLayoutPlan 成功后会生成 set-design-system / update-slide-layout / update-slide-variant
 - 视觉自检：PreviewSlide(slideId) / ValidateDeckLayout()
 主题值：nordic、midnight、ocean、sunset、purple。调色板：cyan、green、purple、orange。
 布局值：cover、section、concept、comparison、process、architecture、case、summary、toc、quote、image-grid。`;

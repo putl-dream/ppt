@@ -15,10 +15,9 @@ function resolveVariant(ctx: LayoutGrammarContext): CaseVariant {
     return ctx.grammarVariant;
   }
   if (ctx.grammarVariant === "split") return "split";
-  if (!ctx.hasExplicitDesignTokens) return "split";
   const hasImage = ctx.imageElements.length > 0;
-  if (hasImage && ctx.designTokens.imageTreatment !== "plain") return "evidence";
-  if (ctx.designTokens.chartStyle === "dashboard" || ctx.designTokens.chartStyle === "report") {
+  if (hasImage && ctx.style.image.treatment !== "plain") return "evidence";
+  if (ctx.style.chart.style === "dashboard" || ctx.style.chart.style === "report") {
     return "metric-focus";
   }
   return hasImage ? "evidence" : "split";

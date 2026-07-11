@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it } from "vitest";
 import { FileSessionStore } from "@main/session-store";
 import { getSessionSandboxPath } from "@shared/workspace-meta";
+import { TEST_DESIGN_SYSTEM } from "./design-engine-test-utils";
 
 const temporaryDirectories: string[] = [];
 
@@ -633,6 +634,7 @@ describe("FileSessionStore", () => {
       id: "pres-id",
       title: "New Title Value",
       revision: 42,
+      designSystem: TEST_DESIGN_SYSTEM,
       slides: [
         {
           id: "slide-1",

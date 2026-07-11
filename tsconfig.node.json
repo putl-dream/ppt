@@ -11,6 +11,8 @@
     "baseUrl": ".",
     "paths": {
       "@shared/*": ["src/shared/*"],
+      "@design-system": ["src/design-system/index.ts"],
+      "@design-system/*": ["src/design-system/*"],
       "@main/*": ["src/main/*"]
     }
   },
@@ -20,6 +22,7 @@
     "src/main/**/*.ts",
     "src/preload/**/*.ts",
     "src/shared/**/*.ts",
+    "src/design-system/**/*.ts",
     "src/renderer/src/components/project-store.ts",
     "src/renderer/src/components/process-trace-rows.ts",
     "tests/**/*.ts"

@@ -2,6 +2,11 @@
  * Canonical parsers / serializers for project sandbox artifact files.
  * Shared by Main (templates), Renderer (editors), and Agent context helpers.
  */
+import {
+  DEFAULT_DESIGN_SYSTEM,
+  designSystemV1Schema,
+  type DesignSystemV1,
+} from "@design-system";
 
 export interface BriefFields {
   title: string;
@@ -25,28 +30,6 @@ export interface ResearchNote {
   quote: string;
 }
 
-export interface ProjectDesignTheme {
-  theme: string;
-  palette: string;
-  logoUrl: string | null;
-  ratio: "16:9" | "4:3";
-  tone: string;
-  typography: {
-    heading: string;
-    body: string;
-  };
-  colors: {
-    primary: string;
-    accent: string;
-    background: string;
-    text: string;
-  };
-  layout: {
-    ratio: "16:9" | "4:3";
-    density: "balanced" | "compact" | "spacious";
-  };
-}
-
 const DEFAULT_BRIEF_FIELDS: BriefFields = {
   title: "新演示文稿",
   purpose: "汇报",
@@ -54,21 +37,6 @@ const DEFAULT_BRIEF_FIELDS: BriefFields = {
   duration: "20分钟",
   script: "需要",
   style: "专业简洁",
-};
-
-const PALETTE_COLORS: Record<string, ProjectDesignTheme["colors"]> = {
-  cyan: { primary: "#0ea5e9", accent: "#06b6d4", background: "#f8fafc", text: "#111827" },
-  green: { primary: "#10b981", accent: "#34d399", background: "#f8fafc", text: "#111827" },
-  purple: { primary: "#a855f7", accent: "#c084fc", background: "#f8fafc", text: "#111827" },
-  orange: { primary: "#f97316", accent: "#fb923c", background: "#f8fafc", text: "#111827" },
-};
-
-const THEME_TONES: Record<string, string> = {
-  nordic: "professional",
-  midnight: "technical",
-  ocean: "business",
-  sunset: "warm",
-  purple: "creative",
 };
 
 function createId(prefix: string): string {
@@ -349,74 +317,14 @@ export function serializeResearchNotes(notes: ResearchNote[]): string {
   return `# 研究资料与素材\n\n${body}\n`;
 }
 
-export function createDefaultDesignTheme(): ProjectDesignTheme {
-  return normalizeDesignTheme({});
+export function createDefaultProjectDesignSystem(): DesignSystemV1 {
+  return structuredClone(DEFAULT_DESIGN_SYSTEM);
 }
 
-function resolvePaletteId(value: unknown): string {
-  if (typeof value === "string" && value in PALETTE_COLORS) return value;
-  return "cyan";
+export function parseProjectDesignSystem(content: string): DesignSystemV1 {
+  return designSystemV1Schema.parse(JSON.parse(content));
 }
 
-function resolveThemeId(value: unknown): string {
-  if (typeof value === "string" && value in THEME_TONES) return value;
-  return "nordic";
-}
-
-function resolveRatio(value: unknown): "16:9" | "4:3" {
-  if (value === "4:3") return "4:3";
-  return "16:9";
-}
-
-export function normalizeDesignTheme(raw: unknown): ProjectDesignTheme {
-  const input = typeof raw === "object" && raw !== null ? raw as Record<string, unknown> : {};
-  const theme = resolveThemeId(input.theme);
-  const palette = resolvePaletteId(input.palette);
-  const ratio = resolveRatio(input.ratio ?? (input.layout as { ratio?: string } | undefined)?.ratio);
-  const colors = typeof input.colors === "object" && input.colors !== null
-    ? { ...PALETTE_COLORS[palette], ...(input.colors as ProjectDesignTheme["colors"]) }
-    : typeof input.palette === "object" && input.palette !== null
-      ? {
-          primary: String((input.palette as { primary?: string }).primary ?? PALETTE_COLORS[palette].primary),
-          accent: String((input.palette as { accent?: string }).accent ?? PALETTE_COLORS[palette].accent),
-          background: String((input.palette as { background?: string }).background ?? PALETTE_COLORS[palette].background),
-          text: String((input.palette as { text?: string }).text ?? PALETTE_COLORS[palette].text),
-        }
-      : PALETTE_COLORS[palette];
-
-  const typography = typeof input.typography === "object" && input.typography !== null
-    ? {
-        heading: String((input.typography as { heading?: string }).heading ?? "system-ui"),
-        body: String((input.typography as { body?: string }).body ?? "system-ui"),
-      }
-    : { heading: "system-ui", body: "system-ui" };
-
-  const layoutDensity = (input.layout as { density?: string } | undefined)?.density;
-  const density = layoutDensity === "compact" || layoutDensity === "spacious"
-    ? layoutDensity
-    : "balanced";
-
-  return {
-    theme,
-    palette,
-    logoUrl: typeof input.logoUrl === "string" ? input.logoUrl : null,
-    ratio,
-    tone: typeof input.tone === "string" ? input.tone : THEME_TONES[theme] ?? "professional",
-    typography,
-    colors,
-    layout: { ratio, density },
-  };
-}
-
-export function parseDesignTheme(content: string): ProjectDesignTheme {
-  try {
-    return normalizeDesignTheme(JSON.parse(content));
-  } catch {
-    return createDefaultDesignTheme();
-  }
-}
-
-export function serializeDesignTheme(theme: ProjectDesignTheme): string {
-  const normalized = normalizeDesignTheme(theme);
-  return `${JSON.stringify(normalized, null, 2)}\n`;
+export function serializeProjectDesignSystem(system: DesignSystemV1): string {
+  return `${JSON.stringify(designSystemV1Schema.parse(system), null, 2)}\n`;
 }

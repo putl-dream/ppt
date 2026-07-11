@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { applyLayout } from "../src/shared/layout";
+import { TEST_DESIGN_SYSTEM, testSlideStyle } from "./design-engine-test-utils";
 import { getLayoutSlotRect, listLayoutSlots } from "../src/shared/layout-slots";
 import { validateDeckRhythm } from "../src/shared/deck-rhythm";
 import { insertSlideImageTool } from "../src/main/agent/tools/deferred/insert-slide-image";
@@ -28,7 +29,7 @@ describe("P1 layouts", () => {
         { id: "b", type: "text", x: 0, y: 0, width: 200, height: 40, text: "下半年", fontSize: 20 },
       ],
     };
-    const laidOut = applyLayout(slide, "toc", "nordic", "cyan");
+    const laidOut = applyLayout(slide, "toc", testSlideStyle(slide));
     expect(laidOut.elements.filter((el) => el.type === "shape" && el.shapeType === "circle").length).toBe(2);
     expect(laidOut.backgroundVariant).toBe("default");
   });
@@ -42,7 +43,7 @@ describe("P1 layouts", () => {
         { id: "a", type: "text", x: 0, y: 0, width: 200, height: 40, text: "— 竞聘者", fontSize: 18 },
       ],
     };
-    const laidOut = applyLayout(slide, "quote", "nordic", "cyan");
+    const laidOut = applyLayout(slide, "quote", testSlideStyle(slide));
     const quote = laidOut.elements.find((el) => el.id === "q");
     expect(quote?.type === "text" ? quote.align : undefined).toBe("center");
     expect(laidOut.backgroundVariant).toBe("muted");
@@ -59,7 +60,7 @@ describe("P1 layouts", () => {
         { id: imgB, type: "image", x: 0, y: 0, width: 100, height: 80, url: "b.png", borderRadius: 0 },
       ],
     };
-    const laidOut = applyLayout(slide, "image-grid", "ocean", "cyan");
+    const laidOut = applyLayout(slide, "image-grid", testSlideStyle(slide));
     const a = laidOut.elements.find((el) => el.type === "image" && el.id === imgA);
     const b = laidOut.elements.find((el) => el.type === "image" && el.id === imgB);
     expect(a?.type === "image" ? a.imageSlot : undefined).toBe("grid-0");
@@ -92,6 +93,7 @@ describe("deck rhythm", () => {
       id: crypto.randomUUID(),
       title: "Deck",
       revision: 1,
+      designSystem: TEST_DESIGN_SYSTEM,
       slides: [mk("cover"), mk("concept"), mk("concept"), mk("concept"), mk("summary")],
     };
     const issues = validateDeckRhythm(presentation);
@@ -106,6 +108,7 @@ describe("P1 deferred tools", () => {
       id: crypto.randomUUID(),
       title: "Deck",
       revision: 1,
+      designSystem: TEST_DESIGN_SYSTEM,
       slides: [
         {
           id: slideId,
@@ -143,6 +146,7 @@ describe("P1 deferred tools", () => {
       id: crypto.randomUUID(),
       title: "Deck",
       revision: 1,
+      designSystem: TEST_DESIGN_SYSTEM,
       slides: [mk("concept"), mk("concept"), mk("concept")],
     };
     const result = await validateDeckLayoutTool.execute({}, makeContext(presentation));
@@ -156,8 +160,7 @@ describe("P1 deferred tools", () => {
       id: crypto.randomUUID(),
       title: "Deck",
       revision: 1,
-      theme: "nordic",
-      palette: "cyan",
+      designSystem: TEST_DESIGN_SYSTEM,
       slides: [
         {
           id: slideId,

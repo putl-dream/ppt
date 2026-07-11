@@ -4,6 +4,7 @@ import { agentActivityItemSchema } from "./agent-activity";
 import { presentationSchema, type Presentation } from "./presentation";
 import { presentationCommandSchema } from "./commands";
 import { agentExecutionStrategySchema, agentModelSelectionSchema } from "./agent";
+import { DEFAULT_DESIGN_SYSTEM } from "@design-system";
 
 export const projectArtifactKindSchema = z.enum([
   "brief",
@@ -57,7 +58,7 @@ const persistedApprovalDiffSchema = z.object({
   titleChanged: z.boolean(),
   oldTitle: z.string(),
   newTitle: z.string(),
-  themeChanged: z.boolean(),
+  designSystemChanged: z.boolean(),
   slidesAddedCount: z.number().int().nonnegative(),
   slidesRemovedCount: z.number().int().nonnegative(),
   affectedSlideIds: z.array(z.string()),
@@ -182,6 +183,7 @@ export function createSessionPresentation(title: string): Presentation {
     id: crypto.randomUUID(),
     title,
     revision: 0,
+    designSystem: DEFAULT_DESIGN_SYSTEM,
     slides: [],
   };
 }

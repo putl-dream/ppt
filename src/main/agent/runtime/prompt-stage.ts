@@ -61,7 +61,7 @@ const LAYOUT_PHASE_PATTERNS = [
   /第二阶段/,
   /layout-plan/i,
   /update-slide-layout/i,
-  /set-theme/i,
+  /set-design-system/i,
 ];
 
 const LIGHT_EDIT_PATTERNS = [
@@ -121,7 +121,7 @@ export function resolvePromptStage(input: PromptStageResolveInput): PromptStage 
   if (input.stageHint) return normalizePromptStage(input.stageHint);
 
   const slideCount = input.presentation.slides?.length ?? 0;
-  const hasTheme = Boolean(input.presentation.theme?.trim());
+  const hasUnstyledSlides = input.presentation.slides.some((slide) => !slide.layout);
 
   if (isExportRequest(input.request)) return "export";
 
@@ -129,16 +129,16 @@ export function resolvePromptStage(input: PromptStageResolveInput): PromptStage 
     return input.artifacts.layoutPlan ? "style" : "design";
   }
 
-  if (input.artifacts.layoutPlan && slideCount > 0 && !hasTheme) {
+  if (input.artifacts.layoutPlan && slideCount > 0 && hasUnstyledSlides) {
     return "style";
   }
 
-  if (isLightEditRequest(input.request, slideCount) && hasTheme) {
+  if (isLightEditRequest(input.request, slideCount) && !hasUnstyledSlides) {
     return "edit";
   }
 
   // layout-choice merged into author — same stage, different sub-mode via message history
-  if (slideCount > 0 && !hasTheme && isAwaitingLayoutChoice(input.messageHistory)) {
+  if (slideCount > 0 && hasUnstyledSlides && isAwaitingLayoutChoice(input.messageHistory)) {
     return "author";
   }
 
@@ -146,7 +146,7 @@ export function resolvePromptStage(input: PromptStageResolveInput): PromptStage 
     return "discover";
   }
 
-  if (slideCount > 0 && !hasTheme) {
+  if (slideCount > 0 && hasUnstyledSlides) {
     return "author";
   }
 
@@ -159,7 +159,7 @@ export function resolvePromptStage(input: PromptStageResolveInput): PromptStage 
   }
 
   if (slideCount > 0) {
-    return hasTheme ? "edit" : "author";
+    return hasUnstyledSlides ? "author" : "edit";
   }
 
   return "discover";

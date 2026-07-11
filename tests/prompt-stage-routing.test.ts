@@ -6,6 +6,7 @@ import {
 } from "../src/main/agent/runtime/prompt-stage";
 import type { Presentation } from "../src/shared/presentation";
 import type { WorkspaceArtifacts } from "../src/main/agent/runtime/workspace-artifacts";
+import { TEST_DESIGN_SYSTEM } from "./design-engine-test-utils";
 
 const emptyArtifacts: WorkspaceArtifacts = {
   brief: false,
@@ -14,19 +15,19 @@ const emptyArtifacts: WorkspaceArtifacts = {
   layoutPlan: false,
 };
 
-function deck(slideCount: number, theme?: string): Presentation {
+function deck(slideCount: number, styled?: string): Presentation {
   return {
     id: "p",
     title: "t",
     revision: 1,
-    theme: theme ?? "",
-    palette: "cyan",
+    designSystem: TEST_DESIGN_SYSTEM,
     slides: Array.from({ length: slideCount }, (_, i) => ({
       id: `slide-${i}`,
       title: `s${i}`,
+      ...(styled ? { layout: "concept" } : {}),
       elements: [],
     })),
-  } as Presentation;
+  };
 }
 
 describe("normalizePromptStage", () => {

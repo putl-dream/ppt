@@ -51,10 +51,8 @@ export function SettingsView({
           onSelectModel={controller.selectModel}
           onSaveModel={controller.saveModel}
           onDeleteModel={controller.deleteModel}
-          selectedTheme={controller.selectedTheme}
-          setSelectedTheme={controller.setSelectedTheme}
-          selectedPalette={controller.selectedPalette}
-          setSelectedPalette={controller.setSelectedPalette}
+          selectedDesignSystem={controller.selectedDesignSystem}
+          setSelectedDesignSystem={controller.setSelectedDesignSystem}
           logoUrl={controller.logoUrl}
           onLogoUpload={controller.uploadLogo}
           onRemoveLogo={controller.removeLogo}

@@ -30,7 +30,7 @@ describe("project artifact mapping", () => {
     });
     expect(primaryProjectArtifactPaths.slides).toBe("slides/storyboard.json");
     expect(getPrimaryProjectArtifactPath(artifactById.get("research")!)).toBe("research/notes.md");
-    expect(getPrimaryProjectArtifactPath(artifactById.get("design")!)).toBe("design/theme.json");
+    expect(getPrimaryProjectArtifactPath(artifactById.get("design")!)).toBe("design/system.json");
     expect(getPrimaryProjectArtifactPath(artifactById.get("deck")!)).toBe("deck/snapshot.json");
     expect(projectArtifactFilePaths.designConstraints).toBe("design/constraints.json");
     expect(projectArtifactFilePaths.deckGenerationJobs).toBe("deck/generation-jobs.json");

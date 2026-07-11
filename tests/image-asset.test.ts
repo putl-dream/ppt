@@ -8,6 +8,7 @@ import { localizeImageAsset } from "../src/main/agent/assets/image-asset";
 import { insertSlideImageTool } from "../src/main/agent/tools/deferred/insert-slide-image";
 import { createDefaultToolRegistry } from "../src/main/agent/tools/tool-registry";
 import type { Presentation } from "../src/shared/presentation";
+import { TEST_DESIGN_SYSTEM } from "./design-engine-test-utils";
 
 const TINY_PNG = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl2n1cAAAAASUVORK5CYII=",
@@ -97,6 +98,7 @@ describe("image asset localization", () => {
       id: crypto.randomUUID(),
       title: "Deck",
       revision: 1,
+      designSystem: TEST_DESIGN_SYSTEM,
       slides: [{
         id: slideId,
         title: "Evidence",

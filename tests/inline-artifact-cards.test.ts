@@ -7,6 +7,7 @@ import {
   shouldShowInlineCard,
 } from "../src/shared/inline-artifact-cards";
 import { applyLayout } from "../src/shared/layout";
+import { testSlideStyle } from "./design-engine-test-utils";
 import { createDefaultBriefMarkdown, createDefaultOutlineMarkdown } from "../src/shared/project-artifacts";
 import { createSessionPresentation } from "../src/shared/session";
 
@@ -49,7 +50,7 @@ describe("inline-artifact-cards", () => {
         },
       ],
     };
-    const laidOutSlide = applyLayout(secondSlide, "summary", "ocean", "cyan");
+    const laidOutSlide = applyLayout(secondSlide, "summary", testSlideStyle(secondSlide));
     presentation.slides = [laidOutSlide];
     presentation.revision = 1;
 

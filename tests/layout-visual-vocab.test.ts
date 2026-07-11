@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { applyLayout } from "../src/shared/layout";
+import { testSlideStyle } from "./design-engine-test-utils";
 import { isLayoutCard } from "../src/shared/layout-shape-utils";
 import { slideNeedsLayoutChoice } from "../src/shared/presentation-draft";
 import type { ShapeElement, Slide } from "../src/shared/presentation";
@@ -36,7 +37,8 @@ describe("layout visual vocabulary", () => {
   it.each(LAYOUTS.filter((l) => l !== "image-grid"))(
     "applies roundedRect cards with shadow on %s layout",
     (layout) => {
-      const laidOut = applyLayout(makeSlide("Test", "Body content"), layout, "ocean", "cyan");
+      const slide = makeSlide("Test", "Body content");
+      const laidOut = applyLayout(slide, layout, testSlideStyle(slide));
       const cards = laidOut.elements.filter(isLayoutCard) as ShapeElement[];
 
       expect(cards.length).toBeGreaterThan(0);
@@ -63,7 +65,7 @@ describe("layout visual vocabulary", () => {
         },
       ],
     };
-    const laidOut = applyLayout(slide, "image-grid", "ocean", "cyan");
+    const laidOut = applyLayout(slide, "image-grid", testSlideStyle(slide));
     const cards = laidOut.elements.filter(isLayoutCard) as ShapeElement[];
     expect(cards.length).toBeGreaterThan(0);
     expect(cards[0]?.shapeType).toBe("roundedRect");
@@ -97,7 +99,7 @@ describe("layout visual vocabulary", () => {
       ],
     };
 
-    const laidOut = applyLayout(slide, "process", "nordic", "cyan");
+    const laidOut = applyLayout(slide, "process", testSlideStyle(slide));
     const badges = laidOut.elements.filter(
       (el) => el.type === "shape" && el.id.startsWith("badge-"),
     );
@@ -111,13 +113,15 @@ describe("layout visual vocabulary", () => {
   });
 
   it("recognizes roundedRect cards for layout choice detection", () => {
-    const laidOut = applyLayout(makeSlide("Points", "One"), "concept", "nordic", "cyan");
+    const base = makeSlide("Points", "One");
+    const laidOut = applyLayout(base, "concept", testSlideStyle(base));
     expect(slideNeedsLayoutChoice(laidOut)).toBe(false);
   });
 
   it("re-applying layout does not duplicate roundedRect cards", () => {
-    const first = applyLayout(makeSlide("Points", "One"), "concept", "nordic", "cyan");
-    const second = applyLayout(first, "concept", "nordic", "cyan");
+    const base = makeSlide("Points", "One");
+    const first = applyLayout(base, "concept", testSlideStyle(base));
+    const second = applyLayout(first, "concept", testSlideStyle(first));
     const cards = second.elements.filter(isLayoutCard);
     expect(cards.length).toBe(1);
   });

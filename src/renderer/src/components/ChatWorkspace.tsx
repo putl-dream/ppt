@@ -27,6 +27,7 @@ import type { InlineCardRef } from "@shared/inline-artifact-cards";
 import type { BriefFields, OutlineItem } from "@shared/project-artifacts";
 import type { LayoutVisualMode } from "@shared/layout-preference";
 import { formatApprovalCommand } from "@shared/approval-command-display";
+import type { DesignSystemV1 } from "@design-system";
 
 type ChatMessage = SessionChatMessage;
 
@@ -58,13 +59,12 @@ interface ChatWorkspaceProps {
   getInlineCardData: (message: ChatMessage) => InlineCardData;
   onConfirmBrief: (messageId: string) => void;
   onConfirmOutline: (messageId: string) => void;
-  onConfirmLayout: (messageId: string, mode: LayoutVisualMode, theme: string, palette: string) => void;
+  onConfirmLayout: (messageId: string, mode: LayoutVisualMode, designSystem: DesignSystemV1) => void;
   onReviseOutline: (messageId: string) => void;
   onOpenDeckPreview: () => void;
   onExportDeck: () => void;
   isExportingDeck?: boolean;
-  selectedTheme: string;
-  selectedPalette: string;
+  selectedDesignSystem: DesignSystemV1;
   activeRunId?: string | null;
   onCancelRun?: () => void;
   isCancellingRun?: boolean;
@@ -108,8 +108,7 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
   onOpenDeckPreview,
   onExportDeck,
   isExportingDeck,
-  selectedTheme,
-  selectedPalette,
+  selectedDesignSystem,
   activeRunId,
   onCancelRun,
   isCancellingRun = false,
@@ -219,8 +218,8 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
   }, [busy]);
 
   const slashCommands = [
-    { cmd: "/theme 商务蔚蓝", desc: "更改设计模板风格为商务蔚蓝" },
-    { cmd: "/theme 黑客帝国", desc: "更改设计模板风格为科技酷黑" },
+    { cmd: "/design 商务蓝", desc: "应用商务蓝设计系统" },
+    { cmd: "/design 科技暗色", desc: "应用科技暗色设计系统" },
     { cmd: "/add-page ", desc: "在末尾添加指定标题的新幻灯片页" },
     { cmd: "/delete-page ", desc: "删除指定页码的幻灯片" },
     { cmd: "/rewrite ", desc: "对选中页面文本进行局部润色优化" },
@@ -572,11 +571,10 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
                         slideCount={inlineCardData.layoutSlideCount ?? 1}
                         resolved={card.resolved}
                         layoutMode={inlineCardData.layoutMode ?? card.layoutMode}
-                        selectedTheme={selectedTheme}
-                        selectedPalette={selectedPalette}
+                        selectedDesignSystem={selectedDesignSystem}
                         onConfirm={card.resolved
                           ? undefined
-                          : (mode, theme, palette) => onConfirmLayout(msg.id, mode, theme, palette)}
+                          : (mode, designSystem) => onConfirmLayout(msg.id, mode, designSystem)}
                       />
                     );
                   }
@@ -586,8 +584,6 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
                       <DeckPreviewCard
                         key={`${msg.id}-deck`}
                         presentation={inlineCardData.presentation}
-                        selectedTheme={selectedTheme}
-                        selectedPalette={selectedPalette}
                         isExporting={isExportingDeck}
                         resolved={card.resolved}
                         onPreview={onOpenDeckPreview}

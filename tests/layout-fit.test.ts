@@ -3,9 +3,9 @@ import {
   applyLayout,
   fitFontSize,
   estimateTextWidthUnits,
-  getThemePaletteColors,
-  resolveThemeAccent,
 } from "../src/shared/layout";
+import { resolveColors } from "@design-system";
+import { testDesignSystem, testSlideStyle } from "./design-engine-test-utils";
 import type { Slide, TextElement } from "../src/shared/presentation";
 import { slideSchema } from "../src/shared/presentation";
 
@@ -65,7 +65,7 @@ describe("applyLayout never drops body content", () => {
         textEl("补充要点四"),
       ],
     };
-    const out = applyLayout(slide, "case", "ocean", "cyan");
+    const out = applyLayout(slide, "case", testSlideStyle(slide));
     const allText = bodyTextsOf(out);
     expect(allText).toContain("案例背景叙述");
     expect(allText).toContain("补充要点三");
@@ -85,7 +85,7 @@ describe("applyLayout never drops body content", () => {
         textEl("第六步"),
       ],
     };
-    const out = applyLayout(slide, "process", "nordic", "green");
+    const out = applyLayout(slide, "process", testSlideStyle(slide, { palette: "soft-academic" }));
     const allText = bodyTextsOf(out);
     for (const step of ["第一步", "第二步", "第三步", "第四步", "第五步", "第六步"]) {
       expect(allText).toContain(step);
@@ -104,7 +104,7 @@ describe("applyLayout never drops body content", () => {
         textEl("基础设施层"),
       ],
     };
-    const out = applyLayout(slide, "architecture", "midnight", "purple");
+    const out = applyLayout(slide, "architecture", testSlideStyle(slide, { palette: "tech-dark" }));
     const allText = bodyTextsOf(out);
     expect(allText).toContain("基础设施层");
   });
@@ -116,7 +116,7 @@ describe("applyLayout never drops body content", () => {
       title: "目录",
       elements: items,
     };
-    const out = applyLayout(slide, "toc", "ocean", "cyan");
+    const out = applyLayout(slide, "toc", testSlideStyle(slide));
     const allText = bodyTextsOf(out);
     expect(allText).toContain("目录项9");
     expect(allText).toContain("目录项10");
@@ -129,30 +129,24 @@ describe("applyLayout never drops body content", () => {
       elements: Array.from({ length: 7 }, (_, index) => textEl(`能力 ${index + 1}`)),
     };
 
-    const out = applyLayout(slide, "summary", "ocean", "cyan");
+    const out = applyLayout(slide, "summary", testSlideStyle(slide));
 
     expect(() => slideSchema.parse(out)).not.toThrow();
     expect(out.elements.every((element) => element.width > 0 && element.height > 0)).toBe(true);
   });
 });
 
-describe("palette participation", () => {
-  it("produces distinct accents for all four palettes within a theme", () => {
-    const accents = ["cyan", "green", "purple", "orange"].map((p) =>
-      resolveThemeAccent("ocean", p),
+describe("design palette participation", () => {
+  it("produces distinct accents for every design-engine palette", () => {
+    const accents = ["business-blue", "warm-paper", "mono-report", "tech-dark", "soft-academic"].map(
+      (palette) => resolveColors(testDesignSystem({ palette: palette as any }).tokens).accent,
     );
-    expect(new Set(accents).size).toBe(4);
+    expect(new Set(accents).size).toBe(5);
   });
 
-  it("preserves cyan accent values (backward compatible)", () => {
-    expect(resolveThemeAccent("ocean", "cyan")).toBe("#38bdf8");
-    expect(resolveThemeAccent("midnight", "cyan")).toBe("#58a6ff");
-    expect(resolveThemeAccent("nordic", "cyan")).toBe("#0ea5e9");
-  });
-
-  it("tints card stroke by palette", () => {
-    const green = getThemePaletteColors("ocean", "green").cardStroke;
-    const purple = getThemePaletteColors("ocean", "purple").cardStroke;
-    expect(green).not.toBe(purple);
+  it("adapts surfaces for contrast while retaining identity accent", () => {
+    const tokens = testDesignSystem({ palette: "warm-paper" }).tokens;
+    expect(resolveColors(tokens, "dark").title).toBe("#eff6ff");
+    expect(resolveColors(tokens, "dark").accent).toBe("#b45309");
   });
 });

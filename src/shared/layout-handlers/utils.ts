@@ -10,8 +10,8 @@ export function grammarId(prefix: string): string {
 }
 
 export function densityScale(ctx: LayoutGrammarContext): number {
-  if (ctx.designTokens.density === "calm") return 1.12;
-  if (ctx.designTokens.density === "dense") return 0.88;
+  if (ctx.style.density === "calm") return 1.12;
+  if (ctx.style.density === "dense") return 0.88;
   return 1;
 }
 
@@ -100,8 +100,7 @@ export function applyImageTreatment(
   image: ImageElement,
   ctx: LayoutGrammarContext,
 ): ImageElement {
-  if (!ctx.hasExplicitDesignTokens) return image;
-  const treatment = ctx.designTokens.imageTreatment;
+  const treatment = ctx.style.image.treatment;
   return {
     ...image,
     imageTreatment: treatment,

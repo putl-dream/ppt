@@ -1,9 +1,7 @@
 import React from "react";
 import type { SlideElement } from "@shared/presentation";
 import { fontFamilyToCss, resolveElementFontFamily } from "@shared/typography";
-import type { FontFamily } from "@shared/typography";
-import type { ChartStyle, ImageTreatment } from "@shared/design-tokens";
-import { resolveImageTreatmentStyle } from "@shared/image-treatment";
+import { resolveImageTreatment, type ResolvedSlideStyle } from "@design-system";
 import { ShapeElementView } from "./ShapeElementView";
 import { ChartElementView } from "./ChartElementView";
 import { TableElementView } from "./TableElementView";
@@ -11,36 +9,22 @@ import { IconElementView } from "./IconElementView";
 
 export interface SlideElementRendererProps {
   element: SlideElement;
-  theme: string;
-  bodyColor?: string;
-  accentColor?: string;
-  cardBg?: string;
-  cardStroke?: string;
-  fontFamily?: FontFamily;
-  imageTreatment?: ImageTreatment;
-  chartStyle?: ChartStyle;
+  style: ResolvedSlideStyle;
 }
 
 export function SlideElementRenderer({
   element,
-  theme,
-  bodyColor = "#475569",
-  accentColor = "#0ea5e9",
-  cardBg = "#f8fafc",
-  cardStroke = "#e2e8f0",
-  fontFamily,
-  imageTreatment = "plain",
-  chartStyle = "minimal",
+  style,
 }: SlideElementRendererProps) {
   if (element.type === "text") {
     return (
       <p
         style={{
           fontSize: element.fontSize,
-          color: element.color || bodyColor,
+          color: element.color || style.colors.body,
           fontWeight: element.bold ? "bold" : "normal",
           textAlign: element.align || "left",
-          fontFamily: fontFamilyToCss(element.fontFamily ?? fontFamily ?? resolveElementFontFamily(element, theme)),
+          fontFamily: fontFamilyToCss(resolveElementFontFamily(element, style.typography.family)),
           margin: 0,
           lineHeight: 1.4,
           whiteSpace: "pre-wrap",
@@ -53,10 +37,11 @@ export function SlideElementRenderer({
   }
 
   if (element.type === "image") {
-    const treatment = resolveImageTreatmentStyle(
-      element,
-      imageTreatment,
-      { cardBg, cardStroke },
+    const treatment = resolveImageTreatment(
+      element.imageTreatment,
+      style.image.treatment,
+      element.borderRadius,
+      style.colors,
     );
     return (
       <img
@@ -85,9 +70,9 @@ export function SlideElementRenderer({
     return (
       <ChartElementView
         element={element}
-        defaultAccent={accentColor}
-        defaultStyle={chartStyle}
-        textColor={bodyColor}
+        defaultAccent={style.colors.accent}
+        defaultStyle={style.chart.style}
+        textColor={style.colors.body}
       />
     );
   }
@@ -96,16 +81,16 @@ export function SlideElementRenderer({
     return (
       <TableElementView
         element={element}
-        headerBg={cardBg}
-        stripeBg={cardStroke}
-        textColor={bodyColor}
-        borderColor={cardStroke}
+        headerBg={style.colors.cardBg}
+        stripeBg={style.colors.cardStroke}
+        textColor={style.colors.body}
+        borderColor={style.colors.cardStroke}
       />
     );
   }
 
   if (element.type === "icon") {
-    return <IconElementView element={element} defaultColor={accentColor} />;
+    return <IconElementView element={element} defaultColor={style.colors.accent} />;
   }
 
   return null;

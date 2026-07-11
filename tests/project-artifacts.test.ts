@@ -1,16 +1,15 @@
 import { describe, expect, it } from "vitest";
 import {
   createDefaultBriefMarkdown,
-  createDefaultDesignTheme,
+  createDefaultProjectDesignSystem,
   createDefaultOutlineMarkdown,
   createDefaultResearchMarkdown,
-  normalizeDesignTheme,
   parseBriefFields,
-  parseDesignTheme,
+  parseProjectDesignSystem,
   parseOutlineItems,
   parseResearchNotes,
   serializeBriefMarkdown,
-  serializeDesignTheme,
+  serializeProjectDesignSystem,
   serializeOutlineMarkdown,
 } from "../src/shared/project-artifacts";
 
@@ -81,36 +80,13 @@ describe("project artifact canonical formats", () => {
     expect(legacyNotes.some((note) => note.quote.includes("需求强劲"))).toBe(true);
   });
 
-  it("normalizes legacy design theme json for renderer and agent", () => {
-    const legacy = {
-      tone: "professional",
-      typography: { heading: "serif", body: "sans" },
-      palette: {
-        primary: "#2563eb",
-        accent: "#10b981",
-        background: "#f8fafc",
-        text: "#111827",
-      },
-      layout: { ratio: "16:9", density: "balanced" },
-    };
-
-    const normalized = normalizeDesignTheme(legacy);
-    expect(normalized.theme).toBe("nordic");
-    expect(normalized.palette).toBe("cyan");
-    expect(normalized.ratio).toBe("16:9");
-    expect(normalized.tone).toBe("professional");
-    expect(normalized.colors.primary).toBe("#2563eb");
-
-    const serialized = parseDesignTheme(serializeDesignTheme(normalized));
-    expect(serialized.theme).toBe(normalized.theme);
-    expect(serialized.palette).toBe(normalized.palette);
-    expect(serialized.logoUrl).toBeNull();
+  it("round-trips strict DesignSystemV1 JSON", () => {
+    const system = createDefaultProjectDesignSystem();
+    const serialized = parseProjectDesignSystem(serializeProjectDesignSystem(system));
+    expect(serialized).toEqual(system);
   });
 
-  it("creates default design theme with ui fields", () => {
-    const theme = createDefaultDesignTheme();
-    expect(theme.theme).toBe("nordic");
-    expect(theme.palette).toBe("cyan");
-    expect(theme.layout.ratio).toBe("16:9");
+  it("rejects old theme/palette project design files", () => {
+    expect(() => parseProjectDesignSystem(JSON.stringify({ theme: "nordic", palette: "cyan" }))).toThrow();
   });
 });

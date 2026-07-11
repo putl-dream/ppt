@@ -60,7 +60,7 @@ export const executeLayoutPlanTool: ToolDefinition<
   name: "ExecuteLayoutPlan",
   description:
     "受控执行 layout-plan：读取 slides/layout-plan.json，校验与当前快照一致，"
-    + "再生成 set-theme/update-slide-layout/update-slide-variant 命令。不要手工重猜 layout。",
+    + "再生成 set-design-system/update-slide-layout/update-slide-variant 命令。不要手工重猜 layout。",
   category: "core",
   loadPolicy: "core",
   inputSchema: executeLayoutPlanSchema,
@@ -118,7 +118,7 @@ export const executeLayoutPlanTool: ToolDefinition<
 
     const summary =
       `Executed layout-plan from ${planPath}: ${plan.slides.length} slides, `
-      + `${layoutTypes.length} layout types, theme ${plan.theme}/${plan.palette}; `
+      + `${layoutTypes.length} layout types, design palette ${plan.designSystem.tokens.palette}; `
       + `validation passed with ${warningCount} warning/info issue(s).`;
 
     return {
@@ -128,7 +128,7 @@ export const executeLayoutPlanTool: ToolDefinition<
       risk: "low",
       assumptions: [
         "slides/layout-plan.json is the single source of truth for layout decisions.",
-        "Only theme, layout, grammarVariant, designTokens, and slideVariant are executed in this step.",
+        "Only designSystem, layout, grammarVariant, designOverride, and slideVariant are executed in this step.",
         enhancementCount > 0
           ? `${enhancementCount} enhancement item(s) remain for ExecuteExtraTool.`
           : "No layout-plan enhancements were requested.",

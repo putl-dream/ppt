@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { ToolDefinition } from "../tool-definition";
+import { DESIGN_PRESETS, type DesignSystemV1 } from "@design-system";
 
 export const selectStyleStrategySchema = z.object({
   targetAudience: z.string().describe("该幻灯片演示的目标受众，如 '高管', '技术研发', '外部客户'"),
@@ -12,7 +13,7 @@ export const selectStyleStrategySchema = z.object({
  */
 export const selectStyleStrategyTool: ToolDefinition<
   typeof selectStyleStrategySchema,
-  { recommendedTheme: string; recommendedPalette: string; fontStack: string }
+  { presetId: string; label: string; designSystem: DesignSystemV1 }
 > = {
   name: "SelectStyleStrategy",
   description: "根据演示目标和受众，推荐契合的视觉风格、色彩调色板及字体组合策略。",
@@ -21,40 +22,26 @@ export const selectStyleStrategyTool: ToolDefinition<
   inputSchema: selectStyleStrategySchema,
   risk: "low",
   execute: async (args) => {
-    let recommendedTheme = "nordic";
-    let recommendedPalette = "cyan";
-    let fontStack = "Outfit, Inter, sans-serif";
+    let presetId = "business";
 
     if (
       args.targetAudience.includes("竞聘")
       || args.coreMessage.includes("竞聘")
       || args.coreMessage.includes("工作汇报")
     ) {
-      recommendedTheme = "nordic";
-      recommendedPalette = "cyan";
-      fontStack = "Georgia, serif";
+      presetId = "report";
     } else if (
       args.targetAudience.includes("人文")
       || args.targetAudience.includes("杂志")
       || args.coreMessage.includes("故事")
     ) {
-      recommendedTheme = "nordic";
-      recommendedPalette = "cyan";
-      fontStack = "Georgia, serif";
+      presetId = "editorial";
     } else if (args.targetAudience.includes("高管") || args.targetAudience.includes("商务")) {
-      recommendedTheme = "ocean";
-      recommendedPalette = "cyan";
-      fontStack = "Outfit, Inter, sans-serif";
+      presetId = "business";
     } else if (args.targetAudience.includes("技术") || args.targetAudience.includes("研发")) {
-      recommendedTheme = "ocean";
-      recommendedPalette = "cyan";
-      fontStack = "JetBrains Mono, Outfit, sans-serif";
+      presetId = "technical";
     }
-
-    return {
-      recommendedTheme,
-      recommendedPalette,
-      fontStack,
-    };
+    const preset = DESIGN_PRESETS.find((item) => item.id === presetId) ?? DESIGN_PRESETS[0];
+    return { presetId: preset.id, label: preset.label, designSystem: preset.system };
   },
 };

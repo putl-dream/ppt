@@ -6,37 +6,29 @@ export type TextRole = (typeof TEXT_ROLES)[number];
 export const FONT_FAMILIES = ["serif", "sans", "mono"] as const;
 export type FontFamily = (typeof FONT_FAMILIES)[number];
 
-/** Resolve element font from explicit fontFamily, textRole, and deck theme. */
+/** Resolve element font from explicit fontFamily, textRole, and resolved deck typography. */
 export function resolveFontFamily(
   fontFamily: FontFamily | undefined,
   textRole: TextRole | undefined,
-  theme: string,
+  fallback: FontFamily = "sans",
 ): FontFamily {
   if (fontFamily) return fontFamily;
 
   if (textRole === "metric") {
-    return theme === "midnight" ? "mono" : "sans";
+    return fallback === "mono" ? "mono" : "sans";
   }
   if (textRole === "caption" || textRole === "kicker") {
-    return theme === "midnight" ? "mono" : "sans";
+    return fallback === "mono" ? "mono" : "sans";
   }
   if (textRole === "body") {
     return "sans";
   }
 
-  switch (theme) {
-    case "nordic":
-    case "sunset":
-      return "serif";
-    case "midnight":
-      return "mono";
-    default:
-      return "sans";
-  }
+  return fallback;
 }
 
-export function resolveElementFontFamily(element: TextElement, theme: string): FontFamily {
-  return resolveFontFamily(element.fontFamily, element.textRole, theme);
+export function resolveElementFontFamily(element: TextElement, fallback: FontFamily = "sans"): FontFamily {
+  return resolveFontFamily(element.fontFamily, element.textRole, fallback);
 }
 
 export function fontFamilyToCss(family: FontFamily): string {
@@ -61,7 +53,3 @@ export function fontFamilyToPptxFace(family: FontFamily): string {
   }
 }
 
-/** Cover/section hero titles: serif on magazine themes, sans on data-driven themes. */
-export function resolveCoverTitleFont(theme: string): FontFamily {
-  return theme === "nordic" || theme === "sunset" ? "serif" : "sans";
-}

@@ -1,8 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { Presentation } from "@shared/presentation";
-import { resolveSlideDesignSystem } from "@shared/resolved-design-system";
-import { resolveChromeTitleFontSize } from "@shared/slide-chrome";
+import { resolveChromeTitleFontSize, resolveSlideStyle } from "@design-system";
 import { SlideElementRenderer } from "./SlideElementRenderer";
 import { ClosePreviewIcon, PlayIcon, DownloadIcon, ExpandIcon, CompressIcon } from "./Icons";
 
@@ -11,8 +10,6 @@ interface PPTMirrorProps {
   presentation: Presentation;
   selectedSlideId: string;
   onSelectSlide: (slideId: string) => void;
-  selectedTheme: string;
-  selectedPalette: string;
   themeMode: "light" | "dark";
   logoUrl: string | null;
   onCloseMirror: () => void;
@@ -26,8 +23,6 @@ export const PPTMirror: React.FC<PPTMirrorProps> = ({
   presentation,
   selectedSlideId,
   onSelectSlide,
-  selectedTheme,
-  selectedPalette,
   themeMode,
   logoUrl,
   onCloseMirror,
@@ -47,8 +42,6 @@ export const PPTMirror: React.FC<PPTMirrorProps> = ({
     setIsExporting(true);
     try {
       const savedPath = await window.desktopApi.exportPresentation(presentation, {
-        theme: selectedTheme,
-        palette: selectedPalette,
         logoUrl: logoUrl,
       });
       if (savedPath) {
@@ -107,10 +100,7 @@ export const PPTMirror: React.FC<PPTMirrorProps> = ({
 
   const fullscreenSlide = slides[fullscreenIndex];
   const fullscreenSystem = fullscreenSlide
-    ? resolveSlideDesignSystem(
-        { theme: selectedTheme, palette: selectedPalette, designTokens: presentation.designTokens },
-        fullscreenSlide,
-      )
+    ? resolveSlideStyle(presentation.designSystem, fullscreenSlide)
     : undefined;
 
   const handleFullscreenOpen = () => {
@@ -181,14 +171,7 @@ export const PPTMirror: React.FC<PPTMirrorProps> = ({
           const cardHeight = isExpanded ? 180 : 157.5;
           const scale = cardWidth / 1280;
 
-          const designSystem = resolveSlideDesignSystem(
-            {
-              theme: selectedTheme,
-              palette: selectedPalette,
-              designTokens: presentation.designTokens,
-            },
-            slide,
-          );
+          const slideStyle = resolveSlideStyle(presentation.designSystem, slide);
 
           return (
             <div
@@ -226,14 +209,14 @@ export const PPTMirror: React.FC<PPTMirrorProps> = ({
                   style={{
                     width: 1280,
                     height: 720,
-                    background: designSystem.background.slideBg,
-                    fontFamily: designSystem.fontCss,
+                    background: slideStyle.background.css,
+                    fontFamily: slideStyle.typography.css,
                     transform: `scale(${scale})`,
                     transformOrigin: "top left",
                     position: "absolute",
                     top: 0,
                     left: 0,
-                    border: `1px solid ${designSystem.colors.cardStroke}`,
+                    border: `1px solid ${slideStyle.colors.cardStroke}`,
                   }}
                 >
                   {/* Logo */}
@@ -244,7 +227,7 @@ export const PPTMirror: React.FC<PPTMirrorProps> = ({
                   )}
 
                   {/* 页码 */}
-                  <div className="slide-page-number" style={{ color: designSystem.colors.body }}>
+                  <div className="slide-page-number" style={{ color: slideStyle.colors.body }}>
                     {index + 1}
                   </div>
 
@@ -253,8 +236,8 @@ export const PPTMirror: React.FC<PPTMirrorProps> = ({
                     <div
                       className="slide-header-text"
                       style={{
-                        color: designSystem.colors.title,
-                        borderBottom: `2px solid ${designSystem.colors.accent}`,
+                        color: slideStyle.colors.title,
+                        borderBottom: `2px solid ${slideStyle.colors.accent}`,
                         fontSize: resolveChromeTitleFontSize(slide.title),
                       }}
                     >
@@ -278,14 +261,7 @@ export const PPTMirror: React.FC<PPTMirrorProps> = ({
                     >
                       <SlideElementRenderer
                         element={element}
-                        theme={selectedTheme}
-                        bodyColor={designSystem.colors.body}
-                        accentColor={designSystem.colors.accent}
-                        cardBg={designSystem.colors.cardBg}
-                        cardStroke={designSystem.colors.cardStroke}
-                        fontFamily={designSystem.fontFamily}
-                        imageTreatment={designSystem.imageTreatment}
-                        chartStyle={designSystem.chartStyle}
+                        style={slideStyle}
                       />
                     </div>
                   ))}
@@ -345,8 +321,8 @@ export const PPTMirror: React.FC<PPTMirrorProps> = ({
                   style={{
                     width: 1280,
                     height: 720,
-                    background: fullscreenSystem?.background.slideBg,
-                    fontFamily: fullscreenSystem?.fontCss,
+                    background: fullscreenSystem?.background.css,
+                    fontFamily: fullscreenSystem?.typography.css,
                     boxShadow: "var(--slideshow-slide-shadow)",
                     borderRadius: 8,
                     position: "relative",
@@ -399,14 +375,7 @@ export const PPTMirror: React.FC<PPTMirrorProps> = ({
                     >
                       <SlideElementRenderer
                         element={element}
-                        theme={selectedTheme}
-                        bodyColor={fullscreenSystem?.colors.body}
-                        accentColor={fullscreenSystem?.colors.accent}
-                        cardBg={fullscreenSystem?.colors.cardBg}
-                        cardStroke={fullscreenSystem?.colors.cardStroke}
-                        fontFamily={fullscreenSystem?.fontFamily}
-                        imageTreatment={fullscreenSystem?.imageTreatment}
-                        chartStyle={fullscreenSystem?.chartStyle}
+                        style={fullscreenSystem!}
                       />
                     </div>
                   ))}

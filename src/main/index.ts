@@ -483,8 +483,7 @@ app.whenReady().then(async () => {
         await sessionStore.recordDeckExport(sessionId, {
           revision: presentation.revision,
           filePath: result.filePath,
-          theme: presentation.theme ?? options.theme,
-          palette: presentation.palette ?? options.palette,
+          designSystem: presentation.designSystem,
         });
       }
 

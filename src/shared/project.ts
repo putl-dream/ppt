@@ -71,7 +71,7 @@ export const primaryProjectArtifactPaths: Record<ProjectStageId, string> = {
   outline: "outline.md",
   research: "research/notes.md",
   slides: "slides/storyboard.json",
-  design: "design/theme.json",
+  design: "design/system.json",
   deck: "deck/snapshot.json",
 };
 

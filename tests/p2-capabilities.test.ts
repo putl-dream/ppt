@@ -2,10 +2,11 @@ import { describe, expect, it } from "vitest";
 import { executeCommand } from "../src/shared/commands";
 import { createStarterPresentation } from "../src/shared/presentation";
 import {
-  resolveSlideBackgroundWithVariant,
   resolveSlideVariant,
   SLIDE_VARIANTS,
 } from "../src/shared/slide-variant";
+import { resolveSlideStyle } from "@design-system";
+import { TEST_DESIGN_SYSTEM } from "./design-engine-test-utils";
 import { layoutRegistry } from "../src/shared/layout-registry";
 import "../src/shared/layout-register-builtin";
 import { chartDataToSvgString } from "../src/shared/chart-utils";
@@ -19,15 +20,15 @@ describe("P2 slide variant", () => {
     expect(SLIDE_VARIANTS).toContain("hero");
   });
 
-  it("resolves light variant to white background", () => {
-    const bg = resolveSlideBackgroundWithVariant("ocean", "cyan", { slideVariant: "light" });
-    expect(bg.slideBg).toBe("#ffffff");
-    expect(bg.exportFill).toBe("#ffffff");
+  it("resolves light variant through the design engine", () => {
+    const bg = resolveSlideStyle(TEST_DESIGN_SYSTEM, { slideVariant: "light" }).background;
+    expect(bg.css).toBe("#f8fbff");
+    expect(bg.fill).toBe("#f8fbff");
   });
 
   it("resolves dark variant to dark background", () => {
-    const bg = resolveSlideBackgroundWithVariant("nordic", "cyan", { slideVariant: "dark" });
-    expect(bg.exportFill).toBe("#0f172a");
+    const bg = resolveSlideStyle(TEST_DESIGN_SYSTEM, { slideVariant: "dark" }).background;
+    expect(bg.fill).toBe("#07111f");
   });
 
   it("infers hero variant from cover layout", () => {
@@ -182,7 +183,7 @@ describe("P2 layout registry", () => {
 describe("P2 HTML export", () => {
   it("exports presentation to HTML with slides", () => {
     const presentation = createStarterPresentation();
-    const html = exportToHtml(presentation, { theme: "nordic", palette: "cyan" });
+    const html = exportToHtml(presentation);
     expect(html).toContain("<!DOCTYPE html>");
     expect(html).toContain("slide");
     expect(html).toContain(presentation.title);

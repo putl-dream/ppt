@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { renderElementHtml } from "../src/shared/slide-html-render";
+import { testSlideStyle } from "./design-engine-test-utils";
 import type { ShapeElement } from "../src/shared/presentation";
 import {
   shapeBorderRadius,
@@ -42,7 +43,7 @@ describe("shape visual vocabulary", () => {
       shadow: { color: "#000000", blur: 16, offsetX: 0, offsetY: 4, opacity: 0.1 },
     };
     expect(shapeBoxShadow(shape)).toContain("4px");
-    const html = renderElementHtml(shape, "nordic");
+    const html = renderElementHtml(shape, testSlideStyle());
     expect(html).toContain("box-shadow:");
     expect(html).toContain("border-radius:12px");
   });
@@ -52,7 +53,7 @@ describe("shape visual vocabulary", () => {
       ...baseShape,
       fillOpacity: 0.2,
     };
-    const html = renderElementHtml(shape, "nordic");
+    const html = renderElementHtml(shape, testSlideStyle());
     expect(html).toContain("rgba(59,130,246,0.2)");
   });
 });

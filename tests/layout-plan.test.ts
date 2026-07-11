@@ -9,24 +9,14 @@ import {
   validateLayoutPlan,
   validateLayoutPlanRhythm,
 } from "../src/shared/layout-plan";
+import { TEST_DESIGN_SYSTEM, testDesignSystem } from "./design-engine-test-utils";
 
 describe("layout-plan", () => {
   it("parses and serializes a valid layout plan", () => {
     const plan = parseLayoutPlan(JSON.stringify({
       version: 1,
-      theme: "ocean",
-      palette: "cyan",
       styleMode: "template",
-      designTokens: {
-        palette: "warm-paper",
-        fontMood: "editorial",
-        shapeLanguage: "annotation",
-        backgroundStyle: "paper",
-        motif: "bookmark",
-        density: "calm",
-        imageTreatment: "framed",
-        chartStyle: "minimal",
-      },
+      designSystem: testDesignSystem({ palette: "warm-paper", fontMood: "editorial", shapeLanguage: "annotation", backgroundStyle: "paper", motif: "bookmark", density: "calm", imageTreatment: "framed" }),
       slides: [{
         slideId: "slide-1",
         title: "Cover",
@@ -39,8 +29,7 @@ describe("layout-plan", () => {
       }],
     }));
 
-    expect(plan.theme).toBe("ocean");
-    expect(plan.designTokens?.version).toBe(1);
+    expect(plan.designSystem.tokens.palette).toBe("warm-paper");
     expect(plan.slides[0].grammarVariant).toBe("editorial-hero");
     expect(serializeLayoutPlan(plan)).toContain('"layout": "cover"');
   });
@@ -63,9 +52,8 @@ describe("layout-plan", () => {
   it("flags three consecutive same layouts", () => {
     const plan = parseLayoutPlan(JSON.stringify({
       version: 1,
-      theme: "nordic",
-      palette: "cyan",
       styleMode: "template",
+      designSystem: TEST_DESIGN_SYSTEM,
       slides: [
         {
           slideId: "s1",
@@ -101,9 +89,8 @@ describe("layout-plan", () => {
   it("rejects grammar variants that are unsupported by the selected layout", () => {
     const plan = parseLayoutPlan(JSON.stringify({
       version: 1,
-      theme: "ocean",
-      palette: "cyan",
       styleMode: "template",
+      designSystem: TEST_DESIGN_SYSTEM,
       slides: [{
         slideId: "s1",
         title: "Process",
@@ -125,22 +112,11 @@ describe("layout-plan", () => {
     ]));
   });
 
-  it("builds set-theme and update-slide-layout commands", () => {
+  it("builds set-design-system and update-slide-layout commands", () => {
     const plan = parseLayoutPlan(JSON.stringify({
       version: 1,
-      theme: "sunset",
-      palette: "orange",
       styleMode: "template",
-      designTokens: {
-        palette: "tech-dark",
-        fontMood: "technical",
-        shapeLanguage: "geometric",
-        backgroundStyle: "dark",
-        motif: "arc",
-        density: "standard",
-        imageTreatment: "masked",
-        chartStyle: "dashboard",
-      },
+      designSystem: testDesignSystem({ palette: "tech-dark", fontMood: "technical", shapeLanguage: "geometric", backgroundStyle: "dark", motif: "arc", imageTreatment: "masked", chartStyle: "dashboard" }),
       slides: [{
         slideId: "slide-1",
         title: "Cover",
@@ -156,13 +132,12 @@ describe("layout-plan", () => {
     const commands = buildLayoutPlanCommands(plan);
     expect(commands).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ type: "set-theme", theme: "sunset", palette: "orange" }),
+        expect.objectContaining({ type: "set-design-system", designSystem: expect.objectContaining({ version: 1 }) }),
         expect.objectContaining({
           type: "update-slide-layout",
           slideId: "slide-1",
           layout: "cover",
           grammarVariant: "signal-dark",
-          designTokens: expect.objectContaining({ palette: "tech-dark", version: 1 }),
         }),
         expect.objectContaining({ type: "update-slide-variant", slideId: "slide-1", slideVariant: "hero" }),
       ]),

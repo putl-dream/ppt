@@ -1,45 +1,24 @@
 import React from "react";
 import type { Presentation } from "@shared/presentation";
+import { resolveSlideStyle } from "@design-system";
 import { DownloadIcon, OpenPreviewIcon } from "./Icons";
 
 interface DeckPreviewCardProps {
   presentation: Presentation;
-  selectedTheme: string;
-  selectedPalette: string;
   isExporting?: boolean;
   resolved?: "confirmed" | "dismissed";
   onPreview?: () => void;
   onExport?: () => void;
 }
 
-function getThemeSlideBg(theme: string): string {
-  switch (theme) {
-    case "midnight":
-      return "#0e1115";
-    case "ocean":
-      return "linear-gradient(135deg, #0f172a 0%, #1e293b 100%)";
-    case "sunset":
-      return "linear-gradient(135deg, #fffcf4 0%, #fff3e3 100%)";
-    case "purple":
-      return "radial-gradient(circle at top, #1c1537 0%, #0d091a 100%)";
-    case "nordic":
-      return "#fbfbfa";
-    default:
-      return "#ffffff";
-  }
-}
-
 export const DeckPreviewCard: React.FC<DeckPreviewCardProps> = ({
   presentation,
-  selectedTheme,
-  selectedPalette,
   isExporting,
   resolved,
   onPreview,
   onExport,
 }) => {
   const previewSlides = presentation.slides.slice(0, 6);
-  const slideBg = getThemeSlideBg(selectedTheme);
 
   return (
     <div className="inline-artifact-card deck-preview-card">
@@ -57,7 +36,7 @@ export const DeckPreviewCard: React.FC<DeckPreviewCardProps> = ({
           <div key={slide.id} className="deck-preview-thumb" title={slide.title}>
             <div
               className="deck-preview-thumb-inner"
-              style={{ background: slideBg }}
+              style={{ background: resolveSlideStyle(presentation.designSystem, slide).background.css }}
             >
               <span className="deck-preview-thumb-index">{index + 1}</span>
               <span className="deck-preview-thumb-title">{slide.title}</span>

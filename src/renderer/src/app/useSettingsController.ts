@@ -19,6 +19,11 @@ import {
   type UiThemeMode,
 } from "./appBootstrap";
 import { getComputedTheme, useAppearanceRuntime } from "./useAppearanceRuntime";
+import {
+  DEFAULT_DESIGN_SYSTEM,
+  designSystemV1Schema,
+  type DesignSystemV1,
+} from "@design-system";
 
 export interface SettingsController {
   models: ManagedModel[];
@@ -29,10 +34,8 @@ export interface SettingsController {
   selectModel: (id: string) => void;
   saveModel: (model: ManagedModel) => void;
   deleteModel: (id: string) => void;
-  selectedTheme: string;
-  setSelectedTheme: (value: string) => void;
-  selectedPalette: string;
-  setSelectedPalette: (value: string) => void;
+  selectedDesignSystem: DesignSystemV1;
+  setSelectedDesignSystem: (value: DesignSystemV1) => void;
   logoUrl: string | null;
   uploadLogo: (url: string) => void;
   removeLogo: () => void;
@@ -94,8 +97,10 @@ export function useSettingsController(
   const [colorContrastOffset, setColorContrastOffsetState] = useState(() =>
     typeof persisted.colorContrastOffset === "number" ? persisted.colorContrastOffset : 0,
   );
-  const [selectedTheme, setSelectedThemeState] = useState(() => persisted.selectedTheme ?? "nordic");
-  const [selectedPalette, setSelectedPaletteState] = useState(() => persisted.selectedPalette ?? "cyan");
+  const [selectedDesignSystem, setSelectedDesignSystemState] = useState<DesignSystemV1>(() => {
+    const parsed = designSystemV1Schema.safeParse(persisted.selectedDesignSystem);
+    return parsed.success ? parsed.data : DEFAULT_DESIGN_SYSTEM;
+  });
   const [logoUrl, setLogoUrl] = useState<string | null>(() => persisted.logoUrl ?? null);
   const [models, setModels] = useState<ManagedModel[]>(() => bootstrap.models);
   const [selectedModelId, setSelectedModelId] = useState(() => bootstrap.selectedModelId);
@@ -145,8 +150,7 @@ export function useSettingsController(
       uiReadingTone,
       borderRadiusScale,
       colorContrastOffset,
-      selectedTheme,
-      selectedPalette,
+      selectedDesignSystem,
       logoUrl,
     });
   }, [
@@ -156,8 +160,7 @@ export function useSettingsController(
     colorContrastOffset,
     defaultRatio,
     logoUrl,
-    selectedPalette,
-    selectedTheme,
+    selectedDesignSystem,
     themeMode,
     uiAccentColor,
     uiControlShape,
@@ -175,13 +178,10 @@ export function useSettingsController(
   });
 
   useEffect(() => {
-    if (presentation?.theme && presentation.theme !== selectedTheme) {
-      setSelectedThemeState(presentation.theme);
+    if (presentation?.designSystem && JSON.stringify(presentation.designSystem) !== JSON.stringify(selectedDesignSystem)) {
+      setSelectedDesignSystemState(presentation.designSystem);
     }
-    if (presentation?.palette && presentation.palette !== selectedPalette) {
-      setSelectedPaletteState(presentation.palette);
-    }
-  }, [presentation, selectedPalette, selectedTheme]);
+  }, [presentation, selectedDesignSystem]);
 
   const update = <T,>(setter: (value: T) => void) => (value: T) => {
     markSaving();
@@ -223,10 +223,8 @@ export function useSettingsController(
     selectModel,
     saveModel,
     deleteModel,
-    selectedTheme,
-    setSelectedTheme: update(setSelectedThemeState),
-    selectedPalette,
-    setSelectedPalette: update(setSelectedPaletteState),
+    selectedDesignSystem,
+    setSelectedDesignSystem: update(setSelectedDesignSystemState),
     logoUrl,
     uploadLogo,
     removeLogo,

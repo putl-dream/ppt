@@ -1,5 +1,5 @@
 import type { ShapeElement } from "./presentation";
-import type { Motif } from "./design-tokens";
+import type { Motif } from "@design-system";
 import { VISUAL_TOKENS, cardShadow } from "./visual-tokens";
 
 export interface MotifColors {

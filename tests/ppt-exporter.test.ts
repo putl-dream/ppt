@@ -6,17 +6,15 @@ import { afterEach, describe, expect, it } from "vitest";
 import { exportToPptx } from "../src/main/ppt-exporter";
 import { CommandBus } from "../src/shared/commands";
 import { applyLayout } from "../src/shared/layout";
-import type { Presentation } from "../src/shared/presentation";
+import type { Presentation, Slide } from "../src/shared/presentation";
 import { createStarterPresentation } from "../src/shared/presentation";
 import type { ExportPresentationOptions } from "../src/shared/ipc";
+import { TEST_DESIGN_SYSTEM, testDesignSystem, testSlideStyle } from "./design-engine-test-utils";
 
 const TINY_PNG_DATA_URL =
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
 
-const defaultExportOptions: ExportPresentationOptions = {
-  theme: "nordic",
-  palette: "cyan",
-};
+const defaultExportOptions: ExportPresentationOptions = {};
 
 let tempDirs: string[] = [];
 
@@ -56,8 +54,7 @@ function createRichPresentation(): Presentation {
     id: crypto.randomUUID(),
     title: "PPT Export Smoke Test",
     revision: 3,
-    theme: "midnight",
-    palette: "green",
+    designSystem: testDesignSystem({ palette: "tech-dark", backgroundStyle: "dark" }),
     slides: [
       {
         id: slideOneId,
@@ -164,8 +161,7 @@ describe("ppt-exporter", () => {
       id: crypto.randomUUID(),
       title: "Localized image export",
       revision: 1,
-      theme: "nordic",
-      palette: "cyan",
+      designSystem: TEST_DESIGN_SYSTEM,
       slides: [{
         id: crypto.randomUUID(),
         title: "Evidence",
@@ -200,9 +196,8 @@ describe("ppt-exporter", () => {
     });
     bus.execute({
       id: crypto.randomUUID(),
-      type: "set-theme",
-      theme: "ocean",
-      palette: "purple",
+      type: "set-design-system",
+      designSystem: testDesignSystem({ palette: "tech-dark" }),
     });
     bus.execute({
       id: crypto.randomUUID(),
@@ -254,10 +249,7 @@ describe("ppt-exporter", () => {
     const filePath = await createTempPptxPath("ppt-export-command-bus-");
     await exportToPptx(
       presentation,
-      {
-        theme: presentation.theme ?? "ocean",
-        palette: presentation.palette ?? "purple",
-      },
+      {},
       filePath,
     );
 
@@ -270,11 +262,10 @@ describe("ppt-exporter", () => {
       id: crypto.randomUUID(),
       title: "Layout Export Test",
       revision: 0,
-      theme: "sunset",
-      palette: "orange",
+      designSystem: testDesignSystem({ palette: "warm-paper" }),
       slides: [
-        applyLayout(
-          {
+        (() => {
+          const base: Slide = {
             id: slideId,
             title: "Architecture",
             elements: [
@@ -289,11 +280,9 @@ describe("ppt-exporter", () => {
                 fontSize: 24,
               },
             ],
-          },
-          "architecture",
-          "sunset",
-          "orange",
-        ),
+          };
+          return applyLayout(base, "architecture", testSlideStyle(base, { palette: "warm-paper" }));
+        })(),
       ],
     };
 
@@ -302,7 +291,7 @@ describe("ppt-exporter", () => {
     const filePath = await createTempPptxPath("ppt-export-layout-");
     await exportToPptx(
       presentation,
-      { theme: "sunset", palette: "orange" },
+      {},
       filePath,
     );
 
@@ -315,17 +304,7 @@ describe("ppt-exporter", () => {
       id: crypto.randomUUID(),
       title: "Resolved design system",
       revision: 1,
-      designTokens: {
-        version: 1,
-        palette: "soft-academic",
-        fontMood: "editorial",
-        shapeLanguage: "cards",
-        backgroundStyle: "grid",
-        motif: "none",
-        density: "standard",
-        imageTreatment: "framed",
-        chartStyle: "report",
-      },
+      designSystem: testDesignSystem({ palette: "soft-academic", fontMood: "editorial", backgroundStyle: "grid", imageTreatment: "framed", chartStyle: "report" }),
       slides: [{
         id: crypto.randomUUID(),
         title: "Visual contract",

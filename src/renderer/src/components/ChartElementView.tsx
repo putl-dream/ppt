@@ -1,5 +1,5 @@
 import type { ChartElement } from "@shared/presentation";
-import type { ChartStyle } from "@shared/design-tokens";
+import type { ChartStyle } from "@design-system";
 import { chartDataToSvgString, chartSvgToDataUri } from "@shared/chart-utils";
 
 interface ChartElementViewProps {

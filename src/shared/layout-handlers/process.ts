@@ -9,12 +9,11 @@ function resolveVariant(ctx: LayoutGrammarContext): ProcessVariant {
   if (["cards", "timeline", "path", "steps"].includes(ctx.grammarVariant ?? "")) {
     return ctx.grammarVariant as ProcessVariant;
   }
-  if (!ctx.hasExplicitDesignTokens) return "cards";
-  if (ctx.designTokens.shapeLanguage === "path" || ctx.designTokens.motif === "path-line") {
+  if (ctx.style.tokens.shapeLanguage === "path" || ctx.style.tokens.motif === "path-line") {
     return "path";
   }
-  if (ctx.designTokens.shapeLanguage === "geometric") return "steps";
-  if (ctx.designTokens.chartStyle === "report" || ctx.designTokens.chartStyle === "editorial") {
+  if (ctx.style.tokens.shapeLanguage === "geometric") return "steps";
+  if (ctx.style.chart.style === "report" || ctx.style.chart.style === "editorial") {
     return "timeline";
   }
   return "cards";

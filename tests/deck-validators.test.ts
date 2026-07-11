@@ -4,14 +4,14 @@ import type { Presentation, Slide } from "../src/shared/presentation";
 import { LayoutValidator } from "../src/main/deck/validators/layout-validator";
 import { StyleValidator } from "../src/main/deck/validators/style-validator";
 import { AssetValidator } from "../src/main/deck/validators/asset-validator";
+import { TEST_DESIGN_SYSTEM, testSlideStyle } from "./design-engine-test-utils";
 
 function createPresentation(slides: Slide[], overrides: Partial<Presentation> = {}): Presentation {
   return {
     id: "pres-1",
     title: "Validation Test Deck",
     revision: 1,
-    theme: "ocean",
-    palette: "cyan",
+    designSystem: TEST_DESIGN_SYSTEM,
     slides,
     ...overrides,
   };
@@ -97,8 +97,7 @@ describe("LayoutValidator", () => {
   });
 
   it("accepts a valid concept layout slide", () => {
-    const slide = applyLayout(
-      {
+    const base: Slide = {
         id: "slide-concept",
         title: "Core Idea",
         elements: [
@@ -113,11 +112,8 @@ describe("LayoutValidator", () => {
             fontSize: 24,
           },
         ],
-      },
-      "concept",
-      "ocean",
-      "cyan",
-    );
+      };
+    const slide = applyLayout(base, "concept", testSlideStyle(base));
 
     const issues = validator.validate(createPresentation([slide]));
     expect(issues.filter((issue) => issue.severity === "error")).toEqual([]);

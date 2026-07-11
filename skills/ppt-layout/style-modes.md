@@ -4,19 +4,19 @@
 
 ## 两种基调
 
-| guizang 风格 | 气质 | 本项目的排版模式 | 推荐 theme |
+| guizang 风格 | 气质 | 本项目的排版模式 | 推荐 design preset |
 |--------------|------|------------------|------------|
-| **A · 电子杂志** | 衬线感、人文、故事、暖纸色 | `template`（标准排版） | `nordic` / `sunset` |
-| **B · 瑞士国际主义** | 无衬线、网格、数据驱动、高对比 | `template` 或 `creative`（轻装饰） | `ocean` / `midnight` |
+| **A · 电子杂志** | 衬线感、人文、故事、暖纸色 | `template`（标准排版） | `editorial` |
+| **B · 瑞士国际主义** | 无衬线、网格、数据驱动、高对比 | `template` 或 `creative`（轻装饰） | `business` / `report` / `technical` |
 
 **选择参考**
 
 | 用户说… | 推荐 |
 |---------|------|
-| 杂志感 / 人文 / 故事 / 不指定 | A → template + nordic |
-| 瑞士风 / 极简 / 网格 / 数据 / KPI | B → template + ocean |
-| AI 产品 / 技术 / 工程发布 | B → ocean + cyan |
-| 行业观察 / 文化 / 非虚构 | A → nordic 或 sunset |
+| 杂志感 / 人文 / 故事 | A → template + editorial |
+| 瑞士风 / 极简 / 网格 / 数据 / KPI | B → template + business/report |
+| AI 产品 / 技术 / 工程发布 | B → technical |
+| 行业观察 / 文化 / 非虚构 | A → editorial |
 | 大量 KPI / 路线图 / 流程 | B → process/case 为主 |
 | 需要 arrow/序号装饰 | B + `creative` 模式 |
 
@@ -47,25 +47,24 @@
 | S15/S16 矩阵/快讯 | `concept` |
 | S22 Image Hero | `case`（叙述 + 数字；图片后期 add-element） |
 
-## 主题色映射（guizang 预设 → set-theme）
+## 视觉语义映射（guizang → DesignSystemV1）
 
-guizang 不允许自定义 hex；本项目用固定 theme/palette，语义对齐如下：
+本项目不再使用 theme/palette 命令，使用可验证的固定 design preset：
 
 | guizang 预设 | 本项目 |
 |--------------|--------|
-| 墨水经典 / Monocle | `nordic` + `cyan` |
-| 靛蓝瓷 | `ocean` + `cyan` |
-| 森林墨 | `nordic` + `green` |
-| 牛皮纸 | `sunset` + `orange` |
-| 沙丘 | `sunset` + `orange` |
-| 瑞士 IKB 蓝 | `ocean` + `cyan` |
-| 瑞士柠檬黄/绿/安全橙 | `sunset`/`nordic` + `orange`/`green` |
+| 墨水经典 / Monocle | `editorial` |
+| 靛蓝瓷 / 瑞士 IKB 蓝 | `business` |
+| 森林墨 / 研究报告 | `academic` |
+| 牛皮纸 / 沙丘 | `editorial` |
+| 技术暗色 / 数据大屏 | `technical` |
+| 黑白正式报告 | `report` |
 
-一份 deck **只用一套 theme**，中途不换色。
+一份 deck **只用一套 DesignSystemV1**；页面差异通过 slideVariant、grammarVariant 和少量 designOverride 表达。
 
 ## 页背景节奏（P0-3）
 
-`applyLayout` 会自动写入 `backgroundVariant`；也可用 `set-slide-background` 手动覆盖。
+`applyLayout` 会根据 ResolvedSlideStyle 生成背景；`backgroundVariant` 仅保留为布局节奏提示，不再存在独立背景命令。
 
 | backgroundVariant | 典型页面 | 视觉 |
 |-------------------|----------|------|
@@ -73,7 +72,7 @@ guizang 不允许自定义 hex；本项目用固定 theme/palette，语义对齐
 | `default` | concept、case、process 等正文页 | 略浅或纯色，与 hero 可区分 |
 | `muted` | 密集内容页（可选） | 更柔和的底色 |
 
-nordic 示例：hero `#fbfbfa`，正文 `#ffffff`；ocean 示例：hero 渐变，正文 `#0f172a`。
+最终颜色与渐变由设计引擎解析，不在 Agent 或渲染器内重复映射。
 
 ## 页级 slideVariant（P2-1）
 

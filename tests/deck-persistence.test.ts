@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { FileSessionStore } from "@main/session-store";
 import { projectArtifactFilePaths } from "@shared/project";
 import type { DeckGenerationJob } from "@shared/deck-persistence";
+import { TEST_DESIGN_SYSTEM } from "./design-engine-test-utils";
 
 const temporaryDirectories: string[] = [];
 
@@ -59,6 +60,7 @@ describe("deck persistence (problem 2)", () => {
       id: "pres-id",
       title: "Persist Mirror Test",
       revision: 7,
+      designSystem: TEST_DESIGN_SYSTEM,
       slides: [{ id: "slide-1", title: "Slide One", elements: [] }],
     };
 
@@ -111,8 +113,7 @@ describe("deck persistence (problem 2)", () => {
     await store.recordDeckExport(sessionId, {
       revision: presentation.revision,
       filePath: "C:/exports/demo.pptx",
-      theme: "ocean",
-      palette: "purple",
+      designSystem: TEST_DESIGN_SYSTEM,
       exportedAt: "2026-07-01T12:00:00.000Z",
     });
 
@@ -123,8 +124,7 @@ describe("deck persistence (problem 2)", () => {
       {
         revision: presentation.revision,
         filePath: "C:/exports/demo.pptx",
-        theme: "ocean",
-        palette: "purple",
+        designSystem: TEST_DESIGN_SYSTEM,
         exportedAt: "2026-07-01T12:00:00.000Z",
       },
     ]);

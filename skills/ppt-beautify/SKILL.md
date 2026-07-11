@@ -24,8 +24,8 @@ allowed-tools:
 | 需求 | Deferred Tool | 产出 |
 |------|--------------|------|
 | 单页重排版 | AutoLayoutSlide | `update-slide-layout` |
-| 换主题 | ApplyThemeStyle | `set-theme` |
-| 风格推荐 | SelectStyleStrategy | 建议 theme/palette（不直接改 deck） |
+| 换设计系统 | ApplyDesignSystem | `set-design-system` |
+| 风格推荐 | SelectStyleStrategy | 返回 preset + DesignSystemV1（不直接改 deck） |
 | 长文精简 | CompressText | 压缩后文本（需再 update-element） |
 | 改写字风 | RewriteSlideContent | `update-element` |
 | 图表样式 | BeautifyChart | P2：文本 KPI → chart 元素（kpi-tower/bar/timeline） |
@@ -64,7 +64,7 @@ update-slide-variant(slideId, hero|light|dark) → SubmitCommands
 
 ## 典型场景
 
-**全 deck 换肤**：SelectStyleStrategy → ApplyThemeStyle → SubmitCommands
+**全 deck 换肤**：SelectStyleStrategy → ApplyDesignSystem → SubmitCommands
 
 **单页排版乱了**：AutoLayoutSlide(slideId, layout) → SubmitCommands
 

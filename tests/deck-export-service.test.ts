@@ -6,10 +6,7 @@ import { DeckExportService } from "../src/main/deck/deck-export-service";
 import { createStarterPresentation } from "../src/shared/presentation";
 import type { ExportPresentationOptions } from "../src/shared/ipc";
 
-const defaultExportOptions: ExportPresentationOptions = {
-  theme: "nordic",
-  palette: "cyan",
-};
+const defaultExportOptions: ExportPresentationOptions = {};
 
 let tempDirs: string[] = [];
 

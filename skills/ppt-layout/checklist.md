@@ -12,7 +12,7 @@
 | 4 | comparison 合法 | 偶数条 body；左右列均非空 |
 | 5 | case 合法 | 恰好 2 条 body |
 | 6 | 已排版 | 内容页有 card 矩形（`update-slide-layout` 已执行） |
-| 7 | 主题统一 | 全 deck 同一 theme/palette |
+| 7 | 设计统一 | 全 deck 同一 DesignSystemV1；页面 override 克制 |
 
 ## P1 · 节奏与版式
 
@@ -68,5 +68,5 @@ ReadPresentationSnapshot → ValidateDeckLayout → 对照本清单 → deck-rev
 | 标题重复 | 删画布重复 text |
 | 要点合并 | 拆成多个 text element（内容草稿阶段） |
 | 缺 section/toc | redesign layout-plan 后重新执行 |
-| 未排版 | 按 layout-plan 批量 `update-slide-layout` + `set-theme` |
+| 未排版 | 按 layout-plan 批量 `set-design-system` + `update-slide-layout` |
 | 缺 chart/KPI | BeautifyChart 或 layout-plan enhancement |

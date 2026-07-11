@@ -89,7 +89,7 @@ describe("system prompt assembly", () => {
     expect(assembled.text).toContain("验收 teammate 提交的产物");
   });
 
-  it("author stage omits layout skills from catalog and set-theme examples", () => {
+  it("author stage omits layout skills from catalog and design-system examples", () => {
     const registry = createEmptySkillRegistry();
     registerSkillFromContent(registry, "/tmp/build", "ppt-build", SAMPLE_SKILL);
     registerSkillFromContent(registry, "/tmp/layout", "ppt-layout", LAYOUT_SKILL);
@@ -106,7 +106,7 @@ describe("system prompt assembly", () => {
     expect(assembled.text).toContain("不要新建 TaskGraphCreatePlan");
     expect(assembled.text).toContain("大纲/分镜已冻结");
     expect(assembled.text).toContain("内容规范化");
-    expect(assembled.text).not.toMatch(/"type":"set-theme"/);
+    expect(assembled.text).not.toMatch(/"type":"set-design-system"/);
   });
 
   it("design stage freezes slide count and copy while executing confirmed layout", () => {
@@ -118,13 +118,13 @@ describe("system prompt assembly", () => {
     expect(assembled.text).toContain("slides[] 必须与当前 snapshot 一一对应");
     expect(assembled.text).toContain("layout-plan");
     expect(assembled.text).toContain("ExecuteLayoutPlan");
-    expect(assembled.text).toContain("set-theme");
+    expect(assembled.text).toContain("set-design-system");
     expect(assembled.text).toContain("update-slide-layout");
     expect(assembled.text).toContain("不要再次输出");
     expect(assembled.text).not.toContain("不直接 SubmitCommands 改 deck");
   });
 
-  it("style stage includes theme commands and layout skills", () => {
+  it("style stage includes design-system commands and layout skills", () => {
     const registry = createEmptySkillRegistry();
     registerSkillFromContent(registry, "/tmp/layout", "ppt-layout", LAYOUT_SKILL);
 
@@ -208,7 +208,7 @@ describe("system prompt assembly", () => {
     expect(stage).toBe("design");
   });
 
-  it("resolves author when slides exist without theme", () => {
+  it("resolves edit when existing slides are already laid out", () => {
     const stage = resolvePromptStage({
       request: "继续写下一页",
       presentation: {
@@ -217,7 +217,7 @@ describe("system prompt assembly", () => {
       },
       artifacts: emptyArtifacts(),
     });
-    expect(stage).toBe("author");
+    expect(stage).toBe("edit");
   });
 
   it("LoadSkill rejects layout skill during author stage", async () => {

@@ -1,4 +1,4 @@
-import type { BackgroundGradient } from "./slide-background";
+import type { BackgroundGradient } from "@design-system";
 import { bytesToBase64 } from "./base64";
 import { SLIDE_HEIGHT, SLIDE_WIDTH } from "./slide-html-render";
 

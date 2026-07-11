@@ -7,11 +7,10 @@ import type {
   Slide,
   TextElement,
 } from "@shared/presentation";
-import { resolveSlideBackgroundWithVariant } from "@shared/slide-variant";
+import { resolveSlideStyle, type SlideDesignOverride } from "@design-system";
 import { listLayoutSlots } from "@shared/layout-slots";
 import { fontFamilyToCss, resolveElementFontFamily } from "@shared/typography";
 import { slideThumbnailService } from "../../../deck/slide-thumbnail-service";
-import type { DesignTokensV1 } from "@shared/design-tokens";
 
 export const previewSlideSchema = z.object({
   slideId: z.string().describe("要预览的幻灯片 ID"),
@@ -37,7 +36,8 @@ export interface SlidePreviewSummary {
   title: string;
   layout?: string;
   grammarVariant?: string;
-  designTokens?: DesignTokensV1;
+  designOverride?: SlideDesignOverride;
+  resolvedTokens: ReturnType<typeof resolveSlideStyle>["tokens"];
   backgroundVariant: string;
   slideVariant?: string;
   backgroundCss: string;
@@ -70,7 +70,7 @@ export interface SlidePreviewSummary {
   description: string;
 }
 
-function describeSlide(slide: Slide, _theme: string): string {
+function describeSlide(slide: Slide): string {
   const texts = slide.elements.filter((el): el is TextElement => el.type === "text");
   const images = slide.elements.filter((el): el is ImageElement => el.type === "image");
   const shapes = slide.elements.filter((el): el is ShapeElement => el.type === "shape");
@@ -112,24 +112,23 @@ export const previewSlideTool: ToolDefinition<
     const slide = context.presentation.slides.find((item) => item.id === args.slideId);
     if (!slide) return { preview: null, thumbnail: null };
 
-    const theme = context.presentation.theme || "nordic";
-    const palette = context.presentation.palette || "cyan";
-    const bg = resolveSlideBackgroundWithVariant(theme, palette, slide);
+    const style = resolveSlideStyle(context.presentation.designSystem, slide);
 
     const preview: SlidePreviewSummary = {
       slideId: slide.id,
       title: slide.title,
       layout: slide.layout,
       grammarVariant: slide.grammarVariant,
-      designTokens: slide.designTokens,
+      designOverride: slide.designOverride,
+      resolvedTokens: style.tokens,
       backgroundVariant: slide.backgroundVariant ?? "default",
       slideVariant: slide.slideVariant,
-      backgroundCss: bg.slideBg,
+      backgroundCss: style.background.css,
       imageSlots: listLayoutSlots(slide.layout ?? "", slide.grammarVariant),
       textElements: slide.elements
         .filter((el): el is TextElement => el.type === "text")
         .map((el) => {
-          const fontFamily = resolveElementFontFamily(el, theme);
+          const fontFamily = resolveElementFontFamily(el, style.typography.family);
           return {
             id: el.id,
             text: el.text.slice(0, 80),
@@ -158,13 +157,13 @@ export const previewSlideTool: ToolDefinition<
       chartCount: slide.elements.filter((el) => el.type === "chart").length,
       tableCount: slide.elements.filter((el) => el.type === "table").length,
       iconCount: slide.elements.filter((el) => el.type === "icon").length,
-      description: describeSlide(slide, theme),
+      description: describeSlide(slide),
     };
 
     let thumbnail: SlidePreviewThumbnail | null = null;
     if (args.includeThumbnail) {
       try {
-        thumbnail = await slideThumbnailService.captureSlide(slide, theme, palette);
+        thumbnail = await slideThumbnailService.captureSlide(slide, context.presentation.designSystem);
       } catch {
         thumbnail = null;
       }

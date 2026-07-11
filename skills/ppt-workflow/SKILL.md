@@ -12,7 +12,7 @@ stages:
 
 | 场景 | 路径 | 步骤 |
 |------|------|------|
-| 改页/加页/换主题/用户已给内容 | **轻量** | ReadPresentationSnapshot → SubmitCommands |
+| 改页/加页/换设计系统/用户已给内容 | **轻量** | ReadPresentationSnapshot → SubmitCommands |
 | 小型新建（≤10 页，需求清晰） | **两阶段** | 内容草稿 → LayoutChoiceCard → **设计 → 执行** |
 | 大型新建（>10 页）或用户要求先规划 | **完整** | 见下表 |
 
@@ -33,7 +33,7 @@ stages:
 
 **设计思路来源**：[guizang-ppt-skill](https://github.com/op7418/guizang-ppt-skill) 已适配至 `ppt-layout/`（style-modes、narrative-arc、checklist）。HTML/WebGL 规则不适用本项目。
 
-**默认跳过**：research（`ppt-research`）、独立 design/theme.json（主题写入 layout-plan）。
+**默认跳过**：research（`ppt-research`）。设计系统直接进入 layout-plan；项目化留存路径为 `design/system.json`。
 
 ## 主 Agent 职责
 
@@ -58,7 +58,7 @@ teammate 自主 Claim → slides/layout-plan.json → submitted → lead 验收 
     ↓
 LoadSkill ppt-layout（Executor 模式）
 ReadPresentationSnapshot
-ExecuteLayoutPlan：读取 layout-plan → 校验 → 生成 set-theme/update-slide-layout/update-slide-variant
+ExecuteLayoutPlan：读取 layout-plan → 校验 → 生成 set-design-system/update-slide-layout/update-slide-variant
 ExecuteExtraTool：plan.enhancements（BeautifyChart / InsertSlideImage 等）
     ↓
 LoadSkill deck-review

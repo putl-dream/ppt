@@ -1,5 +1,6 @@
 import { BrowserWindow } from "electron";
 import type { Slide } from "@shared/presentation";
+import type { DesignSystemV1 } from "@design-system";
 import {
   exportSlideThumbnailHtml,
   SLIDE_HEIGHT,
@@ -28,12 +29,11 @@ export class SlideThumbnailService {
 
   async captureSlide(
     slide: Slide,
-    theme: string,
-    palette: string,
+    designSystem: DesignSystemV1,
   ): Promise<SlideThumbnailResult | null> {
     if (!isElectronRuntime()) return null;
 
-    const html = exportSlideThumbnailHtml(slide, { theme, palette });
+    const html = exportSlideThumbnailHtml(slide, { designSystem });
     const window = await this.ensureWindow();
 
     await window.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);

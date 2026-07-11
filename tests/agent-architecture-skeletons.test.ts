@@ -11,7 +11,8 @@ import { readCurrentSlideTool } from "../src/main/agent/tools/core/read-current-
 import { readPresentationSnapshotTool } from "../src/main/agent/tools/core/read-presentation-snapshot";
 import { submitCommandsTool } from "../src/main/agent/tools/core/submit-commands";
 import { analyzeDeckConsistencyTool } from "../src/main/agent/tools/deferred/analyze-deck-consistency";
-import { applyThemeStyleTool } from "../src/main/agent/tools/deferred/apply-theme-style";
+import { applyDesignSystemTool } from "../src/main/agent/tools/deferred/apply-design-system";
+import { TEST_DESIGN_SYSTEM } from "./design-engine-test-utils";
 import { autoLayoutSlideTool } from "../src/main/agent/tools/deferred/auto-layout-slide";
 import { beautifyChartTool } from "../src/main/agent/tools/deferred/beautify-chart";
 import { beautifyTableTool } from "../src/main/agent/tools/deferred/beautify-table";
@@ -115,7 +116,7 @@ describe("Agent Architecture Skeletons & Types", () => {
 
     // Register Deferred Tools
     registry.register(analyzeDeckConsistencyTool);
-    registry.register(applyThemeStyleTool);
+    registry.register(applyDesignSystemTool);
     registry.register(autoLayoutSlideTool);
     registry.register(beautifyChartTool);
     registry.register(beautifyTableTool);
@@ -551,7 +552,7 @@ describe("Agent Architecture Skeletons & Types", () => {
   it("coerces string assumptions to array for SubmitCommands", () => {
     const parsed = submitCommandsTool.inputSchema.parse({
       summary: "Apply theme and layouts",
-      commands: [{ id: "cmd-1", type: "set-theme", theme: "ocean", palette: "cyan" }],
+      commands: [{ id: "cmd-1", type: "set-design-system", designSystem: TEST_DESIGN_SYSTEM }],
       assumptions: "仅排版，不改文案",
     });
 

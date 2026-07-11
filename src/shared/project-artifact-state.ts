@@ -1,16 +1,15 @@
 import type { ProjectStageId } from "./project";
 import {
   createDefaultBriefMarkdown,
-  createDefaultDesignTheme,
+  createDefaultProjectDesignSystem,
   createDefaultOutlineMarkdown,
   createDefaultResearchMarkdown,
-  normalizeDesignTheme,
   parseBriefFields,
-  parseDesignTheme,
+  parseProjectDesignSystem,
   parseOutlineItems,
   parseResearchNotes,
   serializeBriefMarkdown,
-  serializeDesignTheme,
+  serializeProjectDesignSystem,
 } from "./project-artifacts";
 
 const DEFAULT_SLIDES_STORYBOARD = JSON.stringify(
@@ -57,7 +56,7 @@ function researchStructureKey(content: string): string {
 }
 
 function designStructureKey(content: string): string {
-  return JSON.stringify(normalizeDesignTheme(parseDesignTheme(content)));
+  return JSON.stringify(parseProjectDesignSystem(content));
 }
 
 function slidesStructureKey(content: string): string {
@@ -105,7 +104,7 @@ export function isDefaultArtifactContent(stage: ProjectStageId, content: string)
         === researchStructureKey(createDefaultResearchMarkdown());
     case "design":
       return designStructureKey(trimmed)
-        === designStructureKey(serializeDesignTheme(createDefaultDesignTheme()));
+        === designStructureKey(serializeProjectDesignSystem(createDefaultProjectDesignSystem()));
     case "slides":
       return slidesStructureKey(trimmed) === slidesStructureKey(DEFAULT_SLIDES_STORYBOARD);
     case "deck":

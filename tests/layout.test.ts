@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { applyLayout } from "../src/shared/layout";
+import { testSlideStyle } from "./design-engine-test-utils";
 import type { Slide } from "../src/shared/presentation";
 
 describe("applyLayout", () => {
@@ -22,7 +23,7 @@ describe("applyLayout", () => {
       ],
     };
 
-    const laidOut = applyLayout(slide, "concept", "ocean", "cyan");
+    const laidOut = applyLayout(slide, "concept", testSlideStyle(slide));
     const bodyElement = laidOut.elements.find(
       (element) => element.type === "text" && element.id === bodyId,
     );
@@ -67,7 +68,7 @@ describe("applyLayout", () => {
       ],
     };
 
-    const laidOut = applyLayout(slide, "comparison", "ocean", "cyan");
+    const laidOut = applyLayout(slide, "comparison", testSlideStyle(slide));
     const left = laidOut.elements.find((element) => element.id === leftId);
     const right = laidOut.elements.find((element) => element.id === rightId);
 
@@ -75,7 +76,7 @@ describe("applyLayout", () => {
     expect(right?.x).toBeGreaterThanOrEqual(680);
   });
 
-  it("places case layout image into the side slot", () => {
+  it("uses the evidence grammar for a case slide with an image", () => {
     const descId = crypto.randomUUID();
     const imageId = crypto.randomUUID();
     const slide: Slide = {
@@ -105,14 +106,15 @@ describe("applyLayout", () => {
       ],
     };
 
-    const laidOut = applyLayout(slide, "case", "ocean", "cyan");
+    const laidOut = applyLayout(slide, "case", testSlideStyle(slide));
     const image = laidOut.elements.find(
       (element) => element.type === "image" && element.id === imageId,
     );
 
     expect(image?.type === "image" ? image.imageSlot : undefined).toBe("side");
-    expect(image?.x).toBeGreaterThanOrEqual(760);
-    expect(image?.width).toBeGreaterThan(300);
+    expect(laidOut.grammarVariant).toBe("evidence");
+    expect(image?.x).toBeGreaterThanOrEqual(120);
+    expect(image?.width).toBeGreaterThan(600);
   });
 
   it("assigns metric textRole on case layout when no image is present", () => {
@@ -144,7 +146,7 @@ describe("applyLayout", () => {
       ],
     };
 
-    const laidOut = applyLayout(slide, "case", "ocean", "cyan");
+    const laidOut = applyLayout(slide, "case", testSlideStyle(slide));
     const metric = laidOut.elements.find(
       (element) => element.type === "text" && element.id === metricId,
     );
@@ -154,7 +156,7 @@ describe("applyLayout", () => {
     expect(metric?.x).toBeGreaterThanOrEqual(760);
   });
 
-  it("assigns serif cover title on nordic theme and sans on ocean", () => {
+  it("assigns cover title font from the resolved design system", () => {
     const titleId = crypto.randomUUID();
     const nordicSlide: Slide = {
       id: crypto.randomUUID(),
@@ -173,7 +175,7 @@ describe("applyLayout", () => {
       ],
     };
 
-    const nordic = applyLayout(nordicSlide, "cover", "nordic", "cyan");
+    const nordic = applyLayout(nordicSlide, "cover", testSlideStyle(nordicSlide, { fontMood: "formal" }));
     const nordicTitle = nordic.elements.find(
       (element) => element.type === "text" && element.id === titleId,
     );
@@ -184,7 +186,7 @@ describe("applyLayout", () => {
       id: crypto.randomUUID(),
       elements: [{ ...nordicSlide.elements[0], id: titleId }],
     };
-    const ocean = applyLayout(oceanSlide, "cover", "ocean", "cyan");
+    const ocean = applyLayout(oceanSlide, "cover", testSlideStyle(oceanSlide, { fontMood: "minimal" }));
     const oceanTitle = ocean.elements.find(
       (element) => element.type === "text" && element.id === titleId,
     );
@@ -243,7 +245,7 @@ describe("applyLayout", () => {
       ],
     };
 
-    const laidOut = applyLayout(slide, "concept", "ocean", "cyan");
+    const laidOut = applyLayout(slide, "concept", testSlideStyle(slide));
     const imgA = laidOut.elements.find(
       (element) => element.type === "image" && element.id === imageA,
     );
@@ -257,8 +259,7 @@ describe("applyLayout", () => {
   });
 
   it("sets hero backgroundVariant for cover and default for concept", () => {
-    const cover = applyLayout(
-      {
+    const coverSlide: Slide = {
         id: crypto.randomUUID(),
         title: "封面",
         elements: [
@@ -273,13 +274,9 @@ describe("applyLayout", () => {
             fontSize: 56,
           },
         ],
-      },
-      "cover",
-      "nordic",
-      "cyan",
-    );
-    const concept = applyLayout(
-      {
+      };
+    const cover = applyLayout(coverSlide, "cover", testSlideStyle(coverSlide));
+    const conceptSlide: Slide = {
         id: crypto.randomUUID(),
         title: "要点",
         elements: [
@@ -294,17 +291,14 @@ describe("applyLayout", () => {
             fontSize: 20,
           },
         ],
-      },
-      "concept",
-      "nordic",
-      "cyan",
-    );
+      };
+    const concept = applyLayout(conceptSlide, "concept", testSlideStyle(conceptSlide));
 
     expect(cover.backgroundVariant).toBe("hero");
     expect(concept.backgroundVariant).toBe("default");
   });
 
-  it("varies cover grammar with design tokens without changing layout id", () => {
+  it("varies cover grammar with resolved design styles without changing layout id", () => {
     const titleId = crypto.randomUUID();
     const imageId = crypto.randomUUID();
     const slide: Slide = {
@@ -344,44 +338,23 @@ describe("applyLayout", () => {
       ],
     };
 
-    const centered = applyLayout(slide, "cover", "nordic", "cyan", {
+    const centered = applyLayout(slide, "cover", testSlideStyle(slide, {
+      palette: "business-blue", fontMood: "formal", shapeLanguage: "cards", backgroundStyle: "clean",
+      motif: "none", density: "standard", imageTreatment: "plain", chartStyle: "minimal",
+    }), {
       grammarVariant: "centered",
-      designTokens: {
-        palette: "business-blue",
-        fontMood: "formal",
-        shapeLanguage: "cards",
-        backgroundStyle: "clean",
-        motif: "none",
-        density: "standard",
-        imageTreatment: "plain",
-        chartStyle: "minimal",
-      },
     });
-    const editorial = applyLayout(slide, "cover", "nordic", "cyan", {
+    const editorial = applyLayout(slide, "cover", testSlideStyle(slide, {
+      palette: "warm-paper", fontMood: "editorial", shapeLanguage: "annotation", backgroundStyle: "paper",
+      motif: "bookmark", density: "calm", imageTreatment: "framed", chartStyle: "minimal",
+    }), {
       grammarVariant: "editorial-hero",
-      designTokens: {
-        palette: "warm-paper",
-        fontMood: "editorial",
-        shapeLanguage: "annotation",
-        backgroundStyle: "paper",
-        motif: "bookmark",
-        density: "calm",
-        imageTreatment: "framed",
-        chartStyle: "minimal",
-      },
     });
-    const tech = applyLayout(slide, "cover", "nordic", "cyan", {
+    const tech = applyLayout(slide, "cover", testSlideStyle(slide, {
+      palette: "tech-dark", fontMood: "technical", shapeLanguage: "geometric", backgroundStyle: "dark",
+      motif: "arc", density: "standard", imageTreatment: "masked", chartStyle: "dashboard",
+    }), {
       grammarVariant: "signal-dark",
-      designTokens: {
-        palette: "tech-dark",
-        fontMood: "technical",
-        shapeLanguage: "geometric",
-        backgroundStyle: "dark",
-        motif: "arc",
-        density: "standard",
-        imageTreatment: "masked",
-        chartStyle: "dashboard",
-      },
     });
 
     const centeredTitle = centered.elements.find((element) => element.id === titleId);
@@ -396,7 +369,7 @@ describe("applyLayout", () => {
     expect(editorialTitle?.type === "text" ? editorialTitle.align : undefined).toBe("left");
     expect(techTitle?.type === "text" ? techTitle.fontFamily : undefined).toBe("mono");
     expect(editorialImage?.type === "image" ? editorialImage.imageTreatment : undefined).toBe("framed");
-    expect(editorial.backgroundVariant).toBe("muted");
+    expect(editorial.backgroundVariant).toBe("hero");
     expect(tech.backgroundVariant).toBe("hero");
     expect(editorial.elements.some((element) => element.type === "shape" && element.id.startsWith("motif-"))).toBe(true);
   });
@@ -432,7 +405,7 @@ describe("applyLayout", () => {
       ],
     };
 
-    const laidOut = applyLayout(slide, "concept", "nordic", "cyan");
+    const laidOut = applyLayout(slide, "concept", testSlideStyle(slide));
 
     expect(laidOut.elements.some((element) => element.id === shapeId)).toBe(true);
   });

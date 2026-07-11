@@ -1,5 +1,6 @@
 import type { AgentGatewayPreferences } from "@shared/agent-gateway-config";
 import type { AgentStepLimits } from "@shared/agent-step-limits";
+import type { DesignSystemV1 } from "@design-system";
 import { loadAgentGatewayPreferences } from "../agentGatewayConfig";
 import { loadAgentStepLimits } from "../agentStepLimits";
 import {
@@ -26,8 +27,7 @@ export interface PersistedUiSettings {
   uiReadingTone: UiReadingTone;
   borderRadiusScale: number;
   colorContrastOffset: number;
-  selectedTheme: string;
-  selectedPalette: string;
+  selectedDesignSystem: DesignSystemV1;
   logoUrl: string | null;
 }
 

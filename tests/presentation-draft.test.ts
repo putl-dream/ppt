@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { applyLayout } from "../src/shared/layout";
+import { TEST_DESIGN_SYSTEM, testSlideStyle } from "./design-engine-test-utils";
 import type { Slide } from "../src/shared/presentation";
 import {
   countSlidesNeedingLayout,
@@ -28,8 +29,8 @@ describe("presentation-draft", () => {
     };
 
     expect(slideNeedsLayoutChoice(slide)).toBe(true);
-    expect(presentationNeedsLayoutChoice({ id: "p", title: "T", revision: 1, slides: [slide] })).toBe(true);
-    expect(countSlidesNeedingLayout({ id: "p", title: "T", revision: 1, slides: [slide] })).toBe(1);
+    expect(presentationNeedsLayoutChoice({ id: "p", title: "T", revision: 1, designSystem: TEST_DESIGN_SYSTEM, slides: [slide] })).toBe(true);
+    expect(countSlidesNeedingLayout({ id: "p", title: "T", revision: 1, designSystem: TEST_DESIGN_SYSTEM, slides: [slide] })).toBe(1);
   });
 
   it("returns false after applyLayout adds cards", () => {
@@ -61,7 +62,7 @@ describe("presentation-draft", () => {
       ],
     };
 
-    const laidOut = applyLayout(slide, "process", "ocean", "cyan");
+    const laidOut = applyLayout(slide, "process", testSlideStyle(slide));
     expect(slideNeedsLayoutChoice(laidOut)).toBe(false);
     expect(laidOut.elements.some((el) => el.type === "shape" && el.shapeType === "arrow")).toBe(true);
   });
@@ -98,6 +99,6 @@ describe("presentation-draft", () => {
     };
 
     expect(slideNeedsLayoutChoice(slide)).toBe(false);
-    expect(presentationNeedsLayoutChoice({ id: "p", title: "T", revision: 1, slides: [slide] })).toBe(false);
+    expect(presentationNeedsLayoutChoice({ id: "p", title: "T", revision: 1, designSystem: TEST_DESIGN_SYSTEM, slides: [slide] })).toBe(false);
   });
 });

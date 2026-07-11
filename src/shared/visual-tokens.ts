@@ -1,5 +1,5 @@
 import type { ShapeElement } from "./presentation";
-import type { BackgroundGradient } from "./slide-background";
+import type { BackgroundGradient } from "@design-system";
 
 /** Shared visual vocabulary tokens for layouts and style strategies. */
 export const VISUAL_TOKENS = {

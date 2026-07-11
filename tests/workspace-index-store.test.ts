@@ -4,6 +4,7 @@ import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { WorkspaceIndexStore } from "@main/workspace-index-store";
 import { getWorkspaceSessionSnapshotPath } from "@shared/workspace-meta";
+import { DEFAULT_DESIGN_SYSTEM } from "@design-system";
 
 const temporaryDirectories: string[] = [];
 
@@ -38,6 +39,7 @@ describe("WorkspaceIndexStore", () => {
           id: "presentation-1",
           title: "恢复测试",
           revision: 1,
+          designSystem: DEFAULT_DESIGN_SYSTEM,
           slides: [
             {
               id: "slide-1",

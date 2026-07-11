@@ -3,6 +3,7 @@ import type { ToolDefinition } from "../tool-definition";
 import type { PresentationCommand } from "@shared/commands";
 import { resolveFontFamily, type TextRole } from "@shared/typography";
 import type { SlideLayoutType } from "@shared/slide-layouts";
+import { resolveSlideStyle } from "@design-system";
 
 export const applyTypographySchema = z.object({
   slideId: z.string().optional().describe("可选：仅处理单页；省略则处理全 deck"),
@@ -13,31 +14,31 @@ export const applyTypographySchema = z.object({
 });
 
 /**
- * Deferred Tool: 按 theme + textRole 批量更新字体角色。
+ * Deferred Tool: 按解析后的设计系统与 textRole 批量更新字体角色。
  */
 export const applyTypographyTool: ToolDefinition<
   typeof applyTypographySchema,
   { commands: PresentationCommand[] }
 > = {
   name: "ApplyTypography",
-  description: "按当前 theme 与 textRole 批量更新文本 fontFamily 与 metric 样式。",
+  description: "按当前设计系统与 textRole 批量更新文本 fontFamily 与 metric 样式。",
   category: "deferred",
   loadPolicy: "deferred",
   inputSchema: applyTypographySchema,
   risk: "medium",
   execute: async (args, context) => {
-    const theme = context.presentation.theme || "nordic";
     const commands: PresentationCommand[] = [];
     const slides = args.slideId
       ? context.presentation.slides.filter((slide) => slide.id === args.slideId)
       : context.presentation.slides;
 
     for (const slide of slides) {
+      const style = resolveSlideStyle(context.presentation.designSystem, slide);
       for (const element of slide.elements) {
         if (element.type !== "text") continue;
 
         const role = (element.textRole ?? "body") as TextRole;
-        const fontFamily = resolveFontFamily(element.fontFamily, role, theme);
+        const fontFamily = resolveFontFamily(element.fontFamily, role, style.typography.family);
 
         if (element.fontFamily === fontFamily && role === element.textRole) continue;
 

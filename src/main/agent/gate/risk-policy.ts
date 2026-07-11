@@ -27,7 +27,7 @@ export class RiskPolicy {
 
     // 1. 根据命令类型进行初步升级
     for (const cmd of input.commands) {
-      if (cmd.type === "remove-slide" || cmd.type === "set-theme") {
+      if (cmd.type === "remove-slide" || cmd.type === "set-design-system") {
         assessedRisk = "high";
       } else if (
         cmd.type === "remove-element" ||

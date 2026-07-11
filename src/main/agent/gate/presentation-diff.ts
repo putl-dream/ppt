@@ -4,7 +4,7 @@ export interface PresentationDiff {
   titleChanged: boolean;
   oldTitle: string;
   newTitle: string;
-  themeChanged: boolean;
+  designSystemChanged: boolean;
   slidesAddedCount: number;
   slidesRemovedCount: number;
   affectedSlideIds: string[];
@@ -32,7 +32,7 @@ export class PresentationDiffGenerator {
 
     // 比较标题与主题
     const titleChanged = before.title !== after.title;
-    const themeChanged = before.theme !== after.theme || before.palette !== after.palette;
+    const designSystemChanged = JSON.stringify(before.designSystem) !== JSON.stringify(after.designSystem);
 
     // 统计 slide 增删
     const beforeSlideIds = new Set(before.slides.map((s) => s.id));
@@ -92,7 +92,7 @@ export class PresentationDiffGenerator {
       titleChanged,
       oldTitle: before.title,
       newTitle: after.title,
-      themeChanged,
+      designSystemChanged,
       slidesAddedCount,
       slidesRemovedCount,
       affectedSlideIds: Array.from(affectedSlideIds),

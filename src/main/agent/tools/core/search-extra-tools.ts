@@ -37,7 +37,7 @@ export const searchExtraToolsTool: ToolDefinition<
       baseEditingAvailable: true,
       guidance: matches.length > 0
         ? "Deferred tools are optional enhancements. Create and edit slides directly with PresentationCommand through SubmitCommands."
-        : "No matching Deferred Tool was found. This does not block PPT creation: use add-slide, add-element, set-theme and other PresentationCommand values through SubmitCommands.",
+        : "No matching Deferred Tool was found. This does not block PPT creation: use add-slide, add-element, set-design-system and other PresentationCommand values through SubmitCommands.",
     };
   },
 };

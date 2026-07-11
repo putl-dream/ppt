@@ -7,6 +7,7 @@ import { TaskStore } from "../src/main/agent/task/task-store";
 import { createDefaultToolRegistry } from "../src/main/agent/tools/tool-registry";
 import { createStarterPresentation } from "../src/shared/presentation";
 import { AgentRuntime } from "../src/main/agent/runtime/agent-runtime";
+import { TEST_DESIGN_SYSTEM } from "./design-engine-test-utils";
 
 const tempDirs: string[] = [];
 
@@ -47,14 +48,14 @@ describe("layout choice runtime orchestration", () => {
     } as any;
 
     const first = await prepareLayoutChoiceTask({
-      choice: { mode: "creative", theme: "ocean", palette: "cyan" },
+      choice: { mode: "creative", designSystem: TEST_DESIGN_SYSTEM },
       presentation,
       workspaceRoot,
       taskStore,
       toolContext,
     });
     const second = await prepareLayoutChoiceTask({
-      choice: { mode: "creative", theme: "ocean", palette: "cyan" },
+      choice: { mode: "creative", designSystem: TEST_DESIGN_SYSTEM },
       presentation,
       workspaceRoot,
       taskStore,
@@ -73,7 +74,7 @@ describe("layout choice runtime orchestration", () => {
     const choice = JSON.parse(
       await readFile(join(workspaceRoot, "slides", "layout-choice.json"), "utf8"),
     );
-    expect(choice).toMatchObject({ mode: "creative", theme: "ocean", palette: "cyan" });
+    expect(choice).toMatchObject({ mode: "creative", designSystem: TEST_DESIGN_SYSTEM });
     const snapshot = JSON.parse(
       await readFile(join(workspaceRoot, "slides", "layout-input.json"), "utf8"),
     );
@@ -116,7 +117,7 @@ describe("layout choice runtime orchestration", () => {
       selectedElementIds: [],
       workspaceRoot,
       teammateManager: manager,
-      layoutChoice: { mode: "template", theme: "ocean", palette: "cyan" },
+      layoutChoice: { mode: "template", designSystem: TEST_DESIGN_SYSTEM },
     });
 
     expect(result).toMatchObject({ type: "message" });

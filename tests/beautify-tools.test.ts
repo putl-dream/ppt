@@ -3,6 +3,7 @@ import { beautifyChartTool } from "../src/main/agent/tools/deferred/beautify-cha
 import { beautifyTableTool } from "../src/main/agent/tools/deferred/beautify-table";
 import type { Presentation } from "../src/shared/presentation";
 import type { ToolContext } from "../src/main/agent/tools/tool-definition";
+import { TEST_DESIGN_SYSTEM } from "./design-engine-test-utils";
 
 function makeContext(presentation: Presentation): ToolContext {
   return {
@@ -22,8 +23,7 @@ describe("beautify deferred tools", () => {
       id: crypto.randomUUID(),
       title: "Deck",
       revision: 1,
-      theme: "ocean",
-      palette: "cyan",
+      designSystem: TEST_DESIGN_SYSTEM,
       slides: [
         {
           id: slideId,
@@ -75,6 +75,7 @@ describe("beautify deferred tools", () => {
       id: crypto.randomUUID(),
       title: "Deck",
       revision: 1,
+      designSystem: TEST_DESIGN_SYSTEM,
       slides: [
         {
           id: slideId,

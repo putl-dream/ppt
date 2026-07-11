@@ -1,8 +1,7 @@
 import React, { useEffect } from "react";
 import { createPortal } from "react-dom";
 import type { Presentation } from "@shared/presentation";
-import { resolveSlideDesignSystem } from "@shared/resolved-design-system";
-import { resolveChromeTitleFontSize } from "@shared/slide-chrome";
+import { resolveChromeTitleFontSize, resolveSlideStyle } from "@design-system";
 import { SlideElementRenderer } from "./SlideElementRenderer";
 import { ClosePreviewIcon } from "./Icons";
 
@@ -10,8 +9,6 @@ interface DeckPreviewModalProps {
   open: boolean;
   presentation: Presentation;
   selectedSlideId: string;
-  selectedTheme: string;
-  selectedPalette: string;
   logoUrl: string | null;
   onSelectSlide: (slideId: string) => void;
   onClose: () => void;
@@ -21,8 +18,6 @@ export const DeckPreviewModal: React.FC<DeckPreviewModalProps> = ({
   open,
   presentation,
   selectedSlideId,
-  selectedTheme,
-  selectedPalette,
   logoUrl,
   onSelectSlide,
   onClose,
@@ -43,15 +38,8 @@ export const DeckPreviewModal: React.FC<DeckPreviewModalProps> = ({
     presentation.slides.findIndex((slide) => slide.id === selectedSlideId),
   );
   const activeSlide = presentation.slides[activeIndex] ?? presentation.slides[0];
-  const designSystem = activeSlide
-    ? resolveSlideDesignSystem(
-        {
-          theme: selectedTheme,
-          palette: selectedPalette,
-          designTokens: presentation.designTokens,
-        },
-        activeSlide,
-      )
+  const slideStyle = activeSlide
+    ? resolveSlideStyle(presentation.designSystem, activeSlide)
     : undefined;
 
   return createPortal(
@@ -87,8 +75,8 @@ export const DeckPreviewModal: React.FC<DeckPreviewModalProps> = ({
               <div
                 className="deck-preview-modal-slide"
                 style={{
-                  background: designSystem?.background.slideBg,
-                  fontFamily: designSystem?.fontCss,
+                  background: slideStyle?.background.css,
+                  fontFamily: slideStyle?.typography.css,
                 }}
               >
                 {logoUrl && (
@@ -101,8 +89,8 @@ export const DeckPreviewModal: React.FC<DeckPreviewModalProps> = ({
                   <div
                     className="slide-header-text"
                     style={{
-                      color: designSystem?.colors.title,
-                      borderBottom: `2px solid ${designSystem?.colors.accent}`,
+                      color: slideStyle?.colors.title,
+                      borderBottom: `2px solid ${slideStyle?.colors.accent}`,
                       fontSize: resolveChromeTitleFontSize(activeSlide.title),
                     }}
                   >
@@ -125,14 +113,7 @@ export const DeckPreviewModal: React.FC<DeckPreviewModalProps> = ({
                   >
                     <SlideElementRenderer
                       element={element}
-                      theme={selectedTheme}
-                      bodyColor={designSystem?.colors.body}
-                      accentColor={designSystem?.colors.accent}
-                      cardBg={designSystem?.colors.cardBg}
-                      cardStroke={designSystem?.colors.cardStroke}
-                      fontFamily={designSystem?.fontFamily}
-                      imageTreatment={designSystem?.imageTreatment}
-                      chartStyle={designSystem?.chartStyle}
+                      style={slideStyle!}
                     />
                   </div>
                 ))}

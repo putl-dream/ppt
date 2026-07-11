@@ -19,7 +19,7 @@ allowed-tools:
 
 ## 前置检查
 
-1. `ReadPresentationSnapshot`：slides 非空、title 已设、theme 已应用。
+1. `ReadPresentationSnapshot`：slides 非空、title 已设、DesignSystemV1 完整。
 2. 可选 LoadSkill `deck-review`，严重问题为 0 再导出。
 3. 向用户确认导出格式：**pptx**（默认）或 **html**（网页预览）；pdf 尚未实现。
 
@@ -44,7 +44,7 @@ allowed-tools:
 
 - 导出**不修改** presentation revision；是只读副作用（写磁盘文件）。
 - 若 slides 为空或仅占位页，先 AskUser 是否继续。
-- 导出失败时检查 theme 是否为有效枚举值。
+- 导出失败时检查 presentation.designSystem 是否通过 schema；导出器不接受主题兼容参数。
 
 ## 衔接
 

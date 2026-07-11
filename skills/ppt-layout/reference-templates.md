@@ -8,10 +8,10 @@
 
 **主色**
 
-| 角色 | 色值 | 映射 theme |
+| 角色 | 色值 | 映射 design token |
 |------|------|------------|
-| 主色/强调 | `#0485A8` `#79C9E2` | ocean + cyan |
-| 深色文字 | `#2C3139` | ocean.title |
+| 主色/强调 | `#0485A8` `#79C9E2` | business-blue accent |
+| 深色文字 | `#2C3139` | resolved title |
 | 辅助深蓝 | `#224477` | cardStroke 系 |
 
 **结构节奏**
@@ -39,12 +39,12 @@
 
 **主色**
 
-| 角色 | 色值 | 映射 theme |
+| 角色 | 色值 | 映射 design token |
 |------|------|------------|
-| 背景/分隔 | `#E6E6E6` `#FFFFFF` | nordic |
-| 正文 | `#000000` `#808080` | nordic.title / body |
-| 强调蓝 | `#2786F8` | nordic + cyan accent |
-| 强调橙 | `#ED761A` | sunset + orange（仅点缀） |
+| 背景/分隔 | `#E6E6E6` `#FFFFFF` | mono-report background |
+| 正文 | `#000000` `#808080` | resolved title / body |
+| 强调蓝 | `#2786F8` | business-blue accent |
+| 强调橙 | `#ED761A` | warm-paper accent（仅点缀） |
 
 **结构节奏**
 
@@ -74,9 +74,9 @@
 2. 标准模式依赖 `update-slide-layout` 一键排版
 3. 创意模式仅在 process/comparison 上追加少量 shape
 
-## 主题速查
+## 设计预设速查
 
-| 模板 | 推荐 set-theme |
+| 模板 | 推荐 preset |
 |------|----------------|
-| 简约商务 | `{"theme":"ocean","palette":"cyan"}` |
-| 商务汇报 | `{"theme":"nordic","palette":"cyan"}` |
+| 简约商务 | `business` |
+| 商务汇报 | `report` |

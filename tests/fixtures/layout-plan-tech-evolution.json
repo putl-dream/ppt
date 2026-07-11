@@ -1,8 +1,19 @@
 {
   "version": 1,
-  "theme": "ocean",
-  "palette": "cyan",
   "styleMode": "template",
+  "designSystem": {
+    "version": 1,
+    "tokens": {
+      "palette": "tech-dark",
+      "fontMood": "technical",
+      "shapeLanguage": "geometric",
+      "backgroundStyle": "dark",
+      "motif": "path-line",
+      "density": "standard",
+      "imageTreatment": "masked",
+      "chartStyle": "dashboard"
+    }
+  },
   "designNotes": "Redesign of 7-slide tech evolution deck: replace concept abuse with process/case/toc rhythm.",
   "slides": [
     {

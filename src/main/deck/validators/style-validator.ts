@@ -2,6 +2,7 @@ import type { DeckValidationIssue } from "@shared/deck-validation";
 import type { DesignConstraints } from "@shared/deck-persistence";
 import { createDefaultDesignConstraints } from "@shared/deck-persistence";
 import type { Presentation, Slide, TextElement } from "@shared/presentation";
+import { designSystemV1Schema } from "@design-system";
 
 export interface StyleValidatorOptions {
   constraints?: DesignConstraints;
@@ -16,7 +17,7 @@ export class StyleValidator {
     const slideIdSet = options.slideIds ? new Set(options.slideIds) : undefined;
     const issues: DeckValidationIssue[] = [];
 
-    issues.push(...this.validatePresentationTheme(presentation));
+    issues.push(...this.validateDesignSystem(presentation));
 
     const titleToSlideIds = new Map<string, string[]>();
     for (const slide of presentation.slides) {
@@ -54,27 +55,18 @@ export class StyleValidator {
     return issues;
   }
 
-  private validatePresentationTheme(presentation: Presentation): DeckValidationIssue[] {
+  private validateDesignSystem(presentation: Presentation): DeckValidationIssue[] {
     if (presentation.slides.length === 0) return [];
 
-    const issues: DeckValidationIssue[] = [];
-    if (!presentation.theme) {
-      issues.push({
+    if (!designSystemV1Schema.safeParse(presentation.designSystem).success) {
+      return [{
         category: "style",
-        severity: "warning",
-        message: "Presentation theme is not set.",
-        fixHint: "Apply a theme with ApplyThemeStyle or set-theme command.",
-      });
+        severity: "error",
+        message: "Presentation designSystem is invalid.",
+        fixHint: "Apply a complete DesignSystemV1 with ApplyDesignSystem.",
+      }];
     }
-    if (!presentation.palette) {
-      issues.push({
-        category: "style",
-        severity: "warning",
-        message: "Presentation palette is not set.",
-        fixHint: "Apply a palette with ApplyThemeStyle or set-theme command.",
-      });
-    }
-    return issues;
+    return [];
   }
 
   private validateSlideTypography(slide: Slide, constraints: DesignConstraints): DeckValidationIssue[] {

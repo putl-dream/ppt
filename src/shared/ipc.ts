@@ -30,7 +30,7 @@ export interface AgentApprovalRequest {
     titleChanged: boolean;
     oldTitle: string;
     newTitle: string;
-    themeChanged: boolean;
+    designSystemChanged: boolean;
     slidesAddedCount: number;
     slidesRemovedCount: number;
     affectedSlideIds: string[];
@@ -208,8 +208,6 @@ export interface DesktopApi {
 }
 
 export interface ExportPresentationOptions {
-  theme: string;
-  palette: string;
   logoUrl?: string | null;
 }
 

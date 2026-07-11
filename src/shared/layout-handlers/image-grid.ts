@@ -15,10 +15,9 @@ function resolveVariant(ctx: LayoutGrammarContext): ImageGridVariant {
   if (["grid", "hero-caption", "filmstrip", "evidence-wall"].includes(ctx.grammarVariant ?? "")) {
     return ctx.grammarVariant as ImageGridVariant;
   }
-  if (!ctx.hasExplicitDesignTokens) return "grid";
   if (ctx.imageElements.length <= 1) return "hero-caption";
-  if (ctx.designTokens.shapeLanguage === "editorial") return "filmstrip";
-  if (ctx.designTokens.shapeLanguage === "annotation") return "evidence-wall";
+  if (ctx.style.tokens.shapeLanguage === "editorial") return "filmstrip";
+  if (ctx.style.tokens.shapeLanguage === "annotation") return "evidence-wall";
   return "grid";
 }
 

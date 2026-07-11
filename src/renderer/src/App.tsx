@@ -27,6 +27,7 @@ import {
   type LayoutChoice,
   type LayoutVisualMode,
 } from "@shared/layout-preference";
+import { DEFAULT_DESIGN_SYSTEM, type DesignSystemV1 } from "@design-system";
 import type { AgentQuestionResolved } from "@shared/agent-question";
 import {
   countSlidesNeedingLayout,
@@ -113,10 +114,8 @@ export function App() {
     logoUrl,
     selectedModel,
     selectedModelId,
-    selectedPalette,
-    selectedTheme,
-    setSelectedPalette,
-    setSelectedTheme,
+    selectedDesignSystem,
+    setSelectedDesignSystem,
     selectModel: setSelectedModelId,
     visibleModels,
   } = settings;
@@ -1619,17 +1618,15 @@ export function App() {
   const handleConfirmLayout = (
     messageId: string,
     mode: LayoutVisualMode,
-    theme: string,
-    palette: string,
+    designSystem: DesignSystemV1,
   ) => {
     saveLayoutVisualMode(mode);
-    setSelectedTheme(theme);
-    setSelectedPalette(palette);
+    setSelectedDesignSystem(designSystem);
     markInlineCardResolved(messageId, "layout", "confirmed", mode);
     triggerToast(mode === "creative" ? "🎨 开始创意装饰排版" : "📐 开始标准排版");
-    void startAgent(buildLayoutPhasePrompt(mode, theme, palette), undefined, {
+    void startAgent(buildLayoutPhasePrompt(mode, designSystem), undefined, {
       userDisplayContent: false,
-      layoutChoice: { mode, theme, palette },
+      layoutChoice: { mode, designSystem },
     });
   };
 
@@ -1656,8 +1653,6 @@ export function App() {
     setIsExportingDeck(true);
     try {
       const savedPath = await window.desktopApi.exportPresentation(presentation, {
-        theme: selectedTheme,
-        palette: selectedPalette,
         logoUrl,
       });
       const exportMessage = savedPath
@@ -1750,8 +1745,7 @@ export function App() {
             onOpenDeckPreview: handleOpenDeckPreview,
             onExportDeck: () => void handleExportDeck(),
             isExportingDeck,
-            selectedTheme,
-            selectedPalette,
+            selectedDesignSystem,
             activeRunId,
             onCancelRun: () => void handleCancelRun(),
             isCancellingRun,
@@ -1772,8 +1766,6 @@ export function App() {
             presentation,
             selectedSlideId,
             onSelectSlide: setSelectedSlideId,
-            selectedTheme,
-            selectedPalette,
             themeMode: computedTheme,
             logoUrl,
             onCloseMirror: handleCloseMirror,
@@ -1784,10 +1776,8 @@ export function App() {
           } : undefined}
           deckPreviewProps={{
             open: isDeckPreviewOpen && Boolean(presentation),
-            presentation: presentation ?? { id: "", title: "", revision: 0, slides: [] },
+            presentation: presentation ?? { id: "", title: "", revision: 0, designSystem: DEFAULT_DESIGN_SYSTEM, slides: [] },
             selectedSlideId,
-            selectedTheme,
-            selectedPalette,
             logoUrl,
             onSelectSlide: setSelectedSlideId,
             onClose: () => setIsDeckPreviewOpen(false),

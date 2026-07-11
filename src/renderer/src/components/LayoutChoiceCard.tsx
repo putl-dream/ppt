@@ -1,33 +1,26 @@
 import React, { useState } from "react";
 import type { LayoutVisualMode } from "@shared/layout-preference";
-import { LAYOUT_THEME_OPTIONS, loadLayoutVisualMode } from "@shared/layout-preference";
+import { LAYOUT_DESIGN_OPTIONS, loadLayoutVisualMode } from "@shared/layout-preference";
+import type { DesignSystemV1 } from "@design-system";
 import type { InlineCardRef } from "@shared/inline-artifact-cards";
 
 interface LayoutChoiceCardProps {
   slideCount: number;
   resolved?: InlineCardRef["resolved"];
   layoutMode?: LayoutVisualMode;
-  selectedTheme: string;
-  selectedPalette: string;
-  onConfirm?: (mode: LayoutVisualMode, theme: string, palette: string) => void;
+  selectedDesignSystem: DesignSystemV1;
+  onConfirm?: (mode: LayoutVisualMode, designSystem: DesignSystemV1) => void;
 }
 
 export const LayoutChoiceCard: React.FC<LayoutChoiceCardProps> = ({
   slideCount,
   resolved,
   layoutMode,
-  selectedTheme,
-  selectedPalette,
+  selectedDesignSystem,
   onConfirm,
 }) => {
   const [mode, setMode] = useState<LayoutVisualMode>(layoutMode ?? loadLayoutVisualMode());
-  const [theme, setTheme] = useState(selectedTheme);
-  const [palette, setPalette] = useState(selectedPalette);
-
-  const handleThemePick = (nextTheme: string, nextPalette: string) => {
-    setTheme(nextTheme);
-    setPalette(nextPalette);
-  };
+  const [designSystem, setDesignSystem] = useState(selectedDesignSystem);
 
   const resolvedLabel = resolved === "confirmed"
     ? (layoutMode === "creative" ? "已选：创意装饰" : "已选：标准排版")
@@ -59,7 +52,7 @@ export const LayoutChoiceCard: React.FC<LayoutChoiceCardProps> = ({
           />
           <div className="layout-choice-option-body">
             <strong>标准排版</strong>
-            <span>主题 + 布局模板，卡片与间距自动对齐（推荐）</span>
+            <span>设计系统 + 布局语法，视觉与间距自动对齐（推荐）</span>
           </div>
         </label>
 
@@ -81,18 +74,17 @@ export const LayoutChoiceCard: React.FC<LayoutChoiceCardProps> = ({
 
       {mode === "template" && !resolved && (
         <div className="layout-choice-themes">
-          <span className="layout-choice-themes-label">主题预览</span>
+          <span className="layout-choice-themes-label">设计系统预览</span>
           <div className="layout-choice-theme-grid">
-            {LAYOUT_THEME_OPTIONS.map((option) => (
+            {LAYOUT_DESIGN_OPTIONS.map((option) => (
               <button
-                key={`${option.theme}-${option.palette}`}
+                key={option.id}
                 type="button"
                 className={`layout-choice-theme-chip${
-                  theme === option.theme && palette === option.palette ? " is-active" : ""
+                  designSystem.tokens.palette === option.system.tokens.palette ? " is-active" : ""
                 }`}
-                data-theme={option.theme}
-                data-palette={option.palette}
-                onClick={() => handleThemePick(option.theme, option.palette)}
+                data-palette={option.system.tokens.palette}
+                onClick={() => setDesignSystem(option.system)}
               >
                 {option.label}
               </button>
@@ -106,7 +98,7 @@ export const LayoutChoiceCard: React.FC<LayoutChoiceCardProps> = ({
           <button
             type="button"
             className="btn-apply"
-            onClick={() => onConfirm(mode, theme, palette)}
+            onClick={() => onConfirm(mode, designSystem)}
           >
             确认并排版
           </button>

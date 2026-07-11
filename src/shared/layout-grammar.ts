@@ -1,11 +1,8 @@
-import type { DesignTokensV1 } from "./design-tokens";
 import type { LayoutContext } from "./layout-registry";
 import type { SlideLayoutType } from "./slide-layouts";
 
 export interface LayoutGrammarContext extends LayoutContext {
-  designTokens: DesignTokensV1;
   grammarVariant?: string;
-  hasExplicitDesignTokens: boolean;
 }
 
 export interface LayoutGrammarHandler {

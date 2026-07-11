@@ -20,6 +20,7 @@ import type {
   AgentModelResponse,
   AgentModelToolUseBlock,
 } from "../src/main/agent/gateway/types";
+import { TEST_DESIGN_SYSTEM, testDesignSystem } from "./design-engine-test-utils";
 
 function makePresentation(): Presentation {
   const slideId = crypto.randomUUID();
@@ -27,6 +28,7 @@ function makePresentation(): Presentation {
     id: crypto.randomUUID(),
     title: "Test Deck",
     revision: 1,
+    designSystem: TEST_DESIGN_SYSTEM,
     slides: [{
       id: slideId,
       title: "Intro",
@@ -48,7 +50,7 @@ function makePresentation(): Presentation {
 describe("layout-command-utils", () => {
   it("detects layout-visual commands", () => {
     const layoutCommands: PresentationCommand[] = [
-      { id: "c1", type: "set-theme", theme: "nordic", palette: "cyan" },
+      { id: "c1", type: "set-design-system", designSystem: TEST_DESIGN_SYSTEM },
       { id: "c2", type: "update-slide-layout", slideId: "s1", layout: "cover" },
     ];
     expect(hasLayoutVisualCommands(layoutCommands)).toBe(true);
@@ -61,21 +63,21 @@ describe("layout-command-utils", () => {
     const presentation = makePresentation();
     const slideId = presentation.slides[0].id;
     const draft = applyCommandsToDraft(presentation, [
-      { id: "c1", type: "set-theme", theme: "nordic", palette: "cyan" },
+      { id: "c1", type: "set-design-system", designSystem: TEST_DESIGN_SYSTEM },
       { id: "c2", type: "update-slide-layout", slideId, layout: "cover" },
     ]);
-    expect(draft.theme).toBe("nordic");
+    expect(draft.designSystem).toEqual(TEST_DESIGN_SYSTEM);
     expect(draft.slides[0].layout).toBe("cover");
   });
 
-  it("collects affected slide ids and expands on set-theme", () => {
+  it("collects affected slide ids and expands on set-design-system", () => {
     const presentation = makePresentation();
     const slideId = presentation.slides[0].id;
     const draft = applyCommandsToDraft(presentation, [
-      { id: "c1", type: "set-theme", theme: "nordic" },
+      { id: "c1", type: "set-design-system", designSystem: testDesignSystem({ palette: "warm-paper" }) },
     ]);
     expect(collectAffectedSlideIds([
-      { id: "c1", type: "set-theme", theme: "nordic" },
+      { id: "c1", type: "set-design-system", designSystem: testDesignSystem({ palette: "warm-paper" }) },
     ], draft)).toEqual([slideId]);
   });
 });
@@ -108,7 +110,7 @@ describe("render-feedback-loop", () => {
     const payload = await buildRenderFeedback({
       presentation,
       commands: [
-        { id: "c1", type: "set-theme", theme: "nordic", palette: "cyan" },
+        { id: "c1", type: "set-design-system", designSystem: TEST_DESIGN_SYSTEM },
         { id: "c2", type: "update-slide-layout", slideId, layout: "cover" },
       ],
       proposalSummary: "Apply cover layout",
@@ -117,8 +119,11 @@ describe("render-feedback-loop", () => {
 
     expect(payload.slides.length).toBe(1);
     expect(payload.slides[0].layout).toBe("cover");
+    expect(payload.slides[0].scores.overall).toBeGreaterThan(0);
+    expect(payload.deckScores.consistency).toBe(100);
     expect(payload.hasThumbnails).toBe(false);
     expect(formatRenderFeedbackMessage(payload)).toContain("排版视觉反馈");
+    expect(formatRenderFeedbackMessage(payload)).toContain("Deck 总分");
   });
 });
 
@@ -170,9 +175,9 @@ describe("render feedback runtime integration", () => {
           id: "call-1",
           name: "SubmitCommands",
           input: {
-            summary: "Apply theme and cover layout",
+            summary: "Apply design system and cover layout",
             commands: [
-              { id: "c1", type: "set-theme", theme: "nordic", palette: "cyan" },
+              { id: "c1", type: "set-design-system", designSystem: TEST_DESIGN_SYSTEM },
               { id: "c2", type: "update-slide-layout", slideId, layout: "cover" },
             ],
             risk: "low",
@@ -187,7 +192,7 @@ describe("render feedback runtime integration", () => {
           input: {
             summary: "Visual review passed",
             commands: [
-              { id: "c3", type: "set-theme", theme: "nordic", palette: "cyan" },
+              { id: "c3", type: "set-design-system", designSystem: TEST_DESIGN_SYSTEM },
             ],
             risk: "low",
           },

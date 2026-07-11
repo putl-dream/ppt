@@ -3,9 +3,7 @@ import { fileURLToPath } from "node:url";
 import type { Presentation } from "@shared/presentation";
 import type { ExportPresentationOptions } from "@shared/ipc";
 import { fontFamilyToPptxFace, resolveElementFontFamily } from "@shared/typography";
-import { resolveSlideDesignSystem } from "@shared/resolved-design-system";
-import { resolveImageTreatmentStyle } from "@shared/image-treatment";
-import { resolveChromeTitleFontSize } from "@shared/slide-chrome";
+import { resolveChromeTitleFontSize, resolveImageTreatment, resolveSlideStyle } from "@design-system";
 import { chartDataToSvgString, chartSvgToDataUri } from "@shared/chart-utils";
 import { renderGradientToPng } from "@shared/gradient-export";
 import { iconToSvgString, iconSvgToDataUri } from "@shared/icon-registry";
@@ -34,38 +32,28 @@ export async function exportToPptx(
 ): Promise<void> {
   const pptx = new pptxgen();
 
-  const presentationTheme = (presentation as any).theme || options.theme || "nordic";
-  const presentationPalette = (presentation as any).palette || options.palette || "cyan";
-
   // Canvas is 1280x720 px; PPT slide is 10x5.625 in → divide by 128.
   const px = (value: number) => value / 128;
 
   for (let i = 0; i < presentation.slides.length; i++) {
     const slideData = presentation.slides[i];
     const slide = pptx.addSlide();
-    const designSystem = resolveSlideDesignSystem(
-      {
-        theme: presentationTheme,
-        palette: presentationPalette,
-        designTokens: presentation.designTokens,
-      },
-      slideData,
-    );
-    const { colors } = designSystem;
-    const fontFace = designSystem.fontFace;
+    const style = resolveSlideStyle(presentation.designSystem, slideData);
+    const { colors } = style;
+    const fontFace = style.typography.pptxFace;
     const cleanTitleColor = cleanColor(colors.title);
     const cleanBodyColor = cleanColor(colors.body);
     const cleanAccentColor = cleanColor(colors.accent);
     const showChromeHeader =
       slideData.layout !== "cover" && slideData.layout !== "section";
 
-    const slideBackground = designSystem.background;
+    const slideBackground = style.background;
 
     if (slideBackground.gradient) {
       const bgPng = renderGradientToPng(slideBackground.gradient);
       slide.background = { data: bgPng };
     } else {
-      slide.background = { fill: cleanColor(slideBackground.exportFill) };
+      slide.background = { fill: cleanColor(slideBackground.fill) };
     }
 
     if (slideBackground.pattern?.type === "grid") {
@@ -166,8 +154,8 @@ export async function exportToPptx(
       if (element.type === "text") {
         const elementFont = element.fontFamily ?? (
           element.textRole
-            ? resolveElementFontFamily(element, presentationTheme)
-            : designSystem.fontFamily
+            ? resolveElementFontFamily(element, style.typography.family)
+            : style.typography.family
         );
         slide.addText(element.text, {
           x,
@@ -183,9 +171,10 @@ export async function exportToPptx(
         });
       } else if (element.type === "image") {
         try {
-          const treatment = resolveImageTreatmentStyle(
-            element,
-            designSystem.imageTreatment,
+          const treatment = resolveImageTreatment(
+            element.imageTreatment,
+            style.image.treatment,
+            element.borderRadius,
             colors,
           );
           if (treatment.treatment === "framed" || treatment.treatment === "captioned") {
@@ -295,7 +284,7 @@ export async function exportToPptx(
           const svg = chartDataToSvgString(
             element,
             colors.accent,
-            designSystem.chartStyle,
+            style.chart.style,
             colors.body,
           );
           slide.addImage({

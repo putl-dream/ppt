@@ -6,8 +6,10 @@ import { ICON_NAMES } from "./icon-registry";
 import {
   CHART_STYLES,
   IMAGE_TREATMENTS,
-  designTokensV1Schema,
-} from "./design-tokens";
+  DEFAULT_DESIGN_SYSTEM,
+  designSystemV1Schema,
+  slideDesignOverrideSchema,
+} from "../design-system";
 
 export const CHART_TYPES = ["bar", "h-bar", "timeline", "kpi-tower"] as const;
 export const ELEMENT_PROVENANCE = ["layout", "user", "agent", "asset"] as const;
@@ -152,7 +154,7 @@ export const slideSchema = z.object({
   elements: z.array(slideElementSchema),
   layout: z.string().optional(),
   grammarVariant: z.string().optional(),
-  designTokens: designTokensV1Schema.optional(),
+  designOverride: slideDesignOverrideSchema.optional(),
   backgroundVariant: z.enum(BACKGROUND_VARIANTS).optional(),
   slideVariant: z.enum(SLIDE_VARIANTS).optional(),
 });
@@ -162,9 +164,7 @@ export const presentationSchema = z.object({
   title: z.string(),
   revision: z.number().int().nonnegative(),
   slides: z.array(slideSchema),
-  theme: z.string().optional(),
-  palette: z.string().optional(),
-  designTokens: designTokensV1Schema.optional(),
+  designSystem: designSystemV1Schema,
 });
 
 export type TextElement = z.infer<typeof textElementSchema>;
@@ -185,6 +185,7 @@ export function createStarterPresentation(): Presentation {
     id: crypto.randomUUID(),
     title: "Untitled presentation",
     revision: 0,
+    designSystem: DEFAULT_DESIGN_SYSTEM,
     slides: [
       {
         id: crypto.randomUUID(),

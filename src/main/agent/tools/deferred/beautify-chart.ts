@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { ToolDefinition } from "../tool-definition";
 import type { PresentationCommand } from "@shared/commands";
-import { getThemePaletteColors } from "@shared/layout";
+import { resolveSlideStyle } from "@design-system";
 
 export const beautifyChartSchema = z.object({
   slideId: z.string().describe("幻灯片 ID"),
@@ -28,9 +28,8 @@ export const beautifyChartTool: ToolDefinition<
     const element = slide.elements.find((item) => item.id === args.elementId);
     if (!element) return { commands: [] };
 
-    const theme = context.presentation.theme || "nordic";
-    const palette = context.presentation.palette || "cyan";
-    const colors = getThemePaletteColors(theme, palette);
+    const style = resolveSlideStyle(context.presentation.designSystem, slide);
+    const colors = style.colors;
 
     if (element.type === "chart") {
       return {
@@ -40,7 +39,7 @@ export const beautifyChartTool: ToolDefinition<
             type: "update-element",
             slideId: args.slideId,
             elementId: args.elementId,
-            element: { ...element, accentColor: colors.accent },
+            element: { ...element, accentColor: colors.accent, chartStyle: style.chart.style },
           },
         ],
       };
@@ -82,6 +81,7 @@ export const beautifyChartTool: ToolDefinition<
               items: [{ label: element.text, value: Number.isFinite(parsedValue) ? parsedValue : 100 }],
             },
             accentColor: colors.accent,
+            chartStyle: style.chart.style,
           },
         },
       ],
