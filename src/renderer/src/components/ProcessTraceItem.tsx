@@ -22,6 +22,20 @@ export const ProcessTraceItem: React.FC<ProcessTraceItemProps> = ({
     setExpanded(Boolean(row.active));
   }, [row.active, row.kind]);
 
+  const toggleExpanded = () => setExpanded((value) => !value);
+
+  const handleLabelClick = () => {
+    const selection = window.getSelection();
+    if (selection && !selection.isCollapsed) return;
+    toggleExpanded();
+  };
+
+  const handleLabelKeyDown = (event: React.KeyboardEvent<HTMLSpanElement>) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    toggleExpanded();
+  };
+
   if (row.kind === "progress") {
     return (
       <div className={`process-trace-row process-trace-row--progress${row.active ? " process-trace-row--active" : ""}`}>
@@ -40,7 +54,7 @@ export const ProcessTraceItem: React.FC<ProcessTraceItemProps> = ({
           <button
             type="button"
             className="process-trace-row-toggle"
-            onClick={() => setExpanded((value) => !value)}
+            onClick={toggleExpanded}
             aria-expanded={effectiveExpanded}
             aria-label={effectiveExpanded ? `收起${row.title}` : `展开${row.title}`}
           >
@@ -49,7 +63,16 @@ export const ProcessTraceItem: React.FC<ProcessTraceItemProps> = ({
         ) : (
           <span className="process-trace-row-caret" aria-hidden="true" />
         )}
-        <span className="process-trace-row-label">{row.title}</span>
+        <span
+          className={`process-trace-row-label${hasBody ? " process-trace-row-label--interactive" : ""}`}
+          onClick={hasBody ? handleLabelClick : undefined}
+          onKeyDown={hasBody ? handleLabelKeyDown : undefined}
+          role={hasBody ? "button" : undefined}
+          tabIndex={hasBody ? 0 : undefined}
+          aria-expanded={hasBody ? effectiveExpanded : undefined}
+        >
+          {row.title}
+        </span>
       </div>
       {effectiveExpanded && (
         <div className="process-trace-row-body">

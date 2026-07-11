@@ -822,6 +822,25 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  transition: color 0.15s ease, filter 0.15s ease;
+}
+
+.process-trace-row-label--interactive {
+  cursor: pointer;
+}
+
+.process-trace-row-label--interactive:hover {
+  color: var(--text-primary);
+}
+
+.process-trace-row-title:has(.process-trace-row-label--interactive:hover) .process-trace-row-toggle {
+  color: var(--text-secondary);
+}
+
+.process-trace-row-label--interactive:focus-visible {
+  outline: 1px solid var(--border-glass-focused);
+  outline-offset: 2px;
+  border-radius: 2px;
 }
 
 .process-trace-row--active .process-trace-row-label {
@@ -839,6 +858,10 @@
   background-clip: text;
   -webkit-background-clip: text;
   animation: process-label-shimmer 1.8s linear infinite;
+}
+
+.process-trace-row--active .process-trace-row-label--interactive:hover {
+  filter: brightness(1.3);
 }
 
 @keyframes process-label-shimmer {
