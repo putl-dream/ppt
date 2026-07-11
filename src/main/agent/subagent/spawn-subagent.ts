@@ -62,7 +62,11 @@ export async function spawnSubAgent(options: SpawnSubAgentOptions): Promise<stri
     description: tool.description,
     inputSchema: toToolInputSchema(tool.inputSchema),
   }));
-  const toolContext: SubAgentToolContext = { workspaceRoot: options.workspaceRoot };
+  const toolContext: SubAgentToolContext = {
+    workspaceRoot: options.workspaceRoot,
+    gatewayConfig: options.gateway.getGatewayConfig?.(),
+    signal: options.signal,
+  };
 
   if (options.taskId) {
     emitProgress(options, {

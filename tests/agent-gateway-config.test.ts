@@ -24,4 +24,15 @@ describe("agent-gateway-config", () => {
     expect(config.timeoutMs).toBe(300_000);
     expect(config.fallbackModel?.provider).toBe("anthropic");
   });
+
+  it("passes optional Tavily search settings to the main process", () => {
+    const config = resolveAgentGatewayConfig({
+      webSearchApiKey: "tvly-secret",
+      webSearchEndpoint: "https://api.tavily.com/search",
+      webSearchTimeoutMs: 20_000,
+    });
+    expect(config.webSearchApiKey).toBe("tvly-secret");
+    expect(config.webSearchEndpoint).toBe("https://api.tavily.com/search");
+    expect(config.webSearchTimeoutMs).toBe(20_000);
+  });
 });

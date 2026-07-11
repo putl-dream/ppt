@@ -33,6 +33,9 @@ export function buildAgentGatewayConfig(
   return {
     timeoutMs: preferences.timeoutMs,
     maxOutputTokens: preferences.maxOutputTokens,
+    ...(preferences.webSearchApiKey ? { webSearchApiKey: preferences.webSearchApiKey } : {}),
+    ...(preferences.webSearchEndpoint ? { webSearchEndpoint: preferences.webSearchEndpoint } : {}),
+    ...(preferences.webSearchTimeoutMs ? { webSearchTimeoutMs: preferences.webSearchTimeoutMs } : {}),
     ...(fallbackModel ? { fallbackModel: toAgentModelSettings(fallbackModel) } : {}),
   };
 }

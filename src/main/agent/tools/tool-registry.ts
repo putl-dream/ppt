@@ -18,6 +18,7 @@ import { spawnTeammateTool } from "./core/spawn-teammate";
 import { taskTool } from "./core/task";
 import { taskGraphTools } from "./core/task-graph-tools";
 import { loadSkillTool } from "./core/load-skill";
+import { webSearchTool } from "./core/web-search";
 import { analyzeDeckConsistencyTool } from "./deferred/analyze-deck-consistency";
 import { applyThemeStyleTool } from "./deferred/apply-theme-style";
 import { autoLayoutSlideTool } from "./deferred/auto-layout-slide";
@@ -130,6 +131,7 @@ export function createDefaultToolRegistry(): ToolRegistry {
     taskTool,
     ...taskGraphTools,
     loadSkillTool,
+    webSearchTool,
     analyzeDeckConsistencyTool,
     applyThemeStyleTool,
     autoLayoutSlideTool,

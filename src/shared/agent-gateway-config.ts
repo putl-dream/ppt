@@ -11,6 +11,9 @@ export const agentGatewayPreferencesSchema = z.object({
   timeoutMs: z.number().int().positive().default(DEFAULT_AGENT_GATEWAY_CONFIG.timeoutMs),
   maxOutputTokens: z.number().int().positive().default(DEFAULT_AGENT_GATEWAY_CONFIG.maxOutputTokens),
   fallbackModelId: z.string().trim().optional(),
+  webSearchApiKey: z.string().trim().optional(),
+  webSearchEndpoint: z.string().trim().optional(),
+  webSearchTimeoutMs: z.number().int().positive().optional(),
 });
 
 /** Passed to main process with each Agent run. */
@@ -18,6 +21,9 @@ export const agentGatewayConfigSchema = z.object({
   timeoutMs: z.number().int().positive().default(DEFAULT_AGENT_GATEWAY_CONFIG.timeoutMs),
   maxOutputTokens: z.number().int().positive().default(DEFAULT_AGENT_GATEWAY_CONFIG.maxOutputTokens),
   fallbackModel: agentModelSettingsSchema.optional(),
+  webSearchApiKey: z.string().trim().optional(),
+  webSearchEndpoint: z.string().trim().optional(),
+  webSearchTimeoutMs: z.number().int().positive().optional(),
 });
 
 export type AgentGatewayPreferences = z.infer<typeof agentGatewayPreferencesSchema>;

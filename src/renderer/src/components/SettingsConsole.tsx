@@ -427,6 +427,33 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
                       ))}
                   </select>
                 </label>
+
+                <label className="config-group">
+                  <span className="config-label">Tavily 搜索 API Key</span>
+                  <input
+                    className="config-input"
+                    type="password"
+                    value={agentGatewayPreferences.webSearchApiKey ?? ""}
+                    placeholder="tvly-...（也可设置 TAVILY_API_KEY）"
+                    onChange={(event) => setAgentGatewayPreferences({
+                      ...agentGatewayPreferences,
+                      webSearchApiKey: event.target.value.trim() || undefined,
+                    })}
+                  />
+                </label>
+
+                <label className="config-group">
+                  <span className="config-label">搜索 API 端点（可选）</span>
+                  <input
+                    className="config-input"
+                    value={agentGatewayPreferences.webSearchEndpoint ?? ""}
+                    placeholder="https://api.tavily.com/search"
+                    onChange={(event) => setAgentGatewayPreferences({
+                      ...agentGatewayPreferences,
+                      webSearchEndpoint: event.target.value.trim() || undefined,
+                    })}
+                  />
+                </label>
               </div>
             </section>
           </div>

@@ -12,7 +12,8 @@ export type ToolPermissionEffect =
   | "process.execute"
   | "workflow.delegate"
   | "user.interaction"
-  | "skill.load";
+  | "skill.load"
+  | "network.access";
 
 export type ToolPermissionApproval = "never" | "contextual" | "always";
 
@@ -95,6 +96,14 @@ export const SUB_AGENT_TOOL_PERMISSION_PROFILES = {
     sandbox: "workspace",
     approval: "contextual",
     shellCommandArg: "command",
+  },
+  web_search: {
+    profile: "web-search",
+    description: "Send a query to the configured web search provider.",
+    scopes: ["subagent"],
+    effects: ["network.access"],
+    sandbox: "none",
+    approval: "never",
   },
 } satisfies Record<string, ToolPermissionProfile>;
 

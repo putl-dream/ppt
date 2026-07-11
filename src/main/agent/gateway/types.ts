@@ -1,4 +1,5 @@
 import type { AgentModelSelection, AgentProvider } from "@shared/agent";
+import type { AgentGatewayConfig } from "@shared/agent-gateway-config";
 
 export type AgentResponseContract = "markdown-summary" | "none";
 
@@ -138,6 +139,9 @@ export interface ResolvedAgentModelConfig extends AgentModelSelection {
 }
 
 export interface AgentModelGateway {
+  /** Optional runtime configuration exposed to tools owned by this application. */
+  getGatewayConfig?(): AgentGatewayConfig;
+
   generateText(
     request: AgentModelRequest,
     selection?: AgentModelSelection,

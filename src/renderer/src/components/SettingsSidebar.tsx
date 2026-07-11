@@ -28,11 +28,11 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = ({
     icon: React.ReactNode;
   }> = [
     { id: "account", title: "账户与额度", icon: <UserIcon size={17} /> },
-    { id: "models", title: "AI 模型", icon: <BrainIcon size={17} /> },
-    { id: "gateway", title: "生成参数", icon: <KeyIcon size={17} /> },
-    { id: "generation", title: "生成偏好", icon: <DownloadIcon size={17} /> },
+    { id: "generation", title: "生成与保存", icon: <DownloadIcon size={17} /> },
     { id: "project", title: "文件与模板", icon: <FolderIcon size={17} /> },
     { id: "appearance", title: "外观", icon: <PaletteIcon size={17} /> },
+    { id: "models", title: "AI 服务", icon: <BrainIcon size={17} /> },
+    { id: "gateway", title: "高级参数", icon: <KeyIcon size={17} /> },
   ];
 
   return (

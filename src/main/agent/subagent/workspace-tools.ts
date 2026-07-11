@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { z } from "zod";
+import type { AgentGatewayConfig } from "@shared/agent-gateway-config";
 import {
   editWorkspaceText,
   ensureWorkspaceDir,
@@ -13,11 +14,18 @@ import {
   SUB_AGENT_TOOL_PERMISSION_PROFILES,
   type ToolPermissionProfile,
 } from "../runtime/tool-access-policy";
+import {
+  executeWebSearch,
+  formatWebSearchOutput,
+  webSearchSchema,
+} from "../search/web-search";
 
 const execFileAsync = promisify(execFile);
 
 export interface SubAgentToolContext {
   workspaceRoot: string;
+  gatewayConfig?: AgentGatewayConfig;
+  signal?: AbortSignal;
 }
 
 export interface SubAgentToolDefinition<TParams extends z.ZodObject<any> = z.ZodObject<any>> {
@@ -139,6 +147,19 @@ export const bashTool: SubAgentToolDefinition<typeof bashSchema> = {
   },
 };
 
+export const webSearchSubAgentTool: SubAgentToolDefinition<typeof webSearchSchema> = {
+  name: "web_search",
+  description: "Search the web for current, source-backed facts. Cite returned URLs in research notes.",
+  inputSchema: webSearchSchema,
+  permission: SUB_AGENT_TOOL_PERMISSION_PROFILES.web_search,
+  async execute(args, context) {
+    return formatWebSearchOutput(await executeWebSearch(args, {
+      gatewayConfig: context.gatewayConfig,
+      signal: context.signal,
+    }));
+  },
+};
+
 export const SUB_AGENT_TOOLS: SubAgentToolDefinition[] = [
   readFileTool,
   writeFileTool,
@@ -146,6 +167,7 @@ export const SUB_AGENT_TOOLS: SubAgentToolDefinition[] = [
   editFileTool,
   globTool,
   bashTool,
+  webSearchSubAgentTool,
 ];
 
 export const SUB_AGENT_TOOL_HANDLERS = new Map(
