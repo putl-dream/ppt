@@ -5,6 +5,7 @@ import type { AgentQuestion } from "./agent-question";
 import type { AgentGatewayConfig } from "./agent-gateway-config";
 import type { AgentStepLimits } from "./agent-step-limits";
 import type { AgentTaskNode } from "./agent-task-graph";
+import { layoutChoiceSchema } from "./layout-preference";
 import { z } from "zod";
 import type {
   ProjectArtifact,
@@ -64,6 +65,7 @@ export const agentRunRequestSchema = z.object({
   sessionId: z.string().trim().min(1),
   editorContext: agentEditorContextSchema.optional(),
   attachments: z.array(agentAttachmentSchema).optional(),
+  layoutChoice: layoutChoiceSchema.optional(),
 });
 
 export type AgentAttachment = z.infer<typeof agentAttachmentSchema>;

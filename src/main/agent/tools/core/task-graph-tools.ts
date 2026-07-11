@@ -84,7 +84,7 @@ export type TaskGraphCompleteResult = {
   tasks: AgentTaskNode[];
 };
 
-function ensureAutonomousTaskWorker(
+export function ensureAutonomousTaskWorker(
   context: ToolContext,
   tasks: AgentTaskNode[],
 ): string | undefined {

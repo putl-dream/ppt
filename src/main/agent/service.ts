@@ -4,6 +4,7 @@ import type { AgentTaskNode } from "@shared/agent-task-graph";
 import type { CommandBus, PresentationCommand } from "@shared/commands";
 import type { AgentEditorContext, AgentRunResult } from "@shared/ipc";
 import type { AgentConversationMessage } from "@shared/session-recovery";
+import type { LayoutChoice } from "@shared/layout-preference";
 import { CommitGate, type CommitGateResult } from "./gate/commit-gate";
 import { AgentRuntime } from "./runtime/agent-runtime";
 import { formatRecoverableAgentError } from "./gateway/errors";
@@ -132,6 +133,7 @@ export class AgentService {
     signal?: AbortSignal,
     runId?: string,
     agentStepLimits?: AgentStepLimits,
+    layoutChoice?: LayoutChoice,
   ): Promise<AgentRunResult> {
     // A caller-provided run id is stable across renderer/main persistence and
     // doubles as the recoverable thread id for an interrupted first turn.
@@ -163,6 +165,7 @@ export class AgentService {
       signal,
       runId,
       agentStepLimits,
+      layoutChoice,
     );
   }
 
@@ -174,6 +177,7 @@ export class AgentService {
     signal?: AbortSignal,
     runId?: string,
     agentStepLimits?: AgentStepLimits,
+    layoutChoice?: LayoutChoice,
   ): Promise<AgentRunResult> {
     const conversation = this.conversations.get(threadId);
     if (!conversation) throw new Error("Agent conversation not found or already completed.");
@@ -197,6 +201,7 @@ export class AgentService {
       signal,
       runId,
       agentStepLimits,
+      layoutChoice,
     );
   }
 
@@ -213,6 +218,7 @@ export class AgentService {
     signal?: AbortSignal,
     runId?: string,
     agentStepLimits?: AgentStepLimits,
+    layoutChoice?: LayoutChoice,
   ): Promise<AgentRunResult> {
     if (signal?.aborted) {
       this.conversations.delete(threadId);
@@ -248,6 +254,7 @@ export class AgentService {
         resumeThread: requestAlreadyInHistory,
         messageHistory,
         requiredOutcome,
+        layoutChoice,
         signal,
         workspaceRoot: this.workspaceRoot,
         agentStepLimits,

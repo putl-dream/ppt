@@ -626,6 +626,7 @@ app.whenReady().then(async () => {
               controller.signal,
               currentRunId,
               agentStepLimits,
+              request.layoutChoice,
             ),
           ),
         );
@@ -709,6 +710,7 @@ app.whenReady().then(async () => {
                 controller.signal,
                 currentRunId,
                 agentStepLimits,
+                request.layoutChoice,
               )
             : runtime.agentService.start(
                 request.prompt,
@@ -720,6 +722,7 @@ app.whenReady().then(async () => {
                 controller.signal,
                 currentRunId,
                 agentStepLimits,
+                request.layoutChoice,
               );
 
           return finalizeAgentResult(sessionId, runtime, await run);

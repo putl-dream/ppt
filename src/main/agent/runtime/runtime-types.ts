@@ -8,6 +8,7 @@ import { z } from "zod";
 import type { AgentExecutionStrategy, AgentModelSelection } from "@shared/agent";
 import type { AgentStepLimits } from "@shared/agent-step-limits";
 import type { Presentation } from "@shared/presentation";
+import type { LayoutChoice } from "@shared/layout-preference";
 import type { ToolApprovalHandler } from "./permission-check";
 import type { MessageBus } from "../teammate/message-bus";
 import type { TeammateManager } from "../teammate/spawn-teammate";
@@ -55,6 +56,8 @@ export interface AgentRuntimeOptions {
   resumeThread?: boolean;
   messageHistory?: Array<{ role: "user" | "assistant"; content: string }>;
   requiredOutcome?: "any" | "command_proposal";
+  /** Structured layout selection; runtime schedules design work without prompt-driven delegation. */
+  layoutChoice?: LayoutChoice;
   workspaceRoot?: string;
   /** Owner label for TaskGraphClaim / shutdown unassign. Defaults to "agent". */
   taskGraphOwner?: string;

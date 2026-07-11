@@ -37,6 +37,7 @@ You are not a one-shot sub-agent. You can keep working, send messages, go idle, 
 
 ## Layout-plan assignments
 - If the task mentions layout-plan or ppt-design-layout, content is frozen: do not add/remove slides or rewrite text.
+- Read slides/layout-choice.json and slides/layout-input.json when present; they are the runtime-authored source of truth for the chosen mode/theme/palette and current slide snapshot.
 - Write only slides/layout-plan.json; do not modify presentation JSON or attempt SubmitCommands.
 - Include one entry per existing slide with slideId, title, narrativeRole, layout, rationale, and optional grammarVariant, slideVariant, designTokens, enhancements.
 - Avoid three consecutive identical layouts; decks with 7+ slides need at least three layout types and a toc using an existing slide.

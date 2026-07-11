@@ -24,6 +24,7 @@ import {
 import {
   buildLayoutPhasePrompt,
   saveLayoutVisualMode,
+  type LayoutChoice,
   type LayoutVisualMode,
 } from "@shared/layout-preference";
 import type { AgentQuestionResolved } from "@shared/agent-question";
@@ -848,7 +849,7 @@ export function App() {
   async function startAgent(
     customRequest?: string,
     isEditOfMsgId?: string,
-    options?: { userDisplayContent?: string | false },
+    options?: { userDisplayContent?: string | false; layoutChoice?: LayoutChoice },
   ) {
     const activeRequest = customRequest || request;
     if (!activeRequest.trim() || busy) return;
@@ -945,6 +946,7 @@ export function App() {
       prompt: activeRequest,
       sessionId: agentSessionId,
       editorContext,
+      ...(options?.layoutChoice ? { layoutChoice: options.layoutChoice } : {}),
     };
 
     console.info("Starting unified Agent run", {
@@ -1583,6 +1585,7 @@ export function App() {
     triggerToast(mode === "creative" ? "🎨 开始创意装饰排版" : "📐 开始标准排版");
     void startAgent(buildLayoutPhasePrompt(mode, theme, palette), undefined, {
       userDisplayContent: false,
+      layoutChoice: { mode, theme, palette },
     });
   };
 

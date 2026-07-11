@@ -55,6 +55,7 @@ import {
   type DurableRunPhase,
   type DurableRunStatus,
 } from "../persistence/durable-run-store";
+import { prepareLayoutChoiceTask } from "./layout-choice-orchestrator";
 
 /** Derive a display message for sub-agent progress events lacking one. */
 function subAgentProgressMessage(event: SubAgentProgressEvent): string {
@@ -178,6 +179,24 @@ export class AgentRuntime {
       messageBus: options.messageBus,
       teammateManager: options.teammateManager,
     };
+    if (options.layoutChoice) {
+      if (!taskStore || !options.workspaceRoot) {
+        throw new Error("Layout choice requires a configured workspace task board.");
+      }
+      const prepared = await prepareLayoutChoiceTask({
+        choice: options.layoutChoice,
+        presentation: options.presentationSnapshot,
+        workspaceRoot: options.workspaceRoot,
+        taskStore,
+        toolContext: context,
+      });
+      options.onProgress?.({
+        type: "workflow-progress",
+        message: prepared.message,
+        progress: 20,
+      });
+      return { type: "message", content: prepared.message };
+    }
     const transcript: Array<Record<string, unknown>> = recovered
       ? [...structuredClone(recovered.transcript), { role: "user", content: options.request }]
       : [{ role: "user", content: options.request }];

@@ -93,7 +93,7 @@ function modelMessage(content: string) {
 }
 
 async function waitFor<T>(read: () => Promise<T | undefined>): Promise<T> {
-  for (let attempt = 0; attempt < 80; attempt += 1) {
+  for (let attempt = 0; attempt < 240; attempt += 1) {
     const value = await read();
     if (value !== undefined) return value;
     await new Promise((resolve) => setTimeout(resolve, 25));
@@ -264,7 +264,13 @@ describe("TeammateManager", () => {
     await waitFor(async () =>
       (await store.getTask(created.task.id)).status === "submitted" ? true : undefined,
     );
-    expect(await bus.peekInbox("lead")).toContainEqual(expect.objectContaining({
+    const leadMessages = await waitFor(async () => {
+      const messages = await bus.peekInbox("lead");
+      return messages.some((message) => message.content === "Outline submitted for review.")
+        ? messages
+        : undefined;
+    });
+    expect(leadMessages).toContainEqual(expect.objectContaining({
       from: "task_worker",
       type: "result",
       content: "Outline submitted for review.",

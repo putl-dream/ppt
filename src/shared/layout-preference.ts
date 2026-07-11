@@ -1,4 +1,14 @@
+import { z } from "zod";
+
 export type LayoutVisualMode = "template" | "creative";
+
+export const layoutChoiceSchema = z.object({
+  mode: z.enum(["template", "creative"]),
+  theme: z.string().trim().min(1),
+  palette: z.string().trim().min(1),
+});
+
+export type LayoutChoice = z.infer<typeof layoutChoiceSchema>;
 
 export const LAYOUT_PREFERENCE_STORAGE_KEY = "ppt-layout-visual-mode";
 
@@ -23,29 +33,6 @@ export function saveLayoutVisualMode(mode: LayoutVisualMode): void {
 
 /** Agent 内部执行指令（不直接展示在聊天气泡中）。 */
 export function buildLayoutPhasePrompt(mode: LayoutVisualMode, theme: string, palette: string): string {
-  if (mode === "creative") {
-    return [
-      "请对当前演示文稿执行创意装饰排版（第二阶段）。",
-      "1. LoadSkill ppt-design-layout",
-      "2. Task 按 Rubric 写入 slides/layout-plan.json（不改文案）",
-      "3. LoadSkill ppt-layout（Executor）按 plan 执行",
-      "4. set-theme 应用主题",
-      `5. 主题：${theme}，调色板：${palette}`,
-      "6. update-slide-layout / update-slide-variant；过长文案用 compress-text 或 beautify 精简",
-      "7. 创意模式：process/comparison 页可 AddLayoutDecorations",
-      "8. LoadSkill deck-review 做简要质检",
-    ].join("\n");
-  }
-
-  return [
-    "请对当前演示文稿执行标准排版（第二阶段）。",
-    "1. LoadSkill ppt-design-layout",
-    "2. Task 写入 slides/layout-plan.json（不改文案）",
-    "3. LoadSkill ppt-layout（Executor）按 plan 执行",
-    "4. set-theme 并提交",
-    `5. 主题：${theme}，调色板：${palette}`,
-    "6. 批量 update-slide-layout（+ variant）",
-    "7. 溢出或过长要点：ExecuteExtraTool compress-text / beautify 等，在排版阶段精简",
-    "8. LoadSkill deck-review 做简要质检",
-  ].join("\n");
+  const modeLabel = mode === "creative" ? "创意装饰" : "标准";
+  return `排版方式已确认：${modeLabel}模式；主题 ${theme}；调色板 ${palette}。`;
 }
