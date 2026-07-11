@@ -8,6 +8,7 @@ import {
 } from "@shared/presentation-draft";
 import { findRecoverableConversation } from "@shared/session-recovery";
 import type { SessionChatMessage } from "@shared/session";
+import { compactActivityTraceForPersistence } from "@shared/agent-activity";
 
 export type ChatMessage = SessionChatMessage;
 
@@ -35,7 +36,7 @@ export function toSessionChatMessages(messages: ChatMessage[]): SessionChatMessa
     content,
     thought,
     reasoning,
-    activityTrace,
+    activityTrace: compactActivityTraceForPersistence(activityTrace),
     progress,
     approval,
     patch,

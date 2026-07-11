@@ -289,6 +289,43 @@ describe("FileSessionStore", () => {
     expect(restored.getSession(sessionId).transcript?.leafMessageUuid).toBe("a1");
   });
 
+  it("updates an existing transcript message with a compacted activity trace", async () => {
+    const { store, filePath } = await createStoreWithSession();
+    const sessionId = must(store.getBootstrap().activeSession).session.id;
+    await store.saveMessages(sessionId, [
+      { id: "assistant-stream", role: "assistant", content: "" },
+    ]);
+
+    await store.saveMessages(sessionId, [
+      {
+        id: "assistant-stream",
+        role: "assistant",
+        content: "排版完成",
+        activityTrace: Array.from({ length: 120 }, (_, index) => ({
+          id: `step-${index}`,
+          kind: "step" as const,
+          text: `步骤 ${index}`,
+          status: "done" as const,
+        })),
+      },
+    ]);
+
+    const updated = store.getSession(sessionId).messages[0];
+    expect(updated.content).toBe("排版完成");
+    expect(updated.activityTrace?.length).toBeLessThanOrEqual(80);
+
+    const transcriptLines = (await readFile(store.getSession(sessionId).transcript!.path, "utf8"))
+      .trim()
+      .split(/\r?\n/);
+    expect(transcriptLines).toHaveLength(1);
+
+    const restored = new FileSessionStore(filePath);
+    await restored.initialize();
+    const restoredMessage = restored.getSession(sessionId).messages[0];
+    expect(restoredMessage.content).toBe("排版完成");
+    expect(restoredMessage.activityTrace?.length).toBeLessThanOrEqual(80);
+  });
+
   it("restores messages from the transcript instead of the session snapshot cache", async () => {
     const { store, filePath } = await createStoreWithSession();
     const sessionId = must(store.getBootstrap().activeSession).session.id;

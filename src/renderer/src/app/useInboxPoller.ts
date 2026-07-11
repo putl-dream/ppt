@@ -34,9 +34,9 @@ export function useInboxPoller({
       try {
         const inbox = await window.desktopApi.pollLeadInbox(activeSessionId);
         if (!disposed && inbox.hasMessages && !busy) {
-          const preview = inbox.preview.trim()
-            || `${inbox.count} inbox message(s): ${inbox.types.join(", ")}`;
-          await onInboxTurnRef.current(`[Inbox poller]\n${preview}`);
+          await onInboxTurnRef.current(
+            `[Inbox poller]\n请读取并处理 lead inbox 中的 ${inbox.count} 条消息。`,
+          );
         }
       } catch (error) {
         onErrorRef.current?.(error);

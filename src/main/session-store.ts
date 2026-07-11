@@ -51,6 +51,7 @@ import {
 } from "@shared/workspace";
 import { WorkspaceIndexStore } from "./workspace-index-store";
 import { writeTextFileAtomic } from "./agent/persistence/atomic-json-file";
+import { compactActivityTraceForPersistence } from "@shared/agent-activity";
 
 const storedSessionSchema = sessionSnapshotSchema;
 const sessionFileSchema = z.object({
@@ -392,7 +393,12 @@ export class FileSessionStore {
 
   async saveMessages(sessionId: string, messages: SessionChatMessage[]): Promise<void> {
     const snapshot = this.findSession(sessionId);
-    const parsedMessages = sessionChatMessageSchema.array().parse(structuredClone(messages));
+    const parsedMessages = sessionChatMessageSchema.array().parse(
+      structuredClone(messages).map((message) => ({
+        ...message,
+        activityTrace: compactActivityTraceForPersistence(message.activityTrace),
+      })),
+    );
     const messagesChanged = this.messagesChanged(snapshot.messages, parsedMessages);
     await this.materializeProjectSandbox(snapshot);
     await this.recordTranscriptMessages(snapshot, parsedMessages);

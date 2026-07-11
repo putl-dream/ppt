@@ -3,6 +3,7 @@ import {
   appendReasoningChunk,
   appendToolStart,
   appendToolValidationFailed,
+  compactActivityTraceForPersistence,
   finishTool,
   isProcessTraceActive,
   markTraceComplete,
@@ -298,5 +299,94 @@ describe("process trace rows", () => {
       "ReadPresentationSnapshot · 读取完成",
       "WebSearch · 正在搜索",
     ]);
+  });
+
+  it("compacts oversized traces while preserving task graphs and approvals", () => {
+    const taskgraph: AgentActivityItem = {
+      id: "graph",
+      kind: "taskgraph",
+      tasks: [],
+      goal: "layout",
+    };
+    const approval: AgentActivityItem = {
+      id: "approval",
+      kind: "tool-approval",
+      approvalId: "a1",
+      toolName: "SubmitCommands",
+      reason: "risky",
+      detail: "detail",
+      status: "approved",
+    };
+    const steps: AgentActivityItem[] = Array.from({ length: 100 }, (_, index) => ({
+      id: `step-${index}`,
+      kind: "step" as const,
+      text: `step ${index}`,
+      status: "done" as const,
+    }));
+
+    const compacted = compactActivityTraceForPersistence([taskgraph, approval, ...steps]);
+    expect(compacted).toBeDefined();
+    expect(compacted!.length).toBeLessThanOrEqual(80);
+    expect(compacted!.some((item) => item.id === "graph")).toBe(true);
+    expect(compacted!.some((item) => item.id === "approval")).toBe(true);
+    expect(compacted!.some((item) => item.id === "step-99")).toBe(true);
+    expect(compacted!.some((item) => item.id === "step-0")).toBe(false);
+  });
+
+  it("keeps the persisted trace within hard item and byte limits", () => {
+    const approvals: AgentActivityItem[] = Array.from({ length: 90 }, (_, index) => ({
+      id: `approval-${index}`,
+      kind: "tool-approval" as const,
+      approvalId: `a-${index}`,
+      toolName: "SubmitCommands",
+      reason: "r".repeat(10_000),
+      detail: "d".repeat(10_000),
+      status: index === 89 ? "pending" as const : "approved" as const,
+    }));
+    const steps: AgentActivityItem[] = Array.from({ length: 100 }, (_, index) => ({
+      id: `step-${index}`,
+      kind: "step" as const,
+      text: "x".repeat(10_000),
+      status: "done" as const,
+    }));
+
+    const compacted = compactActivityTraceForPersistence([...approvals, ...steps])!;
+
+    expect(compacted.length).toBeLessThanOrEqual(80);
+    expect(new TextEncoder().encode(JSON.stringify(compacted)).byteLength).toBeLessThanOrEqual(
+      96 * 1_024,
+    );
+    expect(compacted.some((item) => item.id === "approval-89")).toBe(true);
+    expect(compacted.some((item) => item.id === "step-99")).toBe(true);
+  });
+
+  it("bounds nested task steps and long streamed text", () => {
+    const task: AgentActivityItem = {
+      id: "task",
+      kind: "task",
+      taskId: "task-1",
+      description: "d".repeat(10_000),
+      status: "done",
+      steps: Array.from({ length: 100 }, (_, index) => ({
+        id: `nested-${index}`,
+        type: "reasoning" as const,
+        text: "t".repeat(10_000),
+        status: "done" as const,
+      })),
+    };
+    const reasoning: AgentActivityItem = {
+      id: "reasoning",
+      kind: "reasoning",
+      content: "r".repeat(20_000),
+      streaming: false,
+    };
+
+    const compacted = compactActivityTraceForPersistence([task, reasoning])!;
+    const compactedTask = compacted.find((item) => item.kind === "task");
+    const compactedReasoning = compacted.find((item) => item.kind === "reasoning");
+
+    expect(compactedTask?.kind === "task" ? compactedTask.steps.length : 0).toBeLessThanOrEqual(24);
+    expect(compactedReasoning?.kind === "reasoning" ? compactedReasoning.content.length : 0)
+      .toBeLessThanOrEqual(4_000);
   });
 });

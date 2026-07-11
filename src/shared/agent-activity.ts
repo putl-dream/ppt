@@ -324,6 +324,111 @@ export function filterTraceForDisplay(
   );
 }
 
+const MAX_PERSISTED_TRACE_ITEMS = 80;
+const MAX_PERSISTED_APPROVAL_ITEMS = 10;
+const MAX_PERSISTED_TASK_STEPS = 24;
+const MAX_PERSISTED_TASK_GRAPH_NODES = 60;
+const MAX_PERSISTED_TEXT_CHARS = 4_000;
+const MAX_PERSISTED_TRACE_BYTES = 96 * 1_024;
+
+function truncatePersistedText(value: string, maxChars = MAX_PERSISTED_TEXT_CHARS): string {
+  if (value.length <= maxChars) return value;
+  return `…${value.slice(-(maxChars - 1))}`;
+}
+
+function compactActivityItem(item: AgentActivityItem): AgentActivityItem {
+  if (item.kind === "reasoning" || item.kind === "tool-summary") {
+    return { ...item, content: truncatePersistedText(item.content) };
+  }
+  if (item.kind === "step") {
+    return { ...item, text: truncatePersistedText(item.text) };
+  }
+  if (item.kind === "tool") {
+    return {
+      ...item,
+      label: truncatePersistedText(item.label),
+      finishedLabel: item.finishedLabel
+        ? truncatePersistedText(item.finishedLabel)
+        : undefined,
+      summary: item.summary ? truncatePersistedText(item.summary) : undefined,
+    };
+  }
+  if (item.kind === "tool-approval") {
+    return {
+      ...item,
+      reason: truncatePersistedText(item.reason),
+      detail: truncatePersistedText(item.detail),
+    };
+  }
+  if (item.kind === "task") {
+    return {
+      ...item,
+      description: truncatePersistedText(item.description),
+      steps: item.steps.slice(-MAX_PERSISTED_TASK_STEPS).map((step) => ({
+        ...step,
+        text: truncatePersistedText(step.text),
+      })),
+    };
+  }
+  if (item.kind === "taskgraph") {
+    return {
+      ...item,
+      goal: item.goal ? truncatePersistedText(item.goal) : item.goal,
+      tasks: item.tasks.slice(-MAX_PERSISTED_TASK_GRAPH_NODES).map((task) => ({
+        ...task,
+        subject: truncatePersistedText(task.subject, 1_000),
+        description: truncatePersistedText(task.description),
+        blockedBy: task.blockedBy.slice(-MAX_PERSISTED_TASK_GRAPH_NODES),
+      })),
+    };
+  }
+  return item;
+}
+
+function persistedTraceSize(trace: AgentActivityItem[]): number {
+  return new TextEncoder().encode(JSON.stringify(trace)).byteLength;
+}
+
+export function compactActivityTraceForPersistence(
+  trace: AgentActivityItem[] | undefined,
+): AgentActivityItem[] | undefined {
+  if (!trace) return undefined;
+  if (trace.length === 0) return trace;
+
+  const compacted = trace.map(compactActivityItem);
+  const latestTaskGraph = [...compacted].reverse().find((item) => item.kind === "taskgraph");
+  const pendingApprovals = compacted
+    .filter((item) => item.kind === "tool-approval" && item.status === "pending")
+    .slice(-MAX_PERSISTED_APPROVAL_ITEMS);
+  const completedApprovalBudget = MAX_PERSISTED_APPROVAL_ITEMS - pendingApprovals.length;
+  const completedApprovals = completedApprovalBudget > 0
+    ? compacted
+        .filter((item) => item.kind === "tool-approval" && item.status !== "pending")
+        .slice(-completedApprovalBudget)
+    : [];
+  const keptIds = new Set<string>([
+    ...(latestTaskGraph ? [latestTaskGraph.id] : []),
+    ...pendingApprovals.map((item) => item.id),
+    ...completedApprovals.map((item) => item.id),
+  ]);
+
+  for (let index = compacted.length - 1; index >= 0; index -= 1) {
+    if (keptIds.size >= MAX_PERSISTED_TRACE_ITEMS) break;
+    keptIds.add(compacted[index]!.id);
+  }
+
+  const kept = compacted.filter((item) => keptIds.has(item.id));
+  const mandatoryIds = new Set<string>([
+    ...(latestTaskGraph ? [latestTaskGraph.id] : []),
+    ...pendingApprovals.slice(-1).map((item) => item.id),
+  ]);
+  while (kept.length > 1 && persistedTraceSize(kept) > MAX_PERSISTED_TRACE_BYTES) {
+    const removableIndex = kept.findIndex((item) => !mandatoryIds.has(item.id));
+    kept.splice(removableIndex === -1 ? 0 : removableIndex, 1);
+  }
+  return persistedTraceSize(kept) <= MAX_PERSISTED_TRACE_BYTES ? kept : [];
+}
+
 const PROCESS_TRACE_ITEM_KINDS = new Set<AgentActivityItem["kind"]>([
   "reasoning",
   "tool",

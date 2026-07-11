@@ -9,6 +9,7 @@ import {
   nativeTheme,
   shell,
   type MessageBoxOptions,
+  type WebContents,
 } from "electron";
 import type { Presentation } from "@shared/presentation";
 import { CommandBus, type PresentationCommand } from "@shared/commands";
@@ -109,7 +110,33 @@ function createSessionRuntime(snapshot: SessionSnapshot, skillRegistry: SkillReg
   };
 }
 
-function createWindow(): void {
+function createAgentStreamEmitter(
+  sender: WebContents,
+  runId: string,
+  controller: AbortController,
+): (streamEvent: AgentServiceEvent) => void {
+  const abortRun = (reason: string) => {
+    if (controller.signal.aborted) return;
+    controller.abort();
+    toolApprovalBroker.cancelForRun(runId);
+    logger.info("agent.run.aborted", { runId, reason });
+  };
+
+  return (streamEvent: AgentServiceEvent) => {
+    if (sender.isDestroyed()) {
+      abortRun("renderer-disposed");
+      return;
+    }
+    try {
+      sender.send("agent:stream", { ...streamEvent, runId });
+    } catch (error) {
+      logger.warn("agent.stream.send-failed", { runId, error });
+      abortRun("stream-send-failed");
+    }
+  };
+}
+
+function createWindow(onWindowCreated?: (window: BrowserWindow) => void): BrowserWindow {
   const icon = resolveAppIconPath();
   const window = new BrowserWindow({
     width: 1440,
@@ -136,6 +163,9 @@ function createWindow(): void {
   } else {
     void window.loadFile(join(__dirname, "../renderer/index.html"));
   }
+
+  onWindowCreated?.(window);
+  return window;
 }
 
 let sessionStore: FileSessionStore;
@@ -296,6 +326,24 @@ app.whenReady().then(async () => {
       await persistPresentation(sessionId, runtime);
     }
     return result;
+  };
+
+  const abortAllActiveRuns = (reason: string) => {
+    for (const [runId, controller] of activeRuns) {
+      if (controller.signal.aborted) continue;
+      controller.abort();
+      toolApprovalBroker.cancelForRun(runId);
+      logger.info("agent.run.aborted", { runId, reason });
+    }
+  };
+
+  const attachWindowLifecycle = (window: BrowserWindow) => {
+    window.webContents.on("render-process-gone", (_event, details) => {
+      abortAllActiveRuns(`render-process-gone:${details.reason}`);
+    });
+    window.on("closed", () => {
+      abortAllActiveRuns("window-closed");
+    });
   };
 
   const runAgentOperation = async (
@@ -612,9 +660,7 @@ app.whenReady().then(async () => {
       } else if (gatewayConfig) {
         agentGateway.applyGatewayConfig(gatewayConfig);
       }
-      const emit = (streamEvent: AgentServiceEvent) => {
-        event.sender.send("agent:stream", { ...streamEvent, runId: currentRunId });
-      };
+      const emit = createAgentStreamEmitter(event.sender, currentRunId, controller);
 
       try {
         return await runAgentOperation(
@@ -691,9 +737,7 @@ app.whenReady().then(async () => {
     } else if (gatewayConfig) {
       agentGateway.applyGatewayConfig(gatewayConfig);
     }
-    const emit = (streamEvent: AgentServiceEvent) => {
-      event.sender.send("agent:stream", { ...streamEvent, runId: currentRunId });
-    };
+    const emit = createAgentStreamEmitter(event.sender, currentRunId, controller);
 
     try {
       return await runAgentOperation(
@@ -765,9 +809,11 @@ app.whenReady().then(async () => {
     );
   });
 
-  createWindow();
+  createWindow(attachWindowLifecycle);
   app.on("activate", () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+    if (BrowserWindow.getAllWindows().length === 0) {
+      createWindow(attachWindowLifecycle);
+    }
   });
 });
 

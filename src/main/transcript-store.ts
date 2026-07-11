@@ -7,6 +7,7 @@ import {
   type TranscriptMessage,
   type TranscriptRole,
 } from "@shared/transcript";
+import { writeTextFileAtomic } from "./agent/persistence/atomic-json-file";
 
 export interface TranscriptMessageInput {
   uuid?: string;
@@ -34,6 +35,7 @@ export interface InsertMessageChainOptions {
 
 export class TranscriptStore {
   private readonly writeQueues = new Map<string, Promise<void>>();
+  private readonly operationQueues = new Map<string, Promise<void>>();
 
   constructor(private readonly transcriptDirectoryName = "transcripts") {}
 
@@ -108,28 +110,39 @@ export class TranscriptStore {
     if (options.messages.length === 0) return [];
 
     const filePath = this.getTranscriptPath(options.sessionId, options.projectDir);
+    const previous = this.operationQueues.get(filePath) ?? Promise.resolve();
+    const operation = previous.then(() => this.insertMessageChainUnlocked(filePath, options));
+    this.operationQueues.set(filePath, operation.then(() => undefined, () => undefined));
+    return operation;
+  }
+
+  private async insertMessageChainUnlocked(
+    filePath: string,
+    options: InsertMessageChainOptions,
+  ): Promise<TranscriptMessage[]> {
     const existing = await this.loadTranscriptFile(options.sessionId, options.projectDir);
-    const writtenUuids = new Set(existing.map((message) => message.uuid));
+    const existingByUuid = new Map(existing.map((message) => [message.uuid, message]));
     let parentUuid = options.parentUuid;
     const now = new Date().toISOString();
 
     const nextMessages = options.messages.map((message) => {
       const uuid = message.uuid ?? crypto.randomUUID();
+      const stored = existingByUuid.get(uuid);
       const item = transcriptMessageSchema.parse({
         uuid,
-        parentUuid: message.parentUuid ?? parentUuid,
-        isSidechain: message.isSidechain ?? false,
-        agentId: message.agentId,
+        parentUuid: message.parentUuid ?? parentUuid ?? stored?.parentUuid,
+        isSidechain: message.isSidechain ?? stored?.isSidechain ?? false,
+        agentId: message.agentId ?? stored?.agentId,
         sessionId: options.sessionId,
         role: message.role,
         kind: message.kind ?? "message",
         content: message.content,
         cwd: message.cwd ?? options.cwd ?? options.projectDir,
         projectDir: options.projectDir,
-        timestamp: message.timestamp ?? now,
+        timestamp: message.timestamp ?? stored?.timestamp ?? now,
         version: 1,
-        gitBranch: message.gitBranch,
-        runId: message.runId,
+        gitBranch: message.gitBranch ?? stored?.gitBranch,
+        runId: message.runId ?? stored?.runId,
         threadId: message.threadId,
         metadata: message.metadata,
       });
@@ -137,7 +150,21 @@ export class TranscriptStore {
       return item;
     });
 
-    const unwritten = nextMessages.filter((message) => !writtenUuids.has(message.uuid));
+    const unwritten = nextMessages.filter((message) => !existingByUuid.has(message.uuid));
+    const changedExisting = nextMessages.some((message) => {
+      const stored = existingByUuid.get(message.uuid);
+      return stored !== undefined && JSON.stringify(stored) !== JSON.stringify(message);
+    });
+    if (changedExisting) {
+      const replacements = new Map(nextMessages.map((message) => [message.uuid, message]));
+      const merged = existing.map((message) => replacements.get(message.uuid) ?? message);
+      merged.push(...unwritten);
+      await this.enqueueReplace(
+        filePath,
+        merged.map((message) => JSON.stringify(message)).join("\n") + "\n",
+      );
+      return nextMessages;
+    }
     if (unwritten.length === 0) return nextMessages;
 
     await this.enqueueAppend(
@@ -146,6 +173,13 @@ export class TranscriptStore {
     );
 
     return nextMessages;
+  }
+
+  private async enqueueReplace(filePath: string, payload: string): Promise<void> {
+    const previous = this.writeQueues.get(filePath) ?? Promise.resolve();
+    const next = previous.then(() => writeTextFileAtomic(filePath, payload));
+    this.writeQueues.set(filePath, next.catch(() => undefined));
+    await next;
   }
 
   private async enqueueAppend(filePath: string, payload: string): Promise<void> {

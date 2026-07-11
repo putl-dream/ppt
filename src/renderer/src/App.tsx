@@ -134,6 +134,7 @@ export function App() {
   const activeRunTraceRef = useRef<AgentActivityItem[]>([]);
   const requestStatusStepIdRef = useRef<string | null>(null);
   const streamMessageIdsRef = useRef(new Map<string, string>());
+  const sidechainRunRef = useRef<string | null>(null);
   const pendingProgressTextRef = useRef("");
   const statusTypingTimerRef = useRef<number | null>(null);
   const [isCancellingRun, setIsCancellingRun] = useState(false);
@@ -766,6 +767,7 @@ export function App() {
   };
 
   async function applyAgentResult(result: AgentRunResult, trace: AgentActivityItem[], runId?: string) {
+    const isSidechainRun = Boolean(runId && sidechainRunRef.current === runId);
     const messageId = runId ? streamMessageIdsRef.current.get(runId) : undefined;
     const finalizeTrace = (existing?: AgentActivityItem[]) => markTraceComplete(
       mergeActivityTraces(existing, trace, activeRunTraceRef.current) ?? [],
@@ -776,6 +778,9 @@ export function App() {
     };
 
     if (result.status === "chat") {
+      if (isSidechainRun && !isRunAbortedMessage(result.message)) {
+        return;
+      }
       const interrupted = isRunAbortedMessage(result.message);
       const resolveInterruptedContent = (existingContent: string) => {
         if (!interrupted) return result.message;
@@ -815,7 +820,18 @@ export function App() {
     }
 
     if (result.status === "approval-required") {
-      if (messageId) {
+      if (isSidechainRun) {
+        setChatMessages((prev) => [
+          ...prev,
+          {
+            id: crypto.randomUUID(),
+            role: "assistant",
+            content: "后台任务已提出排版更新方案，请在下方审核后应用。",
+            activityTrace: resolvedTrace(),
+            approval: result.approval,
+          },
+        ]);
+      } else if (messageId) {
         setChatMessages((prev) => prev.map((message) =>
           message.id === messageId
             ? {
@@ -890,7 +906,7 @@ export function App() {
   async function startAgent(
     customRequest?: string,
     isEditOfMsgId?: string,
-    options?: { userDisplayContent?: string | false; layoutChoice?: LayoutChoice },
+    options?: { userDisplayContent?: string | false; layoutChoice?: LayoutChoice; sidechain?: boolean },
   ) {
     const activeRequest = customRequest || request;
     if (!activeRequest.trim() || busy) return;
@@ -901,6 +917,7 @@ export function App() {
       return activeRequest;
     };
     const userDisplayContent = resolveUserDisplayContent();
+    const isSidechain = options?.sidechain === true;
 
     if (presentation && isPreviewPrompt(activeRequest)) {
       const userMsgId = crypto.randomUUID();
@@ -1007,6 +1024,7 @@ export function App() {
     pendingProgressTextRef.current = "";
     requestStatusStepIdRef.current = null;
     streamMessageIdsRef.current.set(runId, streamMessageId);
+    sidechainRunRef.current = isSidechain ? runId : null;
     let forkedMessages: ChatMessage[] | undefined;
     const streamPlaceholder: ChatMessage = {
       id: streamMessageId,
@@ -1016,7 +1034,9 @@ export function App() {
     };
     let runMessages: ChatMessage[];
 
-    if (isEditOfMsgId) {
+    if (isSidechain) {
+      runMessages = chatMessages;
+    } else if (isEditOfMsgId) {
       const idx = chatMessages.findIndex((m) => m.id === isEditOfMsgId);
       if (idx !== -1) {
         forkedMessages = chatMessages.slice(0, idx + 1);
@@ -1049,10 +1069,12 @@ export function App() {
     }
 
     try {
-      await window.desktopApi.saveSessionMessages(
-        agentSessionId,
-        toSessionChatMessages(runMessages),
-      );
+      if (!isSidechain) {
+        await window.desktopApi.saveSessionMessages(
+          agentSessionId,
+          toSessionChatMessages(runMessages),
+        );
+      }
       const gatewayConfig = buildAgentGatewayConfig(agentGatewayPreferences, enabledModels);
       const modelSettings = selectedModel ? toAgentModelSettings(selectedModel) : undefined;
       const activeThreadId = findActiveThreadId(forkedMessages ?? chatMessages);
@@ -1079,59 +1101,68 @@ export function App() {
       const errorMessage = err instanceof Error ? err.message : String(err);
       const interrupted = /aborted by user|会话已中断|任务已取消/i.test(errorMessage);
       if (interrupted) {
-        const runMessageId = streamMessageIdsRef.current.get(runId);
-        const interruptedTrace = markTraceComplete(activeRunTraceRef.current);
-        if (runMessageId) {
-          setChatMessages((prev) => prev.map((message) =>
-            message.id === runMessageId
-              ? {
-                  ...message,
-                  content: message.content.trim()
-                    ? `${message.content.trim()}\n\n---\n\n*会话已中断*`
-                    : "会话已中断。",
-                  activityTrace: interruptedTrace.length > 0 ? interruptedTrace : message.activityTrace,
-                }
-              : message,
-          ));
-        } else {
-          setChatMessages((prev) => [
-            ...prev,
-            {
-              id: crypto.randomUUID(),
-              role: "assistant",
-              content: "会话已中断。",
-              activityTrace: interruptedTrace.length > 0 ? interruptedTrace : undefined,
-            },
-          ]);
+        if (!isSidechain) {
+          const runMessageId = streamMessageIdsRef.current.get(runId);
+          const interruptedTrace = markTraceComplete(activeRunTraceRef.current);
+          if (runMessageId) {
+            setChatMessages((prev) => prev.map((message) =>
+              message.id === runMessageId
+                ? {
+                    ...message,
+                    content: message.content.trim()
+                      ? `${message.content.trim()}\n\n---\n\n*会话已中断*`
+                      : "会话已中断。",
+                    activityTrace: interruptedTrace.length > 0 ? interruptedTrace : message.activityTrace,
+                  }
+                : message,
+            ));
+          } else {
+            setChatMessages((prev) => [
+              ...prev,
+              {
+                id: crypto.randomUUID(),
+                role: "assistant",
+                content: "会话已中断。",
+                activityTrace: interruptedTrace.length > 0 ? interruptedTrace : undefined,
+              },
+            ]);
+          }
         }
         triggerToast("会话已中断");
       } else {
         const runMessageId = streamMessageIdsRef.current.get(runId);
         const failedTrace = markTraceComplete(activeRunTraceRef.current);
         const content = `执行指令时发生错误：${errorMessage}`;
-        if (runMessageId) {
-          setChatMessages((prev) => prev.map((message) =>
-            message.id === runMessageId
-              ? {
-                  ...message,
-                  content,
-                  activityTrace: failedTrace.length > 0 ? failedTrace : message.activityTrace,
-                }
-              : message,
-          ));
+        if (!isSidechain) {
+          if (runMessageId) {
+            setChatMessages((prev) => prev.map((message) =>
+              message.id === runMessageId
+                ? {
+                    ...message,
+                    content,
+                    activityTrace: failedTrace.length > 0 ? failedTrace : message.activityTrace,
+                  }
+                : message,
+            ));
+          } else {
+            setChatMessages((prev) => [
+              ...prev,
+              {
+                id: crypto.randomUUID(),
+                role: "assistant",
+                content,
+                activityTrace: failedTrace.length > 0 ? failedTrace : undefined,
+              },
+            ]);
+          }
         } else {
-          setChatMessages((prev) => [
-            ...prev,
-            {
-              id: crypto.randomUUID(),
-              role: "assistant",
-              content,
-              activityTrace: failedTrace.length > 0 ? failedTrace : undefined,
-            },
-          ]);
+          console.error("Sidechain agent run failed:", errorMessage);
         }
       }
     } finally {
+      if (sidechainRunRef.current === runId) {
+        sidechainRunRef.current = null;
+      }
       activeRunIdRef.current = null;
       setActiveRunId(null);
       setIsCancellingRun(false);
@@ -1155,7 +1186,7 @@ export function App() {
     activeSessionId,
     sessionLoaded,
     busy,
-    onInboxTurn: (prompt) => startAgent(prompt, undefined, { userDisplayContent: false }),
+    onInboxTurn: (prompt) => startAgent(prompt, undefined, { userDisplayContent: false, sidechain: true }),
     onError: (error) => {
       console.error("轮询队友收件箱失败:", error);
     },
@@ -1627,6 +1658,7 @@ export function App() {
     void startAgent(buildLayoutPhasePrompt(mode, designSystem), undefined, {
       userDisplayContent: false,
       layoutChoice: { mode, designSystem },
+      sidechain: true,
     });
   };
 
