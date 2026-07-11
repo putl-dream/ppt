@@ -34,6 +34,7 @@ import { DesignPolicy } from "../src/main/agent/design/design-policy";
 import { LayoutPolicy } from "../src/main/agent/design/layout-policy";
 import { AgentService } from "../src/main/agent/service";
 import { createStarterPresentation } from "../src/shared/presentation";
+import type { AgentModelSelection } from "../src/shared/agent";
 import { CommandBus } from "../src/shared/commands";
 import { AgentGatewayError, type AgentModelGateway, type AgentModelRequest } from "../src/main/agent/gateway";
 import type { AgentModelContentBlock } from "../src/main/agent/gateway/types";
@@ -282,6 +283,53 @@ describe("Agent Architecture Skeletons & Types", () => {
     if (proposal.status === "approval-required") {
       expect(proposal.approval.assumptions).toEqual(["中文为主，关键术语保留英文"]);
     }
+  });
+
+  it("uses the current model selection when continuing a restored conversation", async () => {
+    let usedSelection: AgentModelSelection | undefined;
+    const gateway: AgentModelGateway = {
+      async generateText(_request, selection) {
+        usedSelection = selection;
+        return {
+          provider: "anthropic",
+          model: selection?.model ?? "missing-model",
+          content: [modelMessage("Inbox processed.")],
+        };
+      },
+      async *generateTextStream(_request, selection) {
+        usedSelection = selection;
+        yield { type: "complete" as const, content: [modelMessage("Inbox processed.")] };
+      },
+    };
+    const service = new AgentService(
+      new CommandBus(createStarterPresentation()),
+      new AgentRuntime(createDefaultToolRegistry(), gateway),
+      new CommitGate(new RiskPolicy()),
+    );
+    const threadId = "restored-model-selection";
+    service.restoreAgentRunConversation(threadId, [
+      { role: "user", content: "智能自动排版" },
+      { role: "assistant", content: "已成功应用变更方案。" },
+    ]);
+    const selectedModel: AgentModelSelection = {
+      provider: "anthropic",
+      model: "deepseek-v4-flash",
+    };
+
+    const result = await service.continueAgentRun(
+      threadId,
+      "[Inbox poller] process lead inbox",
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      selectedModel,
+    );
+
+    expect(result).toEqual({ status: "chat", message: "Inbox processed." });
+    expect(usedSelection).toEqual(selectedModel);
   });
 
   it("keeps a failed continuation request in the next runtime context", async () => {

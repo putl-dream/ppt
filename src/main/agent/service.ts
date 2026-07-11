@@ -185,20 +185,23 @@ export class AgentService {
     runId?: string,
     agentStepLimits?: AgentStepLimits,
     layoutChoice?: LayoutChoice,
+    modelOverride?: AgentModelSelection,
   ): Promise<AgentRunResult> {
     const conversation = this.conversations.get(threadId);
     if (!conversation) throw new Error("Agent conversation not found or already completed.");
+    const model = modelOverride ?? conversation.model;
+    if (modelOverride) conversation.model = modelOverride;
     conversation.messages.push({ role: "user", content: request });
     await this.persistThread(threadId, {
       status: "active",
       messages: structuredClone(conversation.messages),
-      model: conversation.model,
+      model,
       executionStrategy: conversation.executionStrategy,
     });
     return this.run(
       threadId,
       request,
-      conversation.model,
+      model,
       conversation.executionStrategy,
       conversation.messages,
       listener,

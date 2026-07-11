@@ -838,6 +838,7 @@ app.whenReady().then(async () => {
                 currentRunId,
                 agentStepLimits,
                 request.layoutChoice,
+                selection,
               )
             : runtime.agentService.start(
                 request.prompt,
