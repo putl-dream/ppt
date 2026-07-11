@@ -2,20 +2,21 @@ import { z } from "zod";
 import type { AgentTaskNode } from "@shared/agent-task-graph";
 import type { TaskStore } from "../task/task-store";
 import type { SubAgentToolDefinition } from "../subagent/workspace-tools";
+import type { ToolPermissionProfile } from "../runtime/tool-access-policy";
 
 const emptySchema = z.object({});
 const taskIdSchema = z.object({
   task_id: z.string().trim().min(1).describe("Persistent task ID from the .tasks board"),
 });
 
-const TASK_TOOL_PERMISSION = {
+const TASK_TOOL_PERMISSION: ToolPermissionProfile = {
   profile: "teammate-task-board",
   description: "Read or update the shared persistent task board.",
   scopes: ["subagent"],
   effects: ["workflow.delegate"],
   sandbox: "workspace",
   approval: "never",
-} as const;
+};
 
 export function createTeammateTaskTools(
   store: TaskStore,

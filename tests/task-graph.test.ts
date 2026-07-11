@@ -162,6 +162,46 @@ describe("TaskStore", () => {
       ]),
     ).toBe(true);
   });
+
+  it("scans only unowned pending tasks whose dependencies are completed", async () => {
+    const workspaceRoot = await makeWorkspace();
+    const store = new TaskStore(workspaceRoot);
+    const parent = await store.createTask({ subject: "parent" });
+    expect(parent.ok).toBe(true);
+    if (!parent.ok) return;
+    const child = await store.createTask({
+      subject: "child",
+      blockedBy: [parent.task.id],
+    });
+    expect(child.ok).toBe(true);
+    if (!child.ok) return;
+
+    expect((await store.scanUnclaimedTasks()).map((task) => task.id))
+      .toEqual([parent.task.id]);
+    await store.claimTask(parent.task.id, "alice");
+    expect(await store.scanUnclaimedTasks()).toEqual([]);
+    await store.completeTask(parent.task.id, "alice");
+    expect((await store.scanUnclaimedTasks()).map((task) => task.id))
+      .toEqual([child.task.id]);
+  });
+
+  it("allows only one winner when separate stores claim the same task concurrently", async () => {
+    const workspaceRoot = await makeWorkspace();
+    const creator = new TaskStore(workspaceRoot);
+    const created = await creator.createTask({ subject: "contended" });
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    const [alice, bob] = await Promise.all([
+      new TaskStore(workspaceRoot).claimTask(created.task.id, "alice"),
+      new TaskStore(workspaceRoot).claimTask(created.task.id, "bob"),
+    ]);
+    expect([alice, bob].filter((result) => result.ok)).toHaveLength(1);
+    expect([alice, bob].filter((result) => !result.ok)).toHaveLength(1);
+    const task = await creator.getTask(created.task.id);
+    expect(task.status).toBe("in_progress");
+    expect(["alice", "bob"]).toContain(task.owner);
+  });
 });
 
 describe("TaskGraph tools", () => {

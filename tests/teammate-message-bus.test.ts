@@ -2,11 +2,16 @@ import { mkdtemp, readFile, stat } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { tmpdir } from "node:os";
 import { describe, expect, it } from "vitest";
-import type { AgentModelContentBlock, AgentModelGateway } from "../src/main/agent/gateway/types";
+import type {
+  AgentModelContentBlock,
+  AgentModelGateway,
+  AgentModelRequest,
+} from "../src/main/agent/gateway/types";
 import { AgentRuntime } from "../src/main/agent/runtime/agent-runtime";
 import { MessageBus } from "../src/main/agent/teammate/message-bus";
 import { TeammateManager } from "../src/main/agent/teammate/spawn-teammate";
 import { ProtocolStateStore } from "../src/main/agent/teammate/protocol-state";
+import { TaskStore } from "../src/main/agent/task/task-store";
 import { createDefaultToolRegistry } from "../src/main/agent/tools/tool-registry";
 import type { ToolContext } from "../src/main/agent/tools/tool-definition";
 import { createStarterPresentation } from "../src/shared/presentation";
@@ -39,6 +44,37 @@ function createFailingGateway(error: Error): AgentModelGateway {
     },
     async *generateTextStream() {
       throw error;
+    },
+  };
+}
+
+function createBoardWorkerGateway(): AgentModelGateway {
+  let step = 0;
+  const next = (request: AgentModelRequest): AgentModelContentBlock => {
+    step += 1;
+    if (step === 1) return modelMessage("Ready for shared board work.");
+    if (step === 2) {
+      const text = (request.messages ?? []).flatMap((message) => message.content)
+        .filter((block): block is Extract<AgentModelContentBlock, { type: "text" }> =>
+          block.type === "text",
+        )
+        .map((block) => block.text)
+        .join("\n");
+      const taskId = text.match(/<task_assignment[\s\S]*?"id":\s*"([^"]+)"/)?.[1];
+      if (!taskId) throw new Error("Auto-claimed task assignment was not injected.");
+      return modelToolCall("complete_task", { task_id: taskId });
+    }
+    return modelMessage("Shared board task complete.");
+  };
+
+  return {
+    async generateText(request) {
+      return { provider: "anthropic", model: "test-model", content: [next(request)] };
+    },
+    async *generateTextStream(request) {
+      const value = next(request);
+      if (value.type === "text") yield { type: "text_delta" as const, text: value.text };
+      yield { type: "complete" as const, content: [value] };
     },
   };
 }
@@ -364,6 +400,117 @@ describe("TeammateManager", () => {
     await manager.requestShutdown("reviewer");
     await manager.waitFor("reviewer");
     expect(manager.get("reviewer")?.status).toBe("stopped");
+  });
+
+  it("auto-claims successive board tasks and shuts down after the idle timeout", async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), "ppt-auto-claim-"));
+    const store = new TaskStore(workspaceRoot);
+    const first = await store.createTask({ subject: "Create schema" });
+    const second = await store.createTask({ subject: "Write API" });
+    expect(first.ok && second.ok).toBe(true);
+    if (!first.ok || !second.ok) return;
+
+    const bus = new MessageBus(MessageBus.defaultMailboxDir(workspaceRoot));
+    const manager = new TeammateManager(bus);
+    manager.spawn({
+      name: "alice",
+      role: "backend engineer",
+      prompt: "Join the backend pool and look for board work.",
+      workspaceRoot,
+      gateway: createSequenceGateway([
+        modelMessage("Ready for board work."),
+        modelToolCall("complete_task", { task_id: first.task.id }),
+        modelMessage("Schema task complete."),
+        modelToolCall("complete_task", { task_id: second.task.id }),
+        modelMessage("API task complete."),
+      ]),
+      maxSteps: 3,
+      idlePollMs: 5,
+      idleTimeoutMs: 25,
+    });
+
+    await manager.waitFor("alice");
+    expect(manager.get("alice")?.status).toBe("stopped");
+    expect((await store.getTask(first.task.id)).status).toBe("completed");
+    expect((await store.getTask(second.task.id)).status).toBe("completed");
+    expect(await bus.readInbox("lead")).toContainEqual(expect.objectContaining({
+      from: "alice",
+      type: "result",
+      payload: expect.objectContaining({ reason: "idle timeout" }),
+    }));
+  });
+
+  it("lets two idle teammates atomically split independent board tasks", async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), "ppt-auto-claim-parallel-"));
+    const store = new TaskStore(workspaceRoot);
+    const first = await store.createTask({ subject: "Task A" });
+    const second = await store.createTask({ subject: "Task B" });
+    expect(first.ok && second.ok).toBe(true);
+    if (!first.ok || !second.ok) return;
+
+    const bus = new MessageBus(MessageBus.defaultMailboxDir(workspaceRoot));
+    const manager = new TeammateManager(bus);
+    for (const name of ["alice", "bob"]) {
+      manager.spawn({
+        name,
+        role: "backend engineer",
+        prompt: "Join the shared worker pool.",
+        workspaceRoot,
+        gateway: createBoardWorkerGateway(),
+        maxSteps: 3,
+        idlePollMs: 5,
+        idleTimeoutMs: 30,
+      });
+    }
+
+    await Promise.all([manager.waitFor("alice"), manager.waitFor("bob")]);
+    const tasks = await store.listTasks();
+    expect(tasks.map((task) => task.status)).toEqual(["completed", "completed"]);
+    const results = (await bus.readInbox("lead"))
+      .filter((message) => message.content === "Shared board task complete.");
+    expect(new Set(results.map((message) => message.from))).toEqual(new Set(["alice", "bob"]));
+  });
+
+  it("handles an idle inbox assignment before scanning the task board", async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), "ppt-idle-priority-"));
+    const store = new TaskStore(workspaceRoot);
+    const created = await store.createTask({ subject: "Board task" });
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    const bus = new MessageBus(MessageBus.defaultMailboxDir(workspaceRoot));
+    const manager = new TeammateManager(bus);
+    manager.spawn({
+      name: "alice",
+      role: "backend engineer",
+      prompt: "Enter the worker pool.",
+      workspaceRoot,
+      gateway: createSequenceGateway([
+        modelMessage("Ready."),
+        modelMessage("Handled urgent lead assignment."),
+      ]),
+      maxSteps: 2,
+      idlePollMs: 200,
+      idleTimeoutMs: 1_000,
+    });
+    await waitFor(async () => manager.get("alice")?.status === "idle" ? true : undefined);
+
+    await bus.send({
+      from: "lead",
+      to: "alice",
+      type: "message",
+      content: "Handle this inbox instruction first.",
+    });
+    await waitFor(async () => {
+      const messages = await bus.peekInbox("lead");
+      return messages.some((message) => message.content === "Handled urgent lead assignment.")
+        ? true
+        : undefined;
+    });
+    expect((await store.getTask(created.task.id)).status).toBe("pending");
+
+    await manager.requestShutdown("alice");
+    await manager.waitFor("alice");
   });
 
   it("lets lead send a second assignment to an idle teammate", async () => {

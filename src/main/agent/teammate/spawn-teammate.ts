@@ -8,6 +8,7 @@ import type {
 } from "../gateway/types";
 import type { AgentModelSelection } from "@shared/agent";
 import type { AgentStepLimits } from "@shared/agent-step-limits";
+import type { AgentTaskNode } from "@shared/agent-task-graph";
 import {
   buildSubStepLimitMessage,
   getEffectiveSubMaxSteps,
@@ -373,6 +374,8 @@ export class TeammateManager {
         });
         if (shutdownRequest) {
           const requestId = readProtocolRequestId(shutdownRequest.payload);
+          await taskStore.unassignInProgressByOwner(state.name);
+          currentTaskId = undefined;
           await this.sendLifecycleSummary(state.name, "shutdown requested", workSummaries);
           await this.bus.send({
             from: state.name,
@@ -835,6 +838,23 @@ function formatInboxForTeammate(messages: AgentMailboxMessage[]): string {
     };
   });
   return `<inbox>${JSON.stringify(formatted)}</inbox>`;
+}
+
+function formatClaimedTaskAssignment(task: AgentTaskNode): string {
+  return `<task_assignment source="task_board" owner="${task.owner}">
+${JSON.stringify(task, null, 2)}
+</task_assignment>
+This task has already been claimed for you. Complete the concrete work, then call complete_task with task_id "${task.id}" before returning your summary.`;
+}
+
+function withIdentityIfCompacted(
+  messages: AgentModelMessage[],
+  name: string,
+  role: string,
+  assignment: string,
+): string {
+  if (messages.length > 3) return assignment;
+  return `<identity>You are '${name}', role: ${role}. Continue your work.</identity>\n${assignment}`;
 }
 
 function requiresApprovedPlan(toolName: string): boolean {
