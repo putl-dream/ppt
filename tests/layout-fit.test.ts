@@ -7,6 +7,7 @@ import {
   resolveThemeAccent,
 } from "../src/shared/layout";
 import type { Slide, TextElement } from "../src/shared/presentation";
+import { slideSchema } from "../src/shared/presentation";
 
 function textEl(text: string, fontSize = 20): TextElement {
   return {
@@ -119,6 +120,19 @@ describe("applyLayout never drops body content", () => {
     const allText = bodyTextsOf(out);
     expect(allText).toContain("目录项9");
     expect(allText).toContain("目录项10");
+  });
+
+  it("keeps every generated dimension positive for a dense summary", () => {
+    const slide: Slide = {
+      id: crypto.randomUUID(),
+      title: "能力清单",
+      elements: Array.from({ length: 7 }, (_, index) => textEl(`能力 ${index + 1}`)),
+    };
+
+    const out = applyLayout(slide, "summary", "ocean", "cyan");
+
+    expect(() => slideSchema.parse(out)).not.toThrow();
+    expect(out.elements.every((element) => element.width > 0 && element.height > 0)).toBe(true);
   });
 });
 

@@ -1,7 +1,8 @@
 import { cp, mkdir, readdir, readFile, rename, stat, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { z } from "zod";
-import type { Presentation } from "@shared/presentation";
+import { presentationSchema, type Presentation } from "@shared/presentation";
+import { repairPresentationGeometry } from "@shared/presentation-repair";
 import {
   createDefaultSessionTitle,
   createSessionPresentation,
@@ -91,7 +92,9 @@ export class FileSessionStore {
   async initialize(): Promise<void> {
     await mkdir(dirname(this.filePath), { recursive: true });
     try {
-      const parsed = sessionFileSchema.parse(JSON.parse(await readFile(this.filePath, "utf8")));
+      const stored = JSON.parse(await readFile(this.filePath, "utf8"));
+      const geometryRepair = repairSessionFileGeometry(stored);
+      const parsed = sessionFileSchema.parse(geometryRepair.value);
       const activeExists = parsed.sessions.some(
         (item) => item.session.id === parsed.activeSessionId,
       );
@@ -105,7 +108,13 @@ export class FileSessionStore {
       const projectChanged = await this.materializeProjectSandboxes();
       const transcriptChanged = await this.hydrateMessagesFromTranscripts();
       const expiredApprovals = this.expirePendingApprovals();
-      if (expiredApprovals || transcriptChanged || projectChanged || !activeExists) {
+      if (
+        geometryRepair.repairedDimensionCount > 0 ||
+        expiredApprovals ||
+        transcriptChanged ||
+        projectChanged ||
+        !activeExists
+      ) {
         await this.persist();
       }
     } catch (error) {
@@ -291,13 +300,14 @@ export class FileSessionStore {
 
   async savePresentation(sessionId: string, presentation: Presentation): Promise<void> {
     const snapshot = this.findSession(sessionId);
-    snapshot.presentation = structuredClone(presentation);
+    const validatedPresentation = presentationSchema.parse(structuredClone(presentation));
+    snapshot.presentation = validatedPresentation;
     snapshot.session = {
       ...this.toSummary(
         snapshot.session.id,
         snapshot.session.createdAt,
         new Date().toISOString(),
-        presentation,
+        validatedPresentation,
       ),
       lastMessageAt: snapshot.session.lastMessageAt,
     };
@@ -795,6 +805,31 @@ export class FileSessionStore {
     });
     await this.writeQueue;
   }
+}
+
+function repairSessionFileGeometry(value: unknown): {
+  value: unknown;
+  repairedDimensionCount: number;
+} {
+  if (typeof value !== "object" || value === null || !("sessions" in value)) {
+    return { value, repairedDimensionCount: 0 };
+  }
+  const sessions = (value as { sessions?: unknown }).sessions;
+  if (!Array.isArray(sessions)) return { value, repairedDimensionCount: 0 };
+
+  const repaired = structuredClone(value) as { sessions: unknown[] };
+  let repairedDimensionCount = 0;
+  repaired.sessions = repaired.sessions.map((session) => {
+    if (typeof session !== "object" || session === null || !("presentation" in session)) {
+      return session;
+    }
+    const next = { ...session } as Record<string, unknown>;
+    const geometry = repairPresentationGeometry(next.presentation);
+    next.presentation = geometry.value;
+    repairedDimensionCount += geometry.repairedDimensionCount;
+    return next;
+  });
+  return { value: repaired, repairedDimensionCount };
 }
 
 async function migrateFlatWorkspaceArtifacts(workspaceRoot: string, sessionSandbox: string): Promise<void> {

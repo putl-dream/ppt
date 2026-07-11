@@ -114,6 +114,77 @@ describe("FileSessionStore", () => {
     expect(JSON.parse(await readFile(filePath, "utf8")).version).toBe(1);
   });
 
+  it("repairs persisted non-positive dimensions without discarding the session", async () => {
+    const { store, filePath } = await createStoreWithSession();
+    const active = must(store.getBootstrap().activeSession);
+    const corrupted = structuredClone(active);
+    corrupted.presentation.slides = [
+      {
+        id: "slide-corrupt",
+        title: "高密度列表",
+        elements: [
+          {
+            id: "text-corrupt",
+            type: "text",
+            x: 120,
+            y: 200,
+            width: 1000,
+            height: -4.57,
+            text: "仍需保留的内容",
+            fontSize: 20,
+          },
+        ],
+      },
+    ];
+    await writeFile(
+      filePath,
+      `${JSON.stringify({
+        version: 1,
+        activeSessionId: active.session.id,
+        sessions: [corrupted],
+      })}\n`,
+      "utf8",
+    );
+
+    const restored = new FileSessionStore(filePath);
+    await restored.initialize();
+    const repaired = must(restored.getBootstrap().activeSession);
+
+    expect(repaired.session.id).toBe(active.session.id);
+    expect(repaired.presentation.slides[0]?.elements[0]?.height).toBe(16);
+    expect(repaired.presentation.slides[0]?.elements[0]).toMatchObject({
+      id: "text-corrupt",
+      text: "仍需保留的内容",
+    });
+  });
+
+  it("rejects invalid presentation geometry before mutating session state", async () => {
+    const { store } = await createStoreWithSession();
+    const active = must(store.getBootstrap().activeSession);
+    const invalid = structuredClone(active.presentation);
+    invalid.slides = [
+      {
+        id: "slide-invalid",
+        title: "非法页面",
+        elements: [
+          {
+            id: "text-invalid",
+            type: "text",
+            x: 0,
+            y: 0,
+            width: 100,
+            height: 0,
+            text: "非法尺寸",
+            fontSize: 20,
+          },
+        ],
+      },
+    ];
+
+    await expect(store.savePresentation(active.session.id, invalid)).rejects.toThrow();
+    expect(store.getSession(active.session.id).presentation.slides).toHaveLength(0);
+  });
+
   it("migrates existing sessions into project sandboxes", async () => {
     const { store, filePath } = await createStoreWithSession();
     const legacyState = store.getBootstrap();

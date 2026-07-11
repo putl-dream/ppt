@@ -54,6 +54,29 @@ const CARD_GAP = 32;
 const CARD_PAD = 28;
 const CARD_PAD_SM = 24;
 const ROW_GAP = 24;
+const MIN_STACK_ROW_HEIGHT = 24;
+const MIN_STACK_CONTENT_HEIGHT = 16;
+
+function resolveVerticalStackMetrics(
+  itemCount: number,
+  availableHeight: number,
+  preferredGap: number,
+  preferredInset: number,
+): { gap: number; rowHeight: number; inset: number } {
+  const count = Math.max(1, itemCount);
+  const maxAffordableGap = count === 1
+    ? 0
+    : (availableHeight - count * MIN_STACK_ROW_HEIGHT) / (count - 1);
+  const gap = count === 1
+    ? 0
+    : Math.min(preferredGap, Math.max(0, maxAffordableGap));
+  const rowHeight = Math.max(1, (availableHeight - (count - 1) * gap) / count);
+  const inset = Math.min(
+    preferredInset,
+    Math.max(0, (rowHeight - MIN_STACK_CONTENT_HEIGHT) / 2),
+  );
+  return { gap, rowHeight, inset };
+}
 
 /**
  * Theme-adapted accent per palette. Dark themes get brighter variants, light
@@ -671,9 +694,11 @@ export function applyLayout(
     } else if (layout === "toc") {
       const items = bodyTexts;
       const N = items.length || 1;
-      const rowGap = 12;
-      const rowH = (contentH - (N - 1) * rowGap) / N;
-      const badgeSize = 36;
+      const stack = resolveVerticalStackMetrics(N, contentH, 12, 8);
+      const rowGap = stack.gap;
+      const rowH = stack.rowHeight;
+      const rowInset = stack.inset;
+      const badgeSize = Math.min(36, rowH);
       const textX = 180;
       const textW = 960;
 
@@ -711,10 +736,10 @@ export function applyLayout(
 
         const styled = assignTextRole(el, "body");
         styled.x = textX;
-        styled.y = rowY + 8;
+        styled.y = rowY + rowInset;
         styled.width = textW;
-        styled.height = rowH - 16;
-        styled.fontSize = fitFontSize(styled.text, textW, rowH - 16, 22);
+        styled.height = rowH - rowInset * 2;
+        styled.fontSize = fitFontSize(styled.text, textW, styled.height, 22);
         styled.bold = false;
         styled.color = colors.body;
         styled.align = "left";
@@ -871,20 +896,22 @@ export function applyLayout(
       });
     } else {
       const N = bodyTexts.length || 1;
-      const rowGap = ROW_GAP;
-      const rowH = (contentH - (N - 1) * rowGap) / N;
+      const stack = resolveVerticalStackMetrics(N, contentH, ROW_GAP, CARD_PAD_SM);
+      const rowGap = stack.gap;
+      const rowH = stack.rowHeight;
+      const rowInset = stack.inset;
 
       bodyTexts.forEach((el, idx) => {
         const rowY = contentY + idx * (rowH + rowGap);
         elements.unshift(createCard(CANVAS_CONTENT_X, rowY, CANVAS_CONTENT_W, rowH));
-        elements.push(createAccentBlock(CANVAS_CONTENT_X + 10, rowY + CARD_PAD_SM, 6, rowH - CARD_PAD_SM * 2, { opacity: 1, radius: VISUAL_TOKENS.radii.pill }));
+        elements.push(createAccentBlock(CANVAS_CONTENT_X + 10, rowY + rowInset, 6, rowH - rowInset * 2, { opacity: 1, radius: VISUAL_TOKENS.radii.pill }));
 
         const styled = assignTextRole(el, "body");
         styled.x = CANVAS_CONTENT_X + 30;
-        styled.y = rowY + CARD_PAD_SM;
+        styled.y = rowY + rowInset;
         styled.width = CANVAS_CONTENT_W - 40;
-        styled.height = rowH - CARD_PAD_SM * 2;
-        styled.fontSize = fitFontSize(styled.text, CANVAS_CONTENT_W - 40, rowH - CARD_PAD_SM * 2, 20);
+        styled.height = rowH - rowInset * 2;
+        styled.fontSize = fitFontSize(styled.text, CANVAS_CONTENT_W - 40, styled.height, 20);
         styled.bold = false;
         styled.color = colors.body;
         styled.align = "left";

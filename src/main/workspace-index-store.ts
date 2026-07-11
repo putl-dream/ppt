@@ -14,6 +14,7 @@ import {
   type WorkspaceSessionSnapshot,
 } from "@shared/workspace-meta";
 import type { SessionSnapshot } from "@shared/session";
+import { repairPresentationGeometry } from "@shared/presentation-repair";
 import { normalizeWorkspacePath, compareSessionsByActivity } from "@shared/workspace";
 
 export class WorkspaceIndexStore {
@@ -60,10 +61,20 @@ export class WorkspaceIndexStore {
     rootPath: string,
     sessionId: string,
   ): Promise<WorkspaceSessionSnapshot | null> {
-    return this.readJsonFile(
-      getWorkspaceSessionSnapshotPath(rootPath, sessionId),
-      workspaceSessionSnapshotSchema,
-    );
+    const filePath = getWorkspaceSessionSnapshotPath(rootPath, sessionId);
+    try {
+      const raw = JSON.parse(await readFile(filePath, "utf8"));
+      const repaired = repairWorkspaceSnapshotGeometry(raw);
+      const parsed = workspaceSessionSnapshotSchema.parse(repaired.value);
+      if (repaired.repairedDimensionCount > 0) {
+        await this.writeSessionSnapshot(rootPath, parsed);
+      }
+      return parsed;
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code === "ENOENT") return null;
+      throw error;
+    }
   }
 
   async writeSessionSnapshot(
@@ -224,4 +235,20 @@ export class WorkspaceIndexStore {
     await writeFile(temporaryPath, payload, "utf8");
     await rename(temporaryPath, filePath);
   }
+}
+
+function repairWorkspaceSnapshotGeometry(value: unknown): {
+  value: unknown;
+  repairedDimensionCount: number;
+} {
+  if (typeof value !== "object" || value === null || !("presentation" in value)) {
+    return { value, repairedDimensionCount: 0 };
+  }
+  const repaired = { ...value } as Record<string, unknown>;
+  const geometry = repairPresentationGeometry(repaired.presentation);
+  repaired.presentation = geometry.value;
+  return {
+    value: repaired,
+    repairedDimensionCount: geometry.repairedDimensionCount,
+  };
 }
