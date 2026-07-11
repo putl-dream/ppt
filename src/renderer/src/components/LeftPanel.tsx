@@ -215,15 +215,9 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
   if (collapsed) {
     return (
       <aside className="left-panel cursor-sidebar cursor-sidebar--rail" aria-label="折叠的工作台导航">
-        <button
-          type="button"
-          className="sidebar-rail-btn sidebar-rail-btn--primary"
-          onClick={onToggleCollapsed}
-          title="展开工作台"
-          aria-label="展开工作台"
-        >
-          <ChevronRightIcon size={17} />
-        </button>
+        <div className="sidebar-brand-mark" title="Agent PPT" aria-label="Agent PPT">
+          <img src="./icon.png" alt="" />
+        </div>
         <button
           type="button"
           className="sidebar-rail-btn"
@@ -260,16 +254,10 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
     <aside className="left-panel cursor-sidebar">
       <div className="cursor-sidebar-top">
         <div className="cursor-sidebar-heading">
-          <span>工作台</span>
-          <button
-            type="button"
-            className="sidebar-collapse-btn"
-            onClick={onToggleCollapsed}
-            title="折叠工作台"
-            aria-label="折叠工作台"
-          >
-            <ChevronRightIcon size={15} />
-          </button>
+          <div className="cursor-sidebar-brand">
+            <img src="./icon.png" alt="" />
+            <span>Agent PPT</span>
+          </div>
         </div>
         <button type="button" className="cursor-sidebar-action-row" onClick={onNewSession}>
           <PlusIcon size={14} className="cursor-workspace-icon" />

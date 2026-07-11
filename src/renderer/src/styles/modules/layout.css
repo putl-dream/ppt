@@ -26,16 +26,36 @@
   transition: background-color var(--transition-panel), color var(--transition-panel);
 }
 
-.window-titlebar-icon {
-  width: 16px;
-  height: 16px;
+.window-titlebar-sidebar-toggle {
+  width: 24px;
+  height: 24px;
+  display: inline-grid;
+  place-items: center;
   flex: 0 0 auto;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--field-border-radius);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+  transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
 }
 
-.window-titlebar-title {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.window-titlebar-sidebar-toggle .sidebar-toggle-direction {
+  transform: rotate(180deg);
+  transform-origin: 15.5px 12px;
+  transition: transform 180ms ease;
+}
+
+.window-titlebar-sidebar-toggle.is-collapsed .sidebar-toggle-direction {
+  transform: rotate(0deg);
+}
+
+.window-titlebar-sidebar-toggle:hover {
+  background: var(--bg-glass-hover);
+  border-color: var(--border-glass);
+  color: var(--text-primary);
 }
 
 /* 三栏/双模态布局核心容器 */

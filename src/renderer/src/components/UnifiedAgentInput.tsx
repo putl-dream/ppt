@@ -18,6 +18,7 @@ interface UnifiedAgentInputProps {
   onCancelRun?: () => void;
   isCancellingRun?: boolean;
   sandboxReady?: boolean;
+  sandboxName?: string;
   onPrepareWorkspace?: () => void;
 }
 
@@ -43,6 +44,7 @@ export const UnifiedAgentInput: React.FC<UnifiedAgentInputProps> = ({
   onCancelRun,
   isCancellingRun = false,
   sandboxReady = true,
+  sandboxName,
   onPrepareWorkspace,
 }) => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -143,7 +145,7 @@ export const UnifiedAgentInput: React.FC<UnifiedAgentInputProps> = ({
                   <div className="functional-left">
                     <span className={`action-dock-status${busy ? " is-running" : ""}`}>
                       <span className="action-dock-status-dot" aria-hidden="true" />
-                      {busy ? "Agent 正在执行" : "沙箱已锁定"}
+                      {busy ? "Agent 正在执行" : `沙箱 · ${sandboxName?.trim() || "当前项目"}`}
                     </span>
                   </div>
 

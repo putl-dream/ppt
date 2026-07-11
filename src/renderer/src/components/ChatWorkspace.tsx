@@ -79,6 +79,7 @@ interface ChatWorkspaceProps {
   selectedModelId: string;
   setSelectedModelId: (val: string) => void;
   workspaceReady: boolean;
+  sandboxName: string;
   onPrepareWorkspace: () => void;
   triggerToast: (msg: string) => void;
 }
@@ -123,6 +124,7 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
   selectedModelId,
   setSelectedModelId,
   workspaceReady,
+  sandboxName,
   onPrepareWorkspace,
   triggerToast,
 }) => {
@@ -247,7 +249,7 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
       <section className="canvas-column chat-workspace-column center-focal-wrapper" style={{ background: "var(--bg-canvas)", height: "100%", display: "flex", flexDirection: "column" }}>
         
         {/* Top Header */}
-        <div className="panel-header canvas-header" style={{ borderBottom: "none", background: "transparent" }}>
+        <div className="panel-header canvas-header" style={{ background: "transparent" }}>
           <div className="canvas-header-left">
             <div className="chat-session-title" title={displayConversationTitle}>
               <span>{displayConversationTitle}</span>
@@ -274,6 +276,7 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
             onCancelRun={onCancelRun}
             isCancellingRun={isCancellingRun}
             sandboxReady={workspaceReady}
+            sandboxName={sandboxName}
             onPrepareWorkspace={onPrepareWorkspace}
           />
 
@@ -637,6 +640,7 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
             onCancelRun={onCancelRun}
             isCancellingRun={isCancellingRun}
             sandboxReady
+            sandboxName={sandboxName}
           />
         </div>
         </div>

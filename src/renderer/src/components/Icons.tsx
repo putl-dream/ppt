@@ -219,6 +219,26 @@ export const ChevronRightIcon = ({ size = 20, className, ...props }: IconProps) 
   </svg>
 );
 
+export const SidebarPanelIcon = ({ size = 20, className, ...props }: IconProps) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.8"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    className={className}
+    {...props}
+  >
+    <rect x="3" y="3" width="18" height="18" rx="3" />
+    <path d="M9 3v18" />
+    <path className="sidebar-toggle-direction" d="m14 9 3 3-3 3" />
+  </svg>
+);
+
 export const OpenPreviewIcon = ({ size = 16, className, ...props }: IconProps) => (
   <svg
     xmlns="http://www.w3.org/2000/svg"

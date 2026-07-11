@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   AgentApprovalRequest,
   AgentRunRequest,
@@ -12,13 +12,6 @@ import {
   type SessionBootstrap,
   type SessionSummary,
 } from "@shared/session";
-import { LeftPanel } from "./components/LeftPanel";
-import { SettingsSidebar } from "./components/SettingsSidebar";
-import { SettingsConsole } from "./components/SettingsConsole";
-import { ChatWorkspace } from "./components/ChatWorkspace";
-import { PPTMirror } from "./components/PPTMirror";
-import { DeckPreviewModal } from "./components/DeckPreviewModal";
-
 import { useProjectStore, type ActiveProject } from "./components/project-store";
 import { getWorkspaceLabel, normalizeWorkspacePath, resolveWorkspacePath } from "@shared/workspace";
 import {
@@ -38,31 +31,17 @@ import {
   countSlidesNeedingLayout,
   presentationNeedsLayoutChoice,
 } from "@shared/presentation-draft";
-import {
-  MODEL_STORAGE_KEY,
-  SELECTED_MODEL_STORAGE_KEY,
-  isModelEnabled,
-  toAgentModelSettings,
-  type ManagedModel,
-} from "./modelCatalog";
+import { toAgentModelSettings } from "./modelCatalog";
 import { createOpenExportFolderHref } from "@shared/export-links";
-import { saveAgentStepLimits } from "./agentStepLimits";
-import {
-  buildAgentGatewayConfig,
-  saveAgentGatewayPreferences,
-} from "./agentGatewayConfig";
-import type { AgentGatewayPreferences } from "@shared/agent-gateway-config";
-import type { AgentStepLimits } from "@shared/agent-step-limits";
-import {
-  loadAppBootstrapSnapshot,
-  savePersistedUiSettings,
-  type UiAccentColor,
-  type UiControlShape,
-  type UiReadingTone,
-  type UiThemeMode,
-} from "./app/appBootstrap";
-import { getComputedTheme, useAppearanceRuntime } from "./app/useAppearanceRuntime";
+import { buildAgentGatewayConfig } from "./agentGatewayConfig";
+import { loadAppBootstrapSnapshot } from "./app/appBootstrap";
 import { useInboxPoller } from "./app/useInboxPoller";
+import { AppShell } from "./app/AppShell";
+import { SettingsView } from "./app/SettingsView";
+import { WorkspaceView } from "./app/WorkspaceView";
+import { useNotificationCenter } from "./app/useNotificationCenter";
+import { useSettingsController } from "./app/useSettingsController";
+import { useWorkbenchLayout, type AppMode } from "./app/useWorkbenchLayout";
 import {
   findActiveThreadId,
   finalizeAgentMessage,
@@ -95,7 +74,6 @@ export function App() {
   const initializeProject = useProjectStore((state) => state.initializeProject);
   const hydrateProjectArtifacts = useProjectStore((state) => state.hydrateProjectArtifacts);
   const [bootstrap] = useState(loadAppBootstrapSnapshot);
-  const persistedUiSettings = bootstrap.persistedUiSettings;
 
   const [presentation, setPresentation] = useState<Presentation>();
   const [startupError, setStartupError] = useState<string>();
@@ -107,211 +85,41 @@ export function App() {
   const [isMirrorExpanded, setIsMirrorExpanded] = useState(false);
   const [isDeckPreviewOpen, setIsDeckPreviewOpen] = useState(false);
   const [isExportingDeck, setIsExportingDeck] = useState(false);
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
-  const toastTimerRef = useRef<number | null>(null);
-  const [settingsSaveStatus, setSettingsSaveStatus] = useState<"saved" | "saving">("saved");
-  const settingsSaveTimerRef = useRef<number | null>(null);
   const [maxRevision, setMaxRevision] = useState(0);
-
-  const [isPrimarySidebarCollapsed, setIsPrimarySidebarCollapsed] = useState(
-    () => window.localStorage.getItem("agent-ppt:primary-sidebar") === "collapsed",
-  );
-  const [primarySidebarWidth, setPrimarySidebarWidth] = useState(() => {
-    const value = Number(window.localStorage.getItem("agent-ppt:primary-sidebar-width"));
-    return Number.isFinite(value) && value >= 232 && value <= 360 ? value : 280;
-  });
-  const [secondaryPaneWidth, setSecondaryPaneWidth] = useState(() => {
-    const value = Number(window.localStorage.getItem("agent-ppt:secondary-pane-width"));
-    return Number.isFinite(value) && value >= 300 && value <= 560 ? value : 380;
-  });
-
-  const triggerToast = useCallback((message: string) => {
-    if (toastTimerRef.current !== null) window.clearTimeout(toastTimerRef.current);
-    setToastMessage(message);
-    toastTimerRef.current = window.setTimeout(() => {
-      setToastMessage(null);
-      toastTimerRef.current = null;
-    }, 3200);
-  }, []);
+  const { message: toastMessage, notify: triggerToast } = useNotificationCenter();
 
   // 双模态同构布局模式控制
-  const [activeMode, setActiveMode] = useState<"workspace" | "settings">("workspace");
+  const [activeMode, setActiveMode] = useState<AppMode>("workspace");
   const [settingsCategory, setSettingsCategory] = useState<
     "account" | "models" | "gateway" | "generation" | "project" | "appearance"
   >("account");
+  const isMirrorVisible = Boolean(isMirrorOpen && presentation);
+  const workbenchLayout = useWorkbenchLayout({
+    activeMode,
+    previewOpen: isMirrorVisible,
+    previewExpanded: isMirrorExpanded,
+  });
 
-  // 常规设置：常规/工作流与文件系统
-  const [autoDownload, setAutoDownload] = useState(() => persistedUiSettings.autoDownload ?? true);
-  const [autoCloudSync, setAutoCloudSync] = useState(() => persistedUiSettings.autoCloudSync ?? false);
   const [workspacePath, setWorkspacePath] = useState("");
-  /** @deprecated 与 workspacePath 同步，供 UnifiedAgentInput 等遗留组件使用 */
+  /** 当前会话绑定的项目沙箱。 */
   const [localStoragePath, setLocalStoragePath] = useState("");
-  const [defaultRatio, setDefaultRatio] = useState<"16:9" | "4:3">(
-    () => persistedUiSettings.defaultRatio === "4:3" ? "4:3" : "16:9",
-  );
-  const [agentStepLimits, setAgentStepLimits] = useState<AgentStepLimits>(() => bootstrap.agentStepLimits);
-  const [agentGatewayPreferences, setAgentGatewayPreferences] = useState<AgentGatewayPreferences>(
-    () => bootstrap.agentGatewayPreferences,
-  );
-
-  // 外观定制与视效控制阀
-  const [themeMode, setThemeMode] = useState<UiThemeMode>(() => bootstrap.initialThemeMode);
-  const uiReadingTone: UiReadingTone = themeMode === "cyan" || themeMode === "orange" ? themeMode : "classic";
-  const [uiAccentColor, setUiAccentColor] = useState<UiAccentColor>(() => {
-    const accent = persistedUiSettings.uiAccentColor;
-    return accent === "green" || accent === "purple" || accent === "orange" ? accent : "cyan";
-  });
-  const [uiControlShape, setUiControlShape] = useState<UiControlShape>(() => {
-    const shape = persistedUiSettings.uiControlShape;
-    return shape === "sharp" || shape === "round" ? shape : "soft";
-  });
-  const [borderRadiusScale, setBorderRadiusScale] = useState(() =>
-    typeof persistedUiSettings.borderRadiusScale === "number" ? persistedUiSettings.borderRadiusScale : 0,
-  );
-  const [colorContrastOffset, setColorContrastOffset] = useState(() =>
-    typeof persistedUiSettings.colorContrastOffset === "number" ? persistedUiSettings.colorContrastOffset : 0,
-  );
-  const computedTheme = getComputedTheme(themeMode);
-
-  // 编排属性
-  const [selectedTheme, setSelectedTheme] = useState<string>(() => persistedUiSettings.selectedTheme ?? "nordic");
-  const [selectedPalette, setSelectedPalette] = useState<string>(() => persistedUiSettings.selectedPalette ?? "cyan");
-  const [logoUrl, setLogoUrl] = useState<string | null>(() => persistedUiSettings.logoUrl ?? null);
-  const [activeRunId, setActiveRunId] = useState<string | null>(null);
-  const [models, setModels] = useState<ManagedModel[]>(() => bootstrap.models);
-  const [selectedModelId, setSelectedModelId] = useState(() => bootstrap.selectedModelId);
-  const enabledModels = useMemo(() => models.filter(isModelEnabled), [models]);
-  const visibleModels = useMemo(
-    () => (enabledModels.length > 0 ? enabledModels : models),
-    [enabledModels, models],
-  );
-  const selectedModel = visibleModels.find((model) => model.id === selectedModelId) ?? visibleModels[0];
-
-  const markSettingsSaving = useCallback(() => {
-    setSettingsSaveStatus("saving");
-    if (settingsSaveTimerRef.current !== null) {
-      window.clearTimeout(settingsSaveTimerRef.current);
-    }
-    settingsSaveTimerRef.current = window.setTimeout(() => {
-      setSettingsSaveStatus("saved");
-      settingsSaveTimerRef.current = null;
-    }, 500);
-  }, []);
-
-  useEffect(() => {
-    return () => {
-      if (settingsSaveTimerRef.current !== null) {
-        window.clearTimeout(settingsSaveTimerRef.current);
-      }
-      if (toastTimerRef.current !== null) {
-        window.clearTimeout(toastTimerRef.current);
-      }
-    };
-  }, []);
-
-  useEffect(() => {
-    window.localStorage.setItem(
-      "agent-ppt:primary-sidebar",
-      isPrimarySidebarCollapsed ? "collapsed" : "expanded",
-    );
-  }, [isPrimarySidebarCollapsed]);
-
-  useEffect(() => {
-    window.localStorage.setItem("agent-ppt:primary-sidebar-width", String(primarySidebarWidth));
-  }, [primarySidebarWidth]);
-
-  useEffect(() => {
-    window.localStorage.setItem("agent-ppt:secondary-pane-width", String(secondaryPaneWidth));
-  }, [secondaryPaneWidth]);
-
-  useEffect(() => {
-    window.localStorage.setItem(MODEL_STORAGE_KEY, JSON.stringify(models));
-    if (!visibleModels.some((model) => model.id === selectedModelId) && visibleModels[0]) {
-      setSelectedModelId(visibleModels[0].id);
-    }
-  }, [models, selectedModelId, visibleModels]);
-
-  useEffect(() => {
-    window.localStorage.setItem(SELECTED_MODEL_STORAGE_KEY, selectedModelId);
-  }, [selectedModelId]);
-
-  useEffect(() => {
-    saveAgentStepLimits(agentStepLimits);
-  }, [agentStepLimits]);
-
-  useEffect(() => {
-    saveAgentGatewayPreferences(agentGatewayPreferences);
-  }, [agentGatewayPreferences]);
-
-  useEffect(() => {
-    savePersistedUiSettings({
-      autoDownload,
-      autoCloudSync,
-      defaultRatio,
-      themeMode,
-      uiAccentColor,
-      uiControlShape,
-      uiReadingTone,
-      borderRadiusScale,
-      colorContrastOffset,
-      selectedTheme,
-      selectedPalette,
-      logoUrl,
-    });
-  }, [
-    autoDownload,
-    autoCloudSync,
-    defaultRatio,
-    themeMode,
-    uiAccentColor,
-    uiControlShape,
-    uiReadingTone,
-    borderRadiusScale,
-    colorContrastOffset,
-    selectedTheme,
-    selectedPalette,
-    logoUrl,
-  ]);
-
-  useAppearanceRuntime({
-    themeMode,
+  const settings = useSettingsController(bootstrap, presentation, triggerToast);
+  const {
+    agentStepLimits,
+    agentGatewayPreferences,
     computedTheme,
-    borderRadiusScale,
-    colorContrastOffset,
-    uiAccentColor,
-    uiControlShape,
-    uiReadingTone,
-  });
-
-  const handleSaveModel = (model: ManagedModel) => {
-    markSettingsSaving();
-    setModels((current) => {
-      const exists = current.some((item) => item.id === model.id);
-      return exists
-        ? current.map((item) => (item.id === model.id ? model : item))
-        : [...current, model];
-    });
-  };
-
-  const handleDeleteModel = (id: string) => {
-    markSettingsSaving();
-    setModels((current) => current.filter((model) => model.id !== id));
-    if (selectedModelId === id) {
-      const fallback = models.find((model) => model.id !== id && isModelEnabled(model));
-      if (fallback) setSelectedModelId(fallback.id);
-    }
-  };
-
-  useEffect(() => {
-    if (presentation) {
-      if (presentation.theme && presentation.theme !== selectedTheme) {
-        setSelectedTheme(presentation.theme);
-      }
-      if (presentation.palette && presentation.palette !== selectedPalette) {
-        setSelectedPalette(presentation.palette);
-      }
-    }
-  }, [presentation]);
+    enabledModels,
+    logoUrl,
+    selectedModel,
+    selectedModelId,
+    selectedPalette,
+    selectedTheme,
+    setSelectedPalette,
+    setSelectedTheme,
+    selectModel: setSelectedModelId,
+    visibleModels,
+  } = settings;
+  const [activeRunId, setActiveRunId] = useState<string | null>(null);
 
   // 对话流与 Agent 编排状态
   const [request, setRequest] = useState("");
@@ -844,7 +652,7 @@ export function App() {
       setSessionLoaded(false);
       const state = await window.desktopApi.openWorkspace(selectedPath);
       applySessionState(state);
-      markSettingsSaving();
+      settings.markSaving();
       triggerToast(`已打开项目目录：${getWorkspaceLabel(selectedPath)}`);
     } catch (error) {
       setSessionLoaded(true);
@@ -1683,18 +1491,6 @@ export function App() {
     }
   };
 
-  const handleLogoUpload = (url: string) => {
-    markSettingsSaving();
-    setLogoUrl(url);
-    triggerToast("🖼️ 品牌 Logo 已应用至演示文稿模板");
-  };
-
-  const handleRemoveLogo = () => {
-    markSettingsSaving();
-    setLogoUrl(null);
-    triggerToast("🗑️ 品牌 Logo 已移除");
-  };
-
   const resolveInlineCardContext = () => {
     const project = useProjectStore.getState().activeProject;
     return {
@@ -1803,61 +1599,6 @@ export function App() {
     setIsMirrorExpanded(false);
   };
 
-  const startPanelResize = (panel: "primary" | "secondary", startClientX: number) => {
-    const startPrimaryWidth = primarySidebarWidth;
-    const startSecondaryWidth = secondaryPaneWidth;
-    document.documentElement.classList.add("is-resizing-panels");
-
-    const handlePointerMove = (event: PointerEvent) => {
-      if (panel === "primary") {
-        setPrimarySidebarWidth(Math.min(360, Math.max(232, startPrimaryWidth + event.clientX - startClientX)));
-        return;
-      }
-      const effectivePrimaryWidth = isPrimarySidebarCollapsed ? 56 : primarySidebarWidth;
-      const availableWidth = window.innerWidth - effectivePrimaryWidth - 560 - 18;
-      const maxWidth = Math.max(300, Math.min(560, availableWidth));
-      setSecondaryPaneWidth(
-        Math.min(maxWidth, Math.max(300, startSecondaryWidth - (event.clientX - startClientX))),
-      );
-    };
-
-    const handlePointerUp = () => {
-      document.documentElement.classList.remove("is-resizing-panels");
-      window.removeEventListener("pointermove", handlePointerMove);
-      window.removeEventListener("pointerup", handlePointerUp);
-    };
-
-    window.addEventListener("pointermove", handlePointerMove);
-    window.addEventListener("pointerup", handlePointerUp);
-  };
-
-  useEffect(() => {
-    if (!isMirrorOpen || !presentation || isMirrorExpanded) return;
-    const reconcilePanelWidths = () => {
-      const expandedAvailable = window.innerWidth - primarySidebarWidth - secondaryPaneWidth - 18;
-      if (!isPrimarySidebarCollapsed && expandedAvailable < 560) {
-        setIsPrimarySidebarCollapsed(true);
-        return;
-      }
-      const effectivePrimaryWidth = isPrimarySidebarCollapsed ? 56 : primarySidebarWidth;
-      const maxSecondaryWidth = Math.max(
-        300,
-        Math.min(560, window.innerWidth - effectivePrimaryWidth - 560 - 18),
-      );
-      setSecondaryPaneWidth((width) => Math.min(width, maxSecondaryWidth));
-    };
-    reconcilePanelWidths();
-    window.addEventListener("resize", reconcilePanelWidths);
-    return () => window.removeEventListener("resize", reconcilePanelWidths);
-  }, [
-    isMirrorExpanded,
-    isMirrorOpen,
-    isPrimarySidebarCollapsed,
-    presentation,
-    primarySidebarWidth,
-    secondaryPaneWidth,
-  ]);
-
   const handleOpenDeckPreview = () => {
     setIsDeckPreviewOpen(true);
     setIsMirrorOpen(true);
@@ -1913,267 +1654,116 @@ export function App() {
     sessions.find((session) => session.id === activeSessionId)?.title.trim()
     || presentation?.title?.trim()
     || (isDraftChat ? "AI 新建会话" : "当前对话");
-  const isMirrorVisible = Boolean(isMirrorOpen && presentation);
-  const effectivePrimarySidebarWidth =
-    activeMode === "workspace" && isPrimarySidebarCollapsed ? 56 : primarySidebarWidth;
-  const workspaceLayoutStyle = {
-    "--primary-sidebar-width": `${effectivePrimarySidebarWidth}px`,
-    "--secondary-pane-width": `${secondaryPaneWidth}px`,
-  } as CSSProperties;
 
   return (
-    <main className={`app-shell ${computedTheme === "dark" ? "dark-theme" : ""}`}>
-      <div className="window-titlebar">
-        <img className="window-titlebar-icon" src="./icon.png" alt="" />
-        <span className="window-titlebar-title">Agent PPT</span>
-      </div>
-
-      {/* 浮动提示通知 */}
-      <div className="toast-viewport" aria-live="polite" aria-atomic="true">
-        {toastMessage ? <div className="floating-toast-alert" role="status">{toastMessage}</div> : null}
-      </div>
-
-      {/* 三栏/双模态同构容器 */}
-      <div
-        className={`workspace-container mode-${activeMode}${activeMode === "workspace" && isPrimarySidebarCollapsed ? " primary-sidebar-collapsed" : ""}`}
-        style={workspaceLayoutStyle}
-      >
-        {activeMode === "workspace" ? (
-          <>
-            {/* 左栏：工作台导航 */}
-            <div className="primary-sidebar-slot">
-              <LeftPanel
-                sessions={sessions}
-                activeSessionId={activeSessionId}
-                onSelectSession={handleSelectSession}
-                onNewSession={() => void handleNewSession()}
-                onNewSessionInWorkspace={(path) => void handleNewSessionInWorkspace(path)}
-                onToggleSettings={() => {
-                  setActiveMode("settings");
-                  setSettingsCategory("account");
-                }}
-                onDeleteSession={handleDeleteSession}
-                collapsed={isPrimarySidebarCollapsed}
-                onToggleCollapsed={() => setIsPrimarySidebarCollapsed((collapsed) => !collapsed)}
-              />
-            </div>
-
-            {!isPrimarySidebarCollapsed ? (
-              <div
-                className="panel-resizer panel-resizer--primary"
-                role="separator"
-                aria-label="调整工作台侧栏宽度"
-                aria-orientation="vertical"
-                onPointerDown={(event) => {
-                  event.preventDefault();
-                  startPanelResize("primary", event.clientX);
-                }}
-              />
-            ) : <div className="panel-resizer-placeholder" />}
-
-            <div className="rounded-canvas workbench-main-surface">
-              <div
-                className={[
-                  "workspace-canvas-content",
-                  isDraftChat ? "new-session-layout" : "",
-                  isMirrorVisible ? "ppt-mirror-open" : "ppt-mirror-closed workspace-canvas-content-chat-only",
-                  isMirrorVisible && isMirrorExpanded ? "mirror-expanded" : "",
-                ].filter(Boolean).join(" ")}
-              >
-                <ChatWorkspace
-                  isNewChat={isDraftChat}
-                  conversationTitle={activeSessionTitle}
-                  chatMessages={chatMessages}
-                  activityTrace={activityTrace}
-                  thoughtProgress={thoughtProgress}
-                  agentActivityMode={agentActivityMode}
-                  activeToolName={activeToolName}
-                  streamingMessageId={streamingMessageId}
-                  request={request}
-                  onChangeRequest={setRequest}
-                  onSubmitRequest={() => void startAgent()}
-                  busy={busy}
-                  onResolveApproval={resolveApproval}
-                  onResolveQuestion={handleResolveQuestion}
-                  onResolveToolApproval={(approvalId, approved) => {
-                    void resolveToolApproval(approvalId, approved);
-                  }}
-                  getInlineCardData={getInlineCardData}
-                  onConfirmBrief={handleConfirmBrief}
-                  onConfirmOutline={handleConfirmOutline}
-                  onConfirmLayout={handleConfirmLayout}
-                  onReviseOutline={handleReviseOutline}
-                  onOpenDeckPreview={handleOpenDeckPreview}
-                  onExportDeck={() => void handleExportDeck()}
-                  isExportingDeck={isExportingDeck}
-                  selectedTheme={selectedTheme}
-                  selectedPalette={selectedPalette}
-                  activeRunId={activeRunId}
-                  onCancelRun={() => void handleCancelRun()}
-                  isCancellingRun={isCancellingRun}
-                  onRetry={handleRetryMessage}
-                  isMirrorOpen={isMirrorVisible}
-                  onToggleMirror={handleOpenMirror}
-                  onUpdateMessageContent={handleUpdateMessageContent}
-                  onProposePrompt={handleSuggestPrompt}
-                  models={visibleModels}
-                  selectedModelId={selectedModelId}
-                  setSelectedModelId={setSelectedModelId}
-                  workspaceReady={Boolean(localStoragePath)}
-                  onPrepareWorkspace={() => void handleSelectWorkspaceFolder()}
-                  triggerToast={triggerToast}
-                />
-
-                {isMirrorVisible && presentation ? (
-                  <>
-                    <div
-                      className={`panel-resizer panel-resizer--secondary${isMirrorExpanded ? " is-disabled" : ""}`}
-                      role="separator"
-                      aria-label="调整预览面板宽度"
-                      aria-orientation="vertical"
-                      onPointerDown={(event) => {
-                        if (isMirrorExpanded) return;
-                        event.preventDefault();
-                        startPanelResize("secondary", event.clientX);
-                      }}
-                    />
-                    <PPTMirror
-                      presentation={presentation}
-                      selectedSlideId={selectedSlideId}
-                      onSelectSlide={setSelectedSlideId}
-                      selectedTheme={selectedTheme}
-                      selectedPalette={selectedPalette}
-                      themeMode={computedTheme}
-                      logoUrl={logoUrl}
-                      onCloseMirror={handleCloseMirror}
-                      highlightSlideId={highlightSlideId}
-                      isExpanded={isMirrorExpanded}
-                      onToggleExpand={() => setIsMirrorExpanded((value) => !value)}
-                      triggerToast={triggerToast}
-                    />
-                  </>
-                ) : null}
-              </div>
-
-              <DeckPreviewModal
-                open={isDeckPreviewOpen && Boolean(presentation)}
-                presentation={presentation ?? { id: "", title: "", revision: 0, slides: [] }}
-                selectedSlideId={selectedSlideId}
-                selectedTheme={selectedTheme}
-                selectedPalette={selectedPalette}
-                logoUrl={logoUrl}
-                onSelectSlide={setSelectedSlideId}
-                onClose={() => setIsDeckPreviewOpen(false)}
-              />
-            </div>
-          </>
-        ) : (
-          <>
-            {/* 左栏：设置分类导航 */}
-            <div className="primary-sidebar-slot">
-              <SettingsSidebar
-                activeCategory={settingsCategory}
-                onSelectCategory={setSettingsCategory}
-                onBackToWorkspace={() => setActiveMode("workspace")}
-              />
-            </div>
-            <div
-              className="panel-resizer panel-resizer--primary"
-              role="separator"
-              aria-label="调整设置导航宽度"
-              aria-orientation="vertical"
-              onPointerDown={(event) => {
-                event.preventDefault();
-                startPanelResize("primary", event.clientX);
-              }}
-            />
-
-            {/* 右侧大圆角容器 - 设置项控制台 */}
-            <div className="rounded-canvas">
-              <SettingsConsole
-                activeCategory={settingsCategory}
-                models={models}
-                selectedModelId={selectedModelId}
-                onSelectModel={(id) => {
-                  markSettingsSaving();
-                  setSelectedModelId(id);
-                }}
-                onSaveModel={handleSaveModel}
-                onDeleteModel={handleDeleteModel}
-                selectedTheme={selectedTheme}
-                setSelectedTheme={(value) => {
-                  markSettingsSaving();
-                  setSelectedTheme(value);
-                }}
-                selectedPalette={selectedPalette}
-                setSelectedPalette={(value) => {
-                  markSettingsSaving();
-                  setSelectedPalette(value);
-                }}
-                logoUrl={logoUrl}
-                onLogoUpload={handleLogoUpload}
-                onRemoveLogo={handleRemoveLogo}
-                
-                autoDownload={autoDownload}
-                setAutoDownload={(value) => {
-                  markSettingsSaving();
-                  setAutoDownload(value);
-                }}
-                autoCloudSync={autoCloudSync}
-                setAutoCloudSync={(value) => {
-                  markSettingsSaving();
-                  setAutoCloudSync(value);
-                }}
-                localStoragePath={localStoragePath}
-                onOpenWorkspace={() => void handleOpenWorkspace()}
-                defaultRatio={defaultRatio}
-                setDefaultRatio={(value) => {
-                  markSettingsSaving();
-                  setDefaultRatio(value);
-                }}
-                agentStepLimits={agentStepLimits}
-                setAgentStepLimits={(value) => {
-                  markSettingsSaving();
-                  setAgentStepLimits(value);
-                }}
-                agentGatewayPreferences={agentGatewayPreferences}
-                setAgentGatewayPreferences={(value) => {
-                  markSettingsSaving();
-                  setAgentGatewayPreferences(value);
-                }}
-                
-                themeMode={themeMode}
-                setThemeMode={(value) => {
-                  markSettingsSaving();
-                  setThemeMode(value);
-                }}
-                uiAccentColor={uiAccentColor}
-                setUiAccentColor={(value) => {
-                  markSettingsSaving();
-                  setUiAccentColor(value);
-                }}
-                uiControlShape={uiControlShape}
-                setUiControlShape={(value) => {
-                  markSettingsSaving();
-                  setUiControlShape(value);
-                }}
-                borderRadiusScale={borderRadiusScale}
-                setBorderRadiusScale={(value) => {
-                  markSettingsSaving();
-                  setBorderRadiusScale(value);
-                }}
-                colorContrastOffset={colorContrastOffset}
-                setColorContrastOffset={(value) => {
-                  markSettingsSaving();
-                  setColorContrastOffset(value);
-                }}
-                triggerToast={triggerToast}
-                saveStatus={settingsSaveStatus}
-              />
-            </div>
-          </>
-        )}
-      </div>
-    </main>
+    <AppShell
+      dark={computedTheme === "dark"}
+      notificationMessage={toastMessage}
+      workspaceClassName={workbenchLayout.workspaceClassName}
+      workspaceStyle={workbenchLayout.workspaceStyle}
+      showSidebarToggle={activeMode === "workspace"}
+      sidebarCollapsed={workbenchLayout.isPrimarySidebarCollapsed}
+      onToggleSidebar={workbenchLayout.togglePrimarySidebar}
+    >
+      {activeMode === "workspace" ? (
+        <WorkspaceView
+          leftPanelProps={{
+            sessions,
+            activeSessionId,
+            onSelectSession: handleSelectSession,
+            onNewSession: () => void handleNewSession(),
+            onNewSessionInWorkspace: (path) => void handleNewSessionInWorkspace(path),
+            onToggleSettings: () => {
+              setActiveMode("settings");
+              setSettingsCategory("account");
+            },
+            onDeleteSession: handleDeleteSession,
+          }}
+          chatWorkspaceProps={{
+            isNewChat: isDraftChat,
+            conversationTitle: activeSessionTitle,
+            chatMessages,
+            activityTrace,
+            thoughtProgress,
+            agentActivityMode,
+            activeToolName,
+            streamingMessageId,
+            request,
+            onChangeRequest: setRequest,
+            onSubmitRequest: () => void startAgent(),
+            busy,
+            onResolveApproval: resolveApproval,
+            onResolveQuestion: handleResolveQuestion,
+            onResolveToolApproval: (approvalId, approved) => void resolveToolApproval(approvalId, approved),
+            getInlineCardData,
+            onConfirmBrief: handleConfirmBrief,
+            onConfirmOutline: handleConfirmOutline,
+            onConfirmLayout: handleConfirmLayout,
+            onReviseOutline: handleReviseOutline,
+            onOpenDeckPreview: handleOpenDeckPreview,
+            onExportDeck: () => void handleExportDeck(),
+            isExportingDeck,
+            selectedTheme,
+            selectedPalette,
+            activeRunId,
+            onCancelRun: () => void handleCancelRun(),
+            isCancellingRun,
+            onRetry: handleRetryMessage,
+            isMirrorOpen: isMirrorVisible,
+            onToggleMirror: handleOpenMirror,
+            onUpdateMessageContent: handleUpdateMessageContent,
+            onProposePrompt: handleSuggestPrompt,
+            models: visibleModels,
+            selectedModelId,
+            setSelectedModelId,
+            workspaceReady: Boolean(localStoragePath),
+            sandboxName: getWorkspaceLabel(localStoragePath || undefined),
+            onPrepareWorkspace: () => void handleSelectWorkspaceFolder(),
+            triggerToast,
+          }}
+          mirrorProps={isMirrorVisible && presentation ? {
+            presentation,
+            selectedSlideId,
+            onSelectSlide: setSelectedSlideId,
+            selectedTheme,
+            selectedPalette,
+            themeMode: computedTheme,
+            logoUrl,
+            onCloseMirror: handleCloseMirror,
+            highlightSlideId,
+            isExpanded: isMirrorExpanded,
+            onToggleExpand: () => setIsMirrorExpanded((value) => !value),
+            triggerToast,
+          } : undefined}
+          deckPreviewProps={{
+            open: isDeckPreviewOpen && Boolean(presentation),
+            presentation: presentation ?? { id: "", title: "", revision: 0, slides: [] },
+            selectedSlideId,
+            selectedTheme,
+            selectedPalette,
+            logoUrl,
+            onSelectSlide: setSelectedSlideId,
+            onClose: () => setIsDeckPreviewOpen(false),
+          }}
+          isDraftChat={isDraftChat}
+          isMirrorVisible={isMirrorVisible}
+          isMirrorExpanded={isMirrorExpanded}
+          isPrimarySidebarCollapsed={workbenchLayout.isPrimarySidebarCollapsed}
+          onTogglePrimarySidebar={workbenchLayout.togglePrimarySidebar}
+          onStartPanelResize={workbenchLayout.startPanelResize}
+        />
+      ) : (
+        <SettingsView
+          activeCategory={settingsCategory}
+          onSelectCategory={setSettingsCategory}
+          onBackToWorkspace={() => setActiveMode("workspace")}
+          controller={settings}
+          localStoragePath={localStoragePath}
+          onOpenWorkspace={() => void handleOpenWorkspace()}
+          notify={triggerToast}
+          onStartPanelResize={workbenchLayout.startPanelResize}
+        />
+      )}
+    </AppShell>
   );
 }
