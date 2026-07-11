@@ -47,7 +47,7 @@ export const insertSlideImageTool: ToolDefinition<
     if (!slide) return { commands: [], warnings: ["Slide not found."] };
 
     const layout = slide.layout ?? "concept";
-    const validSlots = listLayoutSlots(layout);
+    const validSlots = listLayoutSlots(layout, slide.grammarVariant);
     if (validSlots.length === 0) {
       return {
         commands: [],
@@ -66,6 +66,7 @@ export const insertSlideImageTool: ToolDefinition<
       layout,
       args.slot,
       (args.aspectRatio ?? "auto") as AspectRatioPreset,
+      slide.grammarVariant,
     );
     if (!rect) {
       return { commands: [], warnings: [`Could not resolve slot '${args.slot}'.`] };

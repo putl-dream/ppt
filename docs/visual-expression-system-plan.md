@@ -5,7 +5,7 @@
 > 目标：先增强基础视觉表达能力与 Layout Grammar，让模型能够稳定看见并控制效果；随后再引入 `brand-profile.json` 做内容品牌推导。
 
 > 进度更新：2026-07-05  
-> 已完成首个系统骨架：`DesignTokensV1`、Layout Grammar registry、`cover` grammar handler 试点、layout-plan 契约扩展、元素 `provenance`、重排 undo 保护与相关单元测试。P0 图片链路已增加 Tavily 图片候选、远程资产本地化、来源元数据和 PPTX 原生 cover/contain 导出。尚未完成多 layout handler、结构化 render evaluation 与 brand-profile 推导。
+> 已完成首个系统骨架与首批高频 Grammar：`cover`、`section`、`process`、`case`、`image-grid` 已支持可执行变体，layout-plan/Design Agent 已接入 `grammarVariant + designTokens`。P0 图片链路已增加 Tavily 图片候选、远程资产本地化、来源元数据和 PPTX 原生 cover/contain 导出。尚未完成 toc/quote 等剩余 handler、结构化 render evaluation 与 brand-profile 推导。
 
 ---
 
@@ -66,8 +66,8 @@ Brand Profile
 | 已完成 | 图片候选搜索与本地化资产闭环 | Tavily `include_images` → `assets/images/` → 来源/授权元数据 → PPTX |
 | 已验证 | 单元测试通过 | `npm test`：56 files / 348 tests |
 | 未完成 | `layout-slots` 与 handler 单一来源彻底合并 | 仍需后续处理 |
-| 未完成 | `section` / `toc` / `process` / `case` / `quote` grammar handler | P2 后续 |
-| 未完成 | Agent skill 输出 grammar + tokens | P3 后续 |
+| 部分完成 | 多 layout grammar handler | `section` / `process` / `case` / `image-grid` 已完成；`toc` / `quote` 等待后续 |
+| 已完成 | Agent skill 输出 grammar + tokens | `ppt-design-layout` 已接入合法变体表与 designTokens |
 | 未完成 | 结构化视觉评分与 render feedback 指标 | P3 后续 |
 | 未完成 | `brand-profile.json` 推导 | P4 后续 |
 
@@ -97,13 +97,13 @@ Layout 不应继续等于固定模板，而应成为结构语法：
 |---------|----------|--------------|------|
 | cover | title + subtitle + hero visual + motif | 大图、色块、侧栏、书签、曲线、留白 | 已完成试点 |
 | toc | chapter list + index motif | 编号目录、路径目录、卡片目录、边注目录 | 未开始 |
-| section | chapter marker + transition | 大号章节号、整页色块、主视觉曲线、纸本页签 | 未开始 |
+| section | chapter marker + transition | 居中、编辑式分栏、章节色带 | 已完成 v1 |
 | concept | parallel points | 卡片、便签、图标列表、分栏、浮动块 | 未开始 grammar 化 |
-| process | path + nodes + annotations | 时间轴、阅读路径、弧线路径、阶梯、流程泳道 | 未开始 |
-| case | narrative + metric + evidence | KPI 大数字、右侧证据图、案例卡、数据栏 | 未开始 |
+| process | path + nodes + annotations | 卡片、时间线、路径、阶梯 | 已完成 v1 |
+| case | narrative + metric + evidence | 左右分栏、KPI 聚焦、大图证据 | 已完成 v1 |
 | comparison | left/right semantic groups | 对照表、天平、分割线、冲突/解决结构 | 未开始 grammar 化 |
 | quote | quote + source + atmosphere | 大留白、书页引用、深色强调、注释框 | 未开始 |
-| image-grid | media + captions | 画廊、证据墙、产品截图网格 | 未开始 grammar 化 |
+| image-grid | media + captions | 网格、主图说明、胶片带、证据墙 | 已完成 v1 |
 | summary | takeaways + next action | 结论栏、行动清单、复盘页 | 未开始 grammar 化 |
 
 ### 3.3 模型接入能力
@@ -339,10 +339,12 @@ render → evaluate → fix
 
 1. [x] `cover`
 2. [ ] `toc`
-3. [ ] `section`
-4. [ ] `process`
-5. [ ] `case`
+3. [x] `section`
+4. [x] `process`
+5. [x] `case`
 6. [ ] `quote`
+
+扩展完成：`image-grid` grammar v1。
 
 每个 grammar handler 需要声明：
 
@@ -363,8 +365,8 @@ render → evaluate → fix
 目标：让模型开始使用系统。
 
 1. [x] `layout-plan.ts` 支持 `designTokens` / `grammarVariant`。
-2. [ ] 更新 `ppt-design-layout`：Design Agent 输出 grammar + tokens。
-3. [ ] 更新 `ppt-layout`：Executor 按 plan 调用 grammar handler。（底层命令已支持，skill 未接入）
+2. [x] 更新 `ppt-design-layout`：Design Agent 输出 grammar + tokens。
+3. [x] 更新 `ppt-layout`：Executor 按 plan 调用 grammar handler。
 4. [ ] Render feedback 回传视觉评分。
 5. [ ] deck-review 增加视觉表达项：母题一致、锚点、密度、页面差异度。
 

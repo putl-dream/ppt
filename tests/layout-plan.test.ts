@@ -98,6 +98,33 @@ describe("layout-plan", () => {
     expect(issues.some((issue) => issue.severity === "error" && issue.message.includes("consecutive"))).toBe(true);
   });
 
+  it("rejects grammar variants that are unsupported by the selected layout", () => {
+    const plan = parseLayoutPlan(JSON.stringify({
+      version: 1,
+      theme: "ocean",
+      palette: "cyan",
+      styleMode: "template",
+      slides: [{
+        slideId: "s1",
+        title: "Process",
+        narrativeRole: "content",
+        layout: "process",
+        grammarVariant: "invented-layout",
+        rationale: "Invalid on purpose.",
+        enhancements: [],
+      }],
+    }));
+
+    const issues = validateLayoutPlan(plan);
+    expect(issues).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        severity: "error",
+        slideId: "s1",
+        message: expect.stringContaining("not supported"),
+      }),
+    ]));
+  });
+
   it("builds set-theme and update-slide-layout commands", () => {
     const plan = parseLayoutPlan(JSON.stringify({
       version: 1,

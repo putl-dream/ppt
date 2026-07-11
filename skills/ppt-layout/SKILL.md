@@ -47,7 +47,7 @@ allowed-tools:
    - 工具内部读取 plan
    - 校验 plan 与 snapshot 页数 / slideId / 顺序一致
    - 执行 `validateLayoutPlan` + `validateLayoutPlanRhythm`
-   - 由 `buildLayoutPlanCommands` 生成 `set-theme` / `update-slide-layout` / `update-slide-variant`
+   - 由 `buildLayoutPlanCommands` 生成 `set-theme` / `update-slide-layout(grammarVariant + designTokens)` / `update-slide-variant`
 3. 若 `ExecuteLayoutPlan` 返回 error：修复或重新生成 `slides/layout-plan.json` 后再执行；**禁止**从聊天上下文凭记忆重建 layout
 4. 对 plan.enhancements 逐项 `ExecuteExtraTool`：
    - `beautify-chart` → BeautifyChart
@@ -57,6 +57,8 @@ allowed-tools:
 5. `ValidateDeckLayout` 确认节奏；`LoadSkill deck-review`
 
 远程图片默认由 InsertSlideImage 本地化到 workspace `assets/images/`；不要把未经本地化的网页 URL 直接留给 PPTX 导出。若来源页或授权信息缺失，必须保留 warning，不能宣称图片已获得商用授权。
+
+Grammar handler 会把 token 推导出的实际变体写回 `slide.grammarVariant`，PreviewSlide 与 deck-review 应以实际值检查页面差异度。
 
 **Executor 禁止**：擅自改 plan 中的 layout；重新推理版式选择；手写 `set-theme` / `update-slide-layout` 绕过 `ExecuteLayoutPlan`；改写 text。
 

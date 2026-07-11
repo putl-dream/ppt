@@ -43,13 +43,18 @@ export function getLayoutSlotRect(
   layout: SlideLayoutType | string,
   slot: string,
   aspectRatio: AspectRatioPreset = "auto",
+  grammarVariant?: string,
 ): SlotRect | undefined {
   let rect: SlotRect | undefined;
 
   if (layout === "cover" && slot === "hero") {
     rect = { x: 200, y: 500, width: 880, height: 160 };
+  } else if (layout === "section" && slot === "hero") {
+    rect = { x: 780, y: 156, width: 340, height: 396 };
   } else if (layout === "case" && slot === "side") {
-    rect = { x: 784, y: 224, width: 352, height: 382 };
+    rect = grammarVariant === "evidence"
+      ? { x: 136, y: 204, width: 618, height: 416 }
+      : { x: 784, y: 212, width: 352, height: 400 };
   } else if (layout === "concept" && /^grid-\d+$/.test(slot)) {
     const idx = Number(slot.slice(5));
     const N = 4;
@@ -126,9 +131,10 @@ export function getImageGridSlotRect(index: number, count: number): SlotRect | u
   };
 }
 
-export function listLayoutSlots(layout: SlideLayoutType | string): string[] {
+export function listLayoutSlots(layout: SlideLayoutType | string, _grammarVariant?: string): string[] {
   switch (layout) {
     case "cover":
+    case "section":
       return ["hero"];
     case "case":
       return ["side"];

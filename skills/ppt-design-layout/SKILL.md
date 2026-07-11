@@ -49,6 +49,17 @@ allowed-tools:
   "theme": "ocean",
   "palette": "cyan",
   "styleMode": "template",
+  "designTokens": {
+    "version": 1,
+    "palette": "business-blue",
+    "fontMood": "formal",
+    "shapeLanguage": "cards",
+    "backgroundStyle": "clean",
+    "motif": "none",
+    "density": "standard",
+    "imageTreatment": "plain",
+    "chartStyle": "report"
+  },
   "designNotes": "可选：整体节奏说明",
   "slides": [
     {
@@ -56,6 +67,7 @@ allowed-tools:
       "title": "演示标题",
       "narrativeRole": "cover",
       "layout": "cover",
+      "grammarVariant": "editorial-hero",
       "slideVariant": "hero",
       "rationale": "开场页，hero 背景",
       "enhancements": []
@@ -73,6 +85,8 @@ allowed-tools:
 | `slideId` | 是 | 与 snapshot 中 slide.id 一致 |
 | `narrativeRole` | 是 | cover / toc / section / content / data / comparison / quote / summary |
 | `layout` | 是 | 11 种引擎 layout 之一 |
+| `grammarVariant` | 支持 Grammar 的 layout 建议填写 | 控制同一 layout 的具体视觉构图；只能使用下表枚举 |
+| `designTokens` | 建议 deck 级填写 | 控制 palette / fontMood / shapeLanguage / backgroundStyle / motif / density / imageTreatment / chartStyle |
 | `slideVariant` | 否 | `hero` / `light` / `dark`；省略则由 layout 推断 |
 | `rationale` | 是 | 一句话：为何选此 layout（供 deck-review 对照） |
 | `enhancements` | 否 | 执行阶段用 Deferred Tool 处理的增强项 |
@@ -94,6 +108,18 @@ allowed-tools:
 | `insert-image` | InsertSlideImage | slot + url，无需坐标 |
 | `add-decorations` | AddLayoutDecorations | 仅 creative + process/comparison |
 | `add-icon` | add-element icon | 关键列表点缀 |
+
+### Layout Grammar 变体（P1）
+
+| layout | grammarVariant | 选择原则 |
+|--------|----------------|----------|
+| `cover` | `centered` / `editorial-hero` / `signal-dark` | 正式居中 / 编辑式图文 / 深色发布 |
+| `section` | `centered` / `editorial-split` / `band` | 常规过渡 / 图文分栏 / 强章节色带 |
+| `process` | `cards` / `timeline` / `path` / `steps` | 并列阶段 / 时间演进 / 路径推进 / 阶梯递进 |
+| `case` | `split` / `metric-focus` / `evidence` | 叙述+指标 / KPI 主导 / 大图证据 |
+| `image-grid` | `grid` / `hero-caption` / `filmstrip` / `evidence-wall` | 等权多图 / 单主图 / 序列图 / 主证据+细节 |
+
+未在表中的 layout 暂不填写 `grammarVariant`。不要自由发明字符串；`validateLayoutPlan` 会拒绝不受支持的组合。
 
 ### 图片选材（P0 资产闭环）
 
@@ -157,7 +183,7 @@ allowed-tools:
 ```
 LoadSkill ppt-design-layout，然后 Task：
 「读取当前 presentation snapshot（slide 列表与 id）。
-**页数与文案已冻结**——为每一现有 slide 选定 layout、slideVariant、enhancements，不得增删页或提内容密度要求。
+**页数与文案已冻结**——为每一现有 slide 选定 layout、grammarVariant、slideVariant、designTokens、enhancements，不得增删页或提内容密度要求。
 按 ppt-design-layout Rubric（仅版式节奏）写入 slides/layout-plan.json。
 用户选择排版方式：{template|creative}。
 禁止 SubmitCommands；结论 1 句：路径 + layout 种类数 + 已写入可执行 plan。」
@@ -178,6 +204,7 @@ LoadSkill ppt-design-layout，然后 Task：
 3. 含 KPI 的 deck 至少 1 页 case 或 beautify-chart
 4. 7 页+ 商务 deck 含 toc
 5. slideVariant 至少 2 种（5 页+ deck）
+6. 支持 Grammar 的页面使用合法 grammarVariant；同类内容可复用变体，不为了多样而每页不同
 
 ## 延伸阅读
 

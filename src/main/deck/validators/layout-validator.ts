@@ -10,8 +10,37 @@ function isLayoutCardElement(element: SlideElement): boolean {
   return isLayoutCard(element);
 }
 
+function isIntentionalLayoutOverlap(left: SlideElement, right: SlideElement): boolean {
+  const pair = [left, right];
+  const hasNumber = pair.some((element) => element.type === "text" && element.id.startsWith("num-"));
+  const hasBadgeOrStepAccent = pair.some((element) =>
+    element.type === "shape"
+    && (element.id.startsWith("badge-") || element.id.startsWith("accent-")),
+  );
+  if (hasNumber && hasBadgeOrStepAccent) return true;
+
+  const connector = pair.find((element) =>
+    element.type === "shape"
+    && element.provenance === "layout"
+    && (element.shapeType === "line" || element.shapeType === "arrow"),
+  );
+  const node = pair.find((element) =>
+    element.id.startsWith("badge-") || element.id.startsWith("num-"),
+  );
+  if (connector && node) return true;
+
+  // Low-opacity layout accents are background motifs, not foreground collisions.
+  return pair.some((element) =>
+    element.type === "shape"
+    && element.provenance === "layout"
+    && element.id.startsWith("accent-")
+    && (element.fillOpacity ?? 1) <= 0.25,
+  );
+}
+
 function shouldCheckOverlap(left: SlideElement, right: SlideElement): boolean {
   if (isLayoutCardElement(left) || isLayoutCardElement(right)) return false;
+  if (isIntentionalLayoutOverlap(left, right)) return false;
   return true;
 }
 

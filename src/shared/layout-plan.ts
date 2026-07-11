@@ -3,6 +3,7 @@ import { z } from "zod";
 import { validateDeckRhythm, type DeckRhythmIssue } from "./deck-rhythm";
 import { designTokensV1Schema, resolveDesignTokens } from "./design-tokens";
 import { SLIDE_LAYOUTS } from "./slide-layouts";
+import { getSupportedGrammarVariants } from "./layout-grammar-variants";
 import { SLIDE_VARIANTS } from "./slide-variant";
 import type { PresentationCommand } from "./commands";
 import type { Presentation } from "./presentation";
@@ -186,6 +187,19 @@ export function validateLayoutPlan(plan: LayoutPlan): LayoutPlanValidationIssue[
   }
 
   for (const slide of slides) {
+    if (slide.grammarVariant) {
+      const supported = getSupportedGrammarVariants(slide.layout);
+      if (!supported.includes(slide.grammarVariant)) {
+        issues.push({
+          slideId: slide.slideId,
+          severity: "error",
+          message: `Grammar variant '${slide.grammarVariant}' is not supported by layout '${slide.layout}'.`,
+          fixHint: supported.length > 0
+            ? `Choose one of: ${supported.join(", ")}.`
+            : "Remove grammarVariant until this layout has a grammar handler.",
+        });
+      }
+    }
     if (slide.narrativeRole === "data" && slide.layout !== "case" && slide.layout !== "process") {
       issues.push({
         slideId: slide.slideId,

@@ -5,6 +5,7 @@ import {
 } from "../design-tokens";
 import type { LayoutGrammarContext, LayoutGrammarHandler } from "../layout-grammar";
 import { layoutGrammarRegistry } from "../layout-grammar";
+import { LAYOUT_GRAMMAR_VARIANTS } from "../layout-grammar-variants";
 import { createCoverMotif } from "../motif-system";
 import { resolveCoverTitleFont } from "../typography";
 import { VISUAL_TOKENS, cardShadow } from "../visual-tokens";
@@ -246,7 +247,7 @@ function applySignalDarkCover(ctx: LayoutGrammarContext): void {
 
 export const coverGrammarHandler: LayoutGrammarHandler = {
   id: "cover",
-  supportedVariants: ["centered", "editorial-hero", "signal-dark"],
+  supportedVariants: LAYOUT_GRAMMAR_VARIANTS.cover,
   defaultVariant: "centered",
   contentSlots: ["title", "subtitle", "hero"],
   visualSlots: ["motif", "hero"],
@@ -254,13 +255,14 @@ export const coverGrammarHandler: LayoutGrammarHandler = {
     const variant = resolveCoverVariant(ctx);
     if (variant === "editorial-hero") {
       applyEditorialCover(ctx);
-      return;
+      return variant;
     }
     if (variant === "signal-dark") {
       applySignalDarkCover(ctx);
-      return;
+      return variant;
     }
     applyCenteredCover(ctx);
+    return variant;
   },
 };
 

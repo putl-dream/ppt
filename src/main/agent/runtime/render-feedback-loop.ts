@@ -30,6 +30,7 @@ export interface SlideRenderFeedback {
   slideId: string;
   title: string;
   layout?: string;
+  grammarVariant?: string;
   description: string;
   thumbnail: RenderFeedbackImage | null;
 }
@@ -65,7 +66,7 @@ export function formatRenderFeedbackMessage(payload: RenderFeedbackPayload): str
 
   for (const slide of payload.slides) {
     lines.push(
-      `- **${slide.title}** (\`${slide.slideId}\`) · layout=${slide.layout ?? "unset"} · ${slide.description}`,
+      `- **${slide.title}** (\`${slide.slideId}\`) · layout=${slide.layout ?? "unset"}${slide.grammarVariant ? `/${slide.grammarVariant}` : ""} · ${slide.description}`,
     );
     if (!slide.thumbnail) {
       lines.push("  （本环境无 PNG 缩略图，请依据结构化摘要判断）");
@@ -117,6 +118,7 @@ export async function buildRenderFeedback(
       slideId: result.preview.slideId,
       title: result.preview.title,
       layout: result.preview.layout,
+      grammarVariant: result.preview.grammarVariant,
       description: result.preview.description,
       thumbnail,
     });

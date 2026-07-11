@@ -14,7 +14,8 @@ export interface LayoutGrammarHandler {
   defaultVariant: string;
   contentSlots: readonly string[];
   visualSlots: readonly string[];
-  apply: (ctx: LayoutGrammarContext) => void;
+  /** Applies the grammar and returns the concrete variant selected after token inference. */
+  apply: (ctx: LayoutGrammarContext) => string | void;
 }
 
 class LayoutGrammarRegistry {

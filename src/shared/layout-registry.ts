@@ -36,6 +36,7 @@ export interface LayoutHelpers {
     opts?: { opacity?: number; radius?: number },
   ) => import("./presentation").ShapeElement;
   createAccentBar: (x: number, y: number, w: number) => import("./presentation").ShapeElement;
+  createStepBadge: (x: number, y: number, size: number) => import("./presentation").ShapeElement;
   createProcessArrow: (x: number, y: number, w: number, h: number) => import("./presentation").ShapeElement;
   assignTextRole: (
     el: import("./presentation").TextElement,

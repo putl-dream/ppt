@@ -11,6 +11,7 @@ import { resolveSlideBackgroundWithVariant } from "@shared/slide-variant";
 import { listLayoutSlots } from "@shared/layout-slots";
 import { fontFamilyToCss, resolveElementFontFamily } from "@shared/typography";
 import { slideThumbnailService } from "../../../deck/slide-thumbnail-service";
+import type { DesignTokensV1 } from "@shared/design-tokens";
 
 export const previewSlideSchema = z.object({
   slideId: z.string().describe("要预览的幻灯片 ID"),
@@ -35,6 +36,8 @@ export interface SlidePreviewSummary {
   slideId: string;
   title: string;
   layout?: string;
+  grammarVariant?: string;
+  designTokens?: DesignTokensV1;
   backgroundVariant: string;
   slideVariant?: string;
   backgroundCss: string;
@@ -78,7 +81,7 @@ function describeSlide(slide: Slide, _theme: string): string {
   ).length;
 
   const parts = [
-    `Layout: ${slide.layout ?? "unset"}`,
+    `Layout: ${slide.layout ?? "unset"}${slide.grammarVariant ? `/${slide.grammarVariant}` : ""}`,
     `${texts.length} text, ${images.length} image, ${shapes.length} shape`,
   ];
   if (cardCount > 0) parts.push(`${cardCount} cards`);
@@ -117,10 +120,12 @@ export const previewSlideTool: ToolDefinition<
       slideId: slide.id,
       title: slide.title,
       layout: slide.layout,
+      grammarVariant: slide.grammarVariant,
+      designTokens: slide.designTokens,
       backgroundVariant: slide.backgroundVariant ?? "default",
       slideVariant: slide.slideVariant,
       backgroundCss: bg.slideBg,
-      imageSlots: listLayoutSlots(slide.layout ?? ""),
+      imageSlots: listLayoutSlots(slide.layout ?? "", slide.grammarVariant),
       textElements: slide.elements
         .filter((el): el is TextElement => el.type === "text")
         .map((el) => {
