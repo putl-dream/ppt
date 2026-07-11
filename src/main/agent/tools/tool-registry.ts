@@ -9,6 +9,7 @@ import { listSlidesTool } from "./core/list-slides";
 import { previewCommandsTool } from "./core/preview-commands";
 import { readCurrentSlideTool } from "./core/read-current-slide";
 import { readPresentationSnapshotTool } from "./core/read-presentation-snapshot";
+import { respondPlanApprovalTool } from "./core/respond-plan-approval";
 import { searchExtraToolsTool } from "./core/search-extra-tools";
 import { sendTeammateMessageTool } from "./core/send-teammate-message";
 import { shutdownTeammateTool } from "./core/shutdown-teammate";
@@ -120,6 +121,7 @@ export function createDefaultToolRegistry(): ToolRegistry {
     previewCommandsTool,
     readCurrentSlideTool,
     readPresentationSnapshotTool,
+    respondPlanApprovalTool,
     searchExtraToolsTool,
     sendTeammateMessageTool,
     shutdownTeammateTool,

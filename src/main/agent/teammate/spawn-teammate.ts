@@ -21,6 +21,7 @@ import { triggerHooks } from "../runtime/hook-registry";
 import type { PostToolUseBlock, StopBlock } from "../runtime/hook-blocks";
 import type { ToolApprovalHandler } from "../runtime/permission-check";
 import { formatToolApprovalDetail } from "../runtime/format-tool-approval";
+import { TaskStore } from "../task/task-store";
 import {
   SUB_AGENT_TOOL_HANDLERS,
   SUB_AGENT_TOOLS,
@@ -33,7 +34,18 @@ import {
   MessageBus,
   sanitizeAgentName,
 } from "./message-bus";
+import {
+  type ProtocolState,
+  ProtocolStateStore,
+  isProtocolResponseType,
+  readProtocolRequestId,
+  routeProtocolResponses,
+} from "./protocol-state";
 import { buildTeammateSystemPrompt } from "./teammate-system-prompt";
+import {
+  claimNextUnclaimedTask,
+  createTeammateTaskTools,
+} from "./teammate-task-tools";
 import { toToolInputSchema } from "../tools/tool-schema";
 
 type TeammateStatus = "running" | "idle" | "stopped" | "failed";
@@ -57,6 +69,7 @@ export interface SpawnTeammateThreadOptions {
   maxSteps?: number;
   agentStepLimits?: AgentStepLimits;
   idlePollMs?: number;
+  idleTimeoutMs?: number;
   permissionPollMs?: number;
 }
 
@@ -75,9 +88,14 @@ const sendMessageSchema = z.object({
     "idle_notification",
     "permission_request",
     "permission_response",
-    "shutdown_request",
     "error",
   ]).optional().describe("Message type; defaults to message"),
+});
+
+const requestPlanApprovalSchema = z.object({
+  plan: z.string().trim().min(1).describe(
+    "Concrete implementation plan for lead to approve before high-risk or broad changes",
+  ),
 });
 
 class TeammateInboxBuffer {
@@ -107,7 +125,10 @@ class TeammateInboxBuffer {
 export class TeammateManager {
   private readonly teammates = new Map<string, TeammateState>();
 
-  constructor(private readonly bus: MessageBus) {}
+  constructor(
+    private readonly bus: MessageBus,
+    private readonly protocolStates = new ProtocolStateStore(),
+  ) {}
 
   spawn(options: SpawnTeammateThreadOptions): TeammateHandle {
     const name = sanitizeAgentName(options.name);
@@ -164,7 +185,7 @@ export class TeammateManager {
     return state ? this.toHandle(state) : undefined;
   }
 
-  async requestShutdown(name: string): Promise<void> {
+  async requestShutdown(name: string, reason = "Lead requested teammate shutdown."): Promise<ProtocolState> {
     const agent = sanitizeAgentName(name);
     const state = this.teammates.get(agent);
     if (!state) {
@@ -173,12 +194,73 @@ export class TeammateManager {
     if (state.status === "stopped" || state.status === "failed") {
       throw new Error(`Teammate ${agent} is ${state.status}.`);
     }
+    const existing = this.protocolStates.findPending({
+      type: "shutdown",
+      sender: "lead",
+      target: agent,
+    });
+    if (existing) return existing;
+
+    const request = this.protocolStates.createRequest({
+      type: "shutdown",
+      sender: "lead",
+      target: agent,
+      payload: reason,
+    });
+    try {
+      await this.bus.send({
+        from: "lead",
+        to: agent,
+        type: "shutdown_request",
+        content: reason,
+        payload: { requestId: request.requestId },
+      });
+    } catch (error) {
+      this.protocolStates.remove(request.requestId);
+      throw error;
+    }
+    return request;
+  }
+
+  async respondPlanApproval(
+    requestId: string,
+    approve: boolean,
+    reason = "",
+  ): Promise<ProtocolState> {
+    const request = this.protocolStates.get(requestId);
+    if (!request) throw new Error(`Unknown protocol request: ${requestId}`);
+    if (request.type !== "plan_approval") {
+      throw new Error(`Request ${requestId} is ${request.type}, not plan_approval.`);
+    }
+    if (request.status !== "pending") {
+      throw new Error(`Request ${requestId} is already ${request.status}.`);
+    }
+    if (request.target !== "lead") {
+      throw new Error(`Request ${requestId} is not addressed to lead.`);
+    }
+
     await this.bus.send({
       from: "lead",
-      to: agent,
-      type: "shutdown_request",
-      content: "Lead requested teammate shutdown.",
+      to: request.sender,
+      type: "plan_approval_response",
+      content: reason || (approve ? "Plan approved by lead." : "Plan rejected by lead."),
+      payload: { requestId, approve, reason },
     });
+    return request;
+  }
+
+  async consumeLeadInbox(): Promise<AgentMailboxMessage[]> {
+    const messages = await this.bus.readInbox("lead");
+    routeProtocolResponses(messages, this.protocolStates);
+    return messages;
+  }
+
+  getProtocolState(requestId: string): ProtocolState | undefined {
+    return this.protocolStates.get(requestId);
+  }
+
+  listProtocolStates(): ProtocolState[] {
+    return this.protocolStates.list();
   }
 
   async waitFor(name: string): Promise<void> {
@@ -203,14 +285,33 @@ export class TeammateManager {
   ): Promise<void> {
     ensureDefaultHooks();
     const inbox = new TeammateInboxBuffer(this.bus, state.name);
+    const taskStore = new TaskStore(options.workspaceRoot);
     const stepLimits = resolveAgentStepLimits(options.agentStepLimits);
-    const maxSteps = options.maxSteps ?? getEffectiveSubMaxSteps(stepLimits);
-    const idlePollMs = options.idlePollMs ?? 1_000;
+    const maxSteps = options.maxSteps ?? Math.min(getEffectiveSubMaxSteps(stepLimits), 10);
+    const idlePollMs = options.idlePollMs ?? 5_000;
+    const idleTimeoutMs = options.idleTimeoutMs ?? 60_000;
     const permissionPollMs = options.permissionPollMs ?? 500;
     const sendMessageTool = createSendMessageTool(this.bus, state.name);
-    const tools = [...SUB_AGENT_TOOLS, sendMessageTool];
+    const requestPlanApprovalTool = createRequestPlanApprovalTool(
+      this.bus,
+      this.protocolStates,
+      state.name,
+    );
+    const taskTools = createTeammateTaskTools(taskStore, state.name);
+    const tools = [
+      ...SUB_AGENT_TOOLS,
+      ...taskTools,
+      sendMessageTool,
+      requestPlanApprovalTool,
+    ];
     const handlers = new Map<string, SubAgentToolDefinition>(
-      [...SUB_AGENT_TOOL_HANDLERS.values(), sendMessageTool].map((tool) => [tool.name, tool]),
+      [
+        ...SUB_AGENT_TOOL_HANDLERS.values(),
+        ...taskTools,
+        sendMessageTool,
+        requestPlanApprovalTool,
+      ]
+        .map((tool) => [tool.name, tool]),
     );
     const systemPrompt = buildTeammateSystemPrompt({
       name: state.name,
@@ -243,17 +344,57 @@ export class TeammateManager {
     let modelSteps = 0;
     let hasActiveAssignment = true;
     let currentAssignment = options.prompt;
+    let currentTaskId: string | undefined;
+    let idleSince: number | undefined;
+    let nextIdlePollAt: number | undefined;
+    const workSummaries: string[] = [];
 
     try {
       while (!state.controller.signal.aborted) {
         const inboxMessages = await inbox.takeAll();
-        if (inboxMessages.some((message) => message.type === "shutdown_request")) {
+        const matchedResponses = routeProtocolResponses(inboxMessages, this.protocolStates);
+        const matchedRequestIds = new Set(
+          matchedResponses.map((response) => response.requestId),
+        );
+        const shutdownRequest = inboxMessages.find(
+          (message) => {
+            if (message.type !== "shutdown_request" || message.from !== "lead") return false;
+            const request = this.protocolStates.get(readProtocolRequestId(message.payload));
+            return request?.type === "shutdown"
+              && request.status === "pending"
+              && request.sender === "lead"
+              && request.target === state.name;
+          },
+        );
+        const routedInboxMessages = inboxMessages.filter((message) => {
+          if (message.type === "shutdown_request") return message === shutdownRequest;
+          return !isProtocolResponseType(message.type)
+            || matchedRequestIds.has(readProtocolRequestId(message.payload));
+        });
+        if (shutdownRequest) {
+          const requestId = readProtocolRequestId(shutdownRequest.payload);
+          await this.sendLifecycleSummary(state.name, "shutdown requested", workSummaries);
+          await this.bus.send({
+            from: state.name,
+            to: shutdownRequest.from,
+            type: "shutdown_response",
+            content: `${state.name} finished its current operation and is shutting down.`,
+            payload: { requestId, approve: true },
+          });
           break;
         }
-        if (inboxMessages.length > 0) {
+        if (routedInboxMessages.length > 0) {
           state.status = "running";
           state.lastActiveAt = Date.now();
-          currentAssignment = formatInboxForTeammate(inboxMessages);
+          const inboxAssignment = formatInboxForTeammate(routedInboxMessages);
+          currentAssignment = hasActiveAssignment
+            ? inboxAssignment
+            : withIdentityIfCompacted(
+                modelMessages,
+                state.name,
+                state.role,
+                inboxAssignment,
+              );
           transcript.push({ role: "user", content: currentAssignment });
           modelMessages.push({
             role: "user",
@@ -261,13 +402,52 @@ export class TeammateManager {
           });
           modelSteps = 0;
           hasActiveAssignment = true;
+          idleSince = undefined;
+          nextIdlePollAt = undefined;
         } else if (!hasActiveAssignment) {
           state.status = "idle";
-          await sleep(idlePollMs, state.controller.signal);
-          continue;
+          const now = Date.now();
+          idleSince ??= now;
+          nextIdlePollAt ??= now + idlePollMs;
+          if (now - idleSince >= idleTimeoutMs) {
+            await this.sendLifecycleSummary(state.name, "idle timeout", workSummaries);
+            break;
+          }
+          if (now < nextIdlePollAt) {
+            await sleep(
+              Math.min(nextIdlePollAt - now, idleTimeoutMs - (now - idleSince)),
+              state.controller.signal,
+            );
+            continue;
+          }
+
+          nextIdlePollAt = now + idlePollMs;
+          const claimedTask = await claimNextUnclaimedTask(taskStore, state.name);
+          if (!claimedTask) continue;
+
+          currentTaskId = claimedTask.id;
+          currentAssignment = withIdentityIfCompacted(
+            modelMessages,
+            state.name,
+            state.role,
+            formatClaimedTaskAssignment(claimedTask),
+          );
+          transcript.push({ role: "user", content: currentAssignment, task: claimedTask });
+          modelMessages.push({
+            role: "user",
+            content: [{ type: "text", text: currentAssignment }],
+          });
+          state.status = "running";
+          state.lastActiveAt = Date.now();
+          modelSteps = 0;
+          hasActiveAssignment = true;
+          idleSince = undefined;
+          nextIdlePollAt = undefined;
         }
 
         if (modelSteps >= maxSteps) {
+          await taskStore.unassignInProgressByOwner(state.name);
+          currentTaskId = undefined;
           await this.finishWithSummary(
             state.name,
             buildSubStepLimitMessage(stepLimits),
@@ -281,6 +461,8 @@ export class TeammateManager {
           state.lastActiveAt = Date.now();
           modelSteps = 0;
           hasActiveAssignment = false;
+          idleSince = Date.now();
+          nextIdlePollAt = idleSince + idlePollMs;
           continue;
         }
 
@@ -299,6 +481,23 @@ export class TeammateManager {
         if (calls.length === 0) {
           const summary = textFromContentBlocks(responseContent);
           transcript.push({ role: "assistant", content: summary });
+          if (currentTaskId) {
+            const currentTask = await taskStore.getTask(currentTaskId);
+            if (currentTask.status === "in_progress" && currentTask.owner === state.name) {
+              const guidance =
+                `Task ${currentTaskId} is still in_progress. Finish its concrete work and call `
+                + `complete_task({"task_id":"${currentTaskId}"}) before returning a summary.`;
+              transcript.push({ role: "user", content: guidance });
+              modelMessages.push({
+                role: "user",
+                content: [{ type: "text", text: guidance }],
+              });
+              currentAssignment = guidance;
+              continue;
+            }
+            currentTaskId = undefined;
+          }
+          workSummaries.push(summary);
           await this.bus.send({
             from: state.name,
             to: "lead",
@@ -310,6 +509,8 @@ export class TeammateManager {
           state.lastActiveAt = Date.now();
           modelSteps = 0;
           hasActiveAssignment = false;
+          idleSince = Date.now();
+          nextIdlePollAt = idleSince + idlePollMs;
           continue;
         }
 
@@ -339,6 +540,22 @@ export class TeammateManager {
           if (!args.success) {
             transcript.push({ role: "tool", toolName: tool.name, error: args.error.message });
             record(args.error.message, true);
+            continue;
+          }
+
+          const latestPlanRequest = this.protocolStates.list()
+            .filter((request) => request.type === "plan_approval" && request.sender === state.name)
+            .at(-1);
+          if (
+            requiresApprovedPlan(tool.name)
+            && latestPlanRequest
+            && latestPlanRequest.status !== "approved"
+          ) {
+            const error = latestPlanRequest.status === "pending"
+              ? `Plan approval ${latestPlanRequest.requestId} is still pending.`
+              : `Plan approval ${latestPlanRequest.requestId} was rejected. Submit a revised plan before making changes.`;
+            transcript.push({ role: "tool", toolName: tool.name, error });
+            record(error, true);
             continue;
           }
 
@@ -403,6 +620,7 @@ export class TeammateManager {
       state.lastError = error instanceof Error ? error.message : String(error);
       throw error;
     } finally {
+      await taskStore.unassignInProgressByOwner(state.name);
       await triggerHooks("Stop", {
         event: "Stop",
         scope: "subagent",
@@ -437,6 +655,21 @@ export class TeammateManager {
       content,
     });
   }
+
+  private async sendLifecycleSummary(
+    name: string,
+    reason: string,
+    workSummaries: string[],
+  ): Promise<void> {
+    const completed = workSummaries.length;
+    await this.bus.send({
+      from: name,
+      to: "lead",
+      type: "result",
+      content: `${name} is shutting down after ${reason}. Completed ${completed} work cycle${completed === 1 ? "" : "s"}.`,
+      payload: { reason, completedWorkCycles: completed },
+    });
+  }
 }
 
 function createSendMessageTool(
@@ -464,6 +697,57 @@ function createSendMessageTool(
         type,
       });
       return `Sent ${message.type} to ${message.to}.`;
+    },
+  };
+}
+
+function createRequestPlanApprovalTool(
+  bus: MessageBus,
+  states: ProtocolStateStore,
+  fromAgent: string,
+): SubAgentToolDefinition<typeof requestPlanApprovalSchema> {
+  return {
+    name: "request_plan_approval",
+    description:
+      "Submit a concrete high-risk or broad-change plan to lead and wait for an approval response before changing files.",
+    inputSchema: requestPlanApprovalSchema,
+    permission: {
+      profile: "message-bus",
+      description: "Request lead approval for a teammate implementation plan.",
+      scopes: ["subagent"],
+      effects: ["workflow.delegate"],
+      sandbox: "workspace",
+      approval: "never",
+    },
+    async execute(args) {
+      const existing = states.findPending({
+        type: "plan_approval",
+        sender: fromAgent,
+        target: "lead",
+      });
+      if (existing) {
+        return `Plan approval ${existing.requestId} is already pending. Wait for lead's response.`;
+      }
+
+      const request = states.createRequest({
+        type: "plan_approval",
+        sender: fromAgent,
+        target: "lead",
+        payload: args.plan,
+      });
+      try {
+        await bus.send({
+          from: fromAgent,
+          to: "lead",
+          type: "plan_approval_request",
+          content: args.plan,
+          payload: { requestId: request.requestId },
+        });
+      } catch (error) {
+        states.remove(request.requestId);
+        throw error;
+      }
+      return `Plan approval ${request.requestId} is pending. Do not make changes until lead responds.`;
     },
   };
 }
@@ -541,7 +825,23 @@ async function generateTeammateResponse(input: {
 }
 
 function formatInboxForTeammate(messages: AgentMailboxMessage[]): string {
-  return `<inbox>${JSON.stringify(messages)}</inbox>`;
+  const formatted = messages.map((message) => {
+    if (message.type !== "plan_approval_response") return message;
+    const requestId = readProtocolRequestId(message.payload);
+    const status = message.payload?.approve === true ? "approved" : "rejected";
+    return {
+      ...message,
+      content: `[Plan ${status}] ${requestId}: ${message.content}`,
+    };
+  });
+  return `<inbox>${JSON.stringify(formatted)}</inbox>`;
+}
+
+function requiresApprovedPlan(toolName: string): boolean {
+  return toolName === "write_file"
+    || toolName === "edit_file"
+    || toolName === "ensure_dir"
+    || toolName === "bash";
 }
 
 async function sleep(ms: number, signal?: AbortSignal): Promise<void> {

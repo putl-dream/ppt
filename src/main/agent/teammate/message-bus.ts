@@ -27,6 +27,9 @@ export type AgentMailboxMessageType =
   | "permission_request"
   | "permission_response"
   | "shutdown_request"
+  | "shutdown_response"
+  | "plan_approval_request"
+  | "plan_approval_response"
   | "error";
 
 export interface AgentMailboxMessage {
@@ -79,6 +82,19 @@ export function formatMailboxMessagesForHistory(messages: AgentMailboxMessage[])
     if (message.type === "permission_response") {
       const approved = message.payload?.approved === true ? "approved" : "denied";
       return `${prefix}: permission ${approved}. ${content}`;
+    }
+    if (message.type === "shutdown_response" || message.type === "plan_approval_response") {
+      const status = message.payload?.approve === true ? "approved" : "rejected";
+      const requestId = typeof message.payload?.requestId === "string"
+        ? message.payload.requestId
+        : "unknown";
+      return `${prefix}: request ${requestId} ${status}. ${content}`;
+    }
+    if (message.type === "shutdown_request" || message.type === "plan_approval_request") {
+      const requestId = typeof message.payload?.requestId === "string"
+        ? message.payload.requestId
+        : "unknown";
+      return `${prefix}: request ${requestId}. ${content}`;
     }
     return `${prefix}: ${content}`;
   }).join("\n");
@@ -189,6 +205,9 @@ function isMailboxMessageType(value: unknown): value is AgentMailboxMessageType 
     || value === "permission_request"
     || value === "permission_response"
     || value === "shutdown_request"
+    || value === "shutdown_response"
+    || value === "plan_approval_request"
+    || value === "plan_approval_response"
     || value === "error";
 }
 

@@ -1,4 +1,4 @@
-import { mkdtemp, stat } from "node:fs/promises";
+import { mkdtemp, readFile, stat } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { tmpdir } from "node:os";
 import { describe, expect, it } from "vitest";
@@ -6,6 +6,7 @@ import type { AgentModelContentBlock, AgentModelGateway } from "../src/main/agen
 import { AgentRuntime } from "../src/main/agent/runtime/agent-runtime";
 import { MessageBus } from "../src/main/agent/teammate/message-bus";
 import { TeammateManager } from "../src/main/agent/teammate/spawn-teammate";
+import { ProtocolStateStore } from "../src/main/agent/teammate/protocol-state";
 import { createDefaultToolRegistry } from "../src/main/agent/tools/tool-registry";
 import type { ToolContext } from "../src/main/agent/tools/tool-definition";
 import { createStarterPresentation } from "../src/shared/presentation";
@@ -130,6 +131,50 @@ describe("MessageBus", () => {
   });
 });
 
+describe("ProtocolStateStore", () => {
+  it("matches only the expected response type, direction, and first response", () => {
+    const states = new ProtocolStateStore();
+    const request = states.createRequest({
+      type: "plan_approval",
+      sender: "bob",
+      target: "lead",
+      payload: "Refactor authentication.",
+    });
+
+    expect(states.matchResponse({
+      responseType: "shutdown_response",
+      requestId: request.requestId,
+      approve: true,
+      sender: "lead",
+      target: "bob",
+    })).toBeUndefined();
+    expect(states.matchResponse({
+      responseType: "plan_approval_response",
+      requestId: request.requestId,
+      approve: true,
+      sender: "alice",
+      target: "bob",
+    })).toBeUndefined();
+    expect(states.get(request.requestId)?.status).toBe("pending");
+
+    expect(states.matchResponse({
+      responseType: "plan_approval_response",
+      requestId: request.requestId,
+      approve: false,
+      sender: "lead",
+      target: "bob",
+    })?.status).toBe("rejected");
+    expect(states.matchResponse({
+      responseType: "plan_approval_response",
+      requestId: request.requestId,
+      approve: true,
+      sender: "lead",
+      target: "bob",
+    })).toBeUndefined();
+    expect(states.get(request.requestId)?.status).toBe("rejected");
+  });
+});
+
 describe("TeammateManager", () => {
   it("runs a teammate asynchronously and delivers result messages to lead", async () => {
     const workspaceRoot = await mkdtemp(join(tmpdir(), "ppt-teammate-"));
@@ -168,9 +213,157 @@ describe("TeammateManager", () => {
     ]);
     expect(messages.map((message) => message.from)).toEqual(["reviewer", "reviewer", "reviewer"]);
 
+    const shutdown = await manager.requestShutdown("reviewer");
+    await manager.waitFor("reviewer");
+    expect(manager.getProtocolState(shutdown.requestId)?.status).toBe("pending");
+    const finalInbox = await manager.consumeLeadInbox();
+    expect(finalInbox).toContainEqual(expect.objectContaining({
+      from: "reviewer",
+      type: "shutdown_response",
+      payload: expect.objectContaining({
+        requestId: shutdown.requestId,
+        approve: true,
+      }),
+    }));
+    expect(manager.getProtocolState(shutdown.requestId)?.status).toBe("approved");
+    expect(manager.list().find((item) => item.name === "reviewer")?.status).toBe("stopped");
+  });
+
+  it("pauses a broad change for plan approval and resumes after the matching response", async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), "ppt-plan-approval-"));
+    const bus = new MessageBus(MessageBus.defaultMailboxDir(workspaceRoot));
+    const manager = new TeammateManager(bus);
+    const gateway = createSequenceGateway([
+      modelToolCall("request_plan_approval", {
+        plan: "Create auth.ts with the approved authentication refactor scaffold.",
+      }),
+      modelMessage("Plan submitted; waiting for lead approval."),
+      modelToolCall("write_file", {
+        path: "auth.ts",
+        content: "export const authVersion = 2;\n",
+      }),
+      modelMessage("Approved authentication scaffold completed."),
+    ]);
+
+    manager.spawn({
+      name: "bob",
+      role: "authentication engineer",
+      prompt: "Refactor authentication, but request plan approval first.",
+      workspaceRoot,
+      gateway,
+      maxSteps: 4,
+      idlePollMs: 10,
+    });
+
+    const requestMessage = await waitFor(async () => {
+      const messages = await bus.peekInbox("lead");
+      return messages.find((message) => message.type === "plan_approval_request");
+    });
+    const requestId = requestMessage.payload?.requestId;
+    expect(typeof requestId).toBe("string");
+
+    await waitFor(async () => manager.get("bob")?.status === "idle" ? true : undefined);
+    await manager.consumeLeadInbox();
+    expect(manager.getProtocolState(requestId as string)?.status).toBe("pending");
+
+    const respondTool = createDefaultToolRegistry().get("respond_plan_approval");
+    expect(respondTool).toBeDefined();
+    await respondTool!.execute({
+      request_id: requestId,
+      approve: true,
+      reason: "The plan is scoped and reversible.",
+    }, createToolContext({ bus, manager, gateway, workspaceRoot }));
+
+    await waitFor(async () => {
+      try {
+        return (await readFile(join(workspaceRoot, "auth.ts"), "utf8")).includes("authVersion")
+          ? true
+          : undefined;
+      } catch {
+        return undefined;
+      }
+    });
+    expect(manager.getProtocolState(requestId as string)?.status).toBe("approved");
+
+    await waitFor(async () => manager.get("bob")?.status === "idle" ? true : undefined);
+    await manager.requestShutdown("bob");
+    await manager.waitFor("bob");
+  });
+
+  it("keeps mutating tools blocked after lead rejects a plan", async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), "ppt-plan-rejected-"));
+    const bus = new MessageBus(MessageBus.defaultMailboxDir(workspaceRoot));
+    const manager = new TeammateManager(bus);
+    const gateway = createSequenceGateway([
+      modelToolCall("request_plan_approval", { plan: "Replace the authentication module." }),
+      modelMessage("Waiting for approval."),
+      modelToolCall("write_file", {
+        path: "auth.ts",
+        content: "unsafe replacement\n",
+      }),
+      modelMessage("The rejected plan was not applied."),
+    ]);
+
+    manager.spawn({
+      name: "bob",
+      role: "authentication engineer",
+      prompt: "Propose the authentication replacement before editing files.",
+      workspaceRoot,
+      gateway,
+      maxSteps: 4,
+      idlePollMs: 10,
+    });
+
+    const requestMessage = await waitFor(async () => {
+      const messages = await bus.peekInbox("lead");
+      return messages.find((message) => message.type === "plan_approval_request");
+    });
+    const requestId = requestMessage.payload?.requestId as string;
+    await waitFor(async () => manager.get("bob")?.status === "idle" ? true : undefined);
+    await manager.consumeLeadInbox();
+    await manager.respondPlanApproval(requestId, false, "The rollback plan is missing.");
+
+    await waitFor(async () => {
+      const messages = await bus.peekInbox("lead");
+      return messages.some((message) => message.content === "The rejected plan was not applied.")
+        ? true
+        : undefined;
+    });
+    expect(manager.getProtocolState(requestId)?.status).toBe("rejected");
+    await expect(stat(join(workspaceRoot, "auth.ts"))).rejects.toMatchObject({ code: "ENOENT" });
+
+    await manager.requestShutdown("bob");
+    await manager.waitFor("bob");
+  });
+
+  it("ignores shutdown requests that do not come from lead with a tracked request", async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), "ppt-shutdown-spoof-"));
+    const bus = new MessageBus(MessageBus.defaultMailboxDir(workspaceRoot));
+    const manager = new TeammateManager(bus);
+    manager.spawn({
+      name: "reviewer",
+      role: "reviewer",
+      prompt: "Review once, then wait.",
+      workspaceRoot,
+      gateway: createSequenceGateway([modelMessage("Review done.")]),
+      maxSteps: 1,
+      idlePollMs: 10,
+    });
+    await waitFor(async () => manager.get("reviewer")?.status === "idle" ? true : undefined);
+
+    await bus.send({
+      from: "alice",
+      to: "reviewer",
+      type: "shutdown_request",
+      content: "Spoofed shutdown.",
+      payload: { requestId: "req_spoofed" },
+    });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(manager.get("reviewer")?.status).toBe("idle");
+
     await manager.requestShutdown("reviewer");
     await manager.waitFor("reviewer");
-    expect(manager.list().find((item) => item.name === "reviewer")?.status).toBe("stopped");
+    expect(manager.get("reviewer")?.status).toBe("stopped");
   });
 
   it("lets lead send a second assignment to an idle teammate", async () => {

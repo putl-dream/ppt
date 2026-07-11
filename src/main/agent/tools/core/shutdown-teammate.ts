@@ -1,13 +1,16 @@
 import { z } from "zod";
 import type { TeammateHandle } from "../../teammate/spawn-teammate";
+import type { ProtocolState } from "../../teammate/protocol-state";
 import type { ToolDefinition } from "../tool-definition";
 
 export const shutdownTeammateSchema = z.object({
   name: z.string().describe("Existing teammate name to ask to stop"),
+  reason: z.string().optional().describe("Why lead is asking the teammate to stop"),
 });
 
 export type ShutdownTeammateToolResult = {
   teammate: TeammateHandle;
+  request: ProtocolState;
   message: string;
 };
 
@@ -32,7 +35,7 @@ export const shutdownTeammateTool:
         throw new Error("Teammate manager is not configured.");
       }
 
-      await context.teammateManager.requestShutdown(args.name);
+      const request = await context.teammateManager.requestShutdown(args.name, args.reason);
       const teammate = context.teammateManager.get(args.name);
       if (!teammate) {
         throw new Error(`Unknown teammate: ${args.name}`);
@@ -40,7 +43,8 @@ export const shutdownTeammateTool:
 
       return {
         teammate,
-        message: `Requested shutdown for teammate ${teammate.name}.`,
+        request,
+        message: `Requested graceful shutdown for ${teammate.name}; ${request.requestId} is pending acknowledgement.`,
       };
     },
   };

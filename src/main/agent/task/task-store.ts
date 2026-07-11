@@ -1,6 +1,7 @@
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { randomBytes } from "node:crypto";
+import { createRequire } from "node:module";
 import {
   agentTaskNodeSchema,
   canStartTask,
@@ -15,6 +16,33 @@ import { resolveAgentPath } from "../subagent/workspace-path";
 
 const META_FILE = "_meta.json";
 const PLAN_FILE = "_plan.json";
+
+type LockRelease = () => Promise<void>;
+type ProperLockfile = {
+  lock(file: string, options?: {
+    realpath?: boolean;
+    stale?: number;
+    retries?: number | {
+      retries?: number;
+      factor?: number;
+      minTimeout?: number;
+      maxTimeout?: number;
+    };
+  }): Promise<LockRelease>;
+};
+
+const require = createRequire(import.meta.url);
+const lockfile = require("proper-lockfile") as ProperLockfile;
+const TASK_LOCK_OPTIONS = {
+  realpath: false,
+  stale: 5_000,
+  retries: {
+    retries: 20,
+    factor: 1,
+    minTimeout: 10,
+    maxTimeout: 75,
+  },
+} as const;
 
 type TaskMeta = {
   idCounter: number;
@@ -179,48 +207,66 @@ export class TaskStore {
     return canStartTask(task, tasksById);
   }
 
-  async claimTask(taskId: string, owner = "agent"): Promise<ClaimTaskResult> {
-    const task = await this.loadTask(taskId);
-    if (task.status !== "pending") {
-      return { ok: false, error: `Task ${taskId} is ${task.status}, cannot claim` };
-    }
-
+  async scanUnclaimedTasks(): Promise<AgentTaskNode[]> {
     const tasks = await this.listTasks();
-    const tasksById = new Map(tasks.map((item) => [item.id, item]));
-    if (!canStartTask(task, tasksById)) {
-      const blocked = getIncompleteBlockedBy(task, tasksById);
-      return { ok: false, error: `Blocked by: ${blocked.join(", ") || "missing dependencies"}` };
-    }
-
-    task.owner = owner;
-    task.status = "in_progress";
-    task.updatedAt = new Date().toISOString();
-    await this.saveTask(task);
-    return {
-      ok: true,
-      message: `Claimed ${taskId} (${task.subject})`,
-      task,
-    };
+    const tasksById = new Map(tasks.map((task) => [task.id, task]));
+    return tasks.filter((task) =>
+      task.status === "pending"
+      && task.owner === null
+      && canStartTask(task, tasksById),
+    );
   }
 
-  async completeTask(taskId: string): Promise<CompleteTaskResult> {
-    const task = await this.loadTask(taskId);
-    if (task.status !== "in_progress") {
-      return { ok: false, error: `Task ${taskId} is ${task.status}, cannot complete` };
-    }
+  async claimTask(taskId: string, owner = "agent"): Promise<ClaimTaskResult> {
+    return this.withTaskLock(taskId, async () => {
+      const task = await this.loadTask(taskId);
+      if (task.status !== "pending" || task.owner !== null) {
+        const ownerDetail = task.owner ? ` by ${task.owner}` : "";
+        return { ok: false, error: `Task ${taskId} is ${task.status}${ownerDetail}, cannot claim` };
+      }
 
-    task.status = "completed";
-    task.owner = null;
-    task.updatedAt = new Date().toISOString();
-    await this.saveTask(task);
+      const tasks = await this.listTasks();
+      const tasksById = new Map(tasks.map((item) => [item.id, item]));
+      if (!canStartTask(task, tasksById)) {
+        const blocked = getIncompleteBlockedBy(task, tasksById);
+        return { ok: false, error: `Blocked by: ${blocked.join(", ") || "missing dependencies"}` };
+      }
 
-    const unblocked = findUnblockedPendingTasks(await this.listTasks()).map((item) => item.subject);
-    let message = `Completed ${taskId} (${task.subject})`;
-    if (unblocked.length > 0) {
-      message += `\nUnblocked: ${unblocked.join(", ")}`;
-    }
+      task.owner = owner;
+      task.status = "in_progress";
+      task.updatedAt = new Date().toISOString();
+      await this.saveTask(task);
+      return {
+        ok: true,
+        message: `Claimed ${taskId} (${task.subject})`,
+        task,
+      };
+    });
+  }
 
-    return { ok: true, message, task, unblocked };
+  async completeTask(taskId: string, owner?: string): Promise<CompleteTaskResult> {
+    return this.withTaskLock(taskId, async () => {
+      const task = await this.loadTask(taskId);
+      if (task.status !== "in_progress") {
+        return { ok: false, error: `Task ${taskId} is ${task.status}, cannot complete` };
+      }
+      if (owner && task.owner !== owner) {
+        return { ok: false, error: `Task ${taskId} is owned by ${task.owner ?? "nobody"}, not ${owner}` };
+      }
+
+      task.status = "completed";
+      task.owner = null;
+      task.updatedAt = new Date().toISOString();
+      await this.saveTask(task);
+
+      const unblocked = findUnblockedPendingTasks(await this.listTasks()).map((item) => item.subject);
+      let message = `Completed ${taskId} (${task.subject})`;
+      if (unblocked.length > 0) {
+        message += `\nUnblocked: ${unblocked.join(", ")}`;
+      }
+
+      return { ok: true, message, task, unblocked };
+    });
   }
 
   /** Release in-progress tasks owned by an agent back to pending. */
@@ -228,12 +274,15 @@ export class TaskStore {
     const released: string[] = [];
     const tasks = await this.listTasks();
     for (const task of tasks) {
-      if (task.status !== "in_progress" || task.owner !== owner) continue;
-      task.status = "pending";
-      task.owner = null;
-      task.updatedAt = new Date().toISOString();
-      await this.saveTask(task);
-      released.push(task.id);
+      await this.withTaskLock(task.id, async () => {
+        const current = await this.loadTask(task.id);
+        if (current.status !== "in_progress" || current.owner !== owner) return;
+        current.status = "pending";
+        current.owner = null;
+        current.updatedAt = new Date().toISOString();
+        await this.saveTask(current);
+        released.push(current.id);
+      });
     }
     return released;
   }
@@ -292,6 +341,16 @@ export class TaskStore {
   private async saveTask(task: AgentTaskNode): Promise<void> {
     await this.ensureTasksDir();
     await writeFile(this.taskPath(task.id), JSON.stringify(task, null, 2), "utf8");
+  }
+
+  private async withTaskLock<T>(taskId: string, fn: () => Promise<T>): Promise<T> {
+    await this.ensureTasksDir();
+    const release = await lockfile.lock(this.taskPath(taskId), TASK_LOCK_OPTIONS);
+    try {
+      return await fn();
+    } finally {
+      await release();
+    }
   }
 }
 

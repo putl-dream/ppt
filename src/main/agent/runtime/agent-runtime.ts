@@ -243,7 +243,9 @@ export class AgentRuntime {
 
     const drainLeadInboxForModel = async (): Promise<string | undefined> => {
       if (!options.messageBus) return undefined;
-      const inbox = await options.messageBus.readInbox("lead");
+      const inbox = options.teammateManager
+        ? await options.teammateManager.consumeLeadInbox()
+        : await options.messageBus.readInbox("lead");
       if (inbox.length === 0) return undefined;
 
       const visibleMessages: AgentMailboxMessage[] = [];
