@@ -21,6 +21,7 @@ import type { ToolApprovalHandler } from "../runtime/permission-check";
 import { buildSubAgentSystemPrompt } from "./sub-system-prompt";
 import { callModelWithRecovery } from "../runtime/model-call-recovery";
 import { toToolInputSchema } from "../tools/tool-schema";
+import { parseToolInput } from "../tools/tool-input";
 import {
   SUB_AGENT_TOOL_HANDLERS,
   SUB_AGENT_TOOLS,
@@ -153,7 +154,7 @@ export async function spawnSubAgent(options: SpawnSubAgentOptions): Promise<stri
         record(error, true);
         continue;
       }
-      const args = tool.inputSchema.safeParse(call.input);
+      const args = parseToolInput(tool.inputSchema, call.input);
       if (!args.success) {
         transcript.push({ role: "tool", toolName: tool.name, error: args.error.message });
         record(args.error.message, true);

@@ -48,6 +48,7 @@ import {
   createTeammateTaskTools,
 } from "./teammate-task-tools";
 import { toToolInputSchema } from "../tools/tool-schema";
+import { parseToolInput } from "../tools/tool-input";
 import { readJsonFile, writeJsonFileAtomic } from "../persistence/atomic-json-file";
 
 type TeammateStatus = "running" | "idle" | "stopped" | "failed";
@@ -611,7 +612,7 @@ export class TeammateManager {
             record(error, true);
             continue;
           }
-          const args = tool.inputSchema.safeParse(call.input);
+          const args = parseToolInput(tool.inputSchema, call.input);
           if (!args.success) {
             transcript.push({ role: "tool", toolName: tool.name, error: args.error.message });
             record(args.error.message, true);

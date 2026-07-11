@@ -92,6 +92,8 @@ export interface ToolDefinition<TParams extends z.ZodObject<any> = z.ZodObject<a
   category: "core" | "deferred" | "runtime";
   loadPolicy: ToolLoadPolicy;
   inputSchema: TParams;
+  /** Compact, valid JSON examples shown in the model-visible tool catalog. */
+  examples?: string[];
   /** Optional runtime guard for the rich local result returned by execute(). */
   outputSchema?: z.ZodType<TResult>;
   /** Optional compact mapping for the result sent back to the model. */

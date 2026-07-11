@@ -245,7 +245,7 @@ describe("Agent Architecture Skeletons & Types", () => {
       modelToolCall("AskUser", {
           message: "请确认语言、时长和代码示例。",
           missingFields: ["language", "duration", "codeExamples"],
-          question: {
+          responseUi: {
             variant: "cards",
             options: [
               { id: "default", title: "按默认方案", value: "按默认方案" },

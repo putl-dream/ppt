@@ -31,6 +31,7 @@ import type {
 import { ensureToolResultPairing } from "../gateway/message-pairing";
 import { textFromContentBlocks, toolUseBlocksFromContent } from "../gateway/content-blocks";
 import { validateToolOutput } from "../tools/tool-validation";
+import { parseDefinedToolInput } from "../tools/tool-input";
 import { prepareToolResultData } from "./tool-result-data";
 import type { SubAgentProgressEvent } from "@shared/subagent-progress";
 import {
@@ -222,6 +223,7 @@ export class AgentRuntime {
     const queuedToolUses: AgentModelToolUseBlock[] = structuredClone(
       recovered?.queuedToolUses ?? [],
     );
+    const validationFailuresByTool = new Map<string, number>();
     const pendingUserContent: string[] = [...(recovered?.pendingUserContent ?? [])];
     let renderFeedbackUsed = recovered?.renderFeedbackUsed ?? false;
     let activeToolUse = recovered?.activeToolUse
@@ -724,16 +726,44 @@ export class AgentRuntime {
         continue;
       }
 
-      const args = tool.inputSchema.safeParse(toolCall.input);
+      const args = parseDefinedToolInput(tool, toolCall.input);
+      if (args.repairs.length > 0 && options.runId && this.conversationDatabase) {
+        this.conversationDatabase.appendRuntimeEvent(
+          options.runId,
+          "workflow_progress",
+          {
+            type: "tool-input-repaired",
+            toolName: tool.name,
+            toolUseId: toolCall.id,
+            repairs: args.repairs,
+          },
+          "internal",
+        );
+      }
       if (!args.success) {
-        options.onProgress?.({
-          type: "tool-validation-failed",
-          toolName: tool.name,
-          message: `工具 ${tool.name} 参数校验失败`,
-          error: args.error.message,
-        });
-        transcript.push({ role: "tool", toolName: tool.name, error: args.error.message });
-        recordToolResult(args.error.message, true);
+        const failures = (validationFailuresByTool.get(tool.name) ?? 0) + 1;
+        validationFailuresByTool.set(tool.name, failures);
+        const correction = [
+          `Tool ${tool.name} input validation failed. Correct the arguments and retry the tool call.`,
+          "Pass nested objects and arrays directly; do not JSON.stringify them.",
+          args.error.message,
+        ].join("\n");
+        if (failures <= 2) {
+          options.onProgress?.({
+            type: "request-status",
+            message: `正在自动修正工具 ${tool.name} 的参数…`,
+            progress: 0,
+          });
+        } else {
+          options.onProgress?.({
+            type: "tool-validation-failed",
+            toolName: tool.name,
+            message: `工具 ${tool.name} 参数连续校验失败`,
+            error: args.error.message,
+          });
+        }
+        transcript.push({ role: "tool", toolName: tool.name, error: correction });
+        recordToolResult(correction, true);
         continue;
       }
 

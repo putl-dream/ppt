@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { ToolDefinition } from "../tool-definition";
 import { validateToolOutput } from "../tool-validation";
+import { parseDefinedToolInput } from "../tool-input";
 
 export const executeExtraToolSchema = z.object({
   toolName: z.string().describe("需要执行的目标延迟工具（Deferred Tool）的名称"),
@@ -41,7 +42,7 @@ export const executeExtraToolTool: ToolDefinition<typeof executeExtraToolSchema,
       throw new Error(`Tool '${args.toolName}' is not an executable Deferred Tool.`);
     }
 
-    const parsed = tool.inputSchema.safeParse(args.toolArgs);
+    const parsed = parseDefinedToolInput(tool, args.toolArgs);
     if (!parsed.success) {
       throw new Error(`Invalid arguments for '${args.toolName}': ${parsed.error.message}`);
     }

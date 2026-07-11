@@ -330,7 +330,7 @@ ${toolsDescription}
 - \`LoadSkill\`：仅加载上方目录中的技能；其他技能在本阶段不可用。
 - \`PreviewSlide\` / \`ValidateDeckLayout\`：排版与质检 Core 工具，可直接调用。
 - \`SearchExtraTools\` + \`ExecuteExtraTool\`：美化/压缩等增强能力（非必需）。
-- \`AskUser\`：仅询问用户决策项，不问工具名或系统实现。`;
+- \`AskUser\`：仅询问用户决策项，不问工具名或系统实现。问题正文放 \`message\`；可选界面配置放 \`responseUi\`，必须直接传对象，禁止 JSON.stringify。`;
 }
 
 function workspaceFilesForStage(stage: PromptStage): string[] {

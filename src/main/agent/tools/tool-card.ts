@@ -1,5 +1,6 @@
 import type { ToolDefinition } from "./tool-definition";
 import { isRiskApprovalHintRequired } from "../runtime/tool-access-policy";
+import { toToolInputSchema } from "./tool-schema";
 
 /**
  * Deferred Tool 的可发现摘要结构，提供给模型做发现决策。
@@ -15,22 +16,42 @@ export interface ToolCard {
   approvalRequired: boolean;
 }
 
+function isSchemaRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function summarizeSchemaType(schema: Record<string, unknown>): string {
+  if ("const" in schema) return JSON.stringify(schema.const);
+  if (Array.isArray(schema.enum)) return schema.enum.map((value) => JSON.stringify(value)).join(" | ");
+  const variants = [schema.oneOf, schema.anyOf]
+    .filter(Array.isArray)
+    .flatMap((value) => value as unknown[])
+    .filter(isSchemaRecord)
+    .map(summarizeSchemaType);
+  if (variants.length > 0) return [...new Set(variants)].join(" | ");
+  if (schema.type === "array") {
+    return isSchemaRecord(schema.items)
+      ? `array<${summarizeSchemaType(schema.items)}>`
+      : "array";
+  }
+  return typeof schema.type === "string" ? schema.type : "unknown";
+}
+
 /**
  * 将完整的工具定义收缩转换为模型可见的 ToolCard
  */
 export function toToolCard(definition: ToolDefinition<any, any>): ToolCard {
   const paramSummary: Record<string, { type: string; description: string; required: boolean }> = {};
-  
-  // 从 inputSchema 中提取字段描述
-  if (definition.inputSchema && definition.inputSchema.shape) {
-    const shape = definition.inputSchema.shape;
-    for (const key of Object.keys(shape)) {
-      const field = shape[key];
-      const isOptional = field.isOptional();
+  const inputSchema = toToolInputSchema(definition.inputSchema);
+  const properties = isSchemaRecord(inputSchema.properties) ? inputSchema.properties : {};
+  const required = new Set(Array.isArray(inputSchema.required) ? inputSchema.required : []);
+
+  for (const [key, value] of Object.entries(properties)) {
+    if (isSchemaRecord(value)) {
       paramSummary[key] = {
-        type: field._def?.typeName || "unknown",
-        description: field.description || "",
-        required: !isOptional,
+        type: summarizeSchemaType(value),
+        description: typeof value.description === "string" ? value.description : "",
+        required: required.has(key),
       };
     }
   }
@@ -44,7 +65,7 @@ export function toToolCard(definition: ToolDefinition<any, any>): ToolCard {
     disabledScenarios: [], // 可由特定工具定义或加载策略注入
     risk: definition.risk,
     parameterSummary: paramSummary,
-    examples: [],
+    examples: definition.examples ?? [],
     approvalRequired,
   };
 }

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { agentQuestionSchema } from "@shared/agent-question";
+import { agentQuestionInputSchema } from "@shared/agent-question";
 import type { ToolDefinition } from "../tool-definition";
 import {
   agentAskUserResultSchema,
@@ -9,8 +9,8 @@ import {
 export const askUserSchema = z.object({
   message: z.string().describe("向用户提出的澄清问题内容"),
   missingFields: z.array(z.string()).optional().describe("阻止安全执行的具体缺失信息"),
-  question: agentQuestionSchema.optional().describe(
-    "可选的追问展示结构。markdown 用于富文本说明；choices/cards 用于单选或多选项。",
+  responseUi: agentQuestionInputSchema.optional().describe(
+    "可选的回答界面配置对象，不是问题正文；必须直接传对象，禁止 JSON.stringify。",
   ),
 });
 
@@ -30,13 +30,17 @@ export const askUserTool: ToolDefinition<
   category: "core",
   loadPolicy: "core",
   inputSchema: askUserSchema,
+  examples: [
+    '{"message":"请选择内容侧重点","missingFields":["focus"],"responseUi":{"variant":"choices","options":[{"id":"theory","title":"理论框架"},{"id":"practice","title":"实践案例"}]}}',
+    '{"message":"请补充目标受众","missingFields":["audience"],"responseUi":{"variant":"markdown","placeholder":"例如：企业管理者"}}',
+  ],
   outputSchema: agentAskUserResultSchema,
   risk: "low",
   execute: async (args) => {
     const data = {
       content: args.message,
       ...(args.missingFields ? { missingFields: args.missingFields } : {}),
-      ...(args.question ? { question: args.question } : {}),
+      ...(args.responseUi ? { question: args.responseUi } : {}),
     };
     return {
       type: "ask_user",
