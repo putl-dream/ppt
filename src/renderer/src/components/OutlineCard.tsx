@@ -18,7 +18,7 @@ export const OutlineCard: React.FC<OutlineCardProps> = ({
 }) => (
   <div className="inline-artifact-card outline-card">
     <div className="inline-artifact-card-header">
-      <span className="inline-artifact-badge">OUTLINE</span>
+      <span className="inline-artifact-badge">内容大纲</span>
       <span className="inline-artifact-title">内容大纲预览</span>
       {resolved === "confirmed" && (
         <span className="inline-artifact-resolved">已确认</span>

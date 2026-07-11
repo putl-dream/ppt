@@ -70,7 +70,7 @@ export const AgentQuestionCard: React.FC<AgentQuestionCardProps> = ({
   return (
     <div className="inline-artifact-card agent-question-card">
       <div className="inline-artifact-card-header">
-        <span className="inline-artifact-badge">QUESTION</span>
+        <span className="inline-artifact-badge">确认问题</span>
         <span className="inline-artifact-title">需要确认</span>
         {resolved && (
           <span className="inline-artifact-resolved">

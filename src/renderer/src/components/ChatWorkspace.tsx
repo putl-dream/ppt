@@ -47,7 +47,6 @@ interface ChatWorkspaceProps {
   activityTrace: AgentActivityItem[];
   thoughtProgress: number;
   agentActivityMode: "idle" | "request" | "workflow" | "reasoning";
-  activeToolName?: string | null;
   streamingMessageId?: string | null;
   request: string;
   onChangeRequest: (val: string) => void;
@@ -91,7 +90,6 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
   activityTrace,
   thoughtProgress,
   agentActivityMode,
-  activeToolName = null,
   streamingMessageId = null,
   request,
   onChangeRequest,

@@ -1,4 +1,8 @@
 import React from "react";
+import {
+  formatAgentToolApprovalDetail,
+  getAgentToolDisplayCopy,
+} from "@shared/agent-activity-display";
 
 export interface PendingToolApproval {
   approvalId: string;
@@ -16,11 +20,13 @@ export const ToolApprovalOverlay: React.FC<ToolApprovalOverlayProps> = ({
   approval,
   onResolve,
 }) => {
+  const action = getAgentToolDisplayCopy(approval.toolName).action;
+  const detail = formatAgentToolApprovalDetail(approval.detail);
   const description = [
-    `工具 ${approval.toolName} 请求授权`,
+    `即将${action}`,
     approval.reason,
-    approval.detail,
-  ].filter(Boolean).join("；");
+    detail,
+  ].filter(Boolean).join("\n");
 
   return (
     <section
@@ -31,8 +37,8 @@ export const ToolApprovalOverlay: React.FC<ToolApprovalOverlayProps> = ({
       aria-describedby={`tool-approval-detail-${approval.approvalId}`}
     >
       <div className="tool-approval-gate-heading">
-        <span className="tool-approval-gate-kicker">流程已暂停</span>
-        <strong id={`tool-approval-title-${approval.approvalId}`}>需要工具权限</strong>
+        <span className="tool-approval-gate-kicker">等待确认</span>
+        <strong id={`tool-approval-title-${approval.approvalId}`}>需要你的授权</strong>
       </div>
       <div
         id={`tool-approval-detail-${approval.approvalId}`}
@@ -48,14 +54,14 @@ export const ToolApprovalOverlay: React.FC<ToolApprovalOverlayProps> = ({
           onClick={() => onResolve(approval.approvalId, false)}
           autoFocus
         >
-          拒绝并停止
+          暂不允许
         </button>
         <button
           type="button"
           className="tool-approval-gate-btn tool-approval-gate-btn--allow"
           onClick={() => onResolve(approval.approvalId, true)}
         >
-          允许并继续
+          允许继续
         </button>
       </div>
     </section>

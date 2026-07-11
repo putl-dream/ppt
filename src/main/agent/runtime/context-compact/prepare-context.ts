@@ -7,6 +7,8 @@ import { snipCompactConversation, snipCompactTranscript } from "./snip-compact";
 import { toolResultBudget } from "./tool-result-budget";
 import type { ContextCompactResult, PrepareContextOptions } from "./types";
 
+export const CONTEXT_PREPARED_USER_MESSAGE = "已整理较早的会话记录，正在继续处理…";
+
 /**
  * Run L1→L3 (0 API), then L4 LLM summary when still over token threshold.
  */
@@ -71,9 +73,10 @@ export async function prepareContext(
     }
   }
 
-  for (const note of notes) {
-    options.onProgress?.(note);
-  }
+  // `notes` are diagnostics for logs/snapshots. The UI receives one stable,
+  // user-facing status instead of internal L1/L2/L4 implementation details.
+  const contextWasOptimized = notes.some((note) => !/^L4 compact_history skipped:/i.test(note));
+  if (contextWasOptimized) options.onProgress?.(CONTEXT_PREPARED_USER_MESSAGE);
 
   return { payload, notes, compactHistoryFailures };
 }

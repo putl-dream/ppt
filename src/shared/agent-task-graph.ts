@@ -94,6 +94,14 @@ export function getIncompleteBlockedBy(
 
 export const TASK_GRAPH_TRACE_ID = "agent-task-graph";
 
+export function formatTaskOwnerForDisplay(
+  task: Pick<AgentTaskNode, "owner" | "executionTarget">,
+): string | null {
+  if (!task.owner) return null;
+  if (task.executionTarget === "teammate") return "协作助手";
+  return "主助手";
+}
+
 export function summarizeTaskGraphProgress(tasks: AgentTaskNode[]): string {
   if (tasks.length === 0) return "暂无任务";
   const completed = tasks.filter((task) => task.status === "completed").length;
@@ -113,13 +121,15 @@ export function formatTaskPlanPosition(tasks: AgentTaskNode[]): string {
   const inProgressIndex = tasks.findIndex((task) => task.status === "in_progress");
   if (inProgressIndex >= 0) {
     const current = tasks[inProgressIndex]!;
-    const owner = current.owner ? ` · ${current.owner}` : "";
+    const displayOwner = formatTaskOwnerForDisplay(current);
+    const owner = displayOwner ? ` · ${displayOwner}` : "";
     return `步骤 ${inProgressIndex + 1}/${tasks.length} · ${current.subject}${owner}`;
   }
   const submittedIndex = tasks.findIndex((task) => task.status === "submitted");
   if (submittedIndex >= 0) {
     const current = tasks[submittedIndex]!;
-    const owner = current.owner ? ` · ${current.owner}` : "";
+    const displayOwner = formatTaskOwnerForDisplay(current);
+    const owner = displayOwner ? ` · ${displayOwner}` : "";
     return `待验收 ${submittedIndex + 1}/${tasks.length} · ${current.subject}${owner}`;
   }
   const completed = tasks.filter((task) => task.status === "completed").length;

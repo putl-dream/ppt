@@ -134,6 +134,9 @@ describe("SQLite session store", () => {
       toolName: "ReadPresentationSnapshot",
       message: "read",
     });
+    store.conversationDatabase.appendRuntimeEvent("run-1", "workflow_progress", {
+      message: "L2 micro_compact: older tool results replaced with placeholders.",
+    }, "internal");
     await store.finalizeAgentRunMessage(sessionId, "run-1", {
       status: "chat",
       message: "Deck inspected.",
@@ -143,5 +146,36 @@ describe("SQLite session store", () => {
     expect(assistant.content).toBe("Deck inspected.");
     expect(assistant.activityTrace?.map((item) => item.kind)).toContain("reasoning");
     expect(assistant.activityTrace?.map((item) => item.kind)).toContain("tool");
+    expect(assistant.activityTrace?.map((item) => item.kind)).not.toContain("step");
+  });
+
+  it("marks an unfinished operation as failed instead of completed", async () => {
+    const { store } = await createStore();
+    const created = await store.createSession({ title: "Failed run" });
+    const sessionId = created.activeSession!.session.id;
+    await store.saveMessages(sessionId, [
+      { id: "u1", role: "user", content: "inspect" },
+      { id: "placeholder", role: "assistant", content: "", threadId: "run-failed" },
+    ]);
+    store.conversationDatabase.beginRun({
+      runId: "run-failed",
+      sessionId,
+      request: "inspect",
+    });
+    store.conversationDatabase.appendRuntimeEvent("run-failed", "tool_started", {
+      toolName: "ReadPresentationSnapshot",
+      message: "正在调用工具 ReadPresentationSnapshot...",
+    });
+
+    await store.failAgentRunMessage(sessionId, "run-failed", "unexpected tool error");
+
+    const assistant = store.getSession(sessionId).messages.at(-1)!;
+    const tool = assistant.activityTrace?.find((item) => item.kind === "tool");
+    expect(tool).toMatchObject({
+      kind: "tool",
+      status: "done",
+      finishedLabel: "读取演示文稿未完成",
+    });
+    expect(assistant.content).not.toContain("unexpected tool error");
   });
 });

@@ -6,10 +6,11 @@ import {
   FolderIcon,
   KeyIcon,
   PaletteIcon,
+  SettingsIcon,
   UserIcon,
 } from "./Icons";
 
-type SettingsCategory = "account" | "models" | "gateway" | "generation" | "project" | "appearance";
+type SettingsCategory = "account" | "models" | "gateway" | "generation" | "project" | "appearance" | "diagnostics";
 
 interface SettingsSidebarProps {
   activeCategory: SettingsCategory;
@@ -33,6 +34,7 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = ({
     { id: "appearance", title: "外观", icon: <PaletteIcon size={17} /> },
     { id: "models", title: "AI 服务", icon: <BrainIcon size={17} /> },
     { id: "gateway", title: "高级参数", icon: <KeyIcon size={17} /> },
+    { id: "diagnostics", title: "日志与诊断", icon: <SettingsIcon size={17} /> },
   ];
 
   return (

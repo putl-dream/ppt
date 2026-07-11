@@ -863,6 +863,121 @@
   transform: translateY(-0.5px);
 }
 
+.log-status-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.log-status-grid > div {
+  display: grid;
+  gap: 5px;
+  padding: 10px;
+  border: 1px solid var(--border-glass);
+  border-radius: var(--field-border-radius);
+  background: var(--bg-darker);
+}
+
+.log-status-grid span {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.log-status-grid strong {
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.log-management-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.log-management-actions .settings-secondary-btn {
+  gap: 6px;
+}
+
+.log-clear-btn {
+  margin-left: auto;
+  color: #dc2626;
+}
+
+.log-level-select {
+  min-width: 180px;
+}
+
+.log-entry-list {
+  display: grid;
+  gap: 7px;
+  max-height: 360px;
+  overflow: auto;
+}
+
+.log-entry {
+  display: grid;
+  gap: 5px;
+  padding: 9px 10px;
+  border: 1px solid var(--border-glass);
+  border-left: 3px solid #f59e0b;
+  border-radius: var(--field-border-radius);
+  background: var(--bg-darker);
+}
+
+.log-entry--error {
+  border-left-color: #dc2626;
+}
+
+.log-entry-topline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.log-entry-level {
+  color: #b45309;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.log-entry--error .log-entry-level {
+  color: #dc2626;
+}
+
+.log-entry-topline code {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.log-entry-topline time {
+  margin-left: auto;
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+.log-entry p {
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.log-empty-state {
+  padding: 24px 12px;
+  color: var(--text-muted);
+  font-size: 12px;
+  text-align: center;
+}
+
 .settings-choice-grid,
 .settings-theme-grid {
   display: grid;

@@ -211,6 +211,7 @@ describe("prepareContext", () => {
       toolName: "Read",
       result: "x".repeat(8_000),
     }));
+    const userProgress: string[] = [];
 
     const result = await prepareContext({
       payload: {
@@ -222,11 +223,16 @@ describe("prepareContext", () => {
       threadId: "thread-2",
       gateway,
       tokenThreshold: 1_000,
-      onProgress: () => {},
+      onProgress: (message) => userProgress.push(message),
     });
 
     expect(result.payload.transcript.length).toBeLessThan(transcript.length);
     expect(generateText).toHaveBeenCalledTimes(1);
+    expect(result.notes.some((note) => /L[1-4]|Persisted oversized/.test(note))).toBe(true);
+    expect(userProgress).toEqual(["已整理较早的会话记录，正在继续处理…"]);
+    expect(userProgress.join(" ")).not.toMatch(
+      /snip_compact|micro_compact|compact_history|tool_result|\.task_outputs/i,
+    );
   });
 });
 

@@ -7,6 +7,9 @@ import { resolveChromeTitleFontSize, resolveImageTreatment, resolveSlideStyle } 
 import { chartDataToSvgString, chartSvgToDataUri } from "@shared/chart-utils";
 import { renderGradientToPng } from "@shared/gradient-export";
 import { iconToSvgString, iconSvgToDataUri } from "@shared/icon-registry";
+import { createModuleLogger } from "./agent/logger";
+
+const logger = createModuleLogger("ppt-exporter");
 
 // Helper to clean colors (e.g. #ffffff -> ffffff)
 function cleanColor(colorStr: string): string {
@@ -97,7 +100,7 @@ export async function exportToPptx(
           });
         }
       } catch (e) {
-        console.error("Failed to add logo to PPTX:", e);
+        logger.error("logo.add.failed", { slideIndex: i, error: e });
       }
     }
 
@@ -227,7 +230,7 @@ export async function exportToPptx(
             });
           }
         } catch (e) {
-          console.error("Failed to add slide element image:", e);
+          logger.error("slide.image.add.failed", { slideIndex: i, error: e });
         }
       } else if (element.type === "shape") {
         const cleanFill = cleanColor(element.fillColor);
@@ -295,7 +298,7 @@ export async function exportToPptx(
             h,
           });
         } catch (e) {
-          console.error("Failed to add chart element:", e);
+          logger.error("slide.chart.add.failed", { slideIndex: i, error: e });
         }
       } else if (element.type === "table") {
         try {
@@ -319,7 +322,7 @@ export async function exportToPptx(
             autoPage: false,
           });
         } catch (e) {
-          console.error("Failed to add table element:", e);
+          logger.error("slide.table.add.failed", { slideIndex: i, error: e });
         }
       } else if (element.type === "icon") {
         try {
@@ -338,7 +341,7 @@ export async function exportToPptx(
             });
           }
         } catch (e) {
-          console.error("Failed to add icon element:", e);
+          logger.error("slide.icon.add.failed", { slideIndex: i, error: e });
         }
       }
     }

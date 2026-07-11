@@ -123,11 +123,13 @@ describe("callModelWithRecovery", () => {
         yield { type: "complete" as const, content: [] };
       },
     };
+    const progress: string[] = [];
 
     const promise = callModelWithRecovery({
       gateway,
       systemPrompt: "system",
       promptPayload: { transcript: [], request: "hello" },
+      onRecovery: (message) => progress.push(message),
     });
 
     await vi.runAllTimersAsync();
@@ -142,6 +144,8 @@ describe("callModelWithRecovery", () => {
       transcript: [],
       request: "hello",
     });
+    expect(progress).toEqual(["服务暂时繁忙，正在重试…"]);
+    expect(result.recoveryNotes[0]).toMatch(/临时故障|Retry-After|指数退避/);
     vi.useRealTimers();
   });
 
@@ -200,12 +204,14 @@ describe("callModelWithRecovery", () => {
         yield { type: "complete" as const, content: [] };
       },
     };
+    const progress: string[] = [];
 
     const result = await callModelWithRecovery({
       gateway,
       systemPrompt: "system",
       promptPayload: { transcript: [], request: "hello" },
       model: { provider: "anthropic", model: "claude" },
+      onRecovery: (message) => progress.push(message),
     });
 
     expect(result.content).toEqual(textContent("done"));
@@ -215,5 +221,7 @@ describe("callModelWithRecovery", () => {
       transcript: [],
       request: "hello",
     });
+    expect(progress).toEqual(["回复内容较长，正在继续生成…"]);
+    expect(result.recoveryNotes[0]).toContain("max_tokens");
   });
 });

@@ -1,4 +1,11 @@
 import type { AgentActivityItem } from "@shared/agent-activity";
+import {
+  formatAgentProgressMessage,
+  formatAgentToolActivity,
+  getAgentToolDisplayCopy,
+  inferAgentToolActivityState,
+  type AgentToolDisplayCategory,
+} from "@shared/agent-activity-display";
 
 export interface ProcessTraceRow {
   id: string;
@@ -12,52 +19,46 @@ export interface ProcessTraceRow {
 
 type ToolTraceItem = Extract<AgentActivityItem, { kind: "tool" }>;
 
-type ToolCategory = "read" | "search" | "inspect" | "change" | "coordinate" | "other";
-
-function categorizeTool(toolName: string): ToolCategory {
-  if (/search|find|web/i.test(toolName)) return "search";
-  if (/read|get|list|load/i.test(toolName)) return "read";
-  if (/preview|validate|analyze|detect/i.test(toolName)) return "inspect";
-  if (/task|teammate|spawn|message/i.test(toolName)) return "coordinate";
-  if (/submit|execute|apply|update|insert|rewrite|compress|beautify|export/i.test(toolName)) {
-    return "change";
-  }
-  return "other";
-}
-
 function summarizeToolBatch(tools: ToolTraceItem[]): string {
-  const counts = new Map<ToolCategory, number>();
+  const counts = new Map<AgentToolDisplayCategory, number>();
   for (const tool of tools) {
-    const category = categorizeTool(tool.toolName);
+    const category = getAgentToolDisplayCopy(tool.toolName).category;
     counts.set(category, (counts.get(category) ?? 0) + 1);
   }
 
-  const labels: Record<ToolCategory, (count: number) => string> = {
+  const labels: Record<AgentToolDisplayCategory, (count: number) => string> = {
     read: (count) => `读取 ${count} 项`,
     search: (count) => `搜索 ${count} 次`,
     inspect: (count) => `检查 ${count} 次`,
     change: (count) => `执行 ${count} 项`,
     coordinate: (count) => `协调 ${count} 项`,
-    other: (count) => `调用 ${count} 次`,
+    other: (count) => `处理 ${count} 项`,
   };
-  const order: ToolCategory[] = ["read", "search", "inspect", "change", "coordinate", "other"];
+  const order: AgentToolDisplayCategory[] = [
+    "read",
+    "search",
+    "inspect",
+    "change",
+    "coordinate",
+    "other",
+  ];
   return order
     .filter((category) => counts.has(category))
     .map((category) => labels[category](counts.get(category)!))
     .join(" · ");
 }
 
-function cleanActivityLabel(value: string): string {
-  return value.replace(/^[^\w\u4e00-\u9fff]+/u, "").trim();
-}
-
 function toolDetailLines(tools: ToolTraceItem[]): string[] {
   return tools.flatMap((tool) => {
-    const status = tool.status === "running"
+    const rawStatus = tool.status === "running"
       ? tool.label
       : (tool.finishedLabel ?? tool.label);
+    const fallbackState = tool.status === "running"
+      ? "running"
+      : (tool.finishedLabel ? "completed" : "failed");
+    const state = inferAgentToolActivityState(rawStatus, fallbackState);
     return [
-      `${tool.toolName} · ${cleanActivityLabel(status)}`,
+      formatAgentToolActivity(tool.toolName, state),
       ...(tool.summary?.trim() ? [tool.summary.trim()] : []),
     ];
   });
@@ -144,7 +145,7 @@ export function buildProcessTraceRows(
       pushRow(rows, {
         id: item.id,
         kind: "approval",
-        title: `工具授权 · ${item.toolName}`,
+        title: `操作授权 · ${getAgentToolDisplayCopy(item.toolName).action}`,
         lines: [item.reason, `状态：${statusLabel}`],
       });
       continue;
@@ -173,11 +174,20 @@ export function buildProcessTraceRows(
           continue;
         }
         const stepRunning = step.status === "running";
+        const stepText = step.toolName
+          ? formatAgentToolActivity(
+              step.toolName,
+              inferAgentToolActivityState(
+                step.text,
+                stepRunning ? "running" : "completed",
+              ),
+            )
+          : (formatAgentProgressMessage(step.text) ?? "正在处理子任务…");
         pushRow(rows, {
           id: step.id,
           kind: "task",
           title: "子任务步骤",
-          lines: [step.text],
+          lines: [stepText],
           active: stepRunning && live,
         });
       }
@@ -187,10 +197,12 @@ export function buildProcessTraceRows(
     if (item.kind === "step") {
       const status = item.status ?? "done";
       const isActive = live && (status === "typing" || status === "running");
+      const title = formatAgentProgressMessage(item.text);
+      if (!title) continue;
       pushRow(rows, {
         id: item.id,
         kind: "progress",
-        title: item.text,
+        title,
         active: isActive,
       });
     }

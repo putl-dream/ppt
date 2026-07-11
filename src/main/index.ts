@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import {
   app,
@@ -43,7 +43,17 @@ import { CommitGate } from "./agent/gate/commit-gate";
 import { scanSkills, type SkillRegistry } from "./agent/skills/loadSkillsDir";
 import { createEmptySkillRegistry } from "./agent/skills/loadSkillsDir";
 import { RiskPolicy } from "./agent/gate/risk-policy";
-import { createModuleLogger, requestSummary } from "./agent/logger";
+import {
+  clearLogFiles,
+  createModuleLogger,
+  getLogDirectory,
+  getLogManagerStatus,
+  getRecentLogEntries,
+  initializeLogManager,
+  requestSummary,
+  updateLogManagerSettings,
+} from "./agent/logger";
+import type { AppLogLevel, LogManagerSettings, RendererLogReport } from "@shared/logging";
 import { FileSessionStore } from "./session-store";
 import { TaskStore } from "./agent/task/task-store";
 import type { SessionChatMessage, SessionSnapshot } from "@shared/session";
@@ -196,7 +206,10 @@ function createWindow(onWindowCreated?: (window: BrowserWindow) => void): Browse
   });
 
   window.webContents.on("did-fail-load", (_, errorCode, errorDescription, validatedUrl) => {
-    console.error("Renderer failed to load", { errorCode, errorDescription, validatedUrl });
+    logger.error("renderer.load.failed", { errorCode, errorDescription, validatedUrl });
+  });
+  window.webContents.on("did-finish-load", () => {
+    logger.info("renderer.load.completed", { webContentsId: window.webContents.id });
   });
   if (process.env.ELECTRON_RENDERER_URL) {
     void window.loadURL(process.env.ELECTRON_RENDERER_URL);
@@ -310,6 +323,12 @@ app.whenReady().then(async () => {
   Menu.setApplicationMenu(null);
   const applicationDataRoot = join(app.getPath("appData"), ".agent-ppt");
   process.env.AGENT_PPT_DATA_DIR = applicationDataRoot;
+  await initializeLogManager();
+  logger.info("application.started", {
+    version: app.getVersion(),
+    platform: process.platform,
+    arch: process.arch,
+  });
   sessionStore = new FileSessionStore(join(applicationDataRoot, "conversations.sqlite"));
   await sessionStore.initialize();
   tokenUsageStore = new TokenUsageStore(join(applicationDataRoot, "token-usage.json"));
@@ -380,6 +399,10 @@ app.whenReady().then(async () => {
 
   const attachWindowLifecycle = (window: BrowserWindow) => {
     window.webContents.on("render-process-gone", (_event, details) => {
+      logger.error("renderer.process.gone", {
+        webContentsId: window.webContents.id,
+        ...details,
+      });
       abortAllActiveRuns(`render-process-gone:${details.reason}`);
     });
     window.on("closed", () => {
@@ -455,34 +478,73 @@ app.whenReady().then(async () => {
 
   ipcMain.handle("session:get-state", () => sessionStore.getBootstrap());
   ipcMain.handle("token-usage:get-stats", () => tokenUsageStore.getStats());
+  ipcMain.handle("logs:get-status", () => getLogManagerStatus());
+  ipcMain.handle("logs:get-recent", (_event, limit?: number, minimumLevel?: AppLogLevel) =>
+    getRecentLogEntries(limit, minimumLevel),
+  );
+  ipcMain.handle("logs:update-settings", async (_event, patch: Partial<LogManagerSettings>) => {
+    const settings = await updateLogManagerSettings(patch ?? {});
+    logger.info("logs.settings.updated", { ...settings });
+    return settings;
+  });
+  ipcMain.handle("logs:clear", async () => clearLogFiles());
+  ipcMain.handle("logs:open-directory", async () => {
+    const directory = getLogDirectory();
+    mkdirSync(directory, { recursive: true });
+    const errorMessage = await shell.openPath(directory);
+    if (errorMessage) {
+      logger.warn("logs.directory.open-failed", { directory, errorMessage });
+      return false;
+    }
+    return true;
+  });
+  ipcMain.on("logs:renderer-report", (_event, report: RendererLogReport) => {
+    if (!report || !["debug", "info", "warn", "error"].includes(report.level)) return;
+    if (typeof report.event !== "string" || !report.event.trim()) return;
+    logger[report.level](`renderer.${report.event}`, report.data);
+  });
   ipcMain.handle("window:set-theme-mode", (_event, themeMode: unknown) =>
     applyWindowThemeMode(normalizeWindowThemeMode(themeMode)),
   );
   ipcMain.handle("session:create", async (_, options?: CreateSessionOptions) => {
+    const startedAt = Date.now();
     const state = await sessionStore.createSession(options);
     activeSessionId = state.activeSession?.session.id ?? "";
     if (state.activeSession) {
       await ensureRuntime(state.activeSession);
     }
+    logger.info("session.created", {
+      sessionId: activeSessionId,
+      hasWorkspace: Boolean(options?.rootPath),
+      durationMs: Date.now() - startedAt,
+    });
     return state;
   });
   ipcMain.handle("workspace:open", async (_, rootPath: string) => {
+    const startedAt = Date.now();
     const state = await sessionStore.openWorkspace(rootPath);
     activeSessionId = state.activeSession?.session.id ?? "";
     if (state.activeSession) {
       await ensureRuntime(state.activeSession);
     }
+    logger.info("workspace.opened", {
+      sessionId: activeSessionId,
+      rootPath,
+      durationMs: Date.now() - startedAt,
+    });
     return state;
   });
   ipcMain.handle("workspace:list-sessions", async (_, rootPath: string) =>
     sessionStore.listWorkspaceSessions(rootPath),
   );
   ipcMain.handle("session:select", async (_, sessionId: string) => {
+    const startedAt = Date.now();
     const state = await sessionStore.selectSession(sessionId);
     activeSessionId = state.activeSession?.session.id ?? "";
     if (state.activeSession) {
       await ensureRuntime(state.activeSession);
     }
+    logger.info("session.selected", { sessionId, durationMs: Date.now() - startedAt });
     return state;
   });
   ipcMain.handle("session:delete", async (event, sessionId: string) => {
@@ -507,6 +569,7 @@ app.whenReady().then(async () => {
     if (state.activeSession) {
       await ensureRuntime(state.activeSession);
     }
+    logger.info("session.deleted", { sessionId, nextSessionId: activeSessionId || undefined });
     return state;
   });
   ipcMain.handle(
@@ -570,6 +633,7 @@ app.whenReady().then(async () => {
   ipcMain.handle(
     "presentation:export",
     async (_, presentation: Presentation, options: ExportPresentationOptions) => {
+      const startedAt = Date.now();
       const sessionId = activeSessionId;
       const window = BrowserWindow.getFocusedWindow();
       const dialogOptions = {
@@ -586,24 +650,46 @@ app.whenReady().then(async () => {
         : await dialog.showSaveDialog(dialogOptions);
 
       if (canceled || !filePath) {
+        logger.info("presentation.export.cancelled", { sessionId });
         return null;
       }
 
-      const result = await deckExportService.exportDeck({
-        presentation,
-        options,
-        filePath,
+      logger.info("presentation.export.started", {
+        sessionId,
+        revision: presentation.revision,
+        slideCount: presentation.slides.length,
+        format: filePath.split(".").pop()?.toLowerCase(),
       });
-
-      if (filePath.endsWith(".pptx")) {
-        await sessionStore.recordDeckExport(sessionId, {
-          revision: presentation.revision,
-          filePath: result.filePath,
-          designSystem: presentation.designSystem,
+      try {
+        const result = await deckExportService.exportDeck({
+          presentation,
+          options,
+          filePath,
         });
-      }
 
-      return result.filePath;
+        if (filePath.endsWith(".pptx")) {
+          await sessionStore.recordDeckExport(sessionId, {
+            revision: presentation.revision,
+            filePath: result.filePath,
+            designSystem: presentation.designSystem,
+          });
+        }
+
+        logger.info("presentation.export.completed", {
+          sessionId,
+          filePath: result.filePath,
+          durationMs: Date.now() - startedAt,
+        });
+        return result.filePath;
+      } catch (error) {
+        logger.error("presentation.export.failed", {
+          sessionId,
+          filePath,
+          durationMs: Date.now() - startedAt,
+          error,
+        });
+        throw error;
+      }
     },
   );
   ipcMain.handle("dialog:select-directory", async (event, defaultPath?: string) => {
@@ -892,6 +978,19 @@ app.on("window-all-closed", () => {
 });
 
 app.on("will-quit", () => {
+  logger.info("application.stopping");
   slideThumbnailService.dispose();
   sessionStore?.conversationDatabase.close();
+});
+
+process.on("uncaughtExceptionMonitor", (error) => {
+  logger.error("process.uncaught-exception", { error });
+});
+
+process.on("unhandledRejection", (reason) => {
+  logger.error("process.unhandled-rejection", { reason });
+});
+
+app.on("child-process-gone", (_event, details) => {
+  logger.error("application.child-process-gone", { ...details });
 });

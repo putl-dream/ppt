@@ -16,9 +16,10 @@ import type { AgentStepLimits } from "@shared/agent-step-limits";
 import type { AgentGatewayPreferences } from "@shared/agent-gateway-config";
 import { DEFAULT_AGENT_GATEWAY_CONFIG } from "@shared/agent-gateway-config";
 import { TokenUsageOverview } from "./TokenUsageOverview";
+import { LogManagementPanel } from "./LogManagementPanel";
 import { DESIGN_PRESETS, type DesignSystemV1 } from "@design-system";
 
-type SettingsCategory = "account" | "models" | "gateway" | "generation" | "project" | "appearance";
+type SettingsCategory = "account" | "models" | "gateway" | "generation" | "project" | "appearance" | "diagnostics";
 type UiThemeMode = "light" | "dark" | "cyan" | "orange";
 type UiAccentColor = "cyan" | "green" | "purple" | "orange";
 type UiControlShape = "sharp" | "soft" | "round";
@@ -83,6 +84,9 @@ const categoryMeta: Record<SettingsCategory, { title: string }> = {
   },
   appearance: {
     title: "外观",
+  },
+  diagnostics: {
+    title: "日志与诊断",
   },
 };
 
@@ -246,6 +250,10 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
           <div className="settings-panel-fade">
             <TokenUsageOverview />
           </div>
+        )}
+
+        {activeCategory === "diagnostics" && (
+          <LogManagementPanel notify={triggerToast} />
         )}
 
         {activeCategory === "models" && (

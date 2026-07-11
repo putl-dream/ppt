@@ -172,10 +172,13 @@ export async function callModelWithRecovery(
   let lastError: unknown;
   let preparedMessages = options.messages;
 
-  const notify = (message: string) => {
+  const recordDiagnostic = (message: string) => {
     recoveryNotes.push(message);
-    options.onRecovery?.(message);
     logger.info("model.recovery", { message, model: modelSelection });
+  };
+  const notify = (diagnostic: string, userMessage = diagnostic) => {
+    recordDiagnostic(diagnostic);
+    options.onRecovery?.(userMessage);
   };
 
   for (let attempt = 1; attempt <= MAX_RECOVERY_ATTEMPTS; attempt += 1) {
@@ -191,8 +194,9 @@ export async function callModelWithRecovery(
         model: modelSelection,
         signal: options.signal,
         compactHistoryFailures,
-        onProgress: notify,
+        onProgress: options.onRecovery,
       });
+      prepared.notes.forEach(recordDiagnostic);
       payload = prepared.payload;
       compactHistoryFailures = prepared.compactHistoryFailures;
       preparedMessages = compactStructuredMessages(
@@ -246,12 +250,15 @@ export async function callModelWithRecovery(
         const nextTokens = nextOutputTokenUpgrade(currentTokens);
         if (nextTokens !== undefined) {
           maxOutputTokens = nextTokens;
-          notify(`输出被截断，提升 max_tokens 至 ${nextTokens} 后重试。`);
+          notify(
+            `输出被截断，提升 max_tokens 至 ${nextTokens} 后重试。`,
+            "回复内容较长，正在继续生成…",
+          );
           continue;
         }
         if (!continuationPartial) {
           continuationPartial = text;
-          notify("输出截断后启用续写提示重试。");
+          notify("输出截断后启用续写提示重试。", "回复内容较长，正在继续生成…");
           continue;
         }
       }
@@ -280,7 +287,7 @@ export async function callModelWithRecovery(
       if (recovery === "compact-context" && !emergencyTrimmed) {
         emergencyTrimmed = true;
         payload = emergencyTrimContext(payload);
-        notify("上下文超限，已应急裁剪后重试。");
+        notify("上下文超限，已应急裁剪后重试。", "对话内容较多，整理后正在继续…");
         continue;
       }
 
@@ -289,7 +296,10 @@ export async function callModelWithRecovery(
         if (fallback) {
           modelSelection = fallback;
           consecutiveOverloaded = 0;
-          notify(`连续过载，切换备用模型 ${fallback.provider}/${fallback.model}。`);
+          notify(
+            `连续过载，切换备用模型 ${fallback.provider}/${fallback.model}。`,
+            "服务暂时繁忙，已切换备用服务继续处理…",
+          );
           continue;
         }
       }
@@ -299,6 +309,7 @@ export async function callModelWithRecovery(
         retryAfterMs
           ? `临时故障，按 Retry-After 等待后重试（第 ${attempt} 次）。`
           : `临时故障，指数退避后重试（第 ${attempt} 次）。`,
+        "服务暂时繁忙，正在重试…",
       );
       await backoffBeforeRetry({ attempt, retryAfterMs, signal: options.signal });
     }

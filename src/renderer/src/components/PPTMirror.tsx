@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { Presentation } from "@shared/presentation";
+import { formatPublicErrorMessage } from "@shared/agent-activity-display";
 import { resolveChromeTitleFontSize, resolveSlideStyle } from "@design-system";
 import { SlideElementRenderer } from "./SlideElementRenderer";
 import { ClosePreviewIcon, PlayIcon, DownloadIcon, ExpandIcon, CompressIcon } from "./Icons";
@@ -49,7 +50,7 @@ export const PPTMirror: React.FC<PPTMirrorProps> = ({
       }
     } catch (error) {
       console.error(error);
-      triggerToast?.(`❌ 导出失败: ${error instanceof Error ? error.message : String(error)}`);
+      triggerToast?.(`导出失败：${formatPublicErrorMessage(error, "请稍后重试。")}`);
     } finally {
       setIsExporting(false);
     }

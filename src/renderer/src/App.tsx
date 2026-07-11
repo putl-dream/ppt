@@ -71,6 +71,12 @@ import {
   finishTaskTool,
   finishTask,
 } from "@shared/agent-activity";
+import {
+  formatAgentProgressMessage,
+  formatAgentToolActivity,
+  formatPublicErrorMessage,
+  inferAgentToolActivityState,
+} from "@shared/agent-activity-display";
 
 export function App() {
   const initializeProject = useProjectStore((state) => state.initializeProject);
@@ -93,7 +99,7 @@ export function App() {
   // 双模态同构布局模式控制
   const [activeMode, setActiveMode] = useState<AppMode>("workspace");
   const [settingsCategory, setSettingsCategory] = useState<
-    "account" | "models" | "gateway" | "generation" | "project" | "appearance"
+    "account" | "models" | "gateway" | "generation" | "project" | "appearance" | "diagnostics"
   >("account");
   const isMirrorVisible = Boolean(isMirrorOpen && presentation);
   const workbenchLayout = useWorkbenchLayout({
@@ -128,7 +134,6 @@ export function App() {
   const [activityTrace, setActivityTrace] = useState<AgentActivityItem[]>([]);
   const [thoughtProgress, setThoughtProgress] = useState(0);
   const [agentActivityMode, setAgentActivityMode] = useState<"idle" | "request" | "workflow" | "reasoning">("idle");
-  const [activeToolName, setActiveToolName] = useState<string | null>(null);
   const [highlightSlideId, setHighlightSlideId] = useState<string | null>(null);
   const activeRunIdRef = useRef<string | null>(null);
   const activeRunTraceRef = useRef<AgentActivityItem[]>([]);
@@ -190,6 +195,8 @@ export function App() {
       if (event.runId !== activeRunIdRef.current) return;
 
       if (event.type === "request-status") {
+        const displayMessage = formatAgentProgressMessage(event.message);
+        if (!displayMessage) return;
         stopStatusTyping();
         setAgentActivityMode("request");
         setThoughtProgress(event.progress);
@@ -201,7 +208,7 @@ export function App() {
             {
               id: stepId,
               kind: "step",
-              text: event.message.slice(0, 1),
+              text: displayMessage.slice(0, 1),
               status: "typing",
             },
           ]);
@@ -215,11 +222,11 @@ export function App() {
               updateStepText(
                 activeRunTraceRef.current,
                 stepId,
-                event.message.slice(0, visibleLength),
+                displayMessage.slice(0, visibleLength),
               ),
             );
           }
-          if (visibleLength >= event.message.length) stopStatusTyping();
+          if (visibleLength >= displayMessage.length) stopStatusTyping();
         }, 28);
         return;
       }
@@ -238,7 +245,10 @@ export function App() {
         stopStatusTyping();
         flushPendingProgress();
         setAgentActivityMode("workflow");
-        syncActivityTrace(appendStep(activeRunTraceRef.current, event.message, "done"));
+        const displayMessage = formatAgentProgressMessage(event.message);
+        if (displayMessage) {
+          syncActivityTrace(appendStep(activeRunTraceRef.current, displayMessage, "done"));
+        }
         setThoughtProgress(event.progress);
         return;
       }
@@ -253,13 +263,12 @@ export function App() {
         stopStatusTyping();
         flushPendingProgress();
         setAgentActivityMode("workflow");
-        setActiveToolName(event.toolName);
         if (event.toolName !== "Task") {
           syncActivityTrace(
             appendToolStart(
               activeRunTraceRef.current,
               event.toolName,
-              `🛠️ 运行工具: ${event.toolName}`,
+              formatAgentToolActivity(event.toolName, "running"),
             ),
           );
         }
@@ -269,7 +278,6 @@ export function App() {
       if (event.type === "tool-finished") {
         stopStatusTyping();
         setAgentActivityMode("workflow");
-        setActiveToolName(null);
         if (event.toolName === "Task") {
           let trace = activeRunTraceRef.current;
           for (const item of trace) {
@@ -279,11 +287,12 @@ export function App() {
           }
           syncActivityTrace(trace);
         } else {
+          const state = inferAgentToolActivityState(event.message, "completed");
           syncActivityTrace(
             finishTool(
               activeRunTraceRef.current,
               event.toolName,
-              `✅ 工具 ${event.toolName} 运行完毕`,
+              formatAgentToolActivity(event.toolName, state),
             ),
           );
         }
@@ -294,7 +303,6 @@ export function App() {
         stopStatusTyping();
         flushPendingProgress();
         setAgentActivityMode("workflow");
-        setActiveToolName(null);
         syncActivityTrace(
           appendToolValidationFailed(
             activeRunTraceRef.current,
@@ -315,7 +323,6 @@ export function App() {
       if (event.type === "tool-approval-waiting") {
         stopStatusTyping();
         setAgentActivityMode("workflow");
-        setActiveToolName(event.toolName);
         syncActivityTrace(
           appendToolApprovalWaiting(activeRunTraceRef.current, {
             approvalId: event.approvalId,
@@ -342,7 +349,6 @@ export function App() {
       if (event.type === "subagent-started") {
         stopStatusTyping();
         setAgentActivityMode("workflow");
-        setActiveToolName("Task");
         syncActivityTrace(
           upsertTaskStarted(activeRunTraceRef.current, {
             taskId: event.taskId,
@@ -362,26 +368,25 @@ export function App() {
 
       if (event.type === "subagent-tool-started") {
         setAgentActivityMode("workflow");
-        setActiveToolName(event.toolName);
         syncActivityTrace(
           appendTaskToolStart(
             activeRunTraceRef.current,
             event.taskId,
             event.toolName,
-            event.message,
+            formatAgentToolActivity(event.toolName, "running"),
           ),
         );
         return;
       }
 
       if (event.type === "subagent-tool-finished") {
-        setActiveToolName(null);
+        const state = inferAgentToolActivityState(event.message, "completed");
         syncActivityTrace(
           finishTaskTool(
             activeRunTraceRef.current,
             event.taskId,
             event.toolName,
-            event.message,
+            formatAgentToolActivity(event.toolName, state),
           ),
         );
         return;
@@ -604,7 +609,7 @@ export function App() {
     initializeProject(snapshot.session.id, snapshot.session.title, snapshot.project?.artifacts);
     void hydrateProjectArtifacts(snapshot.session.id).catch((error) => {
       console.error("加载项目产物失败:", error);
-      triggerToast(error instanceof Error ? error.message : "加载项目产物失败");
+      triggerToast(formatPublicErrorMessage(error, "加载项目内容失败，请重试。"));
     });
     void syncPresentation({
       preferredSlideId: snapshot.presentation.slides[0]?.id,
@@ -622,7 +627,7 @@ export function App() {
       .getSessionState()
       .then(applySessionState)
       .catch((error: unknown) => {
-        setStartupError(error instanceof Error ? error.message : "无法打开本地工作区。");
+        setStartupError(formatPublicErrorMessage(error, "无法打开本地工作区。"));
       });
   }, []);
 
@@ -677,7 +682,7 @@ export function App() {
       setLocalStoragePath(normalized);
       triggerToast(`已选择目录：${getWorkspaceLabel(normalized)}`);
     } catch (error) {
-      triggerToast(error instanceof Error ? error.message : "选择目录失败");
+      triggerToast(formatPublicErrorMessage(error, "选择目录失败，请重试。"));
     }
   };
 
@@ -699,7 +704,7 @@ export function App() {
       triggerToast(`已打开项目目录：${getWorkspaceLabel(selectedPath)}`);
     } catch (error) {
       setSessionLoaded(true);
-      triggerToast(error instanceof Error ? error.message : "打开项目目录失败");
+      triggerToast(formatPublicErrorMessage(error, "打开项目目录失败，请重试。"));
     }
   };
 
@@ -716,7 +721,7 @@ export function App() {
       if (!selectedPath) return;
       enterDraftChat(normalizeWorkspacePath(selectedPath));
     } catch (error) {
-      triggerToast(error instanceof Error ? error.message : "选择项目目录失败");
+      triggerToast(formatPublicErrorMessage(error, "选择项目目录失败，请重试。"));
     }
   };
 
@@ -742,7 +747,7 @@ export function App() {
       applySessionState(await window.desktopApi.selectSession(sessionId));
       triggerToast("已恢复会话内容");
     } catch (error) {
-      triggerToast(error instanceof Error ? error.message : "切换会话失败");
+      triggerToast(formatPublicErrorMessage(error, "切换会话失败，请重试。"));
     } finally {
       setIsSessionSwitching(false);
     }
@@ -762,7 +767,7 @@ export function App() {
         triggerToast("会话已删除");
       }
     } catch (error) {
-      triggerToast(error instanceof Error ? error.message : "删除会话失败");
+      triggerToast(formatPublicErrorMessage(error, "删除会话失败，请重试。"));
     }
   };
 
@@ -966,7 +971,7 @@ export function App() {
       } catch (error) {
         setBusy(false);
         setIsDraftChat(true);
-        triggerToast(error instanceof Error ? error.message : "创建会话失败");
+        triggerToast(formatPublicErrorMessage(error, "创建会话失败，请重试。"));
         return;
       }
     }
@@ -995,7 +1000,6 @@ export function App() {
 
     setThoughtProgress(0);
     syncActivityTrace([]);
-    setActiveToolName(null);
     setAgentActivityMode("request");
     const runId = crypto.randomUUID();
     const streamMessageId = crypto.randomUUID();
@@ -1084,7 +1088,7 @@ export function App() {
       if (interrupted) {
         if (!isSidechain) {
           const runMessageId = streamMessageIdsRef.current.get(runId);
-          const interruptedTrace = markTraceComplete(activeRunTraceRef.current);
+          const interruptedTrace = markTraceComplete(activeRunTraceRef.current, "denied");
           if (runMessageId) {
             setChatMessages((prev) => prev.map((message) =>
               message.id === runMessageId
@@ -1111,9 +1115,13 @@ export function App() {
         }
         triggerToast("会话已中断");
       } else {
+        console.error("Agent run failed:", errorMessage);
         const runMessageId = streamMessageIdsRef.current.get(runId);
-        const failedTrace = markTraceComplete(activeRunTraceRef.current);
-        const content = `执行指令时发生错误：${errorMessage}`;
+        const failedTrace = markTraceComplete(activeRunTraceRef.current, "failed");
+        const content = `本次处理未完成：${formatPublicErrorMessage(
+          errorMessage,
+          "处理请求时遇到问题，请稍后重试。",
+        )}`;
         if (!isSidechain) {
           if (runMessageId) {
             setChatMessages((prev) => prev.map((message) =>
@@ -1154,7 +1162,6 @@ export function App() {
       }
       setBusy(false);
       setAgentActivityMode("idle");
-      setActiveToolName(null);
       syncActivityTrace([]);
       setThoughtProgress(0);
       requestStatusStepIdRef.current = null;
@@ -1197,7 +1204,7 @@ export function App() {
       }
     } catch (error) {
       setIsCancellingRun(false);
-      triggerToast(error instanceof Error ? error.message : "中断会话失败");
+      triggerToast(formatPublicErrorMessage(error, "中断会话失败，请重试。"));
     }
   };
 
@@ -1683,7 +1690,8 @@ export function App() {
         triggerToast(`🎉 成功导出至: ${savedPath}`);
       }
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      console.error("Export failed:", error);
+      const message = formatPublicErrorMessage(error, "导出时遇到问题，请重试。");
       setChatMessages((prev) => [
         ...prev,
         {
@@ -1741,7 +1749,6 @@ export function App() {
             activityTrace,
             thoughtProgress,
             agentActivityMode,
-            activeToolName,
             streamingMessageId,
             request,
             onChangeRequest: setRequest,

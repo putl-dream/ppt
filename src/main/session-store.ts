@@ -51,6 +51,7 @@ import {
   markTraceComplete,
   type AgentActivityItem,
 } from "@shared/agent-activity";
+import { formatPublicErrorMessage } from "@shared/agent-activity-display";
 import { ConversationDatabase } from "./conversation-database";
 import type { AgentRunResult } from "@shared/ipc";
 
@@ -329,10 +330,18 @@ export class FileSessionStore {
       snapshot.messages.push(message);
     }
     const interrupted = /aborted|中断|取消/i.test(error);
-    message.content = interrupted ? "会话已中断。" : `执行指令时发生错误：${error}`;
+    message.content = interrupted
+      ? "会话已中断。"
+      : `本次处理未完成：${formatPublicErrorMessage(
+          error,
+          "处理请求时遇到问题，请稍后重试。",
+        )}`;
     const trace = this.projectRunTrace(runId);
     message.activityTrace = trace.length > 0
-      ? compactActivityTraceForPersistence(markTraceComplete(trace))
+      ? compactActivityTraceForPersistence(markTraceComplete(
+          trace,
+          interrupted ? "denied" : "failed",
+        ))
       : undefined;
     const now = new Date().toISOString();
     snapshot.session.updatedAt = now;
@@ -343,6 +352,7 @@ export class FileSessionStore {
   private projectRunTrace(runId: string): AgentActivityItem[] {
     let trace: AgentActivityItem[] = [];
     for (const event of this.conversationDatabase.listRunEvents(runId)) {
+      if (event.visibility !== "user_visible") continue;
       const payload = event.payload;
       if (event.kind === "reasoning_chunk" && typeof payload.chunk === "string") {
         trace = appendReasoningChunk(

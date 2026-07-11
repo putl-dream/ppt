@@ -132,7 +132,7 @@ describe("agent activity trace", () => {
       summary: "准备提交方案",
       status: "done",
     });
-    expect(failed[0].kind === "tool" && failed[0].finishedLabel).toContain("参数校验失败");
+    expect(failed[0].kind === "tool" && failed[0].finishedLabel).toContain("输入信息有误");
   });
 
   it("absorbs tool-summary into tool block on start", () => {
@@ -221,7 +221,7 @@ describe("agent activity trace", () => {
       { id: "4", kind: "step", text: "启动阶段", status: "done" },
     ];
 
-    expect(summarizeProcessTrace(trace)).toBe("2 轮思考 · 1 次工具调用 · 1 个步骤");
+    expect(summarizeProcessTrace(trace)).toBe("2 轮思考 · 1 项操作 · 1 个步骤");
     expect(isProcessTraceActive(trace)).toBe(false);
   });
 
@@ -239,6 +239,12 @@ describe("agent activity trace", () => {
 
     expect(isProcessTraceActive(trace)).toBe(true);
     expect(isProcessTraceActive(markTraceComplete(trace))).toBe(false);
+    const failed = markTraceComplete(trace, "failed");
+    expect(failed[1]).toMatchObject({
+      kind: "tool",
+      status: "done",
+      finishedLabel: "提交修改方案未完成",
+    });
   });
 });
 
@@ -260,7 +266,7 @@ describe("process trace rows", () => {
     expect(rows).toHaveLength(2);
     expect(rows[0]).toMatchObject({ kind: "thought", title: "思考片刻" });
     expect(rows[1]).toMatchObject({ kind: "tools", title: "读取 1 项" });
-    expect(rows[1]?.lines).toEqual(["ReadPresentationSnapshot · done"]);
+    expect(rows[1]?.lines).toEqual(["已读取演示文稿"]);
   });
 
   it("groups consecutive tools and keeps progress as a direct work row", async () => {
@@ -296,9 +302,57 @@ describe("process trace rows", () => {
       active: true,
     });
     expect(rows[1]?.lines).toEqual([
-      "ReadPresentationSnapshot · 读取完成",
-      "WebSearch · 正在搜索",
+      "已读取演示文稿",
+      "正在查找在线资料…",
     ]);
+  });
+
+  it("normalizes legacy and failed tool labels without exposing protocol names", async () => {
+    const { buildProcessTraceRows } = await import("../src/renderer/src/components/process-trace-rows");
+    const rows = buildProcessTraceRows([
+      {
+        id: "preview",
+        kind: "tool",
+        toolName: "PreviewCommands",
+        label: "🛠️ 运行工具: PreviewCommands",
+        status: "done",
+        finishedLabel: "✅ 工具 PreviewCommands 运行完毕",
+      },
+      {
+        id: "failed",
+        kind: "tool",
+        toolName: "ExportPptx",
+        label: "正在调用工具 ExportPptx...",
+        status: "done",
+        finishedLabel: "工具 ExportPptx 执行失败: EACCES",
+      },
+      {
+        id: "unknown",
+        kind: "tool",
+        toolName: "InternalFoo_v2",
+        label: "run",
+        status: "done",
+        finishedLabel: "done",
+      },
+      {
+        id: "interrupted",
+        kind: "tool",
+        toolName: "ReadPresentationSnapshot",
+        label: "正在读取演示文稿…",
+        status: "done",
+      },
+    ], false);
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.lines).toEqual([
+      "已检查修改方案",
+      "导出演示文稿未完成",
+      "已处理当前任务",
+      "读取演示文稿未完成",
+    ]);
+    expect(rows[0]?.lines?.join(" ")).not.toMatch(
+      /PreviewCommands|ExportPptx|InternalFoo_v2|ReadPresentationSnapshot/,
+    );
   });
 
   it("compacts oversized traces while preserving task graphs and approvals", () => {

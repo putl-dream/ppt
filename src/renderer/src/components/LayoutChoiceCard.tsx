@@ -29,7 +29,7 @@ export const LayoutChoiceCard: React.FC<LayoutChoiceCardProps> = ({
   return (
     <div className="inline-artifact-card layout-choice-card">
       <div className="inline-artifact-card-header">
-        <span className="inline-artifact-badge">LAYOUT</span>
+        <span className="inline-artifact-badge">版式选择</span>
         <span className="inline-artifact-title">选择视觉排版方式</span>
         {resolvedLabel && (
           <span className="inline-artifact-resolved">{resolvedLabel}</span>

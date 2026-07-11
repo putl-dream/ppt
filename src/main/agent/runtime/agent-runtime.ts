@@ -650,6 +650,7 @@ export class AgentRuntime {
             input: structuredClone(toolCall.input),
             parseError: toolCall.parseError,
           },
+          "model_only",
         );
       }
       checkpointPhase = "tool_running";
@@ -680,6 +681,7 @@ export class AgentRuntime {
               isError,
               content: structuredClone(result.content),
             },
+            "model_only",
           );
         }
         const existingIndex = pendingToolResults.current.findIndex(

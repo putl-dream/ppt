@@ -23,7 +23,7 @@ export const DeckPreviewCard: React.FC<DeckPreviewCardProps> = ({
   return (
     <div className="inline-artifact-card deck-preview-card">
       <div className="inline-artifact-card-header">
-        <span className="inline-artifact-badge">DECK</span>
+        <span className="inline-artifact-badge">演示文稿</span>
         <span className="inline-artifact-title">{presentation.title || "演示文稿"}</span>
         <span className="deck-preview-count">
           {presentation.slides.length} 页

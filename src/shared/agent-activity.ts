@@ -1,5 +1,9 @@
 import { z } from "zod";
 import { agentTaskNodeSchema, TASK_GRAPH_TRACE_ID, type AgentTaskNode } from "./agent-task-graph";
+import {
+  formatAgentToolActivity,
+  type AgentToolActivityState,
+} from "./agent-activity-display";
 
 export const agentActivityItemSchema = z.discriminatedUnion("kind", [
   z.object({
@@ -196,12 +200,9 @@ export function appendToolSummaryChunk(
 export function appendToolValidationFailed(
   trace: AgentActivityItem[],
   toolName: string,
-  errorMessage: string,
+  _errorMessage: string,
 ): AgentActivityItem[] {
   const { trace: cleaned, summary } = collectToolSummary(trace, toolName);
-  const shortError = errorMessage.length > 160
-    ? `${errorMessage.slice(0, 157)}...`
-    : errorMessage;
 
   return [
     ...finalizeReasoning(cleaned),
@@ -209,9 +210,9 @@ export function appendToolValidationFailed(
       id: crypto.randomUUID(),
       kind: "tool",
       toolName,
-      label: `🛠️ 尝试调用: ${toolName}`,
+      label: formatAgentToolActivity(toolName, "running"),
       summary: summary || undefined,
-      finishedLabel: `❌ 参数校验失败：${shortError}`,
+      finishedLabel: formatAgentToolActivity(toolName, "invalid-input"),
       status: "done",
     },
   ];
@@ -481,7 +482,7 @@ export function summarizeProcessTrace(items: AgentActivityItem[]): string {
 
   const parts: string[] = [];
   if (reasoningCount > 0) parts.push(`${reasoningCount} 轮思考`);
-  if (toolCount > 0) parts.push(`${toolCount} 次工具调用`);
+  if (toolCount > 0) parts.push(`${toolCount} 项操作`);
   if (taskCount > 0) parts.push(`${taskCount} 个子任务`);
   if (stepCount > 0) parts.push(`${stepCount} 个步骤`);
   if (approvalCount > 0) parts.push(`${approvalCount} 次授权`);
@@ -631,13 +632,21 @@ export function finishTask(
   }));
 }
 
-export function markTraceComplete(trace: AgentActivityItem[]): AgentActivityItem[] {
+export function markTraceComplete(
+  trace: AgentActivityItem[],
+  unfinishedToolState: AgentToolActivityState = "completed",
+): AgentActivityItem[] {
   return trace.map((item) => {
     if (item.kind === "reasoning") {
       return { ...item, streaming: false };
     }
     if (item.kind === "tool" && item.status === "running") {
-      return { ...item, status: "done" as const };
+      return {
+        ...item,
+        status: "done" as const,
+        finishedLabel: item.finishedLabel
+          ?? formatAgentToolActivity(item.toolName, unfinishedToolState),
+      };
     }
     if (item.kind === "step" && item.status && item.status !== "done") {
       return { ...item, status: "done" as const };
@@ -651,7 +660,14 @@ export function markTraceComplete(trace: AgentActivityItem[]): AgentActivityItem
         status: "done" as const,
         steps: item.steps.map((step) =>
           step.streaming || step.status === "running"
-            ? { ...step, streaming: false, status: "done" as const }
+            ? {
+                ...step,
+                text: step.type === "tool" && step.toolName
+                  ? formatAgentToolActivity(step.toolName, unfinishedToolState)
+                  : step.text,
+                streaming: false,
+                status: "done" as const,
+              }
             : step,
         ),
       };

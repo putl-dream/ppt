@@ -1,8 +1,22 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { agentLogger, createModuleLogger, requestSummary } from "../src/main/agent/logger";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import {
+  agentLogger,
+  clearLogFiles,
+  createModuleLogger,
+  getLogDirectory,
+  getLogManagerSettings,
+  getLogManagerStatus,
+  getRecentLogEntries,
+  requestSummary,
+  updateLogManagerSettings,
+} from "../src/main/agent/logger";
 
 const originalLogLevel = process.env.AGENT_LOG_LEVEL;
 const originalLogFile = process.env.AGENT_LOG_FILE;
+const originalDataDir = process.env.AGENT_PPT_DATA_DIR;
 
 beforeEach(() => {
   // Disable file logging in tests
@@ -19,6 +33,11 @@ afterEach(() => {
     delete process.env.AGENT_LOG_FILE;
   } else {
     process.env.AGENT_LOG_FILE = originalLogFile;
+  }
+  if (originalDataDir === undefined) {
+    delete process.env.AGENT_PPT_DATA_DIR;
+  } else {
+    process.env.AGENT_PPT_DATA_DIR = originalDataDir;
   }
   vi.restoreAllMocks();
 });
@@ -121,5 +140,79 @@ describe("sensitive data redaction", () => {
     const parsed = JSON.parse(line.slice(line.indexOf("{")));
     expect(parsed.apiKey).toBe("sk-1...ghij");
     expect(parsed.normalField).toBe("visible");
+  });
+
+  it("redacts credentials embedded in ordinary message fields", () => {
+    const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
+
+    agentLogger.info("test.embedded-secret", {
+      message: "request failed with Bearer abcdefghijklmnopqrstuvwxyz and sk-1234567890abcdefghij",
+    });
+
+    const parsed = JSON.parse(String(info.mock.calls[0][0]).slice(String(info.mock.calls[0][0]).indexOf("{")));
+    expect(parsed.message).toContain("Bearer [REDACTED]");
+    expect(parsed.message).not.toContain("sk-1234567890abcdefghij");
+  });
+
+  it("redacts credentials from serialized errors and stack traces", () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    agentLogger.error("test.secret-error", {
+      error: new Error("request rejected for sk-1234567890abcdefghij"),
+    });
+
+    const line = String(error.mock.calls[0][0]);
+    const parsed = JSON.parse(line.slice(line.indexOf("{")));
+    expect(parsed.error.message).toContain("[REDACTED]");
+    expect(parsed.error.stack).not.toContain("sk-1234567890abcdefghij");
+  });
+});
+
+describe("recent log diagnostics", () => {
+  it("keeps serialized warning and error entries for the diagnostics view", () => {
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const logger = createModuleLogger("diagnostics-test");
+
+    logger.warn("diagnostics.unique-warning", { error: new Error("network unavailable") });
+
+    const entry = getRecentLogEntries(50, "warn")
+      .find((candidate) => candidate.event === "diagnostics.unique-warning");
+    expect(entry).toMatchObject({ level: "warn", module: "diagnostics-test" });
+    expect(entry?.error).toMatchObject({ message: "network unavailable" });
+  });
+
+  it("serializes circular metadata without breaking logging", () => {
+    const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
+    const circular: Record<string, unknown> = {};
+    circular.self = circular;
+
+    agentLogger.info("test.circular", { circular });
+
+    const parsed = JSON.parse(String(info.mock.calls[0][0]).slice(String(info.mock.calls[0][0]).indexOf("{")));
+    expect(parsed.circular.self).toBe("[Circular]");
+  });
+});
+
+describe("log management", () => {
+  it("persists settings, reports disk usage, and clears logs without deleting settings", async () => {
+    const tempRoot = await fs.promises.mkdtemp(path.join(os.tmpdir(), "agent-ppt-logs-"));
+    const originalSettings = getLogManagerSettings();
+    process.env.AGENT_PPT_DATA_DIR = tempRoot;
+
+    try {
+      const settings = await updateLogManagerSettings({ level: "warn", fileEnabled: false });
+      expect(settings).toEqual({ level: "warn", fileEnabled: false });
+      expect(JSON.parse(await fs.promises.readFile(path.join(getLogDirectory(), "settings.json"), "utf8")))
+        .toEqual(settings);
+
+      await fs.promises.writeFile(path.join(getLogDirectory(), "agent.log"), "diagnostic\n", "utf8");
+      expect(await getLogManagerStatus()).toMatchObject({ fileCount: 1, totalBytes: 11 });
+      expect(await clearLogFiles()).toBe(1);
+      await expect(fs.promises.stat(path.join(getLogDirectory(), "agent.log"))).rejects.toThrow();
+      await expect(fs.promises.stat(path.join(getLogDirectory(), "settings.json"))).resolves.toBeDefined();
+    } finally {
+      await updateLogManagerSettings(originalSettings);
+      await fs.promises.rm(tempRoot, { recursive: true, force: true });
+    }
   });
 });

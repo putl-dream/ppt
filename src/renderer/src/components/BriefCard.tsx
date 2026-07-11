@@ -22,7 +22,7 @@ export const BriefCard: React.FC<BriefCardProps> = ({
 }) => (
   <div className="inline-artifact-card brief-card">
     <div className="inline-artifact-card-header">
-      <span className="inline-artifact-badge">BRIEF</span>
+      <span className="inline-artifact-badge">需求简报</span>
       <span className="inline-artifact-title">需求简报摘要</span>
       {resolved === "confirmed" && (
         <span className="inline-artifact-resolved">已确认</span>

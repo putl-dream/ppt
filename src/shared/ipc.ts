@@ -16,6 +16,13 @@ import type {
 } from "./session";
 import type { TokenUsageStats } from "./token-usage";
 import type { ConversationEventPage } from "./conversation-events";
+import type {
+  AppLogEntry,
+  AppLogLevel,
+  LogManagerSettings,
+  LogManagerStatus,
+  RendererLogReport,
+} from "./logging";
 
 export interface CreateSessionOptions {
   rootPath?: string;
@@ -145,6 +152,12 @@ export interface ProjectArtifactWriteResult {
 export interface DesktopApi {
   getSessionState(): Promise<SessionBootstrap>;
   getTokenUsageStats(): Promise<TokenUsageStats>;
+  getLogManagerStatus(): Promise<LogManagerStatus>;
+  getRecentLogs(limit?: number, minimumLevel?: AppLogLevel): Promise<AppLogEntry[]>;
+  updateLogManagerSettings(patch: Partial<LogManagerSettings>): Promise<LogManagerSettings>;
+  clearLogs(): Promise<number>;
+  openLogDirectory(): Promise<boolean>;
+  reportRendererLog(report: RendererLogReport): void;
   createSession(options?: CreateSessionOptions): Promise<SessionBootstrap>;
   openWorkspace(rootPath: string): Promise<SessionBootstrap>;
   listWorkspaceSessions(rootPath: string): Promise<SessionSummary[]>;

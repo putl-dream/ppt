@@ -1,6 +1,9 @@
 import React, { useState } from "react";
 import type { AgentTaskNode } from "@shared/agent-task-graph";
-import { formatTaskPlanPosition } from "@shared/agent-task-graph";
+import {
+  formatTaskOwnerForDisplay,
+  formatTaskPlanPosition,
+} from "@shared/agent-task-graph";
 import { ChevronDownIcon, ChevronRightIcon } from "./Icons";
 
 function TaskStatusIcon({ status }: { status: AgentTaskNode["status"] }) {
@@ -50,23 +53,26 @@ export const TaskPlanCard: React.FC<TaskPlanCardProps> = ({
           )}
           {tasks.length > 0 && (
             <ul className="task-plan-list">
-              {tasks.map((task, index) => (
-                <li
-                  key={task.id}
-                  className={`task-plan-item task-plan-item--${task.status}`}
-                >
-                  <TaskStatusIcon status={task.status} />
-                  <span>
-                    {(task.status === "in_progress" || task.status === "submitted") && (
-                      <span className="task-plan-step-marker">
-                        {task.status === "submitted" ? "待验收" : `步骤 ${index + 1}`} ·{" "}
-                      </span>
-                    )}
-                    {task.subject}
-                    {task.owner ? ` · ${task.owner}` : ""}
-                  </span>
-                </li>
-              ))}
+              {tasks.map((task, index) => {
+                const displayOwner = formatTaskOwnerForDisplay(task);
+                return (
+                  <li
+                    key={task.id}
+                    className={`task-plan-item task-plan-item--${task.status}`}
+                  >
+                    <TaskStatusIcon status={task.status} />
+                    <span>
+                      {(task.status === "in_progress" || task.status === "submitted") && (
+                        <span className="task-plan-step-marker">
+                          {task.status === "submitted" ? "待验收" : `步骤 ${index + 1}`} ·{" "}
+                        </span>
+                      )}
+                      {task.subject}
+                      {displayOwner ? ` · ${displayOwner}` : ""}
+                    </span>
+                  </li>
+                );
+              })}
             </ul>
           )}
         </div>

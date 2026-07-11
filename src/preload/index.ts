@@ -4,6 +4,13 @@ import type { AgentStreamEvent, DesktopApi } from "@shared/ipc";
 const api: DesktopApi = {
   getSessionState: () => ipcRenderer.invoke("session:get-state"),
   getTokenUsageStats: () => ipcRenderer.invoke("token-usage:get-stats"),
+  getLogManagerStatus: () => ipcRenderer.invoke("logs:get-status"),
+  getRecentLogs: (limit, minimumLevel) =>
+    ipcRenderer.invoke("logs:get-recent", limit, minimumLevel),
+  updateLogManagerSettings: (patch) => ipcRenderer.invoke("logs:update-settings", patch),
+  clearLogs: () => ipcRenderer.invoke("logs:clear"),
+  openLogDirectory: () => ipcRenderer.invoke("logs:open-directory"),
+  reportRendererLog: (report) => ipcRenderer.send("logs:renderer-report", report),
   createSession: (options) => ipcRenderer.invoke("session:create", options),
   openWorkspace: (rootPath) => ipcRenderer.invoke("workspace:open", rootPath),
   listWorkspaceSessions: (rootPath) => ipcRenderer.invoke("workspace:list-sessions", rootPath),
