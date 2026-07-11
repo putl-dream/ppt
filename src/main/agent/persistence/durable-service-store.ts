@@ -4,6 +4,7 @@ import type { PresentationCommand } from "@shared/commands";
 import type { AgentConversationMessage } from "@shared/session-recovery";
 import type { CommitGateResult } from "../gate/commit-gate";
 import { readJsonFile, writeJsonFileAtomic, writeTextFileAtomic } from "./atomic-json-file";
+import { ConversationDatabase } from "../../conversation-database";
 
 interface DurableMemoryEntry {
   threadId: string;
@@ -38,26 +39,39 @@ function safeThreadId(threadId: string): string {
 }
 
 export class DurableServiceStore {
-  constructor(private readonly workspaceRoot: string) {}
+  constructor(private readonly storage: string | ConversationDatabase) {}
 
   private pathFor(threadId: string): string {
-    return join(this.workspaceRoot, ".agent", "service", `${safeThreadId(threadId)}.json`);
+    if (typeof this.storage !== "string") {
+      throw new Error("SQLite-backed service threads do not have workspace paths.");
+    }
+    return join(this.storage, ".agent", "service", `${safeThreadId(threadId)}.json`);
   }
 
   async load(threadId: string): Promise<DurableServiceThread | undefined> {
+    if (typeof this.storage !== "string") {
+      const state = this.storage.loadServiceThread<DurableServiceThread>(threadId);
+      if (!state || state.version !== 1 || state.threadId !== threadId) return undefined;
+      return state;
+    }
     const state = await readJsonFile<DurableServiceThread>(this.pathFor(threadId));
     if (!state || state.version !== 1 || state.threadId !== threadId) return undefined;
     return state;
   }
 
   async save(state: DurableServiceThread): Promise<void> {
+    if (typeof this.storage !== "string") {
+      this.storage.saveServiceThread(state.threadId, state);
+      return;
+    }
     await writeJsonFileAtomic(this.pathFor(state.threadId), state);
     await this.updateMemoryState(state);
   }
 
   private async updateMemoryState(state: DurableServiceThread): Promise<void> {
-    const statePath = join(this.workspaceRoot, ".memory", "STATE.json");
-    const markdownPath = join(this.workspaceRoot, ".memory", "STATE.md");
+    if (typeof this.storage !== "string") return;
+    const statePath = join(this.storage, ".memory", "STATE.json");
+    const markdownPath = join(this.storage, ".memory", "STATE.md");
     const existing = await readJsonFile<{ version: 1; entries: DurableMemoryEntry[] }>(statePath)
       ?? { version: 1 as const, entries: [] };
     const objective = [...state.messages].reverse()

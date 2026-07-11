@@ -59,6 +59,8 @@ export interface AgentRuntimeOptions {
   /** Structured layout selection; runtime schedules design work without prompt-driven delegation. */
   layoutChoice?: LayoutChoice;
   workspaceRoot?: string;
+  /** Application-owned runtime directory; never points at the user workspace. */
+  runtimeRoot?: string;
   /** Owner label for TaskGraphClaim / shutdown unassign. Defaults to "agent". */
   taskGraphOwner?: string;
   maxSteps?: number;

@@ -32,11 +32,6 @@ export const projectSandboxSchema = z.object({
   artifacts: z.array(projectArtifactSchema),
 });
 
-export const sessionTranscriptSchema = z.object({
-  path: z.string(),
-  leafMessageUuid: z.string().optional(),
-});
-
 const persistedOutlineSchema = z.object({
   threadId: z.string(),
   message: z.string(),
@@ -122,7 +117,6 @@ export const sessionSummarySchema = z.object({
 export const sessionSnapshotSchema = z.object({
   session: sessionSummarySchema,
   project: projectSandboxSchema.optional(),
-  transcript: sessionTranscriptSchema.optional(),
   presentation: presentationSchema,
   messages: z.array(sessionChatMessageSchema),
 });
@@ -136,7 +130,6 @@ export type SessionChatMessage = z.infer<typeof sessionChatMessageSchema>;
 export type ProjectArtifactStatus = z.infer<typeof projectArtifactStatusSchema>;
 export type ProjectArtifact = z.infer<typeof projectArtifactSchema>;
 export type ProjectSandbox = z.infer<typeof projectSandboxSchema>;
-export type SessionTranscript = z.infer<typeof sessionTranscriptSchema>;
 export type SessionSummary = z.infer<typeof sessionSummarySchema>;
 export type SessionSnapshot = z.infer<typeof sessionSnapshotSchema>;
 export type SessionBootstrap = z.infer<typeof sessionBootstrapSchema>;

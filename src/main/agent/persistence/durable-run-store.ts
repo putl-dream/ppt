@@ -7,6 +7,7 @@ import type {
   AgentModelToolUseBlock,
 } from "../gateway/types";
 import { readJsonFile, writeJsonFileAtomic } from "./atomic-json-file";
+import { ConversationDatabase } from "../../conversation-database";
 
 export type DurableRunStatus =
   | "running"
@@ -54,20 +55,31 @@ function safeThreadId(threadId: string): string {
 }
 
 export class DurableRunStore {
-  constructor(private readonly workspaceRoot: string) {}
+  constructor(private readonly storage: string | ConversationDatabase) {}
 
   pathFor(threadId: string): string {
-    return join(this.workspaceRoot, ".agent", "runs", `${safeThreadId(threadId)}.json`);
+    if (typeof this.storage !== "string") {
+      throw new Error("SQLite-backed run checkpoints do not have workspace paths.");
+    }
+    return join(this.storage, ".agent", "runs", `${safeThreadId(threadId)}.json`);
   }
 
   async load(threadId: string): Promise<DurableRunCheckpoint | undefined> {
+    if (typeof this.storage !== "string") {
+      const checkpoint = this.storage.loadRunCheckpoint<DurableRunCheckpoint>(threadId);
+      if (!checkpoint || checkpoint.version !== 1 || checkpoint.threadId !== threadId) return undefined;
+      return checkpoint;
+    }
     const checkpoint = await readJsonFile<DurableRunCheckpoint>(this.pathFor(threadId));
     if (!checkpoint || checkpoint.version !== 1 || checkpoint.threadId !== threadId) return undefined;
     return checkpoint;
   }
 
   async save(checkpoint: DurableRunCheckpoint): Promise<void> {
+    if (typeof this.storage !== "string") {
+      this.storage.saveRunCheckpoint(checkpoint.threadId, checkpoint, checkpoint.runId);
+      return;
+    }
     await writeJsonFileAtomic(this.pathFor(checkpoint.threadId), checkpoint);
   }
 }
-

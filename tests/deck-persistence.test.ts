@@ -8,17 +8,20 @@ import type { DeckGenerationJob } from "@shared/deck-persistence";
 import { TEST_DESIGN_SYSTEM } from "./design-engine-test-utils";
 
 const temporaryDirectories: string[] = [];
+const stores: FileSessionStore[] = [];
 
 async function createStore() {
   const directory = await mkdtemp(join(tmpdir(), "agent-ppt-deck-persist-"));
   temporaryDirectories.push(directory);
-  const filePath = join(directory, "sessions.json");
+  const filePath = join(directory, "conversations.sqlite");
   const store = new FileSessionStore(filePath);
+  stores.push(store);
   await store.initialize();
   return { store, filePath };
 }
 
 afterEach(async () => {
+  for (const store of stores.splice(0)) store.close();
   await Promise.all(
     temporaryDirectories.splice(0).map((directory) =>
       rm(directory, { recursive: true, force: true }),

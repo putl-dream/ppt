@@ -944,7 +944,6 @@ export function App() {
     setBusy(true);
     setIsDraftChat(false);
     let agentSessionId = activeSessionId;
-    let sessionCreatedWithWorkspace = false;
 
     if (!localStoragePath) {
       setBusy(false);
@@ -961,7 +960,6 @@ export function App() {
             ? { rootPath: localStoragePath, title: sessionTitle }
             : { title: sessionTitle },
         );
-        sessionCreatedWithWorkspace = Boolean(localStoragePath);
         applySessionState(state);
         setIsDraftChat(false);
         agentSessionId = state.activeSession!.session.id;
@@ -969,23 +967,6 @@ export function App() {
         setBusy(false);
         setIsDraftChat(true);
         triggerToast(error instanceof Error ? error.message : "创建会话失败");
-        return;
-      }
-    }
-
-    if (!sessionCreatedWithWorkspace && !workspacePath && localStoragePath) {
-      try {
-        const state = await window.desktopApi.migrateLegacySessionToWorkspace(
-          agentSessionId,
-          localStoragePath,
-        );
-        applySessionState(state);
-        setIsDraftChat(false);
-        agentSessionId = state.activeSession!.session.id;
-      } catch (error) {
-        setBusy(false);
-        setIsDraftChat(chatMessages.length === 0);
-        triggerToast(error instanceof Error ? error.message : "绑定项目目录失败");
         return;
       }
     }

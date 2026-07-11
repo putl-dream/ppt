@@ -21,7 +21,11 @@ function getLogFileStream() {
     return null;
   }
 
-  const logDir = path.join(os.homedir(), ".agent-ppt", "logs");
+  const applicationDataRoot = process.env.AGENT_PPT_DATA_DIR
+    ?? (process.env.APPDATA
+      ? path.join(process.env.APPDATA, ".agent-ppt")
+      : path.join(os.homedir(), ".agent-ppt"));
+  const logDir = path.join(applicationDataRoot, "logs");
 
   try {
     fs.mkdirSync(logDir, { recursive: true });

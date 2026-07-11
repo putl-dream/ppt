@@ -1,12 +1,10 @@
-import { cp, mkdir, readdir, readFile, stat } from "node:fs/promises";
+import { mkdir } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { z } from "zod";
 import { presentationSchema, type Presentation } from "@shared/presentation";
-import { repairPresentationGeometry } from "@shared/presentation-repair";
 import {
   createDefaultSessionTitle,
   createSessionPresentation,
-  createWelcomeMessage,
   type ProjectArtifactStatus,
   sessionChatMessageSchema,
   sessionSnapshotSchema,
@@ -15,7 +13,6 @@ import {
   type SessionSnapshot,
   type SessionSummary,
 } from "@shared/session";
-import { deserializeSessionMessages } from "@shared/transcript";
 import {
   toAgentMessageHistory,
   type AgentConversationMessage,
@@ -32,26 +29,30 @@ import {
 } from "./deck/deck-persistence-services";
 import type { DeckExportRecord, DeckGenerationJobsFile } from "@shared/deck-persistence";
 import { parseStoryboard, serializeStoryboard, type StoryboardSlideSpec } from "@shared/storyboard";
-import { TranscriptStore, type TranscriptMessageInput } from "./transcript-store";
 import { defaultProjectArtifacts } from "@shared/project";
 import type { CreateSessionOptions } from "@shared/ipc";
 import {
   getSessionSandboxPath,
-  isFlatWorkspaceSandboxPath,
   isLegacyProjectSandboxPath,
-  type WorkspaceSessionIndexEntry,
-  type WorkspaceSessionsIndex,
 } from "@shared/workspace-meta";
 import {
   compareSessionsByActivity,
   getWorkspaceLabel,
   normalizeWorkspacePath,
   resolveWorkspacePath,
-  sessionBelongsToWorkspace,
 } from "@shared/workspace";
-import { WorkspaceIndexStore } from "./workspace-index-store";
 import { writeTextFileAtomic } from "./agent/persistence/atomic-json-file";
-import { compactActivityTraceForPersistence } from "@shared/agent-activity";
+import {
+  appendReasoningChunk,
+  appendStep,
+  appendToolStart,
+  compactActivityTraceForPersistence,
+  finishTool,
+  markTraceComplete,
+  type AgentActivityItem,
+} from "@shared/agent-activity";
+import { ConversationDatabase } from "./conversation-database";
+import type { AgentRunResult } from "@shared/ipc";
 
 const storedSessionSchema = sessionSnapshotSchema;
 const sessionFileSchema = z.object({
@@ -62,29 +63,18 @@ const sessionFileSchema = z.object({
 
 type SessionFile = z.infer<typeof sessionFileSchema>;
 
-const FLAT_WORKSPACE_ARTIFACT_NAMES = [
-  "brief.md",
-  "outline.md",
-  "research",
-  "slides",
-  "design",
-  "deck",
-  "history",
-  "transcripts",
-] as const;
-
 export class FileSessionStore {
   private data?: SessionFile;
   private writeQueue = Promise.resolve();
+  readonly conversationDatabase: ConversationDatabase;
   private readonly projectsRootPath: string;
   private readonly projectFileService: ProjectFileService;
   private readonly generationJobsService: GenerationJobsService;
   private readonly exportHistoryService: ExportHistoryService;
-  private readonly transcriptStore = new TranscriptStore();
-  private readonly workspaceIndexStore = new WorkspaceIndexStore();
 
   constructor(private readonly filePath: string, projectRootPath?: string) {
     this.projectsRootPath = projectRootPath ?? join(dirname(filePath), "projects");
+    this.conversationDatabase = new ConversationDatabase(filePath);
     this.projectFileService = new ProjectFileService(this.projectsRootPath);
     this.generationJobsService = new GenerationJobsService(this.projectFileService);
     this.exportHistoryService = new ExportHistoryService(this.projectFileService);
@@ -92,67 +82,14 @@ export class FileSessionStore {
 
   async initialize(): Promise<void> {
     await mkdir(dirname(this.filePath), { recursive: true });
-    try {
-      const stored = JSON.parse(await readFile(this.filePath, "utf8"));
-      const geometryRepair = repairSessionFileGeometry(stored);
-      const parsed = sessionFileSchema.parse(geometryRepair.value);
-      const activeExists = parsed.sessions.some(
-        (item) => item.session.id === parsed.activeSessionId,
-      );
-      if (parsed.sessions.length === 0) {
-        this.data = { ...parsed, activeSessionId: "" };
-      } else if (!activeExists) {
-        this.data = { ...parsed, activeSessionId: parsed.sessions[0].session.id };
-      } else {
-        this.data = parsed;
-      }
-      const projectChanged = await this.materializeProjectSandboxes();
-      const transcriptChanged = await this.hydrateMessagesFromTranscripts();
-      if (
-        geometryRepair.repairedDimensionCount > 0 ||
-        transcriptChanged ||
-        projectChanged ||
-        !activeExists
-      ) {
-        await this.persist();
-      }
-    } catch (error) {
-      const code = (error as NodeJS.ErrnoException).code;
-      if (code !== "ENOENT" && !(error instanceof SyntaxError) && !(error instanceof z.ZodError)) {
-        throw error;
-      }
-      if (code !== "ENOENT") {
-        try {
-          const backupRaw = JSON.parse(await readFile(`${this.filePath}.bak`, "utf8"));
-          const repaired = repairSessionFileGeometry(backupRaw);
-          const backup = sessionFileSchema.parse(repaired.value);
-          const activeExists = backup.sessions.some(
-            (item) => item.session.id === backup.activeSessionId,
-          );
-          this.data = backup.sessions.length === 0
-            ? { ...backup, activeSessionId: "" }
-            : activeExists
-              ? backup
-              : { ...backup, activeSessionId: backup.sessions[0].session.id };
-          await this.materializeProjectSandboxes();
-          await this.hydrateMessagesFromTranscripts();
-          await writeTextFileAtomic(
-            this.filePath,
-            `${JSON.stringify(this.requireData(), null, 2)}\n`,
-          );
-          return;
-        } catch (backupError) {
-          throw new Error(
-            `Session store and backup are both invalid. Original files were preserved: ${this.filePath}`,
-            { cause: backupError },
-          );
-        }
-      }
-      this.data = this.createInitialData();
-      await this.materializeProjectSandboxes();
-      await this.hydrateMessagesFromTranscripts();
-      await this.persist();
-    }
+    const stored = this.conversationDatabase.loadState();
+    this.data = sessionFileSchema.parse({
+      version: 1,
+      activeSessionId: stored.activeSessionId,
+      sessions: stored.sessions,
+    });
+    await this.materializeProjectSandboxes();
+    await this.persist();
   }
 
   getBootstrap(): SessionBootstrap {
@@ -177,23 +114,6 @@ export class FileSessionStore {
 
 
 
-  async switchLeaf(sessionId: string, leafMessageUuid: string): Promise<SessionSnapshot> {
-    const snapshot = this.findSession(sessionId);
-    if (!snapshot.project || !snapshot.transcript) {
-      throw new Error("Session transcript has not been initialized.");
-    }
-    await this.transcriptStore.loadConversationChain(
-      sessionId,
-      snapshot.project.rootPath,
-      leafMessageUuid,
-    );
-    snapshot.transcript.leafMessageUuid = leafMessageUuid;
-    await this.hydrateMessagesFromTranscript(snapshot);
-    snapshot.session.updatedAt = new Date().toISOString();
-    await this.persist();
-    return structuredClone(snapshot);
-  }
-
   async createSession(options?: CreateSessionOptions): Promise<SessionBootstrap> {
     const data = this.requireData();
     const title = options?.title ?? createDefaultSessionTitle(data.sessions.length + 1);
@@ -215,7 +135,6 @@ export class FileSessionStore {
     }
 
     await this.materializeProjectSandbox(snapshot);
-    await this.recordTranscriptMessages(snapshot, snapshot.messages);
     data.sessions.unshift(snapshot);
     data.activeSessionId = snapshot.session.id;
     await this.persist();
@@ -225,80 +144,29 @@ export class FileSessionStore {
 
   async openWorkspace(rootPath: string): Promise<SessionBootstrap> {
     const normalized = normalizeWorkspacePath(rootPath);
-    await this.workspaceIndexStore.ensureProjectMeta(
-      normalized,
-      getWorkspaceLabel(normalized),
-    );
-
-    let index = await this.workspaceIndexStore.readSessionsIndex(normalized);
-    if (!index) {
-      index = await this.buildWorkspaceIndexFromGlobal(normalized);
-    }
-
-    if (index && index.sessions.length > 0) {
-      await this.hydrateGlobalSessionsFromWorkspaceIndex(normalized, index);
-      return this.selectSession(index.activeSessionId);
-    }
-
+    const matches = this.requireData().sessions
+      .filter((snapshot) => this.getWorkspaceRoot(snapshot) === normalized)
+      .sort((left, right) => compareSessionsByActivity(left.session, right.session));
+    if (matches.length > 0) return this.selectSession(matches[0].session.id);
     return this.createSession({ rootPath: normalized });
+  }
+
+  close(): void {
+    this.conversationDatabase.close();
   }
 
   async listWorkspaceSessions(rootPath: string): Promise<SessionSummary[]> {
     const normalized = normalizeWorkspacePath(rootPath);
-    let index = await this.workspaceIndexStore.readSessionsIndex(normalized);
-    if (!index) {
-      index = await this.buildWorkspaceIndexFromGlobal(normalized);
-    }
-    if (!index) return [];
-
-    return index.sessions.map((entry) => ({
-      id: entry.id,
-      title: entry.title,
-      createdAt: entry.createdAt,
-      updatedAt: entry.updatedAt,
-      lastMessageAt: entry.lastMessageAt,
-      slideCount: entry.slideCount,
-      revision: entry.revision,
-      workspacePath: normalized,
-    }));
-  }
-
-  async migrateLegacySessionToWorkspace(
-    sessionId: string,
-    targetRootPath: string,
-  ): Promise<SessionBootstrap> {
-    const snapshot = this.findSession(sessionId);
-    if (!snapshot.project) {
-      throw new Error("Session does not have a project sandbox to migrate.");
-    }
-
-    const legacyPath = normalizeWorkspacePath(snapshot.project.rootPath);
-    if (!isLegacyProjectSandboxPath(legacyPath, this.projectsRootPath)) {
-      throw new Error("Session is not using a legacy projects/session-{id} sandbox.");
-    }
-
-    const normalizedTarget = normalizeWorkspacePath(targetRootPath);
-    await mkdir(normalizedTarget, { recursive: true });
-    const sessionSandbox = getSessionSandboxPath(normalizedTarget, sessionId);
-    await mkdir(sessionSandbox, { recursive: true });
-    await copyDirectoryMerge(legacyPath, sessionSandbox);
-
-    snapshot.project.rootPath = sessionSandbox;
-    snapshot.session.workspacePath = normalizedTarget;
-    await this.materializeProjectSandbox(snapshot);
-    await this.syncWorkspacePersistence(snapshot, { active: true });
-    await this.persist();
-    return this.getBootstrap();
+    return this.requireData().sessions
+      .filter((snapshot) => this.getWorkspaceRoot(snapshot) === normalized)
+      .sort((left, right) => compareSessionsByActivity(left.session, right.session))
+      .map((snapshot) => ({ ...structuredClone(snapshot.session), workspacePath: normalized }));
   }
 
   async selectSession(sessionId: string): Promise<SessionBootstrap> {
     const data = this.requireData();
     const snapshot = this.findSession(sessionId);
     data.activeSessionId = sessionId;
-    const workspaceRoot = this.getWorkspaceRoot(snapshot);
-    if (workspaceRoot) {
-      await this.workspaceIndexStore.setActiveSession(workspaceRoot, sessionId);
-    }
     await this.persist();
     return this.getBootstrap();
   }
@@ -309,16 +177,11 @@ export class FileSessionStore {
     if (index === -1) {
       throw new Error(`Session not found: ${sessionId}`);
     }
-    const removed = data.sessions[index];
-    const workspaceRoot = this.getWorkspaceRoot(removed);
     data.sessions.splice(index, 1);
     if (data.sessions.length === 0) {
       data.activeSessionId = "";
     } else if (data.activeSessionId === sessionId) {
       data.activeSessionId = data.sessions[0].session.id;
-    }
-    if (workspaceRoot) {
-      await this.workspaceIndexStore.removeSession(workspaceRoot, sessionId);
     }
     await this.persist();
     return this.getBootstrap();
@@ -400,15 +263,113 @@ export class FileSessionStore {
       })),
     );
     const messagesChanged = this.messagesChanged(snapshot.messages, parsedMessages);
-    await this.materializeProjectSandbox(snapshot);
-    await this.recordTranscriptMessages(snapshot, parsedMessages);
-    await this.hydrateMessagesFromTranscript(snapshot);
+    snapshot.messages = parsedMessages;
     snapshot.session.updatedAt = new Date().toISOString();
     if (messagesChanged && this.hasConversationMessages(parsedMessages)) {
       snapshot.session.lastMessageAt = new Date().toISOString();
     }
     await this.persist();
-    await this.syncWorkspacePersistence(snapshot);
+  }
+
+  /**
+   * Main-process authoritative completion. Renderer state is never required for
+   * the final assistant message to become durable.
+   */
+  async finalizeAgentRunMessage(
+    sessionId: string,
+    runId: string,
+    result: AgentRunResult,
+  ): Promise<void> {
+    const snapshot = this.findSession(sessionId);
+    let message = [...snapshot.messages].reverse().find(
+      (item) => item.role === "assistant" && item.threadId === runId,
+    );
+    if (!message) {
+      message = {
+        id: crypto.randomUUID(),
+        role: "assistant",
+        content: "",
+        threadId: runId,
+      };
+      snapshot.messages.push(message);
+    }
+
+    const trace = this.projectRunTrace(runId);
+    message.activityTrace = trace.length > 0
+      ? compactActivityTraceForPersistence(markTraceComplete(trace))
+      : undefined;
+
+    if (result.status === "chat") {
+      message.content = result.message;
+      message.threadId = result.threadId ?? runId;
+      message.question = result.question;
+    } else if (result.status === "approval-required") {
+      message.content = "已提出排版更新方案，请在下方审核后应用。";
+      message.threadId = result.approval.threadId;
+      message.approval = result.approval;
+    } else if (result.status === "rejected") {
+      message.content = "已放弃排版变更提案。";
+    } else {
+      message.content = "已根据确认的大纲生成并应用演示文稿。";
+    }
+
+    const now = new Date().toISOString();
+    snapshot.session.updatedAt = now;
+    snapshot.session.lastMessageAt = now;
+    await this.persist();
+  }
+
+  async failAgentRunMessage(sessionId: string, runId: string, error: string): Promise<void> {
+    const snapshot = this.findSession(sessionId);
+    let message = [...snapshot.messages].reverse().find(
+      (item) => item.role === "assistant" && item.threadId === runId,
+    );
+    if (!message) {
+      message = { id: crypto.randomUUID(), role: "assistant", content: "", threadId: runId };
+      snapshot.messages.push(message);
+    }
+    const interrupted = /aborted|中断|取消/i.test(error);
+    message.content = interrupted ? "会话已中断。" : `执行指令时发生错误：${error}`;
+    const trace = this.projectRunTrace(runId);
+    message.activityTrace = trace.length > 0
+      ? compactActivityTraceForPersistence(markTraceComplete(trace))
+      : undefined;
+    const now = new Date().toISOString();
+    snapshot.session.updatedAt = now;
+    snapshot.session.lastMessageAt = now;
+    await this.persist();
+  }
+
+  private projectRunTrace(runId: string): AgentActivityItem[] {
+    let trace: AgentActivityItem[] = [];
+    for (const event of this.conversationDatabase.listRunEvents(runId)) {
+      const payload = event.payload;
+      if (event.kind === "reasoning_chunk" && typeof payload.chunk === "string") {
+        trace = appendReasoningChunk(
+          trace,
+          payload.chunk,
+          typeof payload.modelStep === "number" ? payload.modelStep : 0,
+        );
+      } else if (event.kind === "tool_started" && typeof payload.toolName === "string") {
+        trace = appendToolStart(
+          trace,
+          payload.toolName,
+          typeof payload.message === "string" ? payload.message : `正在调用 ${payload.toolName}`,
+        );
+      } else if (event.kind === "tool_finished" && typeof payload.toolName === "string") {
+        trace = finishTool(
+          trace,
+          payload.toolName,
+          typeof payload.message === "string" ? payload.message : `${payload.toolName} 已完成`,
+        );
+      } else if (
+        (event.kind === "stage_started" || event.kind === "workflow_progress")
+        && typeof payload.message === "string"
+      ) {
+        trace = appendStep(trace, payload.message, "done");
+      }
+    }
+    return trace;
   }
 
   listProjectArtifacts(sessionId: string) {
@@ -479,134 +440,10 @@ export class FileSessionStore {
     return changed;
   }
 
-  private async hydrateMessagesFromTranscripts(): Promise<boolean> {
-    let changed = false;
-    for (const snapshot of this.requireData().sessions) {
-      changed = (await this.hydrateMessagesFromTranscript(snapshot, true)) || changed;
-    }
-    return changed;
-  }
-
-  private async hydrateMessagesFromTranscript(
-    snapshot: SessionSnapshot,
-    recoverTail = false,
-  ): Promise<boolean> {
-    if (!snapshot.project || !snapshot.transcript) {
-      throw new Error("Session transcript has not been initialized.");
-    }
-
-    const chain = await this.transcriptStore.loadConversationChain(
-      snapshot.session.id,
-      snapshot.project.rootPath,
-      snapshot.transcript.leafMessageUuid,
-      { recoverTail },
-    );
-
-    if (chain.length === 0) {
-      if (snapshot.messages.length === 0) return false;
-      await this.recordTranscriptMessages(snapshot, snapshot.messages);
-      return true;
-    }
-
-    const messages = deserializeSessionMessages(chain);
-    const leafMessageUuid = chain.at(-1)?.uuid;
-    const changed =
-      JSON.stringify(snapshot.messages) !== JSON.stringify(messages) ||
-      snapshot.transcript.leafMessageUuid !== leafMessageUuid;
-    snapshot.messages = messages;
-    snapshot.transcript.leafMessageUuid = leafMessageUuid;
-    return changed;
-  }
-
   private async materializeProjectSandbox(snapshot: SessionSnapshot): Promise<boolean> {
-    const migrated = await this.migrateFlatWorkspaceSandbox(snapshot);
     const projectChanged = await this.projectFileService.ensureProjectSandbox(snapshot);
-    const transcriptChanged = this.materializeTranscript(snapshot);
-    return migrated || projectChanged || transcriptChanged;
-  }
-
-  private async migrateFlatWorkspaceSandbox(snapshot: SessionSnapshot): Promise<boolean> {
-    const project = snapshot.project;
-    if (!project || !this.isWorkspaceBoundRoot(project.rootPath)) return false;
-    if (!isFlatWorkspaceSandboxPath(project.rootPath, this.projectsRootPath)) return false;
-
-    const workspaceRoot = normalizeWorkspacePath(project.rootPath);
-    const sessionSandbox = getSessionSandboxPath(workspaceRoot, snapshot.session.id);
-
-    let hasFlatArtifacts = false;
-    for (const artifactName of FLAT_WORKSPACE_ARTIFACT_NAMES) {
-      try {
-        await stat(join(workspaceRoot, artifactName));
-        hasFlatArtifacts = true;
-        break;
-      } catch (error) {
-        const code = (error as NodeJS.ErrnoException).code;
-        if (code !== "ENOENT") throw error;
-      }
-    }
-
-    if (hasFlatArtifacts) {
-      await mkdir(sessionSandbox, { recursive: true });
-      await migrateFlatWorkspaceArtifacts(workspaceRoot, sessionSandbox);
-    }
-
-    project.rootPath = sessionSandbox;
-    snapshot.session.workspacePath = workspaceRoot;
-    return true;
-  }
-
-  private materializeTranscript(snapshot: SessionSnapshot): boolean {
-    if (!snapshot.project) throw new Error("Project sandbox has not been initialized.");
-    const path = this.transcriptStore.getTranscriptPath(
-      snapshot.session.id,
-      snapshot.project.rootPath,
-    );
-    if (snapshot.transcript?.path === path) return false;
-    snapshot.transcript = {
-      path,
-      leafMessageUuid: snapshot.transcript?.leafMessageUuid,
-    };
-    return true;
-  }
-
-  private async recordTranscriptMessages(
-    snapshot: SessionSnapshot,
-    messages: SessionChatMessage[],
-  ): Promise<void> {
-    if (!snapshot.project || !snapshot.transcript) {
-      throw new Error("Session transcript has not been initialized.");
-    }
-
-    const transcriptMessages = messages.map((message): TranscriptMessageInput => {
-      const metadata: Record<string, unknown> = {};
-      if (message.thought) metadata.thought = message.thought;
-      if (message.reasoning) metadata.reasoning = message.reasoning;
-      if (message.activityTrace) metadata.activityTrace = message.activityTrace;
-      if (message.progress !== undefined) metadata.progress = message.progress;
-      if (message.approval) metadata.approval = message.approval;
-      if (message.patch) metadata.patch = message.patch;
-      if (message.inlineCards) metadata.inlineCards = message.inlineCards;
-      if (message.question) metadata.question = message.question;
-      if (message.threadId) metadata.threadId = message.threadId;
-
-      return {
-        uuid: message.id,
-        role: message.role,
-        kind: message.approval ? "approval" : "message",
-        content: message.content,
-        cwd: snapshot.project!.rootPath,
-        threadId: message.approval?.threadId ?? message.threadId,
-        metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
-      };
-    });
-
-    const inserted = await this.transcriptStore.insertMessageChain({
-      sessionId: snapshot.session.id,
-      projectDir: snapshot.project.rootPath,
-      cwd: snapshot.project.rootPath,
-      messages: transcriptMessages,
-    });
-    snapshot.transcript.leafMessageUuid = inserted.at(-1)?.uuid;
+    await this.syncWorkspacePersistence(snapshot);
+    return projectChanged;
   }
 
   private messagesChanged(
@@ -681,198 +518,30 @@ export class FileSessionStore {
   ): Promise<void> {
     const workspaceRoot = this.getWorkspaceRoot(snapshot);
     if (!workspaceRoot) return;
-
-    await this.workspaceIndexStore.ensureProjectMeta(
+    void options;
+    const projectId = this.conversationDatabase.ensureProject(
       workspaceRoot,
       getWorkspaceLabel(workspaceRoot),
     );
-    await this.workspaceIndexStore.upsertSession(workspaceRoot, snapshot, {
-      active: options?.active ?? this.requireData().activeSessionId === snapshot.session.id,
-    });
-  }
-
-  private async buildWorkspaceIndexFromGlobal(
-    rootPath: string,
-  ): Promise<WorkspaceSessionsIndex | null> {
-    const normalized = normalizeWorkspacePath(rootPath);
-    const matches = this.requireData().sessions.filter((snapshot) =>
-      sessionBelongsToWorkspace(
-        {
-          workspacePath: snapshot.session.workspacePath,
-          projectRootPath: snapshot.project?.rootPath,
-        },
-        normalized,
-        this.projectsRootPath,
-      ),
+    await writeTextFileAtomic(
+      join(workspaceRoot, ".agent-ppt-project.json"),
+      `${JSON.stringify({
+        version: 1,
+        projectId,
+        title: getWorkspaceLabel(workspaceRoot),
+      }, null, 2)}\n`,
     );
-    if (matches.length === 0) return null;
-
-    const latest = [...matches].sort((left, right) =>
-      compareSessionsByActivity(left.session, right.session),
-    )[0];
-    const index: WorkspaceSessionsIndex = {
-      version: 1,
-      activeSessionId: latest.session.id,
-      sessions: matches.map((snapshot) => this.workspaceIndexStore.entryFromSnapshot(snapshot)),
-    };
-
-    await this.workspaceIndexStore.writeSessionsIndex(normalized, index);
-    for (const snapshot of matches) {
-      await this.workspaceIndexStore.upsertSession(normalized, snapshot, {
-        active: snapshot.session.id === index.activeSessionId,
-      });
-    }
-    return index;
-  }
-
-  private async hydrateGlobalSessionsFromWorkspaceIndex(
-    rootPath: string,
-    index: WorkspaceSessionsIndex,
-  ): Promise<void> {
-    const data = this.requireData();
-    for (const entry of index.sessions) {
-      if (data.sessions.some((item) => item.session.id === entry.id)) continue;
-
-      const stored = await this.workspaceIndexStore.readSessionSnapshot(rootPath, entry.id);
-      if (stored) {
-        data.sessions.push(
-          this.workspaceIndexStore.sessionFromWorkspaceSnapshot(stored, rootPath),
-        );
-        continue;
-      }
-
-      data.sessions.push(await this.rebuildSessionFromIndexEntry(entry, rootPath));
-    }
-  }
-
-  private async rebuildSessionFromIndexEntry(
-    entry: WorkspaceSessionIndexEntry,
-    rootPath: string,
-  ): Promise<SessionSnapshot> {
-    const presentation = createSessionPresentation(entry.title);
-    presentation.revision = entry.revision;
-    const snapshot: SessionSnapshot = {
-      session: {
-        id: entry.id,
-        title: entry.title,
-        createdAt: entry.createdAt,
-        updatedAt: entry.updatedAt,
-        lastMessageAt: entry.lastMessageAt,
-        slideCount: entry.slideCount,
-        revision: entry.revision,
-        workspacePath: rootPath,
-      },
-      project: {
-        rootPath: getSessionSandboxPath(rootPath, entry.id),
-        artifacts: defaultProjectArtifacts.map((artifact) => ({ ...artifact })),
-      },
-      presentation,
-      messages: [createWelcomeMessage(entry.title)],
-      transcript: {
-        path: entry.transcriptPath,
-        leafMessageUuid: entry.leafMessageUuid,
-      },
-    };
-
-    await this.materializeProjectSandbox(snapshot);
-    await this.hydrateMessagesFromTranscript(snapshot);
-    await this.workspaceIndexStore.upsertSession(rootPath, snapshot, { active: false });
-    return snapshot;
   }
 
   private async persist(): Promise<void> {
-    const payload = `${JSON.stringify(this.requireData(), null, 2)}\n`;
+    const state = structuredClone(this.requireData());
     const write = this.writeQueue.catch(() => undefined).then(async () => {
-      try {
-        const current = await readFile(this.filePath, "utf8");
-        sessionFileSchema.parse(repairSessionFileGeometry(JSON.parse(current)).value);
-        await writeTextFileAtomic(`${this.filePath}.bak`, current);
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-      }
-      await writeTextFileAtomic(this.filePath, payload);
+      this.conversationDatabase.replaceState({
+        activeSessionId: state.activeSessionId,
+        sessions: state.sessions,
+      });
     });
     this.writeQueue = write;
     await write;
-  }
-}
-
-function repairSessionFileGeometry(value: unknown): {
-  value: unknown;
-  repairedDimensionCount: number;
-} {
-  if (typeof value !== "object" || value === null || !("sessions" in value)) {
-    return { value, repairedDimensionCount: 0 };
-  }
-  const sessions = (value as { sessions?: unknown }).sessions;
-  if (!Array.isArray(sessions)) return { value, repairedDimensionCount: 0 };
-
-  const repaired = structuredClone(value) as { sessions: unknown[] };
-  let repairedDimensionCount = 0;
-  repaired.sessions = repaired.sessions.map((session) => {
-    if (typeof session !== "object" || session === null || !("presentation" in session)) {
-      return session;
-    }
-    const next = { ...session } as Record<string, unknown>;
-    const geometry = repairPresentationGeometry(next.presentation);
-    next.presentation = geometry.value;
-    repairedDimensionCount += geometry.repairedDimensionCount;
-    return next;
-  });
-  return { value: repaired, repairedDimensionCount };
-}
-
-async function migrateFlatWorkspaceArtifacts(workspaceRoot: string, sessionSandbox: string): Promise<void> {
-  const reservedNames = new Set([
-    ".agent-ppt",
-    "sandboxes",
-    "node_modules",
-    ".git",
-  ]);
-  const artifactNames = new Set<string>(FLAT_WORKSPACE_ARTIFACT_NAMES);
-
-  for (const entry of await readdir(workspaceRoot, { withFileTypes: true })) {
-    if (reservedNames.has(entry.name) || !artifactNames.has(entry.name)) continue;
-    const sourcePath = join(workspaceRoot, entry.name);
-    const targetPath = join(sessionSandbox, entry.name);
-    if (entry.isDirectory()) {
-      await copyDirectoryMerge(sourcePath, targetPath);
-      continue;
-    }
-    if (entry.isFile()) {
-      try {
-        await stat(targetPath);
-      } catch (error) {
-        const code = (error as NodeJS.ErrnoException).code;
-        if (code === "ENOENT") {
-          await cp(sourcePath, targetPath);
-          continue;
-        }
-        throw error;
-      }
-    }
-  }
-}
-
-async function copyDirectoryMerge(source: string, target: string): Promise<void> {
-  await mkdir(target, { recursive: true });
-  for (const entry of await readdir(source, { withFileTypes: true })) {
-    const sourcePath = join(source, entry.name);
-    const targetPath = join(target, entry.name);
-    if (entry.isDirectory()) {
-      await copyDirectoryMerge(sourcePath, targetPath);
-      continue;
-    }
-    if (!entry.isFile()) continue;
-    try {
-      await stat(targetPath);
-    } catch (error) {
-      const code = (error as NodeJS.ErrnoException).code;
-      if (code === "ENOENT") {
-        await cp(sourcePath, targetPath);
-        continue;
-      }
-      throw error;
-    }
   }
 }

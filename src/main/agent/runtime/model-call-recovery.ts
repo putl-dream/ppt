@@ -19,6 +19,7 @@ import {
 import { backoffBeforeRetry, extractRetryAfterMs } from "../gateway/withRetry";
 import { emergencyTrimContext, prepareContext } from "./context-compact";
 import { createModuleLogger } from "../logger";
+import { ensureToolResultPairing } from "../gateway/message-pairing";
 
 const logger = createModuleLogger("model-call-recovery");
 const MAX_RECOVERY_ATTEMPTS = 8;
@@ -53,6 +54,11 @@ export interface ModelCallRecoveryOptions {
     onThinkingChunk?: (text: string) => void;
   };
   onRecovery?: (message: string) => void;
+  onContextPrepared?: (
+    payload: ModelPromptPayload,
+    notes: string[],
+    messages?: AgentModelMessage[],
+  ) => void;
 }
 
 export interface ModelCallRecoveryResult {
@@ -79,6 +85,30 @@ function buildContinuationPrompt(
       partialOutput,
     },
   });
+}
+
+function compactStructuredMessages(
+  messages: AgentModelMessage[] | undefined,
+  payload: ModelPromptPayload,
+  shouldCompact: boolean,
+): AgentModelMessage[] | undefined {
+  if (!messages || !shouldCompact || messages.length <= 12) return messages;
+  const compactedContext = JSON.stringify(payload);
+  const tail = ensureToolResultPairing(messages.slice(-12));
+  return [
+    {
+      role: "user",
+      content: [{
+        type: "text",
+        text: [
+          "<compacted_conversation_context>",
+          compactedContext,
+          "</compacted_conversation_context>",
+        ].join("\n"),
+      }],
+    },
+    ...tail,
+  ];
 }
 
 function nextOutputTokenUpgrade(current: number): number | undefined {
@@ -140,6 +170,7 @@ export async function callModelWithRecovery(
   let continuationPartial: string | undefined;
   let consecutiveOverloaded = 0;
   let lastError: unknown;
+  let preparedMessages = options.messages;
 
   const notify = (message: string) => {
     recoveryNotes.push(message);
@@ -164,6 +195,16 @@ export async function callModelWithRecovery(
       });
       payload = prepared.payload;
       compactHistoryFailures = prepared.compactHistoryFailures;
+      preparedMessages = compactStructuredMessages(
+        options.messages,
+        payload,
+        prepared.notes.length > 0,
+      );
+      options.onContextPrepared?.(
+        structuredClone(payload),
+        [...prepared.notes],
+        preparedMessages ? structuredClone(preparedMessages) : undefined,
+      );
     }
 
     const prompt = continuationPartial
@@ -180,7 +221,7 @@ export async function callModelWithRecovery(
           signal: options.signal,
           maxOutputTokens,
           tools: options.tools,
-          messages: options.messages,
+          messages: preparedMessages,
         },
         modelSelection,
         continuationPartial ? undefined : options.stream,

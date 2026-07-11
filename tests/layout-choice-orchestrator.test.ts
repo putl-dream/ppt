@@ -109,6 +109,7 @@ describe("layout choice runtime orchestration", () => {
       }),
     } as any;
     const runtime = new AgentRuntime(createDefaultToolRegistry(), gateway);
+    const runtimeRoot = join(workspaceRoot, "runtime");
 
     const result = await runtime.run({
       threadId: "layout-choice-thread",
@@ -116,6 +117,7 @@ describe("layout choice runtime orchestration", () => {
       presentationSnapshot: createStarterPresentation(),
       selectedElementIds: [],
       workspaceRoot,
+      runtimeRoot,
       teammateManager: manager,
       layoutChoice: { mode: "template", designSystem: TEST_DESIGN_SYSTEM },
     });
@@ -123,6 +125,6 @@ describe("layout choice runtime orchestration", () => {
     expect(result).toMatchObject({ type: "message" });
     expect(result.type === "message" && result.content).toContain("自主领取");
     expect(generateText).not.toHaveBeenCalled();
-    expect((await new TaskStore(workspaceRoot).listTasks())).toHaveLength(1);
+    expect((await new TaskStore(runtimeRoot).listTasks())).toHaveLength(1);
   });
 });

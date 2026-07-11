@@ -17,6 +17,7 @@ import {
   type DurablePendingApproval,
   type DurableServiceThread,
 } from "./persistence/durable-service-store";
+import type { ConversationDatabase } from "../conversation-database";
 
 export type AgentServiceEvent =
   | { type: "request-status"; message: string; progress: number }
@@ -72,8 +73,14 @@ export class AgentService {
     private readonly toolApprovalBroker?: ToolApprovalBroker,
     private readonly messageBus?: MessageBus,
     private readonly teammateManager?: TeammateManager,
+    conversationDatabase?: ConversationDatabase,
+    private readonly runtimeRoot?: string,
   ) {
-    this.durableStore = workspaceRoot ? new DurableServiceStore(workspaceRoot) : undefined;
+    this.durableStore = conversationDatabase
+      ? new DurableServiceStore(conversationDatabase)
+      : workspaceRoot
+        ? new DurableServiceStore(workspaceRoot)
+        : undefined;
   }
 
   hasActiveConversation(threadId: string): boolean {
@@ -257,6 +264,7 @@ export class AgentService {
         layoutChoice,
         signal,
         workspaceRoot: this.workspaceRoot,
+        runtimeRoot: this.runtimeRoot,
         agentStepLimits,
         messageBus: this.messageBus,
         teammateManager: this.teammateManager,

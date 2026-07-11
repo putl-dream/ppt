@@ -15,6 +15,7 @@ import type {
   SessionSummary,
 } from "./session";
 import type { TokenUsageStats } from "./token-usage";
+import type { ConversationEventPage } from "./conversation-events";
 
 export interface CreateSessionOptions {
   rootPath?: string;
@@ -147,13 +148,10 @@ export interface DesktopApi {
   createSession(options?: CreateSessionOptions): Promise<SessionBootstrap>;
   openWorkspace(rootPath: string): Promise<SessionBootstrap>;
   listWorkspaceSessions(rootPath: string): Promise<SessionSummary[]>;
-  migrateLegacySessionToWorkspace(
-    sessionId: string,
-    targetRootPath: string,
-  ): Promise<SessionBootstrap>;
   selectSession(sessionId: string): Promise<SessionBootstrap>;
   deleteSession(sessionId: string): Promise<SessionBootstrap>;
   saveSessionMessages(sessionId: string, messages: SessionChatMessage[]): Promise<void>;
+  loadConversationEvents(sessionId: string, cursor?: number, limit?: number): Promise<ConversationEventPage>;
   listProjectArtifacts(sessionId: string): Promise<ProjectArtifact[]>;
   readProjectArtifact(
     sessionId: string,

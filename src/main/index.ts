@@ -53,6 +53,7 @@ import {
 } from "@shared/session-recovery";
 import type { AgentModelSelection } from "@shared/agent";
 import { TokenUsageStore } from "./token-usage-store";
+import type { ConversationEventKind } from "@shared/conversation-events";
 
 const logger = createModuleLogger("main");
 const agentGateway = new AgentGateway();
@@ -83,23 +84,29 @@ interface SessionRuntime {
   messageBus?: MessageBus;
   teammateManager?: TeammateManager;
   workspaceRoot?: string;
+  runtimeRoot: string;
 }
 
-function createSessionRuntime(snapshot: SessionSnapshot, skillRegistry: SkillRegistry): SessionRuntime {
+function createSessionRuntime(
+  snapshot: SessionSnapshot,
+  skillRegistry: SkillRegistry,
+  applicationDataRoot: string,
+): SessionRuntime {
   const commandBus = new CommandBus(snapshot.presentation);
   const registry = createDefaultToolRegistry();
-  const messageBus = snapshot.project?.rootPath
-    ? new MessageBus(MessageBus.defaultMailboxDir(snapshot.project.rootPath))
-    : undefined;
-  const teammateManager = messageBus ? new TeammateManager(messageBus) : undefined;
+  const runtimeRoot = join(applicationDataRoot, "runtime", snapshot.session.id);
+  const messageBus = new MessageBus(MessageBus.defaultMailboxDir(runtimeRoot));
+  const teammateManager = new TeammateManager(messageBus);
   const agentService = new AgentService(
     commandBus,
-    new AgentRuntime(registry, agentGateway, skillRegistry),
+    new AgentRuntime(registry, agentGateway, skillRegistry, sessionStore.conversationDatabase),
     new CommitGate(new RiskPolicy()),
     snapshot.project?.rootPath,
     toolApprovalBroker,
     messageBus,
     teammateManager,
+    sessionStore.conversationDatabase,
+    runtimeRoot,
   );
   return {
     commandBus,
@@ -107,11 +114,13 @@ function createSessionRuntime(snapshot: SessionSnapshot, skillRegistry: SkillReg
     messageBus,
     teammateManager,
     workspaceRoot: snapshot.project?.rootPath,
+    runtimeRoot,
   };
 }
 
 function createAgentStreamEmitter(
   sender: WebContents,
+  sessionId: string,
   runId: string,
   controller: AbortController,
 ): (streamEvent: AgentServiceEvent) => void {
@@ -123,6 +132,37 @@ function createAgentStreamEmitter(
   };
 
   return (streamEvent: AgentServiceEvent) => {
+    const eventKind: ConversationEventKind = (() => {
+      switch (streamEvent.type) {
+        case "thinking-chunk":
+        case "subagent-thinking-chunk":
+          return "reasoning_chunk";
+        case "text-chunk": return "text_chunk";
+        case "stage-started": return "stage_started";
+        case "workflow-progress":
+        case "request-status":
+          return "workflow_progress";
+        case "tool-started":
+        case "subagent-tool-started":
+          return "tool_started";
+        case "tool-finished":
+        case "subagent-tool-finished":
+          return "tool_finished";
+        case "tool-validation-failed": return "tool_failed";
+        case "approval-waiting":
+        case "tool-approval-waiting":
+          return "approval_requested";
+        case "task-graph-updated": return "task_graph_updated";
+        default: return "workflow_progress";
+      }
+    })();
+    sessionStore.conversationDatabase.appendEvent({
+      sessionId,
+      runId,
+      threadId: runId,
+      kind: eventKind,
+      payload: structuredClone(streamEvent) as unknown as Record<string, unknown>,
+    });
     if (sender.isDestroyed()) {
       abortRun("renderer-disposed");
       return;
@@ -268,9 +308,11 @@ app.whenReady().then(async () => {
   }
 
   Menu.setApplicationMenu(null);
-  sessionStore = new FileSessionStore(join(app.getPath("userData"), "sessions.json"));
+  const applicationDataRoot = join(app.getPath("appData"), ".agent-ppt");
+  process.env.AGENT_PPT_DATA_DIR = applicationDataRoot;
+  sessionStore = new FileSessionStore(join(applicationDataRoot, "conversations.sqlite"));
   await sessionStore.initialize();
-  tokenUsageStore = new TokenUsageStore(join(app.getPath("userData"), "token-usage.json"));
+  tokenUsageStore = new TokenUsageStore(join(applicationDataRoot, "token-usage.json"));
   await tokenUsageStore.initialize();
   agentGateway.setUsageRecorder((record) => tokenUsageStore.recordModelUsage(record));
 
@@ -284,10 +326,9 @@ app.whenReady().then(async () => {
   const ensureRuntime = async (snapshot: SessionSnapshot): Promise<SessionRuntime> => {
     const existing = runtimes.get(snapshot.session.id);
     if (existing && existing.workspaceRoot === snapshot.project?.rootPath) return existing;
-    if (snapshot.project?.rootPath) {
-      await new TaskStore(snapshot.project.rootPath).recoverInterruptedClaims();
-    }
-    const runtime = createSessionRuntime(snapshot, skillRegistry);
+    const runtimeRoot = join(applicationDataRoot, "runtime", snapshot.session.id);
+    await new TaskStore(runtimeRoot).recoverInterruptedClaims();
+    const runtime = createSessionRuntime(snapshot, skillRegistry, applicationDataRoot);
     await runtime.teammateManager?.reconcileInterrupted();
     runtimes.set(snapshot.session.id, runtime);
     return runtime;
@@ -362,6 +403,17 @@ app.whenReady().then(async () => {
     });
     try {
       const result = await task();
+      if (runId) {
+        sessionStore.conversationDatabase.finishRun({
+          runId,
+          status: "completed",
+          result,
+          threadId: "threadId" in result && typeof result.threadId === "string"
+            ? result.threadId
+            : runId,
+        });
+        await sessionStore.finalizeAgentRunMessage(sessionId, runId, result);
+      }
       logger.info("session.operation.completed", {
         operation,
         sessionId,
@@ -371,6 +423,16 @@ app.whenReady().then(async () => {
       });
       return result;
     } catch (error) {
+      if (runId) {
+        const message = error instanceof Error ? error.message : String(error);
+        const interrupted = /aborted|中断|取消/i.test(message);
+        sessionStore.conversationDatabase.finishRun({
+          runId,
+          status: interrupted ? "interrupted" : "failed",
+          error: message,
+        });
+        await sessionStore.failAgentRunMessage(sessionId, runId, message);
+      }
       logger.error("session.operation.failed", {
         operation,
         sessionId,
@@ -415,20 +477,6 @@ app.whenReady().then(async () => {
   ipcMain.handle("workspace:list-sessions", async (_, rootPath: string) =>
     sessionStore.listWorkspaceSessions(rootPath),
   );
-  ipcMain.handle(
-    "workspace:migrate-legacy",
-    async (_, sessionId: string, targetRootPath: string) => {
-      const state = await sessionStore.migrateLegacySessionToWorkspace(
-        sessionId,
-        targetRootPath,
-      );
-      activeSessionId = state.activeSession?.session.id ?? "";
-      if (state.activeSession) {
-        await ensureRuntime(state.activeSession);
-      }
-      return state;
-    },
-  );
   ipcMain.handle("session:select", async (_, sessionId: string) => {
     const state = await sessionStore.selectSession(sessionId);
     activeSessionId = state.activeSession?.session.id ?? "";
@@ -465,6 +513,11 @@ app.whenReady().then(async () => {
     "session:save-messages",
     (_, sessionId: string, messages: SessionChatMessage[]) =>
       sessionStore.saveMessages(sessionId, messages),
+  );
+  ipcMain.handle(
+    "conversation:load-events",
+    (_, sessionId: string, cursor?: number, limit?: number) =>
+      sessionStore.conversationDatabase.listEvents(sessionId, cursor, limit),
   );
 
   ipcMain.handle("project:list-artifacts", (_, sessionId: string) =>
@@ -660,7 +713,15 @@ app.whenReady().then(async () => {
       } else if (gatewayConfig) {
         agentGateway.applyGatewayConfig(gatewayConfig);
       }
-      const emit = createAgentStreamEmitter(event.sender, currentRunId, controller);
+      sessionStore.conversationDatabase.beginRun({
+        runId: currentRunId,
+        sessionId,
+        threadId: currentRunId,
+        provider: selection?.provider,
+        model: selection?.model,
+        request: request.prompt,
+      });
+      const emit = createAgentStreamEmitter(event.sender, sessionId, currentRunId, controller);
 
       try {
         return await runAgentOperation(
@@ -737,7 +798,15 @@ app.whenReady().then(async () => {
     } else if (gatewayConfig) {
       agentGateway.applyGatewayConfig(gatewayConfig);
     }
-    const emit = createAgentStreamEmitter(event.sender, currentRunId, controller);
+    sessionStore.conversationDatabase.beginRun({
+      runId: currentRunId,
+      sessionId,
+      threadId,
+      provider: selection?.provider,
+      model: selection?.model,
+      request: request.prompt,
+    });
+    const emit = createAgentStreamEmitter(event.sender, sessionId, currentRunId, controller);
 
     try {
       return await runAgentOperation(
@@ -823,4 +892,5 @@ app.on("window-all-closed", () => {
 
 app.on("will-quit", () => {
   slideThumbnailService.dispose();
+  sessionStore?.conversationDatabase.close();
 });

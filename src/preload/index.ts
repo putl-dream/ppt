@@ -7,12 +7,12 @@ const api: DesktopApi = {
   createSession: (options) => ipcRenderer.invoke("session:create", options),
   openWorkspace: (rootPath) => ipcRenderer.invoke("workspace:open", rootPath),
   listWorkspaceSessions: (rootPath) => ipcRenderer.invoke("workspace:list-sessions", rootPath),
-  migrateLegacySessionToWorkspace: (sessionId, targetRootPath) =>
-    ipcRenderer.invoke("workspace:migrate-legacy", sessionId, targetRootPath),
   selectSession: (sessionId) => ipcRenderer.invoke("session:select", sessionId),
   deleteSession: (sessionId) => ipcRenderer.invoke("session:delete", sessionId),
   saveSessionMessages: (sessionId, messages) =>
     ipcRenderer.invoke("session:save-messages", sessionId, messages),
+  loadConversationEvents: (sessionId, cursor, limit) =>
+    ipcRenderer.invoke("conversation:load-events", sessionId, cursor, limit),
   listProjectArtifacts: (sessionId) => ipcRenderer.invoke("project:list-artifacts", sessionId),
   readProjectArtifact: (sessionId, artifactIdOrPath) =>
     ipcRenderer.invoke("project:read-artifact", sessionId, artifactIdOrPath),

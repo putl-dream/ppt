@@ -56,6 +56,7 @@ import {
   type DurableRunStatus,
 } from "../persistence/durable-run-store";
 import { prepareLayoutChoiceTask } from "./layout-choice-orchestrator";
+import type { ConversationDatabase } from "../../conversation-database";
 
 /** Derive a display message for sub-agent progress events lacking one. */
 function subAgentProgressMessage(event: SubAgentProgressEvent): string {
@@ -99,14 +100,17 @@ export class AgentRuntime {
     private readonly registry: ToolRegistry,
     private readonly gateway: AgentModelGateway,
     private readonly skillRegistry: SkillRegistry = createEmptySkillRegistry(),
+    private readonly conversationDatabase?: ConversationDatabase,
   ) {}
 
   async run(options: AgentRuntimeOptions): Promise<AgentRuntimeResult> {
     ensureDefaultHooks();
 
-    const durableRunStore = options.workspaceRoot
-      ? new DurableRunStore(options.workspaceRoot)
-      : undefined;
+    const durableRunStore = this.conversationDatabase
+      ? new DurableRunStore(this.conversationDatabase)
+      : options.workspaceRoot
+        ? new DurableRunStore(options.workspaceRoot)
+        : undefined;
     const recovered = options.resumeThread
       ? await durableRunStore?.load(options.threadId)
       : undefined;
@@ -122,7 +126,7 @@ export class AgentRuntime {
     };
     this.skillSessions.set(options.threadId, skillSession);
 
-    const taskStore = createTaskStore(options.workspaceRoot);
+    const taskStore = createTaskStore(options.runtimeRoot);
     const taskGraphOwner = options.taskGraphOwner ?? "agent";
 
     try {
@@ -540,7 +544,7 @@ export class AgentRuntime {
           systemPrompt,
           promptPayload,
           model: options.model,
-          workspaceRoot: options.workspaceRoot,
+          workspaceRoot: options.runtimeRoot,
           threadId: options.threadId,
           signal: options.signal,
           tools: toolSchemas,
@@ -560,7 +564,31 @@ export class AgentRuntime {
           onRecovery: (message) => {
             options.onProgress?.({ type: "request-status", message, progress: 0 });
           },
+          onContextPrepared: (preparedPayload, notes, preparedMessages) => {
+            if (!options.runId || !this.conversationDatabase) return;
+            this.conversationDatabase.saveContextSnapshotForRun(
+              options.runId,
+              {
+                payload: preparedPayload,
+                messages: preparedMessages ?? ensureToolResultPairing(modelMessages),
+              },
+              notes,
+            );
+          },
         });
+        if (options.runId && this.conversationDatabase) {
+          this.conversationDatabase.appendRuntimeEvent(
+            options.runId,
+            "model_response",
+            {
+              modelStep: currentModelStep,
+              content: structuredClone(modelResult.content),
+              stopReason: modelResult.stopReason,
+              model: modelResult.modelUsed,
+            },
+            "model_only",
+          );
+        }
         const seenToolCallIds = new Set<string>();
         const toolUses = toolUseBlocksFromContent(modelResult.content).filter((call) => {
           if (!call.id || !call.name || seenToolCallIds.has(call.id)) return false;
@@ -598,11 +626,30 @@ export class AgentRuntime {
             continue;
           }
 
+          if (options.runId && this.conversationDatabase) {
+            this.conversationDatabase.appendRuntimeEvent(
+              options.runId,
+              "assistant_completed",
+              { content: responseText },
+            );
+          }
           return finish({ type: "message", content: responseText });
         }
       }
 
       activeToolUse = structuredClone(toolCall);
+      if (options.runId && this.conversationDatabase) {
+        this.conversationDatabase.appendRuntimeEvent(
+          options.runId,
+          "tool_call",
+          {
+            toolUseId: toolCall.id,
+            toolName: toolCall.name,
+            input: structuredClone(toolCall.input),
+            parseError: toolCall.parseError,
+          },
+        );
+      }
       checkpointPhase = "tool_running";
       await persistCheckpoint();
 
@@ -621,6 +668,18 @@ export class AgentRuntime {
           ],
           ...(isError ? { isError: true } : {}),
         };
+        if (options.runId && this.conversationDatabase) {
+          this.conversationDatabase.appendRuntimeEvent(
+            options.runId,
+            "tool_result",
+            {
+              toolUseId: toolCall.id,
+              toolName: toolCall.name,
+              isError,
+              content: structuredClone(result.content),
+            },
+          );
+        }
         const existingIndex = pendingToolResults.current.findIndex(
           (item) => item.toolUseId === toolCall?.id,
         );
@@ -794,7 +853,7 @@ export class AgentRuntime {
                 const prepared = await prepareToolResultData({
                   data: output,
                   modelContent,
-                  workspaceRoot: options.workspaceRoot,
+                  workspaceRoot: options.runtimeRoot,
                   threadId: options.threadId,
                   toolUseId: toolCall.id,
                   toolName: tool.name,
@@ -931,7 +990,7 @@ export class AgentRuntime {
         const prepared = await prepareToolResultData({
           data: result,
           modelContent,
-          workspaceRoot: options.workspaceRoot,
+          workspaceRoot: options.runtimeRoot,
           threadId: options.threadId,
           toolUseId: toolCall.id,
           toolName: tool.name,
