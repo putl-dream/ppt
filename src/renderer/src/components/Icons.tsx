@@ -227,7 +227,7 @@ export const SidebarPanelIcon = ({ size = 20, className, ...props }: IconProps) 
     viewBox="0 0 24 24"
     fill="none"
     stroke="currentColor"
-    strokeWidth="1.8"
+    strokeWidth="2"
     strokeLinecap="round"
     strokeLinejoin="round"
     className={className}
@@ -244,14 +244,19 @@ export const OpenPreviewIcon = ({ size = 16, className, ...props }: IconProps) =
     xmlns="http://www.w3.org/2000/svg"
     width={size}
     height={size}
-    viewBox="0 0 1024 1024"
-    fill="currentColor"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
     className={className}
     aria-hidden="true"
     {...props}
   >
-    <path d="M768 61.44H256C148.48 61.44 61.44 148.48 61.44 256v512c0 107.52 87.04 194.56 194.56 194.56h512c107.52 0 194.56-87.04 194.56-194.56V256c0-107.52-87.04-194.56-194.56-194.56z m-158.72 814.08H256c-30.72 0-56.32-10.24-76.8-30.72s-30.72-46.08-30.72-76.8V256c0-30.72 10.24-56.32 30.72-76.8s46.08-30.72 76.8-30.72h353.28v727.04z m266.24-107.52c0 30.72-10.24 56.32-30.72 76.8s-46.08 30.72-76.8 30.72h-76.8V148.48H768c30.72 0 56.32 10.24 76.8 30.72s30.72 46.08 30.72 76.8v512z" />
-    <path d="M317.44 645.12c-15.36-15.36-20.48-40.96-5.12-61.44l61.44-66.56-61.44-61.44c-15.36-15.36-15.36-40.96 0-56.32 15.36-20.48 40.96-20.48 56.32-10.24L460.8 481.28c15.36 15.36 15.36 40.96 0 56.32l-92.16 97.28c-15.36 15.36-40.96 15.36-61.44 0z" />
+    <rect x="3" y="3" width="18" height="18" rx="3" />
+    <path d="M15 3v18" />
+    <path d="m8 9 3 3-3 3" />
   </svg>
 );
 
@@ -260,14 +265,19 @@ export const ClosePreviewIcon = ({ size = 16, className, ...props }: IconProps) 
     xmlns="http://www.w3.org/2000/svg"
     width={size}
     height={size}
-    viewBox="0 0 1024 1024"
-    fill="currentColor"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
     className={className}
     aria-hidden="true"
     {...props}
   >
-    <path d="M768 61.44H256C148.48 61.44 61.44 148.48 61.44 256v512c0 107.52 87.04 194.56 194.56 194.56h512c107.52 0 194.56-87.04 194.56-194.56V256c0-107.52-87.04-194.56-194.56-194.56z m-158.72 814.08H256c-30.72 0-56.32-10.24-76.8-30.72s-30.72-46.08-30.72-76.8V256c0-30.72 10.24-56.32 30.72-76.8s46.08-30.72 76.8-30.72h353.28v727.04z m266.24-107.52c0 30.72-10.24 56.32-30.72 76.8s-46.08 30.72-76.8 30.72h-76.8V148.48H768c30.72 0 56.32 10.24 76.8 30.72s30.72 46.08 30.72 76.8v512z" />
-    <path d="M460.8 645.12c15.36-15.36 20.48-40.96 5.12-61.44l-61.44-66.56 61.44-61.44c15.36-15.36 15.36-40.96 0-56.32-15.36-20.48-40.96-20.48-56.32-10.24l-92.16 92.16c-15.36 15.36-15.36 40.96 0 56.32l92.16 97.28c15.36 15.36 40.96 15.36 61.44 0z" />
+    <rect x="3" y="3" width="18" height="18" rx="3" />
+    <path d="M15 3v18" />
+    <path d="m11 9-3 3 3 3" />
   </svg>
 );
 
@@ -313,8 +323,11 @@ export const StopIcon = ({ size = 20, className, ...props }: IconProps) => (
     width={size}
     height={size}
     viewBox="0 0 24 24"
-    fill="currentColor"
-    stroke="none"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
     className={className}
     {...props}
   >
