@@ -3,6 +3,7 @@ import { applyLayout } from "../src/shared/layout";
 import type { Presentation, Slide } from "../src/shared/presentation";
 import { LayoutValidator } from "../src/main/deck/validators/layout-validator";
 import { StyleValidator } from "../src/main/deck/validators/style-validator";
+import { AssetValidator } from "../src/main/deck/validators/asset-validator";
 
 function createPresentation(slides: Slide[], overrides: Partial<Presentation> = {}): Presentation {
   return {
@@ -190,5 +191,34 @@ describe("StyleValidator", () => {
 
     const issues = validator.validate(createPresentation([slide]));
     expect(issues.filter((issue) => issue.message.includes("duplicates the chrome title"))).toEqual([]);
+  });
+});
+
+describe("AssetValidator", () => {
+  const validator = new AssetValidator();
+
+  it("blocks remote images and reports missing provenance metadata", () => {
+    const slide: Slide = {
+      id: "slide-evidence",
+      title: "Evidence",
+      layout: "case",
+      elements: [{
+        id: "image-remote",
+        type: "image",
+        provenance: "asset",
+        x: 760,
+        y: 180,
+        width: 360,
+        height: 320,
+        url: "https://cdn.example.com/evidence.png",
+        borderRadius: 0,
+        asset: { sourceUrl: "https://cdn.example.com/evidence.png" },
+      }],
+    };
+
+    const issues = validator.validate(createPresentation([slide]));
+    expect(issues.some((issue) => issue.severity === "error" && issue.message.includes("remote URL"))).toBe(true);
+    expect(issues.some((issue) => issue.message.includes("source page"))).toBe(true);
+    expect(issues.some((issue) => issue.message.includes("license"))).toBe(true);
   });
 });

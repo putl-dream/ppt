@@ -30,7 +30,7 @@ allowed-tools:
 | 改写字风 | RewriteSlideContent | `update-element` |
 | 图表样式 | BeautifyChart | P2：文本 KPI → chart 元素（kpi-tower/bar/timeline） |
 | 表格样式 | BeautifyTable | P2：`\|` 分隔文本 → table 元素 |
-| 图片入槽 | InsertSlideImage | add/update image（自动坐标） |
+| 图片入槽 | InsertSlideImage | add/update image（自动坐标；远程图默认本地化并保存来源元数据） |
 | 创意装饰 | AddLayoutDecorations | shape 装饰 commands |
 | 字体角色 | ApplyTypography | update-text-style 批量 |
 | 单页预览 | PreviewSlide | 结构化摘要 + PNG 缩略图（base64） |

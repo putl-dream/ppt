@@ -33,6 +33,11 @@ export const layoutPlanEnhancementSchema = z.discriminatedUnion("type", [
     slot: z.string(),
     url: z.string(),
     aspectRatio: z.enum(["16:9", "4:3", "1:1"]).optional(),
+    provider: z.string().optional(),
+    sourcePageUrl: z.string().url().optional(),
+    description: z.string().optional(),
+    attribution: z.string().optional(),
+    license: z.string().optional(),
   }),
   z.object({
     type: z.literal("add-decorations"),

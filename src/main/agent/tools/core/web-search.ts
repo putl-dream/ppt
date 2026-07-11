@@ -9,8 +9,8 @@ import {
 export const webSearchTool: ToolDefinition<typeof webSearchSchema, WebSearchOutput> = {
   name: "WebSearch",
   description:
-    "搜索互联网以获取最新或可核验的事实、数据和来源。仅在任务需要外部资料时使用；"
-    + "结果包含标题、URL 和摘要，引用事实时必须保留来源链接。",
+    "搜索互联网以获取最新或可核验的事实、数据、来源及可选图片候选。"
+    + "引用事实时必须保留来源链接；图片使用前必须核对授权并保留来源。",
   category: "core",
   loadPolicy: "core",
   inputSchema: webSearchSchema,

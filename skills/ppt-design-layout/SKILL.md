@@ -95,6 +95,13 @@ allowed-tools:
 | `add-decorations` | AddLayoutDecorations | 仅 creative + process/comparison |
 | `add-icon` | add-element icon | 关键列表点缀 |
 
+### 图片选材（P0 资产闭环）
+
+- 当页面确实需要主视觉或证据图片时，可让 Task 子 Agent 调用 `web_search`，设置 `include_images: true`。
+- 搜索结果只是候选，不代表自动获得复用授权；优先 Pexels、Pixabay、Wikimedia Commons 等授权信息明确的来源。
+- `insert-image` enhancement 除 `url` / `slot` 外，应尽量记录 `provider`、`sourcePageUrl`、`description`、`attribution`、`license`。
+- 执行阶段的 InsertSlideImage 会把远程图片下载到 workspace `assets/images/`，并将来源元数据写入 image element，避免预览有图而 PPTX 丢图。
+
 ## 设计 Rubric（必过 A + B，强烈建议 C + D）
 
 ### A. 叙事与节奏

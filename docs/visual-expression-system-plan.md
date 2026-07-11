@@ -5,7 +5,7 @@
 > 目标：先增强基础视觉表达能力与 Layout Grammar，让模型能够稳定看见并控制效果；随后再引入 `brand-profile.json` 做内容品牌推导。
 
 > 进度更新：2026-07-05  
-> 已完成首个系统骨架：`DesignTokensV1`、Layout Grammar registry、`cover` grammar handler 试点、layout-plan 契约扩展、元素 `provenance`、重排 undo 保护与相关单元测试。尚未完成多 layout handler、Agent skill 提示接入、结构化 render evaluation 与 brand-profile 推导。
+> 已完成首个系统骨架：`DesignTokensV1`、Layout Grammar registry、`cover` grammar handler 试点、layout-plan 契约扩展、元素 `provenance`、重排 undo 保护与相关单元测试。P0 图片链路已增加 Tavily 图片候选、远程资产本地化、来源元数据和 PPTX 原生 cover/contain 导出。尚未完成多 layout handler、结构化 render evaluation 与 brand-profile 推导。
 
 ---
 
@@ -63,6 +63,7 @@ Brand Profile
 | 已完成 | `cover` grammar handler 试点 | `centered` / `editorial-hero` / `signal-dark` |
 | 已完成 | motif primitives v1 | bookmark / arc / margin-note / path-line |
 | 已完成 | 同一 cover 内容在 3 套 tokens 下产生不同结构与气质 | 单元测试覆盖 |
+| 已完成 | 图片候选搜索与本地化资产闭环 | Tavily `include_images` → `assets/images/` → 来源/授权元数据 → PPTX |
 | 已验证 | 单元测试通过 | `npm test`：56 files / 348 tests |
 | 未完成 | `layout-slots` 与 handler 单一来源彻底合并 | 仍需后续处理 |
 | 未完成 | `section` / `toc` / `process` / `case` / `quote` grammar handler | P2 后续 |
@@ -82,7 +83,7 @@ Brand Profile
 |------|----------|------|------|
 | 背景 | 已有 `slideVariant`、渐变导出 | 增加背景风格 token：paper / grid / gradient / clean / dark | 已有 token schema 与 cover 映射；背景渲染细化待做 |
 | 形状 | 已有圆角、阴影、透明度 | 增加 motif 用形状：书签、侧栏、章节角标、色块带、弧线、路径线 | 部分完成：bookmark / arc / margin-note / path-line |
-| 图片 | 已有 imageSlot / objectFit | 增加 imageTreatment：cover、contain、masked、framed、duotone、captioned | 部分完成：plain / framed / masked / captioned schema 与 cover 应用 |
+| 图片 | 已有 imageSlot / objectFit、Tavily 图片候选、本地缓存与来源元数据 | 增加焦点裁切和 imageTreatment：masked、framed、duotone、captioned | P0 搜索/本地化/导出已完成；视觉 treatment 仍为部分完成 |
 | 图表 | bar / h-bar / timeline / kpi-tower | 增加 chartStyle：minimal、dashboard、editorial、report；支持单位、标签、重点值 | 部分完成：schema 字段已加；渲染细化待做 |
 | 图标 | 24 个内置 | 先扩到高频业务/教育/科技/阅读 icon；后续接 Lucide 子集 | 未开始 |
 | 字体 | serif / sans / mono | 增加 fontMood：formal、editorial、technical、warm、minimal | 已完成 schema；cover 已接入 fontMood |

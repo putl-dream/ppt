@@ -52,9 +52,11 @@ allowed-tools:
 4. 对 plan.enhancements 逐项 `ExecuteExtraTool`：
    - `beautify-chart` → BeautifyChart
    - `beautify-table` → BeautifyTable
-   - `insert-image` → InsertSlideImage(slot, url)
+   - `insert-image` → InsertSlideImage(slot, url, source_page_url, description, attribution, license)
    - `add-decorations` → AddLayoutDecorations（仅 creative）
 5. `ValidateDeckLayout` 确认节奏；`LoadSkill deck-review`
+
+远程图片默认由 InsertSlideImage 本地化到 workspace `assets/images/`；不要把未经本地化的网页 URL 直接留给 PPTX 导出。若来源页或授权信息缺失，必须保留 warning，不能宣称图片已获得商用授权。
 
 **Executor 禁止**：擅自改 plan 中的 layout；重新推理版式选择；手写 `set-theme` / `update-slide-layout` 绕过 `ExecuteLayoutPlan`；改写 text。
 

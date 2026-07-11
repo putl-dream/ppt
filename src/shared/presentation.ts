@@ -81,6 +81,21 @@ export const textElementSchema = z.object({
   fontFamily: z.enum(FONT_FAMILIES).optional(),
 });
 
+export const imageAssetMetadataSchema = z.object({
+  provider: z.string().optional(),
+  sourceUrl: z.string().url().optional(),
+  sourcePageUrl: z.string().url().optional(),
+  description: z.string().optional(),
+  attribution: z.string().optional(),
+  license: z.string().optional(),
+  /** Workspace-relative cached asset path. */
+  localPath: z.string().optional(),
+  mimeType: z.enum(["image/png", "image/jpeg", "image/gif"]).optional(),
+  byteSize: z.number().int().nonnegative().optional(),
+  sha256: z.string().regex(/^[a-f0-9]{64}$/).optional(),
+  fetchedAt: z.string().datetime().optional(),
+});
+
 export const imageElementSchema = z.object({
   id: z.string(),
   type: z.literal("image"),
@@ -94,6 +109,7 @@ export const imageElementSchema = z.object({
   imageSlot: z.string().optional(),
   objectFit: z.enum(["cover", "contain"]).optional(),
   imageTreatment: z.enum(IMAGE_TREATMENTS).optional(),
+  asset: imageAssetMetadataSchema.optional(),
 });
 
 export const shadowSchema = z.object({
@@ -152,6 +168,7 @@ export const presentationSchema = z.object({
 });
 
 export type TextElement = z.infer<typeof textElementSchema>;
+export type ImageAssetMetadata = z.infer<typeof imageAssetMetadataSchema>;
 export type ImageElement = z.infer<typeof imageElementSchema>;
 export type ShapeElement = z.infer<typeof shapeElementSchema>;
 export type ChartElement = z.infer<typeof chartElementSchema>;

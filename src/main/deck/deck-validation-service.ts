@@ -7,6 +7,7 @@ import {
 import type { Presentation } from "@shared/presentation";
 import { LayoutValidator, layoutValidator } from "./validators/layout-validator";
 import { StyleValidator, styleValidator } from "./validators/style-validator";
+import { AssetValidator, assetValidator } from "./validators/asset-validator";
 
 export interface DeckValidationOptions {
   constraints?: DesignConstraints;
@@ -18,12 +19,14 @@ export class DeckValidationService {
   constructor(
     private readonly layout: LayoutValidator = layoutValidator,
     private readonly style: StyleValidator = styleValidator,
+    private readonly asset: AssetValidator = assetValidator,
   ) {}
 
   validate(presentation: Presentation, options: DeckValidationOptions = {}): DeckValidationResult {
     const layoutIssues = this.layout.validate(presentation, options);
     const styleIssues = this.style.validate(presentation, options);
-    return summarizeDeckValidation([...layoutIssues, ...styleIssues]);
+    const assetIssues = this.asset.validate(presentation, options);
+    return summarizeDeckValidation([...layoutIssues, ...styleIssues, ...assetIssues]);
   }
 
   listIssues(presentation: Presentation, options: DeckValidationOptions = {}): DeckValidationIssue[] {

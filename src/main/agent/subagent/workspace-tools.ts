@@ -149,7 +149,9 @@ export const bashTool: SubAgentToolDefinition<typeof bashSchema> = {
 
 export const webSearchSubAgentTool: SubAgentToolDefinition<typeof webSearchSchema> = {
   name: "web_search",
-  description: "Search the web for current, source-backed facts. Cite returned URLs in research notes.",
+  description:
+    "Search the web for current, source-backed facts and optional image candidates. "
+    + "Cite factual sources; verify image licensing and retain provenance before use.",
   inputSchema: webSearchSchema,
   permission: SUB_AGENT_TOOL_PERMISSION_PROFILES.web_search,
   async execute(args, context) {

@@ -1,4 +1,5 @@
 import pptxgen from "pptxgenjs";
+import { fileURLToPath } from "node:url";
 import type { Presentation } from "@shared/presentation";
 import type { ExportPresentationOptions } from "@shared/ipc";
 import { fontFamilyToPptxFace, resolveElementFontFamily } from "@shared/typography";
@@ -18,6 +19,10 @@ function cleanColor(colorStr: string): string {
     clean = clean[0] + clean[0] + clean[1] + clean[1] + clean[2] + clean[2];
   }
   return clean;
+}
+
+function resolveLocalImagePath(value: string): string {
+  return value.startsWith("file://") ? fileURLToPath(value) : value;
 }
 
 export async function exportToPptx(
@@ -108,11 +113,7 @@ export async function exportToPptx(
     // 1. Logo (if any)
     if (options.logoUrl) {
       const isData = options.logoUrl.startsWith("data:");
-      const cleanLogoPath = options.logoUrl.startsWith("file:///")
-        ? options.logoUrl.substring(8)
-        : options.logoUrl.startsWith("file://")
-        ? options.logoUrl.substring(7)
-        : options.logoUrl;
+      const cleanLogoPath = resolveLocalImagePath(options.logoUrl);
 
       try {
         if (isData) {
@@ -203,26 +204,30 @@ export async function exportToPptx(
         });
       } else if (element.type === "image") {
         try {
+          const sizing = {
+            type: element.objectFit ?? "cover",
+            w,
+            h,
+          } as const;
+          const imageOptions = {
+            x,
+            y,
+            w,
+            h,
+            sizing,
+            ...(element.imageTreatment === "masked" ? { rounding: true } : {}),
+            ...(element.asset?.description ? { altText: element.asset.description } : {}),
+          };
           if (element.url.startsWith("data:")) {
             slide.addImage({
               data: element.url,
-              x,
-              y,
-              w,
-              h,
+              ...imageOptions,
             });
           } else {
-            const cleanImgPath = element.url.startsWith("file:///")
-              ? element.url.substring(8)
-              : element.url.startsWith("file://")
-              ? element.url.substring(7)
-              : element.url;
+            const cleanImgPath = resolveLocalImagePath(element.url);
             slide.addImage({
               path: cleanImgPath,
-              x,
-              y,
-              w,
-              h,
+              ...imageOptions,
             });
           }
         } catch (e) {

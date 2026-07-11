@@ -2,7 +2,7 @@ import { z } from "zod";
 
 export const deckValidationIssueSchema = z.object({
   slideId: z.string().optional(),
-  category: z.enum(["layout", "style", "structure", "consistency"]),
+  category: z.enum(["layout", "style", "structure", "consistency", "asset"]),
   severity: z.enum(["info", "warning", "error"]),
   message: z.string(),
   fixHint: z.string().optional(),

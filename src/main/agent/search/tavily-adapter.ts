@@ -1,6 +1,8 @@
 import type {
   WebSearchAdapter,
+  WebSearchImageResult,
   WebSearchOptions,
+  WebSearchResponse,
   WebSearchResult,
 } from "./types";
 
@@ -21,6 +23,12 @@ interface TavilyResultCandidate {
   url?: unknown;
   content?: unknown;
   published_date?: unknown;
+  images?: unknown;
+}
+
+interface TavilyImageCandidate {
+  url?: unknown;
+  description?: unknown;
 }
 
 function asSearchResult(value: unknown): WebSearchResult | null {
@@ -40,6 +48,29 @@ function asSearchResult(value: unknown): WebSearchResult | null {
       ...(typeof candidate.published_date === "string" && candidate.published_date.trim()
         ? { publishedDate: candidate.published_date.trim().slice(0, 100) }
         : {}),
+    };
+  } catch {
+    return null;
+  }
+}
+
+function asImageResult(value: unknown, sourceUrl?: string): WebSearchImageResult | null {
+  const candidate: TavilyImageCandidate = typeof value === "string"
+    ? { url: value }
+    : value && typeof value === "object"
+      ? value as TavilyImageCandidate
+      : {};
+  if (typeof candidate.url !== "string") return null;
+
+  try {
+    const url = new URL(candidate.url);
+    if (url.protocol !== "http:" && url.protocol !== "https:") return null;
+    return {
+      url: url.toString(),
+      ...(typeof candidate.description === "string" && candidate.description.trim()
+        ? { description: candidate.description.trim().slice(0, 600) }
+        : {}),
+      ...(sourceUrl ? { sourceUrl } : {}),
     };
   } catch {
     return null;
@@ -88,7 +119,7 @@ export class TavilySearchAdapter implements WebSearchAdapter {
     }
   }
 
-  async search(query: string, options: WebSearchOptions): Promise<WebSearchResult[]> {
+  async search(query: string, options: WebSearchOptions): Promise<WebSearchResponse> {
     const request = createRequestSignal(options.signal, this.timeoutMs);
     try {
       const response = await this.fetchImpl(this.endpoint, {
@@ -104,7 +135,8 @@ export class TavilySearchAdapter implements WebSearchAdapter {
           max_results: options.maxResults,
           include_answer: false,
           include_raw_content: false,
-          include_images: false,
+          include_images: options.includeImages ?? false,
+          include_image_descriptions: options.includeImages ?? false,
           ...(options.allowedDomains?.length
             ? { include_domains: options.allowedDomains }
             : {}),
@@ -119,7 +151,7 @@ export class TavilySearchAdapter implements WebSearchAdapter {
         throw new Error(`Tavily search failed with HTTP ${response.status}.`);
       }
 
-      const payload = await response.json() as { results?: unknown };
+      const payload = await response.json() as { results?: unknown; images?: unknown };
       if (!Array.isArray(payload.results)) {
         throw new Error("Tavily search returned an invalid response.");
       }
@@ -132,7 +164,34 @@ export class TavilySearchAdapter implements WebSearchAdapter {
         seen.add(result.url);
         results.push(result);
       }
-      return results.slice(0, options.maxResults);
+
+      const images: WebSearchImageResult[] = [];
+      const seenImages = new Set<string>();
+      const appendImage = (value: unknown, sourceUrl?: string) => {
+        const image = asImageResult(value, sourceUrl);
+        if (!image || seenImages.has(image.url)) return;
+        seenImages.add(image.url);
+        images.push(image);
+      };
+
+      if (options.includeImages) {
+        if (Array.isArray(payload.images)) {
+          payload.images.forEach((image) => appendImage(image));
+        }
+        for (const item of payload.results) {
+          if (!item || typeof item !== "object") continue;
+          const candidate = item as TavilyResultCandidate;
+          const source = asSearchResult(item)?.url;
+          if (Array.isArray(candidate.images)) {
+            candidate.images.forEach((image) => appendImage(image, source));
+          }
+        }
+      }
+
+      return {
+        results: results.slice(0, options.maxResults),
+        images: images.slice(0, options.maxImages ?? options.maxResults),
+      };
     } catch (error) {
       if (request.signal.aborted) {
         if (options.signal?.aborted) throw new Error("Web search was cancelled.");

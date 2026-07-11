@@ -22,6 +22,7 @@ stages:
 3. **标题重复**：DetectRepeatedTitles
 3. **文本溢出**：DetectOverflowText
 4. **deck 一致性**：AnalyzeDeckConsistency
+5. **图片资产**：远程 URL 必须先本地化；检查来源页与 license 元数据
 
 ### Rubric A · 叙事与节奏
 

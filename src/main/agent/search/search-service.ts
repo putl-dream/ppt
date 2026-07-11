@@ -2,7 +2,7 @@ import { TavilySearchAdapter } from "./tavily-adapter";
 import type {
   WebSearchAdapter,
   WebSearchOptions,
-  WebSearchResult,
+  WebSearchResponse,
   WebSearchRuntimeConfig,
 } from "./types";
 
@@ -11,7 +11,7 @@ export class SearchService {
     if (adapters.length === 0) throw new Error("At least one web search adapter is required.");
   }
 
-  async search(query: string, options: WebSearchOptions): Promise<WebSearchResult[]> {
+  async search(query: string, options: WebSearchOptions): Promise<WebSearchResponse> {
     let lastError: unknown;
     for (const adapter of this.adapters) {
       try {

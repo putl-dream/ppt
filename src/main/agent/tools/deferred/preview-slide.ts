@@ -1,6 +1,12 @@
 import { z } from "zod";
 import type { ToolDefinition } from "../tool-definition";
-import type { Slide, TextElement, ImageElement, ShapeElement } from "@shared/presentation";
+import type {
+  ImageAssetMetadata,
+  ImageElement,
+  ShapeElement,
+  Slide,
+  TextElement,
+} from "@shared/presentation";
 import { resolveSlideBackgroundWithVariant } from "@shared/slide-variant";
 import { listLayoutSlots } from "@shared/layout-slots";
 import { fontFamilyToCss, resolveElementFontFamily } from "@shared/typography";
@@ -43,6 +49,7 @@ export interface SlidePreviewSummary {
     y: number;
     width: number;
     height: number;
+    asset?: ImageAssetMetadata;
   }>;
   images: Array<{
     id: string;
@@ -140,6 +147,7 @@ export const previewSlideTool: ToolDefinition<
           y: el.y,
           width: el.width,
           height: el.height,
+          asset: el.asset,
         })),
       shapeCount: slide.elements.filter((el) => el.type === "shape").length,
       chartCount: slide.elements.filter((el) => el.type === "chart").length,

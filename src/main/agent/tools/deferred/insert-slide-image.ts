@@ -1,8 +1,9 @@
 import { z } from "zod";
 import type { ToolDefinition } from "../tool-definition";
 import type { PresentationCommand } from "@shared/commands";
-import type { ImageElement } from "@shared/presentation";
+import type { ImageAssetMetadata, ImageElement } from "@shared/presentation";
 import { LayoutPolicy } from "../../design/layout-policy";
+import { localizeImageAsset } from "../../assets/image-asset";
 import {
   getLayoutSlotRect,
   listLayoutSlots,
@@ -18,6 +19,13 @@ export const insertSlideImageSchema = z.object({
     .optional()
     .describe("可选宽高比约束"),
   objectFit: z.enum(["cover", "contain"]).optional(),
+  localize: z.boolean().optional()
+    .describe("远程图片是否下载到 workspace；默认 true，保证 PPTX 可导出"),
+  provider: z.string().max(100).optional(),
+  source_page_url: z.string().url().optional(),
+  description: z.string().max(600).optional(),
+  attribution: z.string().max(300).optional(),
+  license: z.string().max(200).optional(),
 });
 
 /**
@@ -25,7 +33,7 @@ export const insertSlideImageSchema = z.object({
  */
 export const insertSlideImageTool: ToolDefinition<
   typeof insertSlideImageSchema,
-  { commands: PresentationCommand[]; warnings: string[] }
+  { commands: PresentationCommand[]; warnings: string[]; asset?: ImageAssetMetadata }
 > = {
   name: "InsertSlideImage",
   description: "将图片放入当前页 layout 槽位（side/hero/grid-N），自动计算坐标与比例。",
@@ -67,6 +75,37 @@ export const insertSlideImageTool: ToolDefinition<
       warnings.push("Computed slot rect extends outside the canvas safe zone.");
     }
 
+    let effectiveUrl = args.url;
+    let asset: ImageAssetMetadata | undefined;
+    const isRemote = /^https?:\/\//i.test(args.url);
+    if (isRemote && args.localize !== false) {
+      if (!context.workspaceRoot) {
+        warnings.push("Remote image was not localized because workspaceRoot is unavailable; PPTX export may fail.");
+      } else {
+        try {
+          const localized = await localizeImageAsset({
+            url: args.url,
+            workspaceRoot: context.workspaceRoot,
+            provider: args.provider,
+            sourcePageUrl: args.source_page_url,
+            description: args.description,
+            attribution: args.attribution,
+            license: args.license,
+          });
+          effectiveUrl = localized.fileUrl;
+          asset = localized.metadata;
+          if (!asset.sourcePageUrl || !asset.license) {
+            warnings.push("Image was localized, but source page or license metadata is incomplete.");
+          }
+        } catch (error) {
+          return {
+            commands: [],
+            warnings: [`Unable to localize remote image: ${error instanceof Error ? error.message : String(error)}`],
+          };
+        }
+      }
+    }
+
     const existing = slide.elements.find(
       (el): el is ImageElement => el.type === "image" && el.imageSlot === args.slot,
     );
@@ -81,17 +120,20 @@ export const insertSlideImageTool: ToolDefinition<
             elementId: existing.id,
             element: {
               ...existing,
-              url: args.url,
+              url: effectiveUrl,
               x: rect.x,
               y: rect.y,
               width: rect.width,
               height: rect.height,
               imageSlot: args.slot,
               objectFit: args.objectFit ?? existing.objectFit ?? "cover",
+              provenance: "asset",
+              asset: asset ?? existing.asset,
             },
           },
         ],
         warnings,
+        ...(asset ? { asset } : {}),
       };
     }
 
@@ -108,14 +150,17 @@ export const insertSlideImageTool: ToolDefinition<
             y: rect.y,
             width: rect.width,
             height: rect.height,
-            url: args.url,
+            url: effectiveUrl,
             borderRadius: 4,
             imageSlot: args.slot,
             objectFit: args.objectFit ?? "cover",
+            provenance: "asset",
+            ...(asset ? { asset } : {}),
           },
         },
       ],
       warnings,
+      ...(asset ? { asset } : {}),
     };
   },
 };

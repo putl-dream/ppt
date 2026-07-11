@@ -1,6 +1,7 @@
-import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import { exportToPptx } from "../src/main/ppt-exporter";
 import { CommandBus } from "../src/shared/commands";
@@ -149,6 +150,43 @@ describe("ppt-exporter", () => {
     await exportToPptx(presentation, defaultExportOptions, filePath);
 
     await assertValidPptxFile(filePath, 2);
+  });
+
+  it("exports a localized file URL with spaces and native contain sizing", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "ppt export localized image-"));
+    tempDirs.push(dir);
+    const assetDir = join(dir, "asset folder");
+    await mkdir(assetDir, { recursive: true });
+    const imagePath = join(assetDir, "evidence image.png");
+    await writeFile(imagePath, Buffer.from(TINY_PNG_DATA_URL.split(",")[1]!, "base64"));
+    const filePath = join(dir, "export.pptx");
+    const presentation: Presentation = {
+      id: crypto.randomUUID(),
+      title: "Localized image export",
+      revision: 1,
+      theme: "nordic",
+      palette: "cyan",
+      slides: [{
+        id: crypto.randomUUID(),
+        title: "Evidence",
+        layout: "case",
+        elements: [{
+          id: crypto.randomUUID(),
+          type: "image",
+          x: 760,
+          y: 180,
+          width: 360,
+          height: 320,
+          url: pathToFileURL(imagePath).toString(),
+          borderRadius: 0,
+          objectFit: "contain",
+          asset: { description: "Localized evidence image" },
+        }],
+      }],
+    };
+
+    await exportToPptx(presentation, defaultExportOptions, filePath);
+    await assertValidPptxFile(filePath, 1);
   });
 
   it("exports a presentation built through CommandBus and layout commands", async () => {

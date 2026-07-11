@@ -42,19 +42,22 @@ describe("web search", () => {
       fetchImpl,
     });
 
-    const results = await adapter.search("agent architecture", {
+    const output = await adapter.search("agent architecture", {
       maxResults: 5,
       searchDepth: "advanced",
       topic: "general",
+      includeImages: false,
+      maxImages: 5,
       allowedDomains: ["example.com"],
     });
 
-    expect(results).toEqual([{
+    expect(output.results).toEqual([{
       title: "Example result",
       url: "https://example.com/article",
       snippet: "A compact source-backed snippet.",
       publishedDate: "2026-07-10",
     }]);
+    expect(output.images).toEqual([]);
     expect(fetchMock).toHaveBeenCalledOnce();
     const [url, request] = fetchMock.mock.calls[0]!;
     expect(url).toBe("https://api.tavily.com/search");
@@ -66,6 +69,56 @@ describe("web search", () => {
       include_domains: ["example.com"],
       include_answer: false,
       include_raw_content: false,
+      include_images: false,
+      include_image_descriptions: false,
+    });
+  });
+
+  it("optionally returns normalized image candidates with source pages", async () => {
+    const fetchMock = vi.fn(async (
+      _input: Parameters<typeof fetch>[0],
+      _init?: Parameters<typeof fetch>[1],
+    ) => new Response(JSON.stringify({
+      images: [
+        { url: "https://cdn.example.com/hero.jpg", description: "A wide technology landscape" },
+        "javascript:alert(1)",
+      ],
+      results: [{
+        title: "Source article",
+        url: "https://example.com/source",
+        content: "Source-backed context.",
+        images: [
+          "https://cdn.example.com/evidence.png",
+          "https://cdn.example.com/hero.jpg",
+        ],
+      }],
+    }), { status: 200 }));
+    const adapter = new TavilySearchAdapter({
+      apiKey: "tvly-secret",
+      fetchImpl: fetchMock as unknown as typeof fetch,
+    });
+
+    const output = await adapter.search("technology hero image", {
+      maxResults: 3,
+      searchDepth: "basic",
+      topic: "general",
+      includeImages: true,
+      maxImages: 5,
+    });
+
+    expect(output.images).toEqual([
+      {
+        url: "https://cdn.example.com/hero.jpg",
+        description: "A wide technology landscape",
+      },
+      {
+        url: "https://cdn.example.com/evidence.png",
+        sourceUrl: "https://example.com/source",
+      },
+    ]);
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toMatchObject({
+      include_images: true,
+      include_image_descriptions: true,
     });
   });
 
@@ -124,7 +177,8 @@ describe("web search", () => {
     const modelContent = await webSearchTool.mapResultToModelContent!(output, context);
 
     expect(modelContent).toContain("[Official source](https://docs.example.com/fact)");
-    expect(modelContent).toContain("Cite the source URLs");
+    expect(modelContent).toContain("Use source URLs");
+    expect(output.images).toEqual([]);
     expect(fetchImpl).toHaveBeenCalledOnce();
   });
 });
