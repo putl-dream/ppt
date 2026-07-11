@@ -48,6 +48,7 @@ import {
   createTeammateTaskTools,
 } from "./teammate-task-tools";
 import { toToolInputSchema } from "../tools/tool-schema";
+import { readJsonFile, writeJsonFileAtomic } from "../persistence/atomic-json-file";
 
 type TeammateStatus = "running" | "idle" | "stopped" | "failed";
 
@@ -77,7 +78,13 @@ export interface SpawnTeammateThreadOptions {
 type TeammateState = TeammateHandle & {
   controller: AbortController;
   done: Promise<void>;
+  prompt: string;
   lastError?: string;
+};
+
+type PersistedTeammateState = Omit<TeammateHandle, "status"> & {
+  status: TeammateStatus | "interrupted";
+  prompt: string;
 };
 
 const sendMessageSchema = z.object({
@@ -125,11 +132,15 @@ class TeammateInboxBuffer {
 
 export class TeammateManager {
   private readonly teammates = new Map<string, TeammateState>();
+  private readonly protocolStates: ProtocolStateStore;
+  private reconcilePromise?: Promise<void>;
 
   constructor(
     private readonly bus: MessageBus,
-    private readonly protocolStates = new ProtocolStateStore(),
-  ) {}
+    protocolStates?: ProtocolStateStore,
+  ) {
+    this.protocolStates = protocolStates ?? new ProtocolStateStore(bus.getProtocolStatePath());
+  }
 
   spawn(options: SpawnTeammateThreadOptions): TeammateHandle {
     const name = sanitizeAgentName(options.name);
@@ -145,6 +156,7 @@ export class TeammateManager {
       status: "running",
       startedAt: Date.now(),
       lastActiveAt: Date.now(),
+      prompt: options.prompt,
       controller,
       done: Promise.resolve(),
     };
@@ -168,9 +180,10 @@ export class TeammateManager {
         const notifyMessage = notifyError instanceof Error ? notifyError.message : String(notifyError);
         state.lastError = `${errorMessage}; failed to notify lead: ${notifyMessage}`;
       }
-    }).finally(() => {
+    }).finally(async () => {
       if (state.status !== "failed") state.status = "stopped";
       state.lastActiveAt = Date.now();
+      await this.persistTeammateStates();
     });
     this.teammates.set(name, state);
 
@@ -187,6 +200,7 @@ export class TeammateManager {
   }
 
   async requestShutdown(name: string, reason = "Lead requested teammate shutdown."): Promise<ProtocolState> {
+    await this.protocolStates.hydrate();
     const agent = sanitizeAgentName(name);
     const state = this.teammates.get(agent);
     if (!state) {
@@ -208,6 +222,7 @@ export class TeammateManager {
       target: agent,
       payload: reason,
     });
+    await this.protocolStates.flush();
     try {
       await this.bus.send({
         from: "lead",
@@ -218,6 +233,7 @@ export class TeammateManager {
       });
     } catch (error) {
       this.protocolStates.remove(request.requestId);
+      await this.protocolStates.flush();
       throw error;
     }
     return request;
@@ -228,6 +244,7 @@ export class TeammateManager {
     approve: boolean,
     reason = "",
   ): Promise<ProtocolState> {
+    await this.protocolStates.hydrate();
     const request = this.protocolStates.get(requestId);
     if (!request) throw new Error(`Unknown protocol request: ${requestId}`);
     if (request.type !== "plan_approval") {
@@ -251,8 +268,10 @@ export class TeammateManager {
   }
 
   async consumeLeadInbox(): Promise<AgentMailboxMessage[]> {
+    await this.protocolStates.hydrate();
     const messages = await this.bus.readInbox("lead");
     routeProtocolResponses(messages, this.protocolStates);
+    await this.protocolStates.flush();
     return messages;
   }
 
@@ -262,6 +281,55 @@ export class TeammateManager {
 
   listProtocolStates(): ProtocolState[] {
     return this.protocolStates.list();
+  }
+
+  /**
+   * A teammate model loop cannot be safely replayed after a process crash.
+   * Convert persisted running entries into durable interruption messages so
+   * the lead can inspect artifacts/tasks and explicitly re-delegate.
+   */
+  async reconcileInterrupted(): Promise<void> {
+    if (!this.reconcilePromise) {
+      this.reconcilePromise = (async () => {
+        const filePath = this.bus.getTeammateStatePath();
+        const stored = await readJsonFile<{ version: 1; teammates: PersistedTeammateState[] }>(filePath);
+        if (!stored) return;
+        let changed = false;
+        for (const teammate of stored.teammates) {
+          if (teammate.status !== "running" && teammate.status !== "idle") continue;
+          changed = true;
+          teammate.status = "interrupted";
+          teammate.lastError = "Application restarted before the teammate committed its final result.";
+          teammate.lastActiveAt = Date.now();
+          await this.bus.send({
+            from: teammate.name,
+            to: "lead",
+            type: "error",
+            content:
+              `Teammate ${teammate.name} was interrupted by application restart. `
+              + "Its task claims will be reclaimed; inspect durable artifacts before re-delegating.",
+            payload: { role: teammate.role, prompt: teammate.prompt, recoverable: true },
+          });
+        }
+        if (changed) await writeJsonFileAtomic(filePath, stored);
+      })();
+    }
+    await this.reconcilePromise;
+  }
+
+  private async persistTeammateStates(): Promise<void> {
+    await writeJsonFileAtomic(this.bus.getTeammateStatePath(), {
+      version: 1,
+      teammates: Array.from(this.teammates.values()).map((state): PersistedTeammateState => ({
+        name: state.name,
+        role: state.role,
+        status: state.status,
+        startedAt: state.startedAt,
+        lastActiveAt: state.lastActiveAt,
+        prompt: state.prompt,
+        ...(state.lastError ? { lastError: state.lastError } : {}),
+      })),
+    });
   }
 
   async waitFor(name: string): Promise<void> {
@@ -285,6 +353,8 @@ export class TeammateManager {
     options: SpawnTeammateThreadOptions,
   ): Promise<void> {
     ensureDefaultHooks();
+    await this.protocolStates.hydrate();
+    await this.persistTeammateStates();
     const inbox = new TeammateInboxBuffer(this.bus, state.name);
     const taskStore = new TaskStore(options.workspaceRoot);
     const stepLimits = resolveAgentStepLimits(options.agentStepLimits);
@@ -354,6 +424,7 @@ export class TeammateManager {
       while (!state.controller.signal.aborted) {
         const inboxMessages = await inbox.takeAll();
         const matchedResponses = routeProtocolResponses(inboxMessages, this.protocolStates);
+        if (matchedResponses.length > 0) await this.protocolStates.flush();
         const matchedRequestIds = new Set(
           matchedResponses.map((response) => response.requestId),
         );
@@ -723,6 +794,7 @@ function createRequestPlanApprovalTool(
       approval: "never",
     },
     async execute(args) {
+      await states.hydrate();
       const existing = states.findPending({
         type: "plan_approval",
         sender: fromAgent,
@@ -738,6 +810,7 @@ function createRequestPlanApprovalTool(
         target: "lead",
         payload: args.plan,
       });
+      await states.flush();
       try {
         await bus.send({
           from: fromAgent,
@@ -748,6 +821,7 @@ function createRequestPlanApprovalTool(
         });
       } catch (error) {
         states.remove(request.requestId);
+        await states.flush();
         throw error;
       }
       return `Plan approval ${request.requestId} is pending. Do not make changes until lead responds.`;

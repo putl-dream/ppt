@@ -1,4 +1,4 @@
-import { appendFile, mkdir, readFile } from "node:fs/promises";
+import { mkdir, open, readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import {
   buildConversationChain,
@@ -51,30 +51,55 @@ export class TranscriptStore {
       throw error;
     }
 
-    return raw
+    const lines = raw
       .split(/\r?\n/)
-      .filter((line) => line.trim().length > 0)
-      .map((line, index) => {
-        try {
-          return transcriptMessageSchema.parse(JSON.parse(line));
-        } catch (error) {
-          throw new Error(
-            `Invalid transcript JSONL at ${filePath}:${index + 1}: ${
-              error instanceof Error ? error.message : String(error)
-            }`,
-          );
-        }
-      });
+      .map((line, index) => ({ line, lineNumber: index + 1 }))
+      .filter((entry) => entry.line.trim().length > 0);
+    const messages: TranscriptMessage[] = [];
+    for (let index = 0; index < lines.length; index += 1) {
+      const entry = lines[index];
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(entry.line);
+      } catch (error) {
+        // A process kill can truncate only the final append. Preserve all
+        // committed records and ignore that incomplete tail; corruption in the
+        // middle remains fatal.
+        if (index === lines.length - 1) break;
+        throw new Error(
+          `Invalid transcript JSONL at ${filePath}:${entry.lineNumber}: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+      }
+      try {
+        messages.push(transcriptMessageSchema.parse(parsed));
+      } catch (error) {
+        throw new Error(
+          `Invalid transcript JSONL schema at ${filePath}:${entry.lineNumber}: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+      }
+    }
+    return messages;
   }
 
   async loadConversationChain(
     sessionId: string,
     projectDir: string,
     leafMessageUuid?: string,
+    options?: { recoverTail?: boolean },
   ): Promise<TranscriptMessage[]> {
     const messages = await this.loadTranscriptFile(sessionId, projectDir);
     if (messages.length === 0) return [];
-    const leafUuid = leafMessageUuid ?? messages.at(-1)?.uuid;
+    let leafUuid = leafMessageUuid ?? messages.at(-1)?.uuid;
+    if (!leafUuid) return [];
+    if (!messages.some((message) => message.uuid === leafUuid)) {
+      leafUuid = messages.at(-1)?.uuid;
+    } else if (options?.recoverTail) {
+      leafUuid = findLatestDescendantLeaf(messages, leafUuid);
+    }
     if (!leafUuid) return [];
     return buildConversationChain(messages, leafUuid);
   }
@@ -127,9 +152,25 @@ export class TranscriptStore {
     const previous = this.writeQueues.get(filePath) ?? Promise.resolve();
     const next = previous.then(async () => {
       await mkdir(dirname(filePath), { recursive: true });
-      await appendFile(filePath, payload, "utf8");
+      const handle = await open(filePath, "a");
+      try {
+        await handle.writeFile(payload, "utf8");
+        await handle.sync();
+      } finally {
+        await handle.close();
+      }
     });
     this.writeQueues.set(filePath, next.catch(() => undefined));
     await next;
   }
+}
+
+function findLatestDescendantLeaf(messages: TranscriptMessage[], initialLeaf: string): string {
+  let leaf = initialLeaf;
+  for (const message of messages) {
+    if (!message.isSidechain && message.parentUuid === leaf) {
+      leaf = message.uuid;
+    }
+  }
+  return leaf;
 }

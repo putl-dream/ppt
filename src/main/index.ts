@@ -44,6 +44,7 @@ import { createEmptySkillRegistry } from "./agent/skills/loadSkillsDir";
 import { RiskPolicy } from "./agent/gate/risk-policy";
 import { createModuleLogger, requestSummary } from "./agent/logger";
 import { FileSessionStore } from "./session-store";
+import { TaskStore } from "./agent/task/task-store";
 import type { SessionChatMessage, SessionSnapshot } from "@shared/session";
 import { projectArtifactStatusSchema } from "@shared/session";
 import {
@@ -248,7 +249,11 @@ app.whenReady().then(async () => {
   const ensureRuntime = async (snapshot: SessionSnapshot): Promise<SessionRuntime> => {
     const existing = runtimes.get(snapshot.session.id);
     if (existing && existing.workspaceRoot === snapshot.project?.rootPath) return existing;
+    if (snapshot.project?.rootPath) {
+      await new TaskStore(snapshot.project.rootPath).recoverInterruptedClaims();
+    }
     const runtime = createSessionRuntime(snapshot, skillRegistry);
+    await runtime.teammateManager?.reconcileInterrupted();
     runtimes.set(snapshot.session.id, runtime);
     return runtime;
   };
@@ -682,6 +687,7 @@ app.whenReady().then(async () => {
         currentRunId,
         { threadId, ...requestSummary(request.prompt) },
         async () => {
+          await runtime.agentService.restoreDurableThread(threadId);
           if (!runtime.agentService.hasActiveConversation(threadId)) {
             const recovered = findRecoverableConversation(
               sessionStore.getSession(sessionId).messages,

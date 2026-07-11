@@ -1,4 +1,4 @@
-import { cp, mkdir, readdir, readFile, rename, stat, writeFile } from "node:fs/promises";
+import { cp, mkdir, readdir, readFile, stat } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { z } from "zod";
 import { presentationSchema, type Presentation } from "@shared/presentation";
@@ -50,6 +50,7 @@ import {
   sessionBelongsToWorkspace,
 } from "@shared/workspace";
 import { WorkspaceIndexStore } from "./workspace-index-store";
+import { writeTextFileAtomic } from "./agent/persistence/atomic-json-file";
 
 const storedSessionSchema = sessionSnapshotSchema;
 const sessionFileSchema = z.object({
@@ -80,7 +81,6 @@ export class FileSessionStore {
   private readonly exportHistoryService: ExportHistoryService;
   private readonly transcriptStore = new TranscriptStore();
   private readonly workspaceIndexStore = new WorkspaceIndexStore();
-  private readonly expiredApprovalMessageIds = new Set<string>();
 
   constructor(private readonly filePath: string, projectRootPath?: string) {
     this.projectsRootPath = projectRootPath ?? join(dirname(filePath), "projects");
@@ -107,10 +107,8 @@ export class FileSessionStore {
       }
       const projectChanged = await this.materializeProjectSandboxes();
       const transcriptChanged = await this.hydrateMessagesFromTranscripts();
-      const expiredApprovals = this.expirePendingApprovals();
       if (
         geometryRepair.repairedDimensionCount > 0 ||
-        expiredApprovals ||
         transcriptChanged ||
         projectChanged ||
         !activeExists
@@ -121,6 +119,33 @@ export class FileSessionStore {
       const code = (error as NodeJS.ErrnoException).code;
       if (code !== "ENOENT" && !(error instanceof SyntaxError) && !(error instanceof z.ZodError)) {
         throw error;
+      }
+      if (code !== "ENOENT") {
+        try {
+          const backupRaw = JSON.parse(await readFile(`${this.filePath}.bak`, "utf8"));
+          const repaired = repairSessionFileGeometry(backupRaw);
+          const backup = sessionFileSchema.parse(repaired.value);
+          const activeExists = backup.sessions.some(
+            (item) => item.session.id === backup.activeSessionId,
+          );
+          this.data = backup.sessions.length === 0
+            ? { ...backup, activeSessionId: "" }
+            : activeExists
+              ? backup
+              : { ...backup, activeSessionId: backup.sessions[0].session.id };
+          await this.materializeProjectSandboxes();
+          await this.hydrateMessagesFromTranscripts();
+          await writeTextFileAtomic(
+            this.filePath,
+            `${JSON.stringify(this.requireData(), null, 2)}\n`,
+          );
+          return;
+        } catch (backupError) {
+          throw new Error(
+            `Session store and backup are both invalid. Original files were preserved: ${this.filePath}`,
+            { cause: backupError },
+          );
+        }
       }
       this.data = this.createInitialData();
       await this.materializeProjectSandboxes();
@@ -451,12 +476,15 @@ export class FileSessionStore {
   private async hydrateMessagesFromTranscripts(): Promise<boolean> {
     let changed = false;
     for (const snapshot of this.requireData().sessions) {
-      changed = (await this.hydrateMessagesFromTranscript(snapshot)) || changed;
+      changed = (await this.hydrateMessagesFromTranscript(snapshot, true)) || changed;
     }
     return changed;
   }
 
-  private async hydrateMessagesFromTranscript(snapshot: SessionSnapshot): Promise<boolean> {
+  private async hydrateMessagesFromTranscript(
+    snapshot: SessionSnapshot,
+    recoverTail = false,
+  ): Promise<boolean> {
     if (!snapshot.project || !snapshot.transcript) {
       throw new Error("Session transcript has not been initialized.");
     }
@@ -465,6 +493,7 @@ export class FileSessionStore {
       snapshot.session.id,
       snapshot.project.rootPath,
       snapshot.transcript.leafMessageUuid,
+      { recoverTail },
     );
 
     if (chain.length === 0) {
@@ -473,11 +502,7 @@ export class FileSessionStore {
       return true;
     }
 
-    const messages = deserializeSessionMessages(chain).map((message) =>
-      this.expiredApprovalMessageIds.has(message.id)
-        ? this.toExpiredApprovalMessage(message)
-        : message,
-    );
+    const messages = deserializeSessionMessages(chain);
     const leafMessageUuid = chain.at(-1)?.uuid;
     const changed =
       JSON.stringify(snapshot.messages) !== JSON.stringify(messages) ||
@@ -578,41 +603,6 @@ export class FileSessionStore {
     snapshot.transcript.leafMessageUuid = inserted.at(-1)?.uuid;
   }
 
-  private expirePendingApprovals(): boolean {
-    let changed = false;
-    for (const snapshot of this.requireData().sessions) {
-      snapshot.messages = snapshot.messages.map((message) => {
-        let next = message;
-        if (message.approval) {
-          changed = true;
-          this.expiredApprovalMessageIds.add(message.id);
-          next = this.toExpiredApprovalMessage(next);
-        }
-        if (message.patch && !message.patch.resolved) {
-          changed = true;
-          next = this.toExpiredPatchMessage(next);
-        }
-        return next;
-      });
-    }
-    return changed;
-  }
-
-  private toExpiredPatchMessage(message: SessionChatMessage): SessionChatMessage {
-    if (!message.patch || message.patch.resolved) return message;
-    const expirationNotice = "该 Patch 审核请求已随应用重启失效，请重新提交指令。";
-    return {
-      ...message,
-      content: message.content.includes(expirationNotice)
-        ? message.content
-        : `${message.content}\n\n${expirationNotice}`,
-      patch: {
-        ...message.patch,
-        resolved: "rejected",
-      },
-    };
-  }
-
   private messagesChanged(
     before: SessionChatMessage[],
     after: SessionChatMessage[],
@@ -622,18 +612,6 @@ export class FileSessionStore {
 
   private hasConversationMessages(messages: SessionChatMessage[]): boolean {
     return messages.some((message) => message.role === "user");
-  }
-
-  private toExpiredApprovalMessage(message: SessionChatMessage): SessionChatMessage {
-    if (!message.approval) return message;
-    const { approval: _, ...rest } = message;
-    const expirationNotice = "该审批请求已随应用重启失效，请重新提交指令。";
-    return {
-      ...rest,
-      content: message.content.includes(expirationNotice)
-        ? message.content
-        : `${message.content}\n\n${expirationNotice}`,
-    };
   }
 
   private toSummary(
@@ -798,12 +776,18 @@ export class FileSessionStore {
 
   private async persist(): Promise<void> {
     const payload = `${JSON.stringify(this.requireData(), null, 2)}\n`;
-    this.writeQueue = this.writeQueue.then(async () => {
-      const temporaryPath = `${this.filePath}.tmp`;
-      await writeFile(temporaryPath, payload, "utf8");
-      await rename(temporaryPath, this.filePath);
+    const write = this.writeQueue.catch(() => undefined).then(async () => {
+      try {
+        const current = await readFile(this.filePath, "utf8");
+        sessionFileSchema.parse(repairSessionFileGeometry(JSON.parse(current)).value);
+        await writeTextFileAtomic(`${this.filePath}.bak`, current);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      }
+      await writeTextFileAtomic(this.filePath, payload);
     });
-    await this.writeQueue;
+    this.writeQueue = write;
+    await write;
   }
 }
 

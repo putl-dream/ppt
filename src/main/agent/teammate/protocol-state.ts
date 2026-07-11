@@ -1,4 +1,5 @@
 import type { AgentMailboxMessage } from "./message-bus";
+import { readJsonFile, writeJsonFileAtomic } from "../persistence/atomic-json-file";
 
 export type ProtocolType = "shutdown" | "plan_approval";
 export type ProtocolStatus = "pending" | "approved" | "rejected";
@@ -22,6 +23,30 @@ const RESPONSE_TYPES: Record<ProtocolType, ProtocolResponseMessageType> = {
 
 export class ProtocolStateStore {
   private readonly requests = new Map<string, ProtocolState>();
+  private hydratePromise?: Promise<void>;
+
+  constructor(private readonly filePath?: string) {}
+
+  async hydrate(): Promise<void> {
+    if (!this.hydratePromise) {
+      this.hydratePromise = (async () => {
+        if (!this.filePath) return;
+        const stored = await readJsonFile<{ version: 1; requests: ProtocolState[] }>(this.filePath);
+        for (const state of stored?.requests ?? []) {
+          this.requests.set(state.requestId, state);
+        }
+      })();
+    }
+    await this.hydratePromise;
+  }
+
+  async flush(): Promise<void> {
+    if (!this.filePath) return;
+    await writeJsonFileAtomic(this.filePath, {
+      version: 1,
+      requests: this.list(),
+    });
+  }
 
   createRequest(input: {
     type: ProtocolType;

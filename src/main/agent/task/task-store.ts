@@ -1,4 +1,4 @@
-import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { randomBytes } from "node:crypto";
 import { createRequire } from "node:module";
@@ -13,9 +13,15 @@ import {
   type AgentTaskNode,
 } from "@shared/agent-task-graph";
 import { resolveAgentPath } from "../subagent/workspace-path";
+import { writeJsonFileAtomic } from "../persistence/atomic-json-file";
 
 const META_FILE = "_meta.json";
 const PLAN_FILE = "_plan.json";
+const processIdentity = globalThis as typeof globalThis & {
+  __agentPptProcessInstanceId?: string;
+};
+const PROCESS_INSTANCE_ID = processIdentity.__agentPptProcessInstanceId
+  ??= crypto.randomUUID();
 
 type LockRelease = () => Promise<void>;
 type ProperLockfile = {
@@ -234,6 +240,7 @@ export class TaskStore {
 
       task.owner = owner;
       task.status = "in_progress";
+      task.claimInstanceId = PROCESS_INSTANCE_ID;
       task.updatedAt = new Date().toISOString();
       await this.saveTask(task);
       return {
@@ -256,6 +263,7 @@ export class TaskStore {
 
       task.status = "completed";
       task.owner = null;
+      delete task.claimInstanceId;
       task.updatedAt = new Date().toISOString();
       await this.saveTask(task);
 
@@ -279,12 +287,35 @@ export class TaskStore {
         if (current.status !== "in_progress" || current.owner !== owner) return;
         current.status = "pending";
         current.owner = null;
+        delete current.claimInstanceId;
         current.updatedAt = new Date().toISOString();
         await this.saveTask(current);
         released.push(current.id);
       });
     }
     return released;
+  }
+
+  /** Reclaim work left by a previous application process after a hard stop. */
+  async recoverInterruptedClaims(): Promise<string[]> {
+    const recovered: string[] = [];
+    for (const task of await this.listTasks()) {
+      if (task.status !== "in_progress" || task.claimInstanceId === PROCESS_INSTANCE_ID) continue;
+      await this.withTaskLock(task.id, async () => {
+        const current = await this.loadTask(task.id);
+        if (
+          current.status !== "in_progress"
+          || current.claimInstanceId === PROCESS_INSTANCE_ID
+        ) return;
+        current.status = "pending";
+        current.owner = null;
+        delete current.claimInstanceId;
+        current.updatedAt = new Date().toISOString();
+        await this.saveTask(current);
+        recovered.push(current.id);
+      });
+    }
+    return recovered;
   }
 
   private async ensureTasksDir(): Promise<void> {
@@ -305,7 +336,7 @@ export class TaskStore {
 
   private async savePlanMeta(meta: PlanMeta): Promise<void> {
     await this.ensureTasksDir();
-    await writeFile(this.planPath(), JSON.stringify(meta, null, 2), "utf8");
+    await writeJsonFileAtomic(this.planPath(), meta);
   }
 
   private async loadMeta(): Promise<TaskMeta> {
@@ -322,7 +353,7 @@ export class TaskStore {
   }
 
   private async saveMeta(meta: TaskMeta): Promise<void> {
-    await writeFile(this.metaPath(), JSON.stringify(meta, null, 2), "utf8");
+    await writeJsonFileAtomic(this.metaPath(), meta);
   }
 
   private async nextTaskId(): Promise<string> {
@@ -340,7 +371,7 @@ export class TaskStore {
 
   private async saveTask(task: AgentTaskNode): Promise<void> {
     await this.ensureTasksDir();
-    await writeFile(this.taskPath(task.id), JSON.stringify(task, null, 2), "utf8");
+    await writeJsonFileAtomic(this.taskPath(task.id), task);
   }
 
   private async withTaskLock<T>(taskId: string, fn: () => Promise<T>): Promise<T> {

@@ -11,6 +11,11 @@ import type { ToolApprovalHandler } from "./runtime/permission-check";
 import type { ToolApprovalBroker } from "./runtime/tool-approval-broker";
 import type { MessageBus } from "./teammate/message-bus";
 import type { TeammateManager } from "./teammate/spawn-teammate";
+import {
+  DurableServiceStore,
+  type DurablePendingApproval,
+  type DurableServiceThread,
+} from "./persistence/durable-service-store";
 
 export type AgentServiceEvent =
   | { type: "request-status"; message: string; progress: number }
@@ -44,14 +49,7 @@ export type AgentServiceEvent =
 
 export type AgentServiceEventListener = (event: AgentServiceEvent) => void;
 
-type PendingApproval = {
-  commands: PresentationCommand[];
-  summary: string;
-  assumptions?: string[];
-  modelRisk: "low" | "medium" | "high";
-  baseRevision: number;
-  gate: CommitGateResult;
-};
+type PendingApproval = DurablePendingApproval;
 
 type ContinuedConversation = {
   messages: AgentConversationMessage[];
@@ -63,6 +61,7 @@ type ContinuedConversation = {
 export class AgentService {
   private readonly pendingApprovals = new Map<string, PendingApproval>();
   private readonly conversations = new Map<string, ContinuedConversation>();
+  private readonly durableStore?: DurableServiceStore;
 
   constructor(
     private readonly commandBus: CommandBus,
@@ -72,7 +71,9 @@ export class AgentService {
     private readonly toolApprovalBroker?: ToolApprovalBroker,
     private readonly messageBus?: MessageBus,
     private readonly teammateManager?: TeammateManager,
-  ) {}
+  ) {
+    this.durableStore = workspaceRoot ? new DurableServiceStore(workspaceRoot) : undefined;
+  }
 
   hasActiveConversation(threadId: string): boolean {
     return this.conversations.has(threadId);
@@ -91,6 +92,36 @@ export class AgentService {
     });
   }
 
+  async restoreDurableThread(threadId: string): Promise<boolean> {
+    const state = await this.durableStore?.load(threadId);
+    if (!state) return false;
+    if (state.status === "waiting_approval" && state.pendingApproval) {
+      this.pendingApprovals.set(threadId, structuredClone(state.pendingApproval));
+      return true;
+    }
+    if (state.status === "active" || state.status === "waiting_user") {
+      this.conversations.set(threadId, {
+        messages: structuredClone(state.messages),
+        model: state.model,
+        executionStrategy: state.executionStrategy,
+      });
+      return true;
+    }
+    return false;
+  }
+
+  private async persistThread(
+    threadId: string,
+    state: Omit<DurableServiceThread, "version" | "threadId" | "updatedAt">,
+  ): Promise<void> {
+    await this.durableStore?.save({
+      version: 1,
+      threadId,
+      ...state,
+      updatedAt: new Date().toISOString(),
+    });
+  }
+
   async start(
     request: string,
     model?: AgentModelSelection,
@@ -102,7 +133,23 @@ export class AgentService {
     runId?: string,
     agentStepLimits?: AgentStepLimits,
   ): Promise<AgentRunResult> {
-    const threadId = crypto.randomUUID();
+    // A caller-provided run id is stable across renderer/main persistence and
+    // doubles as the recoverable thread id for an interrupted first turn.
+    const threadId = runId ?? crypto.randomUUID();
+    this.conversations.set(threadId, {
+      messages: [
+        ...structuredClone(messageHistory),
+        { role: "user", content: request },
+      ],
+      model,
+      executionStrategy,
+    });
+    await this.persistThread(threadId, {
+      status: "active",
+      messages: structuredClone(this.conversations.get(threadId)!.messages),
+      model,
+      executionStrategy,
+    });
     return this.run(
       threadId,
       request,
@@ -131,6 +178,12 @@ export class AgentService {
     const conversation = this.conversations.get(threadId);
     if (!conversation) throw new Error("Agent conversation not found or already completed.");
     conversation.messages.push({ role: "user", content: request });
+    await this.persistThread(threadId, {
+      status: "active",
+      messages: structuredClone(conversation.messages),
+      model: conversation.model,
+      executionStrategy: conversation.executionStrategy,
+    });
     return this.run(
       threadId,
       request,
@@ -162,10 +215,17 @@ export class AgentService {
     agentStepLimits?: AgentStepLimits,
   ): Promise<AgentRunResult> {
     if (signal?.aborted) {
+      this.conversations.delete(threadId);
+      this.runtime.clearSession(threadId);
+      await this.persistThread(threadId, {
+        status: "interrupted",
+        messages: structuredClone(messageHistory),
+        model,
+        executionStrategy,
+      });
       return {
         status: "chat",
         message: "会话已中断。",
-        ...(this.conversations.has(threadId) ? { threadId } : {}),
       };
     }
     listener?.({
@@ -183,6 +243,9 @@ export class AgentService {
         currentSlideId: editorContext?.currentSlideId,
         selectedElementIds: editorContext?.selectedElementIds ?? [],
         model,
+        executionStrategy,
+        runId,
+        resumeThread: requestAlreadyInHistory,
         messageHistory,
         requiredOutcome,
         signal,
@@ -206,6 +269,17 @@ export class AgentService {
     } catch (error) {
       const recoveryMessage = formatRecoverableAgentError(error, signal);
       if (recoveryMessage) {
+        if (signal?.aborted) {
+          this.runtime.clearSession(threadId);
+          this.conversations.delete(threadId);
+          await this.persistThread(threadId, {
+            status: "interrupted",
+            messages: structuredClone(messageHistory),
+            model,
+            executionStrategy,
+          });
+          return { status: "chat", message: recoveryMessage };
+        }
         if (!this.conversations.has(threadId)) {
           this.runtime.clearSession(threadId);
         }
@@ -224,6 +298,16 @@ export class AgentService {
     if (runtimeResult.type === "message") {
       this.runtime.clearSession(threadId);
       this.conversations.delete(threadId);
+      await this.persistThread(threadId, {
+        status: "completed",
+        messages: [
+          ...structuredClone(messageHistory),
+          ...(requestAlreadyInHistory ? [] : [{ role: "user" as const, content: request }]),
+          { role: "assistant", content: runtimeResult.content },
+        ],
+        model,
+        executionStrategy,
+      });
       return { status: "chat", message: runtimeResult.content };
     }
 
@@ -234,6 +318,12 @@ export class AgentService {
           ...(requestAlreadyInHistory ? [] : [{ role: "user" as const, content: request }]),
           { role: "assistant", content: runtimeResult.content },
         ],
+        model,
+        executionStrategy,
+      });
+      await this.persistThread(threadId, {
+        status: "waiting_user",
+        messages: structuredClone(this.conversations.get(threadId)!.messages),
         model,
         executionStrategy,
       });
@@ -273,6 +363,17 @@ export class AgentService {
       baseRevision: before.revision,
       gate,
     });
+    await this.persistThread(threadId, {
+      status: "waiting_approval",
+      messages: [
+        ...structuredClone(messageHistory),
+        ...(requestAlreadyInHistory ? [] : [{ role: "user" as const, content: request }]),
+        { role: "assistant", content: proposal.summary },
+      ],
+      model,
+      executionStrategy,
+      pendingApproval: structuredClone(this.pendingApprovals.get(threadId)!),
+    });
     this.runtime.clearSession(threadId);
     this.conversations.delete(threadId);
     listener?.({ type: "approval-waiting", message: "修改方案等待确认。" });
@@ -291,6 +392,10 @@ export class AgentService {
   }
 
   async resume(threadId: string, approved: boolean): Promise<AgentRunResult> {
+    const durableState = await this.durableStore?.load(threadId);
+    if (!this.pendingApprovals.has(threadId)) {
+      await this.restoreDurableThread(threadId);
+    }
     const pendingApproval = this.pendingApprovals.get(threadId);
     if (!pendingApproval) {
       throw new Error("Approval request not found or already completed.");
@@ -300,6 +405,12 @@ export class AgentService {
       this.pendingApprovals.delete(threadId);
       this.runtime.clearSession(threadId);
       this.conversations.delete(threadId);
+      await this.persistThread(threadId, {
+        status: "rejected",
+        messages: durableState?.messages ?? [],
+        model: durableState?.model,
+        executionStrategy: durableState?.executionStrategy ?? "REQUEST_APPROVAL",
+      });
       return { status: "rejected", presentation: this.commandBus.getSnapshot() };
     }
 
@@ -320,6 +431,12 @@ export class AgentService {
     this.pendingApprovals.delete(threadId);
     this.runtime.clearSession(threadId);
     this.conversations.delete(threadId);
+    await this.persistThread(threadId, {
+      status: "completed",
+      messages: durableState?.messages ?? [],
+      model: durableState?.model,
+      executionStrategy: durableState?.executionStrategy ?? "REQUEST_APPROVAL",
+    });
     return { status: "completed", presentation: this.commandBus.getSnapshot() };
   }
 

@@ -168,6 +168,28 @@ describe("MessageBus", () => {
 });
 
 describe("ProtocolStateStore", () => {
+  it("restores pending protocol requests from disk", async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), "ppt-protocol-"));
+    const bus = new MessageBus(MessageBus.defaultMailboxDir(workspaceRoot));
+    const first = new ProtocolStateStore(bus.getProtocolStatePath());
+    await first.hydrate();
+    const request = first.createRequest({
+      type: "plan_approval",
+      sender: "designer",
+      target: "lead",
+      payload: "Apply broad layout changes.",
+    });
+    await first.flush();
+
+    const restored = new ProtocolStateStore(bus.getProtocolStatePath());
+    await restored.hydrate();
+    expect(restored.get(request.requestId)).toMatchObject({
+      status: "pending",
+      sender: "designer",
+      target: "lead",
+    });
+  });
+
   it("matches only the expected response type, direction, and first response", () => {
     const states = new ProtocolStateStore();
     const request = states.createRequest({

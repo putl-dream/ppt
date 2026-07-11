@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { appendFile, mkdtemp, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it } from "vitest";
@@ -26,6 +26,48 @@ afterEach(async () => {
 });
 
 describe("TranscriptStore", () => {
+  it("ignores only an incomplete final JSONL record after a hard stop", async () => {
+    const { store, projectDir } = await createStore();
+    await store.insertMessageChain({
+      sessionId: "session-tail",
+      projectDir,
+      messages: [{ role: "user", content: "committed" }],
+    });
+    await appendFile(
+      store.getTranscriptPath("session-tail", projectDir),
+      '{"uuid":"partial"',
+      "utf8",
+    );
+    const restored = await store.loadTranscriptFile("session-tail", projectDir);
+    expect(restored).toHaveLength(1);
+    expect(restored[0].content).toBe("committed");
+  });
+
+  it("recovers descendants appended after a stale leaf pointer", async () => {
+    const { store, projectDir } = await createStore();
+    const first = await store.insertMessageChain({
+      sessionId: "session-orphan",
+      projectDir,
+      messages: [{ role: "user", content: "first" }],
+    });
+    await store.insertMessageChain({
+      sessionId: "session-orphan",
+      projectDir,
+      parentUuid: first[0].uuid,
+      messages: [{ role: "assistant", content: "committed after stale head" }],
+    });
+    const restored = await store.loadConversationChain(
+      "session-orphan",
+      projectDir,
+      first[0].uuid,
+      { recoverTail: true },
+    );
+    expect(restored.map((message) => message.content)).toEqual([
+      "first",
+      "committed after stale head",
+    ]);
+  });
+
   it("appends message chains as JSONL and skips already written UUIDs", async () => {
     const { store, projectDir } = await createStore();
     const sessionId = "session-1";

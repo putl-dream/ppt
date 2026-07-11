@@ -36,6 +36,20 @@ afterEach(async () => {
 });
 
 describe("FileSessionStore", () => {
+  it("restores a validated backup instead of clearing a corrupted global store", async () => {
+    const { store, filePath } = await createStoreWithSession();
+    const sessionId = must(store.getBootstrap().activeSession).session.id;
+    await store.saveMessages(sessionId, [
+      { id: "u-backup", role: "user", content: "create a validated backup" },
+    ]);
+    await writeFile(filePath, "{corrupted", "utf8");
+
+    const restored = new FileSessionStore(filePath);
+    await restored.initialize();
+    expect(restored.getSession(sessionId).session.id).toBe(sessionId);
+    expect(JSON.parse(await readFile(filePath, "utf8")).sessions).toHaveLength(1);
+  });
+
   it("starts with an empty bootstrap on first launch", async () => {
     const { store } = await createStore();
     const initial = store.getBootstrap();
@@ -408,7 +422,7 @@ describe("FileSessionStore", () => {
     expect(diff.unifiedDiff).toContain("+++ b/outline.md");
   });
 
-  it("expires pending approvals after an application restart", async () => {
+  it("preserves pending approvals after an application restart", async () => {
     const { store, filePath } = await createStoreWithSession();
     const sessionId = must(store.getBootstrap().activeSession).session.id;
     await store.saveMessages(sessionId, [
@@ -424,8 +438,12 @@ describe("FileSessionStore", () => {
     await restored.initialize();
     const message = must(restored.getBootstrap().activeSession).messages[0];
 
-    expect(message.approval).toBeUndefined();
-    expect(message.content).toContain("审批请求已随应用重启失效");
+    expect(message.approval).toEqual({
+      threadId: "thread-1",
+      summary: "测试",
+      commands: [],
+    });
+    expect(message.content).not.toContain("审批请求已随应用重启失效");
   });
 
   it("preserves pending threadId metadata after an application restart", async () => {

@@ -15,6 +15,7 @@ import {
 } from "./workspace-artifacts";
 
 export const MEMORY_INDEX_RELATIVE_PATH = ".memory/MEMORY.md";
+export const DURABLE_MEMORY_STATE_RELATIVE_PATH = ".memory/STATE.md";
 
 export interface SystemPromptContextInput {
   request: string;
@@ -50,11 +51,16 @@ async function readMemoryIndex(workspaceRoot?: string): Promise<string> {
   if (!workspaceRoot) return "";
 
   try {
-    const content = await readFile(
-      join(workspaceRoot, MEMORY_INDEX_RELATIVE_PATH),
-      "utf8",
+    const contents = await Promise.all(
+      [MEMORY_INDEX_RELATIVE_PATH, DURABLE_MEMORY_STATE_RELATIVE_PATH].map(async (path) => {
+        try {
+          return (await readFile(join(workspaceRoot, path), "utf8")).trim();
+        } catch {
+          return "";
+        }
+      }),
     );
-    return content.trim();
+    return contents.filter(Boolean).join("\n\n");
   } catch {
     return "";
   }

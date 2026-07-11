@@ -1,5 +1,4 @@
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
-import { dirname } from "node:path";
+import { mkdir, readFile } from "node:fs/promises";
 import {
   getWorkspaceMetaDir,
   getWorkspaceProjectPath,
@@ -16,8 +15,10 @@ import {
 import type { SessionSnapshot } from "@shared/session";
 import { repairPresentationGeometry } from "@shared/presentation-repair";
 import { normalizeWorkspacePath, compareSessionsByActivity } from "@shared/workspace";
+import { writeTextFileAtomic } from "./agent/persistence/atomic-json-file";
 
 export class WorkspaceIndexStore {
+  private readonly workspaceQueues = new Map<string, Promise<unknown>>();
   async ensureProjectMeta(rootPath: string, title: string): Promise<WorkspaceProjectMeta> {
     const normalized = normalizeWorkspacePath(rootPath);
     const existing = await this.readProjectMeta(normalized);
@@ -143,71 +144,85 @@ export class WorkspaceIndexStore {
     options?: { active?: boolean },
   ): Promise<WorkspaceSessionsIndex> {
     const normalized = normalizeWorkspacePath(rootPath);
-    await mkdir(getWorkspaceMetaDir(normalized), { recursive: true });
-    await this.writeSessionSnapshot(normalized, this.snapshotFromSession(snapshot));
+    return this.withWorkspaceQueue(normalized, async () => {
+      await mkdir(getWorkspaceMetaDir(normalized), { recursive: true });
+      await this.writeSessionSnapshot(normalized, this.snapshotFromSession(snapshot));
 
-    const entry = this.entryFromSnapshot(snapshot);
-    const existing = (await this.readSessionsIndex(normalized)) ?? {
-      version: 1 as const,
-      activeSessionId: entry.id,
-      sessions: [],
-    };
+      const entry = this.entryFromSnapshot(snapshot);
+      const existing = (await this.readSessionsIndex(normalized)) ?? {
+        version: 1 as const,
+        activeSessionId: entry.id,
+        sessions: [],
+      };
 
-    const sessions = [
-      entry,
-      ...existing.sessions.filter((item) => item.id !== entry.id),
-    ].sort((left, right) => compareSessionsByActivity(left, right));
+      const sessions = [
+        entry,
+        ...existing.sessions.filter((item) => item.id !== entry.id),
+      ].sort((left, right) => compareSessionsByActivity(left, right));
 
-    const next: WorkspaceSessionsIndex = {
-      version: 1,
-      activeSessionId: options?.active === false
-        ? existing.activeSessionId
-        : entry.id,
-      sessions,
-    };
+      const next: WorkspaceSessionsIndex = {
+        version: 1,
+        activeSessionId: options?.active === false
+          ? existing.activeSessionId
+          : entry.id,
+        sessions,
+      };
 
-    if (!sessions.some((item) => item.id === next.activeSessionId)) {
-      next.activeSessionId = sessions[0]?.id ?? entry.id;
-    }
+      if (!sessions.some((item) => item.id === next.activeSessionId)) {
+        next.activeSessionId = sessions[0]?.id ?? entry.id;
+      }
 
-    await this.writeSessionsIndex(normalized, next);
-    return next;
+      await this.writeSessionsIndex(normalized, next);
+      return next;
+    });
   }
 
   async removeSession(rootPath: string, sessionId: string): Promise<WorkspaceSessionsIndex | null> {
     const normalized = normalizeWorkspacePath(rootPath);
-    const existing = await this.readSessionsIndex(normalized);
-    if (!existing) return null;
+    return this.withWorkspaceQueue(normalized, async () => {
+      const existing = await this.readSessionsIndex(normalized);
+      if (!existing) return null;
 
-    const sessions = existing.sessions.filter((item) => item.id !== sessionId);
-    if (sessions.length === existing.sessions.length) return existing;
+      const sessions = existing.sessions.filter((item) => item.id !== sessionId);
+      if (sessions.length === existing.sessions.length) return existing;
 
-    const next: WorkspaceSessionsIndex = {
-      version: 1,
-      activeSessionId: existing.activeSessionId === sessionId
-        ? (sessions[0]?.id ?? "")
-        : existing.activeSessionId,
-      sessions,
-    };
+      const next: WorkspaceSessionsIndex = {
+        version: 1,
+        activeSessionId: existing.activeSessionId === sessionId
+          ? (sessions[0]?.id ?? "")
+          : existing.activeSessionId,
+        sessions,
+      };
 
-    if (sessions.length === 0) {
       await this.writeSessionsIndex(normalized, next);
       return next;
-    }
-
-    await this.writeSessionsIndex(normalized, next);
-    return next;
+    });
   }
 
   async setActiveSession(rootPath: string, sessionId: string): Promise<void> {
     const normalized = normalizeWorkspacePath(rootPath);
-    const existing = await this.readSessionsIndex(normalized);
-    if (!existing || !existing.sessions.some((item) => item.id === sessionId)) return;
+    await this.withWorkspaceQueue(normalized, async () => {
+      const existing = await this.readSessionsIndex(normalized);
+      if (!existing || !existing.sessions.some((item) => item.id === sessionId)) return;
 
-    await this.writeSessionsIndex(normalized, {
-      ...existing,
-      activeSessionId: sessionId,
+      await this.writeSessionsIndex(normalized, {
+        ...existing,
+        activeSessionId: sessionId,
+      });
     });
+  }
+
+  private async withWorkspaceQueue<T>(rootPath: string, task: () => Promise<T>): Promise<T> {
+    const previous = this.workspaceQueues.get(rootPath) ?? Promise.resolve();
+    const next = previous.catch(() => undefined).then(task);
+    this.workspaceQueues.set(rootPath, next);
+    try {
+      return await next;
+    } finally {
+      if (this.workspaceQueues.get(rootPath) === next) {
+        this.workspaceQueues.delete(rootPath);
+      }
+    }
   }
 
   private async writeProjectMeta(rootPath: string, meta: WorkspaceProjectMeta): Promise<void> {
@@ -224,16 +239,27 @@ export class WorkspaceIndexStore {
     } catch (error) {
       const code = (error as NodeJS.ErrnoException).code;
       if (code === "ENOENT") return null;
-      throw error;
+      try {
+        const backupText = await readFile(`${filePath}.bak`, "utf8");
+        const backup = schema.parse(JSON.parse(backupText));
+        await writeTextFileAtomic(filePath, backupText);
+        return backup;
+      } catch {
+        throw error;
+      }
     }
   }
 
   private async writeJsonFile(filePath: string, value: unknown): Promise<void> {
-    await mkdir(dirname(filePath), { recursive: true });
     const payload = `${JSON.stringify(value, null, 2)}\n`;
-    const temporaryPath = `${filePath}.tmp`;
-    await writeFile(temporaryPath, payload, "utf8");
-    await rename(temporaryPath, filePath);
+    try {
+      const current = await readFile(filePath, "utf8");
+      JSON.parse(current);
+      await writeTextFileAtomic(`${filePath}.bak`, current);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
+    await writeTextFileAtomic(filePath, payload);
   }
 }
 

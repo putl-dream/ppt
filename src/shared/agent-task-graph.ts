@@ -10,6 +10,8 @@ export const agentTaskNodeSchema = z.object({
   description: z.string(),
   status: agentTaskStatusSchema,
   owner: z.string().nullable(),
+  /** Process incarnation that owns an in-progress claim. */
+  claimInstanceId: z.string().optional(),
   blockedBy: z.array(z.string()),
   planId: z.string().optional(),
   createdAt: z.string(),

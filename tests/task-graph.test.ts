@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -106,6 +106,25 @@ describe("agent-task-graph helpers", () => {
 });
 
 describe("TaskStore", () => {
+  it("reclaims an in-progress task owned by a previous process incarnation", async () => {
+    const workspaceRoot = await makeWorkspace();
+    const store = new TaskStore(workspaceRoot);
+    const created = await store.createTask({ subject: "recover me" });
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    await store.claimTask(created.task.id, "crashed-agent");
+    const taskPath = join(workspaceRoot, ".tasks", `${created.task.id}.json`);
+    const persisted = JSON.parse(await readFile(taskPath, "utf8"));
+    persisted.claimInstanceId = "previous-process";
+    await writeFile(taskPath, JSON.stringify(persisted), "utf8");
+
+    expect(await store.recoverInterruptedClaims()).toEqual([created.task.id]);
+    expect(await store.getTask(created.task.id)).toMatchObject({
+      status: "pending",
+      owner: null,
+    });
+  });
+
   it("persists tasks under .tasks and increments id counter", async () => {
     const workspaceRoot = await makeWorkspace();
     const store = new TaskStore(workspaceRoot);

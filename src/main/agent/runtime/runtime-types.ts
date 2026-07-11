@@ -5,7 +5,7 @@
 import { presentationCommandSchema } from "@shared/commands";
 import { agentQuestionSchema } from "@shared/agent-question";
 import { z } from "zod";
-import type { AgentModelSelection } from "@shared/agent";
+import type { AgentExecutionStrategy, AgentModelSelection } from "@shared/agent";
 import type { AgentStepLimits } from "@shared/agent-step-limits";
 import type { Presentation } from "@shared/presentation";
 import type { ToolApprovalHandler } from "./permission-check";
@@ -49,6 +49,10 @@ export interface AgentRuntimeOptions {
   currentSlideId?: string;
   selectedElementIds: string[];
   model?: AgentModelSelection;
+  executionStrategy?: AgentExecutionStrategy;
+  runId?: string;
+  /** Restore the canonical ContentBlock checkpoint for this thread. */
+  resumeThread?: boolean;
   messageHistory?: Array<{ role: "user" | "assistant"; content: string }>;
   requiredOutcome?: "any" | "command_proposal";
   workspaceRoot?: string;

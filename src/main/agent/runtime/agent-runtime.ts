@@ -13,7 +13,7 @@ import { triggerHooks } from "./hook-registry";
 import type { PostToolUseBlock, StopBlock, UserPromptSubmitBlock } from "./hook-blocks";
 import type { SkillRegistry } from "../skills/loadSkillsDir";
 import { createEmptySkillRegistry } from "../skills/loadSkillsDir";
-import { createSkillSession, type SkillSession } from "../skills/skill-types";
+import type { SkillSession } from "../skills/skill-types";
 import {
   buildMainStepLimitMessage,
   getEffectiveMainMaxSteps,
@@ -49,6 +49,12 @@ import {
   formatMailboxMessagesForHistory,
   type AgentMailboxMessage,
 } from "../teammate/message-bus";
+import {
+  DurableRunStore,
+  type DurableRunCheckpoint,
+  type DurableRunPhase,
+  type DurableRunStatus,
+} from "../persistence/durable-run-store";
 
 /** Derive a display message for sub-agent progress events lacking one. */
 function subAgentProgressMessage(event: SubAgentProgressEvent): string {
@@ -97,12 +103,22 @@ export class AgentRuntime {
   async run(options: AgentRuntimeOptions): Promise<AgentRuntimeResult> {
     ensureDefaultHooks();
 
+    const durableRunStore = options.workspaceRoot
+      ? new DurableRunStore(options.workspaceRoot)
+      : undefined;
+    const recovered = options.resumeThread
+      ? await durableRunStore?.load(options.threadId)
+      : undefined;
+    const checkpointCreatedAt = recovered?.createdAt ?? new Date().toISOString();
+
     const discoverySession = this.discoverySessions.get(options.threadId) ?? {
-      discoveredToolNames: new Set<string>(),
+      discoveredToolNames: new Set<string>(recovered?.discoveredToolNames ?? []),
     };
     this.discoverySessions.set(options.threadId, discoverySession);
 
-    const skillSession = this.skillSessions.get(options.threadId) ?? createSkillSession();
+    const skillSession = this.skillSessions.get(options.threadId) ?? {
+      loadedSkillNames: new Set<string>(recovered?.loadedSkillNames ?? []),
+    };
     this.skillSessions.set(options.threadId, skillSession);
 
     const taskStore = createTaskStore(options.workspaceRoot);
@@ -162,23 +178,157 @@ export class AgentRuntime {
       messageBus: options.messageBus,
       teammateManager: options.teammateManager,
     };
-    const transcript: Array<Record<string, unknown>> = [
-      { role: "user", content: options.request },
-    ];
+    const transcript: Array<Record<string, unknown>> = recovered
+      ? [...structuredClone(recovered.transcript), { role: "user", content: options.request }]
+      : [{ role: "user", content: options.request }];
 
     const toolSchemas = toToolSchemas(coreTools);
-    const modelMessages: AgentModelMessage[] = [
-      ...(options.messageHistory ?? []).map((entry) => ({
-        role: entry.role,
-        content: [{ type: "text" as const, text: entry.content }],
-      })),
-      { role: "user", content: [{ type: "text", text: options.request }] },
-    ];
-    const pendingToolResults: { current: AgentModelToolResultBlock[] } = { current: [] };
-    const queuedToolUses: AgentModelToolUseBlock[] = [];
-    const pendingUserContent: string[] = [];
-    let renderFeedbackUsed = false;
+    const recoveredPendingToolResults = structuredClone(recovered?.pendingToolResults ?? []);
+    const modelMessages: AgentModelMessage[] = recovered
+      ? structuredClone(recovered.modelMessages)
+      : [
+          ...(options.messageHistory ?? []).map((entry) => ({
+            role: entry.role,
+            content: [{ type: "text" as const, text: entry.content }],
+          })),
+          { role: "user", content: [{ type: "text", text: options.request }] },
+        ];
+    const pendingToolResults: { current: AgentModelToolResultBlock[] } = {
+      current: recoveredPendingToolResults,
+    };
+    const queuedToolUses: AgentModelToolUseBlock[] = structuredClone(
+      recovered?.queuedToolUses ?? [],
+    );
+    const pendingUserContent: string[] = [...(recovered?.pendingUserContent ?? [])];
+    let renderFeedbackUsed = recovered?.renderFeedbackUsed ?? false;
+    let activeToolUse = recovered?.activeToolUse
+      ? structuredClone(recovered.activeToolUse)
+      : undefined;
+    let checkpointPhase: DurableRunPhase = recovered?.phase ?? "before_model";
+    let totalModelSteps = recovered?.modelStep ?? 0;
     const backgroundTasks = new BackgroundTaskManager();
+
+    if (recovered?.phase === "tool_running" && activeToolUse) {
+      const alreadyRecorded = pendingToolResults.current.some(
+        (item) => item.toolUseId === activeToolUse?.id,
+      );
+      if (!alreadyRecorded) {
+        pendingToolResults.current.push({
+          type: "tool_result",
+          toolUseId: activeToolUse.id,
+          isError: true,
+          content: [{
+            type: "text",
+            text: "The application restarted while this tool was running. Its side effects are uncertain. Inspect durable workspace artifacts and task state before deciding whether to retry; do not assume either success or failure.",
+          }],
+        });
+      }
+      transcript.push({
+        role: "system",
+        kind: "recovery",
+        toolUseId: activeToolUse.id,
+        toolName: activeToolUse.name,
+        content: "Recovered an interrupted tool boundary; side effects require reconciliation.",
+      });
+      activeToolUse = undefined;
+      checkpointPhase = "tool_committed";
+    }
+
+    if (
+      recovered
+      && (recovered.status === "running" || recovered.status === "interrupted" || recovered.status === "failed")
+    ) {
+      const interruptedBackgroundTasks = recovered.transcript.flatMap((entry) => {
+        const result = entry.result;
+        if (!result || typeof result !== "object" || Array.isArray(result)) return [];
+        const record = result as Record<string, unknown>;
+        if (record.status !== "running" || typeof record.backgroundTaskId !== "string") return [];
+        return [{
+          id: record.backgroundTaskId,
+          toolName: typeof entry.toolName === "string" ? entry.toolName : "background-task",
+        }];
+      });
+      if (interruptedBackgroundTasks.length > 0) {
+        const recoveryNotice = interruptedBackgroundTasks.map((task) => [
+          "<task_notification>",
+          `  <task_id>${task.id}</task_id>`,
+          "  <status>failed</status>",
+          `  <tool>${task.toolName}</tool>`,
+          "  <error>The application restarted before this background task committed its result. Inspect durable artifacts before retrying.</error>",
+          "</task_notification>",
+        ].join("\n")).join("\n\n");
+        pendingUserContent.push(recoveryNotice);
+        transcript.push({
+          role: "system",
+          kind: "recovery",
+          content: recoveryNotice,
+        });
+      }
+    }
+
+    if (recovered) {
+      const continuationText = [options.request, ...pendingUserContent.splice(0)]
+        .filter((part) => part.trim())
+        .join("\n\n");
+      if (checkpointPhase === "model_committed" && queuedToolUses.length > 0) {
+        pendingUserContent.push(continuationText);
+      } else if (pendingToolResults.current.length > 0) {
+        modelMessages.push({
+          role: "user",
+          content: [
+            ...pendingToolResults.current,
+            { type: "text", text: continuationText },
+          ],
+        });
+        pendingToolResults.current = [];
+      } else {
+        const last = modelMessages.at(-1);
+        if (last?.role === "user" && !last.content.some((block) => block.type === "tool_result")) {
+          last.content.push({ type: "text", text: continuationText });
+        } else {
+          modelMessages.push({
+            role: "user",
+            content: [{ type: "text", text: continuationText }],
+          });
+        }
+      }
+    }
+
+    const persistCheckpoint = async (input?: {
+      status?: DurableRunStatus;
+      phase?: DurableRunPhase;
+      result?: AgentRuntimeResult;
+      error?: string;
+    }): Promise<void> => {
+      if (!durableRunStore) return;
+      const now = new Date().toISOString();
+      const checkpoint: DurableRunCheckpoint = {
+        version: 1,
+        threadId: options.threadId,
+        runId: options.runId,
+        status: input?.status ?? "running",
+        phase: input?.phase ?? checkpointPhase,
+        request: options.request,
+        model: options.model,
+        executionStrategy: options.executionStrategy,
+        baseRevision: options.presentationSnapshot.revision,
+        modelStep: totalModelSteps,
+        modelMessages: structuredClone(modelMessages),
+        transcript: structuredClone(transcript),
+        queuedToolUses: structuredClone(queuedToolUses),
+        pendingToolResults: structuredClone(pendingToolResults.current),
+        pendingUserContent: [...pendingUserContent],
+        discoveredToolNames: [...discoverySession.discoveredToolNames].sort(),
+        loadedSkillNames: [...skillSession.loadedSkillNames].sort(),
+        renderFeedbackUsed,
+        activeToolUse: activeToolUse ? structuredClone(activeToolUse) : undefined,
+        result: input?.result,
+        error: input?.error,
+        createdAt: checkpointCreatedAt,
+        updatedAt: now,
+      };
+      await durableRunStore.save(checkpoint);
+    };
 
     const appendUserTurn = (input: {
       text?: string;
@@ -303,6 +453,16 @@ export class AgentRuntime {
         result,
         reason,
       } satisfies StopBlock);
+      checkpointPhase = "finished";
+      await persistCheckpoint({
+        status: result.type === "ask_user"
+          ? "waiting_user"
+          : result.type === "command_proposal"
+            ? "proposal_ready"
+            : "completed",
+        phase: "finished",
+        result,
+      });
       return result;
     };
 
@@ -317,10 +477,15 @@ export class AgentRuntime {
       return finish({ type: "message", content: promptStop.reason });
     }
 
-    let modelStep = 0;
-    while (modelStep < maxSteps || queuedToolUses.length > 0) {
+    let runModelSteps = 0;
+    while (runModelSteps < maxSteps || queuedToolUses.length > 0) {
       if (options.signal?.aborted) {
+        await persistCheckpoint({ status: "interrupted" });
         throw new Error("Run aborted by user.");
+      }
+
+      if (checkpointPhase === "tool_committed") {
+        await persistCheckpoint();
       }
 
       let toolCall: AgentModelToolUseBlock | undefined;
@@ -329,8 +494,9 @@ export class AgentRuntime {
       if (queuedToolUse) {
         toolCall = queuedToolUse;
       } else {
-        const currentModelStep = modelStep;
-        modelStep += 1;
+        const currentModelStep = totalModelSteps;
+        runModelSteps += 1;
+        totalModelSteps += 1;
         const shouldUseStream = options.onStreamChunk !== undefined;
         const inboxContent = await drainLeadInboxForModel();
         const promptPayload = {
@@ -346,6 +512,9 @@ export class AgentRuntime {
           inboxContent ?? "",
         ].filter((part) => part.trim()).join("\n\n");
         flushUserTurn(userContent || undefined);
+        checkpointPhase = "before_model";
+        activeToolUse = undefined;
+        await persistCheckpoint();
 
         const modelResult = await callModelWithRecovery({
           gateway: this.gateway,
@@ -379,13 +548,15 @@ export class AgentRuntime {
           seenToolCallIds.add(call.id);
           return true;
         });
-        toolCall = toolUses[0];
-        if (toolCall) {
-          queuedToolUses.push(...toolUses.slice(1));
+        if (toolUses.length > 0) {
+          queuedToolUses.push(...toolUses);
           modelMessages.push({
             role: "assistant",
             content: modelResult.content,
           });
+          checkpointPhase = "model_committed";
+          await persistCheckpoint();
+          continue;
         } else {
           const responseText = textFromContentBlocks(modelResult.content);
           modelMessages.push({ role: "assistant", content: modelResult.content });
@@ -412,6 +583,10 @@ export class AgentRuntime {
         }
       }
 
+      activeToolUse = structuredClone(toolCall);
+      checkpointPhase = "tool_running";
+      await persistCheckpoint();
+
       const recordToolResult = (
         text: string,
         isError = false,
@@ -432,6 +607,8 @@ export class AgentRuntime {
         );
         if (existingIndex >= 0) pendingToolResults.current[existingIndex] = result;
         else pendingToolResults.current.push(result);
+        activeToolUse = undefined;
+        checkpointPhase = "tool_committed";
       };
 
       if (toolCall.parseError) {
@@ -720,6 +897,7 @@ export class AgentRuntime {
 
         if (tool.name === "AskUser") {
           const askUser = agentAskUserResultSchema.parse(result);
+          recordToolResult(askUser.content);
           return finish(askUser);
         }
 

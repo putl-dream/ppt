@@ -1,7 +1,6 @@
-import { randomUUID } from "node:crypto";
-import { mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
-import { basename, dirname, join } from "node:path";
+import { mkdir, readFile, readdir } from "node:fs/promises";
 import { resolveAgentPath } from "./workspace-path";
+import { writeTextFileAtomic } from "../persistence/atomic-json-file";
 
 export async function ensureWorkspaceDir(workspaceRoot: string, path: string): Promise<void> {
   const dirPath = resolveAgentPath(workspaceRoot, path);
@@ -19,25 +18,7 @@ export async function writeWorkspaceText(
   content: string,
 ): Promise<void> {
   const filePath = resolveAgentPath(workspaceRoot, path);
-  const targetDir = dirname(filePath);
-  await mkdir(targetDir, { recursive: true });
-
-  const tempPath = join(
-    targetDir,
-    `.${basename(filePath)}.${process.pid}.${randomUUID()}.tmp`,
-  );
-
-  try {
-    await writeFile(tempPath, content, "utf8");
-    const written = await readFile(tempPath, "utf8");
-    if (written !== content) {
-      throw new Error(`Atomic write verification failed for ${path}`);
-    }
-    await rename(tempPath, filePath);
-  } catch (error) {
-    await rm(tempPath, { force: true }).catch(() => undefined);
-    throw error;
-  }
+  await writeTextFileAtomic(filePath, content);
 }
 
 export async function editWorkspaceText(

@@ -1,4 +1,4 @@
-import { mkdir, readFile, rm, appendFile } from "node:fs/promises";
+import { mkdir, open, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { createRequire } from "node:module";
 
@@ -107,6 +107,14 @@ export class MessageBus {
     return join(workspaceRoot, ".agents", "mailboxes");
   }
 
+  getProtocolStatePath(): string {
+    return join(this.mailboxDir, "..", "protocol-state.json");
+  }
+
+  getTeammateStatePath(): string {
+    return join(this.mailboxDir, "..", "teammates.json");
+  }
+
   getInboxPath(agent: string): string {
     return join(this.mailboxDir, `${sanitizeAgentName(agent)}.jsonl`);
   }
@@ -124,7 +132,13 @@ export class MessageBus {
     const inboxPath = this.getInboxPath(message.to);
 
     await this.withMailboxLock(inboxPath, async () => {
-      await appendFile(inboxPath, `${JSON.stringify(message)}\n`, "utf8");
+      const handle = await open(inboxPath, "a");
+      try {
+        await handle.writeFile(`${JSON.stringify(message)}\n`, "utf8");
+        await handle.sync();
+      } finally {
+        await handle.close();
+      }
     });
 
     return message;

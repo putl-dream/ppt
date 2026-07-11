@@ -1108,11 +1108,20 @@ export function App() {
     setActiveToolName(null);
     setAgentActivityMode("request");
     const runId = crypto.randomUUID();
+    const streamMessageId = crypto.randomUUID();
     activeRunIdRef.current = runId;
     setActiveRunId(runId);
     activeRunTraceRef.current = [];
     requestStatusStepIdRef.current = null;
+    streamMessageIdsRef.current.set(runId, streamMessageId);
     let forkedMessages: ChatMessage[] | undefined;
+    const streamPlaceholder: ChatMessage = {
+      id: streamMessageId,
+      role: "assistant",
+      content: "",
+      threadId: runId,
+    };
+    let runMessages: ChatMessage[];
 
     if (isEditOfMsgId) {
       const idx = chatMessages.findIndex((m) => m.id === isEditOfMsgId);
@@ -1123,14 +1132,23 @@ export function App() {
           id: crypto.randomUUID(),
           content: userDisplayContent ?? activeRequest,
         };
-        setChatMessages(forkedMessages);
+        runMessages = [...forkedMessages, streamPlaceholder];
+        setChatMessages(runMessages);
+      } else {
+        runMessages = [...chatMessages, streamPlaceholder];
+        setChatMessages(runMessages);
       }
     } else if (userDisplayContent !== null) {
       const userMsgId = crypto.randomUUID();
-      setChatMessages((prev) => [
-        ...prev,
+      runMessages = [
+        ...chatMessages,
         { id: userMsgId, role: "user", content: userDisplayContent },
-      ]);
+        streamPlaceholder,
+      ];
+      setChatMessages(runMessages);
+    } else {
+      runMessages = [...chatMessages, streamPlaceholder];
+      setChatMessages(runMessages);
     }
     
     if (!customRequest) {
@@ -1138,12 +1156,10 @@ export function App() {
     }
 
     try {
-      if (forkedMessages && agentSessionId) {
-        await window.desktopApi.saveSessionMessages(
-          agentSessionId,
-          toSessionChatMessages(forkedMessages),
-        );
-      }
+      await window.desktopApi.saveSessionMessages(
+        agentSessionId,
+        toSessionChatMessages(runMessages),
+      );
       const gatewayConfig = buildAgentGatewayConfig(agentGatewayPreferences, enabledModels);
       const modelSettings = selectedModel ? toAgentModelSettings(selectedModel) : undefined;
       const activeThreadId = findActiveThreadId(forkedMessages ?? chatMessages);

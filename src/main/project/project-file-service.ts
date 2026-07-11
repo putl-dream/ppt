@@ -1,4 +1,4 @@
-import { access, mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
+import { access, mkdir, readdir, readFile, stat } from "node:fs/promises";
 import { dirname, isAbsolute, relative, resolve } from "node:path";
 import type { ProjectArtifact, ProjectArtifactStatus, SessionSnapshot } from "@shared/session";
 import { createArtifactDiff, type ArtifactDiff } from "./artifact-diff";
@@ -11,6 +11,7 @@ import {
   createDefaultProjectFiles,
   createProjectSandbox,
 } from "./project-schema";
+import { writeTextFileAtomic } from "../agent/persistence/atomic-json-file";
 
 export interface ProjectArtifactReadResult {
   path: string;
@@ -106,7 +107,7 @@ export class ProjectFileService {
       };
     }
 
-    await writeFile(filePath, content, "utf8");
+    await writeTextFileAtomic(filePath, content);
 
     const changedArtifact = findArtifactByProjectPath(
       this.requireProject(snapshot).artifacts,
