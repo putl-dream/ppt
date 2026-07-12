@@ -80,6 +80,8 @@ export interface SpawnTeammateThreadOptions {
   permissionPollMs?: number;
   /** Current-run listener for publishing durable task board changes. */
   onTaskGraphUpdated?: TaskGraphSnapshotListener;
+  /** Shared durable task board. The board may live outside the project workspace. */
+  taskStore?: TaskStore;
 }
 
 type TeammateState = TeammateHandle & {
@@ -375,7 +377,7 @@ export class TeammateManager {
     await this.protocolStates.hydrate();
     await this.persistTeammateStates();
     const inbox = new TeammateInboxBuffer(this.bus, state.name);
-    const taskStore = new TaskStore(options.workspaceRoot);
+    const taskStore = options.taskStore ?? new TaskStore(options.workspaceRoot);
     const publishTaskGraph: TaskGraphSnapshotListener = (snapshot) => {
       state.taskGraphListener?.(snapshot);
     };

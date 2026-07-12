@@ -453,6 +453,7 @@ describe("TaskGraph tools", () => {
       startIdle: true,
       workspaceRoot,
       onTaskGraphUpdated: onUpdated,
+      taskStore: context.taskStore,
     }));
   });
 

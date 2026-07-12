@@ -282,7 +282,8 @@ describe("TeammateManager", () => {
 
   it("starts idle and claims board work without an initial lead assignment", async () => {
     const workspaceRoot = await mkdtemp(join(tmpdir(), "ppt-idle-worker-"));
-    const store = new TaskStore(workspaceRoot);
+    const taskRoot = await mkdtemp(join(tmpdir(), "ppt-idle-worker-tasks-"));
+    const store = new TaskStore(taskRoot);
     const created = await store.createTask({
       subject: "Create outline",
       executionTarget: "teammate",
@@ -298,6 +299,7 @@ describe("TeammateManager", () => {
       prompt: "Poll the shared board.",
       startIdle: true,
       workspaceRoot,
+      taskStore: store,
       gateway: createSequenceGateway([
         modelToolCall("submit_task", { task_id: created.task.id }),
         modelMessage("Outline submitted for review."),

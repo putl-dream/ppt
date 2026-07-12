@@ -6,8 +6,12 @@ import type { ToolContext } from "../tools/tool-definition";
 import { ensureAutonomousTaskWorker } from "../tools/core/task-graph-tools";
 import { writeJsonFileAtomic } from "../persistence/atomic-json-file";
 import { resolveAgentPath } from "../subagent/workspace-path";
+import { probeWorkspaceArtifactDetails } from "./workspace-artifacts";
 
 const LAYOUT_TASK_PATTERN = /layout-plan|排版计划|版式计划|ppt-design-layout/i;
+const BRIEF_OUTLINE_TASK_PATTERN = /(?:brief.*outline|outline.*brief|简要.*大纲|大纲.*简要)/i;
+const STORYBOARD_TASK_PATTERN = /storyboard|幻灯片内容草稿|逐页内容|内容草稿/i;
+const ARTIFACT_RECONCILER = "artifact_reconciler";
 
 export interface LayoutChoicePreparationResult {
   task: AgentTaskNode;
@@ -15,6 +19,44 @@ export interface LayoutChoicePreparationResult {
   created: boolean;
   worker?: string;
   message: string;
+}
+
+async function completeTaskFromVerifiedArtifact(
+  taskStore: TaskStore,
+  task: AgentTaskNode | undefined,
+): Promise<void> {
+  if (!task || task.status === "completed") return;
+  if (task.status === "pending") {
+    const claimed = await taskStore.claimTask(task.id, ARTIFACT_RECONCILER);
+    if (!claimed.ok) return;
+    const completed = await taskStore.completeTask(task.id, ARTIFACT_RECONCILER);
+    if (!completed.ok) throw new Error(completed.error);
+    return;
+  }
+
+  const completed = await taskStore.completeTask(task.id);
+  if (!completed.ok) throw new Error(completed.error);
+}
+
+export async function reconcileVerifiedContentTasks(input: {
+  workspaceRoot: string;
+  taskStore: TaskStore;
+}): Promise<void> {
+  const artifacts = await probeWorkspaceArtifactDetails(input.workspaceRoot);
+  let tasks = await input.taskStore.listTasks();
+  if (artifacts.brief.verified && artifacts.outline.verified) {
+    await completeTaskFromVerifiedArtifact(
+      input.taskStore,
+      tasks.find((task) => BRIEF_OUTLINE_TASK_PATTERN.test(`${task.subject}\n${task.description}`)),
+    );
+    tasks = await input.taskStore.listTasks();
+  }
+  if (artifacts.storyboard.verified) {
+    await completeTaskFromVerifiedArtifact(
+      input.taskStore,
+      tasks.find((task) => STORYBOARD_TASK_PATTERN.test(`${task.subject}\n${task.description}`)),
+    );
+  }
 }
 
 export async function prepareLayoutChoiceTask(input: {
@@ -32,6 +74,11 @@ export async function prepareLayoutChoiceTask(input: {
     confirmedAt: new Date().toISOString(),
   });
   await writeJsonFileAtomic(snapshotPath, input.presentation);
+
+  await reconcileVerifiedContentTasks({
+    workspaceRoot: input.workspaceRoot,
+    taskStore: input.taskStore,
+  });
 
   const existingTasks = await input.taskStore.listTasks();
   const planMeta = await input.taskStore.getPlanMeta();
@@ -64,18 +111,26 @@ export async function prepareLayoutChoiceTask(input: {
     created = true;
   }
 
-  const worker = task.status === "submitted"
-    ? undefined
-    : ensureAutonomousTaskWorker(input.toolContext, [task]);
-  await publishCurrentTaskGraph(
+  const published = await publishCurrentTaskGraph(
     input.taskStore,
     input.toolContext.notifyTaskGraphUpdated,
   );
+  const publishedTask = published.snapshot.tasks.find((candidate) => candidate.id === task.id) ?? task;
+  const worker = publishedTask.status === "submitted"
+    ? undefined
+    : ensureAutonomousTaskWorker(input.toolContext, published.snapshot.tasks);
+  const canStart = publishedTask.status === "pending"
+    ? await input.taskStore.canStart(publishedTask.id)
+    : true;
 
-  const message = task.status === "submitted"
+  const message = publishedTask.status === "submitted"
     ? "排版计划已经提交，正在等待 lead 验收。"
-    : `排版设计节点 ${task.id} 已就绪，常驻 worker 将自主领取；提交后会自动进入验收与执行。`;
+    : publishedTask.status === "in_progress"
+      ? `排版设计节点 ${publishedTask.id} 正在执行；提交后会自动进入验收与执行。`
+      : canStart
+        ? `排版设计节点 ${publishedTask.id} 已就绪，常驻 worker 将自主领取；提交后会自动进入验收与执行。`
+        : `排版设计节点 ${publishedTask.id} 仍在等待前置内容任务完成，任务计划会持续保留并自动推进。`;
 
-  return { task, tasks, created, worker, message };
+  return { task: publishedTask, tasks: published.snapshot.tasks, created, worker, message };
 }
 import { publishCurrentTaskGraph } from "../task/task-graph-publisher";

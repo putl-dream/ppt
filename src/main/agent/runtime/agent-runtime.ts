@@ -56,8 +56,12 @@ import {
   type DurableRunPhase,
   type DurableRunStatus,
 } from "../persistence/durable-run-store";
-import { prepareLayoutChoiceTask } from "./layout-choice-orchestrator";
+import {
+  prepareLayoutChoiceTask,
+  reconcileVerifiedContentTasks,
+} from "./layout-choice-orchestrator";
 import type { ConversationDatabase } from "../../conversation-database";
+import { ensureAutonomousTaskWorker } from "../tools/core/task-graph-tools";
 
 /** Derive a display message for sub-agent progress events lacking one. */
 function subAgentProgressMessage(event: SubAgentProgressEvent): string {
@@ -83,7 +87,16 @@ async function shouldRequireDiscoverTaskPlan(input: {
 }): Promise<boolean> {
   if (input.stage !== "discover") return false;
   if (!input.taskStore) return false;
-  if (input.toolName === "AskUser" || input.toolName.startsWith("TaskGraph")) return false;
+  // Read-only research is also valid for simple Q&A in the discover stage.
+  // In particular, a user may paste a URL and ask for an evaluation without
+  // requesting a PPT workflow. Requiring a TaskGraph before WebSearch creates
+  // a dead loop: the model keeps requesting search while the runtime keeps
+  // rejecting it as "plan first".
+  if (
+    input.toolName === "AskUser"
+    || input.toolName === "WebSearch"
+    || input.toolName.startsWith("TaskGraph")
+  ) return false;
 
   const tasks = await input.taskStore.listTasks();
   return !isTaskPlanActive(tasks);
@@ -201,6 +214,13 @@ export class AgentRuntime {
         progress: 20,
       });
       return { type: "message", content: prepared.message };
+    }
+    if (taskStore && options.workspaceRoot) {
+      await reconcileVerifiedContentTasks({
+        workspaceRoot: options.workspaceRoot,
+        taskStore,
+      });
+      ensureAutonomousTaskWorker(context, await taskStore.listTasks());
     }
     const transcript: Array<Record<string, unknown>> = recovered
       ? [...structuredClone(recovered.transcript), { role: "user", content: options.request }]

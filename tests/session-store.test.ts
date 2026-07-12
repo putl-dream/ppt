@@ -200,6 +200,57 @@ describe("SQLite session store", () => {
     });
   });
 
+  it("persists task graph progress that arrives after the lead run completes", async () => {
+    const { store } = await createStore();
+    const created = await store.createSession({ title: "Background task graph" });
+    const sessionId = created.activeSession!.session.id;
+    const task = {
+      id: "task_background",
+      subject: "Draft outline",
+      description: "",
+      status: "pending" as const,
+      executionTarget: "teammate" as const,
+      owner: null,
+      blockedBy: [],
+      planId: "plan_background",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    };
+    await store.saveMessages(sessionId, [
+      { id: "placeholder", role: "assistant", content: "", threadId: "run-background" },
+    ]);
+    store.conversationDatabase.beginRun({
+      runId: "run-background",
+      sessionId,
+      request: "build",
+    });
+    store.conversationDatabase.appendRuntimeEvent("run-background", "task_graph_updated", {
+      tasks: [task],
+      goal: "Build deck",
+    });
+    await store.finalizeAgentRunMessage(sessionId, "run-background", {
+      status: "chat",
+      message: "Teammate is working.",
+    });
+
+    store.conversationDatabase.appendRuntimeEvent("run-background", "task_graph_updated", {
+      tasks: [{
+        ...task,
+        status: "in_progress",
+        owner: "task_worker",
+        updatedAt: "2026-01-01T00:01:00.000Z",
+      }],
+      goal: "Build deck",
+    });
+    await store.refreshAgentRunTrace(sessionId, "run-background");
+
+    const assistant = store.getSession(sessionId).messages.at(-1)!;
+    expect(assistant.activityTrace?.find((item) => item.kind === "taskgraph"))
+      .toMatchObject({
+        tasks: [{ id: "task_background", status: "in_progress", owner: "task_worker" }],
+      });
+  });
+
   it("marks an unfinished operation as failed instead of completed", async () => {
     const { store } = await createStore();
     const created = await store.createSession({ title: "Failed run" });

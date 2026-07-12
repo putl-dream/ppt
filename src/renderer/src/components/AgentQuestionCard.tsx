@@ -22,18 +22,16 @@ export const AgentQuestionCard: React.FC<AgentQuestionCardProps> = ({
 }) => {
   const options = question.options ?? [];
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [freeText, setFreeText] = useState("");
   const resolved = question.resolved;
   const isMultiple = question.selectionMode === "multiple";
   const interactive = !disabled && !resolved;
+  const showFreeText = question.variant === "markdown" || question.allowFreeText === true;
 
   const selectedOptions = useMemo(
     () => options.filter((option) => selectedIds.includes(option.id)),
     [options, selectedIds],
   );
-
-  if (question.variant === "markdown" && options.length === 0 && !resolved) {
-    return null;
-  }
 
   const resolveWithOptions = (nextOptions: AgentQuestionOption[]) => {
     if (nextOptions.length === 0) return;
@@ -42,6 +40,21 @@ export const AgentQuestionCard: React.FC<AgentQuestionCardProps> = ({
       optionIds: nextOptions.map((option) => option.id),
       value,
       label: formatOptionLabel(nextOptions),
+      resolvedAt: new Date().toISOString(),
+    });
+  };
+
+  const resolveWithFreeText = () => {
+    const optionValue = selectedOptions.map(optionSubmitValue).join("\n");
+    const textValue = freeText.trim();
+    const value = [optionValue, textValue].filter(Boolean).join("\n");
+    if (!interactive || !value) return;
+    const optionLabel = formatOptionLabel(selectedOptions);
+    const label = [optionLabel, textValue].filter(Boolean).join("；").slice(0, 240);
+    onResolve({
+      optionIds: selectedIds,
+      value,
+      label,
       resolvedAt: new Date().toISOString(),
     });
   };
@@ -110,7 +123,35 @@ export const AgentQuestionCard: React.FC<AgentQuestionCardProps> = ({
         </div>
       )}
 
-      {isMultiple && !resolved && (
+      {showFreeText && !resolved && (
+        <div className="agent-question-free-text">
+          <textarea
+            value={freeText}
+            disabled={!interactive}
+            placeholder={question.placeholder || "请输入补充信息"}
+            rows={3}
+            onChange={(event) => setFreeText(event.target.value)}
+            onKeyDown={(event) => {
+              if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+                event.preventDefault();
+                resolveWithFreeText();
+              }
+            }}
+          />
+          <div className="inline-artifact-actions">
+            <button
+              type="button"
+              className="btn-apply"
+              disabled={!interactive || (!freeText.trim() && selectedOptions.length === 0)}
+              onClick={resolveWithFreeText}
+            >
+              {question.submitLabel || "提交回答"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {isMultiple && !resolved && !showFreeText && (
         <div className="inline-artifact-actions">
           <button
             type="button"

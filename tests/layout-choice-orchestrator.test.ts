@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -126,5 +126,134 @@ describe("layout choice runtime orchestration", () => {
     expect(result.type === "message" && result.content).toContain("自主领取");
     expect(generateText).not.toHaveBeenCalled();
     expect((await new TaskStore(runtimeRoot).listTasks())).toHaveLength(1);
+  });
+
+  it("reconciles verified content artifacts before activating an existing layout task", async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), "ppt-layout-reconcile-workspace-"));
+    const runtimeRoot = await mkdtemp(join(tmpdir(), "ppt-layout-reconcile-runtime-"));
+    tempDirs.push(workspaceRoot, runtimeRoot);
+    await mkdir(join(workspaceRoot, "slides"), { recursive: true });
+    await writeFile(
+      join(workspaceRoot, "brief.md"),
+      "# Brief\n\n## 目的\n制作学习 PPT\n\n## 受众\n高中生\n",
+      "utf8",
+    );
+    await writeFile(
+      join(workspaceRoot, "outline.md"),
+      "# PPT 内容大纲\n\n## 1. 封面\n- 建立主题\n\n## 2. 总结\n- 提炼启示\n",
+      "utf8",
+    );
+    await writeFile(
+      join(workspaceRoot, "slides", "storyboard.json"),
+      JSON.stringify([
+        {
+          id: "slide-1",
+          title: "封面",
+          narrativeRole: "cover",
+          suggestedLayout: "cover",
+          keyPoints: ["建立主题"],
+        },
+        {
+          id: "slide-2",
+          title: "总结",
+          narrativeRole: "summary",
+          suggestedLayout: "summary",
+          keyPoints: ["提炼启示"],
+        },
+      ]),
+      "utf8",
+    );
+
+    const taskStore = new TaskStore(runtimeRoot);
+    const plan = await taskStore.createPlan({
+      sequential: true,
+      steps: [
+        { subject: "起草 brief 与 outline", executionTarget: "teammate" },
+        { subject: "编写幻灯片内容草稿 storyboard", executionTarget: "teammate" },
+        { subject: "制定排版计划 layout-plan", executionTarget: "teammate" },
+        { subject: "执行排版与交付", executionTarget: "lead" },
+      ],
+    });
+    expect(plan.ok).toBe(true);
+    const spawn = vi.fn(() => ({
+      name: "task_worker",
+      role: "worker",
+      status: "running",
+      startedAt: Date.now(),
+      lastActiveAt: Date.now(),
+    }));
+    const presentation = createStarterPresentation();
+    const toolContext = {
+      presentation,
+      selectedElementIds: [],
+      discoverySession: { discoveredToolNames: new Set<string>() },
+      registry: createDefaultToolRegistry(),
+      messageHistory: [],
+      workspaceRoot,
+      gateway: {},
+      taskStore,
+      teammateManager: { list: () => [], spawn },
+      notifyTaskGraphUpdated: vi.fn(),
+    } as any;
+
+    const result = await prepareLayoutChoiceTask({
+      choice: { mode: "creative", designSystem: TEST_DESIGN_SYSTEM },
+      presentation,
+      workspaceRoot,
+      taskStore,
+      toolContext,
+    });
+
+    expect(result.tasks.map((task) => task.status)).toEqual([
+      "completed",
+      "completed",
+      "pending",
+      "pending",
+    ]);
+    expect(result.message).toContain("已就绪");
+    expect(spawn).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not report a blocked layout task as ready", async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), "ppt-layout-blocked-workspace-"));
+    const runtimeRoot = await mkdtemp(join(tmpdir(), "ppt-layout-blocked-runtime-"));
+    tempDirs.push(workspaceRoot, runtimeRoot);
+    const taskStore = new TaskStore(runtimeRoot);
+    const plan = await taskStore.createPlan({
+      sequential: true,
+      steps: [
+        { subject: "起草 brief 与 outline", executionTarget: "teammate" },
+        { subject: "编写幻灯片内容草稿 storyboard", executionTarget: "teammate" },
+        { subject: "制定排版计划 layout-plan", executionTarget: "teammate" },
+      ],
+    });
+    expect(plan.ok).toBe(true);
+    const presentation = createStarterPresentation();
+    const toolContext = {
+      presentation,
+      selectedElementIds: [],
+      discoverySession: { discoveredToolNames: new Set<string>() },
+      registry: createDefaultToolRegistry(),
+      messageHistory: [],
+      workspaceRoot,
+      gateway: {},
+      taskStore,
+      teammateManager: {
+        list: () => [],
+        spawn: vi.fn(() => ({ name: "task_worker", status: "running" })),
+      },
+      notifyTaskGraphUpdated: vi.fn(),
+    } as any;
+
+    const result = await prepareLayoutChoiceTask({
+      choice: { mode: "creative", designSystem: TEST_DESIGN_SYSTEM },
+      presentation,
+      workspaceRoot,
+      taskStore,
+      toolContext,
+    });
+
+    expect(result.message).toContain("等待前置内容任务");
+    expect(result.message).not.toContain("已就绪");
   });
 });

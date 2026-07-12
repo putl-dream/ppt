@@ -31,6 +31,84 @@ import type { DesignSystemV1 } from "@design-system";
 
 type ChatMessage = SessionChatMessage;
 
+interface UserMessageEditorProps {
+  value: string;
+  busy: boolean;
+  onChange: (value: string) => void;
+  onCancel: () => void;
+  onSubmit: () => void;
+}
+
+function resizeMessageEditor(textarea: HTMLTextAreaElement) {
+  const maxHeight = 320;
+  textarea.style.height = "auto";
+  const nextHeight = Math.min(textarea.scrollHeight, maxHeight);
+  textarea.style.height = `${nextHeight}px`;
+  textarea.style.overflowY = textarea.scrollHeight > maxHeight ? "auto" : "hidden";
+}
+
+export const UserMessageEditor: React.FC<UserMessageEditorProps> = ({
+  value,
+  busy,
+  onChange,
+  onCancel,
+  onSubmit,
+}) => {
+  const canSubmit = !busy && Boolean(value.trim());
+
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      onCancel();
+      return;
+    }
+    if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+      event.preventDefault();
+      if (canSubmit) onSubmit();
+    }
+  };
+
+  return (
+    <div className="user-message-editor" role="group" aria-label="编辑已发送的消息">
+      <div className="user-message-editor-header">
+        <span className="user-message-editor-title">编辑消息</span>
+        <span className="user-message-editor-hint">提交后将从这里重新运行</span>
+      </div>
+      <textarea
+        className="user-message-editor-textarea"
+        value={value}
+        onChange={(event) => {
+          onChange(event.target.value);
+          resizeMessageEditor(event.target);
+        }}
+        onKeyDown={handleKeyDown}
+        ref={(textarea) => {
+          if (textarea) resizeMessageEditor(textarea);
+        }}
+        autoFocus
+        rows={3}
+        aria-label="修改消息内容"
+      />
+      <div className="user-message-editor-footer">
+        <span className="user-message-editor-shortcut">Esc 取消 · Ctrl/⌘ Enter 提交</span>
+        <div className="user-message-edit-actions">
+          <button type="button" onClick={onCancel} className="message-action-btn">
+            取消
+          </button>
+          <button
+            type="button"
+            onClick={onSubmit}
+            disabled={!canSubmit}
+            className="message-action-btn message-action-btn--primary"
+          >
+            提交修改
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 export interface InlineCardData {
   refs: InlineCardRef[];
   briefFields?: BriefFields;
@@ -158,6 +236,7 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
   const activeTasks = latestPlan?.tasks ?? [];
   const planGoal = latestPlan ? (latestPlan.goal ?? null) : sessionGoal;
   const showTaskPlan = activeTasks.length > 0;
+  const hasActiveTaskPlan = activeTasks.some((task) => task.status !== "completed");
   const layoutCardMessageIds = visibleLayoutCardMessageIds(chatMessages);
   const displayConversationTitle = conversationTitle?.trim() || (isNewChat ? "AI 新建会话" : "当前对话");
 
@@ -240,14 +319,24 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
 
   // Start editing message
   const handleStartEdit = (msgId: string, currentText: string) => {
+    shouldFollowOutputRef.current = false;
     setEditingMsgId(msgId);
     setEditingText(currentText);
   };
 
-  // Save edits back into the chat block content
-  const handleSaveEdit = (msgId: string) => {
-    onUpdateMessageContent(msgId, editingText);
+  const handleCancelEdit = () => {
     setEditingMsgId(null);
+    setEditingText("");
+  };
+
+  // Replace this branch with the edited prompt and run it again.
+  const handleSaveEdit = (msgId: string) => {
+    const nextContent = editingText.trim();
+    if (!nextContent || busy) return;
+    shouldFollowOutputRef.current = true;
+    setEditingMsgId(null);
+    setEditingText("");
+    onUpdateMessageContent(msgId, nextContent);
   };
 
   const handleCopyMessage = async (content: string) => {
@@ -369,43 +458,16 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
           return (
             <div key={msg.id} className={`chat-message ${msg.role}`}>
               {msg.role === "user" ? (
-                <div className="user-message-shell">
-                  <div className="user-message-bubble">
+                <div className={`user-message-shell${editingMsgId === msg.id ? " is-editing" : ""}`}>
+                  <div className={`user-message-bubble${editingMsgId === msg.id ? " is-editing" : ""}`}>
                     {editingMsgId === msg.id ? (
-                      <div className="user-message-edit">
-                        <textarea
-                          className="chat-message-textarea"
-                          value={editingText}
-                          onChange={(e) => {
-                            setEditingText(e.target.value);
-                            e.target.style.height = "auto";
-                            e.target.style.height = `${e.target.scrollHeight}px`;
-                          }}
-                          ref={(el) => {
-                            if (el) {
-                              el.style.height = "auto";
-                              el.style.height = `${el.scrollHeight}px`;
-                            }
-                          }}
-                          autoFocus
-                        />
-                        <div className="user-message-edit-actions">
-                          <button
-                            type="button"
-                            onClick={() => setEditingMsgId(null)}
-                            className="message-action-btn"
-                          >
-                            取消
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleSaveEdit(msg.id)}
-                            className="message-action-btn message-action-btn--primary"
-                          >
-                            保存并重新生成
-                          </button>
-                        </div>
-                      </div>
+                      <UserMessageEditor
+                        value={editingText}
+                        busy={busy}
+                        onChange={setEditingText}
+                        onCancel={handleCancelEdit}
+                        onSubmit={() => handleSaveEdit(msg.id)}
+                      />
                     ) : (
                       <MessageMarkdown content={msg.content} className="user-message-text" />
                     )}
@@ -426,6 +488,7 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
                         type="button"
                         className="message-action-btn message-action-btn--icon"
                         onClick={() => handleStartEdit(msg.id, msg.content)}
+                        disabled={busy}
                         title="编辑指令并重新运行"
                         aria-label="编辑指令并重新运行"
                       >
@@ -648,7 +711,7 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
             <TaskPlanCard
               goal={planGoal}
               tasks={activeTasks}
-              live={busy}
+              live={busy || hasActiveTaskPlan}
             />
           )}
           <UnifiedAgentInput

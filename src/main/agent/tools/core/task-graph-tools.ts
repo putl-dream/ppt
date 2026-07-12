@@ -90,7 +90,10 @@ export function ensureAutonomousTaskWorker(
   context: ToolContext,
   tasks: AgentTaskNode[],
 ): string | undefined {
-  if (!tasks.some((task) => task.executionTarget === "teammate")) return undefined;
+  if (!tasks.some((task) =>
+    task.executionTarget === "teammate"
+    && (task.status === "pending" || task.status === "in_progress")
+  )) return undefined;
   if (!context.teammateManager || !context.workspaceRoot || !context.gateway) return undefined;
 
   const existing = context.teammateManager.list().find(
@@ -116,6 +119,7 @@ export function ensureAutonomousTaskWorker(
     agentStepLimits: context.agentStepLimits,
     idleTimeoutMs: 300_000,
     onTaskGraphUpdated: context.notifyTaskGraphUpdated,
+    taskStore: context.taskStore,
   }).name;
 }
 
@@ -186,6 +190,7 @@ export const taskGraphListTool: ToolDefinition<typeof taskGraphListSchema, TaskG
   execute: async (_args, context) => {
     const store = requireTaskStore(context);
     const tasks = await publishTaskGraph(context, store);
+    ensureAutonomousTaskWorker(context, tasks);
     const plan = await store.getPlanMeta();
     return { tasks, goal: plan?.goal ?? null, summary: formatTaskListSummary(tasks) };
   },

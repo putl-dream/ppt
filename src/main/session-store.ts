@@ -351,6 +351,25 @@ export class FileSessionStore {
     await this.persist();
   }
 
+  /**
+   * Keep a completed assistant message in sync with late task-board updates
+   * emitted by a long-lived teammate after the lead run has returned.
+   */
+  async refreshAgentRunTrace(sessionId: string, runId: string): Promise<void> {
+    const snapshot = this.findSession(sessionId);
+    const message = [...snapshot.messages].reverse().find(
+      (item) => item.role === "assistant" && item.threadId === runId,
+    );
+    if (!message) return;
+
+    const trace = this.projectRunTrace(runId);
+    message.activityTrace = trace.length > 0
+      ? compactActivityTraceForPersistence(markTraceComplete(trace))
+      : undefined;
+    snapshot.session.updatedAt = new Date().toISOString();
+    await this.persist();
+  }
+
   private projectRunTrace(runId: string): AgentActivityItem[] {
     let trace: AgentActivityItem[] = [];
     for (const event of this.conversationDatabase.listRunEvents(runId)) {

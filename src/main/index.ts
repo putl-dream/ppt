@@ -173,6 +173,11 @@ function createAgentStreamEmitter(
       kind: eventKind,
       payload: structuredClone(streamEvent) as unknown as Record<string, unknown>,
     });
+    if (streamEvent.type === "task-graph-updated") {
+      void sessionStore.refreshAgentRunTrace(sessionId, runId).catch((error) => {
+        logger.warn("agent.task-graph-trace.persist-failed", { sessionId, runId, error });
+      });
+    }
     if (sender.isDestroyed()) {
       abortRun("renderer-disposed");
       return;

@@ -25,6 +25,7 @@
     "src/design-system/**/*.ts",
     "src/renderer/src/components/project-store.ts",
     "src/renderer/src/components/process-trace-rows.ts",
+    "src/renderer/src/app/chatMessageRuntime.ts",
     "tests/**/*.ts"
   ]
 }

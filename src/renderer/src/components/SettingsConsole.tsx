@@ -14,10 +14,14 @@ import { isModelEnabled, type ManagedModel } from "../modelCatalog";
 import { ModelManagement } from "./ModelManagement";
 import type { AgentStepLimits } from "@shared/agent-step-limits";
 import type { AgentGatewayPreferences } from "@shared/agent-gateway-config";
-import { DEFAULT_AGENT_GATEWAY_CONFIG } from "@shared/agent-gateway-config";
 import { TokenUsageOverview } from "./TokenUsageOverview";
 import { LogManagementPanel } from "./LogManagementPanel";
 import { DESIGN_PRESETS, type DesignSystemV1 } from "@design-system";
+import {
+  MAX_OUTPUT_TOKENS,
+  MIN_OUTPUT_TOKENS,
+  normalizeOutputTokenDraft,
+} from "@shared/generation-settings-inputs";
 
 type SettingsCategory = "account" | "models" | "gateway" | "generation" | "project" | "appearance" | "diagnostics";
 type UiThemeMode = "light" | "dark" | "cyan" | "orange";
@@ -208,6 +212,39 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
   const selectedShapeLabel = controlShapeOptions.find((option) => option.value === uiControlShape)?.label ?? "柔和";
   const selectedThemeModeLabel = themeModeOptions.find((option) => option.value === themeMode)?.label ?? "浅色主题";
   const logoFileInputRef = React.useRef<HTMLInputElement>(null);
+  const [maxOutputTokensDraft, setMaxOutputTokensDraft] = React.useState(
+    () => String(agentGatewayPreferences.maxOutputTokens),
+  );
+
+  React.useEffect(() => {
+    setMaxOutputTokensDraft(String(agentGatewayPreferences.maxOutputTokens));
+  }, [agentGatewayPreferences.maxOutputTokens]);
+
+  const commitMaxOutputTokens = () => {
+    const maxOutputTokens = normalizeOutputTokenDraft(
+      maxOutputTokensDraft,
+      agentGatewayPreferences.maxOutputTokens,
+    );
+    setMaxOutputTokensDraft(String(maxOutputTokens));
+    if (maxOutputTokens !== agentGatewayPreferences.maxOutputTokens) {
+      setAgentGatewayPreferences({
+        ...agentGatewayPreferences,
+        maxOutputTokens,
+      });
+    }
+  };
+
+  const commitOptionalGatewayText = (
+    field: "webSearchApiKey" | "webSearchEndpoint",
+    value: string,
+  ) => {
+    const normalized = value.trim() || undefined;
+    if (agentGatewayPreferences[field] === normalized) return;
+    setAgentGatewayPreferences({
+      ...agentGatewayPreferences,
+      [field]: normalized,
+    });
+  };
 
   const handleOpenWorkspace = async () => {
     try {
@@ -303,14 +340,15 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
                   <input
                     className="config-input"
                     type="number"
-                    min={1024}
-                    max={131072}
+                    min={MIN_OUTPUT_TOKENS}
+                    max={MAX_OUTPUT_TOKENS}
                     step={1024}
-                    value={agentGatewayPreferences.maxOutputTokens}
-                    onChange={(event) => setAgentGatewayPreferences({
-                      ...agentGatewayPreferences,
-                      maxOutputTokens: parseInt(event.target.value, 10) || DEFAULT_AGENT_GATEWAY_CONFIG.maxOutputTokens,
-                    })}
+                    value={maxOutputTokensDraft}
+                    onChange={(event) => setMaxOutputTokensDraft(event.target.value)}
+                    onBlur={commitMaxOutputTokens}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") event.currentTarget.blur();
+                    }}
                   />
                 </label>
 
@@ -344,8 +382,9 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
                     placeholder="tvly-...（也可设置 TAVILY_API_KEY）"
                     onChange={(event) => setAgentGatewayPreferences({
                       ...agentGatewayPreferences,
-                      webSearchApiKey: event.target.value.trim() || undefined,
+                      webSearchApiKey: event.target.value || undefined,
                     })}
+                    onBlur={(event) => commitOptionalGatewayText("webSearchApiKey", event.target.value)}
                   />
                 </label>
 
@@ -357,8 +396,9 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
                     placeholder="https://api.tavily.com/search"
                     onChange={(event) => setAgentGatewayPreferences({
                       ...agentGatewayPreferences,
-                      webSearchEndpoint: event.target.value.trim() || undefined,
+                      webSearchEndpoint: event.target.value || undefined,
                     })}
+                    onBlur={(event) => commitOptionalGatewayText("webSearchEndpoint", event.target.value)}
                   />
                 </label>
               </div>

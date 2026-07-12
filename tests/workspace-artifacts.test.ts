@@ -58,6 +58,27 @@ describe("workspace artifact probing", () => {
     expect(artifacts.storyboard).toBe(false);
   });
 
+  it("accepts a detailed numbered outline without explicit page annotations", async () => {
+    const root = await createWorkspace();
+    await writeDefaultScaffold(root);
+    await writeFile(
+      join(root, "outline.md"),
+      [
+        "# PPT 内容大纲",
+        "",
+        "## 1. 封面",
+        "- 建立主题与学习目标",
+        "",
+        "## 2. 核心分析",
+        "- 拆解文章结构",
+        "- 总结写作启示",
+      ].join("\n"),
+      "utf8",
+    );
+
+    await expect(probeWorkspaceArtifacts(root)).resolves.toMatchObject({ outline: true });
+  });
+
   it("detects a brief with real content beyond the scaffold", async () => {
     const root = await createWorkspace();
     await writeDefaultScaffold(root);

@@ -43,7 +43,7 @@ export async function writeTextFileAtomic(filePath: string, payload: string): Pr
     await handle.sync();
     await handle.close();
     handle = undefined;
-    await rename(temporaryPath, filePath);
+    await renameReplacingExisting(temporaryPath, filePath);
 
     let directory;
     try {
@@ -59,4 +59,36 @@ export async function writeTextFileAtomic(filePath: string, payload: string): Pr
     await unlink(temporaryPath).catch(() => undefined);
     throw error;
   }
+}
+
+async function renameReplacingExisting(sourcePath: string, targetPath: string): Promise<void> {
+  try {
+    await rename(sourcePath, targetPath);
+    return;
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code !== "EPERM" && code !== "EEXIST" && code !== "ENOTEMPTY") throw error;
+  }
+
+  // Windows rename does not replace an existing destination. Move the valid
+  // old file aside first so a failed replacement can still be rolled back.
+  const displacedPath = `${targetPath}.${process.pid}.${crypto.randomUUID()}.old`;
+  let displaced = false;
+  try {
+    await rename(targetPath, displacedPath);
+    displaced = true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  }
+
+  try {
+    await rename(sourcePath, targetPath);
+  } catch (error) {
+    if (displaced) {
+      await rename(displacedPath, targetPath).catch(() => undefined);
+    }
+    throw error;
+  }
+
+  if (displaced) await unlink(displacedPath).catch(() => undefined);
 }

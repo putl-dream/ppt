@@ -1,5 +1,7 @@
 import {
   mergeInlineCardRefs,
+  type InlineCardRef,
+  type LayoutVisualMode,
 } from "@shared/inline-artifact-cards";
 import type { Presentation } from "@shared/presentation";
 import {
@@ -44,6 +46,24 @@ export function toSessionChatMessages(messages: ChatMessage[]): SessionChatMessa
     question,
     threadId,
   }));
+}
+
+export function resolveInlineCardInMessages(
+  messages: ChatMessage[],
+  messageId: string,
+  type: InlineCardRef["type"],
+  resolved: InlineCardRef["resolved"],
+  layoutMode?: LayoutVisualMode,
+): ChatMessage[] {
+  return messages.map((message) => {
+    if (message.id !== messageId) return message;
+    const inlineCards = (message.inlineCards ?? [{ type }]).map((card) =>
+      card.type === type
+        ? { ...card, resolved, ...(layoutMode ? { layoutMode } : {}) }
+        : card,
+    );
+    return { ...message, inlineCards };
+  });
 }
 
 function attachInlineCards(

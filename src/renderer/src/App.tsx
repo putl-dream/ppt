@@ -47,6 +47,7 @@ import { useWorkbenchLayout, type AppMode } from "./app/useWorkbenchLayout";
 import {
   findActiveThreadId,
   finalizeAgentMessage,
+  resolveInlineCardInMessages,
   toSessionChatMessages,
   type ChatMessage,
 } from "./app/chatMessageRuntime";
@@ -977,7 +978,12 @@ export function App() {
   async function startAgent(
     customRequest?: string,
     isEditOfMsgId?: string,
-    options?: { userDisplayContent?: string | false; layoutChoice?: LayoutChoice; sidechain?: boolean },
+    options?: {
+      userDisplayContent?: string | false;
+      layoutChoice?: LayoutChoice;
+      sidechain?: boolean;
+      baseMessages?: ChatMessage[];
+    },
   ) {
     const activeRequest = customRequest || request;
     if (!activeRequest.trim() || busy) return;
@@ -989,6 +995,7 @@ export function App() {
     };
     const userDisplayContent = resolveUserDisplayContent();
     const isSidechain = options?.sidechain === true;
+    const sourceMessages = options?.baseMessages ?? chatMessages;
     if (userDisplayContent !== null) {
       setTaskPlanSnapshot((current) => current?.tasks.some(
         (task) => task.status !== "completed",
@@ -1084,12 +1091,12 @@ export function App() {
     let runMessages: ChatMessage[];
 
     if (isSidechain) {
-      runMessages = [...chatMessages, streamPlaceholder];
+      runMessages = [...sourceMessages, streamPlaceholder];
       setChatMessages(runMessages);
     } else if (isEditOfMsgId) {
-      const idx = chatMessages.findIndex((m) => m.id === isEditOfMsgId);
+      const idx = sourceMessages.findIndex((m) => m.id === isEditOfMsgId);
       if (idx !== -1) {
-        forkedMessages = chatMessages.slice(0, idx + 1);
+        forkedMessages = sourceMessages.slice(0, idx + 1);
         forkedMessages[idx] = {
           ...forkedMessages[idx],
           id: crypto.randomUUID(),
@@ -1098,19 +1105,19 @@ export function App() {
         runMessages = [...forkedMessages, streamPlaceholder];
         setChatMessages(runMessages);
       } else {
-        runMessages = [...chatMessages, streamPlaceholder];
+        runMessages = [...sourceMessages, streamPlaceholder];
         setChatMessages(runMessages);
       }
     } else if (userDisplayContent !== null) {
       const userMsgId = crypto.randomUUID();
       runMessages = [
-        ...chatMessages,
+        ...sourceMessages,
         { id: userMsgId, role: "user", content: userDisplayContent },
         streamPlaceholder,
       ];
       setChatMessages(runMessages);
     } else {
-      runMessages = [...chatMessages, streamPlaceholder];
+      runMessages = [...sourceMessages, streamPlaceholder];
       setChatMessages(runMessages);
     }
     
@@ -1127,7 +1134,7 @@ export function App() {
       }
       const gatewayConfig = buildAgentGatewayConfig(agentGatewayPreferences, enabledModels);
       const modelSettings = selectedModel ? toAgentModelSettings(selectedModel) : undefined;
-      const activeThreadId = findActiveThreadId(forkedMessages ?? chatMessages);
+      const activeThreadId = findActiveThreadId(forkedMessages ?? sourceMessages);
       const result = activeThreadId
         ? await window.desktopApi.continueAgentRun(
             activeThreadId,
@@ -1659,15 +1666,9 @@ export function App() {
     resolved: InlineCardRef["resolved"],
     layoutMode?: LayoutVisualMode,
   ) => {
-    setChatMessages((prev) => prev.map((message) => {
-      if (message.id !== messageId) return message;
-      const inlineCards = (message.inlineCards ?? [{ type }]).map((card) =>
-        card.type === type
-          ? { ...card, resolved, ...(layoutMode ? { layoutMode } : {}) }
-          : card,
-      );
-      return { ...message, inlineCards };
-    }));
+    setChatMessages((prev) =>
+      resolveInlineCardInMessages(prev, messageId, type, resolved, layoutMode)
+    );
   };
 
   const handleResolveQuestion = (messageId: string, resolved: AgentQuestionResolved) => {
@@ -1710,12 +1711,20 @@ export function App() {
   ) => {
     saveLayoutVisualMode(mode);
     setSelectedDesignSystem(designSystem);
-    markInlineCardResolved(messageId, "layout", "confirmed", mode);
+    const resolvedMessages = resolveInlineCardInMessages(
+      chatMessages,
+      messageId,
+      "layout",
+      "confirmed",
+      mode,
+    );
+    setChatMessages(resolvedMessages);
     triggerToast(mode === "creative" ? "🎨 开始创意装饰排版" : "📐 开始标准排版");
     void startAgent(buildLayoutPhasePrompt(mode, designSystem), undefined, {
       userDisplayContent: false,
       layoutChoice: { mode, designSystem },
       sidechain: true,
+      baseMessages: resolvedMessages,
     });
   };
 

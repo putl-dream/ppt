@@ -88,7 +88,9 @@ function validateOutlineContent(path: string, content: string | undefined): Work
   const hasOutlineShape = /^##\s+\d+[.、]/m.test(trimmed) || /^\d+[.、]\s+/m.test(trimmed);
   const hasSectionGuidance = /section|分隔页|章节|预计\s*\d+\s*页|Hook|Context|Core|Shift|Takeaway/i.test(trimmed);
   const items = parseOutlineItems(trimmed);
-  if (items.length < 1 || !hasOutlineShape || !hasSectionGuidance) {
+  const hasDetailedNumberedSections = items.length >= 2
+    && items.every((item) => item.title.trim() && item.points.some((point) => point.trim()));
+  if (items.length < 1 || !hasOutlineShape || (!hasSectionGuidance && !hasDetailedNumberedSections)) {
     return {
       path,
       status: "invalid",
