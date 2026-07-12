@@ -80,7 +80,7 @@ export const agentRunRequestSchema = z.object({
 export type AgentAttachment = z.infer<typeof agentAttachmentSchema>;
 export type AgentRunRequest = z.infer<typeof agentRunRequestSchema>;
 
-export type AgentStreamEvent =
+export type AgentStreamEvent = (
   | { runId: string; type: "request-status"; message: string; progress: number }
   | { runId: string; type: "workflow-progress"; message: string; progress: number }
   | { runId: string; type: "text-chunk"; chunk: string; source?: "message" | "tool-summary" }
@@ -110,7 +110,8 @@ export type AgentStreamEvent =
   | { runId: string; type: "subagent-thinking-chunk"; taskId: string; chunk: string }
   | { runId: string; type: "subagent-tool-started"; taskId: string; toolName: string; message: string }
   | { runId: string; type: "subagent-tool-finished"; taskId: string; toolName: string; message: string }
-  | { runId: string; type: "subagent-finished"; taskId: string };
+  | { runId: string; type: "subagent-finished"; taskId: string }
+) & { sessionId?: string };
 
 export type AgentRunResult =
   | { status: "chat"; message: string; threadId?: string; question?: AgentQuestion }

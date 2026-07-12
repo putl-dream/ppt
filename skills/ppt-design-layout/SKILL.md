@@ -7,6 +7,7 @@ stages:
 allowed-tools:
   - ReadPresentationSnapshot
   - ListSlides
+  - web_search
   - TaskGraphList
   - TaskGraphComplete
 ---
@@ -125,10 +126,13 @@ allowed-tools:
 
 ### 图片选材（P0 资产闭环）
 
-- 当页面确实需要主视觉或证据图片时，teammate 可调用 `web_search`，设置 `include_images: true`。
+- 图片不是可选的事后装饰：选择 `image-grid` 或 `case/evidence` 时，teammate **必须**调用 `web_search` 并设置 `include_images: true`，随后写入 `insert-image` enhancement；否则改用不依赖图片的 layout/grammar。
+- `cover/editorial-hero`、`section/editorial-split` 应优先规划 1 张主视觉。
+- 对具体真实世界主题且 5 页以上的 deck，通常规划 2–4 张互不重复、逐页相关的图片；纯数据或抽象主题可改用 chart，并在 rationale 说明不需要搜图。
 - 搜索结果只是候选，不代表自动获得复用授权；优先 Pexels、Pixabay、Wikimedia Commons 等授权信息明确的来源。
 - `insert-image` enhancement 除 `url` / `slot` 外，应尽量记录 `provider`、`sourcePageUrl`、`description`、`attribution`、`license`。
-- 执行阶段的 InsertSlideImage 会把远程图片下载到 workspace `assets/images/`，并将来源元数据写入 image element，避免预览有图而 PPTX 丢图。
+- `ExecuteLayoutPlan` 会自动执行所有 `insert-image` enhancement：调用 InsertSlideImage、本地化到 `assets/images/`，并把命令合并进同一 proposal。不要让主 Agent 再次重复插图。
+- 同一图片 URL 默认只能使用一次；图片必须支持该页论点，禁止用泛化办公照填空。
 
 ## 设计 Rubric（必过 A + B，强烈建议 C + D）
 
@@ -207,6 +211,7 @@ description: 「读取当前 presentation snapshot（slide 列表与 id）。
 4. 7 页+ 商务 deck 含 toc
 5. slideVariant 至少 2 种（5 页+ deck）
 6. 支持 Grammar 的页面使用合法 grammarVariant；同类内容可复用变体，不为了多样而每页不同
+7. image-grid / case-evidence 均已有唯一 insert-image enhancement；不存在空图片骨架
 
 ## 延伸阅读
 

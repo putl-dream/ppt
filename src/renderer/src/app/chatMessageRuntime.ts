@@ -64,8 +64,12 @@ export function finalizeAgentMessage(
   message: ChatMessage,
   presentation: Presentation | undefined,
   fallbackContent: string,
+  options: { allowLayoutChoice?: boolean } = {},
 ): ChatMessage {
   if (presentation && presentationNeedsLayoutChoice(presentation)) {
+    if (options.allowLayoutChoice === false) {
+      return { ...message, content: fallbackContent };
+    }
     const slideCount = countSlidesNeedingLayout(presentation);
     return attachInlineCards(
       { ...message, content: buildLayoutDraftContent(slideCount) },

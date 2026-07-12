@@ -4,6 +4,7 @@ import { validateDeckRhythm, type DeckRhythmIssue } from "./deck-rhythm";
 import { designSystemV1Schema, slideDesignOverrideSchema } from "@design-system";
 import { SLIDE_LAYOUTS } from "./slide-layouts";
 import { getSupportedGrammarVariants } from "./layout-grammar-variants";
+import { listLayoutSlots } from "./layout-slots";
 import { SLIDE_VARIANTS } from "./slide-variant";
 import type { PresentationCommand } from "./commands";
 import type { Presentation } from "./presentation";
@@ -214,6 +215,57 @@ export function validateLayoutPlan(plan: LayoutPlan): LayoutPlanValidationIssue[
         fixHint: "Use comparison layout for A vs B content.",
       });
     }
+
+    const imageEnhancements = slide.enhancements.filter((item) => item.type === "insert-image");
+    const validSlots = listLayoutSlots(slide.layout, slide.grammarVariant);
+    const plannedSlots = imageEnhancements.map((item) => item.slot);
+    if (new Set(plannedSlots).size !== plannedSlots.length) {
+      issues.push({
+        slideId: slide.slideId,
+        severity: "error",
+        message: "Multiple insert-image enhancements target the same image slot.",
+        fixHint: "Use each layout image slot at most once.",
+      });
+    }
+    for (const enhancement of imageEnhancements) {
+      if (!validSlots.includes(enhancement.slot)) {
+        issues.push({
+          slideId: slide.slideId,
+          severity: "error",
+          message: `Image slot '${enhancement.slot}' is invalid for layout '${slide.layout}'.`,
+          fixHint: validSlots.length > 0
+            ? `Choose one of: ${validSlots.join(", ")}.`
+            : "Use an image-capable layout or remove the insert-image enhancement.",
+        });
+      }
+    }
+    const minimumImages = minimumRequiredImages(slide);
+    if (minimumImages > 0 && imageEnhancements.length < minimumImages) {
+      issues.push({
+        slideId: slide.slideId,
+        severity: "warning",
+        message: `${slide.layout}/${slide.grammarVariant ?? "default"} expects at least ${minimumImages} image asset(s), but the plan contains ${imageEnhancements.length}.`,
+        fixHint: "Add unique insert-image enhancements, or choose a grammar/layout that does not depend on images.",
+      });
+    } else if (recommendsImage(slide) && imageEnhancements.length === 0) {
+      issues.push({
+        slideId: slide.slideId,
+        severity: "info",
+        message: `${slide.layout}/${slide.grammarVariant} benefits from a real visual anchor but has no planned image.`,
+        fixHint: "Search one relevant hero image, or switch to a non-image grammar variant.",
+      });
+    }
+  }
+
+  const plannedImageUrls = slides.flatMap((slide) => slide.enhancements
+    .filter((item): item is Extract<LayoutPlanEnhancement, { type: "insert-image" }> => item.type === "insert-image")
+    .map((item) => item.url));
+  if (new Set(plannedImageUrls).size !== plannedImageUrls.length) {
+    issues.push({
+      severity: "warning",
+      message: "The layout plan reuses the same image URL on multiple pages.",
+      fixHint: "Use a unique, slide-specific image for each visual slot.",
+    });
   }
 
   const documentModeContentLayouts = new Set(
@@ -246,6 +298,17 @@ export function validateLayoutPlan(plan: LayoutPlan): LayoutPlanValidationIssue[
   return issues;
 }
 
+function minimumRequiredImages(slide: LayoutPlanSlide): number {
+  if (slide.layout === "image-grid") return slide.grammarVariant === "hero-caption" ? 1 : 2;
+  if (slide.layout === "case" && slide.grammarVariant === "evidence") return 1;
+  return 0;
+}
+
+function recommendsImage(slide: LayoutPlanSlide): boolean {
+  return (slide.layout === "cover" && slide.grammarVariant === "editorial-hero")
+    || (slide.layout === "section" && slide.grammarVariant === "editorial-split");
+}
+
 /** Validate that a layout plan is the executable counterpart of the current presentation snapshot. */
 export function validateLayoutPlanAgainstPresentation(
   plan: LayoutPlan,
@@ -274,6 +337,37 @@ export function validateLayoutPlanAgainstPresentation(
         severity: "error",
         message: `Layout plan slide ${index + 1} targets '${planned.slideId}', but snapshot has '${actual.id}'.`,
         fixHint: "Keep layout-plan slides[] in the same order and with the same slideId values as the snapshot.",
+      });
+    }
+    const existingImages = actual.elements.filter((element) => element.type === "image").length;
+    const plannedImages = planned.enhancements.filter((item) => item.type === "insert-image").length;
+    const minimumImages = minimumRequiredImages(planned);
+    if (existingImages + plannedImages < minimumImages) {
+      issues.push({
+        slideId: planned.slideId,
+        severity: "error",
+        message: `Image-dependent layout '${planned.layout}/${planned.grammarVariant ?? "default"}' has ${existingImages} existing and ${plannedImages} planned image(s); ${minimumImages} required.`,
+        fixHint: "Use web_search(include_images=true) and add insert-image enhancements, or change the layout grammar.",
+      });
+    }
+  }
+
+  if (snapshotSlides.length >= 6) {
+    const existingVisualCount = snapshotSlides.reduce(
+      (total, slide) => total + slide.elements.filter((element) =>
+        element.type === "image" || element.type === "chart" || element.type === "table").length,
+      0,
+    );
+    const plannedVisualCount = planSlides.reduce(
+      (total, slide) => total + slide.enhancements.filter((item) =>
+        item.type === "insert-image" || item.type === "beautify-chart" || item.type === "beautify-table").length,
+      0,
+    );
+    if (existingVisualCount + plannedVisualCount === 0) {
+      issues.push({
+        severity: "warning",
+        message: "A 6+ slide deck has no image, chart, or table visual anchors.",
+        fixHint: "Plan 2–4 relevant images for concrete topics, or add charts/tables for data-heavy topics.",
       });
     }
   }

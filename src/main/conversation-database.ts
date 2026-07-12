@@ -13,6 +13,7 @@ import {
   type SessionChatMessage,
   type SessionSnapshot,
 } from "@shared/session";
+import { repairPresentationIdentities } from "@shared/presentation-repair";
 
 interface StoredSessionRow {
   id: string;
@@ -204,11 +205,13 @@ export class ConversationDatabase {
 
     const sessions = rows.map((row) => {
       const stored = JSON.parse(row.snapshot_json) as Omit<SessionSnapshot, "messages">;
+      const repairedPresentation = repairPresentationIdentities(stored.presentation).value;
       const messageRows = this.database.prepare(
         "SELECT message_json FROM messages WHERE session_id = ? ORDER BY ordinal ASC",
       ).all(row.id) as unknown as StoredMessageRow[];
       return sessionSnapshotSchema.parse({
         ...stored,
+        presentation: repairedPresentation,
         messages: messageRows.map((message) =>
           sessionChatMessageSchema.parse(JSON.parse(message.message_json))),
       });

@@ -24,6 +24,7 @@ stages:
 4. **deck 一致性**：AnalyzeDeckConsistency
 5. **图片资产**：远程 URL 必须先本地化；检查来源页与 license 元数据
 6. **设计引擎评分**：检查 hierarchy/readability/density/visualAnchor/composition；整套检查 consistency/differentiation
+7. **图片覆盖**：ReadPresentationSnapshot.visualAssetAudit 中 missing-required 必须为 0；重复 URL 必须为 0。missing-recommended 应修复或说明为何改用非图片版式
 
 ### Rubric A · 叙事与节奏
 

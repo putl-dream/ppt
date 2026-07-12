@@ -121,6 +121,7 @@ describe("render-feedback-loop", () => {
     expect(payload.slides[0].layout).toBe("cover");
     expect(payload.slides[0].scores.overall).toBeGreaterThan(0);
     expect(payload.deckScores.consistency).toBe(100);
+    expect(payload.visualAssetAudit.totalImageCount).toBe(0);
     expect(payload.hasThumbnails).toBe(false);
     expect(formatRenderFeedbackMessage(payload)).toContain("排版视觉反馈");
     expect(formatRenderFeedbackMessage(payload)).toContain("Deck 总分");

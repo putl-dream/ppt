@@ -147,11 +147,25 @@ export const slideElementSchema = z.discriminatedUnion("type", [
   iconElementSchema,
 ]);
 
+export const slideElementsSchema = z.array(slideElementSchema).superRefine((elements, context) => {
+  const seen = new Set<string>();
+  elements.forEach((element, index) => {
+    if (seen.has(element.id)) {
+      context.addIssue({
+        code: "custom",
+        path: [index, "id"],
+        message: `Duplicate element id: ${element.id}`,
+      });
+    }
+    seen.add(element.id);
+  });
+});
+
 
 export const slideSchema = z.object({
   id: z.string(),
   title: z.string(),
-  elements: z.array(slideElementSchema),
+  elements: slideElementsSchema,
   layout: z.string().optional(),
   grammarVariant: z.string().optional(),
   designOverride: slideDesignOverrideSchema.optional(),
@@ -159,11 +173,25 @@ export const slideSchema = z.object({
   slideVariant: z.enum(SLIDE_VARIANTS).optional(),
 });
 
+export const presentationSlidesSchema = z.array(slideSchema).superRefine((slides, context) => {
+  const seen = new Set<string>();
+  slides.forEach((slide, index) => {
+    if (seen.has(slide.id)) {
+      context.addIssue({
+        code: "custom",
+        path: [index, "id"],
+        message: `Duplicate slide id: ${slide.id}`,
+      });
+    }
+    seen.add(slide.id);
+  });
+});
+
 export const presentationSchema = z.object({
   id: z.string(),
   title: z.string(),
   revision: z.number().int().nonnegative(),
-  slides: z.array(slideSchema),
+  slides: presentationSlidesSchema,
   designSystem: designSystemV1Schema,
 });
 

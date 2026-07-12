@@ -41,6 +41,52 @@ describe("CommandBus", () => {
     expect(bus.getSnapshot().slides).toHaveLength(originalCount);
   });
 
+  it("rejects a duplicate slide id without changing the presentation", () => {
+    const bus = new CommandBus(createStarterPresentation());
+    const original = bus.getSnapshot();
+
+    expect(() => bus.execute({
+      id: crypto.randomUUID(),
+      type: "add-slide",
+      index: 1,
+      slide: {
+        id: original.slides[0].id,
+        title: "Duplicate identity",
+        elements: [],
+      },
+    })).toThrow(`Duplicate slide id: ${original.slides[0].id}`);
+
+    expect(bus.getSnapshot()).toEqual(original);
+  });
+
+  it("atomically rejects duplicate slide ids introduced within one batch", () => {
+    const bus = new CommandBus(createStarterPresentation());
+    const original = bus.getSnapshot();
+    const duplicateId = "batch-slide";
+
+    expect(() => bus.executeMany([
+      {
+        id: crypto.randomUUID(),
+        type: "set-presentation-title",
+        title: "Should not stick",
+      },
+      {
+        id: crypto.randomUUID(),
+        type: "add-slide",
+        index: 1,
+        slide: { id: duplicateId, title: "First", elements: [] },
+      },
+      {
+        id: crypto.randomUUID(),
+        type: "add-slide",
+        index: 2,
+        slide: { id: duplicateId, title: "Second", elements: [] },
+      },
+    ])).toThrow(`Duplicate slide id: ${duplicateId}`);
+
+    expect(bus.getSnapshot()).toEqual(original);
+  });
+
   it("does not partially apply a failing command batch", () => {
     const bus = new CommandBus(createStarterPresentation());
     const original = bus.getSnapshot();
@@ -116,6 +162,85 @@ describe("CommandBus", () => {
     // 4. Undo add
     bus.undo();
     expect(bus.getSnapshot().slides[0].elements).toHaveLength(1);
+  });
+
+  it("rejects duplicate element identities in add and update commands", () => {
+    const bus = new CommandBus(createStarterPresentation());
+    const initial = bus.getSnapshot();
+    const slideId = initial.slides[0].id;
+    const existingElementId = initial.slides[0].elements[0].id;
+
+    expect(() => bus.execute({
+      id: crypto.randomUUID(),
+      type: "add-element",
+      slideId,
+      element: {
+        id: existingElementId,
+        type: "text",
+        x: 10,
+        y: 10,
+        width: 100,
+        height: 40,
+        text: "Duplicate",
+        fontSize: 20,
+      },
+    })).toThrow(`Duplicate element id: ${existingElementId}`);
+    expect(bus.getSnapshot()).toEqual(initial);
+
+    const secondElementId = "second-element";
+    bus.execute({
+      id: crypto.randomUUID(),
+      type: "add-element",
+      slideId,
+      element: {
+        id: secondElementId,
+        type: "text",
+        x: 10,
+        y: 60,
+        width: 100,
+        height: 40,
+        text: "Second",
+        fontSize: 20,
+      },
+    });
+    const beforeUpdate = bus.getSnapshot();
+
+    expect(() => bus.execute({
+      id: crypto.randomUUID(),
+      type: "update-element",
+      slideId,
+      elementId: secondElementId,
+      element: {
+        ...beforeUpdate.slides[0].elements[1],
+        id: existingElementId,
+      },
+    })).toThrow(`Duplicate element id: ${existingElementId}`);
+    expect(bus.getSnapshot()).toEqual(beforeUpdate);
+  });
+
+  it("rejects duplicate element identities in restore commands", () => {
+    const bus = new CommandBus(createStarterPresentation());
+    const original = bus.getSnapshot();
+    const slide = original.slides[0];
+    const duplicateElements = [
+      slide.elements[0],
+      { ...slide.elements[0], text: "Duplicate restored element" },
+    ];
+
+    expect(() => bus.execute({
+      id: crypto.randomUUID(),
+      type: "restore-slide-elements",
+      slideId: slide.id,
+      elements: duplicateElements,
+    })).toThrow("Duplicate element id");
+    expect(bus.getSnapshot()).toEqual(original);
+
+    expect(() => bus.execute({
+      id: crypto.randomUUID(),
+      type: "restore-slide",
+      slide: { ...slide, elements: duplicateElements },
+    })).toThrow("Duplicate element id");
+    expect(bus.getSnapshot()).toEqual(original);
   });
 
   it("undoes slide layout with layout metadata restored", () => {

@@ -22,6 +22,46 @@ export const inlineCardRefSchema = z.object({
 });
 export type InlineCardRef = z.infer<typeof inlineCardRefSchema>;
 
+type InlineCardMessage = {
+  id: string;
+  role: "user" | "assistant";
+  inlineCards?: InlineCardRef[];
+};
+
+/** Hidden sidechains must reuse the layout decision already shown in this user turn. */
+export function hasLayoutCardSinceLastUserMessage(
+  messages: InlineCardMessage[],
+  ignoreMessageId?: string,
+): boolean {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index]!;
+    if (message.role === "user") return false;
+    if (
+      message.id !== ignoreMessageId
+      && message.inlineCards?.some((card) => card.type === "layout")
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/** Keep one layout choice card per user turn, including legacy duplicated runs. */
+export function visibleLayoutCardMessageIds(messages: InlineCardMessage[]): Set<string> {
+  const visible = new Set<string>();
+  let layoutSeenInTurn = false;
+  for (const message of messages) {
+    if (message.role === "user") {
+      layoutSeenInTurn = false;
+      continue;
+    }
+    if (!message.inlineCards?.some((card) => card.type === "layout")) continue;
+    if (!layoutSeenInTurn) visible.add(message.id);
+    layoutSeenInTurn = true;
+  }
+  return visible;
+}
+
 const PREVIEW_PROMPT_PATTERN = /预览.*(?:ppt|幻灯片|演示文稿)|(?:ppt|幻灯片|演示文稿).*预览|打开.*预览/i;
 
 export function isPreviewPrompt(prompt: string): boolean {

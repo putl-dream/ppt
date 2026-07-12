@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { localizeImageAsset } from "../src/main/agent/assets/image-asset";
-import { insertSlideImageTool } from "../src/main/agent/tools/deferred/insert-slide-image";
+import { insertSlideImageTool } from "../src/main/agent/tools/core/insert-slide-image";
 import { createDefaultToolRegistry } from "../src/main/agent/tools/tool-registry";
 import type { Presentation } from "../src/shared/presentation";
 import { TEST_DESIGN_SYSTEM } from "./design-engine-test-utils";
@@ -121,7 +121,7 @@ describe("image asset localization", () => {
       url: "https://93.184.216.34/evidence.png",
       slot: "side",
       provider: "tavily",
-      source_page_url: "https://example.com/source",
+      sourcePageUrl: "https://example.com/source",
       description: "Evidence image",
       license: "license-pending-verification",
     }, {

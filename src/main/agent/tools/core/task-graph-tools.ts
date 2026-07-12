@@ -7,6 +7,7 @@ import {
   type AgentTaskNode,
 } from "@shared/agent-task-graph";
 import type { TaskStore } from "../../task/task-store";
+import { publishCurrentTaskGraph } from "../../task/task-graph-publisher";
 
 function requireTaskStore(context: { taskStore?: TaskStore }): TaskStore {
   if (!context.taskStore) {
@@ -22,10 +23,11 @@ async function publishTaskGraph(
   },
   store: TaskStore,
 ): Promise<AgentTaskNode[]> {
-  const tasks = await store.listTasks();
-  const plan = await store.getPlanMeta();
-  context.notifyTaskGraphUpdated?.({ tasks, goal: plan?.goal ?? null });
-  return tasks;
+  const { allTasks } = await publishCurrentTaskGraph(
+    store,
+    context.notifyTaskGraphUpdated,
+  );
+  return allTasks;
 }
 
 const blockedBySchema = z.array(z.string()).optional().describe("依赖的任务 ID；全部 completed 后才能 claim");
@@ -95,7 +97,13 @@ export function ensureAutonomousTaskWorker(
     (teammate) => teammate.name === "task_worker"
       && (teammate.status === "running" || teammate.status === "idle"),
   );
-  if (existing) return existing.name;
+  if (existing) {
+    context.teammateManager.updateTaskGraphListener?.(
+      existing.name,
+      context.notifyTaskGraphUpdated,
+    );
+    return existing.name;
+  }
 
   return context.teammateManager.spawn({
     name: "task_worker",
@@ -107,6 +115,7 @@ export function ensureAutonomousTaskWorker(
     model: context.model,
     agentStepLimits: context.agentStepLimits,
     idleTimeoutMs: 300_000,
+    onTaskGraphUpdated: context.notifyTaskGraphUpdated,
   }).name;
 }
 
@@ -125,7 +134,8 @@ export const taskGraphCreateTool: ToolDefinition<typeof taskGraphCreateSchema, T
   risk: "low",
   execute: async (args, context) => {
     const store = requireTaskStore(context);
-    const result = await store.createTask(args);
+    const plan = await store.getPlanMeta();
+    const result = await store.createTask({ ...args, planId: plan?.planId });
     if (!result.ok) throw new Error(result.error);
     const worker = ensureAutonomousTaskWorker(context, [result.task]);
     const tasks = await publishTaskGraph(context, store);

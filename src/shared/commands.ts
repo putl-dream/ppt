@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { Presentation, Slide } from "./presentation";
-import { slideSchema, slideElementSchema } from "./presentation";
+import { slideSchema, slideElementSchema, slideElementsSchema } from "./presentation";
 import { applyLayout } from "./layout";
 import { SLIDE_LAYOUTS } from "./slide-layouts";
 import { SLIDE_VARIANTS } from "./slide-variant";
@@ -109,7 +109,7 @@ export const presentationCommandSchema = z.discriminatedUnion("type", [
     id: z.string(),
     type: z.literal("restore-slide-elements"),
     slideId: z.string(),
-    elements: z.array(slideElementSchema),
+    elements: slideElementsSchema,
   }),
   z.object({
     id: z.string(),
@@ -136,6 +136,9 @@ export function executeCommand(
   const command = presentationCommandSchema.parse(input);
 
   if (command.type === "add-slide") {
+    if (presentation.slides.some((slide) => slide.id === command.slide.id)) {
+      throw new Error(`Duplicate slide id: ${command.slide.id}`);
+    }
     const index = Math.min(command.index, presentation.slides.length);
     const slides = [...presentation.slides];
     slides.splice(index, 0, command.slide);
@@ -203,6 +206,9 @@ export function executeCommand(
     const slideIndex = presentation.slides.findIndex((slide) => slide.id === command.slideId);
     if (slideIndex < 0) throw new Error(`Slide not found: ${command.slideId}`);
     const targetSlide = presentation.slides[slideIndex];
+    if (targetSlide.elements.some((element) => element.id === command.element.id)) {
+      throw new Error(`Duplicate element id: ${command.element.id}`);
+    }
     const elements = [...targetSlide.elements, command.element];
     const slides = presentation.slides.map((slide) =>
       slide.id === command.slideId ? { ...slide, elements } : slide,
@@ -253,6 +259,16 @@ export function executeCommand(
     const elementIndex = targetSlide.elements.findIndex((el) => el.id === command.elementId);
     if (elementIndex < 0) throw new Error(`Element not found: ${command.elementId}`);
     const targetElement = targetSlide.elements[elementIndex];
+    if (targetSlide.elements.some((element, index) =>
+      index !== elementIndex && element.id === command.element.id
+    )) {
+      throw new Error(`Duplicate element id: ${command.element.id}`);
+    }
+    if (command.element.id !== command.elementId) {
+      throw new Error(
+        `Element id mismatch: expected ${command.elementId}, received ${command.element.id}`,
+      );
+    }
     const elements = targetSlide.elements.map((el) =>
       el.id === command.elementId ? command.element : el,
     );

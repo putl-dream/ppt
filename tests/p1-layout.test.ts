@@ -3,7 +3,7 @@ import { applyLayout } from "../src/shared/layout";
 import { TEST_DESIGN_SYSTEM, testSlideStyle } from "./design-engine-test-utils";
 import { getLayoutSlotRect, listLayoutSlots } from "../src/shared/layout-slots";
 import { validateDeckRhythm } from "../src/shared/deck-rhythm";
-import { insertSlideImageTool } from "../src/main/agent/tools/deferred/insert-slide-image";
+import { insertSlideImageTool } from "../src/main/agent/tools/core/insert-slide-image";
 import { validateDeckLayoutTool } from "../src/main/agent/tools/deferred/validate-deck-layout";
 import { previewSlideTool } from "../src/main/agent/tools/deferred/preview-slide";
 import type { Presentation, Slide } from "../src/shared/presentation";

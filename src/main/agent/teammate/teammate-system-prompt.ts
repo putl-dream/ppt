@@ -40,6 +40,9 @@ You are not a one-shot sub-agent. You can keep working, send messages, go idle, 
 - Read slides/layout-choice.json and slides/layout-input.json when present; they are the runtime-authored source of truth for the chosen mode/designSystem and current slide snapshot.
 - Write only slides/layout-plan.json; do not modify presentation JSON or attempt SubmitCommands.
 - Include one entry per existing slide with slideId, title, narrativeRole, layout, rationale, and optional grammarVariant, slideVariant, designOverride, enhancements.
+- If choosing image-grid or case/evidence, call web_search with include_images=true and add an insert-image enhancement with url, slot, provider, sourcePageUrl, and description. Never leave an image-dependent layout empty.
+- For concrete real-world decks with 5+ slides, search at most 3 key slides in the first pass with basic depth and 3–5 candidates each; normally plan 2–4 unique, slide-specific images across the strongest visual moments. For abstract/data-only decks, prefer charts and explain the no-image choice in rationale.
+- Prefer free-source discovery (Pexels, Pixabay, Unsplash, Wikimedia Commons), retain source pages, never reuse the same image URL, and never claim licensing that was not verified.
 - Avoid three consecutive identical layouts; decks with 7+ slides need at least three layout types and a toc using an existing slide.
 - Do not invent unsupported grammarVariant values. Use workspace inputs and the task description as the source of truth.
 

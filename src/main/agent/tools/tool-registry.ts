@@ -19,6 +19,8 @@ import { taskTool } from "./core/task";
 import { taskGraphTools } from "./core/task-graph-tools";
 import { loadSkillTool } from "./core/load-skill";
 import { webSearchTool } from "./core/web-search";
+import { searchSlideImagesTool } from "./core/search-slide-images";
+import { insertSlideImageTool } from "./core/insert-slide-image";
 import { analyzeDeckConsistencyTool } from "./deferred/analyze-deck-consistency";
 import { applyDesignSystemTool } from "./deferred/apply-design-system";
 import { autoLayoutSlideTool } from "./deferred/auto-layout-slide";
@@ -30,7 +32,6 @@ import { detectRepeatedTitlesTool } from "./deferred/detect-repeated-titles";
 import { exportPptxTool } from "./deferred/export-pptx";
 import { rewriteSlideContentTool } from "./deferred/rewrite-slide-content";
 import { selectStyleStrategyTool } from "./deferred/select-style-strategy";
-import { insertSlideImageTool } from "./deferred/insert-slide-image";
 import { addLayoutDecorationsTool } from "./deferred/add-layout-decorations";
 import { applyTypographyTool } from "./deferred/apply-typography";
 import { previewSlideTool } from "./deferred/preview-slide";
@@ -132,6 +133,8 @@ export function createDefaultToolRegistry(): ToolRegistry {
     ...taskGraphTools,
     loadSkillTool,
     webSearchTool,
+    searchSlideImagesTool,
+    insertSlideImageTool,
     analyzeDeckConsistencyTool,
     applyDesignSystemTool,
     autoLayoutSlideTool,
@@ -143,7 +146,6 @@ export function createDefaultToolRegistry(): ToolRegistry {
     exportPptxTool,
     rewriteSlideContentTool,
     selectStyleStrategyTool,
-    insertSlideImageTool,
     addLayoutDecorationsTool,
     applyTypographyTool,
     previewSlideTool,

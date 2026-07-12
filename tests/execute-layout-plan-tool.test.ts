@@ -122,6 +122,38 @@ describe("ExecuteLayoutPlan", () => {
     );
   });
 
+  it("compiles insert-image enhancements into the same command proposal", async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), "ppt-layout-plan-image-"));
+    const presentation = makePresentation(["slide-1"]);
+    const plan = makePlan(["slide-1"], ["case"]);
+    plan.slides[0].grammarVariant = "evidence";
+    plan.slides[0].enhancements = [{
+      type: "insert-image",
+      slot: "side",
+      url: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB",
+      description: "Evidence image",
+    }];
+    await writePlan(workspaceRoot, plan);
+
+    const result = await executeLayoutPlanTool.execute({}, makeContext(workspaceRoot, presentation));
+
+    expect("type" in result ? result.type : undefined).toBe("command_proposal");
+    if (!("type" in result) || result.type !== "command_proposal") {
+      throw new Error("Expected command proposal");
+    }
+    expect(result.commands).toEqual(expect.arrayContaining([
+      expect.objectContaining({ type: "update-slide-layout", grammarVariant: "evidence" }),
+      expect.objectContaining({
+        type: "add-element",
+        slideId: "slide-1",
+        element: expect.objectContaining({ type: "image", imageSlot: "side" }),
+      }),
+    ]));
+    expect(result.assumptions).toEqual(expect.arrayContaining([
+      expect.stringContaining("insert-image enhancement"),
+    ]));
+  });
+
   it("blocks execution when layout-plan slide ids do not match the snapshot", async () => {
     const workspaceRoot = await mkdtemp(join(tmpdir(), "ppt-layout-plan-"));
     const presentation = makePresentation(["slide-1", "slide-2"]);

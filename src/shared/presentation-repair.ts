@@ -5,6 +5,12 @@ export interface PresentationGeometryRepairResult {
   repairedDimensionCount: number;
 }
 
+export interface PresentationIdentityRepairResult {
+  value: unknown;
+  repairedSlideIdCount: number;
+  repairedElementIdCount: number;
+}
+
 function isRecord(value: unknown): value is JsonRecord {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -12,6 +18,82 @@ function isRecord(value: unknown): value is JsonRecord {
 function minimumDimension(element: JsonRecord, field: "width" | "height"): number {
   if (field === "height" && element.type === "text") return 16;
   return 1;
+}
+
+function repairDuplicateRecordIds(records: unknown[]): number {
+  const reservedIds = new Set(
+    records
+      .filter(isRecord)
+      .map((record) => record.id)
+      .filter((id): id is string => typeof id === "string"),
+  );
+  const usedIds = new Set<string>();
+  const nextOrdinalById = new Map<string, number>();
+  let repairedCount = 0;
+
+  for (const record of records) {
+    if (!isRecord(record) || typeof record.id !== "string") continue;
+    const originalId = record.id;
+    if (!usedIds.has(originalId)) {
+      usedIds.add(originalId);
+      continue;
+    }
+
+    let ordinal = nextOrdinalById.get(originalId) ?? 2;
+    let candidate = `${originalId}__duplicate_${ordinal}`;
+    while (reservedIds.has(candidate) || usedIds.has(candidate)) {
+      ordinal += 1;
+      candidate = `${originalId}__duplicate_${ordinal}`;
+    }
+
+    record.id = candidate;
+    usedIds.add(candidate);
+    nextOrdinalById.set(originalId, ordinal + 1);
+    repairedCount += 1;
+  }
+
+  return repairedCount;
+}
+
+/**
+ * Migrates legacy presentations that predate identity validation. The first
+ * occurrence keeps its original ID; later duplicates receive deterministic,
+ * collision-safe suffixes while all slide and element content is preserved.
+ * Malformed or missing IDs remain untouched so the canonical schema rejects
+ * them after migration.
+ */
+export function repairPresentationIdentities(
+  presentation: unknown,
+): PresentationIdentityRepairResult {
+  if (!isRecord(presentation) || !Array.isArray(presentation.slides)) {
+    return {
+      value: presentation,
+      repairedSlideIdCount: 0,
+      repairedElementIdCount: 0,
+    };
+  }
+
+  const value = structuredClone(presentation);
+  if (!isRecord(value) || !Array.isArray(value.slides)) {
+    return {
+      value: presentation,
+      repairedSlideIdCount: 0,
+      repairedElementIdCount: 0,
+    };
+  }
+
+  const repairedSlideIdCount = repairDuplicateRecordIds(value.slides);
+  let repairedElementIdCount = 0;
+  for (const slide of value.slides) {
+    if (!isRecord(slide) || !Array.isArray(slide.elements)) continue;
+    repairedElementIdCount += repairDuplicateRecordIds(slide.elements);
+  }
+
+  return {
+    value,
+    repairedSlideIdCount,
+    repairedElementIdCount,
+  };
 }
 
 /**

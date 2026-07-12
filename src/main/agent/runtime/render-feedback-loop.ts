@@ -1,6 +1,11 @@
 import type { PresentationCommand } from "@shared/commands";
 import type { Presentation } from "@shared/presentation";
 import {
+  auditPresentationVisualAssets,
+  type PresentationVisualAssetAudit,
+  type SlideVisualAssetAudit,
+} from "@shared/visual-asset-audit";
+import {
   evaluateDeckVisualQuality,
   type DeckVisualScores,
   type SlideVisualScores,
@@ -40,6 +45,7 @@ export interface SlideRenderFeedback {
   description: string;
   scores: SlideVisualScores;
   issues: VisualIssue[];
+  visualAsset: SlideVisualAssetAudit;
   thumbnail: RenderFeedbackImage | null;
 }
 
@@ -48,6 +54,7 @@ export interface RenderFeedbackPayload {
   slides: SlideRenderFeedback[];
   deckScores: DeckVisualScores;
   deckIssues: VisualIssue[];
+  visualAssetAudit: PresentationVisualAssetAudit;
   hasThumbnails: boolean;
 }
 
@@ -66,6 +73,7 @@ export function formatRenderFeedbackMessage(payload: RenderFeedbackPayload): str
     "",
     "你刚提交的排版方案已在沙箱中渲染，并由设计引擎完成结构化视觉评分：",
     `- Deck 总分 ${payload.deckScores.overall}/100；一致性 ${payload.deckScores.consistency}；差异度 ${payload.deckScores.differentiation}`,
+    `- 图片审计：必补 ${payload.visualAssetAudit.missingRequiredCount} 页，建议补 ${payload.visualAssetAudit.missingRecommendedCount} 页，重复图片 ${payload.visualAssetAudit.duplicateImageUrls.length} 个`,
     "- 若需修正：再次调用 SubmitCommands 提交修复命令",
     "- 若满意：再次调用 SubmitCommands，summary 注明「视觉确认通过」并复提交或微调后的命令",
     "",
@@ -79,6 +87,11 @@ export function formatRenderFeedbackMessage(payload: RenderFeedbackPayload): str
       `- **${slide.title}** (\`${slide.slideId}\`) · ${slide.scores.overall}/100 · layout=${slide.layout ?? "unset"}${slide.grammarVariant ? `/${slide.grammarVariant}` : ""} · ${slide.description}`,
     );
     for (const issue of slide.issues) lines.push(`  - ${issue.message} 建议：${issue.suggestion}`);
+    if (slide.visualAsset.status === "missing-required" || slide.visualAsset.status === "missing-recommended") {
+      lines.push(
+        `  - 图片动作：调用 SearchSlideImages({"slideId":"${slide.slideId}","query":"${slide.visualAsset.suggestedQuery ?? slide.title}"})，选择候选后调用 InsertSlideImage 放入 ${slide.visualAsset.suggestedSlot ?? "有效图片槽"}。`,
+      );
+    }
     if (!slide.thumbnail) {
       lines.push("  （本环境无 PNG 缩略图，请依据结构化摘要判断）");
     }
@@ -101,7 +114,9 @@ export async function buildRenderFeedback(
 ): Promise<RenderFeedbackPayload> {
   const draft = applyCommandsToDraft(input.presentation, input.commands);
   const evaluation = evaluateDeckVisualQuality(draft.designSystem, draft.slides);
+  const visualAssetAudit = auditPresentationVisualAssets(draft);
   const evaluationBySlide = new Map(evaluation.slides.map((item) => [item.slideId, item]));
+  const visualAssetBySlide = new Map(visualAssetAudit.slides.map((item) => [item.slideId, item]));
   const slideIds = collectAffectedSlideIds(input.commands, draft).slice(0, MAX_RENDER_FEEDBACK_SLIDES);
 
   const previewContext: ToolContext = {
@@ -142,6 +157,14 @@ export async function buildRenderFeedback(
         overall: 0,
       },
       issues: evaluationBySlide.get(result.preview.slideId)?.issues ?? [],
+      visualAsset: visualAssetBySlide.get(result.preview.slideId) ?? {
+        slideId: result.preview.slideId,
+        title: result.preview.title,
+        status: "not-needed",
+        existingImageCount: result.preview.images.length,
+        availableSlots: result.preview.imageSlots,
+        reason: "No image requirement was inferred.",
+      },
       thumbnail,
     });
   }
@@ -151,6 +174,7 @@ export async function buildRenderFeedback(
     slides,
     deckScores: evaluation.scores,
     deckIssues: evaluation.issues,
+    visualAssetAudit,
     hasThumbnails: images.length > 0,
   };
 }

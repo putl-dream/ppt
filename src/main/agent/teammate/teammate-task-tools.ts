@@ -3,6 +3,10 @@ import type { AgentTaskNode } from "@shared/agent-task-graph";
 import type { TaskStore } from "../task/task-store";
 import type { SubAgentToolDefinition } from "../subagent/workspace-tools";
 import type { ToolPermissionProfile } from "../runtime/tool-access-policy";
+import {
+  publishCurrentTaskGraph,
+  type TaskGraphSnapshotListener,
+} from "../task/task-graph-publisher";
 
 const emptySchema = z.object({});
 const taskIdSchema = z.object({
@@ -21,6 +25,7 @@ const TASK_TOOL_PERMISSION: ToolPermissionProfile = {
 export function createTeammateTaskTools(
   store: TaskStore,
   owner: string,
+  onTaskGraphUpdated?: TaskGraphSnapshotListener,
 ): SubAgentToolDefinition[] {
   const scanTool: SubAgentToolDefinition<typeof emptySchema> = {
     name: "scan_unclaimed_tasks",
@@ -42,6 +47,7 @@ export function createTeammateTaskTools(
     async execute(args) {
       const result = await store.claimTask(args.task_id, owner);
       if (!result.ok) throw new Error(result.error);
+      await publishCurrentTaskGraph(store, onTaskGraphUpdated);
       return formatTaskResult(result.message, result.task);
     },
   };
@@ -55,6 +61,7 @@ export function createTeammateTaskTools(
     async execute(args) {
       const result = await store.submitTask(args.task_id, owner);
       if (!result.ok) throw new Error(result.error);
+      await publishCurrentTaskGraph(store, onTaskGraphUpdated);
       return formatTaskResult(result.message, result.task);
     },
   };
@@ -65,13 +72,29 @@ export function createTeammateTaskTools(
 export async function claimNextUnclaimedTask(
   store: TaskStore,
   owner: string,
+  onTaskGraphUpdated?: TaskGraphSnapshotListener,
 ): Promise<AgentTaskNode | undefined> {
   const candidates = await store.scanUnclaimedTasks();
   for (const candidate of candidates) {
     const result = await store.claimTask(candidate.id, owner);
-    if (result.ok) return result.task;
+    if (result.ok) {
+      await publishCurrentTaskGraph(store, onTaskGraphUpdated);
+      return result.task;
+    }
   }
   return undefined;
+}
+
+export async function unassignOwnedTasks(
+  store: TaskStore,
+  owner: string,
+  onTaskGraphUpdated?: TaskGraphSnapshotListener,
+): Promise<string[]> {
+  const released = await store.unassignInProgressByOwner(owner);
+  if (released.length > 0) {
+    await publishCurrentTaskGraph(store, onTaskGraphUpdated);
+  }
+  return released;
 }
 
 function formatTaskResult(

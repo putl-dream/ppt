@@ -178,7 +178,7 @@ function createAgentStreamEmitter(
       return;
     }
     try {
-      sender.send("agent:stream", { ...streamEvent, runId });
+      sender.send("agent:stream", { ...streamEvent, runId, sessionId });
     } catch (error) {
       logger.warn("agent.stream.send-failed", { runId, error });
       abortRun("stream-send-failed");

@@ -4,6 +4,8 @@ import { TavilySearchAdapter } from "../src/main/agent/search/tavily-adapter";
 import { createSearchService } from "../src/main/agent/search/search-service";
 import { webSearchSchema } from "../src/main/agent/search/web-search";
 import { webSearchTool } from "../src/main/agent/tools/core/web-search";
+import { searchSlideImagesTool } from "../src/main/agent/tools/core/search-slide-images";
+import { insertSlideImageTool } from "../src/main/agent/tools/core/insert-slide-image";
 import { createDefaultToolRegistry } from "../src/main/agent/tools/tool-registry";
 import {
   SUB_AGENT_TOOLS,
@@ -137,8 +139,76 @@ describe("web search", () => {
 
   it("registers WebSearch for the main agent and web_search for Task sub-agents", () => {
     expect(createDefaultToolRegistry().get("WebSearch")).toBe(webSearchTool);
+    expect(createDefaultToolRegistry().get("SearchSlideImages")).toBe(searchSlideImagesTool);
+    expect(createDefaultToolRegistry().get("InsertSlideImage")).toBe(insertSlideImageTool);
+    expect(createDefaultToolRegistry().getCoreTools()).toContain(insertSlideImageTool);
     expect(SUB_AGENT_TOOLS).toContain(webSearchSubAgentTool);
     expect(webSearchSubAgentTool.permission).toBe(SUB_AGENT_TOOL_PERMISSION_PROFILES.web_search);
+  });
+
+  it("searches slide images with image mode and free-source defaults", async () => {
+    const fetchImpl = vi.fn(async (
+      _input: Parameters<typeof fetch>[0],
+      _init?: Parameters<typeof fetch>[1],
+    ) => new Response(JSON.stringify({
+      results: [{
+        title: "Factory photo",
+        url: "https://www.pexels.com/photo/factory-123",
+        content: "Industrial automation photo.",
+        images: [{
+          url: "https://images.pexels.com/photos/123/factory.jpg",
+          description: "Robotic arm in a modern factory",
+        }],
+      }],
+    }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchImpl);
+
+    const presentation = createStarterPresentation();
+    const slideId = presentation.slides[0].id;
+    presentation.slides[0].layout = "case";
+    presentation.slides[0].grammarVariant = "evidence";
+    const context = {
+      presentation,
+      selectedElementIds: [],
+      discoverySession: { discoveredToolNames: new Set<string>() },
+      registry: createDefaultToolRegistry(),
+      messageHistory: [],
+      gateway: {
+        getGatewayConfig: () => ({
+          timeoutMs: 180_000,
+          maxOutputTokens: 16_384,
+          webSearchApiKey: "tvly-runtime-key",
+        }),
+        async generateText() { throw new Error("not used"); },
+        async *generateTextStream() { throw new Error("not used"); },
+      },
+    };
+
+    const output = await searchSlideImagesTool.execute({
+      slideId,
+      query: "industrial robot assembly line",
+      visualKind: "evidence",
+      sourceMode: "free",
+      maxImages: 3,
+    }, context);
+
+    expect(output.slot).toBe("side");
+    expect(output.candidates[0]).toMatchObject({
+      provider: "Pexels",
+      sourcePageUrl: "https://www.pexels.com/photo/factory-123",
+      insertArgs: {
+        slideId,
+        slot: "side",
+        sourcePageUrl: "https://www.pexels.com/photo/factory-123",
+      },
+    });
+    const requestBody = JSON.parse(String(fetchImpl.mock.calls[0]?.[1]?.body));
+    expect(requestBody).toMatchObject({
+      include_images: true,
+      include_image_descriptions: true,
+      search_depth: "basic",
+    });
+    expect(requestBody.include_domains).toEqual(expect.arrayContaining(["pexels.com", "pixabay.com"]));
   });
 
   it("uses per-run gateway configuration and returns citation-ready model content", async () => {

@@ -153,9 +153,7 @@ export class TaskStore {
 
     const planId = `plan_${Date.now()}_${randomBytes(2).toString("hex")}`;
     const goal = input.goal?.trim() || undefined;
-    if (goal) {
-      await this.savePlanMeta({ planId, goal, updatedAt: new Date().toISOString() });
-    }
+    await this.savePlanMeta({ planId, goal, updatedAt: new Date().toISOString() });
 
     const created: AgentTaskNode[] = [];
     let previousId: string | undefined;

@@ -152,6 +152,21 @@ function buildIntentFirstContract(): string {
   ].join("\n");
 }
 
+function buildVisualAssetContract(stage: PromptStage): string {
+  if (stage === "discover" || stage === "author" || stage === "export") return "";
+  return [
+    "",
+    "## 图片使用闭环（必须执行）",
+    "",
+    "- ReadPresentationSnapshot 会返回 visualAssetAudit。出现 missing-required 或 missing-recommended 时，不要只建议配图：调用 SearchSlideImages(slideId)，选择语义最相关且有来源页的候选，再直接调用 InsertSlideImage，最后把返回 commands 纳入 SubmitCommands。",
+    "- SearchSlideImages 默认优先免费图库；InsertSlideImage 是 Core Tool，无需 SearchExtraTools / ExecuteExtraTool。",
+    "- image-grid、case/evidence 必须有真实图片；editorial-hero、editorial-split 建议有主视觉。若不准备配图，就改用不依赖图片的 grammar/layout。",
+    "- 一张图片默认只使用一次；不得把同一 URL 复制到多页。图片必须与该页核心论点直接相关，不用泛化握手照、随机办公照填空。",
+    "- 搜索候选不等于自动获得授权。保留 provider/sourcePageUrl；license 未核实时可以保留 warning，但不得声称已获商用授权。",
+    "- layout-plan 中的 insert-image enhancement 会被 ExecuteLayoutPlan 自动本地化并编译进同一 command proposal，不要再次重复插入。",
+  ].join("\n");
+}
+
 function buildLeadAgentContract(): string {
   return [
     "",
@@ -176,6 +191,7 @@ function buildCorePrinciples(stage: PromptStage, stepLimits?: AgentStepLimits): 
     "你是一个专业的 PPT 智能助手 (PPT Agent)，也是演示创作流程的 lead/orchestrator。帮助用户创作**可用**的演示文稿。",
     buildIntentFirstContract(),
     buildLeadAgentContract(),
+    buildVisualAssetContract(stage),
     "",
     "## 阶段原则",
     "",
@@ -223,6 +239,7 @@ function buildCorePrinciples(stage: PromptStage, stepLimits?: AgentStepLimits): 
       "- LoadSkill `ppt-design-layout`；layout-plan 对应 teammate 任务由常驻 worker 自主领取并产出 `slides/layout-plan.json`。",
       "- 随后 LoadSkill `ppt-layout`（Executor）并继续执行，不要停在 layout-plan 产物说明。",
       "- 必须调用 `ExecuteLayoutPlan` 读取、校验并执行 `slides/layout-plan.json`；不要手写 `set-design-system` / `update-slide-layout` 来重猜版式。",
+      "- layout-plan 若包含 insert-image，ExecuteLayoutPlan 会自动插图；验收 plan 时拒绝没有图片 enhancement 的 image-grid / case-evidence 页面。",
       "- **不要再次输出**「内容草稿已就绪 / 请选择排版方式」；用户已经完成排版方式选择。",
       "- 如果 `ExecuteLayoutPlan` 报错，修复或重新生成 layout-plan 后再调用它；不要从聊天上下文自由发挥版式。",
     ],
@@ -231,7 +248,7 @@ function buildCorePrinciples(stage: PromptStage, stepLimits?: AgentStepLimits): 
       "### 本阶段（style = 视觉排版 + 质检）",
       "- 按 layout-plan 执行：优先调用 `ExecuteLayoutPlan`，由工具生成 `set-design-system` → `update-slide-layout` → variant。",
       "- **结构仍冻结**：不新增、删除、重排页面；只在溢出或过长时用 `ppt-beautify` / `compress-text` 做最小文案精简。",
-      "- plan.enhancements 经 ExecuteExtraTool；完成后 LoadSkill `deck-review` 或 `ValidateDeckLayout`。",
+      "- plan 中 insert-image 由 ExecuteLayoutPlan 自动执行；其他 enhancements 才经 ExecuteExtraTool。完成后 LoadSkill `deck-review` 或 `ValidateDeckLayout`。",
       "- **首次排版 SubmitCommands 后**，系统自动渲染缩略图回喂一轮视觉质检；对照后修正或确认再提交。",
       "- **Core 工具**：`PreviewSlide`、`ValidateDeckLayout` 可直接调用。",
     ],
@@ -240,6 +257,7 @@ function buildCorePrinciples(stage: PromptStage, stepLimits?: AgentStepLimits): 
       "### 本阶段（edit = 轻量修改）",
       "- ReadPresentationSnapshot → 直接 SubmitCommands 改目标页。",
       "- 无需 TaskGraph、discover/design 全链路；已有主题的 deck 小改专用。",
+      "- 用户要求配图/换图或 visualAssetAudit 缺图时：SearchSlideImages → InsertSlideImage → SubmitCommands。",
     ],
     export: [
       "",
@@ -278,8 +296,9 @@ function buildWorkflowSnippet(stage: PromptStage): string {
 1. ReadPresentationSnapshot + 读取 layout-plan
 2. LoadSkill \`ppt-layout\`（Executor）
 3. ExecuteLayoutPlan：从 layout-plan 生成 set-design-system / update-slide-layout / variant 命令
-4. PreviewSlide / ValidateDeckLayout / deck-review
-5. 过长文案：ExecuteExtraTool compress-text / beautify 等`,
+4. 检查 visualAssetAudit；缺图时 SearchSlideImages → InsertSlideImage
+5. PreviewSlide / ValidateDeckLayout / deck-review
+6. 过长文案：ExecuteExtraTool compress-text / beautify 等`,
 
     edit: `## 本阶段工作流
 1. ReadPresentationSnapshot
@@ -329,6 +348,7 @@ ${toolsDescription}
 - \`TaskGraph*\`：持久化任务 DAG（\`.tasks/\`）。
 - \`LoadSkill\`：仅加载上方目录中的技能；其他技能在本阶段不可用。
 - \`PreviewSlide\` / \`ValidateDeckLayout\`：排版与质检 Core 工具，可直接调用。
+- \`SearchSlideImages\` → \`InsertSlideImage\`：缺图时的标准闭环；两者均为 Core Tool，不要通过 SearchExtraTools 查找。
 - \`SearchExtraTools\` + \`ExecuteExtraTool\`：美化/压缩等增强能力（非必需）。
 - \`AskUser\`：仅询问用户决策项，不问工具名或系统实现。问题正文放 \`message\`；可选界面配置放 \`responseUi\`，必须直接传对象，禁止 JSON.stringify。`;
 }
@@ -357,7 +377,7 @@ function commandExamplesForStage(stage: PromptStage): string {
     return `- 执行唯一事实源：{"toolName":"ExecuteLayoutPlan","args":{"path":"slides/layout-plan.json"}}
 - ExecuteLayoutPlan 成功后会生成 set-design-system / update-slide-layout / update-slide-variant
 - 视觉自检：PreviewSlide(slideId) / ValidateDeckLayout()
-主题值：nordic、midnight、ocean、sunset、purple。调色板：cyan、green、purple、orange。
+设计系统由 DesignSystemV1 提供；不要生成旧 theme/palette 参数。
 布局值：cover、section、concept、comparison、process、architecture、case、summary、toc、quote、image-grid。`;
   }
 

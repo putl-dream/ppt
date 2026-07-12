@@ -54,7 +54,7 @@ export const UnifiedAgentInput: React.FC<UnifiedAgentInputProps> = ({
   const isPermissionGateOpen = Boolean(pendingToolApproval && onResolveToolApproval);
 
   const handleSend = () => {
-    if (busy || !sandboxReady || !request.trim()) return;
+    if (busy || !request.trim()) return;
     onSubmitRequest();
     window.setTimeout(() => textareaRef.current?.focus(), 0);
   };
@@ -107,106 +107,109 @@ export const UnifiedAgentInput: React.FC<UnifiedAgentInputProps> = ({
           <section className="sandbox-preflight-card" aria-labelledby="sandbox-preflight-title">
             <div className="sandbox-preflight-icon"><FolderIcon size={18} /></div>
             <div className="sandbox-preflight-copy">
-              <strong id="sandbox-preflight-title">先确定项目沙箱</strong>
-              <span>新会话创建后将固定绑定到该目录，过程中不可更换。</span>
+              <strong id="sandbox-preflight-title">项目目录（可选）</strong>
+              <span>可直接发送，系统会自动创建托管沙箱；也可以先选择保存目录。</span>
             </div>
             <button type="button" className="sandbox-preflight-btn" onClick={onPrepareWorkspace}>
               选择项目目录
             </button>
           </section>
-        ) : (
-          <div
-            className="double-deck-panel-card unified-agent-input-shell"
-            data-action-state={isPermissionGateOpen ? "permission" : busy ? "running" : "composing"}
-          >
-            {isPermissionGateOpen ? (
-              <ToolApprovalOverlay approval={pendingToolApproval!} onResolve={onResolveToolApproval!} />
-            ) : (
-              <>
-                <div className="input-textarea-row">
-                  <textarea
-                    ref={textareaRef}
-                    value={request}
-                    onChange={(event) => {
-                      onChangeRequest(event.target.value);
-                      resizeTextarea(event.target);
-                    }}
-                    onKeyDown={handleKeyDown}
-                    placeholder="描述你的目标或直接提出修改要求…"
-                    readOnly={busy}
-                    autoFocus
-                    rows={layoutMode === "center" ? 3 : 2}
-                    className={`input-textarea${busy ? " input-textarea--busy" : ""}`}
-                    aria-label="向演示文稿 Agent 输入指令"
-                  />
+        ) : null}
+        <div
+          className="double-deck-panel-card unified-agent-input-shell"
+          data-action-state={isPermissionGateOpen ? "permission" : busy ? "running" : "composing"}
+        >
+          {isPermissionGateOpen ? (
+            <ToolApprovalOverlay approval={pendingToolApproval!} onResolve={onResolveToolApproval!} />
+          ) : (
+            <>
+              <div className="input-textarea-row">
+                <textarea
+                  ref={textareaRef}
+                  value={request}
+                  onChange={(event) => {
+                    onChangeRequest(event.target.value);
+                    resizeTextarea(event.target);
+                  }}
+                  onKeyDown={handleKeyDown}
+                  placeholder="描述目标，或粘贴网页链接生成演示文稿…"
+                  readOnly={busy}
+                  autoFocus
+                  rows={layoutMode === "center" ? 3 : 2}
+                  className={`input-textarea${busy ? " input-textarea--busy" : ""}`}
+                  aria-label="向演示文稿 Agent 输入指令"
+                />
+              </div>
+
+              <div className="functional-control-bar">
+                <div className="functional-left">
+                  <span className={`action-dock-status${busy ? " is-running" : ""}`}>
+                    <span className="action-dock-status-dot" aria-hidden="true" />
+                    {busy
+                      ? "Agent 正在执行"
+                      : sandboxReady
+                        ? `沙箱 · ${sandboxName?.trim() || "当前项目"}`
+                        : "沙箱 · 发送后自动创建"}
+                  </span>
                 </div>
 
-                <div className="functional-control-bar">
-                  <div className="functional-left">
-                    <span className={`action-dock-status${busy ? " is-running" : ""}`}>
-                      <span className="action-dock-status-dot" aria-hidden="true" />
-                      {busy ? "Agent 正在执行" : `沙箱 · ${sandboxName?.trim() || "当前项目"}`}
-                    </span>
-                  </div>
-
-                  <div className="functional-right">
-                    <div
-                      ref={modelMenuRef}
-                      className={`model-tier-select-wrapper${modelMenuOpen ? " is-open" : ""}${busy || models.length === 0 ? " is-disabled" : ""}`}
-                    >
-                      <button
-                        type="button"
-                        className="mini-model-select"
-                        disabled={busy || models.length === 0}
-                        aria-haspopup="listbox"
-                        aria-expanded={modelMenuOpen}
-                        onClick={() => setModelMenuOpen((open) => !open)}
-                      >
-                        <span>{selectedModel?.name ?? "选择模型"}</span>
-                        <ChevronDownIcon size={12} className="model-tier-select-icon" />
-                      </button>
-
-                      {modelMenuOpen && !busy && models.length > 0 ? (
-                        <div className="model-tier-menu" role="listbox" aria-label="选择智能体模型">
-                          {models.map((model) => {
-                            const selected = model.id === selectedModelId;
-                            return (
-                              <button
-                                key={model.id}
-                                type="button"
-                                role="option"
-                                aria-selected={selected}
-                                className={`model-tier-option${selected ? " is-selected" : ""}`}
-                                onClick={() => {
-                                  setSelectedModelId(model.id);
-                                  setModelMenuOpen(false);
-                                }}
-                              >
-                                <span className="model-tier-option-name">{model.name}</span>
-                                {selected ? <CheckIcon size={13} className="model-tier-option-check" /> : null}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      ) : null}
-                    </div>
-
+                <div className="functional-right">
+                  <div
+                    ref={modelMenuRef}
+                    className={`model-tier-select-wrapper${modelMenuOpen ? " is-open" : ""}${busy || models.length === 0 ? " is-disabled" : ""}`}
+                  >
                     <button
                       type="button"
-                      onClick={canCancelRun && onCancelRun ? onCancelRun : handleSend}
-                      disabled={canCancelRun ? isCancellingRun : busy || !request.trim()}
-                      className={canCancelRun ? "stop-cta-btn" : "send-cta-btn"}
-                      aria-label={canCancelRun ? "中止当前 Agent 会话" : "发送指令"}
-                      title={canCancelRun ? "中止当前 Agent 会话" : "发送指令"}
+                      className="mini-model-select"
+                      disabled={busy || models.length === 0}
+                      aria-haspopup="listbox"
+                      aria-expanded={modelMenuOpen}
+                      onClick={() => setModelMenuOpen((open) => !open)}
                     >
-                      {canCancelRun ? <StopIcon size={14} /> : <SendIcon size={14} />}
+                      <span>{selectedModel?.name ?? "选择模型"}</span>
+                      <ChevronDownIcon size={12} className="model-tier-select-icon" />
                     </button>
+
+                    {modelMenuOpen && !busy && models.length > 0 ? (
+                      <div className="model-tier-menu" role="listbox" aria-label="选择智能体模型">
+                        {models.map((model) => {
+                          const selected = model.id === selectedModelId;
+                          return (
+                            <button
+                              key={model.id}
+                              type="button"
+                              role="option"
+                              aria-selected={selected}
+                              className={`model-tier-option${selected ? " is-selected" : ""}`}
+                              onClick={() => {
+                                setSelectedModelId(model.id);
+                                setModelMenuOpen(false);
+                              }}
+                            >
+                              <span className="model-tier-option-name">{model.name}</span>
+                              {selected ? <CheckIcon size={13} className="model-tier-option-check" /> : null}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ) : null}
                   </div>
+
+                  <button
+                    type="button"
+                    onClick={canCancelRun && onCancelRun ? onCancelRun : handleSend}
+                    disabled={canCancelRun ? isCancellingRun : busy || !request.trim()}
+                    className={canCancelRun ? "stop-cta-btn" : "send-cta-btn"}
+                    aria-label={canCancelRun ? "中止当前 Agent 会话" : "发送指令"}
+                    title={canCancelRun ? "中止当前 Agent 会话" : "发送指令"}
+                  >
+                    {canCancelRun ? <StopIcon size={14} /> : <SendIcon size={14} />}
+                  </button>
                 </div>
-              </>
-            )}
-          </div>
-        )}
+              </div>
+            </>
+          )}
+        </div>
       </div>
     </div>
   );

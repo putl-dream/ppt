@@ -11,8 +11,11 @@ import {
   type LayoutPlanValidationIssue,
 } from "@shared/layout-plan";
 import type { AgentCommandProposalResult } from "../../runtime/runtime-types";
+import { applyCommandsToDraft } from "../../runtime/layout-command-utils";
 import { resolveWorkspacePath } from "../../subagent/workspace-path";
 import type { ToolDefinition } from "../tool-definition";
+import type { PresentationCommand } from "@shared/commands";
+import { insertSlideImageTool } from "./insert-slide-image";
 
 export const executeLayoutPlanSchema = z.object({
   path: z.string().optional().describe("Workspace-relative layout plan path; defaults to slides/layout-plan.json"),
@@ -31,6 +34,58 @@ interface ExecuteLayoutPlanFailure {
 }
 
 type ExecuteLayoutPlanResult = AgentCommandProposalResult | ExecuteLayoutPlanFailure;
+
+async function compileImageEnhancements(
+  plan: LayoutPlan,
+  baseCommands: PresentationCommand[],
+  context: Parameters<typeof insertSlideImageTool.execute>[1],
+): Promise<{ commands: PresentationCommand[]; issues: LayoutPlanValidationIssue[]; count: number }> {
+  let draft = applyCommandsToDraft(context.presentation, baseCommands);
+  const commands: PresentationCommand[] = [];
+  const issues: LayoutPlanValidationIssue[] = [];
+  let count = 0;
+
+  for (const slide of plan.slides) {
+    for (const enhancement of slide.enhancements) {
+      if (enhancement.type !== "insert-image") continue;
+      count += 1;
+      const result = await insertSlideImageTool.execute({
+        slideId: slide.slideId,
+        url: enhancement.url,
+        slot: enhancement.slot,
+        aspectRatio: enhancement.aspectRatio ?? "auto",
+        localize: true,
+        provider: enhancement.provider,
+        sourcePageUrl: enhancement.sourcePageUrl,
+        description: enhancement.description,
+        attribution: enhancement.attribution,
+        license: enhancement.license,
+      }, { ...context, presentation: draft });
+
+      if (result.commands.length === 0) {
+        issues.push({
+          slideId: slide.slideId,
+          severity: "error",
+          message: `Unable to compile insert-image enhancement for slot '${enhancement.slot}'.`,
+          fixHint: result.warnings.join(" ") || "Choose another image candidate or image-capable layout.",
+        });
+        continue;
+      }
+      for (const warning of result.warnings) {
+        issues.push({
+          slideId: slide.slideId,
+          severity: "warning",
+          message: `Image enhancement warning: ${warning}`,
+          fixHint: "Keep source metadata and verify licensing before external distribution.",
+        });
+      }
+      commands.push(...result.commands);
+      draft = applyCommandsToDraft(draft, result.commands);
+    }
+  }
+
+  return { commands, issues, count };
+}
 
 function failure(path: string, issues: LayoutPlanValidationIssue[]): ExecuteLayoutPlanFailure {
   const errorCount = issues.filter((issue) => issue.severity === "error").length;
@@ -98,21 +153,27 @@ export const executeLayoutPlanTool: ToolDefinition<
       }]);
     }
 
-    const issues = [
+    const validationIssues = [
       ...validateLayoutPlanAgainstPresentation(plan, context.presentation),
       ...validateLayoutPlan(plan),
       ...validateLayoutPlanRhythm(plan),
     ];
-    const errors = issues.filter((issue) => issue.severity === "error");
+    const errors = validationIssues.filter((issue) => issue.severity === "error");
     if (errors.length > 0) {
-      return failure(planPath, issues);
+      return failure(planPath, validationIssues);
     }
 
-    const commands = buildLayoutPlanCommands(plan);
+    const baseCommands = buildLayoutPlanCommands(plan);
+    const imageCompilation = await compileImageEnhancements(plan, baseCommands, context);
+    const issues = [...validationIssues, ...imageCompilation.issues];
+    if (imageCompilation.issues.some((issue) => issue.severity === "error")) {
+      return failure(planPath, issues);
+    }
+    const commands = [...baseCommands, ...imageCompilation.commands];
     const layoutTypes = [...new Set(plan.slides.map((slide) => slide.layout))];
     const warningCount = issues.length;
-    const enhancementCount = plan.slides.reduce(
-      (total, slide) => total + slide.enhancements.length,
+    const remainingEnhancementCount = plan.slides.reduce(
+      (total, slide) => total + slide.enhancements.filter((item) => item.type !== "insert-image").length,
       0,
     );
 
@@ -128,9 +189,11 @@ export const executeLayoutPlanTool: ToolDefinition<
       risk: "low",
       assumptions: [
         "slides/layout-plan.json is the single source of truth for layout decisions.",
-        "Only designSystem, layout, grammarVariant, designOverride, and slideVariant are executed in this step.",
-        enhancementCount > 0
-          ? `${enhancementCount} enhancement item(s) remain for ExecuteExtraTool.`
+        imageCompilation.count > 0
+          ? `${imageCompilation.count} insert-image enhancement(s) were compiled and localized with the layout commands.`
+          : "No insert-image enhancements were requested.",
+        remainingEnhancementCount > 0
+          ? `${remainingEnhancementCount} non-image enhancement item(s) remain for ExecuteExtraTool.`
           : "No layout-plan enhancements were requested.",
       ],
     };

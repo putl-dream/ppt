@@ -149,6 +149,57 @@ describe("SQLite session store", () => {
     expect(assistant.activityTrace?.map((item) => item.kind)).not.toContain("step");
   });
 
+  it("replays the latest task graph snapshot into one durable trace item", async () => {
+    const { store } = await createStore();
+    const created = await store.createSession({ title: "Task graph run" });
+    const sessionId = created.activeSession!.session.id;
+    const baseTask = {
+      id: "task_1",
+      subject: "Build slides",
+      description: "",
+      executionTarget: "lead" as const,
+      owner: "agent",
+      blockedBy: [],
+      planId: "plan_1",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    };
+    await store.saveMessages(sessionId, [
+      { id: "placeholder", role: "assistant", content: "", threadId: "run-task-graph" },
+    ]);
+    store.conversationDatabase.beginRun({
+      runId: "run-task-graph",
+      sessionId,
+      request: "build",
+    });
+    store.conversationDatabase.appendRuntimeEvent("run-task-graph", "task_graph_updated", {
+      tasks: [{ ...baseTask, status: "in_progress" }],
+      goal: "Build deck",
+    });
+    store.conversationDatabase.appendRuntimeEvent("run-task-graph", "task_graph_updated", {
+      tasks: [{
+        ...baseTask,
+        status: "completed",
+        owner: null,
+        updatedAt: "2026-01-01T00:01:00.000Z",
+      }],
+      goal: "Build deck",
+    });
+
+    await store.finalizeAgentRunMessage(sessionId, "run-task-graph", {
+      status: "chat",
+      message: "Done.",
+    });
+
+    const assistant = store.getSession(sessionId).messages.at(-1)!;
+    const taskGraphs = assistant.activityTrace?.filter((item) => item.kind === "taskgraph") ?? [];
+    expect(taskGraphs).toHaveLength(1);
+    expect(taskGraphs[0]).toMatchObject({
+      goal: "Build deck",
+      tasks: [{ id: "task_1", status: "completed", owner: null }],
+    });
+  });
+
   it("marks an unfinished operation as failed instead of completed", async () => {
     const { store } = await createStore();
     const created = await store.createSession({ title: "Failed run" });

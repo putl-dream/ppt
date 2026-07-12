@@ -46,7 +46,9 @@ import { buildTeammateSystemPrompt } from "./teammate-system-prompt";
 import {
   claimNextUnclaimedTask,
   createTeammateTaskTools,
+  unassignOwnedTasks,
 } from "./teammate-task-tools";
+import type { TaskGraphSnapshotListener } from "../task/task-graph-publisher";
 import { toToolInputSchema } from "../tools/tool-schema";
 import { parseToolInput } from "../tools/tool-input";
 import { readJsonFile, writeJsonFileAtomic } from "../persistence/atomic-json-file";
@@ -76,6 +78,8 @@ export interface SpawnTeammateThreadOptions {
   idlePollMs?: number;
   idleTimeoutMs?: number;
   permissionPollMs?: number;
+  /** Current-run listener for publishing durable task board changes. */
+  onTaskGraphUpdated?: TaskGraphSnapshotListener;
 }
 
 type TeammateState = TeammateHandle & {
@@ -83,6 +87,7 @@ type TeammateState = TeammateHandle & {
   done: Promise<void>;
   prompt: string;
   lastError?: string;
+  taskGraphListener?: TaskGraphSnapshotListener;
 };
 
 type PersistedTeammateState = Omit<TeammateHandle, "status"> & {
@@ -160,6 +165,7 @@ export class TeammateManager {
       startedAt: Date.now(),
       lastActiveAt: Date.now(),
       prompt: options.prompt,
+      taskGraphListener: options.onTaskGraphUpdated,
       controller,
       done: Promise.resolve(),
     };
@@ -200,6 +206,16 @@ export class TeammateManager {
   get(name: string): TeammateHandle | undefined {
     const state = this.teammates.get(sanitizeAgentName(name));
     return state ? this.toHandle(state) : undefined;
+  }
+
+  updateTaskGraphListener(
+    name: string,
+    listener?: TaskGraphSnapshotListener,
+  ): boolean {
+    const state = this.teammates.get(sanitizeAgentName(name));
+    if (!state) return false;
+    state.taskGraphListener = listener;
+    return true;
   }
 
   async requestShutdown(name: string, reason = "Lead requested teammate shutdown."): Promise<ProtocolState> {
@@ -360,6 +376,9 @@ export class TeammateManager {
     await this.persistTeammateStates();
     const inbox = new TeammateInboxBuffer(this.bus, state.name);
     const taskStore = new TaskStore(options.workspaceRoot);
+    const publishTaskGraph: TaskGraphSnapshotListener = (snapshot) => {
+      state.taskGraphListener?.(snapshot);
+    };
     const stepLimits = resolveAgentStepLimits(options.agentStepLimits);
     const maxSteps = options.maxSteps ?? Math.min(getEffectiveSubMaxSteps(stepLimits), 10);
     const idlePollMs = options.idlePollMs ?? 5_000;
@@ -371,7 +390,7 @@ export class TeammateManager {
       this.protocolStates,
       state.name,
     );
-    const taskTools = createTeammateTaskTools(taskStore, state.name);
+    const taskTools = createTeammateTaskTools(taskStore, state.name, publishTaskGraph);
     const tools = [
       ...SUB_AGENT_TOOLS,
       ...taskTools,
@@ -405,6 +424,8 @@ export class TeammateManager {
     }));
     const toolContext: SubAgentToolContext = {
       workspaceRoot: options.workspaceRoot,
+      gatewayConfig: options.gateway.getGatewayConfig?.(),
+      signal: state.controller.signal,
     };
     const requestToolApproval = createTeammateApprovalHandler({
       bus: this.bus,
@@ -447,7 +468,7 @@ export class TeammateManager {
         });
         if (shutdownRequest) {
           const requestId = readProtocolRequestId(shutdownRequest.payload);
-          await taskStore.unassignInProgressByOwner(state.name);
+          await unassignOwnedTasks(taskStore, state.name, publishTaskGraph);
           currentTaskId = undefined;
           await this.sendLifecycleSummary(state.name, "shutdown requested", workSummaries);
           await this.bus.send({
@@ -498,7 +519,11 @@ export class TeammateManager {
           }
 
           nextIdlePollAt = now + idlePollMs;
-          const claimedTask = await claimNextUnclaimedTask(taskStore, state.name);
+          const claimedTask = await claimNextUnclaimedTask(
+            taskStore,
+            state.name,
+            publishTaskGraph,
+          );
           if (!claimedTask) continue;
 
           currentTaskId = claimedTask.id;
@@ -522,7 +547,7 @@ export class TeammateManager {
         }
 
         if (modelSteps >= maxSteps) {
-          await taskStore.unassignInProgressByOwner(state.name);
+          await unassignOwnedTasks(taskStore, state.name, publishTaskGraph);
           currentTaskId = undefined;
           await this.finishWithSummary(
             state.name,
@@ -696,7 +721,7 @@ export class TeammateManager {
       state.lastError = error instanceof Error ? error.message : String(error);
       throw error;
     } finally {
-      await taskStore.unassignInProgressByOwner(state.name);
+      await unassignOwnedTasks(taskStore, state.name, publishTaskGraph);
       await triggerHooks("Stop", {
         event: "Stop",
         scope: "subagent",

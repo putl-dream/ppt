@@ -49,8 +49,10 @@ import {
   compactActivityTraceForPersistence,
   finishTool,
   markTraceComplete,
+  upsertTaskGraphTrace,
   type AgentActivityItem,
 } from "@shared/agent-activity";
+import { agentTaskNodeSchema } from "@shared/agent-task-graph";
 import { formatPublicErrorMessage } from "@shared/agent-activity-display";
 import { ConversationDatabase } from "./conversation-database";
 import type { AgentRunResult } from "@shared/ipc";
@@ -377,6 +379,15 @@ export class FileSessionStore {
         && typeof payload.message === "string"
       ) {
         trace = appendStep(trace, payload.message, "done");
+      } else if (event.kind === "task_graph_updated") {
+        const parsedTasks = agentTaskNodeSchema.array().safeParse(payload.tasks);
+        if (!parsedTasks.success) continue;
+        trace = upsertTaskGraphTrace(trace, {
+          tasks: parsedTasks.data,
+          goal: typeof payload.goal === "string" || payload.goal === null
+            ? payload.goal
+            : null,
+        });
       }
     }
     return trace;

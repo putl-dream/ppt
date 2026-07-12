@@ -1,7 +1,7 @@
 import { mkdtemp, readFile, stat } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { tmpdir } from "node:os";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type {
   AgentModelContentBlock,
   AgentModelGateway,
@@ -234,6 +234,52 @@ describe("ProtocolStateStore", () => {
 });
 
 describe("TeammateManager", () => {
+  it("passes the runtime Tavily configuration to teammate web_search", async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), "ppt-teammate-search-"));
+    const fetchImpl = vi.fn(async (
+      _input: Parameters<typeof fetch>[0],
+      _init?: Parameters<typeof fetch>[1],
+    ) => new Response(JSON.stringify({
+      results: [{ title: "Source", url: "https://example.com/source", content: "Context" }],
+    }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchImpl);
+    const gateway = createSequenceGateway([
+      modelToolCall("web_search", {
+        query: "factory evidence",
+        max_results: 3,
+        search_depth: "basic",
+        topic: "general",
+        include_images: true,
+      }),
+      modelMessage("Search complete."),
+    ]);
+    gateway.getGatewayConfig = () => ({
+      timeoutMs: 180_000,
+      maxOutputTokens: 16_384,
+      webSearchApiKey: "tvly-from-settings",
+    });
+    const bus = new MessageBus(MessageBus.defaultMailboxDir(workspaceRoot));
+    const manager = new TeammateManager(bus);
+    manager.spawn({
+      name: "image_researcher",
+      role: "layout designer",
+      prompt: "Search one image source.",
+      workspaceRoot,
+      gateway,
+      maxSteps: 2,
+      idlePollMs: 5,
+      idleTimeoutMs: 1_000,
+    });
+
+    await waitFor(async () => fetchImpl.mock.calls.length > 0 ? true : undefined);
+    expect((fetchImpl.mock.calls[0]?.[1]?.headers as Record<string, string>).Authorization)
+      .toBe("Bearer tvly-from-settings");
+
+    await manager.requestShutdown("image_researcher");
+    await manager.waitFor("image_researcher");
+    vi.unstubAllGlobals();
+  });
+
   it("starts idle and claims board work without an initial lead assignment", async () => {
     const workspaceRoot = await mkdtemp(join(tmpdir(), "ppt-idle-worker-"));
     const store = new TaskStore(workspaceRoot);

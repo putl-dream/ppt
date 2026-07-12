@@ -169,6 +169,9 @@ describe("system prompt assembly", () => {
     const assembled = assembleSystemPrompt(baseContext({
       memories: "记住：封面用 hero",
     }));
+    expect(assembled.text).toContain("visualAssetAudit");
+    expect(assembled.text).toContain("SearchSlideImages");
+    expect(assembled.text).toContain("InsertSlideImage");
     const split = splitSystemPromptPrefix(assembled.text);
 
     expect(split.staticPrefix).toContain("provider 原生 tool_use");

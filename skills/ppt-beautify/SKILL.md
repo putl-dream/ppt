@@ -30,7 +30,8 @@ allowed-tools:
 | 改写字风 | RewriteSlideContent | `update-element` |
 | 图表样式 | BeautifyChart | P2：文本 KPI → chart 元素（kpi-tower/bar/timeline） |
 | 表格样式 | BeautifyTable | P2：`\|` 分隔文本 → table 元素 |
-| 图片入槽 | InsertSlideImage | add/update image（自动坐标；远程图默认本地化并保存来源元数据） |
+| 搜索页面图片 | SearchSlideImages（Core） | 免费图库优先的候选 + 可直接插入参数 |
+| 图片入槽 | InsertSlideImage（Core） | add/update image（自动坐标；远程图默认本地化并保存来源元数据） |
 | 创意装饰 | AddLayoutDecorations | shape 装饰 commands |
 | 字体角色 | ApplyTypography | update-text-style 批量 |
 | 单页预览 | PreviewSlide | 结构化摘要 + PNG 缩略图（base64） |
@@ -68,7 +69,7 @@ update-slide-variant(slideId, hero|light|dark) → SubmitCommands
 
 **单页排版乱了**：AutoLayoutSlide(slideId, layout) → SubmitCommands
 
-**图片放入槽位**：InsertSlideImage(slideId, url, slot) → SubmitCommands（无需 x/y）
+**图片放入槽位**：SearchSlideImages(slideId) → InsertSlideImage(候选 insertArgs) → SubmitCommands（无需工具发现、无需 x/y）
 
 **排版后自检**：PreviewSlide(slideId) → ValidateDeckLayout → 修复后 SubmitCommands
 

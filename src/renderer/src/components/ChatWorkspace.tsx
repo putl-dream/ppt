@@ -19,11 +19,11 @@ import { MessageMarkdown } from "./MessageMarkdown";
 import { AgentQuestionCard } from "./AgentQuestionCard";
 import type { AgentActivityItem } from "@shared/agent-activity";
 import { findPendingToolApproval, resolveActivityTrace, filterTraceForDisplay, extractLatestTaskGraph } from "@shared/agent-activity";
-import { isTaskPlanActive } from "@shared/agent-task-graph";
+import type { AgentTaskNode } from "@shared/agent-task-graph";
 import { TaskPlanCard } from "./TaskPlanCard";
 import type { ManagedModel } from "../modelCatalog";
 import type { Presentation } from "@shared/presentation";
-import type { InlineCardRef } from "@shared/inline-artifact-cards";
+import { visibleLayoutCardMessageIds, type InlineCardRef } from "@shared/inline-artifact-cards";
 import type { BriefFields, OutlineItem } from "@shared/project-artifacts";
 import type { LayoutVisualMode } from "@shared/layout-preference";
 import { formatApprovalCommand } from "@shared/approval-command-display";
@@ -45,6 +45,7 @@ interface ChatWorkspaceProps {
   conversationTitle?: string;
   chatMessages: ChatMessage[];
   activityTrace: AgentActivityItem[];
+  taskPlanSnapshot?: { tasks: AgentTaskNode[]; goal?: string | null } | null;
   thoughtProgress: number;
   agentActivityMode: "idle" | "request" | "workflow" | "reasoning";
   streamingMessageId?: string | null;
@@ -88,6 +89,7 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
   conversationTitle,
   chatMessages,
   activityTrace,
+  taskPlanSnapshot,
   thoughtProgress,
   agentActivityMode,
   streamingMessageId = null,
@@ -149,13 +151,14 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
   const messageTraces = chatMessages
     .map((message) => message.activityTrace)
     .filter((trace): trace is NonNullable<typeof trace> => Boolean(trace?.length));
-  const latestPlan = extractLatestTaskGraph(
+  const latestPlan = taskPlanSnapshot ?? extractLatestTaskGraph(
     busy ? activityTrace : undefined,
     ...messageTraces.slice().reverse(),
   );
   const activeTasks = latestPlan?.tasks ?? [];
-  const planGoal = latestPlan?.goal ?? sessionGoal;
-  const showTaskPlan = isTaskPlanActive(activeTasks);
+  const planGoal = latestPlan ? (latestPlan.goal ?? null) : sessionGoal;
+  const showTaskPlan = activeTasks.length > 0;
+  const layoutCardMessageIds = visibleLayoutCardMessageIds(chatMessages);
   const displayConversationTitle = conversationTitle?.trim() || (isNewChat ? "AI 新建会话" : "当前对话");
 
   const canCancelRun = Boolean(busy && activeRunId && onCancelRun);
@@ -356,6 +359,12 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
           <div className="chat-stream" ref={chatStreamRef}>
         {chatMessages.map((msg) => {
           const inlineCardData = msg.role === "assistant" ? getInlineCardData(msg) : null;
+          const suppressRepeatedLayoutPrompt = Boolean(
+            msg.role === "assistant"
+            && msg.inlineCards?.some((card) => card.type === "layout")
+            && !layoutCardMessageIds.has(msg.id)
+            && /内容草稿已就绪[\s\S]*待排版[\s\S]*请选择/.test(msg.content),
+          );
 
           return (
             <div key={msg.id} className={`chat-message ${msg.role}`}>
@@ -439,7 +448,7 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
                         });
                     const trace = filterTraceForDisplay(
                       resolvedTrace,
-                      { keepTaskGraph: !useLiveTrace },
+                      { keepTaskGraph: !useLiveTrace && !showTaskPlan },
                     );
                     return trace.length > 0 || (useLiveTrace && msg.content.trim()) ? (
                       <AgentActivityTrace
@@ -450,7 +459,7 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
                     ) : null;
                   })()}
 
-                  {!(busy && streamingMessageId === msg.id) && (
+                  {!(busy && streamingMessageId === msg.id) && !suppressRepeatedLayoutPrompt && (
                     <MessageMarkdown content={msg.content} className="assistant-response" />
                   )}
 
@@ -563,6 +572,7 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
                   }
 
                   if (card.type === "layout") {
+                    if (!layoutCardMessageIds.has(msg.id)) return null;
                     return (
                       <LayoutChoiceCard
                         key={`${msg.id}-layout`}

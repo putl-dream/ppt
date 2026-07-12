@@ -49,14 +49,13 @@ allowed-tools:
    - 执行 `validateLayoutPlan` + `validateLayoutPlanRhythm`
    - 由 `buildLayoutPlanCommands` 生成 `set-design-system` / `update-slide-layout(grammarVariant + designOverride)` / `update-slide-variant`
 3. 若 `ExecuteLayoutPlan` 返回 error：修复或重新生成 `slides/layout-plan.json` 后再执行；**禁止**从聊天上下文凭记忆重建 layout
-4. 对 plan.enhancements 逐项 `ExecuteExtraTool`：
+4. `ExecuteLayoutPlan` 已自动编译并本地化 `insert-image`；只对其余 plan.enhancements 逐项 `ExecuteExtraTool`：
    - `beautify-chart` → BeautifyChart
    - `beautify-table` → BeautifyTable
-   - `insert-image` → InsertSlideImage(slot, url, source_page_url, description, attribution, license)
    - `add-decorations` → AddLayoutDecorations（仅 creative）
 5. `ValidateDeckLayout` 确认节奏；`LoadSkill deck-review`
 
-远程图片默认由 InsertSlideImage 本地化到 workspace `assets/images/`；不要把未经本地化的网页 URL 直接留给 PPTX 导出。若来源页或授权信息缺失，必须保留 warning，不能宣称图片已获得商用授权。
+轻量编辑缺图时，直接走 Core Tool：`SearchSlideImages(slideId)` → 选择候选 → `InsertSlideImage` → `SubmitCommands`，无需 SearchExtraTools。远程图片默认本地化到 workspace `assets/images/`；若来源页或授权信息缺失，必须保留 warning，不能宣称图片已获得商用授权。
 
 Grammar handler 会把 token 推导出的实际变体写回 `slide.grammarVariant`，PreviewSlide 与 deck-review 应以实际值检查页面差异度。
 

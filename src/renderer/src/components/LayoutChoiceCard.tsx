@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useId, useState } from "react";
 import type { LayoutVisualMode } from "@shared/layout-preference";
 import { LAYOUT_DESIGN_OPTIONS, loadLayoutVisualMode } from "@shared/layout-preference";
 import type { DesignSystemV1 } from "@design-system";
@@ -19,6 +19,7 @@ export const LayoutChoiceCard: React.FC<LayoutChoiceCardProps> = ({
   selectedDesignSystem,
   onConfirm,
 }) => {
+  const radioGroupName = `layout-mode-${useId()}`;
   const [mode, setMode] = useState<LayoutVisualMode>(layoutMode ?? loadLayoutVisualMode());
   const [designSystem, setDesignSystem] = useState(selectedDesignSystem);
 
@@ -44,7 +45,7 @@ export const LayoutChoiceCard: React.FC<LayoutChoiceCardProps> = ({
         <label className={`layout-choice-option${mode === "template" ? " is-selected" : ""}`}>
           <input
             type="radio"
-            name="layout-mode"
+            name={radioGroupName}
             value="template"
             checked={mode === "template"}
             disabled={Boolean(resolved)}
@@ -59,7 +60,7 @@ export const LayoutChoiceCard: React.FC<LayoutChoiceCardProps> = ({
         <label className={`layout-choice-option${mode === "creative" ? " is-selected" : ""}`}>
           <input
             type="radio"
-            name="layout-mode"
+            name={radioGroupName}
             value="creative"
             checked={mode === "creative"}
             disabled={Boolean(resolved)}

@@ -60,6 +60,64 @@ describe("ConversationDatabase", () => {
     database.close();
   });
 
+  it("repairs duplicate legacy presentation identities before schema parsing", async () => {
+    const database = await createDatabase();
+    const legacy = snapshot("legacy");
+    legacy.session.slideCount = 2;
+    legacy.presentation.slides = [
+      {
+        id: "slide-1",
+        title: "First slide",
+        elements: [
+          {
+            id: "element-1",
+            type: "text",
+            x: 10,
+            y: 10,
+            width: 200,
+            height: 40,
+            text: "First element",
+            fontSize: 20,
+          },
+          {
+            id: "element-1",
+            type: "text",
+            x: 10,
+            y: 60,
+            width: 200,
+            height: 40,
+            text: "Second element",
+            fontSize: 20,
+          },
+        ],
+      },
+      {
+        id: "slide-1",
+        title: "Second slide",
+        elements: [],
+      },
+    ];
+    database.replaceState({ activeSessionId: "legacy", sessions: [legacy] });
+
+    const restored = database.loadState().sessions[0].presentation;
+    expect(restored.slides.map((slide) => slide.id)).toEqual([
+      "slide-1",
+      "slide-1__duplicate_2",
+    ]);
+    expect(restored.slides.map((slide) => slide.title)).toEqual([
+      "First slide",
+      "Second slide",
+    ]);
+    expect(restored.slides[0].elements.map((element) => element.id)).toEqual([
+      "element-1",
+      "element-1__duplicate_2",
+    ]);
+    expect(restored.slides[0].elements.map((element) =>
+      element.type === "text" ? element.text : ""
+    )).toEqual(["First element", "Second element"]);
+    database.close();
+  });
+
   it("records the complete ordered run event chain", async () => {
     const database = await createDatabase();
     database.replaceState({ activeSessionId: "s1", sessions: [snapshot("s1")] });

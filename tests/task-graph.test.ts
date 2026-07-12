@@ -12,6 +12,11 @@ import {
 } from "../src/main/agent/tools/core/task-graph-tools";
 import { TaskStore } from "../src/main/agent/task/task-store";
 import {
+  claimNextUnclaimedTask,
+  createTeammateTaskTools,
+  unassignOwnedTasks,
+} from "../src/main/agent/teammate/teammate-task-tools";
+import {
   canStartTask,
   hasDependencyCycle,
   isTaskPlanActive,
@@ -343,11 +348,93 @@ describe("TaskGraph tools", () => {
     expect(onUpdated).toHaveBeenCalled();
   });
 
+  it("publishes only the newest plan after a completed plan is replaced without a goal", async () => {
+    const workspaceRoot = await makeWorkspace();
+    const onUpdated = vi.fn();
+    const context = baseContext(workspaceRoot, onUpdated);
+
+    const first = await taskGraphCreatePlanTool.execute({
+      goal: "First plan",
+      steps: [{ subject: "Old step", executionTarget: "lead" }],
+    }, context);
+    await taskGraphClaimTool.execute({ taskId: first.tasks[0]!.id }, context);
+    await taskGraphCompleteTool.execute({ taskId: first.tasks[0]!.id }, context);
+
+    onUpdated.mockClear();
+    const second = await taskGraphCreatePlanTool.execute({
+      steps: [{ subject: "Current step", executionTarget: "lead" }],
+    }, context);
+
+    const planMeta = JSON.parse(
+      await readFile(join(workspaceRoot, ".tasks", "_plan.json"), "utf8"),
+    );
+    expect(planMeta.planId).toBe(second.planId);
+    expect(planMeta).not.toHaveProperty("goal");
+    expect(second.tasks).toHaveLength(2);
+    expect(onUpdated).toHaveBeenLastCalledWith({
+      tasks: [expect.objectContaining({
+        planId: second.planId,
+        subject: "Current step",
+        status: "pending",
+      })],
+      goal: null,
+    });
+  });
+
+  it("publishes worker auto-claim, tool claim, submit, and unassign transitions", async () => {
+    const workspaceRoot = await makeWorkspace();
+    const store = new TaskStore(workspaceRoot);
+    const created = await store.createPlan({
+      goal: "Worker plan",
+      steps: [
+        { subject: "Auto claim", executionTarget: "teammate" },
+        { subject: "Tool claim", executionTarget: "teammate" },
+        { subject: "Remain pending", executionTarget: "teammate" },
+      ],
+    });
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    const onUpdated = vi.fn();
+    const autoClaimed = await claimNextUnclaimedTask(store, "task_worker", onUpdated);
+    expect(autoClaimed?.id).toBe(created.tasks[0]!.id);
+
+    const taskTools = createTeammateTaskTools(store, "task_worker", onUpdated);
+    const claimTool = taskTools.find((tool) => tool.name === "claim_task")!;
+    const submitTool = taskTools.find((tool) => tool.name === "submit_task")!;
+    await claimTool.execute(
+      { task_id: created.tasks[1]!.id },
+      { workspaceRoot },
+    );
+    await submitTool.execute(
+      { task_id: created.tasks[1]!.id },
+      { workspaceRoot },
+    );
+    await unassignOwnedTasks(store, "task_worker", onUpdated);
+
+    expect(onUpdated).toHaveBeenCalledTimes(4);
+    const statuses = onUpdated.mock.calls.map(([snapshot]) =>
+      Object.fromEntries(
+        snapshot.tasks.map((task: AgentTaskNode) => [task.subject, task.status]),
+      )
+    );
+    expect(statuses).toEqual([
+      { "Auto claim": "in_progress", "Tool claim": "pending", "Remain pending": "pending" },
+      { "Auto claim": "in_progress", "Tool claim": "in_progress", "Remain pending": "pending" },
+      { "Auto claim": "in_progress", "Tool claim": "submitted", "Remain pending": "pending" },
+      { "Auto claim": "pending", "Tool claim": "submitted", "Remain pending": "pending" },
+    ]);
+    expect(onUpdated).toHaveBeenLastCalledWith(expect.objectContaining({
+      goal: "Worker plan",
+    }));
+  });
+
   it("starts an idle autonomous worker when a plan contains teammate tasks", async () => {
     const workspaceRoot = await makeWorkspace();
     const spawn = vi.fn(() => ({ name: "task_worker" }));
+    const onUpdated = vi.fn();
     const context = {
-      ...baseContext(workspaceRoot),
+      ...baseContext(workspaceRoot, onUpdated),
       gateway: {},
       teammateManager: {
         list: () => [],
@@ -365,7 +452,31 @@ describe("TaskGraph tools", () => {
       name: "task_worker",
       startIdle: true,
       workspaceRoot,
+      onTaskGraphUpdated: onUpdated,
     }));
+  });
+
+  it("refreshes the task graph listener on an existing autonomous worker", async () => {
+    const workspaceRoot = await makeWorkspace();
+    const onUpdated = vi.fn();
+    const updateTaskGraphListener = vi.fn();
+    const spawn = vi.fn();
+    const context = {
+      ...baseContext(workspaceRoot, onUpdated),
+      gateway: {},
+      teammateManager: {
+        list: () => [{ name: "task_worker", status: "idle" }],
+        spawn,
+        updateTaskGraphListener,
+      },
+    } as any;
+
+    await taskGraphCreatePlanTool.execute({
+      steps: [{ subject: "Create outline", executionTarget: "teammate" }],
+    }, context);
+
+    expect(spawn).not.toHaveBeenCalled();
+    expect(updateTaskGraphListener).toHaveBeenCalledWith("task_worker", onUpdated);
   });
 
   it("rejects creating a second plan while the current task graph is active", async () => {

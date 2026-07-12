@@ -19,7 +19,7 @@ import {
   getEffectiveMainMaxSteps,
   resolveAgentStepLimits,
 } from "@shared/agent-step-limits";
-import { isTaskPlanActive } from "@shared/agent-task-graph";
+import { filterTasksByPlan, isTaskPlanActive } from "@shared/agent-task-graph";
 import { callModelWithRecovery } from "./model-call-recovery";
 import { createTaskStore } from "../task/task-store";
 import { toToolSchemas } from "../tools/tool-schema";
@@ -1088,8 +1088,11 @@ export class AgentRuntime {
       if (taskStore) {
         const released = await taskStore.unassignInProgressByOwner(taskGraphOwner);
         if (released.length > 0) {
-          const tasks = await taskStore.listTasks();
           const plan = await taskStore.getPlanMeta();
+          const tasks = filterTasksByPlan(
+            await taskStore.listTasks(),
+            plan?.planId,
+          );
           options.onProgress?.({
             type: "task-graph-updated",
             message: "任务图已更新",

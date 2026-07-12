@@ -22,24 +22,34 @@ export const insertSlideImageSchema = z.object({
   localize: z.boolean().optional()
     .describe("远程图片是否下载到 workspace；默认 true，保证 PPTX 可导出"),
   provider: z.string().max(100).optional(),
-  source_page_url: z.string().url().optional(),
+  sourcePageUrl: z.string().url().optional(),
   description: z.string().max(600).optional(),
   attribution: z.string().max(300).optional(),
   license: z.string().max(200).optional(),
 });
 
 /**
- * Deferred Tool: 将图片插入 layout 预留槽位，无需手填坐标。
+ * Core Tool: 将已选图片插入 layout 预留槽位，无需手填坐标。
  */
 export const insertSlideImageTool: ToolDefinition<
   typeof insertSlideImageSchema,
   { commands: PresentationCommand[]; warnings: string[]; asset?: ImageAssetMetadata }
 > = {
   name: "InsertSlideImage",
-  description: "将图片放入当前页 layout 槽位（side/hero/grid-N），自动计算坐标与比例。",
-  category: "deferred",
-  loadPolicy: "deferred",
+  description: "将 SearchSlideImages 选中的图片直接放入 layout 槽位（side/hero/grid-N），自动计算坐标、本地化并保留来源。无需 SearchExtraTools。",
+  category: "core",
+  loadPolicy: "core",
   inputSchema: insertSlideImageSchema,
+  examples: [
+    JSON.stringify({
+      slideId: "slide-3",
+      url: "https://images.example.com/photo.jpg",
+      slot: "side",
+      sourcePageUrl: "https://example.com/source",
+      provider: "Pexels",
+      description: "Industrial robot working on an assembly line",
+    }),
+  ],
   risk: "medium",
   execute: async (args, context) => {
     const warnings: string[] = [];
@@ -88,7 +98,7 @@ export const insertSlideImageTool: ToolDefinition<
             url: args.url,
             workspaceRoot: context.workspaceRoot,
             provider: args.provider,
-            sourcePageUrl: args.source_page_url,
+            sourcePageUrl: args.sourcePageUrl,
             description: args.description,
             attribution: args.attribution,
             license: args.license,

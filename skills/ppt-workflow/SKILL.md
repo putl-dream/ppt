@@ -59,7 +59,7 @@ teammate 自主 Claim → slides/layout-plan.json → submitted → lead 验收 
 LoadSkill ppt-layout（Executor 模式）
 ReadPresentationSnapshot
 ExecuteLayoutPlan：读取 layout-plan → 校验 → 生成 set-design-system/update-slide-layout/update-slide-variant
-ExecuteExtraTool：plan.enhancements（BeautifyChart / InsertSlideImage 等）
+ExecuteLayoutPlan：自动执行 insert-image；ExecuteExtraTool：其余 enhancements（BeautifyChart 等）
     ↓
 LoadSkill deck-review
 ```

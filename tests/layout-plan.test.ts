@@ -7,6 +7,7 @@ import {
   parseLayoutPlan,
   serializeLayoutPlan,
   validateLayoutPlan,
+  validateLayoutPlanAgainstPresentation,
   validateLayoutPlanRhythm,
 } from "../src/shared/layout-plan";
 import { TEST_DESIGN_SYSTEM, testDesignSystem } from "./design-engine-test-utils";
@@ -142,5 +143,65 @@ describe("layout-plan", () => {
         expect.objectContaining({ type: "update-slide-variant", slideId: "slide-1", slideVariant: "hero" }),
       ]),
     );
+  });
+
+  it("rejects image-dependent layouts without existing or planned images", () => {
+    const plan = parseLayoutPlan(JSON.stringify({
+      version: 1,
+      styleMode: "template",
+      designSystem: TEST_DESIGN_SYSTEM,
+      slides: [{
+        slideId: "slide-1",
+        title: "Evidence",
+        narrativeRole: "data",
+        layout: "case",
+        grammarVariant: "evidence",
+        rationale: "Evidence-led case study.",
+        enhancements: [],
+      }],
+    }));
+    const presentation = {
+      id: "deck",
+      title: "Deck",
+      revision: 1,
+      designSystem: TEST_DESIGN_SYSTEM,
+      slides: [{ id: "slide-1", title: "Evidence", elements: [] }],
+    };
+
+    const issues = validateLayoutPlanAgainstPresentation(plan, presentation);
+    expect(issues).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        severity: "error",
+        slideId: "slide-1",
+        message: expect.stringContaining("Image-dependent layout"),
+      }),
+    ]));
+  });
+
+  it("rejects insert-image slots that the selected layout cannot consume", () => {
+    const plan = parseLayoutPlan(JSON.stringify({
+      version: 1,
+      styleMode: "template",
+      designSystem: TEST_DESIGN_SYSTEM,
+      slides: [{
+        slideId: "slide-1",
+        title: "Summary",
+        narrativeRole: "summary",
+        layout: "summary",
+        rationale: "Closing page.",
+        enhancements: [{
+          type: "insert-image",
+          slot: "hero",
+          url: "https://example.com/image.jpg",
+        }],
+      }],
+    }));
+
+    expect(validateLayoutPlan(plan)).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        severity: "error",
+        message: expect.stringContaining("invalid for layout"),
+      }),
+    ]));
   });
 });

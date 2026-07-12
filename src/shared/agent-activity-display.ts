@@ -48,6 +48,7 @@ const TOOL_DISPLAY_COPY = {
   TaskGraphComplete: { action: "完成任务步骤", category: "coordinate" },
   LoadSkill: { action: "准备专业能力", category: "coordinate" },
   WebSearch: { action: "查找在线资料", category: "search" },
+  SearchSlideImages: { action: "搜索幻灯片图片", category: "search" },
 
   AddLayoutDecorations: { action: "添加版式装饰", category: "change" },
   AnalyzeDeckConsistency: { action: "检查整体一致性", category: "inspect" },
