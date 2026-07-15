@@ -5,6 +5,7 @@ import type { AgentQuestion } from "./agent-question";
 import type { AgentGatewayConfig } from "./agent-gateway-config";
 import type { AgentStepLimits } from "./agent-step-limits";
 import type { AgentTaskNode } from "./agent-task-graph";
+import type { TeammateProgressEvent } from "./teammate-progress";
 import { layoutChoiceSchema } from "./layout-preference";
 import { z } from "zod";
 import type {
@@ -106,11 +107,7 @@ export type AgentStreamEvent = (
       tasks: AgentTaskNode[];
       goal?: string | null;
     }
-  | { runId: string; type: "subagent-started"; taskId: string; description: string }
-  | { runId: string; type: "subagent-thinking-chunk"; taskId: string; chunk: string }
-  | { runId: string; type: "subagent-tool-started"; taskId: string; toolName: string; message: string }
-  | { runId: string; type: "subagent-tool-finished"; taskId: string; toolName: string; message: string }
-  | { runId: string; type: "subagent-finished"; taskId: string }
+  | ({ runId: string } & TeammateProgressEvent)
 ) & { sessionId?: string };
 
 export type AgentRunResult =

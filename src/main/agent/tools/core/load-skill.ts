@@ -62,7 +62,7 @@ export const loadSkillTool: ToolDefinition<typeof loadSkillSchema, LoadSkillResu
       alreadyLoaded,
       guidance: alreadyLoaded
         ? "Skill already loaded. Follow it; keep tool use minimal."
-        : "Follow the skill above. Use Task only for workspace files; prefer direct action over extra reads.",
+        : "Follow the skill above. Put delegated workspace work in TaskGraph teammate nodes; prefer direct action over extra reads.",
     };
   },
 };

@@ -513,10 +513,14 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
                       resolvedTrace,
                       { keepTaskGraph: !useLiveTrace && !showTaskPlan },
                     );
+                    const hasRunningTeammate = trace.some(
+                      (item) => item.kind === "task" && item.status === "running",
+                    );
+                    const traceIsLive = useLiveTrace || hasRunningTeammate;
                     return trace.length > 0 || (useLiveTrace && msg.content.trim()) ? (
                       <AgentActivityTrace
                         items={trace}
-                        live={useLiveTrace}
+                        live={traceIsLive}
                         liveContent={useLiveTrace ? msg.content : undefined}
                       />
                     ) : null;

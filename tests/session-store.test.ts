@@ -149,6 +149,70 @@ describe("SQLite session store", () => {
     expect(assistant.activityTrace?.map((item) => item.kind)).not.toContain("step");
   });
 
+  it("persists teammate reasoning and tools under the linked task activity", async () => {
+    const { store } = await createStore();
+    const created = await store.createSession({ title: "Teammate trace" });
+    const sessionId = created.activeSession!.session.id;
+    await store.saveMessages(sessionId, [
+      { id: "placeholder", role: "assistant", content: "", threadId: "run-teammate" },
+    ]);
+    store.conversationDatabase.beginRun({
+      runId: "run-teammate",
+      sessionId,
+      request: "build outline",
+    });
+    const common = {
+      teammateName: "task_worker",
+      activityId: "task-outline",
+      taskId: "task-outline",
+    };
+    store.conversationDatabase.appendRuntimeEvent("run-teammate", "workflow_progress", {
+      ...common,
+      type: "teammate-assignment-started",
+      description: "Create outline",
+    });
+    store.conversationDatabase.appendRuntimeEvent("run-teammate", "reasoning_chunk", {
+      ...common,
+      type: "teammate-thinking-chunk",
+      chunk: "Checking the brief.",
+    });
+    store.conversationDatabase.appendRuntimeEvent("run-teammate", "tool_started", {
+      ...common,
+      type: "teammate-tool-started",
+      toolName: "write_file",
+      message: "正在调用 write_file",
+    });
+    store.conversationDatabase.appendRuntimeEvent("run-teammate", "tool_finished", {
+      ...common,
+      type: "teammate-tool-finished",
+      toolName: "write_file",
+      message: "write_file 已完成",
+      status: "completed",
+    });
+    store.conversationDatabase.appendRuntimeEvent("run-teammate", "workflow_progress", {
+      ...common,
+      type: "teammate-assignment-finished",
+      status: "completed",
+    });
+
+    await store.finalizeAgentRunMessage(sessionId, "run-teammate", {
+      status: "chat",
+      message: "Worker finished.",
+    });
+
+    const task = store.getSession(sessionId).messages.at(-1)?.activityTrace
+      ?.find((item) => item.kind === "task");
+    expect(task).toMatchObject({
+      kind: "task",
+      taskId: "task-outline",
+      status: "done",
+      steps: [
+        expect.objectContaining({ type: "reasoning", text: "Checking the brief." }),
+        expect.objectContaining({ type: "tool", toolName: "write_file", status: "done" }),
+      ],
+    });
+  });
+
   it("replays the latest task graph snapshot into one durable trace item", async () => {
     const { store } = await createStore();
     const created = await store.createSession({ title: "Task graph run" });

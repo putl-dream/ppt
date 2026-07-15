@@ -54,6 +54,9 @@ export const spawnTeammateTool: ToolDefinition<typeof spawnTeammateSchema, Spawn
       gateway: context.gateway,
       model: context.model,
       agentStepLimits: context.agentStepLimits,
+      onTaskGraphUpdated: context.notifyTaskGraphUpdated,
+      onProgress: context.onTeammateProgress,
+      taskStore: context.taskStore,
     });
 
     return {

@@ -89,7 +89,8 @@ describe("Agent Architecture Skeletons & Types", () => {
   it("creates the production registry with Core and Deferred Tools", () => {
     const registry = createDefaultToolRegistry();
     expect(registry.get("ReadPresentationSnapshot")?.loadPolicy).toBe("core");
-    expect(registry.get("Task")?.loadPolicy).toBe("core");
+    expect(registry.get("Task")).toBeUndefined();
+    expect(registry.get("TaskGraphCreatePlan")?.loadPolicy).toBe("core");
     expect(registry.get("AutoLayoutSlide")?.loadPolicy).toBe("deferred");
     expect(registry.get("PreviewSlide")?.loadPolicy).toBe("core");
     expect(registry.get("ValidateDeckLayout")?.loadPolicy).toBe("core");

@@ -6,7 +6,7 @@ import type { Presentation } from "@shared/presentation";
 import type { AgentModelGateway } from "../gateway";
 import type { ToolApprovalHandler } from "../runtime/permission-check";
 import type { ToolPermissionProfile, ToolRisk } from "../runtime/tool-access-policy";
-import type { SubAgentProgressListener } from "@shared/subagent-progress";
+import type { TeammateProgressListener } from "@shared/teammate-progress";
 import type { ToolRegistry } from "./tool-registry";
 import type { SkillRegistry } from "../skills/loadSkillsDir";
 import type { SkillSession } from "../skills/skill-types";
@@ -50,16 +50,16 @@ export interface ToolContext {
   readonly registry: ToolRegistry;
   /** 历史消息上下文 */
   readonly messageHistory: Array<{ role: "user" | "assistant"; content: string }>;
-  /** Session project sandbox root for Task sub-agents */
+  /** Session project sandbox root for teammate workspace tools. */
   readonly workspaceRoot?: string;
-  /** Model gateway for Task sub-agent delegation */
+  /** Model gateway for teammate delegation. */
   readonly gateway?: AgentModelGateway;
-  /** Active model selection for Task sub-agent delegation */
+  /** Active model selection for teammate delegation. */
   readonly model?: AgentModelSelection;
   readonly signal?: AbortSignal;
   readonly requestToolApproval?: ToolApprovalHandler;
-  /** Streams sub-agent progress to the UI during Task delegation. */
-  readonly onSubAgentProgress?: SubAgentProgressListener;
+  /** Streams task-graph teammate progress to the UI. */
+  readonly onTeammateProgress?: TeammateProgressListener;
   /** Emits task graph updates to the UI after TaskGraph* mutations. */
   readonly notifyTaskGraphUpdated?: (input: {
     tasks: AgentTaskNode[];
@@ -75,7 +75,7 @@ export interface ToolContext {
   readonly skillSession?: SkillSession;
   /** Active prompt stage for LoadSkill gating and stage-aware behavior. */
   readonly promptStage?: PromptStage;
-  /** Step limit config for Task sub-agents. */
+  /** Step limit config for teammate agents. */
   readonly agentStepLimits?: AgentStepLimits;
   /** File-backed inbox bus for long-lived teammates. */
   readonly messageBus?: MessageBus;

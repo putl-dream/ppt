@@ -29,6 +29,7 @@ import {
 } from "@shared/layout-preference";
 import { DEFAULT_DESIGN_SYSTEM, type DesignSystemV1 } from "@design-system";
 import type { AgentQuestionResolved } from "@shared/agent-question";
+import { isTeammateProgressEvent } from "@shared/teammate-progress";
 import {
   countSlidesNeedingLayout,
   presentationNeedsLayoutChoice,
@@ -67,11 +68,7 @@ import {
   sealAllReasoning,
   updateStepText,
   upsertTaskGraphTrace,
-  upsertTaskStarted,
-  appendTaskReasoningChunk,
-  appendTaskToolStart,
-  finishTaskTool,
-  finishTask,
+  applyTeammateProgressEvent,
   extractLatestTaskGraph,
 } from "@shared/agent-activity";
 import {
@@ -227,6 +224,29 @@ export function App() {
           return;
         }
       }
+
+      if (isTeammateProgressEvent(event)) {
+        if (event.sessionId && event.sessionId !== activeSessionIdRef.current) return;
+        if (isCurrentRun) {
+          setAgentActivityMode(
+            event.type === "teammate-thinking-chunk" ? "reasoning" : "workflow",
+          );
+          syncActivityTrace(applyTeammateProgressEvent(activeRunTraceRef.current, event));
+        } else {
+          setChatMessages((prev) => prev.map((message) =>
+            message.role === "assistant" && message.threadId === event.runId
+              ? {
+                  ...message,
+                  activityTrace: applyTeammateProgressEvent(
+                    message.activityTrace ?? [],
+                    event,
+                  ),
+                }
+              : message,
+          ));
+        }
+        return;
+      }
       if (!isCurrentRun) return;
 
       if (event.type === "request-status") {
@@ -298,39 +318,27 @@ export function App() {
         stopStatusTyping();
         flushPendingProgress();
         setAgentActivityMode("workflow");
-        if (event.toolName !== "Task") {
-          syncActivityTrace(
-            appendToolStart(
-              activeRunTraceRef.current,
-              event.toolName,
-              formatAgentToolActivity(event.toolName, "running"),
-            ),
-          );
-        }
+        syncActivityTrace(
+          appendToolStart(
+            activeRunTraceRef.current,
+            event.toolName,
+            formatAgentToolActivity(event.toolName, "running"),
+          ),
+        );
         return;
       }
 
       if (event.type === "tool-finished") {
         stopStatusTyping();
         setAgentActivityMode("workflow");
-        if (event.toolName === "Task") {
-          let trace = activeRunTraceRef.current;
-          for (const item of trace) {
-            if (item.kind === "task" && item.status === "running") {
-              trace = finishTask(trace, item.taskId);
-            }
-          }
-          syncActivityTrace(trace);
-        } else {
-          const state = inferAgentToolActivityState(event.message, "completed");
-          syncActivityTrace(
-            finishTool(
-              activeRunTraceRef.current,
-              event.toolName,
-              formatAgentToolActivity(event.toolName, state),
-            ),
-          );
-        }
+        const state = inferAgentToolActivityState(event.message, "completed");
+        syncActivityTrace(
+          finishTool(
+            activeRunTraceRef.current,
+            event.toolName,
+            formatAgentToolActivity(event.toolName, state),
+          ),
+        );
         return;
       }
 
@@ -378,57 +386,6 @@ export function App() {
             goal: event.goal,
           }),
         );
-        return;
-      }
-
-      if (event.type === "subagent-started") {
-        stopStatusTyping();
-        setAgentActivityMode("workflow");
-        syncActivityTrace(
-          upsertTaskStarted(activeRunTraceRef.current, {
-            taskId: event.taskId,
-            description: event.description,
-          }),
-        );
-        return;
-      }
-
-      if (event.type === "subagent-thinking-chunk") {
-        setAgentActivityMode("reasoning");
-        syncActivityTrace(
-          appendTaskReasoningChunk(activeRunTraceRef.current, event.taskId, event.chunk),
-        );
-        return;
-      }
-
-      if (event.type === "subagent-tool-started") {
-        setAgentActivityMode("workflow");
-        syncActivityTrace(
-          appendTaskToolStart(
-            activeRunTraceRef.current,
-            event.taskId,
-            event.toolName,
-            formatAgentToolActivity(event.toolName, "running"),
-          ),
-        );
-        return;
-      }
-
-      if (event.type === "subagent-tool-finished") {
-        const state = inferAgentToolActivityState(event.message, "completed");
-        syncActivityTrace(
-          finishTaskTool(
-            activeRunTraceRef.current,
-            event.taskId,
-            event.toolName,
-            formatAgentToolActivity(event.toolName, state),
-          ),
-        );
-        return;
-      }
-
-      if (event.type === "subagent-finished") {
-        syncActivityTrace(finishTask(activeRunTraceRef.current, event.taskId));
         return;
       }
 

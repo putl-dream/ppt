@@ -10,6 +10,11 @@ import type { AgentModelSelection } from "@shared/agent";
 import type { AgentStepLimits } from "@shared/agent-step-limits";
 import type { AgentTaskNode } from "@shared/agent-task-graph";
 import {
+  formatTeammateToolProgress,
+  type TeammateProgressEvent,
+  type TeammateProgressListener,
+} from "@shared/teammate-progress";
+import {
   buildSubStepLimitMessage,
   getEffectiveSubMaxSteps,
   resolveAgentStepLimits,
@@ -80,6 +85,8 @@ export interface SpawnTeammateThreadOptions {
   permissionPollMs?: number;
   /** Current-run listener for publishing durable task board changes. */
   onTaskGraphUpdated?: TaskGraphSnapshotListener;
+  /** Current-run listener for publishing teammate reasoning and tool activity. */
+  onProgress?: TeammateProgressListener;
   /** Shared durable task board. The board may live outside the project workspace. */
   taskStore?: TaskStore;
 }
@@ -90,6 +97,7 @@ type TeammateState = TeammateHandle & {
   prompt: string;
   lastError?: string;
   taskGraphListener?: TaskGraphSnapshotListener;
+  progressListener?: TeammateProgressListener;
 };
 
 type PersistedTeammateState = Omit<TeammateHandle, "status"> & {
@@ -168,6 +176,7 @@ export class TeammateManager {
       lastActiveAt: Date.now(),
       prompt: options.prompt,
       taskGraphListener: options.onTaskGraphUpdated,
+      progressListener: options.onProgress,
       controller,
       done: Promise.resolve(),
     };
@@ -218,6 +227,24 @@ export class TeammateManager {
     if (!state) return false;
     state.taskGraphListener = listener;
     return true;
+  }
+
+  updateProgressListener(
+    name: string,
+    listener?: TeammateProgressListener,
+  ): boolean {
+    const state = this.teammates.get(sanitizeAgentName(name));
+    if (!state) return false;
+    state.progressListener = listener;
+    return true;
+  }
+
+  private emitProgress(state: TeammateState, event: TeammateProgressEvent): void {
+    try {
+      state.progressListener?.(event);
+    } catch {
+      // UI observability must never interrupt teammate execution.
+    }
   }
 
   async requestShutdown(name: string, reason = "Lead requested teammate shutdown."): Promise<ProtocolState> {
@@ -441,9 +468,43 @@ export class TeammateManager {
     let hasActiveAssignment = !options.startIdle;
     let currentAssignment = options.startIdle ? "" : options.prompt;
     let currentTaskId: string | undefined;
+    let currentActivityId: string | undefined;
+    let currentActivityTaskId: string | undefined;
     let idleSince: number | undefined = options.startIdle ? Date.now() : undefined;
     let nextIdlePollAt: number | undefined = options.startIdle ? Date.now() : undefined;
     const workSummaries: string[] = [];
+
+    const startAssignment = (description: string, taskId?: string): void => {
+      currentActivityId = taskId ?? `teammate:${state.name}:${crypto.randomUUID()}`;
+      currentActivityTaskId = taskId;
+      this.emitProgress(state, {
+        type: "teammate-assignment-started",
+        teammateName: state.name,
+        activityId: currentActivityId,
+        ...(taskId ? { taskId } : {}),
+        description,
+      });
+    };
+    const finishAssignment = (
+      status: "completed" | "failed" | "interrupted",
+      message?: string,
+    ): void => {
+      if (!currentActivityId) return;
+      this.emitProgress(state, {
+        type: "teammate-assignment-finished",
+        teammateName: state.name,
+        activityId: currentActivityId,
+        ...(currentActivityTaskId ? { taskId: currentActivityTaskId } : {}),
+        status,
+        ...(message ? { message } : {}),
+      });
+      currentActivityId = undefined;
+      currentActivityTaskId = undefined;
+    };
+
+    if (hasActiveAssignment) {
+      startAssignment(options.prompt);
+    }
 
     try {
       while (!state.controller.signal.aborted) {
@@ -471,6 +532,7 @@ export class TeammateManager {
         if (shutdownRequest) {
           const requestId = readProtocolRequestId(shutdownRequest.payload);
           await unassignOwnedTasks(taskStore, state.name, publishTaskGraph);
+          finishAssignment("interrupted", "协作任务已按 lead 请求停止");
           currentTaskId = undefined;
           await this.sendLifecycleSummary(state.name, "shutdown requested", workSummaries);
           await this.bus.send({
@@ -483,6 +545,7 @@ export class TeammateManager {
           break;
         }
         if (routedInboxMessages.length > 0) {
+          const wasActive = hasActiveAssignment;
           state.status = "running";
           state.lastActiveAt = Date.now();
           const inboxAssignment = formatInboxForTeammate(routedInboxMessages);
@@ -501,6 +564,9 @@ export class TeammateManager {
           });
           modelSteps = 0;
           hasActiveAssignment = true;
+          if (!wasActive) {
+            startAssignment(`来自 lead 的协作任务：${routedInboxMessages[0]?.content ?? "继续处理"}`);
+          }
           idleSince = undefined;
           nextIdlePollAt = undefined;
         } else if (!hasActiveAssignment) {
@@ -529,6 +595,7 @@ export class TeammateManager {
           if (!claimedTask) continue;
 
           currentTaskId = claimedTask.id;
+          startAssignment(claimedTask.subject, claimedTask.id);
           currentAssignment = withIdentityIfCompacted(
             modelMessages,
             state.name,
@@ -550,6 +617,7 @@ export class TeammateManager {
 
         if (modelSteps >= maxSteps) {
           await unassignOwnedTasks(taskStore, state.name, publishTaskGraph);
+          finishAssignment("failed", buildSubStepLimitMessage(stepLimits));
           currentTaskId = undefined;
           await this.finishWithSummary(
             state.name,
@@ -577,6 +645,16 @@ export class TeammateManager {
           tools: toolSchemas,
           task: currentAssignment,
           signal: state.controller.signal,
+          onThinkingChunk: (chunk) => {
+            if (!currentActivityId) return;
+            this.emitProgress(state, {
+              type: "teammate-thinking-chunk",
+              teammateName: state.name,
+              activityId: currentActivityId,
+              ...(currentActivityTaskId ? { taskId: currentActivityTaskId } : {}),
+              chunk,
+            });
+          },
         });
         modelSteps += 1;
         modelMessages.push({ role: "assistant", content: responseContent });
@@ -607,6 +685,7 @@ export class TeammateManager {
             type: "result",
             content: summary,
           });
+          finishAssignment("completed", summary);
           await this.sendIdleNotification(state.name);
           state.status = "idle";
           state.lastActiveAt = Date.now();
@@ -619,6 +698,38 @@ export class TeammateManager {
 
         const results: AgentModelToolResultBlock[] = [];
         for (const call of calls) {
+          const progressActivityId = currentActivityId;
+          const progressTaskId = currentActivityTaskId;
+          const finishToolProgress = (
+            status: "completed" | "failed",
+            message = formatTeammateToolProgress(call.name, status),
+          ): void => {
+            if (!progressActivityId) return;
+            const displayMessage = status === "failed"
+              && !message.includes("失败")
+              && !/\b(?:fail|error|denied|invalid)\b/i.test(message)
+              ? `${formatTeammateToolProgress(call.name, "failed")}：${message}`
+              : message;
+            this.emitProgress(state, {
+              type: "teammate-tool-finished",
+              teammateName: state.name,
+              activityId: progressActivityId,
+              ...(progressTaskId ? { taskId: progressTaskId } : {}),
+              toolName: call.name,
+              message: displayMessage,
+              status,
+            });
+          };
+          if (progressActivityId) {
+            this.emitProgress(state, {
+              type: "teammate-tool-started",
+              teammateName: state.name,
+              activityId: progressActivityId,
+              ...(progressTaskId ? { taskId: progressTaskId } : {}),
+              toolName: call.name,
+              message: formatTeammateToolProgress(call.name, "running"),
+            });
+          }
           const record = (text: string, isError = false): void => {
             results.push({
               type: "tool_result",
@@ -630,6 +741,7 @@ export class TeammateManager {
           if (call.parseError) {
             transcript.push({ role: "tool", toolName: call.name, error: call.parseError });
             record(call.parseError, true);
+            finishToolProgress("failed", call.parseError);
             continue;
           }
           const tool = handlers.get(call.name);
@@ -637,12 +749,14 @@ export class TeammateManager {
             const error = `Unknown tool: ${call.name}. Teammates cannot use task or spawn teammates.`;
             transcript.push({ role: "tool", toolName: call.name, error });
             record(error, true);
+            finishToolProgress("failed", error);
             continue;
           }
           const args = parseToolInput(tool.inputSchema, call.input);
           if (!args.success) {
             transcript.push({ role: "tool", toolName: tool.name, error: args.error.message });
             record(args.error.message, true);
+            finishToolProgress("failed", args.error.message);
             continue;
           }
 
@@ -659,6 +773,7 @@ export class TeammateManager {
               : `Plan approval ${latestPlanRequest.requestId} was rejected. Submit a revised plan before making changes.`;
             transcript.push({ role: "tool", toolName: tool.name, error });
             record(error, true);
+            finishToolProgress("failed", error);
             continue;
           }
 
@@ -679,9 +794,12 @@ export class TeammateManager {
               error: preToolStop.reason,
             });
             record(preToolStop.reason ?? "Tool call denied.", true);
+            finishToolProgress("failed", preToolStop.reason ?? "Tool call denied.");
             continue;
           }
           if (preToolStop) {
+            finishToolProgress("completed", preToolStop.reason);
+            finishAssignment("completed", preToolStop.reason);
             await this.finishWithSummary(state.name, preToolStop.reason, "completed");
             return;
           }
@@ -697,6 +815,7 @@ export class TeammateManager {
           } satisfies PostToolUseBlock);
           transcript.push({ role: "tool", toolName: tool.name, result: output });
           record(output);
+          finishToolProgress("completed");
           } catch (error) {
           const errorMessage = error instanceof Error ? error.message : String(error);
           await triggerHooks("PostToolUse", {
@@ -713,6 +832,7 @@ export class TeammateManager {
             error: errorMessage,
           });
           record(errorMessage, true);
+          finishToolProgress("failed", errorMessage);
           }
         }
         modelMessages.push({ role: "user", content: results });
@@ -721,8 +841,12 @@ export class TeammateManager {
     } catch (error) {
       state.status = "failed";
       state.lastError = error instanceof Error ? error.message : String(error);
+      finishAssignment("failed", state.lastError);
       throw error;
     } finally {
+      if (state.controller.signal.aborted) {
+        finishAssignment("interrupted", "协作任务已中断");
+      }
       await unassignOwnedTasks(taskStore, state.name, publishTaskGraph);
       await triggerHooks("Stop", {
         event: "Stop",
@@ -912,6 +1036,7 @@ async function generateTeammateResponse(input: {
   tools: AgentToolSchema[];
   task: string;
   signal: AbortSignal;
+  onThinkingChunk?: (chunk: string) => void;
 }): Promise<AgentModelContentBlock[]> {
   const result = await callModelWithRecovery({
     gateway: input.options.gateway,
@@ -926,6 +1051,9 @@ async function generateTeammateResponse(input: {
     signal: input.signal,
     tools: input.tools,
     messages: ensureToolResultPairing(input.modelMessages),
+    stream: input.onThinkingChunk
+      ? { onThinkingChunk: input.onThinkingChunk }
+      : undefined,
   });
   return result.content;
 }

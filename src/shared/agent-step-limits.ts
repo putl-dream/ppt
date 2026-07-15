@@ -5,7 +5,7 @@ export const agentStepLimitsSchema = z.object({
   enabled: z.boolean(),
   /** Max model rounds for the main agent per request. */
   mainMaxSteps: z.number().int().min(1).max(200),
-  /** Max model rounds for each sub-agent spawned via Task. */
+  /** Max model rounds for each teammate assignment. */
   subMaxSteps: z.number().int().min(1).max(200),
 });
 

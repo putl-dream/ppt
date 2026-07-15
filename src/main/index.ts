@@ -145,18 +145,20 @@ function createAgentStreamEmitter(
     const eventKind: ConversationEventKind = (() => {
       switch (streamEvent.type) {
         case "thinking-chunk":
-        case "subagent-thinking-chunk":
+        case "teammate-thinking-chunk":
           return "reasoning_chunk";
         case "text-chunk": return "text_chunk";
         case "stage-started": return "stage_started";
         case "workflow-progress":
         case "request-status":
+        case "teammate-assignment-started":
+        case "teammate-assignment-finished":
           return "workflow_progress";
         case "tool-started":
-        case "subagent-tool-started":
+        case "teammate-tool-started":
           return "tool_started";
         case "tool-finished":
-        case "subagent-tool-finished":
+        case "teammate-tool-finished":
           return "tool_finished";
         case "tool-validation-failed": return "tool_failed";
         case "approval-waiting":
@@ -173,7 +175,10 @@ function createAgentStreamEmitter(
       kind: eventKind,
       payload: structuredClone(streamEvent) as unknown as Record<string, unknown>,
     });
-    if (streamEvent.type === "task-graph-updated") {
+    if (
+      streamEvent.type === "task-graph-updated"
+      || streamEvent.type === "teammate-assignment-finished"
+    ) {
       void sessionStore.refreshAgentRunTrace(sessionId, runId).catch((error) => {
         logger.warn("agent.task-graph-trace.persist-failed", { sessionId, runId, error });
       });

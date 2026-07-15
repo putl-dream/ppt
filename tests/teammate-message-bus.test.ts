@@ -15,6 +15,7 @@ import { TaskStore } from "../src/main/agent/task/task-store";
 import { createDefaultToolRegistry } from "../src/main/agent/tools/tool-registry";
 import type { ToolContext } from "../src/main/agent/tools/tool-definition";
 import { createStarterPresentation } from "../src/shared/presentation";
+import type { TeammateProgressEvent } from "../src/shared/teammate-progress";
 
 function createSequenceGateway(responses: AgentModelContentBlock[]): AgentModelGateway {
   let index = 0;
@@ -31,6 +32,26 @@ function createSequenceGateway(responses: AgentModelContentBlock[]): AgentModelG
     async *generateTextStream() {
       const value = responses[index++];
       if (value === undefined) throw new Error("Unexpected gateway call");
+      if (value.type === "text") yield { type: "text_delta" as const, text: value.text };
+      yield { type: "complete" as const, content: [value] };
+    },
+  };
+}
+
+function createThinkingSequenceGateway(
+  responses: AgentModelContentBlock[],
+): AgentModelGateway {
+  let index = 0;
+  return {
+    async generateText() {
+      const value = responses[index++];
+      if (value === undefined) throw new Error("Unexpected gateway call");
+      return { provider: "anthropic", model: "test-model", content: [value] };
+    },
+    async *generateTextStream() {
+      const value = responses[index++];
+      if (value === undefined) throw new Error("Unexpected gateway call");
+      yield { type: "thinking_delta" as const, thinking: `reasoning-${index}` };
       if (value.type === "text") yield { type: "text_delta" as const, text: value.text };
       yield { type: "complete" as const, content: [value] };
     },
@@ -323,6 +344,62 @@ describe("TeammateManager", () => {
       type: "result",
       content: "Outline submitted for review.",
     }));
+
+    await manager.requestShutdown("task_worker");
+    await manager.waitFor("task_worker");
+  });
+
+  it("streams task-linked reasoning and tool activity for the autonomous worker", async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), "ppt-worker-progress-"));
+    const taskRoot = await mkdtemp(join(tmpdir(), "ppt-worker-progress-tasks-"));
+    const store = new TaskStore(taskRoot);
+    const created = await store.createTask({
+      subject: "Draft storyboard",
+      executionTarget: "teammate",
+    });
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    const events: TeammateProgressEvent[] = [];
+    const bus = new MessageBus(MessageBus.defaultMailboxDir(workspaceRoot));
+    const manager = new TeammateManager(bus);
+    manager.spawn({
+      name: "task_worker",
+      role: "autonomous task worker",
+      prompt: "Poll the shared board.",
+      startIdle: true,
+      workspaceRoot,
+      taskStore: store,
+      gateway: createThinkingSequenceGateway([
+        modelToolCall("submit_task", { task_id: created.task.id }),
+        modelMessage("Storyboard submitted."),
+      ]),
+      onProgress: (event) => events.push(event),
+      maxSteps: 2,
+      idlePollMs: 5,
+      idleTimeoutMs: 1_000,
+    });
+
+    await waitFor(async () => events.some(
+      (event) => event.type === "teammate-assignment-finished",
+    ) ? true : undefined);
+
+    expect(events.map((event) => event.type)).toEqual(expect.arrayContaining([
+      "teammate-assignment-started",
+      "teammate-thinking-chunk",
+      "teammate-tool-started",
+      "teammate-tool-finished",
+      "teammate-assignment-finished",
+    ]));
+    expect(events.every((event) => event.activityId === created.task.id)).toBe(true);
+    expect(events.find((event) => event.type === "teammate-tool-started"))
+      .toEqual(expect.objectContaining({ toolName: "submit_task", taskId: created.task.id }));
+    expect(events.find((event) => event.type === "teammate-tool-finished"))
+      .toEqual(expect.objectContaining({
+        toolName: "submit_task",
+        taskId: created.task.id,
+        status: "completed",
+      }));
 
     await manager.requestShutdown("task_worker");
     await manager.waitFor("task_worker");

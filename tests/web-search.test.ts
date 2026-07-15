@@ -137,7 +137,7 @@ describe("web search", () => {
     expect(result.success).toBe(false);
   });
 
-  it("registers WebSearch for the main agent and web_search for Task sub-agents", () => {
+  it("registers WebSearch for the main agent and web_search for teammate workspace agents", () => {
     expect(createDefaultToolRegistry().get("WebSearch")).toBe(webSearchTool);
     expect(createDefaultToolRegistry().get("SearchSlideImages")).toBe(searchSlideImagesTool);
     expect(createDefaultToolRegistry().get("InsertSlideImage")).toBe(insertSlideImageTool);

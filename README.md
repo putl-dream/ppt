@@ -88,7 +88,7 @@ npm.cmd run dev
 
 API Key 会保存在主进程内存中，仅用于当前应用会话，不会写入 `.env`。开发诊断和 CI 覆盖项可以参考 [.env.example](./.env.example)。
 
-如需让 Agent 联网调研，请在 **Settings -> 生成参数** 填写 Tavily API Key。开发环境也可设置 `TAVILY_API_KEY`；搜索结果会以标题、URL 和摘要返回给主 Agent 及 Task 子 Agent。
+如需让 Agent 联网调研，请在 **Settings -> 生成参数** 填写 Tavily API Key。开发环境也可设置 `TAVILY_API_KEY`；搜索结果会以标题、URL 和摘要返回给主 Agent 及任务图 teammate。
 
 ## 常用命令
 

@@ -105,6 +105,10 @@ export function ensureAutonomousTaskWorker(
       existing.name,
       context.notifyTaskGraphUpdated,
     );
+    context.teammateManager.updateProgressListener?.(
+      existing.name,
+      context.onTeammateProgress,
+    );
     return existing.name;
   }
 
@@ -119,6 +123,7 @@ export function ensureAutonomousTaskWorker(
     agentStepLimits: context.agentStepLimits,
     idleTimeoutMs: 300_000,
     onTaskGraphUpdated: context.notifyTaskGraphUpdated,
+    onProgress: context.onTeammateProgress,
     taskStore: context.taskStore,
   }).name;
 }

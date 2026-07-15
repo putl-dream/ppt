@@ -5,6 +5,7 @@ import type { CommandBus, PresentationCommand } from "@shared/commands";
 import type { AgentEditorContext, AgentRunResult } from "@shared/ipc";
 import type { AgentConversationMessage } from "@shared/session-recovery";
 import type { LayoutChoice } from "@shared/layout-preference";
+import type { TeammateProgressEvent } from "@shared/teammate-progress";
 import { CommitGate, type CommitGateResult } from "./gate/commit-gate";
 import { AgentRuntime } from "./runtime/agent-runtime";
 import { formatRecoverableAgentError } from "./gateway/errors";
@@ -43,11 +44,7 @@ export type AgentServiceEvent =
       tasks: AgentTaskNode[];
       goal?: string | null;
     }
-  | { type: "subagent-started"; taskId: string; description: string }
-  | { type: "subagent-thinking-chunk"; taskId: string; chunk: string }
-  | { type: "subagent-tool-started"; taskId: string; toolName: string; message: string }
-  | { type: "subagent-tool-finished"; taskId: string; toolName: string; message: string }
-  | { type: "subagent-finished"; taskId: string };
+  | TeammateProgressEvent;
 
 export type AgentServiceEventListener = (event: AgentServiceEvent) => void;
 

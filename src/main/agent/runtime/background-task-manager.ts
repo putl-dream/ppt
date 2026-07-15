@@ -97,11 +97,7 @@ export function shouldRunBackground(
   }
 
   if (args.run_in_background === true) {
-    return toolName === "Task" || toolName === "PreviewSlide";
-  }
-
-  if (toolName === "Task" && Array.isArray(args.descriptions)) {
-    return args.descriptions.filter((item) => typeof item === "string" && item.trim()).length > 1;
+    return toolName === "PreviewSlide";
   }
 
   return false;
@@ -119,16 +115,6 @@ export function describeBackgroundTask(
       return `ExportPptx: ${format}`;
     }
     return `ExecuteExtraTool: ${targetToolName}`;
-  }
-
-  if (toolName === "Task") {
-    if (Array.isArray(args.descriptions)) {
-      const count = args.descriptions.filter((item) => typeof item === "string" && item.trim()).length;
-      return `Task: ${count} parallel subtasks`;
-    }
-    if (typeof args.description === "string" && args.description.trim()) {
-      return `Task: ${truncateForNotification(args.description.trim(), 80)}`;
-    }
   }
 
   if (toolName === "PreviewSlide" && typeof args.slideId === "string") {

@@ -15,7 +15,6 @@ import { sendTeammateMessageTool } from "./core/send-teammate-message";
 import { shutdownTeammateTool } from "./core/shutdown-teammate";
 import { submitCommandsTool } from "./core/submit-commands";
 import { spawnTeammateTool } from "./core/spawn-teammate";
-import { taskTool } from "./core/task";
 import { taskGraphTools } from "./core/task-graph-tools";
 import { loadSkillTool } from "./core/load-skill";
 import { webSearchTool } from "./core/web-search";
@@ -129,7 +128,6 @@ export function createDefaultToolRegistry(): ToolRegistry {
     shutdownTeammateTool,
     spawnTeammateTool,
     submitCommandsTool,
-    taskTool,
     ...taskGraphTools,
     loadSkillTool,
     webSearchTool,

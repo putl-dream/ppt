@@ -1,4 +1,3 @@
-import { mkdtemp } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { describe, expect, it, beforeEach } from "vitest";
@@ -12,12 +11,6 @@ import {
   createPermissionPreToolUseHook,
   type PreToolUseBlock,
 } from "../src/main/agent/runtime/permission-check";
-import {
-  ensureDefaultHooks,
-  resetDefaultHooksForTests,
-} from "../src/main/agent/runtime/default-hooks";
-import { spawnSubAgent } from "../src/main/agent/subagent/spawn-subagent";
-import type { AgentModelGateway } from "../src/main/agent/gateway";
 
 function createBlock(overrides: Partial<PreToolUseBlock> = {}): PreToolUseBlock {
   return {
@@ -188,97 +181,3 @@ describe("Permission gates", () => {
 function awaitableWorkspace(): string {
   return join(tmpdir(), "ppt-perm-test");
 }
-
-describe("Sub-agent permission integration", () => {
-  beforeEach(() => {
-    clearHooks();
-    resetDefaultHooksForTests();
-    ensureDefaultHooks();
-  });
-
-  it("blocks hard-denied bash commands before execution", async () => {
-    const workspaceRoot = await mkdtemp(join(tmpdir(), "ppt-hook-deny-"));
-    let gatewayCalls = 0;
-    const gateway: AgentModelGateway = {
-      async generateText() {
-        gatewayCalls += 1;
-        if (gatewayCalls === 1) {
-          return {
-            provider: "openai",
-            model: "test",
-            content: [{
-              type: "tool_use",
-              id: "deny-call",
-              name: "bash",
-              input: { command: "rm -rf /" },
-            }],
-          };
-        }
-        return {
-          provider: "openai",
-          model: "test",
-          content: [{ type: "text", text: "Stopped after deny." }],
-        };
-      },
-      async *generateTextStream() {
-        yield { type: "complete" as const, content: [] };
-      },
-    };
-
-    const conclusion = await spawnSubAgent({
-      description: "dangerous",
-      workspaceRoot,
-      gateway,
-      maxSteps: 3,
-      requestToolApproval: async () => true,
-    });
-
-    expect(gatewayCalls).toBeGreaterThanOrEqual(1);
-    expect(conclusion).toBe("Stopped after deny.");
-  });
-
-  it("executes write_file without approval inside workspace", async () => {
-    const workspaceRoot = await mkdtemp(join(tmpdir(), "ppt-hook-approve-"));
-    let gatewayCalls = 0;
-    const gateway: AgentModelGateway = {
-      async generateText() {
-        gatewayCalls += 1;
-        if (gatewayCalls === 1) {
-          return {
-            provider: "openai",
-            model: "test",
-            content: [{
-              type: "tool_use",
-              id: "write-call",
-              name: "write_file",
-              input: { path: "ok.md", content: "approved" },
-            }],
-          };
-        }
-        return {
-          provider: "openai",
-          model: "test",
-          content: [{ type: "text", text: "Write complete." }],
-        };
-      },
-      async *generateTextStream() {
-        yield { type: "complete" as const, content: [] };
-      },
-    };
-
-    let approvalAsked = false;
-    const conclusion = await spawnSubAgent({
-      description: "write",
-      workspaceRoot,
-      gateway,
-      maxSteps: 3,
-      requestToolApproval: async () => {
-        approvalAsked = true;
-        return true;
-      },
-    });
-
-    expect(approvalAsked).toBe(false);
-    expect(conclusion).toBe("Write complete.");
-  });
-});

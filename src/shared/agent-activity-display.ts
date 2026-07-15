@@ -38,7 +38,6 @@ const TOOL_DISPLAY_COPY = {
   shutdown_teammate: { action: "结束协作任务", category: "coordinate" },
   spawn_teammate: { action: "启动协作任务", category: "coordinate" },
   SubmitCommands: { action: "提交修改方案", category: "change" },
-  Task: { action: "处理子任务", category: "coordinate" },
   task_worker: { action: "分配任务步骤", category: "coordinate" },
   TaskGraphCreate: { action: "建立任务计划", category: "coordinate" },
   TaskGraphCreatePlan: { action: "建立任务计划", category: "coordinate" },
@@ -183,9 +182,6 @@ export function inferAgentToolActivityState(
 }
 
 function formatBackgroundTaskLabel(label: string): string {
-  const taskMatch = label.match(/^Task:\s*(\d+)\s+parallel subtasks?$/i);
-  if (taskMatch) return `并行处理 ${taskMatch[1]} 个子任务`;
-
   const toolMatch = label.match(/^([A-Za-z][\w-]*)(?::\s*.*)?$/);
   if (toolMatch) return getAgentToolDisplayCopy(toolMatch[1]!).action;
   return label;

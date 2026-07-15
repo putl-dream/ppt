@@ -15,7 +15,7 @@ export function buildSubAgentSystemPrompt(tools: SubAgentToolDefinition[]): stri
 ## Rules
 1. **Act, don't analyze**: Use the minimum tools needed. Prefer one \`write\` with complete content over read→edit→read loops.
 2. **Content tasks (brief/outline/storyboard)**: Write clear, complete bullet points—not telegraphic stubs. **Do not compress to 15 characters**; trimming happens in the layout phase.
-3. **No delegation**: You cannot spawn subtasks or call Task.
+3. **No delegation**: You cannot spawn subtasks or other agents.
 4. **Conclude fast**: When done, reply with a 1–3 sentence conclusion: file path + what changed. Do not paste file contents.
 5. **File operations use workspace tools**: \`write_file\` automatically creates parent directories, so write files like \`slides/layout-plan.json\` directly. Do not call \`bash\` for mkdir/cat/echo redirection/copy/move style file operations.
 6. Stay within the workspace sandbox.

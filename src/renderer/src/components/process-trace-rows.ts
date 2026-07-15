@@ -153,10 +153,17 @@ export function buildProcessTraceRows(
 
     if (item.kind === "task") {
       const isRunning = item.status === "running";
+      const title = isRunning
+        ? "正在处理子任务"
+        : item.status === "failed"
+          ? "子任务执行失败"
+          : item.status === "interrupted"
+            ? "子任务已中断"
+            : "子任务已完成";
       pushRow(rows, {
         id: item.id,
         kind: "task",
-        title: isRunning && live ? "正在处理子任务" : "子任务已完成",
+        title,
         lines: item.steps.length > 0 ? [item.description] : (isRunning && live ? ["正在准备子任务…"] : [item.description]),
         active: isRunning && live,
       });

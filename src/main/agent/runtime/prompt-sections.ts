@@ -182,7 +182,7 @@ function buildLeadAgentContract(): string {
     "- teammate 节点 description 必须自包含：写清输入产物、目标路径、验收标准和禁止事项；worker 不依赖 lead 的私有聊天上下文。",
     "- 主 Agent 可以直接执行的工作限于：非制作问答、轻量单页/小范围改动、读取上下文、用户追问、结果验收，以及通过 `ExecuteLayoutPlan` 把已冻结 layout-plan 转成最终 command proposal。",
     "- teammate 将任务置为 submitted 并汇报后，先检查产物是否满足本阶段契约，再 `TaskGraphComplete`；验收前不要解锁下游。",
-    "- `Task` 只用于不属于 TaskGraph 的一次性临时子任务；不要对已建图节点再调用 `Task` 重复委派。",
+    "- 所有子任务都必须进入 TaskGraph；teammate 节点由常驻 worker 自主领取。",
     "- 简单任务保持轻量：能一次读取并 SubmitCommands 的局部修改，不创建 TaskGraph、不委派子 Agent。",
   ].join("\n");
 }
@@ -344,7 +344,7 @@ ${formatSkillCatalog(catalog)}
 
 ${toolsDescription}
 
-- \`Task\`：仅处理不属于 TaskGraph 的一次性临时子任务；任务图 workspace 节点由 teammate 自主领取。
+- 所有子任务统一进入 TaskGraph；workspace 节点由 teammate 自主领取。
 - \`ExecuteLayoutPlan\`：读取并校验 \`slides/layout-plan.json\`，再生成受控 command proposal；排版执行默认用它。
 - \`TaskGraph*\`：持久化任务 DAG（\`.tasks/\`）。
 - \`LoadSkill\`：仅加载上方目录中的技能；其他技能在本阶段不可用。

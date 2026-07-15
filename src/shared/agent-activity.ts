@@ -4,6 +4,7 @@ import {
   formatAgentToolActivity,
   type AgentToolActivityState,
 } from "./agent-activity-display";
+import type { TeammateProgressEvent } from "./teammate-progress";
 
 export const agentActivityItemSchema = z.discriminatedUnion("kind", [
   z.object({
@@ -55,7 +56,7 @@ export const agentActivityItemSchema = z.discriminatedUnion("kind", [
     kind: z.literal("task"),
     taskId: z.string(),
     description: z.string(),
-    status: z.enum(["running", "done"]),
+    status: z.enum(["running", "done", "failed", "interrupted"]),
     steps: z.array(z.object({
       id: z.string(),
       type: z.enum(["reasoning", "tool"]),
@@ -620,16 +621,55 @@ export function finishTaskTool(
 export function finishTask(
   trace: AgentActivityItem[],
   taskId: string,
+  status: "done" | "failed" | "interrupted" = "done",
 ): AgentActivityItem[] {
   return upsertTask(trace, taskId, (task) => ({
     ...task,
-    status: "done",
+    status,
     steps: task.steps.map((step): TaskStep =>
       step.streaming || step.status === "running"
         ? { ...step, streaming: false, status: "done" }
         : step,
     ),
   }));
+}
+
+/** Apply one long-lived teammate event to the nested task activity timeline. */
+export function applyTeammateProgressEvent(
+  trace: AgentActivityItem[],
+  event: TeammateProgressEvent,
+): AgentActivityItem[] {
+  switch (event.type) {
+    case "teammate-assignment-started":
+      return upsertTaskStarted(trace, {
+        taskId: event.activityId,
+        description: `${event.description} · ${event.teammateName}`,
+      });
+    case "teammate-thinking-chunk":
+      return appendTaskReasoningChunk(trace, event.activityId, event.chunk);
+    case "teammate-tool-started":
+      return appendTaskToolStart(
+        trace,
+        event.activityId,
+        event.toolName,
+        event.message,
+      );
+    case "teammate-tool-finished":
+      return finishTaskTool(
+        trace,
+        event.activityId,
+        event.toolName,
+        event.message,
+      );
+    case "teammate-assignment-finished":
+      return finishTask(
+        trace,
+        event.activityId,
+        event.status === "completed" ? "done" : event.status,
+      );
+    default:
+      return trace;
+  }
 }
 
 export function markTraceComplete(
@@ -654,24 +694,8 @@ export function markTraceComplete(
     if (item.kind === "tool-summary" && item.streaming) {
       return { ...item, streaming: false };
     }
-    if (item.kind === "task" && item.status === "running") {
-      return {
-        ...item,
-        status: "done" as const,
-        steps: item.steps.map((step) =>
-          step.streaming || step.status === "running"
-            ? {
-                ...step,
-                text: step.type === "tool" && step.toolName
-                  ? formatAgentToolActivity(step.toolName, unfinishedToolState)
-                  : step.text,
-                streaming: false,
-                status: "done" as const,
-              }
-            : step,
-        ),
-      };
-    }
+    // Teammate assignments may outlive the lead run. Only their explicit
+    // assignment-finished event is allowed to close the nested task trace.
     return item;
   });
 }

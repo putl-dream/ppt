@@ -33,7 +33,7 @@ import { textFromContentBlocks, toolUseBlocksFromContent } from "../gateway/cont
 import { validateToolOutput } from "../tools/tool-validation";
 import { parseDefinedToolInput } from "../tools/tool-input";
 import { prepareToolResultData } from "./tool-result-data";
-import type { SubAgentProgressEvent } from "@shared/subagent-progress";
+import type { TeammateProgressEvent } from "@shared/teammate-progress";
 import {
   buildRenderFeedback,
   extractFeedbackImages,
@@ -63,18 +63,18 @@ import {
 import type { ConversationDatabase } from "../../conversation-database";
 import { ensureAutonomousTaskWorker } from "../tools/core/task-graph-tools";
 
-/** Derive a display message for sub-agent progress events lacking one. */
-function subAgentProgressMessage(event: SubAgentProgressEvent): string {
+/** Derive a display message for teammate progress events lacking one. */
+function teammateProgressMessage(event: TeammateProgressEvent): string {
   switch (event.type) {
-    case "subagent-started":
-      return `子任务已开始：${event.description}`;
-    case "subagent-thinking-chunk":
+    case "teammate-assignment-started":
+      return `${event.teammateName} 开始处理：${event.description}`;
+    case "teammate-thinking-chunk":
       return event.chunk;
-    case "subagent-tool-started":
-    case "subagent-tool-finished":
+    case "teammate-tool-started":
+    case "teammate-tool-finished":
       return event.message;
-    case "subagent-finished":
-      return "子任务已完成。";
+    case "teammate-assignment-finished":
+      return event.message ?? `${event.teammateName} 已结束当前任务。`;
     default:
       return "";
   }
@@ -182,10 +182,10 @@ export class AgentRuntime {
           goal,
         });
       },
-      onSubAgentProgress: options.onProgress
+      onTeammateProgress: options.onProgress
         ? (event) => options.onProgress?.({
             ...event,
-            message: subAgentProgressMessage(event),
+            message: teammateProgressMessage(event),
           })
         : undefined,
       agentStepLimits: stepLimits,
@@ -796,7 +796,7 @@ export class AgentRuntime {
       })) {
         const guidance =
           "Full or multi-step PPT creation in the discover stage must start with "
-          + "TaskGraphCreatePlan(sequential=true, 3-5 concrete steps) before LoadSkill, Task, "
+          + "TaskGraphCreatePlan(sequential=true, 3-5 concrete steps) before LoadSkill, "
           + "ReadPresentationSnapshot, or other execution tools. Create the visible task plan first, "
           + "mark every step executionTarget=teammate or lead. Leave teammate steps pending for the "
           + "autonomous worker; only claim lead steps, and review submitted teammate work before completion.";

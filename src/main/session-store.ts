@@ -43,6 +43,7 @@ import {
 } from "@shared/workspace";
 import { writeTextFileAtomic } from "./agent/persistence/atomic-json-file";
 import {
+  applyTeammateProgressEvent,
   appendReasoningChunk,
   appendStep,
   appendToolStart,
@@ -52,6 +53,7 @@ import {
   upsertTaskGraphTrace,
   type AgentActivityItem,
 } from "@shared/agent-activity";
+import { isTeammateProgressEvent } from "@shared/teammate-progress";
 import { agentTaskNodeSchema } from "@shared/agent-task-graph";
 import { formatPublicErrorMessage } from "@shared/agent-activity-display";
 import { ConversationDatabase } from "./conversation-database";
@@ -375,6 +377,16 @@ export class FileSessionStore {
     for (const event of this.conversationDatabase.listRunEvents(runId)) {
       if (event.visibility !== "user_visible") continue;
       const payload = event.payload;
+      const progressPayload = typeof payload.type === "string"
+        ? payload as { type: string }
+        : undefined;
+      if (progressPayload && isTeammateProgressEvent(progressPayload)) {
+        trace = applyTeammateProgressEvent(
+          trace,
+          progressPayload,
+        );
+        continue;
+      }
       if (event.kind === "reasoning_chunk" && typeof payload.chunk === "string") {
         trace = appendReasoningChunk(
           trace,

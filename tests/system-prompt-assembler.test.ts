@@ -81,7 +81,7 @@ describe("system prompt assembly", () => {
     expect(assembled.text).toContain("常驻 teammate 自主认领");
     expect(assembled.text).toContain("executionTarget");
     expect(assembled.text).toContain("submitted");
-    expect(assembled.text).toContain("不要对已建图节点再调用 `Task` 重复委派");
+    expect(assembled.text).toContain("所有子任务都必须进入 TaskGraph");
     expect(assembled.text).toContain("不要创建临时、平面的任务列表");
     expect(assembled.text).toContain("覆盖当前用户目标的端到端计划");
     expect(assembled.text).toContain("同一个用户目标只建一张 TaskGraph");
