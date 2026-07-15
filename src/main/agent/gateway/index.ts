@@ -188,5 +188,18 @@ export type {
   AgentModelResponse,
   AgentModelStreamChunk,
   AgentResponseContract,
+  AgentModelOutputFormat,
+  AgentJsonSchemaOutputFormat,
 } from "./types";
 export { AgentGatewayError } from "./errors";
+export {
+  callLLM,
+  callLLMJson,
+  callTool,
+  ModelOutputError,
+  type JsonModelCallOptions,
+  type MarkdownModelRequest,
+  type ModelOutputErrorCode,
+  type ToolModelRequest,
+  type ToolModelTurn,
+} from "./model-calls";

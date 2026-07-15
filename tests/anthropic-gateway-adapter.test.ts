@@ -86,6 +86,37 @@ describe("generateWithAnthropic", () => {
     });
   });
 
+  it("passes JSON Schema output contracts to the Messages API", async () => {
+    anthropicMock.create.mockResolvedValue({
+      content: [{ type: "text", text: '{"title":"Deck"}' }],
+      _request_id: "req-json",
+      stop_reason: "end_turn",
+    });
+
+    await generateWithAnthropic(config, {
+      prompt: "Return metadata",
+      outputFormat: {
+        type: "json_schema",
+        name: "deck_metadata",
+        schema: {
+          type: "object",
+          properties: { title: { type: "string" } },
+          required: ["title"],
+        },
+        strict: true,
+      },
+    });
+
+    expect(anthropicMock.create.mock.calls[0]?.[0]).toMatchObject({
+      output_config: {
+        format: {
+          type: "json_schema",
+          schema: { type: "object", required: ["title"] },
+        },
+      },
+    });
+  });
+
   it("retries with a larger output budget when thinking consumes the response", async () => {
     anthropicMock.create
       .mockResolvedValueOnce({

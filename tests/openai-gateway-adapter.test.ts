@@ -81,6 +81,41 @@ describe("generateWithOpenAI", () => {
     });
   });
 
+  it("passes JSON Schema output contracts to the Responses API", async () => {
+    openaiMock.createResponse.mockResolvedValue({
+      output_text: '{"title":"Deck"}',
+      _request_id: "req-json",
+    });
+
+    await generateWithOpenAI(config, {
+      prompt: "Return metadata",
+      outputFormat: {
+        type: "json_schema",
+        name: "deck_metadata",
+        description: "Deck metadata",
+        schema: {
+          type: "object",
+          properties: { title: { type: "string" } },
+          required: ["title"],
+          additionalProperties: false,
+        },
+        strict: true,
+      },
+    });
+
+    expect(openaiMock.createResponse.mock.calls[0]?.[0]).toMatchObject({
+      text: {
+        format: {
+          type: "json_schema",
+          name: "deck_metadata",
+          description: "Deck metadata",
+          strict: true,
+          schema: { type: "object", required: ["title"] },
+        },
+      },
+    });
+  });
+
   it("calls Chat Completions for OpenAI-compatible endpoints", async () => {
     openaiMock.createChatCompletion.mockResolvedValue({
       choices: [{ message: { content: " compatible text " }, finish_reason: "stop" }],
@@ -109,6 +144,36 @@ describe("generateWithOpenAI", () => {
       content: [{ type: "text", text: "compatible text" }],
       requestId: "req-compatible",
       stopReason: "stop",
+    });
+  });
+
+  it("passes JSON Schema output contracts to Chat Completions", async () => {
+    openaiMock.createChatCompletion.mockResolvedValue({
+      choices: [{ message: { content: '{"title":"Deck"}' }, finish_reason: "stop" }],
+      _request_id: "req-compatible-json",
+    });
+
+    await generateWithOpenAI(
+      { ...config, openaiApiMode: "chat-completions" },
+      {
+        prompt: "Return metadata",
+        outputFormat: {
+          type: "json_schema",
+          name: "deck_metadata",
+          schema: { type: "object", properties: { title: { type: "string" } } },
+        },
+      },
+    );
+
+    expect(openaiMock.createChatCompletion.mock.calls[0]?.[0]).toMatchObject({
+      response_format: {
+        type: "json_schema",
+        json_schema: {
+          name: "deck_metadata",
+          strict: true,
+          schema: { type: "object" },
+        },
+      },
     });
   });
 

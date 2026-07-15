@@ -199,6 +199,16 @@ export async function generateWithAnthropic(
       messages: request.messages
         ? toAnthropicMessages(request.messages)
         : [{ role: "user", content: request.prompt }],
+      ...(request.outputFormat?.type === "json_schema"
+        ? {
+            output_config: {
+              format: {
+                type: "json_schema" as const,
+                schema: request.outputFormat.schema,
+              },
+            },
+          }
+        : {}),
       ...(request.tools?.length
         ? {
             tools: request.tools.map((tool) => ({
@@ -267,6 +277,16 @@ export async function* generateStreamWithAnthropic(
       messages: request.messages
         ? toAnthropicMessages(request.messages)
         : [{ role: "user", content: request.prompt }],
+      ...(request.outputFormat?.type === "json_schema"
+        ? {
+            output_config: {
+              format: {
+                type: "json_schema" as const,
+                schema: request.outputFormat.schema,
+              },
+            },
+          }
+        : {}),
       ...(request.tools?.length
         ? {
             tools: request.tools.map((tool) => ({

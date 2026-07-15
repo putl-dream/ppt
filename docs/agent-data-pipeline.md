@@ -28,6 +28,14 @@
 
 `AgentModelResponse.content` 是模型响应的唯一事实源。项目不再定义或读取 `text`、`toolCalls`、`thinkingBlocks`、`contentBlocks` 等平行响应字段；`AgentModelMessage` 也不再提供 `toolCalls/toolResults/images` 属性。普通回复直接来自 `text` 块，不解析 JSON envelope。
 
+业务侧通过三种强类型门面收敛这个底层协议：
+
+- `callLLM`：禁止工具并返回非空 Markdown `string`。
+- `callLLMJson`：向 provider 传递原生 JSON Schema，并在本地再次执行 Zod 校验后返回 `T`。
+- `callTool`：允许原生工具调用，把单轮结果归一为 `tool_calls | final`；只分类、不执行，实际参数校验、权限和执行仍由 Agent Runtime 负责。
+
+三种门面不是三个独立 provider 实现；OpenAI/Anthropic 适配器仍统一产出 `AgentModelResponse.content`，门面只在调用边界声明场景契约。主 Agent、子 Agent和 teammate 固定使用工具模式，不增加一层意图路由来猜测是否需要工具。
+
 ## 工具调用闭环
 
 ```text

@@ -2,7 +2,19 @@ import type { AgentModelSelection, AgentProvider } from "@shared/agent";
 import type { AgentGatewayConfig } from "@shared/agent-gateway-config";
 import type { ProviderTokenUsage } from "@shared/token-usage";
 
-export type AgentResponseContract = "markdown-summary" | "none";
+export type AgentResponseContract = "markdown" | "markdown-summary" | "none";
+
+/** Provider-neutral structured-output contract for one-shot JSON calls. */
+export interface AgentJsonSchemaOutputFormat {
+  type: "json_schema";
+  /** Provider-safe schema name (letters, numbers, underscores, and dashes). */
+  name: string;
+  description?: string;
+  schema: Record<string, unknown>;
+  strict?: boolean;
+}
+
+export type AgentModelOutputFormat = AgentJsonSchemaOutputFormat;
 
 /**
  * 原生 tool-use 的工具声明。inputSchema 为标准 JSON Schema（由 zod 转换而来），
@@ -85,6 +97,8 @@ export interface AgentModelRequest {
    * a specialized call uses a shorter system prompt.
    */
   responseContract?: AgentResponseContract;
+  /** Native provider output format. Omit for normal text/tool ContentBlock calls. */
+  outputFormat?: AgentModelOutputFormat;
   signal?: AbortSignal;
   /** Per-request override; used by output-truncation recovery. */
   maxOutputTokens?: number;

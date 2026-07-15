@@ -20,6 +20,7 @@ import { backoffBeforeRetry, extractRetryAfterMs } from "../gateway/withRetry";
 import { emergencyTrimContext, prepareContext } from "./context-compact";
 import { createModuleLogger } from "../logger";
 import { ensureToolResultPairing } from "../gateway/message-pairing";
+import { callTool } from "../gateway/model-calls";
 
 const logger = createModuleLogger("model-call-recovery");
 const MAX_RECOVERY_ATTEMPTS = 8;
@@ -150,6 +151,17 @@ async function invokeGateway(
       content = [{ type: "text", text: streamedText }];
     }
     return { content, stopReason };
+  }
+
+  if (request.tools?.length) {
+    const turn = await callTool(gateway, {
+      ...request,
+      tools: request.tools,
+    }, model);
+    return {
+      content: turn.response.content,
+      stopReason: turn.response.stopReason,
+    };
   }
 
   const response = await gateway.generateText(request, model);

@@ -199,6 +199,19 @@ export async function generateWithOpenAI(
             : [{ role: "user" as const, content: request.prompt }]),
         ],
         max_tokens: maxOutputTokens,
+        ...(request.outputFormat?.type === "json_schema"
+          ? {
+              response_format: {
+                type: "json_schema" as const,
+                json_schema: {
+                  name: request.outputFormat.name,
+                  description: request.outputFormat.description,
+                  schema: request.outputFormat.schema,
+                  strict: request.outputFormat.strict ?? true,
+                },
+              },
+            }
+          : {}),
         ...(request.tools?.length
           ? {
               tools: request.tools.map((tool) => ({
@@ -233,6 +246,19 @@ export async function generateWithOpenAI(
       instructions: systemPrompt,
       input: request.prompt,
       max_output_tokens: maxOutputTokens,
+      ...(request.outputFormat?.type === "json_schema"
+        ? {
+            text: {
+              format: {
+                type: "json_schema" as const,
+                name: request.outputFormat.name,
+                description: request.outputFormat.description,
+                schema: request.outputFormat.schema,
+                strict: request.outputFormat.strict ?? true,
+              },
+            },
+          }
+        : {}),
     }, { signal: request.signal });
     const text = response.output_text.trim();
     if (!text) {
@@ -265,7 +291,7 @@ export async function* generateStreamWithOpenAI(
     const mode = config.openaiApiMode ?? "responses";
     const systemPrompt = applyResponseContract(request.systemPrompt, request.responseContract);
 
-    if (request.tools?.length || mode === "responses") {
+    if (request.tools?.length || request.outputFormat?.type === "json_schema" || mode === "responses") {
       const response = await generateWithOpenAI(config, request);
       const text = textFromBlocks(response.content);
       if (text) yield { type: "text_delta", text };

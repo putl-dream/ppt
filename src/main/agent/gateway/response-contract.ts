@@ -1,6 +1,7 @@
 import type { AgentResponseContract } from "./types";
 
 const MARKDOWN_SUMMARY_MARKER = "<!-- RESPONSE_CONTRACT:markdown-summary -->";
+const MARKDOWN_MARKER = "<!-- RESPONSE_CONTRACT:markdown -->";
 
 /** Main-agent guidance for the sole native ContentBlock protocol. */
 export function buildContentBlockResponseGuidance(): string {
@@ -23,7 +24,17 @@ function buildMarkdownSummaryResponseContract(): string {
   ].join("\n");
 }
 
+function buildMarkdownResponseContract(): string {
+  return [
+    MARKDOWN_MARKER,
+    "## Response Contract",
+    "",
+    "Return Markdown text only. Do not call tools or wrap the response in JSON.",
+  ].join("\n");
+}
+
 export function buildResponseContract(contract: AgentResponseContract): string {
+  if (contract === "markdown") return buildMarkdownResponseContract();
   if (contract === "markdown-summary") return buildMarkdownSummaryResponseContract();
   return "";
 }
@@ -35,6 +46,7 @@ export function applyResponseContract(
   if (!contract || contract === "none") return systemPrompt;
   const contractText = buildResponseContract(contract);
   const currentPrompt = systemPrompt?.trim() ?? "";
-  if (!contractText || currentPrompt.includes(MARKDOWN_SUMMARY_MARKER)) return systemPrompt;
+  const marker = contract === "markdown" ? MARKDOWN_MARKER : MARKDOWN_SUMMARY_MARKER;
+  if (!contractText || currentPrompt.includes(marker)) return systemPrompt;
   return currentPrompt ? `${currentPrompt}\n\n${contractText}` : contractText;
 }

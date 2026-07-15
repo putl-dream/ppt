@@ -25,4 +25,11 @@ describe("response contracts", () => {
     expect(contract).toContain("plain Markdown summary text only");
     expect(contract).not.toContain("JSON envelope");
   });
+
+  it("defines a general Markdown-only one-shot constraint", () => {
+    const contract = buildResponseContract("markdown");
+    expect(contract).toContain("RESPONSE_CONTRACT:markdown");
+    expect(contract).toContain("Return Markdown text only");
+    expect(applyResponseContract(contract, "markdown")).toBe(contract);
+  });
 });
