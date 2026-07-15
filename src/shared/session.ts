@@ -1,10 +1,9 @@
 import { z } from "zod";
-import { agentQuestionSchema } from "./agent-question";
 import { agentActivityItemSchema } from "./agent-activity";
 import { presentationSchema, type Presentation } from "./presentation";
-import { presentationCommandSchema } from "./commands";
 import { agentExecutionStrategySchema, agentModelSelectionSchema } from "./agent";
 import { DEFAULT_DESIGN_SYSTEM } from "@design-system";
+import { persistedDisplayCardSchema } from "./card-display-protocol";
 
 export const projectArtifactKindSchema = z.enum([
   "brief",
@@ -49,45 +48,6 @@ const persistedOutlineSchema = z.object({
   executionStrategy: agentExecutionStrategySchema.optional(),
 });
 
-const persistedApprovalDiffSchema = z.object({
-  titleChanged: z.boolean(),
-  oldTitle: z.string(),
-  newTitle: z.string(),
-  designSystemChanged: z.boolean(),
-  slidesAddedCount: z.number().int().nonnegative(),
-  slidesRemovedCount: z.number().int().nonnegative(),
-  affectedSlideIds: z.array(z.string()),
-  elementChanges: z.object({
-    addedCount: z.number().int().nonnegative(),
-    removedCount: z.number().int().nonnegative(),
-    updatedCount: z.number().int().nonnegative(),
-  }),
-});
-
-const persistedApprovalSchema = z.object({
-  threadId: z.string(),
-  summary: z.string(),
-  commands: z.array(presentationCommandSchema),
-  risk: z.enum(["low", "medium", "high"]).optional(),
-  assumptions: z.array(z.string()).optional(),
-  diff: persistedApprovalDiffSchema.optional(),
-});
-
-const persistedPatchSchema = z.object({
-  threadId: z.string(),
-  targetPath: z.string(),
-  summary: z.string(),
-  contentBefore: z.string().optional(),
-  contentAfter: z.string().optional(),
-  resolved: z.enum(["accepted", "rejected"]).optional(),
-});
-
-const persistedInlineCardSchema = z.object({
-  type: z.enum(["brief", "outline", "layout", "deck"]),
-  resolved: z.enum(["confirmed", "dismissed"]).optional(),
-  layoutMode: z.enum(["template", "creative"]).optional(),
-});
-
 export const sessionChatMessageSchema = z.object({
   id: z.string(),
   role: z.enum(["user", "assistant"]),
@@ -96,10 +56,6 @@ export const sessionChatMessageSchema = z.object({
   reasoning: z.string().optional(),
   activityTrace: z.array(agentActivityItemSchema).optional(),
   progress: z.number().optional(),
-  approval: persistedApprovalSchema.optional(),
-  patch: persistedPatchSchema.optional(),
-  inlineCards: z.array(persistedInlineCardSchema).optional(),
-  question: agentQuestionSchema.optional(),
   threadId: z.string().optional(),
 });
 
@@ -119,6 +75,7 @@ export const sessionSnapshotSchema = z.object({
   project: projectSandboxSchema.optional(),
   presentation: presentationSchema,
   messages: z.array(sessionChatMessageSchema),
+  displayCards: z.array(persistedDisplayCardSchema).default([]),
 });
 
 export const sessionBootstrapSchema = z.object({

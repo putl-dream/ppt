@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
-  AgentApprovalRequest,
   AgentRunRequest,
   AgentRunResult,
   AgentStreamEvent,
 } from "@shared/ipc";
+import { createDisplayEventId, type DisplayEvent } from "@shared/card-display-protocol";
 import type { Presentation, SlideElement } from "@shared/presentation";
 import {
   createSessionTitleFromPrompt,
@@ -12,15 +12,8 @@ import {
   type SessionBootstrap,
   type SessionSummary,
 } from "@shared/session";
-import { useProjectStore, type ActiveProject } from "./components/project-store";
+import { useProjectStore } from "./components/project-store";
 import { getWorkspaceLabel, normalizeWorkspacePath, resolveWorkspacePath } from "@shared/workspace";
-import {
-  isPreviewPrompt,
-  parseBriefForCard,
-  parseOutlineForCard,
-  resolveMessageInlineCards,
-  type InlineCardRef,
-} from "@shared/inline-artifact-cards";
 import {
   buildLayoutPhasePrompt,
   saveLayoutVisualMode,
@@ -47,12 +40,9 @@ import { useSettingsController } from "./app/useSettingsController";
 import { useWorkbenchLayout, type AppMode } from "./app/useWorkbenchLayout";
 import {
   findActiveThreadId,
-  finalizeAgentMessage,
-  resolveInlineCardInMessages,
   toSessionChatMessages,
   type ChatMessage,
 } from "./app/chatMessageRuntime";
-import { hasLayoutCardSinceLastUserMessage } from "@shared/inline-artifact-cards";
 import {
   type AgentActivityItem,
   appendReasoningChunk,
@@ -69,7 +59,6 @@ import {
   updateStepText,
   upsertTaskGraphTrace,
   applyTeammateProgressEvent,
-  extractLatestTaskGraph,
 } from "@shared/agent-activity";
 import {
   formatAgentProgressMessage,
@@ -79,11 +68,24 @@ import {
 } from "@shared/agent-activity-display";
 import {
   clearAllDisplayCardManagers,
+  getPersistedDisplayCards,
+  hydrateDisplayCardManagers,
   ingestDisplayEvent,
+  pruneDisplayCardsForMessages,
   setDisplayCardStatus,
+  subscribeDisplayCardManagers,
   useNotificationCardManager,
   usePermissionCardManager,
 } from "./cards/display-card-managers";
+
+type QuestionEvent = Extract<DisplayEvent, { kind: "interaction.question-requested" }>;
+type LayoutEvent = Extract<DisplayEvent, { kind: "interaction.layout-required" }>;
+type CommandProposalEvent = Extract<DisplayEvent, { kind: "review.command-proposal" }>;
+type PatchEvent = Extract<DisplayEvent, { kind: "review.patch-ready" }>;
+type ArtifactEvent = Extract<DisplayEvent, { kind: "artifact.ready" }>;
+
+const PREVIEW_PROMPT_PATTERN = /预览.*(?:ppt|幻灯片|演示文稿)|(?:ppt|幻灯片|演示文稿).*预览|打开.*预览/i;
+const isPreviewPrompt = (prompt: string) => PREVIEW_PROMPT_PATTERN.test(prompt.trim());
 
 export function App() {
   const initializeProject = useProjectStore((state) => state.initializeProject);
@@ -141,7 +143,6 @@ export function App() {
   const [busy, setBusy] = useState(false);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [activityTrace, setActivityTrace] = useState<AgentActivityItem[]>([]);
-  const [taskPlanSnapshot, setTaskPlanSnapshot] = useState<ReturnType<typeof extractLatestTaskGraph>>(null);
   const [thoughtProgress, setThoughtProgress] = useState(0);
   const [agentActivityMode, setAgentActivityMode] = useState<"idle" | "request" | "workflow" | "reasoning">("idle");
   const [highlightSlideId, setHighlightSlideId] = useState<string | null>(null);
@@ -232,27 +233,7 @@ export function App() {
       }
       if (event.type === "task-graph-updated") {
         if (event.sessionId && event.sessionId !== activeSessionIdRef.current) return;
-        setTaskPlanSnapshot({ tasks: event.tasks, goal: event.goal ?? null });
         if (!isCurrentRun) {
-          setChatMessages((prev) => {
-            let hostIndex = -1;
-            for (let index = prev.length - 1; index >= 0; index -= 1) {
-              if (prev[index]?.role === "assistant") {
-                hostIndex = index;
-                break;
-              }
-            }
-            if (hostIndex < 0) return prev;
-            return prev.map((message, index) => index === hostIndex
-              ? {
-                  ...message,
-                  activityTrace: upsertTaskGraphTrace(message.activityTrace ?? [], {
-                    tasks: event.tasks,
-                    goal: event.goal,
-                  }),
-                }
-              : message);
-          });
           return;
         }
       }
@@ -580,12 +561,11 @@ export function App() {
   }
 
   const enterDraftChat = (workspaceDir?: string) => {
+    activeSessionIdRef.current = "";
     clearAllDisplayCardManagers();
     setIsDraftChat(true);
-    activeSessionIdRef.current = "";
     setActiveSessionId("");
     setChatMessages([]);
-    setTaskPlanSnapshot(null);
     setPresentation(undefined);
     setRequest("");
     setSelectedSlideId("");
@@ -598,7 +578,6 @@ export function App() {
   };
 
   const applySessionState = (state: SessionBootstrap) => {
-    clearAllDisplayCardManagers();
     setSessions(state.sessions);
     if (!state.activeSession) {
       enterDraftChat();
@@ -607,15 +586,12 @@ export function App() {
     }
 
     const snapshot = state.activeSession;
-    setIsDraftChat(snapshot.messages.length === 0);
     activeSessionIdRef.current = snapshot.session.id;
+    hydrateDisplayCardManagers(snapshot.displayCards);
+    setIsDraftChat(snapshot.messages.length === 0);
     setActiveSessionId(snapshot.session.id);
     setPresentation(snapshot.presentation);
     setChatMessages(snapshot.messages);
-    const messageTraces = snapshot.messages
-      .map((message) => message.activityTrace)
-      .filter((trace): trace is NonNullable<typeof trace> => Boolean(trace?.length));
-    setTaskPlanSnapshot(extractLatestTaskGraph(...messageTraces.slice().reverse()));
     setRequest("");
     setSelectedSlideId(snapshot.presentation.slides[0]?.id ?? "");
     setSelectedElementId(null);
@@ -693,6 +669,26 @@ export function App() {
     }, 250);
     return () => clearTimeout(timer);
   }, [activeSessionId, chatMessages, sessionLoaded]);
+
+  // Card managers own their own durable snapshot; message persistence never carries card state.
+  useEffect(() => {
+    if (!sessionLoaded || !activeSessionId) return;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const persistCards = () => {
+      if (activeSessionIdRef.current !== activeSessionId) return;
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => {
+        void window.desktopApi
+          .saveSessionDisplayCards(activeSessionId, getPersistedDisplayCards())
+          .catch((error) => console.error("保存会话卡片失败:", error));
+      }, 250);
+    };
+    const unsubscribe = subscribeDisplayCardManagers(persistCards);
+    return () => {
+      if (timer) clearTimeout(timer);
+      unsubscribe();
+    };
+  }, [activeSessionId, sessionLoaded]);
 
   // 追踪最大版本号以推导 canRedo
   useEffect(() => {
@@ -807,11 +803,13 @@ export function App() {
   async function applyAgentResult(result: AgentRunResult, trace: AgentActivityItem[], runId?: string) {
     const isSidechainRun = Boolean(runId && sidechainRunRef.current === runId);
     const messageId = runId ? streamMessageIdsRef.current.get(runId) : undefined;
+    const hostMessageId = messageId ?? crypto.randomUUID();
     for (const event of result.displayEvents ?? []) {
       try {
-        ingestDisplayEvent(messageId
-          ? { ...event, scope: { ...event.scope, anchorMessageId: messageId } }
-          : event);
+        ingestDisplayEvent({
+          ...event,
+          scope: { ...event.scope, anchorMessageId: hostMessageId },
+        });
       } catch (error) {
         console.error("Invalid result display event received:", error);
       }
@@ -852,7 +850,6 @@ export function App() {
                 content: resolveInterruptedContent(message.content),
                 activityTrace: resolvedTrace(message.activityTrace),
                 threadId: result.threadId,
-                question: result.question,
               }
             : message,
         ));
@@ -860,12 +857,11 @@ export function App() {
         setChatMessages((prev) => [
           ...prev,
           {
-            id: crypto.randomUUID(),
+            id: hostMessageId,
             role: "assistant",
             content: interrupted ? "会话已中断。" : result.message,
             activityTrace: resolvedTrace(),
             threadId: result.threadId,
-            question: result.question,
           },
         ]);
       }
@@ -876,17 +872,15 @@ export function App() {
     }
 
     if (result.status === "approval-required") {
-      if (isSidechainRun) {
-        setChatMessages((prev) => [
-          ...prev,
-          {
-            id: crypto.randomUUID(),
-            role: "assistant",
-            content: "后台任务已提出排版更新方案，请在下方审核后应用。",
-            activityTrace: resolvedTrace(),
-            approval: result.approval,
-          },
-        ]);
+      if (isSidechainRun && messageId) {
+        setChatMessages((prev) => prev.map((message) => message.id === messageId
+          ? {
+              ...message,
+              content: "后台任务已提出排版更新方案，请在下方审核后应用。",
+              activityTrace: resolvedTrace(message.activityTrace),
+              threadId: result.approval.threadId,
+            }
+          : message));
       } else if (messageId) {
         setChatMessages((prev) => prev.map((message) =>
           message.id === messageId
@@ -894,7 +888,7 @@ export function App() {
                 ...message,
                 content: "已提出排版更新方案，请在下方审核后应用。",
                 activityTrace: resolvedTrace(message.activityTrace),
-                approval: result.approval,
+                threadId: result.approval.threadId,
               }
             : message
         ));
@@ -902,11 +896,11 @@ export function App() {
         setChatMessages((prev) => [
           ...prev,
           {
-            id: crypto.randomUUID(),
+            id: hostMessageId,
             role: "assistant",
             content: "已提出排版更新方案，请在下方审核后应用。",
             activityTrace: resolvedTrace(),
-            approval: result.approval,
+            threadId: result.approval.threadId,
           },
         ]);
       }
@@ -927,41 +921,30 @@ export function App() {
 
     const finalContent = result.status === "rejected"
       ? "已放弃排版变更提案。"
-      : "已根据确认的大纲生成并应用演示文稿。";
-    const applyCompletion = (
-      message: ChatMessage,
-      allowLayoutChoice: boolean,
-    ): ChatMessage => {
-      if (result.status !== "completed") {
-        return { ...message, content: finalContent };
-      }
-      const content = !allowLayoutChoice && presentationNeedsLayoutChoice(result.presentation)
-        ? `排版流程已结束，但仍有 ${countSlidesNeedingLayout(result.presentation)} 页尚未应用版式。请检查任务计划后重试。`
-        : finalContent;
-      return finalizeAgentMessage(message, result.presentation, content, { allowLayoutChoice });
-    };
+      : presentationNeedsLayoutChoice(result.presentation)
+        ? `内容草稿已就绪（${countSlidesNeedingLayout(result.presentation)} 页待排版），请选择排版方式后继续。`
+        : "已根据确认的大纲生成并应用演示文稿。";
 
     if (messageId) {
-      setChatMessages((prev) => {
-        const allowLayoutChoice = !isSidechainRun
-          && !hasLayoutCardSinceLastUserMessage(prev, messageId);
-        return prev.map((message) =>
-          message.id === messageId ? applyCompletion(message, allowLayoutChoice) : message
-        );
-      });
+      setChatMessages((prev) => prev.map((message) =>
+        message.id === messageId
+          ? {
+              ...message,
+              content: finalContent,
+              activityTrace: resolvedTrace(message.activityTrace),
+            }
+          : message
+      ));
     } else {
-      setChatMessages((prev) => {
-        const allowLayoutChoice = !isSidechainRun
-          && !hasLayoutCardSinceLastUserMessage(prev);
-        return [
-          ...prev,
-          applyCompletion({
-            id: crypto.randomUUID(),
-            role: "assistant",
-            content: finalContent,
-          }, allowLayoutChoice),
-        ];
-      });
+      setChatMessages((prev) => [
+        ...prev,
+        {
+          id: hostMessageId,
+          role: "assistant",
+          content: finalContent,
+          activityTrace: resolvedTrace(),
+        },
+      ]);
     }
     triggerToast(
       result.status === "rejected"
@@ -982,7 +965,6 @@ export function App() {
       userDisplayContent?: string | false;
       layoutChoice?: LayoutChoice;
       sidechain?: boolean;
-      baseMessages?: ChatMessage[];
     },
   ) {
     const activeRequest = customRequest || request;
@@ -995,12 +977,7 @@ export function App() {
     };
     const userDisplayContent = resolveUserDisplayContent();
     const isSidechain = options?.sidechain === true;
-    const sourceMessages = options?.baseMessages ?? chatMessages;
-    if (userDisplayContent !== null) {
-      setTaskPlanSnapshot((current) => current?.tasks.some(
-        (task) => task.status !== "completed",
-      ) ? current : null);
-    }
+    const sourceMessages = chatMessages;
 
     if (presentation && isPreviewPrompt(activeRequest)) {
       const userMsgId = crypto.randomUUID();
@@ -1011,13 +988,39 @@ export function App() {
       if (!customRequest) setRequest("");
       setIsDeckPreviewOpen(true);
       setIsMirrorOpen(true);
+      const previewMessageId = crypto.randomUUID();
+      ingestDisplayEvent({
+        protocolVersion: 1,
+        eventId: createDisplayEventId("artifact-preview"),
+        emittedAt: new Date().toISOString(),
+        kind: "artifact.ready",
+        category: "artifact",
+        source: {
+          kind: "frontend",
+          feature: "deck-preview-command",
+        },
+        scope: {
+          ...(activeSessionId ? { sessionId: activeSessionId } : {}),
+          anchorMessageId: previewMessageId,
+        },
+        semantics: {
+          blocking: false,
+          requiresResponse: false,
+          priority: "normal",
+        },
+        payload: {
+          artifactId: "deck",
+          artifactType: "deck",
+          title: presentation.title,
+          revision: presentation.revision,
+        },
+      });
       setChatMessages((prev) => [
         ...prev,
         {
-          id: crypto.randomUUID(),
+          id: previewMessageId,
           role: "assistant",
           content: "已打开演示文稿预览，你可以在右侧或弹窗中查看全部页面。",
-          inlineCards: [{ type: "deck" }],
         },
       ]);
       triggerToast("已打开演示文稿预览");
@@ -1102,6 +1105,7 @@ export function App() {
           id: crypto.randomUUID(),
           content: userDisplayContent ?? activeRequest,
         };
+        pruneDisplayCardsForMessages(new Set(forkedMessages.map((message) => message.id)));
         runMessages = [...forkedMessages, streamPlaceholder];
         setChatMessages(runMessages);
       } else {
@@ -1134,7 +1138,10 @@ export function App() {
       }
       const gatewayConfig = buildAgentGatewayConfig(agentGatewayPreferences, enabledModels);
       const modelSettings = selectedModel ? toAgentModelSettings(selectedModel) : undefined;
-      const activeThreadId = findActiveThreadId(forkedMessages ?? sourceMessages);
+      const activeThreadId = findActiveThreadId(
+        forkedMessages ?? sourceMessages,
+        getPersistedDisplayCards(),
+      );
       const result = activeThreadId
         ? await window.desktopApi.continueAgentRun(
             activeThreadId,
@@ -1320,11 +1327,12 @@ export function App() {
 
   // 确认或拒绝 Deck 排版变更方案
   async function resolveApproval(
+    event: CommandProposalEvent,
     approved: boolean,
-    approvalRequest: AgentApprovalRequest,
-    messageId: string,
   ) {
-    if (!approvalRequest || busy || !activeSessionId) return;
+    if (busy || !activeSessionId) return;
+    const approvalRequest = event.payload;
+    const messageId = event.scope.anchorMessageId;
     setBusy(true);
     setThoughtProgress(20);
     syncActivityTrace([
@@ -1355,7 +1363,15 @@ export function App() {
       clearInterval(progressInterval);
       setThoughtProgress(100);
 
-      const resolvedContent = approved ? "已成功应用变更方案。" : "已放弃排版变更提案。";
+      for (const displayEvent of result.displayEvents ?? []) {
+        ingestDisplayEvent({
+          ...displayEvent,
+          scope: {
+            ...displayEvent.scope,
+            ...(messageId ? { anchorMessageId: messageId } : {}),
+          },
+        });
+      }
 
       if (result.status === "completed" || result.status === "rejected") {
         await syncPresentation({
@@ -1364,28 +1380,23 @@ export function App() {
           highlightSlide: approved,
         });
         await hydrateProjectArtifacts(activeSessionId);
-        const syncedPresentation = await window.desktopApi.getPresentation();
-        setChatMessages((prev) => {
-          const allowLayoutChoice = !hasLayoutCardSinceLastUserMessage(prev, messageId);
-          return prev.map((message) => {
-          if (message.id !== messageId) return message;
-          if (!approved) {
-            return { ...message, approval: undefined, content: resolvedContent };
-          }
-          return {
-            ...finalizeAgentMessage(
-              { ...message, approval: undefined },
-              syncedPresentation,
-              resolvedContent,
-              { allowLayoutChoice },
-            ),
-          };
-          });
-        });
+        const resolvedContent = result.status === "rejected"
+          ? "已放弃排版变更提案。"
+          : presentationNeedsLayoutChoice(result.presentation)
+            ? `内容草稿已就绪（${countSlidesNeedingLayout(result.presentation)} 页待排版），请选择排版方式后继续。`
+            : "已成功应用变更方案。";
+        if (messageId) {
+          setChatMessages((prev) => prev.map((message) =>
+            message.id === messageId ? { ...message, content: resolvedContent } : message
+          ));
+        }
         triggerToast(approved ? "✅ 变更已应用" : "❌ 变更已取消");
+      } else {
+        await applyAgentResult(result, activeRunTraceRef.current);
       }
     } catch (err) {
       clearInterval(progressInterval);
+      setDisplayCardStatus(event.eventId, "active");
       setChatMessages((prev) => [
         ...prev,
         {
@@ -1639,101 +1650,58 @@ export function App() {
     }
   };
 
-  const resolveInlineCardContext = () => {
-    const project = useProjectStore.getState().activeProject;
-    return {
-      briefContent: project?.artifacts.brief?.content,
-      outlineContent: project?.artifacts.outline?.content,
-      presentation,
-      projectTitle: project?.name,
-    };
-  };
-
-  const getInlineCardData = (message: ChatMessage) => {
-    const context = resolveInlineCardContext();
-    const refs = resolveMessageInlineCards(message.inlineCards, context);
-    return {
-      refs,
-      briefFields: refs.some((card) => card.type === "brief")
-        ? parseBriefForCard(context.briefContent ?? "", context.projectTitle)
-        : undefined,
-      outlineItems: refs.some((card) => card.type === "outline")
-        ? parseOutlineForCard(context.outlineContent ?? "")
-        : undefined,
-      presentation: refs.some((card) => card.type === "deck") ? presentation : undefined,
-      layoutSlideCount: refs.some((card) => card.type === "layout")
-        ? countSlidesNeedingLayout(presentation)
-        : undefined,
-      layoutMode: refs.find((card) => card.type === "layout")?.layoutMode,
-    };
-  };
-
-  const markInlineCardResolved = (
-    messageId: string,
-    type: InlineCardRef["type"],
-    resolved: InlineCardRef["resolved"],
-    layoutMode?: LayoutVisualMode,
-  ) => {
-    setChatMessages((prev) =>
-      resolveInlineCardInMessages(prev, messageId, type, resolved, layoutMode)
-    );
-  };
-
-  const handleResolveQuestion = (messageId: string, resolved: AgentQuestionResolved) => {
-    setChatMessages((prev) => prev.map((message) => {
-      if (message.id !== messageId || !message.question) return message;
-      return {
-        ...message,
-        question: {
-          ...message.question,
-          resolved,
-        },
-      };
-    }));
+  const handleResolveQuestion = (_event: QuestionEvent, resolved: AgentQuestionResolved) => {
     void startAgent(resolved.value, undefined, {
       userDisplayContent: resolved.label ?? resolved.value,
     });
   };
 
-  const handleConfirmBrief = (messageId: string) => {
+  const handleConfirmBrief = (_event: ArtifactEvent) => {
     void useProjectStore.getState().markStageReady("brief");
-    markInlineCardResolved(messageId, "brief", "confirmed");
     triggerToast("✅ Brief 已确认");
   };
 
-  const handleConfirmOutline = (messageId: string) => {
+  const handleConfirmOutline = (_event: ArtifactEvent) => {
     void useProjectStore.getState().markStageReady("outline");
-    markInlineCardResolved(messageId, "outline", "confirmed");
     triggerToast("✅ 大纲已确认");
   };
 
-  const handleReviseOutline = (messageId: string) => {
-    markInlineCardResolved(messageId, "outline", "dismissed");
+  const handleReviseOutline = (_event: ArtifactEvent) => {
     void startAgent("请根据当前反馈继续修改大纲结构");
   };
 
   const handleConfirmLayout = (
-    messageId: string,
+    _event: LayoutEvent,
     mode: LayoutVisualMode,
     designSystem: DesignSystemV1,
   ) => {
     saveLayoutVisualMode(mode);
     setSelectedDesignSystem(designSystem);
-    const resolvedMessages = resolveInlineCardInMessages(
-      chatMessages,
-      messageId,
-      "layout",
-      "confirmed",
-      mode,
-    );
-    setChatMessages(resolvedMessages);
     triggerToast(mode === "creative" ? "🎨 开始创意装饰排版" : "📐 开始标准排版");
     void startAgent(buildLayoutPhasePrompt(mode, designSystem), undefined, {
       userDisplayContent: false,
       layoutChoice: { mode, designSystem },
       sidechain: true,
-      baseMessages: resolvedMessages,
     });
+  };
+
+  const handleResolvePatch = async (event: PatchEvent, accepted: boolean) => {
+    if (!accepted || !activeSessionId || event.payload.contentAfter === undefined) {
+      triggerToast(accepted ? "补丁已确认" : "补丁已拒绝");
+      return;
+    }
+    try {
+      await window.desktopApi.writeProjectArtifact(
+        activeSessionId,
+        event.payload.targetPath,
+        event.payload.contentAfter,
+      );
+      await hydrateProjectArtifacts(activeSessionId);
+      triggerToast("补丁已应用");
+    } catch (error) {
+      setDisplayCardStatus(event.eventId, "active");
+      triggerToast(formatPublicErrorMessage(error, "应用补丁失败，请重试。"));
+    }
   };
 
   const handleOpenMirror = () => {
@@ -1832,8 +1800,8 @@ export function App() {
             isNewChat: isDraftChat,
             conversationTitle: activeSessionTitle,
             chatMessages,
+            presentation,
             activityTrace,
-            taskPlanSnapshot,
             thoughtProgress,
             agentActivityMode,
             streamingMessageId,
@@ -1842,9 +1810,9 @@ export function App() {
             onSubmitRequest: () => void startAgent(),
             busy,
             onResolveApproval: resolveApproval,
+            onResolvePatch: (event, accepted) => void handleResolvePatch(event, accepted),
             onResolveQuestion: handleResolveQuestion,
             onResolveToolApproval: (approvalId, approved) => void resolveToolApproval(approvalId, approved),
-            getInlineCardData,
             onConfirmBrief: handleConfirmBrief,
             onConfirmOutline: handleConfirmOutline,
             onConfirmLayout: handleConfirmLayout,

@@ -1,6 +1,8 @@
 import { z } from "zod";
 import { agentQuestionSchema } from "./agent-question";
 import { agentTaskNodeSchema } from "./agent-task-graph";
+import { presentationCommandSchema } from "./commands";
+import { presentationSchema } from "./presentation";
 
 /**
  * Stable semantic protocol shared by main and renderer processes.
@@ -101,17 +103,36 @@ const interactionLayoutRequiredEventSchema = z.object({
   }),
 });
 
+export const agentApprovalDiffSchema = z.object({
+  titleChanged: z.boolean(),
+  oldTitle: z.string(),
+  newTitle: z.string(),
+  designSystemChanged: z.boolean(),
+  slidesAddedCount: z.number().int().nonnegative(),
+  slidesRemovedCount: z.number().int().nonnegative(),
+  affectedSlideIds: z.array(z.string()),
+  elementChanges: z.object({
+    addedCount: z.number().int().nonnegative(),
+    removedCount: z.number().int().nonnegative(),
+    updatedCount: z.number().int().nonnegative(),
+  }),
+});
+
+export const agentApprovalRequestSchema = z.object({
+  threadId: z.string().trim().min(1),
+  summary: z.string().trim().min(1),
+  commands: z.array(presentationCommandSchema),
+  risk: z.enum(["low", "medium", "high"]).optional(),
+  assumptions: z.array(z.string()).optional(),
+  diff: agentApprovalDiffSchema.optional(),
+  preview: presentationSchema.optional(),
+});
+
 const reviewCommandProposalEventSchema = z.object({
   ...commonDisplayEventShape,
   kind: z.literal("review.command-proposal"),
   category: z.literal("review"),
-  payload: z.object({
-    approvalThreadId: z.string().trim().min(1),
-    summary: z.string().trim().min(1),
-    risk: z.enum(["low", "medium", "high"]).optional(),
-    assumptions: z.array(z.string()).optional(),
-    affectedSlideCount: z.number().int().nonnegative().optional(),
-  }),
+  payload: agentApprovalRequestSchema,
 });
 
 const reviewPatchReadyEventSchema = z.object({
@@ -120,8 +141,11 @@ const reviewPatchReadyEventSchema = z.object({
   category: z.literal("review"),
   payload: z.object({
     patchId: z.string().trim().min(1),
+    threadId: z.string().trim().min(1),
     targetPath: z.string().trim().min(1),
     summary: z.string(),
+    contentBefore: z.string().optional(),
+    contentAfter: z.string().optional(),
     revision: z.number().int().nonnegative().optional(),
   }),
 });
@@ -188,6 +212,7 @@ export type DisplayCardCategory = z.infer<typeof displayCardCategorySchema>;
 export type DisplayCardSource = z.infer<typeof displayCardSourceSchema>;
 export type DisplayEvent = z.infer<typeof displayEventSchema>;
 export type DisplayEventKind = DisplayEvent["kind"];
+export type AgentApprovalRequest = z.infer<typeof agentApprovalRequestSchema>;
 
 export const displayCardActionSchema = z.object({
   protocolVersion: z.literal(1),
@@ -214,6 +239,23 @@ export const displayCardActionSchema = z.object({
 });
 
 export type DisplayCardAction = z.infer<typeof displayCardActionSchema>;
+
+export const displayCardStatusSchema = z.enum([
+  "active",
+  "resolved",
+  "dismissed",
+  "superseded",
+]);
+
+export const persistedDisplayCardSchema = z.object({
+  event: displayEventSchema,
+  status: displayCardStatusSchema,
+  receivedAt: z.number().int().nonnegative(),
+  lastAction: displayCardActionSchema.optional(),
+});
+
+export type DisplayCardStatus = z.infer<typeof displayCardStatusSchema>;
+export type PersistedDisplayCard = z.infer<typeof persistedDisplayCardSchema>;
 
 export function createDisplayEventId(prefix: string): string {
   return `${prefix}:${crypto.randomUUID()}`;

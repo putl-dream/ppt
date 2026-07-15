@@ -1,4 +1,5 @@
 import type { SessionChatMessage } from "./session";
+import type { PersistedDisplayCard } from "./card-display-protocol";
 
 export interface RecoverableConversation {
   threadId: string;
@@ -35,14 +36,19 @@ export function toAgentMessageHistory(
 
 export function findRecoverableConversation(
   messages: SessionChatMessage[],
+  displayCards: PersistedDisplayCard[] = [],
 ): RecoverableConversation | undefined {
+  if (displayCards.some((card) =>
+    card.status === "active"
+    && card.event.kind === "review.command-proposal"
+    && card.event.semantics.blocking
+  )) return undefined;
   let threadIndex = -1;
   let threadId: string | undefined;
 
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     const message = messages[index];
     if (message.role === "user" || isGeneratedAgentError(message)) continue;
-    if (message.approval) return undefined;
     if (message.threadId) {
       threadIndex = index;
       threadId = message.threadId;

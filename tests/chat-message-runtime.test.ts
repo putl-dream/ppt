@@ -1,49 +1,48 @@
 import { describe, expect, it } from "vitest";
-import {
-  hasLayoutCardSinceLastUserMessage,
-  visibleLayoutCardMessageIds,
-} from "../src/shared/inline-artifact-cards";
-import { resolveInlineCardInMessages } from "../src/renderer/src/app/chatMessageRuntime";
+import type { PersistedDisplayCard } from "../src/shared/card-display-protocol";
 import type { SessionChatMessage } from "../src/shared/session";
+import {
+  findActiveThreadId,
+  toSessionChatMessages,
+} from "../src/renderer/src/app/chatMessageRuntime";
 
-describe("chat message runtime layout-card policy", () => {
-  it("shows only the first layout card in one user turn", () => {
+function pendingReview(): PersistedDisplayCard {
+  return {
+    event: {
+      protocolVersion: 1,
+      eventId: "review-1",
+      emittedAt: "2026-07-15T00:00:00.000Z",
+      kind: "review.command-proposal",
+      category: "review",
+      source: { kind: "tool", toolName: "SubmitCommands" },
+      scope: { sessionId: "session-1", threadId: "thread-1", anchorMessageId: "a-1" },
+      semantics: { blocking: true, requiresResponse: true, priority: "high" },
+      payload: {
+        threadId: "thread-1",
+        summary: "更新排版",
+        commands: [],
+      },
+    },
+    status: "active",
+    receivedAt: 1,
+  };
+}
+
+describe("chat message runtime", () => {
+  it("finds a recoverable thread when no blocking review card exists", () => {
     const messages: SessionChatMessage[] = [
-      { id: "user-1", role: "user", content: "生成 PPT" },
-      { id: "layout-1", role: "assistant", content: "请选择排版", inlineCards: [{ type: "layout", resolved: "confirmed" }] },
-      { id: "layout-2", role: "assistant", content: "请选择排版", inlineCards: [{ type: "layout" }] },
-      { id: "user-2", role: "user", content: "新增一页" },
-      { id: "layout-3", role: "assistant", content: "请选择排版", inlineCards: [{ type: "layout" }] },
+      { id: "u-1", role: "user", content: "继续" },
+      { id: "a-1", role: "assistant", content: "请补充信息", threadId: "thread-1" },
     ];
-
-    expect([...visibleLayoutCardMessageIds(messages)]).toEqual(["layout-1", "layout-3"]);
-    expect(hasLayoutCardSinceLastUserMessage(messages, "layout-3")).toBe(false);
-    expect(hasLayoutCardSinceLastUserMessage(messages)).toBe(true);
+    expect(findActiveThreadId(messages)).toBe("thread-1");
+    expect(findActiveThreadId(messages, [pendingReview()])).toBeUndefined();
   });
 
-  it("keeps a confirmed layout card when a sidechain uses the updated messages", () => {
+  it("persists message content without any card state", () => {
     const messages: SessionChatMessage[] = [
-      { id: "user-1", role: "user", content: "生成 PPT" },
-      { id: "layout-1", role: "assistant", content: "请选择排版", inlineCards: [{ type: "layout" }] },
+      { id: "u-1", role: "user", content: "生成演示文稿" },
+      { id: "a-1", role: "assistant", content: "处理中", threadId: "thread-1" },
     ];
-
-    const resolved = resolveInlineCardInMessages(
-      messages,
-      "layout-1",
-      "layout",
-      "confirmed",
-      "creative",
-    );
-    const sidechainMessages = [
-      ...resolved,
-      { id: "sidechain", role: "assistant" as const, content: "" },
-    ];
-
-    expect(sidechainMessages[1]?.inlineCards).toEqual([{
-      type: "layout",
-      resolved: "confirmed",
-      layoutMode: "creative",
-    }]);
+    expect(toSessionChatMessages(messages)).toEqual(messages);
   });
-
 });

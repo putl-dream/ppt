@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import type { AgentApprovalRequest } from "@shared/ipc";
 import type { AgentQuestionResolved } from "@shared/agent-question";
+import type { DisplayEvent } from "@shared/card-display-protocol";
 import type { SessionChatMessage } from "@shared/session";
 import {
   CopyIcon,
@@ -12,13 +12,10 @@ import { AgentThinkingLoader } from "./AgentThinkingLoader";
 import { AgentActivityTrace } from "./AgentActivityTrace";
 import { MessageMarkdown } from "./MessageMarkdown";
 import type { AgentActivityItem } from "@shared/agent-activity";
-import { findPendingToolApproval, resolveActivityTrace, filterTraceForDisplay, extractLatestTaskGraph } from "@shared/agent-activity";
-import type { AgentTaskNode } from "@shared/agent-task-graph";
+import { resolveActivityTrace, filterTraceForDisplay } from "@shared/agent-activity";
 import { TaskPlanCard } from "./TaskPlanCard";
 import type { ManagedModel } from "../modelCatalog";
 import type { Presentation } from "@shared/presentation";
-import { visibleLayoutCardMessageIds, type InlineCardRef } from "@shared/inline-artifact-cards";
-import type { BriefFields, OutlineItem } from "@shared/project-artifacts";
 import type { LayoutVisualMode } from "@shared/layout-preference";
 import type { DesignSystemV1 } from "@design-system";
 import {
@@ -31,6 +28,11 @@ import { ReviewCardHost } from "../cards/hosts/ReviewCardHost";
 import { ArtifactCardHost } from "../cards/hosts/ArtifactCardHost";
 
 type ChatMessage = SessionChatMessage;
+type QuestionEvent = Extract<DisplayEvent, { kind: "interaction.question-requested" }>;
+type LayoutEvent = Extract<DisplayEvent, { kind: "interaction.layout-required" }>;
+type CommandProposalEvent = Extract<DisplayEvent, { kind: "review.command-proposal" }>;
+type PatchEvent = Extract<DisplayEvent, { kind: "review.patch-ready" }>;
+type ArtifactEvent = Extract<DisplayEvent, { kind: "artifact.ready" }>;
 
 interface UserMessageEditorProps {
   value: string;
@@ -110,21 +112,12 @@ export const UserMessageEditor: React.FC<UserMessageEditorProps> = ({
   );
 };
 
-export interface InlineCardData {
-  refs: InlineCardRef[];
-  briefFields?: BriefFields;
-  outlineItems?: OutlineItem[];
-  presentation?: Presentation;
-  layoutSlideCount?: number;
-  layoutMode?: LayoutVisualMode;
-}
-
 interface ChatWorkspaceProps {
   isNewChat?: boolean;
   conversationTitle?: string;
   chatMessages: ChatMessage[];
+  presentation?: Presentation;
   activityTrace: AgentActivityItem[];
-  taskPlanSnapshot?: { tasks: AgentTaskNode[]; goal?: string | null } | null;
   thoughtProgress: number;
   agentActivityMode: "idle" | "request" | "workflow" | "reasoning";
   streamingMessageId?: string | null;
@@ -132,14 +125,14 @@ interface ChatWorkspaceProps {
   onChangeRequest: (val: string) => void;
   onSubmitRequest: () => void;
   busy: boolean;
-  onResolveApproval: (approved: boolean, approval: AgentApprovalRequest, messageId: string) => void;
-  onResolveQuestion: (messageId: string, resolved: AgentQuestionResolved) => void;
+  onResolveApproval: (event: CommandProposalEvent, approved: boolean) => void;
+  onResolvePatch: (event: PatchEvent, accepted: boolean) => void;
+  onResolveQuestion: (event: QuestionEvent, resolved: AgentQuestionResolved) => void;
   onResolveToolApproval?: (approvalId: string, approved: boolean) => void;
-  getInlineCardData: (message: ChatMessage) => InlineCardData;
-  onConfirmBrief: (messageId: string) => void;
-  onConfirmOutline: (messageId: string) => void;
-  onConfirmLayout: (messageId: string, mode: LayoutVisualMode, designSystem: DesignSystemV1) => void;
-  onReviseOutline: (messageId: string) => void;
+  onConfirmBrief: (event: ArtifactEvent) => void;
+  onConfirmOutline: (event: ArtifactEvent) => void;
+  onConfirmLayout: (event: LayoutEvent, mode: LayoutVisualMode, designSystem: DesignSystemV1) => void;
+  onReviseOutline: (event: ArtifactEvent) => void;
   onOpenDeckPreview: () => void;
   onExportDeck: () => void;
   isExportingDeck?: boolean;
@@ -167,8 +160,8 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
   isNewChat = false,
   conversationTitle,
   chatMessages,
+  presentation,
   activityTrace,
-  taskPlanSnapshot,
   thoughtProgress,
   agentActivityMode,
   streamingMessageId = null,
@@ -177,9 +170,9 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
   onSubmitRequest,
   busy,
   onResolveApproval,
+  onResolvePatch,
   onResolveQuestion,
   onResolveToolApproval,
-  getInlineCardData,
   onConfirmBrief,
   onConfirmOutline,
   onConfirmLayout,
@@ -218,12 +211,9 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
   const managedPermission = busy
     ? findActiveToolPermissionCard(managedPermissionCards, activeRunId)
     : undefined;
-  const legacyPermission = busy && !managedPermission
-    ? findPendingToolApproval(activityTrace)
-    : undefined;
   const pendingToolApproval = managedPermission?.event.kind === "permission.tool-requested"
     ? managedPermission.event.payload
-    : legacyPermission;
+    : undefined;
   const pendingApprovalProps = pendingToolApproval
     ? {
         approvalId: pendingToolApproval.approvalId,
@@ -243,20 +233,13 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
     : undefined;
 
   const sessionGoal = chatMessages.find((message) => message.role === "user")?.content.trim() || null;
-  const messageTraces = chatMessages
-    .map((message) => message.activityTrace)
-    .filter((trace): trace is NonNullable<typeof trace> => Boolean(trace?.length));
-  const latestPlan = taskPlanSnapshot ?? (managedTaskGraphPayload
+  const latestPlan = managedTaskGraphPayload
     ? { tasks: managedTaskGraphPayload.tasks, goal: managedTaskGraphPayload.goal ?? null }
-    : extractLatestTaskGraph(
-    busy ? activityTrace : undefined,
-    ...messageTraces.slice().reverse(),
-  ));
+    : null;
   const activeTasks = latestPlan?.tasks ?? [];
   const planGoal = latestPlan ? (latestPlan.goal ?? null) : sessionGoal;
   const showTaskPlan = activeTasks.length > 0;
   const hasActiveTaskPlan = activeTasks.some((task) => task.status !== "completed");
-  const layoutCardMessageIds = visibleLayoutCardMessageIds(chatMessages);
   const displayConversationTitle = conversationTitle?.trim() || (isNewChat ? "AI 新建会话" : "当前对话");
 
   const canCancelRun = Boolean(busy && activeRunId && onCancelRun);
@@ -466,14 +449,6 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
         <div className="chat-conversation-shell">
           <div className="chat-stream" ref={chatStreamRef}>
         {chatMessages.map((msg) => {
-          const inlineCardData = msg.role === "assistant" ? getInlineCardData(msg) : null;
-          const suppressRepeatedLayoutPrompt = Boolean(
-            msg.role === "assistant"
-            && msg.inlineCards?.some((card) => card.type === "layout")
-            && !layoutCardMessageIds.has(msg.id)
-            && /内容草稿已就绪[\s\S]*待排版[\s\S]*请选择/.test(msg.content),
-          );
-
           return (
             <div key={msg.id} className={`chat-message ${msg.role}`}>
               {msg.role === "user" ? (
@@ -530,7 +505,7 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
                         });
                     const trace = filterTraceForDisplay(
                       resolvedTrace,
-                      { keepTaskGraph: !useLiveTrace && !showTaskPlan },
+                      { keepTaskGraph: false },
                     );
                     const hasRunningTeammate = trace.some(
                       (item) => item.kind === "task" && item.status === "running",
@@ -545,17 +520,13 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
                     ) : null;
                   })()}
 
-                  {!(busy && streamingMessageId === msg.id) && !suppressRepeatedLayoutPrompt && (
+                  {!(busy && streamingMessageId === msg.id) && (
                     <MessageMarkdown content={msg.content} className="assistant-response" />
                   )}
 
                   <InteractionCardHost
-                    messageId={msg.id}
-                    question={msg.question}
-                    inlineCards={inlineCardData?.refs ?? []}
-                    showLayoutCard={layoutCardMessageIds.has(msg.id)}
-                    layoutSlideCount={inlineCardData?.layoutSlideCount}
-                    layoutMode={inlineCardData?.layoutMode}
+                    host="timeline"
+                    anchorMessageId={msg.id}
                     selectedDesignSystem={selectedDesignSystem}
                     busy={busy}
                     onResolveQuestion={onResolveQuestion}
@@ -582,18 +553,15 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
                 )}
 
                 <ReviewCardHost
-                  messageId={msg.id}
-                  approval={msg.approval}
+                  anchorMessageId={msg.id}
                   busy={busy}
                   onResolveApproval={onResolveApproval}
+                  onResolvePatch={onResolvePatch}
                 />
 
                 <ArtifactCardHost
-                  messageId={msg.id}
-                  inlineCards={inlineCardData?.refs ?? []}
-                  briefFields={inlineCardData?.briefFields}
-                  outlineItems={inlineCardData?.outlineItems}
-                  presentation={inlineCardData?.presentation}
+                  anchorMessageId={msg.id}
+                  presentation={presentation}
                   busy={busy}
                   isExportingDeck={isExportingDeck}
                   onConfirmBrief={onConfirmBrief}
@@ -607,6 +575,31 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
             </div>
           );
         })}
+
+        <InteractionCardHost
+          host="timeline"
+          selectedDesignSystem={selectedDesignSystem}
+          busy={busy}
+          onResolveQuestion={onResolveQuestion}
+          onConfirmLayout={onConfirmLayout}
+        />
+
+        <ReviewCardHost
+          busy={busy}
+          onResolveApproval={onResolveApproval}
+          onResolvePatch={onResolvePatch}
+        />
+
+        <ArtifactCardHost
+          presentation={presentation}
+          busy={busy}
+          isExportingDeck={isExportingDeck}
+          onConfirmBrief={onConfirmBrief}
+          onConfirmOutline={onConfirmOutline}
+          onReviseOutline={onReviseOutline}
+          onOpenDeckPreview={onOpenDeckPreview}
+          onExportDeck={onExportDeck}
+        />
 
         {/* Agent 实时思考：工具调用列表 + 模型推理流 */}
         <AgentThinkingLoader
@@ -644,6 +637,13 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
         )}
 
         <div className={showTaskPlan ? "chat-input-stack" : undefined}>
+          <InteractionCardHost
+            host="composer-before-input"
+            selectedDesignSystem={selectedDesignSystem}
+            busy={busy}
+            onResolveQuestion={onResolveQuestion}
+            onConfirmLayout={onConfirmLayout}
+          />
           {showTaskPlan && (
             <TaskPlanCard
               goal={planGoal}

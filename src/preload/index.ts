@@ -18,6 +18,8 @@ const api: DesktopApi = {
   deleteSession: (sessionId) => ipcRenderer.invoke("session:delete", sessionId),
   saveSessionMessages: (sessionId, messages) =>
     ipcRenderer.invoke("session:save-messages", sessionId, messages),
+  saveSessionDisplayCards: (sessionId, cards) =>
+    ipcRenderer.invoke("session:save-display-cards", sessionId, cards),
   loadConversationEvents: (sessionId, cursor, limit) =>
     ipcRenderer.invoke("conversation:load-events", sessionId, cursor, limit),
   listProjectArtifacts: (sessionId) => ipcRenderer.invoke("project:list-artifacts", sessionId),

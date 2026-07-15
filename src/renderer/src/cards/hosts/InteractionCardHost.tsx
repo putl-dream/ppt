@@ -1,93 +1,102 @@
 import React from "react";
-import type { AgentQuestion, AgentQuestionResolved } from "@shared/agent-question";
-import type { InlineCardRef } from "@shared/inline-artifact-cards";
+import type { AgentQuestionResolved } from "@shared/agent-question";
+import type { DisplayEvent } from "@shared/card-display-protocol";
 import type { LayoutVisualMode } from "@shared/layout-preference";
 import type { DesignSystemV1 } from "@design-system";
 import { AgentQuestionCard } from "../../components/AgentQuestionCard";
 import { LayoutChoiceCard } from "../../components/LayoutChoiceCard";
 import {
-  setDisplayCardStatus,
+  recordDisplayCardAction,
   useInteractionCardManager,
 } from "../display-card-managers";
+import type { CardHostId } from "../card-presentation-policy";
+
+type QuestionEvent = Extract<DisplayEvent, { kind: "interaction.question-requested" }>;
+type LayoutEvent = Extract<DisplayEvent, { kind: "interaction.layout-required" }>;
 
 interface InteractionCardHostProps {
-  messageId: string;
-  question?: AgentQuestion;
-  inlineCards: InlineCardRef[];
-  showLayoutCard: boolean;
-  layoutSlideCount?: number;
-  layoutMode?: LayoutVisualMode;
+  host: Extract<CardHostId, "timeline" | "composer-before-input">;
+  anchorMessageId?: string;
   selectedDesignSystem: DesignSystemV1;
   busy: boolean;
-  onResolveQuestion: (messageId: string, resolved: AgentQuestionResolved) => void;
+  onResolveQuestion: (event: QuestionEvent, resolved: AgentQuestionResolved) => void;
   onConfirmLayout: (
-    messageId: string,
+    event: LayoutEvent,
     mode: LayoutVisualMode,
     designSystem: DesignSystemV1,
   ) => void;
 }
 
-/** Owns user-decision cards; it does not render permissions or transaction reviews. */
+/** Renders only semantic interaction events owned by the interaction manager. */
 export const InteractionCardHost: React.FC<InteractionCardHostProps> = ({
-  messageId,
-  question,
-  inlineCards,
-  showLayoutCard,
-  layoutSlideCount,
-  layoutMode,
+  host,
+  anchorMessageId,
   selectedDesignSystem,
   busy,
   onResolveQuestion,
   onConfirmLayout,
 }) => {
-  const managedCards = useInteractionCardManager((state) => state.cards);
-  const managedQuestion = [...managedCards].reverse().find((card) =>
-    card.status === "active"
-    && card.event.kind === "interaction.question-requested"
-    && card.event.scope.anchorMessageId === messageId
+  const cards = useInteractionCardManager((state) => state.cards).filter((card) =>
+    card.policy.host === host
+    && (host !== "timeline" || card.event.scope.anchorMessageId === anchorMessageId)
+    && (host !== "composer-before-input" || card.status === "active")
+    && card.status !== "dismissed"
+    && card.status !== "superseded"
   );
-  const managedLayout = [...managedCards].reverse().find((card) =>
-    card.status === "active"
-    && card.event.kind === "interaction.layout-required"
-    && card.event.scope.anchorMessageId === messageId
-  );
-  const managedQuestionPayload = managedQuestion?.event.kind === "interaction.question-requested"
-    ? managedQuestion.event.payload
-    : undefined;
-  const managedLayoutPayload = managedLayout?.event.kind === "interaction.layout-required"
-    ? managedLayout.event.payload
-    : undefined;
-  const resolvedQuestion = managedQuestionPayload?.question ?? question;
-  const layoutCard = inlineCards.find((card) => card.type === "layout");
-  const shouldRenderLayout = Boolean(managedLayoutPayload) || Boolean(layoutCard && showLayoutCard);
 
   return (
     <>
-      {resolvedQuestion ? (
-        <AgentQuestionCard
-          question={resolvedQuestion}
-          disabled={busy}
-          onResolve={(resolved) => {
-            if (managedQuestion) setDisplayCardStatus(managedQuestion.event.eventId, "resolved");
-            onResolveQuestion(messageId, resolved);
-          }}
-        />
-      ) : null}
-
-      {shouldRenderLayout ? (
-        <LayoutChoiceCard
-          slideCount={managedLayoutPayload?.slideCount ?? layoutSlideCount ?? 1}
-          resolved={layoutCard?.resolved}
-          layoutMode={layoutMode ?? layoutCard?.layoutMode}
-          selectedDesignSystem={selectedDesignSystem}
-          onConfirm={layoutCard?.resolved
-            ? undefined
-            : (mode, designSystem) => {
-                if (managedLayout) setDisplayCardStatus(managedLayout.event.eventId, "resolved");
-                onConfirmLayout(messageId, mode, designSystem);
+      {cards.map((card) => {
+        const event = card.event;
+        if (event.kind === "interaction.question-requested") {
+          const resolved = card.status === "resolved"
+            && card.lastAction?.actionId === "answer"
+            ? card.lastAction.payload as AgentQuestionResolved
+            : undefined;
+          const question = event.payload.question;
+          if (!question) return null;
+          return (
+            <AgentQuestionCard
+              key={event.eventId}
+              question={resolved ? { ...question, resolved } : question}
+              disabled={busy || card.status !== "active"}
+              onResolve={(answer) => {
+                recordDisplayCardAction(event.eventId, "answer", answer, "resolved");
+                onResolveQuestion(event, answer);
               }}
-        />
-      ) : null}
+            />
+          );
+        }
+
+        if (event.kind === "interaction.layout-required") {
+          const actionPayload = card.lastAction?.payload as {
+            mode?: LayoutVisualMode;
+            designSystem?: DesignSystemV1;
+          } | undefined;
+          return (
+            <LayoutChoiceCard
+              key={event.eventId}
+              slideCount={event.payload.slideCount}
+              resolved={card.status === "resolved" ? "confirmed" : undefined}
+              layoutMode={actionPayload?.mode}
+              selectedDesignSystem={actionPayload?.designSystem ?? selectedDesignSystem}
+              onConfirm={card.status === "active" && !busy
+                ? (mode, designSystem) => {
+                    recordDisplayCardAction(
+                      event.eventId,
+                      "confirm-layout",
+                      { mode, designSystem },
+                      "resolved",
+                    );
+                    onConfirmLayout(event, mode, designSystem);
+                  }
+                : undefined}
+            />
+          );
+        }
+
+        return null;
+      })}
     </>
   );
 };

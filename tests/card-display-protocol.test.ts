@@ -7,8 +7,12 @@ import {
 import {
   clearAllDisplayCardManagers,
   findActiveToolPermissionCard,
+  getPersistedDisplayCards,
+  hydrateDisplayCardManagers,
   ingestDisplayEvent,
+  recordDisplayCardAction,
   setDisplayCardStatus,
+  useInteractionCardManager,
   usePermissionCardManager,
   useProgressCardManager,
 } from "../src/renderer/src/cards/display-card-managers";
@@ -94,5 +98,52 @@ describe("card display protocol", () => {
     expect(resultEvents).toHaveLength(1);
     expect(resultEvents[0]?.kind).toBe("interaction.question-requested");
     expect(resultEvents[0]?.scope.threadId).toBe("thread-1");
+  });
+
+  it("persists manager status and actions independently from chat messages", () => {
+    const event = toResultDisplayEvents({
+      status: "chat",
+      message: "请选择内容侧重点",
+      threadId: "thread-1",
+      question: {
+        variant: "choices",
+        selectionMode: "single",
+        options: [{ id: "practice", title: "实践案例" }],
+      },
+    }, "session-1", "run-2")[0]!;
+    ingestDisplayEvent({ ...event, scope: { ...event.scope, anchorMessageId: "message-1" } });
+    recordDisplayCardAction(event.eventId, "answer", {
+      optionIds: ["practice"],
+      value: "practice",
+      label: "实践案例",
+    }, "resolved");
+
+    const snapshot = getPersistedDisplayCards();
+    expect(snapshot).toHaveLength(1);
+    expect(snapshot[0]?.status).toBe("resolved");
+    expect(snapshot[0]?.lastAction?.actionId).toBe("answer");
+
+    clearAllDisplayCardManagers();
+    hydrateDisplayCardManagers(snapshot);
+    expect(useInteractionCardManager.getState().cards[0]?.lastAction?.payload).toMatchObject({
+      value: "practice",
+    });
+  });
+
+  it("keeps the complete approval request in the review event payload", () => {
+    const [event] = toResultDisplayEvents({
+      status: "approval-required",
+      approval: {
+        threadId: "thread-review",
+        summary: "更新标题",
+        commands: [{ id: "command-1", type: "set-presentation-title", title: "新标题" }],
+        assumptions: ["保留现有页面"],
+      },
+    }, "session-1", "run-3");
+
+    expect(event?.kind).toBe("review.command-proposal");
+    if (event?.kind !== "review.command-proposal") throw new Error("missing review event");
+    expect(event.payload.threadId).toBe("thread-review");
+    expect(event.payload.commands).toHaveLength(1);
   });
 });

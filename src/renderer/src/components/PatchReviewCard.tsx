@@ -1,7 +1,8 @@
 import React, { useState } from "react";
-import type { SessionChatMessage } from "@shared/session";
+import type { DisplayEvent } from "@shared/card-display-protocol";
 
-type PatchData = NonNullable<SessionChatMessage["patch"]>;
+type PatchEvent = Extract<DisplayEvent, { kind: "review.patch-ready" }>;
+type PatchData = PatchEvent["payload"] & { resolved?: "accepted" | "rejected" };
 
 interface PatchReviewCardProps {
   patch: PatchData;

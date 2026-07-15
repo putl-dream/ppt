@@ -35,6 +35,7 @@ function snapshot(id: string): SessionSnapshot {
       { id: "u1", role: "user", content: "build a deck" },
       { id: "a1", role: "assistant", content: "working", threadId: "run-1" },
     ],
+    displayCards: [],
   };
 }
 
@@ -49,7 +50,26 @@ afterEach(async () => {
 describe("ConversationDatabase", () => {
   it("stores sessions and messages without workspace transcripts", async () => {
     const database = await createDatabase();
-    database.replaceState({ activeSessionId: "s1", sessions: [snapshot("s1")] });
+    const session = snapshot("s1");
+    session.displayCards = [{
+      event: {
+        protocolVersion: 1,
+        eventId: "question-1",
+        emittedAt: "2026-07-15T00:00:00.000Z",
+        kind: "interaction.question-requested",
+        category: "interaction",
+        source: { kind: "tool", toolName: "AskUser" },
+        scope: { sessionId: "s1", threadId: "thread-1", anchorMessageId: "a1" },
+        semantics: { blocking: true, requiresResponse: true, priority: "high" },
+        payload: {
+          message: "请选择",
+          question: { variant: "markdown", selectionMode: "single" },
+        },
+      },
+      status: "active",
+      receivedAt: 1,
+    }];
+    database.replaceState({ activeSessionId: "s1", sessions: [session] });
 
     const restored = database.loadState();
     expect(restored.activeSessionId).toBe("s1");
@@ -57,6 +77,7 @@ describe("ConversationDatabase", () => {
       "build a deck",
       "working",
     ]);
+    expect(restored.sessions[0].displayCards[0]?.event.eventId).toBe("question-1");
     database.close();
   });
 

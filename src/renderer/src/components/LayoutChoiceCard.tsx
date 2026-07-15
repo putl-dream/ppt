@@ -2,11 +2,10 @@ import React, { useId, useState } from "react";
 import type { LayoutVisualMode } from "@shared/layout-preference";
 import { LAYOUT_DESIGN_OPTIONS, loadLayoutVisualMode } from "@shared/layout-preference";
 import type { DesignSystemV1 } from "@design-system";
-import type { InlineCardRef } from "@shared/inline-artifact-cards";
 
 interface LayoutChoiceCardProps {
   slideCount: number;
-  resolved?: InlineCardRef["resolved"];
+  resolved?: "confirmed" | "dismissed";
   layoutMode?: LayoutVisualMode;
   selectedDesignSystem: DesignSystemV1;
   onConfirm?: (mode: LayoutVisualMode, designSystem: DesignSystemV1) => void;

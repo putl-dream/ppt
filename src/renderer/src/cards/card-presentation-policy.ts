@@ -46,7 +46,7 @@ export const CARD_PRESENTATION_POLICIES: Record<DisplayEventKind, CardPresentati
     activation: "domain-ready",
     persistence: "session",
     replaceActiveInScope: true,
-    dedupeKey: (event) => `${event.kind}:${scopeKey(event)}`,
+    dedupeKey: (event) => `${event.kind}:${event.scope.sessionId ?? scopeKey(event)}`,
   },
   "review.command-proposal": {
     category: "review",
@@ -68,13 +68,13 @@ export const CARD_PRESENTATION_POLICIES: Record<DisplayEventKind, CardPresentati
     activation: "immediate",
     persistence: "session",
     replaceActiveInScope: true,
-    dedupeKey: (event) => `${event.kind}:${scopeKey(event)}`,
+    dedupeKey: (event) => `${event.kind}:${event.scope.sessionId ?? scopeKey(event)}`,
   },
   "artifact.ready": {
     category: "artifact",
     host: "timeline",
     activation: "domain-ready",
-    persistence: "derived",
+    persistence: "session",
     dedupeKey: (event) => {
       if (event.kind !== "artifact.ready") return event.eventId;
       return `artifact:${event.payload.artifactId}`;

@@ -117,13 +117,7 @@ export function toResultDisplayEvents(
         requiresResponse: true,
         priority: result.approval.risk === "high" ? "critical" : "high",
       },
-      payload: {
-        approvalThreadId: result.approval.threadId,
-        summary: result.approval.summary,
-        risk: result.approval.risk,
-        assumptions: result.approval.assumptions,
-        affectedSlideCount: result.approval.diff?.affectedSlideIds.length,
-      },
+      payload: result.approval,
     }];
   }
 

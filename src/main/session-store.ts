@@ -14,6 +14,10 @@ import {
   type SessionSummary,
 } from "@shared/session";
 import {
+  persistedDisplayCardSchema,
+  type PersistedDisplayCard,
+} from "@shared/card-display-protocol";
+import {
   toAgentMessageHistory,
   type AgentConversationMessage,
 } from "@shared/session-recovery";
@@ -128,6 +132,7 @@ export class FileSessionStore {
       session: this.toSummary(crypto.randomUUID(), now, now, presentation),
       presentation,
       messages: [],
+      displayCards: [],
     };
 
     if (options?.rootPath) {
@@ -307,11 +312,9 @@ export class FileSessionStore {
     if (result.status === "chat") {
       message.content = result.message;
       message.threadId = result.threadId ?? runId;
-      message.question = result.question;
     } else if (result.status === "approval-required") {
       message.content = "已提出排版更新方案，请在下方审核后应用。";
       message.threadId = result.approval.threadId;
-      message.approval = result.approval;
     } else if (result.status === "rejected") {
       message.content = "已放弃排版变更提案。";
     } else {
@@ -321,6 +324,13 @@ export class FileSessionStore {
     const now = new Date().toISOString();
     snapshot.session.updatedAt = now;
     snapshot.session.lastMessageAt = now;
+    await this.persist();
+  }
+
+  async saveDisplayCards(sessionId: string, cards: PersistedDisplayCard[]): Promise<void> {
+    const snapshot = this.findSession(sessionId);
+    snapshot.displayCards = persistedDisplayCardSchema.array().parse(structuredClone(cards));
+    snapshot.session.updatedAt = new Date().toISOString();
     await this.persist();
   }
 

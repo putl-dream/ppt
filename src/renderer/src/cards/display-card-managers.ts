@@ -1,27 +1,34 @@
 import { create, type StoreApi, type UseBoundStore } from "zustand";
 import {
+  displayCardActionSchema,
   displayEventSchema,
+  persistedDisplayCardSchema,
   type DisplayCardCategory,
+  type DisplayCardAction,
+  type DisplayCardStatus,
   type DisplayEvent,
+  type PersistedDisplayCard,
 } from "@shared/card-display-protocol";
 import {
   getCardPresentationPolicy,
   type CardPresentationPolicy,
 } from "./card-presentation-policy";
 
-export type ManagedDisplayCardStatus = "active" | "resolved" | "dismissed" | "superseded";
+export type ManagedDisplayCardStatus = DisplayCardStatus;
 
-export interface ManagedDisplayCard {
-  event: DisplayEvent;
+export interface ManagedDisplayCard extends PersistedDisplayCard {
   policy: CardPresentationPolicy;
-  status: ManagedDisplayCardStatus;
-  receivedAt: number;
 }
 
 interface CategoryCardManagerState {
   cards: ManagedDisplayCard[];
   ingest: (event: DisplayEvent, policy: CardPresentationPolicy) => void;
-  setStatus: (eventId: string, status: ManagedDisplayCardStatus) => void;
+  setStatus: (
+    eventId: string,
+    status: ManagedDisplayCardStatus,
+    lastAction?: DisplayCardAction,
+  ) => void;
+  replace: (cards: ManagedDisplayCard[]) => void;
   clear: () => void;
 }
 
@@ -49,6 +56,7 @@ function createCategoryCardManager(category: DisplayCardCategory): CategoryCardM
             policy,
             status: "active" as const,
             receivedAt: Date.now(),
+            lastAction: undefined,
           };
         }
         if (
@@ -69,11 +77,14 @@ function createCategoryCardManager(category: DisplayCardCategory): CategoryCardM
       // Notifications are transient and should not grow without bound.
       return { cards: category === "notification" ? next.slice(-50) : next };
     }),
-    setStatus: (eventId, status) => set((state) => ({
+    setStatus: (eventId, status, lastAction) => set((state) => ({
       cards: state.cards.map((card) =>
-        card.event.eventId === eventId ? { ...card, status } : card
+        card.event.eventId === eventId
+          ? { ...card, status, ...(lastAction ? { lastAction } : {}) }
+          : card
       ),
     })),
+    replace: (cards) => set({ cards }),
     clear: () => set({ cards: [] }),
   }));
 }
@@ -108,14 +119,92 @@ export function ingestDisplayEvent(input: unknown): DisplayEvent {
 export function setDisplayCardStatus(
   eventId: string,
   status: ManagedDisplayCardStatus,
+  lastAction?: DisplayCardAction,
 ): boolean {
   for (const manager of Object.values(managers)) {
     if (manager.getState().cards.some((card) => card.event.eventId === eventId)) {
-      manager.getState().setStatus(eventId, status);
+      manager.getState().setStatus(eventId, status, lastAction);
       return true;
     }
   }
   return false;
+}
+
+export function recordDisplayCardAction(
+  eventId: string,
+  actionId: DisplayCardAction["actionId"],
+  payload: unknown,
+  status: ManagedDisplayCardStatus,
+): DisplayCardAction | undefined {
+  for (const manager of Object.values(managers)) {
+    const card = manager.getState().cards.find((item) => item.event.eventId === eventId);
+    if (!card) continue;
+    const action = displayCardActionSchema.parse({
+      protocolVersion: 1,
+      eventId,
+      actionId,
+      payload,
+      correlation: {
+        sessionId: card.event.scope.sessionId,
+        runId: card.event.scope.runId,
+        threadId: card.event.scope.threadId,
+        toolCallId: card.event.source.kind === "tool"
+          ? card.event.source.toolCallId
+          : undefined,
+      },
+    });
+    manager.getState().setStatus(eventId, status, action);
+    return action;
+  }
+  return undefined;
+}
+
+export function getPersistedDisplayCards(): PersistedDisplayCard[] {
+  return Object.values(managers).flatMap((manager) =>
+    manager.getState().cards
+      .filter((card) => card.policy.persistence === "session")
+      .map(({ policy: _policy, ...card }) => persistedDisplayCardSchema.parse(card))
+  );
+}
+
+export function hydrateDisplayCardManagers(input: PersistedDisplayCard[]): void {
+  const grouped: Record<DisplayCardCategory, ManagedDisplayCard[]> = {
+    permission: [],
+    interaction: [],
+    review: [],
+    progress: [],
+    artifact: [],
+    notification: [],
+    environment: [],
+  };
+  for (const rawCard of input) {
+    const card = persistedDisplayCardSchema.parse(rawCard);
+    const policy = getCardPresentationPolicy(card.event);
+    if (policy.persistence !== "session") continue;
+    grouped[card.event.category].push({ ...card, policy });
+  }
+  for (const [category, manager] of Object.entries(managers)) {
+    manager.getState().replace(grouped[category as DisplayCardCategory]);
+  }
+}
+
+export function subscribeDisplayCardManagers(listener: () => void): () => void {
+  const unsubscribes = [
+    useInteractionCardManager,
+    useReviewCardManager,
+    useProgressCardManager,
+    useArtifactCardManager,
+  ].map((manager) => manager.subscribe(listener));
+  return () => unsubscribes.forEach((unsubscribe) => unsubscribe());
+}
+
+export function pruneDisplayCardsForMessages(messageIds: ReadonlySet<string>): void {
+  for (const manager of Object.values(managers)) {
+    const next = manager.getState().cards.filter((card) =>
+      !card.event.scope.anchorMessageId || messageIds.has(card.event.scope.anchorMessageId)
+    );
+    manager.getState().replace(next);
+  }
 }
 
 export function clearAllDisplayCardManagers(): void {

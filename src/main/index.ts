@@ -57,6 +57,7 @@ import type { AppLogLevel, LogManagerSettings, RendererLogReport } from "@shared
 import { FileSessionStore } from "./session-store";
 import { TaskStore } from "./agent/task/task-store";
 import type { SessionChatMessage, SessionSnapshot } from "@shared/session";
+import type { PersistedDisplayCard } from "@shared/card-display-protocol";
 import { projectArtifactStatusSchema } from "@shared/session";
 import {
   findRecoverableConversation,
@@ -604,6 +605,11 @@ app.whenReady().then(async () => {
     "session:save-messages",
     (_, sessionId: string, messages: SessionChatMessage[]) =>
       sessionStore.saveMessages(sessionId, messages),
+  );
+  ipcMain.handle(
+    "session:save-display-cards",
+    (_, sessionId: string, cards: PersistedDisplayCard[]) =>
+      sessionStore.saveDisplayCards(sessionId, cards),
   );
   ipcMain.handle(
     "conversation:load-events",

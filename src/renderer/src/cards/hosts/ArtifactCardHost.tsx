@@ -1,33 +1,34 @@
 import React from "react";
+import type { DisplayEvent } from "@shared/card-display-protocol";
 import type { Presentation } from "@shared/presentation";
-import type { InlineCardRef } from "@shared/inline-artifact-cards";
-import type { BriefFields, OutlineItem } from "@shared/project-artifacts";
+import { hasMeaningfulArtifactContent, isDefaultArtifactContent } from "@shared/project-artifact-state";
+import { parseBriefFields, parseOutlineItems } from "@shared/project-artifacts";
 import { BriefCard } from "../../components/BriefCard";
 import { OutlineCard } from "../../components/OutlineCard";
 import { DeckPreviewCard } from "../../components/DeckPreviewCard";
-import { useArtifactCardManager } from "../display-card-managers";
+import { useProjectStore } from "../../components/project-store";
+import {
+  recordDisplayCardAction,
+  useArtifactCardManager,
+} from "../display-card-managers";
+
+type ArtifactEvent = Extract<DisplayEvent, { kind: "artifact.ready" }>;
 
 interface ArtifactCardHostProps {
-  messageId: string;
-  inlineCards: InlineCardRef[];
-  briefFields?: BriefFields;
-  outlineItems?: OutlineItem[];
+  anchorMessageId?: string;
   presentation?: Presentation;
   busy: boolean;
   isExportingDeck?: boolean;
-  onConfirmBrief: (messageId: string) => void;
-  onConfirmOutline: (messageId: string) => void;
-  onReviseOutline: (messageId: string) => void;
+  onConfirmBrief: (event: ArtifactEvent) => void;
+  onConfirmOutline: (event: ArtifactEvent) => void;
+  onReviseOutline: (event: ArtifactEvent) => void;
   onOpenDeckPreview: () => void;
   onExportDeck: () => void;
 }
 
-/** Owns cards derived from project artifacts and Presentation state. */
+/** Renders project artifacts selected by semantic artifact events. */
 export const ArtifactCardHost: React.FC<ArtifactCardHostProps> = ({
-  messageId,
-  inlineCards,
-  briefFields,
-  outlineItems,
+  anchorMessageId,
   presentation,
   busy,
   isExportingDeck,
@@ -37,65 +38,89 @@ export const ArtifactCardHost: React.FC<ArtifactCardHostProps> = ({
   onOpenDeckPreview,
   onExportDeck,
 }) => {
-  const managedCards = useArtifactCardManager((state) => state.cards);
-  const managedArtifact = [...managedCards].reverse().find((card) =>
-    card.status === "active"
-    && card.event.kind === "artifact.ready"
-    && card.event.scope.anchorMessageId === messageId
+  const project = useProjectStore((state) => state.activeProject);
+  const cards = useArtifactCardManager((state) => state.cards).filter((card) =>
+    card.event.scope.anchorMessageId === anchorMessageId
+    && card.status !== "dismissed"
+    && card.status !== "superseded"
   );
-  const managedArtifactPayload = managedArtifact?.event.kind === "artifact.ready"
-    ? managedArtifact.event.payload
-    : undefined;
-  const managedInlineType = managedArtifactPayload?.artifactType === "patch"
-    ? undefined
-    : managedArtifactPayload?.artifactType;
-  const refs = managedInlineType
-    && !inlineCards.some((card) => card.type === managedInlineType)
-    ? [...inlineCards, { type: managedInlineType } as InlineCardRef]
-    : inlineCards;
 
   return (
     <>
-    {refs.map((card) => {
-      if (card.type === "brief" && briefFields) {
-        return (
-          <BriefCard
-            key={`${messageId}-brief`}
-            fields={briefFields}
-            resolved={card.resolved}
-            onConfirm={card.resolved ? undefined : () => onConfirmBrief(messageId)}
-          />
-        );
-      }
+      {cards.map((card) => {
+        const event = card.event;
+        if (event.kind !== "artifact.ready") return null;
+        const type = event.payload.artifactType;
+        const resolved = card.status === "resolved" ? "confirmed" as const : undefined;
 
-      if (card.type === "outline" && outlineItems?.length) {
-        return (
-          <OutlineCard
-            key={`${messageId}-outline`}
-            items={outlineItems}
-            resolved={card.resolved}
-            busy={busy}
-            onConfirm={card.resolved ? undefined : () => onConfirmOutline(messageId)}
-            onRevise={card.resolved ? undefined : () => onReviseOutline(messageId)}
-          />
-        );
-      }
+        if (type === "brief") {
+          const content = project?.artifacts.brief.content ?? "";
+          if (!hasMeaningfulArtifactContent("brief", content)) return null;
+          return (
+            <BriefCard
+              key={event.eventId}
+              fields={parseBriefFields(content, project?.name ?? "新演示文稿")}
+              resolved={resolved}
+              onConfirm={card.status === "active"
+                ? () => {
+                    recordDisplayCardAction(event.eventId, "approve", undefined, "resolved");
+                    onConfirmBrief(event);
+                  }
+                : undefined}
+            />
+          );
+        }
 
-      if (card.type === "deck" && presentation) {
-        return (
-          <DeckPreviewCard
-            key={`${messageId}-deck`}
-            presentation={presentation}
-            isExporting={isExportingDeck}
-            resolved={card.resolved}
-            onPreview={onOpenDeckPreview}
-            onExport={onExportDeck}
-          />
-        );
-      }
+        if (type === "outline") {
+          const content = project?.artifacts.outline.content ?? "";
+          const items = parseOutlineItems(content);
+          if (
+            !hasMeaningfulArtifactContent("outline", content)
+            || (items.length === 1 && isDefaultArtifactContent("outline", content))
+          ) return null;
+          return (
+            <OutlineCard
+              key={event.eventId}
+              items={items}
+              resolved={resolved}
+              busy={busy}
+              onConfirm={card.status === "active"
+                ? () => {
+                    recordDisplayCardAction(event.eventId, "approve", undefined, "resolved");
+                    onConfirmOutline(event);
+                  }
+                : undefined}
+              onRevise={card.status === "active"
+                ? () => {
+                    recordDisplayCardAction(event.eventId, "revise", undefined, "dismissed");
+                    onReviseOutline(event);
+                  }
+                : undefined}
+            />
+          );
+        }
 
-      return null;
-    })}
+        if (type === "deck" && presentation) {
+          return (
+            <DeckPreviewCard
+              key={event.eventId}
+              presentation={presentation}
+              isExporting={isExportingDeck}
+              resolved={resolved}
+              onPreview={() => {
+                recordDisplayCardAction(event.eventId, "preview", undefined, card.status);
+                onOpenDeckPreview();
+              }}
+              onExport={() => {
+                recordDisplayCardAction(event.eventId, "export", undefined, card.status);
+                onExportDeck();
+              }}
+            />
+          );
+        }
+
+        return null;
+      })}
     </>
   );
 };

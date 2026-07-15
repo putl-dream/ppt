@@ -17,7 +17,11 @@ import type {
 } from "./session";
 import type { TokenUsageStats } from "./token-usage";
 import type { ConversationEventPage } from "./conversation-events";
-import type { DisplayEvent } from "./card-display-protocol";
+import type {
+  AgentApprovalRequest,
+  DisplayEvent,
+  PersistedDisplayCard,
+} from "./card-display-protocol";
 import type {
   AppLogEntry,
   AppLogLevel,
@@ -31,28 +35,7 @@ export interface CreateSessionOptions {
   title?: string;
 }
 
-export interface AgentApprovalRequest {
-  threadId: string;
-  summary: string;
-  commands: PresentationCommand[];
-  risk?: "low" | "medium" | "high";
-  assumptions?: string[];
-  diff?: {
-    titleChanged: boolean;
-    oldTitle: string;
-    newTitle: string;
-    designSystemChanged: boolean;
-    slidesAddedCount: number;
-    slidesRemovedCount: number;
-    affectedSlideIds: string[];
-    elementChanges: {
-      addedCount: number;
-      removedCount: number;
-      updatedCount: number;
-    };
-  };
-  preview?: Presentation;
-}
+export type { AgentApprovalRequest } from "./card-display-protocol";
 
 export interface AgentEditorContext {
   currentSlideId?: string;
@@ -167,6 +150,7 @@ export interface DesktopApi {
   selectSession(sessionId: string): Promise<SessionBootstrap>;
   deleteSession(sessionId: string): Promise<SessionBootstrap>;
   saveSessionMessages(sessionId: string, messages: SessionChatMessage[]): Promise<void>;
+  saveSessionDisplayCards(sessionId: string, cards: PersistedDisplayCard[]): Promise<void>;
   loadConversationEvents(sessionId: string, cursor?: number, limit?: number): Promise<ConversationEventPage>;
   listProjectArtifacts(sessionId: string): Promise<ProjectArtifact[]>;
   readProjectArtifact(
