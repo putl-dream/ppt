@@ -77,6 +77,13 @@ import {
   formatPublicErrorMessage,
   inferAgentToolActivityState,
 } from "@shared/agent-activity-display";
+import {
+  clearAllDisplayCardManagers,
+  ingestDisplayEvent,
+  setDisplayCardStatus,
+  useNotificationCardManager,
+  usePermissionCardManager,
+} from "./cards/display-card-managers";
 
 export function App() {
   const initializeProject = useProjectStore((state) => state.initializeProject);
@@ -95,6 +102,8 @@ export function App() {
   const [isExportingDeck, setIsExportingDeck] = useState(false);
   const [maxRevision, setMaxRevision] = useState(0);
   const { message: toastMessage, notify: triggerToast } = useNotificationCenter();
+  const notificationCards = useNotificationCardManager((state) => state.cards);
+  const lastNotificationEventIdRef = useRef<string | undefined>(undefined);
 
   // 双模态同构布局模式控制
   const [activeMode, setActiveMode] = useState<AppMode>("workspace");
@@ -149,6 +158,20 @@ export function App() {
   const isRunAbortedMessage = (message: string) =>
     message === "会话已中断。" || message === "任务已取消。";
 
+  useEffect(() => {
+    const latest = [...notificationCards].reverse().find((card) =>
+      card.status === "active" && card.event.kind === "notification.message"
+    );
+    if (
+      !latest
+      || latest.event.kind !== "notification.message"
+      || latest.event.eventId === lastNotificationEventIdRef.current
+    ) return;
+    lastNotificationEventIdRef.current = latest.event.eventId;
+    triggerToast(latest.event.payload.message);
+    setDisplayCardStatus(latest.event.eventId, "resolved");
+  }, [notificationCards, triggerToast]);
+
   const syncActivityTrace = useCallback((next: AgentActivityItem[]) => {
     activeRunTraceRef.current = next;
     setActivityTrace(next);
@@ -198,6 +221,15 @@ export function App() {
     };
     const unsubscribe = window.desktopApi.onAgentStream((event: AgentStreamEvent) => {
       const isCurrentRun = event.runId === activeRunIdRef.current;
+      if (event.type === "display-event") {
+        if (event.sessionId && event.sessionId !== activeSessionIdRef.current) return;
+        try {
+          ingestDisplayEvent(event.event);
+        } catch (error) {
+          console.error("Invalid display event received:", error);
+        }
+        return;
+      }
       if (event.type === "task-graph-updated") {
         if (event.sessionId && event.sessionId !== activeSessionIdRef.current) return;
         setTaskPlanSnapshot({ tasks: event.tasks, goal: event.goal ?? null });
@@ -548,6 +580,7 @@ export function App() {
   }
 
   const enterDraftChat = (workspaceDir?: string) => {
+    clearAllDisplayCardManagers();
     setIsDraftChat(true);
     activeSessionIdRef.current = "";
     setActiveSessionId("");
@@ -565,6 +598,7 @@ export function App() {
   };
 
   const applySessionState = (state: SessionBootstrap) => {
+    clearAllDisplayCardManagers();
     setSessions(state.sessions);
     if (!state.activeSession) {
       enterDraftChat();
@@ -773,6 +807,15 @@ export function App() {
   async function applyAgentResult(result: AgentRunResult, trace: AgentActivityItem[], runId?: string) {
     const isSidechainRun = Boolean(runId && sidechainRunRef.current === runId);
     const messageId = runId ? streamMessageIdsRef.current.get(runId) : undefined;
+    for (const event of result.displayEvents ?? []) {
+      try {
+        ingestDisplayEvent(messageId
+          ? { ...event, scope: { ...event.scope, anchorMessageId: messageId } }
+          : event);
+      } catch (error) {
+        console.error("Invalid result display event received:", error);
+      }
+    }
     const finalizeTrace = (existing?: AgentActivityItem[]) => markTraceComplete(
       mergeActivityTraces(existing, trace, activeRunTraceRef.current) ?? [],
     );
@@ -1264,6 +1307,14 @@ export function App() {
     syncActivityTrace(
       resolveToolApprovalItem(activeRunTraceRef.current, approvalId, approved ? "approved" : "denied"),
     );
+    const permissionCard = usePermissionCardManager.getState().cards.find((card) =>
+      card.status === "active"
+      && card.event.kind === "permission.tool-requested"
+      && card.event.payload.approvalId === approvalId
+    );
+    if (permissionCard) {
+      setDisplayCardStatus(permissionCard.event.eventId, approved ? "resolved" : "dismissed");
+    }
     await window.desktopApi.resolveToolApproval(runId, approvalId, approved);
   }
 

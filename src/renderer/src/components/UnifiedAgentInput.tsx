@@ -1,7 +1,9 @@
 import React, { useEffect, useRef, useState } from "react";
-import { CheckIcon, ChevronDownIcon, FolderIcon, SendIcon, StopIcon } from "./Icons";
+import { CheckIcon, ChevronDownIcon, SendIcon, StopIcon } from "./Icons";
 import type { ManagedModel } from "../modelCatalog";
-import { ToolApprovalOverlay, type PendingToolApproval } from "./ToolApprovalOverlay";
+import type { PendingToolApproval } from "./ToolApprovalOverlay";
+import { PermissionCardHost } from "../cards/hosts/PermissionCardHost";
+import { EnvironmentCardHost } from "../cards/hosts/EnvironmentCardHost";
 
 interface UnifiedAgentInputProps {
   request: string;
@@ -103,24 +105,13 @@ export const UnifiedAgentInput: React.FC<UnifiedAgentInputProps> = ({
       ) : null}
 
       <div className="unified-agent-input-stack">
-        {!sandboxReady ? (
-          <section className="sandbox-preflight-card" aria-labelledby="sandbox-preflight-title">
-            <div className="sandbox-preflight-icon"><FolderIcon size={18} /></div>
-            <div className="sandbox-preflight-copy">
-              <strong id="sandbox-preflight-title">项目目录（可选）</strong>
-              <span>可直接发送，系统会自动创建托管沙箱；也可以先选择保存目录。</span>
-            </div>
-            <button type="button" className="sandbox-preflight-btn" onClick={onPrepareWorkspace}>
-              选择项目目录
-            </button>
-          </section>
-        ) : null}
+        <EnvironmentCardHost ready={sandboxReady} onPrepare={onPrepareWorkspace} />
         <div
           className="double-deck-panel-card unified-agent-input-shell"
           data-action-state={isPermissionGateOpen ? "permission" : busy ? "running" : "composing"}
         >
           {isPermissionGateOpen ? (
-            <ToolApprovalOverlay approval={pendingToolApproval!} onResolve={onResolveToolApproval!} />
+            <PermissionCardHost approval={pendingToolApproval} onResolve={onResolveToolApproval} />
           ) : (
             <>
               <div className="input-textarea-row">

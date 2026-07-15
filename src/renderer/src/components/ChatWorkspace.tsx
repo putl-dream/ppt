@@ -6,17 +6,11 @@ import {
   CopyIcon,
   Edit3Icon,
   OpenPreviewIcon,
-  FileIcon,
 } from "./Icons";
 import { UnifiedAgentInput } from "./UnifiedAgentInput";
-import { BriefCard } from "./BriefCard";
-import { OutlineCard } from "./OutlineCard";
-import { DeckPreviewCard } from "./DeckPreviewCard";
-import { LayoutChoiceCard } from "./LayoutChoiceCard";
 import { AgentThinkingLoader } from "./AgentThinkingLoader";
 import { AgentActivityTrace } from "./AgentActivityTrace";
 import { MessageMarkdown } from "./MessageMarkdown";
-import { AgentQuestionCard } from "./AgentQuestionCard";
 import type { AgentActivityItem } from "@shared/agent-activity";
 import { findPendingToolApproval, resolveActivityTrace, filterTraceForDisplay, extractLatestTaskGraph } from "@shared/agent-activity";
 import type { AgentTaskNode } from "@shared/agent-task-graph";
@@ -26,8 +20,15 @@ import type { Presentation } from "@shared/presentation";
 import { visibleLayoutCardMessageIds, type InlineCardRef } from "@shared/inline-artifact-cards";
 import type { BriefFields, OutlineItem } from "@shared/project-artifacts";
 import type { LayoutVisualMode } from "@shared/layout-preference";
-import { formatApprovalCommand } from "@shared/approval-command-display";
 import type { DesignSystemV1 } from "@design-system";
+import {
+  findActiveToolPermissionCard,
+  usePermissionCardManager,
+  useProgressCardManager,
+} from "../cards/display-card-managers";
+import { InteractionCardHost } from "../cards/hosts/InteractionCardHost";
+import { ReviewCardHost } from "../cards/hosts/ReviewCardHost";
+import { ArtifactCardHost } from "../cards/hosts/ArtifactCardHost";
 
 type ChatMessage = SessionChatMessage;
 
@@ -213,9 +214,16 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
   const chatStreamRef = useRef<HTMLDivElement>(null);
   const shouldFollowOutputRef = useRef(true);
 
-  const pendingToolApproval = busy
+  const managedPermissionCards = usePermissionCardManager((state) => state.cards);
+  const managedPermission = busy
+    ? findActiveToolPermissionCard(managedPermissionCards, activeRunId)
+    : undefined;
+  const legacyPermission = busy && !managedPermission
     ? findPendingToolApproval(activityTrace)
     : undefined;
+  const pendingToolApproval = managedPermission?.event.kind === "permission.tool-requested"
+    ? managedPermission.event.payload
+    : legacyPermission;
   const pendingApprovalProps = pendingToolApproval
     ? {
         approvalId: pendingToolApproval.approvalId,
@@ -224,15 +232,26 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
         detail: pendingToolApproval.detail,
       }
     : null;
+  const managedProgressCards = useProgressCardManager((state) => state.cards);
+  const managedTaskGraph = [...managedProgressCards].reverse().find((card) =>
+    card.status === "active"
+    && card.event.kind === "progress.task-graph-updated"
+    && (!activeRunId || card.event.scope.runId === activeRunId)
+  );
+  const managedTaskGraphPayload = managedTaskGraph?.event.kind === "progress.task-graph-updated"
+    ? managedTaskGraph.event.payload
+    : undefined;
 
   const sessionGoal = chatMessages.find((message) => message.role === "user")?.content.trim() || null;
   const messageTraces = chatMessages
     .map((message) => message.activityTrace)
     .filter((trace): trace is NonNullable<typeof trace> => Boolean(trace?.length));
-  const latestPlan = taskPlanSnapshot ?? extractLatestTaskGraph(
+  const latestPlan = taskPlanSnapshot ?? (managedTaskGraphPayload
+    ? { tasks: managedTaskGraphPayload.tasks, goal: managedTaskGraphPayload.goal ?? null }
+    : extractLatestTaskGraph(
     busy ? activityTrace : undefined,
     ...messageTraces.slice().reverse(),
-  );
+  ));
   const activeTasks = latestPlan?.tasks ?? [];
   const planGoal = latestPlan ? (latestPlan.goal ?? null) : sessionGoal;
   const showTaskPlan = activeTasks.length > 0;
@@ -530,13 +549,18 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
                     <MessageMarkdown content={msg.content} className="assistant-response" />
                   )}
 
-                  {msg.question && (
-                    <AgentQuestionCard
-                      question={msg.question}
-                      disabled={busy}
-                      onResolve={(resolved) => onResolveQuestion(msg.id, resolved)}
-                    />
-                  )}
+                  <InteractionCardHost
+                    messageId={msg.id}
+                    question={msg.question}
+                    inlineCards={inlineCardData?.refs ?? []}
+                    showLayoutCard={layoutCardMessageIds.has(msg.id)}
+                    layoutSlideCount={inlineCardData?.layoutSlideCount}
+                    layoutMode={inlineCardData?.layoutMode}
+                    selectedDesignSystem={selectedDesignSystem}
+                    busy={busy}
+                    onResolveQuestion={onResolveQuestion}
+                    onConfirmLayout={onConfirmLayout}
+                  />
 
                   {onRetry && msg.content.includes("发生错误") && (
                   <button
@@ -557,118 +581,27 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
                   </button>
                 )}
 
-                {/* Deck 排版审批卡片 */}
-                {msg.approval && (
-                  <div className="approval-card">
-                    <div className="approval-card-title">
-                      <span>📋 待审核的排版更新</span>
-                    </div>
-                    <p className="approval-summary">{msg.approval.summary}</p>
-                    {msg.approval.risk && (
-                      <p className="approval-summary">
-                        风险等级：{msg.approval.risk === "high" ? "高" : msg.approval.risk === "medium" ? "中" : "低"}
-                      </p>
-                    )}
-                    {msg.approval.diff && (
-                      <p className="approval-summary">
-                        影响范围：{msg.approval.diff.affectedSlideIds.length} 页，新增元素 {msg.approval.diff.elementChanges.addedCount} 个，删除元素 {msg.approval.diff.elementChanges.removedCount} 个，更新元素 {msg.approval.diff.elementChanges.updatedCount} 个
-                      </p>
-                    )}
-                    {msg.approval.assumptions && msg.approval.assumptions.length > 0 && (
-                      <p className="approval-summary">
-                        默认假设：{msg.approval.assumptions.join("；")}
-                      </p>
-                    )}
-                    
-                    <div className="approval-commands-list">
-                      {msg.approval.commands.map((cmd) => {
-                        const display = formatApprovalCommand(cmd);
-                        return (
-                          <div key={cmd.id} className="approval-command-item">
-                            <FileIcon size={12} className="cmd-icon" />
-                            <span className="cmd-type">{display.label}</span>
-                            {display.detail && <span className="cmd-val">{display.detail}</span>}
-                          </div>
-                        );
-                      })}
-                    </div>
+                <ReviewCardHost
+                  messageId={msg.id}
+                  approval={msg.approval}
+                  busy={busy}
+                  onResolveApproval={onResolveApproval}
+                />
 
-                    <div className="approval-buttons">
-                      <button
-                        disabled={busy}
-                        onClick={() => onResolveApproval(false, msg.approval!, msg.id)}
-                        className="btn-reject"
-                      >
-                        拒绝变更
-                      </button>
-                      <button
-                        disabled={busy}
-                        onClick={() => onResolveApproval(true, msg.approval!, msg.id)}
-                        className="btn-apply"
-                      >
-                        确认执行修改
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                {/* 产物内联预览卡片 */}
-                {inlineCardData?.refs.map((card) => {
-                  if (card.type === "brief" && inlineCardData.briefFields) {
-                    return (
-                      <BriefCard
-                        key={`${msg.id}-brief`}
-                        fields={inlineCardData.briefFields}
-                        resolved={card.resolved}
-                        onConfirm={card.resolved ? undefined : () => onConfirmBrief(msg.id)}
-                      />
-                    );
-                  }
-
-                  if (card.type === "outline" && inlineCardData.outlineItems?.length) {
-                    return (
-                      <OutlineCard
-                        key={`${msg.id}-outline`}
-                        items={inlineCardData.outlineItems}
-                        resolved={card.resolved}
-                        busy={busy}
-                        onConfirm={card.resolved ? undefined : () => onConfirmOutline(msg.id)}
-                        onRevise={card.resolved ? undefined : () => onReviseOutline(msg.id)}
-                      />
-                    );
-                  }
-
-                  if (card.type === "layout") {
-                    if (!layoutCardMessageIds.has(msg.id)) return null;
-                    return (
-                      <LayoutChoiceCard
-                        key={`${msg.id}-layout`}
-                        slideCount={inlineCardData.layoutSlideCount ?? 1}
-                        resolved={card.resolved}
-                        layoutMode={inlineCardData.layoutMode ?? card.layoutMode}
-                        selectedDesignSystem={selectedDesignSystem}
-                        onConfirm={card.resolved
-                          ? undefined
-                          : (mode, designSystem) => onConfirmLayout(msg.id, mode, designSystem)}
-                      />
-                    );
-                  }
-
-                  if (card.type === "deck" && inlineCardData.presentation) {
-                    return (
-                      <DeckPreviewCard
-                        key={`${msg.id}-deck`}
-                        presentation={inlineCardData.presentation}
-                        isExporting={isExportingDeck}
-                        resolved={card.resolved}
-                        onPreview={onOpenDeckPreview}
-                        onExport={onExportDeck}
-                      />
-                    );
-                  }
-
-                  return null;
-                })}
+                <ArtifactCardHost
+                  messageId={msg.id}
+                  inlineCards={inlineCardData?.refs ?? []}
+                  briefFields={inlineCardData?.briefFields}
+                  outlineItems={inlineCardData?.outlineItems}
+                  presentation={inlineCardData?.presentation}
+                  busy={busy}
+                  isExportingDeck={isExportingDeck}
+                  onConfirmBrief={onConfirmBrief}
+                  onConfirmOutline={onConfirmOutline}
+                  onReviseOutline={onReviseOutline}
+                  onOpenDeckPreview={onOpenDeckPreview}
+                  onExportDeck={onExportDeck}
+                />
                 </>
               )}
             </div>

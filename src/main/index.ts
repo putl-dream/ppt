@@ -64,6 +64,10 @@ import {
 import type { AgentModelSelection } from "@shared/agent";
 import { TokenUsageStore } from "./token-usage-store";
 import type { ConversationEventKind } from "@shared/conversation-events";
+import {
+  toResultDisplayEvents,
+  toStreamDisplayEvent,
+} from "./agent/display/display-event-adapter";
 
 const logger = createModuleLogger("main");
 const agentGateway = new AgentGateway();
@@ -189,6 +193,15 @@ function createAgentStreamEmitter(
     }
     try {
       sender.send("agent:stream", { ...streamEvent, runId, sessionId });
+      const displayEvent = toStreamDisplayEvent(streamEvent, sessionId, runId);
+      if (displayEvent) {
+        sender.send("agent:stream", {
+          type: "display-event",
+          runId,
+          sessionId,
+          event: displayEvent,
+        } satisfies AgentStreamEvent);
+      }
     } catch (error) {
       logger.warn("agent.stream.send-failed", { runId, error });
       abortRun("stream-send-failed");
@@ -388,6 +401,7 @@ app.whenReady().then(async () => {
     sessionId: string,
     runtime: SessionRuntime,
     result: AgentRunResult,
+    runId?: string,
   ): Promise<AgentRunResult> => {
     if (result.status === "completed") {
       await persistPresentation(sessionId, runtime);
@@ -395,7 +409,11 @@ app.whenReady().then(async () => {
     } else if (result.status === "rejected") {
       await persistPresentation(sessionId, runtime);
     }
-    return result;
+    const displayEvents = [
+      ...(result.displayEvents ?? []),
+      ...toResultDisplayEvents(result, sessionId, runId),
+    ];
+    return displayEvents.length > 0 ? { ...result, displayEvents } : result;
   };
 
   const abortAllActiveRuns = (reason: string) => {
@@ -845,6 +863,7 @@ app.whenReady().then(async () => {
               agentStepLimits,
               request.layoutChoice,
             ),
+            currentRunId,
           ),
         );
       } finally {
@@ -949,7 +968,7 @@ app.whenReady().then(async () => {
                 request.layoutChoice,
               );
 
-          return finalizeAgentResult(sessionId, runtime, await run);
+          return finalizeAgentResult(sessionId, runtime, await run, currentRunId);
         },
       );
     } finally {

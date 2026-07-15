@@ -17,6 +17,7 @@ import type {
 } from "./session";
 import type { TokenUsageStats } from "./token-usage";
 import type { ConversationEventPage } from "./conversation-events";
+import type { DisplayEvent } from "./card-display-protocol";
 import type {
   AppLogEntry,
   AppLogLevel,
@@ -108,13 +109,17 @@ export type AgentStreamEvent = (
       goal?: string | null;
     }
   | ({ runId: string } & TeammateProgressEvent)
+  | { runId: string; type: "display-event"; event: DisplayEvent }
 ) & { sessionId?: string };
 
-export type AgentRunResult =
+type AgentRunResultDisplay = { displayEvents?: DisplayEvent[] };
+
+export type AgentRunResult = (
   | { status: "chat"; message: string; threadId?: string; question?: AgentQuestion }
   | { status: "approval-required"; approval: AgentApprovalRequest }
   | { status: "completed"; presentation: Presentation }
-  | { status: "rejected"; presentation?: Presentation };
+  | { status: "rejected"; presentation?: Presentation }
+) & AgentRunResultDisplay;
 
 export interface AgentInboxPollResult {
   hasMessages: boolean;
