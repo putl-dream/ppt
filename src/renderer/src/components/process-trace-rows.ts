@@ -157,8 +157,8 @@ export function buildProcessTraceRows(
         ? "正在处理子任务"
         : item.status === "failed"
           ? "子任务执行失败"
-          : item.status === "interrupted"
-            ? "子任务已中断"
+          : item.status === "interrupted" || item.status === "cancelled"
+            ? "子任务已取消"
             : "子任务已完成";
       pushRow(rows, {
         id: item.id,

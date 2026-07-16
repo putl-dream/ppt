@@ -10,14 +10,20 @@ interface ProcessTracePanelProps {
   items: AgentActivityItem[];
   live?: boolean;
   liveContent?: string;
+  defaultOpen?: boolean;
+  defaultExpandRows?: boolean;
 }
 
 export const ProcessTracePanel: React.FC<ProcessTracePanelProps> = ({
   items,
   live = false,
   liveContent = "",
+  defaultOpen = false,
+  defaultExpandRows = false,
 }) => {
-  const [open, setOpen] = useState(live && (items.length > 0 || Boolean(liveContent.trim())));
+  const [open, setOpen] = useState(
+    defaultOpen || (live && (items.length > 0 || Boolean(liveContent.trim()))),
+  );
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const wasLiveRef = useRef(live);
   const startedAtRef = useRef<number | null>(live ? Date.now() : null);
@@ -94,7 +100,7 @@ export const ProcessTracePanel: React.FC<ProcessTracePanelProps> = ({
             <ProcessTraceItem
               key={row.id}
               row={row}
-              defaultExpanded={Boolean(row.active && row.kind !== "thought")}
+              defaultExpanded={defaultExpandRows || Boolean(row.active && row.kind !== "thought")}
             />
           ))}
           {liveContent.trim() && (

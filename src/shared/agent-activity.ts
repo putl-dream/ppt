@@ -55,8 +55,14 @@ export const agentActivityItemSchema = z.discriminatedUnion("kind", [
     id: z.string(),
     kind: z.literal("task"),
     taskId: z.string(),
+    /** Stable teammate identity. Optional for activity persisted before team views existed. */
+    agentName: z.string().optional(),
+    /** TaskGraph node linked to this activity, when the assignment came from the shared board. */
+    taskGraphId: z.string().optional(),
+    /** Reserved for recursive teammate/session trees. */
+    parentTaskId: z.string().optional(),
     description: z.string(),
-    status: z.enum(["running", "done", "failed", "interrupted"]),
+    status: z.enum(["running", "done", "failed", "interrupted", "cancelled"]),
     steps: z.array(z.object({
       id: z.string(),
       type: z.enum(["reasoning", "tool"]),
@@ -521,13 +527,22 @@ function upsertTask(
 
 export function upsertTaskStarted(
   trace: AgentActivityItem[],
-  input: { taskId: string; description: string },
+  input: {
+    taskId: string;
+    description: string;
+    agentName?: string;
+    taskGraphId?: string;
+    parentTaskId?: string;
+  },
 ): AgentActivityItem[] {
   const existing = trace.find((item) => item.kind === "task" && item.taskId === input.taskId);
   if (existing?.kind === "task") {
     return upsertTask(trace, input.taskId, (task) => ({
       ...task,
       description: input.description,
+      ...(input.agentName ? { agentName: input.agentName } : {}),
+      ...(input.taskGraphId ? { taskGraphId: input.taskGraphId } : {}),
+      ...(input.parentTaskId ? { parentTaskId: input.parentTaskId } : {}),
       status: "running",
     }));
   }
@@ -537,6 +552,9 @@ export function upsertTaskStarted(
       id: crypto.randomUUID(),
       kind: "task",
       taskId: input.taskId,
+      ...(input.agentName ? { agentName: input.agentName } : {}),
+      ...(input.taskGraphId ? { taskGraphId: input.taskGraphId } : {}),
+      ...(input.parentTaskId ? { parentTaskId: input.parentTaskId } : {}),
       description: input.description,
       status: "running",
       steps: [],
@@ -621,7 +639,7 @@ export function finishTaskTool(
 export function finishTask(
   trace: AgentActivityItem[],
   taskId: string,
-  status: "done" | "failed" | "interrupted" = "done",
+  status: "done" | "failed" | "interrupted" | "cancelled" = "done",
 ): AgentActivityItem[] {
   return upsertTask(trace, taskId, (task) => ({
     ...task,
@@ -643,7 +661,11 @@ export function applyTeammateProgressEvent(
     case "teammate-assignment-started":
       return upsertTaskStarted(trace, {
         taskId: event.activityId,
+        // Preserve the legacy readable description for persisted traces while
+        // also publishing structured identity for the team-session UI.
         description: `${event.description} · ${event.teammateName}`,
+        agentName: event.teammateName,
+        ...(event.taskId ? { taskGraphId: event.taskId } : {}),
       });
     case "teammate-thinking-chunk":
       return appendTaskReasoningChunk(trace, event.activityId, event.chunk);
@@ -665,7 +687,11 @@ export function applyTeammateProgressEvent(
       return finishTask(
         trace,
         event.activityId,
-        event.status === "completed" ? "done" : event.status,
+        event.status === "completed"
+          ? "done"
+          : event.status === "interrupted"
+            ? "cancelled"
+            : event.status,
       );
     default:
       return trace;

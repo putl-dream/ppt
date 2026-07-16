@@ -1,8 +1,9 @@
-import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { AgentQuestionResolved } from "@shared/agent-question";
 import type { DisplayEvent } from "@shared/card-display-protocol";
 import type { SessionChatMessage } from "@shared/session";
 import {
+  ChevronRightIcon,
   CopyIcon,
   Edit3Icon,
   OpenPreviewIcon,
@@ -26,6 +27,15 @@ import {
 import { InteractionCardHost } from "../cards/hosts/InteractionCardHost";
 import { ReviewCardHost } from "../cards/hosts/ReviewCardHost";
 import { ArtifactCardHost } from "../cards/hosts/ArtifactCardHost";
+import {
+  collectTeamSessions,
+  type TeamSessionProjection,
+} from "@shared/team-session";
+import {
+  FocusedTeamSession,
+  LeadWaitingState,
+  TeamOverview,
+} from "./TeamSessionViews";
 
 type ChatMessage = SessionChatMessage;
 type QuestionEvent = Extract<DisplayEvent, { kind: "interaction.question-requested" }>;
@@ -33,6 +43,14 @@ type LayoutEvent = Extract<DisplayEvent, { kind: "interaction.layout-required" }
 type CommandProposalEvent = Extract<DisplayEvent, { kind: "review.command-proposal" }>;
 type PatchEvent = Extract<DisplayEvent, { kind: "review.patch-ready" }>;
 type ArtifactEvent = Extract<DisplayEvent, { kind: "artifact.ready" }>;
+type ConversationFocus =
+  | { kind: "main" }
+  | { kind: "overview" }
+  | { kind: "team-session"; sessionId: string };
+
+function getConversationFocusKey(focus: ConversationFocus): string {
+  return focus.kind === "team-session" ? `team:${focus.sessionId}` : focus.kind;
+}
 
 interface UserMessageEditorProps {
   value: string;
@@ -206,11 +224,19 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
   const scrollViewportRef = useRef<HTMLDivElement>(null);
   const chatStreamRef = useRef<HTMLDivElement>(null);
   const shouldFollowOutputRef = useRef(true);
+  const [conversationFocus, setConversationFocus] = useState<ConversationFocus>({ kind: "main" });
+  const [teamAttentionIds, setTeamAttentionIds] = useState<Set<string>>(() => new Set());
+  const [mainHasAttention, setMainHasAttention] = useState(false);
+  const scrollPositionsRef = useRef(new Map<string, number>());
+  const pendingScrollRestoreRef = useRef<string | null>(null);
+  const teamSnapshotsRef = useRef(new Map<string, TeamSessionProjection>());
+  const mainFingerprintRef = useRef<string | null>(null);
+  const decisionReturnFocusRef = useRef<ConversationFocus | null>(null);
+  const hadPendingDecisionRef = useRef(false);
+  const sessionIdentityRef = useRef<string | null>(null);
 
   const managedPermissionCards = usePermissionCardManager((state) => state.cards);
-  const managedPermission = busy
-    ? findActiveToolPermissionCard(managedPermissionCards, activeRunId)
-    : undefined;
+  const managedPermission = findActiveToolPermissionCard(managedPermissionCards, activeRunId);
   const pendingToolApproval = managedPermission?.event.kind === "permission.tool-requested"
     ? managedPermission.event.payload
     : undefined;
@@ -241,6 +267,34 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
   const showTaskPlan = activeTasks.length > 0;
   const hasActiveTaskPlan = activeTasks.some((task) => task.status !== "completed");
   const displayConversationTitle = conversationTitle?.trim() || (isNewChat ? "AI 新建会话" : "当前对话");
+  const teamSessions = useMemo(() => collectTeamSessions(
+    [
+      ...chatMessages.map((message) => message.activityTrace),
+      activityTrace,
+    ],
+    activeTasks,
+  ), [activeTasks, activityTrace, chatMessages]);
+  const selectedTeamSession = conversationFocus.kind === "team-session"
+    ? teamSessions.find((session) => session.id === conversationFocus.sessionId)
+    : undefined;
+  const runningTeamCount = teamSessions.filter((session) => session.status === "running").length;
+  const focusKey = getConversationFocusKey(conversationFocus);
+  const sessionIdentity = chatMessages[0]?.id ?? `empty:${displayConversationTitle}`;
+  const mainFingerprint = useMemo(() => {
+    const lastMessage = chatMessages.at(-1);
+    const leadTrace = activityTrace.filter(
+      (item) => item.kind !== "task" && item.kind !== "taskgraph",
+    );
+    const lastLeadItem = leadTrace.at(-1);
+    return [
+      lastMessage?.id ?? "",
+      lastMessage?.content.length ?? 0,
+      busy ? "busy" : "idle",
+      leadTrace.length,
+      lastLeadItem?.id ?? "",
+      lastLeadItem?.kind ?? "",
+    ].join(":");
+  }, [activityTrace, busy, chatMessages]);
 
   const canCancelRun = Boolean(busy && activeRunId && onCancelRun);
 
@@ -254,6 +308,38 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
     viewport.scrollTo({ top: viewport.scrollHeight, behavior: "smooth" });
   }, []);
 
+  const switchConversationFocus = useCallback((nextFocus: ConversationFocus) => {
+    const viewport = scrollViewportRef.current;
+    if (viewport) scrollPositionsRef.current.set(focusKey, viewport.scrollTop);
+    const nextKey = getConversationFocusKey(nextFocus);
+    pendingScrollRestoreRef.current = nextKey;
+    shouldFollowOutputRef.current = false;
+    setConversationFocus(nextFocus);
+    if (nextFocus.kind === "main") setMainHasAttention(false);
+    if (nextFocus.kind === "team-session") {
+      setTeamAttentionIds((current) => {
+        if (!current.has(nextFocus.sessionId)) return current;
+        const next = new Set(current);
+        next.delete(nextFocus.sessionId);
+        return next;
+      });
+    }
+  }, [focusKey]);
+
+  const focusTeamSession = useCallback((sessionId: string) => {
+    switchConversationFocus({ kind: "team-session", sessionId });
+  }, [switchConversationFocus]);
+
+  const openPendingDecision = useCallback(() => {
+    if (!pendingToolApproval) return;
+    if (conversationFocus.kind !== "main") decisionReturnFocusRef.current = conversationFocus;
+    switchConversationFocus({ kind: "main" });
+    window.requestAnimationFrame(() => {
+      shouldFollowOutputRef.current = true;
+      scrollToBottom(true);
+    });
+  }, [conversationFocus, pendingToolApproval, scrollToBottom, switchConversationFocus]);
+
   // 居中放大初始化页 vs 底部对话页，由 isNewChat 单独控制
   const showInitChat = isNewChat;
 
@@ -265,6 +351,105 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
       setShowSlashMenu(false);
     }
   }, [request]);
+
+  useEffect(() => {
+    if (sessionIdentityRef.current === null) {
+      sessionIdentityRef.current = sessionIdentity;
+      return;
+    }
+    if (sessionIdentityRef.current === sessionIdentity) return;
+    sessionIdentityRef.current = sessionIdentity;
+    scrollPositionsRef.current.clear();
+    teamSnapshotsRef.current.clear();
+    mainFingerprintRef.current = null;
+    decisionReturnFocusRef.current = null;
+    setTeamAttentionIds(new Set());
+    setMainHasAttention(false);
+    setConversationFocus({ kind: "main" });
+    shouldFollowOutputRef.current = true;
+  }, [sessionIdentity]);
+
+  useEffect(() => {
+    if (
+      conversationFocus.kind === "team-session"
+      && !teamSessions.some((session) => session.id === conversationFocus.sessionId)
+    ) {
+      switchConversationFocus({ kind: "main" });
+    }
+  }, [conversationFocus, switchConversationFocus, teamSessions]);
+
+  useEffect(() => {
+    const previous = teamSnapshotsRef.current;
+    const nextSnapshots = new Map<string, TeamSessionProjection>();
+    const changedIds: string[] = [];
+    for (const session of teamSessions) {
+      nextSnapshots.set(session.id, session);
+      const previousSession = previous.get(session.id);
+      const latestStep = session.activity.steps.at(-1);
+      const previousLatestStep = previousSession?.activity.steps.at(-1);
+      const reachedMeaningfulState = Boolean(
+        previousSession
+        && (
+          previousSession.status !== session.status
+          || (
+            latestStep?.type === "tool"
+            && latestStep.status === "done"
+            && (
+              previousLatestStep?.id !== latestStep.id
+              || previousLatestStep.status !== "done"
+            )
+          )
+        )
+      );
+      if (
+        reachedMeaningfulState
+        && !(conversationFocus.kind === "team-session" && conversationFocus.sessionId === session.id)
+      ) {
+        changedIds.push(session.id);
+      }
+      if (
+        previousSession === undefined
+        && previous.size > 0
+        && conversationFocus.kind !== "main"
+      ) {
+        changedIds.push(session.id);
+      }
+    }
+    teamSnapshotsRef.current = nextSnapshots;
+    if (changedIds.length > 0) {
+      setTeamAttentionIds((current) => new Set([...current, ...changedIds]));
+    }
+  }, [conversationFocus, teamSessions]);
+
+  useEffect(() => {
+    const previous = mainFingerprintRef.current;
+    mainFingerprintRef.current = mainFingerprint;
+    if (previous && previous !== mainFingerprint && conversationFocus.kind !== "main") {
+      setMainHasAttention(true);
+    }
+  }, [conversationFocus.kind, mainFingerprint]);
+
+  useEffect(() => {
+    const pending = Boolean(pendingToolApproval);
+    if (
+      hadPendingDecisionRef.current
+      && !pending
+      && decisionReturnFocusRef.current
+    ) {
+      const returnFocus = decisionReturnFocusRef.current;
+      decisionReturnFocusRef.current = null;
+      switchConversationFocus(returnFocus);
+    }
+    hadPendingDecisionRef.current = pending;
+  }, [pendingToolApproval, switchConversationFocus]);
+
+  useLayoutEffect(() => {
+    if (pendingScrollRestoreRef.current !== focusKey) return;
+    const viewport = scrollViewportRef.current;
+    if (!viewport) return;
+    viewport.scrollTop = scrollPositionsRef.current.get(focusKey) ?? 0;
+    pendingScrollRestoreRef.current = null;
+  }, [focusKey]);
 
   useLayoutEffect(() => {
     if (shouldFollowOutputRef.current) {
@@ -291,13 +476,13 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
     if (!stream || !viewport) return;
 
     const observer = new ResizeObserver(() => {
-      if (busy && shouldFollowOutputRef.current) {
+      if ((busy || runningTeamCount > 0) && shouldFollowOutputRef.current) {
         viewport.scrollTop = viewport.scrollHeight;
       }
     });
     observer.observe(stream);
     return () => observer.disconnect();
-  }, [busy]);
+  }, [busy, runningTeamCount]);
 
   const slashCommands = [
     { cmd: "/design 商务蓝", desc: "应用商务蓝设计系统" },
@@ -424,12 +609,60 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
       {/* 顶部中央状态控制栏 */}
       <div className="panel-header canvas-header">
         <div className="canvas-header-left">
-          <div className="chat-session-title" title={displayConversationTitle}>
-            <span>{displayConversationTitle}</span>
-          </div>
+          <nav className="chat-session-breadcrumb" aria-label="任务焦点">
+            <button
+              type="button"
+              className={`chat-session-crumb${conversationFocus.kind === "main" ? " is-current" : ""}`}
+              onClick={() => switchConversationFocus({ kind: "main" })}
+              title={displayConversationTitle}
+              aria-current={conversationFocus.kind === "main" ? "page" : undefined}
+            >
+              <span>{displayConversationTitle}</span>
+              {mainHasAttention && <i className="chat-session-attention-dot" aria-label="主任务有新动态" />}
+            </button>
+            {conversationFocus.kind !== "main" && (
+              <ChevronRightIcon size={13} className="chat-session-crumb-separator" aria-hidden="true" />
+            )}
+            {conversationFocus.kind === "overview" && (
+              <span className="chat-session-crumb is-current" aria-current="page">团队总览</span>
+            )}
+            {conversationFocus.kind === "team-session" && selectedTeamSession && (
+              <span className="chat-session-crumb is-current" aria-current="page">
+                {selectedTeamSession.title}
+              </span>
+            )}
+          </nav>
         </div>
 
         <div className="canvas-header-right">
+          {teamSessions.length > 1 && (
+            <button
+              type="button"
+              className={`team-overview-trigger${conversationFocus.kind === "overview" ? " is-active" : ""}`}
+              onClick={() => switchConversationFocus({ kind: "overview" })}
+              aria-label={`打开团队总览，${teamSessions.length} 个子任务`}
+            >
+              <span className="team-overview-trigger-agents" aria-hidden="true">
+                <i /><i /><i />
+              </span>
+              <span>团队</span>
+              <b>{teamSessions.length}</b>
+              {teamAttentionIds.size > 0 && <i className="team-overview-trigger-alert" />}
+            </button>
+          )}
+          {pendingToolApproval && (
+            <button
+              type="button"
+              className="team-decision-alert"
+              onClick={openPendingDecision}
+              aria-label={`需要授权：${pendingToolApproval.reason}`}
+              title="跳转处理，完成后返回当前视图"
+            >
+              <span className="team-decision-alert-icon" aria-hidden="true">!</span>
+              <span>需要授权</span>
+              <b>1</b>
+            </button>
+          )}
           {/* 打开右侧预览；关闭入口固定在右侧 PPT 面板最右侧 */}
           {!isMirrorOpen && (
             <button
@@ -448,6 +681,8 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
       <div className="chat-scroll-viewport" ref={scrollViewportRef}>
         <div className="chat-conversation-shell">
           <div className="chat-stream" ref={chatStreamRef}>
+        {conversationFocus.kind === "main" ? (
+          <>
         {chatMessages.map((msg) => {
           return (
             <div key={msg.id} className={`chat-message ${msg.role}`}>
@@ -516,6 +751,9 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
                         items={trace}
                         live={traceIsLive}
                         liveContent={useLiveTrace ? msg.content : undefined}
+                        teamGraphTasks={activeTasks}
+                        teamSessionAttentionIds={teamAttentionIds}
+                        onFocusTeamSession={focusTeamSession}
                       />
                     ) : null;
                   })()}
@@ -607,7 +845,24 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
           agentActivityMode={agentActivityMode}
           activityTrace={activityTrace}
           suppressTrace={Boolean(streamingMessageId)}
+          teamGraphTasks={activeTasks}
+          teamSessionAttentionIds={teamAttentionIds}
+          onFocusTeamSession={focusTeamSession}
         />
+
+        {!busy && runningTeamCount > 0 && (
+          <LeadWaitingState runningCount={runningTeamCount} />
+        )}
+          </>
+        ) : conversationFocus.kind === "overview" ? (
+          <TeamOverview
+            sessions={teamSessions}
+            attentionIds={teamAttentionIds}
+            onFocus={focusTeamSession}
+          />
+        ) : selectedTeamSession ? (
+          <FocusedTeamSession session={selectedTeamSession} />
+        ) : null}
 
         <div ref={messagesEndRef} />
           </div>
@@ -636,7 +891,7 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
           </div>
         )}
 
-        <div className={showTaskPlan ? "chat-input-stack" : undefined}>
+        <div className={showTaskPlan && conversationFocus.kind === "main" ? "chat-input-stack" : undefined}>
           <InteractionCardHost
             host="composer-before-input"
             selectedDesignSystem={selectedDesignSystem}
@@ -644,12 +899,17 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
             onResolveQuestion={onResolveQuestion}
             onConfirmLayout={onConfirmLayout}
           />
-          {showTaskPlan && (
+          {showTaskPlan && conversationFocus.kind === "main" && (
             <TaskPlanCard
               goal={planGoal}
               tasks={activeTasks}
               live={busy || hasActiveTaskPlan}
             />
+          )}
+          {conversationFocus.kind !== "main" && !pendingToolApproval && (
+            <div className="team-focus-composer-note">
+              当前为只读观察视图；这里发送的新指令仍会交给 lead。
+            </div>
           )}
           <UnifiedAgentInput
             request={request}

@@ -18,9 +18,9 @@ export const ProcessTraceItem: React.FC<ProcessTraceItemProps> = ({
   const CaretIcon = effectiveExpanded ? ChevronDownIcon : ChevronRightIcon;
 
   useEffect(() => {
-    if (row.kind === "thought") return;
+    if (row.kind === "thought" || defaultExpanded) return;
     setExpanded(Boolean(row.active));
-  }, [row.active, row.kind]);
+  }, [defaultExpanded, row.active, row.kind]);
 
   const toggleExpanded = () => setExpanded((value) => !value);
 

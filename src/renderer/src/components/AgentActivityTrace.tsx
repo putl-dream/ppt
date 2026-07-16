@@ -3,6 +3,8 @@ import type { AgentActivityItem } from "@shared/agent-activity";
 import { splitTraceItems } from "@shared/agent-activity";
 import { ProcessTracePanel } from "./ProcessTracePanel";
 import { TaskPlanCard } from "./TaskPlanCard";
+import type { AgentTaskNode } from "@shared/agent-task-graph";
+import { TeamSessionCards } from "./TeamSessionViews";
 
 interface AgentActivityTraceProps {
   items: AgentActivityItem[];
@@ -10,21 +12,39 @@ interface AgentActivityTraceProps {
   live?: boolean;
   /** 运行期间的模型正文；与执行过程一起展示，完成后再回到消息正文区。 */
   liveContent?: string;
+  teamGraphTasks?: AgentTaskNode[];
+  teamSessionAttentionIds?: ReadonlySet<string>;
+  onFocusTeamSession?: (sessionId: string) => void;
 }
 
 export const AgentActivityTrace: React.FC<AgentActivityTraceProps> = ({
   items,
   live = false,
   liveContent = "",
+  teamGraphTasks = [],
+  teamSessionAttentionIds,
+  onFocusTeamSession,
 }) => {
   const { processItems, standaloneItems } = splitTraceItems(items);
+  const teamActivities = processItems.filter(
+    (item): item is Extract<AgentActivityItem, { kind: "task" }> => item.kind === "task",
+  );
+  const leadProcessItems = processItems.filter((item) => item.kind !== "task");
   const hasLiveContent = Boolean(live && liveContent.trim());
   if (processItems.length === 0 && standaloneItems.length === 0 && !hasLiveContent) return null;
 
   return (
     <div className={`agent-activity-trace${live ? " agent-activity-trace--live" : ""}`}>
-      {(processItems.length > 0 || hasLiveContent) && (
-        <ProcessTracePanel items={processItems} live={live} liveContent={liveContent} />
+      {(leadProcessItems.length > 0 || hasLiveContent) && (
+        <ProcessTracePanel items={leadProcessItems} live={live} liveContent={liveContent} />
+      )}
+      {teamActivities.length > 0 && onFocusTeamSession && (
+        <TeamSessionCards
+          activities={teamActivities}
+          graphTasks={teamGraphTasks}
+          attentionIds={teamSessionAttentionIds}
+          onFocus={onFocusTeamSession}
+        />
       )}
       {standaloneItems.map((item) => {
         if (item.kind === "taskgraph" && item.tasks.length > 0) {
