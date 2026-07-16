@@ -16,7 +16,7 @@ function makeContext(presentation: Presentation): ToolContext {
 }
 
 describe("beautify deferred tools", () => {
-  it("BeautifyChart returns metric styling commands for numeric text", async () => {
+  it("BeautifyChart styles numeric text without inventing chart data", async () => {
     const metricId = crypto.randomUUID();
     const slideId = crypto.randomUUID();
     const presentation: Presentation = {
@@ -60,15 +60,18 @@ describe("beautify deferred tools", () => {
       makeContext(presentation),
     );
 
-    expect(result.commands.length).toBe(2);
-    expect(result.commands[0]?.type).toBe("remove-element");
-    expect(result.commands[1]?.type).toBe("add-element");
-    if (result.commands[1]?.type === "add-element") {
-      expect(result.commands[1].element.type).toBe("chart");
+    expect(result.commands).toHaveLength(1);
+    expect(result.commands[0]?.type).toBe("update-text-style");
+    if (result.commands[0]?.type === "update-text-style") {
+      expect(result.commands[0]).toMatchObject({
+        elementId: metricId,
+        textRole: "metric",
+        bold: true,
+      });
     }
   });
 
-  it("BeautifyTable splits multiline text and applies concept layout", async () => {
+  it("BeautifyTable preserves every row of a pipe-delimited table", async () => {
     const tableId = crypto.randomUUID();
     const slideId = crypto.randomUUID();
     const presentation: Presentation = {
@@ -88,7 +91,14 @@ describe("beautify deferred tools", () => {
               y: 0,
               width: 500,
               height: 200,
-              text: "上半年情况\n问题方案\n下半年计划",
+              text: [
+                "| 阶段 | 状态 |",
+                "| --- | --- |",
+                "| 上半年 | 已完成 |",
+                "| 当前 | 处理中 |",
+                "| 下半年 | 待启动 |",
+                "| 收尾 | 待复盘 |",
+              ].join("\n"),
               fontSize: 20,
             },
           ],
@@ -101,9 +111,50 @@ describe("beautify deferred tools", () => {
       makeContext(presentation),
     );
 
-    expect(result.commands.length).toBeGreaterThan(2);
-    expect(result.commands.some((cmd) => cmd.type === "remove-element")).toBe(true);
-    expect(result.commands.filter((cmd) => cmd.type === "add-element").length).toBe(3);
-    expect(result.commands.at(-1)?.type).toBe("update-slide-layout");
+    expect(result.commands).toHaveLength(2);
+    expect(result.commands[0]?.type).toBe("remove-element");
+    expect(result.commands[1]?.type).toBe("add-element");
+    if (result.commands[1]?.type === "add-element") {
+      expect(result.commands[1].element.type).toBe("table");
+      if (result.commands[1].element.type === "table") {
+        expect(result.commands[1].element.rows).toEqual([
+          ["阶段", "状态"],
+          ["上半年", "已完成"],
+          ["当前", "处理中"],
+          ["下半年", "待启动"],
+          ["收尾", "待复盘"],
+        ]);
+      }
+    }
+  });
+
+  it("BeautifyTable rejects prose instead of deleting or truncating it", async () => {
+    const slideId = crypto.randomUUID();
+    const elementId = crypto.randomUUID();
+    const presentation: Presentation = {
+      id: crypto.randomUUID(),
+      title: "Deck",
+      revision: 1,
+      designSystem: TEST_DESIGN_SYSTEM,
+      slides: [{
+        id: slideId,
+        title: "正文",
+        elements: [{
+          id: elementId,
+          type: "text",
+          x: 120,
+          y: 180,
+          width: 500,
+          height: 240,
+          text: "第一条\n第二条\n第三条\n第四条\n第五条",
+          fontSize: 20,
+        }],
+      }],
+    };
+
+    await expect(beautifyTableTool.execute(
+      { slideId, elementId },
+      makeContext(presentation),
+    )).rejects.toThrow("not a rectangular pipe-delimited table");
   });
 });

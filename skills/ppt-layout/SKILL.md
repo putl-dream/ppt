@@ -50,8 +50,8 @@ allowed-tools:
    - 由 `buildLayoutPlanCommands` 生成 `set-design-system` / `update-slide-layout(grammarVariant + designOverride)` / `update-slide-variant`
 3. 若 `ExecuteLayoutPlan` 返回 error：修复或重新生成 `slides/layout-plan.json` 后再执行；**禁止**从聊天上下文凭记忆重建 layout
 4. `ExecuteLayoutPlan` 已自动编译并本地化 `insert-image`；只对其余 plan.enhancements 逐项 `ExecuteExtraTool`：
-   - `beautify-chart` → BeautifyChart
-   - `beautify-table` → BeautifyTable
+   - `beautify-chart` → BeautifyChart（已有 chart 或明确 KPI 文本；不推断数据）
+   - `beautify-table` → BeautifyTable（仅列数一致的 pipe/Markdown 表格）
    - `add-decorations` → AddLayoutDecorations（仅 creative）
 5. `ValidateDeckLayout` 确认节奏；`LoadSkill deck-review`
 

@@ -4,6 +4,7 @@ import { slideSchema, slideElementSchema, slideElementsSchema } from "./presenta
 import { applyLayout } from "./layout";
 import { SLIDE_LAYOUTS } from "./slide-layouts";
 import { SLIDE_VARIANTS } from "./slide-variant";
+import { resolveFontFamily } from "./typography";
 import {
   designSystemV1Schema,
   resolveSlideStyle,
@@ -293,11 +294,26 @@ export function executeCommand(
   if (command.type === "set-design-system") {
     const previousDesignSystem = presentation.designSystem;
     const slides = presentation.slides.map((slide) => {
-      if (!slide.layout || !SLIDE_LAYOUTS.includes(slide.layout as (typeof SLIDE_LAYOUTS)[number])) {
-        return slide;
-      }
       const style = resolveSlideStyle(command.designSystem, slide);
-      return applyLayout(slide, slide.layout as (typeof SLIDE_LAYOUTS)[number], style, {
+      const restyledSlide: Slide = {
+        ...slide,
+        elements: slide.elements.map((element) => (
+          element.type === "text"
+            ? {
+                ...element,
+                fontFamily: resolveFontFamily(
+                  undefined,
+                  element.textRole ?? "body",
+                  style.typography.family,
+                ),
+              }
+            : element
+        )),
+      };
+      if (!slide.layout || !SLIDE_LAYOUTS.includes(slide.layout as (typeof SLIDE_LAYOUTS)[number])) {
+        return restyledSlide;
+      }
+      return applyLayout(restyledSlide, slide.layout as (typeof SLIDE_LAYOUTS)[number], style, {
         grammarVariant: slide.grammarVariant,
         designOverride: slide.designOverride,
       });

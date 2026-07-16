@@ -7,6 +7,26 @@ export const beautifyTableSchema = z.object({
   elementId: z.string().describe("表格文本或 table 元素 ID"),
 });
 
+function parsePipeTable(text: string): string[][] | null {
+  const rows = text
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const withoutEdges = line.replace(/^\|/, "").replace(/\|$/, "");
+      return withoutEdges.split("|").map((cell) => cell.trim());
+    });
+
+  if (rows.length < 2 || rows[0].length < 2) return null;
+  const columnCount = rows[0].length;
+  if (rows.some((row) => row.length !== columnCount)) return null;
+
+  const isSeparatorRow = (row: string[]) =>
+    row.every((cell) => /^:?-{3,}:?$/.test(cell));
+  const normalized = rows.filter((row, index) => index !== 1 || !isSeparatorRow(row));
+  return normalized.length >= 2 ? normalized : null;
+}
+
 /**
  * Deferred Tool: 将多行文本转为 table 元素，或降级为 concept 卡片组。
  */
@@ -22,91 +42,67 @@ export const beautifyTableTool: ToolDefinition<
   risk: "medium",
   execute: async (args, context) => {
     const slide = context.presentation.slides.find((item) => item.id === args.slideId);
-    if (!slide) return { commands: [] };
+    if (!slide) throw new Error(`Slide '${args.slideId}' was not found.`);
 
     const element = slide.elements.find((item) => item.id === args.elementId);
-    if (!element) return { commands: [] };
-
-    if (element.type === "table") {
-      return { commands: [] };
+    if (!element) {
+      throw new Error(`Element '${args.elementId}' was not found on slide '${args.slideId}'.`);
     }
 
-    if (element.type !== "text") return { commands: [] };
-
-    const lines = element.text
-      .split("\n")
-      .map((line) => line.trim())
-      .filter(Boolean);
-
-    if (lines.length === 0) return { commands: [] };
-
-    const pipeRows = lines
-      .map((line) => line.split("|").map((cell) => cell.trim()))
-      .filter((row) => row.some(Boolean));
-
-    if (pipeRows.length >= 2 && pipeRows[0].length >= 2) {
+    if (element.type === "table") {
+      if (element.headerRow && element.zebraStripe) return { commands: [] };
       return {
-        commands: [
-          {
-            id: crypto.randomUUID(),
-            type: "remove-element",
-            slideId: args.slideId,
-            elementId: args.elementId,
+        commands: [{
+          id: crypto.randomUUID(),
+          type: "update-element",
+          slideId: args.slideId,
+          elementId: args.elementId,
+          element: {
+            ...element,
+            headerRow: true,
+            zebraStripe: true,
           },
-          {
-            id: crypto.randomUUID(),
-            type: "add-element",
-            slideId: args.slideId,
-            element: {
-              id: crypto.randomUUID(),
-              type: "table",
-              x: element.x,
-              y: element.y,
-              width: element.width,
-              height: element.height,
-              rows: pipeRows,
-              headerRow: true,
-              zebraStripe: true,
-            },
-          },
-        ],
+        }],
       };
     }
 
-    const commands: PresentationCommand[] = [
-      {
-        id: crypto.randomUUID(),
-        type: "remove-element",
-        slideId: args.slideId,
-        elementId: args.elementId,
-      },
-    ];
-
-    for (const line of lines.slice(0, 4)) {
-      commands.push({
-        id: crypto.randomUUID(),
-        type: "add-element",
-        slideId: args.slideId,
-        element: {
-          id: crypto.randomUUID(),
-          type: "text",
-          x: element.x,
-          y: element.y,
-          width: element.width,
-          height: 60,
-          text: line,
-          fontSize: 20,
-        },
-      });
+    if (element.type !== "text") {
+      throw new Error("BeautifyTable only accepts a table or pipe-delimited text element.");
     }
 
-    commands.push({
-      id: crypto.randomUUID(),
-      type: "update-slide-layout",
-      slideId: args.slideId,
-      layout: "concept",
-    });
+    const rows = parsePipeTable(element.text);
+    if (!rows) {
+      throw new Error(
+        "The selected text is not a rectangular pipe-delimited table. "
+        + "Use AutoLayoutSlide for prose or provide explicit table rows.",
+      );
+    }
 
-    return { commands };
+    return {
+      commands: [
+        {
+          id: crypto.randomUUID(),
+          type: "remove-element",
+          slideId: args.slideId,
+          elementId: args.elementId,
+        },
+        {
+          id: crypto.randomUUID(),
+          type: "add-element",
+          slideId: args.slideId,
+          element: {
+            id: crypto.randomUUID(),
+            type: "table",
+            x: element.x,
+            y: element.y,
+            width: element.width,
+            height: element.height,
+            rows,
+            headerRow: true,
+            zebraStripe: true,
+          },
+        },
+      ],
+    };
   },
 };

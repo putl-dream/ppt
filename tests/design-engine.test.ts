@@ -105,4 +105,44 @@ describe("design engine", () => {
       expect.arrayContaining(["readability", "over-density", "missing-visual-anchor"]),
     );
   });
+
+  it("does not award an empty deck a perfect score", () => {
+    const result = evaluateDeckVisualQuality(DEFAULT_DESIGN_SYSTEM, []);
+    expect(result.scores.overall).toBe(0);
+    expect(result.issues).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: "empty-deck", severity: "error" }),
+    ]));
+  });
+
+  it("penalizes overlapping foreground content", () => {
+    const result = evaluateDeckVisualQuality(DEFAULT_DESIGN_SYSTEM, [{
+      id: "overlap-slide",
+      layout: "concept",
+      elements: [
+        {
+          type: "text",
+          x: 120,
+          y: 180,
+          width: 500,
+          height: 160,
+          text: "Primary content",
+          fontSize: 28,
+        },
+        {
+          type: "text",
+          x: 180,
+          y: 220,
+          width: 500,
+          height: 160,
+          text: "Overlapping content",
+          fontSize: 24,
+        },
+      ],
+    }]);
+
+    expect(result.slides[0].scores.composition).toBeLessThan(80);
+    expect(result.slides[0].issues).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: "composition-bounds", severity: "error" }),
+    ]));
+  });
 });

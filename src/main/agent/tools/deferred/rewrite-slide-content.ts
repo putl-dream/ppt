@@ -1,6 +1,8 @@
 import { z } from "zod";
 import type { ToolDefinition } from "../tool-definition";
 import type { PresentationCommand } from "@shared/commands";
+import { callLLMJson } from "../../gateway/model-calls";
+import { assertProtectedFactsPreserved } from "./text-rewrite-utils";
 
 export const rewriteSlideContentSchema = z.object({
   slideId: z.string().describe("目标幻灯片 ID"),
@@ -29,15 +31,46 @@ export const rewriteSlideContentTool: ToolDefinition<
     if (!element || element.type !== "text") {
       throw new Error(`Text element '${args.elementId}' not found on slide '${args.slideId}'.`);
     }
+    if (!context.gateway) {
+      throw new Error(
+        "RewriteSlideContent requires a configured model gateway; mock rewriting is disabled.",
+      );
+    }
 
-    const mockRewrites: Record<string, string> = {
-      professional: `[专业版] ${element.text}`,
-      concise: `[精炼版] ${element.text.slice(0, 30)}`,
-      creative: `[创意版] Sparking: ${element.text}`,
-      persuasive: `[说服性版] Key Value: ${element.text}`,
+    const styleInstructions: Record<typeof args.style, string> = {
+      professional: "Use precise, professional wording and a restrained tone.",
+      concise: "Remove repetition and filler while keeping every material fact.",
+      creative: "Use vivid but credible phrasing without inventing claims.",
+      persuasive: "Strengthen the value proposition without exaggerating evidence.",
     };
-
-    const rewrittenText = mockRewrites[args.style] || element.text;
+    const resultSchema = z.object({
+      rewrittenText: z.string().trim().min(1).max(Math.max(1_000, element.text.length * 3)),
+    });
+    const { rewrittenText } = await callLLMJson(
+      context.gateway,
+      {
+        schema: resultSchema,
+        schemaName: "rewritten_slide_text",
+        description: "Fact-preserving rewritten slide text.",
+        request: {
+          systemPrompt: [
+            "Rewrite one presentation text element.",
+            "Preserve every number, date, percentage, currency amount, URL, email, proper noun, and factual relationship.",
+            "Do not add prefixes such as 'professional version' or meta commentary.",
+            "Return only the rewritten text in the structured field.",
+          ].join("\n"),
+          prompt: JSON.stringify({
+            style: args.style,
+            instruction: styleInstructions[args.style],
+            text: element.text,
+          }),
+          signal: context.signal,
+          maxOutputTokens: Math.min(4_096, Math.max(512, element.text.length * 3)),
+        },
+      },
+      context.model,
+    );
+    assertProtectedFactsPreserved(element.text, rewrittenText);
 
     const commands: PresentationCommand[] = [
       {

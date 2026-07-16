@@ -38,9 +38,25 @@ export const applyTypographyTool: ToolDefinition<
         if (element.type !== "text") continue;
 
         const role = (element.textRole ?? "body") as TextRole;
-        const fontFamily = resolveFontFamily(element.fontFamily, role, style.typography.family);
+        const fontFamily = resolveFontFamily(undefined, role, style.typography.family);
+        const metricStyle = role === "metric"
+          ? {
+              bold: true,
+              color: style.colors.accent,
+              fontSize: Math.max(element.fontSize, 32),
+            }
+          : {};
 
-        if (element.fontFamily === fontFamily && role === element.textRole) continue;
+        if (
+          element.fontFamily === fontFamily
+          && role === element.textRole
+          && (role !== "metric"
+            || (
+              element.bold === true
+              && element.color === style.colors.accent
+              && element.fontSize >= 32
+            ))
+        ) continue;
 
         commands.push({
           id: crypto.randomUUID(),
@@ -49,6 +65,7 @@ export const applyTypographyTool: ToolDefinition<
           elementId: element.id,
           textRole: role,
           fontFamily,
+          ...metricStyle,
         });
       }
 

@@ -106,8 +106,8 @@ allowed-tools:
 
 | type | 执行工具 | 说明 |
 |------|----------|------|
-| `beautify-chart` | BeautifyChart | KPI / 趋势；可选 chartType |
-| `beautify-table` | BeautifyTable | 表格数据页 |
+| `beautify-chart` | BeautifyChart | 仅美化已有 chart，或强化明确的 KPI 文本；不得从自由文本推断图表数据 |
+| `beautify-table` | BeautifyTable | 仅转换列数一致的 pipe/Markdown 表格；普通多行文本改用布局工具 |
 | `insert-image` | InsertSlideImage | slot + url，无需坐标 |
 | `add-decorations` | AddLayoutDecorations | 仅 creative + process/comparison |
 | `add-icon` | add-element icon | 关键列表点缀 |

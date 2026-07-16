@@ -409,7 +409,7 @@ export class TeammateManager {
       state.taskGraphListener?.(snapshot);
     };
     const stepLimits = resolveAgentStepLimits(options.agentStepLimits);
-    const maxSteps = options.maxSteps ?? Math.min(getEffectiveSubMaxSteps(stepLimits), 10);
+    const maxSteps = options.maxSteps ?? getEffectiveSubMaxSteps(stepLimits);
     const idlePollMs = options.idlePollMs ?? 5_000;
     const idleTimeoutMs = options.idleTimeoutMs ?? 60_000;
     const permissionPollMs = options.permissionPollMs ?? 500;

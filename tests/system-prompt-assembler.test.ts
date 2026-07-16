@@ -167,6 +167,7 @@ describe("system prompt assembly", () => {
 
   it("keeps the response protocol in the stable prompt prefix", () => {
     const assembled = assembleSystemPrompt(baseContext({
+      stage: "style",
       memories: "记住：封面用 hero",
     }));
     expect(assembled.text).toContain("visualAssetAudit");

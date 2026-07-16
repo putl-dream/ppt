@@ -23,10 +23,12 @@ export const beautifyChartTool: ToolDefinition<
   risk: "medium",
   execute: async (args, context) => {
     const slide = context.presentation.slides.find((item) => item.id === args.slideId);
-    if (!slide) return { commands: [] };
+    if (!slide) throw new Error(`Slide '${args.slideId}' was not found.`);
 
     const element = slide.elements.find((item) => item.id === args.elementId);
-    if (!element) return { commands: [] };
+    if (!element) {
+      throw new Error(`Element '${args.elementId}' was not found on slide '${args.slideId}'.`);
+    }
 
     const style = resolveSlideStyle(context.presentation.designSystem, slide);
     const colors = style.colors;
@@ -45,44 +47,29 @@ export const beautifyChartTool: ToolDefinition<
       };
     }
 
-    if (element.type !== "text") return { commands: [] };
-
-    const isMetricLayout = slide.layout === "case";
-    const numericHint = /[\d%$¥€]/.test(element.text);
-
-    if (!numericHint && element.textRole !== "metric" && !isMetricLayout) {
-      return { commands: [] };
+    if (element.type !== "text") {
+      throw new Error("BeautifyChart only accepts an existing chart or KPI text element.");
     }
 
-    const parsedValue = parseFloat(element.text.replace(/[^\d.]/g, ""));
-    const chartType = isMetricLayout ? "kpi-tower" : "bar";
+    const numericHint = /[\d%$¥€]/.test(element.text);
+    if (!numericHint && element.textRole !== "metric") {
+      throw new Error(
+        "The selected text is not marked as a metric and contains no numeric value. "
+        + "Provide structured chart data instead of inferring values from prose.",
+      );
+    }
 
     return {
       commands: [
         {
           id: crypto.randomUUID(),
-          type: "remove-element",
+          type: "update-text-style",
           slideId: args.slideId,
           elementId: args.elementId,
-        },
-        {
-          id: crypto.randomUUID(),
-          type: "add-element",
-          slideId: args.slideId,
-          element: {
-            id: crypto.randomUUID(),
-            type: "chart",
-            x: element.x,
-            y: element.y,
-            width: element.width,
-            height: element.height,
-            chartType,
-            data: {
-              items: [{ label: element.text, value: Number.isFinite(parsedValue) ? parsedValue : 100 }],
-            },
-            accentColor: colors.accent,
-            chartStyle: style.chart.style,
-          },
+          textRole: "metric",
+          bold: true,
+          color: colors.accent,
+          fontSize: Math.max(element.fontSize, 28),
         },
       ],
     };

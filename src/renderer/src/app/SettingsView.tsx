@@ -56,14 +56,10 @@ export function SettingsView({
           logoUrl={controller.logoUrl}
           onLogoUpload={controller.uploadLogo}
           onRemoveLogo={controller.removeLogo}
-          autoDownload={controller.autoDownload}
-          setAutoDownload={controller.setAutoDownload}
           autoCloudSync={controller.autoCloudSync}
           setAutoCloudSync={controller.setAutoCloudSync}
           localStoragePath={localStoragePath}
           onOpenWorkspace={onOpenWorkspace}
-          defaultRatio={controller.defaultRatio}
-          setDefaultRatio={controller.setDefaultRatio}
           agentStepLimits={controller.agentStepLimits}
           setAgentStepLimits={controller.setAgentStepLimits}
           agentGatewayPreferences={controller.agentGatewayPreferences}

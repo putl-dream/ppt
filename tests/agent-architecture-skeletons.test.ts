@@ -505,7 +505,19 @@ describe("Agent Architecture Skeletons & Types", () => {
   it("DesignPolicy checks semantic conservation rules", () => {
     const policy = new DesignPolicy();
     const before = createStarterPresentation();
-    const after = createStarterPresentation();
+    const after = structuredClone(before);
+    const textElement = {
+      id: "semantic-text",
+      type: "text" as const,
+      x: 120,
+      y: 180,
+      width: 800,
+      height: 160,
+      text: "This is important source content that must not be silently removed.",
+      fontSize: 24,
+    };
+    before.slides[0].elements = [textElement];
+    after.slides[0].elements = [structuredClone(textElement)];
     
     // Valid case: no text removal
     const check1 = policy.validate(before, after);

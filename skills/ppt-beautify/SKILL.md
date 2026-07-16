@@ -26,8 +26,8 @@ allowed-tools:
 | 单页重排版 | AutoLayoutSlide | `update-slide-layout` |
 | 换设计系统 | ApplyDesignSystem | `set-design-system` |
 | 风格推荐 | SelectStyleStrategy | 返回 preset + DesignSystemV1（不直接改 deck） |
-| 长文精简 | CompressText | 压缩后文本（需再 update-element） |
-| 改写字风 | RewriteSlideContent | `update-element` |
+| 长文精简 | CompressText | 调用模型做事实保持压缩；无法保留数字/日期/链接时会失败 |
+| 改写字风 | RewriteSlideContent | 调用模型生成 `update-element`，并校验关键事实 token |
 | 图表样式 | BeautifyChart | P2：文本 KPI → chart 元素（kpi-tower/bar/timeline） |
 | 表格样式 | BeautifyTable | P2：`\|` 分隔文本 → table 元素 |
 | 搜索页面图片 | SearchSlideImages（Core） | 免费图库优先的候选 + 可直接插入参数 |
@@ -77,7 +77,7 @@ update-slide-variant(slideId, hero|light|dark) → SubmitCommands
 
 **文字太长溢出**：DetectOverflowText（审查）→ CompressText → update-element 命令
 
-**润色不改事实**：AutoLayoutSlide / Beautify*；**允许改写措辞**：RewriteSlideContent
+**润色不改事实**：AutoLayoutSlide / Beautify*；BeautifyChart 不会从文字生成数值，BeautifyTable 只接受结构化 pipe 表格。**允许改写措辞**：RewriteSlideContent
 
 ## 约束
 

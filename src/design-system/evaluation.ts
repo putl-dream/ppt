@@ -64,8 +64,18 @@ export interface EvaluationSlide {
 
 const clamp = (value: number): number => Math.max(0, Math.min(100, Math.round(value)));
 const average = (values: number[]): number => values.length === 0
-  ? 100
+  ? 0
   : values.reduce((sum, value) => sum + value, 0) / values.length;
+const SAFE_MARGIN = 40;
+
+function overlaps(left: EvaluationElement, right: EvaluationElement): boolean {
+  return (
+    left.x < right.x + right.width
+    && left.x + left.width > right.x
+    && left.y < right.y + right.height
+    && left.y + left.height > right.y
+  );
+}
 
 function hexToRgb(hex: string): [number, number, number] | null {
   const normalized = hex.replace("#", "");
@@ -131,9 +141,21 @@ function evaluateSlide(system: DesignSystemV1, slide: EvaluationSlide): SlideVis
   const visualAnchor = hasPrimaryVisual ? 100 : hasSecondaryVisual ? 78 : slide.layout === "cover" ? 80 : 48;
 
   const outOfBounds = slide.elements.filter((element) =>
-    element.x < 0 || element.y < 0 || element.x + element.width > 1280 || element.y + element.height > 720).length;
+    element.x < SAFE_MARGIN
+    || element.y < SAFE_MARGIN
+    || element.x + element.width > 1280 - SAFE_MARGIN
+    || element.y + element.height > 720 - SAFE_MARGIN).length;
   const tinyElements = slide.elements.filter((element) => element.width < 24 || element.height < 12).length;
-  const composition = clamp(100 - outOfBounds * 25 - tinyElements * 8);
+  const foregroundElements = slide.elements.filter((element) => element.type !== "shape");
+  let overlapCount = 0;
+  for (let left = 0; left < foregroundElements.length; left += 1) {
+    for (let right = left + 1; right < foregroundElements.length; right += 1) {
+      if (overlaps(foregroundElements[left], foregroundElements[right])) overlapCount += 1;
+    }
+  }
+  const composition = clamp(
+    100 - outOfBounds * 25 - tinyElements * 8 - overlapCount * 22,
+  );
 
   const scores: SlideVisualScores = {
     hierarchy,
@@ -155,7 +177,14 @@ function evaluateSlide(system: DesignSystemV1, slide: EvaluationSlide): SlideVis
   if (readability < 75) issues.push({ code: "readability", severity: readability < 55 ? "error" : "warning", message: "文字尺寸、篇幅或对比度影响阅读。", suggestion: "压缩文案、提高最小字号，并使用解析后的正文色。" });
   if (density < 70) issues.push({ code: "over-density", severity: "warning", message: "当前页面超过设计系统的密度预算。", suggestion: "删减次要信息，或改用更适合高密度内容的版式。" });
   if (visualAnchor < 70) issues.push({ code: "missing-visual-anchor", severity: "warning", message: "页面缺少明确的视觉锚点。", suggestion: "加入与叙事相关的图片、图表、关键数字或结构图。" });
-  if (composition < 80) issues.push({ code: "composition-bounds", severity: "error", message: "存在越界或尺寸过小的元素。", suggestion: "重新应用布局槽位并检查安全边距。" });
+  if (composition < 80) issues.push({
+    code: "composition-bounds",
+    severity: "error",
+    message: overlapCount > 0
+      ? "存在内容元素重叠、越过安全边距或尺寸过小的问题。"
+      : "存在越过安全边距或尺寸过小的元素。",
+    suggestion: "重新应用布局槽位，并检查内容元素重叠和安全边距。",
+  });
 
   return { slideId: slide.id, scores, issues };
 }
@@ -165,6 +194,7 @@ export function evaluateDeckVisualQuality(
   slides: EvaluationSlide[],
 ): DeckVisualEvaluation {
   const evaluations = slides.map((slide) => evaluateSlide(system, slide));
+  const emptyDeck = slides.length === 0;
   const keys: VisualScoreKey[] = ["hierarchy", "readability", "density", "visualAnchor", "composition"];
   const base = Object.fromEntries(keys.map((key) => [key, clamp(average(evaluations.map((item) => item.scores[key])))]) ) as Record<VisualScoreKey, number>;
 
@@ -172,15 +202,25 @@ export function evaluateDeckVisualQuality(
     .filter((slide) => slide.designOverride && Object.keys(slide.designOverride).length > 0)
     .map((slide) => JSON.stringify(slide.designOverride, Object.keys(slide.designOverride ?? {}).sort())));
   const allowedOverrides = Math.max(2, Math.ceil(slides.length * 0.25));
-  const consistency = clamp(100 - Math.max(0, overrideSignatures.size - allowedOverrides) * 12);
+  const consistency = emptyDeck
+    ? 0
+    : clamp(100 - Math.max(0, overrideSignatures.size - allowedOverrides) * 12);
 
   const layoutSignatures = new Set(slides.map((slide) =>
     `${slide.layout ?? "unset"}/${slide.grammarVariant ?? "default"}/${slide.slideVariant ?? "default"}`));
-  const differentiation = slides.length <= 2
+  const differentiation = emptyDeck
+    ? 0
+    : slides.length <= 2
     ? 100
     : clamp(45 + Math.min(55, (layoutSignatures.size / slides.length) * 90));
 
   const issues: VisualIssue[] = [];
+  if (emptyDeck) issues.push({
+    code: "empty-deck",
+    severity: "error",
+    message: "演示文稿没有任何幻灯片，无法进行视觉质量确认。",
+    suggestion: "先创建并排版至少一页幻灯片。",
+  });
   if (consistency < 80) issues.push({ code: "deck-style-drift", severity: "warning", message: "页面级设计覆盖过多，整套视觉语言开始漂移。", suggestion: "将共性收回 deck 级 DesignSystem，只保留有叙事意义的页面覆盖。" });
   if (differentiation < 70) issues.push({ code: "deck-repetition", severity: "warning", message: "页面版式重复度较高。", suggestion: "按叙事角色切换 grammarVariant、布局或明暗节奏。" });
 

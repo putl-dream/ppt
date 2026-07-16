@@ -2,7 +2,10 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { exportPptxTool } from "../src/main/agent/tools/deferred/export-pptx";
+import {
+  exportPptxSchema,
+  exportPptxTool,
+} from "../src/main/agent/tools/deferred/export-pptx";
 import { createDefaultToolRegistry } from "../src/main/agent/tools/tool-registry";
 import { createStarterPresentation } from "../src/shared/presentation";
 
@@ -35,19 +38,8 @@ describe("ExportPptx deferred tool", () => {
     tempExportDirs.push(join(result.filePath, ".."));
   });
 
-  it("rejects pdf export", async () => {
-    const registry = createDefaultToolRegistry();
-    const context = {
-      presentation: createStarterPresentation(),
-      selectedElementIds: [],
-      discoverySession: { discoveredToolNames: new Set<string>() },
-      registry,
-      messageHistory: [],
-    };
-
-    await expect(exportPptxTool.execute({ format: "pdf" }, context)).rejects.toThrow(
-      "PDF export is not supported yet",
-    );
+  it("does not advertise unsupported pdf export", () => {
+    expect(exportPptxSchema.safeParse({ format: "pdf" }).success).toBe(false);
   });
 
   it("exports html format", async () => {

@@ -109,10 +109,10 @@ describe("ExecuteLayoutPlan", () => {
 
     const result = await executeLayoutPlanTool.execute({}, makeContext(workspaceRoot, presentation));
 
-    expect("type" in result ? result.type : undefined).toBe("command_proposal");
     if (!("type" in result) || result.type !== "command_proposal") {
-      throw new Error("Expected command proposal");
+      throw new Error(`Expected command proposal, received: ${JSON.stringify(result)}`);
     }
+    expect(result.type).toBe("command_proposal");
     expect(result.commands).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ type: "set-design-system" }),
@@ -130,17 +130,17 @@ describe("ExecuteLayoutPlan", () => {
     plan.slides[0].enhancements = [{
       type: "insert-image",
       slot: "side",
-      url: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB",
+      url: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl2n1cAAAAASUVORK5CYII=",
       description: "Evidence image",
     }];
     await writePlan(workspaceRoot, plan);
 
     const result = await executeLayoutPlanTool.execute({}, makeContext(workspaceRoot, presentation));
 
-    expect("type" in result ? result.type : undefined).toBe("command_proposal");
     if (!("type" in result) || result.type !== "command_proposal") {
-      throw new Error("Expected command proposal");
+      throw new Error(`Expected command proposal, received: ${JSON.stringify(result)}`);
     }
+    expect(result.type).toBe("command_proposal");
     expect(result.commands).toEqual(expect.arrayContaining([
       expect.objectContaining({ type: "update-slide-layout", grammarVariant: "evidence" }),
       expect.objectContaining({

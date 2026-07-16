@@ -82,7 +82,18 @@ export function applyLayout(
   const userShapes = workingSlide.elements.filter(isUserPreservedShape);
 
   if (textElements.length === 0 && layout !== "image-grid") {
-    return slide;
+    const defaultBackgroundVariant = (
+      layoutRegistry.get(layout)?.defaultBackgroundVariant
+      ?? resolveLayoutBackgroundVariant(layout)
+    ) as BackgroundVariant;
+    return {
+      ...workingSlide,
+      layout,
+      grammarVariant,
+      designOverride: options.designOverride ?? slide.designOverride,
+      backgroundVariant: defaultBackgroundVariant,
+      slideVariant: slide.slideVariant ?? layoutRegistry.get(layout)?.defaultSlideVariant,
+    };
   }
 
   const isChromeLayout = layout === "cover" || layout === "section";

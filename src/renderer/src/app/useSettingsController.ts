@@ -39,12 +39,8 @@ export interface SettingsController {
   logoUrl: string | null;
   uploadLogo: (url: string) => void;
   removeLogo: () => void;
-  autoDownload: boolean;
-  setAutoDownload: (value: boolean) => void;
   autoCloudSync: boolean;
   setAutoCloudSync: (value: boolean) => void;
-  defaultRatio: "16:9" | "4:3";
-  setDefaultRatio: (value: "16:9" | "4:3") => void;
   agentStepLimits: AgentStepLimits;
   setAgentStepLimits: (value: AgentStepLimits) => void;
   agentGatewayPreferences: AgentGatewayPreferences;
@@ -72,11 +68,7 @@ export function useSettingsController(
   const persisted = bootstrap.persistedUiSettings;
   const [saveStatus, setSaveStatus] = useState<"saved" | "saving">("saved");
   const saveTimerRef = useRef<number | null>(null);
-  const [autoDownload, setAutoDownloadState] = useState(() => persisted.autoDownload ?? true);
   const [autoCloudSync, setAutoCloudSyncState] = useState(() => persisted.autoCloudSync ?? false);
-  const [defaultRatio, setDefaultRatioState] = useState<"16:9" | "4:3">(
-    () => persisted.defaultRatio === "4:3" ? "4:3" : "16:9",
-  );
   const [agentStepLimits, setAgentStepLimitsState] = useState(() => bootstrap.agentStepLimits);
   const [agentGatewayPreferences, setAgentGatewayPreferencesState] = useState(
     () => bootstrap.agentGatewayPreferences,
@@ -141,9 +133,9 @@ export function useSettingsController(
 
   useEffect(() => {
     savePersistedUiSettings({
-      autoDownload,
+      autoDownload: false,
       autoCloudSync,
-      defaultRatio,
+      defaultRatio: "16:9",
       themeMode,
       uiAccentColor,
       uiControlShape,
@@ -155,10 +147,8 @@ export function useSettingsController(
     });
   }, [
     autoCloudSync,
-    autoDownload,
     borderRadiusScale,
     colorContrastOffset,
-    defaultRatio,
     logoUrl,
     selectedDesignSystem,
     themeMode,
@@ -228,12 +218,8 @@ export function useSettingsController(
     logoUrl,
     uploadLogo,
     removeLogo,
-    autoDownload,
-    setAutoDownload: update(setAutoDownloadState),
     autoCloudSync,
     setAutoCloudSync: update(setAutoCloudSyncState),
-    defaultRatio,
-    setDefaultRatio: update(setDefaultRatioState),
     agentStepLimits,
     setAgentStepLimits: update(setAgentStepLimitsState),
     agentGatewayPreferences,

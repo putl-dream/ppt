@@ -42,14 +42,10 @@ interface SettingsConsoleProps {
   onLogoUpload: (url: string) => void;
   onRemoveLogo: () => void;
 
-  autoDownload: boolean;
-  setAutoDownload: (val: boolean) => void;
   autoCloudSync: boolean;
   setAutoCloudSync: (val: boolean) => void;
   localStoragePath: string;
   onOpenWorkspace: () => void;
-  defaultRatio: "16:9" | "4:3";
-  setDefaultRatio: (val: "16:9" | "4:3") => void;
   agentStepLimits: AgentStepLimits;
   setAgentStepLimits: (val: AgentStepLimits) => void;
   agentGatewayPreferences: AgentGatewayPreferences;
@@ -181,14 +177,10 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
   logoUrl,
   onLogoUpload,
   onRemoveLogo,
-  autoDownload,
-  setAutoDownload,
   autoCloudSync,
   setAutoCloudSync,
   localStoragePath,
   onOpenWorkspace,
-  defaultRatio,
-  setDefaultRatio,
   agentStepLimits,
   setAgentStepLimits,
   agentGatewayPreferences,
@@ -474,12 +466,13 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
                 title="生成后动作"
               />
 
-              <SettingRow title="生成完成后自动下载">
+              <SettingRow title="生成完成后自动下载（尚未支持）" muted>
                 <label className="toggle-switch">
                   <input
                     type="checkbox"
-                    checked={autoDownload}
-                    onChange={(event) => setAutoDownload(event.target.checked)}
+                    checked={false}
+                    disabled
+                    readOnly
                   />
                   <span className="toggle-slider" />
                 </label>
@@ -525,18 +518,20 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
 
               <div className="settings-choice-grid">
                 <button
-                  className={`settings-choice-card ${defaultRatio === "16:9" ? "active" : ""}`}
-                  onClick={() => setDefaultRatio("16:9")}
+                  className="settings-choice-card active"
+                  type="button"
                 >
                   <span className="settings-ratio-preview settings-ratio-preview--wide" />
                   <span>16:9 宽屏</span>
                 </button>
                 <button
-                  className={`settings-choice-card ${defaultRatio === "4:3" ? "active" : ""}`}
-                  onClick={() => setDefaultRatio("4:3")}
+                  className="settings-choice-card"
+                  type="button"
+                  disabled
+                  title="当前渲染与导出引擎仅支持 16:9"
                 >
                   <span className="settings-ratio-preview settings-ratio-preview--classic" />
-                  <span>4:3 经典屏</span>
+                  <span>4:3 经典屏（尚未支持）</span>
                 </button>
               </div>
 
