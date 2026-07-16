@@ -72,18 +72,58 @@ describe("snip_compact", () => {
 });
 
 describe("micro_compact", () => {
-  it("keeps only the last three tool results at full size", () => {
+  it("compacts sizeable older tool results while keeping the last three in full", () => {
     const transcript = Array.from({ length: 6 }, (_, index) => ({
       role: "tool",
       toolName: `tool-${index}`,
-      result: `payload-${index}`,
+      result: `payload-${index}-${"x".repeat(3_000)}`,
     }));
 
     const compacted = microCompactTranscript(transcript, 3);
     expect(compacted[0].result).toContain("compacted");
+    expect(compacted[0].result).toContain("payload-0");
     expect(compacted[2].result).toContain("compacted");
-    expect(compacted[3].result).toBe("payload-3");
-    expect(compacted[5].result).toBe("payload-5");
+    expect(compacted[3].result).toBe(transcript[3].result);
+    expect(compacted[5].result).toBe(transcript[5].result);
+  });
+
+  it("keeps small results and the latest durable state result intact", () => {
+    const transcript = [
+      { role: "tool", toolName: "small-1", result: "small result" },
+      { role: "tool", toolName: "TaskGraphList", result: "x".repeat(3_000) },
+      { role: "tool", toolName: "large-1", result: "x".repeat(3_000) },
+      { role: "tool", toolName: "large-2", result: "x".repeat(3_000) },
+      { role: "tool", toolName: "large-3", result: "x".repeat(3_000) },
+      { role: "tool", toolName: "large-4", result: "x".repeat(3_000) },
+    ];
+
+    const compacted = microCompactTranscript(transcript, 2);
+    expect(compacted[0].result).toBe("small result");
+    expect(compacted[1].result).toBe(transcript[1].result);
+    expect(compacted[2].result).toContain("compacted");
+  });
+
+  it("keeps the persisted recovery path in a compacted preview", () => {
+    const transcript = [
+      {
+        role: "tool",
+        toolName: "Read",
+        result: "x".repeat(3_000),
+        modelResult: { persistedPath: ".agent/tool-results/thread/read.json" },
+      },
+      ...Array.from({ length: 3 }, (_, index) => ({
+        role: "tool",
+        toolName: `recent-${index}`,
+        result: "x".repeat(3_000),
+      })),
+    ];
+
+    const compacted = microCompactTranscript(transcript, 3);
+    expect(compacted[0].result).toContain(".agent/tool-results/thread/read.json");
+    expect(compacted[0].compaction).toMatchObject({
+      originalChars: 3_002,
+      persistedPath: ".agent/tool-results/thread/read.json",
+    });
   });
 });
 
@@ -192,7 +232,61 @@ describe("compact_history", () => {
 });
 
 describe("prepareContext", () => {
-  it("runs L1-L3 without API and triggers L4 when over threshold", async () => {
+  it("does not compact solely because more than three tool results exist", async () => {
+    const progress: string[] = [];
+    const transcript = Array.from({ length: 8 }, (_, index) => ({
+      role: "tool",
+      toolName: `tool-${index}`,
+      result: `small-${index}`,
+    }));
+
+    const result = await prepareContext({
+      payload: { request: "task", transcript },
+      systemPrompt: "system",
+      tokenThreshold: 100_000,
+      onProgress: (message) => progress.push(message),
+    });
+
+    expect(result.payload.transcript).toEqual(transcript);
+    expect(result.notes).toEqual([]);
+    expect(result.contextChanged).toBe(false);
+    expect(progress).toEqual([]);
+  });
+
+  it("uses preview-preserving micro compaction only after the soft threshold", async () => {
+    const generateText = vi.fn();
+    const gateway: AgentModelGateway = {
+      generateText,
+      async *generateTextStream() {
+        yield { type: "complete" as const, content: [] };
+      },
+    };
+    const progress: string[] = [];
+    const transcript = Array.from({ length: 6 }, (_, index) => ({
+      role: "tool",
+      toolName: `tool-${index}`,
+      result: `important-${index}-${"x".repeat(4_000)}`,
+    }));
+
+    const result = await prepareContext({
+      payload: { request: "task", transcript },
+      systemPrompt: "system",
+      gateway,
+      tokenThreshold: 10_000,
+      softTokenThreshold: 5_000,
+      onProgress: (message) => progress.push(message),
+    });
+
+    expect(generateText).not.toHaveBeenCalled();
+    expect(result.contextChanged).toBe(true);
+    expect(result.notes.some((note) => note.startsWith("L2 micro_compact:"))).toBe(true);
+    expect(String(result.payload.transcript[0].result)).toContain("important-0");
+    expect(progress).toEqual([
+      "上下文空间接近阈值，已精简较早的工具结果并保留可恢复摘要…",
+    ]);
+  });
+
+  it("persists large results and triggers L4 when still over the hard threshold", async () => {
     const workspaceRoot = await createWorkspace();
     const generateText = vi.fn().mockResolvedValue({
       provider: "openai",
@@ -229,7 +323,10 @@ describe("prepareContext", () => {
     expect(result.payload.transcript.length).toBeLessThan(transcript.length);
     expect(generateText).toHaveBeenCalledTimes(1);
     expect(result.notes.some((note) => /L[1-4]|Persisted oversized/.test(note))).toBe(true);
-    expect(userProgress).toEqual(["已整理较早的会话记录，正在继续处理…"]);
+    expect(result.contextChanged).toBe(true);
+    expect(userProgress).toEqual([
+      "上下文空间接近上限，已总结较早的会话记录并继续处理…",
+    ]);
     expect(userProgress.join(" ")).not.toMatch(
       /snip_compact|micro_compact|compact_history|tool_result|\.task_outputs/i,
     );

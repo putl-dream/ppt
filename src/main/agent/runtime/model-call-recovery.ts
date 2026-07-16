@@ -214,7 +214,7 @@ export async function callModelWithRecovery(
       preparedMessages = compactStructuredMessages(
         options.messages,
         payload,
-        prepared.notes.length > 0,
+        prepared.contextChanged,
       );
       options.onContextPrepared?.(
         structuredClone(payload),

@@ -1,4 +1,4 @@
-export { resolveContextTokenThreshold } from "./config";
+export { resolveContextSoftTokenThreshold, resolveContextTokenThreshold } from "./config";
 export { estimatePromptTokens } from "./estimate-tokens";
 export { snipCompactConversation, snipCompactTranscript, adjustSnipBoundary } from "./snip-compact";
 export { microCompactTranscript, measureToolResultBytes } from "./micro-compact";

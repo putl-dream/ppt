@@ -1,5 +1,5 @@
 import type { ModelPromptPayload } from "../model-call-recovery";
-import { resolveContextTokenThreshold } from "./config";
+import { resolveContextSoftTokenThreshold, resolveContextTokenThreshold } from "./config";
 import { compactHistory } from "./compact-history";
 import { estimatePromptTokens } from "./estimate-tokens";
 import { microCompactTranscript } from "./micro-compact";
@@ -7,10 +7,32 @@ import { snipCompactConversation, snipCompactTranscript } from "./snip-compact";
 import { toolResultBudget } from "./tool-result-budget";
 import type { ContextCompactResult, PrepareContextOptions } from "./types";
 
-export const CONTEXT_PREPARED_USER_MESSAGE = "已整理较早的会话记录，正在继续处理…";
+export const CONTEXT_TOOL_RESULTS_COMPACTED_USER_MESSAGE =
+  "上下文空间接近阈值，已精简较早的工具结果并保留可恢复摘要…";
+export const CONTEXT_HISTORY_COMPACTED_USER_MESSAGE =
+  "上下文空间接近上限，已总结较早的会话记录并继续处理…";
+export const CONTEXT_LARGE_RESULTS_PERSISTED_USER_MESSAGE =
+  "已将较大的工具结果保存到工作区，正在继续处理…";
+
+function contextProgressMessage(notes: string[]): string | undefined {
+  if (notes.some((note) => /^L4 compact_history:/i.test(note))) {
+    return CONTEXT_HISTORY_COMPACTED_USER_MESSAGE;
+  }
+  if (notes.some((note) => /^L1 snip_compact:/i.test(note))) {
+    return CONTEXT_HISTORY_COMPACTED_USER_MESSAGE;
+  }
+  if (notes.some((note) => /^L2 micro_compact:/i.test(note))) {
+    return CONTEXT_TOOL_RESULTS_COMPACTED_USER_MESSAGE;
+  }
+  if (notes.some((note) => /^(?:L3 tool_result_budget:|Persisted oversized tool result)/i.test(note))) {
+    return CONTEXT_LARGE_RESULTS_PERSISTED_USER_MESSAGE;
+  }
+  return undefined;
+}
 
 /**
- * Run L1→L3 (0 API), then L4 LLM summary when still over token threshold.
+ * Persist exceptionally large results immediately, then delay lossy compaction
+ * until the prompt approaches its configured token threshold.
  */
 export async function prepareContext(
   options: PrepareContextOptions,
@@ -20,33 +42,31 @@ export async function prepareContext(
 
   let payload: ModelPromptPayload = structuredClone(options.payload);
 
-  const beforeSnip = payload.transcript.length + (payload.conversation?.length ?? 0);
-  payload = {
-    ...payload,
-    conversation: snipCompactConversation(payload.conversation),
-    transcript: snipCompactTranscript(payload.transcript),
-  };
-  const afterSnip = payload.transcript.length + (payload.conversation?.length ?? 0);
-  if (afterSnip < beforeSnip) {
-    notes.push(`L1 snip_compact: ${beforeSnip - afterSnip} messages removed from middle.`);
-  }
-
-  const beforeMicro = JSON.stringify(payload.transcript).length;
-  payload = {
-    ...payload,
-    transcript: microCompactTranscript(payload.transcript),
-  };
-  const afterMicro = JSON.stringify(payload.transcript).length;
-  if (afterMicro < beforeMicro) {
-    notes.push("L2 micro_compact: older tool results replaced with placeholders.");
-  }
-
   const budgetResult = await toolResultBudget(payload.transcript, options.workspaceRoot);
   payload = { ...payload, transcript: budgetResult.transcript };
   notes.push(...budgetResult.notes);
 
   const tokenThreshold = options.tokenThreshold ?? resolveContextTokenThreshold();
+  const softTokenThreshold = Math.min(
+    options.softTokenThreshold ?? resolveContextSoftTokenThreshold(tokenThreshold),
+    tokenThreshold,
+  );
   let estimatedTokens = estimatePromptTokens(options.systemPrompt, payload);
+
+  if (estimatedTokens > softTokenThreshold) {
+    const beforeMicro = JSON.stringify(payload.transcript).length;
+    payload = {
+      ...payload,
+      transcript: microCompactTranscript(payload.transcript),
+    };
+    const afterMicro = JSON.stringify(payload.transcript).length;
+    if (afterMicro < beforeMicro) {
+      notes.push(
+        `L2 micro_compact: reduced older tool results by ${beforeMicro - afterMicro} characters.`,
+      );
+      estimatedTokens = estimatePromptTokens(options.systemPrompt, payload);
+    }
+  }
 
   if (estimatedTokens > tokenThreshold && options.gateway) {
     const historyResult = await compactHistory({
@@ -73,10 +93,25 @@ export async function prepareContext(
     }
   }
 
-  // `notes` are diagnostics for logs/snapshots. The UI receives one stable,
-  // user-facing status instead of internal L1/L2/L4 implementation details.
-  const contextWasOptimized = notes.some((note) => !/^L4 compact_history skipped:/i.test(note));
-  if (contextWasOptimized) options.onProgress?.(CONTEXT_PREPARED_USER_MESSAGE);
+  if (estimatedTokens > tokenThreshold) {
+    const beforeSnip = payload.transcript.length + (payload.conversation?.length ?? 0);
+    payload = {
+      ...payload,
+      conversation: snipCompactConversation(payload.conversation),
+      transcript: snipCompactTranscript(payload.transcript),
+    };
+    const afterSnip = payload.transcript.length + (payload.conversation?.length ?? 0);
+    if (afterSnip < beforeSnip) {
+      notes.push(
+        `L1 snip_compact: ${beforeSnip - afterSnip} messages removed after summary was unavailable.`,
+      );
+      estimatedTokens = estimatePromptTokens(options.systemPrompt, payload);
+    }
+  }
 
-  return { payload, notes, compactHistoryFailures };
+  const contextChanged = notes.some((note) => !/^L4 compact_history skipped:/i.test(note));
+  const progressMessage = contextChanged ? contextProgressMessage(notes) : undefined;
+  if (progressMessage) options.onProgress?.(progressMessage);
+
+  return { payload, notes, compactHistoryFailures, contextChanged };
 }

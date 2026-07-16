@@ -8,6 +8,7 @@ export interface ContextCompactResult {
   payload: ModelPromptPayload;
   notes: string[];
   compactHistoryFailures: number;
+  contextChanged: boolean;
 }
 
 export interface PrepareContextOptions {
@@ -16,6 +17,7 @@ export interface PrepareContextOptions {
   workspaceRoot?: string;
   threadId?: string;
   tokenThreshold?: number;
+  softTokenThreshold?: number;
   compactHistoryFailures?: number;
   gateway?: import("../../gateway/types").AgentModelGateway;
   model?: import("@shared/agent").AgentModelSelection;
