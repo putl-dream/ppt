@@ -56,9 +56,7 @@
       "narrativeRole": "content",
       "layout": "case",
       "rationale": "Narrative + key metric; avoids third consecutive concept page.",
-      "enhancements": [
-        { "type": "beautify-chart", "chartType": "kpi-tower" }
-      ]
+      "enhancements": []
     },
     {
       "slideId": "slide-6",
@@ -74,9 +72,7 @@
       "narrativeRole": "data",
       "layout": "case",
       "rationale": "Case study with KPI anchor (Rubric C1).",
-      "enhancements": [
-        { "type": "beautify-chart", "chartType": "kpi-tower" }
-      ]
+      "enhancements": []
     },
     {
       "slideId": "slide-8",

@@ -126,13 +126,7 @@ export const searchSlideImagesTool: ToolDefinition<
   execute: async (args, context) => {
     const slide = context.presentation.slides.find((item) => item.id === args.slideId);
     if (!slide) {
-      return {
-        slideId: args.slideId,
-        query: args.query ?? "",
-        candidates: [],
-        guidance: "Slide not found.",
-        rawSearch: { query: args.query ?? "", results: [], images: [], sourcesGuidance: "" },
-      };
+      throw new Error(`Slide '${args.slideId}' was not found.`);
     }
 
     const slots = listLayoutSlots(slide.layout ?? "", slide.grammarVariant);
@@ -169,7 +163,7 @@ export const searchSlideImagesTool: ToolDefinition<
     const rankedImages = [...rawSearch.images]
       .filter((image) => !usedImageUrls.has(image.url))
       .sort((left, right) => Number(Boolean(right.sourceUrl)) - Number(Boolean(left.sourceUrl)));
-    const candidates = rankedImages.map((image, index): SlideImageCandidate => {
+    const candidates = rankedImages.slice(0, args.maxImages).map((image, index): SlideImageCandidate => {
       const sourcePageUrl = image.sourceUrl;
       const provider = providerFromUrl(sourcePageUrl ?? image.url);
       const description = image.description || `${slide.title} image candidate ${index + 1}`;

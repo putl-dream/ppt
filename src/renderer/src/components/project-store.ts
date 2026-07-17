@@ -51,7 +51,7 @@ interface ProjectState {
   initializeProject: (id: string, name: string, backendArtifacts?: ProjectArtifact[]) => void;
   hydrateProjectArtifacts: (sessionId?: string) => Promise<void>;
   updateArtifactContent: (id: ArtifactId, content: string, by?: "user" | "agent") => void;
-  markStageReady: (id: ArtifactId) => void;
+  markStageReady: (id: ArtifactId) => Promise<void>;
   resetProject: () => void;
 }
 
@@ -376,31 +376,32 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     );
   },
 
-  markStageReady: (id) => {
+  markStageReady: async (id) => {
     const project = get().activeProject;
     if (!project) return;
 
-    set((state) => {
-      if (!state.activeProject) return {};
-      const currentArtifact = state.activeProject.artifacts[id];
-      return {
-        activeProject: {
-          ...state.activeProject,
-          artifacts: {
-            ...state.activeProject.artifacts,
-            [id]: {
-              ...currentArtifact,
-              status: "ready",
-              updatedAt: Date.now(),
-              lastWriteError: undefined,
+    const api = getDesktopApi();
+    if (!api || project.id === "draft_id") {
+      set((state) => {
+        if (!state.activeProject || state.activeProject.id !== project.id) return {};
+        const currentArtifact = state.activeProject.artifacts[id];
+        return {
+          activeProject: {
+            ...state.activeProject,
+            artifacts: {
+              ...state.activeProject.artifacts,
+              [id]: {
+                ...currentArtifact,
+                status: "ready",
+                updatedAt: Date.now(),
+                lastWriteError: undefined,
+              },
             },
           },
-        },
-      };
-    });
-
-    const api = getDesktopApi();
-    if (!api || project.id === "draft_id") return;
+        };
+      });
+      return;
+    }
 
     const artifact = project.artifacts[id];
     const timerKey = `${project.id}:${id}`;
@@ -410,41 +411,68 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       writeTimers.delete(timerKey);
     }
 
-    void api
-      .writeProjectArtifact(project.id, artifact.path, artifact.content)
-      .then((result: ProjectArtifactWriteResult) => {
-        set((state) => {
-          if (!state.activeProject || state.activeProject.id !== project.id) return {};
-          return {
-            activeProject: {
-              ...state.activeProject,
-              artifacts: applyWriteResult(state.activeProject.artifacts, result),
-            },
-          };
-        });
-        return api.markProjectArtifactStatus(project.id, id, "ready");
-      })
-      .then((artifact: ProjectArtifact) => {
-        set((state) => {
-          if (!state.activeProject || state.activeProject.id !== project.id) return {};
-          return {
-            activeProject: {
-              ...state.activeProject,
-              artifacts: {
-                ...state.activeProject.artifacts,
-                [id]: {
-                  ...state.activeProject.artifacts[id],
-                  status: artifact.status,
-                  updatedAt: Date.now(),
-                },
+    try {
+      const result: ProjectArtifactWriteResult = await api.writeProjectArtifact(
+        project.id,
+        artifact.path,
+        artifact.content,
+      );
+      const latestArtifact = get().activeProject?.id === project.id
+        ? get().activeProject?.artifacts[id]
+        : undefined;
+      if (!latestArtifact || latestArtifact.content !== artifact.content) {
+        throw new Error(`Artifact '${id}' changed while it was being confirmed; confirm it again.`);
+      }
+      set((state) => {
+        if (!state.activeProject || state.activeProject.id !== project.id) return {};
+        return {
+          activeProject: {
+            ...state.activeProject,
+            artifacts: applyWriteResult(state.activeProject.artifacts, result),
+          },
+        };
+      });
+
+      const markedArtifact = await api.markProjectArtifactStatus(project.id, id, "ready");
+      if (!markedArtifact || markedArtifact.id !== id || markedArtifact.status !== "ready") {
+        throw new Error(`Backend did not confirm artifact '${id}' as ready.`);
+      }
+      set((state) => {
+        if (!state.activeProject || state.activeProject.id !== project.id) return {};
+        return {
+          activeProject: {
+            ...state.activeProject,
+            artifacts: {
+              ...state.activeProject.artifacts,
+              [id]: {
+                ...state.activeProject.artifacts[id],
+                status: markedArtifact.status,
+                updatedAt: Date.now(),
+                lastWriteError: undefined,
               },
             },
-          };
-        });
-      })
-      .catch((error: unknown) => {
-        console.error(`标记项目产物状态失败: ${id}`, error);
+          },
+        };
       });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      set((state) => {
+        if (!state.activeProject || state.activeProject.id !== project.id) return {};
+        return {
+          activeProject: {
+            ...state.activeProject,
+            artifacts: {
+              ...state.activeProject.artifacts,
+              [id]: {
+                ...state.activeProject.artifacts[id],
+                lastWriteError: message,
+              },
+            },
+          },
+        };
+      });
+      throw error;
+    }
   },
 
   resetProject: () => {

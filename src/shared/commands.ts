@@ -1,6 +1,11 @@
 import { z } from "zod";
 import type { Presentation, Slide } from "./presentation";
-import { slideSchema, slideElementSchema, slideElementsSchema } from "./presentation";
+import {
+  hexColorSchema,
+  slideSchema,
+  slideElementSchema,
+  slideElementsSchema,
+} from "./presentation";
 import { applyLayout } from "./layout";
 import { SLIDE_LAYOUTS } from "./slide-layouts";
 import { SLIDE_VARIANTS } from "./slide-variant";
@@ -85,7 +90,7 @@ export const presentationCommandSchema = z.discriminatedUnion("type", [
     elementId: z.string(),
     fontSize: z.number().positive().optional(),
     bold: z.boolean().optional(),
-    color: z.string().optional(),
+    color: hexColorSchema.optional(),
     align: z.enum(["left", "center", "right"]).optional(),
     textRole: z.enum(["kicker", "body", "metric", "caption"]).optional(),
     fontFamily: z.enum(["serif", "sans", "mono"]).optional(),

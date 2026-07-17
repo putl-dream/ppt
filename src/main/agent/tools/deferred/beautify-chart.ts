@@ -9,14 +9,14 @@ export const beautifyChartSchema = z.object({
 });
 
 /**
- * Deferred Tool: 对图表 / KPI 数字进行美化，或创建 chart 元素。
+ * Deferred Tool: 对已有图表或 KPI 数字文本进行样式强化。
  */
 export const beautifyChartTool: ToolDefinition<
   typeof beautifyChartSchema,
   { commands: PresentationCommand[] }
 > = {
   name: "BeautifyChart",
-  description: "强化 KPI / 指标数字的视觉展现，或将文本指标转为 chart 元素（kpi-tower / bar）。",
+  description: "美化已有 chart，或将明确的数值/KPI 文本强化为 metric 样式；不会从文本生成或推断图表数据。",
   category: "deferred",
   loadPolicy: "deferred",
   inputSchema: beautifyChartSchema,

@@ -16,12 +16,94 @@ export const ELEMENT_PROVENANCE = ["layout", "user", "agent", "asset"] as const;
 
 export const elementProvenanceSchema = z.enum(ELEMENT_PROVENANCE);
 
+export const hexColorSchema = z.string()
+  .regex(/^#[0-9a-f]{6}$/i, "Color must be a six-digit hex value such as #2563eb.");
+export const paintColorSchema = z.union([hexColorSchema, z.literal("transparent")]);
+
+const SUPPORTED_DATA_IMAGE_RE =
+  /^data:image\/(?:png|jpeg|gif);base64,[a-z0-9+/]+={0,2}$/i;
+const URI_SCHEME_RE = /^[a-z][a-z0-9+.-]*:/i;
+const WINDOWS_ABSOLUTE_PATH_RE = /^[a-z]:[\\/]/i;
+
+function hasMatchingRasterSignature(value: string): boolean {
+  const separatorIndex = value.indexOf(",");
+  if (separatorIndex < 0) return false;
+  const header = value.slice(0, separatorIndex).toLowerCase();
+  const payload = value.slice(separatorIndex + 1);
+  if (header === "data:image/png;base64") return payload.startsWith("iVBORw0KGgo");
+  if (header === "data:image/jpeg;base64") return payload.startsWith("/9j/");
+  if (header === "data:image/gif;base64") {
+    return payload.startsWith("R0lGODdh") || payload.startsWith("R0lGODlh");
+  }
+  return false;
+}
+
+export const rasterDataImageSourceSchema = z.string().trim().min(1).max(18 * 1024 * 1024)
+  .regex(
+    SUPPORTED_DATA_IMAGE_RE,
+    "Image data must be a PNG, JPEG, or GIF base64 data URL.",
+  )
+  .refine(
+    hasMatchingRasterSignature,
+    "Image data signature does not match its declared PNG, JPEG, or GIF media type.",
+  );
+
+export const imageSourceSchema = z.string().trim().min(1).max(18 * 1024 * 1024)
+  .superRefine((value, context) => {
+    if (
+      /^https?:\/\//i.test(value)
+      || /^file:\/\//i.test(value)
+      || WINDOWS_ABSOLUTE_PATH_RE.test(value)
+      || value.startsWith("\\\\")
+      || !URI_SCHEME_RE.test(value)
+    ) {
+      return;
+    }
+    if (rasterDataImageSourceSchema.safeParse(value).success) return;
+    context.addIssue({
+      code: "custom",
+      message: "Image source must be HTTP(S), file://, a filesystem path, or a PNG/JPEG/GIF base64 data URL.",
+    });
+  });
+
+const chartItemSchema = z.object({
+  label: z.string().trim().min(1),
+  value: z.number().finite(),
+});
+
 export const chartDataSchema = z.object({
-  labels: z.array(z.string()).optional(),
-  values: z.array(z.number()).optional(),
-  items: z
-    .array(z.object({ label: z.string(), value: z.number() }))
-    .optional(),
+  labels: z.array(z.string().trim().min(1)).optional(),
+  values: z.array(z.number().finite()).optional(),
+  items: z.array(chartItemSchema).optional(),
+}).superRefine((data, context) => {
+  const itemCount = data.items?.length ?? 0;
+  const labelCount = data.labels?.length ?? 0;
+  const valueCount = data.values?.length ?? 0;
+  const hasParallelData = labelCount > 0 || valueCount > 0;
+
+  if (itemCount > 0 && hasParallelData) {
+    context.addIssue({
+      code: "custom",
+      message: "Chart data must use either items or labels/values, not both.",
+    });
+    return;
+  }
+
+  if (itemCount === 0) {
+    if (labelCount === 0 || valueCount === 0) {
+      context.addIssue({
+        code: "custom",
+        message: "Chart data requires at least one item or a non-empty labels/values pair.",
+      });
+      return;
+    }
+    if (labelCount !== valueCount) {
+      context.addIssue({
+        code: "custom",
+        message: "Chart labels and values must have the same length.",
+      });
+    }
+  }
 });
 
 export const chartElementSchema = z.object({
@@ -34,10 +116,20 @@ export const chartElementSchema = z.object({
   height: z.number().positive(),
   chartType: z.enum(CHART_TYPES),
   data: chartDataSchema,
-  accentColor: z.string().optional(),
+  accentColor: hexColorSchema.optional(),
   chartStyle: z.enum(CHART_STYLES).optional(),
-  unit: z.string().optional(),
+  unit: z.string().trim().max(30).optional(),
   highlightIndex: z.number().int().nonnegative().optional(),
+}).superRefine((element, context) => {
+  const dataLength = element.data.items?.length
+    ?? Math.min(element.data.labels?.length ?? 0, element.data.values?.length ?? 0);
+  if (element.highlightIndex !== undefined && element.highlightIndex >= dataLength) {
+    context.addIssue({
+      code: "custom",
+      path: ["highlightIndex"],
+      message: `highlightIndex must be smaller than the chart data length (${dataLength}).`,
+    });
+  }
 });
 
 export const tableElementSchema = z.object({
@@ -48,9 +140,20 @@ export const tableElementSchema = z.object({
   y: z.number(),
   width: z.number().positive(),
   height: z.number().positive(),
-  rows: z.array(z.array(z.string())).min(1),
+  rows: z.array(z.array(z.string()).min(1)).min(1),
   headerRow: z.boolean().optional().default(true),
   zebraStripe: z.boolean().optional().default(true),
+}).superRefine((element, context) => {
+  const columnCount = element.rows[0]?.length ?? 0;
+  element.rows.forEach((row, rowIndex) => {
+    if (row.length !== columnCount) {
+      context.addIssue({
+        code: "custom",
+        path: ["rows", rowIndex],
+        message: `Table rows must all contain ${columnCount} column(s).`,
+      });
+    }
+  });
 });
 
 export const iconElementSchema = z.object({
@@ -62,7 +165,7 @@ export const iconElementSchema = z.object({
   width: z.number().positive(),
   height: z.number().positive(),
   name: z.enum(ICON_NAMES),
-  color: z.string().optional(),
+  color: hexColorSchema.optional(),
   strokeWidth: z.number().positive().optional().default(2),
 });
 
@@ -77,7 +180,7 @@ export const textElementSchema = z.object({
   text: z.string(),
   fontSize: z.number().positive().default(32),
   bold: z.boolean().optional(),
-  color: z.string().optional(),
+  color: hexColorSchema.optional(),
   align: z.enum(["left", "center", "right"]).optional(),
   textRole: z.enum(TEXT_ROLES).optional(),
   fontFamily: z.enum(FONT_FAMILIES).optional(),
@@ -106,7 +209,7 @@ export const imageElementSchema = z.object({
   y: z.number(),
   width: z.number().positive(),
   height: z.number().positive(),
-  url: z.string(),
+  url: imageSourceSchema,
   borderRadius: z.number().optional().default(0),
   imageSlot: z.string().optional(),
   objectFit: z.enum(["cover", "contain"]).optional(),
@@ -115,7 +218,7 @@ export const imageElementSchema = z.object({
 });
 
 export const shadowSchema = z.object({
-  color: z.string().default("#000000"),
+  color: hexColorSchema.default("#000000"),
   blur: z.number().default(12),
   offsetX: z.number().default(0),
   offsetY: z.number().default(4),
@@ -131,8 +234,8 @@ export const shapeElementSchema = z.object({
   width: z.number().positive(),
   height: z.number().positive(),
   shapeType: z.enum(["rectangle", "circle", "arrow", "line", "roundedRect"]),
-  fillColor: z.string().default("#3b82f6"),
-  strokeColor: z.string().default("#1d4ed8"),
+  fillColor: paintColorSchema.default("#3b82f6"),
+  strokeColor: paintColorSchema.default("#1d4ed8"),
   cornerRadius: z.number().optional(),
   fillOpacity: z.number().min(0).max(1).optional(),
   shadow: shadowSchema.optional(),

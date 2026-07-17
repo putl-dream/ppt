@@ -126,6 +126,43 @@ describe("render-feedback-loop", () => {
     expect(formatRenderFeedbackMessage(payload)).toContain("排版视觉反馈");
     expect(formatRenderFeedbackMessage(payload)).toContain("Deck 总分");
   });
+
+  it("keeps structured feedback for every affected slide", async () => {
+    const base = makePresentation();
+    const presentation: Presentation = {
+      ...base,
+      slides: Array.from({ length: 8 }, (_, index) => ({
+        ...structuredClone(base.slides[0]),
+        id: `slide-${index + 1}`,
+        title: `Slide ${index + 1}`,
+        elements: base.slides[0].elements.map((element) => ({
+          ...structuredClone(element),
+          id: `${element.id}-${index + 1}`,
+        })),
+      })),
+    };
+    const context: ToolContext = {
+      presentation,
+      selectedElementIds: [],
+      discoverySession: { discoveredToolNames: new Set() },
+      registry: createDefaultToolRegistry(),
+      messageHistory: [],
+      promptStage: "style",
+    };
+
+    const payload = await buildRenderFeedback({
+      presentation,
+      commands: [{
+        id: "restyle-all",
+        type: "set-design-system",
+        designSystem: testDesignSystem({ palette: "warm-paper" }),
+      }],
+      proposalSummary: "Restyle all slides",
+      context,
+    });
+
+    expect(payload.slides).toHaveLength(8);
+  });
 });
 
 function createNativeGateway(

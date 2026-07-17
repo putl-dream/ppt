@@ -83,6 +83,27 @@ describe("agent activity display", () => {
       .toBe("无法恢复会话。");
   });
 
+  it("hides Lean DeckSpec diagnostics behind an actionable public message", () => {
+    const error = new Error(
+      "Error invoking remote method 'agent:start': ModelOutputError: "
+      + "Lean DeckSpec 校验失败；为保持单次调用承诺，本次不会自动重试："
+      + "Unrecognized key: \"language\"; Invalid input: expected 1 at version",
+    );
+
+    const message = formatPublicErrorMessage(error, "请重试。");
+    expect(message).toBe(
+      "模型未按 Lean Mode 契约返回内容。本次未自动重试，也未修改 PPT；请重新生成。",
+    );
+    expect(message).not.toContain("ModelOutputError");
+    expect(message).not.toContain("language");
+    expect(formatPublicErrorMessage(
+      "Lean Mode 未通过唯一的 DeckSpec 提交工具返回结果；本次不会自动重试。",
+      "请重试。",
+    )).toBe(
+      "模型未按 Lean Mode 契约返回内容。本次未自动重试，也未修改 PPT；请重新生成。",
+    );
+  });
+
   it("replaces internal task owner ids with collaboration roles", () => {
     const task: AgentTaskNode = {
       id: "task-1",

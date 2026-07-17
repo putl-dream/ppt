@@ -18,6 +18,7 @@ import { TaskPlanCard } from "./TaskPlanCard";
 import type { ManagedModel } from "../modelCatalog";
 import type { Presentation } from "@shared/presentation";
 import type { LayoutVisualMode } from "@shared/layout-preference";
+import type { LeanGenerationMode } from "@shared/lean-mode-contract";
 import type { DesignSystemV1 } from "@design-system";
 import {
   findActiveToolPermissionCard,
@@ -168,6 +169,8 @@ interface ChatWorkspaceProps {
   models: ManagedModel[];
   selectedModelId: string;
   setSelectedModelId: (val: string) => void;
+  generationMode: LeanGenerationMode;
+  onChangeGenerationMode: (mode: LeanGenerationMode) => void;
   workspaceReady: boolean;
   sandboxName: string;
   onPrepareWorkspace: () => void;
@@ -212,6 +215,8 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
   models,
   selectedModelId,
   setSelectedModelId,
+  generationMode,
+  onChangeGenerationMode,
   workspaceReady,
   sandboxName,
   onPrepareWorkspace,
@@ -561,6 +566,8 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
             models={models}
             selectedModelId={selectedModelId}
             setSelectedModelId={setSelectedModelId}
+            generationMode={generationMode}
+            onChangeGenerationMode={onChangeGenerationMode}
             layoutMode="center"
             pendingToolApproval={pendingApprovalProps}
             onResolveToolApproval={onResolveToolApproval}
@@ -919,6 +926,8 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
             models={models}
             selectedModelId={selectedModelId}
             setSelectedModelId={setSelectedModelId}
+            generationMode={generationMode}
+            onChangeGenerationMode={onChangeGenerationMode}
             layoutMode="bottom"
             pendingToolApproval={pendingApprovalProps}
             onResolveToolApproval={onResolveToolApproval}

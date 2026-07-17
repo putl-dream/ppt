@@ -100,7 +100,11 @@ function describeSlide(slide: Slide): string {
  */
 export const previewSlideTool: ToolDefinition<
   typeof previewSlideSchema,
-  { preview: SlidePreviewSummary | null; thumbnail: SlidePreviewThumbnail | null }
+  {
+    preview: SlidePreviewSummary;
+    thumbnail: SlidePreviewThumbnail | null;
+    thumbnailError?: string;
+  }
 > = {
   name: "PreviewSlide",
   description: "获取单页幻灯片的视觉摘要（layout、槽位、元素位置、背景）及 PNG 缩略图，用于排版后自检。",
@@ -110,7 +114,7 @@ export const previewSlideTool: ToolDefinition<
   risk: "low",
   execute: async (args, context) => {
     const slide = context.presentation.slides.find((item) => item.id === args.slideId);
-    if (!slide) return { preview: null, thumbnail: null };
+    if (!slide) throw new Error(`Slide '${args.slideId}' was not found.`);
 
     const style = resolveSlideStyle(context.presentation.designSystem, slide);
 
@@ -131,7 +135,7 @@ export const previewSlideTool: ToolDefinition<
           const fontFamily = resolveElementFontFamily(el, style.typography.family);
           return {
             id: el.id,
-            text: el.text.slice(0, 80),
+            text: el.text,
             textRole: el.textRole,
             fontFamily,
             fontCss: fontFamilyToCss(fontFamily),
@@ -161,14 +165,20 @@ export const previewSlideTool: ToolDefinition<
     };
 
     let thumbnail: SlidePreviewThumbnail | null = null;
+    let thumbnailError: string | undefined;
     if (args.includeThumbnail) {
       try {
         thumbnail = await slideThumbnailService.captureSlide(slide, context.presentation.designSystem);
-      } catch {
+      } catch (error) {
         thumbnail = null;
+        thumbnailError = error instanceof Error ? error.message : String(error);
       }
     }
 
-    return { preview, thumbnail };
+    return {
+      preview,
+      thumbnail,
+      ...(thumbnailError ? { thumbnailError } : {}),
+    };
   },
 };

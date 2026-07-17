@@ -204,4 +204,23 @@ describe("layout-plan", () => {
       }),
     ]));
   });
+
+  it("rejects non-executable layout-plan enhancements", () => {
+    expect(() => parseLayoutPlan(JSON.stringify({
+      version: 1,
+      styleMode: "template",
+      designSystem: TEST_DESIGN_SYSTEM,
+      slides: [{
+        slideId: "slide-1",
+        title: "Metrics",
+        narrativeRole: "data",
+        layout: "case",
+        rationale: "Metrics page.",
+        enhancements: [{
+          type: "beautify-chart",
+          chartType: "kpi-tower",
+        }],
+      }],
+    }))).toThrow();
+  });
 });

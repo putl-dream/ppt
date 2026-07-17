@@ -75,20 +75,34 @@ describe("project-store zustand store", () => {
   it("updates artifact content and propagates stale status to downstream artifacts", async () => {
     vi.useFakeTimers();
 
-    mockDesktopApi.writeProjectArtifact.mockResolvedValue({
-      path: "brief.md",
-      changed: true,
-      changedArtifactId: "brief",
-      staleArtifactIds: ["outline", "research", "design", "slides", "deck"],
-    });
+    mockDesktopApi.writeProjectArtifact.mockImplementation(async (_sessionId, path) => ({
+      path,
+      changed: false,
+      staleArtifactIds: [],
+    }));
+    mockDesktopApi.markProjectArtifactStatus.mockImplementation(async (_sessionId, id) => ({
+      id,
+      title: id,
+      path: `${id}.md`,
+      status: "ready",
+      dependsOn: [],
+    }));
 
     const store = useProjectStore.getState();
     store.initializeProject("test-session", "Test Project");
 
     // mark all stages ready first
     for (const stage of ["brief", "outline", "research", "design", "slides", "deck"] as const) {
-      store.markStageReady(stage);
+      await store.markStageReady(stage);
     }
+
+    mockDesktopApi.writeProjectArtifact.mockClear();
+    mockDesktopApi.writeProjectArtifact.mockResolvedValue({
+      path: "brief.md",
+      changed: true,
+      changedArtifactId: "brief",
+      staleArtifactIds: ["outline", "research", "design", "slides", "deck"],
+    });
 
     let state = useProjectStore.getState();
     expect(state.activeProject?.artifacts.brief.status).toBe("ready");
@@ -153,5 +167,19 @@ describe("project-store zustand store", () => {
       "brief",
       "ready",
     );
+  });
+
+  it("does not report a stage as ready when persistence fails", async () => {
+    mockDesktopApi.writeProjectArtifact.mockRejectedValue(new Error("disk full"));
+
+    const store = useProjectStore.getState();
+    store.initializeProject("test-session", "Test Project");
+
+    await expect(store.markStageReady("brief")).rejects.toThrow("disk full");
+
+    const brief = useProjectStore.getState().activeProject?.artifacts.brief;
+    expect(brief?.status).toBe("draft");
+    expect(brief?.lastWriteError).toBe("disk full");
+    expect(mockDesktopApi.markProjectArtifactStatus).not.toHaveBeenCalled();
   });
 });

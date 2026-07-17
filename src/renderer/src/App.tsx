@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { DEFAULT_DESIGN_SYSTEM } from "@design-system";
+import type { LeanGenerationMode } from "@shared/lean-mode-contract";
 import { getWorkspaceLabel } from "@shared/workspace";
 import {
   setDisplayCardStatus,
@@ -27,6 +28,18 @@ type SettingsCategory =
   | "project"
   | "appearance"
   | "diagnostics";
+
+const GENERATION_MODE_STORAGE_KEY = "ppt-generation-mode";
+
+function loadGenerationMode(): LeanGenerationMode {
+  try {
+    return window.localStorage.getItem(GENERATION_MODE_STORAGE_KEY) === "lean"
+      ? "lean"
+      : "agent";
+  } catch {
+    return "agent";
+  }
+}
 
 export function App() {
   const [bootstrap] = useState(loadAppBootstrapSnapshot);
@@ -69,6 +82,17 @@ export function App() {
   } = settings;
 
   const [request, setRequest] = useState("");
+  const [generationMode, setGenerationModeState] = useState<LeanGenerationMode>(
+    loadGenerationMode,
+  );
+  const setGenerationMode = useCallback((mode: LeanGenerationMode) => {
+    setGenerationModeState(mode);
+    try {
+      window.localStorage.setItem(GENERATION_MODE_STORAGE_KEY, mode);
+    } catch {
+      // Storage is an enhancement; the in-memory mode remains authoritative.
+    }
+  }, []);
   const [busy, setBusy] = useState(false);
   const resetRequest = useCallback(() => setRequest(""), []);
   const sessionController = useSessionController({
@@ -124,6 +148,7 @@ export function App() {
     activeSessionId,
     sessionLoaded,
     localStoragePath,
+    generationMode,
     chatMessages,
     setChatMessages,
     setIsDraftChat,
@@ -217,7 +242,17 @@ export function App() {
             streamingMessageId,
             request,
             onChangeRequest: setRequest,
-            onSubmitRequest: () => void startAgent(),
+            onSubmitRequest: () => void startAgent(undefined, undefined, {
+              generationMode,
+              ...(generationMode === "lean"
+                ? {
+                    layoutChoice: {
+                      mode: "template",
+                      designSystem: selectedDesignSystem,
+                    },
+                  }
+                : {}),
+            }),
             busy,
             onResolveApproval: displayActions.resolveApproval,
             onResolvePatch: (event, accepted) =>
@@ -245,6 +280,8 @@ export function App() {
             models: visibleModels,
             selectedModelId,
             setSelectedModelId,
+            generationMode,
+            onChangeGenerationMode: setGenerationMode,
             workspaceReady: Boolean(localStoragePath),
             sandboxName: getWorkspaceLabel(localStoragePath || undefined),
             onPrepareWorkspace: () => void selectWorkspaceFolder(),

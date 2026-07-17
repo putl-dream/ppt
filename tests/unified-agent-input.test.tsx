@@ -29,4 +29,26 @@ describe("UnifiedAgentInput draft workspace", () => {
     expect(sendButton).toBeDefined();
     expect(sendButton).not.toContain("disabled");
   });
+
+  it("shows the Lean/Agent switch and explains the single-call boundary", () => {
+    const html = renderToStaticMarkup(
+      <UnifiedAgentInput
+        request="为管理层生成经营复盘"
+        onChangeRequest={vi.fn()}
+        onSubmitRequest={vi.fn()}
+        busy={false}
+        models={[]}
+        selectedModelId=""
+        setSelectedModelId={vi.fn()}
+        layoutMode="center"
+        generationMode="lean"
+        onChangeGenerationMode={vi.fn()}
+      />,
+    );
+
+    expect(html).toContain("选择生成模式");
+    expect(html).toContain('aria-pressed="true"');
+    expect(html).toContain("单次模型调用");
+    expect(html).toContain("单次调用 · 新建商业 PPT");
+  });
 });

@@ -217,4 +217,61 @@ describe("AssetValidator", () => {
     expect(issues.some((issue) => issue.message.includes("source page"))).toBe(true);
     expect(issues.some((issue) => issue.message.includes("license"))).toBe(true);
   });
+
+  it("blocks image-dependent layouts without their required visual asset", () => {
+    const slide: Slide = {
+      id: "slide-evidence",
+      title: "Evidence",
+      layout: "case",
+      grammarVariant: "evidence",
+      elements: [{
+        id: "body",
+        type: "text",
+        x: 120,
+        y: 220,
+        width: 500,
+        height: 180,
+        text: "Evidence narrative",
+        fontSize: 24,
+      }],
+    };
+
+    const issues = validator.validate(createPresentation([slide]), {
+      workspaceRoot: "C:\\workspace",
+    });
+    expect(issues).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        severity: "error",
+        message: expect.stringContaining("missing a required image"),
+      }),
+    ]));
+  });
+
+  it("blocks local image paths outside the workspace", () => {
+    const slide: Slide = {
+      id: "slide-image",
+      title: "Image",
+      layout: "concept",
+      elements: [{
+        id: "image-outside",
+        type: "image",
+        x: 120,
+        y: 220,
+        width: 400,
+        height: 240,
+        url: "C:\\outside\\image.png",
+        borderRadius: 0,
+      }],
+    };
+
+    const issues = validator.validate(createPresentation([slide]), {
+      workspaceRoot: "C:\\workspace",
+    });
+    expect(issues).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        severity: "error",
+        message: expect.stringContaining("outside the workspace"),
+      }),
+    ]));
+  });
 });

@@ -27,8 +27,8 @@ const RENDER_FEEDBACK_STAGES = new Set<PromptStage>([
   "edit",
 ]);
 
-/** Cap thumbnails per feedback round to control token cost. */
-export const MAX_RENDER_FEEDBACK_SLIDES = 6;
+/** Cap PNG thumbnails per feedback round; structured feedback still covers every affected slide. */
+export const MAX_RENDER_FEEDBACK_THUMBNAILS = 6;
 
 export interface RenderFeedbackImage {
   mediaType: "image/png";
@@ -47,6 +47,7 @@ export interface SlideRenderFeedback {
   issues: VisualIssue[];
   visualAsset: SlideVisualAssetAudit;
   thumbnail: RenderFeedbackImage | null;
+  thumbnailError?: string;
 }
 
 export interface RenderFeedbackPayload {
@@ -93,7 +94,11 @@ export function formatRenderFeedbackMessage(payload: RenderFeedbackPayload): str
       );
     }
     if (!slide.thumbnail) {
-      lines.push("  （本环境无 PNG 缩略图，请依据结构化摘要判断）");
+      lines.push(
+        slide.thumbnailError
+          ? `  （PNG 缩略图生成失败：${slide.thumbnailError}；请依据结构化摘要判断）`
+          : "  （本环境无 PNG 缩略图，请依据结构化摘要判断）",
+      );
     }
   }
 
@@ -117,7 +122,7 @@ export async function buildRenderFeedback(
   const visualAssetAudit = auditPresentationVisualAssets(draft);
   const evaluationBySlide = new Map(evaluation.slides.map((item) => [item.slideId, item]));
   const visualAssetBySlide = new Map(visualAssetAudit.slides.map((item) => [item.slideId, item]));
-  const slideIds = collectAffectedSlideIds(input.commands, draft).slice(0, MAX_RENDER_FEEDBACK_SLIDES);
+  const slideIds = collectAffectedSlideIds(input.commands, draft);
 
   const previewContext: ToolContext = {
     ...input.context,
@@ -127,9 +132,11 @@ export async function buildRenderFeedback(
   const slides: SlideRenderFeedback[] = [];
   const images: RenderFeedbackImage[] = [];
 
-  for (const slideId of slideIds) {
-    const result = await previewSlideTool.execute({ slideId, includeThumbnail: true }, previewContext);
-    if (!result.preview) continue;
+  for (const [index, slideId] of slideIds.entries()) {
+    const result = await previewSlideTool.execute({
+      slideId,
+      includeThumbnail: index < MAX_RENDER_FEEDBACK_THUMBNAILS,
+    }, previewContext);
 
     let thumbnail: RenderFeedbackImage | null = null;
     if (result.thumbnail?.pngBase64) {
@@ -166,6 +173,7 @@ export async function buildRenderFeedback(
         reason: "No image requirement was inferred.",
       },
       thumbnail,
+      ...(result.thumbnailError ? { thumbnailError: result.thumbnailError } : {}),
     });
   }
 

@@ -116,6 +116,48 @@ describe("generateWithOpenAI", () => {
     });
   });
 
+  it("keeps one-shot forced tools on the Responses API", async () => {
+    openaiMock.createResponse.mockResolvedValue({
+      output_text: "",
+      output: [{
+        type: "function_call",
+        call_id: "call-submit",
+        name: "submit_deck",
+        arguments: '{"title":"Deck"}',
+      }],
+      _request_id: "req-responses-tool",
+    });
+
+    const response = await generateWithOpenAI(config, {
+      prompt: "Submit the deck",
+      tools: [{
+        name: "submit_deck",
+        description: "Submit a deck",
+        inputSchema: { type: "object", properties: { title: { type: "string" } } },
+      }],
+      requiredToolName: "submit_deck",
+    });
+
+    expect(openaiMock.createChatCompletion).not.toHaveBeenCalled();
+    expect(openaiMock.createResponse.mock.calls[0]?.[0]).toMatchObject({
+      tools: [{
+        type: "function",
+        name: "submit_deck",
+        strict: true,
+      }],
+      tool_choice: {
+        type: "function",
+        name: "submit_deck",
+      },
+    });
+    expect(response.content).toEqual([{
+      type: "tool_use",
+      id: "call-submit",
+      name: "submit_deck",
+      input: { title: "Deck" },
+    }]);
+  });
+
   it("calls Chat Completions for OpenAI-compatible endpoints", async () => {
     openaiMock.createChatCompletion.mockResolvedValue({
       choices: [{ message: { content: " compatible text " }, finish_reason: "stop" }],
@@ -193,7 +235,10 @@ describe("generateWithOpenAI", () => {
       _request_id: "req-invalid-tool",
     });
 
-    const response = await generateWithOpenAI(config, {
+    const response = await generateWithOpenAI({
+      ...config,
+      openaiApiMode: "chat-completions",
+    }, {
       systemPrompt: "System instruction",
       prompt: "User prompt",
       tools: [{
@@ -201,8 +246,15 @@ describe("generateWithOpenAI", () => {
         description: "Read data",
         inputSchema: { type: "object", properties: {} },
       }],
+      requiredToolName: "Read",
     });
 
+    expect(openaiMock.createChatCompletion.mock.calls[0]?.[0]).toMatchObject({
+      tool_choice: {
+        type: "function",
+        function: { name: "Read" },
+      },
+    });
     expect(response.content).toEqual([
       expect.objectContaining({
         type: "tool_use",

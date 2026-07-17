@@ -28,14 +28,14 @@ function parsePipeTable(text: string): string[][] | null {
 }
 
 /**
- * Deferred Tool: 将多行文本转为 table 元素，或降级为 concept 卡片组。
+ * Deferred Tool: 将结构化 pipe/Markdown 表格文本转为 table 元素。
  */
 export const beautifyTableTool: ToolDefinition<
   typeof beautifyTableSchema,
   { commands: PresentationCommand[] }
 > = {
   name: "BeautifyTable",
-  description: "将表格文本转为 table 元素（带斑马纹），或多行文本降级为 concept 卡片。",
+  description: "将列数一致的 pipe/Markdown 表格文本转为 table 元素（带表头和斑马纹）；普通多行文本会被拒绝。",
   category: "deferred",
   loadPolicy: "deferred",
   inputSchema: beautifyTableSchema,

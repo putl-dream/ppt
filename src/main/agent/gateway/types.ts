@@ -99,6 +99,13 @@ export interface AgentModelRequest {
   responseContract?: AgentResponseContract;
   /** Native provider output format. Omit for normal text/tool ContentBlock calls. */
   outputFormat?: AgentModelOutputFormat;
+  /**
+   * Prefer one named native tool for specialized one-shot submissions.
+   * Providers that support forced tool selection enforce it; Anthropic omits
+   * tool_choice because thinking-mode compatible endpoints reject that field.
+   * The named tool must also be present in `tools`.
+   */
+  requiredToolName?: string;
   signal?: AbortSignal;
   /** Per-request override; used by output-truncation recovery. */
   maxOutputTokens?: number;

@@ -31,7 +31,6 @@ import { detectRepeatedTitlesTool } from "./deferred/detect-repeated-titles";
 import { exportPptxTool } from "./deferred/export-pptx";
 import { rewriteSlideContentTool } from "./deferred/rewrite-slide-content";
 import { selectStyleStrategyTool } from "./deferred/select-style-strategy";
-import { addLayoutDecorationsTool } from "./deferred/add-layout-decorations";
 import { applyTypographyTool } from "./deferred/apply-typography";
 import { previewSlideTool } from "./deferred/preview-slide";
 import { validateDeckLayoutTool } from "./deferred/validate-deck-layout";
@@ -144,7 +143,6 @@ export function createDefaultToolRegistry(): ToolRegistry {
     exportPptxTool,
     rewriteSlideContentTool,
     selectStyleStrategyTool,
-    addLayoutDecorationsTool,
     applyTypographyTool,
     previewSlideTool,
     validateDeckLayoutTool,

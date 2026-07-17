@@ -10,7 +10,12 @@ function makeContext(): ToolContext {
     title: "Test",
     revision: 0,
     designSystem: TEST_DESIGN_SYSTEM,
-    slides: [],
+    slides: [{
+      id: "slide-1",
+      title: "Slide 1",
+      layout: "blank",
+      elements: [],
+    }],
   };
   return {
     presentation,
@@ -34,5 +39,12 @@ describe("UpdateSlideVariant deferred tool", () => {
       slideId: "slide-1",
       slideVariant: "hero",
     });
+  });
+
+  it("rejects an update for a slide that does not exist", async () => {
+    await expect(updateSlideVariantTool.execute({
+      slideId: "missing-slide",
+      slideVariant: "hero",
+    }, makeContext())).rejects.toThrow("Slide 'missing-slide' was not found");
   });
 });

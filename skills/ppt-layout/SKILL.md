@@ -49,10 +49,7 @@ allowed-tools:
    - 执行 `validateLayoutPlan` + `validateLayoutPlanRhythm`
    - 由 `buildLayoutPlanCommands` 生成 `set-design-system` / `update-slide-layout(grammarVariant + designOverride)` / `update-slide-variant`
 3. 若 `ExecuteLayoutPlan` 返回 error：修复或重新生成 `slides/layout-plan.json` 后再执行；**禁止**从聊天上下文凭记忆重建 layout
-4. `ExecuteLayoutPlan` 已自动编译并本地化 `insert-image`；只对其余 plan.enhancements 逐项 `ExecuteExtraTool`：
-   - `beautify-chart` → BeautifyChart（已有 chart 或明确 KPI 文本；不推断数据）
-   - `beautify-table` → BeautifyTable（仅列数一致的 pipe/Markdown 表格）
-   - `add-decorations` → AddLayoutDecorations（仅 creative）
+4. `ExecuteLayoutPlan` 会原子编译并本地化全部 `insert-image` enhancement。layout-plan 不接受无 elementId 的 chart/table/icon/装饰增强；这些修改必须在后续显式编辑中针对具体元素执行。
 5. `ValidateDeckLayout` 确认节奏；`LoadSkill deck-review`
 
 轻量编辑缺图时，直接走 Core Tool：`SearchSlideImages(slideId)` → 选择候选 → `InsertSlideImage` → `SubmitCommands`，无需 SearchExtraTools。远程图片默认本地化到 workspace `assets/images/`；若来源页或授权信息缺失，必须保留 warning，不能宣称图片已获得商用授权。
@@ -86,12 +83,12 @@ Grammar handler 会把 token 推导出的实际变体写回 `slide.grammarVarian
 3. 封面/章节页（cover/section）由 `applyLayout` 自动居中标题区，无需额外 shape
 4. 完成后 `LoadSkill deck-review`；对照 [checklist.md](checklist.md) P0/P1
 
-## 创意装饰（creative）
+## 创意模式（creative）
 
 1. `LoadSkill ppt-beautify`
 2. 先执行标准排版（set-design-system + 全部 update-slide-layout）
-3. 仅对 `process` / `comparison` 页追加轻量 shape（arrow、accent line、circle 序号），**不**覆盖卡片底色
-4. 全 deck 装饰元素 ≤ 每页 3 个；禁止重复 `slide.title`
+3. 由 designSystem 的 shapeLanguage/motif 与 layout grammar 自动生成 arrow、accent line、序号和卡片
+4. 不再调用固定坐标装饰工具；禁止重复 `slide.title`
 
 ## 版式与引擎约束（必须遵守）
 

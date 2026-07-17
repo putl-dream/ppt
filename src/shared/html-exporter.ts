@@ -1,10 +1,11 @@
 import type { Presentation } from "@shared/presentation";
-import { exportDeckHtml } from "./slide-html-render";
+import { exportDeckHtml, type DeckHtmlRenderOptions } from "./slide-html-render";
 
 export { exportSlideThumbnailHtml, SLIDE_WIDTH, SLIDE_HEIGHT } from "./slide-html-render";
 
 export function exportToHtml(
   presentation: Presentation,
+  options: DeckHtmlRenderOptions = {},
 ): string {
-  return exportDeckHtml(presentation);
+  return exportDeckHtml(presentation, options);
 }

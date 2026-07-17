@@ -15,6 +15,7 @@ import type { Presentation } from "@shared/presentation";
 import { CommandBus, type PresentationCommand } from "@shared/commands";
 import {
   agentRunRequestSchema,
+  exportPresentationOptionsSchema,
   type AgentRunRequest,
   type AgentRunResult,
   type AgentStreamEvent,
@@ -34,6 +35,7 @@ import {
 import { agentStepLimitsSchema, type AgentStepLimits } from "@shared/agent-step-limits";
 import { agentGatewayConfigSchema, type AgentGatewayConfig } from "@shared/agent-gateway-config";
 import { AgentGateway } from "./agent/gateway";
+import { LeanPresentationService } from "./agent/lean/lean-presentation-service";
 import { AgentRuntime } from "./agent/runtime/agent-runtime";
 import { ToolApprovalBroker } from "./agent/runtime/tool-approval-broker";
 import { createDefaultToolRegistry } from "./agent/tools/tool-registry";
@@ -72,6 +74,7 @@ import {
 
 const logger = createModuleLogger("main");
 const agentGateway = new AgentGateway();
+const leanPresentationService = new LeanPresentationService(agentGateway);
 const toolApprovalBroker = new ToolApprovalBroker();
 type WindowThemePreset = Exclude<WindowThemeMode, "system">;
 
@@ -417,6 +420,56 @@ app.whenReady().then(async () => {
     return displayEvents.length > 0 ? { ...result, displayEvents } : result;
   };
 
+  const runLeanPresentation = async (
+    runtime: SessionRuntime,
+    request: AgentRunRequest,
+    selection: AgentModelSelection | undefined,
+    executionStrategy: AgentExecutionStrategy,
+    emit: (event: AgentServiceEvent) => void,
+    signal: AbortSignal,
+    runId: string,
+  ): Promise<AgentRunResult> => {
+    if ((request.attachments?.length ?? 0) > 0) {
+      throw new Error("Lean Mode v1 暂不处理附件；请把核心要求写入输入框，或切换 Agent Mode。");
+    }
+    emit({
+      type: "stage-started",
+      message: "Lean Mode：正在一次性生成商业叙事...",
+      stage: "lean-generate",
+    });
+    emit({
+      type: "workflow-progress",
+      message: "正在生成紧凑 DeckSpec（模型调用 1/1）...",
+      progress: 20,
+    });
+    const proposal = await leanPresentationService.createProposal({
+      request: request.prompt,
+      presentation: runtime.commandBus.getSnapshot(),
+      model: selection,
+      designSystem: request.layoutChoice?.designSystem,
+      signal,
+    });
+    emit({
+      type: "workflow-progress",
+      message:
+        `DeckSpec 已编译：${proposal.metrics.slideCount} 页，`
+        + `${proposal.metrics.totalTokens?.toLocaleString("zh-CN") ?? "未报告"} tokens。`,
+      progress: 60,
+    });
+    const result = await runtime.agentService.submitDirectProposal({
+      threadId: runId,
+      request: request.prompt,
+      commands: proposal.commands,
+      summary: proposal.summary,
+      assumptions: proposal.assumptions,
+      risk: proposal.risk,
+      model: selection,
+      executionStrategy,
+      listener: emit,
+    });
+    return { ...result, leanMetrics: proposal.metrics };
+  };
+
   const abortAllActiveRuns = (reason: string) => {
     for (const [runId, controller] of activeRuns) {
       if (controller.signal.aborted) continue;
@@ -666,9 +719,12 @@ app.whenReady().then(async () => {
   });
   ipcMain.handle(
     "presentation:export",
-    async (_, presentation: Presentation, options: ExportPresentationOptions) => {
+    async (_, _presentation: Presentation, options: ExportPresentationOptions) => {
       const startedAt = Date.now();
       const sessionId = activeSessionId;
+      const validatedOptions = exportPresentationOptionsSchema.parse(options);
+      const runtime = await getActiveRuntime();
+      const presentation = runtime.commandBus.getSnapshot();
       const window = BrowserWindow.getFocusedWindow();
       const dialogOptions = {
         title: "导出幻灯片",
@@ -697,8 +753,9 @@ app.whenReady().then(async () => {
       try {
         const result = await deckExportService.exportDeck({
           presentation,
-          options,
+          options: validatedOptions,
           filePath,
+          workspaceRoot: runtime.workspaceRoot,
         });
 
         if (filePath.endsWith(".pptx")) {
@@ -787,7 +844,7 @@ app.whenReady().then(async () => {
     return {
       hasMessages: messages.length > 0,
       count: messages.length,
-      preview: formatMailboxMessagesForHistory(messages.slice(0, 5)),
+      preview: formatMailboxMessagesForHistory(messages.slice(0, 5), 1_000),
       types: Array.from(new Set(messages.map((message) => message.type))),
     };
   });
@@ -853,24 +910,33 @@ app.whenReady().then(async () => {
             provider: selection?.provider,
             model: selection?.model,
             executionStrategy,
+            generationMode: request.generationMode,
           },
-          async () => finalizeAgentResult(
-            sessionId,
-            runtime,
-            await runtime.agentService.start(
-              request.prompt,
-              selection,
-              executionStrategy,
-              emit,
-              request.editorContext,
-              sessionStore.getAgentMessageHistory(sessionId, request.prompt),
-              controller.signal,
-              currentRunId,
-              agentStepLimits,
-              request.layoutChoice,
-            ),
-            currentRunId,
-          ),
+          async () => {
+            const result = request.generationMode === "lean"
+              ? await runLeanPresentation(
+                  runtime,
+                  request,
+                  selection,
+                  executionStrategy,
+                  emit,
+                  controller.signal,
+                  currentRunId,
+                )
+              : await runtime.agentService.start(
+                  request.prompt,
+                  selection,
+                  executionStrategy,
+                  emit,
+                  request.editorContext,
+                  sessionStore.getAgentMessageHistory(sessionId, request.prompt),
+                  controller.signal,
+                  currentRunId,
+                  agentStepLimits,
+                  request.layoutChoice,
+                );
+            return finalizeAgentResult(sessionId, runtime, result, currentRunId);
+          },
         );
       } finally {
         activeRuns.delete(currentRunId);
@@ -922,7 +988,7 @@ app.whenReady().then(async () => {
     sessionStore.conversationDatabase.beginRun({
       runId: currentRunId,
       sessionId,
-      threadId,
+      threadId: request.generationMode === "lean" ? currentRunId : threadId,
       provider: selection?.provider,
       model: selection?.model,
       request: request.prompt,
@@ -934,8 +1000,21 @@ app.whenReady().then(async () => {
         "continue-agent-run",
         sessionId,
         currentRunId,
-        { threadId, ...requestSummary(request.prompt) },
+        { threadId, generationMode: request.generationMode, ...requestSummary(request.prompt) },
         async () => {
+          if (request.generationMode === "lean") {
+            const result = await runLeanPresentation(
+              runtime,
+              request,
+              selection,
+              "REQUEST_APPROVAL",
+              emit,
+              controller.signal,
+              currentRunId,
+            );
+            return finalizeAgentResult(sessionId, runtime, result, currentRunId);
+          }
+
           await runtime.agentService.restoreDurableThread(threadId);
           if (!runtime.agentService.hasActiveConversation(threadId)) {
             const recovered = findRecoverableConversation(

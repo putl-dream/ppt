@@ -138,20 +138,7 @@ function parseChatToolCalls(
   const out: AgentModelToolUseBlock[] = [];
   for (const call of toolCalls) {
     if (call.type !== "function") continue;
-    let input: Record<string, unknown> = {};
-    let parseError: string | undefined;
-    try {
-      const parsed = call.function.arguments ? JSON.parse(call.function.arguments) : {};
-      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-        parseError = "Tool arguments must decode to a JSON object.";
-      } else {
-        input = parsed as Record<string, unknown>;
-      }
-    } catch (error) {
-      parseError = `Invalid tool argument JSON: ${
-        error instanceof Error ? error.message : String(error)
-      }`;
-    }
+    const { input, parseError } = parseToolArguments(call.function.arguments);
     out.push({
       type: "tool_use",
       id: call.id,
@@ -163,6 +150,28 @@ function parseChatToolCalls(
   return out;
 }
 
+function parseToolArguments(
+  value: string | undefined,
+): { input: Record<string, unknown>; parseError?: string } {
+  try {
+    const parsed = value ? JSON.parse(value) : {};
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return {
+        input: {},
+        parseError: "Tool arguments must decode to a JSON object.",
+      };
+    }
+    return { input: parsed as Record<string, unknown> };
+  } catch (error) {
+    return {
+      input: {},
+      parseError: `Invalid tool argument JSON: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    };
+  }
+}
+
 function contentFromChatChoice(
   choice: OpenAI.Chat.Completions.ChatCompletion.Choice | undefined,
 ): AgentModelContentBlock[] {
@@ -170,6 +179,28 @@ function contentFromChatChoice(
   return [
     ...(text ? [{ type: "text" as const, text }] : []),
     ...parseChatToolCalls(choice?.message.tool_calls),
+  ];
+}
+
+function contentFromResponsesOutput(
+  response: OpenAI.Responses.Response,
+): AgentModelContentBlock[] {
+  const text = response.output_text.trim();
+  const toolCalls: AgentModelToolUseBlock[] = [];
+  for (const item of response.output ?? []) {
+    if (item.type !== "function_call") continue;
+    const { input, parseError } = parseToolArguments(item.arguments);
+    toolCalls.push({
+      type: "tool_use",
+      id: item.call_id,
+      name: item.name,
+      input,
+      ...(parseError ? { parseError } : {}),
+    });
+  }
+  return [
+    ...(text ? [{ type: "text" as const, text }] : []),
+    ...toolCalls,
   ];
 }
 
@@ -189,7 +220,7 @@ export async function generateWithOpenAI(
     const maxOutputTokens = request.maxOutputTokens ?? config.maxOutputTokens;
     const systemPrompt = applyResponseContract(request.systemPrompt, request.responseContract);
 
-    if (request.tools?.length || mode === "chat-completions") {
+    if (mode === "chat-completions" || (request.tools?.length && request.messages)) {
       const response = await client.chat.completions.create({
         model: config.model,
         messages: [
@@ -223,6 +254,14 @@ export async function generateWithOpenAI(
                   strict: true,
                 },
               })),
+            }
+          : {}),
+        ...(request.requiredToolName
+          ? {
+              tool_choice: {
+                type: "function" as const,
+                function: { name: request.requiredToolName },
+              },
             }
           : {}),
       }, { signal: request.signal });
@@ -259,15 +298,34 @@ export async function generateWithOpenAI(
             },
           }
         : {}),
+      ...(request.tools?.length
+        ? {
+            tools: request.tools.map((tool) => ({
+              type: "function" as const,
+              name: tool.name,
+              description: tool.description,
+              parameters: tool.inputSchema,
+              strict: true,
+            })),
+          }
+        : {}),
+      ...(request.requiredToolName
+        ? {
+            tool_choice: {
+              type: "function" as const,
+              name: request.requiredToolName,
+            },
+          }
+        : {}),
     }, { signal: request.signal });
-    const text = response.output_text.trim();
-    if (!text) {
+    const content = contentFromResponsesOutput(response);
+    if (content.length === 0) {
       throw new AgentGatewayError("OpenAI returned an empty response.", "empty-response", "openai");
     }
     return {
       provider: "openai",
       model: config.model,
-      content: [{ type: "text", text }],
+      content,
       requestId: response._request_id ?? undefined,
       ...openAIUsageProperty(response.usage),
     };

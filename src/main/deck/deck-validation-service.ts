@@ -13,6 +13,8 @@ export interface DeckValidationOptions {
   constraints?: DesignConstraints;
   /** Limit validation to specific slides (e.g. current generation batch) */
   slideIds?: string[];
+  /** Workspace root used to validate local image paths. */
+  workspaceRoot?: string;
 }
 
 export class DeckValidationService {

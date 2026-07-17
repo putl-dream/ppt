@@ -74,7 +74,11 @@ export function iconToSvgString(
 ): string {
   const path = resolveIconPath(name);
   if (!path) return "";
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="${strokeWidth}" stroke-linecap="round" stroke-linejoin="round"><path d="${path}"/></svg>`;
+  const safeColor = /^#[0-9a-f]{6}$/i.test(color) ? color : "#0ea5e9";
+  const safeStrokeWidth = Number.isFinite(strokeWidth)
+    ? Math.min(12, Math.max(0.25, strokeWidth))
+    : 2;
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="${safeColor}" stroke-width="${safeStrokeWidth}" stroke-linecap="round" stroke-linejoin="round"><path d="${path}"/></svg>`;
 }
 
 export function iconSvgToDataUri(svg: string): string {

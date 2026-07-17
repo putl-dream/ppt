@@ -28,6 +28,12 @@ export const applyTypographyTool: ToolDefinition<
   risk: "medium",
   execute: async (args, context) => {
     const commands: PresentationCommand[] = [];
+    if (
+      args.slideId
+      && !context.presentation.slides.some((slide) => slide.id === args.slideId)
+    ) {
+      throw new Error(`Slide '${args.slideId}' was not found.`);
+    }
     const slides = args.slideId
       ? context.presentation.slides.filter((slide) => slide.id === args.slideId)
       : context.presentation.slides;

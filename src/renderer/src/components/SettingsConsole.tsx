@@ -154,6 +154,9 @@ const controlShapeOptions: Array<{ value: UiControlShape; label: string; radius:
   { value: "round", label: "圆润", radius: "14px" },
 ];
 
+const SUPPORTED_LOGO_TYPES = new Set(["image/png", "image/jpeg", "image/gif"]);
+const MAX_LOGO_BYTES = 12 * 1024 * 1024;
+
 const themeModeOptions: Array<{
   value: UiThemeMode;
   label: string;
@@ -253,6 +256,16 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
   const handleLogoFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
+    event.target.value = "";
+
+    if (!SUPPORTED_LOGO_TYPES.has(file.type)) {
+      triggerToast("❌ Logo 仅支持 PNG、JPEG 或 GIF 文件");
+      return;
+    }
+    if (file.size === 0 || file.size > MAX_LOGO_BYTES) {
+      triggerToast("❌ Logo 文件必须大于 0 且不超过 12 MB");
+      return;
+    }
 
     const reader = new FileReader();
     reader.onload = (loadEvent) => {
@@ -572,7 +585,7 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
                       type="file"
                       ref={logoFileInputRef}
                       onChange={handleLogoFileChange}
-                      accept="image/*"
+                      accept="image/png,image/jpeg,image/gif"
                     />
                     <UploadIcon size={18} className="upload-icon" />
                     <span>选择品牌 Logo</span>

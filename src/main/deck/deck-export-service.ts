@@ -1,20 +1,51 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import type { Presentation } from "@shared/presentation";
-import type { DeckExportResult, ExportPresentationOptions } from "@shared/ipc";
+import { presentationSchema, type Presentation } from "@shared/presentation";
+import {
+  exportPresentationOptionsSchema,
+  type DeckExportResult,
+  type ExportPresentationOptions,
+} from "@shared/ipc";
 import { exportToPptx } from "../ppt-exporter";
 import { exportToHtml } from "@shared/html-exporter";
+import { assetValidator } from "./validators/asset-validator";
+import {
+  assertSupportedLocalImageFile,
+  resolveLocalImagePath,
+} from "../local-image-file";
 
 export interface DeckExportInput {
   presentation: Presentation;
   options: ExportPresentationOptions;
   filePath?: string;
   format?: "pptx" | "json" | "html";
+  workspaceRoot?: string;
 }
 
 function sanitizeFileName(title: string): string {
   return title.replace(/[<>:"/\\|?*\x00-\x1f]/g, "_").trim() || "presentation";
+}
+
+async function inlineHtmlImageAssets(
+  presentation: Presentation,
+  workspaceRoot?: string,
+): Promise<Presentation> {
+  for (const slide of presentation.slides) {
+    for (const element of slide.elements) {
+      if (element.type !== "image" || /^data:image\/(?:png|jpeg|gif);base64,/i.test(element.url)) {
+        continue;
+      }
+      if (!workspaceRoot) {
+        throw new Error(`Cannot embed local image '${element.id}' without a workspace root.`);
+      }
+      const imagePath = resolveLocalImagePath(element.url, workspaceRoot);
+      const mimeType = await assertSupportedLocalImageFile(imagePath);
+      const data = await readFile(imagePath);
+      element.url = `data:${mimeType};base64,${data.toString("base64")}`;
+    }
+  }
+  return presentation;
 }
 
 /**
@@ -23,26 +54,43 @@ function sanitizeFileName(title: string): string {
  */
 export class DeckExportService {
   async exportDeck(input: DeckExportInput): Promise<DeckExportResult> {
+    const presentation = presentationSchema.parse(structuredClone(input.presentation));
+    const options = exportPresentationOptionsSchema.parse(input.options);
     const format = input.format ?? "pptx";
     const filePath =
       input.filePath ??
-      (await this.createDefaultExportPath(input.presentation, format));
+      (await this.createDefaultExportPath(presentation, format));
 
     if (filePath.endsWith(".json")) {
-      await writeFile(filePath, JSON.stringify(input.presentation, null, 2), "utf8");
-    } else if (filePath.endsWith(".html")) {
-      const html = exportToHtml(input.presentation);
-      await writeFile(filePath, html, "utf8");
+      await writeFile(filePath, JSON.stringify(presentation, null, 2), "utf8");
     } else {
+      const assetErrors = assetValidator.validate(presentation, {
+        workspaceRoot: input.workspaceRoot,
+      }).filter((issue) => issue.severity === "error");
+      if (assetErrors.length > 0) {
+        throw new Error(
+          `Export blocked by asset validation: ${assetErrors.map((issue) => issue.message).join("; ")}`,
+        );
+      }
+
+      if (filePath.endsWith(".html")) {
+        const portablePresentation = await inlineHtmlImageAssets(presentation, input.workspaceRoot);
+        const html = exportToHtml(portablePresentation, options);
+        await writeFile(filePath, html, "utf8");
+        return {
+          filePath,
+          slideCount: presentation.slides.length,
+        };
+      }
       if (!filePath.endsWith(".pptx")) {
         throw new Error("Unsupported export format; only .pptx, .json, and .html are supported.");
       }
-      await exportToPptx(input.presentation, input.options, filePath);
+      await exportToPptx(presentation, options, filePath, input.workspaceRoot);
     }
 
     return {
       filePath,
-      slideCount: input.presentation.slides.length,
+      slideCount: presentation.slides.length,
     };
   }
 

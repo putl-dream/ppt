@@ -574,11 +574,8 @@ export class TeammateManager {
           const now = Date.now();
           idleSince ??= now;
           nextIdlePollAt ??= now + idlePollMs;
-          if (now - idleSince >= idleTimeoutMs) {
-            await this.sendLifecycleSummary(state.name, "idle timeout", workSummaries);
-            break;
-          }
-          if (now < nextIdlePollAt) {
+          const idleTimeoutReached = now - idleSince >= idleTimeoutMs;
+          if (now < nextIdlePollAt && !idleTimeoutReached) {
             await sleep(
               Math.min(nextIdlePollAt - now, idleTimeoutMs - (now - idleSince)),
               state.controller.signal,
@@ -592,7 +589,13 @@ export class TeammateManager {
             state.name,
             publishTaskGraph,
           );
-          if (!claimedTask) continue;
+          if (!claimedTask) {
+            if (Date.now() - idleSince >= idleTimeoutMs) {
+              await this.sendLifecycleSummary(state.name, "idle timeout", workSummaries);
+              break;
+            }
+            continue;
+          }
 
           currentTaskId = claimedTask.id;
           startAssignment(claimedTask.subject, claimedTask.id);

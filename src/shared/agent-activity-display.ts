@@ -49,7 +49,6 @@ const TOOL_DISPLAY_COPY = {
   WebSearch: { action: "查找在线资料", category: "search" },
   SearchSlideImages: { action: "搜索幻灯片图片", category: "search" },
 
-  AddLayoutDecorations: { action: "添加版式装饰", category: "change" },
   AnalyzeDeckConsistency: { action: "检查整体一致性", category: "inspect" },
   ApplyDesignSystem: { action: "应用视觉主题", category: "change" },
   ApplyTypography: { action: "优化文字排版", category: "change" },
@@ -259,7 +258,16 @@ export function formatPublicErrorMessage(
   if (/\b(?:eacces|eperm|permission denied)\b/i.test(value)) {
     return "当前操作缺少必要权限，请检查项目目录权限。";
   }
-  if (/zod|schema|validation|json|tool[_ -]?use|stack|\bat\s+\S+\s*\(/i.test(value)) {
+  if (
+    /lean deckspec.*校验失败|modeloutputerror.*lean|lean mode.*(?:deckspec|无效 json|提交工具)/i
+      .test(value)
+  ) {
+    return "模型未按 Lean Mode 契约返回内容。本次未自动重试，也未修改 PPT；请重新生成。";
+  }
+  if (
+    /zod|schema|validation|json|tool[_ -]?use|modeloutputerror|unrecognized key|invalid input: expected|校验失败|stack|\bat\s+\S+\s*\(/i
+      .test(value)
+  ) {
     return fallback;
   }
   if (/^[\x00-\x7F]+$/.test(value)) return fallback;

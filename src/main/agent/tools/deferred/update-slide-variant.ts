@@ -21,7 +21,10 @@ export const updateSlideVariantTool: ToolDefinition<
   loadPolicy: "deferred",
   inputSchema: updateSlideVariantSchema,
   risk: "low",
-  execute: async (args) => {
+  execute: async (args, context) => {
+    if (!context.presentation.slides.some((slide) => slide.id === args.slideId)) {
+      throw new Error(`Slide '${args.slideId}' was not found.`);
+    }
     const commands: PresentationCommand[] = [
       {
         id: crypto.randomUUID(),

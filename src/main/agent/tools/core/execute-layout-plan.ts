@@ -47,20 +47,29 @@ async function compileImageEnhancements(
 
   for (const slide of plan.slides) {
     for (const enhancement of slide.enhancements) {
-      if (enhancement.type !== "insert-image") continue;
       count += 1;
-      const result = await insertSlideImageTool.execute({
-        slideId: slide.slideId,
-        url: enhancement.url,
-        slot: enhancement.slot,
-        aspectRatio: enhancement.aspectRatio ?? "auto",
-        localize: true,
-        provider: enhancement.provider,
-        sourcePageUrl: enhancement.sourcePageUrl,
-        description: enhancement.description,
-        attribution: enhancement.attribution,
-        license: enhancement.license,
-      }, { ...context, presentation: draft });
+      let result: Awaited<ReturnType<typeof insertSlideImageTool.execute>>;
+      try {
+        result = await insertSlideImageTool.execute({
+          slideId: slide.slideId,
+          url: enhancement.url,
+          slot: enhancement.slot,
+          aspectRatio: enhancement.aspectRatio ?? "auto",
+          provider: enhancement.provider,
+          sourcePageUrl: enhancement.sourcePageUrl,
+          description: enhancement.description,
+          attribution: enhancement.attribution,
+          license: enhancement.license,
+        }, { ...context, presentation: draft });
+      } catch (error) {
+        issues.push({
+          slideId: slide.slideId,
+          severity: "error",
+          message: `Unable to compile insert-image enhancement for slot '${enhancement.slot}'.`,
+          fixHint: error instanceof Error ? error.message : String(error),
+        });
+        continue;
+      }
 
       if (result.commands.length === 0) {
         issues.push({
@@ -172,11 +181,6 @@ export const executeLayoutPlanTool: ToolDefinition<
     const commands = [...baseCommands, ...imageCompilation.commands];
     const layoutTypes = [...new Set(plan.slides.map((slide) => slide.layout))];
     const warningCount = issues.length;
-    const remainingEnhancementCount = plan.slides.reduce(
-      (total, slide) => total + slide.enhancements.filter((item) => item.type !== "insert-image").length,
-      0,
-    );
-
     const summary =
       `Executed layout-plan from ${planPath}: ${plan.slides.length} slides, `
       + `${layoutTypes.length} layout types, design palette ${plan.designSystem.tokens.palette}; `
@@ -192,9 +196,7 @@ export const executeLayoutPlanTool: ToolDefinition<
         imageCompilation.count > 0
           ? `${imageCompilation.count} insert-image enhancement(s) were compiled and localized with the layout commands.`
           : "No insert-image enhancements were requested.",
-        remainingEnhancementCount > 0
-          ? `${remainingEnhancementCount} non-image enhancement item(s) remain for ExecuteExtraTool.`
-          : "No layout-plan enhancements were requested.",
+        "Layout-plan enhancements are limited to executable insert-image operations; chart, table, icon, and decoration changes must use explicit element-targeted commands.",
       ],
     };
   },

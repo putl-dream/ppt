@@ -26,7 +26,7 @@ export function buildSubAgentSystemPrompt(tools: SubAgentToolDefinition[]): stri
 - Input = existing slides (from task description, storyboard.json, or snapshot summary). **One layout-plan entry per existing slide—do not add/remove slides.**
 - Output **slides/layout-plan.json** only—do NOT modify presentation JSON or call SubmitCommands.
 - Each slide needs: slideId, title, narrativeRole, layout, rationale; optional slideVariant and enhancements.
-- Apply **layout Rubric only**: no 3 consecutive same layout; 7+ slides need toc + ≥3 layout types; KPI pages use case or beautify-chart.
+- Apply **layout Rubric only**: no 3 consecutive same layout; 7+ slides need toc + ≥3 layout types; KPI pages use case or an existing explicit chart element.
 - **Do NOT** rewrite, compress, or change bullet text. Overflow trimming is for the style phase.
 
 ## Available tools

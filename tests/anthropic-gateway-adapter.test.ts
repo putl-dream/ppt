@@ -117,6 +117,34 @@ describe("generateWithAnthropic", () => {
     });
   });
 
+  it("keeps named one-shot tools compatible with thinking mode", async () => {
+    anthropicMock.create.mockResolvedValue({
+      content: [{
+        type: "tool_use",
+        id: "tool-1",
+        name: "submit_deck",
+        input: { title: "Deck" },
+      }],
+      _request_id: "req-tool",
+      stop_reason: "tool_use",
+    });
+
+    await generateWithAnthropic(config, {
+      prompt: "Submit the deck",
+      tools: [{
+        name: "submit_deck",
+        description: "Submit a deck",
+        inputSchema: { type: "object", properties: { title: { type: "string" } } },
+      }],
+      requiredToolName: "submit_deck",
+    });
+
+    expect(anthropicMock.create.mock.calls[0]?.[0]).toMatchObject({
+      tools: [{ name: "submit_deck" }],
+    });
+    expect(anthropicMock.create.mock.calls[0]?.[0]).not.toHaveProperty("tool_choice");
+  });
+
   it("retries with a larger output budget when thinking consumes the response", async () => {
     anthropicMock.create
       .mockResolvedValueOnce({

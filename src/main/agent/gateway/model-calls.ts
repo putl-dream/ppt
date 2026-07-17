@@ -31,7 +31,7 @@ export class ModelOutputError extends Error {
 
 type BaseOneShotRequest = Omit<
   AgentModelRequest,
-  "tools" | "outputFormat" | "responseContract"
+  "tools" | "outputFormat" | "requiredToolName" | "responseContract"
 >;
 
 export type MarkdownModelRequest = BaseOneShotRequest & {

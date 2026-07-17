@@ -56,6 +56,18 @@ type ContinuedConversation = {
   executionStrategy: AgentExecutionStrategy;
 };
 
+export interface DirectCommandProposal {
+  threadId: string;
+  request: string;
+  commands: PresentationCommand[];
+  summary: string;
+  assumptions?: string[];
+  risk: "low" | "medium" | "high";
+  model?: AgentModelSelection;
+  executionStrategy?: AgentExecutionStrategy;
+  listener?: AgentServiceEventListener;
+}
+
 /** Coordinates Runtime, Commit Gate, approval persistence and CommandBus writes. */
 export class AgentService {
   private readonly pendingApprovals = new Map<string, PendingApproval>();
@@ -356,7 +368,12 @@ export class AgentService {
 
     listener?.({ type: "workflow-progress", message: "正在进行安全校验...", progress: 70 });
     const proposal = runtimeResult;
-    const gate = await this.commitGate.evaluate(before, proposal.commands, proposal.risk);
+    const gate = await this.commitGate.evaluate(
+      before,
+      proposal.commands,
+      proposal.risk,
+      { workspaceRoot: this.workspaceRoot },
+    );
     if (!gate.success || !gate.preview) {
       throw new Error(`Commit Gate rejected proposal: ${gate.errors.join("; ")}`);
     }
@@ -406,6 +423,87 @@ export class AgentService {
     };
   }
 
+  /**
+   * Submits commands produced by a bounded non-agent pipeline (for example
+   * Lean Mode) through the exact same gate, preview and durable approval path
+   * as an AgentRuntime command proposal.
+   */
+  async submitDirectProposal(input: DirectCommandProposal): Promise<AgentRunResult> {
+    const {
+      threadId,
+      request,
+      commands,
+      summary,
+      assumptions,
+      risk,
+      model,
+      listener,
+    } = input;
+    const executionStrategy = input.executionStrategy ?? "REQUEST_APPROVAL";
+    const before = this.commandBus.getSnapshot();
+
+    listener?.({ type: "workflow-progress", message: "正在进行安全校验...", progress: 70 });
+    const gate = await this.commitGate.evaluate(
+      before,
+      commands,
+      risk,
+      { workspaceRoot: this.workspaceRoot },
+    );
+    if (!gate.success || !gate.preview) {
+      throw new Error(`Commit Gate rejected proposal: ${gate.errors.join("; ")}`);
+    }
+
+    const canAutoApply = executionStrategy === "AUTO" && gate.decision === "AUTO";
+    if (canAutoApply) {
+      this.commandBus.executeMany(commands);
+      await this.persistThread(threadId, {
+        status: "completed",
+        messages: [
+          { role: "user", content: request },
+          { role: "assistant", content: summary },
+        ],
+        model,
+        executionStrategy,
+      });
+      listener?.({ type: "workflow-progress", message: "修改已完成。", progress: 100 });
+      return { status: "completed", presentation: this.commandBus.getSnapshot() };
+    }
+
+    this.pendingApprovals.set(threadId, {
+      commands: structuredClone(commands),
+      summary,
+      assumptions: assumptions ? [...assumptions] : undefined,
+      modelRisk: risk,
+      baseRevision: before.revision,
+      gate,
+    });
+    await this.persistThread(threadId, {
+      status: "waiting_approval",
+      messages: [
+        { role: "user", content: request },
+        { role: "assistant", content: summary },
+      ],
+      model,
+      executionStrategy,
+      pendingApproval: structuredClone(this.pendingApprovals.get(threadId)!),
+    });
+    this.runtime.clearSession(threadId);
+    this.conversations.delete(threadId);
+    listener?.({ type: "approval-waiting", message: "Lean 生成结果等待确认。" });
+    return {
+      status: "approval-required",
+      approval: {
+        threadId,
+        summary,
+        commands,
+        risk: gate.risk,
+        assumptions,
+        diff: gate.diff,
+        preview: gate.preview,
+      },
+    };
+  }
+
   async resume(threadId: string, approved: boolean): Promise<AgentRunResult> {
     const durableState = await this.durableStore?.load(threadId);
     if (!this.pendingApprovals.has(threadId)) {
@@ -435,7 +533,12 @@ export class AgentService {
       this.runtime.clearSession(threadId);
       throw new Error("The presentation changed after preview. Generate a new proposal before applying.");
     }
-    const gate = await this.commitGate.evaluate(current, pendingApproval.commands, pendingApproval.modelRisk);
+    const gate = await this.commitGate.evaluate(
+      current,
+      pendingApproval.commands,
+      pendingApproval.modelRisk,
+      { workspaceRoot: this.workspaceRoot },
+    );
     if (!gate.success) {
       this.pendingApprovals.delete(threadId);
       this.runtime.clearSession(threadId);

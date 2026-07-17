@@ -28,11 +28,10 @@ allowed-tools:
 | 风格推荐 | SelectStyleStrategy | 返回 preset + DesignSystemV1（不直接改 deck） |
 | 长文精简 | CompressText | 调用模型做事实保持压缩；无法保留数字/日期/链接时会失败 |
 | 改写字风 | RewriteSlideContent | 调用模型生成 `update-element`，并校验关键事实 token |
-| 图表样式 | BeautifyChart | P2：文本 KPI → chart 元素（kpi-tower/bar/timeline） |
+| 图表样式 | BeautifyChart | 美化已有 chart；明确 KPI 文本只强化 metric 样式，不生成数据 |
 | 表格样式 | BeautifyTable | P2：`\|` 分隔文本 → table 元素 |
 | 搜索页面图片 | SearchSlideImages（Core） | 免费图库优先的候选 + 可直接插入参数 |
 | 图片入槽 | InsertSlideImage（Core） | add/update image（自动坐标；远程图默认本地化并保存来源元数据） |
-| 创意装饰 | AddLayoutDecorations | shape 装饰 commands |
 | 字体角色 | ApplyTypography | update-text-style 批量 |
 | 单页预览 | PreviewSlide | 结构化摘要 + PNG 缩略图（base64） |
 | 版式节奏 | ValidateDeckLayout | 连续 layout / 多样性报告 |
@@ -41,9 +40,9 @@ allowed-tools:
 
 ## P2 元素能力
 
-BeautifyChart / BeautifyTable 在 P2 后**创建 chart/table 元素**，而非仅改样式：
+P2 元素能力必须区分“已有数据”和“文本样式”：
 
-- **BeautifyChart**：case 页 metric 或数值文本 → `chart` 元素（chartType: kpi-tower / bar / h-bar / timeline）
+- **BeautifyChart**：已有 `chart` → 同步设计系统图表样式；数值文本 → `metric` 样式。只有显式结构化数据才能创建 chart 元素
 - **BeautifyTable**：结构化或 `|` 分隔文本 → `table` 元素（headerRow + zebraStripe）
 - **icon 元素**：经 `add-element` 添加，`name` 为内置 24 Lucide 兼容图标之一
 - **slideVariant**：经 `update-slide-variant` 设置页级 light/dark/hero 节奏
@@ -72,8 +71,6 @@ update-slide-variant(slideId, hero|light|dark) → SubmitCommands
 **图片放入槽位**：SearchSlideImages(slideId) → InsertSlideImage(候选 insertArgs) → SubmitCommands（无需工具发现、无需 x/y）
 
 **排版后自检**：PreviewSlide(slideId) → ValidateDeckLayout → 修复后 SubmitCommands
-
-**创意模式装饰**：AddLayoutDecorations(slideId, mode: creative) → SubmitCommands
 
 **文字太长溢出**：DetectOverflowText（审查）→ CompressText → update-element 命令
 

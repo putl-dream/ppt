@@ -7,6 +7,7 @@ import {
   type LayoutVisualMode,
 } from "@shared/layout-preference";
 import type { DesignSystemV1 } from "@design-system";
+import { formatLeanRunMetrics } from "@shared/lean-mode-contract";
 import {
   countSlidesNeedingLayout,
   presentationNeedsLayoutChoice,
@@ -49,8 +50,8 @@ export interface DisplayEventActions {
     messages: ChatMessage[],
   ) => void;
   resolveQuestion: (event: QuestionEvent, resolved: AgentQuestionResolved) => void;
-  confirmBrief: (event: ArtifactEvent) => void;
-  confirmOutline: (event: ArtifactEvent) => void;
+  confirmBrief: (event: ArtifactEvent) => Promise<void>;
+  confirmOutline: (event: ArtifactEvent) => Promise<void>;
   reviseOutline: (event: ArtifactEvent) => void;
   confirmLayout: (
     event: LayoutEvent,
@@ -133,11 +134,17 @@ export function useDisplayEventActions({
           highlightSlide: approved,
         });
         await hydrateProjectArtifacts(activeSessionId);
-        const resolvedContent = result.status === "rejected"
+        const resolvedContentBase = result.status === "rejected"
           ? "已放弃排版变更提案。"
           : presentationNeedsLayoutChoice(result.presentation)
             ? `内容草稿已就绪（${countSlidesNeedingLayout(result.presentation)} 页待排版），请选择排版方式后继续。`
             : "已成功应用变更方案。";
+        const isLeanProposal = approvalRequest.summary.startsWith("Lean Mode");
+        const resolvedContent = isLeanProposal
+          ? `${resolvedContentBase}\n\n${approvalRequest.summary}`
+          : result.leanMetrics
+            ? `${resolvedContentBase}\n\n${formatLeanRunMetrics(result.leanMetrics)}`
+            : resolvedContentBase;
         if (messageId) {
           setChatMessages((current) => current.map((message) =>
             message.id === messageId ? { ...message, content: resolvedContent } : message
@@ -204,21 +211,32 @@ export function useDisplayEventActions({
   ) => {
     void startAgent(resolved.value, undefined, {
       userDisplayContent: resolved.label ?? resolved.value,
+      generationMode: "agent",
     });
   }, [startAgent]);
 
-  const confirmBrief = useCallback((_event: ArtifactEvent) => {
-    void useProjectStore.getState().markStageReady("brief");
-    notify("✅ Brief 已确认");
+  const confirmBrief = useCallback(async (_event: ArtifactEvent) => {
+    try {
+      await useProjectStore.getState().markStageReady("brief");
+      notify("✅ Brief 已确认");
+    } catch (error) {
+      notify(`❌ Brief 确认失败: ${formatPublicErrorMessage(error)}`);
+    }
   }, [notify]);
 
-  const confirmOutline = useCallback((_event: ArtifactEvent) => {
-    void useProjectStore.getState().markStageReady("outline");
-    notify("✅ 大纲已确认");
+  const confirmOutline = useCallback(async (_event: ArtifactEvent) => {
+    try {
+      await useProjectStore.getState().markStageReady("outline");
+      notify("✅ 大纲已确认");
+    } catch (error) {
+      notify(`❌ 大纲确认失败: ${formatPublicErrorMessage(error)}`);
+    }
   }, [notify]);
 
   const reviseOutline = useCallback((_event: ArtifactEvent) => {
-    void startAgent("请根据当前反馈继续修改大纲结构");
+    void startAgent("请根据当前反馈继续修改大纲结构", undefined, {
+      generationMode: "agent",
+    });
   }, [startAgent]);
 
   const confirmLayout = useCallback((
@@ -233,6 +251,7 @@ export function useDisplayEventActions({
       userDisplayContent: false,
       layoutChoice: { mode, designSystem },
       sidechain: true,
+      generationMode: "agent",
     });
   }, [notify, setSelectedDesignSystem, startAgent]);
 

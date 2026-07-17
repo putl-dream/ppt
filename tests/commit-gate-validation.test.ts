@@ -113,5 +113,25 @@ describe("CommitGate validation integration", () => {
     expect(result.decision).toBe("REQUIRES_APPROVAL");
     expect(result.warnings?.join(" ")).toContain("overlap");
   });
-});
 
+  it("rejects switching to an image-dependent layout without an image", async () => {
+    const { presentation, slideId } = createPresentation();
+    const gate = new CommitGate(new RiskPolicy());
+    const result = await gate.evaluate(
+      presentation,
+      [{
+        id: "cmd-evidence-layout",
+        type: "update-slide-layout",
+        slideId,
+        layout: "case",
+        grammarVariant: "evidence",
+      }],
+      "low",
+      { workspaceRoot: "C:\\workspace" },
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.decision).toBe("REJECT");
+    expect(result.errors.join(" ")).toContain("missing a required image");
+  });
+});

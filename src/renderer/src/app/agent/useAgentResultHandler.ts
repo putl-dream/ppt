@@ -1,5 +1,6 @@
 import { useCallback, type Dispatch, type SetStateAction } from "react";
 import type { AgentRunResult } from "@shared/ipc";
+import { formatLeanRunMetrics } from "@shared/lean-mode-contract";
 import {
   type AgentActivityItem,
   markTraceComplete,
@@ -123,9 +124,11 @@ export function useAgentResultHandler({
     }
 
     if (result.status === "approval-required") {
-      const content = isSidechainRun && messageId
-        ? "后台任务已提出排版更新方案，请在下方审核后应用。"
-        : "已提出排版更新方案，请在下方审核后应用。";
+      const content = result.leanMetrics
+        ? `已生成 Lean 商业 PPT 草稿，请在下方审核后应用。\n\n${formatLeanRunMetrics(result.leanMetrics)}`
+        : isSidechainRun && messageId
+          ? "后台任务已提出排版更新方案，请在下方审核后应用。"
+          : "已提出排版更新方案，请在下方审核后应用。";
       if (messageId) {
         setChatMessages((current) => current.map((message) =>
           message.id === messageId
@@ -149,7 +152,9 @@ export function useAgentResultHandler({
           },
         ]);
       }
-      notify("AI 已提出排版变更方案，请进行审核");
+      notify(result.leanMetrics
+        ? "Lean PPT 草稿已生成，请进行审核"
+        : "AI 已提出排版变更方案，请进行审核");
       return;
     }
 
@@ -164,11 +169,14 @@ export function useAgentResultHandler({
       }
     }
 
-    const finalContent = result.status === "rejected"
+    const finalContentBase = result.status === "rejected"
       ? "已放弃排版变更提案。"
       : presentationNeedsLayoutChoice(result.presentation)
         ? `内容草稿已就绪（${countSlidesNeedingLayout(result.presentation)} 页待排版），请选择排版方式后继续。`
         : "已根据确认的大纲生成并应用演示文稿。";
+    const finalContent = result.leanMetrics
+      ? `${finalContentBase}\n\n${formatLeanRunMetrics(result.leanMetrics)}`
+      : finalContentBase;
 
     if (messageId) {
       setChatMessages((current) => current.map((message) =>

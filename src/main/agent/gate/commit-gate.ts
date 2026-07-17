@@ -42,7 +42,8 @@ export class CommitGate {
   async evaluate(
     presentation: Presentation,
     commands: PresentationCommand[],
-    modelReportedRisk: "low" | "medium" | "high"
+    modelReportedRisk: "low" | "medium" | "high",
+    options: { workspaceRoot?: string } = {},
   ): Promise<CommitGateResult> {
     const errors: string[] = [];
     let stagedPresentation = structuredClone(presentation);
@@ -93,9 +94,11 @@ export class CommitGate {
     const affectedSlideIds = diff.affectedSlideIds;
     const beforeValidation = this.deckValidation.validate(presentation, {
       slideIds: affectedSlideIds,
+      workspaceRoot: options.workspaceRoot,
     });
     const afterValidation = this.deckValidation.validate(stagedPresentation, {
       slideIds: affectedSlideIds,
+      workspaceRoot: options.workspaceRoot,
     });
     const beforeIssueKeys = new Set(
       beforeValidation.issues.map((issue) => validationIssueKey(issue, presentation)),

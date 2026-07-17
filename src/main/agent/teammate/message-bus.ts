@@ -66,9 +66,15 @@ export function sanitizeAgentName(name: string): string {
   return sanitized || "agent";
 }
 
-export function formatMailboxMessagesForHistory(messages: AgentMailboxMessage[]): string {
+export function formatMailboxMessagesForHistory(
+  messages: AgentMailboxMessage[],
+  maxContentChars?: number,
+): string {
   return messages.map((message) => {
-    const content = message.content.trim().slice(0, 1_000);
+    const normalizedContent = message.content.trim();
+    const content = maxContentChars === undefined
+      ? normalizedContent
+      : normalizedContent.slice(0, Math.max(0, maxContentChars));
     const prefix = `From ${message.from} [${message.type}]`;
     if (message.type === "permission_request") {
       const toolName = typeof message.payload?.toolName === "string"

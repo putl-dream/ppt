@@ -1,4 +1,4 @@
-import type { Presentation } from "./presentation";
+import { rasterDataImageSourceSchema, type Presentation } from "./presentation";
 import type { PresentationCommand } from "./commands";
 import type { AgentExecutionStrategy, AgentModelSettings } from "./agent";
 import type { AgentQuestion } from "./agent-question";
@@ -17,6 +17,10 @@ import type {
 } from "./session";
 import type { TokenUsageStats } from "./token-usage";
 import type { ConversationEventPage } from "./conversation-events";
+import {
+  leanGenerationModeSchema,
+  type LeanRunMetrics,
+} from "./lean-mode-contract";
 import type {
   AgentApprovalRequest,
   DisplayEvent,
@@ -60,6 +64,7 @@ export const agentRunRequestSchema = z.object({
   editorContext: agentEditorContextSchema.optional(),
   attachments: z.array(agentAttachmentSchema).optional(),
   layoutChoice: layoutChoiceSchema.optional(),
+  generationMode: leanGenerationModeSchema.optional().default("agent"),
 });
 
 export type AgentAttachment = z.infer<typeof agentAttachmentSchema>;
@@ -95,7 +100,10 @@ export type AgentStreamEvent = (
   | { runId: string; type: "display-event"; event: DisplayEvent }
 ) & { sessionId?: string };
 
-type AgentRunResultDisplay = { displayEvents?: DisplayEvent[] };
+type AgentRunResultDisplay = {
+  displayEvents?: DisplayEvent[];
+  leanMetrics?: LeanRunMetrics;
+};
 
 export type AgentRunResult = (
   | { status: "chat"; message: string; threadId?: string; question?: AgentQuestion }
@@ -207,9 +215,11 @@ export interface DesktopApi {
   pollLeadInbox(sessionId: string): Promise<AgentInboxPollResult>;
 }
 
-export interface ExportPresentationOptions {
-  logoUrl?: string | null;
-}
+export const exportPresentationOptionsSchema = z.object({
+  logoUrl: rasterDataImageSourceSchema.nullable().optional(),
+}).strict();
+
+export type ExportPresentationOptions = z.infer<typeof exportPresentationOptionsSchema>;
 
 export interface DeckExportResult {
   filePath: string;

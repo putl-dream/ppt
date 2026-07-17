@@ -30,6 +30,7 @@ export const exportPptxTool: ToolDefinition<
       presentation,
       options: {},
       format: args.format,
+      workspaceRoot: context.workspaceRoot,
     });
 
     return {

@@ -71,6 +71,33 @@ describe("handleAgentRunFailure", () => {
     expect(state.messages[0]?.content).toContain("处理请求时遇到问题，请稍后重试");
   });
 
+  it("does not expose Lean schema diagnostics in the foreground message", () => {
+    const state = createMessageState([
+      {
+        id: "assistant-1",
+        role: "assistant",
+        content: "",
+      },
+    ]);
+
+    handleAgentRunFailure({
+      error: new Error(
+        "Error invoking remote method 'agent:start': ModelOutputError: "
+        + "Lean DeckSpec 校验失败：Unrecognized key: \"language\"; "
+        + "Invalid input: expected 1 at version",
+      ),
+      isSidechain: false,
+      runMessageId: "assistant-1",
+      activeTrace: [],
+      setChatMessages: state.setMessages,
+      notify: vi.fn(),
+    });
+
+    expect(state.messages[0]?.content).toContain("本次未自动重试，也未修改 PPT");
+    expect(state.messages[0]?.content).not.toContain("ModelOutputError");
+    expect(state.messages[0]?.content).not.toContain("language");
+  });
+
   it("does not append a visible failure message for sidechain runs", () => {
     const state = createMessageState([]);
 

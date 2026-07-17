@@ -62,6 +62,7 @@ import { agentTaskNodeSchema } from "@shared/agent-task-graph";
 import { formatPublicErrorMessage } from "@shared/agent-activity-display";
 import { ConversationDatabase } from "./conversation-database";
 import type { AgentRunResult } from "@shared/ipc";
+import { formatLeanRunMetrics } from "@shared/lean-mode-contract";
 
 const storedSessionSchema = sessionSnapshotSchema;
 const sessionFileSchema = z.object({
@@ -313,12 +314,16 @@ export class FileSessionStore {
       message.content = result.message;
       message.threadId = result.threadId ?? runId;
     } else if (result.status === "approval-required") {
-      message.content = "已提出排版更新方案，请在下方审核后应用。";
+      message.content = result.leanMetrics
+        ? `已生成 Lean 商业 PPT 草稿，请在下方审核后应用。\n\n${formatLeanRunMetrics(result.leanMetrics)}`
+        : "已提出排版更新方案，请在下方审核后应用。";
       message.threadId = result.approval.threadId;
     } else if (result.status === "rejected") {
       message.content = "已放弃排版变更提案。";
     } else {
-      message.content = "已根据确认的大纲生成并应用演示文稿。";
+      message.content = result.leanMetrics
+        ? `已生成并应用演示文稿。\n\n${formatLeanRunMetrics(result.leanMetrics)}`
+        : "已根据确认的大纲生成并应用演示文稿。";
     }
 
     const now = new Date().toISOString();

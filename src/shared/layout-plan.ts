@@ -7,7 +7,7 @@ import { getSupportedGrammarVariants } from "./layout-grammar-variants";
 import { listLayoutSlots } from "./layout-slots";
 import { SLIDE_VARIANTS } from "./slide-variant";
 import type { PresentationCommand } from "./commands";
-import type { Presentation } from "./presentation";
+import { imageSourceSchema, type Presentation } from "./presentation";
 
 export const LAYOUT_PLAN_PATH = "slides/layout-plan.json";
 
@@ -24,32 +24,17 @@ export const NARRATIVE_ROLES = [
 
 export const STYLE_MODES = ["template", "creative"] as const;
 
-export const layoutPlanEnhancementSchema = z.discriminatedUnion("type", [
-  z.object({
-    type: z.literal("beautify-chart"),
-    chartType: z.enum(["bar", "h-bar", "timeline", "kpi-tower"]).optional(),
-  }),
-  z.object({ type: z.literal("beautify-table") }),
-  z.object({
-    type: z.literal("insert-image"),
-    slot: z.string(),
-    url: z.string(),
-    aspectRatio: z.enum(["16:9", "4:3", "1:1"]).optional(),
-    provider: z.string().optional(),
-    sourcePageUrl: z.string().url().optional(),
-    description: z.string().optional(),
-    attribution: z.string().optional(),
-    license: z.string().optional(),
-  }),
-  z.object({
-    type: z.literal("add-decorations"),
-    mode: z.enum(["creative"]).optional(),
-  }),
-  z.object({
-    type: z.literal("add-icon"),
-    name: z.string(),
-  }),
-]);
+export const layoutPlanEnhancementSchema = z.object({
+  type: z.literal("insert-image"),
+  slot: z.string(),
+  url: imageSourceSchema,
+  aspectRatio: z.enum(["16:9", "4:3", "1:1"]).optional(),
+  provider: z.string().optional(),
+  sourcePageUrl: z.string().url().optional(),
+  description: z.string().optional(),
+  attribution: z.string().optional(),
+  license: z.string().optional(),
+});
 
 export const layoutPlanSlideSchema = z.object({
   slideId: z.string(),
@@ -216,7 +201,7 @@ export function validateLayoutPlan(plan: LayoutPlan): LayoutPlanValidationIssue[
       });
     }
 
-    const imageEnhancements = slide.enhancements.filter((item) => item.type === "insert-image");
+    const imageEnhancements = slide.enhancements;
     const validSlots = listLayoutSlots(slide.layout, slide.grammarVariant);
     const plannedSlots = imageEnhancements.map((item) => item.slot);
     if (new Set(plannedSlots).size !== plannedSlots.length) {
@@ -257,9 +242,9 @@ export function validateLayoutPlan(plan: LayoutPlan): LayoutPlanValidationIssue[
     }
   }
 
-  const plannedImageUrls = slides.flatMap((slide) => slide.enhancements
-    .filter((item): item is Extract<LayoutPlanEnhancement, { type: "insert-image" }> => item.type === "insert-image")
-    .map((item) => item.url));
+  const plannedImageUrls = slides.flatMap((slide) =>
+    slide.enhancements.map((item) => item.url),
+  );
   if (new Set(plannedImageUrls).size !== plannedImageUrls.length) {
     issues.push({
       severity: "warning",
@@ -340,7 +325,7 @@ export function validateLayoutPlanAgainstPresentation(
       });
     }
     const existingImages = actual.elements.filter((element) => element.type === "image").length;
-    const plannedImages = planned.enhancements.filter((item) => item.type === "insert-image").length;
+    const plannedImages = planned.enhancements.length;
     const minimumImages = minimumRequiredImages(planned);
     if (existingImages + plannedImages < minimumImages) {
       issues.push({
@@ -359,8 +344,7 @@ export function validateLayoutPlanAgainstPresentation(
       0,
     );
     const plannedVisualCount = planSlides.reduce(
-      (total, slide) => total + slide.enhancements.filter((item) =>
-        item.type === "insert-image" || item.type === "beautify-chart" || item.type === "beautify-table").length,
+      (total, slide) => total + slide.enhancements.length,
       0,
     );
     if (existingVisualCount + plannedVisualCount === 0) {

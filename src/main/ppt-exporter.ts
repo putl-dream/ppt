@@ -1,5 +1,4 @@
 import pptxgen from "pptxgenjs";
-import { fileURLToPath } from "node:url";
 import type { Presentation } from "@shared/presentation";
 import type { ExportPresentationOptions } from "@shared/ipc";
 import { fontFamilyToPptxFace, resolveElementFontFamily } from "@shared/typography";
@@ -8,12 +7,18 @@ import { chartDataToSvgString, chartSvgToDataUri } from "@shared/chart-utils";
 import { renderGradientToPng } from "@shared/gradient-export";
 import { iconToSvgString, iconSvgToDataUri } from "@shared/icon-registry";
 import { createModuleLogger } from "./agent/logger";
+import {
+  assertSupportedLocalImageFile,
+  resolveLocalImagePath,
+} from "./local-image-file";
 
 const logger = createModuleLogger("ppt-exporter");
 
 // Helper to clean colors (e.g. #ffffff -> ffffff)
 function cleanColor(colorStr: string): string {
-  if (!colorStr) return "000000";
+  if (!/^#[0-9a-f]{6}$/i.test(colorStr)) {
+    throw new Error(`Invalid hex color '${colorStr}'.`);
+  }
   let clean = colorStr.trim();
   if (clean.startsWith("#")) {
     clean = clean.substring(1);
@@ -24,14 +29,24 @@ function cleanColor(colorStr: string): string {
   return clean;
 }
 
-function resolveLocalImagePath(value: string): string {
-  return value.startsWith("file://") ? fileURLToPath(value) : value;
+function exportFailure(
+  kind: string,
+  slideIndex: number,
+  elementId: string | undefined,
+  error: unknown,
+): Error {
+  const reason = error instanceof Error ? error.message : String(error);
+  return new Error(
+    `Unable to export ${kind} on slide ${slideIndex + 1}${elementId ? ` (element '${elementId}')` : ""}: ${reason}`,
+    { cause: error },
+  );
 }
 
 export async function exportToPptx(
   presentation: Presentation,
   options: ExportPresentationOptions,
   filePath: string,
+  workspaceRoot?: string,
 ): Promise<void> {
   const pptx = new pptxgen();
 
@@ -78,29 +93,17 @@ export async function exportToPptx(
 
     // 1. Logo (if any)
     if (options.logoUrl) {
-      const isData = options.logoUrl.startsWith("data:");
-      const cleanLogoPath = resolveLocalImagePath(options.logoUrl);
-
       try {
-        if (isData) {
-          slide.addImage({
-            data: options.logoUrl,
-            x: 8.8,
-            y: 0.31,
-            w: 0.78,
-            h: 0.25,
-          });
-        } else {
-          slide.addImage({
-            path: cleanLogoPath,
-            x: 8.8,
-            y: 0.31,
-            w: 0.78,
-            h: 0.25,
-          });
-        }
+        slide.addImage({
+          data: options.logoUrl,
+          x: 8.8,
+          y: 0.31,
+          w: 0.78,
+          h: 0.25,
+        });
       } catch (e) {
         logger.error("logo.add.failed", { slideIndex: i, error: e });
+        throw exportFailure("logo", i, undefined, e);
       }
     }
 
@@ -223,7 +226,8 @@ export async function exportToPptx(
               ...imageOptions,
             });
           } else {
-            const cleanImgPath = resolveLocalImagePath(element.url);
+            const cleanImgPath = resolveLocalImagePath(element.url, workspaceRoot);
+            await assertSupportedLocalImageFile(cleanImgPath);
             slide.addImage({
               path: cleanImgPath,
               ...imageOptions,
@@ -231,12 +235,17 @@ export async function exportToPptx(
           }
         } catch (e) {
           logger.error("slide.image.add.failed", { slideIndex: i, error: e });
+          throw exportFailure("image", i, element.id, e);
         }
       } else if (element.type === "shape") {
-        const cleanFill = cleanColor(element.fillColor);
-        const cleanStroke = cleanColor(element.strokeColor);
+        const fillIsTransparent = element.fillColor === "transparent";
+        const strokeIsTransparent = element.strokeColor === "transparent";
+        const cleanFill = fillIsTransparent ? "000000" : cleanColor(element.fillColor);
+        const cleanStroke = strokeIsTransparent ? "000000" : cleanColor(element.strokeColor);
         const fillTransparency =
-          element.fillOpacity != null ? (1 - element.fillOpacity) * 100 : 0;
+          fillIsTransparent
+            ? 100
+            : element.fillOpacity != null ? (1 - element.fillOpacity) * 100 : 0;
 
         if (element.shapeType === "line") {
           slide.addShape((pptx as any).shapes.LINE, {
@@ -244,7 +253,11 @@ export async function exportToPptx(
             y: y + h / 2,
             w,
             h: 0,
-            line: { color: cleanStroke, width: Math.max(1, h * 0.75) },
+            line: {
+              color: cleanStroke,
+              width: Math.max(1, h * 0.75),
+              ...(strokeIsTransparent ? { transparency: 100 } : {}),
+            },
           });
         } else {
           let shapeType = (pptx as any).shapes.RECTANGLE;
@@ -262,7 +275,11 @@ export async function exportToPptx(
             w,
             h,
             fill: { color: cleanFill, transparency: fillTransparency },
-            line: { color: cleanStroke, width: 2 },
+            line: {
+              color: cleanStroke,
+              width: 2,
+              ...(strokeIsTransparent ? { transparency: 100 } : {}),
+            },
           };
 
           if (element.cornerRadius != null) {
@@ -299,19 +316,28 @@ export async function exportToPptx(
           });
         } catch (e) {
           logger.error("slide.chart.add.failed", { slideIndex: i, error: e });
+          throw exportFailure("chart", i, element.id, e);
         }
       } else if (element.type === "table") {
         try {
-          const tableRows = element.rows.map((row) =>
-            row.map((cell) => ({
+          const tableRows = element.rows.map((row, rowIndex) =>
+            row.map((cell) => {
+              const isHeader = Boolean(element.headerRow) && rowIndex === 0;
+              const isStripe = Boolean(element.zebraStripe) && rowIndex % 2 === 1;
+              const fillColor = isHeader
+                ? colors.muted
+                : isStripe ? colors.cardBg : colors.bg;
+              return {
               text: cell,
               options: {
                 fontFace,
                 fontSize: 12,
                 color: cleanBodyColor,
-                fill: { color: cleanColor(colors.cardBg) },
+                fill: { color: cleanColor(fillColor) },
+                bold: isHeader,
               },
-            })),
+              };
+            }),
           );
           slide.addTable(tableRows, {
             x,
@@ -323,6 +349,7 @@ export async function exportToPptx(
           });
         } catch (e) {
           logger.error("slide.table.add.failed", { slideIndex: i, error: e });
+          throw exportFailure("table", i, element.id, e);
         }
       } else if (element.type === "icon") {
         try {
@@ -342,10 +369,19 @@ export async function exportToPptx(
           }
         } catch (e) {
           logger.error("slide.icon.add.failed", { slideIndex: i, error: e });
+          throw exportFailure("icon", i, element.id, e);
         }
       }
     }
   }
 
-  await pptx.writeFile({ fileName: filePath });
+  try {
+    await pptx.writeFile({ fileName: filePath });
+  } catch (error) {
+    logger.error("pptx.write.failed", { filePath, error });
+    throw new Error(
+      `Unable to write PPTX export: ${error instanceof Error ? error.message : String(error)}`,
+      { cause: error },
+    );
+  }
 }

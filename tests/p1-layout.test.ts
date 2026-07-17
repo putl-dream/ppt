@@ -121,7 +121,11 @@ describe("P1 deferred tools", () => {
       ],
     };
     const result = await insertSlideImageTool.execute(
-      { slideId, url: "https://example.com/kpi.png", slot: "side" },
+      {
+        slideId,
+        url: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl2n1cAAAAASUVORK5CYII=",
+        slot: "side",
+      },
       makeContext(presentation),
     );
     expect(result.commands.length).toBe(1);

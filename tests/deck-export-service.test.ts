@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
+import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -7,6 +7,8 @@ import { createStarterPresentation } from "../src/shared/presentation";
 import type { ExportPresentationOptions } from "../src/shared/ipc";
 
 const defaultExportOptions: ExportPresentationOptions = {};
+const TINY_PNG_DATA_URL =
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
 
 let tempDirs: string[] = [];
 
@@ -90,6 +92,51 @@ describe("DeckExportService", () => {
     expect(html).toContain(presentation.title);
   });
 
+  it("embeds local images and the configured logo into portable HTML", async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), "deck-export-html-assets-"));
+    tempDirs.push(workspaceRoot);
+    const imagePath = join(workspaceRoot, "photo.png");
+    await writeFile(imagePath, Buffer.from(TINY_PNG_DATA_URL.split(",")[1], "base64"));
+
+    const presentation = createStarterPresentation();
+    presentation.slides[0].elements.push({
+      id: "local-image",
+      type: "image",
+      x: 120,
+      y: 200,
+      width: 400,
+      height: 240,
+      url: "photo.png",
+      borderRadius: 0,
+    });
+    const filePath = join(workspaceRoot, "export.html");
+
+    await service.exportDeck({
+      presentation,
+      options: { logoUrl: TINY_PNG_DATA_URL },
+      filePath,
+      workspaceRoot,
+    });
+
+    const html = await readFile(filePath, "utf8");
+    expect(html).toContain(`src="${TINY_PNG_DATA_URL}"`);
+    expect(html).not.toContain("src=\"photo.png\"");
+    expect(html.match(/<img class="export-brand-logo"/g)).toHaveLength(
+      presentation.slides.length,
+    );
+  });
+
+  it("rejects forged local paths in export options", async () => {
+    const presentation = createStarterPresentation();
+    const filePath = await createTempExportPath("deck-export-options-", "pptx");
+
+    await expect(service.exportDeck({
+      presentation,
+      options: { logoUrl: "C:\\private\\logo.png" } as ExportPresentationOptions,
+      filePath,
+    })).rejects.toThrow("Image data must be");
+  });
+
   it("generates a default export path when filePath is omitted", async () => {
     const presentation = createStarterPresentation();
 
@@ -103,5 +150,47 @@ describe("DeckExportService", () => {
     await assertValidPptxFile(result.filePath, presentation.slides.length);
 
     tempDirs.push(join(result.filePath, ".."));
+  });
+
+  it("blocks renderable exports that still contain remote images", async () => {
+    const presentation = createStarterPresentation();
+    presentation.slides[0].elements.push({
+      id: "remote-image",
+      type: "image",
+      x: 120,
+      y: 200,
+      width: 400,
+      height: 240,
+      url: "https://example.com/image.png",
+      borderRadius: 0,
+    });
+    const filePath = await createTempExportPath("deck-export-remote-", "html");
+
+    await expect(service.exportDeck({
+      presentation,
+      options: defaultExportOptions,
+      filePath,
+    })).rejects.toThrow("remote URL");
+  });
+
+  it("still allows JSON recovery export for decks with unresolved assets", async () => {
+    const presentation = createStarterPresentation();
+    presentation.slides[0].elements.push({
+      id: "remote-image",
+      type: "image",
+      x: 120,
+      y: 200,
+      width: 400,
+      height: 240,
+      url: "https://example.com/image.png",
+      borderRadius: 0,
+    });
+    const filePath = await createTempExportPath("deck-export-recovery-", "json");
+
+    await expect(service.exportDeck({
+      presentation,
+      options: defaultExportOptions,
+      filePath,
+    })).resolves.toMatchObject({ filePath });
   });
 });

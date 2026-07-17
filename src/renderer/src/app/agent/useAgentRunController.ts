@@ -9,6 +9,7 @@ import { createDisplayEventId } from "@shared/card-display-protocol";
 import type { Presentation } from "@shared/presentation";
 import { createSessionTitleFromPrompt, type SessionBootstrap } from "@shared/session";
 import type { LayoutChoice } from "@shared/layout-preference";
+import type { LeanGenerationMode } from "@shared/lean-mode-contract";
 import {
   appendStep,
   resolveToolApprovalItem,
@@ -48,6 +49,7 @@ interface StartAgentOptions {
   userDisplayContent?: string | false;
   layoutChoice?: LayoutChoice;
   sidechain?: boolean;
+  generationMode?: LeanGenerationMode;
 }
 
 interface UseAgentRunControllerOptions {
@@ -58,6 +60,7 @@ interface UseAgentRunControllerOptions {
   activeSessionId: string;
   sessionLoaded: boolean;
   localStoragePath: string;
+  generationMode: LeanGenerationMode;
   chatMessages: ChatMessage[];
   setChatMessages: Dispatch<SetStateAction<ChatMessage[]>>;
   setIsDraftChat: Dispatch<SetStateAction<boolean>>;
@@ -100,6 +103,7 @@ export function useAgentRunController({
   activeSessionId,
   sessionLoaded,
   localStoragePath,
+  generationMode,
   chatMessages,
   setChatMessages,
   setIsDraftChat,
@@ -143,6 +147,7 @@ export function useAgentRunController({
   ) => {
     const activeRequest = customRequest || request;
     if (!activeRequest.trim() || busy) return;
+    const runGenerationMode = options?.generationMode ?? generationMode;
 
     const userDisplayContent = options?.userDisplayContent === false
       ? null
@@ -232,12 +237,14 @@ export function useAgentRunController({
       prompt: activeRequest,
       sessionId: agentSessionId,
       editorContext: { selectedElementIds: [] },
+      generationMode: runGenerationMode,
       ...(options?.layoutChoice ? { layoutChoice: options.layoutChoice } : {}),
     };
 
     console.info("Starting unified Agent run", {
       sessionId: agentRequest.sessionId,
       editorContext: agentRequest.editorContext,
+      generationMode: runGenerationMode,
     });
 
     const runId = crypto.randomUUID();
@@ -298,7 +305,7 @@ export function useAgentRunController({
         forkedMessages ?? sourceMessages,
         getPersistedDisplayCards(),
       );
-      const result = activeThreadId
+      const result = runGenerationMode === "agent" && activeThreadId
         ? await window.desktopApi.continueAgentRun(
             activeThreadId,
             agentRequest,
@@ -344,6 +351,7 @@ export function useAgentRunController({
     chatMessages,
     enabledModels,
     finishRunActivity,
+    generationMode,
     localStoragePath,
     notify,
     openDeckPreview,
@@ -364,7 +372,7 @@ export function useAgentRunController({
     onInboxTurn: (prompt) => startAgent(
       prompt,
       undefined,
-      { userDisplayContent: false, sidechain: true },
+      { userDisplayContent: false, sidechain: true, generationMode: "agent" },
     ),
     onError: (error) => {
       console.error("轮询队友收件箱失败:", error);

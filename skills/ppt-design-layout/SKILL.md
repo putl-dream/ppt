@@ -28,7 +28,7 @@ allowed-tools:
 |-------------|--------------------------------------|
 | 每页选 layout / slideVariant | 「共 N 页，简洁明了」 |
 | deck 级 designSystem + 页级 designOverride | 「每条 ≤15 字，每页 3–5 条」 |
-| enhancements（chart/icon/image） | 增删 slide、改写要点、压缩文案 |
+| 可执行图片 enhancements | 增删 slide、改写要点、压缩文案 |
 | 节奏 Rubric（section/toc/多样性） | 重新规划 storyboard 页数 |
 
 **硬性规则**：layout-plan 的 `slides[]` 必须与 snapshot **一一对应**（相同 slideId、相同页数）。不得因 Rubric 建议 toc/section 而**新增**页面——若缺 toc/section，在 rationale 注明「建议用户补页」，或把现有页改 layout（如第 2 页改 toc）。
@@ -92,7 +92,7 @@ allowed-tools:
 | `designOverride` | 否 | 仅覆盖本页确有叙事意义的 token；其余继承 deck 级 designSystem |
 | `slideVariant` | 否 | `hero` / `light` / `dark`；省略则由 layout 推断 |
 | `rationale` | 是 | 一句话：为何选此 layout（供 deck-review 对照） |
-| `enhancements` | 否 | 执行阶段用 Deferred Tool 处理的增强项 |
+| `enhancements` | 否 | 仅允许可由 ExecuteLayoutPlan 原子执行的 `insert-image` |
 
 ### slideVariant 映射（guizang 节奏）
 
@@ -106,11 +106,9 @@ allowed-tools:
 
 | type | 执行工具 | 说明 |
 |------|----------|------|
-| `beautify-chart` | BeautifyChart | 仅美化已有 chart，或强化明确的 KPI 文本；不得从自由文本推断图表数据 |
-| `beautify-table` | BeautifyTable | 仅转换列数一致的 pipe/Markdown 表格；普通多行文本改用布局工具 |
 | `insert-image` | InsertSlideImage | slot + url，无需坐标 |
-| `add-decorations` | AddLayoutDecorations | 仅 creative + process/comparison |
-| `add-icon` | add-element icon | 关键列表点缀 |
+
+chart/table/icon 必须在内容创建或后续显式编辑中通过带 `elementId`/完整元素数据的命令处理，不能写成 layout-plan 的无目标增强项。布局引擎本身已根据 grammar 和 design tokens 生成卡片、分隔线、序号与连接符，不再追加固定坐标装饰。
 
 ### Layout Grammar 变体（P1）
 
@@ -163,7 +161,7 @@ allowed-tools:
 
 ### C. 视觉层级（强烈建议）
 
-- 每 deck 1–2 页 `case` 或 chart（KPI 锚点）
+- 每 deck 1–2 页 `case` 或已有明确数据的 chart（KPI 锚点）
 - 趋势页用 process 或 chart，非四条等宽文本框
 - comparison 偶数条，左问题右方案
 
@@ -171,7 +169,7 @@ allowed-tools:
 
 - 全 deck 一套 designSystem；页级 override 只用于必要的叙事节奏
 - 不规划手填 x/y；图片用 insert-image 槽位
-- creative 装饰仅 process/comparison，每页 ≤3 shape
+- creative 风格通过 designSystem + grammar 生成装饰，不额外叠加固定坐标 shape
 - 文档模式 8 页建议 3–5 种 layout；不要为了凑多样性做成 8 页 8 种 layout
 - 主内容页优先复用同类 layout，通过 slideVariant 做轻微变化
 
@@ -181,7 +179,7 @@ allowed-tools:
 |--------|--------|
 | 趋势页用 concept 四栏 | process 或 case + chart |
 | cover 后无 section/toc | 第 2 页 toc；大章前 section |
-| 案例页两栏文字 | case + beautify-chart |
+| 案例页两栏文字 | case；有明确结构化数据时再添加 chart |
 | 全程同色同构 | slideVariant 交替 |
 
 ## TaskGraph teammate 节点描述模板（创建计划时使用）
@@ -207,7 +205,7 @@ description: 「读取当前 presentation snapshot（slide 列表与 id）。
 
 1. layout 种类：7 页 deck ≥3，10 页 ≥5
 2. 无连续 3 页同 layout
-3. 含 KPI 的 deck 至少 1 页 case 或 beautify-chart
+3. 含 KPI 的 deck 至少 1 页 case 或已有明确数据的 chart
 4. 7 页+ 商务 deck 含 toc
 5. slideVariant 至少 2 种（5 页+ deck）
 6. 支持 Grammar 的页面使用合法 grammarVariant；同类内容可复用变体，不为了多样而每页不同

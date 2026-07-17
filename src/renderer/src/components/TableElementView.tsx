@@ -43,9 +43,9 @@ export function TableElementView({
                     border: `1px solid ${borderColor}`,
                     padding: "6px 10px",
                     fontWeight: isHeader ? 600 : 400,
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    whiteSpace: "nowrap",
+                    whiteSpace: "normal",
+                    overflowWrap: "anywhere",
+                    lineHeight: 1.25,
                   }}
                 >
                   {row[colIdx] ?? ""}

@@ -185,6 +185,27 @@ describe("ppt-exporter", () => {
     await assertValidPptxFile(filePath, 1);
   });
 
+  it("fails instead of silently exporting a deck with a missing image", async () => {
+    const filePath = await createTempPptxPath("ppt-export-missing-image-");
+    const presentation = createStarterPresentation();
+    presentation.slides[0].elements.push({
+      id: "missing-image",
+      type: "image",
+      x: 760,
+      y: 180,
+      width: 360,
+      height: 320,
+      url: pathToFileURL(join(tempDirs[0], "missing.png")).toString(),
+      borderRadius: 0,
+    });
+
+    await expect(exportToPptx(
+      presentation,
+      defaultExportOptions,
+      filePath,
+    )).rejects.toThrow("Unable to export image");
+  });
+
   it("exports a presentation built through CommandBus and layout commands", async () => {
     const bus = new CommandBus(createStarterPresentation());
     const firstSlideId = bus.getSnapshot().slides[0].id;

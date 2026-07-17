@@ -15,6 +15,10 @@ export const SLIDE_HEIGHT = 720;
 export const THUMBNAIL_WIDTH = 640;
 export const THUMBNAIL_HEIGHT = 360;
 
+export interface DeckHtmlRenderOptions {
+  logoUrl?: string | null;
+}
+
 function escapeHtml(text: string): string {
   return text
     .replace(/&/g, "&amp;")
@@ -40,7 +44,7 @@ export function renderElementHtml(
       `color:${element.color ?? style.colors.body}`,
       element.align ? `text-align:${element.align}` : "",
       `font-family:${fontFamily}`,
-      "display:flex;align-items:center",
+      "display:flex;align-items:center;white-space:pre-wrap;line-height:1.4;overflow-wrap:anywhere",
     ]
       .filter(Boolean)
       .join(";");
@@ -78,12 +82,16 @@ export function renderElementHtml(
     const rows = element.rows
       .map((row, rowIdx) => {
         const tag = element.headerRow && rowIdx === 0 ? "th" : "td";
-        const cellStyle = `border:1px solid ${style.colors.cardStroke};padding:6px 10px;color:${style.colors.body};${tag === "th" ? `background:${style.colors.cardBg};font-weight:600` : ""}`;
+        const isStripe = element.zebraStripe && rowIdx % 2 === 1;
+        const background = tag === "th"
+          ? style.colors.muted
+          : isStripe ? style.colors.cardBg : style.colors.bg;
+        const cellStyle = `border:1px solid ${style.colors.cardStroke};padding:6px 10px;color:${style.colors.body};background:${background};white-space:normal;overflow-wrap:anywhere;${tag === "th" ? "font-weight:600" : ""}`;
         const cells = row.map((cell) => `<${tag} style="${cellStyle}">${escapeHtml(cell)}</${tag}>`).join("");
         return `<tr>${cells}</tr>`;
       })
       .join("");
-    return `<div style="${baseStyle}overflow:hidden"><table style="width:100%;height:100%;border-collapse:collapse;font-size:14px">${rows}</table></div>`;
+    return `<div style="${baseStyle}"><table style="width:100%;height:100%;border-collapse:collapse;font-size:14px;table-layout:fixed">${rows}</table></div>`;
   }
 
   if (element.type === "icon") {
@@ -110,6 +118,7 @@ export function renderSlideHtml(
   slide: Slide,
   index: number,
   designSystem: DesignSystemV1,
+  options: DeckHtmlRenderOptions = {},
 ): string {
   const style = resolveSlideStyle(designSystem, slide);
   const showChrome = slide.layout !== "cover" && slide.layout !== "section";
@@ -120,10 +129,14 @@ export function renderSlideHtml(
   const headerHtml = showChrome
     ? `<div class="slide-header" style="border-bottom:2px solid ${style.colors.accent}"><h2 style="color:${style.colors.title};font-size:${resolveChromeTitleFontSize(slide.title)}px;white-space:nowrap">${escapeHtml(slide.title)}</h2></div>`
     : "";
+  const logoHtml = options.logoUrl
+    ? `<img class="export-brand-logo" src="${escapeHtml(options.logoUrl)}" alt="Brand logo" />`
+    : "";
 
   return `
 <section class="slide" data-index="${index}" style="background:${style.background.css};font-family:${style.typography.css}">
   ${headerHtml}
+  ${logoHtml}
   <div class="slide-canvas">${elementsHtml}</div>
 </section>`;
 }
@@ -140,10 +153,18 @@ const SLIDE_BASE_STYLES = `
   }
   .slide-header { padding: 50px 120px 0; }
   .slide-header h2 { font-size: 36px; font-weight: bold; }
+  .export-brand-logo {
+    position: absolute;
+    z-index: 2;
+    top: 40px;
+    right: 54px;
+    width: 100px;
+    height: 32px;
+    object-fit: contain;
+  }
   .slide-canvas { position: relative; width: 100%; height: 100%; }
   table th, table td { border: 1px solid #e2e8f0; padding: 6px 10px; }
   table th { background: #f1f5f9; font-weight: 600; }
-  tr:nth-child(even) td { background: #f8fafc; }
 `;
 
 /** Standalone HTML document for a single slide (used by thumbnail capture). */
@@ -169,9 +190,10 @@ export function exportSlideThumbnailHtml(
 
 export function exportDeckHtml(
   presentation: Presentation,
+  options: DeckHtmlRenderOptions = {},
 ): string {
   const slidesHtml = presentation.slides
-    .map((slide, idx) => renderSlideHtml(slide, idx, presentation.designSystem))
+    .map((slide, idx) => renderSlideHtml(slide, idx, presentation.designSystem, options))
     .join("\n");
 
   return `<!DOCTYPE html>

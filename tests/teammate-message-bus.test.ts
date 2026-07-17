@@ -8,7 +8,10 @@ import type {
   AgentModelRequest,
 } from "../src/main/agent/gateway/types";
 import { AgentRuntime } from "../src/main/agent/runtime/agent-runtime";
-import { MessageBus } from "../src/main/agent/teammate/message-bus";
+import {
+  formatMailboxMessagesForHistory,
+  MessageBus,
+} from "../src/main/agent/teammate/message-bus";
 import { TeammateManager } from "../src/main/agent/teammate/spawn-teammate";
 import { ProtocolStateStore } from "../src/main/agent/teammate/protocol-state";
 import { TaskStore } from "../src/main/agent/task/task-store";
@@ -16,6 +19,23 @@ import { createDefaultToolRegistry } from "../src/main/agent/tools/tool-registry
 import type { ToolContext } from "../src/main/agent/tools/tool-definition";
 import { createStarterPresentation } from "../src/shared/presentation";
 import type { TeammateProgressEvent } from "../src/shared/teammate-progress";
+
+describe("mailbox history formatting", () => {
+  it("keeps full teammate content for model context and truncates only explicit previews", () => {
+    const content = `result:${"x".repeat(1_500)}:tail`;
+    const messages = [{
+      id: "message-1",
+      from: "researcher",
+      to: "lead",
+      content,
+      type: "result" as const,
+      ts: 1,
+    }];
+
+    expect(formatMailboxMessagesForHistory(messages)).toContain(":tail");
+    expect(formatMailboxMessagesForHistory(messages, 1_000)).not.toContain(":tail");
+  });
+});
 
 function createSequenceGateway(responses: AgentModelContentBlock[]): AgentModelGateway {
   let index = 0;
