@@ -8,6 +8,7 @@
 | [ppt-layout-state-machine-plan.md](./ppt-layout-state-machine-plan.md) | 排版流程状态机化：layout-plan 唯一事实源、校验器与执行器方案 |
 | [ppt-style-capability-plan.md](./ppt-style-capability-plan.md) | 样式表达能力评估与分阶段能力建设方案 |
 | [visual-expression-system-plan.md](./visual-expression-system-plan.md) | 视觉表达系统、Layout Grammar 与品牌化能力建设计划 |
+| [commercial-ppt-visual-compiler-v2.md](./commercial-ppt-visual-compiler-v2.md) | Lean Mode 从自动排版稿升级到商业成品的 Scene、素材、视觉导演与质量门路线 |
 | [harness-teammate-message-bus-fix-plan.md](./harness-teammate-message-bus-fix-plan.md) | Harness 多 Agent 协作与消息总线 review 问题修复方案 |
 | [frontend-app-decomposition-plan.md](./frontend-app-decomposition-plan.md) | 前端 App 控制层拆分：Workspace、Presentation、Chat、Agent Controller 的分阶段路线图 |
 

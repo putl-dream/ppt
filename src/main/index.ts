@@ -447,6 +447,7 @@ app.whenReady().then(async () => {
       presentation: runtime.commandBus.getSnapshot(),
       model: selection,
       designSystem: request.layoutChoice?.designSystem,
+      workspaceRoot: runtime.workspaceRoot,
       signal,
     });
     emit({

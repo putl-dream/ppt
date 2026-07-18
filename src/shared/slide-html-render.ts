@@ -58,8 +58,12 @@ export function renderElementHtml(
       element.borderRadius,
       style.colors,
     );
-    const imageStyle = `${baseStyle}object-fit:${element.objectFit ?? "cover"};border-radius:${treatment.borderRadius}px;border:${treatment.borderWidth}px solid ${treatment.borderColor};padding:${treatment.padding}px;background:${treatment.backgroundColor};box-shadow:${treatment.boxShadow ?? "none"};box-sizing:border-box`;
-    return `<img src="${escapeHtml(element.url)}" style="${imageStyle}" alt="${escapeHtml(element.asset?.description ?? "")}" />`;
+    const crop = element.crop;
+    const frameStyle = `${baseStyle}position:absolute;overflow:hidden;border-radius:${treatment.borderRadius}px;border:${treatment.borderWidth}px solid ${treatment.borderColor};padding:${treatment.padding}px;background:${treatment.backgroundColor};box-shadow:${treatment.boxShadow ?? "none"};box-sizing:border-box`;
+    const imageStyle = crop
+      ? `position:absolute;left:${-(crop.x / crop.width) * 100}%;top:${-(crop.y / crop.height) * 100}%;width:${100 / crop.width}%;height:${100 / crop.height}%;object-fit:fill`
+      : `width:100%;height:100%;object-fit:${element.objectFit ?? "cover"}`;
+    return `<div style="${frameStyle}"><img src="${escapeHtml(element.url)}" style="${imageStyle}" alt="${escapeHtml(element.asset?.description ?? "")}" /></div>`;
   }
 
   if (element.type === "shape") {

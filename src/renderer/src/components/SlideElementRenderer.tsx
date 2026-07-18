@@ -43,14 +43,28 @@ export function SlideElementRenderer({
       element.borderRadius,
       style.colors,
     );
-    return (
+    const crop = element.crop;
+    const image = (
       <img
         src={element.url}
-        alt=""
+        alt={element.asset?.description ?? ""}
         style={{
+          position: crop ? "absolute" : "static",
+          left: crop ? `${-(crop.x / crop.width) * 100}%` : undefined,
+          top: crop ? `${-(crop.y / crop.height) * 100}%` : undefined,
+          width: crop ? `${100 / crop.width}%` : "100%",
+          height: crop ? `${100 / crop.height}%` : "100%",
+          objectFit: crop ? "fill" : element.objectFit || "cover",
+        }}
+      />
+    );
+    return (
+      <div
+        style={{
+          position: "relative",
           width: "100%",
           height: "100%",
-          objectFit: element.objectFit || "cover",
+          overflow: "hidden",
           borderRadius: `${treatment.borderRadius}px`,
           border: `${treatment.borderWidth}px solid ${treatment.borderColor}`,
           padding: treatment.padding,
@@ -58,7 +72,9 @@ export function SlideElementRenderer({
           boxShadow: treatment.boxShadow,
           boxSizing: "border-box",
         }}
-      />
+      >
+        {image}
+      </div>
     );
   }
 

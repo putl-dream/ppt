@@ -15,6 +15,14 @@ export interface LeanRunMetrics {
   cachedInputTokens: number | null;
   durationMs: number;
   compileDurationMs: number;
+  directorDurationMs?: number;
+  assetResolutionDurationMs?: number;
+  qualityDurationMs?: number;
+  assetRequestCount?: number;
+  resolvedAssetCount?: number;
+  sceneCount?: number;
+  commercialQualityScore?: number;
+  canonicalHash?: string;
   slideCount: number;
   requestChars: number;
   specChars: number;

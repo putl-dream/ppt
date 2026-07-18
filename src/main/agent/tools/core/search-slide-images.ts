@@ -1,17 +1,8 @@
 import { z } from "zod";
 import { getLayoutSlotRect, listLayoutSlots } from "@shared/layout-slots";
-import {
-  executeWebSearch,
-  type WebSearchOutput,
-} from "../../search/web-search";
+import type { WebSearchOutput } from "../../search/web-search";
+import { imageSearchService } from "../../search/image-search-service";
 import type { ToolDefinition } from "../tool-definition";
-
-const FREE_IMAGE_DOMAINS = [
-  "pexels.com",
-  "pixabay.com",
-  "unsplash.com",
-  "commons.wikimedia.org",
-] as const;
 
 export const searchSlideImagesSchema = z.object({
   slideId: z.string().describe("需要配图的幻灯片 ID；工具会读取标题、layout 和空图片槽"),
@@ -51,20 +42,6 @@ export interface SearchSlideImagesOutput {
   candidates: SlideImageCandidate[];
   guidance: string;
   rawSearch: WebSearchOutput;
-}
-
-function providerFromUrl(url: string | undefined): string | undefined {
-  if (!url) return undefined;
-  try {
-    const host = new URL(url).hostname.toLowerCase();
-    if (host.includes("pexels")) return "Pexels";
-    if (host.includes("pixabay")) return "Pixabay";
-    if (host.includes("unsplash")) return "Unsplash";
-    if (host.includes("wikimedia")) return "Wikimedia Commons";
-    return host.replace(/^www\./, "");
-  } catch {
-    return undefined;
-  }
 }
 
 function aspectRatioForSlot(
@@ -137,35 +114,29 @@ export const searchSlideImagesTool: ToolDefinition<
     const slot = args.slot && slots.includes(args.slot)
       ? args.slot
       : slots.find((candidate) => !usedSlots.has(candidate)) ?? slots[0];
-    const kindPhrase = {
-      photo: "professional editorial photography",
-      illustration: "high quality editorial illustration",
-      evidence: "documentary evidence photography",
-      logo: "official logo transparent background",
-    }[args.visualKind];
-    const query = `${args.query?.trim() || slide.title} ${kindPhrase} landscape no text`;
-    const rawSearch = await executeWebSearch({
-      query,
-      max_results: Math.max(3, args.maxImages),
-      search_depth: "basic",
-      topic: "general",
-      include_images: true,
-      max_images: args.maxImages,
-      ...(args.sourceMode === "free" ? { allowed_domains: [...FREE_IMAGE_DOMAINS] } : {}),
+    const search = await imageSearchService.search({
+      brief: args.query?.trim() || slide.title,
+      maxImages: args.maxImages,
+      sourceMode: args.sourceMode,
+      visualKind: args.visualKind,
     }, {
       gatewayConfig: context.gateway?.getGatewayConfig?.(),
       signal: context.signal,
     });
+    const { query, rawSearch } = search;
     const aspectRatio = aspectRatioForSlot(slide.layout ?? "", slot, slide.grammarVariant);
     const usedImageUrls = new Set(context.presentation.slides.flatMap((item) => item.elements
       .filter((element) => element.type === "image")
       .map((element) => element.url)));
-    const rankedImages = [...rawSearch.images]
+    const rankedImages = search.candidates
       .filter((image) => !usedImageUrls.has(image.url))
-      .sort((left, right) => Number(Boolean(right.sourceUrl)) - Number(Boolean(left.sourceUrl)));
+      .sort((left, right) =>
+        Number(Boolean(right.sourcePageUrl)) - Number(Boolean(left.sourcePageUrl))
+        || left.candidateIndex - right.candidateIndex
+      );
     const candidates = rankedImages.slice(0, args.maxImages).map((image, index): SlideImageCandidate => {
-      const sourcePageUrl = image.sourceUrl;
-      const provider = providerFromUrl(sourcePageUrl ?? image.url);
+      const sourcePageUrl = image.sourcePageUrl;
+      const provider = image.provider;
       const description = image.description || `${slide.title} image candidate ${index + 1}`;
       return {
         candidateId: `${slide.id}:image-${index + 1}`,

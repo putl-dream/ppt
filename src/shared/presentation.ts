@@ -197,6 +197,8 @@ export const imageAssetMetadataSchema = z.object({
   localPath: z.string().optional(),
   mimeType: z.enum(["image/png", "image/jpeg", "image/gif"]).optional(),
   byteSize: z.number().int().nonnegative().optional(),
+  pixelWidth: z.number().int().positive().optional(),
+  pixelHeight: z.number().int().positive().optional(),
   sha256: z.string().regex(/^[a-f0-9]{64}$/).optional(),
   fetchedAt: z.string().datetime().optional(),
 });
@@ -213,6 +215,19 @@ export const imageElementSchema = z.object({
   borderRadius: z.number().optional().default(0),
   imageSlot: z.string().optional(),
   objectFit: z.enum(["cover", "contain"]).optional(),
+  crop: z.object({
+    x: z.number().min(0).max(1),
+    y: z.number().min(0).max(1),
+    width: z.number().positive().max(1),
+    height: z.number().positive().max(1),
+  }).strict().superRefine((crop, context) => {
+    if (crop.x + crop.width > 1 || crop.y + crop.height > 1) {
+      context.addIssue({
+        code: "custom",
+        message: "Image crop must stay inside normalized image bounds.",
+      });
+    }
+  }).optional(),
   imageTreatment: z.enum(IMAGE_TREATMENTS).optional(),
   asset: imageAssetMetadataSchema.optional(),
 });
@@ -274,6 +289,11 @@ export const slideSchema = z.object({
   designOverride: slideDesignOverrideSchema.optional(),
   backgroundVariant: z.enum(BACKGROUND_VARIANTS).optional(),
   slideVariant: z.enum(SLIDE_VARIANTS).optional(),
+  sceneRef: z.object({
+    packId: z.string().trim().min(1),
+    sceneId: z.string().trim().min(1),
+    variantId: z.string().trim().min(1),
+  }).strict().optional(),
 });
 
 export const presentationSlidesSchema = z.array(slideSchema).superRefine((slides, context) => {

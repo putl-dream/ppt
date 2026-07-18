@@ -33,6 +33,7 @@ import {
   createStarterPresentation,
   presentationSchema,
 } from "../src/shared/presentation";
+import { migrateLeanDeckSpecV1ToV2 } from "../src/shared/lean/deck-spec-v2";
 
 function slide(
   input: Pick<LeanSlideSpec, "kind" | "purpose" | "title"> & Partial<LeanSlideSpec>,
@@ -184,9 +185,11 @@ describe("Lean Mode", () => {
     expect(LEAN_SYSTEM_PROMPT).toContain("10–12 页必须有 1–2 页 section");
     expect(LEAN_SYSTEM_PROMPT).toContain("两页 proof");
     expect(LEAN_SYSTEM_PROMPT).toContain("不得连续三页 bullets");
-    expect(LEAN_SYSTEM_PROMPT).toContain("version 必须是数字 1");
+    expect(LEAN_SYSTEM_PROMPT).toContain("version 必须是数字 2");
     expect(LEAN_SYSTEM_PROMPT).toContain("字段名必须是 locale（不要 language）");
     expect(LEAN_SYSTEM_PROMPT).toContain("不要输出 body、agenda、bullets");
+    expect(LEAN_SYSTEM_PROMPT).toContain("可取标题或正文的子串");
+    expect(LEAN_SYSTEM_PROMPT).toContain("imageMode=none 时 assetBrief 必须是空字符串");
 
     const base = createSpec();
     const extraSlides = [
@@ -376,8 +379,31 @@ describe("Lean Mode", () => {
     });
 
     expect(gateway.requests).toHaveLength(1);
-    expect(proposal.spec.version).toBe(1);
+    expect(proposal.spec.version).toBe(2);
     expect(proposal.spec.locale).toBe("zh-CN");
+  });
+
+  it("drops an unused asset brief when image mode is none without another model call", async () => {
+    const spec = migrateLeanDeckSpecV1ToV2(createSpec());
+    spec.slides[2]!.visual.assetBrief = "这段图片说明不会被使用";
+    spec.slides[5]!.visual.assetBrief = "另一段不会被使用的图片说明";
+    const gateway = new FakeGateway(JSON.stringify(spec));
+    const service = new LeanPresentationService(gateway);
+
+    const proposal = await service.createProposal({
+      request: "生成一份经营复盘",
+      presentation: createStarterPresentation(),
+    });
+
+    expect(gateway.requests).toHaveLength(1);
+    expect(proposal.spec.slides[2]?.visual).toMatchObject({
+      imageMode: "none",
+      assetBrief: "",
+    });
+    expect(proposal.spec.slides[5]?.visual).toMatchObject({
+      imageMode: "none",
+      assetBrief: "",
+    });
   });
 
   it("keeps unknown fields strict after compatibility normalization", async () => {

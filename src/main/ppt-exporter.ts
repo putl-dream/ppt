@@ -3,7 +3,6 @@ import type { Presentation } from "@shared/presentation";
 import type { ExportPresentationOptions } from "@shared/ipc";
 import { fontFamilyToPptxFace, resolveElementFontFamily } from "@shared/typography";
 import { resolveChromeTitleFontSize, resolveImageTreatment, resolveSlideStyle } from "@design-system";
-import { chartDataToSvgString, chartSvgToDataUri } from "@shared/chart-utils";
 import { renderGradientToPng } from "@shared/gradient-export";
 import { iconToSvgString, iconSvgToDataUri } from "@shared/icon-registry";
 import { createModuleLogger } from "./agent/logger";
@@ -206,11 +205,21 @@ export async function exportToPptx(
           const imageY = y + inset;
           const imageW = Math.max(0.01, w - inset * 2);
           const imageH = Math.max(0.01, h - inset * 2);
-          const sizing = {
-            type: element.objectFit ?? "cover",
-            w: imageW,
-            h: imageH,
-          } as const;
+          const sizing = element.crop
+            && element.asset?.pixelWidth
+            && element.asset.pixelHeight
+            ? {
+                type: "crop" as const,
+                x: (element.asset.pixelWidth * element.crop.x) / 96,
+                y: (element.asset.pixelHeight * element.crop.y) / 96,
+                w: (element.asset.pixelWidth * element.crop.width) / 96,
+                h: (element.asset.pixelHeight * element.crop.height) / 96,
+              }
+            : {
+                type: element.objectFit ?? "cover",
+                w: imageW,
+                h: imageH,
+              } as const;
           const imageOptions = {
             x: imageX,
             y: imageY,
@@ -301,19 +310,106 @@ export async function exportToPptx(
         }
       } else if (element.type === "chart") {
         try {
-          const svg = chartDataToSvgString(
-            element,
-            colors.accent,
-            style.chart.style,
-            colors.body,
-          );
-          slide.addImage({
-            data: chartSvgToDataUri(svg),
-            x,
-            y,
-            w,
-            h,
-          });
+          const items = element.data.items ?? (
+            element.data.labels ?? []
+          ).map((label, index) => ({
+            label,
+            value: element.data.values?.[index] ?? 0,
+          }));
+          const maxValue = Math.max(1, ...items.map((item) => Math.abs(item.value)));
+          if (element.chartType === "bar") {
+            const gap = w * 0.03;
+            const barW = Math.max(0.08, (w - gap * (items.length + 1)) / items.length);
+            items.forEach((item, index) => {
+              const barH = Math.max(0.04, h * 0.68 * (Math.abs(item.value) / maxValue));
+              const barX = x + gap + index * (barW + gap);
+              const barY = y + h * 0.76 - barH;
+              slide.addShape((pptx as any).shapes.RECTANGLE, {
+                x: barX, y: barY, w: barW, h: barH,
+                fill: { color: cleanAccentColor },
+                line: { color: cleanAccentColor, transparency: 100 },
+              });
+              slide.addText(`${item.value}`, {
+                x: barX, y: Math.max(y, barY - 0.22), w: barW, h: 0.2,
+                fontSize: 10, bold: true, align: "center",
+                color: cleanBodyColor, fontFace,
+              });
+              slide.addText(item.label, {
+                x: barX - gap / 2, y: y + h * 0.78, w: barW + gap, h: h * 0.2,
+                fontSize: 9, align: "center", valign: "top",
+                color: cleanBodyColor, fontFace,
+              });
+            });
+          } else if (element.chartType === "h-bar") {
+            const rowH = h / Math.max(1, items.length);
+            items.forEach((item, index) => {
+              const rowY = y + index * rowH;
+              const barX = x + w * 0.28;
+              const barW = Math.max(0.04, w * 0.62 * (Math.abs(item.value) / maxValue));
+              slide.addText(item.label, {
+                x, y: rowY, w: w * 0.25, h: rowH,
+                fontSize: 9, valign: "middle", align: "right",
+                color: cleanBodyColor, fontFace,
+              });
+              slide.addShape((pptx as any).shapes.ROUNDED_RECTANGLE, {
+                x: barX, y: rowY + rowH * 0.24, w: barW, h: rowH * 0.52,
+                fill: { color: cleanAccentColor },
+                line: { color: cleanAccentColor, transparency: 100 },
+              });
+              slide.addText(`${item.value}`, {
+                x: barX + barW + 0.04, y: rowY, w: w * 0.1, h: rowH,
+                fontSize: 9, bold: true, valign: "middle",
+                color: cleanBodyColor, fontFace,
+              });
+            });
+          } else if (element.chartType === "timeline") {
+            const lineY = y + h * 0.48;
+            slide.addShape((pptx as any).shapes.LINE, {
+              x: x + w * 0.08, y: lineY, w: w * 0.84, h: 0,
+              line: { color: cleanAccentColor, width: 2 },
+            });
+            items.forEach((item, index) => {
+              const pointX = x + w * (0.1 + (items.length === 1 ? 0.4 : index * 0.8 / (items.length - 1)));
+              slide.addShape((pptx as any).shapes.OVAL, {
+                x: pointX - 0.08, y: lineY - 0.08, w: 0.16, h: 0.16,
+                fill: { color: cleanAccentColor },
+                line: { color: cleanAccentColor },
+              });
+              slide.addText(item.label, {
+                x: pointX - w * 0.08,
+                y: index % 2 === 0 ? lineY - h * 0.34 : lineY + 0.12,
+                w: w * 0.16,
+                h: h * 0.25,
+                fontSize: 9,
+                bold: true,
+                align: "center",
+                valign: "middle",
+                color: cleanBodyColor,
+                fontFace,
+              });
+            });
+          } else {
+            const cardGap = w * 0.03;
+            const cardW = (w - cardGap * (items.length - 1)) / Math.max(1, items.length);
+            items.forEach((item, index) => {
+              const cardX = x + index * (cardW + cardGap);
+              slide.addShape((pptx as any).shapes.ROUNDED_RECTANGLE, {
+                x: cardX, y, w: cardW, h,
+                fill: { color: cleanColor(colors.cardBg) },
+                line: { color: cleanColor(colors.cardStroke), width: 1 },
+              });
+              slide.addText(`${item.value}`, {
+                x: cardX, y: y + h * 0.18, w: cardW, h: h * 0.34,
+                fontSize: 24, bold: true, align: "center", valign: "middle",
+                color: cleanAccentColor, fontFace,
+              });
+              slide.addText(item.label, {
+                x: cardX + 0.05, y: y + h * 0.55, w: cardW - 0.1, h: h * 0.25,
+                fontSize: 10, align: "center", valign: "middle",
+                color: cleanBodyColor, fontFace,
+              });
+            });
+          }
         } catch (e) {
           logger.error("slide.chart.add.failed", { slideIndex: i, error: e });
           throw exportFailure("chart", i, element.id, e);
