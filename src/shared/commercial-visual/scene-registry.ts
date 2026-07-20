@@ -154,8 +154,16 @@ const definitions: CommercialSceneDefinition[] = [
         assetSlots: [],
       },
       {
+        id: "section-divider",
+        layout: "section",
+        grammarVariant: "editorial-split",
+        backgroundMode: "dark",
+        assetSlots: [],
+      },
+      {
         id: "image-led",
         layout: "case",
+        grammarVariant: "evidence",
         backgroundMode: "light",
         assetSlots: [{ id: "side", required: false, targetAspectRatio: 4 / 5 }],
       },
@@ -173,12 +181,14 @@ const definitions: CommercialSceneDefinition[] = [
       {
         id: "fact-sidebar",
         layout: "case",
+        grammarVariant: "split",
         backgroundMode: "light",
         assetSlots: [],
       },
       {
         id: "image-sidebar",
         layout: "case",
+        grammarVariant: "evidence",
         backgroundMode: "light",
         assetSlots: [{ id: "side", required: false, targetAspectRatio: 4 / 5 }],
       },

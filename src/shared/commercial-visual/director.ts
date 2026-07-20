@@ -26,6 +26,7 @@ function scoreScene(
     || (scene.id === "dual-evidence" && slide.kind === "comparison")
     || (scene.id === "metric-landscape" && (slide.kind === "metric" || slide.kind === "chart"))
     || (scene.id === "numbered-overview" && (slide.kind === "agenda" || slide.kind === "process"))
+    || (scene.id === "hero-narrative" && slide.kind === "section")
       ? 20
       : 0;
   const rhythmBonus = previous && previous.backgroundMode !== backgroundMode ? 5 : 0;
@@ -48,6 +49,9 @@ function scoreScene(
 }
 
 function selectVariant(scene: CommercialSceneDefinition, slide: LeanSlideSpecV2) {
+  if (scene.id === "hero-narrative" && slide.kind === "section") {
+    return scene.variants.find((variant) => variant.id === "section-divider");
+  }
   if (scene.id === "metric-landscape") {
     return scene.variants.find((variant) =>
       variant.id === (slide.kind === "chart" ? "chart-focus" : "metric-focus")

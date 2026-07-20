@@ -183,6 +183,28 @@ describe("layout grammar variants", () => {
     expectNoLayoutErrorsOrUnexpectedOverlaps(evidence);
   });
 
+  it("does not emit an empty side card for a narrative-only split case", () => {
+    const slide: Slide = {
+      id: crypto.randomUUID(),
+      title: "Business impact",
+      elements: [textElement("One focused narrative")],
+    };
+    const laidOut = applyLayout(slide, "case", testSlideStyle(slide, BASE_TOKENS), {
+      grammarVariant: "split",
+    });
+    const cards = laidOut.elements.filter(
+      (element) =>
+        element.type === "shape"
+        && element.provenance === "layout"
+        && element.shapeType === "roundedRect"
+        && element.fillOpacity === undefined,
+    );
+
+    expect(cards).toHaveLength(1);
+    expect(cards[0]).toMatchObject({ x: 120, width: 600 });
+    expectNoLayoutErrorsOrUnexpectedOverlaps(laidOut);
+  });
+
   it.each(["grid", "hero-caption", "filmstrip", "evidence-wall"] as const)(
     "renders a valid image-grid %s variant",
     (variant) => {

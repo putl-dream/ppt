@@ -37,6 +37,19 @@ export class LayoutPolicy {
   }
 
   /**
+   * Full-bleed media may intentionally cross the content safe margin, but it
+   * must still stay entirely on the physical slide canvas.
+   */
+  static isWithinCanvas(box: BoundingBox): boolean {
+    return (
+      box.x >= 0 &&
+      box.x + box.width <= LayoutPolicy.CANVAS_WIDTH &&
+      box.y >= 0 &&
+      box.y + box.height <= LayoutPolicy.CANVAS_HEIGHT
+    );
+  }
+
+  /**
    * 检查两个元素在视觉上是否重叠
    */
   static isOverlapping(a: BoundingBox, b: BoundingBox): boolean {

@@ -1,10 +1,15 @@
-import type { LeanDeckSpecV2 } from "../lean/deck-spec-v2";
-import { presentationSchema, type Presentation } from "../presentation";
+import type { LeanDeckSpecV2, LeanSlideSpecV2 } from "../lean/deck-spec-v2";
+import {
+  presentationSchema,
+  type Presentation,
+  type SlideElement,
+} from "../presentation";
 import type {
   DirectedDeckPlanV1,
   ResolvedAssetManifestV1,
 } from "./contracts";
 import { commercialSceneRegistry } from "./scene-registry";
+import { findEmptyLayoutCards } from "../layout-shape-utils";
 
 export interface CommercialQualityIssue {
   code: string;
@@ -59,6 +64,113 @@ function issue(
     fixHint,
     ruleVersion: "commercial-v2.1",
   };
+}
+
+function requiredContentUnits(
+  slide: LeanSlideSpecV2,
+  spec: LeanDeckSpecV2,
+): string[] {
+  const units = [
+    slide.title,
+    slide.subtitle,
+    ...slide.items.flatMap((item) => [item.heading, item.detail]),
+    ...(slide.left ? [slide.left.label, ...slide.left.items] : []),
+    ...(slide.right ? [slide.right.label, ...slide.right.items] : []),
+    ...slide.steps.flatMap((step) => [step.heading, step.detail]),
+    ...(slide.metric
+      ? [slide.metric.value, slide.metric.label, slide.metric.takeaway]
+      : []),
+    ...(slide.chart
+      ? [
+          slide.chart.takeaway,
+          slide.chart.unit,
+          ...slide.chart.items.flatMap((item) => [item.label, String(item.value)]),
+        ]
+      : []),
+    ...spec.sources
+      .filter((source) => slide.sourceRefs.includes(source.id))
+      .map((source) => source.label),
+  ];
+  return [...new Set(units.map((unit) => unit.trim()).filter(Boolean))];
+}
+
+function compiledContentCorpus(
+  slide: Presentation["slides"][number],
+): string {
+  const parts = [slide.title];
+  for (const element of slide.elements) {
+    if (element.type === "text") parts.push(element.text);
+    if (element.type === "chart") {
+      if (element.unit) parts.push(element.unit);
+      for (const item of element.data.items ?? []) {
+        parts.push(item.label, String(item.value));
+      }
+      parts.push(...(element.data.labels ?? []));
+      parts.push(...(element.data.values ?? []).map(String));
+    }
+    if (element.type === "table") {
+      parts.push(...element.rows.flat());
+    }
+  }
+  return parts.join("\n");
+}
+
+function isForegroundElement(element: SlideElement): boolean {
+  return element.type !== "shape";
+}
+
+function isFullBleedBackground(element: SlideElement): boolean {
+  return element.type === "image"
+    && element.width * element.height >= 1280 * 720 * 0.7;
+}
+
+function overlapRatio(first: SlideElement, second: SlideElement): number {
+  const width = Math.max(
+    0,
+    Math.min(first.x + first.width, second.x + second.width)
+      - Math.max(first.x, second.x),
+  );
+  const height = Math.max(
+    0,
+    Math.min(first.y + first.height, second.y + second.height)
+      - Math.max(first.y, second.y),
+  );
+  const intersection = width * height;
+  return intersection / Math.max(1, Math.min(
+    first.width * first.height,
+    second.width * second.height,
+  ));
+}
+
+interface ForegroundOverlap {
+  first: SlideElement;
+  second: SlideElement;
+  ratio: number;
+}
+
+function foregroundOverlaps(
+  slide: Presentation["slides"][number],
+): ForegroundOverlap[] {
+  const foreground = slide.elements.filter(
+    (element) => isForegroundElement(element) && !isFullBleedBackground(element),
+  );
+  const overlaps: ForegroundOverlap[] = [];
+  for (let firstIndex = 0; firstIndex < foreground.length; firstIndex += 1) {
+    for (let secondIndex = firstIndex + 1; secondIndex < foreground.length; secondIndex += 1) {
+      const first = foreground[firstIndex]!;
+      const second = foreground[secondIndex]!;
+      const ratio = overlapRatio(first, second);
+      if (ratio >= 0.15) overlaps.push({ first, second, ratio });
+    }
+  }
+  return overlaps;
+}
+
+function overlapEvidence(overlap: ForegroundOverlap): string {
+  const { first, second, ratio } = overlap;
+  const rect = (element: SlideElement) =>
+    `${element.type}:${element.id}[${element.x},${element.y},${element.width}×${element.height}]`;
+  return `${rect(first)}/${rect(second)} (${Math.round(ratio * 100)}%)`;
 }
 
 export function evaluateCommercialQuality(input: {
@@ -143,6 +255,59 @@ export function evaluateCommercialQuality(input: {
         ));
       }
     }
+    if (specSlide) {
+      const corpus = compiledContentCorpus(slide);
+      const missingUnits = requiredContentUnits(specSlide, input.spec)
+        .filter((unit) => !corpus.includes(unit));
+      if (missingUnits.length > 0) {
+        hardFailures.push(issue(
+          "content-unit-unconsumed",
+          "error",
+          `Required content was not consumed: ${missingUnits.join(" | ")}.`,
+          "Compile each DeckSpec content unit into its declared scene slot.",
+          slide,
+        ));
+      }
+    }
+    const overlaps = foregroundOverlaps(slide);
+    const blockingOverlaps = overlaps.filter(({ first, second }) =>
+      first.type === "text" && second.type === "text"
+    );
+    const mediaOverlaps = overlaps.filter(({ first, second }) =>
+      first.type !== "text" || second.type !== "text"
+    );
+    if (blockingOverlaps.length > 0) {
+      hardFailures.push(issue(
+        "foreground-overlap",
+        "error",
+        `Foreground text elements overlap materially: ${blockingOverlaps
+          .map(overlapEvidence)
+          .join(", ")}.`,
+        "Assign text, data and media to non-overlapping scene slots.",
+        slide,
+      ));
+    }
+    if (mediaOverlaps.length > 0) {
+      warnings.push(issue(
+        "foreground-media-overlap",
+        "warning",
+        `Foreground media elements overlap: ${mediaOverlaps
+          .map(overlapEvidence)
+          .join(", ")}.`,
+        "Review the media layering in preview; adjust the scene only if readability is affected.",
+        slide,
+      ));
+    }
+    const emptyCards = findEmptyLayoutCards(slide.elements);
+    if (emptyCards.length > 0) {
+      hardFailures.push(issue(
+        "empty-layout-card",
+        "error",
+        `Empty layout card(s) were emitted: ${emptyCards.map((card) => card.id).join(", ")}.`,
+        "Remove unused containers or populate their declared content slot.",
+        slide,
+      ));
+    }
     if (specSlide && (specSlide.kind === "metric" || specSlide.kind === "chart")) {
       const referencedLabels = input.spec.sources
         .filter((source) => specSlide.sourceRefs.includes(source.id))
@@ -204,6 +369,28 @@ export function evaluateCommercialQuality(input: {
 
   input.plan.slides.forEach((planSlide, slideIndex) => {
     const slide = input.presentation.slides[slideIndex];
+    const consumedSlots = new Set(
+      slide?.elements
+        .filter((element) => element.type === "image")
+        .map((element) => element.imageSlot)
+        .filter((slot): slot is string => Boolean(slot)) ?? [],
+    );
+    const unconsumedResolvedSlots = planSlide.assetRequests.filter((request) =>
+      input.assets.assets.some((asset) =>
+        asset.requestId === request.requestId && asset.status === "resolved"
+      ) && !consumedSlots.has(request.slotId)
+    );
+    if (unconsumedResolvedSlots.length > 0) {
+      hardFailures.push(issue(
+        "resolved-asset-slot-unconsumed",
+        "error",
+        `Resolved asset slot(s) were not rendered: ${unconsumedResolvedSlots
+          .map((request) => request.slotId)
+          .join(", ")}.`,
+        "Place each resolved asset in the exact slot declared by the Scene variant.",
+        slide,
+      ));
+    }
     if (planSlide.rationaleCodes.includes("image-intent-fallback")) {
       warnings.push(issue(
         "image-intent-fallback",
@@ -293,7 +480,25 @@ export function evaluateCommercialQuality(input: {
   const outOfBoundsCount = hardFailures.filter(
     (candidate) => candidate.code === "element-out-of-bounds",
   ).length;
-  const composition = Math.max(0, 100 - outOfBoundsCount * 25);
+  const overlapCount = hardFailures.filter(
+    (candidate) => candidate.code === "foreground-overlap",
+  ).length + warnings.filter(
+    (candidate) => candidate.code === "foreground-media-overlap",
+  ).length;
+  const emptyCardCount = hardFailures.filter(
+    (candidate) => candidate.code === "empty-layout-card",
+  ).length;
+  const unconsumedContentCount = hardFailures.filter(
+    (candidate) => candidate.code === "content-unit-unconsumed",
+  ).length;
+  const composition = Math.max(
+    0,
+    100
+      - outOfBoundsCount * 25
+      - overlapCount * 25
+      - emptyCardCount * 15
+      - unconsumedContentCount * 20,
+  );
   const editableElements = input.presentation.slides.flatMap((slide) => slide.elements)
     .filter((element) =>
       element.type === "text"
@@ -301,7 +506,17 @@ export function evaluateCommercialQuality(input: {
       || element.type === "image"
       || element.type === "chart"
     );
-  const editability = editableElements.length === 0 ? 0 : 100;
+  const slidesWithEditableContent = input.presentation.slides.filter((slide) =>
+    slide.elements.some((element) =>
+      element.type === "text"
+      || element.type === "shape"
+      || element.type === "image"
+      || element.type === "chart"
+    )
+  ).length;
+  const editability = editableElements.length === 0 || input.presentation.slides.length === 0
+    ? 0
+    : Math.round((slidesWithEditableContent / input.presentation.slides.length) * 100);
   const slidesWithStyle = input.presentation.slides.filter((slide) =>
     slide.elements.every((element) =>
       element.type !== "text" || Boolean(element.color && element.fontFamily)

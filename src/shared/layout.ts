@@ -77,6 +77,9 @@ export function applyLayout(
   // Separate elements by type
   let textElements = workingSlide.elements.filter((el): el is TextElement => el.type === "text");
   const imageElements = workingSlide.elements.filter((el) => el.type === "image");
+  const dataElements = workingSlide.elements.filter(
+    (el) => el.type === "chart" || el.type === "table" || el.type === "icon",
+  );
   
   // Keep user-added shapes (lines, circles, arrows) — not layout-generated cards/badges.
   const userShapes = workingSlide.elements.filter(isUserPreservedShape);
@@ -102,7 +105,7 @@ export function applyLayout(
   // Drop canvas text that duplicates the chrome header title on content slides.
   if (!isChromeLayout) {
     textElements = textElements.filter(
-      (el) => el.text.trim() !== normalizedTitle && el.fontSize < 36,
+      (el) => el.text.trim() !== normalizedTitle,
     );
   }
 
@@ -185,6 +188,7 @@ export function applyLayout(
   });
 
   const placedImageIds = new Set<string>();
+  const placedDataIds = new Set<string>();
 
   const assignTextRole = (el: TextElement, role: TextRole): TextElement => ({
     ...el,
@@ -221,6 +225,14 @@ export function applyLayout(
     return undefined;
   };
 
+  const placeDataInSlot = <T extends (typeof dataElements)[number]>(
+    element: T,
+    rect: { x: number; y: number; width: number; height: number },
+  ): T => {
+    placedDataIds.add(element.id);
+    return { ...element, ...rect };
+  };
+
   const grammarHandler = layoutGrammarRegistry.get(layout);
   let appliedGrammarVariant = grammarVariant;
   if (grammarHandler) {
@@ -230,11 +242,13 @@ export function applyLayout(
       colors,
       textElements,
       imageElements,
+      dataElements,
       userShapes,
       titleEl,
       bodyTexts,
       elements,
       placedImageIds,
+      placedDataIds,
       helpers: {
         createCard,
         createAccentBlock,
@@ -244,6 +258,7 @@ export function applyLayout(
         assignTextRole,
         placeImageInSlot,
         pickImageForSlot,
+        placeDataInSlot,
       },
       grammarVariant,
     }) ?? grammarVariant ?? grammarHandler.defaultVariant;
@@ -774,7 +789,7 @@ export function applyLayout(
   const remainingImages = imageElements.filter((img) => !placedImageIds.has(img.id));
   const userDataElements = workingSlide.elements.filter(
     (el) => el.type === "chart" || el.type === "table" || el.type === "icon",
-  );
+  ).filter((element) => !placedDataIds.has(element.id));
   elements.push(...remainingImages);
   elements.push(...userShapes);
   elements.push(...userDataElements);

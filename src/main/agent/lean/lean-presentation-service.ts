@@ -5,6 +5,7 @@ import {
   type LeanRunMetrics,
 } from "@shared/lean-mode";
 import {
+  COMMERCIAL_COMPOSITIONS,
   migrateLeanDeckSpecV1ToV2,
   leanDeckSpecV2Schema,
   type LeanDeckSpecV2,
@@ -39,7 +40,7 @@ export const LEAN_SYSTEM_PROMPT = `你是商业演示文稿架构师。把用户
 - version 必须是数字 2（不是字符串）；字段名必须是 locale（不要 language），值只能是 zh-CN 或 en-US。
 - 每个 source 必须有 id、label、asOf、provenance；asOf 不确定时用 null。
 - 每个 slide 必须有 kind、purpose、title、subtitle、items、left、right、steps、metric、chart、sourceRefs、visual；未使用字段分别用空字符串、空数组或 null。不要输出 body、agenda、bullets、comparison、process、closing 等替代字段。
-- visual 必须有 role、composition、imageMode、assetBrief、emphasis。imageMode=none 时 assetBrief 必须是空字符串；imageMode=required/optional 时 assetBrief 必须非空。emphasis 填 1–3 个从本页可见文字中原样复制的非空短语，可取标题或正文的子串，不得改写或概括。不得输出坐标、字号、颜色、阴影、素材 URL 或 sceneId。
+- visual 必须有 role、composition、imageMode、assetBrief、emphasis。composition 只能是 full-bleed、split、editorial-grid、image-collage、metric-story、minimal-statement 之一。imageMode=none 时 assetBrief 必须是空字符串；imageMode=required/optional 时 assetBrief 必须非空。emphasis 填 1–3 个从本页可见文字中原样复制的非空短语，可取标题或正文的子串；图表数值必须使用 JSON 中的标准数字文本（例如数值 14 应写 "14"，不要写 "14.0"）。不得改写或概括。不得输出坐标、字号、颜色、阴影、素材 URL 或 sceneId。
 
 必须同时满足工具 JSON Schema 和以下跨页规则：
 1. 不调用其他工具，不请求澄清，不输出 DeckSpec 以外的内容。
@@ -86,6 +87,108 @@ function canonicalLocale(value: unknown): "zh-CN" | "en-US" | undefined {
   return undefined;
 }
 
+type CommercialComposition = (typeof COMMERCIAL_COMPOSITIONS)[number];
+
+function canonicalComposition(
+  value: unknown,
+  slide: Record<string, unknown>,
+): CommercialComposition | undefined {
+  if (typeof value !== "string") return undefined;
+  const normalized = value.trim().toLowerCase().replaceAll("_", "-").replaceAll(" ", "-");
+  if ((COMMERCIAL_COMPOSITIONS as readonly string[]).includes(normalized)) {
+    return normalized as CommercialComposition;
+  }
+  const aliases: Record<string, CommercialComposition> = {
+    "fullbleed": "full-bleed",
+    "hero": "full-bleed",
+    "two-column": "split",
+    "side-by-side": "split",
+    "comparison": "split",
+    "grid": "editorial-grid",
+    "card-grid": "editorial-grid",
+    "cards": "editorial-grid",
+    "collage": "image-collage",
+    "gallery": "image-collage",
+    "dashboard": "metric-story",
+    "data-story": "metric-story",
+    "chart": "metric-story",
+    "kpi": "metric-story",
+    "minimal": "minimal-statement",
+    "statement": "minimal-statement",
+    "centered": "minimal-statement",
+  };
+  if (aliases[normalized]) return aliases[normalized];
+
+  const kind = slide.kind;
+  if (kind === "cover") {
+    return isRecord(slide.visual) && slide.visual.imageMode !== "none"
+      ? "full-bleed"
+      : "minimal-statement";
+  }
+  if (kind === "comparison") return "split";
+  if (kind === "metric" || kind === "chart") return "metric-story";
+  if (kind === "closing" || kind === "section") return "minimal-statement";
+  if (kind === "agenda" || kind === "process") return "editorial-grid";
+  if (kind === "bullets") {
+    return isRecord(slide.visual) && slide.visual.role === "gallery"
+      ? "image-collage"
+      : "editorial-grid";
+  }
+  return undefined;
+}
+
+function visibleSlideValues(slide: Record<string, unknown>): Array<string | number> {
+  const values: Array<string | number> = [];
+  const append = (value: unknown): void => {
+    if (typeof value === "string" || typeof value === "number") {
+      values.push(value);
+      return;
+    }
+    if (Array.isArray(value)) {
+      value.forEach(append);
+      return;
+    }
+    if (isRecord(value)) {
+      Object.values(value).forEach(append);
+    }
+  };
+  for (const key of [
+    "title",
+    "subtitle",
+    "items",
+    "left",
+    "right",
+    "steps",
+    "metric",
+    "chart",
+  ]) {
+    append(slide[key]);
+  }
+  return values;
+}
+
+function canonicalEmphasis(value: unknown, slide: Record<string, unknown>): unknown {
+  const emphasis = typeof value === "number" ? String(value) : value;
+  if (typeof emphasis !== "string") return emphasis;
+  const trimmed = emphasis.trim();
+  const visibleValues = visibleSlideValues(slide);
+  if (visibleValues.some((candidate) => String(candidate).includes(trimmed))) {
+    return trimmed;
+  }
+  if (!/^[+-]?(?:\d+(?:\.\d+)?|\.\d+)%?$/.test(trimmed)) return trimmed;
+  const numericValue = Number(trimmed.replace(/%$/, ""));
+  if (!Number.isFinite(numericValue)) return trimmed;
+
+  for (const candidate of visibleValues) {
+    const tokens = String(candidate).match(/[+-]?(?:\d+(?:\.\d+)?|\.\d+)%?/g) ?? [];
+    const equivalent = tokens.find((token) =>
+      Number(token.replace(/%$/, "")) === numericValue
+    );
+    if (equivalent) return equivalent;
+  }
+  return trimmed;
+}
+
 /**
  * Provider compatibility stays deliberately shallow and whitelisted. The
  * canonical schema remains strict; this only repairs representational aliases
@@ -115,24 +218,49 @@ function normalizeLeanDeckSpecInput(value: unknown): unknown {
     }
   }
 
+  if (normalized.sources === undefined) {
+    normalized.sources = [];
+  } else if (Array.isArray(normalized.sources)) {
+    normalized.sources = normalized.sources.map((source) =>
+      isRecord(source) && source.asOf === undefined
+        ? { ...source, asOf: null }
+        : source
+    );
+  }
+
   if (Array.isArray(normalized.slides)) {
     normalized.slides = normalized.slides.map((slide) => {
-      if (!isRecord(slide) || !isRecord(slide.visual)) return slide;
-      const visual = slide.visual;
-      if (
-        visual.imageMode !== "none"
-        || typeof visual.assetBrief !== "string"
-        || visual.assetBrief === ""
-      ) {
-        return slide;
-      }
-      return {
-        ...slide,
-        visual: {
-          ...visual,
-          assetBrief: "",
-        },
+      if (!isRecord(slide)) return slide;
+      const normalizedSlide: Record<string, unknown> = { ...slide };
+      const neutralDefaults: Record<string, unknown> = {
+        subtitle: "",
+        items: [],
+        left: null,
+        right: null,
+        steps: [],
+        metric: null,
+        chart: null,
+        sourceRefs: [],
       };
+      for (const [key, defaultValue] of Object.entries(neutralDefaults)) {
+        if (normalizedSlide[key] === undefined) {
+          normalizedSlide[key] = defaultValue;
+        }
+      }
+      if (!isRecord(normalizedSlide.visual)) return normalizedSlide;
+
+      const visual = { ...normalizedSlide.visual };
+      const composition = canonicalComposition(visual.composition, slide);
+      if (composition) visual.composition = composition;
+      if (Array.isArray(visual.emphasis)) {
+        visual.emphasis = visual.emphasis.map((emphasis) =>
+          canonicalEmphasis(emphasis, normalizedSlide)
+        );
+      }
+      if (visual.imageMode === "none") {
+        visual.assetBrief = "";
+      }
+      return { ...normalizedSlide, visual };
     });
   }
 

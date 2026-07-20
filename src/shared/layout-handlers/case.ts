@@ -24,23 +24,35 @@ function resolveVariant(ctx: LayoutGrammarContext): CaseVariant {
 }
 
 function foldText(ctx: LayoutGrammarContext, start: number): string[] {
-  return ctx.bodyTexts.slice(start).map((item) => item.text.trim()).filter(Boolean);
+  return ctx.bodyTexts
+    .filter((item) => item.textRole !== "caption" && item.textRole !== "metric")
+    .slice(start)
+    .map((item) => item.text.trim())
+    .filter(Boolean);
 }
 
 function applySplit(ctx: LayoutGrammarContext): void {
-  const description = ctx.bodyTexts[0];
-  const metric = ctx.bodyTexts[1];
+  const source = ctx.bodyTexts.find((item) => item.textRole === "caption");
+  const explicitMetric = ctx.bodyTexts.find((item) => item.textRole === "metric");
+  const narratives = ctx.bodyTexts.filter(
+    (item) => item.textRole !== "caption" && item.textRole !== "metric",
+  );
+  const description = narratives[0];
+  const metric = explicitMetric ?? narratives[1];
+  const chart = ctx.dataElements.find((element) => element.type === "chart");
   const sideImage = pickAnyImage(ctx, "side");
   const left = { x: 120, y: CONTENT.y, width: 600, height: CONTENT.height };
   const right = { x: 760, y: CONTENT.y, width: 400, height: CONTENT.height };
   const pad = 24;
 
   ctx.elements.unshift(ctx.helpers.createCard(left.x, left.y, left.width, left.height));
-  ctx.elements.unshift(ctx.helpers.createCard(right.x, right.y, right.width, right.height));
+  if (sideImage || metric || chart) {
+    ctx.elements.unshift(ctx.helpers.createCard(right.x, right.y, right.width, right.height));
+  }
   ctx.elements.push(ctx.helpers.createAccentBlock(left.x + pad, left.y + pad, 6, 80, { opacity: 1 }));
 
   if (description) {
-    const extras = foldText(ctx, sideImage ? 1 : 2);
+    const extras = foldText(ctx, metric && metric !== explicitMetric ? 2 : 1);
     if (extras.length > 0) description.text = [description.text.trim(), ...extras].join("\n");
     ctx.elements.push(styleText(ctx, description, {
       x: left.x + 40,
@@ -55,7 +67,14 @@ function applySplit(ctx: LayoutGrammarContext): void {
     }));
   }
 
-  if (sideImage) {
+  if (chart) {
+    ctx.elements.push(ctx.helpers.placeDataInSlot(chart, {
+      x: right.x + 20,
+      y: right.y + 28,
+      width: right.width - 40,
+      height: right.height - 56,
+    }));
+  } else if (sideImage) {
     const placed = ctx.helpers.placeImageInSlot(sideImage, {
       x: right.x + pad,
       y: right.y + pad,
@@ -77,11 +96,30 @@ function applySplit(ctx: LayoutGrammarContext): void {
       align: "center",
     }));
   }
+  if (source) {
+    ctx.elements.push(styleText(ctx, source, {
+      x: 120,
+      y: 650,
+      width: 1040,
+      height: 28,
+      role: "caption",
+      baseSize: 14,
+      minSize: 11,
+      color: ctx.colors.body,
+      align: "left",
+    }));
+  }
 }
 
 function applyMetricFocus(ctx: LayoutGrammarContext): void {
-  const metric = ctx.bodyTexts[1] ?? ctx.bodyTexts[0];
-  const description = ctx.bodyTexts[1] ? ctx.bodyTexts[0] : undefined;
+  const source = ctx.bodyTexts.find((item) => item.textRole === "caption");
+  const narratives = ctx.bodyTexts.filter(
+    (item) => item.textRole !== "caption" && item.textRole !== "metric",
+  );
+  const metric = ctx.bodyTexts.find((item) => item.textRole === "metric")
+    ?? narratives[1]
+    ?? narratives[0];
+  const description = narratives.find((item) => item.id !== metric?.id);
   const left = { x: 120, y: CONTENT.y + 36, width: 430, height: 360 };
   const right = { x: 590, y: CONTENT.y, width: 570, height: CONTENT.height };
 
@@ -90,7 +128,10 @@ function applyMetricFocus(ctx: LayoutGrammarContext): void {
   ctx.elements.push(ctx.helpers.createAccentBar(left.x + 28, left.y + 28, 120));
 
   if (description) {
-    const extras = foldText(ctx, 2);
+    const extras = narratives
+      .filter((item) => item.id !== description.id && item.id !== metric?.id)
+      .map((item) => item.text.trim())
+      .filter(Boolean);
     if (extras.length > 0) description.text = [description.text.trim(), ...extras].join("\n");
     ctx.elements.push(styleText(ctx, description, {
       x: left.x + 32,
@@ -118,13 +159,30 @@ function applyMetricFocus(ctx: LayoutGrammarContext): void {
       align: "center",
     }));
   }
+  if (source) {
+    ctx.elements.push(styleText(ctx, source, {
+      x: 120,
+      y: 650,
+      width: 1040,
+      height: 28,
+      role: "caption",
+      baseSize: 14,
+      minSize: 11,
+      color: ctx.colors.body,
+      align: "left",
+    }));
+  }
 }
 
 function applyEvidence(ctx: LayoutGrammarContext): void {
   const image = pickAnyImage(ctx, "side");
   if (!image) return applyMetricFocus(ctx);
-  const description = ctx.bodyTexts[0];
-  const metric = ctx.bodyTexts[1];
+  const source = ctx.bodyTexts.find((item) => item.textRole === "caption");
+  const narratives = ctx.bodyTexts.filter(
+    (item) => item.textRole !== "caption" && item.textRole !== "metric",
+  );
+  const metric = ctx.bodyTexts.find((item) => item.textRole === "metric") ?? narratives[1];
+  const description = narratives[0];
   const imageBox = { x: 120, y: CONTENT.y, width: 650, height: CONTENT.height };
   const textBox = { x: 810, y: CONTENT.y, width: 350, height: CONTENT.height };
 
@@ -153,7 +211,10 @@ function applyEvidence(ctx: LayoutGrammarContext): void {
     }));
   }
   if (description) {
-    const extras = foldText(ctx, 2);
+    const extras = narratives
+      .filter((item) => item.id !== description.id && item.id !== metric?.id)
+      .map((item) => item.text.trim())
+      .filter(Boolean);
     if (extras.length > 0) description.text = [description.text.trim(), ...extras].join("\n");
     ctx.elements.push(styleText(ctx, description, {
       x: textBox.x + 34,
@@ -163,6 +224,19 @@ function applyEvidence(ctx: LayoutGrammarContext): void {
       role: "body",
       baseSize: 19,
       minSize: 14,
+      color: ctx.colors.body,
+      align: "left",
+    }));
+  }
+  if (source) {
+    ctx.elements.push(styleText(ctx, source, {
+      x: 120,
+      y: 650,
+      width: 1040,
+      height: 28,
+      role: "caption",
+      baseSize: 14,
+      minSize: 11,
       color: ctx.colors.body,
       align: "left",
     }));

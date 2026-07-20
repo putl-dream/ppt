@@ -43,6 +43,60 @@ describe("LayoutValidator", () => {
     expect(issues.some((issue) => issue.severity === "error" && issue.category === "layout")).toBe(true);
   });
 
+  it("accepts an intentional full-bleed commercial cover image", () => {
+    const slide: Slide = {
+      id: "slide-full-bleed",
+      title: "Full bleed",
+      layout: "cover",
+      sceneRef: {
+        packId: "editorial-business",
+        sceneId: "cinematic-cover",
+        variantId: "full-bleed",
+      },
+      elements: [{
+        id: "hero-image",
+        type: "image",
+        x: 0,
+        y: 0,
+        width: 1280,
+        height: 720,
+        url: "assets/hero.png",
+        borderRadius: 0,
+        imageSlot: "hero",
+      }],
+    };
+
+    const issues = validator.validate(createPresentation([slide]));
+    expect(issues.filter((issue) => issue.message.includes("outside the safe margin"))).toEqual([]);
+  });
+
+  it("still rejects a full-bleed cover image that extends beyond the canvas", () => {
+    const slide: Slide = {
+      id: "slide-overflowing-full-bleed",
+      title: "Overflowing full bleed",
+      layout: "cover",
+      sceneRef: {
+        packId: "editorial-business",
+        sceneId: "cinematic-cover",
+        variantId: "full-bleed",
+      },
+      elements: [{
+        id: "hero-image",
+        type: "image",
+        x: -1,
+        y: 0,
+        width: 1281,
+        height: 720,
+        url: "assets/hero.png",
+        borderRadius: 0,
+        imageSlot: "hero",
+      }],
+    };
+
+    const issues = validator.validate(createPresentation([slide]));
+    expect(issues.some((issue) => issue.message.includes("outside the safe margin"))).toBe(true);
+  });
+
   it("flags empty comparison layout slides", () => {
     const slide: Slide = {
       id: "slide-comparison",

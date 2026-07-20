@@ -10,6 +10,20 @@ function isLayoutCardElement(element: SlideElement): boolean {
   return isLayoutCard(element);
 }
 
+function isIntentionalFullBleedImage(slide: Slide, element: SlideElement): boolean {
+  return (
+    element.type === "image"
+    && element.imageSlot === "hero"
+    && slide.sceneRef?.sceneId === "cinematic-cover"
+    && slide.sceneRef.variantId === "full-bleed"
+    && element.x === 0
+    && element.y === 0
+    && element.width === LayoutPolicy.CANVAS_WIDTH
+    && element.height === LayoutPolicy.CANVAS_HEIGHT
+    && LayoutPolicy.isWithinCanvas(element)
+  );
+}
+
 function isIntentionalLayoutOverlap(left: SlideElement, right: SlideElement): boolean {
   const pair = [left, right];
   const hasNumber = pair.some((element) => element.type === "text" && element.id.startsWith("num-"));
@@ -95,7 +109,10 @@ export class LayoutValidator {
     }
 
     for (const element of slide.elements) {
-      if (!LayoutPolicy.isWithinSafeZone(element)) {
+      if (
+        !LayoutPolicy.isWithinSafeZone(element)
+        && !isIntentionalFullBleedImage(slide, element)
+      ) {
         issues.push({
           slideId: slide.id,
           category: "layout",

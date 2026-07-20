@@ -5,7 +5,8 @@ import {
 } from "@design-system";
 
 import {
-  compileLeanDeckSpec,
+  createLeanSlideContentElements,
+  isLeanStarterPresentation,
   type LeanDeckSpec,
 } from "../lean-mode";
 import {
@@ -13,6 +14,7 @@ import {
   type LeanDeckSpecV2,
 } from "../lean/deck-spec-v2";
 import type { PresentationCommand } from "../commands";
+import { pruneEmptyLayoutCards } from "../layout-shape-utils";
 import {
   presentationSchema,
   type ImageElement,
@@ -156,15 +158,17 @@ export function compileCommercialDeck(input: {
   }
 
   const designSystem = resolveDesignSystem(spec, input.designSystem);
-  const baseline = compileLeanDeckSpec(asV1Spec(spec), input.basePresentation, designSystem);
+  if (!isLeanStarterPresentation(input.basePresentation)) {
+    throw new Error("Commercial Visual v2 only supports a new presentation.");
+  }
+  const v1Spec = asV1Spec(spec);
   const ids = createDeterministicIdFactory(
     `${spec.title}:${input.compilerVersion}:${plan.packId}`,
   );
   const diagnostics: CompiledCommercialDeck["diagnostics"] = [];
 
-  const slides = baseline.presentation.slides.map((baselineSlide, slideIndex): Slide => {
+  const slides = spec.slides.map((specSlide, slideIndex): Slide => {
     const planSlide = plan.slides[slideIndex];
-    const specSlide = spec.slides[slideIndex];
     if (!planSlide || !specSlide || planSlide.slideIndex !== slideIndex) {
       throw new Error(`Invalid directed plan entry at slide ${slideIndex + 1}.`);
     }
@@ -183,32 +187,53 @@ export function compileCommercialDeck(input: {
       return image ? [image] : [];
     });
 
-    const sceneInput: Slide = {
-      ...baselineSlide,
+    const rawSlide: Slide = {
       id: ids.id("slide", slideIndex, specSlide.kind, specSlide.title),
+      title: specSlide.title,
+      elements: [],
       slideVariant: planSlide.backgroundMode === "dark" ? "dark" : "light",
       sceneRef: {
         packId: plan.packId,
         sceneId: scene.id,
         variantId: planSlide.variantId,
       },
-      elements: [...baselineSlide.elements, ...resolvedImages],
     };
-    const style = resolveSlideStyle(designSystem, sceneInput);
+    const style = resolveSlideStyle(designSystem, rawSlide);
+    const sceneInput: Slide = {
+      ...rawSlide,
+      elements: [
+        ...createLeanSlideContentElements(
+          v1Spec.slides[slideIndex]!,
+          v1Spec,
+          slideIndex,
+          style.colors.body,
+        ),
+        ...resolvedImages,
+      ],
+    };
     const laidOut = scene.compile({
       slide: sceneInput,
       variantId: planSlide.variantId,
       style,
       emphasis: planSlide.emphasis,
     });
+    const prunedElements = pruneEmptyLayoutCards(laidOut.elements);
     const normalized: Slide = {
       ...laidOut,
       sceneRef: sceneInput.sceneRef,
-      elements: laidOut.elements.map((element, elementIndex) => ({
+      elements: prunedElements.map((element, elementIndex) => ({
         ...element,
         id: ids.id("element", slideIndex, elementIndex, element.type),
       })),
     };
+    const prunedCardCount = laidOut.elements.length - prunedElements.length;
+    if (prunedCardCount > 0) {
+      diagnostics.push({
+        code: "empty-layout-card-pruned",
+        slideIndex,
+        message: `Removed ${prunedCardCount} unused layout card(s).`,
+      });
+    }
     diagnostics.push({
       code: "scene-compiled",
       slideIndex,

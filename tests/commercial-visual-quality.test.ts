@@ -27,14 +27,13 @@ describe("commercial visual quality gate", () => {
         { ...firstSlide, id: "quality-slide-2" },
       ],
     };
-    const contentSlide = (title: string): LeanDeckSpecV2["slides"][number] => ({
+    const contentSlide = (_title: string): LeanDeckSpecV2["slides"][number] => ({
       kind: "bullets",
       purpose: "insight",
-      title,
+      title: "Opening",
       subtitle: "",
       items: [
-        { heading: "系统", detail: "完成统一" },
-        { heading: "数据", detail: "实现互通" },
+        { heading: "Agent PPT", detail: "" },
       ],
       left: null,
       right: null,
@@ -47,7 +46,7 @@ describe("commercial visual quality gate", () => {
         composition: "editorial-grid",
         imageMode: "none",
         assetBrief: "",
-        emphasis: [title],
+        emphasis: ["Opening"],
       },
     });
     const spec: LeanDeckSpecV2 = {
@@ -110,5 +109,157 @@ describe("commercial visual quality gate", () => {
         "adjacent-scene-repeat",
       ]),
     );
+
+    const missingContent = evaluateCommercialQuality({
+      spec,
+      plan,
+      assets: EMPTY_ASSET_MANIFEST,
+      presentation: {
+        ...presentation,
+        slides: [
+          { ...presentation.slides[0]!, elements: [] },
+          presentation.slides[1]!,
+        ],
+      },
+      canonicalHash: "missing-content",
+      determinismVerified: true,
+      commandReplayVerified: true,
+    });
+    expect(missingContent.hardFailures.map((failure) => failure.code))
+      .toContain("content-unit-unconsumed");
+
+    const overlapPresentation = structuredClone(presentation);
+    overlapPresentation.slides[0]!.elements.push(
+      {
+        id: "overlap-a",
+        type: "text",
+        x: 900,
+        y: 100,
+        width: 200,
+        height: 80,
+        text: "A",
+        fontSize: 20,
+      },
+      {
+        id: "overlap-b",
+        type: "text",
+        x: 920,
+        y: 120,
+        width: 200,
+        height: 80,
+        text: "B",
+        fontSize: 20,
+      },
+    );
+    const overlapQuality = evaluateCommercialQuality({
+      spec,
+      plan,
+      assets: EMPTY_ASSET_MANIFEST,
+      presentation: overlapPresentation,
+      canonicalHash: "overlap",
+      determinismVerified: true,
+      commandReplayVerified: true,
+    });
+    expect(overlapQuality.hardFailures.map((failure) => failure.code))
+      .toContain("foreground-overlap");
+    expect(overlapQuality.scores.composition).toBeLessThan(100);
+
+    const mediaOverlapPresentation = structuredClone(presentation);
+    mediaOverlapPresentation.slides[0]!.elements.push(
+      {
+        id: "media-overlap-text",
+        type: "text",
+        x: 900,
+        y: 100,
+        width: 200,
+        height: 80,
+        text: "Caption",
+        fontSize: 20,
+      },
+      {
+        id: "media-overlap-image",
+        type: "image",
+        x: 920,
+        y: 120,
+        width: 200,
+        height: 80,
+        url: "assets/media-overlap.png",
+        borderRadius: 0,
+      },
+    );
+    const mediaOverlapQuality = evaluateCommercialQuality({
+      spec,
+      plan,
+      assets: EMPTY_ASSET_MANIFEST,
+      presentation: mediaOverlapPresentation,
+      canonicalHash: "media-overlap",
+      determinismVerified: true,
+      commandReplayVerified: true,
+    });
+    expect(mediaOverlapQuality.hardFailures.map((failure) => failure.code))
+      .not.toContain("foreground-overlap");
+    expect(mediaOverlapQuality.warnings.map((warning) => warning.code))
+      .toContain("foreground-media-overlap");
+    expect(mediaOverlapQuality.hardFailures).toEqual([]);
+    expect(mediaOverlapQuality.passed).toBe(true);
+    expect(mediaOverlapQuality.scores.composition).toBeLessThan(100);
+
+    const emptyCardPresentation = structuredClone(presentation);
+    emptyCardPresentation.slides[0]!.elements.push({
+      id: "empty-card",
+      type: "shape",
+      provenance: "layout",
+      shapeType: "roundedRect",
+      x: 900,
+      y: 500,
+      width: 250,
+      height: 160,
+      fillColor: "#ffffff",
+      strokeColor: "#dbeafe",
+    });
+    const emptyCardQuality = evaluateCommercialQuality({
+      spec,
+      plan,
+      assets: EMPTY_ASSET_MANIFEST,
+      presentation: emptyCardPresentation,
+      canonicalHash: "empty-card",
+      determinismVerified: true,
+      commandReplayVerified: true,
+    });
+    expect(emptyCardQuality.hardFailures.map((failure) => failure.code))
+      .toContain("empty-layout-card");
+
+    const assetPlan = structuredClone(plan);
+    assetPlan.slides[0]!.assetRequests.push({
+      requestId: "asset-1",
+      slideIndex: 0,
+      slotId: "side",
+      brief: "Business evidence",
+      required: false,
+      targetAspectRatio: 4 / 5,
+    });
+    const assetQuality = evaluateCommercialQuality({
+      spec,
+      plan: assetPlan,
+      assets: {
+        version: 1,
+        assets: [{
+          requestId: "asset-1",
+          slotId: "side",
+          status: "resolved",
+          sha256: "a".repeat(64),
+          localPath: "assets/evidence.png",
+          mimeType: "image/png",
+          licenseStatus: "verified",
+          rejectionCodes: [],
+        }],
+      },
+      presentation,
+      canonicalHash: "asset-slot",
+      determinismVerified: true,
+      commandReplayVerified: true,
+    });
+    expect(assetQuality.hardFailures.map((failure) => failure.code))
+      .toContain("resolved-asset-slot-unconsumed");
   });
 });

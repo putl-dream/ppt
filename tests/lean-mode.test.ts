@@ -190,6 +190,8 @@ describe("Lean Mode", () => {
     expect(LEAN_SYSTEM_PROMPT).toContain("不要输出 body、agenda、bullets");
     expect(LEAN_SYSTEM_PROMPT).toContain("可取标题或正文的子串");
     expect(LEAN_SYSTEM_PROMPT).toContain("imageMode=none 时 assetBrief 必须是空字符串");
+    expect(LEAN_SYSTEM_PROMPT).toContain("composition 只能是 full-bleed");
+    expect(LEAN_SYSTEM_PROMPT).toContain("数值 14 应写 \"14\"");
 
     const base = createSpec();
     const extraSlides = [
@@ -404,6 +406,78 @@ describe("Lean Mode", () => {
       imageMode: "none",
       assetBrief: "",
     });
+  });
+
+  it("normalizes a composition alias and equivalent numeric emphasis without another model call", async () => {
+    const spec = migrateLeanDeckSpecV1ToV2(createSpec());
+    spec.slides[3]!.metric!.value = "14";
+    const payload = structuredClone(spec) as unknown as {
+      slides: Array<{ visual: { composition: string; emphasis: string[] } }>;
+    };
+    payload.slides[3]!.visual.composition = "dashboard";
+    payload.slides[3]!.visual.emphasis = ["续费", "14.0"];
+    const gateway = new FakeGateway(JSON.stringify(payload));
+    const service = new LeanPresentationService(gateway);
+
+    const proposal = await service.createProposal({
+      request: "生成一份经营复盘",
+      presentation: createStarterPresentation(),
+    });
+
+    expect(gateway.requests).toHaveLength(1);
+    expect(proposal.spec.slides[3]?.visual).toMatchObject({
+      composition: "metric-story",
+      emphasis: ["续费", "14"],
+    });
+  });
+
+  it("fills omitted neutral slide fields without another model call", async () => {
+    const spec = migrateLeanDeckSpecV1ToV2(createSpec());
+    const payload = structuredClone(spec) as unknown as {
+      sources: Array<{ asOf?: string | null }>;
+      slides: Array<Record<string, unknown>>;
+    };
+    delete payload.sources[0]!.asOf;
+    delete payload.slides[3]!.subtitle;
+    delete payload.slides[3]!.items;
+    delete payload.slides[3]!.left;
+    delete payload.slides[3]!.right;
+    delete payload.slides[3]!.steps;
+    delete payload.slides[3]!.chart;
+    const gateway = new FakeGateway(JSON.stringify(payload));
+    const service = new LeanPresentationService(gateway);
+
+    const proposal = await service.createProposal({
+      request: "生成一份经营复盘",
+      presentation: createStarterPresentation(),
+    });
+
+    expect(gateway.requests).toHaveLength(1);
+    expect(proposal.spec.sources[0]?.asOf).toBeNull();
+    expect(proposal.spec.slides[3]).toMatchObject({
+      subtitle: "",
+      items: [],
+      left: null,
+      right: null,
+      steps: [],
+      chart: null,
+    });
+  });
+
+  it("still rejects an omitted field that is semantically required by the slide kind", async () => {
+    const spec = migrateLeanDeckSpecV1ToV2(createSpec());
+    const payload = structuredClone(spec) as unknown as {
+      slides: Array<Record<string, unknown>>;
+    };
+    delete payload.slides[1]!.items;
+    const gateway = new FakeGateway(JSON.stringify(payload));
+    const service = new LeanPresentationService(gateway);
+
+    await expect(service.createProposal({
+      request: "生成一份经营复盘",
+      presentation: createStarterPresentation(),
+    })).rejects.toThrow("Bullets requires 2 to 4 items");
+    expect(gateway.requests).toHaveLength(1);
   });
 
   it("keeps unknown fields strict after compatibility normalization", async () => {

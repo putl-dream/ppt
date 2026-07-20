@@ -436,6 +436,12 @@ function itemText(item: z.infer<typeof leanContentItemSchema>): string {
   return item.detail ? `${item.heading}\n${item.detail}` : item.heading;
 }
 
+function withSubtitle(slide: LeanSlideSpec, text: string): string {
+  return slide.subtitle
+    ? `${slide.subtitle}\n${text}`
+    : text;
+}
+
 function sourceFooter(
   slide: LeanSlideSpec,
   deck: LeanDeckSpec,
@@ -484,27 +490,42 @@ function createRawElements(slide: LeanSlideSpec, slideIndex: number): SlideEleme
           ...slide.items,
         ]
       : slide.items;
-    return content.map((item, index) =>
-      textElement(`${seed}:item:${index}`, itemText(item), 22)
-    );
+    return content.map((item, index) => {
+      const text = itemText(item);
+      return textElement(
+        `${seed}:item:${index}`,
+        slide.kind !== "closing" && index === 0
+          ? withSubtitle(slide, text)
+          : text,
+        22,
+      );
+    });
   }
   if (slide.kind === "comparison" && slide.left && slide.right) {
     return [
-      textElement(`${seed}:left:label`, slide.left.label, 22),
+      textElement(`${seed}:left:label`, withSubtitle(slide, slide.left.label), 22),
       textElement(`${seed}:right:label`, slide.right.label, 22),
       textElement(`${seed}:left:items`, slide.left.items.map((item) => `• ${item}`).join("\n"), 20),
       textElement(`${seed}:right:items`, slide.right.items.map((item) => `• ${item}`).join("\n"), 20),
     ];
   }
   if (slide.kind === "process") {
-    return slide.steps.map((step, index) =>
-      textElement(`${seed}:step:${index}`, itemText(step), 20)
-    );
+    return slide.steps.map((step, index) => {
+      const text = itemText(step);
+      return textElement(
+        `${seed}:step:${index}`,
+        index === 0 ? withSubtitle(slide, text) : text,
+        20,
+      );
+    });
   }
   if (slide.kind === "metric" && slide.metric) {
     return [
-      textElement(`${seed}:takeaway`, slide.metric.takeaway, 20),
-      textElement(`${seed}:metric`, `${slide.metric.value}\n${slide.metric.label}`, 44),
+      textElement(`${seed}:takeaway`, withSubtitle(slide, slide.metric.takeaway), 20),
+      {
+        ...textElement(`${seed}:metric`, `${slide.metric.value}\n${slide.metric.label}`, 44),
+        textRole: "metric",
+      },
     ];
   }
   if (slide.kind === "chart" && slide.chart) {
@@ -521,11 +542,24 @@ function createRawElements(slide: LeanSlideSpec, slideIndex: number): SlideEleme
       unit: slide.chart.unit || undefined,
     };
     return [
-      textElement(`${seed}:takeaway`, slide.chart.takeaway, 20),
+      textElement(`${seed}:takeaway`, withSubtitle(slide, slide.chart.takeaway), 20),
       chart,
     ];
   }
   return [];
+}
+
+export function createLeanSlideContentElements(
+  slide: LeanSlideSpec,
+  deck: LeanDeckSpec,
+  slideIndex: number,
+  sourceColor: string,
+): SlideElement[] {
+  const slideSeed = `${deck.title}:${slideIndex}:${slide.kind}:${slide.title}`;
+  const footer = sourceFooter(slide, deck, slideSeed, sourceColor);
+  return footer
+    ? [...createRawElements(slide, slideIndex), footer]
+    : createRawElements(slide, slideIndex);
 }
 
 function normalizeElementIds(elements: SlideElement[], slideSeed: string): SlideElement[] {

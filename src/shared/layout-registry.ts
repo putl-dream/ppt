@@ -10,11 +10,17 @@ export interface LayoutContext {
   colors: ResolvedSlideStyle["colors"];
   textElements: import("./presentation").TextElement[];
   imageElements: import("./presentation").ImageElement[];
+  dataElements: Array<
+    import("./presentation").ChartElement
+    | import("./presentation").TableElement
+    | import("./presentation").IconElement
+  >;
   userShapes: import("./presentation").ShapeElement[];
   titleEl?: import("./presentation").TextElement;
   bodyTexts: import("./presentation").TextElement[];
   elements: SlideElement[];
   placedImageIds: Set<string>;
+  placedDataIds: Set<string>;
   helpers: LayoutHelpers;
 }
 
@@ -39,6 +45,13 @@ export interface LayoutHelpers {
     rect: { x: number; y: number; width: number; height: number },
     slotName: string,
   ) => import("./presentation").ImageElement;
+  placeDataInSlot: <T extends
+    | import("./presentation").ChartElement
+    | import("./presentation").TableElement
+    | import("./presentation").IconElement>(
+    element: T,
+    rect: { x: number; y: number; width: number; height: number },
+  ) => T;
   pickImageForSlot: (slotName: string, fallbackUnslottedOnly?: boolean) => import("./presentation").ImageElement | undefined;
 }
 
