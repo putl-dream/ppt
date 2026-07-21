@@ -4,10 +4,8 @@ import {
   type Dispatch,
   type SetStateAction,
 } from "react";
-import type { AgentRunRequest } from "@shared/ipc";
-import { createDisplayEventId } from "@shared/card-display-protocol";
 import type { Presentation } from "@shared/presentation";
-import { createSessionTitleFromPrompt, type SessionBootstrap } from "@shared/session";
+import type { SessionBootstrap } from "@shared/session";
 import type { LayoutChoice } from "@shared/layout-preference";
 import type { LeanGenerationMode } from "@shared/lean-mode-contract";
 import {
@@ -15,18 +13,13 @@ import {
   resolveToolApprovalItem,
 } from "@shared/agent-activity";
 import { formatPublicErrorMessage } from "@shared/agent-activity-display";
-import { toAgentModelSettings } from "../../modelCatalog";
-import { buildAgentGatewayConfig } from "../../agentGatewayConfig";
 import { useProjectStore } from "../../components/project-store";
 import {
-  getPersistedDisplayCards,
-  ingestDisplayEvent,
   pruneDisplayCardsForMessages,
   setDisplayCardStatus,
   usePermissionCardManager,
 } from "../../cards/display-card-managers";
 import {
-  findActiveThreadId,
   toSessionChatMessages,
   type ChatMessage,
 } from "../chatMessageRuntime";
@@ -39,11 +32,13 @@ import {
   type ApplyAgentResult,
 } from "./useAgentResultHandler";
 import { handleAgentRunFailure } from "./agentRunFailure";
-
-const PREVIEW_PROMPT_PATTERN =
-  /预览.*(?:ppt|幻灯片|演示文稿)|(?:ppt|幻灯片|演示文稿).*预览|打开.*预览/i;
-
-const isPreviewPrompt = (prompt: string) => PREVIEW_PROMPT_PATTERN.test(prompt.trim());
+import { tryHandleLocalAgentCommand } from "./agentLocalCommand";
+import { executeAgentRun } from "./agentRunExecution";
+import {
+  buildAgentRunRequest,
+  prepareAgentRunMessages,
+} from "./agentRunPreparation";
+import { ensureAgentSession } from "./agentSessionPreparation";
 
 interface StartAgentOptions {
   userDisplayContent?: string | false;
@@ -162,74 +157,30 @@ export function useAgentRunController({
     const isSidechain = options?.sidechain === true;
     const sourceMessages = chatMessages;
 
-    if (presentation && isPreviewPrompt(activeRequest)) {
-      setChatMessages((current) => [
-        ...current,
-        { id: crypto.randomUUID(), role: "user", content: activeRequest },
-      ]);
-      if (!customRequest) setRequest("");
-      openDeckPreview();
-      const previewMessageId = crypto.randomUUID();
-      ingestDisplayEvent({
-        protocolVersion: 1,
-        eventId: createDisplayEventId("artifact-preview"),
-        emittedAt: new Date().toISOString(),
-        kind: "artifact.ready",
-        category: "artifact",
-        source: {
-          kind: "frontend",
-          feature: "deck-preview-command",
-        },
-        scope: {
-          ...(activeSessionId ? { sessionId: activeSessionId } : {}),
-          anchorMessageId: previewMessageId,
-        },
-        semantics: {
-          blocking: false,
-          requiresResponse: false,
-          priority: "normal",
-        },
-        payload: {
-          artifactId: "deck",
-          artifactType: "deck",
-          title: presentation.title,
-          revision: presentation.revision,
-        },
-      });
-      setChatMessages((current) => [
-        ...current,
-        {
-          id: previewMessageId,
-          role: "assistant",
-          content: "已打开演示文稿预览，你可以在右侧或弹窗中查看全部页面。",
-        },
-      ]);
-      notify("已打开演示文稿预览");
-      return;
-    }
+    const handledLocally = tryHandleLocalAgentCommand({
+      prompt: activeRequest,
+      presentation,
+      sessionId: activeSessionId,
+      clearRequest: !customRequest,
+      appendChatMessage: (message) => {
+        setChatMessages((current) => [...current, message]);
+      },
+      onClearRequest: () => setRequest(""),
+      openDeckPreview,
+      notify,
+    });
+    if (handledLocally) return;
 
     setBusy(true);
     setIsDraftChat(false);
-    let agentSessionId = activeSessionId;
-
-    if (!agentSessionId) {
-      try {
-        const sessionTitle = createSessionTitleFromPrompt(activeRequest);
-        const state = await window.desktopApi.createSession(
-          localStoragePath
-            ? { rootPath: localStoragePath, title: sessionTitle }
-            : { title: sessionTitle },
-        );
-        applySessionState(state);
-        setIsDraftChat(false);
-        agentSessionId = state.activeSession!.session.id;
-      } catch (error) {
-        setBusy(false);
-        setIsDraftChat(true);
-        notify(formatPublicErrorMessage(error, "创建会话失败，请重试。"));
-        return;
-      }
-    }
+    const agentSessionId = await ensureAgentSession({
+      activeSessionId,
+      prompt: activeRequest,
+      localStoragePath,
+      applySessionState,
+      setIsDraftChat,
+      notify,
+    });
 
     const activeProject = useProjectStore.getState().activeProject;
     if (!agentSessionId || !activeProject) {
@@ -238,13 +189,12 @@ export function useAgentRunController({
       return;
     }
 
-    const agentRequest: AgentRunRequest = {
+    const agentRequest = buildAgentRunRequest({
       prompt: activeRequest,
       sessionId: agentSessionId,
-      editorContext: { selectedElementIds: [] },
       generationMode: runGenerationMode,
-      ...(options?.layoutChoice ? { layoutChoice: options.layoutChoice } : {}),
-    };
+      layoutChoice: options?.layoutChoice,
+    });
 
     console.info("Starting unified Agent run", {
       sessionId: agentRequest.sessionId,
@@ -256,44 +206,25 @@ export function useAgentRunController({
     const streamMessageId = crypto.randomUUID();
     setActiveRunId(runId);
     beginRunActivity(runId, streamMessageId, isSidechain);
-    let forkedMessages: ChatMessage[] | undefined;
     const streamPlaceholder: ChatMessage = {
       id: streamMessageId,
       role: "assistant",
       content: "",
       threadId: runId,
     };
-    let runMessages: ChatMessage[];
-
-    if (isSidechain) {
-      runMessages = [...sourceMessages, streamPlaceholder];
-      setChatMessages(runMessages);
-    } else if (isEditOfMsgId) {
-      const index = sourceMessages.findIndex((message) => message.id === isEditOfMsgId);
-      if (index !== -1) {
-        forkedMessages = sourceMessages.slice(0, index + 1);
-        forkedMessages[index] = {
-          ...forkedMessages[index],
-          id: crypto.randomUUID(),
-          content: userDisplayContent ?? activeRequest,
-        };
-        pruneDisplayCardsForMessages(new Set(forkedMessages.map((message) => message.id)));
-        runMessages = [...forkedMessages, streamPlaceholder];
-      } else {
-        runMessages = [...sourceMessages, streamPlaceholder];
-      }
-      setChatMessages(runMessages);
-    } else if (userDisplayContent !== null) {
-      runMessages = [
-        ...sourceMessages,
-        { id: crypto.randomUUID(), role: "user", content: userDisplayContent },
-        streamPlaceholder,
-      ];
-      setChatMessages(runMessages);
-    } else {
-      runMessages = [...sourceMessages, streamPlaceholder];
-      setChatMessages(runMessages);
+    const preparedMessages = prepareAgentRunMessages({
+      sourceMessages,
+      activeRequest,
+      userDisplayContent,
+      isSidechain,
+      editedMessageId: isEditOfMsgId,
+      streamPlaceholder,
+      createMessageId: () => crypto.randomUUID(),
+    });
+    if (preparedMessages.retainedMessageIds) {
+      pruneDisplayCardsForMessages(preparedMessages.retainedMessageIds);
     }
+    setChatMessages(preparedMessages.runMessages);
 
     if (!customRequest) setRequest("");
 
@@ -301,32 +232,20 @@ export function useAgentRunController({
       if (!isSidechain) {
         await window.desktopApi.saveSessionMessages(
           agentSessionId,
-          toSessionChatMessages(runMessages),
+          toSessionChatMessages(preparedMessages.runMessages),
         );
       }
-      const gatewayConfig = buildAgentGatewayConfig(agentGatewayPreferences, enabledModels);
-      const modelSettings = selectedModel ? toAgentModelSettings(selectedModel) : undefined;
-      const activeThreadId = findActiveThreadId(
-        forkedMessages ?? sourceMessages,
-        getPersistedDisplayCards(),
-      );
-      const result = runGenerationMode === "agent" && activeThreadId
-        ? await window.desktopApi.continueAgentRun(
-            activeThreadId,
-            agentRequest,
-            modelSettings,
-            agentStepLimits,
-            gatewayConfig,
-            runId,
-          )
-        : await window.desktopApi.startAgentRun(
-            agentRequest,
-            modelSettings,
-            "REQUEST_APPROVAL",
-            agentStepLimits,
-            gatewayConfig,
-            runId,
-          );
+      const result = await executeAgentRun({
+        request: agentRequest,
+        generationMode: runGenerationMode,
+        sourceMessages,
+        forkedMessages: preparedMessages.forkedMessages,
+        gatewayPreferences: agentGatewayPreferences,
+        enabledModels,
+        selectedModel,
+        stepLimits: agentStepLimits,
+        runId,
+      });
       await new Promise<void>((resolve) => queueMicrotask(resolve));
       await applyAgentResult(result, activeRunTraceRef.current, runId);
     } catch (error) {
