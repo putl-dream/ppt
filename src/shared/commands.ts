@@ -614,16 +614,22 @@ export function executeCommand(
   throw new Error(`Unhandled command type`);
 }
 
+/**
+ * Presentation 的会话内写入边界。
+ * 所有命令都通过纯函数 executeCommand 产生新快照，并在此维护 undo/redo 历史。
+ */
 export class CommandBus {
   private undoStack: ExecutedCommand[] = [];
   private redoStack: ExecutedCommand[] = [];
 
   constructor(private presentation: Presentation) {}
 
+  /** 返回深拷贝快照，避免调用方绕过命令系统直接修改内部状态。 */
   getSnapshot(): Presentation {
     return structuredClone(this.presentation);
   }
 
+  /** 原子执行单条命令；成功后记录逆命令，并清空 redo 历史。 */
   execute(command: PresentationCommand): Presentation {
     const result = executeCommand(this.presentation, command);
     this.presentation = result.presentation;
@@ -632,6 +638,10 @@ export class CommandBus {
     return this.getSnapshot();
   }
 
+  /**
+   * 以事务方式执行一组命令：全部在临时快照成功后才提交到真实状态，
+   * 任一命令抛错时不会产生部分写入。
+   */
   executeMany(commands: PresentationCommand[]): Presentation {
     let stagedPresentation = this.presentation;
     const stagedExecutions: ExecutedCommand[] = [];
@@ -648,6 +658,7 @@ export class CommandBus {
     return this.getSnapshot();
   }
 
+  /** 撤销最近一次已提交命令，并把原命令移入 redo 栈。 */
   undo(): Presentation {
     const executed = this.undoStack.pop();
     if (!executed) return this.getSnapshot();
@@ -657,6 +668,7 @@ export class CommandBus {
     return this.getSnapshot();
   }
 
+  /** 重做最近一次撤销的命令，并重新生成可撤销记录。 */
   redo(): Presentation {
     const executed = this.redoStack.pop();
     if (!executed) return this.getSnapshot();

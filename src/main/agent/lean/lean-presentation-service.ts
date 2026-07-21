@@ -63,6 +63,12 @@ export const LEAN_SYSTEM_PROMPT = `你是商业演示文稿架构师。把用户
 10. 默认使用 zh-CN；只有用户明确要求英文时才使用 en-US。
 11. 这是一次生成：信息不足时采用保守、透明的商业假设，不请求第二轮。`;
 
+const LEAN_SUBMISSION_CHECKLIST = `调用工具前在内部逐项自检跨页叙事：
+- internal-report 必须同时有 context、proof、plan、close。
+- sales-proposal 必须同时有 problem、solution、proof、ask、close；ask 必须是 closing 之前的独立 bullets 或 comparison 页，closing/close 不能代替 ask。
+- investor-pitch 必须同时有 problem、solution、至少两页 proof、plan 或 ask、close。
+只在全部满足后提交，不要输出自检过程。`;
+
 export interface LeanPresentationProposal {
   spec: LeanDeckSpecV2;
   commands: PresentationCommand[];
@@ -78,6 +84,14 @@ function toLeanOutputJsonSchema(): Record<string, unknown> {
     io: "output",
   }) as Record<string, unknown>;
   delete schema.$schema;
+  const properties = isRecord(schema.properties) ? schema.properties : undefined;
+  const slides = properties && isRecord(properties.slides)
+    ? properties.slides
+    : undefined;
+  if (slides) {
+    slides.description =
+      "Cross-slide narrative contract: sales-proposal requires distinct problem, solution, proof, ask, and close purposes. The ask must be a separate bullets or comparison slide before closing; closing/close does not satisfy ask.";
+  }
   return schema;
 }
 
@@ -383,6 +397,10 @@ export class LeanPresentationService {
     this.visualReviewer = visualReviewer ?? new LeanCommercialVisualReviewer(gateway);
   }
 
+  /**
+   * 将新建演示需求压缩为 DeckSpec v2，经过确定性编译与一次商业视觉复核，
+   * 最终只返回命令提案；真实 Presentation 仍由 AgentService/CommitGate 提交。
+   */
   async createProposal(input: {
     request: string;
     presentation: Presentation;
@@ -407,7 +425,7 @@ export class LeanPresentationService {
 
     const startedAt = Date.now();
     const response = await this.gateway.generateText({
-      prompt: `用户需求：\n${request}`,
+      prompt: `用户需求：\n${request}\n\n${LEAN_SUBMISSION_CHECKLIST}`,
       systemPrompt: LEAN_SYSTEM_PROMPT,
       tools: [{
         name: LEAN_SUBMIT_TOOL_NAME,

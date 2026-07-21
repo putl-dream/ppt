@@ -49,6 +49,10 @@ export class LeanV2Pipeline {
     private readonly assetResolver: CommercialAssetResolver,
   ) {}
 
+  /**
+   * 执行 Lean v2 的确定性编译链：视觉导演、素材解析、命令编译、可重放校验和质量门。
+   * 只有质量门通过时才返回 Presentation 预览及等价的命令序列。
+   */
   async create(input: {
     spec: LeanDeckSpecV2;
     basePresentation: Presentation;

@@ -117,6 +117,11 @@ export class AgentRuntime {
     private readonly conversationDatabase?: ConversationDatabase,
   ) {}
 
+  /**
+   * 运行一次模型驱动的工具循环：准备提示与恢复点，调用模型，串行执行工具，
+   * 并将最终结果归一为普通消息、用户追问或待提交的结构化命令提案。
+   * 本方法不直接修改真实 Presentation。
+   */
   async run(options: AgentRuntimeOptions): Promise<AgentRuntimeResult> {
     ensureDefaultHooks();
 

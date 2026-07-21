@@ -109,6 +109,10 @@ export class ToolRegistry {
   }
 }
 
+/**
+ * 构建每个 SessionRuntime 使用的标准工具集合。
+ * Core Tools 可由模型直接调用；Deferred Tools 只能经发现与 ExecuteExtraTool 间接执行。
+ */
 export function createDefaultToolRegistry(): ToolRegistry {
   const registry = new ToolRegistry();
   [

@@ -105,6 +105,10 @@ interface SessionRuntime {
   runtimeRoot: string;
 }
 
+/**
+ * 为单个会话装配独立的编辑状态与 Agent 基础设施。
+ * CommandBus 是该会话 Presentation 的内存事实源，其余服务共享同一实例。
+ */
 function createSessionRuntime(
   snapshot: SessionSnapshot,
   skillRegistry: SkillRegistry,
@@ -395,12 +399,17 @@ app.whenReady().then(async () => {
     await ensureRuntime(initialBootstrap.activeSession);
   }
 
+  /** 将 CommandBus 的当前快照同步到会话数据库和项目 deck/snapshot.json。 */
   const persistPresentation = async (sessionId: string, runtime: SessionRuntime) => {
     const presentation = runtime.commandBus.getSnapshot();
     await sessionStore.savePresentation(sessionId, presentation);
     return presentation;
   };
 
+  /**
+   * 收口一次 Agent 运行：仅在状态已落定时持久化 Presentation，
+   * 并把领域结果转换为 Renderer 可回放的展示事件。
+   */
   const finalizeAgentResult = async (
     sessionId: string,
     runtime: SessionRuntime,
@@ -420,6 +429,10 @@ app.whenReady().then(async () => {
     return displayEvents.length > 0 ? { ...result, displayEvents } : result;
   };
 
+  /**
+   * 执行 Lean 旁路：把一次性生成的 DeckSpec 编译为命令提案，
+   * 再交给 AgentService 复用与默认 Agent 相同的 CommitGate 和审批流程。
+   */
   const runLeanPresentation = async (
     runtime: SessionRuntime,
     request: AgentRunRequest,

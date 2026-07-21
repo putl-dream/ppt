@@ -440,6 +440,18 @@ describe("Lean Mode", () => {
     expect(gateway.requests[0].requiredToolName).toBe(LEAN_SUBMIT_TOOL_NAME);
     expect(gateway.requests[0].messages).toBeUndefined();
     expect(gateway.requests[0].outputFormat).toBeUndefined();
+    expect(gateway.requests[0].prompt).toContain(
+      "closing/close 不能代替 ask",
+    );
+    expect(gateway.requests[0].tools?.[0]?.inputSchema).toMatchObject({
+      properties: {
+        slides: {
+          description: expect.stringContaining(
+            "closing/close does not satisfy ask",
+          ),
+        },
+      },
+    });
     expect(proposal.metrics).toMatchObject({
       mode: "lean",
       modelCalls: 1,

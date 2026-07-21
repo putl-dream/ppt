@@ -53,6 +53,10 @@ async function inlineHtmlImageAssets(
  * 与数据生成（CommandBus / revision）解耦，同一 revision 可多次导出。
  */
 export class DeckExportService {
+  /**
+   * 从不可变 Presentation 快照导出目标格式。
+   * PPTX 导出前执行 deck/素材校验，导出后执行结构 postflight，失败时不伪装为成功产物。
+   */
   async exportDeck(input: DeckExportInput): Promise<DeckExportResult> {
     const presentation = presentationSchema.parse(structuredClone(input.presentation));
     const options = exportPresentationOptionsSchema.parse(input.options);

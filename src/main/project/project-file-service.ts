@@ -35,6 +35,10 @@ export interface ProjectArtifactWriteResult {
 export class ProjectFileService {
   constructor(private readonly projectRootPath: string) {}
 
+  /**
+   * 为会话创建或补齐本地项目沙箱与默认产物文件。
+   * 返回值表示项目元数据是否变化，调用方据此决定是否持久化 SessionSnapshot。
+   */
   async ensureProjectSandbox(snapshot: SessionSnapshot): Promise<boolean> {
     const project = createProjectSandbox(snapshot, this.projectRootPath);
     const changed = JSON.stringify(snapshot.project) !== JSON.stringify(project);
@@ -129,6 +133,7 @@ export class ProjectFileService {
     };
   }
 
+  /** 将 Presentation 写入固定的 deck/snapshot.json，并复用统一的产物状态更新规则。 */
   async writeDeckSnapshot(
     snapshot: SessionSnapshot,
     options: ProjectArtifactWriteOptions = {},

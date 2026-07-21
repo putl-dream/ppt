@@ -198,6 +198,10 @@ export class FileSessionStore {
     return this.getBootstrap();
   }
 
+  /**
+   * 保存会话的权威 Presentation：先做 schema 校验，再更新数据库状态，
+   * 最后同步项目目录中的 deck/snapshot.json，且不把正常保存标记为历史产物过期。
+   */
   async savePresentation(sessionId: string, presentation: Presentation): Promise<void> {
     const snapshot = this.findSession(sessionId);
     const validatedPresentation = presentationSchema.parse(structuredClone(presentation));

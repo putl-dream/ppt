@@ -139,6 +139,10 @@ export class AgentService {
     });
   }
 
+  /**
+   * 开启新的可恢复 Agent 会话，并以稳定 threadId 保存首轮上下文。
+   * 此处只建立服务级生命周期；模型与工具循环由 run() 统一编排。
+   */
   async start(
     request: string,
     model?: AgentModelSelection,
@@ -224,6 +228,10 @@ export class AgentService {
     );
   }
 
+  /**
+   * 协调 AgentRuntime、CommitGate 与 CommandBus 的主提交链。
+   * Runtime 只能返回消息、追问或命令提案；真实 Presentation 仅在门禁通过后修改。
+   */
   private async run(
     threadId: string,
     request: string,
@@ -504,6 +512,10 @@ export class AgentService {
     };
   }
 
+  /**
+   * 恢复等待审批的命令提案。应用前会核对基础 revision 并重新执行 CommitGate，
+   * 防止用户预览后 Presentation 已变化或审批状态在进程重启后失效。
+   */
   async resume(threadId: string, approved: boolean): Promise<AgentRunResult> {
     const durableState = await this.durableStore?.load(threadId);
     if (!this.pendingApprovals.has(threadId)) {

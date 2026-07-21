@@ -37,6 +37,10 @@ export class AgentGateway implements AgentModelGateway {
     }
   }
 
+  /**
+   * 更新当前应用会话使用的 provider 配置，并返回后续请求应携带的模型选择。
+   * API Key 等运行时设置只保存在主进程内存中。
+   */
   configure(
     settings: AgentModelSettings,
     gatewayConfig?: AgentGatewayConfig,
@@ -70,6 +74,10 @@ export class AgentGateway implements AgentModelGateway {
     return resolveAgentModelConfig(selection, this.runtimeSettings, process.env, this.gatewayConfig);
   }
 
+  /**
+   * 将 provider-neutral 请求路由到 OpenAI 或 Anthropic 适配器，
+   * 统一记录用量、超时与诊断信息，并返回标准 AgentModelResponse。
+   */
   async generateText(
     request: AgentModelRequest,
     selection?: Pick<AgentModelSettings, "provider" | "model">,
@@ -124,6 +132,7 @@ export class AgentGateway implements AgentModelGateway {
     }
   }
 
+  /** generateText 的流式版本；向上层暴露统一 chunk 协议而非 provider 原生事件。 */
   async *generateTextStream(
     request: AgentModelRequest,
     selection?: Pick<AgentModelSettings, "provider" | "model">,
