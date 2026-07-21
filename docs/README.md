@@ -10,6 +10,7 @@
 | [visual-expression-system-plan.md](./visual-expression-system-plan.md) | 视觉表达系统、Layout Grammar 与品牌化能力建设计划 |
 | [commercial-ppt-visual-compiler-v2.md](./commercial-ppt-visual-compiler-v2.md) | Lean Mode 从自动排版稿升级到商业成品的 Scene、素材、视觉导演与质量门路线 |
 | [harness-teammate-message-bus-fix-plan.md](./harness-teammate-message-bus-fix-plan.md) | Harness 多 Agent 协作与消息总线 review 问题修复方案 |
+| [teammate-runtime-refactor-plan.md](./teammate-runtime-refactor-plan.md) | Teammate runtime 状态迁移、conversation 与工具管线的渐进式重构计划 |
 | [frontend-app-decomposition-plan.md](./frontend-app-decomposition-plan.md) | 前端 App 控制层拆分：Workspace、Presentation、Chat、Agent Controller 的分阶段路线图 |
 
 相关 Skill 文档见仓库 `skills/ppt-layout/`（排版规则、guizang 适配、质检清单）。
