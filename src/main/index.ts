@@ -863,6 +863,10 @@ app.whenReady().then(async () => {
     };
   });
 
+  /**
+   * 接收 Renderer 的新 query，完成协议/模型配置校验、并发控制和运行事件初始化，
+   * 再按 generationMode 分流到默认 Agent 工具循环或 Lean 编译链。
+   */
   ipcMain.handle(
     "agent:start",
     async (

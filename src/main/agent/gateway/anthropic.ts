@@ -179,6 +179,10 @@ function hasThinkingContent(blocks: AgentModelContentBlock[]): boolean {
   return blocks.some((block) => block.type === "thinking" || block.type === "redacted_thinking");
 }
 
+/**
+ * 把统一 AgentModelRequest 转成 Anthropic Messages 请求，
+ * 并把 text、thinking、tool_use 等原生块归一化为项目内容块协议。
+ */
 export async function generateWithAnthropic(
   config: ResolvedAgentModelConfig,
   request: AgentModelRequest,
@@ -257,6 +261,7 @@ export async function generateWithAnthropic(
   }
 }
 
+/** 将 Anthropic 流事件归一化为 Runtime 使用的增量文本、思考块和完整响应事件。 */
 export async function* generateStreamWithAnthropic(
   config: ResolvedAgentModelConfig,
   request: AgentModelRequest,

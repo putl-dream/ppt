@@ -58,6 +58,7 @@ export const agentAttachmentSchema = z.object({
   mimeType: z.string().optional(),
 });
 
+/** Renderer 发送给 Main 的 query 协议；Main 必须解析成功后才能进入 Agent/Lean 执行链。 */
 export const agentRunRequestSchema = z.object({
   prompt: z.string().trim().min(1),
   sessionId: z.string().trim().min(1),

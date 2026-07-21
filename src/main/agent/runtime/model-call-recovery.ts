@@ -168,6 +168,11 @@ async function invokeGateway(
   return { content: response.content, stopReason: response.stopReason };
 }
 
+/**
+ * Runtime 到模型 Gateway 的可靠调用边界：先压缩上下文并构造最终 prompt/messages，
+ * 再处理限流、上下文超限、输出截断和 fallback；成功时统一返回 text/tool_use 内容块。
+ * 工具只在后续 AgentRuntime 循环中执行，本方法不会修改 Presentation。
+ */
 export async function callModelWithRecovery(
   options: ModelCallRecoveryOptions,
 ): Promise<ModelCallRecoveryResult> {

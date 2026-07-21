@@ -103,6 +103,10 @@ export function usePresentationController(
     setIsDeckPreviewOpen(false);
   }, [clearHighlightTimer]);
 
+  /**
+   * 从 Main 的 CommandBus 回读已提交的权威 Presentation，并刷新当前选页和镜像视图。
+   * 这是 query 生成应用内 PPT 后回到 Renderer 的链路终点。
+   */
   const syncPresentation = useCallback(async (
     options: PresentationSyncOptions = {},
   ) => {

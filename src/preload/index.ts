@@ -32,8 +32,10 @@ const api: DesktopApi = {
   markProjectArtifactStatus: (sessionId, artifactId, status) =>
     ipcRenderer.invoke("project:mark-artifact-status", sessionId, artifactId, status),
   getPresentation: () => ipcRenderer.invoke("presentation:get"),
+  // query 跨越 Renderer/Main 安全边界的唯一新运行入口；参数在 Main 端再次做 schema 校验。
   startAgentRun: (request, model, executionStrategy, stepLimits, gatewayConfig, runId) =>
     ipcRenderer.invoke("agent:start", request, model, executionStrategy, stepLimits, gatewayConfig, runId),
+  // 继续运行会额外携带既有 threadId，使 Main 能恢复模型消息、工具结果和审批上下文。
   continueAgentRun: (threadId, request, model, stepLimits, gatewayConfig, runId) =>
     ipcRenderer.invoke("agent:continue", threadId, request, model, stepLimits, gatewayConfig, runId),
   onAgentStream: (listener) => {

@@ -36,6 +36,10 @@ export type ApplyAgentResult = (
   runId?: string,
 ) => Promise<void>;
 
+/**
+ * 消费 Main 返回的 AgentRunResult：更新聊天/审批展示，并在命令已应用后回读权威 Presentation。
+ * Renderer 不直接采用模型生成的数据修改 PPT，避免绕过 Main 中的 CommitGate 和 CommandBus。
+ */
 export function useAgentResultHandler({
   activeSessionId,
   setChatMessages,

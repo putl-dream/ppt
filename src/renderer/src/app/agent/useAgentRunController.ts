@@ -140,6 +140,11 @@ export function useAgentRunController({
     notify,
   });
 
+  /**
+   * 用户 query 的 Renderer 总入口：确保会话存在，组装 AgentRunRequest、模型和网关配置，
+   * 再根据是否存在可继续的 thread 调用 startAgentRun 或 continueAgentRun。
+   * 返回值只描述运行结果；最终 Presentation 会由 applyAgentResult 另行回读同步。
+   */
   const startAgent = useCallback(async (
     customRequest?: string,
     isEditOfMsgId?: string,

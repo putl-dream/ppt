@@ -204,6 +204,10 @@ function contentFromResponsesOutput(
   ];
 }
 
+/**
+ * 把统一 AgentModelRequest 转成 OpenAI Responses/Chat Completions 请求，
+ * 并把文本和 function_call 归一化为 provider-neutral 内容块。
+ */
 export async function generateWithOpenAI(
   config: ResolvedAgentModelConfig,
   request: AgentModelRequest,
@@ -334,6 +338,10 @@ export async function generateWithOpenAI(
   }
 }
 
+/**
+ * OpenAI 流式入口。带工具的请求会保持完整 function_call 语义，
+ * 最终仍以统一的 text_delta/complete chunk 协议返回 Runtime。
+ */
 export async function* generateStreamWithOpenAI(
   config: ResolvedAgentModelConfig,
   request: AgentModelRequest,
