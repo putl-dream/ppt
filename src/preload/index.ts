@@ -2,15 +2,8 @@ import { contextBridge, ipcRenderer } from "electron";
 import type { AgentStreamEvent, DesktopApi } from "@shared/ipc";
 
 const api: DesktopApi = {
+  // Session 与工作区
   getSessionState: () => ipcRenderer.invoke("session:get-state"),
-  getTokenUsageStats: () => ipcRenderer.invoke("token-usage:get-stats"),
-  getLogManagerStatus: () => ipcRenderer.invoke("logs:get-status"),
-  getRecentLogs: (limit, minimumLevel) =>
-    ipcRenderer.invoke("logs:get-recent", limit, minimumLevel),
-  updateLogManagerSettings: (patch) => ipcRenderer.invoke("logs:update-settings", patch),
-  clearLogs: () => ipcRenderer.invoke("logs:clear"),
-  openLogDirectory: () => ipcRenderer.invoke("logs:open-directory"),
-  reportRendererLog: (report) => ipcRenderer.send("logs:renderer-report", report),
   createSession: (options) => ipcRenderer.invoke("session:create", options),
   openWorkspace: (rootPath) => ipcRenderer.invoke("workspace:open", rootPath),
   listWorkspaceSessions: (rootPath) => ipcRenderer.invoke("workspace:list-sessions", rootPath),
@@ -22,6 +15,18 @@ const api: DesktopApi = {
     ipcRenderer.invoke("session:save-display-cards", sessionId, cards),
   loadConversationEvents: (sessionId, cursor, limit) =>
     ipcRenderer.invoke("conversation:load-events", sessionId, cursor, limit),
+
+  // 日志与用量统计
+  getTokenUsageStats: () => ipcRenderer.invoke("token-usage:get-stats"),
+  getLogManagerStatus: () => ipcRenderer.invoke("logs:get-status"),
+  getRecentLogs: (limit, minimumLevel) =>
+    ipcRenderer.invoke("logs:get-recent", limit, minimumLevel),
+  updateLogManagerSettings: (patch) => ipcRenderer.invoke("logs:update-settings", patch),
+  clearLogs: () => ipcRenderer.invoke("logs:clear"),
+  openLogDirectory: () => ipcRenderer.invoke("logs:open-directory"),
+  reportRendererLog: (report) => ipcRenderer.send("logs:renderer-report", report),
+
+  // 项目产物
   listProjectArtifacts: (sessionId) => ipcRenderer.invoke("project:list-artifacts", sessionId),
   readProjectArtifact: (sessionId, artifactIdOrPath) =>
     ipcRenderer.invoke("project:read-artifact", sessionId, artifactIdOrPath),
@@ -31,7 +36,17 @@ const api: DesktopApi = {
     ipcRenderer.invoke("project:get-artifact-diff", sessionId, relativePath, nextContent),
   markProjectArtifactStatus: (sessionId, artifactId, status) =>
     ipcRenderer.invoke("project:mark-artifact-status", sessionId, artifactId, status),
+
+  // 演示文稿编辑与导出
   getPresentation: () => ipcRenderer.invoke("presentation:get"),
+  undo: () => ipcRenderer.invoke("presentation:undo"),
+  redo: () => ipcRenderer.invoke("presentation:redo"),
+  executeCommand: (command) => ipcRenderer.invoke("presentation:execute", command),
+  exportPresentation: (presentation, options) =>
+    ipcRenderer.invoke("presentation:export", presentation, options),
+  openExportFolder: (filePath) => ipcRenderer.invoke("shell:open-export-folder", filePath),
+
+  // Agent 运行与交互
   // query 跨越 Renderer/Main 安全边界的唯一新运行入口；参数在 Main 端再次做 schema 校验。
   startAgentRun: (request, model, executionStrategy, stepLimits, gatewayConfig, runId) =>
     ipcRenderer.invoke("agent:start", request, model, executionStrategy, stepLimits, gatewayConfig, runId),
@@ -47,19 +62,15 @@ const api: DesktopApi = {
   },
   resumeAgentRun: (sessionId, threadId, approved) =>
     ipcRenderer.invoke("agent:resume", sessionId, threadId, approved),
-  undo: () => ipcRenderer.invoke("presentation:undo"),
-  redo: () => ipcRenderer.invoke("presentation:redo"),
-  executeCommand: (command) => ipcRenderer.invoke("presentation:execute", command),
-  exportPresentation: (presentation, options) =>
-    ipcRenderer.invoke("presentation:export", presentation, options),
-  openExportFolder: (filePath) => ipcRenderer.invoke("shell:open-export-folder", filePath),
-  selectDirectory: (defaultPath) => ipcRenderer.invoke("dialog:select-directory", defaultPath),
-  setWindowThemeMode: (themeMode) => ipcRenderer.invoke("window:set-theme-mode", themeMode),
   cancelAgentRun: (runId) => ipcRenderer.invoke("agent:cancel", runId),
   cancelAgentSession: (sessionId) => ipcRenderer.invoke("agent:cancel-session", sessionId),
   resolveToolApproval: (runId, approvalId, approved) =>
     ipcRenderer.invoke("agent:resolve-tool-approval", runId, approvalId, approved),
   pollLeadInbox: (sessionId) => ipcRenderer.invoke("agent:poll-lead-inbox", sessionId),
+
+  // 原生窗口与对话框
+  selectDirectory: (defaultPath) => ipcRenderer.invoke("dialog:select-directory", defaultPath),
+  setWindowThemeMode: (themeMode) => ipcRenderer.invoke("window:set-theme-mode", themeMode),
 };
 
 contextBridge.exposeInMainWorld("desktopApi", api);
