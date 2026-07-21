@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createStarterPresentation } from "../src/shared/presentation";
 import {
+  exportDeckContactSheetHtml,
   exportSlideThumbnailHtml,
   SLIDE_HEIGHT,
   SLIDE_WIDTH,
@@ -34,5 +35,25 @@ describe("slide-html-render", () => {
     expect(THUMBNAIL_WIDTH).toBe(640);
     expect(THUMBNAIL_HEIGHT).toBe(360);
     expect(THUMBNAIL_WIDTH / THUMBNAIL_HEIGHT).toBeCloseTo(SLIDE_WIDTH / SLIDE_HEIGHT);
+  });
+
+  it("exports a labeled contact-sheet item for every slide", () => {
+    const presentation = createStarterPresentation();
+    presentation.slides.push({
+      ...structuredClone(presentation.slides[0]!),
+      id: "second-slide",
+      title: "Second slide",
+      sceneRef: {
+        packId: "editorial-business",
+        sceneId: "split-case",
+        variantId: "fact-sidebar",
+      },
+    });
+
+    const html = exportDeckContactSheetHtml(presentation);
+
+    expect(html.match(/class="contact-item"/g)).toHaveLength(2);
+    expect(html).toContain("split-case / fact-sidebar");
+    expect(html).toContain("grid-template-columns: repeat(2,");
   });
 });

@@ -1,0 +1,292 @@
+{
+  "version": 2,
+  "title": "增长操作系统｜从线索到收入的可复制闭环",
+  "locale": "zh-CN",
+  "scenario": "sales-proposal",
+  "audience": "正在评估增长效率与销售协同方案的企业管理层",
+  "objective": "用一套可审计的增长方法说明方案价值、落地路径与预期业务影响",
+  "desiredAction": "批准 90 天联合验证计划，并指定业务负责人",
+  "durationMinutes": 15,
+  "designPreset": "business",
+  "sources": [
+    {
+      "id": "illustrative-baseline",
+      "label": "示意数据｜客户增长漏斗基线",
+      "asOf": "方案讨论版",
+      "provenance": "illustrative"
+    },
+    {
+      "id": "illustrative-model",
+      "label": "示意数据｜90 天影响测算模型",
+      "asOf": "方案讨论版",
+      "provenance": "illustrative"
+    }
+  ],
+  "slides": [
+    {
+      "kind": "cover",
+      "purpose": "opening",
+      "title": "把增长从偶然，变成可复制的系统",
+      "subtitle": "增长操作系统｜90 天联合验证提案",
+      "items": [],
+      "left": null,
+      "right": null,
+      "steps": [],
+      "metric": null,
+      "chart": null,
+      "sourceRefs": [],
+      "visual": {
+        "role": "hero",
+        "composition": "minimal-statement",
+        "imageMode": "none",
+        "assetBrief": "",
+        "emphasis": [
+          "可复制的系统"
+        ]
+      }
+    },
+    {
+      "kind": "agenda",
+      "purpose": "navigation",
+      "title": "今天只回答三个经营问题",
+      "subtitle": "从瓶颈、方案到验证承诺",
+      "items": [
+        {
+          "heading": "01｜为什么现在",
+          "detail": "增长投入增加，但收入转化没有同步提速"
+        },
+        {
+          "heading": "02｜如何重构",
+          "detail": "用统一信号、流程与复盘机制连接市场和销售"
+        },
+        {
+          "heading": "03｜如何证明",
+          "detail": "以 90 天业务指标验证价值，再决定规模化"
+        }
+      ],
+      "left": null,
+      "right": null,
+      "steps": [],
+      "metric": null,
+      "chart": null,
+      "sourceRefs": [],
+      "visual": {
+        "role": "overview",
+        "composition": "editorial-grid",
+        "imageMode": "none",
+        "assetBrief": "",
+        "emphasis": [
+          "三个经营问题"
+        ]
+      }
+    },
+    {
+      "kind": "bullets",
+      "purpose": "problem",
+      "title": "真正的瓶颈不是线索少，而是信号断裂",
+      "subtitle": "团队在各自优化局部，却没人对端到端收入负责",
+      "items": [
+        {
+          "heading": "判断不一致",
+          "detail": "市场与销售使用不同口径，优先级每天变化"
+        },
+        {
+          "heading": "动作不连续",
+          "detail": "高意向信号没有触发统一且及时的下一步"
+        },
+        {
+          "heading": "复盘不闭环",
+          "detail": "结果停留在报表，无法回流到策略与内容"
+        }
+      ],
+      "left": null,
+      "right": null,
+      "steps": [],
+      "metric": null,
+      "chart": null,
+      "sourceRefs": [],
+      "visual": {
+        "role": "statement",
+        "composition": "editorial-grid",
+        "imageMode": "none",
+        "assetBrief": "",
+        "emphasis": [
+          "信号断裂"
+        ]
+      }
+    },
+    {
+      "kind": "comparison",
+      "purpose": "solution",
+      "title": "从部门接力，升级为一套共同的增长操作系统",
+      "subtitle": "不替换现有工具，先统一决策与执行语言",
+      "items": [],
+      "left": {
+        "label": "今天｜分散优化",
+        "items": [
+          "以渠道数量衡量市场贡献",
+          "以个人经验判断线索优先级",
+          "月底才发现漏斗异常"
+        ]
+      },
+      "right": {
+        "label": "目标｜闭环经营",
+        "items": [
+          "以收入信号定义共同优先级",
+          "以标准动作承接关键行为",
+          "每周用证据校准投入与策略"
+        ]
+      },
+      "steps": [],
+      "metric": null,
+      "chart": null,
+      "sourceRefs": [],
+      "visual": {
+        "role": "comparison",
+        "composition": "split",
+        "imageMode": "none",
+        "assetBrief": "",
+        "emphasis": [
+          "共同的增长操作系统"
+        ]
+      }
+    },
+    {
+      "kind": "metric",
+      "purpose": "proof",
+      "title": "价值首先体现在高意向机会的响应速度",
+      "subtitle": "统一信号与动作后，团队把时间花在更可能成交的机会",
+      "items": [],
+      "left": null,
+      "right": null,
+      "steps": [],
+      "metric": {
+        "value": "2.4×",
+        "label": "高意向机会有效响应率",
+        "takeaway": "示意测算：相同团队规模下，优先级与动作一致可显著改善有效响应"
+      },
+      "chart": null,
+      "sourceRefs": [
+        "illustrative-model"
+      ],
+      "visual": {
+        "role": "evidence",
+        "composition": "metric-story",
+        "imageMode": "none",
+        "assetBrief": "",
+        "emphasis": [
+          "2.4×"
+        ]
+      }
+    },
+    {
+      "kind": "chart",
+      "purpose": "proof",
+      "title": "90 天验证聚焦三项领先指标",
+      "subtitle": "先证明行为与漏斗改善，再讨论全年收入外推",
+      "items": [],
+      "left": null,
+      "right": null,
+      "steps": [],
+      "metric": null,
+      "chart": {
+        "chartType": "bar",
+        "unit": "相对基线指数",
+        "items": [
+          {
+            "label": "有效响应",
+            "value": 135
+          },
+          {
+            "label": "商机转化",
+            "value": 122
+          },
+          {
+            "label": "周期效率",
+            "value": 116
+          }
+        ],
+        "takeaway": "示意目标：三项领先指标均高于基线，且改善可被过程证据解释"
+      },
+      "sourceRefs": [
+        "illustrative-baseline",
+        "illustrative-model"
+      ],
+      "visual": {
+        "role": "evidence",
+        "composition": "metric-story",
+        "imageMode": "none",
+        "assetBrief": "",
+        "emphasis": [
+          "三项领先指标"
+        ]
+      }
+    },
+    {
+      "kind": "bullets",
+      "purpose": "ask",
+      "title": "现在需要的不是大规模采购，而是一场可判定的验证",
+      "subtitle": "双方用清晰边界换取更快、更可信的决策",
+      "items": [
+        {
+          "heading": "共同范围",
+          "detail": "选择一个业务单元、一条核心漏斗和一组目标客户"
+        },
+        {
+          "heading": "共同节奏",
+          "detail": "每周经营复盘，每两周校准信号、动作与内容"
+        },
+        {
+          "heading": "共同标准",
+          "detail": "第 90 天按领先指标、过程证据与团队采纳度决策"
+        }
+      ],
+      "left": null,
+      "right": null,
+      "steps": [],
+      "metric": null,
+      "chart": null,
+      "sourceRefs": [],
+      "visual": {
+        "role": "hero",
+        "composition": "minimal-statement",
+        "imageMode": "none",
+        "assetBrief": "",
+        "emphasis": [
+          "可判定的验证"
+        ]
+      }
+    },
+    {
+      "kind": "closing",
+      "purpose": "close",
+      "title": "90 天后，用证据决定是否规模化",
+      "subtitle": "把一次采购讨论，变成一次可复用的增长能力建设",
+      "items": [
+        {
+          "heading": "本周",
+          "detail": "确认业务负责人、试点范围与基线口径"
+        },
+        {
+          "heading": "下周",
+          "detail": "完成工作坊并启动第一轮信号与动作实验"
+        }
+      ],
+      "left": null,
+      "right": null,
+      "steps": [],
+      "metric": null,
+      "chart": null,
+      "sourceRefs": [],
+      "visual": {
+        "role": "statement",
+        "composition": "minimal-statement",
+        "imageMode": "none",
+        "assetBrief": "",
+        "emphasis": [
+          "用证据决定"
+        ]
+      }
+    }
+  ]
+}

@@ -431,6 +431,39 @@ describe("Lean Mode", () => {
     });
   });
 
+  it("caps excessive native tool emphasis hints without another model call", async () => {
+    const spec = migrateLeanDeckSpecV1ToV2(createSpec());
+    const payload = structuredClone(spec) as unknown as {
+      slides: Array<{ visual: { emphasis: string[] } }>;
+    };
+    payload.slides[1]!.visual.emphasis = [
+      "规模增长",
+      "客户结构",
+      "高价值客户",
+      "渠道结构",
+      "自然流量",
+    ];
+    const gateway = new FakeGateway([{
+      type: "tool_use",
+      id: "lean-submit-excessive-emphasis",
+      name: LEAN_SUBMIT_TOOL_NAME,
+      input: payload,
+    }]);
+    const service = new LeanPresentationService(gateway);
+
+    const proposal = await service.createProposal({
+      request: "给管理层做一份增长经营复盘",
+      presentation: createStarterPresentation(),
+    });
+
+    expect(gateway.requests).toHaveLength(1);
+    expect(proposal.spec.slides[1]?.visual.emphasis).toEqual([
+      "规模增长",
+      "客户结构",
+      "高价值客户",
+    ]);
+  });
+
   it("fills omitted neutral slide fields without another model call", async () => {
     const spec = migrateLeanDeckSpecV1ToV2(createSpec());
     const payload = structuredClone(spec) as unknown as {

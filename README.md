@@ -99,7 +99,17 @@ npm.cmd run typecheck
 npm.cmd run build
 npm.cmd run preview
 npm.cmd run generate:pptx
+npm.cmd run generate:commercial-pptx
 ```
+
+`generate:commercial-pptx` 会用固定 8 页 DeckSpec 走完整的 Lean v2 商业生成链路，并在 `output/commercial/` 产出：
+
+- `growth-operating-system.pptx`：原生可编辑的商业样稿
+- `growth-operating-system.contact-sheet.html`：标注 Scene/Variant 的整套缩略图
+- `growth-operating-system.quality.json`：商业质量门、确定性 hash 与 PPTX postflight 报告
+- `growth-operating-system.presentation.json`：三端渲染共用的 Presentation 快照
+
+生成命令只有在商业质量门和导出后结构检查同时通过时才成功；示例中的业务数字均明确标注为示意数据。
 
 平台打包：
 

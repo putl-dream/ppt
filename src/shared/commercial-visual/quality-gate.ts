@@ -38,7 +38,12 @@ export interface CommercialQualityReport {
   hardFailures: CommercialQualityIssue[];
   warnings: CommercialQualityIssue[];
   scores: CommercialVisualScore;
-  sceneStats: { distinctScenes: number; repeatedAdjacentScenes: number };
+  sceneStats: {
+    distinctScenes: number;
+    repeatedAdjacentScenes: number;
+    strongVisualSlides: number;
+    requiredStrongVisualSlides: number;
+  };
   assetStats: { requested: number; resolved: number; unavailable: number };
   determinism: {
     canonicalHash: string;
@@ -122,6 +127,23 @@ function isForegroundElement(element: SlideElement): boolean {
 function isFullBleedBackground(element: SlideElement): boolean {
   return element.type === "image"
     && element.width * element.height >= 1280 * 720 * 0.7;
+}
+
+function isStrongVisualSlide(
+  slide: Presentation["slides"][number],
+): boolean {
+  const strongScene = slide.sceneRef && [
+    "cinematic-cover",
+    "hero-narrative",
+    "metric-landscape",
+    "project-gallery",
+    "minimal-epilogue",
+  ].includes(slide.sceneRef.sceneId);
+  return Boolean(strongScene) || slide.elements.some((element) =>
+    element.type === "chart"
+    || element.type === "image"
+    || (element.type === "text" && element.textRole === "metric")
+  );
 }
 
 function overlapRatio(first: SlideElement, second: SlideElement): number {
@@ -333,10 +355,18 @@ export function evaluateCommercialQuality(input: {
 
   const sceneIds = input.plan.slides.map((slide) => slide.sceneId);
   const distinctScenes = new Set(sceneIds).size;
-  const repeatedAdjacentScenes = sceneIds.reduce(
-    (count, sceneId, index) => count + (index > 0 && sceneIds[index - 1] === sceneId ? 1 : 0),
+  const sceneSignatures = input.plan.slides.map(
+    (slide) => `${slide.sceneId}/${slide.variantId}`,
+  );
+  const repeatedAdjacentScenes = sceneSignatures.reduce(
+    (count, signature, index) =>
+      count + (index > 0 && sceneSignatures[index - 1] === signature ? 1 : 0),
     0,
   );
+  const strongVisualSlides = input.presentation.slides.filter(isStrongVisualSlide).length;
+  const requiredStrongVisualSlides = input.spec.slides.length >= 6
+    ? Math.ceil(input.spec.slides.length / 2)
+    : 0;
   const requests = input.plan.slides.flatMap((slide) => slide.assetRequests);
   const resolved = input.assets.assets.filter((asset) => asset.status === "resolved").length;
   const unavailable = input.assets.assets.filter((asset) => asset.status === "unavailable").length;
@@ -351,19 +381,29 @@ export function evaluateCommercialQuality(input: {
 
   const requiredDistinctScenes = input.spec.slides.length >= 8 ? 5 : 3;
   if (distinctScenes < requiredDistinctScenes) {
-    warnings.push(issue(
+    const collection = input.spec.slides.length >= 6 ? hardFailures : warnings;
+    collection.push(issue(
       "scene-variety-insufficient",
-      "warning",
+      input.spec.slides.length >= 6 ? "error" : "warning",
       `Deck uses ${distinctScenes} scenes; at least ${requiredDistinctScenes} are required.`,
       "Adjust role/composition choices or Director scoring to increase structural variety.",
     ));
   }
   if (repeatedAdjacentScenes > 0) {
-    warnings.push(issue(
+    const collection = input.spec.slides.length >= 6 ? hardFailures : warnings;
+    collection.push(issue(
       "adjacent-scene-repeat",
-      "warning",
-      `Deck repeats the same scene on ${repeatedAdjacentScenes} adjacent transition(s).`,
-      "Select a compatible alternate scene or variant for the repeated slide.",
+      input.spec.slides.length >= 6 ? "error" : "warning",
+      `Deck repeats the same scene and variant on ${repeatedAdjacentScenes} adjacent transition(s).`,
+      "Select a compatible alternate scene or variant before commercial delivery.",
+    ));
+  }
+  if (strongVisualSlides < requiredStrongVisualSlides) {
+    hardFailures.push(issue(
+      "strong-visual-coverage-insufficient",
+      "error",
+      `Deck has ${strongVisualSlides} strong visual slide(s); at least ${requiredStrongVisualSlides} are required.`,
+      "Add image-led, metric, chart, hero or statement scenes so at least half the deck has a clear visual anchor.",
     ));
   }
 
@@ -529,7 +569,13 @@ export function evaluateCommercialQuality(input: {
   const variety = Math.min(100, Math.round((distinctScenes / Math.min(5, input.spec.slides.length)) * 100));
   const rhythm = Math.max(0, 100 - repeatedAdjacentScenes * 20);
   const assetQuality = requests.length === 0
-    ? 100
+    ? (
+        requiredStrongVisualSlides === 0
+          ? 100
+          : Math.min(100, Math.round(
+              (strongVisualSlides / requiredStrongVisualSlides) * 100,
+            ))
+      )
     : Math.round((resolved / requests.length) * 100);
   const scores: CommercialVisualScore = {
     hierarchy,
@@ -552,7 +598,12 @@ export function evaluateCommercialQuality(input: {
     hardFailures,
     warnings,
     scores,
-    sceneStats: { distinctScenes, repeatedAdjacentScenes },
+    sceneStats: {
+      distinctScenes,
+      repeatedAdjacentScenes,
+      strongVisualSlides,
+      requiredStrongVisualSlides,
+    },
     assetStats: { requested: requests.length, resolved, unavailable },
     determinism: {
       canonicalHash: input.canonicalHash,

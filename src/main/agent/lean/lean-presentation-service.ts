@@ -253,9 +253,12 @@ function normalizeLeanDeckSpecInput(value: unknown): unknown {
       const composition = canonicalComposition(visual.composition, slide);
       if (composition) visual.composition = composition;
       if (Array.isArray(visual.emphasis)) {
-        visual.emphasis = visual.emphasis.map((emphasis) =>
-          canonicalEmphasis(emphasis, normalizedSlide)
-        );
+        visual.emphasis = visual.emphasis
+          .map((emphasis) => canonicalEmphasis(emphasis, normalizedSlide))
+          .filter((emphasis, index, all) =>
+            all.findIndex((candidate) => candidate === emphasis) === index
+          )
+          .slice(0, 3);
       }
       if (visual.imageMode === "none") {
         visual.assetBrief = "";
