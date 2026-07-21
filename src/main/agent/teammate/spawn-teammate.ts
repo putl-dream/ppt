@@ -7,8 +7,6 @@ import type {
   AgentModelToolUseBlock,
   AgentToolSchema,
 } from "../gateway/types";
-import type { AgentModelSelection } from "@shared/agent";
-import type { AgentStepLimits } from "@shared/agent-step-limits";
 import type { AgentTaskNode } from "@shared/agent-task-graph";
 import {
   formatTeammateToolProgress,
@@ -49,6 +47,23 @@ import {
   routeProtocolResponses,
 } from "./protocol-state";
 import { buildTeammateSystemPrompt } from "./teammate-system-prompt";
+import { TeammateConversation } from "./teammate-conversation";
+import { TeammateInboxBuffer } from "./teammate-inbox-buffer";
+import { TeammateCancellationError, TeammateRuntime } from "./teammate-runtime";
+import type {
+  AssignmentCompletionOutcome,
+  PersistedTeammateState,
+  SpawnTeammateThreadOptions,
+  TeammateAssignedPhase,
+  TeammateExit,
+  TeammateHandle,
+  TeammateIdlePhase,
+  TeammateIdlePollOutcome,
+  TeammateInboxOutcome,
+  TeammateState,
+  TeammateToolBatchOutcome,
+  TeammateTurnOutcome,
+} from "./teammate-types";
 import {
   claimNextUnclaimedTask,
   createTeammateTaskTools,
@@ -59,431 +74,7 @@ import { toToolInputSchema } from "../tools/tool-schema";
 import { parseToolInput } from "../tools/tool-input";
 import { readJsonFile, writeJsonFileAtomic } from "../persistence/atomic-json-file";
 
-type TeammateStatus = "running" | "idle" | "stopped" | "failed";
-
-export interface TeammateHandle {
-  name: string;
-  role: string;
-  status: TeammateStatus;
-  startedAt: number;
-  lastActiveAt: number;
-  lastError?: string;
-}
-
-export interface SpawnTeammateThreadOptions {
-  name: string;
-  role: string;
-  prompt: string;
-  /** Start by polling the shared board instead of executing prompt as a lead assignment. */
-  startIdle?: boolean;
-  workspaceRoot: string;
-  gateway: AgentModelGateway;
-  model?: AgentModelSelection;
-  maxSteps?: number;
-  agentStepLimits?: AgentStepLimits;
-  idlePollMs?: number;
-  idleTimeoutMs?: number;
-  permissionPollMs?: number;
-  /** Current-run listener for publishing durable task board changes. */
-  onTaskGraphUpdated?: TaskGraphSnapshotListener;
-  /** Current-run listener for publishing teammate reasoning and tool activity. */
-  onProgress?: TeammateProgressListener;
-  /** Shared durable task board. The board may live outside the project workspace. */
-  taskStore?: TaskStore;
-}
-
-type TeammateState = TeammateHandle & {
-  controller: AbortController;
-  done: Promise<void>;
-  prompt: string;
-  lastError?: string;
-  taskGraphListener?: TaskGraphSnapshotListener;
-  progressListener?: TeammateProgressListener;
-};
-
-type AssignmentSource = "spawn-prompt" | "message" | "task-board";
-
-type AssignmentContext = {
-  input: string;
-  source: AssignmentSource;
-  activityTaskId?: string;
-};
-
-type TeammateIdlePhase = {
-  kind: "idle";
-  since: number;
-  nextPollAt: number;
-};
-
-type TeammateAssignedPhase = {
-  kind: "assigned";
-  assignment: AssignmentContext;
-  activityId: string;
-  activityFinished: boolean;
-  modelSteps: number;
-};
-
-type TeammateExit =
-  | { kind: "idle-timeout" }
-  | { kind: "shutdown"; requestId: string; sender: string }
-  | { kind: "hook-stop"; reason: string }
-  | { kind: "aborted" }
-  | { kind: "failed"; error: Error };
-
-type TeammateTerminalPhase =
-  | {
-      kind: "stopping";
-      exit: Exclude<TeammateExit, { kind: "failed" }>;
-      assignment?: TeammateAssignedPhase;
-    }
-  | {
-      kind: "failed";
-      exit: Extract<TeammateExit, { kind: "failed" }>;
-      assignment?: TeammateAssignedPhase;
-    };
-
-type TeammatePhase = TeammateIdlePhase | TeammateAssignedPhase | TeammateTerminalPhase;
-
-type TeammateInboxOutcome =
-  | { kind: "none" }
-  | { kind: "routed-messages"; messages: AgentMailboxMessage[] }
-  | { kind: "shutdown"; requestId: string; sender: string };
-
-type TeammateToolBatchOutcome =
-  | {
-      kind: "continue";
-      results: AgentModelToolResultBlock[];
-      transcriptEntries: Array<Record<string, unknown>>;
-    }
-  | {
-      kind: "stop";
-      reason: string;
-      transcriptEntries: Array<Record<string, unknown>>;
-    };
-
-type TeammateIdlePollOutcome =
-  | { kind: "wait"; idle: TeammateIdlePhase }
-  | { kind: "timeout" }
-  | { kind: "claimed"; task: AgentTaskNode };
-
-type TeammateTurnOutcome =
-  | {
-      kind: "continue";
-      assistantContent: AgentModelContentBlock[];
-      results: AgentModelToolResultBlock[];
-      transcriptEntries: Array<Record<string, unknown>>;
-    }
-  | {
-      kind: "final";
-      assistantContent: AgentModelContentBlock[];
-      summary: string;
-    }
-  | {
-      kind: "stop-teammate";
-      assistantContent: AgentModelContentBlock[];
-      reason: string;
-      transcriptEntries: Array<Record<string, unknown>>;
-    };
-
-type AssignmentCompletionOutcome =
-  | { kind: "completed"; summary: string }
-  | { kind: "continue"; guidance: string };
-
-type PersistedTeammateState = Omit<TeammateHandle, "status"> & {
-  status: TeammateStatus | "interrupted";
-  prompt: string;
-};
-
-class TeammateCancellationError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "TeammateCancellationError";
-  }
-}
-
-class TeammateConversation {
-  private readonly transcript: Array<Record<string, unknown>>;
-  private readonly modelMessages: AgentModelMessage[];
-
-  constructor(initialPrompt?: string) {
-    this.transcript = initialPrompt ? [{ role: "user", content: initialPrompt }] : [];
-    this.modelMessages = initialPrompt
-      ? [{ role: "user", content: [{ type: "text", text: initialPrompt }] }]
-      : [];
-  }
-
-  appendUser(
-    content: string,
-    transcriptFields: Record<string, unknown> = {},
-  ): void {
-    this.transcript.push({ role: "user", content, ...transcriptFields });
-    this.modelMessages.push({
-      role: "user",
-      content: [{ type: "text", text: content }],
-    });
-  }
-
-  appendAssistant(
-    content: AgentModelContentBlock[],
-    transcriptText?: string,
-  ): void {
-    this.modelMessages.push({ role: "assistant", content });
-    if (transcriptText !== undefined) {
-      this.transcript.push({ role: "assistant", content: transcriptText });
-    }
-  }
-
-  appendToolResults(
-    transcriptEntries: Array<Record<string, unknown>>,
-    results: AgentModelToolResultBlock[],
-  ): void {
-    this.transcript.push(...transcriptEntries);
-    this.modelMessages.push({ role: "user", content: results });
-  }
-
-  appendToolTranscript(transcriptEntries: Array<Record<string, unknown>>): void {
-    this.transcript.push(...transcriptEntries);
-  }
-
-  modelInput(): AgentModelMessage[] {
-    return [...this.modelMessages];
-  }
-
-  transcriptSnapshot(): Array<Record<string, unknown>> {
-    return [...this.transcript];
-  }
-}
-
-class TeammateRuntime {
-  phase: TeammatePhase;
-  readonly conversation: TeammateConversation;
-  readonly workSummaries: string[] = [];
-
-  constructor(
-    private readonly state: TeammateState,
-    input: {
-      startIdle: boolean;
-      prompt: string;
-      idlePollMs: number;
-      emitProgress: (event: TeammateProgressEvent) => void;
-    },
-  ) {
-    this.emitProgress = input.emitProgress;
-    this.conversation = new TeammateConversation(input.startIdle ? undefined : input.prompt);
-    if (input.startIdle) {
-      const now = Date.now();
-      this.phase = { kind: "idle", since: now, nextPollAt: now };
-      this.syncActiveStatus("idle", now);
-      return;
-    }
-
-    const activityId = this.createActivityId();
-    this.phase = {
-      kind: "assigned",
-      assignment: { input: input.prompt, source: "spawn-prompt" },
-      activityId,
-      activityFinished: false,
-      modelSteps: 0,
-    };
-    this.syncActiveStatus("running");
-    this.emitAssignmentStarted(activityId, input.prompt);
-  }
-
-  private readonly emitProgress: (event: TeammateProgressEvent) => void;
-
-  get signal(): AbortSignal {
-    return this.state.controller.signal;
-  }
-
-  get name(): string {
-    return this.state.name;
-  }
-
-  get role(): string {
-    return this.state.role;
-  }
-
-  beginAssignment(input: {
-    assignment: string;
-    source: AssignmentSource;
-    description: string;
-    activityTaskId?: string;
-    transcriptFields?: Record<string, unknown>;
-  }): void {
-    if (this.phase.kind !== "idle") {
-      throw new Error(`Cannot begin assignment while teammate is ${this.phase.kind}.`);
-    }
-    this.conversation.appendUser(input.assignment, input.transcriptFields);
-    const activityId = input.activityTaskId ?? this.createActivityId();
-    this.phase = {
-      kind: "assigned",
-      assignment: {
-        input: input.assignment,
-        source: input.source,
-        ...(input.activityTaskId ? { activityTaskId: input.activityTaskId } : {}),
-      },
-      activityId,
-      activityFinished: false,
-      modelSteps: 0,
-    };
-    this.syncActiveStatus("running");
-    this.emitAssignmentStarted(activityId, input.description, input.activityTaskId);
-  }
-
-  continueAssignment(input: string, resetStepCount: boolean): void {
-    const phase = this.requireAssigned();
-    this.conversation.appendUser(input);
-    phase.assignment = { ...phase.assignment, input };
-    if (resetStepCount) phase.modelSteps = 0;
-    this.syncActiveStatus("running");
-  }
-
-  incrementModelSteps(): void {
-    this.requireAssigned().modelSteps += 1;
-  }
-
-  assignmentStepLimitReached(maxSteps: number): boolean {
-    return this.requireAssigned().modelSteps >= maxSteps;
-  }
-
-  currentTurn(): TeammateAssignedPhase {
-    return this.requireAssigned();
-  }
-
-  finishCurrentActivity(
-    status: "completed" | "failed" | "interrupted",
-    message?: string,
-  ): void {
-    const assignment = this.assignmentForActivity();
-    if (!assignment || assignment.activityFinished) return;
-    assignment.activityFinished = true;
-    this.emitProgress({
-      type: "teammate-assignment-finished",
-      teammateName: this.state.name,
-      activityId: assignment.activityId,
-      ...(assignment.assignment.activityTaskId
-        ? { taskId: assignment.assignment.activityTaskId }
-        : {}),
-      status,
-      ...(message ? { message } : {}),
-    });
-  }
-
-  transitionToIdle(idlePollMs: number): void {
-    if (this.phase.kind !== "assigned") {
-      throw new Error(`Cannot enter idle while teammate is ${this.phase.kind}.`);
-    }
-    if (!this.phase.activityFinished) {
-      throw new Error("Cannot enter idle before the current activity is finished.");
-    }
-    const now = Date.now();
-    this.phase = { kind: "idle", since: now, nextPollAt: now + idlePollMs };
-    this.syncActiveStatus("idle", now);
-  }
-
-  updateIdlePhase(idle: TeammateIdlePhase): void {
-    if (this.phase.kind !== "idle") {
-      throw new Error(`Cannot update idle timing while teammate is ${this.phase.kind}.`);
-    }
-    this.phase = idle;
-  }
-
-  transitionToStopping(exit: Exclude<TeammateExit, { kind: "failed" }>): void {
-    if (this.phase.kind === "stopping" || this.phase.kind === "failed") return;
-    this.phase = {
-      kind: "stopping",
-      exit,
-      ...(this.phase.kind === "assigned" ? { assignment: this.phase } : {}),
-    };
-  }
-
-  transitionToFailed(error: Error): void {
-    const assignment = this.phase.kind === "assigned"
-      ? this.phase
-      : this.phase.kind === "stopping" || this.phase.kind === "failed"
-        ? this.phase.assignment
-        : undefined;
-    this.phase = {
-      kind: "failed",
-      exit: { kind: "failed", error },
-      ...(assignment ? { assignment } : {}),
-    };
-    this.state.status = "failed";
-    this.state.lastError = error.message;
-    this.state.lastActiveAt = Date.now();
-  }
-
-  terminalExit(): TeammateExit {
-    if (this.phase.kind !== "stopping" && this.phase.kind !== "failed") {
-      throw new Error(`Teammate is not terminal: ${this.phase.kind}.`);
-    }
-    return this.phase.exit;
-  }
-
-  isTerminal(): boolean {
-    return this.phase.kind === "stopping" || this.phase.kind === "failed";
-  }
-
-  finalizeStopped(): void {
-    if (this.phase.kind !== "stopping") {
-      throw new Error(`Cannot finalize stopped teammate from ${this.phase.kind}.`);
-    }
-    this.state.status = "stopped";
-    this.state.lastActiveAt = Date.now();
-  }
-
-  recordSummary(summary: string): void {
-    this.workSummaries.push(summary);
-  }
-
-  emitThinking(chunk: string): void {
-    const assignment = this.assignmentForActivity();
-    if (!assignment || assignment.activityFinished) return;
-    this.emitProgress({
-      type: "teammate-thinking-chunk",
-      teammateName: this.state.name,
-      activityId: assignment.activityId,
-      ...(assignment.assignment.activityTaskId
-        ? { taskId: assignment.assignment.activityTaskId }
-        : {}),
-      chunk,
-    });
-  }
-
-  private requireAssigned(): TeammateAssignedPhase {
-    if (this.phase.kind !== "assigned") {
-      throw new Error(`Expected assigned teammate, received ${this.phase.kind}.`);
-    }
-    return this.phase;
-  }
-
-  private assignmentForActivity(): TeammateAssignedPhase | undefined {
-    if (this.phase.kind === "assigned") return this.phase;
-    if (this.phase.kind === "stopping" || this.phase.kind === "failed") {
-      return this.phase.assignment;
-    }
-    return undefined;
-  }
-
-  private syncActiveStatus(status: "running" | "idle", at = Date.now()): void {
-    this.state.status = status;
-    this.state.lastActiveAt = at;
-  }
-
-  private createActivityId(): string {
-    return `teammate:${this.state.name}:${crypto.randomUUID()}`;
-  }
-
-  private emitAssignmentStarted(activityId: string, description: string, taskId?: string): void {
-    this.emitProgress({
-      type: "teammate-assignment-started",
-      teammateName: this.state.name,
-      activityId,
-      ...(taskId ? { taskId } : {}),
-      description,
-    });
-  }
-}
+export type { SpawnTeammateThreadOptions, TeammateHandle };
 
 const sendMessageSchema = z.object({
   to_agent: z.string().describe("Recipient agent name, e.g. lead or a teammate name"),
@@ -503,30 +94,6 @@ const requestPlanApprovalSchema = z.object({
     "Concrete implementation plan for lead to approve before high-risk or broad changes",
   ),
 });
-
-class TeammateInboxBuffer {
-  private readonly buffered: AgentMailboxMessage[] = [];
-
-  constructor(
-    private readonly bus: MessageBus,
-    private readonly name: string,
-  ) {}
-
-  async takeAll(): Promise<AgentMailboxMessage[]> {
-    const fresh = await this.bus.readInbox(this.name);
-    this.buffered.push(...fresh);
-    return this.shiftAll();
-  }
-
-  pushBack(messages: AgentMailboxMessage[]): void {
-    this.buffered.unshift(...messages);
-  }
-
-  private shiftAll(): AgentMailboxMessage[] {
-    const messages = this.buffered.splice(0);
-    return messages;
-  }
-}
 
 export class TeammateManager {
   private readonly teammates = new Map<string, TeammateState>();
@@ -864,7 +431,6 @@ export class TeammateManager {
     const runtime = new TeammateRuntime(state, {
       startIdle: options.startIdle === true,
       prompt: options.prompt,
-      idlePollMs,
       emitProgress: (event) => this.emitProgress(state, event),
     });
     let primaryError: Error | undefined;
