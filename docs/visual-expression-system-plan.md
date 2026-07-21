@@ -1,11 +1,14 @@
 # PPT 视觉表达系统与 Layout Grammar 建设计划
 
 > 版本：2026-07-05  
-> 状态：建设中（首个骨架已落地）  
+> 状态：建设中（高频 Grammar 与品牌人格骨架已落地）
 > 目标：先增强基础视觉表达能力与 Layout Grammar，让模型能够稳定看见并控制效果；随后再引入 `brand-profile.json` 做内容品牌推导。
 
 > 进度更新：2026-07-05  
-> 已完成首个系统骨架与首批高频 Grammar：`cover`、`section`、`process`、`case`、`image-grid` 已支持可执行变体，layout-plan/Design Agent 已接入 `grammarVariant + designTokens`。P0 图片链路已增加 Tavily 图片候选、远程资产本地化、来源元数据和 PPTX 原生 cover/contain 导出。尚未完成 toc/quote 等剩余 handler、结构化 render evaluation 与 brand-profile 推导。
+> 已完成首个系统骨架与首批高频 Grammar：`cover`、`section`、`process`、`case`、`image-grid` 已支持可执行变体，layout-plan/Design Agent 已接入 `grammarVariant + designTokens`。P0 图片链路已增加 Tavily 图片候选、远程资产本地化、来源元数据和 PPTX 原生 cover/contain 导出。
+
+> 进度更新：2026-07-21
+> `toc`、`concept`、`comparison`、`quote`、`summary` 已各支持三种可执行 Grammar，并能由 Design Tokens 推导默认变体。新增严格的 `design/brand-profile.json`，支持咨询、财经编辑、产品科技、品牌发布、学术报告、年轻消费六种视觉人格到 Design Tokens 的确定性映射。结构化视觉评分已在 Commercial Quality Gate 中覆盖视觉焦点、卡片墙、token 一致性与母题连续性；真实人工视觉相关性和模型看图复盘仍待后续阶段完成。
 
 ---
 
@@ -381,7 +384,7 @@ render → evaluate → fix
 1. [x] `layout-plan.ts` 支持 `designTokens` / `grammarVariant`。
 2. [x] 更新 `ppt-design-layout`：Design Agent 输出 grammar + tokens。
 3. [x] 更新 `ppt-layout`：Executor 按 plan 调用 grammar handler。
-4. [ ] Render feedback 回传视觉评分。
+4. [x] Render feedback 回传视觉评分；Lean 商业链路增加最多一次 PNG 视觉复盘。
 5. [ ] deck-review 增加视觉表达项：母题一致、锚点、密度、页面差异度。
 
 验收：模型能在不依赖固定模板名的情况下，按内容选择视觉方向并通过缩略图反馈修正。
@@ -390,8 +393,8 @@ render → evaluate → fix
 
 目标：在底层可表达后，再做内容品牌推导。
 
-1. [ ] 新增 `brand-profile.json`：领域、受众、语气、情绪、视觉隐喻、禁忌风格。
-2. [ ] 新增 `brand-profile -> designTokens` 映射。
+1. [x] 新增 `brand-profile.json`：首版包含 persona、语气、视觉母题、密度和禁忌风格。
+2. [x] 新增 `brand-profile -> designTokens` 映射，覆盖六个稳定视觉人格。
 3. [ ] 让 Agent 从内容自动推导品牌，再生成 layout-plan。
 4. [ ] 增加用户可控项：更商务 / 更学术 / 更温暖 / 更科技 / 更克制。
 

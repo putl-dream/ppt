@@ -6,6 +6,11 @@ export const LAYOUT_GRAMMAR_VARIANTS = {
   process: ["cards", "timeline", "path", "steps"],
   case: ["split", "metric-focus", "evidence"],
   "image-grid": ["grid", "hero-caption", "filmstrip", "evidence-wall"],
+  toc: ["numbered-list", "chapter-rail", "editorial-index"],
+  concept: ["cards", "statement-stack", "editorial-columns"],
+  comparison: ["split", "before-after", "verdict"],
+  quote: ["centered-card", "editorial-pullquote", "quote-band"],
+  summary: ["action-list", "three-takeaways", "closing-checklist"],
 } as const satisfies Partial<Record<SlideLayoutType, readonly string[]>>;
 
 export function getSupportedGrammarVariants(layout: SlideLayoutType): readonly string[] {

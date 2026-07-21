@@ -66,6 +66,7 @@ export class DeckExportService {
     } else {
       const assetErrors = assetValidator.validate(presentation, {
         workspaceRoot: input.workspaceRoot,
+        allowUnverifiedAssets: options.allowUnverifiedAssets,
       }).filter((issue) => issue.severity === "error");
       if (assetErrors.length > 0) {
         throw new Error(

@@ -5,6 +5,7 @@ import {
   type SetStateAction,
 } from "react";
 import type { Presentation } from "@shared/presentation";
+import { hasUnverifiedCommercialAssets } from "@shared/asset-license";
 import { createOpenExportFolderHref } from "@shared/export-links";
 import { formatPublicErrorMessage } from "@shared/agent-activity-display";
 import type { ChatMessage } from "../chatMessageRuntime";
@@ -26,9 +27,17 @@ export function useDeckExport({
 
   const exportDeck = useCallback(async () => {
     if (!presentation || isExportingDeck) return;
+    const needsApproval = hasUnverifiedCommercialAssets(presentation);
+    const allowUnverifiedAssets = needsApproval
+      ? window.confirm("演示文稿包含尚未核实商业授权的图片。是否明确批准本次导出？")
+      : false;
+    if (needsApproval && !allowUnverifiedAssets) return;
     setIsExportingDeck(true);
     try {
-      const savedPath = await window.desktopApi.exportPresentation(presentation, { logoUrl });
+      const savedPath = await window.desktopApi.exportPresentation(presentation, {
+        logoUrl,
+        allowUnverifiedAssets,
+      });
       setChatMessages((current) => [
         ...current,
         {

@@ -21,6 +21,7 @@ function coverSlide(
     metric: null,
     chart: null,
     sourceRefs: [],
+    audienceMove: "让受众理解本页核心承诺",
     visual: {
       role: "hero",
       composition: "minimal-statement",
@@ -33,6 +34,13 @@ function coverSlide(
 }
 
 describe("Lean DeckSpec v2 emphasis", () => {
+  it("fills a compatibility audience move for legacy v2 slides", () => {
+    const { audienceMove: _audienceMove, ...legacySlide } = coverSlide(["数字化转型"]);
+    const parsed = leanSlideSpecV2Schema.parse(legacySlide);
+
+    expect(parsed.audienceMove).toBe("帮助受众理解并接受本页结论");
+  });
+
   it("accepts verbatim phrases contained in visible slide text", () => {
     const parsed = leanSlideSpecV2Schema.safeParse(coverSlide([
       "数字化转型",
@@ -54,6 +62,15 @@ describe("Lean DeckSpec v2 emphasis", () => {
         message: "Emphasis '长期主义' must be copied from visible slide content.",
       }),
     ]));
+  });
+
+  it("rejects an explicitly empty audience move", () => {
+    const parsed = leanSlideSpecV2Schema.safeParse(coverSlide(
+      ["数字化转型"],
+      { audienceMove: "" },
+    ));
+
+    expect(parsed.success).toBe(false);
   });
 
   it("recognizes visible chart labels, values, and units", () => {

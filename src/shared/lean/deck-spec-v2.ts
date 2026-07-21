@@ -1,4 +1,10 @@
 import { z } from "zod";
+import {
+  COMMERCIAL_COMMUNICATION_DEFAULTS,
+  commercialCommunicationSchema,
+  narrativeModeSchema,
+  restructurePermissionSchema,
+} from "../commercial-communication";
 
 import {
   LEAN_DECK_SCENARIOS,
@@ -95,6 +101,8 @@ export const leanSlideSpecV2Schema = z.object({
   metric: metricSchema.nullable(),
   chart: chartSchema.nullable(),
   sourceRefs: z.array(z.string().trim().min(1).max(40)).max(6),
+  audienceMove: z.string().trim().min(1).max(120)
+    .default("帮助受众理解并接受本页结论"),
   visual: commercialVisualIntentV2Schema,
 }).strict().superRefine((slide, context) => {
   const visibleContent = [
@@ -197,18 +205,36 @@ export const leanDeckSpecV2Schema = z.object({
   title: z.string().trim().min(1).max(80),
   locale: z.enum(["zh-CN", "en-US"]),
   scenario: z.enum(LEAN_DECK_SCENARIOS),
-  audience: z.string().trim().min(1).max(100),
-  objective: z.string().trim().min(1).max(140),
-  desiredAction: z.string().trim().min(1).max(120),
+  audience: commercialCommunicationSchema.shape.audience,
+  objective: commercialCommunicationSchema.shape.objective,
+  desiredAction: commercialCommunicationSchema.shape.desiredAction,
+  coreMessage: commercialCommunicationSchema.shape.coreMessage
+    .default(COMMERCIAL_COMMUNICATION_DEFAULTS.coreMessage),
+  presentationContext: commercialCommunicationSchema.shape.presentationContext
+    .default(COMMERCIAL_COMMUNICATION_DEFAULTS.presentationContext),
+  afterUse: commercialCommunicationSchema.shape.afterUse
+    .default(COMMERCIAL_COMMUNICATION_DEFAULTS.afterUse),
+  restructurePermission: restructurePermissionSchema
+    .default(COMMERCIAL_COMMUNICATION_DEFAULTS.restructurePermission),
+  narrativeMode: narrativeModeSchema
+    .default(COMMERCIAL_COMMUNICATION_DEFAULTS.narrativeMode),
   durationMinutes: z.number().int().min(5).max(30),
   designPreset: z.enum(["business", "report", "technical"]),
   sources: z.array(sourceSchema).max(12),
   slides: z.array(leanSlideSpecV2Schema).min(6).max(12),
 }).strict().superRefine((deck, context) => {
   const v1Compatibility = leanDeckSpecSchema.safeParse({
-    ...deck,
     version: 1,
-    slides: deck.slides.map(({ visual: _visual, ...slide }) => slide),
+    title: deck.title,
+    locale: deck.locale,
+    scenario: deck.scenario,
+    audience: deck.audience,
+    objective: deck.objective,
+    desiredAction: deck.desiredAction,
+    durationMinutes: deck.durationMinutes,
+    designPreset: deck.designPreset,
+    sources: deck.sources,
+    slides: deck.slides.map(({ visual: _visual, audienceMove: _audienceMove, ...slide }) => slide),
   });
   if (!v1Compatibility.success) {
     for (const issue of v1Compatibility.error.issues) {
@@ -315,7 +341,20 @@ export function migrateLeanDeckSpecV1ToV2(input: LeanDeckSpec): LeanDeckSpecV2 {
                       assetBrief: "",
                       emphasis: [slide.title],
                     };
-      return { ...slide, visual };
+      const audienceMove = slide.purpose === "opening"
+        ? "建立共同语境并明确整套演示的核心承诺"
+        : slide.purpose === "navigation"
+          ? "让受众理解接下来的决策路径"
+          : slide.purpose === "problem"
+            ? "让受众承认问题及其业务影响"
+            : slide.purpose === "proof" || slide.purpose === "insight"
+              ? "让受众相信核心判断有证据支撑"
+              : slide.purpose === "solution" || slide.purpose === "plan"
+                ? "让受众理解方案并判断其可执行性"
+                : slide.purpose === "ask" || slide.purpose === "close"
+                  ? "推动受众确认决定与下一步行动"
+                  : "帮助受众理解并接受本页结论";
+      return { ...slide, audienceMove, visual };
     }),
   });
 }

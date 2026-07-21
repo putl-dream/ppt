@@ -25,24 +25,51 @@ export interface CommercialQualityIssue {
 export interface CommercialVisualScore {
   hierarchy: number;
   composition: number;
-  assetQuality: number;
+  assetQuality: number | null;
   variety: number;
   rhythm: number;
   brandConsistency: number;
   editability: number;
+  visualFocus: number;
+  cardWallControl: number;
   overall: number;
 }
+
+export interface CommercialScoreDetail {
+  status: "scored" | "not-applicable";
+  score: number | null;
+  evidence: string[];
+}
+
+export type CommercialScoreDimension = Exclude<keyof CommercialVisualScore, "overall">;
 
 export interface CommercialQualityReport {
   passed: boolean;
   hardFailures: CommercialQualityIssue[];
   warnings: CommercialQualityIssue[];
   scores: CommercialVisualScore;
+  scoreDetails: Record<CommercialScoreDimension, CommercialScoreDetail>;
+  brandSignals: {
+    tokenConsistency: number;
+    motifContinuity: number;
+    visualDistinctiveness: null;
+  };
+  humanReview: {
+    status: "not-reviewed";
+    rubricVersion: "commercial-visual-human-v1";
+    requiredDimensions: [
+      "visual-distinctiveness",
+      "message-impact",
+      "brand-fit",
+    ];
+  };
   sceneStats: {
     distinctScenes: number;
     repeatedAdjacentScenes: number;
     strongVisualSlides: number;
     requiredStrongVisualSlides: number;
+    visualFocusSlides: number;
+    cardWallSlides: number;
   };
   assetStats: { requested: number; resolved: number; unavailable: number };
   determinism: {
@@ -132,18 +159,66 @@ function isFullBleedBackground(element: SlideElement): boolean {
 function isStrongVisualSlide(
   slide: Presentation["slides"][number],
 ): boolean {
-  const strongScene = slide.sceneRef && [
+  const supportsStatementFocus = slide.sceneRef && [
     "cinematic-cover",
     "hero-narrative",
-    "metric-landscape",
-    "project-gallery",
     "minimal-epilogue",
   ].includes(slide.sceneRef.sceneId);
-  return Boolean(strongScene) || slide.elements.some((element) =>
+  return slide.elements.some((element) =>
     element.type === "chart"
     || element.type === "image"
-    || (element.type === "text" && element.textRole === "metric")
+    || (
+      element.type === "text"
+      && element.textRole === "metric"
+      && element.provenance !== "layout"
+    )
+    || (
+      element.type === "text"
+      && Boolean(supportsStatementFocus)
+      && element.fontSize >= 36
+      && element.y >= 140
+      && element.width * element.height >= 1280 * 720 * 0.05
+    )
   );
+}
+
+function isCardWallSlide(slide: Presentation["slides"][number]): boolean {
+  const canvasArea = 1280 * 720;
+  const largeLayoutCards = slide.elements.filter((element) =>
+    element.type === "shape"
+    && element.provenance === "layout"
+    && element.width >= 240
+    && element.height >= 100
+    && element.width * element.height >= canvasArea * 0.08
+    && element.width * element.height <= canvasArea * 0.6
+  );
+  const hasMediaOrMetric = slide.elements.some((element) =>
+    element.type === "image"
+    || element.type === "chart"
+    || (
+      element.type === "text"
+      && element.textRole === "metric"
+      && element.provenance !== "layout"
+    )
+  );
+  return largeLayoutCards.length >= 3 && !hasMediaOrMetric;
+}
+
+function sharedMotifScore(presentation: Presentation): number {
+  if (presentation.slides.length < 2) return 0;
+  const motifColors = (slide: Presentation["slides"][number]) => new Set(
+    slide.elements
+      .filter((element): element is Extract<SlideElement, { type: "shape" }> =>
+        element.type === "shape" && element.provenance === "layout"
+      )
+      .flatMap((element) => [element.fillColor, element.strokeColor])
+      .filter((color): color is string => Boolean(color))
+      .map((color) => color.toLowerCase())
+      .filter((color) => color !== "#ffffff" && color !== "#000000"),
+  );
+  const opening = motifColors(presentation.slides[0]!);
+  const closing = motifColors(presentation.slides[presentation.slides.length - 1]!);
+  return [...opening].some((color) => closing.has(color)) ? 100 : 0;
 }
 
 function overlapRatio(first: SlideElement, second: SlideElement): number {
@@ -364,6 +439,12 @@ export function evaluateCommercialQuality(input: {
     0,
   );
   const strongVisualSlides = input.presentation.slides.filter(isStrongVisualSlide).length;
+  const visualFocusSlideIds = input.presentation.slides
+    .filter(isStrongVisualSlide)
+    .map((slide) => slide.id);
+  const cardWallSlideIds = input.presentation.slides
+    .filter(isCardWallSlide)
+    .map((slide) => slide.id);
   const requiredStrongVisualSlides = input.spec.slides.length >= 6
     ? Math.ceil(input.spec.slides.length / 2)
     : 0;
@@ -404,6 +485,14 @@ export function evaluateCommercialQuality(input: {
       "error",
       `Deck has ${strongVisualSlides} strong visual slide(s); at least ${requiredStrongVisualSlides} are required.`,
       "Add image-led, metric, chart, hero or statement scenes so at least half the deck has a clear visual anchor.",
+    ));
+  }
+  if (cardWallSlideIds.length / Math.max(1, input.presentation.slides.length) >= 0.25) {
+    warnings.push(issue(
+      "card-wall-overuse",
+      "warning",
+      `Deck uses repeated large-card compositions on ${cardWallSlideIds.length} slide(s).`,
+      "Replace repeated card groups with a stronger visual anchor, comparison, process, or evidence composition.",
     ));
   }
 
@@ -562,21 +651,37 @@ export function evaluateCommercialQuality(input: {
       element.type !== "text" || Boolean(element.color && element.fontFamily)
     )
   ).length;
-  const brandConsistency = input.presentation.slides.length === 0
+  const tokenConsistency = input.presentation.slides.length === 0
     ? 0
     : Math.round((slidesWithStyle / input.presentation.slides.length) * 100);
+  const motifContinuity = sharedMotifScore(input.presentation);
+  const brandConsistency = Math.round((tokenConsistency + motifContinuity) / 2);
 
   const variety = Math.min(100, Math.round((distinctScenes / Math.min(5, input.spec.slides.length)) * 100));
   const rhythm = Math.max(0, 100 - repeatedAdjacentScenes * 20);
+  const slidesWithAssetIntent = input.spec.slides.filter(
+    (slide) => slide.visual.imageMode !== "none",
+  ).length;
   const assetQuality = requests.length === 0
-    ? (
-        requiredStrongVisualSlides === 0
-          ? 100
-          : Math.min(100, Math.round(
-              (strongVisualSlides / requiredStrongVisualSlides) * 100,
-            ))
-      )
+    ? (slidesWithAssetIntent === 0 ? null : 0)
     : Math.round((resolved / requests.length) * 100);
+  if (slidesWithAssetIntent > 0 && requests.length === 0) {
+    warnings.push(issue(
+      "asset-intent-unplanned",
+      "warning",
+      `${slidesWithAssetIntent} slide(s) declare image intent, but the Director emitted no asset requests.`,
+      "Plan asset requests for image intent or record an explicit asset-free fallback.",
+    ));
+  }
+  const visualFocus = requiredStrongVisualSlides === 0
+    ? 100
+    : Math.min(100, Math.round((strongVisualSlides / requiredStrongVisualSlides) * 100));
+  const cardWallControl = Math.max(
+    0,
+    100 - Math.round(
+      (cardWallSlideIds.length / Math.max(1, input.presentation.slides.length)) * 240,
+    ),
+  );
   const scores: CommercialVisualScore = {
     hierarchy,
     composition,
@@ -585,24 +690,124 @@ export function evaluateCommercialQuality(input: {
     rhythm,
     brandConsistency,
     editability,
+    visualFocus,
+    cardWallControl,
     overall: 0,
   };
-  scores.overall = Math.round(
-    Object.entries(scores)
-      .filter(([key]) => key !== "overall")
-      .reduce((sum, [, value]) => sum + value, 0) / 7,
-  );
+  const applicableScores = Object.entries(scores)
+    .filter(([key, value]) => key !== "overall" && value !== null)
+    .map(([, value]) => value as number);
+  scores.overall = applicableScores.length === 0
+    ? 0
+    : Math.round(applicableScores.reduce((sum, value) => sum + value, 0) / applicableScores.length);
+  const cardWallOveruse = cardWallSlideIds.length
+    / Math.max(1, input.presentation.slides.length) >= 0.25;
+  if (assetQuality === null && cardWallOveruse) {
+    scores.overall = Math.min(scores.overall, 89);
+  }
+
+  const scoreDetails: Record<CommercialScoreDimension, CommercialScoreDetail> = {
+    hierarchy: {
+      status: "scored",
+      score: hierarchy,
+      evidence: [
+        `${Math.round(roleCoverage * 100)}% text-role coverage`,
+        `${hierarchyRatio.toFixed(2)}x font-size range`,
+      ],
+    },
+    composition: {
+      status: "scored",
+      score: composition,
+      evidence: [
+        `${outOfBoundsCount} out-of-bounds`,
+        `${overlapCount} material overlaps`,
+        `${emptyCardCount} empty cards`,
+        `${unconsumedContentCount} unconsumed content units`,
+      ],
+    },
+    assetQuality: assetQuality === null
+      ? {
+          status: "not-applicable",
+          score: null,
+          evidence: ["All slides explicitly declare imageMode=none; asset quality was not scored."],
+        }
+      : {
+          status: "scored",
+          score: assetQuality,
+          evidence: [
+            `${slidesWithAssetIntent} slide(s) with image intent`,
+            `${resolved}/${requests.length} asset requests resolved`,
+          ],
+        },
+    variety: {
+      status: "scored",
+      score: variety,
+      evidence: [`${distinctScenes} distinct scene(s)`],
+    },
+    rhythm: {
+      status: "scored",
+      score: rhythm,
+      evidence: [`${repeatedAdjacentScenes} repeated adjacent scene transition(s)`],
+    },
+    brandConsistency: {
+      status: "scored",
+      score: brandConsistency,
+      evidence: [
+        `${tokenConsistency}/100 token consistency`,
+        `${motifContinuity}/100 opening-to-closing motif continuity`,
+        "Visual distinctiveness requires human review and is not included in this score.",
+      ],
+    },
+    editability: {
+      status: "scored",
+      score: editability,
+      evidence: [`${slidesWithEditableContent}/${input.presentation.slides.length} slides contain editable content`],
+    },
+    visualFocus: {
+      status: "scored",
+      score: visualFocus,
+      evidence: [
+        `${visualFocusSlideIds.length}/${input.presentation.slides.length} slide(s) have a measurable visual anchor`,
+        `anchor slide ids: ${visualFocusSlideIds.join(", ") || "none"}`,
+      ],
+    },
+    cardWallControl: {
+      status: "scored",
+      score: cardWallControl,
+      evidence: [
+        `${cardWallSlideIds.length}/${input.presentation.slides.length} slide(s) use large-card walls`,
+        `card-wall slide ids: ${cardWallSlideIds.join(", ") || "none"}`,
+      ],
+    },
+  };
 
   return {
     passed: hardFailures.length === 0,
     hardFailures,
     warnings,
     scores,
+    scoreDetails,
+    brandSignals: {
+      tokenConsistency,
+      motifContinuity,
+      visualDistinctiveness: null,
+    },
+    humanReview: {
+      status: "not-reviewed",
+      rubricVersion: "commercial-visual-human-v1",
+      requiredDimensions: [
+        "visual-distinctiveness",
+        "message-impact",
+        "brand-fit",
+      ],
+    },
     sceneStats: {
       distinctScenes,
       repeatedAdjacentScenes,
       strongVisualSlides,
       requiredStrongVisualSlides,
+      visualFocusSlides: visualFocusSlideIds.length,
+      cardWallSlides: cardWallSlideIds.length,
     },
     assetStats: { requested: requests.length, resolved, unavailable },
     determinism: {

@@ -272,6 +272,75 @@ describe("AssetValidator", () => {
     expect(issues.some((issue) => issue.message.includes("license"))).toBe(true);
   });
 
+  it("requires explicit approval for unverified commercial assets", () => {
+    const slide: Slide = {
+      id: "slide-license",
+      title: "Licensed evidence",
+      layout: "concept",
+      elements: [{
+        id: "image-license",
+        type: "image",
+        provenance: "asset",
+        x: 120,
+        y: 180,
+        width: 400,
+        height: 240,
+        url: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+        borderRadius: 0,
+        asset: {
+          sourceUrl: "https://cdn.example.com/evidence.png",
+          sourcePageUrl: "https://example.com/evidence",
+          licenseStatus: "unknown",
+        },
+      }],
+    };
+
+    const blocked = validator.validate(createPresentation([slide]));
+    const approved = validator.validate(createPresentation([slide]), {
+      allowUnverifiedAssets: true,
+    });
+    expect(blocked).toEqual(expect.arrayContaining([expect.objectContaining({
+      severity: "error",
+      message: expect.stringContaining("not had its commercial license verified"),
+    })]));
+    expect(approved).toEqual(expect.arrayContaining([expect.objectContaining({
+      severity: "warning",
+      message: expect.stringContaining("not had its commercial license verified"),
+    })]));
+  });
+
+  it("always blocks restricted commercial assets", () => {
+    const slide: Slide = {
+      id: "slide-restricted",
+      title: "Restricted evidence",
+      layout: "concept",
+      elements: [{
+        id: "image-restricted",
+        type: "image",
+        provenance: "asset",
+        x: 120,
+        y: 180,
+        width: 400,
+        height: 240,
+        url: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+        borderRadius: 0,
+        asset: {
+          sourceUrl: "https://cdn.example.com/restricted.png",
+          sourcePageUrl: "https://example.com/restricted",
+          licenseStatus: "restricted",
+        },
+      }],
+    };
+
+    const issues = validator.validate(createPresentation([slide]), {
+      allowUnverifiedAssets: true,
+    });
+    expect(issues).toEqual(expect.arrayContaining([expect.objectContaining({
+      severity: "error",
+      message: expect.stringContaining("marked as restricted"),
+    })]));
+  });
+
   it("blocks image-dependent layouts without their required visual asset", () => {
     const slide: Slide = {
       id: "slide-evidence",

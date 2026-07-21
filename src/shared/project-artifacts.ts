@@ -6,12 +6,21 @@ import {
   DEFAULT_DESIGN_SYSTEM,
   designSystemV1Schema,
   type DesignSystemV1,
+  DEFAULT_BRAND_PROFILE,
+  brandProfileV1Schema,
+  type BrandProfileV1,
 } from "@design-system";
+import {
+  COMMERCIAL_COMMUNICATION_DEFAULTS,
+  normalizeNarrativeMode,
+  normalizeRestructurePermission,
+  type CommercialCommunicationContract,
+} from "./commercial-communication";
 
-export interface BriefFields {
+export interface BriefFields extends CommercialCommunicationContract {
   title: string;
+  /** @deprecated Read objective instead; retained for legacy callers. */
   purpose: string;
-  audience: string;
   duration: string;
   script: string;
   style: string;
@@ -33,7 +42,10 @@ export interface ResearchNote {
 const DEFAULT_BRIEF_FIELDS: BriefFields = {
   title: "新演示文稿",
   purpose: "汇报",
+  objective: "汇报",
   audience: "团队成员",
+  desiredAction: "理解结论并确认下一步",
+  ...COMMERCIAL_COMMUNICATION_DEFAULTS,
   duration: "20分钟",
   script: "需要",
   style: "专业简洁",
@@ -49,8 +61,14 @@ export function createDefaultBriefMarkdown(title = DEFAULT_BRIEF_FIELDS.title): 
 
 export function isDefaultBriefMarkdown(md: string): boolean {
   const fields = parseBriefFields(md, DEFAULT_BRIEF_FIELDS.title);
-  const hasDefaultFields = fields.purpose === DEFAULT_BRIEF_FIELDS.purpose
+  const hasDefaultFields = fields.objective === DEFAULT_BRIEF_FIELDS.objective
     && fields.audience === DEFAULT_BRIEF_FIELDS.audience
+    && fields.desiredAction === DEFAULT_BRIEF_FIELDS.desiredAction
+    && fields.coreMessage === DEFAULT_BRIEF_FIELDS.coreMessage
+    && fields.presentationContext === DEFAULT_BRIEF_FIELDS.presentationContext
+    && fields.afterUse === DEFAULT_BRIEF_FIELDS.afterUse
+    && fields.restructurePermission === DEFAULT_BRIEF_FIELDS.restructurePermission
+    && fields.narrativeMode === DEFAULT_BRIEF_FIELDS.narrativeMode
     && fields.duration === DEFAULT_BRIEF_FIELDS.duration
     && fields.script === DEFAULT_BRIEF_FIELDS.script
     && fields.style === DEFAULT_BRIEF_FIELDS.style;
@@ -61,10 +79,15 @@ export function isDefaultBriefMarkdown(md: string): boolean {
 export function parseBriefFields(md: string, fallbackTitle = DEFAULT_BRIEF_FIELDS.title): BriefFields {
   const fields: BriefFields = { ...DEFAULT_BRIEF_FIELDS, title: fallbackTitle };
 
-  const formPatterns: Array<[keyof BriefFields, RegExp]> = [
+  type BriefTextKey = Exclude<keyof BriefFields, "restructurePermission" | "narrativeMode">;
+  const formPatterns: Array<[BriefTextKey, RegExp]> = [
     ["title", /-\s+\*\*项目名称\*\*:\s*(.*)/],
-    ["purpose", /-\s+\*\*核心目的\*\*:\s*(.*)/],
+    ["objective", /-\s+\*\*核心目的\*\*:\s*(.*)/],
     ["audience", /-\s+\*\*目标听众\*\*:\s*(.*)/],
+    ["coreMessage", /-\s+\*\*核心信息\*\*:\s*(.*)/],
+    ["presentationContext", /-\s+\*\*演示场景\*\*:\s*(.*)/],
+    ["desiredAction", /-\s+\*\*期望行动\*\*:\s*(.*)/],
+    ["afterUse", /-\s+\*\*使用方式\*\*:\s*(.*)/],
     ["duration", /-\s+\*\*演讲时长\*\*:\s*(.*)/],
     ["script", /-\s+\*\*讲稿配置\*\*:\s*(.*)/],
     ["style", /-\s+\*\*期望风格\*\*:\s*(.*)/],
@@ -74,9 +97,17 @@ export function parseBriefFields(md: string, fallbackTitle = DEFAULT_BRIEF_FIELD
     const match = md.match(pattern);
     if (match?.[1]?.trim()) fields[key] = match[1].trim();
   }
+  const restructureMatch = md.match(/-\s+\*\*内容重构\*\*:\s*(.*)/);
+  if (restructureMatch?.[1]?.trim()) {
+    fields.restructurePermission = normalizeRestructurePermission(restructureMatch[1]);
+  }
+  const narrativeMatch = md.match(/-\s+\*\*叙事模式\*\*:\s*(.*)/);
+  if (narrativeMatch?.[1]?.trim()) {
+    fields.narrativeMode = normalizeNarrativeMode(narrativeMatch[1]);
+  }
 
-  const sectionPatterns: Array<[keyof BriefFields, RegExp]> = [
-    ["purpose", /##\s*目的\s*\n([\s\S]*?)(?=\n##|\n$)/i],
+  const sectionPatterns: Array<[BriefTextKey, RegExp]> = [
+    ["objective", /##\s*目的\s*\n([\s\S]*?)(?=\n##|\n$)/i],
     ["audience", /##\s*受众\s*\n([\s\S]*?)(?=\n##|\n$)/i],
     ["style", /##\s*方向\s*\n([\s\S]*?)(?=\n##|\n$)/i],
   ];
@@ -97,6 +128,10 @@ export function parseBriefFields(md: string, fallbackTitle = DEFAULT_BRIEF_FIELD
     fields.title = titleMatch[1].trim();
   }
 
+  fields.purpose = fields.objective;
+  fields.restructurePermission = normalizeRestructurePermission(fields.restructurePermission);
+  fields.narrativeMode = normalizeNarrativeMode(fields.narrativeMode);
+
   return fields;
 }
 
@@ -104,12 +139,33 @@ export function serializeBriefMarkdown(fields: BriefFields): string {
   return `# 演示文稿 Brief
 
 - **项目名称**: ${fields.title}
-- **核心目的**: ${fields.purpose}
+- **核心目的**: ${fields.objective}
 - **目标听众**: ${fields.audience}
+- **核心信息**: ${fields.coreMessage}
+- **演示场景**: ${fields.presentationContext}
+- **期望行动**: ${fields.desiredAction}
+- **使用方式**: ${fields.afterUse}
+- **内容重构**: ${fields.restructurePermission}
+- **叙事模式**: ${fields.narrativeMode}
 - **演讲时长**: ${fields.duration}
 - **讲稿配置**: ${fields.script}
 - **期望风格**: ${fields.style}
 `;
+}
+
+export function toCommercialCommunicationContract(
+  fields: BriefFields,
+): CommercialCommunicationContract {
+  return {
+    audience: fields.audience,
+    objective: fields.objective,
+    desiredAction: fields.desiredAction,
+    coreMessage: fields.coreMessage,
+    presentationContext: fields.presentationContext,
+    afterUse: fields.afterUse,
+    restructurePermission: fields.restructurePermission,
+    narrativeMode: fields.narrativeMode,
+  };
 }
 
 export function createDefaultOutlineMarkdown(title = "新演示文稿"): string {
@@ -327,4 +383,16 @@ export function parseProjectDesignSystem(content: string): DesignSystemV1 {
 
 export function serializeProjectDesignSystem(system: DesignSystemV1): string {
   return `${JSON.stringify(designSystemV1Schema.parse(system), null, 2)}\n`;
+}
+
+export function createDefaultBrandProfile(brandName = "未命名品牌"): BrandProfileV1 {
+  return brandProfileV1Schema.parse({ ...DEFAULT_BRAND_PROFILE, brandName });
+}
+
+export function parseBrandProfileFile(content: string): BrandProfileV1 {
+  return brandProfileV1Schema.parse(JSON.parse(content));
+}
+
+export function serializeBrandProfile(profile: BrandProfileV1): string {
+  return `${JSON.stringify(brandProfileV1Schema.parse(profile), null, 2)}\n`;
 }

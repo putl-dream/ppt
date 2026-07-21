@@ -108,8 +108,11 @@ async function main(): Promise<void> {
   console.log(`Contact sheet: ${contactSheetPath}`);
   console.log(`Slides: ${result.presentation.slides.length}`);
   console.log(`Scenes: ${result.quality.sceneStats.distinctScenes}`);
-  console.log(`Commercial score: ${result.quality.scores.overall}`);
+  console.log(`Machine quality score: ${result.quality.scores.overall}`);
+  console.log(`Human visual review: ${result.quality.humanReview.status}`);
   console.log(`Editable PPTX objects: ${postflight.totals.editableObjects}`);
+  console.log(`Native chart parts: ${postflight.chartPartCount}`);
+  console.log(`Speaker notes parts: ${postflight.notesPartCount}`);
   console.log(`Canonical hash: ${result.canonicalHash}`);
 }
 

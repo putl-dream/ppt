@@ -11,6 +11,7 @@ export interface PptxSlidePostflight {
   graphicFrames: number;
   editableObjects: number;
   expectedChartPrimitives: number;
+  expectedNativeCharts: number;
   titlePresent: boolean;
 }
 
@@ -20,6 +21,7 @@ export interface PptxPostflightReport {
   slideCount: number;
   mediaCount: number;
   chartPartCount: number;
+  notesPartCount: number;
   totals: {
     textRuns: number;
     shapes: number;
@@ -83,11 +85,18 @@ export async function inspectPptxExport(
     const graphicFrames = countMatches(xml, /<p:graphicFrame>/g);
     const editableObjects = textRuns + shapes + pictures + graphicFrames;
     const expectedSlide = presentation.slides[index];
-    const expectedChartPrimitives = expectedSlide?.elements
-      .filter((element) => element.type === "chart")
-      .reduce((sum, element) =>
-        sum + (element.data.items?.length ?? element.data.labels?.length ?? 0), 0
-      ) ?? 0;
+    const expectedChartPrimitives = expectedSlide?.elements.reduce((sum, element) => {
+      if (
+        element.type !== "chart"
+        || element.chartType === "bar"
+        || element.chartType === "h-bar"
+      ) return sum;
+      return sum + (element.data.items?.length ?? element.data.labels?.length ?? 0);
+    }, 0) ?? 0;
+    const expectedNativeCharts = expectedSlide?.elements.filter((element) =>
+      element.type === "chart"
+      && (element.chartType === "bar" || element.chartType === "h-bar")
+    ).length ?? 0;
     const titlePresent = expectedSlide
       ? xml.includes(xmlText(expectedSlide.title))
       : false;
@@ -103,6 +112,11 @@ export async function inspectPptxExport(
         `Slide ${index + 1} exported ${shapes} shape(s), fewer than the ${expectedChartPrimitives} required chart primitives.`,
       );
     }
+    if (graphicFrames < expectedNativeCharts) {
+      errors.push(
+        `Slide ${index + 1} exported ${graphicFrames} graphic frame(s), fewer than the ${expectedNativeCharts} required native chart(s).`,
+      );
+    }
     slides.push({
       slideNumber: index + 1,
       textRuns,
@@ -111,6 +125,7 @@ export async function inspectPptxExport(
       graphicFrames,
       editableObjects,
       expectedChartPrimitives,
+      expectedNativeCharts,
       titlePresent,
     });
   }
@@ -127,6 +142,24 @@ export async function inspectPptxExport(
   }
   const chartPartCount = Object.keys(archive.files)
     .filter((path) => /^ppt\/charts\/chart\d+\.xml$/.test(path)).length;
+  const expectedNativeChartCount = presentation.slides.flatMap((slide) => slide.elements)
+    .filter((element) =>
+      element.type === "chart"
+      && (element.chartType === "bar" || element.chartType === "h-bar")
+    ).length;
+  if (chartPartCount < expectedNativeChartCount) {
+    errors.push(
+      `PPTX contains ${chartPartCount} native chart part(s), fewer than the ${expectedNativeChartCount} required by the Presentation.`,
+    );
+  }
+  const notesPartCount = Object.keys(archive.files)
+    .filter((path) => /^ppt\/notesSlides\/notesSlide\d+\.xml$/.test(path)).length;
+  const expectedNotesCount = presentation.slides.filter((slide) => Boolean(slide.speakerNotes)).length;
+  if (notesPartCount < expectedNotesCount) {
+    errors.push(
+      `PPTX contains ${notesPartCount} notes slide part(s), fewer than the ${expectedNotesCount} required by the Presentation.`,
+    );
+  }
   const totals = slides.reduce(
     (sum, slide) => ({
       textRuns: sum.textRuns + slide.textRuns,
@@ -144,6 +177,7 @@ export async function inspectPptxExport(
     slideCount: slidePaths.length,
     mediaCount,
     chartPartCount,
+    notesPartCount,
     totals,
     slides,
     errors,

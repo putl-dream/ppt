@@ -6,7 +6,7 @@ export type LeanGenerationMode = z.infer<typeof leanGenerationModeSchema>;
 
 export interface LeanRunMetrics {
   mode: "lean";
-  modelCalls: 1;
+  modelCalls: 1 | 2;
   provider: string;
   model: string;
   inputTokens: number | null;
@@ -23,6 +23,9 @@ export interface LeanRunMetrics {
   sceneCount?: number;
   commercialQualityScore?: number;
   canonicalHash?: string;
+  visualReviewStatus?: "not-available" | "approved" | "revised" | "failed";
+  visualReviewThumbnailCount?: number;
+  visualReviewDurationMs?: number;
   slideCount: number;
   requestChars: number;
   specChars: number;
@@ -32,11 +35,15 @@ export function formatLeanRunMetrics(metrics: LeanRunMetrics): string {
   const tokens = metrics.totalTokens === null
     ? "token 未报告"
     : `${metrics.totalTokens.toLocaleString("zh-CN")} tokens`;
+  const visualReview = metrics.visualReviewStatus
+    ? `视觉复盘 ${metrics.visualReviewStatus}`
+    : undefined;
   return [
     "Lean Mode",
     `${metrics.modelCalls} 次模型调用`,
     `${metrics.slideCount} 页`,
     tokens,
     `${(metrics.durationMs / 1_000).toFixed(1)} 秒`,
-  ].join(" · ");
+    visualReview,
+  ].filter((value): value is string => Boolean(value)).join(" · ");
 }

@@ -2,6 +2,7 @@ import { z } from "zod";
 import { designSystemV1Schema } from "@design-system";
 
 export const projectArtifactFilePaths = {
+  brandProfile: "design/brand-profile.json",
   designConstraints: "design/constraints.json",
   deckGenerationJobs: "deck/generation-jobs.json",
   exportHistory: "history/exports.json",

@@ -316,51 +316,26 @@ export async function exportToPptx(
             label,
             value: element.data.values?.[index] ?? 0,
           }));
-          const maxValue = Math.max(1, ...items.map((item) => Math.abs(item.value)));
-          if (element.chartType === "bar") {
-            const gap = w * 0.03;
-            const barW = Math.max(0.08, (w - gap * (items.length + 1)) / items.length);
-            items.forEach((item, index) => {
-              const barH = Math.max(0.04, h * 0.68 * (Math.abs(item.value) / maxValue));
-              const barX = x + gap + index * (barW + gap);
-              const barY = y + h * 0.76 - barH;
-              slide.addShape((pptx as any).shapes.RECTANGLE, {
-                x: barX, y: barY, w: barW, h: barH,
-                fill: { color: cleanAccentColor },
-                line: { color: cleanAccentColor, transparency: 100 },
-              });
-              slide.addText(`${item.value}`, {
-                x: barX, y: Math.max(y, barY - 0.22), w: barW, h: 0.2,
-                fontSize: 10, bold: true, align: "center",
-                color: cleanBodyColor, fontFace,
-              });
-              slide.addText(item.label, {
-                x: barX - gap / 2, y: y + h * 0.78, w: barW + gap, h: h * 0.2,
-                fontSize: 9, align: "center", valign: "top",
-                color: cleanBodyColor, fontFace,
-              });
-            });
-          } else if (element.chartType === "h-bar") {
-            const rowH = h / Math.max(1, items.length);
-            items.forEach((item, index) => {
-              const rowY = y + index * rowH;
-              const barX = x + w * 0.28;
-              const barW = Math.max(0.04, w * 0.62 * (Math.abs(item.value) / maxValue));
-              slide.addText(item.label, {
-                x, y: rowY, w: w * 0.25, h: rowH,
-                fontSize: 9, valign: "middle", align: "right",
-                color: cleanBodyColor, fontFace,
-              });
-              slide.addShape((pptx as any).shapes.ROUNDED_RECTANGLE, {
-                x: barX, y: rowY + rowH * 0.24, w: barW, h: rowH * 0.52,
-                fill: { color: cleanAccentColor },
-                line: { color: cleanAccentColor, transparency: 100 },
-              });
-              slide.addText(`${item.value}`, {
-                x: barX + barW + 0.04, y: rowY, w: w * 0.1, h: rowH,
-                fontSize: 9, bold: true, valign: "middle",
-                color: cleanBodyColor, fontFace,
-              });
+          if (element.chartType === "bar" || element.chartType === "h-bar") {
+            slide.addChart(pptx.ChartType.bar, [{
+              name: element.unit ?? "Value",
+              labels: items.map((item) => item.label),
+              values: items.map((item) => item.value),
+            }], {
+              x,
+              y,
+              w,
+              h,
+              barDir: element.chartType === "bar" ? "col" : "bar",
+              chartColors: [cleanAccentColor],
+              showLegend: false,
+              showTitle: false,
+              showValue: true,
+              catAxisLabelFontFace: fontFace,
+              valAxisLabelFontFace: fontFace,
+              showCatAxisTitle: false,
+              showValAxisTitle: false,
+              altText: `Editable ${element.chartType} chart`,
             });
           } else if (element.chartType === "timeline") {
             const lineY = y + h * 0.48;
@@ -468,6 +443,9 @@ export async function exportToPptx(
           throw exportFailure("icon", i, element.id, e);
         }
       }
+    }
+    if (slideData.speakerNotes) {
+      slide.addNotes(slideData.speakerNotes);
     }
   }
 

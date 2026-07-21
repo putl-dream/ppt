@@ -33,6 +33,32 @@ describe("PPTX postflight", () => {
     expect(report.totals.editableObjects).toBeGreaterThan(0);
   });
 
+  it("verifies editable native charts and speaker notes", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "pptx-postflight-native-"));
+    tempDirs.push(dir);
+    const path = join(dir, "native.pptx");
+    const presentation = createStarterPresentation();
+    presentation.slides[0].speakerNotes = "Explain the revenue inflection and ask for approval.";
+    presentation.slides[0].elements.push({
+      id: "revenue-chart",
+      type: "chart",
+      x: 160,
+      y: 180,
+      width: 900,
+      height: 380,
+      chartType: "bar",
+      data: { items: [{ label: "2025", value: 42 }, { label: "2026", value: 68 }] },
+    });
+
+    await exportToPptx(presentation, {}, path);
+    const report = await inspectPptxExport(path, presentation);
+
+    expect(report.passed).toBe(true);
+    expect(report.chartPartCount).toBe(1);
+    expect(report.notesPartCount).toBe(1);
+    expect(report.slides[0]).toMatchObject({ expectedNativeCharts: 1 });
+  });
+
   it("rejects a non-ZIP file", async () => {
     const dir = await mkdtemp(join(tmpdir(), "pptx-postflight-invalid-"));
     tempDirs.push(dir);

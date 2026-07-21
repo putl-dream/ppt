@@ -1,14 +1,18 @@
 import { describe, expect, it } from "vitest";
 import {
   createDefaultBriefMarkdown,
+  createDefaultBrandProfile,
   createDefaultProjectDesignSystem,
   createDefaultOutlineMarkdown,
   createDefaultResearchMarkdown,
   parseBriefFields,
+  parseBrandProfileFile,
   parseProjectDesignSystem,
   parseOutlineItems,
   parseResearchNotes,
   serializeBriefMarkdown,
+  serializeBrandProfile,
+  toCommercialCommunicationContract,
   serializeProjectDesignSystem,
   serializeOutlineMarkdown,
 } from "../src/shared/project-artifacts";
@@ -19,6 +23,18 @@ describe("project artifact canonical formats", () => {
     const fields = parseBriefFields(markdown);
     expect(fields.title).toBe("Q3 汇报");
     expect(serializeBriefMarkdown(fields)).toContain("**项目名称**: Q3 汇报");
+    expect(serializeBriefMarkdown(fields)).toContain("**核心信息**:");
+    expect(serializeBriefMarkdown(fields)).toContain("**叙事模式**: executive-brief");
+    expect(toCommercialCommunicationContract(fields)).toEqual({
+      audience: fields.audience,
+      objective: fields.objective,
+      desiredAction: fields.desiredAction,
+      coreMessage: fields.coreMessage,
+      presentationContext: fields.presentationContext,
+      afterUse: fields.afterUse,
+      restructurePermission: "reorder",
+      narrativeMode: "executive-brief",
+    });
   });
 
   it("parses legacy brief section markdown", () => {
@@ -36,8 +52,31 @@ describe("project artifact canonical formats", () => {
     const fields = parseBriefFields(legacy);
     expect(fields.title).toBe("路演稿");
     expect(fields.purpose).toBe("争取融资");
+    expect(fields.objective).toBe("争取融资");
     expect(fields.audience).toBe("投资人");
     expect(fields.style).toBe("专业简洁");
+  });
+
+  it("normalizes commercial communication aliases in brief markdown", () => {
+    const fields = parseBriefFields(`# 演示文稿 Brief
+
+- **项目名称**: 新品发布
+- **核心目的**: 获得首批客户
+- **目标听众**: 企业采购负责人
+- **核心信息**: 产品把部署周期缩短到一周
+- **演示场景**: 销售演示
+- **期望行动**: 同意启动试点
+- **使用方式**: 会后转发给技术团队
+- **内容重构**: 允许重写、合并与删减
+- **叙事模式**: 问题—方案
+- **演讲时长**: 20分钟
+- **讲稿配置**: 需要
+- **期望风格**: 专业简洁
+`);
+
+    expect(fields.restructurePermission).toBe("rewrite-and-merge");
+    expect(fields.narrativeMode).toBe("problem-solution");
+    expect(fields.desiredAction).toBe("同意启动试点");
   });
 
   it("round-trips outline markdown and parses legacy outline", () => {
@@ -88,5 +127,14 @@ describe("project artifact canonical formats", () => {
 
   it("rejects old theme/palette project design files", () => {
     expect(() => parseProjectDesignSystem(JSON.stringify({ theme: "nordic", palette: "cyan" }))).toThrow();
+  });
+
+  it("round-trips a strict brand profile file", () => {
+    const profile = createDefaultBrandProfile("Agent PPT");
+    const parsed = parseBrandProfileFile(serializeBrandProfile(profile));
+
+    expect(parsed.brandName).toBe("Agent PPT");
+    expect(parsed.persona).toBe("consulting");
+    expect(parsed.attributes.length).toBeGreaterThanOrEqual(2);
   });
 });

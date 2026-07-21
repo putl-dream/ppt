@@ -95,7 +95,7 @@ function expectNoLayoutErrorsOrUnexpectedOverlaps(slide: Slide): void {
 }
 
 describe("layout grammar variants", () => {
-  it("registers the four P1 grammar families and their supported variants", () => {
+  it("registers the high-frequency grammar families and their supported variants", () => {
     expect(layoutGrammarRegistry.get("section")?.supportedVariants).toEqual([
       "centered", "editorial-split", "band",
     ]);
@@ -107,6 +107,21 @@ describe("layout grammar variants", () => {
     ]);
     expect(layoutGrammarRegistry.get("image-grid")?.supportedVariants).toEqual([
       "grid", "hero-caption", "filmstrip", "evidence-wall",
+    ]);
+    expect(layoutGrammarRegistry.get("toc")?.supportedVariants).toEqual([
+      "numbered-list", "chapter-rail", "editorial-index",
+    ]);
+    expect(layoutGrammarRegistry.get("concept")?.supportedVariants).toEqual([
+      "cards", "statement-stack", "editorial-columns",
+    ]);
+    expect(layoutGrammarRegistry.get("comparison")?.supportedVariants).toEqual([
+      "split", "before-after", "verdict",
+    ]);
+    expect(layoutGrammarRegistry.get("quote")?.supportedVariants).toEqual([
+      "centered-card", "editorial-pullquote", "quote-band",
+    ]);
+    expect(layoutGrammarRegistry.get("summary")?.supportedVariants).toEqual([
+      "action-list", "three-takeaways", "closing-checklist",
     ]);
   });
 
@@ -219,4 +234,37 @@ describe("layout grammar variants", () => {
       expectNoLayoutErrorsOrUnexpectedOverlaps(laidOut);
     },
   );
+
+  it.each([
+    ["toc", ["numbered-list", "chapter-rail", "editorial-index"]],
+    ["concept", ["cards", "statement-stack", "editorial-columns"]],
+    ["comparison", ["split", "before-after", "verdict"]],
+    ["quote", ["centered-card", "editorial-pullquote", "quote-band"]],
+    ["summary", ["action-list", "three-takeaways", "closing-checklist"]],
+  ] as const)("renders distinct, valid %s variants", (layout, variants) => {
+    const signatures = variants.map((variant) => {
+      const texts = layout === "quote"
+        ? ["A strong point of view", "— Author"]
+        : layout === "comparison"
+          ? ["Before", "After", "Fragmented", "Connected"]
+          : ["First conclusion", "Second conclusion", "Third conclusion"];
+      const slide: Slide = {
+        id: crypto.randomUUID(),
+        title: `${layout} grammar`,
+        elements: texts.map((text) => textElement(text)),
+      };
+      const laidOut = applyLayout(slide, layout, testSlideStyle(slide, BASE_TOKENS), {
+        grammarVariant: variant,
+      });
+      expect(laidOut.grammarVariant).toBe(variant);
+      expect(laidOut.elements.filter((element) => element.type === "text").length)
+        .toBeGreaterThanOrEqual(texts.length);
+      expectNoLayoutErrorsOrUnexpectedOverlaps(laidOut);
+      return laidOut.elements
+        .filter((element) => element.provenance === "layout")
+        .map((element) => `${element.type}:${element.x},${element.y},${element.width},${element.height}`)
+        .join("|");
+    });
+    expect(new Set(signatures).size).toBe(variants.length);
+  });
 });

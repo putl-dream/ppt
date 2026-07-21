@@ -5,8 +5,12 @@ import {
   evaluateDeckVisualQuality,
   resolveImageTreatment,
   resolveSlideStyle,
+  BRAND_PERSONAS,
+  DEFAULT_BRAND_PROFILE,
+  resolveBrandProfileDesignSystem,
 } from "@design-system";
 import { executeCommand } from "../src/shared/commands";
+import { applyLayout } from "../src/shared/layout";
 import { exportSlideThumbnailHtml } from "../src/shared/slide-html-render";
 import type { Presentation, Slide } from "../src/shared/presentation";
 import { testDesignSystem } from "./design-engine-test-utils";
@@ -19,6 +23,67 @@ const slide: Slide = {
 };
 
 describe("design engine", () => {
+  it("maps six brand personas to distinct deterministic token systems", () => {
+    const signatures = BRAND_PERSONAS.map((persona) => {
+      const first = resolveBrandProfileDesignSystem({
+        ...DEFAULT_BRAND_PROFILE,
+        brandName: persona,
+        persona,
+      });
+      const second = resolveBrandProfileDesignSystem({
+        ...DEFAULT_BRAND_PROFILE,
+        brandName: persona,
+        persona,
+      });
+      expect(first).toEqual(second);
+      return JSON.stringify(first.tokens);
+    });
+
+    expect(new Set(signatures).size).toBe(BRAND_PERSONAS.length);
+  });
+
+  it("changes the rendered grammar silhouette when brand persona changes", () => {
+    const contentSlide: Slide = {
+      id: "persona-slide",
+      title: "同一份内容",
+      elements: ["观点一", "观点二", "观点三"].map((text, index) => ({
+        id: `persona-text-${index}`,
+        type: "text" as const,
+        x: 0,
+        y: 0,
+        width: 300,
+        height: 80,
+        text,
+        fontSize: 20,
+      })),
+    };
+    const consulting = resolveBrandProfileDesignSystem({
+      ...DEFAULT_BRAND_PROFILE,
+      brandName: "Consulting",
+      persona: "consulting",
+    });
+    const launch = resolveBrandProfileDesignSystem({
+      ...DEFAULT_BRAND_PROFILE,
+      brandName: "Launch",
+      persona: "brand-launch",
+    });
+    const consultingSlide = applyLayout(
+      contentSlide,
+      "concept",
+      resolveSlideStyle(consulting, contentSlide),
+    );
+    const launchSlide = applyLayout(
+      contentSlide,
+      "concept",
+      resolveSlideStyle(launch, contentSlide),
+    );
+
+    expect(consultingSlide.grammarVariant).toBe("editorial-columns");
+    expect(launchSlide.grammarVariant).toBe("statement-stack");
+    expect(consultingSlide.elements.map(({ x, y, width, height }) => [x, y, width, height]))
+      .not.toEqual(launchSlide.elements.map(({ x, y, width, height }) => [x, y, width, height]));
+  });
+
   it("requires a complete DesignSystemV1 contract", () => {
     expect(designSystemV1Schema.parse(DEFAULT_DESIGN_SYSTEM)).toEqual(DEFAULT_DESIGN_SYSTEM);
     expect(() => designSystemV1Schema.parse({ version: 1 })).toThrow();

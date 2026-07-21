@@ -4,10 +4,12 @@ import type { ProjectSandbox, SessionSnapshot } from "@shared/session";
 import { defaultProjectArtifacts } from "@shared/project";
 import {
   createDefaultBriefMarkdown,
+  createDefaultBrandProfile,
   createDefaultProjectDesignSystem,
   createDefaultOutlineMarkdown,
   createDefaultResearchMarkdown,
   serializeProjectDesignSystem,
+  serializeBrandProfile,
 } from "@shared/project-artifacts";
 import {
   createDefaultDesignConstraints,
@@ -75,6 +77,10 @@ export function createDefaultProjectFiles(snapshot: SessionSnapshot): ProjectFil
     {
       path: "design/system.json",
       content: serializeProjectDesignSystem(createDesignSystemTemplate()),
+    },
+    {
+      path: "design/brand-profile.json",
+      content: serializeBrandProfile(createDefaultBrandProfile(snapshot.session.title)),
     },
     {
       path: "design/constraints.json",

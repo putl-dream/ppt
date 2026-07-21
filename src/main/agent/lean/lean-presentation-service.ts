@@ -26,7 +26,11 @@ import type {
   AgentModelGateway,
 } from "../gateway/types";
 import { SearchCommercialAssetResolver } from "../assets/commercial-asset-resolver";
-import { LeanV2Pipeline } from "./lean-v2-pipeline";
+import { LeanV2Pipeline, type LeanV2PipelineResult } from "./lean-v2-pipeline";
+import {
+  LeanCommercialVisualReviewer,
+  type CommercialVisualReviewResult,
+} from "./commercial-visual-review";
 
 export const LEAN_MAX_REQUEST_CHARS = 8_000;
 export const LEAN_MAX_OUTPUT_TOKENS = 10_000;
@@ -36,26 +40,28 @@ export const LEAN_SYSTEM_PROMPT = `你是商业演示文稿架构师。把用户
 
 输出协议：
 - 必须且只能调用一次 submit_lean_deck_spec；工具参数就是完整 DeckSpec，不要解释、不要 Markdown。若服务端不支持 tool_use，则只输出同一对象的 JSON。
-- 字段名必须精确。顶层只能有 version、title、locale、scenario、audience、objective、desiredAction、durationMinutes、designPreset、sources、slides。
+- 字段名必须精确。顶层只能有 version、title、locale、scenario、audience、objective、desiredAction、coreMessage、presentationContext、afterUse、restructurePermission、narrativeMode、durationMinutes、designPreset、sources、slides。
 - version 必须是数字 2（不是字符串）；字段名必须是 locale（不要 language），值只能是 zh-CN 或 en-US。
 - 每个 source 必须有 id、label、asOf、provenance；asOf 不确定时用 null。
-- 每个 slide 必须有 kind、purpose、title、subtitle、items、left、right、steps、metric、chart、sourceRefs、visual；未使用字段分别用空字符串、空数组或 null。不要输出 body、agenda、bullets、comparison、process、closing 等替代字段。
+- coreMessage 是整套演示唯一核心信息；presentationContext 描述会议/传播场景；afterUse 描述会后如何使用。restructurePermission 只能是 preserve、reorder、rewrite-and-merge；narrativeMode 只能是 executive-brief、problem-solution、evidence-led、vision-to-action。
+- 每个 slide 必须有 kind、purpose、title、subtitle、items、left、right、steps、metric、chart、sourceRefs、audienceMove、visual；audienceMove 用一句话说明本页推动受众理解、相信、决定或行动什么。未使用字段分别用空字符串、空数组或 null。不要输出 body、agenda、bullets、comparison、process、closing 等替代字段。
 - visual 必须有 role、composition、imageMode、assetBrief、emphasis。composition 只能是 full-bleed、split、editorial-grid、image-collage、metric-story、minimal-statement 之一。imageMode=none 时 assetBrief 必须是空字符串；imageMode=required/optional 时 assetBrief 必须非空。emphasis 填 1–3 个从本页可见文字中原样复制的非空短语，可取标题或正文的子串；图表数值必须使用 JSON 中的标准数字文本（例如数值 14 应写 "14"，不要写 "14.0"）。不得改写或概括。不得输出坐标、字号、颜色、阴影、素材 URL 或 sceneId。
 
 必须同时满足工具 JSON Schema 和以下跨页规则：
 1. 不调用其他工具，不请求澄清，不输出 DeckSpec 以外的内容。
-2. 生成 6–12 页；第一页且仅一页 cover/opening，最后一页且仅一页 closing/close。9–12 页必须恰有一页 agenda/navigation；10–12 页必须有 1–2 页 section/navigation；section 最多两页。
-3. 场景叙事必须完整：
+2. audience、objective、desiredAction、coreMessage、presentationContext、afterUse 必须共同描述同一个商业任务；每页 audienceMove 必须能回扣 objective 或 desiredAction。
+3. 生成 6–12 页；第一页且仅一页 cover/opening，最后一页且仅一页 closing/close。9–12 页必须恰有一页 agenda/navigation；10–12 页必须有 1–2 页 section/navigation；section 最多两页。
+4. 场景叙事必须完整：
    - internal-report：至少包含 context、proof、plan、close；
    - sales-proposal：至少包含 problem、solution、proof、ask、close；
    - investor-pitch：至少包含 problem、solution、两页 proof、plan 或 ask、close。
-4. kind/purpose 组合：cover=opening；agenda/section=navigation；process 只能是 solution/plan；metric/chart 只能是 proof/insight；closing=close；bullets/comparison 只能是 context/problem/insight/solution/proof/plan/ask。
-5. 字段规则：agenda.items 3–6；bullets.items 2–4；comparison 必须同时填写 left/right 且每侧 1–4 项；process.steps 2–5；metric 填 metric；chart 填 chart 且数据点 2–8；closing.subtitle 是总括结论、items 是 1–3 个下一步行动。
-6. 不得连续三页 bullets。6–7 页至少使用 3 种 kind，8–9 页至少 4 种，10–12 页至少 5 种。每页只表达一个结论，标题用结论式短句，正文不用长段落。
-7. 所有字段都必须返回；未使用字段用空字符串、空数组或 null。单页可见文字不超过 260 字符。
-8. 不做外部研究，不编造真实来源。用户明确给出的数据可建 provenance=user 来源；其他数字只能标 provenance=illustrative。metric/chart 必须用 sourceRefs 引用已声明来源；没有可靠数字时优先使用非数据页。
-9. 默认使用 zh-CN；只有用户明确要求英文时才使用 en-US。
-10. 这是一次生成：信息不足时采用保守、透明的商业假设，不请求第二轮。`;
+5. kind/purpose 组合：cover=opening；agenda/section=navigation；process 只能是 solution/plan；metric/chart 只能是 proof/insight；closing=close；bullets/comparison 只能是 context/problem/insight/solution/proof/plan/ask。
+6. 字段规则：agenda.items 3–6；bullets.items 2–4；comparison 必须同时填写 left/right 且每侧 1–4 项；process.steps 2–5；metric 填 metric；chart 填 chart 且数据点 2–8；closing.subtitle 是总括结论、items 是 1–3 个下一步行动。
+7. 不得连续三页 bullets。6–7 页至少使用 3 种 kind，8–9 页至少 4 种，10–12 页至少 5 种。每页只表达一个结论，标题用结论式短句，正文不用长段落。
+8. 所有字段都必须返回；未使用字段用空字符串、空数组或 null。单页可见文字不超过 260 字符。
+9. 不做外部研究，不编造真实来源。用户明确给出的数据可建 provenance=user 来源；其他数字只能标 provenance=illustrative。metric/chart 必须用 sourceRefs 引用已声明来源；没有可靠数字时优先使用非数据页。
+10. 默认使用 zh-CN；只有用户明确要求英文时才使用 en-US。
+11. 这是一次生成：信息不足时采用保守、透明的商业假设，不请求第二轮。`;
 
 export interface LeanPresentationProposal {
   spec: LeanDeckSpecV2;
@@ -361,10 +367,12 @@ function formatTokenCount(value: number | null): string {
 
 export class LeanPresentationService {
   private readonly pipeline: LeanV2Pipeline;
+  private readonly visualReviewer: LeanCommercialVisualReviewer;
 
   constructor(
     private readonly gateway: AgentModelGateway,
     pipeline?: LeanV2Pipeline,
+    visualReviewer?: LeanCommercialVisualReviewer,
   ) {
     const configuredGateway = gateway as AgentModelGateway & {
       getGatewayConfig?: () => AgentGatewayConfig;
@@ -372,6 +380,7 @@ export class LeanPresentationService {
     this.pipeline = pipeline ?? new LeanV2Pipeline(
       new SearchCommercialAssetResolver(() => configuredGateway.getGatewayConfig?.()),
     );
+    this.visualReviewer = visualReviewer ?? new LeanCommercialVisualReviewer(gateway);
   }
 
   async createProposal(input: {
@@ -412,30 +421,70 @@ export class LeanPresentationService {
     }, input.model);
 
     const extracted = extractLeanDeckSpec(response.content);
-    const spec = extracted.spec;
+    let spec = extracted.spec;
 
-    const compiled = await this.pipeline.create({
+    let compiled = await this.pipeline.create({
       spec,
       basePresentation: input.presentation,
       designSystem: input.designSystem,
       workspaceRoot: input.workspaceRoot,
       signal: input.signal,
     });
+    const pipelineRuns = [compiled];
+    let visualReview: CommercialVisualReviewResult = await this.visualReviewer.review({
+      spec,
+      presentation: compiled.presentation,
+      model: input.model,
+      signal: input.signal,
+    });
+    if (visualReview.status === "revised" && visualReview.revisedSpec) {
+      try {
+        const revised = await this.pipeline.create({
+          spec: visualReview.revisedSpec,
+          basePresentation: input.presentation,
+          designSystem: input.designSystem,
+          workspaceRoot: input.workspaceRoot,
+          signal: input.signal,
+        });
+        spec = visualReview.revisedSpec;
+        compiled = revised;
+        pipelineRuns.push(revised);
+      } catch (error) {
+        visualReview = {
+          ...visualReview,
+          status: "failed",
+          rationale:
+            `Visual revision was rejected; retained the first quality-gated deck. ${error instanceof Error ? error.message : String(error)}`,
+          revisedSpec: undefined,
+        };
+      }
+    }
     const usage = response.usage;
+    const reviewUsage = visualReview.usage;
+    const addUsage = (
+      initial: number | undefined,
+      review: number | undefined,
+    ): number | null => {
+      if (initial === undefined) return null;
+      if (!visualReview.modelCallMade) return initial;
+      return review === undefined ? null : initial + review;
+    };
+    const totalTiming = (key: keyof LeanV2PipelineResult["timings"]): number =>
+      pipelineRuns.reduce((sum, run) => sum + run.timings[key], 0);
     const metrics: LeanRunMetrics = {
       mode: "lean",
-      modelCalls: 1,
+      modelCalls: visualReview.modelCallMade ? 2 : 1,
       provider: response.provider,
       model: response.model,
-      inputTokens: usage?.inputTokens ?? null,
-      outputTokens: usage?.outputTokens ?? null,
-      totalTokens: usage?.totalTokens ?? null,
-      cachedInputTokens: usage?.cachedInputTokens ?? null,
+      inputTokens: addUsage(usage?.inputTokens, reviewUsage?.inputTokens),
+      outputTokens: addUsage(usage?.outputTokens, reviewUsage?.outputTokens),
+      totalTokens: addUsage(usage?.totalTokens, reviewUsage?.totalTokens),
+      cachedInputTokens: addUsage(usage?.cachedInputTokens, reviewUsage?.cachedInputTokens),
       durationMs: Date.now() - startedAt,
-      compileDurationMs: compiled.timings.compileDurationMs,
-      directorDurationMs: compiled.timings.directorDurationMs,
-      assetResolutionDurationMs: compiled.timings.assetResolutionDurationMs,
-      qualityDurationMs: compiled.timings.qualityDurationMs,
+      compileDurationMs: totalTiming("compileDurationMs"),
+      directorDurationMs: totalTiming("directorDurationMs"),
+      assetResolutionDurationMs: totalTiming("assetResolutionDurationMs"),
+      qualityDurationMs: totalTiming("qualityDurationMs"),
       assetRequestCount: compiled.plan.slides.reduce(
         (sum, slide) => sum + slide.assetRequests.length,
         0,
@@ -446,6 +495,9 @@ export class LeanPresentationService {
       sceneCount: new Set(compiled.plan.slides.map((slide) => slide.sceneId)).size,
       commercialQualityScore: compiled.quality.scores.overall,
       canonicalHash: compiled.canonicalHash,
+      visualReviewStatus: visualReview.status,
+      visualReviewThumbnailCount: visualReview.thumbnailCount,
+      visualReviewDurationMs: visualReview.durationMs,
       slideCount: spec.slides.length,
       requestChars: request.length,
       specChars: extracted.specChars,
@@ -455,13 +507,16 @@ export class LeanPresentationService {
       spec,
       commands: compiled.commands,
       summary:
-        `Lean Mode 已用 1 次模型调用生成 ${spec.slides.length} 页商业 PPT，`
+        `Lean Mode 已用 ${metrics.modelCalls} 次模型调用生成 ${spec.slides.length} 页商业 PPT，`
         + `共 ${formatTokenCount(metrics.totalTokens)} tokens，`
         + `耗时 ${(metrics.durationMs / 1_000).toFixed(1)} 秒。`,
       assumptions: [
         "Lean v2 不执行外部事实研究或多轮 Agent 编排。",
         "场景、版式、坐标、设计系统和元素 ID 均由本地确定性编译器生成。",
         "素材不可用时由确定性 fallback 场景降级，不触发第二次内容模型调用。",
+        visualReview.status === "not-available"
+          ? "当前运行环境无法生成 PNG，因此跳过视觉模型复盘。"
+          : `已执行一次有边界的视觉复盘（${visualReview.status}，${visualReview.thumbnailCount} 张缩略图）。`,
         "示意数据会在对应页面显示“示意数据”，不会伪装为事实来源。",
       ],
       risk: "high",

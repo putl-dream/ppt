@@ -193,6 +193,7 @@ export const imageAssetMetadataSchema = z.object({
   description: z.string().optional(),
   attribution: z.string().optional(),
   license: z.string().optional(),
+  licenseStatus: z.enum(["verified", "unknown", "restricted"]).optional(),
   /** Workspace-relative cached asset path. */
   localPath: z.string().optional(),
   mimeType: z.enum(["image/png", "image/jpeg", "image/gif"]).optional(),
@@ -283,6 +284,7 @@ export const slideElementsSchema = z.array(slideElementSchema).superRefine((elem
 export const slideSchema = z.object({
   id: z.string(),
   title: z.string(),
+  speakerNotes: z.string().trim().max(20_000).optional(),
   elements: slideElementsSchema,
   layout: z.string().optional(),
   grammarVariant: z.string().optional(),

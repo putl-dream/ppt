@@ -193,4 +193,37 @@ describe("DeckExportService", () => {
       filePath,
     })).resolves.toMatchObject({ filePath });
   });
+
+  it("blocks unverified commercial assets unless this export is explicitly approved", async () => {
+    const presentation = createStarterPresentation();
+    presentation.slides[0].elements.push({
+      id: "unverified-image",
+      type: "image",
+      provenance: "asset",
+      x: 120,
+      y: 200,
+      width: 400,
+      height: 240,
+      url: TINY_PNG_DATA_URL,
+      borderRadius: 0,
+      asset: {
+        sourceUrl: "https://cdn.example.com/photo.png",
+        sourcePageUrl: "https://example.com/photo",
+        licenseStatus: "unknown",
+      },
+    });
+    const blockedPath = await createTempExportPath("deck-export-license-blocked-", "pptx");
+    const approvedPath = await createTempExportPath("deck-export-license-approved-", "pptx");
+
+    await expect(service.exportDeck({
+      presentation,
+      options: defaultExportOptions,
+      filePath: blockedPath,
+    })).rejects.toThrow("commercial license verified");
+    await expect(service.exportDeck({
+      presentation,
+      options: { allowUnverifiedAssets: true },
+      filePath: approvedPath,
+    })).resolves.toMatchObject({ filePath: approvedPath });
+  });
 });

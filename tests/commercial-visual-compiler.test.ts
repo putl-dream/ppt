@@ -34,6 +34,11 @@ function fixture(): {
     audience: "Executive team",
     objective: "Verify semantic scene compilation",
     desiredAction: "Approve the next phase",
+    coreMessage: "A deterministic compiler can preserve commercial meaning and editability",
+    presentationContext: "Executive regression review",
+    afterUse: "Approve the next compiler phase",
+    restructurePermission: "reorder",
+    narrativeMode: "evidence-led",
     durationMinutes: 10,
     designPreset: "report",
     sources: [{
@@ -55,6 +60,7 @@ function fixture(): {
         metric: null,
         chart: null,
         sourceRefs: [],
+        audienceMove: "Establish the promise of a sharper operating model",
         visual: {
           role: "hero",
           composition: "minimal-statement",
@@ -79,6 +85,7 @@ function fixture(): {
         metric: null,
         chart: null,
         sourceRefs: [],
+        audienceMove: "Orient the audience around three decisions",
         visual: {
           role: "overview",
           composition: "editorial-grid",
@@ -102,6 +109,7 @@ function fixture(): {
         metric: null,
         chart: null,
         sourceRefs: [],
+        audienceMove: "Make the operating problem concrete",
         visual: {
           role: "evidence",
           composition: "split",
@@ -126,6 +134,7 @@ function fixture(): {
         },
         chart: null,
         sourceRefs: ["report"],
+        audienceMove: "Build confidence with a measurable outcome",
         visual: {
           role: "evidence",
           composition: "metric-story",
@@ -155,6 +164,7 @@ function fixture(): {
           takeaway: "Adoption accelerates after the operating model stabilizes",
         },
         sourceRefs: ["report"],
+        audienceMove: "Show the trend that supports the recommendation",
         visual: {
           role: "evidence",
           composition: "metric-story",
@@ -179,6 +189,7 @@ function fixture(): {
         metric: null,
         chart: null,
         sourceRefs: [],
+        audienceMove: "Make the implementation path feel executable",
         visual: {
           role: "process",
           composition: "editorial-grid",
@@ -199,6 +210,7 @@ function fixture(): {
         metric: null,
         chart: null,
         sourceRefs: [],
+        audienceMove: "Secure approval for the next phase",
         visual: {
           role: "statement",
           composition: "minimal-statement",
@@ -281,6 +293,7 @@ describe("commercial visual compiler", () => {
       metric: null,
       chart: null,
       sourceRefs: [],
+      audienceMove: "Signal a clear transition in the narrative",
       visual: {
         role: "statement",
         composition: "minimal-statement",
@@ -376,6 +389,8 @@ describe("commercial visual compiler", () => {
       (element) => element.type === "image" && element.imageSlot === "side",
     );
     expect(evidenceImage?.type === "image" ? evidenceImage.width : 0).toBeGreaterThan(600);
+    expect(evidenceImage?.type === "image" ? evidenceImage.asset?.licenseStatus : undefined)
+      .toBe("verified");
 
     const metric = compiled.presentation.slides[3]!.elements.find(
       (element) => element.type === "text" && element.textRole === "metric",
@@ -388,6 +403,7 @@ describe("commercial visual compiler", () => {
       .toContain("Digital transformation report");
 
     const chartSlide = compiled.presentation.slides[4]!;
+    expect(chartSlide.speakerNotes).toBe(spec.slides[4]!.audienceMove);
     const chart = chartSlide.elements.find((element) => element.type === "chart");
     const chartSource = chartSlide.elements.find(
       (element) => element.type === "text" && element.textRole === "caption",

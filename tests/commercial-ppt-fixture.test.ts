@@ -61,6 +61,11 @@ describe("commercial PPT fixture", () => {
     expect(first.quality.sceneStats.repeatedAdjacentScenes).toBe(0);
     expect(first.quality.sceneStats.strongVisualSlides).toBeGreaterThanOrEqual(4);
     expect(first.quality.scores.editability).toBe(100);
+    expect(first.quality.scores.assetQuality).toBeNull();
+    expect(first.quality.scoreDetails.assetQuality.status).toBe("not-applicable");
+    expect(first.quality.humanReview.status).toBe("not-reviewed");
+    expect(first.quality.sceneStats.cardWallSlides).toBeGreaterThan(0);
+    expect(first.quality.scores.overall).toBeLessThan(90);
     expect(first.canonicalHash).toBe(second.canonicalHash);
     expect(first.presentation).toEqual(second.presentation);
     expect(first.commands).toEqual(second.commands);

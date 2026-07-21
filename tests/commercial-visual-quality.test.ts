@@ -41,6 +41,7 @@ describe("commercial visual quality gate", () => {
       metric: null,
       chart: null,
       sourceRefs: [],
+      audienceMove: "让受众相信本页结论",
       visual: {
         role: "statement",
         composition: "editorial-grid",
@@ -57,6 +58,11 @@ describe("commercial visual quality gate", () => {
       audience: "管理层",
       objective: "验证质量门级别",
       desiredAction: "继续生成",
+      coreMessage: "验证质量门能区分结构质量与审美判断",
+      presentationContext: "质量门回归测试",
+      afterUse: "用于确认质量规则",
+      restructurePermission: "reorder",
+      narrativeMode: "evidence-led",
       durationMinutes: 10,
       designPreset: "business",
       sources: [],
@@ -109,6 +115,14 @@ describe("commercial visual quality gate", () => {
         "adjacent-scene-repeat",
       ]),
     );
+    expect(quality.scores.assetQuality).toBeNull();
+    expect(quality.scoreDetails.assetQuality).toEqual({
+      status: "not-applicable",
+      score: null,
+      evidence: ["All slides explicitly declare imageMode=none; asset quality was not scored."],
+    });
+    expect(quality.brandSignals.visualDistinctiveness).toBeNull();
+    expect(quality.humanReview.status).toBe("not-reviewed");
 
     const missingContent = evaluateCommercialQuality({
       spec,
@@ -261,5 +275,21 @@ describe("commercial visual quality gate", () => {
     });
     expect(assetQuality.hardFailures.map((failure) => failure.code))
       .toContain("resolved-asset-slot-unconsumed");
+
+    const missingAssetPlan = structuredClone(plan);
+    const missingAssetSpec = structuredClone(spec);
+    missingAssetSpec.slides[0]!.visual.imageMode = "optional";
+    const missingAssetQuality = evaluateCommercialQuality({
+      spec: missingAssetSpec,
+      plan: missingAssetPlan,
+      assets: EMPTY_ASSET_MANIFEST,
+      presentation,
+      canonicalHash: "missing-asset-plan",
+      determinismVerified: true,
+      commandReplayVerified: true,
+    });
+    expect(missingAssetQuality.scores.assetQuality).toBe(0);
+    expect(missingAssetQuality.warnings.map((warning) => warning.code))
+      .toContain("asset-intent-unplanned");
   });
 });

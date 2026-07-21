@@ -33,6 +33,7 @@ describe("project artifact mapping", () => {
     expect(getPrimaryProjectArtifactPath(artifactById.get("design")!)).toBe("design/system.json");
     expect(getPrimaryProjectArtifactPath(artifactById.get("deck")!)).toBe("deck/snapshot.json");
     expect(projectArtifactFilePaths.designConstraints).toBe("design/constraints.json");
+    expect(projectArtifactFilePaths.brandProfile).toBe("design/brand-profile.json");
     expect(projectArtifactFilePaths.deckGenerationJobs).toBe("deck/generation-jobs.json");
     expect(projectArtifactFilePaths.exportHistory).toBe("history/exports.json");
   });

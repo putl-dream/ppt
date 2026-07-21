@@ -95,6 +95,7 @@ function assetImage(
       sourcePageUrl: asset.sourcePageUrl,
       attribution: asset.attribution,
       license: asset.license,
+      licenseStatus: asset.licenseStatus,
       localPath: asset.localPath,
       mimeType: asset.mimeType,
       pixelWidth: asset.pixelWidth,
@@ -190,6 +191,7 @@ export function compileCommercialDeck(input: {
     const rawSlide: Slide = {
       id: ids.id("slide", slideIndex, specSlide.kind, specSlide.title),
       title: specSlide.title,
+      speakerNotes: specSlide.audienceMove,
       elements: [],
       slideVariant: planSlide.backgroundMode === "dark" ? "dark" : "light",
       sceneRef: {

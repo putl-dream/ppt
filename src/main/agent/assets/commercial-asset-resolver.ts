@@ -53,18 +53,46 @@ async function probeImage(filePath: string): Promise<{ width: number; height: nu
   return undefined;
 }
 
-function centerCrop(
+export interface NormalizedPoint { x: number; y: number }
+
+export function inferFocalPointFromBrief(brief: string): NormalizedPoint {
+  const normalized = brief.toLowerCase();
+  const x = /(?:subject|person|product|focus).{0,20}(?:on the |to the )?left|主体.{0,8}(?:左|靠左)/u.test(normalized)
+    ? 0.3
+    : /(?:subject|person|product|focus).{0,20}(?:on the |to the )?right|主体.{0,8}(?:右|靠右)/u.test(normalized)
+      ? 0.7
+      : 0.5;
+  const y = /(?:subject|person|product|focus).{0,20}(?:at the |on the )?top|主体.{0,8}(?:上|靠上)/u.test(normalized)
+    ? 0.3
+    : /(?:subject|person|product|focus).{0,20}(?:at the |on the )?bottom|主体.{0,8}(?:下|靠下)/u.test(normalized)
+      ? 0.7
+      : 0.5;
+  return { x, y };
+}
+
+export function cropAroundFocalPoint(
   width: number,
   height: number,
   targetAspectRatio: number,
+  focalPoint: NormalizedPoint,
 ): { x: number; y: number; width: number; height: number } {
   const sourceAspectRatio = width / height;
   if (sourceAspectRatio > targetAspectRatio) {
     const cropWidth = targetAspectRatio / sourceAspectRatio;
-    return { x: (1 - cropWidth) / 2, y: 0, width: cropWidth, height: 1 };
+    return {
+      x: Math.max(0, Math.min(1 - cropWidth, focalPoint.x - cropWidth / 2)),
+      y: 0,
+      width: cropWidth,
+      height: 1,
+    };
   }
   const cropHeight = sourceAspectRatio / targetAspectRatio;
-  return { x: 0, y: (1 - cropHeight) / 2, width: 1, height: cropHeight };
+  return {
+    x: 0,
+    y: Math.max(0, Math.min(1 - cropHeight, focalPoint.y - cropHeight / 2)),
+    width: 1,
+    height: cropHeight,
+  };
 }
 
 function tokenize(value: string): Set<string> {
@@ -81,6 +109,17 @@ function relevance(brief: string, description: string): number {
     if (actual.has(token)) matches += 1;
   });
   return expected.size === 0 ? 0 : matches / expected.size;
+}
+
+function descriptionSpecificity(description: string): number {
+  if (/^image candidate \d+$/i.test(description.trim())) return 0;
+  return Math.min(1, tokenize(description).size / 12);
+}
+
+function aspectFit(width: number, height: number, targetAspectRatio: number): number {
+  const sourceAspectRatio = width / height;
+  return Math.min(sourceAspectRatio, targetAspectRatio)
+    / Math.max(sourceAspectRatio, targetAspectRatio);
 }
 
 export class SearchCommercialAssetResolver implements CommercialAssetResolver {
@@ -130,8 +169,9 @@ export class SearchCommercialAssetResolver implements CommercialAssetResolver {
           );
 
         let resolved: ResolvedAssetV1 | undefined;
+        let resolvedScore = Number.NEGATIVE_INFINITY;
         const rejectionCodes: string[] = [];
-        for (const candidate of candidates) {
+        for (const candidate of candidates.slice(0, 4)) {
           try {
             const provider = candidate.provider;
             const localized = await localizeImageAsset({
@@ -157,7 +197,13 @@ export class SearchCommercialAssetResolver implements CommercialAssetResolver {
               rejectionCodes.push("resolution-too-low");
               continue;
             }
-            usedHashes.add(sha256);
+            const focalPoint = inferFocalPointFromBrief(request.brief);
+            const candidateScore = candidate.score
+              + descriptionSpecificity(candidate.description ?? "") * 0.15
+              + aspectFit(dimensions.width, dimensions.height, request.targetAspectRatio) * 0.25
+              + Math.min(1, Math.sqrt(dimensions.width * dimensions.height) / 1600) * 0.15;
+            if (candidateScore <= resolvedScore) continue;
+            resolvedScore = candidateScore;
             resolved = {
               requestId: request.requestId,
               slotId: request.slotId,
@@ -168,11 +214,12 @@ export class SearchCommercialAssetResolver implements CommercialAssetResolver {
               mimeType,
               pixelWidth: dimensions.width,
               pixelHeight: dimensions.height,
-              focalPoint: { x: 0.5, y: 0.5 },
-              safeCrop: centerCrop(
+              focalPoint,
+              safeCrop: cropAroundFocalPoint(
                 dimensions.width,
                 dimensions.height,
                 request.targetAspectRatio,
+                focalPoint,
               ),
               sourceUrl: localized.metadata.sourceUrl,
               sourcePageUrl: localized.metadata.sourcePageUrl,
@@ -182,11 +229,11 @@ export class SearchCommercialAssetResolver implements CommercialAssetResolver {
               attribution: localized.metadata.attribution,
               rejectionCodes,
             };
-            break;
           } catch {
             rejectionCodes.push("candidate-localization-failed");
           }
         }
+        if (resolved?.sha256) usedHashes.add(resolved.sha256);
         assets.push(resolved ?? {
           requestId: request.requestId,
           slotId: request.slotId,

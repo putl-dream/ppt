@@ -11,6 +11,10 @@ import {
   LEAN_SUBMIT_TOOL_NAME,
   LeanPresentationService,
 } from "../src/main/agent/lean/lean-presentation-service";
+import {
+  LeanCommercialVisualReviewer,
+  selectCommercialReviewSlideIndices,
+} from "../src/main/agent/lean/commercial-visual-review";
 import { AgentService } from "../src/main/agent/service";
 import { FileSessionStore } from "../src/main/session-store";
 import { AgentRuntime } from "../src/main/agent/runtime/agent-runtime";
@@ -167,6 +171,84 @@ class FakeGateway implements AgentModelGateway {
 }
 
 describe("Lean Mode", () => {
+  it("selects an evenly distributed bounded thumbnail set", () => {
+    expect(selectCommercialReviewSlideIndices(12)).toEqual([0, 2, 4, 7, 9, 11]);
+    expect(selectCommercialReviewSlideIndices(3)).toEqual([0, 1, 2]);
+  });
+
+  it("performs at most one image-backed commercial visual review call", async () => {
+    const gateway = new FakeGateway([{
+      type: "tool_use",
+      id: "review-1",
+      name: "submit_commercial_visual_review",
+      input: {
+        verdict: "approve",
+        rationale: "Hierarchy and cross-slide rhythm are delivery-ready.",
+        revisions: [],
+      },
+    }]);
+    const reviewer = new LeanCommercialVisualReviewer(gateway, {
+      async captureSlide() {
+        return {
+          pngBase64: "AA==",
+          width: 320,
+          height: 180,
+          mimeType: "image/png" as const,
+        };
+      },
+    });
+    const presentation = createStarterPresentation();
+    const result = await reviewer.review({
+      spec: migrateLeanDeckSpecV1ToV2(createSpec()),
+      presentation,
+    });
+
+    expect(result).toMatchObject({
+      status: "approved",
+      thumbnailCount: 1,
+      modelCallMade: true,
+    });
+    expect(gateway.requests).toHaveLength(1);
+    expect(gateway.requests[0]?.messages?.[0]?.content).toEqual(expect.arrayContaining([
+      expect.objectContaining({ type: "image", mediaType: "image/png" }),
+    ]));
+    expect(gateway.requests[0]?.requiredToolName).toBe("submit_commercial_visual_review");
+  });
+
+  it("applies visual-only revisions without changing slide content", async () => {
+    const original = migrateLeanDeckSpecV1ToV2(createSpec());
+    const gateway = new FakeGateway([{
+      type: "tool_use",
+      id: "review-2",
+      name: "submit_commercial_visual_review",
+      input: {
+        verdict: "revise",
+        rationale: "The opening needs a quieter composition.",
+        revisions: [{
+          slideIndex: 0,
+          composition: "minimal-statement",
+          imageMode: "none",
+          assetBrief: "",
+          emphasis: [original.slides[0]!.title],
+        }],
+      },
+    }]);
+    const reviewer = new LeanCommercialVisualReviewer(gateway, {
+      async captureSlide() {
+        return { pngBase64: "AA==", width: 320, height: 180, mimeType: "image/png" as const };
+      },
+    });
+    const result = await reviewer.review({
+      spec: original,
+      presentation: createStarterPresentation(),
+    });
+
+    expect(result.status).toBe("revised");
+    expect(result.revisedSpec?.slides[0]?.title).toBe(original.slides[0]!.title);
+    expect(result.revisedSpec?.slides[0]?.items).toEqual(original.slides[0]!.items);
+    expect(result.revisedSpec?.slides[0]?.visual.composition).toBe("minimal-statement");
+  });
+
   it("defaults legacy Agent requests to Agent mode", () => {
     expect(agentRunRequestSchema.parse({
       prompt: "生成季度汇报",
@@ -192,6 +274,9 @@ describe("Lean Mode", () => {
     expect(LEAN_SYSTEM_PROMPT).toContain("imageMode=none 时 assetBrief 必须是空字符串");
     expect(LEAN_SYSTEM_PROMPT).toContain("composition 只能是 full-bleed");
     expect(LEAN_SYSTEM_PROMPT).toContain("数值 14 应写 \"14\"");
+    expect(LEAN_SYSTEM_PROMPT).toContain("coreMessage、presentationContext、afterUse");
+    expect(LEAN_SYSTEM_PROMPT).toContain("restructurePermission 只能是 preserve、reorder、rewrite-and-merge");
+    expect(LEAN_SYSTEM_PROMPT).toContain("每页 audienceMove 必须能回扣 objective 或 desiredAction");
 
     const base = createSpec();
     const extraSlides = [

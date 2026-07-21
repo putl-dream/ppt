@@ -23,6 +23,8 @@ describe("presentation element integrity", () => {
       logoUrl: "data:image/png;base64,PHN2Zz48L3N2Zz4=",
     }).success).toBe(false);
     expect(exportPresentationOptionsSchema.safeParse({ unexpected: true }).success).toBe(false);
+    expect(exportPresentationOptionsSchema.safeParse({ allowUnverifiedAssets: true }).success)
+      .toBe(true);
   });
 
   it("rejects empty, mismatched, or ambiguous chart data", () => {

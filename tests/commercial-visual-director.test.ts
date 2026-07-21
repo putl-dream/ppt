@@ -20,6 +20,7 @@ function closingWithRequiredImage(): LeanDeckSpecV2["slides"][number] {
     metric: null,
     chart: null,
     sourceRefs: [],
+    audienceMove: "推动受众确认下一步行动",
     visual: {
       role: "statement",
       composition: "minimal-statement",
@@ -43,6 +44,7 @@ function comparisonSlide(title: string): LeanDeckSpecV2["slides"][number] {
     metric: null,
     chart: null,
     sourceRefs: [],
+    audienceMove: "让受众相信协同模式更有效",
     visual: {
       role: "comparison",
       composition: "split",
@@ -62,6 +64,11 @@ function specWithSlides(slides: LeanDeckSpecV2["slides"]): LeanDeckSpecV2 {
     audience: "管理层",
     objective: "汇报数字化转型进展",
     desiredAction: "确认下一阶段行动",
+    coreMessage: "用统一叙事推动管理层确认下一阶段",
+    presentationContext: "管理层阶段汇报",
+    afterUse: "用于会后行动跟进",
+    restructurePermission: "reorder",
+    narrativeMode: "executive-brief",
     durationMinutes: 10,
     designPreset: "business",
     sources: [],

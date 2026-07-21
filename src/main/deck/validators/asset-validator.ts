@@ -8,6 +8,7 @@ import { isOutsideWorkspace } from "../../agent/subagent/workspace-path";
 export interface AssetValidatorOptions {
   slideIds?: string[];
   workspaceRoot?: string;
+  allowUnverifiedAssets?: boolean;
 }
 
 const SUPPORTED_IMAGE_EXTENSIONS = new Set([".png", ".jpg", ".jpeg", ".gif"]);
@@ -91,13 +92,32 @@ export class AssetValidator {
               fixHint: "Record the page that supplied the image candidate.",
             });
           }
-          if (!element.asset.license) {
+          const licenseStatus = element.asset.licenseStatus ?? "unknown";
+          if (licenseStatus === "restricted") {
+            issues.push({
+              slideId: slide.id,
+              category: "asset",
+              severity: "error",
+              message: `Image '${element.id}' is marked as restricted and cannot be exported.`,
+              fixHint: "Replace it with a rights-safe asset before export.",
+            });
+          } else if (licenseStatus !== "verified") {
+            issues.push({
+              slideId: slide.id,
+              category: "asset",
+              severity: options.allowUnverifiedAssets ? "warning" : "error",
+              message: `Image '${element.id}' has not had its commercial license verified.`,
+              fixHint: options.allowUnverifiedAssets
+                ? "The user explicitly approved exporting this unverified asset."
+                : "Verify the license, replace the image, or explicitly approve unverified assets for this export.",
+            });
+          } else if (!element.asset.license) {
             issues.push({
               slideId: slide.id,
               category: "asset",
               severity: "warning",
-              message: `Image '${element.id}' has no recorded license status.`,
-              fixHint: "Verify the image license or replace it with a rights-safe asset.",
+              message: `Image '${element.id}' is verified but has no human-readable license label.`,
+              fixHint: "Record the license name in the asset metadata.",
             });
           }
         }

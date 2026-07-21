@@ -6,3 +6,4 @@ export * from "./image-treatment";
 export * from "./presets";
 export * from "./chrome";
 export * from "./evaluation";
+export * from "./brand-profile";

@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { Presentation } from "@shared/presentation";
+import { hasUnverifiedCommercialAssets } from "@shared/asset-license";
 import { formatPublicErrorMessage } from "@shared/agent-activity-display";
 import { resolveChromeTitleFontSize, resolveSlideStyle } from "@design-system";
 import { SlideElementRenderer } from "./SlideElementRenderer";
@@ -40,10 +41,16 @@ export const PPTMirror: React.FC<PPTMirrorProps> = ({
 
   const handleDownload = async () => {
     if (isExporting) return;
+    const needsApproval = hasUnverifiedCommercialAssets(presentation);
+    const allowUnverifiedAssets = needsApproval
+      ? window.confirm("演示文稿包含尚未核实商业授权的图片。是否明确批准本次导出？")
+      : false;
+    if (needsApproval && !allowUnverifiedAssets) return;
     setIsExporting(true);
     try {
       const savedPath = await window.desktopApi.exportPresentation(presentation, {
         logoUrl: logoUrl,
+        allowUnverifiedAssets,
       });
       if (savedPath) {
         triggerToast?.(`🎉 成功导出至: ${savedPath}`);
