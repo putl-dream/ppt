@@ -10,7 +10,10 @@ interface EnsureAgentSessionOptions {
   notify: (message: string) => void;
 }
 
-/** Ensures the run has a persisted session and owns session-creation failures. */
+/**
+ * 确保本次运行拥有持久化 session。
+ * 会话创建及其失败反馈在此闭环，避免消息构造和 Agent 执行逻辑感知草稿会话状态。
+ */
 export async function ensureAgentSession({
   activeSessionId,
   prompt,

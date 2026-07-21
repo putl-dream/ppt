@@ -1,41 +1,39 @@
 import { createDisplayEventId } from "@shared/card-display-protocol";
 import type { Presentation } from "@shared/presentation";
-import { ingestDisplayEvent } from "../../cards/display-card-managers";
-import type { ChatMessage } from "../chatMessageRuntime";
+import { ingestDisplayEvent } from "../cards/display-card-managers";
+import type { ChatMessage } from "./chatMessageRuntime";
 
 const PREVIEW_PROMPT_PATTERN =
   /预览.*(?:ppt|幻灯片|演示文稿)|(?:ppt|幻灯片|演示文稿).*预览|打开.*预览/i;
 
-const isPreviewPrompt = (prompt: string) => PREVIEW_PROMPT_PATTERN.test(prompt.trim());
-
-interface HandleLocalAgentCommandOptions {
+interface LocalQueryCommandContext {
   prompt: string;
   presentation?: Presentation;
   sessionId: string;
-  clearRequest: boolean;
   appendChatMessage: (message: ChatMessage) => void;
-  onClearRequest: () => void;
+  clearRequest: () => void;
   openDeckPreview: () => void;
   notify: (message: string) => void;
 }
 
-/** Returns true when a Renderer-only command consumed the prompt. */
-export function tryHandleLocalAgentCommand({
+type LocalQueryCommandHandler = (context: LocalQueryCommandContext) => boolean;
+
+const handlePreviewCommand: LocalQueryCommandHandler = ({
   prompt,
   presentation,
   sessionId,
-  clearRequest,
   appendChatMessage,
-  onClearRequest,
+  clearRequest,
   openDeckPreview,
   notify,
-}: HandleLocalAgentCommandOptions): boolean {
-  if (!presentation || !isPreviewPrompt(prompt)) return false;
+}) => {
+  if (!presentation || !PREVIEW_PROMPT_PATTERN.test(prompt.trim())) return false;
 
   appendChatMessage({ id: crypto.randomUUID(), role: "user", content: prompt });
-  if (clearRequest) onClearRequest();
+  clearRequest();
   openDeckPreview();
 
+  // Display Event 锚定到助手消息，使预览卡片能随该消息持久化和恢复。
   const previewMessageId = crypto.randomUUID();
   ingestDisplayEvent({
     protocolVersion: 1,
@@ -70,4 +68,13 @@ export function tryHandleLocalAgentCommand({
   });
   notify("已打开演示文稿预览");
   return true;
+};
+
+// 用户输入在进入 Agent Controller 前依次匹配这些纯前端命令。
+const LOCAL_QUERY_COMMAND_HANDLERS: LocalQueryCommandHandler[] = [
+  handlePreviewCommand,
+];
+
+export function tryHandleLocalQueryCommand(context: LocalQueryCommandContext): boolean {
+  return LOCAL_QUERY_COMMAND_HANDLERS.some((handler) => handler(context));
 }

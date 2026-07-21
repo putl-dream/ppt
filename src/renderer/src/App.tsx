@@ -19,6 +19,7 @@ import { useSessionController } from "./app/session/useSessionController";
 import { useAgentActivityStream } from "./app/agent/useAgentActivityStream";
 import { useAgentRunController } from "./app/agent/useAgentRunController";
 import { useDisplayEventActions } from "./app/cards/useDisplayEventActions";
+import { useUserQuerySubmission } from "./app/useUserQuerySubmission";
 
 type SettingsCategory =
   | "account"
@@ -153,8 +154,6 @@ export function App() {
     setChatMessages,
     setIsDraftChat,
     applySessionState,
-    presentation,
-    openDeckPreview,
     syncPresentation,
     settings,
     activity,
@@ -170,6 +169,20 @@ export function App() {
     suggestPrompt,
     resolveToolApproval,
   } = agentRun;
+
+  const submitUserQuery = useUserQuerySubmission({
+    request,
+    busy,
+    generationMode,
+    selectedDesignSystem,
+    presentation,
+    activeSessionId,
+    setRequest,
+    setChatMessages,
+    openDeckPreview,
+    notify,
+    startAgent,
+  });
 
   const displayActions = useDisplayEventActions({
     busy,
@@ -242,17 +255,7 @@ export function App() {
             streamingMessageId,
             request,
             onChangeRequest: setRequest,
-            onSubmitRequest: () => void startAgent(undefined, undefined, {
-              generationMode,
-              ...(generationMode === "lean"
-                ? {
-                    layoutChoice: {
-                      mode: "template",
-                      designSystem: selectedDesignSystem,
-                    },
-                  }
-                : {}),
-            }),
+            onSubmitRequest: submitUserQuery,
             busy,
             onResolveApproval: displayActions.resolveApproval,
             onResolvePatch: (event, accepted) =>

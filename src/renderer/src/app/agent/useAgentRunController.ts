@@ -4,7 +4,6 @@ import {
   type Dispatch,
   type SetStateAction,
 } from "react";
-import type { Presentation } from "@shared/presentation";
 import type { SessionBootstrap } from "@shared/session";
 import type { LayoutChoice } from "@shared/layout-preference";
 import type { LeanGenerationMode } from "@shared/lean-mode-contract";
@@ -32,7 +31,6 @@ import {
   type ApplyAgentResult,
 } from "./useAgentResultHandler";
 import { handleAgentRunFailure } from "./agentRunFailure";
-import { tryHandleLocalAgentCommand } from "./agentLocalCommand";
 import { executeAgentRun } from "./agentRunExecution";
 import {
   buildAgentRunRequest,
@@ -60,8 +58,6 @@ interface UseAgentRunControllerOptions {
   setChatMessages: Dispatch<SetStateAction<ChatMessage[]>>;
   setIsDraftChat: Dispatch<SetStateAction<boolean>>;
   applySessionState: (state: SessionBootstrap) => void;
-  presentation: Presentation | undefined;
-  openDeckPreview: PresentationController["openDeckPreview"];
   syncPresentation: PresentationController["syncPresentation"];
   settings: Pick<
     SettingsController,
@@ -103,8 +99,6 @@ export function useAgentRunController({
   setChatMessages,
   setIsDraftChat,
   applySessionState,
-  presentation,
-  openDeckPreview,
   syncPresentation,
   settings,
   activity,
@@ -136,9 +130,9 @@ export function useAgentRunController({
   });
 
   /**
-   * 用户 query 的 Renderer 总入口：确保会话存在，组装 AgentRunRequest、模型和网关配置，
-   * 再根据是否存在可继续的 thread 调用 startAgentRun 或 continueAgentRun。
-   * 返回值只描述运行结果；最终 Presentation 会由 applyAgentResult 另行回读同步。
+   * 用户 query 的 Renderer 用例入口，仅负责编排各阶段和维护一次运行的生命周期。
+   * 调用方应确保输入确实需要 Agent 处理；会话准备、消息构造、执行分流分别由
+   * 独立模块负责。最终 Presentation 由 applyAgentResult 从主进程回读。
    */
   const startAgent = useCallback(async (
     customRequest?: string,
@@ -157,22 +151,9 @@ export function useAgentRunController({
     const isSidechain = options?.sidechain === true;
     const sourceMessages = chatMessages;
 
-    const handledLocally = tryHandleLocalAgentCommand({
-      prompt: activeRequest,
-      presentation,
-      sessionId: activeSessionId,
-      clearRequest: !customRequest,
-      appendChatMessage: (message) => {
-        setChatMessages((current) => [...current, message]);
-      },
-      onClearRequest: () => setRequest(""),
-      openDeckPreview,
-      notify,
-    });
-    if (handledLocally) return;
-
     setBusy(true);
     setIsDraftChat(false);
+    // AgentRunRequest 强制要求 sessionId，因此先完成会话持久化，再构造运行上下文。
     const agentSessionId = await ensureAgentSession({
       activeSessionId,
       prompt: activeRequest,
@@ -182,6 +163,7 @@ export function useAgentRunController({
       notify,
     });
 
+    // applySessionState 可能刚刚激活项目，必须在会话准备完成后读取最新 store 状态。
     const activeProject = useProjectStore.getState().activeProject;
     if (!agentSessionId || !activeProject) {
       setBusy(false);
@@ -205,6 +187,7 @@ export function useAgentRunController({
     const runId = crypto.randomUUID();
     const streamMessageId = crypto.randomUUID();
     setActiveRunId(runId);
+    // 先注册 activity 和空助手消息，流式事件到达时才有稳定的 run/message 锚点。
     beginRunActivity(runId, streamMessageId, isSidechain);
     const streamPlaceholder: ChatMessage = {
       id: streamMessageId,
@@ -222,6 +205,7 @@ export function useAgentRunController({
       createMessageId: () => crypto.randomUUID(),
     });
     if (preparedMessages.retainedMessageIds) {
+      // 编辑重发会截断旧分支；同步移除不再有消息锚点的 Display Card。
       pruneDisplayCardsForMessages(preparedMessages.retainedMessageIds);
     }
     setChatMessages(preparedMessages.runMessages);
@@ -229,6 +213,7 @@ export function useAgentRunController({
     if (!customRequest) setRequest("");
 
     try {
+      // sidechain 是后台协作回合，不覆盖用户当前可见会话的持久化消息。
       if (!isSidechain) {
         await window.desktopApi.saveSessionMessages(
           agentSessionId,
@@ -246,6 +231,7 @@ export function useAgentRunController({
         stepLimits: agentStepLimits,
         runId,
       });
+      // 让本轮最后一批 stream state 先提交，再用最终结果收口消息和 Presentation。
       await new Promise<void>((resolve) => queueMicrotask(resolve));
       await applyAgentResult(result, activeRunTraceRef.current, runId);
     } catch (error) {
@@ -258,6 +244,7 @@ export function useAgentRunController({
         notify,
       });
     } finally {
+      // 运行生命周期由入口统一收口，所有执行路径都必须解除 busy/activity 状态。
       setActiveRunId(null);
       setIsCancellingRun(false);
       setBusy(false);
@@ -278,8 +265,6 @@ export function useAgentRunController({
     generationMode,
     localStoragePath,
     notify,
-    openDeckPreview,
-    presentation,
     request,
     selectedModel,
     setBusy,

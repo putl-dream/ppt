@@ -19,7 +19,10 @@ interface ExecuteAgentRunOptions {
   runId: string;
 }
 
-/** Resolves Renderer configuration and selects continuation versus a fresh run. */
+/**
+ * Agent 执行边界：集中解析 Renderer 配置，并选择继续既有 thread 或启动新运行。
+ * Hook 只传入运行上下文，不需要了解 desktopApi 两个入口的参数差异。
+ */
 export function executeAgentRun({
   request,
   generationMode,
@@ -38,6 +41,7 @@ export function executeAgentRun({
     getPersistedDisplayCards(),
   );
 
+  // 只有完整 Agent 模式可以续接 thread；Lean 等模式始终开启独立运行。
   if (generationMode === "agent" && activeThreadId) {
     return window.desktopApi.continueAgentRun(
       activeThreadId,
