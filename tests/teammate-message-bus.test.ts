@@ -8,6 +8,9 @@ import type {
   AgentModelRequest,
 } from "../src/main/agent/gateway/types";
 import { AgentRuntime } from "../src/main/agent/runtime/agent-runtime";
+import type { StopBlock } from "../src/main/agent/runtime/hook-blocks";
+import { clearHooks, registerHook } from "../src/main/agent/runtime/hook-registry";
+import { resetDefaultHooksForTests } from "../src/main/agent/runtime/default-hooks";
 import {
   formatMailboxMessagesForHistory,
   MessageBus,
@@ -118,6 +121,96 @@ function createBoardWorkerGateway(): AgentModelGateway {
       yield { type: "complete" as const, content: [value] };
     },
   };
+}
+
+function createActiveContinuationGateway() {
+  let releaseFirstTurn!: () => void;
+  let markFirstTurnStarted!: () => void;
+  const firstTurnStarted = new Promise<void>((resolve) => {
+    markFirstTurnStarted = resolve;
+  });
+  const firstTurnRelease = new Promise<void>((resolve) => {
+    releaseFirstTurn = resolve;
+  });
+  const requests: AgentModelRequest[] = [];
+  let step = 0;
+  const gateway: AgentModelGateway = {
+    async generateText() {
+      throw new Error("Streaming path expected.");
+    },
+    async *generateTextStream(request) {
+      requests.push(request);
+      step += 1;
+      if (step === 1) {
+        markFirstTurnStarted();
+        await firstTurnRelease;
+        yield {
+          type: "complete" as const,
+          content: [modelToolCall("scan_unclaimed_tasks")],
+        };
+        return;
+      }
+      const value = modelMessage("Peer continuation handled.");
+      yield { type: "text_delta" as const, text: value.text };
+      yield { type: "complete" as const, content: [value] };
+    },
+  };
+  return { gateway, firstTurnStarted, releaseFirstTurn, requests };
+}
+
+function createAbortableGateway(onStarted: () => void): AgentModelGateway {
+  return {
+    async generateText() {
+      throw new Error("Streaming path expected.");
+    },
+    async *generateTextStream(request) {
+      onStarted();
+      await new Promise<void>((_resolve, reject) => {
+        const signal = request.signal;
+        if (signal?.aborted) {
+          reject(signal.reason);
+          return;
+        }
+        signal?.addEventListener("abort", () => reject(signal.reason), { once: true });
+      });
+    },
+  };
+}
+
+class ControlledCleanupTaskStore extends TaskStore {
+  private releaseCleanup!: () => void;
+  readonly cleanupStarted: Promise<void>;
+  private readonly cleanupRelease: Promise<void>;
+
+  constructor(root: string) {
+    super(root);
+    let markStarted!: () => void;
+    this.cleanupStarted = new Promise<void>((resolve) => {
+      markStarted = resolve;
+    });
+    this.cleanupRelease = new Promise<void>((resolve) => {
+      this.releaseCleanup = resolve;
+    });
+    this.markCleanupStarted = markStarted;
+  }
+
+  private readonly markCleanupStarted: () => void;
+
+  override async unassignInProgressByOwner(owner: string): Promise<string[]> {
+    this.markCleanupStarted();
+    await this.cleanupRelease;
+    return super.unassignInProgressByOwner(owner);
+  }
+
+  continueCleanup(): void {
+    this.releaseCleanup();
+  }
+}
+
+class FailingCleanupTaskStore extends TaskStore {
+  override async unassignInProgressByOwner(): Promise<string[]> {
+    throw new Error("cleanup exploded");
+  }
 }
 
 function modelToolCall(toolName: string, args: Record<string, unknown> = {}) {
@@ -818,6 +911,99 @@ describe("TeammateManager", () => {
     expect(manager.get("reviewer")?.status).toBe("stopped");
   });
 
+  it("drains peer continuation messages between complete model-tool turns", async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), "ppt-active-continuation-"));
+    const bus = new MessageBus(MessageBus.defaultMailboxDir(workspaceRoot));
+    const manager = new TeammateManager(bus);
+    const controlled = createActiveContinuationGateway();
+    const events: TeammateProgressEvent[] = [];
+    manager.spawn({
+      name: "reviewer",
+      role: "outline reviewer",
+      prompt: "Begin the review.",
+      workspaceRoot,
+      gateway: controlled.gateway,
+      onProgress: (event) => events.push(event),
+      maxSteps: 1,
+      idlePollMs: 5,
+      idleTimeoutMs: 1_000,
+    });
+
+    await controlled.firstTurnStarted;
+    await bus.send({
+      from: "researcher",
+      to: "reviewer",
+      type: "message",
+      content: "Include the source audit in this assignment.",
+    });
+    controlled.releaseFirstTurn();
+
+    await waitFor(async () => {
+      const messages = await bus.peekInbox("lead");
+      return messages.some((message) => message.content === "Peer continuation handled.")
+        ? true
+        : undefined;
+    });
+    const secondTurnText = (controlled.requests[1]?.messages ?? [])
+      .flatMap((message) => message.content)
+      .filter((block): block is Extract<AgentModelContentBlock, { type: "text" }> =>
+        block.type === "text",
+      )
+      .map((block) => block.text)
+      .join("\n");
+    expect(secondTurnText).toContain("Include the source audit in this assignment.");
+    expect(events.filter((event) => event.type === "teammate-assignment-started")).toHaveLength(1);
+
+    await manager.requestShutdown("reviewer");
+    await manager.waitFor("reviewer");
+  });
+
+  it("does not complete while manually claimed tasks remain in progress", async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), "ppt-owned-task-completion-"));
+    const taskRoot = await mkdtemp(join(tmpdir(), "ppt-owned-task-completion-tasks-"));
+    const store = new TaskStore(taskRoot);
+    const created = await store.createTask({
+      subject: "Inspect the narrative",
+      executionTarget: "teammate",
+    });
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    const bus = new MessageBus(MessageBus.defaultMailboxDir(workspaceRoot));
+    const manager = new TeammateManager(bus);
+    manager.spawn({
+      name: "reviewer",
+      role: "outline reviewer",
+      prompt: "Claim the review task and complete it.",
+      workspaceRoot,
+      taskStore: store,
+      gateway: createSequenceGateway([
+        modelToolCall("claim_task", { task_id: created.task.id }),
+        modelMessage("I am done, but have not submitted the claimed task."),
+        modelToolCall("submit_task", { task_id: created.task.id }),
+        modelMessage("The claimed task is now submitted."),
+      ]),
+      maxSteps: 4,
+      idlePollMs: 5,
+      idleTimeoutMs: 1_000,
+    });
+
+    await waitFor(async () =>
+      (await store.getTask(created.task.id)).status === "submitted" ? true : undefined,
+    );
+    await waitFor(async () => {
+      const messages = await bus.peekInbox("lead");
+      return messages.some((message) =>
+        message.from === "reviewer"
+        && message.type === "result"
+        && message.content === "The claimed task is now submitted."
+      ) ? true : undefined;
+    });
+
+    await manager.requestShutdown("reviewer");
+    await manager.waitFor("reviewer");
+  });
+
   it("captures background teammate failures without rejecting waiters", async () => {
     const workspaceRoot = await mkdtemp(join(tmpdir(), "ppt-teammate-"));
     const bus = new MessageBus(MessageBus.defaultMailboxDir(workspaceRoot));
@@ -932,5 +1118,179 @@ describe("Lead inbox injection", () => {
         }),
       }),
     ]);
+  });
+});
+
+describe("Teammate terminal lifecycle", () => {
+  it("does not expose stopped before terminal cleanup completes", async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), "ppt-teammate-stopping-"));
+    const taskRoot = await mkdtemp(join(tmpdir(), "ppt-teammate-stopping-tasks-"));
+    const store = new ControlledCleanupTaskStore(taskRoot);
+    const bus = new MessageBus(MessageBus.defaultMailboxDir(workspaceRoot));
+    const manager = new TeammateManager(bus);
+    manager.spawn({
+      name: "reviewer",
+      role: "outline reviewer",
+      prompt: "Finish and wait.",
+      workspaceRoot,
+      taskStore: store,
+      gateway: createSequenceGateway([modelMessage("Ready to stop.")]),
+      idlePollMs: 5,
+      idleTimeoutMs: 1_000,
+    });
+    await waitFor(async () => manager.get("reviewer")?.status === "idle" ? true : undefined);
+
+    await manager.requestShutdown("reviewer");
+    await store.cleanupStarted;
+    expect(manager.get("reviewer")?.status).toBe("idle");
+
+    store.continueCleanup();
+    await manager.waitFor("reviewer");
+    expect(manager.get("reviewer")?.status).toBe("stopped");
+  });
+
+  it("reports an explicit abort without converting it to failure", async () => {
+    clearHooks();
+    resetDefaultHooksForTests();
+    const stopBlocks: StopBlock[] = [];
+    registerHook("Stop", (block) => {
+      stopBlocks.push(block as StopBlock);
+      return null;
+    });
+    let markStarted!: () => void;
+    const started = new Promise<void>((resolve) => {
+      markStarted = resolve;
+    });
+
+    try {
+      const workspaceRoot = await mkdtemp(join(tmpdir(), "ppt-teammate-abort-"));
+      const bus = new MessageBus(MessageBus.defaultMailboxDir(workspaceRoot));
+      const manager = new TeammateManager(bus);
+      manager.spawn({
+        name: "reviewer",
+        role: "outline reviewer",
+        prompt: "Wait for cancellation.",
+        workspaceRoot,
+        gateway: createAbortableGateway(markStarted),
+        maxSteps: 1,
+      });
+
+      await started;
+      expect(manager.abortTeammate("reviewer", "User cancelled the teammate.")).toBe(true);
+      await manager.waitFor("reviewer");
+
+      expect(manager.get("reviewer")).toMatchObject({ status: "stopped" });
+      expect(manager.get("reviewer")?.lastError).toBeUndefined();
+      expect(stopBlocks).toEqual([
+        expect.objectContaining({
+          scope: "subagent",
+          result: "stopped",
+          reason: "aborted",
+        }),
+      ]);
+      expect(await bus.peekInbox("lead")).not.toContainEqual(expect.objectContaining({
+        type: "error",
+      }));
+      expect(manager.abortTeammate("reviewer")).toBe(false);
+    } finally {
+      clearHooks();
+      resetDefaultHooksForTests();
+    }
+  });
+
+  it("keeps hook-stop completion messaging and activity semantics", async () => {
+    clearHooks();
+    resetDefaultHooksForTests();
+    const stopBlocks: StopBlock[] = [];
+    registerHook("PreToolUse", () => ({ type: "stop", reason: "Policy ended the teammate." }));
+    registerHook("Stop", (block) => {
+      stopBlocks.push(block as StopBlock);
+      return null;
+    });
+
+    try {
+      const workspaceRoot = await mkdtemp(join(tmpdir(), "ppt-teammate-hook-stop-"));
+      const bus = new MessageBus(MessageBus.defaultMailboxDir(workspaceRoot));
+      const manager = new TeammateManager(bus);
+      const events: TeammateProgressEvent[] = [];
+      manager.spawn({
+        name: "reviewer",
+        role: "outline reviewer",
+        prompt: "Inspect the board.",
+        workspaceRoot,
+        gateway: createSequenceGateway([modelToolCall("scan_unclaimed_tasks")]),
+        onProgress: (event) => events.push(event),
+        maxSteps: 1,
+      });
+
+      await manager.waitFor("reviewer");
+
+      expect(manager.get("reviewer")?.status).toBe("stopped");
+      expect(await bus.peekInbox("lead")).toContainEqual(expect.objectContaining({
+        from: "reviewer",
+        type: "result",
+        content: "Policy ended the teammate.",
+      }));
+      expect(events.filter((event) => event.type === "teammate-assignment-finished"))
+        .toEqual([
+          expect.objectContaining({
+            status: "completed",
+            message: "Policy ended the teammate.",
+          }),
+        ]);
+      expect(stopBlocks).toEqual([
+        expect.objectContaining({ result: "stopped", reason: "completed" }),
+      ]);
+    } finally {
+      clearHooks();
+      resetDefaultHooksForTests();
+    }
+  });
+
+  it("promotes pre-hook cleanup failures to the effective failed exit", async () => {
+    clearHooks();
+    resetDefaultHooksForTests();
+    const stopBlocks: StopBlock[] = [];
+    registerHook("Stop", (block) => {
+      stopBlocks.push(block as StopBlock);
+      return null;
+    });
+
+    try {
+      const workspaceRoot = await mkdtemp(join(tmpdir(), "ppt-teammate-cleanup-failure-"));
+      const taskRoot = await mkdtemp(join(tmpdir(), "ppt-teammate-cleanup-failure-tasks-"));
+      const bus = new MessageBus(MessageBus.defaultMailboxDir(workspaceRoot));
+      const manager = new TeammateManager(bus);
+      manager.spawn({
+        name: "reviewer",
+        role: "outline reviewer",
+        prompt: "Finish and wait.",
+        workspaceRoot,
+        taskStore: new FailingCleanupTaskStore(taskRoot),
+        gateway: createSequenceGateway([modelMessage("Ready to stop.")]),
+        idlePollMs: 5,
+        idleTimeoutMs: 1_000,
+      });
+      await waitFor(async () => manager.get("reviewer")?.status === "idle" ? true : undefined);
+
+      await manager.requestShutdown("reviewer");
+      await manager.waitFor("reviewer");
+
+      expect(manager.get("reviewer")?.status).toBe("failed");
+      expect(stopBlocks).toEqual([
+        expect.objectContaining({ result: "failed", reason: "aborted" }),
+      ]);
+      const leadMessages = await bus.peekInbox("lead");
+      expect(leadMessages).toContainEqual(expect.objectContaining({
+        type: "shutdown_response",
+      }));
+      expect(leadMessages).toContainEqual(expect.objectContaining({
+        type: "error",
+        content: "Teammate finalization failed.",
+      }));
+    } finally {
+      clearHooks();
+      resetDefaultHooksForTests();
+    }
   });
 });

@@ -589,4 +589,23 @@ describe("TaskGraph tools", () => {
     expect(task.status).toBe("pending");
     expect(task.owner).toBeNull();
   });
+
+  it("lists owned tasks by owner and status", async () => {
+    const workspaceRoot = await makeWorkspace();
+    const store = new TaskStore(workspaceRoot);
+    const first = await store.createTask({ subject: "first owned task" });
+    const second = await store.createTask({ subject: "second owned task" });
+    expect(first.ok && second.ok).toBe(true);
+    if (!first.ok || !second.ok) return;
+
+    await store.claimTask(first.task.id, "alice");
+    await store.claimTask(second.task.id, "bob");
+    expect(await store.listTasksOwnedBy("alice", { status: "in_progress" }))
+      .toEqual([expect.objectContaining({ id: first.task.id, owner: "alice" })]);
+
+    await store.submitTask(first.task.id, "alice");
+    expect(await store.listTasksOwnedBy("alice", { status: "in_progress" })).toEqual([]);
+    expect(await store.listTasksOwnedBy("alice", { status: "submitted" }))
+      .toEqual([expect.objectContaining({ id: first.task.id, owner: "alice" })]);
+  });
 });

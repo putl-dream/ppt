@@ -208,6 +208,17 @@ export class TaskStore {
     return tasks.sort((left, right) => left.createdAt.localeCompare(right.createdAt));
   }
 
+  async listTasksOwnedBy(
+    owner: string,
+    options: { status?: AgentTaskNode["status"] } = {},
+  ): Promise<AgentTaskNode[]> {
+    const tasks = await this.listTasks();
+    return tasks.filter((task) =>
+      task.owner === owner
+      && (options.status === undefined || task.status === options.status),
+    );
+  }
+
   async getTask(taskId: string): Promise<AgentTaskNode> {
     return this.loadTask(taskId);
   }
