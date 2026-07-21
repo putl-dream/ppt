@@ -919,7 +919,7 @@ app.whenReady().then(async () => {
       const emit = createAgentStreamEmitter(event.sender, sessionId, currentRunId, controller);
 
       try {
-        return await runAgentOperation(
+        const result = await runAgentOperation(
           "start",
           sessionId,
           currentRunId,
@@ -956,6 +956,14 @@ app.whenReady().then(async () => {
             return finalizeAgentResult(sessionId, runtime, result, currentRunId);
           },
         );
+        if (!event.sender.isDestroyed()) {
+          event.sender.send("agent:stream", {
+            type: "stream-completed",
+            runId: currentRunId,
+            sessionId,
+          } satisfies AgentStreamEvent);
+        }
+        return result;
       } finally {
         activeRuns.delete(currentRunId);
         if (sessionActiveRuns.get(sessionId) === currentRunId) {
@@ -1014,7 +1022,7 @@ app.whenReady().then(async () => {
     const emit = createAgentStreamEmitter(event.sender, sessionId, currentRunId, controller);
 
     try {
-      return await runAgentOperation(
+      const result = await runAgentOperation(
         "continue-agent-run",
         sessionId,
         currentRunId,
@@ -1074,6 +1082,14 @@ app.whenReady().then(async () => {
           return finalizeAgentResult(sessionId, runtime, await run, currentRunId);
         },
       );
+      if (!event.sender.isDestroyed()) {
+        event.sender.send("agent:stream", {
+          type: "stream-completed",
+          runId: currentRunId,
+          sessionId,
+        } satisfies AgentStreamEvent);
+      }
+      return result;
     } finally {
       activeRuns.delete(currentRunId);
       if (sessionActiveRuns.get(sessionId) === currentRunId) {

@@ -76,6 +76,7 @@ export type AgentStreamEvent = (
   | { runId: string; type: "workflow-progress"; message: string; progress: number }
   | { runId: string; type: "text-chunk"; chunk: string; source?: "message" | "tool-summary" }
   | { runId: string; type: "thinking-chunk"; chunk: string; modelStep?: number }
+  | { runId: string; type: "stream-completed" }
   | { runId: string; type: "stage-started"; message: string; stage: string }
   | { runId: string; type: "tool-started"; message: string; toolName: string }
   | { runId: string; type: "tool-finished"; message: string; toolName: string }

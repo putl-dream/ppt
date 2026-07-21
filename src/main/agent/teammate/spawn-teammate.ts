@@ -335,6 +335,12 @@ export class TeammateManager {
    * A teammate model loop cannot be safely replayed after a process crash.
    * Convert persisted running entries into durable interruption messages so
    * the lead can inspect artifacts/tasks and explicitly re-delegate.
+   *
+   * 翻译：
+   * 一个 teammate 模型循环不能在进程崩溃后安全地重新播放。
+   * 将持久化的运行条目转换为持久中断消息，以便
+   * 使 lead 可以检查 artifacts/tasks 并显式重新委托。
+   *
    */
   async reconcileInterrupted(): Promise<void> {
     if (!this.reconcilePromise) {

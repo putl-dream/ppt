@@ -52,6 +52,7 @@ export interface AgentActivityStreamController {
   syncActivityTrace: (next: AgentActivityItem[]) => void;
   beginRunActivity: (runId: string, messageId: string, sidechain: boolean) => void;
   finishRunActivity: (runId: string) => void;
+  waitForRunStreamCompletion: (runId: string) => Promise<void>;
 }
 
 export function useAgentActivityStream({
@@ -68,6 +69,8 @@ export function useAgentActivityStream({
   const sidechainRunRef = useRef<string | null>(null);
   const pendingProgressTextRef = useRef("");
   const statusTypingTimerRef = useRef<number | null>(null);
+  const completedStreamRunIdsRef = useRef(new Set<string>());
+  const streamCompletionWaitersRef = useRef(new Map<string, () => void>());
 
   const stopStatusTyping = useCallback(() => {
     if (statusTypingTimerRef.current !== null) {
@@ -115,6 +118,16 @@ export function useAgentActivityStream({
 
   useEffect(() => {
     const unsubscribe = window.desktopApi.onAgentStream((event: AgentStreamEvent) => {
+      if (event.type === "stream-completed") {
+        const resolve = streamCompletionWaitersRef.current.get(event.runId);
+        if (resolve) {
+          streamCompletionWaitersRef.current.delete(event.runId);
+          resolve();
+        } else {
+          completedStreamRunIdsRef.current.add(event.runId);
+        }
+        return;
+      }
       const isCurrentRun = event.runId === activeRunIdRef.current;
       if (event.type === "display-event") {
         if (event.sessionId && event.sessionId !== activeSessionIdRef.current) return;
@@ -376,6 +389,9 @@ export function useAgentActivityStream({
     return () => {
       stopStatusTyping();
       unsubscribe();
+      for (const resolve of streamCompletionWaitersRef.current.values()) resolve();
+      streamCompletionWaitersRef.current.clear();
+      completedStreamRunIdsRef.current.clear();
     };
   }, [
     activeSessionIdRef,
@@ -402,9 +418,12 @@ export function useAgentActivityStream({
   }, [syncActivityTrace]);
 
   const finishRunActivity = useCallback((runId: string) => {
+    streamMessageIdsRef.current.delete(runId);
+    completedStreamRunIdsRef.current.delete(runId);
+    streamCompletionWaitersRef.current.delete(runId);
+    if (activeRunIdRef.current !== runId) return;
     if (sidechainRunRef.current === runId) sidechainRunRef.current = null;
     activeRunIdRef.current = null;
-    streamMessageIdsRef.current.delete(runId);
     stopStatusTyping();
     setAgentActivityMode("idle");
     syncActivityTrace([]);
@@ -413,6 +432,13 @@ export function useAgentActivityStream({
     activeRunTraceRef.current = [];
     pendingProgressTextRef.current = "";
   }, [stopStatusTyping, syncActivityTrace]);
+
+  const waitForRunStreamCompletion = useCallback((runId: string) => {
+    if (completedStreamRunIdsRef.current.delete(runId)) return Promise.resolve();
+    return new Promise<void>((resolve) => {
+      streamCompletionWaitersRef.current.set(runId, resolve);
+    });
+  }, []);
 
   return {
     activityTrace,
@@ -427,5 +453,6 @@ export function useAgentActivityStream({
     syncActivityTrace,
     beginRunActivity,
     finishRunActivity,
+    waitForRunStreamCompletion,
   };
 }

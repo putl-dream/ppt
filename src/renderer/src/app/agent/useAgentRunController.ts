@@ -1,5 +1,6 @@
 import {
   useCallback,
+  useRef,
   useState,
   type Dispatch,
   type SetStateAction,
@@ -12,7 +13,11 @@ import {
   resolveToolApprovalItem,
 } from "@shared/agent-activity";
 import { formatPublicErrorMessage } from "@shared/agent-activity-display";
-import { useProjectStore } from "../../components/project-store";
+import {
+  coordinateAgentRun,
+  createAgentRunLock,
+  type AgentRunContext,
+} from "@shared/agent-run-lifecycle";
 import {
   pruneDisplayCardsForMessages,
   setDisplayCardStatus,
@@ -36,7 +41,7 @@ import {
   buildAgentRunRequest,
   prepareAgentRunMessages,
 } from "./agentRunPreparation";
-import { ensureAgentSession } from "./agentSessionPreparation";
+import { prepareAgentContext } from "./agentSessionPreparation";
 
 interface StartAgentOptions {
   userDisplayContent?: string | false;
@@ -113,6 +118,7 @@ export function useAgentRunController({
     syncActivityTrace,
     beginRunActivity,
     finishRunActivity,
+    waitForRunStreamCompletion,
   } = activity;
   const {
     agentStepLimits,
@@ -120,6 +126,7 @@ export function useAgentRunController({
     enabledModels,
     selectedModel,
   } = settings;
+  const runLockRef = useRef(createAgentRunLock());
 
   const applyAgentResult = useAgentResultHandler({
     activeSessionId,
@@ -141,6 +148,11 @@ export function useAgentRunController({
   ) => {
     const activeRequest = customRequest || request;
     if (!activeRequest.trim() || busy) return;
+
+    const runId = crypto.randomUUID();
+    const runLock = runLockRef.current;
+    if (!runLock.acquire(runId)) return;
+
     const runGenerationMode = options?.generationMode ?? generationMode;
 
     const userDisplayContent = options?.userDisplayContent === false
@@ -150,106 +162,107 @@ export function useAgentRunController({
         : activeRequest;
     const isSidechain = options?.sidechain === true;
     const sourceMessages = chatMessages;
+    const streamMessageId = crypto.randomUUID();
+    let activityStarted = false;
 
     setBusy(true);
-    setIsDraftChat(false);
-    // AgentRunRequest 强制要求 sessionId，因此先完成会话持久化，再构造运行上下文。
-    const agentSessionId = await ensureAgentSession({
-      activeSessionId,
-      prompt: activeRequest,
-      localStoragePath,
-      applySessionState,
-      setIsDraftChat,
-      notify,
+    await coordinateAgentRun({
+      prepareContext: async (): Promise<AgentRunContext | undefined> => {
+        const preparedContext = await prepareAgentContext({
+          activeSessionId,
+          prompt: activeRequest,
+          localStoragePath,
+          applySessionState,
+          setIsDraftChat,
+          notify,
+        });
+        return preparedContext
+          ? {
+              ...preparedContext,
+              runId,
+              streamMessageId,
+              sidechain: isSidechain,
+            }
+          : undefined;
+      },
+      execute: async (context) => {
+        const agentRequest = buildAgentRunRequest({
+          prompt: activeRequest,
+          sessionId: context.sessionId,
+          generationMode: runGenerationMode,
+          layoutChoice: options?.layoutChoice,
+        });
+
+        console.info("Starting unified Agent run", {
+          sessionId: agentRequest.sessionId,
+          editorContext: agentRequest.editorContext,
+          generationMode: runGenerationMode,
+        });
+
+        setActiveRunId(context.runId);
+        activityStarted = true;
+        // 先注册 activity 和空助手消息，流式事件到达时才有稳定的 run/message 锚点。
+        beginRunActivity(context.runId, context.streamMessageId, context.sidechain);
+        const streamPlaceholder: ChatMessage = {
+          id: context.streamMessageId,
+          role: "assistant",
+          content: "",
+          threadId: context.runId,
+        };
+        const preparedMessages = prepareAgentRunMessages({
+          sourceMessages,
+          activeRequest,
+          userDisplayContent,
+          isSidechain: context.sidechain,
+          editedMessageId: isEditOfMsgId,
+          streamPlaceholder,
+          createMessageId: () => crypto.randomUUID(),
+        });
+        if (preparedMessages.retainedMessageIds) {
+          pruneDisplayCardsForMessages(preparedMessages.retainedMessageIds);
+        }
+        setChatMessages(preparedMessages.runMessages);
+        if (!customRequest) setRequest("");
+
+        if (!context.sidechain) {
+          await window.desktopApi.saveSessionMessages(
+            context.sessionId,
+            toSessionChatMessages(preparedMessages.runMessages),
+          );
+        }
+        return executeAgentRun({
+          request: agentRequest,
+          generationMode: runGenerationMode,
+          sourceMessages,
+          forkedMessages: preparedMessages.forkedMessages,
+          gatewayPreferences: agentGatewayPreferences,
+          enabledModels,
+          selectedModel,
+          stepLimits: agentStepLimits,
+          runId: context.runId,
+        });
+      },
+      finalize: async (context, result) => {
+        await waitForRunStreamCompletion(context.runId);
+        await applyAgentResult(result, activeRunTraceRef.current, context.runId);
+      },
+      handleFailure: (error, context) => {
+        handleAgentRunFailure({
+          error,
+          isSidechain: context?.sidechain ?? isSidechain,
+          runMessageId: streamMessageIdsRef.current.get(runId),
+          activeTrace: activeRunTraceRef.current,
+          setChatMessages,
+          notify,
+        });
+      },
+      cleanup: () => {
+        if (activityStarted) finishRunActivity(runId);
+        setActiveRunId((current) => current === runId ? null : current);
+        setIsCancellingRun(false);
+        if (runLock.release(runId)) setBusy(false);
+      },
     });
-
-    // applySessionState 可能刚刚激活项目，必须在会话准备完成后读取最新 store 状态。
-    const activeProject = useProjectStore.getState().activeProject;
-    if (!agentSessionId || !activeProject) {
-      setBusy(false);
-      notify("项目会话尚未准备好，请稍后再试");
-      return;
-    }
-
-    const agentRequest = buildAgentRunRequest({
-      prompt: activeRequest,
-      sessionId: agentSessionId,
-      generationMode: runGenerationMode,
-      layoutChoice: options?.layoutChoice,
-    });
-
-    console.info("Starting unified Agent run", {
-      sessionId: agentRequest.sessionId,
-      editorContext: agentRequest.editorContext,
-      generationMode: runGenerationMode,
-    });
-
-    const runId = crypto.randomUUID();
-    const streamMessageId = crypto.randomUUID();
-    setActiveRunId(runId);
-    // 先注册 activity 和空助手消息，流式事件到达时才有稳定的 run/message 锚点。
-    beginRunActivity(runId, streamMessageId, isSidechain);
-    const streamPlaceholder: ChatMessage = {
-      id: streamMessageId,
-      role: "assistant",
-      content: "",
-      threadId: runId,
-    };
-    const preparedMessages = prepareAgentRunMessages({
-      sourceMessages,
-      activeRequest,
-      userDisplayContent,
-      isSidechain,
-      editedMessageId: isEditOfMsgId,
-      streamPlaceholder,
-      createMessageId: () => crypto.randomUUID(),
-    });
-    if (preparedMessages.retainedMessageIds) {
-      // 编辑重发会截断旧分支；同步移除不再有消息锚点的 Display Card。
-      pruneDisplayCardsForMessages(preparedMessages.retainedMessageIds);
-    }
-    setChatMessages(preparedMessages.runMessages);
-
-    if (!customRequest) setRequest("");
-
-    try {
-      // sidechain 是后台协作回合，不覆盖用户当前可见会话的持久化消息。
-      if (!isSidechain) {
-        await window.desktopApi.saveSessionMessages(
-          agentSessionId,
-          toSessionChatMessages(preparedMessages.runMessages),
-        );
-      }
-      const result = await executeAgentRun({
-        request: agentRequest,
-        generationMode: runGenerationMode,
-        sourceMessages,
-        forkedMessages: preparedMessages.forkedMessages,
-        gatewayPreferences: agentGatewayPreferences,
-        enabledModels,
-        selectedModel,
-        stepLimits: agentStepLimits,
-        runId,
-      });
-      // 让本轮最后一批 stream state 先提交，再用最终结果收口消息和 Presentation。
-      await new Promise<void>((resolve) => queueMicrotask(resolve));
-      await applyAgentResult(result, activeRunTraceRef.current, runId);
-    } catch (error) {
-      handleAgentRunFailure({
-        error,
-        isSidechain,
-        runMessageId: streamMessageIdsRef.current.get(runId),
-        activeTrace: activeRunTraceRef.current,
-        setChatMessages,
-        notify,
-      });
-    } finally {
-      // 运行生命周期由入口统一收口，所有执行路径都必须解除 busy/activity 状态。
-      setActiveRunId(null);
-      setIsCancellingRun(false);
-      setBusy(false);
-      finishRunActivity(runId);
-    }
   }, [
     activeRunTraceRef,
     activeSessionId,
@@ -272,6 +285,7 @@ export function useAgentRunController({
     setIsDraftChat,
     setRequest,
     streamMessageIdsRef,
+    waitForRunStreamCompletion,
   ]);
 
   useInboxPoller({
