@@ -1,4 +1,4 @@
-import { mkdtemp, readFile } from "node:fs/promises";
+import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -10,6 +10,7 @@ import type { AgentModelGateway } from "../src/main/agent/gateway/types";
 import { ToolRegistry } from "../src/main/agent/tools/tool-registry";
 import type { ToolDefinition } from "../src/main/agent/tools/tool-definition";
 import { createStarterPresentation } from "../src/shared/presentation";
+import { DurableRunStore } from "../src/main/agent/persistence/durable-run-store";
 
 function textGateway(text: string): AgentModelGateway {
   return {
@@ -46,10 +47,7 @@ describe("AgentRuntime terminal boundaries", () => {
       });
 
     expect(result).toEqual({ type: "message", content: "completed" });
-    const checkpoint = JSON.parse(await readFile(
-      join(workspaceRoot, ".agent", "runs", "stop-hook-thread.json"),
-      "utf8",
-    ));
+    const checkpoint = await new DurableRunStore(workspaceRoot).load("stop-hook-thread");
     expect(checkpoint).toMatchObject({ status: "completed", phase: "finished" });
   });
 
@@ -67,10 +65,7 @@ describe("AgentRuntime terminal boundaries", () => {
         workspaceRoot,
       })).rejects.toThrow("primary model failure");
 
-    const checkpoint = JSON.parse(await readFile(
-      join(workspaceRoot, ".agent", "runs", "failed-thread.json"),
-      "utf8",
-    ));
+    const checkpoint = await new DurableRunStore(workspaceRoot).load("failed-thread");
     expect(checkpoint).toMatchObject({
       status: "failed",
       phase: "finished",
@@ -96,10 +91,30 @@ describe("AgentRuntime terminal boundaries", () => {
         signal: controller.signal,
       })).rejects.toThrow("Run aborted by user");
 
-    const checkpoint = JSON.parse(await readFile(
-      join(workspaceRoot, ".agent", "runs", "aborted-thread.json"),
-      "utf8",
-    ));
+    const checkpoint = await new DurableRunStore(workspaceRoot).load("aborted-thread");
+    expect(checkpoint).toMatchObject({ status: "interrupted", phase: "finished" });
+    expect(stops.at(-1)?.reason).toBe("aborted");
+  });
+
+  it("classifies a downstream AbortError as interrupted even before the signal flips", async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), "runtime-downstream-abort-"));
+    const stops: StopBlock[] = [];
+    registerHook("Stop", (block) => { stops.push(block as StopBlock); return null; });
+    const abortError = Object.assign(new Error("provider cancelled"), { name: "AbortError" });
+    const gateway: AgentModelGateway = {
+      async generateText() { throw abortError; },
+      async *generateTextStream() { throw abortError; },
+    };
+
+    await expect(new AgentRuntime(new ToolRegistry(), gateway).run({
+      threadId: "downstream-abort-thread",
+      request: "abort",
+      presentationSnapshot: createStarterPresentation(),
+      selectedElementIds: [],
+      workspaceRoot,
+    })).rejects.toBe(abortError);
+
+    const checkpoint = await new DurableRunStore(workspaceRoot).load("downstream-abort-thread");
     expect(checkpoint).toMatchObject({ status: "interrupted", phase: "finished" });
     expect(stops.at(-1)?.reason).toBe("aborted");
   });
@@ -152,10 +167,7 @@ describe("AgentRuntime terminal boundaries", () => {
 
     resolvePreview();
     await new Promise((resolve) => setTimeout(resolve, 30));
-    const checkpoint = JSON.parse(await readFile(
-      join(workspaceRoot, ".agent", "runs", "late-background-thread.json"),
-      "utf8",
-    ));
+    const checkpoint = await new DurableRunStore(workspaceRoot).load("late-background-thread");
     expect(checkpoint).toMatchObject({ status: "failed", phase: "finished" });
   });
 });

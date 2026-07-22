@@ -72,6 +72,7 @@ export interface DirectCommandProposal {
 export class AgentService {
   private readonly pendingApprovals = new Map<string, PendingApproval>();
   private readonly conversations = new Map<string, ContinuedConversation>();
+  private readonly runningThreads = new Set<string>();
   private readonly durableStore?: DurableServiceStore;
 
   constructor(
@@ -94,6 +95,18 @@ export class AgentService {
 
   hasActiveConversation(threadId: string): boolean {
     return this.conversations.has(threadId);
+  }
+
+  private async withThreadRun<T>(threadId: string, operation: () => Promise<T>): Promise<T> {
+    if (this.runningThreads.has(threadId)) {
+      throw new Error(`Agent thread ${threadId} already has an active run.`);
+    }
+    this.runningThreads.add(threadId);
+    try {
+      return await operation();
+    } finally {
+      this.runningThreads.delete(threadId);
+    }
   }
 
   restoreAgentRunConversation(
@@ -158,35 +171,38 @@ export class AgentService {
     // A caller-provided run id is stable across renderer/main persistence and
     // doubles as the recoverable thread id for an interrupted first turn.
     const threadId = runId ?? crypto.randomUUID();
-    this.conversations.set(threadId, {
-      messages: [
-        ...structuredClone(messageHistory),
-        { role: "user", content: request },
-      ],
-      model,
-      executionStrategy,
+    const invocationRunId = runId ?? crypto.randomUUID();
+    return this.withThreadRun(threadId, async () => {
+      this.conversations.set(threadId, {
+        messages: [
+          ...structuredClone(messageHistory),
+          { role: "user", content: request },
+        ],
+        model,
+        executionStrategy,
+      });
+      await this.persistThread(threadId, {
+        status: "active",
+        messages: structuredClone(this.conversations.get(threadId)!.messages),
+        model,
+        executionStrategy,
+      });
+      return this.run(
+        threadId,
+        request,
+        model,
+        executionStrategy,
+        messageHistory,
+        listener,
+        editorContext,
+        "any",
+        false,
+        signal,
+        invocationRunId,
+        agentStepLimits,
+        layoutChoice,
+      );
     });
-    await this.persistThread(threadId, {
-      status: "active",
-      messages: structuredClone(this.conversations.get(threadId)!.messages),
-      model,
-      executionStrategy,
-    });
-    return this.run(
-      threadId,
-      request,
-      model,
-      executionStrategy,
-      messageHistory,
-      listener,
-      editorContext,
-      "any",
-      false,
-      signal,
-      runId,
-      agentStepLimits,
-      layoutChoice,
-    );
   }
 
   async continueAgentRun(
@@ -200,32 +216,35 @@ export class AgentService {
     layoutChoice?: LayoutChoice,
     modelOverride?: AgentModelSelection,
   ): Promise<AgentRunResult> {
-    const conversation = this.conversations.get(threadId);
-    if (!conversation) throw new Error("Agent conversation not found or already completed.");
-    const model = modelOverride ?? conversation.model;
-    if (modelOverride) conversation.model = modelOverride;
-    conversation.messages.push({ role: "user", content: request });
-    await this.persistThread(threadId, {
-      status: "active",
-      messages: structuredClone(conversation.messages),
-      model,
-      executionStrategy: conversation.executionStrategy,
+    const invocationRunId = runId ?? crypto.randomUUID();
+    return this.withThreadRun(threadId, async () => {
+      const conversation = this.conversations.get(threadId);
+      if (!conversation) throw new Error("Agent conversation not found or already completed.");
+      const model = modelOverride ?? conversation.model;
+      if (modelOverride) conversation.model = modelOverride;
+      conversation.messages.push({ role: "user", content: request });
+      await this.persistThread(threadId, {
+        status: "active",
+        messages: structuredClone(conversation.messages),
+        model,
+        executionStrategy: conversation.executionStrategy,
+      });
+      return this.run(
+        threadId,
+        request,
+        model,
+        conversation.executionStrategy,
+        conversation.messages,
+        listener,
+        editorContext,
+        "any",
+        true,
+        signal,
+        invocationRunId,
+        agentStepLimits,
+        layoutChoice,
+      );
     });
-    return this.run(
-      threadId,
-      request,
-      model,
-      conversation.executionStrategy,
-      conversation.messages,
-      listener,
-      editorContext,
-      "any",
-      true,
-      signal,
-      runId,
-      agentStepLimits,
-      layoutChoice,
-    );
   }
 
   /**

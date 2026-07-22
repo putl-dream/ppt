@@ -161,6 +161,10 @@ export class ConversationDatabase {
         thread_id TEXT PRIMARY KEY,
         run_id TEXT,
         checkpoint_json TEXT NOT NULL,
+        active_run_id TEXT,
+        writer_generation INTEGER NOT NULL DEFAULT 0,
+        writer_revision INTEGER NOT NULL DEFAULT 0,
+        lease_updated_at TEXT,
         updated_at TEXT NOT NULL
       );
 
@@ -193,6 +197,18 @@ export class ConversationDatabase {
         created_at TEXT NOT NULL
       );
     `);
+    const checkpointColumns = new Set((this.database.prepare(
+      "PRAGMA table_info(run_checkpoints)",
+    ).all() as unknown as Array<{ name: string }>).map((column) => column.name));
+    const migrations = [
+      ["active_run_id", "ALTER TABLE run_checkpoints ADD COLUMN active_run_id TEXT"],
+      ["writer_generation", "ALTER TABLE run_checkpoints ADD COLUMN writer_generation INTEGER NOT NULL DEFAULT 0"],
+      ["writer_revision", "ALTER TABLE run_checkpoints ADD COLUMN writer_revision INTEGER NOT NULL DEFAULT 0"],
+      ["lease_updated_at", "ALTER TABLE run_checkpoints ADD COLUMN lease_updated_at TEXT"],
+    ] as const;
+    for (const [column, sql] of migrations) {
+      if (!checkpointColumns.has(column)) this.database.exec(sql);
+    }
   }
 
   loadState(): ConversationDatabaseState {
@@ -479,7 +495,164 @@ export class ConversationDatabase {
     const row = this.database.prepare(
       "SELECT checkpoint_json FROM run_checkpoints WHERE thread_id = ?",
     ).get(threadId) as { checkpoint_json: string } | undefined;
-    return row ? JSON.parse(row.checkpoint_json) as T : undefined;
+    if (!row) return undefined;
+    const parsed = JSON.parse(row.checkpoint_json) as T | null;
+    return parsed ?? undefined;
+  }
+
+  openRunCheckpointLease(input: {
+    threadId: string;
+    runId: string;
+    resume: boolean;
+    allowTakeover?: boolean;
+  }):
+    | { type: "opened"; generation: number; revision: number; checkpoint?: unknown }
+    | { type: "lease_busy"; activeRunId: string; generation: number } {
+    return this.transaction(() => {
+      const row = this.database.prepare(`
+        SELECT checkpoint_json, active_run_id, writer_generation, writer_revision
+        FROM run_checkpoints WHERE thread_id = ?
+      `).get(input.threadId) as {
+        checkpoint_json: string;
+        active_run_id: string | null;
+        writer_generation: number;
+        writer_revision: number;
+      } | undefined;
+
+      if (row?.active_run_id && row.active_run_id !== input.runId && !input.allowTakeover) {
+        return {
+          type: "lease_busy" as const,
+          activeRunId: row.active_run_id,
+          generation: row.writer_generation,
+        };
+      }
+      if (row?.active_run_id === input.runId) {
+        const checkpoint = input.resume ? JSON.parse(row.checkpoint_json) as unknown : undefined;
+        return {
+          type: "opened" as const,
+          generation: row.writer_generation,
+          revision: row.writer_revision,
+          ...(checkpoint ? { checkpoint } : {}),
+        };
+      }
+
+      const generation = (row?.writer_generation ?? 0) + 1;
+      const now = new Date().toISOString();
+      this.database.prepare(`
+        INSERT INTO run_checkpoints(
+          thread_id, run_id, checkpoint_json, active_run_id,
+          writer_generation, writer_revision, lease_updated_at, updated_at
+        ) VALUES(?, NULL, 'null', ?, ?, 0, ?, ?)
+        ON CONFLICT(thread_id) DO UPDATE SET
+          active_run_id = excluded.active_run_id,
+          writer_generation = excluded.writer_generation,
+          writer_revision = 0,
+          lease_updated_at = excluded.lease_updated_at
+      `).run(input.threadId, input.runId, generation, now, now);
+      const checkpoint = input.resume && row
+        ? JSON.parse(row.checkpoint_json) as unknown
+        : undefined;
+      return {
+        type: "opened" as const,
+        generation,
+        revision: 0,
+        ...(checkpoint ? { checkpoint } : {}),
+      };
+    });
+  }
+
+  saveRunCheckpointCas(input: {
+    threadId: string;
+    runId: string;
+    generation: number;
+    expectedRevision: number;
+    nextRevision: number;
+    checkpoint: unknown;
+  }): "saved" | "already_applied" | "stale_generation" | "revision_conflict" {
+    return this.transaction(() => {
+      const row = this.database.prepare(`
+        SELECT active_run_id, writer_generation, writer_revision, checkpoint_json
+        FROM run_checkpoints WHERE thread_id = ?
+      `).get(input.threadId) as {
+        active_run_id: string | null;
+        writer_generation: number;
+        writer_revision: number;
+        checkpoint_json: string;
+      } | undefined;
+      if (
+        !row
+        || row.active_run_id !== input.runId
+        || row.writer_generation !== input.generation
+      ) return "stale_generation";
+
+      const payload = JSON.stringify(input.checkpoint);
+      if (row.writer_revision === input.nextRevision) {
+        return row.checkpoint_json === payload ? "already_applied" : "revision_conflict";
+      }
+      if (
+        row.writer_revision !== input.expectedRevision
+        || input.nextRevision !== input.expectedRevision + 1
+      ) return "revision_conflict";
+
+      const result = this.database.prepare(`
+        UPDATE run_checkpoints
+        SET run_id = ?, checkpoint_json = ?, writer_revision = ?,
+            lease_updated_at = ?, updated_at = ?
+        WHERE thread_id = ? AND active_run_id = ?
+          AND writer_generation = ? AND writer_revision = ?
+      `).run(
+        input.runId,
+        payload,
+        input.nextRevision,
+        new Date().toISOString(),
+        new Date().toISOString(),
+        input.threadId,
+        input.runId,
+        input.generation,
+        input.expectedRevision,
+      );
+      return result.changes === 1 ? "saved" : "revision_conflict";
+    });
+  }
+
+  closeRunCheckpointLease(input: {
+    threadId: string;
+    runId: string;
+    generation: number;
+  }): boolean {
+    const result = this.database.prepare(`
+      UPDATE run_checkpoints
+      SET active_run_id = NULL, lease_updated_at = ?
+      WHERE thread_id = ? AND active_run_id = ? AND writer_generation = ?
+    `).run(new Date().toISOString(), input.threadId, input.runId, input.generation);
+    return result.changes === 1;
+  }
+
+  inspectRunCheckpointLease(input: {
+    threadId: string;
+    runId: string;
+    generation: number;
+  }): { type: "active"; revision: number; checkpoint?: unknown } | { type: "stale" } {
+    const row = this.database.prepare(`
+      SELECT active_run_id, writer_generation, writer_revision, checkpoint_json
+      FROM run_checkpoints WHERE thread_id = ?
+    `).get(input.threadId) as {
+      active_run_id: string | null;
+      writer_generation: number;
+      writer_revision: number;
+      checkpoint_json: string;
+    } | undefined;
+    if (
+      !row
+      || row.active_run_id !== input.runId
+      || row.writer_generation !== input.generation
+    ) return { type: "stale" };
+    const checkpoint = JSON.parse(row.checkpoint_json) as unknown;
+    return {
+      type: "active",
+      revision: row.writer_revision,
+      ...(checkpoint ? { checkpoint } : {}),
+    };
   }
 
   saveServiceThread(threadId: string, state: unknown): void {

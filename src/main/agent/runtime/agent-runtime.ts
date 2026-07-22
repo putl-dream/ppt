@@ -3,8 +3,6 @@ import type {ToolContext, ToolDiscoverySession} from "../tools/tool-definition";
 import {ToolRegistry} from "../tools/tool-registry";
 import {buildSystemPromptContext, clearSystemPromptCache, getSystemPrompt} from "./system-prompt";
 import {
-    agentAskUserResultSchema,
-    agentCommandProposalResultSchema,
     type AgentRuntimeOptions,
     type AgentRuntimeResult,
 } from "./runtime-types";
@@ -22,23 +20,12 @@ import {toToolSchemas} from "../tools/tool-schema";
 import type {AgentModelMessage, AgentModelToolResultBlock, AgentModelToolUseBlock,} from "../gateway/types";
 import {ensureToolResultPairing} from "../gateway/message-pairing";
 import {textFromContentBlocks, toolUseBlocksFromContent} from "../gateway/content-blocks";
-import {validateToolOutput} from "../tools/tool-validation";
-import {parseDefinedToolInput} from "../tools/tool-input";
-import {prepareToolResultData} from "./tool-result-data";
 import type {TeammateProgressEvent} from "@shared/teammate-progress";
-import {
-    buildRenderFeedback,
-    extractFeedbackImages,
-    formatRenderFeedbackMessage,
-    shouldOfferRenderFeedback,
-} from "./render-feedback-loop";
 import {
     BackgroundTaskManager,
     describeBackgroundTask,
     formatBackgroundNotifications,
-    shouldRunBackground,
 } from "./background-task-manager";
-import {type AgentMailboxMessage, formatMailboxMessagesForHistory,} from "../teammate/message-bus";
 import {
     type DurableRunCheckpoint,
     type DurableRunPhase,
@@ -48,6 +35,16 @@ import {
 import {prepareLayoutChoiceTask, reconcileVerifiedContentTasks,} from "./layout-choice-orchestrator";
 import type {ConversationDatabase} from "../../conversation-database";
 import {ensureAutonomousTaskWorker} from "../tools/core/task-graph-tools";
+import {AgentSession} from "./agent-session";
+import {CheckpointCoordinator} from "./checkpoint-coordinator";
+import {isRuntimeCancellation, rethrowIfRuntimeCancellation} from "./runtime-cancellation";
+import {ToolExecutionEngine} from "./tool-execution-engine";
+import {ToolPreflight} from "./tool-preflight";
+import {TurnInputAssembler} from "./turn-input-assembler";
+import {LeadInboxInputSource} from "./lead-inbox-input-source";
+import {PresentationCompletionPolicy} from "./presentation-completion-policy";
+import {AgentEventPorts} from "./agent-event-ports";
+import {CheckpointPolicy} from "./checkpoint-policy";
 
 /** Derive a display message for teammate progress events lacking one. */
 function teammateProgressMessage(event: TeammateProgressEvent): string {
@@ -121,16 +118,38 @@ export class AgentRuntime {
         const forwardAbort = (): void => runtimeAbortController.abort(options.signal?.reason);
         if (options.signal?.aborted) forwardAbort();
         else options.signal?.addEventListener("abort", forwardAbort, {once: true});
+        const rethrowIfCancelled = (error: unknown): void => {
+            rethrowIfRuntimeCancellation(error, runtimeAbortController.signal, options.signal);
+        };
 
         const durableRunStore = this.conversationDatabase
             ? new DurableRunStore(this.conversationDatabase)
             : options.workspaceRoot
                 ? new DurableRunStore(options.workspaceRoot)
                 : undefined;
-        const recovered = options.resumeThread
-            ? await durableRunStore?.load(options.threadId)
+        const effectiveRunId = options.runId ?? crypto.randomUUID();
+        const openedCheckpoint = durableRunStore
+            ? await durableRunStore.openLease({
+                threadId: options.threadId,
+                runId: effectiveRunId,
+                resume: options.resumeThread === true,
+            })
+            : undefined;
+        if (openedCheckpoint?.type === "lease_busy") {
+            throw new Error(
+                `Agent thread ${options.threadId} is already owned by active run ${openedCheckpoint.activeRunId}.`,
+            );
+        }
+        const recovered = openedCheckpoint?.type === "opened"
+            ? openedCheckpoint.checkpoint
             : undefined;
         const checkpointCreatedAt = recovered?.createdAt ?? new Date().toISOString();
+        const checkpoints = new CheckpointCoordinator(
+            durableRunStore,
+            openedCheckpoint?.type === "opened" ? openedCheckpoint.lease : undefined,
+            openedCheckpoint?.type === "opened" ? openedCheckpoint.currentRevision : 0,
+        );
+        let detachBackgroundCheckpoint = (): void => undefined;
 
         const discoverySession = this.discoverySessions.get(options.threadId) ?? {
             discoveredToolNames: new Set<string>(recovered?.discoveredToolNames ?? []),
@@ -144,15 +163,21 @@ export class AgentRuntime {
 
         const taskStore = createTaskStore(options.runtimeRoot);
         const taskGraphOwner = options.taskGraphOwner ?? "agent";
+        // Transcript exists before preparation so observational adapter failures during
+        // short-circuit preparation can still be diagnosed without becoming control flow.
+        const transcript: Array<Record<string, unknown>> = recovered
+            ? [...structuredClone(recovered.transcript), {role: "user", content: options.request}]
+            : [{role: "user", content: options.request}];
+        const eventPorts = new AgentEventPorts({
+            threadId: options.threadId,
+            runId: effectiveRunId,
+            onProgress: options.onProgress,
+            conversationDatabase: this.conversationDatabase,
+            transcript,
+        });
 
         // UI 回调只用于观测；渲染进程监听器即使同步抛错，也不能中断核心 Runtime。
-        const emitProgress = (event: { type: string; message: string; [key: string]: unknown }): void => {
-            try {
-                options.onProgress?.(event);
-            } catch {
-                // UI 投递失败时仍以持久化状态为准。
-            }
-        };
+        const emitProgress = eventPorts.renderer.bind(eventPorts);
 
         // 主线 2/8：准备只属于本次运行的提示词、工具上下文和任务图环境。
         // 这一步只组装执行条件，不进入模型循环，也不产生工具副作用。
@@ -235,37 +260,15 @@ export class AgentRuntime {
                 });
                 ensureAutonomousTaskWorker(context, await taskStore.listTasks());
             }
-            // Transcript 记录面向恢复与诊断的运行事实；modelMessages 则严格维护
-            // 模型协议所需的 assistant/tool_result 配对，两者职责不同但同步推进。
-            const transcript: Array<Record<string, unknown>> = recovered
-                ? [...structuredClone(recovered.transcript), {role: "user", content: options.request}]
-                : [{role: "user", content: options.request}];
+            const appendRuntimeEventSafely = eventPorts.audit.bind(eventPorts);
 
-            const appendRuntimeEventSafely = (
-                kind: Parameters<ConversationDatabase["appendRuntimeEvent"]>[1],
-                payload: Record<string, unknown>,
-                visibility: Parameters<ConversationDatabase["appendRuntimeEvent"]>[3] = "user_visible",
-            ): void => {
-                if (!options.runId || !this.conversationDatabase) return;
-                try {
-                    this.conversationDatabase.appendRuntimeEvent(options.runId, kind, payload, visibility);
-                } catch (error) {
-                    // Runtime Event 只是审计投影，不是模型或工具事实的提交边界；
-                    // 写入失败时将警告保存在可持久化 Transcript 中。
-                    transcript.push({
-                        role: "system",
-                        kind: "runtime_event_error",
-                        eventKind: kind,
-                        content: error instanceof Error ? error.message : String(error),
-                    });
-                }
-            };
-
-            const runPostToolUseHook = async (block: PostToolUseBlock): Promise<void> => {
+            const runPostToolUseHook = async (block: PostToolUseBlock): Promise<string[]> => {
                 try {
                     // PostToolUse 仅用于观测；Hook 失败不能推翻 execute() 已确定的执行事实。
                     await triggerHooks("PostToolUse", block);
+                    return [];
                 } catch (error) {
+                    rethrowIfCancelled(error);
                     const message = error instanceof Error ? error.message : String(error);
                     transcript.push({
                         role: "system",
@@ -279,13 +282,13 @@ export class AgentRuntime {
                         message: `工具 ${block.toolName} 已执行，但 PostToolUse Hook 失败：${message}`,
                         toolName: block.toolName,
                     });
+                    return [message];
                 }
             };
 
             // 主线 3/8：把 checkpoint 还原为可继续推进的内存状态。
             // 恢复的队列、待提交工具结果和后台任务会接回同一条模型循环，而不是另开流程。
             const toolSchemas = toToolSchemas(coreTools);
-            const recoveredPendingToolResults = structuredClone(recovered?.pendingToolResults ?? []);
             const modelMessages: AgentModelMessage[] = recovered
                 ? structuredClone(recovered.modelMessages)
                 : [
@@ -295,39 +298,42 @@ export class AgentRuntime {
                     })),
                     {role: "user", content: [{type: "text", text: options.request}]},
                 ];
-            const pendingToolResults: { current: AgentModelToolResultBlock[] } = {
-                current: recoveredPendingToolResults,
-            };
-            const queuedToolUses: AgentModelToolUseBlock[] = structuredClone(
-                recovered?.queuedToolUses ?? [],
-            );
-            const validationFailuresByTool = new Map<string, number>();
-            const pendingUserContent: string[] = [...(recovered?.pendingUserContent ?? [])];
-            const processedInboxMessageIds = new Set(recovered?.processedInboxMessageIds ?? []);
-            let renderFeedbackUsed = recovered?.renderFeedbackUsed ?? false;
-            let activeToolUse = recovered?.activeToolUse
-                ? structuredClone(recovered.activeToolUse)
-                : undefined;
-            let checkpointPhase: DurableRunPhase = recovered?.phase ?? "before_model";
-            let totalModelSteps = recovered?.modelStep ?? 0;
-            let terminalCheckpoint: {
-                status: DurableRunStatus;
-                result?: AgentRuntimeResult;
-                error?: string;
-            } | undefined;
+            const session = new AgentSession({
+                transcript,
+                modelMessages,
+                queuedToolUses: structuredClone(recovered?.queuedToolUses ?? []),
+                pendingToolResults: structuredClone(recovered?.pendingToolResults ?? []),
+                pendingUserContent: [...(recovered?.pendingUserContent ?? [])],
+                processedInboxMessageIds: recovered?.processedInboxMessageIds,
+                renderFeedbackUsed: recovered?.renderFeedbackUsed,
+                activeToolUse: recovered?.activeToolUse
+                    ? structuredClone(recovered.activeToolUse)
+                    : undefined,
+                phase: recovered?.phase,
+                totalModelSteps: recovered?.modelStep,
+            });
+            const queuedToolUses = session.queuedToolUses;
+            const pendingUserContent = session.pendingUserContent;
+            const processedInboxMessageIds = session.processedInboxMessageIds;
+            const validationFailuresByTool = session.validationFailuresByTool;
             const backgroundTasks = new BackgroundTaskManager({
-                runId: options.runId ?? `${options.threadId}:${crypto.randomUUID()}`,
+                runId: effectiveRunId,
                 recovered: recovered?.backgroundTasks,
             });
+            const toolExecutionEngine = new ToolExecutionEngine();
+            const toolPreflight = new ToolPreflight(this.registry);
+            const presentationCompletionPolicy = new PresentationCompletionPolicy();
+            const checkpointPolicy = new CheckpointPolicy();
 
             // checkpoint 停在 tool_running 时，进程无法判断工具是否已经产生副作用。
             // 因此只合成“不确定”结果交给模型核对，绝不自动重放该工具。
-            if (recovered?.phase === "tool_running" && activeToolUse) {
-                const alreadyRecorded = pendingToolResults.current.some(
-                    (item) => item.toolUseId === activeToolUse?.id,
+            if (recovered?.phase === "tool_running" && session.activeToolUse) {
+                const activeToolUse = session.activeToolUse;
+                const alreadyRecorded = session.pendingToolResults.some(
+                    (item) => item.toolUseId === activeToolUse.id,
                 );
                 if (!alreadyRecorded) {
-                    pendingToolResults.current.push({
+                    session.replacePendingToolResults([...session.pendingToolResults, {
                         type: "tool_result",
                         toolUseId: activeToolUse.id,
                         isError: true,
@@ -335,7 +341,7 @@ export class AgentRuntime {
                             type: "text",
                             text: "The application restarted while this tool was running. Its side effects are uncertain. Inspect durable workspace artifacts and task state before deciding whether to retry; do not assume either success or failure.",
                         }],
-                    });
+                    }]);
                 }
                 transcript.push({
                     role: "system",
@@ -344,8 +350,8 @@ export class AgentRuntime {
                     toolName: activeToolUse.name,
                     content: "Recovered an interrupted tool boundary; side effects require reconciliation.",
                 });
-                activeToolUse = undefined;
-                checkpointPhase = "tool_committed";
+                session.clearActiveTool();
+                session.setPhase("tool_committed");
             }
 
             if (
@@ -386,17 +392,17 @@ export class AgentRuntime {
                 const continuationText = [options.request, ...pendingUserContent.splice(0)]
                     .filter((part) => part.trim())
                     .join("\n\n");
-                if (checkpointPhase === "model_committed" && queuedToolUses.length > 0) {
+                if (session.phase === "model_committed" && queuedToolUses.length > 0) {
                     pendingUserContent.push(continuationText);
-                } else if (pendingToolResults.current.length > 0) {
+                } else if (session.pendingToolResults.length > 0) {
                     modelMessages.push({
                         role: "user",
                         content: [
-                            ...pendingToolResults.current,
+                            ...session.pendingToolResults,
                             {type: "text", text: continuationText},
                         ],
                     });
-                    pendingToolResults.current = [];
+                    session.replacePendingToolResults([]);
                 } else {
                     const last = modelMessages.at(-1);
                     if (last?.role === "user" && !last.content.some((block) => block.type === "tool_result")) {
@@ -410,51 +416,49 @@ export class AgentRuntime {
                 }
             }
 
-            // 主线 4/8：建立统一的 checkpoint 提交口。模型历史、工具队列、Inbox 去重集、
-            // 后台任务和终态都从这里生成同一份快照，避免各分支各自拼装恢复状态。
-            let checkpointWriteTail: Promise<void> = Promise.resolve();
-            const persistCheckpoint = async (input?: {
+            // 主线 4/8：统一生成不可变 checkpoint snapshot，具体串行写入、
+            // terminal fence 和失败终态降级由 CheckpointCoordinator 负责。
+            const createCheckpoint = (input?: {
                 status?: DurableRunStatus;
                 phase?: DurableRunPhase;
                 result?: AgentRuntimeResult;
                 error?: string;
-            }): Promise<void> => {
-                if (!durableRunStore) return;
+            }): DurableRunCheckpoint => {
                 const now = new Date().toISOString();
-                const checkpoint: DurableRunCheckpoint = {
+                return {
                     version: 1,
                     threadId: options.threadId,
-                    runId: options.runId,
-                    status: input?.status ?? terminalCheckpoint?.status ?? "running",
-                    phase: input?.phase ?? (terminalCheckpoint ? "finished" : checkpointPhase),
+                    runId: effectiveRunId,
+                    status: input?.status ?? session.terminalState?.status ?? "running",
+                    phase: input?.phase ?? (session.terminalState ? "finished" : session.phase),
                     request: options.request,
                     model: options.model,
                     executionStrategy: options.executionStrategy,
                     baseRevision: options.presentationSnapshot.revision,
-                    modelStep: totalModelSteps,
+                    modelStep: session.totalModelSteps,
                     modelMessages: structuredClone(modelMessages),
                     transcript: structuredClone(transcript),
                     queuedToolUses: structuredClone(queuedToolUses),
-                    pendingToolResults: structuredClone(pendingToolResults.current),
+                    pendingToolResults: structuredClone(session.pendingToolResults),
                     pendingUserContent: [...pendingUserContent],
                     discoveredToolNames: [...discoverySession.discoveredToolNames].sort(),
                     loadedSkillNames: [...skillSession.loadedSkillNames].sort(),
-                    renderFeedbackUsed,
-                    activeToolUse: activeToolUse ? structuredClone(activeToolUse) : undefined,
+                    renderFeedbackUsed: session.renderFeedbackUsed,
+                    activeToolUse: session.activeToolUse ? structuredClone(session.activeToolUse) : undefined,
                     backgroundTasks: backgroundTasks.snapshot(),
                     processedInboxMessageIds: [...processedInboxMessageIds].sort(),
-                    result: input?.result ?? terminalCheckpoint?.result,
-                    error: input?.error ?? terminalCheckpoint?.error,
+                    result: input?.result ?? session.terminalState?.result,
+                    error: input?.error ?? session.terminalState?.error,
                     createdAt: checkpointCreatedAt,
                     updatedAt: now,
                 };
-                // 后台任务结束可能与主循环并发请求保存；按调用顺序串行写入，
-                // 防止较旧的 running 快照覆盖较新的 finished checkpoint。
-                const write = checkpointWriteTail
-                    .catch(() => undefined)
-                    .then(() => durableRunStore.save(checkpoint));
-                checkpointWriteTail = write;
-                await write;
+            };
+            const persistCheckpoint = async (input?: Parameters<typeof createCheckpoint>[0]): Promise<void> => {
+                await checkpoints.commit(createCheckpoint(input));
+            };
+            const applyTransition = (transition: Parameters<AgentSession["apply"]>[0]) => {
+                session.apply(transition);
+                return checkpointPolicy.afterTransition(transition);
             };
 
             backgroundTasks.setOnStateChange(async () => {
@@ -468,118 +472,33 @@ export class AgentRuntime {
                     });
                 }
             });
+            detachBackgroundCheckpoint = () => backgroundTasks.setOnStateChange(undefined);
 
+            const turnInput = new TurnInputAssembler(modelMessages);
             const appendUserTurn = (input: {
                 text?: string;
                 toolResults?: AgentModelToolResultBlock[];
-            }): void => {
-                const text = input.text?.trim();
-                const toolResults = input.toolResults?.length ? input.toolResults : undefined;
-                if (!toolResults && !text) return;
-
-                if (!toolResults && text) {
-                    const last = modelMessages.at(-1);
-                    if (last?.role === "user" && !last.content.some((block) => block.type === "tool_result")) {
-                        last.content.push({type: "text", text});
-                        return;
-                    }
-                }
-
-                modelMessages.push({
-                    role: "user",
-                    content: [
-                        ...(toolResults ?? []),
-                        ...(text ? [{type: "text" as const, text}] : []),
-                    ],
-                });
-            };
+            }): void => turnInput.append(input);
 
             const flushUserTurn = (text?: string): void => {
-                const toolResults = pendingToolResults.current.length
-                    ? [...pendingToolResults.current]
+                const toolResults = session.pendingToolResults.length
+                    ? [...session.pendingToolResults]
                     : undefined;
                 appendUserTurn({text, toolResults});
-                pendingToolResults.current = [];
-            };
-
-            const handleLeadPermissionRequest = async (
-                message: AgentMailboxMessage,
-            ): Promise<string> => {
-                const payload = message.payload ?? {};
-                const requestId = typeof payload.requestId === "string" ? payload.requestId : "";
-                const toolName = typeof payload.toolName === "string" ? payload.toolName : "unknown";
-                const reason = typeof payload.reason === "string" ? payload.reason : message.content;
-                const args = payload.args;
-                const approved = options.requestToolApproval
-                    ? await options.requestToolApproval({toolName, args, reason})
-                    : false;
-
-                await options.messageBus?.send({
-                    id: `permission-response-${requestId || message.id}`,
-                    from: "lead",
-                    to: message.from,
-                    type: "permission_response",
-                    content: approved ? "Permission approved by lead." : "Permission denied by lead.",
-                    payload: {
-                        requestId,
-                        approved,
-                        toolName,
-                        reason,
-                    },
-                });
-
-                return `Permission request from ${message.from} for ${toolName} was ${approved ? "approved" : "denied"} and the response was sent.`;
+                session.replacePendingToolResults([]);
             };
 
             // Inbox 子线遵循 claim → 去重 → 写入 Transcript/checkpoint → ack。
             // 崩溃时允许重复领取，但已提交的消息 ID 会阻止模型重复消费。
-            const drainLeadInboxForModel = async (): Promise<string | undefined> => {
-                if (!options.messageBus) return undefined;
-                const claim = options.teammateManager
-                    ? await options.teammateManager.claimLeadInbox()
-                    : await options.messageBus.claimInbox("lead");
-                if (!claim) return undefined;
-                const inbox = claim.messages.filter((message) => !processedInboxMessageIds.has(message.id));
-                if (inbox.length === 0) {
-                    if (options.teammateManager) await options.teammateManager.ackLeadInboxClaim(claim.claimId);
-                    else await options.messageBus.ackInboxClaim(claim.claimId);
-                    return undefined;
-                }
-
-                const visibleMessages: AgentMailboxMessage[] = [];
-                const systemNotes: string[] = [];
-                for (const message of inbox) {
-                    if (message.type === "permission_request") {
-                        systemNotes.push(await handleLeadPermissionRequest(message));
-                    } else {
-                        visibleMessages.push(message);
-                    }
-                }
-
-                const parts = [
-                    visibleMessages.length > 0
-                        ? `[Inbox]\n${formatMailboxMessagesForHistory(visibleMessages)}`
-                        : "",
-                    systemNotes.length > 0
-                        ? `[Inbox permissions]\n${systemNotes.join("\n")}`
-                        : "",
-                ].filter(Boolean);
-                if (parts.length === 0) return undefined;
-
-                const content = parts.join("\n\n");
-                transcript.push({
-                    role: "user",
-                    content,
-                    inbox,
-                });
-                for (const message of inbox) processedInboxMessageIds.add(message.id);
-                // 先提交消息 ID 和 Transcript，再确认 claim；
-                // 崩溃最多导致 claim 重放，不会让已提交消息消失。
-                await persistCheckpoint();
-                if (options.teammateManager) await options.teammateManager.ackLeadInboxClaim(claim.claimId);
-                else await options.messageBus.ackInboxClaim(claim.claimId);
-                return content;
-            };
+            const leadInbox = new LeadInboxInputSource({
+                messageBus: options.messageBus,
+                teammateManager: options.teammateManager,
+                requestToolApproval: options.requestToolApproval,
+                processedMessageIds: processedInboxMessageIds,
+                transcript,
+                commit: persistCheckpoint,
+            });
+            const drainLeadInboxForModel = (): Promise<string | undefined> => leadInbox.drain();
 
             // 后台任务只在合法的用户轮次注入通知；若当前仍有成批工具结果待回传，
             // 通知先暂存，避免拆断 assistant 工具调用与紧随其后的 tool_result。
@@ -630,9 +549,12 @@ export class AgentRuntime {
                         : result.type === "command_proposal"
                             ? "proposal_ready"
                             : "completed");
-                terminalCheckpoint = {status, result};
-                checkpointPhase = "finished";
-                await persistCheckpoint({status, phase: "finished", result});
+                const checkpointDecision = applyTransition({type: "run_terminal", status, result});
+                if (checkpointDecision !== "terminal") {
+                    throw new Error("CheckpointPolicy rejected a Runtime terminal transition.");
+                }
+                await checkpoints.commitTerminal(createCheckpoint({status, phase: "finished", result}));
+                session.sealTerminal();
                 await runStopHookSafely({
                     event: "Stop",
                     threadId: options.threadId,
@@ -654,16 +576,15 @@ export class AgentRuntime {
                 };
                 const promptStop = await triggerHooks("UserPromptSubmit", promptBlock);
                 if (promptStop) {
-                    return finish({type: "message", content: promptStop.reason});
+                    return await finish({type: "message", content: promptStop.reason});
                 }
 
-                let runModelSteps = 0;
-                while (runModelSteps < maxSteps || queuedToolUses.length > 0) {
+                while (session.runModelSteps < maxSteps || queuedToolUses.length > 0) {
                     if (runtimeAbortController.signal.aborted) {
                         throw new Error("Run aborted by user.");
                     }
 
-                    if (checkpointPhase === "tool_committed") {
+                    if (session.phase === "tool_committed") {
                         await persistCheckpoint();
                     }
 
@@ -673,9 +594,8 @@ export class AgentRuntime {
                     if (queuedToolUse) {
                         toolCall = queuedToolUse;
                     } else {
-                        const currentModelStep = totalModelSteps;
-                        runModelSteps += 1;
-                        totalModelSteps += 1;
+                        const currentModelStep = session.totalModelSteps;
+                        const checkpointDecision = applyTransition({type: "model_input_prepared"});
                         const shouldUseStream = options.onStreamChunk !== undefined;
                         const inboxContent = await drainLeadInboxForModel();
                         const promptPayload = {
@@ -693,9 +613,7 @@ export class AgentRuntime {
                             inboxContent ?? "",
                         ].filter((part) => part.trim()).join("\n\n");
                         flushUserTurn(userContent || undefined);
-                        checkpointPhase = "before_model";
-                        activeToolUse = undefined;
-                        await persistCheckpoint();
+                        if (checkpointDecision === "commit") await persistCheckpoint();
 
                         const modelResult = await callModelWithRecovery({
                             gateway: this.gateway,
@@ -723,9 +641,9 @@ export class AgentRuntime {
                                 emitProgress({type: "request-status", message, progress: 0});
                             },
                             onContextPrepared: (preparedPayload, notes, preparedMessages) => {
-                                if (!options.runId || !this.conversationDatabase) return;
+                                if (!this.conversationDatabase) return;
                                 this.conversationDatabase.saveContextSnapshotForRun(
-                                    options.runId,
+                                    effectiveRunId,
                                     {
                                         payload: preparedPayload,
                                         messages: preparedMessages ?? ensureToolResultPairing(modelMessages),
@@ -749,17 +667,20 @@ export class AgentRuntime {
                         // 模型输出在这里分叉：有工具调用就完整保存 assistant 批次并入队；
                         // 只有纯文本输出才有资格进入最终回答检查。
                         if (toolUses.length > 0) {
-                            queuedToolUses.push(...toolUses);
-                            modelMessages.push({
-                                role: "assistant",
+                            const responseCheckpointDecision = applyTransition({
+                                type: "model_response_received",
                                 content: modelResult.content,
+                                toolUses,
                             });
-                            checkpointPhase = "model_committed";
-                            await persistCheckpoint();
+                            if (responseCheckpointDecision === "commit") await persistCheckpoint();
                             continue;
                         } else {
                             const responseText = textFromContentBlocks(modelResult.content);
-                            modelMessages.push({role: "assistant", content: modelResult.content});
+                            applyTransition({
+                                type: "model_response_received",
+                                content: modelResult.content,
+                                toolUses: [],
+                            });
                             if (options.requiredOutcome === "command_proposal") {
                                 const guidance =
                                     "This is an unresolved presentation action. Do not narrate future work. "
@@ -780,22 +701,35 @@ export class AgentRuntime {
                             }
 
                             appendRuntimeEventSafely("assistant_completed", {content: responseText});
-                            return finish({type: "message", content: responseText});
+                            return await finish({type: "message", content: responseText});
                         }
                     }
 
                     // 主线 6/8：进入单个工具事务。先把 activeToolUse 以 tool_running 落盘，
                     // 再做解析、权限判断和 execute，崩溃恢复时才能识别副作用不确定边界。
-                    activeToolUse = structuredClone(toolCall);
+                    const toolClaimCheckpointDecision = applyTransition({type: "tool_claimed", toolUse: toolCall});
                     appendRuntimeEventSafely("tool_call", {
                         toolUseId: toolCall.id,
                         toolName: toolCall.name,
                         input: structuredClone(toolCall.input),
                         parseError: toolCall.parseError,
                     }, "model_only");
-                    checkpointPhase = "tool_running";
-                    await persistCheckpoint();
+                    if (toolClaimCheckpointDecision === "commit") await persistCheckpoint();
 
+                    const recordToolResultBlock = (result: AgentModelToolResultBlock): void => {
+                        const decision = applyTransition({type: "tool_processed", result});
+                        if (decision !== "commit_before_next") {
+                            throw new Error("CheckpointPolicy rejected a normal tool result transition.");
+                        }
+                        // 先把权威内存状态推进到 tool_committed；循环顶部会在下一步前落盘。
+                        // Runtime Event 只做审计投影，写入失败不影响工具结果。
+                        appendRuntimeEventSafely("tool_result", {
+                            toolUseId: toolCall.id,
+                            toolName: toolCall.name,
+                            isError: result.isError === true,
+                            content: structuredClone(result.content),
+                        }, "model_only");
+                    };
                     const recordToolResult = (
                         text: string,
                         isError = false,
@@ -805,7 +739,7 @@ export class AgentRuntime {
                         }>,
                     ): void => {
                         if (!toolCall) return;
-                        const result: AgentModelToolResultBlock = {
+                        recordToolResultBlock({
                             type: "tool_result",
                             toolUseId: toolCall.id,
                             content: [
@@ -813,167 +747,118 @@ export class AgentRuntime {
                                 ...(images ?? []).map((image) => ({type: "image" as const, ...image})),
                             ],
                             ...(isError ? {isError: true} : {}),
-                        };
-                        const existingIndex = pendingToolResults.current.findIndex(
-                            (item) => item.toolUseId === toolCall?.id,
-                        );
-                        if (existingIndex >= 0) pendingToolResults.current[existingIndex] = result;
-                        else pendingToolResults.current.push(result);
-                        activeToolUse = undefined;
-                        checkpointPhase = "tool_committed";
-                        // 先把权威内存状态推进到 tool_committed；循环顶部会在下一步前落盘。
-                        // Runtime Event 只做审计投影，写入失败不影响工具结果。
-                        appendRuntimeEventSafely("tool_result", {
-                            toolUseId: toolCall.id,
-                            toolName: toolCall.name,
-                            isError,
-                            content: structuredClone(result.content),
-                        }, "model_only");
+                        });
                     };
 
-                    if (toolCall.parseError) {
-                        emitProgress({
-                            type: "tool-validation-failed",
-                            toolName: toolCall.name,
-                            message: `工具 ${toolCall.name} 参数 JSON 解析失败`,
-                            error: toolCall.parseError,
-                        });
-                        transcript.push({
-                            role: "tool",
-                            kind: "tool_result",
-                            toolUseId: toolCall.id,
-                            toolName: toolCall.name,
-                            error: toolCall.parseError,
-                        });
-                        recordToolResult(toolCall.parseError, true);
-                        continue;
-                    }
-
-                    const tool = this.registry.get(toolCall.name);
-                    if (!tool || tool.category !== "core" || tool.loadPolicy !== "core") {
-                        emitProgress({
-                            type: "tool-validation-failed",
-                            toolName: toolCall.name,
-                            message: `工具 ${toolCall.name} 无法直接调用`,
-                            error: "Only registered Core Tools can be called directly.",
-                        });
-                        transcript.push({
-                            role: "tool",
-                            toolName: toolCall.name,
-                            error: "Only registered Core Tools can be called directly.",
-                        });
-                        recordToolResult("Only registered Core Tools can be called directly.", true);
-                        continue;
-                    }
-
-                    const args = parseDefinedToolInput(tool, toolCall.input);
-                    if (args.repairs.length > 0) {
+                    const preflight = await toolPreflight.prepare({
+                        toolCall,
+                        context,
+                        workspaceRoot: options.workspaceRoot,
+                        threadId: options.threadId,
+                        requestToolApproval: options.requestToolApproval,
+                        signal: runtimeAbortController.signal,
+                        policyGuidance: async (toolName) => {
+                            if (!await shouldRequireDiscoverTaskPlan({
+                                stage: context.promptStage,
+                                toolName,
+                                taskStore,
+                            })) return undefined;
+                            return "Full or multi-step PPT creation in the discover stage must start with "
+                                + "TaskGraphCreatePlan(sequential=true, 3-5 concrete steps) before LoadSkill, "
+                                + "ReadPresentationSnapshot, or other execution tools. Create the visible task plan first, "
+                                + "mark every step executionTarget=teammate or lead. Leave teammate steps pending for the "
+                                + "autonomous worker; only claim lead steps, and review submitted teammate work before completion.";
+                        },
+                    });
+                    if (preflight.repairs.length > 0) {
                         appendRuntimeEventSafely("workflow_progress", {
                             type: "tool-input-repaired",
-                            toolName: tool.name,
+                            toolName: toolCall.name,
                             toolUseId: toolCall.id,
-                            repairs: args.repairs,
+                            repairs: preflight.repairs,
                         }, "internal");
                     }
-                    if (!args.success) {
-                        const failures = (validationFailuresByTool.get(tool.name) ?? 0) + 1;
-                        validationFailuresByTool.set(tool.name, failures);
-                        const correction = [
-                            `Tool ${tool.name} input validation failed. Correct the arguments and retry the tool call.`,
-                            "Pass nested objects and arrays directly; do not JSON.stringify them.",
-                            args.error.message,
-                        ].join("\n");
-                        if (failures <= 2) {
+
+                    if (preflight.type === "immediate_result") {
+                        const outcomeText = preflight.outcome.modelResult.content
+                            .filter((block) => block.type === "text")
+                            .map((block) => block.text)
+                            .join("\n");
+                        if (preflight.kind === "validation_error") {
+                            const failures = (validationFailuresByTool.get(toolCall.name) ?? 0) + 1;
+                            validationFailuresByTool.set(toolCall.name, failures);
+                            if (failures <= 2) {
+                                emitProgress({
+                                    type: "request-status",
+                                    message: `正在自动修正工具 ${toolCall.name} 的参数…`,
+                                    progress: 0,
+                                });
+                            } else {
+                                emitProgress({
+                                    type: "tool-validation-failed",
+                                    toolName: toolCall.name,
+                                    message: `工具 ${toolCall.name} 参数连续校验失败`,
+                                    error: preflight.validationError ?? outcomeText,
+                                });
+                            }
+                        } else if (preflight.kind === "policy_blocked") {
                             emitProgress({
-                                type: "request-status",
-                                message: `正在自动修正工具 ${tool.name} 的参数…`,
+                                type: "workflow-progress",
+                                message: "正在先建立可见任务计划...",
                                 progress: 0,
                             });
                         } else {
                             emitProgress({
                                 type: "tool-validation-failed",
-                                toolName: tool.name,
-                                message: `工具 ${tool.name} 参数连续校验失败`,
-                                error: args.error.message,
+                                toolName: toolCall.name,
+                                message: preflight.kind === "parse_error"
+                                    ? `工具 ${toolCall.name} 参数 JSON 解析失败`
+                                    : preflight.kind === "unavailable"
+                                        ? `工具 ${toolCall.name} 无法直接调用`
+                                        : `工具 ${toolCall.name} 执行前检查失败`,
+                                error: outcomeText,
                             });
                         }
-                        transcript.push({role: "tool", toolName: tool.name, error: correction});
-                        recordToolResult(correction, true);
+                        transcript.push({
+                            role: "tool",
+                            toolName: toolCall.name,
+                            error: outcomeText,
+                            executionStatus: "not_started",
+                            sideEffects: "none",
+                        });
+                        recordToolResultBlock(preflight.outcome.modelResult);
                         continue;
                     }
 
-                    if (await shouldRequireDiscoverTaskPlan({
-                        stage: context.promptStage,
-                        toolName: tool.name,
-                        taskStore,
-                    })) {
-                        const guidance =
-                            "Full or multi-step PPT creation in the discover stage must start with "
-                            + "TaskGraphCreatePlan(sequential=true, 3-5 concrete steps) before LoadSkill, "
-                            + "ReadPresentationSnapshot, or other execution tools. Create the visible task plan first, "
-                            + "mark every step executionTarget=teammate or lead. Leave teammate steps pending for the "
-                            + "autonomous worker; only claim lead steps, and review submitted teammate work before completion.";
+                    if (preflight.type === "denied") {
                         emitProgress({
-                            type: "workflow-progress",
-                            message: "正在先建立可见任务计划...",
-                            progress: 0,
+                            type: "tool-finished",
+                            message: `工具 ${preflight.tool.name} 被拒绝: ${preflight.reason}`,
+                            toolName: preflight.tool.name,
                         });
                         transcript.push({
                             role: "tool",
-                            toolName: tool.name,
-                            error: guidance,
+                            toolName: preflight.tool.name,
+                            error: preflight.reason,
+                            executionStatus: "not_started",
+                            sideEffects: "none",
                         });
-                        recordToolResult(guidance, true);
+                        recordToolResultBlock(preflight.modelResult);
                         continue;
                     }
+                    if (preflight.type === "hook_stopped") {
+                        return await finish({type: "message", content: preflight.reason});
+                    }
 
+                    const {tool, args, mode} = preflight.prepared;
                     emitProgress({
                         type: "tool-started",
                         message: `正在调用工具 ${tool.name}...`,
                         toolName: tool.name,
                     });
 
-                    // PreToolUse 是 execute 前唯一可阻止执行的 Hook；一旦进入 execute，
-                    // 后续错误只能描述执行事实及副作用确定性，不能再声称工具“未运行”。
-                    let preToolStop;
-                    try {
-                        preToolStop = await triggerHooks("PreToolUse", {
-                            event: "PreToolUse",
-                            toolName: tool.name,
-                            args: args.data,
-                            scope: "main",
-                            workspaceRoot: options.workspaceRoot,
-                            threadId: options.threadId,
-                            requestToolApproval: options.requestToolApproval,
-                        });
-                    } catch (error) {
-                        const errorMessage = error instanceof Error ? error.message : String(error);
-                        const guidance = `PreToolUse failed before ${tool.name} executed: ${errorMessage}`;
-                        transcript.push({
-                            role: "tool",
-                            toolName: tool.name,
-                            error: guidance,
-                            executionStatus: "not_started"
-                        });
-                        recordToolResult(guidance, true);
-                        continue;
-                    }
-                    if (preToolStop?.toolDenied) {
-                        emitProgress({
-                            type: "tool-finished",
-                            message: `工具 ${tool.name} 被拒绝: ${preToolStop.reason}`,
-                            toolName: tool.name,
-                        });
-                        transcript.push({role: "tool", toolName: tool.name, error: preToolStop.reason});
-                        recordToolResult(preToolStop.reason ?? "Tool call denied.", true);
-                        continue;
-                    }
-                    if (preToolStop) {
-                        return finish({type: "message", content: preToolStop.reason});
-                    }
-
                     if (
-                        (tool.name === "SubmitCommands" || tool.name === "AskUser")
+                        presentationCompletionPolicy.isFinishTool(tool.name)
                         && (backgroundTasks.hasRunning() || backgroundTasks.hasPendingNotifications())
                     ) {
                         const guidance =
@@ -998,91 +883,48 @@ export class AgentRuntime {
 
                     // 后台分支立即向模型返回任务占位符，真实结果由 BackgroundTaskManager
                     // 独立持久化并在后续安全轮次注入；前台分支则在当前循环完成全部阶段。
-                    if (shouldRunBackground(tool.name, args.data as Record<string, unknown>)) {
-                        const label = describeBackgroundTask(tool.name, args.data as Record<string, unknown>);
+                    if (mode === "background") {
+                        const label = describeBackgroundTask(tool.name, args as Record<string, unknown>);
                         let bgId = "";
-                        bgId = backgroundTasks.start({
+                        const scheduled = backgroundTasks.prepare({
                             toolName: tool.name,
                             label,
                             toolUseId: toolCall.id,
                             run: async () => {
-                                let rawOutput: unknown;
-                                try {
-                                    rawOutput = await tool.execute(args.data, context);
-                                } catch (error) {
-                                    const errorMessage = error instanceof Error ? error.message : String(error);
-                                    await runPostToolUseHook({
-                                        event: "PostToolUse",
-                                        toolName: tool.name,
-                                        args: args.data,
-                                        scope: "main",
-                                        executionStatus: "threw",
-                                        sideEffects: "uncertain",
-                                        error: errorMessage,
-                                        threadId: options.threadId,
-                                    });
+                                const outcome = await toolExecutionEngine.execute({
+                                    tool,
+                                    args,
+                                    context,
+                                    toolCall,
+                                    runtimeArtifactRoot: options.runtimeRoot,
+                                    threadId: options.threadId,
+                                    signal: runtimeAbortController.signal,
+                                    runPostToolUseHook,
+                                });
+                                const content = outcome.modelResult.content
+                                    .filter((block) => block.type === "text")
+                                    .map((block) => block.text)
+                                    .join("\n");
+                                if (
+                                    outcome.executionStatus === "threw"
+                                    || outcome.deliveryStatus === "validation_failed"
+                                ) {
                                     emitProgress({
                                         type: "tool-finished",
-                                        message: `后台任务 ${bgId} 执行失败：${errorMessage}`,
+                                        message: `后台任务 ${bgId} 执行失败：${content}`,
                                         toolName: tool.name,
                                     });
-                                    throw error;
+                                    throw new Error(content);
                                 }
-
-                                let output: unknown;
-                                try {
-                                    output = validateToolOutput(tool, rawOutput);
-                                } catch (error) {
-                                    const errorMessage = error instanceof Error ? error.message : String(error);
-                                    await runPostToolUseHook({
-                                        event: "PostToolUse",
-                                        toolName: tool.name,
-                                        args: args.data,
-                                        scope: "main",
-                                        executionStatus: "returned",
-                                        sideEffects: "committed_or_unknown",
-                                        error: errorMessage,
-                                        threadId: options.threadId,
-                                    });
-                                    throw new Error(
-                                        `${errorMessage} The tool returned after execution; side effects may already exist.`,
-                                    );
-                                }
-
-                                await runPostToolUseHook({
-                                    event: "PostToolUse",
-                                    toolName: tool.name,
-                                    args: args.data,
-                                    scope: "main",
-                                    executionStatus: "returned",
-                                    sideEffects: "committed_or_unknown",
-                                    result: output,
-                                    threadId: options.threadId,
-                                });
                                 emitProgress({
                                     type: "tool-finished",
                                     message: `后台任务 ${bgId} 已完成：${tool.name}`,
                                     toolName: tool.name,
                                 });
-                                try {
-                                    const modelContent = tool.mapResultToModelContent
-                                        ? await tool.mapResultToModelContent(output, context)
-                                        : undefined;
-                                    const prepared = await prepareToolResultData({
-                                        data: output,
-                                        modelContent,
-                                        workspaceRoot: options.runtimeRoot,
-                                        threadId: options.threadId,
-                                        toolUseId: toolCall.id,
-                                        toolName: tool.name,
-                                    });
-                                    return prepared.modelContent;
-                                } catch (error) {
-                                    const errorMessage = error instanceof Error ? error.message : String(error);
-                                    return `Tool ${tool.name} executed successfully, but result post-processing failed: ${errorMessage}. Do not retry blindly; inspect durable artifacts first.`;
-                                }
+                                return content;
                             },
                         });
+                        bgId = scheduled.bgId;
 
                         const placeholder =
                             `[Background task ${bgId} started: ${label}] `
@@ -1093,6 +935,10 @@ export class AgentRuntime {
                             result: {backgroundTaskId: bgId, status: "running", label},
                         });
                         recordToolResult(placeholder);
+                        // 两阶段后台协议：先把 scheduled task 与 tool placeholder 一起
+                        // 写入 durable checkpoint，确认成功后才允许真实工具产生副作用。
+                        await persistCheckpoint();
+                        scheduled.launch();
                         emitProgress({
                             type: "workflow-progress",
                             message: `后台任务 ${bgId} 已启动：${label}`,
@@ -1101,71 +947,48 @@ export class AgentRuntime {
                         continue;
                     }
 
-                    // 前台工具严格按 execute → 输出校验 → PostToolUse → 结果后处理推进。
-                    // execute 已返回后，即使校验或映射失败，也不能否认可能已经发生的副作用。
-                    let rawResult: unknown;
-                    try {
-                        rawResult = await tool.execute(args.data, context);
-                    } catch (error) {
-                        const errorMessage = error instanceof Error ? error.message : String(error);
-                        await runPostToolUseHook({
-                            event: "PostToolUse",
-                            toolName: tool.name,
-                            args: args.data,
-                            scope: "main",
-                            executionStatus: "threw",
-                            sideEffects: "uncertain",
-                            error: errorMessage,
-                            threadId: options.threadId,
-                        });
+                    const executionOutcome = await toolExecutionEngine.execute({
+                        tool,
+                        args,
+                        context,
+                        toolCall,
+                        runtimeArtifactRoot: options.runtimeRoot,
+                        threadId: options.threadId,
+                        signal: runtimeAbortController.signal,
+                        runPostToolUseHook,
+                    });
+                    const outcomeText = executionOutcome.modelResult.content
+                        .filter((block) => block.type === "text")
+                        .map((block) => block.text)
+                        .join("\n");
+                    if (executionOutcome.executionStatus === "threw") {
                         emitProgress({
                             type: "tool-finished",
-                            message: `工具 ${tool.name} 执行失败: ${errorMessage}`,
+                            message: `工具 ${tool.name} 执行失败: ${outcomeText}`,
                             toolName: tool.name,
                         });
-                        const guidance = `${errorMessage}\nThe tool threw after execution started; side effects may be uncertain. Inspect durable artifacts before retrying.`;
-                        transcript.push({role: "tool", toolName: tool.name, error: guidance, sideEffects: "uncertain"});
-                        recordToolResult(guidance, true);
-                        continue;
-                    }
-
-                    let result: unknown;
-                    try {
-                        result = validateToolOutput(tool, rawResult);
-                    } catch (error) {
-                        const errorMessage = error instanceof Error ? error.message : String(error);
-                        await runPostToolUseHook({
-                            event: "PostToolUse",
-                            toolName: tool.name,
-                            args: args.data,
-                            scope: "main",
-                            executionStatus: "returned",
-                            sideEffects: "committed_or_unknown",
-                            error: errorMessage,
-                            threadId: options.threadId,
-                        });
-                        const guidance = `${errorMessage}\nThe tool returned after execution; side effects may already exist. Do not retry blindly.`;
                         transcript.push({
                             role: "tool",
                             toolName: tool.name,
-                            error: guidance,
-                            executionStatus: "returned",
-                            sideEffects: "committed_or_unknown",
+                            error: outcomeText,
+                            sideEffects: executionOutcome.sideEffects,
                         });
-                        recordToolResult(guidance, true);
+                        recordToolResultBlock(executionOutcome.modelResult);
+                        continue;
+                    }
+                    if (executionOutcome.deliveryStatus === "validation_failed") {
+                        transcript.push({
+                            role: "tool",
+                            toolName: tool.name,
+                            error: outcomeText,
+                            executionStatus: "returned",
+                            sideEffects: executionOutcome.sideEffects,
+                        });
+                        recordToolResultBlock(executionOutcome.modelResult);
                         continue;
                     }
 
-                    await runPostToolUseHook({
-                        event: "PostToolUse",
-                        toolName: tool.name,
-                        args: args.data,
-                        scope: "main",
-                        executionStatus: "returned",
-                        sideEffects: "committed_or_unknown",
-                        result,
-                        threadId: options.threadId,
-                    });
+                    const result = executionOutcome.validatedResult;
 
                     emitProgress({
                         type: "tool-finished",
@@ -1174,103 +997,24 @@ export class AgentRuntime {
                     });
 
                     try {
-                        const commandProposalResult = agentCommandProposalResultSchema.safeParse(result);
-                        if (
-                            !commandProposalResult.success
-                            && result
-                            && typeof result === "object"
-                            && !Array.isArray(result)
-                            && (result as { type?: unknown }).type === "command_proposal"
-                        ) {
-                            throw new Error(
-                                `${tool.name} returned an invalid command proposal: ${commandProposalResult.error.message}`,
-                            );
-                        }
-                        const commandProposal = commandProposalResult.success
-                            ? commandProposalResult.data
-                            : undefined;
-
-                        if (commandProposal) {
-                            if (
-                                shouldOfferRenderFeedback(context.promptStage, commandProposal.commands, renderFeedbackUsed)
-                            ) {
-                                renderFeedbackUsed = true;
-                                emitProgress({
-                                    type: "render-feedback",
-                                    message: "正在生成排版视觉预览…",
-                                    progress: 0,
-                                });
-
-                                const feedback = await buildRenderFeedback({
-                                    presentation: context.presentation,
-                                    commands: commandProposal.commands,
-                                    proposalSummary: commandProposal.summary,
-                                    context,
-                                });
-                                const feedbackMessage = formatRenderFeedbackMessage(feedback);
-                                const feedbackImages = extractFeedbackImages(feedback);
-
-                                emitProgress({
-                                    type: "render-feedback-ready",
-                                    message: feedback.hasThumbnails
-                                        ? `已生成 ${feedback.slides.length} 页视觉预览（含缩略图）`
-                                        : `已生成 ${feedback.slides.length} 页结构化预览`,
-                                    progress: 0,
-                                });
-
-                                transcript.push({
-                                    role: "tool",
-                                    toolName: tool.name,
-                                    result: commandProposal,
-                                    renderFeedback: feedback,
-                                });
-
-                                recordToolResult(feedbackMessage, false, feedbackImages);
-                                continue;
-                            }
-
-                            return finish(commandProposal);
-                        }
-
-                        if (tool.name === "AskUser") {
-                            const askUser = agentAskUserResultSchema.parse(result);
-                            recordToolResult(askUser.content);
-                            return finish(askUser);
-                        }
-
-                        if (tool.name === "SubmitCommands") {
-                            throw new Error("SubmitCommands must return a command proposal result.");
-                        }
-
-                        const modelContent = tool.mapResultToModelContent
-                            ? await tool.mapResultToModelContent(result, context)
-                            : undefined;
-                        const prepared = await prepareToolResultData({
-                            data: result,
-                            modelContent,
-                            workspaceRoot: options.runtimeRoot,
-                            threadId: options.threadId,
-                            toolUseId: toolCall.id,
+                        const decision = await presentationCompletionPolicy.interpret({
                             toolName: tool.name,
-                        });
-                        transcript.push({
-                            role: "tool",
-                            toolName: tool.name,
-                            result: prepared.data,
                             toolUseId: toolCall.id,
-                            ...(prepared.truncated
-                                ? {
-                                    modelResult: {
-                                        truncated: true,
-                                        originalChars: prepared.originalChars,
-                                        persistedPath: prepared.persistedPath,
-                                        persistenceError: prepared.persistenceError,
-                                    },
-                                }
-                                : {}),
+                            outcome: executionOutcome,
+                            context,
+                            promptStage: context.promptStage,
+                            renderFeedbackUsed: session.renderFeedbackUsed,
+                            emitProgress,
                         });
-                        recordToolResult(prepared.modelContent);
+                        if (decision.type === "terminal") {
+                            if (decision.modelResult) recordToolResultBlock(decision.modelResult);
+                            return await finish(decision.result);
+                        }
+                        if (decision.markRenderFeedbackUsed) session.markRenderFeedbackUsed();
+                        transcript.push(decision.transcriptEntry);
+                        recordToolResultBlock(decision.modelResult);
                     } catch (error) {
+                        rethrowIfCancelled(error);
                         const errorMessage = error instanceof Error ? error.message : String(error);
                         const guidance = `Tool ${tool.name} executed successfully, but result post-processing failed: ${errorMessage}. Do not retry blindly; inspect durable artifacts first.`;
                         transcript.push({
@@ -1311,7 +1055,7 @@ export class AgentRuntime {
                     );
                 }
 
-                return finish({
+                return await finish({
                     type: "message",
                     content: [buildMainStepLimitMessage(stepLimits), finalBackgroundContent]
                         .filter(Boolean)
@@ -1320,20 +1064,27 @@ export class AgentRuntime {
             // 主线 8/8：任意异常或取消都先写入 failed/interrupted 终态，再触发 Stop Hook。
             // 最外层 finally 只负责释放资源，不参与重新判定本次运行的业务结果。
             } catch (error) {
-                const aborted = runtimeAbortController.signal.aborted;
+                const aborted = isRuntimeCancellation(
+                    error,
+                    runtimeAbortController.signal,
+                    options.signal,
+                );
                 runtimeAbortController.abort(error);
                 const errorMessage = error instanceof Error ? error.message : String(error);
-                terminalCheckpoint = {
+                session.overrideTerminalCandidate({
                     status: aborted ? "interrupted" : "failed",
                     error: errorMessage,
-                };
-                checkpointPhase = "finished";
+                });
                 try {
-                    await persistCheckpoint({
+                    const terminalSaved = await checkpoints.commitFailureTerminal(createCheckpoint({
                         status: aborted ? "interrupted" : "failed",
                         phase: "finished",
                         error: errorMessage,
-                    });
+                    }));
+                    if (!terminalSaved) {
+                        throw new Error("Failed to persist the Runtime failure terminal checkpoint.");
+                    }
+                    session.sealTerminal();
                 } catch (checkpointError) {
                     // Checkpoint Store 本身可能就是故障源；保留主错误，并使用独立的
                     // Runtime Event 投影作为尽力而为的降级通道，避免递归依赖同一存储。
@@ -1355,6 +1106,15 @@ export class AgentRuntime {
         } finally {
             runtimeAbortController.abort();
             options.signal?.removeEventListener("abort", forwardAbort);
+            detachBackgroundCheckpoint();
+            try {
+                await checkpoints.close();
+            } catch (cleanupError) {
+                emitProgress({
+                    type: "workflow-warning",
+                    message: `Checkpoint cleanup failed: ${cleanupError instanceof Error ? cleanupError.message : String(cleanupError)}`,
+                });
+            }
             try {
                 if (taskStore) {
                     const released = await taskStore.unassignInProgressByOwner(taskGraphOwner);

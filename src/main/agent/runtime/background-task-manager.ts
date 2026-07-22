@@ -13,7 +13,7 @@ export interface DurableBackgroundTask {
   toolUseId?: string;
   toolName: string;
   label: string;
-  status: "running" | "completed" | "failed" | "consumed";
+  status: "scheduled" | "running" | "completed" | "failed" | "consumed";
   startedAt: number;
   content?: string;
   isError?: boolean;
@@ -31,7 +31,11 @@ export class BackgroundTaskManager {
     this.runId = input?.runId ?? crypto.randomUUID();
     for (const recovered of input?.recovered ?? []) {
       const task = structuredClone(recovered);
-      if (task.status === "running") {
+      if (task.status === "scheduled") {
+        task.status = "failed";
+        task.isError = true;
+        task.content = "The application restarted before this background task started. It is safe to schedule it again.";
+      } else if (task.status === "running") {
         // 进程重启后无法恢复内存 Promise；直接持久化终态“不确定”通知，
         // 不再通过扫描 Transcript 推断任务状态。
         task.status = "failed";
@@ -44,7 +48,7 @@ export class BackgroundTaskManager {
 
   private readonly runId: string;
 
-  setOnStateChange(callback: () => void | Promise<void>): void {
+  setOnStateChange(callback?: () => void | Promise<void>): void {
     this.onStateChange = callback;
   }
 
@@ -58,6 +62,17 @@ export class BackgroundTaskManager {
     toolUseId?: string;
     run: () => Promise<unknown>;
   }): string {
+    const scheduled = this.prepare(input);
+    scheduled.launch();
+    return scheduled.bgId;
+  }
+
+  prepare(input: {
+    toolName: string;
+    label: string;
+    toolUseId?: string;
+    run: () => Promise<unknown>;
+  }): { bgId: string; launch: () => void } {
     this.counter += 1;
     const bgId = `${this.runId}:bg_${String(this.counter).padStart(4, "0")}`;
     this.tasks.set(bgId, {
@@ -66,22 +81,33 @@ export class BackgroundTaskManager {
       toolUseId: input.toolUseId,
       toolName: input.toolName,
       label: input.label,
-      status: "running",
+      status: "scheduled",
       startedAt: Date.now(),
     });
     void this.onStateChange?.();
 
-    void input.run().then(
-      (result) => this.settle(bgId, stringifyBackgroundResult(result), false),
-      (error) => this.settle(bgId, error instanceof Error ? error.message : String(error), true),
-    );
-
-    return bgId;
+    let launched = false;
+    return {
+      bgId,
+      launch: () => {
+        if (launched) return;
+        launched = true;
+        const task = this.tasks.get(bgId);
+        if (!task || task.status !== "scheduled") return;
+        task.status = "running";
+        task.startedAt = Date.now();
+        void this.onStateChange?.();
+        void input.run().then(
+          (result) => this.settle(bgId, stringifyBackgroundResult(result), false),
+          (error) => this.settle(bgId, error instanceof Error ? error.message : String(error), true),
+        );
+      },
+    };
   }
 
   hasRunning(): boolean {
     for (const task of this.tasks.values()) {
-      if (task.status === "running") return true;
+      if (task.status === "scheduled" || task.status === "running") return true;
     }
     return false;
   }

@@ -63,6 +63,27 @@ function modelToolCall(
 }
 
 describe("background task manager", () => {
+  it("does not start a prepared task until launch is explicitly called", async () => {
+    const manager = new BackgroundTaskManager({ runId: "run-two-phase" });
+    let executions = 0;
+    const scheduled = manager.prepare({
+      toolName: "PreviewSlide",
+      label: "PreviewSlide: prepared",
+      run: async () => {
+        executions += 1;
+        return { ok: true };
+      },
+    });
+
+    expect(executions).toBe(0);
+    expect(manager.snapshot()).toMatchObject([{ bgId: scheduled.bgId, status: "scheduled" }]);
+
+    scheduled.launch();
+    const notifications = await manager.drain();
+    expect(executions).toBe(1);
+    expect(notifications).toMatchObject([{ bgId: scheduled.bgId, status: "completed" }]);
+  });
+
   it("collects completed and failed task notifications", async () => {
     const manager = new BackgroundTaskManager();
     manager.start({
@@ -134,6 +155,28 @@ describe("background task manager", () => {
       isError: true,
     }]);
     expect(restored.collect()).toEqual([]);
+  });
+
+  it("marks recovered scheduled tasks as safe to retry", () => {
+    const restored = new BackgroundTaskManager({
+      runId: "new-run",
+      recovered: [{
+        bgId: "old-run:bg_0002",
+        runId: "old-run",
+        toolUseId: "old-tool-use",
+        toolName: "PreviewSlide",
+        label: "old scheduled preview",
+        status: "scheduled",
+        startedAt: 1,
+      }],
+    });
+
+    expect(restored.collect()).toMatchObject([{
+      bgId: "old-run:bg_0002",
+      status: "failed",
+      isError: true,
+      content: expect.stringContaining("safe to schedule it again"),
+    }]);
   });
 });
 

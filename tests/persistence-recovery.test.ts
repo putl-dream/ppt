@@ -1,4 +1,4 @@
-import { mkdtemp, readFile } from "node:fs/promises";
+import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -162,10 +162,9 @@ describe("durable agent recovery", () => {
     });
     expect(first.type).toBe("ask_user");
 
-    const checkpoint = JSON.parse(await readFile(
-      join(workspaceRoot, ".agent", "runs", "thread-recovery.json"),
-      "utf8",
-    ));
+    const checkpoint = await new DurableRunStore(workspaceRoot).load("thread-recovery");
+    expect(checkpoint).toBeDefined();
+    if (!checkpoint) throw new Error("expected a durable checkpoint");
     expect(checkpoint.status).toBe("waiting_user");
     expect(checkpoint.pendingToolResults[0]).toMatchObject({ toolUseId: "ask-1" });
 

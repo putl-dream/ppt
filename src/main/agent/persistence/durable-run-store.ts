@@ -1,4 +1,6 @@
-import { join } from "node:path";
+import { mkdir, open } from "node:fs/promises";
+import { createRequire } from "node:module";
+import { dirname, join } from "node:path";
 import type { AgentExecutionStrategy, AgentModelSelection } from "@shared/agent";
 import type { AgentRuntimeResult } from "../runtime/runtime-types";
 import type {
@@ -9,6 +11,17 @@ import type {
 import { readJsonFile, writeJsonFileAtomic } from "./atomic-json-file";
 import { ConversationDatabase } from "../../conversation-database";
 import type { DurableBackgroundTask } from "../runtime/background-task-manager";
+
+type LockRelease = () => Promise<void>;
+type ProperLockfile = {
+  lock(file: string, options?: {
+    realpath?: boolean;
+    stale?: number;
+    retries?: number | { retries?: number; minTimeout?: number; maxTimeout?: number; factor?: number };
+  }): Promise<LockRelease>;
+};
+const require = createRequire(import.meta.url);
+const lockfile = require("proper-lockfile") as ProperLockfile;
 
 export type DurableRunStatus =
   | "running"
@@ -55,6 +68,46 @@ export interface DurableRunCheckpoint {
   updatedAt: string;
 }
 
+export interface CheckpointLease {
+  threadId: string;
+  runId: string;
+  generation: number;
+}
+
+export interface DurableRunCheckpointV2 {
+  version: 2;
+  writer: {
+    runId: string;
+    generation: number;
+    revision: number;
+    active: boolean;
+  };
+  payload?: DurableRunCheckpoint;
+}
+
+export type OpenCheckpointLeaseResult =
+  | {
+      type: "opened";
+      lease: CheckpointLease;
+      currentRevision: number;
+      checkpoint?: DurableRunCheckpoint;
+    }
+  | {
+      type: "lease_busy";
+      activeRunId: string;
+      generation: number;
+    };
+
+export type CheckpointSaveResult =
+  | "saved"
+  | "already_applied"
+  | "stale_generation"
+  | "revision_conflict";
+
+export type CheckpointLeaseInspection =
+  | { type: "active"; revision: number; checkpoint?: DurableRunCheckpoint }
+  | { type: "stale" };
+
 function safeThreadId(threadId: string): string {
   return threadId.trim().replace(/[^a-zA-Z0-9._-]+/g, "-") || "thread";
 }
@@ -71,13 +124,11 @@ export class DurableRunStore {
 
   async load(threadId: string): Promise<DurableRunCheckpoint | undefined> {
     if (typeof this.storage !== "string") {
-      const checkpoint = this.storage.loadRunCheckpoint<DurableRunCheckpoint>(threadId);
-      if (!checkpoint || checkpoint.version !== 1 || checkpoint.threadId !== threadId) return undefined;
-      return checkpoint;
+      const stored = this.storage.loadRunCheckpoint<DurableRunCheckpoint | DurableRunCheckpointV2>(threadId);
+      return checkpointPayload(stored, threadId);
     }
-    const checkpoint = await readJsonFile<DurableRunCheckpoint>(this.pathFor(threadId));
-    if (!checkpoint || checkpoint.version !== 1 || checkpoint.threadId !== threadId) return undefined;
-    return checkpoint;
+    const stored = await readJsonFile<DurableRunCheckpoint | DurableRunCheckpointV2>(this.pathFor(threadId));
+    return checkpointPayload(stored, threadId);
   }
 
   async save(checkpoint: DurableRunCheckpoint): Promise<void> {
@@ -87,4 +138,186 @@ export class DurableRunStore {
     }
     await writeJsonFileAtomic(this.pathFor(checkpoint.threadId), checkpoint);
   }
+
+  async openLease(input: {
+    threadId: string;
+    runId: string;
+    resume: boolean;
+    allowTakeover?: boolean;
+  }): Promise<OpenCheckpointLeaseResult> {
+    if (typeof this.storage !== "string") {
+      const result = this.storage.openRunCheckpointLease(input);
+      if (result.type === "lease_busy") return result;
+      return {
+        type: "opened",
+        lease: {
+          threadId: input.threadId,
+          runId: input.runId,
+          generation: result.generation,
+        },
+        currentRevision: result.revision,
+        checkpoint: input.resume
+          ? checkpointPayload(result.checkpoint as DurableRunCheckpoint | DurableRunCheckpointV2 | undefined, input.threadId)
+          : undefined,
+      };
+    }
+
+    return this.withFileLeaseLock(input.threadId, async () => {
+      const path = this.pathFor(input.threadId);
+      const stored = await readJsonFile<DurableRunCheckpoint | DurableRunCheckpointV2>(path);
+      const existingWriter = stored?.version === 2 ? stored.writer : undefined;
+      if (
+        existingWriter?.active
+        && existingWriter.runId !== input.runId
+        && !input.allowTakeover
+      ) {
+        return {
+          type: "lease_busy" as const,
+          activeRunId: existingWriter.runId,
+          generation: existingWriter.generation,
+        };
+      }
+      if (existingWriter?.active && existingWriter.runId === input.runId) {
+        return {
+          type: "opened" as const,
+          lease: { threadId: input.threadId, runId: input.runId, generation: existingWriter.generation },
+          currentRevision: existingWriter.revision,
+          checkpoint: input.resume ? checkpointPayload(stored, input.threadId) : undefined,
+        };
+      }
+
+      const generation = (existingWriter?.generation ?? 0) + 1;
+      const envelope: DurableRunCheckpointV2 = {
+        version: 2,
+        writer: { runId: input.runId, generation, revision: 0, active: true },
+        payload: checkpointPayload(stored, input.threadId),
+      };
+      await writeJsonFileAtomic(path, envelope);
+      return {
+        type: "opened" as const,
+        lease: { threadId: input.threadId, runId: input.runId, generation },
+        currentRevision: 0,
+        checkpoint: input.resume ? envelope.payload : undefined,
+      };
+    });
+  }
+
+  async saveCas(input: {
+    lease: CheckpointLease;
+    expectedRevision: number;
+    nextRevision: number;
+    checkpoint: DurableRunCheckpoint;
+  }): Promise<CheckpointSaveResult> {
+    if (typeof this.storage !== "string") {
+      return this.storage.saveRunCheckpointCas({
+        threadId: input.lease.threadId,
+        runId: input.lease.runId,
+        generation: input.lease.generation,
+        expectedRevision: input.expectedRevision,
+        nextRevision: input.nextRevision,
+        checkpoint: input.checkpoint,
+      });
+    }
+    return this.withFileLeaseLock(input.lease.threadId, async () => {
+      const path = this.pathFor(input.lease.threadId);
+      const stored = await readJsonFile<DurableRunCheckpointV2>(path);
+      if (
+        stored?.version !== 2
+        || !stored.writer.active
+        || stored.writer.runId !== input.lease.runId
+        || stored.writer.generation !== input.lease.generation
+      ) return "stale_generation";
+
+      if (stored.writer.revision === input.nextRevision) {
+        return JSON.stringify(stored.payload) === JSON.stringify(input.checkpoint)
+          ? "already_applied"
+          : "revision_conflict";
+      }
+      if (
+        stored.writer.revision !== input.expectedRevision
+        || input.nextRevision !== input.expectedRevision + 1
+      ) return "revision_conflict";
+
+      await writeJsonFileAtomic(path, {
+        version: 2,
+        writer: { ...stored.writer, revision: input.nextRevision },
+        payload: structuredClone(input.checkpoint),
+      } satisfies DurableRunCheckpointV2);
+      return "saved";
+    });
+  }
+
+  async closeLease(lease: CheckpointLease): Promise<boolean> {
+    if (typeof this.storage !== "string") {
+      return this.storage.closeRunCheckpointLease(lease);
+    }
+    return this.withFileLeaseLock(lease.threadId, async () => {
+      const path = this.pathFor(lease.threadId);
+      const stored = await readJsonFile<DurableRunCheckpointV2>(path);
+      if (
+        stored?.version !== 2
+        || stored.writer.runId !== lease.runId
+        || stored.writer.generation !== lease.generation
+      ) return false;
+      await writeJsonFileAtomic(path, {
+        ...stored,
+        writer: { ...stored.writer, active: false },
+      } satisfies DurableRunCheckpointV2);
+      return true;
+    });
+  }
+
+  async inspectLease(lease: CheckpointLease): Promise<CheckpointLeaseInspection> {
+    if (typeof this.storage !== "string") {
+      const inspected = this.storage.inspectRunCheckpointLease(lease);
+      if (inspected.type === "stale") return inspected;
+      return {
+        type: "active",
+        revision: inspected.revision,
+        checkpoint: checkpointPayload(
+          inspected.checkpoint as DurableRunCheckpoint | DurableRunCheckpointV2 | undefined,
+          lease.threadId,
+        ),
+      };
+    }
+    return this.withFileLeaseLock(lease.threadId, async () => {
+      const stored = await readJsonFile<DurableRunCheckpointV2>(this.pathFor(lease.threadId));
+      if (
+        stored?.version !== 2
+        || !stored.writer.active
+        || stored.writer.runId !== lease.runId
+        || stored.writer.generation !== lease.generation
+      ) return { type: "stale" as const };
+      return {
+        type: "active" as const,
+        revision: stored.writer.revision,
+        checkpoint: checkpointPayload(stored, lease.threadId),
+      };
+    });
+  }
+
+  private async withFileLeaseLock<T>(threadId: string, task: () => Promise<T>): Promise<T> {
+    const lockTarget = `${this.pathFor(threadId)}.writer`;
+    await mkdir(dirname(lockTarget), { recursive: true });
+    await (await open(lockTarget, "a")).close();
+    const release = await lockfile.lock(lockTarget, {
+      realpath: false,
+      stale: 30_000,
+      retries: { retries: 20, factor: 1, minTimeout: 10, maxTimeout: 75 },
+    });
+    try {
+      return await task();
+    } finally {
+      await release();
+    }
+  }
+}
+
+function checkpointPayload(
+  stored: DurableRunCheckpoint | DurableRunCheckpointV2 | undefined,
+  threadId: string,
+): DurableRunCheckpoint | undefined {
+  const checkpoint = stored?.version === 2 ? stored.payload : stored;
+  if (!checkpoint || checkpoint.version !== 1 || checkpoint.threadId !== threadId) return undefined;
+  return checkpoint;
 }
