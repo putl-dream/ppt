@@ -1,6 +1,7 @@
-import { mkdir, open, readFile, rm } from "node:fs/promises";
+import { mkdir, open, readFile, readdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { createRequire } from "node:module";
+import { readJsonFile, writeJsonFileAtomic } from "../persistence/atomic-json-file";
 
 type LockRelease = () => Promise<void>;
 type LockOptions = {
@@ -43,11 +44,21 @@ export interface AgentMailboxMessage {
 }
 
 export interface SendMailboxMessageInput {
+  /** 稳定 ID 用于保证协议响应在 claim 重放时保持幂等。 */
+  id?: string;
   from: string;
   to: string;
   content: string;
   type?: AgentMailboxMessageType;
   payload?: Record<string, unknown>;
+}
+
+export interface InboxClaim {
+  version: 1;
+  claimId: string;
+  agent: string;
+  messages: AgentMailboxMessage[];
+  createdAt: string;
 }
 
 const LOCK_OPTIONS: LockOptions = {
@@ -127,7 +138,7 @@ export class MessageBus {
 
   async send(input: SendMailboxMessageInput): Promise<AgentMailboxMessage> {
     const message: AgentMailboxMessage = {
-      id: crypto.randomUUID(),
+      id: input.id ?? crypto.randomUUID(),
       from: sanitizeAgentName(input.from),
       to: sanitizeAgentName(input.to),
       content: input.content,
@@ -161,6 +172,35 @@ export class MessageBus {
     });
   }
 
+  async claimInbox(agent: string): Promise<InboxClaim | undefined> {
+    const safeAgent = sanitizeAgentName(agent);
+    const inboxPath = this.getInboxPath(safeAgent);
+    return this.withMailboxLock(inboxPath, async () => {
+      const existing = await this.readPendingClaim(safeAgent);
+      if (existing) return existing;
+
+      const messages = await this.readMessagesUnlocked(inboxPath);
+      if (messages.length === 0) return undefined;
+      const claim: InboxClaim = {
+        version: 1,
+        claimId: `${safeAgent}-${crypto.randomUUID()}`,
+        agent: safeAgent,
+        messages,
+        createdAt: new Date().toISOString(),
+      };
+      // 删除 mailbox 前先持久化 claim。两步之间崩溃可能造成批次重复，
+      // 但不会丢失消息；Runtime 消息 ID 是重放时的幂等边界。
+      await writeJsonFileAtomic(this.claimPath(claim.claimId), claim);
+      await rm(inboxPath, { force: true });
+      return claim;
+    });
+  }
+
+  async ackInboxClaim(claimId: string): Promise<void> {
+    await rm(this.claimPath(claimId), { force: true });
+    await rm(`${this.claimPath(claimId)}.bak`, { force: true });
+  }
+
   async peekInbox(agent: string): Promise<AgentMailboxMessage[]> {
     const inboxPath = this.getInboxPath(agent);
     return this.withMailboxLock(inboxPath, async () =>
@@ -178,6 +218,27 @@ export class MessageBus {
     }
   }
 
+  private claimPath(claimId: string): string {
+    return join(this.mailboxDir, ".processing", `${sanitizeAgentName(claimId)}.json`);
+  }
+
+  private async readPendingClaim(agent: string): Promise<InboxClaim | undefined> {
+    const directory = join(this.mailboxDir, ".processing");
+    let names: string[];
+    try {
+      names = await readdir(directory);
+    } catch (error) {
+      if (isNodeError(error) && error.code === "ENOENT") return undefined;
+      throw error;
+    }
+    const prefix = `${sanitizeAgentName(agent)}-`;
+    for (const name of names.filter((entry) => entry.startsWith(prefix) && entry.endsWith(".json")).sort()) {
+      const claim = await readJsonFile<InboxClaim>(join(directory, name));
+      if (claim?.version === 1 && claim.agent === sanitizeAgentName(agent)) return claim;
+    }
+    return undefined;
+  }
+
   private async readMessagesUnlocked(inboxPath: string): Promise<AgentMailboxMessage[]> {
     let raw = "";
     try {
@@ -187,7 +248,7 @@ export class MessageBus {
       throw error;
     }
 
-    return raw.split(/\r?\n/g)
+    const messages = raw.split(/\r?\n/g)
       .map((line) => line.trim())
       .filter(Boolean)
       .flatMap((line) => {
@@ -197,6 +258,12 @@ export class MessageBus {
           return [];
         }
       });
+    const seen = new Set<string>();
+    return messages.filter((message) => {
+      if (seen.has(message.id)) return false;
+      seen.add(message.id);
+      return true;
+    });
   }
 }
 

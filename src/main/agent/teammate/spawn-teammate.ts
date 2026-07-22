@@ -36,6 +36,7 @@ import {
 import {
   type AgentMailboxMessage,
   type AgentMailboxMessageType,
+  type InboxClaim,
   MessageBus,
   sanitizeAgentName,
 } from "./message-bus";
@@ -282,6 +283,19 @@ export class TeammateManager {
     routeProtocolResponses(messages, this.protocolStates);
     await this.protocolStates.flush();
     return messages;
+  }
+
+  async claimLeadInbox(): Promise<InboxClaim | undefined> {
+    await this.protocolStates.hydrate();
+    const claim = await this.bus.claimInbox("lead");
+    if (!claim) return undefined;
+    routeProtocolResponses(claim.messages, this.protocolStates);
+    await this.protocolStates.flush();
+    return claim;
+  }
+
+  async ackLeadInboxClaim(claimId: string): Promise<void> {
+    await this.bus.ackInboxClaim(claimId);
   }
 
   getProtocolState(requestId: string): ProtocolState | undefined {
@@ -1074,9 +1088,10 @@ async function executeTeammateToolBatch(input: {
       continue;
     }
 
+    let preToolStop;
     try {
-      // Hook 统一承接权限审批和策略拦截；通过校验并执行的工具都会触发 PostToolUse。
-      const preToolStop = await triggerHooks("PreToolUse", {
+      // 只有 PreToolUse 可以阻止工具执行。
+      preToolStop = await triggerHooks("PreToolUse", {
         event: "PreToolUse",
         toolName: tool.name,
         args: args.data,
@@ -1085,55 +1100,80 @@ async function executeTeammateToolBatch(input: {
         threadId: input.teammateName,
         requestToolApproval: input.requestToolApproval,
       });
-      if (preToolStop?.toolDenied) {
-        transcriptEntries.push({
-          role: "tool",
-          toolName: tool.name,
-          error: preToolStop.reason,
-        });
-        record(preToolStop.reason ?? "Tool call denied.", true);
-        finishToolProgress("failed", preToolStop.reason ?? "Tool call denied.");
-        continue;
-      }
-      if (preToolStop) {
-        finishToolProgress("completed", preToolStop.reason);
-        return {
-          kind: "stop",
-          reason: preToolStop.reason,
-          transcriptEntries,
-        };
-      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const guidance = `PreToolUse failed before ${tool.name} executed: ${errorMessage}`;
+      transcriptEntries.push({ role: "tool", toolName: tool.name, error: guidance });
+      record(guidance, true);
+      finishToolProgress("failed", guidance);
+      continue;
+    }
+    if (preToolStop?.toolDenied) {
+      transcriptEntries.push({ role: "tool", toolName: tool.name, error: preToolStop.reason });
+      record(preToolStop.reason ?? "Tool call denied.", true);
+      finishToolProgress("failed", preToolStop.reason ?? "Tool call denied.");
+      continue;
+    }
+    if (preToolStop) {
+      finishToolProgress("completed", preToolStop.reason);
+      return { kind: "stop", reason: preToolStop.reason, transcriptEntries };
+    }
 
-      const output = await tool.execute(args.data, input.toolContext);
+    let output: string;
+    try {
+      output = await tool.execute(args.data, input.toolContext);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      try {
+        await triggerHooks("PostToolUse", {
+          event: "PostToolUse",
+          toolName: tool.name,
+          args: args.data,
+          scope: "subagent",
+          executionStatus: "threw",
+          sideEffects: "uncertain",
+          error: errorMessage,
+          threadId: input.teammateName,
+        } satisfies PostToolUseBlock);
+      } catch (hookError) {
+        transcriptEntries.push({
+          role: "system",
+          kind: "hook_error",
+          hook: "PostToolUse",
+          toolName: tool.name,
+          error: hookError instanceof Error ? hookError.message : String(hookError),
+        });
+      }
+      transcriptEntries.push({ role: "tool", toolName: tool.name, error: errorMessage });
+      record(errorMessage, true);
+      finishToolProgress("failed", errorMessage);
+      continue;
+    }
+
+    try {
+      // PostToolUse 仅用于观测；失败会被记录，但不会改写已经确定的成功事实。
       await triggerHooks("PostToolUse", {
         event: "PostToolUse",
         toolName: tool.name,
         args: args.data,
         scope: "subagent",
+        executionStatus: "returned",
+        sideEffects: "committed_or_unknown",
         result: output,
         threadId: input.teammateName,
       } satisfies PostToolUseBlock);
-      transcriptEntries.push({ role: "tool", toolName: tool.name, result: output });
-      record(output);
-      finishToolProgress("completed");
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      await triggerHooks("PostToolUse", {
-        event: "PostToolUse",
-        toolName: tool.name,
-        args: args.data,
-        scope: "subagent",
-        error: errorMessage,
-        threadId: input.teammateName,
-      } satisfies PostToolUseBlock);
       transcriptEntries.push({
-        role: "tool",
+        role: "system",
+        kind: "hook_error",
+        hook: "PostToolUse",
         toolName: tool.name,
-        error: errorMessage,
+        error: error instanceof Error ? error.message : String(error),
       });
-      record(errorMessage, true);
-      finishToolProgress("failed", errorMessage);
     }
+    transcriptEntries.push({ role: "tool", toolName: tool.name, result: output });
+    record(output);
+    finishToolProgress("completed");
   }
 
   return { kind: "continue", results, transcriptEntries };

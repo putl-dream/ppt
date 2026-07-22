@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
+import { z } from "zod";
 import { AgentRuntime } from "../src/main/agent/runtime/agent-runtime";
 import { ToolRegistry } from "../src/main/agent/tools/tool-registry";
 import { readPresentationSnapshotTool } from "../src/main/agent/tools/core/read-presentation-snapshot";
@@ -12,6 +13,8 @@ import type {
   AgentModelResponse,
 } from "../src/main/agent/gateway/types";
 import { createStarterPresentation } from "../src/shared/presentation";
+import type { ToolDefinition } from "../src/main/agent/tools/tool-definition";
+import { clearHooks, registerHook } from "../src/main/agent/runtime/hook-registry";
 
 function createGateway(turns: AgentModelContentBlock[][]): AgentModelGateway & { requests: AgentModelRequest[] } {
   let index = 0;
@@ -166,5 +169,124 @@ describe("native ContentBlock runtime path", () => {
     });
     expect(result).toEqual({ type: "message", content: jsonLookingText });
     expect(gateway.requests).toHaveLength(1);
+  });
+});
+
+describe("tool lifecycle commit boundary", () => {
+  afterEach(() => clearHooks());
+
+  function lifecycleTool(input: {
+    execute: () => Promise<unknown>;
+    outputSchema?: z.ZodTypeAny;
+    mapResultToModelContent?: () => Promise<string>;
+  }): ToolDefinition<any, any> {
+    return {
+      name: "LifecycleTool",
+      description: "Exercises runtime lifecycle boundaries",
+      category: "core",
+      loadPolicy: "core",
+      inputSchema: z.object({}),
+      outputSchema: input.outputSchema,
+      risk: "low",
+      execute: input.execute,
+      mapResultToModelContent: input.mapResultToModelContent,
+    };
+  }
+
+  function lifecycleGateway(): ReturnType<typeof createGateway> {
+    return createGateway([
+      [{ type: "tool_use", id: "lifecycle-1", name: "LifecycleTool", input: {} }],
+      text("runtime continued"),
+    ]);
+  }
+
+  it("does not emit PostToolUse when a pre-hook fails before execution", async () => {
+    let executions = 0;
+    let postHooks = 0;
+    const registry = new ToolRegistry();
+    registry.register(lifecycleTool({ execute: async () => { executions += 1; return { ok: true }; } }));
+    registerHook("PreToolUse", () => { throw new Error("pre-hook unavailable"); });
+    registerHook("PostToolUse", () => { postHooks += 1; return null; });
+    const gateway = lifecycleGateway();
+
+    await new AgentRuntime(registry, gateway).run({
+      threadId: "pre-hook-failure",
+      request: "run tool",
+      presentationSnapshot: createStarterPresentation(),
+      selectedElementIds: [],
+    });
+
+    expect(executions).toBe(0);
+    expect(postHooks).toBe(0);
+    const toolResult = gateway.requests[1]!.messages!.flatMap((message) => message.content)
+      .find((block) => block.type === "tool_result");
+    expect(toolResult).toMatchObject({ isError: true });
+  });
+
+  it("keeps a successful tool result when PostToolUse throws", async () => {
+    let executions = 0;
+    let postHooks = 0;
+    const registry = new ToolRegistry();
+    registry.register(lifecycleTool({ execute: async () => { executions += 1; return { ok: true }; } }));
+    registerHook("PostToolUse", () => { postHooks += 1; throw new Error("audit sink unavailable"); });
+    const gateway = lifecycleGateway();
+
+    await new AgentRuntime(registry, gateway).run({
+      threadId: "post-hook-failure",
+      request: "run tool",
+      presentationSnapshot: createStarterPresentation(),
+      selectedElementIds: [],
+    });
+
+    expect(executions).toBe(1);
+    expect(postHooks).toBe(1);
+    const toolResult = gateway.requests[1]!.messages!.flatMap((message) => message.content)
+      .find((block) => block.type === "tool_result");
+    expect(toolResult).toMatchObject({ type: "tool_result", toolUseId: "lifecycle-1" });
+    expect(toolResult).not.toHaveProperty("isError");
+  });
+
+  it("marks invalid output as side-effect-uncertain without retrying execution", async () => {
+    let executions = 0;
+    const registry = new ToolRegistry();
+    registry.register(lifecycleTool({
+      execute: async () => { executions += 1; return { invalid: true }; },
+      outputSchema: z.object({ ok: z.literal(true) }),
+    }));
+    const gateway = lifecycleGateway();
+
+    await new AgentRuntime(registry, gateway).run({
+      threadId: "invalid-output",
+      request: "run tool",
+      presentationSnapshot: createStarterPresentation(),
+      selectedElementIds: [],
+    });
+
+    expect(executions).toBe(1);
+    const toolResult = gateway.requests[1]!.messages!.flatMap((message) => message.content)
+      .find((block) => block.type === "tool_result");
+    expect(toolResult).toMatchObject({ isError: true });
+    expect(JSON.stringify(toolResult)).toContain("side effects may already exist");
+  });
+
+  it("does not reclassify execution when model-content mapping fails", async () => {
+    const registry = new ToolRegistry();
+    registry.register(lifecycleTool({
+      execute: async () => ({ ok: true }),
+      mapResultToModelContent: async () => { throw new Error("mapping failed"); },
+    }));
+    const gateway = lifecycleGateway();
+
+    await new AgentRuntime(registry, gateway).run({
+      threadId: "mapping-failure",
+      request: "run tool",
+      presentationSnapshot: createStarterPresentation(),
+      selectedElementIds: [],
+    });
+
+    const toolResult = gateway.requests[1]!.messages!.flatMap((message) => message.content)
+      .find((block) => block.type === "tool_result");
+    expect(toolResult).not.toHaveProperty("isError");
+    expect(JSON.stringify(toolResult)).toContain("executed successfully");
   });
 });

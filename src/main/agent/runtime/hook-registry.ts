@@ -11,7 +11,10 @@ export const HOOK_EVENTS = [
 
 export type HookEvent = (typeof HOOK_EVENTS)[number];
 
-/** 非 null 返回值表示 hook 要求中断当前流程。 */
+/**
+ * 仅前置 Hook（UserPromptSubmit / PreToolUse）使用非 null 返回值中断流程。
+ * PostToolUse / Stop 是观测型 Hook；调用方不得让其返回值改写已经发生的事实。
+ */
 export type HookStopResult = {
   type: "stop";
   reason: string;

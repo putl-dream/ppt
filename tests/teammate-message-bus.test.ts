@@ -290,6 +290,37 @@ describe("MessageBus", () => {
     expect(new Set(messages.map((message) => message.content)).size).toBe(12);
   });
 
+  it("replays a durable claim until it is explicitly acknowledged", async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), "ppt-bus-claim-"));
+    const bus = new MessageBus(MessageBus.defaultMailboxDir(workspaceRoot));
+    await bus.send({ id: "claim-message", from: "worker", to: "lead", content: "durable result" });
+
+    const first = await bus.claimInbox("lead");
+    expect(first?.messages).toMatchObject([{ id: "claim-message" }]);
+    expect(await bus.peekInbox("lead")).toEqual([]);
+    expect((await bus.claimInbox("lead"))?.claimId).toBe(first?.claimId);
+
+    await bus.ackInboxClaim(first!.claimId);
+    expect(await bus.claimInbox("lead")).toBeUndefined();
+  });
+
+  it("deduplicates replayed protocol messages by their stable id", async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), "ppt-bus-idempotent-"));
+    const bus = new MessageBus(MessageBus.defaultMailboxDir(workspaceRoot));
+    const response = {
+      id: "permission-response-request-1",
+      from: "lead",
+      to: "worker",
+      type: "permission_response" as const,
+      content: "approved",
+      payload: { requestId: "request-1", approved: true },
+    };
+    await bus.send(response);
+    await bus.send(response);
+
+    expect(await bus.readInbox("worker")).toHaveLength(1);
+  });
+
   it("normalizes Windows-unsafe agent names in mailbox filenames", async () => {
     const workspaceRoot = await mkdtemp(join(tmpdir(), "ppt-bus-"));
     const bus = new MessageBus(MessageBus.defaultMailboxDir(workspaceRoot));

@@ -7,33 +7,69 @@ export interface BackgroundTaskNotification {
   isError: boolean;
 }
 
-interface BackgroundTaskRecord {
+export interface DurableBackgroundTask {
   bgId: string;
+  runId: string;
+  toolUseId?: string;
   toolName: string;
   label: string;
-  status: "running" | "completed" | "failed";
+  status: "running" | "completed" | "failed" | "consumed";
   startedAt: number;
+  content?: string;
+  isError?: boolean;
 }
 
 export class BackgroundTaskManager {
   private counter = 0;
-  private readonly tasks = new Map<string, BackgroundTaskRecord>();
-  private readonly done: BackgroundTaskNotification[] = [];
+  private readonly tasks = new Map<string, DurableBackgroundTask>();
+  private onStateChange?: () => void | Promise<void>;
+
+  constructor(input?: {
+    runId?: string;
+    recovered?: DurableBackgroundTask[];
+  }) {
+    this.runId = input?.runId ?? crypto.randomUUID();
+    for (const recovered of input?.recovered ?? []) {
+      const task = structuredClone(recovered);
+      if (task.status === "running") {
+        // 进程重启后无法恢复内存 Promise；直接持久化终态“不确定”通知，
+        // 不再通过扫描 Transcript 推断任务状态。
+        task.status = "failed";
+        task.isError = true;
+        task.content = "The application restarted before this background task committed its result. Inspect durable artifacts before retrying.";
+      }
+      this.tasks.set(task.bgId, task);
+    }
+  }
+
+  private readonly runId: string;
+
+  setOnStateChange(callback: () => void | Promise<void>): void {
+    this.onStateChange = callback;
+  }
+
+  snapshot(): DurableBackgroundTask[] {
+    return [...this.tasks.values()].map((task) => structuredClone(task));
+  }
 
   start(input: {
     toolName: string;
     label: string;
+    toolUseId?: string;
     run: () => Promise<unknown>;
   }): string {
     this.counter += 1;
-    const bgId = `bg_${String(this.counter).padStart(4, "0")}`;
+    const bgId = `${this.runId}:bg_${String(this.counter).padStart(4, "0")}`;
     this.tasks.set(bgId, {
       bgId,
+      runId: this.runId,
+      toolUseId: input.toolUseId,
       toolName: input.toolName,
       label: input.label,
       status: "running",
       startedAt: Date.now(),
     });
+    void this.onStateChange?.();
 
     void input.run().then(
       (result) => this.settle(bgId, stringifyBackgroundResult(result), false),
@@ -51,14 +87,29 @@ export class BackgroundTaskManager {
   }
 
   hasPendingNotifications(): boolean {
-    return this.done.length > 0;
+    for (const task of this.tasks.values()) {
+      if (task.status === "completed" || task.status === "failed") return true;
+    }
+    return false;
   }
 
   collect(): BackgroundTaskNotification[] {
-    const ready = this.done.splice(0, this.done.length);
-    for (const notification of ready) {
-      this.tasks.delete(notification.bgId);
+    const ready: BackgroundTaskNotification[] = [];
+    for (const task of this.tasks.values()) {
+      if (task.status !== "completed" && task.status !== "failed") continue;
+      ready.push({
+        bgId: task.bgId,
+        toolName: task.toolName,
+        label: task.label,
+        status: task.status,
+        content: task.content ?? "",
+        isError: task.isError === true,
+      });
+      // 在 checkpoint 中保留终态记录，使恢复逻辑能够区分
+      // 已投递通知与仍需重放的任务。
+      task.status = "consumed";
     }
+    if (ready.length > 0) void this.onStateChange?.();
     return ready;
   }
 
@@ -74,14 +125,11 @@ export class BackgroundTaskManager {
     const task = this.tasks.get(bgId);
     if (!task) return;
     task.status = isError ? "failed" : "completed";
-    this.done.push({
-      bgId,
-      toolName: task.toolName,
-      label: task.label,
-      status: task.status,
-      content,
-      isError,
-    });
+    task.content = content;
+    task.isError = isError;
+    // 后台完成状态独立于下一次模型回合持久化，避免崩溃后把
+    // 已成功结束的任务重新解释为 running。
+    void this.onStateChange?.();
   }
 }
 

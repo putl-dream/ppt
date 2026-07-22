@@ -86,6 +86,55 @@ describe("background task manager", () => {
     expect(manager.hasRunning()).toBe(false);
     expect(manager.collect()).toEqual([]);
   });
+
+  it("persists terminal and consumed state with run-scoped ids", async () => {
+    const manager = new BackgroundTaskManager({ runId: "run-a" });
+    const bgId = manager.start({
+      toolName: "PreviewSlide",
+      toolUseId: "tool-use-a",
+      label: "PreviewSlide: durable",
+      run: async () => ({ ok: true }),
+    });
+
+    expect(bgId).toBe("run-a:bg_0001");
+    const notifications = await manager.drain();
+    expect(notifications).toMatchObject([{ bgId, status: "completed" }]);
+    expect(manager.snapshot()).toMatchObject([{
+      bgId,
+      runId: "run-a",
+      toolUseId: "tool-use-a",
+      status: "consumed",
+    }]);
+
+    const restored = new BackgroundTaskManager({
+      runId: "run-b",
+      recovered: manager.snapshot(),
+    });
+    expect(restored.hasPendingNotifications()).toBe(false);
+    expect(restored.collect()).toEqual([]);
+  });
+
+  it("turns only genuinely running recovered tasks into one failure notification", () => {
+    const restored = new BackgroundTaskManager({
+      runId: "new-run",
+      recovered: [{
+        bgId: "old-run:bg_0001",
+        runId: "old-run",
+        toolUseId: "old-tool-use",
+        toolName: "PreviewSlide",
+        label: "old preview",
+        status: "running",
+        startedAt: 1,
+      }],
+    });
+
+    expect(restored.collect()).toMatchObject([{
+      bgId: "old-run:bg_0001",
+      status: "failed",
+      isError: true,
+    }]);
+    expect(restored.collect()).toEqual([]);
+  });
 });
 
 describe("AgentRuntime background tool path", () => {
@@ -199,5 +248,47 @@ describe("AgentRuntime background tool path", () => {
     expect(notificationText).toContain("<tool>ExecuteExtraTool</tool>");
     expect(notificationText).toContain("ExportPptx: pptx");
     expect(notificationText).toContain("deck.pptx");
+  });
+
+  it("includes settled background results in the step-limit result", async () => {
+    const previewSchema = z.object({
+      slideId: z.string(),
+      run_in_background: z.boolean().optional(),
+    });
+    const mockPreview: ToolDefinition<typeof previewSchema, { summary: string }> = {
+      name: "PreviewSlide",
+      description: "Mock background preview",
+      category: "core",
+      loadPolicy: "core",
+      inputSchema: previewSchema,
+      risk: "low",
+      execute: async () => ({ summary: "preview ready" }),
+    };
+    const registry = new ToolRegistry();
+    registry.register(mockPreview);
+    const gateway = createNativeGateway(() => ({
+      provider: "anthropic",
+      model: "test-model",
+      content: [modelToolCall("preview-call", "PreviewSlide", {
+        slideId: "slide-1",
+        run_in_background: true,
+      })],
+    }));
+
+    const result = await new AgentRuntime(registry, gateway).run({
+      threadId: "background-step-limit",
+      runId: "background-step-limit-run",
+      request: "preview once",
+      presentationSnapshot: createStarterPresentation(),
+      selectedElementIds: [],
+      maxSteps: 1,
+    });
+
+    expect(result.type).toBe("message");
+    if (result.type === "message") {
+      expect(result.content).toContain("<task_notification>");
+      expect(result.content).toContain("preview ready");
+      expect(result.content).toContain("background-step-limit-run:bg_0001");
+    }
   });
 });

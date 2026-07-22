@@ -8,6 +8,7 @@ import type {
 } from "../gateway/types";
 import { readJsonFile, writeJsonFileAtomic } from "./atomic-json-file";
 import { ConversationDatabase } from "../../conversation-database";
+import type { DurableBackgroundTask } from "../runtime/background-task-manager";
 
 export type DurableRunStatus =
   | "running"
@@ -44,6 +45,10 @@ export interface DurableRunCheckpoint {
   loadedSkillNames: string[];
   renderFeedbackUsed: boolean;
   activeToolUse?: AgentModelToolUseBlock;
+  /** 每次运行的后台任务终态与通知消费状态。 */
+  backgroundTasks?: DurableBackgroundTask[];
+  /** 在确认可恢复 Inbox claim 前已提交的消息 ID。 */
+  processedInboxMessageIds?: string[];
   result?: AgentRuntimeResult;
   error?: string;
   createdAt: string;

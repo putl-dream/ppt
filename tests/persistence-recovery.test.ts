@@ -18,6 +18,7 @@ import type {
   AgentModelResponse,
 } from "../src/main/agent/gateway/types";
 import { DurableRunStore } from "../src/main/agent/persistence/durable-run-store";
+import { MessageBus } from "../src/main/agent/teammate/message-bus";
 
 function gatewayFor(turns: AgentModelContentBlock[][]): AgentModelGateway & {
   requests: AgentModelRequest[];
@@ -40,6 +41,54 @@ function gatewayFor(turns: AgentModelContentBlock[][]): AgentModelGateway & {
 }
 
 describe("durable agent recovery", () => {
+  it("acks a replayed Inbox claim without exposing an already committed message twice", async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), "agent-inbox-recovery-"));
+    const bus = new MessageBus(MessageBus.defaultMailboxDir(workspaceRoot));
+    await bus.send({
+      id: "already-committed",
+      from: "worker",
+      to: "lead",
+      content: "should not replay",
+    });
+    await bus.claimInbox("lead");
+    const now = new Date().toISOString();
+    await new DurableRunStore(workspaceRoot).save({
+      version: 1,
+      threadId: "inbox-recovery",
+      status: "running",
+      phase: "before_model",
+      request: "old request",
+      baseRevision: 0,
+      modelStep: 0,
+      modelMessages: [{ role: "user", content: [{ type: "text", text: "old request" }] }],
+      transcript: [{ role: "user", content: "old request" }],
+      queuedToolUses: [],
+      pendingToolResults: [],
+      pendingUserContent: [],
+      discoveredToolNames: [],
+      loadedSkillNames: [],
+      renderFeedbackUsed: false,
+      backgroundTasks: [],
+      processedInboxMessageIds: ["already-committed"],
+      createdAt: now,
+      updatedAt: now,
+    });
+    const gateway = gatewayFor([[{ type: "text", text: "continued once" }]]);
+
+    await new AgentRuntime(new ToolRegistry(), gateway).run({
+      threadId: "inbox-recovery",
+      request: "continue",
+      presentationSnapshot: createStarterPresentation(),
+      selectedElementIds: [],
+      workspaceRoot,
+      resumeThread: true,
+      messageBus: bus,
+    });
+
+    expect(JSON.stringify(gateway.requests[0].messages)).not.toContain("should not replay");
+    expect(await bus.claimInbox("lead")).toBeUndefined();
+  });
+
   it("does not replay an interrupted tool with uncertain side effects", async () => {
     const workspaceRoot = await mkdtemp(join(tmpdir(), "agent-tool-recovery-"));
     const toolUse = {

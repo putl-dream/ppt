@@ -13,6 +13,13 @@ export interface PostToolUseBlock {
   toolName: string;
   args: unknown;
   scope: "main" | "subagent";
+  /**
+   * `returned` 仅表示 execute() 已正常返回，不代表结果校验或后续 Runtime
+   * 处理成功。工具抛错前仍可能产生部分副作用，消费者不能根据 `threw`
+   * 推断副作用已经回滚。
+   */
+  executionStatus?: "returned" | "threw";
+  sideEffects?: "committed_or_unknown" | "uncertain";
   result?: unknown;
   error?: string;
   threadId?: string;
@@ -23,7 +30,7 @@ export interface StopBlock {
   threadId?: string;
   scope: "main" | "subagent";
   result: AgentRuntimeResult | string;
-  reason: "completed" | "step_limit" | "aborted";
+  reason: "completed" | "waiting_user" | "proposal_ready" | "step_limit" | "aborted" | "failed";
 }
 
 export type RuntimeHookContext = {
