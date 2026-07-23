@@ -1,9 +1,4 @@
 import type {
-  AgentModelMessage,
-  AgentModelToolResultBlock,
-  AgentModelToolUseBlock,
-} from "../../gateway/types";
-import type {
   DurableRunPhase,
   DurableRunStatus,
 } from "../../persistence/durable-run-store";
@@ -19,15 +14,10 @@ export interface AgentTerminalState {
 
 export interface AgentSessionInput {
   transcript: Array<Record<string, unknown>>;
-  modelMessages: AgentModelMessage[];
-  queuedToolUses?: AgentModelToolUseBlock[];
-  pendingToolResults?: AgentModelToolResultBlock[];
   pendingUserContent?: string[];
   processedInboxMessageIds?: string[];
-  activeToolUse?: AgentModelToolUseBlock;
   phase?: DurableRunPhase;
   totalModelSteps?: number;
-  renderFeedbackUsed?: boolean;
 }
 
 /**
@@ -39,30 +29,19 @@ export interface AgentSessionInput {
  */
 export class AgentSession {
   private readonly transcriptValue: Array<Record<string, unknown>>;
-  private readonly modelMessagesValue: AgentModelMessage[];
-  private readonly queuedToolUsesValue: AgentModelToolUseBlock[];
   private readonly pendingUserContentValue: string[];
   private readonly processedInboxMessageIdsValue: Set<string>;
-  private readonly validationFailuresByToolValue = new Map<string, number>();
-  private pendingToolResultsValue: AgentModelToolResultBlock[];
-  private activeToolUseValue?: AgentModelToolUseBlock;
   private phaseValue: DurableRunPhase;
   private totalModelStepsValue: number;
   private runModelStepsValue = 0;
-  private renderFeedbackUsedValue: boolean;
   private terminalStateValue?: AgentTerminalState;
 
   constructor(input: AgentSessionInput) {
     this.transcriptValue = input.transcript;
-    this.modelMessagesValue = input.modelMessages;
-    this.queuedToolUsesValue = input.queuedToolUses ?? [];
-    this.pendingToolResultsValue = input.pendingToolResults ?? [];
     this.pendingUserContentValue = input.pendingUserContent ?? [];
     this.processedInboxMessageIdsValue = new Set(input.processedInboxMessageIds ?? []);
-    this.activeToolUseValue = input.activeToolUse;
     this.phaseValue = input.phase ?? "before_model";
     this.totalModelStepsValue = input.totalModelSteps ?? 0;
-    this.renderFeedbackUsedValue = input.renderFeedbackUsed ?? false;
   }
 
   get transcript(): readonly Record<string, unknown>[] {
@@ -71,46 +50,6 @@ export class AgentSession {
 
   appendTranscript(entry: Record<string, unknown>): void {
     this.transcriptValue.push(entry);
-  }
-
-  get modelMessages(): readonly AgentModelMessage[] {
-    return this.modelMessagesValue;
-  }
-
-  appendUserTurn(input: {
-    text?: string;
-    toolResults?: readonly AgentModelToolResultBlock[];
-  }): void {
-    const text = input.text?.trim();
-    const toolResults = input.toolResults?.length ? input.toolResults : undefined;
-    if (!toolResults && !text) return;
-
-    if (!toolResults && text) {
-      const last = this.modelMessagesValue.at(-1);
-      if (last?.role === "user" && !last.content.some((block) => block.type === "tool_result")) {
-        last.content.push({ type: "text", text });
-        return;
-      }
-    }
-    this.modelMessagesValue.push({
-      role: "user",
-      content: [
-        ...(toolResults ?? []),
-        ...(text ? [{ type: "text" as const, text }] : []),
-      ],
-    });
-  }
-
-  get queuedToolUses(): readonly AgentModelToolUseBlock[] {
-    return this.queuedToolUsesValue;
-  }
-
-  takeQueuedToolUse(): AgentModelToolUseBlock | undefined {
-    return this.queuedToolUsesValue.shift();
-  }
-
-  hasQueuedToolUses(): boolean {
-    return this.queuedToolUsesValue.length > 0;
   }
 
   get pendingUserContent(): readonly string[] {
@@ -141,49 +80,6 @@ export class AgentSession {
     for (const id of ids) this.processedInboxMessageIdsValue.add(id);
   }
 
-  recordValidationFailure(toolName: string): number {
-    const failures = (this.validationFailuresByToolValue.get(toolName) ?? 0) + 1;
-    this.validationFailuresByToolValue.set(toolName, failures);
-    return failures;
-  }
-
-  get pendingToolResults(): readonly AgentModelToolResultBlock[] {
-    return this.pendingToolResultsValue;
-  }
-
-  replacePendingToolResults(results: readonly AgentModelToolResultBlock[]): void {
-    this.pendingToolResultsValue = [...results];
-  }
-
-  takePendingToolResults(): AgentModelToolResultBlock[] {
-    const results = this.pendingToolResultsValue;
-    this.pendingToolResultsValue = [];
-    return results;
-  }
-
-  commitToolResult(result: AgentModelToolResultBlock): void {
-    const existingIndex = this.pendingToolResultsValue.findIndex(
-      (item) => item.toolUseId === result.toolUseId,
-    );
-    if (existingIndex >= 0) this.pendingToolResultsValue[existingIndex] = result;
-    else this.pendingToolResultsValue.push(result);
-    this.activeToolUseValue = undefined;
-    this.phaseValue = "tool_committed";
-  }
-
-  get activeToolUse(): AgentModelToolUseBlock | undefined {
-    return this.activeToolUseValue;
-  }
-
-  claimTool(toolUse: AgentModelToolUseBlock): void {
-    this.activeToolUseValue = structuredClone(toolUse);
-    this.phaseValue = "tool_running";
-  }
-
-  clearActiveTool(): void {
-    this.activeToolUseValue = undefined;
-  }
-
   get phase(): DurableRunPhase {
     return this.phaseValue;
   }
@@ -205,16 +101,7 @@ export class AgentSession {
     this.runModelStepsValue += 1;
     this.totalModelStepsValue += 1;
     this.phaseValue = "before_model";
-    this.activeToolUseValue = undefined;
     return current;
-  }
-
-  get renderFeedbackUsed(): boolean {
-    return this.renderFeedbackUsedValue;
-  }
-
-  markRenderFeedbackUsed(): void {
-    this.renderFeedbackUsedValue = true;
   }
 
   get terminalState(): AgentTerminalState | undefined {
@@ -249,17 +136,13 @@ export class AgentSession {
         this.beginModelStep();
         return;
       case "model_response_received":
-        this.modelMessagesValue.push({ role: "assistant", content: transition.content });
-        if (transition.toolUses.length > 0) {
-          this.queuedToolUsesValue.push(...transition.toolUses);
-          this.phaseValue = "model_committed";
-        }
+        if (transition.toolUses.length > 0) this.phaseValue = "model_committed";
         return;
       case "tool_claimed":
-        this.claimTool(transition.toolUse);
+        this.phaseValue = "tool_running";
         return;
       case "tool_processed":
-        this.commitToolResult(transition.result);
+        this.phaseValue = "tool_committed";
         return;
       case "run_terminal":
         this.setTerminalState({

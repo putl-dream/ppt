@@ -1,6 +1,6 @@
 # Agent Query 生命周期与会话状态重构计划
 
-> 状态：核心实施完成（2026-07-23）；类型检查与单元测试已通过，真实 Gateway 集成验证待凭证
+> 状态：第二轮生命周期收口已完成（2026-07-23）；类型检查与单元测试已通过，真实 Gateway 集成验证待凭证
 >
 > 范围：主 Agent 的会话历史、`AgentRuntimeOptions` 组装、Query loop、工具批次、checkpoint 与恢复语义。
 >
@@ -734,3 +734,12 @@ Driver 不读取：
 - 旧持久化格式有兼容读取与迁移路径；
 - typecheck、单元测试和可执行的真实调用验证结果均已记录；
 - 未修改无关测试或以特判绕过失败。
+
+## 13. 第二轮实施结果（2026-07-23）
+
+- Query loop 的模型输入、工具批次、render feedback、validation counter 与输出恢复计数只由 `AgentQueryParams`、committed `AgentQueryState` 和 `AgentIterationWorkspace` 驱动；`AgentSession` 不再保存这些别名。
+- waiting_user 直接保存 suspended Workspace；回答恢复后先完成并提交原工具批次，再进入下一次模型调用。
+- checkpoint 新 writer 使用 version 2 的 `committedState + inflight` 结构，不再生成 version 1 的 `modelMessages`、tool queue/results、active tool 或 render feedback 字段；version 1 只保留兼容 reader。
+- `ThreadId`、`RunId`、`QueryId` 已用于 normalized Runtime、Scope、Prepared deps、version 2 checkpoint 与 lease，字符串只保留在公开输入和旧存储读取边界。
+- `resumeThread`、`onStreamChunk` 与 `TurnInputAssembler` 已移除；恢复只接受显式 `QueryStartMode`，流式只使用 attempt-aware `onStreamEvent`。
+- `fallbackModel`、`maxOutputTokensOverride`、`userContext`、`systemContext`、`querySource` 与 `canUseTool` 已进入实际模型/工具决策路径，并由单元测试覆盖。

@@ -38,10 +38,17 @@ function readGatewayConfig(gateway: AgentModelGateway): AgentGatewayConfig {
   return reader.getGatewayConfig?.() ?? resolveAgentGatewayConfig();
 }
 export interface ModelPromptPayload {
+  /** Specialized one-shot callers only; the main query loop leaves this unset. */
   request?: string;
   task?: string;
+  /** Legacy/specialized compact input; the main query loop uses canonical messages. */
   conversation?: Array<{ role: "user" | "assistant"; content: string }>;
   transcript: Array<Record<string, unknown>>;
+  queryContext?: {
+    source: "user" | "continuation" | "recovery";
+    user: Readonly<Record<string, string>>;
+    system: Readonly<Record<string, string>>;
+  };
 }
 
 export interface ModelCallRecoveryOptions {
@@ -50,6 +57,8 @@ export interface ModelCallRecoveryOptions {
   responseContract?: AgentResponseContract;
   promptPayload: ModelPromptPayload;
   model?: AgentModelSelection;
+  fallbackModel?: AgentModelSelection;
+  maxOutputTokensOverride?: number;
   workspaceRoot?: string;
   threadId?: string;
   signal?: AbortSignal;
@@ -72,6 +81,9 @@ export interface ModelCallRecoveryResult {
   stopReason?: string;
   modelUsed?: AgentModelSelection;
   recoveryNotes: string[];
+  maxOutputTokensOverride?: number;
+  maxOutputTokensRecoveryCount: number;
+  hasAttemptedReactiveCompact: boolean;
 }
 
 function buildPrompt(payload: ModelPromptPayload): string {
@@ -194,7 +206,8 @@ export async function callModelWithRecovery(
   const defaultOutputTokens = gatewayConfig.maxOutputTokens;
   let payload: ModelPromptPayload = structuredClone(options.promptPayload);
   let modelSelection = options.model;
-  let maxOutputTokens: number | undefined;
+  let maxOutputTokens = options.maxOutputTokensOverride;
+  let maxOutputTokensRecoveryCount = 0;
   let emergencyTrimmed = false;
   let compactHistoryFailures = 0;
   let continuationPartial: string | undefined;
@@ -267,6 +280,9 @@ export async function callModelWithRecovery(
           stopReason: response.stopReason,
           modelUsed: modelSelection,
           recoveryNotes,
+          maxOutputTokensOverride: maxOutputTokens,
+          maxOutputTokensRecoveryCount,
+          hasAttemptedReactiveCompact: emergencyTrimmed,
         };
       }
 
@@ -280,6 +296,7 @@ export async function callModelWithRecovery(
         const nextTokens = nextOutputTokenUpgrade(currentTokens);
         if (nextTokens !== undefined) {
           maxOutputTokens = nextTokens;
+          maxOutputTokensRecoveryCount += 1;
           notify(
             `输出被截断，提升 max_tokens 至 ${nextTokens} 后重试。`,
             "回复内容较长，正在继续生成…",
@@ -298,6 +315,9 @@ export async function callModelWithRecovery(
         stopReason: response.stopReason,
         modelUsed: modelSelection,
         recoveryNotes,
+        maxOutputTokensOverride: maxOutputTokens,
+        maxOutputTokensRecoveryCount,
+        hasAttemptedReactiveCompact: emergencyTrimmed,
       };
     } catch (error) {
       lastError = error;
@@ -321,8 +341,16 @@ export async function callModelWithRecovery(
         continue;
       }
 
-      if (consecutiveOverloaded >= CONSECUTIVE_OVERLOAD_SWITCH && modelSelection) {
-        const fallback = resolveFallbackModelSelection(modelSelection, gatewayConfig);
+      if (consecutiveOverloaded >= CONSECUTIVE_OVERLOAD_SWITCH) {
+        const fallback = options.fallbackModel
+          && (
+            !modelSelection
+            ||
+            options.fallbackModel.provider !== modelSelection.provider
+            || options.fallbackModel.model !== modelSelection.model
+          )
+          ? options.fallbackModel
+          : resolveFallbackModelSelection(modelSelection, gatewayConfig);
         if (fallback) {
           modelSelection = fallback;
           consecutiveOverloaded = 0;

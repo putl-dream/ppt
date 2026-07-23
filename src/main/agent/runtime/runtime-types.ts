@@ -12,7 +12,13 @@ import type { LayoutChoice } from "@shared/layout-preference";
 import type { ToolApprovalHandler } from "./tools/permission-check";
 import type { MessageBus } from "../teammate/message-bus";
 import type { TeammateManager } from "../teammate/spawn-teammate";
-import type { QueryStartMode } from "./query/query-types";
+import {
+  asRunId,
+  asThreadId,
+  type QueryStartMode,
+  type RunId,
+  type ThreadId,
+} from "./query/query-types";
 
 export type AgentRuntimeRisk = "low" | "medium" | "high";
 
@@ -51,18 +57,19 @@ export type AgentRuntimeStreamEvent =
   | { type: "attempt_committed"; attemptId: string };
 
 export interface AgentRuntimeOptions {
-  threadId: string;
+  threadId: ThreadId;
   request: string;
   presentationSnapshot: Presentation;
   currentSlideId?: string;
   selectedElementIds: string[];
   model?: AgentModelSelection;
+  fallbackModel?: AgentModelSelection;
   executionStrategy?: AgentExecutionStrategy;
-  runId?: string;
-  /** Explicit query lifecycle. Prefer this over the compatibility resume flag. */
-  startMode?: QueryStartMode;
-  /** Restore the canonical ContentBlock checkpoint for this thread. */
-  resumeThread?: boolean;
+  runId?: RunId;
+  startMode: QueryStartMode;
+  userContext?: Readonly<Record<string, string>>;
+  systemContext?: Readonly<Record<string, string>>;
+  maxOutputTokensOverride?: number;
   messageHistory?: Array<{ role: "user" | "assistant"; content: string }>;
   requiredOutcome?: "any" | "command_proposal";
   /** Structured layout selection; runtime schedules design work without prompt-driven delegation. */
@@ -74,7 +81,6 @@ export interface AgentRuntimeOptions {
   taskGraphOwner?: string;
   maxSteps?: number;
   agentStepLimits?: AgentStepLimits;
-  onStreamChunk?: (chunk: string, source: "message" | "tool-summary") => void;
   onStreamEvent?: (event: AgentRuntimeStreamEvent) => void;
   onThinkingChunk?: (chunk: string, modelStep: number) => void;
   signal?: AbortSignal;
@@ -86,4 +92,24 @@ export interface AgentRuntimeOptions {
   teammateManager?: TeammateManager;
   /** Test/harness override; accepts merged or legacy stage names. */
   stageHint?: string;
+}
+
+export type AgentRuntimeInput = Omit<
+  AgentRuntimeOptions,
+  "threadId" | "runId" | "startMode"
+> & {
+  threadId: string;
+  runId?: string;
+  startMode?: QueryStartMode;
+};
+
+export function normalizeAgentRuntimeOptions(
+  input: AgentRuntimeInput,
+): AgentRuntimeOptions {
+  return {
+    ...input,
+    threadId: asThreadId(input.threadId),
+    runId: input.runId ? asRunId(input.runId) : undefined,
+    startMode: input.startMode ?? { type: "new_query" },
+  };
 }

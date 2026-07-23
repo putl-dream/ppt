@@ -20,36 +20,29 @@ export interface AgentQueryAssemblyInput<TDeps> {
 /**
  * The sole adapter from application-level Runtime options to stable query input.
  * Compatibility fields are interpreted here and do not leak into turn runners.
- */
+  */
 export class AgentQueryAssembler {
   assemble<TDeps>(input: AgentQueryAssemblyInput<TDeps>): AgentQueryParams<TDeps> {
-    const startMode = resolveQueryStartMode(input.options);
+    const startMode = input.options.startMode;
     return Object.freeze({
       messages: structuredClone(input.messages),
       systemPrompt: input.systemPrompt,
-      userContext: Object.freeze({
-        request: input.options.request,
-      }),
+      userContext: Object.freeze({ ...(input.options.userContext ?? {}) }),
       systemContext: Object.freeze({
+        ...(input.options.systemContext ?? {}),
         threadId: input.options.threadId,
         runId: input.options.runId ?? "",
       }),
       canUseTool: input.canUseTool ?? (() => true),
       toolUseContext: input.toolUseContext,
       model: input.options.model,
+      fallbackModel: input.options.fallbackModel,
       querySource: querySourceFor(startMode),
+      maxOutputTokensOverride: input.options.maxOutputTokensOverride,
       maxTurns: input.maxTurns,
       deps: input.deps,
     });
   }
-}
-
-export function resolveQueryStartMode(options: AgentRuntimeOptions): QueryStartMode {
-  if (options.startMode) return options.startMode;
-  if (options.resumeThread) {
-    return { type: "resume_query", reason: "interrupted" };
-  }
-  return { type: "new_query" };
 }
 
 function querySourceFor(startMode: QueryStartMode): AgentQuerySource {

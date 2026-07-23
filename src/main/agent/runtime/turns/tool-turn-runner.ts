@@ -6,7 +6,7 @@ import {
 } from "../background/background-task-manager";
 import type { AgentLoopTurnOutcome, PreparedAgentRun } from "./prepared-agent-run";
 import { rethrowIfRuntimeCancellation } from "../lifecycle/runtime-cancellation";
-import type { AgentIterationWorkspace } from "../query/query-types";
+import type { AgentIterationWorkspace, AgentQueryState } from "../query/query-types";
 
 /** Runs claim → checkpoint → preflight → dispatch → interpretation as one transaction. */
 export class ToolTurnRunner {
@@ -14,6 +14,7 @@ export class ToolTurnRunner {
     run: PreparedAgentRun,
     toolCalls: readonly AgentModelToolUseBlock[],
     workspace: AgentIterationWorkspace,
+    state: AgentQueryState,
   ): Promise<AgentLoopTurnOutcome> {
     if (
       toolCalls.length > 1
@@ -21,10 +22,6 @@ export class ToolTurnRunner {
         run.input.presentationCompletionPolicy.isFinishTool(call.name))
     ) {
       for (const toolCall of toolCalls) {
-        const queued = run.scope.session.takeQueuedToolUse();
-        if (queued?.id !== toolCall.id) {
-          throw new Error("Session tool queue diverged while rejecting a mixed terminal batch.");
-        }
         const result: AgentModelToolResultBlock = {
           type: "tool_result",
           toolUseId: toolCall.id,
@@ -49,11 +46,8 @@ export class ToolTurnRunner {
     }
 
     for (const toolCall of toolCalls) {
-      const queued = run.scope.session.takeQueuedToolUse();
-      if (queued?.id !== toolCall.id) {
-        throw new Error("Session tool queue diverged while executing a tool batch.");
-      }
-      const outcome = await this.runOne(run, toolCall, workspace);
+      if (workspace.toolResults.some((result) => result.toolUseId === toolCall.id)) continue;
+      const outcome = await this.runOne(run, toolCall, workspace, state);
       if (outcome.type === "terminal") return outcome;
       await run.scope.persistCheckpoint();
     }
@@ -64,6 +58,7 @@ export class ToolTurnRunner {
     run: PreparedAgentRun,
     toolCall: AgentModelToolUseBlock,
     workspace: AgentIterationWorkspace,
+    state: AgentQueryState,
   ): Promise<AgentLoopTurnOutcome> {
     const { scope, params } = run;
     const { session, backgroundTasks, taskStore } = scope;
@@ -114,16 +109,21 @@ export class ToolTurnRunner {
       });
     };
 
+    if (!await params.canUseTool(toolCall, workspace.updatedToolUseContext)) {
+      recordToolResult(`Tool ${toolCall.name} is not permitted in this query.`, true);
+      return { type: "continue" };
+    }
+
     const preflight = await run.input.toolPreflight.prepare({
       toolCall,
-      context: run.input.context,
+      context: workspace.updatedToolUseContext,
       workspaceRoot: deps.workspaceRoot,
       threadId: deps.threadId,
       requestToolApproval: deps.requestToolApproval,
       signal: scope.signal,
       policyGuidance: async (toolName) => {
         if (!await shouldRequireDiscoverTaskPlan({
-          stage: run.input.context.promptStage,
+          stage: workspace.updatedToolUseContext.promptStage,
           toolName,
           taskStore,
         })) return undefined;
@@ -146,7 +146,9 @@ export class ToolTurnRunner {
     if (preflight.type === "immediate_result") {
       const text = textFromResult(preflight.outcome.modelResult);
       if (preflight.kind === "validation_error") {
-        const failures = session.recordValidationFailure(toolCall.name);
+        const failures =
+          (workspace.validationFailuresByTool.get(toolCall.name) ?? 0) + 1;
+        workspace.validationFailuresByTool.set(toolCall.name, failures);
         if (failures <= 2) {
           run.emitProgress({
             type: "request-status",
@@ -230,6 +232,7 @@ export class ToolTurnRunner {
       });
       recordToolResult(guidance);
       await run.drainBackgroundForModel(
+        workspace,
         "Background tasks have completed. Reconsider these results before calling a finish tool.",
       );
       run.emitProgress({
@@ -251,7 +254,7 @@ export class ToolTurnRunner {
           const outcome = await run.input.toolExecutionEngine.execute({
             tool,
             args,
-            context: run.input.context,
+            context: workspace.updatedToolUseContext,
             toolCall,
             runtimeArtifactRoot: deps.runtimeRoot,
             threadId: deps.threadId,
@@ -298,7 +301,7 @@ export class ToolTurnRunner {
     const outcome = await run.input.toolExecutionEngine.execute({
       tool,
       args,
-      context: run.input.context,
+      context: workspace.updatedToolUseContext,
       toolCall,
       runtimeArtifactRoot: deps.runtimeRoot,
       threadId: deps.threadId,
@@ -343,16 +346,24 @@ export class ToolTurnRunner {
         toolName: tool.name,
         toolUseId: toolCall.id,
         outcome,
-        context: run.input.context,
-        promptStage: run.input.context.promptStage,
-        renderFeedbackUsed: session.renderFeedbackUsed,
+        context: workspace.updatedToolUseContext,
+        promptStage: workspace.updatedToolUseContext.promptStage,
+        renderFeedbackUsed: workspace.renderFeedbackUsed,
         emitProgress: (event) => run.emitProgress(event),
       });
       if (decision.type === "terminal") {
         if (decision.modelResult) recordToolResultBlock(decision.modelResult);
+        if (decision.result.type === "ask_user") {
+          scope.setInflightQuery("waiting_user", workspace);
+        } else {
+          scope.stageConversationHistory(
+            state,
+            workspace,
+          );
+        }
         return { type: "terminal", result: decision.result };
       }
-      if (decision.markRenderFeedbackUsed) session.markRenderFeedbackUsed();
+      if (decision.markRenderFeedbackUsed) workspace.renderFeedbackUsed = true;
       session.appendTranscript(decision.transcriptEntry);
       recordToolResultBlock(decision.modelResult);
       return { type: "continue" };

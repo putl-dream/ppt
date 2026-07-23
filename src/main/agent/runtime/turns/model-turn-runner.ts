@@ -15,7 +15,7 @@ import { formatBackgroundNotifications } from "../background/background-task-man
 export class ModelTurnRunner {
   async run(
     run: PreparedAgentRun,
-    _state: AgentQueryState,
+    state: AgentQueryState,
     workspace: AgentIterationWorkspace,
   ): Promise<AgentLoopTurnOutcome> {
     const { scope, params } = run;
@@ -32,11 +32,18 @@ export class ModelTurnRunner {
       ...session.takePendingUserContent(),
       inboxContent ?? "",
     ].filter((part) => part.trim()).join("\n\n");
-    run.flushUserTurn(userContent || undefined);
-    workspace.messagesForQuery = structuredClone([...session.modelMessages]);
+    appendUserText(workspace.messagesForQuery, userContent);
+    scope.setInflightQuery("model_streaming", workspace);
     if (checkpointDecision === "commit") await scope.persistCheckpoint();
 
-    const promptPayload = { transcript: [] };
+    const promptPayload = {
+      transcript: [],
+      queryContext: {
+        source: params.querySource,
+        user: params.userContext,
+        system: params.systemContext,
+      },
+    };
     const modelMessages = workspace.messagesForQuery;
     let attemptId = crypto.randomUUID();
     safeStreamEvent(deps.onStreamEvent, { type: "attempt_started", attemptId });
@@ -47,16 +54,17 @@ export class ModelTurnRunner {
         systemPrompt: params.systemPrompt,
         promptPayload,
         model: params.model,
+        fallbackModel: params.fallbackModel,
+        maxOutputTokensOverride: workspace.maxOutputTokensOverride,
         workspaceRoot: deps.runtimeRoot,
         threadId: deps.threadId,
         signal: deps.signal,
         tools: deps.toolSchemas,
         messages: ensureToolResultPairing(modelMessages),
-        stream: deps.onStreamChunk || deps.onStreamEvent
+        stream: deps.onStreamEvent
           ? {
               onChunk: (chunk) => {
                 if (chunk.type === "text_delta" && chunk.text) {
-                  deps.onStreamChunk?.(chunk.text, "message");
                   safeStreamEvent(deps.onStreamEvent, {
                     type: "delta",
                     attemptId,
@@ -81,13 +89,17 @@ export class ModelTurnRunner {
           run.emitProgress({ type: "request-status", message, progress: 0 });
         },
         onContextPrepared: (preparedPayload, notes, preparedMessages) => {
+          if (preparedMessages) {
+            workspace.messagesForQuery = structuredClone(preparedMessages);
+            scope.setInflightQuery("model_streaming", workspace);
+          }
           if (!deps.conversationDatabase) return;
           deps.conversationDatabase.saveContextSnapshotForRun(
             scope.runId,
             {
               payload: preparedPayload,
               messages: preparedMessages
-                ?? ensureToolResultPairing([...session.modelMessages]),
+                ?? ensureToolResultPairing(workspace.messagesForQuery),
             },
             notes,
           );
@@ -101,6 +113,13 @@ export class ModelTurnRunner {
       });
       throw error;
     }
+    workspace.maxOutputTokensOverride = modelResult.maxOutputTokensOverride;
+    workspace.maxOutputTokensRecoveryCount =
+      state.maxOutputTokensRecoveryCount
+      + modelResult.maxOutputTokensRecoveryCount;
+    workspace.hasAttemptedReactiveCompact =
+      state.hasAttemptedReactiveCompact
+      || modelResult.hasAttemptedReactiveCompact;
     safeStreamEvent(deps.onStreamEvent, { type: "attempt_committed", attemptId });
     run.appendRuntimeEvent("model_response", {
       modelStep: currentModelStep,
@@ -146,7 +165,6 @@ export class ModelTurnRunner {
         "This is an unresolved presentation action. Do not narrate future work. "
         + "Call AskUser if information is still missing, otherwise continue tools and finish with SubmitCommands.";
       session.appendTranscript({ role: "assistant", content: responseText, error: guidance });
-      run.appendUserTurn({ text: guidance });
       workspace.followUpMessages.push({
         role: "user",
         content: [{ type: "text", text: guidance }],
@@ -154,19 +172,14 @@ export class ModelTurnRunner {
       return { type: "continue" };
     }
     if (await run.drainBackgroundForModel(
+      workspace,
       "Background tasks have completed. Use these results before giving the final response.",
     )) {
-      workspace.followUpMessages.push(
-        ...structuredClone(session.modelMessages.slice(
-          workspace.messagesForQuery.length + workspace.assistantMessages.length,
-        )),
-      );
       return { type: "continue" };
     }
 
     const finalInboxContent = await run.drainLeadInboxForModel();
     if (finalInboxContent) {
-      run.appendUserTurn({ text: finalInboxContent });
       workspace.followUpMessages.push({
         role: "user",
         content: [{ type: "text", text: finalInboxContent }],
@@ -174,11 +187,32 @@ export class ModelTurnRunner {
       return { type: "continue" };
     }
     run.appendRuntimeEvent("assistant_completed", { content: responseText });
+    scope.stageConversationHistory(state, workspace);
     return {
       type: "terminal",
       result: { type: "message", content: responseText },
     };
   }
+}
+
+function appendUserText(
+  messages: AgentQueryState["messages"],
+  text: string,
+): void {
+  const trimmed = text.trim();
+  if (!trimmed) return;
+  const last = messages.at(-1);
+  if (
+    last?.role === "user"
+    && !last.content.some((block) => block.type === "tool_result")
+  ) {
+    last.content.push({ type: "text", text: trimmed });
+    return;
+  }
+  messages.push({
+    role: "user",
+    content: [{ type: "text", text: trimmed }],
+  });
 }
 
 function safeStreamEvent(

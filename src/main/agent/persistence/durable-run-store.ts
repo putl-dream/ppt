@@ -11,6 +11,12 @@ import type {
 import { readJsonFile, writeJsonFileAtomic } from "./atomic-json-file";
 import { ConversationDatabase } from "../../conversation-database";
 import type { DurableBackgroundTask } from "../runtime/background/background-task-manager";
+import type {
+  QueryId,
+  RunId,
+  ThreadId,
+} from "../runtime/query/query-types";
+import { asRunId, asThreadId } from "../runtime/query/query-types";
 
 type LockRelease = () => Promise<void>;
 type ProperLockfile = {
@@ -38,7 +44,7 @@ export type DurableRunPhase =
   | "tool_committed"
   | "finished";
 
-export interface DurableRunCheckpoint {
+export interface LegacyDurableRunCheckpoint {
   version: 1;
   threadId: string;
   runId?: string;
@@ -69,6 +75,35 @@ export interface DurableRunCheckpoint {
   updatedAt: string;
 }
 
+export interface DurableRunCheckpointV2Payload {
+  version: 2;
+  threadId: ThreadId;
+  queryId: QueryId;
+  lastRunId: RunId;
+  status: DurableRunStatus;
+  phase: DurableRunPhase;
+  request: string;
+  model?: AgentModelSelection;
+  executionStrategy?: AgentExecutionStrategy;
+  baseRevision: number;
+  transcript: Array<Record<string, unknown>>;
+  pendingUserContent: string[];
+  discoveredToolNames: string[];
+  loadedSkillNames: string[];
+  backgroundTasks?: DurableBackgroundTask[];
+  processedInboxMessageIds?: string[];
+  committedState: DurableQueryStateSnapshot;
+  inflight?: DurableQueryInflightSnapshot;
+  result?: AgentRuntimeResult;
+  error?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type DurableRunCheckpoint =
+  | LegacyDurableRunCheckpoint
+  | DurableRunCheckpointV2Payload;
+
 export interface DurableQueryStateSnapshot {
   messages: AgentModelMessage[];
   turnCount: number;
@@ -85,30 +120,38 @@ export interface DurableIterationWorkspaceSnapshot {
   assistantMessages: AgentModelMessage[];
   toolUseBlocks: AgentModelToolUseBlock[];
   toolResults: AgentModelToolResultBlock[];
+  userContent?: string[];
   followUpMessages: AgentModelMessage[];
   needsFollowUp: boolean;
+  maxOutputTokensOverride?: number;
+  maxOutputTokensRecoveryCount?: number;
+  hasAttemptedReactiveCompact?: boolean;
+  renderFeedbackUsed?: boolean;
+  validationFailuresByTool?: Array<[string, number]>;
 }
 
 export interface DurableQueryLifecycleSnapshot {
   queryId: string;
   committedState: DurableQueryStateSnapshot;
-  inflight?: {
-    phase: "model_streaming" | "model_received" | "tool_running" | "waiting_user";
-    workspace: DurableIterationWorkspaceSnapshot;
-    activeToolUse?: AgentModelToolUseBlock;
-  };
+  inflight?: DurableQueryInflightSnapshot;
+}
+
+export interface DurableQueryInflightSnapshot {
+  phase: "model_streaming" | "model_received" | "tool_running" | "waiting_user";
+  workspace: DurableIterationWorkspaceSnapshot;
+  activeToolUse?: AgentModelToolUseBlock;
 }
 
 export interface CheckpointLease {
-  threadId: string;
-  runId: string;
+  threadId: ThreadId;
+  runId: RunId;
   generation: number;
 }
 
-export interface DurableRunCheckpointV2 {
+export interface DurableRunCheckpointEnvelope {
   version: 2;
   writer: {
-    runId: string;
+    runId: RunId;
     generation: number;
     revision: number;
     active: boolean;
@@ -155,16 +198,20 @@ export class DurableRunStore {
 
   async load(threadId: string): Promise<DurableRunCheckpoint | undefined> {
     if (typeof this.storage !== "string") {
-      const stored = this.storage.loadRunCheckpoint<DurableRunCheckpoint | DurableRunCheckpointV2>(threadId);
+      const stored = this.storage.loadRunCheckpoint<DurableRunCheckpoint | DurableRunCheckpointEnvelope>(threadId);
       return checkpointPayload(stored, threadId);
     }
-    const stored = await readJsonFile<DurableRunCheckpoint | DurableRunCheckpointV2>(this.pathFor(threadId));
+    const stored = await readJsonFile<DurableRunCheckpoint | DurableRunCheckpointEnvelope>(this.pathFor(threadId));
     return checkpointPayload(stored, threadId);
   }
 
   async save(checkpoint: DurableRunCheckpoint): Promise<void> {
     if (typeof this.storage !== "string") {
-      this.storage.saveRunCheckpoint(checkpoint.threadId, checkpoint, checkpoint.runId);
+      this.storage.saveRunCheckpoint(
+        checkpoint.threadId,
+        checkpoint,
+        checkpoint.version === 1 ? checkpoint.runId : checkpoint.lastRunId,
+      );
       return;
     }
     await writeJsonFileAtomic(this.pathFor(checkpoint.threadId), checkpoint);
@@ -182,21 +229,21 @@ export class DurableRunStore {
       return {
         type: "opened",
         lease: {
-          threadId: input.threadId,
-          runId: input.runId,
+          threadId: asThreadId(input.threadId),
+          runId: asRunId(input.runId),
           generation: result.generation,
         },
         currentRevision: result.revision,
         checkpoint: input.resume
-          ? checkpointPayload(result.checkpoint as DurableRunCheckpoint | DurableRunCheckpointV2 | undefined, input.threadId)
+          ? checkpointPayload(result.checkpoint as DurableRunCheckpoint | DurableRunCheckpointEnvelope | undefined, input.threadId)
           : undefined,
       };
     }
 
     return this.withFileLeaseLock(input.threadId, async () => {
       const path = this.pathFor(input.threadId);
-      const stored = await readJsonFile<DurableRunCheckpoint | DurableRunCheckpointV2>(path);
-      const existingWriter = stored?.version === 2 ? stored.writer : undefined;
+      const stored = await readJsonFile<DurableRunCheckpoint | DurableRunCheckpointEnvelope>(path);
+      const existingWriter = isCheckpointEnvelope(stored) ? stored.writer : undefined;
       if (
         existingWriter?.active
         && existingWriter.runId !== input.runId
@@ -211,22 +258,30 @@ export class DurableRunStore {
       if (existingWriter?.active && existingWriter.runId === input.runId) {
         return {
           type: "opened" as const,
-          lease: { threadId: input.threadId, runId: input.runId, generation: existingWriter.generation },
+          lease: {
+            threadId: asThreadId(input.threadId),
+            runId: asRunId(input.runId),
+            generation: existingWriter.generation,
+          },
           currentRevision: existingWriter.revision,
           checkpoint: input.resume ? checkpointPayload(stored, input.threadId) : undefined,
         };
       }
 
       const generation = (existingWriter?.generation ?? 0) + 1;
-      const envelope: DurableRunCheckpointV2 = {
+      const envelope: DurableRunCheckpointEnvelope = {
         version: 2,
-        writer: { runId: input.runId, generation, revision: 0, active: true },
+        writer: { runId: asRunId(input.runId), generation, revision: 0, active: true },
         payload: checkpointPayload(stored, input.threadId),
       };
       await writeJsonFileAtomic(path, envelope);
       return {
         type: "opened" as const,
-        lease: { threadId: input.threadId, runId: input.runId, generation },
+        lease: {
+          threadId: asThreadId(input.threadId),
+          runId: asRunId(input.runId),
+          generation,
+        },
         currentRevision: 0,
         checkpoint: input.resume ? envelope.payload : undefined,
       };
@@ -251,7 +306,7 @@ export class DurableRunStore {
     }
     return this.withFileLeaseLock(input.lease.threadId, async () => {
       const path = this.pathFor(input.lease.threadId);
-      const stored = await readJsonFile<DurableRunCheckpointV2>(path);
+      const stored = await readJsonFile<DurableRunCheckpointEnvelope>(path);
       if (
         stored?.version !== 2
         || !stored.writer.active
@@ -273,7 +328,7 @@ export class DurableRunStore {
         version: 2,
         writer: { ...stored.writer, revision: input.nextRevision },
         payload: structuredClone(input.checkpoint),
-      } satisfies DurableRunCheckpointV2);
+      } satisfies DurableRunCheckpointEnvelope);
       return "saved";
     });
   }
@@ -284,7 +339,7 @@ export class DurableRunStore {
     }
     return this.withFileLeaseLock(lease.threadId, async () => {
       const path = this.pathFor(lease.threadId);
-      const stored = await readJsonFile<DurableRunCheckpointV2>(path);
+      const stored = await readJsonFile<DurableRunCheckpointEnvelope>(path);
       if (
         stored?.version !== 2
         || stored.writer.runId !== lease.runId
@@ -293,7 +348,7 @@ export class DurableRunStore {
       await writeJsonFileAtomic(path, {
         ...stored,
         writer: { ...stored.writer, active: false },
-      } satisfies DurableRunCheckpointV2);
+      } satisfies DurableRunCheckpointEnvelope);
       return true;
     });
   }
@@ -306,13 +361,13 @@ export class DurableRunStore {
         type: "active",
         revision: inspected.revision,
         checkpoint: checkpointPayload(
-          inspected.checkpoint as DurableRunCheckpoint | DurableRunCheckpointV2 | undefined,
+          inspected.checkpoint as DurableRunCheckpoint | DurableRunCheckpointEnvelope | undefined,
           lease.threadId,
         ),
       };
     }
     return this.withFileLeaseLock(lease.threadId, async () => {
-      const stored = await readJsonFile<DurableRunCheckpointV2>(this.pathFor(lease.threadId));
+      const stored = await readJsonFile<DurableRunCheckpointEnvelope>(this.pathFor(lease.threadId));
       if (
         stored?.version !== 2
         || !stored.writer.active
@@ -345,10 +400,16 @@ export class DurableRunStore {
 }
 
 function checkpointPayload(
-  stored: DurableRunCheckpoint | DurableRunCheckpointV2 | undefined,
+  stored: DurableRunCheckpoint | DurableRunCheckpointEnvelope | undefined,
   threadId: string,
 ): DurableRunCheckpoint | undefined {
-  const checkpoint = stored?.version === 2 ? stored.payload : stored;
-  if (!checkpoint || checkpoint.version !== 1 || checkpoint.threadId !== threadId) return undefined;
+  const checkpoint = isCheckpointEnvelope(stored) ? stored.payload : stored;
+  if (!checkpoint || checkpoint.threadId !== threadId) return undefined;
   return checkpoint;
+}
+
+function isCheckpointEnvelope(
+  stored: DurableRunCheckpoint | DurableRunCheckpointEnvelope | undefined,
+): stored is DurableRunCheckpointEnvelope {
+  return stored?.version === 2 && "writer" in stored;
 }

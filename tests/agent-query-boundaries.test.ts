@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createStarterPresentation } from "../src/shared/presentation";
-import { AgentQueryAssembler, resolveQueryStartMode } from "../src/main/agent/runtime/query/agent-query-assembler";
+import { AgentQueryAssembler } from "../src/main/agent/runtime/query/agent-query-assembler";
+import { normalizeAgentRuntimeOptions } from "../src/main/agent/runtime/runtime-types";
 import {
   createInitialQueryState,
   createIterationWorkspace,
@@ -18,14 +19,16 @@ function context() {
 }
 
 describe("agent query lifecycle boundaries", () => {
-  it("maps the legacy resume flag only at the application assembler boundary", () => {
-    expect(resolveQueryStartMode({
+  it("normalizes public string identities and defaults a new query at the runtime boundary", () => {
+    expect(normalizeAgentRuntimeOptions({
       threadId: "thread",
-      request: "continue",
+      request: "start",
       presentationSnapshot: createStarterPresentation(),
       selectedElementIds: [],
-      resumeThread: true,
-    })).toEqual({ type: "resume_query", reason: "interrupted" });
+    })).toMatchObject({
+      threadId: "thread",
+      startMode: { type: "new_query" },
+    });
   });
 
   it("assembles stable params once and creates an independent committed state", () => {
@@ -34,13 +37,17 @@ describe("agent query lifecycle boundaries", () => {
       content: [{ type: "text" as const, text: "hello" }],
     }];
     const params = new AgentQueryAssembler().assemble({
-      options: {
+      options: normalizeAgentRuntimeOptions({
         threadId: "thread",
         runId: "run",
         request: "hello",
         presentationSnapshot: createStarterPresentation(),
         selectedElementIds: [],
-      },
+        fallbackModel: { provider: "anthropic", model: "fallback" },
+        userContext: { locale: "zh-CN" },
+        systemContext: { surface: "desktop" },
+        maxOutputTokensOverride: 12_345,
+      }),
       messages,
       systemPrompt: "system",
       toolUseContext: context(),
@@ -54,16 +61,24 @@ describe("agent query lifecycle boundaries", () => {
     expect(state.messages).not.toBe(params.messages);
     expect(state.turnCount).toBe(0);
     expect(params.querySource).toBe("user");
+    expect(params.fallbackModel).toEqual({ provider: "anthropic", model: "fallback" });
+    expect(params.userContext).toEqual({ locale: "zh-CN" });
+    expect(params.systemContext).toMatchObject({
+      surface: "desktop",
+      threadId: "thread",
+      runId: "run",
+    });
+    expect(state.maxOutputTokensOverride).toBe(12_345);
   });
 
   it("commits a complete multi-tool batch in one user result message", () => {
     const params = new AgentQueryAssembler().assemble({
-      options: {
+      options: normalizeAgentRuntimeOptions({
         threadId: "thread",
         request: "inspect",
         presentationSnapshot: createStarterPresentation(),
         selectedElementIds: [],
-      },
+      }),
       messages: [{
         role: "user",
         content: [{ type: "text", text: "inspect" }],
@@ -90,6 +105,9 @@ describe("agent query lifecycle boundaries", () => {
       { type: "tool_result", toolUseId: "a", content: [{ type: "text", text: "A" }] },
       { type: "tool_result", toolUseId: "b", content: [{ type: "text", text: "B" }] },
     );
+    workspace.renderFeedbackUsed = true;
+    workspace.validationFailuresByTool.set("ReadA", 2);
+    workspace.maxOutputTokensRecoveryCount = 1;
 
     const next = reduceQueryState(state, workspace);
 
@@ -100,16 +118,21 @@ describe("agent query lifecycle boundaries", () => {
       content: workspace.toolResults,
     });
     expect(next.turnCount).toBe(1);
+    expect(next.renderFeedbackUsed).toBe(true);
+    expect(next.validationFailuresByTool.get("ReadA")).toBe(2);
+    expect(next.maxOutputTokensRecoveryCount).toBe(1);
+    expect(state.renderFeedbackUsed).toBe(false);
+    expect(state.validationFailuresByTool.size).toBe(0);
   });
 
   it("rejects an incomplete batch before changing committed state", () => {
     const params = new AgentQueryAssembler().assemble({
-      options: {
+      options: normalizeAgentRuntimeOptions({
         threadId: "thread",
         request: "inspect",
         presentationSnapshot: createStarterPresentation(),
         selectedElementIds: [],
-      },
+      }),
       messages: [],
       systemPrompt: "system",
       toolUseContext: context(),

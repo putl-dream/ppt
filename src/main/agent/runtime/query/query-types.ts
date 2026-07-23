@@ -17,6 +17,10 @@ export function asThreadId(value: string): ThreadId {
   return value as ThreadId;
 }
 
+export function asSessionId(value: string): SessionId {
+  return value as SessionId;
+}
+
 export function asRunId(value: string): RunId {
   return value as RunId;
 }
@@ -83,9 +87,15 @@ export interface AgentIterationWorkspace {
   assistantMessages: AgentModelMessage[];
   toolUseBlocks: AgentModelToolUseBlock[];
   toolResults: AgentModelToolResultBlock[];
+  userContent: string[];
   followUpMessages: AgentModelMessage[];
   needsFollowUp: boolean;
   updatedToolUseContext: ToolContext;
+  maxOutputTokensOverride?: number;
+  maxOutputTokensRecoveryCount: number;
+  hasAttemptedReactiveCompact: boolean;
+  renderFeedbackUsed: boolean;
+  validationFailuresByTool: Map<string, number>;
 }
 
 export function createInitialQueryState(
@@ -115,9 +125,15 @@ export function createIterationWorkspace(
     assistantMessages: [],
     toolUseBlocks: [],
     toolResults: [],
+    userContent: [],
     followUpMessages: [],
     needsFollowUp: false,
     updatedToolUseContext: state.toolUseContext,
+    maxOutputTokensOverride: state.maxOutputTokensOverride,
+    maxOutputTokensRecoveryCount: state.maxOutputTokensRecoveryCount,
+    hasAttemptedReactiveCompact: state.hasAttemptedReactiveCompact,
+    renderFeedbackUsed: state.renderFeedbackUsed,
+    validationFailuresByTool: new Map(state.validationFailuresByTool),
   };
 }
 
@@ -138,8 +154,19 @@ export function reduceQueryState(
     );
   }
 
-  const toolResultMessage: AgentModelMessage[] = workspace.toolResults.length > 0
-    ? [{ role: "user", content: structuredClone(workspace.toolResults) }]
+  const userContent = workspace.userContent
+    .map((text) => text.trim())
+    .filter(Boolean)
+    .map((text) => ({ type: "text" as const, text }));
+  const toolResultMessage: AgentModelMessage[] =
+    workspace.toolResults.length > 0 || userContent.length > 0
+    ? [{
+        role: "user",
+        content: [
+          ...structuredClone(workspace.toolResults),
+          ...userContent,
+        ],
+      }]
     : [];
   return {
     ...state,
@@ -152,5 +179,10 @@ export function reduceQueryState(
     toolUseContext: workspace.updatedToolUseContext,
     turnCount: state.turnCount + 1,
     transition,
+    maxOutputTokensOverride: workspace.maxOutputTokensOverride,
+    maxOutputTokensRecoveryCount: workspace.maxOutputTokensRecoveryCount,
+    hasAttemptedReactiveCompact: workspace.hasAttemptedReactiveCompact,
+    renderFeedbackUsed: workspace.renderFeedbackUsed,
+    validationFailuresByTool: new Map(workspace.validationFailuresByTool),
   };
 }

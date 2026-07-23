@@ -81,7 +81,7 @@ describe("durable agent recovery", () => {
       presentationSnapshot: createStarterPresentation(),
       selectedElementIds: [],
       workspaceRoot,
-      resumeThread: true,
+      startMode: { type: "resume_query", reason: "interrupted" },
       messageBus: bus,
     });
 
@@ -127,7 +127,7 @@ describe("durable agent recovery", () => {
       presentationSnapshot: createStarterPresentation(),
       selectedElementIds: [],
       workspaceRoot,
-      resumeThread: true,
+      startMode: { type: "resume_query", reason: "crash_recovery" },
     });
     expect(result.type).toBe("message");
     const resultBlock = gateway.requests[0].messages!
@@ -166,7 +166,14 @@ describe("durable agent recovery", () => {
     expect(checkpoint).toBeDefined();
     if (!checkpoint) throw new Error("expected a durable checkpoint");
     expect(checkpoint.status).toBe("waiting_user");
-    expect(checkpoint.pendingToolResults[0]).toMatchObject({ toolUseId: "ask-1" });
+    expect(checkpoint.version).toBe(2);
+    if (checkpoint.version !== 2) throw new Error("expected a version 2 checkpoint");
+    expect(checkpoint).not.toHaveProperty("modelMessages");
+    expect(checkpoint).not.toHaveProperty("pendingToolResults");
+    expect(checkpoint).not.toHaveProperty("renderFeedbackUsed");
+    expect(checkpoint.inflight?.phase).toBe("waiting_user");
+    expect(checkpoint.inflight?.workspace.toolResults[0])
+      .toMatchObject({ toolUseId: "ask-1" });
 
     const secondGateway = gatewayFor([[
       { type: "text", text: "已按管理层受众继续。" },
@@ -178,7 +185,7 @@ describe("durable agent recovery", () => {
       presentationSnapshot: createStarterPresentation(),
       selectedElementIds: [],
       workspaceRoot,
-      resumeThread: true,
+      startMode: { type: "resume_query", reason: "waiting_user" },
     });
     expect(second).toEqual({ type: "message", content: "已按管理层受众继续。" });
     const blocks = secondGateway.requests[0].messages!.flatMap((message) => message.content);

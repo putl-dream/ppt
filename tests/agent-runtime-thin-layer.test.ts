@@ -39,7 +39,7 @@ describe("AgentRuntime thin-layer architecture", () => {
     expect(combined).not.toMatch(/scope\.options|options\.(?:request|messageHistory|model|runtimeRoot|onStreamChunk)/);
   });
 
-  it("routes recoverable collection writes through AgentSession commands", async () => {
+  it("keeps query messages and tool-batch state out of AgentSession", async () => {
     const collaborators = [
       "lifecycle/agent-run-scope.ts",
       "agent-run-finalizer.ts",
@@ -49,13 +49,16 @@ describe("AgentRuntime thin-layer architecture", () => {
       "turns/tool-turn-runner.ts",
       "agent-loop-driver.ts",
       "background/lead-inbox-input-source.ts",
-      "turns/turn-input-assembler.ts",
       "lifecycle/agent-event-ports.ts",
     ];
     const combined = (await Promise.all(collaborators.map(source))).join("\n");
+    const session = await source("lifecycle/agent-session.ts");
 
     expect(combined).not.toMatch(
-      /session\.(?:transcript|modelMessages|queuedToolUses|pendingUserContent|processedInboxMessageIds)\.(?:push|splice|shift|add|set)\s*\(/,
+      /session\.(?:modelMessages|queuedToolUses|pendingToolResults|renderFeedbackUsed|validationFailuresByTool)/,
+    );
+    expect(session).not.toMatch(
+      /modelMessagesValue|queuedToolUsesValue|pendingToolResultsValue|renderFeedbackUsedValue|validationFailuresByToolValue/,
     );
   });
 });

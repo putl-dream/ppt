@@ -3,7 +3,6 @@ import { buildMainStepLimitMessage } from "@shared/agent-step-limits";
 import type { ConversationDatabase } from "../../../conversation-database";
 import type {
   AgentModelGateway,
-  AgentModelToolResultBlock,
   AgentToolSchema,
 } from "../../gateway/types";
 import type { ToolContext } from "../../tools/tool-definition";
@@ -17,16 +16,16 @@ import type { LeadInboxInputSource } from "../background/lead-inbox-input-source
 import type { PresentationCompletionPolicy } from "../presentation/presentation-completion-policy";
 import type { ToolExecutionEngine } from "../tools/tool-execution-engine";
 import type { ToolPreflight } from "../tools/tool-preflight";
-import { TurnInputAssembler } from "./turn-input-assembler";
 import type { AgentRuntimeResult } from "../runtime-types";
 import type { AgentRuntimeStreamEvent } from "../runtime-types";
 import { AgentQueryAssembler } from "../query/agent-query-assembler";
 import {
   createInitialQueryState,
+  type AgentIterationWorkspace,
   type AgentQueryParams,
   type AgentQueryState,
+  type ThreadId,
 } from "../query/query-types";
-import type { AgentModelSelection } from "@shared/agent";
 import type { ToolApprovalHandler } from "../tools/permission-check";
 
 export interface AgentLoopTerminalOutcome {
@@ -46,22 +45,20 @@ export interface PreparedAgentQueryDeps {
   toolSchemas: AgentToolSchema[];
   workspaceRoot?: string;
   runtimeRoot?: string;
-  threadId: string;
+  threadId: ThreadId;
   signal: AbortSignal;
   externalSignal?: AbortSignal;
   requiredOutcome?: "any" | "command_proposal";
   requestToolApproval?: ToolApprovalHandler;
-  onStreamChunk?: (chunk: string, source: "message" | "tool-summary") => void;
   onStreamEvent?: (event: AgentRuntimeStreamEvent) => void;
   onThinkingChunk?: (chunk: string, modelStep: number) => void;
-  fallbackModel?: AgentModelSelection;
 }
 
 /** Prepared, invocation-scoped dependencies consumed by the stable loop and turn runners. */
 export class PreparedAgentRun {
-  readonly turnInput: TurnInputAssembler;
   readonly params: AgentQueryParams<PreparedAgentQueryDeps>;
   readonly initialState: AgentQueryState;
+  readonly initialWorkspace?: AgentIterationWorkspace;
 
   constructor(readonly input: {
     scope: AgentRunScope;
@@ -78,11 +75,10 @@ export class PreparedAgentRun {
     presentationCompletionPolicy: PresentationCompletionPolicy;
     runPostToolUseHook(block: PostToolUseBlock): Promise<string[]>;
   }) {
-    this.turnInput = new TurnInputAssembler(input.scope.session);
-    const { options, session } = input.scope;
+    const { options } = input.scope;
     this.params = new AgentQueryAssembler().assemble({
       options,
-      messages: session.modelMessages,
+      messages: input.scope.initialMessages,
       systemPrompt: input.systemPrompt,
       toolUseContext: input.context,
       maxTurns: input.maxSteps,
@@ -97,17 +93,17 @@ export class PreparedAgentRun {
         externalSignal: options.signal,
         requiredOutcome: options.requiredOutcome,
         requestToolApproval: options.requestToolApproval,
-        onStreamChunk: options.onStreamChunk,
         onStreamEvent: options.onStreamEvent,
         onThinkingChunk: options.onThinkingChunk,
       },
     });
     this.initialState = createInitialQueryState(
       this.params,
-      input.scope.restoreQueryState(input.context) ?? {
-        turnCount: session.totalModelSteps,
-        renderFeedbackUsed: session.renderFeedbackUsed,
-      },
+      input.scope.restoreQueryState(input.context),
+    );
+    this.initialWorkspace = input.scope.restoreIterationWorkspace(
+      this.initialState,
+      input.context,
     );
   }
 
@@ -127,36 +123,23 @@ export class PreparedAgentRun {
     this.scope.eventPorts.audit(kind, payload, visibility);
   }
 
-  appendUserTurn(input: {
-    text?: string;
-    toolResults?: AgentModelToolResultBlock[];
-  }): void {
-    this.turnInput.append(input);
-  }
-
-  flushUserTurn(text?: string): void {
-    const results = this.scope.session.takePendingToolResults();
-    this.appendUserTurn({
-      text,
-      toolResults: results.length ? results : undefined,
-    });
-  }
-
   async drainLeadInboxForModel(): Promise<string | undefined> {
     return await this.input.leadInbox.drain();
   }
 
-  async drainBackgroundForModel(instruction: string): Promise<boolean> {
-    const { backgroundTasks, session } = this.scope;
+  async drainBackgroundForModel(
+    workspace: AgentIterationWorkspace,
+    instruction: string,
+  ): Promise<boolean> {
+    const { backgroundTasks } = this.scope;
     if (!backgroundTasks.hasRunning() && !backgroundTasks.hasPendingNotifications()) return false;
     const notifications = await backgroundTasks.drain(this.scope.signal);
     if (notifications.length === 0) return false;
     const content = `${formatBackgroundNotifications(notifications)}\n\n${instruction}`;
-    if (session.hasQueuedToolUses()) {
-      session.appendPendingUserContent(content);
-    } else {
-      this.flushUserTurn(content);
-    }
+    workspace.followUpMessages.push({
+      role: "user",
+      content: [{ type: "text", text: content }],
+    });
     return true;
   }
 

@@ -5,7 +5,11 @@ import { ToolRegistry } from "../tools/tool-registry";
 import { AgentLoopDriver } from "./agent-loop-driver";
 import { AgentRunFinalizer } from "./agent-run-finalizer";
 import { PresentationAgentRunFactory } from "./presentation-agent-run-factory";
-import type { AgentRuntimeOptions, AgentRuntimeResult } from "./runtime-types";
+import {
+  normalizeAgentRuntimeOptions,
+  type AgentRuntimeInput,
+  type AgentRuntimeResult,
+} from "./runtime-types";
 
 /** Public-compatible facade over the prepared Agent lifecycle. */
 export class AgentRuntime {
@@ -27,7 +31,8 @@ export class AgentRuntime {
     );
   }
 
-  async run(options: AgentRuntimeOptions): Promise<AgentRuntimeResult> {
+  async run(input: AgentRuntimeInput): Promise<AgentRuntimeResult> {
+    const options = normalizeAgentRuntimeOptions(input);
     const scope = await this.runFactory.open(options);
     try {
       const prepared = await this.runFactory.prepare(scope);

@@ -52,6 +52,35 @@ function countingTool(onExecute: () => void): ToolDefinition<any, any> {
 }
 
 describe("agent query loop batches", () => {
+  it("passes stable query context and output-token policy to the gateway", async () => {
+    const gateway = gatewayFor([[{ type: "text", text: "done" }]]);
+
+    await new AgentRuntime(new ToolRegistry(), gateway).run({
+      threadId: "query-policy",
+      runId: "query-policy-run",
+      request: "inspect",
+      presentationSnapshot: createStarterPresentation(),
+      selectedElementIds: [],
+      userContext: { locale: "zh-CN" },
+      systemContext: { surface: "desktop" },
+      maxOutputTokensOverride: 12_345,
+    });
+
+    expect(gateway.requests[0]?.maxOutputTokens).toBe(12_345);
+    expect(JSON.parse(gateway.requests[0]!.prompt)).toEqual({
+      transcript: [],
+      queryContext: {
+        source: "user",
+        user: { locale: "zh-CN" },
+        system: {
+          surface: "desktop",
+          threadId: "query-policy",
+          runId: "query-policy-run",
+        },
+      },
+    });
+  });
+
   it("rejects a mixed terminal batch as one complete error result turn", async () => {
     let executions = 0;
     const registry = new ToolRegistry();
@@ -118,9 +147,10 @@ describe("agent query loop batches", () => {
     expect(executions).toBe(2);
     expect(gateway.requests).toHaveLength(1);
     const checkpoint = await new DurableRunStore(workspaceRoot).load("batch-turn-limit");
-    expect(checkpoint?.queryLifecycle).toMatchObject({
+    expect(checkpoint).toMatchObject({
+      version: 2,
       committedState: { turnCount: 1 },
     });
-    expect(checkpoint?.queryLifecycle?.inflight).toBeUndefined();
+    expect(checkpoint?.version === 2 ? checkpoint.inflight : undefined).toBeUndefined();
   });
 });

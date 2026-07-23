@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { CheckpointCoordinator } from "../src/main/agent/runtime/lifecycle/checkpoint-coordinator";
 import type { DurableRunCheckpoint } from "../src/main/agent/persistence/durable-run-store";
+import {
+  asRunId,
+  asThreadId,
+} from "../src/main/agent/runtime/query/query-types";
 
 function checkpoint(status: DurableRunCheckpoint["status"]): DurableRunCheckpoint {
   const now = new Date().toISOString();
@@ -78,7 +82,11 @@ describe("CheckpointCoordinator", () => {
         return { type: "active" as const, revision };
       },
       async closeLease() { return true; },
-    }, { threadId: "thread", runId: "run", generation: 1 });
+    }, {
+      threadId: asThreadId("thread"),
+      runId: asRunId("run"),
+      generation: 1,
+    });
 
     await expect(coordinator.commit(checkpoint("running"))).rejects.toThrow("connection lost");
     await expect(coordinator.commitFailureTerminal(checkpoint("failed"))).resolves.toBe(true);

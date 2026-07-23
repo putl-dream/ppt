@@ -177,6 +177,7 @@ describe("callModelWithRecovery", () => {
     });
 
     expect(result.content).toEqual(textContent("ok"));
+    expect(result.hasAttemptedReactiveCompact).toBe(true);
     const retriedPrompt = JSON.parse(generateText.mock.calls[1][0].prompt);
     expect(retriedPrompt.transcript[0]).toMatchObject({ kind: "compact_boundary" });
     expect(retriedPrompt.transcript.length).toBeLessThanOrEqual(5);
@@ -223,5 +224,54 @@ describe("callModelWithRecovery", () => {
     });
     expect(progress).toEqual(["回复内容较长，正在继续生成…"]);
     expect(result.recoveryNotes[0]).toContain("max_tokens");
+    expect(result.maxOutputTokensOverride).toBe(65536);
+    expect(result.maxOutputTokensRecoveryCount).toBe(1);
+  });
+
+  it("uses the query fallback model after consecutive overloads", async () => {
+    vi.useFakeTimers();
+    const generateText = vi
+      .fn()
+      .mockRejectedValueOnce(
+        normalizeProviderError(
+          "openai",
+          Object.assign(new Error("overloaded"), { status: 529 }),
+        ),
+      )
+      .mockRejectedValueOnce(
+        normalizeProviderError(
+          "openai",
+          Object.assign(new Error("overloaded"), { status: 529 }),
+        ),
+      )
+      .mockResolvedValueOnce({
+        provider: "anthropic",
+        model: "fallback",
+        content: textContent("ok"),
+      });
+    const gateway: AgentModelGateway = {
+      generateText,
+      async *generateTextStream() {
+        yield { type: "complete" as const, content: [] };
+      },
+    };
+
+    const promise = callModelWithRecovery({
+      gateway,
+      systemPrompt: "system",
+      promptPayload: { transcript: [] },
+      model: { provider: "openai", model: "primary" },
+      fallbackModel: { provider: "anthropic", model: "fallback" },
+    });
+    await vi.runAllTimersAsync();
+    const result = await promise;
+
+    expect(generateText.mock.calls.map((call) => call[1])).toEqual([
+      { provider: "openai", model: "primary" },
+      { provider: "openai", model: "primary" },
+      { provider: "anthropic", model: "fallback" },
+    ]);
+    expect(result.modelUsed).toEqual({ provider: "anthropic", model: "fallback" });
+    vi.useRealTimers();
   });
 });

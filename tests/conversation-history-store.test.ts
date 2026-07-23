@@ -103,7 +103,10 @@ describe("canonical conversation history store", () => {
       ]),
     );
     const checkpoint = await new DurableRunStore(root).load("history-thread");
-    expect(checkpoint?.runId).toBe("second-run");
-    expect(checkpoint?.modelStep).toBe(1);
+    expect(checkpoint).toMatchObject({
+      version: 2,
+      lastRunId: "second-run",
+      committedState: { turnCount: 0 },
+    });
   });
 });

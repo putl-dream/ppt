@@ -4,7 +4,7 @@ import { LeadInboxInputSource } from "../src/main/agent/runtime/background/lead-
 import { AgentSession } from "../src/main/agent/runtime/lifecycle/agent-session";
 
 function createSession(): AgentSession {
-  return new AgentSession({ transcript: [], modelMessages: [] });
+  return new AgentSession({ transcript: [] });
 }
 
 describe("LeadInboxInputSource", () => {

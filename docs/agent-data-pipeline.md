@@ -33,6 +33,7 @@
 主 Agent 的 provider 请求只从 Query State/Workspace 中的 canonical `messages` 构造。
 `request`、可见 `messageHistory` 和 transcript 不再作为平行 conversation payload 发送给 provider；
 context compact 的最终结果也直接体现为 provider 收到的 `AgentModelMessage[]`。
+`AgentSession` 只保留 transcript、终止态、模型步诊断计数和外部通知消费状态，不再保存模型消息、工具队列、工具结果、render feedback 或 validation counter。后五者分别由 Query State 与 Iteration Workspace 持有，并只在完整批次结束时通过 reducer 原子提交。
 
 业务侧通过三种强类型门面收敛这个底层协议：
 

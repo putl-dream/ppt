@@ -110,7 +110,9 @@ describe("native ContentBlock runtime path", () => {
       request: "你是谁？",
       presentationSnapshot: createStarterPresentation(),
       selectedElementIds: [],
-      onStreamChunk: (chunk) => { streamed += chunk; },
+      onStreamEvent: (event) => {
+        if (event.type === "delta") streamed += event.text;
+      },
     });
     expect(result.type).toBe("message");
     expect(streamed).toBe("我是你的 PPT 智能助手。\n\n说说你的需求，我马上开干。");
