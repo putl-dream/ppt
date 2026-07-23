@@ -8,10 +8,14 @@ import { createDefaultToolRegistry } from "../src/main/agent/tools/tool-registry
 import { createStarterPresentation } from "../src/shared/presentation";
 import { AgentRuntime } from "../src/main/agent/runtime/agent-runtime";
 import { TEST_DESIGN_SYSTEM } from "./design-engine-test-utils";
+import { clearHooks, registerHook } from "../src/main/agent/runtime/hook-registry";
+import type { StopBlock } from "../src/main/agent/runtime/hook-blocks";
+import { DurableRunStore } from "../src/main/agent/persistence/durable-run-store";
 
 const tempDirs: string[] = [];
 
 afterEach(async () => {
+  clearHooks();
   await Promise.all(tempDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
 });
 
@@ -110,6 +114,8 @@ describe("layout choice runtime orchestration", () => {
     } as any;
     const runtime = new AgentRuntime(createDefaultToolRegistry(), gateway);
     const runtimeRoot = join(workspaceRoot, "runtime");
+    const stops: StopBlock[] = [];
+    registerHook("Stop", (block) => { stops.push(block as StopBlock); return null; });
 
     const result = await runtime.run({
       threadId: "layout-choice-thread",
@@ -126,6 +132,10 @@ describe("layout choice runtime orchestration", () => {
     expect(result.type === "message" && result.content).toContain("自主领取");
     expect(generateText).not.toHaveBeenCalled();
     expect((await new TaskStore(runtimeRoot).listTasks())).toHaveLength(1);
+    expect(await new DurableRunStore(workspaceRoot).load("layout-choice-thread"))
+      .toMatchObject({ status: "completed", phase: "finished", result });
+    expect(stops).toHaveLength(1);
+    expect(stops[0]).toMatchObject({ reason: "completed", result });
   });
 
   it("reconciles verified content artifacts before activating an existing layout task", async () => {

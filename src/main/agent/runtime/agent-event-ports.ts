@@ -30,7 +30,7 @@ export class AgentEventPorts {
     runId?: string;
     onProgress?: (event: AgentRendererEvent) => void;
     conversationDatabase?: ConversationDatabase;
-    transcript: Array<Record<string, unknown>>;
+    appendTranscript(entry: Record<string, unknown>): void;
   }) {}
 
   renderer(event: AgentRendererEvent): void {
@@ -55,7 +55,7 @@ export class AgentEventPorts {
         visibility,
       );
     } catch (error) {
-      this.input.transcript.push({
+      this.input.appendTranscript({
         role: "system",
         kind: "runtime_event_error",
         eventKind: kind,

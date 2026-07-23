@@ -1,7 +1,7 @@
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { AgentRuntime } from "../src/main/agent/runtime/agent-runtime";
 import { clearHooks, registerHook } from "../src/main/agent/runtime/hook-registry";
@@ -11,6 +11,7 @@ import { ToolRegistry } from "../src/main/agent/tools/tool-registry";
 import type { ToolDefinition } from "../src/main/agent/tools/tool-definition";
 import { createStarterPresentation } from "../src/shared/presentation";
 import { DurableRunStore } from "../src/main/agent/persistence/durable-run-store";
+import { TEST_DESIGN_SYSTEM } from "./design-engine-test-utils";
 
 function textGateway(text: string): AgentModelGateway {
   return {
@@ -169,5 +170,55 @@ describe("AgentRuntime terminal boundaries", () => {
     await new Promise((resolve) => setTimeout(resolve, 30));
     const checkpoint = await new DurableRunStore(workspaceRoot).load("late-background-thread");
     expect(checkpoint).toMatchObject({ status: "failed", phase: "finished" });
+  });
+
+  it("removes abort forwarding when a durable lease cannot be acquired", async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), "runtime-lease-busy-"));
+    const store = new DurableRunStore(workspaceRoot);
+    const opened = await store.openLease({
+      threadId: "busy-thread",
+      runId: "existing-run",
+      resume: false,
+    });
+    expect(opened.type).toBe("opened");
+    if (opened.type !== "opened") return;
+
+    const controller = new AbortController();
+    const removeListener = vi.spyOn(controller.signal, "removeEventListener");
+    await expect(new AgentRuntime(new ToolRegistry(), textGateway("unused")).run({
+      threadId: "busy-thread",
+      runId: "new-run",
+      request: "blocked",
+      presentationSnapshot: createStarterPresentation(),
+      selectedElementIds: [],
+      workspaceRoot,
+      signal: controller.signal,
+    })).rejects.toThrow("already owned");
+
+    expect(removeListener).toHaveBeenCalledWith("abort", expect.any(Function));
+    await store.closeLease(opened.lease);
+  });
+
+  it("closes a lease when preparation fails after acquisition", async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), "runtime-prepare-failed-"));
+    await expect(new AgentRuntime(new ToolRegistry(), textGateway("unused")).run({
+      threadId: "prepare-failed-thread",
+      runId: "failed-preparation",
+      request: "layout",
+      presentationSnapshot: createStarterPresentation(),
+      selectedElementIds: [],
+      workspaceRoot,
+      layoutChoice: { mode: "creative", designSystem: TEST_DESIGN_SYSTEM },
+    })).rejects.toThrow("configured workspace task board");
+
+    const reopened = await new DurableRunStore(workspaceRoot).openLease({
+      threadId: "prepare-failed-thread",
+      runId: "replacement-run",
+      resume: false,
+    });
+    expect(reopened.type).toBe("opened");
+    if (reopened.type === "opened") {
+      await new DurableRunStore(workspaceRoot).closeLease(reopened.lease);
+    }
   });
 });

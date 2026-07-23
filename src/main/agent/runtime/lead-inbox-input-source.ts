@@ -6,6 +6,7 @@ import type {
 import { formatMailboxMessagesForHistory } from "../teammate/message-bus";
 import type { TeammateManager } from "../teammate/spawn-teammate";
 import type { ToolApprovalHandler } from "./permission-check";
+import type { AgentSession } from "./agent-session";
 
 /**
  * Claims and commits lead inbox input. Permission responses intentionally retain
@@ -16,8 +17,7 @@ export class LeadInboxInputSource {
     messageBus?: MessageBus;
     teammateManager?: TeammateManager;
     requestToolApproval?: ToolApprovalHandler;
-    processedMessageIds: Set<string>;
-    transcript: Array<Record<string, unknown>>;
+    session: AgentSession;
     commit(): Promise<void>;
   }) {}
 
@@ -30,7 +30,7 @@ export class LeadInboxInputSource {
     if (!claim) return undefined;
 
     const inbox = claim.messages.filter(
-      (message) => !this.input.processedMessageIds.has(message.id),
+      (message) => !this.input.session.hasProcessedInboxMessage(message.id),
     );
     if (inbox.length === 0) {
       await this.ack(claim);
@@ -58,8 +58,10 @@ export class LeadInboxInputSource {
     if (parts.length === 0) return undefined;
 
     const content = parts.join("\n\n");
-    this.input.transcript.push({ role: "user", content, inbox });
-    for (const message of inbox) this.input.processedMessageIds.add(message.id);
+    this.input.session.recordInboxConsumption(
+      inbox.map((message) => message.id),
+      { role: "user", content, inbox },
+    );
     await this.input.commit();
     await this.ack(claim);
     return content;

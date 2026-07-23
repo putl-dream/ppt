@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { MessageBus } from "../src/main/agent/teammate/message-bus";
 import { LeadInboxInputSource } from "../src/main/agent/runtime/lead-inbox-input-source";
+import { AgentSession } from "../src/main/agent/runtime/agent-session";
+
+function createSession(): AgentSession {
+  return new AgentSession({ transcript: [], modelMessages: [] });
+}
 
 describe("LeadInboxInputSource", () => {
   it("replays a permission response with the same stable id after a pre-checkpoint crash", async () => {
@@ -35,8 +40,7 @@ describe("LeadInboxInputSource", () => {
     const interrupted = new LeadInboxInputSource({
       messageBus: bus,
       requestToolApproval: async () => true,
-      processedMessageIds: new Set(),
-      transcript: [],
+      session: createSession(),
       commit: async () => {
         order.push("commit");
         throw new Error("checkpoint unavailable");
@@ -49,8 +53,7 @@ describe("LeadInboxInputSource", () => {
     const recovered = new LeadInboxInputSource({
       messageBus: bus,
       requestToolApproval: async () => true,
-      processedMessageIds: new Set(),
-      transcript: [],
+      session: createSession(),
       commit: async () => {
         order.push("commit");
       },

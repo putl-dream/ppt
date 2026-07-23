@@ -6,7 +6,7 @@ describe("AgentEventPorts renderer adapter", () => {
     const received: unknown[] = [];
     const events = new AgentEventPorts({
       threadId: "thread-1",
-      transcript: [],
+      appendTranscript: () => undefined,
       onProgress: (event) => received.push(event),
     });
     events.renderer({
@@ -26,7 +26,7 @@ describe("AgentEventPorts renderer adapter", () => {
     const events = new AgentEventPorts({
       threadId: "thread-1",
       runId: "run-1",
-      transcript: [],
+      appendTranscript: () => undefined,
       onProgress: () => { throw new Error("renderer unavailable"); },
     });
 
