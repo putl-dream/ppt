@@ -1,4 +1,4 @@
-import type { ModelPromptPayload } from "../model-call-recovery";
+import type { ModelPromptPayload } from "../turns/model-call-recovery";
 import { resolveContextSoftTokenThreshold, resolveContextTokenThreshold } from "./config";
 import { compactHistory } from "./compact-history";
 import { estimatePromptTokens } from "./estimate-tokens";

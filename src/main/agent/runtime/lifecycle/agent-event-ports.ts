@@ -1,4 +1,4 @@
-import type { ConversationDatabase } from "../../conversation-database";
+import type { ConversationDatabase } from "../../../conversation-database";
 
 export interface AgentRendererEvent {
   type: string;

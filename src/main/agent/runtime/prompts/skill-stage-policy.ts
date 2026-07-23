@@ -1,4 +1,4 @@
-import type { SkillCard, SkillEntry } from "../skills/skill-types";
+import type { SkillCard, SkillEntry } from "../../skills/skill-types";
 import type { PromptStage } from "./prompt-stage";
 import { normalizePromptStage } from "./prompt-stage";
 

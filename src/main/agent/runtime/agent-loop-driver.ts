@@ -1,6 +1,6 @@
-import type { AgentLoopTerminalOutcome, PreparedAgentRun } from "./prepared-agent-run";
-import { ModelTurnRunner } from "./model-turn-runner";
-import { ToolTurnRunner } from "./tool-turn-runner";
+import type { AgentLoopTerminalOutcome, PreparedAgentRun } from "./turns/prepared-agent-run";
+import { ModelTurnRunner } from "./turns/model-turn-runner";
+import { ToolTurnRunner } from "./turns/tool-turn-runner";
 
 /** The single linear queue/model/tool loop for one prepared run. */
 export class AgentLoopDriver {

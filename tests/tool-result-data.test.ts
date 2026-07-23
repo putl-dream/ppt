@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { z } from "zod";
-import { prepareToolResultData } from "../src/main/agent/runtime/tool-result-data";
+import { prepareToolResultData } from "../src/main/agent/runtime/tools/tool-result-data";
 import { ToolOutputValidationError, validateToolOutput } from "../src/main/agent/tools/tool-validation";
 import type { ToolDefinition } from "../src/main/agent/tools/tool-definition";
 

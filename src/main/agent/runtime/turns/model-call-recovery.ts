@@ -7,20 +7,20 @@ import type {
   AgentModelStreamChunk,
   AgentResponseContract,
   AgentToolSchema,
-} from "../gateway/types";
-import { textFromContentBlocks, toolUseBlocksFromContent } from "../gateway/content-blocks";
-import { resolveFallbackModelSelection } from "../gateway/config";
+} from "../../gateway/types";
+import { textFromContentBlocks, toolUseBlocksFromContent } from "../../gateway/content-blocks";
+import { resolveFallbackModelSelection } from "../../gateway/config";
 import {
   AgentGatewayError,
   classifyGatewayRecovery,
   isAbortError,
   isOutputTruncated,
-} from "../gateway/errors";
-import { backoffBeforeRetry, extractRetryAfterMs } from "../gateway/withRetry";
-import { emergencyTrimContext, prepareContext } from "./context-compact";
-import { createModuleLogger } from "../logger";
-import { ensureToolResultPairing } from "../gateway/message-pairing";
-import { callTool } from "../gateway/model-calls";
+} from "../../gateway/errors";
+import { backoffBeforeRetry, extractRetryAfterMs } from "../../gateway/withRetry";
+import { emergencyTrimContext, prepareContext } from "../context-compact";
+import { createModuleLogger } from "../../logger";
+import { ensureToolResultPairing } from "../../gateway/message-pairing";
+import { callTool } from "../../gateway/model-calls";
 
 const logger = createModuleLogger("model-call-recovery");
 const MAX_RECOVERY_ATTEMPTS = 8;

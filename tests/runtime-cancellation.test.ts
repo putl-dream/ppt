@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   isRuntimeCancellation,
   rethrowIfRuntimeCancellation,
-} from "../src/main/agent/runtime/runtime-cancellation";
+} from "../src/main/agent/runtime/lifecycle/runtime-cancellation";
 
 describe("runtime cancellation classification", () => {
   it("prioritizes an aborted signal over an ordinary downstream error", () => {

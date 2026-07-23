@@ -8,9 +8,9 @@ import type {
   AgentModelRequest,
 } from "../src/main/agent/gateway/types";
 import { AgentRuntime } from "../src/main/agent/runtime/agent-runtime";
-import type { StopBlock } from "../src/main/agent/runtime/hook-blocks";
-import { clearHooks, registerHook } from "../src/main/agent/runtime/hook-registry";
-import { resetDefaultHooksForTests } from "../src/main/agent/runtime/default-hooks";
+import type { StopBlock } from "../src/main/agent/runtime/hooks/hook-blocks";
+import { clearHooks, registerHook } from "../src/main/agent/runtime/hooks/hook-registry";
+import { resetDefaultHooksForTests } from "../src/main/agent/runtime/hooks/default-hooks";
 import {
   formatMailboxMessagesForHistory,
   MessageBus,

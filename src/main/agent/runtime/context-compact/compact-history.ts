@@ -2,7 +2,7 @@ import { appendFile, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import type { AgentModelGateway } from "../../gateway/types";
 import type { AgentModelSelection } from "@shared/agent";
-import type { ModelPromptPayload } from "../model-call-recovery";
+import type { ModelPromptPayload } from "../turns/model-call-recovery";
 import { COMPACT_HISTORY_MAX_FAILURES, COMPACT_TRANSCRIPTS_DIR } from "./config";
 import type { TranscriptEntry } from "./types";
 import { callLLM } from "../../gateway/model-calls";

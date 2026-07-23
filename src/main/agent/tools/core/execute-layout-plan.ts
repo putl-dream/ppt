@@ -11,7 +11,7 @@ import {
   type LayoutPlanValidationIssue,
 } from "@shared/layout-plan";
 import type { AgentCommandProposalResult } from "../../runtime/runtime-types";
-import { applyCommandsToDraft } from "../../runtime/layout-command-utils";
+import { applyCommandsToDraft } from "../../runtime/presentation/layout-command-utils";
 import { resolveWorkspacePath } from "../../subagent/workspace-path";
 import type { ToolDefinition } from "../tool-definition";
 import type { PresentationCommand } from "@shared/commands";

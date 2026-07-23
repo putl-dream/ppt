@@ -1,9 +1,9 @@
-import type { AgentModelToolResultBlock, AgentModelToolUseBlock } from "../gateway/types";
-import type { ToolContext, ToolDefinition } from "../tools/tool-definition";
-import { validateToolOutput } from "../tools/tool-validation";
-import type { PostToolUseBlock } from "./hook-blocks";
+import type { AgentModelToolResultBlock, AgentModelToolUseBlock } from "../../gateway/types";
+import type { ToolContext, ToolDefinition } from "../../tools/tool-definition";
+import { validateToolOutput } from "../../tools/tool-validation";
+import type { PostToolUseBlock } from "../hooks/hook-blocks";
 import { prepareToolResultData } from "./tool-result-data";
-import { rethrowIfRuntimeCancellation } from "./runtime-cancellation";
+import { rethrowIfRuntimeCancellation } from "../lifecycle/runtime-cancellation";
 
 export interface ToolExecutionOutcome {
   executionStatus: "not_started" | "threw" | "returned";

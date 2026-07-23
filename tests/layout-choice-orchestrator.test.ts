@@ -2,14 +2,14 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { prepareLayoutChoiceTask } from "../src/main/agent/runtime/layout-choice-orchestrator";
+import { prepareLayoutChoiceTask } from "../src/main/agent/runtime/presentation/layout-choice-orchestrator";
 import { TaskStore } from "../src/main/agent/task/task-store";
 import { createDefaultToolRegistry } from "../src/main/agent/tools/tool-registry";
 import { createStarterPresentation } from "../src/shared/presentation";
 import { AgentRuntime } from "../src/main/agent/runtime/agent-runtime";
 import { TEST_DESIGN_SYSTEM } from "./design-engine-test-utils";
-import { clearHooks, registerHook } from "../src/main/agent/runtime/hook-registry";
-import type { StopBlock } from "../src/main/agent/runtime/hook-blocks";
+import { clearHooks, registerHook } from "../src/main/agent/runtime/hooks/hook-registry";
+import type { StopBlock } from "../src/main/agent/runtime/hooks/hook-blocks";
 import { DurableRunStore } from "../src/main/agent/persistence/durable-run-store";
 
 const tempDirs: string[] = [];

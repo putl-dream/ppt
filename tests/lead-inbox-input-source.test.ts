@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { MessageBus } from "../src/main/agent/teammate/message-bus";
-import { LeadInboxInputSource } from "../src/main/agent/runtime/lead-inbox-input-source";
-import { AgentSession } from "../src/main/agent/runtime/agent-session";
+import { LeadInboxInputSource } from "../src/main/agent/runtime/background/lead-inbox-input-source";
+import { AgentSession } from "../src/main/agent/runtime/lifecycle/agent-session";
 
 function createSession(): AgentSession {
   return new AgentSession({ transcript: [], modelMessages: [] });

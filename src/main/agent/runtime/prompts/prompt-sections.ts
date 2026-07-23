@@ -1,13 +1,13 @@
-import type { ToolDefinition } from "../tools/tool-definition";
-import { toToolCard } from "../tools/tool-card";
-import type { SkillCard } from "../skills/skill-types";
+import type { ToolDefinition } from "../../tools/tool-definition";
+import { toToolCard } from "../../tools/tool-card";
+import type { SkillCard } from "../../skills/skill-types";
 import type { AgentStepLimits } from "@shared/agent-step-limits";
 import type { PromptStage } from "./prompt-stage";
 import { describePromptStage } from "./prompt-stage";
 import { filterSkillCatalogForStage } from "./skill-stage-policy";
-import type { SkillRegistry } from "../skills/loadSkillsDir";
-import { buildContentBlockResponseGuidance } from "../gateway/response-contract";
-import type { WorkspaceArtifacts } from "./workspace-artifacts";
+import type { SkillRegistry } from "../../skills/loadSkillsDir";
+import { buildContentBlockResponseGuidance } from "../../gateway/response-contract";
+import type { WorkspaceArtifacts } from "../presentation/workspace-artifacts";
 
 export type PromptSectionId = "identity" | "responseProtocol" | "tools" | "workspace" | "memory";
 

@@ -6,13 +6,13 @@ import { TEST_DESIGN_SYSTEM } from "./design-engine-test-utils";
 import {
   probeWorkspaceArtifactDetails,
   probeWorkspaceArtifacts,
-} from "../src/main/agent/runtime/workspace-artifacts";
+} from "../src/main/agent/runtime/presentation/workspace-artifacts";
 import {
   createDefaultBriefMarkdown,
   createDefaultOutlineMarkdown,
 } from "../src/shared/project-artifacts";
 import { createDefaultStoryboardSlide } from "../src/shared/storyboard";
-import { buildSystemPromptContext } from "../src/main/agent/runtime/prompt-context";
+import { buildSystemPromptContext } from "../src/main/agent/runtime/prompts/prompt-context";
 import { askUserTool } from "../src/main/agent/tools/core/ask-user";
 
 async function createWorkspace(): Promise<string> {

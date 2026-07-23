@@ -5,8 +5,8 @@ import {
   isOutputTruncated,
   normalizeProviderError,
 } from "../src/main/agent/gateway/errors";
-import { compactTranscript } from "../src/main/agent/runtime/transcript-compact";
-import { callModelWithRecovery } from "../src/main/agent/runtime/model-call-recovery";
+import { compactTranscript } from "../src/main/agent/runtime/turns/transcript-compact";
+import { callModelWithRecovery } from "../src/main/agent/runtime/turns/model-call-recovery";
 import type { AgentModelGateway } from "../src/main/agent/gateway/types";
 
 function textContent(text: string) {

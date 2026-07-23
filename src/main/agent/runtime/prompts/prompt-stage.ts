@@ -1,6 +1,6 @@
 import type { Presentation } from "@shared/presentation";
 
-import type { WorkspaceArtifacts } from "./workspace-artifacts";
+import type { WorkspaceArtifacts } from "../presentation/workspace-artifacts";
 import { isExplicitExportPrompt } from "./export-intent";
 
 /**

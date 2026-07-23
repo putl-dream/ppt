@@ -1,4 +1,4 @@
-import type { PromptStage } from "../runtime/prompt-stage";
+import type { PromptStage } from "../runtime/prompts/prompt-stage";
 
 /**
  * Skill catalog and session types for the two-layer load_skill design.

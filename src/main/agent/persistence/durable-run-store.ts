@@ -10,7 +10,7 @@ import type {
 } from "../gateway/types";
 import { readJsonFile, writeJsonFileAtomic } from "./atomic-json-file";
 import { ConversationDatabase } from "../../conversation-database";
-import type { DurableBackgroundTask } from "../runtime/background-task-manager";
+import type { DurableBackgroundTask } from "../runtime/background/background-task-manager";
 
 type LockRelease = () => Promise<void>;
 type ProperLockfile = {

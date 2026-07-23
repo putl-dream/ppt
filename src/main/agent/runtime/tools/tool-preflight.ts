@@ -1,12 +1,12 @@
-import type { AgentModelToolResultBlock, AgentModelToolUseBlock } from "../gateway/types";
-import type { ToolContext, ToolDefinition } from "../tools/tool-definition";
-import type { ToolInputRepair } from "../tools/tool-input";
-import { parseDefinedToolInput } from "../tools/tool-input";
-import type { ToolRegistry } from "../tools/tool-registry";
-import { triggerHooks } from "./hook-registry";
+import type { AgentModelToolResultBlock, AgentModelToolUseBlock } from "../../gateway/types";
+import type { ToolContext, ToolDefinition } from "../../tools/tool-definition";
+import type { ToolInputRepair } from "../../tools/tool-input";
+import { parseDefinedToolInput } from "../../tools/tool-input";
+import type { ToolRegistry } from "../../tools/tool-registry";
+import { triggerHooks } from "../hooks/hook-registry";
 import type { ToolApprovalHandler } from "./permission-check";
-import { rethrowIfRuntimeCancellation } from "./runtime-cancellation";
-import { shouldRunBackground } from "./background-task-manager";
+import { rethrowIfRuntimeCancellation } from "../lifecycle/runtime-cancellation";
+import { shouldRunBackground } from "../background/background-task-manager";
 import type { ToolExecutionOutcome } from "./tool-execution-engine";
 
 export type ToolPreflightFailureKind =

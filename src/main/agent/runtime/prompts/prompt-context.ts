@@ -1,10 +1,10 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Presentation } from "@shared/presentation";
-import type { ToolDefinition } from "../tools/tool-definition";
-import type { SkillCard } from "../skills/skill-types";
+import type { ToolDefinition } from "../../tools/tool-definition";
+import type { SkillCard } from "../../skills/skill-types";
 import type { AgentStepLimits } from "@shared/agent-step-limits";
-import type { SkillRegistry } from "../skills/loadSkillsDir";
+import type { SkillRegistry } from "../../skills/loadSkillsDir";
 import {
   resolvePromptStage,
   type PromptStage,
@@ -12,7 +12,7 @@ import {
 import {
   probeWorkspaceArtifacts,
   type WorkspaceArtifacts,
-} from "./workspace-artifacts";
+} from "../presentation/workspace-artifacts";
 
 export const MEMORY_INDEX_RELATIVE_PATH = ".memory/MEMORY.md";
 export const DURABLE_MEMORY_STATE_RELATIVE_PATH = ".memory/STATE.md";

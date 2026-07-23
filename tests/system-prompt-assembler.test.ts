@@ -11,16 +11,16 @@ import { createStarterPresentation } from "../src/shared/presentation";
 import {
   buildSystemPromptContext,
   MEMORY_INDEX_RELATIVE_PATH,
-} from "../src/main/agent/runtime/prompt-context";
+} from "../src/main/agent/runtime/prompts/prompt-context";
 import {
   assembleSystemPrompt,
   clearSystemPromptCache,
   getSystemPrompt,
   splitSystemPromptPrefix,
-} from "../src/main/agent/runtime/system-prompt-assembler";
-import { SYSTEM_PROMPT_DYNAMIC_BOUNDARY } from "../src/main/agent/runtime/prompt-sections";
-import { SystemPromptBuilder } from "../src/main/agent/runtime/system-prompt";
-import { resolvePromptStage } from "../src/main/agent/runtime/prompt-stage";
+} from "../src/main/agent/runtime/prompts/system-prompt-assembler";
+import { SYSTEM_PROMPT_DYNAMIC_BOUNDARY } from "../src/main/agent/runtime/prompts/prompt-sections";
+import { SystemPromptBuilder } from "../src/main/agent/runtime/prompts/system-prompt";
+import { resolvePromptStage } from "../src/main/agent/runtime/prompts/prompt-stage";
 
 const SAMPLE_SKILL = `---
 name: ppt-build

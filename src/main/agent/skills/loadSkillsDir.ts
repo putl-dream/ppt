@@ -1,6 +1,6 @@
 import { readdir, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
-import { normalizePromptStage, type PromptStage } from "../runtime/prompt-stage";
+import { normalizePromptStage, type PromptStage } from "../runtime/prompts/prompt-stage";
 import type { SkillCard, SkillEntry, SkillFrontmatter } from "./skill-types";
 import {
   parseSkillFrontmatterFields,

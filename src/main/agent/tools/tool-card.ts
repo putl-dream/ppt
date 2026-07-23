@@ -1,5 +1,5 @@
 import type { ToolDefinition } from "./tool-definition";
-import { isRiskApprovalHintRequired } from "../runtime/tool-access-policy";
+import { isRiskApprovalHintRequired } from "../runtime/tools/tool-access-policy";
 import { toToolInputSchema } from "./tool-schema";
 
 /**

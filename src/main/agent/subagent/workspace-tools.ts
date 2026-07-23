@@ -13,7 +13,7 @@ import { isOutsideWorkspace } from "./workspace-path";
 import {
   SUB_AGENT_TOOL_PERMISSION_PROFILES,
   type ToolPermissionProfile,
-} from "../runtime/tool-access-policy";
+} from "../runtime/tools/tool-access-policy";
 import {
   executeWebSearch,
   formatWebSearchOutput,

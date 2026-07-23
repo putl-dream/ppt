@@ -1,5 +1,5 @@
-import type { AgentModelToolResultBlock } from "../gateway/types";
-import type { AgentSession } from "./agent-session";
+import type { AgentModelToolResultBlock } from "../../gateway/types";
+import type { AgentSession } from "../lifecycle/agent-session";
 
 /** Maintains the provider-required assistant/tool_result adjacency for user turns. */
 export class TurnInputAssembler {

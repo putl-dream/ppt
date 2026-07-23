@@ -1,4 +1,4 @@
-import type { ModelPromptPayload } from "../model-call-recovery";
+import type { ModelPromptPayload } from "../turns/model-call-recovery";
 
 export type TranscriptEntry = Record<string, unknown>;
 

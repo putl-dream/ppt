@@ -37,7 +37,7 @@ import { agentGatewayConfigSchema, type AgentGatewayConfig } from "@shared/agent
 import { AgentGateway } from "./agent/gateway";
 import { LeanPresentationService } from "./agent/lean/lean-presentation-service";
 import { AgentRuntime } from "./agent/runtime/agent-runtime";
-import { ToolApprovalBroker } from "./agent/runtime/tool-approval-broker";
+import { ToolApprovalBroker } from "./agent/runtime/tools/tool-approval-broker";
 import { createDefaultToolRegistry } from "./agent/tools/tool-registry";
 import { formatMailboxMessagesForHistory, MessageBus } from "./agent/teammate/message-bus";
 import { TeammateManager } from "./agent/teammate/spawn-teammate";

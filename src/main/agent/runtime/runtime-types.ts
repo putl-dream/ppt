@@ -9,7 +9,7 @@ import type { AgentExecutionStrategy, AgentModelSelection } from "@shared/agent"
 import type { AgentStepLimits } from "@shared/agent-step-limits";
 import type { Presentation } from "@shared/presentation";
 import type { LayoutChoice } from "@shared/layout-preference";
-import type { ToolApprovalHandler } from "./permission-check";
+import type { ToolApprovalHandler } from "./tools/permission-check";
 import type { MessageBus } from "../teammate/message-bus";
 import type { TeammateManager } from "../teammate/spawn-teammate";
 

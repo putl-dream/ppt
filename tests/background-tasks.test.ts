@@ -4,7 +4,7 @@ import { AgentRuntime } from "../src/main/agent/runtime/agent-runtime";
 import {
   BackgroundTaskManager,
   formatBackgroundNotifications,
-} from "../src/main/agent/runtime/background-task-manager";
+} from "../src/main/agent/runtime/background/background-task-manager";
 import type {
   AgentModelGateway,
   AgentModelRequest,

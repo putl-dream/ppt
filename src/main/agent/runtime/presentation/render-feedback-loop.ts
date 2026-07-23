@@ -12,9 +12,9 @@ import {
   type VisualIssue,
 } from "@design-system";
 
-import { previewSlideTool } from "../tools/deferred/preview-slide";
-import type { ToolContext } from "../tools/tool-definition";
-import type { PromptStage } from "./prompt-stage";
+import { previewSlideTool } from "../../tools/deferred/preview-slide";
+import type { ToolContext } from "../../tools/tool-definition";
+import type { PromptStage } from "../prompts/prompt-stage";
 import {
   applyCommandsToDraft,
   collectAffectedSlideIds,

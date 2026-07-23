@@ -1,11 +1,11 @@
 import type { LayoutChoice } from "@shared/layout-preference";
 import type { Presentation } from "@shared/presentation";
 import type { AgentTaskNode } from "@shared/agent-task-graph";
-import type { TaskStore } from "../task/task-store";
-import type { ToolContext } from "../tools/tool-definition";
-import { ensureAutonomousTaskWorker } from "../tools/core/task-graph-tools";
-import { writeJsonFileAtomic } from "../persistence/atomic-json-file";
-import { resolveAgentPath } from "../subagent/workspace-path";
+import type { TaskStore } from "../../task/task-store";
+import type { ToolContext } from "../../tools/tool-definition";
+import { ensureAutonomousTaskWorker } from "../../tools/core/task-graph-tools";
+import { writeJsonFileAtomic } from "../../persistence/atomic-json-file";
+import { resolveAgentPath } from "../../subagent/workspace-path";
 import { probeWorkspaceArtifactDetails } from "./workspace-artifacts";
 
 const LAYOUT_TASK_PATTERN = /layout-plan|排版计划|版式计划|ppt-design-layout/i;
@@ -133,4 +133,4 @@ export async function prepareLayoutChoiceTask(input: {
 
   return { task: publishedTask, tasks: published.snapshot.tasks, created, worker, message };
 }
-import { publishCurrentTaskGraph } from "../task/task-graph-publisher";
+import { publishCurrentTaskGraph } from "../../task/task-graph-publisher";

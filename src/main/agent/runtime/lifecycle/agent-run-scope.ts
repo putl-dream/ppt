@@ -1,19 +1,19 @@
-import type { ConversationDatabase } from "../../conversation-database";
+import type { ConversationDatabase } from "../../../conversation-database";
 import { filterTasksByPlan } from "@shared/agent-task-graph";
-import type { AgentModelMessage } from "../gateway/types";
+import type { AgentModelMessage } from "../../gateway/types";
 import {
   type DurableRunCheckpoint,
   type DurableRunPhase,
   type DurableRunStatus,
   DurableRunStore,
-} from "../persistence/durable-run-store";
-import { createTaskStore } from "../task/task-store";
-import type { ToolDiscoverySession } from "../tools/tool-definition";
-import type { SkillSession } from "../skills/skill-types";
-import type { AgentRuntimeOptions, AgentRuntimeResult } from "./runtime-types";
+} from "../../persistence/durable-run-store";
+import { createTaskStore } from "../../task/task-store";
+import type { ToolDiscoverySession } from "../../tools/tool-definition";
+import type { SkillSession } from "../../skills/skill-types";
+import type { AgentRuntimeOptions, AgentRuntimeResult } from "../runtime-types";
 import { AgentEventPorts } from "./agent-event-ports";
 import { AgentSession } from "./agent-session";
-import { BackgroundTaskManager } from "./background-task-manager";
+import { BackgroundTaskManager } from "../background/background-task-manager";
 import { CheckpointCoordinator } from "./checkpoint-coordinator";
 import { CheckpointPolicy } from "./checkpoint-policy";
 

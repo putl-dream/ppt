@@ -2,12 +2,12 @@ import type {
   AgentModelMessage,
   AgentModelToolResultBlock,
   AgentModelToolUseBlock,
-} from "../gateway/types";
+} from "../../gateway/types";
 import type {
   DurableRunPhase,
   DurableRunStatus,
-} from "../persistence/durable-run-store";
-import type { AgentRuntimeResult } from "./runtime-types";
+} from "../../persistence/durable-run-store";
+import type { AgentRuntimeResult } from "../runtime-types";
 import type { AgentTransition } from "./agent-transition";
 
 export interface AgentTerminalState {

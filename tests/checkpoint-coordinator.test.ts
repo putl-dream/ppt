@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CheckpointCoordinator } from "../src/main/agent/runtime/checkpoint-coordinator";
+import { CheckpointCoordinator } from "../src/main/agent/runtime/lifecycle/checkpoint-coordinator";
 import type { DurableRunCheckpoint } from "../src/main/agent/persistence/durable-run-store";
 
 function checkpoint(status: DurableRunCheckpoint["status"]): DurableRunCheckpoint {

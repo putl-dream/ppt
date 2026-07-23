@@ -1,5 +1,5 @@
-import type { AgentRuntimeResult } from "./runtime-types";
-import type { ToolApprovalHandler } from "./permission-check";
+import type { AgentRuntimeResult } from "../runtime-types";
+import type { ToolApprovalHandler } from "../tools/permission-check";
 
 export interface UserPromptSubmitBlock {
   event: "UserPromptSubmit";

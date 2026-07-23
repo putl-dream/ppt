@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { ToolDefinition } from "../tool-definition";
-import { formatSkillStageRejection, isSkillAllowedForStage } from "../../runtime/skill-stage-policy";
+import { formatSkillStageRejection, isSkillAllowedForStage } from "../../runtime/prompts/skill-stage-policy";
 
 export const loadSkillSchema = z.object({
   skillName: z.string().describe("Registered skill name from the Available Skills catalog"),

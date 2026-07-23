@@ -14,7 +14,7 @@ import type {
 } from "../src/main/agent/gateway/types";
 import { createStarterPresentation } from "../src/shared/presentation";
 import type { ToolDefinition } from "../src/main/agent/tools/tool-definition";
-import { clearHooks, registerHook } from "../src/main/agent/runtime/hook-registry";
+import { clearHooks, registerHook } from "../src/main/agent/runtime/hooks/hook-registry";
 
 function createGateway(turns: AgentModelContentBlock[][]): AgentModelGateway & { requests: AgentModelRequest[] } {
   let index = 0;

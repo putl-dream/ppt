@@ -15,7 +15,7 @@ import {
 import { loadSkillTool } from "../src/main/agent/tools/core/load-skill";
 import { createSkillSession } from "../src/main/agent/skills/skill-types";
 import { createStarterPresentation } from "../src/shared/presentation";
-import { SystemPromptBuilder } from "../src/main/agent/runtime/system-prompt";
+import { SystemPromptBuilder } from "../src/main/agent/runtime/prompts/system-prompt";
 import { askUserTool } from "../src/main/agent/tools/core/ask-user";
 import { createDefaultToolRegistry } from "../src/main/agent/tools/tool-registry";
 

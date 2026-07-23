@@ -2,11 +2,11 @@ import type {
   AgentMailboxMessage,
   InboxClaim,
   MessageBus,
-} from "../teammate/message-bus";
-import { formatMailboxMessagesForHistory } from "../teammate/message-bus";
-import type { TeammateManager } from "../teammate/spawn-teammate";
-import type { ToolApprovalHandler } from "./permission-check";
-import type { AgentSession } from "./agent-session";
+} from "../../teammate/message-bus";
+import { formatMailboxMessagesForHistory } from "../../teammate/message-bus";
+import type { TeammateManager } from "../../teammate/spawn-teammate";
+import type { ToolApprovalHandler } from "../tools/permission-check";
+import type { AgentSession } from "../lifecycle/agent-session";
 
 /**
  * Claims and commits lead inbox input. Permission responses intentionally retain

@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { AgentTaskNode } from "@shared/agent-task-graph";
 import type { TaskStore } from "../task/task-store";
 import type { SubAgentToolDefinition } from "../subagent/workspace-tools";
-import type { ToolPermissionProfile } from "../runtime/tool-access-policy";
+import type { ToolPermissionProfile } from "../runtime/tools/tool-access-policy";
 import {
   publishCurrentTaskGraph,
   type TaskGraphSnapshotListener,

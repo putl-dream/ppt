@@ -26,7 +26,7 @@ import { rewriteSlideContentTool } from "../src/main/agent/tools/deferred/rewrit
 import { selectStyleStrategyTool } from "../src/main/agent/tools/deferred/select-style-strategy";
 import { toToolCard } from "../src/main/agent/tools/tool-card";
 import { ToolLoader } from "../src/main/agent/tools/tool-loader";
-import { SystemPromptBuilder } from "../src/main/agent/runtime/system-prompt";
+import { SystemPromptBuilder } from "../src/main/agent/runtime/prompts/system-prompt";
 import { AgentRuntime } from "../src/main/agent/runtime/agent-runtime";
 import { CommitGate } from "../src/main/agent/gate/commit-gate";
 import { RiskPolicy } from "../src/main/agent/gate/risk-policy";

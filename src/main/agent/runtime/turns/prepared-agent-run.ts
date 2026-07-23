@@ -1,24 +1,24 @@
 import type { AgentStepLimits } from "@shared/agent-step-limits";
 import { buildMainStepLimitMessage } from "@shared/agent-step-limits";
-import type { ConversationDatabase } from "../../conversation-database";
+import type { ConversationDatabase } from "../../../conversation-database";
 import type {
   AgentModelGateway,
   AgentModelToolResultBlock,
   AgentToolSchema,
-} from "../gateway/types";
-import type { ToolContext } from "../tools/tool-definition";
-import type { AgentRendererEvent } from "./agent-event-ports";
-import type { AgentRunScope } from "./agent-run-scope";
+} from "../../gateway/types";
+import type { ToolContext } from "../../tools/tool-definition";
+import type { AgentRendererEvent } from "../lifecycle/agent-event-ports";
+import type { AgentRunScope } from "../lifecycle/agent-run-scope";
 import {
   formatBackgroundNotifications,
-} from "./background-task-manager";
-import type { PostToolUseBlock, StopBlock } from "./hook-blocks";
-import type { LeadInboxInputSource } from "./lead-inbox-input-source";
-import type { PresentationCompletionPolicy } from "./presentation-completion-policy";
-import type { ToolExecutionEngine } from "./tool-execution-engine";
-import type { ToolPreflight } from "./tool-preflight";
+} from "../background/background-task-manager";
+import type { PostToolUseBlock, StopBlock } from "../hooks/hook-blocks";
+import type { LeadInboxInputSource } from "../background/lead-inbox-input-source";
+import type { PresentationCompletionPolicy } from "../presentation/presentation-completion-policy";
+import type { ToolExecutionEngine } from "../tools/tool-execution-engine";
+import type { ToolPreflight } from "../tools/tool-preflight";
 import { TurnInputAssembler } from "./turn-input-assembler";
-import type { AgentRuntimeResult } from "./runtime-types";
+import type { AgentRuntimeResult } from "../runtime-types";
 
 export interface AgentLoopTerminalOutcome {
   type: "terminal";

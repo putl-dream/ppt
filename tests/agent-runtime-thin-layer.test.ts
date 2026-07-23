@@ -31,16 +31,16 @@ describe("AgentRuntime thin-layer architecture", () => {
 
   it("routes recoverable collection writes through AgentSession commands", async () => {
     const collaborators = [
-      "agent-run-scope.ts",
+      "lifecycle/agent-run-scope.ts",
       "agent-run-finalizer.ts",
-      "prepared-agent-run.ts",
+      "turns/prepared-agent-run.ts",
       "presentation-agent-run-factory.ts",
-      "model-turn-runner.ts",
-      "tool-turn-runner.ts",
+      "turns/model-turn-runner.ts",
+      "turns/tool-turn-runner.ts",
       "agent-loop-driver.ts",
-      "lead-inbox-input-source.ts",
-      "turn-input-assembler.ts",
-      "agent-event-ports.ts",
+      "background/lead-inbox-input-source.ts",
+      "turns/turn-input-assembler.ts",
+      "lifecycle/agent-event-ports.ts",
     ];
     const combined = (await Promise.all(collaborators.map(source))).join("\n");
 

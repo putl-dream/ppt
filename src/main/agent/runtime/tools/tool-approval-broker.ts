@@ -1,4 +1,4 @@
-import type { AgentServiceEvent, AgentServiceEventListener } from "../service";
+import type { AgentServiceEvent, AgentServiceEventListener } from "../../service";
 import type { ToolApprovalHandler, ToolApprovalRequest } from "./permission-check";
 import { formatToolApprovalDetail } from "./format-tool-approval";
 

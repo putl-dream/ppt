@@ -1,4 +1,4 @@
-import type { HookCallback } from "./hook-registry";
+import type { HookCallback } from "../hooks/hook-registry";
 import {
   evaluateToolPermission,
   type PermissionDecision,

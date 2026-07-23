@@ -1,8 +1,8 @@
-import type { StopBlock } from "./hook-blocks";
-import { triggerHooks } from "./hook-registry";
-import { isRuntimeCancellation } from "./runtime-cancellation";
+import type { StopBlock } from "./hooks/hook-blocks";
+import { triggerHooks } from "./hooks/hook-registry";
+import { isRuntimeCancellation } from "./lifecycle/runtime-cancellation";
 import type { AgentRuntimeResult } from "./runtime-types";
-import type { AgentRunScope } from "./agent-run-scope";
+import type { AgentRunScope } from "./lifecycle/agent-run-scope";
 
 /** Commits the authoritative terminal state before running observational hooks. */
 export class AgentRunFinalizer {

@@ -2,9 +2,9 @@ import type {
   AgentModelContentBlock,
   AgentModelToolResultBlock,
   AgentModelToolUseBlock,
-} from "../gateway/types";
-import type { DurableRunStatus } from "../persistence/durable-run-store";
-import type { AgentRuntimeResult } from "./runtime-types";
+} from "../../gateway/types";
+import type { DurableRunStatus } from "../../persistence/durable-run-store";
+import type { AgentRuntimeResult } from "../runtime-types";
 
 export type AgentTransition =
   | { type: "model_input_prepared" }

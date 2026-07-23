@@ -1,5 +1,5 @@
 import { registerHook } from "./hook-registry";
-import { createPermissionPreToolUseHook } from "./permission-check";
+import { createPermissionPreToolUseHook } from "../tools/permission-check";
 
 let defaultsRegistered = false;
 

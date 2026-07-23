@@ -1,11 +1,11 @@
-import { ensureToolResultPairing } from "../gateway/message-pairing";
+import { ensureToolResultPairing } from "../../gateway/message-pairing";
 import {
   textFromContentBlocks,
   toolUseBlocksFromContent,
-} from "../gateway/content-blocks";
+} from "../../gateway/content-blocks";
 import { callModelWithRecovery } from "./model-call-recovery";
 import type { AgentLoopTurnOutcome, PreparedAgentRun } from "./prepared-agent-run";
-import { formatBackgroundNotifications } from "./background-task-manager";
+import { formatBackgroundNotifications } from "../background/background-task-manager";
 
 /** Runs one sealed model turn and returns an explicit loop decision. */
 export class ModelTurnRunner {

@@ -1,18 +1,18 @@
-import type { AgentModelToolResultBlock } from "../gateway/types";
-import type { ToolContext } from "../tools/tool-definition";
+import type { AgentModelToolResultBlock } from "../../gateway/types";
+import type { ToolContext } from "../../tools/tool-definition";
 import {
   agentAskUserResultSchema,
   agentCommandProposalResultSchema,
   type AgentRuntimeResult,
-} from "./runtime-types";
+} from "../runtime-types";
 import {
   buildRenderFeedback,
   extractFeedbackImages,
   formatRenderFeedbackMessage,
   shouldOfferRenderFeedback,
 } from "./render-feedback-loop";
-import type { ToolExecutionOutcome } from "./tool-execution-engine";
-import type { PromptStage } from "./prompt-stage";
+import type { ToolExecutionOutcome } from "../tools/tool-execution-engine";
+import type { PromptStage } from "../prompts/prompt-stage";
 
 export type PresentationCompletionDecision =
   | {

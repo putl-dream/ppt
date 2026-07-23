@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { AgentEventPorts } from "../src/main/agent/runtime/agent-event-ports";
+import { AgentEventPorts } from "../src/main/agent/runtime/lifecycle/agent-event-ports";
 
 describe("AgentEventPorts renderer adapter", () => {
   it("preserves the renderer DTO shape", () => {

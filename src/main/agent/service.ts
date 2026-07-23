@@ -9,8 +9,8 @@ import type { TeammateProgressEvent } from "@shared/teammate-progress";
 import { CommitGate, type CommitGateResult } from "./gate/commit-gate";
 import { AgentRuntime } from "./runtime/agent-runtime";
 import { formatRecoverableAgentError } from "./gateway/errors";
-import type { ToolApprovalHandler } from "./runtime/permission-check";
-import type { ToolApprovalBroker } from "./runtime/tool-approval-broker";
+import type { ToolApprovalHandler } from "./runtime/tools/permission-check";
+import type { ToolApprovalBroker } from "./runtime/tools/tool-approval-broker";
 import type { MessageBus } from "./teammate/message-bus";
 import type { TeammateManager } from "./teammate/spawn-teammate";
 import {

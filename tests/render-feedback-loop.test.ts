@@ -5,12 +5,12 @@ import {
   applyCommandsToDraft,
   collectAffectedSlideIds,
   hasLayoutVisualCommands,
-} from "../src/main/agent/runtime/layout-command-utils";
+} from "../src/main/agent/runtime/presentation/layout-command-utils";
 import {
   buildRenderFeedback,
   formatRenderFeedbackMessage,
   shouldOfferRenderFeedback,
-} from "../src/main/agent/runtime/render-feedback-loop";
+} from "../src/main/agent/runtime/presentation/render-feedback-loop";
 import type { ToolContext } from "../src/main/agent/tools/tool-definition";
 import { createDefaultToolRegistry } from "../src/main/agent/tools/tool-registry";
 import { AgentRuntime } from "../src/main/agent/runtime/agent-runtime";

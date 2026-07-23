@@ -1,11 +1,11 @@
 import { isTaskPlanActive } from "@shared/agent-task-graph";
-import type { AgentModelToolResultBlock, AgentModelToolUseBlock } from "../gateway/types";
-import type { createTaskStore } from "../task/task-store";
+import type { AgentModelToolResultBlock, AgentModelToolUseBlock } from "../../gateway/types";
+import type { createTaskStore } from "../../task/task-store";
 import {
   describeBackgroundTask,
-} from "./background-task-manager";
+} from "../background/background-task-manager";
 import type { AgentLoopTurnOutcome, PreparedAgentRun } from "./prepared-agent-run";
-import { rethrowIfRuntimeCancellation } from "./runtime-cancellation";
+import { rethrowIfRuntimeCancellation } from "../lifecycle/runtime-cancellation";
 
 /** Runs claim → checkpoint → preflight → dispatch → interpretation as one transaction. */
 export class ToolTurnRunner {

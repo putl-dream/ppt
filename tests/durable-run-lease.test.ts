@@ -6,7 +6,7 @@ import {
   DurableRunStore,
   type DurableRunCheckpoint,
 } from "../src/main/agent/persistence/durable-run-store";
-import { CheckpointCoordinator } from "../src/main/agent/runtime/checkpoint-coordinator";
+import { CheckpointCoordinator } from "../src/main/agent/runtime/lifecycle/checkpoint-coordinator";
 import { ConversationDatabase } from "../src/main/conversation-database";
 
 function checkpoint(threadId: string, status: DurableRunCheckpoint["status"]): DurableRunCheckpoint {

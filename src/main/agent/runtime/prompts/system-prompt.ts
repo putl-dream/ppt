@@ -1,8 +1,8 @@
 import type { Presentation } from "@shared/presentation";
-import type { ToolDefinition } from "../tools/tool-definition";
-import type { SkillCard } from "../skills/skill-types";
+import type { ToolDefinition } from "../../tools/tool-definition";
+import type { SkillCard } from "../../skills/skill-types";
 import type { AgentStepLimits } from "@shared/agent-step-limits";
-import type { SkillRegistry } from "../skills/loadSkillsDir";
+import type { SkillRegistry } from "../../skills/loadSkillsDir";
 import { buildSystemPromptContext, buildSystemPromptContextSync } from "./prompt-context";
 import { getSystemPrompt, type AssembledSystemPrompt } from "./system-prompt-assembler";
 import type { PromptStage } from "./prompt-stage";

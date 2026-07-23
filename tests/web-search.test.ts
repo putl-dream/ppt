@@ -11,7 +11,7 @@ import {
   SUB_AGENT_TOOLS,
   webSearchSubAgentTool,
 } from "../src/main/agent/subagent/workspace-tools";
-import { SUB_AGENT_TOOL_PERMISSION_PROFILES } from "../src/main/agent/runtime/tool-access-policy";
+import { SUB_AGENT_TOOL_PERMISSION_PROFILES } from "../src/main/agent/runtime/tools/tool-access-policy";
 
 afterEach(() => {
   vi.unstubAllGlobals();

@@ -18,14 +18,14 @@ import {
   getEffectiveSubMaxSteps,
   resolveAgentStepLimits,
 } from "@shared/agent-step-limits";
-import { callModelWithRecovery } from "../runtime/model-call-recovery";
+import { callModelWithRecovery } from "../runtime/turns/model-call-recovery";
 import { textFromContentBlocks, toolUseBlocksFromContent } from "../gateway/content-blocks";
 import { ensureToolResultPairing } from "../gateway/message-pairing";
-import { ensureDefaultHooks } from "../runtime/default-hooks";
-import { triggerHooks } from "../runtime/hook-registry";
-import type { PostToolUseBlock, StopBlock } from "../runtime/hook-blocks";
-import type { ToolApprovalHandler } from "../runtime/permission-check";
-import { formatToolApprovalDetail } from "../runtime/format-tool-approval";
+import { ensureDefaultHooks } from "../runtime/hooks/default-hooks";
+import { triggerHooks } from "../runtime/hooks/hook-registry";
+import type { PostToolUseBlock, StopBlock } from "../runtime/hooks/hook-blocks";
+import type { ToolApprovalHandler } from "../runtime/tools/permission-check";
+import { formatToolApprovalDetail } from "../runtime/tools/format-tool-approval";
 import { TaskStore } from "../task/task-store";
 import {
   SUB_AGENT_TOOL_HANDLERS,

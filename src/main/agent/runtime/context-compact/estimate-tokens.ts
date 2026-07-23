@@ -1,4 +1,4 @@
-import type { ModelPromptPayload } from "../model-call-recovery";
+import type { ModelPromptPayload } from "../turns/model-call-recovery";
 import { CHARS_PER_TOKEN_ESTIMATE } from "./config";
 
 /**

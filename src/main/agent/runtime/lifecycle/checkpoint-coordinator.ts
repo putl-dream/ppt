@@ -2,8 +2,8 @@ import type {
   CheckpointLease,
   CheckpointSaveResult,
   DurableRunCheckpoint,
-} from "../persistence/durable-run-store";
-import type { DurableRunStore } from "../persistence/durable-run-store";
+} from "../../persistence/durable-run-store";
+import type { DurableRunStore } from "../../persistence/durable-run-store";
 
 export type CheckpointCoordinatorState =
   | "open"

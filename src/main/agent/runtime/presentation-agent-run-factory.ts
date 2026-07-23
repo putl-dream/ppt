@@ -8,22 +8,22 @@ import type { ToolContext, ToolDiscoverySession } from "../tools/tool-definition
 import { ToolRegistry } from "../tools/tool-registry";
 import { ensureAutonomousTaskWorker } from "../tools/core/task-graph-tools";
 import { toToolSchemas } from "../tools/tool-schema";
-import { AgentRunScope } from "./agent-run-scope";
-import { ensureDefaultHooks } from "./default-hooks";
-import type { PostToolUseBlock, UserPromptSubmitBlock } from "./hook-blocks";
-import { triggerHooks } from "./hook-registry";
+import { AgentRunScope } from "./lifecycle/agent-run-scope";
+import { ensureDefaultHooks } from "./hooks/default-hooks";
+import type { PostToolUseBlock, UserPromptSubmitBlock } from "./hooks/hook-blocks";
+import { triggerHooks } from "./hooks/hook-registry";
 import {
   prepareLayoutChoiceTask,
   reconcileVerifiedContentTasks,
-} from "./layout-choice-orchestrator";
-import { LeadInboxInputSource } from "./lead-inbox-input-source";
-import { PreparedAgentRun } from "./prepared-agent-run";
-import { PresentationCompletionPolicy } from "./presentation-completion-policy";
-import { rethrowIfRuntimeCancellation } from "./runtime-cancellation";
+} from "./presentation/layout-choice-orchestrator";
+import { LeadInboxInputSource } from "./background/lead-inbox-input-source";
+import { PreparedAgentRun } from "./turns/prepared-agent-run";
+import { PresentationCompletionPolicy } from "./presentation/presentation-completion-policy";
+import { rethrowIfRuntimeCancellation } from "./lifecycle/runtime-cancellation";
 import type { AgentRuntimeOptions, AgentRuntimeResult } from "./runtime-types";
-import { buildSystemPromptContext, clearSystemPromptCache, getSystemPrompt } from "./system-prompt";
-import { ToolExecutionEngine } from "./tool-execution-engine";
-import { ToolPreflight } from "./tool-preflight";
+import { buildSystemPromptContext, clearSystemPromptCache, getSystemPrompt } from "./prompts/system-prompt";
+import { ToolExecutionEngine } from "./tools/tool-execution-engine";
+import { ToolPreflight } from "./tools/tool-preflight";
 
 export type AgentRunPreparation =
   | { type: "ready"; run: PreparedAgentRun }

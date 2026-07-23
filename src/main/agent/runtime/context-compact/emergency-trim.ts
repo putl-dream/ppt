@@ -1,5 +1,5 @@
-import type { ModelPromptPayload } from "../model-call-recovery";
-import { compactConversation, compactTranscript } from "../transcript-compact";
+import type { ModelPromptPayload } from "../turns/model-call-recovery";
+import { compactConversation, compactTranscript } from "../turns/transcript-compact";
 import { snipCompactConversation, snipCompactTranscript } from "./snip-compact";
 import { microCompactTranscript } from "./micro-compact";
 

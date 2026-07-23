@@ -5,7 +5,7 @@ import {
   evaluateToolPermission,
   getToolPermissionProfile,
   isRiskApprovalHintRequired,
-} from "../src/main/agent/runtime/tool-access-policy";
+} from "../src/main/agent/runtime/tools/tool-access-policy";
 import { SUB_AGENT_TOOLS } from "../src/main/agent/subagent/workspace-tools";
 
 const workspaceRoot = join(tmpdir(), "ppt-tool-policy");
