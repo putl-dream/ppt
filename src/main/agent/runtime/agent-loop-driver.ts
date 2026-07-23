@@ -17,7 +17,7 @@ export class AgentLoopDriver {
     const { scope } = run;
     let state = run.initialState;
     scope.setCommittedQueryState(state);
-    if (run.initialWorkspace) {
+    if (run.initialWorkspace && run.initialWorkspacePhase !== "model_streaming") {
       const workspace = run.initialWorkspace;
       scope.setInflightQuery("model_received", workspace);
       if (workspace.toolResults.length < workspace.toolUseBlocks.length) {
@@ -33,10 +33,17 @@ export class AgentLoopDriver {
       scope.setCommittedQueryState(state);
       await scope.persistCheckpoint();
     }
+    let replayWorkspace = run.initialWorkspacePhase === "model_streaming"
+      ? run.initialWorkspace
+      : undefined;
     while (state.turnCount < run.params.maxTurns) {
       if (scope.signal.aborted) throw new Error("Run aborted by user.");
-      const workspace = createIterationWorkspace(state);
-      scope.setInflightQuery("model_streaming", workspace);
+      const isStreamingReplay = replayWorkspace !== undefined;
+      const workspace = replayWorkspace ?? createIterationWorkspace(state);
+      replayWorkspace = undefined;
+      if (!isStreamingReplay) {
+        scope.setInflightQuery("model_streaming", workspace);
+      }
       const modelOutcome = await this.modelTurns.run(run, state, workspace);
       if (modelOutcome.type === "terminal") return modelOutcome;
 

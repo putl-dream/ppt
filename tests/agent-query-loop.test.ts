@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { AgentRuntime } from "../src/main/agent/runtime/agent-runtime";
 import { ToolRegistry } from "../src/main/agent/tools/tool-registry";
@@ -152,5 +152,81 @@ describe("agent query loop batches", () => {
       committedState: { turnCount: 1 },
     });
     expect(checkpoint?.version === 2 ? checkpoint.inflight : undefined).toBeUndefined();
+  });
+
+  it("checkpoints a completed tool result before committing the next State", async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), "agent-tool-result-checkpoint-"));
+    const checkpoints: Parameters<DurableRunStore["saveCas"]>[0]["checkpoint"][] = [];
+    const originalSaveCas = DurableRunStore.prototype.saveCas;
+    const saveSpy = vi.spyOn(DurableRunStore.prototype, "saveCas")
+      .mockImplementation(async function (this: DurableRunStore, input) {
+        checkpoints.push(structuredClone(input.checkpoint));
+        return await originalSaveCas.call(this, input);
+      });
+    try {
+      const registry = new ToolRegistry();
+      registry.register(countingTool(() => undefined));
+      const gateway = gatewayFor([
+        [{ type: "tool_use", id: "durable-result", name: "CountingTool", input: { value: 1 } }],
+        [{ type: "text", text: "done" }],
+      ]);
+
+      await new AgentRuntime(registry, gateway).run({
+        threadId: "durable-tool-result",
+        request: "run once",
+        presentationSnapshot: createStarterPresentation(),
+        selectedElementIds: [],
+        workspaceRoot,
+      });
+    } finally {
+      saveSpy.mockRestore();
+    }
+
+    expect(checkpoints.some((checkpoint) =>
+      checkpoint.version === 2
+      && checkpoint.status === "running"
+      && checkpoint.inflight?.phase === "model_received"
+      && checkpoint.inflight.workspace.toolResults.some((result) =>
+        result.toolUseId === "durable-result")
+    )).toBe(true);
+  });
+
+  it("assembles canUseTool from the tools exposed to this query", async () => {
+    let executions = 0;
+    const registry = new ToolRegistry();
+    registry.register({
+      ...countingTool(() => { executions += 1; }),
+      name: "DeferredCountingTool",
+      category: "deferred",
+      loadPolicy: "deferred",
+    });
+    const gateway = gatewayFor([
+      [{
+        type: "tool_use",
+        id: "deferred-direct",
+        name: "DeferredCountingTool",
+        input: { value: 1 },
+      }],
+      [{ type: "text", text: "used the available tool boundary" }],
+    ]);
+
+    await new AgentRuntime(registry, gateway).run({
+      threadId: "query-tool-boundary",
+      request: "call a deferred tool directly",
+      presentationSnapshot: createStarterPresentation(),
+      selectedElementIds: [],
+    });
+
+    expect(executions).toBe(0);
+    expect(gateway.requests[1]!.messages!.flatMap((message) => message.content))
+      .toContainEqual(expect.objectContaining({
+        type: "tool_result",
+        toolUseId: "deferred-direct",
+        isError: true,
+        content: [expect.objectContaining({
+          type: "text",
+          text: expect.stringContaining("not permitted in this query"),
+        })],
+      }));
   });
 });

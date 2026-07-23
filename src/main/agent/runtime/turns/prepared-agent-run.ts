@@ -27,6 +27,7 @@ import {
   type ThreadId,
 } from "../query/query-types";
 import type { ToolApprovalHandler } from "../tools/permission-check";
+import type { DurableQueryInflightSnapshot } from "../../persistence/durable-run-store";
 
 export interface AgentLoopTerminalOutcome {
   type: "terminal";
@@ -59,6 +60,7 @@ export class PreparedAgentRun {
   readonly params: AgentQueryParams<PreparedAgentQueryDeps>;
   readonly initialState: AgentQueryState;
   readonly initialWorkspace?: AgentIterationWorkspace;
+  readonly initialWorkspacePhase?: DurableQueryInflightSnapshot["phase"];
 
   constructor(readonly input: {
     scope: AgentRunScope;
@@ -76,12 +78,14 @@ export class PreparedAgentRun {
     runPostToolUseHook(block: PostToolUseBlock): Promise<string[]>;
   }) {
     const { options } = input.scope;
+    const exposedToolNames = new Set(input.toolSchemas.map((schema) => schema.name));
     this.params = new AgentQueryAssembler().assemble({
       options,
       messages: input.scope.initialMessages,
       systemPrompt: input.systemPrompt,
       toolUseContext: input.context,
       maxTurns: input.maxSteps,
+      canUseTool: (toolUse) => exposedToolNames.has(toolUse.name),
       deps: {
         gateway: input.gateway,
         conversationDatabase: input.conversationDatabase,
@@ -105,6 +109,7 @@ export class PreparedAgentRun {
       this.initialState,
       input.context,
     );
+    this.initialWorkspacePhase = input.scope.restoredInflightPhase();
   }
 
   get scope(): AgentRunScope {

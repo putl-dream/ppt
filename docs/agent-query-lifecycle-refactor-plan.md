@@ -1,6 +1,6 @@
 # Agent Query 生命周期与会话状态重构计划
 
-> 状态：第二轮生命周期收口已完成（2026-07-23）；类型检查与单元测试已通过，真实 Gateway 集成验证待凭证
+> 状态：核心 P1 收口已完成（2026-07-24）；类型检查与单元测试已通过，真实 Gateway 集成验证待凭证
 >
 > 范围：主 Agent 的会话历史、`AgentRuntimeOptions` 组装、Query loop、工具批次、checkpoint 与恢复语义。
 >
@@ -743,3 +743,11 @@ Driver 不读取：
 - `ThreadId`、`RunId`、`QueryId` 已用于 normalized Runtime、Scope、Prepared deps、version 2 checkpoint 与 lease，字符串只保留在公开输入和旧存储读取边界。
 - `resumeThread`、`onStreamChunk` 与 `TurnInputAssembler` 已移除；恢复只接受显式 `QueryStartMode`，流式只使用 attempt-aware `onStreamEvent`。
 - `fallbackModel`、`maxOutputTokensOverride`、`userContext`、`systemContext`、`querySource` 与 `canUseTool` 已进入实际模型/工具决策路径，并由单元测试覆盖。
+
+## 14. 核心 P1 收口结果（2026-07-24）
+
+- 成功终态 checkpoint 保存完整 `terminalHistory` fallback；若进程停在 terminal fence 与独立 Conversation History 写入之间，下一次 new query 可从 checkpoint 恢复完整 ContentBlock 链。
+- 每个 `tool_result` 生成后立即刷新 inflight Workspace，清除已经完成工具的 `activeToolUse` 不确定状态；结果 checkpoint 不再误写执行前快照。
+- `model_streaming` 恢复不再按 `model_received` reduce 空 Workspace，而是保留已准备的 canonical 输入并重放未提交的 provider attempt。
+- `canUseTool` 由本次 Query 实际暴露的 Core Tool schemas 组装，不再依赖 assembler 的恒真默认值。
+- 新增故障边界测试覆盖终态 History 写入丢失、工具结果先于 next State 持久化、`model_streaming` 重放和 query 工具暴露边界。

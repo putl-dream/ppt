@@ -140,6 +140,49 @@ describe("durable agent recovery", () => {
     });
   });
 
+  it("replays a model_streaming attempt instead of committing an empty turn", async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), "agent-model-stream-recovery-"));
+    const failingGateway: AgentModelGateway = {
+      async generateText() {
+        throw new Error("provider disconnected during streaming");
+      },
+      async *generateTextStream() {
+        throw new Error("provider disconnected during streaming");
+      },
+    };
+    await expect(new AgentRuntime(new ToolRegistry(), failingGateway).run({
+      threadId: "stream-recovery-thread",
+      runId: "failed-stream-run",
+      request: "original request",
+      presentationSnapshot: createStarterPresentation(),
+      selectedElementIds: [],
+      workspaceRoot,
+      maxSteps: 1,
+    })).rejects.toThrow("provider disconnected during streaming");
+
+    const failedCheckpoint = await new DurableRunStore(workspaceRoot)
+      .load("stream-recovery-thread");
+    expect(failedCheckpoint?.version === 2 ? failedCheckpoint.inflight?.phase : undefined)
+      .toBe("model_streaming");
+
+    const recoveredGateway = gatewayFor([[{ type: "text", text: "replayed safely" }]]);
+    const result = await new AgentRuntime(new ToolRegistry(), recoveredGateway).run({
+      threadId: "stream-recovery-thread",
+      runId: "recovered-stream-run",
+      request: "continue after crash",
+      presentationSnapshot: createStarterPresentation(),
+      selectedElementIds: [],
+      workspaceRoot,
+      maxSteps: 1,
+      startMode: { type: "resume_query", reason: "crash_recovery" },
+    });
+
+    expect(result).toEqual({ type: "message", content: "replayed safely" });
+    expect(recoveredGateway.requests).toHaveLength(1);
+    expect(recoveredGateway.requests[0]!.messages!.flatMap((message) => message.content))
+      .toContainEqual({ type: "text", text: "continue after crash" });
+  });
+
   it("restores canonical ContentBlock history after AskUser", async () => {
     const workspaceRoot = await mkdtemp(join(tmpdir(), "agent-run-recovery-"));
     const registry = new ToolRegistry();

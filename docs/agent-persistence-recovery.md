@@ -5,7 +5,7 @@
 Agent 不再依赖进程内 `Map` 作为可恢复事实源。每个会话沙箱包含：
 
 - `.agent/threads/<threadId>.json`：跨 query 的 canonical `AgentModelMessage[]`，完整保留 thinking/signature、image、tool_use/tool_result。
-- `.agent/runs/<threadId>.json`：version 2 payload 直接保存当前 query 的 `committedState`、可选 `inflight` Iteration Workspace、工具副作用边界、Skill/工具发现状态和终止状态；不再写入 Session 的 `modelMessages`、tool queue/result 或 render-feedback 别名，也不再兼任 completed conversation history。
+- `.agent/runs/<threadId>.json`：version 2 payload 直接保存当前 query 的 `committedState`、可选 `inflight` Iteration Workspace、工具副作用边界、Skill/工具发现状态和终止状态；不再写入 Session 的 `modelMessages`、tool queue/result 或 render-feedback 别名。成功终态额外保存一次 `terminalHistory` 恢复快照，只用于覆盖 terminal checkpoint 已提交但独立 History 尚未写入时的崩溃窗口，不作为正常跨 query 事实源。
 - `.agent/service/<threadId>.json`：文本对话、模型、执行策略和完整命令审批。
 - `.agent/tool-results/<threadId>/`：超过上下文预算的完整工具结果。
 - `.agents/protocol-state.json`：teammate 的 shutdown/plan approval 协议状态。
@@ -36,6 +36,8 @@ Runtime 在以下边界提交 checkpoint：
 - renderer 在发起模型调用前同步保存 user 消息和带稳定 threadId 的 assistant 占位消息。
 - 正常 continue 从 canonical Conversation History 创建新的 QueryParams/State，turnCount、render feedback 和 recovery counter 重置。
 - 只有 waiting_user、interrupted 或 crash recovery 才装载 Runtime query checkpoint；waiting_user 将用户回答追加到同一 suspended Workspace，完成原批次后才生成 next State。旧 version 1 checkpoint 只在 reader 边界转换，新 writer 仅生成 version 2。
+- `model_streaming` 表示 provider attempt 尚未提交；恢复时保留已经准备好的 canonical 输入并重放模型调用，不把空 Workspace reduce 成一个已完成 turn。
+- 如果成功终态后的独立 Conversation History 写入丢失，下一次 new query 从 terminal checkpoint 的 `terminalHistory` 一次性恢复完整 ContentBlock 链，随后仍写回独立 History Store。
 - 待审批命令跨重启保留，应用时重新检查 Presentation revision 并重新运行 CommitGate。
 - transcript 忽略被强杀造成的最后一个不完整 JSONL 行；冷启动可沿 parent 链追回 leaf 指针之后已经完整追加的消息。
 - 全局会话和工作区索引维护校验备份。主文件损坏时恢复备份；主文件和备份都无效时停止启动并保留原文件，不创建空状态覆盖。
@@ -43,4 +45,4 @@ Runtime 在以下边界提交 checkpoint：
 
 ## 数据安全
 
-Provider thinking ContentBlock 会保留在 thread checkpoint，用于同一 thread 的协议级恢复。长期记忆只保存目标、结果和状态，不把隐藏 chain-of-thought 汇总到跨会话 Memory。
+Provider thinking ContentBlock 会保留在 canonical Conversation History；当前 query 所需内容同时保留在 checkpoint Workspace，成功终态的短暂 fallback 保留在 `terminalHistory`。长期记忆只保存目标、结果和状态，不把隐藏 chain-of-thought 汇总到跨会话 Memory。

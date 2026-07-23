@@ -1,7 +1,7 @@
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { ConversationDatabase } from "../src/main/conversation-database";
 import { DurableConversationHistoryStore } from "../src/main/agent/persistence/conversation-history-store";
 import { AgentRuntime } from "../src/main/agent/runtime/agent-runtime";
@@ -108,5 +108,63 @@ describe("canonical conversation history store", () => {
       lastRunId: "second-run",
       committedState: { turnCount: 0 },
     });
+  });
+
+  it("recovers terminal History from checkpoint when the independent store write was lost", async () => {
+    const root = await mkdtemp(join(tmpdir(), "agent-terminal-history-recovery-"));
+    const requests: AgentModelRequest[] = [];
+    const responses: AgentModelContentBlock[][] = [
+      [{ type: "text", text: "durable first answer" }],
+      [{ type: "text", text: "second answer" }],
+    ];
+    const gateway: AgentModelGateway = {
+      async generateText(request) {
+        requests.push(request);
+        const content = responses.shift();
+        if (!content) throw new Error("Unexpected gateway call");
+        return { provider: "openai", model: "test", content };
+      },
+      async *generateTextStream(request) {
+        const response = await this.generateText(request);
+        yield { type: "complete" as const, content: response.content };
+      },
+    };
+    const historySave = vi.spyOn(DurableConversationHistoryStore.prototype, "save")
+      .mockRejectedValueOnce(new Error("simulated crash before History commit"));
+    try {
+      await new AgentRuntime(new ToolRegistry(), gateway).run({
+        threadId: "terminal-history-thread",
+        runId: "terminal-history-first",
+        request: "first question",
+        presentationSnapshot: createStarterPresentation(),
+        selectedElementIds: [],
+        workspaceRoot: root,
+      });
+    } finally {
+      historySave.mockRestore();
+    }
+    expect(await new DurableConversationHistoryStore(root).load("terminal-history-thread"))
+      .toBeUndefined();
+    const checkpoint = await new DurableRunStore(root).load("terminal-history-thread");
+    expect(checkpoint?.version === 2 ? checkpoint.terminalHistory : undefined)
+      .toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          role: "assistant",
+          content: [expect.objectContaining({ type: "text", text: "durable first answer" })],
+        }),
+      ]));
+
+    await new AgentRuntime(new ToolRegistry(), gateway).run({
+      threadId: "terminal-history-thread",
+      runId: "terminal-history-second",
+      request: "second question",
+      startMode: { type: "new_query" },
+      presentationSnapshot: createStarterPresentation(),
+      selectedElementIds: [],
+      workspaceRoot: root,
+    });
+
+    expect(requests[1]!.messages!.flatMap((message) => message.content))
+      .toContainEqual({ type: "text", text: "durable first answer" });
   });
 });

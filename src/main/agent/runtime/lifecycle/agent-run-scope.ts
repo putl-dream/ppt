@@ -65,7 +65,7 @@ export class AgentRunScope {
       const storedHistory = startMode.type === "new_query"
         ? await historyStore?.load(options.threadId)
         : undefined;
-      const legacyCompletedCheckpoint = startMode.type === "new_query" && !storedHistory
+      const completedCheckpoint = startMode.type === "new_query" && !storedHistory
         ? await durableRunStore?.load(options.threadId)
         : undefined;
       const runId = options.runId ?? asRunId(crypto.randomUUID());
@@ -94,17 +94,7 @@ export class AgentRunScope {
       const transcript: Array<Record<string, unknown>> = recovered
         ? [...structuredClone(recovered.transcript), { role: "user", content: options.request }]
         : [{ role: "user", content: options.request }];
-      const migratedHistory =
-        legacyCompletedCheckpoint?.version === 1
-        && (
-          legacyCompletedCheckpoint.status === "completed"
-          || legacyCompletedCheckpoint.status === "proposal_ready"
-        )
-          ? pairPendingToolResults(
-              legacyCompletedCheckpoint.modelMessages,
-              legacyCompletedCheckpoint.pendingToolResults,
-            )
-          : undefined;
+      const migratedHistory = completedConversationHistory(completedCheckpoint);
       const recoveredCommittedMessages = checkpointState(recovered)?.messages;
       const recoveredInflight = checkpointInflight(recovered);
       const legacyInflightAssistantIndex = recovered?.version === 1
@@ -279,6 +269,7 @@ export class AgentRunScope {
     error?: string;
   }): DurableRunCheckpoint {
     const now = new Date().toISOString();
+    const status = input?.status ?? this.session.terminalState?.status ?? "running";
     const committedState = this.committedQueryState ?? {
       messages: structuredClone([...this.initialMessages]),
       turnCount: 0,
@@ -292,7 +283,7 @@ export class AgentRunScope {
       threadId: this.options.threadId,
       queryId: this.queryId,
       lastRunId: this.runId,
-      status: input?.status ?? this.session.terminalState?.status ?? "running",
+      status,
       phase: input?.phase ?? (this.session.terminalState ? "finished" : this.session.phase),
       request: this.options.request,
       model: this.options.model,
@@ -307,6 +298,14 @@ export class AgentRunScope {
       committedState: structuredClone(committedState),
       ...(this.inflightQuery
         ? { inflight: structuredClone(this.inflightQuery) }
+        : {}),
+      ...(status === "completed" || status === "proposal_ready"
+        ? {
+            terminalHistory: structuredClone(
+              this.conversationHistorySnapshot
+              ?? committedState.messages,
+            ),
+          }
         : {}),
       result: input?.result ?? this.session.terminalState?.result,
       error: input?.error ?? this.session.terminalState?.error,
@@ -381,6 +380,24 @@ export class AgentRunScope {
       : legacyIterationWorkspace(this.recovered, state, toolUseContext);
     if (!workspace) return undefined;
 
+    const resumedUserContent = [
+      this.options.request,
+      ...this.session.takePendingUserContent(),
+    ]
+      .map((part) => part.trim())
+      .filter(Boolean);
+    if (inflight?.phase === "model_streaming") {
+      for (const text of [...workspace.userContent, ...resumedUserContent]) {
+        appendUserText(workspace.messagesForQuery, text);
+      }
+      workspace.userContent = [];
+      workspace.assistantMessages = [];
+      workspace.toolUseBlocks = [];
+      workspace.toolResults = [];
+      workspace.followUpMessages = [];
+      return workspace;
+    }
+
     const activeToolUse = inflight?.activeToolUse
       ?? (
         this.recovered?.version === 1
@@ -400,12 +417,12 @@ export class AgentRunScope {
         content: "Recovered an interrupted tool boundary; side effects require reconciliation.",
       });
     }
-    workspace.userContent.push(
-      ...[this.options.request, ...this.session.takePendingUserContent()]
-        .map((part) => part.trim())
-        .filter(Boolean),
-    );
+    workspace.userContent.push(...resumedUserContent);
     return workspace;
+  }
+
+  restoredInflightPhase(): DurableQueryInflightSnapshot["phase"] | undefined {
+    return checkpointInflight(this.recovered)?.phase;
   }
 
   setCommittedQueryState(state: AgentQueryState): void {
@@ -529,6 +546,24 @@ function pairPendingToolResults(
     content: structuredClone([...pendingToolResults]),
   });
   return cloned;
+}
+
+function completedConversationHistory(
+  checkpoint: DurableRunCheckpoint | undefined,
+): AgentModelMessage[] | undefined {
+  if (
+    !checkpoint
+    || (checkpoint.status !== "completed" && checkpoint.status !== "proposal_ready")
+  ) return undefined;
+  if (checkpoint.version === 2) {
+    return checkpoint.terminalHistory
+      ? structuredClone(checkpoint.terminalHistory)
+      : undefined;
+  }
+  return pairPendingToolResults(
+    checkpoint.modelMessages,
+    checkpoint.pendingToolResults,
+  );
 }
 
 function legacyVisibleHistory(

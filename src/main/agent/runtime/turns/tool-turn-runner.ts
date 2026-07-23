@@ -83,6 +83,9 @@ export class ToolTurnRunner {
       if (decision !== "commit_before_next") {
         throw new Error("CheckpointPolicy rejected a normal tool result transition.");
       }
+      // The active tool is no longer uncertain once its provider-facing result
+      // exists. Refresh the durable Workspace before the batch advances.
+      scope.setInflightQuery("model_received", workspace);
       run.appendRuntimeEvent("tool_result", {
         toolUseId: toolCall.id,
         toolName: toolCall.name,

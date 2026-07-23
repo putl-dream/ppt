@@ -94,6 +94,12 @@ export interface DurableRunCheckpointV2Payload {
   processedInboxMessageIds?: string[];
   committedState: DurableQueryStateSnapshot;
   inflight?: DurableQueryInflightSnapshot;
+  /**
+   * Complete canonical history staged for a successful terminal. This is a
+   * recovery fallback for the crash window between terminal checkpointing and
+   * the independent ConversationHistoryStore write.
+   */
+  terminalHistory?: AgentModelMessage[];
   result?: AgentRuntimeResult;
   error?: string;
   createdAt: string;
