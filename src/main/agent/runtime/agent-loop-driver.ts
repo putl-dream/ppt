@@ -1,6 +1,10 @@
 import type { AgentLoopTerminalOutcome, PreparedAgentRun } from "./turns/prepared-agent-run";
 import { ModelTurnRunner } from "./turns/model-turn-runner";
 import { ToolTurnRunner } from "./turns/tool-turn-runner";
+import {
+  createIterationWorkspace,
+  reduceQueryState,
+} from "./query/query-types";
 
 /** The single linear queue/model/tool loop for one prepared run. */
 export class AgentLoopDriver {
@@ -12,15 +16,46 @@ export class AgentLoopDriver {
   async run(run: PreparedAgentRun): Promise<AgentLoopTerminalOutcome> {
     const { scope } = run;
     const { session } = scope;
-    while (session.runModelSteps < run.input.maxSteps || session.hasQueuedToolUses()) {
+    let state = run.initialState;
+    scope.setCommittedQueryState(state);
+    while (state.turnCount < run.params.maxTurns) {
       if (scope.signal.aborted) throw new Error("Run aborted by user.");
-      if (session.phase === "tool_committed") await scope.persistCheckpoint();
+      const workspace = createIterationWorkspace(state);
+      scope.setInflightQuery("model_streaming", workspace);
+      const modelOutcome = await this.modelTurns.run(run, state, workspace);
+      if (modelOutcome.type === "terminal") return modelOutcome;
 
-      const toolCall = session.takeQueuedToolUse();
-      const outcome = toolCall
-        ? await this.toolTurns.run(run, toolCall)
-        : await this.modelTurns.run(run);
-      if (outcome.type === "terminal") return outcome;
+      if (modelOutcome.type === "tool_batch") {
+        const queuedBatch = session.queuedToolUses;
+        if (
+          queuedBatch.length !== workspace.toolUseBlocks.length
+          || queuedBatch.some((toolUse, index) =>
+            toolUse.id !== workspace.toolUseBlocks[index]?.id)
+        ) {
+          throw new Error("Session tool queue diverged from the current iteration workspace.");
+        }
+        const toolOutcome = await this.toolTurns.runBatch(
+          run,
+          workspace.toolUseBlocks,
+          workspace,
+        );
+        if (toolOutcome.type === "terminal") return toolOutcome;
+        run.flushUserTurn();
+      }
+
+      const next = reduceQueryState(
+        state,
+        workspace,
+        modelOutcome.type === "continue"
+          ? { reason: "required_outcome" }
+          : { reason: "next_turn" },
+      );
+      if (JSON.stringify(next.messages) !== JSON.stringify(session.modelMessages)) {
+        throw new Error("Committed query state diverged from canonical session messages.");
+      }
+      scope.setCommittedQueryState(next);
+      await scope.persistCheckpoint();
+      state = next;
     }
     return await run.resolveStepLimit();
   }

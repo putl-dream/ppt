@@ -21,6 +21,11 @@ import { emergencyTrimContext, prepareContext } from "../context-compact";
 import { createModuleLogger } from "../../logger";
 import { ensureToolResultPairing } from "../../gateway/message-pairing";
 import { callTool } from "../../gateway/model-calls";
+import {
+  CHARS_PER_TOKEN_ESTIMATE,
+  resolveContextSoftTokenThreshold,
+  resolveContextTokenThreshold,
+} from "../context-compact/config";
 
 const logger = createModuleLogger("model-call-recovery");
 const MAX_RECOVERY_ATTEMPTS = 8;
@@ -93,9 +98,17 @@ function compactStructuredMessages(
   payload: ModelPromptPayload,
   shouldCompact: boolean,
 ): AgentModelMessage[] | undefined {
-  if (!messages || !shouldCompact || messages.length <= 12) return messages;
-  const compactedContext = JSON.stringify(payload);
+  if (!messages || messages.length <= 12) return messages;
+  const estimatedTokens = JSON.stringify(messages).length / CHARS_PER_TOKEN_ESTIMATE;
+  const exceedsSoftThreshold = estimatedTokens > resolveContextSoftTokenThreshold(
+    resolveContextTokenThreshold(),
+  );
+  if (!shouldCompact && !exceedsSoftThreshold) return messages;
   const tail = ensureToolResultPairing(messages.slice(-12));
+  const compactedContext = JSON.stringify({
+    messages: messages.slice(0, Math.max(0, messages.length - tail.length)),
+    runtimeContext: payload,
+  });
   return [
     {
       role: "user",

@@ -19,6 +19,15 @@ import type { ToolExecutionEngine } from "../tools/tool-execution-engine";
 import type { ToolPreflight } from "../tools/tool-preflight";
 import { TurnInputAssembler } from "./turn-input-assembler";
 import type { AgentRuntimeResult } from "../runtime-types";
+import type { AgentRuntimeStreamEvent } from "../runtime-types";
+import { AgentQueryAssembler } from "../query/agent-query-assembler";
+import {
+  createInitialQueryState,
+  type AgentQueryParams,
+  type AgentQueryState,
+} from "../query/query-types";
+import type { AgentModelSelection } from "@shared/agent";
+import type { ToolApprovalHandler } from "../tools/permission-check";
 
 export interface AgentLoopTerminalOutcome {
   type: "terminal";
@@ -31,9 +40,28 @@ export type AgentLoopTurnOutcome =
   | { type: "continue" }
   | { type: "tool_batch" };
 
+export interface PreparedAgentQueryDeps {
+  gateway: AgentModelGateway;
+  conversationDatabase?: ConversationDatabase;
+  toolSchemas: AgentToolSchema[];
+  workspaceRoot?: string;
+  runtimeRoot?: string;
+  threadId: string;
+  signal: AbortSignal;
+  externalSignal?: AbortSignal;
+  requiredOutcome?: "any" | "command_proposal";
+  requestToolApproval?: ToolApprovalHandler;
+  onStreamChunk?: (chunk: string, source: "message" | "tool-summary") => void;
+  onStreamEvent?: (event: AgentRuntimeStreamEvent) => void;
+  onThinkingChunk?: (chunk: string, modelStep: number) => void;
+  fallbackModel?: AgentModelSelection;
+}
+
 /** Prepared, invocation-scoped dependencies consumed by the stable loop and turn runners. */
 export class PreparedAgentRun {
   readonly turnInput: TurnInputAssembler;
+  readonly params: AgentQueryParams<PreparedAgentQueryDeps>;
+  readonly initialState: AgentQueryState;
 
   constructor(readonly input: {
     scope: AgentRunScope;
@@ -51,6 +79,36 @@ export class PreparedAgentRun {
     runPostToolUseHook(block: PostToolUseBlock): Promise<string[]>;
   }) {
     this.turnInput = new TurnInputAssembler(input.scope.session);
+    const { options, session } = input.scope;
+    this.params = new AgentQueryAssembler().assemble({
+      options,
+      messages: session.modelMessages,
+      systemPrompt: input.systemPrompt,
+      toolUseContext: input.context,
+      maxTurns: input.maxSteps,
+      deps: {
+        gateway: input.gateway,
+        conversationDatabase: input.conversationDatabase,
+        toolSchemas: input.toolSchemas,
+        workspaceRoot: options.workspaceRoot,
+        runtimeRoot: options.runtimeRoot,
+        threadId: options.threadId,
+        signal: input.scope.signal,
+        externalSignal: options.signal,
+        requiredOutcome: options.requiredOutcome,
+        requestToolApproval: options.requestToolApproval,
+        onStreamChunk: options.onStreamChunk,
+        onStreamEvent: options.onStreamEvent,
+        onThinkingChunk: options.onThinkingChunk,
+      },
+    });
+    this.initialState = createInitialQueryState(
+      this.params,
+      input.scope.restoreQueryState(input.context) ?? {
+        turnCount: session.totalModelSteps,
+        renderFeedbackUsed: session.renderFeedbackUsed,
+      },
+    );
   }
 
   get scope(): AgentRunScope {
@@ -103,7 +161,7 @@ export class PreparedAgentRun {
   }
 
   async resolveStepLimit(): Promise<AgentLoopTerminalOutcome> {
-    const { options, backgroundTasks, session } = this.scope;
+    const { backgroundTasks, session } = this.scope;
     const notifications = backgroundTasks.hasRunning()
       ? await backgroundTasks.drain(this.scope.signal)
       : backgroundTasks.collect();
@@ -117,7 +175,7 @@ export class PreparedAgentRun {
         content: backgroundContent,
       });
     }
-    if (options.requiredOutcome === "command_proposal") {
+    if (this.params.deps.requiredOutcome === "command_proposal") {
       throw new Error(
         "Agent reached the tool-step limit before resolving the presentation action. "
         + "The conversation remains active and can be continued."

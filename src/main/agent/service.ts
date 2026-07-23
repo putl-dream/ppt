@@ -19,11 +19,19 @@ import {
   type DurableServiceThread,
 } from "./persistence/durable-service-store";
 import type { ConversationDatabase } from "../conversation-database";
+import type { QueryStartMode } from "./runtime/query/query-types";
 
 export type AgentServiceEvent =
   | { type: "request-status"; message: string; progress: number }
   | { type: "workflow-progress"; message: string; progress: number }
-  | { type: "text-chunk"; chunk: string; source?: "message" | "tool-summary" }
+  | {
+      type: "text-chunk";
+      chunk: string;
+      source?: "message" | "tool-summary";
+      attemptId?: string;
+    }
+  | { type: "text-reset"; attemptId: string }
+  | { type: "text-commit"; attemptId: string }
   | { type: "thinking-chunk"; chunk: string; modelStep?: number }
   | { type: "stage-started"; message: string; stage: string }
   | { type: "tool-started"; message: string; toolName: string }
@@ -54,6 +62,7 @@ type ContinuedConversation = {
   messages: AgentConversationMessage[];
   model?: AgentModelSelection;
   executionStrategy: AgentExecutionStrategy;
+  suspendedQuery: boolean;
 };
 
 export interface DirectCommandProposal {
@@ -119,6 +128,7 @@ export class AgentService {
       messages: structuredClone(messages),
       model,
       executionStrategy,
+      suspendedQuery: false,
     });
   }
 
@@ -134,6 +144,7 @@ export class AgentService {
         messages: structuredClone(state.messages),
         model: state.model,
         executionStrategy: state.executionStrategy,
+        suspendedQuery: state.status === "waiting_user",
       });
       return true;
     }
@@ -180,6 +191,7 @@ export class AgentService {
         ],
         model,
         executionStrategy,
+        suspendedQuery: false,
       });
       await this.persistThread(threadId, {
         status: "active",
@@ -221,6 +233,9 @@ export class AgentService {
       const conversation = this.conversations.get(threadId);
       if (!conversation) throw new Error("Agent conversation not found or already completed.");
       const model = modelOverride ?? conversation.model;
+      const startMode: QueryStartMode = conversation.suspendedQuery
+        ? { type: "resume_query", reason: "waiting_user" }
+        : { type: "new_query" };
       if (modelOverride) conversation.model = modelOverride;
       conversation.messages.push({ role: "user", content: request });
       await this.persistThread(threadId, {
@@ -243,6 +258,7 @@ export class AgentService {
         invocationRunId,
         agentStepLimits,
         layoutChoice,
+        startMode,
       );
     });
   }
@@ -265,6 +281,7 @@ export class AgentService {
     runId?: string,
     agentStepLimits?: AgentStepLimits,
     layoutChoice?: LayoutChoice,
+    startMode: QueryStartMode = { type: "new_query" },
   ): Promise<AgentRunResult> {
     if (signal?.aborted) {
       this.conversations.delete(threadId);
@@ -297,7 +314,7 @@ export class AgentService {
         model,
         executionStrategy,
         runId,
-        resumeThread: requestAlreadyInHistory,
+        startMode,
         messageHistory,
         requiredOutcome,
         layoutChoice,
@@ -312,8 +329,19 @@ export class AgentService {
           listener?.(ev as AgentServiceEvent);
         },
         ...(listener && {
-          onStreamChunk: (chunk: string, source: "message" | "tool-summary") => {
-            listener({ type: "text-chunk", chunk, source });
+          onStreamEvent: (event) => {
+            if (event.type === "delta") {
+              listener({
+                type: "text-chunk",
+                chunk: event.text,
+                source: event.source,
+                attemptId: event.attemptId,
+              });
+            } else if (event.type === "attempt_reset") {
+              listener({ type: "text-reset", attemptId: event.attemptId });
+            } else if (event.type === "attempt_committed") {
+              listener({ type: "text-commit", attemptId: event.attemptId });
+            }
           },
           onThinkingChunk: (chunk: string, modelStep: number) => {
             listener({ type: "thinking-chunk", chunk, modelStep });
@@ -374,6 +402,7 @@ export class AgentService {
         ],
         model,
         executionStrategy,
+        suspendedQuery: true,
       });
       await this.persistThread(threadId, {
         status: "waiting_user",

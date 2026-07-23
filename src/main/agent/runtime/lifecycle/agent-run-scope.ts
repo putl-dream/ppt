@@ -3,6 +3,8 @@ import { filterTasksByPlan } from "@shared/agent-task-graph";
 import type { AgentModelMessage } from "../../gateway/types";
 import {
   type DurableRunCheckpoint,
+  type DurableIterationWorkspaceSnapshot,
+  type DurableQueryStateSnapshot,
   type DurableRunPhase,
   type DurableRunStatus,
   DurableRunStore,
@@ -16,6 +18,12 @@ import { AgentSession } from "./agent-session";
 import { BackgroundTaskManager } from "../background/background-task-manager";
 import { CheckpointCoordinator } from "./checkpoint-coordinator";
 import { CheckpointPolicy } from "./checkpoint-policy";
+import { DurableConversationHistoryStore } from "../../persistence/conversation-history-store";
+import { resolveQueryStartMode } from "../query/agent-query-assembler";
+import type {
+  AgentIterationWorkspace,
+  AgentQueryState,
+} from "../query/query-types";
 
 export interface AgentRunScopeOpenInput {
   options: AgentRuntimeOptions;
@@ -43,12 +51,24 @@ export class AgentRunScope {
         : options.workspaceRoot
           ? new DurableRunStore(options.workspaceRoot)
           : undefined;
+      const historyStore = input.conversationDatabase
+        ? new DurableConversationHistoryStore(input.conversationDatabase)
+        : options.workspaceRoot
+          ? new DurableConversationHistoryStore(options.workspaceRoot)
+          : undefined;
+      const startMode = resolveQueryStartMode(options);
+      const storedHistory = startMode.type === "new_query"
+        ? await historyStore?.load(options.threadId)
+        : undefined;
+      const legacyCompletedCheckpoint = startMode.type === "new_query" && !storedHistory
+        ? await durableRunStore?.load(options.threadId)
+        : undefined;
       const runId = options.runId ?? crypto.randomUUID();
       const openedCheckpoint = durableRunStore
         ? await durableRunStore.openLease({
             threadId: options.threadId,
             runId,
-            resume: options.resumeThread === true,
+            resume: startMode.type === "resume_query",
           })
         : undefined;
       if (openedCheckpoint?.type === "lease_busy") {
@@ -69,13 +89,25 @@ export class AgentRunScope {
       const transcript: Array<Record<string, unknown>> = recovered
         ? [...structuredClone(recovered.transcript), { role: "user", content: options.request }]
         : [{ role: "user", content: options.request }];
+      const migratedHistory =
+        legacyCompletedCheckpoint?.status === "completed"
+        || legacyCompletedCheckpoint?.status === "proposal_ready"
+          ? pairPendingToolResults(
+              legacyCompletedCheckpoint.modelMessages,
+              legacyCompletedCheckpoint.pendingToolResults,
+            )
+          : undefined;
       const modelMessages: AgentModelMessage[] = recovered
         ? structuredClone(recovered.modelMessages)
         : [
-            ...(options.messageHistory ?? []).map((entry) => ({
-              role: entry.role,
-              content: [{ type: "text" as const, text: entry.content }],
-            })),
+            ...structuredClone(
+              storedHistory
+              ?? migratedHistory
+              ?? legacyVisibleHistory(options).map((entry) => ({
+                role: entry.role,
+                content: [{ type: "text" as const, text: entry.content }],
+              })),
+            ),
             { role: "user", content: [{ type: "text", text: options.request }] },
           ];
       const session = new AgentSession({
@@ -116,6 +148,8 @@ export class AgentRunScope {
         eventPorts,
         discoverySession: input.resolveDiscoverySession(recovered),
         skillSession: input.resolveSkillSession(recovered),
+        historyStore,
+        queryId: recovered?.queryLifecycle?.queryId ?? crypto.randomUUID(),
       });
       scope.restoreRecoverableState();
       scope.attachBackgroundCheckpoint();
@@ -146,11 +180,15 @@ export class AgentRunScope {
   readonly taskStore;
   readonly taskGraphOwner: string;
   readonly checkpointPolicy = new CheckpointPolicy();
+  readonly historyStore?: DurableConversationHistoryStore;
+  readonly queryId: string;
 
   private readonly abortController: AbortController;
   private readonly forwardAbort: () => void;
   private readonly checkpointCreatedAt: string;
   private closed = false;
+  private committedQueryState?: DurableQueryStateSnapshot;
+  private inflightQuery?: NonNullable<DurableRunCheckpoint["queryLifecycle"]>["inflight"];
 
   private constructor(input: {
     options: AgentRuntimeOptions;
@@ -165,6 +203,8 @@ export class AgentRunScope {
     eventPorts: AgentEventPorts;
     discoverySession: ToolDiscoverySession;
     skillSession: SkillSession;
+    historyStore?: DurableConversationHistoryStore;
+    queryId: string;
   }) {
     this.options = input.options;
     this.abortController = input.abortController;
@@ -178,6 +218,8 @@ export class AgentRunScope {
     this.eventPorts = input.eventPorts;
     this.discoverySession = input.discoverySession;
     this.skillSession = input.skillSession;
+    this.historyStore = input.historyStore;
+    this.queryId = input.queryId;
     this.taskStore = createTaskStore(input.options.runtimeRoot);
     this.taskGraphOwner = input.options.taskGraphOwner ?? "agent";
   }
@@ -226,6 +268,17 @@ export class AgentRunScope {
         : undefined,
       backgroundTasks: this.backgroundTasks.snapshot(),
       processedInboxMessageIds: [...this.session.processedInboxMessageIds].sort(),
+      ...(this.committedQueryState
+        ? {
+            queryLifecycle: {
+              queryId: this.queryId,
+              committedState: structuredClone(this.committedQueryState),
+              ...(this.inflightQuery
+                ? { inflight: structuredClone(this.inflightQuery) }
+                : {}),
+            },
+          }
+        : {}),
       result: input?.result ?? this.session.terminalState?.result,
       error: input?.error ?? this.session.terminalState?.error,
       createdAt: this.checkpointCreatedAt,
@@ -237,6 +290,51 @@ export class AgentRunScope {
     input?: Parameters<AgentRunScope["createCheckpoint"]>[0],
   ): Promise<void> {
     await this.checkpoints.commit(this.createCheckpoint(input));
+  }
+
+  async commitConversationHistory(): Promise<void> {
+    if (!this.historyStore) return;
+    await this.historyStore.save(
+      this.options.threadId,
+      pairPendingToolResults(
+        [...this.session.modelMessages],
+        [...this.session.pendingToolResults],
+      ),
+    );
+  }
+
+  restoreQueryState(toolUseContext: AgentQueryState["toolUseContext"]):
+    | Partial<AgentQueryState>
+    | undefined {
+    const snapshot = this.recovered?.queryLifecycle?.committedState;
+    if (!snapshot) return undefined;
+    return {
+      ...structuredClone(snapshot),
+      toolUseContext,
+      validationFailuresByTool: new Map(snapshot.validationFailuresByTool),
+      transition: snapshot.transition?.reason
+        ? { reason: snapshot.transition.reason as NonNullable<AgentQueryState["transition"]>["reason"] }
+        : undefined,
+    };
+  }
+
+  setCommittedQueryState(state: AgentQueryState): void {
+    this.committedQueryState = queryStateSnapshot(state);
+    this.inflightQuery = undefined;
+  }
+
+  setInflightQuery(
+    phase: NonNullable<DurableRunCheckpoint["queryLifecycle"]>["inflight"] extends infer T
+      ? T extends { phase: infer P } ? P : never
+      : never,
+    workspace: AgentIterationWorkspace,
+    activeToolUse?: import("../../gateway/types").AgentModelToolUseBlock,
+  ): void {
+    this.inflightQuery = {
+      phase,
+      workspace: iterationWorkspaceSnapshot(workspace),
+      ...(activeToolUse ? { activeToolUse: structuredClone(activeToolUse) } : {}),
+    };
   }
 
   async close(): Promise<void> {
@@ -364,4 +462,52 @@ export class AgentRunScope {
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function pairPendingToolResults(
+  messages: readonly AgentModelMessage[],
+  pendingToolResults: readonly import("../../gateway/types").AgentModelToolResultBlock[],
+): AgentModelMessage[] {
+  const cloned = structuredClone([...messages]);
+  if (pendingToolResults.length === 0) return cloned;
+  cloned.push({
+    role: "user",
+    content: structuredClone([...pendingToolResults]),
+  });
+  return cloned;
+}
+
+function legacyVisibleHistory(
+  options: AgentRuntimeOptions,
+): Array<{ role: "user" | "assistant"; content: string }> {
+  const history = structuredClone(options.messageHistory ?? []);
+  const last = history.at(-1);
+  if (last?.role === "user" && last.content === options.request) history.pop();
+  return history;
+}
+
+function queryStateSnapshot(state: AgentQueryState): DurableQueryStateSnapshot {
+  return {
+    messages: structuredClone(state.messages),
+    turnCount: state.turnCount,
+    transition: state.transition ? { ...state.transition } : undefined,
+    maxOutputTokensOverride: state.maxOutputTokensOverride,
+    maxOutputTokensRecoveryCount: state.maxOutputTokensRecoveryCount,
+    hasAttemptedReactiveCompact: state.hasAttemptedReactiveCompact,
+    renderFeedbackUsed: state.renderFeedbackUsed,
+    validationFailuresByTool: [...state.validationFailuresByTool.entries()],
+  };
+}
+
+function iterationWorkspaceSnapshot(
+  workspace: AgentIterationWorkspace,
+): DurableIterationWorkspaceSnapshot {
+  return {
+    messagesForQuery: structuredClone(workspace.messagesForQuery),
+    assistantMessages: structuredClone(workspace.assistantMessages),
+    toolUseBlocks: structuredClone(workspace.toolUseBlocks),
+    toolResults: structuredClone(workspace.toolResults),
+    followUpMessages: structuredClone(workspace.followUpMessages),
+    needsFollowUp: workspace.needsFollowUp,
+  };
 }

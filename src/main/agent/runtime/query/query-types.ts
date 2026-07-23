@@ -1,0 +1,156 @@
+import type { AgentModelSelection } from "@shared/agent";
+import type {
+  AgentModelMessage,
+  AgentModelToolResultBlock,
+  AgentModelToolUseBlock,
+} from "../../gateway/types";
+import type { ToolContext } from "../../tools/tool-definition";
+
+declare const identityBrand: unique symbol;
+
+export type SessionId = string & { readonly [identityBrand]: "SessionId" };
+export type ThreadId = string & { readonly [identityBrand]: "ThreadId" };
+export type RunId = string & { readonly [identityBrand]: "RunId" };
+export type QueryId = string & { readonly [identityBrand]: "QueryId" };
+
+export function asThreadId(value: string): ThreadId {
+  return value as ThreadId;
+}
+
+export function asRunId(value: string): RunId {
+  return value as RunId;
+}
+
+export function asQueryId(value: string): QueryId {
+  return value as QueryId;
+}
+
+export type QueryStartMode =
+  | { type: "new_query" }
+  | {
+      type: "resume_query";
+      reason: "waiting_user" | "interrupted" | "crash_recovery";
+    };
+
+export type AgentQuerySource = "user" | "continuation" | "recovery";
+
+export type CanUseToolFn = (
+  toolUse: AgentModelToolUseBlock,
+  context: ToolContext,
+) => boolean | Promise<boolean>;
+
+/**
+ * Stable input assembled once for one logical user query.
+ *
+ * Runtime dependencies deliberately stay opaque at this layer. The Presentation
+ * factory supplies them, while the loop consumes only this assembled boundary.
+ */
+export interface AgentQueryParams<TDeps = unknown> {
+  messages: readonly AgentModelMessage[];
+  systemPrompt: string;
+  userContext: Readonly<Record<string, string>>;
+  systemContext: Readonly<Record<string, string>>;
+  canUseTool: CanUseToolFn;
+  toolUseContext: ToolContext;
+  model?: AgentModelSelection;
+  fallbackModel?: AgentModelSelection;
+  querySource: AgentQuerySource;
+  maxOutputTokensOverride?: number;
+  maxTurns: number;
+  deps: TDeps;
+}
+
+export interface AgentQueryContinue {
+  reason: "next_turn" | "required_outcome" | "background_result" | "inbox";
+}
+
+/** The committed snapshot shared by consecutive agentic turns in one query. */
+export interface AgentQueryState {
+  messages: AgentModelMessage[];
+  toolUseContext: ToolContext;
+  turnCount: number;
+  transition?: AgentQueryContinue;
+  maxOutputTokensOverride?: number;
+  maxOutputTokensRecoveryCount: number;
+  hasAttemptedReactiveCompact: boolean;
+  renderFeedbackUsed: boolean;
+  validationFailuresByTool: ReadonlyMap<string, number>;
+}
+
+/** Uncommitted assistant/tool work owned by exactly one loop iteration. */
+export interface AgentIterationWorkspace {
+  messagesForQuery: AgentModelMessage[];
+  assistantMessages: AgentModelMessage[];
+  toolUseBlocks: AgentModelToolUseBlock[];
+  toolResults: AgentModelToolResultBlock[];
+  followUpMessages: AgentModelMessage[];
+  needsFollowUp: boolean;
+  updatedToolUseContext: ToolContext;
+}
+
+export function createInitialQueryState(
+  params: AgentQueryParams,
+  recovered?: Partial<AgentQueryState>,
+): AgentQueryState {
+  return {
+    messages: structuredClone([...(recovered?.messages ?? params.messages)]),
+    toolUseContext: recovered?.toolUseContext ?? params.toolUseContext,
+    turnCount: recovered?.turnCount ?? 0,
+    transition: recovered?.transition,
+    maxOutputTokensOverride:
+      recovered?.maxOutputTokensOverride ?? params.maxOutputTokensOverride,
+    maxOutputTokensRecoveryCount: recovered?.maxOutputTokensRecoveryCount ?? 0,
+    hasAttemptedReactiveCompact: recovered?.hasAttemptedReactiveCompact ?? false,
+    renderFeedbackUsed: recovered?.renderFeedbackUsed ?? false,
+    validationFailuresByTool:
+      new Map(recovered?.validationFailuresByTool ?? []),
+  };
+}
+
+export function createIterationWorkspace(
+  state: AgentQueryState,
+): AgentIterationWorkspace {
+  return {
+    messagesForQuery: structuredClone(state.messages),
+    assistantMessages: [],
+    toolUseBlocks: [],
+    toolResults: [],
+    followUpMessages: [],
+    needsFollowUp: false,
+    updatedToolUseContext: state.toolUseContext,
+  };
+}
+
+export function reduceQueryState(
+  state: AgentQueryState,
+  workspace: AgentIterationWorkspace,
+  transition: AgentQueryContinue = { reason: "next_turn" },
+): AgentQueryState {
+  if (workspace.toolUseBlocks.length !== workspace.toolResults.length) {
+    throw new Error(
+      "Cannot commit an incomplete tool batch: every tool_use requires one tool_result.",
+    );
+  }
+  const resultIds = new Set(workspace.toolResults.map((result) => result.toolUseId));
+  if (workspace.toolUseBlocks.some((toolUse) => !resultIds.has(toolUse.id))) {
+    throw new Error(
+      "Cannot commit a mismatched tool batch: tool_result ids must match tool_use ids.",
+    );
+  }
+
+  const toolResultMessage: AgentModelMessage[] = workspace.toolResults.length > 0
+    ? [{ role: "user", content: structuredClone(workspace.toolResults) }]
+    : [];
+  return {
+    ...state,
+    messages: [
+      ...structuredClone(workspace.messagesForQuery),
+      ...structuredClone(workspace.assistantMessages),
+      ...toolResultMessage,
+      ...structuredClone(workspace.followUpMessages),
+    ],
+    toolUseContext: workspace.updatedToolUseContext,
+    turnCount: state.turnCount + 1,
+    transition,
+  };
+}

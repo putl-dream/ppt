@@ -62,10 +62,41 @@ export interface DurableRunCheckpoint {
   backgroundTasks?: DurableBackgroundTask[];
   /** 在确认可恢复 Inbox claim 前已提交的消息 ID。 */
   processedInboxMessageIds?: string[];
+  queryLifecycle?: DurableQueryLifecycleSnapshot;
   result?: AgentRuntimeResult;
   error?: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface DurableQueryStateSnapshot {
+  messages: AgentModelMessage[];
+  turnCount: number;
+  transition?: { reason: string };
+  maxOutputTokensOverride?: number;
+  maxOutputTokensRecoveryCount: number;
+  hasAttemptedReactiveCompact: boolean;
+  renderFeedbackUsed: boolean;
+  validationFailuresByTool: Array<[string, number]>;
+}
+
+export interface DurableIterationWorkspaceSnapshot {
+  messagesForQuery: AgentModelMessage[];
+  assistantMessages: AgentModelMessage[];
+  toolUseBlocks: AgentModelToolUseBlock[];
+  toolResults: AgentModelToolResultBlock[];
+  followUpMessages: AgentModelMessage[];
+  needsFollowUp: boolean;
+}
+
+export interface DurableQueryLifecycleSnapshot {
+  queryId: string;
+  committedState: DurableQueryStateSnapshot;
+  inflight?: {
+    phase: "model_streaming" | "model_received" | "tool_running" | "waiting_user";
+    workspace: DurableIterationWorkspaceSnapshot;
+    activeToolUse?: AgentModelToolUseBlock;
+  };
 }
 
 export interface CheckpointLease {

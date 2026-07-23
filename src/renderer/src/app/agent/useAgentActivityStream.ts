@@ -66,6 +66,7 @@ export function useAgentActivityStream({
   const activeRunTraceRef = useRef<AgentActivityItem[]>([]);
   const requestStatusStepIdRef = useRef<string | null>(null);
   const streamMessageIdsRef = useRef(new Map<string, string>());
+  const streamAttemptLengthsRef = useRef(new Map<string, number>());
   const sidechainRunRef = useRef<string | null>(null);
   const pendingProgressTextRef = useRef("");
   const statusTypingTimerRef = useRef<number | null>(null);
@@ -331,6 +332,37 @@ export function useAgentActivityStream({
         return;
       }
 
+      if (event.type === "text-reset") {
+        const messageId = streamMessageIdsRef.current.get(event.runId);
+        const resetLength = streamAttemptLengthsRef.current.get(event.attemptId) ?? 0;
+        streamAttemptLengthsRef.current.delete(event.attemptId);
+        if (resetLength > 0) {
+          pendingProgressTextRef.current = pendingProgressTextRef.current.slice(
+            0,
+            Math.max(0, pendingProgressTextRef.current.length - resetLength),
+          );
+        }
+        if (messageId) {
+          setChatMessages((current) => current.map((message) =>
+            message.id === messageId
+              ? {
+                  ...message,
+                  content: message.content.slice(
+                    0,
+                    Math.max(0, message.content.length - resetLength),
+                  ),
+                }
+              : message
+          ));
+        }
+        return;
+      }
+
+      if (event.type === "text-commit") {
+        streamAttemptLengthsRef.current.delete(event.attemptId);
+        return;
+      }
+
       if (event.type === "text-chunk") {
         stopStatusTyping();
         requestStatusStepIdRef.current = null;
@@ -361,6 +393,13 @@ export function useAgentActivityStream({
         setActivityTrace(sealedTrace);
         let messageId = streamMessageIdsRef.current.get(event.runId);
         pendingProgressTextRef.current += event.chunk;
+        if (event.attemptId) {
+          streamAttemptLengthsRef.current.set(
+            event.attemptId,
+            (streamAttemptLengthsRef.current.get(event.attemptId) ?? 0)
+              + event.chunk.length,
+          );
+        }
         if (!messageId) {
           messageId = crypto.randomUUID();
           streamMessageIdsRef.current.set(event.runId, messageId);

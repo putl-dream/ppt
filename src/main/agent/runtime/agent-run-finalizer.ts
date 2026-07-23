@@ -32,6 +32,18 @@ export class AgentRunFinalizer {
       result,
     }));
     scope.session.sealTerminal();
+    if (status !== "waiting_user") {
+      try {
+        await scope.commitConversationHistory();
+      } catch (error) {
+        scope.eventPorts.renderer({
+          type: "workflow-warning",
+          message: `Conversation history commit failed: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        });
+      }
+    }
     await this.runStopHookSafely(scope, {
       event: "Stop",
       threadId: scope.options.threadId,

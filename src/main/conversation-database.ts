@@ -174,6 +174,12 @@ export class ConversationDatabase {
         updated_at TEXT NOT NULL
       );
 
+      CREATE TABLE IF NOT EXISTS agent_conversation_histories (
+        thread_id TEXT PRIMARY KEY,
+        messages_json TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+
       CREATE TABLE IF NOT EXISTS context_snapshots (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
@@ -670,6 +676,23 @@ export class ConversationDatabase {
       "SELECT state_json FROM service_threads WHERE thread_id = ?",
     ).get(threadId) as { state_json: string } | undefined;
     return row ? JSON.parse(row.state_json) as T : undefined;
+  }
+
+  saveAgentConversationHistory(threadId: string, messages: unknown): void {
+    this.database.prepare(`
+      INSERT INTO agent_conversation_histories(thread_id, messages_json, updated_at)
+      VALUES(?, ?, ?)
+      ON CONFLICT(thread_id) DO UPDATE SET
+        messages_json = excluded.messages_json,
+        updated_at = excluded.updated_at
+    `).run(threadId, JSON.stringify(messages), new Date().toISOString());
+  }
+
+  loadAgentConversationHistory<T>(threadId: string): T | undefined {
+    const row = this.database.prepare(
+      "SELECT messages_json FROM agent_conversation_histories WHERE thread_id = ?",
+    ).get(threadId) as { messages_json: string } | undefined;
+    return row ? JSON.parse(row.messages_json) as T : undefined;
   }
 
   saveContextSnapshot(input: Omit<StoredContextSnapshot, "id" | "createdAt">): StoredContextSnapshot {

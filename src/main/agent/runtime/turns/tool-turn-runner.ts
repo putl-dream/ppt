@@ -6,19 +6,73 @@ import {
 } from "../background/background-task-manager";
 import type { AgentLoopTurnOutcome, PreparedAgentRun } from "./prepared-agent-run";
 import { rethrowIfRuntimeCancellation } from "../lifecycle/runtime-cancellation";
+import type { AgentIterationWorkspace } from "../query/query-types";
 
 /** Runs claim → checkpoint → preflight → dispatch → interpretation as one transaction. */
 export class ToolTurnRunner {
-  async run(
+  async runBatch(
+    run: PreparedAgentRun,
+    toolCalls: readonly AgentModelToolUseBlock[],
+    workspace: AgentIterationWorkspace,
+  ): Promise<AgentLoopTurnOutcome> {
+    if (
+      toolCalls.length > 1
+      && toolCalls.some((call) =>
+        run.input.presentationCompletionPolicy.isFinishTool(call.name))
+    ) {
+      for (const toolCall of toolCalls) {
+        const queued = run.scope.session.takeQueuedToolUse();
+        if (queued?.id !== toolCall.id) {
+          throw new Error("Session tool queue diverged while rejecting a mixed terminal batch.");
+        }
+        const result: AgentModelToolResultBlock = {
+          type: "tool_result",
+          toolUseId: toolCall.id,
+          isError: true,
+          content: [{
+            type: "text",
+            text:
+              "Terminal tools must be called alone. No tool in this mixed batch was executed; "
+              + "call ordinary tools first, then issue the terminal tool in a separate assistant response.",
+          }],
+        };
+        run.scope.applyTransition({ type: "tool_processed", result });
+        workspace.toolResults.push(structuredClone(result));
+        run.appendRuntimeEvent("tool_result", {
+          toolUseId: toolCall.id,
+          toolName: toolCall.name,
+          isError: true,
+          content: structuredClone(result.content),
+        }, "model_only");
+      }
+      return { type: "continue" };
+    }
+
+    for (const toolCall of toolCalls) {
+      const queued = run.scope.session.takeQueuedToolUse();
+      if (queued?.id !== toolCall.id) {
+        throw new Error("Session tool queue diverged while executing a tool batch.");
+      }
+      const outcome = await this.runOne(run, toolCall, workspace);
+      if (outcome.type === "terminal") return outcome;
+      await run.scope.persistCheckpoint();
+    }
+    return { type: "continue" };
+  }
+
+  private async runOne(
     run: PreparedAgentRun,
     toolCall: AgentModelToolUseBlock,
+    workspace: AgentIterationWorkspace,
   ): Promise<AgentLoopTurnOutcome> {
-    const { scope } = run;
-    const { options, session, backgroundTasks, taskStore } = scope;
+    const { scope, params } = run;
+    const { session, backgroundTasks, taskStore } = scope;
+    const deps = params.deps;
     const rethrowIfCancelled = (error: unknown): void => {
-      rethrowIfRuntimeCancellation(error, scope.signal, options.signal);
+      rethrowIfRuntimeCancellation(error, scope.signal, deps.externalSignal);
     };
 
+    scope.setInflightQuery("tool_running", workspace, toolCall);
     const claimDecision = scope.applyTransition({ type: "tool_claimed", toolUse: toolCall });
     run.appendRuntimeEvent("tool_call", {
       toolUseId: toolCall.id,
@@ -29,6 +83,7 @@ export class ToolTurnRunner {
     if (claimDecision === "commit") await scope.persistCheckpoint();
 
     const recordToolResultBlock = (result: AgentModelToolResultBlock): void => {
+      workspace.toolResults.push(structuredClone(result));
       const decision = scope.applyTransition({ type: "tool_processed", result });
       if (decision !== "commit_before_next") {
         throw new Error("CheckpointPolicy rejected a normal tool result transition.");
@@ -62,9 +117,9 @@ export class ToolTurnRunner {
     const preflight = await run.input.toolPreflight.prepare({
       toolCall,
       context: run.input.context,
-      workspaceRoot: options.workspaceRoot,
-      threadId: options.threadId,
-      requestToolApproval: options.requestToolApproval,
+      workspaceRoot: deps.workspaceRoot,
+      threadId: deps.threadId,
+      requestToolApproval: deps.requestToolApproval,
       signal: scope.signal,
       policyGuidance: async (toolName) => {
         if (!await shouldRequireDiscoverTaskPlan({
@@ -198,8 +253,8 @@ export class ToolTurnRunner {
             args,
             context: run.input.context,
             toolCall,
-            runtimeArtifactRoot: options.runtimeRoot,
-            threadId: options.threadId,
+            runtimeArtifactRoot: deps.runtimeRoot,
+            threadId: deps.threadId,
             signal: scope.signal,
             runPostToolUseHook: run.input.runPostToolUseHook,
           });
@@ -245,8 +300,8 @@ export class ToolTurnRunner {
       args,
       context: run.input.context,
       toolCall,
-      runtimeArtifactRoot: options.runtimeRoot,
-      threadId: options.threadId,
+      runtimeArtifactRoot: deps.runtimeRoot,
+      threadId: deps.threadId,
       signal: scope.signal,
       runPostToolUseHook: run.input.runPostToolUseHook,
     });

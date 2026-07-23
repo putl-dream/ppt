@@ -15,6 +15,7 @@ import type {
 import { createStarterPresentation } from "../src/shared/presentation";
 import type { ToolDefinition } from "../src/main/agent/tools/tool-definition";
 import { clearHooks, registerHook } from "../src/main/agent/runtime/hooks/hook-registry";
+import type { AgentRuntimeStreamEvent } from "../src/main/agent/runtime/runtime-types";
 
 function createGateway(turns: AgentModelContentBlock[][]): AgentModelGateway & { requests: AgentModelRequest[] } {
   let index = 0;
@@ -113,6 +114,50 @@ describe("native ContentBlock runtime path", () => {
     });
     expect(result.type).toBe("message");
     expect(streamed).toBe("我是你的 PPT 智能助手。\n\n说说你的需求，我马上开干。");
+  });
+
+  it("resets a failed streamed attempt before committing the retry", async () => {
+    let invocation = 0;
+    const gateway: AgentModelGateway = {
+      async generateText() {
+        throw new Error("Unexpected non-streaming call");
+      },
+      async *generateTextStream() {
+        invocation += 1;
+        if (invocation === 1) {
+          yield { type: "text_delta" as const, text: "failed partial" };
+          throw Object.assign(new Error("rate limited"), { status: 429 });
+        }
+        yield { type: "text_delta" as const, text: "successful text" };
+        yield {
+          type: "complete" as const,
+          content: [{ type: "text" as const, text: "successful text" }],
+        };
+      },
+    };
+    const events: AgentRuntimeStreamEvent[] = [];
+
+    const result = await new AgentRuntime(new ToolRegistry(), gateway).run({
+      threadId: "stream-attempt-reset",
+      request: "retry",
+      presentationSnapshot: createStarterPresentation(),
+      selectedElementIds: [],
+      onStreamEvent: (event) => events.push(event),
+    });
+
+    expect(result).toEqual({ type: "message", content: "successful text" });
+    expect(events.map((event) => event.type)).toEqual([
+      "attempt_started",
+      "delta",
+      "attempt_reset",
+      "attempt_started",
+      "delta",
+      "attempt_committed",
+    ]);
+    const attempts = events
+      .filter((event) => event.type === "attempt_started")
+      .map((event) => event.attemptId);
+    expect(new Set(attempts).size).toBe(2);
   });
 
   it("accepts direct Markdown on the first turn", async () => {

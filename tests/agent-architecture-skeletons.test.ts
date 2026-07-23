@@ -334,21 +334,18 @@ describe("Agent Architecture Skeletons & Types", () => {
   });
 
   it("keeps a failed continuation request in the next runtime context", async () => {
-    const prompts: Array<{
-      request: string;
-      conversation: Array<{ role: "user" | "assistant"; content: string }>;
-    }> = [];
+    const requests: AgentModelRequest[] = [];
     const gateway: AgentModelGateway = {
       async generateText(request) {
-        prompts.push(JSON.parse(request.prompt));
-        if (prompts.length === 1) {
+        requests.push(request);
+        if (requests.length === 1) {
           return {
           provider: "openai",
           model: "test-model",
           content: [modelAskUser("请补充具体主题。", ["topic"])],
           };
         }
-        if (prompts.length === 2) {
+        if (requests.length === 2) {
           throw new AgentGatewayError("Provider request timed out", "timeout", "openai");
         }
         return {
@@ -383,24 +380,26 @@ describe("Agent Architecture Skeletons & Types", () => {
 
     await service.continueAgentRun(first.threadId!, "我刚才说了什么？");
 
-    expect(prompts[2].conversation).toEqual([
-      { role: "user", content: "帮我做一份 PPT" },
-      { role: "assistant", content: "请补充具体主题。" },
-      { role: "user", content: "Agent 范式与架构演进：从 ReAct / Plan / Workflow 看智能体设计" },
-      { role: "user", content: "我刚才说了什么？" },
-    ]);
+    const textContent = requests[2]!.messages!
+      .flatMap((message) => message.content)
+      .filter((block) => block.type === "text")
+      .map((block) => block.text);
+    expect(textContent).toEqual(expect.arrayContaining([
+      "帮我做一份 PPT",
+      "Agent 范式与架构演进：从 ReAct / Plan / Workflow 看智能体设计",
+      "我刚才说了什么？",
+    ]));
+    expect(JSON.parse(requests[2]!.prompt)).not.toHaveProperty("conversation");
+    expect(JSON.parse(requests[2]!.prompt)).not.toHaveProperty("request");
   });
 
   it("passes restored chat history into a normal start request", async () => {
-    let promptPayload: {
-      request: string;
-      conversation: Array<{ role: "user" | "assistant"; content: string }>;
-    } | undefined;
+    let modelRequest: AgentModelRequest | undefined;
     const service = new AgentService(
       new CommandBus(createStarterPresentation()),
       new AgentRuntime(createDefaultToolRegistry(), {
         async generateText(request) {
-          promptPayload = JSON.parse(request.prompt);
+          modelRequest = request;
           return {
           provider: "openai",
           model: "test-model",
@@ -426,9 +425,21 @@ describe("Agent Architecture Skeletons & Types", () => {
     );
 
     expect(result.status).toBe("chat");
-    expect(promptPayload?.conversation).toEqual([
-      { role: "user", content: "Agent 范式与架构演进：从 ReAct / Plan / Workflow 看智能体设计" },
+    expect(modelRequest?.messages).toEqual([
+      {
+        role: "user",
+        content: [{
+          type: "text",
+          text: "Agent 范式与架构演进：从 ReAct / Plan / Workflow 看智能体设计",
+        }],
+      },
+      {
+        role: "user",
+        content: [{ type: "text", text: "我刚才说了什么？" }],
+      },
     ]);
+    expect(JSON.parse(modelRequest!.prompt)).not.toHaveProperty("conversation");
+    expect(JSON.parse(modelRequest!.prompt)).not.toHaveProperty("request");
   });
 
   it("requires Deferred Tools to be discovered in the same session before execution", async () => {

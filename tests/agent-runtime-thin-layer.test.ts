@@ -29,6 +29,16 @@ describe("AgentRuntime thin-layer architecture", () => {
     expect(driver).not.toMatch(/presentation-completion-policy|layout-choice-orchestrator/);
   });
 
+  it("keeps application-level Runtime options out of model turns", async () => {
+    const turns = await Promise.all([
+      source("turns/model-turn-runner.ts"),
+      source("turns/tool-turn-runner.ts"),
+    ]);
+    const combined = turns.join("\n");
+
+    expect(combined).not.toMatch(/scope\.options|options\.(?:request|messageHistory|model|runtimeRoot|onStreamChunk)/);
+  });
+
   it("routes recoverable collection writes through AgentSession commands", async () => {
     const collaborators = [
       "lifecycle/agent-run-scope.ts",

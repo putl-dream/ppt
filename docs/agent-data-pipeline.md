@@ -13,20 +13,26 @@
 
 会话回放另外使用 `image` 与 `tool_result` 块；它们和上面四类共用同一个 `messages[].content[]` 容器，不存在平行的扁平字段。
 
-完整运行链路由 8 类数据组成：
+完整运行链路由 10 类数据组成：
 
 | 层 | 当前结构 | 责任 |
 |---|---|---|
-| 1. 流式协议 | `AgentModelStreamChunk` | 接收增量文本、thinking 和完成事件 |
+| 1. 流式协议 | `AgentModelStreamChunk`、`AgentRuntimeStreamEvent` | provider chunk 进入 attempt；支持 delta、reset/tombstone 和 commit |
 | 2. 内容块 | `AgentModelContentBlock` | provider-neutral 的模型内容协议 |
-| 3. 会话消息 | `AgentModelMessage`、`TranscriptMessage` | 保存 assistant/user/system/tool 历史 |
-| 4. 工具定义 | `ToolDefinition` | 输入/输出 Schema、风险、执行和模型结果映射 |
-| 5. 控制上下文 | `ToolContext`、Hook、权限策略 | 快照、会话、取消、审批、任务状态 |
-| 6. 执行结果 | `PreparedToolResult<T>` | 分离本地富结果与模型紧凑结果 |
-| 7. PPT/文件数据 | `Presentation`、commands、workspace artifacts | 真实业务数据与受控写入 |
-| 8. 持久化 | transcript JSONL、`.agent/tool-results/` | 会话恢复与大结果完整保存 |
+| 3. Conversation History | `AgentModelMessage[]` | thread 级完整 provider 历史；与可见文本消息分离 |
+| 4. Query 输入 | `AgentQueryParams` | 每次用户提交只组装一次的稳定策略和依赖 |
+| 5. Query 状态 | `AgentQueryState` | 同一 query 多圈之间的 committed snapshot |
+| 6. 单圈工作区 | `AgentIterationWorkspace` | 当前 assistant/tool batch 的未提交增量 |
+| 7. 工具定义 | `ToolDefinition` | 输入/输出 Schema、风险、执行和模型结果映射 |
+| 8. 控制上下文 | `ToolContext`、Hook、权限策略 | 快照、会话、取消、审批、任务状态 |
+| 9. 执行结果 | `PreparedToolResult<T>` | 分离本地富结果与模型紧凑结果 |
+| 10. 持久化 | canonical History、query checkpoint、`.agent/tool-results/` | 会话、暂停/崩溃恢复与大结果完整保存 |
 
 `AgentModelResponse.content` 是模型响应的唯一事实源。项目不再定义或读取 `text`、`toolCalls`、`thinkingBlocks`、`contentBlocks` 等平行响应字段；`AgentModelMessage` 也不再提供 `toolCalls/toolResults/images` 属性。普通回复直接来自 `text` 块，不解析 JSON envelope。
+
+主 Agent 的 provider 请求只从 Query State/Workspace 中的 canonical `messages` 构造。
+`request`、可见 `messageHistory` 和 transcript 不再作为平行 conversation payload 发送给 provider；
+context compact 的最终结果也直接体现为 provider 收到的 `AgentModelMessage[]`。
 
 业务侧通过三种强类型门面收敛这个底层协议：
 
@@ -40,6 +46,7 @@
 
 ```text
 provider stream / response
+  -> attempt(id): delta* -> reset | commit
   -> AgentModelContentBlock[]
   -> tool_use(id, name, input)
   -> Zod inputSchema.safeParse
@@ -57,6 +64,7 @@ provider stream / response
 
 - 不依赖 `stop_reason` 判断是否有工具调用，直接检查内容中的 `tool_use`。
 - 同一 assistant 轮的多个 `tool_use` 会保守地串行执行，全部完成后合并成一个 user 结果轮。
+- terminal tool 必须独占一个 assistant batch；混合 batch 不执行半批工具，而是为整批返回配对错误并要求模型重试。
 - 每个调用 ID 必须恰好有一个结果；缺失结果补 synthetic error，孤立结果删除，重复 ID 去重。
 - OpenAI 工具参数 JSON 解析失败不会退化为可执行的空对象，而是生成 `isError` 结果让模型重试。
 - 工具异常、参数错误、权限拒绝和输出 Schema 错误都进入相同的错误结果通道。

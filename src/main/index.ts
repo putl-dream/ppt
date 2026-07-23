@@ -160,6 +160,9 @@ function createAgentStreamEmitter(
         case "teammate-thinking-chunk":
           return "reasoning_chunk";
         case "text-chunk": return "text_chunk";
+        case "text-reset":
+        case "text-commit":
+          return "workflow_progress";
         case "stage-started": return "stage_started";
         case "workflow-progress":
         case "request-status":

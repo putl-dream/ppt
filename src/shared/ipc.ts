@@ -74,7 +74,15 @@ export type AgentRunRequest = z.infer<typeof agentRunRequestSchema>;
 export type AgentStreamEvent = (
   | { runId: string; type: "request-status"; message: string; progress: number }
   | { runId: string; type: "workflow-progress"; message: string; progress: number }
-  | { runId: string; type: "text-chunk"; chunk: string; source?: "message" | "tool-summary" }
+  | {
+      runId: string;
+      type: "text-chunk";
+      chunk: string;
+      source?: "message" | "tool-summary";
+      attemptId?: string;
+    }
+  | { runId: string; type: "text-reset"; attemptId: string }
+  | { runId: string; type: "text-commit"; attemptId: string }
   | { runId: string; type: "thinking-chunk"; chunk: string; modelStep?: number }
   | { runId: string; type: "stream-completed" }
   | { runId: string; type: "stage-started"; message: string; stage: string }

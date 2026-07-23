@@ -12,6 +12,7 @@ import type { LayoutChoice } from "@shared/layout-preference";
 import type { ToolApprovalHandler } from "./tools/permission-check";
 import type { MessageBus } from "../teammate/message-bus";
 import type { TeammateManager } from "../teammate/spawn-teammate";
+import type { QueryStartMode } from "./query/query-types";
 
 export type AgentRuntimeRisk = "low" | "medium" | "high";
 
@@ -43,6 +44,12 @@ export type AgentRuntimeResult =
   | AgentAskUserResult
   | AgentCommandProposalResult;
 
+export type AgentRuntimeStreamEvent =
+  | { type: "attempt_started"; attemptId: string }
+  | { type: "delta"; attemptId: string; text: string; source: "message" | "tool-summary" }
+  | { type: "attempt_reset"; attemptId: string; reason: string }
+  | { type: "attempt_committed"; attemptId: string };
+
 export interface AgentRuntimeOptions {
   threadId: string;
   request: string;
@@ -52,6 +59,8 @@ export interface AgentRuntimeOptions {
   model?: AgentModelSelection;
   executionStrategy?: AgentExecutionStrategy;
   runId?: string;
+  /** Explicit query lifecycle. Prefer this over the compatibility resume flag. */
+  startMode?: QueryStartMode;
   /** Restore the canonical ContentBlock checkpoint for this thread. */
   resumeThread?: boolean;
   messageHistory?: Array<{ role: "user" | "assistant"; content: string }>;
@@ -66,6 +75,7 @@ export interface AgentRuntimeOptions {
   maxSteps?: number;
   agentStepLimits?: AgentStepLimits;
   onStreamChunk?: (chunk: string, source: "message" | "tool-summary") => void;
+  onStreamEvent?: (event: AgentRuntimeStreamEvent) => void;
   onThinkingChunk?: (chunk: string, modelStep: number) => void;
   signal?: AbortSignal;
   onProgress?: (event: { type: string; message: string; [key: string]: unknown }) => void;
