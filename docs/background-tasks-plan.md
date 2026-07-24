@@ -208,7 +208,7 @@ export function shouldRunBackground(toolName: string, args: Record<string, unkno
 
 **排除项与理由**：
 - `SubmitCommands` / `AskUser`：本身就是 finish 信号，后台化无意义。
-- `TaskGraph*`、`Read*`、`ListSlides`：快操作，后台化只增加复杂度。
+- `Task list*`、`Read*`、`ListSlides`：快操作，后台化只增加复杂度。
 - `preview-slide` / `ExecuteExtraTool`：deferred，须经 `SearchExtraTools`→`ExecuteExtraTool` 两跳，暂不纳入首期（见 §7 未决问题）。
 
 **`run_in_background` 参数如何暴露给模型**：给 `Task` 与 `ExportPptx` 的 `inputSchema` 增加可选布尔字段 `run_in_background`（`.optional().describe("true 时后台执行，主流程继续，结果稍后作为通知返回")`）。原生 tool-use 下模型可显式设置。

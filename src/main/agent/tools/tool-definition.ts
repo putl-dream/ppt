@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { AgentModelSelection } from "@shared/agent";
 import type { AgentStepLimits } from "@shared/agent-step-limits";
-import type { AgentTaskNode } from "@shared/agent-task-graph";
+import type { AgentTaskNode } from "@shared/agent-task-list";
 import type { Presentation } from "@shared/presentation";
 import type { AgentModelGateway } from "../gateway";
 import type { ToolApprovalHandler } from "../runtime/tools/permission-check";
@@ -10,7 +10,7 @@ import type { TeammateProgressListener } from "@shared/teammate-progress";
 import type { ToolRegistry } from "./tool-registry";
 import type { SkillRegistry } from "../skills/loadSkillsDir";
 import type { SkillSession } from "../skills/skill-types";
-import type { TaskStore } from "../task/task-store";
+import type { TaskCommandPrincipal, TaskStore } from "../task/task-store";
 import type { PromptStage } from "../runtime/prompts/prompt-stage";
 import type { MessageBus } from "../teammate/message-bus";
 import type { TeammateManager } from "../teammate/spawn-teammate";
@@ -60,15 +60,25 @@ export interface ToolContext {
   readonly requestToolApproval?: ToolApprovalHandler;
   /** Streams task-graph teammate progress to the UI. */
   readonly onTeammateProgress?: TeammateProgressListener;
-  /** Emits task graph updates to the UI after TaskGraph* mutations. */
-  readonly notifyTaskGraphUpdated?: (input: {
+  /** Emits task-list updates to the UI after Task mutations. */
+  readonly notifyTaskListUpdated?: (input: {
     tasks: AgentTaskNode[];
     goal?: string | null;
+    listRevision?: number;
+    state?: "open" | "closed" | "archived";
+    archive?: {
+      outcome: "completed" | "abandoned";
+      reason?: string;
+      archivedBy: string;
+      archivedAt: string;
+    };
   }) => void;
   /** File-backed task graph store (`.tasks/` under workspace). */
   readonly taskStore?: TaskStore;
-  /** Owner id used by TaskGraphClaim when args.owner is omitted. */
-  readonly taskGraphOwner?: string;
+  /** Trusted runtime identity for Task commands; never sourced from model input. */
+  readonly taskPrincipal?: TaskCommandPrincipal;
+  /** Runtime actor id used to construct the trusted Task principal. */
+  readonly taskListOwner?: string;
   /** Skills catalog scanned at harness startup (Layer 1). */
   readonly skillRegistry?: SkillRegistry;
   /** Per-run loaded skill tracking (Layer 2). */

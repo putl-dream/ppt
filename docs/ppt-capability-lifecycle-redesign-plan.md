@@ -38,11 +38,11 @@ Project / Deck Identity
 核心决策：
 
 1. **PPT Job 是跨 Query 的业务工作流**。它不属于某次 Agent Query State，也不因一次 Query completed 而消失。
-2. **中间过程必须以有类型、有版本、可校验的 Artifact 表达**，不能通过聊天摘要、TaskGraph 状态或文件是否存在来推断。
+2. **中间过程必须以有类型、有版本、可校验的 Artifact 表达**，不能通过聊天摘要、Task list 状态或文件是否存在来推断。
 3. **Agent Mode 与 Lean Mode 使用同一组 PPT Artifact 和同一条后半段管线**；差别只是执行策略、模型调用预算和用户确认点。
 4. **Presentation 只表示已应用的可编辑 deck**。未审批的内容草稿、设计方案和编译结果属于 job candidate，不提前伪装成已提交 Presentation。
 5. **每个阶段都采用 candidate → validate → commit**。阶段中途写出的半成品不推进 Job State，也不使下游产物变为 ready。
-6. **用户可见进度是 durable Job State 的投影**。Renderer 事件、Agent 文本和 TaskGraph 只负责展示或调度，不是业务事实源。
+6. **用户可见进度是 durable Job State 的投影**。Renderer 事件、Agent 文本和 Task list 只负责展示或调度，不是业务事实源。
 7. **内容、设计、素材、编译和质量是不同数据领域**。不能继续让 storyboard、layout-plan、Presentation 和 command proposal 互相代替。
 
 一句话概括：
@@ -100,9 +100,9 @@ LeanDeckSpecV2
 - context compact 后只能再次探测文件并猜测业务进度；
 - Task 完成、文件写入、文件校验和业务阶段完成不是同一个事件。
 
-### 2.3 TaskGraph、Agent Query 与 PPT 工作流层级混合
+### 2.3 Task list、Agent Query 与 PPT 工作流层级混合
 
-TaskGraph 适合表达工作分配和依赖，但不应成为 PPT 业务状态机：
+Task list 适合表达工作分配和依赖，但不应成为 PPT 业务状态机：
 
 - teammate `submitted` 只表示工作已提交给 lead，不表示 artifact 已验证；
 - Query completed 只表示一次模型请求结束，不表示 PPT Job 完成；
@@ -169,7 +169,7 @@ ProposalId ─ applies against ──> PresentationRevision
 - 用 `threadId === jobId` 推断 PPT Job；
 - 用 Query completed 推断 PptJob completed；
 - 用 Presentation revision 代替 Artifact revision；
-- 用 TaskGraph task ID 代替 Artifact ID。
+- 用 Task list task ID 代替 Artifact ID。
 
 ### 3.2 生命周期层级
 
@@ -928,7 +928,7 @@ reload current Presentation
 - inflight stage workspace；
 - 已记录的外部副作用事实。
 
-不通过聊天记录重新猜阶段，不从 TaskGraph conclusion 重建 artifact，不把 partial candidate 当成 committed。
+不通过聊天记录重新猜阶段，不从 Task list conclusion 重建 artifact，不把 partial candidate 当成 committed。
 
 ### 14.2 外部副作用
 
@@ -1049,7 +1049,7 @@ PPT Job:
 3. Job State 只引用已 committed Artifact。
 4. candidate 验证失败不得推进 stage。
 5. Artifact freshness 由 dependency revision 计算，不依赖手工 stale 标记。
-6. TaskGraph completed 不等于 Artifact committed。
+6. Task list completed 不等于 Artifact committed。
 7. Query completed 不等于 PptJob completed。
 8. Agent 与 fast/Lean 路径必须产出同一 DeckSpec/DesignPlan 契约。
 9. 内容域不得包含坐标；设计域不得修改事实和正文。
@@ -1132,7 +1132,7 @@ PPT Job:
 - 建立 candidate → validate → commit → advance 的 stage runner。
 - 将文件存在探测替换为 committed artifact refs。
 - waiting_user、暂停、失败和恢复使用 PptJob checkpoint。
-- TaskGraph 只负责调度 artifact producer，提交必须经过 validator。
+- Task list 只负责调度 artifact producer，提交必须经过 validator。
 
 验收：
 
@@ -1184,7 +1184,7 @@ PPT Job:
 - 让模型直接生成 PresentationElement 坐标；
 - 重写 CommandBus、CommitGate 或 Presentation schema；
 - 同时建设大量新 layout/scene/theme；
-- 把 TaskGraph 替换成新的通用任务系统；
+- 把 Task list 替换成新的通用任务系统；
 - 把所有中间产物塞入 Conversation History；
 - 为了统一管线而取消 fast/Lean 的单次内容调用优势；
 - 未经用户授权自动应用 Proposal；

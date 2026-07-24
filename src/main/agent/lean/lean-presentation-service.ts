@@ -341,11 +341,11 @@ function extractLeanDeckSpec(
 ): { spec: LeanDeckSpecV2; specChars: number } {
   const toolCalls = toolUseBlocksFromContent(content);
   if (toolCalls.length > 0) {
-    const submitted = toolCalls.filter((call) => call.name === LEAN_SUBMIT_TOOL_NAME);
+    const submissionCalls = toolCalls.filter((call) => call.name === LEAN_SUBMIT_TOOL_NAME);
     if (
       toolCalls.length !== 1
-      || submitted.length !== 1
-      || submitted[0]?.parseError
+      || submissionCalls.length !== 1
+      || submissionCalls[0]?.parseError
     ) {
       throw new ModelOutputError(
         "Lean Mode 未通过唯一的 DeckSpec 提交工具返回结果；"
@@ -353,7 +353,7 @@ function extractLeanDeckSpec(
         "unexpected-tool-use",
       );
     }
-    const input = submitted[0].input;
+    const input = submissionCalls[0].input;
     return {
       spec: parseLeanDeckSpecValue(input),
       specChars: JSON.stringify(input).length,

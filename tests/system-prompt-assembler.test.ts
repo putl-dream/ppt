@@ -77,16 +77,15 @@ describe("system prompt assembly", () => {
 
     expect(assembled.text).toContain("Lead Agent 职责边界");
     expect(assembled.text).toContain("lead/orchestrator");
-    expect(assembled.text).toContain("维护 TaskGraph");
-    expect(assembled.text).toContain("常驻 teammate 自主认领");
+    expect(assembled.text).toContain("维护持久化 Task");
+    expect(assembled.text).toContain("watcher 独立消费");
     expect(assembled.text).toContain("executionTarget");
-    expect(assembled.text).toContain("submitted");
-    expect(assembled.text).toContain("所有子任务都必须进入 TaskGraph");
-    expect(assembled.text).toContain("不要创建临时、平面的任务列表");
-    expect(assembled.text).toContain("覆盖当前用户目标的端到端计划");
-    expect(assembled.text).toContain("同一个用户目标只建一张 TaskGraph");
-    expect(assembled.text).toContain("不要因为进入 author/design/style 再调用 `TaskGraphCreatePlan`");
-    expect(assembled.text).toContain("验收 teammate 提交的产物");
+    expect(assembled.text).toContain("completionPolicy");
+    expect(assembled.text).toContain("TaskReviewRequest");
+    expect(assembled.text).toContain("TaskReviewApprove");
+    expect(assembled.text).toContain("status、owner、依赖、review 相互独立");
+    expect(assembled.text).toContain("TaskList");
+    expect(assembled.text).toContain("验收 teammate 产物");
   });
 
   it("author stage omits layout skills from catalog and design-system examples", () => {
@@ -103,7 +102,7 @@ describe("system prompt assembly", () => {
     expect(assembled.text).toContain("`ppt-build`");
     expect(assembled.text).not.toContain("`ppt-layout`");
     expect(assembled.text).toContain("充分写内容");
-    expect(assembled.text).toContain("不要新建 TaskGraphCreatePlan");
+    expect(assembled.text).toContain("TaskList");
     expect(assembled.text).toContain("大纲/分镜已冻结");
     expect(assembled.text).toContain("内容规范化");
     expect(assembled.text).not.toMatch(/"type":"set-design-system"/);

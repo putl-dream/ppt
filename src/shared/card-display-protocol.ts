@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { agentQuestionSchema } from "./agent-question";
-import { agentTaskNodeSchema } from "./agent-task-graph";
+import { agentTaskNodeSchema } from "./agent-task-list";
 import { presentationCommandSchema } from "./commands";
 import { presentationSchema } from "./presentation";
 
@@ -150,13 +150,21 @@ const reviewPatchReadyEventSchema = z.object({
   }),
 });
 
-const progressTaskGraphUpdatedEventSchema = z.object({
+const progressTaskListUpdatedEventSchema = z.object({
   ...commonDisplayEventShape,
-  kind: z.literal("progress.task-graph-updated"),
+  kind: z.literal("progress.task-list-updated"),
   category: z.literal("progress"),
   payload: z.object({
     tasks: z.array(agentTaskNodeSchema),
     goal: z.string().nullable().optional(),
+    listRevision: z.number().int().nonnegative().optional(),
+    state: z.enum(["open", "closed", "archived"]).optional(),
+    archive: z.object({
+      outcome: z.enum(["completed", "abandoned"]),
+      reason: z.string().optional(),
+      archivedBy: z.string(),
+      archivedAt: z.string(),
+    }).optional(),
   }),
 });
 
@@ -202,7 +210,7 @@ export const displayEventSchema = z.discriminatedUnion("kind", [
   interactionLayoutRequiredEventSchema,
   reviewCommandProposalEventSchema,
   reviewPatchReadyEventSchema,
-  progressTaskGraphUpdatedEventSchema,
+  progressTaskListUpdatedEventSchema,
   artifactReadyEventSchema,
   notificationMessageEventSchema,
   environmentActionRequiredEventSchema,

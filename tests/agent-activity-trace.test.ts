@@ -36,19 +36,23 @@ describe("agent activity trace", () => {
 
   it("keeps the newest task graph snapshot even when an older trace is longer", () => {
     const oldGraph: AgentActivityItem = {
-      id: "agent-task-graph",
-      kind: "taskgraph",
+      id: "agent-task-list",
+      kind: "tasklist",
       goal: "goal",
       tasks: [
         {
           id: "task-1",
+          revision: 0,
           subject: "起草 Brief",
           description: "",
           status: "in_progress",
           owner: "agent",
+          blocks: [],
           blockedBy: [],
-          createdAt: "2026-01-01T00:00:00.000Z",
-          updatedAt: "2026-01-01T00:00:00.000Z",
+          routing: { executionTarget: "lead" },
+          completionPolicy: "direct",
+          review: { state: "none" },
+          reviewReceipts: [],
         },
       ],
     };
@@ -58,7 +62,7 @@ describe("agent activity trace", () => {
         {
           ...oldGraph.tasks[0],
           status: "completed",
-          owner: null,
+          owner: undefined,
           updatedAt: "2026-01-01T00:01:00.000Z",
         },
       ],
@@ -69,12 +73,12 @@ describe("agent activity trace", () => {
     ];
 
     const merged = mergeActivityTraces(longerExisting, [newerGraph]);
-    const graph = merged?.find((item) => item.kind === "taskgraph");
+    const graph = merged?.find((item) => item.kind === "tasklist");
 
     expect(merged).toHaveLength(2);
     expect(graph).toMatchObject({
-      kind: "taskgraph",
-      tasks: [{ id: "task-1", status: "completed", owner: null }],
+      kind: "tasklist",
+      tasks: [{ id: "task-1", status: "completed" }],
     });
   });
 
@@ -186,16 +190,19 @@ describe("agent activity trace", () => {
       },
       {
         id: "graph",
-        kind: "taskgraph",
+        kind: "tasklist",
         tasks: [{
           id: "t1",
+          revision: 0,
           subject: "task",
           description: "do work",
           status: "pending",
-          owner: null,
+          blocks: [],
           blockedBy: [],
-          createdAt: "2026-01-01T00:00:00.000Z",
-          updatedAt: "2026-01-01T00:00:00.000Z",
+          routing: { executionTarget: "lead" },
+          completionPolicy: "direct",
+          review: { state: "none" },
+          reviewReceipts: [],
         }],
         goal: "goal",
       },
@@ -204,7 +211,7 @@ describe("agent activity trace", () => {
     const { processItems, standaloneItems } = splitTraceItems(trace);
     expect(processItems).toHaveLength(2);
     expect(standaloneItems).toHaveLength(1);
-    expect(standaloneItems[0]?.kind).toBe("taskgraph");
+    expect(standaloneItems[0]?.kind).toBe("tasklist");
   });
 
   it("summarizes completed process trace for collapsed header", () => {
@@ -356,9 +363,9 @@ describe("process trace rows", () => {
   });
 
   it("compacts oversized traces while preserving task graphs and approvals", () => {
-    const taskgraph: AgentActivityItem = {
+    const tasklist: AgentActivityItem = {
       id: "graph",
-      kind: "taskgraph",
+      kind: "tasklist",
       tasks: [],
       goal: "layout",
     };
@@ -378,7 +385,7 @@ describe("process trace rows", () => {
       status: "done" as const,
     }));
 
-    const compacted = compactActivityTraceForPersistence([taskgraph, approval, ...steps]);
+    const compacted = compactActivityTraceForPersistence([tasklist, approval, ...steps]);
     expect(compacted).toBeDefined();
     expect(compacted!.length).toBeLessThanOrEqual(80);
     expect(compacted!.some((item) => item.id === "graph")).toBe(true);

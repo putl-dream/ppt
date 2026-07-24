@@ -64,7 +64,7 @@ teammate 自主领取任务并创建精简的 `brief.md`。必要用户信息应
 
 1. 用户已给完整大纲 → 可跳过 brief，直接 outline/storyboard。
 2. 缺 1–2 项 → lead AskUser 一次；不要连环追问。
-3. teammate 写入后 submit_task，并用 2–3 句摘要回报，不粘贴全文；lead 验收后 Complete。
+3. teammate 写入后调用 `TaskReviewRequest`，并用 2–3 句摘要回报，不粘贴全文；lead 使用 approve/reject 验收。
 
 ## 质量
 

@@ -12,7 +12,7 @@ describe("layout phase prompt", () => {
       expect(prompt).toContain("排版方式已确认");
       expect(prompt).toContain("设计系统");
       expect(prompt).toContain("business-blue");
-      expect(prompt).not.toMatch(/Task|TaskGraph|Claim|submitted|LoadSkill|ExecuteLayoutPlan/);
+      expect(prompt).not.toMatch(/Task|TaskList|Claim|LoadSkill|ExecuteLayoutPlan/);
     },
   );
 

@@ -17,7 +17,13 @@ import {
 } from "../src/main/agent/teammate/message-bus";
 import { TeammateManager } from "../src/main/agent/teammate/spawn-teammate";
 import { ProtocolStateStore } from "../src/main/agent/teammate/protocol-state";
-import { TaskStore } from "../src/main/agent/task/task-store";
+import {
+  LEAD_TASK_PERMISSIONS,
+  TaskStore,
+  type TaskCommand,
+  type TaskCommandPrincipal,
+  type TaskMutationResult,
+} from "../src/main/agent/task/task-store";
 import { createDefaultToolRegistry } from "../src/main/agent/tools/tool-registry";
 import type { ToolContext } from "../src/main/agent/tools/tool-definition";
 import { createStarterPresentation } from "../src/shared/presentation";
@@ -97,7 +103,7 @@ function createBoardWorkerGateway(): AgentModelGateway {
   const next = (request: AgentModelRequest): AgentModelContentBlock => {
     step += 1;
     if (step === 1) return modelMessage("Ready for shared board work.");
-    if (step === 2) {
+    if (step === 2 || step === 3) {
       const text = (request.messages ?? []).flatMap((message) => message.content)
         .filter((block): block is Extract<AgentModelContentBlock, { type: "text" }> =>
           block.type === "text",
@@ -106,7 +112,17 @@ function createBoardWorkerGateway(): AgentModelGateway {
         .join("\n");
       const taskId = text.match(/<task_assignment[\s\S]*?"id":\s*"([^"]+)"/)?.[1];
       if (!taskId) throw new Error("Auto-claimed task assignment was not injected.");
-      return modelToolCall("submit_task", { task_id: taskId });
+      return step === 2
+        ? modelToolCall("TaskUpdate", {
+            taskId,
+            expectedRevision: 1,
+            status: "in_progress",
+          })
+        : modelToolCall("TaskReviewRequest", {
+            taskId,
+            requestId: `review-${taskId}`,
+            expectedRevision: 2,
+          });
     }
     return modelMessage("Shared board task complete.");
   };
@@ -146,7 +162,7 @@ function createActiveContinuationGateway() {
         await firstTurnRelease;
         yield {
           type: "complete" as const,
-          content: [modelToolCall("scan_unclaimed_tasks")],
+          content: [modelToolCall("TaskList")],
         };
         return;
       }
@@ -196,10 +212,15 @@ class ControlledCleanupTaskStore extends TaskStore {
 
   private readonly markCleanupStarted: () => void;
 
-  override async unassignInProgressByOwner(owner: string): Promise<string[]> {
-    this.markCleanupStarted();
-    await this.cleanupRelease;
-    return super.unassignInProgressByOwner(owner);
+  override async mutate(
+    command: TaskCommand,
+    principal: TaskCommandPrincipal,
+  ): Promise<TaskMutationResult> {
+    if (command.type === "release") {
+      this.markCleanupStarted();
+      await this.cleanupRelease;
+    }
+    return super.mutate(command, principal);
   }
 
   continueCleanup(): void {
@@ -208,9 +229,38 @@ class ControlledCleanupTaskStore extends TaskStore {
 }
 
 class FailingCleanupTaskStore extends TaskStore {
-  override async unassignInProgressByOwner(): Promise<string[]> {
-    throw new Error("cleanup exploded");
+  override async mutate(
+    command: TaskCommand,
+    principal: TaskCommandPrincipal,
+  ): Promise<TaskMutationResult> {
+    if (command.type === "release") throw new Error("cleanup exploded");
+    return super.mutate(command, principal);
   }
+}
+
+async function createBoardTask(store: TaskStore, subject: string) {
+  return store.mutate({
+    type: "create",
+    subject,
+    description: "",
+    executionTarget: "teammate",
+    completionPolicy: "review_required",
+  }, store.principal("lead", "lead", LEAD_TASK_PERMISSIONS));
+}
+
+function finishClaimedTask(taskId: string, requestId = `review-${taskId}`) {
+  return [
+    modelToolCall("TaskUpdate", {
+      taskId,
+      expectedRevision: 1,
+      status: "in_progress",
+    }),
+    modelToolCall("TaskReviewRequest", {
+      taskId,
+      requestId,
+      expectedRevision: 2,
+    }),
+  ];
 }
 
 function modelToolCall(toolName: string, args: Record<string, unknown> = {}) {
@@ -449,12 +499,7 @@ describe("TeammateManager", () => {
     const workspaceRoot = await mkdtemp(join(tmpdir(), "ppt-idle-worker-"));
     const taskRoot = await mkdtemp(join(tmpdir(), "ppt-idle-worker-tasks-"));
     const store = new TaskStore(taskRoot);
-    const created = await store.createTask({
-      subject: "Create outline",
-      executionTarget: "teammate",
-    });
-    expect(created.ok).toBe(true);
-    if (!created.ok) return;
+    const created = await createBoardTask(store, "Create outline");
 
     const bus = new MessageBus(MessageBus.defaultMailboxDir(workspaceRoot));
     const manager = new TeammateManager(bus);
@@ -466,27 +511,27 @@ describe("TeammateManager", () => {
       workspaceRoot,
       taskStore: store,
       gateway: createSequenceGateway([
-        modelToolCall("submit_task", { task_id: created.task.id }),
-        modelMessage("Outline submitted for review."),
+        ...finishClaimedTask(created.task!.id),
+        modelMessage("Outline ready for review."),
       ]),
-      maxSteps: 2,
+      maxSteps: 3,
       idlePollMs: 5,
       idleTimeoutMs: 1_000,
     });
 
     await waitFor(async () =>
-      (await store.getTask(created.task.id)).status === "submitted" ? true : undefined,
+      (await store.getTask(created.task!.id)).review.state === "requested" ? true : undefined,
     );
     const leadMessages = await waitFor(async () => {
       const messages = await bus.peekInbox("lead");
-      return messages.some((message) => message.content === "Outline submitted for review.")
+      return messages.some((message) => message.content === "Outline ready for review.")
         ? messages
         : undefined;
     });
     expect(leadMessages).toContainEqual(expect.objectContaining({
       from: "task_worker",
       type: "result",
-      content: "Outline submitted for review.",
+      content: "Outline ready for review.",
     }));
 
     await manager.requestShutdown("task_worker");
@@ -497,12 +542,7 @@ describe("TeammateManager", () => {
     const workspaceRoot = await mkdtemp(join(tmpdir(), "ppt-worker-progress-"));
     const taskRoot = await mkdtemp(join(tmpdir(), "ppt-worker-progress-tasks-"));
     const store = new TaskStore(taskRoot);
-    const created = await store.createTask({
-      subject: "Draft storyboard",
-      executionTarget: "teammate",
-    });
-    expect(created.ok).toBe(true);
-    if (!created.ok) return;
+    const created = await createBoardTask(store, "Draft storyboard");
 
     const events: TeammateProgressEvent[] = [];
     const bus = new MessageBus(MessageBus.defaultMailboxDir(workspaceRoot));
@@ -515,11 +555,11 @@ describe("TeammateManager", () => {
       workspaceRoot,
       taskStore: store,
       gateway: createThinkingSequenceGateway([
-        modelToolCall("submit_task", { task_id: created.task.id }),
-        modelMessage("Storyboard submitted."),
+        ...finishClaimedTask(created.task!.id),
+        modelMessage("Storyboard ready for review."),
       ]),
       onProgress: (event) => events.push(event),
-      maxSteps: 2,
+      maxSteps: 3,
       idlePollMs: 5,
       idleTimeoutMs: 1_000,
     });
@@ -535,13 +575,13 @@ describe("TeammateManager", () => {
       "teammate-tool-finished",
       "teammate-assignment-finished",
     ]));
-    expect(events.every((event) => event.activityId === created.task.id)).toBe(true);
+    expect(events.every((event) => event.activityId === created.task!.id)).toBe(true);
     expect(events.find((event) => event.type === "teammate-tool-started"))
-      .toEqual(expect.objectContaining({ toolName: "submit_task", taskId: created.task.id }));
+      .toEqual(expect.objectContaining({ toolName: "TaskUpdate", taskId: created.task!.id }));
     expect(events.find((event) => event.type === "teammate-tool-finished"))
       .toEqual(expect.objectContaining({
-        toolName: "submit_task",
-        taskId: created.task.id,
+        toolName: "TaskReviewRequest",
+        taskId: created.task!.id,
         status: "completed",
       }));
 
@@ -610,7 +650,7 @@ describe("TeammateManager", () => {
       modelToolCall("request_plan_approval", {
         plan: "Create auth.ts with the approved authentication refactor scaffold.",
       }),
-      modelMessage("Plan submitted; waiting for lead approval."),
+      modelMessage("Plan ready; waiting for lead approval."),
       modelToolCall("write_file", {
         path: "auth.ts",
         content: "export const authVersion = 2;\n",
@@ -742,10 +782,8 @@ describe("TeammateManager", () => {
   it("auto-claims successive board tasks and shuts down after the idle timeout", async () => {
     const workspaceRoot = await mkdtemp(join(tmpdir(), "ppt-auto-claim-"));
     const store = new TaskStore(workspaceRoot);
-    const first = await store.createTask({ subject: "Create schema" });
-    const second = await store.createTask({ subject: "Write API" });
-    expect(first.ok && second.ok).toBe(true);
-    if (!first.ok || !second.ok) return;
+    const first = await createBoardTask(store, "Create schema");
+    const second = await createBoardTask(store, "Write API");
 
     const bus = new MessageBus(MessageBus.defaultMailboxDir(workspaceRoot));
     const manager = new TeammateManager(bus);
@@ -756,20 +794,20 @@ describe("TeammateManager", () => {
       workspaceRoot,
       gateway: createSequenceGateway([
         modelMessage("Ready for board work."),
-        modelToolCall("submit_task", { task_id: first.task.id }),
+        ...finishClaimedTask(first.task!.id, "review-schema"),
         modelMessage("Schema task complete."),
-        modelToolCall("submit_task", { task_id: second.task.id }),
+        ...finishClaimedTask(second.task!.id, "review-api"),
         modelMessage("API task complete."),
       ]),
-      maxSteps: 3,
+      maxSteps: 5,
       idlePollMs: 5,
       idleTimeoutMs: 25,
     });
 
     await manager.waitFor("alice");
     expect(manager.get("alice")?.status).toBe("stopped");
-    expect((await store.getTask(first.task.id)).status).toBe("submitted");
-    expect((await store.getTask(second.task.id)).status).toBe("submitted");
+    expect((await store.getTask(first.task!.id)).review.state).toBe("requested");
+    expect((await store.getTask(second.task!.id)).review.state).toBe("requested");
     expect(await bus.readInbox("lead")).toContainEqual(expect.objectContaining({
       from: "alice",
       type: "result",
@@ -780,10 +818,8 @@ describe("TeammateManager", () => {
   it("lets two idle teammates atomically split independent board tasks", async () => {
     const workspaceRoot = await mkdtemp(join(tmpdir(), "ppt-auto-claim-parallel-"));
     const store = new TaskStore(workspaceRoot);
-    const first = await store.createTask({ subject: "Task A" });
-    const second = await store.createTask({ subject: "Task B" });
-    expect(first.ok && second.ok).toBe(true);
-    if (!first.ok || !second.ok) return;
+    const first = await createBoardTask(store, "Task A");
+    const second = await createBoardTask(store, "Task B");
 
     const bus = new MessageBus(MessageBus.defaultMailboxDir(workspaceRoot));
     const manager = new TeammateManager(bus);
@@ -794,7 +830,7 @@ describe("TeammateManager", () => {
         prompt: "Join the shared worker pool.",
         workspaceRoot,
         gateway: createBoardWorkerGateway(),
-        maxSteps: 3,
+        maxSteps: 4,
         idlePollMs: 5,
         idleTimeoutMs: 30,
       });
@@ -802,7 +838,7 @@ describe("TeammateManager", () => {
 
     await Promise.all([manager.waitFor("alice"), manager.waitFor("bob")]);
     const tasks = await store.listTasks();
-    expect(tasks.map((task) => task.status)).toEqual(["submitted", "submitted"]);
+    expect(tasks.map((task) => task.review.state)).toEqual(["requested", "requested"]);
     const results = (await bus.readInbox("lead"))
       .filter((message) => message.content === "Shared board task complete.");
     expect(new Set(results.map((message) => message.from))).toEqual(new Set(["alice", "bob"]));
@@ -811,9 +847,7 @@ describe("TeammateManager", () => {
   it("handles an idle inbox assignment before scanning the task board", async () => {
     const workspaceRoot = await mkdtemp(join(tmpdir(), "ppt-idle-priority-"));
     const store = new TaskStore(workspaceRoot);
-    const created = await store.createTask({ subject: "Board task" });
-    expect(created.ok).toBe(true);
-    if (!created.ok) return;
+    const created = await createBoardTask(store, "Board task");
 
     const bus = new MessageBus(MessageBus.defaultMailboxDir(workspaceRoot));
     const manager = new TeammateManager(bus);
@@ -844,7 +878,7 @@ describe("TeammateManager", () => {
         ? true
         : undefined;
     });
-    expect((await store.getTask(created.task.id)).status).toBe("pending");
+    expect((await store.getTask(created.task!.id)).status).toBe("pending");
 
     await manager.requestShutdown("alice");
     await manager.waitFor("alice");
@@ -993,12 +1027,7 @@ describe("TeammateManager", () => {
     const workspaceRoot = await mkdtemp(join(tmpdir(), "ppt-owned-task-completion-"));
     const taskRoot = await mkdtemp(join(tmpdir(), "ppt-owned-task-completion-tasks-"));
     const store = new TaskStore(taskRoot);
-    const created = await store.createTask({
-      subject: "Inspect the narrative",
-      executionTarget: "teammate",
-    });
-    expect(created.ok).toBe(true);
-    if (!created.ok) return;
+    const created = await createBoardTask(store, "Inspect the narrative");
 
     const bus = new MessageBus(MessageBus.defaultMailboxDir(workspaceRoot));
     const manager = new TeammateManager(bus);
@@ -1009,25 +1038,34 @@ describe("TeammateManager", () => {
       workspaceRoot,
       taskStore: store,
       gateway: createSequenceGateway([
-        modelToolCall("claim_task", { task_id: created.task.id }),
-        modelMessage("I am done, but have not submitted the claimed task."),
-        modelToolCall("submit_task", { task_id: created.task.id }),
-        modelMessage("The claimed task is now submitted."),
+        modelToolCall("TaskClaim", { taskId: created.task!.id, expectedRevision: 0 }),
+        modelToolCall("TaskUpdate", {
+          taskId: created.task!.id,
+          expectedRevision: 1,
+          status: "in_progress",
+        }),
+        modelMessage("I am done, but have not requested review."),
+        modelToolCall("TaskReviewRequest", {
+          taskId: created.task!.id,
+          requestId: "manual-review",
+          expectedRevision: 2,
+        }),
+        modelMessage("The claimed task is now ready for review."),
       ]),
-      maxSteps: 4,
+      maxSteps: 5,
       idlePollMs: 5,
       idleTimeoutMs: 1_000,
     });
 
     await waitFor(async () =>
-      (await store.getTask(created.task.id)).status === "submitted" ? true : undefined,
+      (await store.getTask(created.task!.id)).review.state === "requested" ? true : undefined,
     );
     await waitFor(async () => {
       const messages = await bus.peekInbox("lead");
       return messages.some((message) =>
         message.from === "reviewer"
         && message.type === "result"
-        && message.content === "The claimed task is now submitted."
+        && message.content === "The claimed task is now ready for review."
       ) ? true : undefined;
     });
 
@@ -1157,6 +1195,12 @@ describe("Teammate terminal lifecycle", () => {
     const workspaceRoot = await mkdtemp(join(tmpdir(), "ppt-teammate-stopping-"));
     const taskRoot = await mkdtemp(join(tmpdir(), "ppt-teammate-stopping-tasks-"));
     const store = new ControlledCleanupTaskStore(taskRoot);
+    const cleanupTask = await createBoardTask(store, "Cleanup-owned task");
+    await store.mutate({
+      type: "claim",
+      taskId: cleanupTask.task!.id,
+      expectedRevision: cleanupTask.task!.revision,
+    }, store.principal("reviewer", "teammate", new Set(["task:update_own"])));
     const bus = new MessageBus(MessageBus.defaultMailboxDir(workspaceRoot));
     const manager = new TeammateManager(bus);
     manager.spawn({
@@ -1197,6 +1241,13 @@ describe("Teammate terminal lifecycle", () => {
       const workspaceRoot = await mkdtemp(join(tmpdir(), "ppt-teammate-abort-"));
       const bus = new MessageBus(MessageBus.defaultMailboxDir(workspaceRoot));
       const manager = new TeammateManager(bus);
+      const cleanupStore = new FailingCleanupTaskStore(taskRoot);
+      const cleanupTask = await createBoardTask(cleanupStore, "Cleanup failure task");
+      await cleanupStore.mutate({
+        type: "claim",
+        taskId: cleanupTask.task!.id,
+        expectedRevision: cleanupTask.task!.revision,
+      }, cleanupStore.principal("reviewer", "teammate", new Set(["task:update_own"])));
       manager.spawn({
         name: "reviewer",
         role: "outline reviewer",
@@ -1249,7 +1300,7 @@ describe("Teammate terminal lifecycle", () => {
         role: "outline reviewer",
         prompt: "Inspect the board.",
         workspaceRoot,
-        gateway: createSequenceGateway([modelToolCall("scan_unclaimed_tasks")]),
+        gateway: createSequenceGateway([modelToolCall("TaskList")]),
         onProgress: (event) => events.push(event),
         maxSteps: 1,
       });
@@ -1297,7 +1348,7 @@ describe("Teammate terminal lifecycle", () => {
         role: "outline reviewer",
         prompt: "Finish and wait.",
         workspaceRoot,
-        taskStore: new FailingCleanupTaskStore(taskRoot),
+        taskStore: cleanupStore,
         gateway: createSequenceGateway([modelMessage("Ready to stop.")]),
         idlePollMs: 5,
         idleTimeoutMs: 1_000,

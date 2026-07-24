@@ -1,6 +1,6 @@
 import type { AgentExecutionStrategy, AgentModelSelection } from "@shared/agent";
 import type { AgentStepLimits } from "@shared/agent-step-limits";
-import type { AgentTaskNode } from "@shared/agent-task-graph";
+import type { AgentTaskNode } from "@shared/agent-task-list";
 import type { CommandBus, PresentationCommand } from "@shared/commands";
 import type { AgentEditorContext, AgentRunResult } from "@shared/ipc";
 import type { AgentConversationMessage } from "@shared/session-recovery";
@@ -47,10 +47,18 @@ export type AgentServiceEvent =
       detail: string;
     }
   | {
-      type: "task-graph-updated";
+      type: "task-list-updated";
       message: string;
       tasks: AgentTaskNode[];
       goal?: string | null;
+      listRevision?: number;
+      state?: "open" | "closed" | "archived";
+      archive?: {
+        outcome: "completed" | "abandoned";
+        reason?: string;
+        archivedBy: string;
+        archivedAt: string;
+      };
     }
   | TeammateProgressEvent;
 

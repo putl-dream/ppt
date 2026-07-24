@@ -54,11 +54,11 @@ import {
   compactActivityTraceForPersistence,
   finishTool,
   markTraceComplete,
-  upsertTaskGraphTrace,
+  upsertTaskListTrace,
   type AgentActivityItem,
 } from "@shared/agent-activity";
 import { isTeammateProgressEvent } from "@shared/teammate-progress";
-import { agentTaskNodeSchema } from "@shared/agent-task-graph";
+import { agentTaskNodeSchema } from "@shared/agent-task-list";
 import { formatPublicErrorMessage } from "@shared/agent-activity-display";
 import { ConversationDatabase } from "./conversation-database";
 import type { AgentRunResult } from "@shared/ipc";
@@ -429,10 +429,10 @@ export class FileSessionStore {
         && typeof payload.message === "string"
       ) {
         trace = appendStep(trace, payload.message, "done");
-      } else if (event.kind === "task_graph_updated") {
+      } else if (event.kind === "task_list_updated") {
         const parsedTasks = agentTaskNodeSchema.array().safeParse(payload.tasks);
         if (!parsedTasks.success) continue;
-        trace = upsertTaskGraphTrace(trace, {
+        trace = upsertTaskListTrace(trace, {
           tasks: parsedTasks.data,
           goal: typeof payload.goal === "string" || payload.goal === null
             ? payload.goal

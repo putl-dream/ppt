@@ -12,7 +12,7 @@ describe("team session projection", () => {
       id: "trace-1",
       kind: "task",
       taskId: "task-1",
-      taskGraphId: "task-1",
+      taskListId: "task-1",
       agentName: "outline_writer",
       description: "起草大纲",
       status: "running",
@@ -27,14 +27,17 @@ describe("team session projection", () => {
 
     const session = projectTeamSession(activity, [{
       id: "task-1",
+      revision: 0,
       subject: "编写演示大纲",
       description: "",
       status: "in_progress",
-      executionTarget: "teammate",
+      routing: { executionTarget: "teammate" },
+      completionPolicy: "review_required",
       owner: "outline_writer",
+      blocks: [],
       blockedBy: [],
-      createdAt: "2026-01-01T00:00:00.000Z",
-      updatedAt: "2026-01-01T00:00:00.000Z",
+      review: { state: "none" },
+      reviewReceipts: [],
     }]);
 
     expect(session).toMatchObject({

@@ -23,7 +23,7 @@ afterEach(async () => {
 });
 
 describe("discover-stage WebSearch routing", () => {
-  it("allows a pasted URL to be researched before any TaskGraph exists", async () => {
+  it("allows a pasted URL to be researched before any persistent Task exists", async () => {
     const runtimeRoot = await mkdtemp(join(tmpdir(), "agent-ppt-url-search-"));
     temporaryRoots.push(runtimeRoot);
     const fetchImpl = vi.fn(async () => new Response(JSON.stringify({

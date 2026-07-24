@@ -51,7 +51,7 @@ teammate 自主领取任务并写 `slides/storyboard.json`，供后续 lead 的 
 2. 按 outline 叙事弧映射：Hook → section → Core → evidence/process → summary。
 3. 为每页填写 `narrativeRole` + `keyPoints`；`layout` 可省略（由 role 推导）。
 4. 写回 `slides/storyboard.json`。
-5. teammate submit_task，并摘要总页数、1 处需确认项；lead 验收后 Complete。
+5. teammate 调用 `TaskReviewRequest`，并摘要总页数、1 处需确认项；lead 使用 approve/reject 验收。
 
 ## 约束（内容阶段）
 

@@ -4,7 +4,7 @@ import type { AgentExecutionStrategy, AgentModelSettings } from "./agent";
 import type { AgentQuestion } from "./agent-question";
 import type { AgentGatewayConfig } from "./agent-gateway-config";
 import type { AgentStepLimits } from "./agent-step-limits";
-import type { AgentTaskNode } from "./agent-task-graph";
+import type { AgentTaskNode } from "./agent-task-list";
 import type { TeammateProgressEvent } from "./teammate-progress";
 import { layoutChoiceSchema } from "./layout-preference";
 import { z } from "zod";
@@ -101,10 +101,18 @@ export type AgentStreamEvent = (
     }
   | {
       runId: string;
-      type: "task-graph-updated";
+      type: "task-list-updated";
       message: string;
       tasks: AgentTaskNode[];
       goal?: string | null;
+      listRevision?: number;
+      state?: "open" | "closed" | "archived";
+      archive?: {
+        outcome: "completed" | "abandoned";
+        reason?: string;
+        archivedBy: string;
+        archivedAt: string;
+      };
     }
   | ({ runId: string } & TeammateProgressEvent)
   | { runId: string; type: "display-event"; event: DisplayEvent }

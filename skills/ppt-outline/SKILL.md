@@ -52,7 +52,7 @@ teammate 自主领取任务并创建精简 `outline.md`，为 storyboard 提供�
 2. 按 brief 时长→页数拆章节；顺序：Hook → Context → Core → Shift → Takeaway。
 3. 每章标注是否需 `section` 分隔页。
 4. 写回 `outline.md`。
-5. teammate submit_task，并摘要章节数、总页数、1 处待确认项（若有）；lead 验收后 Complete。
+5. teammate 调用 `TaskReviewRequest`，并摘要章节数、总页数、1 处待确认项（若有）；lead 使用 approve/reject 验收。
 
 ## 质量
 

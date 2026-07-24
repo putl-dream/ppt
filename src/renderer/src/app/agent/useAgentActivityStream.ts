@@ -22,7 +22,7 @@ import {
   mergeActivityTraces,
   sealAllReasoning,
   updateStepText,
-  upsertTaskGraphTrace,
+  upsertTaskListTrace,
 } from "@shared/agent-activity";
 import {
   formatAgentProgressMessage,
@@ -139,7 +139,7 @@ export function useAgentActivityStream({
         }
         return;
       }
-      if (event.type === "task-graph-updated") {
+      if (event.type === "task-list-updated") {
         if (event.sessionId && event.sessionId !== activeSessionIdRef.current) return;
         if (!isCurrentRun) return;
       }
@@ -296,11 +296,11 @@ export function useAgentActivityStream({
         return;
       }
 
-      if (event.type === "task-graph-updated") {
+      if (event.type === "task-list-updated") {
         stopStatusTyping();
         setAgentActivityMode("workflow");
         syncActivityTrace(
-          upsertTaskGraphTrace(activeRunTraceRef.current, {
+          upsertTaskListTrace(activeRunTraceRef.current, {
             tasks: event.tasks,
             goal: event.goal,
           }),

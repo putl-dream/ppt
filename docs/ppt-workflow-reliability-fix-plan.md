@@ -58,8 +58,8 @@ document writes and repeated execution. The intended edits are:
 
 The second captured workflow adds three more reliability gaps:
 
-1. The initial `TaskGraphCreatePlan` can be scoped too narrowly to `discover`, causing the agent to
-   create a second plan when the user says "continue" and the workflow enters `author`.
+1. The initial task-list setup can be scoped too narrowly to `discover`, causing the agent to
+   create a second list when the user says "continue" and the workflow enters `author`.
 2. Planning agents naturally emit narrative-arc words such as `context`, `shift`, and `takeaway`,
    but the storyboard schema only accepted the narrower execution roles.
 3. Outline and storyboard page counts can drift. In the trace, a target of roughly 12 pages became
@@ -67,8 +67,8 @@ The second captured workflow adds three more reliability gaps:
 
 Follow-up repairs:
 
-1. Treat a user objective as one TaskGraph. Phase transitions and "continue" should reuse the
-   existing graph and verified artifacts rather than creating a fresh plan.
+1. Treat a user objective as one task list. Phase transitions and "continue" should reuse the
+   existing list and verified artifacts rather than creating a fresh list.
 2. Normalize common storyboard narrative-role aliases into supported execution roles.
 3. Cross-check verified `outline.md` page count against `slides/storyboard.json` slide count before
    allowing storyboard to become a verified artifact.

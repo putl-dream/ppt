@@ -3,7 +3,7 @@ import {
   formatAgentToolActivity,
   inferAgentToolActivityState,
 } from "./agent-activity-display";
-import type { AgentTaskNode } from "./agent-task-graph";
+import type { AgentTaskNode } from "./agent-task-list";
 
 export type TeamSessionStatus = "running" | "completed" | "error" | "cancelled";
 
@@ -18,7 +18,7 @@ export interface TeamSessionProjection {
   status: TeamSessionStatus;
   toolCount: number;
   stepCount: number;
-  taskGraphId?: string;
+  taskListId?: string;
   activity: TeamTaskActivity;
 }
 
@@ -69,10 +69,10 @@ export function projectTeamSession(
   activity: TeamTaskActivity,
   graphTasks: readonly AgentTaskNode[] = [],
 ): TeamSessionProjection {
-  const taskGraphId = activity.taskGraphId
+  const taskListId = activity.taskListId
     ?? (graphTasks.some((task) => task.id === activity.taskId) ? activity.taskId : undefined);
-  const graphTask = taskGraphId
-    ? graphTasks.find((task) => task.id === taskGraphId)
+  const graphTask = taskListId
+    ? graphTasks.find((task) => task.id === taskListId)
     : undefined;
   const description = cleanLegacyDescription(activity.description);
   return {
@@ -84,7 +84,7 @@ export function projectTeamSession(
     status: toTeamSessionStatus(activity.status),
     toolCount: activity.steps.filter((step) => step.type === "tool").length,
     stepCount: activity.steps.length,
-    ...(taskGraphId ? { taskGraphId } : {}),
+    ...(taskListId ? { taskListId } : {}),
     activity,
   };
 }

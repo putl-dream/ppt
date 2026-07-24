@@ -77,8 +77,12 @@ export interface AgentRuntimeOptions {
   workspaceRoot?: string;
   /** Application-owned runtime directory; never points at the user workspace. */
   runtimeRoot?: string;
-  /** Owner label for TaskGraphClaim / shutdown unassign. Defaults to "agent". */
-  taskGraphOwner?: string;
+  /** Explicit persistent task-list identity; inherited by fork/recovery runtimes. */
+  taskListId?: string;
+  /** Stable team identity when lead and teammates share one task list. */
+  teamSessionId?: string;
+  /** Trusted Task actor id. Defaults to "agent". */
+  taskListOwner?: string;
   maxSteps?: number;
   agentStepLimits?: AgentStepLimits;
   onStreamEvent?: (event: AgentRuntimeStreamEvent) => void;

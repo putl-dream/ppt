@@ -1,5 +1,4 @@
 import type { ConversationDatabase } from "../../../conversation-database";
-import { filterTasksByPlan } from "@shared/agent-task-graph";
 import type { AgentModelMessage } from "../../gateway/types";
 import {
   type DurableRunCheckpoint,
@@ -12,6 +11,8 @@ import {
   DurableRunStore,
 } from "../../persistence/durable-run-store";
 import { createTaskStore } from "../../task/task-store";
+import { TaskSubscriptionService } from "../../task/task-subscription-service";
+import { resolveTaskListIdentity } from "../../task/task-list-identity";
 import type { ToolDiscoverySession } from "../../tools/tool-definition";
 import type { SkillSession } from "../../skills/skill-types";
 import type { AgentRuntimeOptions, AgentRuntimeResult } from "../runtime-types";
@@ -177,6 +178,7 @@ export class AgentRunScope {
       });
       scope.restoreBackgroundRecovery();
       scope.attachBackgroundCheckpoint();
+      await scope.startTaskSubscription();
       return scope;
     } catch (error) {
       abortController.abort(error);
@@ -202,7 +204,8 @@ export class AgentRunScope {
   readonly discoverySession: ToolDiscoverySession;
   readonly skillSession: SkillSession;
   readonly taskStore;
-  readonly taskGraphOwner: string;
+  readonly taskSubscription?: TaskSubscriptionService;
+  readonly taskListOwner: string;
   readonly checkpointPolicy = new CheckpointPolicy();
   readonly historyStore?: DurableConversationHistoryStore;
   readonly queryId: QueryId;
@@ -249,8 +252,18 @@ export class AgentRunScope {
     this.historyStore = input.historyStore;
     this.queryId = input.queryId;
     this.initialMessages = structuredClone(input.initialMessages);
-    this.taskStore = createTaskStore(input.options.runtimeRoot);
-    this.taskGraphOwner = input.options.taskGraphOwner ?? "agent";
+    this.taskStore = createTaskStore(
+      input.options.runtimeRoot,
+      resolveTaskListIdentity({
+        taskListId: input.options.taskListId,
+        teamSessionId: input.options.teamSessionId,
+        threadId: input.options.threadId,
+      }),
+    );
+    this.taskSubscription = this.taskStore
+      ? new TaskSubscriptionService(this.taskStore)
+      : undefined;
+    this.taskListOwner = input.options.taskListOwner ?? "agent";
   }
 
   get signal(): AbortSignal {
@@ -259,6 +272,20 @@ export class AgentRunScope {
 
   abort(reason?: unknown): void {
     this.abortController.abort(reason);
+  }
+
+  private async startTaskSubscription(): Promise<void> {
+    await this.taskSubscription?.subscribe((snapshot) => {
+      this.eventPorts.renderer({
+        type: "task-list-updated",
+        message: "任务列表已更新",
+        tasks: snapshot.tasks,
+        goal: null,
+        listRevision: snapshot.listRevision,
+        state: snapshot.state,
+        archive: snapshot.archive,
+      });
+    });
   }
 
   applyTransition(transition: Parameters<AgentSession["apply"]>[0]) {
@@ -477,26 +504,12 @@ export class AgentRunScope {
     this.abortController.abort();
     this.options.signal?.removeEventListener("abort", this.forwardAbort);
     this.backgroundTasks.setOnStateChange(undefined);
+    this.taskSubscription?.dispose();
 
     try {
       await this.checkpoints.close();
     } catch (error) {
       this.warn(`Checkpoint cleanup failed: ${errorMessage(error)}`);
-    }
-    try {
-      if (!this.taskStore) return;
-      const released = await this.taskStore.unassignInProgressByOwner(this.taskGraphOwner);
-      if (released.length === 0) return;
-      const plan = await this.taskStore.getPlanMeta();
-      const tasks = filterTasksByPlan(await this.taskStore.listTasks(), plan?.planId);
-      this.eventPorts.renderer({
-        type: "task-graph-updated",
-        message: "任务图已更新",
-        tasks,
-        goal: plan?.goal ?? null,
-      });
-    } catch (error) {
-      this.warn(`Runtime cleanup failed: ${errorMessage(error)}`);
     }
   }
 

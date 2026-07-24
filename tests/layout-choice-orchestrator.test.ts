@@ -3,7 +3,8 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { prepareLayoutChoiceTask } from "../src/main/agent/runtime/presentation/layout-choice-orchestrator";
-import { TaskStore } from "../src/main/agent/task/task-store";
+import { LEAD_TASK_PERMISSIONS, TaskStore } from "../src/main/agent/task/task-store";
+import { resolveTaskListIdentity } from "../src/main/agent/task/task-list-identity";
 import { createDefaultToolRegistry } from "../src/main/agent/tools/tool-registry";
 import { createStarterPresentation } from "../src/shared/presentation";
 import { AgentRuntime } from "../src/main/agent/runtime/agent-runtime";
@@ -14,6 +15,38 @@ import { DurableRunStore } from "../src/main/agent/persistence/durable-run-store
 import { DurableConversationHistoryStore } from "../src/main/agent/persistence/conversation-history-store";
 
 const tempDirs: string[] = [];
+
+async function createSequentialTasks(
+  store: TaskStore,
+  steps: Array<{ subject: string; executionTarget: "lead" | "teammate" }>,
+) {
+  const lead = store.principal("lead", "lead", LEAD_TASK_PERMISSIONS);
+  const tasks = [];
+  let listRevision = (await store.getSnapshot()).listRevision;
+  let previousId: string | undefined;
+  for (const step of steps) {
+    let result = await store.mutate({
+      type: "create",
+      subject: step.subject,
+      description: "",
+      executionTarget: step.executionTarget,
+      completionPolicy: step.executionTarget === "lead" ? "direct" : "review_required",
+    }, lead);
+    if (previousId) {
+      result = await store.mutate({
+        type: "update",
+        taskId: result.task!.id,
+        expectedRevision: result.task!.revision,
+        expectedListRevision: result.listRevision,
+        dependencyChanges: { addBlockedBy: [previousId] },
+      }, lead);
+    }
+    tasks.push(result.task!);
+    listRevision = result.listRevision;
+    previousId = result.task!.id;
+  }
+  return { tasks, listRevision };
+}
 
 afterEach(async () => {
   clearHooks();
@@ -38,7 +71,7 @@ describe("layout choice runtime orchestration", () => {
       return handle;
     });
     const presentation = createStarterPresentation();
-    const notifyTaskGraphUpdated = vi.fn();
+    const notifyTaskListUpdated = vi.fn();
     const toolContext = {
       presentation,
       selectedElementIds: [],
@@ -49,7 +82,7 @@ describe("layout choice runtime orchestration", () => {
       gateway: {},
       taskStore,
       teammateManager: { list: () => teammates, spawn },
-      notifyTaskGraphUpdated,
+      notifyTaskListUpdated,
     } as any;
 
     const first = await prepareLayoutChoiceTask({
@@ -70,11 +103,10 @@ describe("layout choice runtime orchestration", () => {
     expect(first.created).toBe(true);
     expect(second.created).toBe(false);
     expect(second.task.id).toBe(first.task.id);
-    expect(first.task.executionTarget).toBe("teammate");
+    expect(first.task.routing.executionTarget).toBe("teammate");
     expect(first.task.description).toContain("slides/layout-choice.json");
-    expect(spawn).toHaveBeenCalledTimes(1);
-    expect(spawn).toHaveBeenCalledWith(expect.objectContaining({ startIdle: true }));
-    expect(notifyTaskGraphUpdated).toHaveBeenCalled();
+    expect(spawn).not.toHaveBeenCalled();
+    expect(notifyTaskListUpdated).toHaveBeenCalled();
 
     const choice = JSON.parse(
       await readFile(join(workspaceRoot, "slides", "layout-choice.json"), "utf8"),
@@ -133,7 +165,9 @@ describe("layout choice runtime orchestration", () => {
     if (result.type !== "message") throw new Error("Expected layout scheduling message.");
     expect(result.type === "message" && result.content).toContain("自主领取");
     expect(generateText).not.toHaveBeenCalled();
-    expect((await new TaskStore(runtimeRoot).listTasks())).toHaveLength(1);
+    expect((await new TaskStore(runtimeRoot, resolveTaskListIdentity({
+      threadId: "layout-choice-thread",
+    })).listTasks())).toHaveLength(1);
     expect(await new DurableRunStore(workspaceRoot).load("layout-choice-thread"))
       .toMatchObject({ status: "completed", phase: "finished", result });
     expect((await new DurableConversationHistoryStore(workspaceRoot)
@@ -185,16 +219,12 @@ describe("layout choice runtime orchestration", () => {
     );
 
     const taskStore = new TaskStore(runtimeRoot);
-    const plan = await taskStore.createPlan({
-      sequential: true,
-      steps: [
+    await createSequentialTasks(taskStore, [
         { subject: "起草 brief 与 outline", executionTarget: "teammate" },
         { subject: "编写幻灯片内容草稿 storyboard", executionTarget: "teammate" },
         { subject: "制定排版计划 layout-plan", executionTarget: "teammate" },
         { subject: "执行排版与交付", executionTarget: "lead" },
-      ],
-    });
-    expect(plan.ok).toBe(true);
+    ]);
     const spawn = vi.fn(() => ({
       name: "task_worker",
       role: "worker",
@@ -213,7 +243,7 @@ describe("layout choice runtime orchestration", () => {
       gateway: {},
       taskStore,
       teammateManager: { list: () => [], spawn },
-      notifyTaskGraphUpdated: vi.fn(),
+      notifyTaskListUpdated: vi.fn(),
     } as any;
 
     const result = await prepareLayoutChoiceTask({
@@ -225,13 +255,13 @@ describe("layout choice runtime orchestration", () => {
     });
 
     expect(result.tasks.map((task) => task.status)).toEqual([
-      "completed",
-      "completed",
+      "pending",
+      "pending",
       "pending",
       "pending",
     ]);
-    expect(result.message).toContain("已就绪");
-    expect(spawn).toHaveBeenCalledTimes(1);
+    expect(result.message).toContain("等待前置");
+    expect(spawn).not.toHaveBeenCalled();
   });
 
   it("does not report a blocked layout task as ready", async () => {
@@ -239,15 +269,11 @@ describe("layout choice runtime orchestration", () => {
     const runtimeRoot = await mkdtemp(join(tmpdir(), "ppt-layout-blocked-runtime-"));
     tempDirs.push(workspaceRoot, runtimeRoot);
     const taskStore = new TaskStore(runtimeRoot);
-    const plan = await taskStore.createPlan({
-      sequential: true,
-      steps: [
+    await createSequentialTasks(taskStore, [
         { subject: "起草 brief 与 outline", executionTarget: "teammate" },
         { subject: "编写幻灯片内容草稿 storyboard", executionTarget: "teammate" },
         { subject: "制定排版计划 layout-plan", executionTarget: "teammate" },
-      ],
-    });
-    expect(plan.ok).toBe(true);
+    ]);
     const presentation = createStarterPresentation();
     const toolContext = {
       presentation,
@@ -262,7 +288,7 @@ describe("layout choice runtime orchestration", () => {
         list: () => [],
         spawn: vi.fn(() => ({ name: "task_worker", status: "running" })),
       },
-      notifyTaskGraphUpdated: vi.fn(),
+      notifyTaskListUpdated: vi.fn(),
     } as any;
 
     const result = await prepareLayoutChoiceTask({

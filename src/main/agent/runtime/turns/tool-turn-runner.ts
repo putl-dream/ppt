@@ -1,6 +1,4 @@
-import { isTaskPlanActive } from "@shared/agent-task-graph";
 import type { AgentModelToolResultBlock, AgentModelToolUseBlock } from "../../gateway/types";
-import type { createTaskStore } from "../../task/task-store";
 import {
   describeBackgroundTask,
 } from "../background/background-task-manager";
@@ -124,18 +122,7 @@ export class ToolTurnRunner {
       threadId: deps.threadId,
       requestToolApproval: deps.requestToolApproval,
       signal: scope.signal,
-      policyGuidance: async (toolName) => {
-        if (!await shouldRequireDiscoverTaskPlan({
-          stage: workspace.updatedToolUseContext.promptStage,
-          toolName,
-          taskStore,
-        })) return undefined;
-        return "Full or multi-step PPT creation in the discover stage must start with "
-          + "TaskGraphCreatePlan(sequential=true, 3-5 concrete steps) before LoadSkill, "
-          + "ReadPresentationSnapshot, or other execution tools. Create the visible task plan first, "
-          + "mark every step executionTarget=teammate or lead. Leave teammate steps pending for the "
-          + "autonomous worker; only claim lead steps, and review submitted teammate work before completion.";
-      },
+      policyGuidance: async () => undefined,
     });
     if (preflight.repairs.length > 0) {
       run.appendRuntimeEvent("workflow_progress", {
@@ -394,18 +381,4 @@ function textFromResult(result: AgentModelToolResultBlock): string {
     .filter((block) => block.type === "text")
     .map((block) => block.text)
     .join("\n");
-}
-
-async function shouldRequireDiscoverTaskPlan(input: {
-  stage?: string;
-  toolName: string;
-  taskStore?: ReturnType<typeof createTaskStore>;
-}): Promise<boolean> {
-  if (input.stage !== "discover" || !input.taskStore) return false;
-  if (
-    input.toolName === "AskUser"
-    || input.toolName === "WebSearch"
-    || input.toolName.startsWith("TaskGraph")
-  ) return false;
-  return !isTaskPlanActive(await input.taskStore.listTasks());
 }

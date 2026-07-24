@@ -3,7 +3,7 @@ import type { AgentActivityItem } from "@shared/agent-activity";
 import { splitTraceItems } from "@shared/agent-activity";
 import { ProcessTracePanel } from "./ProcessTracePanel";
 import { TaskPlanCard } from "./TaskPlanCard";
-import type { AgentTaskNode } from "@shared/agent-task-graph";
+import type { AgentTaskNode } from "@shared/agent-task-list";
 import { TeamSessionCards } from "./TeamSessionViews";
 
 interface AgentActivityTraceProps {
@@ -47,7 +47,7 @@ export const AgentActivityTrace: React.FC<AgentActivityTraceProps> = ({
         />
       )}
       {standaloneItems.map((item) => {
-        if (item.kind === "taskgraph" && item.tasks.length > 0) {
+        if (item.kind === "tasklist" && item.tasks.length > 0) {
           return (
             <TaskPlanCard
               key={item.id}

@@ -90,7 +90,7 @@ describe("micro_compact", () => {
   it("keeps small results and the latest durable state result intact", () => {
     const transcript = [
       { role: "tool", toolName: "small-1", result: "small result" },
-      { role: "tool", toolName: "TaskGraphList", result: "x".repeat(3_000) },
+      { role: "tool", toolName: "TaskList", result: "x".repeat(3_000) },
       { role: "tool", toolName: "large-1", result: "x".repeat(3_000) },
       { role: "tool", toolName: "large-2", result: "x".repeat(3_000) },
       { role: "tool", toolName: "large-3", result: "x".repeat(3_000) },

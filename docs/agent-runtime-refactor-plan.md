@@ -7,7 +7,7 @@
 
 ## 1. 背景与边界
 
-当前 `AgentRuntime.run()` 同时负责模型循环、工具协议、前后台执行、checkpoint、Inbox、Hook、UI 事件、TaskGraph 与 Presentation 终止策略。问题不只是方法过长，而是稳定机制、基础设施和 PPT 业务策略共享同一修改入口。
+当前 `AgentRuntime.run()` 同时负责模型循环、工具协议、前后台执行、checkpoint、Inbox、Hook、UI 事件、Task list 与 Presentation 终止策略。问题不只是方法过长，而是稳定机制、基础设施和 PPT 业务策略共享同一修改入口。
 
 本轮目标：
 

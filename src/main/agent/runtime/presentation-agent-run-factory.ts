@@ -6,7 +6,7 @@ import { createEmptySkillRegistry, type SkillRegistry } from "../skills/loadSkil
 import type { SkillSession } from "../skills/skill-types";
 import type { ToolContext, ToolDiscoverySession } from "../tools/tool-definition";
 import { ToolRegistry } from "../tools/tool-registry";
-import { ensureAutonomousTaskWorker } from "../tools/core/task-graph-tools";
+import { LEAD_TASK_PERMISSIONS } from "../task/task-store";
 import { toToolSchemas } from "../tools/tool-schema";
 import { AgentRunScope } from "./lifecycle/agent-run-scope";
 import { ensureDefaultHooks } from "./hooks/default-hooks";
@@ -14,7 +14,6 @@ import type { PostToolUseBlock, UserPromptSubmitBlock } from "./hooks/hook-block
 import { triggerHooks } from "./hooks/hook-registry";
 import {
   prepareLayoutChoiceTask,
-  reconcileVerifiedContentTasks,
 } from "./presentation/layout-choice-orchestrator";
 import { LeadInboxInputSource } from "./background/lead-inbox-input-source";
 import { PreparedAgentRun } from "./turns/prepared-agent-run";
@@ -95,8 +94,8 @@ export class PresentationAgentRunFactory {
       model: options.model,
       signal: scope.signal,
       requestToolApproval: options.requestToolApproval,
-      notifyTaskGraphUpdated: ({ tasks, goal }) => {
-        emitProgress({ type: "task-graph-updated", message: "任务图已更新", tasks, goal });
+      notifyTaskListUpdated: () => {
+        if (taskStore) scope.taskSubscription?.notifyTasksUpdated(taskStore.identity.taskListId);
       },
       onTeammateProgress: options.onProgress
         ? (event) => emitProgress({ ...event, message: teammateProgressMessage(event) })
@@ -106,7 +105,8 @@ export class PresentationAgentRunFactory {
       skillSession: scope.skillSession,
       promptStage: promptContext.stage,
       taskStore,
-      taskGraphOwner: scope.taskGraphOwner,
+      taskPrincipal: taskStore?.principal(scope.taskListOwner, "lead", LEAD_TASK_PERMISSIONS),
+      taskListOwner: scope.taskListOwner,
       messageBus: options.messageBus,
       teammateManager: options.teammateManager,
     };
@@ -127,11 +127,6 @@ export class PresentationAgentRunFactory {
         type: "short_circuit",
         result: { type: "message", content: prepared.message },
       };
-    }
-
-    if (taskStore && options.workspaceRoot) {
-      await reconcileVerifiedContentTasks({ workspaceRoot: options.workspaceRoot, taskStore });
-      ensureAutonomousTaskWorker(context, await taskStore.listTasks());
     }
 
     const promptBlock: UserPromptSubmitBlock = {

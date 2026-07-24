@@ -62,7 +62,7 @@ export const CARD_PRESENTATION_POLICIES: Record<DisplayEventKind, CardPresentati
     persistence: "session",
     dedupeKey: (event) => event.eventId,
   },
-  "progress.task-graph-updated": {
+  "progress.task-list-updated": {
     category: "progress",
     host: "composer-before-input",
     activation: "immediate",
@@ -104,11 +104,12 @@ export const CARD_PRESENTATION_POLICIES: Record<DisplayEventKind, CardPresentati
 export const TOOL_DISPLAY_BINDINGS: Readonly<Record<string, readonly DisplayEventKind[]>> = {
   AskUser: ["interaction.question-requested"],
   SubmitCommands: ["review.command-proposal"],
-  TaskGraphCreate: ["progress.task-graph-updated"],
-  TaskGraphUpdate: ["progress.task-graph-updated"],
-  TaskGraphClaim: ["progress.task-graph-updated"],
-  TaskGraphSubmit: ["progress.task-graph-updated"],
-  TaskGraphComplete: ["progress.task-graph-updated"],
+  TaskCreate: ["progress.task-list-updated"],
+  TaskUpdate: ["progress.task-list-updated"],
+  TaskClaim: ["progress.task-list-updated"],
+  TaskReviewRequest: ["progress.task-list-updated"],
+  TaskReviewApprove: ["progress.task-list-updated"],
+  TaskReviewReject: ["progress.task-list-updated"],
 };
 
 export function getCardPresentationPolicy(event: DisplayEvent): CardPresentationPolicy {

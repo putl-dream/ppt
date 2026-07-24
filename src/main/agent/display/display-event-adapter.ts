@@ -41,13 +41,13 @@ export function toStreamDisplayEvent(
     };
   }
 
-  if (event.type === "task-graph-updated") {
+  if (event.type === "task-list-updated") {
     return {
       protocolVersion: 1,
       // One semantic card per run; later updates replace the prior snapshot.
-      eventId: `task-graph:${sessionId}:${runId}`,
+      eventId: `task-list:${sessionId}:${runId}`,
       emittedAt: now(),
-      kind: "progress.task-graph-updated",
+      kind: "progress.task-list-updated",
       category: "progress",
       source: { kind: "agent" },
       scope: { sessionId, runId },
@@ -59,6 +59,9 @@ export function toStreamDisplayEvent(
       payload: {
         tasks: event.tasks,
         goal: event.goal,
+        listRevision: event.listRevision,
+        state: event.state,
+        archive: event.archive,
       },
     };
   }

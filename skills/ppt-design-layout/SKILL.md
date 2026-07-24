@@ -8,8 +8,10 @@ allowed-tools:
   - ReadPresentationSnapshot
   - ListSlides
   - web_search
-  - TaskGraphList
-  - TaskGraphComplete
+  - TaskList
+  - TaskGet
+  - TaskUpdate
+  - TaskReviewRequest
 ---
 
 # 排版设计专责（Design Agent）
@@ -18,7 +20,7 @@ allowed-tools:
 
 **只做设计决策，不做执行。** 在引擎能力边界内产出可执行的逐页 `layout-plan.json`；不改写文案、不手填坐标、不调用 SubmitCommands。
 
-阶段 4c 的 layout-plan TaskGraph 节点由常驻 teammate 自主领取；主 Agent只负责验收 submitted 产物并 `TaskGraphComplete`。阶段 5 由主 Agent 调用 `ExecuteLayoutPlan` 消费本 plan（LoadSkill `ppt-layout` Executor 模式），不得凭记忆重猜 layout。
+阶段 4c 的 layout-plan Task 由 watcher 自主领取；teammate 显式更新 in_progress 并用 `TaskReviewRequest` 请求验收，主 Agent 用 approve/reject 完成验收。阶段 5 由主 Agent 调用 `ExecuteLayoutPlan` 消费本 plan（LoadSkill `ppt-layout` Executor 模式），不得凭记忆重猜 layout。
 
 ## 设计阶段边界（重要）
 
@@ -182,7 +184,7 @@ chart/table/icon 必须在内容创建或后续显式编辑中通过带 `element
 | 案例页两栏文字 | case；有明确结构化数据时再添加 chart |
 | 全程同色同构 | slideVariant 交替 |
 
-## TaskGraph teammate 节点描述模板（创建计划时使用）
+## Task teammate 节点描述模板（创建任务时使用）
 
 ```
 executionTarget: teammate
@@ -190,7 +192,7 @@ description: 「读取当前 presentation snapshot（slide 列表与 id）。
 **页数与文案已冻结**——为每一现有 slide 选定 layout、grammarVariant、slideVariant、designOverride、enhancements，并为 deck 选定唯一 designSystem；不得增删页或提内容密度要求。
 按 ppt-design-layout Rubric（仅版式节奏）写入 slides/layout-plan.json。
 用户选择排版方式：{template|creative}。
-禁止 SubmitCommands；完成后 submit_task，结论 1 句：路径 + layout 种类数 + 已写入可执行 plan。」
+禁止 SubmitCommands；完成后调用 `TaskReviewRequest`，结论 1 句：路径 + layout 种类数 + 已写入可执行 plan。」
 ```
 
 ## 禁止事项

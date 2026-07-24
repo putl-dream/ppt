@@ -57,7 +57,6 @@ import {
 } from "./agent/logger";
 import type { AppLogLevel, LogManagerSettings, RendererLogReport } from "@shared/logging";
 import { FileSessionStore } from "./session-store";
-import { TaskStore } from "./agent/task/task-store";
 import type { SessionChatMessage, SessionSnapshot } from "@shared/session";
 import type { PersistedDisplayCard } from "@shared/card-display-protocol";
 import { projectArtifactStatusSchema } from "@shared/session";
@@ -179,7 +178,7 @@ function createAgentStreamEmitter(
         case "approval-waiting":
         case "tool-approval-waiting":
           return "approval_requested";
-        case "task-graph-updated": return "task_graph_updated";
+        case "task-list-updated": return "task_list_updated";
         default: return "workflow_progress";
       }
     })();
@@ -191,11 +190,11 @@ function createAgentStreamEmitter(
       payload: structuredClone(streamEvent) as unknown as Record<string, unknown>,
     });
     if (
-      streamEvent.type === "task-graph-updated"
+      streamEvent.type === "task-list-updated"
       || streamEvent.type === "teammate-assignment-finished"
     ) {
       void sessionStore.refreshAgentRunTrace(sessionId, runId).catch((error) => {
-        logger.warn("agent.task-graph-trace.persist-failed", { sessionId, runId, error });
+        logger.warn("agent.task-list-trace.persist-failed", { sessionId, runId, error });
       });
     }
     if (sender.isDestroyed()) {
@@ -380,7 +379,6 @@ app.whenReady().then(async () => {
     const existing = runtimes.get(snapshot.session.id);
     if (existing && existing.workspaceRoot === snapshot.project?.rootPath) return existing;
     const runtimeRoot = join(applicationDataRoot, "runtime", snapshot.session.id);
-    await new TaskStore(runtimeRoot).recoverInterruptedClaims();
     const runtime = createSessionRuntime(snapshot, skillRegistry, applicationDataRoot);
     await runtime.teammateManager?.reconcileInterrupted();
     runtimes.set(snapshot.session.id, runtime);

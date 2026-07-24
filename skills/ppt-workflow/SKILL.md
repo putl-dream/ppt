@@ -20,7 +20,7 @@ stages:
 
 | 阶段 | LoadSkill | 产出 | 执行者 |
 |------|-----------|------|--------|
-| 0 规划 | — | TaskGraphCreatePlan（3–5 步，sequential） | 主 Agent（lead/orchestrator） |
+| 0 规划 | — | TaskCreate（3–5 项）+ TaskUpdate 建依赖 | 主 Agent（lead/orchestrator） |
 | 1 需求 | `ppt-brief` | `brief.md` | teammate 自主领取 |
 | 2 大纲 | `ppt-outline` | `outline.md` | teammate 自主领取 |
 | 3 分镜 | `ppt-storyboard` | `slides/storyboard.json` | teammate 自主领取 |
@@ -39,11 +39,11 @@ stages:
 
 主 Agent 是 lead/orchestrator，不是全流程生产工人。
 
-1. 先识别意图并选路径；完整/多阶段(≥3 步)**必须**先 `TaskGraphCreatePlan`(sequential) 建计划再执行；单页修改**不要** TaskGraph、两阶段。
-2. 任务计划系统只用 `TaskGraph*`；不要使用、恢复或维护临时、平面的任务列表。
+1. 先识别意图并选路径；完整/多阶段任务按需用 `TaskCreate` 建任务，再用 `TaskUpdate` 建依赖；单页修改无需 Task。
+2. 任务计划系统只用职责分离的 `Task*` 工具；恢复时先 `TaskList` / `TaskGet`。
 3. 创建计划时每步标记 executionTarget：workspace 文件产物用 `teammate`，SubmitCommands / ExecuteLayoutPlan / 用户决策用 `lead`。
-4. teammate 节点 description 必须自包含输入、输出路径、验收标准和禁止事项；节点保持 pending/unowned，由常驻 worker 自主 Claim 并置为 submitted；主 Agent 验收后才 `TaskGraphComplete`。lead 节点才由主 Agent 主动 Claim。
-5. `Task` 仅用于不属于 TaskGraph 的一次性临时工作；不要对任务图节点重复委派 Task。
+4. teammate 节点 description 必须自包含输入、输出路径、验收标准和禁止事项；保持 pending/unowned，由 watcher Claim；完成工作后 `TaskReviewRequest`，lead 用 approve/reject 验收。
+5. claim 只写 owner；开始工作须显式 `TaskUpdate(in_progress)`，普通工具结果不自动推进状态。
 6. 新建/批量加页：内容草稿完成后停止，等待 LayoutChoiceCard。
 7. 用户确认排版方式后：**先** LoadSkill `ppt-design-layout`，等待 teammate 产出并提交 layout-plan；**再**验收 Complete，LoadSkill `ppt-layout` 并调用 `ExecuteLayoutPlan` 按 plan 执行（禁止 freestyle 改 layout）。
 8. 控制步数：设计决策在 teammate 内完成；执行阶段合并 SubmitCommands；不重复 LoadSkill。
@@ -54,7 +54,7 @@ stages:
 LayoutChoiceCard 确认
     ↓
 LoadSkill ppt-design-layout
-teammate 自主 Claim → slides/layout-plan.json → submitted → lead 验收 Complete
+teammate 自主 Claim → TaskUpdate(in_progress) → slides/layout-plan.json → TaskReviewRequest → lead TaskReviewApprove
     ↓
 LoadSkill ppt-layout（Executor 模式）
 ReadPresentationSnapshot

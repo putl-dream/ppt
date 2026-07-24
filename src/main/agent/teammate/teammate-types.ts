@@ -5,10 +5,10 @@ import type {
 } from "../gateway/types";
 import type { AgentModelSelection } from "@shared/agent";
 import type { AgentStepLimits } from "@shared/agent-step-limits";
-import type { AgentTaskNode } from "@shared/agent-task-graph";
+import type { AgentTaskNode } from "@shared/agent-task-list";
 import type { TeammateProgressListener } from "@shared/teammate-progress";
-import type { TaskGraphSnapshotListener } from "../task/task-graph-publisher";
-import type { TaskStore } from "../task/task-store";
+import type { TaskListSnapshotListener } from "../task/task-list-publisher";
+import type { TaskDispatchMode, TaskStore } from "../task/task-store";
 import type { AgentMailboxMessage } from "./message-bus";
 
 export type TeammateStatus = "running" | "idle" | "stopped" | "failed";
@@ -37,7 +37,7 @@ export interface SpawnTeammateThreadOptions {
   idleTimeoutMs?: number;
   permissionPollMs?: number;
   /** Current-run listener for publishing durable task board changes. */
-  onTaskGraphUpdated?: TaskGraphSnapshotListener;
+  onTaskListUpdated?: TaskListSnapshotListener;
   /** Current-run listener for publishing teammate reasoning and tool activity. */
   onProgress?: TeammateProgressListener;
   /** Shared durable task board. The board may live outside the project workspace. */
@@ -49,7 +49,7 @@ export type TeammateState = TeammateHandle & {
   done: Promise<void>;
   prompt: string;
   lastError?: string;
-  taskGraphListener?: TaskGraphSnapshotListener;
+  taskListListener?: TaskListSnapshotListener;
   progressListener?: TeammateProgressListener;
 };
 
@@ -119,7 +119,7 @@ export type TeammateToolBatchOutcome =
 export type TeammateIdlePollOutcome =
   | { kind: "wait"; idle: TeammateIdlePhase }
   | { kind: "timeout" }
-  | { kind: "claimed"; task: AgentTaskNode };
+  | { kind: "claimed"; task: AgentTaskNode; mode: TaskDispatchMode };
 
 export type TeammateTurnOutcome =
   | {

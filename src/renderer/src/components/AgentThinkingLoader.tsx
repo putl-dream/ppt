@@ -2,7 +2,7 @@ import React from "react";
 import type { AgentActivityItem } from "@shared/agent-activity";
 import { filterTraceForDisplay } from "@shared/agent-activity";
 import { AgentActivityTrace } from "./AgentActivityTrace";
-import type { AgentTaskNode } from "@shared/agent-task-graph";
+import type { AgentTaskNode } from "@shared/agent-task-list";
 
 interface AgentThinkingLoaderProps {
   busy: boolean;

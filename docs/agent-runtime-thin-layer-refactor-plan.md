@@ -17,7 +17,7 @@
 当前代码已抽出 `AgentSession`、`CheckpointCoordinator`、`ToolPreflight`、`ToolExecutionEngine`、`PresentationCompletionPolicy`、`BackgroundTaskManager`、`LeadInboxInputSource` 和 `AgentEventPorts`，但 `run()` 仍负责以下不同层次的工作：
 
 - 创建取消域、lease、Session、TaskStore、事件端口和后台任务，并决定资源释放；
-- 构建 prompt、`ToolContext`、layout choice 短路和 TaskGraph worker；
+- 构建 prompt、`ToolContext`、layout choice 短路和 Task list worker；
 - 恢复 checkpoint、兼容旧后台任务状态并拼接 continuation；
 - 构造 checkpoint snapshot、应用 transition 和执行保存策略；
 - 汇聚 Inbox、后台通知、pending tool results 并调用模型；
@@ -46,7 +46,7 @@
 
 ### 1.4 循环决策与具体适配器耦合
 
-模型调用、中文 UI 文案、Presentation 终止规则、TaskGraph discover 策略和后台展示文本都嵌在循环分支里。当前类还在每次运行中直接 `new` 多个协作者，使依赖边界难以替换和单测。
+模型调用、中文 UI 文案、Presentation 终止规则、Task list discover 策略和后台展示文本都嵌在循环分支里。当前类还在每次运行中直接 `new` 多个协作者，使依赖边界难以替换和单测。
 
 结论：Loop Driver 只处理队列优先级、模型/工具 turn 顺序、预算和 terminal outcome；领域策略及 I/O 由构造好的协作者提供。第一轮迁移使用具体类即可，只在外部 I/O 和策略替换点定义接口，避免为每个局部函数制造空抽象。
 
@@ -74,7 +74,7 @@ AgentService
         └── AgentRunFinalizer             # success/failure/cancel、terminal、Stop Hook
 
 AgentRunScope                            # 拥有 abort、lease、checkpoint、Session、后台任务和 cleanup
-PresentationAgentRunFactory             # 构建 prompt/ToolContext、TaskGraph、layout choice 准备结果
+PresentationAgentRunFactory             # 构建 prompt/ToolContext、Task list、layout choice 准备结果
 ```
 
 期望的顶层形态如下，具体命名可在实现时按现有目录约定调整：
@@ -121,14 +121,14 @@ async run(options: AgentRuntimeOptions): Promise<AgentRuntimeResult> {
 
 - 为 layout choice 短路、lease 打开后准备失败、abort listener 清理、纯文本/AskUser/SubmitCommands 终态补 characterization tests。
 - 为 assistant/tool-result 批次、`tool_running` 保存点、后台两阶段 launch、取消优先分类补缺口测试。
-- 增加轻量架构测试：`agent-runtime.ts` 不再直接导入具体 Presentation/TaskGraph/模型内容解析模块，且不允许新增直接 Session 集合写入。
+- 增加轻量架构测试：`agent-runtime.ts` 不再直接导入具体 Presentation/Task list/模型内容解析模块，且不允许新增直接 Session 集合写入。
 
 验收：新增用例能在重构前证明现有契约或明确暴露上述生命周期缺口；现有测试断言不放松，相关 Runtime 测试全部通过。
 
 ### 步骤 2：建立异常安全的 RunScope 与准备边界
 
 - 提取 `AgentRunScope`，统一拥有 abort forwarding、lease/checkpoint、Session、BackgroundTaskManager、TaskStore、事件端口和清理动作。
-- 提取 `PresentationAgentRunFactory.prepare()`，负责 prompt、`ToolContext`、session 恢复兼容、TaskGraph 初始化和 `ready | short_circuit`。
+- 提取 `PresentationAgentRunFactory.prepare()`，负责 prompt、`ToolContext`、session 恢复兼容、Task list 初始化和 `ready | short_circuit`。
 - 让 layout choice 只返回 short-circuit outcome，并进入统一 finalizer；`open()` 中途失败必须回滚 listener 和已取得 lease。
 
 验收：故障注入证明每个资源只关闭一次；准备期成功、短路、失败和取消均无 lease/listener 泄漏；模型循环和工具 checkpoint 时序不变。
@@ -147,7 +147,7 @@ async run(options: AgentRuntimeOptions): Promise<AgentRuntimeResult> {
 - `AgentRunFinalizer` 统一普通成功、AskUser、proposal、step limit、失败和取消；保持 candidate/checkpoint/seal/Hook 顺序。
 - 将 UI/audit 文案映射移入事件 adapter；Driver 只发语义事件，不拼接展示文本。
 
-验收：`AgentRuntime.run()` 只剩顶层生命周期；Driver 不导入 Presentation DTO、TaskGraph 工具、具体 Tool 名或 Renderer 文案；所有 terminal path 的 checkpoint 与 Stop Hook 各至多一次。
+验收：`AgentRuntime.run()` 只剩顶层生命周期；Driver 不导入 Presentation DTO、Task list 工具、具体 Tool 名或 Renderer 文案；所有 terminal path 的 checkpoint 与 Stop Hook 各至多一次。
 
 ### 步骤 5：装配、收口与完整验证
 
@@ -180,7 +180,7 @@ git diff --check
 - 一个 `AgentLoopDriver` 集中表达稳定循环，不存在跨 service 的隐式控制流；
 - `AgentSession` 是可恢复状态唯一写入口，checkpoint snapshot 不读取散落的可变别名；
 - 所有准备期短路与正常循环出口共享 finalizer；
-- 任意资源获取阶段失败都不会泄漏 abort listener、lease、后台回调或 TaskGraph ownership；
+- 任意资源获取阶段失败都不会泄漏 abort listener、lease、后台回调或 Task list ownership；
 - 新增 Presentation 策略、事件展示文案或输入源不需要修改 Driver；
 - typecheck、全量单测、适用的真实集成测试和手动生命周期验证均有实际结果记录。
 
@@ -188,7 +188,7 @@ git diff --check
 
 - `AgentRuntime.run()` 已收敛为 open → prepare → drive → finalize → close 顶层生命周期；默认构造签名保持兼容。
 - 新增异常安全、幂等关闭的 `AgentRunScope`，统一取消转发、lease/checkpoint、Session、后台任务、TaskStore、事件端口和清理。
-- 新增 `PresentationAgentRunFactory`、`PreparedAgentRun`、`ModelTurnRunner`、`ToolTurnRunner`、`AgentLoopDriver` 与 `AgentRunFinalizer`；稳定 Driver 不导入 Presentation、TaskGraph、具体 Tool 名或展示文案。
+- 新增 `PresentationAgentRunFactory`、`PreparedAgentRun`、`ModelTurnRunner`、`ToolTurnRunner`、`AgentLoopDriver` 与 `AgentRunFinalizer`；稳定 Driver 不导入 Presentation、Task list、具体 Tool 名或展示文案。
 - `AgentSession` 的可恢复数组与 Set 已改为只读 view，通过显式命令或 transition 更新；Inbox、事件审计和 user turn 组装不再直接写集合。
 - layout choice 短路已进入统一 terminal checkpoint 与 Stop Hook；lease busy、准备失败、abort listener 回收增加了故障注入测试。
 - 验证结果：`npm.cmd run typecheck` 通过；`npm.cmd test` 为 115 个测试文件、672 个用例全部通过；`git diff --check` 通过。

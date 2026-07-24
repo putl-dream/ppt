@@ -14,7 +14,7 @@ import {
   formatTaskOwnerForDisplay,
   formatTaskPlanPosition,
   type AgentTaskNode,
-} from "../src/shared/agent-task-graph";
+} from "../src/shared/agent-task-list";
 
 describe("agent activity display", () => {
   it("covers every registered main and sub-agent tool", () => {
@@ -107,25 +107,29 @@ describe("agent activity display", () => {
   it("replaces internal task owner ids with collaboration roles", () => {
     const task: AgentTaskNode = {
       id: "task-1",
+      revision: 0,
       subject: "整理内容",
       description: "",
       status: "in_progress",
-      executionTarget: "teammate",
+      routing: { executionTarget: "teammate" },
+      completionPolicy: "review_required",
       owner: "teammate-019f51ff",
+      blocks: [],
       blockedBy: [],
-      createdAt: "2026-01-01T00:00:00.000Z",
-      updatedAt: "2026-01-01T00:00:00.000Z",
+      review: { state: "none" },
+      reviewReceipts: [],
     };
 
     expect(formatTaskOwnerForDisplay(task)).toBe("协作助手");
     expect(formatTaskPlanPosition([task])).toContain("协作助手");
     expect(formatTaskPlanPosition([task])).not.toContain("teammate-019f51ff");
 
-    const legacyLeadTask = {
+    const leadTask: AgentTaskNode = {
       ...task,
-      executionTarget: undefined,
+      routing: { executionTarget: "lead" },
+      completionPolicy: "direct",
       owner: "custom-lead-owner",
     };
-    expect(formatTaskOwnerForDisplay(legacyLeadTask)).toBe("主助手");
+    expect(formatTaskOwnerForDisplay(leadTask)).toBe("主助手");
   });
 });

@@ -15,7 +15,7 @@ export const conversationEventKindSchema = z.enum([
   "tool_failed",
   "approval_requested",
   "approval_resolved",
-  "task_graph_updated",
+  "task_list_updated",
   "artifact_written",
   "assistant_completed",
   "run_started",

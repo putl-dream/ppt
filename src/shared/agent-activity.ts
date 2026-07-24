@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { agentTaskNodeSchema, TASK_GRAPH_TRACE_ID, type AgentTaskNode } from "./agent-task-graph";
+import { agentTaskNodeSchema, TASK_LIST_TRACE_ID, type AgentTaskNode } from "./agent-task-list";
 import {
   formatAgentToolActivity,
   type AgentToolActivityState,
@@ -38,7 +38,7 @@ export const agentActivityItemSchema = z.discriminatedUnion("kind", [
   }),
   z.object({
     id: z.string(),
-    kind: z.literal("taskgraph"),
+    kind: z.literal("tasklist"),
     tasks: z.array(agentTaskNodeSchema),
     goal: z.string().nullable().optional(),
   }),
@@ -57,8 +57,8 @@ export const agentActivityItemSchema = z.discriminatedUnion("kind", [
     taskId: z.string(),
     /** Stable teammate identity. Optional for activity persisted before team views existed. */
     agentName: z.string().optional(),
-    /** TaskGraph node linked to this activity, when the assignment came from the shared board. */
-    taskGraphId: z.string().optional(),
+    /** TaskList node linked to this activity, when the assignment came from the shared board. */
+    taskListId: z.string().optional(),
     /** Reserved for recursive teammate/session trees. */
     parentTaskId: z.string().optional(),
     description: z.string(),
@@ -133,15 +133,15 @@ export function appendStep(
   ];
 }
 
-export function upsertTaskGraphTrace(
+export function upsertTaskListTrace(
   trace: AgentActivityItem[],
   input: { tasks: AgentTaskNode[]; goal?: string | null },
 ): AgentActivityItem[] {
   const sealed = finalizeReasoning(trace);
-  const existingIndex = sealed.findIndex((item) => item.kind === "taskgraph");
+  const existingIndex = sealed.findIndex((item) => item.kind === "tasklist");
   const nextItem = {
-    id: existingIndex >= 0 ? sealed[existingIndex]!.id : TASK_GRAPH_TRACE_ID,
-    kind: "taskgraph" as const,
+    id: existingIndex >= 0 ? sealed[existingIndex]!.id : TASK_LIST_TRACE_ID,
+    kind: "tasklist" as const,
     tasks: input.tasks.map((task) => ({ ...task })),
     goal: input.goal ?? null,
   };
@@ -323,11 +323,11 @@ export function findPendingToolApproval(
 
 export function filterTraceForDisplay(
   trace: AgentActivityItem[],
-  options: { keepTaskGraph?: boolean } = {},
+  options: { keepTaskList?: boolean } = {},
 ): AgentActivityItem[] {
   return trace.filter(
     (item) =>
-      (options.keepTaskGraph || item.kind !== "taskgraph") &&
+      (options.keepTaskList || item.kind !== "tasklist") &&
       !(item.kind === "tool-approval" && item.status === "pending"),
   );
 }
@@ -335,7 +335,7 @@ export function filterTraceForDisplay(
 const MAX_PERSISTED_TRACE_ITEMS = 80;
 const MAX_PERSISTED_APPROVAL_ITEMS = 10;
 const MAX_PERSISTED_TASK_STEPS = 24;
-const MAX_PERSISTED_TASK_GRAPH_NODES = 60;
+const MAX_PERSISTED_TASK_LIST_NODES = 60;
 const MAX_PERSISTED_TEXT_CHARS = 4_000;
 const MAX_PERSISTED_TRACE_BYTES = 96 * 1_024;
 
@@ -378,15 +378,15 @@ function compactActivityItem(item: AgentActivityItem): AgentActivityItem {
       })),
     };
   }
-  if (item.kind === "taskgraph") {
+  if (item.kind === "tasklist") {
     return {
       ...item,
       goal: item.goal ? truncatePersistedText(item.goal) : item.goal,
-      tasks: item.tasks.slice(-MAX_PERSISTED_TASK_GRAPH_NODES).map((task) => ({
+      tasks: item.tasks.slice(-MAX_PERSISTED_TASK_LIST_NODES).map((task) => ({
         ...task,
         subject: truncatePersistedText(task.subject, 1_000),
         description: truncatePersistedText(task.description),
-        blockedBy: task.blockedBy.slice(-MAX_PERSISTED_TASK_GRAPH_NODES),
+        blockedBy: task.blockedBy.slice(-MAX_PERSISTED_TASK_LIST_NODES),
       })),
     };
   }
@@ -404,7 +404,7 @@ export function compactActivityTraceForPersistence(
   if (trace.length === 0) return trace;
 
   const compacted = trace.map(compactActivityItem);
-  const latestTaskGraph = [...compacted].reverse().find((item) => item.kind === "taskgraph");
+  const latestTaskList = [...compacted].reverse().find((item) => item.kind === "tasklist");
   const pendingApprovals = compacted
     .filter((item) => item.kind === "tool-approval" && item.status === "pending")
     .slice(-MAX_PERSISTED_APPROVAL_ITEMS);
@@ -415,7 +415,7 @@ export function compactActivityTraceForPersistence(
         .slice(-completedApprovalBudget)
     : [];
   const keptIds = new Set<string>([
-    ...(latestTaskGraph ? [latestTaskGraph.id] : []),
+    ...(latestTaskList ? [latestTaskList.id] : []),
     ...pendingApprovals.map((item) => item.id),
     ...completedApprovals.map((item) => item.id),
   ]);
@@ -427,7 +427,7 @@ export function compactActivityTraceForPersistence(
 
   const kept = compacted.filter((item) => keptIds.has(item.id));
   const mandatoryIds = new Set<string>([
-    ...(latestTaskGraph ? [latestTaskGraph.id] : []),
+    ...(latestTaskList ? [latestTaskList.id] : []),
     ...pendingApprovals.slice(-1).map((item) => item.id),
   ]);
   while (kept.length > 1 && persistedTraceSize(kept) > MAX_PERSISTED_TRACE_BYTES) {
@@ -457,7 +457,7 @@ export function splitTraceItems(trace: AgentActivityItem[]): {
   const processItems: AgentActivityItem[] = [];
   const standaloneItems: AgentActivityItem[] = [];
   for (const item of trace) {
-    if (item.kind === "taskgraph") {
+    if (item.kind === "tasklist") {
       standaloneItems.push(item);
     } else if (isProcessTraceItem(item)) {
       processItems.push(item);
@@ -498,14 +498,14 @@ export function summarizeProcessTrace(items: AgentActivityItem[]): string {
   return parts.join(" · ");
 }
 
-export function extractLatestTaskGraph(
+export function extractLatestTaskList(
   ...traces: Array<AgentActivityItem[] | undefined>
 ): { tasks: AgentTaskNode[]; goal?: string | null } | null {
   for (const trace of traces) {
     if (!trace?.length) continue;
     for (let index = trace.length - 1; index >= 0; index -= 1) {
       const item = trace[index];
-      if (item?.kind === "taskgraph" && item.tasks.length > 0) {
+      if (item?.kind === "tasklist" && item.tasks.length > 0) {
         return { tasks: item.tasks, goal: item.goal ?? null };
       }
     }
@@ -531,7 +531,7 @@ export function upsertTaskStarted(
     taskId: string;
     description: string;
     agentName?: string;
-    taskGraphId?: string;
+    taskListId?: string;
     parentTaskId?: string;
   },
 ): AgentActivityItem[] {
@@ -541,7 +541,7 @@ export function upsertTaskStarted(
       ...task,
       description: input.description,
       ...(input.agentName ? { agentName: input.agentName } : {}),
-      ...(input.taskGraphId ? { taskGraphId: input.taskGraphId } : {}),
+      ...(input.taskListId ? { taskListId: input.taskListId } : {}),
       ...(input.parentTaskId ? { parentTaskId: input.parentTaskId } : {}),
       status: "running",
     }));
@@ -553,7 +553,7 @@ export function upsertTaskStarted(
       kind: "task",
       taskId: input.taskId,
       ...(input.agentName ? { agentName: input.agentName } : {}),
-      ...(input.taskGraphId ? { taskGraphId: input.taskGraphId } : {}),
+      ...(input.taskListId ? { taskListId: input.taskListId } : {}),
       ...(input.parentTaskId ? { parentTaskId: input.parentTaskId } : {}),
       description: input.description,
       status: "running",
@@ -665,7 +665,7 @@ export function applyTeammateProgressEvent(
         // also publishing structured identity for the team-session UI.
         description: `${event.description} · ${event.teammateName}`,
         agentName: event.teammateName,
-        ...(event.taskId ? { taskGraphId: event.taskId } : {}),
+        ...(event.taskId ? { taskListId: event.taskId } : {}),
       });
     case "teammate-thinking-chunk":
       return appendTaskReasoningChunk(trace, event.activityId, event.chunk);
@@ -726,14 +726,14 @@ export function markTraceComplete(
   });
 }
 
-function findLatestTaskGraphItem(
+function findLatestTaskListItem(
   traces: AgentActivityItem[][],
-): Extract<AgentActivityItem, { kind: "taskgraph" }> | undefined {
+): Extract<AgentActivityItem, { kind: "tasklist" }> | undefined {
   for (let traceIndex = traces.length - 1; traceIndex >= 0; traceIndex -= 1) {
     const trace = traces[traceIndex]!;
     for (let itemIndex = trace.length - 1; itemIndex >= 0; itemIndex -= 1) {
       const item = trace[itemIndex];
-      if (item?.kind === "taskgraph") return item;
+      if (item?.kind === "tasklist") return item;
     }
   }
   return undefined;
@@ -746,17 +746,17 @@ export function mergeActivityTraces(
   const valid = traces.filter((trace): trace is AgentActivityItem[] => Boolean(trace?.length));
   if (valid.length === 0) return undefined;
   const base = valid.reduce((best, trace) => (trace.length >= best.length ? trace : best));
-  const latestTaskGraph = findLatestTaskGraphItem(valid);
-  if (!latestTaskGraph) return base;
+  const latestTaskList = findLatestTaskListItem(valid);
+  if (!latestTaskList) return base;
 
   let replaced = false;
   const merged = base.map((item) => {
-    if (item.kind !== "taskgraph") return item;
+    if (item.kind !== "tasklist") return item;
     replaced = true;
-    return latestTaskGraph;
+    return latestTaskList;
   });
 
-  return replaced ? merged : [...merged, latestTaskGraph];
+  return replaced ? merged : [...merged, latestTaskList];
 }
 
 /** @deprecated 使用 mergeActivityTraces */

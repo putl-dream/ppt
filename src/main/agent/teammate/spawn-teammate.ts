@@ -7,7 +7,7 @@ import type {
   AgentModelToolUseBlock,
   AgentToolSchema,
 } from "../gateway/types";
-import type { AgentTaskNode } from "@shared/agent-task-graph";
+import type { AgentTaskNode } from "@shared/agent-task-list";
 import {
   formatTeammateToolProgress,
   type TeammateProgressEvent,
@@ -66,11 +66,12 @@ import type {
   TeammateTurnOutcome,
 } from "./teammate-types";
 import {
-  claimNextUnclaimedTask,
+  claimNextDispatchTask,
   createTeammateTaskTools,
-  unassignOwnedTasks,
+  formatTaskAssignment,
+  releaseOwnedTasks,
 } from "./teammate-task-tools";
-import type { TaskGraphSnapshotListener } from "../task/task-graph-publisher";
+import type { TaskListSnapshotListener } from "../task/task-list-publisher";
 import { toToolInputSchema } from "../tools/tool-schema";
 import { parseToolInput } from "../tools/tool-input";
 import { readJsonFile, writeJsonFileAtomic } from "../persistence/atomic-json-file";
@@ -123,7 +124,7 @@ export class TeammateManager {
       startedAt: Date.now(),
       lastActiveAt: Date.now(),
       prompt: options.prompt,
-      taskGraphListener: options.onTaskGraphUpdated,
+      taskListListener: options.onTaskListUpdated,
       progressListener: options.onProgress,
       controller,
       done: Promise.resolve(),
@@ -166,13 +167,13 @@ export class TeammateManager {
     return state ? this.toHandle(state) : undefined;
   }
 
-  updateTaskGraphListener(
+  updateTaskListListener(
     name: string,
-    listener?: TaskGraphSnapshotListener,
+    listener?: TaskListSnapshotListener,
   ): boolean {
     const state = this.teammates.get(sanitizeAgentName(name));
     if (!state) return false;
-    state.taskGraphListener = listener;
+    state.taskListListener = listener;
     return true;
   }
 
@@ -390,8 +391,8 @@ export class TeammateManager {
     await this.persistTeammateStates();
     const inbox = new TeammateInboxBuffer(this.bus, state.name);
     const taskStore = options.taskStore ?? new TaskStore(options.workspaceRoot);
-    const publishTaskGraph: TaskGraphSnapshotListener = (snapshot) => {
-      state.taskGraphListener?.(snapshot);
+    const publishTaskList: TaskListSnapshotListener = (snapshot) => {
+      state.taskListListener?.(snapshot);
     };
     const stepLimits = resolveAgentStepLimits(options.agentStepLimits);
     const maxSteps = options.maxSteps ?? getEffectiveSubMaxSteps(stepLimits);
@@ -404,7 +405,7 @@ export class TeammateManager {
       this.protocolStates,
       state.name,
     );
-    const taskTools = createTeammateTaskTools(taskStore, state.name, publishTaskGraph);
+    const taskTools = createTeammateTaskTools(taskStore, state.name, publishTaskList);
     const tools = [
       ...SUB_AGENT_TOOLS,
       ...taskTools,
@@ -495,7 +496,7 @@ export class TeammateManager {
             idle: runtime.phase,
             taskStore,
             teammateName: state.name,
-            publishTaskGraph,
+            publishTaskList,
             idlePollMs,
             idleTimeoutMs,
             signal: state.controller.signal,
@@ -514,7 +515,7 @@ export class TeammateManager {
             runtime.conversation.modelInput(),
             runtime.name,
             runtime.role,
-            formatClaimedTaskAssignment(claimedTask),
+            formatTaskAssignment({ task: claimedTask, mode: idleOutcome.mode }),
           );
           runtime.beginAssignment({
             assignment: nextAssignment,
@@ -534,7 +535,7 @@ export class TeammateManager {
           await this.finalizeStepLimitedAssignment({
             runtime,
             taskStore,
-            publishTaskGraph,
+            publishTaskList,
             idlePollMs,
             message,
           });
@@ -613,7 +614,7 @@ export class TeammateManager {
     const cleanupErrors = await this.finalizeTeammateRuntime({
       runtime,
       taskStore,
-      publishTaskGraph,
+      publishTaskList,
     });
 
     if (primaryError) {
@@ -633,11 +634,11 @@ export class TeammateManager {
   private async finalizeStepLimitedAssignment(input: {
     runtime: TeammateRuntime;
     taskStore: TaskStore;
-    publishTaskGraph: TaskGraphSnapshotListener;
+    publishTaskList: TaskListSnapshotListener;
     idlePollMs: number;
     message: string;
   }): Promise<void> {
-    await unassignOwnedTasks(input.taskStore, input.runtime.name, input.publishTaskGraph);
+    await releaseOwnedTasks(input.taskStore, input.runtime.name, input.publishTaskList);
     input.runtime.finishCurrentActivity("failed", input.message);
     await this.finishWithSummary(input.runtime.name, input.message, "step_limit");
     await this.sendIdleNotification(
@@ -667,7 +668,7 @@ export class TeammateManager {
   private async finalizeTeammateRuntime(input: {
     runtime: TeammateRuntime;
     taskStore: TaskStore;
-    publishTaskGraph: TaskGraphSnapshotListener;
+    publishTaskList: TaskListSnapshotListener;
   }): Promise<Error[]> {
     const cleanupErrors: Error[] = [];
     const attempt = async (
@@ -683,10 +684,10 @@ export class TeammateManager {
         ));
       }
     };
-    const releaseTasks = () => unassignOwnedTasks(
+    const releaseTasks = () => releaseOwnedTasks(
       input.taskStore,
       input.runtime.name,
-      input.publishTaskGraph,
+      input.publishTaskList,
     );
     const exit = input.runtime.terminalExit();
 
@@ -910,12 +911,12 @@ async function advanceTeammateTurn(input: {
   };
 }
 
-function buildOwnedTasksSubmissionGuidance(tasks: AgentTaskNode[]): string {
+function buildOwnedTasksReviewGuidance(tasks: AgentTaskNode[]): string {
   const taskList = tasks.map((task) => `- ${task.id}: ${task.subject}`).join("\n");
   return [
     "You still own the following in-progress tasks:",
     taskList,
-    "Complete each task and call submit_task for every task id before returning a final summary for lead review.",
+    "Complete each task and call TaskReviewRequest with a stable requestId and latest revision before returning a final summary.",
   ].join("\n\n");
 }
 
@@ -924,13 +925,15 @@ async function evaluateAssignmentCompletion(input: {
   teammateName: string;
   summary: string;
 }): Promise<AssignmentCompletionOutcome> {
-  const ownedInProgressTasks = await input.taskStore.listTasksOwnedBy(input.teammateName, {
-    status: "in_progress",
-  });
+  const ownedInProgressTasks = (await input.taskStore.listTasks()).filter((task) =>
+    task.owner === input.teammateName
+    && task.status === "in_progress"
+    && task.review.state !== "requested"
+  );
   return ownedInProgressTasks.length > 0
     ? {
         kind: "continue",
-        guidance: buildOwnedTasksSubmissionGuidance(ownedInProgressTasks),
+        guidance: buildOwnedTasksReviewGuidance(ownedInProgressTasks),
       }
     : { kind: "completed", summary: input.summary };
 }
@@ -957,7 +960,7 @@ async function pollForTeammateTask(input: {
   idle: TeammateIdlePhase;
   taskStore: TaskStore;
   teammateName: string;
-  publishTaskGraph: TaskGraphSnapshotListener;
+  publishTaskList: TaskListSnapshotListener;
   idlePollMs: number;
   idleTimeoutMs: number;
   signal: AbortSignal;
@@ -977,12 +980,12 @@ async function pollForTeammateTask(input: {
   }
 
   const nextIdle = { ...input.idle, nextPollAt: now + input.idlePollMs };
-  const task = await claimNextUnclaimedTask(
+  const candidate = await claimNextDispatchTask(
     input.taskStore,
     input.teammateName,
-    input.publishTaskGraph,
+    input.publishTaskList,
   );
-  if (task) return { kind: "claimed", task };
+  if (candidate) return { kind: "claimed", task: candidate.task, mode: candidate.mode };
   if (Date.now() - input.idle.since >= input.idleTimeoutMs) {
     return { kind: "timeout" };
   }
@@ -1349,13 +1352,6 @@ function formatInboxForTeammate(messages: AgentMailboxMessage[]): string {
     };
   });
   return `<inbox>${JSON.stringify(formatted)}</inbox>`;
-}
-
-function formatClaimedTaskAssignment(task: AgentTaskNode): string {
-  return `<task_assignment source="task_board" owner="${task.owner}">
-${JSON.stringify(task, null, 2)}
-</task_assignment>
-This task has already been claimed for you. Complete the concrete work, then call submit_task with task_id "${task.id}" before returning your summary for lead review.`;
 }
 
 function withIdentityIfCompacted(

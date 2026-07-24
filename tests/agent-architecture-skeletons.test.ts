@@ -90,7 +90,8 @@ describe("Agent Architecture Skeletons & Types", () => {
     const registry = createDefaultToolRegistry();
     expect(registry.get("ReadPresentationSnapshot")?.loadPolicy).toBe("core");
     expect(registry.get("Task")).toBeUndefined();
-    expect(registry.get("TaskGraphCreatePlan")?.loadPolicy).toBe("core");
+    expect(registry.get("TaskCreate")?.loadPolicy).toBe("core");
+    expect(registry.get("TaskReviewApprove")?.loadPolicy).toBe("core");
     expect(registry.get("AutoLayoutSlide")?.loadPolicy).toBe("deferred");
     expect(registry.get("PreviewSlide")?.loadPolicy).toBe("core");
     expect(registry.get("ValidateDeckLayout")?.loadPolicy).toBe("core");
@@ -101,7 +102,7 @@ describe("Agent Architecture Skeletons & Types", () => {
 
   it("ToolRegistry can register and retrieve tools by category", () => {
     const registry = new ToolRegistry();
-    
+
     // Register Core Tools
     registry.register(askUserTool);
     registry.register(searchExtraToolsTool);
@@ -174,7 +175,7 @@ describe("Agent Architecture Skeletons & Types", () => {
       coreTools: [askUserTool],
       currentSlideId: "slide-123",
     });
-    
+
     expect(prompt).toContain("AskUser");
     expect(prompt).toContain("不问工具名");
   });
@@ -529,7 +530,7 @@ describe("Agent Architecture Skeletons & Types", () => {
     };
     before.slides[0].elements = [textElement];
     after.slides[0].elements = [structuredClone(textElement)];
-    
+
     // Valid case: no text removal
     const check1 = policy.validate(before, after);
     expect(check1.valid).toBe(true);

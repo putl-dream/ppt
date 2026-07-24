@@ -219,14 +219,16 @@ describe("SQLite session store", () => {
     const sessionId = created.activeSession!.session.id;
     const baseTask = {
       id: "task_1",
+      revision: 0,
       subject: "Build slides",
       description: "",
-      executionTarget: "lead" as const,
+      routing: { executionTarget: "lead" as const },
+      completionPolicy: "direct" as const,
       owner: "agent",
+      blocks: [],
       blockedBy: [],
-      planId: "plan_1",
-      createdAt: "2026-01-01T00:00:00.000Z",
-      updatedAt: "2026-01-01T00:00:00.000Z",
+      review: { state: "none" as const },
+      reviewReceipts: [],
     };
     await store.saveMessages(sessionId, [
       { id: "placeholder", role: "assistant", content: "", threadId: "run-task-graph" },
@@ -236,16 +238,15 @@ describe("SQLite session store", () => {
       sessionId,
       request: "build",
     });
-    store.conversationDatabase.appendRuntimeEvent("run-task-graph", "task_graph_updated", {
+    store.conversationDatabase.appendRuntimeEvent("run-task-graph", "task_list_updated", {
       tasks: [{ ...baseTask, status: "in_progress" }],
       goal: "Build deck",
     });
-    store.conversationDatabase.appendRuntimeEvent("run-task-graph", "task_graph_updated", {
+    store.conversationDatabase.appendRuntimeEvent("run-task-graph", "task_list_updated", {
       tasks: [{
         ...baseTask,
         status: "completed",
-        owner: null,
-        updatedAt: "2026-01-01T00:01:00.000Z",
+        owner: undefined,
       }],
       goal: "Build deck",
     });
@@ -256,11 +257,11 @@ describe("SQLite session store", () => {
     });
 
     const assistant = store.getSession(sessionId).messages.at(-1)!;
-    const taskGraphs = assistant.activityTrace?.filter((item) => item.kind === "taskgraph") ?? [];
-    expect(taskGraphs).toHaveLength(1);
-    expect(taskGraphs[0]).toMatchObject({
+    const taskLists = assistant.activityTrace?.filter((item) => item.kind === "tasklist") ?? [];
+    expect(taskLists).toHaveLength(1);
+    expect(taskLists[0]).toMatchObject({
       goal: "Build deck",
-      tasks: [{ id: "task_1", status: "completed", owner: null }],
+      tasks: [{ id: "task_1", status: "completed" }],
     });
   });
 
@@ -270,15 +271,16 @@ describe("SQLite session store", () => {
     const sessionId = created.activeSession!.session.id;
     const task = {
       id: "task_background",
+      revision: 0,
       subject: "Draft outline",
       description: "",
       status: "pending" as const,
-      executionTarget: "teammate" as const,
-      owner: null,
+      routing: { executionTarget: "teammate" as const },
+      completionPolicy: "review_required" as const,
+      blocks: [],
       blockedBy: [],
-      planId: "plan_background",
-      createdAt: "2026-01-01T00:00:00.000Z",
-      updatedAt: "2026-01-01T00:00:00.000Z",
+      review: { state: "none" as const },
+      reviewReceipts: [],
     };
     await store.saveMessages(sessionId, [
       { id: "placeholder", role: "assistant", content: "", threadId: "run-background" },
@@ -288,7 +290,7 @@ describe("SQLite session store", () => {
       sessionId,
       request: "build",
     });
-    store.conversationDatabase.appendRuntimeEvent("run-background", "task_graph_updated", {
+    store.conversationDatabase.appendRuntimeEvent("run-background", "task_list_updated", {
       tasks: [task],
       goal: "Build deck",
     });
@@ -297,7 +299,7 @@ describe("SQLite session store", () => {
       message: "Teammate is working.",
     });
 
-    store.conversationDatabase.appendRuntimeEvent("run-background", "task_graph_updated", {
+    store.conversationDatabase.appendRuntimeEvent("run-background", "task_list_updated", {
       tasks: [{
         ...task,
         status: "in_progress",
@@ -309,7 +311,7 @@ describe("SQLite session store", () => {
     await store.refreshAgentRunTrace(sessionId, "run-background");
 
     const assistant = store.getSession(sessionId).messages.at(-1)!;
-    expect(assistant.activityTrace?.find((item) => item.kind === "taskgraph"))
+    expect(assistant.activityTrace?.find((item) => item.kind === "tasklist"))
       .toMatchObject({
         tasks: [{ id: "task_background", status: "in_progress", owner: "task_worker" }],
       });

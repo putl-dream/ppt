@@ -15,7 +15,7 @@ import { sendTeammateMessageTool } from "./core/send-teammate-message";
 import { shutdownTeammateTool } from "./core/shutdown-teammate";
 import { submitCommandsTool } from "./core/submit-commands";
 import { spawnTeammateTool } from "./core/spawn-teammate";
-import { taskGraphTools } from "./core/task-graph-tools";
+import { taskTools } from "./core/task-tools";
 import { loadSkillTool } from "./core/load-skill";
 import { webSearchTool } from "./core/web-search";
 import { searchSlideImagesTool } from "./core/search-slide-images";
@@ -52,7 +52,7 @@ export class ToolRegistry {
     if (this.tools.has(tool.name)) {
       throw new Error(`Tool already registered: ${tool.name}`);
     }
-    
+
     // 安全校验：核心工具和延迟工具不允许混淆 category 和 loadPolicy
     if (tool.category === "core" && tool.loadPolicy === "runtime") {
       throw new Error("Core tools cannot have runtime load policy");
@@ -131,7 +131,7 @@ export function createDefaultToolRegistry(): ToolRegistry {
     shutdownTeammateTool,
     spawnTeammateTool,
     submitCommandsTool,
-    ...taskGraphTools,
+    ...taskTools,
     loadSkillTool,
     webSearchTool,
     searchSlideImagesTool,

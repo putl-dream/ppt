@@ -210,7 +210,7 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
   onToggleMirror,
   onUpdateMessageContent,
   onProposePrompt,
-  
+
   // Bound props
   models,
   selectedModelId,
@@ -254,18 +254,23 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
       }
     : null;
   const managedProgressCards = useProgressCardManager((state) => state.cards);
-  const managedTaskGraph = [...managedProgressCards].reverse().find((card) =>
+  const managedTaskList = [...managedProgressCards].reverse().find((card) =>
     card.status === "active"
-    && card.event.kind === "progress.task-graph-updated"
+    && card.event.kind === "progress.task-list-updated"
     && (!activeRunId || card.event.scope.runId === activeRunId)
   );
-  const managedTaskGraphPayload = managedTaskGraph?.event.kind === "progress.task-graph-updated"
-    ? managedTaskGraph.event.payload
+  const managedTaskListPayload = managedTaskList?.event.kind === "progress.task-list-updated"
+    ? managedTaskList.event.payload
     : undefined;
 
   const sessionGoal = chatMessages.find((message) => message.role === "user")?.content.trim() || null;
-  const latestPlan = managedTaskGraphPayload
-    ? { tasks: managedTaskGraphPayload.tasks, goal: managedTaskGraphPayload.goal ?? null }
+  const latestPlan = managedTaskListPayload
+    ? {
+        tasks: managedTaskListPayload.tasks,
+        goal: managedTaskListPayload.goal ?? null,
+        state: managedTaskListPayload.state,
+        archive: managedTaskListPayload.archive,
+      }
     : null;
   const activeTasks = latestPlan?.tasks ?? [];
   const planGoal = latestPlan ? (latestPlan.goal ?? null) : sessionGoal;
@@ -288,7 +293,7 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
   const mainFingerprint = useMemo(() => {
     const lastMessage = chatMessages.at(-1);
     const leadTrace = activityTrace.filter(
-      (item) => item.kind !== "task" && item.kind !== "taskgraph",
+      (item) => item.kind !== "task" && item.kind !== "tasklist",
     );
     const lastLeadItem = leadTrace.at(-1);
     return [
@@ -544,7 +549,7 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
   if (showInitChat) {
     return (
       <section className="canvas-column chat-workspace-column center-focal-wrapper" style={{ background: "var(--bg-canvas)", height: "100%", display: "flex", flexDirection: "column" }}>
-        
+
         {/* Top Header */}
         <div className="panel-header canvas-header" style={{ background: "transparent" }}>
           <div className="canvas-header-left">
@@ -557,7 +562,7 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
 
         {/* Center content container */}
         <div className="center-focal-content-area" style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", padding: "40px 20px" }}>
-          
+
           <UnifiedAgentInput
             request={request}
             onChangeRequest={onChangeRequest}
@@ -612,7 +617,7 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
   // Render State B: Bottom-Anchored Split View (伴随式会话与双轨生成阶段 —— “底部承托控制台”)
   return (
     <section className="canvas-column chat-workspace-column" style={{ background: "var(--bg-canvas)" }}>
-      
+
       {/* 顶部中央状态控制栏 */}
       <div className="panel-header canvas-header">
         <div className="canvas-header-left">
@@ -747,7 +752,7 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
                         });
                     const trace = filterTraceForDisplay(
                       resolvedTrace,
-                      { keepTaskGraph: false },
+                      { keepTaskList: false },
                     );
                     const hasRunningTeammate = trace.some(
                       (item) => item.kind === "task" && item.status === "running",
@@ -879,7 +884,7 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
       {/* 底部统一控制台输入区 */}
       <div className="right-panel-footer chat-workspace-footer-unified">
         <div className="chat-conversation-shell chat-conversation-footer">
-        
+
         {/* 斜杠弹出指令 */}
         {showSlashMenu && !pendingToolApproval && (
           <div className="slash-menu-popup" role="listbox" aria-label="快捷指令">
@@ -911,6 +916,8 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
               goal={planGoal}
               tasks={activeTasks}
               live={busy || hasActiveTaskPlan}
+              state={latestPlan?.state}
+              archive={latestPlan?.archive}
             />
           )}
           {conversationFocus.kind !== "main" && !pendingToolApproval && (

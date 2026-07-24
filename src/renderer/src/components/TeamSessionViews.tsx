@@ -1,5 +1,5 @@
 import React from "react";
-import type { AgentTaskNode } from "@shared/agent-task-graph";
+import type { AgentTaskNode } from "@shared/agent-task-list";
 import type { TeamSessionProjection, TeamSessionStatus, TeamTaskActivity } from "@shared/team-session";
 import { projectTeamSession } from "@shared/team-session";
 import { ProcessTracePanel } from "./ProcessTracePanel";

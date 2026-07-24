@@ -1191,7 +1191,7 @@
   color: var(--text-primary);
 }
 
-.task-plan-item--submitted {
+.task-plan-item--review-requested {
   color: var(--text-primary);
 }
 
@@ -1210,7 +1210,7 @@
   opacity: 0.55;
 }
 
-.task-plan-icon.submitted {
+.task-plan-icon.review-requested {
   color: #f59e0b;
 }
 
