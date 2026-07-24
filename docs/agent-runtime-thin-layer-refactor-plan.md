@@ -1,6 +1,8 @@
 # Agent Runtime 薄层收敛方案
 
-> 状态：核心实施完成（2026-07-23）；静态检查与单元测试通过，真实 Gateway 集成待凭证验证
+> 状态：核心实施完成后，于 2026-07-24 被直接 Query Loop 结构取代。生命周期、恢复和终态边界继续保留，
+> 但独立 `AgentLoopDriver` 已内联回 `AgentRuntime`，使 state → model → tools → next state
+> 在同一文件中连续可读；真实 Gateway 集成仍待凭证验证。
 >
 > 范围：`src/main/agent/runtime/agent-runtime.ts`、直接协作者、应用装配入口与 Runtime 回归测试。
 >

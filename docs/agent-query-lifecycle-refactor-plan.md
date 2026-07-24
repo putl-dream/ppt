@@ -9,7 +9,7 @@
 > - `src/main/agent/service.ts`
 > - `src/main/agent/runtime/agent-runtime.ts`
 > - `src/main/agent/runtime/presentation-agent-run-factory.ts`
-> - `src/main/agent/runtime/agent-loop-driver.ts`
+> - `src/main/agent/runtime/agent-runtime.ts`（包含直接 Query Loop）
 > - `src/main/agent/runtime/turns/*`
 > - `src/main/agent/runtime/lifecycle/*`
 > - `src/main/agent/persistence/*`
@@ -189,7 +189,7 @@ AgentRunScope.open(options)
   → 创建 AgentSession、modelMessages、tool queue
 PresentationAgentRunFactory.prepare(scope)
   → 构建 systemPrompt、ToolContext、tool schemas
-AgentLoopDriver.run(prepared)
+AgentRuntime.runQuery(prepared)
 ```
 
 即先创建工作区，再完成 query 参数组装。目标应为：
