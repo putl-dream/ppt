@@ -35,9 +35,12 @@ Runtime 在以下边界提交 checkpoint：
 
 - renderer 在发起模型调用前同步保存 user 消息和带稳定 threadId 的 assistant 占位消息。
 - 正常 continue 从 canonical Conversation History 创建新的 QueryParams/State，turnCount、render feedback 和 recovery counter 重置。
+- new query 会同时读取独立 History 与最新 run checkpoint。由于成功 terminal checkpoint 在 History 写入前完成 fence，只要最新 checkpoint 含 `terminalHistory`，该快照就不早于独立 History 并优先作为输入；失败、中断或等待中的 checkpoint 不覆盖上一次成功 History。
+- 跨进程交接先在 file lock/SQLite transaction 内取得 writer lease，并由 `openLease()` 返回同一临界区观察到的 previous checkpoint；独立 History 在 lease 成功后读取。新 owner 不会使用取得 lease 前的陈旧 History/checkpoint 快照。
 - 只有 waiting_user、interrupted 或 crash recovery 才装载 Runtime query checkpoint；waiting_user 将用户回答追加到同一 suspended Workspace，完成原批次后才生成 next State。旧 version 1 checkpoint 只在 reader 边界转换，新 writer 仅生成 version 2。
 - `model_streaming` 表示 provider attempt 尚未提交；恢复时保留已经准备好的 canonical 输入并重放模型调用，不把空 Workspace reduce 成一个已完成 turn。
 - 如果成功终态后的独立 Conversation History 写入丢失，下一次 new query 从 terminal checkpoint 的 `terminalHistory` 一次性恢复完整 ContentBlock 链，随后仍写回独立 History Store。
+- Finalizer 在 terminal fence 前统一物化成功终态。标准模型回复和终止工具保留原始 ContentBlock；layoutChoice、UserPromptSubmit stop、PreToolUse hook stop 与 step limit 等非标准成功路径追加实际展示给用户的 assistant 文本。
 - 待审批命令跨重启保留，应用时重新检查 Presentation revision 并重新运行 CommitGate。
 - transcript 忽略被强杀造成的最后一个不完整 JSONL 行；冷启动可沿 parent 链追回 leaf 指针之后已经完整追加的消息。
 - 全局会话和工作区索引维护校验备份。主文件损坏时恢复备份；主文件和备份都无效时停止启动并保留原文件，不创建空状态覆盖。

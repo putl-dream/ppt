@@ -751,3 +751,10 @@ Driver 不读取：
 - `model_streaming` 恢复不再按 `model_received` reduce 空 Workspace，而是保留已准备的 canonical 输入并重放未提交的 provider attempt。
 - `canUseTool` 由本次 Query 实际暴露的 Core Tool schemas 组装，不再依赖 assembler 的恒真默认值。
 - 新增故障边界测试覆盖终态 History 写入丢失、工具结果先于 next State 持久化、`model_streaming` 重放和 query 工具暴露边界。
+
+## 15. History 边界收口结果（2026-07-24）
+
+- new query 始终同时检查独立 Conversation History 和最新 completed/proposal checkpoint；依据“terminal fence 先于 History save”的提交顺序，存在 `terminalHistory` 时优先使用该不早于独立 History 的快照，避免旧 History 遮蔽更新终态。
+- Finalizer 在成功 terminal checkpoint 前调用统一终态 History 物化入口。标准模型/终止工具已 stage 的 ContentBlock 不重复追加；layoutChoice、UserPromptSubmit stop、PreToolUse hook stop 和 step limit 会补入实际可见 assistant 结果。
+- 新增“已有旧 History、下一次 History 写入失败”的恢复测试，并分别覆盖上述四类非标准成功终态。
+- 跨进程 new-query 交接先取得 writer lease，再读取独立 History；file/SQLite `openLease()` 都返回锁内观察到的 previous payload，消除 pre-lease History/checkpoint 的 TOCTOU 窗口。

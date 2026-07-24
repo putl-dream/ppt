@@ -82,6 +82,16 @@ describe("DurableRunStore lease CAS", () => {
     await coordinator.commitTerminal(checkpoint("thread", "completed"));
     await coordinator.close();
     await expect(store.load("thread")).resolves.toMatchObject({ status: "completed" });
+    const next = await store.openLease({
+      threadId: "thread",
+      runId: "run-b",
+      resume: false,
+    });
+    expect(next).toMatchObject({
+      type: "opened",
+      checkpoint: { status: "completed" },
+    });
+    if (next.type === "opened") await store.closeLease(next.lease);
   });
 
   it("enforces busy and exact CAS semantics in the SQLite store", async () => {
@@ -111,6 +121,18 @@ describe("DurableRunStore lease CAS", () => {
         checkpoint: firstCheckpoint,
       })).resolves.toBe("already_applied");
       await expect(store.closeLease(first.lease)).resolves.toBe(true);
+      const second = await store.openLease({
+        threadId: "thread",
+        runId: "run-b",
+        resume: false,
+      });
+      expect(second).toMatchObject({
+        type: "opened",
+        checkpoint: firstCheckpoint,
+      });
+      if (second.type === "opened") {
+        await expect(store.closeLease(second.lease)).resolves.toBe(true);
+      }
     } finally {
       database.close();
     }

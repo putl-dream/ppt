@@ -62,12 +62,6 @@ export class AgentRunScope {
           ? new DurableConversationHistoryStore(options.workspaceRoot)
           : undefined;
       const startMode = options.startMode;
-      const storedHistory = startMode.type === "new_query"
-        ? await historyStore?.load(options.threadId)
-        : undefined;
-      const completedCheckpoint = startMode.type === "new_query" && !storedHistory
-        ? await durableRunStore?.load(options.threadId)
-        : undefined;
       const runId = options.runId ?? asRunId(crypto.randomUUID());
       const openedCheckpoint = durableRunStore
         ? await durableRunStore.openLease({
@@ -82,14 +76,23 @@ export class AgentRunScope {
         );
       }
 
-      const recovered = openedCheckpoint?.type === "opened"
-        ? openedCheckpoint.checkpoint
-        : undefined;
       checkpoints = new CheckpointCoordinator(
         durableRunStore,
         openedCheckpoint?.type === "opened" ? openedCheckpoint.lease : undefined,
         openedCheckpoint?.type === "opened" ? openedCheckpoint.currentRevision : 0,
       );
+      const previousCheckpoint = openedCheckpoint?.type === "opened"
+        ? openedCheckpoint.checkpoint
+        : undefined;
+      const recovered = startMode.type === "resume_query"
+        ? previousCheckpoint
+        : undefined;
+      const storedHistory = startMode.type === "new_query"
+        ? await historyStore?.load(options.threadId)
+        : undefined;
+      const completedCheckpoint = startMode.type === "new_query"
+        ? previousCheckpoint
+        : undefined;
 
       const transcript: Array<Record<string, unknown>> = recovered
         ? [...structuredClone(recovered.transcript), { role: "user", content: options.request }]
@@ -111,8 +114,8 @@ export class AgentRunScope {
           )
         : [
             ...structuredClone(
-              storedHistory
-              ?? migratedHistory
+              migratedHistory
+              ?? storedHistory
               ?? legacyVisibleHistory(options).map((entry) => ({
                 role: entry.role,
                 content: [{ type: "text" as const, text: entry.content }],
@@ -212,6 +215,7 @@ export class AgentRunScope {
   private committedQueryState?: DurableQueryStateSnapshot;
   private inflightQuery?: DurableQueryInflightSnapshot;
   private conversationHistorySnapshot?: AgentModelMessage[];
+  private terminalConversationHistoryStaged = false;
 
   private constructor(input: {
     options: AgentRuntimeOptions;
@@ -436,6 +440,23 @@ export class AgentRunScope {
     workspace: AgentIterationWorkspace,
   ): void {
     this.conversationHistorySnapshot = materializeWorkspaceMessages(state, workspace);
+    this.terminalConversationHistoryStaged = true;
+  }
+
+  stageTerminalConversationHistory(result: AgentRuntimeResult): void {
+    if (result.type === "ask_user" || this.terminalConversationHistoryStaged) return;
+    const content = result.type === "message" ? result.content : result.summary;
+    const messages = structuredClone(
+      this.conversationHistorySnapshot
+      ?? this.committedQueryState?.messages
+      ?? [...this.initialMessages],
+    );
+    messages.push({
+      role: "assistant",
+      content: [{ type: "text", text: content }],
+    });
+    this.conversationHistorySnapshot = messages;
+    this.terminalConversationHistoryStaged = true;
   }
 
   setInflightQuery(

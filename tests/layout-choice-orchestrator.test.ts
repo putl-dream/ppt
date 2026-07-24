@@ -11,6 +11,7 @@ import { TEST_DESIGN_SYSTEM } from "./design-engine-test-utils";
 import { clearHooks, registerHook } from "../src/main/agent/runtime/hooks/hook-registry";
 import type { StopBlock } from "../src/main/agent/runtime/hooks/hook-blocks";
 import { DurableRunStore } from "../src/main/agent/persistence/durable-run-store";
+import { DurableConversationHistoryStore } from "../src/main/agent/persistence/conversation-history-store";
 
 const tempDirs: string[] = [];
 
@@ -129,11 +130,20 @@ describe("layout choice runtime orchestration", () => {
     });
 
     expect(result).toMatchObject({ type: "message" });
+    if (result.type !== "message") throw new Error("Expected layout scheduling message.");
     expect(result.type === "message" && result.content).toContain("自主领取");
     expect(generateText).not.toHaveBeenCalled();
     expect((await new TaskStore(runtimeRoot).listTasks())).toHaveLength(1);
     expect(await new DurableRunStore(workspaceRoot).load("layout-choice-thread"))
       .toMatchObject({ status: "completed", phase: "finished", result });
+    expect((await new DurableConversationHistoryStore(workspaceRoot)
+      .load("layout-choice-thread"))?.at(-1)).toEqual({
+      role: "assistant",
+      content: [{
+        type: "text",
+        text: result.content,
+      }],
+    });
     expect(stops).toHaveLength(1);
     expect(stops[0]).toMatchObject({ reason: "completed", result });
   });

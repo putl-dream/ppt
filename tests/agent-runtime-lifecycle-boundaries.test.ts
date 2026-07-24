@@ -11,6 +11,7 @@ import { ToolRegistry } from "../src/main/agent/tools/tool-registry";
 import type { ToolDefinition } from "../src/main/agent/tools/tool-definition";
 import { createStarterPresentation } from "../src/shared/presentation";
 import { DurableRunStore } from "../src/main/agent/persistence/durable-run-store";
+import { DurableConversationHistoryStore } from "../src/main/agent/persistence/conversation-history-store";
 import { TEST_DESIGN_SYSTEM } from "./design-engine-test-utils";
 
 function textGateway(text: string): AgentModelGateway {
@@ -50,6 +51,171 @@ describe("AgentRuntime terminal boundaries", () => {
     expect(result).toEqual({ type: "message", content: "completed" });
     const checkpoint = await new DurableRunStore(workspaceRoot).load("stop-hook-thread");
     expect(checkpoint).toMatchObject({ status: "completed", phase: "finished" });
+  });
+
+  it("records a UserPromptSubmit short circuit as visible assistant History", async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), "runtime-prompt-stop-history-"));
+    registerHook("UserPromptSubmit", () => ({
+      type: "stop",
+      reason: "Request stopped before model execution.",
+    }));
+
+    const result = await new AgentRuntime(new ToolRegistry(), textGateway("unused")).run({
+      threadId: "prompt-stop-history-thread",
+      request: "stop this request",
+      presentationSnapshot: createStarterPresentation(),
+      selectedElementIds: [],
+      workspaceRoot,
+    });
+
+    expect(result).toEqual({
+      type: "message",
+      content: "Request stopped before model execution.",
+    });
+    expect(await new DurableConversationHistoryStore(workspaceRoot)
+      .load("prompt-stop-history-thread")).toEqual([
+        {
+          role: "user",
+          content: [{ type: "text", text: "stop this request" }],
+        },
+        {
+          role: "assistant",
+          content: [{ type: "text", text: "Request stopped before model execution." }],
+        },
+      ]);
+  });
+
+  it("records a PreToolUse hook stop without persisting an unresolved tool_use", async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), "runtime-tool-stop-history-"));
+    const schema = z.object({ value: z.number() });
+    const tool: ToolDefinition<typeof schema, { ok: true }> = {
+      name: "StoppedTool",
+      description: "Stopped before execution.",
+      category: "core",
+      loadPolicy: "core",
+      inputSchema: schema,
+      outputSchema: z.object({ ok: z.literal(true) }),
+      risk: "low",
+      async execute() {
+        throw new Error("StoppedTool must not execute.");
+      },
+    };
+    const registry = new ToolRegistry();
+    registry.register(tool);
+    registerHook("PreToolUse", () => ({
+      type: "stop",
+      reason: "Tool stopped by policy hook.",
+    }));
+    const gateway: AgentModelGateway = {
+      async generateText() {
+        return {
+          provider: "anthropic",
+          model: "test",
+          content: [{
+            type: "tool_use",
+            id: "stopped-tool-use",
+            name: "StoppedTool",
+            input: { value: 1 },
+          }],
+        };
+      },
+      async *generateTextStream() {
+        yield {
+          type: "complete" as const,
+          content: [{
+            type: "tool_use" as const,
+            id: "stopped-tool-use",
+            name: "StoppedTool",
+            input: { value: 1 },
+          }],
+        };
+      },
+    };
+
+    const result = await new AgentRuntime(registry, gateway).run({
+      threadId: "tool-stop-history-thread",
+      request: "call the stopped tool",
+      presentationSnapshot: createStarterPresentation(),
+      selectedElementIds: [],
+      workspaceRoot,
+    });
+
+    expect(result).toEqual({ type: "message", content: "Tool stopped by policy hook." });
+    const history = await new DurableConversationHistoryStore(workspaceRoot)
+      .load("tool-stop-history-thread");
+    expect(history?.at(-1)).toEqual({
+      role: "assistant",
+      content: [{ type: "text", text: "Tool stopped by policy hook." }],
+    });
+    expect(history?.flatMap((message) => message.content)
+      .some((block) => block.type === "tool_use")).toBe(false);
+  });
+
+  it("records the visible step-limit result after the committed tool batch", async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), "runtime-step-limit-history-"));
+    const schema = z.object({});
+    const tool: ToolDefinition<typeof schema, { ok: true }> = {
+      name: "OneStepTool",
+      description: "Completes one tool batch.",
+      category: "core",
+      loadPolicy: "core",
+      inputSchema: schema,
+      outputSchema: z.object({ ok: z.literal(true) }),
+      risk: "low",
+      async execute() {
+        return { ok: true };
+      },
+    };
+    const registry = new ToolRegistry();
+    registry.register(tool);
+    const gateway: AgentModelGateway = {
+      async generateText() {
+        return {
+          provider: "anthropic",
+          model: "test",
+          content: [{
+            type: "tool_use",
+            id: "one-step-tool-use",
+            name: "OneStepTool",
+            input: {},
+          }],
+        };
+      },
+      async *generateTextStream() {
+        yield {
+          type: "complete" as const,
+          content: [{
+            type: "tool_use" as const,
+            id: "one-step-tool-use",
+            name: "OneStepTool",
+            input: {},
+          }],
+        };
+      },
+    };
+
+    const result = await new AgentRuntime(registry, gateway).run({
+      threadId: "step-limit-history-thread",
+      request: "use one step",
+      presentationSnapshot: createStarterPresentation(),
+      selectedElementIds: [],
+      workspaceRoot,
+      maxSteps: 1,
+    });
+    if (result.type !== "message") throw new Error("Expected a visible step-limit message.");
+
+    const history = await new DurableConversationHistoryStore(workspaceRoot)
+      .load("step-limit-history-thread");
+    expect(history?.at(-1)).toEqual({
+      role: "assistant",
+      content: [{ type: "text", text: result.content }],
+    });
+    expect(history?.flatMap((message) => message.content)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: "tool_use", id: "one-step-tool-use" }),
+        expect.objectContaining({ type: "tool_result", toolUseId: "one-step-tool-use" }),
+      ]),
+    );
   });
 
   it("persists failed and emits a failed Stop reason without replacing the primary error", async () => {
@@ -214,6 +380,34 @@ describe("AgentRuntime terminal boundaries", () => {
     const reopened = await new DurableRunStore(workspaceRoot).openLease({
       threadId: "prepare-failed-thread",
       runId: "replacement-run",
+      resume: false,
+    });
+    expect(reopened.type).toBe("opened");
+    if (reopened.type === "opened") {
+      await new DurableRunStore(workspaceRoot).closeLease(reopened.lease);
+    }
+  });
+
+  it("closes a newly acquired lease when the post-lease History read fails", async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), "runtime-history-read-failed-"));
+    const historyLoad = vi.spyOn(DurableConversationHistoryStore.prototype, "load")
+      .mockRejectedValueOnce(new Error("History storage unavailable"));
+    try {
+      await expect(new AgentRuntime(new ToolRegistry(), textGateway("unused")).run({
+        threadId: "history-read-failed-thread",
+        runId: "failed-history-reader",
+        request: "read previous History",
+        presentationSnapshot: createStarterPresentation(),
+        selectedElementIds: [],
+        workspaceRoot,
+      })).rejects.toThrow("History storage unavailable");
+    } finally {
+      historyLoad.mockRestore();
+    }
+
+    const reopened = await new DurableRunStore(workspaceRoot).openLease({
+      threadId: "history-read-failed-thread",
+      runId: "replacement-history-reader",
       resume: false,
     });
     expect(reopened.type).toBe("opened");

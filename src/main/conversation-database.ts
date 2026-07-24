@@ -533,7 +533,7 @@ export class ConversationDatabase {
         };
       }
       if (row?.active_run_id === input.runId) {
-        const checkpoint = input.resume ? JSON.parse(row.checkpoint_json) as unknown : undefined;
+        const checkpoint = JSON.parse(row.checkpoint_json) as unknown;
         return {
           type: "opened" as const,
           generation: row.writer_generation,
@@ -555,7 +555,7 @@ export class ConversationDatabase {
           writer_revision = 0,
           lease_updated_at = excluded.lease_updated_at
       `).run(input.threadId, input.runId, generation, now, now);
-      const checkpoint = input.resume && row
+      const checkpoint = row
         ? JSON.parse(row.checkpoint_json) as unknown
         : undefined;
       return {

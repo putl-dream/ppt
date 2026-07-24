@@ -240,9 +240,10 @@ export class DurableRunStore {
           generation: result.generation,
         },
         currentRevision: result.revision,
-        checkpoint: input.resume
-          ? checkpointPayload(result.checkpoint as DurableRunCheckpoint | DurableRunCheckpointEnvelope | undefined, input.threadId)
-          : undefined,
+        checkpoint: checkpointPayload(
+          result.checkpoint as DurableRunCheckpoint | DurableRunCheckpointEnvelope | undefined,
+          input.threadId,
+        ),
       };
     }
 
@@ -270,7 +271,7 @@ export class DurableRunStore {
             generation: existingWriter.generation,
           },
           currentRevision: existingWriter.revision,
-          checkpoint: input.resume ? checkpointPayload(stored, input.threadId) : undefined,
+          checkpoint: checkpointPayload(stored, input.threadId),
         };
       }
 
@@ -289,7 +290,7 @@ export class DurableRunStore {
           generation,
         },
         currentRevision: 0,
-        checkpoint: input.resume ? envelope.payload : undefined,
+        checkpoint: envelope.payload,
       };
     });
   }

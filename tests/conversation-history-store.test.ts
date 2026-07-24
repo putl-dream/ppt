@@ -167,4 +167,125 @@ describe("canonical conversation history store", () => {
     expect(requests[1]!.messages!.flatMap((message) => message.content))
       .toContainEqual({ type: "text", text: "durable first answer" });
   });
+
+  it("prefers a newer terminal checkpoint over an older stored History", async () => {
+    const root = await mkdtemp(join(tmpdir(), "agent-stale-history-recovery-"));
+    const requests: AgentModelRequest[] = [];
+    const responses: AgentModelContentBlock[][] = [
+      [{ type: "text", text: "first persisted answer" }],
+      [{ type: "text", text: "newer checkpoint answer" }],
+      [{ type: "text", text: "third answer" }],
+    ];
+    const gateway: AgentModelGateway = {
+      async generateText(request) {
+        requests.push(request);
+        const content = responses.shift();
+        if (!content) throw new Error("Unexpected gateway call");
+        return { provider: "openai", model: "test", content };
+      },
+      async *generateTextStream(request) {
+        const response = await this.generateText(request);
+        yield { type: "complete" as const, content: response.content };
+      },
+    };
+    const runtime = new AgentRuntime(new ToolRegistry(), gateway);
+    const baseInput = {
+      threadId: "stale-history-thread",
+      presentationSnapshot: createStarterPresentation(),
+      selectedElementIds: [] as string[],
+      workspaceRoot: root,
+    };
+    await runtime.run({
+      ...baseInput,
+      runId: "stale-history-first",
+      request: "first question",
+    });
+
+    const historySave = vi.spyOn(DurableConversationHistoryStore.prototype, "save")
+      .mockRejectedValueOnce(new Error("simulated second History commit loss"));
+    try {
+      await runtime.run({
+        ...baseInput,
+        runId: "stale-history-second",
+        request: "second question",
+      });
+    } finally {
+      historySave.mockRestore();
+    }
+
+    const staleHistory = await new DurableConversationHistoryStore(root)
+      .load("stale-history-thread");
+    expect(staleHistory?.flatMap((message) => message.content))
+      .not.toContainEqual({ type: "text", text: "newer checkpoint answer" });
+    const checkpoint = await new DurableRunStore(root).load("stale-history-thread");
+    expect(checkpoint?.version === 2 ? checkpoint.terminalHistory : undefined)
+      .toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          role: "assistant",
+          content: [expect.objectContaining({
+            type: "text",
+            text: "newer checkpoint answer",
+          })],
+        }),
+      ]));
+
+    await runtime.run({
+      ...baseInput,
+      runId: "stale-history-third",
+      request: "third question",
+    });
+    expect(requests[2]!.messages!.flatMap((message) => message.content))
+      .toContainEqual({ type: "text", text: "newer checkpoint answer" });
+  });
+
+  it("reads History after lease handoff instead of using a pre-lease snapshot", async () => {
+    const root = await mkdtemp(join(tmpdir(), "agent-history-lease-handoff-"));
+    const historyStore = new DurableConversationHistoryStore(root);
+    await historyStore.save("lease-handoff-thread", [
+      { role: "user", content: [{ type: "text", text: "first question" }] },
+      { role: "assistant", content: [{ type: "text", text: "first answer" }] },
+    ]);
+
+    const originalOpenLease = DurableRunStore.prototype.openLease;
+    const openLease = vi.spyOn(DurableRunStore.prototype, "openLease")
+      .mockImplementationOnce(async function (this: DurableRunStore, input) {
+        await historyStore.save("lease-handoff-thread", [
+          { role: "user", content: [{ type: "text", text: "first question" }] },
+          { role: "assistant", content: [{ type: "text", text: "first answer" }] },
+          { role: "user", content: [{ type: "text", text: "handoff question" }] },
+          { role: "assistant", content: [{ type: "text", text: "handoff answer" }] },
+        ]);
+        return await originalOpenLease.call(this, input);
+      });
+    const requests: AgentModelRequest[] = [];
+    const gateway: AgentModelGateway = {
+      async generateText(request) {
+        requests.push(request);
+        return {
+          provider: "openai",
+          model: "test",
+          content: [{ type: "text", text: "new owner answer" }],
+        };
+      },
+      async *generateTextStream(request) {
+        const response = await this.generateText(request);
+        yield { type: "complete" as const, content: response.content };
+      },
+    };
+    try {
+      await new AgentRuntime(new ToolRegistry(), gateway).run({
+        threadId: "lease-handoff-thread",
+        runId: "new-owner-run",
+        request: "new owner question",
+        presentationSnapshot: createStarterPresentation(),
+        selectedElementIds: [],
+        workspaceRoot: root,
+      });
+    } finally {
+      openLease.mockRestore();
+    }
+
+    expect(requests[0]!.messages!.flatMap((message) => message.content))
+      .toContainEqual({ type: "text", text: "handoff answer" });
+  });
 });

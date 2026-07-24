@@ -22,6 +22,7 @@ export class AgentRunFinalizer {
         : result.type === "command_proposal"
           ? "proposal_ready"
           : "completed");
+    scope.stageTerminalConversationHistory(result);
     const checkpointDecision = scope.applyTransition({ type: "run_terminal", status, result });
     if (checkpointDecision !== "terminal") {
       throw new Error("CheckpointPolicy rejected a Runtime terminal transition.");
