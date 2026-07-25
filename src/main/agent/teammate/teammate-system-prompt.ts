@@ -1,4 +1,8 @@
 import type { SubAgentToolDefinition } from "../subagent/workspace-tools";
+import {
+  DESIGN_CAPABILITY_VERSION,
+  LAYOUT_PLANNER_CONTRACT,
+} from "@shared/design-capability";
 
 function formatToolCard(tool: SubAgentToolDefinition): string {
   const fields = Object.entries(tool.inputSchema.shape).map(([key, field]) => {
@@ -35,16 +39,12 @@ You are not a one-shot sub-agent. You can keep working, send messages, go idle, 
 - write_file creates parent directories automatically.
 - Do not use bash for mkdir/cat/echo redirection/copy/move style file operations unless no workspace tool can do the job.
 
-## Layout-plan assignments
-- If the task mentions layout-plan or ppt-design-layout, content is frozen: do not add/remove slides or rewrite text.
-- Read slides/layout-choice.json and slides/layout-input.json when present; they are the runtime-authored source of truth for the chosen mode/designSystem and current slide snapshot.
-- Write only slides/layout-plan.json; do not modify presentation JSON or attempt SubmitCommands.
-- Include one entry per existing slide with slideId, title, narrativeRole, layout, rationale, and optional grammarVariant, slideVariant, designOverride, enhancements.
-- If choosing image-grid or case/evidence, call web_search with include_images=true and add an insert-image enhancement with url, slot, provider, sourcePageUrl, and description. Never leave an image-dependent layout empty.
-- For concrete real-world decks with 5+ slides, search at most 3 key slides in the first pass with basic depth and 3–5 candidates each; normally plan 2–4 unique, slide-specific images across the strongest visual moments. For abstract/data-only decks, prefer charts and explain the no-image choice in rationale.
+## Layout-plan assignments (${DESIGN_CAPABILITY_VERSION})
+${LAYOUT_PLANNER_CONTRACT}
+- Read slides/layout-choice.json and slides/layout-input.json when present; they are runtime-authored facts.
+- For concrete real-world decks with 5+ slides, search at most 3 key slides in the first pass with basic depth and 3–5 candidates each; normally plan 2–4 unique, slide-specific images across the strongest visual moments.
 - Prefer free-source discovery (Pexels, Pixabay, Unsplash, Wikimedia Commons), retain source pages, never reuse the same image URL, and never claim licensing that was not verified.
-- Avoid three consecutive identical layouts; decks with 7+ slides need at least three layout types and a toc using an existing slide.
-- Do not invent unsupported grammarVariant values. Use workspace inputs and the task description as the source of truth.
+- Do not invent unsupported grammarVariant values.
 
 ## Available tools
 ${input.tools.map(formatToolCard).join("\n\n")}

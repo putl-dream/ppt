@@ -1,7 +1,11 @@
 import type { Presentation, Slide, SlideElement } from "@shared/presentation";
-import type { DesignSystemV1, ResolvedSlideStyle } from "@design-system";
+import type {
+  DesignSystemV2,
+  ResolvedSlideStyle,
+  ResolvedTypographyRole,
+} from "@design-system";
 import { resolveChromeTitleFontSize, resolveImageTreatment, resolveSlideStyle } from "@design-system";
-import { fontFamilyToCss, resolveElementFontFamily } from "./typography";
+import { fontFamilyToCss } from "./typography";
 import { chartDataToSvgString } from "./chart-utils";
 import { resolveIconPath } from "./icon-registry";
 import {
@@ -19,6 +23,15 @@ export interface DeckHtmlRenderOptions {
   logoUrl?: string | null;
 }
 
+function resolveElementTypography(
+  element: Extract<SlideElement, { type: "text" }>,
+  style: ResolvedSlideStyle,
+): ResolvedTypographyRole {
+  if (element.textRole === "metric") return style.typography.data;
+  if (element.textRole === "kicker") return style.typography.heading;
+  return style.typography.body;
+}
+
 function escapeHtml(text: string): string {
   return text
     .replace(/&/g, "&amp;")
@@ -34,17 +47,20 @@ export function renderElementHtml(
   const baseStyle = `position:absolute;left:${element.x}px;top:${element.y}px;width:${element.width}px;height:${element.height}px;`;
 
   if (element.type === "text") {
+    const typography = resolveElementTypography(element, style);
     const fontFamily = fontFamilyToCss(
-      resolveElementFontFamily(element, style.typography.family),
+      element.fontFamily ?? typography.family,
     );
     const textStyle = [
       baseStyle,
       `font-size:${element.fontSize}px`,
-      element.bold ? "font-weight:bold" : "",
+      `font-weight:${element.bold ? 700 : typography.weight}`,
       `color:${element.color ?? style.colors.body}`,
       element.align ? `text-align:${element.align}` : "",
       `font-family:${fontFamily}`,
-      "display:flex;align-items:center;white-space:pre-wrap;line-height:1.4;overflow-wrap:anywhere",
+      `letter-spacing:${typography.tracking}em`,
+      `line-height:${typography.lineHeight}`,
+      "display:flex;align-items:center;white-space:pre-wrap;overflow-wrap:anywhere",
     ]
       .filter(Boolean)
       .join(";");
@@ -121,7 +137,7 @@ export function renderElementHtml(
 export function renderSlideHtml(
   slide: Slide,
   index: number,
-  designSystem: DesignSystemV1,
+  designSystem: DesignSystemV2,
   options: DeckHtmlRenderOptions = {},
 ): string {
   const style = resolveSlideStyle(designSystem, slide);
@@ -131,14 +147,14 @@ export function renderSlideHtml(
     .join("\n");
 
   const headerHtml = showChrome
-    ? `<div class="slide-header" style="border-bottom:2px solid ${style.colors.accent}"><h2 style="color:${style.colors.title};font-size:${resolveChromeTitleFontSize(slide.title)}px;white-space:nowrap">${escapeHtml(slide.title)}</h2></div>`
+    ? `<div class="slide-header" style="border-bottom:${style.shape.stroke.width}px ${style.shape.stroke.style} ${style.colors.accent}"><h2 style="color:${style.colors.title};font-family:${style.typography.heading.css};font-size:${resolveChromeTitleFontSize(slide.title)}px;font-weight:${style.typography.heading.weight};letter-spacing:${style.typography.heading.tracking}em;line-height:${style.typography.heading.lineHeight};white-space:nowrap">${escapeHtml(slide.title)}</h2></div>`
     : "";
   const logoHtml = options.logoUrl
     ? `<img class="export-brand-logo" src="${escapeHtml(options.logoUrl)}" alt="Brand logo" />`
     : "";
 
   return `
-<section class="slide" data-index="${index}" style="background:${style.background.css};font-family:${style.typography.css}">
+<section class="slide" data-index="${index}" style="background:${style.background.css};font-family:${style.typography.body.css}">
   ${headerHtml}
   ${logoHtml}
   <div class="slide-canvas">${elementsHtml}</div>
@@ -174,7 +190,7 @@ const SLIDE_BASE_STYLES = `
 /** Standalone HTML document for a single slide (used by thumbnail capture). */
 export function exportSlideThumbnailHtml(
   slide: Slide,
-  options: { designSystem: DesignSystemV1; index?: number },
+  options: { designSystem: DesignSystemV2; index?: number },
 ): string {
   const slideHtml = renderSlideHtml(slide, options.index ?? 0, options.designSystem);
 

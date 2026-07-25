@@ -2,7 +2,7 @@ import type { DeckValidationIssue } from "@shared/deck-validation";
 import type { DesignConstraints } from "@shared/deck-persistence";
 import { createDefaultDesignConstraints } from "@shared/deck-persistence";
 import type { Presentation, Slide, TextElement } from "@shared/presentation";
-import { designSystemV1Schema } from "@design-system";
+import { designSystemV2Schema } from "@design-system";
 
 export interface StyleValidatorOptions {
   constraints?: DesignConstraints;
@@ -58,12 +58,12 @@ export class StyleValidator {
   private validateDesignSystem(presentation: Presentation): DeckValidationIssue[] {
     if (presentation.slides.length === 0) return [];
 
-    if (!designSystemV1Schema.safeParse(presentation.designSystem).success) {
+    if (!designSystemV2Schema.safeParse(presentation.designSystem).success) {
       return [{
         category: "style",
         severity: "error",
         message: "Presentation designSystem is invalid.",
-        fixHint: "Apply a complete DesignSystemV1 with ApplyDesignSystem.",
+        fixHint: "Apply a complete DesignSystemV2 with ApplyDesignSystem.",
       }];
     }
     return [];

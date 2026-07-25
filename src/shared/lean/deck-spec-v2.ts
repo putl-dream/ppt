@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { VISUAL_STYLES } from "@design-system";
 import {
   COMMERCIAL_COMMUNICATION_DEFAULTS,
   commercialCommunicationSchema,
@@ -219,7 +220,7 @@ export const leanDeckSpecV2Schema = z.object({
   narrativeMode: narrativeModeSchema
     .default(COMMERCIAL_COMMUNICATION_DEFAULTS.narrativeMode),
   durationMinutes: z.number().int().min(5).max(30),
-  designPreset: z.enum(["business", "report", "technical"]),
+  designPreset: z.enum(VISUAL_STYLES),
   sources: z.array(sourceSchema).max(12),
   slides: z.array(leanSlideSpecV2Schema).min(6).max(12),
 }).strict().superRefine((deck, context) => {

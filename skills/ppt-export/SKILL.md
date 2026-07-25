@@ -19,7 +19,7 @@ allowed-tools:
 
 ## 前置检查
 
-1. `ReadPresentationSnapshot`：slides 非空、title 已设、DesignSystemV1 完整。
+1. `ReadPresentationSnapshot`：slides 非空、title 已设、Design System v2 完整；若存在 LayoutPlan v2，当前系统必须与 selected direction 一致。
 2. 可选 LoadSkill `deck-review`，严重问题为 0 再导出。
 3. 向用户确认导出格式：**pptx**（默认）或 **html**（网页预览）；pdf 尚未实现。
 

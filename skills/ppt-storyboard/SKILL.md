@@ -43,7 +43,7 @@ teammate 自主领取任务并写 `slides/storyboard.json`，供后续 lead 的 
 | `compare` | comparison | 对比、优劣 |
 | `summary` | summary | 总结、收尾 |
 
-**本阶段不做**：版式节奏 Rubric、连续三页同 layout 自检、style-modes——留给 `ppt-design-layout` / `ppt-layout`。
+**本阶段不做**：视觉风格、页面节奏 Rubric、连续三页同 layout 自检——留给 `ppt-design` / `ppt-design-layout` / `ppt-layout`。
 
 ## 工作流
 

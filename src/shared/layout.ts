@@ -2,12 +2,8 @@ import type { Slide, SlideElement, TextElement, ShapeElement, ImageElement } fro
 import { getImageGridSlotRect } from "./layout-slots";
 import type { SlideLayoutType } from "./slide-layouts";
 import type { ResolvedSlideStyle, SlideDesignOverride } from "@design-system";
-import {
-  resolveFontFamily,
-  type TextRole,
-} from "./typography";
+import type { TextRole } from "./typography";
 import { resolveLayoutBackgroundVariant, type BackgroundVariant } from "./slide-background";
-import { cardShadow, VISUAL_TOKENS } from "./visual-tokens";
 import { isUserPreservedShape } from "./layout-shape-utils";
 import "./layout-register-builtin";
 import "./layout-handlers/cover";
@@ -38,10 +34,6 @@ const CANVAS_CONTENT_X = 120;
 const CANVAS_CONTENT_W = 1040;
 const BODY_CONTENT_Y = 188;
 const BODY_CONTENT_H = 448;
-const CARD_GAP = 32;
-const CARD_PAD = 28;
-const CARD_PAD_SM = 24;
-const ROW_GAP = 24;
 const MIN_STACK_ROW_HEIGHT = 24;
 const MIN_STACK_CONTENT_HEIGHT = 16;
 
@@ -124,21 +116,57 @@ export function applyLayout(
     ? textElements.filter((el) => el.id !== titleEl.id)
     : textElements;
   const elements: SlideElement[] = [];
+  const spacingScale = style.spacing.scale;
+  const CARD_GAP = Math.max(
+    12,
+    Math.round(style.spacing.gutter * spacingScale),
+  );
+  const CARD_PAD = Math.max(
+    12,
+    Math.round(style.spacing.cardPadding * spacingScale),
+  );
+  const CARD_PAD_SM = Math.max(10, Math.round(CARD_PAD * 0.72));
+  const ROW_GAP = Math.max(10, Math.round(CARD_GAP * 0.75));
 
-  const createCard = (x: number, y: number, w: number, h: number): ShapeElement => ({
-    id: `card-${generateId()}`,
-    type: "shape",
-    shapeType: "roundedRect",
-    x,
-    y,
-    width: w,
-    height: h,
-    fillColor: colors.cardBg,
-    strokeColor: colors.cardStroke,
-    cornerRadius: VISUAL_TOKENS.radii.md,
-    shadow: cardShadow("md"),
-    provenance: "layout",
-  });
+  const shapeShadow = (
+    opacityScale = 1,
+  ): ShapeElement["shadow"] => {
+    if (!style.shape.shadow) return undefined;
+    const source = style.catalog.elevation.shadow;
+    if (!source) return undefined;
+    return {
+      color: style.shape.elevation === "glow" ? colors.accent : colors.scrim,
+      blur: source.blur,
+      offsetX: source.x,
+      offsetY: source.y,
+      opacity: Math.min(1, source.opacity * opacityScale),
+    };
+  };
+  const shapeStroke = style.shape.stroke.width > 0
+    ? style.shape.stroke.color
+    : "transparent";
+  const shapeTypeForRadius = (
+    radius: number,
+  ): ShapeElement["shapeType"] => radius > 0 ? "roundedRect" : "rectangle";
+
+  const createCard = (x: number, y: number, w: number, h: number): ShapeElement => {
+    const radius = Math.max(0, style.shape.radius);
+    return {
+      id: `card-${generateId()}`,
+      type: "shape",
+      shapeType: shapeTypeForRadius(radius),
+      x,
+      y,
+      width: w,
+      height: h,
+      fillColor: colors.cardBg,
+      strokeColor: shapeStroke,
+      cornerRadius: radius,
+      fillOpacity: style.catalog.texture.kind === "frosted-glass" ? 0.72 : undefined,
+      shadow: shapeShadow(),
+      provenance: "layout",
+    };
+  };
 
   const createAccentBlock = (
     x: number,
@@ -146,24 +174,32 @@ export function applyLayout(
     w: number,
     h: number,
     opts: { opacity?: number; radius?: number } = {},
-  ): ShapeElement => ({
-    id: `accent-${generateId()}`,
-    type: "shape",
-    shapeType: "roundedRect",
-    x,
-    y,
-    width: w,
-    height: h,
-    fillColor: colors.accent,
-    strokeColor: colors.accent,
-    cornerRadius: opts.radius ?? VISUAL_TOKENS.radii.lg,
-    fillOpacity: opts.opacity ?? 0.15,
-    shadow: cardShadow("sm"),
-    provenance: "layout",
-  });
+  ): ShapeElement => {
+    const radius = Math.max(
+      0,
+      opts.radius == null
+        ? style.shape.radius
+        : Math.min(opts.radius, style.shape.radius),
+    );
+    return {
+      id: `accent-${generateId()}`,
+      type: "shape",
+      shapeType: shapeTypeForRadius(radius),
+      x,
+      y,
+      width: w,
+      height: h,
+      fillColor: colors.accent,
+      strokeColor: shapeStroke,
+      cornerRadius: radius,
+      fillOpacity: opts.opacity ?? 0.15,
+      shadow: w > 12 && h > 12 ? shapeShadow(0.65) : undefined,
+      provenance: "layout",
+    };
+  };
 
   const createAccentBar = (x: number, y: number, w: number): ShapeElement =>
-    createAccentBlock(x, y, w, 6, { opacity: 1, radius: VISUAL_TOKENS.radii.pill });
+    createAccentBlock(x, y, w, 6, { opacity: 1, radius: style.shape.radius });
 
   const createStepBadge = (x: number, y: number, size: number): ShapeElement => ({
     id: `badge-${generateId()}`,
@@ -174,8 +210,8 @@ export function applyLayout(
     width: size,
     height: size,
     fillColor: colors.accent,
-    strokeColor: colors.accent,
-    shadow: cardShadow("sm"),
+    strokeColor: shapeStroke,
+    shadow: shapeShadow(0.65),
     provenance: "layout",
   });
 
@@ -188,18 +224,25 @@ export function applyLayout(
     width: w,
     height: h,
     fillColor: colors.accent,
-    strokeColor: colors.accent,
+    strokeColor: shapeStroke,
     provenance: "layout",
   });
 
   const placedImageIds = new Set<string>();
   const placedDataIds = new Set<string>();
 
-  const assignTextRole = (el: TextElement, role: TextRole): TextElement => ({
-    ...el,
-    textRole: role,
-    fontFamily: resolveFontFamily(el.fontFamily, role, style.typography.family),
-  });
+  const assignTextRole = (el: TextElement, role: TextRole): TextElement => {
+    const typography = role === "kicker"
+      ? style.typography.heading
+      : role === "metric"
+        ? style.typography.data
+        : style.typography.body;
+    return {
+      ...el,
+      textRole: role,
+      fontFamily: typography.family,
+    };
+  };
 
   const placeImageInSlot = (
     image: ImageElement,
@@ -285,7 +328,7 @@ export function applyLayout(
       coverTitleEl.bold = true;
       coverTitleEl.color = colors.title;
       coverTitleEl.align = "center";
-      coverTitleEl.fontFamily = style.typography.family;
+      coverTitleEl.fontFamily = style.typography.heading.family;
       elements.push(coverTitleEl);
 
       if (coverBodyTexts[0]) {
@@ -316,7 +359,10 @@ export function applyLayout(
         );
       }
     } else {
-      elements.unshift(createAccentBlock(520, 60, 240, 8, { opacity: 0.35, radius: VISUAL_TOKENS.radii.pill }));
+      elements.unshift(createAccentBlock(520, 60, 240, 8, {
+        opacity: 0.35,
+        radius: style.shape.radius,
+      }));
 
       coverTitleEl.x = 120;
       coverTitleEl.y = 220;
@@ -326,7 +372,7 @@ export function applyLayout(
       coverTitleEl.bold = true;
       coverTitleEl.color = colors.title;
       coverTitleEl.align = "center";
-      coverTitleEl.fontFamily = style.typography.family;
+      coverTitleEl.fontFamily = style.typography.heading.family;
       elements.push(coverTitleEl);
 
       if (coverBodyTexts[0]) {
@@ -362,8 +408,14 @@ export function applyLayout(
 
       elements.unshift(createCard(leftX, contentY, colW, contentH));
       elements.unshift(createCard(rightX, contentY, colW, contentH));
-      elements.push(createAccentBlock(leftX + CARD_PAD_SM, contentY + CARD_PAD_SM, 48, 48, { opacity: 1, radius: VISUAL_TOKENS.radii.md }));
-      elements.push(createAccentBlock(rightX + CARD_PAD_SM, contentY + CARD_PAD_SM, 48, 48, { opacity: 1, radius: VISUAL_TOKENS.radii.md }));
+      elements.push(createAccentBlock(leftX + CARD_PAD_SM, contentY + CARD_PAD_SM, 48, 48, {
+        opacity: 1,
+        radius: style.shape.radius,
+      }));
+      elements.push(createAccentBlock(rightX + CARD_PAD_SM, contentY + CARD_PAD_SM, 48, 48, {
+        opacity: 1,
+        radius: style.shape.radius,
+      }));
 
       const accentHeaderH = 56;
 
@@ -477,7 +529,7 @@ export function applyLayout(
             rowY + CARD_PAD_SM,
             accentW,
             layerH - CARD_PAD_SM * 2,
-            { opacity: 1, radius: VISUAL_TOKENS.radii.pill },
+            { opacity: 1, radius: style.shape.radius },
           ),
         );
 
@@ -504,7 +556,10 @@ export function applyLayout(
 
       elements.unshift(createCard(leftX, contentY, leftW, contentH));
       elements.unshift(createCard(rightX, contentY, rightW, contentH));
-      elements.push(createAccentBlock(leftX + pad, contentY + pad, 6, 80, { opacity: 1, radius: VISUAL_TOKENS.radii.pill }));
+      elements.push(createAccentBlock(leftX + pad, contentY + pad, 6, 80, {
+        opacity: 1,
+        radius: style.shape.radius,
+      }));
 
       const sideImage =
         pickImageForSlot("side") ??
@@ -575,7 +630,7 @@ export function applyLayout(
       elements.unshift(
         createAccentBlock(168, contentY, 4, contentH, {
           opacity: 0.25,
-          radius: VISUAL_TOKENS.radii.pill,
+          radius: style.shape.radius,
         }),
       );
 
@@ -627,7 +682,7 @@ export function applyLayout(
       elements.unshift(
         createAccentBlock(160, contentY + 36, 80, 80, {
           opacity: 0.1,
-          radius: VISUAL_TOKENS.radii.lg,
+          radius: style.shape.radius,
         }),
       );
 
@@ -644,14 +699,14 @@ export function applyLayout(
         styled.bold = false;
         styled.color = colors.title;
         styled.align = "center";
-        styled.fontFamily = style.typography.family;
+        styled.fontFamily = style.typography.heading.family;
         elements.push(styled);
       }
 
       elements.push(
         createAccentBlock(440, contentY + contentH - 56, 400, 8, {
           opacity: 0.5,
-          radius: VISUAL_TOKENS.radii.pill,
+          radius: style.shape.radius,
         }),
       );
 
@@ -730,7 +785,13 @@ export function applyLayout(
           pickImageForSlot(slotKey) ?? unslottedImages.shift();
 
         elements.unshift(createCard(colX, contentY, colW, contentH));
-        elements.push(createAccentBlock(colX + CARD_PAD, contentY + CARD_PAD_SM, colW - CARD_PAD * 2, 8, { opacity: 0.85, radius: VISUAL_TOKENS.radii.pill }));
+        elements.push(createAccentBlock(
+          colX + CARD_PAD,
+          contentY + CARD_PAD_SM,
+          colW - CARD_PAD * 2,
+          8,
+          { opacity: 0.85, radius: style.shape.radius },
+        ));
 
         const hasImage = Boolean(cardImage);
         const accentOffset = 20;
@@ -774,7 +835,13 @@ export function applyLayout(
       bodyTexts.forEach((el, idx) => {
         const rowY = contentY + idx * (rowH + rowGap);
         elements.unshift(createCard(CANVAS_CONTENT_X, rowY, CANVAS_CONTENT_W, rowH));
-        elements.push(createAccentBlock(CANVAS_CONTENT_X + 10, rowY + rowInset, 6, rowH - rowInset * 2, { opacity: 1, radius: VISUAL_TOKENS.radii.pill }));
+        elements.push(createAccentBlock(
+          CANVAS_CONTENT_X + 10,
+          rowY + rowInset,
+          6,
+          rowH - rowInset * 2,
+          { opacity: 1, radius: style.shape.radius },
+        ));
 
         const styled = assignTextRole(el, "body");
         styled.x = CANVAS_CONTENT_X + 30;

@@ -4,11 +4,11 @@
  */
 import {
   DEFAULT_DESIGN_SYSTEM,
-  designSystemV1Schema,
-  type DesignSystemV1,
+  designSystemV2Schema,
+  type DesignSystemV2,
   DEFAULT_BRAND_PROFILE,
-  brandProfileV1Schema,
-  type BrandProfileV1,
+  brandProfileV2Schema,
+  type BrandProfileV2,
 } from "@design-system";
 import {
   COMMERCIAL_COMMUNICATION_DEFAULTS,
@@ -373,26 +373,26 @@ export function serializeResearchNotes(notes: ResearchNote[]): string {
   return `# 研究资料与素材\n\n${body}\n`;
 }
 
-export function createDefaultProjectDesignSystem(): DesignSystemV1 {
+export function createDefaultProjectDesignSystem(): DesignSystemV2 {
   return structuredClone(DEFAULT_DESIGN_SYSTEM);
 }
 
-export function parseProjectDesignSystem(content: string): DesignSystemV1 {
-  return designSystemV1Schema.parse(JSON.parse(content));
+export function parseProjectDesignSystem(content: string): DesignSystemV2 {
+  return designSystemV2Schema.parse(JSON.parse(content));
 }
 
-export function serializeProjectDesignSystem(system: DesignSystemV1): string {
-  return `${JSON.stringify(designSystemV1Schema.parse(system), null, 2)}\n`;
+export function serializeProjectDesignSystem(system: DesignSystemV2): string {
+  return `${JSON.stringify(designSystemV2Schema.parse(system), null, 2)}\n`;
 }
 
-export function createDefaultBrandProfile(brandName = "未命名品牌"): BrandProfileV1 {
-  return brandProfileV1Schema.parse({ ...DEFAULT_BRAND_PROFILE, brandName });
+export function createDefaultBrandProfile(brandName = "未命名品牌"): BrandProfileV2 {
+  return brandProfileV2Schema.parse({ ...DEFAULT_BRAND_PROFILE, brandName });
 }
 
-export function parseBrandProfileFile(content: string): BrandProfileV1 {
-  return brandProfileV1Schema.parse(JSON.parse(content));
+export function parseBrandProfileFile(content: string): BrandProfileV2 {
+  return brandProfileV2Schema.parse(JSON.parse(content));
 }
 
-export function serializeBrandProfile(profile: BrandProfileV1): string {
-  return `${JSON.stringify(brandProfileV1Schema.parse(profile), null, 2)}\n`;
+export function serializeBrandProfile(profile: BrandProfileV2): string {
+  return `${JSON.stringify(brandProfileV2Schema.parse(profile), null, 2)}\n`;
 }

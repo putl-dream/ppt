@@ -1,6 +1,6 @@
 import { BrowserWindow } from "electron";
 import type { Slide } from "@shared/presentation";
-import type { DesignSystemV1 } from "@design-system";
+import type { DesignSystemV2 } from "@design-system";
 import {
   exportSlideThumbnailHtml,
   SLIDE_HEIGHT,
@@ -29,7 +29,7 @@ export class SlideThumbnailService {
 
   async captureSlide(
     slide: Slide,
-    designSystem: DesignSystemV1,
+    designSystem: DesignSystemV2,
   ): Promise<SlideThumbnailResult | null> {
     if (!isElectronRuntime()) return null;
 

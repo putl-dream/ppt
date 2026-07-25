@@ -25,7 +25,7 @@ allowed-tools:
 |------|--------------|------|
 | 单页重排版 | AutoLayoutSlide | `update-slide-layout` |
 | 换设计系统 | ApplyDesignSystem | `set-design-system` |
-| 风格推荐 | SelectStyleStrategy | 返回 preset + DesignSystemV1（不直接改 deck） |
+| 设计方向 | ResolveDesignPlan | 返回需求合同 + safe / shifted / bold，或用户锁定方向（不直接改 deck） |
 | 长文精简 | CompressText | 调用模型做事实保持压缩；无法保留数字/日期/链接时会失败 |
 | 改写字风 | RewriteSlideContent | 调用模型生成 `update-element`，并校验关键事实 token |
 | 图表样式 | BeautifyChart | 美化已有 chart；明确 KPI 文本只强化 metric 样式，不生成数据 |
@@ -64,7 +64,7 @@ update-slide-variant(slideId, hero|light|dark) → SubmitCommands
 
 ## 典型场景
 
-**全 deck 换肤**：SelectStyleStrategy → ApplyDesignSystem → SubmitCommands
+**全 deck 换肤**：ResolveDesignPlan → 用户确认 direction → ApplyDesignSystem → SubmitCommands
 
 **单页排版乱了**：AutoLayoutSlide(slideId, layout) → SubmitCommands
 
@@ -80,5 +80,6 @@ update-slide-variant(slideId, hero|light|dark) → SubmitCommands
 
 - Deferred Tool **不能替代**基础 `add-slide`；仅用于增强。
 - `ExecuteExtraTool` 产出的 commands 仍须 `SubmitCommands`，不会自动生效。
+- argument mode、visual style、color scheme、reading mode 是独立轴；不得用一个 preset 名称替代整套设计决策。
 - 改写类工具 `risk` 建议 `medium`；纯排版 `low`。
 - 大改前先 LoadSkill `deck-review`，用户确认后再批量修复。

@@ -54,7 +54,7 @@ function createRichPresentation(): Presentation {
     id: crypto.randomUUID(),
     title: "PPT Export Smoke Test",
     revision: 3,
-    designSystem: testDesignSystem({ palette: "tech-dark", backgroundStyle: "dark" }),
+    designSystem: testDesignSystem({ visualStyle: "dark-tech", colorScheme: "tech-dark" }),
     slides: [
       {
         id: slideOneId,
@@ -218,7 +218,7 @@ describe("ppt-exporter", () => {
     bus.execute({
       id: crypto.randomUUID(),
       type: "set-design-system",
-      designSystem: testDesignSystem({ palette: "tech-dark" }),
+      designSystem: testDesignSystem({ visualStyle: "dark-tech", colorScheme: "tech-dark" }),
     });
     bus.execute({
       id: crypto.randomUUID(),
@@ -283,7 +283,7 @@ describe("ppt-exporter", () => {
       id: crypto.randomUUID(),
       title: "Layout Export Test",
       revision: 0,
-      designSystem: testDesignSystem({ palette: "warm-paper" }),
+      designSystem: testDesignSystem({ visualStyle: "editorial", colorScheme: "warm-paper" }),
       slides: [
         (() => {
           const base: Slide = {
@@ -302,7 +302,10 @@ describe("ppt-exporter", () => {
               },
             ],
           };
-          return applyLayout(base, "architecture", testSlideStyle(base, { palette: "warm-paper" }));
+          return applyLayout(base, "architecture", testSlideStyle(base, {
+            visualStyle: "editorial",
+            colorScheme: "warm-paper",
+          }));
         })(),
       ],
     };
@@ -325,7 +328,10 @@ describe("ppt-exporter", () => {
       id: crypto.randomUUID(),
       title: "Resolved design system",
       revision: 1,
-      designSystem: testDesignSystem({ palette: "soft-academic", fontMood: "editorial", backgroundStyle: "grid", imageTreatment: "framed", chartStyle: "report" }),
+      designSystem: testDesignSystem({
+        visualStyle: "blueprint",
+        colorScheme: "soft-academic",
+      }),
       slides: [{
         id: crypto.randomUUID(),
         title: "Visual contract",

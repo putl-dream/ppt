@@ -1,13 +1,29 @@
 import { z } from "zod";
 
 import { validateDeckRhythm, type DeckRhythmIssue } from "./deck-rhythm";
-import { designSystemV1Schema, slideDesignOverrideSchema } from "@design-system";
+import { slideDesignOverrideSchema } from "@design-system";
 import { SLIDE_LAYOUTS } from "./slide-layouts";
 import { getSupportedGrammarVariants } from "./layout-grammar-variants";
 import { listLayoutSlots } from "./layout-slots";
 import { SLIDE_VARIANTS } from "./slide-variant";
 import type { PresentationCommand } from "./commands";
 import { imageSourceSchema, type Presentation } from "./presentation";
+import { PAGE_RHYTHMS } from "./design-capability";
+import {
+  confirmedDesignSelectionBaseSchema,
+  getSelectedDesignDirection,
+  validateDesignDirectionSelection,
+  type CommunicationContract,
+  type DesignDirection,
+} from "./design-plan";
+
+export {
+  communicationContractSchema,
+  designDirectionSchema,
+  DESIGN_SELECTION_SOURCES,
+  getSelectedDesignDirection,
+} from "./design-plan";
+export type { CommunicationContract, DesignDirection } from "./design-plan";
 
 export const LAYOUT_PLAN_PATH = "slides/layout-plan.json";
 
@@ -21,8 +37,6 @@ export const NARRATIVE_ROLES = [
   "quote",
   "summary",
 ] as const;
-
-export const STYLE_MODES = ["template", "creative"] as const;
 
 export const layoutPlanEnhancementSchema = z.object({
   type: z.literal("insert-image"),
@@ -40,6 +54,9 @@ export const layoutPlanSlideSchema = z.object({
   slideId: z.string(),
   title: z.string(),
   narrativeRole: z.enum(NARRATIVE_ROLES),
+  audienceMove: z.string().trim().min(1).max(200),
+  rhythm: z.enum(PAGE_RHYTHMS),
+  layoutIntent: z.string().trim().min(1).max(240),
   layout: z.enum(SLIDE_LAYOUTS),
   grammarVariant: z.string().optional(),
   designOverride: slideDesignOverrideSchema.optional(),
@@ -48,12 +65,16 @@ export const layoutPlanSlideSchema = z.object({
   enhancements: z.array(layoutPlanEnhancementSchema).default([]),
 });
 
-export const layoutPlanSchema = z.object({
-  version: z.literal(1).default(1),
-  styleMode: z.enum(STYLE_MODES).default("template"),
-  designSystem: designSystemV1Schema,
+export const layoutPlanSchema = confirmedDesignSelectionBaseSchema.extend({
   designNotes: z.string().optional(),
   slides: z.array(layoutPlanSlideSchema).min(1),
+}).strict().superRefine((plan, context) => {
+  validateDesignDirectionSelection(
+    plan,
+    plan.selectedDirectionId,
+    context,
+    "selectedDirectionId",
+  );
 });
 
 export type LayoutPlanEnhancement = z.infer<typeof layoutPlanEnhancementSchema>;
@@ -125,16 +146,35 @@ export function validateLayoutPlan(plan: LayoutPlan): LayoutPlanValidationIssue[
     });
   }
 
+  const rhythms = slides.map((slide) => slide.rhythm);
+  const uniqueRhythms = new Set(rhythms);
+  if (count >= 5 && uniqueRhythms.size < 2) {
+    issues.push({
+      severity: "error",
+      message: "A 5+ slide plan must use at least two page rhythms.",
+      fixHint: "Use anchor for key claims, dense for evidence, and breathing for transitions.",
+    });
+  }
+
   for (let i = 0; i < layouts.length - 2; i += 1) {
-    const a = layouts[i];
-    const b = layouts[i + 1];
-    const c = layouts[i + 2];
-    if (a === b && b === c) {
+    const window = slides.slice(i, i + 3);
+    const signatures = window.map((slide) =>
+      `${slide.layout}/${slide.grammarVariant ?? "default"}/${slide.rhythm}`,
+    );
+    if (new Set(signatures).size === 1) {
       issues.push({
         slideId: slides[i + 2]?.slideId,
         severity: "error",
-        message: `Three consecutive '${a}' layouts in plan (Rubric A3).`,
-        fixHint: "Alternate process, concept, case, or section.",
+        message: `Three consecutive slides repeat '${signatures[0]}' (Rubric A3).`,
+        fixHint: "Change the composition, grammar, or rhythm to create a meaningful beat.",
+      });
+    }
+    if (window.every((slide) => slide.rhythm === "dense")) {
+      issues.push({
+        slideId: slides[i + 2]?.slideId,
+        severity: "warning",
+        message: "Three consecutive dense pages create excessive cognitive load.",
+        fixHint: "Introduce an anchor or breathing page, or document why the evidence sequence cannot break.",
       });
     }
   }
@@ -361,11 +401,12 @@ export function validateLayoutPlanAgainstPresentation(
 
 /** Simulate deck rhythm from a layout plan (pre-execution check). */
 export function validateLayoutPlanRhythm(plan: LayoutPlan): DeckRhythmIssue[] {
+  const selectedDirection = getSelectedDesignDirection(plan);
   const pseudoPresentation = {
     id: "layout-plan-check",
     title: "Layout Plan Check",
     revision: 0,
-    designSystem: plan.designSystem,
+    designSystem: selectedDirection.designSystem,
     slides: plan.slides.map((slide) => ({
       id: slide.slideId,
       title: slide.title,
@@ -378,11 +419,12 @@ export function validateLayoutPlanRhythm(plan: LayoutPlan): DeckRhythmIssue[] {
 
 /** Build core presentation commands from a validated layout plan (Executor step 1). */
 export function buildLayoutPlanCommands(plan: LayoutPlan): PresentationCommand[] {
+  const selectedDirection = getSelectedDesignDirection(plan);
   const commands: PresentationCommand[] = [
     {
       id: "cmd-design-system",
       type: "set-design-system",
-      designSystem: plan.designSystem,
+      designSystem: selectedDirection.designSystem,
     },
   ];
 

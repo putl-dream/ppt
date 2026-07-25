@@ -116,7 +116,7 @@ describe("workspace artifact probing", () => {
     await writeDefaultScaffold(root);
     await writeFile(
       join(root, "slides/layout-plan.json"),
-      JSON.stringify({ version: 1, slides: [] }),
+      JSON.stringify({ version: 2, slides: [] }),
       "utf8",
     );
 
@@ -133,13 +133,31 @@ describe("workspace artifact probing", () => {
     await writeFile(
       join(root, "slides/layout-plan.json"),
       JSON.stringify({
-        version: 1,
-        styleMode: "template",
-        designSystem: TEST_DESIGN_SYSTEM,
+        version: 2,
+        communicationContract: {
+          audience: "产品与研发负责人",
+          objective: "对齐下一阶段的产品演进方案。",
+          desiredOutcome: "批准推荐方向并明确首个里程碑。",
+          coreMessage: "先收敛关键场景，再分阶段扩展能力。",
+          deliveryContext: "15 分钟内部决策会。",
+          afterUse: "听众可以选择方向并指定首个负责人。",
+        },
+        selectionSource: "user-locked",
+        directions: [{
+          id: "locked-direction",
+          tier: "locked",
+          label: "用户指定方向",
+          rationale: "严格采用用户已经确认的设计语言。",
+          designSystem: TEST_DESIGN_SYSTEM,
+        }],
+        selectedDirectionId: "locked-direction",
         slides: [{
           slideId: "slide-cover",
           title: "封面",
           narrativeRole: "cover",
+          audienceMove: "理解本次决策的主题与边界。",
+          rhythm: "anchor",
+          layoutIntent: "用单一主张和克制层级建立开场。",
           layout: "cover",
           rationale: "建立主题。",
         }],

@@ -12,7 +12,7 @@ import type { ToolDefinition } from "../src/main/agent/tools/tool-definition";
 import { createStarterPresentation } from "../src/shared/presentation";
 import { DurableRunStore } from "../src/main/agent/persistence/durable-run-store";
 import { DurableConversationHistoryStore } from "../src/main/agent/persistence/conversation-history-store";
-import { TEST_DESIGN_SYSTEM } from "./design-engine-test-utils";
+import { testLayoutChoice } from "./design-engine-test-utils";
 import { submitCommandsTool } from "../src/main/agent/tools/core/submit-commands";
 
 function textGateway(text: string): AgentModelGateway {
@@ -462,7 +462,7 @@ describe("AgentRuntime terminal boundaries", () => {
       presentationSnapshot: createStarterPresentation(),
       selectedElementIds: [],
       workspaceRoot,
-      layoutChoice: { mode: "creative", designSystem: TEST_DESIGN_SYSTEM },
+      layoutChoice: testLayoutChoice(),
     })).rejects.toThrow("configured workspace task board");
 
     const reopened = await new DurableRunStore(workspaceRoot).openLease({

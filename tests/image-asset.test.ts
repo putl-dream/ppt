@@ -103,6 +103,7 @@ describe("image asset localization", () => {
         id: slideId,
         title: "Evidence",
         layout: "case",
+        grammarVariant: "evidence",
         elements: [{
           id: crypto.randomUUID(),
           type: "text",
@@ -135,12 +136,15 @@ describe("image asset localization", () => {
 
     expect(result.commands).toHaveLength(1);
     const command = result.commands[0];
-    expect(command?.type).toBe("add-element");
-    if (command?.type === "add-element" && command.element.type === "image") {
-      expect(command.element.url).toMatch(/^file:\/\/\//);
-      expect(command.element.provenance).toBe("asset");
-      expect(command.element.asset?.sourcePageUrl).toBe("https://example.com/source");
-      expect(command.element.asset?.localPath).toMatch(/^assets\/images\//);
+    expect(command?.type).toBe("restore-slide");
+    if (command?.type === "restore-slide") {
+      const image = command.slide.elements.find((element) => element.type === "image");
+      expect(image?.type === "image" ? image.url : "").toMatch(/^file:\/\/\//);
+      expect(image?.provenance).toBe("asset");
+      expect(image?.type === "image" ? image.asset?.sourcePageUrl : undefined)
+        .toBe("https://example.com/source");
+      expect(image?.type === "image" ? image.asset?.localPath : undefined)
+        .toMatch(/^assets\/images\//);
     }
   });
 });

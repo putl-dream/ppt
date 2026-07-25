@@ -19,9 +19,9 @@ import { filterTraceForDisplay, markTraceComplete } from "@shared/agent-activity
 import { TaskPlanCard } from "./TaskPlanCard";
 import type { ManagedModel } from "../modelCatalog";
 import type { Presentation } from "@shared/presentation";
-import type { LayoutVisualMode } from "@shared/layout-preference";
+import type { LayoutChoice } from "@shared/layout-preference";
 import type { LeanGenerationMode } from "@shared/lean-mode-contract";
-import type { DesignSystemV1 } from "@design-system";
+import type { DesignSystemV2 } from "@design-system";
 import {
   findActiveToolPermissionCard,
   usePermissionCardManager,
@@ -152,12 +152,12 @@ interface ChatWorkspaceProps {
   onResolveToolApproval?: (approvalId: string, approved: boolean) => void;
   onConfirmBrief: (event: ArtifactEvent) => void;
   onConfirmOutline: (event: ArtifactEvent) => void;
-  onConfirmLayout: (event: LayoutEvent, mode: LayoutVisualMode, designSystem: DesignSystemV1) => void;
+  onConfirmLayout: (event: LayoutEvent, choice: LayoutChoice) => void;
   onReviseOutline: (event: ArtifactEvent) => void;
   onOpenDeckPreview: () => void;
   onExportDeck: () => void;
   isExportingDeck?: boolean;
-  selectedDesignSystem: DesignSystemV1;
+  selectedDesignSystem: DesignSystemV2;
   activeRunId?: string | null;
   onCancelRun?: () => void;
   isCancellingRun?: boolean;

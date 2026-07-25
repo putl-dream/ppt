@@ -57,7 +57,11 @@ export function formatApprovalCommand(command: PresentationCommand): ApprovalCom
     case "set-design-system":
       return {
         label: "应用设计系统",
-        detail: `设计色板: ${command.designSystem.tokens.palette}`,
+        detail: compact([
+          `视觉风格: ${command.designSystem.visualStyle}`,
+          `论证模式: ${command.designSystem.argumentMode}`,
+          `阅读模式: ${command.designSystem.readingMode}`,
+        ]),
       };
     case "set-slide-design":
       return {

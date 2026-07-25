@@ -199,6 +199,7 @@ describe("web search", () => {
       insertArgs: {
         slideId,
         slot: "side",
+        aspectRatio: "auto",
         sourcePageUrl: "https://www.pexels.com/photo/factory-123",
       },
     });

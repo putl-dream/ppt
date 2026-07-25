@@ -1,4 +1,4 @@
-import type { DesignSystemV1 } from "@design-system";
+import type { DesignSystemV2 } from "@design-system";
 import {
   applyCommercialAssetFallbacks,
   compileCommercialDeck,
@@ -56,7 +56,7 @@ export class LeanV2Pipeline {
   async create(input: {
     spec: LeanDeckSpecV2;
     basePresentation: Presentation;
-    designSystem?: DesignSystemV1;
+    designSystem?: DesignSystemV2;
     workspaceRoot?: string;
     signal?: AbortSignal;
   }): Promise<LeanV2PipelineResult> {

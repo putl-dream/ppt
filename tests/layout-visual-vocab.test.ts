@@ -35,10 +35,14 @@ const LAYOUTS = [
 
 describe("layout visual vocabulary", () => {
   it.each(LAYOUTS.filter((l) => l !== "image-grid"))(
-    "applies roundedRect cards with shadow on %s layout",
+    "applies soft-rounded cards with shadow on %s layout",
     (layout) => {
       const slide = makeSlide("Test", "Body content");
-      const laidOut = applyLayout(slide, layout, testSlideStyle(slide));
+      const laidOut = applyLayout(
+        slide,
+        layout,
+        testSlideStyle(slide, { visualStyle: "soft-rounded" }),
+      );
       const cards = laidOut.elements.filter(isLayoutCard) as ShapeElement[];
 
       expect(cards.length).toBeGreaterThan(0);
@@ -65,7 +69,11 @@ describe("layout visual vocabulary", () => {
         },
       ],
     };
-    const laidOut = applyLayout(slide, "image-grid", testSlideStyle(slide));
+    const laidOut = applyLayout(
+      slide,
+      "image-grid",
+      testSlideStyle(slide, { visualStyle: "soft-rounded" }),
+    );
     const cards = laidOut.elements.filter(isLayoutCard) as ShapeElement[];
     expect(cards.length).toBeGreaterThan(0);
     expect(cards[0]?.shapeType).toBe("roundedRect");
@@ -99,7 +107,11 @@ describe("layout visual vocabulary", () => {
       ],
     };
 
-    const laidOut = applyLayout(slide, "process", testSlideStyle(slide));
+    const laidOut = applyLayout(
+      slide,
+      "process",
+      testSlideStyle(slide, { visualStyle: "soft-rounded" }),
+    );
     const badges = laidOut.elements.filter(
       (el) => el.type === "shape" && el.id.startsWith("badge-"),
     );
@@ -124,5 +136,88 @@ describe("layout visual vocabulary", () => {
     const second = applyLayout(first, "concept", testSlideStyle(first));
     const cards = second.elements.filter(isLayoutCard);
     expect(cards.length).toBe(1);
+  });
+
+  it("projects sharp-flat and soft-elevated style geometry into cards", () => {
+    const slide = makeSlide("Style execution", "One decisive point");
+    const swiss = applyLayout(
+      slide,
+      "concept",
+      testSlideStyle(slide, { visualStyle: "swiss-minimal" }),
+      { grammarVariant: "cards" },
+    );
+    const soft = applyLayout(
+      slide,
+      "concept",
+      testSlideStyle(slide, { visualStyle: "soft-rounded" }),
+      { grammarVariant: "cards" },
+    );
+    const swissCard = swiss.elements.find(isLayoutCard) as ShapeElement;
+    const softCard = soft.elements.find(isLayoutCard) as ShapeElement;
+
+    expect(swissCard.shapeType).toBe("rectangle");
+    expect(swissCard.cornerRadius).toBe(0);
+    expect(swissCard.shadow).toBeUndefined();
+    expect(softCard.shapeType).toBe("roundedRect");
+    expect(softCard.cornerRadius).toBeGreaterThan(0);
+    expect(softCard.shadow).toBeDefined();
+  });
+
+  it("uses reading mode to expand card gutters and text scale", () => {
+    const slide: Slide = {
+      id: crypto.randomUUID(),
+      title: "Reading rhythm",
+      elements: [
+        {
+          id: crypto.randomUUID(),
+          type: "text",
+          x: 0,
+          y: 0,
+          width: 400,
+          height: 80,
+          text: "First idea",
+          fontSize: 20,
+        },
+        {
+          id: crypto.randomUUID(),
+          type: "text",
+          x: 0,
+          y: 0,
+          width: 400,
+          height: 80,
+          text: "Second idea",
+          fontSize: 20,
+        },
+      ],
+    };
+    const textMode = applyLayout(
+      slide,
+      "concept",
+      testSlideStyle(slide, {
+        visualStyle: "soft-rounded",
+        readingMode: "text",
+      }),
+      { grammarVariant: "cards" },
+    );
+    const presentationMode = applyLayout(
+      slide,
+      "concept",
+      testSlideStyle(slide, {
+        visualStyle: "soft-rounded",
+        readingMode: "presentation",
+      }),
+      { grammarVariant: "cards" },
+    );
+    const textCards = textMode.elements.filter(isLayoutCard) as ShapeElement[];
+    const presentationCards = presentationMode.elements.filter(isLayoutCard) as ShapeElement[];
+    const textGap = textCards[1].x - (textCards[0].x + textCards[0].width);
+    const presentationGap = presentationCards[1].x
+      - (presentationCards[0].x + presentationCards[0].width);
+    const textBody = textMode.elements.find((element) => element.type === "text");
+    const presentationBody = presentationMode.elements.find((element) => element.type === "text");
+
+    expect(presentationGap).toBeGreaterThan(textGap);
+    expect(presentationBody?.type === "text" ? presentationBody.fontSize : 0)
+      .toBeGreaterThan(textBody?.type === "text" ? textBody.fontSize : 0);
   });
 });

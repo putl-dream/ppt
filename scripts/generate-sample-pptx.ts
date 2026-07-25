@@ -22,7 +22,7 @@ function buildSamplePresentation() {
     {
       id: crypto.randomUUID(),
       type: "set-design-system",
-      designSystem: DESIGN_PRESETS.find((preset) => preset.id === "business")!.system,
+      designSystem: DESIGN_PRESETS.find((preset) => preset.id === "swiss-minimal")!.system,
     },
     {
       id: crypto.randomUUID(),
@@ -203,7 +203,9 @@ async function main(): Promise<void> {
   console.log(`已生成示例 PPT：${outputPath}`);
   console.log(`标题：${presentation.title}`);
   console.log(`页数：${presentation.slides.length}`);
-  console.log(`设计系统：${presentation.designSystem.tokens.palette}`);
+  console.log(
+    `设计系统：${presentation.designSystem.visualStyle} · ${presentation.designSystem.colorScheme}`,
+  );
 }
 
 main().catch((error) => {

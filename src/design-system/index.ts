@@ -1,4 +1,5 @@
 export * from "./schema";
+export * from "./catalog";
 export * from "./colors";
 export * from "./backgrounds";
 export * from "./resolver";

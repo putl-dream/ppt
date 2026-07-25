@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { designSystemV1Schema } from "@design-system";
+import { designSystemV2Schema } from "@design-system";
 
 export const projectArtifactFilePaths = {
   brandProfile: "design/brand-profile.json",
@@ -57,7 +57,7 @@ export const deckExportRecordSchema = z.object({
   revision: z.number().int().nonnegative(),
   filePath: z.string(),
   exportedAt: z.string(),
-  designSystem: designSystemV1Schema,
+  designSystem: designSystemV2Schema,
 });
 
 export const deckExportHistoryFileSchema = z.object({

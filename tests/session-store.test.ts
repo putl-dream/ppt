@@ -503,7 +503,9 @@ describe("SQLite session store", () => {
     expect(store.getSession(sessionId).messages.at(-1)?.content)
       .toBe(formatTerminalAgentRunContent(terminalResult));
     expect(store.getSession(sessionId).messages.at(-1)?.content)
-      .toContain("1 页待排版");
+      .toContain("1 页待设计");
+    expect(store.getSession(sessionId).messages.at(-1)?.content)
+      .toContain("请选择设计方向");
   });
 
   it("persists teammate reasoning and tools under the linked task activity", async () => {

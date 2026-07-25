@@ -57,7 +57,7 @@ export async function exportToPptx(
     const slide = pptx.addSlide();
     const style = resolveSlideStyle(presentation.designSystem, slideData);
     const { colors } = style;
-    const fontFace = style.typography.pptxFace;
+    const fontFace = style.typography.heading.pptxFace;
     const cleanTitleColor = cleanColor(colors.title);
     const cleanBodyColor = cleanColor(colors.body);
     const cleanAccentColor = cleanColor(colors.accent);
@@ -157,10 +157,15 @@ export async function exportToPptx(
       const h = px(element.height);
 
       if (element.type === "text") {
+        const roleFamily = element.textRole === "metric"
+          ? style.typography.data.family
+          : element.textRole === "kicker"
+            ? style.typography.heading.family
+            : style.typography.body.family;
         const elementFont = element.fontFamily ?? (
           element.textRole
-            ? resolveElementFontFamily(element, style.typography.family)
-            : style.typography.family
+            ? resolveElementFontFamily(element, roleFamily)
+            : style.typography.body.family
         );
         slide.addText(element.text, {
           x,

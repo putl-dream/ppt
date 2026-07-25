@@ -16,7 +16,7 @@ import type { AgentStepLimits } from "@shared/agent-step-limits";
 import type { AgentGatewayPreferences } from "@shared/agent-gateway-config";
 import { TokenUsageOverview } from "./TokenUsageOverview";
 import { LogManagementPanel } from "./LogManagementPanel";
-import { DESIGN_PRESETS, type DesignSystemV1 } from "@design-system";
+import { DESIGN_PRESETS, type DesignSystemV2 } from "@design-system";
 import {
   MAX_OUTPUT_TOKENS,
   MIN_OUTPUT_TOKENS,
@@ -36,8 +36,8 @@ interface SettingsConsoleProps {
   onSaveModel: (model: ManagedModel) => void;
   onDeleteModel: (id: string) => void;
 
-  selectedDesignSystem: DesignSystemV1;
-  setSelectedDesignSystem: (val: DesignSystemV1) => void;
+  selectedDesignSystem: DesignSystemV2;
+  setSelectedDesignSystem: (val: DesignSystemV2) => void;
   logoUrl: string | null;
   onLogoUpload: (url: string) => void;
   onRemoveLogo: () => void;
@@ -206,6 +206,9 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
   const selectedAccentLabel = accentOptions.find((option) => option.value === uiAccentColor)?.label ?? "湖蓝";
   const selectedShapeLabel = controlShapeOptions.find((option) => option.value === uiControlShape)?.label ?? "柔和";
   const selectedThemeModeLabel = themeModeOptions.find((option) => option.value === themeMode)?.label ?? "浅色主题";
+  const selectedColorSchemeName = typeof selectedDesignSystem.colorScheme === "string"
+    ? selectedDesignSystem.colorScheme
+    : selectedDesignSystem.colorScheme.name ?? "custom";
   const logoFileInputRef = React.useRef<HTMLInputElement>(null);
   const [maxOutputTokensDraft, setMaxOutputTokensDraft] = React.useState(
     () => String(agentGatewayPreferences.maxOutputTokens),
@@ -552,7 +555,7 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
                 <label className="config-group">
                   <span className="config-label">默认设计系统</span>
                   <select
-                    value={DESIGN_PRESETS.find((preset) => preset.system.tokens.palette === selectedDesignSystem.tokens.palette)?.id ?? DESIGN_PRESETS[0].id}
+                    value={selectedDesignSystem.visualStyle}
                     onChange={(event) => {
                       const preset = DESIGN_PRESETS.find((item) => item.id === event.target.value);
                       if (preset) setSelectedDesignSystem(preset.system);
@@ -566,7 +569,10 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
                 </label>
                 <div className="config-group">
                   <span className="config-label">当前设计语言</span>
-                  <span>{selectedDesignSystem.tokens.palette} · {selectedDesignSystem.tokens.fontMood} · {selectedDesignSystem.tokens.backgroundStyle}</span>
+                  <span>
+                    {selectedDesignSystem.argumentMode} · {selectedDesignSystem.visualStyle} ·{" "}
+                    {selectedDesignSystem.readingMode} · {selectedColorSchemeName}
+                  </span>
                 </div>
               </div>
 

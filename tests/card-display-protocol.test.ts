@@ -17,6 +17,7 @@ import {
   useProgressCardManager,
 } from "../src/renderer/src/cards/display-card-managers";
 import { getCardPresentationPolicy } from "../src/renderer/src/cards/card-presentation-policy";
+import { testLayoutChoice } from "./design-engine-test-utils";
 
 const permissionEvent = {
   protocolVersion: 1 as const,
@@ -159,7 +160,7 @@ describe("card display protocol", () => {
     recordDisplayCardAction(
       event.eventId,
       "confirm-layout",
-      { mode: "template" },
+      testLayoutChoice(),
       "resolved",
     );
     ingestDisplayEvent({
@@ -206,7 +207,7 @@ describe("card display protocol", () => {
     recordDisplayCardAction(
       event.eventId,
       "confirm-layout",
-      { mode: "template" },
+      testLayoutChoice(),
       "resolved",
     );
 

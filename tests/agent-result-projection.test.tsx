@@ -180,6 +180,7 @@ describe("agent result projection", () => {
       content: formatTerminalAgentRunContent(result),
       runStatus: "completed",
     });
-    expect(messages.at(-1)?.content).toContain("1 页待排版");
+    expect(messages.at(-1)?.content).toContain("1 页待设计");
+    expect(messages.at(-1)?.content).toContain("请选择设计方向");
   });
 });

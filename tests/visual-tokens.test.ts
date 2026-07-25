@@ -17,12 +17,13 @@ describe("visual tokens", () => {
   });
 
   it("design presets resolve complete renderer-ready styles", () => {
-    const preset = DESIGN_PRESETS.find((item) => item.id === "technical");
+    const preset = DESIGN_PRESETS.find((item) => item.id === "dark-tech");
     expect(preset).toBeDefined();
     const style = resolveSlideStyle(preset!.system, {});
     expect(style.mode).toBe("dark");
     expect(style.background.fill).toBe(style.colors.bg);
-    expect(style.typography.family).toBe("mono");
+    expect(style.typography.data.family).toBe("mono");
+    expect(style.layoutTokens.chartStyle).toBe("dashboard");
   });
 
   it("creates schema-valid motif line elements", () => {

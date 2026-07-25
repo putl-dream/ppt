@@ -271,13 +271,13 @@ export function useAgentResultHandler({
     }
     notify(
       result.status === "rejected"
-        ? "变更已取消"
+          ? "变更已取消"
         : result.presentation
             && presentationNeedsLayoutChoice(result.presentation)
             && !isSidechainRun
-          ? "内容草稿已就绪，请选择排版方式"
+          ? "内容草稿已就绪，请确认设计方向"
           : result.presentation && presentationNeedsLayoutChoice(result.presentation)
-            ? "排版尚未完整应用，请检查任务计划"
+            ? "设计尚未完整应用，请检查任务计划"
             : "演示文稿已成功更新",
     );
   }, [

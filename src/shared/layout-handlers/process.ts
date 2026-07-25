@@ -1,7 +1,13 @@
 import type { LayoutGrammarContext, LayoutGrammarHandler } from "../layout-grammar";
 import { layoutGrammarRegistry } from "../layout-grammar";
 import { LAYOUT_GRAMMAR_VARIANTS } from "../layout-grammar-variants";
-import { CONTENT, layoutText, lineShape, styleText } from "./utils";
+import {
+  CONTENT,
+  layoutSpacing,
+  layoutText,
+  lineShape,
+  styleText,
+} from "./utils";
 
 type ProcessVariant = "cards" | "timeline" | "path" | "steps";
 
@@ -9,10 +15,13 @@ function resolveVariant(ctx: LayoutGrammarContext): ProcessVariant {
   if (["cards", "timeline", "path", "steps"].includes(ctx.grammarVariant ?? "")) {
     return ctx.grammarVariant as ProcessVariant;
   }
-  if (ctx.style.tokens.shapeLanguage === "path" || ctx.style.tokens.motif === "path-line") {
+  if (
+    ctx.style.layoutTokens.shapeLanguage === "path"
+    || ctx.style.layoutTokens.motif === "path-line"
+  ) {
     return "path";
   }
-  if (ctx.style.tokens.shapeLanguage === "geometric") return "steps";
+  if (ctx.style.layoutTokens.shapeLanguage === "geometric") return "steps";
   if (ctx.style.chart.style === "report" || ctx.style.chart.style === "editorial") {
     return "timeline";
   }
@@ -22,10 +31,11 @@ function resolveVariant(ctx: LayoutGrammarContext): ProcessVariant {
 function applyCards(ctx: LayoutGrammarContext): void {
   const steps = ctx.bodyTexts;
   const count = Math.max(steps.length, 1);
-  const gap = 32;
+  const spacing = layoutSpacing(ctx);
+  const gap = spacing.gutter;
   const colW = (CONTENT.width - (count - 1) * gap) / count;
-  const cardTop = CONTENT.y + 24;
-  const cardH = CONTENT.height - 48;
+  const cardTop = CONTENT.y + spacing.compactPadding;
+  const cardH = CONTENT.height - spacing.compactPadding * 2;
   const badgeSize = 32;
 
   // Connectors must be behind node cards.
@@ -42,9 +52,13 @@ function applyCards(ctx: LayoutGrammarContext): void {
   steps.forEach((element, index) => {
     const colX = CONTENT.x + index * (colW + gap);
     ctx.elements.unshift(ctx.helpers.createCard(colX, cardTop, colW, cardH));
-    ctx.elements.push(ctx.helpers.createAccentBar(colX + 24, cardTop + 24, colW - 48));
+    ctx.elements.push(ctx.helpers.createAccentBar(
+      colX + spacing.padding,
+      cardTop + spacing.compactPadding,
+      colW - spacing.padding * 2,
+    ));
     const badgeX = colX + colW / 2 - badgeSize / 2;
-    const badgeY = cardTop + 40;
+    const badgeY = cardTop + spacing.padding + 12;
     ctx.elements.push(ctx.helpers.createStepBadge(badgeX, badgeY, badgeSize));
     ctx.elements.push(layoutText(ctx, {
       text: String(index + 1),
@@ -61,10 +75,10 @@ function applyCards(ctx: LayoutGrammarContext): void {
       idPrefix: "num",
     }));
     ctx.elements.push(styleText(ctx, element, {
-      x: colX + 24,
-      y: cardTop + 82,
-      width: colW - 48,
-      height: cardH - 108,
+      x: colX + spacing.padding,
+      y: badgeY + badgeSize + 10,
+      width: colW - spacing.padding * 2,
+      height: cardH - (badgeY - cardTop) - badgeSize - spacing.compactPadding - 10,
       role: "body",
       baseSize: 20,
       minSize: 14,
@@ -121,6 +135,7 @@ function applyTimeline(ctx: LayoutGrammarContext): void {
 function applyPath(ctx: LayoutGrammarContext): void {
   const steps = ctx.bodyTexts;
   const count = Math.max(steps.length, 1);
+  const spacing = layoutSpacing(ctx);
   const nodeW = Math.min(230, (CONTENT.width - 60) / Math.min(count, 4));
   const nodeH = 124;
   const available = CONTENT.width - nodeW;
@@ -142,11 +157,12 @@ function applyPath(ctx: LayoutGrammarContext): void {
     const x = CONTENT.x + index * (available / Math.max(count - 1, 1));
     const y = index % 2 === 0 ? 220 : 372;
     ctx.elements.unshift(ctx.helpers.createCard(x, y, nodeW, nodeH));
-    ctx.elements.push(ctx.helpers.createStepBadge(x + 16, y + 16, 30));
+    const inset = spacing.compactPadding;
+    ctx.elements.push(ctx.helpers.createStepBadge(x + inset, y + inset, 30));
     ctx.elements.push(layoutText(ctx, {
       text: String(index + 1),
-      x: x + 16,
-      y: y + 16,
+      x: x + inset,
+      y: y + inset,
       width: 30,
       height: 30,
       role: "caption",
@@ -157,10 +173,10 @@ function applyPath(ctx: LayoutGrammarContext): void {
       idPrefix: "num",
     }));
     ctx.elements.push(styleText(ctx, element, {
-      x: x + 54,
-      y: y + 16,
-      width: nodeW - 70,
-      height: nodeH - 32,
+      x: x + inset + 38,
+      y: y + inset,
+      width: nodeW - inset * 2 - 38,
+      height: nodeH - inset * 2,
       role: index === 0 ? "kicker" : "body",
       baseSize: 18,
       minSize: 13,
@@ -174,11 +190,13 @@ function applyPath(ctx: LayoutGrammarContext): void {
 function applySteps(ctx: LayoutGrammarContext): void {
   const steps = ctx.bodyTexts;
   const count = Math.max(steps.length, 1);
-  const rowH = Math.min(82, (CONTENT.height - 18 * (count - 1)) / count);
+  const spacing = layoutSpacing(ctx);
+  const rowGap = Math.max(10, Math.round(spacing.gutter * 0.55));
+  const rowH = Math.min(82, (CONTENT.height - rowGap * (count - 1)) / count);
   steps.forEach((element, index) => {
-    const inset = index * 70;
+    const inset = index * Math.round(70 * spacing.scale);
     const x = CONTENT.x + inset;
-    const y = CONTENT.y + index * (rowH + 18);
+    const y = CONTENT.y + index * (rowH + rowGap);
     const width = CONTENT.width - inset * 1.35;
     ctx.elements.unshift(ctx.helpers.createCard(x, y, width, rowH));
     ctx.elements.push(ctx.helpers.createAccentBlock(x, y, 54, rowH, { opacity: 0.9 }));

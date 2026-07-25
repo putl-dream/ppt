@@ -65,7 +65,7 @@ allowed-tools:
 ```
 
 - 一次 SubmitCommands 提交全部 add-slide。
-- message 告知「内容草稿已就绪，请选择排版方式」。
+- message 告知「内容草稿已就绪，请确认设计方向」。
 
 ## 禁止
 
@@ -75,4 +75,4 @@ allowed-tools:
 
 ## 衔接
 
-用户选择排版方式后进入 design / style；届时再精简文案与定主题版式。
+用户确认设计方向后进入 design / style；届时再精简文案并落实版式。

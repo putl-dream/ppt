@@ -119,14 +119,27 @@ describe("project artifact canonical formats", () => {
     expect(legacyNotes.some((note) => note.quote.includes("需求强劲"))).toBe(true);
   });
 
-  it("round-trips strict DesignSystemV1 JSON", () => {
+  it("round-trips strict DesignSystemV2 JSON", () => {
     const system = createDefaultProjectDesignSystem();
     const serialized = parseProjectDesignSystem(serializeProjectDesignSystem(system));
     expect(serialized).toEqual(system);
   });
 
-  it("rejects old theme/palette project design files", () => {
+  it("rejects pre-v2 project design files", () => {
     expect(() => parseProjectDesignSystem(JSON.stringify({ theme: "nordic", palette: "cyan" }))).toThrow();
+    expect(() => parseProjectDesignSystem(JSON.stringify({
+      version: 1,
+      tokens: {
+        palette: "business-blue",
+        fontMood: "formal",
+        shapeLanguage: "cards",
+        backgroundStyle: "clean",
+        motif: "none",
+        density: "standard",
+        imageTreatment: "plain",
+        chartStyle: "minimal",
+      },
+    }))).toThrow();
   });
 
   it("round-trips a strict brand profile file", () => {
@@ -134,6 +147,7 @@ describe("project artifact canonical formats", () => {
     const parsed = parseBrandProfileFile(serializeBrandProfile(profile));
 
     expect(parsed.brandName).toBe("Agent PPT");
+    expect(parsed.version).toBe(2);
     expect(parsed.persona).toBe("consulting");
     expect(parsed.attributes.length).toBeGreaterThanOrEqual(2);
   });

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   DEFAULT_DESIGN_SYSTEM,
-  designSystemV1Schema,
+  designSystemV2Schema,
   evaluateDeckVisualQuality,
   resolveImageTreatment,
   resolveSlideStyle,
@@ -36,7 +36,7 @@ describe("design engine", () => {
         persona,
       });
       expect(first).toEqual(second);
-      return JSON.stringify(first.tokens);
+      return JSON.stringify(resolveSlideStyle(first, {}).layoutTokens);
     });
 
     expect(new Set(signatures).size).toBe(BRAND_PERSONAS.length);
@@ -57,20 +57,20 @@ describe("design engine", () => {
         fontSize: 20,
       })),
     };
-    const consulting = resolveBrandProfileDesignSystem({
+    const editorial = resolveBrandProfileDesignSystem({
       ...DEFAULT_BRAND_PROFILE,
-      brandName: "Consulting",
-      persona: "consulting",
+      brandName: "Editorial",
+      persona: "financial-editorial",
     });
     const launch = resolveBrandProfileDesignSystem({
       ...DEFAULT_BRAND_PROFILE,
       brandName: "Launch",
       persona: "brand-launch",
     });
-    const consultingSlide = applyLayout(
+    const editorialSlide = applyLayout(
       contentSlide,
       "concept",
-      resolveSlideStyle(consulting, contentSlide),
+      resolveSlideStyle(editorial, contentSlide),
     );
     const launchSlide = applyLayout(
       contentSlide,
@@ -78,40 +78,43 @@ describe("design engine", () => {
       resolveSlideStyle(launch, contentSlide),
     );
 
-    expect(consultingSlide.grammarVariant).toBe("editorial-columns");
+    expect(editorialSlide.grammarVariant).toBe("editorial-columns");
     expect(launchSlide.grammarVariant).toBe("statement-stack");
-    expect(consultingSlide.elements.map(({ x, y, width, height }) => [x, y, width, height]))
+    expect(editorialSlide.elements.map(({ x, y, width, height }) => [x, y, width, height]))
       .not.toEqual(launchSlide.elements.map(({ x, y, width, height }) => [x, y, width, height]));
   });
 
-  it("requires a complete DesignSystemV1 contract", () => {
-    expect(designSystemV1Schema.parse(DEFAULT_DESIGN_SYSTEM)).toEqual(DEFAULT_DESIGN_SYSTEM);
-    expect(() => designSystemV1Schema.parse({ version: 1 })).toThrow();
+  it("requires a complete DesignSystemV2 contract", () => {
+    expect(designSystemV2Schema.parse(DEFAULT_DESIGN_SYSTEM)).toEqual(DEFAULT_DESIGN_SYSTEM);
+    expect(() => designSystemV2Schema.parse({ version: 1 })).toThrow();
   });
 
   it("merges slide override and resolves renderer-ready style", () => {
-    const style = resolveSlideStyle(testDesignSystem({ palette: "warm-paper" }), {
+    const style = resolveSlideStyle(testDesignSystem({ colorScheme: "warm-paper" }), {
       ...slide,
-      designOverride: { backgroundStyle: "grid", chartStyle: "report", imageTreatment: "framed" },
+      designOverride: { visualStyle: "data-journalism" },
     });
     expect(style.colors.accent).toBe("#b45309");
-    expect(style.background.pattern).toEqual({ type: "grid", color: style.colors.cardStroke, size: 32 });
     expect(style.chart.style).toBe("report");
-    expect(style.image.treatment).toBe("framed");
-    expect(style.typography.family).toBe("serif");
+    expect(style.image.treatment).toBe("captioned");
+    expect(style.typography.heading.family).toBe("serif");
+    expect(style.typography.body.family).toBe("sans");
   });
 
   it("adapts light/dark surfaces without changing palette identity", () => {
-    const system = testDesignSystem({ palette: "warm-paper" });
+    const system = testDesignSystem({ colorScheme: "warm-paper" });
     const dark = resolveSlideStyle(system, { ...slide, slideVariant: "dark" });
     const light = resolveSlideStyle(system, { ...slide, slideVariant: "light" });
     expect(dark.colors.title).toBe("#eff6ff");
     expect(dark.colors.accent).toBe("#b45309");
-    expect(light.colors.title).toBe("#0f172a");
+    expect(light.colors.title).toBe("#31251b");
   });
 
   it("uses the same style contract in thumbnail HTML", () => {
-    const system = testDesignSystem({ backgroundStyle: "grid", imageTreatment: "masked" });
+    const system = testDesignSystem({
+      visualStyle: "dark-tech",
+      colorScheme: "tech-dark",
+    });
     const html = exportSlideThumbnailHtml({
       ...slide,
       elements: [{
@@ -134,7 +137,10 @@ describe("design engine", () => {
         ],
       }],
     };
-    const system = testDesignSystem({ palette: "tech-dark", backgroundStyle: "dark" });
+    const system = testDesignSystem({
+      visualStyle: "dark-tech",
+      colorScheme: "tech-dark",
+    });
     const result = executeCommand(presentation, {
       id: "set-design", type: "set-design-system", designSystem: system,
     }).presentation;

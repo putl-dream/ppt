@@ -3,10 +3,9 @@ import type { DisplayEvent } from "@shared/card-display-protocol";
 import type { AgentQuestionResolved } from "@shared/agent-question";
 import {
   buildLayoutPhasePrompt,
-  saveLayoutVisualMode,
-  type LayoutVisualMode,
+  type LayoutChoice,
 } from "@shared/layout-preference";
-import type { DesignSystemV1 } from "@design-system";
+import { getSelectedDesignDirection } from "@shared/design-plan";
 import { formatTerminalAgentRunContent } from "@shared/agent-result-copy";
 import { mergeResponseText } from "@shared/agent-activity";
 import { formatPublicErrorMessage } from "@shared/agent-activity-display";
@@ -52,8 +51,7 @@ export interface DisplayEventActions {
   reviseOutline: (event: ArtifactEvent) => void;
   confirmLayout: (
     event: LayoutEvent,
-    mode: LayoutVisualMode,
-    designSystem: DesignSystemV1,
+    choice: LayoutChoice,
   ) => void;
   resolvePatch: (event: PatchEvent, accepted: boolean) => Promise<void>;
 }
@@ -229,15 +227,14 @@ export function useDisplayEventActions({
 
   const confirmLayout = useCallback((
     _event: LayoutEvent,
-    mode: LayoutVisualMode,
-    designSystem: DesignSystemV1,
+    choice: LayoutChoice,
   ) => {
-    saveLayoutVisualMode(mode);
-    setSelectedDesignSystem(designSystem);
-    notify(mode === "creative" ? "🎨 开始创意装饰排版" : "📐 开始标准排版");
-    void startAgent(buildLayoutPhasePrompt(mode, designSystem), undefined, {
+    const selected = getSelectedDesignDirection(choice);
+    setSelectedDesignSystem(selected.designSystem);
+    notify(`🎨 已确认设计方向：${selected.label}`);
+    void startAgent(buildLayoutPhasePrompt(choice), undefined, {
       userDisplayContent: false,
-      layoutChoice: { mode, designSystem },
+      layoutChoice: choice,
       sidechain: true,
       generationMode: "agent",
     });

@@ -1,31 +1,42 @@
 import { describe, expect, it } from "vitest";
-import { buildLayoutPhasePrompt } from "../src/shared/layout-preference";
+import { resolveDesignPlan } from "../src/shared/design-recommendation";
+import {
+  buildLayoutPhasePrompt,
+  confirmDesignPlan,
+} from "../src/shared/layout-preference";
 import { agentRunRequestSchema } from "../src/shared/ipc";
-import { TEST_DESIGN_SYSTEM } from "./design-engine-test-utils";
+
+const candidate = resolveDesignPlan({
+  communicationContract: {
+    audience: "CTO",
+    objective: "申请批准 AI 开发工具试点",
+    desiredOutcome: "批准 90 天试点",
+    coreMessage: "治理边界内的 AI 工具能提升交付速度",
+    deliveryContext: "20 分钟现场汇报",
+    afterUse: "作为试点决策记录",
+  },
+  sourceText: "AI developer architecture",
+});
 
 describe("layout phase prompt", () => {
-  it.each(["template", "creative"] as const)(
-    "keeps %s layout prompt free of orchestration instructions",
-    (mode) => {
-      const prompt = buildLayoutPhasePrompt(mode, TEST_DESIGN_SYSTEM);
+  it("keeps the confirmed direction prompt free of orchestration instructions", () => {
+    const choice = confirmDesignPlan(candidate, "direction-shifted");
+    const prompt = buildLayoutPhasePrompt(choice);
 
-      expect(prompt).toContain("排版方式已确认");
-      expect(prompt).toContain("设计系统");
-      expect(prompt).toContain("business-blue");
-      expect(prompt).not.toMatch(/Task|TaskList|Claim|LoadSkill|ExecuteLayoutPlan/);
-    },
-  );
+    expect(prompt).toContain("设计方向已确认");
+    expect(prompt).toContain("visualStyle=blueprint");
+    expect(prompt).not.toMatch(/Task|TaskList|Claim|LoadSkill|ExecuteLayoutPlan/);
+  });
 
-  it("validates layout choice as structured run metadata", () => {
+  it("validates confirmed design selection as structured run metadata", () => {
+    const choice = confirmDesignPlan(candidate, "direction-bold");
     const request = agentRunRequestSchema.parse({
-      prompt: "排版方式已确认：标准模式。",
+      prompt: "设计方向已确认。",
       sessionId: "session-1",
-      layoutChoice: { mode: "template", designSystem: TEST_DESIGN_SYSTEM },
+      layoutChoice: choice,
     });
 
-    expect(request.layoutChoice).toEqual({
-      mode: "template",
-      designSystem: TEST_DESIGN_SYSTEM,
-    });
+    expect(request.layoutChoice?.selectedDirectionId).toBe("direction-bold");
+    expect(request.layoutChoice?.directions).toHaveLength(3);
   });
 });

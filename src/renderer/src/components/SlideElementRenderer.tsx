@@ -24,7 +24,14 @@ export function SlideElementRenderer({
           color: element.color || style.colors.body,
           fontWeight: element.bold ? "bold" : "normal",
           textAlign: element.align || "left",
-          fontFamily: fontFamilyToCss(resolveElementFontFamily(element, style.typography.family)),
+          fontFamily: fontFamilyToCss(resolveElementFontFamily(
+            element,
+            element.textRole === "metric"
+              ? style.typography.data.family
+              : element.textRole === "kicker"
+                ? style.typography.heading.family
+                : style.typography.body.family,
+          )),
           margin: 0,
           lineHeight: 1.4,
           whiteSpace: "pre-wrap",

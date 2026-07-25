@@ -1,7 +1,6 @@
 import type { ImageElement, ShapeElement, TextElement } from "../presentation";
 import type { LayoutGrammarContext } from "../layout-grammar";
 import { fitFontSize } from "../layout-text-fit";
-import { VISUAL_TOKENS } from "../visual-tokens";
 
 export const CONTENT = { x: 120, y: 188, width: 1040, height: 448 } as const;
 
@@ -13,6 +12,42 @@ export function densityScale(ctx: LayoutGrammarContext): number {
   if (ctx.style.density === "calm") return 1.12;
   if (ctx.style.density === "dense") return 0.88;
   return 1;
+}
+
+export function typographyScale(
+  ctx: LayoutGrammarContext,
+  role: "kicker" | "body" | "metric" | "caption",
+): number {
+  const roleScale = role === "kicker"
+    ? ctx.style.typography.heading.scale
+    : role === "metric"
+      ? ctx.style.typography.data.scale
+      : ctx.style.typography.body.scale;
+  return densityScale(ctx) * roleScale;
+}
+
+/**
+ * Convert the v2 whitespace model into executable layout measurements.
+ *
+ * Resolver spacing values already include reading-mode adaptation. Applying
+ * `scale` here gives the composition itself (rather than only its metadata) a
+ * visibly tighter or more expansive reading rhythm.
+ */
+export function layoutSpacing(ctx: LayoutGrammarContext): {
+  gutter: number;
+  padding: number;
+  compactPadding: number;
+  scale: number;
+} {
+  const scale = ctx.style.spacing.scale;
+  const gutter = Math.max(12, Math.round(ctx.style.spacing.gutter * scale));
+  const padding = Math.max(12, Math.round(ctx.style.spacing.cardPadding * scale));
+  return {
+    gutter,
+    padding,
+    compactPadding: Math.max(10, Math.round(padding * 0.72)),
+    scale,
+  };
 }
 
 export function layoutText(
@@ -32,6 +67,7 @@ export function layoutText(
     idPrefix?: string;
   },
 ): TextElement {
+  const role = input.role ?? "body";
   return ctx.helpers.assignTextRole({
     id: grammarId(input.idPrefix ?? "grammar-text"),
     type: "text",
@@ -44,14 +80,14 @@ export function layoutText(
       input.text,
       input.width,
       input.height,
-      Math.round(input.baseSize * densityScale(ctx)),
+      Math.round(input.baseSize * typographyScale(ctx, role)),
       input.minSize ?? 14,
     ),
     bold: input.bold,
     color: input.color ?? ctx.colors.body,
     align: input.align ?? "left",
     provenance: "layout",
-  }, input.role ?? "body");
+  }, role);
 }
 
 export function styleText(
@@ -70,7 +106,8 @@ export function styleText(
     align?: "left" | "center" | "right";
   },
 ): TextElement {
-  const styled = ctx.helpers.assignTextRole(element, input.role ?? "body");
+  const role = input.role ?? "body";
+  const styled = ctx.helpers.assignTextRole(element, role);
   styled.x = input.x;
   styled.y = input.y;
   styled.width = input.width;
@@ -79,7 +116,7 @@ export function styleText(
     styled.text,
     input.width,
     input.height,
-    Math.round(input.baseSize * densityScale(ctx)),
+    Math.round(input.baseSize * typographyScale(ctx, role)),
     input.minSize ?? 14,
   );
   styled.bold = input.bold ?? false;
@@ -105,9 +142,9 @@ export function applyImageTreatment(
     ...image,
     imageTreatment: treatment,
     borderRadius: treatment === "masked"
-      ? VISUAL_TOKENS.radii.pill
+      ? Math.max(0, ctx.style.shape.radius * 2)
       : treatment === "framed" || treatment === "captioned"
-        ? VISUAL_TOKENS.radii.md
+        ? Math.max(0, ctx.style.shape.radius)
         : image.borderRadius,
   };
 }

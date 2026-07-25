@@ -181,7 +181,7 @@ describe("system prompt assembly", () => {
 
   it("honors an explicit stage hint without hiding other capabilities", () => {
     const stage = resolvePromptStage({
-      request: "执行标准排版",
+      request: "执行已确认的设计方向",
       presentation: createStarterPresentation(),
       artifacts: emptyArtifacts(),
       stageHint: "layout-design",

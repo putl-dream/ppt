@@ -76,7 +76,7 @@ export const DeckPreviewModal: React.FC<DeckPreviewModalProps> = ({
                 className="deck-preview-modal-slide"
                 style={{
                   background: slideStyle?.background.css,
-                  fontFamily: slideStyle?.typography.css,
+                  fontFamily: slideStyle?.typography.body.css,
                 }}
               >
                 {logoUrl && (

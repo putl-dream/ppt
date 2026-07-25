@@ -23,7 +23,12 @@ describe("applyLayout", () => {
       ],
     };
 
-    const laidOut = applyLayout(slide, "concept", testSlideStyle(slide));
+    const laidOut = applyLayout(
+      slide,
+      "concept",
+      testSlideStyle(slide, { visualStyle: "soft-rounded" }),
+      { grammarVariant: "cards" },
+    );
     const bodyElement = laidOut.elements.find(
       (element) => element.type === "text" && element.id === bodyId,
     );
@@ -146,13 +151,18 @@ describe("applyLayout", () => {
       ],
     };
 
-    const laidOut = applyLayout(slide, "case", testSlideStyle(slide));
+    const laidOut = applyLayout(
+      slide,
+      "case",
+      testSlideStyle(slide, { visualStyle: "dark-tech" }),
+      { grammarVariant: "split" },
+    );
     const metric = laidOut.elements.find(
       (element) => element.type === "text" && element.id === metricId,
     );
 
     expect(metric?.type === "text" ? metric.textRole : undefined).toBe("metric");
-    expect(metric?.type === "text" ? metric.fontFamily : undefined).toBe("sans");
+    expect(metric?.type === "text" ? metric.fontFamily : undefined).toBe("mono");
     expect(metric?.x).toBeGreaterThanOrEqual(760);
   });
 
@@ -175,7 +185,11 @@ describe("applyLayout", () => {
       ],
     };
 
-    const nordic = applyLayout(nordicSlide, "cover", testSlideStyle(nordicSlide, { fontMood: "formal" }));
+    const nordic = applyLayout(
+      nordicSlide,
+      "cover",
+      testSlideStyle(nordicSlide, { visualStyle: "editorial" }),
+    );
     const nordicTitle = nordic.elements.find(
       (element) => element.type === "text" && element.id === titleId,
     );
@@ -186,7 +200,11 @@ describe("applyLayout", () => {
       id: crypto.randomUUID(),
       elements: [{ ...nordicSlide.elements[0], id: titleId }],
     };
-    const ocean = applyLayout(oceanSlide, "cover", testSlideStyle(oceanSlide, { fontMood: "minimal" }));
+    const ocean = applyLayout(
+      oceanSlide,
+      "cover",
+      testSlideStyle(oceanSlide, { visualStyle: "swiss-minimal" }),
+    );
     const oceanTitle = ocean.elements.find(
       (element) => element.type === "text" && element.id === titleId,
     );
@@ -245,7 +263,12 @@ describe("applyLayout", () => {
       ],
     };
 
-    const laidOut = applyLayout(slide, "concept", testSlideStyle(slide));
+    const laidOut = applyLayout(
+      slide,
+      "concept",
+      testSlideStyle(slide, { visualStyle: "soft-rounded" }),
+      { grammarVariant: "cards" },
+    );
     const imgA = laidOut.elements.find(
       (element) => element.type === "image" && element.id === imageA,
     );
@@ -339,20 +362,23 @@ describe("applyLayout", () => {
     };
 
     const centered = applyLayout(slide, "cover", testSlideStyle(slide, {
-      palette: "business-blue", fontMood: "formal", shapeLanguage: "cards", backgroundStyle: "clean",
-      motif: "none", density: "standard", imageTreatment: "plain", chartStyle: "minimal",
+      visualStyle: "soft-rounded",
+      colorScheme: "business-blue",
+      readingMode: "balanced",
     }), {
       grammarVariant: "centered",
     });
     const editorial = applyLayout(slide, "cover", testSlideStyle(slide, {
-      palette: "warm-paper", fontMood: "editorial", shapeLanguage: "annotation", backgroundStyle: "paper",
-      motif: "bookmark", density: "calm", imageTreatment: "framed", chartStyle: "minimal",
+      visualStyle: "zine",
+      colorScheme: "warm-paper",
+      readingMode: "balanced",
     }), {
       grammarVariant: "editorial-hero",
     });
     const tech = applyLayout(slide, "cover", testSlideStyle(slide, {
-      palette: "tech-dark", fontMood: "technical", shapeLanguage: "geometric", backgroundStyle: "dark",
-      motif: "arc", density: "standard", imageTreatment: "masked", chartStyle: "dashboard",
+      visualStyle: "pixel-art",
+      colorScheme: "tech-dark",
+      readingMode: "balanced",
     }), {
       grammarVariant: "signal-dark",
     });

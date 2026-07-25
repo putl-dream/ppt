@@ -4,6 +4,7 @@ import { LAYOUT_GRAMMAR_VARIANTS } from "../layout-grammar-variants";
 import {
   CONTENT,
   applyImageTreatment,
+  layoutSpacing,
   pickAnyImage,
   styleText,
 } from "./utils";
@@ -41,9 +42,17 @@ function applySplit(ctx: LayoutGrammarContext): void {
   const metric = explicitMetric ?? narratives[1];
   const chart = ctx.dataElements.find((element) => element.type === "chart");
   const sideImage = pickAnyImage(ctx, "side");
-  const left = { x: 120, y: CONTENT.y, width: 600, height: CONTENT.height };
-  const right = { x: 760, y: CONTENT.y, width: 400, height: CONTENT.height };
-  const pad = 24;
+  const spacing = layoutSpacing(ctx);
+  const gap = spacing.gutter;
+  const leftWidth = Math.round((CONTENT.width - gap) * 0.6);
+  const left = { x: CONTENT.x, y: CONTENT.y, width: leftWidth, height: CONTENT.height };
+  const right = {
+    x: CONTENT.x + leftWidth + gap,
+    y: CONTENT.y,
+    width: CONTENT.width - leftWidth - gap,
+    height: CONTENT.height,
+  };
+  const pad = spacing.padding;
 
   ctx.elements.unshift(ctx.helpers.createCard(left.x, left.y, left.width, left.height));
   if (sideImage || metric || chart) {
@@ -120,12 +129,29 @@ function applyMetricFocus(ctx: LayoutGrammarContext): void {
     ?? narratives[1]
     ?? narratives[0];
   const description = narratives.find((item) => item.id !== metric?.id);
-  const left = { x: 120, y: CONTENT.y + 36, width: 430, height: 360 };
-  const right = { x: 590, y: CONTENT.y, width: 570, height: CONTENT.height };
+  const spacing = layoutSpacing(ctx);
+  const gap = spacing.gutter;
+  const leftWidth = Math.round((CONTENT.width - gap) * 0.42);
+  const left = {
+    x: CONTENT.x,
+    y: CONTENT.y + spacing.compactPadding,
+    width: leftWidth,
+    height: CONTENT.height - spacing.compactPadding * 2,
+  };
+  const right = {
+    x: CONTENT.x + leftWidth + gap,
+    y: CONTENT.y,
+    width: CONTENT.width - leftWidth - gap,
+    height: CONTENT.height,
+  };
 
   ctx.elements.unshift(ctx.helpers.createCard(left.x, left.y, left.width, left.height));
   ctx.elements.unshift(ctx.helpers.createAccentBlock(right.x, right.y, right.width, right.height, { opacity: 0.12 }));
-  ctx.elements.push(ctx.helpers.createAccentBar(left.x + 28, left.y + 28, 120));
+  ctx.elements.push(ctx.helpers.createAccentBar(
+    left.x + spacing.padding,
+    left.y + spacing.padding,
+    120,
+  ));
 
   if (description) {
     const extras = narratives
@@ -134,10 +160,10 @@ function applyMetricFocus(ctx: LayoutGrammarContext): void {
       .filter(Boolean);
     if (extras.length > 0) description.text = [description.text.trim(), ...extras].join("\n");
     ctx.elements.push(styleText(ctx, description, {
-      x: left.x + 32,
-      y: left.y + 64,
-      width: left.width - 64,
-      height: left.height - 92,
+      x: left.x + spacing.padding,
+      y: left.y + spacing.padding + 36,
+      width: left.width - spacing.padding * 2,
+      height: left.height - spacing.padding * 2 - 36,
       role: "body",
       baseSize: 20,
       minSize: 14,
@@ -147,10 +173,10 @@ function applyMetricFocus(ctx: LayoutGrammarContext): void {
   }
   if (metric) {
     ctx.elements.push(styleText(ctx, metric, {
-      x: right.x + 46,
-      y: right.y + 72,
-      width: right.width - 92,
-      height: right.height - 144,
+      x: right.x + spacing.padding,
+      y: right.y + spacing.padding * 2,
+      width: right.width - spacing.padding * 2,
+      height: right.height - spacing.padding * 4,
       role: "metric",
       baseSize: 58,
       minSize: 28,
@@ -183,24 +209,37 @@ function applyEvidence(ctx: LayoutGrammarContext): void {
   );
   const metric = ctx.bodyTexts.find((item) => item.textRole === "metric") ?? narratives[1];
   const description = narratives[0];
-  const imageBox = { x: 120, y: CONTENT.y, width: 650, height: CONTENT.height };
-  const textBox = { x: 810, y: CONTENT.y, width: 350, height: CONTENT.height };
+  const spacing = layoutSpacing(ctx);
+  const gap = spacing.gutter;
+  const imageWidth = Math.round((CONTENT.width - gap) * 0.65);
+  const imageBox = {
+    x: CONTENT.x,
+    y: CONTENT.y,
+    width: imageWidth,
+    height: CONTENT.height,
+  };
+  const textBox = {
+    x: CONTENT.x + imageWidth + gap,
+    y: CONTENT.y,
+    width: CONTENT.width - imageWidth - gap,
+    height: CONTENT.height,
+  };
 
   ctx.elements.unshift(ctx.helpers.createCard(imageBox.x, imageBox.y, imageBox.width, imageBox.height));
   const placed = ctx.helpers.placeImageInSlot(image, {
-    x: imageBox.x + 16,
-    y: imageBox.y + 16,
-    width: imageBox.width - 32,
-    height: imageBox.height - 32,
+    x: imageBox.x + spacing.compactPadding,
+    y: imageBox.y + spacing.compactPadding,
+    width: imageBox.width - spacing.compactPadding * 2,
+    height: imageBox.height - spacing.compactPadding * 2,
   }, "side");
   ctx.elements.push(applyImageTreatment(placed, ctx));
   ctx.elements.push(ctx.helpers.createAccentBlock(textBox.x, textBox.y, 8, textBox.height, { opacity: 1 }));
 
   if (metric) {
     ctx.elements.push(styleText(ctx, metric, {
-      x: textBox.x + 34,
-      y: textBox.y + 24,
-      width: textBox.width - 46,
+      x: textBox.x + spacing.padding,
+      y: textBox.y + spacing.compactPadding,
+      width: textBox.width - spacing.padding,
       height: 150,
       role: "metric",
       baseSize: 42,
@@ -217,10 +256,10 @@ function applyEvidence(ctx: LayoutGrammarContext): void {
       .filter(Boolean);
     if (extras.length > 0) description.text = [description.text.trim(), ...extras].join("\n");
     ctx.elements.push(styleText(ctx, description, {
-      x: textBox.x + 34,
-      y: textBox.y + (metric ? 190 : 32),
-      width: textBox.width - 46,
-      height: textBox.height - (metric ? 214 : 64),
+      x: textBox.x + spacing.padding,
+      y: textBox.y + (metric ? 190 : spacing.padding),
+      width: textBox.width - spacing.padding,
+      height: textBox.height - (metric ? 190 + spacing.padding : spacing.padding * 2),
       role: "body",
       baseSize: 19,
       minSize: 14,

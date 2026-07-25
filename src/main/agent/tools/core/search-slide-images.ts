@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { getLayoutSlotRect, listLayoutSlots } from "@shared/layout-slots";
+import type { Slide } from "@shared/presentation";
 import type { WebSearchOutput } from "../../search/web-search";
 import { imageSearchService } from "../../search/image-search-service";
 import type { ToolDefinition } from "../tool-definition";
@@ -45,12 +46,11 @@ export interface SearchSlideImagesOutput {
 }
 
 function aspectRatioForSlot(
-  layout: string,
+  slide: Slide,
   slot: string | undefined,
-  grammarVariant: string | undefined,
 ): "16:9" | "4:3" | "1:1" | "auto" {
   if (!slot) return "auto";
-  const rect = getLayoutSlotRect(layout, slot, "auto", grammarVariant);
+  const rect = getLayoutSlotRect(slide, slot);
   if (!rect) return "auto";
   const ratio = rect.width / rect.height;
   if (ratio > 1.5) return "16:9";
@@ -124,7 +124,7 @@ export const searchSlideImagesTool: ToolDefinition<
       signal: context.signal,
     });
     const { query, rawSearch } = search;
-    const aspectRatio = aspectRatioForSlot(slide.layout ?? "", slot, slide.grammarVariant);
+    const aspectRatio = aspectRatioForSlot(slide, slot);
     const usedImageUrls = new Set(context.presentation.slides.flatMap((item) => item.elements
       .filter((element) => element.type === "image")
       .map((element) => element.url)));

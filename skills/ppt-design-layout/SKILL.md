@@ -1,7 +1,7 @@
 ---
 name: ppt-design-layout
-description: Design Agent 专责排版设计；按 Rubric 产出 layout-plan.json，禁止 SubmitCommands
-when_to_use: 内容草稿完成且用户已确认排版方式后，需要逐页版式/节奏设计时
+description: Design Agent 将锁定的设计方向转成逐页 audience move、节奏、构图与可执行 layout-plan v2
+when_to_use: 内容和页序已冻结，设计方向已锁定，需要为每一页做真正的构图决策时
 stages:
   - design
 allowed-tools:
@@ -14,208 +14,123 @@ allowed-tools:
   - TaskReviewRequest
 ---
 
-# 排版设计专责（Design Agent）
+# 排版设计专责（ppt-master-design-v2）
 
-## 角色定位
+## 角色
 
-**只做设计决策，不做执行。** 在引擎能力边界内产出可执行的逐页 `layout-plan.json`；不改写文案、不手填坐标、不调用 SubmitCommands。
+只做设计决策，不改内容，不执行命令。输出唯一文件 `slides/layout-plan.json`；主 Agent 之后用 `ExecuteLayoutPlan` 原子执行。
 
-阶段 4c 的 layout-plan Task 由 watcher 自主领取；teammate 显式更新 in_progress 并用 `TaskReviewRequest` 请求验收，主 Agent 用 approve/reject 完成验收。阶段 5 由主 Agent 调用 `ExecuteLayoutPlan` 消费本 plan（LoadSkill `ppt-layout` Executor 模式），不得凭记忆重猜 layout。
+设计不是“给每页套一种模板”。每页先回答三件事：
 
-## 设计阶段边界（重要）
+1. `audienceMove`：受众看完本页发生什么变化
+2. `rhythm`：本页在整套节奏中是 anchor、dense 还是 breathing
+3. `layoutIntent`：视觉焦点、阅读顺序、图文关系是什么
 
-**本 Skill 只管视觉决策，不管内容密度。**
-
-| 属于设计阶段 | **不属于**设计阶段（内容阶段已做完） |
-|-------------|--------------------------------------|
-| 每页选 layout / slideVariant | 「共 N 页，简洁明了」 |
-| deck 级 designSystem + 页级 designOverride | 「每条 ≤15 字，每页 3–5 条」 |
-| 可执行图片 enhancements | 增删 slide、改写要点、压缩文案 |
-| 节奏 Rubric（section/toc/多样性） | 重新规划 storyboard 页数 |
-
-**硬性规则**：layout-plan 的 `slides[]` 必须与 snapshot **一一对应**（相同 slideId、相同页数）。不得因 Rubric 建议 toc/section 而**新增**页面——若缺 toc/section，在 rationale 注明「建议用户补页」，或把现有页改 layout（如第 2 页改 toc）。
+最后才选择 layout / grammarVariant。
 
 ## 输入
 
-1. `ReadPresentationSnapshot` 或 workspace `slides/storyboard.json`（完整路径时）
-2. 用户 LayoutChoiceCard 选择：`template`（标准）或 `creative`（轻装饰）
-3. 可选：`brief.md` 受众与场景
+- `slides/layout-choice.json`：已确认的沟通契约、全部候选方向和 `selectedDirectionId`
+- `slides/layout-input.json` 或 `ReadPresentationSnapshot`：当前页序与内容
+- 可选 brief / outline / storyboard
 
-## 输出
+页数、页序、标题和正文已经冻结，必须与 snapshot 一一对应。
 
-写入 workspace **`slides/layout-plan.json`**，格式见下。teammate 提交结论仅 1–3 句：路径 + layout 种类数 + “已写入可执行 plan”。不需要回传完整 JSON；后续由 `ExecuteLayoutPlan` 读取文件。
+## LayoutPlan v2
 
-## layout-plan 格式
+顶层必须包含：
 
-```json
-{
-  "version": 1,
-  "styleMode": "template",
-  "designSystem": {
-    "version": 1,
-    "tokens": {
-      "palette": "business-blue",
-      "fontMood": "formal",
-      "shapeLanguage": "cards",
-      "backgroundStyle": "clean",
-      "motif": "none",
-      "density": "standard",
-      "imageTreatment": "plain",
-      "chartStyle": "report"
-    }
-  },
-  "designNotes": "可选：整体节奏说明",
-  "slides": [
-    {
-      "slideId": "slide-1",
-      "title": "演示标题",
-      "narrativeRole": "cover",
-      "layout": "cover",
-      "grammarVariant": "editorial-hero",
-      "slideVariant": "hero",
-      "designOverride": { "backgroundStyle": "gradient" },
-      "rationale": "开场页，hero 背景",
-      "enhancements": []
-    }
-  ]
-}
-```
+- `version: 2`
+- `communicationContract`
+- `selectionSource`: `recommended-spectrum` 或 `user-locked`
+- `directions`
+  - 未指定风格：恰好 safe / shifted / bold 三个不同方向
+  - 用户已指定：恰好一个 `locked` 方向
+- `selectedDirectionId`
+- `slides`
 
-### 字段说明
+每页必须包含：
 
-| 字段 | 必填 | 说明 |
-|------|------|------|
-| `designSystem` | 是 | 全 deck 唯一 DesignSystemV1；见 style-modes 预设映射 |
-| `styleMode` | 是 | `template` 或 `creative`（与用户选择一致） |
-| `slideId` | 是 | 与 snapshot 中 slide.id 一致 |
-| `narrativeRole` | 是 | cover / toc / section / content / data / comparison / quote / summary |
-| `layout` | 是 | 11 种引擎 layout 之一 |
-| `grammarVariant` | 支持 Grammar 的 layout 建议填写 | 控制同一 layout 的具体视觉构图；只能使用下表枚举 |
-| `designOverride` | 否 | 仅覆盖本页确有叙事意义的 token；其余继承 deck 级 designSystem |
-| `slideVariant` | 否 | `hero` / `light` / `dark`；省略则由 layout 推断 |
-| `rationale` | 是 | 一句话：为何选此 layout（供 deck-review 对照） |
-| `enhancements` | 否 | 仅允许可由 ExecuteLayoutPlan 原子执行的 `insert-image` |
+- `slideId`、`title`、`narrativeRole`
+- `audienceMove`
+- `rhythm`: `anchor` / `dense` / `breathing`
+- `layoutIntent`
+- `layout`、`rationale`
+- 可选 `grammarVariant`、`slideVariant`、`designOverride`、`enhancements`
 
-### slideVariant 映射（guizang 节奏）
+方向中的 `designSystem` 必须原样采用设计规划工具的结果，不手写旧版 token。字段的可执行 schema 以 `src/shared/layout-plan.ts` 和 `src/design-system/schema.ts` 为准；未知字段不得猜测。
 
-| slideVariant | 典型页面 | 视觉 |
-|--------------|----------|------|
-| `hero` | cover、section | 品牌渐变 / 呼吸页 |
-| `light` | 正文、summary | 浅色底，与 hero 对比 |
-| `dark` | quote、强调页 | 深色底，节奏变化 |
+## 逐页决策
 
-### enhancements 类型
+### Audience move
 
-| type | 执行工具 | 说明 |
-|------|----------|------|
-| `insert-image` | InsertSlideImage | slot + url，无需坐标 |
+使用具体动词，避免“了解本页内容”：
 
-chart/table/icon 必须在内容创建或后续显式编辑中通过带 `elementId`/完整元素数据的命令处理，不能写成 layout-plan 的无目标增强项。布局引擎本身已根据 grammar 和 design tokens 生成卡片、分隔线、序号与连接符，不再追加固定坐标装饰。
+- “接受先保留率、后拉新的增长判断”
+- “看懂三个模块的依赖顺序”
+- “记住 37% 是方案成立的关键证据”
+- “从问题张力切换到解决方案期待”
 
-### Layout Grammar 变体（P1）
+### Rhythm
 
-| layout | grammarVariant | 选择原则 |
-|--------|----------------|----------|
-| `cover` | `centered` / `editorial-hero` / `signal-dark` | 正式居中 / 编辑式图文 / 深色发布 |
-| `section` | `centered` / `editorial-split` / `band` | 常规过渡 / 图文分栏 / 强章节色带 |
-| `process` | `cards` / `timeline` / `path` / `steps` | 并列阶段 / 时间演进 / 路径推进 / 阶梯递进 |
-| `case` | `split` / `metric-focus` / `evidence` | 叙述+指标 / KPI 主导 / 大图证据 |
-| `image-grid` | `grid` / `hero-caption` / `filmstrip` / `evidence-wall` | 等权多图 / 单主图 / 序列图 / 主证据+细节 |
+| rhythm | 作用 | 常见页 |
+|---|---|---|
+| `anchor` | 建立章节、结论或证据锚点 | cover、section、关键 KPI、结尾 |
+| `dense` | 承载需要近读的证据与细节 | 数据、比较、架构、表格 |
+| `breathing` | 释放认知负荷并制造转折 | 大图、金句、单一结论、章节过渡 |
 
-未在表中的 layout 暂不填写 `grammarVariant`。不要自由发明字符串；`validateLayoutPlan` 会拒绝不受支持的组合。
+规则：
 
-### 图片选材（P0 资产闭环）
+- 5 页以上至少出现两种 rhythm。
+- 不连续安排 3 个 dense 页；确需连续时用不同构图与明确理由。
+- narrative / showcase 每 3–5 页通常需要一个 breathing beat。
+- breathing 页禁止塞入 3 个以上同构卡片。
 
-- 图片不是可选的事后装饰：选择 `image-grid` 或 `case/evidence` 时，teammate **必须**调用 `web_search` 并设置 `include_images: true`，随后写入 `insert-image` enhancement；否则改用不依赖图片的 layout/grammar。
-- `cover/editorial-hero`、`section/editorial-split` 应优先规划 1 张主视觉。
-- 对具体真实世界主题且 5 页以上的 deck，通常规划 2–4 张互不重复、逐页相关的图片；纯数据或抽象主题可改用 chart，并在 rationale 说明不需要搜图。
-- 搜索结果只是候选，不代表自动获得复用授权；优先 Pexels、Pixabay、Wikimedia Commons 等授权信息明确的来源。
-- `insert-image` enhancement 除 `url` / `slot` 外，应尽量记录 `provider`、`sourcePageUrl`、`description`、`attribution`、`license`。
-- `ExecuteLayoutPlan` 会自动执行所有 `insert-image` enhancement：调用 InsertSlideImage、本地化到 `assets/images/`，并把命令合并进同一 proposal。不要让主 Agent 再次重复插图。
-- 同一图片 URL 默认只能使用一次；图片必须支持该页论点，禁止用泛化办公照填空。
+### Layout intent → layout
 
-## 设计 Rubric（必过 A + B，强烈建议 C + D）
+| 页面意图 | layout / grammar 候选 |
+|---|---|
+| 开场身份或单一命题 | cover: centered / editorial-hero / signal-dark |
+| 章节转场 | section: centered / editorial-split / band |
+| 导航与章节索引 | toc: numbered-list / chapter-rail / editorial-index |
+| 并列概念 | concept: cards / statement-stack / editorial-columns |
+| 先后步骤、时间或路径 | process: cards / timeline / path / steps |
+| A/B、前后或裁决 | comparison: split / before-after / verdict |
+| 叙述 + 关键证据 | case: split / metric-focus / evidence |
+| 图片主导 | image-grid: grid / hero-caption / filmstrip / evidence-wall |
+| 引言或转折 | quote: centered-card / editorial-pullquote / quote-band |
+| 行动收束 | summary: action-list / three-takeaways / closing-checklist |
+| 分层系统 | architecture |
 
-### A. 叙事与节奏
+不要为“版式种类数”强行每页换 layout。重复内容可复用骨架，但必须通过焦点、节奏、明暗、图片关系或 grammar 形成有意义差异。
 
-| # | 标准 | 坏例子 | 好做法 |
-|---|------|--------|--------|
-| A1 | cover + summary | 直接内容页 | 首尾齐全 |
-| A2 | 8 页+ 至少 1 section | 7 页全 concept | 大章前 section |
-| A3 | 无连续 3 页同 layout | 趋势一/二均 concept | process / case 交替 |
-| A4 | 7 页+ ≥3 种 layout；10 页+ ≥5 种 | 全程 concept | 见 layout-catalog 示例 |
-| A5 | slideVariant 有变化 | 全 deck 同色同构 | hero / light / dark 交替 |
+## 图片
 
-### B. 版式与内容匹配
+- image-dependent grammar 必须有真实图片 enhancement，不能留下空骨架。
+- `cover/editorial-hero`、`section/editorial-split`、`case/evidence`、`image-grid/*` 优先规划图片。
+- 具体真实世界主题且 5 页以上，通常选择 2–4 张互不重复、逐页相关的图片；纯数据/抽象内容可不用。
+- 每张图记录 `url`、`slot`、`provider`、`sourcePageUrl`、`description`，能确认时再写 attribution/license。
+- 图片服务论点；泛化办公照、同图复用、为填空而配图均不合格。
+- 文字、数字、数据标签保持原生元素，不放进生成图片。
 
-| 内容类型 | layout | 禁止 |
-|----------|--------|------|
-| 开场 | cover | concept 堆标题 |
-| 目录 | toc | 7 页+ 无目录 |
-| 章节切换 | section | concept 假装章节 |
-| 并列要点 | concept | 误用 process |
-| 步骤/时间线 | process | 误用 concept |
-| 叙述+数字 | case | 四栏均分文字 |
-| A vs B | comparison | 两栏 concept |
-| 多图 | image-grid | 纯文字 concept |
-| 金句 | quote | section 堆长段 |
-| 收束 | summary | concept 重复 |
+## 风格兑现
 
-### C. 视觉层级（强烈建议）
+检查所选 visual style 的 shape、elevation、whitespace、typography、texture 与 image rendering 是否被本页构图支持：
 
-- 每 deck 1–2 页 `case` 或已有明确数据的 chart（KPI 锚点）
-- 趋势页用 process 或 chart，非四条等宽文本框
-- comparison 偶数条，左问题右方案
+- swiss/editorial/data 风格依赖网格、规则线与层级，不靠一排圆角卡片。
+- photo-editorial/showcase 风格必须让图片获得页面级面积。
+- brutalist/zine/memphis/pixel-art 等强风格需要可见的几何与节奏差异，不能只换色。
+- ink-wash/ink-notes 风格以克制和留白为结构，避免卡片堆叠。
+- glassmorphism/paper-cut 的层次来自透明度或层叠阴影，数量必须克制。
 
-### D. 克制与一致性
+## 提交前检查
 
-- 全 deck 一套 designSystem；页级 override 只用于必要的叙事节奏
-- 不规划手填 x/y；图片用 insert-image 槽位
-- creative 风格通过 designSystem + grammar 生成装饰，不额外叠加固定坐标 shape
-- 文档模式 8 页建议 3–5 种 layout；不要为了凑多样性做成 8 页 8 种 layout
-- 主内容页优先复用同类 layout，通过 slideVariant 做轻微变化
+1. slides 与 snapshot 页数、顺序、slideId 完全一致。
+2. 每页 audienceMove / rhythm / layoutIntent 均具体。
+3. argument mode、visual style、color scheme、reading mode deck-wide 唯一。
+4. 无连续 3 页相同 layout + grammarVariant + rhythm。
+5. 5 页以上至少两种 rhythm，且不存在无理由的 dense 长串。
+6. 图片依赖页面都有唯一、可执行的 insert-image enhancement。
+7. 没有手填 x/y，没有 SubmitCommands，没有改文案。
 
-### E. 反模式（出现即 redesign）
-
-| 反模式 | 应改为 |
-|--------|--------|
-| 趋势页用 concept 四栏 | process 或 case + chart |
-| cover 后无 section/toc | 第 2 页 toc；大章前 section |
-| 案例页两栏文字 | case；有明确结构化数据时再添加 chart |
-| 全程同色同构 | slideVariant 交替 |
-
-## Task teammate 节点描述模板（创建任务时使用）
-
-```
-executionTarget: teammate
-description: 「读取当前 presentation snapshot（slide 列表与 id）。
-**页数与文案已冻结**——为每一现有 slide 选定 layout、grammarVariant、slideVariant、designOverride、enhancements，并为 deck 选定唯一 designSystem；不得增删页或提内容密度要求。
-按 ppt-design-layout Rubric（仅版式节奏）写入 slides/layout-plan.json。
-用户选择排版方式：{template|creative}。
-禁止 SubmitCommands；完成后调用 `TaskReviewRequest`，结论 1 句：路径 + layout 种类数 + 已写入可执行 plan。」
-```
-
-## 禁止事项
-
-- ❌ SubmitCommands / update-slide-layout / set-design-system
-- ❌ 改写 slide.title 或 body text
-- ❌ 手填 x/y 坐标
-- ❌ 长篇分析（结论 ≤3 句）
-- ❌ **复述内容阶段约束**（「15 字以内」「3–5 条」「共 N 页简洁」）——那是 ppt-build / storyboard 的职责
-
-## 验收自检（写入 plan 前）
-
-1. layout 种类：7 页 deck ≥3，10 页 ≥5
-2. 无连续 3 页同 layout
-3. 含 KPI 的 deck 至少 1 页 case 或已有明确数据的 chart
-4. 7 页+ 商务 deck 含 toc
-5. slideVariant 至少 2 种（5 页+ deck）
-6. 支持 Grammar 的页面使用合法 grammarVariant；同类内容可复用变体，不为了多样而每页不同
-7. image-grid / case-evidence 均已有唯一 insert-image enhancement；不存在空图片骨架
-
-## 延伸阅读
-
-- 版式映射：[../ppt-layout/layout-catalog.md](../ppt-layout/layout-catalog.md)
-- 风格模式：[../ppt-layout/style-modes.md](../ppt-layout/style-modes.md)
-- 设计原则：[../ppt-layout/design-principles.md](../ppt-layout/design-principles.md)
-- 示例 plan：`tests/fixtures/layout-plan-tech-evolution.json`
+完成后调用 `TaskReviewRequest`；结论只写路径、所选方向、节奏分布和自检结果。

@@ -1,6 +1,6 @@
 import type { ShapeElement } from "./presentation";
-import type { Motif } from "@design-system";
-import { VISUAL_TOKENS, cardShadow } from "./visual-tokens";
+import type { Motif, ResolvedSlideStyle } from "@design-system";
+import { VISUAL_TOKENS } from "./visual-tokens";
 
 export interface MotifColors {
   bg: string;
@@ -13,6 +13,7 @@ export interface CoverMotifInput {
   motif: Motif;
   colors: MotifColors;
   variant: "centered" | "editorial-hero" | "signal-dark";
+  style: ResolvedSlideStyle;
 }
 
 const generateId = (): string => {
@@ -35,34 +36,75 @@ function layoutShape(
   };
 }
 
-export function createBookmarkMotif(colors: MotifColors): ShapeElement[] {
+function motifRadius(
+  style: ResolvedSlideStyle | undefined,
+  maxRadius = Number.POSITIVE_INFINITY,
+): number {
+  return Math.min(maxRadius, Math.max(0, style?.shape.radius ?? 0));
+}
+
+function motifStroke(
+  style: ResolvedSlideStyle | undefined,
+  fallback: string,
+): string {
+  if (!style) return fallback;
+  return style.shape.stroke.width > 0
+    ? style.shape.stroke.color
+    : "transparent";
+}
+
+function motifShadow(
+  style: ResolvedSlideStyle | undefined,
+): ShapeElement["shadow"] {
+  if (!style?.shape.shadow) return undefined;
+  const shadow = style.catalog.elevation.shadow;
+  if (!shadow) return undefined;
+  return {
+    color: style.shape.elevation === "glow"
+      ? style.colors.accent
+      : style.colors.scrim,
+    blur: shadow.blur,
+    offsetX: shadow.x,
+    offsetY: shadow.y,
+    opacity: shadow.opacity,
+  };
+}
+
+export function createBookmarkMotif(
+  colors: MotifColors,
+  style?: ResolvedSlideStyle,
+): ShapeElement[] {
+  const radius = motifRadius(style, VISUAL_TOKENS.motif.bookmark.width / 2);
   return [
     layoutShape({
-      shapeType: "roundedRect",
+      shapeType: radius > 0 ? "roundedRect" : "rectangle",
       x: 84,
       y: 90,
       width: VISUAL_TOKENS.motif.bookmark.width,
       height: 510,
       fillColor: colors.accent,
-      strokeColor: colors.accent,
-      cornerRadius: VISUAL_TOKENS.radii.pill,
-      shadow: cardShadow("sm"),
+      strokeColor: motifStroke(style, colors.accent),
+      cornerRadius: radius,
+      shadow: motifShadow(style),
     }),
     layoutShape({
-      shapeType: "roundedRect",
+      shapeType: radius > 0 ? "roundedRect" : "rectangle",
       x: 112,
       y: 90,
       width: 8,
       height: 360,
       fillColor: colors.cardStroke,
-      strokeColor: colors.cardStroke,
-      cornerRadius: VISUAL_TOKENS.radii.pill,
+      strokeColor: motifStroke(style, colors.cardStroke),
+      cornerRadius: radius,
       fillOpacity: 0.7,
     }),
   ];
 }
 
-export function createArcMotif(colors: MotifColors): ShapeElement[] {
+export function createArcMotif(
+  colors: MotifColors,
+  style?: ResolvedSlideStyle,
+): ShapeElement[] {
   return [
     layoutShape({
       shapeType: "circle",
@@ -71,7 +113,7 @@ export function createArcMotif(colors: MotifColors): ShapeElement[] {
       width: 360,
       height: 360,
       fillColor: colors.accent,
-      strokeColor: colors.accent,
+      strokeColor: motifStroke(style, colors.accent),
       fillOpacity: 0.1,
     }),
     layoutShape({
@@ -81,25 +123,29 @@ export function createArcMotif(colors: MotifColors): ShapeElement[] {
       width: 204,
       height: 204,
       fillColor: colors.bg,
-      strokeColor: colors.cardStroke,
+      strokeColor: motifStroke(style, colors.cardStroke),
       fillOpacity: 0.18,
     }),
   ];
 }
 
-export function createMarginNoteMotif(colors: MotifColors): ShapeElement[] {
+export function createMarginNoteMotif(
+  colors: MotifColors,
+  style?: ResolvedSlideStyle,
+): ShapeElement[] {
+  const radius = motifRadius(style);
   return [
     layoutShape({
-      shapeType: "roundedRect",
+      shapeType: radius > 0 ? "roundedRect" : "rectangle",
       x: 948,
       y: 116,
       width: VISUAL_TOKENS.motif.marginNote.width,
       height: 420,
       fillColor: colors.cardBg,
-      strokeColor: colors.cardStroke,
-      cornerRadius: VISUAL_TOKENS.radii.sm,
+      strokeColor: motifStroke(style, colors.cardStroke),
+      cornerRadius: radius,
       fillOpacity: 0.78,
-      shadow: cardShadow("sm"),
+      shadow: motifShadow(style),
     }),
     layoutShape({
       shapeType: "line",
@@ -108,13 +154,16 @@ export function createMarginNoteMotif(colors: MotifColors): ShapeElement[] {
       width: 132,
       height: LINE_MOTIF_HEIGHT,
       fillColor: colors.accent,
-      strokeColor: colors.accent,
+      strokeColor: motifStroke(style, colors.accent),
       fillOpacity: 0.9,
     }),
   ];
 }
 
-export function createPathLineMotif(colors: MotifColors): ShapeElement[] {
+export function createPathLineMotif(
+  colors: MotifColors,
+  style?: ResolvedSlideStyle,
+): ShapeElement[] {
   return [
     layoutShape({
       shapeType: "line",
@@ -123,7 +172,7 @@ export function createPathLineMotif(colors: MotifColors): ShapeElement[] {
       width: 820,
       height: LINE_MOTIF_HEIGHT,
       fillColor: colors.accent,
-      strokeColor: colors.accent,
+      strokeColor: motifStroke(style, colors.accent),
       fillOpacity: 0.8,
     }),
     layoutShape({
@@ -133,17 +182,19 @@ export function createPathLineMotif(colors: MotifColors): ShapeElement[] {
       width: 24,
       height: 24,
       fillColor: colors.accent,
-      strokeColor: colors.accent,
+      strokeColor: motifStroke(style, colors.accent),
     }),
   ];
 }
 
 export function createCoverMotif(input: CoverMotifInput): ShapeElement[] {
-  if (input.motif === "bookmark") return createBookmarkMotif(input.colors);
-  if (input.motif === "arc") return createArcMotif(input.colors);
-  if (input.motif === "margin-note") return createMarginNoteMotif(input.colors);
-  if (input.motif === "path-line") return createPathLineMotif(input.colors);
-  if (input.variant === "signal-dark") return createArcMotif(input.colors);
-  if (input.variant === "editorial-hero") return createBookmarkMotif(input.colors);
+  if (input.motif === "bookmark") return createBookmarkMotif(input.colors, input.style);
+  if (input.motif === "arc") return createArcMotif(input.colors, input.style);
+  if (input.motif === "margin-note") return createMarginNoteMotif(input.colors, input.style);
+  if (input.motif === "path-line") return createPathLineMotif(input.colors, input.style);
+  if (input.variant === "signal-dark") return createArcMotif(input.colors, input.style);
+  if (input.variant === "editorial-hero") {
+    return createBookmarkMotif(input.colors, input.style);
+  }
   return [];
 }

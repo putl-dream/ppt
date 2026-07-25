@@ -9,7 +9,7 @@ import type {
 } from "@shared/presentation";
 import { resolveSlideStyle, type SlideDesignOverride } from "@design-system";
 import { listLayoutSlots } from "@shared/layout-slots";
-import { fontFamilyToCss, resolveElementFontFamily } from "@shared/typography";
+import { fontFamilyToCss } from "@shared/typography";
 import { slideThumbnailService } from "../../../deck/slide-thumbnail-service";
 
 export const previewSlideSchema = z.object({
@@ -37,7 +37,10 @@ export interface SlidePreviewSummary {
   layout?: string;
   grammarVariant?: string;
   designOverride?: SlideDesignOverride;
-  resolvedTokens: ReturnType<typeof resolveSlideStyle>["tokens"];
+  resolvedDesign: Pick<
+    ReturnType<typeof resolveSlideStyle>,
+    "argumentMode" | "visualStyle" | "readingMode" | "layoutTokens" | "typography"
+  >;
   backgroundVariant: string;
   slideVariant?: string;
   backgroundCss: string;
@@ -52,7 +55,6 @@ export interface SlidePreviewSummary {
     y: number;
     width: number;
     height: number;
-    asset?: ImageAssetMetadata;
   }>;
   images: Array<{
     id: string;
@@ -62,6 +64,7 @@ export interface SlidePreviewSummary {
     y: number;
     width: number;
     height: number;
+    asset?: ImageAssetMetadata;
   }>;
   shapeCount: number;
   chartCount: number;
@@ -130,7 +133,13 @@ export const previewSlideTool: ToolDefinition<
       layout: slide.layout,
       grammarVariant: slide.grammarVariant,
       designOverride: slide.designOverride,
-      resolvedTokens: style.tokens,
+      resolvedDesign: {
+        argumentMode: style.argumentMode,
+        visualStyle: style.visualStyle,
+        readingMode: style.readingMode,
+        layoutTokens: style.layoutTokens,
+        typography: style.typography,
+      },
       backgroundVariant: slide.backgroundVariant ?? "default",
       slideVariant: slide.slideVariant,
       backgroundCss: style.background.css,
@@ -138,7 +147,12 @@ export const previewSlideTool: ToolDefinition<
       textElements: slide.elements
         .filter((el): el is TextElement => el.type === "text")
         .map((el) => {
-          const fontFamily = resolveElementFontFamily(el, style.typography.family);
+          const roleTypography = el.textRole === "metric"
+            ? style.typography.data
+            : el.textRole === "kicker"
+              ? style.typography.heading
+              : style.typography.body;
+          const fontFamily = el.fontFamily ?? roleTypography.family;
           return {
             id: el.id,
             text: el.text,

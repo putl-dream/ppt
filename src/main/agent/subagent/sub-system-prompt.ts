@@ -1,4 +1,8 @@
 import type { SubAgentToolDefinition } from "./workspace-tools";
+import {
+  DESIGN_CAPABILITY_VERSION,
+  LAYOUT_PLANNER_CONTRACT,
+} from "@shared/design-capability";
 
 function formatToolCard(tool: SubAgentToolDefinition): string {
   const fields = Object.entries(tool.inputSchema.shape).map(([key, field]) => {
@@ -20,14 +24,10 @@ export function buildSubAgentSystemPrompt(tools: SubAgentToolDefinition[]): stri
 5. **File operations use workspace tools**: \`write_file\` automatically creates parent directories, so write files like \`slides/layout-plan.json\` directly. Do not call \`bash\` for mkdir/cat/echo redirection/copy/move style file operations.
 6. Stay within the workspace sandbox.
 
-## Layout design tasks (when description mentions layout-plan or ppt-design-layout)
-**Scope: visual design only. Content is frozen.**
-
-- Input = existing slides (from task description, storyboard.json, or snapshot summary). **One layout-plan entry per existing slide—do not add/remove slides.**
-- Output **slides/layout-plan.json** only—do NOT modify presentation JSON or call SubmitCommands.
-- Each slide needs: slideId, title, narrativeRole, layout, rationale; optional slideVariant and enhancements.
-- Apply **layout Rubric only**: no 3 consecutive same layout; 7+ slides need toc + ≥3 layout types; KPI pages use case or an existing explicit chart element.
-- **Do NOT** rewrite, compress, or change bullet text. Overflow trimming is for the style phase.
+## Layout design tasks (${DESIGN_CAPABILITY_VERSION})
+${LAYOUT_PLANNER_CONTRACT}
+- Input is the existing slides from the task, storyboard, or snapshot.
+- Do not invent unsupported grammarVariant values.
 
 ## Available tools
 ${tools.map(formatToolCard).join("\n\n")}

@@ -87,7 +87,7 @@ export function resolvePromptStage(input: PromptStageResolveInput): PromptStage 
 export function describePromptStage(stage: PromptStage): string {
   const labels: Record<PromptStage, string> = {
     discover: "路径选择与规划（brief / outline / storyboard）",
-    author: "内容撰写与草稿落盘（含等待排版选择）",
+    author: "内容撰写与草稿落盘（含等待设计方向确认）",
     design: "排版设计（layout-plan）",
     style: "视觉排版执行与质检",
     edit: "轻量单页修改",

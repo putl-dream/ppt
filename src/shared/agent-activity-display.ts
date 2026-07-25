@@ -76,7 +76,7 @@ const TOOL_DISPLAY_COPY = {
   InsertSlideImage: { action: "添加页面图片", category: "change" },
   PreviewSlide: { action: "生成页面预览", category: "inspect" },
   RewriteSlideContent: { action: "改写页面内容", category: "change" },
-  SelectStyleStrategy: { action: "选择视觉风格", category: "inspect" },
+  ResolveDesignPlan: { action: "规划设计方向", category: "inspect" },
   UpdateSlideVariant: { action: "调整页面视觉节奏", category: "change" },
   ValidateDeckLayout: { action: "检查页面布局", category: "inspect" },
 

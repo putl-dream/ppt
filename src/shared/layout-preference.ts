@@ -1,32 +1,57 @@
-import { z } from "zod";
-import { DESIGN_PRESETS, designSystemV1Schema, type DesignSystemV1 } from "@design-system";
+import type { DesignSystemV2 } from "@design-system";
+import {
+  confirmedDesignSelectionSchema,
+  getSelectedDesignDirection,
+  type CommunicationContract,
+  type ConfirmedDesignSelection,
+  type DesignPlanCandidate,
+} from "./design-plan";
 
-export type LayoutVisualMode = "template" | "creative";
+export const layoutChoiceSchema = confirmedDesignSelectionSchema;
+export type LayoutChoice = ConfirmedDesignSelection;
 
-export const layoutChoiceSchema = z.object({
-  mode: z.enum(["template", "creative"]),
-  designSystem: designSystemV1Schema,
-});
-
-export type LayoutChoice = z.infer<typeof layoutChoiceSchema>;
-
-export const LAYOUT_PREFERENCE_STORAGE_KEY = "ppt-layout-visual-mode";
-
-export const LAYOUT_DESIGN_OPTIONS = DESIGN_PRESETS;
-
-export function loadLayoutVisualMode(): LayoutVisualMode {
-  if (typeof window === "undefined") return "template";
-  const stored = window.localStorage.getItem(LAYOUT_PREFERENCE_STORAGE_KEY);
-  return stored === "creative" ? "creative" : "template";
+export function confirmDesignPlan(
+  candidate: DesignPlanCandidate,
+  selectedDirectionId: string,
+): LayoutChoice {
+  return layoutChoiceSchema.parse({
+    version: 2,
+    communicationContract: candidate.communicationContract,
+    selectionSource: candidate.selectionSource,
+    directions: candidate.directions,
+    selectedDirectionId,
+  });
 }
 
-export function saveLayoutVisualMode(mode: LayoutVisualMode): void {
-  if (typeof window === "undefined") return;
-  window.localStorage.setItem(LAYOUT_PREFERENCE_STORAGE_KEY, mode);
+export function createLockedLayoutChoice(
+  communicationContract: CommunicationContract,
+  designSystem: DesignSystemV2,
+  rationale = "用户已在设计设置中明确锁定此方向。",
+): LayoutChoice {
+  return layoutChoiceSchema.parse({
+    version: 2,
+    communicationContract,
+    selectionSource: "user-locked",
+    directions: [{
+      id: "direction-locked",
+      tier: "locked",
+      label: `已锁定 · ${designSystem.visualStyle}`,
+      rationale,
+      designSystem,
+    }],
+    selectedDirectionId: "direction-locked",
+  });
 }
 
 /** Agent 内部执行指令（不直接展示在聊天气泡中）。 */
-export function buildLayoutPhasePrompt(mode: LayoutVisualMode, designSystem: DesignSystemV1): string {
-  const modeLabel = mode === "creative" ? "创意装饰" : "标准";
-  return `排版方式已确认：${modeLabel}模式；设计系统 ${JSON.stringify(designSystem)}。`;
+export function buildLayoutPhasePrompt(choice: LayoutChoice): string {
+  const selected = getSelectedDesignDirection(choice);
+  return [
+    "设计方向已确认。",
+    `selectedDirectionId=${selected.id}`,
+    `argumentMode=${selected.designSystem.argumentMode}`,
+    `visualStyle=${selected.designSystem.visualStyle}`,
+    `readingMode=${selected.designSystem.readingMode}`,
+    "完整已确认选择作为结构化 layoutChoice 元数据提交；按 LayoutPlan v2 继续，不重新猜设计。",
+  ].join(" ");
 }

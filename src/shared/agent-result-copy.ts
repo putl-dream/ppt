@@ -18,7 +18,7 @@ export function formatTerminalAgentRunContent(result: TerminalAgentRunResult): s
   const base = result.status === "rejected"
     ? "已放弃排版变更提案。"
     : presentationNeedsLayoutChoice(result.presentation)
-      ? `内容草稿已就绪（${countSlidesNeedingLayout(result.presentation)} 页待排版），请选择排版方式后继续。`
+      ? `内容草稿已就绪（${countSlidesNeedingLayout(result.presentation)} 页待设计），请选择设计方向后继续。`
       : "已成功应用演示文稿更新。";
 
   return result.leanMetrics

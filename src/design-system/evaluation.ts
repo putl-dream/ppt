@@ -1,4 +1,4 @@
-import type { DesignSystemV1 } from "./schema";
+import type { DesignSystemV2 } from "./schema";
 import { resolveSlideStyle } from "./resolver";
 
 export type VisualScoreKey =
@@ -98,7 +98,7 @@ function contrastRatio(foreground: string, background: string): number {
   return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
 }
 
-function evaluateSlide(system: DesignSystemV1, slide: EvaluationSlide): SlideVisualEvaluation {
+function evaluateSlide(system: DesignSystemV2, slide: EvaluationSlide): SlideVisualEvaluation {
   const style = resolveSlideStyle(system, slide);
   const texts = slide.elements.filter((element) => element.type === "text");
   const fontSizes = texts.map((element) => element.fontSize ?? 32);
@@ -190,7 +190,7 @@ function evaluateSlide(system: DesignSystemV1, slide: EvaluationSlide): SlideVis
 }
 
 export function evaluateDeckVisualQuality(
-  system: DesignSystemV1,
+  system: DesignSystemV2,
   slides: EvaluationSlide[],
 ): DeckVisualEvaluation {
   const evaluations = slides.map((slide) => evaluateSlide(system, slide));

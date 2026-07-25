@@ -58,7 +58,10 @@ async function main(): Promise<void> {
   );
 
   const fixture = JSON.parse(await readFile(fixturePath, "utf8"));
-  const spec = leanDeckSpecV2Schema.parse(fixture);
+  const spec = leanDeckSpecV2Schema.parse({
+    ...fixture,
+    designPreset: "swiss-minimal",
+  });
   const pipeline = new LeanV2Pipeline(noExternalAssets);
   const result = await pipeline.create({
     spec,

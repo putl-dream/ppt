@@ -9,8 +9,8 @@ function resolveVariant(ctx: LayoutGrammarContext): QuoteVariant {
   if (LAYOUT_GRAMMAR_VARIANTS.quote.includes(ctx.grammarVariant as QuoteVariant)) {
     return ctx.grammarVariant as QuoteVariant;
   }
-  if (ctx.style.tokens.fontMood === "editorial") return "editorial-pullquote";
-  if (ctx.style.tokens.backgroundStyle === "dark") return "quote-band";
+  if (ctx.style.layoutTokens.fontMood === "editorial") return "editorial-pullquote";
+  if (ctx.style.layoutTokens.backgroundStyle === "dark") return "quote-band";
   return "centered-card";
 }
 

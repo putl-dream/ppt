@@ -29,7 +29,7 @@ describe("gradient-export", () => {
   });
 
   it("design-engine gradient includes structured export stops", () => {
-    const bg = resolveSlideStyle(testDesignSystem({ backgroundStyle: "gradient" }), {
+    const bg = resolveSlideStyle(testDesignSystem({ visualStyle: "soft-rounded" }), {
       layout: "cover", slideVariant: "light",
     }).background;
     expect(bg.gradient).toBeDefined();

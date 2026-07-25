@@ -8,7 +8,7 @@ import { resolveTaskListIdentity } from "../src/main/agent/task/task-list-identi
 import { createDefaultToolRegistry } from "../src/main/agent/tools/tool-registry";
 import { createStarterPresentation } from "../src/shared/presentation";
 import { AgentRuntime } from "../src/main/agent/runtime/agent-runtime";
-import { TEST_DESIGN_SYSTEM } from "./design-engine-test-utils";
+import { testLayoutChoice } from "./design-engine-test-utils";
 import { clearHooks, registerHook } from "../src/main/agent/runtime/hooks/hook-registry";
 import type { StopBlock } from "../src/main/agent/runtime/hooks/hook-blocks";
 import { DurableRunStore } from "../src/main/agent/persistence/durable-run-store";
@@ -86,14 +86,14 @@ describe("layout choice runtime orchestration", () => {
     } as any;
 
     const first = await prepareLayoutChoiceTask({
-      choice: { mode: "creative", designSystem: TEST_DESIGN_SYSTEM },
+      choice: testLayoutChoice(),
       presentation,
       workspaceRoot,
       taskStore,
       toolContext,
     });
     const second = await prepareLayoutChoiceTask({
-      choice: { mode: "creative", designSystem: TEST_DESIGN_SYSTEM },
+      choice: testLayoutChoice(),
       presentation,
       workspaceRoot,
       taskStore,
@@ -119,7 +119,11 @@ describe("layout choice runtime orchestration", () => {
     const choice = JSON.parse(
       await readFile(join(workspaceRoot, "slides", "layout-choice.json"), "utf8"),
     );
-    expect(choice).toMatchObject({ mode: "creative", designSystem: TEST_DESIGN_SYSTEM });
+    expect(choice).toMatchObject({
+      version: 2,
+      selectionSource: "user-locked",
+      selectedDirectionId: "direction-locked",
+    });
     const snapshot = JSON.parse(
       await readFile(join(workspaceRoot, "slides", "layout-input.json"), "utf8"),
     );
@@ -160,13 +164,13 @@ describe("layout choice runtime orchestration", () => {
 
     const result = await runtime.run({
       threadId: "layout-choice-thread",
-      request: "排版方式已确认：标准模式；主题 ocean；调色板 cyan。",
+      request: "设计方向已确认：偏移方案；风格 swiss-minimal；配色 business-blue。",
       presentationSnapshot: createStarterPresentation(),
       selectedElementIds: [],
       workspaceRoot,
       runtimeRoot,
       teammateManager: manager,
-      layoutChoice: { mode: "template", designSystem: TEST_DESIGN_SYSTEM },
+      layoutChoice: testLayoutChoice(),
     });
 
     expect(result).toMatchObject({ type: "message" });
@@ -255,7 +259,7 @@ describe("layout choice runtime orchestration", () => {
     } as any;
 
     const result = await prepareLayoutChoiceTask({
-      choice: { mode: "creative", designSystem: TEST_DESIGN_SYSTEM },
+      choice: testLayoutChoice(),
       presentation,
       workspaceRoot,
       taskStore,
@@ -300,7 +304,7 @@ describe("layout choice runtime orchestration", () => {
     } as any;
 
     const result = await prepareLayoutChoiceTask({
-      choice: { mode: "creative", designSystem: TEST_DESIGN_SYSTEM },
+      choice: testLayoutChoice(),
       presentation,
       workspaceRoot,
       taskStore,

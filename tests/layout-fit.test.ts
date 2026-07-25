@@ -85,7 +85,10 @@ describe("applyLayout never drops body content", () => {
         textEl("第六步"),
       ],
     };
-    const out = applyLayout(slide, "process", testSlideStyle(slide, { palette: "soft-academic" }));
+    const out = applyLayout(slide, "process", testSlideStyle(slide, {
+      visualStyle: "soft-rounded",
+      colorScheme: "soft-academic",
+    }));
     const allText = bodyTextsOf(out);
     for (const step of ["第一步", "第二步", "第三步", "第四步", "第五步", "第六步"]) {
       expect(allText).toContain(step);
@@ -104,7 +107,10 @@ describe("applyLayout never drops body content", () => {
         textEl("基础设施层"),
       ],
     };
-    const out = applyLayout(slide, "architecture", testSlideStyle(slide, { palette: "tech-dark" }));
+    const out = applyLayout(slide, "architecture", testSlideStyle(slide, {
+      visualStyle: "dark-tech",
+      colorScheme: "tech-dark",
+    }));
     const allText = bodyTextsOf(out);
     expect(allText).toContain("基础设施层");
   });
@@ -139,14 +145,13 @@ describe("applyLayout never drops body content", () => {
 describe("design palette participation", () => {
   it("produces distinct accents for every design-engine palette", () => {
     const accents = ["business-blue", "warm-paper", "mono-report", "tech-dark", "soft-academic"].map(
-      (palette) => resolveColors(testDesignSystem({ palette: palette as any }).tokens).accent,
+      (colorScheme) => resolveColors(colorScheme as Parameters<typeof resolveColors>[0]).accent,
     );
     expect(new Set(accents).size).toBe(5);
   });
 
   it("adapts surfaces for contrast while retaining identity accent", () => {
-    const tokens = testDesignSystem({ palette: "warm-paper" }).tokens;
-    expect(resolveColors(tokens, "dark").title).toBe("#eff6ff");
-    expect(resolveColors(tokens, "dark").accent).toBe("#b45309");
+    expect(resolveColors("warm-paper", "dark").title).toBe("#eff6ff");
+    expect(resolveColors("warm-paper", "dark").accent).toBe("#b45309");
   });
 });

@@ -1,7 +1,7 @@
 import {
   DESIGN_PRESETS,
   resolveSlideStyle,
-  type DesignSystemV1,
+  type DesignSystemV2,
 } from "@design-system";
 
 import {
@@ -54,8 +54,8 @@ function asV1Spec(spec: LeanDeckSpecV2): LeanDeckSpec {
 
 function resolveDesignSystem(
   spec: LeanDeckSpecV2,
-  override?: DesignSystemV1,
-): DesignSystemV1 {
+  override?: DesignSystemV2,
+): DesignSystemV2 {
   if (override) return structuredClone(override);
   const preset = DESIGN_PRESETS.find((candidate) => candidate.id === spec.designPreset);
   if (!preset) throw new Error(`Unknown design preset '${spec.designPreset}'.`);
@@ -144,7 +144,7 @@ export function compileCommercialDeck(input: {
   assets: ResolvedAssetManifestV1;
   basePresentation: Presentation;
   compilerVersion: string;
-  designSystem?: DesignSystemV1;
+  designSystem?: DesignSystemV2;
 }): CompiledCommercialDeck {
   const spec = leanDeckSpecV2Schema.parse(input.spec);
   const plan = directedDeckPlanV1Schema.parse(input.plan);

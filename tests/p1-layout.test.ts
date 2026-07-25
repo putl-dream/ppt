@@ -69,15 +69,27 @@ describe("P1 layouts", () => {
 });
 
 describe("layout slots", () => {
-  it("resolves case side slot within safe zone", () => {
-    const rect = getLayoutSlotRect("case", "side");
+  it("reads the case side slot from the grammar result", () => {
+    const slide: Slide = {
+      id: crypto.randomUUID(),
+      title: "Evidence",
+      elements: [
+        { id: "copy", type: "text", x: 0, y: 0, width: 300, height: 80, text: "Proof", fontSize: 20 },
+        { id: "image", type: "image", x: 0, y: 0, width: 100, height: 100, url: "data:image/png;base64,AA==", borderRadius: 0, imageSlot: "side" },
+      ],
+    };
+    const laidOut = applyLayout(slide, "case", testSlideStyle(slide), {
+      grammarVariant: "evidence",
+    });
+    const rect = getLayoutSlotRect(laidOut, "side");
     expect(rect).toBeDefined();
     expect(rect!.x).toBeGreaterThanOrEqual(120);
   });
 
   it("lists slots per layout", () => {
-    expect(listLayoutSlots("case")).toEqual(["side"]);
-    expect(listLayoutSlots("image-grid")).toContain("grid-0");
+    expect(listLayoutSlots("case", "evidence")).toEqual(["side"]);
+    expect(listLayoutSlots("image-grid", "grid")).toContain("grid-0");
+    expect(listLayoutSlots("image-grid", "hero-caption")).not.toContain("grid-0");
   });
 });
 
@@ -114,6 +126,7 @@ describe("P1 deferred tools", () => {
           id: slideId,
           title: "指标",
           layout: "case",
+          grammarVariant: "evidence",
           elements: [
             { id: crypto.randomUUID(), type: "text", x: 140, y: 220, width: 400, height: 200, text: "说明", fontSize: 20 },
           ],
@@ -129,13 +142,11 @@ describe("P1 deferred tools", () => {
       makeContext(presentation),
     );
     expect(result.commands.length).toBe(1);
-    expect(result.commands[0]?.type).toBe("add-element");
-    if (result.commands[0]?.type === "add-element") {
-      expect(result.commands[0].element.type).toBe("image");
-      if (result.commands[0].element.type === "image") {
-        expect(result.commands[0].element.imageSlot).toBe("side");
-        expect(result.commands[0].element.x).toBeGreaterThan(700);
-      }
+    expect(result.commands[0]?.type).toBe("restore-slide");
+    if (result.commands[0]?.type === "restore-slide") {
+      const image = result.commands[0].slide.elements.find((element) => element.type === "image");
+      expect(image?.type === "image" ? image.imageSlot : undefined).toBe("side");
+      expect(image?.type === "image" ? image.width : 0).toBeGreaterThan(600);
     }
   });
 
@@ -180,6 +191,15 @@ describe("P1 deferred tools", () => {
     const result = await previewSlideTool.execute({ slideId, includeThumbnail: false }, makeContext(presentation));
     expect(result.preview?.layout).toBe("cover");
     expect(result.preview?.backgroundVariant).toBe("hero");
+    expect(result.preview?.resolvedDesign).toMatchObject({
+      argumentMode: TEST_DESIGN_SYSTEM.argumentMode,
+      visualStyle: TEST_DESIGN_SYSTEM.visualStyle,
+      readingMode: TEST_DESIGN_SYSTEM.readingMode,
+    });
+    expect(result.preview?.resolvedDesign.layoutTokens).toBeDefined();
+    expect(result.preview?.resolvedDesign.typography.heading).toBeDefined();
+    expect(result.preview?.resolvedDesign.typography.body).toBeDefined();
+    expect(result.preview?.resolvedDesign.typography.data).toBeDefined();
     expect(result.preview?.textElements.length).toBe(1);
     expect(result.thumbnail).toBeNull();
   });

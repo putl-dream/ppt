@@ -79,6 +79,7 @@ import {
 import { isRuntimeCancellation } from "./agent/runtime/lifecycle/runtime-cancellation";
 import { formatPublicErrorMessage } from "@shared/agent-activity-display";
 import { isTeammateProgressEvent } from "@shared/teammate-progress";
+import { getSelectedDesignDirection } from "@shared/design-plan";
 
 const logger = createModuleLogger("main");
 const agentGateway = new AgentGateway();
@@ -487,7 +488,9 @@ app.whenReady().then(async () => {
       request: request.prompt,
       presentation: runtime.commandBus.getSnapshot(),
       model: selection,
-      designSystem: request.layoutChoice?.designSystem,
+      designSystem: request.layoutChoice
+        ? getSelectedDesignDirection(request.layoutChoice).designSystem
+        : undefined,
       workspaceRoot: runtime.workspaceRoot,
       signal,
     });

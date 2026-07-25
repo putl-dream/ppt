@@ -31,7 +31,7 @@ import { detectOverflowTextTool } from "./deferred/detect-overflow-text";
 import { detectRepeatedTitlesTool } from "./deferred/detect-repeated-titles";
 import { exportPptxTool } from "./deferred/export-pptx";
 import { rewriteSlideContentTool } from "./deferred/rewrite-slide-content";
-import { selectStyleStrategyTool } from "./deferred/select-style-strategy";
+import { resolveDesignPlanTool } from "./deferred/resolve-design-plan";
 import { applyTypographyTool } from "./deferred/apply-typography";
 import { previewSlideTool } from "./deferred/preview-slide";
 import { validateDeckLayoutTool } from "./deferred/validate-deck-layout";
@@ -179,7 +179,7 @@ export function createDefaultToolRegistry(): ToolRegistry {
     detectRepeatedTitlesTool,
     exportPptxTool,
     rewriteSlideContentTool,
-    selectStyleStrategyTool,
+    resolveDesignPlanTool,
     applyTypographyTool,
     previewSlideTool,
     validateDeckLayoutTool,

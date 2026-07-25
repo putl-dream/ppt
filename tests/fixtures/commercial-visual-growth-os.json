@@ -7,7 +7,7 @@
   "objective": "用一套可审计的增长方法说明方案价值、落地路径与预期业务影响",
   "desiredAction": "批准 90 天联合验证计划，并指定业务负责人",
   "durationMinutes": 15,
-  "designPreset": "business",
+  "designPreset": "swiss-minimal",
   "sources": [
     {
       "id": "illustrative-baseline",

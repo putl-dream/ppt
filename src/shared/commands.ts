@@ -9,9 +9,8 @@ import {
 import { applyLayout } from "./layout";
 import { SLIDE_LAYOUTS } from "./slide-layouts";
 import { SLIDE_VARIANTS } from "./slide-variant";
-import { resolveFontFamily } from "./typography";
 import {
-  designSystemV1Schema,
+  designSystemV2Schema,
   resolveSlideStyle,
   slideDesignOverrideSchema,
 } from "@design-system";
@@ -61,7 +60,7 @@ export const presentationCommandSchema = z.discriminatedUnion("type", [
   z.object({
     id: z.string(),
     type: z.literal("set-design-system"),
-    designSystem: designSystemV1Schema,
+    designSystem: designSystemV2Schema,
   }),
   z.object({
     id: z.string(),
@@ -306,11 +305,11 @@ export function executeCommand(
           element.type === "text"
             ? {
                 ...element,
-                fontFamily: resolveFontFamily(
-                  undefined,
-                  element.textRole ?? "body",
-                  style.typography.family,
-                ),
+                fontFamily: element.textRole === "metric"
+                  ? style.typography.data.family
+                  : element.textRole === "kicker"
+                    ? style.typography.heading.family
+                    : style.typography.body.family,
               }
             : element
         )),

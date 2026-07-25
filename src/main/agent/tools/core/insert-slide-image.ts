@@ -1,20 +1,25 @@
-import { z } from "zod";
 import { fileURLToPath } from "node:url";
-import type { ToolDefinition } from "../tool-definition";
+import { z } from "zod";
+import { resolveSlideStyle } from "@design-system";
 import type { PresentationCommand } from "@shared/commands";
+import { applyLayout } from "@shared/layout";
+import { getLayoutSlotRect, listLayoutSlots } from "@shared/layout-slots";
 import {
   imageSourceSchema,
   type ImageAssetMetadata,
   type ImageElement,
 } from "@shared/presentation";
-import { LayoutPolicy } from "../../design/layout-policy";
+import { SLIDE_LAYOUTS, type SlideLayoutType } from "@shared/slide-layouts";
 import { localizeImageAsset } from "../../assets/image-asset";
+import { LayoutPolicy } from "../../design/layout-policy";
 import { isOutsideWorkspace } from "../../subagent/workspace-path";
-import {
-  getLayoutSlotRect,
-  listLayoutSlots,
-  type AspectRatioPreset,
-} from "@shared/layout-slots";
+import type { ToolDefinition } from "../tool-definition";
+
+const UNPLACED_COORDINATE = -10_000;
+
+function isSlideLayout(value: string): value is SlideLayoutType {
+  return (SLIDE_LAYOUTS as readonly string[]).includes(value);
+}
 
 export const insertSlideImageSchema = z.object({
   slideId: z.string().describe("幻灯片 ID"),
@@ -23,7 +28,7 @@ export const insertSlideImageSchema = z.object({
   aspectRatio: z
     .enum(["16:9", "4:3", "1:1", "auto"])
     .optional()
-    .describe("可选宽高比约束"),
+    .describe("图片搜索与选择时的宽高比偏好；最终坐标由 layout grammar 决定"),
   objectFit: z.enum(["cover", "contain"]).optional(),
   provider: z.string().max(100).optional(),
   sourcePageUrl: z.string().url().optional(),
@@ -33,14 +38,16 @@ export const insertSlideImageSchema = z.object({
 });
 
 /**
- * Core Tool: 将已选图片插入 layout 预留槽位，无需手填坐标。
+ * Core Tool: 将已选图片插入 layout 预留槽位，并由当前 grammar 重排整页。
  */
 export const insertSlideImageTool: ToolDefinition<
   typeof insertSlideImageSchema,
   { commands: PresentationCommand[]; warnings: string[]; asset?: ImageAssetMetadata }
 > = {
   name: "InsertSlideImage",
-  description: "将 SearchSlideImages 选中的图片直接放入 layout 槽位（side/hero/grid-N），自动计算坐标、本地化并保留来源。无需 SearchExtraTools。",
+  description:
+    "将 SearchSlideImages 选中的图片放入 layout 槽位（side/hero/grid-N），"
+    + "本地化并以当前 grammarVariant 重排整页，最终坐标以 grammar handler 为准。",
   category: "core",
   loadPolicy: "core",
   inputSchema: insertSlideImageSchema,
@@ -61,31 +68,21 @@ export const insertSlideImageTool: ToolDefinition<
     if (!slide) throw new Error(`Slide '${args.slideId}' was not found.`);
 
     const layout = slide.layout ?? "concept";
+    if (!isSlideLayout(layout)) {
+      throw new Error(`Layout '${layout}' is not registered.`);
+    }
     const validSlots = listLayoutSlots(layout, slide.grammarVariant);
     if (validSlots.length === 0) {
       throw new Error(
-        `Layout '${layout}' has no image slots. Use concept, case, cover, or image-grid.`,
+        `Layout '${layout}/${slide.grammarVariant ?? "default"}' has no image slots. `
+        + "Choose an image-capable grammar variant first.",
       );
     }
-
     if (!validSlots.includes(args.slot)) {
       throw new Error(
-        `Slot '${args.slot}' invalid for layout '${layout}'. Valid: ${validSlots.join(", ")}`,
+        `Slot '${args.slot}' invalid for layout '${layout}/${slide.grammarVariant ?? "default"}'. `
+        + `Valid: ${validSlots.join(", ")}`,
       );
-    }
-
-    const rect = getLayoutSlotRect(
-      layout,
-      args.slot,
-      (args.aspectRatio ?? "auto") as AspectRatioPreset,
-      slide.grammarVariant,
-    );
-    if (!rect) {
-      throw new Error(`Could not resolve slot '${args.slot}'.`);
-    }
-
-    if (!LayoutPolicy.isWithinSafeZone(rect)) {
-      warnings.push("Computed slot rect extends outside the canvas safe zone.");
     }
 
     let effectiveUrl = args.url;
@@ -127,58 +124,67 @@ export const insertSlideImageTool: ToolDefinition<
     }
 
     const existing = slide.elements.find(
-      (el): el is ImageElement => el.type === "image" && el.imageSlot === args.slot,
+      (element): element is ImageElement =>
+        element.type === "image" && element.imageSlot === args.slot,
     );
+    const imageId = existing?.id ?? crypto.randomUUID();
+    const pendingImage: ImageElement = {
+      ...existing,
+      id: imageId,
+      type: "image",
+      x: UNPLACED_COORDINATE,
+      y: UNPLACED_COORDINATE,
+      width: 1,
+      height: 1,
+      url: effectiveUrl,
+      borderRadius: existing?.borderRadius ?? 4,
+      imageSlot: args.slot,
+      objectFit: args.objectFit ?? existing?.objectFit ?? "cover",
+      provenance: "asset",
+      ...(asset || existing?.asset ? { asset: asset ?? existing?.asset } : {}),
+    };
+    const slideWithImage = {
+      ...slide,
+      elements: existing
+        ? slide.elements.map((element) => element.id === existing.id ? pendingImage : element)
+        : [...slide.elements, pendingImage],
+    };
+    const laidOutSlide = applyLayout(
+      slideWithImage,
+      layout,
+      resolveSlideStyle(context.presentation.designSystem, slideWithImage),
+      {
+        grammarVariant: slide.grammarVariant,
+        designOverride: slide.designOverride,
+      },
+    );
+    const placedImage = laidOutSlide.elements.find(
+      (element): element is ImageElement => element.type === "image" && element.id === imageId,
+    );
+    const rect = getLayoutSlotRect(laidOutSlide, args.slot);
+    if (
+      !placedImage
+      || placedImage.imageSlot !== args.slot
+      || placedImage.x === UNPLACED_COORDINATE
+      || placedImage.y === UNPLACED_COORDINATE
+      || !rect
+    ) {
+      throw new Error(
+        `Layout grammar '${layout}/${slide.grammarVariant ?? "default"}' `
+        + `did not consume image slot '${args.slot}'.`,
+      );
+    }
 
-    if (existing) {
-      return {
-        commands: [
-          {
-            id: crypto.randomUUID(),
-            type: "update-element",
-            slideId: args.slideId,
-            elementId: existing.id,
-            element: {
-              ...existing,
-              url: effectiveUrl,
-              x: rect.x,
-              y: rect.y,
-              width: rect.width,
-              height: rect.height,
-              imageSlot: args.slot,
-              objectFit: args.objectFit ?? existing.objectFit ?? "cover",
-              provenance: "asset",
-              asset: asset ?? existing.asset,
-            },
-          },
-        ],
-        warnings,
-        ...(asset ? { asset } : {}),
-      };
+    if (!LayoutPolicy.isWithinSafeZone(rect)) {
+      warnings.push("Grammar-assigned slot rect extends outside the canvas safe zone.");
     }
 
     return {
-      commands: [
-        {
-          id: crypto.randomUUID(),
-          type: "add-element",
-          slideId: args.slideId,
-          element: {
-            id: crypto.randomUUID(),
-            type: "image",
-            x: rect.x,
-            y: rect.y,
-            width: rect.width,
-            height: rect.height,
-            url: effectiveUrl,
-            borderRadius: 4,
-            imageSlot: args.slot,
-            objectFit: args.objectFit ?? "cover",
-            provenance: "asset",
-            ...(asset ? { asset } : {}),
-          },
-        },
-      ],
+      commands: [{
+        id: crypto.randomUUID(),
+        type: "restore-slide",
+        slide: laidOutSlide,
+      }],
       warnings,
       ...(asset ? { asset } : {}),
     };

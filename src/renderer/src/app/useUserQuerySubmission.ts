@@ -1,7 +1,8 @@
 import { useCallback, type Dispatch, type SetStateAction } from "react";
-import type { LayoutChoice } from "@shared/layout-preference";
+import { createLockedLayoutChoice } from "@shared/layout-preference";
 import type { LeanGenerationMode } from "@shared/lean-mode-contract";
 import type { Presentation } from "@shared/presentation";
+import type { DesignSystemV2 } from "@design-system";
 import type { ChatMessage } from "./chatMessageRuntime";
 import type { AgentRunController } from "./agent/useAgentRunController";
 import { tryHandleLocalQueryCommand } from "./localQueryCommand";
@@ -10,7 +11,7 @@ interface UseUserQuerySubmissionOptions {
   request: string;
   busy: boolean;
   generationMode: LeanGenerationMode;
-  selectedDesignSystem: LayoutChoice["designSystem"];
+  selectedDesignSystem: DesignSystemV2;
   presentation?: Presentation;
   activeSessionId: string;
   setRequest: Dispatch<SetStateAction<string>>;
@@ -57,10 +58,14 @@ export function useUserQuerySubmission({
       generationMode,
       ...(generationMode === "lean"
         ? {
-            layoutChoice: {
-              mode: "template",
-              designSystem: selectedDesignSystem,
-            },
+            layoutChoice: createLockedLayoutChoice({
+              audience: "Lean 请求中定义的目标受众",
+              objective: `生成“${presentation?.title ?? "新演示文稿"}”`,
+              desiredOutcome: "形成可评审、可继续编辑的完整演示",
+              coreMessage: request.trim().slice(0, 240),
+              deliveryContext: "Lean 单次生成",
+              afterUse: "用于预览、评审与后续修改",
+            }, selectedDesignSystem, "Lean 模式沿用用户当前明确选择的设计系统。"),
           }
         : {}),
     });

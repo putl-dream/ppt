@@ -62,7 +62,12 @@ describe("presentation-draft", () => {
       ],
     };
 
-    const laidOut = applyLayout(slide, "process", testSlideStyle(slide));
+    const laidOut = applyLayout(
+      slide,
+      "process",
+      testSlideStyle(slide),
+      { grammarVariant: "cards" },
+    );
     expect(slideNeedsLayoutChoice(laidOut)).toBe(false);
     expect(laidOut.elements.some((el) => el.type === "shape" && el.shapeType === "arrow")).toBe(true);
   });

@@ -70,7 +70,7 @@ function specWithSlides(slides: LeanDeckSpecV2["slides"]): LeanDeckSpecV2 {
     restructurePermission: "reorder",
     narrativeMode: "executive-brief",
     durationMinutes: 10,
-    designPreset: "business",
+    designPreset: "swiss-minimal",
     sources: [],
     slides,
   };

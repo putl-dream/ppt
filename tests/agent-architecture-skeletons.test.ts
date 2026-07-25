@@ -26,7 +26,7 @@ import { exportPptxTool } from "../src/main/agent/tools/deferred/export-pptx";
 import { previewSlideTool } from "../src/main/agent/tools/deferred/preview-slide";
 import { validateDeckLayoutTool } from "../src/main/agent/tools/deferred/validate-deck-layout";
 import { rewriteSlideContentTool } from "../src/main/agent/tools/deferred/rewrite-slide-content";
-import { selectStyleStrategyTool } from "../src/main/agent/tools/deferred/select-style-strategy";
+import { resolveDesignPlanTool } from "../src/main/agent/tools/deferred/resolve-design-plan";
 import { toToolCard } from "../src/main/agent/tools/tool-card";
 import { ToolLoader } from "../src/main/agent/tools/tool-loader";
 import { SystemPromptBuilder } from "../src/main/agent/runtime/prompts/system-prompt";
@@ -132,7 +132,7 @@ describe("Agent Architecture Skeletons & Types", () => {
     registry.register(detectRepeatedTitlesTool);
     registry.register(exportPptxTool);
     registry.register(rewriteSlideContentTool);
-    registry.register(selectStyleStrategyTool);
+    registry.register(resolveDesignPlanTool);
 
     // Assertions
     expect(registry.get("AskUser")).toBe(askUserTool);

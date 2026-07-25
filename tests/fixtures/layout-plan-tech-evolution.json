@@ -1,25 +1,65 @@
 {
-  "version": 1,
-  "styleMode": "template",
-  "designSystem": {
-    "version": 1,
-    "tokens": {
-      "palette": "tech-dark",
-      "fontMood": "technical",
-      "shapeLanguage": "geometric",
-      "backgroundStyle": "dark",
-      "motif": "path-line",
-      "density": "standard",
-      "imageTreatment": "masked",
-      "chartStyle": "dashboard"
-    }
+  "version": 2,
+  "communicationContract": {
+    "audience": "负责技术投入与商业落地的管理团队",
+    "objective": "用八页演示对齐 2025 年技术演进的优先级与推进方式",
+    "desiredOutcome": "确认阶段性投入顺序，并为首个落地案例指定负责人",
+    "coreMessage": "技术演进的价值来自分阶段商业落地，而不是能力清单的堆叠",
+    "deliveryContext": "20 分钟季度技术战略评审",
+    "afterUse": "听众能够复述优先趋势、权衡机遇与挑战，并启动首个案例"
   },
-  "designNotes": "Redesign of 7-slide tech evolution deck: replace concept abuse with process/case/toc rhythm.",
+  "selectionSource": "recommended-spectrum",
+  "directions": [
+    {
+      "id": "safe",
+      "tier": "safe",
+      "label": "清晰决策",
+      "rationale": "以瑞士极简和金字塔论证确保管理团队快速理解优先级。",
+      "designSystem": {
+        "version": 2,
+        "argumentMode": "briefing",
+        "visualStyle": "swiss-minimal",
+        "colorScheme": "business-blue",
+        "readingMode": "balanced"
+      }
+    },
+    {
+      "id": "shifted",
+      "tier": "shifted",
+      "label": "数据叙事",
+      "rationale": "用数据新闻式视觉强化证据与章节节奏，同时保持正式感。",
+      "designSystem": {
+        "version": 2,
+        "argumentMode": "briefing",
+        "visualStyle": "data-journalism",
+        "colorScheme": "tech-dark",
+        "readingMode": "balanced"
+      }
+    },
+    {
+      "id": "bold",
+      "tier": "bold",
+      "label": "未来信号",
+      "rationale": "以深色科技语言和展示型论证制造更强的现场记忆点。",
+      "designSystem": {
+        "version": 2,
+        "argumentMode": "briefing",
+        "visualStyle": "dark-tech",
+        "colorScheme": "tech-dark",
+        "readingMode": "balanced"
+      }
+    }
+  ],
+  "selectedDirectionId": "shifted",
+  "designNotes": "用证据驱动的章节节奏替代同质化概念卡片，并在关键转折页留出呼吸。",
   "slides": [
     {
       "slideId": "slide-1",
       "title": "2025 技术演进与商业落地",
       "narrativeRole": "cover",
+      "audienceMove": "把注意力从技术热点转向商业落地的核心决策。",
+      "rhythm": "anchor",
+      "layoutIntent": "用单一主张和明确时间范围建立全篇锚点。",
       "layout": "cover",
       "slideVariant": "hero",
       "rationale": "Opening title page; hero variant for brand impact.",
@@ -29,6 +69,9 @@
       "slideId": "slide-2",
       "title": "目录",
       "narrativeRole": "toc",
+      "audienceMove": "理解演示将如何从趋势证据推进到行动选择。",
+      "rhythm": "dense",
+      "layoutIntent": "用紧凑目录交代论证路径，不抢占章节内容的视觉重心。",
       "layout": "toc",
       "rationale": "7+ page business deck needs agenda (Rubric A2 anti-pattern fix).",
       "enhancements": []
@@ -37,6 +80,9 @@
       "slideId": "slide-3",
       "title": "技术趋势概览",
       "narrativeRole": "section",
+      "audienceMove": "暂停并切换到技术趋势这一主章节。",
+      "rhythm": "breathing",
+      "layoutIntent": "用章节标识和留白制造清晰的叙事转折。",
       "layout": "section",
       "slideVariant": "hero",
       "rationale": "Chapter breathing page before trend content.",
@@ -46,6 +92,9 @@
       "slideId": "slide-4",
       "title": "趋势一：大模型规模化",
       "narrativeRole": "content",
+      "audienceMove": "看见大模型能力如何按阶段转化为规模化价值。",
+      "rhythm": "dense",
+      "layoutIntent": "将四个演进阶段组织为一条有方向的连续流程。",
       "layout": "process",
       "rationale": "Four evolution stages are sequential, not parallel concepts.",
       "enhancements": []
@@ -54,6 +103,9 @@
       "slideId": "slide-5",
       "title": "趋势二：多模态融合",
       "narrativeRole": "content",
+      "audienceMove": "用一个案例和关键指标判断多模态融合的成熟度。",
+      "rhythm": "anchor",
+      "layoutIntent": "突出单一证据中心，并让解释文本服务于指标。",
       "layout": "case",
       "rationale": "Narrative + key metric; avoids third consecutive concept page.",
       "enhancements": []
@@ -62,6 +114,9 @@
       "slideId": "slide-6",
       "title": "机遇与挑战",
       "narrativeRole": "comparison",
+      "audienceMove": "同时权衡增长机会与实施风险，而不是只接受单边论证。",
+      "rhythm": "dense",
+      "layoutIntent": "用对称比较呈现两侧证据，并在底部给出判断。",
       "layout": "comparison",
       "rationale": "A vs B structure; not two-column concept text boxes.",
       "enhancements": []
@@ -70,6 +125,9 @@
       "slideId": "slide-7",
       "title": "行业案例",
       "narrativeRole": "data",
+      "audienceMove": "相信推荐顺序已经在真实行业场景中得到验证。",
+      "rhythm": "anchor",
+      "layoutIntent": "让案例结论和 KPI 成为页面的两个主要视觉落点。",
       "layout": "case",
       "rationale": "Case study with KPI anchor (Rubric C1).",
       "enhancements": []
@@ -78,6 +136,9 @@
       "slideId": "slide-8",
       "title": "总结与展望",
       "narrativeRole": "summary",
+      "audienceMove": "把分析收束为下一步投入顺序与责任动作。",
+      "rhythm": "breathing",
+      "layoutIntent": "用少量结论和明确行动项结束演示，保留充分留白。",
       "layout": "summary",
       "slideVariant": "light",
       "rationale": "Closing takeaway with left accent bar; distinct from concept cards.",

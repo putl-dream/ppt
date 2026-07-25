@@ -7,7 +7,7 @@ import {
   CHART_STYLES,
   IMAGE_TREATMENTS,
   DEFAULT_DESIGN_SYSTEM,
-  designSystemV1Schema,
+  designSystemV2Schema,
   slideDesignOverrideSchema,
 } from "../design-system";
 
@@ -317,7 +317,7 @@ export const presentationSchema = z.object({
   title: z.string(),
   revision: z.number().int().nonnegative(),
   slides: presentationSlidesSchema,
-  designSystem: designSystemV1Schema,
+  designSystem: designSystemV2Schema,
 });
 
 export type TextElement = z.infer<typeof textElementSchema>;

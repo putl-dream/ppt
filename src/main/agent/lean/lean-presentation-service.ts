@@ -13,7 +13,7 @@ import {
 import { leanDeckSpecSchema } from "@shared/lean-mode";
 import type { PresentationCommand } from "@shared/commands";
 import type { Presentation } from "@shared/presentation";
-import type { DesignSystemV1 } from "@design-system";
+import { VISUAL_STYLES, type DesignSystemV2 } from "@design-system";
 import { z } from "zod";
 
 import { ModelOutputError } from "../gateway/model-calls";
@@ -42,6 +42,7 @@ export const LEAN_SYSTEM_PROMPT = `你是商业演示文稿架构师。把用户
 - 必须且只能调用一次 submit_lean_deck_spec；工具参数就是完整 DeckSpec，不要解释、不要 Markdown。若服务端不支持 tool_use，则只输出同一对象的 JSON。
 - 字段名必须精确。顶层只能有 version、title、locale、scenario、audience、objective、desiredAction、coreMessage、presentationContext、afterUse、restructurePermission、narrativeMode、durationMinutes、designPreset、sources、slides。
 - version 必须是数字 2（不是字符串）；字段名必须是 locale（不要 language），值只能是 zh-CN 或 en-US。
+- designPreset 必须是以下视觉风格之一：${VISUAL_STYLES.join("、")}。
 - 每个 source 必须有 id、label、asOf、provenance；asOf 不确定时用 null。
 - coreMessage 是整套演示唯一核心信息；presentationContext 描述会议/传播场景；afterUse 描述会后如何使用。restructurePermission 只能是 preserve、reorder、rewrite-and-merge；narrativeMode 只能是 executive-brief、problem-solution、evidence-led、vision-to-action。
 - 每个 slide 必须有 kind、purpose、title、subtitle、items、left、right、steps、metric、chart、sourceRefs、audienceMove、visual；audienceMove 用一句话说明本页推动受众理解、相信、决定或行动什么。未使用字段分别用空字符串、空数组或 null。不要输出 body、agenda、bullets、comparison、process、closing 等替代字段。
@@ -405,7 +406,7 @@ export class LeanPresentationService {
     request: string;
     presentation: Presentation;
     model?: AgentModelSelection;
-    designSystem?: DesignSystemV1;
+    designSystem?: DesignSystemV2;
     workspaceRoot?: string;
     signal?: AbortSignal;
   }): Promise<LeanPresentationProposal> {

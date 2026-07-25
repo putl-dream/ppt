@@ -64,7 +64,7 @@ describe("commercial visual quality gate", () => {
       restructurePermission: "reorder",
       narrativeMode: "evidence-led",
       durationMinutes: 10,
-      designPreset: "business",
+      designPreset: "swiss-minimal",
       sources: [],
       slides: [contentSlide("第一页"), contentSlide("第二页")],
     };

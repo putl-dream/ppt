@@ -1,7 +1,8 @@
 import {
   DESIGN_PRESETS,
+  VISUAL_STYLES,
   resolveSlideStyle,
-  type DesignSystemV1,
+  type DesignSystemV2,
 } from "@design-system";
 import { z } from "zod";
 
@@ -240,7 +241,7 @@ export const leanDeckSpecSchema = z.object({
   objective: z.string().trim().min(1).max(140),
   desiredAction: z.string().trim().min(1).max(120),
   durationMinutes: z.number().int().min(5).max(30),
-  designPreset: z.enum(["business", "report", "technical"]),
+  designPreset: z.enum(VISUAL_STYLES),
   sources: z.array(leanSourceSpecSchema).max(12),
   slides: z.array(leanSlideSpecSchema).min(6).max(12),
 }).strict().superRefine((deck, context) => {
@@ -571,8 +572,8 @@ function normalizeElementIds(elements: SlideElement[], slideSeed: string): Slide
 
 function resolveLeanDesignSystem(
   deck: LeanDeckSpec,
-  override?: DesignSystemV1,
-): DesignSystemV1 {
+  override?: DesignSystemV2,
+): DesignSystemV2 {
   if (override) return structuredClone(override);
   const preset = DESIGN_PRESETS.find((candidate) => candidate.id === deck.designPreset);
   if (!preset) {
@@ -594,7 +595,7 @@ export function isLeanStarterPresentation(presentation: Presentation): boolean {
 export function compileLeanDeckSpec(
   input: LeanDeckSpec,
   basePresentation: Presentation,
-  designSystemOverride?: DesignSystemV1,
+  designSystemOverride?: DesignSystemV2,
 ): CompiledLeanDeck {
   const deck = leanDeckSpecSchema.parse(input);
   if (!isLeanStarterPresentation(basePresentation)) {

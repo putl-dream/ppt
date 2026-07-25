@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { z } from "zod";
 import {
   buildLayoutPlanCommands,
+  getSelectedDesignDirection,
   LAYOUT_PLAN_PATH,
   parseLayoutPlan,
   validateLayoutPlan,
@@ -15,6 +16,7 @@ import { applyCommandsToDraft } from "../../runtime/presentation/layout-command-
 import { resolveWorkspacePath } from "../../subagent/workspace-path";
 import type { ToolDefinition } from "../tool-definition";
 import type { PresentationCommand } from "@shared/commands";
+import type { Presentation } from "@shared/presentation";
 import { insertSlideImageTool } from "./insert-slide-image";
 
 export const executeLayoutPlanSchema = z.object({
@@ -37,10 +39,10 @@ type ExecuteLayoutPlanResult = AgentCommandProposalResult | ExecuteLayoutPlanFai
 
 async function compileImageEnhancements(
   plan: LayoutPlan,
-  baseCommands: PresentationCommand[],
+  laidOutDraft: Presentation,
   context: Parameters<typeof insertSlideImageTool.execute>[1],
 ): Promise<{ commands: PresentationCommand[]; issues: LayoutPlanValidationIssue[]; count: number }> {
-  let draft = applyCommandsToDraft(context.presentation, baseCommands);
+  let draft = laidOutDraft;
   const commands: PresentationCommand[] = [];
   const issues: LayoutPlanValidationIssue[] = [];
   let count = 0;
@@ -180,18 +182,22 @@ export const executeLayoutPlanTool: ToolDefinition<
       return failure(planPath, validationIssues);
     }
 
-    const baseCommands = buildLayoutPlanCommands(plan);
-    const imageCompilation = await compileImageEnhancements(plan, baseCommands, context);
+    const selectedDirection = getSelectedDesignDirection(plan);
+    const layoutCommands = buildLayoutPlanCommands(plan);
+    const laidOutDraft = applyCommandsToDraft(context.presentation, layoutCommands);
+    const imageCompilation = await compileImageEnhancements(plan, laidOutDraft, context);
     const issues = [...validationIssues, ...imageCompilation.issues];
     if (imageCompilation.issues.some((issue) => issue.severity === "error")) {
       return failure(planPath, issues);
     }
-    const commands = [...baseCommands, ...imageCompilation.commands];
+    const commands = [...layoutCommands, ...imageCompilation.commands];
     const layoutTypes = [...new Set(plan.slides.map((slide) => slide.layout))];
     const warningCount = issues.length;
     const summary =
       `Executed layout-plan from ${planPath}: ${plan.slides.length} slides, `
-      + `${layoutTypes.length} layout types, design palette ${plan.designSystem.tokens.palette}; `
+      + `${layoutTypes.length} layout types, visual style ${selectedDirection.designSystem.visualStyle}, `
+      + `argument mode ${selectedDirection.designSystem.argumentMode}, `
+      + `reading mode ${selectedDirection.designSystem.readingMode}; `
       + `validation passed with ${warningCount} warning/info issue(s).`;
 
     return {
@@ -202,7 +208,7 @@ export const executeLayoutPlanTool: ToolDefinition<
       assumptions: [
         "slides/layout-plan.json is the single source of truth for layout decisions.",
         imageCompilation.count > 0
-          ? `${imageCompilation.count} insert-image enhancement(s) were compiled and localized with the layout commands.`
+          ? `${imageCompilation.count} insert-image enhancement(s) were localized and each target slide was reflowed with its selected grammarVariant.`
           : "No insert-image enhancements were requested.",
         "Layout-plan enhancements are limited to executable insert-image operations; chart, table, icon, and decoration changes must use explicit element-targeted commands.",
       ],

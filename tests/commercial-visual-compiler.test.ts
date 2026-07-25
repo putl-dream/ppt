@@ -40,7 +40,7 @@ function fixture(): {
     restructurePermission: "reorder",
     narrativeMode: "evidence-led",
     durationMinutes: 10,
-    designPreset: "report",
+    designPreset: "data-journalism",
     sources: [{
       id: "report",
       label: "Digital transformation report",

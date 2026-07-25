@@ -6,7 +6,6 @@ import type { LayoutGrammarContext, LayoutGrammarHandler } from "../layout-gramm
 import { layoutGrammarRegistry } from "../layout-grammar";
 import { LAYOUT_GRAMMAR_VARIANTS } from "../layout-grammar-variants";
 import { createCoverMotif } from "../motif-system";
-import { VISUAL_TOKENS, cardShadow } from "../visual-tokens";
 
 type CoverVariant = "centered" | "editorial-hero" | "signal-dark";
 
@@ -15,11 +14,11 @@ function resolveCoverVariant(ctx: LayoutGrammarContext): CoverVariant {
   if (ctx.grammarVariant === "editorial-hero" || ctx.grammarVariant === "signal-dark") {
     return ctx.grammarVariant;
   }
-  if (isDarkTokens(ctx.style.tokens)) return "signal-dark";
+  if (isDarkTokens(ctx.style.layoutTokens)) return "signal-dark";
   if (
-    ctx.style.tokens.fontMood === "editorial" ||
-    ctx.style.tokens.motif === "bookmark" ||
-    ctx.style.tokens.shapeLanguage === "annotation"
+    ctx.style.layoutTokens.fontMood === "editorial" ||
+    ctx.style.layoutTokens.motif === "bookmark" ||
+    ctx.style.layoutTokens.shapeLanguage === "annotation"
   ) {
     return "editorial-hero";
   }
@@ -27,7 +26,7 @@ function resolveCoverVariant(ctx: LayoutGrammarContext): CoverVariant {
 }
 
 function coverTitleFont(ctx: LayoutGrammarContext): "serif" | "sans" | "mono" {
-  return ctx.style.typography.family;
+  return ctx.style.typography.heading.family;
 }
 
 function titleAndBody(ctx: LayoutGrammarContext): {
@@ -59,9 +58,9 @@ function applyImageTreatment(
     ...image,
     borderRadius:
       treatment === "masked"
-        ? VISUAL_TOKENS.radii.lg
+        ? Math.max(0, ctx.style.shape.radius * 2)
         : treatment === "framed" || treatment === "captioned"
-          ? VISUAL_TOKENS.radii.md
+          ? Math.max(0, ctx.style.shape.radius)
           : image.borderRadius,
     imageTreatment: treatment,
   };
@@ -75,18 +74,8 @@ function createFrame(
   ctx: LayoutGrammarContext,
 ): ShapeElement {
   return {
+    ...ctx.helpers.createCard(x, y, width, height),
     id: `motif-frame-${crypto.randomUUID()}`,
-    type: "shape",
-    shapeType: "roundedRect",
-    x,
-    y,
-    width,
-    height,
-    fillColor: ctx.colors.cardBg,
-    strokeColor: ctx.colors.cardStroke,
-    cornerRadius: VISUAL_TOKENS.radii.md,
-    shadow: cardShadow("md"),
-    provenance: "layout",
   };
 }
 
@@ -102,7 +91,7 @@ function applyCenteredCover(ctx: LayoutGrammarContext): void {
   title.y = 180;
   title.width = 1040;
   title.height = 180;
-  title.fontSize = 64;
+  title.fontSize = Math.round(64 * ctx.style.typography.heading.scale);
   title.bold = true;
   title.color = ctx.colors.title;
   title.align = "center";
@@ -115,7 +104,7 @@ function applyCenteredCover(ctx: LayoutGrammarContext): void {
     sub.y = 400;
     sub.width = 1040;
     sub.height = 80;
-    sub.fontSize = 24;
+    sub.fontSize = Math.round(24 * ctx.style.typography.body.scale);
     sub.bold = false;
     sub.color = ctx.colors.body;
     sub.align = "center";
@@ -139,9 +128,10 @@ function applyEditorialCover(ctx: LayoutGrammarContext): void {
 
   ctx.elements.push(
     ...createCoverMotif({
-      motif: ctx.style.tokens.motif,
+      motif: ctx.style.layoutTokens.motif,
       colors: ctx.colors,
       variant: "editorial-hero",
+      style: ctx.style,
     }),
   );
 
@@ -153,7 +143,7 @@ function applyEditorialCover(ctx: LayoutGrammarContext): void {
   title.y = 154;
   title.width = titleW;
   title.height = 188;
-  title.fontSize = 58;
+  title.fontSize = Math.round(58 * ctx.style.typography.heading.scale);
   title.bold = true;
   title.color = ctx.colors.title;
   title.align = "left";
@@ -166,7 +156,7 @@ function applyEditorialCover(ctx: LayoutGrammarContext): void {
     sub.y = 378;
     sub.width = hasHeroImage ? 540 : 760;
     sub.height = 96;
-    sub.fontSize = 22;
+    sub.fontSize = Math.round(22 * ctx.style.typography.body.scale);
     sub.bold = false;
     sub.color = ctx.colors.body;
     sub.align = "left";
@@ -186,7 +176,7 @@ function applyEditorialCover(ctx: LayoutGrammarContext): void {
     ctx.elements.push(
       ctx.helpers.createAccentBlock(760, 144, 300, 360, {
         opacity: 0.09,
-        radius: VISUAL_TOKENS.radii.lg,
+        radius: ctx.style.shape.radius,
       }),
     );
   }
@@ -198,9 +188,10 @@ function applySignalDarkCover(ctx: LayoutGrammarContext): void {
 
   ctx.elements.push(
     ...createCoverMotif({
-      motif: ctx.style.tokens.motif,
+      motif: ctx.style.layoutTokens.motif,
       colors: ctx.colors,
       variant: "signal-dark",
+      style: ctx.style,
     }),
   );
 
@@ -208,7 +199,7 @@ function applySignalDarkCover(ctx: LayoutGrammarContext): void {
   title.y = 168;
   title.width = 700;
   title.height = 168;
-  title.fontSize = 60;
+  title.fontSize = Math.round(60 * ctx.style.typography.heading.scale);
   title.bold = true;
   title.color = ctx.colors.title;
   title.align = "left";
@@ -221,7 +212,7 @@ function applySignalDarkCover(ctx: LayoutGrammarContext): void {
     sub.y = 366;
     sub.width = 610;
     sub.height = 112;
-    sub.fontSize = 22;
+    sub.fontSize = Math.round(22 * ctx.style.typography.body.scale);
     sub.bold = false;
     sub.color = ctx.colors.body;
     sub.align = "left";

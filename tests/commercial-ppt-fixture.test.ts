@@ -41,9 +41,11 @@ describe("commercial PPT fixture", () => {
       "fixtures",
       "commercial-visual-growth-os.json",
     );
-    const spec = leanDeckSpecV2Schema.parse(
-      JSON.parse(await readFile(fixturePath, "utf8")),
-    );
+    const fixture = JSON.parse(await readFile(fixturePath, "utf8"));
+    const spec = leanDeckSpecV2Schema.parse({
+      ...fixture,
+      designPreset: "swiss-minimal",
+    });
     const pipeline = new LeanV2Pipeline(noExternalAssets);
 
     const first = await pipeline.create({

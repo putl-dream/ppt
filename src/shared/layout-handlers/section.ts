@@ -16,15 +16,15 @@ function resolveVariant(ctx: LayoutGrammarContext): SectionVariant {
   }
   if (ctx.grammarVariant === "centered") return "centered";
   if (
-    ctx.style.tokens.shapeLanguage === "editorial"
-    || ctx.style.tokens.shapeLanguage === "annotation"
-    || ctx.style.tokens.motif === "bookmark"
+    ctx.style.layoutTokens.shapeLanguage === "editorial"
+    || ctx.style.layoutTokens.shapeLanguage === "annotation"
+    || ctx.style.layoutTokens.motif === "bookmark"
   ) {
     return "editorial-split";
   }
   if (
-    ctx.style.tokens.shapeLanguage === "geometric"
-    || ctx.style.tokens.backgroundStyle === "dark"
+    ctx.style.layoutTokens.shapeLanguage === "geometric"
+    || ctx.style.layoutTokens.backgroundStyle === "dark"
   ) {
     return "band";
   }

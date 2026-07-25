@@ -44,7 +44,12 @@ export const applyTypographyTool: ToolDefinition<
         if (element.type !== "text") continue;
 
         const role = (element.textRole ?? "body") as TextRole;
-        const fontFamily = resolveFontFamily(undefined, role, style.typography.family);
+        const roleFamily = role === "metric"
+          ? style.typography.data.family
+          : role === "kicker"
+            ? style.typography.heading.family
+            : style.typography.body.family;
+        const fontFamily = resolveFontFamily(undefined, role, roleFamily);
         const metricStyle = role === "metric"
           ? {
               bold: true,

@@ -74,10 +74,10 @@ describe("layout-command-utils", () => {
     const presentation = makePresentation();
     const slideId = presentation.slides[0].id;
     const draft = applyCommandsToDraft(presentation, [
-      { id: "c1", type: "set-design-system", designSystem: testDesignSystem({ palette: "warm-paper" }) },
+      { id: "c1", type: "set-design-system", designSystem: testDesignSystem({ colorScheme: "warm-paper" }) },
     ]);
     expect(collectAffectedSlideIds([
-      { id: "c1", type: "set-design-system", designSystem: testDesignSystem({ palette: "warm-paper" }) },
+      { id: "c1", type: "set-design-system", designSystem: testDesignSystem({ colorScheme: "warm-paper" }) },
     ], draft)).toEqual([slideId]);
   });
 });
@@ -158,7 +158,7 @@ describe("render-feedback-loop", () => {
       commands: [{
         id: "restyle-all",
         type: "set-design-system",
-        designSystem: testDesignSystem({ palette: "warm-paper" }),
+        designSystem: testDesignSystem({ colorScheme: "warm-paper" }),
       }],
       proposalSummary: "Restyle all slides",
       context,
@@ -246,7 +246,7 @@ describe("render feedback runtime integration", () => {
 
     const result = await runtime.run({
       threadId: "render-feedback-thread",
-      request: "执行标准排版",
+      request: "执行已确认的设计方向",
       presentationSnapshot: presentation,
       currentSlideId: slideId,
       selectedElementIds: [],

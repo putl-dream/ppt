@@ -1,3 +1,4 @@
+import type { Slide } from "./presentation";
 import type { SlideLayoutType } from "./slide-layouts";
 
 export interface SlotRect {
@@ -7,83 +8,42 @@ export interface SlotRect {
   height: number;
 }
 
-export type AspectRatioPreset = "16:9" | "4:3" | "1:1" | "auto";
-
 const CONTENT_Y = 200;
 const CONTENT_H = 430;
+const GRID_SLOTS = ["grid-0", "grid-1", "grid-2", "grid-3"] as const;
 
-function fitAspectRatio(
-  rect: SlotRect,
-  aspect: AspectRatioPreset,
-): SlotRect {
-  if (aspect === "auto") return rect;
-
-  const [wRatio, hRatio] =
-    aspect === "16:9"
-      ? [16, 9]
-      : aspect === "4:3"
-        ? [4, 3]
-        : [1, 1];
-  const targetRatio = wRatio / hRatio;
-  const currentRatio = rect.width / rect.height;
-
-  if (currentRatio > targetRatio) {
-    const newWidth = rect.height * targetRatio;
-    const dx = (rect.width - newWidth) / 2;
-    return { ...rect, x: rect.x + dx, width: newWidth };
-  }
-
-  const newHeight = rect.width / targetRatio;
-  const dy = (rect.height - newHeight) / 2;
-  return { ...rect, y: rect.y + dy, height: newHeight };
-}
-
-/** Slot rectangles aligned with applyLayout placement logic. */
+/**
+ * Reads the rectangle that the active grammar handler actually assigned to an
+ * image slot. Empty slots intentionally have no speculative geometry.
+ */
 export function getLayoutSlotRect(
-  layout: SlideLayoutType | string,
+  laidOutSlide: Pick<Slide, "elements">,
   slot: string,
-  aspectRatio: AspectRatioPreset = "auto",
-  grammarVariant?: string,
 ): SlotRect | undefined {
-  let rect: SlotRect | undefined;
-
-  if (layout === "cover" && slot === "hero") {
-    rect = { x: 200, y: 500, width: 880, height: 160 };
-  } else if (layout === "section" && slot === "hero") {
-    rect = { x: 780, y: 156, width: 340, height: 396 };
-  } else if (layout === "case" && slot === "side") {
-    rect = grammarVariant === "evidence"
-      ? { x: 136, y: 204, width: 618, height: 416 }
-      : { x: 784, y: 212, width: 352, height: 400 };
-  } else if (layout === "concept" && /^grid-\d+$/.test(slot)) {
-    const idx = Number(slot.slice(5));
-    const N = 4;
-    const cardGap = 24;
-    const totalW = 1040;
-    const colW = (totalW - (N - 1) * cardGap) / N;
-    const colX = 120 + idx * (colW + cardGap);
-    const imageAreaH = 100;
-    rect = {
-      x: colX + 20,
-      y: CONTENT_Y + CONTENT_H - imageAreaH - 16,
-      width: colW - 40,
-      height: imageAreaH,
-    };
-  } else if (layout === "image-grid" && /^grid-\d+$/.test(slot)) {
-    const idx = Number(slot.slice(5));
-    rect = getImageGridSlotRect(idx, 4);
-  } else if (layout === "image-grid" && slot === "hero") {
-    rect = { x: 120, y: CONTENT_Y, width: 1040, height: CONTENT_H };
-  }
-
-  if (!rect) return undefined;
-  return fitAspectRatio(rect, aspectRatio);
+  const image = laidOutSlide.elements.find(
+    (element) => element.type === "image" && element.imageSlot === slot,
+  );
+  if (!image || image.type !== "image") return undefined;
+  return {
+    x: image.x,
+    y: image.y,
+    width: image.width,
+    height: image.height,
+  };
 }
 
+/**
+ * Shared geometry primitive used directly by the image-grid grammar handler.
+ * This describes the grid card; the handler remains the sole owner of image
+ * padding and caption-aware placement inside that card.
+ */
 export function getImageGridSlotRect(index: number, count: number): SlotRect | undefined {
-  const pad = 12;
   const gap = 16;
   const area = { x: 120, y: CONTENT_Y, width: 1040, height: CONTENT_H };
+
+  if (index < 0 || index >= Math.min(Math.max(count, 1), 4)) {
+    return undefined;
+  }
 
   if (count <= 1) {
     return area;
@@ -118,7 +78,6 @@ export function getImageGridSlotRect(index: number, count: number): SlotRect | u
     };
   }
 
-  // 4-up grid
   const colW = (area.width - gap) / 2;
   const rowH = (area.height - gap) / 2;
   const col = index % 2;
@@ -131,17 +90,29 @@ export function getImageGridSlotRect(index: number, count: number): SlotRect | u
   };
 }
 
-export function listLayoutSlots(layout: SlideLayoutType | string, _grammarVariant?: string): string[] {
+export function listLayoutSlots(
+  layout: SlideLayoutType | string,
+  grammarVariant?: string,
+): string[] {
   switch (layout) {
     case "cover":
-    case "section":
       return ["hero"];
+    case "section":
+      return grammarVariant === "editorial-split" ? ["hero"] : [];
     case "case":
-      return ["side"];
+      return grammarVariant === "metric-focus" ? [] : ["side"];
     case "concept":
-      return ["grid-0", "grid-1", "grid-2", "grid-3"];
+      if (grammarVariant === "statement-stack") return [];
+      if (grammarVariant === "editorial-columns") return ["side"];
+      return [...GRID_SLOTS];
     case "image-grid":
-      return ["grid-0", "grid-1", "grid-2", "grid-3", "hero"];
+      if (grammarVariant === "hero-caption" || grammarVariant === undefined) {
+        return ["hero", "grid-1", "grid-2", "grid-3"];
+      }
+      if (grammarVariant === "evidence-wall") {
+        return ["grid-0", "grid-1", "grid-2"];
+      }
+      return [...GRID_SLOTS];
     default:
       return [];
   }

@@ -1,22 +1,20 @@
 import { describe, expect, it } from "vitest";
 
 import { LayoutValidator } from "../src/main/deck/validators/layout-validator";
-import type { DesignTokens } from "@design-system";
 import { applyLayout } from "../src/shared/layout";
 import { layoutGrammarRegistry } from "../src/shared/layout-grammar";
 import { getLayoutSlotRect, listLayoutSlots } from "../src/shared/layout-slots";
 import type { Presentation, Slide, TextElement } from "../src/shared/presentation";
-import { TEST_DESIGN_SYSTEM, testSlideStyle } from "./design-engine-test-utils";
+import {
+  TEST_DESIGN_SYSTEM,
+  testSlideStyle,
+  type TestDesignSystemOverrides,
+} from "./design-engine-test-utils";
 
-const BASE_TOKENS: DesignTokens = {
-  palette: "business-blue",
-  fontMood: "formal",
-  shapeLanguage: "cards",
-  backgroundStyle: "clean",
-  motif: "none",
-  density: "standard",
-  imageTreatment: "plain",
-  chartStyle: "minimal",
+const BASE_SYSTEM: TestDesignSystemOverrides = {
+  visualStyle: "soft-rounded",
+  colorScheme: "business-blue",
+  readingMode: "balanced",
 };
 
 function textElement(text: string, fontSize = 20): TextElement {
@@ -125,12 +123,23 @@ describe("layout grammar variants", () => {
     ]);
   });
 
-  it("exposes image slots that follow section and case grammar geometry", () => {
+  it("reads image slot geometry from the applied grammar result", () => {
     expect(listLayoutSlots("section", "editorial-split")).toContain("hero");
-    const split = getLayoutSlotRect("case", "side", "auto", "split");
-    const evidence = getLayoutSlotRect("case", "side", "auto", "evidence");
-    expect(evidence?.width).toBeGreaterThan(split?.width ?? 0);
-    expect(evidence?.x).toBeLessThan(split?.x ?? 0);
+    const splitSlide = caseSlide(true);
+    const evidenceSlide = caseSlide(true);
+    const split = applyLayout(splitSlide, "case", testSlideStyle(splitSlide, BASE_SYSTEM), {
+      grammarVariant: "split",
+    });
+    const evidence = applyLayout(
+      evidenceSlide,
+      "case",
+      testSlideStyle(evidenceSlide, BASE_SYSTEM),
+      { grammarVariant: "evidence" },
+    );
+    const splitRect = getLayoutSlotRect(split, "side");
+    const evidenceRect = getLayoutSlotRect(evidence, "side");
+    expect(evidenceRect?.width).toBeGreaterThan(splitRect?.width ?? 0);
+    expect(evidenceRect?.x).toBeLessThan(splitRect?.x ?? 0);
   });
 
   it("produces distinct section silhouettes", () => {
@@ -139,11 +148,14 @@ describe("layout grammar variants", () => {
       title: "Chapter One",
       elements: [textElement("Chapter One", 52), textElement("A focused transition")],
     };
-    const centered = applyLayout(base, "section", testSlideStyle(base, BASE_TOKENS), {
+    const centered = applyLayout(base, "section", testSlideStyle(base, BASE_SYSTEM), {
       grammarVariant: "centered",
     });
-    const editorialTokens = { ...BASE_TOKENS, shapeLanguage: "editorial" as const };
-    const editorial = applyLayout(base, "section", testSlideStyle(base, editorialTokens), {
+    const editorialSystem: TestDesignSystemOverrides = {
+      ...BASE_SYSTEM,
+      visualStyle: "editorial",
+    };
+    const editorial = applyLayout(base, "section", testSlideStyle(base, editorialSystem), {
       grammarVariant: "editorial-split",
     });
     const centeredTitle = centered.elements.find((element) => element.type === "text" && element.text === "Chapter One");
@@ -160,7 +172,7 @@ describe("layout grammar variants", () => {
     "renders a valid process %s variant",
     (variant) => {
       const slide = processSlide();
-      const laidOut = applyLayout(slide, "process", testSlideStyle(slide, BASE_TOKENS), {
+      const laidOut = applyLayout(slide, "process", testSlideStyle(slide, BASE_SYSTEM), {
         grammarVariant: variant,
       });
       expect(laidOut.grammarVariant).toBe(variant);
@@ -172,7 +184,8 @@ describe("layout grammar variants", () => {
   it("infers path process grammar from design tokens", () => {
     const slide = processSlide();
     const laidOut = applyLayout(slide, "process", testSlideStyle(slide, {
-      ...BASE_TOKENS, shapeLanguage: "path", motif: "path-line",
+      ...BASE_SYSTEM,
+      visualStyle: "blueprint",
     }));
     expect(laidOut.grammarVariant).toBe("path");
   });
@@ -180,13 +193,15 @@ describe("layout grammar variants", () => {
   it("switches case composition between metric focus and visual evidence", () => {
     const metricSlide = caseSlide();
     const metric = applyLayout(metricSlide, "case", testSlideStyle(metricSlide, {
-      ...BASE_TOKENS, chartStyle: "dashboard",
+      ...BASE_SYSTEM,
+      visualStyle: "dark-tech",
     }), {
       grammarVariant: "metric-focus",
     });
     const evidenceSlide = caseSlide(true);
     const evidence = applyLayout(evidenceSlide, "case", testSlideStyle(evidenceSlide, {
-      ...BASE_TOKENS, imageTreatment: "framed",
+      ...BASE_SYSTEM,
+      visualStyle: "soft-rounded",
     }), {
       grammarVariant: "evidence",
     });
@@ -204,7 +219,7 @@ describe("layout grammar variants", () => {
       title: "Business impact",
       elements: [textElement("One focused narrative")],
     };
-    const laidOut = applyLayout(slide, "case", testSlideStyle(slide, BASE_TOKENS), {
+    const laidOut = applyLayout(slide, "case", testSlideStyle(slide, BASE_SYSTEM), {
       grammarVariant: "split",
     });
     const cards = laidOut.elements.filter(
@@ -216,7 +231,9 @@ describe("layout grammar variants", () => {
     );
 
     expect(cards).toHaveLength(1);
-    expect(cards[0]).toMatchObject({ x: 120, width: 600 });
+    expect(cards[0]).toMatchObject({ x: 120 });
+    expect(cards[0].width).toBeGreaterThan(580);
+    expect(cards[0].width).toBeLessThan(630);
     expectNoLayoutErrorsOrUnexpectedOverlaps(laidOut);
   });
 
@@ -225,7 +242,8 @@ describe("layout grammar variants", () => {
     (variant) => {
       const slide = imageGridSlide();
       const laidOut = applyLayout(slide, "image-grid", testSlideStyle(slide, {
-        ...BASE_TOKENS, imageTreatment: "framed",
+        ...BASE_SYSTEM,
+        visualStyle: "soft-rounded",
       }), {
         grammarVariant: variant,
       });
@@ -253,7 +271,7 @@ describe("layout grammar variants", () => {
         title: `${layout} grammar`,
         elements: texts.map((text) => textElement(text)),
       };
-      const laidOut = applyLayout(slide, layout, testSlideStyle(slide, BASE_TOKENS), {
+      const laidOut = applyLayout(slide, layout, testSlideStyle(slide, BASE_SYSTEM), {
         grammarVariant: variant,
       });
       expect(laidOut.grammarVariant).toBe(variant);

@@ -114,7 +114,7 @@ describe("resolvePromptStage (advisory capability hint)", () => {
       presentation: deck(2),
       artifacts: emptyArtifacts,
       messageHistory: [
-        { role: "assistant", content: "内容草稿已就绪，待排版，请选择排版方式。" },
+        { role: "assistant", content: "内容草稿已就绪，请确认设计方向。" },
       ],
     });
     const withoutMessage = resolvePromptStage({

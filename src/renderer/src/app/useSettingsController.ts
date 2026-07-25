@@ -21,8 +21,8 @@ import {
 import { getComputedTheme, useAppearanceRuntime } from "./useAppearanceRuntime";
 import {
   DEFAULT_DESIGN_SYSTEM,
-  designSystemV1Schema,
-  type DesignSystemV1,
+  designSystemV2Schema,
+  type DesignSystemV2,
 } from "@design-system";
 
 export interface SettingsController {
@@ -34,8 +34,8 @@ export interface SettingsController {
   selectModel: (id: string) => void;
   saveModel: (model: ManagedModel) => void;
   deleteModel: (id: string) => void;
-  selectedDesignSystem: DesignSystemV1;
-  setSelectedDesignSystem: (value: DesignSystemV1) => void;
+  selectedDesignSystem: DesignSystemV2;
+  setSelectedDesignSystem: (value: DesignSystemV2) => void;
   logoUrl: string | null;
   uploadLogo: (url: string) => void;
   removeLogo: () => void;
@@ -89,8 +89,8 @@ export function useSettingsController(
   const [colorContrastOffset, setColorContrastOffsetState] = useState(() =>
     typeof persisted.colorContrastOffset === "number" ? persisted.colorContrastOffset : 0,
   );
-  const [selectedDesignSystem, setSelectedDesignSystemState] = useState<DesignSystemV1>(() => {
-    const parsed = designSystemV1Schema.safeParse(persisted.selectedDesignSystem);
+  const [selectedDesignSystem, setSelectedDesignSystemState] = useState<DesignSystemV2>(() => {
+    const parsed = designSystemV2Schema.safeParse(persisted.selectedDesignSystem);
     return parsed.success ? parsed.data : DEFAULT_DESIGN_SYSTEM;
   });
   const [logoUrl, setLogoUrl] = useState<string | null>(() => persisted.logoUrl ?? null);

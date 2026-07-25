@@ -67,7 +67,7 @@ function createSpec(): LeanDeckSpec {
     objective: "说明增长质量并确认下一阶段资源配置",
     desiredAction: "批准三项增长实验",
     durationMinutes: 12,
-    designPreset: "business",
+    designPreset: "swiss-minimal",
     sources: [{
       id: "forecast",
       label: "内部测算",
@@ -268,6 +268,9 @@ describe("Lean Mode", () => {
     expect(LEAN_SYSTEM_PROMPT).toContain("两页 proof");
     expect(LEAN_SYSTEM_PROMPT).toContain("不得连续三页 bullets");
     expect(LEAN_SYSTEM_PROMPT).toContain("version 必须是数字 2");
+    expect(LEAN_SYSTEM_PROMPT).toContain("designPreset 必须是以下视觉风格之一");
+    expect(LEAN_SYSTEM_PROMPT).toContain("swiss-minimal");
+    expect(LEAN_SYSTEM_PROMPT).toContain("pixel-art");
     expect(LEAN_SYSTEM_PROMPT).toContain("字段名必须是 locale（不要 language）");
     expect(LEAN_SYSTEM_PROMPT).toContain("不要输出 body、agenda、bullets");
     expect(LEAN_SYSTEM_PROMPT).toContain("可取标题或正文的子串");
