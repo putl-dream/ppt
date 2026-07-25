@@ -26,6 +26,8 @@ import {
   ProjectFileService,
   type ProjectArtifactReadResult,
   type ProjectArtifactWriteResult,
+  type ProjectFileEditorReadResult,
+  type ProjectFileEditorWriteResult,
 } from "./project/project-file-service";
 import {
   ExportHistoryService,
@@ -447,11 +449,25 @@ export class FileSessionStore {
     return this.projectFileService.listArtifacts(this.findSession(sessionId));
   }
 
+  listProjectFiles(sessionId: string): Promise<string[]> {
+    return this.projectFileService.listProjectFiles(this.findSession(sessionId));
+  }
+
   readProjectArtifact(
     sessionId: string,
     artifactIdOrPath: string,
   ): Promise<ProjectArtifactReadResult> {
     return this.projectFileService.readArtifact(this.findSession(sessionId), artifactIdOrPath);
+  }
+
+  openProjectFile(
+    sessionId: string,
+    relativePath: string,
+  ): Promise<ProjectFileEditorReadResult> {
+    return this.projectFileService.openProjectFile(
+      this.findSession(sessionId),
+      relativePath,
+    );
   }
 
   getProjectArtifactDiff(
@@ -472,13 +488,53 @@ export class FileSessionStore {
     content: string,
   ): Promise<ProjectArtifactWriteResult> {
     const snapshot = this.findSession(sessionId);
-    const result = await this.projectFileService.writeArtifact(snapshot, relativePath, content);
+    const result = await this.projectFileService.writeEditableArtifact(
+      snapshot,
+      relativePath,
+      content,
+    );
     if (result.changed) {
       snapshot.session.updatedAt = new Date().toISOString();
       await this.persist();
       await this.syncWorkspacePersistence(snapshot);
     }
     return result;
+  }
+
+  async saveProjectFile(
+    sessionId: string,
+    relativePath: string,
+    content: string,
+    editToken: string,
+    expectedVersion: string,
+  ): Promise<ProjectFileEditorWriteResult> {
+    const snapshot = this.findSession(sessionId);
+    const result = await this.projectFileService.saveProjectFile(
+      snapshot,
+      relativePath,
+      content,
+      editToken,
+      expectedVersion,
+    );
+    snapshot.session.updatedAt = new Date().toISOString();
+    const postCommitWarnings: NonNullable<
+      ProjectFileEditorWriteResult["postCommitWarnings"]
+    > = [];
+    try {
+      await this.persist();
+    } catch (error) {
+      console.error("Project file was committed, but session state persistence failed.", error);
+      postCommitWarnings.push("session-state-persistence-failed");
+    }
+    try {
+      await this.syncWorkspacePersistence(snapshot);
+    } catch (error) {
+      console.error("Project file was committed, but workspace metadata sync failed.", error);
+      postCommitWarnings.push("workspace-metadata-sync-failed");
+    }
+    return postCommitWarnings.length > 0
+      ? { ...result, postCommitWarnings }
+      : result;
   }
 
   async markProjectArtifactStatus(

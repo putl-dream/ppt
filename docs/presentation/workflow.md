@@ -78,6 +78,10 @@ request
 
 它们是当前兼容事实，不应继续扩成第三套工作流状态。跨 Query 的统一 revision/dependency 状态属于路线图中的 `PptJob`。
 
+workspace 项目文件管理页只投影这两类现有事实：文件分组与内容来自 workspace，
+artifact 标签来自现有 metadata/validator。页面自己的 loading、dirty、diff 或保存
+状态不是新的 Presentation 工作流状态。
+
 ## 5. 读取和写入
 
 Main Agent 与 teammate 使用统一 Glob/ReadFile/WriteFile/EditFile：
@@ -87,6 +91,21 @@ Main Agent 与 teammate 使用统一 Glob/ReadFile/WriteFile/EditFile：
 - 写入使用原子替换；
 - 通用文件写入只保证文本与并发安全，不自动运行 artifact schema validator；
 - 消费方在使用前负责解析和验证；`ready/verified` 不能只由文件存在推导。
+
+Renderer 提供 workspace-level 项目文件管理页：
+
+- 按 artifact 分组展示文件列表，并提供文本详情和保存前 diff；
+- 只打开普通 UTF-8 文本，不跟随 symlink，也不编辑二进制文件；
+- Main 在打开文件时返回隔离的 `editToken` 与 `sha256:` version；
+- 保存必须同时提交同一 token 和 `expectedVersion`，由 `WorkspaceFileService`
+  compare-and-commit；Agent、外部编辑器或另一个页面先修改文件时返回冲突；
+- 只有归属于已注册、可编辑 artifact 的文本文件允许保存；`deck`、`history` 与未知
+  artifact 文件只读，Main 在保存入口再次强制校验，不能由 Renderer 绕过；
+- 保存成功后沿用现有 artifact dependency 规则标记下游 stale，但不能仅凭保存把
+  当前 artifact 标记成 `ready/verified`。
+
+现有 `ProjectFileService` 的 artifact 读写同样委托 `WorkspaceFileService`，不再维护
+一套弱化的路径、编码和原子写语义。当前页面不提供删除、重命名或二进制编辑。
 
 不要通过 Shell 重定向生成工作流文件。
 
@@ -164,6 +183,11 @@ Tool result
 ## 11. 关键实现
 
 - `src/main/project/`
+- `src/main/project/project-file-service.ts`
+- `src/shared/ipc.ts`
+- `src/renderer/src/app/ProjectFilesView.tsx`
+- `src/renderer/src/app/project/useProjectFiles.ts`
+- `src/renderer/src/components/ProjectFilesPage.tsx`
 - `src/shared/project-artifacts.ts`
 - `src/shared/project-artifact-state.ts`
 - `src/shared/layout-plan.ts`
@@ -179,5 +203,6 @@ Tool result
 - artifact 缺少统一 immutable revision 和 dependency hash。
 - candidate、preview 和 committed Presentation 边界仍需进一步收敛。
 - 完整工作流状态尚未成为跨 Query 的单一 `PptJob`。
+- 文件管理页的 SHA-256 version 是并发前置条件，不是 immutable Artifact Revision。
 
 这些问题只在 [路线图](../roadmap/presentation-lifecycle.md) 中维护，不再创建新的阶段性 plan 文档。

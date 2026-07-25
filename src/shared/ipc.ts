@@ -71,6 +71,35 @@ export const agentRunRequestSchema = z.object({
 export type AgentAttachment = z.infer<typeof agentAttachmentSchema>;
 export type AgentRunRequest = z.infer<typeof agentRunRequestSchema>;
 
+export const projectFileSessionIdSchema = z.string().trim().min(1).max(256);
+const projectFilePathSchema = z.string().trim().min(1).max(4_096).refine((path) => {
+  const normalized = path.replace(/\\/g, "/");
+  return !normalized.includes("\0")
+    && !normalized.startsWith("/")
+    && !/^[a-z]:\//i.test(normalized)
+    && !normalized.split("/").includes("..");
+}, "Project file path must be a contained relative path.");
+const projectFileContentSchema = z.string().max(5 * 1024 * 1024);
+
+export const projectFileOpenRequestSchema = z.object({
+  sessionId: projectFileSessionIdSchema,
+  relativePath: projectFilePathSchema,
+}).strict();
+
+export const projectArtifactWriteRequestSchema = projectFileOpenRequestSchema.extend({
+  content: projectFileContentSchema,
+}).strict();
+
+export const projectArtifactDiffRequestSchema = projectFileOpenRequestSchema.extend({
+  nextContent: projectFileContentSchema,
+}).strict();
+
+export const projectFileSaveRequestSchema = projectFileOpenRequestSchema.extend({
+  content: projectFileContentSchema,
+  editToken: z.string().uuid(),
+  expectedVersion: z.string().regex(/^sha256:[a-f0-9]{64}$/),
+}).strict();
+
 export type AgentStreamEvent = (
   | { runId: string; type: "request-status"; message: string; progress: number }
   | { runId: string; type: "workflow-progress"; message: string; progress: number }
@@ -144,6 +173,11 @@ export interface ProjectArtifactReadResult {
   type: "file" | "directory";
   content?: string;
   entries?: string[];
+  version?: string;
+  mtimeMs?: number;
+  size?: number;
+  encoding?: "utf8";
+  newline?: "lf" | "crlf" | "mixed" | "none";
 }
 
 export interface ArtifactDiff {
@@ -159,6 +193,32 @@ export interface ProjectArtifactWriteResult {
   changed: boolean;
   changedArtifactId?: string;
   staleArtifactIds: string[];
+}
+
+export interface ProjectFileReceipt {
+  path: string;
+  version: string;
+  mtimeMs: number;
+  size: number;
+  encoding: "utf8";
+  newline: "lf" | "crlf" | "mixed" | "none";
+}
+
+export interface ProjectFileEditorReadResult extends ProjectFileReceipt {
+  content: string;
+  editToken: string;
+  editable: boolean;
+  readOnlyReason?: string;
+}
+
+export interface ProjectFileEditorWriteResult
+  extends ProjectArtifactWriteResult, ProjectFileReceipt {
+  characterCount: number;
+  editToken: string;
+  postCommitWarnings?: Array<
+    "session-state-persistence-failed"
+    | "workspace-metadata-sync-failed"
+  >;
 }
 
 export interface DesktopApi {
@@ -193,6 +253,18 @@ export interface DesktopApi {
     relativePath: string,
     nextContent: string,
   ): Promise<ArtifactDiff>;
+  listProjectFiles(sessionId: string): Promise<string[]>;
+  openProjectFile(
+    sessionId: string,
+    relativePath: string,
+  ): Promise<ProjectFileEditorReadResult>;
+  saveProjectFile(
+    sessionId: string,
+    relativePath: string,
+    content: string,
+    editToken: string,
+    expectedVersion: string,
+  ): Promise<ProjectFileEditorWriteResult>;
   markProjectArtifactStatus(
     sessionId: string,
     artifactId: string,

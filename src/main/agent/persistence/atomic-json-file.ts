@@ -444,8 +444,11 @@ async function guardedReplace(
         "Committed destination identity differs from the prepared inode.",
       );
     }
-    await guard.validateCommitted?.(targetPath);
     await unlink(sourcePath);
+    // The prepared file and destination are hard links to the same inode.
+    // Removing the preparation link can update ctime/link metadata on Windows,
+    // so capture the reusable post-write receipt only after that unlink.
+    await guard.validateCommitted?.(targetPath);
     await syncReplacementDirectories(transaction);
 
     if (displaced) {

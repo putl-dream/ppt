@@ -1,6 +1,6 @@
 import { useEffect, useState, type CSSProperties, type Dispatch, type SetStateAction } from "react";
 
-export type AppMode = "workspace" | "settings";
+export type AppMode = "workspace" | "files" | "settings";
 export type ResizablePanel = "primary" | "secondary";
 
 interface WorkbenchLayoutOptions {
@@ -64,7 +64,7 @@ export function useWorkbenchLayout({
   }, [secondaryPaneWidth]);
 
   useEffect(() => {
-    if (!previewOpen || previewExpanded) return;
+    if (activeMode !== "workspace" || !previewOpen || previewExpanded) return;
     const reconcilePanelWidths = () => {
       const expandedAvailable = window.innerWidth - primarySidebarWidth - secondaryPaneWidth - PANEL_GUTTERS;
       if (!isPrimarySidebarCollapsed && expandedAvailable < MAIN_MIN) {
@@ -82,6 +82,7 @@ export function useWorkbenchLayout({
     window.addEventListener("resize", reconcilePanelWidths);
     return () => window.removeEventListener("resize", reconcilePanelWidths);
   }, [
+    activeMode,
     isPrimarySidebarCollapsed,
     previewExpanded,
     previewOpen,
@@ -119,14 +120,14 @@ export function useWorkbenchLayout({
   };
 
   const effectivePrimarySidebarWidth =
-    activeMode === "workspace" && isPrimarySidebarCollapsed ? PRIMARY_RAIL : primarySidebarWidth;
+    activeMode !== "settings" && isPrimarySidebarCollapsed ? PRIMARY_RAIL : primarySidebarWidth;
   const workspaceStyle = {
     "--primary-sidebar-width": `${effectivePrimarySidebarWidth}px`,
     "--secondary-pane-width": `${secondaryPaneWidth}px`,
   } as CSSProperties;
   const workspaceClassName =
     `workspace-container mode-${activeMode}`
-    + (activeMode === "workspace" && isPrimarySidebarCollapsed ? " primary-sidebar-collapsed" : "");
+    + (activeMode !== "settings" && isPrimarySidebarCollapsed ? " primary-sidebar-collapsed" : "");
 
   return {
     isPrimarySidebarCollapsed,

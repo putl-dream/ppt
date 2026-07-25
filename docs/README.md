@@ -32,7 +32,7 @@
 
 | 文档 | 内容 |
 |---|---|
-| [工作流与状态](./presentation/workflow.md) | Agent/Lean 路径、artifact、Layout Plan、Proposal 与 CommitGate |
+| [工作流与状态](./presentation/workflow.md) | Agent/Lean 路径、artifact、workspace 文件管理、Layout Plan、Proposal 与 CommitGate |
 | [Visual Expression System](./presentation/visual-system.md) | Design System、Layout Grammar、素材、三端渲染与反馈 |
 | [Commercial Visual Compiler](./presentation/commercial-pipeline.md) | DeckSpec v2、Visual Director、素材解析、编译与质量门 |
 | [商业视觉质量规范](./presentation/quality-rubric.md) | 机器证据与人工评分的边界 |
@@ -55,6 +55,8 @@
 8. System Prompt 使用稳定前缀、动态后缀和 Section Registry。
 9. 权限、tool pairing、CommitGate 和持久化不变量由代码执行，不依赖 Prompt。
 10. Presentation 业务状态与单次 Agent Query 状态正交。
+11. 项目文件管理只投影当前 workspace 文件；文本保存必须携带隔离的编辑凭证和读取时
+    SHA-256 version，不能把文件保存等同于 artifact revision 或验证完成。
 
 ## 本轮重构状态
 
@@ -66,6 +68,7 @@
 | Tools | Implemented | 动态可用性、definition-owned behavior、统一 permission/hook/execution 管线 |
 | System Prompt | Implemented | Section Registry、稳定/动态边界、契约级 cache key、stage 建议化 |
 | File operations | Implemented | Main/teammate 共用 read receipt、精确 Edit、冲突检测与受保护提交 |
+| Project file management | Implemented | artifact 分组、文件列表/详情/diff；注册文本 artifact 用隔离 `editToken` + SHA-256 CAS 编辑，deck/history/未知文件只读 |
 | Presentation lifecycle | Proposed | 跨 Query 的 Artifact Revision / PptJob 仍只在 roadmap |
 
 ## 参考项目的使用方式

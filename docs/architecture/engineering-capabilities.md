@@ -55,6 +55,7 @@ Agent PPT 不需要复制这些入口和命令，但需要吸收其中与长任�
 | System Prompt 分区 | **Implemented** | `src/main/agent/runtime/prompts/` | section registry、稳定/动态边界、stage 建议化 |
 | 动态工具系统 | **Implemented** | `src/main/agent/tools/tool-registry.ts`、`src/main/agent/tools/tool-loader.ts`、`src/main/agent/runtime/tools/` | 注册、暴露、权限和执行解耦 |
 | 文件安全操作 | **Implemented** | `src/main/agent/tools/files/workspace-file-service.ts`、`src/main/agent/tools/core/workspace-files.ts` | Main/teammate 共享 read-before-write 与原子提交 |
+| 项目文件管理 | **Implemented** | `src/main/project/project-file-service.ts`、`src/shared/ipc.ts`、`src/renderer/src/app/ProjectFilesView.tsx` | workspace-level artifact 分组、list/detail/diff；注册文本 artifact 使用隔离编辑凭证与 SHA-256 CAS |
 | 权限与审批 | **Implemented** | `src/main/agent/runtime/tools/permission-check.ts`、`src/main/agent/runtime/tools/tool-approval-broker.ts`、`src/main/agent/gate/commit-gate.ts` | Prompt 不承担权限；Presentation 变更有独立提交门 |
 | Skill 渐进加载 | **Implemented** | `src/main/agent/skills/loadSkillsDir.ts`、`src/main/agent/tools/core/load-skill.ts`、`skills/` | Skill 是知识/流程注入，不是硬编码阶段机 |
 | Task / teammate | **Implemented** | `src/main/agent/task/`、`src/main/agent/teammate/`、`src/main/agent/subagent/` | 有持久化任务、独立会话、消息总线和生命周期 |
@@ -187,6 +188,29 @@ Claude Code 的 FileRead/Edit/Write 体现了一个重要原则：读写工具�
 
 这套能力保护 workspace 文本文件，不替代 Presentation 的 Proposal、CommitGate 和 artifact revision。
 
+Renderer 的项目文件管理也复用同一安全边界，但使用独立的应用协议：
+
+```text
+list workspace files
+  → open UTF-8 text file
+  → issue editToken + sha256 version
+  → inspect detail / diff
+  → save(editToken, expectedVersion)
+  → WorkspaceFileService compare-and-commit
+```
+
+`editToken` 绑定 session、workspace root、相对路径和一次隔离的读取 scope；其他调用者
+重新读取同一文件不能刷新这份基线。保存时 token 或 SHA-256 version 任一不匹配都会
+拒绝写入。`ProjectFileService` 的既有 artifact 读写也已委托
+`WorkspaceFileService`，因此 Renderer、Agent 和项目持久化共享 UTF-8、symlink、
+inode/hash、跨进程锁和原子替换语义。
+
+当前管理页提供 artifact 分组、文件列表、详情、diff 和文本编辑。只有归属于已注册、
+可编辑 artifact 的普通文本文件可以保存；`deck`、`history` 和未知 artifact 文件只读，
+从 Main 的 `saveProjectFile` 也会强制拒绝写入，避免绕过 Presentation 与导出事实源。
+页面不提供删除、重命名或二进制编辑。它管理的是当前 workspace 文件，不生成
+immutable Artifact Revision，也不把一次保存自动解释为 `ready/verified`。
+
 详见 [文件操作](../agent/file-operations.md)。
 
 ### 4.6 Prompt、Skill 与 Hook
@@ -303,6 +327,10 @@ tool proposal
 - 重试时的幂等性；
 - 导出物追溯。
 
+workspace 项目文件管理页已经让当前 artifact 可安全浏览和编辑，但它只提供文件级
+SHA-256 CAS，不保存 immutable revision、dependency snapshot 或 Job transition，
+因此没有关闭该缺口。
+
 该能力仍为 **Proposed**，唯一设计入口是
 [Presentation Artifact 与 Job 生命周期](../roadmap/presentation-lifecycle.md)。
 
@@ -335,7 +363,7 @@ tool proposal
 | Query / Runtime | `agent-query-*`、`agent-runtime-*`、`tool-result-pairing` | cancellation、checkpoint、recovery |
 | Gateway | adapter、routing、response contract、model recovery | `npm.cmd run test:integration:agent` |
 | Tool / Permission | tool pipeline、access policy、approval、hooks | 对应真实工具副作用测试 |
-| 文件操作 | `tests/workspace-file-service.test.ts` | 并发修改、路径逃逸、原子写失败 |
+| 文件操作 / 项目文件管理 | `tests/workspace-file-service.test.ts`、`tests/project-file-editor-safety.test.ts` | 编辑 token 隔离、只读 artifact、并发修改、路径逃逸、UTF-8 与原子写失败；页面状态/交互测试 |
 | Multi-Agent | task、message bus、teammate recovery | background 与 shutdown 场景 |
 | Presentation model | schema、layout、design、compiler | sample fixture 与渲染快照 |
 | Export | exporter、postflight、deck export | `npm.cmd run generate:pptx` 后人工打开 |

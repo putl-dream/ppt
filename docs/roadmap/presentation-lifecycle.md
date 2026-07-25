@@ -8,6 +8,11 @@
 
 当前 Agent Mode 与 Lean Mode 已能生成、校验、审批和导出，但前半段使用不同 artifact 和状态来源。文件存在、Task 完成、Query completed、proposal ready 和 Presentation applied 容易被混为一个“完成”。
 
+现行代码已经提供 workspace-level 项目文件管理页，可按 artifact 分组浏览文件、查看
+详情/diff，并安全编辑已注册的普通 UTF-8 文本 artifact；`deck`、`history` 和未知
+artifact 文件只读。其 `editToken + expected sha256 version` 只解决当前文件的读取
+隔离和并发提交，不提供本路线所定义的 immutable Artifact Revision 或 PptJob 状态。
+
 目标是增加独立的 PPT 业务层：
 
 > Query 管一次模型请求如何运行；PptJob 管一份演示如何跨 Query 演化；Artifact Revision 证明每个阶段可靠地产出了什么。
@@ -157,6 +162,17 @@ PptJob checkpoint 与 Query checkpoint 正交：
 - apply/export 在副作用边界后不盲目重放。
 
 ## 10. 迁移顺序
+
+### 已落地的前置能力（不代表 Phase 1 完成）
+
+- workspace 当前 artifact 的分组、文件列表、详情、diff 与文本编辑入口。
+- `deck`、`history` 与未知 artifact 只读，避免通用编辑入口覆盖领域事实源。
+- Renderer、Agent 与项目持久化共享 `WorkspaceFileService` 的路径、UTF-8、symlink、
+  inode/hash、跨进程锁和原子替换边界。
+- 编辑保存使用 session/path-bound `editToken` 与读取时 SHA-256 version 做 CAS。
+
+这些能力没有建立 Artifact Index，也没有保留 immutable revision、dependency
+snapshot 或 validation snapshot，因此本路线整体仍为 **Proposed**。
 
 ### Phase 1：领域类型与 Artifact Index
 

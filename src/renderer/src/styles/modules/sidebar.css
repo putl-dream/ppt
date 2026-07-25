@@ -295,6 +295,12 @@ aside {
   color: var(--text-primary);
 }
 
+.sidebar-rail-btn.active {
+  background: var(--accent-selected-bg);
+  border-color: var(--accent-selected-border);
+  color: var(--accent-selected-text);
+}
+
 .cursor-sidebar--rail {
   align-items: center;
   gap: 8px;

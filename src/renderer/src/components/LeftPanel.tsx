@@ -7,17 +7,22 @@ import {
   PlusIcon,
   SearchIcon,
   SettingsIcon,
+  SidebarPanelIcon,
   UserIcon,
   TrashIcon,
+  FileIcon,
   FolderIcon,
 } from "./Icons";
 
 interface LeftPanelProps {
   sessions: SessionSummary[];
   activeSessionId: string;
+  activeMode: "workspace" | "files";
   onSelectSession: (id: string) => void;
   onNewSession: () => void;
   onNewSessionInWorkspace: (workspacePath: string) => void;
+  onOpenWorkspace: () => void;
+  onOpenFiles: () => void;
   onToggleSettings: () => void;
   onDeleteSession: (id: string) => void;
   collapsed: boolean;
@@ -125,9 +130,12 @@ function WorkspaceSection({
 export const LeftPanel: React.FC<LeftPanelProps> = ({
   sessions,
   activeSessionId,
+  activeMode,
   onSelectSession,
   onNewSession,
   onNewSessionInWorkspace,
+  onOpenWorkspace,
+  onOpenFiles,
   onToggleSettings,
   onDeleteSession,
   collapsed,
@@ -221,6 +229,15 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
         <button
           type="button"
           className="sidebar-rail-btn"
+          onClick={onToggleCollapsed}
+          title="展开导航"
+          aria-label="展开导航"
+        >
+          <SidebarPanelIcon size={17} />
+        </button>
+        <button
+          type="button"
+          className="sidebar-rail-btn"
           onClick={onNewSession}
           title="新建会话"
           aria-label="新建会话"
@@ -229,12 +246,23 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
         </button>
         <button
           type="button"
-          className="sidebar-rail-btn"
-          onClick={onToggleCollapsed}
-          title="查看项目和会话"
-          aria-label="查看项目和会话"
+          className={`sidebar-rail-btn${activeMode === "workspace" ? " active" : ""}`}
+          onClick={onOpenWorkspace}
+          title="Agent 工作区"
+          aria-label="Agent 工作区"
+          aria-current={activeMode === "workspace" ? "page" : undefined}
         >
           <FolderIcon size={17} />
+        </button>
+        <button
+          type="button"
+          className={`sidebar-rail-btn${activeMode === "files" ? " active" : ""}`}
+          onClick={onOpenFiles}
+          title="项目文件"
+          aria-label="项目文件"
+          aria-current={activeMode === "files" ? "page" : undefined}
+        >
+          <FileIcon size={17} />
         </button>
         <div className="sidebar-rail-spacer" />
         <button
@@ -262,6 +290,24 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
         <button type="button" className="cursor-sidebar-action-row" onClick={onNewSession}>
           <PlusIcon size={14} className="cursor-workspace-icon" />
           <span>新建会话</span>
+        </button>
+        <button
+          type="button"
+          className={`cursor-sidebar-action-row${activeMode === "workspace" ? " active" : ""}`}
+          onClick={onOpenWorkspace}
+          aria-current={activeMode === "workspace" ? "page" : undefined}
+        >
+          <FolderIcon size={14} className="cursor-workspace-icon" />
+          <span>Agent 工作区</span>
+        </button>
+        <button
+          type="button"
+          className={`cursor-sidebar-action-row${activeMode === "files" ? " active" : ""}`}
+          onClick={onOpenFiles}
+          aria-current={activeMode === "files" ? "page" : undefined}
+        >
+          <FileIcon size={14} className="cursor-workspace-icon" />
+          <span>项目文件</span>
         </button>
         <div ref={searchAreaRef}>
           <button

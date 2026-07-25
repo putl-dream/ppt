@@ -16,6 +16,11 @@ import { CommandBus, type PresentationCommand } from "@shared/commands";
 import {
   agentRunRequestSchema,
   exportPresentationOptionsSchema,
+  projectArtifactDiffRequestSchema,
+  projectArtifactWriteRequestSchema,
+  projectFileOpenRequestSchema,
+  projectFileSaveRequestSchema,
+  projectFileSessionIdSchema,
   type AgentRunRequest,
   type AgentRunResult,
   type AgentStreamEvent,
@@ -688,18 +693,94 @@ app.whenReady().then(async () => {
   ipcMain.handle("project:list-artifacts", (_, sessionId: string) =>
     sessionStore.listProjectArtifacts(sessionId),
   );
-  ipcMain.handle("project:read-artifact", (_, sessionId: string, artifactIdOrPath: string) =>
-    sessionStore.readProjectArtifact(sessionId, artifactIdOrPath),
+  ipcMain.handle(
+    "project:read-artifact",
+    (_, rawSessionId: unknown, rawArtifactIdOrPath: unknown) => {
+      const request = projectFileOpenRequestSchema.parse({
+        sessionId: rawSessionId,
+        relativePath: rawArtifactIdOrPath,
+      });
+      return sessionStore.readProjectArtifact(request.sessionId, request.relativePath);
+    },
   );
   ipcMain.handle(
     "project:write-artifact",
-    (_, sessionId: string, relativePath: string, content: string) =>
-      sessionStore.writeProjectArtifact(sessionId, relativePath, content),
+    (
+      _,
+      rawSessionId: unknown,
+      rawRelativePath: unknown,
+      rawContent: unknown,
+    ) => {
+      const request = projectArtifactWriteRequestSchema.parse({
+        sessionId: rawSessionId,
+        relativePath: rawRelativePath,
+        content: rawContent,
+      });
+      return sessionStore.writeProjectArtifact(
+        request.sessionId,
+        request.relativePath,
+        request.content,
+      );
+    },
   );
   ipcMain.handle(
     "project:get-artifact-diff",
-    (_, sessionId: string, relativePath: string, nextContent: string) =>
-      sessionStore.getProjectArtifactDiff(sessionId, relativePath, nextContent),
+    (
+      _,
+      rawSessionId: unknown,
+      rawRelativePath: unknown,
+      rawNextContent: unknown,
+    ) => {
+      const request = projectArtifactDiffRequestSchema.parse({
+        sessionId: rawSessionId,
+        relativePath: rawRelativePath,
+        nextContent: rawNextContent,
+      });
+      return sessionStore.getProjectArtifactDiff(
+        request.sessionId,
+        request.relativePath,
+        request.nextContent,
+      );
+    },
+  );
+  ipcMain.handle("project:list-files", (_, rawSessionId: unknown) =>
+    sessionStore.listProjectFiles(projectFileSessionIdSchema.parse(rawSessionId)),
+  );
+  ipcMain.handle(
+    "project:open-file",
+    (_, rawSessionId: unknown, rawRelativePath: unknown) => {
+      const request = projectFileOpenRequestSchema.parse({
+        sessionId: rawSessionId,
+        relativePath: rawRelativePath,
+      });
+      return sessionStore.openProjectFile(request.sessionId, request.relativePath);
+    },
+  );
+  ipcMain.handle(
+    "project:save-file",
+    (
+      _,
+      rawSessionId: unknown,
+      rawRelativePath: unknown,
+      rawContent: unknown,
+      rawEditToken: unknown,
+      rawExpectedVersion: unknown,
+    ) => {
+      const request = projectFileSaveRequestSchema.parse({
+        sessionId: rawSessionId,
+        relativePath: rawRelativePath,
+        content: rawContent,
+        editToken: rawEditToken,
+        expectedVersion: rawExpectedVersion,
+      });
+      return sessionStore.saveProjectFile(
+        request.sessionId,
+        request.relativePath,
+        request.content,
+        request.editToken,
+        request.expectedVersion,
+      );
+    },
   );
   ipcMain.handle(
     "project:mark-artifact-status",

@@ -7,6 +7,7 @@ import {
   useNotificationCardManager,
 } from "./cards/display-card-managers";
 import { AppShell } from "./app/AppShell";
+import { ProjectFilesView } from "./app/ProjectFilesView";
 import { SettingsView } from "./app/SettingsView";
 import { WorkspaceView } from "./app/WorkspaceView";
 import { loadAppBootstrapSnapshot } from "./app/appBootstrap";
@@ -19,6 +20,7 @@ import { useSessionController } from "./app/session/useSessionController";
 import { useAgentActivityStream } from "./app/agent/useAgentActivityStream";
 import { useAgentRunController } from "./app/agent/useAgentRunController";
 import { useDisplayEventActions } from "./app/cards/useDisplayEventActions";
+import { confirmProjectFileNavigation } from "./app/project/projectFilesState";
 import { useUserQuerySubmission } from "./app/useUserQuerySubmission";
 
 type SettingsCategory =
@@ -65,6 +67,7 @@ export function App() {
   } = presentationController;
 
   const [activeMode, setActiveMode] = useState<AppMode>("workspace");
+  const [projectFilesDirty, setProjectFilesDirty] = useState(false);
   const [settingsCategory, setSettingsCategory] = useState<SettingsCategory>("account");
   const workbenchLayout = useWorkbenchLayout({
     activeMode,
@@ -219,6 +222,44 @@ export function App() {
     sessions.find((session) => session.id === activeSessionId)?.title.trim()
     || presentation?.title?.trim()
     || (isDraftChat ? "AI 新建会话" : "当前对话");
+  const confirmLeaveProjectFiles = () =>
+    activeMode !== "files"
+    || confirmProjectFileNavigation(
+      projectFilesDirty,
+      () => window.confirm("当前项目文件有未保存修改。要放弃草稿并离开吗？"),
+    );
+  const leftPanelProps = {
+    sessions,
+    activeSessionId,
+    activeMode: activeMode === "files" ? "files" as const : "workspace" as const,
+    onSelectSession: (sessionId: string) => {
+      if (sessionId === activeSessionId || !confirmLeaveProjectFiles()) return;
+      void selectSession(sessionId);
+    },
+    onNewSession: () => {
+      if (!confirmLeaveProjectFiles()) return;
+      setActiveMode("workspace");
+      void newSession();
+    },
+    onNewSessionInWorkspace: (workspacePath: string) => {
+      if (!confirmLeaveProjectFiles()) return;
+      setActiveMode("workspace");
+      void newSessionInWorkspace(workspacePath);
+    },
+    onOpenWorkspace: () => {
+      if (confirmLeaveProjectFiles()) setActiveMode("workspace");
+    },
+    onOpenFiles: () => setActiveMode("files"),
+    onToggleSettings: () => {
+      if (!confirmLeaveProjectFiles()) return;
+      setActiveMode("settings");
+      setSettingsCategory("account");
+    },
+    onDeleteSession: (sessionId: string) => {
+      if (sessionId === activeSessionId && !confirmLeaveProjectFiles()) return;
+      void deleteSession(sessionId);
+    },
+  };
 
   return (
     <AppShell
@@ -226,24 +267,13 @@ export function App() {
       notificationMessage={toastMessage}
       workspaceClassName={workbenchLayout.workspaceClassName}
       workspaceStyle={workbenchLayout.workspaceStyle}
-      showSidebarToggle={activeMode === "workspace"}
+      showSidebarToggle={activeMode !== "settings"}
       sidebarCollapsed={workbenchLayout.isPrimarySidebarCollapsed}
       onToggleSidebar={workbenchLayout.togglePrimarySidebar}
     >
       {activeMode === "workspace" ? (
         <WorkspaceView
-          leftPanelProps={{
-            sessions,
-            activeSessionId,
-            onSelectSession: selectSession,
-            onNewSession: () => void newSession(),
-            onNewSessionInWorkspace: newSessionInWorkspace,
-            onToggleSettings: () => {
-              setActiveMode("settings");
-              setSettingsCategory("account");
-            },
-            onDeleteSession: deleteSession,
-          }}
+          leftPanelProps={leftPanelProps}
           chatWorkspaceProps={{
             isNewChat: isDraftChat,
             conversationTitle: activeSessionTitle,
@@ -319,6 +349,21 @@ export function App() {
           isDraftChat={isDraftChat}
           isMirrorVisible={isMirrorVisible}
           isMirrorExpanded={isMirrorExpanded}
+          isPrimarySidebarCollapsed={workbenchLayout.isPrimarySidebarCollapsed}
+          onTogglePrimarySidebar={workbenchLayout.togglePrimarySidebar}
+          onStartPanelResize={workbenchLayout.startPanelResize}
+        />
+      ) : activeMode === "files" ? (
+        <ProjectFilesView
+          leftPanelProps={leftPanelProps}
+          projectFilesProps={{
+            sessionId: activeSessionId || undefined,
+            sessionTitle: activeSessionTitle,
+            workspaceLabel: getWorkspaceLabel(localStoragePath || undefined),
+            busy,
+            notify,
+            onDirtyChange: setProjectFilesDirty,
+          }}
           isPrimarySidebarCollapsed={workbenchLayout.isPrimarySidebarCollapsed}
           onTogglePrimarySidebar={workbenchLayout.togglePrimarySidebar}
           onStartPanelResize={workbenchLayout.startPanelResize}

@@ -34,6 +34,18 @@ const api: DesktopApi = {
     ipcRenderer.invoke("project:write-artifact", sessionId, relativePath, content),
   getProjectArtifactDiff: (sessionId, relativePath, nextContent) =>
     ipcRenderer.invoke("project:get-artifact-diff", sessionId, relativePath, nextContent),
+  listProjectFiles: (sessionId) => ipcRenderer.invoke("project:list-files", sessionId),
+  openProjectFile: (sessionId, relativePath) =>
+    ipcRenderer.invoke("project:open-file", sessionId, relativePath),
+  saveProjectFile: (sessionId, relativePath, content, editToken, expectedVersion) =>
+    ipcRenderer.invoke(
+      "project:save-file",
+      sessionId,
+      relativePath,
+      content,
+      editToken,
+      expectedVersion,
+    ),
   markProjectArtifactStatus: (sessionId, artifactId, status) =>
     ipcRenderer.invoke("project:mark-artifact-status", sessionId, artifactId, status),
 

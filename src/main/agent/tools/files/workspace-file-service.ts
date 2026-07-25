@@ -28,6 +28,7 @@ export type WorkspaceFileErrorCode =
   | "AMBIGUOUS_EDIT"
   | "UNSAFE_FILE_TYPE"
   | "INVALID_UTF8"
+  | "FILE_TOO_LARGE"
   | "UNSAFE_COMMAND";
 
 export class WorkspaceFileError extends Error {
@@ -55,6 +56,10 @@ export interface WorkspaceFileReceipt {
 
 export interface WorkspaceFileReadResult extends WorkspaceFileReceipt {
   content: string;
+}
+
+export interface WorkspaceFileReadOptions {
+  maxBytes?: number;
 }
 
 export interface WorkspaceFileWriteOptions {
@@ -120,7 +125,16 @@ export class WorkspaceFileService {
     this.workspaceRoot = resolve(workspaceRoot);
   }
 
-  async read(path: string): Promise<WorkspaceFileReadResult> {
+  async read(
+    path: string,
+    options: WorkspaceFileReadOptions = {},
+  ): Promise<WorkspaceFileReadResult> {
+    if (
+      options.maxBytes !== undefined
+      && (!Number.isSafeInteger(options.maxBytes) || options.maxBytes < 0)
+    ) {
+      throw new Error("maxBytes must be a non-negative safe integer.");
+    }
     const absolutePath = await this.resolveContainedPath(path);
     let pathGuard = await captureWorkspacePathGuard(
       this.workspaceRoot,
@@ -156,7 +170,7 @@ export class WorkspaceFileService {
         }
         let snapshot: StableFileSnapshot;
         try {
-          snapshot = await readStableSnapshot(absolutePath);
+          snapshot = await readStableSnapshot(absolutePath, options.maxBytes);
           await pathGuard.validate();
         } catch (error) {
           if (recovered && error instanceof WorkspaceFileError) {
@@ -706,10 +720,14 @@ async function withFileMutationLock<T>(
   }
 }
 
-async function readStableSnapshot(absolutePath: string): Promise<StableFileSnapshot> {
+async function readStableSnapshot(
+  absolutePath: string,
+  maxBytes?: number,
+): Promise<StableFileSnapshot> {
   for (let attempt = 0; attempt < 3; attempt += 1) {
     const lexicalStats = await lstat(absolutePath);
     assertRegularFile(lexicalStats, absolutePath);
+    assertFileSizeWithinLimit(lexicalStats.size, maxBytes, absolutePath);
 
     let handle;
     try {
@@ -724,6 +742,7 @@ async function readStableSnapshot(absolutePath: string): Promise<StableFileSnaps
       );
       const before = await handle.stat();
       assertRegularFile(before, absolutePath);
+      assertFileSizeWithinLimit(before.size, maxBytes, absolutePath);
       const bytes = await handle.readFile();
       const after = await handle.stat();
       const pathAfter = await lstat(absolutePath);
@@ -756,6 +775,18 @@ async function readStableSnapshot(absolutePath: string): Promise<StableFileSnaps
   throw new WorkspaceFileError(
     "STALE_FILE",
     `File changed while it was being read: ${absolutePath}`,
+  );
+}
+
+function assertFileSizeWithinLimit(
+  size: number,
+  maxBytes: number | undefined,
+  path: string,
+): void {
+  if (maxBytes === undefined || size <= maxBytes) return;
+  throw new WorkspaceFileError(
+    "FILE_TOO_LARGE",
+    `File exceeds the ${maxBytes}-byte read limit (${size} bytes): ${path}`,
   );
 }
 

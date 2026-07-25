@@ -25,6 +25,10 @@ teammate 的 `read_file/write_file/edit_file` 保留名称兼容层，但调用�
 第二套读写语义。`WorkspaceFileService` 由 RunFactory 按 thread/workspace 复用，使
 read receipt 能跨同一 Query 的连续工具调用生效。
 
+workspace-level 项目文件管理页也复用该服务的底层安全和提交语义，但不伪装成模型
+工具调用。Main 为每次打开文件签发隔离的 `editToken` 和读取时 SHA-256 version，
+Renderer 保存时必须同时提交二者。
+
 ## 2. 路径解析
 
 工具输入可以是 workspace-relative 或位于同一 workspace 的绝对路径。执行前：
@@ -56,6 +60,12 @@ interface FileReadReceipt {
 Service 在当前 thread/workspace 实例中记录最近收据及完整 inode snapshot。收据用于
 证明 Write/Edit 的基线，不要求模型手工计算 hash；可选 `expected_version` 只能匹配
 当前 service 已签发的 receipt，不能代替一次真实读取。
+
+项目文件编辑的 token 绑定 session、workspace root、规范化相对路径和独立
+`WorkspaceFileService` 读取 scope。另一位调用者读取同一文件不会刷新这份 receipt；
+token 缺失、过期、跨 session/path 使用或 `expectedVersion` 与 receipt 不一致时拒绝
+保存。打开结果还包含 Main 计算的 `editable/readOnlyReason`；保存入口不会信任
+Renderer 回传的可编辑状态，而会重新解析 artifact policy。
 
 Read 行为：
 
@@ -107,6 +117,15 @@ Windows 和 guarded replacement 使用带 old/new fingerprint 的 durable manife
 唯一 backup。恢复只在 inode/hash 能证明 old/new 身份时自动完成；未知 target 保留
 manifest/backup 并上报 `uncertain`，不会静默删除原文件。
 
+`ProjectFileService` 的兼容 artifact 读写与项目文件管理保存都委托这条路径。前者在
+内部先建立 receipt 再写；后者使用打开文件时返回的隔离 `editToken` 与
+`expectedVersion`，因此不能绕过 read-before-write。
+
+既有 Renderer `writeProjectArtifact` 兼容入口同样先执行 Main artifact policy：
+现有文件通过一次性 open/save receipt 提交，新文件只能创建在已注册且可编辑的
+artifact 下；`deck`、`history` 与未知路径会在 Main 拒绝。领域服务维护 deck/history
+时使用不暴露给 Renderer 的内部写入入口。
+
 ## 6. EditFile
 
 EditFile 是确定性的精确编辑：
@@ -154,6 +173,14 @@ release
 
 同一 Query 中连续编辑成功后，read-set 自动更新为最新 receipt，模型不必为了工具刚刚完成的确定性写入再读一次。
 
+项目文件管理页成功保存后可沿用同一 token 和新 version 继续编辑；
+compare-and-commit 进入后失败会使该编辑 scope 失效，页面必须重新打开文件，而不能
+用旧凭证盲目重试。只读策略或内容大小等执行前拒绝不消费 token。
+
+文件内容原子提交成功后，若会话状态持久化或 workspace metadata 同步失败，Main
+返回 `postCommitWarnings`，页面明确显示“内容已保存但状态同步失败”，不会把已经
+落盘的内容误报成未保存。
+
 ## 8. 写后反馈
 
 当前成功结果包含：
@@ -171,6 +198,11 @@ release
 当前文件工具尚不返回结构化 diff、增删行或 file history snapshot；Presentation
 artifact schema 由消费方在使用前验证，不由通用 WriteFile 自动推导 `ready`。
 
+项目文件管理页的 diff 由应用层基于当前文件和编辑草稿生成；这不改变模型工具结果
+协议，也不构成 file history 或 immutable Artifact Revision。只有已注册、可编辑
+artifact 下的文本文件能保存；`deck`、`history` 和未知 artifact 文件保持只读，
+防止普通文件编辑绕过 Presentation/CommandBus 或导出历史的事实源。
+
 ## 9. 权限
 
 | 操作 | workspace 内 | workspace 外 |
@@ -178,6 +210,8 @@ artifact schema 由消费方在使用前验证，不由通用 WriteFile 自动�
 | ReadFile / Glob | permission profile + path guard | deny |
 | 新建文件 | workspace-write + guarded create | deny |
 | 覆盖/Edit | workspace-write + read receipt + guarded replace | deny |
+| 项目文件页读取 | session + path guard；返回 artifact edit policy | deny |
+| 项目文件页保存 | 已注册可编辑文本 artifact + session-bound token + version CAS | deny；deck/history/未知 artifact 同样 deny |
 | teammate diagnostic | direct-exec allowlist | 不接受自定义 cwd/path root |
 
 权限通过代码检查。Prompt 中“只能写 workspace”只是解释，不是安全边界。
@@ -193,6 +227,15 @@ src/main/agent/tools/files/
 
 Main ToolDefinition 位于 `src/main/agent/tools/core/workspace-files.ts`；teammate
 兼容工具位于 `src/main/agent/subagent/workspace-tools.ts`。二者都调用上述同一服务。
+
+项目文件管理应用协议位于：
+
+- `src/main/project/project-file-service.ts`
+- `src/shared/ipc.ts`
+- `src/preload/index.ts`
+- `src/renderer/src/app/ProjectFilesView.tsx`
+- `src/renderer/src/app/project/useProjectFiles.ts`
+- `src/renderer/src/components/ProjectFilesPage.tsx`
 
 底层原子替换复用并增强：
 
@@ -211,9 +254,13 @@ Main 和 teammate 的 ToolDefinition 都调用同一底层服务。
 - manifest crash recovery、未知 target 保留 backup、成功后清理。
 - active transaction 不被另一个 reader/recovery 当成 crash，JSON fallback 不覆盖等待中的新 writer。
 - Bash 重定向/任意解释器拒绝与只读 direct-exec。
+- 项目文件 list/open/diff/save、token 跨 session/path 拒绝及过期处理。
+- 页面读取后被 Agent/外部 writer 修改时，旧 SHA-256 version 保存失败。
+- 文本编辑大小上限、deck/history/未知 artifact 只读，以及删除、重命名和二进制编辑不进入该协议。
 
 核心回归位于 `tests/workspace-file-service.test.ts` 和
-`tests/tool-execution-pipeline.test.ts`。
+`tests/tool-execution-pipeline.test.ts`；项目文件应用链还覆盖
+`tests/project-file-editor-safety.test.ts`。
 
 ## 12. 状态变更
 
@@ -225,3 +272,4 @@ Main 和 teammate 的 ToolDefinition 都调用同一底层服务。
 | Windows `.old` 文件靠存在性猜测恢复 | durable manifest 记录 old/new fingerprint；歧义时保留证据并报 `uncertain` |
 | Bash 只设置 cwd，仍可重定向越界 | 无 shell 的只读 direct-exec allowlist；文件 mutation 走结构化工具 |
 | 文件存在即可参与工作流 | 通用写入不推导 artifact ready；消费方必须解析/验证 |
+| Renderer 项目文件另走弱化读写 | `ProjectFileService` 委托 `WorkspaceFileService`，编辑页使用隔离 token + SHA-256 CAS |
