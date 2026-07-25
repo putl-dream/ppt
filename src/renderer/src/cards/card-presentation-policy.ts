@@ -18,6 +18,7 @@ export interface CardPresentationPolicy {
   activation: "immediate" | "stream-ended" | "domain-ready";
   persistence: "volatile" | "session" | "derived";
   replaceActiveInScope?: boolean;
+  resolvedIsTerminal?: boolean;
   dedupeKey: (event: DisplayEvent) => string;
 }
 
@@ -46,6 +47,7 @@ export const CARD_PRESENTATION_POLICIES: Record<DisplayEventKind, CardPresentati
     activation: "domain-ready",
     persistence: "session",
     replaceActiveInScope: true,
+    resolvedIsTerminal: true,
     dedupeKey: (event) => `${event.kind}:${event.scope.sessionId ?? scopeKey(event)}`,
   },
   "review.command-proposal": {

@@ -28,4 +28,20 @@ describe("LayoutChoiceCard", () => {
     expect(names[2]).toBe(names[3]);
     expect(names[0]).not.toBe(names[2]);
   });
+
+  it("replaces the controls with a resolved summary after confirmation", () => {
+    const markup = renderToStaticMarkup(
+      <LayoutChoiceCard
+        slideCount={8}
+        resolved="confirmed"
+        layoutMode="template"
+        selectedDesignSystem={TEST_DESIGN_SYSTEM}
+      />,
+    );
+
+    expect(markup).toContain("已确认");
+    expect(markup).toContain("标准排版");
+    expect(markup).not.toContain("确认并排版");
+    expect(markup).not.toContain('type="radio"');
+  });
 });

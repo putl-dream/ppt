@@ -51,6 +51,23 @@ function createCategoryCardManager(category: DisplayCardCategory): CategoryCardM
         const sameCard = card.policy.dedupeKey(card.event) === dedupeKey;
         if (sameCard) {
           matched = true;
+          if (card.event.eventId === event.eventId) {
+            // Display events can arrive once through the live stream and again
+            // in the terminal result. Refresh the event payload/scope without
+            // reopening a card the user has already resolved.
+            return {
+              ...card,
+              event,
+              policy,
+            };
+          }
+          if (card.status === "resolved" && policy.resolvedIsTerminal) {
+            // A layout choice is a one-time decision for the session. Background
+            // layout work can advance the presentation revision while some
+            // slides are still being processed; that must not resurrect the
+            // already-confirmed choice as another clickable request.
+            return card;
+          }
           return {
             event,
             policy,

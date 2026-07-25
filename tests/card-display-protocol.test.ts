@@ -130,6 +130,111 @@ describe("card display protocol", () => {
     });
   });
 
+  it("does not reopen a resolved layout card when the same event is delivered again", () => {
+    const event = {
+      protocolVersion: 1 as const,
+      eventId: "layout-required:session-1:4",
+      emittedAt: "2026-07-15T00:00:00.000Z",
+      kind: "interaction.layout-required" as const,
+      category: "interaction" as const,
+      source: {
+        kind: "domain" as const,
+        entityType: "presentation",
+        entityId: "session-1",
+        revision: 4,
+      },
+      scope: { sessionId: "session-1", runId: "run-4" },
+      semantics: {
+        blocking: true,
+        requiresResponse: true,
+        priority: "high" as const,
+      },
+      payload: {
+        presentationRevision: 4,
+        slideCount: 8,
+      },
+    };
+
+    ingestDisplayEvent(event);
+    recordDisplayCardAction(
+      event.eventId,
+      "confirm-layout",
+      { mode: "template" },
+      "resolved",
+    );
+    ingestDisplayEvent({
+      ...event,
+      scope: { ...event.scope, anchorMessageId: "message-4" },
+    });
+
+    const [card] = useInteractionCardManager.getState().cards;
+    expect(card?.status).toBe("resolved");
+    expect(card?.lastAction?.actionId).toBe("confirm-layout");
+    expect(card?.event.scope.anchorMessageId).toBe("message-4");
+  });
+
+  it("keeps a confirmed layout choice terminal across later presentation revisions", () => {
+    const event = {
+      protocolVersion: 1 as const,
+      eventId: "layout-required:session-1:4",
+      emittedAt: "2026-07-15T00:00:00.000Z",
+      kind: "interaction.layout-required" as const,
+      category: "interaction" as const,
+      source: {
+        kind: "domain" as const,
+        entityType: "presentation",
+        entityId: "session-1",
+        revision: 4,
+      },
+      scope: {
+        sessionId: "session-1",
+        runId: "run-4",
+        anchorMessageId: "message-4",
+      },
+      semantics: {
+        blocking: true,
+        requiresResponse: true,
+        priority: "high" as const,
+      },
+      payload: {
+        presentationRevision: 4,
+        slideCount: 8,
+      },
+    };
+
+    ingestDisplayEvent(event);
+    recordDisplayCardAction(
+      event.eventId,
+      "confirm-layout",
+      { mode: "template" },
+      "resolved",
+    );
+
+    const persisted = getPersistedDisplayCards();
+    clearAllDisplayCardManagers();
+    hydrateDisplayCardManagers(persisted);
+    ingestDisplayEvent({
+      ...event,
+      eventId: "layout-required:session-1:5",
+      source: { ...event.source, revision: 5 },
+      scope: {
+        ...event.scope,
+        runId: "run-5",
+        anchorMessageId: "message-5",
+      },
+      payload: {
+        presentationRevision: 5,
+        slideCount: 8,
+      },
+    });
+
+    const [card] = useInteractionCardManager.getState().cards;
+    expect(card?.status).toBe("resolved");
+    expect(card?.event.eventId).toBe(event.eventId);
+    expect(card?.event.scope.anchorMessageId).toBe("message-4");
+    expect(card?.lastAction?.actionId).toBe("confirm-layout");
+  });
+
   it("keeps the complete approval request in the review event payload", () => {
     const [event] = toResultDisplayEvents({
       status: "approval-required",
