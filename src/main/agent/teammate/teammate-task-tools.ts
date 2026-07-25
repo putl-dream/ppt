@@ -3,8 +3,8 @@ import type { AgentTaskNode } from "@shared/agent-task-list";
 import type {
   TaskCommandPrincipal,
   TaskDispatchCandidate,
-  TaskStore,
 } from "../task/task-store";
+import { TaskStoreError, type TaskStore } from "../task/task-store";
 import type { SubAgentToolDefinition } from "../subagent/workspace-tools";
 import type { ToolPermissionProfile } from "../runtime/tools/tool-access-policy";
 import {
@@ -146,8 +146,16 @@ export async function releaseOwnedTasks(
         expectedRevision: task.revision,
       }, principal);
       released.push(task.id);
-    } catch {
-      // A concurrent owner/revision change is authoritative.
+    } catch (error) {
+      // Another writer may have removed or revised the task after listTasks().
+      // Those facts are authoritative; operational and policy failures are not.
+      if (
+        error instanceof TaskStoreError
+        && (error.code === "TASK_NOT_FOUND" || error.code === "REVISION_CONFLICT")
+      ) {
+        continue;
+      }
+      throw error;
     }
   }
   if (released.length) await publishCurrentTaskList(store, onTasksUpdated);

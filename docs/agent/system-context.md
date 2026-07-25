@@ -7,25 +7,27 @@
 
 System Prompt 是有序 Section 的组装结果，不是一份不断追加规则的巨型字符串。
 
-参考 Claude Code，应同时满足：
+参考 Claude Code，当前实现与扩展方向共同遵守：
 
 - 稳定内容获得稳定前缀和 Prompt Cache；
-- workspace、日期、记忆、工具等动态事实可独立更新；
+- workspace、artifact、selection、记忆、工具和预算等动态事实可独立更新；
 - 项目指令与系统安全策略分层；
 - Skill 提供建议，不编译成隐藏状态机；
 - Prompt 只解释能力和偏好，不承担权限与持久化正确性。
 
-## 2. 三类上下文
+## 2. 当前上下文来源与扩展契约
 
-| 类型 | 内容 | 注入方式 |
+| 类型 | 当前已接入内容 | 注入方式 |
 |---|---|---|
-| System Prompt | 身份、通用行为、安全边界、工具协议 | system blocks |
-| System Context | 日期、cwd、环境、workspace 状态、运行预算 | 动态 system section/reminder |
-| User Context | 项目指令、用户附件、恢复说明、inbox | user meta ContentBlock |
+| System Prompt | 身份、响应协议、动态工具说明 | Provider system field |
+| Dynamic sections | workspace/artifact、当前 slide、memory、预算、required outcome、建议 stage | dynamic system suffix |
+| Request context | caller 可选的 `userContext` / `systemContext`、thread/run identity | 临时 user message |
+| Canonical messages | 用户消息、assistant ContentBlock、成对工具结果 | Provider messages |
 
-项目文件中的指令属于用户控制的上下文，不能与不可覆盖的系统安全规则混为同一来源。
-当 Provider 请求已经携带 canonical `messages` 时，Gateway 会把本次 request-scoped
-prompt 投影为临时 user message；它能到达模型，但不会写回长期 History。
+当 Provider 请求已经携带 canonical `messages` 时，Gateway 会把本次
+request-scoped payload 投影为临时 user message；它能到达模型，但不会写回长期
+History。项目指令、附件、日期和更完整的环境快照目前尚未由生产装配自动加载；未来
+接入时必须保留来源标签，并把用户控制的项目内容与不可覆盖的系统安全策略分开。
 
 ## 3. 稳定/动态分区
 
@@ -137,20 +139,16 @@ require the full production workflow.
 
 ## 8. Cache 与失效
 
-至少在以下事件显式失效相关 session cache：
+当前缓存项以 thread + 完整 Context key + section registry revision 为粒度：
 
-- `/clear` 或新 thread；
-- compact 后 History 基线变化；
-- workspace/worktree 切换；
-- project instructions 更新；
-- Skill registry 更新；
-- resolved tool pool 更新；
-- 权限模式更新；
-- session restore。
+- Context key 变化时惰性 miss 并重建；
+- section 注册或注销会清空全部 thread cache；
+- `clearSystemPromptCache()` 提供显式清理入口，但当前生产生命周期尚未调用它；
+- `/clear`、compact、restore 等事件只要改变已纳入 key 的 Context，就会自然 miss。
 
-当前缓存项以 thread + 完整 Context key 为粒度，但稳定前缀由独立 global section
-构建，动态变化不会改变其字节。更细的单-section memoization 是可选优化，不是正确性
-前提。
+项目指令、附件和权限模式尚未接入 Context key；将这些数据源接入生产装配时，必须
+同时纳入 key 或在对应生命周期调用显式清理。稳定前缀由独立 global section 构建，
+动态变化不会改变其字节。更细的单-section memoization 是可选优化，不是正确性前提。
 
 ## 9. Canonical Context 压缩
 
@@ -168,7 +166,8 @@ messages
 
 压缩保持 `tool_use/tool_result` 配对，并通过 `onContextPrepared` 回写当前 Query
 Workspace。Reactive prompt-too-long 恢复从已压缩消息继续，不能用原始 messages
-覆盖裁剪结果。
+覆盖裁剪结果。完整归档写入模型可读 workspace 的 `.transcripts/`；若没有
+workspace，则跳过依赖归档的 LLM summary，不向模型暴露 application runtimeRoot。
 
 ## 10. 安全
 

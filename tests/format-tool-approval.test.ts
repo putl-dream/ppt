@@ -13,4 +13,16 @@ describe("formatToolApprovalDetail", () => {
     expect(detail).toContain("path: x.md");
     expect(detail).toContain("...");
   });
+
+  it("formats main-agent workspace file tools with the same readable contract", () => {
+    expect(formatToolApprovalDetail("ReadFile", { path: "slides/outline.md" }))
+      .toBe("slides/outline.md");
+    expect(formatToolApprovalDetail("Glob", { pattern: "slides/**/*.md" }))
+      .toBe("slides/**/*.md");
+    expect(formatToolApprovalDetail("EditFile", {
+      path: "slides/outline.md",
+      old_string: "old",
+      new_string: "new",
+    })).toBe("path: slides/outline.md\n- old\n+ new");
+  });
 });

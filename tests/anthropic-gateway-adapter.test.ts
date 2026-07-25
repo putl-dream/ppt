@@ -3,11 +3,15 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const anthropicMock = vi.hoisted(() => ({
   constructorOptions: undefined as unknown,
   create: vi.fn(),
+  stream: vi.fn(),
 }));
 
 vi.mock("@anthropic-ai/sdk", () => ({
   default: class Anthropic {
-    messages = { create: anthropicMock.create };
+    messages = {
+      create: anthropicMock.create,
+      stream: anthropicMock.stream,
+    };
 
     constructor(options: unknown) {
       anthropicMock.constructorOptions = options;
@@ -15,7 +19,10 @@ vi.mock("@anthropic-ai/sdk", () => ({
   },
 }));
 
-import { generateWithAnthropic } from "../src/main/agent/gateway/anthropic";
+import {
+  generateStreamWithAnthropic,
+  generateWithAnthropic,
+} from "../src/main/agent/gateway/anthropic";
 
 const config = {
   provider: "anthropic" as const,
@@ -29,6 +36,7 @@ const config = {
 describe("generateWithAnthropic", () => {
   beforeEach(() => {
     anthropicMock.create.mockReset();
+    anthropicMock.stream.mockReset();
     anthropicMock.constructorOptions = undefined;
   });
 
@@ -117,6 +125,38 @@ describe("generateWithAnthropic", () => {
     });
   });
 
+  it("delivers request-scoped context alongside native history without mutating it", async () => {
+    anthropicMock.create.mockResolvedValue({
+      content: [{ type: "text", text: "ok" }],
+      _request_id: "req-native-context",
+      stop_reason: "end_turn",
+    });
+    const messages = [{
+      role: "user" as const,
+      content: [{ type: "text" as const, text: "canonical user request" }],
+    }];
+    const original = structuredClone(messages);
+    const prompt = JSON.stringify({
+      transcript: [],
+      queryContext: {
+        user: { locale: "zh-CN" },
+        system: { surface: "desktop" },
+      },
+    });
+
+    await generateWithAnthropic(config, {
+      systemPrompt: "System instruction",
+      prompt,
+      messages,
+    });
+
+    expect(anthropicMock.create.mock.calls[0]?.[0].messages).toEqual([
+      { role: "user", content: [{ type: "text", text: "canonical user request" }] },
+      { role: "user", content: [{ type: "text", text: prompt }] },
+    ]);
+    expect(messages).toEqual(original);
+  });
+
   it("keeps named one-shot tools compatible with thinking mode", async () => {
     anthropicMock.create.mockResolvedValue({
       content: [{
@@ -172,6 +212,56 @@ describe("generateWithAnthropic", () => {
     });
   });
 
+  it("also retries a thinking-only stream with a larger output budget", async () => {
+    anthropicMock.stream
+      .mockReturnValueOnce(mockAnthropicStream(
+        [{
+          type: "content_block_delta",
+          index: 0,
+          delta: { type: "thinking_delta", thinking: "still reasoning" },
+        }],
+        {
+          content: [{ type: "thinking", thinking: "still reasoning" }],
+          stop_reason: "max_tokens",
+          usage: { input_tokens: 10, output_tokens: 20 },
+        },
+      ))
+      .mockReturnValueOnce(mockAnthropicStream(
+        [{
+          type: "content_block_delta",
+          index: 0,
+          delta: { type: "text_delta", text: "final answer" },
+        }],
+        {
+          content: [{ type: "text", text: "final answer" }],
+          stop_reason: "end_turn",
+          usage: { input_tokens: 30, output_tokens: 40 },
+        },
+      ));
+
+    const chunks = [];
+    for await (const chunk of generateStreamWithAnthropic(config, {
+      prompt: "User prompt",
+    })) {
+      chunks.push(chunk);
+    }
+
+    expect(anthropicMock.stream).toHaveBeenCalledTimes(2);
+    expect(anthropicMock.stream.mock.calls[1][0]).toMatchObject({
+      max_tokens: 1308,
+    });
+    expect(chunks.at(-1)).toEqual({
+      type: "complete",
+      content: [{ type: "text", text: "final answer" }],
+      stopReason: "end_turn",
+      usage: {
+        inputTokens: 40,
+        outputTokens: 60,
+        totalTokens: 100,
+      },
+    });
+  });
+
   it("rejects a response without any usable content", async () => {
     anthropicMock.create.mockResolvedValue({
       content: [],
@@ -208,3 +298,17 @@ describe("generateWithAnthropic", () => {
     });
   });
 });
+
+function mockAnthropicStream(
+  events: unknown[],
+  finalMessage: unknown,
+) {
+  return {
+    async *[Symbol.asyncIterator]() {
+      yield* events;
+    },
+    async finalMessage() {
+      return finalMessage;
+    },
+  };
+}

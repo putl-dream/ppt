@@ -3,6 +3,10 @@ import { resolveContextSoftTokenThreshold, resolveContextTokenThreshold } from "
 import { compactHistory } from "./compact-history";
 import { estimatePromptTokens } from "./estimate-tokens";
 import { microCompactTranscript } from "./micro-compact";
+import {
+  microCompactModelMessages,
+  snipCompactModelMessages,
+} from "./model-messages";
 import { snipCompactConversation, snipCompactTranscript } from "./snip-compact";
 import { toolResultBudget } from "./tool-result-budget";
 import type { ContextCompactResult, PrepareContextOptions } from "./types";
@@ -24,7 +28,8 @@ function contextProgressMessage(notes: string[]): string | undefined {
   if (notes.some((note) => /^L2 micro_compact:/i.test(note))) {
     return CONTEXT_TOOL_RESULTS_COMPACTED_USER_MESSAGE;
   }
-  if (notes.some((note) => /^(?:L3 tool_result_budget:|Persisted oversized tool result)/i.test(note))) {
+  if (notes.some((note) =>
+    /^(?:L3 tool_result_budget:|Persisted oversized tool result)/i.test(note))) {
     return CONTEXT_LARGE_RESULTS_PERSISTED_USER_MESSAGE;
   }
   return undefined;
@@ -32,15 +37,18 @@ function contextProgressMessage(notes: string[]): string | undefined {
 
 /**
  * Persist exceptionally large results immediately, then delay lossy compaction
- * until the prompt approaches its configured token threshold.
+ * until the prompt approaches its configured token threshold. Both the legacy
+ * payload and canonical native messages participate in every size decision.
  */
 export async function prepareContext(
   options: PrepareContextOptions,
 ): Promise<ContextCompactResult> {
   const notes: string[] = [];
   let compactHistoryFailures = options.compactHistoryFailures ?? 0;
-
   let payload: ModelPromptPayload = structuredClone(options.payload);
+  let messages = options.messages
+    ? structuredClone(options.messages)
+    : undefined;
 
   const budgetResult = await toolResultBudget(payload.transcript, options.workspaceRoot);
   payload = { ...payload, transcript: budgetResult.transcript };
@@ -51,26 +59,30 @@ export async function prepareContext(
     options.softTokenThreshold ?? resolveContextSoftTokenThreshold(tokenThreshold),
     tokenThreshold,
   );
-  let estimatedTokens = estimatePromptTokens(options.systemPrompt, payload);
+  let estimatedTokens = estimatePromptTokens(options.systemPrompt, payload, messages);
 
   if (estimatedTokens > softTokenThreshold) {
-    const beforeMicro = JSON.stringify(payload.transcript).length;
+    const beforeMicro = JSON.stringify(payload.transcript).length
+      + JSON.stringify(messages ?? []).length;
     payload = {
       ...payload,
       transcript: microCompactTranscript(payload.transcript),
     };
-    const afterMicro = JSON.stringify(payload.transcript).length;
+    messages = microCompactModelMessages(messages);
+    const afterMicro = JSON.stringify(payload.transcript).length
+      + JSON.stringify(messages ?? []).length;
     if (afterMicro < beforeMicro) {
       notes.push(
         `L2 micro_compact: reduced older tool results by ${beforeMicro - afterMicro} characters.`,
       );
-      estimatedTokens = estimatePromptTokens(options.systemPrompt, payload);
+      estimatedTokens = estimatePromptTokens(options.systemPrompt, payload, messages);
     }
   }
 
   if (estimatedTokens > tokenThreshold && options.gateway) {
     const historyResult = await compactHistory({
       payload,
+      messages,
       workspaceRoot: options.workspaceRoot,
       threadId: options.threadId,
       gateway: options.gateway,
@@ -82,30 +94,48 @@ export async function prepareContext(
 
     if (!historyResult.skipped && historyResult.summary) {
       payload = historyResult.payload;
+      messages = historyResult.messages;
       notes.push(
         historyResult.savedPath
           ? `L4 compact_history: archived to ${historyResult.savedPath} and replaced with summary.`
           : "L4 compact_history: replaced history with LLM summary.",
       );
-      estimatedTokens = estimatePromptTokens(options.systemPrompt, payload);
+      estimatedTokens = estimatePromptTokens(options.systemPrompt, payload, messages);
     } else if (historyResult.reason) {
       notes.push(`L4 compact_history skipped: ${historyResult.reason}`);
     }
   }
 
   if (estimatedTokens > tokenThreshold) {
-    const beforeSnip = payload.transcript.length + (payload.conversation?.length ?? 0);
+    const beforeSnip = payload.transcript.length
+      + (payload.conversation?.length ?? 0)
+      + (messages?.length ?? 0);
+    const beforeSnipChars = JSON.stringify({
+      conversation: payload.conversation,
+      transcript: payload.transcript,
+      messages,
+    }).length;
     payload = {
       ...payload,
       conversation: snipCompactConversation(payload.conversation),
       transcript: snipCompactTranscript(payload.transcript),
     };
-    const afterSnip = payload.transcript.length + (payload.conversation?.length ?? 0);
-    if (afterSnip < beforeSnip) {
+    // Hard overflow is size-driven. Use a paired native tail even when fewer
+    // than the normal count threshold are individually very large.
+    messages = snipCompactModelMessages(messages, 0, 1, 2);
+    const afterSnip = payload.transcript.length
+      + (payload.conversation?.length ?? 0)
+      + (messages?.length ?? 0);
+    const afterSnipChars = JSON.stringify({
+      conversation: payload.conversation,
+      transcript: payload.transcript,
+      messages,
+    }).length;
+    if (afterSnip < beforeSnip || afterSnipChars < beforeSnipChars) {
       notes.push(
-        `L1 snip_compact: ${beforeSnip - afterSnip} messages removed after summary was unavailable.`,
+        `L1 snip_compact: removed ${Math.max(0, beforeSnip - afterSnip)} messages `
+        + `and ${Math.max(0, beforeSnipChars - afterSnipChars)} characters after summary was unavailable.`,
       );
-      estimatedTokens = estimatePromptTokens(options.systemPrompt, payload);
     }
   }
 
@@ -113,5 +143,5 @@ export async function prepareContext(
   const progressMessage = contextChanged ? contextProgressMessage(notes) : undefined;
   if (progressMessage) options.onProgress?.(progressMessage);
 
-  return { payload, notes, compactHistoryFailures, contextChanged };
+  return { payload, messages, notes, compactHistoryFailures, contextChanged };
 }

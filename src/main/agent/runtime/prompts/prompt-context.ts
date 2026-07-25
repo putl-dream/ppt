@@ -2,6 +2,8 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Presentation } from "@shared/presentation";
 import type { ToolDefinition } from "../../tools/tool-definition";
+import { toToolCard } from "../../tools/tool-card";
+import { toToolInputSchema } from "../../tools/tool-schema";
 import type { SkillCard } from "../../skills/skill-types";
 import type { AgentStepLimits } from "@shared/agent-step-limits";
 import type { SkillRegistry } from "../../skills/loadSkillsDir";
@@ -139,15 +141,58 @@ export function buildSystemPromptContextSync(
 }
 
 export function serializeSystemPromptContextKey(context: SystemPromptContext): string {
-  return JSON.stringify({
+  const tools = context.coreTools
+    .map((tool) => ({
+      card: toToolCard(tool),
+      category: tool.category,
+      loadPolicy: tool.loadPolicy,
+      permission: tool.permission ?? null,
+      inputSchema: toToolInputSchema(tool.inputSchema),
+      behavior: tool.behavior
+        ? {
+            capabilities: tool.behavior.capabilities ?? [],
+            completion: tool.behavior.completion ?? null,
+            background: Boolean(tool.behavior.background),
+            delegation: tool.behavior.delegation
+              ? {
+                  allowedCategories: tool.behavior.delegation.allowedCategories,
+                  allowedLoadPolicies: tool.behavior.delegation.allowedLoadPolicies,
+                }
+              : null,
+          }
+        : null,
+    }))
+    .sort((left, right) => left.card.name.localeCompare(right.card.name));
+  const skills = (context.skillCatalog ?? [])
+    .map((skill) => ({
+      ...skill,
+      frontmatter: context.skillRegistry?.get(skill.name)?.frontmatter ?? null,
+    }))
+    .sort((left, right) => left.name.localeCompare(right.name));
+
+  return stableStringify({
     stage: context.stage,
     enabledTools: context.enabledTools,
+    tools,
     workspaceRoot: context.workspaceRoot ?? null,
     memories: context.memories || null,
-    skillNames: (context.skillCatalog ?? []).map((skill) => skill.name).sort(),
+    skills,
     currentSlideId: context.currentSlideId ?? null,
     requiredOutcome: context.requiredOutcome ?? "any",
     stepLimits: context.stepLimits ?? null,
     artifacts: context.artifacts,
   });
+}
+
+function stableStringify(value: unknown): string {
+  const normalize = (candidate: unknown): unknown => {
+    if (Array.isArray(candidate)) return candidate.map(normalize);
+    if (!candidate || typeof candidate !== "object") return candidate;
+    return Object.fromEntries(
+      Object.entries(candidate)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([key, entry]) => [key, normalize(entry)]),
+    );
+  };
+  return JSON.stringify(normalize(value));
 }

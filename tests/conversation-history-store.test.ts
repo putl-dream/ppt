@@ -106,7 +106,12 @@ describe("canonical conversation history store", () => {
     expect(checkpoint).toMatchObject({
       version: 2,
       lastRunId: "second-run",
-      committedState: { turnCount: 0 },
+      // The fresh Query counts its own terminal model turn, but does not carry
+      // the previous Query's counter forward (which would produce 2).
+      committedState: {
+        turnCount: 1,
+        transition: { reason: "completed" },
+      },
     });
   });
 

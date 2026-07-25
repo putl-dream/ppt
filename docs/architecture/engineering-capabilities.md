@@ -4,6 +4,9 @@
 > 最后核对：2026-07-25
 > 事实来源：`/mnt/e/Coding/claude-code`、`src/`、`skills/`、`tests/` 与 `package.json`
 
+下文中 `/mnt/e/Coding/claude-code/...` 是参考项目绝对路径；`src/...`、`tests/...`
+和 `docs/...` 均相对本仓库根目录。
+
 ## 1. 文档目的
 
 本文回答三个问题：
@@ -29,12 +32,12 @@
 
 | 层 | Claude Code 的代表实现 | 可复用的工程原则 |
 |---|---|---|
-| 入口与运行形态 | `claude-code/src/entrypoints/cli.tsx`、`claude-code/src/main.tsx`、pipe、daemon、bridge、background session | 快速路径与完整 Agent 启动分离；运行形态共享核心能力 |
-| Query 编排 | `claude-code/src/query.ts`、`claude-code/src/QueryEngine.ts` | Query Loop 独立；跨圈状态与单圈临时状态分离 |
-| 模型适配 | `claude-code/src/services/api/`、provider registry | Provider 差异在边界层收敛，下游消费统一内容块 |
-| 工具与权限 | `claude-code/src/Tool.ts`、`claude-code/src/tools.ts`、`claude-code/packages/builtin-tools/`、`claude-code/src/hooks/` | 工具动态暴露；校验、权限、Hook、执行和结果归一化形成单管线 |
-| Context 与记忆 | `claude-code/src/context.ts`、`claude-code/src/utils/claudemd.ts`、compact、memory services | 稳定 Prompt 与动态上下文分区；超预算时有确定性降级 |
-| 任务与协作 | `claude-code/src/tasks/`、`claude-code/src/coordinator/`、teammate、workflow engine | Task 是持久化协调协议；子 Agent 有独立身份、收件箱和终态 |
+| 入口与运行形态 | `/mnt/e/Coding/claude-code/src/entrypoints/cli.tsx`、`/mnt/e/Coding/claude-code/src/main.tsx`、pipe、daemon、bridge、background session | 快速路径与完整 Agent 启动分离；运行形态共享核心能力 |
+| Query 编排 | `/mnt/e/Coding/claude-code/src/query.ts`、`/mnt/e/Coding/claude-code/src/QueryEngine.ts` | Query Loop 独立；跨圈状态与单圈临时状态分离 |
+| 模型适配 | `/mnt/e/Coding/claude-code/src/services/api/`、provider registry | Provider 差异在边界层收敛，下游消费统一内容块 |
+| 工具与权限 | `/mnt/e/Coding/claude-code/src/Tool.ts`、`/mnt/e/Coding/claude-code/src/tools.ts`、`/mnt/e/Coding/claude-code/packages/builtin-tools/`、`/mnt/e/Coding/claude-code/src/hooks/` | 工具动态暴露；校验、权限、Hook、执行和结果归一化形成单管线 |
+| Context 与记忆 | `/mnt/e/Coding/claude-code/src/context.ts`、`/mnt/e/Coding/claude-code/src/utils/claudemd.ts`、compact、memory services | 稳定 Prompt 与动态上下文分区；超预算时有确定性降级 |
+| 任务与协作 | `/mnt/e/Coding/claude-code/src/tasks/`、`/mnt/e/Coding/claude-code/src/coordinator/`、teammate、workflow engine | Task 是持久化协调协议；子 Agent 有独立身份、收件箱和终态 |
 | 恢复与远程 | transcript、session、background、daemon、bridge、ACP、RCS | 执行状态可持久化；交互端与执行端可解耦 |
 | 扩展与运维 | skills、plugins、MCP、LSP、telemetry、health、feature flags | 扩展能力与核心循环解耦；构建、诊断和可观测性是产品能力的一部分 |
 
@@ -44,26 +47,26 @@ Agent PPT 不需要复制这些入口和命令，但需要吸收其中与长任�
 
 | 能力域 | 当前状态 | Agent PPT 落点 | 与 Claude Code 的关系 |
 |---|---|---|---|
-| 独立 Query Loop | **Implemented** | `runtime/query/query.ts`、`query-types.ts` | 采用独立循环与显式 transition，不复制 CLI 状态 |
-| Run 生命周期 | **Implemented** | `agent-runtime.ts`、`agent-run-scope.ts`、`agent-run-finalizer.ts` | 将 Query 编排与资源/提交生命周期分开 |
-| Provider Gateway | **Implemented** | `gateway/anthropic.ts`、`openai.ts`、`content-blocks.ts` | 在适配层统一流与内容块 |
-| 模型调用恢复 | **Implemented** | `turns/model-call-recovery.ts`、`gateway/withRetry.ts` | 将可恢复错误与终止错误显式分类 |
-| Context 压缩 | **Implemented** | `runtime/context-compact/` | 具备预算、micro/snip/full compact 与 emergency trim |
-| System Prompt 分区 | **Implemented** | `runtime/prompts/` | section registry、稳定/动态边界、stage 建议化 |
-| 动态工具系统 | **Implemented** | `tools/tool-registry.ts`、`tool-loader.ts`、`runtime/tools/` | 注册、暴露、权限和执行解耦 |
-| 文件安全操作 | **Implemented** | `tools/files/workspace-file-service.ts`、`core/workspace-files.ts` | Main/teammate 共享 read-before-write 与原子提交 |
-| 权限与审批 | **Implemented** | `permission-check.ts`、`tool-approval-broker.ts`、`CommitGate` | Prompt 不承担权限；Presentation 变更有独立提交门 |
+| 独立 Query Loop | **Implemented** | `src/main/agent/runtime/query/query.ts`、`src/main/agent/runtime/query/query-types.ts` | 采用独立循环与显式 transition，不复制 CLI 状态 |
+| Run 生命周期 | **Implemented** | `src/main/agent/runtime/agent-runtime.ts`、`src/main/agent/runtime/lifecycle/agent-run-scope.ts`、`src/main/agent/runtime/agent-run-finalizer.ts` | 将 Query 编排与资源/提交生命周期分开 |
+| Provider Gateway | **Implemented** | `src/main/agent/gateway/anthropic.ts`、`src/main/agent/gateway/openai.ts`、`src/main/agent/gateway/content-blocks.ts` | 在适配层统一流与内容块 |
+| 模型调用恢复 | **Implemented** | `src/main/agent/runtime/turns/model-call-recovery.ts`、`src/main/agent/gateway/withRetry.ts` | 将可恢复错误与终止错误显式分类 |
+| Context 压缩 | **Implemented** | `src/main/agent/runtime/context-compact/` | 具备预算、micro/snip/full compact 与 emergency trim |
+| System Prompt 分区 | **Implemented** | `src/main/agent/runtime/prompts/` | section registry、稳定/动态边界、stage 建议化 |
+| 动态工具系统 | **Implemented** | `src/main/agent/tools/tool-registry.ts`、`src/main/agent/tools/tool-loader.ts`、`src/main/agent/runtime/tools/` | 注册、暴露、权限和执行解耦 |
+| 文件安全操作 | **Implemented** | `src/main/agent/tools/files/workspace-file-service.ts`、`src/main/agent/tools/core/workspace-files.ts` | Main/teammate 共享 read-before-write 与原子提交 |
+| 权限与审批 | **Implemented** | `src/main/agent/runtime/tools/permission-check.ts`、`src/main/agent/runtime/tools/tool-approval-broker.ts`、`src/main/agent/gate/commit-gate.ts` | Prompt 不承担权限；Presentation 变更有独立提交门 |
 | Skill 渐进加载 | **Implemented** | `src/main/agent/skills/loadSkillsDir.ts`、`src/main/agent/tools/core/load-skill.ts`、`skills/` | Skill 是知识/流程注入，不是硬编码阶段机 |
-| Task / teammate | **Implemented** | `task/`、`teammate/`、`subagent/` | 有持久化任务、独立会话、消息总线和生命周期 |
-| 后台任务 | **Partial** | `runtime/background/` | 已有 manager 与 inbox 输入，尚非 daemon/跨进程后台平台 |
-| 持久化与恢复 | **Implemented** | `persistence/`、`lifecycle/checkpoint-*` | History、checkpoint、lease、CAS 与 inflight 恢复分层 |
-| Web / 图片检索 | **Implemented** | `search/`、`core/web-search.ts`、`search-slide-images.ts` | 作为受控外部能力进入工具管线 |
-| Presentation 编译 | **Implemented** | `shared/commercial-visual/`、`design-system/`、layout registry | PPT 自有领域能力，不从 Claude Code 复制 |
-| 渲染反馈与质量门 | **Implemented** | `render-feedback-loop.ts`、deck validators、quality gate | 模型复盘有界，最终约束由确定性代码执行 |
-| Artifact / Job 生命周期 | **Proposed** | `roadmap/presentation-lifecycle.md` | 当前最大结构性缺口 |
+| Task / teammate | **Implemented** | `src/main/agent/task/`、`src/main/agent/teammate/`、`src/main/agent/subagent/` | 有持久化任务、独立会话、消息总线和生命周期 |
+| 后台任务 | **Partial** | `src/main/agent/runtime/background/` | 已有 manager 与 inbox 输入，尚非 daemon/跨进程后台平台 |
+| 持久化与恢复 | **Implemented** | `src/main/agent/persistence/`、`src/main/agent/runtime/lifecycle/checkpoint-coordinator.ts` | History、checkpoint、lease、CAS 与 inflight 恢复分层 |
+| Web / 图片检索 | **Implemented** | `src/main/agent/search/`、`src/main/agent/tools/core/web-search.ts`、`src/main/agent/tools/core/search-slide-images.ts` | 作为受控外部能力进入工具管线 |
+| Presentation 编译 | **Implemented** | `src/shared/commercial-visual/`、`src/design-system/`、layout registry | PPT 自有领域能力，不从 Claude Code 复制 |
+| 渲染反馈与质量门 | **Implemented** | `src/main/agent/runtime/presentation/render-feedback-loop.ts`、deck validators、quality gate | 模型复盘有界，最终约束由确定性代码执行 |
+| Artifact / Job 生命周期 | **Proposed** | `docs/roadmap/presentation-lifecycle.md` | 当前最大结构性缺口 |
 | MCP / Plugin / LSP | **Not adopted** | 无对应产品入口 | 不是当前 PPT 主链路所必需 |
 | Daemon / Remote Control / ACP | **Not adopted** | 无对应产品入口 | Electron 本地应用暂不需要复制远程运行面 |
-| 通用 Shell / Computer Use | **Not adopted** | 无通用执行器 | PPT 使用窄工具面，降低宿主机副作用风险 |
+| 通用 Shell / Computer Use | **Partial** | teammate-only `src/main/agent/subagent/workspace-tools.ts` | Bash 为 fail-closed 的只读 direct-exec allowlist；无任意 shell 或 Computer Use |
 
 ## 4. 核心 Agent 能力细节
 
@@ -103,9 +106,12 @@ Gateway 当前支持 Anthropic 与 OpenAI 两条适配路径。工程边界不�
 - usage 与 finish reason；
 - 可重试错误、超长输出与响应契约错误。
 
-`gateway/content-blocks.ts` 和 `message-pairing.ts` 保护模型消息协议；
-`response-contract.ts` 约束上层实际可消费的返回形态；
-`model-call-recovery.ts` 处理一次模型 attempt 失败后的恢复。新增 Provider 时应实现同一内部协议，不能把 Provider 分支扩散进 Query Loop 或 Presentation 工具。
+`src/main/agent/gateway/content-blocks.ts` 和
+`src/main/agent/gateway/message-pairing.ts` 保护模型消息协议；
+`src/main/agent/gateway/response-contract.ts` 约束上层实际可消费的返回形态；
+`src/main/agent/runtime/turns/model-call-recovery.ts` 处理一次模型 attempt 失败后的恢复。
+新增 Provider 时应实现同一内部协议，不能把 Provider 分支扩散进 Query Loop 或
+Presentation 工具。
 
 验证入口：
 
@@ -123,13 +129,14 @@ Context 管理已经不是简单截断聊天数组。当前能力包含：
 
 | 机制 | 目的 | 代码入口 |
 |---|---|---|
-| token 估算 | 在请求前判断预算 | `estimate-tokens.ts` |
-| tool result budget | 避免单个工具结果吞掉上下文 | `tool-result-budget.ts` |
-| micro compact | 优先清理低价值局部内容 | `micro-compact.ts` |
-| snip compact | 对大块内容做局部裁剪 | `snip-compact.ts` |
-| canonical compact | 生成可继续推理的紧凑历史 | `compact-history.ts` |
-| emergency trim | 正常压缩仍超限时保住协议有效性 | `emergency-trim.ts` |
-| request projection | 将 canonical messages 投影为模型请求 | `model-messages.ts`、`prepare-context.ts` |
+| token 估算 | 在请求前判断预算 | `src/main/agent/runtime/context-compact/estimate-tokens.ts` |
+| tool result budget | 避免单个工具结果吞掉上下文 | `src/main/agent/runtime/context-compact/tool-result-budget.ts` |
+| micro compact | 优先清理低价值局部内容 | `src/main/agent/runtime/context-compact/micro-compact.ts` |
+| snip compact | 对大块内容做局部裁剪 | `src/main/agent/runtime/context-compact/snip-compact.ts` |
+| canonical compact | 生成可继续推理的紧凑历史 | `src/main/agent/runtime/context-compact/compact-history.ts` |
+| emergency trim | 正常压缩仍超限时保住协议有效性 | `src/main/agent/runtime/context-compact/emergency-trim.ts` |
+| native message compact | 压缩并保持 tool pairing | `src/main/agent/runtime/context-compact/model-messages.ts`、`src/main/agent/runtime/context-compact/prepare-context.ts` |
+| request projection | 临时注入 request context，不污染 History | `src/main/agent/gateway/message-pairing.ts`、`src/main/agent/gateway/anthropic.ts`、`src/main/agent/gateway/openai.ts` |
 
 压缩必须保留 system/user 意图、未完成工具配对、关键决策和当前任务状态。Renderer transcript 可以更丰富，但不能拿 UI 文本代替 canonical provider messages。
 
@@ -138,24 +145,28 @@ Context 管理已经不是简单截断聊天数组。当前能力包含：
 工具系统分为三个概念：
 
 1. **Registered**：代码知道该工具；
-2. **Available**：当前 Agent、stage、workspace 和权限上下文允许暴露；
-3. **Executable**：本次输入通过 schema、preflight、审批和 Hook，可以执行。
+2. **Resolved / Visible**：load policy、category 与 `isEnabled(context)` 允许本次暴露；
+3. **Authorized / Executable**：本次输入通过 schema、permission、审批和 Hook，可以执行。
+
+stage 只影响建议与排序，permission 只在 Preflight/执行前裁决；二者都不参与
+Registry 的 `Resolved / Visible` 过滤。
 
 统一执行链为：
 
 ```text
-resolve tool
-  → normalize and validate input
-  → access policy
-  → preflight
-  → permission / approval
-  → hooks
+resolve registered core tool
+  → parse and validate requested input
+  → resolve delegation target when declared
+  → parse and validate target input
+  → non-removable permission / approval
+  → mutable PreToolUse hooks
   → execute
-  → normalize local data and model result
+  → output validation / PostToolUse hooks
+  → bounded model result
   → emit paired tool_result
 ```
 
-Core tools 提供高频基础能力；Deferred tools 通过搜索后按需进入上下文；Runtime-only 能力服务宿主运行，不应暴露给模型。`search_extra_tools` 降低工具描述常驻上下文的成本，但不能绕过权限策略。
+Core tools 提供高频基础能力；Deferred tools 通过搜索后按需进入上下文；Runtime-only 能力服务宿主运行，不应暴露给模型。`SearchExtraTools` 降低工具描述常驻上下文的成本，但不能绕过权限策略。
 
 详见 [Tool 系统](../agent/tools.md)。
 
@@ -171,6 +182,8 @@ Claude Code 的 FileRead/Edit/Write 体现了一个重要原则：读写工具�
 - 写入使用临时文件加原子替换；
 - Main Agent 与 teammate 使用同一服务，不维护两套语义；
 - 工具结果区分可给模型的摘要与本地富数据。
+- 超预算结果与 Context 归档只在模型可读 workspace 中返回恢复路径；checkpoint 等
+  application runtimeRoot 状态不暴露为文件工具路径。
 
 这套能力保护 workspace 文本文件，不替代 Presentation 的 Proposal、CommitGate 和 artifact revision。
 
@@ -232,7 +245,7 @@ Claude Code 提供通用 Agent 骨架，Agent PPT 的产品价值来自以下领
 
 当前能力包括：
 
-- Design System schema、preset、brand profile、颜色、背景、chrome 与图片处理；
+- `src/design-system/` 中的 schema、preset、brand profile、颜色、背景、chrome 与图片处理；
 - Layout Grammar、variant、slot、text fit 和内置 layout handler；
 - commercial scene 与 deterministic ID；
 - chart、table、shape、icon 和 image 等可编辑视觉元素；
@@ -256,7 +269,7 @@ tool proposal
   → postflight
 ```
 
-自动质量能力覆盖 layout、style、asset、overflow、标题重复、deck consistency 和商业视觉 quality gate。`render-feedback-loop.ts` 允许模型基于渲染结果做有限轮次修正，但必须受迭代预算约束，且不能绕过最终 validator。
+自动质量能力覆盖 layout、style、asset、overflow、标题重复、deck consistency 和商业视觉 quality gate。`src/main/agent/runtime/presentation/render-feedback-loop.ts` 允许模型基于渲染结果做有限轮次修正，但必须受迭代预算约束，且不能绕过最终 validator。
 
 详见 [工作流与状态](../presentation/workflow.md)、
 [Visual Expression System](../presentation/visual-system.md) 和
@@ -268,7 +281,7 @@ tool proposal
 
 | 能力 | 暂不采用的原因 | 重新评估条件 |
 |---|---|---|
-| 通用 Bash / PowerShell | 权限面过大；当前 PPT 任务可由窄工具完成 | 出现无法由结构化工具覆盖的明确用例 |
+| 任意 Bash / PowerShell | 权限面过大；当前只保留 teammate 的 fail-closed 只读 direct-exec 子集 | 出现无法由结构化工具覆盖的明确用例，并先具备可证明的 OS sandbox |
 | MCP / Plugin Marketplace | 会显著扩大配置、权限和兼容面 | 产品需要第三方数据源/企业连接器 |
 | LSP / IDE 集成 | 与 Presentation 主任务无关 | 产品扩展为通用内容开发环境 |
 | Computer Use / Chrome Control | 外部副作用与隐私边界复杂 | 明确需要浏览器内采集或演示 |
@@ -322,7 +335,7 @@ tool proposal
 | Query / Runtime | `agent-query-*`、`agent-runtime-*`、`tool-result-pairing` | cancellation、checkpoint、recovery |
 | Gateway | adapter、routing、response contract、model recovery | `npm.cmd run test:integration:agent` |
 | Tool / Permission | tool pipeline、access policy、approval、hooks | 对应真实工具副作用测试 |
-| 文件操作 | `workspace-file-service.test.ts` | 并发修改、路径逃逸、原子写失败 |
+| 文件操作 | `tests/workspace-file-service.test.ts` | 并发修改、路径逃逸、原子写失败 |
 | Multi-Agent | task、message bus、teammate recovery | background 与 shutdown 场景 |
 | Presentation model | schema、layout、design、compiler | sample fixture 与渲染快照 |
 | Export | exporter、postflight、deck export | `npm.cmd run generate:pptx` 后人工打开 |

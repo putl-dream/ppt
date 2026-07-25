@@ -56,8 +56,8 @@ export function toToolCard(definition: ToolDefinition<any, any>): ToolCard {
     }
   }
 
-  // 延迟工具默认在 high/medium 风险时需要审批
-  const approvalRequired = isRiskApprovalHintRequired(definition.risk);
+  const approvalRequired = definition.permission?.approval === "always"
+    || isRiskApprovalHintRequired(definition.risk);
 
   return {
     name: definition.name,

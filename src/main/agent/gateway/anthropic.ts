@@ -1,7 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { AgentGatewayError, normalizeProviderError } from "./errors";
 import { applyResponseContract } from "./response-contract";
-import { ensureToolResultPairing } from "./message-pairing";
+import { ensureToolResultPairing, withEphemeralPrompt } from "./message-pairing";
 import type { ProviderTokenUsage } from "@shared/token-usage";
 import type {
   AgentModelContentBlock,
@@ -201,7 +201,7 @@ export async function generateWithAnthropic(
       max_tokens: maxTokens,
       system: systemPrompt,
       messages: request.messages
-        ? toAnthropicMessages(request.messages)
+        ? toAnthropicMessages(withEphemeralPrompt(request.messages, request.prompt))
         : [{ role: "user", content: request.prompt }],
       ...(request.outputFormat?.type === "json_schema"
         ? {
@@ -275,12 +275,12 @@ export async function* generateStreamWithAnthropic(
 
   try {
     const systemPrompt = applyResponseContract(request.systemPrompt, request.responseContract);
-    const stream = client.messages.stream({
+    const createStream = (maxTokens: number) => client.messages.stream({
       model: config.model,
-      max_tokens: request.maxOutputTokens ?? config.maxOutputTokens,
+      max_tokens: maxTokens,
       system: systemPrompt,
       messages: request.messages
-        ? toAnthropicMessages(request.messages)
+        ? toAnthropicMessages(withEphemeralPrompt(request.messages, request.prompt))
         : [{ role: "user", content: request.prompt }],
       ...(request.outputFormat?.type === "json_schema"
         ? {
@@ -303,22 +303,48 @@ export async function* generateStreamWithAnthropic(
         : {}),
     }, { signal: request.signal });
 
-    for await (const event of stream) {
-      if (event.type !== "content_block_delta") continue;
-      if (event.delta.type === "text_delta") {
-        yield { type: "text_delta", text: event.delta.text, index: event.index };
-      } else if (event.delta.type === "thinking_delta") {
-        yield { type: "thinking_delta", thinking: event.delta.thinking, index: event.index };
+    let maxTokens = request.maxOutputTokens ?? config.maxOutputTokens;
+    let accumulatedUsage: ProviderTokenUsage | undefined;
+    while (true) {
+      const stream = createStream(maxTokens);
+      for await (const event of stream) {
+        if (event.type !== "content_block_delta") continue;
+        if (event.delta.type === "text_delta") {
+          yield { type: "text_delta", text: event.delta.text, index: event.index };
+        } else if (event.delta.type === "thinking_delta") {
+          yield { type: "thinking_delta", thinking: event.delta.thinking, index: event.index };
+        }
       }
-    }
 
-    const finalMessage = await stream.finalMessage();
-    yield {
-      type: "complete",
-      content: extractContentBlocks(finalMessage.content),
-      stopReason: finalMessage.stop_reason ?? undefined,
-      ...anthropicUsageProperty(finalMessage.usage),
-    };
+      const finalMessage = await stream.finalMessage();
+      accumulatedUsage = combineUsage(
+        accumulatedUsage,
+        extractAnthropicUsage(finalMessage.usage),
+      );
+      const content = extractContentBlocks(finalMessage.content);
+      if (
+        !hasUsableContent(content)
+        && hasThinkingContent(content)
+        && maxTokens < 8_192
+      ) {
+        maxTokens = Math.min(maxTokens * 2, 8_192);
+        continue;
+      }
+      if (!hasUsableContent(content)) {
+        throw new AgentGatewayError(
+          `Anthropic returned no usable content (stop_reason=${finalMessage.stop_reason ?? "unknown"}).`,
+          "empty-response",
+          "anthropic",
+        );
+      }
+      yield {
+        type: "complete",
+        content,
+        stopReason: finalMessage.stop_reason ?? undefined,
+        ...(accumulatedUsage ? { usage: accumulatedUsage } : {}),
+      };
+      return;
+    }
   } catch (error) {
     throw normalizeProviderError("anthropic", error, request.signal);
   }

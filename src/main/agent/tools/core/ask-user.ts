@@ -66,6 +66,14 @@ export const askUserTool: ToolDefinition<
     '{"message":"请补充目标受众","missingFields":["audience"],"responseUi":{"variant":"markdown","placeholder":"例如：企业管理者"}}',
   ],
   outputSchema: agentAskUserResultSchema,
+  behavior: {
+    capabilities: ["user_interaction"],
+    completion: {
+      terminalResult: "ask_user",
+      expectation: "always",
+      exclusiveBatch: true,
+    },
+  },
   risk: "low",
   execute: async (args) => {
     const content = completeAskUserMessage(args.message, args.missingFields);

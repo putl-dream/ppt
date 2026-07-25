@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { AgentModelSelection } from "@shared/agent";
 import { textFromContentBlocks, toolUseBlocksFromContent } from "./content-blocks";
+import { isOutputTruncated } from "./errors";
 import type {
   AgentModelGateway,
   AgentModelRequest,
@@ -16,7 +17,8 @@ export type ModelOutputErrorCode =
   | "invalid-json"
   | "schema-validation"
   | "missing-tools"
-  | "malformed-tool-use";
+  | "malformed-tool-use"
+  | "truncated-output";
 
 export class ModelOutputError extends Error {
   constructor(
@@ -87,6 +89,14 @@ function assertNoToolCalls(response: AgentModelResponse, mode: "markdown" | "jso
   );
 }
 
+function assertCompleteResponse(response: AgentModelResponse): void {
+  if (!isOutputTruncated(response.stopReason)) return;
+  throw new ModelOutputError(
+    `Model output was truncated (${response.stopReason}); refusing to accept a partial one-shot result.`,
+    "truncated-output",
+  );
+}
+
 /** One-shot model call whose public contract is non-empty Markdown text. */
 export async function callLLM(
   gateway: AgentModelGateway,
@@ -97,6 +107,7 @@ export async function callLLM(
     ...request,
     responseContract: request.responseContract ?? "markdown",
   }, selection);
+  assertCompleteResponse(response);
   assertNoToolCalls(response, "markdown");
 
   const markdown = textFromContentBlocks(response.content);
@@ -125,6 +136,7 @@ export async function callLLMJson<T>(
       strict: true,
     },
   }, selection);
+  assertCompleteResponse(response);
   assertNoToolCalls(response, "json");
 
   const text = textFromContentBlocks(response.content);
@@ -167,6 +179,7 @@ export async function callTool(
   }
 
   const response = await gateway.generateText(request, selection);
+  assertCompleteResponse(response);
   const calls = toolUseBlocksFromContent(response.content);
   const malformed = calls.find((call) => !call.id || !call.name);
   if (malformed) {

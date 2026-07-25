@@ -21,12 +21,6 @@ import {
   hasLayoutVisualCommands,
 } from "./layout-command-utils";
 
-/** Stages where a single automatic visual review round is offered. */
-const RENDER_FEEDBACK_STAGES = new Set<PromptStage>([
-  "style",
-  "edit",
-]);
-
 /** Cap PNG thumbnails per feedback round; structured feedback still covers every affected slide. */
 export const MAX_RENDER_FEEDBACK_THUMBNAILS = 6;
 
@@ -60,23 +54,28 @@ export interface RenderFeedbackPayload {
 }
 
 export function shouldOfferRenderFeedback(
-  stage: PromptStage | undefined,
+  _stage: PromptStage | undefined,
   commands: PresentationCommand[],
   alreadyUsed: boolean,
 ): boolean {
-  if (alreadyUsed || !stage || !RENDER_FEEDBACK_STAGES.has(stage)) return false;
-  return hasLayoutVisualCommands(commands);
+  return !alreadyUsed && hasLayoutVisualCommands(commands);
 }
 
-export function formatRenderFeedbackMessage(payload: RenderFeedbackPayload): string {
+export function formatRenderFeedbackMessage(
+  payload: RenderFeedbackPayload,
+  commandProposalToolNames: readonly string[] = [],
+): string {
+  const completionTarget = commandProposalToolNames.length > 0
+    ? commandProposalToolNames.join(" / ")
+    : "具备 command_proposal capability 的工具";
   const lines = [
     "## 排版视觉反馈（系统自动生成）",
     "",
     "你刚提交的排版方案已在沙箱中渲染，并由设计引擎完成结构化视觉评分：",
     `- Deck 总分 ${payload.deckScores.overall}/100；一致性 ${payload.deckScores.consistency}；差异度 ${payload.deckScores.differentiation}`,
     `- 图片审计：必补 ${payload.visualAssetAudit.missingRequiredCount} 页，建议补 ${payload.visualAssetAudit.missingRecommendedCount} 页，重复图片 ${payload.visualAssetAudit.duplicateImageUrls.length} 个`,
-    "- 若需修正：再次调用 SubmitCommands 提交修复命令",
-    "- 若满意：再次调用 SubmitCommands，summary 注明「视觉确认通过」并复提交或微调后的命令",
+    `- 若需修正：再次调用 ${completionTarget} 提交修复命令`,
+    `- 若满意：再次调用 ${completionTarget}，summary 注明「视觉确认通过」并复提交或微调后的命令`,
     "",
     `方案摘要：${payload.proposalSummary}`,
     "",

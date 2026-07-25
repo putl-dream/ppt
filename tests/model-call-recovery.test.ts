@@ -7,10 +7,35 @@ import {
 } from "../src/main/agent/gateway/errors";
 import { compactTranscript } from "../src/main/agent/runtime/turns/transcript-compact";
 import { callModelWithRecovery } from "../src/main/agent/runtime/turns/model-call-recovery";
-import type { AgentModelGateway } from "../src/main/agent/gateway/types";
+import type {
+  AgentModelGateway,
+  AgentModelMessage,
+} from "../src/main/agent/gateway/types";
 
 function textContent(text: string) {
   return [{ type: "text" as const, text }];
+}
+
+function canonicalToolHistory(count: number): AgentModelMessage[] {
+  return Array.from({ length: count }, (_, index): AgentModelMessage[] => [
+    {
+      role: "assistant",
+      content: [{
+        type: "tool_use",
+        id: `call-${index}`,
+        name: "ReadFile",
+        input: { path: `${index}.txt` },
+      }],
+    },
+    {
+      role: "user",
+      content: [{
+        type: "tool_result",
+        toolUseId: `call-${index}`,
+        content: [{ type: "text", text: `result-${index}` }],
+      }],
+    },
+  ]).flat();
 }
 
 describe("computeBackoffDelayMs", () => {
@@ -183,6 +208,43 @@ describe("callModelWithRecovery", () => {
     expect(retriedPrompt.transcript.length).toBeLessThanOrEqual(5);
   });
 
+  it("emergency-trims canonical native messages and keeps the caller history immutable", async () => {
+    const generateText = vi
+      .fn()
+      .mockRejectedValueOnce(
+        Object.assign(new Error("maximum context length exceeded"), { status: 400 }),
+      )
+      .mockResolvedValueOnce({
+        provider: "openai",
+        model: "gpt",
+        content: textContent("ok"),
+      });
+    const gateway: AgentModelGateway = {
+      generateText,
+      async *generateTextStream() {
+        yield { type: "complete" as const, content: [] };
+      },
+    };
+    const messages = canonicalToolHistory(8);
+    const original = structuredClone(messages);
+    const preparedSnapshots: AgentModelMessage[][] = [];
+
+    const result = await callModelWithRecovery({
+      gateway,
+      systemPrompt: "system",
+      promptPayload: { transcript: [], request: "hello" },
+      messages,
+      onContextPrepared: (_payload, _notes, prepared) => {
+        if (prepared) preparedSnapshots.push(prepared);
+      },
+    });
+
+    expect(result.content).toEqual(textContent("ok"));
+    expect(generateText.mock.calls[1][0].messages.length).toBeLessThan(messages.length);
+    expect(preparedSnapshots.some((snapshot) => snapshot.length < messages.length)).toBe(true);
+    expect(messages).toEqual(original);
+  });
+
   it("upgrades max tokens before using continuation prompt", async () => {
     const generateText = vi
       .fn()
@@ -226,6 +288,128 @@ describe("callModelWithRecovery", () => {
     expect(result.recoveryNotes[0]).toContain("max_tokens");
     expect(result.maxOutputTokensOverride).toBe(65536);
     expect(result.maxOutputTokensRecoveryCount).toBe(1);
+  });
+
+  it("merges every max-output continuation and keeps detecting repeated truncation", async () => {
+    const generateText = vi
+      .fn()
+      .mockResolvedValueOnce({
+        provider: "anthropic",
+        model: "claude",
+        content: textContent("alpha"),
+        stopReason: "max_tokens",
+      })
+      .mockResolvedValueOnce({
+        provider: "anthropic",
+        model: "claude",
+        content: textContent("beta"),
+        stopReason: "max_tokens",
+      })
+      .mockResolvedValueOnce({
+        provider: "anthropic",
+        model: "claude",
+        content: textContent("gamma"),
+        stopReason: "end_turn",
+      });
+    const gateway: AgentModelGateway = {
+      generateText,
+      async *generateTextStream() {
+        yield { type: "complete" as const, content: [] };
+      },
+    };
+
+    const result = await callModelWithRecovery({
+      gateway,
+      systemPrompt: "system",
+      promptPayload: { transcript: [], request: "hello" },
+      maxOutputTokensOverride: 65_536,
+    });
+
+    expect(result.content).toEqual(textContent("alphabetagamma"));
+    expect(generateText).toHaveBeenCalledTimes(3);
+    expect(JSON.parse(generateText.mock.calls[1][0].prompt).continuation.partialOutput)
+      .toBe("alpha");
+    expect(JSON.parse(generateText.mock.calls[2][0].prompt).continuation.partialOutput)
+      .toBe("alphabeta");
+    expect(result.stopReason).toBe("end_turn");
+  });
+
+  it("continues native history from an ephemeral assistant partial", async () => {
+    const generateText = vi
+      .fn()
+      .mockResolvedValueOnce({
+        provider: "anthropic",
+        model: "claude",
+        content: textContent("first-half"),
+        stopReason: "max_tokens",
+      })
+      .mockResolvedValueOnce({
+        provider: "anthropic",
+        model: "claude",
+        content: textContent("-second-half"),
+        stopReason: "end_turn",
+      });
+    const gateway: AgentModelGateway = {
+      generateText,
+      async *generateTextStream() {
+        yield { type: "complete" as const, content: [] };
+      },
+    };
+    const messages: AgentModelMessage[] = [{
+      role: "user",
+      content: [{ type: "text", text: "canonical request" }],
+    }];
+    const original = structuredClone(messages);
+
+    const result = await callModelWithRecovery({
+      gateway,
+      systemPrompt: "system",
+      promptPayload: {
+        transcript: [],
+        queryContext: {
+          source: "user",
+          user: { locale: "zh-CN" },
+          system: { surface: "desktop" },
+        },
+      },
+      messages,
+      maxOutputTokensOverride: 65_536,
+    });
+
+    expect(result.content).toEqual(textContent("first-half-second-half"));
+    expect(generateText.mock.calls[1][0].prompt).toBe("");
+    expect(generateText.mock.calls[1][0].messages.at(-2)).toEqual({
+      role: "assistant",
+      content: [{ type: "text", text: "first-half" }],
+    });
+    const continuationContext = JSON.parse(
+      generateText.mock.calls[1][0].messages.at(-3).content[0].text,
+    );
+    expect(continuationContext.queryContext.user.locale).toBe("zh-CN");
+    expect(messages).toEqual(original);
+  });
+
+  it("never reports success while every continuation remains truncated", async () => {
+    const gateway: AgentModelGateway = {
+      async generateText() {
+        return {
+          provider: "anthropic",
+          model: "claude",
+          content: textContent("partial"),
+          stopReason: "max_tokens",
+        };
+      },
+      async *generateTextStream() {
+        yield { type: "complete" as const, content: [] };
+      },
+    };
+
+    await expect(callModelWithRecovery({
+      gateway,
+      systemPrompt: "system",
+      promptPayload: { transcript: [], request: "hello" },
+      maxOutputTokensOverride: 65_536,
+    })).rejects.toThrow("remained truncated");
   });
 
   it("uses the query fallback model after consecutive overloads", async () => {

@@ -1,3 +1,5 @@
+import type { ToolDefinition } from "../../tools/tool-definition";
+
 export interface BackgroundTaskNotification {
   bgId: string;
   toolName: string;
@@ -160,42 +162,17 @@ export class BackgroundTaskManager {
 }
 
 export function shouldRunBackground(
-  toolName: string,
-  args: Record<string, unknown>,
+  tool: ToolDefinition<any, any>,
+  args: unknown,
 ): boolean {
-  if (toolName === "ExecuteExtraTool") {
-    const targetToolName = typeof args.toolName === "string" ? args.toolName : "";
-    const toolArgs = isRecord(args.toolArgs) ? args.toolArgs : {};
-    return targetToolName === "ExportPptx" &&
-      (args.run_in_background === true || toolArgs.run_in_background === true);
-  }
-
-  if (args.run_in_background === true) {
-    return toolName === "PreviewSlide";
-  }
-
-  return false;
+  return tool.behavior?.background?.isRequested(args) === true;
 }
 
 export function describeBackgroundTask(
-  toolName: string,
-  args: Record<string, unknown>,
+  tool: ToolDefinition<any, any>,
+  args: unknown,
 ): string {
-  if (toolName === "ExecuteExtraTool") {
-    const targetToolName = typeof args.toolName === "string" ? args.toolName : "DeferredTool";
-    const toolArgs = isRecord(args.toolArgs) ? args.toolArgs : {};
-    if (targetToolName === "ExportPptx") {
-      const format = typeof toolArgs.format === "string" ? toolArgs.format : "pptx";
-      return `ExportPptx: ${format}`;
-    }
-    return `ExecuteExtraTool: ${targetToolName}`;
-  }
-
-  if (toolName === "PreviewSlide" && typeof args.slideId === "string") {
-    return `PreviewSlide: ${args.slideId}`;
-  }
-
-  return toolName;
+  return tool.behavior?.background?.describe(args) ?? tool.name;
 }
 
 export function formatBackgroundNotifications(
@@ -236,8 +213,4 @@ function escapeXml(value: string): string {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&apos;");
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value && typeof value === "object" && !Array.isArray(value));
 }

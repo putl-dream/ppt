@@ -5,13 +5,13 @@ export function formatToolApprovalDetail(toolName: string, args: unknown): strin
   if (toolName === "bash" && typeof record.command === "string") {
     return record.command;
   }
-  if (toolName === "write_file") {
+  if (toolName === "write_file" || toolName === "WriteFile") {
     const path = typeof record.path === "string" ? record.path : "";
     const content = typeof record.content === "string" ? record.content : "";
     const preview = content.length > 240 ? `${content.slice(0, 237)}...` : content;
     return `path: ${path}\n${preview}`;
   }
-  if (toolName === "edit_file") {
+  if (toolName === "edit_file" || toolName === "EditFile") {
     const path = typeof record.path === "string" ? record.path : "";
     const oldString = typeof record.old_string === "string" ? record.old_string : "";
     const newString = typeof record.new_string === "string" ? record.new_string : "";
@@ -21,7 +21,12 @@ export function formatToolApprovalDetail(toolName: string, args: unknown): strin
     const path = typeof record.path === "string" ? record.path : "";
     return `path: ${path}`;
   }
-  if (toolName === "read_file" || toolName === "glob") {
+  if (
+    toolName === "read_file"
+    || toolName === "ReadFile"
+    || toolName === "glob"
+    || toolName === "Glob"
+  ) {
     const path = typeof record.path === "string"
       ? record.path
       : typeof record.pattern === "string"

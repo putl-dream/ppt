@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   adjustSnipBoundary,
   emergencyTrimContext,
+  emergencyTrimModelMessages,
   findLastToolResultBlock,
   microCompactTranscript,
   prepareContext,
@@ -13,7 +14,10 @@ import {
   toolResultBudget,
 } from "../src/main/agent/runtime/context-compact";
 import { compactHistory } from "../src/main/agent/runtime/context-compact/compact-history";
-import type { AgentModelGateway } from "../src/main/agent/gateway/types";
+import type {
+  AgentModelGateway,
+  AgentModelMessage,
+} from "../src/main/agent/gateway/types";
 
 const temporaryDirectories: string[] = [];
 
@@ -21,6 +25,28 @@ async function createWorkspace() {
   const workspaceRoot = await mkdtemp(join(tmpdir(), "agent-context-compact-"));
   temporaryDirectories.push(workspaceRoot);
   return workspaceRoot;
+}
+
+function nativeToolHistory(count: number, resultChars: number): AgentModelMessage[] {
+  return Array.from({ length: count }, (_, index): AgentModelMessage[] => [
+    {
+      role: "assistant",
+      content: [{
+        type: "tool_use",
+        id: `native-call-${index}`,
+        name: "ReadFile",
+        input: { path: `file-${index}.txt` },
+      }],
+    },
+    {
+      role: "user",
+      content: [{
+        type: "tool_result",
+        toolUseId: `native-call-${index}`,
+        content: [{ type: "text", text: `result-${index}-${"x".repeat(resultChars)}` }],
+      }],
+    },
+  ]).flat();
 }
 
 afterEach(async () => {
@@ -109,7 +135,7 @@ describe("micro_compact", () => {
         role: "tool",
         toolName: "Read",
         result: "x".repeat(3_000),
-        modelResult: { persistedPath: ".agent/tool-results/thread/read.json" },
+        modelResult: { persistedPath: ".task_outputs/tool-results/thread/read.json" },
       },
       ...Array.from({ length: 3 }, (_, index) => ({
         role: "tool",
@@ -119,10 +145,10 @@ describe("micro_compact", () => {
     ];
 
     const compacted = microCompactTranscript(transcript, 3);
-    expect(compacted[0].result).toContain(".agent/tool-results/thread/read.json");
+    expect(compacted[0].result).toContain(".task_outputs/tool-results/thread/read.json");
     expect(compacted[0].compaction).toMatchObject({
       originalChars: 3_002,
-      persistedPath: ".agent/tool-results/thread/read.json",
+      persistedPath: ".task_outputs/tool-results/thread/read.json",
     });
   });
 });
@@ -197,6 +223,39 @@ describe("compact_history", () => {
     expect(String(result.payload.transcript[0].content)).toContain("Finish slides");
   });
 
+  it("does not replace canonical history with a truncated summary", async () => {
+    const workspaceRoot = await createWorkspace();
+    const gateway: AgentModelGateway = {
+      async generateText() {
+        return {
+          provider: "openai",
+          model: "gpt",
+          content: [{ type: "text", text: "Plausible but incomplete summary." }],
+          stopReason: "max_output_tokens",
+        };
+      },
+      async *generateTextStream() {
+        yield { type: "complete" as const, content: [] };
+      },
+    };
+    const payload = {
+      request: "build deck",
+      transcript: [{ role: "user", content: "retain this complete history" }],
+    };
+
+    const result = await compactHistory({
+      payload,
+      workspaceRoot,
+      threadId: "truncated-summary",
+      gateway,
+    });
+
+    expect(result.skipped).toBe(true);
+    expect(result.failures).toBe(1);
+    expect(result.reason).toContain("truncated");
+    expect(result.payload).toEqual(payload);
+  });
+
   it("opens circuit breaker after consecutive failures", async () => {
     const gateway: AgentModelGateway = {
       async generateText() {
@@ -251,6 +310,74 @@ describe("prepareContext", () => {
     expect(result.notes).toEqual([]);
     expect(result.contextChanged).toBe(false);
     expect(progress).toEqual([]);
+  });
+
+  it("counts and micro-compacts canonical native tool history", async () => {
+    const messages = nativeToolHistory(6, 4_000);
+    const original = structuredClone(messages);
+
+    const result = await prepareContext({
+      payload: { request: "task", transcript: [] },
+      messages,
+      systemPrompt: "system",
+      tokenThreshold: 100_000,
+      softTokenThreshold: 1_000,
+    });
+
+    expect(result.contextChanged).toBe(true);
+    expect(result.notes.some((note) => note.startsWith("L2 micro_compact:"))).toBe(true);
+    expect(result.messages).toHaveLength(messages.length);
+    const firstResult = result.messages?.[1]?.content[0];
+    expect(firstResult).toMatchObject({ type: "tool_result", toolUseId: "native-call-0" });
+    expect(JSON.stringify(firstResult)).toContain("<compacted-tool-result");
+    expect(JSON.stringify(result.messages?.at(-1))).toContain("result-5-");
+    expect(messages).toEqual(original);
+  });
+
+  it("summarizes canonical native history at the hard threshold", async () => {
+    const workspaceRoot = await createWorkspace();
+    const messages: AgentModelMessage[] = Array.from({ length: 16 }, (_, index) => ({
+      role: index % 2 === 0 ? "user" as const : "assistant" as const,
+      content: [{ type: "text" as const, text: `native-${index}-${"x".repeat(2_000)}` }],
+    }));
+    let summaryInput: Record<string, unknown> | undefined;
+    const gateway: AgentModelGateway = {
+      async generateText(request) {
+        summaryInput = JSON.parse(request.prompt) as Record<string, unknown>;
+        return {
+          provider: "openai",
+          model: "gpt",
+          content: [{ type: "text", text: "Native history summary." }],
+        };
+      },
+      async *generateTextStream() {
+        yield { type: "complete" as const, content: [] };
+      },
+    };
+
+    const result = await prepareContext({
+      payload: {
+        transcript: [],
+        queryContext: {
+          source: "user",
+          user: { locale: "zh-CN" },
+          system: { surface: "desktop" },
+        },
+      },
+      messages,
+      systemPrompt: "system",
+      workspaceRoot,
+      threadId: "native-history",
+      gateway,
+      tokenThreshold: 1_000,
+    });
+
+    expect((summaryInput?.messages as unknown[]).length).toBe(messages.length);
+    expect(result.payload.transcript).toEqual([]);
+    expect(result.messages?.length).toBeLessThan(messages.length);
+    expect(JSON.stringify(result.messages?.[0])).toContain("Native history summary.");
+    expect(JSON.stringify(result.messages)).not.toContain('"locale":"zh-CN"');
+    expect(result.notes.some((note) => note.startsWith("L4 compact_history:"))).toBe(true);
   });
 
   it("uses preview-preserving micro compaction only after the soft threshold", async () => {
@@ -351,5 +478,22 @@ describe("emergencyTrimContext", () => {
     const trimmed = emergencyTrimContext(payload);
     expect(trimmed.transcript.length).toBeLessThanOrEqual(5);
     expect(trimmed.conversation?.length ?? 0).toBeLessThanOrEqual(4);
+  });
+
+  it("trims canonical native history without splitting tool protocol pairs", () => {
+    const messages = nativeToolHistory(8, 100);
+    const trimmed = emergencyTrimModelMessages(messages)!;
+
+    expect(trimmed.length).toBeLessThan(messages.length);
+    for (let index = 0; index < trimmed.length; index += 1) {
+      const message = trimmed[index]!;
+      if (
+        message.role === "assistant"
+        && message.content.some((block) => block.type === "tool_use")
+      ) {
+        expect(trimmed[index + 1]?.content.some((block) => block.type === "tool_result"))
+          .toBe(true);
+      }
+    }
   });
 });

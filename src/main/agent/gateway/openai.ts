@@ -1,7 +1,7 @@
 import OpenAI from "openai";
 import { AgentGatewayError, normalizeProviderError } from "./errors";
 import { applyResponseContract } from "./response-contract";
-import { ensureToolResultPairing } from "./message-pairing";
+import { ensureToolResultPairing, withEphemeralPrompt } from "./message-pairing";
 import type { ProviderTokenUsage } from "@shared/token-usage";
 import type {
   AgentModelContentBlock,
@@ -204,6 +204,13 @@ function contentFromResponsesOutput(
   ];
 }
 
+function stopReasonFromResponses(
+  response: OpenAI.Responses.Response,
+): string | undefined {
+  if (response.status !== "incomplete") return undefined;
+  return response.incomplete_details?.reason ?? "incomplete";
+}
+
 /**
  * 把统一 AgentModelRequest 转成 OpenAI Responses/Chat Completions 请求，
  * 并把文本和 function_call 归一化为 provider-neutral 内容块。
@@ -224,13 +231,13 @@ export async function generateWithOpenAI(
     const maxOutputTokens = request.maxOutputTokens ?? config.maxOutputTokens;
     const systemPrompt = applyResponseContract(request.systemPrompt, request.responseContract);
 
-    if (mode === "chat-completions" || (request.tools?.length && request.messages)) {
+    if (mode === "chat-completions" || request.messages) {
       const response = await client.chat.completions.create({
         model: config.model,
         messages: [
           ...(systemPrompt ? [{ role: "system" as const, content: systemPrompt }] : []),
           ...(request.messages
-            ? toChatMessages(request.messages)
+            ? toChatMessages(withEphemeralPrompt(request.messages, request.prompt))
             : [{ role: "user" as const, content: request.prompt }]),
         ],
         max_tokens: maxOutputTokens,
@@ -326,11 +333,13 @@ export async function generateWithOpenAI(
     if (content.length === 0) {
       throw new AgentGatewayError("OpenAI returned an empty response.", "empty-response", "openai");
     }
+    const stopReason = stopReasonFromResponses(response);
     return {
       provider: "openai",
       model: config.model,
       content,
       requestId: response._request_id ?? undefined,
+      ...(stopReason ? { stopReason } : {}),
       ...openAIUsageProperty(response.usage),
     };
   } catch (error) {
@@ -375,7 +384,7 @@ export async function* generateStreamWithOpenAI(
       messages: [
         ...(systemPrompt ? [{ role: "system" as const, content: systemPrompt }] : []),
         ...(request.messages
-          ? toChatMessages(request.messages)
+          ? toChatMessages(withEphemeralPrompt(request.messages, request.prompt))
           : [{ role: "user" as const, content: request.prompt }]),
       ],
       max_tokens: request.maxOutputTokens ?? config.maxOutputTokens,

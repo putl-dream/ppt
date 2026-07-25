@@ -1,5 +1,5 @@
 import type { AgentModelToolResultBlock } from "../../gateway/types";
-import type { ToolContext } from "../../tools/tool-definition";
+import type { ToolContext, ToolDefinition } from "../../tools/tool-definition";
 import {
   agentAskUserResultSchema,
   agentCommandProposalResultSchema,
@@ -29,12 +29,12 @@ export type PresentationCompletionDecision =
 
 /** Interprets validated tool facts without executing tools or mutating AgentSession. */
 export class PresentationCompletionPolicy {
-  isFinishTool(toolName: string): boolean {
-    return toolName === "SubmitCommands" || toolName === "AskUser";
+  canTerminate(tool: ToolDefinition<any, any>): boolean {
+    return Boolean(tool.behavior?.completion);
   }
 
   async interpret(input: {
-    toolName: string;
+    tool: ToolDefinition<any, any>;
     toolUseId: string;
     outcome: ToolExecutionOutcome;
     context: ToolContext;
@@ -42,20 +42,25 @@ export class PresentationCompletionPolicy {
     renderFeedbackUsed: boolean;
     emitProgress(event: { type: string; message: string; [key: string]: unknown }): void;
   }): Promise<PresentationCompletionDecision> {
+    const toolName = input.tool.name;
     const result = input.outcome.validatedResult;
-    const commandProposalResult = agentCommandProposalResultSchema.safeParse(result);
+    const completion = input.tool.behavior?.completion;
+    const commandProposalResult = completion?.terminalResult === "command_proposal"
+      ? agentCommandProposalResultSchema.safeParse(result)
+      : undefined;
     if (
-      !commandProposalResult.success
+      commandProposalResult
+      && !commandProposalResult.success
       && result
       && typeof result === "object"
       && !Array.isArray(result)
       && (result as { type?: unknown }).type === "command_proposal"
     ) {
       throw new Error(
-        `${input.toolName} returned an invalid command proposal: ${commandProposalResult.error.message}`,
+        `${toolName} returned an invalid command proposal: ${commandProposalResult.error.message}`,
       );
     }
-    const commandProposal = commandProposalResult.success
+    const commandProposal = commandProposalResult?.success
       ? commandProposalResult.data
       : undefined;
 
@@ -86,12 +91,16 @@ export class PresentationCompletionPolicy {
           progress: 0,
         });
         const images = extractFeedbackImages(feedback);
+        const commandProposalToolNames = input.context.registry
+          .getCoreTools(input.context)
+          .filter((tool) => tool.behavior?.capabilities?.includes("command_proposal"))
+          .map((tool) => tool.name);
         return {
           type: "continue",
           markRenderFeedbackUsed: true,
           transcriptEntry: {
             role: "tool",
-            toolName: input.toolName,
+            toolName,
             result: commandProposal,
             renderFeedback: feedback,
           },
@@ -99,25 +108,56 @@ export class PresentationCompletionPolicy {
             type: "tool_result",
             toolUseId: input.toolUseId,
             content: [
-              { type: "text", text: formatRenderFeedbackMessage(feedback) },
+              {
+                type: "text",
+                text: formatRenderFeedbackMessage(feedback, commandProposalToolNames),
+              },
               ...images.map((image) => ({ type: "image" as const, ...image })),
             ],
           },
         };
       }
-      return { type: "terminal", result: commandProposal };
-    }
-
-    if (input.toolName === "AskUser") {
-      const askUser = agentAskUserResultSchema.parse(result);
       return {
         type: "terminal",
-        result: askUser,
-        modelResult: textResult(input.toolUseId, askUser.content),
+        result: commandProposal,
+        // Even terminal tools must close the provider protocol pair in canonical
+        // history. The result is not sent to another model turn, but it is
+        // required for resume, export, and cross-provider replay.
+        modelResult: input.outcome.modelResult,
       };
     }
-    if (input.toolName === "SubmitCommands") {
-      throw new Error("SubmitCommands must return a command proposal result.");
+
+    if (completion?.terminalResult === "ask_user") {
+      const askUserResult = agentAskUserResultSchema.safeParse(result);
+      if (!askUserResult.success) {
+        if (completion.expectation === "always") {
+          throw new Error(
+            `${toolName} must return an ask_user result: ${askUserResult.error.message}`,
+          );
+        }
+      } else {
+        const askUser = askUserResult.data;
+        return {
+          type: "terminal",
+          result: askUser,
+          modelResult: textResult(input.toolUseId, askUser.content),
+        };
+      }
+    }
+    if (
+      completion?.terminalResult === "command_proposal"
+      && completion.expectation === "always"
+    ) {
+      const error = commandProposalResult && !commandProposalResult.success
+        ? commandProposalResult.error.message
+        : "result did not match command_proposal";
+      throw new Error(`${toolName} must return a command proposal result: ${error}`);
+    }
+
+    if (completion?.terminalResult === "ask_user" && completion.expectation === "always") {
+      // The invalid-result branch above always throws; this is an exhaustive
+      // guard for future schema/control-flow changes.
+      throw new Error(`${toolName} must return an ask_user result.`);
     }
 
     if (input.outcome.deliveryStatus === "postprocessing_failed") {
@@ -126,7 +166,7 @@ export class PresentationCompletionPolicy {
         modelResult: input.outcome.modelResult,
         transcriptEntry: {
           role: "tool",
-          toolName: input.toolName,
+          toolName,
           result,
           postProcessingError: input.outcome.error,
           executionStatus: "returned",
@@ -142,7 +182,7 @@ export class PresentationCompletionPolicy {
       modelResult: input.outcome.modelResult,
       transcriptEntry: {
         role: "tool",
-        toolName: input.toolName,
+        toolName,
         result: prepared.data,
         toolUseId: input.toolUseId,
         ...(prepared.truncated

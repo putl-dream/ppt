@@ -111,6 +111,49 @@ describe("workspace artifact probing", () => {
     expect(details.storyboard.reason).toContain("lacks title, role, layout, or key points");
   });
 
+  it("does not treat an existing but invalid layout plan as verified", async () => {
+    const root = await createWorkspace();
+    await writeDefaultScaffold(root);
+    await writeFile(
+      join(root, "slides/layout-plan.json"),
+      JSON.stringify({ version: 1, slides: [] }),
+      "utf8",
+    );
+
+    const artifacts = await probeWorkspaceArtifacts(root);
+    const details = await probeWorkspaceArtifactDetails(root);
+
+    expect(artifacts.layoutPlan).toBe(false);
+    expect(details.layoutPlan.status).toBe("invalid");
+  });
+
+  it("verifies a schema-valid layout plan", async () => {
+    const root = await createWorkspace();
+    await writeDefaultScaffold(root);
+    await writeFile(
+      join(root, "slides/layout-plan.json"),
+      JSON.stringify({
+        version: 1,
+        styleMode: "template",
+        designSystem: TEST_DESIGN_SYSTEM,
+        slides: [{
+          slideId: "slide-cover",
+          title: "封面",
+          narrativeRole: "cover",
+          layout: "cover",
+          rationale: "建立主题。",
+        }],
+      }),
+      "utf8",
+    );
+
+    const artifacts = await probeWorkspaceArtifacts(root);
+    const details = await probeWorkspaceArtifactDetails(root);
+
+    expect(artifacts.layoutPlan).toBe(true);
+    expect(details.layoutPlan.status).toBe("verified");
+  });
+
   it("verifies generated storyboard objects with slides wrappers", async () => {
     const root = await createWorkspace();
     await writeDefaultScaffold(root);

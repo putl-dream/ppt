@@ -128,6 +128,14 @@ export const executeLayoutPlanTool: ToolDefinition<
   category: "core",
   loadPolicy: "core",
   inputSchema: executeLayoutPlanSchema,
+  behavior: {
+    capabilities: ["command_proposal"],
+    completion: {
+      terminalResult: "command_proposal",
+      expectation: "when_matching",
+      exclusiveBatch: true,
+    },
+  },
   risk: "low",
   execute: async (args, context) => {
     const planPath = args.path?.trim() || LAYOUT_PLAN_PATH;

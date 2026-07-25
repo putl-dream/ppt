@@ -65,8 +65,60 @@ export interface AgentQueryParams<TDeps = unknown> {
 }
 
 export interface AgentQueryContinue {
-  reason: "next_turn" | "required_outcome" | "background_result" | "inbox";
+  reason:
+    | "next_turn"
+    | "required_outcome"
+    | "background_result"
+    | "inbox"
+    | "completed";
 }
+
+/**
+ * Observable, provider-neutral events emitted by the query state machine.
+ *
+ * These events intentionally describe control-flow facts rather than UI copy or
+ * persistence payloads. Consumers can project progress without reaching into
+ * AgentRuntime, and tests can assert state movement without depending on the
+ * concrete loop implementation.
+ */
+export type AgentQueryLoopEvent =
+  | { type: "query_started"; turnCount: number }
+  | {
+      type: "workspace_recovered";
+      turnCount: number;
+      phase: "model_streaming" | "model_received" | "tool_running" | "waiting_user";
+      toolUseCount: number;
+      toolResultCount: number;
+    }
+  | {
+      type: "model_turn_completed";
+      turnCount: number;
+      decision: "terminal" | "continue" | "tool_batch";
+      toolUseCount: number;
+    }
+  | {
+      type: "tool_batch_completed";
+      turnCount: number;
+      toolUseCount: number;
+      toolResultCount: number;
+      terminal: boolean;
+    }
+  | {
+      type: "state_committed";
+      turnCount: number;
+      reason: AgentQueryContinue["reason"];
+    }
+  | {
+      type: "query_completed";
+      turnCount: number;
+      reason: "terminal" | "step_limit";
+      resultType: "message" | "ask_user" | "command_proposal";
+    }
+  | {
+      type: "query_failed";
+      turnCount: number;
+      error: string;
+    };
 
 /** The committed snapshot shared by consecutive agentic turns in one query. */
 export interface AgentQueryState {

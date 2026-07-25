@@ -19,9 +19,10 @@ export interface PostToolUseBlock {
    * 推断副作用已经回滚。
    */
   executionStatus?: "returned" | "threw";
-  sideEffects?: "committed_or_unknown" | "uncertain";
+  sideEffects?: "none" | "committed_or_unknown" | "uncertain";
   result?: unknown;
   error?: string;
+  errorCode?: string;
   threadId?: string;
 }
 

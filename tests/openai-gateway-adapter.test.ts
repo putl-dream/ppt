@@ -81,6 +81,25 @@ describe("generateWithOpenAI", () => {
     });
   });
 
+  it("preserves the Responses API incomplete reason as a truncation signal", async () => {
+    openaiMock.createResponse.mockResolvedValue({
+      output_text: "plausible partial summary",
+      output: [],
+      status: "incomplete",
+      incomplete_details: { reason: "max_output_tokens" },
+      _request_id: "req-incomplete",
+    });
+
+    const response = await generateWithOpenAI(config, {
+      prompt: "Summarize",
+    });
+
+    expect(response).toMatchObject({
+      content: [{ type: "text", text: "plausible partial summary" }],
+      stopReason: "max_output_tokens",
+    });
+  });
+
   it("passes JSON Schema output contracts to the Responses API", async () => {
     openaiMock.createResponse.mockResolvedValue({
       output_text: '{"title":"Deck"}',
@@ -114,6 +133,39 @@ describe("generateWithOpenAI", () => {
         },
       },
     });
+  });
+
+  it("delivers request-scoped context with native history without persisting it", async () => {
+    openaiMock.createChatCompletion.mockResolvedValue({
+      choices: [{ message: { content: "ok" }, finish_reason: "stop" }],
+      _request_id: "req-native-context",
+    });
+    const messages = [{
+      role: "user" as const,
+      content: [{ type: "text" as const, text: "canonical user request" }],
+    }];
+    const original = structuredClone(messages);
+    const prompt = JSON.stringify({
+      transcript: [],
+      queryContext: {
+        user: { locale: "zh-CN" },
+        system: { surface: "desktop" },
+      },
+    });
+
+    await generateWithOpenAI(config, {
+      systemPrompt: "System instruction",
+      prompt,
+      messages,
+    });
+
+    expect(openaiMock.createResponse).not.toHaveBeenCalled();
+    expect(openaiMock.createChatCompletion.mock.calls[0]?.[0].messages).toEqual([
+      { role: "system", content: "System instruction" },
+      { role: "user", content: "canonical user request" },
+      { role: "user", content: prompt },
+    ]);
+    expect(messages).toEqual(original);
   });
 
   it("keeps one-shot forced tools on the Responses API", async () => {

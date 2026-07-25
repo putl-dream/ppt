@@ -1,12 +1,14 @@
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { z } from "zod";
 import {
   evaluateToolPermission,
   getToolPermissionProfile,
   isRiskApprovalHintRequired,
 } from "../src/main/agent/runtime/tools/tool-access-policy";
 import { SUB_AGENT_TOOLS } from "../src/main/agent/subagent/workspace-tools";
+import { ToolRegistry } from "../src/main/agent/tools/tool-registry";
 
 const workspaceRoot = join(tmpdir(), "ppt-tool-policy");
 
@@ -51,5 +53,104 @@ describe("tool access policy", () => {
     expect(isRiskApprovalHintRequired("low")).toBe(false);
     expect(isRiskApprovalHintRequired("medium")).toBe(true);
     expect(isRiskApprovalHintRequired("high")).toBe(true);
+  });
+
+  it("evaluates definition-owned permissions without a hardcoded tool name", () => {
+    const permission = {
+      profile: "custom-mutator",
+      description: "Apply a custom mutation.",
+      scopes: ["main"] as const,
+      effects: ["workspace.write"] as const,
+      sandbox: "workspace" as const,
+      approval: "always" as const,
+      workspacePathArg: "path" as const,
+    };
+
+    expect(evaluateToolPermission({
+      toolName: "PluginMutation",
+      args: { path: "notes.md" },
+      scope: "main",
+      workspaceRoot,
+      permission: {
+        ...permission,
+        scopes: [...permission.scopes],
+        effects: [...permission.effects],
+      },
+    })).toEqual({
+      type: "require_approval",
+      reason: "Apply a custom mutation.",
+    });
+
+    expect(evaluateToolPermission({
+      toolName: "PluginMutation",
+      args: { path: "notes.md" },
+      scope: "subagent",
+      workspaceRoot,
+      permission: {
+        ...permission,
+        scopes: [...permission.scopes],
+        effects: [...permission.effects],
+      },
+    })).toEqual({
+      type: "deny",
+      reason: "Tool PluginMutation is not permitted for subagent agents.",
+    });
+  });
+
+  it("fails closed without permission metadata and approves declared medium risk", () => {
+    expect(evaluateToolPermission({
+      toolName: "UnclassifiedPluginTool",
+      args: {},
+      scope: "main",
+    })).toEqual({
+      type: "deny",
+      reason: "Tool UnclassifiedPluginTool has no permission profile or declared risk.",
+    });
+
+    expect(evaluateToolPermission({
+      toolName: "DeferredMediumTool",
+      args: {},
+      scope: "main",
+      risk: "medium",
+    })).toEqual({
+      type: "require_approval",
+      reason: "Tool DeferredMediumTool declares medium risk.",
+    });
+
+    expect(evaluateToolPermission({
+      toolName: "DeclaredReadOnlyTool",
+      args: {},
+      scope: "main",
+      risk: "low",
+    })).toEqual({ type: "allow" });
+  });
+
+  it("rejects incomplete execution metadata at registration", () => {
+    const registry = new ToolRegistry();
+    expect(() => registry.register({
+      name: "MissingSecurityMetadata",
+      description: "Invalid plugin tool.",
+      category: "core",
+      loadPolicy: "core",
+      inputSchema: z.object({}),
+      execute: async () => ({ ok: true }),
+    } as never)).toThrow("permission profile or risk classification");
+
+    expect(() => registry.register({
+      name: "MissingCompletionCapability",
+      description: "Invalid terminal plugin tool.",
+      category: "core",
+      loadPolicy: "core",
+      inputSchema: z.object({}),
+      risk: "low",
+      behavior: {
+        completion: {
+          terminalResult: "ask_user",
+          expectation: "always",
+          exclusiveBatch: true,
+        },
+      },
+      execute: async () => ({ type: "ask_user", content: "question" }),
+    })).toThrow("requires capability 'user_interaction'");
   });
 });

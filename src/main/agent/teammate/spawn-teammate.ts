@@ -24,7 +24,10 @@ import { ensureToolResultPairing } from "../gateway/message-pairing";
 import { ensureDefaultHooks } from "../runtime/hooks/default-hooks";
 import { triggerHooks } from "../runtime/hooks/hook-registry";
 import type { PostToolUseBlock, StopBlock } from "../runtime/hooks/hook-blocks";
-import type { ToolApprovalHandler } from "../runtime/tools/permission-check";
+import {
+  authorizeToolUse,
+  type ToolApprovalHandler,
+} from "../runtime/tools/permission-check";
 import { formatToolApprovalDetail } from "../runtime/tools/format-tool-approval";
 import { TaskStore } from "../task/task-store";
 import {
@@ -33,6 +36,7 @@ import {
   type SubAgentToolContext,
   type SubAgentToolDefinition,
 } from "../subagent/workspace-tools";
+import { WorkspaceFileService } from "../tools/files/workspace-file-service";
 import {
   type AgentMailboxMessage,
   type AgentMailboxMessageType,
@@ -433,6 +437,7 @@ export class TeammateManager {
     }));
     const toolContext: SubAgentToolContext = {
       workspaceRoot: options.workspaceRoot,
+      fileService: new WorkspaceFileService(options.workspaceRoot),
       gatewayConfig: options.gateway.getGatewayConfig?.(),
       signal: state.controller.signal,
     };
@@ -1091,18 +1096,38 @@ async function executeTeammateToolBatch(input: {
       continue;
     }
 
+    const permissionBlock = {
+      event: "PreToolUse" as const,
+      toolName: tool.name,
+      args: args.data,
+      scope: "subagent" as const,
+      workspaceRoot: input.workspaceRoot,
+      threadId: input.teammateName,
+      permission: tool.permission,
+      requestToolApproval: input.requestToolApproval,
+    };
+    let permissionStop;
+    try {
+      permissionStop = await authorizeToolUse(permissionBlock);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const guidance = `Permission check failed before ${tool.name} executed: ${errorMessage}`;
+      transcriptEntries.push({ role: "tool", toolName: tool.name, error: guidance });
+      record(guidance, true);
+      finishToolProgress("failed", guidance);
+      continue;
+    }
+    if (permissionStop?.toolDenied) {
+      transcriptEntries.push({ role: "tool", toolName: tool.name, error: permissionStop.reason });
+      record(permissionStop.reason ?? "Tool call denied.", true);
+      finishToolProgress("failed", permissionStop.reason ?? "Tool call denied.");
+      continue;
+    }
+
     let preToolStop;
     try {
-      // 只有 PreToolUse 可以阻止工具执行。
-      preToolStop = await triggerHooks("PreToolUse", {
-        event: "PreToolUse",
-        toolName: tool.name,
-        args: args.data,
-        scope: "subagent",
-        workspaceRoot: input.workspaceRoot,
-        threadId: input.teammateName,
-        requestToolApproval: input.requestToolApproval,
-      });
+      // Mutable PreToolUse extensions run only after non-removable permission.
+      preToolStop = await triggerHooks("PreToolUse", permissionBlock);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       const guidance = `PreToolUse failed before ${tool.name} executed: ${errorMessage}`;

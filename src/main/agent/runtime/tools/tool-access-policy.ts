@@ -40,45 +40,64 @@ export interface ToolPermissionBlock {
   args: unknown;
   scope?: ToolPermissionScope;
   workspaceRoot?: string;
+  /** Definition-owned policy takes precedence over legacy name registration. */
+  permission?: ToolPermissionProfile;
+  /** Declared definition risk is the fail-safe fallback when no profile exists. */
+  risk?: ToolRisk;
 }
 
+const WORKSPACE_READ_PERMISSION = {
+  profile: "workspace-read",
+  description: "Read a text file from the configured workspace sandbox.",
+  scopes: ["main", "subagent"],
+  effects: ["workspace.read"],
+  sandbox: "workspace",
+  approval: "contextual",
+  workspacePathArg: "path",
+} satisfies ToolPermissionProfile;
+
+const WORKSPACE_GLOB_PERMISSION = {
+  profile: "workspace-read",
+  description: "List files in the configured workspace sandbox.",
+  scopes: ["main", "subagent"],
+  effects: ["workspace.read"],
+  sandbox: "workspace",
+  approval: "contextual",
+  workspacePathArg: "pattern",
+} satisfies ToolPermissionProfile;
+
+const WORKSPACE_WRITE_PERMISSION = {
+  profile: "workspace-write",
+  description: "Create or overwrite a text file in the configured workspace sandbox.",
+  scopes: ["main", "subagent"],
+  effects: ["workspace.write"],
+  sandbox: "workspace",
+  approval: "contextual",
+  workspacePathArg: "path",
+} satisfies ToolPermissionProfile;
+
+const WORKSPACE_EDIT_PERMISSION = {
+  profile: "workspace-write",
+  description: "Edit an existing text file in the configured workspace sandbox.",
+  scopes: ["main", "subagent"],
+  effects: ["workspace.read", "workspace.write"],
+  sandbox: "workspace",
+  approval: "contextual",
+  workspacePathArg: "path",
+} satisfies ToolPermissionProfile;
+
+export const MAIN_AGENT_TOOL_PERMISSION_PROFILES = {
+  Glob: WORKSPACE_GLOB_PERMISSION,
+  ReadFile: WORKSPACE_READ_PERMISSION,
+  WriteFile: WORKSPACE_WRITE_PERMISSION,
+  EditFile: WORKSPACE_EDIT_PERMISSION,
+} satisfies Record<string, ToolPermissionProfile>;
+
 export const SUB_AGENT_TOOL_PERMISSION_PROFILES = {
-  read_file: {
-    profile: "workspace-read",
-    description: "Read a text file from the configured workspace sandbox.",
-    scopes: ["subagent"],
-    effects: ["workspace.read"],
-    sandbox: "workspace",
-    approval: "contextual",
-    workspacePathArg: "path",
-  },
-  glob: {
-    profile: "workspace-read",
-    description: "List files in the configured workspace sandbox.",
-    scopes: ["subagent"],
-    effects: ["workspace.read"],
-    sandbox: "workspace",
-    approval: "contextual",
-    workspacePathArg: "pattern",
-  },
-  write_file: {
-    profile: "workspace-write",
-    description: "Create or overwrite a text file in the configured workspace sandbox.",
-    scopes: ["subagent"],
-    effects: ["workspace.write"],
-    sandbox: "workspace",
-    approval: "contextual",
-    workspacePathArg: "path",
-  },
-  edit_file: {
-    profile: "workspace-write",
-    description: "Edit an existing text file in the configured workspace sandbox.",
-    scopes: ["subagent"],
-    effects: ["workspace.read", "workspace.write"],
-    sandbox: "workspace",
-    approval: "contextual",
-    workspacePathArg: "path",
-  },
+  read_file: WORKSPACE_READ_PERMISSION,
+  glob: WORKSPACE_GLOB_PERMISSION,
+  write_file: WORKSPACE_WRITE_PERMISSION,
+  edit_file: WORKSPACE_EDIT_PERMISSION,
   ensure_dir: {
     profile: "workspace-write",
     description: "Create a directory in the configured workspace sandbox.",
@@ -89,11 +108,12 @@ export const SUB_AGENT_TOOL_PERMISSION_PROFILES = {
     workspacePathArg: "path",
   },
   bash: {
-    profile: "workspace-shell",
-    description: "Run a shell command with the workspace as cwd.",
+    profile: "workspace-diagnostic",
+    description:
+      "Directly execute a fail-closed read-only diagnostic allowlist; no shell or OS sandbox is provided.",
     scopes: ["subagent"],
     effects: ["process.execute"],
-    sandbox: "workspace",
+    sandbox: "none",
     approval: "contextual",
     shellCommandArg: "command",
   },
@@ -106,6 +126,11 @@ export const SUB_AGENT_TOOL_PERMISSION_PROFILES = {
     approval: "never",
   },
 } satisfies Record<string, ToolPermissionProfile>;
+
+const TOOL_PERMISSION_PROFILES: Record<string, ToolPermissionProfile> = {
+  ...SUB_AGENT_TOOL_PERMISSION_PROFILES,
+  ...MAIN_AGENT_TOOL_PERMISSION_PROFILES,
+};
 
 const HARD_DENY_PATTERNS: Array<{ pattern: RegExp; reason: string }> = [
   { pattern: /\bsudo\b/i, reason: "禁止使用 sudo" },
@@ -127,9 +152,7 @@ export function isRiskApprovalHintRequired(risk: ToolRisk): boolean {
 }
 
 export function getToolPermissionProfile(toolName: string): ToolPermissionProfile | undefined {
-  return SUB_AGENT_TOOL_PERMISSION_PROFILES[
-    toolName as keyof typeof SUB_AGENT_TOOL_PERMISSION_PROFILES
-  ];
+  return TOOL_PERMISSION_PROFILES[toolName];
 }
 
 export function isPathOutsideWorkspace(workspaceRoot: string | undefined, path: string): boolean {
@@ -147,21 +170,49 @@ export function isPathOutsideWorkspace(workspaceRoot: string | undefined, path: 
 }
 
 export function evaluateToolPermission(block: ToolPermissionBlock): PermissionDecision {
-  const hardDeny = matchHardDeny(block.toolName, block.args);
+  const profile = block.permission ?? getToolPermissionProfile(block.toolName);
+  const hardDeny = matchHardDeny(block.args, profile);
   if (hardDeny) {
     return { type: "deny", reason: hardDeny };
   }
 
-  const ruleReason = matchContextRule(block);
+  if (!profile && !block.risk) {
+    return {
+      type: "deny",
+      reason: `Tool ${block.toolName} has no permission profile or declared risk.`,
+    };
+  }
+
+  if (profile && block.scope && !profile.scopes.includes(block.scope)) {
+    return {
+      type: "deny",
+      reason: `Tool ${block.toolName} is not permitted for ${block.scope} agents.`,
+    };
+  }
+
+  const ruleReason = matchContextRule(block, profile);
   if (ruleReason) {
     return { type: "require_approval", reason: ruleReason };
+  }
+
+  if (profile?.approval === "always") {
+    return { type: "require_approval", reason: profile.description };
+  }
+
+  if (!profile && block.risk && isRiskApprovalHintRequired(block.risk)) {
+    return {
+      type: "require_approval",
+      reason: `Tool ${block.toolName} declares ${block.risk} risk.`,
+    };
   }
 
   return { type: "allow" };
 }
 
-function matchHardDeny(toolName: string, args: unknown): string | null {
-  const profile = getToolPermissionProfile(toolName);
+function matchHardDeny(
+  args: unknown,
+  profile: ToolPermissionProfile | undefined,
+): string | null {
   const command = extractStringArg(args, profile?.shellCommandArg);
   if (!command) return null;
 
@@ -173,8 +224,10 @@ function matchHardDeny(toolName: string, args: unknown): string | null {
   return null;
 }
 
-function matchContextRule(block: ToolPermissionBlock): string | null {
-  const profile = getToolPermissionProfile(block.toolName);
+function matchContextRule(
+  block: ToolPermissionBlock,
+  profile: ToolPermissionProfile | undefined,
+): string | null {
   if (!profile) return null;
 
   const workspacePath = extractStringArg(block.args, profile.workspacePathArg);

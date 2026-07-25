@@ -24,7 +24,7 @@ Query 不是：
 
 | 参考符号 | 责任 | 本项目映射 |
 |---|---|---|
-| `query()` / `queryLoop()` | 主 Agent 多圈编排 | `runtime/query/query.ts` |
+| `query()` / `queryLoop()` | 主 Agent 多圈编排 | `src/main/agent/runtime/query/query.ts` |
 | `queryModelWithStreaming()` | 流式 Provider 调用 | Gateway + `ModelTurnRunner` |
 | `queryModelWithoutStreaming()` | 消费同一模型流并返回最终消息 | Gateway 一次性调用边界 |
 | `sideQuery()` | 权限分类、记忆相关性、会话搜索等脱离主 Loop 的小查询 | 按用途放在窄 service；不得共享/修改主 Query State |

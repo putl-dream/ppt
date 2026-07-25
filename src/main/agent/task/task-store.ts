@@ -420,10 +420,9 @@ export class TaskStore {
         deny("Only the original requester can recover changes-requested work");
       }
       this.assertUnblocked(list, task);
-      const busy = Object.values(list.tasks).some((item) =>
-        item.owner === principal.actorId && item.id !== task.id && item.status !== "completed"
-      );
-      if (busy) throw new TaskStoreError("OWNER_BUSY", `${principal.actorId} already owns active work`);
+      if (this.ownerHasActiveWork(list, principal.actorId, task.id)) {
+        throw new TaskStoreError("OWNER_BUSY", `${principal.actorId} already owns active work`);
+      }
       task.owner = principal.actorId;
       this.bump(task, principal);
       return task;
@@ -434,7 +433,7 @@ export class TaskStore {
       if (command.type === "assign" && task.owner) throw new TaskStoreError("OWNER_CONFLICT", "Assign cannot overwrite owner");
       if (command.type === "transfer" && !task.owner) throw new TaskStoreError("OWNER_CONFLICT", "Transfer requires current owner");
       const owner = command.type === "assign" ? command.owner : command.newOwner;
-      if (Object.values(list.tasks).some((item) => item.owner === owner && item.id !== task.id && item.status !== "completed")) {
+      if (this.ownerHasActiveWork(list, owner, task.id)) {
         throw new TaskStoreError("OWNER_BUSY", `${owner} already owns active work`);
       }
       task.owner = owner;
@@ -625,6 +624,23 @@ export class TaskStore {
     if (!canStartTask(task, byId)) {
       throw new TaskStoreError("TASK_BLOCKED", `Blocked by: ${getIncompleteBlockedBy(task, byId).join(", ")}`);
     }
+  }
+
+  /**
+   * An owner has one execution slot. A task awaiting lead review keeps its
+   * owner for review continuity, but no longer occupies that execution slot.
+   */
+  private ownerHasActiveWork(
+    list: PersistedTaskList,
+    owner: string,
+    exceptTaskId: string,
+  ): boolean {
+    return Object.values(list.tasks).some((task) =>
+      task.owner === owner
+      && task.id !== exceptTaskId
+      && task.status !== "completed"
+      && task.review.state !== "requested"
+    );
   }
 
   private touch(task: AgentTaskNode, principal: TaskCommandPrincipal): void {

@@ -1,12 +1,13 @@
-import { registerHook } from "./hook-registry";
-import { createPermissionPreToolUseHook } from "../tools/permission-check";
-
 let defaultsRegistered = false;
 
-/** 注册默认 hook（幂等）。权限检查挂在 PreToolUse 上。 */
+/**
+ * Register optional default extensions (currently none).
+ *
+ * Permission is enforced directly at execution boundaries and must never be a
+ * removable hook. Keep this lifecycle shim for embedders and tests.
+ */
 export function ensureDefaultHooks(): void {
   if (defaultsRegistered) return;
-  registerHook("PreToolUse", createPermissionPreToolUseHook());
   defaultsRegistered = true;
 }
 

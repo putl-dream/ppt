@@ -578,7 +578,11 @@ describe("TeammateManager", () => {
     expect(events.every((event) => event.activityId === created.task!.id)).toBe(true);
     expect(events.find((event) => event.type === "teammate-tool-started"))
       .toEqual(expect.objectContaining({ toolName: "TaskUpdate", taskId: created.task!.id }));
-    expect(events.find((event) => event.type === "teammate-tool-finished"))
+    expect(events.find(
+      (event) =>
+        event.type === "teammate-tool-finished"
+        && event.toolName === "TaskReviewRequest",
+    ))
       .toEqual(expect.objectContaining({
         toolName: "TaskReviewRequest",
         taskId: created.task!.id,
@@ -1241,13 +1245,6 @@ describe("Teammate terminal lifecycle", () => {
       const workspaceRoot = await mkdtemp(join(tmpdir(), "ppt-teammate-abort-"));
       const bus = new MessageBus(MessageBus.defaultMailboxDir(workspaceRoot));
       const manager = new TeammateManager(bus);
-      const cleanupStore = new FailingCleanupTaskStore(taskRoot);
-      const cleanupTask = await createBoardTask(cleanupStore, "Cleanup failure task");
-      await cleanupStore.mutate({
-        type: "claim",
-        taskId: cleanupTask.task!.id,
-        expectedRevision: cleanupTask.task!.revision,
-      }, cleanupStore.principal("reviewer", "teammate", new Set(["task:update_own"])));
       manager.spawn({
         name: "reviewer",
         role: "outline reviewer",
@@ -1343,6 +1340,13 @@ describe("Teammate terminal lifecycle", () => {
       const taskRoot = await mkdtemp(join(tmpdir(), "ppt-teammate-cleanup-failure-tasks-"));
       const bus = new MessageBus(MessageBus.defaultMailboxDir(workspaceRoot));
       const manager = new TeammateManager(bus);
+      const cleanupStore = new FailingCleanupTaskStore(taskRoot);
+      const cleanupTask = await createBoardTask(cleanupStore, "Cleanup failure task");
+      await cleanupStore.mutate({
+        type: "claim",
+        taskId: cleanupTask.task!.id,
+        expectedRevision: cleanupTask.task!.revision,
+      }, cleanupStore.principal("reviewer", "teammate", new Set(["task:update_own"])));
       manager.spawn({
         name: "reviewer",
         role: "outline reviewer",

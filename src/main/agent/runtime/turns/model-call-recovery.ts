@@ -17,21 +17,22 @@ import {
   isOutputTruncated,
 } from "../../gateway/errors";
 import { backoffBeforeRetry, extractRetryAfterMs } from "../../gateway/withRetry";
-import { emergencyTrimContext, prepareContext } from "../context-compact";
-import { createModuleLogger } from "../../logger";
-import { ensureToolResultPairing } from "../../gateway/message-pairing";
-import { callTool } from "../../gateway/model-calls";
 import {
-  CHARS_PER_TOKEN_ESTIMATE,
-  resolveContextSoftTokenThreshold,
-  resolveContextTokenThreshold,
-} from "../context-compact/config";
+  emergencyTrimContext,
+  emergencyTrimModelMessages,
+  prepareContext,
+} from "../context-compact";
+import { createModuleLogger } from "../../logger";
+import { callTool } from "../../gateway/model-calls";
 
 const logger = createModuleLogger("model-call-recovery");
 const MAX_RECOVERY_ATTEMPTS = 8;
 const TOKEN_UPGRADE_8K = 8_192;
 const TOKEN_UPGRADE_64K = 65_536;
 const CONSECUTIVE_OVERLOAD_SWITCH = 2;
+const CONTINUATION_INSTRUCTION =
+  "Continue exactly where the previous text response ended. "
+  + "Do not repeat content already written.";
 
 function readGatewayConfig(gateway: AgentModelGateway): AgentGatewayConfig {
   const reader = gateway as AgentModelGateway & { getGatewayConfig?: () => AgentGatewayConfig };
@@ -98,42 +99,35 @@ function buildContinuationPrompt(
     ...originalPayload,
     continuation: {
       instruction:
-        "Your previous text response was truncated by max_tokens. Continue exactly where you left off. "
-        + "Do not repeat content already written.",
+        `Your previous text response was truncated by max_tokens. ${CONTINUATION_INSTRUCTION}`,
       partialOutput,
     },
   });
 }
 
-function compactStructuredMessages(
+function buildContinuationMessages(
   messages: AgentModelMessage[] | undefined,
   payload: ModelPromptPayload,
-  shouldCompact: boolean,
+  partialOutput: string,
 ): AgentModelMessage[] | undefined {
-  if (!messages || messages.length <= 12) return messages;
-  const estimatedTokens = JSON.stringify(messages).length / CHARS_PER_TOKEN_ESTIMATE;
-  const exceedsSoftThreshold = estimatedTokens > resolveContextSoftTokenThreshold(
-    resolveContextTokenThreshold(),
-  );
-  if (!shouldCompact && !exceedsSoftThreshold) return messages;
-  const tail = ensureToolResultPairing(messages.slice(-12));
-  const compactedContext = JSON.stringify({
-    messages: messages.slice(0, Math.max(0, messages.length - tail.length)),
-    runtimeContext: payload,
-  });
+  if (!messages) return undefined;
   return [
+    ...structuredClone(messages),
+    {
+      role: "user",
+      content: [{ type: "text", text: buildPrompt(payload) }],
+    },
+    {
+      role: "assistant",
+      content: [{ type: "text", text: partialOutput }],
+    },
     {
       role: "user",
       content: [{
         type: "text",
-        text: [
-          "<compacted_conversation_context>",
-          compactedContext,
-          "</compacted_conversation_context>",
-        ].join("\n"),
+        text: `The preceding assistant response was truncated by max_tokens. ${CONTINUATION_INSTRUCTION}`,
       }],
     },
-    ...tail,
   ];
 }
 
@@ -141,6 +135,34 @@ function nextOutputTokenUpgrade(current: number): number | undefined {
   if (current < TOKEN_UPGRADE_8K) return TOKEN_UPGRADE_8K;
   if (current < TOKEN_UPGRADE_64K) return TOKEN_UPGRADE_64K;
   return undefined;
+}
+
+function mergeContinuationText(previous: string, next: string): string {
+  if (!previous) return next;
+  if (!next) return previous;
+  if (next.startsWith(previous)) return next;
+  if (previous.endsWith(next)) return previous;
+
+  const maxOverlap = Math.min(previous.length, next.length);
+  for (let size = maxOverlap; size > 0; size -= 1) {
+    if (previous.slice(-size) === next.slice(0, size)) {
+      return previous + next.slice(size);
+    }
+  }
+  return previous + next;
+}
+
+function mergeContinuationContent(
+  previousText: string,
+  content: AgentModelContentBlock[],
+): AgentModelContentBlock[] {
+  const nextText = textFromContentBlocks(content);
+  const combinedText = mergeContinuationText(previousText, nextText);
+  const nonText = content.filter((block) => block.type !== "text");
+  return [
+    ...(combinedText ? [{ type: "text" as const, text: combinedText }] : []),
+    ...nonText,
+  ];
 }
 
 async function invokeGateway(
@@ -213,7 +235,9 @@ export async function callModelWithRecovery(
   let continuationPartial: string | undefined;
   let consecutiveOverloaded = 0;
   let lastError: unknown;
-  let preparedMessages = options.messages;
+  let preparedMessages = options.messages
+    ? structuredClone(options.messages)
+    : undefined;
 
   const recordDiagnostic = (message: string) => {
     recoveryNotes.push(message);
@@ -230,6 +254,7 @@ export async function callModelWithRecovery(
     if (!continuationPartial) {
       const prepared = await prepareContext({
         payload,
+        messages: preparedMessages,
         systemPrompt: options.systemPrompt,
         workspaceRoot: options.workspaceRoot,
         threadId: options.threadId,
@@ -242,11 +267,7 @@ export async function callModelWithRecovery(
       prepared.notes.forEach(recordDiagnostic);
       payload = prepared.payload;
       compactHistoryFailures = prepared.compactHistoryFailures;
-      preparedMessages = compactStructuredMessages(
-        options.messages,
-        payload,
-        prepared.contextChanged,
-      );
+      preparedMessages = prepared.messages;
       options.onContextPrepared?.(
         structuredClone(payload),
         [...prepared.notes],
@@ -254,8 +275,13 @@ export async function callModelWithRecovery(
       );
     }
 
+    const continuationMessages = continuationPartial
+      ? buildContinuationMessages(preparedMessages, payload, continuationPartial)
+      : undefined;
     const prompt = continuationPartial
-      ? buildContinuationPrompt(options.promptPayload, continuationPartial)
+      ? continuationMessages
+        ? ""
+        : buildContinuationPrompt(payload, continuationPartial)
       : buildPrompt(payload);
 
     try {
@@ -268,29 +294,14 @@ export async function callModelWithRecovery(
           signal: options.signal,
           maxOutputTokens,
           tools: options.tools,
-          messages: preparedMessages,
+          messages: continuationMessages ?? preparedMessages,
         },
         modelSelection,
         continuationPartial ? undefined : options.stream,
       );
 
-      if (toolUseBlocksFromContent(response.content).length > 0) {
-        return {
-          content: response.content,
-          stopReason: response.stopReason,
-          modelUsed: modelSelection,
-          recoveryNotes,
-          maxOutputTokensOverride: maxOutputTokens,
-          maxOutputTokensRecoveryCount,
-          hasAttemptedReactiveCompact: emergencyTrimmed,
-        };
-      }
-
+      const toolUses = toolUseBlocksFromContent(response.content);
       const text = textFromContentBlocks(response.content);
-      if (!text) {
-        throw new AgentGatewayError("Model returned no text or tool_use content.", "empty-response");
-      }
-
       if (isOutputTruncated(response.stopReason)) {
         const currentTokens = maxOutputTokens ?? defaultOutputTokens;
         const nextTokens = nextOutputTokenUpgrade(currentTokens);
@@ -303,15 +314,54 @@ export async function callModelWithRecovery(
           );
           continue;
         }
-        if (!continuationPartial) {
-          continuationPartial = text;
-          notify("输出截断后启用续写提示重试。", "回复内容较长，正在继续生成…");
-          continue;
+        if (toolUses.length > 0) {
+          throw new AgentGatewayError(
+            "Model output was truncated while emitting native tool calls; refusing to execute an incomplete turn.",
+            "empty-response",
+          );
         }
+        if (!text) {
+          throw new AgentGatewayError(
+            "Model output was truncated without recoverable text.",
+            "empty-response",
+          );
+        }
+        const wasContinuation = continuationPartial !== undefined;
+        continuationPartial = mergeContinuationText(continuationPartial ?? "", text);
+        lastError = new Error(
+          "Model output remained truncated after continuation recovery attempts.",
+        );
+        notify(
+          !wasContinuation
+            ? "输出截断后启用续写提示重试。"
+            : "续写结果仍被截断，保留已生成内容并继续续写。",
+          "回复内容较长，正在继续生成…",
+        );
+        continue;
+      }
+
+      if (toolUses.length > 0) {
+        return {
+          content: continuationPartial
+            ? mergeContinuationContent(continuationPartial, response.content)
+            : response.content,
+          stopReason: response.stopReason,
+          modelUsed: modelSelection,
+          recoveryNotes,
+          maxOutputTokensOverride: maxOutputTokens,
+          maxOutputTokensRecoveryCount,
+          hasAttemptedReactiveCompact: emergencyTrimmed,
+        };
+      }
+
+      if (!text) {
+        throw new AgentGatewayError("Model returned no text or tool_use content.", "empty-response");
       }
 
       return {
-        content: response.content,
+        content: continuationPartial
+          ? mergeContinuationContent(continuationPartial, response.content)
+          : response.content,
         stopReason: response.stopReason,
         modelUsed: modelSelection,
         recoveryNotes,
@@ -337,6 +387,12 @@ export async function callModelWithRecovery(
       if (recovery === "compact-context" && !emergencyTrimmed) {
         emergencyTrimmed = true;
         payload = emergencyTrimContext(payload);
+        preparedMessages = emergencyTrimModelMessages(preparedMessages);
+        options.onContextPrepared?.(
+          structuredClone(payload),
+          ["Reactive emergency trim after provider prompt-too-long."],
+          preparedMessages ? structuredClone(preparedMessages) : undefined,
+        );
         notify("上下文超限，已应急裁剪后重试。", "对话内容较多，整理后正在继续…");
         continue;
       }

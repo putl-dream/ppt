@@ -4,6 +4,12 @@ export { snipCompactConversation, snipCompactTranscript, adjustSnipBoundary } fr
 export { microCompactTranscript, measureToolResultBytes } from "./micro-compact";
 export { toolResultBudget, findLastToolResultBlock } from "./tool-result-budget";
 export { compactHistory } from "./compact-history";
-export { emergencyTrimContext } from "./emergency-trim";
+export { emergencyTrimContext, emergencyTrimModelMessages } from "./emergency-trim";
+export {
+  buildModelCompactionBoundary,
+  microCompactModelMessages,
+  snipCompactModelMessages,
+  takeRecentModelMessages,
+} from "./model-messages";
 export { prepareContext } from "./prepare-context";
 export type { PrepareContextOptions, ContextCompactResult } from "./types";

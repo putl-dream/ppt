@@ -1,11 +1,15 @@
 import { appendFile, mkdir } from "node:fs/promises";
 import { join } from "node:path";
-import type { AgentModelGateway } from "../../gateway/types";
+import type { AgentModelGateway, AgentModelMessage } from "../../gateway/types";
 import type { AgentModelSelection } from "@shared/agent";
 import type { ModelPromptPayload } from "../turns/model-call-recovery";
 import { COMPACT_HISTORY_MAX_FAILURES, COMPACT_TRANSCRIPTS_DIR } from "./config";
 import type { TranscriptEntry } from "./types";
 import { callLLM } from "../../gateway/model-calls";
+import {
+  buildModelCompactionBoundary,
+  takeRecentModelMessages,
+} from "./model-messages";
 
 const SUMMARY_SYSTEM_PROMPT = `You compress agent conversation history for context window management.
 Return a concise markdown summary that preserves:
@@ -18,6 +22,7 @@ Do not invent facts. Use the same language as the conversation when possible.`;
 
 export interface CompactHistoryOptions {
   payload: ModelPromptPayload;
+  messages?: AgentModelMessage[];
   workspaceRoot?: string;
   threadId?: string;
   gateway: AgentModelGateway;
@@ -28,6 +33,7 @@ export interface CompactHistoryOptions {
 
 export interface CompactHistoryResult {
   payload: ModelPromptPayload;
+  messages?: AgentModelMessage[];
   savedPath?: string;
   summary?: string;
   skipped: boolean;
@@ -39,6 +45,7 @@ async function saveCompactionTranscript(
   workspaceRoot: string,
   threadId: string,
   payload: ModelPromptPayload,
+  messages: AgentModelMessage[] | undefined,
 ): Promise<string> {
   const dir = join(workspaceRoot, COMPACT_TRANSCRIPTS_DIR);
   await mkdir(dir, { recursive: true });
@@ -51,6 +58,11 @@ async function saveCompactionTranscript(
       content: message.content,
     })),
     ...payload.transcript,
+    ...(messages ?? []).map((message) => ({
+      role: message.role,
+      kind: "native_model_message",
+      content: message.content,
+    })),
   ];
 
   for (const line of lines) {
@@ -63,6 +75,7 @@ async function saveCompactionTranscript(
 async function requestHistorySummary(
   gateway: AgentModelGateway,
   payload: ModelPromptPayload,
+  messages: AgentModelMessage[] | undefined,
   model: AgentModelSelection | undefined,
   signal: AbortSignal | undefined,
 ): Promise<string> {
@@ -76,6 +89,7 @@ async function requestHistorySummary(
         request: payload.request ?? payload.task,
         conversation: payload.conversation ?? [],
         transcript: payload.transcript,
+        messages: messages ?? [],
       }),
       signal,
       maxOutputTokens: 4_096,
@@ -89,6 +103,9 @@ function buildCompactedPayload(
   summary: string,
   savedPath: string,
 ): ModelPromptPayload {
+  if (payload.transcript.length === 0 && (payload.conversation?.length ?? 0) === 0) {
+    return payload;
+  }
   const recentTail = payload.transcript.slice(-3);
   return {
     ...payload,
@@ -105,6 +122,19 @@ function buildCompactedPayload(
   };
 }
 
+function buildCompactedMessages(
+  messages: AgentModelMessage[] | undefined,
+  summary: string,
+  savedPath: string,
+): AgentModelMessage[] | undefined {
+  if (!messages || messages.length === 0) return messages;
+  const recentTail = takeRecentModelMessages(messages, 3) ?? [];
+  return [
+    buildModelCompactionBoundary(summary, savedPath),
+    ...recentTail,
+  ];
+}
+
 /**
  * L4: compact_history — archive full history, LLM summary, replace active context.
  * Circuit breaker stops after COMPACT_HISTORY_MAX_FAILURES consecutive failures.
@@ -116,6 +146,7 @@ export async function compactHistory(
   if (failures >= COMPACT_HISTORY_MAX_FAILURES) {
     return {
       payload: options.payload,
+      messages: options.messages,
       skipped: true,
       failures,
       reason: "compact_history circuit breaker open",
@@ -125,6 +156,7 @@ export async function compactHistory(
   if (!options.workspaceRoot || !options.threadId) {
     return {
       payload: options.payload,
+      messages: options.messages,
       skipped: true,
       failures,
       reason: "workspaceRoot or threadId missing",
@@ -136,15 +168,18 @@ export async function compactHistory(
       options.workspaceRoot,
       options.threadId,
       options.payload,
+      options.messages,
     );
     const summary = await requestHistorySummary(
       options.gateway,
       options.payload,
+      options.messages,
       options.model,
       options.signal,
     );
     return {
       payload: buildCompactedPayload(options.payload, summary, savedPath),
+      messages: buildCompactedMessages(options.messages, summary, savedPath),
       savedPath,
       summary,
       skipped: false,
@@ -154,6 +189,7 @@ export async function compactHistory(
     const nextFailures = failures + 1;
     return {
       payload: options.payload,
+      messages: options.messages,
       skipped: true,
       failures: nextFailures,
       reason: error instanceof Error ? error.message : String(error),

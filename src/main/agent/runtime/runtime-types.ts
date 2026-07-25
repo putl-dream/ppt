@@ -15,6 +15,7 @@ import type { TeammateManager } from "../teammate/spawn-teammate";
 import {
   asRunId,
   asThreadId,
+  type AgentQueryLoopEvent,
   type QueryStartMode,
   type RunId,
   type ThreadId,
@@ -86,6 +87,8 @@ export interface AgentRuntimeOptions {
   maxSteps?: number;
   agentStepLimits?: AgentStepLimits;
   onStreamEvent?: (event: AgentRuntimeStreamEvent) => void;
+  /** Semantic query state changes; observational callbacks cannot affect execution. */
+  onQueryEvent?: (event: AgentQueryLoopEvent) => void;
   onThinkingChunk?: (chunk: string, modelStep: number) => void;
   signal?: AbortSignal;
   onProgress?: (event: { type: string; message: string; [key: string]: unknown }) => void;

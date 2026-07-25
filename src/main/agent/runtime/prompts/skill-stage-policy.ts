@@ -2,7 +2,7 @@ import type { SkillCard, SkillEntry } from "../../skills/skill-types";
 import type { PromptStage } from "./prompt-stage";
 import { normalizePromptStage } from "./prompt-stage";
 
-/** Default stage allow-list per skill (overridable via SKILL.md `stages:` frontmatter). */
+/** Default recommended stages per skill (overridable via SKILL.md frontmatter). */
 export const DEFAULT_SKILL_STAGES: Record<string, PromptStage[]> = {
   "ppt-workflow": ["discover"],
   "ppt-brief": ["discover"],
@@ -27,7 +27,7 @@ export function resolveSkillStages(entry: SkillEntry): PromptStage[] {
   return DEFAULT_SKILL_STAGES[entry.name] ?? ["discover"];
 }
 
-export function isSkillAllowedForStage(
+export function isSkillRecommendedForStage(
   skillName: string,
   stage: PromptStage,
   entry?: SkillEntry,
@@ -37,25 +37,23 @@ export function isSkillAllowedForStage(
   return stages.includes(stage);
 }
 
-export function filterSkillCatalogForStage(
+export function rankSkillCatalogForStage(
   cards: SkillCard[],
   stage: PromptStage,
   registry?: { get(name: string): SkillEntry | undefined },
 ): SkillCard[] {
-  return cards.filter((card) => {
-    const entry = registry?.get(card.name);
-    return isSkillAllowedForStage(card.name, stage, entry);
+  return [...cards].sort((left, right) => {
+    const leftRecommended = isSkillRecommendedForStage(
+      left.name,
+      stage,
+      registry?.get(left.name),
+    );
+    const rightRecommended = isSkillRecommendedForStage(
+      right.name,
+      stage,
+      registry?.get(right.name),
+    );
+    if (leftRecommended !== rightRecommended) return leftRecommended ? -1 : 1;
+    return left.name.localeCompare(right.name);
   });
-}
-
-export function formatSkillStageRejection(
-  skillName: string,
-  stage: PromptStage,
-  entry?: SkillEntry,
-): string {
-  const allowed = entry ? resolveSkillStages(entry) : DEFAULT_SKILL_STAGES[skillName];
-  const allowedText = allowed?.length ? allowed.join(", ") : "none";
-  return `Skill '${skillName}' is not available in stage '${stage}'. `
-    + `Allowed stages: ${allowedText}. `
-    + "Complete the current phase before loading layout or export skills.";
 }

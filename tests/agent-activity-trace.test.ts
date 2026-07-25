@@ -63,7 +63,6 @@ describe("agent activity trace", () => {
           ...oldGraph.tasks[0],
           status: "completed",
           owner: undefined,
-          updatedAt: "2026-01-01T00:01:00.000Z",
         },
       ],
     };

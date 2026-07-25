@@ -56,7 +56,10 @@ export class ModelTurnRunner {
         model: params.model,
         fallbackModel: params.fallbackModel,
         maxOutputTokensOverride: workspace.maxOutputTokensOverride,
-        workspaceRoot: deps.runtimeRoot,
+        // Context archives are model-addressable recovery artifacts. Keep them
+        // in the guarded workspace that ReadFile can actually reach; runtimeRoot
+        // remains reserved for application-owned checkpoints and transcripts.
+        workspaceRoot: deps.workspaceRoot,
         threadId: deps.threadId,
         signal: deps.signal,
         tools: deps.toolSchemas,
@@ -161,21 +164,29 @@ export class ModelTurnRunner {
       toolUses: [],
     });
     if (deps.requiredOutcome === "command_proposal") {
+      const proposalTools = deps.capabilityToolNames.command_proposal ?? [];
+      const interactionTools = deps.capabilityToolNames.user_interaction ?? [];
+      const proposalInstruction = proposalTools.length > 0
+        ? `finish with a tool that provides command_proposal capability (${proposalTools.join(", ")})`
+        : "continue until a command_proposal capability becomes available";
+      const interactionInstruction = interactionTools.length > 0
+        ? `Use ${interactionTools.join(", ")} if information is still missing`
+        : "If information is missing, explain the blocking facts through an available interaction capability";
       const guidance =
         "This is an unresolved presentation action. Do not narrate future work. "
-        + "Call AskUser if information is still missing, otherwise continue tools and finish with SubmitCommands.";
+        + `${interactionInstruction}; otherwise continue tools and ${proposalInstruction}.`;
       session.appendTranscript({ role: "assistant", content: responseText, error: guidance });
       workspace.followUpMessages.push({
         role: "user",
         content: [{ type: "text", text: guidance }],
       });
-      return { type: "continue" };
+      return { type: "continue", reason: "required_outcome" };
     }
     if (await run.drainBackgroundForModel(
       workspace,
       "Background tasks have completed. Use these results before giving the final response.",
     )) {
-      return { type: "continue" };
+      return { type: "continue", reason: "background_result" };
     }
 
     const finalInboxContent = await run.drainLeadInboxForModel();
@@ -184,7 +195,7 @@ export class ModelTurnRunner {
         role: "user",
         content: [{ type: "text", text: finalInboxContent }],
       });
-      return { type: "continue" };
+      return { type: "continue", reason: "inbox" };
     }
     run.appendRuntimeEvent("assistant_completed", { content: responseText });
     scope.stageConversationHistory(state, workspace);

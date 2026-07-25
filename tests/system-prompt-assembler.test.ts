@@ -1,11 +1,15 @@
 import { describe, expect, it } from "vitest";
+import { z } from "zod";
 import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { askUserTool } from "../src/main/agent/tools/core/ask-user";
 import { loadSkillTool } from "../src/main/agent/tools/core/load-skill";
 import { createDefaultToolRegistry } from "../src/main/agent/tools/tool-registry";
-import { registerSkillFromContent, createEmptySkillRegistry } from "../src/main/agent/skills/loadSkillsDir";
+import {
+  registerSkillFromContent,
+  createEmptySkillRegistry,
+} from "../src/main/agent/skills/loadSkillsDir";
 import { createSkillSession } from "../src/main/agent/skills/skill-types";
 import { createStarterPresentation } from "../src/shared/presentation";
 import {
@@ -17,6 +21,7 @@ import {
   clearSystemPromptCache,
   getSystemPrompt,
   splitSystemPromptPrefix,
+  SystemPromptManager,
 } from "../src/main/agent/runtime/prompts/system-prompt-assembler";
 import { SYSTEM_PROMPT_DYNAMIC_BOUNDARY } from "../src/main/agent/runtime/prompts/prompt-sections";
 import { SystemPromptBuilder } from "../src/main/agent/runtime/prompts/system-prompt";
@@ -58,175 +63,64 @@ function baseContext(overrides: Record<string, unknown> = {}) {
 }
 
 describe("system prompt assembly", () => {
-  it("always includes identity, tools, and workspace sections", () => {
+  it("keeps stable principles separate from query-specific capabilities and facts", () => {
     const assembled = assembleSystemPrompt(baseContext());
     const ids = assembled.sections.map((section) => section.id);
 
-    expect(ids).toEqual(["identity", "responseProtocol", "tools", "workspace"]);
-    expect(assembled.text).toContain("PPT 智能助手");
-    expect(assembled.text).toContain("AskUser");
-    expect(assembled.text).toContain("工作目录: /tmp/project");
-    expect(assembled.text).toContain("Workflow Artifact State");
-    expect(assembled.text).toContain("brief.md: missing/unverified");
-    expect(assembled.text).toContain("slide-1");
+    expect(ids).toEqual([
+      "identity",
+      "responseProtocol",
+      "runtimeContext",
+      "tools",
+      "workspace",
+    ]);
+    expect(assembled.staticPrefix).toContain("工程型智能体");
+    expect(assembled.staticPrefix).toContain("provider 原生 tool_use");
+    expect(assembled.staticPrefix).not.toContain('"name":"AskUser"');
+    expect(assembled.dynamicSuffix).toContain('"name":"AskUser"');
+    expect(assembled.dynamicSuffix).toContain("工作目录: /tmp/project");
+    expect(assembled.dynamicSuffix).toContain("brief.md: missing/unverified");
+    expect(assembled.dynamicSuffix).toContain("slide-1");
     expect(assembled.text).not.toContain("## 相关记忆");
   });
 
-  it("frames the main agent as a lead orchestrator with autonomous teammate claiming", () => {
-    const assembled = assembleSystemPrompt(baseContext());
+  it("describes an adaptive inspect-act-verify loop instead of a mandatory workflow", () => {
+    const text = assembleSystemPrompt(baseContext()).text;
 
-    expect(assembled.text).toContain("Lead Agent 职责边界");
-    expect(assembled.text).toContain("lead/orchestrator");
-    expect(assembled.text).toContain("维护持久化 Task");
-    expect(assembled.text).toContain("watcher 独立消费");
-    expect(assembled.text).toContain("executionTarget");
-    expect(assembled.text).toContain("completionPolicy");
-    expect(assembled.text).toContain("TaskReviewRequest");
-    expect(assembled.text).toContain("TaskReviewApprove");
-    expect(assembled.text).toContain("status、owner、依赖、review 相互独立");
-    expect(assembled.text).toContain("TaskList");
-    expect(assembled.text).toContain("验收 teammate 产物");
+    expect(text).toContain("阶段标签只是上下文提示，不是控制流或能力白名单");
+    expect(text).toContain("先检查必要事实，再修改，再验证");
+    expect(text).toContain("简单任务直接完成");
+    expect(text).toContain("已验证产物默认复用");
+    expect(text).not.toContain("阶段契约：收敛而非发散");
+    expect(text).not.toContain("当前仅执行本阶段");
+    expect(text).not.toContain("主 Agent 可以直接执行的工作限于");
+    expect(text).not.toContain("ReadFile");
+    expect(text).not.toContain("SubmitCommands");
+    expect(text).not.toContain("SearchExtraTools");
+    expect(text).not.toContain("PreviewSlide");
   });
 
-  it("author stage omits layout skills from catalog and design-system examples", () => {
+  it("shows every registered skill while ranking current recommendations first", () => {
     const registry = createEmptySkillRegistry();
     registerSkillFromContent(registry, "/tmp/build", "ppt-build", SAMPLE_SKILL);
     registerSkillFromContent(registry, "/tmp/layout", "ppt-layout", LAYOUT_SKILL);
 
-    const assembled = assembleSystemPrompt(baseContext({
+    const text = assembleSystemPrompt(baseContext({
       stage: "author",
       skillCatalog: registry.listCards(),
       skillRegistry: registry,
-    }));
+    })).text;
 
-    expect(assembled.text).toContain("`ppt-build`");
-    expect(assembled.text).not.toContain("`ppt-layout`");
-    expect(assembled.text).toContain("充分写内容");
-    expect(assembled.text).toContain("TaskList");
-    expect(assembled.text).toContain("大纲/分镜已冻结");
-    expect(assembled.text).toContain("内容规范化");
-    expect(assembled.text).not.toMatch(/"type":"set-design-system"/);
+    expect(text).toContain("`ppt-build` [当前上下文推荐]");
+    expect(text).toContain("`ppt-layout`");
+    expect(text).not.toContain("`ppt-layout` [当前上下文推荐]");
+    expect(text.indexOf("`ppt-build`")).toBeLessThan(text.indexOf("`ppt-layout`"));
+    expect(text).toContain("任何已注册 Skill 都保留");
   });
 
-  it("design stage freezes slide count and copy while executing confirmed layout", () => {
-    const assembled = assembleSystemPrompt(baseContext({
-      stage: "design",
-    }));
-
-    expect(assembled.text).toContain("页数与文案已冻结");
-    expect(assembled.text).toContain("slides[] 必须与当前 snapshot 一一对应");
-    expect(assembled.text).toContain("layout-plan");
-    expect(assembled.text).toContain("ExecuteLayoutPlan");
-    expect(assembled.text).toContain("set-design-system");
-    expect(assembled.text).toContain("update-slide-layout");
-    expect(assembled.text).toContain("不要再次输出");
-    expect(assembled.text).not.toContain("不直接 SubmitCommands 改 deck");
-  });
-
-  it("style stage includes design-system commands and layout skills", () => {
+  it("allows loading a skill outside its suggested stage", async () => {
     const registry = createEmptySkillRegistry();
     registerSkillFromContent(registry, "/tmp/layout", "ppt-layout", LAYOUT_SKILL);
-
-    const assembled = assembleSystemPrompt(baseContext({
-      stage: "style",
-      skillCatalog: registry.listCards(),
-      skillRegistry: registry,
-    }));
-
-    expect(assembled.text).toContain("`ppt-layout`");
-    expect(assembled.text).toContain("ExecuteLayoutPlan");
-    expect(assembled.text).toContain("视觉排版");
-  });
-
-  it("includes six-stage workflow overview in every stage", () => {
-    const assembled = assembleSystemPrompt(baseContext({ stage: "discover" }));
-    expect(assembled.text).toContain("`discover` → `author` → `design` → `style` → `export`");
-    expect(assembled.text).toContain("阶段契约：收敛而非发散");
-  });
-
-  it("allows informational detours before PPT production workflow", () => {
-    const assembled = assembleSystemPrompt(baseContext({ stage: "discover" }));
-
-    expect(assembled.text).toContain("意图优先：先回答用户当下问题");
-    expect(assembled.text).toContain("先不做 PPT");
-    expect(assembled.text).toContain("直接用 Markdown 文本");
-    expect(assembled.text).toContain("不要立刻收集使用场景、受众、页数");
-    expect(assembled.text).toContain("不要声称“刚才已经讲解");
-  });
-
-  it("documents direct text and native tool_use responses", () => {
-    const assembled = assembleSystemPrompt(baseContext({ stage: "discover" }));
-
-    expect(assembled.text).toContain("直接输出 Markdown 文本");
-    expect(assembled.text).toContain("provider 原生 tool_use");
-    expect(assembled.text).not.toContain("RESPONSE_CONTRACT:agent-protocol");
-    expect(assembled.text).not.toContain("assistant.message");
-    expect(assembled.text).toContain("请求用户补充必须调用 AskUser");
-  });
-
-  it("keeps the response protocol in the stable prompt prefix", () => {
-    const assembled = assembleSystemPrompt(baseContext({
-      stage: "style",
-      memories: "记住：封面用 hero",
-    }));
-    expect(assembled.text).toContain("visualAssetAudit");
-    expect(assembled.text).toContain("SearchSlideImages");
-    expect(assembled.text).toContain("InsertSlideImage");
-    const split = splitSystemPromptPrefix(assembled.text);
-
-    expect(split.staticPrefix).toContain("provider 原生 tool_use");
-    expect(split.staticPrefix).toContain("## Core Tools");
-    expect(split.dynamicSuffix).not.toContain("provider 原生 tool_use");
-  });
-
-  it("loads memory section only when MEMORY.md has content", async () => {
-    const root = await mkdtemp(join(tmpdir(), "ppt-memory-"));
-    const memoryDir = join(root, ".memory");
-    await mkdir(memoryDir, { recursive: true });
-    await writeFile(join(memoryDir, "MEMORY.md"), "用户偏好深色主题\n", "utf8");
-
-    const context = await buildSystemPromptContext({
-      request: "hello",
-      presentation: createStarterPresentation(),
-      coreTools: [askUserTool],
-      workspaceRoot: root,
-    });
-
-    expect(context.memories).toContain("深色主题");
-
-    const assembled = assembleSystemPrompt(context);
-    expect(assembled.sections.map((section) => section.id)).toContain("memory");
-    expect(assembled.text).toContain("用户偏好深色主题");
-  });
-
-  it("resolves design from layout phase user request", () => {
-    const stage = resolvePromptStage({
-      request: "请对当前演示文稿执行标准排版（第二阶段）。",
-      presentation: {
-        ...createStarterPresentation(),
-        slides: [{ id: "s1", title: "T", layout: "concept", elements: [] }],
-      },
-      artifacts: emptyArtifacts(),
-    });
-    expect(stage).toBe("design");
-  });
-
-  it("resolves edit when existing slides are already laid out", () => {
-    const stage = resolvePromptStage({
-      request: "继续写下一页",
-      presentation: {
-        ...createStarterPresentation(),
-        slides: [{ id: "s1", title: "T", layout: "concept", elements: [] }],
-      },
-      artifacts: emptyArtifacts(),
-    });
-    expect(stage).toBe("edit");
-  });
-
-  it("LoadSkill rejects layout skill during author stage", async () => {
-    const registry = createEmptySkillRegistry();
-    registerSkillFromContent(registry, "/tmp/layout", "ppt-layout", LAYOUT_SKILL);
-
     const context = {
       presentation: createStarterPresentation(),
       selectedElementIds: [],
@@ -238,42 +132,177 @@ describe("system prompt assembly", () => {
       promptStage: "author" as const,
     };
 
-    await expect(loadSkillTool.execute({ skillName: "ppt-layout" }, context as any))
-      .rejects.toThrow("not available in stage 'author'");
+    const result = await loadSkillTool.execute(
+      { skillName: "ppt-layout" },
+      context as any,
+    );
+    expect(result.name).toBe("ppt-layout");
+    expect(result.guidance).toContain("not normally suggested");
   });
 
-  it("caches assembled prompt per thread when context is unchanged", () => {
+  it("loads memory only when MEMORY.md has content", async () => {
+    const root = await mkdtemp(join(tmpdir(), "ppt-memory-"));
+    const memoryDir = join(root, ".memory");
+    await mkdir(memoryDir, { recursive: true });
+    await writeFile(join(memoryDir, "MEMORY.md"), "用户偏好深色主题\n", "utf8");
+
+    const context = await buildSystemPromptContext({
+      request: "hello",
+      presentation: createStarterPresentation(),
+      coreTools: [askUserTool],
+      workspaceRoot: root,
+    });
+    const assembled = assembleSystemPrompt(context);
+
+    expect(context.memories).toContain("深色主题");
+    expect(assembled.sections.map((section) => section.id)).toContain("memory");
+    expect(assembled.dynamicSuffix).toContain("用户偏好深色主题");
+  });
+
+  it("does not infer a control-flow stage from request keywords", () => {
+    const presentation = {
+      ...createStarterPresentation(),
+      slides: [{ id: "s1", title: "T", layout: "concept" as const, elements: [] }],
+    };
+    const exportRequest = resolvePromptStage({
+      request: "请导出 PPT 文件",
+      presentation,
+      artifacts: emptyArtifacts(),
+    });
+    const authorRequest = resolvePromptStage({
+      request: "继续写下一页",
+      presentation,
+      artifacts: emptyArtifacts(),
+    });
+
+    expect(exportRequest).toBe("edit");
+    expect(authorRequest).toBe(exportRequest);
+  });
+
+  it("honors an explicit stage hint without hiding other capabilities", () => {
+    const stage = resolvePromptStage({
+      request: "执行标准排版",
+      presentation: createStarterPresentation(),
+      artifacts: emptyArtifacts(),
+      stageHint: "layout-design",
+    });
+    expect(stage).toBe("design");
+  });
+
+  it("caches unchanged contexts per thread and rebuilds dynamic changes", () => {
     clearSystemPromptCache();
     const context = baseContext();
-
     const first = getSystemPrompt(context, "thread-a");
-    const second = getSystemPrompt(context, "thread-a");
+    const same = getSystemPrompt(context, "thread-a");
+    const changed = getSystemPrompt(baseContext({ stage: "style" }), "thread-a");
 
-    expect(second).toBe(first);
+    expect(same).toBe(first);
+    expect(changed).not.toBe(first);
+    expect(changed.staticPrefix).toBe(first.staticPrefix);
+    expect(changed.dynamicSuffix).not.toBe(first.dynamicSuffix);
   });
 
-  it("rebuilds prompt when stage changes", () => {
+  it("invalidates a thread cache when a same-name tool contract changes", () => {
     clearSystemPromptCache();
-    const first = getSystemPrompt(baseContext({ stage: "author" }), "thread-b");
-    const second = getSystemPrompt(baseContext({ stage: "style" }), "thread-b");
+    const first = getSystemPrompt(baseContext(), "thread-tool-contract");
+    const changedTool = {
+      ...askUserTool,
+      description: "Updated interaction contract",
+      inputSchema: z.object({
+        decision: z.enum(["accept", "reject"]).describe("Required decision"),
+      }),
+      risk: "medium" as const,
+      permission: {
+        profile: "interactive-approval",
+        description: "Always ask before interacting.",
+        scopes: ["main" as const],
+        effects: ["user.interaction" as const],
+        sandbox: "none" as const,
+        approval: "always" as const,
+      },
+    };
+    const second = getSystemPrompt(baseContext({
+      coreTools: [changedTool],
+    }), "thread-tool-contract");
 
-    expect(second.text).not.toBe(first.text);
+    expect(second).not.toBe(first);
+    expect(second.dynamicSuffix).toContain("Updated interaction contract");
+    expect(second.dynamicSuffix).toContain("decision");
+    expect(second.dynamicSuffix).toContain('"risk":"medium"');
   });
 
-  it("places dynamic boundary between static and dynamic sections", () => {
+  it("invalidates a thread cache when same-name Skill frontmatter changes", () => {
+    clearSystemPromptCache();
+    const authorRegistry = createEmptySkillRegistry();
+    registerSkillFromContent(authorRegistry, "/tmp/build-author", "ppt-build", SAMPLE_SKILL);
+    const first = getSystemPrompt(baseContext({
+      stage: "author",
+      skillCatalog: authorRegistry.listCards(),
+      skillRegistry: authorRegistry,
+    }), "thread-skill-contract");
+
+    const styleRegistry = createEmptySkillRegistry();
+    registerSkillFromContent(
+      styleRegistry,
+      "/tmp/build-style",
+      "ppt-build",
+      SAMPLE_SKILL.replace("  - author", "  - style"),
+    );
+    const second = getSystemPrompt(baseContext({
+      stage: "author",
+      skillCatalog: styleRegistry.listCards(),
+      skillRegistry: styleRegistry,
+    }), "thread-skill-contract");
+
+    expect(second).not.toBe(first);
+    expect(first.dynamicSuffix).toContain("`ppt-build` [当前上下文推荐]");
+    expect(second.dynamicSuffix).not.toContain("`ppt-build` [当前上下文推荐]");
+  });
+
+  it("supports independently registered, ordered prompt sections", () => {
+    const manager = new SystemPromptManager([
+      {
+        id: "feature-context",
+        order: 30,
+        cacheScope: null,
+        render: (context) => `feature:${context.currentSlideId}`,
+      },
+      {
+        id: "feature-principles",
+        order: 10,
+        cacheScope: "global",
+        render: () => "stable feature principles",
+      },
+    ]);
+
+    const assembled = manager.assemble(baseContext());
+    expect(assembled.sections.map((section) => section.id)).toEqual([
+      "feature-principles",
+      "feature-context",
+    ]);
+    expect(assembled.staticPrefix).toBe("stable feature principles");
+    expect(assembled.dynamicSuffix).toBe("feature:slide-1");
+  });
+
+  it("places the explicit cache boundary between stable and dynamic sections", () => {
     const assembled = assembleSystemPrompt(baseContext({
       memories: "记住：封面用 hero",
     }));
+    const split = splitSystemPromptPrefix(assembled.text);
 
     expect(assembled.text).toContain(SYSTEM_PROMPT_DYNAMIC_BOUNDARY);
-    const split = splitSystemPromptPrefix(assembled.text);
-    expect(split.staticPrefix).toContain("PPT 智能助手");
+    expect(split.staticPrefix).toContain("工程型智能体");
     expect(split.dynamicSuffix).toContain("记住：封面用 hero");
   });
 
-  it("SystemPromptBuilder injects skill catalog without full SKILL.md body", () => {
+  it("injects skill cards without eagerly copying SKILL.md bodies", () => {
     const registry = createEmptySkillRegistry();
-    registerSkillFromContent(registry, "/tmp/pdf", "pdf", SAMPLE_SKILL.replace("ppt-build", "pdf"));
+    registerSkillFromContent(
+      registry,
+      "/tmp/pdf",
+      "pdf",
+      SAMPLE_SKILL.replace("ppt-build", "pdf"),
+    );
 
     const prompt = SystemPromptBuilder.build({
       request: "写内容草稿",
@@ -289,7 +318,7 @@ describe("system prompt assembly", () => {
     expect(prompt).not.toContain("# Build");
   });
 
-  it("documents memory path constant", () => {
+  it("documents the memory path constant", () => {
     expect(MEMORY_INDEX_RELATIVE_PATH).toBe(".memory/MEMORY.md");
   });
 });

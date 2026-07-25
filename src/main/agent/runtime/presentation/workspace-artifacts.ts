@@ -1,7 +1,11 @@
-import { access, constants, readFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 
-import { LAYOUT_PLAN_PATH } from "@shared/layout-plan";
+import {
+  LAYOUT_PLAN_PATH,
+  parseLayoutPlan,
+  validateLayoutPlan,
+} from "@shared/layout-plan";
 import {
   isDefaultBriefMarkdown,
   isDefaultOutlineMarkdown,
@@ -38,15 +42,6 @@ const EMPTY_ARTIFACTS: WorkspaceArtifacts = {
   storyboard: false,
   layoutPlan: false,
 };
-
-async function fileExists(path: string): Promise<boolean> {
-  try {
-    await access(path, constants.F_OK);
-    return true;
-  } catch {
-    return false;
-  }
-}
 
 async function readOptionalText(path: string): Promise<string | undefined> {
   try {
@@ -160,10 +155,39 @@ function countOutlinePages(content: string): number {
 }
 
 async function probeLayoutPlan(path: string): Promise<WorkspaceArtifactProbe> {
-  if (await fileExists(path)) {
-    return { path, status: "verified", verified: true };
+  const content = await readOptionalText(path);
+  if (content === undefined) return missingProbe(path);
+  if (!content.trim()) {
+    return {
+      path,
+      status: "empty",
+      verified: false,
+      reason: "Layout plan is empty.",
+    };
   }
-  return missingProbe(path);
+
+  try {
+    const plan = parseLayoutPlan(content);
+    const blockingIssue = validateLayoutPlan(plan)
+      .find((issue) => issue.severity === "error");
+    if (blockingIssue) {
+      return {
+        path,
+        status: "invalid",
+        verified: false,
+        reason: blockingIssue.message,
+      };
+    }
+  } catch (error) {
+    return {
+      path,
+      status: "invalid",
+      verified: false,
+      reason: error instanceof Error ? error.message : "Layout plan JSON is invalid.",
+    };
+  }
+
+  return { path, status: "verified", verified: true };
 }
 
 export async function probeWorkspaceArtifactDetails(

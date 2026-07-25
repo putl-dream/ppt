@@ -1,4 +1,4 @@
-import type { ToolDefinition } from "./tool-definition";
+import type { ToolContext, ToolDefinition } from "./tool-definition";
 import { ToolLoader } from "./tool-loader";
 import { askUserTool } from "./core/ask-user";
 import { executeExtraToolTool } from "./core/execute-extra-tool";
@@ -20,6 +20,7 @@ import { loadSkillTool } from "./core/load-skill";
 import { webSearchTool } from "./core/web-search";
 import { searchSlideImagesTool } from "./core/search-slide-images";
 import { insertSlideImageTool } from "./core/insert-slide-image";
+import { workspaceFileTools } from "./core/workspace-files";
 import { analyzeDeckConsistencyTool } from "./deferred/analyze-deck-consistency";
 import { applyDesignSystemTool } from "./deferred/apply-design-system";
 import { autoLayoutSlideTool } from "./deferred/auto-layout-slide";
@@ -60,6 +61,26 @@ export class ToolRegistry {
     if (tool.category === "runtime" && (tool.loadPolicy === "core" || tool.loadPolicy === "deferred")) {
       throw new Error("Runtime-only tools cannot be exposed as core or deferred to the model");
     }
+    if (!tool.permission && !tool.risk) {
+      throw new Error(
+        `Tool ${tool.name} must declare a permission profile or risk classification.`,
+      );
+    }
+
+    const terminalResult = tool.behavior?.completion?.terminalResult;
+    const requiredCapability = terminalResult === "command_proposal"
+      ? "command_proposal"
+      : terminalResult === "ask_user"
+        ? "user_interaction"
+        : undefined;
+    if (
+      requiredCapability
+      && !tool.behavior?.capabilities?.includes(requiredCapability)
+    ) {
+      throw new Error(
+        `Tool ${tool.name} completion '${terminalResult}' requires capability '${requiredCapability}'.`,
+      );
+    }
 
     this.tools.set(tool.name, tool);
   }
@@ -74,23 +95,27 @@ export class ToolRegistry {
   /**
    * 列出所有核心工具
    */
-  getCoreTools(): ToolDefinition<any, any>[] {
-    return ToolLoader.loadCoreTools(Array.from(this.tools.values()));
+  getCoreTools(context?: ToolContext): ToolDefinition<any, any>[] {
+    return ToolLoader.loadCoreTools(Array.from(this.tools.values()))
+      .filter((tool) => !context || !tool.isEnabled || tool.isEnabled(context))
+      .sort(stableToolOrder);
   }
 
   /**
    * 获取所有注册的延迟工具
    */
-  getDeferredTools(): ToolDefinition<any, any>[] {
-    return ToolLoader.loadDeferredTools(Array.from(this.tools.values()));
+  getDeferredTools(context?: ToolContext): ToolDefinition<any, any>[] {
+    return ToolLoader.loadDeferredTools(Array.from(this.tools.values()))
+      .filter((tool) => !context || !tool.isEnabled || tool.isEnabled(context))
+      .sort(stableToolOrder);
   }
 
   /**
    * 搜索可发现的延迟工具（Deferred Tools），排除 core、runtime 和 disabled。
    * 支持模糊匹配名称或描述。
    */
-  searchDeferredTools(query: string): ToolDefinition<any, any>[] {
-    const deferred = this.getDeferredTools();
+  searchDeferredTools(query: string, context?: ToolContext): ToolDefinition<any, any>[] {
+    const deferred = this.getDeferredTools(context);
     const trimmed = query.trim();
     if (!trimmed) {
       return deferred;
@@ -107,6 +132,13 @@ export class ToolRegistry {
       return words.some((word) => searchable.includes(word));
     });
   }
+}
+
+function stableToolOrder(
+  left: ToolDefinition<any, any>,
+  right: ToolDefinition<any, any>,
+): number {
+  return left.name < right.name ? -1 : left.name > right.name ? 1 : 0;
 }
 
 /**
@@ -136,6 +168,7 @@ export function createDefaultToolRegistry(): ToolRegistry {
     webSearchTool,
     searchSlideImagesTool,
     insertSlideImageTool,
+    ...workspaceFileTools,
     analyzeDeckConsistencyTool,
     applyDesignSystemTool,
     autoLayoutSlideTool,

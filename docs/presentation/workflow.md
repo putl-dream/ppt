@@ -85,8 +85,8 @@ Main Agent 与 teammate 使用统一 Glob/ReadFile/WriteFile/EditFile：
 - 读取建立 receipt/read-set；
 - 覆盖和 Edit 执行乐观并发检查；
 - 写入使用原子替换；
-- artifact 写后运行相应 schema validator；
-- 校验成功才可被下游视为 ready。
+- 通用文件写入只保证文本与并发安全，不自动运行 artifact schema validator；
+- 消费方在使用前负责解析和验证；`ready/verified` 不能只由文件存在推导。
 
 不要通过 Shell 重定向生成工作流文件。
 

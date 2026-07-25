@@ -1,15 +1,24 @@
+import type { AgentStepLimits } from "@shared/agent-step-limits";
+import { buildContentBlockResponseGuidance } from "../../gateway/response-contract";
+import type { SkillRegistry } from "../../skills/loadSkillsDir";
+import type { SkillCard } from "../../skills/skill-types";
 import type { ToolDefinition } from "../../tools/tool-definition";
 import { toToolCard } from "../../tools/tool-card";
-import type { SkillCard } from "../../skills/skill-types";
-import type { AgentStepLimits } from "@shared/agent-step-limits";
-import type { PromptStage } from "./prompt-stage";
-import { describePromptStage } from "./prompt-stage";
-import { filterSkillCatalogForStage } from "./skill-stage-policy";
-import type { SkillRegistry } from "../../skills/loadSkillsDir";
-import { buildContentBlockResponseGuidance } from "../../gateway/response-contract";
 import type { WorkspaceArtifacts } from "../presentation/workspace-artifacts";
+import { describePromptStage, type PromptStage } from "./prompt-stage";
+import {
+  isSkillRecommendedForStage,
+  rankSkillCatalogForStage,
+} from "./skill-stage-policy";
 
-export type PromptSectionId = "identity" | "responseProtocol" | "tools" | "workspace" | "memory";
+export type PromptSectionId =
+  | "identity"
+  | "responseProtocol"
+  | "runtimeContext"
+  | "tools"
+  | "workspace"
+  | "memory"
+  | (string & {});
 
 export type PromptSectionLoadPolicy = "always" | "conditional";
 export type PromptSectionCacheScope = "global" | null;
@@ -18,37 +27,49 @@ export interface PromptSectionDef {
   id: PromptSectionId;
   loadPolicy: PromptSectionLoadPolicy;
   cacheScope: PromptSectionCacheScope;
+  order: number;
 }
 
-export const PROMPT_SECTION_DEFS: Record<PromptSectionId, PromptSectionDef> = {
-  identity: { id: "identity", loadPolicy: "always", cacheScope: "global" },
-  responseProtocol: { id: "responseProtocol", loadPolicy: "always", cacheScope: "global" },
-  tools: { id: "tools", loadPolicy: "always", cacheScope: "global" },
-  workspace: { id: "workspace", loadPolicy: "always", cacheScope: null },
-  memory: { id: "memory", loadPolicy: "conditional", cacheScope: null },
+/**
+ * Default section metadata. Only sections whose bytes are independent of a
+ * thread belong to the global prefix. Runtime, tool, workspace, and memory
+ * facts stay after the cache boundary.
+ */
+export const PROMPT_SECTION_DEFS: Record<string, PromptSectionDef> = {
+  identity: { id: "identity", loadPolicy: "always", cacheScope: "global", order: 10 },
+  responseProtocol: {
+    id: "responseProtocol",
+    loadPolicy: "always",
+    cacheScope: "global",
+    order: 20,
+  },
+  runtimeContext: {
+    id: "runtimeContext",
+    loadPolicy: "always",
+    cacheScope: null,
+    order: 30,
+  },
+  tools: { id: "tools", loadPolicy: "always", cacheScope: null, order: 40 },
+  workspace: { id: "workspace", loadPolicy: "always", cacheScope: null, order: 50 },
+  memory: { id: "memory", loadPolicy: "conditional", cacheScope: null, order: 60 },
 };
 
 export const SYSTEM_PROMPT_DYNAMIC_BOUNDARY = "\n<!-- SYSTEM_PROMPT_DYNAMIC -->\n";
 
-const WORKSPACE_FILES_CONTENT = [
-  "brief.md — 目的、受众与方向",
-  "outline.md — 内容大纲",
-  "research/notes.md — 资料与素材",
-  "slides/storyboard.json — 逐页分镜",
-];
-
-const WORKSPACE_FILES_LAYOUT = [
-  "slides/layout-plan.json — 排版设计决策（Design Agent 产出）",
-  "validated-plan — 由 ExecuteLayoutPlan 内部生成，不依赖聊天记忆",
-];
-
 export interface IdentitySectionInput {
-  stage: PromptStage;
+  stage?: PromptStage;
   stepLimits?: AgentStepLimits;
 }
 
 export interface ResponseProtocolSectionInput {
   requiredOutcome?: "any" | "command_proposal";
+}
+
+export interface RuntimeContextSectionInput {
+  stage: PromptStage;
+  requiredOutcome?: "any" | "command_proposal";
+  stepLimits?: AgentStepLimits;
+  enabledTools?: ToolDefinition<any, any>[];
 }
 
 export interface ToolsSectionInput {
@@ -69,370 +90,180 @@ export interface MemorySectionInput {
   memories: string;
 }
 
-function formatSkillCatalog(skills: SkillCard[]): string {
-  if (skills.length === 0) {
-    return "（当前阶段无可用技能目录项；进入下一阶段后会出现对应技能）";
-  }
+export function buildIdentitySection(_input: IdentitySectionInput = {}): string {
+  return `你是一个专业的 PPT Agent，也是能够独立调查、编辑、验证和交付结果的工程型智能体。
 
-  return skills
-    .map((skill) => {
-      const whenToUse = skill.whenToUse ? ` | 适用: ${skill.whenToUse}` : "";
-      return `- \`${skill.name}\`: ${skill.description}${whenToUse}`;
-    })
-    .join("\n");
+## 工作原则
+
+- 先理解用户本轮真实目标；问答就直接回答，需要行动就使用工具完成，不把所有输入强行套入固定流程。
+- 根据当前 Presentation、Workspace、任务状态和工具结果决定下一步。阶段标签只是上下文提示，不是控制流或能力白名单。
+- 在合理范围内自主推进：先检查必要事实，再修改，再验证。不要只描述将来会做什么。
+- 简单任务直接完成；只有工作确实可并行、需跨回合恢复或存在依赖时才创建 Task/teammate。
+- 尊重用户范围和已有产物。不要因为模板流程而重做已完成工作，也不要把局部修改扩成整套重构。
+- 工具失败是可恢复信息：阅读错误结果，调整参数或检查持久化产物；有副作用不确定时不要盲目重试。
+- 真实变更必须通过本 Query 实际提供的受审 proposal 或 Workspace 写入能力完成；不要用文字假装已经执行。`;
 }
 
-function buildStepBudgetLine(stepLimits?: AgentStepLimits): string {
-  return stepLimits?.enabled
-    ? `- **步数预算**：主 Agent 约 ${stepLimits.mainMaxSteps} 次模型调用；子 Agent 约 ${stepLimits.subMaxSteps} 次。合并操作、避免重复 LoadSkill。`
-    : "- **效率优先**：合并操作；能一次 SubmitCommands 就不要分批；简单单页修改无需持久化 Task。";
+export function buildResponseProtocolSection(_input: ResponseProtocolSectionInput = {}): string {
+  return `${buildContentBlockResponseGuidance()}
+
+## 完成与验证
+
+- 只有实际结果已产生时才声称完成；能验证的修改应读取、预览或校验后再总结。
+- 信息确实缺失且会改变结果时才使用当前可用的用户交互能力；不要询问工具名、内部阶段或实现细节。
+- 不在文本中伪造 tool_use、tool_result、JSON envelope 或执行结果。`;
 }
 
-function buildRequiredOutcomeBlock(requiredOutcome?: "any" | "command_proposal"): string {
-  if (requiredOutcome !== "command_proposal") return "";
-  return `## 当前回合终止约束
+export function buildRuntimeContextSection(input: RuntimeContextSectionInput): string {
+  const budget = input.stepLimits?.enabled
+    ? `主 Agent ${input.stepLimits.mainMaxSteps} 次模型调用；子 Agent ${input.stepLimits.subMaxSteps} 次`
+    : "未启用硬性步骤提示；仍应合并无意义的重复操作";
+  const outcomeTools = (input.enabledTools ?? [])
+    .filter((tool) => tool.behavior?.capabilities?.includes("command_proposal"))
+    .map((tool) => `\`${tool.name}\``);
+  const interactionTools = (input.enabledTools ?? [])
+    .filter((tool) => tool.behavior?.capabilities?.includes("user_interaction"))
+    .map((tool) => `\`${tool.name}\``);
+  const requiredOutcome = input.requiredOutcome === "command_proposal"
+    ? [
+        "",
+        `本回合要求产生 Presentation 行动结果：可执行时必须由 ${
+          outcomeTools.length > 0 ? outcomeTools.join("、") : "当前清单中的行动能力"
+        } 返回 command_proposal，不能用文字代替执行；信息不足时才使用 ${
+          interactionTools.length > 0 ? interactionTools.join("、") : "当前可用的用户交互能力"
+        }。`,
+      ].join("\n")
+    : "";
 
-这是等待执行的行动请求。不能用 message 描述"准备执行"。
-- 信息不足：AskUser
-- 可执行：读取必要上下文后 SubmitCommands`;
-}
+  return `## Runtime Context
 
-function buildWorkflowOverview(stage: PromptStage): string {
-  return [
-    "",
-    "## 六阶段全流程（当前仅执行本阶段）",
-    "",
-    "`discover` → `author` → `design` → `style` → `export`",
-    "",
-    "- **discover**：路径判断 + brief / outline / storyboard",
-    "- **author**：内容草稿落盘；草稿就绪后引导用户选排版方式",
-    "- **design**：用户确认排版后的 layout-plan + 首次视觉执行",
-    "- **style**：set-design-system / update-slide-layout + 视觉质检",
-    "- **edit**：已有主题 deck 的轻量单页修改（可跳过 design/style）",
-    "- **export**：导出交付",
-    "",
-    `当前阶段：\`${stage}\` — ${describePromptStage(stage)}`,
-  ].join("\n");
-}
-
-function buildConvergenceContract(stage: PromptStage): string {
-  const stageGoals: Record<PromptStage, string> = {
-    discover: "冻结规划：确定路径、页数口径、叙事骨架；不要同时保留多套互斥方案。",
-    author: "冻结内容：按已定大纲/分镜逐页写稿并做文案规范化；不要改页数、重排叙事。",
-    design: "执行已确认的排版选择：为现有每一页生成 layout-plan，并通过 ExecuteLayoutPlan 消费该产物；不要再次要求用户选择排版。",
-    style: "执行视觉方案：调用 ExecuteLayoutPlan 从 layout-plan 生成命令；不要回头重做结构或手工猜 layout。",
-    edit: "局部收敛：只改用户指定范围；不要扩展成全流程重做。",
-    export: "交付收敛：只做必要复核与导出；不要重新设计 deck。",
-  };
-
-  return [
-    "",
-    "## 阶段契约：收敛而非发散",
-    "",
-    "- 每个阶段只交付本阶段产物；阶段完成后，上一阶段产物就是冻结输入。",
-    "- 决策时选择一个可执行方案并推进；除非用户明确要求重做，不输出多套互斥方案、不推翻已完成规划。",
-    "- 发现上一阶段缺陷时，优先在当前阶段做最小承接；必须改变目标、页数或叙事顺序时，先 AskUser 说明影响。",
-    "- 不提前加载后续阶段知识：design 前不讨论主题色、版式节奏或 Rubric；style 前不执行视觉排版命令。",
-    "- 冻结顺序：outline/storyboard（规划）→ slide content（页数与文案）→ content normalization（标题、术语、密度）→ layout-plan（排版决策）→ visual execution（主题与版式命令）。",
-    "",
-    `当前阶段收敛目标：${stageGoals[stage]}`,
-  ].join("\n");
-}
-
-function buildIntentFirstContract(): string {
-  return [
-    "",
-    "## 意图优先：先回答用户当下问题",
-    "",
-    "- 不要把所有输入都解释为“现在要制作 PPT”。用户问概念、背景、定义、方法、评价、示例，或明确说“先不做 PPT / 暂不做 PPT / 先讲解 / 先聊聊”时，直接用 Markdown 文本给出实质回答。",
-    "- 回答这类非制作请求时，先完整回应用户问的内容；不要立刻收集使用场景、受众、页数、风格等 PPT 制作字段。",
-    "- 只有用户明确表示要开始制作、整理成 PPT、继续排版、导出或修改已有页面时，才进入对应阶段工具流程。",
-    "- 用户提供网页链接并要求评价、摘要、核验或讨论时，这是非制作问答：直接调用 WebSearch，以完整 URL 或页面标题为 query 获取可核验内容；不创建持久化 Task，也不要在尚未调用工具前声称无法访问链接。",
-    "- 不要声称“刚才已经讲解/已经完成/已经创建”任何尚未在当前会话真实发生的内容；若用户指出漏答，先承认并补上答案。",
-    "- 可以在讲解末尾轻轻承接一句“之后可以基于这个内容做 PPT”，但不能用它替代本次讲解。",
-  ].join("\n");
-}
-
-function buildVisualAssetContract(stage: PromptStage): string {
-  if (stage === "discover" || stage === "author" || stage === "export") return "";
-  return [
-    "",
-    "## 图片使用闭环（必须执行）",
-    "",
-    "- ReadPresentationSnapshot 会返回 visualAssetAudit。出现 missing-required 或 missing-recommended 时，不要只建议配图：调用 SearchSlideImages(slideId)，选择语义最相关且有来源页的候选，再直接调用 InsertSlideImage，最后把返回 commands 纳入 SubmitCommands。",
-    "- SearchSlideImages 默认优先免费图库；InsertSlideImage 是 Core Tool，无需 SearchExtraTools / ExecuteExtraTool。",
-    "- image-grid、case/evidence 必须有真实图片；editorial-hero、editorial-split 建议有主视觉。若不准备配图，就改用不依赖图片的 grammar/layout。",
-    "- 一张图片默认只使用一次；不得把同一 URL 复制到多页。图片必须与该页核心论点直接相关，不用泛化握手照、随机办公照填空。",
-    "- 搜索候选不等于自动获得授权。保留 provider/sourcePageUrl；license 未核实时可以保留 warning，但不得声称已获商用授权。",
-    "- layout-plan 中的 insert-image enhancement 会被 ExecuteLayoutPlan 自动本地化并编译进同一 command proposal，不要再次重复插入。",
-  ].join("\n");
-}
-
-function buildLeadAgentContract(): string {
-  return [
-    "",
-    "## Lead Agent 职责边界",
-    "",
-    "- 你的核心身份是 **lead/orchestrator**：识别意图、判断阶段、维护持久化 Task、验收 teammate 产物、收敛交付。",
-    "- 不亲自承担完整写作、分镜、排版设计或大段重写；这些 workspace 中间产物建为 `executionTarget=teammate` 的任务，由常驻 teammate 自主认领。",
-    "- 复杂任务按需逐个调用 `TaskCreate` 建立持久化任务；依赖在取得 ID 后用 `TaskUpdate(dependencyChanges)` 建立。",
-    "- Task 的 status、owner、依赖、review 相互独立：认领用 `TaskClaim`，开始执行再用 `TaskUpdate(in_progress)`，不要从普通工具结果推导进度。",
-    "- 阶段切换、用户说“继续”或恢复时，先依据 Workspace Artifact State 和 `TaskList` / `TaskGet` 读取持久化事实。",
-    "- 创建计划时每步必须标记 executionTarget：workspace 文件写作/设计用 `teammate`；用户决策、SubmitCommands、ExecuteLayoutPlan、最终验收用 `lead`。",
-    "- teammate 节点 description 必须自包含：写清输入产物、目标路径、验收标准和禁止事项；worker 不依赖 lead 的私有聊天上下文。",
-    "- 主 Agent 可以直接执行的工作限于：非制作问答、轻量单页/小范围改动、读取上下文、用户追问、结果验收，以及通过 `ExecuteLayoutPlan` 把已冻结 layout-plan 转成最终 command proposal。",
-    "- teammate 使用 `TaskReviewRequest` 请求验收；检查产物后调用 `TaskReviewApprove`，不满足则调用 `TaskReviewReject`。",
-    "- 只有 approved 后原子进入 completed 并解锁下游；验收前不要解除依赖。",
-    "- 简单任务保持轻量：能一次读取并 SubmitCommands 的局部修改，无需创建 Task。",
-  ].join("\n");
-}
-
-function buildCorePrinciples(stage: PromptStage, stepLimits?: AgentStepLimits): string {
-  const shared = [
-    "你是一个专业的 PPT 智能助手 (PPT Agent)，也是演示创作流程的 lead/orchestrator。帮助用户创作**可用**的演示文稿。",
-    buildIntentFirstContract(),
-    buildLeadAgentContract(),
-    buildVisualAssetContract(stage),
-    "",
-    "## 阶段原则",
-    "",
-    `- **当前阶段**：${describePromptStage(stage)}（\`${stage}\`）`,
-    buildWorkflowOverview(stage),
-    buildConvergenceContract(stage),
-    "- **两阶段建稿**：先内容草稿（author），再视觉排版（design → style）。author 阶段不写主题/版式命令。",
-    "- **幻灯片写入**：改动经 `SubmitCommands`；读现状用 `ReadPresentationSnapshot` / `ReadCurrentSlide` / `ListSlides`。",
-    "- **自主领取**：workspace 中间产物建为 teammate 任务并保持未认领；watcher 独立消费可执行任务。",
-    "- **任务协议**：复杂任务用 `TaskCreate` / `TaskUpdate` 显式维护；claim 只认领，review 工具负责验收。",
-    "- **技能**：仅加载当前阶段目录中的技能；`LoadSkill` 在错误阶段会被拒绝。",
-    buildStepBudgetLine(stepLimits),
-  ];
-
-  const stageRules: Record<PromptStage, string[]> = {
-    discover: [
-      "",
-      "### 本阶段（discover = 路径 + 规划）",
-      "- 若用户是在提问、要求讲解、讨论主题，或明确说先不做 PPT：直接回答问题，不进入需求收集。",
-      "- 判断轻量 / 两阶段 / 完整路径；不要默认走全流程。",
-      "- 轻量单页修改 → 可跳过 discover，直接 edit。",
-      "- 完整路径：按需用 `TaskCreate` 建立 3–5 个任务，再用 `TaskUpdate(dependencyChanges)` 建立依赖；每项显式提供 executionTarget 和 completionPolicy。",
-      "- 聚焦目的、受众、页数、叙事结构；只保留一套可执行大纲，**不讨论设计系统、版式节奏、set-design-system**。",
-      "- 文案可完整表达观点；字数精简留到 style 阶段。",
-    ],
-    author: [
-      "",
-      "### 本阶段（author = 内容 + 等待排版选择）",
-      "- 如果本轮来自用户“继续”或 compact 恢复，先使用 Workspace Artifact State / TaskList 确认已有任务与冻结产物。",
-      "- **大纲/分镜已冻结**：若存在 outline.md 或 storyboard.json，按其页数与顺序逐页创作；不要增删页、合并页或重排章节。",
-      "- **充分写内容**：要点可完整表达；信息准确优先。",
-      "- **按单页承载量组织**：每页 1 个主论点、3–4 条要点；流程类 2–4 步；案例类 1 段叙述 + 1 个关键数字。",
-      "- 若尚无冻结分镜且内容明显超载，可在 author 内拆页；若已有 outline/storyboard，保持页数，用更短句收敛。",
-      "- **内容规范化**：提交排版前统一标题语气、术语、数字口径和每页信息密度；仍然不改变页数与叙事顺序。",
-      "- 只 `add-slide` + text elements + layout 字段；**禁止** `set-design-system`、`update-slide-layout`。",
-      "- 标题放 `slide.title`；画布不放 fontSize≥36 的标题文本。",
-      "- 草稿完成后 message 含「内容草稿已就绪，请选择排版方式」——此时仍属 author，不提交 designSystem/layout。",
-      "- **不要** LoadSkill 排版/主题/美化类技能。",
-    ],
-    design: [
-      "",
-      "### 本阶段（design = 已确认排版后的 layout-plan + 首次执行）",
-      "- **页数与文案已冻结**：以 ReadPresentationSnapshot 为准；不改写、不增删页。",
-      "- layout-plan 的 slides[] 必须与当前 snapshot 一一对应：相同 slideId、相同页数、相同顺序。",
-      "- LoadSkill `ppt-design-layout`；layout-plan 对应 teammate 任务由常驻 worker 自主领取并产出 `slides/layout-plan.json`。",
-      "- 随后 LoadSkill `ppt-layout`（Executor）并继续执行，不要停在 layout-plan 产物说明。",
-      "- 必须调用 `ExecuteLayoutPlan` 读取、校验并执行 `slides/layout-plan.json`；不要手写 `set-design-system` / `update-slide-layout` 来重猜版式。",
-      "- layout-plan 若包含 insert-image，ExecuteLayoutPlan 会自动插图；验收 plan 时拒绝没有图片 enhancement 的 image-grid / case-evidence 页面。",
-      "- **不要再次输出**「内容草稿已就绪 / 请选择排版方式」；用户已经完成排版方式选择。",
-      "- 如果 `ExecuteLayoutPlan` 报错，修复或重新生成 layout-plan 后再调用它；不要从聊天上下文自由发挥版式。",
-    ],
-    style: [
-      "",
-      "### 本阶段（style = 视觉排版 + 质检）",
-      "- 按 layout-plan 执行：优先调用 `ExecuteLayoutPlan`，由工具生成 `set-design-system` → `update-slide-layout` → variant。",
-      "- **结构仍冻结**：不新增、删除、重排页面；只在溢出或过长时用 `ppt-beautify` / `compress-text` 做最小文案精简。",
-      "- plan 中 insert-image 由 ExecuteLayoutPlan 自动执行；其他 enhancements 才经 ExecuteExtraTool。完成后 LoadSkill `deck-review` 或 `ValidateDeckLayout`。",
-      "- **首次排版 SubmitCommands 后**，系统自动渲染缩略图回喂一轮视觉质检；对照后修正或确认再提交。",
-      "- **Core 工具**：`PreviewSlide`、`ValidateDeckLayout` 可直接调用。",
-    ],
-    edit: [
-      "",
-      "### 本阶段（edit = 轻量修改）",
-      "- ReadPresentationSnapshot → 直接 SubmitCommands 改目标页。",
-      "- 无需持久化 Task、discover/design 全链路；已有主题的 deck 小改专用。",
-      "- 用户要求配图/换图或 visualAssetAudit 缺图时：SearchSlideImages → InsertSlideImage → SubmitCommands。",
-    ],
-    export: [
-      "",
-      "### 本阶段（export）",
-      "- 可选 `deck-review` 后 LoadSkill `ppt-export`。",
-    ],
-  };
-
-  return [...shared, ...stageRules[stage]].join("\n");
-}
-
-function buildWorkflowSnippet(stage: PromptStage): string {
-  const snippets: Partial<Record<PromptStage, string>> = {
-    discover: `## 本阶段工作流
-0. 非制作请求（讲解/问答/讨论/先不做 PPT）→ 直接输出 Markdown 文本
-1. 判断场景：改一页 → edit；新建 ≤10 页 → author；大型/要先规划 → discover 全流程
-2. **多阶段(≥3 步)或完整路径**：用 \`TaskCreate\` 建任务并用 \`TaskUpdate\` 建依赖；按 owner/status/review 专用命令推进
-3. LoadSkill \`ppt-brief\` → outline → storyboard（按需）
-4. **不写主题/版式命令**`,
-
-    author: `## 本阶段工作流
-1. LoadSkill \`ppt-build\`（规范参考）
-2. ReadPresentationSnapshot
-3. SubmitCommands：add-slide（layout + text elements），**不含** set-design-system / update-slide-layout
-4. message 结尾：「内容草稿已就绪，请选择排版方式」`,
-
-    design: `## 本阶段工作流
-1. ReadPresentationSnapshot
-2. LoadSkill \`ppt-design-layout\`
-3. 等待 layout-plan teammate 节点自主领取并提交 slides/layout-plan.json（一页一条，不改文案）
-4. LoadSkill \`ppt-layout\`（Executor）
-5. ExecuteLayoutPlan：读取 layout-plan → 校验 → 生成 command proposal
-6. 不再提示用户选择排版方式`,
-
-    style: `## 本阶段工作流
-1. ReadPresentationSnapshot + 读取 layout-plan
-2. LoadSkill \`ppt-layout\`（Executor）
-3. ExecuteLayoutPlan：从 layout-plan 生成 set-design-system / update-slide-layout / variant 命令
-4. 检查 visualAssetAudit；缺图时 SearchSlideImages → InsertSlideImage
-5. PreviewSlide / ValidateDeckLayout / deck-review
-6. 过长文案：ExecuteExtraTool compress-text / beautify 等`,
-
-    edit: `## 本阶段工作流
-1. ReadPresentationSnapshot
-2. SubmitCommands 直接修改
-3. 简短 message`,
-
-    export: `## 本阶段工作流
-1. deck-review（建议）
-2. LoadSkill \`ppt-export\``,
-  };
-
-  const snippet = snippets[stage];
-  return snippet ? `\n${snippet}\n` : "";
-}
-
-export function buildIdentitySection(input: IdentitySectionInput): string {
-  return `${buildCorePrinciples(input.stage, input.stepLimits)}
-${buildWorkflowSnippet(input.stage)}`;
-}
-
-export function buildResponseProtocolSection(input: ResponseProtocolSectionInput): string {
-  const outcomeBlock = buildRequiredOutcomeBlock(input.requiredOutcome);
-  return `${buildContentBlockResponseGuidance()}${outcomeBlock ? `\n\n${outcomeBlock}` : ""}`;
+- 建议阶段：\`${input.stage}\`（${describePromptStage(input.stage)}）
+- 阶段语义：仅用于排序相关 Skill 和解释现有产物；模型可以根据证据跨阶段选择能力。
+- 步骤预算：${budget}${requiredOutcome}`;
 }
 
 export function buildToolsSection(input: ToolsSectionInput): string {
-  const catalog = filterSkillCatalogForStage(
+  const skillLoaders = input.enabledTools
+    .filter((tool) => tool.behavior?.capabilities?.includes("skill_load"));
+  const catalog = rankSkillCatalogForStage(
     input.skillCatalog ?? [],
     input.stage,
     input.skillRegistry,
   );
-
-  const toolsDescription = input.enabledTools
+  const skills = catalog.length > 0
+    ? catalog.map((skill) => {
+        const entry = input.skillRegistry?.get(skill.name);
+        const recommended = isSkillRecommendedForStage(skill.name, input.stage, entry)
+          ? " [当前上下文推荐]"
+          : "";
+        const whenToUse = skill.whenToUse ? ` | 适用: ${skill.whenToUse}` : "";
+        return `- \`${skill.name}\`${recommended}: ${skill.description}${whenToUse}`;
+      }).join("\n")
+    : "（没有已注册 Skill）";
+  const tools = input.enabledTools
     .map((tool) => JSON.stringify(toToolCard(tool)))
     .join("\n");
+  const skillLoadingGuidance = skillLoaders.length > 0
+    ? `目录会把当前上下文相关项排在前面，但任何已注册 Skill 都可以在确有需要时通过 ${
+        formatToolNames(skillLoaders)
+      } 加载。`
+    : "目录会把当前上下文相关项排在前面，任何已注册 Skill 都保留在目录中；只有实际工具清单提供加载能力时才能展开全文。";
+  const guidance = [
+    "- 用最直接的能力完成任务，不要为了遵守阶段模板而制造额外 Task、文件或模型轮次。",
+  ];
+  const availableFileTools = input.enabledTools.filter((tool) =>
+    tool.permission?.effects.some((effect) =>
+      effect === "workspace.read" || effect === "workspace.write"
+    ));
+  if (availableFileTools.length > 0) {
+    guidance.push(
+      `- Workspace 文件能力（${formatToolNames(availableFileTools)}）受统一沙箱与版本协议保护；修改既有文件前先读取，冲突时重新读取后再编辑。`,
+    );
+  }
+  const proposalTools = input.enabledTools.filter((tool) =>
+    tool.behavior?.capabilities?.includes("command_proposal")
+  );
+  if (proposalTools.length > 0) {
+    guidance.push(
+      `- ${formatToolNames(proposalTools)} 产生受审的 Presentation proposal；不能绕过 CommitGate。`,
+    );
+  }
+  const discoveryTools = input.enabledTools.filter((tool) =>
+    tool.behavior?.capabilities?.includes("tool_discovery")
+  );
+  const delegationTools = input.enabledTools.filter((tool) => tool.behavior?.delegation);
+  if (discoveryTools.length > 0) {
+    guidance.push(`- ${formatToolNames(discoveryTools)} 只发现当前 Query 可用的可选增强能力。`);
+  }
+  if (delegationTools.length > 0) {
+    guidance.push(
+      `- ${formatToolNames(delegationTools)} 只路由本 Query 已发现且仍可用的能力；目标仍经过统一权限和执行管线。`,
+    );
+  }
+  if (skillLoaders.length > 0) {
+    guidance.push(`- ${formatToolNames(skillLoaders)} 可加载任意已注册 Skill；阶段匹配只影响推荐顺序。`);
+  }
+  const interactionTools = input.enabledTools.filter((tool) =>
+    tool.behavior?.capabilities?.includes("user_interaction")
+  );
+  if (interactionTools.length > 0) {
+    guidance.push(`- 只有涉及会实质改变结果的用户决策时才调用 ${formatToolNames(interactionTools)}。`);
+  }
 
-  return `## Available Skills（阶段 \`${input.stage}\`）
+  return `## Available Skills
 
-${formatSkillCatalog(catalog)}
+Skill 是按需加载的知识，不是固定工作流。${skillLoadingGuidance}
+
+${skills}
 
 ## Core Tools
 
-${toolsDescription}
+以下清单来自本次 Query 的实际工具解析结果；未列出的工具不可直接调用。
 
-- 复杂子任务统一进入持久化 Task；workspace 节点由 teammate watcher 自主领取。
-- \`ExecuteLayoutPlan\`：读取并校验 \`slides/layout-plan.json\`，再生成受控 command proposal；排版执行默认用它。
-- \`Task*\`：职责分离的持久化任务协议（\`.tasks/<taskListId>/tasks.json\`）。
-- \`LoadSkill\`：仅加载上方目录中的技能；其他技能在本阶段不可用。
-- \`PreviewSlide\` / \`ValidateDeckLayout\`：排版与质检 Core 工具，可直接调用。
-- \`SearchSlideImages\` → \`InsertSlideImage\`：缺图时的标准闭环；两者均为 Core Tool，不要通过 SearchExtraTools 查找。
-- \`SearchExtraTools\` + \`ExecuteExtraTool\`：美化/压缩等增强能力（非必需）。
-- \`AskUser\`：仅询问用户决策项，不问工具名或系统实现。问题正文放 \`message\`；可选界面配置放 \`responseUi\`，必须直接传对象，禁止 JSON.stringify。`;
-}
+${tools}
 
-function workspaceFilesForStage(stage: PromptStage): string[] {
-  const contentOnlyStages: PromptStage[] = ["discover", "author", "edit"];
-  if (contentOnlyStages.includes(stage)) {
-    return WORKSPACE_FILES_CONTENT;
-  }
-  return [...WORKSPACE_FILES_CONTENT, ...WORKSPACE_FILES_LAYOUT];
-}
+## Tool Selection
 
-function commandExamplesForStage(stage: PromptStage): string {
-  if (stage === "discover" || stage === "author") {
-    return `- 创建幻灯片：{"id":"cmd-slide-1","type":"add-slide","slide":{"id":"slide-1","title":"页面标题","layout":"concept","elements":[...]},"index":0}
-- 设置页标题：在 slide.title 字段，不要用大字号 text 元素`;
-  }
-
-  if (stage === "design") {
-    return `- 先产出 slides/layout-plan.json，再调用 ExecuteLayoutPlan，不回到排版选择
-- 执行唯一事实源：{"toolName":"ExecuteLayoutPlan","args":{"path":"slides/layout-plan.json"}}
-- 不手写 set-design-system / update-slide-layout；这些命令由 ExecuteLayoutPlan 从 plan 生成`;
-  }
-
-  if (stage === "style") {
-    return `- 执行唯一事实源：{"toolName":"ExecuteLayoutPlan","args":{"path":"slides/layout-plan.json"}}
-- ExecuteLayoutPlan 成功后会生成 set-design-system / update-slide-layout / update-slide-variant
-- 视觉自检：PreviewSlide(slideId) / ValidateDeckLayout()
-设计系统由 DesignSystemV1 提供；不要生成旧 theme/palette 参数。
-布局值：cover、section、concept、comparison、process、architecture、case、summary、toc、quote、image-grid。`;
-  }
-
-  return `- 读现状：ReadPresentationSnapshot
-- 改内容或版式：按当前阶段选择 add-slide 或 update-slide-layout`;
+${guidance.join("\n")}`;
 }
 
 function formatArtifactState(artifacts?: WorkspaceArtifacts): string {
-  if (!artifacts) return "";
-
+  if (!artifacts) return "（未探测 Workspace 产物）";
   const format = (ready: boolean) => ready ? "verified" : "missing/unverified";
-  return `## Workflow Artifact State
-
-- brief.md: ${format(artifacts.brief)}
-- outline.md: ${format(artifacts.outline)}
-- slides/storyboard.json: ${format(artifacts.storyboard)}
-- slides/layout-plan.json: ${format(artifacts.layoutPlan)}
-
-Use this filesystem-derived state as the source of truth after context compaction. Skip artifacts that are already verified unless the user explicitly asks to regenerate them.`;
+  return [
+    `- brief.md: ${format(artifacts.brief)}`,
+    `- outline.md: ${format(artifacts.outline)}`,
+    `- slides/storyboard.json: ${format(artifacts.storyboard)}`,
+    `- slides/layout-plan.json: ${format(artifacts.layoutPlan)}`,
+  ].join("\n");
 }
 
 export function buildWorkspaceSection(input: WorkspaceSectionInput): string {
-  const workspaceLine = input.workspaceRoot
-    ? input.workspaceRoot
-    : "未配置（轻量路径，无需 workspace 文件）";
-
-  const files = workspaceFilesForStage(input.stage);
-
   return `## Workspace
 
-工作目录: ${workspaceLine}
-阶段: \`${input.stage}\`
+- 工作目录: ${input.workspaceRoot ?? "未配置"}
+- 活跃幻灯片 ID: ${input.currentSlideId ?? "未选择"}
+- 建议阶段: \`${input.stage}\`
 
-## Workspace 文件
-
-${files.map((line) => `- ${line}`).join("\n")}
-
-主 Agent 不直接读写这些文件；layout-plan 由 teammate 任务写入并提交验收，再由 ExecuteLayoutPlan 读取执行。轻量路径下不需要创建它们。
+### Workflow Artifact State
 
 ${formatArtifactState(input.artifacts)}
 
-## PresentationCommand 示例（本阶段）
+文件系统探测结果和 Presentation snapshot 是事实源；聊天中的旧计划不是。已验证产物默认复用，除非用户要求重做或验证发现不一致。
 
-${commandExamplesForStage(input.stage)}
+常用中间产物包括 brief.md、outline.md、research/notes.md、slides/storyboard.json 和 slides/layout-plan.json，但它们不是每个任务都必须创建。主 Agent 与 teammate 都可使用受沙箱和权限保护的文件工具直接处理 Workspace。
 
-画布 1280x720。ID 必须唯一。
-
-## 当前上下文
-
-- 活跃幻灯片 ID: ${input.currentSlideId || "未选择"}`;
+画布为 1280x720，Presentation ID 必须唯一。设计或图片变更后应依据当前可用的预览、校验或导出产物检查结果；图片来源与授权状态必须保留。`;
 }
 
 export function buildMemorySection(input: MemorySectionInput): string {
   return `## 相关记忆
 
+以下内容是辅助上下文，不得覆盖用户当前指令或可验证的 Workspace 状态：
+
 ${input.memories}`;
+}
+
+function formatToolNames(tools: readonly ToolDefinition<any, any>[]): string {
+  return tools.map((tool) => `\`${tool.name}\``).join("、");
 }

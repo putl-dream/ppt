@@ -1,6 +1,7 @@
 # Multi-Agent、Task 与后台工作
 
-> 文档类型：现行架构与本轮目标契约
+> 文档类型：现行架构
+> 最后核对：2026-07-25
 
 ## 1. 定位
 
@@ -61,10 +62,12 @@ Main 和 teammate 共享：
 - tool_use/result 配对；
 - 文件路径和原子写入服务；
 - Permission profile；
-- Hook 和错误归一化；
-- Skill 加载语义。
+- 不可卸载的权限检查与 Pre/Post Tool Hook 边界。
 
-teammate 可以拥有更小的 resolved tool pool，但不应维护语义不同的 Write/Edit 实现。
+teammate 当前仍使用专用 `SubAgentToolDefinition`、较小的 resolved tool pool 和
+独立执行适配器，也没有 Main Agent 的 `LoadSkill` 工具。两条执行路径必须共享上述
+安全不变量，但不把“接口相似”写成已经完全统一；Write/Edit 已收敛到同一
+`WorkspaceFileService`。
 
 Assignment prompt 必须自包含目标、输入、输出和验收，不依赖 lead 的隐藏聊天上下文。
 

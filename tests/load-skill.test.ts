@@ -98,7 +98,7 @@ describe("load_skill two-layer design", () => {
     const prompt = SystemPromptBuilder.build({
       request: "写幻灯片",
       presentation: createStarterPresentation(),
-      coreTools: [askUserTool],
+      coreTools: [askUserTool, loadSkillTool],
       skillCatalog: registry.listCards(),
       skillRegistry: registry,
       stageHint: "author",

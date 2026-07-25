@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { ToolDefinition } from "../tool-definition";
-import { formatSkillStageRejection, isSkillAllowedForStage } from "../../runtime/prompts/skill-stage-policy";
+import { isSkillRecommendedForStage } from "../../runtime/prompts/skill-stage-policy";
 
 export const loadSkillSchema = z.object({
   skillName: z.string().describe("Registered skill name from the Available Skills catalog"),
@@ -22,10 +22,13 @@ export interface LoadSkillResult {
 export const loadSkillTool: ToolDefinition<typeof loadSkillSchema, LoadSkillResult> = {
   name: "LoadSkill",
   description:
-    "Load full instructions for a registered skill. Only call when entering a stage that needs it—not for simple slide edits.",
+    "Load full instructions for any registered skill when its specialized knowledge helps the current task.",
   category: "core",
   loadPolicy: "core",
   inputSchema: loadSkillSchema,
+  behavior: {
+    capabilities: ["skill_load"],
+  },
   risk: "low",
   execute: async (args, context) => {
     const registry = context.skillRegistry;
@@ -35,21 +38,16 @@ export const loadSkillTool: ToolDefinition<typeof loadSkillSchema, LoadSkillResu
 
     const entry = registry.get(args.skillName);
     if (!entry) {
-      const stage = context.promptStage ?? "discover";
-      const available = registry.listCards()
-        .filter((card) => isSkillAllowedForStage(card.name, stage, registry.get(card.name)))
-        .map((card) => card.name);
+      const available = registry.listCards().map((card) => card.name);
       throw new Error(
         available.length > 0
-          ? `Unknown skill '${args.skillName}'. Available in stage '${stage}': ${available.join(", ")}`
+          ? `Unknown skill '${args.skillName}'. Registered skills: ${available.join(", ")}`
           : `Unknown skill '${args.skillName}'. No skills are registered.`,
       );
     }
 
     const stage = context.promptStage ?? "discover";
-    if (!isSkillAllowedForStage(entry.name, stage, entry)) {
-      throw new Error(formatSkillStageRejection(entry.name, stage, entry));
-    }
+    const recommended = isSkillRecommendedForStage(entry.name, stage, entry);
 
     const alreadyLoaded = context.skillSession?.loadedSkillNames.has(entry.name) ?? false;
     context.skillSession?.loadedSkillNames.add(entry.name);
@@ -62,7 +60,9 @@ export const loadSkillTool: ToolDefinition<typeof loadSkillSchema, LoadSkillResu
       alreadyLoaded,
       guidance: alreadyLoaded
         ? "Skill already loaded. Follow it; keep tool use minimal."
-        : "Follow the skill above. Persist delegated workspace work with TaskCreate teammate tasks; prefer direct action over extra reads.",
+        : recommended
+          ? "This skill matches the current context. Apply only the parts relevant to the user's task."
+          : `This skill is not normally suggested for '${stage}', but it is available. Apply it only where the current task requires it.`,
     };
   },
 };

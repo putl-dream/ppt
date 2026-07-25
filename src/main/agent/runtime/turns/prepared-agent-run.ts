@@ -5,7 +5,10 @@ import type {
   AgentModelGateway,
   AgentToolSchema,
 } from "../../gateway/types";
-import type { ToolContext } from "../../tools/tool-definition";
+import type {
+  ToolContext,
+  ToolRuntimeCapability,
+} from "../../tools/tool-definition";
 import type { AgentRendererEvent } from "../lifecycle/agent-event-ports";
 import type { AgentRunScope } from "../lifecycle/agent-run-scope";
 import {
@@ -21,6 +24,8 @@ import type { AgentRuntimeStreamEvent } from "../runtime-types";
 import { AgentQueryAssembler } from "../query/agent-query-assembler";
 import {
   createInitialQueryState,
+  type AgentQueryContinue,
+  type AgentQueryLoopEvent,
   type AgentIterationWorkspace,
   type AgentQueryParams,
   type AgentQueryState,
@@ -37,7 +42,7 @@ export interface AgentLoopTerminalOutcome {
 
 export type AgentLoopTurnOutcome =
   | AgentLoopTerminalOutcome
-  | { type: "continue" }
+  | { type: "continue"; reason?: AgentQueryContinue["reason"] }
   | { type: "tool_batch" };
 
 export interface PreparedAgentQueryDeps {
@@ -52,7 +57,9 @@ export interface PreparedAgentQueryDeps {
   requiredOutcome?: "any" | "command_proposal";
   requestToolApproval?: ToolApprovalHandler;
   onStreamEvent?: (event: AgentRuntimeStreamEvent) => void;
+  onQueryEvent?: (event: AgentQueryLoopEvent) => void;
   onThinkingChunk?: (chunk: string, modelStep: number) => void;
+  capabilityToolNames: Readonly<Partial<Record<ToolRuntimeCapability, readonly string[]>>>;
 }
 
 /** Prepared, invocation-scoped dependencies consumed by the stable loop and turn runners. */
@@ -79,6 +86,13 @@ export class PreparedAgentRun {
   }) {
     const { options } = input.scope;
     const exposedToolNames = new Set(input.toolSchemas.map((schema) => schema.name));
+    const capabilityToolNames: Partial<Record<ToolRuntimeCapability, string[]>> = {};
+    for (const tool of input.context.registry.getCoreTools(input.context)) {
+      if (!exposedToolNames.has(tool.name)) continue;
+      for (const capability of tool.behavior?.capabilities ?? []) {
+        (capabilityToolNames[capability] ??= []).push(tool.name);
+      }
+    }
     this.params = new AgentQueryAssembler().assemble({
       options,
       messages: input.scope.initialMessages,
@@ -98,7 +112,9 @@ export class PreparedAgentRun {
         requiredOutcome: options.requiredOutcome,
         requestToolApproval: options.requestToolApproval,
         onStreamEvent: options.onStreamEvent,
+        onQueryEvent: options.onQueryEvent,
         onThinkingChunk: options.onThinkingChunk,
+        capabilityToolNames,
       },
     });
     this.initialState = createInitialQueryState(

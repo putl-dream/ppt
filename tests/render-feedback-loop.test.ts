@@ -83,13 +83,16 @@ describe("layout-command-utils", () => {
 });
 
 describe("render-feedback-loop", () => {
-  it("offers feedback only once in layout stages with visual commands", () => {
+  it("offers feedback once for actual visual commands regardless of stage hint", () => {
     const commands: PresentationCommand[] = [
       { id: "c1", type: "update-slide-layout", slideId: "s1", layout: "cover" },
     ];
     expect(shouldOfferRenderFeedback("style", commands, false)).toBe(true);
     expect(shouldOfferRenderFeedback("style", commands, true)).toBe(false);
-    expect(shouldOfferRenderFeedback("author", commands, false)).toBe(false);
+    expect(shouldOfferRenderFeedback("author", commands, false)).toBe(true);
+    expect(shouldOfferRenderFeedback("style", [
+      { id: "c2", type: "set-presentation-title", title: "Title" },
+    ], false)).toBe(false);
   });
 
   it("builds structured feedback without thumbnails outside Electron", async () => {

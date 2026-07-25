@@ -3,6 +3,9 @@ import { z } from "zod";
 import { AgentRuntime } from "../src/main/agent/runtime/agent-runtime";
 import { ToolRegistry } from "../src/main/agent/tools/tool-registry";
 import { askUserTool } from "../src/main/agent/tools/core/ask-user";
+import { executeExtraToolTool } from "../src/main/agent/tools/core/execute-extra-tool";
+import { executeLayoutPlanTool } from "../src/main/agent/tools/core/execute-layout-plan";
+import { searchExtraToolsTool } from "../src/main/agent/tools/core/search-extra-tools";
 import type {
   AgentModelContentBlock,
   AgentModelGateway,
@@ -14,6 +17,11 @@ import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DurableRunStore } from "../src/main/agent/persistence/durable-run-store";
+import type { AgentQueryLoopEvent } from "../src/main/agent/runtime/query/query-types";
+import {
+  agentCommandProposalResultSchema,
+  type AgentCommandProposalResult,
+} from "../src/main/agent/runtime/runtime-types";
 
 function gatewayFor(turns: AgentModelContentBlock[][]): AgentModelGateway & {
   requests: AgentModelRequest[];
@@ -52,6 +60,65 @@ function countingTool(onExecute: () => void): ToolDefinition<any, any> {
 }
 
 describe("agent query loop batches", () => {
+  it("emits semantic query events without exposing loop control to observers", async () => {
+    const events: AgentQueryLoopEvent[] = [];
+    const gateway = gatewayFor([[{ type: "text", text: "done" }]]);
+
+    const result = await new AgentRuntime(new ToolRegistry(), gateway).run({
+      threadId: "query-events",
+      request: "inspect",
+      presentationSnapshot: createStarterPresentation(),
+      selectedElementIds: [],
+      onQueryEvent(event) {
+        events.push(event);
+        if (event.type === "model_turn_completed") {
+          throw new Error("observers cannot stop the query");
+        }
+      },
+    });
+
+    expect(result).toEqual({ type: "message", content: "done" });
+    expect(events.map((event) => event.type)).toEqual([
+      "query_started",
+      "model_turn_completed",
+      "state_committed",
+      "query_completed",
+    ]);
+    expect(events.at(-1)).toMatchObject({
+      type: "query_completed",
+      resultType: "message",
+    });
+  });
+
+  it("emits a query_failed observation before propagating execution errors", async () => {
+    const events: AgentQueryLoopEvent[] = [];
+    const gateway: AgentModelGateway = {
+      async generateText() {
+        throw new Error("provider unavailable");
+      },
+      async *generateTextStream() {
+        throw new Error("provider unavailable");
+      },
+    };
+
+    await expect(new AgentRuntime(new ToolRegistry(), gateway).run({
+      threadId: "query-failed-events",
+      request: "inspect",
+      presentationSnapshot: createStarterPresentation(),
+      selectedElementIds: [],
+      onQueryEvent: (event) => events.push(event),
+    })).rejects.toThrow("provider unavailable");
+
+    expect(events.map((event) => event.type)).toEqual([
+      "query_started",
+      "query_failed",
+    ]);
+    expect(events.at(-1)).toMatchObject({
+      type: "query_failed",
+      error: "provider unavailable",
+    });
+  });
+
   it("passes stable query context and output-token policy to the gateway", async () => {
     const gateway = gatewayFor([[{ type: "text", text: "done" }]]);
 
@@ -122,6 +189,250 @@ describe("agent query loop batches", () => {
       expect.objectContaining({ type: "tool_result", toolUseId: "ask", isError: true }),
       expect.objectContaining({ type: "tool_result", toolUseId: "count", isError: true }),
     ]);
+  });
+
+  it("isolates ExecuteLayoutPlan before execution and pairs every mixed tool_use", async () => {
+    let executions = 0;
+    const registry = new ToolRegistry();
+    registry.register(executeLayoutPlanTool);
+    registry.register(countingTool(() => { executions += 1; }));
+    const gateway = gatewayFor([
+      [
+        {
+          type: "tool_use",
+          id: "layout",
+          name: "ExecuteLayoutPlan",
+          input: {},
+        },
+        {
+          type: "tool_use",
+          id: "count",
+          name: "CountingTool",
+          input: { value: 1 },
+        },
+      ],
+      [{ type: "text", text: "retried separately" }],
+    ]);
+
+    const result = await new AgentRuntime(registry, gateway).run({
+      threadId: "mixed-layout-terminal-batch",
+      request: "execute the layout plan",
+      presentationSnapshot: createStarterPresentation(),
+      selectedElementIds: [],
+    });
+
+    expect(result).toEqual({ type: "message", content: "retried separately" });
+    expect(executions).toBe(0);
+    const pairedResults = gateway.requests[1]!.messages!
+      .filter((message) => message.role === "user")
+      .flatMap((message) => message.content)
+      .filter((block) => block.type === "tool_result");
+    expect(pairedResults).toEqual([
+      expect.objectContaining({ toolUseId: "layout", isError: true }),
+      expect.objectContaining({ toolUseId: "count", isError: true }),
+    ]);
+  });
+
+  it("fail-closes unresolved delegation before a sibling can reveal a terminal target", async () => {
+    let terminalExecutions = 0;
+    let ordinaryExecutions = 0;
+    const terminalSchema = z.object({});
+    const terminalDeferred: ToolDefinition<
+      typeof terminalSchema,
+      AgentCommandProposalResult
+    > = {
+      name: "DeferredTerminal",
+      description: "A dynamically discovered terminal capability.",
+      category: "deferred",
+      loadPolicy: "deferred",
+      inputSchema: terminalSchema,
+      outputSchema: agentCommandProposalResultSchema,
+      behavior: {
+        capabilities: ["command_proposal"],
+        completion: {
+          terminalResult: "command_proposal",
+          expectation: "always",
+          exclusiveBatch: true,
+        },
+      },
+      risk: "low",
+      async execute() {
+        terminalExecutions += 1;
+        return {
+          type: "command_proposal",
+          summary: "Deferred terminal result",
+          commands: [],
+          risk: "low",
+        };
+      },
+    };
+    const registry = new ToolRegistry();
+    registry.register(searchExtraToolsTool);
+    registry.register(executeExtraToolTool);
+    registry.register(terminalDeferred);
+    registry.register(countingTool(() => { ordinaryExecutions += 1; }));
+    const gateway = gatewayFor([
+      [
+        {
+          type: "tool_use",
+          id: "discover",
+          name: "SearchExtraTools",
+          input: { query: "select:DeferredTerminal" },
+        },
+        {
+          type: "tool_use",
+          id: "delegate",
+          name: "ExecuteExtraTool",
+          input: { toolName: "DeferredTerminal", toolArgs: {} },
+        },
+        {
+          type: "tool_use",
+          id: "ordinary",
+          name: "CountingTool",
+          input: { value: 1 },
+        },
+      ],
+      [{ type: "text", text: "retried with isolated delegation" }],
+    ]);
+
+    const result = await new AgentRuntime(registry, gateway).run({
+      threadId: "dynamic-delegation-terminal-batch",
+      request: "discover and execute the optional terminal capability",
+      presentationSnapshot: createStarterPresentation(),
+      selectedElementIds: [],
+    });
+
+    expect(result).toEqual({
+      type: "message",
+      content: "retried with isolated delegation",
+    });
+    expect(terminalExecutions).toBe(0);
+    expect(ordinaryExecutions).toBe(0);
+    const pairedResults = gateway.requests[1]!.messages!
+      .filter((message) => message.role === "user")
+      .flatMap((message) => message.content)
+      .filter((block) => block.type === "tool_result");
+    expect(pairedResults).toEqual([
+      expect.objectContaining({ toolUseId: "discover", isError: true }),
+      expect.objectContaining({ toolUseId: "delegate", isError: true }),
+      expect.objectContaining({ toolUseId: "ordinary", isError: true }),
+    ]);
+  });
+
+  it("uses definition metadata, not a magic tool name, to terminate with ask_user", async () => {
+    const schema = z.object({ question: z.string() });
+    const resultSchema = z.object({
+      type: z.literal("ask_user"),
+      content: z.string(),
+    });
+    const renamedTerminalTool: ToolDefinition<
+      typeof schema,
+      z.infer<typeof resultSchema>
+    > = {
+      name: "RequestMissingDecision",
+      description: "Request a missing user decision.",
+      category: "core",
+      loadPolicy: "core",
+      inputSchema: schema,
+      outputSchema: resultSchema,
+      behavior: {
+        capabilities: ["user_interaction"],
+        completion: {
+          terminalResult: "ask_user",
+          expectation: "always",
+          exclusiveBatch: true,
+        },
+      },
+      risk: "low",
+      async execute(args) {
+        return { type: "ask_user", content: args.question };
+      },
+    };
+    const registry = new ToolRegistry();
+    registry.register(renamedTerminalTool);
+    const gateway = gatewayFor([[
+      {
+        type: "tool_use",
+        id: "renamed-terminal",
+        name: renamedTerminalTool.name,
+        input: { question: "Which audience should I target?" },
+      },
+    ]]);
+
+    const result = await new AgentRuntime(registry, gateway).run({
+      threadId: "metadata-terminal-tool",
+      request: "ask for the audience",
+      presentationSnapshot: createStarterPresentation(),
+      selectedElementIds: [],
+    });
+
+    expect(result).toEqual({
+      type: "ask_user",
+      content: "Which audience should I target?",
+    });
+  });
+
+  it("derives required-outcome guidance from registered capability metadata", async () => {
+    const schema = z.object({});
+    const renamedProposalTool: ToolDefinition<
+      typeof schema,
+      AgentCommandProposalResult
+    > = {
+      name: "CompletePresentationAction",
+      description: "Complete a presentation action.",
+      category: "core",
+      loadPolicy: "core",
+      inputSchema: schema,
+      outputSchema: agentCommandProposalResultSchema,
+      behavior: {
+        capabilities: ["command_proposal"],
+        completion: {
+          terminalResult: "command_proposal",
+          expectation: "always",
+          exclusiveBatch: true,
+        },
+      },
+      risk: "low",
+      async execute() {
+        return {
+          type: "command_proposal",
+          summary: "Update title",
+          commands: [{
+            id: "metadata-title",
+            type: "set-presentation-title",
+            title: "Metadata-driven completion",
+          }],
+          risk: "low",
+        };
+      },
+    };
+    const registry = new ToolRegistry();
+    registry.register(renamedProposalTool);
+    const gateway = gatewayFor([
+      [{ type: "text", text: "I will do that later." }],
+      [{
+        type: "tool_use",
+        id: "renamed-proposal",
+        name: renamedProposalTool.name,
+        input: {},
+      }],
+    ]);
+
+    const result = await new AgentRuntime(registry, gateway).run({
+      threadId: "metadata-required-capability",
+      request: "update title",
+      presentationSnapshot: createStarterPresentation(),
+      selectedElementIds: [],
+      requiredOutcome: "command_proposal",
+    });
+
+    expect(result.type).toBe("command_proposal");
+    const followUp = gateway.requests[1]!.messages!
+      .flatMap((message) => message.role === "user" ? message.content : [])
+      .filter((block) => block.type === "text")
+      .map((block) => block.text)
+      .join("\n");
+    expect(followUp).toContain(renamedProposalTool.name);
   });
 
   it("counts a complete multi-tool batch as one agentic turn", async () => {

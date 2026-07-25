@@ -127,6 +127,67 @@ describe("TaskStore v1 contract", () => {
     expect(await store.getTask("1")).toMatchObject({ status: "pending", revision: 1 });
   });
 
+  it("keeps an owner busy while their current task is still executing", async () => {
+    const { store, lead, teammate } = await fixture();
+    let first = await createTeammateTask(store, lead, "First");
+    const second = await createTeammateTask(store, lead, "Second");
+    first = await store.mutate({
+      type: "claim",
+      taskId: first.task!.id,
+      expectedRevision: first.task!.revision,
+    }, teammate("alice"));
+    await store.mutate({
+      type: "update",
+      taskId: first.task!.id,
+      expectedRevision: first.task!.revision,
+      status: "in_progress",
+    }, teammate("alice"));
+
+    await expect(store.mutate({
+      type: "claim",
+      taskId: second.task!.id,
+      expectedRevision: second.task!.revision,
+    }, teammate("alice"))).rejects.toMatchObject({ code: "OWNER_BUSY" });
+  });
+
+  it("lets an owner claim new work while a retained task awaits review", async () => {
+    const { store, lead, teammate } = await fixture();
+    let first = await createTeammateTask(store, lead, "First");
+    const second = await createTeammateTask(store, lead, "Second");
+    first = await store.mutate({
+      type: "claim",
+      taskId: first.task!.id,
+      expectedRevision: first.task!.revision,
+    }, teammate("alice"));
+    first = await store.mutate({
+      type: "update",
+      taskId: first.task!.id,
+      expectedRevision: first.task!.revision,
+      status: "in_progress",
+    }, teammate("alice"));
+    first = await store.mutate({
+      type: "review_request",
+      taskId: first.task!.id,
+      requestId: "review-first",
+      expectedRevision: first.task!.revision,
+    }, teammate("alice"));
+
+    const claimed = await store.mutate({
+      type: "claim",
+      taskId: second.task!.id,
+      expectedRevision: second.task!.revision,
+    }, teammate("alice"));
+    expect(first.task).toMatchObject({
+      owner: "alice",
+      review: { state: "requested" },
+    });
+    expect(claimed.task).toMatchObject({
+      id: second.task!.id,
+      owner: "alice",
+      status: "pending",
+    });
+  });
+
   it("blocks start, direct completion, and review approval until dependencies complete", async () => {
     const { store, lead, teammate } = await fixture();
     await createLeadTask(store, lead, "blocker");

@@ -59,7 +59,7 @@ async function persistResult<T>(
   const call = safeSegment(options.toolUseId, "call");
   const filePath = join(
     options.workspaceRoot,
-    ".agent",
+    ".task_outputs",
     "tool-results",
     thread,
     `${call}-${tool}-${Date.now()}.json`,

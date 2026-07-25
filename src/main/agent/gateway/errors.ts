@@ -157,6 +157,7 @@ export function isOutputTruncated(stopReason?: string): boolean {
   if (!stopReason) return false;
   const normalized = stopReason.toLowerCase();
   return normalized === "max_tokens"
+    || normalized === "max_output_tokens"
     || normalized === "length"
     || normalized === "model_length"
     || normalized === "output_length";

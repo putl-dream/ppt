@@ -111,6 +111,12 @@ export const previewSlideTool: ToolDefinition<
   category: "core",
   loadPolicy: "core",
   inputSchema: previewSlideSchema,
+  behavior: {
+    background: {
+      isRequested: (args) => args.run_in_background === true,
+      describe: (args) => `PreviewSlide: ${args.slideId}`,
+    },
+  },
   risk: "low",
   execute: async (args, context) => {
     const slide = context.presentation.slides.find((item) => item.id === args.slideId);

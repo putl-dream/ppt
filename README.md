@@ -8,7 +8,7 @@
 ![Vitest](https://img.shields.io/badge/Vitest-3.2-6E9F18?logo=vitest&logoColor=white)
 ![Local First](https://img.shields.io/badge/local--first-desktop-111827)
 
-Agent PPT 是一个本地优先的 AI 演示文稿工作台。它把一句粗糙需求拆成可确认的 Brief、大纲、分镜、内容草稿、排版计划和 PPTX 导出，让模型像一个会交付过程稿的演示设计搭档，而不是一次性吐出不可控的黑箱文件。
+Agent PPT 是一个本地优先的 AI 演示文稿工作台。它会根据任务需要生成可确认的 Brief、大纲、分镜、内容草稿、排版计划或 PPTX，让模型像一个会使用工具并交付证据的演示设计搭档，而不是一次性吐出不可控的黑箱文件。
 
 它尤其适合这些场景：
 
@@ -19,33 +19,38 @@ Agent PPT 是一个本地优先的 AI 演示文稿工作台。它把一句粗糙
 
 ## 为什么不一样
 
-**不是一次性生成，而是分阶段协作。**  
-Agent PPT 会按 `discover -> author -> design -> style -> edit -> export` 路由任务。大任务先产出 Brief / Outline / Storyboard，小任务直接走轻量编辑；内容草稿完成后会停下来等你选择标准排版或创意装饰，再继续执行视觉排版。
+**不是固定阶段机，而是模型驱动的工具协作。**
 
-**不是让模型直接改文件，而是让模型提交结构化命令。**  
+Runtime 向模型提供当前 workspace 事实、可用 Skill 和动态工具。复杂创建任务可以按需产出 Brief / Outline / Storyboard / Layout Plan；局部编辑、审查或导出可以直接走短路径。只有缺少关键约束、发生高风险变更或用户明确要求比较方案时才暂停交互。
+
+**不是让模型直接改文件，而是让模型提交结构化命令。**
+
 所有真实幻灯片修改都会进入 `CommitGate`：先做 schema 校验、沙箱执行、diff 摘要和风险评估，再自动应用或请求用户确认。你能看到模型想改什么，也能拒绝它。
 
-**不是只会写文字，而是有完整的演示文稿模型。**  
+**不是只会写文字，而是有完整的演示文稿模型。**
+
 内部文档模型支持文本、图片、形状、图表、表格、图标、背景变体、版式、设计 token、主题和调色板。导出时会把这些结构转换成真正的 `.pptx`。
 
-**不是只保留最终结果，而是保留制作过程。**  
-每个会话都有本地项目沙箱，包含 `brief.md`、`outline.md`、`slides/storyboard.json`、`slides/layout-plan.json`、`deck/snapshot.json`、transcript 和导出历史，便于复盘、调试和继续迭代。
+**不是只保留最终结果，而是保留制作过程。**
+
+本地 workspace 会按任务产生 `brief.md`、`outline.md`、`slides/storyboard.json`、`slides/layout-plan.json`、`deck/snapshot.json` 等 artifact；History、checkpoint、transcript 和导出记录由各自的持久化服务维护，便于复盘、调试和继续迭代。
 
 ## 工作流一览
 
 ```mermaid
 flowchart LR
-  A["用户需求"] --> B["阶段路由"]
-  B --> C["Brief / Outline / Storyboard"]
-  C --> D["内容草稿"]
-  D --> E{"选择排版方式"}
-  E --> F["Layout Plan"]
-  F --> G["视觉执行与质检"]
-  G --> H{"Commit Gate"}
-  H -->|低风险| I["应用到演示文稿"]
-  H -->|需确认| J["用户审批卡片"]
-  J --> I
-  I --> K["实时预览 / 放映 / PPTX 导出"]
+  A["用户需求"] --> B["读取当前事实与动态能力"]
+  B --> C{"模型选择安全路径"}
+  C -->|复杂创建| D["可选 Brief / Outline / Storyboard / Layout Plan"]
+  C -->|轻量任务| E["直接编辑 / 审查 / 导出"]
+  D --> F["视觉执行与质检"]
+  E --> G["工具结果"]
+  F --> G
+  G --> H{"需要修改 Presentation？"}
+  H -->|是| I["Proposal → CommitGate → 必要时审批"]
+  H -->|否| J["直接交付观察或导出结果"]
+  I --> K["实时预览 / 放映 / PPTX"]
+  J --> K
 ```
 
 ## 你能在应用里做什么
@@ -86,7 +91,7 @@ npm.cmd run dev
 
 启动后，在桌面应用里打开 **Settings -> 模型**，配置模型供应商、API Key、端点、超时、输出上限和 fallback 模型。
 
-API Key 会保存在主进程内存中，仅用于当前应用会话，不会写入 `.env`。开发诊断和 CI 覆盖项可以参考 [.env.example](./.env.example)。
+当前模型与搜索 API Key 会以明文保存在 Renderer 的 `localStorage`，并在调用时传给主进程；它们不会自动写入仓库 `.env`，但也尚未使用系统凭据库加密。请把本机用户账户视为信任边界。开发诊断和 CI 覆盖项可以参考 [.env.example](./.env.example)。
 
 如需让 Agent 联网调研，请在 **Settings -> 生成参数** 填写 Tavily API Key。开发环境也可设置 `TAVILY_API_KEY`；搜索结果会以标题、URL 和摘要返回给主 Agent 及任务图 teammate。
 
@@ -142,7 +147,8 @@ Main process
   Agent runtime -> Gateway -> OpenAI / Anthropic
   Tool registry -> Core tools + Deferred tools + Skills
   CommitGate -> CommandBus -> Presentation snapshot
-  ProjectFileService -> local artifacts and transcripts
+  ProjectFileService -> project artifacts and snapshots
+  Conversation DB / Runtime stores -> history, checkpoints, transcripts
         |
         v
 PPTX exporter
@@ -162,21 +168,21 @@ PPTX exporter
 
 Agent PPT 的默认运行方式是本地优先：
 
-- 会话、项目产物、transcript、deck snapshot 和导出历史保存在本机工作区
-- API Key 由应用设置传入主进程使用，不写入仓库环境文件
+- 项目产物与 deck snapshot 保存在 workspace；History、checkpoint、transcript 和部分设置也可能保存在本机应用数据目录
+- API Key 当前明文保存在 Renderer `localStorage`，不写入仓库环境文件
 - 模型只能通过已注册工具和结构化命令影响演示文稿
 - 高风险或不可自动应用的变更会要求用户审批
 
 ## 文档
 
 - [docs/README.md](./docs/README.md)：文档索引
-- [docs/ppt-capability-status-plan.md](./docs/ppt-capability-status-plan.md)：PPT 能力状态与建设计划
-- [docs/ppt-quality-attention-plan.md](./docs/ppt-quality-attention-plan.md)：PPT 生成质量与模型注意力改进计划
-- [docs/ppt-style-capability-plan.md](./docs/ppt-style-capability-plan.md)：样式表达能力建设方案
-- [docs/visual-expression-system-plan.md](./docs/visual-expression-system-plan.md)：视觉表达系统与 Layout Grammar 计划
-- [docs/visual-vocabulary-plan.md](./docs/visual-vocabulary-plan.md)：视觉词汇与图形表达计划
-- [docs/background-tasks-plan.md](./docs/background-tasks-plan.md)：后台任务计划
+- [架构总览](./docs/architecture/overview.md)：现行分层、数据流与状态边界
+- [工程能力地图](./docs/architecture/engineering-capabilities.md)：Claude Code 参考能力、当前落点与缺口
+- [Query 与 Agent Loop](./docs/agent/query.md)：QueryParams、State、Workspace、事件和恢复
+- [Tools 与文件操作](./docs/agent/tools.md)：动态能力、权限、Read/Write/Edit 契约
+- [System Prompt 与 Context](./docs/agent/system-context.md)：Section Registry 与稳定/动态分区
+- [Presentation 工作流](./docs/presentation/workflow.md)：Artifact、Proposal、CommitGate 与交付状态
 
 ## 当前状态
 
-这是一个快速演进中的实验型桌面应用。当前重点是把“可控的 AI 演示文稿制作”跑通：从需求澄清、内容生成、排版设计、视觉质检，到审批、预览和 PPTX 导出。代码里已经具备完整的端到端骨架，接下来最值得投入的是视觉质量、更多可复用模板、导入能力和更强的跨会话项目管理。
+这是一个快速演进中的实验型桌面应用。当前重点是把“可控的 AI 演示文稿制作”跑通：从需求澄清、内容生成、排版设计、视觉质检，到审批、预览和 PPTX 导出。现行架构与尚未完成的路线图已在文档中明确分开。

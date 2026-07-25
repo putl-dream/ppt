@@ -14,6 +14,7 @@ import type { TaskCommandPrincipal, TaskStore } from "../task/task-store";
 import type { PromptStage } from "../runtime/prompts/prompt-stage";
 import type { MessageBus } from "../teammate/message-bus";
 import type { TeammateManager } from "../teammate/spawn-teammate";
+import type { WorkspaceFileService } from "./files/workspace-file-service";
 
 /**
  * 工具加载策略。
@@ -34,6 +35,60 @@ export interface ToolDiscoverySession {
   discoveredToolNames: Set<string>;
 }
 
+export type ToolRuntimeCapability =
+  | "command_proposal"
+  | "user_interaction"
+  | "skill_load"
+  | "tool_discovery";
+
+export type ToolTerminalResultType =
+  | "command_proposal"
+  | "ask_user";
+
+export interface ToolCompletionBehavior {
+  /**
+   * The validated result protocol that can end the current Query.
+   *
+   * `always` means returning any other result is a tool contract violation.
+   * `when_matching` lets a tool return ordinary diagnostic output as well.
+   */
+  terminalResult: ToolTerminalResultType;
+  expectation: "always" | "when_matching";
+  /**
+   * Tools that can terminate must be isolated before execution so every
+   * provider tool_use in the assistant batch receives a paired tool_result.
+   */
+  exclusiveBatch: true;
+}
+
+export interface ToolBackgroundBehavior<TArgs = unknown> {
+  isRequested: (args: TArgs) => boolean;
+  describe: (args: TArgs) => string;
+}
+
+export interface ToolDelegationTarget {
+  toolName: string;
+  input: unknown;
+}
+
+export interface ToolDelegationBehavior<TArgs = unknown> {
+  /**
+   * Resolve a model-visible dispatcher call to the real registered tool.
+   * The runtime executes the resolved target through the same permission,
+   * hook, validation and result-delivery pipeline as a direct tool.
+   */
+  resolve: (args: TArgs, context: ToolContext) => ToolDelegationTarget;
+  allowedCategories: ReadonlyArray<ToolDefinition["category"]>;
+  allowedLoadPolicies: ReadonlyArray<ToolLoadPolicy>;
+}
+
+export interface ToolRuntimeBehavior<TArgs = unknown> {
+  capabilities?: ReadonlyArray<ToolRuntimeCapability>;
+  completion?: ToolCompletionBehavior;
+  background?: ToolBackgroundBehavior<TArgs>;
+  delegation?: ToolDelegationBehavior<TArgs>;
+}
+
 /**
  * 工具执行的只读上下文环境，包含当前 PPT 快照、选区和会话历史等。
  */
@@ -52,6 +107,8 @@ export interface ToolContext {
   readonly messageHistory: Array<{ role: "user" | "assistant"; content: string }>;
   /** Session project sandbox root for teammate workspace tools. */
   readonly workspaceRoot?: string;
+  /** Per-thread workspace read receipts and optimistic file versions. */
+  readonly fileService?: WorkspaceFileService;
   /** Model gateway for teammate delegation. */
   readonly gateway?: AgentModelGateway;
   /** Active model selection for teammate delegation. */
@@ -83,7 +140,7 @@ export interface ToolContext {
   readonly skillRegistry?: SkillRegistry;
   /** Per-run loaded skill tracking (Layer 2). */
   readonly skillSession?: SkillSession;
-  /** Active prompt stage for LoadSkill gating and stage-aware behavior. */
+  /** Advisory context used to rank Skills and explain the current artifact shape. */
   readonly promptStage?: PromptStage;
   /** Step limit config for teammate agents. */
   readonly agentStepLimits?: AgentStepLimits;
@@ -111,6 +168,10 @@ export interface ToolDefinition<TParams extends z.ZodObject<any> = z.ZodObject<a
     result: TResult,
     context: ToolContext,
   ) => string | Promise<string>;
+  /** Runtime capability check; unavailable tools are not exposed or executable. */
+  isEnabled?: (context: ToolContext) => boolean;
+  /** Runtime orchestration semantics; execution code must not infer these from names. */
+  behavior?: ToolRuntimeBehavior<z.infer<TParams>>;
   risk: ToolRisk;
   permission?: ToolPermissionProfile;
   execute: (args: z.infer<TParams>, context: ToolContext) => Promise<TResult>;

@@ -1,4 +1,5 @@
 import type { ConversationDatabase } from "../../conversation-database";
+import { resolve } from "node:path";
 import { getEffectiveMainMaxSteps, resolveAgentStepLimits } from "@shared/agent-step-limits";
 import type { TeammateProgressEvent } from "@shared/teammate-progress";
 import type { AgentModelGateway } from "../gateway";
@@ -23,6 +24,7 @@ import type { AgentRuntimeOptions, AgentRuntimeResult } from "./runtime-types";
 import { buildSystemPromptContext, clearSystemPromptCache, getSystemPrompt } from "./prompts/system-prompt";
 import { ToolExecutionEngine } from "./tools/tool-execution-engine";
 import { ToolPreflight } from "./tools/tool-preflight";
+import { WorkspaceFileService } from "../tools/files/workspace-file-service";
 
 export type AgentRunPreparation =
   | { type: "ready"; run: PreparedAgentRun }
@@ -32,6 +34,7 @@ export type AgentRunPreparation =
 export class PresentationAgentRunFactory {
   private readonly discoverySessions = new Map<string, ToolDiscoverySession>();
   private readonly skillSessions = new Map<string, SkillSession>();
+  private readonly fileSessions = new Map<string, WorkspaceFileService>();
 
   constructor(
     private readonly registry: ToolRegistry,
@@ -66,7 +69,36 @@ export class PresentationAgentRunFactory {
     const { options, session, taskStore } = scope;
     const stepLimits = resolveAgentStepLimits(options.agentStepLimits);
     const maxSteps = options.maxSteps ?? getEffectiveMainMaxSteps(stepLimits);
-    const coreTools = this.registry.getCoreTools();
+    const emitProgress = scope.eventPorts.renderer.bind(scope.eventPorts);
+    const contextBase: ToolContext = {
+      presentation: structuredClone(options.presentationSnapshot),
+      currentSlideId: options.currentSlideId,
+      selectedElementIds: [...options.selectedElementIds],
+      discoverySession: scope.discoverySession,
+      registry: this.registry,
+      messageHistory: options.messageHistory ?? [],
+      workspaceRoot: options.workspaceRoot,
+      fileService: this.resolveFileService(options.threadId, options.workspaceRoot),
+      gateway: this.gateway,
+      model: options.model,
+      signal: scope.signal,
+      requestToolApproval: options.requestToolApproval,
+      notifyTaskListUpdated: () => {
+        if (taskStore) scope.taskSubscription?.notifyTasksUpdated(taskStore.identity.taskListId);
+      },
+      onTeammateProgress: options.onProgress
+        ? (event) => emitProgress({ ...event, message: teammateProgressMessage(event) })
+        : undefined,
+      agentStepLimits: stepLimits,
+      skillRegistry: this.skillRegistry,
+      skillSession: scope.skillSession,
+      taskStore,
+      taskPrincipal: taskStore?.principal(scope.taskListOwner, "lead", LEAD_TASK_PERMISSIONS),
+      taskListOwner: scope.taskListOwner,
+      messageBus: options.messageBus,
+      teammateManager: options.teammateManager,
+    };
+    const coreTools = this.registry.getCoreTools(contextBase);
     const promptContext = await buildSystemPromptContext({
       request: options.request,
       presentation: options.presentationSnapshot,
@@ -81,34 +113,9 @@ export class PresentationAgentRunFactory {
       stageHint: options.stageHint,
     });
     const { text: systemPrompt } = getSystemPrompt(promptContext, options.threadId);
-    const emitProgress = scope.eventPorts.renderer.bind(scope.eventPorts);
     const context: ToolContext = {
-      presentation: structuredClone(options.presentationSnapshot),
-      currentSlideId: options.currentSlideId,
-      selectedElementIds: [...options.selectedElementIds],
-      discoverySession: scope.discoverySession,
-      registry: this.registry,
-      messageHistory: options.messageHistory ?? [],
-      workspaceRoot: options.workspaceRoot,
-      gateway: this.gateway,
-      model: options.model,
-      signal: scope.signal,
-      requestToolApproval: options.requestToolApproval,
-      notifyTaskListUpdated: () => {
-        if (taskStore) scope.taskSubscription?.notifyTasksUpdated(taskStore.identity.taskListId);
-      },
-      onTeammateProgress: options.onProgress
-        ? (event) => emitProgress({ ...event, message: teammateProgressMessage(event) })
-        : undefined,
-      agentStepLimits: stepLimits,
-      skillRegistry: this.skillRegistry,
-      skillSession: scope.skillSession,
+      ...contextBase,
       promptStage: promptContext.stage,
-      taskStore,
-      taskPrincipal: taskStore?.principal(scope.taskListOwner, "lead", LEAD_TASK_PERMISSIONS),
-      taskListOwner: scope.taskListOwner,
-      messageBus: options.messageBus,
-      teammateManager: options.teammateManager,
     };
 
     if (options.layoutChoice) {
@@ -195,7 +202,23 @@ export class PresentationAgentRunFactory {
   clearSession(threadId: string): void {
     this.discoverySessions.delete(threadId);
     this.skillSessions.delete(threadId);
+    this.fileSessions.get(threadId)?.clear();
+    this.fileSessions.delete(threadId);
     clearSystemPromptCache(threadId);
+  }
+
+  private resolveFileService(
+    threadId: string,
+    workspaceRoot: string | undefined,
+  ): WorkspaceFileService | undefined {
+    if (!workspaceRoot) return undefined;
+    const normalizedRoot = resolve(workspaceRoot);
+    const current = this.fileSessions.get(threadId);
+    if (current?.workspaceRoot === normalizedRoot) return current;
+    current?.clear();
+    const service = new WorkspaceFileService(normalizedRoot);
+    this.fileSessions.set(threadId, service);
+    return service;
   }
 }
 

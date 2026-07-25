@@ -44,6 +44,14 @@ export const submitCommandsTool: ToolDefinition<
   loadPolicy: "core",
   inputSchema: submitCommandsSchema,
   outputSchema: agentCommandProposalResultSchema,
+  behavior: {
+    capabilities: ["command_proposal"],
+    completion: {
+      terminalResult: "command_proposal",
+      expectation: "always",
+      exclusiveBatch: true,
+    },
+  },
   risk: "low",
   execute: async (args) => {
     return {

@@ -8,7 +8,7 @@
 ![Vitest](https://img.shields.io/badge/Vitest-3.2-6E9F18?logo=vitest&logoColor=white)
 ![Local First](https://img.shields.io/badge/local--first-desktop-111827)
 
-Agent PPT is a local-first AI workspace for presentations. It turns a rough request into reviewable brief, outline, storyboard, slide draft, layout plan, and PPTX export artifacts, making the model behave like a traceable presentation partner instead of a one-shot black box.
+Agent PPT is a local-first AI workspace for presentations. It creates reviewable briefs, outlines, storyboards, slide drafts, layout plans, or PPTX exports when the task calls for them, making the model a tool-using, traceable presentation partner instead of a one-shot black box.
 
 It is useful when you want to:
 
@@ -19,33 +19,38 @@ It is useful when you want to:
 
 ## What Makes It Different
 
-**It is staged collaboration, not one-shot generation.**  
-Agent PPT routes work through `discover -> author -> design -> style -> edit -> export`. Large jobs produce brief / outline / storyboard artifacts first. Small edits take a lightweight path. After the content draft is ready, the app pauses for you to choose standard layout or creative decoration before visual execution begins.
+**It is model-driven tool collaboration, not a fixed stage machine.**
 
-**The model does not directly mutate the deck.**  
+The runtime gives the model current workspace facts, available skills, and a dynamic tool set. Complex creation jobs can produce Brief / Outline / Storyboard / Layout Plan artifacts as needed; local edits, reviews, and exports can take a short path. Interaction pauses only for missing critical constraints, risky changes, or an explicitly requested comparison.
+
+**The model does not directly mutate the deck.**
+
 All real slide changes pass through `CommitGate`: schema validation, sandbox execution, diff generation, and risk evaluation. Changes can be auto-applied only when safe; otherwise the UI asks for your approval.
 
-**The deck model is richer than text.**  
+**The deck model is richer than text.**
+
 The internal presentation model supports text, images, shapes, charts, tables, icons, background variants, layouts, design tokens, themes, and palettes. Export converts those structures into a real `.pptx`.
 
-**The process is preserved, not just the result.**  
-Each session has a local project sandbox containing `brief.md`, `outline.md`, `slides/storyboard.json`, `slides/layout-plan.json`, `deck/snapshot.json`, transcripts, and export history, so the work can be reviewed, debugged, and continued later.
+**The process is preserved, not just the result.**
+
+The local workspace can contain task-specific artifacts such as `brief.md`, `outline.md`, `slides/storyboard.json`, `slides/layout-plan.json`, and `deck/snapshot.json`. Dedicated persistence services retain history, checkpoints, transcripts, and export records for review and recovery.
 
 ## Workflow
 
 ```mermaid
 flowchart LR
-  A["User request"] --> B["Stage router"]
-  B --> C["Brief / Outline / Storyboard"]
-  C --> D["Content draft"]
-  D --> E{"Choose layout mode"}
-  E --> F["Layout Plan"]
-  F --> G["Visual execution and review"]
-  G --> H{"Commit Gate"}
-  H -->|Low risk| I["Apply commands"]
-  H -->|Needs approval| J["Approval card"]
-  J --> I
-  I --> K["Live preview / Slideshow / PPTX export"]
+  A["User request"] --> B["Read current facts and dynamic capabilities"]
+  B --> C{"Model chooses a safe path"}
+  C -->|Complex creation| D["Optional Brief / Outline / Storyboard / Layout Plan"]
+  C -->|Focused task| E["Direct edit / review / export"]
+  D --> F["Visual execution and review"]
+  E --> G["Tool results"]
+  F --> G
+  G --> H{"Presentation mutation required?"}
+  H -->|Yes| I["Proposal → CommitGate → approval when required"]
+  H -->|No| J["Return observations or export"]
+  I --> K["Live preview / Slideshow / PPTX"]
+  J --> K
 ```
 
 ## In The App
@@ -86,7 +91,7 @@ npm.cmd run dev
 
 After launch, open **Settings -> 模型** in the desktop app to configure the provider, API key, endpoint, timeout, output limits, and fallback models.
 
-API keys are kept in main-process memory for the current app session and are not written to `.env`. Developer diagnostics and CI overrides are documented in [.env.example](./.env.example).
+Model and search API keys are currently stored as plaintext in Renderer `localStorage` and passed to the main process when used. They are not automatically written to the repository `.env`, but they are not yet protected by an operating-system credential vault. Treat the local user account as the trust boundary. Developer diagnostics and CI overrides are documented in [.env.example](./.env.example).
 
 ## Commands
 
@@ -130,7 +135,8 @@ Main process
   Agent runtime -> Gateway -> OpenAI / Anthropic
   Tool registry -> Core tools + Deferred tools + Skills
   CommitGate -> CommandBus -> Presentation snapshot
-  ProjectFileService -> local artifacts and transcripts
+  ProjectFileService -> project artifacts and snapshots
+  Conversation DB / Runtime stores -> history, checkpoints, transcripts
         |
         v
 PPTX exporter
@@ -150,21 +156,21 @@ Key areas:
 
 Agent PPT is local-first by default:
 
-- Sessions, project artifacts, transcripts, deck snapshots, and export history stay on your machine
-- API keys are passed through app settings to the main process and are not written to repository env files
+- Project artifacts and deck snapshots stay in the workspace; history, checkpoints, transcripts, and some settings may live in the local application-data directory
+- API keys currently remain as plaintext in Renderer `localStorage` and are not written to repository environment files
 - The model can affect a deck only through registered tools and structured commands
 - Risky or non-auto-applicable changes require user approval
 
 ## Documentation
 
 - [docs/README.md](./docs/README.md): documentation index
-- [docs/ppt-capability-status-plan.md](./docs/ppt-capability-status-plan.md): PPT capability status and roadmap
-- [docs/ppt-quality-attention-plan.md](./docs/ppt-quality-attention-plan.md): slide generation quality and model attention improvement plan
-- [docs/ppt-style-capability-plan.md](./docs/ppt-style-capability-plan.md): style capability roadmap
-- [docs/visual-expression-system-plan.md](./docs/visual-expression-system-plan.md): visual expression system and Layout Grammar plan
-- [docs/visual-vocabulary-plan.md](./docs/visual-vocabulary-plan.md): visual vocabulary and graphic expression plan
-- [docs/background-tasks-plan.md](./docs/background-tasks-plan.md): background task plan
+- [Architecture overview](./docs/architecture/overview.md): current layers, data flow, and state boundaries
+- [Engineering capability map](./docs/architecture/engineering-capabilities.md): Claude Code reference capabilities, current mappings, and gaps
+- [Query and Agent Loop](./docs/agent/query.md): QueryParams, State, Workspace, events, and recovery
+- [Tools and file operations](./docs/agent/tools.md): dynamic capabilities, permissions, and Read/Write/Edit contracts
+- [System Prompt and Context](./docs/agent/system-context.md): section registry and stable/dynamic boundaries
+- [Presentation workflow](./docs/presentation/workflow.md): artifacts, proposals, CommitGate, and delivery states
 
 ## Status
 
-This is a fast-moving experimental desktop app. The current focus is reliable AI-assisted presentation production: requirement shaping, content generation, layout design, visual review, approval, preview, and PPTX export. The end-to-end skeleton is already in place; the highest-value next work is visual quality, reusable templates, import support, and stronger cross-session project management.
+This is a fast-moving experimental desktop app. The current focus is reliable AI-assisted presentation production: requirement shaping, content generation, layout design, visual review, approval, preview, and PPTX export. Current architecture and unfinished roadmap work are documented separately.

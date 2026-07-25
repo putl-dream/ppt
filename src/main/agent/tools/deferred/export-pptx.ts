@@ -23,6 +23,12 @@ export const exportPptxTool: ToolDefinition<
   category: "deferred",
   loadPolicy: "deferred",
   inputSchema: exportPptxSchema,
+  behavior: {
+    background: {
+      isRequested: (args) => args.run_in_background === true,
+      describe: (args) => `ExportPptx: ${args.format}`,
+    },
+  },
   risk: "medium",
   execute: async (args, context) => {
     const presentation = context.presentation;

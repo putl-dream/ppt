@@ -12,7 +12,10 @@ import {
   ModelOutputError,
 } from "../src/main/agent/gateway/model-calls";
 
-function createGateway(content: AgentModelContentBlock[]) {
+function createGateway(
+  content: AgentModelContentBlock[],
+  stopReason?: string,
+) {
   const requests: AgentModelRequest[] = [];
   const generateText = vi.fn(async (request: AgentModelRequest) => {
     requests.push(request);
@@ -20,6 +23,7 @@ function createGateway(content: AgentModelContentBlock[]) {
       provider: "openai" as const,
       model: "test-model",
       content,
+      stopReason,
     };
   });
   const gateway: AgentModelGateway = {
@@ -56,6 +60,21 @@ describe("typed model calls", () => {
     await expect(callLLM(gateway, { prompt: "Read" })).rejects.toMatchObject({
       name: "ModelOutputError",
       code: "unexpected-tool-use",
+    });
+  });
+
+  it("callLLM rejects non-empty Markdown when the provider reports truncation", async () => {
+    const { gateway } = createGateway(
+      [{ type: "text", text: "A plausible but incomplete summary." }],
+      "max_output_tokens",
+    );
+
+    await expect(callLLM(gateway, {
+      prompt: "Summarize",
+      responseContract: "markdown-summary",
+    })).rejects.toMatchObject({
+      name: "ModelOutputError",
+      code: "truncated-output",
     });
   });
 

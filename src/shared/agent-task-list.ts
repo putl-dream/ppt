@@ -124,11 +124,22 @@ export function summarizeTaskListProgress(tasks: AgentTaskNode[]): string {
 
 export function formatTaskPlanPosition(tasks: AgentTaskNode[]): string {
   const reviewIndex = tasks.findIndex((task) => task.review.state === "requested");
-  if (reviewIndex >= 0) return `待验收 ${reviewIndex + 1}/${tasks.length} · ${tasks[reviewIndex]!.subject}`;
+  if (reviewIndex >= 0) {
+    const task = tasks[reviewIndex]!;
+    return `待验收 ${reviewIndex + 1}/${tasks.length} · ${formatTaskPositionLabel(task)}`;
+  }
   const currentIndex = tasks.findIndex((task) => task.status === "in_progress");
-  if (currentIndex >= 0) return `步骤 ${currentIndex + 1}/${tasks.length} · ${tasks[currentIndex]!.subject}`;
+  if (currentIndex >= 0) {
+    const task = tasks[currentIndex]!;
+    return `步骤 ${currentIndex + 1}/${tasks.length} · ${formatTaskPositionLabel(task)}`;
+  }
   const completed = tasks.filter((task) => task.status === "completed").length;
   return completed === tasks.length && tasks.length ? `全部完成 · ${completed}/${tasks.length}` : summarizeTaskListProgress(tasks);
+}
+
+function formatTaskPositionLabel(task: AgentTaskNode): string {
+  const owner = formatTaskOwnerForDisplay(task);
+  return owner ? `${task.subject} · ${owner}` : task.subject;
 }
 
 export function isTaskPlanActive(tasks: AgentTaskNode[]): boolean {

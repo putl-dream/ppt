@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { executeLayoutPlanTool } from "../src/main/agent/tools/core/execute-layout-plan";
+import { submitCommandsTool } from "../src/main/agent/tools/core/submit-commands";
 import { AgentRuntime } from "../src/main/agent/runtime/agent-runtime";
 import type { AgentModelGateway } from "../src/main/agent/gateway";
 import type { ToolContext } from "../src/main/agent/tools/tool-definition";
@@ -213,10 +214,25 @@ describe("ExecuteLayoutPlan", () => {
       ["cover", "concept", "summary"],
     ));
 
+    const proposal = await executeLayoutPlanTool.execute(
+      { path: "slides/layout-plan.json" },
+      makeContext(workspaceRoot, presentation),
+    );
+    if (!("type" in proposal) || proposal.type !== "command_proposal") {
+      throw new Error("Expected the file-backed plan to compile into a command proposal");
+    }
+
     const registry = new ToolRegistry();
     registry.register(executeLayoutPlanTool);
+    registry.register(submitCommandsTool);
     const runtime = new AgentRuntime(registry, createSequenceGateway([
       modelToolCall("ExecuteLayoutPlan", { path: "slides/layout-plan.json" }),
+      modelToolCall("SubmitCommands", {
+        summary: `${proposal.summary}（已检查视觉反馈）`,
+        commands: proposal.commands,
+        risk: proposal.risk,
+        assumptions: proposal.assumptions,
+      }),
     ]));
 
     const result = await runtime.run({

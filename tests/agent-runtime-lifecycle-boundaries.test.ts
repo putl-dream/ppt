@@ -13,6 +13,7 @@ import { createStarterPresentation } from "../src/shared/presentation";
 import { DurableRunStore } from "../src/main/agent/persistence/durable-run-store";
 import { DurableConversationHistoryStore } from "../src/main/agent/persistence/conversation-history-store";
 import { TEST_DESIGN_SYSTEM } from "./design-engine-test-utils";
+import { submitCommandsTool } from "../src/main/agent/tools/core/submit-commands";
 
 function textGateway(text: string): AgentModelGateway {
   return {
@@ -218,6 +219,81 @@ describe("AgentRuntime terminal boundaries", () => {
     );
   });
 
+  it("persists a paired result for a terminal SubmitCommands call", async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), "runtime-terminal-tool-history-"));
+    const registry = new ToolRegistry();
+    registry.register(submitCommandsTool);
+    const gateway: AgentModelGateway = {
+      async generateText() {
+        return {
+          provider: "anthropic",
+          model: "test",
+          content: [{
+            type: "tool_use",
+            id: "terminal-submit",
+            name: "SubmitCommands",
+            input: {
+              summary: "Update title",
+              risk: "low",
+              commands: [{
+                id: "title-command",
+                type: "set-presentation-title",
+                title: "Updated title",
+              }],
+            },
+          }],
+        };
+      },
+      async *generateTextStream() {
+        yield {
+          type: "complete" as const,
+          content: [{
+            type: "tool_use" as const,
+            id: "terminal-submit",
+            name: "SubmitCommands",
+            input: {
+              summary: "Update title",
+              risk: "low",
+              commands: [{
+                id: "title-command",
+                type: "set-presentation-title",
+                title: "Updated title",
+              }],
+            },
+          }],
+        };
+      },
+    };
+
+    const result = await new AgentRuntime(registry, gateway).run({
+      threadId: "terminal-tool-history-thread",
+      request: "update title",
+      presentationSnapshot: createStarterPresentation(),
+      selectedElementIds: [],
+      workspaceRoot,
+    });
+
+    expect(result.type).toBe("command_proposal");
+    const history = await new DurableConversationHistoryStore(workspaceRoot)
+      .load("terminal-tool-history-thread");
+    expect(history?.flatMap((message) => message.content)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: "tool_use", id: "terminal-submit" }),
+        expect.objectContaining({ type: "tool_result", toolUseId: "terminal-submit" }),
+      ]),
+    );
+    const checkpoint = await new DurableRunStore(workspaceRoot)
+      .load("terminal-tool-history-thread");
+    expect(checkpoint).toMatchObject({
+      status: "proposal_ready",
+      committedState: {
+        turnCount: 1,
+        transition: { reason: "completed" },
+      },
+    });
+    expect(checkpoint?.version === 2 ? checkpoint.inflight : undefined).toBeUndefined();
+  });
+
   it("persists failed and emits a failed Stop reason without replacing the primary error", async () => {
     const workspaceRoot = await mkdtemp(join(tmpdir(), "runtime-failed-"));
     const stops: StopBlock[] = [];
@@ -297,6 +373,12 @@ describe("AgentRuntime terminal boundaries", () => {
       category: "core",
       loadPolicy: "core",
       inputSchema: schema,
+      behavior: {
+        background: {
+          isRequested: (args) => args.run_in_background === true,
+          describe: (args) => `PreviewSlide: ${args.slideId}`,
+        },
+      },
       risk: "low",
       execute: async () => { await previewDone; return { ok: true }; },
     };

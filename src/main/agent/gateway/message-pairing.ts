@@ -79,3 +79,23 @@ export function ensureToolResultPairing(
   flushMissingResults();
   return repaired;
 }
+
+/**
+ * Add request-scoped prompt data after canonical history without mutating that
+ * history. Provider adapters use this for query/user/system context that must
+ * reach the model but must never become a durable conversation message.
+ */
+export function withEphemeralPrompt(
+  messages: AgentModelMessage[],
+  prompt: string,
+): AgentModelMessage[] {
+  const paired = ensureToolResultPairing(messages);
+  if (!prompt.trim()) return paired;
+  return [
+    ...paired,
+    {
+      role: "user",
+      content: [{ type: "text", text: prompt }],
+    },
+  ];
+}

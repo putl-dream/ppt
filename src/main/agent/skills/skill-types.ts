@@ -11,7 +11,7 @@ export interface SkillFrontmatter {
   name: string;
   description: string;
   when_to_use?: string;
-  /** Prompt stages where this skill may appear in catalog and LoadSkill is allowed. */
+  /** Advisory prompt stages used only to rank and recommend this skill. */
   stages?: PromptStage[];
   /** Tool names the skill may auto-allow when applied */
   allowedTools?: string[];

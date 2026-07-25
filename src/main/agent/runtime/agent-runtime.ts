@@ -5,26 +5,22 @@ import { ToolRegistry } from "../tools/tool-registry";
 import { AgentRunFinalizer } from "./agent-run-finalizer";
 import { PresentationAgentRunFactory } from "./presentation-agent-run-factory";
 import {
-  createIterationWorkspace,
-  reduceQueryState,
+  type AgentQueryLoopEvent,
 } from "./query/query-types";
+import { query } from "./query/query";
 import {
   normalizeAgentRuntimeOptions,
   type AgentRuntimeInput,
   type AgentRuntimeResult,
 } from "./runtime-types";
-import { ModelTurnRunner } from "./turns/model-turn-runner";
 import type {
   AgentLoopTerminalOutcome,
   PreparedAgentRun,
 } from "./turns/prepared-agent-run";
-import { ToolTurnRunner } from "./turns/tool-turn-runner";
 
-/** Owns the complete lifecycle and linear model → tools → state loop for one query. */
+/** Owns one run lifecycle and consumes the independent query state machine. */
 export class AgentRuntime {
   private readonly runFactory: PresentationAgentRunFactory;
-  private readonly modelTurns = new ModelTurnRunner();
-  private readonly toolTurns = new ToolTurnRunner();
   private readonly finalizer = new AgentRunFinalizer();
 
   constructor(
@@ -63,66 +59,22 @@ export class AgentRuntime {
   }
 
   private async runQuery(run: PreparedAgentRun): Promise<AgentLoopTerminalOutcome> {
-    const { scope } = run;
-    let state = run.initialState;
-    scope.setCommittedQueryState(state);
-
-    if (run.initialWorkspace && run.initialWorkspacePhase !== "model_streaming") {
-      const workspace = run.initialWorkspace;
-      scope.setInflightQuery("model_received", workspace);
-      if (workspace.toolResults.length < workspace.toolUseBlocks.length) {
-        const toolOutcome = await this.toolTurns.runBatch(
-          run,
-          workspace.toolUseBlocks,
-          workspace,
-          state,
-        );
-        if (toolOutcome.type === "terminal") return toolOutcome;
-      }
-      state = reduceQueryState(state, workspace);
-      scope.setCommittedQueryState(state);
-      await scope.persistCheckpoint();
-    }
-
-    let replayWorkspace = run.initialWorkspacePhase === "model_streaming"
-      ? run.initialWorkspace
-      : undefined;
-
+    const iterator = query(run);
     while (true) {
-      if (state.turnCount >= run.params.maxTurns) {
-        return await run.resolveStepLimit();
-      }
-      if (scope.signal.aborted) throw new Error("Run aborted by user.");
-
-      const workspace = replayWorkspace ?? createIterationWorkspace(state);
-      const isStreamingReplay = replayWorkspace !== undefined;
-      replayWorkspace = undefined;
-      if (!isStreamingReplay) {
-        scope.setInflightQuery("model_streaming", workspace);
-      }
-
-      const modelOutcome = await this.modelTurns.run(run, state, workspace);
-      if (modelOutcome.type === "terminal") return modelOutcome;
-
-      if (modelOutcome.type === "tool_batch") {
-        const toolOutcome = await this.toolTurns.runBatch(
-          run,
-          workspace.toolUseBlocks,
-          workspace,
-          state,
-        );
-        if (toolOutcome.type === "terminal") return toolOutcome;
-      }
-
-      state = reduceQueryState(
-        state,
-        workspace,
-        modelOutcome.type === "continue"
-          ? { reason: "required_outcome" }
-          : { reason: "next_turn" },
-      );
-      scope.setCommittedQueryState(state);
-      await scope.persistCheckpoint();
+      const next = await iterator.next();
+      if (next.done) return next.value;
+      safelyNotifyQueryEvent(run.params.deps.onQueryEvent, next.value);
     }
+  }
+}
+
+function safelyNotifyQueryEvent(
+  handler: ((event: AgentQueryLoopEvent) => void) | undefined,
+  event: AgentQueryLoopEvent,
+): void {
+  try {
+    handler?.(event);
+  } catch {
+    // Query events are projections. Observers cannot replace Runtime control flow.
   }
 }

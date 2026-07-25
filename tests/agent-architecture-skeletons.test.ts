@@ -177,7 +177,7 @@ describe("Agent Architecture Skeletons & Types", () => {
     });
 
     expect(prompt).toContain("AskUser");
-    expect(prompt).toContain("不问工具名");
+    expect(prompt).toContain("不要询问工具名");
   });
 
   it("AgentRuntime executes a Gateway-driven Core Tool loop", async () => {
@@ -465,8 +465,8 @@ describe("Agent Architecture Skeletons & Types", () => {
     expect(search.tools.map((tool) => tool.name)).toContain("DetectRepeatedTitles");
     const emptySearch = await searchExtraToolsTool.execute({ query: "create-new-slide-tool" }, context);
     expect(emptySearch.tools).toEqual([]);
-    expect(emptySearch.baseEditingAvailable).toBe(true);
-    expect(emptySearch.guidance).toContain("add-slide");
+    expect(emptySearch.baseEditingAvailable).toBe(false);
+    expect(emptySearch.guidance).toContain("No command-proposal capability");
     const execution = await executeExtraToolTool.execute({
       toolName: "DetectRepeatedTitles",
       toolArgs: {},

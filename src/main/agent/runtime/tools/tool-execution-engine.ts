@@ -4,6 +4,7 @@ import { validateToolOutput } from "../../tools/tool-validation";
 import type { PostToolUseBlock } from "../hooks/hook-blocks";
 import { prepareToolResultData } from "./tool-result-data";
 import { rethrowIfRuntimeCancellation } from "../lifecycle/runtime-cancellation";
+import { WorkspaceFileError } from "../../tools/files/workspace-file-service";
 
 export interface ToolExecutionOutcome {
   executionStatus: "not_started" | "threw" | "returned";
@@ -13,6 +14,7 @@ export interface ToolExecutionOutcome {
   validatedResult?: unknown;
   preparedResult?: Awaited<ReturnType<typeof prepareToolResultData>>;
   error?: string;
+  errorCode?: string;
   warnings: string[];
 }
 
@@ -21,7 +23,8 @@ export interface ToolExecutionEngineInput {
   args: unknown;
   context: ToolContext;
   toolCall: AgentModelToolUseBlock;
-  runtimeArtifactRoot?: string;
+  /** Workspace root for model-addressable spill files; never application runtime state. */
+  modelArtifactRoot?: string;
   threadId: string;
   signal?: AbortSignal;
   runPostToolUseHook(block: PostToolUseBlock): Promise<string[]>;
@@ -36,23 +39,30 @@ export class ToolExecutionEngine {
     } catch (error) {
       rethrowIfRuntimeCancellation(error, input.signal, context.signal);
       const message = error instanceof Error ? error.message : String(error);
+      const isRejectedFileMutation = error instanceof WorkspaceFileError;
+      const sideEffects = isRejectedFileMutation ? "none" : "uncertain";
+      const errorCode = isRejectedFileMutation ? error.code : undefined;
       const warnings = await input.runPostToolUseHook({
         event: "PostToolUse",
         toolName: tool.name,
         args,
         scope: "main",
         executionStatus: "threw",
-        sideEffects: "uncertain",
+        sideEffects,
         error: message,
+        ...(errorCode ? { errorCode } : {}),
         threadId: input.threadId,
       });
-      const guidance = `${message}\nThe tool threw after execution started; side effects may be uncertain. Inspect durable artifacts before retrying.`;
+      const guidance = isRejectedFileMutation
+        ? `[${error.code}] ${message}\nThe file operation was rejected before mutation; no side effects were committed.`
+        : `${message}\nThe tool threw after execution started; side effects may be uncertain. Inspect durable artifacts before retrying.`;
       return {
         executionStatus: "threw",
-        sideEffects: "uncertain",
+        sideEffects,
         deliveryStatus: "delivered",
         modelResult: toModelResult(toolCall.id, guidance, true),
         error: guidance,
+        ...(errorCode ? { errorCode } : {}),
         warnings,
       };
     }
@@ -102,7 +112,7 @@ export class ToolExecutionEngine {
       const preparedResult = await prepareToolResultData({
         data: validatedResult,
         modelContent,
-        workspaceRoot: input.runtimeArtifactRoot,
+        workspaceRoot: input.modelArtifactRoot,
         threadId: input.threadId,
         toolUseId: toolCall.id,
         toolName: tool.name,

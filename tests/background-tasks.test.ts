@@ -210,6 +210,12 @@ describe("AgentRuntime background tool path", () => {
       category: "deferred",
       loadPolicy: "deferred",
       inputSchema: exportSchema,
+      behavior: {
+        background: {
+          isRequested: (args) => args.run_in_background === true,
+          describe: (args) => `ExportPptx: ${args.format}`,
+        },
+      },
       risk: "medium",
       execute: async () => {
         events.push("export-start");
@@ -268,6 +274,7 @@ describe("AgentRuntime background tool path", () => {
       request: "Export deck",
       presentationSnapshot: createStarterPresentation(),
       selectedElementIds: [],
+      requestToolApproval: async () => true,
     });
 
     expect(result.type).toBe("message");
@@ -288,7 +295,7 @@ describe("AgentRuntime background tool path", () => {
         block.type === "text" && block.text.includes("<task_notification>")));
     const notificationText = notificationTurn?.content
       .filter((block) => block.type === "text").map((block) => block.text).join("\n") ?? "";
-    expect(notificationText).toContain("<tool>ExecuteExtraTool</tool>");
+    expect(notificationText).toContain("<tool>ExportPptx</tool>");
     expect(notificationText).toContain("ExportPptx: pptx");
     expect(notificationText).toContain("deck.pptx");
   });
@@ -304,6 +311,12 @@ describe("AgentRuntime background tool path", () => {
       category: "core",
       loadPolicy: "core",
       inputSchema: previewSchema,
+      behavior: {
+        background: {
+          isRequested: (args) => args.run_in_background === true,
+          describe: (args) => `PreviewSlide: ${args.slideId}`,
+        },
+      },
       risk: "low",
       execute: async () => ({ summary: "preview ready" }),
     };

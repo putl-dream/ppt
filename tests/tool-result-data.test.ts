@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { z } from "zod";
 import { prepareToolResultData } from "../src/main/agent/runtime/tools/tool-result-data";
+import { WorkspaceFileService } from "../src/main/agent/tools/files/workspace-file-service";
 import { ToolOutputValidationError, validateToolOutput } from "../src/main/agent/tools/tool-validation";
 import type { ToolDefinition } from "../src/main/agent/tools/tool-definition";
 
@@ -31,9 +32,11 @@ describe("tool result data boundary", () => {
     expect(prepared.data).toBe(data);
     expect(prepared.truncated).toBe(true);
     expect(prepared.modelContent.length).toBeLessThan(300);
-    expect(prepared.persistedPath).toMatch(/^\.agent\/tool-results\//);
+    expect(prepared.persistedPath).toMatch(/^\.task_outputs\/tool-results\//);
     const stored = await readFile(join(workspaceRoot, prepared.persistedPath!), "utf8");
     expect(JSON.parse(stored)).toEqual(data);
+    await expect(new WorkspaceFileService(workspaceRoot).read(prepared.persistedPath!))
+      .resolves.toMatchObject({ content: stored });
   });
 
   it("injects a completion marker for empty results", async () => {

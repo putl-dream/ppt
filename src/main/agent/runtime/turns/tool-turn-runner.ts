@@ -17,7 +17,10 @@ export class ToolTurnRunner {
     if (
       toolCalls.length > 1
       && toolCalls.some((call) =>
-        run.input.presentationCompletionPolicy.isFinishTool(call.name))
+        run.input.toolPreflight.requiresExclusiveBatch(
+          call,
+          workspace.updatedToolUseContext,
+        ))
     ) {
       for (const toolCall of toolCalls) {
         const result: AgentModelToolResultBlock = {
@@ -209,7 +212,7 @@ export class ToolTurnRunner {
       toolName: tool.name,
     });
     if (
-      run.input.presentationCompletionPolicy.isFinishTool(tool.name)
+      run.input.presentationCompletionPolicy.canTerminate(tool)
       && (backgroundTasks.hasRunning() || backgroundTasks.hasPendingNotifications())
     ) {
       const guidance =
@@ -234,7 +237,7 @@ export class ToolTurnRunner {
     }
 
     if (mode === "background") {
-      const label = describeBackgroundTask(tool.name, args as Record<string, unknown>);
+      const label = describeBackgroundTask(tool, args);
       let bgId = "";
       const scheduled = backgroundTasks.prepare({
         toolName: tool.name,
@@ -246,7 +249,7 @@ export class ToolTurnRunner {
             args,
             context: workspace.updatedToolUseContext,
             toolCall,
-            runtimeArtifactRoot: deps.runtimeRoot,
+            modelArtifactRoot: deps.workspaceRoot,
             threadId: deps.threadId,
             signal: scope.signal,
             runPostToolUseHook: run.input.runPostToolUseHook,
@@ -293,7 +296,7 @@ export class ToolTurnRunner {
       args,
       context: workspace.updatedToolUseContext,
       toolCall,
-      runtimeArtifactRoot: deps.runtimeRoot,
+      modelArtifactRoot: deps.workspaceRoot,
       threadId: deps.threadId,
       signal: scope.signal,
       runPostToolUseHook: run.input.runPostToolUseHook,
@@ -333,7 +336,7 @@ export class ToolTurnRunner {
     });
     try {
       const decision = await run.input.presentationCompletionPolicy.interpret({
-        toolName: tool.name,
+        tool,
         toolUseId: toolCall.id,
         outcome,
         context: workspace.updatedToolUseContext,

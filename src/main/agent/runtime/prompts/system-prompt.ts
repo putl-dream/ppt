@@ -8,7 +8,13 @@ import { getSystemPrompt, type AssembledSystemPrompt } from "./system-prompt-ass
 import type { PromptStage } from "./prompt-stage";
 
 export type { AssembledSystemPrompt } from "./system-prompt-assembler";
-export { getSystemPrompt, getSystemPromptSections, clearSystemPromptCache } from "./system-prompt-assembler";
+export {
+  SystemPromptManager,
+  clearSystemPromptCache,
+  getSystemPrompt,
+  getSystemPromptSections,
+  registerSystemPromptSection,
+} from "./system-prompt-assembler";
 export { buildSystemPromptContext, buildSystemPromptContextSync } from "./prompt-context";
 export type { SystemPromptContext, SystemPromptContextInput } from "./prompt-context";
 export { SYSTEM_PROMPT_DYNAMIC_BOUNDARY } from "./prompt-sections";

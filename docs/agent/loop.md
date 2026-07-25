@@ -97,9 +97,8 @@ Loop 必须支持以下“继续而非失败”路径：
 - 未知工具、参数错误、权限拒绝、异常、取消都生成 `isError` 结果。
 - Terminal tool 不与普通写工具执行半个混合批次。
 - Terminal/独占语义来自 ToolDefinition metadata；mixed batch 在任何工具执行前整批拒绝。
-- 默认串行执行有副作用或共享上下文的工具。
-- 只有明确声明 concurrency-safe 的只读工具才可并行。
-- 并行结果即使完成顺序不同，也按原调用顺序提交。
+- 当前所有前台工具都按调用顺序串行执行。
+- 只读并发需要未来新增显式 concurrency metadata，并保证结果仍按原调用顺序提交；当前契约没有这项元数据。
 
 ## 6. 流式 attempt
 
