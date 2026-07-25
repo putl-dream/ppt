@@ -1746,3 +1746,250 @@ button.chat-session-crumb:hover {
   font-size: 10px;
   color: var(--text-muted);
 }
+
+/* ==========================================================================
+   Conversation hierarchy — compact, editorial, progressively disclosed
+   ========================================================================== */
+
+.chat-conversation-shell {
+  max-width: 800px;
+  padding-inline: 28px;
+}
+
+.chat-stream {
+  gap: 0;
+  padding: 30px 0 44px;
+}
+
+.chat-message {
+  margin: 0;
+}
+
+.chat-message.user {
+  margin: 22px 0 12px;
+}
+
+.chat-message.assistant {
+  margin: 12px 0 30px;
+}
+
+.user-message-bubble {
+  max-width: min(80%, 640px);
+  border: 0;
+  border-radius: 10px 10px 3px 10px;
+  background: color-mix(in srgb, var(--text-primary) 6%, var(--bg-input-field));
+  box-shadow: none;
+}
+
+.dark-theme .user-message-bubble {
+  background: color-mix(in srgb, var(--text-primary) 9%, var(--bg-input-field));
+}
+
+.markdown-body.user-message-text {
+  padding: 11px 15px;
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+.assistant-message-shell {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  align-items: start;
+  gap: 12px;
+}
+
+.assistant-message-avatar {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  margin-top: 1px;
+  border-radius: 8px;
+  color: var(--accent-primary);
+  background: color-mix(in srgb, var(--accent-primary) 9%, transparent);
+}
+
+.assistant-message-main {
+  min-width: 0;
+}
+
+.assistant-message-sender {
+  margin: 0 0 7px;
+  color: var(--text-primary);
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+}
+
+.assistant-response {
+  width: auto;
+  max-width: 72ch;
+  padding: 0;
+}
+
+.markdown-body {
+  font-size: 14.5px;
+  line-height: 1.72;
+}
+
+.markdown-body p {
+  margin-bottom: 0.8em;
+}
+
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3,
+.markdown-body h4,
+.markdown-body h5,
+.markdown-body h6 {
+  margin-top: 1.4em;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+
+.agent-run-timeline {
+  gap: 13px;
+}
+
+.agent-run-activity-cluster {
+  max-width: 72ch;
+}
+
+.agent-run-block--activity {
+  padding: 0;
+}
+
+.process-trace-panel {
+  margin: 0;
+  border-left: 1px solid color-mix(in srgb, var(--text-muted) 22%, transparent);
+  padding-left: 11px;
+}
+
+.process-trace-panel-header {
+  min-height: 26px;
+  padding: 3px 0;
+  font-size: 12px;
+}
+
+.process-trace-panel-header-left {
+  gap: 7px;
+}
+
+.process-trace-panel-label {
+  color: var(--text-secondary);
+  font-weight: 520;
+}
+
+.process-trace-panel-body {
+  gap: 1px;
+  padding: 3px 0 7px 2px;
+}
+
+.process-trace-row {
+  padding: 1px 0;
+}
+
+.process-trace-row-title {
+  min-height: 24px;
+  gap: 7px;
+  padding: 2px 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.process-trace-row-status,
+.process-trace-row-caret,
+.process-trace-row-toggle {
+  width: 14px;
+  height: 14px;
+  flex-basis: 14px;
+}
+
+.process-trace-progress-content {
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.process-trace-row-body {
+  margin-left: 21px;
+}
+
+.process-trace-row-text,
+.process-trace-row-line {
+  font-size: 11.5px;
+  line-height: 1.55;
+}
+
+.agent-run-tail-status {
+  padding-left: 42px;
+  font-size: 12px;
+}
+
+.chat-stream > .task-plan-card,
+.chat-stream > .inline-artifact-card,
+.chat-stream > .approval-card,
+.chat-stream > .patch-review-card,
+.chat-stream > .resolved-card {
+  width: calc(100% - 42px);
+  margin-left: 42px;
+}
+
+.chat-stream > .task-plan-card {
+  margin-top: 4px;
+  margin-bottom: 18px;
+  border-color: color-mix(in srgb, var(--text-muted) 18%, transparent);
+  border-radius: 8px;
+  background: transparent;
+}
+
+.chat-stream > .task-plan-card.task-plan-card--active {
+  border-color: color-mix(in srgb, var(--accent-primary) 34%, transparent);
+}
+
+.chat-stream > .task-plan-card .task-plan-card-title {
+  color: var(--text-secondary);
+}
+
+.chat-stream > .task-plan-card .task-plan-card-goal {
+  border: 0;
+  background: color-mix(in srgb, var(--accent-primary) 5%, transparent);
+}
+
+.message-action-btn {
+  padding: 5px;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+@media (max-width: 700px) {
+  .chat-conversation-shell {
+    padding-inline: 18px;
+  }
+
+  .user-message-bubble {
+    max-width: 88%;
+  }
+
+  .assistant-message-shell {
+    grid-template-columns: 24px minmax(0, 1fr);
+    gap: 9px;
+  }
+
+  .assistant-message-avatar {
+    width: 24px;
+    height: 24px;
+  }
+
+  .chat-stream > .task-plan-card,
+  .chat-stream > .inline-artifact-card,
+  .chat-stream > .approval-card,
+  .chat-stream > .patch-review-card,
+  .chat-stream > .resolved-card {
+    width: calc(100% - 33px);
+    margin-left: 33px;
+  }
+}

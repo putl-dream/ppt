@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from "react";
 import type { AgentQuestion, AgentQuestionOption, AgentQuestionResolved } from "@shared/agent-question";
+import { ResolvedCard } from "./ResolvedCard";
 
 interface AgentQuestionCardProps {
   question: AgentQuestion;
@@ -32,6 +33,16 @@ export const AgentQuestionCard: React.FC<AgentQuestionCardProps> = ({
     () => options.filter((option) => selectedIds.includes(option.id)),
     [options, selectedIds],
   );
+
+  if (resolved) {
+    return (
+      <ResolvedCard
+        label="确认问题"
+        title="已回答"
+        detail={resolved.label ?? resolved.value}
+      />
+    );
+  }
 
   const resolveWithOptions = (nextOptions: AgentQuestionOption[]) => {
     if (nextOptions.length === 0) return;
@@ -73,7 +84,7 @@ export const AgentQuestionCard: React.FC<AgentQuestionCardProps> = ({
   };
 
   const optionClass = (option: AgentQuestionOption) => {
-    const selected = selectedIds.includes(option.id) || resolved?.optionIds.includes(option.id);
+    const selected = selectedIds.includes(option.id);
     const styleClass = question.variant === "cards"
       ? "agent-question-option agent-question-option--card"
       : "agent-question-option agent-question-option--choice";
@@ -85,11 +96,6 @@ export const AgentQuestionCard: React.FC<AgentQuestionCardProps> = ({
       <div className="inline-artifact-card-header">
         <span className="inline-artifact-badge">确认问题</span>
         <span className="inline-artifact-title">需要确认</span>
-        {resolved && (
-          <span className="inline-artifact-resolved">
-            已选择：{resolved.label ?? resolved.value}
-          </span>
-        )}
       </div>
 
       {options.length > 0 && (

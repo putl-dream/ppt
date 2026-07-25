@@ -2,6 +2,7 @@ import React, { useId, useState } from "react";
 import type { LayoutVisualMode } from "@shared/layout-preference";
 import { LAYOUT_DESIGN_OPTIONS, loadLayoutVisualMode } from "@shared/layout-preference";
 import type { DesignSystemV1 } from "@design-system";
+import { ResolvedCard } from "./ResolvedCard";
 
 interface LayoutChoiceCardProps {
   slideCount: number;
@@ -25,6 +26,16 @@ export const LayoutChoiceCard: React.FC<LayoutChoiceCardProps> = ({
   const resolvedLabel = resolved === "confirmed"
     ? (layoutMode === "creative" ? "已选：创意装饰" : "已选：标准排版")
     : undefined;
+
+  if (resolved === "confirmed") {
+    return (
+      <ResolvedCard
+        label="视觉排版"
+        title="已确认"
+        detail={layoutMode === "creative" ? "创意装饰" : "标准排版"}
+      />
+    );
+  }
 
   return (
     <div className="inline-artifact-card layout-choice-card">

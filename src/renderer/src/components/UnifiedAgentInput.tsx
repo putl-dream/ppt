@@ -119,10 +119,12 @@ export const UnifiedAgentInput: React.FC<UnifiedAgentInputProps> = ({
           className="double-deck-panel-card unified-agent-input-shell"
           data-action-state={isPermissionGateOpen ? "permission" : busy ? "running" : "composing"}
         >
-          {isPermissionGateOpen ? (
-            <PermissionCardHost approval={pendingToolApproval} onResolve={onResolveToolApproval} />
-          ) : (
-            <>
+          {isPermissionGateOpen && (
+            <div className="tool-approval-attached">
+              <PermissionCardHost approval={pendingToolApproval} onResolve={onResolveToolApproval} />
+            </div>
+          )}
+          <>
               <div className="input-textarea-row">
                 <textarea
                   ref={textareaRef}
@@ -241,8 +243,7 @@ export const UnifiedAgentInput: React.FC<UnifiedAgentInputProps> = ({
                   </button>
                 </div>
               </div>
-            </>
-          )}
+          </>
         </div>
       </div>
     </div>

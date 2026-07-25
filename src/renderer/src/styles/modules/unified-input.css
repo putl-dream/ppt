@@ -619,4 +619,106 @@
   }
 }
 
+/* Compact composer: stable frame, light controls, no double-deck visual weight. */
+.unified-agent-input-stack {
+  gap: 6px;
+}
 
+.double-deck-panel-card {
+  overflow: hidden;
+  border-color: color-mix(in srgb, var(--text-muted) 25%, transparent);
+  border-radius: 12px;
+  background: var(--bg-input-field);
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.045);
+  transition: border-color 140ms ease, box-shadow 140ms ease;
+}
+
+.double-deck-panel-card:focus-within {
+  border-color: color-mix(in srgb, var(--accent-primary) 50%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-primary) 12%, transparent);
+}
+
+.input-textarea-row {
+  padding: 10px 12px 5px;
+  border-radius: 0;
+}
+
+.input-textarea {
+  min-height: 34px;
+  max-height: 180px;
+  padding: 0;
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.functional-control-bar {
+  gap: 8px;
+  padding: 4px 7px 7px;
+  border-radius: 0;
+}
+
+.functional-left,
+.functional-right {
+  gap: 6px;
+}
+
+.generation-mode-switch {
+  padding: 1px;
+  border-color: color-mix(in srgb, var(--text-muted) 20%, transparent);
+  background: transparent;
+}
+
+.generation-mode-switch button {
+  min-height: 23px;
+  padding-inline: 7px;
+  font-size: 10.5px;
+}
+
+.generation-mode-switch button.is-active {
+  background: color-mix(in srgb, var(--accent-primary) 10%, transparent);
+  color: var(--accent-primary);
+  box-shadow: none;
+}
+
+.action-dock-status {
+  font-size: 10.5px;
+  font-weight: 500;
+}
+
+.mini-model-select {
+  min-height: 28px;
+  border-color: transparent;
+  background: transparent;
+}
+
+.mini-model-select:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--text-muted) 20%, transparent);
+  background: var(--bg-glass-hover);
+}
+
+.send-cta-btn,
+.stop-cta-btn {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  box-shadow: none;
+}
+
+.send-cta-btn:hover:not(:disabled),
+.stop-cta-btn:hover:not(:disabled) {
+  transform: none;
+  box-shadow: none;
+}
+
+.chat-workspace-footer-unified {
+  padding: 8px 0 10px;
+  border-top: 1px solid color-mix(in srgb, var(--text-muted) 10%, transparent);
+  background: color-mix(in srgb, var(--bg-canvas) 94%, transparent);
+  backdrop-filter: blur(12px);
+}
+
+@media (max-width: 620px) {
+  .action-dock-status {
+    display: none;
+  }
+}

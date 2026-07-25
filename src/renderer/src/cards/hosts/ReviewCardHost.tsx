@@ -3,6 +3,7 @@ import type { DisplayEvent } from "@shared/card-display-protocol";
 import { formatApprovalCommand } from "@shared/approval-command-display";
 import { FileIcon } from "../../components/Icons";
 import { PatchReviewCard } from "../../components/PatchReviewCard";
+import { ResolvedCard } from "../../components/ResolvedCard";
 import {
   recordDisplayCardAction,
   useReviewCardManager,
@@ -61,20 +62,29 @@ export const ReviewCardHost: React.FC<ReviewCardHostProps> = ({
 
         if (event.kind !== "review.command-proposal") return null;
         const approval = event.payload;
-        if (card.status !== "active") return null;
+        if (card.status !== "active") {
+          return (
+            <ResolvedCard
+              key={event.eventId}
+              label="排版更新"
+              title={card.lastAction?.actionId === "approve" ? "已应用" : "已取消"}
+              detail={approval.summary}
+            />
+          );
+        }
         const resolve = (approved: boolean) => {
           recordDisplayCardAction(
             event.eventId,
             approved ? "approve" : "deny",
             undefined,
-            approved ? "resolved" : "dismissed",
+            "resolved",
           );
           onResolveApproval(event, approved);
         };
 
         return (
           <div className="approval-card" key={event.eventId}>
-            <div className="approval-card-title"><span>📋 待审核的排版更新</span></div>
+            <div className="approval-card-title"><span>待审核的排版更新</span></div>
             <p className="approval-summary">{approval.summary}</p>
             {approval.risk ? (
               <p className="approval-summary">

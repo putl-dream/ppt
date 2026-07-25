@@ -1,1 +1,5 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+/*
+ * Electron's CSP intentionally blocks remote font stylesheets. Prefer native
+ * UI families so typography is deterministic offline instead of silently
+ * falling back after a failed Google Fonts request.
+ */

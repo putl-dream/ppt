@@ -426,6 +426,32 @@ export class ToolTurnRunner {
       toolName: tool.name,
       status: "completed",
     });
+    if (tool.name === "PreviewSlide") {
+      const result = outcome.validatedResult as {
+        preview?: { slideId?: string; title?: string; description?: string };
+        thumbnail?: {
+          pngBase64: string;
+          width: number;
+          height: number;
+          mimeType: "image/png";
+        } | null;
+        thumbnailError?: string;
+      };
+      if (result.preview?.slideId) {
+        run.emitProgress({
+          type: "slide-preview-ready",
+          toolCallId: toolCall.id,
+          slideId: result.preview.slideId,
+          title: result.preview.title ?? result.preview.slideId,
+          description: result.preview.description ?? "",
+          thumbnail: result.thumbnail ?? null,
+          ...(result.thumbnailError ? { thumbnailError: result.thumbnailError } : {}),
+          message: result.thumbnail
+            ? `已生成 ${result.preview.title ?? result.preview.slideId} 的页面预览`
+            : `已读取 ${result.preview.title ?? result.preview.slideId} 的页面结构`,
+        });
+      }
+    }
     try {
       const decision = await run.input.presentationCompletionPolicy.interpret({
         tool,

@@ -66,6 +66,34 @@ export function toStreamDisplayEvent(
     };
   }
 
+  if (event.type === "slide-preview-ready") {
+    return {
+      protocolVersion: 1,
+      eventId: `slide-preview:${runId}:${event.toolCallId}`,
+      emittedAt: now(),
+      kind: "artifact.slide-preview",
+      category: "artifact",
+      source: {
+        kind: "tool",
+        toolName: "PreviewSlide",
+        toolCallId: event.toolCallId,
+      },
+      scope: { sessionId, runId },
+      semantics: {
+        blocking: false,
+        requiresResponse: false,
+        priority: "normal",
+      },
+      payload: {
+        slideId: event.slideId,
+        title: event.title,
+        description: event.description,
+        thumbnail: event.thumbnail,
+        ...(event.thumbnailError ? { thumbnailError: event.thumbnailError } : {}),
+      },
+    };
+  }
+
   return undefined;
 }
 

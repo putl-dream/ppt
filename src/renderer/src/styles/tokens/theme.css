@@ -23,10 +23,10 @@
   --accent-orange: #ea580c;
   
   --bg-canvas: #ffffff;
-  --font-display: "Outfit", "Inter", sans-serif;
-  --font-body: "Inter", sans-serif;
+  --font-display: "Segoe UI Variable Display", "Segoe UI", "Microsoft YaHei UI", sans-serif;
+  --font-body: "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI", sans-serif;
   --font-serif: "Georgia", serif;
-  --font-mono: "JetBrains Mono", monospace;
+  --font-mono: "Cascadia Code", "Cascadia Mono", "SFMono-Regular", Consolas, monospace;
   
   --shadow-premium: 0 15px 35px -10px rgba(0, 0, 0, 0.08);
   --shadow-glow: 0 0 20px rgba(2, 132, 199, 0.1);

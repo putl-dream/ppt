@@ -4,6 +4,7 @@ import {
   NARRATIVE_MODE_LABELS,
   RESTRUCTURE_PERMISSION_LABELS,
 } from "@shared/commercial-communication";
+import { ResolvedCard } from "./ResolvedCard";
 
 interface BriefCardProps {
   fields: BriefFields;
@@ -29,14 +30,26 @@ export const BriefCard: React.FC<BriefCardProps> = ({
   fields,
   resolved,
   onConfirm,
-}) => (
+}) => resolved === "confirmed" ? (
+  <ResolvedCard label="需求简报" title="已确认" detail={fields.title}>
+    <dl className="brief-card-fields">
+      {FIELD_LABELS.map(({ key, label }) => (
+        <div key={key} className="brief-card-field">
+          <dt>{label}</dt>
+          <dd>{key === "restructurePermission"
+            ? RESTRUCTURE_PERMISSION_LABELS[fields.restructurePermission]
+            : key === "narrativeMode"
+              ? NARRATIVE_MODE_LABELS[fields.narrativeMode]
+              : fields[key]}</dd>
+        </div>
+      ))}
+    </dl>
+  </ResolvedCard>
+) : (
   <div className="inline-artifact-card brief-card">
     <div className="inline-artifact-card-header">
       <span className="inline-artifact-badge">需求简报</span>
       <span className="inline-artifact-title">需求简报摘要</span>
-      {resolved === "confirmed" && (
-        <span className="inline-artifact-resolved">已确认</span>
-      )}
     </div>
 
     <dl className="brief-card-fields">

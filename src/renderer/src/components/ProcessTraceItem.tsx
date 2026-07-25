@@ -60,6 +60,7 @@ export const ProcessTraceItem: React.FC<ProcessTraceItemProps> = ({
           onClick={toggleExpanded}
           aria-expanded={effectiveExpanded}
         >
+          {statusIndicator}
           <span className="process-trace-row-toggle" aria-hidden="true">
             <CaretIcon size={12} />
           </span>

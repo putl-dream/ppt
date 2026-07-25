@@ -101,4 +101,34 @@ describe("presentation-draft", () => {
     expect(slideNeedsLayoutChoice(slide)).toBe(false);
     expect(presentationNeedsLayoutChoice({ id: "p", title: "T", revision: 1, designSystem: TEST_DESIGN_SYSTEM, slides: [slide] })).toBe(false);
   });
+
+  it("does not send a designed slide back to layout choice after targeted element fixes", () => {
+    const slide: Slide = {
+      id: "s1",
+      title: "已设计页面",
+      layout: "concept",
+      grammarVariant: "editorial-columns",
+      elements: [
+        {
+          id: "body",
+          type: "text",
+          x: 120,
+          y: 180,
+          width: 900,
+          height: 120,
+          text: "仅调整过边距、字号和密度的正文",
+          fontSize: 24,
+        },
+      ],
+    };
+
+    expect(slideNeedsLayoutChoice(slide)).toBe(false);
+    expect(presentationNeedsLayoutChoice({
+      id: "p",
+      title: "T",
+      revision: 2,
+      designSystem: TEST_DESIGN_SYSTEM,
+      slides: [slide],
+    })).toBe(false);
+  });
 });

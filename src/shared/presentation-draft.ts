@@ -20,6 +20,16 @@ function slideHasBodyText(slide: Slide): boolean {
 
 export function slideNeedsLayoutChoice(slide: Slide): boolean {
   if (CHROME_LAYOUTS.has(slide.layout ?? "")) return false;
+  // A chosen grammar/design variant is durable evidence that this slide has
+  // already entered the design workflow. Targeted typography or spacing fixes
+  // may legitimately leave no generated cards/shapes, so element heuristics
+  // alone must not send an edited deck back to the initial layout-choice gate.
+  if (
+    slide.grammarVariant
+    || slide.designOverride
+    || slide.slideVariant
+    || slide.sceneRef
+  ) return false;
   return slideHasBodyText(slide)
     && !slideHasLayoutCards(slide)
     && !slideHasLayoutGeneratedElements(slide);

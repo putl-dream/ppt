@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import type { DisplayEvent } from "@shared/card-display-protocol";
+import { ResolvedCard } from "./ResolvedCard";
 
 type PatchEvent = Extract<DisplayEvent, { kind: "review.patch-ready" }>;
 type PatchData = PatchEvent["payload"] & { resolved?: "accepted" | "rejected" };
@@ -20,6 +21,16 @@ export const PatchReviewCard: React.FC<PatchReviewCardProps> = ({
   const [expanded, setExpanded] = useState(false);
   const isResolved = Boolean(patch.resolved);
   const canShowDiff = Boolean(patch.contentBefore !== undefined && patch.contentAfter !== undefined);
+
+  if (patch.resolved) {
+    return (
+      <ResolvedCard
+        label="产物变更"
+        title={patch.resolved === "accepted" ? "已接受" : "已拒绝"}
+        detail={patch.targetPath}
+      />
+    );
+  }
 
   const renderDiffPreview = () => {
     if (!canShowDiff) return null;

@@ -1,5 +1,6 @@
 import React from "react";
 import type { OutlineItem } from "@shared/project-artifacts";
+import { ResolvedCard } from "./ResolvedCard";
 
 interface OutlineCardProps {
   items: OutlineItem[];
@@ -15,14 +16,24 @@ export const OutlineCard: React.FC<OutlineCardProps> = ({
   busy,
   onConfirm,
   onRevise,
-}) => (
+}) => resolved === "confirmed" ? (
+  <ResolvedCard label="内容大纲" title="已确认" detail={`${items.length} 个章节`}>
+    <ol className="outline-card-list">
+      {items.map((item, index) => (
+        <li key={item.id} className="outline-card-item">
+          <div className="outline-card-item-title">
+            <span className="outline-card-index">{index + 1}</span>
+            <span>{item.title}</span>
+          </div>
+        </li>
+      ))}
+    </ol>
+  </ResolvedCard>
+) : (
   <div className="inline-artifact-card outline-card">
     <div className="inline-artifact-card-header">
       <span className="inline-artifact-badge">内容大纲</span>
       <span className="inline-artifact-title">内容大纲预览</span>
-      {resolved === "confirmed" && (
-        <span className="inline-artifact-resolved">已确认</span>
-      )}
     </div>
 
     <ol className="outline-card-list">

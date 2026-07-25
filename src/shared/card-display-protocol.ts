@@ -180,6 +180,24 @@ const artifactReadyEventSchema = z.object({
   }),
 });
 
+const artifactSlidePreviewEventSchema = z.object({
+  ...commonDisplayEventShape,
+  kind: z.literal("artifact.slide-preview"),
+  category: z.literal("artifact"),
+  payload: z.object({
+    slideId: z.string().trim().min(1),
+    title: z.string(),
+    description: z.string(),
+    thumbnail: z.object({
+      pngBase64: z.string().min(1),
+      width: z.number().int().positive(),
+      height: z.number().int().positive(),
+      mimeType: z.literal("image/png"),
+    }).nullable(),
+    thumbnailError: z.string().optional(),
+  }),
+});
+
 const notificationMessageEventSchema = z.object({
   ...commonDisplayEventShape,
   kind: z.literal("notification.message"),
@@ -212,6 +230,7 @@ export const displayEventSchema = z.discriminatedUnion("kind", [
   reviewPatchReadyEventSchema,
   progressTaskListUpdatedEventSchema,
   artifactReadyEventSchema,
+  artifactSlidePreviewEventSchema,
   notificationMessageEventSchema,
   environmentActionRequiredEventSchema,
 ]);

@@ -38,7 +38,7 @@ describe("AgentQuestionCard", () => {
     });
   });
 
-  it("submits a single choice immediately and disables resolved questions", () => {
+  it("submits a single choice immediately and compacts resolved questions", () => {
     const onResolve = vi.fn();
     const view = render(
       <AgentQuestionCard
@@ -76,8 +76,8 @@ describe("AgentQuestionCard", () => {
       />,
     );
 
-    expect((screen.getByRole("button", { name: "管理层" }) as HTMLButtonElement).disabled)
-      .toBe(true);
-    expect(screen.getByText("已选择：管理层")).not.toBeNull();
+    expect(screen.queryByRole("button", { name: "管理层" })).toBeNull();
+    expect(screen.getByText("已回答")).not.toBeNull();
+    expect(screen.getByText("管理层")).not.toBeNull();
   });
 });

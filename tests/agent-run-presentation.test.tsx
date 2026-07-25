@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import React from "react";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { deriveAgentRunPresentation } from "../src/renderer/src/agentRunPresentation";
 import { AgentRunLoader } from "../src/renderer/src/components/AgentRunLoader";
@@ -227,6 +227,38 @@ describe("agent run presentation", () => {
 
     expect(screen.getAllByRole("button")).toHaveLength(1);
     expect(screen.getByRole("button").textContent).toContain("查看思考过程");
+  });
+
+  it("collapses adjacent completed tools into one disclosure", () => {
+    render(
+      <AgentRunTimeline
+        content=""
+        items={[
+          {
+            id: "preview-1",
+            kind: "tool",
+            toolCallId: "preview-call-1",
+            toolName: "PreviewSlide",
+            status: "completed",
+          },
+          {
+            id: "preview-2",
+            kind: "tool",
+            toolCallId: "preview-call-2",
+            toolName: "PreviewSlide",
+            status: "completed",
+          },
+        ]}
+      />,
+    );
+
+    const disclosure = screen.getByRole("button", { name: "展开执行过程" });
+    expect(disclosure.textContent).toContain("2 项操作");
+    expect(document.querySelector('[data-run-block-id="preview-1"]')).toBeNull();
+
+    fireEvent.click(disclosure);
+    expect(document.querySelector('[data-run-block-id="preview-1"]')).not.toBeNull();
+    expect(document.querySelector('[data-run-block-id="preview-2"]')).not.toBeNull();
   });
 
   it("renders interrupted and failed outcomes outside assistant transcript text", () => {

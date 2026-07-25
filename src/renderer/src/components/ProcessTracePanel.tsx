@@ -16,6 +16,7 @@ interface ProcessTracePanelProps {
   startedAt?: number;
   defaultOpen?: boolean;
   defaultExpandRows?: boolean;
+  collapseOnComplete?: boolean;
 }
 
 export const ProcessTracePanel: React.FC<ProcessTracePanelProps> = ({
@@ -25,6 +26,7 @@ export const ProcessTracePanel: React.FC<ProcessTracePanelProps> = ({
   startedAt,
   defaultOpen = false,
   defaultExpandRows = false,
+  collapseOnComplete = false,
 }) => {
   const [open, setOpen] = useState(
     defaultOpen || live,
@@ -63,10 +65,12 @@ export const ProcessTracePanel: React.FC<ProcessTracePanelProps> = ({
         if (startedAt !== undefined) startedAtRef.current = startedAt;
       }
       setOpen(true);
+    } else if (wasLive && collapseOnComplete) {
+      setOpen(false);
     }
 
     wasLiveRef.current = live;
-  }, [live, startedAt]);
+  }, [collapseOnComplete, live, startedAt]);
 
   const rows = useMemo(() => buildProcessTraceRows(items, live), [items, live]);
   const hasRunningToolRow = rows.some((row) => row.status === "running");
@@ -123,11 +127,17 @@ export const ProcessTracePanel: React.FC<ProcessTracePanelProps> = ({
       {open && (
         <div className="process-trace-panel-body">
           {rows.map((row) => (
-            <ProcessTraceItem
+            <div
               key={row.id}
-              row={row}
-              defaultExpanded={defaultExpandRows || Boolean(row.active && row.kind !== "thought")}
-            />
+              className="agent-run-block agent-run-block--activity"
+              data-run-block-id={row.id}
+              data-run-block-kind={row.kind}
+            >
+              <ProcessTraceItem
+                row={row}
+                defaultExpanded={defaultExpandRows || Boolean(row.active && row.kind !== "thought")}
+              />
+            </div>
           ))}
         </div>
       )}

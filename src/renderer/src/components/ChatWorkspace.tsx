@@ -7,6 +7,7 @@ import {
   CopyIcon,
   Edit3Icon,
   OpenPreviewIcon,
+  SparklesIcon,
 } from "./Icons";
 import { UnifiedAgentInput } from "./UnifiedAgentInput";
 import { AgentRunLoader } from "./AgentRunLoader";
@@ -746,7 +747,12 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
                   )}
                 </div>
               ) : (
-                <>
+                <div className="assistant-message-shell">
+                  <div className="assistant-message-avatar" aria-hidden="true">
+                    <SparklesIcon size={16} />
+                  </div>
+                  <div className="assistant-message-main">
+                    <div className="assistant-message-sender">PPT Agent</div>
                   {(() => {
                     const useLiveTrace = busy && streamingMessageId === msg.id;
                     const resolvedTrace = useLiveTrace
@@ -818,7 +824,8 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
                   onOpenDeckPreview={onOpenDeckPreview}
                   onExportDeck={onExportDeck}
                 />
-                </>
+                  </div>
+                </div>
               )}
             </div>
           );
@@ -848,6 +855,16 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
           onOpenDeckPreview={onOpenDeckPreview}
           onExportDeck={onExportDeck}
         />
+
+        {showTaskPlan && conversationFocus.kind === "main" && (
+          <TaskPlanCard
+            goal={planGoal}
+            tasks={activeTasks}
+            live={busy || hasActiveTaskPlan}
+            state={latestPlan?.state}
+            archive={latestPlan?.archive}
+          />
+        )}
 
         {/* 当前活动只出现在时间线尾部；正文流式展示时自动让位。 */}
         <AgentRunLoader
@@ -883,7 +900,7 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
         {/* 斜杠弹出指令 */}
         {showSlashMenu && !pendingToolApproval && (
           <div className="slash-menu-popup" role="listbox" aria-label="快捷指令">
-            <div className="slash-menu-header">💡 斜杠快捷指令集</div>
+            <div className="slash-menu-header">斜杠快捷指令</div>
             {slashCommands.map((command, index) => (
               <button
                 type="button"
@@ -898,7 +915,7 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
           </div>
         )}
 
-        <div className={showTaskPlan && conversationFocus.kind === "main" ? "chat-input-stack" : undefined}>
+        <div>
           <InteractionCardHost
             host="composer-before-input"
             selectedDesignSystem={selectedDesignSystem}
@@ -906,15 +923,6 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
             onResolveQuestion={onResolveQuestion}
             onConfirmLayout={onConfirmLayout}
           />
-          {showTaskPlan && conversationFocus.kind === "main" && (
-            <TaskPlanCard
-              goal={planGoal}
-              tasks={activeTasks}
-              live={busy || hasActiveTaskPlan}
-              state={latestPlan?.state}
-              archive={latestPlan?.archive}
-            />
-          )}
           {conversationFocus.kind !== "main" && !pendingToolApproval && (
             <div className="team-focus-composer-note">
               当前为只读观察视图；这里发送的新指令仍会交给 lead。

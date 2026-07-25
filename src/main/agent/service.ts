@@ -42,6 +42,21 @@ export type AgentServiceEvent =
       status: "running" | "completed" | "failed" | "denied" | "invalid-input";
       error?: string;
     }
+  | {
+      type: "slide-preview-ready";
+      message: string;
+      toolCallId: string;
+      slideId: string;
+      title: string;
+      description: string;
+      thumbnail: {
+        pngBase64: string;
+        width: number;
+        height: number;
+        mimeType: "image/png";
+      } | null;
+      thumbnailError?: string;
+    }
   | { type: "approval-waiting"; message: string }
   | {
       type: "tool-approval-waiting";

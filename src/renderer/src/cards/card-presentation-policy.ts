@@ -42,7 +42,7 @@ export const CARD_PRESENTATION_POLICIES: Record<DisplayEventKind, CardPresentati
   },
   "interaction.layout-required": {
     category: "interaction",
-    host: "composer-before-input",
+    host: "timeline",
     activation: "domain-ready",
     persistence: "session",
     replaceActiveInScope: true,
@@ -80,6 +80,13 @@ export const CARD_PRESENTATION_POLICIES: Record<DisplayEventKind, CardPresentati
       return `artifact:${event.payload.artifactId}`;
     },
   },
+  "artifact.slide-preview": {
+    category: "artifact",
+    host: "timeline",
+    activation: "immediate",
+    persistence: "session",
+    dedupeKey: (event) => event.eventId,
+  },
   "notification.message": {
     category: "notification",
     host: "global-notification",
@@ -110,6 +117,7 @@ export const TOOL_DISPLAY_BINDINGS: Readonly<Record<string, readonly DisplayEven
   TaskReviewRequest: ["progress.task-list-updated"],
   TaskReviewApprove: ["progress.task-list-updated"],
   TaskReviewReject: ["progress.task-list-updated"],
+  PreviewSlide: ["artifact.slide-preview"],
 };
 
 export function getCardPresentationPolicy(event: DisplayEvent): CardPresentationPolicy {
