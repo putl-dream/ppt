@@ -130,7 +130,12 @@ export function toResultDisplayEvents(
   if (result.status === "approval-required") {
     return [{
       protocolVersion: 1,
-      eventId: `command-proposal:${result.approval.threadId}`,
+      // A thread can produce more than one proposal over its lifetime. Key the
+      // card by run so a later proposal cannot inherit an earlier card's
+      // resolved state and appear applied before its commands are committed.
+      eventId: runId
+        ? `command-proposal:${runId}`
+        : createDisplayEventId("command-proposal"),
       emittedAt: now(),
       kind: "review.command-proposal",
       category: "review",

@@ -52,6 +52,21 @@ function createCategoryCardManager(category: DisplayCardCategory): CategoryCardM
         if (sameCard) {
           matched = true;
           if (card.event.eventId === event.eventId) {
+            if (
+              card.event.kind === "review.command-proposal"
+              && event.kind === "review.command-proposal"
+              && card.event.scope.runId
+              && event.scope.runId
+              && card.event.scope.runId !== event.scope.runId
+            ) {
+              return {
+                event,
+                policy,
+                status: "active" as const,
+                receivedAt: Date.now(),
+                lastAction: undefined,
+              };
+            }
             // Display events can arrive once through the live stream and again
             // in the terminal result. Refresh the event payload/scope without
             // reopening a card the user has already resolved.
@@ -201,7 +216,22 @@ export function hydrateDisplayCardManagers(input: PersistedDisplayCard[]): void 
     environment: [],
   };
   for (const rawCard of input) {
-    const card = persistedDisplayCardSchema.parse(rawCard);
+    const parsedCard = persistedDisplayCardSchema.parse(rawCard);
+    const actionRunId = parsedCard.lastAction?.correlation.runId;
+    const eventRunId = parsedCard.event.scope.runId;
+    const card = (
+      parsedCard.event.kind === "review.command-proposal"
+      && parsedCard.status === "resolved"
+      && actionRunId
+      && eventRunId
+      && actionRunId !== eventRunId
+    )
+      ? {
+          event: parsedCard.event,
+          status: "active" as const,
+          receivedAt: parsedCard.receivedAt,
+        }
+      : parsedCard;
     if (card.event.kind === "interaction.layout-required") continue;
     const policy = getCardPresentationPolicy(card.event);
     if (policy.persistence !== "session") continue;

@@ -15,6 +15,7 @@ import {
   useInteractionCardManager,
   usePermissionCardManager,
   useProgressCardManager,
+  useReviewCardManager,
 } from "../src/renderer/src/cards/display-card-managers";
 import { getCardPresentationPolicy } from "../src/renderer/src/cards/card-presentation-policy";
 import { createSessionPresentation } from "../src/shared/session";
@@ -229,5 +230,80 @@ describe("card display protocol", () => {
     if (event?.kind !== "review.command-proposal") throw new Error("missing review event");
     expect(event.payload.threadId).toBe("thread-review");
     expect(event.payload.commands).toHaveLength(1);
+  });
+
+  it("creates a fresh approval card for each proposal in the same thread", () => {
+    const proposal = {
+      status: "approval-required" as const,
+      approval: {
+        threadId: "thread-review",
+        summary: "更新标题",
+        commands: [{ id: "command-1", type: "set-presentation-title" as const, title: "新标题" }],
+      },
+    };
+    const [first] = toResultDisplayEvents(proposal, "session-1", "run-1");
+    const [second] = toResultDisplayEvents(proposal, "session-1", "run-2");
+    if (!first || !second) throw new Error("missing proposal events");
+
+    expect(first?.eventId).toBe("command-proposal:run-1");
+    expect(second?.eventId).toBe("command-proposal:run-2");
+    expect(second?.eventId).not.toBe(first?.eventId);
+
+    ingestDisplayEvent(first);
+    recordDisplayCardAction(first.eventId, "approve", undefined, "resolved");
+    ingestDisplayEvent(second);
+
+    const cards = useReviewCardManager.getState().cards;
+    expect(cards).toHaveLength(2);
+    expect(cards[0]).toMatchObject({
+      event: { eventId: "command-proposal:run-1" },
+      status: "resolved",
+    });
+    expect(cards[1]).toMatchObject({
+      event: { eventId: "command-proposal:run-2" },
+      status: "active",
+    });
+    expect(cards[1]).not.toHaveProperty("lastAction");
+  });
+
+  it("reactivates a legacy proposal card whose resolved action belongs to an older run", () => {
+    const [event] = toResultDisplayEvents({
+      status: "approval-required",
+      approval: {
+        threadId: "thread-review",
+        summary: "提交 SVG 幻灯片",
+        commands: [{ id: "command-2", type: "set-presentation-title", title: "SVG 版本" }],
+      },
+    }, "session-1", "run-new");
+    if (!event) throw new Error("missing proposal event");
+
+    hydrateDisplayCardManagers([{
+      event: {
+        ...event,
+        eventId: "command-proposal:thread-review",
+      },
+      status: "resolved",
+      receivedAt: Date.now(),
+      lastAction: {
+        protocolVersion: 1,
+        eventId: "command-proposal:thread-review",
+        actionId: "approve",
+        correlation: {
+          sessionId: "session-1",
+          runId: "run-old",
+          threadId: "thread-review",
+        },
+      },
+    }]);
+
+    const [card] = useReviewCardManager.getState().cards;
+    expect(card).toMatchObject({
+      event: {
+        eventId: "command-proposal:thread-review",
+        scope: { runId: "run-new" },
+      },
+      status: "active",
+    });
+    expect(card).not.toHaveProperty("lastAction");
   });
 });
