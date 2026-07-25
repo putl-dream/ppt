@@ -472,7 +472,7 @@ describe("SQLite session store", () => {
     expect(() => sessionChatMessageSchema.parse(durable)).not.toThrow();
   });
 
-  it("persists the same pending-layout terminal copy used by Renderer", async () => {
+  it("persists content-only terminal copy without asking for a layout choice", async () => {
     const { store } = await createStore();
     const created = await store.createSession({ title: "Layout choice" });
     const sessionId = created.activeSession!.session.id;
@@ -505,7 +505,7 @@ describe("SQLite session store", () => {
     expect(store.getSession(sessionId).messages.at(-1)?.content)
       .toContain("1 页待设计");
     expect(store.getSession(sessionId).messages.at(-1)?.content)
-      .toContain("请选择设计方向");
+      .not.toContain("请选择设计方向");
   });
 
   it("persists teammate reasoning and tools under the linked task activity", async () => {

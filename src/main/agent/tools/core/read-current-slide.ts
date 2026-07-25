@@ -18,6 +18,28 @@ export const readCurrentSlideTool: ToolDefinition<
   category: "core",
   loadPolicy: "core",
   inputSchema: readCurrentSlideSchema,
+  mapResultToModelContent: (result) => {
+    const slide = result.slide;
+    if (!slide) return JSON.stringify({ slide: null });
+    if (slide.visualSource?.kind !== "svg") return JSON.stringify(result);
+    return JSON.stringify({
+      slide: {
+        id: slide.id,
+        title: slide.title,
+        speakerNotes: slide.speakerNotes,
+        narrative: slide.narrative,
+        visualSource: {
+          kind: "svg",
+          sourcePath: slide.visualSource.sourcePath,
+          sha256: slide.visualSource.sha256,
+          width: slide.visualSource.width,
+          height: slide.visualSource.height,
+          resourceCount: slide.visualSource.resources.length,
+        },
+        readInstruction: `Use ReadFile("${slide.visualSource.sourcePath}") to inspect or edit the complete SVG page.`,
+      },
+    });
+  },
   risk: "low",
   execute: async (_, context) => {
     if (!context.currentSlideId) {

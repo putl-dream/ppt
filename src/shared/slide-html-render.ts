@@ -13,6 +13,7 @@ import {
   shapeBoxShadow,
   shapeFillColor,
 } from "./shape-render-utils";
+import { utf8ToBase64 } from "./base64";
 
 export const SLIDE_WIDTH = 1280;
 export const SLIDE_HEIGHT = 720;
@@ -140,6 +141,19 @@ export function renderSlideHtml(
   designSystem: DesignSystemV2,
   options: DeckHtmlRenderOptions = {},
 ): string {
+  if (slide.visualSource?.kind === "svg") {
+    if (slide.elements.length > 0) {
+      throw new Error(
+        `SVG-native slide '${slide.title}' contains legacy canvas elements.`,
+      );
+    }
+    const svgDataUri = `data:image/svg+xml;base64,${utf8ToBase64(slide.visualSource.markup)}`;
+    return `
+<section class="slide slide-svg" data-index="${index}">
+  <img class="slide-svg-source" src="${svgDataUri}" alt="${escapeHtml(slide.title)}" />
+</section>`;
+  }
+
   const style = resolveSlideStyle(designSystem, slide);
   const showChrome = slide.layout !== "cover" && slide.layout !== "section";
   const elementsHtml = slide.elements
@@ -170,6 +184,13 @@ const SLIDE_BASE_STYLES = `
     width: ${SLIDE_WIDTH}px;
     height: ${SLIDE_HEIGHT}px;
     overflow: hidden;
+  }
+  .slide-svg { background: #ffffff; }
+  .slide-svg-source {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: fill;
   }
   .slide-header { padding: 50px 120px 0; }
   .slide-header h2 { font-size: 36px; font-weight: bold; }

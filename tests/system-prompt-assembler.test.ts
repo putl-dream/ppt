@@ -100,6 +100,18 @@ describe("system prompt assembly", () => {
     expect(text).not.toContain("PreviewSlide");
   });
 
+  it("requires one autonomous content-and-visual proposal for deck creation", () => {
+    const text = assembleSystemPrompt(baseContext()).text;
+
+    expect(text).toContain("以完整页面 SVG 为唯一视觉事实源");
+    expect(text).toContain("最后只用 SubmitSvgDeck 提交");
+    expect(text).toContain("不要调用固定 layout handler");
+    expect(text).not.toContain("完整 Design System 与逐页 layout / grammar");
+    expect(text).toContain("标准排版 / 创意装饰");
+    expect(text).toContain("只有用户明确说“只要内容草稿”时才允许在未排版草稿处结束");
+    expect(text).toContain("不要询问工具名、内部阶段、排版类型或实现细节");
+  });
+
   it("shows every registered skill while ranking current recommendations first", () => {
     const registry = createEmptySkillRegistry();
     registerSkillFromContent(registry, "/tmp/build", "ppt-build", SAMPLE_SKILL);

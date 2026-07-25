@@ -8,7 +8,7 @@
 ![Vitest](https://img.shields.io/badge/Vitest-3.2-6E9F18?logo=vitest&logoColor=white)
 ![Local First](https://img.shields.io/badge/local--first-desktop-111827)
 
-Agent PPT 是一个本地优先的 AI 演示文稿工作台。它会根据任务需要生成可确认的 Brief、大纲、分镜、内容草稿、排版计划或 PPTX，让模型像一个会使用工具并交付证据的演示设计搭档，而不是一次性吐出不可控的黑箱文件。
+Agent PPT 是一个本地优先的 AI 演示文稿工作台。它会根据任务需要生成可确认的 Brief、大纲、分镜、一体化内容与视觉方案、排版计划或 PPTX，让模型像一个会使用工具并交付证据的演示设计搭档，而不是一次性吐出不可控的黑箱文件。
 
 它尤其适合这些场景：
 
@@ -22,6 +22,8 @@ Agent PPT 是一个本地优先的 AI 演示文稿工作台。它会根据任务
 **不是固定阶段机，而是模型驱动的工具协作。**
 
 Runtime 向模型提供当前 workspace 事实、可用 Skill 和动态工具。复杂创建任务可以按需产出 Brief / Outline / Storyboard / Layout Plan；局部编辑、审查或导出可以直接走短路径。只有缺少关键约束、发生高风险变更或用户明确要求比较方案时才暂停交互。
+
+新建整套 PPT 或批量创建页面时，Agent 默认依据受众、主题和交付场景自主选择 Design System 与逐页版式，并把内容和视觉命令合并成一个 proposal；不会在内容草稿后要求用户再选“标准排版”或“创意装饰”。用户明确只要内容草稿时除外。
 
 **不是让模型直接改文件，而是让模型提交结构化命令。**
 
@@ -43,11 +45,11 @@ flowchart LR
   B --> C{"模型选择安全路径"}
   C -->|复杂创建| D["可选 Brief / Outline / Storyboard / Layout Plan"]
   C -->|轻量任务| E["直接编辑 / 审查 / 导出"]
-  D --> F["视觉执行与质检"]
+  D --> F["内容 + Design System + 逐页版式"]
   E --> G["工具结果"]
-  F --> G
+  F --> I["单一 Proposal → CommitGate → 必要时审批"]
   G --> H{"需要修改 Presentation？"}
-  H -->|是| I["Proposal → CommitGate → 必要时审批"]
+  H -->|是| I
   H -->|否| J["直接交付观察或导出结果"]
   I --> K["实时预览 / 放映 / PPTX"]
   J --> K
@@ -57,7 +59,7 @@ flowchart LR
 
 - 用居中的 AI 输入框新建会话，输入自然语言需求开始生成
 - 在左侧管理本地会话和工作区
-- 在聊天流里确认 Brief、大纲、排版方式和工具审批
+- 在聊天流里审阅 Brief、大纲、一体化内容与视觉方案，以及必要的工具审批
 - 查看 Agent 的任务计划、阶段进度、工具调用和子任务执行痕迹
 - 打开右侧 PPT 实时预览，选择页面、放映、导出或触发全局 AI 美化
 - 选择 OpenAI 或 Anthropic 模型，并配置 endpoint、timeout、输出上限和 fallback 模型

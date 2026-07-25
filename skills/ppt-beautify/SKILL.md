@@ -1,85 +1,73 @@
 ---
 name: ppt-beautify
-description: 用 Deferred Tools 做自动排版、文本压缩、图表表格美化与文风改写
-when_to_use: 基础 deck 已生成，需要排版优化、精简文案、统一风格或单页润色时
+description: 直接编辑 SVG 作者源以优化构图、排印、图表、图片和跨页一致性，并用同源预览验证
+when_to_use: SVG-native deck 已生成，需要视觉美化、排版修复、内容精简、统一风格或单页润色时
 stages:
   - style
 allowed-tools:
-  - ReadPresentationSnapshot
+  - ListSlides
   - ReadCurrentSlide
-  - GetSelection
-  - SearchExtraTools
-  - ExecuteExtraTool
-  - SubmitCommands
+  - ReadFile
+  - WriteFile
+  - PreviewSvgPage
+  - SubmitSvgDeck
 ---
 
-# 美化与增强
+# SVG 美化与增强
 
 ## 目标
 
-在**不重建 deck** 的前提下，用 Deferred Tools 生成 commands 或建议，经 `SubmitCommands` 应用。
+在不重建整套 deck 的前提下，直接改善目标页的完整 SVG。所有视觉修改都写回其 `visualSource.sourcePath`；不生成 commands，不把自动排版或 element schema 当作中间层。
 
-## 工具选型
+默认保留事实、页面职责和未涉及页面。只有用户明确要求改写或压缩内容时才改变 `finalCopy`，并同步 `slides/page-plan.json`。
 
-| 需求 | Deferred Tool | 产出 |
-|------|--------------|------|
-| 单页重排版 | AutoLayoutSlide | `update-slide-layout` |
-| 换设计系统 | ApplyDesignSystem | `set-design-system` |
-| 设计方向 | ResolveDesignPlan | 返回需求合同 + safe / shifted / bold，或用户锁定方向（不直接改 deck） |
-| 长文精简 | CompressText | 调用模型做事实保持压缩；无法保留数字/日期/链接时会失败 |
-| 改写字风 | RewriteSlideContent | 调用模型生成 `update-element`，并校验关键事实 token |
-| 图表样式 | BeautifyChart | 美化已有 chart；明确 KPI 文本只强化 metric 样式，不生成数据 |
-| 表格样式 | BeautifyTable | P2：`\|` 分隔文本 → table 元素 |
-| 搜索页面图片 | SearchSlideImages（Core） | 免费图库优先的候选 + 可直接插入参数 |
-| 图片入槽 | InsertSlideImage（Core） | add/update image（自动坐标；远程图默认本地化并保存来源元数据） |
-| 字体角色 | ApplyTypography | update-text-style 批量 |
-| 单页预览 | PreviewSlide | 结构化摘要 + PNG 缩略图（base64） |
-| 版式节奏 | ValidateDeckLayout | 连续 layout / 多样性报告 |
-| 页级背景节奏 | UpdateSlideVariant | `update-slide-variant` commands |
-| 一致性分析 | AnalyzeDeckConsistency | 报告（不直接改 deck） |
+## 固定工作流
 
-## P2 元素能力
+1. 用 `ListSlides` 获取完整有序页面清单及每页 `svgSourcePath`、`svgSha256`。
+2. 目标是当前页时用 `ReadCurrentSlide` 确认 `visualSource.sourcePath`；其他页使用 `ListSlides.svgSourcePath`。再用 `ReadFile` 读取完整 SVG。
+3. 对照 `design/design-spec.json` 与 `slides/page-plan.json` 判断问题来自当前页还是 deck-wide 设计语言。
+4. 直接修改 SVG 中的文字、几何、图表、图片、分组、渐变、裁切和装饰。用 `WriteFile` 将完整 SVG 写回原路径。
+5. 对每个新增或修改页调用 `PreviewSvgPage`；若有越界、溢出、重叠、图片失败或视觉层级问题，继续修源并重新预览。未修改且 hash 与当前已提交页面一致的作者源可以直接复用。
+6. 全部修改页通过后，调用一次 `SubmitSvgDeck`，提交所有有序页面。未修改页也必须包含在提交列表中，以保持完整 deck。参数显式使用 `"designSpecPath":"design/design-spec.json"` 与 `"pagePlanPath":"slides/page-plan.json"`，并让 `communication`、`designSystem`、每页 `id/path/narrative` 与锁文件完全一致。
 
-P2 元素能力必须区分“已有数据”和“文本样式”：
+## 美化判断
 
-- **BeautifyChart**：已有 `chart` → 同步设计系统图表样式；数值文本 → `metric` 样式。只有显式结构化数据才能创建 chart 元素
-- **BeautifyTable**：结构化或 `|` 分隔文本 → `table` 元素（headerRow + zebraStripe）
-- **icon 元素**：经 `add-element` 添加，`name` 为内置 24 Lucide 兼容图标之一
-- **slideVariant**：经 `update-slide-variant` 设置页级 light/dark/hero 节奏
+### 构图
 
-典型命令序列（KPI 页）：
+- 先恢复 `coreMessage` 的主焦点，再调整阅读顺序、尺度、对齐和留白。
+- `anchor` 保持单一强锚点；`dense` 提升扫描性；`breathing` 不重新填满。
+- 不调用固定 layout 或自动布局。重排是对完整 SVG 的页面级重构，不是把内容换进另一个壳。
+- 卡片仅用于确有语义边界的实体；禁止把全套页面统一成三卡、四卡或 2×2 圆角网格。
 
-```
-BeautifyChart(slideId) → SubmitCommands
-update-slide-variant(slideId, hero|light|dark) → SubmitCommands
-```
+### 排印与文案
 
-## 工作流
+- 保持设计规格中的字体角色与语义色；正文对背景对比度至少 4.5:1。
+- 优先通过宽度、层级、换行和构图解决溢出，不靠无限缩小字号。
+- 未授权改写时保持文字、数字、日期、链接、专名和来源不变。
+- 用户要求精简时，先保存所有事实 token，再同步页面计划的 `finalCopy`。
 
-1. `ReadPresentationSnapshot` 定位目标 `slideId` / `elementId`。
-2. `SearchExtraTools` 用自然语言查询（如「自动排版」「溢出」），勿猜测工具名。
-3. `ExecuteExtraTool` 执行；若返回 `{ commands }`，汇总后 `SubmitCommands`。
-4. 若返回分析报告，向用户展示后再决定是否修改。
-5. 单页操作优先 `ReadCurrentSlide` + `GetSelection` 确认选中元素。
+### 图表、表格与图片
 
-## 典型场景
+- 只根据明确数据修改或重绘图表；不得从叙述性文字臆造数值。
+- 表格、图表与关键数字应成为真实 SVG 结构和文本，而非模板占位。
+- 图片使用 workspace 相对 `href`，由 `SubmitSvgDeck` 内联；禁止远程 URL、绝对路径和空图片框。
+- 裁切必须保留主体，caption 与图片形成明确关联。
+- 精确标题、数字和数据标签保持 SVG 文本，不烘焙进图片。
 
-**全 deck 换肤**：ResolveDesignPlan → 用户确认 direction → ApplyDesignSystem → SubmitCommands
+## Deck-wide 换肤
 
-**单页排版乱了**：AutoLayoutSlide(slideId, layout) → SubmitCommands
+用户要求整套换肤时：
 
-**图片放入槽位**：SearchSlideImages(slideId) → InsertSlideImage(候选 insertArgs) → SubmitCommands（无需工具发现、无需 x/y）
+1. 先更新 `design/design-spec.json` 的唯一设计锁。
+2. 逐页读取并修改每个完整 SVG，使几何、字体、色彩、纹理、图片处理和节奏共同体现新风格。
+3. 先用一页代表性页面完成 `PreviewSvgPage` 校准，再批量推进。
+4. 全部页面复查后按上述锁文件参数一次 `SubmitSvgDeck`。
 
-**排版后自检**：PreviewSlide(slideId) → ValidateDeckLayout → 修复后 SubmitCommands
+只改设计规格而不改 SVG 不会改变可见结果。
 
-**文字太长溢出**：DetectOverflowText（审查）→ CompressText → update-element 命令
+## 禁止
 
-**润色不改事实**：AutoLayoutSlide / Beautify*；BeautifyChart 不会从文字生成数值，BeautifyTable 只接受结构化 pipe 表格。**允许改写措辞**：RewriteSlideContent
-
-## 约束
-
-- Deferred Tool **不能替代**基础 `add-slide`；仅用于增强。
-- `ExecuteExtraTool` 产出的 commands 仍须 `SubmitCommands`，不会自动生效。
-- argument mode、visual style、color scheme、reading mode 是独立轴；不得用一个 preset 名称替代整套设计决策。
-- 改写类工具 `risk` 建议 `medium`；纯排版 `low`。
-- 大改前先 LoadSkill `deck-review`，用户确认后再批量修复。
+- 不使用 `AutoLayoutSlide`、`ApplyDesignSystem`、`BeautifyChart`、`BeautifyTable`、`ApplyTypography`、`UpdateSlideVariant` 或任何返回 commands 的增强路线。
+- 不调用 `SubmitCommands`、`PreviewCommands`、element/layout grammar 工具。
+- 不让预览、提交或导出工具添加标题、页码、背景或其他自动 chrome。
+- 用户只要求审查时不要擅自修改；先按 `deck-review` 输出问题。

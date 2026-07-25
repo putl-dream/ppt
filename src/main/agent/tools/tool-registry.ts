@@ -4,9 +4,11 @@ import { askUserTool } from "./core/ask-user";
 import { executeExtraToolTool } from "./core/execute-extra-tool";
 import { executeLayoutPlanTool } from "./core/execute-layout-plan";
 import { getSelectionTool } from "./core/get-selection";
+import { getDesignReferenceTool } from "./core/get-design-reference";
 import { listTeammatesTool } from "./core/list-teammates";
 import { listSlidesTool } from "./core/list-slides";
 import { previewCommandsTool } from "./core/preview-commands";
+import { previewSvgPageTool } from "./core/preview-svg-page";
 import { readCurrentSlideTool } from "./core/read-current-slide";
 import { readPresentationSnapshotTool } from "./core/read-presentation-snapshot";
 import { respondPlanApprovalTool } from "./core/respond-plan-approval";
@@ -14,6 +16,7 @@ import { searchExtraToolsTool } from "./core/search-extra-tools";
 import { sendTeammateMessageTool } from "./core/send-teammate-message";
 import { shutdownTeammateTool } from "./core/shutdown-teammate";
 import { submitCommandsTool } from "./core/submit-commands";
+import { submitSvgDeckTool } from "./core/submit-svg-deck";
 import { spawnTeammateTool } from "./core/spawn-teammate";
 import { taskTools } from "./core/task-tools";
 import { loadSkillTool } from "./core/load-skill";
@@ -151,10 +154,12 @@ export function createDefaultToolRegistry(): ToolRegistry {
     askUserTool,
     executeExtraToolTool,
     executeLayoutPlanTool,
+    getDesignReferenceTool,
     getSelectionTool,
     listTeammatesTool,
     listSlidesTool,
     previewCommandsTool,
+    previewSvgPageTool,
     readCurrentSlideTool,
     readPresentationSnapshotTool,
     respondPlanApprovalTool,
@@ -163,6 +168,7 @@ export function createDefaultToolRegistry(): ToolRegistry {
     shutdownTeammateTool,
     spawnTeammateTool,
     submitCommandsTool,
+    submitSvgDeckTool,
     ...taskTools,
     loadSkillTool,
     webSearchTool,

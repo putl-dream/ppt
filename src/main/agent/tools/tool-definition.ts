@@ -15,6 +15,10 @@ import type { PromptStage } from "../runtime/prompts/prompt-stage";
 import type { MessageBus } from "../teammate/message-bus";
 import type { TeammateManager } from "../teammate/spawn-teammate";
 import type { WorkspaceFileService } from "./files/workspace-file-service";
+import type {
+  AgentModelImageBlock,
+  AgentModelTextBlock,
+} from "../gateway/types";
 
 /**
  * 工具加载策略。
@@ -87,6 +91,12 @@ export interface ToolRuntimeBehavior<TArgs = unknown> {
   completion?: ToolCompletionBehavior;
   background?: ToolBackgroundBehavior<TArgs>;
   delegation?: ToolDelegationBehavior<TArgs>;
+  /**
+   * The tool has already enforced content-exact rendered previews for every
+   * visual source in its proposal, so the legacy command render loop must not
+   * request a second submission.
+   */
+  visualReview?: { mode: "tool-managed" };
 }
 
 /**
@@ -95,6 +105,8 @@ export interface ToolRuntimeBehavior<TArgs = unknown> {
 export interface ToolContext {
   /** 当前 PPT 快照（克隆快照，防模型或工具直接篡改真实状态） */
   readonly presentation: Presentation;
+  /** 当前用户请求，用于校验提案是否满足本轮明确边界。 */
+  readonly request?: string;
   /** 当前编辑页 ID */
   readonly currentSlideId?: string;
   /** 当前选中的元素 ID 列表 */
@@ -168,6 +180,12 @@ export interface ToolDefinition<TParams extends z.ZodObject<any> = z.ZodObject<a
     result: TResult,
     context: ToolContext,
   ) => string | Promise<string>;
+  /** Optional multimodal provider-facing result; rich local data remains available to hooks and UI. */
+  mapResultToModelBlocks?: (
+    result: TResult,
+    context: ToolContext,
+  ) => Array<AgentModelTextBlock | AgentModelImageBlock>
+    | Promise<Array<AgentModelTextBlock | AgentModelImageBlock>>;
   /** Runtime capability check; unavailable tools are not exposed or executable. */
   isEnabled?: (context: ToolContext) => boolean;
   /** Runtime orchestration semantics; execution code must not infer these from names. */

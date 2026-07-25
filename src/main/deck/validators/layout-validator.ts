@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { LayoutPolicy } from "../../agent/design/layout-policy";
 import type { DeckValidationIssue } from "@shared/deck-validation";
 import type { DesignConstraints } from "@shared/deck-persistence";
@@ -5,6 +6,7 @@ import { createDefaultDesignConstraints } from "@shared/deck-persistence";
 import type { Presentation, Slide, SlideElement, TextElement } from "@shared/presentation";
 import { isLayoutCard } from "@shared/layout-shape-utils";
 import { CONTENT_LAYOUTS, type SlideLayoutType } from "@shared/slide-layouts";
+import { assertValidSvgPage } from "@shared/svg-page";
 
 function isLayoutCardElement(element: SlideElement): boolean {
   return isLayoutCard(element);
@@ -79,6 +81,53 @@ export class LayoutValidator {
 
   private validateSlide(slide: Slide, constraints: DesignConstraints): DeckValidationIssue[] {
     const issues: DeckValidationIssue[] = [];
+
+    if (slide.visualSource?.kind === "svg") {
+      if (slide.elements.length > 0) {
+        issues.push({
+          slideId: slide.id,
+          category: "structure",
+          severity: "error",
+          message: `SVG page '${slide.title}' also contains legacy canvas elements.`,
+          fixHint: "Remove every legacy element; the complete SVG page must be the only visual source.",
+        });
+      }
+      try {
+        assertValidSvgPage(slide.visualSource.markup);
+      } catch (error) {
+        issues.push({
+          slideId: slide.id,
+          category: "layout",
+          severity: "error",
+          message: `SVG page '${slide.title}' is invalid: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+          fixHint: "Fix the complete source SVG and submit the page again.",
+        });
+      }
+      const actualHash = createHash("sha256")
+        .update(slide.visualSource.markup, "utf8")
+        .digest("hex");
+      if (actualHash !== slide.visualSource.sha256) {
+        issues.push({
+          slideId: slide.id,
+          category: "layout",
+          severity: "error",
+          message: `SVG page '${slide.title}' no longer matches its source hash.`,
+          fixHint: "Resubmit the SVG page so validation, preview, and export share the same source.",
+        });
+      }
+      if (!slide.narrative) {
+        issues.push({
+          slideId: slide.id,
+          category: "structure",
+          severity: "error",
+          message: `SVG page '${slide.title}' is missing its page narrative contract.`,
+          fixHint: "Provide role, coreMessage, audienceMove, rhythm, and layoutIntent.",
+        });
+      }
+      return issues;
+    }
 
     if (slide.elements.length === 0 && slide.layout && CONTENT_LAYOUTS.has(slide.layout as SlideLayoutType)) {
       issues.push({

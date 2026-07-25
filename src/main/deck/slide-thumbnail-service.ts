@@ -26,13 +26,27 @@ function isElectronRuntime(): boolean {
  */
 export class SlideThumbnailService {
   private captureWindow: BrowserWindow | null = null;
+  private captureQueue: Promise<void> = Promise.resolve();
 
-  async captureSlide(
+  captureSlide(
     slide: Slide,
     designSystem: DesignSystemV2,
   ): Promise<SlideThumbnailResult | null> {
-    if (!isElectronRuntime()) return null;
+    if (!isElectronRuntime()) return Promise.resolve(null);
+    const capture = this.captureQueue.then(
+      () => this.captureSlideSerially(slide, designSystem),
+    );
+    this.captureQueue = capture.then(
+      () => undefined,
+      () => undefined,
+    );
+    return capture;
+  }
 
+  private async captureSlideSerially(
+    slide: Slide,
+    designSystem: DesignSystemV2,
+  ): Promise<SlideThumbnailResult> {
     const html = exportSlideThumbnailHtml(slide, { designSystem });
     const window = await this.ensureWindow();
 
@@ -87,38 +101,38 @@ export class SlideThumbnailService {
     return this.captureWindow;
   }
 
-  private waitForRender(window: BrowserWindow): Promise<void> {
-    return new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        cleanup();
-        resolve();
-      }, 3000);
-
-      const cleanup = () => {
-        clearTimeout(timeout);
-        window.webContents.removeListener("did-finish-load", onLoad);
-        window.webContents.removeListener("did-fail-load", onFail);
-      };
-
-      const onLoad = () => {
-        cleanup();
-        // Allow layout/fonts to settle before capture.
-        setTimeout(resolve, 50);
-      };
-
-      const onFail = (_event: unknown, errorCode: number, errorDescription: string) => {
-        cleanup();
-        reject(new Error(`Thumbnail render failed (${errorCode}): ${errorDescription}`));
-      };
-
-      if (window.webContents.isLoading()) {
-        window.webContents.once("did-finish-load", onLoad);
-        window.webContents.once("did-fail-load", onFail);
-      } else {
-        cleanup();
-        setTimeout(resolve, 50);
-      }
+  private async waitForRender(window: BrowserWindow): Promise<void> {
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    const renderReady = window.webContents.executeJavaScript(`
+      (async () => {
+        if (document.fonts && document.fonts.ready) {
+          await document.fonts.ready;
+        }
+        const images = Array.from(document.images);
+        await Promise.all(images.map(async (image) => {
+          if (typeof image.decode === "function") {
+            await image.decode();
+            return;
+          }
+          if (!image.complete || image.naturalWidth === 0) {
+            throw new Error("A slide image failed to load.");
+          }
+        }));
+        await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        return true;
+      })()
+    `, true);
+    const timedOut = new Promise<never>((_resolve, reject) => {
+      timeout = setTimeout(
+        () => reject(new Error("Thumbnail render did not settle within 5 seconds.")),
+        5_000,
+      );
     });
+    try {
+      await Promise.race([renderReady, timedOut]);
+    } finally {
+      if (timeout) clearTimeout(timeout);
+    }
   }
 }
 

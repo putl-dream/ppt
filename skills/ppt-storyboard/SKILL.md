@@ -1,65 +1,74 @@
 ---
 name: ppt-storyboard
-description: 根据 outline 生成 storyboard.json，规划每页标题、叙事角色与版式意图（完整路径）
-when_to_use: outline 已就绪，完整路径中需要逐页分镜时
+description: 根据 outline 生成 page-plan 的叙事上游 storyboard，规划页序、页面职责、核心信息草案和素材意图
+when_to_use: outline 已就绪，复杂或长篇演示需要先规划逐页叙事再冻结最终 page plan 时
 stages:
   - discover
   - author
+allowed-tools:
+  - ReadFile
+  - WriteFile
 ---
 
 # Storyboard 分镜
 
 ## 目标
 
-teammate 自主领取任务并写 `slides/storyboard.json`，供后续 lead 的 SubmitCommands 使用。
+用 `ReadFile` 读取 outline、brief 和事实来源，写出 `slides/storyboard.json`。它是 `slides/page-plan.json` 的可选叙事上游，不是视觉作者源，不包含 commands、element、固定 layout 或 SVG 几何。
 
 ## storyboard.json 结构
 
 ```json
 {
+  "version": 1,
   "slides": [
     {
-      "id": "slide-cover",
-      "title": "封面标题",
+      "id": "P01",
       "narrativeRole": "hook",
-      "layout": "cover",
-      "keyPoints": ["副标题或补充说明"]
+      "contentIntent": "用一句核心命题建立整套演示语境",
+      "coreMessageDraft": "封面要让受众记住的判断",
+      "audienceMoveDraft": "从泛泛兴趣转为关注核心矛盾",
+      "keyPoints": ["副标题或必要上下文"],
+      "sourceRefs": [],
+      "assetIntent": []
     }
   ]
 }
 ```
 
-## 叙事角色（narrativeRole，P1-2 联合决策）
+字段说明：
 
-每页标注 `narrativeRole`，系统会推导默认 `layout`（可被显式 `layout` 覆盖）：
+- `id`：使用 `P01`、`P02`……稳定编号，供 page plan 与 SVG 文件复用。
+- `narrativeRole`：页面在整套论证中的职责。
+- `contentIntent`：本页要承载的内容边界。
+- `coreMessageDraft`：中心判断草案；后续在 page plan 中冻结。
+- `audienceMoveDraft`：受众变化草案。
+- `keyPoints`：需要保留的事实、论据或解释。
+- `sourceRefs`：事实来源 id。
+- `assetIntent`：需要何种真实素材及其论证作用；不写占位坐标。
 
-| narrativeRole | 默认 layout | 适用场景 |
-|---------------|-------------|----------|
-| `hook` | cover | 开场、封面 |
-| `section` | section | 章节过渡 |
-| `core` | concept | 核心观点、并列要点 |
-| `evidence` | case | 数据、案例、KPI |
-| `process` | process | 流程、步骤 |
-| `compare` | comparison | 对比、优劣 |
-| `summary` | summary | 总结、收尾 |
+## 叙事角色
 
-**本阶段不做**：视觉风格、页面节奏 Rubric、连续三页同 layout 自检——留给 `ppt-design` / `ppt-design-layout` / `ppt-layout`。
+可使用 `hook`、`section`、`claim`、`evidence`、`process`、`comparison`、`case`、`decision`、`summary` 等开放角色。角色帮助建立推进关系，不映射到固定版式。
 
 ## 工作流
 
-1. teammate 读取 `outline.md`（或 brief）。
-2. 按 outline 叙事弧映射：Hook → section → Core → evidence/process → summary。
-3. 为每页填写 `narrativeRole` + `keyPoints`；`layout` 可省略（由 role 推导）。
-4. 写回 `slides/storyboard.json`。
-5. teammate 调用 `TaskReviewRequest`，并摘要总页数、1 处需确认项；lead 使用 approve/reject 验收。
+1. 读取真实 outline、brief 与来源，确认用户指定的页数、顺序和不可改内容。
+2. 根据后续受众行动组织叙事弧，确保相邻页面有清楚推进。
+3. 为每页写稳定 id、角色、中心信息草案、受众变化草案、关键事实和素材意图。
+4. 用 `WriteFile` 一次写入完整 `slides/storyboard.json`。
+5. 检查来源引用、页序与信息覆盖；不要为追求页数拆出空洞过渡页。
 
 ## 约束（内容阶段）
 
-- **充分写要点**：每条 keyPoint 表达完整意思，不强行 ≤15 字。
+- 每条 `keyPoint` 表达完整意思，不强行压成短标签。
 - 单页要点数量按内容需要，不必压到 3–5 条。
-- **按版式容量分页**：case 每页 1 叙述 + 1 数字；process/architecture 每页 2–4 步；concept 3–4 条；toc 3–8 项。超出就**多开一页**。
-- 复杂对比用 `compare` + comparison；流程用 `process`。
+- 信息量超过一页可读容量时拆页，但不要依赖某种 layout 的卡片数量决定页数。
+- 不在本阶段锁定 visual style、reading mode、image language、rhythm 或 `layoutIntent`；它们由 design spec 与 page plan 阶段完成。
+- 不写 x/y、grammarVariant、layout 名、elements 或提交命令。
 
 ## 衔接
 
-完成后主 Agent LoadSkill `ppt-build` 落盘幻灯片（使用 storyboard 的 `layout` / `narrativeRole`）。
+`ppt-design` 将 deck-wide 设计事实写入 `design/design-spec.json`；随后 `ppt-design-layout` 合并 design spec 与本 storyboard，冻结 `slides/page-plan.json` 的 `finalCopy`、`coreMessage`、`audienceMove`、`rhythm` 和 `layoutIntent`。最后才由 `ppt-build` 写逐页 SVG。
+
+简单 deck 可以跳过 storyboard，由 `ppt-design-layout` 直接从 outline 生成 page plan。

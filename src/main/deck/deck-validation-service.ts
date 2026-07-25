@@ -15,6 +15,8 @@ export interface DeckValidationOptions {
   slideIds?: string[];
   /** Workspace root used to validate local image paths. */
   workspaceRoot?: string;
+  /** Explicit export-only approval for assets whose commercial license is still unknown. */
+  allowUnverifiedAssets?: boolean;
 }
 
 export class DeckValidationService {

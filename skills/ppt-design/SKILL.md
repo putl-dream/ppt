@@ -1,51 +1,43 @@
 ---
 name: ppt-design
-description: 基于沟通目标生成并锁定 argument mode × visual style × color scheme × reading mode 的完整设计方向
-when_to_use: 新建整套演示、重做视觉系统、或 layout-plan 尚未锁定设计方向时
+description: 为 SVG-native 新建 deck 建立沟通契约，并在页面构图前锁定 argument mode、visual style、reading mode、image language、色彩和字体
+when_to_use: 新建整套 PPT，或尚未建立 deck-wide 设计事实源时
 stages:
+  - discover
   - design
   - style
 allowed-tools:
-  - ReadPresentationSnapshot
-  - AskUser
-  - SearchExtraTools
-  - ExecuteExtraTool
-  - ApplyDesignSystem
-  - SubmitCommands
+  - ReadFile
+  - WriteFile
+  - GetDesignReference
 ---
 
-# PPT 设计决策（ppt-master-design-v2）
+# SVG-native 设计锁
 
 ## 目标
 
-先决定这套演示如何说服受众，再决定它如何呈现。设计事实源由五个独立轴组成：
+在写任何页面 SVG 前，先决定这套演示如何推动受众，再锁定一套可执行的视觉语言。将唯一 deck-wide 设计事实写入 `design/design-spec.json`；不要创建旧 Design System commands，也不要直接生成可见页面对象。
 
-1. `argumentMode`：论证骨架
-2. `visualStyle`：形状、构图、留白、字体气质与质感
-3. `colorScheme`：独立的语义色彩身份
-4. `readingMode`：近读 / 混合 / 投影
-5. 图像语言：与 visual style 配对的 image rendering
+## 1. 建立沟通契约
 
-不要再从旧的 business / editorial / technical / academic / report 五预设中挑一个“一键主题”；它们无法表达完整设计意图。
+从用户原话、brief、outline 和已有 workspace 文件中确定：
 
-## 设计顺序
+- `audience`：谁看。
+- `objective`：为什么需要这套演示。
+- `desiredOutcome`：受众看完后需要理解、相信、决定或执行什么。
+- `coreMessage`：整套演示唯一核心判断。
+- `deliveryContext`：现场讲述、会议讨论、异步近读或其他场景。
+- `afterUse`：会后决策、留档、传播或培训复用。
 
-### 1. 建立沟通契约
+已有事实不要重复询问。仅当缺失信息会改变内容事实或交付目标时才暂停；不要询问“标准还是创意”“要不要卡片”等内部设计选项。
 
-从 brief、用户原话和 snapshot 得到：
+## 2. 先锁定四个设计轴
 
-- audience：谁看
-- objective：为何演示
-- desiredOutcome：看完后要理解、相信或执行什么
-- coreMessage：整套唯一核心信息
-- deliveryContext：现场演讲、会议材料、异步阅读等
-- afterUse：会后决策、留档、培训复用等
+### Argument mode
 
-缺少会显著改变设计的事实时只问一次；已有事实不重复询问。
+选择唯一的 deck-wide 论证方式：
 
-### 2. 独立选择 argument mode
-
-| mode | 论证方式 | 典型用途 |
+| `argumentMode` | 论证方式 | 适用目标 |
 |---|---|---|
 | `pyramid` | 结论先行，MECE 证据支撑 | 高管决策、战略、分析 |
 | `narrative` | 情境 → 张力 → 转折 → 解决 | 融资、案例、品牌故事 |
@@ -53,37 +45,73 @@ allowed-tools:
 | `showcase` | 大图/大数字主导，情绪节奏 | 发布、品牌揭晓、活动 |
 | `briefing` | 中性、完整、便于检索 | 状态同步、会议包、交接 |
 
-用户给定页面顺序时，mode 只影响标题语气、页面内部层级和讲述节奏，不擅自重排。
+用户已经给定顺序或事实结构时，不为迁就 mode 擅自重排或改写事实。
 
-### 3. 独立选择 visual style
+### Visual style
 
-通过 `SearchExtraTools` 精确发现 `ResolveDesignPlan`，再用 `ExecuteExtraTool` 调用。工具返回候选设计计划，不修改 deck。
+选择唯一风格并写出具体 `visualStyleBehavior`，至少说明构图重心、几何语言、留白、层级、线条/质感和应避免的视觉习惯。风格不能只是一枚名称或一组颜色。
 
-- 用户明确命名风格或品牌方向：直接生成一个 `locked` direction，不重新给选择题。
-- 用户未指定：必须生成 `safe / shifted / bold` 三个完整方向。三者要有明显视觉距离，不能只是同一蓝色主题换名字。
-- visual style 不携带固定色值；同一风格可与不同 color scheme 组合。
-
-可用 visual style：
+可用起点：
 
 `swiss-minimal`、`soft-rounded`、`glassmorphism`、`dark-tech`、`blueprint`、`editorial`、`photo-editorial`、`data-journalism`、`brutalist`、`memphis`、`zine`、`vintage-poster`、`paper-cut`、`sketch-notes`、`ink-notes`、`chalkboard`、`ink-wash`、`pixel-art`。
 
-### 4. 确认并锁定
+用户明确指定时直接锁定；未指定时根据沟通契约自主选择一个最合适的方向。除非用户明确要求比较方案，不展示 safe/shifted/bold 选择题。
 
-全套新建或整套换肤时，把三个方向用一行性格标签 + 一行实际效果说明展示给用户。候选阶段使用 `recommendedDirectionId`，不得伪造用户选择；用户确认后，由交互链把完整沟通契约、全部候选、`selectedDirectionId` 和确认时间写入 `slides/layout-choice.json`。
+### Reading mode
 
-本 skill 不写 `slides/layout-plan.json`。只有 `ppt-design-layout` 拥有该文件，并把已确认选择复制为 LayoutPlan v2 的顶层设计事实源。
+锁定 `text`（近读）、`balanced`（均衡）或 `presentation`（投影）。该值必须与 `SubmitSvgDeck.designSystem.readingMode` 完全一致；它决定信息密度、正文基线、留白与讲者依赖，不能在执行时靠任意缩字改变。
 
-轻量单页编辑不重开方向选择，沿用现有 design system。
+### Image language
 
-## 视觉执行原则
+即使决定不用图片，也要显式锁定。至少记录：
 
-- 一套 deck 只锁一个 argument mode 和一个 visual style。
-- 色彩按语义角色使用；正文对背景对比度至少 4.5:1。
-- 标题体现风格性格，正文优先可读；reading mode 决定正文基线，而不是任意缩字塞内容。
-- 图像 rendering 与 visual style 配对；长文、数字与关键标签保持原生可编辑，不烘焙进图片。
-- 页面通过 `anchor / dense / breathing` 建立节奏，禁止全篇同构卡片网格。
-- page override 只处理确有叙事意义的背景/密度变化，不创建第二套主题。
+- `usage`：`none`、`selective` 或 `image-led`。
+- `rendering`：照片、拼贴、线稿、3D、信息图插画等一致的渲染家族。
+- `motif`：跨页重复的视觉母题。
+- `framing`：满版、裁切、边到边、独立对象等规则。
+- `tone`：光线、颗粒、材质、情绪和与页面颜色的关系。
+- `textPolicy`：默认 `none`，不要让生成图片承担精确标题、数字或数据标签。
 
-## 衔接
+### 读取完整执行参考
 
-方向确认并生成 `slides/layout-choice.json` 后加载 `ppt-design-layout`，逐页写入 `audienceMove`、`rhythm`、`layoutIntent`、layout/grammar 与可执行图片增强；执行阶段只消费锁定结果，不重新猜设计。
+四轴确定后立即调用一次 `GetDesignReference`，传入精确的 `argumentMode`、`visualStyle` 和 `readingMode`。将返回的论证骨架、标题语气、构图、shape/elevation/whitespace/typography/background/texture、image language 和 `avoid` 约束写入设计规格。风格名称本身不算设计锁；SVG 作者必须拿到这些行为细节。
+
+## 3. 锁定配套视觉事实
+
+- 定义语义色彩角色：`background`、`surface`、`primaryText`、`secondaryText`、`accent`、`signal`，使用明确 HEX；正文对背景对比度至少 4.5:1。
+- 定义 `title`、`body`、`emphasis`、`code/data` 字体角色和大致字号层级；选择预览与提交环境可用的字体。
+- 定义页面边距、常用对齐线、圆角/直角倾向、描边、阴影与纹理纪律。
+- 定义 `anchor`、`dense`、`breathing` 三种页面节奏如何在本风格中呈现。
+- 明确禁止项，至少包括自动 chrome、固定 layout、全套卡片网格和仅换色不换构图。
+
+## 4. 写入设计规格
+
+用 `WriteFile` 写 `design/design-spec.json`。最低结构：
+
+```json
+{
+  "version": 1,
+  "canvas": {"width": 1280, "height": 720},
+  "communicationContract": {},
+  "presentationDesignSystem": {
+    "version": 2,
+    "argumentMode": "pyramid",
+    "visualStyle": "swiss-minimal",
+    "colorScheme": "business-blue",
+    "readingMode": "balanced"
+  },
+  "argumentMode": "pyramid",
+  "visualStyle": {"id": "swiss-minimal", "reference": {}},
+  "readingMode": "balanced",
+  "imageLanguage": {},
+  "colors": {},
+  "typography": {},
+  "geometry": {},
+  "rhythmBehavior": {},
+  "forbidden": []
+}
+```
+
+字段值必须具体、内部一致，不能把待决定项留给 SVG Executor。该文件不含可见对象，也不授权预览或提交工具补对象。
+
+完成后由 `ppt-design-layout` 读取同一文件，为每页冻结最终文案和构图意图。后续不得无故重新选择 mode 或 style；若用户改变沟通目标，先更新设计规格，再继续页面规划。

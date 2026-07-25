@@ -128,6 +128,7 @@ export type AgentStreamEvent = (
       type: "slide-preview-ready";
       message: string;
       toolCallId: string;
+      toolName?: "PreviewSlide" | "PreviewSvgPage";
       slideId: string;
       title: string;
       description: string;

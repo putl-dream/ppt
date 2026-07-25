@@ -128,6 +128,9 @@ const managers: Record<DisplayCardCategory, CategoryCardManager> = {
 /** Thin protocol ingress: validate and route, never own category lifecycle. */
 export function ingestDisplayEvent(input: unknown): DisplayEvent {
   const event = displayEventSchema.parse(input);
+  // Kept parse-compatible for persisted sessions created before autonomous
+  // design, but the former layout-choice interaction must never reopen.
+  if (event.kind === "interaction.layout-required") return event;
   const policy = getCardPresentationPolicy(event);
   managers[event.category].getState().ingest(event, policy);
   return event;
@@ -179,7 +182,10 @@ export function recordDisplayCardAction(
 export function getPersistedDisplayCards(): PersistedDisplayCard[] {
   return Object.values(managers).flatMap((manager) =>
     manager.getState().cards
-      .filter((card) => card.policy.persistence === "session")
+      .filter((card) =>
+        card.policy.persistence === "session"
+        && card.event.kind !== "interaction.layout-required"
+      )
       .map(({ policy: _policy, ...card }) => persistedDisplayCardSchema.parse(card))
   );
 }
@@ -196,6 +202,7 @@ export function hydrateDisplayCardManagers(input: PersistedDisplayCard[]): void 
   };
   for (const rawCard of input) {
     const card = persistedDisplayCardSchema.parse(rawCard);
+    if (card.event.kind === "interaction.layout-required") continue;
     const policy = getCardPresentationPolicy(card.event);
     if (policy.persistence !== "session") continue;
     grouped[card.event.category].push({ ...card, policy });

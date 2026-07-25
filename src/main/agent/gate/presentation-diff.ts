@@ -64,6 +64,17 @@ export class PresentationDiffGenerator {
       const afterElements = new Map(afterSlide.elements.map((e) => [e.id, e]));
 
       let slideChanged = false;
+      const pageSourceChanged =
+        beforeSlide.visualSource?.sha256 !== afterSlide.visualSource?.sha256
+        || beforeSlide.visualSource?.sourcePath !== afterSlide.visualSource?.sourcePath;
+      const pageMetadataChanged =
+        beforeSlide.title !== afterSlide.title
+        || beforeSlide.speakerNotes !== afterSlide.speakerNotes
+        || JSON.stringify(beforeSlide.narrative) !== JSON.stringify(afterSlide.narrative);
+      if (pageSourceChanged || pageMetadataChanged) {
+        updatedCount++;
+        slideChanged = true;
+      }
 
       for (const [id, afterEl] of afterElements.entries()) {
         const beforeEl = beforeElements.get(id);

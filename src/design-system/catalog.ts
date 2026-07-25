@@ -424,15 +424,326 @@ export interface ArgumentModeDefinition {
   titleVoice: "assertion" | "story-beat" | "teaching" | "evocative" | "topic";
   pageStructures: readonly string[];
   speakerNotesRegister: string;
+  hardRules: readonly string[];
+  antiPatterns: readonly string[];
+  titleExamples: readonly {
+    prefer: string;
+    avoid: string;
+  }[];
+  pageSkeletons: readonly {
+    id: string;
+    useWhen: string;
+    titlePattern: string;
+    bodySequence: readonly string[];
+  }[];
 }
 
 export const ARGUMENT_MODE_CATALOG: readonly ArgumentModeDefinition[] = [
-  { id: "pyramid", label: "金字塔", narrativeSkeleton: "结论先行；SCQA 开场，MECE 证据支撑；数字必须带比较与 so-what。", titleVoice: "assertion", pageStructures: ["结论标题", "一句 takeaway", "MECE 证据", "来源"], speakerNotesRegister: "首句给结论，再用两到三个事实支撑；权威克制。" },
-  { id: "narrative", label: "叙事", narrativeSkeleton: "situation → conflict → resolution；悬念、转折与兑现推动页面。", titleVoice: "story-beat", pageStructures: ["故事场景", "冲突", "转折", "兑现"], speakerNotesRegister: "对话式、有桥接；用修辞问句和具体人物建立悬念。" },
-  { id: "instructional", label: "教学", narrativeSkeleton: "先分解再排序；一页一概念；show then tell；持续 signpost。", titleVoice: "teaching", pageStructures: ["具体例子", "规则", "渐进图", "下一步"], speakerNotesRegister: "耐心解释，先定义再使用，类比之后给原则。" },
-  { id: "showcase", label: "展演", narrativeSkeleton: "图片或数字先行；build/release 节奏；一页一意；hold/reveal。", titleVoice: "evocative", pageStructures: ["全出血英雄图", "巨型数字", "短语", "大留白"], speakerNotesRegister: "短促、有能量；讲视觉周围的感受，不复述页面。" },
-  { id: "briefing", label: "简报", narrativeSkeleton: "刻意不造 thesis；完整、平行、可扫描、可导航地陈列事实。", titleVoice: "topic", pageStructures: ["表格", "定义列表", "状态卡", "参考网格"], speakerNotesRegister: "平实、中性、完整；不造悬念、不反问、不强加 so-what。" },
+  {
+    id: "pyramid",
+    label: "金字塔",
+    narrativeSkeleton: "结论先行；SCQA 开场，MECE 证据支撑；数字必须带比较与 so-what。",
+    titleVoice: "assertion",
+    pageStructures: ["结论标题", "一句 takeaway", "MECE 证据", "来源"],
+    speakerNotesRegister: "首句给结论，再用两到三个事实支撑；权威克制。",
+    hardRules: [
+      "正文页标题必须是一句可独立成立的结论，而不是主题标签。",
+      "每页只回答一个决策问题，并让标题、takeaway 与证据指向同一结论。",
+      "每个数字同时给出比较基准或变化，并明确它为何重要。",
+      "拆解必须 MECE；若无法穷尽，显式保留“其他”而不是伪装完整。",
+      "所有数据页保留可追溯来源。",
+    ],
+    antiPatterns: [
+      "先展示分析过程，最后一页才给答案。",
+      "使用“市场概览”“主要挑战”等无结论主题标题。",
+      "孤立陈列 KPI，既无比较也无 so-what。",
+      "用等权卡片堆放重叠、遗漏或粒度不一的论据。",
+    ],
+    titleExamples: [
+      {
+        prefer: "续费而非拉新，已成为增长主引擎",
+        avoid: "增长概览",
+      },
+      {
+        prefer: "三项结构性矛盾阻碍规模化部署",
+        avoid: "主要挑战",
+      },
+    ],
+    pageSkeletons: [
+      {
+        id: "analytical-proof",
+        useWhen: "证明一个关键判断",
+        titlePattern: "结论句：主语 + 变化/判断 + 业务含义",
+        bodySequence: [
+          "一句 takeaway，压缩结论与关键比较",
+          "二至四个 MECE 论据",
+          "每个论据附比较口径与 so-what",
+          "页脚列来源",
+        ],
+      },
+      {
+        id: "recommendation",
+        useWhen: "提出选择或行动方案",
+        titlePattern: "推荐动作 + 预期结果",
+        bodySequence: [
+          "推荐方案与适用边界",
+          "互斥的选择标准或支柱",
+          "量化收益、风险与权衡",
+          "明确下一步",
+        ],
+      },
+    ],
+  },
+  {
+    id: "narrative",
+    label: "叙事",
+    narrativeSkeleton: "situation → conflict → resolution；悬念、转折与兑现推动页面。",
+    titleVoice: "story-beat",
+    pageStructures: ["故事场景", "冲突", "转折", "兑现"],
+    speakerNotesRegister: "对话式、有桥接；用修辞问句和具体人物建立悬念。",
+    hardRules: [
+      "整副与单页都要有场景、冲突、解决或通向解决的桥接。",
+      "用具体人物、时刻或代价承载抽象观点。",
+      "全篇至少安排一次真正改变理解的转折或重构。",
+      "悬念页提出问题，后续页面必须兑现，不能只制造情绪。",
+      "密集信息页与呼吸页交替，连续章节保持线索，章节之间改变节奏。",
+    ],
+    antiPatterns: [
+      "按主题平铺事实，没有 stakes、turn 或 payoff。",
+      "在同一页同时提出悬念并完整回答，失去跨页推动力。",
+      "使用与内容无关的戏剧化图片或空泛隐喻。",
+      "每页密度与构图完全相同，故事没有快慢。",
+    ],
+    titleExamples: [
+      {
+        prefer: "直到周五，交付链突然断裂",
+        avoid: "交付问题",
+      },
+      {
+        prefer: "真正的瓶颈，却不在产能",
+        avoid: "根因分析",
+      },
+    ],
+    pageSkeletons: [
+      {
+        id: "turn-and-payoff",
+        useWhen: "制造并兑现关键转折",
+        titlePattern: "转折页用故事节拍；兑现页用新的理解",
+        bodySequence: [
+          "转折页：一个场景视觉 + 一句冲突",
+          "留出未回答的问题",
+          "兑现页：重构判断 + 一个焦点证据",
+          "桥接到下一行动或后果",
+        ],
+      },
+      {
+        id: "human-stake",
+        useWhen: "让抽象问题具象化",
+        titlePattern: "人物/团队 + 关键时刻或代价",
+        bodySequence: [
+          "具体人物与场景",
+          "可感知的阻力或代价",
+          "一项证据放大 stakes",
+          "一句未完成的下一拍",
+        ],
+      },
+    ],
+  },
+  {
+    id: "instructional",
+    label: "教学",
+    narrativeSkeleton: "先分解再排序；一页一概念；show then tell；持续 signpost。",
+    titleVoice: "teaching",
+    pageStructures: ["具体例子", "规则", "渐进图", "下一步"],
+    speakerNotesRegister: "耐心解释，先定义再使用，类比之后给原则。",
+    hardRules: [
+      "按简单到复杂、前置到依赖或概览到细节建立明确学习顺序。",
+      "一页只教一个概念，标题明确这页学会什么。",
+      "先展示具体例子或类比，再抽象出规则。",
+      "同级概念使用相同结构与深度，便于比较和建立心智地图。",
+      "每页标明已学内容与下一步，图示只高亮当前讲解部件。",
+    ],
+    antiPatterns: [
+      "术语未经定义就直接使用。",
+      "在一页堆叠多个无依赖关系的概念。",
+      "把有顺序的过程做成无序等权卡片。",
+      "只给抽象定义，没有例子、演示或练习。",
+    ],
+    titleExamples: [
+      {
+        prefer: "第 2 步：让每个令牌与查询评分",
+        avoid: "注意力机制",
+      },
+      {
+        prefer: "为什么先归一化，再比较概率",
+        avoid: "归一化介绍",
+      },
+    ],
+    pageSkeletons: [
+      {
+        id: "worked-example",
+        useWhen: "解释抽象概念或规则",
+        titlePattern: "步骤/问题 + 本页要掌握的动作",
+        bodySequence: [
+          "一个最小可运行例子",
+          "标注例子中正在发生的动作",
+          "从例子提炼一条规则",
+          "一句下一步 signpost",
+        ],
+      },
+      {
+        id: "ordered-process",
+        useWhen: "教授多步流程",
+        titlePattern: "第 N 步：动作 + 对象",
+        bodySequence: [
+          "显示完整路径但弱化未讲步骤",
+          "放大当前步骤",
+          "给输入、操作与输出",
+          "说明它如何成为下一步的前置",
+        ],
+      },
+    ],
+  },
+  {
+    id: "showcase",
+    label: "展演",
+    narrativeSkeleton: "图片或数字先行；build/release 节奏；一页一意；hold/reveal。",
+    titleVoice: "evocative",
+    pageStructures: ["全出血英雄图", "巨型数字", "短语", "大留白"],
+    speakerNotesRegister: "短促、有能量；讲视觉周围的感受，不复述页面。",
+    hardRules: [
+      "每页只有一个主导视觉：英雄图、巨型数字或极短短语三选一。",
+      "文字只支撑主视觉，一页只保留一个可在台上说清的 takeaway。",
+      "用强页与安静页交替形成 build/release，而不是全程满强度。",
+      "产品、结果或口号先 hold，后续单独 reveal。",
+      "留白必须围绕焦点形成舞台，不用次要信息填满空处。",
+    ],
+    antiPatterns: [
+      "主视觉旁放段落、列表和多个同级 KPI。",
+      "同一页出现两个争夺注意力的英雄对象。",
+      "每页都全出血、巨字和高饱和，导致没有高潮。",
+      "用漂亮图片代替信息逻辑，图像与 takeaway 无因果关系。",
+    ],
+    titleExamples: [
+      {
+        prefer: "新标准，就此出现",
+        avoid: "产品功能介绍",
+      },
+      {
+        prefer: "10×",
+        avoid: "性能提升数据",
+      },
+    ],
+    pageSkeletons: [
+      {
+        id: "hero-reveal",
+        useWhen: "发布产品、品牌或关键结果",
+        titlePattern: "不超过一行的短语",
+        bodySequence: [
+          "一个全出血或孤立英雄对象",
+          "一行 reveal 文案",
+          "可选：一个极短限定语",
+          "其余区域留白",
+        ],
+      },
+      {
+        id: "hero-proof",
+        useWhen: "用一个数字证明上一页承诺",
+        titlePattern: "巨型数字或极短结论",
+        bodySequence: [
+          "一个巨型数字",
+          "一句比较口径",
+          "一个支持性视觉线索",
+          "不增加第二组证据",
+        ],
+      },
+    ],
+  },
+  {
+    id: "briefing",
+    label: "简报",
+    narrativeSkeleton: "刻意不造 thesis；完整、平行、可扫描、可导航地陈列事实。",
+    titleVoice: "topic",
+    pageStructures: ["表格", "定义列表", "状态卡", "参考网格"],
+    speakerNotesRegister: "平实、中性、完整；不造悬念、不反问、不强加 so-what。",
+    hardRules: [
+      "标题命名页面主题，不把中性资料强写成结论。",
+      "core message 说明覆盖范围，而不是宣称证明了什么。",
+      "保留受众查阅所需的完整集合，不只选择支持某观点的事实。",
+      "同级项目使用相同权重、字段与视觉结构。",
+      "按时间、类别或字母等稳定顺序分组，提供可预测导航。",
+      "只有真实异常才获得强调，正常项保持均匀。",
+    ],
+    antiPatterns: [
+      "为中性资料强造 thesis、冲突或故事转折。",
+      "省略不支持某个结论但查阅时必要的信息。",
+      "任意放大某项，制造并不存在的 punchline。",
+      "同级页面频繁换布局，破坏扫描与定位。",
+    ],
+    titleExamples: [
+      {
+        prefer: "Q3 各工作流交付状态",
+        avoid: "支付集成拖累整体进度",
+      },
+      {
+        prefer: "支持的文件格式",
+        avoid: "我们覆盖了所有关键格式",
+      },
+    ],
+    pageSkeletons: [
+      {
+        id: "status-reference",
+        useWhen: "汇报状态或交付清单",
+        titlePattern: "时间/范围 + 对象 + 状态",
+        bodySequence: [
+          "稳定字段的状态表或列表",
+          "同级行等权排列",
+          "真实异常使用单一状态信号",
+          "补充 owner、日期与定义",
+        ],
+      },
+      {
+        id: "catalog-reference",
+        useWhen: "提供可查阅的分类、定义或 FAQ",
+        titlePattern: "对象或问题主题",
+        bodySequence: [
+          "按稳定规则分组",
+          "每项使用相同字段",
+          "必要时提供索引或章节定位",
+          "不附加虚构结论",
+        ],
+      },
+    ],
+  },
 ] as const;
+
+export interface CompositionDiscipline {
+  primaryStructure: readonly string[];
+  decorationLayer: readonly string[];
+  deckVariation: readonly string[];
+}
+
+/**
+ * Applies to every SVG style. The style supplies the aesthetic moves; this
+ * discipline keeps those moves from collapsing into a repeated card grid or
+ * an unstructured pile of decoration.
+ */
+export const SVG_COMPOSITION_DISCIPLINE: CompositionDiscipline = {
+  primaryStructure: [
+    "每页先选一个承担阅读顺序的主结构：轴线、分区、路径、英雄对象或整页图。",
+    "标题、证据与视觉都挂接到该主结构；避免再建立第二套竞争网格。",
+    "先用少量大形与留白确定焦点，再放正文和细节。",
+  ],
+  decorationLayer: [
+    "修饰只强化层级、节奏或连续性，不承担核心信息。",
+    "每页最多一个主 motif；纹理、光效和图案保持在内容层之后。",
+    "任何装饰若削弱文字对比、数据读取或焦点唯一性，直接删除。",
+  ],
+  deckVariation: [
+    "保持字体、色彩角色、形状语言与 motif 一致，但改变页面的主结构。",
+    "相邻页面避免重复同一等权卡片阵列；只有真实平行比较才使用同构布局。",
+  ],
+};
 
 export interface ReadingModeDefinition {
   id: ReadingMode;

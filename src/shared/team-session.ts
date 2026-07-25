@@ -30,7 +30,7 @@ export function toTeamSessionStatus(
 
 export function projectTeamCurrentActivity(activity: TeamTaskActivity): string {
   const lastStep = activity.steps.at(-1);
-  if (activity.status === "completed") return "已完成，等待 lead 汇总";
+  if (activity.status === "completed") return "已完成";
   if (activity.status === "failed") {
     if (lastStep?.type === "tool") {
       return formatAgentToolActivity(
@@ -38,7 +38,7 @@ export function projectTeamCurrentActivity(activity: TeamTaskActivity): string {
         "failed",
       );
     }
-    return "任务执行失败，等待 lead 处理";
+    return "任务执行失败";
   }
   if (activity.status === "interrupted" || activity.status === "cancelled") {
     return "任务已取消";

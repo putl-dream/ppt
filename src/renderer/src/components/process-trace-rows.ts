@@ -88,17 +88,17 @@ export function buildProcessTraceRows(
     if (item.kind === "task") {
       const isRunning = item.status === "running";
       const title = isRunning
-        ? "正在处理子任务"
+        ? "正在处理任务"
         : item.status === "failed"
-          ? "子任务执行失败"
+          ? "任务执行失败"
           : item.status === "interrupted" || item.status === "cancelled"
-            ? "子任务已取消"
-            : "子任务已完成";
+            ? "任务已取消"
+            : "任务已完成";
       pushRow(rows, {
         id: item.id,
         kind: "task",
         title,
-        lines: item.steps.length > 0 ? [item.description] : (isRunning && live ? ["正在准备子任务…"] : [item.description]),
+        lines: item.steps.length > 0 ? [item.description] : (isRunning && live ? ["正在准备任务…"] : [item.description]),
         active: isRunning && live,
       });
 
@@ -107,7 +107,7 @@ export function buildProcessTraceRows(
           pushRow(rows, {
             id: step.id,
             kind: "thought",
-            title: live && step.streaming ? "子任务思考中" : "子任务思考",
+            title: live && step.streaming ? "任务分析中" : "任务分析",
             content: step.text,
             active: live && Boolean(step.streaming),
             streaming: live && Boolean(step.streaming),
@@ -120,11 +120,11 @@ export function buildProcessTraceRows(
               step.toolName,
               step.status,
             )
-          : (formatAgentProgressMessage(step.text) ?? "正在处理子任务…");
+          : (formatAgentProgressMessage(step.text) ?? "正在处理任务…");
         pushRow(rows, {
           id: step.id,
           kind: "task",
-          title: "子任务步骤",
+          title: "任务步骤",
           lines: [stepText],
           active: stepRunning && live,
         });

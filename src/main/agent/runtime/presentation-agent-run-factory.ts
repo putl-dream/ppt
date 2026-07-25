@@ -72,6 +72,7 @@ export class PresentationAgentRunFactory {
     const emitProgress = scope.eventPorts.renderer.bind(scope.eventPorts);
     const contextBase: ToolContext = {
       presentation: structuredClone(options.presentationSnapshot),
+      request: options.request,
       currentSlideId: options.currentSlideId,
       selectedElementIds: [...options.selectedElementIds],
       discoverySession: scope.discoverySession,

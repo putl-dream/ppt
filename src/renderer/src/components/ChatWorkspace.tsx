@@ -19,9 +19,7 @@ import { filterTraceForDisplay, markTraceComplete } from "@shared/agent-activity
 import { TaskPlanCard } from "./TaskPlanCard";
 import type { ManagedModel } from "../modelCatalog";
 import type { Presentation } from "@shared/presentation";
-import type { LayoutChoice } from "@shared/layout-preference";
 import type { LeanGenerationMode } from "@shared/lean-mode-contract";
-import type { DesignSystemV2 } from "@design-system";
 import {
   findActiveToolPermissionCard,
   usePermissionCardManager,
@@ -32,24 +30,17 @@ import { ReviewCardHost } from "../cards/hosts/ReviewCardHost";
 import { ArtifactCardHost } from "../cards/hosts/ArtifactCardHost";
 import {
   collectTeamSessions,
-  type TeamSessionProjection,
 } from "@shared/team-session";
-import {
-  FocusedTeamSession,
-  LeadWaitingState,
-  TeamOverview,
-} from "./TeamSessionViews";
+import { FocusedTeamSession } from "./TeamSessionViews";
 import type { AgentRunPhase } from "../agentRunPresentation";
 
 type ChatMessage = SessionChatMessage;
 type QuestionEvent = Extract<DisplayEvent, { kind: "interaction.question-requested" }>;
-type LayoutEvent = Extract<DisplayEvent, { kind: "interaction.layout-required" }>;
 type CommandProposalEvent = Extract<DisplayEvent, { kind: "review.command-proposal" }>;
 type PatchEvent = Extract<DisplayEvent, { kind: "review.patch-ready" }>;
 type ArtifactEvent = Extract<DisplayEvent, { kind: "artifact.ready" }>;
 type ConversationFocus =
   | { kind: "main" }
-  | { kind: "overview" }
   | { kind: "team-session"; sessionId: string };
 
 function getConversationFocusKey(focus: ConversationFocus): string {
@@ -152,12 +143,10 @@ interface ChatWorkspaceProps {
   onResolveToolApproval?: (approvalId: string, approved: boolean) => void;
   onConfirmBrief: (event: ArtifactEvent) => void;
   onConfirmOutline: (event: ArtifactEvent) => void;
-  onConfirmLayout: (event: LayoutEvent, choice: LayoutChoice) => void;
   onReviseOutline: (event: ArtifactEvent) => void;
   onOpenDeckPreview: () => void;
   onExportDeck: () => void;
   isExportingDeck?: boolean;
-  selectedDesignSystem: DesignSystemV2;
   activeRunId?: string | null;
   onCancelRun?: () => void;
   isCancellingRun?: boolean;
@@ -172,7 +161,7 @@ interface ChatWorkspaceProps {
   selectedModelId: string;
   setSelectedModelId: (val: string) => void;
   generationMode: LeanGenerationMode;
-  onChangeGenerationMode: (mode: LeanGenerationMode) => void;
+  onChangeGenerationMode?: (mode: LeanGenerationMode) => void;
   workspaceReady: boolean;
   sandboxName: string;
   onPrepareWorkspace: () => void;
@@ -197,12 +186,10 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
   onResolveToolApproval,
   onConfirmBrief,
   onConfirmOutline,
-  onConfirmLayout,
   onReviseOutline,
   onOpenDeckPreview,
   onExportDeck,
   isExportingDeck,
-  selectedDesignSystem,
   activeRunId,
   onCancelRun,
   isCancellingRun = false,
@@ -237,11 +224,9 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
     activeRunStartedAtRef.current = null;
   }
   const [conversationFocus, setConversationFocus] = useState<ConversationFocus>({ kind: "main" });
-  const [teamAttentionIds, setTeamAttentionIds] = useState<Set<string>>(() => new Set());
   const [mainHasAttention, setMainHasAttention] = useState(false);
   const scrollPositionsRef = useRef(new Map<string, number>());
   const pendingScrollRestoreRef = useRef<string | null>(null);
-  const teamSnapshotsRef = useRef(new Map<string, TeamSessionProjection>());
   const mainFingerprintRef = useRef<string | null>(null);
   const decisionReturnFocusRef = useRef<ConversationFocus | null>(null);
   const hadPendingDecisionRef = useRef(false);
@@ -294,7 +279,6 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
   const selectedTeamSession = conversationFocus.kind === "team-session"
     ? teamSessions.find((session) => session.id === conversationFocus.sessionId)
     : undefined;
-  const runningTeamCount = teamSessions.filter((session) => session.status === "running").length;
   const focusKey = getConversationFocusKey(conversationFocus);
   const sessionIdentity = chatMessages[0]?.id ?? `empty:${displayConversationTitle}`;
   const mainFingerprint = useMemo(() => {
@@ -334,14 +318,6 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
     shouldFollowOutputRef.current = false;
     setConversationFocus(nextFocus);
     if (nextFocus.kind === "main") setMainHasAttention(false);
-    if (nextFocus.kind === "team-session") {
-      setTeamAttentionIds((current) => {
-        if (!current.has(nextFocus.sessionId)) return current;
-        const next = new Set(current);
-        next.delete(nextFocus.sessionId);
-        return next;
-      });
-    }
   }, [focusKey]);
 
   const focusTeamSession = useCallback((sessionId: string) => {
@@ -378,10 +354,8 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
     if (sessionIdentityRef.current === sessionIdentity) return;
     sessionIdentityRef.current = sessionIdentity;
     scrollPositionsRef.current.clear();
-    teamSnapshotsRef.current.clear();
     mainFingerprintRef.current = null;
     decisionReturnFocusRef.current = null;
-    setTeamAttentionIds(new Set());
     setMainHasAttention(false);
     setConversationFocus({ kind: "main" });
     shouldFollowOutputRef.current = true;
@@ -395,49 +369,6 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
       switchConversationFocus({ kind: "main" });
     }
   }, [conversationFocus, switchConversationFocus, teamSessions]);
-
-  useEffect(() => {
-    const previous = teamSnapshotsRef.current;
-    const nextSnapshots = new Map<string, TeamSessionProjection>();
-    const changedIds: string[] = [];
-    for (const session of teamSessions) {
-      nextSnapshots.set(session.id, session);
-      const previousSession = previous.get(session.id);
-      const latestStep = session.activity.steps.at(-1);
-      const previousLatestStep = previousSession?.activity.steps.at(-1);
-      const reachedMeaningfulState = Boolean(
-        previousSession
-        && (
-          previousSession.status !== session.status
-          || (
-            latestStep?.type === "tool"
-            && latestStep.status !== "running"
-            && (
-              previousLatestStep?.id !== latestStep.id
-              || previousLatestStep.status === "running"
-            )
-          )
-        )
-      );
-      if (
-        reachedMeaningfulState
-        && !(conversationFocus.kind === "team-session" && conversationFocus.sessionId === session.id)
-      ) {
-        changedIds.push(session.id);
-      }
-      if (
-        previousSession === undefined
-        && previous.size > 0
-        && conversationFocus.kind !== "main"
-      ) {
-        changedIds.push(session.id);
-      }
-    }
-    teamSnapshotsRef.current = nextSnapshots;
-    if (changedIds.length > 0) {
-      setTeamAttentionIds((current) => new Set([...current, ...changedIds]));
-    }
-  }, [conversationFocus, teamSessions]);
 
   useEffect(() => {
     const previous = mainFingerprintRef.current;
@@ -500,7 +431,7 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
     });
     observer.observe(stream);
     return () => observer.disconnect();
-  }, [busy, runningTeamCount]);
+  }, [busy]);
 
   const slashCommands = [
     { cmd: "/design 商务蓝", desc: "应用商务蓝设计系统" },
@@ -643,9 +574,6 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
             {conversationFocus.kind !== "main" && (
               <ChevronRightIcon size={13} className="chat-session-crumb-separator" aria-hidden="true" />
             )}
-            {conversationFocus.kind === "overview" && (
-              <span className="chat-session-crumb is-current" aria-current="page">团队总览</span>
-            )}
             {conversationFocus.kind === "team-session" && selectedTeamSession && (
               <span className="chat-session-crumb is-current" aria-current="page">
                 {selectedTeamSession.title}
@@ -655,21 +583,6 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
         </div>
 
         <div className="canvas-header-right">
-          {teamSessions.length > 1 && (
-            <button
-              type="button"
-              className={`team-overview-trigger${conversationFocus.kind === "overview" ? " is-active" : ""}`}
-              onClick={() => switchConversationFocus({ kind: "overview" })}
-              aria-label={`打开团队总览，${teamSessions.length} 个子任务`}
-            >
-              <span className="team-overview-trigger-agents" aria-hidden="true">
-                <i /><i /><i />
-              </span>
-              <span>团队</span>
-              <b>{teamSessions.length}</b>
-              {teamAttentionIds.size > 0 && <i className="team-overview-trigger-alert" />}
-            </button>
-          )}
           {pendingToolApproval && (
             <button
               type="button"
@@ -783,8 +696,6 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
                           content={msg.content}
                           live={useLiveTrace}
                           teamGraphTasks={activeTasks}
-                          teamSessionAttentionIds={teamAttentionIds}
-                          onFocusTeamSession={focusTeamSession}
                         />
                       );
                     }
@@ -805,10 +716,8 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
                   <InteractionCardHost
                     host="timeline"
                     anchorMessageId={msg.id}
-                    selectedDesignSystem={selectedDesignSystem}
                     busy={busy}
                     onResolveQuestion={onResolveQuestion}
-                    onConfirmLayout={onConfirmLayout}
                   />
 
                 <ReviewCardHost
@@ -838,10 +747,8 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
 
         <InteractionCardHost
           host="timeline"
-          selectedDesignSystem={selectedDesignSystem}
           busy={busy}
           onResolveQuestion={onResolveQuestion}
-          onConfirmLayout={onConfirmLayout}
         />
 
         <ReviewCardHost
@@ -868,6 +775,8 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
             live={busy || hasActiveTaskPlan}
             state={latestPlan?.state}
             archive={latestPlan?.archive}
+            sessions={teamSessions}
+            onOpenTask={focusTeamSession}
           />
         )}
 
@@ -879,16 +788,7 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
           startedAt={activeRunStartedAtRef.current ?? undefined}
         />
 
-        {!busy && runningTeamCount > 0 && (
-          <LeadWaitingState runningCount={runningTeamCount} />
-        )}
           </>
-        ) : conversationFocus.kind === "overview" ? (
-          <TeamOverview
-            sessions={teamSessions}
-            attentionIds={teamAttentionIds}
-            onFocus={focusTeamSession}
-          />
         ) : selectedTeamSession ? (
           <FocusedTeamSession session={selectedTeamSession} />
         ) : null}
@@ -923,14 +823,12 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
         <div>
           <InteractionCardHost
             host="composer-before-input"
-            selectedDesignSystem={selectedDesignSystem}
             busy={busy}
             onResolveQuestion={onResolveQuestion}
-            onConfirmLayout={onConfirmLayout}
           />
           {conversationFocus.kind !== "main" && !pendingToolApproval && (
             <div className="team-focus-composer-note">
-              当前为只读观察视图；这里发送的新指令仍会交给 lead。
+              当前正在查看任务详情；这里发送的新指令仍会交给 PPT Agent。
             </div>
           )}
           <UnifiedAgentInput

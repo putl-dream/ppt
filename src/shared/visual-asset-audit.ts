@@ -83,6 +83,26 @@ export function auditPresentationVisualAssets(
   let imageSlideCount = 0;
 
   const slides = presentation.slides.map((slide): SlideVisualAssetAudit => {
+    if (slide.visualSource?.kind === "svg") {
+      const resources = slide.visualSource.resources;
+      totalImageCount += resources.length;
+      if (resources.length > 0) imageSlideCount += 1;
+      for (const resource of resources) {
+        imageUrlCounts.set(
+          resource.sourcePath,
+          (imageUrlCounts.get(resource.sourcePath) ?? 0) + 1,
+        );
+      }
+      return {
+        slideId: slide.id,
+        title: slide.title,
+        status: resources.length > 0 ? "satisfied" : "not-needed",
+        existingImageCount: resources.length,
+        availableSlots: [],
+        reason: "The complete SVG page owns its visual composition and embedded raster resources.",
+      };
+    }
+
     const images = slide.elements.filter((element) => element.type === "image");
     totalImageCount += images.length;
     if (images.length > 0) imageSlideCount += 1;

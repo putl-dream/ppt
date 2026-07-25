@@ -1,11 +1,6 @@
 import { useCallback, type Dispatch, type SetStateAction } from "react";
 import type { DisplayEvent } from "@shared/card-display-protocol";
 import type { AgentQuestionResolved } from "@shared/agent-question";
-import {
-  buildLayoutPhasePrompt,
-  type LayoutChoice,
-} from "@shared/layout-preference";
-import { getSelectedDesignDirection } from "@shared/design-plan";
 import { formatTerminalAgentRunContent } from "@shared/agent-result-copy";
 import { mergeResponseText } from "@shared/agent-activity";
 import { formatPublicErrorMessage } from "@shared/agent-activity-display";
@@ -15,13 +10,11 @@ import {
   setDisplayCardStatus,
 } from "../../cards/display-card-managers";
 import type { ChatMessage } from "../chatMessageRuntime";
-import type { SettingsController } from "../useSettingsController";
 import type { PresentationController } from "../presentation/usePresentationController";
 import type { AgentActivityStreamController } from "../agent/useAgentActivityStream";
 import type { AgentRunController } from "../agent/useAgentRunController";
 
 type QuestionEvent = Extract<DisplayEvent, { kind: "interaction.question-requested" }>;
-type LayoutEvent = Extract<DisplayEvent, { kind: "interaction.layout-required" }>;
 type CommandProposalEvent = Extract<DisplayEvent, { kind: "review.command-proposal" }>;
 type PatchEvent = Extract<DisplayEvent, { kind: "review.patch-ready" }>;
 type ArtifactEvent = Extract<DisplayEvent, { kind: "artifact.ready" }>;
@@ -32,7 +25,6 @@ interface UseDisplayEventActionsOptions {
   activeSessionId: string;
   setChatMessages: Dispatch<SetStateAction<ChatMessage[]>>;
   syncPresentation: PresentationController["syncPresentation"];
-  setSelectedDesignSystem: SettingsController["setSelectedDesignSystem"];
   activity: AgentActivityStreamController;
   agentRun: Pick<AgentRunController, "startAgent" | "applyAgentResult">;
   notify: (message: string) => void;
@@ -49,10 +41,6 @@ export interface DisplayEventActions {
   confirmBrief: (event: ArtifactEvent) => Promise<void>;
   confirmOutline: (event: ArtifactEvent) => Promise<void>;
   reviseOutline: (event: ArtifactEvent) => void;
-  confirmLayout: (
-    event: LayoutEvent,
-    choice: LayoutChoice,
-  ) => void;
   resolvePatch: (event: PatchEvent, accepted: boolean) => Promise<void>;
 }
 
@@ -62,7 +50,6 @@ export function useDisplayEventActions({
   activeSessionId,
   setChatMessages,
   syncPresentation,
-  setSelectedDesignSystem,
   activity,
   agentRun,
   notify,
@@ -225,21 +212,6 @@ export function useDisplayEventActions({
     });
   }, [startAgent]);
 
-  const confirmLayout = useCallback((
-    _event: LayoutEvent,
-    choice: LayoutChoice,
-  ) => {
-    const selected = getSelectedDesignDirection(choice);
-    setSelectedDesignSystem(selected.designSystem);
-    notify(`🎨 已确认设计方向：${selected.label}`);
-    void startAgent(buildLayoutPhasePrompt(choice), undefined, {
-      userDisplayContent: false,
-      layoutChoice: choice,
-      sidechain: true,
-      generationMode: "agent",
-    });
-  }, [notify, setSelectedDesignSystem, startAgent]);
-
   const resolvePatch = useCallback(async (event: PatchEvent, accepted: boolean) => {
     if (!accepted || !activeSessionId || event.payload.contentAfter === undefined) {
       notify(accepted ? "补丁已确认" : "补丁已拒绝");
@@ -266,7 +238,6 @@ export function useDisplayEventActions({
     confirmBrief,
     confirmOutline,
     reviseOutline,
-    confirmLayout,
     resolvePatch,
   };
 }

@@ -1,75 +1,55 @@
 ---
 name: ppt-workflow
-description: 端到端演示创作流程；默认轻量路径，完整路径按需分阶段
-when_to_use: 用户要从零做完整 PPT、不确定下一步、或要求「一条龙」完成演示时
+description: 以完整页面 SVG 为唯一视觉事实源，完成从沟通契约、设计锁定、逐页规划、P01 校验到整套提交的新建 PPT 工作流
+when_to_use: 用户要从零新建、批量生成或一条龙完成整套 PPT 时
 stages:
   - discover
+  - author
+  - design
+allowed-tools:
+  - ReadFile
+  - WriteFile
+  - PreviewSvgPage
+  - SubmitSvgDeck
 ---
 
-# 端到端工作流
+# SVG-native 端到端工作流
 
-## 路径选择（先判断，不要默认走完整流程）
+## 权威来源
 
-| 场景 | 路径 | 步骤 |
-|------|------|------|
-| 改页/加页/换设计系统/用户已给内容 | **轻量** | ReadPresentationSnapshot → SubmitCommands |
-| 小型新建（≤10 页，需求清晰） | **两阶段** | 内容草稿 → 设计方向 → **设计 → 执行** |
-| 大型新建（>10 页）或用户要求先规划 | **完整** | 见下表 |
+新建流程只认 `slides/svg/P<NN>.svg` 为页面视觉作者源。设计规格和逐页计划描述意图，不能在预览或提交时补出任何可见对象。图片可以作为 workspace 资源被 SVG 显式引用；除此之外，页面的背景、标题、正文、页码、图表、图示和装饰都必须已经存在于 SVG 中。
 
-## 完整路径阶段（按需跳过可选项）
+预览与提交必须消费同一份 SVG。禁止把旧 Presentation element IR、固定 layout、layout handler、自动页眉/页码或其他 chrome 作为新建流程的一部分；不要调用 `PreviewCommands`、`SubmitCommands` 或 `ExecuteLayoutPlan`。无需兼容旧生成路线。
 
-| 阶段 | LoadSkill | 产出 | 执行者 |
-|------|-----------|------|--------|
-| 0 规划 | — | TaskCreate（3–5 项）+ TaskUpdate 建依赖 | 主 Agent（lead/orchestrator） |
-| 1 需求 | `ppt-brief` | `brief.md` | teammate 自主领取 |
-| 2 大纲 | `ppt-outline` | `outline.md` | teammate 自主领取 |
-| 3 分镜 | `ppt-storyboard` | `slides/storyboard.json` | teammate 自主领取 |
-| 4 内容草稿 | `ppt-build` | add-slide（无排版） | 主 Agent 整合冻结产物后 SubmitCommands |
-| **4b 设计方向** | **`ppt-design`** | **需求合同 + safe / shifted / bold，或用户锁定的单一方向** | **主 Agent + 用户（需要选择时）** |
-| **4c 排版设计** | **`ppt-design-layout`** | **`slides/layout-plan.json`** | **teammate 自主领取（design 阶段）** |
-| 5 视觉执行 | `ppt-layout` | ExecuteLayoutPlan 按 plan 执行 commands + 增强 | Core Tool（style 阶段） |
-| 5b 质检 | `deck-review` | Rubric + ValidateDeckLayout | style 阶段 |
-| 6 美化/导出 | `ppt-beautify` / `ppt-export` | 可选 | 仅用户要求 |
+## 固定顺序
 
-**设计能力来源**：`ppt-master` 的设计决策层已复刻为本项目原生能力：5 种论证模式、18 种视觉风格、三档设计方向、阅读模式、页面节奏和 audience move。其 Python/SVG/PPTX 生成管线不进入本项目。
+1. 建立沟通契约：`audience`、`objective`、`desiredOutcome`、deck-wide `coreMessage`、`deliveryContext`、`afterUse`。只有缺少会改变内容事实或交付目标的信息时才询问。
+2. 应用 `ppt-design`，先锁定唯一的 `argumentMode`、`visualStyle`、`readingMode` 和 `imageLanguage`，同时锁定语义色彩与字体角色。将结果写入 `design/design-spec.json`。
+3. 应用 `ppt-design-layout`，为每页冻结 `finalCopy`、`coreMessage`、`audienceMove`、`rhythm`、`layoutIntent` 和素材引用，按顺序写入 `slides/page-plan.json`。
+4. 应用 `ppt-build`。先用 `WriteFile` 只写 `slides/svg/P01.svg`。
+5. 立即用 `PreviewSvgPage({"path":"slides/svg/P01.svg"})` 校验并真实渲染 P01。若有越界、缺字、素材失败、视觉层级或 SVG 兼容问题，修改同一个文件并重新预览；P01 未通过前禁止生成 P02。
+6. P01 通过后，逐页用 `WriteFile` 写 `P02.svg`、`P03.svg`……；每次只改当前页，不让后处理器重新布局。
+7. 全部写完后进入最终视觉门禁：按页调用 `PreviewSvgPage`，确保每个新建或改动 SVG 的当前内容与素材都成功产出 PNG。任何修订都会使旧凭据失效，必须重新预览该页。
+8. 最后只调用一次 `SubmitSvgDeck`，显式传入 `"designSpecPath":"design/design-spec.json"`、`"pagePlanPath":"slides/page-plan.json"` 及有序 SVG 页面。`communication`、`designSystem`、每页 `id/path/narrative` 必须原样来自这两个锁文件；提交工具会重新读取并核对，再校验与内联 workspace 相对图片。任何锁漂移或页面失败都不视为完成。
 
-**默认跳过**：research（`ppt-research`）。设计系统直接进入 layout-plan；项目化留存路径为 `design/system.json`。
+## 作者文件
 
-## 主 Agent 职责
+- `design/design-spec.json`：沟通契约和 deck-wide 设计锁。
+- `slides/page-plan.json`：有序逐页内容与构图意图。
+- `slides/svg/P01.svg`、`P02.svg`……：唯一视觉作者源。
+- `assets/**`：SVG 显式引用的本地图片或其他资源。
 
-主 Agent 是 lead/orchestrator，不是全流程生产工人。
+设计规格和页面计划可以重建；一旦开始写 SVG，任何可见修改都必须直接修改对应 SVG，不能只改计划后期待提交工具代为更新。
 
-1. 先识别意图并选路径；完整/多阶段任务按需用 `TaskCreate` 建任务，再用 `TaskUpdate` 建依赖；单页修改无需 Task。
-2. 任务计划系统只用职责分离的 `Task*` 工具；恢复时先 `TaskList` / `TaskGet`。
-3. 创建计划时每步标记 executionTarget：workspace 文件产物用 `teammate`，SubmitCommands / ExecuteLayoutPlan / 用户决策用 `lead`。
-4. teammate 节点 description 必须自包含输入、输出路径、验收标准和禁止事项；保持 pending/unowned，由 watcher Claim；完成工作后 `TaskReviewRequest`，lead 用 approve/reject 验收。
-5. claim 只写 owner；开始工作须显式 `TaskUpdate(in_progress)`，普通工具结果不自动推进状态。
-6. 新建/批量加页：内容草稿完成后，LoadSkill `ppt-design` 并建立完整需求合同。用户明确指定风格时生成一个 locked 方向；否则生成彼此有实质差异的 safe / shifted / bold 三档方向，并让用户确认。
-7. 方向确认后：**先** LoadSkill `ppt-design-layout`，等待 teammate 产出并提交 LayoutPlan v2；**再**验收 Complete，LoadSkill `ppt-layout` 并调用 `ExecuteLayoutPlan` 按 plan 执行（禁止 freestyle 改 layout）。
-8. 图片页先写入图片元素，再按同一 grammar 做最终布局；不得先冻结空槽位坐标。
-9. 控制步数：方向决策只做一次；执行阶段合并 SubmitCommands；不重复 LoadSkill。
+## 页面硬约束
 
-## 阶段 4c → 5 衔接
+- 画布固定为 `1280 × 720`，根节点使用 `viewBox="0 0 1280 720"`。
+- SVG 必须是完整页面构图，不是供模板或 layout handler 填槽的片段。
+- 禁止自动 chrome；若要标题、页码、章节标、品牌条或背景，必须在每页 SVG 中明确绘制。
+- 禁止把全套内容默认做成等宽圆角卡片网格；卡片仅在语义确实需要分组时使用。
+- 图片 `href` 使用 workspace 相对路径，例如 `assets/images/hero.jpg`；禁止远程 URL。提交时由 `SubmitSvgDeck` 内联同一字节。
+- 除显式引用的本地图片外，SVG 自包含：不依赖外部 CSS、脚本或运行时布局。
 
-```
-LoadSkill ppt-design
-ResolveDesignPlan → 用户确认 direction
-    ↓
-LoadSkill ppt-design-layout
-teammate 自主 Claim → TaskUpdate(in_progress) → slides/layout-plan.json → TaskReviewRequest → lead TaskReviewApprove
-    ↓
-LoadSkill ppt-layout（Executor 模式）
-ReadPresentationSnapshot
-ExecuteLayoutPlan：读取 LayoutPlan v2 → 校验 direction / audienceMove / rhythm → 生成 set-design-system/update-slide-layout/update-slide-variant
-ExecuteLayoutPlan：先插入或替换 image，再执行最终 layout；ExecuteExtraTool：其余 enhancements（BeautifyChart 等）
-    ↓
-LoadSkill deck-review
-```
+## 完成条件
 
-## 分支
-
-- 用户只改一页 → 轻量路径，LoadSkill `ppt-edit`（若存在）或直接 SubmitCommands
-- 已有 brief 无 outline → 从 outline 开始
-- 已有 storyboard → 直接 ppt-build
-- 只要导出 → ppt-export
-- 用户拒绝推荐方向 → 回到 `ppt-design` 修改或锁定方向；不得跳过计划让 Executor 自主选风格
+只有在 P01 闸门通过、全部新建或改动 SVG 的当前版本均通过真实 PNG 门禁、页面与 `slides/page-plan.json` 一一对应、最终 `SubmitSvgDeck` 成功后，才能宣告新建 deck 完成。用户只要内容草稿时可以停在 `slides/page-plan.json`，但不得生成或提交占位页面。

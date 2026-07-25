@@ -1,51 +1,69 @@
 ---
 name: ppt-layout
-description: 严格执行 LayoutPlan v2，并以选定 design direction 重排图片、文字和数据元素
-when_to_use: slides/layout-plan.json 已通过验收，需要生成并提交原子命令提案时
+description: 为 SVG-native 页面提供自由构图执行准则，并把实际逐页 SVG 创作委托给 ppt-build
+when_to_use: 页面计划已经冻结，需要把 layout intent 转成自由构图原则或准备进入 SVG 页面生成时
 stages:
+  - author
   - design
   - style
 allowed-tools:
-  - ReadPresentationSnapshot
-  - ListSlides
-  - ExecuteLayoutPlan
-  - PreviewCommands
-  - SubmitCommands
-  - SearchExtraTools
-  - ExecuteExtraTool
+  - ReadFile
+  - WriteFile
 ---
 
-# Layout Executor（ppt-master-design-v2）
+# 自由构图执行说明
 
-## 唯一职责
+## 目标
 
-读取、校验并执行 `slides/layout-plan.json`。设计方向、页面 audience move、节奏、layout、grammar 和图片槽位都已锁定；Executor 不重新设计。
+把 `slides/page-plan.json` 的页面意图翻译为可直接绘制的页面级构图判断。不要选择固定 layout、grammarVariant 或坐标模板；新建 deck 的实际 SVG 写入、P01 校验与提交统一由 `ppt-build` 完成。
 
-## 工作流
+## 输入
 
-1. `ReadPresentationSnapshot` 与 `ListSlides`，确认当前 slideId/顺序仍与 plan 一致。
-2. 调用 `ExecuteLayoutPlan({"path":"slides/layout-plan.json"})`。
-3. 工具必须完成：
-   - 校验 communication contract、设计方向与逐页意图
-   - 应用所选 direction 的 DesignSystem v2
-   - 将图片增强先纳入目标页，再用同一 grammarVariant 做最终布局
-   - 生成一个可审查的 command proposal
-4. 有 error 时修复或退回 Design Agent 重做 plan；不得从聊天记忆手写另一套布局。
-5. 预览命令，确认图像、文本和数据元素没有丢失，再 `SubmitCommands`。
-6. 加载 `deck-review` 做渲染后检查。
+用 `ReadFile` 读取：
 
-## 执行边界
+- `design/design-spec.json`：唯一 deck-wide 设计锁。
+- `slides/page-plan.json`：逐页 `finalCopy`、`coreMessage`、`audienceMove`、`rhythm`、`layoutIntent` 和素材引用。
 
-- plan 是设计与执行之间的锁，不得擅自换 visual style、argument mode 或 color scheme。
-- 不改标题和正文，不增删页。
-- 不手填 x/y 绕过 grammar。
-- 图片插入后的最终坐标必须来自该页实际 grammar handler，不能使用通用估算槽位。
-- 页面级 design override 只用于 plan 已声明的背景/密度变化。
-- 图表、表格与 icon 必须针对已有元素或明确数据执行；不得从文字臆造数值。
+设计规格决定整套语言；页面计划决定当前页的内容和沟通任务。二者都不是视觉作者源，不能在预览或提交时补对象。
 
-## 失败处理
+## 每页自由构图
 
-- snapshot 不一致：停止，重生成 plan。
-- 图片无法取得：改为 plan 声明的非图片 fallback 构图；不能保留空白图片框。
-- 风格能力超出当前原生渲染器：退回 Design Agent 选择可执行方向，不静默降级成圆角卡片模板。
+对每页依次明确：
 
+1. 主焦点：受众第一眼必须看到什么。
+2. 阅读路径：横向、纵向、中心辐射、对照或流程如何与论点一致。
+3. 空间比例：核心证据、解释、图片与留白各自占多少页面级面积。
+4. 对齐与张力：使用哪些主轴、边界、规则线、重叠或裁切建立秩序。
+5. 节奏兑现：
+   - `anchor` 需要单一强锚点；
+   - `dense` 需要可扫描的证据结构；
+   - `breathing` 需要真正留白，不能重新塞成卡片网格。
+6. 风格兑现：几何、字体、颜色、纹理、图片处理和留白必须共同体现 `visualStyle`，不能只换色。
+
+`layoutIntent` 可以描述几何关系，但不要输出组件槽位、layout 名或 handler 参数。相似页面可以共享对齐逻辑，不能机械复制同一轮廓。
+
+## 反卡片化
+
+卡片只在确有独立实体、对比边界或交互隐喻时使用。以下不是默认构图：
+
+- 三个等宽圆角矩形承载任意三点。
+- 每页都使用相同的 2×2 容器。
+- 把流程、架构、证据和大图都降级成卡片列表。
+- 用装饰阴影代替信息层级。
+
+优先考虑大字结论、裸文本、规则线、尺度对比、真实图表结构、路径关系、全幅图片和负空间。
+
+## 交付给 `ppt-build`
+
+新建页面时，不在本技能内写或提交 commands。确认页面计划足够具体后，应用 `ppt-build`：
+
+- 按页写 `slides/svg/P01.svg`、`P02.svg`……；
+- 每页完整包含背景、标题、页码、图表和装饰；
+- 先通过该技能定义的 P01 同源预览闸门，再继续其他页；
+- 最后按该技能定义的方式提交全部有序页面。
+
+若本技能发现 `layoutIntent` 仍是固定 layout 名或过于抽象，可用 `WriteFile` 修订 `slides/page-plan.json` 的自然语言意图，再交给 `ppt-build`。已存在 SVG 的重排由 `ppt-edit` 或 `ppt-beautify` 直接修改作者源。
+
+## 退出的旧路线
+
+不要调用 `ExecuteLayoutPlan`、`AutoLayoutSlide`、`PreviewCommands`、`SubmitCommands` 或任何 element/layout grammar 工具。不要建立与 SVG 并行的布局模型，也不要让运行时追加自动 chrome。

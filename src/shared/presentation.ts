@@ -3,6 +3,7 @@ import { FONT_FAMILIES, TEXT_ROLES } from "./typography";
 import { BACKGROUND_VARIANTS } from "./slide-background";
 import { SLIDE_VARIANTS } from "./slide-variant";
 import { ICON_NAMES } from "./icon-registry";
+import { SVG_PAGE_HEIGHT, SVG_PAGE_WIDTH } from "./svg-page";
 import {
   CHART_STYLES,
   IMAGE_TREATMENTS,
@@ -280,12 +281,45 @@ export const slideElementsSchema = z.array(slideElementSchema).superRefine((elem
   });
 });
 
+export { SVG_PAGE_HEIGHT, SVG_PAGE_WIDTH } from "./svg-page";
+
+export const slideNarrativeSchema = z.object({
+  role: z.string().trim().min(1).max(80),
+  coreMessage: z.string().trim().min(1).max(1_000),
+  audienceMove: z.string().trim().min(1).max(1_000),
+  rhythm: z.enum(["anchor", "dense", "breathing"]),
+  layoutIntent: z.string().trim().min(1).max(2_000),
+}).strict();
+
+export const svgPageResourceSchema = z.object({
+  sourcePath: z.string().trim().min(1),
+  mimeType: z.enum(["image/png", "image/jpeg", "image/gif", "image/webp"]),
+  byteSize: z.number().int().positive(),
+  sha256: z.string().regex(/^[a-f0-9]{64}$/),
+}).strict();
+
+export const svgPageVisualSourceSchema = z.object({
+  kind: z.literal("svg"),
+  markup: z.string()
+    .min(1)
+    .max(25 * 1024 * 1024)
+    .refine((markup) => markup.trim().length > 0, {
+      message: "SVG page markup must not be blank.",
+    }),
+  width: z.literal(SVG_PAGE_WIDTH),
+  height: z.literal(SVG_PAGE_HEIGHT),
+  sha256: z.string().regex(/^[a-f0-9]{64}$/),
+  sourcePath: z.string().trim().min(1),
+  resources: z.array(svgPageResourceSchema).default([]),
+}).strict();
 
 export const slideSchema = z.object({
   id: z.string(),
   title: z.string(),
   speakerNotes: z.string().trim().max(20_000).optional(),
   elements: slideElementsSchema,
+  visualSource: svgPageVisualSourceSchema.optional(),
+  narrative: slideNarrativeSchema.optional(),
   layout: z.string().optional(),
   grammarVariant: z.string().optional(),
   designOverride: slideDesignOverrideSchema.optional(),
@@ -296,6 +330,14 @@ export const slideSchema = z.object({
     sceneId: z.string().trim().min(1),
     variantId: z.string().trim().min(1),
   }).strict().optional(),
+}).superRefine((slide, context) => {
+  if (slide.visualSource?.kind === "svg" && slide.elements.length > 0) {
+    context.addIssue({
+      code: "custom",
+      path: ["elements"],
+      message: "SVG-native slides must use the complete SVG page as their only visual source.",
+    });
+  }
 });
 
 export const presentationSlidesSchema = z.array(slideSchema).superRefine((slides, context) => {
@@ -329,6 +371,9 @@ export type TableElement = z.infer<typeof tableElementSchema>;
 export type IconElement = z.infer<typeof iconElementSchema>;
 export type SlideElement = z.infer<typeof slideElementSchema>;
 export type ChartData = z.infer<typeof chartDataSchema>;
+export type SlideNarrative = z.infer<typeof slideNarrativeSchema>;
+export type SvgPageResource = z.infer<typeof svgPageResourceSchema>;
+export type SvgPageVisualSource = z.infer<typeof svgPageVisualSourceSchema>;
 export type Slide = z.infer<typeof slideSchema>;
 export type Presentation = z.infer<typeof presentationSchema>;
 export type ElementProvenance = z.infer<typeof elementProvenanceSchema>;

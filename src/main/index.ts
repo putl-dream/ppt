@@ -21,7 +21,6 @@ import {
   projectFileOpenRequestSchema,
   projectFileSaveRequestSchema,
   projectFileSessionIdSchema,
-  type AgentRunRequest,
   type AgentRunResult,
   type AgentStreamEvent,
   type CreateSessionOptions,
@@ -40,7 +39,6 @@ import {
 import { agentStepLimitsSchema, type AgentStepLimits } from "@shared/agent-step-limits";
 import { agentGatewayConfigSchema, type AgentGatewayConfig } from "@shared/agent-gateway-config";
 import { AgentGateway } from "./agent/gateway";
-import { LeanPresentationService } from "./agent/lean/lean-presentation-service";
 import { AgentRuntime } from "./agent/runtime/agent-runtime";
 import { ToolApprovalBroker } from "./agent/runtime/tools/tool-approval-broker";
 import { createDefaultToolRegistry } from "./agent/tools/tool-registry";
@@ -79,11 +77,9 @@ import {
 import { isRuntimeCancellation } from "./agent/runtime/lifecycle/runtime-cancellation";
 import { formatPublicErrorMessage } from "@shared/agent-activity-display";
 import { isTeammateProgressEvent } from "@shared/teammate-progress";
-import { getSelectedDesignDirection } from "@shared/design-plan";
 
 const logger = createModuleLogger("main");
 const agentGateway = new AgentGateway();
-const leanPresentationService = new LeanPresentationService(agentGateway);
 const toolApprovalBroker = new ToolApprovalBroker();
 type WindowThemePreset = Exclude<WindowThemeMode, "system">;
 
@@ -456,63 +452,6 @@ app.whenReady().then(async () => {
       ...toResultDisplayEvents(result, sessionId, runId),
     ];
     return displayEvents.length > 0 ? { ...result, displayEvents } : result;
-  };
-
-  /**
-   * 执行 Lean 旁路：把一次性生成的 DeckSpec 编译为命令提案，
-   * 再交给 AgentService 复用与默认 Agent 相同的 CommitGate 和审批流程。
-   */
-  const runLeanPresentation = async (
-    runtime: SessionRuntime,
-    request: AgentRunRequest,
-    selection: AgentModelSelection | undefined,
-    executionStrategy: AgentExecutionStrategy,
-    emit: (event: AgentServiceEvent) => void,
-    signal: AbortSignal,
-    runId: string,
-  ): Promise<AgentRunResult> => {
-    if ((request.attachments?.length ?? 0) > 0) {
-      throw new Error("Lean Mode v1 暂不处理附件；请把核心要求写入输入框，或切换 Agent Mode。");
-    }
-    emit({
-      type: "stage-started",
-      message: "Lean Mode：正在一次性生成商业叙事...",
-      stage: "lean-generate",
-    });
-    emit({
-      type: "workflow-progress",
-      message: "正在生成紧凑 DeckSpec（模型调用 1/1）...",
-      progress: 20,
-    });
-    const proposal = await leanPresentationService.createProposal({
-      request: request.prompt,
-      presentation: runtime.commandBus.getSnapshot(),
-      model: selection,
-      designSystem: request.layoutChoice
-        ? getSelectedDesignDirection(request.layoutChoice).designSystem
-        : undefined,
-      workspaceRoot: runtime.workspaceRoot,
-      signal,
-    });
-    emit({
-      type: "workflow-progress",
-      message:
-        `DeckSpec 已编译：${proposal.metrics.slideCount} 页，`
-        + `${proposal.metrics.totalTokens?.toLocaleString("zh-CN") ?? "未报告"} tokens。`,
-      progress: 60,
-    });
-    const result = await runtime.agentService.submitDirectProposal({
-      threadId: runId,
-      request: request.prompt,
-      commands: proposal.commands,
-      summary: proposal.summary,
-      assumptions: proposal.assumptions,
-      risk: proposal.risk,
-      model: selection,
-      executionStrategy,
-      listener: emit,
-    });
-    return { ...result, leanMetrics: proposal.metrics };
   };
 
   const abortAllActiveRuns = (reason: string) => {
@@ -996,7 +935,7 @@ app.whenReady().then(async () => {
 
   /**
    * 接收 Renderer 的新 query，完成协议/模型配置校验、并发控制和运行事件初始化，
-   * 再按 generationMode 分流到默认 Agent 工具循环或 Lean 编译链。
+   * 并统一进入 Agent 的 SVG-native 工具循环。旧 Lean 请求在入口处明确拒绝。
    */
   ipcMain.handle(
     "agent:start",
@@ -1010,6 +949,11 @@ app.whenReady().then(async () => {
       runId?: string,
     ) => {
       const request = agentRunRequestSchema.parse(rawRequest);
+      if (request.generationMode === "lean") {
+        throw new Error(
+          "Lean Mode 已退役；新建 PPT 必须使用 Agent 的 SVG-native 逐页设计与预览门禁。",
+        );
+      }
       const sessionId = request.sessionId;
 
       // 当前桌面端采用单窗口、单前台运行模型；Main 同步执行这一约束，
@@ -1070,28 +1014,18 @@ app.whenReady().then(async () => {
           },
           controller.signal,
           async () => {
-            const result = request.generationMode === "lean"
-              ? await runLeanPresentation(
-                  runtime,
-                  request,
-                  selection,
-                  executionStrategy,
-                  emit,
-                  controller.signal,
-                  currentRunId,
-                )
-              : await runtime.agentService.start(
-                  request.prompt,
-                  selection,
-                  executionStrategy,
-                  emit,
-                  request.editorContext,
-                  sessionStore.getAgentMessageHistory(sessionId, request.prompt),
-                  controller.signal,
-                  currentRunId,
-                  agentStepLimits,
-                  request.layoutChoice,
-                );
+            const result = await runtime.agentService.start(
+              request.prompt,
+              selection,
+              executionStrategy,
+              emit,
+              request.editorContext,
+              sessionStore.getAgentMessageHistory(sessionId, request.prompt),
+              controller.signal,
+              currentRunId,
+              agentStepLimits,
+              request.layoutChoice,
+            );
             return finalizeAgentResult(sessionId, runtime, result, currentRunId);
           },
         );
@@ -1123,6 +1057,11 @@ app.whenReady().then(async () => {
     runId?: string,
   ) => {
     const request = agentRunRequestSchema.parse(rawRequest);
+    if (request.generationMode === "lean") {
+      throw new Error(
+        "Lean Mode 已退役；请以 Agent 模式继续 SVG-native 工作流。",
+      );
+    }
     const sessionId = request.sessionId;
 
     // 与 start 保持同一条全局串行边界，避免继续会话与新运行交错。
@@ -1155,7 +1094,7 @@ app.whenReady().then(async () => {
       sessionStore.conversationDatabase.beginRun({
         runId: currentRunId,
         sessionId,
-        threadId: request.generationMode === "lean" ? currentRunId : threadId,
+        threadId,
         provider: selection?.provider,
         model: selection?.model,
         request: request.prompt,
@@ -1164,7 +1103,7 @@ app.whenReady().then(async () => {
         event.sender,
         sessionId,
         currentRunId,
-        request.generationMode === "lean" ? currentRunId : threadId,
+        threadId,
         controller,
       );
 
@@ -1175,19 +1114,6 @@ app.whenReady().then(async () => {
         { threadId, generationMode: request.generationMode, ...requestSummary(request.prompt) },
         controller.signal,
         async () => {
-          if (request.generationMode === "lean") {
-            const result = await runLeanPresentation(
-              runtime,
-              request,
-              selection,
-              "REQUEST_APPROVAL",
-              emit,
-              controller.signal,
-              currentRunId,
-            );
-            return finalizeAgentResult(sessionId, runtime, result, currentRunId);
-          }
-
           await runtime.agentService.restoreDurableThread(threadId);
           if (!runtime.agentService.hasActiveConversation(threadId)) {
             const recovered = findRecoverableConversation(

@@ -1,9 +1,6 @@
-import React, { useEffect, useState } from "react";
+import React, { useMemo, useState } from "react";
 import type { AgentTaskNode } from "@shared/agent-task-list";
-import {
-  formatTaskOwnerForDisplay,
-  formatTaskPlanPosition,
-} from "@shared/agent-task-list";
+import type { TeamSessionProjection } from "@shared/team-session";
 import { ChevronDownIcon, ChevronRightIcon } from "./Icons";
 
 function TaskStatusIcon({ task }: { task: AgentTaskNode }) {
@@ -17,49 +14,87 @@ function TaskStatusIcon({ task }: { task: AgentTaskNode }) {
 interface TaskPlanCardProps {
   goal?: string | null;
   tasks: AgentTaskNode[];
+  sessions?: TeamSessionProjection[];
   live?: boolean;
   state?: "open" | "closed" | "archived";
   archive?: { outcome: "completed" | "abandoned"; reason?: string };
+  onOpenTask?: (sessionId: string) => void;
 }
 
 export const TaskPlanCard: React.FC<TaskPlanCardProps> = ({
   goal,
   tasks,
+  sessions = [],
   live = false,
   state = "open",
   archive,
+  onOpenTask,
 }) => {
   const [expanded, setExpanded] = useState(false);
   const hasActive = tasks.some(
     (task) => task.status === "in_progress" || task.review.state === "requested",
   );
-
-  useEffect(() => {
-    if (hasActive) {
-      setExpanded(true);
-      return;
+  const sessionByTaskId = useMemo(() => {
+    const result = new Map<string, TeamSessionProjection>();
+    for (const session of sessions) {
+      result.set(session.taskListId ?? session.id, session);
     }
-    const timer = window.setTimeout(() => setExpanded(false), 5_000);
-    return () => window.clearTimeout(timer);
-  }, [hasActive]);
+    return result;
+  }, [sessions]);
+  const currentTask = tasks.find((task) => task.review.state === "requested")
+    ?? tasks.find((task) => task.status === "in_progress")
+    ?? tasks.find((task) => task.status === "pending")
+    ?? tasks.at(-1);
+  const currentSession = currentTask
+    ? sessionByTaskId.get(currentTask.id)
+    : undefined;
+  const completedCount = tasks.filter((task) => task.status === "completed").length;
+  const summaryTitle = state === "archived"
+    ? archive?.outcome === "abandoned"
+      ? "任务已结束"
+      : "任务已完成"
+    : currentTask?.review.state === "requested"
+      ? `待验收 · ${currentTask.subject}`
+      : currentTask?.status === "in_progress"
+        ? currentTask.subject
+        : currentTask?.status === "pending"
+          ? `等待执行 · ${currentTask.subject}`
+          : "任务进度";
+  const summaryActivity = currentSession?.currentActivity
+    ?? (currentTask?.review.state === "requested"
+      ? "结果已提交，正在等待验收"
+      : currentTask?.status === "in_progress"
+        ? "正在处理…"
+        : currentTask?.status === "pending"
+          ? "将在前置任务完成后开始"
+          : undefined);
 
   if (tasks.length === 0) return null;
 
   return (
-    <div className={`task-plan-card${hasActive && live ? " task-plan-card--active" : ""}`}>
+    <section
+      className={`task-plan-card${hasActive && live ? " task-plan-card--active" : ""}`}
+      aria-label="任务进度"
+    >
       <button
         type="button"
         className="task-plan-card-header"
         onClick={() => setExpanded((value) => !value)}
         aria-expanded={expanded}
       >
-        <span className="task-plan-card-title">任务计划</span>
-        <span className="task-plan-card-position">
+        {currentTask && <TaskStatusIcon task={currentTask} />}
+        <span className="task-plan-card-summary">
+          <span className="task-plan-card-title">{summaryTitle}</span>
+          {summaryActivity && (
+            <span className="task-plan-card-activity">{summaryActivity}</span>
+          )}
+        </span>
+        <span className="task-plan-card-position" aria-label="任务完成进度">
           {state === "archived" && archive?.outcome === "abandoned"
-            ? `已放弃${archive.reason ? ` · ${archive.reason}` : ""}`
+            ? "已放弃"
             : state === "archived"
-              ? "已归档 · 全部完成"
-              : formatTaskPlanPosition(tasks)}
+              ? "全部完成"
+              : `${completedCount}/${tasks.length} 已完成`}
         </span>
         {expanded ? <ChevronDownIcon size={12} /> : <ChevronRightIcon size={12} />}
       </button>
@@ -73,8 +108,15 @@ export const TaskPlanCard: React.FC<TaskPlanCardProps> = ({
           )}
           {tasks.length > 0 && (
             <ul className="task-plan-list">
-              {tasks.map((task, index) => {
-                const displayOwner = formatTaskOwnerForDisplay(task);
+              {tasks.map((task) => {
+                const session = sessionByTaskId.get(task.id);
+                const taskState = task.review.state === "requested"
+                  ? "等待验收"
+                  : task.status === "completed"
+                    ? "已完成"
+                    : task.status === "in_progress"
+                      ? session?.currentActivity ?? "正在处理…"
+                      : "等待执行";
                 return (
                   <li
                     key={task.id}
@@ -83,15 +125,19 @@ export const TaskPlanCard: React.FC<TaskPlanCardProps> = ({
                     }`}
                   >
                     <TaskStatusIcon task={task} />
-                    <span>
-                      {(task.status === "in_progress" || task.review.state === "requested") && (
-                        <span className="task-plan-step-marker">
-                          {task.review.state === "requested" ? "待验收" : `步骤 ${index + 1}`} ·{" "}
-                        </span>
-                      )}
-                      {task.subject}
-                      {displayOwner ? ` · ${displayOwner}` : ""}
+                    <span className="task-plan-item-copy">
+                      <span className="task-plan-item-title">{task.subject}</span>
+                      <span className="task-plan-item-state">{taskState}</span>
                     </span>
+                    {session && onOpenTask && (
+                      <button
+                        type="button"
+                        className="task-plan-item-open"
+                        onClick={() => onOpenTask(session.id)}
+                      >
+                        详情
+                      </button>
+                    )}
                   </li>
                 );
               })}
@@ -99,6 +145,6 @@ export const TaskPlanCard: React.FC<TaskPlanCardProps> = ({
           )}
         </div>
       )}
-    </div>
+    </section>
   );
 };

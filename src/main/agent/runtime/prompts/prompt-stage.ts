@@ -8,8 +8,8 @@ import type { WorkspaceArtifacts } from "../presentation/workspace-artifacts";
  * | New       | Former |
  * |-----------|--------|
  * | discover  | routing + planning |
- * | author    | content + layout-choice |
- * | design    | layout-design |
+ * | author    | integrated content + visual authoring |
+ * | design    | autonomous layout-design |
  * | style     | layout-exec + review |
  * | edit      | light-edit |
  * | export    | export |
@@ -30,7 +30,7 @@ export const LEGACY_PROMPT_STAGE_MAP: Record<string, PromptStage> = {
   routing: "discover",
   planning: "discover",
   content: "author",
-  "layout-choice": "author",
+  "layout-choice": "design",
   "layout-design": "design",
   "layout-exec": "style",
   review: "style",
@@ -66,15 +66,20 @@ export function resolvePromptStage(input: PromptStageResolveInput): PromptStage 
   if (input.stageHint) return normalizePromptStage(input.stageHint);
 
   const slideCount = input.presentation.slides?.length ?? 0;
-  const hasUnstyledSlides = input.presentation.slides.some((slide) => !slide.layout);
+  const hasUnstyledSlides = input.presentation.slides.some(
+    (slide) => !slide.visualSource && !slide.layout,
+  );
 
   if (input.artifacts.layoutPlan && slideCount > 0) {
     return hasUnstyledSlides ? "style" : "edit";
   }
 
+  if (hasUnstyledSlides) {
+    return "design";
+  }
+
   if (
-    hasUnstyledSlides
-    || input.artifacts.storyboard
+    input.artifacts.storyboard
     || input.artifacts.outline
     || input.artifacts.brief
   ) {
@@ -87,8 +92,8 @@ export function resolvePromptStage(input: PromptStageResolveInput): PromptStage 
 export function describePromptStage(stage: PromptStage): string {
   const labels: Record<PromptStage, string> = {
     discover: "路径选择与规划（brief / outline / storyboard）",
-    author: "内容撰写与草稿落盘（含等待设计方向确认）",
-    design: "排版设计（layout-plan）",
+    author: "内容与视觉一体化创作（单一 proposal）",
+    design: "自主选择设计系统并规划逐页版式",
     style: "视觉排版执行与质检",
     edit: "轻量单页修改",
     export: "导出交付",

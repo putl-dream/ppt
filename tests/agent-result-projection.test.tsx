@@ -149,7 +149,7 @@ describe("agent result projection", () => {
     });
   });
 
-  it("uses the shared pending-layout copy for the terminal Renderer projection", async () => {
+  it("reports an explicit content-only result without asking for a layout choice", async () => {
     const presentation = {
       ...createSessionPresentation("Layout result"),
       slides: [{
@@ -181,6 +181,6 @@ describe("agent result projection", () => {
       runStatus: "completed",
     });
     expect(messages.at(-1)?.content).toContain("1 页待设计");
-    expect(messages.at(-1)?.content).toContain("请选择设计方向");
+    expect(messages.at(-1)?.content).not.toContain("请选择设计方向");
   });
 });

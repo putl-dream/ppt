@@ -9,6 +9,7 @@ export type CardHostId =
   | "composer-before-input"
   | "timeline"
   | "workspace"
+  | "presentation-preview"
   | "global-notification"
   | "environment-preflight";
 
@@ -84,7 +85,7 @@ export const CARD_PRESENTATION_POLICIES: Record<DisplayEventKind, CardPresentati
   },
   "artifact.slide-preview": {
     category: "artifact",
-    host: "timeline",
+    host: "presentation-preview",
     activation: "immediate",
     persistence: "session",
     dedupeKey: (event) => event.eventId,
@@ -120,6 +121,7 @@ export const TOOL_DISPLAY_BINDINGS: Readonly<Record<string, readonly DisplayEven
   TaskReviewApprove: ["progress.task-list-updated"],
   TaskReviewReject: ["progress.task-list-updated"],
   PreviewSlide: ["artifact.slide-preview"],
+  PreviewSvgPage: ["artifact.slide-preview"],
 };
 
 export function getCardPresentationPolicy(event: DisplayEvent): CardPresentationPolicy {

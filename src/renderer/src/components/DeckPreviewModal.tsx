@@ -2,6 +2,7 @@ import React, { useEffect } from "react";
 import { createPortal } from "react-dom";
 import type { Presentation } from "@shared/presentation";
 import { resolveChromeTitleFontSize, resolveSlideStyle } from "@design-system";
+import { utf8ToBase64 } from "@shared/base64";
 import { SlideElementRenderer } from "./SlideElementRenderer";
 import { ClosePreviewIcon } from "./Icons";
 
@@ -38,7 +39,7 @@ export const DeckPreviewModal: React.FC<DeckPreviewModalProps> = ({
     presentation.slides.findIndex((slide) => slide.id === selectedSlideId),
   );
   const activeSlide = presentation.slides[activeIndex] ?? presentation.slides[0];
-  const slideStyle = activeSlide
+  const slideStyle = activeSlide && activeSlide.visualSource?.kind !== "svg"
     ? resolveSlideStyle(presentation.designSystem, activeSlide)
     : undefined;
 
@@ -75,48 +76,63 @@ export const DeckPreviewModal: React.FC<DeckPreviewModalProps> = ({
               <div
                 className="deck-preview-modal-slide"
                 style={{
-                  background: slideStyle?.background.css,
+                  background: slideStyle?.background.css ?? "#ffffff",
                   fontFamily: slideStyle?.typography.body.css,
                 }}
               >
-                {logoUrl && (
-                  <div className="slide-brand-logo">
-                    <img src={logoUrl} alt="Logo" />
-                  </div>
-                )}
-
-                {activeSlide.layout !== "cover" && activeSlide.layout !== "section" && (
-                  <div
-                    className="slide-header-text"
+                {activeSlide.visualSource?.kind === "svg" ? (
+                  <img
+                    src={`data:image/svg+xml;base64,${utf8ToBase64(activeSlide.visualSource.markup)}`}
+                    alt={activeSlide.title}
                     style={{
-                      color: slideStyle?.colors.title,
-                      borderBottom: `2px solid ${slideStyle?.colors.accent}`,
-                      fontSize: resolveChromeTitleFontSize(activeSlide.title),
+                      display: "block",
+                      width: "100%",
+                      height: "100%",
+                      objectFit: "fill",
                     }}
-                  >
-                    {activeSlide.title}
-                  </div>
-                )}
+                  />
+                ) : (
+                  <>
+                    {logoUrl && (
+                      <div className="slide-brand-logo">
+                        <img src={logoUrl} alt="Logo" />
+                      </div>
+                    )}
 
-                {activeSlide.elements.map((element) => (
-                  <div
-                    key={element.id}
-                    style={{
-                      position: "absolute",
-                      left: element.x,
-                      top: element.y,
-                      width: element.width,
-                      height: element.height,
-                      display: "flex",
-                      alignItems: "center",
-                    }}
-                  >
-                    <SlideElementRenderer
-                      element={element}
-                      style={slideStyle!}
-                    />
-                  </div>
-                ))}
+                    {activeSlide.layout !== "cover" && activeSlide.layout !== "section" && (
+                      <div
+                        className="slide-header-text"
+                        style={{
+                          color: slideStyle?.colors.title,
+                          borderBottom: `2px solid ${slideStyle?.colors.accent}`,
+                          fontSize: resolveChromeTitleFontSize(activeSlide.title),
+                        }}
+                      >
+                        {activeSlide.title}
+                      </div>
+                    )}
+
+                    {activeSlide.elements.map((element) => (
+                      <div
+                        key={element.id}
+                        style={{
+                          position: "absolute",
+                          left: element.x,
+                          top: element.y,
+                          width: element.width,
+                          height: element.height,
+                          display: "flex",
+                          alignItems: "center",
+                        }}
+                      >
+                        <SlideElementRenderer
+                          element={element}
+                          style={slideStyle!}
+                        />
+                      </div>
+                    ))}
+                  </>
+                )}
               </div>
             ) : (
               <div className="deck-preview-modal-empty">暂无幻灯片内容</div>

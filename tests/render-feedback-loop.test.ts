@@ -11,6 +11,9 @@ import {
   formatRenderFeedbackMessage,
   shouldOfferRenderFeedback,
 } from "../src/main/agent/runtime/presentation/render-feedback-loop";
+import {
+  requestExplicitlyAllowsContentOnly,
+} from "../src/main/agent/runtime/presentation/presentation-completion-policy";
 import type { ToolContext } from "../src/main/agent/tools/tool-definition";
 import { createDefaultToolRegistry } from "../src/main/agent/tools/tool-registry";
 import { AgentRuntime } from "../src/main/agent/runtime/agent-runtime";
@@ -83,6 +86,13 @@ describe("layout-command-utils", () => {
 });
 
 describe("render-feedback-loop", () => {
+  it("only treats explicit content-only wording as permission to skip design", () => {
+    expect(requestExplicitlyAllowsContentOnly("只要内容草稿，暂时不要排版")).toBe(true);
+    expect(requestExplicitlyAllowsContentOnly("Create a content-only deck")).toBe(true);
+    expect(requestExplicitlyAllowsContentOnly("创建完整 PPT，不要让我选择排版类型")).toBe(false);
+    expect(requestExplicitlyAllowsContentOnly("创建内容并自动完成视觉设计")).toBe(false);
+  });
+
   it("offers feedback once for actual visual commands regardless of stage hint", () => {
     const commands: PresentationCommand[] = [
       { id: "c1", type: "update-slide-layout", slideId: "s1", layout: "cover" },
@@ -203,6 +213,111 @@ function createNativeGateway(
 }
 
 describe("render feedback runtime integration", () => {
+  it("rejects default creation through the legacy element/layout submit route", async () => {
+    const registry = createDefaultToolRegistry();
+    const presentation = { ...makePresentation(), slides: [] };
+    const slide = {
+      id: "new-slide",
+      title: "核心观点",
+      layout: "concept" as const,
+      elements: [{
+        id: "new-slide-body",
+        type: "text" as const,
+        x: 0,
+        y: 0,
+        width: 400,
+        height: 80,
+        text: "默认创建必须完成视觉排版",
+        fontSize: 24,
+      }],
+    };
+    const contentOnlyCommands: PresentationCommand[] = [{
+      id: "add-slide",
+      type: "add-slide",
+      index: 0,
+      slide,
+    }];
+    const gateway = createNativeGateway([
+      {
+        toolCalls: [{
+          type: "tool_use",
+          id: "call-legacy-create",
+          name: "SubmitCommands",
+          input: {
+            summary: "创建完整演示",
+            commands: contentOnlyCommands,
+            risk: "low",
+          },
+        }],
+      },
+      { text: "旧 element/layout 创建路线已被拒绝，必须改走完整 SVG 工作流。" },
+    ]);
+
+    const result = await new AgentRuntime(registry, gateway).run({
+      threadId: "create-with-design-thread",
+      request: "创建一页完整 PPT",
+      presentationSnapshot: presentation,
+      selectedElementIds: [],
+    });
+
+    expect(gateway.requests).toHaveLength(2);
+    const rejection = gateway.requests[1]?.messages
+      ?.flatMap((message) => message.content)
+      .find((block) => block.type === "tool_result" && block.content.some((entry) =>
+        entry.type === "text" && entry.text.includes("SubmitSvgDeck")));
+    expect(rejection?.type).toBe("tool_result");
+    expect(result).toEqual({
+      type: "message",
+      content: "旧 element/layout 创建路线已被拒绝，必须改走完整 SVG 工作流。",
+    });
+  });
+
+  it("allows an explicitly requested content-only proposal to finish", async () => {
+    const registry = createDefaultToolRegistry();
+    const presentation = { ...makePresentation(), slides: [] };
+    const gateway = createNativeGateway([{
+      toolCalls: [{
+        type: "tool_use",
+        id: "call-content-only",
+        name: "SubmitCommands",
+        input: {
+          summary: "只创建内容草稿",
+          commands: [{
+            id: "add-content-slide",
+            type: "add-slide",
+            index: 0,
+            slide: {
+              id: "content-slide",
+              title: "内容草稿",
+              layout: "concept",
+              elements: [{
+                id: "content-body",
+                type: "text",
+                x: 0,
+                y: 0,
+                width: 400,
+                height: 80,
+                text: "仅包含内容",
+                fontSize: 24,
+              }],
+            },
+          }],
+          risk: "low",
+        },
+      }],
+    }]);
+
+    const result = await new AgentRuntime(registry, gateway).run({
+      threadId: "content-only-thread",
+      request: "只要内容草稿，暂时不要排版",
+      presentationSnapshot: presentation,
+      selectedElementIds: [],
+    });
+
+    expect(gateway.requests).toHaveLength(1);
+    expect(result.type).toBe("command_proposal");
+  });
+
   it("defers finish after layout SubmitCommands and continues for visual review", async () => {
     const registry = createDefaultToolRegistry();
 

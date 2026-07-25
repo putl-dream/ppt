@@ -6,7 +6,6 @@ import { parseBriefFields, parseOutlineItems } from "@shared/project-artifacts";
 import { BriefCard } from "../../components/BriefCard";
 import { OutlineCard } from "../../components/OutlineCard";
 import { DeckPreviewCard } from "../../components/DeckPreviewCard";
-import { SlidePreviewGallery } from "../../components/SlidePreviewGallery";
 import { useProjectStore } from "../../components/project-store";
 import {
   recordDisplayCardAction,
@@ -45,28 +44,11 @@ export const ArtifactCardHost: React.FC<ArtifactCardHostProps> = ({
     && card.status !== "dismissed"
     && card.status !== "superseded"
   );
-  const slidePreviewCards = cards.filter(
-    (card) => card.event.kind === "artifact.slide-preview",
-  );
 
   return (
     <>
       {cards.map((card) => {
         const event = card.event;
-        if (event.kind === "artifact.slide-preview") {
-          const runPreviews = slidePreviewCards.filter(
-            (candidate) => candidate.event.scope.runId === event.scope.runId,
-          );
-          if (runPreviews[0]?.event.eventId !== event.eventId) return null;
-          return (
-            <SlidePreviewGallery
-              key={`preview-gallery:${event.scope.runId ?? event.eventId}`}
-              previews={runPreviews.map((candidate) =>
-                candidate.event as Extract<DisplayEvent, { kind: "artifact.slide-preview" }>
-              )}
-            />
-          );
-        }
         if (event.kind !== "artifact.ready") return null;
         const type = event.payload.artifactType;
         const resolved = card.status === "resolved" ? "confirmed" as const : undefined;

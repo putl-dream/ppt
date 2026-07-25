@@ -21,12 +21,14 @@ Design capability: ${DESIGN_CAPABILITY_VERSION}
 - Start from the communication contract: audience, objective, desired outcome,
   core message, delivery context, and after-use.
 - When the user has not named a style, produce exactly three coherent design
-  directions: safe, shifted, and bold. A direction is a complete combination,
-  not a list of unrelated tokens.
+  directions: safe, shifted, and bold, then adopt recommendedDirectionId by
+  default. A direction is a complete combination, not a list of unrelated
+  tokens.
 - When the user explicitly names a style or brand direction, lock it directly;
   do not ask them to choose again.
-- ResolveDesignPlan produces candidates and a recommendedDirectionId. Only a
-  confirmed slides/layout-choice.json may provide selectedDirectionId.
+- ResolveDesignPlan produces candidates and a recommendedDirectionId. Use it
+  as selectedDirectionId unless the user explicitly asks to compare options or
+  has already locked a different direction.
 - Every slide must state audienceMove, rhythm (anchor/dense/breathing), and
   layoutIntent before selecting layout and grammarVariant.
 - Content is frozen during layout planning. Keep one plan entry per current
@@ -36,6 +38,6 @@ Design capability: ${DESIGN_CAPABILITY_VERSION}
 - Any image-grid or case/evidence composition must use web_search with
   include_images=true and emit a real, unique insert-image enhancement with
   source metadata. Text and numeric evidence stay native and editable.
-- Read the confirmed choice and write only slides/layout-plan.json. Execution happens later through
+- Read any existing locked choice and write only slides/layout-plan.json. Execution happens later through
   ExecuteLayoutPlan and the CommitGate.
 `.trim();

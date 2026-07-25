@@ -34,6 +34,7 @@ export class AssetValidator {
 
     for (const slide of presentation.slides) {
       if (slideIdSet && !slideIdSet.has(slide.id)) continue;
+      if (slide.visualSource?.kind === "svg") continue;
       for (const element of slide.elements) {
         if (element.type !== "image") continue;
 
@@ -147,7 +148,9 @@ export class AssetValidator {
 
     for (const duplicateUrl of visualAudit.duplicateImageUrls) {
       const duplicateSlides = presentation.slides.filter((slide) =>
-        slide.elements.some((element) => element.type === "image" && element.url === duplicateUrl),
+        slide.visualSource?.kind === "svg"
+          ? slide.visualSource.resources.some((resource) => resource.sourcePath === duplicateUrl)
+          : slide.elements.some((element) => element.type === "image" && element.url === duplicateUrl),
       );
       if (slideIdSet && !duplicateSlides.some((slide) => slideIdSet.has(slide.id))) continue;
       issues.push({

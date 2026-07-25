@@ -10,8 +10,12 @@ import {
   assertSupportedLocalImageFile,
   resolveLocalImagePath,
 } from "./local-image-file";
+import { utf8ToBase64 } from "@shared/base64";
 
 const logger = createModuleLogger("ppt-exporter");
+const PPTX_LAYOUT_NAME = "AGENT_PPT_WIDE";
+const PPTX_SLIDE_WIDTH_INCHES = 10;
+const PPTX_SLIDE_HEIGHT_INCHES = 5.625;
 
 // Helper to clean colors (e.g. #ffffff -> ffffff)
 function cleanColor(colorStr: string): string {
@@ -48,6 +52,12 @@ export async function exportToPptx(
   workspaceRoot?: string,
 ): Promise<void> {
   const pptx = new pptxgen();
+  pptx.defineLayout({
+    name: PPTX_LAYOUT_NAME,
+    width: PPTX_SLIDE_WIDTH_INCHES,
+    height: PPTX_SLIDE_HEIGHT_INCHES,
+  });
+  pptx.layout = PPTX_LAYOUT_NAME;
 
   // Canvas is 1280x720 px; PPT slide is 10x5.625 in → divide by 128.
   const px = (value: number) => value / 128;
@@ -55,6 +65,27 @@ export async function exportToPptx(
   for (let i = 0; i < presentation.slides.length; i++) {
     const slideData = presentation.slides[i];
     const slide = pptx.addSlide();
+    if (slideData.visualSource?.kind === "svg") {
+      if (slideData.elements.length > 0) {
+        throw new Error(
+          `SVG-native slide ${i + 1} contains legacy canvas elements; `
+          + "the complete SVG page must be its only visual source.",
+        );
+      }
+      slide.background = { fill: "FFFFFF" };
+      slide.addImage({
+        data: `data:image/svg+xml;base64,${utf8ToBase64(slideData.visualSource.markup)}`,
+        x: 0,
+        y: 0,
+        w: PPTX_SLIDE_WIDTH_INCHES,
+        h: PPTX_SLIDE_HEIGHT_INCHES,
+      });
+      if (slideData.speakerNotes) {
+        slide.addNotes(slideData.speakerNotes);
+      }
+      continue;
+    }
+
     const style = resolveSlideStyle(presentation.designSystem, slideData);
     const { colors } = style;
     const fontFace = style.typography.heading.pptxFace;

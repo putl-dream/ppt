@@ -41,6 +41,39 @@ export const readPresentationSnapshotTool: ToolDefinition<
   loadPolicy: "core",
   inputSchema: readPresentationSnapshotSchema,
   outputSchema: readPresentationSnapshotOutputSchema,
+  mapResultToModelContent: (result) => JSON.stringify({
+    presentation: {
+      id: result.presentation.id,
+      title: result.presentation.title,
+      revision: result.presentation.revision,
+      designSystem: result.presentation.designSystem,
+      slides: result.presentation.slides.map((slide, index) => ({
+        id: slide.id,
+        index,
+        title: slide.title,
+        speakerNotes: slide.speakerNotes,
+        narrative: slide.narrative,
+        svgPage: slide.visualSource?.kind === "svg"
+          ? {
+              sourcePath: slide.visualSource.sourcePath,
+              sha256: slide.visualSource.sha256,
+              width: slide.visualSource.width,
+              height: slide.visualSource.height,
+              resourceCount: slide.visualSource.resources.length,
+              readInstruction: `Use ReadFile("${slide.visualSource.sourcePath}") to inspect or edit the author source.`,
+            }
+          : undefined,
+        legacy: slide.visualSource
+          ? undefined
+          : {
+              layout: slide.layout,
+              grammarVariant: slide.grammarVariant,
+              elementCount: slide.elements.length,
+            },
+      })),
+    },
+    visualAssetAudit: result.visualAssetAudit,
+  }),
   risk: "low",
   execute: async (_, context) => {
     return {

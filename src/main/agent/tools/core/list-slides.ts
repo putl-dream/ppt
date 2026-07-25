@@ -7,6 +7,10 @@ export const listSlidesOutputSchema = z.object({
     id: z.string(),
     index: z.number().int().nonnegative(),
     title: z.string(),
+    svgSourcePath: z.string().optional(),
+    svgSha256: z.string().optional(),
+    narrativeRole: z.string().optional(),
+    rhythm: z.enum(["anchor", "dense", "breathing"]).optional(),
   })),
 });
 
@@ -17,7 +21,17 @@ export const listSlidesOutputSchema = z.object({
  */
 export const listSlidesTool: ToolDefinition<
   typeof listSlidesSchema,
-  { slides: { id: string; index: number; title: string }[] }
+  {
+    slides: Array<{
+      id: string;
+      index: number;
+      title: string;
+      svgSourcePath?: string;
+      svgSha256?: string;
+      narrativeRole?: string;
+      rhythm?: "anchor" | "dense" | "breathing";
+    }>;
+  }
 > = {
   name: "ListSlides",
   description: "轻量列出所有幻灯片的基本信息，包括 ID、索引顺序和标题。",
@@ -31,6 +45,14 @@ export const listSlidesTool: ToolDefinition<
       id: slide.id,
       index,
       title: slide.title,
+      ...(slide.visualSource?.kind === "svg"
+        ? {
+            svgSourcePath: slide.visualSource.sourcePath,
+            svgSha256: slide.visualSource.sha256,
+            narrativeRole: slide.narrative?.role,
+            rhythm: slide.narrative?.rhythm,
+          }
+        : {}),
     }));
     return { slides };
   },

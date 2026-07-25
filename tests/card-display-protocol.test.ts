@@ -17,7 +17,7 @@ import {
   useProgressCardManager,
 } from "../src/renderer/src/cards/display-card-managers";
 import { getCardPresentationPolicy } from "../src/renderer/src/cards/card-presentation-policy";
-import { testLayoutChoice } from "./design-engine-test-utils";
+import { createSessionPresentation } from "../src/shared/session";
 
 const permissionEvent = {
   protocolVersion: 1 as const,
@@ -85,6 +85,21 @@ describe("card display protocol", () => {
     expect(streamDisplay?.kind).toBe("permission.tool-requested");
     expect(streamDisplay?.scope.runId).toBe("run-2");
 
+    const svgPreviewDisplay = toStreamDisplayEvent({
+      type: "slide-preview-ready",
+      message: "已生成页面预览",
+      toolCallId: "preview-svg-1",
+      toolName: "PreviewSvgPage",
+      slideId: "svg-preview-abc",
+      title: "P01",
+      description: "content-exact SVG preview",
+      thumbnail: null,
+    }, "session-1", "run-2");
+    expect(svgPreviewDisplay?.source).toMatchObject({
+      kind: "tool",
+      toolName: "PreviewSvgPage",
+    });
+
     const resultEvents = toResultDisplayEvents({
       status: "waiting-user",
       message: "请选择内容侧重点",
@@ -99,6 +114,37 @@ describe("card display protocol", () => {
     expect(resultEvents).toHaveLength(1);
     expect(resultEvents[0]?.kind).toBe("interaction.question-requested");
     expect(resultEvents[0]?.scope.threadId).toBe("thread-1");
+  });
+
+  it("projects an unstyled completed deck as an artifact without reopening layout choice", () => {
+    const presentation = {
+      ...createSessionPresentation("Content-only result"),
+      revision: 4,
+      slides: [{
+        id: "slide-needs-layout",
+        title: "核心观点",
+        layout: "concept" as const,
+        elements: [{
+          id: "body",
+          type: "text" as const,
+          x: 0,
+          y: 0,
+          width: 400,
+          height: 80,
+          text: "明确要求的内容草稿",
+          fontSize: 24,
+        }],
+      }],
+    };
+
+    const resultEvents = toResultDisplayEvents({
+      status: "completed",
+      presentation,
+    }, "session-1", "run-4");
+
+    expect(resultEvents).toHaveLength(1);
+    expect(resultEvents[0]?.kind).toBe("artifact.ready");
+    expect(resultEvents.some((event) => event.kind === "interaction.layout-required")).toBe(false);
   });
 
   it("persists manager status and actions independently from chat messages", () => {
@@ -131,7 +177,7 @@ describe("card display protocol", () => {
     });
   });
 
-  it("does not reopen a resolved layout card when the same event is delivered again", () => {
+  it("silently retires legacy layout-choice cards during ingest and hydration", () => {
     const event = {
       protocolVersion: 1 as const,
       eventId: "layout-required:session-1:4",
@@ -157,83 +203,15 @@ describe("card display protocol", () => {
     };
 
     ingestDisplayEvent(event);
-    recordDisplayCardAction(
-      event.eventId,
-      "confirm-layout",
-      testLayoutChoice(),
-      "resolved",
-    );
-    ingestDisplayEvent({
-      ...event,
-      scope: { ...event.scope, anchorMessageId: "message-4" },
-    });
-
-    const [card] = useInteractionCardManager.getState().cards;
-    expect(card?.status).toBe("resolved");
-    expect(card?.lastAction?.actionId).toBe("confirm-layout");
-    expect(card?.event.scope.anchorMessageId).toBe("message-4");
-  });
-
-  it("keeps a confirmed layout choice terminal across later presentation revisions", () => {
-    const event = {
-      protocolVersion: 1 as const,
-      eventId: "layout-required:session-1:4",
-      emittedAt: "2026-07-15T00:00:00.000Z",
-      kind: "interaction.layout-required" as const,
-      category: "interaction" as const,
-      source: {
-        kind: "domain" as const,
-        entityType: "presentation",
-        entityId: "session-1",
-        revision: 4,
-      },
-      scope: {
-        sessionId: "session-1",
-        runId: "run-4",
-        anchorMessageId: "message-4",
-      },
-      semantics: {
-        blocking: true,
-        requiresResponse: true,
-        priority: "high" as const,
-      },
-      payload: {
-        presentationRevision: 4,
-        slideCount: 8,
-      },
-    };
-
-    ingestDisplayEvent(event);
-    recordDisplayCardAction(
-      event.eventId,
-      "confirm-layout",
-      testLayoutChoice(),
-      "resolved",
-    );
-
-    const persisted = getPersistedDisplayCards();
+    expect(useInteractionCardManager.getState().cards).toHaveLength(0);
+    hydrateDisplayCardManagers([{
+      event,
+      status: "active",
+      receivedAt: Date.now(),
+    }]);
+    expect(useInteractionCardManager.getState().cards).toHaveLength(0);
+    expect(getPersistedDisplayCards()).toHaveLength(0);
     clearAllDisplayCardManagers();
-    hydrateDisplayCardManagers(persisted);
-    ingestDisplayEvent({
-      ...event,
-      eventId: "layout-required:session-1:5",
-      source: { ...event.source, revision: 5 },
-      scope: {
-        ...event.scope,
-        runId: "run-5",
-        anchorMessageId: "message-5",
-      },
-      payload: {
-        presentationRevision: 5,
-        slideCount: 8,
-      },
-    });
-
-    const [card] = useInteractionCardManager.getState().cards;
-    expect(card?.status).toBe("resolved");
-    expect(card?.event.eventId).toBe(event.eventId);
-    expect(card?.event.scope.anchorMessageId).toBe("message-4");
-    expect(card?.lastAction?.actionId).toBe("confirm-layout");
   });
 
   it("keeps the complete approval request in the review event payload", () => {

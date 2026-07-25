@@ -1,9 +1,6 @@
 import type { AgentRunResult } from "./ipc";
 import { formatLeanRunMetrics } from "./lean-mode-contract";
-import {
-  countSlidesNeedingLayout,
-  presentationNeedsLayoutChoice,
-} from "./presentation-draft";
+import { countSlidesNeedingLayout } from "./presentation-draft";
 
 export type TerminalAgentRunResult = Extract<
   AgentRunResult,
@@ -15,10 +12,13 @@ export type TerminalAgentRunResult = Extract<
  * in Shared prevents a late Renderer snapshot from changing result semantics.
  */
 export function formatTerminalAgentRunContent(result: TerminalAgentRunResult): string {
+  const slidesNeedingDesign = result.status === "completed"
+    ? countSlidesNeedingLayout(result.presentation)
+    : 0;
   const base = result.status === "rejected"
     ? "已放弃排版变更提案。"
-    : presentationNeedsLayoutChoice(result.presentation)
-      ? `内容草稿已就绪（${countSlidesNeedingLayout(result.presentation)} 页待设计），请选择设计方向后继续。`
+    : slidesNeedingDesign > 0
+      ? `内容草稿已就绪（${slidesNeedingDesign} 页待设计）。`
       : "已成功应用演示文稿更新。";
 
   return result.leanMetrics

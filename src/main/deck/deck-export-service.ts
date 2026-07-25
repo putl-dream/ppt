@@ -1,5 +1,5 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
+import { basename, dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { presentationSchema, type Presentation } from "@shared/presentation";
 import {
@@ -9,7 +9,8 @@ import {
 } from "@shared/ipc";
 import { exportToPptx } from "../ppt-exporter";
 import { exportToHtml } from "@shared/html-exporter";
-import { assetValidator } from "./validators/asset-validator";
+import { deckValidationService } from "./deck-validation-service";
+import { inspectPptxExport } from "./pptx-postflight";
 import {
   assertSupportedLocalImageFile,
   resolveLocalImagePath,
@@ -68,13 +69,13 @@ export class DeckExportService {
     if (filePath.endsWith(".json")) {
       await writeFile(filePath, JSON.stringify(presentation, null, 2), "utf8");
     } else {
-      const assetErrors = assetValidator.validate(presentation, {
+      const validationErrors = deckValidationService.validate(presentation, {
         workspaceRoot: input.workspaceRoot,
         allowUnverifiedAssets: options.allowUnverifiedAssets,
-      }).filter((issue) => issue.severity === "error");
-      if (assetErrors.length > 0) {
+      }).issues.filter((issue) => issue.severity === "error");
+      if (validationErrors.length > 0) {
         throw new Error(
-          `Export blocked by asset validation: ${assetErrors.map((issue) => issue.message).join("; ")}`,
+          `Export blocked by deck validation: ${validationErrors.map((issue) => issue.message).join("; ")}`,
         );
       }
 
@@ -90,7 +91,22 @@ export class DeckExportService {
       if (!filePath.endsWith(".pptx")) {
         throw new Error("Unsupported export format; only .pptx, .json, and .html are supported.");
       }
-      await exportToPptx(presentation, options, filePath, input.workspaceRoot);
+      const temporaryPath = join(
+        dirname(filePath),
+        `.${basename(filePath)}.${process.pid}.${Date.now()}.tmp.pptx`,
+      );
+      try {
+        await exportToPptx(presentation, options, temporaryPath, input.workspaceRoot);
+        const postflight = await inspectPptxExport(temporaryPath, presentation);
+        if (!postflight.passed) {
+          throw new Error(
+            `PPTX postflight failed: ${postflight.errors.join("; ")}`,
+          );
+        }
+        await rename(temporaryPath, filePath);
+      } finally {
+        await unlink(temporaryPath).catch(() => undefined);
+      }
     }
 
     return {

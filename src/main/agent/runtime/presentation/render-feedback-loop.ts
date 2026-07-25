@@ -21,8 +21,8 @@ import {
   hasLayoutVisualCommands,
 } from "./layout-command-utils";
 
-/** Cap PNG thumbnails per feedback round; structured feedback still covers every affected slide. */
-export const MAX_RENDER_FEEDBACK_THUMBNAILS = 6;
+/** SubmitSvgDeck accepts at most 100 pages; every affected SVG page must be visually reviewable. */
+export const MAX_RENDER_FEEDBACK_THUMBNAILS = 100;
 
 export interface RenderFeedbackImage {
   mediaType: "image/png";

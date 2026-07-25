@@ -11,7 +11,6 @@ import {
   mergeActivityTraces,
   mergeResponseText,
 } from "@shared/agent-activity";
-import { presentationNeedsLayoutChoice } from "@shared/presentation-draft";
 import { useProjectStore } from "../../components/project-store";
 import {
   ingestDisplayEvent,
@@ -271,14 +270,8 @@ export function useAgentResultHandler({
     }
     notify(
       result.status === "rejected"
-          ? "变更已取消"
-        : result.presentation
-            && presentationNeedsLayoutChoice(result.presentation)
-            && !isSidechainRun
-          ? "内容草稿已就绪，请确认设计方向"
-          : result.presentation && presentationNeedsLayoutChoice(result.presentation)
-            ? "设计尚未完整应用，请检查任务计划"
-            : "演示文稿已成功更新",
+        ? "变更已取消"
+        : "演示文稿已成功更新",
     );
   }, [
     activeRunTraceRef,

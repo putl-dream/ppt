@@ -4,16 +4,16 @@ import { normalizePromptStage } from "./prompt-stage";
 
 /** Default recommended stages per skill (overridable via SKILL.md frontmatter). */
 export const DEFAULT_SKILL_STAGES: Record<string, PromptStage[]> = {
-  "ppt-workflow": ["discover"],
+  "ppt-workflow": ["discover", "author"],
   "ppt-brief": ["discover"],
   "ppt-outline": ["discover", "author"],
   "ppt-storyboard": ["discover", "author"],
   "ppt-research": ["discover", "author"],
   "ppt-build": ["author"],
   "ppt-edit": ["author", "edit"],
-  "ppt-design": ["design", "style"],
-  "ppt-design-layout": ["design"],
-  "ppt-layout": ["design", "style"],
+  "ppt-design": ["author", "design", "style"],
+  "ppt-design-layout": ["author", "design"],
+  "ppt-layout": ["author", "design", "style"],
   "ppt-beautify": ["style"],
   "deck-review": ["style", "export"],
   "ppt-export": ["export", "style"],

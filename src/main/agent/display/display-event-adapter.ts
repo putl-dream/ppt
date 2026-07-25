@@ -3,10 +3,6 @@ import {
   type DisplayEvent,
 } from "@shared/card-display-protocol";
 import type { AgentRunResult } from "@shared/ipc";
-import {
-  countSlidesNeedingLayout,
-  presentationNeedsLayoutChoice,
-} from "@shared/presentation-draft";
 import type { AgentServiceEvent } from "../service";
 
 function now(): string {
@@ -75,7 +71,7 @@ export function toStreamDisplayEvent(
       category: "artifact",
       source: {
         kind: "tool",
-        toolName: "PreviewSlide",
+        toolName: event.toolName ?? "PreviewSlide",
         toolCallId: event.toolCallId,
       },
       scope: { sessionId, runId },
@@ -154,32 +150,6 @@ export function toResultDisplayEvents(
 
   if (result.status === "completed") {
     const presentation = result.presentation;
-    if (presentationNeedsLayoutChoice(presentation)) {
-      return [{
-        protocolVersion: 1,
-        eventId: `layout-required:${sessionId}:${presentation.revision}`,
-        emittedAt: now(),
-        kind: "interaction.layout-required",
-        category: "interaction",
-        source: {
-          kind: "domain",
-          entityType: "presentation",
-          entityId: sessionId,
-          revision: presentation.revision,
-        },
-        scope,
-        semantics: {
-          blocking: true,
-          requiresResponse: true,
-          priority: "high",
-        },
-        payload: {
-          presentationRevision: presentation.revision,
-          slideCount: Math.max(1, countSlidesNeedingLayout(presentation)),
-        },
-      }];
-    }
-
     return [{
       protocolVersion: 1,
       eventId: `artifact:deck:${sessionId}:${presentation.revision}`,

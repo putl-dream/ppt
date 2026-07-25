@@ -1,11 +1,26 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import type { Presentation } from "@shared/presentation";
+import type { Presentation, Slide } from "@shared/presentation";
 import { hasUnverifiedCommercialAssets } from "@shared/asset-license";
 import { formatPublicErrorMessage } from "@shared/agent-activity-display";
 import { resolveChromeTitleFontSize, resolveSlideStyle } from "@design-system";
+import { utf8ToBase64 } from "@shared/base64";
+import { useArtifactCardManager } from "../cards/display-card-managers";
+import {
+  getSlidePreviewBatchKey,
+  selectLatestSlidePreviews,
+} from "../cards/select-slide-previews";
 import { SlideElementRenderer } from "./SlideElementRenderer";
-import { ClosePreviewIcon, PlayIcon, DownloadIcon, ExpandIcon, CompressIcon } from "./Icons";
+import { SlidePreviewGallery } from "./SlidePreviewGallery";
+import {
+  CheckIcon,
+  ClosePreviewIcon,
+  CompressIcon,
+  DownloadIcon,
+  ExpandIcon,
+  LayoutIcon,
+  PlayIcon,
+} from "./Icons";
 
 
 interface PPTMirrorProps {
@@ -19,6 +34,136 @@ interface PPTMirrorProps {
   isExpanded?: boolean;
   onToggleExpand?: () => void;
   triggerToast?: (msg: string) => void;
+}
+
+function SvgSlideSurface({ slide }: { slide: Slide }) {
+  if (slide.visualSource?.kind !== "svg") return null;
+  const source = `data:image/svg+xml;base64,${utf8ToBase64(slide.visualSource.markup)}`;
+  return (
+    <img
+      src={source}
+      alt={slide.title}
+      style={{
+        display: "block",
+        width: "100%",
+        height: "100%",
+        objectFit: "fill",
+      }}
+    />
+  );
+}
+
+interface MirrorSlideFrameProps {
+  presentation: Presentation;
+  slide: Slide;
+  slideIndex: number;
+  logoUrl: string | null;
+  fallbackWidth: number;
+  className?: string;
+}
+
+function MirrorSlideFrame({
+  presentation,
+  slide,
+  slideIndex,
+  logoUrl,
+  fallbackWidth,
+  className,
+}: MirrorSlideFrameProps) {
+  const frameRef = useRef<HTMLDivElement>(null);
+  const [frameWidth, setFrameWidth] = useState(fallbackWidth);
+  const isSvgSlide = slide.visualSource?.kind === "svg";
+  const slideStyle = isSvgSlide
+    ? undefined
+    : resolveSlideStyle(presentation.designSystem, slide);
+
+  useEffect(() => {
+    const frame = frameRef.current;
+    if (!frame) return;
+    const updateWidth = () => {
+      const measuredWidth = frame.getBoundingClientRect().width;
+      if (measuredWidth > 0) setFrameWidth(measuredWidth);
+    };
+    updateWidth();
+    if (typeof ResizeObserver === "undefined") {
+      window.addEventListener("resize", updateWidth);
+      return () => window.removeEventListener("resize", updateWidth);
+    }
+    const observer = new ResizeObserver(updateWidth);
+    observer.observe(frame);
+    return () => observer.disconnect();
+  }, []);
+
+  return (
+    <div
+      ref={frameRef}
+      className={["mirror-slide-frame", className].filter(Boolean).join(" ")}
+    >
+      <div
+        className="slide-viewport"
+        style={{
+          width: 1280,
+          height: 720,
+          background: isSvgSlide ? "#ffffff" : slideStyle?.background.css,
+          fontFamily: slideStyle?.typography.body.css,
+          transform: `scale(${frameWidth / 1280})`,
+          transformOrigin: "top left",
+          position: "absolute",
+          inset: 0,
+          border: isSvgSlide ? undefined : `1px solid ${slideStyle?.colors.cardStroke}`,
+        }}
+      >
+        {isSvgSlide ? (
+          <SvgSlideSurface slide={slide} />
+        ) : (
+          <>
+            {logoUrl && (
+              <div className="slide-brand-logo">
+                <img src={logoUrl} alt="Logo" />
+              </div>
+            )}
+
+            <div className="slide-page-number" style={{ color: slideStyle?.colors.body }}>
+              {slideIndex + 1}
+            </div>
+
+            {slide.layout !== "cover" && slide.layout !== "section" && (
+              <div
+                className="slide-header-text"
+                style={{
+                  color: slideStyle?.colors.title,
+                  borderBottom: `2px solid ${slideStyle?.colors.accent}`,
+                  fontSize: resolveChromeTitleFontSize(slide.title),
+                }}
+              >
+                {slide.title}
+              </div>
+            )}
+
+            {slide.elements.map((element) => (
+              <div
+                key={element.id}
+                style={{
+                  position: "absolute",
+                  left: element.x,
+                  top: element.y,
+                  width: element.width,
+                  height: element.height,
+                  display: "flex",
+                  alignItems: "center",
+                }}
+              >
+                <SlideElementRenderer
+                  element={element}
+                  style={slideStyle!}
+                />
+              </div>
+            ))}
+          </>
+        )}
+      </div>
+    </div>
+  );
 }
 
 export const PPTMirror: React.FC<PPTMirrorProps> = ({
@@ -36,8 +181,18 @@ export const PPTMirror: React.FC<PPTMirrorProps> = ({
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [fullscreenIndex, setFullscreenIndex] = useState(0);
   const [isExporting, setIsExporting] = useState(false);
+  const artifactCards = useArtifactCardManager((state) => state.cards);
+  const inspectionPreviews = useMemo(
+    () => selectLatestSlidePreviews(artifactCards),
+    [artifactCards],
+  );
+  const inspectionBatchKey = getSlidePreviewBatchKey(inspectionPreviews);
+  const [activeView, setActiveView] = useState<"slides" | "inspection">(
+    () => inspectionPreviews.length > 0 ? "inspection" : "slides",
+  );
+  const surfacedInspectionBatchRef = useRef<string | undefined>(inspectionBatchKey);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const cardRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const cardRefs = useRef<Record<string, HTMLButtonElement | null>>({});
 
   const handleDownload = async () => {
     if (isExporting) return;
@@ -64,9 +219,40 @@ export const PPTMirror: React.FC<PPTMirrorProps> = ({
   };
 
   const slides = presentation.slides;
+  const slideOrder = useMemo(
+    () => new Map(slides.map((slide, index) => [slide.id, index])),
+    [slides],
+  );
+  const orderedInspectionPreviews = useMemo(
+    () => [...inspectionPreviews].sort((left, right) =>
+      (slideOrder.get(left.payload.slideId) ?? Number.MAX_SAFE_INTEGER)
+      - (slideOrder.get(right.payload.slideId) ?? Number.MAX_SAFE_INTEGER)
+    ),
+    [inspectionPreviews, slideOrder],
+  );
+  const reviewedSlideIds = useMemo(
+    () => new Set(inspectionPreviews.map((preview) => preview.payload.slideId)),
+    [inspectionPreviews],
+  );
+  const reviewedSlideCount = slides.filter((slide) => reviewedSlideIds.has(slide.id)).length;
+  const selectedSlideIndex = slides.findIndex((slide) => slide.id === selectedSlideId);
+  const selectedSlide = slides[selectedSlideIndex >= 0 ? selectedSlideIndex : 0];
+
+  useEffect(() => {
+    if (!inspectionBatchKey || inspectionBatchKey === surfacedInspectionBatchRef.current) return;
+    surfacedInspectionBatchRef.current = inspectionBatchKey;
+    setActiveView("inspection");
+  }, [inspectionBatchKey]);
+
+  useEffect(() => {
+    if (activeView === "inspection" && inspectionPreviews.length === 0) {
+      setActiveView("slides");
+    }
+  }, [activeView, inspectionPreviews.length]);
 
   // 当外部选中/高亮变化时，平滑滚动至可视区域
   useEffect(() => {
+    if (activeView !== "slides") return;
     const targetId = highlightSlideId || selectedSlideId;
     if (targetId && cardRefs.current[targetId]) {
       cardRefs.current[targetId]?.scrollIntoView({
@@ -74,7 +260,7 @@ export const PPTMirror: React.FC<PPTMirrorProps> = ({
         block: "nearest",
       });
     }
-  }, [selectedSlideId, highlightSlideId]);
+  }, [activeView, selectedSlideId, highlightSlideId]);
 
   // 监听全屏放映时的键盘事件
   useEffect(() => {
@@ -107,7 +293,7 @@ export const PPTMirror: React.FC<PPTMirrorProps> = ({
   }, [fullscreenIndex, isFullscreen]);
 
   const fullscreenSlide = slides[fullscreenIndex];
-  const fullscreenSystem = fullscreenSlide
+  const fullscreenSystem = fullscreenSlide && fullscreenSlide.visualSource?.kind !== "svg"
     ? resolveSlideStyle(presentation.designSystem, fullscreenSlide)
     : undefined;
 
@@ -117,14 +303,30 @@ export const PPTMirror: React.FC<PPTMirrorProps> = ({
     setIsFullscreen(true);
   };
 
+  const selectRelativeSlide = (delta: number) => {
+    if (slides.length === 0) return;
+    const currentIndex = selectedSlideIndex >= 0 ? selectedSlideIndex : 0;
+    const nextIndex = Math.max(0, Math.min(slides.length - 1, currentIndex + delta));
+    onSelectSlide(slides[nextIndex]!.id);
+  };
+
+  const selectInspectedSlide = (slideId: string) => {
+    if (slideOrder.has(slideId)) onSelectSlide(slideId);
+  };
+
   return (
-    <aside className="right-panel mirror-panel">
+    <aside className={`right-panel mirror-panel${isExpanded ? " is-expanded" : ""}`}>
       {/* 顶部工具栏 */}
       <div className="panel-header right-header mirror-header">
+        <div className="mirror-header-copy">
+          <span>PPT 预览</span>
+          <strong title={presentation.title}>{presentation.title || "未命名演示文稿"}</strong>
+        </div>
         <div className="mirror-header-actions">
           <button
             onClick={handleFullscreenOpen}
             className="action-icon-btn mirror-header-icon-btn"
+            disabled={slides.length === 0}
             aria-label="放映演示文稿"
             title="放映演示文稿"
           >
@@ -158,131 +360,188 @@ export const PPTMirror: React.FC<PPTMirrorProps> = ({
         </div>
       </div>
 
-      {/* 纵向滚动卡片列表 */}
-      <div
-        className="sections-container flex-1 overflow-y-auto"
-        ref={scrollContainerRef}
-        style={{
-          padding: isExpanded ? "30px 40px" : "20px 14px",
-          display: "flex",
-          flexDirection: isExpanded ? "row" : "column",
-          flexWrap: isExpanded ? "wrap" : "nowrap",
-          gap: isExpanded ? 30 : 20,
-          justifyContent: isExpanded ? "center" : "flex-start",
-          alignContent: "flex-start"
-        }}
-      >
-        {slides.map((slide, index) => {
-          const isSelected = selectedSlideId === slide.id;
-          const isHighlighted = highlightSlideId === slide.id;
-          const cardWidth = isExpanded ? 320 : 280;
-          const cardHeight = isExpanded ? 180 : 157.5;
-          const scale = cardWidth / 1280;
+      <div className="mirror-workbench-toolbar">
+        <div className="mirror-view-tabs" role="tablist" aria-label="预览内容">
+          <button
+            type="button"
+            role="tab"
+            id="mirror-slides-tab"
+            aria-controls="mirror-preview-content"
+            aria-selected={activeView === "slides"}
+            className={activeView === "slides" ? "is-active" : ""}
+            onClick={() => setActiveView("slides")}
+          >
+            <LayoutIcon size={14} />
+            <span>幻灯片</span>
+            <b>{slides.length}</b>
+          </button>
+          <button
+            type="button"
+            role="tab"
+            id="mirror-inspection-tab"
+            aria-controls="mirror-preview-content"
+            aria-selected={activeView === "inspection"}
+            className={activeView === "inspection" ? "is-active" : ""}
+            onClick={() => setActiveView("inspection")}
+            disabled={inspectionPreviews.length === 0}
+          >
+            <CheckIcon size={14} />
+            <span>检查结果</span>
+            <b>{inspectionPreviews.length}</b>
+          </button>
+        </div>
 
-          const slideStyle = resolveSlideStyle(presentation.designSystem, slide);
-
-          return (
-            <div
-              key={slide.id}
-              ref={(el) => {
-                cardRefs.current[slide.id] = el;
-              }}
-              className={`mirror-slide-card-container ${
-                isSelected ? "selected" : ""
-              } ${isHighlighted ? "highlighted-pulse" : ""}`}
-              onClick={() => onSelectSlide(slide.id)}
-              style={{ width: cardWidth }}
-            >
-              {/* 页码与选中标签 */}
-              <div className="mirror-card-meta">
-                <span className="slide-number">{(index + 1).toString().padStart(2, "0")}</span>
-                {isSelected && <span className="selected-tag">已选中</span>}
-              </div>
-
-              {/* 等比例缩放的幻灯片镜像 */}
-              <div
-                className="mirror-slide-wrapper"
-                style={{
-                  width: cardWidth,
-                  height: cardHeight,
-                  overflow: "hidden",
-                  position: "relative",
-                  borderRadius: 6,
-                  border: "1px solid rgba(15, 23, 42, 0.12)",
-                  boxShadow: "0 10px 24px rgba(15, 23, 42, 0.12)",
-                }}
-              >
-                <div
-                  className="slide-viewport"
-                  style={{
-                    width: 1280,
-                    height: 720,
-                    background: slideStyle.background.css,
-                    fontFamily: slideStyle.typography.body.css,
-                    transform: `scale(${scale})`,
-                    transformOrigin: "top left",
-                    position: "absolute",
-                    top: 0,
-                    left: 0,
-                    border: `1px solid ${slideStyle.colors.cardStroke}`,
-                  }}
-                >
-                  {/* Logo */}
-                  {logoUrl && (
-                    <div className="slide-brand-logo">
-                      <img src={logoUrl} alt="Logo" />
-                    </div>
-                  )}
-
-                  {/* 页码 */}
-                  <div className="slide-page-number" style={{ color: slideStyle.colors.body }}>
-                    {index + 1}
-                  </div>
-
-                  {/* 标题 */}
-                  {slide.layout !== "cover" && slide.layout !== "section" && (
-                    <div
-                      className="slide-header-text"
-                      style={{
-                        color: slideStyle.colors.title,
-                        borderBottom: `2px solid ${slideStyle.colors.accent}`,
-                        fontSize: resolveChromeTitleFontSize(slide.title),
-                      }}
-                    >
-                      {slide.title}
-                    </div>
-                  )}
-
-                  {/* 元素 */}
-                  {slide.elements.map((element) => (
-                    <div
-                      key={element.id}
-                      style={{
-                        position: "absolute",
-                        left: element.x,
-                        top: element.y,
-                        width: element.width,
-                        height: element.height,
-                        display: "flex",
-                        alignItems: "center",
-                      }}
-                    >
-                      <SlideElementRenderer
-                        element={element}
-                        style={slideStyle}
-                      />
-                    </div>
-                  ))}
-                </div>
-              </div>
+        {activeView === "slides" ? (
+          <div className="mirror-view-summary">
+            <div className="mirror-view-summary-copy">
+              <strong title={selectedSlide?.title}>{selectedSlide?.title ?? "暂无页面"}</strong>
+              <span>
+                {slides.length > 0
+                  ? `第 ${Math.max(0, selectedSlideIndex) + 1} 页 / 共 ${slides.length} 页`
+                  : "等待生成演示文稿"}
+              </span>
             </div>
-          );
-        })}
+            <div className="mirror-page-navigation" aria-label="页面导航">
+              <button
+                type="button"
+                onClick={() => selectRelativeSlide(-1)}
+                disabled={selectedSlideIndex <= 0}
+                aria-label="选择上一页"
+              >
+                ‹
+              </button>
+              <button
+                type="button"
+                onClick={() => selectRelativeSlide(1)}
+                disabled={
+                  slides.length === 0
+                  || selectedSlideIndex < 0
+                  || selectedSlideIndex >= slides.length - 1
+                }
+                aria-label="选择下一页"
+              >
+                ›
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="mirror-view-summary mirror-inspection-summary">
+            <div className="mirror-view-summary-copy">
+              <strong>本轮页面检查</strong>
+              <span>
+                已检查 {inspectionPreviews.length} 页
+                {slides.length > 0 ? ` · 覆盖 ${reviewedSlideCount} / ${slides.length} 页` : ""}
+              </span>
+            </div>
+            <div
+              className="mirror-inspection-progress"
+              role="progressbar"
+              aria-label="页面检查覆盖率"
+              aria-valuemin={0}
+              aria-valuemax={Math.max(1, slides.length)}
+              aria-valuenow={reviewedSlideCount}
+            >
+              <span
+                style={{
+                  width: `${slides.length > 0
+                    ? Math.min(100, (reviewedSlideCount / slides.length) * 100)
+                    : 0}%`,
+                }}
+              />
+            </div>
+          </div>
+        )}
+      </div>
 
-        {slides.length === 0 && (
-          <div className="mirror-empty-state">
-            <p className="mirror-empty-title">还没有幻灯片</p>
-            <p className="mirror-empty-hint">在下方对话框描述你的需求，AI 会帮你生成第一页。</p>
+      {/* 幻灯片导航与页面检查共用右侧工作台 */}
+      <div
+        id="mirror-preview-content"
+        className={`sections-container flex-1 overflow-y-auto mirror-workbench-content mirror-workbench-content--${activeView}`}
+        ref={scrollContainerRef}
+        role="tabpanel"
+        aria-labelledby={activeView === "slides" ? "mirror-slides-tab" : "mirror-inspection-tab"}
+      >
+        {activeView === "inspection" ? (
+          <SlidePreviewGallery
+            previews={orderedInspectionPreviews}
+            selectedSlideId={selectedSlideId}
+            onSelectSlide={selectInspectedSlide}
+            variant="panel"
+          />
+        ) : (
+          <div className="mirror-slides-workspace">
+            {selectedSlide ? (
+              <section className="mirror-focus-preview" aria-label="当前页面预览">
+                <div className="mirror-focus-preview-label">
+                  <span>当前页面</span>
+                  <span>{Math.max(0, selectedSlideIndex) + 1} / {slides.length}</span>
+                </div>
+                <button
+                  type="button"
+                  className="mirror-focus-canvas"
+                  onClick={handleFullscreenOpen}
+                  aria-label={`放大查看第 ${Math.max(0, selectedSlideIndex) + 1} 页：${selectedSlide.title}`}
+                >
+                  <MirrorSlideFrame
+                    presentation={presentation}
+                    slide={selectedSlide}
+                    slideIndex={Math.max(0, selectedSlideIndex)}
+                    logoUrl={logoUrl}
+                    fallbackWidth={isExpanded ? 960 : 320}
+                    className="mirror-focus-frame"
+                  />
+                  <span className="mirror-focus-canvas-action">点击放大查看</span>
+                </button>
+              </section>
+            ) : null}
+
+            <div className="mirror-slide-list" aria-label="幻灯片导航">
+              {slides.map((slide, index) => {
+                const isSelected = selectedSlideId === slide.id;
+                const isHighlighted = highlightSlideId === slide.id;
+
+                return (
+                  <button
+                    type="button"
+                    key={slide.id}
+                    ref={(element) => {
+                      cardRefs.current[slide.id] = element;
+                    }}
+                    className={`mirror-slide-card-container ${
+                      isSelected ? "selected" : ""
+                    } ${isHighlighted ? "highlighted-pulse" : ""}`}
+                    onClick={() => onSelectSlide(slide.id)}
+                    aria-label={`选择第 ${index + 1} 页：${slide.title}`}
+                    aria-current={isSelected ? "page" : undefined}
+                  >
+                    <MirrorSlideFrame
+                      presentation={presentation}
+                      slide={slide}
+                      slideIndex={index}
+                      logoUrl={logoUrl}
+                      fallbackWidth={isExpanded ? 220 : 150}
+                      className="mirror-slide-wrapper"
+                    />
+                    <span className="mirror-card-meta">
+                      <span className="mirror-card-identity">
+                        <span className="slide-number">
+                          {(index + 1).toString().padStart(2, "0")}
+                        </span>
+                        <span className="mirror-card-title" title={slide.title}>{slide.title}</span>
+                      </span>
+                      {isSelected && <span className="selected-tag">已选中</span>}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {slides.length === 0 && (
+              <div className="mirror-empty-state">
+                <p className="mirror-empty-title">还没有幻灯片</p>
+                <p className="mirror-empty-hint">在下方对话框描述你的需求，AI 会帮你生成第一页。</p>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -329,7 +588,7 @@ export const PPTMirror: React.FC<PPTMirrorProps> = ({
                   style={{
                     width: 1280,
                     height: 720,
-                    background: fullscreenSystem?.background.css,
+                    background: fullscreenSystem?.background.css ?? "#ffffff",
                     fontFamily: fullscreenSystem?.typography.body.css,
                     boxShadow: "var(--slideshow-slide-shadow)",
                     borderRadius: 8,
@@ -341,52 +600,58 @@ export const PPTMirror: React.FC<PPTMirrorProps> = ({
                       : undefined,
                   }}
                 >
-                  {/* Logo */}
-                  {logoUrl && (
-                    <div className="slide-brand-logo">
-                      <img src={logoUrl} alt="Logo" />
-                    </div>
+                  {slides[fullscreenIndex].visualSource?.kind === "svg" ? (
+                    <SvgSlideSurface slide={slides[fullscreenIndex]} />
+                  ) : (
+                    <>
+                      {/* Logo */}
+                      {logoUrl && (
+                        <div className="slide-brand-logo">
+                          <img src={logoUrl} alt="Logo" />
+                        </div>
+                      )}
+
+                      {/* 页码 */}
+                      <div className="slide-page-number" style={{ color: fullscreenSystem?.colors.body }}>
+                        {fullscreenIndex + 1}
+                      </div>
+
+                      {/* 标题 */}
+                      {slides[fullscreenIndex].layout !== "cover" && slides[fullscreenIndex].layout !== "section" && (
+                        <div
+                          className="slide-header-text"
+                          style={{
+                            color: fullscreenSystem?.colors.title,
+                            borderBottom: `2px solid ${fullscreenSystem?.colors.accent}`,
+                            fontSize: resolveChromeTitleFontSize(slides[fullscreenIndex].title),
+                          }}
+                        >
+                          {slides[fullscreenIndex].title}
+                        </div>
+                      )}
+
+                      {/* 元素 */}
+                      {slides[fullscreenIndex].elements.map((element) => (
+                        <div
+                          key={element.id}
+                          style={{
+                            position: "absolute",
+                            left: element.x,
+                            top: element.y,
+                            width: element.width,
+                            height: element.height,
+                            display: "flex",
+                            alignItems: "center",
+                          }}
+                        >
+                          <SlideElementRenderer
+                            element={element}
+                            style={fullscreenSystem!}
+                          />
+                        </div>
+                      ))}
+                    </>
                   )}
-
-                  {/* 页码 */}
-                  <div className="slide-page-number" style={{ color: fullscreenSystem?.colors.body }}>
-                    {fullscreenIndex + 1}
-                  </div>
-
-                  {/* 标题 */}
-                  {slides[fullscreenIndex].layout !== "cover" && slides[fullscreenIndex].layout !== "section" && (
-                    <div
-                      className="slide-header-text"
-                      style={{
-                        color: fullscreenSystem?.colors.title,
-                        borderBottom: `2px solid ${fullscreenSystem?.colors.accent}`,
-                        fontSize: resolveChromeTitleFontSize(slides[fullscreenIndex].title),
-                      }}
-                    >
-                      {slides[fullscreenIndex].title}
-                    </div>
-                  )}
-
-                  {/* 元素 */}
-                  {slides[fullscreenIndex].elements.map((element) => (
-                    <div
-                      key={element.id}
-                      style={{
-                        position: "absolute",
-                        left: element.x,
-                        top: element.y,
-                        width: element.width,
-                        height: element.height,
-                        display: "flex",
-                        alignItems: "center",
-                      }}
-                    >
-                      <SlideElementRenderer
-                        element={element}
-                        style={fullscreenSystem!}
-                      />
-                    </div>
-                  ))}
                 </div>
               ) : (
                 <div className="text-white">无页面</div>

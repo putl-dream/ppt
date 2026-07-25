@@ -7,7 +7,6 @@ import type { AgentTaskNode } from "@shared/agent-task-list";
 import { ProcessTraceItem } from "./ProcessTraceItem";
 import { buildProcessTraceRows } from "./process-trace-rows";
 import { ProcessTracePanel } from "./ProcessTracePanel";
-import { TeamSessionCards } from "./TeamSessionViews";
 import { TypewriterMarkdown } from "./TypewriterMarkdown";
 
 interface AgentRunTimelineProps {
@@ -15,8 +14,6 @@ interface AgentRunTimelineProps {
   content: string;
   live?: boolean;
   teamGraphTasks?: AgentTaskNode[];
-  teamSessionAttentionIds?: ReadonlySet<string>;
-  onFocusTeamSession?: (sessionId: string) => void;
 }
 
 export const AgentRunTimeline: React.FC<AgentRunTimelineProps> = ({
@@ -24,8 +21,6 @@ export const AgentRunTimeline: React.FC<AgentRunTimelineProps> = ({
   content,
   live = false,
   teamGraphTasks = [],
-  teamSessionAttentionIds,
-  onFocusTeamSession,
 }) => {
   if (items.length === 0) {
     return content ? (
@@ -80,27 +75,12 @@ export const AgentRunTimeline: React.FC<AgentRunTimelineProps> = ({
           );
         }
 
-        if (segment.kind === "task" && onFocusTeamSession) {
-          const item = segment.item;
-          return (
-            <div
-              key={item.id}
-              className="agent-run-block agent-run-block--task"
-              data-run-block-id={item.id}
-              data-run-block-kind="task"
-            >
-              <TeamSessionCards
-                activities={[item]}
-                graphTasks={teamGraphTasks}
-                attentionIds={teamSessionAttentionIds}
-                onFocus={onFocusTeamSession}
-              />
-            </div>
-          );
-        }
-
         if (segment.kind === "task") {
           const item = segment.item;
+          const graphTaskId = item.taskListId ?? item.taskId;
+          if (teamGraphTasks.some((task) => task.id === graphTaskId)) {
+            return null;
+          }
           const rows = buildProcessTraceRows([item], live);
           if (rows.length === 0) return null;
           return (

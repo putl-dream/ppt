@@ -37,6 +37,7 @@ export class StyleValidator {
         titleToSlideIds.set(slide.title, ids);
       }
 
+      if (slide.visualSource?.kind === "svg") continue;
       issues.push(...this.validateSlideTypography(slide, constraints));
       issues.push(...this.validateChromeDuplication(slide));
     }

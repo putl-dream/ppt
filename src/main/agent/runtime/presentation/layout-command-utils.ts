@@ -4,6 +4,7 @@ import type { Presentation } from "@shared/presentation";
 
 /** Commands that materially change resolved slide visuals. */
 export const LAYOUT_VISUAL_COMMAND_TYPES = new Set<PresentationCommand["type"]>([
+  "add-slide",
   "set-design-system",
   "set-slide-design",
   "update-slide-layout",
@@ -39,7 +40,13 @@ export function collectAffectedSlideIds(
     if (command.type === "set-design-system") {
       designSystemChanged = true;
     }
-    if ("slideId" in command && typeof command.slideId === "string") {
+    if (command.type === "add-slide") {
+      ids.add(command.slide.id);
+    } else if (
+      command.type !== "remove-slide"
+      && "slideId" in command
+      && typeof command.slideId === "string"
+    ) {
       ids.add(command.slideId);
     }
     if (command.type === "restore-slide") {
@@ -47,13 +54,14 @@ export function collectAffectedSlideIds(
     }
   }
 
-  if (designSystemChanged && ids.size === 0) {
-    return draft.slides.map((slide) => slide.id);
+  if (designSystemChanged) {
+    for (const slide of draft.slides) ids.add(slide.id);
   }
 
   if (ids.size === 0 && hasLayoutVisualCommands(commands)) {
     return draft.slides.map((slide) => slide.id);
   }
 
-  return [...ids];
+  const existingIds = new Set(draft.slides.map((slide) => slide.id));
+  return [...ids].filter((id) => existingIds.has(id));
 }

@@ -10,6 +10,7 @@ import { AgentRunTerminalNotice } from "../src/renderer/src/components/AgentRunT
 import { ProcessTraceItem } from "../src/renderer/src/components/ProcessTraceItem";
 import { buildProcessTraceRows } from "../src/renderer/src/components/process-trace-rows";
 import type { AgentActivityItem } from "../src/shared/agent-activity";
+import type { AgentTaskNode } from "../src/shared/agent-task-list";
 
 afterEach(cleanup);
 
@@ -259,6 +260,44 @@ describe("agent run presentation", () => {
     fireEvent.click(disclosure);
     expect(document.querySelector('[data-run-block-id="preview-1"]')).not.toBeNull();
     expect(document.querySelector('[data-run-block-id="preview-2"]')).not.toBeNull();
+  });
+
+  it("does not duplicate a task activity already represented by the task panel", () => {
+    const graphTask: AgentTaskNode = {
+      id: "layout-task",
+      revision: 1,
+      subject: "生成排版计划",
+      description: "为每页选择版式",
+      status: "in_progress",
+      routing: { executionTarget: "teammate" },
+      completionPolicy: "review_required",
+      owner: "layout_planner",
+      blocks: [],
+      blockedBy: [],
+      review: { state: "none" },
+      reviewReceipts: [],
+    };
+
+    render(
+      <AgentRunTimeline
+        content=""
+        live
+        teamGraphTasks={[graphTask]}
+        items={[{
+          id: "layout-activity",
+          kind: "task",
+          taskId: "layout-task",
+          taskListId: "layout-task",
+          agentName: "layout_planner",
+          description: graphTask.description,
+          status: "running",
+          steps: [],
+        }]}
+      />,
+    );
+
+    expect(document.querySelector('[data-run-block-kind="task"]')).toBeNull();
+    expect(document.querySelector(".team-session-card")).toBeNull();
   });
 
   it("renders interrupted and failed outcomes outside assistant transcript text", () => {

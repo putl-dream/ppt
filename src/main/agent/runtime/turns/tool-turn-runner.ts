@@ -426,9 +426,15 @@ export class ToolTurnRunner {
       toolName: tool.name,
       status: "completed",
     });
-    if (tool.name === "PreviewSlide") {
+    if (tool.name === "PreviewSlide" || tool.name === "PreviewSvgPage") {
       const result = outcome.validatedResult as {
-        preview?: { slideId?: string; title?: string; description?: string };
+        preview?: {
+          slideId?: string;
+          sourcePath?: string;
+          sha256?: string;
+          title?: string;
+          description?: string;
+        };
         thumbnail?: {
           pngBase64: string;
           width: number;
@@ -437,18 +443,25 @@ export class ToolTurnRunner {
         } | null;
         thumbnailError?: string;
       };
-      if (result.preview?.slideId) {
+      const previewId = result.preview?.slideId
+        ?? (
+          result.preview?.sha256
+            ? `svg-preview-${result.preview.sha256.slice(0, 16)}`
+            : undefined
+        );
+      if (previewId) {
         run.emitProgress({
           type: "slide-preview-ready",
           toolCallId: toolCall.id,
-          slideId: result.preview.slideId,
-          title: result.preview.title ?? result.preview.slideId,
-          description: result.preview.description ?? "",
+          toolName: tool.name,
+          slideId: previewId,
+          title: result.preview?.title ?? result.preview?.sourcePath ?? previewId,
+          description: result.preview?.description ?? "",
           thumbnail: result.thumbnail ?? null,
           ...(result.thumbnailError ? { thumbnailError: result.thumbnailError } : {}),
           message: result.thumbnail
-            ? `已生成 ${result.preview.title ?? result.preview.slideId} 的页面预览`
-            : `已读取 ${result.preview.title ?? result.preview.slideId} 的页面结构`,
+            ? `已生成 ${result.preview?.title ?? result.preview?.sourcePath ?? previewId} 的页面预览`
+            : `已读取 ${result.preview?.title ?? result.preview?.sourcePath ?? previewId} 的页面结构`,
         });
       }
     }

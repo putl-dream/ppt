@@ -22,6 +22,7 @@ export class DesignPolicy {
         for (const beforeSlide of before.slides) {
           const afterSlide = after.slides.find((slide) => slide.id === beforeSlide.id);
           if (!afterSlide) continue;
+          if (afterSlide.visualSource?.kind === "svg") continue;
 
           const beforeTextById = new Map(
             beforeSlide.elements

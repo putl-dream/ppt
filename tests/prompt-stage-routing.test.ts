@@ -35,7 +35,7 @@ describe("normalizePromptStage", () => {
     expect(normalizePromptStage("routing")).toBe("discover");
     expect(normalizePromptStage("planning")).toBe("discover");
     expect(normalizePromptStage("content")).toBe("author");
-    expect(normalizePromptStage("layout-choice")).toBe("author");
+    expect(normalizePromptStage("layout-choice")).toBe("design");
     expect(normalizePromptStage("layout-design")).toBe("design");
     expect(normalizePromptStage("layout-exec")).toBe("style");
     expect(normalizePromptStage("review")).toBe("style");
@@ -82,12 +82,12 @@ describe("resolvePromptStage (advisory capability hint)", () => {
     })).toBe("discover");
   });
 
-  it("describes unstyled slides or authored artifacts as author", () => {
+  it("routes unstyled slides to autonomous design and authored artifacts to authoring", () => {
     expect(resolvePromptStage({
       request: "任意请求",
       presentation: deck(3),
       artifacts: emptyArtifacts,
-    })).toBe("author");
+    })).toBe("design");
     expect(resolvePromptStage({
       request: "任意请求",
       presentation: deck(0),
@@ -122,7 +122,7 @@ describe("resolvePromptStage (advisory capability hint)", () => {
       presentation: deck(2),
       artifacts: emptyArtifacts,
     });
-    expect(withMessage).toBe("author");
+    expect(withMessage).toBe("design");
     expect(withMessage).toBe(withoutMessage);
   });
 

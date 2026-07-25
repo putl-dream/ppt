@@ -34,6 +34,14 @@ export interface SlidePreviewThumbnail {
 export interface SlidePreviewSummary {
   slideId: string;
   title: string;
+  svgPage?: {
+    sourcePath: string;
+    sha256: string;
+    width: 1280;
+    height: 720;
+    resourceCount: number;
+  };
+  narrative?: Slide["narrative"];
   layout?: string;
   grammarVariant?: string;
   designOverride?: SlideDesignOverride;
@@ -74,6 +82,16 @@ export interface SlidePreviewSummary {
 }
 
 function describeSlide(slide: Slide): string {
+  if (slide.visualSource?.kind === "svg") {
+    return [
+      "Complete-page SVG",
+      `${slide.visualSource.width}×${slide.visualSource.height}`,
+      `source=${slide.visualSource.sourcePath}`,
+      `sha256=${slide.visualSource.sha256.slice(0, 12)}`,
+      `rhythm=${slide.narrative?.rhythm ?? "unset"}`,
+    ].join(" · ");
+  }
+
   const texts = slide.elements.filter((el): el is TextElement => el.type === "text");
   const images = slide.elements.filter((el): el is ImageElement => el.type === "image");
   const shapes = slide.elements.filter((el): el is ShapeElement => el.type === "shape");
@@ -114,6 +132,39 @@ export const previewSlideTool: ToolDefinition<
   category: "core",
   loadPolicy: "core",
   inputSchema: previewSlideSchema,
+  mapResultToModelBlocks: (result) => {
+    const summary = {
+      slideId: result.preview.slideId,
+      title: result.preview.title,
+      description: result.preview.description,
+      svgPage: result.preview.svgPage,
+      narrative: result.preview.narrative,
+      layout: result.preview.layout,
+      grammarVariant: result.preview.grammarVariant,
+      elementCounts: {
+        text: result.preview.textElements.length,
+        image: result.preview.images.length,
+        shape: result.preview.shapeCount,
+        chart: result.preview.chartCount,
+        table: result.preview.tableCount,
+        icon: result.preview.iconCount,
+      },
+      thumbnail: result.thumbnail
+        ? { width: result.thumbnail.width, height: result.thumbnail.height }
+        : null,
+      thumbnailError: result.thumbnailError,
+    };
+    return [
+      { type: "text", text: JSON.stringify(summary) },
+      ...(result.thumbnail
+        ? [{
+            type: "image" as const,
+            mediaType: result.thumbnail.mimeType,
+            data: result.thumbnail.pngBase64,
+          }]
+        : []),
+    ];
+  },
   behavior: {
     background: {
       isRequested: (args) => args.run_in_background === true,
@@ -130,6 +181,18 @@ export const previewSlideTool: ToolDefinition<
     const preview: SlidePreviewSummary = {
       slideId: slide.id,
       title: slide.title,
+      ...(slide.visualSource?.kind === "svg"
+        ? {
+            svgPage: {
+              sourcePath: slide.visualSource.sourcePath,
+              sha256: slide.visualSource.sha256,
+              width: slide.visualSource.width,
+              height: slide.visualSource.height,
+              resourceCount: slide.visualSource.resources.length,
+            },
+            narrative: slide.narrative,
+          }
+        : {}),
       layout: slide.layout,
       grammarVariant: slide.grammarVariant,
       designOverride: slide.designOverride,

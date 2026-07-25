@@ -1,44 +1,55 @@
 ---
 name: deck-review
-description: 依据设计意图、硬性渲染规则和软性构图规则审查整套演示，并区分可自动修复与需重新设计的问题
-when_to_use: layout-plan 执行后、整套换肤后、导出前或用户要求视觉审查时
+description: 基于逐页 SVG 真渲染审查整套演示的硬性错误、设计兑现和跨页节奏，并只在授权后修改 SVG 作者源
+when_to_use: SVG 页面生成、编辑或换肤后，导出前，或用户要求视觉审查时
 stages:
   - style
   - export
+allowed-tools:
+  - ListSlides
+  - ReadCurrentSlide
+  - ReadFile
+  - WriteFile
+  - PreviewSvgPage
+  - PreviewSlide
+  - SubmitSvgDeck
 ---
 
-# Deck 视觉审查（ppt-master-design-v2）
+# SVG-native Deck 视觉审查
 
 ## 前提
 
-先取得 `ReadPresentationSnapshot`、LayoutPlan v2、逐页缩略图和自动检查结果。没有渲染结果时，不把结构分数冒充视觉验收。
+1. 用 `ListSlides` 取得完整有序页面及每页已提交的 `svgSourcePath`、`svgSha256`。
+2. 当前页可用 `ReadCurrentSlide` 确认 `visualSource.sourcePath`；其他页使用 `ListSlides.svgSourcePath`。再用 `ReadFile` 读取完整 SVG。
+3. 对每个作者源调用 `PreviewSvgPage`，检查该文件的真实渲染。页面已提交时可用 `PreviewSlide` 对照当前 deck，但不能用已提交预览替代源文件审查；任何修复都会使该页先前的预览凭据失效。
+4. 读取 `design/design-spec.json` 和 `slides/page-plan.json`，只用于核对设计与内容意图；它们不能补充 SVG 中缺失的可见对象。
 
-审查按以下顺序进行：
+没有逐页渲染结果时，不把 XML 结构或 hash 检查冒充视觉验收。若 `svgSourcePath`/`svgSha256` 缺失，或 `PreviewSvgPage` 返回的当前源 `sha256` 与已提交 `svgSha256` 不一致，先报告来源漂移并阻断导出判断。
 
-1. 硬性渲染错误
-2. 设计意图是否兑现
-3. 软性构图问题
-4. 跨页节奏与一致性
+审查顺序：硬性渲染错误 → 页面意图兑现 → 软性构图 → 跨页节奏与一致性。
 
 ## 硬性规则：命中即修
 
 | 规则 | 问题 | 修复方向 |
 |---|---|---|
-| H1 | 元素越过 1280×720 画布 | 重排或缩放到画布内 |
-| H2 | 文本溢出容器 | 调整布局、换行或在字号下限内缩小 |
-| H3 | 两个正文/标题元素发生非语义重叠 | 打开间距或重排 |
+| H1 | SVG 不是完整 `1280×720` 页面或对象越过 viewBox | 修正根画布、重排或缩放 |
+| H2 | 文本被裁切、出界或无法完整阅读 | 调整 SVG 换行、宽度、层级或页面构图 |
+| H3 | 正文、标题或关键证据发生非语义重叠 | 打开间距或重构当前 SVG |
 | H4 | 小字对比度 <4.5；24px+ 对比度 <3.0；复杂图片上文字无 scrim | 调整语义色、位置或 scrim |
-| H5 | 页眉、页码、来源等锚定元素缺失或被遮挡 | 恢复锚点 |
-| H6 | 图片为空、损坏、严重变形或错误裁切主体 | 修复资产、objectFit 或 crop |
-| H7 | layout-plan 声明的核心证据/图片/数据元素缺失 | 从 plan 恢复 |
-| H8 | 图片仍是远程临时 URL，或 restricted license 被使用 | 本地化或替换 |
+| H5 | 页面计划要求的标题、页码、背景、来源或品牌锚点未在 SVG 中出现 | 直接恢复到作者 SVG |
+| H6 | 图片为空、损坏、变形、错误裁切主体或 workspace 路径不可读 | 修复本地素材或 SVG 的 image/crop |
+| H7 | `finalCopy`、核心证据、数据或明确素材在 SVG 中缺失 | 从 page plan 恢复，禁止运行时补齐 |
+| H8 | SVG 使用远程 URL、绝对路径、脚本、`foreignObject` 或其他不支持依赖 | 本地化、移除或改写为受支持 SVG |
+| H9 | 当前 workspace SVG hash 与已提交 `svgSha256` 不一致 | 重新预览并用整套 source 重新提交 |
 
-如果问题来自 deck-wide 颜色、字体或 visual style，不做单页补丁；标为设计系统级问题，一次性修复。
+如果问题来自 deck-wide 颜色、字体或 visual style，标为系统级问题；授权修复时逐页修改受影响 SVG，不能只改设计规格并假设页面自动更新。
 
 ## 设计意图检查
 
 逐页对照：
 
+- `finalCopy` 和事实是否完整、准确。
+- `coreMessage` 是否形成一个清楚的视觉主张。
 - `audienceMove` 是否真的由页面表达出来
 - `layoutIntent` 指定的焦点是否是视觉最突出的元素
 - `rhythm` 是否兑现
@@ -54,7 +65,7 @@ stages:
 |---|---|
 | S1 | 同一文本块行距过紧或过空 |
 | S2 | 本应共线的元素偏移 >4px |
-| S3 | 同行卡片/图像间距不均 |
+| S3 | 同行图形、图像或确有语义的卡片间距不均 |
 | S4 | 视觉重心明显偏离 layoutIntent |
 | S5 | 一页出现过多无语义 accent、阴影或装饰 |
 | S6 | 图片与 caption 距离过大，或图片与论点无关 |
@@ -67,30 +78,29 @@ stages:
 
 - 一套 deck 只有一个 argument mode、visual style、color scheme、reading mode。
 - 5 页以上至少两种 rhythm。
-- 不连续 3 页使用相同 layout + grammarVariant + rhythm。
+- 不连续 3 页使用相同轮廓、焦点位置、阅读方向与 rhythm。
 - narrative / showcase 通常每 3–5 页有 breathing beat。
 - anchor 页比例合理；不能每页都“重点”。
 - 图片、图表和数字锚点分布服务叙事，不是平均撒满。
-- safe / shifted / bold 只存在于设计候选阶段；执行后的 deck 只能有一个选定方向。
+- 标题、页码、背景与品牌锚点在 SVG 内保持有意的一致性，不依赖自动 chrome。
+- 全套不能退化成统一的三卡、四卡或 2×2 圆角网格。
 
-## 自动化
+## 修复规则
 
-依次使用：
+默认只报告。用户已授权修复时：
 
-1. `ValidateDeckLayout`
-2. `PreviewSlide`（逐页真实缩略图）
-3. `DetectOverflowText`
-4. `DetectRepeatedTitles`
-5. `AnalyzeDeckConsistency`
-6. visual asset audit
-
-自动分数低于 70 需要解释，低于 55 通常是严重问题；但最终判断必须结合页面意图。
+1. 用 `ReadFile` 重新读取目标页完整 SVG，避免基于旧上下文覆盖并发修改。
+2. 用 `WriteFile` 只修改作者 SVG；不可写 commands、elements 或第二份布局状态。
+3. 每个修复页重新 `PreviewSvgPage`，确认问题已消失且未引入回归。
+4. 全部修复通过后调用一次 `SubmitSvgDeck`，提交所有有序页面；显式传入 `"designSpecPath":"design/design-spec.json"` 与 `"pagePlanPath":"slides/page-plan.json"`，并让 `communication`、`designSystem`、每页 `id/path/narrative` 与锁文件完全一致。
+5. 不允许 `PreviewSlide`、提交器或导出器直接修复页面；已提交视图只能用于对照。
 
 ## 输出
 
 ```markdown
 ## 审查摘要
-- 设计方向：argumentMode / visualStyle / colorScheme / readingMode
+- 视觉来源：N/N 页 `svgSourcePath` + `svgSha256` 有效
+- 设计方向：argumentMode / visualStyle / readingMode / imageLanguage
 - 节奏：anchor N / dense N / breathing N
 - 严重：N | 设计偏差：N | 建议：N
 
@@ -107,5 +117,9 @@ stages:
 - ...
 ```
 
-用户未授权修改时只报告；确认后才提交命令。
+## 禁止
 
+- 不使用 `ValidateDeckLayout`、`DetectOverflowText`、`AnalyzeDeckConsistency`、element/layout grammar 或任何 commands 修复路线。
+- 不因自动分数好看而覆盖真实视觉判断。
+- 不在用户未授权时修改文件。
+- 不把缺失标题、页码、背景或图表归因于“导出时会自动补”；SVG 页面本身必须完整。

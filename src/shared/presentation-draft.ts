@@ -19,6 +19,7 @@ function slideHasBodyText(slide: Slide): boolean {
 }
 
 export function slideNeedsLayoutChoice(slide: Slide): boolean {
+  if (slide.visualSource?.kind === "svg") return false;
   if (CHROME_LAYOUTS.has(slide.layout ?? "")) return false;
   // A chosen grammar/design variant is durable evidence that this slide has
   // already entered the design workflow. Targeted typography or spacing fixes

@@ -32,18 +32,6 @@ type SettingsCategory =
   | "appearance"
   | "diagnostics";
 
-const GENERATION_MODE_STORAGE_KEY = "ppt-generation-mode";
-
-function loadGenerationMode(): LeanGenerationMode {
-  try {
-    return window.localStorage.getItem(GENERATION_MODE_STORAGE_KEY) === "lean"
-      ? "lean"
-      : "agent";
-  } catch {
-    return "agent";
-  }
-}
-
 export function App() {
   const [bootstrap] = useState(loadAppBootstrapSnapshot);
   const { message: toastMessage, notify } = useNotificationCenter();
@@ -80,23 +68,12 @@ export function App() {
     logoUrl,
     selectedModelId,
     selectedDesignSystem,
-    setSelectedDesignSystem,
     selectModel: setSelectedModelId,
     visibleModels,
   } = settings;
 
   const [request, setRequest] = useState("");
-  const [generationMode, setGenerationModeState] = useState<LeanGenerationMode>(
-    loadGenerationMode,
-  );
-  const setGenerationMode = useCallback((mode: LeanGenerationMode) => {
-    setGenerationModeState(mode);
-    try {
-      window.localStorage.setItem(GENERATION_MODE_STORAGE_KEY, mode);
-    } catch {
-      // Storage is an enhancement; the in-memory mode remains authoritative.
-    }
-  }, []);
+  const generationMode: LeanGenerationMode = "agent";
   const [busy, setBusy] = useState(false);
   const resetRequest = useCallback(() => setRequest(""), []);
   const sessionController = useSessionController({
@@ -192,7 +169,6 @@ export function App() {
     activeSessionId,
     setChatMessages,
     syncPresentation,
-    setSelectedDesignSystem,
     activity,
     agentRun,
     notify,
@@ -293,12 +269,10 @@ export function App() {
               void resolveToolApproval(approvalId, approved),
             onConfirmBrief: displayActions.confirmBrief,
             onConfirmOutline: displayActions.confirmOutline,
-            onConfirmLayout: displayActions.confirmLayout,
             onReviseOutline: displayActions.reviseOutline,
             onOpenDeckPreview: openDeckPreview,
             onExportDeck: () => void exportDeck(),
             isExportingDeck,
-            selectedDesignSystem,
             activeRunId,
             onCancelRun: () => void cancelRun(),
             isCancellingRun,
@@ -312,7 +286,6 @@ export function App() {
             selectedModelId,
             setSelectedModelId,
             generationMode,
-            onChangeGenerationMode: setGenerationMode,
             workspaceReady: Boolean(localStoragePath),
             sandboxName: getWorkspaceLabel(localStoragePath || undefined),
             onPrepareWorkspace: () => void selectWorkspaceFolder(),

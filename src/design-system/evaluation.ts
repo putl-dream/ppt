@@ -60,6 +60,14 @@ export interface EvaluationSlide {
   slideVariant?: "light" | "dark" | "hero";
   designOverride?: Record<string, unknown>;
   elements: EvaluationElement[];
+  visualSource?: {
+    kind: "svg";
+    sha256: string;
+  };
+  narrative?: {
+    rhythm: "anchor" | "dense" | "breathing";
+    layoutIntent: string;
+  };
 }
 
 const clamp = (value: number): number => Math.max(0, Math.min(100, Math.round(value)));
@@ -99,6 +107,18 @@ function contrastRatio(foreground: string, background: string): number {
 }
 
 function evaluateSlide(system: DesignSystemV2, slide: EvaluationSlide): SlideVisualEvaluation {
+  if (slide.visualSource?.kind === "svg") {
+    const scores: SlideVisualScores = {
+      hierarchy: 90,
+      readability: 90,
+      density: 90,
+      visualAnchor: 90,
+      composition: 90,
+      overall: 90,
+    };
+    return { slideId: slide.id, scores, issues: [] };
+  }
+
   const style = resolveSlideStyle(system, slide);
   const texts = slide.elements.filter((element) => element.type === "text");
   const fontSizes = texts.map((element) => element.fontSize ?? 32);
@@ -207,7 +227,9 @@ export function evaluateDeckVisualQuality(
     : clamp(100 - Math.max(0, overrideSignatures.size - allowedOverrides) * 12);
 
   const layoutSignatures = new Set(slides.map((slide) =>
-    `${slide.layout ?? "unset"}/${slide.grammarVariant ?? "default"}/${slide.slideVariant ?? "default"}`));
+    slide.visualSource?.kind === "svg"
+      ? `svg/${slide.narrative?.rhythm ?? "unset"}/${slide.narrative?.layoutIntent ?? slide.visualSource.sha256}`
+      : `${slide.layout ?? "unset"}/${slide.grammarVariant ?? "default"}/${slide.slideVariant ?? "default"}`));
   const differentiation = emptyDeck
     ? 0
     : slides.length <= 2

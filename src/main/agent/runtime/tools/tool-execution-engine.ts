@@ -106,9 +106,17 @@ export class ToolExecutionEngine {
     });
 
     try {
+      const modelBlocks = tool.mapResultToModelBlocks
+        ? await tool.mapResultToModelBlocks(validatedResult, context)
+        : undefined;
       const modelContent = tool.mapResultToModelContent
         ? await tool.mapResultToModelContent(validatedResult, context)
-        : undefined;
+        : modelBlocks
+          ? modelBlocks
+              .filter((block) => block.type === "text")
+              .map((block) => block.text)
+              .join("\n") || `[${modelBlocks.length} multimodal tool result block(s)]`
+          : undefined;
       const preparedResult = await prepareToolResultData({
         data: validatedResult,
         modelContent,
@@ -121,7 +129,15 @@ export class ToolExecutionEngine {
         executionStatus: "returned",
         sideEffects: "committed_or_unknown",
         deliveryStatus: "delivered",
-        modelResult: toModelResult(toolCall.id, preparedResult.modelContent, false),
+        modelResult: modelBlocks
+          ? {
+              type: "tool_result",
+              toolUseId: toolCall.id,
+              content: modelBlocks.length > 0
+                ? modelBlocks
+                : [{ type: "text", text: preparedResult.modelContent }],
+            }
+          : toModelResult(toolCall.id, preparedResult.modelContent, false),
         validatedResult,
         preparedResult,
         warnings,

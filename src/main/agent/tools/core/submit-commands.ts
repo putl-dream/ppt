@@ -5,6 +5,7 @@ import {
   agentCommandProposalResultSchema,
   type AgentCommandProposalResult,
 } from "../../runtime/runtime-types";
+import { requestExplicitlyAllowsContentOnly } from "../../runtime/presentation/presentation-completion-policy";
 
 /** Models often pass a single string; coerce to string[]. */
 export const assumptionsSchema = z.preprocess(
@@ -38,8 +39,8 @@ export const submitCommandsTool: ToolDefinition<
 > = {
   name: "SubmitCommands",
   description:
-    "基础 PPT 创建与编辑入口：可直接提交 add-slide、add-element、set-design-system 等 PresentationCommand，"
-    + "形成最终 Command Proposal 并进入系统校验关闸。基础创建无需搜索额外工具。",
+    "旧 element 页面与局部编辑的命令入口。新建或整套重做 PPT 必须先写完整页面 SVG，"
+    + "再使用 SubmitSvgDeck；不得用固定 layout handler 拼装新演示。",
   category: "core",
   loadPolicy: "core",
   inputSchema: submitCommandsSchema,
@@ -53,7 +54,32 @@ export const submitCommandsTool: ToolDefinition<
     },
   },
   risk: "low",
-  execute: async (args) => {
+  execute: async (args, context) => {
+    const introducesSvgPage = args.commands.some(
+      (command) =>
+        (command.type === "add-slide" || command.type === "restore-slide")
+        && command.slide.visualSource?.kind === "svg",
+    );
+    if (introducesSvgPage) {
+      throw new Error(
+        "SubmitCommands cannot introduce SVG-native pages because it has no content-exact "
+        + "PreviewSvgPage receipt gate. Preview every current SVG page and use SubmitSvgDeck.",
+      );
+    }
+
+    const createsLegacyPages = args.commands.some(
+      (command) => command.type === "add-slide" || command.type === "restore-slide",
+    );
+    if (
+      createsLegacyPages
+      && !requestExplicitlyAllowsContentOnly(context.request)
+    ) {
+      throw new Error(
+        "SubmitCommands cannot create visual slides through the legacy element/layout route. "
+        + "Load ppt-workflow, author complete workspace SVG pages, preview every current page "
+        + "with PreviewSvgPage, and submit them with SubmitSvgDeck.",
+      );
+    }
     return {
       type: "command_proposal",
       summary: args.summary,
