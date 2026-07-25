@@ -72,15 +72,69 @@ function toOpenAiUserContent(
   return parts;
 }
 
-function toolResultText(result: AgentModelToolResultBlock): string {
+function toResponsesMessageContent(
+  blocks: AgentModelContentBlock[],
+): OpenAI.Responses.ResponseInputMessageContentList | string {
+  const parts: OpenAI.Responses.ResponseInputMessageContentList = [];
+  for (const block of blocks) {
+    if (block.type === "text" && block.text.trim()) {
+      parts.push({ type: "input_text", text: block.text });
+    } else if (block.type === "image") {
+      parts.push({
+        type: "input_image",
+        image_url: toOpenAiImageUrl(block),
+        detail: "auto",
+      });
+    }
+  }
+  if (parts.length === 0) return "";
+  if (parts.length === 1 && parts[0].type === "input_text") return parts[0].text;
+  return parts;
+}
+
+function toolResultBodyText(result: AgentModelToolResultBlock): string {
   const text = result.content
     .filter((block): block is Extract<typeof block, { type: "text" }> => block.type === "text")
     .map((block) => block.text)
     .join("\n");
+  return result.isError
+    ? `[Tool error]${text ? `\n${text}` : ""}`
+    : text;
+}
+
+function toolResultText(result: AgentModelToolResultBlock): string {
+  const markedText = toolResultBodyText(result);
   const images = result.content.filter((block) => block.type === "image");
   return images.length > 0
-    ? `${text}\n\n[${images.length} image attachment(s) follow in a user message]`.trim()
-    : text;
+    ? `${markedText}\n\n[${images.length} image attachment(s) follow in a user message]`.trim()
+    : markedText;
+}
+
+function toResponsesToolOutput(
+  result: AgentModelToolResultBlock,
+): OpenAI.Responses.ResponseFunctionCallOutputItemList | string {
+  const images = result.content.filter(
+    (block): block is AgentModelImageBlock => block.type === "image",
+  );
+  if (images.length === 0) {
+    return toolResultText(result);
+  }
+
+  const output: OpenAI.Responses.ResponseFunctionCallOutputItemList = [];
+  const markedText = toolResultBodyText(result);
+  if (markedText.trim()) {
+    output.push({ type: "input_text", text: markedText });
+  }
+  for (const block of result.content) {
+    if (block.type === "image") {
+      output.push({
+        type: "input_image",
+        image_url: toOpenAiImageUrl(block),
+        detail: "auto",
+      });
+    }
+  }
+  return output;
 }
 
 function toChatMessages(
@@ -126,6 +180,47 @@ function toChatMessages(
     const combined = [...userBlocks, ...resultImages];
     if (combined.length > 0) {
       out.push({ role: "user", content: toOpenAiUserContent(combined) });
+    }
+  }
+  return out;
+}
+
+function toResponsesInput(
+  messages: AgentModelMessage[],
+): OpenAI.Responses.ResponseInput {
+  const out: OpenAI.Responses.ResponseInput = [];
+  for (const message of ensureToolResultPairing(messages)) {
+    if (message.role === "assistant") {
+      const messageContent = toResponsesMessageContent(message.content);
+      if (typeof messageContent === "string" ? messageContent : messageContent.length > 0) {
+        out.push({ role: "assistant", content: messageContent });
+      }
+      for (const call of message.content) {
+        if (call.type !== "tool_use") continue;
+        out.push({
+          type: "function_call",
+          call_id: call.id,
+          name: call.name,
+          arguments: JSON.stringify(call.input),
+        });
+      }
+      continue;
+    }
+
+    for (const result of message.content) {
+      if (result.type !== "tool_result") continue;
+      out.push({
+        type: "function_call_output",
+        call_id: result.toolUseId,
+        output: toResponsesToolOutput(result),
+      });
+    }
+
+    const userContent = toResponsesMessageContent(
+      message.content.filter((block) => block.type === "text" || block.type === "image"),
+    );
+    if (typeof userContent === "string" ? userContent : userContent.length > 0) {
+      out.push({ role: "user", content: userContent });
     }
   }
   return out;
@@ -231,7 +326,7 @@ export async function generateWithOpenAI(
     const maxOutputTokens = request.maxOutputTokens ?? config.maxOutputTokens;
     const systemPrompt = applyResponseContract(request.systemPrompt, request.responseContract);
 
-    if (mode === "chat-completions" || request.messages) {
+    if (mode === "chat-completions") {
       const response = await client.chat.completions.create({
         model: config.model,
         messages: [
@@ -294,7 +389,9 @@ export async function generateWithOpenAI(
     const response = await client.responses.create({
       model: config.model,
       instructions: systemPrompt,
-      input: request.prompt,
+      input: request.messages
+        ? toResponsesInput(withEphemeralPrompt(request.messages, request.prompt))
+        : request.prompt,
       max_output_tokens: maxOutputTokens,
       ...(request.outputFormat?.type === "json_schema"
         ? {

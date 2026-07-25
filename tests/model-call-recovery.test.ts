@@ -80,6 +80,25 @@ describe("gateway recovery classification", () => {
     expect(classifyGatewayRecovery(error)).toBe("compact-context");
   });
 
+  it.each([400, 404, 422])(
+    "does not retry a deterministic HTTP %s provider error",
+    (status) => {
+      const error = normalizeProviderError(
+        "openai",
+        Object.assign(new Error("invalid request"), { status }),
+      );
+      expect(classifyGatewayRecovery(error)).toBe("non-recoverable");
+    },
+  );
+
+  it.each([408, 429])("keeps recoverable HTTP %s errors on backoff", (status) => {
+    const error = normalizeProviderError(
+      "openai",
+      Object.assign(new Error("retry later"), { status }),
+    );
+    expect(classifyGatewayRecovery(error)).toBe("retry-backoff");
+  });
+
   it("detects output truncation stop reasons", () => {
     expect(isOutputTruncated("max_tokens")).toBe(true);
     expect(isOutputTruncated("length")).toBe(true);
@@ -171,6 +190,62 @@ describe("callModelWithRecovery", () => {
     });
     expect(progress).toEqual(["服务暂时繁忙，正在重试…"]);
     expect(result.recoveryNotes[0]).toMatch(/临时故障|Retry-After|指数退避/);
+    vi.useRealTimers();
+  });
+
+  it.each([400, 404])("fails fast on HTTP %s without entering backoff", async (status) => {
+    const source = Object.assign(new Error("invalid request"), { status });
+    const error = normalizeProviderError("openai", source);
+    const generateText = vi.fn().mockRejectedValue(error);
+    const progress: string[] = [];
+    const gateway: AgentModelGateway = {
+      generateText,
+      async *generateTextStream() {
+        yield { type: "complete" as const, content: [] };
+      },
+    };
+
+    await expect(callModelWithRecovery({
+      gateway,
+      systemPrompt: "system",
+      promptPayload: { transcript: [], request: "hello" },
+      onRecovery: (message) => progress.push(message),
+    })).rejects.toBe(error);
+
+    expect(generateText).toHaveBeenCalledTimes(1);
+    expect(progress).toEqual([]);
+  });
+
+  it("does not notify or wait for another retry after the final failed attempt", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(0));
+    const error = Object.assign(new Error("rate limited"), {
+      status: 429,
+      headers: { get: () => "1" },
+    });
+    const generateText = vi.fn().mockRejectedValue(error);
+    const progress: string[] = [];
+    const gateway: AgentModelGateway = {
+      generateText,
+      async *generateTextStream() {
+        yield { type: "complete" as const, content: [] };
+      },
+    };
+
+    const startedAt = Date.now();
+    const promise = callModelWithRecovery({
+      gateway,
+      systemPrompt: "system",
+      promptPayload: { transcript: [], request: "hello" },
+      onRecovery: (message) => progress.push(message),
+    });
+    const rejection = expect(promise).rejects.toBe(error);
+
+    await vi.runAllTimersAsync();
+    await rejection;
+    expect(generateText).toHaveBeenCalledTimes(8);
+    expect(progress).toHaveLength(7);
+    expect(Date.now() - startedAt).toBe(7_000);
     vi.useRealTimers();
   });
 

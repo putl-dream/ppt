@@ -377,6 +377,7 @@ export async function callModelWithRecovery(
 
       const recovery = classifyGatewayRecovery(error);
       if (recovery === "non-recoverable") throw error;
+      if (attempt === MAX_RECOVERY_ATTEMPTS) break;
 
       if (error instanceof AgentGatewayError && error.code === "overloaded") {
         consecutiveOverloaded += 1;

@@ -176,6 +176,23 @@ describe("Permission gates", () => {
     }));
     expect(approved).toBeNull();
   });
+
+  it("passes the run signal to approval handlers", async () => {
+    const hook = createPermissionPreToolUseHook();
+    const controller = new AbortController();
+    let receivedSignal: AbortSignal | undefined;
+
+    await hook(createBlock({
+      args: { command: "rm notes.md" },
+      signal: controller.signal,
+      requestToolApproval: async (request) => {
+        receivedSignal = request.signal;
+        return false;
+      },
+    }));
+
+    expect(receivedSignal).toBe(controller.signal);
+  });
 });
 
 function awaitableWorkspace(): string {

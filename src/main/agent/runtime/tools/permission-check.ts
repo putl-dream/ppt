@@ -9,6 +9,7 @@ export type ToolApprovalRequest = {
   toolName: string;
   args: unknown;
   reason: string;
+  signal?: AbortSignal;
 };
 
 export type ToolApprovalHandler = (request: ToolApprovalRequest) => Promise<boolean>;
@@ -20,6 +21,7 @@ export interface PreToolUseBlock extends ToolPermissionBlock {
   scope: "main" | "subagent";
   threadId?: string;
   requestToolApproval?: ToolApprovalHandler;
+  signal?: AbortSignal;
 }
 
 /** 三道闸门顺序固定：硬拒绝 → 规则匹配 → 用户审批。 */
@@ -56,6 +58,7 @@ export async function authorizeToolUse(
       toolName: preBlock.toolName,
       args: preBlock.args,
       reason: decision.reason,
+      signal: preBlock.signal,
     });
     if (!approved) {
       return { type: "stop", reason: "用户拒绝了该工具操作。", toolDenied: true };

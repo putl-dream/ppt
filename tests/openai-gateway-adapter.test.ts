@@ -135,15 +135,49 @@ describe("generateWithOpenAI", () => {
     });
   });
 
-  it("delivers request-scoped context with native history without persisting it", async () => {
-    openaiMock.createChatCompletion.mockResolvedValue({
-      choices: [{ message: { content: "ok" }, finish_reason: "stop" }],
+  it("sends native multi-turn history through the Responses API without persisting context", async () => {
+    openaiMock.createResponse.mockResolvedValue({
+      output_text: "ok",
+      output: [],
       _request_id: "req-native-context",
     });
-    const messages = [{
-      role: "user" as const,
-      content: [{ type: "text" as const, text: "canonical user request" }],
-    }];
+    const messages = [
+      {
+        role: "user" as const,
+        content: [{ type: "text" as const, text: "canonical user request" }],
+      },
+      {
+        role: "assistant" as const,
+        content: [
+          { type: "text" as const, text: "I will inspect the deck." },
+          {
+            type: "tool_use" as const,
+            id: "call-read",
+            name: "Read",
+            input: { path: "presentation.json" },
+          },
+        ],
+      },
+      {
+        role: "user" as const,
+        content: [
+          {
+            type: "tool_result" as const,
+            toolUseId: "call-read",
+            isError: true,
+            content: [
+              { type: "text" as const, text: '{"title":"Deck"}' },
+              {
+                type: "image" as const,
+                mediaType: "image/png" as const,
+                data: "image-data",
+              },
+            ],
+          },
+          { type: "text" as const, text: "Use the inspected deck." },
+        ],
+      },
+    ];
     const original = structuredClone(messages);
     const prompt = JSON.stringify({
       transcript: [],
@@ -159,13 +193,140 @@ describe("generateWithOpenAI", () => {
       messages,
     });
 
+    expect(openaiMock.createChatCompletion).not.toHaveBeenCalled();
+    expect(openaiMock.createResponse.mock.calls[0]?.[0]).toMatchObject({
+      instructions: "System instruction",
+      input: [
+        { role: "user", content: "canonical user request" },
+        { role: "assistant", content: "I will inspect the deck." },
+        {
+          type: "function_call",
+          call_id: "call-read",
+          name: "Read",
+          arguments: '{"path":"presentation.json"}',
+        },
+        {
+          type: "function_call_output",
+          call_id: "call-read",
+          output: [
+            { type: "input_text", text: '[Tool error]\n{"title":"Deck"}' },
+            {
+              type: "input_image",
+              image_url: "data:image/png;base64,image-data",
+              detail: "auto",
+            },
+          ],
+        },
+        { role: "user", content: "Use the inspected deck." },
+        { role: "user", content: prompt },
+      ],
+    });
+    expect(messages).toEqual(original);
+  });
+
+  it("marks text-only tool errors in Responses function call outputs", async () => {
+    openaiMock.createResponse.mockResolvedValue({
+      output_text: "handled",
+      output: [],
+      _request_id: "req-tool-error",
+    });
+
+    await generateWithOpenAI(config, {
+      prompt: "",
+      messages: [
+        {
+          role: "user",
+          content: [{ type: "text", text: "Read the protected file." }],
+        },
+        {
+          role: "assistant",
+          content: [{
+            type: "tool_use",
+            id: "call-protected",
+            name: "Read",
+            input: { path: "protected.txt" },
+          }],
+        },
+        {
+          role: "user",
+          content: [{
+            type: "tool_result",
+            toolUseId: "call-protected",
+            content: [{ type: "text", text: "Permission denied" }],
+            isError: true,
+          }],
+        },
+      ],
+    });
+
+    expect(openaiMock.createResponse.mock.calls[0]?.[0].input).toContainEqual({
+      type: "function_call_output",
+      call_id: "call-protected",
+      output: "[Tool error]\nPermission denied",
+    });
+  });
+
+  it("keeps native multi-turn history on explicit Chat Completions mode", async () => {
+    openaiMock.createChatCompletion.mockResolvedValue({
+      choices: [{ message: { content: "ok" }, finish_reason: "stop" }],
+      _request_id: "req-chat-history",
+    });
+
+    await generateWithOpenAI(
+      { ...config, openaiApiMode: "chat-completions" },
+      {
+        systemPrompt: "System instruction",
+        prompt: "request context",
+        messages: [
+          {
+            role: "user",
+            content: [{ type: "text", text: "canonical user request" }],
+          },
+          {
+            role: "assistant",
+            content: [
+              { type: "text", text: "I will inspect the deck." },
+              {
+                type: "tool_use",
+                id: "call-read",
+                name: "Read",
+                input: { path: "presentation.json" },
+              },
+            ],
+          },
+          {
+            role: "user",
+            content: [{
+              type: "tool_result",
+              toolUseId: "call-read",
+              content: [{ type: "text", text: '{"title":"Deck"}' }],
+              isError: true,
+            }],
+          },
+        ],
+      },
+    );
+
     expect(openaiMock.createResponse).not.toHaveBeenCalled();
     expect(openaiMock.createChatCompletion.mock.calls[0]?.[0].messages).toEqual([
       { role: "system", content: "System instruction" },
       { role: "user", content: "canonical user request" },
-      { role: "user", content: prompt },
+      {
+        role: "assistant",
+        content: "I will inspect the deck.",
+        tool_calls: [{
+          id: "call-read",
+          type: "function",
+          function: { name: "Read", arguments: '{"path":"presentation.json"}' },
+        }],
+      },
+      {
+        role: "tool",
+        tool_call_id: "call-read",
+        content: '[Tool error]\n{"title":"Deck"}',
+      },
+      { role: "user", content: "request context" },
     ]);
-    expect(messages).toEqual(original);
   });
 
   it("keeps one-shot forced tools on the Responses API", async () => {

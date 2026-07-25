@@ -38,6 +38,25 @@ function errorName(error: unknown): string {
   return (error as { name?: string }).name ?? "";
 }
 
+function errorStatus(error: unknown): number | undefined {
+  if (!error || typeof error !== "object") return undefined;
+  const status = (error as { status?: unknown }).status;
+  if (typeof status === "number") return status;
+  if (error instanceof AgentGatewayError && error.cause !== error) {
+    return errorStatus(error.cause);
+  }
+  return undefined;
+}
+
+function isDeterministicClientError(error: unknown): boolean {
+  const status = errorStatus(error);
+  return status !== undefined
+    && status >= 400
+    && status < 500
+    && status !== 408
+    && status !== 429;
+}
+
 function isAbortLike(error: unknown, signal?: AbortSignal): boolean {
   if (signal?.aborted) return true;
   const name = errorName(error);
@@ -172,9 +191,9 @@ export function classifyGatewayRecovery(error: unknown): GatewayRecoveryKind {
       case "prompt-too-long":
         return "compact-context";
       case "timeout":
-        return "non-recoverable";
+        return errorStatus(error) === 408 ? "retry-backoff" : "non-recoverable";
       case "provider-error":
-        return "retry-backoff";
+        return isDeterministicClientError(error) ? "non-recoverable" : "retry-backoff";
       default:
         return "non-recoverable";
     }

@@ -238,6 +238,7 @@ export class ToolPreflight {
       permission: tool.permission,
       risk: tool.risk,
       requestToolApproval: input.requestToolApproval,
+      signal: input.signal,
     };
 
     let authorization;

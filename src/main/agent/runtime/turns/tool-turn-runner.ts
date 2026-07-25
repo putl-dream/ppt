@@ -14,6 +14,7 @@ export class ToolTurnRunner {
     workspace: AgentIterationWorkspace,
     state: AgentQueryState,
   ): Promise<AgentLoopTurnOutcome> {
+    throwIfRunCancelled(run.scope.signal, run.params.deps.externalSignal);
     if (
       toolCalls.length > 1
       && toolCalls.some((call) =>
@@ -23,6 +24,7 @@ export class ToolTurnRunner {
         ))
     ) {
       for (const toolCall of toolCalls) {
+        throwIfRunCancelled(run.scope.signal, run.params.deps.externalSignal);
         const result: AgentModelToolResultBlock = {
           type: "tool_result",
           toolUseId: toolCall.id,
@@ -47,6 +49,7 @@ export class ToolTurnRunner {
     }
 
     for (const toolCall of toolCalls) {
+      throwIfRunCancelled(run.scope.signal, run.params.deps.externalSignal);
       if (workspace.toolResults.some((result) => result.toolUseId === toolCall.id)) continue;
       const outcome = await this.runOne(run, toolCall, workspace, state);
       if (outcome.type === "terminal") return outcome;
@@ -67,7 +70,11 @@ export class ToolTurnRunner {
     const rethrowIfCancelled = (error: unknown): void => {
       rethrowIfRuntimeCancellation(error, scope.signal, deps.externalSignal);
     };
+    const throwIfCancelled = (): void => {
+      throwIfRunCancelled(scope.signal, deps.externalSignal);
+    };
 
+    throwIfCancelled();
     scope.setInflightQuery("tool_running", workspace, toolCall);
     const claimDecision = scope.applyTransition({ type: "tool_claimed", toolUse: toolCall });
     run.appendRuntimeEvent("tool_call", {
@@ -77,6 +84,7 @@ export class ToolTurnRunner {
       parseError: toolCall.parseError,
     }, "model_only");
     if (claimDecision === "commit") await scope.persistCheckpoint();
+    throwIfCancelled();
 
     const recordToolResultBlock = (result: AgentModelToolResultBlock): void => {
       workspace.toolResults.push(structuredClone(result));
@@ -113,11 +121,14 @@ export class ToolTurnRunner {
       });
     };
 
-    if (!await params.canUseTool(toolCall, workspace.updatedToolUseContext)) {
+    const canUseTool = await params.canUseTool(toolCall, workspace.updatedToolUseContext);
+    throwIfCancelled();
+    if (!canUseTool) {
       recordToolResult(`Tool ${toolCall.name} is not permitted in this query.`, true);
       return { type: "continue" };
     }
 
+    throwIfCancelled();
     const preflight = await run.input.toolPreflight.prepare({
       toolCall,
       context: workspace.updatedToolUseContext,
@@ -127,6 +138,7 @@ export class ToolTurnRunner {
       signal: scope.signal,
       policyGuidance: async () => undefined,
     });
+    throwIfCancelled();
     if (preflight.repairs.length > 0) {
       run.appendRuntimeEvent("workflow_progress", {
         type: "tool-input-repaired",
@@ -244,6 +256,7 @@ export class ToolTurnRunner {
         label,
         toolUseId: toolCall.id,
         run: async () => {
+          throwIfCancelled();
           const outcome = await run.input.toolExecutionEngine.execute({
             tool,
             args,
@@ -291,6 +304,7 @@ export class ToolTurnRunner {
       return { type: "continue" };
     }
 
+    throwIfCancelled();
     const outcome = await run.input.toolExecutionEngine.execute({
       tool,
       args,
@@ -301,6 +315,7 @@ export class ToolTurnRunner {
       signal: scope.signal,
       runPostToolUseHook: run.input.runPostToolUseHook,
     });
+    throwIfCancelled();
     const outcomeText = textFromResult(outcome.modelResult);
     if (outcome.executionStatus === "threw") {
       run.emitProgress({
@@ -384,4 +399,10 @@ function textFromResult(result: AgentModelToolResultBlock): string {
     .filter((block) => block.type === "text")
     .map((block) => block.text)
     .join("\n");
+}
+
+function throwIfRunCancelled(...signals: Array<AbortSignal | undefined>): void {
+  if (signals.some((signal) => signal?.aborted)) {
+    throw new Error("Run aborted by user.");
+  }
 }

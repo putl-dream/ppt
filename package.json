@@ -57,6 +57,13 @@
     ],
     "extraResources": [
       {
+        "from": "skills",
+        "to": "skills",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
         "from": "build/icon.ico",
         "to": "icon.ico"
       },

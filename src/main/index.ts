@@ -68,6 +68,7 @@ import { projectArtifactStatusSchema } from "@shared/session";
 import {
   findRecoverableConversation,
 } from "@shared/session-recovery";
+import { resolveExternalHttpUrl } from "./external-navigation";
 import type { AgentModelSelection } from "@shared/agent";
 import { TokenUsageStore } from "./token-usage-store";
 import type { ConversationEventKind } from "@shared/conversation-events";
@@ -84,6 +85,7 @@ type WindowThemePreset = Exclude<WindowThemeMode, "system">;
 
 async function resolveSkillRegistry(): Promise<SkillRegistry> {
   const candidates = [
+    ...(app.isPackaged ? [join(process.resourcesPath, "skills")] : []),
     join(process.cwd(), "skills"),
     join(app.getAppPath(), "skills"),
     join(__dirname, "../../skills"),
@@ -248,6 +250,21 @@ function createWindow(onWindowCreated?: (window: BrowserWindow) => void): Browse
   });
   window.webContents.on("did-finish-load", () => {
     logger.info("renderer.load.completed", { webContentsId: window.webContents.id });
+  });
+  const openInSystemBrowser = (rawUrl: string) => {
+    const externalUrl = resolveExternalHttpUrl(rawUrl);
+    if (!externalUrl) return;
+    void shell.openExternal(externalUrl).catch((error) => {
+      logger.warn("renderer.external-link.open-failed", { externalUrl, error });
+    });
+  };
+  window.webContents.on("will-navigate", (event, url) => {
+    event.preventDefault();
+    openInSystemBrowser(url);
+  });
+  window.webContents.setWindowOpenHandler(({ url }) => {
+    openInSystemBrowser(url);
+    return { action: "deny" };
   });
   if (process.env.ELECTRON_RENDERER_URL) {
     void window.loadURL(process.env.ELECTRON_RENDERER_URL);
@@ -963,9 +980,10 @@ app.whenReady().then(async () => {
       const request = agentRunRequestSchema.parse(rawRequest);
       const sessionId = request.sessionId;
 
-      const activeRunId = sessionActiveRuns.get(sessionId);
-      if (activeRunId && activeRuns.has(activeRunId)) {
-        throw new Error("Concurrency Conflict: An active agent run is already in progress in this session.");
+      // 当前桌面端采用单窗口、单前台运行模型；Main 同步执行这一约束，
+      // 让模型配置和交互状态在一次 run 内保持稳定。
+      if (activeRuns.size > 0) {
+        throw new Error("Concurrency Conflict: An active agent run is already in progress.");
       }
 
       const currentRunId = runId || crypto.randomUUID();
@@ -973,34 +991,34 @@ app.whenReady().then(async () => {
       activeRuns.set(currentRunId, controller);
       sessionActiveRuns.set(sessionId, currentRunId);
 
-      const runtime = await getRuntimeForSession(sessionId);
-      const settings = input ? agentModelSettingsSchema.parse(input) : undefined;
-      const executionStrategy = strategy
-        ? agentExecutionStrategySchema.parse(strategy)
-        : "REQUEST_APPROVAL";
-      const agentStepLimits = rawStepLimits
-        ? agentStepLimitsSchema.parse(rawStepLimits)
-        : undefined;
-      const gatewayConfig = rawGatewayConfig
-        ? agentGatewayConfigSchema.parse(rawGatewayConfig)
-        : undefined;
-      let selection: AgentModelSelection | undefined;
-      if (settings) {
-        selection = agentGateway.configure(settings, gatewayConfig);
-      } else if (gatewayConfig) {
-        agentGateway.applyGatewayConfig(gatewayConfig);
-      }
-      sessionStore.conversationDatabase.beginRun({
-        runId: currentRunId,
-        sessionId,
-        threadId: currentRunId,
-        provider: selection?.provider,
-        model: selection?.model,
-        request: request.prompt,
-      });
-      const emit = createAgentStreamEmitter(event.sender, sessionId, currentRunId, controller);
-
       try {
+        const runtime = await getRuntimeForSession(sessionId);
+        const settings = input ? agentModelSettingsSchema.parse(input) : undefined;
+        const executionStrategy = strategy
+          ? agentExecutionStrategySchema.parse(strategy)
+          : "REQUEST_APPROVAL";
+        const agentStepLimits = rawStepLimits
+          ? agentStepLimitsSchema.parse(rawStepLimits)
+          : undefined;
+        const gatewayConfig = rawGatewayConfig
+          ? agentGatewayConfigSchema.parse(rawGatewayConfig)
+          : undefined;
+        let selection: AgentModelSelection | undefined;
+        if (settings) {
+          selection = agentGateway.configure(settings, gatewayConfig);
+        } else if (gatewayConfig) {
+          agentGateway.applyGatewayConfig(gatewayConfig);
+        }
+        sessionStore.conversationDatabase.beginRun({
+          runId: currentRunId,
+          sessionId,
+          threadId: currentRunId,
+          provider: selection?.provider,
+          model: selection?.model,
+          request: request.prompt,
+        });
+        const emit = createAgentStreamEmitter(event.sender, sessionId, currentRunId, controller);
+
         const result = await runAgentOperation(
           "start",
           sessionId,
@@ -1047,6 +1065,7 @@ app.whenReady().then(async () => {
         }
         return result;
       } finally {
+        toolApprovalBroker.finishForRun(currentRunId);
         activeRuns.delete(currentRunId);
         if (sessionActiveRuns.get(sessionId) === currentRunId) {
           sessionActiveRuns.delete(sessionId);
@@ -1067,9 +1086,9 @@ app.whenReady().then(async () => {
     const request = agentRunRequestSchema.parse(rawRequest);
     const sessionId = request.sessionId;
 
-    const activeRunId = sessionActiveRuns.get(sessionId);
-    if (activeRunId && activeRuns.has(activeRunId)) {
-      throw new Error("Concurrency Conflict: An active agent run is already in progress in this session.");
+    // 与 start 保持同一条全局串行边界，避免继续会话与新运行交错。
+    if (activeRuns.size > 0) {
+      throw new Error("Concurrency Conflict: An active agent run is already in progress.");
     }
 
     const currentRunId = runId || crypto.randomUUID();
@@ -1077,33 +1096,33 @@ app.whenReady().then(async () => {
     activeRuns.set(currentRunId, controller);
     sessionActiveRuns.set(sessionId, currentRunId);
 
-    const runtime = await getRuntimeForSession(sessionId);
-    const settings = rawModelSettings
-      ? agentModelSettingsSchema.parse(rawModelSettings)
-      : undefined;
-    const agentStepLimits = rawStepLimits
-      ? agentStepLimitsSchema.parse(rawStepLimits)
-      : undefined;
-    const gatewayConfig = rawGatewayConfig
-      ? agentGatewayConfigSchema.parse(rawGatewayConfig)
-      : undefined;
-    let selection: AgentModelSelection | undefined;
-    if (settings) {
-      selection = agentGateway.configure(settings, gatewayConfig);
-    } else if (gatewayConfig) {
-      agentGateway.applyGatewayConfig(gatewayConfig);
-    }
-    sessionStore.conversationDatabase.beginRun({
-      runId: currentRunId,
-      sessionId,
-      threadId: request.generationMode === "lean" ? currentRunId : threadId,
-      provider: selection?.provider,
-      model: selection?.model,
-      request: request.prompt,
-    });
-    const emit = createAgentStreamEmitter(event.sender, sessionId, currentRunId, controller);
-
     try {
+      const runtime = await getRuntimeForSession(sessionId);
+      const settings = rawModelSettings
+        ? agentModelSettingsSchema.parse(rawModelSettings)
+        : undefined;
+      const agentStepLimits = rawStepLimits
+        ? agentStepLimitsSchema.parse(rawStepLimits)
+        : undefined;
+      const gatewayConfig = rawGatewayConfig
+        ? agentGatewayConfigSchema.parse(rawGatewayConfig)
+        : undefined;
+      let selection: AgentModelSelection | undefined;
+      if (settings) {
+        selection = agentGateway.configure(settings, gatewayConfig);
+      } else if (gatewayConfig) {
+        agentGateway.applyGatewayConfig(gatewayConfig);
+      }
+      sessionStore.conversationDatabase.beginRun({
+        runId: currentRunId,
+        sessionId,
+        threadId: request.generationMode === "lean" ? currentRunId : threadId,
+        provider: selection?.provider,
+        model: selection?.model,
+        request: request.prompt,
+      });
+      const emit = createAgentStreamEmitter(event.sender, sessionId, currentRunId, controller);
+
       const result = await runAgentOperation(
         "continue-agent-run",
         sessionId,
@@ -1173,6 +1192,7 @@ app.whenReady().then(async () => {
       }
       return result;
     } finally {
+      toolApprovalBroker.finishForRun(currentRunId);
       activeRuns.delete(currentRunId);
       if (sessionActiveRuns.get(sessionId) === currentRunId) {
         sessionActiveRuns.delete(sessionId);

@@ -1,8 +1,15 @@
 import { describe, expect, it } from "vitest";
+import { z } from "zod";
+import type { AgentModelGateway } from "../src/main/agent/gateway/types";
+import { AgentRuntime } from "../src/main/agent/runtime/agent-runtime";
 import {
   isRuntimeCancellation,
   rethrowIfRuntimeCancellation,
 } from "../src/main/agent/runtime/lifecycle/runtime-cancellation";
+import { ToolApprovalBroker } from "../src/main/agent/runtime/tools/tool-approval-broker";
+import type { ToolDefinition } from "../src/main/agent/tools/tool-definition";
+import { ToolRegistry } from "../src/main/agent/tools/tool-registry";
+import { createStarterPresentation } from "../src/shared/presentation";
 
 describe("runtime cancellation classification", () => {
   it("prioritizes an aborted signal over an ordinary downstream error", () => {
@@ -20,5 +27,115 @@ describe("runtime cancellation classification", () => {
     const error = new Error("ordinary failure");
     expect(isRuntimeCancellation(error)).toBe(false);
     expect(() => rethrowIfRuntimeCancellation(error)).not.toThrow();
+  });
+
+  it("does not execute later tools after cancellation during a multi-tool batch", async () => {
+    const controller = new AbortController();
+    const executions: number[] = [];
+    const schema = z.object({ order: z.number() });
+    const tool: ToolDefinition<typeof schema, { ok: true }> = {
+      name: "CancelableBatchTool",
+      description: "Cancels the run when the first batch item executes.",
+      category: "core",
+      loadPolicy: "core",
+      inputSchema: schema,
+      outputSchema: z.object({ ok: z.literal(true) }),
+      risk: "low",
+      async execute(args) {
+        executions.push(args.order);
+        if (args.order === 1) controller.abort();
+        return { ok: true };
+      },
+    };
+    const registry = new ToolRegistry();
+    registry.register(tool);
+    const content = [
+      {
+        type: "tool_use" as const,
+        id: "cancel-first",
+        name: tool.name,
+        input: { order: 1 },
+      },
+      {
+        type: "tool_use" as const,
+        id: "must-not-run",
+        name: tool.name,
+        input: { order: 2 },
+      },
+    ];
+    const gateway: AgentModelGateway = {
+      async generateText() {
+        return { provider: "anthropic", model: "test", content };
+      },
+      async *generateTextStream() {
+        yield { type: "complete" as const, content };
+      },
+    };
+
+    await expect(new AgentRuntime(registry, gateway).run({
+      threadId: "cancel-multi-tool-batch",
+      request: "run both tools",
+      presentationSnapshot: createStarterPresentation(),
+      selectedElementIds: [],
+      signal: controller.signal,
+    })).rejects.toThrow("Run aborted by user");
+    expect(executions).toEqual([1]);
+  });
+
+  it("propagates the run signal so an approval wait ends on cancellation", async () => {
+    const controller = new AbortController();
+    const broker = new ToolApprovalBroker();
+    let executions = 0;
+    const schema = z.object({});
+    const tool: ToolDefinition<typeof schema, { ok: true }> = {
+      name: "ApprovalCancellationTool",
+      description: "Requires approval before execution.",
+      category: "core",
+      loadPolicy: "core",
+      inputSchema: schema,
+      outputSchema: z.object({ ok: z.literal(true) }),
+      risk: "medium",
+      permission: {
+        profile: "approval-cancellation-test",
+        description: "Test approval cancellation.",
+        scopes: ["main"],
+        effects: ["workspace.write"],
+        sandbox: "none",
+        approval: "always",
+      },
+      async execute() {
+        executions += 1;
+        return { ok: true };
+      },
+    };
+    const registry = new ToolRegistry();
+    registry.register(tool);
+    const content = [{
+      type: "tool_use" as const,
+      id: "approval-wait",
+      name: tool.name,
+      input: {},
+    }];
+    const gateway: AgentModelGateway = {
+      async generateText() {
+        return { provider: "anthropic", model: "test", content };
+      },
+      async *generateTextStream() {
+        yield { type: "complete" as const, content };
+      },
+    };
+    const runId = "cancel-approval-run";
+
+    await expect(new AgentRuntime(registry, gateway).run({
+      threadId: "cancel-approval-thread",
+      runId,
+      request: "run the protected tool",
+      presentationSnapshot: createStarterPresentation(),
+      selectedElementIds: [],
+      signal: controller.signal,
+      requestToolApproval: broker.createHandler(runId, () => controller.abort()),
+    })).rejects.toThrow("Run aborted by user");
+    expect(executions).toBe(0);
+    broker.finishForRun(runId);
   });
 });
