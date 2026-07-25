@@ -704,8 +704,13 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
         {conversationFocus.kind === "main" ? (
           <>
         {chatMessages.map((msg) => {
+          const isLiveAssistantMessage =
+            msg.role === "assistant" && busy && streamingMessageId === msg.id;
           return (
-            <div key={msg.id} className={`chat-message ${msg.role}`}>
+            <div
+              key={msg.id}
+              className={`chat-message ${msg.role}${isLiveAssistantMessage ? " is-active-run" : ""}`}
+            >
               {msg.role === "user" ? (
                 <div className={`user-message-shell${editingMsgId === msg.id ? " is-editing" : ""}`}>
                   <div className={`user-message-bubble${editingMsgId === msg.id ? " is-editing" : ""}`}>

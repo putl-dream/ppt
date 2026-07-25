@@ -1773,6 +1773,14 @@ button.chat-session-crumb:hover {
   margin: 12px 0 30px;
 }
 
+.chat-message.assistant.is-active-run {
+  margin-bottom: 3px;
+}
+
+.chat-message.assistant.agent-run-tail {
+  margin: 0 0 10px;
+}
+
 .user-message-bubble {
   max-width: min(80%, 640px);
   border: 0;
