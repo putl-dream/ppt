@@ -1,8 +1,5 @@
 import type { AgentActivityItem } from "./agent-activity";
-import {
-  formatAgentToolActivity,
-  inferAgentToolActivityState,
-} from "./agent-activity-display";
+import { formatAgentToolActivity } from "./agent-activity-display";
 import type { AgentTaskNode } from "./agent-task-list";
 
 export type TeamSessionStatus = "running" | "completed" | "error" | "cancelled";
@@ -22,19 +19,10 @@ export interface TeamSessionProjection {
   activity: TeamTaskActivity;
 }
 
-function legacyAgentName(description: string): string | undefined {
-  const match = description.match(/\s+·\s+([A-Za-z0-9_.-]+)$/);
-  return match?.[1];
-}
-
-function cleanLegacyDescription(description: string): string {
-  return description.replace(/\s+·\s+[A-Za-z0-9_.-]+$/, "").trim();
-}
-
 export function toTeamSessionStatus(
   status: TeamTaskActivity["status"],
 ): TeamSessionStatus {
-  if (status === "done") return "completed";
+  if (status === "completed") return "completed";
   if (status === "failed") return "error";
   if (status === "interrupted" || status === "cancelled") return "cancelled";
   return "running";
@@ -42,12 +30,12 @@ export function toTeamSessionStatus(
 
 export function projectTeamCurrentActivity(activity: TeamTaskActivity): string {
   const lastStep = activity.steps.at(-1);
-  if (activity.status === "done") return "已完成，等待 lead 汇总";
+  if (activity.status === "completed") return "已完成，等待 lead 汇总";
   if (activity.status === "failed") {
     if (lastStep?.type === "tool") {
       return formatAgentToolActivity(
         lastStep.toolName ?? "task",
-        inferAgentToolActivityState(lastStep.text, "failed"),
+        "failed",
       );
     }
     return "任务执行失败，等待 lead 处理";
@@ -58,10 +46,9 @@ export function projectTeamCurrentActivity(activity: TeamTaskActivity): string {
   if (!lastStep) return "正在准备任务…";
   if (lastStep.type === "reasoning") return "正在分析任务上下文…";
 
-  const fallback = lastStep.status === "running" ? "running" : "completed";
   return formatAgentToolActivity(
     lastStep.toolName ?? "task",
-    inferAgentToolActivityState(lastStep.text, fallback),
+    lastStep.status,
   );
 }
 
@@ -74,11 +61,11 @@ export function projectTeamSession(
   const graphTask = taskListId
     ? graphTasks.find((task) => task.id === taskListId)
     : undefined;
-  const description = cleanLegacyDescription(activity.description);
+  const description = activity.description.trim();
   return {
     id: activity.taskId,
     ...(activity.parentTaskId ? { parentId: activity.parentTaskId } : {}),
-    agentName: activity.agentName ?? legacyAgentName(activity.description) ?? "协作助手",
+    agentName: activity.agentName ?? "协作助手",
     title: graphTask?.subject.trim() || description || "未命名子任务",
     currentActivity: projectTeamCurrentActivity(activity),
     status: toTeamSessionStatus(activity.status),

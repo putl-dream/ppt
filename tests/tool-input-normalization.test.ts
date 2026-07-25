@@ -126,6 +126,6 @@ describe("tool input normalization", () => {
     expect(result.question?.variant).toBe("choices");
     expect(result.question?.options?.map((option) => option.id)).toEqual(["manager", "student"]);
     expect(requests).toHaveLength(1);
-    expect(progress).not.toContain("tool-validation-failed");
+    expect(progress).toContain("tool-state");
   });
 });

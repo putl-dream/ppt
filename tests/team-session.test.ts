@@ -50,17 +50,18 @@ describe("team session projection", () => {
     });
   });
 
-  it("keeps legacy persisted tasks compatible and separates cancelled from errors", () => {
-    const legacy: Extract<AgentActivityItem, { kind: "task" }> = {
-      id: "trace-legacy",
+  it("uses explicit teammate identity and separates cancelled from errors", () => {
+    const interrupted: Extract<AgentActivityItem, { kind: "task" }> = {
+      id: "trace-interrupted",
       kind: "task",
-      taskId: "legacy-task",
-      description: "调研竞品 · researcher_1",
+      taskId: "research-task",
+      agentName: "researcher_1",
+      description: "调研竞品",
       status: "interrupted",
       steps: [],
     };
 
-    expect(projectTeamSession(legacy)).toMatchObject({
+    expect(projectTeamSession(interrupted)).toMatchObject({
       agentName: "researcher_1",
       title: "调研竞品",
       status: "cancelled",

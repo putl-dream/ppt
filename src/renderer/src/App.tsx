@@ -141,8 +141,7 @@ export function App() {
   });
   const {
     activityTrace,
-    thoughtProgress,
-    agentActivityMode,
+    agentRunPhase,
   } = activity;
   const agentRun = useAgentRunController({
     request,
@@ -280,8 +279,7 @@ export function App() {
             chatMessages,
             presentation,
             activityTrace,
-            thoughtProgress,
-            agentActivityMode,
+            agentRunPhase,
             streamingMessageId,
             request,
             onChangeRequest: setRequest,

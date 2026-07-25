@@ -107,7 +107,6 @@ export type AgentStreamEvent = (
       runId: string;
       type: "text-chunk";
       chunk: string;
-      source?: "message" | "tool-summary";
       attemptId?: string;
     }
   | { runId: string; type: "text-reset"; attemptId: string }
@@ -115,9 +114,15 @@ export type AgentStreamEvent = (
   | { runId: string; type: "thinking-chunk"; chunk: string; modelStep?: number }
   | { runId: string; type: "stream-completed" }
   | { runId: string; type: "stage-started"; message: string; stage: string }
-  | { runId: string; type: "tool-started"; message: string; toolName: string }
-  | { runId: string; type: "tool-finished"; message: string; toolName: string }
-  | { runId: string; type: "tool-validation-failed"; message: string; toolName: string; error: string }
+  | {
+      runId: string;
+      type: "tool-state";
+      message: string;
+      toolCallId: string;
+      toolName: string;
+      status: "running" | "completed" | "failed" | "denied" | "invalid-input";
+      error?: string;
+    }
   | { runId: string; type: "approval-waiting"; message: string }
   | {
       runId: string;
@@ -127,6 +132,14 @@ export type AgentStreamEvent = (
       toolName: string;
       reason: string;
       detail: string;
+    }
+  | {
+      runId: string;
+      type: "tool-approval-resolved";
+      message: string;
+      approvalId: string;
+      toolName: string;
+      status: "approved" | "denied";
     }
   | {
       runId: string;
@@ -153,10 +166,13 @@ type AgentRunResultDisplay = {
 };
 
 export type AgentRunResult = (
-  | { status: "chat"; message: string; threadId?: string; question?: AgentQuestion }
+  | { status: "chat"; message: string; threadId?: string }
+  | { status: "waiting-user"; message: string; threadId: string; question?: AgentQuestion }
   | { status: "approval-required"; approval: AgentApprovalRequest }
   | { status: "completed"; presentation: Presentation }
   | { status: "rejected"; presentation?: Presentation }
+  | { status: "interrupted"; threadId?: string }
+  | { status: "failed"; error: string; threadId?: string }
 ) & AgentRunResultDisplay;
 
 export interface AgentInboxPollResult {

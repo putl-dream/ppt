@@ -25,6 +25,9 @@ export interface AgentEventEnvelope<TPayload = Record<string, unknown>> {
 
 /** Isolates renderer and audit projections from authoritative Runtime state. */
 export class AgentEventPorts {
+  private readonly startedToolCalls = new Set<string>();
+  private readonly terminalToolCalls = new Set<string>();
+
   constructor(private readonly input: {
     threadId: string;
     runId?: string;
@@ -34,6 +37,16 @@ export class AgentEventPorts {
   }) {}
 
   renderer(event: AgentRendererEvent): void {
+    if (event.type === "tool-state" && typeof event.toolCallId === "string") {
+      const terminal = event.status !== "running";
+      if (this.terminalToolCalls.has(event.toolCallId)) return;
+      if (terminal) {
+        this.terminalToolCalls.add(event.toolCallId);
+      } else {
+        if (this.startedToolCalls.has(event.toolCallId)) return;
+        this.startedToolCalls.add(event.toolCallId);
+      }
+    }
     try {
       this.input.onProgress?.(event);
     } catch {

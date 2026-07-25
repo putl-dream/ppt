@@ -7,11 +7,8 @@ import {
   type LayoutVisualMode,
 } from "@shared/layout-preference";
 import type { DesignSystemV1 } from "@design-system";
-import { formatLeanRunMetrics } from "@shared/lean-mode-contract";
-import {
-  countSlidesNeedingLayout,
-  presentationNeedsLayoutChoice,
-} from "@shared/presentation-draft";
+import { formatTerminalAgentRunContent } from "@shared/agent-result-copy";
+import { mergeResponseText } from "@shared/agent-activity";
 import { formatPublicErrorMessage } from "@shared/agent-activity-display";
 import { useProjectStore } from "../../components/project-store";
 import {
@@ -75,7 +72,6 @@ export function useDisplayEventActions({
   const hydrateProjectArtifacts = useProjectStore((state) => state.hydrateProjectArtifacts);
   const {
     activeRunTraceRef,
-    setThoughtProgress,
     syncActivityTrace,
   } = activity;
   const { startAgent, applyAgentResult } = agentRun;
@@ -88,7 +84,6 @@ export function useDisplayEventActions({
     const approvalRequest = event.payload;
     const messageId = event.scope.anchorMessageId;
     setBusy(true);
-    setThoughtProgress(20);
     syncActivityTrace([
       {
         id: crypto.randomUUID(),
@@ -104,19 +99,12 @@ export function useDisplayEventActions({
       },
     ]);
 
-    const progressInterval = window.setInterval(() => {
-      setThoughtProgress((progress) => progress >= 95 ? 95 : progress + 25);
-    }, 200);
-
     try {
       const result = await window.desktopApi.resumeAgentRun(
         activeSessionId,
         approvalRequest.threadId,
         approved,
       );
-      window.clearInterval(progressInterval);
-      setThoughtProgress(100);
-
       for (const displayEvent of result.displayEvents ?? []) {
         ingestDisplayEvent({
           ...displayEvent,
@@ -134,41 +122,43 @@ export function useDisplayEventActions({
           highlightSlide: approved,
         });
         await hydrateProjectArtifacts(activeSessionId);
-        const resolvedContentBase = result.status === "rejected"
-          ? "已放弃排版变更提案。"
-          : presentationNeedsLayoutChoice(result.presentation)
-            ? `内容草稿已就绪（${countSlidesNeedingLayout(result.presentation)} 页待排版），请选择排版方式后继续。`
-            : "已成功应用变更方案。";
-        const isLeanProposal = approvalRequest.summary.startsWith("Lean Mode");
-        const resolvedContent = isLeanProposal
-          ? `${resolvedContentBase}\n\n${approvalRequest.summary}`
-          : result.leanMetrics
-            ? `${resolvedContentBase}\n\n${formatLeanRunMetrics(result.leanMetrics)}`
-            : resolvedContentBase;
         if (messageId) {
           setChatMessages((current) => current.map((message) =>
-            message.id === messageId ? { ...message, content: resolvedContent } : message
+            {
+              const projected = message.id === messageId
+                ? mergeResponseText(
+                    message.activityTrace ?? [],
+                    message.content,
+                    formatTerminalAgentRunContent(result),
+                  )
+                : undefined;
+              return projected
+                ? {
+                    ...message,
+                    content: projected.content,
+                    activityTrace: projected.trace,
+                    runStatus: "completed",
+                    runError: undefined,
+                  }
+                : message;
+            }
           ));
         }
         notify(approved ? "✅ 变更已应用" : "❌ 变更已取消");
       } else {
-        await applyAgentResult(result, activeRunTraceRef.current);
+        await applyAgentResult(
+          result,
+          activeRunTraceRef.current,
+          event.scope.runId,
+          messageId,
+        );
       }
     } catch (error) {
-      window.clearInterval(progressInterval);
       setDisplayCardStatus(event.eventId, "active");
-      setChatMessages((current) => [
-        ...current,
-        {
-          id: crypto.randomUUID(),
-          role: "assistant",
-          content: `确认变更时发生异常：${error instanceof Error ? error.message : String(error)}`,
-        },
-      ]);
+      notify(formatPublicErrorMessage(error, "确认变更失败，请重试。"));
     } finally {
       setBusy(false);
       syncActivityTrace([]);
-      setThoughtProgress(0);
     }
   }, [
     activeRunTraceRef,
@@ -179,7 +169,6 @@ export function useDisplayEventActions({
     notify,
     setBusy,
     setChatMessages,
-    setThoughtProgress,
     syncActivityTrace,
     syncPresentation,
   ]);
@@ -190,30 +179,29 @@ export function useDisplayEventActions({
     messages: ChatMessage[],
   ) => {
     const targetMessage = messages.find((message) => message.id === messageId);
-    if (!targetMessage) return;
+    if (targetMessage?.role !== "user") return;
 
-    if (targetMessage.role === "user") {
-      void startAgent(newContent, messageId);
-      notify("✏️ 已更新指令并重新生成");
-      return;
-    }
-    setChatMessages((current) =>
-      current.map((message) =>
-        message.id === messageId ? { ...message, content: newContent } : message
-      )
-    );
-    notify("✏️ 消息内容已更新");
-  }, [notify, setChatMessages, startAgent]);
+    void startAgent(newContent, messageId);
+    notify("✏️ 已更新指令并重新生成");
+  }, [notify, startAgent]);
 
   const resolveQuestion = useCallback((
-    _event: QuestionEvent,
+    event: QuestionEvent,
     resolved: AgentQuestionResolved,
   ) => {
+    const messageId = event.scope.anchorMessageId;
+    if (messageId) {
+      setChatMessages((current) => current.map((message) =>
+        message.id === messageId
+          ? { ...message, runStatus: "completed", runError: undefined }
+          : message
+      ));
+    }
     void startAgent(resolved.value, undefined, {
       userDisplayContent: resolved.label ?? resolved.value,
       generationMode: "agent",
     });
-  }, [startAgent]);
+  }, [setChatMessages, startAgent]);
 
   const confirmBrief = useCallback(async (_event: ArtifactEvent) => {
     try {

@@ -76,6 +76,9 @@ import {
   toResultDisplayEvents,
   toStreamDisplayEvent,
 } from "./agent/display/display-event-adapter";
+import { isRuntimeCancellation } from "./agent/runtime/lifecycle/runtime-cancellation";
+import { formatPublicErrorMessage } from "@shared/agent-activity-display";
+import { isTeammateProgressEvent } from "@shared/teammate-progress";
 
 const logger = createModuleLogger("main");
 const agentGateway = new AgentGateway();
@@ -150,6 +153,7 @@ function createAgentStreamEmitter(
   sender: WebContents,
   sessionId: string,
   runId: string,
+  threadId: string,
   controller: AbortController,
 ): (streamEvent: AgentServiceEvent) => void {
   const abortRun = (reason: string) => {
@@ -175,16 +179,17 @@ function createAgentStreamEmitter(
         case "teammate-assignment-started":
         case "teammate-assignment-finished":
           return "workflow_progress";
-        case "tool-started":
+        case "tool-state":
+          return streamEvent.status === "running" ? "tool_started" : "tool_finished";
         case "teammate-tool-started":
           return "tool_started";
-        case "tool-finished":
         case "teammate-tool-finished":
           return "tool_finished";
-        case "tool-validation-failed": return "tool_failed";
         case "approval-waiting":
         case "tool-approval-waiting":
           return "approval_requested";
+        case "tool-approval-resolved":
+          return "approval_resolved";
         case "task-list-updated": return "task_list_updated";
         default: return "workflow_progress";
       }
@@ -192,16 +197,16 @@ function createAgentStreamEmitter(
     sessionStore.conversationDatabase.appendEvent({
       sessionId,
       runId,
-      threadId: runId,
+      threadId,
       kind: eventKind,
       payload: structuredClone(streamEvent) as unknown as Record<string, unknown>,
     });
     if (
       streamEvent.type === "task-list-updated"
-      || streamEvent.type === "teammate-assignment-finished"
+      || isTeammateProgressEvent(streamEvent)
     ) {
       void sessionStore.refreshAgentRunTrace(sessionId, runId).catch((error) => {
-        logger.warn("agent.task-list-trace.persist-failed", { sessionId, runId, error });
+        logger.warn("agent.run-trace.persist-failed", { sessionId, runId, error });
       });
     }
     if (sender.isDestroyed()) {
@@ -534,6 +539,7 @@ app.whenReady().then(async () => {
     sessionId: string,
     runId: string | undefined,
     details: Record<string, unknown>,
+    signal: AbortSignal | undefined,
     task: () => Promise<AgentRunResult>,
   ): Promise<AgentRunResult> => {
     const startedAt = Date.now();
@@ -548,8 +554,13 @@ app.whenReady().then(async () => {
       if (runId) {
         sessionStore.conversationDatabase.finishRun({
           runId,
-          status: "completed",
+          status: result.status === "interrupted"
+            ? "interrupted"
+            : result.status === "failed"
+              ? "failed"
+              : "completed",
           result,
+          ...(result.status === "failed" ? { error: result.error } : {}),
           threadId: "threadId" in result && typeof result.threadId === "string"
             ? result.threadId
             : runId,
@@ -565,15 +576,32 @@ app.whenReady().then(async () => {
       });
       return result;
     } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      const interrupted = isRuntimeCancellation(error, signal);
+      const failureThreadId = typeof details.threadId === "string"
+        ? details.threadId
+        : runId;
+      const result: AgentRunResult = interrupted
+        ? {
+            status: "interrupted",
+            ...(failureThreadId ? { threadId: failureThreadId } : {}),
+          }
+        : {
+            status: "failed",
+            error: formatPublicErrorMessage(
+              error,
+              "处理请求时遇到问题，请稍后重试。",
+            ),
+            ...(failureThreadId ? { threadId: failureThreadId } : {}),
+          };
       if (runId) {
-        const message = error instanceof Error ? error.message : String(error);
-        const interrupted = /aborted|中断|取消/i.test(message);
         sessionStore.conversationDatabase.finishRun({
           runId,
           status: interrupted ? "interrupted" : "failed",
           error: message,
+          result,
         });
-        await sessionStore.failAgentRunMessage(sessionId, runId, message);
+        await sessionStore.finalizeAgentRunMessage(sessionId, runId, result);
       }
       logger.error("session.operation.failed", {
         operation,
@@ -582,6 +610,7 @@ app.whenReady().then(async () => {
         durationMs: Date.now() - startedAt,
         error,
       });
+      if (runId) return result;
       throw error;
     } finally {
       await tokenUsageStore.recordTask(Date.now() - startedAt).catch((error) => {
@@ -1017,7 +1046,13 @@ app.whenReady().then(async () => {
           model: selection?.model,
           request: request.prompt,
         });
-        const emit = createAgentStreamEmitter(event.sender, sessionId, currentRunId, controller);
+        const emit = createAgentStreamEmitter(
+          event.sender,
+          sessionId,
+          currentRunId,
+          currentRunId,
+          controller,
+        );
 
         const result = await runAgentOperation(
           "start",
@@ -1030,6 +1065,7 @@ app.whenReady().then(async () => {
             executionStrategy,
             generationMode: request.generationMode,
           },
+          controller.signal,
           async () => {
             const result = request.generationMode === "lean"
               ? await runLeanPresentation(
@@ -1121,13 +1157,20 @@ app.whenReady().then(async () => {
         model: selection?.model,
         request: request.prompt,
       });
-      const emit = createAgentStreamEmitter(event.sender, sessionId, currentRunId, controller);
+      const emit = createAgentStreamEmitter(
+        event.sender,
+        sessionId,
+        currentRunId,
+        request.generationMode === "lean" ? currentRunId : threadId,
+        controller,
+      );
 
       const result = await runAgentOperation(
         "continue-agent-run",
         sessionId,
         currentRunId,
         { threadId, generationMode: request.generationMode, ...requestSummary(request.prompt) },
+        controller.signal,
         async () => {
           if (request.generationMode === "lean") {
             const result = await runLeanPresentation(
@@ -1202,15 +1245,18 @@ app.whenReady().then(async () => {
 
   ipcMain.handle("agent:resume", async (_event, sessionId: string, threadId: string, approved: boolean) => {
     const runtime = await getRuntimeForSession(sessionId);
+    const runId = sessionStore.findWaitingAgentRunId(sessionId, threadId);
     return runAgentOperation(
       "resume",
       sessionId,
-      undefined,
+      runId,
       { threadId, approved },
+      undefined,
       async () => finalizeAgentResult(
         sessionId,
         runtime,
         await runtime.agentService.resume(threadId, approved),
+        runId,
       ),
     );
   });

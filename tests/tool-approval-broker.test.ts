@@ -22,11 +22,19 @@ describe("ToolApprovalBroker", () => {
     const approvalId = emit.mock.calls[0]![0].approvalId as string;
     expect(broker.resolve(approvalId, true)).toBe(true);
     await expect(pending).resolves.toBe(true);
+    expect(emit).toHaveBeenLastCalledWith({
+      type: "tool-approval-resolved",
+      approvalId,
+      toolName: "bash",
+      status: "approved",
+      message: "工具授权已确认",
+    });
   });
 
   it("cancels pending approvals when a run is aborted", async () => {
     const broker = new ToolApprovalBroker();
-    const handler = broker.createHandler("run-2", () => {});
+    const emit = vi.fn();
+    const handler = broker.createHandler("run-2", emit);
     const pending = handler({
       toolName: "write_file",
       args: { path: "a.md", content: "x" },
@@ -35,6 +43,10 @@ describe("ToolApprovalBroker", () => {
 
     broker.cancelForRun("run-2");
     await expect(pending).resolves.toBe(false);
+    expect(emit).toHaveBeenLastCalledWith(expect.objectContaining({
+      type: "tool-approval-resolved",
+      status: "denied",
+    }));
   });
 
   it("rejects approvals created after the run was already cancelled", async () => {

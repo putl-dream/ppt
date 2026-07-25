@@ -79,7 +79,7 @@ export function toResultDisplayEvents(
     ...(runId ? { runId } : {}),
   };
 
-  if (result.status === "chat" && result.question) {
+  if (result.status === "waiting-user" && result.question) {
     return [{
       protocolVersion: 1,
       eventId: createDisplayEventId("question"),

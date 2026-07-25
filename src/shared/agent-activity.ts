@@ -1,12 +1,18 @@
 import { z } from "zod";
 import { agentTaskNodeSchema, TASK_LIST_TRACE_ID, type AgentTaskNode } from "./agent-task-list";
-import {
-  formatAgentToolActivity,
-  type AgentToolActivityState,
-} from "./agent-activity-display";
+import type { AgentToolActivityState } from "./agent-activity-display";
 import type { TeammateProgressEvent } from "./teammate-progress";
 
 export const agentActivityItemSchema = z.discriminatedUnion("kind", [
+  z.object({
+    id: z.string(),
+    kind: z.literal("response"),
+    /** UTF-16 offsets into SessionChatMessage.content. */
+    start: z.number().int().nonnegative(),
+    end: z.number().int().nonnegative(),
+    attemptId: z.string().optional(),
+    streaming: z.boolean().optional(),
+  }),
   z.object({
     id: z.string(),
     kind: z.literal("reasoning"),
@@ -17,18 +23,9 @@ export const agentActivityItemSchema = z.discriminatedUnion("kind", [
   z.object({
     id: z.string(),
     kind: z.literal("tool"),
+    toolCallId: z.string(),
     toolName: z.string(),
-    label: z.string(),
-    finishedLabel: z.string().optional(),
-    summary: z.string().optional(),
-    status: z.enum(["running", "done"]),
-  }),
-  z.object({
-    id: z.string(),
-    kind: z.literal("tool-summary"),
-    toolName: z.string(),
-    content: z.string(),
-    streaming: z.boolean().optional(),
+    status: z.enum(["running", "completed", "failed", "denied", "invalid-input"]),
   }),
   z.object({
     id: z.string(),
@@ -62,19 +59,29 @@ export const agentActivityItemSchema = z.discriminatedUnion("kind", [
     /** Reserved for recursive teammate/session trees. */
     parentTaskId: z.string().optional(),
     description: z.string(),
-    status: z.enum(["running", "done", "failed", "interrupted", "cancelled"]),
+    status: z.enum(["running", "completed", "failed", "interrupted", "cancelled"]),
     steps: z.array(z.object({
       id: z.string(),
       type: z.enum(["reasoning", "tool"]),
       text: z.string(),
       toolName: z.string().optional(),
-      status: z.enum(["running", "done"]),
+      status: z.enum(["running", "completed", "failed"]),
       streaming: z.boolean().optional(),
     })),
   }),
 ]);
 
 export type AgentActivityItem = z.infer<typeof agentActivityItemSchema>;
+
+export function sealResponseBlocks(
+  trace: AgentActivityItem[],
+): AgentActivityItem[] {
+  return trace.map((item) =>
+    item.kind === "response" && item.streaming
+      ? { ...item, streaming: false }
+      : item,
+  );
+}
 
 export function sealAllReasoning(trace: AgentActivityItem[]): AgentActivityItem[] {
   return trace.map((item) =>
@@ -97,16 +104,17 @@ export function appendReasoningChunk(
   chunk: string,
   modelStep = 0,
 ): AgentActivityItem[] {
-  const last = trace.at(-1);
+  const sealed = sealResponseBlocks(trace);
+  const last = sealed.at(-1);
   if (
     last?.kind === "reasoning" &&
     last.streaming &&
     (last.modelStep ?? 0) === modelStep
   ) {
-    return [...trace.slice(0, -1), { ...last, content: last.content + chunk }];
+    return [...sealed.slice(0, -1), { ...last, content: last.content + chunk }];
   }
   return [
-    ...sealAllReasoning(trace),
+    ...sealAllReasoning(sealed),
     {
       id: crypto.randomUUID(),
       kind: "reasoning",
@@ -117,13 +125,147 @@ export function appendReasoningChunk(
   ];
 }
 
+export function appendResponseChunk(
+  trace: AgentActivityItem[],
+  contentStart: number,
+  chunkLength: number,
+  attemptId?: string,
+): AgentActivityItem[] {
+  if (chunkLength <= 0) return trace;
+  const sealed = sealAllReasoning(trace);
+  const last = sealed.at(-1);
+  const contentEnd = contentStart + chunkLength;
+  if (
+    last?.kind === "response"
+    && last.streaming
+    && last.end === contentStart
+    && last.attemptId === attemptId
+  ) {
+    return [
+      ...sealed.slice(0, -1),
+      { ...last, end: contentEnd },
+    ];
+  }
+  return [
+    ...sealResponseBlocks(sealed),
+    {
+      id: crypto.randomUUID(),
+      kind: "response",
+      start: contentStart,
+      end: contentEnd,
+      ...(attemptId ? { attemptId } : {}),
+      streaming: true,
+    },
+  ];
+}
+
+export function commitResponseAttempt(
+  trace: AgentActivityItem[],
+  attemptId: string,
+): AgentActivityItem[] {
+  return trace.map((item) =>
+    item.kind === "response"
+      && item.attemptId === attemptId
+      && item.streaming
+      ? { ...item, streaming: false }
+      : item,
+  );
+}
+
+export function removeResponseAttempt(
+  trace: AgentActivityItem[],
+  content: string,
+  attemptId: string,
+): { trace: AgentActivityItem[]; content: string } {
+  let nextContent = "";
+  const nextTrace: AgentActivityItem[] = [];
+  for (const item of trace) {
+    if (item.kind !== "response") {
+      nextTrace.push(item);
+      continue;
+    }
+    if (item.attemptId === attemptId) continue;
+    const blockContent = content.slice(item.start, item.end);
+    const start = nextContent.length;
+    nextContent += blockContent;
+    nextTrace.push({
+      ...item,
+      start,
+      end: nextContent.length,
+    });
+  }
+  return { trace: nextTrace, content: nextContent };
+}
+
+export function appendResponseText(
+  trace: AgentActivityItem[],
+  content: string,
+  text: string,
+): { trace: AgentActivityItem[]; content: string } {
+  if (!text) return { trace, content };
+  const start = content.length;
+  const nextContent = content + text;
+  return {
+    content: nextContent,
+    trace: [
+      ...sealResponseBlocks(sealAllReasoning(trace)),
+      {
+        id: crypto.randomUUID(),
+        kind: "response",
+        start,
+        end: nextContent.length,
+        streaming: false,
+      },
+    ],
+  };
+}
+
+export function mergeResponseText(
+  trace: AgentActivityItem[],
+  content: string,
+  nextText: string,
+): { trace: AgentActivityItem[]; content: string } {
+  if (!nextText || nextText === content) {
+    return { trace, content };
+  }
+  const last = trace.at(-1);
+  if (last?.kind === "response" && last.end === content.length) {
+    const tail = getResponseBlockContent(last, content);
+    if (
+      tail === nextText
+      || tail === `\n${nextText}`
+      || tail === `\n\n${nextText}`
+    ) {
+      return { trace, content };
+    }
+  }
+  if (nextText.length > content.length && nextText.startsWith(content)) {
+    return appendResponseText(trace, content, nextText.slice(content.length));
+  }
+  const separator = content.endsWith("\n\n")
+    ? ""
+    : content.endsWith("\n")
+      ? "\n"
+      : content
+        ? "\n\n"
+        : "";
+  return appendResponseText(trace, content, `${separator}${nextText}`);
+}
+
+export function getResponseBlockContent(
+  item: Extract<AgentActivityItem, { kind: "response" }>,
+  content: string,
+): string {
+  return content.slice(item.start, item.end);
+}
+
 export function appendStep(
   trace: AgentActivityItem[],
   text: string,
   status: "typing" | "running" | "done" = "done",
 ): AgentActivityItem[] {
   return [
-    ...finalizeReasoning(trace),
+    ...finalizeReasoning(sealResponseBlocks(trace)),
     {
       id: crypto.randomUUID(),
       kind: "step",
@@ -137,7 +279,7 @@ export function upsertTaskListTrace(
   trace: AgentActivityItem[],
   input: { tasks: AgentTaskNode[]; goal?: string | null },
 ): AgentActivityItem[] {
-  const sealed = finalizeReasoning(trace);
+  const sealed = finalizeReasoning(sealResponseBlocks(trace));
   const existingIndex = sealed.findIndex((item) => item.kind === "tasklist");
   const nextItem = {
     id: existingIndex >= 0 ? sealed[existingIndex]!.id : TASK_LIST_TRACE_ID,
@@ -165,80 +307,25 @@ export function updateStepText(
   );
 }
 
-export function collectToolSummary(
-  trace: AgentActivityItem[],
-  toolName: string,
-): { trace: AgentActivityItem[]; summary: string } {
-  const summary = trace
-    .filter((item): item is Extract<AgentActivityItem, { kind: "tool-summary" }> =>
-      item.kind === "tool-summary" && item.toolName === toolName)
-    .map((item) => item.content)
-    .join("");
-  const cleaned = trace.filter((item) => item.kind !== "tool-summary" || item.toolName !== toolName);
-  return { trace: cleaned, summary };
-}
-
-export function appendToolSummaryChunk(
-  trace: AgentActivityItem[],
-  chunk: string,
-  toolName = "SubmitCommands",
-): AgentActivityItem[] {
-  const sealed = sealAllReasoning(trace);
-  const last = sealed.at(-1);
-  if (
-    last?.kind === "tool-summary" &&
-    last.toolName === toolName &&
-    last.streaming
-  ) {
-    return [...sealed.slice(0, -1), { ...last, content: last.content + chunk }];
-  }
-  return [
-    ...sealed,
-    {
-      id: crypto.randomUUID(),
-      kind: "tool-summary",
-      toolName,
-      content: chunk,
-      streaming: true,
-    },
-  ];
-}
-
-export function appendToolValidationFailed(
-  trace: AgentActivityItem[],
-  toolName: string,
-  _errorMessage: string,
-): AgentActivityItem[] {
-  const { trace: cleaned, summary } = collectToolSummary(trace, toolName);
-
-  return [
-    ...finalizeReasoning(cleaned),
-    {
-      id: crypto.randomUUID(),
-      kind: "tool",
-      toolName,
-      label: formatAgentToolActivity(toolName, "running"),
-      summary: summary || undefined,
-      finishedLabel: formatAgentToolActivity(toolName, "invalid-input"),
-      status: "done",
-    },
-  ];
-}
-
 export function appendToolStart(
   trace: AgentActivityItem[],
+  toolCallId: string,
   toolName: string,
-  label: string,
 ): AgentActivityItem[] {
-  const { trace: cleaned, summary } = collectToolSummary(trace, toolName);
+  if (
+    trace.some(
+      (item) => item.kind === "tool" && item.toolCallId === toolCallId,
+    )
+  ) {
+    return trace;
+  }
   return [
-    ...finalizeReasoning(cleaned),
+    ...finalizeReasoning(sealResponseBlocks(trace)),
     {
       id: crypto.randomUUID(),
       kind: "tool",
+      toolCallId,
       toolName,
-      label,
-      summary: summary || undefined,
       status: "running",
     },
   ];
@@ -254,7 +341,7 @@ export function appendToolApprovalWaiting(
   },
 ): AgentActivityItem[] {
   return [
-    ...finalizeReasoning(trace),
+    ...finalizeReasoning(sealResponseBlocks(trace)),
     {
       id: crypto.randomUUID(),
       kind: "tool-approval",
@@ -281,32 +368,45 @@ export function resolveToolApprovalItem(
 
 export function finishTool(
   trace: AgentActivityItem[],
+  toolCallId: string,
   toolName: string,
-  finishedLabel: string,
+  status: Exclude<AgentToolActivityState, "running">,
 ): AgentActivityItem[] {
   let matchedIndex = -1;
+  let terminalIndex = -1;
   for (let index = trace.length - 1; index >= 0; index -= 1) {
     const item = trace[index];
-    if (
-      item.kind === "tool" &&
-      item.toolName === toolName &&
-      (item.status === "running" || !item.finishedLabel)
-    ) {
-      matchedIndex = index;
-      break;
+    if (item.kind === "tool" && item.toolCallId === toolCallId) {
+      if (item.status === "running") {
+        matchedIndex = index;
+        break;
+      }
+      if (terminalIndex === -1) terminalIndex = index;
     }
   }
 
+  // The first terminal event wins. Replayed/duplicated starts and finishes are
+  // idempotent, and a late start cannot regress a completed tool to running.
+  if (terminalIndex !== -1) return trace;
+
   if (matchedIndex === -1) {
-    return appendStep(trace, finishedLabel, "done");
+    return [
+      ...finalizeReasoning(sealResponseBlocks(trace)),
+      {
+        id: crypto.randomUUID(),
+        kind: "tool",
+        toolCallId,
+        toolName,
+        status,
+      },
+    ];
   }
 
   return trace.map((item, index) =>
     index === matchedIndex && item.kind === "tool"
       ? {
           ...item,
-          status: "done" as const,
-          finishedLabel,
+          status,
         }
       : item,
   );
@@ -345,21 +445,17 @@ function truncatePersistedText(value: string, maxChars = MAX_PERSISTED_TEXT_CHAR
 }
 
 function compactActivityItem(item: AgentActivityItem): AgentActivityItem {
-  if (item.kind === "reasoning" || item.kind === "tool-summary") {
+  if (item.kind === "response") {
+    return item;
+  }
+  if (item.kind === "reasoning") {
     return { ...item, content: truncatePersistedText(item.content) };
   }
   if (item.kind === "step") {
     return { ...item, text: truncatePersistedText(item.text) };
   }
   if (item.kind === "tool") {
-    return {
-      ...item,
-      label: truncatePersistedText(item.label),
-      finishedLabel: item.finishedLabel
-        ? truncatePersistedText(item.finishedLabel)
-        : undefined,
-      summary: item.summary ? truncatePersistedText(item.summary) : undefined,
-    };
+    return item;
   }
   if (item.kind === "tool-approval") {
     return {
@@ -414,63 +510,50 @@ export function compactActivityTraceForPersistence(
         .filter((item) => item.kind === "tool-approval" && item.status !== "pending")
         .slice(-completedApprovalBudget)
     : [];
+  // Response markers are structural: dropping one would make the remaining
+  // content offsets lie about the visual order. Keep them outside the process
+  // item budget, then retain the newest process activity around them.
+  const responseIds = compacted
+    .filter((item) => item.kind === "response")
+    .map((item) => item.id);
   const keptIds = new Set<string>([
+    ...responseIds,
     ...(latestTaskList ? [latestTaskList.id] : []),
     ...pendingApprovals.map((item) => item.id),
     ...completedApprovals.map((item) => item.id),
   ]);
 
+  let keptProcessItems = keptIds.size - responseIds.length;
   for (let index = compacted.length - 1; index >= 0; index -= 1) {
-    if (keptIds.size >= MAX_PERSISTED_TRACE_ITEMS) break;
-    keptIds.add(compacted[index]!.id);
+    const item = compacted[index]!;
+    if (item.kind === "response" || keptIds.has(item.id)) continue;
+    if (keptProcessItems >= MAX_PERSISTED_TRACE_ITEMS) break;
+    keptIds.add(item.id);
+    keptProcessItems += 1;
   }
 
   const kept = compacted.filter((item) => keptIds.has(item.id));
+  const latestProcessItem = [...compacted].reverse().find(
+    (item) => item.kind !== "response" && item.kind !== "tasklist",
+  );
   const mandatoryIds = new Set<string>([
+    ...responseIds,
     ...(latestTaskList ? [latestTaskList.id] : []),
     ...pendingApprovals.slice(-1).map((item) => item.id),
+    ...(latestProcessItem ? [latestProcessItem.id] : []),
   ]);
   while (kept.length > 1 && persistedTraceSize(kept) > MAX_PERSISTED_TRACE_BYTES) {
     const removableIndex = kept.findIndex((item) => !mandatoryIds.has(item.id));
-    kept.splice(removableIndex === -1 ? 0 : removableIndex, 1);
+    if (removableIndex === -1) break;
+    kept.splice(removableIndex, 1);
   }
-  return persistedTraceSize(kept) <= MAX_PERSISTED_TRACE_BYTES ? kept : [];
-}
-
-const PROCESS_TRACE_ITEM_KINDS = new Set<AgentActivityItem["kind"]>([
-  "reasoning",
-  "tool",
-  "tool-summary",
-  "step",
-  "task",
-  "tool-approval",
-]);
-
-export function isProcessTraceItem(item: AgentActivityItem): boolean {
-  return PROCESS_TRACE_ITEM_KINDS.has(item.kind);
-}
-
-export function splitTraceItems(trace: AgentActivityItem[]): {
-  processItems: AgentActivityItem[];
-  standaloneItems: AgentActivityItem[];
-} {
-  const processItems: AgentActivityItem[] = [];
-  const standaloneItems: AgentActivityItem[] = [];
-  for (const item of trace) {
-    if (item.kind === "tasklist") {
-      standaloneItems.push(item);
-    } else if (isProcessTraceItem(item)) {
-      processItems.push(item);
-    }
-  }
-  return { processItems, standaloneItems };
+  return kept;
 }
 
 export function isProcessTraceActive(items: AgentActivityItem[]): boolean {
   return items.some((item) => {
     if (item.kind === "reasoning" && item.streaming) return true;
     if (item.kind === "tool" && item.status === "running") return true;
-    if (item.kind === "tool-summary" && item.streaming) return true;
     if (item.kind === "step" && item.status !== "done") return true;
     if (item.kind === "task") {
       if (item.status === "running") return true;
@@ -547,7 +630,7 @@ export function upsertTaskStarted(
     }));
   }
   return [
-    ...finalizeReasoning(trace),
+    ...finalizeReasoning(sealResponseBlocks(trace)),
     {
       id: crypto.randomUUID(),
       kind: "task",
@@ -593,7 +676,7 @@ export function appendTaskToolStart(
 ): AgentActivityItem[] {
   return upsertTask(trace, taskId, (task) => {
     const steps = task.steps.map((step): TaskStep =>
-      step.streaming ? { ...step, streaming: false, status: "done" } : step,
+      step.streaming ? { ...step, streaming: false, status: "completed" } : step,
     );
     steps.push({
       id: crypto.randomUUID(),
@@ -611,6 +694,7 @@ export function finishTaskTool(
   taskId: string,
   toolName: string,
   message: string,
+  status: "completed" | "failed",
 ): AgentActivityItem[] {
   return upsertTask(trace, taskId, (task) => {
     let matched = false;
@@ -618,7 +702,7 @@ export function finishTaskTool(
     for (let index = steps.length - 1; index >= 0; index -= 1) {
       const step = steps[index]!;
       if (step.type === "tool" && step.toolName === toolName && step.status === "running") {
-        steps[index] = { ...step, text: message, status: "done" };
+        steps[index] = { ...step, text: message, status };
         matched = true;
         break;
       }
@@ -629,7 +713,7 @@ export function finishTaskTool(
         type: "tool",
         text: message,
         toolName,
-        status: "done",
+        status,
       });
     }
     return { ...task, steps };
@@ -639,14 +723,15 @@ export function finishTaskTool(
 export function finishTask(
   trace: AgentActivityItem[],
   taskId: string,
-  status: "done" | "failed" | "interrupted" | "cancelled" = "done",
+  status: "completed" | "failed" | "interrupted" | "cancelled" = "completed",
 ): AgentActivityItem[] {
+  const unfinishedStepStatus = status === "completed" ? "completed" : "failed";
   return upsertTask(trace, taskId, (task) => ({
     ...task,
     status,
     steps: task.steps.map((step): TaskStep =>
       step.streaming || step.status === "running"
-        ? { ...step, streaming: false, status: "done" }
+        ? { ...step, streaming: false, status: unfinishedStepStatus }
         : step,
     ),
   }));
@@ -661,9 +746,7 @@ export function applyTeammateProgressEvent(
     case "teammate-assignment-started":
       return upsertTaskStarted(trace, {
         taskId: event.activityId,
-        // Preserve the legacy readable description for persisted traces while
-        // also publishing structured identity for the team-session UI.
-        description: `${event.description} · ${event.teammateName}`,
+        description: event.description,
         agentName: event.teammateName,
         ...(event.taskId ? { taskListId: event.taskId } : {}),
       });
@@ -682,16 +765,13 @@ export function applyTeammateProgressEvent(
         event.activityId,
         event.toolName,
         event.message,
+        event.status,
       );
     case "teammate-assignment-finished":
       return finishTask(
         trace,
         event.activityId,
-        event.status === "completed"
-          ? "done"
-          : event.status === "interrupted"
-            ? "cancelled"
-            : event.status,
+        event.status === "interrupted" ? "cancelled" : event.status,
       );
     default:
       return trace;
@@ -700,25 +780,26 @@ export function applyTeammateProgressEvent(
 
 export function markTraceComplete(
   trace: AgentActivityItem[],
-  unfinishedToolState: AgentToolActivityState = "completed",
+  unfinishedToolState: AgentToolActivityState = "failed",
 ): AgentActivityItem[] {
   return trace.map((item) => {
+    if (item.kind === "response") {
+      return { ...item, streaming: false };
+    }
     if (item.kind === "reasoning") {
       return { ...item, streaming: false };
     }
     if (item.kind === "tool" && item.status === "running") {
       return {
         ...item,
-        status: "done" as const,
-        finishedLabel: item.finishedLabel
-          ?? formatAgentToolActivity(item.toolName, unfinishedToolState),
+        status: unfinishedToolState,
       };
     }
     if (item.kind === "step" && item.status && item.status !== "done") {
       return { ...item, status: "done" as const };
     }
-    if (item.kind === "tool-summary" && item.streaming) {
-      return { ...item, streaming: false };
+    if (item.kind === "tool-approval" && item.status === "pending") {
+      return { ...item, status: "denied" as const };
     }
     // Teammate assignments may outlive the lead run. Only their explicit
     // assignment-finished event is allowed to close the nested task trace.
@@ -726,74 +807,81 @@ export function markTraceComplete(
   });
 }
 
-function findLatestTaskListItem(
-  traces: AgentActivityItem[][],
-): Extract<AgentActivityItem, { kind: "tasklist" }> | undefined {
-  for (let traceIndex = traces.length - 1; traceIndex >= 0; traceIndex -= 1) {
-    const trace = traces[traceIndex]!;
-    for (let itemIndex = trace.length - 1; itemIndex >= 0; itemIndex -= 1) {
-      const item = trace[itemIndex];
-      if (item?.kind === "tasklist") return item;
-    }
-  }
-  return undefined;
+function activityMergeKey(item: AgentActivityItem): string {
+  if (item.kind === "response") return `response:${item.id}`;
+  if (item.kind === "tool") return `tool:${item.toolCallId}`;
+  if (item.kind === "tool-approval") return `approval:${item.approvalId}`;
+  if (item.kind === "task") return `task:${item.taskId}`;
+  if (item.kind === "tasklist") return "tasklist";
+  if (item.kind === "reasoning") return `reasoning:${item.id}`;
+  return `${item.kind}:${item.id}`;
 }
 
-/** 合并多份时间线快照，保留最完整过程，并确保任务图使用最新快照。 */
+function mergeActivityItem(
+  current: AgentActivityItem,
+  incoming: AgentActivityItem,
+): AgentActivityItem {
+  if (current.kind !== incoming.kind) return incoming;
+  if (current.kind === "response" && incoming.kind === "response") {
+    return {
+      ...incoming,
+      start: current.start,
+      end: Math.max(current.end, incoming.end),
+      streaming: Boolean(current.streaming && incoming.streaming),
+    };
+  }
+  if (current.kind === "tool" && incoming.kind === "tool") {
+    if (current.status !== "running" && incoming.status === "running") return current;
+    return incoming;
+  }
+  if (current.kind === "reasoning" && incoming.kind === "reasoning") {
+    const content = incoming.content.length >= current.content.length
+      ? incoming.content
+      : current.content;
+    return {
+      ...incoming,
+      content,
+      streaming: Boolean(current.streaming && incoming.streaming),
+    };
+  }
+  if (current.kind === "step" && incoming.kind === "step") {
+    const statusRank = { typing: 0, running: 1, done: 2 } as const;
+    const currentStatus = current.status ?? "done";
+    const incomingStatus = incoming.status ?? "done";
+    return {
+      ...incoming,
+      status: statusRank[currentStatus] > statusRank[incomingStatus]
+        ? currentStatus
+        : incomingStatus,
+    };
+  }
+  if (current.kind === "tool-approval" && incoming.kind === "tool-approval") {
+    return current.status !== "pending" && incoming.status === "pending"
+      ? current
+      : incoming;
+  }
+  return incoming;
+}
+
+/** 按稳定活动身份合并快照；后续快照更新内容，但已完成状态不会回退为运行中。 */
 export function mergeActivityTraces(
   ...traces: Array<AgentActivityItem[] | undefined>
 ): AgentActivityItem[] | undefined {
   const valid = traces.filter((trace): trace is AgentActivityItem[] => Boolean(trace?.length));
   if (valid.length === 0) return undefined;
-  const base = valid.reduce((best, trace) => (trace.length >= best.length ? trace : best));
-  const latestTaskList = findLatestTaskListItem(valid);
-  if (!latestTaskList) return base;
-
-  let replaced = false;
-  const merged = base.map((item) => {
-    if (item.kind !== "tasklist") return item;
-    replaced = true;
-    return latestTaskList;
-  });
-
-  return replaced ? merged : [...merged, latestTaskList];
-}
-
-/** @deprecated 使用 mergeActivityTraces */
-export function preferActivityTrace(
-  existing: AgentActivityItem[] | undefined,
-  incoming: AgentActivityItem[] | undefined,
-): AgentActivityItem[] | undefined {
-  return mergeActivityTraces(existing, incoming);
-}
-
-export function resolveActivityTrace(input: {
-  activityTrace?: AgentActivityItem[];
-  thought?: string[];
-  reasoning?: string;
-}): AgentActivityItem[] {
-  if (input.activityTrace && input.activityTrace.length > 0) {
-    return markTraceComplete(input.activityTrace).filter((item) => item.kind !== "tool-summary");
-  }
-
-  const legacy: AgentActivityItem[] = [];
-  if (input.reasoning?.trim()) {
-    legacy.push({
-      id: "legacy-reasoning",
-      kind: "reasoning",
-      content: input.reasoning.trim(),
-      streaming: false,
-    });
-  }
-  if (input.thought?.length) {
-    for (const [index, text] of input.thought.entries()) {
-      legacy.push({
-        id: `legacy-step-${index}`,
-        kind: "step",
-        text,
-        status: "done",
-      });
+  const merged: AgentActivityItem[] = [];
+  const indices = new Map<string, number>();
+  for (const trace of valid) {
+    for (const item of trace) {
+      const key = activityMergeKey(item);
+      const index = indices.get(key);
+      if (index === undefined) {
+        indices.set(key, merged.length);
+        merged.push(item);
+      } else {
+        merged[index] = mergeActivityItem(merged[index]!, item);
+      }
     }
   }
-  return legacy;
+  return merged;
 }

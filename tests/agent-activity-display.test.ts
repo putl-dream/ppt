@@ -6,7 +6,6 @@ import {
   formatPublicErrorMessage,
   getAgentToolDisplayCopy,
   hasAgentToolDisplayCopy,
-  inferAgentToolActivityState,
 } from "../src/shared/agent-activity-display";
 import { createDefaultToolRegistry } from "../src/main/agent/tools/tool-registry";
 import { SUB_AGENT_TOOLS } from "../src/main/agent/subagent/workspace-tools";
@@ -39,17 +38,7 @@ describe("agent activity display", () => {
     expect(formatAgentToolActivity("InternalFoo_v2", "completed")).not.toContain("InternalFoo_v2");
   });
 
-  it("distinguishes failures, denials, and invalid input from completion events", () => {
-    expect(inferAgentToolActivityState("工具 ExportPptx 执行失败: EACCES", "completed"))
-      .toBe("failed");
-    expect(inferAgentToolActivityState("工具 bash 被拒绝", "completed")).toBe("denied");
-    expect(inferAgentToolActivityState("参数 JSON 解析失败", "completed")).toBe("invalid-input");
-    expect(inferAgentToolActivityState("执行本地操作已取消", "completed")).toBe("denied");
-    expect(inferAgentToolActivityState("检查修改方案暂未执行：输入信息有误", "completed"))
-      .toBe("invalid-input");
-  });
-
-  it("normalizes internal diagnostics and legacy progress labels", () => {
+  it("normalizes current runtime diagnostics", () => {
     expect(formatAgentProgressMessage(
       "L2 micro_compact: older tool results replaced with placeholders.",
     )).toBe("已精简较早的运行记录");
@@ -62,9 +51,6 @@ describe("agent activity display", () => {
     expect(formatAgentProgressMessage(
       "后台任务 bg_0001 已启动：ExportPptx: pptx",
     )).toBe("已开始后台处理：导出演示文稿");
-    expect(formatAgentProgressMessage(
-      "✅ 工具 PreviewCommands 运行完毕",
-    )).toBe("已检查修改方案");
   });
 
   it("keeps approval impact readable without exposing raw JSON fallbacks", () => {

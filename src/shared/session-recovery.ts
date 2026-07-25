@@ -8,15 +8,19 @@ export interface RecoverableConversation {
 
 export type AgentConversationMessage = { role: "user" | "assistant"; content: string };
 
-function isGeneratedAgentError(message: SessionChatMessage): boolean {
-  return message.role === "assistant" &&
-    (/^(?:执行指令|确认大纲)时发生错误：/.test(message.content.trim()));
+function isIncompleteAgentTurn(message: SessionChatMessage): boolean {
+  return message.role === "assistant"
+    && (
+      message.runStatus === "running"
+      || message.runStatus === "interrupted"
+      || message.runStatus === "failed"
+    );
 }
 
 function isConversationMessage(message: SessionChatMessage): boolean {
   return message.id !== "init" &&
     Boolean(message.content.trim()) &&
-    !isGeneratedAgentError(message);
+    !isIncompleteAgentTurn(message);
 }
 
 export function toAgentMessageHistory(
@@ -48,7 +52,15 @@ export function findRecoverableConversation(
 
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     const message = messages[index];
-    if (message.role === "user" || isGeneratedAgentError(message)) continue;
+    if (message.role === "user") continue;
+    if (isIncompleteAgentTurn(message)) {
+      if (message.runStatus === "failed" && message.threadId) {
+        threadIndex = index;
+        threadId = message.threadId;
+        break;
+      }
+      continue;
+    }
     if (message.threadId) {
       threadIndex = index;
       threadId = message.threadId;

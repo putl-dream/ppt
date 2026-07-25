@@ -501,6 +501,20 @@ export class AgentRunScope {
   async close(): Promise<void> {
     if (this.closed) return;
     this.closed = true;
+    for (const task of this.backgroundTasks.snapshot()) {
+      if (
+        (task.status === "scheduled" || task.status === "running")
+        && task.toolUseId
+      ) {
+        this.eventPorts.renderer({
+          type: "tool-state",
+          toolCallId: task.toolUseId,
+          toolName: task.toolName,
+          status: "denied",
+          message: `后台任务 ${task.bgId} 随运行结束而取消`,
+        });
+      }
+    }
     this.abortController.abort();
     this.options.signal?.removeEventListener("abort", this.forwardAbort);
     this.backgroundTasks.setOnStateChange(undefined);

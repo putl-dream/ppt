@@ -1,4 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { createDefaultToolRegistry, ToolRegistry } from "../src/main/agent/tools/tool-registry";
 import { askUserTool } from "../src/main/agent/tools/core/ask-user";
 import { searchExtraToolsTool } from "../src/main/agent/tools/core/search-extra-tools";
@@ -38,6 +41,7 @@ import type { AgentModelSelection } from "../src/shared/agent";
 import { CommandBus } from "../src/shared/commands";
 import { AgentGatewayError, type AgentModelGateway, type AgentModelRequest } from "../src/main/agent/gateway";
 import type { AgentModelContentBlock } from "../src/main/agent/gateway/types";
+import { DurableServiceStore } from "../src/main/agent/persistence/durable-service-store";
 
 function createSequenceGateway(
   responses: Array<AgentModelContentBlock | Error>,
@@ -271,8 +275,8 @@ describe("Agent Architecture Skeletons & Types", () => {
     );
 
     const clarification = await service.start("生成 30 页 Vibe Coding 技术分享 PPT");
-    expect(clarification.status).toBe("chat");
-    if (clarification.status !== "chat") throw new Error("Expected clarification");
+    expect(clarification.status).toBe("waiting-user");
+    if (clarification.status !== "waiting-user") throw new Error("Expected clarification");
     expect(clarification.question?.variant).toBe("cards");
     expect(clarification.question?.options?.map((option) => option.id)).toEqual(["default", "custom"]);
 
@@ -366,16 +370,16 @@ describe("Agent Architecture Skeletons & Types", () => {
     );
 
     const first = await service.start("帮我做一份 PPT");
-    expect(first.status).toBe("chat");
-    if (first.status !== "chat") throw new Error("Expected clarification");
+    expect(first.status).toBe("waiting-user");
+    if (first.status !== "waiting-user") throw new Error("Expected clarification");
 
     const failed = await service.continueAgentRun(
       first.threadId!,
       "Agent 范式与架构演进：从 ReAct / Plan / Workflow 看智能体设计",
     );
-    expect(failed.status).toBe("chat");
-    if (failed.status === "chat") {
-      expect(failed.message).toContain("Provider request timed out");
+    expect(failed.status).toBe("failed");
+    if (failed.status === "failed") {
+      expect(failed.error).toContain("Provider request timed out");
       expect(failed.threadId).toBe(first.threadId);
     }
 
@@ -601,6 +605,7 @@ describe("Agent Architecture Skeletons & Types", () => {
   });
 
   it("rejects an approved proposal when the presentation changed after preview", async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), "agent-stale-approval-"));
     const registry = new ToolRegistry();
     registry.register(submitCommandsTool);
     const runtime = new AgentRuntime(registry, createSequenceGateway([
@@ -611,15 +616,28 @@ describe("Agent Architecture Skeletons & Types", () => {
       }),
     ]));
     const bus = new CommandBus(createStarterPresentation());
-    const service = new AgentService(bus, runtime, new CommitGate(new RiskPolicy()));
-    const result = await service.start("Update title", undefined, "REQUEST_APPROVAL");
-    if (result.status !== "approval-required") throw new Error("Expected approval");
-    bus.execute({ id: "external-change", type: "set-presentation-title", title: "Newer title" });
-
-    await expect(service.resume(result.approval.threadId, true)).rejects.toThrow(
-      "changed after preview",
+    const service = new AgentService(
+      bus,
+      runtime,
+      new CommitGate(new RiskPolicy()),
+      workspaceRoot,
     );
-    expect(bus.getSnapshot().title).toBe("Newer title");
+    try {
+      const result = await service.start("Update title", undefined, "REQUEST_APPROVAL");
+      if (result.status !== "approval-required") throw new Error("Expected approval");
+      bus.execute({ id: "external-change", type: "set-presentation-title", title: "Newer title" });
+
+      await expect(service.resume(result.approval.threadId, true)).rejects.toThrow(
+        "changed after preview",
+      );
+      expect(bus.getSnapshot().title).toBe("Newer title");
+      const durableState = await new DurableServiceStore(workspaceRoot)
+        .load(result.approval.threadId);
+      expect(durableState?.status).toBe("rejected");
+      expect(durableState).not.toHaveProperty("pendingApproval");
+    } finally {
+      await rm(workspaceRoot, { recursive: true, force: true });
+    }
   });
 
   it("coerces string assumptions to array for SubmitCommands", () => {
@@ -648,10 +666,7 @@ describe("Agent Architecture Skeletons & Types", () => {
 
     await expect(
       service.start("Hello", undefined, "AUTO", undefined, undefined, [], controller.signal),
-    ).resolves.toEqual({
-      status: "chat",
-      message: "会话已中断。",
-    });
+    ).resolves.toEqual({ status: "interrupted" });
     expect(mockRuntime.run).not.toHaveBeenCalled();
   });
 });

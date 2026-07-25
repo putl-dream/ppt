@@ -21,6 +21,9 @@ describe("runtime cancellation classification", () => {
   it("recognizes standard abort-shaped errors without an attached signal", () => {
     expect(isRuntimeCancellation(Object.assign(new Error("aborted"), { name: "AbortError" }))).toBe(true);
     expect(isRuntimeCancellation(Object.assign(new Error("aborted"), { code: "ABORT_ERR" }))).toBe(true);
+    expect(isRuntimeCancellation(new Error("wrapped", {
+      cause: Object.assign(new Error("provider stopped"), { name: "APIUserAbortError" }),
+    }))).toBe(true);
   });
 
   it("does not reclassify an ordinary tool failure", () => {
@@ -32,6 +35,7 @@ describe("runtime cancellation classification", () => {
   it("does not execute later tools after cancellation during a multi-tool batch", async () => {
     const controller = new AbortController();
     const executions: number[] = [];
+    const progress: Array<{ type: string; [key: string]: unknown }> = [];
     const schema = z.object({ order: z.number() });
     const tool: ToolDefinition<typeof schema, { ok: true }> = {
       name: "CancelableBatchTool",
@@ -78,8 +82,18 @@ describe("runtime cancellation classification", () => {
       presentationSnapshot: createStarterPresentation(),
       selectedElementIds: [],
       signal: controller.signal,
+      onProgress: (event) => progress.push(event),
     })).rejects.toThrow("Run aborted by user");
     expect(executions).toEqual([1]);
+    const statusesFor = (toolCallId: string) => progress
+      .filter((event) =>
+        event.type === "tool-state"
+        && event.toolCallId === toolCallId
+      )
+      .map((event) => event.status);
+    expect(statusesFor("cancel-first")).toEqual(["running", "denied"]);
+    expect(statusesFor("cancel-first")).not.toContain("completed");
+    expect(statusesFor("must-not-run")).toEqual([]);
   });
 
   it("propagates the run signal so an approval wait ends on cancellation", async () => {

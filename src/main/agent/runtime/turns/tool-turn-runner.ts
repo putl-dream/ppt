@@ -3,8 +3,12 @@ import {
   describeBackgroundTask,
 } from "../background/background-task-manager";
 import type { AgentLoopTurnOutcome, PreparedAgentRun } from "./prepared-agent-run";
-import { rethrowIfRuntimeCancellation } from "../lifecycle/runtime-cancellation";
+import {
+  isRuntimeCancellation,
+  rethrowIfRuntimeCancellation,
+} from "../lifecycle/runtime-cancellation";
 import type { AgentIterationWorkspace, AgentQueryState } from "../query/query-types";
+import type { ToolExecutionOutcome } from "../tools/tool-execution-engine";
 
 /** Runs claim → checkpoint → preflight → dispatch → interpretation as one transaction. */
 export class ToolTurnRunner {
@@ -44,6 +48,13 @@ export class ToolTurnRunner {
           isError: true,
           content: structuredClone(result.content),
         }, "model_only");
+        run.emitProgress({
+          type: "tool-state",
+          toolCallId: toolCall.id,
+          toolName: toolCall.name,
+          status: "invalid-input",
+          message: `工具 ${toolCall.name} 不能与终结工具在同一批次执行`,
+        });
       }
       return { type: "continue" };
     }
@@ -125,6 +136,13 @@ export class ToolTurnRunner {
     throwIfCancelled();
     if (!canUseTool) {
       recordToolResult(`Tool ${toolCall.name} is not permitted in this query.`, true);
+      run.emitProgress({
+        type: "tool-state",
+        toolCallId: toolCall.id,
+        toolName: toolCall.name,
+        status: "denied",
+        message: `工具 ${toolCall.name} 在当前任务中不可用`,
+      });
       return { type: "continue" };
     }
 
@@ -160,13 +178,6 @@ export class ToolTurnRunner {
             message: `正在自动修正工具 ${toolCall.name} 的参数…`,
             progress: 0,
           });
-        } else {
-          run.emitProgress({
-            type: "tool-validation-failed",
-            toolName: toolCall.name,
-            message: `工具 ${toolCall.name} 参数连续校验失败`,
-            error: preflight.validationError ?? text,
-          });
         }
       } else if (preflight.kind === "policy_blocked") {
         run.emitProgress({
@@ -174,18 +185,28 @@ export class ToolTurnRunner {
           message: "正在先建立可见任务计划...",
           progress: 0,
         });
-      } else {
-        run.emitProgress({
-          type: "tool-validation-failed",
-          toolName: toolCall.name,
-          message: preflight.kind === "parse_error"
-            ? `工具 ${toolCall.name} 参数 JSON 解析失败`
-            : preflight.kind === "unavailable"
-              ? `工具 ${toolCall.name} 无法直接调用`
-              : `工具 ${toolCall.name} 执行前检查失败`,
-          error: text,
-        });
       }
+      const status = preflight.kind === "pre_hook_failed"
+        ? "failed"
+        : preflight.kind === "policy_blocked"
+          ? "denied"
+          : "invalid-input";
+      run.emitProgress({
+        type: "tool-state",
+        toolCallId: toolCall.id,
+        toolName: toolCall.name,
+        status,
+        message: preflight.kind === "parse_error"
+          ? `工具 ${toolCall.name} 参数 JSON 解析失败`
+          : preflight.kind === "unavailable"
+            ? `工具 ${toolCall.name} 无法直接调用`
+            : preflight.kind === "validation_error"
+              ? `工具 ${toolCall.name} 参数校验失败`
+              : preflight.kind === "policy_blocked"
+                ? `工具 ${toolCall.name} 被当前任务策略阻止`
+                : `工具 ${toolCall.name} 执行前检查失败`,
+        error: preflight.validationError ?? text,
+      });
       session.appendTranscript({
         role: "tool",
         toolName: toolCall.name,
@@ -199,9 +220,11 @@ export class ToolTurnRunner {
 
     if (preflight.type === "denied") {
       run.emitProgress({
-        type: "tool-finished",
+        type: "tool-state",
+        toolCallId: toolCall.id,
         message: `工具 ${preflight.tool.name} 被拒绝: ${preflight.reason}`,
         toolName: preflight.tool.name,
+        status: "denied",
       });
       session.appendTranscript({
         role: "tool",
@@ -214,15 +237,26 @@ export class ToolTurnRunner {
       return { type: "continue" };
     }
     if (preflight.type === "hook_stopped") {
+      run.emitProgress({
+        type: "tool-state",
+        toolCallId: toolCall.id,
+        toolName: toolCall.name,
+        status: "failed",
+        message: `工具 ${toolCall.name} 被执行前钩子终止`,
+        error: preflight.reason,
+      });
       return { type: "terminal", result: { type: "message", content: preflight.reason } };
     }
 
     const { tool, args, mode } = preflight.prepared;
     run.emitProgress({
-      type: "tool-started",
+      type: "tool-state",
+      toolCallId: toolCall.id,
       message: `正在调用工具 ${tool.name}...`,
       toolName: tool.name,
+      status: "running",
     });
+    try {
     if (
       run.input.presentationCompletionPolicy.canTerminate(tool)
       && (backgroundTasks.hasRunning() || backgroundTasks.hasPendingNotifications())
@@ -241,9 +275,11 @@ export class ToolTurnRunner {
         "Background tasks have completed. Reconsider these results before calling a finish tool.",
       );
       run.emitProgress({
-        type: "tool-finished",
+        type: "tool-state",
+        toolCallId: toolCall.id,
         message: `工具 ${tool.name} 已等待后台任务结果。`,
         toolName: tool.name,
+        status: "completed",
       });
       return { type: "continue" };
     }
@@ -257,29 +293,58 @@ export class ToolTurnRunner {
         toolUseId: toolCall.id,
         run: async () => {
           throwIfCancelled();
-          const outcome = await run.input.toolExecutionEngine.execute({
-            tool,
-            args,
-            context: workspace.updatedToolUseContext,
-            toolCall,
-            modelArtifactRoot: deps.workspaceRoot,
-            threadId: deps.threadId,
-            signal: scope.signal,
-            runPostToolUseHook: run.input.runPostToolUseHook,
-          });
+          let outcome: ToolExecutionOutcome;
+          try {
+            outcome = await run.input.toolExecutionEngine.execute({
+              tool,
+              args,
+              context: workspace.updatedToolUseContext,
+              toolCall,
+              modelArtifactRoot: deps.workspaceRoot,
+              threadId: deps.threadId,
+              signal: scope.signal,
+              runPostToolUseHook: run.input.runPostToolUseHook,
+            });
+            throwIfCancelled();
+          } catch (error) {
+            const errorText = error instanceof Error ? error.message : String(error);
+            if (isRuntimeCancellation(error, scope.signal, deps.externalSignal)) {
+              run.emitProgress({
+                type: "tool-state",
+                toolCallId: toolCall.id,
+                message: `后台任务 ${bgId} 已取消`,
+                toolName: tool.name,
+                status: "denied",
+              });
+              throw error;
+            }
+            run.emitProgress({
+              type: "tool-state",
+              toolCallId: toolCall.id,
+              message: `后台任务 ${bgId} 执行失败：${errorText}`,
+              toolName: tool.name,
+              status: "failed",
+              error: errorText,
+            });
+            throw error;
+          }
           const content = textFromResult(outcome.modelResult);
           if (outcome.executionStatus === "threw" || outcome.deliveryStatus === "validation_failed") {
             run.emitProgress({
-              type: "tool-finished",
+              type: "tool-state",
+              toolCallId: toolCall.id,
               message: `后台任务 ${bgId} 执行失败：${content}`,
               toolName: tool.name,
+              status: "failed",
             });
             throw new Error(content);
           }
           run.emitProgress({
-            type: "tool-finished",
+            type: "tool-state",
+            toolCallId: toolCall.id,
             message: `后台任务 ${bgId} 已完成：${tool.name}`,
             toolName: tool.name,
+            status: "completed",
           });
           return content;
         },
@@ -305,7 +370,7 @@ export class ToolTurnRunner {
     }
 
     throwIfCancelled();
-    const outcome = await run.input.toolExecutionEngine.execute({
+    const outcome: ToolExecutionOutcome = await run.input.toolExecutionEngine.execute({
       tool,
       args,
       context: workspace.updatedToolUseContext,
@@ -319,9 +384,11 @@ export class ToolTurnRunner {
     const outcomeText = textFromResult(outcome.modelResult);
     if (outcome.executionStatus === "threw") {
       run.emitProgress({
-        type: "tool-finished",
+        type: "tool-state",
+        toolCallId: toolCall.id,
         message: `工具 ${tool.name} 执行失败: ${outcomeText}`,
         toolName: tool.name,
+        status: "failed",
       });
       session.appendTranscript({
         role: "tool",
@@ -333,6 +400,14 @@ export class ToolTurnRunner {
       return { type: "continue" };
     }
     if (outcome.deliveryStatus === "validation_failed") {
+      run.emitProgress({
+        type: "tool-state",
+        toolCallId: toolCall.id,
+        message: `工具 ${tool.name} 返回结果未通过校验`,
+        toolName: tool.name,
+        status: "invalid-input",
+        error: outcomeText,
+      });
       session.appendTranscript({
         role: "tool",
         toolName: tool.name,
@@ -345,9 +420,11 @@ export class ToolTurnRunner {
     }
 
     run.emitProgress({
-      type: "tool-finished",
+      type: "tool-state",
+      toolCallId: toolCall.id,
       message: `工具 ${tool.name} 执行完成。`,
       toolName: tool.name,
+      status: "completed",
     });
     try {
       const decision = await run.input.presentationCompletionPolicy.interpret({
@@ -390,6 +467,21 @@ export class ToolTurnRunner {
       });
       recordToolResult(guidance);
       return { type: "continue" };
+    }
+    } catch (error) {
+      const cancelled = isRuntimeCancellation(error, scope.signal, deps.externalSignal);
+      const errorText = error instanceof Error ? error.message : String(error);
+      run.emitProgress({
+        type: "tool-state",
+        toolCallId: toolCall.id,
+        message: cancelled
+          ? `工具 ${tool.name} 已取消`
+          : `工具 ${tool.name} 执行失败: ${errorText}`,
+        toolName: tool.name,
+        status: cancelled ? "denied" : "failed",
+        ...(!cancelled ? { error: errorText } : {}),
+      });
+      throw error;
     }
   }
 }

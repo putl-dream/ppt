@@ -3,6 +3,9 @@ import { dirname, join } from "node:path";
 import { z } from "zod";
 import { presentationSchema, type Presentation } from "@shared/presentation";
 import {
+  formatTerminalAgentRunContent,
+} from "@shared/agent-result-copy";
+import {
   createDefaultSessionTitle,
   createSessionPresentation,
   type ProjectArtifactStatus,
@@ -50,12 +53,20 @@ import {
 import { writeTextFileAtomic } from "./agent/persistence/atomic-json-file";
 import {
   applyTeammateProgressEvent,
+  appendResponseChunk,
   appendReasoningChunk,
+  commitResponseAttempt,
+  mergeResponseText,
+  removeResponseAttempt,
   appendStep,
   appendToolStart,
+  appendToolApprovalWaiting,
   compactActivityTraceForPersistence,
   finishTool,
   markTraceComplete,
+  sealAllReasoning,
+  sealResponseBlocks,
+  resolveToolApprovalItem,
   upsertTaskListTrace,
   type AgentActivityItem,
 } from "@shared/agent-activity";
@@ -74,6 +85,54 @@ const sessionFileSchema = z.object({
 });
 
 type SessionFile = z.infer<typeof sessionFileSchema>;
+
+type RunTranscript = {
+  trace: AgentActivityItem[];
+  content: string;
+};
+
+function sameProjectedActivity(
+  existing: AgentActivityItem,
+  existingContent: string,
+  projected: AgentActivityItem,
+  projectedContent: string,
+): boolean {
+  if (existing.kind !== projected.kind) return false;
+  if (existing.kind === "response" && projected.kind === "response") {
+    if (existing.attemptId || projected.attemptId) {
+      return existing.attemptId === projected.attemptId;
+    }
+    const existingText = existingContent.slice(existing.start, existing.end);
+    const projectedText = projectedContent.slice(projected.start, projected.end);
+    return existingText === projectedText
+      || existingText.startsWith(projectedText)
+      || projectedText.startsWith(existingText);
+  }
+  if (existing.kind === "reasoning" && projected.kind === "reasoning") {
+    return (existing.modelStep ?? 0) === (projected.modelStep ?? 0)
+      && (
+        existing.content === projected.content
+        || existing.content.startsWith(projected.content)
+        || projected.content.startsWith(existing.content)
+      );
+  }
+  if (existing.kind === "tool" && projected.kind === "tool") {
+    return existing.toolCallId === projected.toolCallId;
+  }
+  if (existing.kind === "step" && projected.kind === "step") {
+    return existing.text === projected.text;
+  }
+  if (existing.kind === "tasklist" && projected.kind === "tasklist") {
+    return true;
+  }
+  if (existing.kind === "tool-approval" && projected.kind === "tool-approval") {
+    return existing.approvalId === projected.approvalId;
+  }
+  if (existing.kind === "task" && projected.kind === "task") {
+    return existing.taskId === projected.taskId;
+  }
+  return false;
+}
 
 export class FileSessionStore {
   private data?: SessionFile;
@@ -94,12 +153,62 @@ export class FileSessionStore {
 
   async initialize(): Promise<void> {
     await mkdir(dirname(this.filePath), { recursive: true });
+    const interruptedRunIds = new Set(
+      this.conversationDatabase.interruptRunningRuns(),
+    );
     const stored = this.conversationDatabase.loadState();
     this.data = sessionFileSchema.parse({
       version: 1,
       activeSessionId: stored.activeSessionId,
       sessions: stored.sessions,
     });
+    const terminalRecoveries: Array<{
+      sessionId: string;
+      runId: string;
+      result: AgentRunResult;
+    }> = [];
+    for (const session of this.data.sessions) {
+      for (const message of session.messages) {
+        if (
+          message.role === "assistant"
+          && message.runStatus === "running"
+          && message.runId
+          && !interruptedRunIds.has(message.runId)
+        ) {
+          const result = this.conversationDatabase
+            .loadTerminalRunResult<AgentRunResult>(message.runId);
+          if (result) {
+            terminalRecoveries.push({
+              sessionId: session.session.id,
+              runId: message.runId,
+              result,
+            });
+            continue;
+          }
+        }
+        if (
+          message.role !== "assistant"
+          || (
+            message.runStatus !== "running"
+            && (!message.runId || !interruptedRunIds.has(message.runId))
+          )
+        ) {
+          continue;
+        }
+        message.runStatus = "interrupted";
+        message.runError = undefined;
+        message.activityTrace = message.activityTrace
+          ? markTraceComplete(message.activityTrace, "denied")
+          : undefined;
+      }
+    }
+    for (const recovery of terminalRecoveries) {
+      await this.finalizeAgentRunMessage(
+        recovery.sessionId,
+        recovery.runId,
+        recovery.result,
+      );
+    }
     await this.materializeProjectSandboxes();
     await this.persist();
   }
@@ -115,6 +224,16 @@ export class FileSessionStore {
 
   getSession(sessionId: string): SessionSnapshot {
     return structuredClone(this.findSession(sessionId));
+  }
+
+  findWaitingAgentRunId(sessionId: string, threadId: string): string | undefined {
+    return [...this.findSession(sessionId).messages].reverse().find(
+      (message) =>
+        message.role === "assistant"
+        && message.runStatus === "waiting"
+        && message.threadId === threadId
+        && Boolean(message.runId),
+    )?.runId;
   }
 
   getAgentMessageHistory(
@@ -273,12 +392,44 @@ export class FileSessionStore {
 
   async saveMessages(sessionId: string, messages: SessionChatMessage[]): Promise<void> {
     const snapshot = this.findSession(sessionId);
-    const parsedMessages = sessionChatMessageSchema.array().parse(
+    const rendererMessages = sessionChatMessageSchema.array().parse(
       structuredClone(messages).map((message) => ({
         ...message,
         activityTrace: compactActivityTraceForPersistence(message.activityTrace),
       })),
     );
+    const authoritativeByRunId = new Map(
+      snapshot.messages
+        .filter(
+          (message) =>
+            message.role === "assistant"
+            && message.runId
+            && message.runStatus
+            && message.runStatus !== "running",
+        )
+        .map((message) => [message.runId!, message] as const),
+    );
+    const parsedMessages = rendererMessages.map((message) => {
+      if (message.role !== "assistant" || !message.runId) return message;
+      const authoritative = authoritativeByRunId.get(message.runId);
+      if (!authoritative) return message;
+      const rendererStatus = message.runStatus;
+      const authoritativeStatus = authoritative.runStatus;
+      const statusRank = (status: SessionChatMessage["runStatus"]): number => {
+        if (status === "running" || status === undefined) return 0;
+        if (status === "waiting") return 1;
+        return 2;
+      };
+      if (statusRank(rendererStatus) > statusRank(authoritativeStatus)) return message;
+      return {
+        ...message,
+        content: authoritative.content,
+        activityTrace: authoritative.activityTrace,
+        runStatus: authoritativeStatus,
+        runError: authoritative.runError,
+        threadId: authoritative.threadId,
+      };
+    });
     const messagesChanged = this.messagesChanged(snapshot.messages, parsedMessages);
     snapshot.messages = parsedMessages;
     snapshot.session.updatedAt = new Date().toISOString();
@@ -299,38 +450,75 @@ export class FileSessionStore {
   ): Promise<void> {
     const snapshot = this.findSession(sessionId);
     let message = [...snapshot.messages].reverse().find(
-      (item) => item.role === "assistant" && item.threadId === runId,
+      (item) => item.role === "assistant" && item.runId === runId,
     );
     if (!message) {
       message = {
         id: crypto.randomUUID(),
         role: "assistant",
         content: "",
-        threadId: runId,
+        runId,
+        runStatus: "running",
       };
       snapshot.messages.push(message);
     }
 
-    const trace = this.projectRunTrace(runId);
-    message.activityTrace = trace.length > 0
-      ? compactActivityTraceForPersistence(markTraceComplete(trace))
-      : undefined;
+    const projected = this.reconcileRunTranscript(
+      message,
+      this.projectRunTranscript(runId),
+    );
+    const interrupted = result.status === "interrupted";
+    const failed = result.status === "failed";
+    const waiting = result.status === "approval-required"
+      || result.status === "waiting-user";
+    let content = projected.content || message.content;
+    let trace = projected.trace.length > 0
+      ? projected.trace
+      : (message.activityTrace ?? []);
 
-    if (result.status === "chat") {
-      message.content = result.message;
-      message.threadId = result.threadId ?? runId;
+    if (result.status === "waiting-user" || result.status === "chat") {
+      const merged = mergeResponseText(trace, content, result.message);
+      trace = merged.trace;
+      content = merged.content;
+      message.threadId = result.threadId;
     } else if (result.status === "approval-required") {
-      message.content = result.leanMetrics
+      const approvalContent = result.leanMetrics
         ? `已生成 Lean 商业 PPT 草稿，请在下方审核后应用。\n\n${formatLeanRunMetrics(result.leanMetrics)}`
         : "已提出排版更新方案，请在下方审核后应用。";
+      const merged = mergeResponseText(trace, content, approvalContent);
+      trace = merged.trace;
+      content = merged.content;
       message.threadId = result.approval.threadId;
-    } else if (result.status === "rejected") {
-      message.content = "已放弃排版变更提案。";
+    } else if (result.status === "completed" || result.status === "rejected") {
+      const merged = mergeResponseText(
+        trace,
+        content,
+        formatTerminalAgentRunContent(result),
+      );
+      trace = merged.trace;
+      content = merged.content;
     } else {
-      message.content = result.leanMetrics
-        ? `已生成并应用演示文稿。\n\n${formatLeanRunMetrics(result.leanMetrics)}`
-        : "已根据确认的大纲生成并应用演示文稿。";
+      message.threadId = result.threadId;
     }
+
+    message.content = content;
+    message.activityTrace = trace.length > 0
+      ? compactActivityTraceForPersistence(markTraceComplete(
+          trace,
+          interrupted ? "denied" : "failed",
+        ))
+      : undefined;
+    message.runStatus = interrupted
+      ? "interrupted"
+      : failed
+        ? "failed"
+      : waiting
+        ? "waiting"
+        : "completed";
+    message.runError = failed
+      ? formatPublicErrorMessage(result.error, "处理请求时遇到问题，请稍后重试。")
+      : undefined;
+    sessionChatMessageSchema.parse(structuredClone(message));
 
     const now = new Date().toISOString();
     snapshot.session.updatedAt = now;
@@ -345,35 +533,6 @@ export class FileSessionStore {
     await this.persist();
   }
 
-  async failAgentRunMessage(sessionId: string, runId: string, error: string): Promise<void> {
-    const snapshot = this.findSession(sessionId);
-    let message = [...snapshot.messages].reverse().find(
-      (item) => item.role === "assistant" && item.threadId === runId,
-    );
-    if (!message) {
-      message = { id: crypto.randomUUID(), role: "assistant", content: "", threadId: runId };
-      snapshot.messages.push(message);
-    }
-    const interrupted = /aborted|中断|取消/i.test(error);
-    message.content = interrupted
-      ? "会话已中断。"
-      : `本次处理未完成：${formatPublicErrorMessage(
-          error,
-          "处理请求时遇到问题，请稍后重试。",
-        )}`;
-    const trace = this.projectRunTrace(runId);
-    message.activityTrace = trace.length > 0
-      ? compactActivityTraceForPersistence(markTraceComplete(
-          trace,
-          interrupted ? "denied" : "failed",
-        ))
-      : undefined;
-    const now = new Date().toISOString();
-    snapshot.session.updatedAt = now;
-    snapshot.session.lastMessageAt = now;
-    await this.persist();
-  }
-
   /**
    * Keep a completed assistant message in sync with late task-board updates
    * emitted by a long-lived teammate after the lead run has returned.
@@ -381,23 +540,152 @@ export class FileSessionStore {
   async refreshAgentRunTrace(sessionId: string, runId: string): Promise<void> {
     const snapshot = this.findSession(sessionId);
     const message = [...snapshot.messages].reverse().find(
-      (item) => item.role === "assistant" && item.threadId === runId,
+      (item) => item.role === "assistant" && item.runId === runId,
     );
     if (!message) return;
 
-    const trace = this.projectRunTrace(runId);
+    const projected = this.reconcileRunTranscript(
+      message,
+      this.projectRunTranscript(runId),
+    );
+    const trace = projected.trace;
+    message.content = projected.content;
     message.activityTrace = trace.length > 0
-      ? compactActivityTraceForPersistence(markTraceComplete(trace))
+      ? compactActivityTraceForPersistence(
+          message.runStatus === "running"
+            ? trace
+            : markTraceComplete(
+                trace,
+                message.runStatus === "failed"
+                  ? "failed"
+                  : message.runStatus === "interrupted"
+                    ? "denied"
+                    : "failed",
+              ),
+        )
       : undefined;
+    sessionChatMessageSchema.parse(structuredClone(message));
     snapshot.session.updatedAt = new Date().toISOString();
     await this.persist();
   }
 
-  private projectRunTrace(runId: string): AgentActivityItem[] {
+  /**
+   * Runtime events are authoritative for model/process blocks. Text appended by
+   * a previous finalize call (approval, question, or terminal copy) has no
+   * corresponding event, so replay must splice those response blocks back into
+   * the event projection and rebuild every offset against one canonical string.
+   */
+  private reconcileRunTranscript(
+    message: SessionChatMessage,
+    projected: RunTranscript,
+  ): RunTranscript {
+    const existingTrace = message.activityTrace ?? [];
+    if (existingTrace.length === 0) return projected;
+    if (projected.trace.length === 0) {
+      return {
+        trace: existingTrace,
+        content: message.content,
+      };
+    }
+
+    const trace: AgentActivityItem[] = [];
+    let content = "";
+    const append = (
+      item: AgentActivityItem,
+      sourceContent: string,
+      stableId = item.id,
+    ): void => {
+      if (item.kind !== "response") {
+        trace.push(stableId === item.id ? item : { ...item, id: stableId });
+        return;
+      }
+      const text = sourceContent.slice(item.start, item.end);
+      const start = content.length;
+      content += text;
+      trace.push({
+        ...item,
+        id: stableId,
+        start,
+        end: content.length,
+      });
+    };
+
+    let existingIndex = 0;
+    let projectedIndex = 0;
+    while (
+      existingIndex < existingTrace.length
+      && projectedIndex < projected.trace.length
+    ) {
+      const existing = existingTrace[existingIndex]!;
+      const nextProjected = projected.trace[projectedIndex]!;
+      if (sameProjectedActivity(
+        existing,
+        message.content,
+        nextProjected,
+        projected.content,
+      )) {
+        append(nextProjected, projected.content, existing.id);
+        existingIndex += 1;
+        projectedIndex += 1;
+        continue;
+      }
+      if (existing.kind === "response") {
+        append(existing, message.content);
+        existingIndex += 1;
+        continue;
+      }
+      append(nextProjected, projected.content);
+      projectedIndex += 1;
+    }
+
+    for (; projectedIndex < projected.trace.length; projectedIndex += 1) {
+      append(projected.trace[projectedIndex]!, projected.content);
+    }
+    for (; existingIndex < existingTrace.length; existingIndex += 1) {
+      const existing = existingTrace[existingIndex]!;
+      if (existing.kind === "response") append(existing, message.content);
+    }
+    return { trace, content };
+  }
+
+  private projectRunTranscript(runId: string): RunTranscript {
     let trace: AgentActivityItem[] = [];
+    let content = "";
     for (const event of this.conversationDatabase.listRunEvents(runId)) {
       if (event.visibility !== "user_visible") continue;
       const payload = event.payload;
+      if (event.kind === "text_chunk" && typeof payload.chunk === "string") {
+        trace = appendResponseChunk(
+          trace,
+          content.length,
+          payload.chunk.length,
+          typeof payload.attemptId === "string" ? payload.attemptId : undefined,
+        );
+        content += payload.chunk;
+        continue;
+      }
+      if (
+        event.kind === "workflow_progress"
+        && payload.type === "text-reset"
+        && typeof payload.attemptId === "string"
+      ) {
+        const reset = removeResponseAttempt(
+          sealAllReasoning(trace),
+          content,
+          payload.attemptId,
+        );
+        trace = reset.trace;
+        content = reset.content;
+        continue;
+      }
+      if (
+        event.kind === "workflow_progress"
+        && payload.type === "text-commit"
+        && typeof payload.attemptId === "string"
+      ) {
+        trace = commitResponseAttempt(trace, payload.attemptId);
+        continue;
+      }
       const progressPayload = typeof payload.type === "string"
         ? payload as { type: string }
         : undefined;
@@ -414,18 +702,54 @@ export class FileSessionStore {
           payload.chunk,
           typeof payload.modelStep === "number" ? payload.modelStep : 0,
         );
-      } else if (event.kind === "tool_started" && typeof payload.toolName === "string") {
+      } else if (
+        event.kind === "tool_started"
+        && typeof payload.toolCallId === "string"
+        && typeof payload.toolName === "string"
+      ) {
         trace = appendToolStart(
           trace,
+          payload.toolCallId,
           payload.toolName,
-          typeof payload.message === "string" ? payload.message : `正在调用 ${payload.toolName}`,
         );
-      } else if (event.kind === "tool_finished" && typeof payload.toolName === "string") {
+      } else if (
+        event.kind === "tool_finished"
+        && typeof payload.toolCallId === "string"
+        && typeof payload.toolName === "string"
+        && (
+          payload.status === "completed"
+          || payload.status === "failed"
+          || payload.status === "denied"
+          || payload.status === "invalid-input"
+        )
+      ) {
         trace = finishTool(
           trace,
+          payload.toolCallId,
           payload.toolName,
-          typeof payload.message === "string" ? payload.message : `${payload.toolName} 已完成`,
+          payload.status,
         );
+      } else if (
+        event.kind === "approval_requested"
+        && payload.type === "tool-approval-waiting"
+        && typeof payload.approvalId === "string"
+        && typeof payload.toolName === "string"
+        && typeof payload.reason === "string"
+        && typeof payload.detail === "string"
+      ) {
+        trace = appendToolApprovalWaiting(trace, {
+          approvalId: payload.approvalId,
+          toolName: payload.toolName,
+          reason: payload.reason,
+          detail: payload.detail,
+        });
+      } else if (
+        event.kind === "approval_resolved"
+        && payload.type === "tool-approval-resolved"
+        && typeof payload.approvalId === "string"
+        && (payload.status === "approved" || payload.status === "denied")
+      ) {
+        trace = resolveToolApprovalItem(trace, payload.approvalId, payload.status);
       } else if (
         (event.kind === "stage_started" || event.kind === "workflow_progress")
         && typeof payload.message === "string"
@@ -442,7 +766,10 @@ export class FileSessionStore {
         });
       }
     }
-    return trace;
+    return {
+      trace: sealResponseBlocks(trace),
+      content,
+    };
   }
 
   listProjectArtifacts(sessionId: string) {

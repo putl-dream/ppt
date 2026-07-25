@@ -159,7 +159,12 @@ describe("ConversationDatabase", () => {
       toolUseId: "tool-1",
       content: [{ type: "text", text: "empty deck" }],
     });
-    database.finishRun({ runId: "run-1", status: "completed", result: { status: "chat" } });
+    expect(database.loadTerminalRunResult("run-1")).toBeUndefined();
+    database.finishRun({
+      runId: "run-1",
+      status: "completed",
+      result: { status: "chat", message: "done" },
+    });
 
     const events = database.listRunEvents("run-1");
     expect(events.map((event) => event.kind)).toEqual([
@@ -172,6 +177,10 @@ describe("ConversationDatabase", () => {
       "run_completed",
     ]);
     expect(events.map((event) => event.sequence)).toEqual([0, 1, 2, 3, 4, 5, 6]);
+    expect(database.loadTerminalRunResult("run-1")).toEqual({
+      status: "chat",
+      message: "done",
+    });
     database.close();
   });
 

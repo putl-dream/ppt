@@ -3,72 +3,24 @@ import {
   formatAgentProgressMessage,
   formatAgentToolActivity,
   getAgentToolDisplayCopy,
-  inferAgentToolActivityState,
-  type AgentToolDisplayCategory,
 } from "@shared/agent-activity-display";
 
 export interface ProcessTraceRow {
   id: string;
-  kind: "thought" | "progress" | "tools" | "task" | "approval";
+  kind: "thought" | "progress" | "tool" | "task" | "approval";
   title: string;
   content?: string;
   active?: boolean;
   streaming?: boolean;
   lines?: string[];
-}
-
-type ToolTraceItem = Extract<AgentActivityItem, { kind: "tool" }>;
-
-function summarizeToolBatch(tools: ToolTraceItem[]): string {
-  const counts = new Map<AgentToolDisplayCategory, number>();
-  for (const tool of tools) {
-    const category = getAgentToolDisplayCopy(tool.toolName).category;
-    counts.set(category, (counts.get(category) ?? 0) + 1);
-  }
-
-  const labels: Record<AgentToolDisplayCategory, (count: number) => string> = {
-    read: (count) => `读取 ${count} 项`,
-    search: (count) => `搜索 ${count} 次`,
-    inspect: (count) => `检查 ${count} 次`,
-    change: (count) => `执行 ${count} 项`,
-    coordinate: (count) => `协调 ${count} 项`,
-    other: (count) => `处理 ${count} 项`,
-  };
-  const order: AgentToolDisplayCategory[] = [
-    "read",
-    "search",
-    "inspect",
-    "change",
-    "coordinate",
-    "other",
-  ];
-  return order
-    .filter((category) => counts.has(category))
-    .map((category) => labels[category](counts.get(category)!))
-    .join(" · ");
-}
-
-function toolDetailLines(tools: ToolTraceItem[]): string[] {
-  return tools.flatMap((tool) => {
-    const rawStatus = tool.status === "running"
-      ? tool.label
-      : (tool.finishedLabel ?? tool.label);
-    const fallbackState = tool.status === "running"
-      ? "running"
-      : (tool.finishedLabel ? "completed" : "failed");
-    const state = inferAgentToolActivityState(rawStatus, fallbackState);
-    return [
-      formatAgentToolActivity(tool.toolName, state),
-      ...(tool.summary?.trim() ? [tool.summary.trim()] : []),
-    ];
-  });
+  status?: "running" | "completed" | "failed" | "denied" | "invalid-input";
 }
 
 function pushRow(
   rows: ProcessTraceRow[],
   row: ProcessTraceRow,
 ) {
-  if (row.kind === "progress" && row.title.trim()) {
+  if ((row.kind === "progress" || row.kind === "tool") && row.title.trim()) {
     rows.push(row);
     return;
   }
@@ -110,31 +62,13 @@ export function buildProcessTraceRows(
     }
 
     if (item.kind === "tool") {
-      const tools: ToolTraceItem[] = [item];
-      while (items[itemIndex + 1]?.kind === "tool") {
-        tools.push(items[itemIndex + 1] as ToolTraceItem);
-        itemIndex += 1;
-      }
-      const isRunning = tools.some((tool) => tool.status === "running");
-      const summary = summarizeToolBatch(tools);
-      pushRow(rows, {
-        id: `tool-batch-${tools[0]!.id}`,
-        kind: "tools",
-        title: isRunning && live ? `正在${summary}` : summary,
-        lines: toolDetailLines(tools),
-        active: isRunning && live,
-      });
-      continue;
-    }
-
-    if (item.kind === "tool-summary") {
+      const isRunning = item.status === "running";
       pushRow(rows, {
         id: item.id,
-        kind: "tools",
-        title: live && item.streaming ? "方案摘要" : "方案摘要",
-        content: item.content,
-        active: live && Boolean(item.streaming),
-        streaming: live && Boolean(item.streaming),
+        kind: "tool",
+        title: formatAgentToolActivity(item.toolName, item.status),
+        active: isRunning && live,
+        status: item.status,
       });
       continue;
     }
@@ -184,10 +118,7 @@ export function buildProcessTraceRows(
         const stepText = step.toolName
           ? formatAgentToolActivity(
               step.toolName,
-              inferAgentToolActivityState(
-                step.text,
-                stepRunning ? "running" : "completed",
-              ),
+              step.status,
             )
           : (formatAgentProgressMessage(step.text) ?? "正在处理子任务…");
         pushRow(rows, {

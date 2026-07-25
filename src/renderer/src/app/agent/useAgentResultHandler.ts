@@ -2,22 +2,25 @@ import { useCallback, type Dispatch, type SetStateAction } from "react";
 import type { AgentRunResult } from "@shared/ipc";
 import { formatLeanRunMetrics } from "@shared/lean-mode-contract";
 import {
+  formatTerminalAgentRunContent,
+  mergeWaitingUserRunContent,
+} from "@shared/agent-result-copy";
+import {
   type AgentActivityItem,
   markTraceComplete,
   mergeActivityTraces,
+  mergeResponseText,
 } from "@shared/agent-activity";
-import {
-  countSlidesNeedingLayout,
-  presentationNeedsLayoutChoice,
-} from "@shared/presentation-draft";
+import { presentationNeedsLayoutChoice } from "@shared/presentation-draft";
 import { useProjectStore } from "../../components/project-store";
-import { ingestDisplayEvent } from "../../cards/display-card-managers";
+import {
+  ingestDisplayEvent,
+  setDisplayCardStatus,
+  usePermissionCardManager,
+} from "../../cards/display-card-managers";
 import type { ChatMessage } from "../chatMessageRuntime";
 import type { PresentationController } from "../presentation/usePresentationController";
 import type { AgentActivityStreamController } from "./useAgentActivityStream";
-
-const isRunAbortedMessage = (message: string) =>
-  message === "会话已中断。" || message === "任务已取消。";
 
 interface UseAgentResultHandlerOptions {
   activeSessionId: string;
@@ -34,6 +37,7 @@ export type ApplyAgentResult = (
   result: AgentRunResult,
   trace: AgentActivityItem[],
   runId?: string,
+  messageIdOverride?: string,
 ) => Promise<void>;
 
 /**
@@ -58,10 +62,14 @@ export function useAgentResultHandler({
     result: AgentRunResult,
     trace: AgentActivityItem[],
     runId?: string,
+    messageIdOverride?: string,
   ) => {
     const isSidechainRun = Boolean(runId && sidechainRunRef.current === runId);
-    const messageId = runId ? streamMessageIdsRef.current.get(runId) : undefined;
+    const messageId = messageIdOverride
+      ?? (runId ? streamMessageIdsRef.current.get(runId) : undefined);
     const hostMessageId = messageId ?? crypto.randomUUID();
+    const interrupted = result.status === "interrupted";
+    const failed = result.status === "failed";
     for (const event of result.displayEvents ?? []) {
       try {
         ingestDisplayEvent({
@@ -74,56 +82,115 @@ export function useAgentResultHandler({
     }
     const finalizeTrace = (existing?: AgentActivityItem[]) => markTraceComplete(
       mergeActivityTraces(existing, trace, activeRunTraceRef.current) ?? [],
+      interrupted ? "denied" : "failed",
     );
     const resolvedTrace = (existing?: AgentActivityItem[]) => {
       const merged = finalizeTrace(existing);
       return merged.length > 0 ? merged : undefined;
     };
+    const projectResponse = (
+      currentContent: string,
+      existing: AgentActivityItem[] | undefined,
+      nextText?: string,
+    ) => {
+      const baseTrace = resolvedTrace(existing) ?? [];
+      const projected = nextText === undefined
+        ? { content: currentContent, trace: baseTrace }
+        : mergeResponseText(baseTrace, currentContent, nextText);
+      return {
+        content: projected.content,
+        activityTrace: projected.trace.length > 0 ? projected.trace : undefined,
+      };
+    };
 
-    if (result.status === "chat") {
-      if (isSidechainRun && !isRunAbortedMessage(result.message)) {
+    if (interrupted || failed) {
+      if (runId) {
+        for (const card of usePermissionCardManager.getState().cards) {
+          if (card.status === "active" && card.event.scope.runId === runId) {
+            setDisplayCardStatus(card.event.eventId, "dismissed");
+          }
+        }
+      }
+      const terminalPatch = {
+        activityTrace: resolvedTrace(),
+        runStatus: interrupted ? "interrupted" as const : "failed" as const,
+        runError: failed ? result.error : undefined,
+        threadId: result.threadId,
+      };
+      if (messageId) {
+        setChatMessages((current) => current.map((message) =>
+          message.id === messageId
+            ? {
+                ...message,
+                ...terminalPatch,
+                ...projectResponse(message.content, message.activityTrace),
+              }
+            : message,
+        ));
+      } else if (!isSidechainRun) {
+        setChatMessages((current) => [
+          ...current,
+          {
+            id: hostMessageId,
+            role: "assistant",
+            content: "",
+            runId,
+            ...terminalPatch,
+          },
+        ]);
+      }
+      if (interrupted) notify("会话已中断");
+      return;
+    }
+
+    if (result.status === "chat" || result.status === "waiting-user") {
+      const waitingForAnswer = result.status === "waiting-user";
+      if (isSidechainRun && !waitingForAnswer) {
         if (messageId) {
           setChatMessages((current) => current.map((message) => message.id === messageId
             ? {
                 ...message,
                 activityTrace: resolvedTrace(message.activityTrace),
+                runStatus: "completed",
+                runError: undefined,
                 threadId: result.threadId ?? message.threadId,
               }
             : message));
         }
         return;
       }
-      const interrupted = isRunAbortedMessage(result.message);
-      const resolveInterruptedContent = (existingContent: string) => {
-        if (!interrupted) return result.message;
-        const trimmed = existingContent.trim();
-        return trimmed ? `${trimmed}\n\n---\n\n*会话已中断*` : "会话已中断。";
-      };
-
       if (messageId) {
         setChatMessages((current) => current.map((message) =>
           message.id === messageId
             ? {
                 ...message,
-                content: resolveInterruptedContent(message.content),
-                activityTrace: resolvedTrace(message.activityTrace),
+                ...projectResponse(
+                  message.content,
+                  message.activityTrace,
+                  waitingForAnswer
+                    ? mergeWaitingUserRunContent(message.content, result.message)
+                    : result.message,
+                ),
+                runStatus: waitingForAnswer ? "waiting" as const : "completed" as const,
+                runError: undefined,
                 threadId: result.threadId,
               }
-            : message,
+            : message
         ));
       } else {
+        const projected = projectResponse("", undefined, result.message);
         setChatMessages((current) => [
           ...current,
           {
             id: hostMessageId,
             role: "assistant",
-            content: interrupted ? "会话已中断。" : result.message,
-            activityTrace: resolvedTrace(),
+            ...projected,
+            runId,
+            runStatus: waitingForAnswer ? "waiting" : "completed",
             threadId: result.threadId,
           },
         ]);
       }
-      if (interrupted) notify("会话已中断");
       return;
     }
 
@@ -138,20 +205,23 @@ export function useAgentResultHandler({
           message.id === messageId
             ? {
                 ...message,
-                content,
-                activityTrace: resolvedTrace(message.activityTrace),
+                ...projectResponse(message.content, message.activityTrace, content),
+                runStatus: "waiting",
+                runError: undefined,
                 threadId: result.approval.threadId,
               }
             : message,
         ));
       } else {
+        const projected = projectResponse("", undefined, content);
         setChatMessages((current) => [
           ...current,
           {
             id: hostMessageId,
             role: "assistant",
-            content,
-            activityTrace: resolvedTrace(),
+            ...projected,
+            runId,
+            runStatus: "waiting",
             threadId: result.approval.threadId,
           },
         ]);
@@ -173,33 +243,29 @@ export function useAgentResultHandler({
       }
     }
 
-    const finalContentBase = result.status === "rejected"
-      ? "已放弃排版变更提案。"
-      : presentationNeedsLayoutChoice(result.presentation)
-        ? `内容草稿已就绪（${countSlidesNeedingLayout(result.presentation)} 页待排版），请选择排版方式后继续。`
-        : "已根据确认的大纲生成并应用演示文稿。";
-    const finalContent = result.leanMetrics
-      ? `${finalContentBase}\n\n${formatLeanRunMetrics(result.leanMetrics)}`
-      : finalContentBase;
+    const finalContent = formatTerminalAgentRunContent(result);
 
     if (messageId) {
       setChatMessages((current) => current.map((message) =>
         message.id === messageId
           ? {
               ...message,
-              content: finalContent,
-              activityTrace: resolvedTrace(message.activityTrace),
+              ...projectResponse(message.content, message.activityTrace, finalContent),
+              runStatus: "completed",
+              runError: undefined,
             }
           : message,
       ));
     } else {
+      const projected = projectResponse("", undefined, finalContent);
       setChatMessages((current) => [
         ...current,
         {
           id: hostMessageId,
           role: "assistant",
-          content: finalContent,
-          activityTrace: resolvedTrace(),
+          ...projected,
+          runId,
+          runStatus: "completed",
         },
       ]);
     }

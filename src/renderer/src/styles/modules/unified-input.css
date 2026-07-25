@@ -247,11 +247,6 @@
 
 .action-dock-status.is-running .action-dock-status-dot {
   background: var(--accent-primary);
-  animation: actionDockPulse 1.2s ease-in-out infinite;
-}
-
-@keyframes actionDockPulse {
-  50% { opacity: 0.35; transform: scale(0.8); }
 }
 
 .functional-right {

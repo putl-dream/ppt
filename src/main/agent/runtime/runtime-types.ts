@@ -53,7 +53,7 @@ export type AgentRuntimeResult =
 
 export type AgentRuntimeStreamEvent =
   | { type: "attempt_started"; attemptId: string }
-  | { type: "delta"; attemptId: string; text: string; source: "message" | "tool-summary" }
+  | { type: "delta"; attemptId: string; text: string }
   | { type: "attempt_reset"; attemptId: string; reason: string }
   | { type: "attempt_committed"; attemptId: string };
 

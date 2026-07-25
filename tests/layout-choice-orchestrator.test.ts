@@ -105,7 +105,15 @@ describe("layout choice runtime orchestration", () => {
     expect(second.task.id).toBe(first.task.id);
     expect(first.task.routing.executionTarget).toBe("teammate");
     expect(first.task.description).toContain("slides/layout-choice.json");
-    expect(spawn).not.toHaveBeenCalled();
+    expect(spawn).toHaveBeenCalledTimes(1);
+    expect(spawn).toHaveBeenCalledWith(expect.objectContaining({
+      name: "layout_planner",
+      role: "layout planner",
+      startIdle: true,
+      taskStore,
+    }));
+    expect(first.worker).toBe("layout_planner");
+    expect(second.worker).toBe("layout_planner");
     expect(notifyTaskListUpdated).toHaveBeenCalled();
 
     const choice = JSON.parse(

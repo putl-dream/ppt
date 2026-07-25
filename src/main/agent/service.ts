@@ -20,6 +20,7 @@ import {
 } from "./persistence/durable-service-store";
 import type { ConversationDatabase } from "../conversation-database";
 import type { QueryStartMode } from "./runtime/query/query-types";
+import { isRuntimeCancellation } from "./runtime/lifecycle/runtime-cancellation";
 
 export type AgentServiceEvent =
   | { type: "request-status"; message: string; progress: number }
@@ -27,16 +28,20 @@ export type AgentServiceEvent =
   | {
       type: "text-chunk";
       chunk: string;
-      source?: "message" | "tool-summary";
       attemptId?: string;
     }
   | { type: "text-reset"; attemptId: string }
   | { type: "text-commit"; attemptId: string }
   | { type: "thinking-chunk"; chunk: string; modelStep?: number }
   | { type: "stage-started"; message: string; stage: string }
-  | { type: "tool-started"; message: string; toolName: string }
-  | { type: "tool-finished"; message: string; toolName: string }
-  | { type: "tool-validation-failed"; message: string; toolName: string; error: string }
+  | {
+      type: "tool-state";
+      message: string;
+      toolCallId: string;
+      toolName: string;
+      status: "running" | "completed" | "failed" | "denied" | "invalid-input";
+      error?: string;
+    }
   | { type: "approval-waiting"; message: string }
   | {
       type: "tool-approval-waiting";
@@ -45,6 +50,13 @@ export type AgentServiceEvent =
       toolName: string;
       reason: string;
       detail: string;
+    }
+  | {
+      type: "tool-approval-resolved";
+      message: string;
+      approvalId: string;
+      toolName: string;
+      status: "approved" | "denied";
     }
   | {
       type: "task-list-updated";
@@ -301,8 +313,7 @@ export class AgentService {
         executionStrategy,
       });
       return {
-        status: "chat",
-        message: "会话已中断。",
+        status: "interrupted",
       };
     }
     listener?.({
@@ -342,7 +353,6 @@ export class AgentService {
               listener({
                 type: "text-chunk",
                 chunk: event.text,
-                source: event.source,
                 attemptId: event.attemptId,
               });
             } else if (event.type === "attempt_reset") {
@@ -357,25 +367,25 @@ export class AgentService {
         }),
       });
     } catch (error) {
+      if (isRuntimeCancellation(error, signal)) {
+        this.runtime.clearSession(threadId);
+        this.conversations.delete(threadId);
+        await this.persistThread(threadId, {
+          status: "interrupted",
+          messages: structuredClone(messageHistory),
+          model,
+          executionStrategy,
+        });
+        return { status: "interrupted" };
+      }
       const recoveryMessage = formatRecoverableAgentError(error, signal);
       if (recoveryMessage) {
-        if (signal?.aborted) {
-          this.runtime.clearSession(threadId);
-          this.conversations.delete(threadId);
-          await this.persistThread(threadId, {
-            status: "interrupted",
-            messages: structuredClone(messageHistory),
-            model,
-            executionStrategy,
-          });
-          return { status: "chat", message: recoveryMessage };
-        }
         if (!this.conversations.has(threadId)) {
           this.runtime.clearSession(threadId);
         }
         return {
-          status: "chat",
-          message: recoveryMessage,
+          status: "failed",
+          error: recoveryMessage,
           ...(this.conversations.has(threadId) ? { threadId } : {}),
         };
       }
@@ -419,7 +429,7 @@ export class AgentService {
         executionStrategy,
       });
       return {
-        status: "chat",
+        status: "waiting-user",
         message: runtimeResult.content,
         threadId,
         question: runtimeResult.question,
@@ -599,6 +609,12 @@ export class AgentService {
     if (current.revision !== pendingApproval.baseRevision) {
       this.pendingApprovals.delete(threadId);
       this.runtime.clearSession(threadId);
+      await this.persistThread(threadId, {
+        status: "rejected",
+        messages: durableState?.messages ?? [],
+        model: durableState?.model,
+        executionStrategy: durableState?.executionStrategy ?? "REQUEST_APPROVAL",
+      });
       throw new Error("The presentation changed after preview. Generate a new proposal before applying.");
     }
     const gate = await this.commitGate.evaluate(
@@ -610,6 +626,12 @@ export class AgentService {
     if (!gate.success) {
       this.pendingApprovals.delete(threadId);
       this.runtime.clearSession(threadId);
+      await this.persistThread(threadId, {
+        status: "rejected",
+        messages: durableState?.messages ?? [],
+        model: durableState?.model,
+        executionStrategy: durableState?.executionStrategy ?? "REQUEST_APPROVAL",
+      });
       throw new Error(`Commit Gate rejected approved proposal: ${gate.errors.join("; ")}`);
     }
 

@@ -3,6 +3,9 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it } from "vitest";
 import { FileSessionStore } from "@main/session-store";
+import { formatTerminalAgentRunContent } from "@shared/agent-result-copy";
+import { getResponseBlockContent } from "@shared/agent-activity";
+import { sessionChatMessageSchema } from "@shared/session";
 
 const temporaryDirectories: string[] = [];
 const stores: FileSessionStore[] = [];
@@ -36,7 +39,20 @@ describe("SQLite session store", () => {
     const sessionId = created.activeSession!.session.id;
     await store.saveMessages(sessionId, [
       { id: "u1", role: "user", content: "创建演示文稿" },
-      { id: "a1", role: "assistant", content: "正在处理" },
+      {
+        id: "a1",
+        role: "assistant",
+        content: "演示文稿已完成",
+        activityTrace: [{
+          id: "response-complete",
+          kind: "response",
+          start: 0,
+          end: 7,
+          streaming: false,
+        }],
+        runId: "run-complete",
+        runStatus: "completed",
+      },
     ]);
     store.close();
     stores.splice(stores.indexOf(store), 1);
@@ -46,8 +62,118 @@ describe("SQLite session store", () => {
     await restored.initialize();
     expect(restored.getSession(sessionId).messages.map((message) => message.content)).toEqual([
       "创建演示文稿",
-      "正在处理",
+      "演示文稿已完成",
     ]);
+  });
+
+  it("converts a crash-left running turn into an interrupted terminal state", async () => {
+    const { store, databasePath, directory } = await createStore();
+    const created = await store.createSession({ title: "Interrupted project" });
+    const sessionId = created.activeSession!.session.id;
+    await store.saveMessages(sessionId, [{
+      id: "a-running",
+      role: "assistant",
+      content: "已生成部分内容",
+      runId: "run-stale",
+      runStatus: "running",
+      activityTrace: [
+        {
+          id: "response-partial",
+          kind: "response",
+          start: 0,
+          end: 7,
+          streaming: false,
+        },
+        {
+          id: "tool-running",
+          kind: "tool",
+          toolCallId: "call-running",
+          toolName: "ExportPptx",
+          status: "running",
+        },
+      ],
+    }]);
+    store.conversationDatabase.beginRun({
+      runId: "run-stale",
+      sessionId,
+      request: "build",
+    });
+    store.close();
+    stores.splice(stores.indexOf(store), 1);
+
+    const restored = new FileSessionStore(databasePath, join(directory, "projects"));
+    stores.push(restored);
+    await restored.initialize();
+
+    expect(restored.getSession(sessionId).messages[0]).toMatchObject({
+      content: "已生成部分内容",
+      runStatus: "interrupted",
+      activityTrace: [
+        { kind: "response" },
+        { kind: "tool", status: "denied" },
+      ],
+    });
+    expect(
+      restored.conversationDatabase.listRunEvents("run-stale").at(-1)?.kind,
+    ).toBe("run_interrupted");
+  });
+
+  it("recovers a terminal run result when the assistant message write was lost", async () => {
+    const { store, databasePath, directory } = await createStore();
+    const created = await store.createSession({ title: "Terminal recovery" });
+    const sessionId = created.activeSession!.session.id;
+    await store.saveMessages(sessionId, [{
+      id: "a-terminal-window",
+      role: "assistant",
+      content: "最终答案",
+      runId: "run-terminal-window",
+      runStatus: "running",
+      activityTrace: [{
+        id: "response-terminal-window",
+        kind: "response",
+        start: 0,
+        end: 4,
+        attemptId: "terminal-attempt",
+        streaming: false,
+      }],
+    }]);
+    store.conversationDatabase.beginRun({
+      runId: "run-terminal-window",
+      sessionId,
+      request: "build",
+    });
+    store.conversationDatabase.appendRuntimeEvent("run-terminal-window", "text_chunk", {
+      type: "text-chunk",
+      attemptId: "terminal-attempt",
+      chunk: "最终答案",
+    });
+    store.conversationDatabase.finishRun({
+      runId: "run-terminal-window",
+      status: "completed",
+      result: {
+        status: "chat",
+        message: "最终答案",
+        threadId: "thread-terminal",
+      },
+      threadId: "thread-terminal",
+    });
+    store.close();
+    stores.splice(stores.indexOf(store), 1);
+
+    const restored = new FileSessionStore(databasePath, join(directory, "projects"));
+    stores.push(restored);
+    await restored.initialize();
+
+    expect(restored.getSession(sessionId).messages[0]).toMatchObject({
+      content: "最终答案",
+      runId: "run-terminal-window",
+      runStatus: "completed",
+      threadId: "thread-terminal",
+      activityTrace: [{ kind: "response", start: 0, end: 4, streaming: false }],
+    });
+    expect(
+      restored.conversationDatabase.listRunEvents("run-terminal-window").at(-1)?.kind,
+    ).toBe("run_completed");
   });
 
   it("persists presentation state while keeping the deck snapshot in the sandbox", async () => {
@@ -114,48 +240,276 @@ describe("SQLite session store", () => {
   });
 
   it("durably finalizes the assistant message from main-process run events", async () => {
-    const { store } = await createStore();
+    const { store, databasePath, directory } = await createStore();
     const created = await store.createSession({ title: "Run" });
     const sessionId = created.activeSession!.session.id;
     await store.saveMessages(sessionId, [
       { id: "u1", role: "user", content: "inspect" },
-      { id: "placeholder", role: "assistant", content: "", threadId: "run-1" },
     ]);
     store.conversationDatabase.beginRun({ runId: "run-1", sessionId, request: "inspect" });
     store.conversationDatabase.appendRuntimeEvent("run-1", "reasoning_chunk", {
       chunk: "I should inspect the deck",
       modelStep: 0,
     });
+    store.conversationDatabase.appendRuntimeEvent("run-1", "text_chunk", {
+      type: "text-chunk",
+      attemptId: "attempt-1",
+      chunk: "我先检查。",
+    });
     store.conversationDatabase.appendRuntimeEvent("run-1", "tool_started", {
+      toolCallId: "call-read",
       toolName: "ReadPresentationSnapshot",
       message: "reading",
     });
     store.conversationDatabase.appendRuntimeEvent("run-1", "tool_finished", {
+      toolCallId: "call-read",
       toolName: "ReadPresentationSnapshot",
       message: "read",
+      status: "completed",
+    });
+    store.conversationDatabase.appendRuntimeEvent("run-1", "text_chunk", {
+      type: "text-chunk",
+      attemptId: "attempt-2",
+      chunk: "演示文稿已检查完成。",
     });
     store.conversationDatabase.appendRuntimeEvent("run-1", "workflow_progress", {
       message: "L2 micro_compact: older tool results replaced with placeholders.",
     }, "internal");
     await store.finalizeAgentRunMessage(sessionId, "run-1", {
       status: "chat",
-      message: "Deck inspected.",
+      message: "演示文稿已检查完成。",
     });
 
     const assistant = store.getSession(sessionId).messages.at(-1)!;
-    expect(assistant.content).toBe("Deck inspected.");
-    expect(assistant.activityTrace?.map((item) => item.kind)).toContain("reasoning");
-    expect(assistant.activityTrace?.map((item) => item.kind)).toContain("tool");
-    expect(assistant.activityTrace?.map((item) => item.kind)).not.toContain("step");
+    expect(assistant).toMatchObject({
+      content: "我先检查。演示文稿已检查完成。",
+      runId: "run-1",
+      runStatus: "completed",
+    });
+    expect(assistant.activityTrace?.map((item) => item.kind)).toEqual([
+      "reasoning",
+      "response",
+      "tool",
+      "response",
+    ]);
+    expect(assistant.activityTrace?.find((item) => item.kind === "tool"))
+      .toMatchObject({ toolCallId: "call-read", status: "completed" });
+    expect(
+      assistant.activityTrace
+        ?.filter((item) => item.kind === "response")
+        .map((item) => getResponseBlockContent(item, assistant.content)),
+    ).toEqual(["我先检查。", "演示文稿已检查完成。"]);
+
+    const durableTrace = structuredClone(assistant.activityTrace);
+    store.close();
+    stores.splice(stores.indexOf(store), 1);
+    const reopened = new FileSessionStore(databasePath, join(directory, "projects"));
+    stores.push(reopened);
+    await reopened.initialize();
+    expect(reopened.getSession(sessionId).messages.at(-1)?.activityTrace).toEqual(durableTrace);
+  });
+
+  it("persists AskUser as a waiting run until the response is submitted", async () => {
+    const { store } = await createStore();
+    const created = await store.createSession({ title: "Question" });
+    const sessionId = created.activeSession!.session.id;
+    store.conversationDatabase.beginRun({
+      runId: "run-question",
+      sessionId,
+      request: "继续",
+    });
+    store.conversationDatabase.appendRuntimeEvent("run-question", "text_chunk", {
+      type: "text-chunk",
+      attemptId: "question-preamble",
+      chunk: "我需要先确认一点。",
+    });
+
+    await store.finalizeAgentRunMessage(sessionId, "run-question", {
+      status: "waiting-user",
+      message: "请直接输入目标受众",
+      threadId: "thread-question",
+    });
+
+    const waiting = store.getSession(sessionId).messages.at(-1)!;
+    expect(waiting).toMatchObject({
+      content: "我需要先确认一点。\n\n请直接输入目标受众",
+      runId: "run-question",
+      runStatus: "waiting",
+      threadId: "thread-question",
+    });
+    expect(store.findWaitingAgentRunId(sessionId, "thread-question")).toBe("run-question");
+
+    await store.saveMessages(sessionId, [{
+      ...waiting,
+      runStatus: "completed",
+    }]);
+    expect(store.getSession(sessionId).messages.at(-1)?.runStatus).toBe("completed");
+  });
+
+  it("settles the original approval run without allowing a stale waiting snapshot to roll it back", async () => {
+    const { store } = await createStore();
+    const created = await store.createSession({ title: "Approval" });
+    const sessionId = created.activeSession!.session.id;
+
+    await store.finalizeAgentRunMessage(sessionId, "run-approval", {
+      status: "approval-required",
+      approval: {
+        threadId: "thread-approval",
+        summary: "应用排版",
+        commands: [],
+      },
+    });
+    const staleWaitingMessages = store.getSession(sessionId).messages;
+    expect(store.findWaitingAgentRunId(sessionId, "thread-approval")).toBe("run-approval");
+
+    const terminalResult = {
+      status: "completed" as const,
+      presentation: created.activeSession!.presentation,
+    };
+    await store.finalizeAgentRunMessage(sessionId, "run-approval", terminalResult);
+    await store.saveMessages(sessionId, staleWaitingMessages);
+
+    const messages = store.getSession(sessionId).messages;
+    expect(messages.filter((message) => message.role === "assistant")).toHaveLength(1);
+    expect(messages.at(-1)).toMatchObject({
+      runId: "run-approval",
+      runStatus: "completed",
+      content: [
+        "已提出排版更新方案，请在下方审核后应用。",
+        formatTerminalAgentRunContent(terminalResult),
+      ].join("\n\n"),
+    });
+    expect(messages.at(-1)?.activityTrace?.map((item) => item.kind)).toEqual([
+      "response",
+      "response",
+    ]);
+    expect(store.findWaitingAgentRunId(sessionId, "thread-approval")).toBeUndefined();
+  });
+
+  it("reconciles synthetic approval responses with replayed run events before reload", async () => {
+    const { store, databasePath, directory } = await createStore();
+    const created = await store.createSession({ title: "Approval transcript" });
+    const sessionId = created.activeSession!.session.id;
+    const runId = "run-approval-transcript";
+    store.conversationDatabase.beginRun({
+      runId,
+      sessionId,
+      request: "apply layout",
+    });
+    store.conversationDatabase.appendRuntimeEvent(runId, "workflow_progress", {
+      type: "workflow-progress",
+      message: "正在准备排版更新",
+    });
+    store.conversationDatabase.appendRuntimeEvent(runId, "tool_started", {
+      toolCallId: "call-layout",
+      toolName: "SubmitCommands",
+      message: "正在提交命令",
+    });
+    store.conversationDatabase.appendRuntimeEvent(runId, "tool_finished", {
+      toolCallId: "call-layout",
+      toolName: "SubmitCommands",
+      message: "命令已提交",
+      status: "completed",
+    });
+
+    await store.finalizeAgentRunMessage(sessionId, runId, {
+      status: "approval-required",
+      approval: {
+        threadId: "thread-approval-transcript",
+        summary: "应用排版",
+        commands: [],
+      },
+    });
+    expect(store.getSession(sessionId).messages.at(-1)?.activityTrace?.map(
+      (item) => item.kind,
+    )).toEqual(["step", "tool", "response"]);
+
+    store.conversationDatabase.appendRuntimeEvent(runId, "workflow_progress", {
+      type: "workflow-progress",
+      message: "审批结果已处理",
+    });
+    await store.refreshAgentRunTrace(sessionId, runId);
+    expect(store.getSession(sessionId).messages.at(-1)?.activityTrace?.map(
+      (item) => item.kind,
+    )).toEqual(["step", "tool", "response", "step"]);
+
+    const terminalResult = { status: "rejected" as const };
+    await store.finalizeAgentRunMessage(sessionId, runId, terminalResult);
+    store.conversationDatabase.finishRun({
+      runId,
+      status: "completed",
+      result: terminalResult,
+      threadId: "thread-approval-transcript",
+    });
+
+    const terminal = store.getSession(sessionId).messages.at(-1)!;
+    const responseBlocks = terminal.activityTrace?.filter(
+      (item) => item.kind === "response",
+    ) ?? [];
+    let cursor = 0;
+    for (const response of responseBlocks) {
+      expect(response.start).toBe(cursor);
+      expect(response.end).toBeGreaterThan(response.start);
+      cursor = response.end;
+    }
+    expect(cursor).toBe(terminal.content.length);
+    expect(responseBlocks.map(
+      (item) => getResponseBlockContent(item, terminal.content),
+    )).toEqual([
+      "已提出排版更新方案，请在下方审核后应用。",
+      `\n\n${formatTerminalAgentRunContent(terminalResult)}`,
+    ]);
+    expect(() => sessionChatMessageSchema.parse(terminal)).not.toThrow();
+
+    store.close();
+    stores.splice(stores.indexOf(store), 1);
+    const reopened = new FileSessionStore(databasePath, join(directory, "projects"));
+    stores.push(reopened);
+    await reopened.initialize();
+
+    const durable = reopened.getSession(sessionId).messages.at(-1)!;
+    expect(durable).toEqual(terminal);
+    expect(() => sessionChatMessageSchema.parse(durable)).not.toThrow();
+  });
+
+  it("persists the same pending-layout terminal copy used by Renderer", async () => {
+    const { store } = await createStore();
+    const created = await store.createSession({ title: "Layout choice" });
+    const sessionId = created.activeSession!.session.id;
+    const terminalResult = {
+      status: "completed" as const,
+      presentation: {
+        ...created.activeSession!.presentation,
+        slides: [{
+          id: "slide-needs-layout",
+          title: "核心观点",
+          layout: "concept" as const,
+          elements: [{
+            id: "body",
+            type: "text" as const,
+            x: 0,
+            y: 0,
+            width: 400,
+            height: 80,
+            text: "需要选择版式的正文",
+            fontSize: 24,
+          }],
+        }],
+      },
+    };
+
+    await store.finalizeAgentRunMessage(sessionId, "run-layout", terminalResult);
+
+    expect(store.getSession(sessionId).messages.at(-1)?.content)
+      .toBe(formatTerminalAgentRunContent(terminalResult));
+    expect(store.getSession(sessionId).messages.at(-1)?.content)
+      .toContain("1 页待排版");
   });
 
   it("persists teammate reasoning and tools under the linked task activity", async () => {
     const { store } = await createStore();
     const created = await store.createSession({ title: "Teammate trace" });
     const sessionId = created.activeSession!.session.id;
-    await store.saveMessages(sessionId, [
-      { id: "placeholder", role: "assistant", content: "", threadId: "run-teammate" },
-    ]);
     store.conversationDatabase.beginRun({
       runId: "run-teammate",
       sessionId,
@@ -205,10 +559,10 @@ describe("SQLite session store", () => {
     expect(task).toMatchObject({
       kind: "task",
       taskId: "task-outline",
-      status: "done",
+      status: "completed",
       steps: [
         expect.objectContaining({ type: "reasoning", text: "Checking the brief." }),
-        expect.objectContaining({ type: "tool", toolName: "write_file", status: "done" }),
+        expect.objectContaining({ type: "tool", toolName: "write_file", status: "completed" }),
       ],
     });
   });
@@ -230,9 +584,6 @@ describe("SQLite session store", () => {
       review: { state: "none" as const },
       reviewReceipts: [],
     };
-    await store.saveMessages(sessionId, [
-      { id: "placeholder", role: "assistant", content: "", threadId: "run-task-graph" },
-    ]);
     store.conversationDatabase.beginRun({
       runId: "run-task-graph",
       sessionId,
@@ -282,9 +633,6 @@ describe("SQLite session store", () => {
       review: { state: "none" as const },
       reviewReceipts: [],
     };
-    await store.saveMessages(sessionId, [
-      { id: "placeholder", role: "assistant", content: "", threadId: "run-background" },
-    ]);
     store.conversationDatabase.beginRun({
       runId: "run-background",
       sessionId,
@@ -298,6 +646,7 @@ describe("SQLite session store", () => {
       status: "chat",
       message: "Teammate is working.",
     });
+    const staleRendererMessages = store.getSession(sessionId).messages;
 
     store.conversationDatabase.appendRuntimeEvent("run-background", "task_list_updated", {
       tasks: [{
@@ -309,12 +658,146 @@ describe("SQLite session store", () => {
       goal: "Build deck",
     });
     await store.refreshAgentRunTrace(sessionId, "run-background");
+    await store.saveMessages(sessionId, staleRendererMessages);
 
     const assistant = store.getSession(sessionId).messages.at(-1)!;
     expect(assistant.activityTrace?.find((item) => item.kind === "tasklist"))
       .toMatchObject({
         tasks: [{ id: "task_background", status: "in_progress", owner: "task_worker" }],
       });
+    expect(assistant).toMatchObject({
+      runId: "run-background",
+      runStatus: "completed",
+    });
+  });
+
+  it("persists every late teammate progress phase across close and reopen", async () => {
+    const { store, databasePath, directory } = await createStore();
+    const created = await store.createSession({ title: "Late teammate progress" });
+    const sessionId = created.activeSession!.session.id;
+    const runId = "run-late-teammate";
+    const common = {
+      teammateName: "layout_worker",
+      activityId: "task-layout",
+      taskId: "task-layout",
+    };
+    const leadResult = {
+      status: "chat" as const,
+      message: "Lead finished.",
+      threadId: "thread-late-teammate",
+    };
+    store.conversationDatabase.beginRun({
+      runId,
+      sessionId,
+      request: "build layout",
+    });
+    store.conversationDatabase.finishRun({
+      runId,
+      status: "completed",
+      result: leadResult,
+      threadId: leadResult.threadId,
+    });
+    await store.finalizeAgentRunMessage(sessionId, runId, leadResult);
+
+    store.conversationDatabase.appendRuntimeEvent(runId, "workflow_progress", {
+      ...common,
+      type: "teammate-assignment-started",
+      description: "Build layout",
+    });
+    await store.refreshAgentRunTrace(sessionId, runId);
+    expect(store.getSession(sessionId).messages.at(-1)?.activityTrace)
+      .toContainEqual(expect.objectContaining({
+        kind: "task",
+        taskId: "task-layout",
+        status: "running",
+      }));
+
+    store.conversationDatabase.appendRuntimeEvent(runId, "reasoning_chunk", {
+      ...common,
+      type: "teammate-thinking-chunk",
+      chunk: "Inspecting visual hierarchy.",
+    });
+    await store.refreshAgentRunTrace(sessionId, runId);
+    expect(
+      store.getSession(sessionId).messages.at(-1)?.activityTrace
+        ?.find((item) => item.kind === "task"),
+    ).toMatchObject({
+      steps: [expect.objectContaining({
+        type: "reasoning",
+        text: "Inspecting visual hierarchy.",
+      })],
+    });
+
+    store.conversationDatabase.appendRuntimeEvent(runId, "tool_started", {
+      ...common,
+      type: "teammate-tool-started",
+      toolName: "write_file",
+      message: "正在调用 write_file",
+    });
+    await store.refreshAgentRunTrace(sessionId, runId);
+    expect(
+      store.getSession(sessionId).messages.at(-1)?.activityTrace
+        ?.find((item) => item.kind === "task"),
+    ).toMatchObject({
+      steps: [
+        expect.objectContaining({ type: "reasoning" }),
+        expect.objectContaining({ type: "tool", status: "running" }),
+      ],
+    });
+
+    store.conversationDatabase.appendRuntimeEvent(runId, "tool_finished", {
+      ...common,
+      type: "teammate-tool-finished",
+      toolName: "write_file",
+      message: "write_file 已完成",
+      status: "completed",
+    });
+    await store.refreshAgentRunTrace(sessionId, runId);
+    expect(
+      store.getSession(sessionId).messages.at(-1)?.activityTrace
+        ?.find((item) => item.kind === "task"),
+    ).toMatchObject({
+      steps: [
+        expect.objectContaining({ type: "reasoning" }),
+        expect.objectContaining({ type: "tool", status: "completed" }),
+      ],
+    });
+
+    store.conversationDatabase.appendRuntimeEvent(runId, "workflow_progress", {
+      ...common,
+      type: "teammate-assignment-finished",
+      status: "completed",
+    });
+    await store.refreshAgentRunTrace(sessionId, runId);
+
+    const durableMessage = store.getSession(sessionId).messages.at(-1)!;
+    expect(durableMessage).toMatchObject({
+      runId,
+      runStatus: "completed",
+    });
+    expect(durableMessage.activityTrace?.find((item) => item.kind === "task"))
+      .toMatchObject({
+        taskId: "task-layout",
+        status: "completed",
+        steps: [
+          expect.objectContaining({
+            type: "reasoning",
+            text: "Inspecting visual hierarchy.",
+          }),
+          expect.objectContaining({
+            type: "tool",
+            toolName: "write_file",
+            status: "completed",
+          }),
+        ],
+      });
+
+    store.close();
+    stores.splice(stores.indexOf(store), 1);
+    const reopened = new FileSessionStore(databasePath, join(directory, "projects"));
+    stores.push(reopened);
+    await reopened.initialize();
+    expect(reopened.getSession(sessionId).messages.at(-1)).toEqual(durableMessage);
   });
 
   it("marks an unfinished operation as failed instead of completed", async () => {
@@ -323,7 +806,6 @@ describe("SQLite session store", () => {
     const sessionId = created.activeSession!.session.id;
     await store.saveMessages(sessionId, [
       { id: "u1", role: "user", content: "inspect" },
-      { id: "placeholder", role: "assistant", content: "", threadId: "run-failed" },
     ]);
     store.conversationDatabase.beginRun({
       runId: "run-failed",
@@ -331,19 +813,96 @@ describe("SQLite session store", () => {
       request: "inspect",
     });
     store.conversationDatabase.appendRuntimeEvent("run-failed", "tool_started", {
+      toolCallId: "call-read",
       toolName: "ReadPresentationSnapshot",
       message: "正在调用工具 ReadPresentationSnapshot...",
     });
 
-    await store.failAgentRunMessage(sessionId, "run-failed", "unexpected tool error");
+    await store.finalizeAgentRunMessage(sessionId, "run-failed", {
+      status: "failed",
+      error: "unexpected tool error",
+    });
 
     const assistant = store.getSession(sessionId).messages.at(-1)!;
     const tool = assistant.activityTrace?.find((item) => item.kind === "tool");
     expect(tool).toMatchObject({
       kind: "tool",
-      status: "done",
-      finishedLabel: "读取演示文稿未完成",
+      toolCallId: "call-read",
+      status: "failed",
     });
     expect(assistant.content).not.toContain("unexpected tool error");
+    expect(assistant).toMatchObject({
+      runId: "run-failed",
+      runStatus: "failed",
+      runError: "处理请求时遇到问题，请稍后重试。",
+    });
+  });
+
+  it("persists explicit interruption without reading display copy", async () => {
+    const { store } = await createStore();
+    const created = await store.createSession({ title: "Interrupted run" });
+    const sessionId = created.activeSession!.session.id;
+    store.conversationDatabase.beginRun({
+      runId: "run-interrupted",
+      sessionId,
+      request: "build",
+    });
+    store.conversationDatabase.appendRuntimeEvent("run-interrupted", "text_chunk", {
+      type: "text-chunk",
+      chunk: "已完成部分页面",
+    });
+
+    await store.finalizeAgentRunMessage(sessionId, "run-interrupted", {
+      status: "interrupted",
+    });
+
+    expect(store.getSession(sessionId).messages.at(-1)).toMatchObject({
+      content: "已完成部分页面",
+      runStatus: "interrupted",
+      runError: undefined,
+    });
+  });
+
+  it("replays tool approval request and resolution into the durable trace", async () => {
+    const { store } = await createStore();
+    const created = await store.createSession({ title: "Tool approval" });
+    const sessionId = created.activeSession!.session.id;
+    store.conversationDatabase.beginRun({
+      runId: "run-approval",
+      sessionId,
+      request: "export",
+    });
+    store.conversationDatabase.appendRuntimeEvent("run-approval", "approval_requested", {
+      type: "tool-approval-waiting",
+      approvalId: "approval-1",
+      toolName: "ExportPptx",
+      reason: "写入导出文件",
+      detail: "输出到项目目录",
+    });
+    store.conversationDatabase.appendRuntimeEvent("run-approval", "approval_resolved", {
+      type: "tool-approval-resolved",
+      approvalId: "approval-1",
+      toolName: "ExportPptx",
+      status: "approved",
+      message: "工具授权已确认",
+    });
+
+    await store.finalizeAgentRunMessage(sessionId, "run-approval", {
+      status: "chat",
+      message: "导出完成",
+    });
+
+    const message = store.getSession(sessionId).messages.at(-1)!;
+    expect(message.activityTrace?.map((item) => item.kind)).toEqual([
+      "tool-approval",
+      "response",
+    ]);
+    expect(message.activityTrace?.[0]).toEqual(expect.objectContaining({
+      kind: "tool-approval",
+      approvalId: "approval-1",
+      status: "approved",
+    }));
+    const response = message.activityTrace?.find((item) => item.kind === "response");
+    expect(response && getResponseBlockContent(response, message.content)).toBe("导出完成");
   });
 });

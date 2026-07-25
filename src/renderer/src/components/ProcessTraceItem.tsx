@@ -18,23 +18,20 @@ export const ProcessTraceItem: React.FC<ProcessTraceItemProps> = ({
   const CaretIcon = effectiveExpanded ? ChevronDownIcon : ChevronRightIcon;
 
   useEffect(() => {
-    if (row.kind === "thought" || defaultExpanded) return;
-    setExpanded(Boolean(row.active));
+    if (row.kind === "thought" || defaultExpanded || !row.active) return;
+    setExpanded(true);
   }, [defaultExpanded, row.active, row.kind]);
 
   const toggleExpanded = () => setExpanded((value) => !value);
 
-  const handleLabelClick = () => {
-    const selection = window.getSelection();
-    if (selection && !selection.isCollapsed) return;
-    toggleExpanded();
-  };
-
-  const handleLabelKeyDown = (event: React.KeyboardEvent<HTMLSpanElement>) => {
-    if (event.key !== "Enter" && event.key !== " ") return;
-    event.preventDefault();
-    toggleExpanded();
-  };
+  const statusIndicator = row.status ? (
+    <span
+      className={`process-trace-row-status process-trace-row-status--${row.status}`}
+      aria-hidden="true"
+    >
+      {row.status === "running" ? <i /> : row.status === "completed" ? "✓" : "!"}
+    </span>
+  ) : null;
 
   if (row.kind === "progress") {
     return (
@@ -48,32 +45,34 @@ export const ProcessTraceItem: React.FC<ProcessTraceItemProps> = ({
   }
 
   return (
-    <div className={`process-trace-row process-trace-row--${row.kind}${row.active ? " process-trace-row--active" : ""}`}>
-      <div className="process-trace-row-title">
-        {hasBody ? (
-          <button
-            type="button"
-            className="process-trace-row-toggle"
-            onClick={toggleExpanded}
-            aria-expanded={effectiveExpanded}
-            aria-label={effectiveExpanded ? `收起${row.title}` : `展开${row.title}`}
-          >
-            <CaretIcon size={12} />
-          </button>
-        ) : (
-          <span className="process-trace-row-caret" aria-hidden="true" />
-        )}
-        <span
-          className={`process-trace-row-label${hasBody ? " process-trace-row-label--interactive" : ""}`}
-          onClick={hasBody ? handleLabelClick : undefined}
-          onKeyDown={hasBody ? handleLabelKeyDown : undefined}
-          role={hasBody ? "button" : undefined}
-          tabIndex={hasBody ? 0 : undefined}
-          aria-expanded={hasBody ? effectiveExpanded : undefined}
+    <div
+      className={[
+        "process-trace-row",
+        `process-trace-row--${row.kind}`,
+        row.active ? "process-trace-row--active" : "",
+        row.status ? `process-trace-row--status-${row.status}` : "",
+      ].filter(Boolean).join(" ")}
+    >
+      {hasBody ? (
+        <button
+          type="button"
+          className="process-trace-row-title process-trace-row-title--interactive"
+          onClick={toggleExpanded}
+          aria-expanded={effectiveExpanded}
         >
-          {row.title}
-        </span>
-      </div>
+          <span className="process-trace-row-toggle" aria-hidden="true">
+            <CaretIcon size={12} />
+          </span>
+          <span className="process-trace-row-label">{row.title}</span>
+        </button>
+      ) : (
+        <div className="process-trace-row-title">
+          {statusIndicator ?? (
+            <span className="process-trace-row-caret" aria-hidden="true" />
+          )}
+          <span className="process-trace-row-label">{row.title}</span>
+        </div>
+      )}
       {effectiveExpanded && (
         <div className="process-trace-row-body">
           {row.content !== undefined && (

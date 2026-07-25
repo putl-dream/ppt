@@ -9,11 +9,12 @@ import {
   OpenPreviewIcon,
 } from "./Icons";
 import { UnifiedAgentInput } from "./UnifiedAgentInput";
-import { AgentThinkingLoader } from "./AgentThinkingLoader";
-import { AgentActivityTrace } from "./AgentActivityTrace";
+import { AgentRunLoader } from "./AgentRunLoader";
+import { AgentRunTimeline } from "./AgentRunTimeline";
 import { MessageMarkdown } from "./MessageMarkdown";
+import { AgentRunTerminalNotice } from "./AgentRunTerminalNotice";
 import type { AgentActivityItem } from "@shared/agent-activity";
-import { resolveActivityTrace, filterTraceForDisplay } from "@shared/agent-activity";
+import { filterTraceForDisplay, markTraceComplete } from "@shared/agent-activity";
 import { TaskPlanCard } from "./TaskPlanCard";
 import type { ManagedModel } from "../modelCatalog";
 import type { Presentation } from "@shared/presentation";
@@ -37,6 +38,7 @@ import {
   LeadWaitingState,
   TeamOverview,
 } from "./TeamSessionViews";
+import type { AgentRunPhase } from "../agentRunPresentation";
 
 type ChatMessage = SessionChatMessage;
 type QuestionEvent = Extract<DisplayEvent, { kind: "interaction.question-requested" }>;
@@ -137,8 +139,7 @@ interface ChatWorkspaceProps {
   chatMessages: ChatMessage[];
   presentation?: Presentation;
   activityTrace: AgentActivityItem[];
-  thoughtProgress: number;
-  agentActivityMode: "idle" | "request" | "workflow" | "reasoning";
+  agentRunPhase: AgentRunPhase;
   streamingMessageId?: string | null;
   request: string;
   onChangeRequest: (val: string) => void;
@@ -183,8 +184,7 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
   chatMessages,
   presentation,
   activityTrace,
-  thoughtProgress,
-  agentActivityMode,
+  agentRunPhase,
   streamingMessageId = null,
   request,
   onChangeRequest,
@@ -229,6 +229,12 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
   const scrollViewportRef = useRef<HTMLDivElement>(null);
   const chatStreamRef = useRef<HTMLDivElement>(null);
   const shouldFollowOutputRef = useRef(true);
+  const activeRunStartedAtRef = useRef<number | null>(null);
+  if (busy && activeRunStartedAtRef.current === null) {
+    activeRunStartedAtRef.current = Date.now();
+  } else if (!busy) {
+    activeRunStartedAtRef.current = null;
+  }
   const [conversationFocus, setConversationFocus] = useState<ConversationFocus>({ kind: "main" });
   const [teamAttentionIds, setTeamAttentionIds] = useState<Set<string>>(() => new Set());
   const [mainHasAttention, setMainHasAttention] = useState(false);
@@ -311,7 +317,8 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
   const scrollToBottom = useCallback((instant: boolean) => {
     const viewport = scrollViewportRef.current;
     if (!viewport) return;
-    if (instant) {
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (instant || reducedMotion) {
       viewport.scrollTop = viewport.scrollHeight;
       return;
     }
@@ -403,10 +410,10 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
           previousSession.status !== session.status
           || (
             latestStep?.type === "tool"
-            && latestStep.status === "done"
+            && latestStep.status !== "running"
             && (
               previousLatestStep?.id !== latestStep.id
-              || previousLatestStep.status !== "done"
+              || previousLatestStep.status === "running"
             )
           )
         )
@@ -465,7 +472,7 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
     if (shouldFollowOutputRef.current) {
       scrollToBottom(busy);
     }
-  }, [chatMessages, activityTrace, thoughtProgress, busy, agentActivityMode, scrollToBottom]);
+  }, [chatMessages, activityTrace, busy, agentRunPhase, scrollToBottom]);
 
   useEffect(() => {
     const viewport = scrollViewportRef.current;
@@ -486,7 +493,7 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
     if (!stream || !viewport) return;
 
     const observer = new ResizeObserver(() => {
-      if ((busy || runningTeamCount > 0) && shouldFollowOutputRef.current) {
+      if (shouldFollowOutputRef.current) {
         viewport.scrollTop = viewport.scrollHeight;
       }
     });
@@ -742,37 +749,47 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
                 <>
                   {(() => {
                     const useLiveTrace = busy && streamingMessageId === msg.id;
-                    // 实时消息的任务计划由输入框上方的浮动卡片展示，历史消息则内联到时间线中
                     const resolvedTrace = useLiveTrace
                       ? activityTrace
-                      : resolveActivityTrace({
-                          activityTrace: msg.activityTrace,
-                          thought: msg.thought,
-                          reasoning: msg.reasoning,
-                        });
+                      : msg.runStatus === "running"
+                        ? (msg.activityTrace ?? [])
+                        : markTraceComplete(
+                            msg.activityTrace ?? [],
+                            msg.runStatus === "failed"
+                              ? "failed"
+                              : msg.runStatus === "interrupted"
+                                ? "denied"
+                                : "failed",
+                          );
                     const trace = filterTraceForDisplay(
                       resolvedTrace,
                       { keepTaskList: false },
                     );
-                    const hasRunningTeammate = trace.some(
-                      (item) => item.kind === "task" && item.status === "running",
-                    );
-                    const traceIsLive = useLiveTrace || hasRunningTeammate;
-                    return trace.length > 0 || (useLiveTrace && msg.content.trim()) ? (
-                      <AgentActivityTrace
-                        items={trace}
-                        live={traceIsLive}
-                        liveContent={useLiveTrace ? msg.content : undefined}
-                        teamGraphTasks={activeTasks}
-                        teamSessionAttentionIds={teamAttentionIds}
-                        onFocusTeamSession={focusTeamSession}
+                    if (msg.runId) {
+                      return (
+                        <AgentRunTimeline
+                          items={trace}
+                          content={msg.content}
+                          live={useLiveTrace}
+                          teamGraphTasks={activeTasks}
+                          teamSessionAttentionIds={teamAttentionIds}
+                          onFocusTeamSession={focusTeamSession}
+                        />
+                      );
+                    }
+                    return msg.content ? (
+                      <MessageMarkdown
+                        content={msg.content}
+                        className="assistant-response"
                       />
                     ) : null;
                   })()}
 
-                  {!(busy && streamingMessageId === msg.id) && (
-                    <MessageMarkdown content={msg.content} className="assistant-response" />
-                  )}
+                  <AgentRunTerminalNotice
+                    status={msg.runStatus}
+                    error={msg.runError}
+                    onRetry={onRetry ? () => onRetry(msg.id) : undefined}
+                  />
 
                   <InteractionCardHost
                     host="timeline"
@@ -782,25 +799,6 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
                     onResolveQuestion={onResolveQuestion}
                     onConfirmLayout={onConfirmLayout}
                   />
-
-                  {onRetry && msg.content.includes("发生错误") && (
-                  <button
-                    onClick={() => onRetry(msg.id)}
-                    style={{
-                      background: "transparent",
-                      border: "none",
-                      cursor: "pointer",
-                      color: "var(--accent-primary)",
-                      fontSize: "11px",
-                      marginTop: "4px",
-                      display: "inline-flex",
-                      alignItems: "center",
-                      gap: "4px",
-                    }}
-                  >
-                    🔄 重试该指令
-                  </button>
-                )}
 
                 <ReviewCardHost
                   anchorMessageId={msg.id}
@@ -851,15 +849,12 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
           onExportDeck={onExportDeck}
         />
 
-        {/* Agent 实时思考：工具调用列表 + 模型推理流 */}
-        <AgentThinkingLoader
+        {/* 当前活动只出现在时间线尾部；正文流式展示时自动让位。 */}
+        <AgentRunLoader
           busy={busy}
-          agentActivityMode={agentActivityMode}
+          phase={agentRunPhase}
           activityTrace={activityTrace}
-          suppressTrace={Boolean(streamingMessageId)}
-          teamGraphTasks={activeTasks}
-          teamSessionAttentionIds={teamAttentionIds}
-          onFocusTeamSession={focusTeamSession}
+          startedAt={activeRunStartedAtRef.current ?? undefined}
         />
 
         {!busy && runningTeamCount > 0 && (

@@ -1,0 +1,37 @@
+import React from "react";
+import type { SessionChatMessage } from "@shared/session";
+
+interface AgentRunTerminalNoticeProps {
+  status: SessionChatMessage["runStatus"];
+  error?: string;
+  onRetry?: () => void;
+}
+
+export const AgentRunTerminalNotice: React.FC<AgentRunTerminalNoticeProps> = ({
+  status,
+  error,
+  onRetry,
+}) => {
+  if (status !== "interrupted" && status !== "failed") return null;
+
+  const failed = status === "failed";
+  return (
+    <div
+      className={`agent-run-terminal-notice agent-run-terminal-notice--${status}`}
+      role="status"
+    >
+      <span className="agent-run-terminal-notice-icon" aria-hidden="true">
+        {failed ? "!" : "■"}
+      </span>
+      <span className="agent-run-terminal-notice-copy">
+        <strong>{failed ? "本次处理未完成" : "会话已中断"}</strong>
+        {failed && error && <small>{error}</small>}
+      </span>
+      {onRetry && (
+        <button type="button" onClick={onRetry}>
+          重试
+        </button>
+      )}
+    </div>
+  );
+};

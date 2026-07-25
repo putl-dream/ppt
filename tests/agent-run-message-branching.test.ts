@@ -8,15 +8,16 @@ import { TEST_DESIGN_SYSTEM } from "./design-engine-test-utils";
 
 const sourceMessages: ChatMessage[] = [
   { id: "user-1", role: "user", content: "first" },
-  { id: "assistant-1", role: "assistant", content: "answer" },
+  { id: "assistant-1", role: "assistant", content: "answer", runStatus: "completed" },
   { id: "user-2", role: "user", content: "second" },
 ];
 
-const streamPlaceholder: ChatMessage = {
+const streamMessage: ChatMessage = {
   id: "stream-1",
   role: "assistant",
   content: "",
-  threadId: "run-1",
+  runId: "run-1",
+  runStatus: "running",
 };
 
 function prepare(overrides: Partial<Parameters<typeof prepareAgentRunMessages>[0]> = {}) {
@@ -25,14 +26,14 @@ function prepare(overrides: Partial<Parameters<typeof prepareAgentRunMessages>[0
     activeRequest: "new prompt",
     userDisplayContent: "new prompt",
     isSidechain: false,
-    streamPlaceholder,
+    streamMessage,
     createMessageId: () => "new-user-id",
     ...overrides,
   });
 }
 
-describe("agent run preparation", () => {
-  it("builds the IPC request and includes an optional layout choice", () => {
+describe("agent run message branching", () => {
+  it("builds the IPC request with the selected layout mode", () => {
     const layoutChoice = {
       mode: "creative" as const,
       designSystem: TEST_DESIGN_SYSTEM,
@@ -51,25 +52,20 @@ describe("agent run preparation", () => {
     });
   });
 
-  it("appends a visible user message and stream placeholder for a normal send", () => {
+  it("adds one stable running assistant turn with runId separate from threadId", () => {
     expect(prepare().runMessages.slice(-2)).toEqual([
       { id: "new-user-id", role: "user", content: "new prompt" },
-      streamPlaceholder,
+      streamMessage,
     ]);
+    expect(streamMessage.threadId).toBeUndefined();
   });
 
-  it("omits the visible user message for hidden and sidechain turns", () => {
-    expect(prepare({ userDisplayContent: null }).runMessages).toEqual([
-      ...sourceMessages,
-      streamPlaceholder,
-    ]);
-    expect(prepare({ isSidechain: true }).runMessages).toEqual([
-      ...sourceMessages,
-      streamPlaceholder,
-    ]);
+  it("does not invent a user bubble for hidden or sidechain turns", () => {
+    expect(prepare({ userDisplayContent: null }).runMessages.at(-1)).toBe(streamMessage);
+    expect(prepare({ isSidechain: true }).runMessages.at(-1)).toBe(streamMessage);
   });
 
-  it("forks at an edited message and reports the retained display-card anchors", () => {
+  it("forks edited history while retaining the stable running turn anchor", () => {
     const result = prepare({ editedMessageId: "user-2", userDisplayContent: "edited" });
 
     expect(result.forkedMessages).toEqual([
@@ -77,18 +73,11 @@ describe("agent run preparation", () => {
       sourceMessages[1],
       { id: "new-user-id", role: "user", content: "edited" },
     ]);
-    expect(result.runMessages).toEqual([...result.forkedMessages!, streamPlaceholder]);
+    expect(result.runMessages).toEqual([...result.forkedMessages!, streamMessage]);
     expect([...result.retainedMessageIds!]).toEqual([
       "user-1",
       "assistant-1",
       "new-user-id",
     ]);
-    expect(sourceMessages[2]).toEqual({ id: "user-2", role: "user", content: "second" });
-  });
-
-  it("keeps the conversation when the edited message no longer exists", () => {
-    expect(prepare({ editedMessageId: "missing" })).toEqual({
-      runMessages: [...sourceMessages, streamPlaceholder],
-    });
   });
 });

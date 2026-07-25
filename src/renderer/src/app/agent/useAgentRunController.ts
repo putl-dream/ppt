@@ -10,7 +10,6 @@ import type { LayoutChoice } from "@shared/layout-preference";
 import type { LeanGenerationMode } from "@shared/lean-mode-contract";
 import {
   appendStep,
-  resolveToolApprovalItem,
 } from "@shared/agent-activity";
 import { formatPublicErrorMessage } from "@shared/agent-activity-display";
 import {
@@ -21,7 +20,6 @@ import {
 import {
   pruneDisplayCardsForMessages,
   setDisplayCardStatus,
-  usePermissionCardManager,
 } from "../../cards/display-card-managers";
 import {
   toSessionChatMessages,
@@ -163,8 +161,27 @@ export function useAgentRunController({
     const isSidechain = options?.sidechain === true;
     const sourceMessages = chatMessages;
     const streamMessageId = crypto.randomUUID();
-    let activityStarted = false;
-
+    const streamMessage: ChatMessage = {
+      id: streamMessageId,
+      role: "assistant",
+      content: "",
+      runId,
+      runStatus: "running",
+    };
+    const preparedMessages = prepareAgentRunMessages({
+      sourceMessages,
+      activeRequest,
+      userDisplayContent,
+      isSidechain,
+      editedMessageId: isEditOfMsgId,
+      streamMessage,
+      createMessageId: () => crypto.randomUUID(),
+    });
+    // The assistant message groups one semantic turn. Its ordered run blocks are
+    // appended in event order; the transient activity indicator stays at list tail.
+    beginRunActivity(runId, streamMessageId, isSidechain);
+    setActiveRunId(runId);
+    setChatMessages(preparedMessages.runMessages);
     setBusy(true);
     await coordinateAgentRun({
       prepareContext: async (): Promise<AgentRunContext | undefined> => {
@@ -172,18 +189,24 @@ export function useAgentRunController({
           activeSessionId,
           prompt: activeRequest,
           localStoragePath,
-          applySessionState,
+          applySessionState: (state) => {
+            applySessionState(state);
+            // Session hydration and the provisional run anchor belong to one
+            // render transaction, so creating a draft session cannot remount
+            // the loader between standalone and message-local trees.
+            setChatMessages(preparedMessages.runMessages);
+          },
           setIsDraftChat,
           notify,
         });
-        return preparedContext
-          ? {
-              ...preparedContext,
-              runId,
-              streamMessageId,
-              sidechain: isSidechain,
-            }
-          : undefined;
+        if (!preparedContext) {
+          throw new Error("Agent run context could not be prepared.");
+        }
+        return {
+          ...preparedContext,
+          runId,
+          sidechain: isSidechain,
+        };
       },
       execute: async (context) => {
         const agentRequest = buildAgentRunRequest({
@@ -199,25 +222,6 @@ export function useAgentRunController({
           generationMode: runGenerationMode,
         });
 
-        setActiveRunId(context.runId);
-        activityStarted = true;
-        // 先注册 activity 和空助手消息，流式事件到达时才有稳定的 run/message 锚点。
-        beginRunActivity(context.runId, context.streamMessageId, context.sidechain);
-        const streamPlaceholder: ChatMessage = {
-          id: context.streamMessageId,
-          role: "assistant",
-          content: "",
-          threadId: context.runId,
-        };
-        const preparedMessages = prepareAgentRunMessages({
-          sourceMessages,
-          activeRequest,
-          userDisplayContent,
-          isSidechain: context.sidechain,
-          editedMessageId: isEditOfMsgId,
-          streamPlaceholder,
-          createMessageId: () => crypto.randomUUID(),
-        });
         if (preparedMessages.retainedMessageIds) {
           pruneDisplayCardsForMessages(preparedMessages.retainedMessageIds);
         }
@@ -257,7 +261,7 @@ export function useAgentRunController({
         });
       },
       cleanup: () => {
-        if (activityStarted) finishRunActivity(runId);
+        finishRunActivity(runId);
         setActiveRunId((current) => current === runId ? null : current);
         setIsCancellingRun(false);
         if (runLock.release(runId)) setBusy(false);
@@ -357,27 +361,17 @@ export function useAgentRunController({
     approved: boolean,
   ) => {
     const runId = activeRunIdRef.current;
-    if (!runId || !busy) return;
-    syncActivityTrace(
-      resolveToolApprovalItem(
-        activeRunTraceRef.current,
-        approvalId,
-        approved ? "approved" : "denied",
-      ),
-    );
-    const permissionCard = usePermissionCardManager.getState().cards.find((card) =>
-      card.status === "active"
-      && card.event.kind === "permission.tool-requested"
-      && card.event.payload.approvalId === approvalId
-    );
-    if (permissionCard) {
-      setDisplayCardStatus(
-        permissionCard.event.eventId,
-        approved ? "resolved" : "dismissed",
-      );
+    if (!runId) return;
+    try {
+      const resolved = await window.desktopApi.resolveToolApproval(runId, approvalId, approved);
+      if (!resolved) {
+        setDisplayCardStatus(`tool-approval:${approvalId}`, "dismissed");
+        notify("这项工具授权已失效");
+      }
+    } catch (error) {
+      notify(formatPublicErrorMessage(error, "工具授权提交失败，请重试。"));
     }
-    await window.desktopApi.resolveToolApproval(runId, approvalId, approved);
-  }, [activeRunIdRef, activeRunTraceRef, busy, syncActivityTrace]);
+  }, [activeRunIdRef, notify]);
 
   const streamingMessageId =
     busy && activeRunId

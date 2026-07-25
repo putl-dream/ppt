@@ -177,33 +177,13 @@ export function formatAgentToolActivity(
   }
 }
 
-export function inferAgentToolActivityState(
-  message: string | undefined,
-  fallback: AgentToolActivityState,
-): AgentToolActivityState {
-  const normalized = message?.toLowerCase() ?? "";
-  if (/参数|校验|解析失败|输入信息有误|暂未执行|validation|invalid|parse error/.test(normalized)) {
-    return "invalid-input";
-  }
-  if (/拒绝|未授权|取消|denied|not approved|cancelled|canceled/.test(normalized)) {
-    return "denied";
-  }
-  if (/失败|未完成|failed|error|exception/.test(normalized)) {
-    return "failed";
-  }
-  return fallback;
-}
-
 function formatBackgroundTaskLabel(label: string): string {
   const toolMatch = label.match(/^([A-Za-z][\w-]*)(?::\s*.*)?$/);
   if (toolMatch) return getAgentToolDisplayCopy(toolMatch[1]!).action;
   return label;
 }
 
-/**
- * Normalize runtime diagnostics and legacy persisted labels at the final display
- * boundary. The raw messages remain available to logs and context snapshots.
- */
+/** Normalize runtime diagnostics at the final display boundary. */
 export function formatAgentProgressMessage(message: string): string | null {
   const value = message.trim();
   if (!value) return null;
@@ -230,19 +210,6 @@ export function formatAgentProgressMessage(message: string): string | null {
   if (backgroundMatch) {
     return `已开始后台处理：${formatBackgroundTaskLabel(backgroundMatch[1]!)}`;
   }
-
-  const legacyCompleted = value.match(
-    /^(?:✅\s*)?工具\s+([A-Za-z_][\w-]*)\s+(?:运行完毕|执行完成)[。.]?$/,
-  );
-  if (legacyCompleted) return formatAgentToolActivity(legacyCompleted[1]!, "completed");
-
-  const legacyStarted = value.match(
-    /^(?:🛠️\s*)?(?:运行工具|正在调用工具|尝试调用)[：:]?\s*([A-Za-z_][\w-]*)/,
-  );
-  if (legacyStarted) return formatAgentToolActivity(legacyStarted[1]!, "running");
-
-  const legacyFailed = value.match(/^工具\s+([A-Za-z_][\w-]*)\s+执行失败/i);
-  if (legacyFailed) return formatAgentToolActivity(legacyFailed[1]!, "failed");
 
   return value;
 }

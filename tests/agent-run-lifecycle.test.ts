@@ -7,7 +7,6 @@ import {
 
 const context: AgentRunContext = {
   runId: "run-1",
-  streamMessageId: "message-1",
   sessionId: "session-1",
   projectId: "project-1",
   sidechain: false,

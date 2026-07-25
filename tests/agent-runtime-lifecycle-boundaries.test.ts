@@ -364,6 +364,7 @@ describe("AgentRuntime terminal boundaries", () => {
 
   it("does not let a late background settlement overwrite a failed terminal checkpoint", async () => {
     const workspaceRoot = await mkdtemp(join(tmpdir(), "runtime-late-background-"));
+    const progress: Array<{ type: string; [key: string]: unknown }> = [];
     let resolvePreview!: () => void;
     const previewDone = new Promise<void>((resolve) => { resolvePreview = resolve; });
     const schema = z.object({ slideId: z.string(), run_in_background: z.boolean().optional() });
@@ -412,10 +413,15 @@ describe("AgentRuntime terminal boundaries", () => {
       presentationSnapshot: createStarterPresentation(),
       selectedElementIds: [],
       workspaceRoot,
+      onProgress: (event) => progress.push(event),
     })).rejects.toThrow("model failed while preview was running");
 
     resolvePreview();
     await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(progress
+      .filter((event) => event.type === "tool-state" && event.toolCallId === "late-preview")
+      .map((event) => event.status))
+      .toEqual(["running", "denied"]);
     const checkpoint = await new DurableRunStore(workspaceRoot).load("late-background-thread");
     expect(checkpoint).toMatchObject({ status: "failed", phase: "finished" });
   });

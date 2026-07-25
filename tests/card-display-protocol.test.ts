@@ -85,7 +85,7 @@ describe("card display protocol", () => {
     expect(streamDisplay?.scope.runId).toBe("run-2");
 
     const resultEvents = toResultDisplayEvents({
-      status: "chat",
+      status: "waiting-user",
       message: "请选择内容侧重点",
       threadId: "thread-1",
       question: {
@@ -102,7 +102,7 @@ describe("card display protocol", () => {
 
   it("persists manager status and actions independently from chat messages", () => {
     const event = toResultDisplayEvents({
-      status: "chat",
+      status: "waiting-user",
       message: "请选择内容侧重点",
       threadId: "thread-1",
       question: {

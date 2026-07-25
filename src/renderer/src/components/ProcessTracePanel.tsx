@@ -2,14 +2,18 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import type { AgentActivityItem } from "@shared/agent-activity";
 import { summarizeProcessTrace } from "@shared/agent-activity";
 import { ChevronDownIcon, ChevronRightIcon } from "./Icons";
-import { MessageMarkdown } from "./MessageMarkdown";
 import { ProcessTraceItem } from "./ProcessTraceItem";
 import { buildProcessTraceRows } from "./process-trace-rows";
+import {
+  deriveAgentRunPresentation,
+  type AgentRunPhase,
+} from "../agentRunPresentation";
 
 interface ProcessTracePanelProps {
   items: AgentActivityItem[];
   live?: boolean;
-  liveContent?: string;
+  phase?: AgentRunPhase;
+  startedAt?: number;
   defaultOpen?: boolean;
   defaultExpandRows?: boolean;
 }
@@ -17,16 +21,17 @@ interface ProcessTracePanelProps {
 export const ProcessTracePanel: React.FC<ProcessTracePanelProps> = ({
   items,
   live = false,
-  liveContent = "",
+  phase = "idle",
+  startedAt,
   defaultOpen = false,
   defaultExpandRows = false,
 }) => {
   const [open, setOpen] = useState(
-    defaultOpen || (live && (items.length > 0 || Boolean(liveContent.trim()))),
+    defaultOpen || live,
   );
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const wasLiveRef = useRef(live);
-  const startedAtRef = useRef<number | null>(live ? Date.now() : null);
+  const startedAtRef = useRef<number | null>(live ? (startedAt ?? Date.now()) : null);
 
   useEffect(() => {
     if (!live) {
@@ -36,7 +41,11 @@ export const ProcessTracePanel: React.FC<ProcessTracePanelProps> = ({
       return;
     }
 
-    if (startedAtRef.current === null) startedAtRef.current = Date.now();
+    if (startedAt !== undefined) {
+      startedAtRef.current = startedAt;
+    } else if (startedAtRef.current === null) {
+      startedAtRef.current = Date.now();
+    }
     const updateElapsed = () => {
       if (startedAtRef.current === null) return;
       setElapsedSeconds(Math.max(0, Math.floor((Date.now() - startedAtRef.current) / 1_000)));
@@ -44,32 +53,33 @@ export const ProcessTracePanel: React.FC<ProcessTracePanelProps> = ({
     updateElapsed();
     const timer = window.setInterval(updateElapsed, 1_000);
     return () => window.clearInterval(timer);
-  }, [live]);
+  }, [live, startedAt]);
 
   useEffect(() => {
     const wasLive = wasLiveRef.current;
 
     if (live) {
       if (!wasLive) {
-        startedAtRef.current = Date.now();
-        setElapsedSeconds(0);
+        if (startedAt !== undefined) startedAtRef.current = startedAt;
       }
       setOpen(true);
-    } else if (wasLive) {
-      setOpen(false);
     }
 
     wasLiveRef.current = live;
-  }, [live]);
+  }, [live, startedAt]);
 
   const rows = useMemo(() => buildProcessTraceRows(items, live), [items, live]);
+  const hasRunningToolRow = rows.some((row) => row.status === "running");
 
-  if (rows.length === 0 && !liveContent.trim()) return null;
+  if (rows.length === 0 && !live) return null;
 
   const processSummary = summarizeProcessTrace(items);
-  const headerLabel = elapsedSeconds > 0
-    ? `已工作 ${elapsedSeconds} 秒`
-    : (live ? "正在工作" : processSummary);
+  const runPresentation = deriveAgentRunPresentation(phase, items);
+  const headerLabel = live
+    ? runPresentation.label
+    : elapsedSeconds > 0
+      ? `已工作 ${elapsedSeconds} 秒`
+      : processSummary;
 
   const handleHeaderClick = () => {
     if (live) return;
@@ -88,7 +98,23 @@ export const ProcessTracePanel: React.FC<ProcessTracePanelProps> = ({
         title={processSummary}
       >
         <span className="process-trace-panel-header-left">
-          <span className="process-trace-panel-label">{headerLabel}</span>
+          {live && !hasRunningToolRow && (
+            <span
+              className={[
+                "agent-run-loader",
+                runPresentation.animated ? "agent-run-loader--active" : "agent-run-loader--paused",
+              ].join(" ")}
+              aria-hidden="true"
+            >
+              <i />
+            </span>
+          )}
+          <span className="process-trace-panel-label" role="status" aria-live="polite">
+            {headerLabel}
+          </span>
+          {live && elapsedSeconds > 0 && (
+            <span className="process-trace-panel-elapsed">{elapsedSeconds} 秒</span>
+          )}
           <span className="process-trace-panel-caret" aria-hidden="true">
             {open ? <ChevronDownIcon size={12} /> : <ChevronRightIcon size={12} />}
           </span>
@@ -103,12 +129,6 @@ export const ProcessTracePanel: React.FC<ProcessTracePanelProps> = ({
               defaultExpanded={defaultExpandRows || Boolean(row.active && row.kind !== "thought")}
             />
           ))}
-          {liveContent.trim() && (
-            <MessageMarkdown
-              content={liveContent}
-              className="assistant-response process-trace-live-content"
-            />
-          )}
         </div>
       )}
     </div>

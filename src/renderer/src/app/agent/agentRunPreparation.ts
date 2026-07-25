@@ -32,7 +32,7 @@ interface PrepareAgentRunMessagesOptions {
   userDisplayContent: string | null;
   isSidechain: boolean;
   editedMessageId?: string;
-  streamPlaceholder: ChatMessage;
+  streamMessage: ChatMessage;
   createMessageId: () => string;
 }
 
@@ -52,18 +52,18 @@ export function prepareAgentRunMessages({
   userDisplayContent,
   isSidechain,
   editedMessageId,
-  streamPlaceholder,
+  streamMessage,
   createMessageId,
 }: PrepareAgentRunMessagesOptions): PreparedAgentRunMessages {
   // sidechain 是后台回合，不插入可见用户消息，也不参与编辑消息分支。
   if (isSidechain) {
-    return { runMessages: [...sourceMessages, streamPlaceholder] };
+    return { runMessages: [...sourceMessages, streamMessage] };
   }
 
   if (editedMessageId) {
     const editedIndex = sourceMessages.findIndex((message) => message.id === editedMessageId);
     if (editedIndex === -1) {
-      return { runMessages: [...sourceMessages, streamPlaceholder] };
+      return { runMessages: [...sourceMessages, streamMessage] };
     }
 
     // 编辑旧消息等价于从该消息处创建新分支，后续旧消息及其卡片都应被截断。
@@ -77,7 +77,7 @@ export function prepareAgentRunMessages({
     return {
       forkedMessages,
       retainedMessageIds: new Set(forkedMessages.map((message) => message.id)),
-      runMessages: [...forkedMessages, streamPlaceholder],
+      runMessages: [...forkedMessages, streamMessage],
     };
   }
 
@@ -87,10 +87,10 @@ export function prepareAgentRunMessages({
       runMessages: [
         ...sourceMessages,
         { id: createMessageId(), role: "user", content: userDisplayContent },
-        streamPlaceholder,
+        streamMessage,
       ],
     };
   }
 
-  return { runMessages: [...sourceMessages, streamPlaceholder] };
+  return { runMessages: [...sourceMessages, streamMessage] };
 }

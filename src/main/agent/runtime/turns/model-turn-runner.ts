@@ -72,7 +72,6 @@ export class ModelTurnRunner {
                     type: "delta",
                     attemptId,
                     text: chunk.text,
-                    source: "message",
                   });
                 }
               },

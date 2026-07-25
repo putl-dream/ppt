@@ -4,7 +4,10 @@ import {
   markTraceComplete,
   type AgentActivityItem,
 } from "../src/shared/agent-activity";
-import type { TeammateProgressEvent } from "../src/shared/teammate-progress";
+import {
+  isTeammateProgressEvent,
+  type TeammateProgressEvent,
+} from "../src/shared/teammate-progress";
 
 describe("teammate progress activity", () => {
   it("projects assignment reasoning and tool calls into one task trace", () => {
@@ -49,24 +52,26 @@ describe("teammate progress activity", () => {
       },
     ];
 
+    expect(events.every(isTeammateProgressEvent)).toBe(true);
     const trace = events.reduce<AgentActivityItem[]>(applyTeammateProgressEvent, []);
     expect(trace).toEqual([
       expect.objectContaining({
         kind: "task",
         taskId: "task-outline",
-        description: "Create outline · task_worker",
-        status: "done",
+        agentName: "task_worker",
+        description: "Create outline",
+        status: "completed",
         steps: [
           expect.objectContaining({
             type: "reasoning",
             text: "Inspecting source material.",
-            status: "done",
+            status: "completed",
           }),
           expect.objectContaining({
             type: "tool",
             toolName: "write_file",
             text: "write_file 已完成",
-            status: "done",
+            status: "completed",
           }),
         ],
       }),

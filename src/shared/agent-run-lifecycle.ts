@@ -1,6 +1,5 @@
 export interface AgentRunIdentity {
   runId: string;
-  streamMessageId: string;
   sidechain: boolean;
 }
 

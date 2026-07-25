@@ -77,6 +77,11 @@ Presentation Command Proposal → CommitGate → CommandBus
 
 Provider 原生内容块是消息协议唯一事实源。UI transcript、活动事件和本地富工具结果不能反向拼成另一套 Provider History。
 
+Renderer 将一次运行投影为有序的可见 block 流：`response` 通过偏移引用消息正文，
+`reasoning / tool / step / task` 保留在各自发生的位置。当前 activity indicator
+只是消息列表尾部的瞬态反馈，正文开始流式显示时让位，不写入会话，也不会重新激活
+旧 block。这样 `正文 → 工具 → 正文` 在实时展示和会话重载后保持同一顺序。
+
 ## 5. 三类状态必须分开
 
 ### 5.1 Query 状态

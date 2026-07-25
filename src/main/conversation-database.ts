@@ -418,6 +418,31 @@ export class ConversationDatabase {
     });
   }
 
+  loadTerminalRunResult<T>(runId: string): T | undefined {
+    const row = this.database.prepare(
+      "SELECT status, result_json FROM runs WHERE run_id = ?",
+    ).get(runId) as {
+      status: "running" | "completed" | "failed" | "interrupted";
+      result_json: string | null;
+    } | undefined;
+    if (!row || row.status === "running" || row.result_json === null) return undefined;
+    return JSON.parse(row.result_json) as T;
+  }
+
+  interruptRunningRuns(error = "Application restarted before the run completed."): string[] {
+    const rows = this.database.prepare(
+      "SELECT run_id FROM runs WHERE status = 'running' ORDER BY started_at",
+    ).all() as Array<{ run_id: string }>;
+    for (const row of rows) {
+      this.finishRun({
+        runId: row.run_id,
+        status: "interrupted",
+        error,
+      });
+    }
+    return rows.map((row) => row.run_id);
+  }
+
   appendEvent(input: AppendConversationEventInput): ConversationEvent | undefined {
     const sessionId = input.sessionId ?? this.sessionIdForRun(input.runId);
     if (!sessionId) return undefined;

@@ -24,35 +24,36 @@ export function handleAgentRunFailure({
   notify,
 }: HandleAgentRunFailureOptions): void {
   const errorMessage = error instanceof Error ? error.message : String(error);
-  const interrupted = /aborted by user|会话已中断|任务已取消/i.test(errorMessage);
+  const candidate = error && typeof error === "object"
+    ? error as { name?: unknown; code?: unknown }
+    : undefined;
+  const interrupted = candidate?.name === "AbortError" || candidate?.code === "ABORT_ERR";
   if (interrupted) {
-    if (!isSidechain) {
-      const interruptedTrace = markTraceComplete(activeTrace, "denied");
-      if (runMessageId) {
-        setChatMessages((current) => current.map((message) =>
-          message.id === runMessageId
-            ? {
-                ...message,
-                content: message.content.trim()
-                  ? `${message.content.trim()}\n\n---\n\n*会话已中断*`
-                  : "会话已中断。",
-                activityTrace: interruptedTrace.length > 0
-                  ? interruptedTrace
-                  : message.activityTrace,
-              }
-            : message,
-        ));
-      } else {
-        setChatMessages((current) => [
-          ...current,
-          {
-            id: crypto.randomUUID(),
-            role: "assistant",
-            content: "会话已中断。",
-            activityTrace: interruptedTrace.length > 0 ? interruptedTrace : undefined,
-          },
-        ]);
-      }
+    const interruptedTrace = markTraceComplete(activeTrace, "denied");
+    if (runMessageId) {
+      setChatMessages((current) => current.map((message) =>
+        message.id === runMessageId
+          ? {
+              ...message,
+              runStatus: "interrupted",
+              runError: undefined,
+              activityTrace: interruptedTrace.length > 0
+                ? interruptedTrace
+                : message.activityTrace,
+            }
+          : message,
+      ));
+    } else if (!isSidechain) {
+      setChatMessages((current) => [
+        ...current,
+        {
+          id: crypto.randomUUID(),
+          role: "assistant",
+          content: "",
+          runStatus: "interrupted",
+          activityTrace: interruptedTrace.length > 0 ? interruptedTrace : undefined,
+        },
+      ]);
     }
     notify("会话已中断");
     return;
@@ -60,34 +61,37 @@ export function handleAgentRunFailure({
 
   console.error("Agent run failed:", errorMessage);
   const failedTrace = markTraceComplete(activeTrace, "failed");
-  const content = `本次处理未完成：${formatPublicErrorMessage(
+  const publicError = formatPublicErrorMessage(
     errorMessage,
     "处理请求时遇到问题，请稍后重试。",
-  )}`;
+  );
+  if (runMessageId) {
+    setChatMessages((current) => current.map((message) =>
+      message.id === runMessageId
+        ? {
+            ...message,
+            runStatus: "failed",
+            runError: publicError,
+            activityTrace: failedTrace.length > 0
+              ? failedTrace
+              : message.activityTrace,
+          }
+        : message,
+    ));
+    return;
+  }
   if (!isSidechain) {
-    if (runMessageId) {
-      setChatMessages((current) => current.map((message) =>
-        message.id === runMessageId
-          ? {
-              ...message,
-              content,
-              activityTrace: failedTrace.length > 0
-                ? failedTrace
-                : message.activityTrace,
-            }
-          : message,
-      ));
-    } else {
-      setChatMessages((current) => [
-        ...current,
-        {
-          id: crypto.randomUUID(),
-          role: "assistant",
-          content,
-          activityTrace: failedTrace.length > 0 ? failedTrace : undefined,
-        },
-      ]);
-    }
+    setChatMessages((current) => [
+      ...current,
+      {
+        id: crypto.randomUUID(),
+        role: "assistant",
+        content: "",
+        runStatus: "failed",
+        runError: publicError,
+        activityTrace: failedTrace.length > 0 ? failedTrace : undefined,
+      },
+    ]);
     return;
   }
   console.error("Sidechain agent run failed:", errorMessage);

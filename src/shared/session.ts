@@ -52,11 +52,49 @@ export const sessionChatMessageSchema = z.object({
   id: z.string(),
   role: z.enum(["user", "assistant"]),
   content: z.string(),
-  thought: z.array(z.string()).optional(),
-  reasoning: z.string().optional(),
+  /** Ordered run blocks; response ranges project content into the visual timeline. */
   activityTrace: z.array(agentActivityItemSchema).optional(),
-  progress: z.number().optional(),
+  runId: z.string().optional(),
+  runStatus: z.enum(["running", "waiting", "completed", "interrupted", "failed"]).optional(),
+  runError: z.string().optional(),
   threadId: z.string().optional(),
+}).strict().superRefine((message, context) => {
+  if (message.role !== "assistant" || !message.runId) return;
+  const responses = (message.activityTrace ?? []).filter(
+    (item) => item.kind === "response",
+  );
+  if (message.content.length > 0 && responses.length === 0) {
+    context.addIssue({
+      code: "custom",
+      path: ["activityTrace"],
+      message: "Run messages with text must describe it with ordered response blocks.",
+    });
+    return;
+  }
+
+  let cursor = 0;
+  for (const response of responses) {
+    if (
+      response.start !== cursor
+      || response.end < response.start
+      || response.end > message.content.length
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["activityTrace"],
+        message: "Response block offsets must be contiguous and within message content.",
+      });
+      return;
+    }
+    cursor = response.end;
+  }
+  if (cursor !== message.content.length) {
+    context.addIssue({
+      code: "custom",
+      path: ["activityTrace"],
+      message: "Response blocks must cover the complete run message content.",
+    });
+  }
 });
 
 export const sessionSummarySchema = z.object({
