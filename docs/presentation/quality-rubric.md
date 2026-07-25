@@ -1,8 +1,9 @@
 # 商业视觉质量评分与人工复核规范
 
-> 版本：commercial-visual-human-v1  
-> 日期：2026-07-21  
-> 适用范围：Lean Commercial Visual Compiler v2
+> 版本：commercial-visual-human-v1
+> 日期：2026-07-21
+> 文档类型：现行质量规范
+> 适用范围：[Lean Commercial Visual Compiler v2](./commercial-pipeline.md)
 
 ## 1. 评分边界
 

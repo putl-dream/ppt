@@ -1,22 +1,92 @@
 # Agent PPT 文档
 
-| 文档 | 说明 |
-|------|------|
-| [agent-data-pipeline.md](./agent-data-pipeline.md) | 模型内容块、工具调用配对、结果归一化与持久化的数据链路设计 |
-| [agent-persistence-recovery.md](./agent-persistence-recovery.md) | Durable Run checkpoint、跨重启审批、事务写入与冷启动恢复语义 |
-| [agent-runtime-refactor-plan.md](./agent-runtime-refactor-plan.md) | 主 Agent Runtime 的 Session、transition、checkpoint lease、工具事务与领域边界渐进式重构方案 |
-| [agent-runtime-thin-layer-refactor-plan.md](./agent-runtime-thin-layer-refactor-plan.md) | 主 Agent Runtime 第二阶段薄层收敛：RunScope、稳定 Loop Driver、单 turn 执行器与统一终态方案 |
-| [agent-query-lifecycle-refactor-plan.md](./agent-query-lifecycle-refactor-plan.md) | 主 Agent 下一阶段：Conversation History、QueryParams → State、单圈 Workspace、工具批次与 continue/resume 语义重构计划 |
-| [task-protocol-refactor-plan.md](./task-protocol-refactor-plan.md) | 模型驱动的持久化 Task 协议：正交状态、统一工具、并发认领、teammate 消费与 UI 同步 clean-break 重构方案 |
-| [ppt-capability-lifecycle-redesign-plan.md](./ppt-capability-lifecycle-redesign-plan.md) | PPT 新建、编辑、设计、素材、编译、质检、审批与导出的统一能力、Artifact 和 Job 生命周期重构方案 |
-| [ppt-quality-attention-plan.md](./ppt-quality-attention-plan.md) | PPT 生成质量与模型注意力问题诊断及改进计划 |
-| [ppt-layout-state-machine-plan.md](./ppt-layout-state-machine-plan.md) | 排版流程状态机化：layout-plan 唯一事实源、校验器与执行器方案 |
-| [ppt-style-capability-plan.md](./ppt-style-capability-plan.md) | 样式表达能力评估与分阶段能力建设方案 |
-| [visual-expression-system-plan.md](./visual-expression-system-plan.md) | 视觉表达系统、Layout Grammar 与品牌化能力建设计划 |
-| [commercial-ppt-visual-compiler-v2.md](./commercial-ppt-visual-compiler-v2.md) | Lean Mode 从自动排版稿升级到商业成品的 Scene、素材、视觉导演与质量门路线 |
-| [harness-teammate-message-bus-fix-plan.md](./harness-teammate-message-bus-fix-plan.md) | Harness 多 Agent 协作与消息总线 review 问题修复方案 |
-| [teammate-runtime-refactor-plan.md](./teammate-runtime-refactor-plan.md) | Teammate runtime 状态迁移、conversation 与工具管线的渐进式重构计划 |
-| [teammate-runtime-second-stage-refactor-plan.md](./teammate-runtime-second-stage-refactor-plan.md) | Teammate runtime 第二阶段：Active Inbox、单 turn runner、任务所有权与终态清理方案 |
-| [frontend-app-decomposition-plan.md](./frontend-app-decomposition-plan.md) | 前端 App 控制层拆分：Workspace、Presentation、Chat、Agent Controller 的分阶段路线图 |
+本文档集只保留三类内容：
 
-相关 Skill 文档见仓库 `skills/ppt-layout/`（排版规则、guizang 适配、质检清单）。
+- **现行架构**：代码正在遵守的稳定契约；
+- **本轮目标契约**：正在收敛、不得反向引入旧设计的边界；
+- **活跃提案**：尚未实现，明确放在 `roadmap/`。
+
+已完成、已被替代的实施计划不归档在主文档树中。行为事实以代码和测试为准。
+
+## 从这里开始
+
+| 文档 | 内容 |
+|---|---|
+| [架构总览](./architecture/overview.md) | 五层架构、数据流、状态边界与自主性原则 |
+| [工程能力地图](./architecture/engineering-capabilities.md) | Claude Code 能力分层、PPT 落点、成熟度、缺口与验证入口 |
+| [Query](./agent/query.md) | QueryParams、QueryState、IterationWorkspace、身份与恢复 |
+| [Agent Loop](./agent/loop.md) | 独立 AsyncGenerator、显式 outcome、工具批次与事件 |
+| [Agent Runtime](./agent/runtime.md) | Service、RunFactory、RunScope、Runtime 与 Finalizer |
+
+## Agent 系统
+
+| 文档 | 内容 |
+|---|---|
+| [Tool 系统](./agent/tools.md) | ToolDefinition、动态解析、单一执行管线、权限和并发 |
+| [文件操作](./agent/file-operations.md) | Main/teammate 共用 Glob、ReadFile、WriteFile、EditFile，读后写与原子提交 |
+| [System Prompt 与 Context](./agent/system-context.md) | 稳定/动态分区、Section Registry、Skill stage 建议化 |
+| [持久化与恢复](./agent/persistence.md) | History、checkpoint、lease、inflight 恢复和数据安全 |
+| [Multi-Agent](./agent/multi-agent.md) | TaskStore、teammate 生命周期、mailbox 与后台任务 |
+
+## Presentation 系统
+
+| 文档 | 内容 |
+|---|---|
+| [工作流与状态](./presentation/workflow.md) | Agent/Lean 路径、artifact、Layout Plan、Proposal 与 CommitGate |
+| [Visual Expression System](./presentation/visual-system.md) | Design System、Layout Grammar、素材、三端渲染与反馈 |
+| [Commercial Visual Compiler](./presentation/commercial-pipeline.md) | DeckSpec v2、Visual Director、素材解析、编译与质量门 |
+| [商业视觉质量规范](./presentation/quality-rubric.md) | 机器证据与人工评分的边界 |
+
+## 活跃路线图
+
+| 文档 | 状态 |
+|---|---|
+| [Presentation Artifact 与 Job 生命周期](./roadmap/presentation-lifecycle.md) | Proposed；尚未成为现行代码事实 |
+
+## 核心设计约束
+
+1. Query Loop 由独立 `AsyncGenerator` 驱动，不嵌入 UI 或固定 PPT 阶段机。
+2. `QueryParams → QueryState → IterationWorkspace` 是唯一 Query 状态层级。
+3. 观察事件只做投影，不能成为第二个事实源。
+4. 工具按当前 Context 动态解析；注册工具不等于始终暴露。
+5. Main Agent 可以直接使用安全的 Glob/Read/Write/Edit，不强制借 teammate 写文件。
+6. 覆盖/Edit 必须 read-before-write，所有文本写入使用原子替换。
+7. Skill stage 只影响推荐和排序，不是权限 allow-list。
+8. System Prompt 使用稳定前缀、动态后缀和 Section Registry。
+9. 权限、tool pairing、CommitGate 和持久化不变量由代码执行，不依赖 Prompt。
+10. Presentation 业务状态与单次 Agent Query 状态正交。
+
+## 本轮重构状态
+
+| 系统 | 状态 | 当前边界 |
+|---|---|---|
+| Query / Loop | Implemented | 独立 AsyncGenerator、Params/State/Workspace、显式事件与完整批次提交 |
+| Runtime | Implemented | 生命周期 facade；装配、循环和 finalization 分离 |
+| Model Context | Implemented | canonical messages 压缩、request-scoped Context 投影、多段 max-output 恢复 |
+| Tools | Implemented | 动态可用性、definition-owned behavior、统一 permission/hook/execution 管线 |
+| System Prompt | Implemented | Section Registry、稳定/动态边界、契约级 cache key、stage 建议化 |
+| File operations | Implemented | Main/teammate 共用 read receipt、精确 Edit、冲突检测与受保护提交 |
+| Presentation lifecycle | Proposed | 跨 Query 的 Artifact Revision / PptJob 仍只在 roadmap |
+
+## 参考项目的使用方式
+
+`/mnt/e/Coding/claude-code` 是工程设计参考，不是复制来源。重点吸收：
+
+- `QueryEngine` 与 `query()` 的编排/循环分层；
+- Query Params、跨圈 State 和显式 transition；
+- Tool pool 动态组装与单一执行管线；
+- File Read/Edit/Write 的并发与写入安全；
+- System Prompt 的稳定/动态缓存分区；
+- 权限作为代码策略层。
+
+本项目保留 Electron、Presentation、CommitGate、PPTX 和本地项目 artifact 等自身领域边界。
+完整的能力对照、当前成熟度和明确不复制的范围见
+[工程能力地图](./architecture/engineering-capabilities.md)。
+
+## 文档维护规则
+
+- 代码重构完成后，更新现行文档并删除对应阶段计划。
+- 活跃提案必须标记 `Proposed`，不能写成“当前已经如此”。
+- 文档引用实际路径；移动文件时同步运行链接检查。
+- 状态转换优先用类型、表格或图表达，不用模糊进度文案。
+- 新规则先判断它属于模型建议还是代码不变量；只有后者进入 Runtime/Policy。
