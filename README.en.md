@@ -27,9 +27,9 @@ The runtime gives the model current workspace facts, available skills, and a dyn
 
 All real slide changes pass through `CommitGate`: schema validation, sandbox execution, diff generation, and risk evaluation. Changes can be auto-applied only when safe; otherwise the UI asks for your approval.
 
-**The deck model is richer than text.**
+**The deck model is richer than text and also supports SVG-native pages.**
 
-The internal presentation model supports text, images, shapes, charts, tables, icons, background variants, layouts, design tokens, themes, and palettes. Export converts those structures into a real `.pptx`.
+The internal presentation model supports text, images, shapes, charts, tables, icons, background variants, layouts, design tokens, themes, and palettes. Structured slides are converted into native PowerPoint elements. SVG-native slides use a validated full-page SVG as the shared visual source of truth for preview and export, keeping the in-app result consistent with the exported `.pptx`.
 
 **The process is preserved, not just the result.**
 
@@ -52,6 +52,46 @@ flowchart LR
   I --> K["Live preview / Slideshow / PPTX"]
   J --> K
 ```
+
+## SVG-Native Full-Deck Generation
+
+When creating or redesigning an entire presentation, the agent can use the SVG-native workflow and author every slide as a complete `1280 × 720` SVG. The SVG itself contains the title, body copy, background, charts, images, page number, and decoration; the preview and export layers do not add a second set of visual styling that could drift from the source.
+
+Key workspace files:
+
+- `design/design-spec.json`: locked communication contract and Design System
+- `slides/page-plan.json`: slide order, final copy, and per-slide narrative intent
+- `slides/svg/P01.svg`, etc.: complete slide visual sources
+- `deck/snapshot.json`: the Presentation snapshot already approved and applied by the user
+
+The submission path is:
+
+```mermaid
+flowchart LR
+  A["Author complete SVG pages"] --> B["Render and validate each page with PreviewSvgPage"]
+  B --> C["SubmitSvgDeck checks design locks and the page plan"]
+  C --> D["Create an independent Command Proposal"]
+  D --> E["CommitGate sandbox execution and safety checks"]
+  E --> F{"User approval required?"}
+  F -->|Yes| G["Approval card: approve or reject"]
+  F -->|No| H["Apply commands atomically"]
+  G -->|Approve| H
+  G -->|Reject| I["Keep the current Presentation"]
+  H --> J["Refresh the mirror and deck snapshot"]
+  J --> K["Preview and export the same SVG to PPTX"]
+```
+
+Three completion states must remain distinct:
+
+| State | Meaning |
+|---|---|
+| SVG workspace files complete | The page sources exist, but the current slides have not changed |
+| Proposal created | Replacement commands passed preview and safety checks and are waiting for approval |
+| Presentation applied | `CommandBus` executed the commands atomically and persisted the deck snapshot |
+
+A successful `SubmitSvgDeck` result means that the Proposal was created; it does not mean the slides were already replaced. When approval is required, the SVG pages take effect only after the user approves the current proposal, the apply operation succeeds, and the right-side mirror reloads the authoritative Presentation.
+
+Each agent run creates an independent proposal card. If one conversation thread produces several deck proposals, a later proposal cannot inherit the earlier proposal's “applied” state. When loading sessions created by an older version, the app also detects a resolved action that belongs to a different run and reactivates that proposal for review instead of reporting unapplied commands as complete.
 
 ## In The App
 
