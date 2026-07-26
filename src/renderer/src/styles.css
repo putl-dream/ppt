@@ -1,5 +1,5 @@
-@import './styles/tokens/fonts.css';
 @import './styles/tokens/theme.css';
+@import './styles/tokens/fonts.css';
 @import './styles/tokens/personalization.css';
 @import './styles/modules/base.css';
 @import './styles/modules/layout.css';
