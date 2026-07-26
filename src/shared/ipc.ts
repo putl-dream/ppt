@@ -316,6 +316,7 @@ export interface DesktopApi {
     threadId: string,
     request: AgentRunRequest,
     model?: AgentModelSettings,
+    executionStrategy?: AgentExecutionStrategy,
     stepLimits?: AgentStepLimits,
     gatewayConfig?: AgentGatewayConfig,
     runId?: string,

@@ -263,12 +263,16 @@ export class AgentService {
     agentStepLimits?: AgentStepLimits,
     layoutChoice?: LayoutChoice,
     modelOverride?: AgentModelSelection,
+    executionStrategyOverride?: AgentExecutionStrategy,
   ): Promise<AgentRunResult> {
     const invocationRunId = runId ?? crypto.randomUUID();
     return this.withThreadRun(threadId, async () => {
       const conversation = this.conversations.get(threadId);
       if (!conversation) throw new Error("Agent conversation not found or already completed.");
       const model = modelOverride ?? conversation.model;
+      if (executionStrategyOverride) {
+        conversation.executionStrategy = executionStrategyOverride;
+      }
       const startMode: QueryStartMode = conversation.suspendedQuery
         ? { type: "resume_query", reason: "waiting_user" }
         : { type: "new_query" };

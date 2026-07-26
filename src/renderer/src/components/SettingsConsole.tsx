@@ -14,6 +14,7 @@ import { isModelEnabled, type ManagedModel } from "../modelCatalog";
 import { ModelManagement } from "./ModelManagement";
 import type { AgentStepLimits } from "@shared/agent-step-limits";
 import type { AgentGatewayPreferences } from "@shared/agent-gateway-config";
+import type { AgentExecutionStrategy } from "@shared/agent";
 import { TokenUsageOverview } from "./TokenUsageOverview";
 import { LogManagementPanel } from "./LogManagementPanel";
 import { DESIGN_PRESETS, type DesignSystemV2 } from "@design-system";
@@ -22,8 +23,8 @@ import {
   MIN_OUTPUT_TOKENS,
   normalizeOutputTokenDraft,
 } from "@shared/generation-settings-inputs";
+import type { SettingsCategory } from "../settingsCategories";
 
-type SettingsCategory = "account" | "models" | "gateway" | "generation" | "project" | "appearance" | "diagnostics";
 type UiThemeMode = "light" | "dark" | "cyan" | "orange";
 type UiAccentColor = "cyan" | "green" | "purple" | "orange";
 type UiControlShape = "sharp" | "soft" | "round";
@@ -42,14 +43,14 @@ interface SettingsConsoleProps {
   onLogoUpload: (url: string) => void;
   onRemoveLogo: () => void;
 
-  autoCloudSync: boolean;
-  setAutoCloudSync: (val: boolean) => void;
   localStoragePath: string;
   onOpenWorkspace: () => void;
   agentStepLimits: AgentStepLimits;
   setAgentStepLimits: (val: AgentStepLimits) => void;
   agentGatewayPreferences: AgentGatewayPreferences;
   setAgentGatewayPreferences: (val: AgentGatewayPreferences) => void;
+  executionStrategy: AgentExecutionStrategy;
+  setExecutionStrategy: (val: AgentExecutionStrategy) => void;
 
   themeMode: UiThemeMode;
   setThemeMode: (val: UiThemeMode) => void;
@@ -67,26 +68,35 @@ interface SettingsConsoleProps {
 }
 
 const categoryMeta: Record<SettingsCategory, { title: string }> = {
-  account: {
-    title: "Token 使用",
+  "models-list": {
+    title: "模型列表",
   },
-  models: {
-    title: "AI 模型",
+  "models-search": {
+    title: "搜索与联网",
   },
-  gateway: {
-    title: "生成参数",
+  "models-runtime": {
+    title: "运行参数",
   },
-  generation: {
-    title: "生成偏好",
+  "preferences-presentation": {
+    title: "演示文档默认项",
   },
-  project: {
-    title: "文件与模板",
+  "preferences-storage": {
+    title: "存储与目录",
   },
-  appearance: {
-    title: "外观",
+  "preferences-appearance": {
+    title: "界面外观（UI）",
   },
-  diagnostics: {
-    title: "日志与诊断",
+  "agent-approval": {
+    title: "提交与审批",
+  },
+  "agent-limits": {
+    title: "调用频率限制",
+  },
+  "agent-logs": {
+    title: "系统日志",
+  },
+  "usage-overview": {
+    title: "用量统计与趋势",
   },
 };
 
@@ -180,14 +190,14 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
   logoUrl,
   onLogoUpload,
   onRemoveLogo,
-  autoCloudSync,
-  setAutoCloudSync,
   localStoragePath,
   onOpenWorkspace,
   agentStepLimits,
   setAgentStepLimits,
   agentGatewayPreferences,
   setAgentGatewayPreferences,
+  executionStrategy,
+  setExecutionStrategy,
   themeMode,
   setThemeMode,
   uiAccentColor,
@@ -285,23 +295,21 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
           <div>
             <h1>{currentMeta.title}</h1>
           </div>
-          <div className={`settings-header-pill ${saveStatus === "saving" ? "is-saving" : ""}`}>
-            {saveStatus === "saving" ? <RefreshIcon size={15} /> : <CheckCircleIcon size={15} />}
-            <span>{saveStatus === "saving" ? "正在保存" : "本地已保存"}</span>
-          </div>
+          {activeCategory !== "usage-overview" && (
+            <div className={`settings-header-pill ${saveStatus === "saving" ? "is-saving" : ""}`}>
+              {saveStatus === "saving" ? <RefreshIcon size={15} /> : <CheckCircleIcon size={15} />}
+              <span>{saveStatus === "saving" ? "正在保存" : "本地已保存"}</span>
+            </div>
+          )}
         </header>
 
-        {activeCategory === "account" && (
+        {activeCategory === "usage-overview" && (
           <div className="settings-panel-fade">
-            <TokenUsageOverview />
+            <TokenUsageOverview models={models} selectedModelId={selectedModelId} />
           </div>
         )}
 
-        {activeCategory === "diagnostics" && (
-          <LogManagementPanel notify={triggerToast} />
-        )}
-
-        {activeCategory === "models" && (
+        {activeCategory === "models-list" && (
           <div className="settings-panel-fade">
             <ModelManagement
               models={models}
@@ -314,13 +322,56 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
           </div>
         )}
 
-        {activeCategory === "gateway" && (
+        {activeCategory === "models-search" && (
+          <div className="settings-panel-fade">
+            <section className="settings-card">
+              <SettingsCardHeader
+                icon={<BrainIcon size={16} />}
+                title="搜索与联网"
+                meta={<span>可选</span>}
+              />
+
+              <div className="settings-form-stack">
+                <label className="config-group">
+                  <span className="config-label">Tavily API Key</span>
+                  <input
+                    className="config-input"
+                    type="password"
+                    value={agentGatewayPreferences.webSearchApiKey ?? ""}
+                    placeholder="tvly-...（也可设置 TAVILY_API_KEY）"
+                    onChange={(event) => setAgentGatewayPreferences({
+                      ...agentGatewayPreferences,
+                      webSearchApiKey: event.target.value || undefined,
+                    })}
+                    onBlur={(event) => commitOptionalGatewayText("webSearchApiKey", event.target.value)}
+                  />
+                </label>
+
+                <label className="config-group">
+                  <span className="config-label">Search Endpoint</span>
+                  <input
+                    className="config-input"
+                    value={agentGatewayPreferences.webSearchEndpoint ?? ""}
+                    placeholder="https://api.tavily.com/search"
+                    onChange={(event) => setAgentGatewayPreferences({
+                      ...agentGatewayPreferences,
+                      webSearchEndpoint: event.target.value || undefined,
+                    })}
+                    onBlur={(event) => commitOptionalGatewayText("webSearchEndpoint", event.target.value)}
+                  />
+                </label>
+              </div>
+            </section>
+          </div>
+        )}
+
+        {activeCategory === "models-runtime" && (
           <div className="settings-panel-fade">
             <section className="settings-card">
               <SettingsCardHeader
                 icon={<SettingsIcon size={16} />}
-                title="生成参数"
-                meta={<span>{enabledModelCount} 个可用</span>}
+                title="运行参数"
+                meta={<span>{enabledModelCount} 个模型可用</span>}
               />
 
               <div className="settings-form-stack">
@@ -380,46 +431,45 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
                       ))}
                   </select>
                 </label>
-
-                <label className="config-group">
-                  <span className="config-label">Tavily 搜索 API Key</span>
-                  <input
-                    className="config-input"
-                    type="password"
-                    value={agentGatewayPreferences.webSearchApiKey ?? ""}
-                    placeholder="tvly-...（也可设置 TAVILY_API_KEY）"
-                    onChange={(event) => setAgentGatewayPreferences({
-                      ...agentGatewayPreferences,
-                      webSearchApiKey: event.target.value || undefined,
-                    })}
-                    onBlur={(event) => commitOptionalGatewayText("webSearchApiKey", event.target.value)}
-                  />
-                </label>
-
-                <label className="config-group">
-                  <span className="config-label">搜索 API 端点（可选）</span>
-                  <input
-                    className="config-input"
-                    value={agentGatewayPreferences.webSearchEndpoint ?? ""}
-                    placeholder="https://api.tavily.com/search"
-                    onChange={(event) => setAgentGatewayPreferences({
-                      ...agentGatewayPreferences,
-                      webSearchEndpoint: event.target.value || undefined,
-                    })}
-                    onBlur={(event) => commitOptionalGatewayText("webSearchEndpoint", event.target.value)}
-                  />
-                </label>
               </div>
             </section>
           </div>
         )}
 
-        {activeCategory === "generation" && (
+        {activeCategory === "agent-approval" && (
+          <div className="settings-panel-fade">
+            <section className="settings-card">
+              <SettingsCardHeader
+                icon={<CheckCircleIcon size={16} />}
+                title="提交与审批（CommitGate）"
+              />
+
+              <label className="config-group">
+                <span className="config-label">审批模式</span>
+                <select
+                  className="model-select"
+                  value={executionStrategy}
+                  onChange={(event) => setExecutionStrategy(
+                    event.target.value as AgentExecutionStrategy,
+                  )}
+                >
+                  <option value="REQUEST_APPROVAL">手动确认每次修改</option>
+                  <option value="AUTO">自动应用低风险修改</option>
+                </select>
+                <span className="settings-help-text">
+                  自动模式仅直接应用低风险提案；中高风险修改仍由 CommitGate 请求确认。
+                </span>
+              </label>
+            </section>
+          </div>
+        )}
+
+        {activeCategory === "agent-limits" && (
           <div className="settings-panel-fade">
             <section className="settings-card">
               <SettingsCardHeader
                 icon={<BrainIcon size={16} />}
-                title="Agent 调用限制"
+                title="调用频率限制"
               />
 
               <SettingRow title="启用调用次数限制">
@@ -476,45 +526,21 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
               </div>
             </section>
 
-            <section className="settings-card">
-              <SettingsCardHeader
-                icon={<FolderIcon size={16} />}
-                title="生成后动作"
-              />
-
-              <SettingRow title="生成完成后自动下载（尚未支持）" muted>
-                <label className="toggle-switch">
-                  <input
-                    type="checkbox"
-                    checked={false}
-                    disabled
-                    readOnly
-                  />
-                  <span className="toggle-slider" />
-                </label>
-              </SettingRow>
-
-              <SettingRow title="云端空间备份" muted>
-                <label className="toggle-switch">
-                  <input
-                    type="checkbox"
-                    checked={autoCloudSync}
-                    disabled
-                    onChange={(event) => setAutoCloudSync(event.target.checked)}
-                  />
-                  <span className="toggle-slider" />
-                </label>
-              </SettingRow>
-            </section>
           </div>
         )}
 
-        {activeCategory === "project" && (
+        {activeCategory === "agent-logs" && (
           <div className="settings-panel-fade">
-            <section className="settings-card">
+            <LogManagementPanel notify={triggerToast} />
+          </div>
+        )}
+
+        {activeCategory === "preferences-storage" && (
+          <div className="settings-panel-fade">
+            <section className="settings-card settings-preferences-storage">
               <SettingsCardHeader
                 icon={<FolderIcon size={16} />}
-                title="项目工作目录"
+                title="存储与目录"
               />
 
               <div className="settings-path-display">
@@ -526,10 +552,15 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
               </div>
             </section>
 
-            <section className="settings-card">
+          </div>
+        )}
+
+        {activeCategory === "preferences-presentation" && (
+          <div className="settings-panel-fade">
+            <section className="settings-card settings-preferences-presentation">
               <SettingsCardHeader
                 icon={<PaletteIcon size={16} />}
-                title="演示文稿默认模板"
+                title="演示文档默认项"
               />
 
               <div className="settings-choice-grid">
@@ -540,16 +571,8 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
                   <span className="settings-ratio-preview settings-ratio-preview--wide" />
                   <span>16:9 宽屏</span>
                 </button>
-                <button
-                  className="settings-choice-card"
-                  type="button"
-                  disabled
-                  title="当前渲染与导出引擎仅支持 16:9"
-                >
-                  <span className="settings-ratio-preview settings-ratio-preview--classic" />
-                  <span>4:3 经典屏（尚未支持）</span>
-                </button>
               </div>
+              <p className="settings-help-text">当前画布与 PPTX 导出统一采用 16:9 宽屏比例。</p>
 
               <div className="settings-inline-grid">
                 <label className="config-group">
@@ -602,8 +625,12 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
           </div>
         )}
 
-        {activeCategory === "appearance" && (
+        {activeCategory === "preferences-appearance" && (
           <div className="settings-panel-fade">
+            <div className="settings-section-heading">
+              <h2>界面外观</h2>
+              <p>以下设置只改变软件自身的皮肤与控件，不影响导出的演示文档。</p>
+            </div>
             <section className="settings-card">
               <SettingsCardHeader
                 icon={<SunIcon size={16} />}

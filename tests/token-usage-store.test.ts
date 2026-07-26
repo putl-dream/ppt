@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it } from "vitest";
@@ -49,11 +49,17 @@ describe("TokenUsageStore", () => {
       recordedAt: new Date(2026, 6, 10, 12),
     });
     await store.recordTask(7_200_000, new Date(2026, 6, 10, 13));
+    await store.recordTask(2_000, new Date(2026, 6, 10, 14), "failed");
 
     const stats = store.getStats(new Date(2026, 6, 11, 12));
     expect(stats).toMatchObject({
       totalTokens: 550,
       peakTokens: 300,
+      requestCount: 3,
+      taskCount: 2,
+      completedTaskCount: 1,
+      failedTaskCount: 1,
+      averageTaskDurationMs: 3_601_000,
       longestTaskDurationMs: 7_200_000,
       currentStreakDays: 3,
       longestStreakDays: 3,
@@ -64,6 +70,18 @@ describe("TokenUsageStore", () => {
       cachedInputTokens: 30,
       requestCount: 1,
     });
+    expect(stats.models).toEqual([
+      expect.objectContaining({
+        provider: "anthropic",
+        model: "model-b",
+        totalTokens: 300,
+      }),
+      expect.objectContaining({
+        provider: "openai",
+        model: "model-a",
+        totalTokens: 250,
+      }),
+    ]);
 
     const reloaded = new TokenUsageStore(filePath);
     await reloaded.initialize();
@@ -85,5 +103,37 @@ describe("TokenUsageStore", () => {
       currentStreakDays: 0,
       longestStreakDays: 1,
     });
+  });
+
+  it("migrates version 1 totals without inventing model attribution or task outcomes", async () => {
+    const { filePath } = await createStore();
+    await writeFile(filePath, JSON.stringify({
+      version: 1,
+      firstRecordedAt: "2026-07-01T00:00:00.000Z",
+      lastRecordedAt: "2026-07-01T00:00:01.000Z",
+      days: [{
+        date: "2026-07-01",
+        inputTokens: 90,
+        outputTokens: 10,
+        totalTokens: 100,
+        cachedInputTokens: 0,
+        cacheCreationInputTokens: 0,
+        requestCount: 1,
+        taskCount: 1,
+        longestTaskDurationMs: 500,
+      }],
+    }));
+
+    const migrated = new TokenUsageStore(filePath);
+    await migrated.initialize();
+    expect(migrated.getStats(new Date(2026, 6, 1))).toMatchObject({
+      totalTokens: 100,
+      taskCount: 1,
+      completedTaskCount: 0,
+      failedTaskCount: 0,
+      averageTaskDurationMs: 0,
+      models: [],
+    });
+    expect(JSON.parse(await readFile(filePath, "utf8")).version).toBe(2);
   });
 });

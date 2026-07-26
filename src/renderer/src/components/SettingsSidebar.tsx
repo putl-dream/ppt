@@ -2,15 +2,11 @@ import React from "react";
 import {
   BrainIcon,
   ChevronRightIcon,
-  DownloadIcon,
-  FolderIcon,
-  KeyIcon,
+  HistoryIcon,
   PaletteIcon,
   SettingsIcon,
-  UserIcon,
 } from "./Icons";
-
-type SettingsCategory = "account" | "models" | "gateway" | "generation" | "project" | "appearance" | "diagnostics";
+import type { SettingsCategory } from "../settingsCategories";
 
 interface SettingsSidebarProps {
   activeCategory: SettingsCategory;
@@ -24,36 +20,75 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = ({
   onBackToWorkspace,
 }) => {
   const navItems: Array<{
-    id: SettingsSidebarProps["activeCategory"];
     title: string;
     icon: React.ReactNode;
+    items: Array<{
+      id: SettingsSidebarProps["activeCategory"];
+      title: string;
+    }>;
   }> = [
-    { id: "account", title: "Token 使用", icon: <UserIcon size={17} /> },
-    { id: "generation", title: "生成与保存", icon: <DownloadIcon size={17} /> },
-    { id: "project", title: "文件与模板", icon: <FolderIcon size={17} /> },
-    { id: "appearance", title: "外观", icon: <PaletteIcon size={17} /> },
-    { id: "models", title: "AI 服务", icon: <BrainIcon size={17} /> },
-    { id: "gateway", title: "高级参数", icon: <KeyIcon size={17} /> },
-    { id: "diagnostics", title: "日志与诊断", icon: <SettingsIcon size={17} /> },
+    {
+      title: "模型与 AI 服务",
+      icon: <BrainIcon size={17} />,
+      items: [
+        { id: "models-list", title: "模型列表" },
+        { id: "models-search", title: "搜索与联网" },
+        { id: "models-runtime", title: "运行参数" },
+      ],
+    },
+    {
+      title: "偏好与演示规范",
+      icon: <PaletteIcon size={17} />,
+      items: [
+        { id: "preferences-presentation", title: "演示文档默认项" },
+        { id: "preferences-storage", title: "存储与目录" },
+        { id: "preferences-appearance", title: "界面外观 (UI)" },
+      ],
+    },
+    {
+      title: "Agent 机制与日志",
+      icon: <SettingsIcon size={17} />,
+      items: [
+        { id: "agent-approval", title: "提交与审批" },
+        { id: "agent-limits", title: "调用频率限制" },
+        { id: "agent-logs", title: "系统日志" },
+      ],
+    },
+    {
+      title: "用量与费用",
+      icon: <HistoryIcon size={17} />,
+      items: [
+        { id: "usage-overview", title: "用量统计与趋势" },
+      ],
+    },
   ];
 
   return (
     <aside className="left-panel settings-sidebar">
       <div className="sections-container flex-1">
-        <div className="settings-nav-list">
-          {navItems.map((item) => (
-            <button
-              key={item.id}
-              className={`settings-nav-item ${activeCategory === item.id ? "active" : ""}`}
-              onClick={() => onSelectCategory(item.id)}
-            >
-              <div className="nav-icon-wrapper">{item.icon}</div>
-              <div className="nav-text">
-                <span className="nav-title">{item.title}</span>
+        <nav className="settings-nav-list" aria-label="设置导航">
+          {navItems.map((group) => (
+            <div className="settings-nav-group" key={group.title}>
+              <div className="settings-nav-group-title">
+                <span className="nav-icon-wrapper">{group.icon}</span>
+                <span>{group.title}</span>
               </div>
-            </button>
+              <div className="settings-nav-submenu">
+                {group.items.map((item) => (
+                  <button
+                    key={item.id}
+                    className={`settings-nav-item ${activeCategory === item.id ? "active" : ""}`}
+                    onClick={() => onSelectCategory(item.id)}
+                    aria-current={activeCategory === item.id ? "page" : undefined}
+                  >
+                    <span className="settings-nav-bullet" aria-hidden="true" />
+                    <span className="nav-title">{item.title}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
           ))}
-        </div>
+        </nav>
       </div>
 
       <div className="panel-footer left-footer settings-sidebar-footer">

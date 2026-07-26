@@ -1,23 +1,56 @@
 import { mkdir, readFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { z } from "zod";
-import type { ProviderTokenUsage, TokenUsageDay, TokenUsageStats } from "@shared/token-usage";
+import type {
+  ProviderTokenUsage,
+  TokenTaskOutcome,
+  TokenUsageDay,
+  TokenUsageModel,
+  TokenUsageStats,
+} from "@shared/token-usage";
 import { writeJsonFileAtomic, writeTextFileAtomic } from "./agent/persistence/atomic-json-file";
 
-const tokenUsageDaySchema = z.object({
-  date: z.string(),
+const usageTotalsSchema = {
   inputTokens: z.number().int().nonnegative(),
   outputTokens: z.number().int().nonnegative(),
   totalTokens: z.number().int().nonnegative(),
   cachedInputTokens: z.number().int().nonnegative().default(0),
   cacheCreationInputTokens: z.number().int().nonnegative().default(0),
+};
+
+const tokenUsageModelSchema = z.object({
+  provider: z.string(),
+  model: z.string(),
+  ...usageTotalsSchema,
+  requestCount: z.number().int().nonnegative().default(0),
+});
+
+const legacyTokenUsageDaySchema = z.object({
+  date: z.string(),
+  ...usageTotalsSchema,
   requestCount: z.number().int().nonnegative().default(0),
   taskCount: z.number().int().nonnegative().default(0),
   longestTaskDurationMs: z.number().int().nonnegative().default(0),
 });
 
-const tokenUsageFileSchema = z.object({
+const tokenUsageDaySchema = legacyTokenUsageDaySchema.extend({
+  completedTaskCount: z.number().int().nonnegative().default(0),
+  failedTaskCount: z.number().int().nonnegative().default(0),
+  interruptedTaskCount: z.number().int().nonnegative().default(0),
+  totalTaskDurationMs: z.number().int().nonnegative().default(0),
+  durationSampleCount: z.number().int().nonnegative().default(0),
+  models: z.array(tokenUsageModelSchema).default([]),
+});
+
+const legacyTokenUsageFileSchema = z.object({
   version: z.literal(1),
+  firstRecordedAt: z.string().optional(),
+  lastRecordedAt: z.string().optional(),
+  days: z.array(legacyTokenUsageDaySchema),
+});
+
+const tokenUsageFileSchema = z.object({
+  version: z.literal(2),
   firstRecordedAt: z.string().optional(),
   lastRecordedAt: z.string().optional(),
   days: z.array(tokenUsageDaySchema),
@@ -51,7 +84,13 @@ function emptyDay(date: string): TokenUsageDay {
     cacheCreationInputTokens: 0,
     requestCount: 0,
     taskCount: 0,
+    completedTaskCount: 0,
+    failedTaskCount: 0,
+    interruptedTaskCount: 0,
+    totalTaskDurationMs: 0,
+    durationSampleCount: 0,
     longestTaskDurationMs: 0,
+    models: [],
   };
 }
 
@@ -88,6 +127,27 @@ function computeStreaks(activeDateKeys: string[], todayKey: string): {
   return { currentStreakDays, longestStreakDays };
 }
 
+function migrateLegacyFile(value: unknown): TokenUsageFile {
+  const current = tokenUsageFileSchema.safeParse(value);
+  if (current.success) return current.data;
+
+  const legacy = legacyTokenUsageFileSchema.parse(value);
+  return {
+    version: 2,
+    firstRecordedAt: legacy.firstRecordedAt,
+    lastRecordedAt: legacy.lastRecordedAt,
+    days: legacy.days.map((day) => ({
+      ...day,
+      completedTaskCount: 0,
+      failedTaskCount: 0,
+      interruptedTaskCount: 0,
+      totalTaskDurationMs: 0,
+      durationSampleCount: 0,
+      models: [],
+    })),
+  };
+}
+
 export interface ModelUsageRecord extends ProviderTokenUsage {
   provider: string;
   model: string;
@@ -95,7 +155,7 @@ export interface ModelUsageRecord extends ProviderTokenUsage {
 }
 
 export class TokenUsageStore {
-  private data: TokenUsageFile = { version: 1, days: [] };
+  private data: TokenUsageFile = { version: 2, days: [] };
   private writeQueue = Promise.resolve();
 
   constructor(private readonly filePath: string) {}
@@ -103,7 +163,9 @@ export class TokenUsageStore {
   async initialize(): Promise<void> {
     await mkdir(dirname(this.filePath), { recursive: true });
     try {
-      this.data = tokenUsageFileSchema.parse(JSON.parse(await readFile(this.filePath, "utf8")));
+      const stored = JSON.parse(await readFile(this.filePath, "utf8"));
+      this.data = migrateLegacyFile(stored);
+      if (stored.version === 1) await this.persist();
     } catch (error) {
       const code = (error as NodeJS.ErrnoException).code;
       if (code !== "ENOENT" && !(error instanceof SyntaxError) && !(error instanceof z.ZodError)) {
@@ -111,7 +173,7 @@ export class TokenUsageStore {
       }
       if (code !== "ENOENT") {
         try {
-          this.data = tokenUsageFileSchema.parse(
+          this.data = migrateLegacyFile(
             JSON.parse(await readFile(`${this.filePath}.bak`, "utf8")),
           );
           await writeTextFileAtomic(
@@ -120,11 +182,10 @@ export class TokenUsageStore {
           );
           return;
         } catch {
-          // Both copies are unusable. Start a fresh statistics file without
-          // allowing optional telemetry to block the application startup.
+          // Both copies are unusable. Optional statistics must not block startup.
         }
       }
-      this.data = { version: 1, days: [] };
+      this.data = { version: 2, days: [] };
       await writeTextFileAtomic(this.filePath, `${JSON.stringify(this.data, null, 2)}\n`);
     }
   }
@@ -134,23 +195,35 @@ export class TokenUsageStore {
     const timestamp = recordedAt.toISOString();
     await this.mutate(() => {
       const day = this.getOrCreateDay(localDateKey(recordedAt));
-      day.inputTokens += record.inputTokens;
-      day.outputTokens += record.outputTokens;
-      day.totalTokens += record.totalTokens;
-      day.cachedInputTokens += record.cachedInputTokens ?? 0;
-      day.cacheCreationInputTokens += record.cacheCreationInputTokens ?? 0;
-      day.requestCount += 1;
+      addUsage(day, record);
+      let model = day.models.find(
+        (entry) => entry.provider === record.provider && entry.model === record.model,
+      );
+      if (!model) {
+        model = emptyModel(record.provider, record.model);
+        day.models.push(model);
+      }
+      addUsage(model, record);
       this.data.firstRecordedAt ??= timestamp;
       this.data.lastRecordedAt = timestamp;
     });
   }
 
-  async recordTask(durationMs: number, recordedAt = new Date()): Promise<void> {
+  async recordTask(
+    durationMs: number,
+    recordedAt = new Date(),
+    outcome: TokenTaskOutcome = "completed",
+  ): Promise<void> {
     const safeDuration = Math.max(0, Math.round(durationMs));
     await this.mutate(() => {
       const day = this.getOrCreateDay(localDateKey(recordedAt));
       day.taskCount += 1;
+      day.totalTaskDurationMs += safeDuration;
+      day.durationSampleCount += 1;
       day.longestTaskDurationMs = Math.max(day.longestTaskDurationMs, safeDuration);
+      if (outcome === "completed") day.completedTaskCount += 1;
+      else if (outcome === "failed") day.failedTaskCount += 1;
+      else day.interruptedTaskCount += 1;
     });
   }
 
@@ -158,9 +231,28 @@ export class TokenUsageStore {
     const sortedDays = [...this.data.days].sort((a, b) => a.date.localeCompare(b.date));
     const activeDateKeys = sortedDays.filter((day) => day.totalTokens > 0).map((day) => day.date);
     const streaks = computeStreaks(activeDateKeys, localDateKey(now));
+    const durationSampleCount = sumDays(sortedDays, "durationSampleCount");
+    const models = new Map<string, TokenUsageModel>();
+    for (const day of sortedDays) {
+      for (const entry of day.models) {
+        const key = `${entry.provider}\0${entry.model}`;
+        const aggregate = models.get(key) ?? emptyModel(entry.provider, entry.model);
+        addUsage(aggregate, entry, entry.requestCount);
+        models.set(key, aggregate);
+      }
+    }
+
     return {
-      totalTokens: sortedDays.reduce((sum, day) => sum + day.totalTokens, 0),
+      totalTokens: sumDays(sortedDays, "totalTokens"),
       peakTokens: sortedDays.reduce((peak, day) => Math.max(peak, day.totalTokens), 0),
+      requestCount: sumDays(sortedDays, "requestCount"),
+      taskCount: sumDays(sortedDays, "taskCount"),
+      completedTaskCount: sumDays(sortedDays, "completedTaskCount"),
+      failedTaskCount: sumDays(sortedDays, "failedTaskCount"),
+      interruptedTaskCount: sumDays(sortedDays, "interruptedTaskCount"),
+      averageTaskDurationMs: durationSampleCount > 0
+        ? Math.round(sumDays(sortedDays, "totalTaskDurationMs") / durationSampleCount)
+        : 0,
       longestTaskDurationMs: sortedDays.reduce(
         (peak, day) => Math.max(peak, day.longestTaskDurationMs),
         0,
@@ -168,7 +260,11 @@ export class TokenUsageStore {
       ...streaks,
       firstRecordedAt: this.data.firstRecordedAt,
       lastRecordedAt: this.data.lastRecordedAt,
-      days: sortedDays.map((day) => ({ ...day })),
+      models: [...models.values()].sort((a, b) => b.totalTokens - a.totalTokens),
+      days: sortedDays.map((day) => ({
+        ...day,
+        models: day.models.map((model) => ({ ...model })),
+      })),
     };
   }
 
@@ -193,6 +289,42 @@ export class TokenUsageStore {
   private async persist(): Promise<void> {
     await writeJsonFileAtomic(this.filePath, this.data);
   }
+}
+
+function emptyModel(provider: string, model: string): TokenUsageModel {
+  return {
+    provider,
+    model,
+    inputTokens: 0,
+    outputTokens: 0,
+    totalTokens: 0,
+    cachedInputTokens: 0,
+    cacheCreationInputTokens: 0,
+    requestCount: 0,
+  };
+}
+
+function addUsage(
+  target: Omit<TokenUsageDay, "date" | "taskCount" | "completedTaskCount" | "failedTaskCount"
+    | "interruptedTaskCount" | "totalTaskDurationMs" | "durationSampleCount"
+    | "longestTaskDurationMs" | "models"> | TokenUsageModel,
+  usage: ProviderTokenUsage,
+  requestCount = 1,
+): void {
+  target.inputTokens += usage.inputTokens;
+  target.outputTokens += usage.outputTokens;
+  target.totalTokens += usage.totalTokens;
+  target.cachedInputTokens += usage.cachedInputTokens ?? 0;
+  target.cacheCreationInputTokens += usage.cacheCreationInputTokens ?? 0;
+  target.requestCount += requestCount;
+}
+
+function sumDays(
+  days: TokenUsageDay[],
+  key: "totalTokens" | "requestCount" | "taskCount" | "completedTaskCount"
+    | "failedTaskCount" | "interruptedTaskCount" | "totalTaskDurationMs" | "durationSampleCount",
+): number {
+  return days.reduce((sum, day) => sum + day[key], 0);
 }
 
 export { computeStreaks, localDateKey };

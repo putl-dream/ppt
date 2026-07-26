@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Presentation } from "@shared/presentation";
 import type { AgentGatewayPreferences } from "@shared/agent-gateway-config";
 import type { AgentStepLimits } from "@shared/agent-step-limits";
+import type { AgentExecutionStrategy } from "@shared/agent";
 import {
   MODEL_STORAGE_KEY,
   SELECTED_MODEL_STORAGE_KEY,
@@ -45,6 +46,8 @@ export interface SettingsController {
   setAgentStepLimits: (value: AgentStepLimits) => void;
   agentGatewayPreferences: AgentGatewayPreferences;
   setAgentGatewayPreferences: (value: AgentGatewayPreferences) => void;
+  executionStrategy: AgentExecutionStrategy;
+  setExecutionStrategy: (value: AgentExecutionStrategy) => void;
   themeMode: UiThemeMode;
   setThemeMode: (value: UiThemeMode) => void;
   computedTheme: "light" | "dark";
@@ -72,6 +75,9 @@ export function useSettingsController(
   const [agentStepLimits, setAgentStepLimitsState] = useState(() => bootstrap.agentStepLimits);
   const [agentGatewayPreferences, setAgentGatewayPreferencesState] = useState(
     () => bootstrap.agentGatewayPreferences,
+  );
+  const [executionStrategy, setExecutionStrategyState] = useState<AgentExecutionStrategy>(
+    () => persisted.executionStrategy === "AUTO" ? "AUTO" : "REQUEST_APPROVAL",
   );
   const [themeMode, setThemeModeState] = useState<UiThemeMode>(() => bootstrap.initialThemeMode);
   const uiReadingTone: UiReadingTone = themeMode === "cyan" || themeMode === "orange" ? themeMode : "classic";
@@ -144,11 +150,13 @@ export function useSettingsController(
       colorContrastOffset,
       selectedDesignSystem,
       logoUrl,
+      executionStrategy,
     });
   }, [
     autoCloudSync,
     borderRadiusScale,
     colorContrastOffset,
+    executionStrategy,
     logoUrl,
     selectedDesignSystem,
     themeMode,
@@ -224,6 +232,8 @@ export function useSettingsController(
     setAgentStepLimits: update(setAgentStepLimitsState),
     agentGatewayPreferences,
     setAgentGatewayPreferences: update(setAgentGatewayPreferencesState),
+    executionStrategy,
+    setExecutionStrategy: update(setExecutionStrategyState),
     themeMode,
     setThemeMode: update(setThemeModeState),
     computedTheme,

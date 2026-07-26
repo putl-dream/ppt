@@ -22,15 +22,7 @@ import { useAgentRunController } from "./app/agent/useAgentRunController";
 import { useDisplayEventActions } from "./app/cards/useDisplayEventActions";
 import { confirmProjectFileNavigation } from "./app/project/projectFilesState";
 import { useUserQuerySubmission } from "./app/useUserQuerySubmission";
-
-type SettingsCategory =
-  | "account"
-  | "models"
-  | "gateway"
-  | "generation"
-  | "project"
-  | "appearance"
-  | "diagnostics";
+import type { SettingsCategory } from "./settingsCategories";
 
 export function App() {
   const [bootstrap] = useState(loadAppBootstrapSnapshot);
@@ -56,7 +48,7 @@ export function App() {
 
   const [activeMode, setActiveMode] = useState<AppMode>("workspace");
   const [projectFilesDirty, setProjectFilesDirty] = useState(false);
-  const [settingsCategory, setSettingsCategory] = useState<SettingsCategory>("account");
+  const [settingsCategory, setSettingsCategory] = useState<SettingsCategory>("models-list");
   const workbenchLayout = useWorkbenchLayout({
     activeMode,
     previewOpen: isMirrorVisible,
@@ -228,7 +220,7 @@ export function App() {
     onToggleSettings: () => {
       if (!confirmLeaveProjectFiles()) return;
       setActiveMode("settings");
-      setSettingsCategory("account");
+      setSettingsCategory("models-list");
     },
     onDeleteSession: (sessionId: string) => {
       if (sessionId === activeSessionId && !confirmLeaveProjectFiles()) return;

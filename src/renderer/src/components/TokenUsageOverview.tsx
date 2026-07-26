@@ -1,15 +1,39 @@
 import React from "react";
-import type { TokenUsageStats } from "@shared/token-usage";
+import type {
+  TokenUsageDay,
+  TokenUsageModel,
+  TokenUsageStats,
+} from "@shared/token-usage";
+import type { ManagedModel, ModelTokenPricing } from "../modelCatalog";
 import { RefreshIcon } from "./Icons";
 
-type UsageView = "daily" | "weekly" | "cumulative";
+type UsageView = "tokens" | "cost" | "tasks";
 
-interface CalendarCell {
-  date: string;
-  value: number;
-  actualTokens: number;
-  future: boolean;
+interface TokenUsageOverviewProps {
+  models: ManagedModel[];
+  selectedModelId: string;
 }
+
+interface CostEstimate {
+  costUsd: number;
+  coveredTokens: number;
+}
+
+const emptyStats: TokenUsageStats = {
+  totalTokens: 0,
+  peakTokens: 0,
+  requestCount: 0,
+  taskCount: 0,
+  completedTaskCount: 0,
+  failedTaskCount: 0,
+  interruptedTaskCount: 0,
+  averageTaskDurationMs: 0,
+  longestTaskDurationMs: 0,
+  currentStreakDays: 0,
+  longestStreakDays: 0,
+  models: [],
+  days: [],
+};
 
 function dateKey(date: Date): string {
   const year = date.getFullYear();
@@ -25,88 +49,105 @@ function formatTokens(value: number): string {
   }).format(value);
 }
 
+function formatCost(value: number): string {
+  if (value === 0) return "$0.00";
+  if (value < 0.01) return `<$0.01`;
+  return `$${value.toFixed(2)}`;
+}
+
 function formatDuration(durationMs: number): string {
-  const totalMinutes = Math.floor(durationMs / 60_000);
-  const days = Math.floor(totalMinutes / 1_440);
-  const hours = Math.floor((totalMinutes % 1_440) / 60);
-  const minutes = totalMinutes % 60;
-  if (days > 0) return `${days} 天 ${hours} 小时`;
-  if (hours > 0) return `${hours} 小时 ${minutes} 分`;
-  if (minutes > 0) return `${minutes} 分钟`;
-  return durationMs > 0 ? "不足 1 分钟" : "0 分钟";
+  if (durationMs <= 0) return "—";
+  const seconds = Math.round(durationMs / 1_000);
+  if (seconds < 60) return `${seconds} 秒`;
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = seconds % 60;
+  return `${minutes} 分 ${remainingSeconds} 秒`;
 }
 
-function buildCalendarCells(stats: TokenUsageStats, view: UsageView): CalendarCell[] {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const start = new Date(today);
-  start.setDate(today.getDate() - today.getDay() - 52 * 7);
-  const totals = new Map(stats.days.map((day) => [day.date, day.totalTokens]));
-  const daily = Array.from({ length: 53 * 7 }, (_, index) => {
-    const date = new Date(start);
-    date.setDate(start.getDate() + index);
-    const key = dateKey(date);
-    return {
-      date: key,
-      actualTokens: totals.get(key) ?? 0,
-      future: date > today,
-    };
-  });
-
-  if (view === "daily") {
-    return daily.map((cell) => ({ ...cell, value: cell.actualTokens }));
-  }
-
-  if (view === "weekly") {
-    const weeklyTotals = new Map<number, number>();
-    daily.forEach((cell, index) => {
-      const week = Math.floor(index / 7);
-      weeklyTotals.set(week, (weeklyTotals.get(week) ?? 0) + cell.actualTokens);
-    });
-    return daily.map((cell, index) => ({
-      ...cell,
-      value: weeklyTotals.get(Math.floor(index / 7)) ?? 0,
-    }));
-  }
-
-  let cumulative = 0;
-  return daily.map((cell) => {
-    cumulative += cell.actualTokens;
-    return { ...cell, value: cumulative };
-  });
+function modelKey(provider: string, model: string): string {
+  return `${provider}\0${model}`;
 }
 
-function intensity(value: number, max: number, future: boolean): number {
-  if (future || value <= 0 || max <= 0) return 0;
-  return Math.min(4, Math.max(1, Math.ceil((value / max) * 4)));
-}
-
-function monthMarkers(cells: CalendarCell[]): Array<{ column: number; label: string }> {
-  const markers: Array<{ column: number; label: string }> = [];
-  let previousMonth = "";
-  for (let column = 0; column < 53; column += 1) {
-    const cell = cells[column * 7];
-    const month = cell.date.slice(0, 7);
-    if (month !== previousMonth) {
-      markers.push({ column: column + 1, label: `${Number(cell.date.slice(5, 7))}月` });
-      previousMonth = month;
+function buildPricingMap(models: ManagedModel[]): Map<string, ModelTokenPricing> {
+  const result = new Map<string, ModelTokenPricing>();
+  for (const model of models) {
+    if (model.pricing && !(model.baseURL ?? "").trim()) {
+      result.set(modelKey(model.provider, model.model), model.pricing);
     }
   }
-  return markers;
+  return result;
 }
 
-const emptyStats: TokenUsageStats = {
-  totalTokens: 0,
-  peakTokens: 0,
-  longestTaskDurationMs: 0,
-  currentStreakDays: 0,
-  longestStreakDays: 0,
-  days: [],
-};
+function estimateModelCost(
+  usage: TokenUsageModel,
+  pricing: ModelTokenPricing | undefined,
+): CostEstimate {
+  if (!pricing) return { costUsd: 0, coveredTokens: 0 };
+  const cachedInput = usage.cachedInputTokens;
+  const cacheCreationInput = usage.cacheCreationInputTokens;
+  const regularInput = usage.provider === "anthropic"
+    ? usage.inputTokens
+    : Math.max(0, usage.inputTokens - cachedInput - cacheCreationInput);
+  const costUsd = (
+    regularInput * pricing.inputPerMillionUsd
+    + cachedInput * pricing.cachedInputPerMillionUsd
+    + cacheCreationInput * (
+      pricing.cacheCreationInputPerMillionUsd ?? pricing.inputPerMillionUsd
+    )
+    + usage.outputTokens * pricing.outputPerMillionUsd
+  ) / 1_000_000;
+  return { costUsd, coveredTokens: usage.totalTokens };
+}
 
-export const TokenUsageOverview: React.FC = () => {
+function estimateModelsCost(
+  usageModels: TokenUsageModel[],
+  pricing: Map<string, ModelTokenPricing>,
+): CostEstimate {
+  return usageModels.reduce<CostEstimate>((total, usage) => {
+    const estimate = estimateModelCost(
+      usage,
+      pricing.get(modelKey(usage.provider, usage.model)),
+    );
+    return {
+      costUsd: total.costUsd + estimate.costUsd,
+      coveredTokens: total.coveredTokens + estimate.coveredTokens,
+    };
+  }, { costUsd: 0, coveredTokens: 0 });
+}
+
+function buildTrendDays(stats: TokenUsageStats): TokenUsageDay[] {
+  const byDate = new Map(stats.days.map((day) => [day.date, day]));
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return Array.from({ length: 30 }, (_, index) => {
+    const date = new Date(today);
+    date.setDate(today.getDate() - (29 - index));
+    return byDate.get(dateKey(date)) ?? {
+      date: dateKey(date),
+      inputTokens: 0,
+      outputTokens: 0,
+      totalTokens: 0,
+      cachedInputTokens: 0,
+      cacheCreationInputTokens: 0,
+      requestCount: 0,
+      taskCount: 0,
+      completedTaskCount: 0,
+      failedTaskCount: 0,
+      interruptedTaskCount: 0,
+      totalTaskDurationMs: 0,
+      durationSampleCount: 0,
+      longestTaskDurationMs: 0,
+      models: [],
+    };
+  });
+}
+
+export const TokenUsageOverview: React.FC<TokenUsageOverviewProps> = ({
+  models,
+  selectedModelId,
+}) => {
   const [stats, setStats] = React.useState<TokenUsageStats>(emptyStats);
-  const [view, setView] = React.useState<UsageView>("daily");
+  const [view, setView] = React.useState<UsageView>("tokens");
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
 
@@ -126,37 +167,90 @@ export const TokenUsageOverview: React.FC = () => {
     void loadStats();
   }, [loadStats]);
 
-  const cells = React.useMemo(() => buildCalendarCells(stats, view), [stats, view]);
-  const maxValue = Math.max(0, ...cells.filter((cell) => !cell.future).map((cell) => cell.value));
-  const markers = monthMarkers(cells);
+  const pricing = React.useMemo(() => buildPricingMap(models), [models]);
+  const totalEstimate = React.useMemo(
+    () => estimateModelsCost(stats.models, pricing),
+    [pricing, stats.models],
+  );
+  const trendDays = React.useMemo(() => buildTrendDays(stats), [stats]);
+  const trendValues = trendDays.map((day) => {
+    if (view === "tokens") return day.totalTokens;
+    if (view === "tasks") return day.taskCount;
+    return estimateModelsCost(day.models, pricing).costUsd;
+  });
+  const trendMax = Math.max(0, ...trendValues);
+  const selectedModel = models.find((model) => model.id === selectedModelId);
+  const selectedModelEnabled = Boolean(selectedModel && selectedModel.enabled !== false);
+  const measuredTasks = stats.completedTaskCount + stats.failedTaskCount;
+  const successRate = measuredTasks > 0
+    ? (stats.completedTaskCount / measuredTasks) * 100
+    : undefined;
+  const coverage = stats.totalTokens > 0
+    ? Math.round((totalEstimate.coveredTokens / stats.totalTokens) * 100)
+    : 0;
+
   const metrics = [
-    { value: formatTokens(stats.totalTokens), label: "累计 Token 数" },
-    { value: formatTokens(stats.peakTokens), label: "单日峰值 Token 数" },
-    { value: formatDuration(stats.longestTaskDurationMs), label: "最长任务时长" },
-    { value: `${stats.currentStreakDays} 天`, label: "当前连续天数" },
-    { value: `${stats.longestStreakDays} 天`, label: "最长连续天数" },
+    {
+      value: stats.totalTokens > 0 && totalEstimate.coveredTokens === 0
+        ? "—"
+        : formatCost(totalEstimate.costUsd),
+      label: "预估 API 费用",
+      detail: stats.totalTokens > 0 ? `覆盖 ${coverage}% Token` : "等待产生用量",
+    },
+    {
+      value: stats.requestCount.toLocaleString("zh-CN"),
+      label: "模型调用",
+      detail: `${formatTokens(stats.totalTokens)} Token`,
+    },
+    {
+      value: stats.taskCount.toLocaleString("zh-CN"),
+      label: "Agent 任务",
+      detail: stats.interruptedTaskCount > 0 ? `${stats.interruptedTaskCount} 次中断` : "本地累计",
+    },
+    {
+      value: successRate === undefined ? "—" : `${successRate.toFixed(1)}%`,
+      label: "任务成功率",
+      detail: measuredTasks > 0 ? `${stats.failedTaskCount} 次失败` : "暂无完整样本",
+    },
+    {
+      value: formatDuration(stats.averageTaskDurationMs),
+      label: "平均任务耗时",
+      detail: "按已记录任务计算",
+    },
   ];
 
   return (
     <div className="token-usage-shell">
-      <section className="token-usage-metrics" aria-label="Token 使用概览">
+      <section className="token-current-model" aria-label="当前主模型">
+        <div>
+          <span>当前主模型</span>
+          <strong>{selectedModel?.name ?? "未选择模型"}</strong>
+          <small>{selectedModel?.model ?? "请先配置可用模型"}</small>
+        </div>
+        <span className={`token-model-status ${selectedModelEnabled ? "is-online" : ""}`}>
+          {selectedModel ? (selectedModelEnabled ? "已启用" : "已停用") : "未配置"}
+        </span>
+      </section>
+
+      <section className="token-usage-metrics" aria-label="用量与费用概览">
         {metrics.map((metric) => (
           <div className="token-usage-metric" key={metric.label}>
             <strong>{loading ? "—" : metric.value}</strong>
             <span>{metric.label}</span>
+            <small>{loading ? "" : metric.detail}</small>
           </div>
         ))}
       </section>
 
-      <section className="token-activity-card">
+      <section className="token-activity-card settings-card">
         <div className="token-activity-header">
           <div>
-            <h3>Token 活动</h3>
-            <p>统计由模型服务响应的真实 Token 用量累加</p>
+            <h3>最近 30 天趋势</h3>
+            <p>按实际模型响应记录，可切换业务与成本视角</p>
           </div>
           <div className="token-activity-actions">
-            <div className="token-view-tabs" role="tablist" aria-label="Token 活动粒度">
-              {(["daily", "weekly", "cumulative"] as const).map((item) => (
+            <div className="token-view-tabs" role="tablist" aria-label="用量趋势指标">
+              {(["tokens", "cost", "tasks"] as const).map((item) => (
                 <button
                   key={item}
                   type="button"
@@ -165,7 +259,7 @@ export const TokenUsageOverview: React.FC = () => {
                   className={view === item ? "active" : ""}
                   onClick={() => setView(item)}
                 >
-                  {{ daily: "每日", weekly: "每周", cumulative: "累计" }[item]}
+                  {{ tokens: "Token", cost: "预估费用", tasks: "任务数" }[item]}
                 </button>
               ))}
             </div>
@@ -173,7 +267,7 @@ export const TokenUsageOverview: React.FC = () => {
               type="button"
               className="token-usage-refresh"
               onClick={() => void loadStats()}
-              aria-label="刷新 Token 统计"
+              aria-label="刷新用量统计"
               title="刷新"
               disabled={loading}
             >
@@ -188,29 +282,68 @@ export const TokenUsageOverview: React.FC = () => {
             <button type="button" onClick={() => void loadStats()}>重试</button>
           </div>
         ) : (
-          <div className={`token-heatmap-scroll ${loading ? "is-loading" : ""}`}>
-            <div className="token-heatmap-months" aria-hidden="true">
-              {markers.map((marker) => (
-                <span key={`${marker.column}-${marker.label}`} style={{ gridColumn: marker.column }}>
-                  {marker.label}
-                </span>
-              ))}
-            </div>
-            <div className="token-heatmap-grid" aria-label="最近 53 周 Token 活动">
-              {cells.map((cell) => (
-                <span
-                  key={cell.date}
-                  className={`token-heatmap-cell level-${intensity(cell.value, maxValue, cell.future)} ${cell.future ? "is-future" : ""}`}
-                  title={`${cell.date} · ${cell.actualTokens.toLocaleString("zh-CN")} Tokens`}
-                />
-              ))}
-            </div>
+          <div className={`token-trend-chart ${loading ? "is-loading" : ""}`} role="img" aria-label="最近 30 天用量柱状图">
+            {trendDays.map((day, index) => {
+              const value = trendValues[index];
+              const label = view === "cost"
+                ? formatCost(value)
+                : view === "tokens"
+                  ? `${formatTokens(value)} Token`
+                  : `${value} 个任务`;
+              return (
+                <div className="token-trend-column" key={day.date} title={`${day.date} · ${label}`}>
+                  <span
+                    className="token-trend-bar"
+                    style={{ height: `${trendMax > 0 ? Math.max(3, (value / trendMax) * 100) : 3}%` }}
+                  />
+                  {(index === 0 || index === 29 || index % 7 === 1) && (
+                    <small>{Number(day.date.slice(5, 7))}/{Number(day.date.slice(8, 10))}</small>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
+      </section>
 
-        {!loading && !error && stats.totalTokens === 0 && (
-          <p className="token-usage-empty">完成下一次模型调用后，这里会开始记录真实 Token 消耗。</p>
+      <section className="token-model-breakdown settings-card">
+        <div className="token-activity-header">
+          <div>
+            <h3>按模型分摊</h3>
+            <p>识别不同模型的 Token、调用次数与预估费用</p>
+          </div>
+        </div>
+        {stats.models.length > 0 ? (
+          <div className="token-model-list">
+            {stats.models.map((usage) => {
+              const estimate = estimateModelCost(
+                usage,
+                pricing.get(modelKey(usage.provider, usage.model)),
+              );
+              const share = stats.totalTokens > 0 ? (usage.totalTokens / stats.totalTokens) * 100 : 0;
+              return (
+                <div className="token-model-row" key={modelKey(usage.provider, usage.model)}>
+                  <div className="token-model-copy">
+                    <strong>{usage.model}</strong>
+                    <span>{usage.provider} · {usage.requestCount} 次调用</span>
+                  </div>
+                  <div className="token-model-bar-track">
+                    <span style={{ width: `${share}%` }} />
+                  </div>
+                  <div className="token-model-values">
+                    <strong>{formatTokens(usage.totalTokens)}</strong>
+                    <span>{estimate.coveredTokens > 0 ? formatCost(estimate.costUsd) : "费用未知"}</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <p className="token-usage-empty">完成下一次模型调用后，这里会开始记录模型用量。</p>
         )}
+        <p className="token-pricing-note">
+          费用按内置模型公开单价估算；自定义 Base URL、代理服务折扣与工具调用费用不计入，实际账单以服务商为准。
+        </p>
       </section>
     </div>
   );

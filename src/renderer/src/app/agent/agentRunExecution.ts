@@ -1,5 +1,6 @@
 import type { AgentGatewayPreferences } from "@shared/agent-gateway-config";
 import type { AgentStepLimits } from "@shared/agent-step-limits";
+import type { AgentExecutionStrategy } from "@shared/agent";
 import type { AgentRunRequest, AgentRunResult } from "@shared/ipc";
 import type { LeanGenerationMode } from "@shared/lean-mode-contract";
 import { buildAgentGatewayConfig } from "../../agentGatewayConfig";
@@ -16,6 +17,7 @@ interface ExecuteAgentRunOptions {
   enabledModels: ManagedModel[];
   selectedModel?: ManagedModel;
   stepLimits: AgentStepLimits;
+  executionStrategy: AgentExecutionStrategy;
   runId: string;
 }
 
@@ -32,6 +34,7 @@ export function executeAgentRun({
   enabledModels,
   selectedModel,
   stepLimits,
+  executionStrategy,
   runId,
 }: ExecuteAgentRunOptions): Promise<AgentRunResult> {
   const gatewayConfig = buildAgentGatewayConfig(gatewayPreferences, enabledModels);
@@ -47,6 +50,7 @@ export function executeAgentRun({
       activeThreadId,
       request,
       modelSettings,
+      executionStrategy,
       stepLimits,
       gatewayConfig,
       runId,
@@ -56,7 +60,7 @@ export function executeAgentRun({
   return window.desktopApi.startAgentRun(
     request,
     modelSettings,
-    "REQUEST_APPROVAL",
+    executionStrategy,
     stepLimits,
     gatewayConfig,
     runId,

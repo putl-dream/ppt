@@ -604,6 +604,41 @@ describe("Agent Architecture Skeletons & Types", () => {
     expect(bus.getSnapshot().title).toBe("Auto title");
   });
 
+  it("applies an updated execution strategy when continuing a conversation", async () => {
+    const registry = new ToolRegistry();
+    registry.register(submitCommandsTool);
+    const runtime = new AgentRuntime(registry, createSequenceGateway([
+      modelToolCall("SubmitCommands", {
+        summary: "Update title",
+        commands: [{ id: "cmd-auto-continued", type: "set-presentation-title", title: "Continued auto title" }],
+        risk: "low",
+      }),
+    ]));
+    const bus = new CommandBus(createStarterPresentation());
+    const service = new AgentService(bus, runtime, new CommitGate(new RiskPolicy()));
+    const threadId = "execution-strategy-override";
+    service.restoreAgentRunConversation(threadId, [
+      { role: "user", content: "先准备演示文档" },
+      { role: "assistant", content: "准备好了。" },
+    ]);
+
+    const result = await service.continueAgentRun(
+      threadId,
+      "更新标题",
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      "AUTO",
+    );
+
+    expect(result.status).toBe("completed");
+    expect(bus.getSnapshot().title).toBe("Continued auto title");
+  });
+
   it("rejects an approved proposal when the presentation changed after preview", async () => {
     const workspaceRoot = await mkdtemp(join(tmpdir(), "agent-stale-approval-"));
     const registry = new ToolRegistry();

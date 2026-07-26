@@ -63,8 +63,17 @@ const api: DesktopApi = {
   startAgentRun: (request, model, executionStrategy, stepLimits, gatewayConfig, runId) =>
     ipcRenderer.invoke("agent:start", request, model, executionStrategy, stepLimits, gatewayConfig, runId),
   // 继续运行会额外携带既有 threadId，使 Main 能恢复模型消息、工具结果和审批上下文。
-  continueAgentRun: (threadId, request, model, stepLimits, gatewayConfig, runId) =>
-    ipcRenderer.invoke("agent:continue", threadId, request, model, stepLimits, gatewayConfig, runId),
+  continueAgentRun: (threadId, request, model, executionStrategy, stepLimits, gatewayConfig, runId) =>
+    ipcRenderer.invoke(
+      "agent:continue",
+      threadId,
+      request,
+      model,
+      executionStrategy,
+      stepLimits,
+      gatewayConfig,
+      runId,
+    ),
   onAgentStream: (listener) => {
     const handler = (_event: Electron.IpcRendererEvent, streamEvent: AgentStreamEvent) => {
       listener(streamEvent);

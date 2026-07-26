@@ -56,14 +56,14 @@ export function SettingsView({
           logoUrl={controller.logoUrl}
           onLogoUpload={controller.uploadLogo}
           onRemoveLogo={controller.removeLogo}
-          autoCloudSync={controller.autoCloudSync}
-          setAutoCloudSync={controller.setAutoCloudSync}
           localStoragePath={localStoragePath}
           onOpenWorkspace={onOpenWorkspace}
           agentStepLimits={controller.agentStepLimits}
           setAgentStepLimits={controller.setAgentStepLimits}
           agentGatewayPreferences={controller.agentGatewayPreferences}
           setAgentGatewayPreferences={controller.setAgentGatewayPreferences}
+          executionStrategy={controller.executionStrategy}
+          setExecutionStrategy={controller.setExecutionStrategy}
           themeMode={controller.themeMode}
           setThemeMode={controller.setThemeMode}
           uiAccentColor={controller.uiAccentColor}

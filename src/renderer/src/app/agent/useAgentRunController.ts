@@ -68,6 +68,7 @@ interface UseAgentRunControllerOptions {
     | "agentGatewayPreferences"
     | "enabledModels"
     | "selectedModel"
+    | "executionStrategy"
   >;
   activity: AgentActivityStreamController;
   notify: (message: string) => void;
@@ -123,6 +124,7 @@ export function useAgentRunController({
     agentGatewayPreferences,
     enabledModels,
     selectedModel,
+    executionStrategy,
   } = settings;
   const runLockRef = useRef(createAgentRunLock());
 
@@ -243,6 +245,7 @@ export function useAgentRunController({
           enabledModels,
           selectedModel,
           stepLimits: agentStepLimits,
+          executionStrategy,
           runId: context.runId,
         });
       },

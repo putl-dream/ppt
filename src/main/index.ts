@@ -485,6 +485,7 @@ app.whenReady().then(async () => {
     task: () => Promise<AgentRunResult>,
   ): Promise<AgentRunResult> => {
     const startedAt = Date.now();
+    let taskOutcome: "completed" | "failed" | "interrupted" = "completed";
     logger.info("session.operation.started", {
       operation,
       sessionId,
@@ -493,6 +494,11 @@ app.whenReady().then(async () => {
     });
     try {
       const result = await task();
+      taskOutcome = result.status === "interrupted"
+        ? "interrupted"
+        : result.status === "failed"
+          ? "failed"
+          : "completed";
       if (runId) {
         sessionStore.conversationDatabase.finishRun({
           runId,
@@ -520,6 +526,7 @@ app.whenReady().then(async () => {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       const interrupted = isRuntimeCancellation(error, signal);
+      taskOutcome = interrupted ? "interrupted" : "failed";
       const failureThreadId = typeof details.threadId === "string"
         ? details.threadId
         : runId;
@@ -555,7 +562,11 @@ app.whenReady().then(async () => {
       if (runId) return result;
       throw error;
     } finally {
-      await tokenUsageStore.recordTask(Date.now() - startedAt).catch((error) => {
+      await tokenUsageStore.recordTask(
+        Date.now() - startedAt,
+        new Date(),
+        taskOutcome,
+      ).catch((error) => {
         logger.error("session.operation.usage-persist-failed", {
           operation,
           sessionId,
@@ -1052,6 +1063,7 @@ app.whenReady().then(async () => {
     threadId: string,
     rawRequest: unknown,
     rawModelSettings?: AgentModelSettings,
+    rawExecutionStrategy?: AgentExecutionStrategy,
     rawStepLimits?: AgentStepLimits,
     rawGatewayConfig?: AgentGatewayConfig,
     runId?: string,
@@ -1078,6 +1090,9 @@ app.whenReady().then(async () => {
       const runtime = await getRuntimeForSession(sessionId);
       const settings = rawModelSettings
         ? agentModelSettingsSchema.parse(rawModelSettings)
+        : undefined;
+      const executionStrategy = rawExecutionStrategy
+        ? agentExecutionStrategySchema.parse(rawExecutionStrategy)
         : undefined;
       const agentStepLimits = rawStepLimits
         ? agentStepLimitsSchema.parse(rawStepLimits)
@@ -1138,11 +1153,12 @@ app.whenReady().then(async () => {
                 agentStepLimits,
                 request.layoutChoice,
                 selection,
+                executionStrategy,
               )
             : runtime.agentService.start(
                 request.prompt,
                 selection,
-                "REQUEST_APPROVAL",
+                executionStrategy ?? "REQUEST_APPROVAL",
                 emit,
                 request.editorContext,
                 sessionStore.getAgentMessageHistory(sessionId, request.prompt),

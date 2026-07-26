@@ -1,5 +1,13 @@
 import type { AgentModelSettings, AgentProvider } from "@shared/agent";
 
+export interface ModelTokenPricing {
+  inputPerMillionUsd: number;
+  cachedInputPerMillionUsd: number;
+  cacheCreationInputPerMillionUsd?: number;
+  outputPerMillionUsd: number;
+  updatedAt: string;
+}
+
 export interface ManagedModel {
   id: string;
   name: string;
@@ -10,6 +18,7 @@ export interface ManagedModel {
   openaiApiMode: "responses" | "chat-completions";
   enabled?: boolean;
   builtIn?: boolean;
+  pricing?: ModelTokenPricing;
 }
 
 export const DEFAULT_MODELS: ManagedModel[] = [
@@ -23,6 +32,12 @@ export const DEFAULT_MODELS: ManagedModel[] = [
     openaiApiMode: "responses",
     enabled: true,
     builtIn: true,
+    pricing: {
+      inputPerMillionUsd: 5,
+      cachedInputPerMillionUsd: 0.5,
+      outputPerMillionUsd: 30,
+      updatedAt: "2026-07-26",
+    },
   },
   {
     id: "openai-gpt-5-mini",
@@ -34,6 +49,12 @@ export const DEFAULT_MODELS: ManagedModel[] = [
     openaiApiMode: "responses",
     enabled: true,
     builtIn: true,
+    pricing: {
+      inputPerMillionUsd: 0.25,
+      cachedInputPerMillionUsd: 0.025,
+      outputPerMillionUsd: 2,
+      updatedAt: "2026-07-26",
+    },
   },
   {
     id: "anthropic-sonnet-4-6",
@@ -45,6 +66,13 @@ export const DEFAULT_MODELS: ManagedModel[] = [
     openaiApiMode: "responses",
     enabled: true,
     builtIn: true,
+    pricing: {
+      inputPerMillionUsd: 3,
+      cachedInputPerMillionUsd: 0.3,
+      cacheCreationInputPerMillionUsd: 3.75,
+      outputPerMillionUsd: 15,
+      updatedAt: "2026-07-26",
+    },
   },
   {
     id: "anthropic-opus-4-6",
@@ -56,6 +84,13 @@ export const DEFAULT_MODELS: ManagedModel[] = [
     openaiApiMode: "responses",
     enabled: true,
     builtIn: true,
+    pricing: {
+      inputPerMillionUsd: 5,
+      cachedInputPerMillionUsd: 0.5,
+      cacheCreationInputPerMillionUsd: 6.25,
+      outputPerMillionUsd: 25,
+      updatedAt: "2026-07-26",
+    },
   },
 ];
 
@@ -71,7 +106,17 @@ export function loadManagedModels(): ManagedModel[] {
     return parsed.filter(
       (item) => item && item.id && item.name && item.model &&
         (item.provider === "openai" || item.provider === "anthropic"),
-    ).map((item) => ({ ...item, enabled: item.enabled !== false }));
+    ).map((item) => {
+      const builtIn = DEFAULT_MODELS.find((model) =>
+        model.provider === item.provider
+        && model.model === item.model
+        && !(item.baseURL ?? "").trim());
+      return {
+        ...item,
+        enabled: item.enabled !== false,
+        pricing: builtIn?.pricing,
+      };
+    });
   } catch {
     return DEFAULT_MODELS;
   }

@@ -1,5 +1,6 @@
 import type { AgentGatewayPreferences } from "@shared/agent-gateway-config";
 import type { AgentStepLimits } from "@shared/agent-step-limits";
+import type { AgentExecutionStrategy } from "@shared/agent";
 import type { DesignSystemV2 } from "@design-system";
 import { loadAgentGatewayPreferences } from "../agentGatewayConfig";
 import { loadAgentStepLimits } from "../agentStepLimits";
@@ -29,6 +30,7 @@ export interface PersistedUiSettings {
   colorContrastOffset: number;
   selectedDesignSystem: DesignSystemV2;
   logoUrl: string | null;
+  executionStrategy: AgentExecutionStrategy;
 }
 
 export interface AppBootstrapSnapshot {
