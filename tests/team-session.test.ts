@@ -19,8 +19,8 @@ describe("team session projection", () => {
       steps: [{
         id: "step-1",
         type: "tool",
-        toolName: "write_file",
-        text: "正在调用 write_file",
+        toolName: "WriteFile",
+        text: "正在调用 WriteFile",
         status: "running",
       }],
     };

@@ -36,7 +36,7 @@ describe("ToolApprovalBroker", () => {
     const emit = vi.fn();
     const handler = broker.createHandler("run-2", emit);
     const pending = handler({
-      toolName: "write_file",
+      toolName: "WriteFile",
       args: { path: "a.md", content: "x" },
       reason: "文件修改",
     });
@@ -57,7 +57,7 @@ describe("ToolApprovalBroker", () => {
     broker.cancelForRun("run-3");
 
     await expect(handler({
-      toolName: "write_file",
+      toolName: "WriteFile",
       args: { path: "late.md", content: "x" },
       reason: "文件修改",
     })).resolves.toBe(false);

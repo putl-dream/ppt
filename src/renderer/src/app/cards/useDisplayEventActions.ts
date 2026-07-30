@@ -5,6 +5,8 @@ import { formatTerminalAgentRunContent } from "@shared/agent-result-copy";
 import { mergeResponseText } from "@shared/agent-activity";
 import { formatPublicErrorMessage } from "@shared/agent-activity-display";
 import { useProjectStore } from "../../components/project-store";
+import { saveExistingProjectFile } from "../project/projectFileMutations";
+import { projectFileRequiresReload } from "../project/projectFilesState";
 import {
   ingestDisplayEvent,
   setDisplayCardStatus,
@@ -213,21 +215,35 @@ export function useDisplayEventActions({
   }, [startAgent]);
 
   const resolvePatch = useCallback(async (event: PatchEvent, accepted: boolean) => {
-    if (!accepted || !activeSessionId || event.payload.contentAfter === undefined) {
+    if (!accepted || !activeSessionId) {
       notify(accepted ? "补丁已确认" : "补丁已拒绝");
       return;
     }
+    if (
+      event.payload.contentBefore === undefined
+      || event.payload.contentAfter === undefined
+    ) {
+      setDisplayCardStatus(event.eventId, "active");
+      notify("补丁缺少完整的读取基线，无法安全应用。");
+      return;
+    }
     try {
-      await window.desktopApi.writeProjectArtifact(
+      await saveExistingProjectFile(
+        window.desktopApi,
         activeSessionId,
         event.payload.targetPath,
         event.payload.contentAfter,
+        event.payload.contentBefore,
       );
       await hydrateProjectArtifacts(activeSessionId);
       notify("补丁已应用");
     } catch (error) {
       setDisplayCardStatus(event.eventId, "active");
-      notify(formatPublicErrorMessage(error, "应用补丁失败，请重试。"));
+      notify(
+        projectFileRequiresReload(error)
+          ? "补丁基线已变化，当前补丁未应用；请重新读取后生成新补丁。"
+          : formatPublicErrorMessage(error, "应用补丁失败，请重试。"),
+      );
     }
   }, [activeSessionId, hydrateProjectArtifacts, notify]);
 

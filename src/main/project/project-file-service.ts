@@ -260,58 +260,6 @@ export class ProjectFileService {
     }
   }
 
-  /**
-   * Compatibility boundary for Renderer workflows that still submit a whole
-   * artifact payload. Existing files are opened and committed through the
-   * same isolated receipt flow as the file manager; new files are allowed
-   * only beneath a registered editable artifact.
-   */
-  async writeEditableArtifact(
-    snapshot: SessionSnapshot,
-    relativePath: string,
-    content: string,
-  ): Promise<ProjectArtifactWriteResult> {
-    const normalizedPath = normalizeProjectPath(relativePath);
-    this.resolveProjectPath(snapshot, normalizedPath);
-    const editPolicy = this.getEditPolicy(snapshot, normalizedPath);
-    if (!editPolicy.editable) {
-      throw new Error(editPolicy.readOnlyReason ?? "This project file is read-only.");
-    }
-
-    let opened: ProjectFileEditorReadResult;
-    try {
-      opened = await this.openProjectFile(snapshot, normalizedPath);
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-      return await this.writeArtifact(snapshot, normalizedPath, content);
-    }
-
-    try {
-      if (opened.content === content) {
-        return {
-          path: opened.path,
-          changed: false,
-          staleArtifactIds: [],
-        };
-      }
-      const saved = await this.saveProjectFile(
-        snapshot,
-        opened.path,
-        content,
-        opened.editToken,
-        opened.version,
-      );
-      return {
-        path: saved.path,
-        changed: saved.changed,
-        changedArtifactId: saved.changedArtifactId,
-        staleArtifactIds: saved.staleArtifactIds,
-      };
-    } finally {
-      this.editorSessions.delete(opened.editToken);
-    }
-  }
-
   async writeArtifact(
     snapshot: SessionSnapshot,
     relativePath: string,

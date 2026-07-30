@@ -28,7 +28,6 @@ import { type ArtifactDiff } from "./project/artifact-diff";
 import {
   ProjectFileService,
   type ProjectArtifactReadResult,
-  type ProjectArtifactWriteResult,
   type ProjectFileEditorReadResult,
   type ProjectFileEditorWriteResult,
 } from "./project/project-file-service";
@@ -375,7 +374,16 @@ export class FileSessionStore {
   }
 
   async writeStoryboard(sessionId: string, storyboard: StoryboardSlideSpec[]): Promise<void> {
-    await this.writeProjectArtifact(sessionId, "slides/storyboard.json", serializeStoryboard(storyboard));
+    const snapshot = this.findSession(sessionId);
+    const result = await this.projectFileService.writeArtifact(
+      snapshot,
+      "slides/storyboard.json",
+      serializeStoryboard(storyboard),
+    );
+    if (!result.changed) return;
+    snapshot.session.updatedAt = new Date().toISOString();
+    await this.persist();
+    await this.syncWorkspacePersistence(snapshot);
   }
 
   createDeckGenerationJobStore(_sessionId: string) {
@@ -807,25 +815,6 @@ export class FileSessionStore {
       relativePath,
       nextContent,
     );
-  }
-
-  async writeProjectArtifact(
-    sessionId: string,
-    relativePath: string,
-    content: string,
-  ): Promise<ProjectArtifactWriteResult> {
-    const snapshot = this.findSession(sessionId);
-    const result = await this.projectFileService.writeEditableArtifact(
-      snapshot,
-      relativePath,
-      content,
-    );
-    if (result.changed) {
-      snapshot.session.updatedAt = new Date().toISOString();
-      await this.persist();
-      await this.syncWorkspacePersistence(snapshot);
-    }
-    return result;
   }
 
   async saveProjectFile(

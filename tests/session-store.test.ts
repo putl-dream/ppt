@@ -231,10 +231,17 @@ describe("SQLite session store", () => {
     const { store } = await createStore();
     const created = await store.createSession({ title: "Artifacts" });
     const sessionId = created.activeSession!.session.id;
-    const result = await store.writeProjectArtifact(sessionId, "research/notes.md", "facts");
+    const opened = await store.openProjectFile(sessionId, "brief.md");
+    const result = await store.saveProjectFile(
+      sessionId,
+      "brief.md",
+      "# Facts\n",
+      opened.editToken,
+      opened.version,
+    );
     expect(result.changed).toBe(true);
-    expect((await store.readProjectArtifact(sessionId, "research/notes.md")).content).toBe("facts");
-    await expect(store.writeProjectArtifact(sessionId, "../escape.md", "no")).rejects.toThrow(
+    expect((await store.readProjectArtifact(sessionId, "brief.md")).content).toBe("# Facts\n");
+    await expect(store.openProjectFile(sessionId, "../escape.md")).rejects.toThrow(
       "outside the sandbox",
     );
   });
@@ -535,14 +542,14 @@ describe("SQLite session store", () => {
     store.conversationDatabase.appendRuntimeEvent("run-teammate", "tool_started", {
       ...common,
       type: "teammate-tool-started",
-      toolName: "write_file",
-      message: "正在调用 write_file",
+      toolName: "WriteFile",
+      message: "正在调用 WriteFile",
     });
     store.conversationDatabase.appendRuntimeEvent("run-teammate", "tool_finished", {
       ...common,
       type: "teammate-tool-finished",
-      toolName: "write_file",
-      message: "write_file 已完成",
+      toolName: "WriteFile",
+      message: "WriteFile 已完成",
       status: "completed",
     });
     store.conversationDatabase.appendRuntimeEvent("run-teammate", "workflow_progress", {
@@ -564,7 +571,7 @@ describe("SQLite session store", () => {
       status: "completed",
       steps: [
         expect.objectContaining({ type: "reasoning", text: "Checking the brief." }),
-        expect.objectContaining({ type: "tool", toolName: "write_file", status: "completed" }),
+        expect.objectContaining({ type: "tool", toolName: "WriteFile", status: "completed" }),
       ],
     });
   });
@@ -733,8 +740,8 @@ describe("SQLite session store", () => {
     store.conversationDatabase.appendRuntimeEvent(runId, "tool_started", {
       ...common,
       type: "teammate-tool-started",
-      toolName: "write_file",
-      message: "正在调用 write_file",
+      toolName: "WriteFile",
+      message: "正在调用 WriteFile",
     });
     await store.refreshAgentRunTrace(sessionId, runId);
     expect(
@@ -750,8 +757,8 @@ describe("SQLite session store", () => {
     store.conversationDatabase.appendRuntimeEvent(runId, "tool_finished", {
       ...common,
       type: "teammate-tool-finished",
-      toolName: "write_file",
-      message: "write_file 已完成",
+      toolName: "WriteFile",
+      message: "WriteFile 已完成",
       status: "completed",
     });
     await store.refreshAgentRunTrace(sessionId, runId);
@@ -788,7 +795,7 @@ describe("SQLite session store", () => {
           }),
           expect.objectContaining({
             type: "tool",
-            toolName: "write_file",
+            toolName: "WriteFile",
             status: "completed",
           }),
         ],

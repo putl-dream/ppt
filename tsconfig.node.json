@@ -29,6 +29,7 @@
     "src/renderer/src/agentRunPresentation.ts",
     "src/renderer/src/streamingText.ts",
     "src/renderer/src/app/chatMessageRuntime.ts",
+    "src/renderer/src/app/project/projectFileMutations.ts",
     "src/renderer/src/app/agent/agentRunFailure.ts",
     "src/renderer/src/app/agent/agentRunPreparation.ts",
     "src/renderer/src/cards/**/*.ts",

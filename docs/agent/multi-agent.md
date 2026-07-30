@@ -1,7 +1,7 @@
 # Multi-Agent、Task 与后台工作
 
 > 文档类型：现行架构
-> 最后核对：2026-07-25
+> 最后核对：2026-07-30
 
 ## 1. 定位
 
@@ -64,10 +64,11 @@ Main 和 teammate 共享：
 - Permission profile；
 - 不可卸载的权限检查与 Pre/Post Tool Hook 边界。
 
-teammate 当前仍使用专用 `SubAgentToolDefinition`、较小的 resolved tool pool 和
-独立执行适配器，也没有 Main Agent 的 `LoadSkill` 工具。两条执行路径必须共享上述
-安全不变量，但不把“接口相似”写成已经完全统一；Write/Edit 已收敛到同一
-`WorkspaceFileService`。
+teammate 仍使用专用 `SubAgentToolDefinition`、较小的 resolved tool pool 和独立
+编排器，也没有 Main Agent 的 `LoadSkill` 工具。文件能力例外地已经收敛到唯一契约：
+Main 与 teammate 都只暴露 `Glob`、`ReadFile`、`WriteFile`、`EditFile`，共享名称、
+schema、结构化输出、权限、错误副作用分类和 `WorkspaceFileService` 执行逻辑。旧
+snake_case 名称和 `ensure_dir` 不再注册；teammate 的 `bash` 仅保留只读诊断白名单。
 
 Assignment prompt 必须自包含目标、输入、输出和验收，不依赖 lead 的隐藏聊天上下文。
 

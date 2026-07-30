@@ -1,6 +1,4 @@
 import type { z } from "zod";
-import type { ToolDefinition } from "./tool-definition";
-
 export class ToolOutputValidationError extends Error {
   constructor(
     readonly toolName: string,
@@ -13,7 +11,10 @@ export class ToolOutputValidationError extends Error {
 
 /** Apply a tool's optional output schema at the central execution boundary. */
 export function validateToolOutput<TResult>(
-  tool: ToolDefinition<any, TResult>,
+  tool: {
+    name: string;
+    outputSchema?: z.ZodType<TResult>;
+  },
   output: unknown,
 ): TResult {
   if (!tool.outputSchema) return output as TResult;

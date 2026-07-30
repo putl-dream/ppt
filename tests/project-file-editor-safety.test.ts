@@ -13,7 +13,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { FileSessionStore } from "@main/session-store";
 import {
   projectArtifactDiffRequestSchema,
-  projectArtifactWriteRequestSchema,
   projectFileOpenRequestSchema,
   projectFileSaveRequestSchema,
 } from "@shared/ipc";
@@ -319,15 +318,17 @@ describe("project file editor safety boundary", () => {
     }
   });
 
-  it("keeps the legacy artifact writer within the same edit policy", async () => {
+  it("allows Renderer saves only for existing registered editable files", async () => {
     const fixture = await createStore();
     const { sessionId, rootPath } = await createProject(fixture);
-    const editableContent = "# Renderer-compatible brief\n";
-
-    await expect(fixture.store.writeProjectArtifact(
+    const editableContent = "# Canonical editor brief\n";
+    const opened = await fixture.store.openProjectFile(sessionId, "brief.md");
+    await expect(fixture.store.saveProjectFile(
       sessionId,
       "brief.md",
       editableContent,
+      opened.editToken,
+      opened.version,
     )).resolves.toMatchObject({
       path: "brief.md",
       changed: true,
@@ -335,41 +336,20 @@ describe("project file editor safety boundary", () => {
     });
     expect(await readFile(join(rootPath, "brief.md"), "utf8")).toBe(editableContent);
 
-    const readOnlyFiles = [
-      "deck/snapshot.json",
-      "history/README.md",
-    ];
-    const readOnlyContent = new Map(
-      await Promise.all(readOnlyFiles.map(async (relativePath) => [
-        relativePath,
-        await readFile(join(rootPath, relativePath), "utf8"),
-      ] as const)),
-    );
-    for (const relativePath of readOnlyFiles) {
-      await expect(fixture.store.writeProjectArtifact(
-        sessionId,
-        relativePath,
-        "must not replace service-owned content",
-      )).rejects.toThrow("只能预览");
-      expect(await readFile(join(rootPath, relativePath), "utf8"))
-        .toBe(readOnlyContent.get(relativePath));
-    }
-
-    await expect(fixture.store.writeProjectArtifact(
+    await expect(fixture.store.openProjectFile(
       sessionId,
       "misc/unregistered.md",
-      "must not create an unknown artifact",
-    )).rejects.toThrow("只能预览");
+    )).rejects.toMatchObject({ code: "ENOENT" });
     await expect(readFile(join(rootPath, "misc", "unregistered.md"), "utf8"))
       .rejects.toMatchObject({ code: "ENOENT" });
   });
 
   it("returns a diff against the complete current artifact content", async () => {
     const fixture = await createStore();
-    const { sessionId } = await createProject(fixture);
+    const { sessionId, rootPath } = await createProject(fixture);
     const before = "# Brief\n\nKeep this line.\nReplace this line.\n";
     const after = "# Brief\n\nKeep this line.\nReplacement is visible.\n";
-    await fixture.store.writeProjectArtifact(sessionId, "brief.md", before);
+    await writeFile(join(rootPath, "brief.md"), before, "utf8");
 
     const diff = await fixture.store.getProjectArtifactDiff(
       sessionId,
@@ -507,50 +487,29 @@ describe("project file editor safety boundary", () => {
     }).success).toBe(false);
   });
 
-  it("rejects unsafe legacy artifact write and diff IPC payloads", () => {
+  it("rejects unsafe artifact diff IPC payloads", () => {
     const sessionId = "session-1";
     const relativePath = "brief.md";
     const oversizedContent = "x".repeat((5 * 1024 * 1024) + 1);
 
-    expect(projectArtifactWriteRequestSchema.parse({
-      sessionId,
-      relativePath,
-      content: "# Brief\n",
-    })).toEqual({ sessionId, relativePath, content: "# Brief\n" });
     expect(projectArtifactDiffRequestSchema.parse({
       sessionId,
       relativePath,
       nextContent: "# Next brief\n",
     })).toEqual({ sessionId, relativePath, nextContent: "# Next brief\n" });
 
-    expect(projectArtifactWriteRequestSchema.safeParse({
-      sessionId,
-      relativePath: "../outside.md",
-      content: "escape",
-    }).success).toBe(false);
     expect(projectArtifactDiffRequestSchema.safeParse({
       sessionId,
       relativePath: "../outside.md",
       nextContent: "escape",
     }).success).toBe(false);
 
-    expect(projectArtifactWriteRequestSchema.safeParse({
-      sessionId,
-      relativePath,
-      content: oversizedContent,
-    }).success).toBe(false);
     expect(projectArtifactDiffRequestSchema.safeParse({
       sessionId,
       relativePath,
       nextContent: oversizedContent,
     }).success).toBe(false);
 
-    expect(projectArtifactWriteRequestSchema.safeParse({
-      sessionId,
-      relativePath,
-      content: "# Brief\n",
-      unexpected: true,
-    }).success).toBe(false);
     expect(projectArtifactDiffRequestSchema.safeParse({
       sessionId,
       relativePath,

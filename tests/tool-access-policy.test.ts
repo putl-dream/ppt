@@ -34,7 +34,7 @@ describe("tool access policy", () => {
     })).toEqual({ type: "require_approval", reason: "删除命令：rm notes.md" });
 
     expect(evaluateToolPermission({
-      toolName: "read_file",
+      toolName: "ReadFile",
       args: { path: "../outside.txt" },
       workspaceRoot,
     })).toEqual({
@@ -43,7 +43,7 @@ describe("tool access policy", () => {
     });
 
     expect(evaluateToolPermission({
-      toolName: "write_file",
+      toolName: "WriteFile",
       args: { path: "notes.md", content: "hello" },
       workspaceRoot,
     })).toEqual({ type: "allow" });

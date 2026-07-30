@@ -6,8 +6,8 @@ describe("sub-agent system prompt", () => {
   it("directs file operations to workspace tools before bash", () => {
     const prompt = buildSubAgentSystemPrompt(SUB_AGENT_TOOLS);
 
-    expect(prompt).toContain("`write_file` automatically creates parent directories");
+    expect(prompt).toContain("`WriteFile` automatically creates parent directories");
     expect(prompt).toContain("Do not call `bash` for mkdir/cat/echo redirection/copy/move style file operations");
-    expect(prompt.indexOf("- write_file")).toBeLessThan(prompt.indexOf("- bash"));
+    expect(prompt.indexOf("- WriteFile")).toBeLessThan(prompt.indexOf("- bash"));
   });
 });

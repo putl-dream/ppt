@@ -83,11 +83,6 @@ const TOOL_DISPLAY_COPY = {
   UpdateSlideVariant: { action: "调整页面视觉节奏", category: "change" },
   ValidateDeckLayout: { action: "检查页面布局", category: "inspect" },
 
-  read_file: { action: "读取工作文件", category: "read" },
-  write_file: { action: "保存工作文件", category: "change" },
-  ensure_dir: { action: "准备工作目录", category: "change" },
-  edit_file: { action: "编辑工作文件", category: "change" },
-  glob: { action: "查找工作文件", category: "search" },
   bash: { action: "执行本地操作", category: "change" },
   web_search: { action: "查找在线资料", category: "search" },
   recovery: { action: "恢复当前任务", category: "coordinate" },

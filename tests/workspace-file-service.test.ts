@@ -24,11 +24,13 @@ import {
 } from "../src/main/agent/tools/files/workspace-file-service";
 import {
   bashTool as subAgentBashTool,
-  editFileTool as subAgentEditFileTool,
-  readFileTool as subAgentReadFileTool,
-  writeFileTool as subAgentWriteFileTool,
+  SUB_AGENT_TOOL_HANDLERS,
+  workspaceFileTools as subAgentWorkspaceFileTools,
   type SubAgentToolContext,
 } from "../src/main/agent/subagent/workspace-tools";
+import {
+  workspaceFileTools as mainAgentWorkspaceFileTools,
+} from "../src/main/agent/tools/core/workspace-files";
 import {
   AtomicWriteConflictError,
   readJsonFile,
@@ -358,26 +360,70 @@ describe("WorkspaceFileService", () => {
       .rejects.toMatchObject({ code: "ENOENT" });
   }, 20_000);
 
-  it("keeps legacy sub-agent calls while sharing one receipt service", async () => {
+  it("uses the canonical file tools and one shared receipt service for teammates", async () => {
     const root = await createWorkspace();
     const context: SubAgentToolContext = { workspaceRoot: root };
+    const writeTool = SUB_AGENT_TOOL_HANDLERS.get("WriteFile")!;
+    const readTool = SUB_AGENT_TOOL_HANDLERS.get("ReadFile")!;
+    const editTool = SUB_AGENT_TOOL_HANDLERS.get("EditFile")!;
 
-    await subAgentWriteFileTool.execute({
-      path: "legacy.txt",
+    await writeTool.execute({
+      path: "canonical.txt",
       content: "before",
     }, context);
-    const readResult = JSON.parse(await subAgentReadFileTool.execute({
-      path: "legacy.txt",
-    }, context)) as { content: string; version: string };
+    const readResult = await readTool.execute({
+      path: "canonical.txt",
+    }, context) as { content: string; version: string };
     expect(readResult.content).toBe("before");
     expect(readResult.version).toMatch(/^sha256:/);
 
-    await subAgentEditFileTool.execute({
-      path: "legacy.txt",
+    const editResult = await editTool.execute({
+      path: "canonical.txt",
       old_string: "before",
       new_string: "after",
+    }, context) as { replacements: number; version: string };
+    expect(editResult.replacements).toBe(1);
+    expect(editResult.version).toMatch(/^sha256:/);
+    expect(await readFile(join(root, "canonical.txt"), "utf8")).toBe("after");
+    expect(SUB_AGENT_TOOL_HANDLERS.has("read_file")).toBe(false);
+    expect(SUB_AGENT_TOOL_HANDLERS.has("write_file")).toBe(false);
+    expect(SUB_AGENT_TOOL_HANDLERS.has("edit_file")).toBe(false);
+    expect(SUB_AGENT_TOOL_HANDLERS.has("glob")).toBe(false);
+    expect(SUB_AGENT_TOOL_HANDLERS.has("ensure_dir")).toBe(false);
+  });
+
+  it("exposes the exact same workspace file contract to Main and teammates", () => {
+    expect(subAgentWorkspaceFileTools.map((tool) => tool.name))
+      .toEqual(mainAgentWorkspaceFileTools.map((tool) => tool.name));
+
+    for (const mainTool of mainAgentWorkspaceFileTools) {
+      const teammateTool = subAgentWorkspaceFileTools.find(
+        (tool) => tool.name === mainTool.name,
+      );
+      expect(teammateTool).toBeDefined();
+      expect(teammateTool?.description).toBe(mainTool.description);
+      expect(teammateTool?.inputSchema).toBe(mainTool.inputSchema);
+      expect(teammateTool?.outputSchema).toBe(mainTool.outputSchema);
+      expect(teammateTool?.permission).toBe(mainTool.permission);
+    }
+  });
+
+  it("returns the canonical truncated Glob result for teammates", async () => {
+    const root = await createWorkspace();
+    const context: SubAgentToolContext = { workspaceRoot: root };
+    await writeFile(join(root, "a.txt"), "a", "utf8");
+    await writeFile(join(root, "b.txt"), "b", "utf8");
+
+    const result = await SUB_AGENT_TOOL_HANDLERS.get("Glob")!.execute({
+      pattern: "*.txt",
+      limit: 1,
     }, context);
-    expect(await readFile(join(root, "legacy.txt"), "utf8")).toBe("after");
+
+    expect(result).toEqual({
+      matches: ["a.txt"],
+      totalMatches: 2,
+      truncated: true,
+    });
   });
 
   it("matches double-star globs at both the workspace root and nested paths", async () => {
@@ -629,6 +675,9 @@ describe("sub-agent diagnostic command policy", () => {
     }, context)).rejects.toMatchObject({ code: "UNSAFE_COMMAND" });
     await expect(subAgentBashTool.execute({
       command: "python -c pass",
+    }, context)).rejects.toMatchObject({ code: "UNSAFE_COMMAND" });
+    await expect(subAgentBashTool.execute({
+      command: "mkdir generated",
     }, context)).rejects.toMatchObject({ code: "UNSAFE_COMMAND" });
   });
 

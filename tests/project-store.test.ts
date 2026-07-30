@@ -3,9 +3,31 @@ import { useProjectStore } from "../src/renderer/src/components/project-store";
 
 const mockDesktopApi = {
   readProjectArtifact: vi.fn(),
-  writeProjectArtifact: vi.fn(),
+  openProjectFile: vi.fn(),
+  saveProjectFile: vi.fn(),
   markProjectArtifactStatus: vi.fn(),
 };
+
+const FILE_VERSION = `sha256:${"a".repeat(64)}`;
+
+function openedProjectFile(
+  path: string,
+  content: string,
+  version = FILE_VERSION,
+  editToken = "11111111-1111-4111-8111-111111111111",
+) {
+  return {
+    path,
+    content,
+    version,
+    mtimeMs: 1,
+    size: content.length,
+    encoding: "utf8" as const,
+    newline: content.includes("\n") ? "lf" as const : "none" as const,
+    editToken,
+    editable: true,
+  };
+}
 
 beforeAll(() => {
   global.window = {
@@ -75,10 +97,19 @@ describe("project-store zustand store", () => {
   it("updates artifact content and propagates stale status to downstream artifacts", async () => {
     vi.useFakeTimers();
 
-    mockDesktopApi.writeProjectArtifact.mockImplementation(async (_sessionId, path) => ({
+    mockDesktopApi.openProjectFile.mockImplementation(async (_sessionId, path) =>
+      openedProjectFile(path, ""));
+    mockDesktopApi.saveProjectFile.mockImplementation(async (_sessionId, path) => ({
       path,
       changed: false,
       staleArtifactIds: [],
+      version: FILE_VERSION,
+      mtimeMs: 2,
+      size: 0,
+      encoding: "utf8",
+      newline: "none",
+      characterCount: 0,
+      editToken: "11111111-1111-4111-8111-111111111111",
     }));
     mockDesktopApi.markProjectArtifactStatus.mockImplementation(async (_sessionId, id) => ({
       id,
@@ -96,12 +127,23 @@ describe("project-store zustand store", () => {
       await store.markStageReady(stage);
     }
 
-    mockDesktopApi.writeProjectArtifact.mockClear();
-    mockDesktopApi.writeProjectArtifact.mockResolvedValue({
+    mockDesktopApi.openProjectFile.mockClear();
+    mockDesktopApi.saveProjectFile.mockClear();
+    mockDesktopApi.openProjectFile.mockResolvedValue(
+      openedProjectFile("brief.md", "# Previous Brief"),
+    );
+    mockDesktopApi.saveProjectFile.mockResolvedValue({
       path: "brief.md",
       changed: true,
       changedArtifactId: "brief",
       staleArtifactIds: ["outline", "research", "design", "slides", "deck"],
+      version: `sha256:${"b".repeat(64)}`,
+      mtimeMs: 2,
+      size: 19,
+      encoding: "utf8",
+      newline: "none",
+      characterCount: 19,
+      editToken: "11111111-1111-4111-8111-111111111111",
     });
 
     let state = useProjectStore.getState();
@@ -124,10 +166,16 @@ describe("project-store zustand store", () => {
     // wait for promises to resolve
     await vi.runAllTimersAsync();
 
-    expect(mockDesktopApi.writeProjectArtifact).toHaveBeenCalledWith(
+    expect(mockDesktopApi.openProjectFile).toHaveBeenCalledWith(
+      "test-session",
+      "brief.md",
+    );
+    expect(mockDesktopApi.saveProjectFile).toHaveBeenCalledWith(
       "test-session",
       "brief.md",
       "# New Brief Content",
+      "11111111-1111-4111-8111-111111111111",
+      FILE_VERSION,
     );
 
     // after write resolves, check applied write result
@@ -137,11 +185,6 @@ describe("project-store zustand store", () => {
   });
 
   it("marks stage ready and calls backend write + status updates", async () => {
-    mockDesktopApi.writeProjectArtifact.mockResolvedValue({
-      path: "brief.md",
-      changed: false,
-      staleArtifactIds: [],
-    });
     mockDesktopApi.markProjectArtifactStatus.mockResolvedValue({
       id: "brief",
       title: "Brief",
@@ -152,16 +195,20 @@ describe("project-store zustand store", () => {
 
     const store = useProjectStore.getState();
     store.initializeProject("test-session", "Test Project");
+    const briefContent = useProjectStore.getState().activeProject!.artifacts.brief.content;
+    mockDesktopApi.openProjectFile.mockResolvedValue(
+      openedProjectFile("brief.md", briefContent),
+    );
     
     await store.markStageReady("brief");
 
     const state = useProjectStore.getState();
     expect(state.activeProject?.artifacts.brief.status).toBe("ready");
-    expect(mockDesktopApi.writeProjectArtifact).toHaveBeenCalledWith(
+    expect(mockDesktopApi.openProjectFile).toHaveBeenCalledWith(
       "test-session",
       "brief.md",
-      expect.any(String),
     );
+    expect(mockDesktopApi.saveProjectFile).not.toHaveBeenCalled();
     expect(mockDesktopApi.markProjectArtifactStatus).toHaveBeenCalledWith(
       "test-session",
       "brief",
@@ -170,7 +217,10 @@ describe("project-store zustand store", () => {
   });
 
   it("does not report a stage as ready when persistence fails", async () => {
-    mockDesktopApi.writeProjectArtifact.mockRejectedValue(new Error("disk full"));
+    mockDesktopApi.openProjectFile.mockResolvedValue(
+      openedProjectFile("brief.md", "persisted"),
+    );
+    mockDesktopApi.saveProjectFile.mockRejectedValue(new Error("disk full"));
 
     const store = useProjectStore.getState();
     store.initializeProject("test-session", "Test Project");
@@ -181,5 +231,97 @@ describe("project-store zustand store", () => {
     expect(brief?.status).toBe("draft");
     expect(brief?.lastWriteError).toBe("disk full");
     expect(mockDesktopApi.markProjectArtifactStatus).not.toHaveBeenCalled();
+  });
+
+  it("opens each autosave baseline and uses the next receipt for continued edits", async () => {
+    vi.useFakeTimers();
+    const nextVersion = `sha256:${"b".repeat(64)}`;
+    const firstToken = "11111111-1111-4111-8111-111111111111";
+    const secondToken = "22222222-2222-4222-8222-222222222222";
+    mockDesktopApi.openProjectFile
+      .mockResolvedValueOnce(openedProjectFile("brief.md", "# Disk\n", FILE_VERSION, firstToken))
+      .mockResolvedValueOnce(openedProjectFile("brief.md", "# First\n", nextVersion, secondToken));
+    mockDesktopApi.saveProjectFile
+      .mockResolvedValueOnce({
+        path: "brief.md",
+        changed: true,
+        changedArtifactId: "brief",
+        staleArtifactIds: [],
+        version: nextVersion,
+        mtimeMs: 2,
+        size: 8,
+        encoding: "utf8",
+        newline: "lf",
+        characterCount: 8,
+        editToken: firstToken,
+      })
+      .mockResolvedValueOnce({
+        path: "brief.md",
+        changed: true,
+        changedArtifactId: "brief",
+        staleArtifactIds: [],
+        version: `sha256:${"c".repeat(64)}`,
+        mtimeMs: 3,
+        size: 9,
+        encoding: "utf8",
+        newline: "lf",
+        characterCount: 9,
+        editToken: secondToken,
+      });
+
+    const store = useProjectStore.getState();
+    store.initializeProject("test-session", "Test Project");
+    store.updateArtifactContent("brief", "# First\n", "user");
+    vi.advanceTimersByTime(400);
+    await vi.runAllTimersAsync();
+
+    useProjectStore.getState().updateArtifactContent("brief", "# Second\n", "user");
+    vi.advanceTimersByTime(400);
+    await vi.runAllTimersAsync();
+
+    expect(mockDesktopApi.saveProjectFile).toHaveBeenNthCalledWith(
+      1,
+      "test-session",
+      "brief.md",
+      "# First\n",
+      firstToken,
+      FILE_VERSION,
+    );
+    expect(mockDesktopApi.saveProjectFile).toHaveBeenNthCalledWith(
+      2,
+      "test-session",
+      "brief.md",
+      "# Second\n",
+      secondToken,
+      nextVersion,
+    );
+  });
+
+  it("keeps the current autosave draft and requires a reread after a conflict", async () => {
+    vi.useFakeTimers();
+    mockDesktopApi.openProjectFile.mockResolvedValue(
+      openedProjectFile("brief.md", "# Disk baseline\n"),
+    );
+    mockDesktopApi.saveProjectFile.mockRejectedValue(
+      Object.assign(new Error("stale editor version"), { code: "STALE_FILE" }),
+    );
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    try {
+      const store = useProjectStore.getState();
+      store.initializeProject("test-session", "Test Project");
+      store.updateArtifactContent("brief", "# Unsaved current draft\n", "user");
+      vi.advanceTimersByTime(400);
+      await vi.runAllTimersAsync();
+
+      const brief = useProjectStore.getState().activeProject?.artifacts.brief;
+      expect(brief?.content).toBe("# Unsaved current draft\n");
+      expect(brief?.lastWriteError).toBe(
+        "文件已在磁盘上变化，当前草稿已保留；请重新读取后再保存。",
+      );
+      expect(mockDesktopApi.saveProjectFile).toHaveBeenCalledTimes(1);
+    } finally {
+      consoleError.mockRestore();
+    }
   });
 });

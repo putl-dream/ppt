@@ -86,10 +86,6 @@ export const projectFileOpenRequestSchema = z.object({
   relativePath: projectFilePathSchema,
 }).strict();
 
-export const projectArtifactWriteRequestSchema = projectFileOpenRequestSchema.extend({
-  content: projectFileContentSchema,
-}).strict();
-
 export const projectArtifactDiffRequestSchema = projectFileOpenRequestSchema.extend({
   nextContent: projectFileContentSchema,
 }).strict();
@@ -221,13 +217,6 @@ export interface ArtifactDiff {
   unifiedDiff: string;
 }
 
-export interface ProjectArtifactWriteResult {
-  path: string;
-  changed: boolean;
-  changedArtifactId?: string;
-  staleArtifactIds: string[];
-}
-
 export interface ProjectFileReceipt {
   path: string;
   version: string;
@@ -245,7 +234,10 @@ export interface ProjectFileEditorReadResult extends ProjectFileReceipt {
 }
 
 export interface ProjectFileEditorWriteResult
-  extends ProjectArtifactWriteResult, ProjectFileReceipt {
+  extends ProjectFileReceipt {
+  changed: boolean;
+  changedArtifactId?: string;
+  staleArtifactIds: string[];
   characterCount: number;
   editToken: string;
   postCommitWarnings?: Array<
@@ -276,11 +268,6 @@ export interface DesktopApi {
     sessionId: string,
     artifactIdOrPath: string,
   ): Promise<ProjectArtifactReadResult>;
-  writeProjectArtifact(
-    sessionId: string,
-    relativePath: string,
-    content: string,
-  ): Promise<ProjectArtifactWriteResult>;
   getProjectArtifactDiff(
     sessionId: string,
     relativePath: string,

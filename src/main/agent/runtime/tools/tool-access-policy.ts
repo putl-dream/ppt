@@ -86,7 +86,7 @@ const WORKSPACE_EDIT_PERMISSION = {
   workspacePathArg: "path",
 } satisfies ToolPermissionProfile;
 
-export const MAIN_AGENT_TOOL_PERMISSION_PROFILES = {
+export const WORKSPACE_FILE_TOOL_PERMISSION_PROFILES = {
   Glob: WORKSPACE_GLOB_PERMISSION,
   ReadFile: WORKSPACE_READ_PERMISSION,
   WriteFile: WORKSPACE_WRITE_PERMISSION,
@@ -94,19 +94,6 @@ export const MAIN_AGENT_TOOL_PERMISSION_PROFILES = {
 } satisfies Record<string, ToolPermissionProfile>;
 
 export const SUB_AGENT_TOOL_PERMISSION_PROFILES = {
-  read_file: WORKSPACE_READ_PERMISSION,
-  glob: WORKSPACE_GLOB_PERMISSION,
-  write_file: WORKSPACE_WRITE_PERMISSION,
-  edit_file: WORKSPACE_EDIT_PERMISSION,
-  ensure_dir: {
-    profile: "workspace-write",
-    description: "Create a directory in the configured workspace sandbox.",
-    scopes: ["subagent"],
-    effects: ["workspace.write"],
-    sandbox: "workspace",
-    approval: "contextual",
-    workspacePathArg: "path",
-  },
   bash: {
     profile: "workspace-diagnostic",
     description:
@@ -129,7 +116,7 @@ export const SUB_AGENT_TOOL_PERMISSION_PROFILES = {
 
 const TOOL_PERMISSION_PROFILES: Record<string, ToolPermissionProfile> = {
   ...SUB_AGENT_TOOL_PERMISSION_PROFILES,
-  ...MAIN_AGENT_TOOL_PERMISSION_PROFILES,
+  ...WORKSPACE_FILE_TOOL_PERMISSION_PROFILES,
 };
 
 const HARD_DENY_PATTERNS: Array<{ pattern: RegExp; reason: string }> = [
@@ -254,7 +241,7 @@ function formatOutsideWorkspaceReason(
   profile: ToolPermissionProfile,
   path: string,
 ): string {
-  if (toolName === "glob") {
+  if (toolName === "Glob") {
     return `访问工作区外的目录：${path}`;
   }
   if (profile.effects.includes("workspace.write")) {

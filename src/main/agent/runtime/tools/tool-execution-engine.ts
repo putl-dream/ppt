@@ -4,7 +4,7 @@ import { validateToolOutput } from "../../tools/tool-validation";
 import type { PostToolUseBlock } from "../hooks/hook-blocks";
 import { prepareToolResultData } from "./tool-result-data";
 import { rethrowIfRuntimeCancellation } from "../lifecycle/runtime-cancellation";
-import { WorkspaceFileError } from "../../tools/files/workspace-file-service";
+import { classifyToolExecutionError } from "./tool-execution-error";
 
 export interface ToolExecutionOutcome {
   executionStatus: "not_started" | "threw" | "returned";
@@ -38,31 +38,25 @@ export class ToolExecutionEngine {
       rawResult = await tool.execute(args, context);
     } catch (error) {
       rethrowIfRuntimeCancellation(error, input.signal, context.signal);
-      const message = error instanceof Error ? error.message : String(error);
-      const isRejectedFileMutation = error instanceof WorkspaceFileError;
-      const sideEffects = isRejectedFileMutation ? "none" : "uncertain";
-      const errorCode = isRejectedFileMutation ? error.code : undefined;
+      const classification = classifyToolExecutionError(error);
       const warnings = await input.runPostToolUseHook({
         event: "PostToolUse",
         toolName: tool.name,
         args,
         scope: "main",
         executionStatus: "threw",
-        sideEffects,
-        error: message,
-        ...(errorCode ? { errorCode } : {}),
+        sideEffects: classification.sideEffects,
+        error: classification.message,
+        ...(classification.errorCode ? { errorCode: classification.errorCode } : {}),
         threadId: input.threadId,
       });
-      const guidance = isRejectedFileMutation
-        ? `[${error.code}] ${message}\nThe file operation was rejected before mutation; no side effects were committed.`
-        : `${message}\nThe tool threw after execution started; side effects may be uncertain. Inspect durable artifacts before retrying.`;
       return {
         executionStatus: "threw",
-        sideEffects,
+        sideEffects: classification.sideEffects,
         deliveryStatus: "delivered",
-        modelResult: toModelResult(toolCall.id, guidance, true),
-        error: guidance,
-        ...(errorCode ? { errorCode } : {}),
+        modelResult: toModelResult(toolCall.id, classification.guidance, true),
+        error: classification.guidance,
+        ...(classification.errorCode ? { errorCode: classification.errorCode } : {}),
         warnings,
       };
     }

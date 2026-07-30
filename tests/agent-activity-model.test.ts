@@ -246,7 +246,7 @@ describe("agent activity model", () => {
       type: "teammate-tool-started",
       teammateName: "layout-worker",
       activityId: "task-1",
-      toolName: "write_file",
+      toolName: "WriteFile",
       message: "正在写入",
     });
     trace = applyTeammateProgressEvent(trace, {

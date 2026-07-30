@@ -53,6 +53,34 @@ const approvalEvent = {
   },
 } satisfies Extract<DisplayEvent, { kind: "review.command-proposal" }>;
 
+const patchEvent = {
+  protocolVersion: 1 as const,
+  eventId: "patch:thread-1",
+  emittedAt: "2026-07-30T00:00:00.000Z",
+  kind: "review.patch-ready" as const,
+  category: "review" as const,
+  source: { kind: "tool" as const, toolName: "EditFile" },
+  scope: {
+    sessionId: "session-1",
+    runId: "run-1",
+    threadId: "thread-1",
+    anchorMessageId: "assistant-1",
+  },
+  semantics: {
+    blocking: true,
+    requiresResponse: true,
+    priority: "high" as const,
+  },
+  payload: {
+    patchId: "patch-1",
+    threadId: "thread-1",
+    targetPath: "brief.md",
+    summary: "更新 brief",
+    contentBefore: "# Before\n",
+    contentAfter: "# After\n",
+  },
+} satisfies Extract<DisplayEvent, { kind: "review.patch-ready" }>;
+
 let actions: DisplayEventActions;
 let messages: ChatMessage[];
 let busy: boolean;
@@ -236,5 +264,110 @@ describe("display event approval actions", () => {
         generationMode: "agent",
       },
     );
+  });
+
+  it("applies a patch only through open/save after matching its complete baseline", async () => {
+    const openProjectFile = vi.fn(async () => ({
+      path: "brief.md",
+      content: "# Before\n",
+      version: `sha256:${"a".repeat(64)}`,
+      mtimeMs: 1,
+      size: 9,
+      encoding: "utf8" as const,
+      newline: "lf" as const,
+      editToken: "11111111-1111-4111-8111-111111111111",
+      editable: true,
+    }));
+    const saveProjectFile = vi.fn(async () => ({
+      path: "brief.md",
+      changed: true,
+      changedArtifactId: "brief",
+      staleArtifactIds: ["outline"],
+      version: `sha256:${"b".repeat(64)}`,
+      mtimeMs: 2,
+      size: 8,
+      encoding: "utf8" as const,
+      newline: "lf" as const,
+      characterCount: 8,
+      editToken: "11111111-1111-4111-8111-111111111111",
+    }));
+    Object.defineProperty(window, "desktopApi", {
+      configurable: true,
+      value: { openProjectFile, saveProjectFile },
+    });
+    render(<Harness />);
+
+    await act(async () => {
+      await actions.resolvePatch(patchEvent, true);
+    });
+
+    expect(openProjectFile).toHaveBeenCalledWith("session-1", "brief.md");
+    expect(saveProjectFile).toHaveBeenCalledWith(
+      "session-1",
+      "brief.md",
+      "# After\n",
+      "11111111-1111-4111-8111-111111111111",
+      `sha256:${"a".repeat(64)}`,
+    );
+    expect(useProjectStore.getState().hydrateProjectArtifacts)
+      .toHaveBeenCalledWith("session-1");
+    expect(notify).toHaveBeenCalledWith("补丁已应用");
+  });
+
+  it("keeps a patch active when its disk baseline changed or is missing", async () => {
+    const openProjectFile = vi.fn(async () => ({
+      path: "brief.md",
+      content: "# Newer disk content\n",
+      version: `sha256:${"c".repeat(64)}`,
+      mtimeMs: 2,
+      size: 21,
+      encoding: "utf8" as const,
+      newline: "lf" as const,
+      editToken: "22222222-2222-4222-8222-222222222222",
+      editable: true,
+    }));
+    const saveProjectFile = vi.fn();
+    Object.defineProperty(window, "desktopApi", {
+      configurable: true,
+      value: { openProjectFile, saveProjectFile },
+    });
+    ingestDisplayEvent(patchEvent);
+    setDisplayCardStatus(patchEvent.eventId, "resolved");
+    render(<Harness />);
+
+    await act(async () => {
+      await actions.resolvePatch(patchEvent, true);
+    });
+
+    expect(saveProjectFile).not.toHaveBeenCalled();
+    expect(useReviewCardManager.getState().cards[0]?.status).toBe("active");
+    expect(notify).toHaveBeenCalledWith(
+      "补丁基线已变化，当前补丁未应用；请重新读取后生成新补丁。",
+    );
+
+    const missingBaselineEvent = {
+      ...patchEvent,
+      eventId: "patch:missing-baseline",
+      payload: {
+        ...patchEvent.payload,
+        patchId: "patch-2",
+        contentBefore: undefined,
+      },
+    };
+    ingestDisplayEvent(missingBaselineEvent);
+    setDisplayCardStatus(missingBaselineEvent.eventId, "resolved");
+    openProjectFile.mockClear();
+    notify.mockClear();
+
+    await act(async () => {
+      await actions.resolvePatch(missingBaselineEvent, true);
+    });
+
+    expect(openProjectFile).not.toHaveBeenCalled();
+    expect(saveProjectFile).not.toHaveBeenCalled();
+    expect(useReviewCardManager.getState().cards.find(
+      (card) => card.event.eventId === missingBaselineEvent.eventId,
+    )?.status).toBe("active");
+    expect(notify).toHaveBeenCalledWith("补丁缺少完整的读取基线，无法安全应用。");
   });
 });

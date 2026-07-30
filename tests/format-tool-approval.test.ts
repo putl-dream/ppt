@@ -7,9 +7,9 @@ describe("formatToolApprovalDetail", () => {
       .toBe("rm notes.md");
   });
 
-  it("formats write_file with truncated content", () => {
+  it("formats WriteFile with truncated content", () => {
     const content = "a".repeat(300);
-    const detail = formatToolApprovalDetail("write_file", { path: "x.md", content });
+    const detail = formatToolApprovalDetail("WriteFile", { path: "x.md", content });
     expect(detail).toContain("path: x.md");
     expect(detail).toContain("...");
   });

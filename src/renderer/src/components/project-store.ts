@@ -1,6 +1,10 @@
 import { create } from "zustand";
 import type { ProjectArtifact, ProjectArtifactStatus } from "@shared/session";
-import type { ProjectArtifactWriteResult } from "@shared/ipc";
+import type { DesktopApi } from "@shared/ipc";
+import {
+  saveExistingProjectFile,
+  type ProjectFileMutationResult,
+} from "../app/project/projectFileMutations";
 import {
   getPrimaryProjectArtifactPath,
   isProjectStageId,
@@ -156,8 +160,29 @@ const DEPENDENCY_MAP: Record<ArtifactId, ArtifactId[]> = {
 
 const writeTimers = new Map<string, any>();
 
-function getDesktopApi() {
-  return typeof window === "undefined" ? undefined : (window as any).desktopApi;
+function getDesktopApi(): DesktopApi | undefined {
+  return typeof window === "undefined"
+    ? undefined
+    : (window as unknown as { desktopApi: DesktopApi }).desktopApi;
+}
+
+function projectStoreWriteError(error: unknown): string {
+  const code = typeof error === "object" && error !== null && "code" in error
+    ? String((error as { code?: unknown }).code ?? "")
+    : "";
+  const message = error instanceof Error && error.message.trim()
+    ? error.message
+    : typeof error === "string" && error.trim()
+      ? error
+      : "写入项目产物失败";
+  if (
+    code === "STALE_FILE"
+    || /stale|conflict|changed|read it again|expected_version|edit session.+(?:missing|expired|match)/i
+      .test(message)
+  ) {
+    return "文件已在磁盘上变化，当前草稿已保留；请重新读取后再保存。";
+  }
+  return message;
 }
 
 function createArtifactShell(
@@ -207,7 +232,7 @@ function propagateStale(
 
 function applyWriteResult(
   artifacts: Record<ArtifactId, Artifact>,
-  result: ProjectArtifactWriteResult,
+  result: ProjectFileMutationResult,
 ): Record<ArtifactId, Artifact> {
   const nextArtifacts = { ...artifacts };
   const changedId = result.changedArtifactId;
@@ -339,9 +364,8 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       timerKey,
       window.setTimeout(() => {
         writeTimers.delete(timerKey);
-        void api
-          .writeProjectArtifact(project.id, artifact.path, content)
-          .then((result: ProjectArtifactWriteResult) => {
+        void saveExistingProjectFile(api, project.id, artifact.path, content)
+          .then((result) => {
             set((state) => {
               if (!state.activeProject || state.activeProject.id !== project.id) return {};
               return {
@@ -353,7 +377,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
             });
           })
           .catch((error: unknown) => {
-            const message = error instanceof Error ? error.message : "写入项目产物失败";
+            const message = projectStoreWriteError(error);
             console.error(`写入项目产物失败: ${artifact.path}`, error);
             set((state) => {
               if (!state.activeProject || state.activeProject.id !== project.id) return {};
@@ -412,7 +436,8 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     }
 
     try {
-      const result: ProjectArtifactWriteResult = await api.writeProjectArtifact(
+      const result = await saveExistingProjectFile(
+        api,
         project.id,
         artifact.path,
         artifact.content,
@@ -455,7 +480,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         };
       });
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = projectStoreWriteError(error);
       set((state) => {
         if (!state.activeProject || state.activeProject.id !== project.id) return {};
         return {

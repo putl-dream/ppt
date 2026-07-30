@@ -66,20 +66,15 @@ describe("Permission gates", () => {
     }))).toEqual({ type: "deny", reason: "禁止删除根目录" });
   });
 
-  it("allows in-workspace writes and shell without approval", () => {
+  it("allows canonical in-workspace file operations and shell without approval", () => {
     expect(evaluatePermission(createBlock({
-      toolName: "write_file",
+      toolName: "WriteFile",
       args: { path: "notes.md", content: "hello" },
     }))).toEqual({ type: "allow" });
 
     expect(evaluatePermission(createBlock({
-      toolName: "edit_file",
+      toolName: "EditFile",
       args: { path: "notes.md", old_string: "a", new_string: "b" },
-    }))).toEqual({ type: "allow" });
-
-    expect(evaluatePermission(createBlock({
-      toolName: "ensure_dir",
-      args: { path: "slides" },
     }))).toEqual({ type: "allow" });
 
     expect(evaluatePermission(createBlock({
@@ -98,7 +93,7 @@ describe("Permission gates", () => {
 
   it("requires approval for outside-workspace file access", () => {
     expect(evaluatePermission(createBlock({
-      toolName: "write_file",
+      toolName: "WriteFile",
       args: { path: "../outside.txt", content: "x" },
       workspaceRoot: awaitableWorkspace(),
     }))).toEqual({
@@ -107,7 +102,7 @@ describe("Permission gates", () => {
     });
 
     expect(evaluatePermission(createBlock({
-      toolName: "read_file",
+      toolName: "ReadFile",
       args: { path: "../outside.txt" },
       workspaceRoot: awaitableWorkspace(),
     }))).toEqual({
@@ -116,16 +111,7 @@ describe("Permission gates", () => {
     });
 
     expect(evaluatePermission(createBlock({
-      toolName: "ensure_dir",
-      args: { path: "../outside" },
-      workspaceRoot: awaitableWorkspace(),
-    }))).toEqual({
-      type: "require_approval",
-      reason: "尝试写入工作区外路径：../outside",
-    });
-
-    expect(evaluatePermission(createBlock({
-      toolName: "glob",
+      toolName: "Glob",
       args: { pattern: "../**/*.pptx" },
       workspaceRoot: awaitableWorkspace(),
     }))).toEqual({
@@ -136,12 +122,12 @@ describe("Permission gates", () => {
 
   it("allows read-only operations inside workspace without approval", () => {
     expect(evaluatePermission(createBlock({
-      toolName: "read_file",
+      toolName: "ReadFile",
       args: { path: "notes.md" },
     }))).toEqual({ type: "allow" });
 
     expect(evaluatePermission(createBlock({
-      toolName: "glob",
+      toolName: "Glob",
       args: { pattern: "**/*.md" },
     }))).toEqual({ type: "allow" });
   });

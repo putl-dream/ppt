@@ -1,7 +1,7 @@
 # Glob、ReadFile、WriteFile 与 EditFile
 
 > 文档类型：现行架构
-> 最后核对：2026-07-25
+> 最后核对：2026-07-30
 > 参考：Claude Code 的 read-set、乐观并发与原子替换
 
 ## 1. 目标
@@ -21,9 +21,13 @@ Main Agent 与 teammate 已共享同一 `WorkspaceFileService`，本轮重构消
 - `WriteFile`
 - `EditFile`
 
-teammate 的 `read_file/write_file/edit_file` 保留名称兼容层，但调用同一服务，不维护
-第二套读写语义。`WorkspaceFileService` 由 RunFactory 按 thread/workspace 复用，使
-read receipt 能跨同一 Query 的连续工具调用生效。
+Main Agent 与 teammate 都只接受以上四个 PascalCase 工具名。旧的
+`read_file/write_file/edit_file/glob` 不再注册为 alias；恢复后的新执行调用旧名称会
+得到 unknown tool。两条运行时各自只保留薄适配器，工具名称、输入 schema、输出
+schema、权限、描述和执行逻辑均来自唯一的 workspace 文件工具契约。
+
+`WorkspaceFileService` 由 RunFactory 或 teammate runtime 按 thread/workspace 持有，
+使 read receipt 能跨同一 Query 的连续工具调用生效。
 
 workspace-level 项目文件管理页也复用该服务的底层安全和提交语义，但不伪装成模型
 工具调用。Main 为每次打开文件签发隔离的 `editToken` 和读取时 SHA-256 version，
@@ -109,22 +113,22 @@ resolve + authorize
   → return the commit-verified receipt
 ```
 
-父目录可由工具明确创建。teammate 的 `bash` 不再启动 shell，而是 fail-closed
-direct-exec 诊断白名单；重定向、管道、解释器代码和任意可执行文件在启动前拒绝。
-`mkdir` 兼容输入转交 `ensureWorkspaceDir`。
+`WriteFile` 创建新文件时自动创建父目录，不再暴露 `ensure_dir`。teammate 的 `bash`
+不启动 shell，只执行 fail-closed 的只读 direct-exec 诊断白名单；`mkdir`、重定向、
+管道、解释器代码和任意可执行文件都会在启动前拒绝。
 
 Windows 和 guarded replacement 使用带 old/new fingerprint 的 durable manifest 与
 唯一 backup。恢复只在 inode/hash 能证明 old/new 身份时自动完成；未知 target 保留
 manifest/backup 并上报 `uncertain`，不会静默删除原文件。
 
-`ProjectFileService` 的兼容 artifact 读写与项目文件管理保存都委托这条路径。前者在
-内部先建立 receipt 再写；后者使用打开文件时返回的隔离 `editToken` 与
-`expectedVersion`，因此不能绕过 read-before-write。
+Renderer 只有 `openProjectFile → saveProjectFile` 编辑协议。保存使用打开文件时返回的
+隔离 `editToken` 与 `expectedVersion`，相同内容直接返回无变更；stale 冲突保留当前
+草稿，并要求重新读取。Renderer 不能创建文件，只能编辑已经存在且已注册为可编辑
+文本 artifact 的文件；`deck`、`history`、未知路径和缺失目标会在 Main 拒绝。
 
-既有 Renderer `writeProjectArtifact` 兼容入口同样先执行 Main artifact policy：
-现有文件通过一次性 open/save receipt 提交，新文件只能创建在已注册且可编辑的
-artifact 下；`deck`、`history` 与未知路径会在 Main 拒绝。领域服务维护 deck/history
-时使用不暴露给 Renderer 的内部写入入口。
+storyboard、deck、history 等领域内部写入直接调用各自明确的可信写入 API，并继续
+执行状态持久化和 stale 传播。它们不经过 Renderer 编辑协议，也不对 Renderer 暴露
+无 token 的覆盖入口。
 
 ## 6. EditFile
 
@@ -191,9 +195,10 @@ compare-and-commit 进入后失败会使该编辑 scope 失效，页面必须重
 - Edit 的 `replacements`
 - 新 `version/mtimeMs/size/encoding/newline` receipt
 
-`WorkspaceFileError` 只用于执行前失败或已经确认完整回滚的失败，因此中央执行器可标记
-`sideEffects=none`。回滚、恢复或清理无法证明时抛普通/`AtomicWriteConflictError`
-并标记 `uncertain`；不能把不确定副作用伪装成安全重试。
+Main 与 teammate 使用同一输出 schema 校验和错误分类。`WorkspaceFileError` 只用于
+执行前失败或已经确认完整回滚的失败，因此两条执行路径都返回错误码并标记
+`sideEffects=none`。回滚、恢复或清理无法证明时抛普通/
+`AtomicWriteConflictError` 并标记 `uncertain`；不能把不确定副作用伪装成安全重试。
 
 当前文件工具尚不返回结构化 diff、增删行或 file history snapshot；Presentation
 artifact schema 由消费方在使用前验证，不由通用 WriteFile 自动推导 `ready`。
@@ -218,15 +223,17 @@ artifact 下的文本文件能保存；`deck`、`history` 和未知 artifact 文
 
 ## 10. 关键实现
 
-共享服务：
+唯一工具契约与共享服务：
 
 ```text
 src/main/agent/tools/files/
+├─ workspace-file-tool-contract.ts
 └─ workspace-file-service.ts
 ```
 
-Main ToolDefinition 位于 `src/main/agent/tools/core/workspace-files.ts`；teammate
-兼容工具位于 `src/main/agent/subagent/workspace-tools.ts`。二者都调用上述同一服务。
+Main ToolDefinition 适配器位于 `src/main/agent/tools/core/workspace-files.ts`；
+teammate 适配器位于 `src/main/agent/subagent/workspace-tools.ts`。teammate 仍有独立
+编排器和较小工具池，但文件工具契约和执行语义完全一致。
 
 项目文件管理应用协议位于：
 
@@ -254,7 +261,12 @@ Main 和 teammate 的 ToolDefinition 都调用同一底层服务。
 - manifest crash recovery、未知 target 保留 backup、成功后清理。
 - active transaction 不被另一个 reader/recovery 当成 crash，JSON fallback 不覆盖等待中的新 writer。
 - Bash 重定向/任意解释器拒绝与只读 direct-exec。
+- Main/teammate 四个文件工具名称、schema、输出和权限完全一致；旧名称、
+  `ensure_dir` 与 `bash mkdir` 都不可调用。
 - 项目文件 list/open/diff/save、token 跨 session/path 拒绝及过期处理。
+- Store 自动保存严格执行 open/save、连续保存使用最新 receipt、冲突保留草稿。
+- 补丁接受在保存前核对 `contentBefore`；缺失或变化的基线拒绝应用。
+- Renderer 拒绝创建新文件、只读 artifact 和缺失目标。
 - 页面读取后被 Agent/外部 writer 修改时，旧 SHA-256 version 保存失败。
 - 文本编辑大小上限、deck/history/未知 artifact 只读，以及删除、重命名和二进制编辑不进入该协议。
 
@@ -272,4 +284,5 @@ Main 和 teammate 的 ToolDefinition 都调用同一底层服务。
 | Windows `.old` 文件靠存在性猜测恢复 | durable manifest 记录 old/new fingerprint；歧义时保留证据并报 `uncertain` |
 | Bash 只设置 cwd，仍可重定向越界 | 无 shell 的只读 direct-exec allowlist；文件 mutation 走结构化工具 |
 | 文件存在即可参与工作流 | 通用写入不推导 artifact ready；消费方必须解析/验证 |
-| Renderer 项目文件另走弱化读写 | `ProjectFileService` 委托 `WorkspaceFileService`，编辑页使用隔离 token + SHA-256 CAS |
+| teammate 维护 snake_case 文件工具 | Main/teammate 共享唯一 PascalCase 文件工具契约与错误语义 |
+| Renderer 曾有独立 artifact writer 覆盖或创建 | 仅可 open/save 已注册可编辑文本 artifact，使用隔离 token + SHA-256 CAS |

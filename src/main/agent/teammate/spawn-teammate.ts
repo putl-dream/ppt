@@ -37,6 +37,8 @@ import {
   type SubAgentToolDefinition,
 } from "../subagent/workspace-tools";
 import { WorkspaceFileService } from "../tools/files/workspace-file-service";
+import { validateToolOutput } from "../tools/tool-validation";
+import { classifyToolExecutionError } from "../runtime/tools/tool-execution-error";
 import {
   type AgentMailboxMessage,
   type AgentMailboxMessageType,
@@ -1147,9 +1149,47 @@ async function executeTeammateToolBatch(input: {
       return { kind: "stop", reason: preToolStop.reason, transcriptEntries };
     }
 
-    let output: string;
+    let rawOutput: unknown;
     try {
-      output = await tool.execute(args.data, input.toolContext);
+      rawOutput = await tool.execute(args.data, input.toolContext);
+    } catch (error) {
+      const classification = classifyToolExecutionError(error);
+      try {
+        await triggerHooks("PostToolUse", {
+          event: "PostToolUse",
+          toolName: tool.name,
+          args: args.data,
+          scope: "subagent",
+          executionStatus: "threw",
+          sideEffects: classification.sideEffects,
+          error: classification.message,
+          ...(classification.errorCode ? { errorCode: classification.errorCode } : {}),
+          threadId: input.teammateName,
+        } satisfies PostToolUseBlock);
+      } catch (hookError) {
+        transcriptEntries.push({
+          role: "system",
+          kind: "hook_error",
+          hook: "PostToolUse",
+          toolName: tool.name,
+          error: hookError instanceof Error ? hookError.message : String(hookError),
+        });
+      }
+      transcriptEntries.push({
+        role: "tool",
+        toolName: tool.name,
+        error: classification.guidance,
+        ...(classification.errorCode ? { errorCode: classification.errorCode } : {}),
+        sideEffects: classification.sideEffects,
+      });
+      record(classification.guidance, true);
+      finishToolProgress("failed", classification.message);
+      continue;
+    }
+
+    let output: unknown;
+    try {
+      output = validateToolOutput(tool, rawOutput);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       try {
@@ -1158,8 +1198,8 @@ async function executeTeammateToolBatch(input: {
           toolName: tool.name,
           args: args.data,
           scope: "subagent",
-          executionStatus: "threw",
-          sideEffects: "uncertain",
+          executionStatus: "returned",
+          sideEffects: "committed_or_unknown",
           error: errorMessage,
           threadId: input.teammateName,
         } satisfies PostToolUseBlock);
@@ -1172,8 +1212,16 @@ async function executeTeammateToolBatch(input: {
           error: hookError instanceof Error ? hookError.message : String(hookError),
         });
       }
-      transcriptEntries.push({ role: "tool", toolName: tool.name, error: errorMessage });
-      record(errorMessage, true);
+      const guidance =
+        `${errorMessage}\nThe tool returned after execution; side effects may already exist. `
+        + "Do not retry blindly.";
+      transcriptEntries.push({
+        role: "tool",
+        toolName: tool.name,
+        error: guidance,
+        sideEffects: "committed_or_unknown",
+      });
+      record(guidance, true);
       finishToolProgress("failed", errorMessage);
       continue;
     }
@@ -1200,7 +1248,7 @@ async function executeTeammateToolBatch(input: {
       });
     }
     transcriptEntries.push({ role: "tool", toolName: tool.name, result: output });
-    record(output);
+    record(formatTeammateToolResult(output));
     finishToolProgress("completed");
   }
 
@@ -1390,10 +1438,19 @@ function withIdentityIfCompacted(
 }
 
 function requiresApprovedPlan(toolName: string): boolean {
-  return toolName === "write_file"
-    || toolName === "edit_file"
-    || toolName === "ensure_dir"
+  return toolName === "WriteFile"
+    || toolName === "EditFile"
     || toolName === "bash";
+}
+
+function formatTeammateToolResult(output: unknown): string {
+  if (typeof output === "string") return output;
+  if (output === undefined) return "";
+  try {
+    return JSON.stringify(output);
+  } catch {
+    return String(output);
+  }
 }
 
 async function sleep(ms: number, signal?: AbortSignal): Promise<void> {

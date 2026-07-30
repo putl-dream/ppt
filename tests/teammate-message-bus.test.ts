@@ -1,4 +1,9 @@
-import { mkdtemp, readFile, stat } from "node:fs/promises";
+import {
+  mkdtemp,
+  readFile,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import { basename, join } from "node:path";
 import { tmpdir } from "node:os";
 import { describe, expect, it, vi } from "vitest";
@@ -8,7 +13,10 @@ import type {
   AgentModelRequest,
 } from "../src/main/agent/gateway/types";
 import { AgentRuntime } from "../src/main/agent/runtime/agent-runtime";
-import type { StopBlock } from "../src/main/agent/runtime/hooks/hook-blocks";
+import type {
+  PostToolUseBlock,
+  StopBlock,
+} from "../src/main/agent/runtime/hooks/hook-blocks";
 import { clearHooks, registerHook } from "../src/main/agent/runtime/hooks/hook-registry";
 import { resetDefaultHooksForTests } from "../src/main/agent/runtime/hooks/default-hooks";
 import {
@@ -449,6 +457,73 @@ describe("ProtocolStateStore", () => {
 });
 
 describe("TeammateManager", () => {
+  it("classifies canonical workspace file errors with no side effects", async () => {
+    clearHooks();
+    resetDefaultHooksForTests();
+    const postToolBlocks: PostToolUseBlock[] = [];
+    registerHook("PostToolUse", (block) => {
+      postToolBlocks.push(block as PostToolUseBlock);
+      return null;
+    });
+
+    try {
+      const workspaceRoot = await mkdtemp(join(tmpdir(), "ppt-teammate-file-error-"));
+      await writeFile(join(workspaceRoot, "notes.md"), "before", "utf8");
+      const requests: AgentModelRequest[] = [];
+      const responses = [
+        modelToolCall("EditFile", {
+          path: "notes.md",
+          old_string: "before",
+          new_string: "after",
+        }),
+        modelMessage("The edit was rejected safely."),
+      ];
+      let responseIndex = 0;
+      const gateway: AgentModelGateway = {
+        async generateText(request) {
+          requests.push(request);
+          const value = responses[responseIndex++];
+          if (!value) throw new Error("Unexpected gateway call");
+          return { provider: "anthropic", model: "test-model", content: [value] };
+        },
+        async *generateTextStream(request) {
+          const response = await this.generateText(request);
+          yield { type: "complete" as const, content: response.content };
+        },
+      };
+      const bus = new MessageBus(MessageBus.defaultMailboxDir(workspaceRoot));
+      const manager = new TeammateManager(bus);
+      manager.spawn({
+        name: "editor",
+        role: "editor",
+        prompt: "Edit notes.md without reading it.",
+        workspaceRoot,
+        gateway,
+        maxSteps: 2,
+        idlePollMs: 5,
+        idleTimeoutMs: 1_000,
+      });
+
+      await waitFor(async () => manager.get("editor")?.status === "idle" ? true : undefined);
+
+      expect(postToolBlocks).toContainEqual(expect.objectContaining({
+        toolName: "EditFile",
+        scope: "subagent",
+        executionStatus: "threw",
+        sideEffects: "none",
+        errorCode: "READ_REQUIRED",
+      }));
+      expect(JSON.stringify(requests[1]?.messages)).toContain("[READ_REQUIRED]");
+      expect(await readFile(join(workspaceRoot, "notes.md"), "utf8")).toBe("before");
+
+      await manager.requestShutdown("editor");
+      await manager.waitFor("editor");
+    } finally {
+      clearHooks();
+      resetDefaultHooksForTests();
+    }
+  });
+
   it("passes the runtime Tavily configuration to teammate web_search", async () => {
     const workspaceRoot = await mkdtemp(join(tmpdir(), "ppt-teammate-search-"));
     const fetchImpl = vi.fn(async (
@@ -655,7 +730,7 @@ describe("TeammateManager", () => {
         plan: "Create auth.ts with the approved authentication refactor scaffold.",
       }),
       modelMessage("Plan ready; waiting for lead approval."),
-      modelToolCall("write_file", {
+      modelToolCall("WriteFile", {
         path: "auth.ts",
         content: "export const authVersion = 2;\n",
       }),
@@ -714,7 +789,7 @@ describe("TeammateManager", () => {
     const gateway = createSequenceGateway([
       modelToolCall("request_plan_approval", { plan: "Replace the authentication module." }),
       modelMessage("Waiting for approval."),
-      modelToolCall("write_file", {
+      modelToolCall("WriteFile", {
         path: "auth.ts",
         content: "unsafe replacement\n",
       }),

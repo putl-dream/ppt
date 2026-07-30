@@ -17,7 +17,6 @@ import {
   agentRunRequestSchema,
   exportPresentationOptionsSchema,
   projectArtifactDiffRequestSchema,
-  projectArtifactWriteRequestSchema,
   projectFileOpenRequestSchema,
   projectFileSaveRequestSchema,
   projectFileSessionIdSchema,
@@ -700,26 +699,6 @@ app.whenReady().then(async () => {
         relativePath: rawArtifactIdOrPath,
       });
       return sessionStore.readProjectArtifact(request.sessionId, request.relativePath);
-    },
-  );
-  ipcMain.handle(
-    "project:write-artifact",
-    (
-      _,
-      rawSessionId: unknown,
-      rawRelativePath: unknown,
-      rawContent: unknown,
-    ) => {
-      const request = projectArtifactWriteRequestSchema.parse({
-        sessionId: rawSessionId,
-        relativePath: rawRelativePath,
-        content: rawContent,
-      });
-      return sessionStore.writeProjectArtifact(
-        request.sessionId,
-        request.relativePath,
-        request.content,
-      );
     },
   );
   ipcMain.handle(

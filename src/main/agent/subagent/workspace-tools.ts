@@ -10,11 +10,16 @@ import { promisify } from "node:util";
 import { z } from "zod";
 import type { AgentGatewayConfig } from "@shared/agent-gateway-config";
 import {
-  ensureWorkspaceDir,
-  globWorkspaceFiles,
   WorkspaceFileError,
   WorkspaceFileService,
 } from "../tools/files/workspace-file-service";
+import {
+  editFileContract,
+  globFilesContract,
+  readFileContract,
+  writeFileContract,
+  type WorkspaceFileToolContract,
+} from "../tools/files/workspace-file-tool-contract";
 import {
   SUB_AGENT_TOOL_PERMISSION_PROFILES,
   type ToolPermissionProfile,
@@ -35,122 +40,49 @@ export interface SubAgentToolContext {
   signal?: AbortSignal;
 }
 
-export interface SubAgentToolDefinition<TParams extends z.ZodObject<any> = z.ZodObject<any>> {
+export interface SubAgentToolDefinition<
+  TParams extends z.ZodObject<any> = z.ZodObject<any>,
+  TResult = unknown,
+> {
   name: string;
   description: string;
   inputSchema: TParams;
+  outputSchema?: z.ZodType<TResult>;
   permission: ToolPermissionProfile;
-  execute: (args: z.infer<TParams>, context: SubAgentToolContext) => Promise<string>;
+  execute: (args: z.infer<TParams>, context: SubAgentToolContext) => Promise<TResult>;
 }
-
-const readFileSchema = z.object({
-  path: z.string().describe("Workspace-relative file path"),
-});
-
-const writeFileSchema = z.object({
-  path: z.string().describe("Workspace-relative file path"),
-  content: z.string().describe("Full file content to write"),
-  expected_version: z.string().optional().describe(
-    "Version returned by read_file. Existing files must have been read in this session.",
-  ),
-});
-
-const ensureDirSchema = z.object({
-  path: z.string().describe("Workspace-relative directory path"),
-});
-
-const editFileSchema = z.object({
-  path: z.string().describe("Workspace-relative file path"),
-  old_string: z.string().describe("Exact text to replace"),
-  new_string: z.string().describe("Replacement text"),
-  replace_all: z.boolean().optional().describe(
-    "Replace every exact match. Without this flag, old_string must match exactly once.",
-  ),
-  expected_version: z.string().optional().describe(
-    "Version returned by read_file. Existing files must have been read in this session.",
-  ),
-});
-
-const globSchema = z.object({
-  pattern: z.string().describe("Glob pattern relative to workspace root, e.g. **/*.md"),
-});
 
 const bashSchema = z.object({
   command: z.string().describe(
-    "A fail-closed workspace diagnostic command (pwd, rg, read-only git, node --check, or mkdir)",
+    "A fail-closed workspace diagnostic command (pwd, rg, read-only git, or node --check)",
   ),
 });
 
-export const readFileTool: SubAgentToolDefinition<typeof readFileSchema> = {
-  name: "read_file",
-  description: "Read a text file from the workspace.",
-  inputSchema: readFileSchema,
-  permission: SUB_AGENT_TOOL_PERMISSION_PROFILES.read_file,
-  async execute(args, context) {
-    return JSON.stringify(
-      await resolveFileService(context).read(args.path),
-      null,
-      2,
-    );
-  },
-};
+function toSubAgentWorkspaceTool<
+  TParams extends z.ZodObject<any>,
+  TResult,
+>(
+  contract: WorkspaceFileToolContract<TParams, TResult>,
+): SubAgentToolDefinition<TParams, TResult> {
+  return {
+    name: contract.name,
+    description: contract.description,
+    inputSchema: contract.inputSchema,
+    outputSchema: contract.outputSchema,
+    permission: contract.permission,
+    execute: async (args, context) => contract.execute(args, {
+      workspaceRoot: context.workspaceRoot,
+      fileService: resolveFileService(context),
+    }),
+  };
+}
 
-export const writeFileTool: SubAgentToolDefinition<typeof writeFileSchema> = {
-  name: "write_file",
-  description: "Write or overwrite a text file in the workspace. Parent directories are created automatically.",
-  inputSchema: writeFileSchema,
-  permission: SUB_AGENT_TOOL_PERMISSION_PROFILES.write_file,
-  async execute(args, context) {
-    const result = await resolveFileService(context).write(args.path, args.content, {
-      expectedVersion: args.expected_version,
-    });
-    return `Wrote ${result.path} (${result.characterCount} chars, version ${result.version}).`;
-  },
-};
-
-export const ensureDirTool: SubAgentToolDefinition<typeof ensureDirSchema> = {
-  name: "ensure_dir",
-  description: "Create a workspace directory if it does not already exist.",
-  inputSchema: ensureDirSchema,
-  permission: SUB_AGENT_TOOL_PERMISSION_PROFILES.ensure_dir,
-  async execute(args, context) {
-    await ensureWorkspaceDir(context.workspaceRoot, args.path);
-    return `Ensured directory ${args.path}.`;
-  },
-};
-
-export const editFileTool: SubAgentToolDefinition<typeof editFileSchema> = {
-  name: "edit_file",
-  description:
-    "Replace an exact string in a file after reading it. Ambiguous matches are rejected "
-    + "unless replace_all=true.",
-  inputSchema: editFileSchema,
-  permission: SUB_AGENT_TOOL_PERMISSION_PROFILES.edit_file,
-  async execute(args, context) {
-    const result = await resolveFileService(context).edit(
-      args.path,
-      args.old_string,
-      args.new_string,
-      {
-        expectedVersion: args.expected_version,
-        replaceAll: args.replace_all,
-      },
-    );
-    return `Updated ${result.path} (${result.replacements} replacement(s), `
-      + `version ${result.version}).`;
-  },
-};
-
-export const globTool: SubAgentToolDefinition<typeof globSchema> = {
-  name: "glob",
-  description: "List workspace files matching a glob pattern.",
-  inputSchema: globSchema,
-  permission: SUB_AGENT_TOOL_PERMISSION_PROFILES.glob,
-  async execute(args, context) {
-    const matches = await globWorkspaceFiles(context.workspaceRoot, args.pattern);
-    return matches.length > 0 ? matches.join("\n") : "(no matches)";
-  },
-};
+export const workspaceFileTools: SubAgentToolDefinition[] = [
+  toSubAgentWorkspaceTool(globFilesContract),
+  toSubAgentWorkspaceTool(readFileContract),
+  toSubAgentWorkspaceTool(writeFileContract),
+  toSubAgentWorkspaceTool(editFileContract),
+];
 
 export const bashTool: SubAgentToolDefinition<typeof bashSchema> = {
   name: "bash",
@@ -160,12 +92,6 @@ export const bashTool: SubAgentToolDefinition<typeof bashSchema> = {
   inputSchema: bashSchema,
   permission: SUB_AGENT_TOOL_PERMISSION_PROFILES.bash,
   async execute(args, context) {
-    const mkdirPath = parseSimpleMkdirCommand(args.command);
-    if (mkdirPath) {
-      await ensureWorkspaceDir(context.workspaceRoot, mkdirPath);
-      return `Ensured directory ${mkdirPath}.`;
-    }
-
     const prepared = await prepareDiagnosticCommand(args.command, context);
     if ("output" in prepared) return prepared.output;
     const { stdout, stderr } = await execFileAsync(
@@ -205,11 +131,7 @@ export const webSearchSubAgentTool: SubAgentToolDefinition<typeof webSearchSchem
 };
 
 export const SUB_AGENT_TOOLS: SubAgentToolDefinition[] = [
-  readFileTool,
-  writeFileTool,
-  ensureDirTool,
-  editFileTool,
-  globTool,
+  ...workspaceFileTools,
   bashTool,
   webSearchSubAgentTool,
 ];
@@ -226,25 +148,6 @@ function resolveFileService(context: SubAgentToolContext): WorkspaceFileService 
     context.fileService = new WorkspaceFileService(context.workspaceRoot);
   }
   return context.fileService;
-}
-
-function parseSimpleMkdirCommand(command: string): string | null {
-  const match = command.trim().match(/^mkdir(?:\s+-p)?\s+("[^"]+"|'[^']+'|[^\s"'<>|&;]+)\s*$/i);
-  if (!match) return null;
-  const rawPath = match[1]!;
-  const path = stripMatchingQuotes(rawPath);
-  if (!path.trim()) return null;
-  return path;
-}
-
-function stripMatchingQuotes(value: string): string {
-  if (
-    (value.startsWith("\"") && value.endsWith("\""))
-    || (value.startsWith("'") && value.endsWith("'"))
-  ) {
-    return value.slice(1, -1);
-  }
-  return value;
 }
 
 type PreparedDiagnosticCommand =

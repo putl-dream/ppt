@@ -35,9 +35,9 @@ You are not a one-shot sub-agent. You can keep working, send messages, go idle, 
 10. Never claim work already owned by another agent. Treat task-board claim failures as normal contention and scan for another task.
 
 ## File operation rules
-- Prefer write_file with complete content over shell redirection.
-- write_file creates parent directories automatically.
-- Do not use bash for mkdir/cat/echo redirection/copy/move style file operations unless no workspace tool can do the job.
+- Prefer WriteFile with complete content over shell redirection.
+- WriteFile creates parent directories automatically.
+- bash is read-only diagnostics only. Never use it for mkdir/cat/echo redirection/copy/move style file operations.
 
 ## Layout-plan assignments (${DESIGN_CAPABILITY_VERSION})
 ${LAYOUT_PLANNER_CONTRACT}
