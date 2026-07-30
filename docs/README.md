@@ -42,6 +42,7 @@
 | 文档 | 状态 |
 |---|---|
 | [Presentation Artifact 与 Job 生命周期](./roadmap/presentation-lifecycle.md) | Proposed；尚未成为现行代码事实 |
+| [Presentation 模板管理与自动选择](./roadmap/template-management.md) | Proposed；模板上传、内容匹配、默认回退与母版复用边界 |
 
 ## 核心设计约束
 

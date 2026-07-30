@@ -1,6 +1,8 @@
 # Visual Expression System
 
 > 文档类型：现行架构与剩余边界
+> 模板上传、内容自动选择与默认回退方案见
+> [Presentation 模板管理与自动选择](../roadmap/template-management.md)
 
 ## 1. 系统定位
 
