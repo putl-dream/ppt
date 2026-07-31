@@ -7,6 +7,7 @@
 @import './styles/tokens/ide-density.css';
 @import './styles/components/ide.css';
 @import './styles/components/controls.css';
+@import './styles/components/run-status.css';
 @import './styles/modules/base.css';
 @import './styles/modules/layout.css';
 @import './styles/modules/sidebar.css';

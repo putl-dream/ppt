@@ -316,13 +316,28 @@ export const PPTMirror: React.FC<PPTMirrorProps> = ({
     if (slideOrder.has(slideId)) onSelectSlide(slideId);
   };
 
+  const renderInspectedSlide = (slideId: string) => {
+    const index = slideOrder.get(slideId);
+    if (index === undefined) return null;
+    const slide = slides[index];
+    if (!slide) return null;
+    return (
+      <MirrorSlideFrame
+        presentation={presentation}
+        slide={slide}
+        slideIndex={index}
+        logoUrl={logoUrl}
+        fallbackWidth={960}
+      />
+    );
+  };
+
   return (
     <aside className={`right-panel mirror-panel${isExpanded ? " is-expanded" : ""}`}>
       {/* 顶部工具栏 */}
       <div className="panel-header right-header mirror-header">
         <div className="mirror-header-copy">
-          <span>PPT 预览</span>
-          <strong title={presentation.title}>{presentation.title || "未命名演示文稿"}</strong>
+          <span title={presentation.title || "未命名演示文稿"}>PPT 预览</span>
         </div>
         <div className="mirror-header-actions">
           <button
@@ -431,8 +446,9 @@ export const PPTMirror: React.FC<PPTMirrorProps> = ({
             <div className="mirror-view-summary-copy">
               <strong>本轮页面检查</strong>
               <span>
-                已检查 {inspectionPreviews.length} 页
-                {slides.length > 0 ? ` · 覆盖 ${reviewedSlideCount} / ${slides.length} 页` : ""}
+                {slides.length > 0
+                  ? `覆盖 ${reviewedSlideCount} / ${slides.length} 页`
+                  : `${inspectionPreviews.length} 页`}
               </span>
             </div>
             <div
@@ -468,6 +484,7 @@ export const PPTMirror: React.FC<PPTMirrorProps> = ({
             previews={orderedInspectionPreviews}
             selectedSlideId={selectedSlideId}
             onSelectSlide={selectInspectedSlide}
+            renderSlide={renderInspectedSlide}
             variant="panel"
           />
         ) : (

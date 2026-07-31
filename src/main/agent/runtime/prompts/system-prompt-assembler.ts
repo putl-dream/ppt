@@ -168,6 +168,7 @@ const defaultProviders: SystemPromptSectionProvider[] = [
       workspaceRoot: context.workspaceRoot,
       currentSlideId: context.currentSlideId,
       artifacts: context.artifacts,
+      artifactDetails: context.artifactDetails,
     }),
   },
   {

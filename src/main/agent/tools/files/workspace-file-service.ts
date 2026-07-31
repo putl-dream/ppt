@@ -29,7 +29,8 @@ export type WorkspaceFileErrorCode =
   | "UNSAFE_FILE_TYPE"
   | "INVALID_UTF8"
   | "FILE_TOO_LARGE"
-  | "UNSAFE_COMMAND";
+  | "UNSAFE_COMMAND"
+  | "LOCK_SCHEMA_INVALID";
 
 export class WorkspaceFileError extends Error {
   constructor(
@@ -1044,7 +1045,8 @@ function detectNewlineStyle(content: string): WorkspaceFileReceipt["newline"] {
   return "none";
 }
 
-function countOccurrences(content: string, needle: string): number {
+export function countOccurrences(content: string, needle: string): number {
+  if (!needle) return 0;
   let count = 0;
   let offset = 0;
   while (offset <= content.length - needle.length) {

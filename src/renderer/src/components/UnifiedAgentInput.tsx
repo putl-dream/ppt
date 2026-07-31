@@ -1,9 +1,12 @@
 import React, { useEffect, useRef, useState } from "react";
+import type { AgentActivityItem } from "@shared/agent-activity";
 import { CheckIcon, ChevronDownIcon, SendIcon, StopIcon } from "./Icons";
 import type { ManagedModel } from "../modelCatalog";
+import type { AgentRunPhase } from "../agentRunPresentation";
 import type { PendingToolApproval } from "./ToolApprovalOverlay";
 import { PermissionCardHost } from "../cards/hosts/PermissionCardHost";
 import { EnvironmentCardHost } from "../cards/hosts/EnvironmentCardHost";
+import { RunStatusIndicator } from "./RunStatusIndicator";
 
 interface UnifiedAgentInputProps {
   request: string;
@@ -20,8 +23,10 @@ interface UnifiedAgentInputProps {
   onCancelRun?: () => void;
   isCancellingRun?: boolean;
   sandboxReady?: boolean;
-  sandboxName?: string;
   onPrepareWorkspace?: () => void;
+  agentRunPhase?: AgentRunPhase;
+  activityTrace?: AgentActivityItem[];
+  runStartedAt?: number;
 }
 
 function resizeTextarea(textarea: HTMLTextAreaElement) {
@@ -46,8 +51,10 @@ export const UnifiedAgentInput: React.FC<UnifiedAgentInputProps> = ({
   onCancelRun,
   isCancellingRun = false,
   sandboxReady = true,
-  sandboxName,
   onPrepareWorkspace,
+  agentRunPhase = "idle",
+  activityTrace = [],
+  runStartedAt,
 }) => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const modelMenuRef = useRef<HTMLDivElement>(null);
@@ -141,14 +148,13 @@ export const UnifiedAgentInput: React.FC<UnifiedAgentInputProps> = ({
 
               <div className="functional-control-bar">
                 <div className="functional-left">
-                  <span className={`action-dock-status${busy ? " is-running" : ""}`}>
-                    <span className="action-dock-status-dot" aria-hidden="true" />
-                    {busy
-                      ? "Agent 正在执行"
-                      : sandboxReady
-                        ? `沙箱 · ${sandboxName?.trim() || "当前项目"}`
-                        : "沙箱 · 发送后自动创建"}
-                  </span>
+                  {busy ? (
+                    <RunStatusIndicator
+                      phase={agentRunPhase}
+                      activityTrace={activityTrace}
+                      startedAt={runStartedAt}
+                    />
+                  ) : null}
                 </div>
 
                 <div className="functional-right">
@@ -197,11 +203,13 @@ export const UnifiedAgentInput: React.FC<UnifiedAgentInputProps> = ({
                     type="button"
                     onClick={canCancelRun && onCancelRun ? onCancelRun : handleSend}
                     disabled={canCancelRun ? isCancellingRun : busy || !request.trim()}
-                    className={canCancelRun ? "stop-cta-btn" : "send-cta-btn"}
+                    className={canCancelRun
+                      ? "stop-cta-btn"
+                      : `send-cta-btn${!busy && request.trim() ? " is-ready" : ""}`}
                     aria-label={canCancelRun ? "中止当前 Agent 会话" : "发送指令"}
-                    title={canCancelRun ? "中止当前 Agent 会话" : "发送指令"}
+                    title={canCancelRun ? "中止当前 Agent 会话" : "发送指令（Enter）"}
                   >
-                    {canCancelRun ? <StopIcon size={14} /> : <SendIcon size={14} />}
+                    {canCancelRun ? <StopIcon size={13} /> : <SendIcon size={15} />}
                   </button>
                 </div>
               </div>

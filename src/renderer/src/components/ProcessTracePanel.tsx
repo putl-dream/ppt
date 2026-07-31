@@ -4,15 +4,10 @@ import { summarizeProcessTrace } from "@shared/agent-activity";
 import { ChevronDownIcon, ChevronRightIcon } from "./Icons";
 import { ProcessTraceItem } from "./ProcessTraceItem";
 import { buildProcessTraceRows } from "./process-trace-rows";
-import {
-  deriveAgentRunPresentation,
-  type AgentRunPhase,
-} from "../agentRunPresentation";
 
 interface ProcessTracePanelProps {
   items: AgentActivityItem[];
   live?: boolean;
-  phase?: AgentRunPhase;
   startedAt?: number;
   defaultOpen?: boolean;
   defaultExpandRows?: boolean;
@@ -22,7 +17,6 @@ interface ProcessTracePanelProps {
 export const ProcessTracePanel: React.FC<ProcessTracePanelProps> = ({
   items,
   live = false,
-  phase = "idle",
   startedAt,
   defaultOpen = false,
   defaultExpandRows = false,
@@ -73,14 +67,12 @@ export const ProcessTracePanel: React.FC<ProcessTracePanelProps> = ({
   }, [collapseOnComplete, live, startedAt]);
 
   const rows = useMemo(() => buildProcessTraceRows(items, live), [items, live]);
-  const hasRunningToolRow = rows.some((row) => row.status === "running");
 
   if (rows.length === 0 && !live) return null;
 
   const processSummary = summarizeProcessTrace(items);
-  const runPresentation = deriveAgentRunPresentation(phase, items);
   const headerLabel = live
-    ? runPresentation.label
+    ? "执行过程"
     : elapsedSeconds > 0
       ? `已工作 ${elapsedSeconds} 秒`
       : processSummary;
@@ -102,18 +94,7 @@ export const ProcessTracePanel: React.FC<ProcessTracePanelProps> = ({
         title={processSummary}
       >
         <span className="process-trace-panel-header-left">
-          {live && !hasRunningToolRow && (
-            <span
-              className={[
-                "agent-run-loader",
-                runPresentation.animated ? "agent-run-loader--active" : "agent-run-loader--paused",
-              ].join(" ")}
-              aria-hidden="true"
-            >
-              <i />
-            </span>
-          )}
-          <span className="process-trace-panel-label" role="status" aria-live="polite">
+          <span className="process-trace-panel-label">
             {headerLabel}
           </span>
           {live && elapsedSeconds > 0 && (
@@ -126,19 +107,34 @@ export const ProcessTracePanel: React.FC<ProcessTracePanelProps> = ({
       </button>
       {open && (
         <div className="process-trace-panel-body">
-          {rows.map((row) => (
-            <div
-              key={row.id}
-              className="agent-run-block agent-run-block--activity"
-              data-run-block-id={row.id}
-              data-run-block-kind={row.kind}
-            >
-              <ProcessTraceItem
-                row={row}
-                defaultExpanded={defaultExpandRows || Boolean(row.active && row.kind !== "thought")}
-              />
-            </div>
-          ))}
+          {rows.map((row) => {
+            // Live panel header is a neutral group label — don't nest a
+            // second "思考中" title under it (Cursor: one Thinking line).
+            const suppressThoughtTitle = live
+              && row.kind === "thought"
+              && Boolean(row.active);
+            if (suppressThoughtTitle && !row.content?.trim()) {
+              return null;
+            }
+            return (
+              <div
+                key={row.id}
+                className="agent-run-block agent-run-block--activity"
+                data-run-block-id={row.id}
+                data-run-block-kind={row.kind}
+              >
+                <ProcessTraceItem
+                  row={row}
+                  defaultExpanded={
+                    defaultExpandRows
+                    || Boolean(row.active && row.kind !== "thought")
+                    || suppressThoughtTitle
+                  }
+                  suppressTitle={suppressThoughtTitle}
+                />
+              </div>
+            );
+          })}
         </div>
       )}
     </div>

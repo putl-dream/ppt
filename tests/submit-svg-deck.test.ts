@@ -44,19 +44,6 @@ describe("SubmitSvgDeck", () => {
     );
     await fileService.write("slides/svg/P01.svg", `\n${svgPage("../../assets/pixel.png")}\n`);
     const context = createContext(root, fileService);
-    vi.spyOn(slideThumbnailService, "captureSlide").mockResolvedValue({
-      pngBase64: "rendered-page",
-      width: 640,
-      height: 360,
-      mimeType: "image/png",
-    });
-    const preview = await previewSvgPageTool.execute({
-      path: "slides/svg/P01.svg",
-      title: "Opportunity",
-      includeThumbnail: true,
-    }, context);
-    expect(preview.preview.previewGatePassed).toBe(true);
-
     const args: SubmissionArgs = {
       title: "SVG deck",
       designSpecPath: "design/design-spec.json",
@@ -87,6 +74,19 @@ describe("SubmitSvgDeck", () => {
       risk: "medium",
     };
     await writeSubmissionLocks(fileService, args);
+    vi.spyOn(slideThumbnailService, "captureSlide").mockResolvedValue({
+      pngBase64: "rendered-page",
+      width: 640,
+      height: 360,
+      mimeType: "image/png",
+    });
+    const preview = await previewSvgPageTool.execute({
+      path: "slides/svg/P01.svg",
+      title: "Opportunity",
+      includeThumbnail: true,
+    }, context);
+    expect(preview.preview.previewGatePassed).toBe(true);
+
     const result = await submitSvgDeckTool.execute(args, context);
 
     expect(result.type).toBe("command_proposal");

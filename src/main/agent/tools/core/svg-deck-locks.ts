@@ -86,6 +86,196 @@ export const svgDeckPagePlanSchema = z.object({
 export type SvgDeckDesignSpec = z.infer<typeof svgDeckDesignSpecSchema>;
 export type SvgDeckPagePlan = z.infer<typeof svgDeckPagePlanSchema>;
 
+/** Minimal valid shapes shown to the model on write/preview/prompt recovery. */
+export const SVG_DECK_DESIGN_SPEC_MINI_SCHEMA = `{
+  "version": 1,
+  "canvas": {"width": 1280, "height": 720},
+  "communicationContract": {
+    "audience": "...",
+    "objective": "...",
+    "desiredOutcome": "...",
+    "coreMessage": "...",
+    "deliveryContext": "...",
+    "afterUse": "..."
+  },
+  "presentationDesignSystem": {
+    "version": 2,
+    "argumentMode": "pyramid",
+    "visualStyle": "swiss-minimal",
+    "colorScheme": "business-blue",
+    "readingMode": "balanced"
+  },
+  "argumentMode": "pyramid",
+  "visualStyle": {"id": "swiss-minimal"},
+  "readingMode": "balanced"
+}`;
+
+export const SVG_DECK_PAGE_PLAN_MINI_SCHEMA = `{
+  "version": 1,
+  "designSpec": "design/design-spec.json",
+  "slides": [
+    {
+      "id": "P01",
+      "path": "slides/svg/P01.svg",
+      "narrativeRole": "cover",
+      "finalCopy": {"title": "..."},
+      "coreMessage": "...",
+      "audienceMove": "...",
+      "rhythm": "anchor",
+      "layoutIntent": "..."
+    }
+  ]
+}`;
+
+export function isSvgDeckLockPath(path: string): boolean {
+  const normalized = normalizeLockPath(path);
+  return normalized === SVG_DECK_DESIGN_SPEC_PATH
+    || normalized === SVG_DECK_PAGE_PLAN_PATH;
+}
+
+export function svgDeckLockRecoveryHint(path: string): string {
+  const normalized = normalizeLockPath(path);
+  if (normalized === SVG_DECK_DESIGN_SPEC_PATH) {
+    return `LoadSkill("ppt-design") before rewriting ${SVG_DECK_DESIGN_SPEC_PATH}. `
+      + "Required top-level fields: version=1, canvas{width:1280,height:720}, "
+      + "communicationContract{audience,objective,desiredOutcome,coreMessage,deliveryContext,afterUse}, "
+      + "presentationDesignSystem (Design System v2), argumentMode, visualStyle.id, readingMode "
+      + "(axes must match presentationDesignSystem).";
+  }
+  if (normalized === SVG_DECK_PAGE_PLAN_PATH) {
+    return `LoadSkill("ppt-design-layout") before rewriting ${SVG_DECK_PAGE_PLAN_PATH}. `
+      + "Required top-level fields: version=1, designSpec=\"design/design-spec.json\", "
+      + "slides[].{id,path,narrativeRole,finalCopy,coreMessage,audienceMove,rhythm,layoutIntent}.";
+  }
+  return `LoadSkill("ppt-design") and LoadSkill("ppt-design-layout") for SVG deck lock schemas.`;
+}
+
+export function svgDeckLockMiniSchemaForPath(path: string): string | undefined {
+  const normalized = normalizeLockPath(path);
+  if (normalized === SVG_DECK_DESIGN_SPEC_PATH) return SVG_DECK_DESIGN_SPEC_MINI_SCHEMA;
+  if (normalized === SVG_DECK_PAGE_PLAN_PATH) return SVG_DECK_PAGE_PLAN_MINI_SCHEMA;
+  return undefined;
+}
+
+export function formatSvgDeckLockIssues(
+  zodError: z.ZodError,
+  limit = 12,
+): string {
+  return zodError.issues
+    .slice(0, limit)
+    .map((issue) => `${formatIssuePath(issue.path)}: ${issue.message}`)
+    .join("; ");
+}
+
+export function formatSvgDeckLockContractBlock(): string {
+  return [
+    "### SVG Deck Lock Contract",
+    `写 ${SVG_DECK_DESIGN_SPEC_PATH} 前先 LoadSkill("ppt-design")；`
+    + `写 ${SVG_DECK_PAGE_PLAN_PATH} 前先 LoadSkill("ppt-design-layout")。`,
+    "推荐顺序：LoadSkill(ppt-design) → WriteFile design-spec → "
+    + "LoadSkill(ppt-design-layout) → WriteFile page-plan → WriteFile SVG → PreviewSvgPage → SubmitSvgDeck。",
+    `非法锁文件不会通过 WriteFile、PreviewSvgPage 或 SubmitSvgDeck。`,
+    "",
+    `${SVG_DECK_DESIGN_SPEC_PATH} 最低结构：`,
+    "```json",
+    SVG_DECK_DESIGN_SPEC_MINI_SCHEMA,
+    "```",
+    "",
+    `${SVG_DECK_PAGE_PLAN_PATH} 最低结构：`,
+    "```json",
+    SVG_DECK_PAGE_PLAN_MINI_SCHEMA,
+    "```",
+  ].join("\n");
+}
+
+export function formatSvgDeckLockBootstrapGuidance(): string {
+  return [
+    "SVG-native create bootstrap:",
+    "1. LoadSkill(\"ppt-design\") then WriteFile design/design-spec.json.",
+    "2. LoadSkill(\"ppt-design-layout\") then WriteFile slides/page-plan.json.",
+    "3. WriteFile slides/svg/P01.svg then PreviewSvgPage; do not start P02 until P01 passes.",
+    "4. After all pages pass PreviewSvgPage, call SubmitSvgDeck once.",
+    "",
+    formatSvgDeckLockContractBlock(),
+  ].join("\n");
+}
+
+/**
+ * Validate lock-file content before WriteFile/EditFile commits.
+ * Returns parsed data on success; throws Error with recovery hint on failure.
+ */
+export function validateSvgDeckLockContent(
+  path: string,
+  content: string,
+): SvgDeckDesignSpec | SvgDeckPagePlan {
+  const normalized = normalizeLockPath(path);
+  const schema = schemaForLockPath(normalized);
+  if (!schema) {
+    throw new Error(`${path} is not an SVG deck lock file.`);
+  }
+
+  let source: unknown;
+  try {
+    source = JSON.parse(content);
+  } catch (error) {
+    throw new Error(
+      formatLockValidationFailure(
+        normalized,
+        `${normalized} must contain valid JSON: ${errorMessage(error)}`,
+      ),
+    );
+  }
+
+  const result = schema.safeParse(source);
+  if (!result.success) {
+    throw new Error(
+      formatLockValidationFailure(
+        normalized,
+        `${normalized} does not satisfy the SVG deck lock schema: `
+        + formatSvgDeckLockIssues(result.error),
+      ),
+    );
+  }
+  return result.data;
+}
+
+export function assertSvgPageBelongsToPlan(
+  sourcePath: string,
+  pagePlan: SvgDeckPagePlan,
+): void {
+  const normalized = normalizeWorkspaceSvgPath(sourcePath);
+  if (
+    !pagePlan.slides.some(
+      (slide) => normalizeWorkspaceSvgPath(slide.path) === normalized,
+    )
+  ) {
+    throw new Error(
+      `${sourcePath} is not present in the current ${SVG_DECK_PAGE_PLAN_PATH}.`,
+    );
+  }
+}
+
+/** Read and validate both locks, then ensure the SVG page is listed in page-plan. */
+export async function precheckSvgPagePreviewLocks(
+  fileService: NonNullable<ToolContext["fileService"]>,
+  sourcePath: string,
+  caller = "PreviewSvgPage",
+): Promise<{
+  designSpec: SvgDeckDesignSpec;
+  pagePlan: SvgDeckPagePlan;
+}> {
+  try {
+    const locks = await readSvgDeckLocks(fileService, caller);
+    assertSvgPageBelongsToPlan(sourcePath, locks.pagePlan);
+    return locks;
+  } catch (error) {
+    const detail = errorMessage(error);
+    throw new Error(
+      `${caller} lock precheck failed: ${detail}`,
+    );
+  }
+}
+
 export async function readSvgDeckLocks(
   fileService: NonNullable<ToolContext["fileService"]>,
   caller = "SubmitSvgDeck",
@@ -98,15 +288,13 @@ export async function readSvgDeckLocks(
   const designSpec = await readSvgDeckLock(
     fileService,
     SVG_DECK_DESIGN_SPEC_PATH,
-    svgDeckDesignSpecSchema,
     caller,
-  );
+  ) as SvgDeckDesignSpec;
   const pagePlan = await readSvgDeckLock(
     fileService,
     SVG_DECK_PAGE_PLAN_PATH,
-    svgDeckPagePlanSchema,
     caller,
-  );
+  ) as SvgDeckPagePlan;
   return { designSpec, pagePlan };
 }
 
@@ -217,12 +405,11 @@ export function assertSvgDeckLocksMatchSubmission<
   });
 }
 
-async function readSvgDeckLock<T>(
+async function readSvgDeckLock(
   fileService: NonNullable<ToolContext["fileService"]>,
-  path: string,
-  schema: z.ZodType<T>,
+  path: typeof SVG_DECK_DESIGN_SPEC_PATH | typeof SVG_DECK_PAGE_PLAN_PATH,
   caller: string,
-): Promise<T> {
+): Promise<SvgDeckDesignSpec | SvgDeckPagePlan> {
   let content: string;
   try {
     content = (await fileService.read(path, {
@@ -233,22 +420,31 @@ async function readSvgDeckLock<T>(
       `${caller} requires readable lock file ${path}: ${errorMessage(error)}`,
     );
   }
+  return validateSvgDeckLockContent(path, content);
+}
 
-  let source: unknown;
-  try {
-    source = JSON.parse(content);
-  } catch (error) {
-    throw new Error(`${path} must contain valid JSON: ${errorMessage(error)}`);
+function schemaForLockPath(
+  path: string,
+): typeof svgDeckDesignSpecSchema | typeof svgDeckPagePlanSchema | undefined {
+  if (path === SVG_DECK_DESIGN_SPEC_PATH) return svgDeckDesignSpecSchema;
+  if (path === SVG_DECK_PAGE_PLAN_PATH) return svgDeckPagePlanSchema;
+  return undefined;
+}
+
+function formatLockValidationFailure(path: string, details: string): string {
+  const mini = svgDeckLockMiniSchemaForPath(path);
+  const parts = [
+    details,
+    svgDeckLockRecoveryHint(path),
+  ];
+  if (mini) {
+    parts.push(`Minimum valid shape:\n${mini}`);
   }
-  const result = schema.safeParse(source);
-  if (!result.success) {
-    const details = result.error.issues
-      .slice(0, 12)
-      .map((issue) => `${formatIssuePath(issue.path)}: ${issue.message}`)
-      .join("; ");
-    throw new Error(`${path} does not satisfy the SVG deck lock schema: ${details}`);
-  }
-  return result.data;
+  return parts.join("\n");
+}
+
+function normalizeLockPath(path: string): string {
+  return path.replace(/\\/g, "/").replace(/^\.\//, "");
 }
 
 function formatIssuePath(path: PropertyKey[]): string {

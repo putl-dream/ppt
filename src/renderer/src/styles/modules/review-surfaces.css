@@ -6,20 +6,15 @@
 .approval-card,
 .patch-review-card {
   margin-top: 10px;
-  border: 1px solid color-mix(in srgb, var(--text-muted) 20%, transparent);
-  border-radius: 9px;
-  background: color-mix(in srgb, var(--surface-sunken) 96%, var(--text-primary) 4%);
+  border: 1px solid color-mix(in srgb, var(--text-muted) 18%, transparent);
+  border-radius: var(--control-radius-sm);
+  background: transparent;
   box-shadow: none;
 }
 
 .approval-card,
 .patch-review-card {
   padding: 13px 14px;
-  border-top: 2px solid var(--accent-primary);
-}
-
-.patch-review-card {
-  border-top-color: var(--accent-orange);
 }
 
 .inline-artifact-card-header {
@@ -69,7 +64,7 @@
   margin: 12px 0;
   overflow: hidden;
   border: 1px solid color-mix(in srgb, var(--text-muted) 18%, transparent);
-  border-radius: 7px;
+  border-radius: var(--control-radius-sm);
 }
 
 .approval-command-item {
@@ -111,7 +106,7 @@
   min-width: 96px;
   min-height: 34px;
   padding: 7px 13px;
-  border-radius: 7px;
+  border-radius: var(--control-radius-sm);
   font-family: var(--font-body);
   font-size: 12px;
   font-weight: var(--font-weight-semibold);
@@ -168,7 +163,7 @@
 }
 
 .agent-question-option {
-  border-radius: 7px;
+  border-radius: var(--control-radius-sm);
   background: transparent;
 }
 
@@ -178,9 +173,10 @@
 
 .resolved-card {
   margin-top: 8px;
-  border: 1px solid color-mix(in srgb, var(--text-muted) 17%, transparent);
-  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--text-muted) 18%, transparent);
+  border-radius: var(--control-radius-sm);
   background: transparent;
+  box-shadow: none;
 }
 
 .resolved-card-summary {
@@ -265,14 +261,6 @@
   width: 100%;
   border-color: color-mix(in srgb, var(--text-muted) 22%, transparent);
   background: color-mix(in srgb, var(--surface-sunken) 84%, transparent);
-}
-
-.slide-preview-gallery--panel .inline-artifact-card-header {
-  position: sticky;
-  top: -14px;
-  z-index: 2;
-  background: color-mix(in srgb, var(--surface-raised) 94%, transparent);
-  backdrop-filter: blur(10px);
 }
 
 .mirror-panel.is-expanded .slide-preview-gallery-grid {
@@ -418,6 +406,11 @@
   display: block;
   width: 100%;
   height: auto;
+  background: #fff;
+}
+
+.slide-preview-lightbox-live {
+  width: 100%;
   background: #fff;
 }
 

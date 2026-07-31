@@ -89,7 +89,7 @@ allowed-tools:
 
 ## 写入 `slides/page-plan.json`
 
-用 `WriteFile` 一次写入有序 JSON：
+用 `WriteFile` 一次写入有序 JSON（必须可通过运行时 SVG deck 锁契约校验）：
 
 ```json
 {
@@ -100,17 +100,18 @@ allowed-tools:
       "id": "P01",
       "path": "slides/svg/P01.svg",
       "narrativeRole": "cover",
-      "finalCopy": {},
-      "coreMessage": "",
-      "audienceMove": "",
+      "finalCopy": {"title": "封面标题", "subtitle": "一句话副标题"},
+      "coreMessage": "本页唯一核心判断",
+      "audienceMove": "受众看完本页后应理解或相信什么",
       "rhythm": "anchor",
-      "layoutIntent": "",
+      "layoutIntent": "用自然语言描述页面级构图意图，不要写固定 layout 名",
       "assetRefs": []
     }
   ]
 }
 ```
 
+`finalCopy`、`coreMessage`、`audienceMove`、`layoutIntent` 不能为空字符串或空对象占位；`rhythm` 只能是 `anchor` / `dense` / `breathing`。
 提交前确认：
 
 1. 所有页面的 `finalCopy`、`coreMessage`、`audienceMove`、`rhythm`、`layoutIntent` 都具体且互相一致。

@@ -272,7 +272,6 @@ export function App() {
             selectedModelId,
             setSelectedModelId,
             workspaceReady: Boolean(localStoragePath),
-            sandboxName: getWorkspaceLabel(localStoragePath || undefined),
             onPrepareWorkspace: () => void selectWorkspaceFolder(),
             triggerToast: notify,
           }}

@@ -8,13 +8,12 @@ import {
 
 interface PptJobStatusBarProps {
   pptJob: PptJobProjection;
-  compact?: boolean;
 }
 
-export function PptJobStatusBar({ pptJob, compact = false }: PptJobStatusBarProps) {
+export function PptJobStatusBar({ pptJob }: PptJobStatusBarProps) {
   return (
     <div
-      className={`ppt-job-status-bar is-${pptJob.status}${compact ? " is-compact" : ""}`}
+      className={`ppt-job-status-bar is-${pptJob.status}`}
       role="status"
       aria-label="演示文稿任务状态"
     >

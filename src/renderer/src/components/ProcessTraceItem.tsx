@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { ChevronDownIcon, ChevronRightIcon } from "./Icons";
 import { MessageMarkdown } from "./MessageMarkdown";
 import type { ProcessTraceRow } from "./process-trace-rows";
@@ -6,21 +6,36 @@ import type { ProcessTraceRow } from "./process-trace-rows";
 interface ProcessTraceItemProps {
   row: ProcessTraceRow;
   defaultExpanded?: boolean;
+  /** Parent panel already shows the live status; render body only. */
+  suppressTitle?: boolean;
 }
 
 export const ProcessTraceItem: React.FC<ProcessTraceItemProps> = ({
   row,
   defaultExpanded = false,
+  suppressTitle = false,
 }) => {
-  const [expanded, setExpanded] = useState(defaultExpanded);
+  const [expanded, setExpanded] = useState(defaultExpanded || suppressTitle);
+  const liveBodyRef = useRef<HTMLDivElement>(null);
   const hasBody = Boolean(row.content?.trim() || (row.lines && row.lines.length > 0));
-  const effectiveExpanded = hasBody && expanded;
+  const effectiveExpanded = hasBody && (suppressTitle || expanded);
   const CaretIcon = effectiveExpanded ? ChevronDownIcon : ChevronRightIcon;
 
   useEffect(() => {
+    if (suppressTitle) {
+      setExpanded(true);
+      return;
+    }
     if (row.kind === "thought" || defaultExpanded || !row.active) return;
     setExpanded(true);
-  }, [defaultExpanded, row.active, row.kind]);
+  }, [defaultExpanded, row.active, row.kind, suppressTitle]);
+
+  useEffect(() => {
+    if (!suppressTitle || !row.streaming) return;
+    const body = liveBodyRef.current;
+    if (!body) return;
+    body.scrollTop = body.scrollHeight;
+  }, [row.content, row.streaming, suppressTitle]);
 
   const toggleExpanded = () => setExpanded((value) => !value);
 
@@ -40,6 +55,35 @@ export const ProcessTraceItem: React.FC<ProcessTraceItemProps> = ({
           content={row.title}
           className="assistant-response process-trace-progress-content"
         />
+      </div>
+    );
+  }
+
+  if (suppressTitle) {
+    if (!hasBody) return null;
+    return (
+      <div
+        className={[
+          "process-trace-row",
+          `process-trace-row--${row.kind}`,
+          "process-trace-row--content-only",
+          row.active ? "process-trace-row--active" : "",
+        ].filter(Boolean).join(" ")}
+      >
+        <div
+          ref={liveBodyRef}
+          className="process-trace-row-body process-trace-row-body--live"
+        >
+          {row.content !== undefined && (
+            <pre className="process-trace-row-text">
+              {row.content}
+              {row.streaming && <span className="reasoning-cursor" aria-hidden="true" />}
+            </pre>
+          )}
+          {row.lines?.map((line, index) => (
+            <div key={index} className="process-trace-row-line">{line}</div>
+          ))}
+        </div>
       </div>
     );
   }

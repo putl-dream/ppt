@@ -20,9 +20,6 @@ export const AgentRunTerminalNotice: React.FC<AgentRunTerminalNoticeProps> = ({
       className={`agent-run-terminal-notice agent-run-terminal-notice--${status}`}
       role="status"
     >
-      <span className="agent-run-terminal-notice-icon" aria-hidden="true">
-        {failed ? "!" : "■"}
-      </span>
       <span className="agent-run-terminal-notice-copy">
         <strong>{failed ? "本次处理未完成" : "会话已中断"}</strong>
         {failed && error && <small>{error}</small>}

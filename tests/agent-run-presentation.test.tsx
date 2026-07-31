@@ -4,10 +4,10 @@ import React from "react";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { deriveAgentRunPresentation } from "../src/renderer/src/agentRunPresentation";
-import { AgentRunLoader } from "../src/renderer/src/components/AgentRunLoader";
 import { AgentRunTimeline } from "../src/renderer/src/components/AgentRunTimeline";
 import { AgentRunTerminalNotice } from "../src/renderer/src/components/AgentRunTerminalNotice";
 import { ProcessTraceItem } from "../src/renderer/src/components/ProcessTraceItem";
+import { RunStatusIndicator } from "../src/renderer/src/components/RunStatusIndicator";
 import { buildProcessTraceRows } from "../src/renderer/src/components/process-trace-rows";
 import type { AgentActivityItem } from "../src/shared/agent-activity";
 import type { AgentTaskNode } from "../src/shared/agent-task-list";
@@ -29,34 +29,21 @@ describe("agent run presentation", () => {
       items,
       content,
       busy,
-      phase,
     }: {
       items: AgentActivityItem[];
       content: string;
       busy: boolean;
-      phase: "requesting" | "responding" | "tool";
     }) => (
       <div data-testid="surface">
         <AgentRunTimeline items={items} content={content} live={busy} />
-        <AgentRunLoader
-          busy={busy}
-          phase={phase}
-          activityTrace={items}
-        />
       </div>
     );
 
     const view = render(
-      <Surface items={[]} content="" busy phase="requesting" />,
+      <Surface items={[]} content="" busy />,
     );
     const surface = screen.getByTestId("surface");
-    const activeSpinners = () => surface.querySelectorAll([
-      ".agent-run-loader--active",
-      ".process-trace-row-status--running",
-    ].join(", "));
-    expect(surface.lastElementChild?.classList.contains("agent-run-tail")).toBe(true);
-    expect(screen.getByRole("status").textContent).toBe("正在理解你的需求");
-    expect(activeSpinners()).toHaveLength(1);
+    expect(surface.querySelector("[data-run-block-kind]")).toBeNull();
 
     const firstText: AgentActivityItem[] = [{
       id: "response-1",
@@ -66,12 +53,11 @@ describe("agent run presentation", () => {
       streaming: true,
     }];
     view.rerender(
-      <Surface items={firstText} content="我先检查。" busy phase="responding" />,
+      <Surface items={firstText} content="我先检查。" busy />,
     );
     const firstResponse = surface.querySelector('[data-run-block-id="response-1"]');
     expect(firstResponse).not.toBeNull();
-    expect(surface.querySelector(".agent-run-tail")).toBeNull();
-    expect(activeSpinners()).toHaveLength(0);
+    expect(surface.querySelector(".process-trace-row-status--running")).toBeNull();
 
     const withTool: AgentActivityItem[] = [
       { ...firstText[0]!, streaming: false },
@@ -84,13 +70,12 @@ describe("agent run presentation", () => {
       },
     ];
     view.rerender(
-      <Surface items={withTool} content="我先检查。" busy phase="tool" />,
+      <Surface items={withTool} content="我先检查。" busy />,
     );
     const tool = surface.querySelector('[data-run-block-id="tool-1"]');
     expect(surface.querySelector('[data-run-block-id="response-1"]')).toBe(firstResponse);
-    expect(surface.querySelector(".agent-run-tail")).toBeNull();
     expect(tool).not.toBeNull();
-    expect(activeSpinners()).toHaveLength(1);
+    expect(surface.querySelectorAll(".process-trace-row-status--running")).toHaveLength(1);
 
     const finalItems: AgentActivityItem[] = [
       withTool[0]!,
@@ -108,7 +93,6 @@ describe("agent run presentation", () => {
         items={finalItems}
         content="我先检查。处理完成"
         busy
-        phase="responding"
       />,
     );
     expect(
@@ -117,8 +101,7 @@ describe("agent run presentation", () => {
     ).toEqual(["response", "tool", "response"]);
     expect(surface.querySelector('[data-run-block-id="response-1"]')).toBe(firstResponse);
     expect(surface.querySelector('[data-run-block-id="tool-1"]')).toBe(tool);
-    expect(surface.querySelector(".agent-run-tail")).toBeNull();
-    expect(activeSpinners()).toHaveLength(0);
+    expect(surface.querySelector(".process-trace-row-status--running")).toBeNull();
 
     view.rerender(
       <Surface
@@ -127,13 +110,10 @@ describe("agent run presentation", () => {
         )}
         content="我先检查。处理完成"
         busy={false}
-        phase="responding"
       />,
     );
     expect(surface.querySelector('[data-run-block-id="response-1"]')).toBe(firstResponse);
     expect(surface.querySelector('[data-run-block-id="tool-1"]')).toBe(tool);
-    expect(surface.querySelector(".agent-run-tail")).toBeNull();
-    expect(activeSpinners()).toHaveLength(0);
   });
 
   it("uses the active tool as the primary loading message", () => {
@@ -153,25 +133,57 @@ describe("agent run presentation", () => {
   });
 
   it.each(["requesting", "thinking", "working"] as const)(
-    "keeps the tail loader during a %s gap",
+    "shows run status with glyph and shimmer during a %s gap",
     (phase) => {
       render(
-        <AgentRunLoader
-          busy
+        <RunStatusIndicator
           phase={phase}
           activityTrace={[]}
         />,
       );
 
-      expect(document.querySelector(".agent-run-tail")).not.toBeNull();
-      expect(document.querySelectorAll(".agent-run-loader--active")).toHaveLength(1);
+      expect(document.querySelector(".run-glyph")).not.toBeNull();
+      expect(document.querySelectorAll(".agent-run-status--shimmer")).toHaveLength(1);
+      expect(screen.getByRole("status").textContent).toBeTruthy();
     },
   );
 
-  it("turns permission waiting into a static state instead of a spinner", () => {
+  it("keeps timeline process label neutral while dock status owns the step copy", () => {
     render(
-      <AgentRunLoader
-        busy
+      <div data-testid="surface">
+        <AgentRunTimeline
+          content=""
+          live
+          items={[{
+            id: "reason-1",
+            kind: "reasoning",
+            content: "",
+            streaming: true,
+          }]}
+        />
+        <RunStatusIndicator
+          phase="thinking"
+          activityTrace={[{
+            id: "reason-1",
+            kind: "reasoning",
+            content: "",
+            streaming: true,
+          }]}
+        />
+      </div>,
+    );
+
+    const surface = screen.getByTestId("surface");
+    expect(surface.querySelector(".process-trace-panel-label")?.textContent).toBe("执行过程");
+    expect(surface.querySelector(".run-glyph")).not.toBeNull();
+    expect(surface.querySelectorAll(".agent-run-status--shimmer")).toHaveLength(1);
+    expect(screen.getByRole("status").textContent).toContain("正在思考页面内容");
+    expect(surface.textContent).not.toContain("思考中");
+  });
+
+  it("turns permission waiting into a static glyph instead of a shimmer", () => {
+    render(
+      <RunStatusIndicator
         phase="waiting"
         activityTrace={[{
           id: "tool-awaiting-approval",
@@ -183,12 +195,13 @@ describe("agent run presentation", () => {
       />,
     );
 
-    expect(screen.getByRole("status").textContent).toBe("等待你的确认");
-    expect(document.querySelector(".agent-run-loader--paused")).not.toBeNull();
-    expect(document.querySelector(".agent-run-loader--active")).toBeNull();
+    expect(screen.getByRole("status").textContent).toContain("等待你的确认");
+    expect(document.querySelector(".run-glyph--paused")).not.toBeNull();
+    expect(document.querySelector(".agent-run-status--paused")).not.toBeNull();
+    expect(document.querySelector(".agent-run-status--shimmer")).toBeNull();
   });
 
-  it("renders independent spinner and failure state for same-name tool calls", () => {
+  it("renders independent running pulse and failure state for same-name tool calls", () => {
     const rows = buildProcessTraceRows([
       {
         id: "tool-a",
@@ -304,7 +317,7 @@ describe("agent run presentation", () => {
     const interrupted = render(
       <AgentRunTerminalNotice status="interrupted" />,
     );
-    expect(interrupted.getByRole("status").textContent).toBe("■会话已中断");
+    expect(interrupted.getByRole("status").textContent).toBe("会话已中断");
     interrupted.unmount();
 
     render(

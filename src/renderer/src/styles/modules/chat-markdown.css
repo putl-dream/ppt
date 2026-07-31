@@ -1,39 +1,57 @@
-/* Markdown rendering inside chat messages */
+/* Markdown rendering inside chat messages — single typography source of truth */
 
+/* CJK body copy needs tracking and leading above the Latin default to breathe. */
 .markdown-body {
-  font-size: 14px;
-  line-height: 1.7;
+  font-size: var(--text-md);
+  line-height: 1.8;
+  letter-spacing: 0.02em;
   color: var(--text-primary);
-  word-break: break-word;
+  overflow-wrap: break-word;
 }
+
 /* Padding belongs to .user-message-bubble; keep the markdown body flush. */
 .markdown-body.user-message-text {
-  font-size: 14px;
-  line-height: 1.6;
   padding: 0;
 }
+
+.markdown-body.assistant-response {
+  width: auto;
+  max-width: 72ch;
+  padding: 0;
+}
+
 .markdown-body > :first-child {
   margin-top: 0;
 }
 .markdown-body > :last-child {
   margin-bottom: 0;
 }
+
+.markdown-body p,
+.markdown-body li,
+.markdown-body blockquote,
+.markdown-body td {
+  text-wrap: pretty;
+}
+
 .markdown-body p {
-  margin: 0 0 0.75em;
+  margin: 0 0 12px;
 }
 .markdown-body p:last-child {
   margin-bottom: 0;
 }
+
 .markdown-body h1,
 .markdown-body h2,
 .markdown-body h3,
 .markdown-body h4,
 .markdown-body h5,
 .markdown-body h6 {
-  margin: 1.25em 0 0.5em;
+  margin: 20px 0 8px;
   font-family: var(--font-display);
-  font-weight: 600;
+  font-weight: var(--font-weight-semibold);
   line-height: 1.35;
+  letter-spacing: -0.01em;
   color: var(--text-primary);
 }
 .markdown-body h1 { font-size: 1.5em; }
@@ -45,19 +63,21 @@
 .markdown-body h3:first-child {
   margin-top: 0;
 }
+
 .markdown-body ul,
 .markdown-body ol {
-  margin: 0.5em 0;
+  margin: 6px 0;
   padding-left: 1.5em;
 }
 .markdown-body li {
-  margin: 0.25em 0;
+  margin: 2px 0;
 }
 .markdown-body li > p {
-  margin: 0.25em 0;
+  margin: 2px 0;
 }
+
 .markdown-body blockquote {
-  margin: 0.75em 0;
+  margin: 12px 0;
   padding: 0.5em 0 0.5em 1em;
   border-left: 3px solid var(--accent-primary);
   color: var(--text-secondary);
@@ -70,17 +90,18 @@
 .markdown-body blockquote > :last-child {
   margin-bottom: 0;
 }
+
 .markdown-body code {
   font-family: var(--font-mono);
-  font-size: 0.88em;
-  padding: 0.15em 0.4em;
+  font-size: 0.92em;
+  padding: 0.1em 0.3em;
   border-radius: var(--control-radius-xs);
-  background: var(--surface-sunken);
-  border: 1px solid var(--border-default);
-  color: var(--accent-primary);
+  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+  border: none;
+  color: var(--text-primary);
 }
 .markdown-body pre {
-  margin: 0.75em 0;
+  margin: 12px 0;
   padding: 12px 14px;
   border-radius: var(--button-border-radius);
   background: var(--surface-sunken);
@@ -95,6 +116,7 @@
   font-size: 0.85em;
   line-height: 1.6;
 }
+
 .markdown-body a {
   color: var(--accent-primary);
   text-decoration: none;
@@ -102,14 +124,16 @@
 .markdown-body a:hover {
   text-decoration: underline;
 }
+
 .markdown-body hr {
-  margin: 1em 0;
+  margin: 12px 0;
   border: none;
   border-top: 1px solid var(--border-default);
 }
+
 .markdown-body table {
   width: 100%;
-  margin: 0.75em 0;
+  margin: 12px 0;
   border-collapse: collapse;
   font-size: 0.92em;
 }
@@ -126,6 +150,7 @@
 .markdown-body tr:nth-child(even) td {
   background: var(--surface-sunken);
 }
+
 .markdown-body strong {
   font-weight: 600;
   color: var(--text-primary);
@@ -135,26 +160,4 @@
 }
 .markdown-body del {
   color: var(--text-muted);
-}
-.markdown-body.user-message-text {
-  padding: 0;
-  font-size: 14px;
-  line-height: 1.65;
-}
-.markdown-body {
-  font-size: 14px;
-  line-height: 1.72;
-}
-.markdown-body p {
-  margin-bottom: 0.8em;
-}
-.markdown-body h1,
-.markdown-body h2,
-.markdown-body h3,
-.markdown-body h4,
-.markdown-body h5,
-.markdown-body h6 {
-  margin-top: 1.4em;
-  font-weight: var(--font-weight-semibold);
-  letter-spacing: -0.01em;
 }

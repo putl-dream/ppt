@@ -89,13 +89,20 @@ allowed-tools:
 
 ## 4. 写入设计规格
 
-用 `WriteFile` 写 `design/design-spec.json`。最低结构：
+用 `WriteFile` 写 `design/design-spec.json`。最低结构（必须可通过运行时 SVG deck 锁契约校验）：
 
 ```json
 {
   "version": 1,
   "canvas": {"width": 1280, "height": 720},
-  "communicationContract": {},
+  "communicationContract": {
+    "audience": "目标受众",
+    "objective": "演示要推动的决策或行动",
+    "desiredOutcome": "受众看完后应理解、相信或执行什么",
+    "coreMessage": "整套演示唯一核心判断",
+    "deliveryContext": "现场讲述 / 会议讨论 / 异步近读",
+    "afterUse": "会后决策、留档、传播或培训复用"
+  },
   "presentationDesignSystem": {
     "version": 2,
     "argumentMode": "pyramid",
@@ -115,6 +122,6 @@ allowed-tools:
 }
 ```
 
-字段值必须具体、内部一致，不能把待决定项留给 SVG Executor。该文件不含可见对象，也不授权预览或提交工具补对象。
+`communicationContract` 六个字符串字段、`presentationDesignSystem`（Design System v2）以及顶层 `argumentMode` / `visualStyle.id` / `readingMode` 必须齐全且轴一致；空对象 `{}` 不能代替沟通契约。字段值必须具体，不能把待决定项留给 SVG Executor。该文件不含可见对象，也不授权预览或提交工具补对象。
 
 完成后由 `ppt-design-layout` 读取同一文件，为每页冻结最终文案和构图意图。后续不得无故重新选择 mode 或 style；若用户改变沟通目标，先更新设计规格，再继续页面规划。

@@ -135,6 +135,79 @@ function sameProjectedActivity(
   return false;
 }
 
+function processActivityIdentity(item: AgentActivityItem): string {
+  if (item.kind === "tool") return `tool:${item.toolCallId}`;
+  if (item.kind === "tool-approval") return `approval:${item.approvalId}`;
+  if (item.kind === "task") return `task:${item.taskId}`;
+  if (item.kind === "tasklist") return "tasklist";
+  if (item.kind === "reasoning") return `reasoning:${item.modelStep ?? 0}`;
+  if (item.kind === "step") return `step:${item.text}`;
+  return `${item.kind}:${item.id}`;
+}
+
+function missingProcessItems(
+  present: AgentActivityItem[] | undefined,
+  candidates: AgentActivityItem[],
+): AgentActivityItem[] {
+  const presentKeys = new Set(
+    (present ?? [])
+      .filter((item) => item.kind !== "response")
+      .map(processActivityIdentity),
+  );
+  return candidates.filter(
+    (item) => item.kind !== "response" && !presentKeys.has(processActivityIdentity(item)),
+  );
+}
+
+/**
+ * Keep main-process terminal fields, but fold in process items the renderer
+ * observed that never made it into the authoritative projection (e.g. tools
+ * dropped by an incomplete reconcile).
+ */
+function foldMissingProcessActivity(
+  authoritative: AgentActivityItem[] | undefined,
+  renderer: AgentActivityItem[] | undefined,
+): AgentActivityItem[] | undefined {
+  if (!renderer?.length) return authoritative;
+  if (!authoritative?.length) return renderer;
+  const missing = missingProcessItems(authoritative, renderer);
+  if (missing.length === 0) return authoritative;
+  return [...authoritative, ...missing];
+}
+
+function traceMissingProjectedProcessItems(
+  existing: AgentActivityItem[] | undefined,
+  projected: AgentActivityItem[],
+): boolean {
+  return missingProcessItems(existing, projected).length > 0;
+}
+
+function unfinishedToolStateForRunStatus(
+  status: SessionChatMessage["runStatus"],
+): "denied" | "failed" {
+  return status === "interrupted" ? "denied" : "failed";
+}
+
+function activityInRemainingTrace(
+  needle: AgentActivityItem,
+  needleContent: string,
+  haystack: AgentActivityItem[],
+  haystackContent: string,
+  fromIndex: number,
+): boolean {
+  for (let index = fromIndex; index < haystack.length; index += 1) {
+    if (sameProjectedActivity(
+      needle,
+      needleContent,
+      haystack[index]!,
+      haystackContent,
+    )) {
+      return true;
+    }
+  }
+  return false;
+}
+
 export class FileSessionStore {
   private data?: SessionFile;
   private writeQueue = Promise.resolve();
@@ -215,6 +288,9 @@ export class FileSessionStore {
         recovery.runId,
         recovery.result,
       );
+    }
+    for (const session of this.data.sessions) {
+      this.repairThinTerminalRunTraces(session);
     }
     await this.materializeProjectSandboxes();
     await this.persist();
@@ -319,6 +395,7 @@ export class FileSessionStore {
   async selectSession(sessionId: string): Promise<SessionBootstrap> {
     const data = this.requireData();
     const snapshot = this.findSession(sessionId);
+    this.repairThinTerminalRunTraces(snapshot);
     data.activeSessionId = sessionId;
     await this.persist();
     return this.getBootstrap();
@@ -512,7 +589,12 @@ export class FileSessionStore {
       return {
         ...message,
         content: authoritative.content,
-        activityTrace: authoritative.activityTrace,
+        activityTrace: compactActivityTraceForPersistence(
+          foldMissingProcessActivity(
+            authoritative.activityTrace,
+            message.activityTrace,
+          ),
+        ),
         runStatus: authoritativeStatus,
         runError: authoritative.runError,
         threadId: authoritative.threadId,
@@ -641,17 +723,62 @@ export class FileSessionStore {
             ? trace
             : markTraceComplete(
                 trace,
-                message.runStatus === "failed"
-                  ? "failed"
-                  : message.runStatus === "interrupted"
-                    ? "denied"
-                    : "failed",
+                unfinishedToolStateForRunStatus(message.runStatus),
               ),
         )
       : undefined;
     sessionChatMessageSchema.parse(structuredClone(message));
     snapshot.session.updatedAt = new Date().toISOString();
     await this.persist();
+  }
+
+  /**
+   * Reproject terminal assistant traces that lost process items relative to
+   * durable conversation events (e.g. after a prior incomplete finalize).
+   */
+  private repairThinTerminalRunTraces(snapshot: SessionSnapshot): void {
+    for (const message of snapshot.messages) {
+      if (
+        message.role !== "assistant"
+        || !message.runId
+        || message.runStatus === "running"
+        || message.runStatus === undefined
+      ) {
+        continue;
+      }
+      const projected = this.projectRunTranscript(message.runId);
+      if (projected.trace.length === 0) continue;
+      if (!traceMissingProjectedProcessItems(message.activityTrace, projected.trace)) {
+        continue;
+      }
+      // Drop stale response markers so event replay owns text offsets; keep any
+      // process items the message still has that events might have missed.
+      const processOnlyMessage: SessionChatMessage = {
+        ...message,
+        content: projected.content,
+        activityTrace: (message.activityTrace ?? []).filter(
+          (item) => item.kind !== "response",
+        ),
+      };
+      const reconciled = this.reconcileRunTranscript(processOnlyMessage, projected);
+      let content = reconciled.content || projected.content || message.content;
+      let trace = reconciled.trace;
+      if (message.content && message.content !== content) {
+        const merged = mergeResponseText(trace, content, message.content);
+        content = merged.content;
+        trace = merged.trace;
+      }
+      message.content = content;
+      message.activityTrace = trace.length > 0
+        ? compactActivityTraceForPersistence(
+            markTraceComplete(
+              trace,
+              unfinishedToolStateForRunStatus(message.runStatus),
+            ),
+          )
+        : undefined;
+      sessionChatMessageSchema.parse(structuredClone(message));
+    }
   }
 
   /**
@@ -719,6 +846,20 @@ export class FileSessionStore {
         existingIndex += 1;
         continue;
       }
+      // Prefer event projection when the existing process item still appears
+      // later. Otherwise keep the existing item — incomplete projections must
+      // not drop tools/reasoning the renderer already persisted.
+      if (!activityInRemainingTrace(
+        existing,
+        message.content,
+        projected.trace,
+        projected.content,
+        projectedIndex,
+      )) {
+        append(existing, message.content);
+        existingIndex += 1;
+        continue;
+      }
       append(nextProjected, projected.content);
       projectedIndex += 1;
     }
@@ -727,8 +868,7 @@ export class FileSessionStore {
       append(projected.trace[projectedIndex]!, projected.content);
     }
     for (; existingIndex < existingTrace.length; existingIndex += 1) {
-      const existing = existingTrace[existingIndex]!;
-      if (existing.kind === "response") append(existing, message.content);
+      append(existingTrace[existingIndex]!, message.content);
     }
     return { trace, content };
   }

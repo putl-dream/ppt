@@ -17,6 +17,7 @@ import { validateSvgPage } from "@shared/svg-page";
 import {
   SVG_DECK_DESIGN_SPEC_PATH,
   SVG_DECK_PAGE_PLAN_PATH,
+  formatSvgDeckLockIssues,
   svgDeckDesignSpecSchema,
   svgDeckPagePlanSchema,
   type SvgDeckPagePlan,
@@ -161,11 +162,7 @@ function validateJsonArtifact<T>(
   }
   const result = schema.safeParse(source);
   if (!result.success) {
-    const reason = result.error.issues
-      .slice(0, 6)
-      .map((issue) => `${issue.path.join(".") || "<root>"}: ${issue.message}`)
-      .join("; ");
-    return { probe: invalidProbe(path, reason) };
+    return { probe: invalidProbe(path, formatSvgDeckLockIssues(result.error, 6)) };
   }
   return {
     probe: { path, status: "verified", verified: true },

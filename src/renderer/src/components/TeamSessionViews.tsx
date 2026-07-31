@@ -11,7 +11,7 @@ const STATUS_COPY: Record<TeamSessionStatus, string> = {
 
 function TeamStatusMark({ status }: { status: TeamSessionStatus }) {
   if (status === "running") {
-    return <span className="step-spinner team-session-status-spinner" aria-hidden="true" />;
+    return <span className="run-status-pulse team-session-status-spinner" aria-hidden="true"><i /></span>;
   }
   const glyph = status === "completed" ? "✓" : status === "error" ? "!" : "×";
   return (

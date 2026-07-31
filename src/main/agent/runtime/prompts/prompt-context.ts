@@ -12,7 +12,8 @@ import {
   type PromptStage,
 } from "./prompt-stage";
 import {
-  probeWorkspaceArtifacts,
+  probeWorkspaceArtifactDetails,
+  type WorkspaceArtifactProbeDetails,
   type WorkspaceArtifacts,
 } from "../presentation/workspace-artifacts";
 
@@ -32,12 +33,14 @@ export interface SystemPromptContextInput {
   stepLimits?: AgentStepLimits;
   memories?: string;
   artifacts?: WorkspaceArtifacts;
+  artifactDetails?: WorkspaceArtifactProbeDetails;
   stageHint?: string;
 }
 
 export interface SystemPromptContext {
   stage: PromptStage;
   artifacts: WorkspaceArtifacts;
+  artifactDetails?: WorkspaceArtifactProbeDetails;
   enabledTools: string[];
   workspaceRoot?: string;
   memories: string;
@@ -74,14 +77,26 @@ async function readMemoryIndex(workspaceRoot?: string): Promise<string> {
 export async function buildSystemPromptContext(
   input: SystemPromptContextInput,
 ): Promise<SystemPromptContext> {
-  const [memories, artifacts] = await Promise.all([
+  const [memories, artifactDetails] = await Promise.all([
     input.memories !== undefined
       ? Promise.resolve(input.memories)
       : readMemoryIndex(input.workspaceRoot),
-    input.artifacts !== undefined
-      ? Promise.resolve(input.artifacts)
-      : probeWorkspaceArtifacts(input.workspaceRoot),
+    input.artifactDetails !== undefined
+      ? Promise.resolve(input.artifactDetails)
+      : probeWorkspaceArtifactDetails(input.workspaceRoot),
   ]);
+
+  const artifacts = input.artifacts ?? {
+    designSpec: artifactDetails.designSpec.verified,
+    pagePlan: artifactDetails.pagePlan.verified,
+    pageSvg: artifactDetails.pageSvg.verified,
+    assets: artifactDetails.assets.verified,
+    deck: artifactDetails.deck.verified,
+    exportHistory: artifactDetails.exportHistory.verified,
+    brief: artifactDetails.brief.verified,
+    outline: artifactDetails.outline.verified,
+    research: artifactDetails.research.verified,
+  };
 
   const stage = resolvePromptStage({
     request: input.request,
@@ -94,6 +109,7 @@ export async function buildSystemPromptContext(
   return {
     stage,
     artifacts,
+    artifactDetails,
     enabledTools: input.coreTools.map((tool) => tool.name).sort(),
     workspaceRoot: input.workspaceRoot,
     memories,
@@ -133,6 +149,7 @@ export function buildSystemPromptContextSync(
   return {
     stage,
     artifacts,
+    artifactDetails: input.artifactDetails,
     enabledTools: input.coreTools.map((tool) => tool.name).sort(),
     workspaceRoot: input.workspaceRoot,
     memories: input.memories ?? "",
@@ -186,6 +203,7 @@ export function serializeSystemPromptContextKey(context: SystemPromptContext): s
     requiredOutcome: context.requiredOutcome ?? "any",
     stepLimits: context.stepLimits ?? null,
     artifacts: context.artifacts,
+    artifactDetails: context.artifactDetails ?? null,
   });
 }
 

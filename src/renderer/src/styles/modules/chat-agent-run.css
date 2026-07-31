@@ -3,65 +3,30 @@
 .agent-run-timeline {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 12px;
   min-width: 0;
 }
 .agent-run-block {
   min-width: 0;
 }
 .agent-run-block--activity {
-  padding: 0 2px;
+  padding: 0;
 }
-.agent-run-tail {
-  margin-top: -8px;
-}
-.agent-run-tail-status {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-  padding: 4px 2px;
-  color: var(--text-muted);
-  font-size: var(--text-xs);
-}
-.agent-run-tail-label {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.agent-run-tail-elapsed {
-  flex-shrink: 0;
-  font-size: var(--text-2xs);
-  font-variant-numeric: tabular-nums;
+.agent-run-activity-cluster {
+  max-width: 72ch;
 }
 .agent-run-terminal-notice {
   display: flex;
-  align-items: flex-start;
+  align-items: baseline;
   gap: 8px;
-  margin: 2px 2px 8px;
-  padding: 10px 12px;
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--control-radius-md);
-  background: var(--surface-sunken);
-  color: var(--text-secondary);
-  box-shadow: var(--elevation-1);
+  margin: 2px 0 6px;
+  padding: 2px 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  box-shadow: none;
 }
 .agent-run-terminal-notice--failed {
-  border-color: color-mix(in srgb, var(--danger) 28%, var(--border-default));
-}
-.agent-run-terminal-notice-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 16px;
-  height: 16px;
-  flex: 0 0 16px;
-  color: var(--text-muted);
-  font-size: var(--text-2xs);
-  font-weight: 700;
-}
-.agent-run-terminal-notice--failed .agent-run-terminal-notice-icon {
   color: var(--danger);
 }
 .agent-run-terminal-notice-copy {
@@ -73,40 +38,30 @@
   line-height: 1.45;
 }
 .agent-run-terminal-notice-copy strong {
-  color: var(--text-primary);
-  font-size: var(--text-xs);
-  font-weight: var(--font-weight-semibold);
+  color: inherit;
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-medium);
 }
 .agent-run-terminal-notice-copy small {
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: var(--text-xs);
 }
 .agent-run-terminal-notice button {
-  padding: 2px 7px;
-  border: 1px solid var(--border-focused);
-  border-radius: var(--field-border-radius);
+  padding: 0;
+  border: 0;
   background: transparent;
-  color: var(--accent-primary);
+  color: var(--text-secondary);
   font: inherit;
-  font-size: 11px;
+  font-size: var(--text-xs);
   cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 .agent-run-terminal-notice button:hover {
-  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+.agent-run-terminal-notice--failed button {
+  color: var(--danger);
 }
 
-/* Loader dots share rules with process-trace in chat.css */
-
-.agent-run-timeline {
-  gap: 13px;
-}
-.agent-run-activity-cluster {
-  max-width: 72ch;
-}
-.agent-run-block--activity {
-  padding: 0;
-}
-.agent-run-tail-status {
-  padding-left: 42px;
-  font-size: 12px;
-}
+/* Live status shimmer / pulse rules live in chat.css */

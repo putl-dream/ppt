@@ -7,12 +7,18 @@ import {
 } from "../../runtime/tools/tool-access-policy";
 import {
   globWorkspaceFiles,
+  countOccurrences,
+  WorkspaceFileError,
   type WorkspaceFileService,
 } from "./workspace-file-service";
 import type {
   PptLifecycleToolBridge,
   ToolRuntimeBehavior,
 } from "../tool-definition";
+import {
+  isSvgDeckLockPath,
+  validateSvgDeckLockContent,
+} from "../core/svg-deck-locks";
 
 export interface WorkspaceFileToolContext {
   readonly workspaceRoot?: string;
@@ -151,7 +157,8 @@ export const writeFileContract: WorkspaceFileToolContract<
   name: "WriteFile",
   description:
     "在 workspace 内创建或原子覆盖 UTF-8 文本文件。覆盖已有文件时，"
-    + "必须具有当前 thread 的 ReadFile receipt；磁盘版本变化会拒绝写入。",
+    + "必须具有当前 thread 的 ReadFile receipt；磁盘版本变化会拒绝写入。"
+    + "写入 design/design-spec.json 或 slides/page-plan.json 时会按 SVG deck 锁契约做硬校验，非法内容不落盘。",
   inputSchema: writeFileSchema,
   outputSchema: writeFileOutputSchema,
   behavior: {
@@ -165,6 +172,7 @@ export const writeFileContract: WorkspaceFileToolContract<
   permission: WORKSPACE_FILE_TOOL_PERMISSION_PROFILES.WriteFile,
   isEnabled: hasWorkspaceFileService,
   execute: async (args, context) => {
+    assertSvgDeckLockContentIfNeeded(args.path, args.content);
     const result = await requireFileService(context).write(
       args.path,
       args.content,
@@ -182,7 +190,8 @@ export const editFileContract: WorkspaceFileToolContract<
   name: "EditFile",
   description:
     "在已读取的 workspace 文件中执行精确文本替换。默认要求 old_string 唯一匹配；"
-    + "只有显式 replace_all=true 才会替换所有匹配，版本冲突时拒绝修改。",
+    + "只有显式 replace_all=true 才会替换所有匹配，版本冲突时拒绝修改。"
+    + "编辑 design/design-spec.json 或 slides/page-plan.json 时，替换后的完整内容必须满足 SVG deck 锁契约。",
   inputSchema: editFileSchema,
   outputSchema: editFileOutputSchema,
   behavior: {
@@ -196,7 +205,29 @@ export const editFileContract: WorkspaceFileToolContract<
   permission: WORKSPACE_FILE_TOOL_PERMISSION_PROFILES.EditFile,
   isEnabled: hasWorkspaceFileService,
   execute: async (args, context) => {
-    const result = await requireFileService(context).edit(
+    const fileService = requireFileService(context);
+    if (isSvgDeckLockPath(args.path)) {
+      const current = await fileService.read(args.path);
+      const replacements = countOccurrences(current.content, args.old_string);
+      if (replacements === 0) {
+        throw new WorkspaceFileError(
+          "OLD_STRING_NOT_FOUND",
+          `old_string not found in ${args.path}`,
+        );
+      }
+      if (!args.replace_all && replacements > 1) {
+        throw new WorkspaceFileError(
+          "AMBIGUOUS_EDIT",
+          `old_string matches ${replacements} locations in ${args.path}; `
+          + "provide more context or set replace_all=true.",
+        );
+      }
+      const updated = args.replace_all
+        ? current.content.split(args.old_string).join(args.new_string)
+        : current.content.replace(args.old_string, args.new_string);
+      assertSvgDeckLockContentIfNeeded(args.path, updated);
+    }
+    const result = await fileService.edit(
       args.path,
       args.old_string,
       args.new_string,
@@ -267,4 +298,16 @@ async function observeArtifactChange(
     paths,
     source,
   });
+}
+
+function assertSvgDeckLockContentIfNeeded(path: string, content: string): void {
+  if (!isSvgDeckLockPath(path)) return;
+  try {
+    validateSvgDeckLockContent(path, content);
+  } catch (error) {
+    throw new WorkspaceFileError(
+      "LOCK_SCHEMA_INVALID",
+      error instanceof Error ? error.message : String(error),
+    );
+  }
 }

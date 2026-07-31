@@ -368,8 +368,8 @@ const WINDOW_FRAME_BY_THEME: Record<WindowThemePreset, { background: string; sym
     nativeTheme: "light",
   },
   dark: {
-    background: "#0b0c0e",
-    symbol: "#f4f5f6",
+    background: "#181818",
+    symbol: "#ffffff",
     nativeTheme: "dark",
   },
 };

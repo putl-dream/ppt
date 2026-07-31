@@ -10,17 +10,18 @@
 [data-skin="studio"][data-color-scheme="dark"] {
   color-scheme: dark;
 
-  --surface-canvas: #0b0c0e;
-  --surface-base: #111316;
-  --surface-raised: #16181c;
-  --surface-sunken: #1c1f24;
-  --surface-overlay: #23272e;
+  /* Neutral reading surfaces anchored on the reference #181818 canvas. */
+  --surface-canvas: #181818;
+  --surface-base: #1c1c1c;
+  --surface-raised: #202020;
+  --surface-sunken: #242424;
+  --surface-overlay: #2a2a2a;
   --surface-hover: rgba(255, 255, 255, 0.05);
   --surface-active: rgba(255, 255, 255, 0.08);
 
-  --text-primary: #f4f5f6;
-  --text-secondary: #a8b0b8;
-  --text-muted: #7a808a;
+  --text-primary: #ffffff;
+  --text-secondary: #b0b0b0;
+  --text-muted: #808080;
   --text-on-accent: #ffffff;
 
   --border-subtle: rgba(255, 255, 255, 0.06);

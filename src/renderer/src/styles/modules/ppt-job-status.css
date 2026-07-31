@@ -44,8 +44,3 @@
 .ppt-job-status-bar.is-cancelled {
   color: var(--danger);
 }
-
-.ppt-job-status-bar.is-compact {
-  padding: 6px 14px;
-  border-radius: 0;
-}

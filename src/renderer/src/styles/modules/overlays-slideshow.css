@@ -32,7 +32,8 @@
   position: absolute;
   top: 0; left: 0; right: 0;
   height: 64px;
-  padding: 0 40px;
+  padding-left: 40px;
+  padding-right: max(40px, calc(100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw) + 16px));
   display: flex;
   justify-content: space-between;
   align-items: center;

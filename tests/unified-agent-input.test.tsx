@@ -28,6 +28,7 @@ describe("UnifiedAgentInput draft workspace", () => {
     const sendButton = html.match(/<button[^>]*aria-label="发送指令"[^>]*>/)?.[0];
     expect(sendButton).toBeDefined();
     expect(sendButton).not.toContain("disabled");
+    expect(sendButton).toContain("send-cta-btn is-ready");
   });
 
   it("does not expose the retired Lean mode switch", () => {

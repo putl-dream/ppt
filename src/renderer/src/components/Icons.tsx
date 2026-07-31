@@ -349,8 +349,8 @@ export const SendIcon = ({ size = 20, className, ...props }: IconProps) => (
     className={className}
     {...props}
   >
-    <path d="m22 2-7 20-4-9-9-4Z" />
-    <path d="M22 2 11 13" />
+    <path d="M12 20V5" />
+    <path d="m5 12 7-7 7 7" />
   </svg>
 );
 

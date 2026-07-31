@@ -91,11 +91,12 @@ describe("PPTMirror preview workspace", () => {
   it("hosts the latest inspection batch in the right preview and syncs page selection", () => {
     render(<MirrorHarness />);
 
-    expect(screen.getByText("右侧预览升级")).not.toBeNull();
+    expect(screen.getByText("PPT 预览")).not.toBeNull();
     expect(screen.getByRole("tab", { name: /检查结果\s*2/ }).getAttribute("aria-selected"))
       .toBe("true");
-    expect(screen.getAllByText("已检查 2 页").length).toBeGreaterThan(0);
-    expect(screen.getByText("点击查看大图")).not.toBeNull();
+    expect(screen.getByText(/覆盖 2 \/ 2 页/)).not.toBeNull();
+    expect(screen.queryByText("点击查看大图")).toBeNull();
+    expect(screen.queryByText("页面预览")).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "查看 核心结论 大图" }));
     expect(screen.getByRole("dialog", { name: "核心结论 页面预览" })).not.toBeNull();

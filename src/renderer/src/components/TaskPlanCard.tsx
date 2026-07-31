@@ -7,7 +7,9 @@ function TaskStatusIcon({ task }: { task: AgentTaskNode }) {
   if (task.review.state === "requested") return <span className="task-plan-icon review-requested" aria-hidden="true">◇</span>;
   const { status } = task;
   if (status === "completed") return <span className="task-plan-icon done" aria-hidden="true">✓</span>;
-  if (status === "in_progress") return <span className="step-spinner task-plan-spinner" aria-hidden="true" />;
+  if (status === "in_progress") {
+    return <span className="run-status-pulse task-plan-spinner" aria-hidden="true"><i /></span>;
+  }
   return <span className="task-plan-icon pending" aria-hidden="true">○</span>;
 }
 

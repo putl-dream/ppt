@@ -11,6 +11,7 @@ import { normalizeWorkspaceSvgPath } from "../../../deck/svg-page-loader";
 import { hashArtifactValue } from "../../../presentation-lifecycle/content-addressed-blob-store";
 import type { PptLifecycleToolBridge } from "../tool-definition";
 import {
+  assertSvgPageBelongsToPlan,
   readSvgDeckLocks,
   type SvgDeckDesignSpec,
   type SvgDeckPagePlan,
@@ -36,7 +37,7 @@ export async function commitSvgPagePreviewLifecycle(input: {
 }): Promise<void> {
   input.lifecycle.requireActiveCapability(SVG_PREVIEW_CAPABILITIES);
   const locks = await readSvgDeckLocks(input.fileService, "PreviewSvgPage");
-  assertPageBelongsToPlan(input.page.sourcePath, locks.pagePlan);
+  assertSvgPageBelongsToPlan(input.page.sourcePath, locks.pagePlan);
   const values = await storeLifecycleValues(
     input.lifecycle,
     input.page,
@@ -104,7 +105,7 @@ export async function assertSvgPageLifecycleCurrent(input: {
 }): Promise<void> {
   input.lifecycle.requireActiveCapability(SVG_AUTHORING_CAPABILITIES);
   const locks = input.locks ?? await readSvgDeckLocks(input.fileService);
-  assertPageBelongsToPlan(input.page.sourcePath, locks.pagePlan);
+  assertSvgPageBelongsToPlan(input.page.sourcePath, locks.pagePlan);
   const values = currentLifecycleValues(input.page, locks);
   const projection = input.lifecycle.requireActiveCapability(
     SVG_AUTHORING_CAPABILITIES,
@@ -412,22 +413,6 @@ function previewReceiptArtifactId(sourcePath: string): string {
 
 function sourceAssetArtifactId(sourcePath: string): string {
   return `source-asset:${sourcePath}`;
-}
-
-function assertPageBelongsToPlan(
-  sourcePath: string,
-  pagePlan: SvgDeckPagePlan,
-): void {
-  const normalized = normalizeWorkspaceSvgPath(sourcePath);
-  if (
-    !pagePlan.slides.some(
-      (slide) => normalizeWorkspaceSvgPath(slide.path) === normalized,
-    )
-  ) {
-    throw new Error(
-      `${sourcePath} is not present in the current slides/page-plan.json.`,
-    );
-  }
 }
 
 function passedValidation(validator: string): ValidationReport {

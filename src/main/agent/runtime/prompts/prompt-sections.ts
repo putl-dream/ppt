@@ -4,12 +4,16 @@ import type { SkillRegistry } from "../../skills/loadSkillsDir";
 import type { SkillCard } from "../../skills/skill-types";
 import type { ToolDefinition } from "../../tools/tool-definition";
 import { toToolCard } from "../../tools/tool-card";
-import type { WorkspaceArtifacts } from "../presentation/workspace-artifacts";
+import type {
+  WorkspaceArtifactProbeDetails,
+  WorkspaceArtifacts,
+} from "../presentation/workspace-artifacts";
 import { describePromptStage, type PromptStage } from "./prompt-stage";
 import {
   isSkillRecommendedForStage,
   rankSkillCatalogForStage,
 } from "./skill-stage-policy";
+import { formatSvgDeckLockContractBlock } from "../../tools/core/svg-deck-locks";
 
 export type PromptSectionId =
   | "identity"
@@ -84,6 +88,7 @@ export interface WorkspaceSectionInput {
   workspaceRoot?: string;
   currentSlideId?: string;
   artifacts?: WorkspaceArtifacts;
+  artifactDetails?: WorkspaceArtifactProbeDetails;
 }
 
 export interface MemorySectionInput {
@@ -233,23 +238,69 @@ ${tools}
 ${guidance.join("\n")}`;
 }
 
-function formatArtifactState(artifacts?: WorkspaceArtifacts): string {
-  if (!artifacts) return "（未探测 Workspace 产物）";
-  const format = (ready: boolean) => ready ? "verified" : "missing/unverified";
+function formatArtifactProbe(
+  label: string,
+  probe: { status: string; verified: boolean; reason?: string } | undefined,
+  fallbackVerified?: boolean,
+): string {
+  if (probe) {
+    if (probe.verified) return `- ${label}: verified`;
+    if (probe.status === "invalid" && probe.reason) {
+      return `- ${label}: invalid: ${probe.reason}`;
+    }
+    if (probe.status === "missing") return `- ${label}: missing`;
+    if (probe.status === "empty") {
+      return `- ${label}: empty${probe.reason ? `: ${probe.reason}` : ""}`;
+    }
+    if (probe.status === "default") {
+      return `- ${label}: default/unverified${probe.reason ? `: ${probe.reason}` : ""}`;
+    }
+    return `- ${label}: ${probe.status}`;
+  }
+  if (fallbackVerified === undefined) return `- ${label}: （未探测）`;
+  return `- ${label}: ${fallbackVerified ? "verified" : "missing/unverified"}`;
+}
+
+function formatArtifactState(
+  artifacts?: WorkspaceArtifacts,
+  details?: WorkspaceArtifactProbeDetails,
+): string {
+  if (!artifacts && !details) return "（未探测 Workspace 产物）";
   return [
-    `- design/design-spec.json: ${format(artifacts.designSpec)}`,
-    `- slides/page-plan.json: ${format(artifacts.pagePlan)}`,
-    `- slides/svg/*.svg: ${format(artifacts.pageSvg)}`,
-    `- assets/**: ${format(artifacts.assets)}`,
-    `- deck/snapshot.json: ${format(artifacts.deck)}`,
-    `- history/exports.json: ${format(artifacts.exportHistory)}`,
-    `- optional brief.md: ${format(artifacts.brief)}`,
-    `- optional outline.md: ${format(artifacts.outline)}`,
-    `- optional research/**: ${format(artifacts.research)}`,
+    formatArtifactProbe("design/design-spec.json", details?.designSpec, artifacts?.designSpec),
+    formatArtifactProbe("slides/page-plan.json", details?.pagePlan, artifacts?.pagePlan),
+    formatArtifactProbe("slides/svg/*.svg", details?.pageSvg, artifacts?.pageSvg),
+    formatArtifactProbe("assets/**", details?.assets, artifacts?.assets),
+    formatArtifactProbe("deck/snapshot.json", details?.deck, artifacts?.deck),
+    formatArtifactProbe("history/exports.json", details?.exportHistory, artifacts?.exportHistory),
+    formatArtifactProbe("optional brief.md", details?.brief, artifacts?.brief),
+    formatArtifactProbe("optional outline.md", details?.outline, artifacts?.outline),
+    formatArtifactProbe("optional research/**", details?.research, artifacts?.research),
   ].join("\n");
 }
 
+function shouldInjectSvgDeckLockContract(
+  stage: PromptStage,
+  artifacts?: WorkspaceArtifacts,
+  details?: WorkspaceArtifactProbeDetails,
+): boolean {
+  if (stage !== "discover" && stage !== "author" && stage !== "design") {
+    return false;
+  }
+  const designReady = details?.designSpec.verified ?? artifacts?.designSpec ?? false;
+  const planReady = details?.pagePlan.verified ?? artifacts?.pagePlan ?? false;
+  return !designReady || !planReady;
+}
+
 export function buildWorkspaceSection(input: WorkspaceSectionInput): string {
+  const lockContract = shouldInjectSvgDeckLockContract(
+    input.stage,
+    input.artifacts,
+    input.artifactDetails,
+  )
+    ? `\n\n${formatSvgDeckLockContractBlock()}`
+    : "";
+
   return `## Workspace
 
 - 工作目录: ${input.workspaceRoot ?? "未配置"}
@@ -258,13 +309,13 @@ export function buildWorkspaceSection(input: WorkspaceSectionInput): string {
 
 ### Workflow Artifact State
 
-${formatArtifactState(input.artifacts)}
+${formatArtifactState(input.artifacts, input.artifactDetails)}
 
 文件系统探测只描述当前作者文件；业务完成、等待与 stale 以 PptJob 投影为准，聊天中的旧计划和文件存在本身都不是完成证明。
 
 新建流程的作者文件是 design/design-spec.json、slides/page-plan.json、slides/svg/*.svg 与 assets/**。brief.md、outline.md、research/** 仅为可选参考；storyboard/layout-plan 不属于新建生命周期事实源。主 Agent 与 teammate 都可使用受沙箱和权限保护的文件工具直接处理 Workspace。
 
-画布为 1280x720，Presentation ID 必须唯一。设计或图片变更后应依据当前可用的预览、校验或导出产物检查结果；图片来源与授权状态必须保留。`;
+画布为 1280x720，Presentation ID 必须唯一。设计或图片变更后应依据当前可用的预览、校验或导出产物检查结果；图片来源与授权状态必须保留。${lockContract}`;
 }
 
 export function buildMemorySection(input: MemorySectionInput): string {

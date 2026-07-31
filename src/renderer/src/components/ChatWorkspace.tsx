@@ -9,7 +9,6 @@ import {
   OpenPreviewIcon,
 } from "./Icons";
 import { UnifiedAgentInput } from "./UnifiedAgentInput";
-import { AgentRunLoader } from "./AgentRunLoader";
 import { AgentRunTimeline } from "./AgentRunTimeline";
 import { MessageMarkdown } from "./MessageMarkdown";
 import { AgentRunTerminalNotice } from "./AgentRunTerminalNotice";
@@ -31,8 +30,6 @@ import {
 } from "@shared/team-session";
 import { FocusedTeamSession } from "./TeamSessionViews";
 import type { AgentRunPhase } from "../agentRunPresentation";
-import { useProjectStore } from "./project-store";
-import { PptJobStatusBar } from "./PptJobStatusBar";
 
 type ChatMessage = SessionChatMessage;
 type QuestionEvent = Extract<DisplayEvent, { kind: "interaction.question-requested" }>;
@@ -160,7 +157,6 @@ interface ChatWorkspaceProps {
   selectedModelId: string;
   setSelectedModelId: (val: string) => void;
   workspaceReady: boolean;
-  sandboxName: string;
   onPrepareWorkspace: () => void;
   triggerToast: (msg: string) => void;
 }
@@ -200,11 +196,9 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
   selectedModelId,
   setSelectedModelId,
   workspaceReady,
-  sandboxName,
   onPrepareWorkspace,
   triggerToast,
 }) => {
-  const pptJob = useProjectStore((state) => state.pptJob);
   const [showSlashMenu, setShowSlashMenu] = useState(false);
   const [editingMsgId, setEditingMsgId] = useState<string | null>(null);
   const [editingText, setEditingText] = useState("");
@@ -511,8 +505,10 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
             onCancelRun={onCancelRun}
             isCancellingRun={isCancellingRun}
             sandboxReady={workspaceReady}
-            sandboxName={sandboxName}
             onPrepareWorkspace={onPrepareWorkspace}
+            agentRunPhase={agentRunPhase}
+            activityTrace={activityTrace}
+            runStartedAt={activeRunStartedAtRef.current ?? undefined}
           />
 
           <div className="center-suggestions">
@@ -590,8 +586,6 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
           )}
         </div>
       </div>
-
-      {pptJob ? <PptJobStatusBar pptJob={pptJob} compact /> : null}
 
       {/* 核心 AI 对话信息流 */}
       <div className="chat-scroll-viewport" ref={scrollViewportRef}>
@@ -757,14 +751,6 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
           />
         )}
 
-        {/* 当前活动只出现在时间线尾部；正文流式展示时自动让位。 */}
-        <AgentRunLoader
-          busy={busy}
-          phase={agentRunPhase}
-          activityTrace={activityTrace}
-          startedAt={activeRunStartedAtRef.current ?? undefined}
-        />
-
           </>
         ) : selectedTeamSession ? (
           <FocusedTeamSession session={selectedTeamSession} />
@@ -823,7 +809,9 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
             onCancelRun={onCancelRun}
             isCancellingRun={isCancellingRun}
             sandboxReady
-            sandboxName={sandboxName}
+            agentRunPhase={agentRunPhase}
+            activityTrace={activityTrace}
+            runStartedAt={activeRunStartedAtRef.current ?? undefined}
           />
         </div>
         </div>

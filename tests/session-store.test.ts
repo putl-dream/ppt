@@ -921,4 +921,191 @@ describe("SQLite session store", () => {
     const response = message.activityTrace?.find((item) => item.kind === "response");
     expect(response && getResponseBlockContent(response, message.content)).toBe("导出完成");
   });
+
+  it("keeps renderer tools when finalize projection is incomplete then session is reselected", async () => {
+    const { store } = await createStore();
+    const created = await store.createSession({ title: "Interrupt tools" });
+    const sessionId = created.activeSession!.session.id;
+    const runId = "run-interrupt-tools";
+
+    store.conversationDatabase.beginRun({
+      runId,
+      sessionId,
+      request: "build",
+    });
+    store.conversationDatabase.appendRuntimeEvent(runId, "text_chunk", {
+      type: "text-chunk",
+      attemptId: "attempt-1",
+      chunk: "正在处理",
+    });
+    // Only one tool landed in durable events; the renderer also saw a second tool.
+    store.conversationDatabase.appendRuntimeEvent(runId, "tool_started", {
+      type: "tool-state",
+      toolCallId: "call-read",
+      toolName: "ReadPresentationSnapshot",
+      status: "running",
+      message: "reading",
+    });
+    store.conversationDatabase.appendRuntimeEvent(runId, "tool_finished", {
+      type: "tool-state",
+      toolCallId: "call-read",
+      toolName: "ReadPresentationSnapshot",
+      status: "denied",
+      message: "cancelled",
+    });
+
+    await store.saveMessages(sessionId, [{
+      id: "a-interrupt-tools",
+      role: "assistant",
+      content: "正在处理",
+      runId,
+      runStatus: "running",
+      activityTrace: [
+        {
+          id: "response-1",
+          kind: "response",
+          start: 0,
+          end: 4,
+          attemptId: "attempt-1",
+          streaming: false,
+        },
+        {
+          id: "tool-read",
+          kind: "tool",
+          toolCallId: "call-read",
+          toolName: "ReadPresentationSnapshot",
+          status: "running",
+        },
+        {
+          id: "tool-write",
+          kind: "tool",
+          toolCallId: "call-write",
+          toolName: "WriteFile",
+          status: "running",
+        },
+      ],
+    }]);
+
+    await store.finalizeAgentRunMessage(sessionId, runId, {
+      status: "interrupted",
+      threadId: "thread-interrupt-tools",
+    });
+
+    const afterFinalize = store.getSession(sessionId).messages.at(-1)!;
+    expect(afterFinalize.runStatus).toBe("interrupted");
+    expect(afterFinalize.activityTrace?.filter((item) => item.kind === "tool")).toEqual([
+      expect.objectContaining({ toolCallId: "call-read", status: "denied" }),
+      expect.objectContaining({ toolCallId: "call-write", status: "denied" }),
+    ]);
+
+    // Renderer saves an interrupted message whose process trace is thinner than
+    // main's — equal status must not wipe tools that only main retained, and
+    // must still fold renderer-only tools when main is the thin side.
+    await store.saveMessages(sessionId, [{
+      ...afterFinalize,
+      activityTrace: [
+        {
+          id: "response-1",
+          kind: "response",
+          start: 0,
+          end: 4,
+          attemptId: "attempt-1",
+          streaming: false,
+        },
+        {
+          id: "tool-read",
+          kind: "tool",
+          toolCallId: "call-read",
+          toolName: "ReadPresentationSnapshot",
+          status: "denied",
+        },
+        {
+          id: "tool-extra",
+          kind: "tool",
+          toolCallId: "call-extra",
+          toolName: "AskUserQuestion",
+          status: "denied",
+        },
+      ],
+    }]);
+
+    const afterSave = store.getSession(sessionId).messages.at(-1)!;
+    const toolIds = afterSave.activityTrace
+      ?.filter((item) => item.kind === "tool")
+      .map((item) => item.toolCallId)
+      .sort();
+    expect(toolIds).toEqual(["call-extra", "call-read", "call-write"]);
+
+    const other = await store.createSession({ title: "Other" });
+    await store.selectSession(other.activeSession!.session.id);
+    const restored = await store.selectSession(sessionId);
+    const selected = restored.activeSession!.messages.at(-1)!;
+    expect(selected.activityTrace?.filter((item) => item.kind === "tool").map(
+      (item) => item.toolCallId,
+    ).sort()).toEqual(["call-extra", "call-read", "call-write"]);
+  });
+
+  it("repairs a thin interrupted trace from conversation events on selectSession", async () => {
+    const { store } = await createStore();
+    const created = await store.createSession({ title: "Thin repair" });
+    const sessionId = created.activeSession!.session.id;
+    const runId = "run-thin-repair";
+
+    store.conversationDatabase.beginRun({
+      runId,
+      sessionId,
+      request: "build",
+    });
+    store.conversationDatabase.appendRuntimeEvent(runId, "tool_started", {
+      type: "tool-state",
+      toolCallId: "call-export",
+      toolName: "ExportPptx",
+      status: "running",
+      message: "exporting",
+    });
+    store.conversationDatabase.appendRuntimeEvent(runId, "tool_finished", {
+      type: "tool-state",
+      toolCallId: "call-export",
+      toolName: "ExportPptx",
+      status: "denied",
+      message: "cancelled",
+    });
+    store.conversationDatabase.appendRuntimeEvent(runId, "text_chunk", {
+      type: "text-chunk",
+      chunk: "已中断",
+    });
+
+    // Simulate a historically broken persist: terminal status + response only.
+    await store.saveMessages(sessionId, [{
+      id: "a-thin",
+      role: "assistant",
+      content: "已中断",
+      runId,
+      runStatus: "interrupted",
+      activityTrace: [{
+        id: "response-thin",
+        kind: "response",
+        start: 0,
+        end: 3,
+        streaming: false,
+      }],
+    }]);
+
+    expect(
+      store.getSession(sessionId).messages.at(-1)?.activityTrace
+        ?.some((item) => item.kind === "tool"),
+    ).toBe(false);
+
+    const restored = await store.selectSession(sessionId);
+    const message = restored.activeSession!.messages.at(-1)!;
+    expect(message.activityTrace?.map((item) => item.kind)).toEqual([
+      "tool",
+      "response",
+    ]);
+    expect(message.activityTrace?.[0]).toMatchObject({
+      kind: "tool",
+      toolCallId: "call-export",
+      status: "denied",
+    });
+  });
 });

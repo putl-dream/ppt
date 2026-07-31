@@ -9,6 +9,7 @@ import {
 } from "../../../deck/svg-page-loader";
 import type { ToolDefinition } from "../tool-definition";
 import { commitSvgPagePreviewLifecycle } from "./svg-deck-lifecycle";
+import { precheckSvgPagePreviewLocks } from "./svg-deck-locks";
 
 export const previewSvgPageSchema = z.object({
   path: z.string().trim().min(1).describe(
@@ -43,7 +44,9 @@ export const previewSvgPageTool: ToolDefinition<
   name: "PreviewSvgPage",
   description:
     "校验并真实渲染 workspace 中尚未提交的完整页面 SVG。P01 写完后先查看 PNG 并校准风格；"
-    + "最终提交前每页当前版本都必须通过本工具。它与 SubmitSvgDeck 使用同一图片内联和 SVG 校验边界。",
+    + "最终提交前每页当前版本都必须通过本工具。它与 SubmitSvgDeck 使用同一图片内联和 SVG 校验边界。"
+    + "通过预览门禁前会先校验 design/design-spec.json 与 slides/page-plan.json，"
+    + "且该页 path 必须出现在 page-plan 中；锁契约失败不会记为预览通过。",
   category: "core",
   loadPolicy: "core",
   inputSchema: previewSvgPageSchema,
@@ -93,6 +96,16 @@ export const previewSvgPageTool: ToolDefinition<
       fileService: context.fileService,
     });
     assertValidSvgPage(page.markup);
+
+    // Gate path requires valid locks before spending thumbnail render cost.
+    if (args.includeThumbnail) {
+      await precheckSvgPagePreviewLocks(
+        context.fileService,
+        page.sourcePath,
+        "PreviewSvgPage",
+      );
+    }
+
     const title = args.title ?? page.sourcePath;
     const slide: Slide = {
       id: `svg-preview-${page.sha256.slice(0, 16)}`,

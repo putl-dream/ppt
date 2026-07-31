@@ -7,6 +7,7 @@ interface SlidePreviewGalleryProps {
   selectedSlideId?: string;
   onSelectSlide?: (slideId: string) => void;
   variant?: "inline" | "panel";
+  renderSlide?: (slideId: string) => React.ReactNode;
 }
 
 export const SlidePreviewGallery: React.FC<SlidePreviewGalleryProps> = ({
@@ -14,6 +15,7 @@ export const SlidePreviewGallery: React.FC<SlidePreviewGalleryProps> = ({
   selectedSlideId,
   onSelectSlide,
   variant = "inline",
+  renderSlide,
 }) => {
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const selected = selectedIndex === null ? undefined : previews[selectedIndex];
@@ -55,6 +57,11 @@ export const SlidePreviewGallery: React.FC<SlidePreviewGalleryProps> = ({
 
   if (previews.length === 0) return null;
 
+  const selectedThumbnail = selected?.payload.thumbnail;
+  const liveSlide = selected && renderSlide
+    ? renderSlide(selected.payload.slideId)
+    : null;
+
   return (
     <>
       <section
@@ -65,13 +72,15 @@ export const SlidePreviewGallery: React.FC<SlidePreviewGalleryProps> = ({
         ].filter(Boolean).join(" ")}
         aria-label="页面检查预览"
       >
-        <div className="inline-artifact-card-header">
-          <span className="inline-artifact-badge">页面预览</span>
-          <span className="inline-artifact-title">
-            {previews.length === 1 ? previews[0]!.payload.title : `已检查 ${previews.length} 页`}
-          </span>
-          <span className="inline-artifact-resolved">点击查看大图</span>
-        </div>
+        {variant === "panel" ? null : (
+          <div className="inline-artifact-card-header">
+            <span className="inline-artifact-badge">页面预览</span>
+            <span className="inline-artifact-title">
+              {previews.length === 1 ? previews[0]!.payload.title : `已检查 ${previews.length} 页`}
+            </span>
+            <span className="inline-artifact-resolved">点击查看大图</span>
+          </div>
+        )}
         <div className="slide-preview-gallery-grid">
           {previews.map((event, index) => {
             const { thumbnail } = event.payload;
@@ -111,7 +120,7 @@ export const SlidePreviewGallery: React.FC<SlidePreviewGalleryProps> = ({
         </div>
       </section>
 
-      {selected?.payload.thumbnail && createPortal(
+      {selected && selectedThumbnail && createPortal(
         <div
           className="slide-preview-lightbox"
           role="dialog"
@@ -145,12 +154,18 @@ export const SlidePreviewGallery: React.FC<SlidePreviewGalleryProps> = ({
                 ×
               </button>
             </div>
-            <img
-              src={`data:${selected.payload.thumbnail.mimeType};base64,${selected.payload.thumbnail.pngBase64}`}
-              width={selected.payload.thumbnail.width}
-              height={selected.payload.thumbnail.height}
-              alt={`${selected.payload.title} 页面预览`}
-            />
+            {liveSlide ? (
+              <div className="slide-preview-lightbox-live">
+                {liveSlide}
+              </div>
+            ) : (
+              <img
+                src={`data:${selectedThumbnail.mimeType};base64,${selectedThumbnail.pngBase64}`}
+                width={selectedThumbnail.width}
+                height={selectedThumbnail.height}
+                alt={`${selected.payload.title} 页面预览`}
+              />
+            )}
             {selected.payload.description && (
               <p>{selected.payload.description}</p>
             )}
