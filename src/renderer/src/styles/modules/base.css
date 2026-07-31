@@ -14,8 +14,8 @@
 body {
   margin: 0;
   font-family: var(--font-body);
-  font-size: var(--text-sm);
-  line-height: var(--text-sm-lh);
+  font-size: var(--text-base);
+  line-height: var(--text-base-lh);
   font-weight: var(--font-weight-regular);
   color: var(--text-primary);
   background-color: var(--surface-canvas);

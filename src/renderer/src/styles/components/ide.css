@@ -18,7 +18,7 @@
   margin: 0 auto;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 18px;
   padding: var(--ide-page-pad);
   box-sizing: border-box;
 }
@@ -63,7 +63,7 @@
 .ide-section {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 10px;
   padding: var(--ide-section-pad);
   border-bottom: 1px solid var(--border-default);
 }
@@ -134,7 +134,7 @@
 .ide-nav {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 14px;
 }
 
 .ide-nav-filter {
@@ -161,22 +161,22 @@
 .ide-nav-group {
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: 2px;
 }
 
 .ide-nav-group-title {
-  padding: 6px 8px 4px;
+  padding: 8px 8px 6px;
   color: var(--text-muted);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
+  font-size: var(--text-xs);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: var(--letter-wide);
 }
 
 .ide-nav-item {
   display: flex;
   align-items: center;
-  min-height: 28px;
-  padding: 4px 8px;
+  min-height: 30px;
+  padding: 5px 9px;
   border: 0;
   border-radius: var(--ide-radius);
   background: transparent;

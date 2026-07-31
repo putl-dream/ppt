@@ -8,12 +8,12 @@
   --ide-font-title: var(--text-md);
   --ide-font-section: var(--text-sm);
   --ide-font-nav: var(--text-base);
-  --ide-row-height: 32px;
+  --ide-row-height: 34px;
   --ide-gap: var(--space-2);
-  --ide-section-pad: 12px 0;
-  --ide-page-pad: 16px 20px 28px;
+  --ide-section-pad: 14px 0;
+  --ide-page-pad: 24px 28px 40px;
   --ide-label-width: 168px;
-  --ide-control-height: 28px;
+  --ide-control-height: 30px;
   --ide-radius: var(--control-radius-xs);
   /* Settings content stays readable instead of stretching across a wide window. */
   --ide-content-width: 880px;

@@ -178,7 +178,7 @@ aside {
   background: var(--surface-sunken);
 }
 
-/* 历史卡片列表 �?legacy unused */
+/* 历史卡片列表 legacy unused */
 
 /* Studio workbench sidebar */
 .workbench-sidebar {
@@ -289,8 +289,8 @@ aside {
   display: flex;
   align-items: center;
   gap: 8px;
-  min-height: 28px;
-  padding: 5px 10px;
+  min-height: 32px;
+  padding: 6px 10px;
   border: none;
   border-radius: var(--control-radius-md);
   background: transparent;
@@ -377,9 +377,9 @@ aside {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 4px 8px;
+  padding: 5px 8px;
   border-radius: var(--control-radius-sm);
-  min-height: 26px;
+  min-height: 28px;
   cursor: pointer;
   transition: var(--transition-color);
 }
@@ -444,14 +444,14 @@ aside {
 .session-list {
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: 2px;
   padding-left: 0;
 }
 
 .session-row {
   width: 100%;
   display: block;
-  padding: 6px 10px 6px 28px;
+  padding: 7px 10px 7px 28px;
   border: none;
   border-radius: var(--control-radius-md);
   background: transparent;
@@ -661,7 +661,7 @@ aside {
 }
 
 .theme-desc {
-  font-size: 9px;
+  font-size: var(--text-2xs);
   color: var(--text-muted);
 }
 
@@ -749,7 +749,7 @@ aside {
 }
 
 .logo-dropzone .sub {
-  font-size: 9px;
+  font-size: var(--text-2xs);
   color: var(--text-muted);
 }
 
@@ -849,7 +849,7 @@ aside {
 }
 
 .config-help {
-  font-size: 9px;
+  font-size: var(--text-2xs);
   color: var(--text-muted);
 }
 

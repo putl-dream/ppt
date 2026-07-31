@@ -303,8 +303,8 @@
 }
 
 .chat-bubble-text {
-  font-size: 13px;
-  line-height: 1.5;
+  font-size: var(--text-base);
+  line-height: var(--text-base-lh);
   padding: 10px 14px;
   border-radius: var(--panel-border-radius);
 }
