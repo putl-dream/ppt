@@ -29,7 +29,6 @@ interface PPTMirrorProps {
   presentation: Presentation;
   selectedSlideId: string;
   onSelectSlide: (slideId: string) => void;
-  themeMode: "light" | "dark";
   logoUrl: string | null;
   onCloseMirror: () => void;
   highlightSlideId: string | null; // AI 当前正在更新的页面 ID
@@ -173,7 +172,6 @@ export const PPTMirror: React.FC<PPTMirrorProps> = ({
   presentation,
   selectedSlideId,
   onSelectSlide,
-  themeMode,
   logoUrl,
   onCloseMirror,
   highlightSlideId,
@@ -553,7 +551,7 @@ export const PPTMirror: React.FC<PPTMirrorProps> = ({
       {/* 4. 全屏放映灯箱模态窗口 */}
       {isFullscreen && createPortal(
         <div
-          className={`slideshow-lightbox-overlay ${themeMode === "dark" ? "dark-theme" : ""}`}
+          className="slideshow-lightbox-overlay"
           onClick={() => setIsFullscreen(false)}
         >
           <div className="slideshow-lightbox-content" onClick={(e) => e.stopPropagation()}>

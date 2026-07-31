@@ -13,21 +13,19 @@ interface AppearanceRuntimeOptions {
   colorScheme: UiColorScheme;
   computedScheme: ComputedColorScheme;
   borderRadiusScale: number;
-  colorContrastOffset: number;
   uiAccentColor: UiAccentColor;
   uiControlShape: UiControlShape;
 }
 
 /**
  * Applies skin × color-scheme to the document. Surfaces come from CSS skins;
- * this hook only sets data attributes, contrast offset, and window chrome.
+ * this hook only sets data attributes and window chrome.
  */
 export function useAppearanceRuntime({
   skin,
   colorScheme,
   computedScheme,
   borderRadiusScale,
-  colorContrastOffset,
   uiAccentColor,
   uiControlShape,
 }: AppearanceRuntimeOptions): void {
@@ -36,7 +34,7 @@ export function useAppearanceRuntime({
     root.dataset.skin = skin;
     root.dataset.colorScheme = computedScheme;
     root.style.colorScheme = computedScheme;
-    root.classList.toggle("dark-theme", computedScheme === "dark");
+    root.classList.remove("dark-theme");
 
     const desktopApi = window.desktopApi;
     if (!desktopApi?.setWindowThemeMode) return;
@@ -62,22 +60,8 @@ export function useAppearanceRuntime({
   useEffect(() => {
     document.documentElement.dataset.controlShape = uiControlShape;
   }, [uiControlShape]);
-
-  useEffect(() => {
-    /* Contrast offset nudges surface lightness without owning the palette. */
-    const offset = Math.max(-10, Math.min(15, colorContrastOffset));
-    document.documentElement.style.setProperty(
-      "--contrast-offset",
-      `${offset}`,
-    );
-  }, [colorContrastOffset]);
 }
 
 export function getComputedScheme(colorScheme: UiColorScheme): ComputedColorScheme {
   return resolveColorScheme(colorScheme);
-}
-
-/** @deprecated Use getComputedScheme */
-export function getComputedTheme(colorScheme: UiColorScheme): ComputedColorScheme {
-  return getComputedScheme(colorScheme);
 }

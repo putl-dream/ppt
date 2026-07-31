@@ -52,17 +52,17 @@
   background-clip: padding-box;
 }
 
-.dark-theme .chat-scroll-viewport {
+:root[data-color-scheme="dark"] .chat-scroll-viewport {
   scrollbar-color: rgba(255, 255, 255, 0.14) transparent;
 }
 
-.dark-theme .chat-scroll-viewport::-webkit-scrollbar-thumb {
+:root[data-color-scheme="dark"] .chat-scroll-viewport::-webkit-scrollbar-thumb {
   background: rgba(255, 255, 255, 0.14);
   border: 2px solid transparent;
   background-clip: padding-box;
 }
 
-.dark-theme .chat-scroll-viewport::-webkit-scrollbar-thumb:hover {
+:root[data-color-scheme="dark"] .chat-scroll-viewport::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.22);
   border: 2px solid transparent;
   background-clip: padding-box;
@@ -729,7 +729,7 @@
   overflow: hidden;
 }
 
-.dark-theme .progress-bar-track {
+:root[data-color-scheme="dark"] .progress-bar-track {
   background: rgba(255, 255, 255, 0.05);
 }
 
@@ -788,7 +788,7 @@
   box-shadow: none;
 }
 
-.dark-theme .user-message-bubble {
+:root[data-color-scheme="dark"] .user-message-bubble {
   background: var(--surface-sunken);
 }
 

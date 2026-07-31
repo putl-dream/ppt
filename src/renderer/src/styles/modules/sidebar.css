@@ -640,7 +640,7 @@ aside {
   backdrop-filter: blur(2px);
 }
 
-.dark-theme .theme-inner-mock {
+:root[data-color-scheme="dark"] .theme-inner-mock {
   background: rgba(0, 0, 0, 0.2);
 }
 
@@ -650,7 +650,7 @@ aside {
   border-top: 1px solid var(--border-default);
 }
 
-.dark-theme .theme-card-meta {
+:root[data-color-scheme="dark"] .theme-card-meta {
   background: rgba(5, 5, 5, 0.2);
 }
 
@@ -862,7 +862,7 @@ aside {
   background: rgba(0, 0, 0, 0.01);
 }
 
-.dark-theme .left-footer {
+:root[data-color-scheme="dark"] .left-footer {
   background: rgba(10, 12, 18, 0.3);
 }
 

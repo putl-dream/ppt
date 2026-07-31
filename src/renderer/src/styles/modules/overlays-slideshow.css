@@ -14,7 +14,7 @@
   color: var(--text-primary);
 }
 
-.slideshow-lightbox-overlay.dark-theme {
+:root[data-color-scheme="dark"] .slideshow-lightbox-overlay {
   --slideshow-slide-shadow: 0 25px 60px rgba(0, 0, 0, 0.8);
 }
 

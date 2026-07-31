@@ -93,7 +93,7 @@
   overflow: auto;
 }
 
-[data-theme="dark"] .tool-approval-detail {
+:root[data-color-scheme="dark"] .tool-approval-detail {
   background: rgba(255, 255, 255, 0.06);
 }
 

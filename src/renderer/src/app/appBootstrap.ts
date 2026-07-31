@@ -32,7 +32,6 @@ export interface PersistedUiSettings {
   uiAccentColor: UiAccentColor;
   uiControlShape: UiControlShape;
   borderRadiusScale: number;
-  colorContrastOffset: number;
   selectedDesignSystem: DesignSystemV2;
   logoUrl: string | null;
   executionStrategy: AgentExecutionStrategy;
@@ -119,6 +118,7 @@ function migrateLegacySettings(raw: Record<string, unknown>): Partial<PersistedU
 
   delete (migrated as Record<string, unknown>).themeMode;
   delete (migrated as Record<string, unknown>).uiReadingTone;
+  delete (migrated as Record<string, unknown>).colorContrastOffset;
 
   return migrated;
 }
@@ -127,8 +127,10 @@ export function loadPersistedUiSettings(): Partial<PersistedUiSettings> {
   try {
     const v2 = readStorageItem(UI_SETTINGS_STORAGE_KEY);
     if (v2) {
-      const parsed = JSON.parse(v2) as Partial<PersistedUiSettings>;
-      return parsed && typeof parsed === "object" ? parsed : {};
+      const parsed = JSON.parse(v2) as Record<string, unknown>;
+      if (!parsed || typeof parsed !== "object") return {};
+      delete parsed.colorContrastOffset;
+      return parsed as Partial<PersistedUiSettings>;
     }
 
     const v1 = readStorageItem(LEGACY_UI_SETTINGS_STORAGE_KEY);

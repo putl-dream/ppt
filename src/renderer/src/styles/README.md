@@ -21,11 +21,15 @@ Workbench UI tokens are separate from the Presentation deck design system under 
 
 ## Skin × color-scheme (dual axis)
 
-Appearance is applied by `useAppearanceRuntime`:
+Appearance is applied by `useAppearanceRuntime` on `document.documentElement`:
 
-- `document.documentElement.dataset.skin` — currently only `studio`
-- `document.documentElement.dataset.colorScheme` — `light` \| `dark`
+- `dataset.skin` — currently only `studio`
+- `dataset.colorScheme` — `light` \| `dark`
 - `dataset.accent` / `dataset.controlShape` — accent + radius family
+- `style.colorScheme` — native form controls / scrollbars
+
+**Do not** use `.dark-theme` or UI-level `[data-theme]` for workbench appearance.
+Deck layout chips may still use `data-theme="ocean|midnight|…"` — that is the presentation design-system axis, not workbench UI theme.
 
 To add a future **document** skin: create `tokens/skins/document.css`, add `"document"` to `UiSkin`, and leave modules unchanged.
 

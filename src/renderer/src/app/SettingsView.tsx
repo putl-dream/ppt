@@ -75,8 +75,6 @@ export function SettingsView({
           setUiControlShape={controller.setUiControlShape}
           borderRadiusScale={controller.borderRadiusScale}
           setBorderRadiusScale={controller.setBorderRadiusScale}
-          colorContrastOffset={controller.colorContrastOffset}
-          setColorContrastOffset={controller.setColorContrastOffset}
           triggerToast={notify}
           saveStatus={controller.saveStatus}
         />

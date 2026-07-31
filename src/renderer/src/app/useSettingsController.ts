@@ -60,8 +60,6 @@ export interface SettingsController {
   setUiControlShape: (value: UiControlShape) => void;
   borderRadiusScale: number;
   setBorderRadiusScale: (value: number) => void;
-  colorContrastOffset: number;
-  setColorContrastOffset: (value: number) => void;
   saveStatus: "saved" | "saving";
   markSaving: () => void;
 }
@@ -98,9 +96,6 @@ export function useSettingsController(
   });
   const [borderRadiusScale, setBorderRadiusScaleState] = useState(() =>
     typeof persisted.borderRadiusScale === "number" ? persisted.borderRadiusScale : 0.2,
-  );
-  const [colorContrastOffset, setColorContrastOffsetState] = useState(() =>
-    typeof persisted.colorContrastOffset === "number" ? persisted.colorContrastOffset : 0,
   );
   const [selectedDesignSystem, setSelectedDesignSystemState] = useState<DesignSystemV2>(() => {
     const parsed = designSystemV2Schema.safeParse(persisted.selectedDesignSystem);
@@ -154,7 +149,6 @@ export function useSettingsController(
       uiAccentColor,
       uiControlShape,
       borderRadiusScale,
-      colorContrastOffset,
       selectedDesignSystem,
       logoUrl,
       executionStrategy,
@@ -162,7 +156,6 @@ export function useSettingsController(
   }, [
     autoCloudSync,
     borderRadiusScale,
-    colorContrastOffset,
     colorScheme,
     executionStrategy,
     logoUrl,
@@ -177,7 +170,6 @@ export function useSettingsController(
     colorScheme,
     computedScheme,
     borderRadiusScale,
-    colorContrastOffset,
     uiAccentColor,
     uiControlShape,
   });
@@ -252,8 +244,6 @@ export function useSettingsController(
     setUiControlShape: update(setUiControlShapeState),
     borderRadiusScale,
     setBorderRadiusScale: update(setBorderRadiusScaleState),
-    colorContrastOffset,
-    setColorContrastOffset: update(setColorContrastOffsetState),
     saveStatus,
     markSaving,
   };

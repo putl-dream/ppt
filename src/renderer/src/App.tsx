@@ -56,7 +56,6 @@ export function App() {
   });
   const settings = useSettingsController(bootstrap, presentation, notify);
   const {
-    computedScheme,
     logoUrl,
     selectedModelId,
     selectModel: setSelectedModelId,
@@ -227,7 +226,6 @@ export function App() {
 
   return (
     <AppShell
-      dark={computedScheme === "dark"}
       notificationMessage={toastMessage}
       workspaceClassName={workbenchLayout.workspaceClassName}
       workspaceStyle={workbenchLayout.workspaceStyle}
@@ -283,7 +281,6 @@ export function App() {
             presentation,
             selectedSlideId,
             onSelectSlide: setSelectedSlideId,
-            themeMode: computedScheme,
             logoUrl,
             onCloseMirror: closeMirror,
             highlightSlideId,

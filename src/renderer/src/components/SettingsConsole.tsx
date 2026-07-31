@@ -60,8 +60,6 @@ interface SettingsConsoleProps {
   setUiControlShape: (val: UiControlShape) => void;
   borderRadiusScale: number;
   setBorderRadiusScale: (val: number) => void;
-  colorContrastOffset: number;
-  setColorContrastOffset: (val: number) => void;
 
   triggerToast: (msg: string) => void;
   saveStatus?: "saved" | "saving";
@@ -176,8 +174,6 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
   setUiControlShape,
   borderRadiusScale,
   setBorderRadiusScale,
-  colorContrastOffset,
-  setColorContrastOffset,
   triggerToast,
   saveStatus = "saved",
 }) => {
@@ -624,20 +620,6 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
                   step="0.1"
                   value={borderRadiusScale}
                   onChange={(event) => setBorderRadiusScale(parseFloat(event.target.value))}
-                />
-              </IdeRow>
-              <IdeRow label="背景明暗偏置">
-                <span className="ide-field-value">
-                  {colorContrastOffset > 0 ? `+${colorContrastOffset}` : colorContrastOffset}%
-                </span>
-                <input
-                  className="ide-range"
-                  type="range"
-                  min="-10"
-                  max="15"
-                  step="1"
-                  value={colorContrastOffset}
-                  onChange={(event) => setColorContrastOffset(parseInt(event.target.value, 10))}
                 />
               </IdeRow>
             </IdeSection>

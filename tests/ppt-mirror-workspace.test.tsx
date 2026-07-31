@@ -58,7 +58,6 @@ function MirrorHarness() {
       presentation={presentation}
       selectedSlideId={selectedSlideId}
       onSelectSlide={setSelectedSlideId}
-      themeMode="light"
       logoUrl={null}
       onCloseMirror={() => undefined}
       highlightSlideId={null}

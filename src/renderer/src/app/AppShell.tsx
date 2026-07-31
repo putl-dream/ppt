@@ -3,7 +3,6 @@ import { SidebarPanelIcon } from "../components/Icons";
 import { NotificationViewport } from "./useNotificationCenter";
 
 interface AppShellProps {
-  dark: boolean;
   notificationMessage: string | null;
   workspaceClassName: string;
   workspaceStyle: CSSProperties;
@@ -14,7 +13,6 @@ interface AppShellProps {
 }
 
 export function AppShell({
-  dark,
   notificationMessage,
   workspaceClassName,
   workspaceStyle,
@@ -24,7 +22,7 @@ export function AppShell({
   children,
 }: AppShellProps) {
   return (
-    <main className={`app-shell${dark ? " dark-theme" : ""}`}>
+    <main className="app-shell">
       <div className="window-titlebar" role="toolbar" aria-label="窗口菜单栏">
         {showSidebarToggle ? (
           <button
