@@ -15,6 +15,7 @@
 |---|---|
 | [架构总览](./architecture/overview.md) | 五层架构、数据流、状态边界与自主性原则 |
 | [工程能力地图](./architecture/engineering-capabilities.md) | Claude Code 能力分层、PPT 落点、成熟度、缺口与验证入口 |
+| [本地日志与运行诊断](./architecture/observability.md) | JSONL 日志、关联身份、事件级别、脱敏与容量边界 |
 | [Query](./agent/query.md) | QueryParams、QueryState、IterationWorkspace、身份与恢复 |
 | [Agent Loop](./agent/loop.md) | 独立 AsyncGenerator、显式 outcome、工具批次与事件 |
 | [Agent Runtime](./agent/runtime.md) | Service、RunFactory、RunScope、Runtime 与 Finalizer |

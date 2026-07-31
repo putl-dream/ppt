@@ -6,21 +6,25 @@ import {
   agentLogger,
   clearLogFiles,
   createModuleLogger,
+  diagnosticValuePreview,
   getLogDirectory,
   getLogManagerSettings,
   getLogManagerStatus,
   getRecentLogEntries,
   requestSummary,
   updateLogManagerSettings,
+  withLogContext,
 } from "../src/main/agent/logger";
 
 const originalLogLevel = process.env.AGENT_LOG_LEVEL;
 const originalLogFile = process.env.AGENT_LOG_FILE;
 const originalDataDir = process.env.AGENT_PPT_DATA_DIR;
+const originalLogDetail = process.env.AGENT_LOG_DETAIL;
 
 beforeEach(() => {
   // Disable file logging in tests
   process.env.AGENT_LOG_FILE = "false";
+  process.env.AGENT_LOG_LEVEL = "info";
 });
 
 afterEach(() => {
@@ -38,6 +42,11 @@ afterEach(() => {
     delete process.env.AGENT_PPT_DATA_DIR;
   } else {
     process.env.AGENT_PPT_DATA_DIR = originalDataDir;
+  }
+  if (originalLogDetail === undefined) {
+    delete process.env.AGENT_LOG_DETAIL;
+  } else {
+    process.env.AGENT_LOG_DETAIL = originalLogDetail;
   }
   vi.restoreAllMocks();
 });
@@ -125,6 +134,59 @@ describe("createModuleLogger", () => {
     expect(parsed.event).toBe("test.event");
     expect(parsed.value).toBe(123);
   });
+
+  it("inherits authoritative async context without leaking between concurrent runs", async () => {
+    const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
+    const logger = createModuleLogger("context-test");
+
+    await Promise.all([
+      withLogContext({ runId: "run-a", threadId: "thread-a" }, async () => {
+        await Promise.resolve();
+        logger.info("context.a", { runId: "spoofed" });
+      }),
+      withLogContext({ runId: "run-b", threadId: "thread-b" }, async () => {
+        await Promise.resolve();
+        logger.info("context.b");
+      }),
+    ]);
+
+    const entries = info.mock.calls.map(([line]) =>
+      JSON.parse(String(line).slice(String(line).indexOf("{"))) as Record<string, unknown>
+    );
+    expect(entries.find((entry) => entry.event === "context.a")).toMatchObject({
+      runId: "run-a",
+      threadId: "thread-a",
+    });
+    expect(entries.find((entry) => entry.event === "context.b")).toMatchObject({
+      runId: "run-b",
+      threadId: "thread-b",
+    });
+  });
+});
+
+describe("diagnosticValuePreview", () => {
+  it("redacts secrets, omits binary fields, and handles circular values", () => {
+    const value: Record<string, unknown> = {
+      apiKey: "sk-1234567890abcdefghij",
+      pngBase64: "a".repeat(2_000),
+    };
+    value.self = value;
+
+    const preview = diagnosticValuePreview(value, 4_096);
+
+    expect(preview.preview).not.toContain("sk-1234567890abcdefghij");
+    expect(preview.preview).toContain("sk-1...ghij");
+    expect(preview.preview).toContain("Binary data omitted");
+    expect(preview.preview).toContain("[Circular]");
+  });
+
+  it("caps the total diagnostic preview length", () => {
+    const preview = diagnosticValuePreview({ content: "x".repeat(20_000) }, 256);
+
+    expect(preview.preview).toHaveLength(256);
+    expect(preview.truncated).toBe(true);
+    expect(preview.serializedLength).toBeGreaterThan(256);
+  });
 });
 
 describe("sensitive data redaction", () => {
@@ -190,6 +252,14 @@ describe("recent log diagnostics", () => {
 
     const parsed = JSON.parse(String(info.mock.calls[0][0]).slice(String(info.mock.calls[0][0]).indexOf("{")));
     expect(parsed.circular.self).toBe("[Circular]");
+  });
+
+  it("does not let a throwing console sink replace application control flow", () => {
+    vi.spyOn(console, "info").mockImplementation(() => {
+      throw new Error("console unavailable");
+    });
+
+    expect(() => agentLogger.info("test.console-failure")).not.toThrow();
   });
 });
 
