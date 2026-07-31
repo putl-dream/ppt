@@ -1,5 +1,17 @@
 import React, { useMemo, useState } from "react";
-import { ChevronRightIcon } from "./Icons";
+import {
+  BrainIcon,
+  ChartIcon,
+  CheckCircleIcon,
+  ChevronRightIcon,
+  FolderIcon,
+  GaugeIcon,
+  HistoryIcon,
+  LayoutIcon,
+  PaletteIcon,
+  SearchIcon,
+  SlidersIcon,
+} from "./Icons";
 import type { SettingsCategory } from "../settingsCategories";
 import { cx } from "../lib/cx";
 
@@ -11,36 +23,40 @@ interface SettingsSidebarProps {
 
 const NAV_GROUPS: Array<{
   title: string;
-  items: Array<{ id: SettingsCategory; title: string }>;
+  items: Array<{
+    id: SettingsCategory;
+    title: string;
+    icon: React.ReactNode;
+  }>;
 }> = [
   {
-    title: "模型与 AI 服务",
+    title: "常用",
     items: [
-      { id: "models-list", title: "模型列表" },
-      { id: "models-search", title: "搜索与联网" },
-      { id: "models-runtime", title: "运行参数" },
+      { id: "preferences-appearance", title: "界面外观", icon: <PaletteIcon size={15} /> },
+      { id: "models-list", title: "模型", icon: <BrainIcon size={15} /> },
+      { id: "usage-overview", title: "用量与费用", icon: <ChartIcon size={15} /> },
     ],
   },
   {
-    title: "偏好与演示规范",
+    title: "偏好",
     items: [
-      { id: "preferences-presentation", title: "演示文档默认项" },
-      { id: "preferences-storage", title: "存储与目录" },
-      { id: "preferences-appearance", title: "界面外观" },
+      { id: "preferences-presentation", title: "演示与品牌", icon: <LayoutIcon size={15} /> },
+      { id: "preferences-storage", title: "存储", icon: <FolderIcon size={15} /> },
     ],
   },
   {
-    title: "Agent 机制与日志",
+    title: "模型服务",
     items: [
-      { id: "agent-approval", title: "提交与审批" },
-      { id: "agent-limits", title: "调用频率限制" },
-      { id: "agent-logs", title: "系统日志" },
+      { id: "models-search", title: "搜索与联网", icon: <SearchIcon size={15} /> },
+      { id: "models-runtime", title: "运行参数", icon: <SlidersIcon size={15} /> },
     ],
   },
   {
-    title: "用量与费用",
+    title: "Agent",
     items: [
-      { id: "usage-overview", title: "用量统计与趋势" },
+      { id: "agent-approval", title: "提交与审批", icon: <CheckCircleIcon size={15} /> },
+      { id: "agent-limits", title: "限流", icon: <GaugeIcon size={15} /> },
+      { id: "agent-logs", title: "系统日志", icon: <HistoryIcon size={15} /> },
     ],
   },
 ];
@@ -79,8 +95,12 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = ({
             aria-label="筛选设置项"
           />
           {visibleGroups.map((group) => (
-            <div className="ide-nav-group" key={group.title}>
-              <div className="ide-nav-group-title">{group.title}</div>
+            <div
+              className="ide-nav-group"
+              key={group.title}
+              role="group"
+              aria-label={group.title}
+            >
               {group.items.map((item) => (
                 <button
                   key={item.id}
@@ -89,7 +109,8 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = ({
                   onClick={() => onSelectCategory(item.id)}
                   aria-current={activeCategory === item.id ? "page" : undefined}
                 >
-                  {item.title}
+                  <span className="ide-nav-item-icon" aria-hidden="true">{item.icon}</span>
+                  <span>{item.title}</span>
                 </button>
               ))}
             </div>

@@ -18,9 +18,23 @@ let logFileStream: ReturnType<typeof createStream> | null | undefined;
 let runtimeSettings: Partial<LogManagerSettings> = {};
 const recentEntries: AppLogEntry[] = [];
 const MAX_RECENT_ENTRIES = 300;
-const RETENTION_DAYS = 7;
-const MAX_FILE_SIZE_MB = 10;
+export const DEFAULT_LOG_RETENTION_DAYS = 7;
+export const DEFAULT_LOG_MAX_FILE_SIZE_MB = 10;
+const MIN_LOG_RETENTION_DAYS = 1;
+const MAX_LOG_RETENTION_DAYS = 90;
+const MIN_LOG_MAX_FILE_SIZE_MB = 1;
+const MAX_LOG_MAX_FILE_SIZE_MB = 100;
 const SETTINGS_FILE_NAME = "settings.json";
+
+function clampRetentionDays(value: unknown): number | undefined {
+  if (typeof value !== "number" || !Number.isFinite(value)) return undefined;
+  return Math.min(MAX_LOG_RETENTION_DAYS, Math.max(MIN_LOG_RETENTION_DAYS, Math.trunc(value)));
+}
+
+function clampMaxFileSizeMb(value: unknown): number | undefined {
+  if (typeof value !== "number" || !Number.isFinite(value)) return undefined;
+  return Math.min(MAX_LOG_MAX_FILE_SIZE_MB, Math.max(MIN_LOG_MAX_FILE_SIZE_MB, Math.trunc(value)));
+}
 
 export function getLogDirectory(): string {
   return path.join(getApplicationDataRoot(), "logs");
@@ -42,8 +56,8 @@ function getLogFileStream() {
 
     logFileStream = createStream("agent.log", {
       interval: "1d",
-      size: `${MAX_FILE_SIZE_MB}M`,
-      maxFiles: RETENTION_DAYS,
+      size: `${configuredMaxFileSizeMb()}M`,
+      maxFiles: configuredRetentionDays(),
       path: logDir,
       compress: "gzip",
     });
@@ -71,6 +85,14 @@ function configuredLevel(): AppLogLevel {
   if (runtimeSettings.level) return runtimeSettings.level;
   const value = process.env.AGENT_LOG_LEVEL?.trim().toLowerCase();
   return value === "debug" || value === "warn" || value === "error" ? value : "info";
+}
+
+function configuredRetentionDays(): number {
+  return runtimeSettings.retentionDays ?? DEFAULT_LOG_RETENTION_DAYS;
+}
+
+function configuredMaxFileSizeMb(): number {
+  return runtimeSettings.maxFileSizeMb ?? DEFAULT_LOG_MAX_FILE_SIZE_MB;
 }
 
 function configuredDetail(): LogDetail {
@@ -195,6 +217,8 @@ export function getLogManagerSettings(): LogManagerSettings {
   return {
     level: configuredLevel(),
     fileEnabled: runtimeSettings.fileEnabled ?? process.env.AGENT_LOG_FILE !== "false",
+    retentionDays: configuredRetentionDays(),
+    maxFileSizeMb: configuredMaxFileSizeMb(),
   };
 }
 
@@ -203,9 +227,13 @@ export async function initializeLogManager(): Promise<LogManagerSettings> {
   runtimeSettings = {};
   try {
     const parsed = JSON.parse(await fs.promises.readFile(settingsPath, "utf8")) as Partial<LogManagerSettings>;
+    const retentionDays = clampRetentionDays(parsed.retentionDays);
+    const maxFileSizeMb = clampMaxFileSizeMb(parsed.maxFileSizeMb);
     runtimeSettings = {
       ...(parsed.level && parsed.level in levelPriority ? { level: parsed.level } : {}),
       ...(typeof parsed.fileEnabled === "boolean" ? { fileEnabled: parsed.fileEnabled } : {}),
+      ...(retentionDays !== undefined ? { retentionDays } : {}),
+      ...(maxFileSizeMb !== undefined ? { maxFileSizeMb } : {}),
     };
   } catch (error) {
     const code = (error as NodeJS.ErrnoException).code;
@@ -239,21 +267,30 @@ export async function initializeLogManager(): Promise<LogManagerSettings> {
 export async function updateLogManagerSettings(
   patch: Partial<LogManagerSettings>,
 ): Promise<LogManagerSettings> {
-  const previousFileEnabled = getLogManagerSettings().fileEnabled;
+  const previous = getLogManagerSettings();
   if (patch.level && patch.level in levelPriority) runtimeSettings.level = patch.level;
   if (typeof patch.fileEnabled === "boolean") {
     runtimeSettings.fileEnabled = patch.fileEnabled;
   }
-  if (getLogManagerSettings().fileEnabled !== previousFileEnabled) await closeLogFileStream();
-  const settings = getLogManagerSettings();
+  const retentionDays = clampRetentionDays(patch.retentionDays);
+  if (retentionDays !== undefined) runtimeSettings.retentionDays = retentionDays;
+  const maxFileSizeMb = clampMaxFileSizeMb(patch.maxFileSizeMb);
+  if (maxFileSizeMb !== undefined) runtimeSettings.maxFileSizeMb = maxFileSizeMb;
+
+  const next = getLogManagerSettings();
+  const streamConfigChanged = next.fileEnabled !== previous.fileEnabled
+    || next.retentionDays !== previous.retentionDays
+    || next.maxFileSizeMb !== previous.maxFileSizeMb;
+  if (streamConfigChanged) await closeLogFileStream();
+
   const directory = getLogDirectory();
   await fs.promises.mkdir(directory, { recursive: true });
   await fs.promises.writeFile(
     path.join(directory, SETTINGS_FILE_NAME),
-    `${JSON.stringify(settings, null, 2)}\n`,
+    `${JSON.stringify(next, null, 2)}\n`,
     "utf8",
   );
-  return settings;
+  return next;
 }
 
 export async function getLogManagerStatus(): Promise<LogManagerStatus> {
@@ -265,11 +302,10 @@ export async function getLogManagerStatus(): Promise<LogManagerStatus> {
       .map((entry) => fs.promises.stat(path.join(directory, entry.name))),
   );
   const lastWrittenMs = stats.reduce((latest, stat) => Math.max(latest, stat.mtimeMs), 0);
+  const settings = getLogManagerSettings();
   return {
-    ...getLogManagerSettings(),
+    ...settings,
     directory,
-    retentionDays: RETENTION_DAYS,
-    maxFileSizeMb: MAX_FILE_SIZE_MB,
     fileCount: stats.length,
     totalBytes: stats.reduce((total, stat) => total + stat.size, 0),
     ...(lastWrittenMs > 0 ? { lastWrittenAt: new Date(lastWrittenMs).toISOString() } : {}),

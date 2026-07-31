@@ -174,6 +174,7 @@
 .ide-nav-item {
   display: flex;
   align-items: center;
+  gap: 8px;
   min-height: 26px;
   padding: 4px 8px;
   border: 0;
@@ -185,6 +186,16 @@
   text-align: left;
   cursor: pointer;
   width: 100%;
+}
+
+.ide-nav-item-icon {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  color: currentColor;
 }
 
 .ide-nav-item:hover {
@@ -268,7 +279,6 @@
 }
 
 .ide-field,
-.ide-select,
 .ide-range {
   width: min(320px, 100%);
   height: var(--ide-control-height);
@@ -281,14 +291,12 @@
   font-size: var(--ide-font-ui);
 }
 
-.ide-field,
-.ide-select {
+.ide-field {
   padding: 0 8px;
   outline: none;
 }
 
-.ide-field:focus,
-.ide-select:focus {
+.ide-field:focus {
   border-color: var(--accent-primary);
 }
 

@@ -77,7 +77,7 @@ import {
 import { isRuntimeCancellation } from "./agent/runtime/lifecycle/runtime-cancellation";
 import { formatPublicErrorMessage } from "@shared/agent-activity-display";
 import { isTeammateProgressEvent } from "@shared/teammate-progress";
-import { configureApplicationDataRoot } from "./application-data";
+import { configureApplicationDataRoot, getApplicationDataRoot } from "./application-data";
 import {
   asPresentationId,
   asProjectId,
@@ -707,6 +707,17 @@ app.whenReady().then(async () => {
     const errorMessage = await shell.openPath(directory);
     if (errorMessage) {
       logger.warn("logs.directory.open-failed", { directory, errorMessage });
+      return false;
+    }
+    return true;
+  });
+  ipcMain.handle("app:get-data-path", () => getApplicationDataRoot());
+  ipcMain.handle("app:open-data-directory", async () => {
+    const directory = getApplicationDataRoot();
+    mkdirSync(directory, { recursive: true });
+    const errorMessage = await shell.openPath(directory);
+    if (errorMessage) {
+      logger.warn("app.data-directory.open-failed", { directory, errorMessage });
       return false;
     }
     return true;

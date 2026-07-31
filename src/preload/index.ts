@@ -25,6 +25,8 @@ const api: DesktopApi = {
   updateLogManagerSettings: (patch) => ipcRenderer.invoke("logs:update-settings", patch),
   clearLogs: () => ipcRenderer.invoke("logs:clear"),
   openLogDirectory: () => ipcRenderer.invoke("logs:open-directory"),
+  getApplicationDataPath: () => ipcRenderer.invoke("app:get-data-path"),
+  openApplicationDataDirectory: () => ipcRenderer.invoke("app:open-data-directory"),
   reportRendererLog: (report) => ipcRenderer.send("logs:renderer-report", report),
 
   // 项目产物

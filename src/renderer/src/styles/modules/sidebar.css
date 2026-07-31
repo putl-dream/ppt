@@ -789,33 +789,7 @@ aside {
   align-items: center;
 }
 
-.select-wrapper {
-  position: relative;
-}
-
-.model-select {
-  width: 100%;
-  background: var(--surface-sunken);
-  border: 1px solid var(--border-default);
-  border-radius: var(--field-border-radius);
-  padding: 8px 10px;
-  color: var(--text-primary);
-  font-size: 12px;
-  font-family: var(--font-body);
-  cursor: pointer;
-  appearance: none;
-}
-
-.select-wrapper::after {
-  content: "?";
-  font-size: 8px;
-  color: var(--text-muted);
-  position: absolute;
-  right: 10px; top: 12px;
-  pointer-events: none;
-}
-
-/* Form controls do not inherit font-family; match .model-select explicitly. */
+/* Form controls do not inherit font-family; set it on inputs explicitly. */
 .config-input {
   width: 100%;
   background: var(--surface-sunken);

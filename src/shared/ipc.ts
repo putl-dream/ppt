@@ -247,6 +247,8 @@ export interface DesktopApi {
   updateLogManagerSettings(patch: Partial<LogManagerSettings>): Promise<LogManagerSettings>;
   clearLogs(): Promise<number>;
   openLogDirectory(): Promise<boolean>;
+  getApplicationDataPath(): Promise<string>;
+  openApplicationDataDirectory(): Promise<boolean>;
   reportRendererLog(report: RendererLogReport): void;
   createSession(options?: CreateSessionOptions): Promise<SessionBootstrap>;
   openWorkspace(rootPath: string): Promise<SessionBootstrap>;

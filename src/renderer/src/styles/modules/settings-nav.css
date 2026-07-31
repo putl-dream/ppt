@@ -1,8 +1,36 @@
 ﻿/*
  * Settings sidebar shell. The nav itself uses the shared `ide-nav-*` vocabulary
  * from components/ide.css — do not reintroduce a parallel `settings-nav-*` set.
+ *
+ * Cluster layout follows Cursor-style settings: no group titles, spacing between
+ * groups, slightly taller rows and compound labels for horizontal rhythm.
  */
 
 .settings-sidebar .sections-container {
-  padding: 8px 6px;
+  padding: 10px 8px;
+}
+
+.settings-sidebar .ide-nav {
+  gap: 10px;
+}
+
+.settings-sidebar .ide-nav-group {
+  gap: 1px;
+  padding-bottom: 6px;
+}
+
+.settings-sidebar .ide-nav-group:last-of-type {
+  padding-bottom: 0;
+}
+
+.settings-sidebar .ide-nav-item {
+  min-height: 28px;
+  padding: 5px 10px;
+  gap: 10px;
+  border-radius: 6px;
+}
+
+.settings-sidebar .ide-nav-item-icon {
+  width: 16px;
+  height: 16px;
 }

@@ -1,6 +1,8 @@
 import React from "react";
 import type { AppLogEntry, AppLogLevel, LogManagerStatus } from "@shared/logging";
+import { normalizeWorkspacePath } from "@shared/workspace";
 import { FolderIcon, RefreshIcon, TrashIcon } from "./Icons";
+import { Select } from "./Select";
 
 interface LogManagementPanelProps {
   notify: (message: string) => void;
@@ -36,6 +38,8 @@ export const LogManagementPanel: React.FC<LogManagementPanelProps> = ({ notify }
   const [status, setStatus] = React.useState<LogManagerStatus | null>(null);
   const [entries, setEntries] = React.useState<AppLogEntry[]>([]);
   const [loading, setLoading] = React.useState(true);
+  const [retentionDraft, setRetentionDraft] = React.useState(7);
+  const [maxFileSizeDraft, setMaxFileSizeDraft] = React.useState(10);
 
   const refresh = React.useCallback(async () => {
     setLoading(true);
@@ -45,6 +49,8 @@ export const LogManagementPanel: React.FC<LogManagementPanelProps> = ({ notify }
         window.desktopApi.getRecentLogs(50, "warn"),
       ]);
       setStatus(nextStatus);
+      setRetentionDraft(nextStatus.retentionDays);
+      setMaxFileSizeDraft(nextStatus.maxFileSizeMb);
       setEntries(nextEntries);
     } catch (error) {
       notify(`读取日志状态失败: ${error instanceof Error ? error.message : String(error)}`);
@@ -57,7 +63,12 @@ export const LogManagementPanel: React.FC<LogManagementPanelProps> = ({ notify }
     void refresh();
   }, [refresh]);
 
-  const updateSettings = async (patch: { level?: AppLogLevel; fileEnabled?: boolean }) => {
+  const updateSettings = async (patch: Partial<{
+    level: AppLogLevel;
+    fileEnabled: boolean;
+    retentionDays: number;
+    maxFileSizeMb: number;
+  }>) => {
     try {
       await window.desktopApi.updateLogManagerSettings(patch);
       await refresh();
@@ -65,6 +76,16 @@ export const LogManagementPanel: React.FC<LogManagementPanelProps> = ({ notify }
     } catch (error) {
       notify(`保存日志设置失败: ${error instanceof Error ? error.message : String(error)}`);
     }
+  };
+
+  const commitRetention = () => {
+    if (!status || retentionDraft === status.retentionDays) return;
+    void updateSettings({ retentionDays: retentionDraft });
+  };
+
+  const commitMaxFileSize = () => {
+    if (!status || maxFileSizeDraft === status.maxFileSizeMb) return;
+    void updateSettings({ maxFileSizeMb: maxFileSizeDraft });
   };
 
   const openDirectory = async () => {
@@ -98,22 +119,25 @@ export const LogManagementPanel: React.FC<LogManagementPanelProps> = ({ notify }
         </div>
 
         <div className="settings-form-stack">
-          <label className="setting-row">
+          <div className="setting-row">
             <span className="setting-row-copy"><span className="setting-row-title">最低记录级别</span></span>
             <span className="setting-row-control">
-              <select
-                className="model-select log-level-select"
+              <Select
+                variant="block"
+                className="log-level-select"
+                ariaLabel="最低记录级别"
                 value={status?.level ?? "info"}
                 disabled={!status}
-                onChange={(event) => void updateSettings({ level: event.target.value as AppLogLevel })}
-              >
-                <option value="debug">Debug（完整诊断）</option>
-                <option value="info">Info（推荐）</option>
-                <option value="warn">Warn（仅问题）</option>
-                <option value="error">Error（仅错误）</option>
-              </select>
+                onChange={(next) => void updateSettings({ level: next as AppLogLevel })}
+                options={[
+                  { value: "debug", label: "Debug（完整诊断）" },
+                  { value: "info", label: "Info（推荐）" },
+                  { value: "warn", label: "Warn（仅问题）" },
+                  { value: "error", label: "Error（仅错误）" },
+                ]}
+              />
             </span>
-          </label>
+          </div>
           <label className="setting-row">
             <span className="setting-row-copy"><span className="setting-row-title">写入日志文件</span></span>
             <span className="setting-row-control">
@@ -128,6 +152,50 @@ export const LogManagementPanel: React.FC<LogManagementPanelProps> = ({ notify }
               </span>
             </span>
           </label>
+          <div className="setting-row">
+            <span className="setting-row-copy">
+              <span className="setting-row-title">保留天数</span>
+              <span className="ide-hint">{retentionDraft} 天</span>
+            </span>
+            <span className="setting-row-control">
+              <input
+                className="ide-range"
+                type="range"
+                min={1}
+                max={90}
+                step={1}
+                disabled={!status}
+                value={retentionDraft}
+                onChange={(event) => setRetentionDraft(parseInt(event.target.value, 10))}
+                onMouseUp={commitRetention}
+                onTouchEnd={commitRetention}
+                onKeyUp={commitRetention}
+                aria-label="日志保留天数"
+              />
+            </span>
+          </div>
+          <div className="setting-row">
+            <span className="setting-row-copy">
+              <span className="setting-row-title">单文件上限</span>
+              <span className="ide-hint">{maxFileSizeDraft} MB</span>
+            </span>
+            <span className="setting-row-control">
+              <input
+                className="ide-range"
+                type="range"
+                min={1}
+                max={100}
+                step={1}
+                disabled={!status}
+                value={maxFileSizeDraft}
+                onChange={(event) => setMaxFileSizeDraft(parseInt(event.target.value, 10))}
+                onMouseUp={commitMaxFileSize}
+                onTouchEnd={commitMaxFileSize}
+                onKeyUp={commitMaxFileSize}
+                aria-label="日志单文件上限"
+              />
+            </span>
+          </div>
         </div>
 
         <div className="log-management-actions">
@@ -141,7 +209,12 @@ export const LogManagementPanel: React.FC<LogManagementPanelProps> = ({ notify }
             <TrashIcon size={14} /> 清理日志
           </button>
         </div>
-        {status && <div className="settings-path-display"><FolderIcon size={14} /><span>{status.directory}</span></div>}
+        {status && (
+          <div className="settings-path-display">
+            <FolderIcon size={14} />
+            <span>{normalizeWorkspacePath(status.directory)}</span>
+          </div>
+        )}
       </section>
 
       <section className="settings-card">

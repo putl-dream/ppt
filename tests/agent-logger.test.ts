@@ -201,7 +201,12 @@ describe("log management", () => {
 
     try {
       const settings = await updateLogManagerSettings({ level: "warn", fileEnabled: false });
-      expect(settings).toEqual({ level: "warn", fileEnabled: false });
+      expect(settings).toEqual({
+        level: "warn",
+        fileEnabled: false,
+        retentionDays: 7,
+        maxFileSizeMb: 10,
+      });
       expect(JSON.parse(await fs.promises.readFile(path.join(getLogDirectory(), "settings.json"), "utf8")))
         .toEqual(settings);
 
@@ -210,6 +215,19 @@ describe("log management", () => {
       expect(await clearLogFiles()).toBe(1);
       await expect(fs.promises.stat(path.join(getLogDirectory(), "agent.log"))).rejects.toThrow();
       await expect(fs.promises.stat(path.join(getLogDirectory(), "settings.json"))).resolves.toBeDefined();
+
+      const retentionSettings = await updateLogManagerSettings({
+        retentionDays: 14,
+        maxFileSizeMb: 25,
+      });
+      expect(retentionSettings).toMatchObject({
+        retentionDays: 14,
+        maxFileSizeMb: 25,
+      });
+      expect(await getLogManagerStatus()).toMatchObject({
+        retentionDays: 14,
+        maxFileSizeMb: 25,
+      });
     } finally {
       await updateLogManagerSettings(originalSettings);
       await fs.promises.rm(tempRoot, { recursive: true, force: true });

@@ -12,12 +12,12 @@ export interface AppLogEntry {
 export interface LogManagerSettings {
   level: AppLogLevel;
   fileEnabled: boolean;
+  retentionDays: number;
+  maxFileSizeMb: number;
 }
 
 export interface LogManagerStatus extends LogManagerSettings {
   directory: string;
-  retentionDays: number;
-  maxFileSizeMb: number;
   fileCount: number;
   totalBytes: number;
   lastWrittenAt?: string;

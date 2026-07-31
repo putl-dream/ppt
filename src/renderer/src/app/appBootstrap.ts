@@ -5,7 +5,6 @@ import type { DesignSystemV2 } from "@design-system";
 import { loadAgentGatewayPreferences } from "../agentGatewayConfig";
 import { loadAgentStepLimits } from "../agentStepLimits";
 import {
-  DEFAULT_MODELS,
   SELECTED_MODEL_STORAGE_KEY,
   loadManagedModels,
   type ManagedModel,
@@ -24,8 +23,6 @@ export type ComputedColorScheme = "light" | "dark";
 type LegacyThemeMode = "light" | "dark" | "cyan" | "orange" | "system";
 
 export interface PersistedUiSettings {
-  autoDownload: boolean;
-  autoCloudSync: boolean;
   defaultRatio: "16:9" | "4:3";
   skin: UiSkin;
   colorScheme: UiColorScheme;
@@ -168,13 +165,14 @@ export function resolveInitialColorScheme(settings: Partial<PersistedUiSettings>
 export function loadAppBootstrapSnapshot(): AppBootstrapSnapshot {
   const persistedUiSettings = loadPersistedUiSettings();
   const initialColorScheme = resolveInitialColorScheme(persistedUiSettings);
+  const models = loadManagedModels();
 
   return {
     persistedUiSettings,
     initialColorScheme,
     initialComputedScheme: resolveColorScheme(initialColorScheme),
-    models: loadManagedModels(),
-    selectedModelId: readStorageItem(SELECTED_MODEL_STORAGE_KEY) ?? DEFAULT_MODELS[0].id,
+    models,
+    selectedModelId: readStorageItem(SELECTED_MODEL_STORAGE_KEY) ?? models[0]?.id ?? "",
     agentStepLimits: loadAgentStepLimits(),
     agentGatewayPreferences: loadAgentGatewayPreferences(),
   };

@@ -504,8 +504,7 @@
   line-height: 1.45;
 }
 
-.settings-console-container .config-input,
-.settings-console-container .model-select {
+.settings-console-container .config-input {
   min-height: 34px;
   border-radius: var(--field-border-radius);
   font-size: 13px;

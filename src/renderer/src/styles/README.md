@@ -73,6 +73,7 @@ Prefer `var(--transition-color)` / `var(--transition-panel)` / property-specific
 
 - `components/ide.css` — settings chrome vocabulary
 - `components/controls.css` — shared `.toggle-switch`
+- `components/select.css` — shared Cursor-style `.ui-select` (portal menu)
 
 ## Modules ownership
 

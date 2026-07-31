@@ -41,8 +41,6 @@ export interface SettingsController {
   logoUrl: string | null;
   uploadLogo: (url: string) => void;
   removeLogo: () => void;
-  autoCloudSync: boolean;
-  setAutoCloudSync: (value: boolean) => void;
   agentStepLimits: AgentStepLimits;
   setAgentStepLimits: (value: AgentStepLimits) => void;
   agentGatewayPreferences: AgentGatewayPreferences;
@@ -72,7 +70,6 @@ export function useSettingsController(
   const persisted = bootstrap.persistedUiSettings;
   const [saveStatus, setSaveStatus] = useState<"saved" | "saving">("saved");
   const saveTimerRef = useRef<number | null>(null);
-  const [autoCloudSync, setAutoCloudSyncState] = useState(() => persisted.autoCloudSync ?? false);
   const [agentStepLimits, setAgentStepLimitsState] = useState(() => bootstrap.agentStepLimits);
   const [agentGatewayPreferences, setAgentGatewayPreferencesState] = useState(
     () => bootstrap.agentGatewayPreferences,
@@ -141,8 +138,6 @@ export function useSettingsController(
 
   useEffect(() => {
     savePersistedUiSettings({
-      autoDownload: false,
-      autoCloudSync,
       defaultRatio: "16:9",
       skin,
       colorScheme,
@@ -154,7 +149,6 @@ export function useSettingsController(
       executionStrategy,
     });
   }, [
-    autoCloudSync,
     borderRadiusScale,
     colorScheme,
     executionStrategy,
@@ -225,8 +219,6 @@ export function useSettingsController(
     logoUrl,
     uploadLogo,
     removeLogo,
-    autoCloudSync,
-    setAutoCloudSync: update(setAutoCloudSyncState),
     agentStepLimits,
     setAgentStepLimits: update(setAgentStepLimitsState),
     agentGatewayPreferences,

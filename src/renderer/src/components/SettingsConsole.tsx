@@ -13,6 +13,7 @@ import type { AgentGatewayPreferences } from "@shared/agent-gateway-config";
 import type { AgentExecutionStrategy } from "@shared/agent";
 import { TokenUsageOverview } from "./TokenUsageOverview";
 import { LogManagementPanel } from "./LogManagementPanel";
+import { Select } from "./Select";
 import { DESIGN_PRESETS, type DesignSystemV2 } from "@design-system";
 import {
   MAX_OUTPUT_TOKENS,
@@ -20,6 +21,7 @@ import {
   normalizeOutputTokenDraft,
 } from "@shared/generation-settings-inputs";
 import type { SettingsCategory } from "../settingsCategories";
+import { normalizeWorkspacePath } from "@shared/workspace";
 import { cx } from "../lib/cx";
 
 type UiColorScheme = "light" | "dark" | "system";
@@ -66,16 +68,16 @@ interface SettingsConsoleProps {
 }
 
 const categoryMeta: Record<SettingsCategory, { title: string }> = {
-  "models-list": { title: "模型列表" },
+  "models-list": { title: "模型" },
   "models-search": { title: "搜索与联网" },
   "models-runtime": { title: "运行参数" },
-  "preferences-presentation": { title: "演示文档默认项" },
-  "preferences-storage": { title: "存储与目录" },
+  "preferences-presentation": { title: "演示与品牌" },
+  "preferences-storage": { title: "存储" },
   "preferences-appearance": { title: "界面外观" },
   "agent-approval": { title: "提交与审批" },
-  "agent-limits": { title: "调用频率限制" },
+  "agent-limits": { title: "限流" },
   "agent-logs": { title: "系统日志" },
-  "usage-overview": { title: "用量统计与趋势" },
+  "usage-overview": { title: "用量与费用" },
 };
 
 function IdeRow({
@@ -190,10 +192,25 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
   const [maxOutputTokensDraft, setMaxOutputTokensDraft] = React.useState(
     () => String(agentGatewayPreferences.maxOutputTokens),
   );
+  const [applicationDataPath, setApplicationDataPath] = React.useState("");
 
   React.useEffect(() => {
     setMaxOutputTokensDraft(String(agentGatewayPreferences.maxOutputTokens));
   }, [agentGatewayPreferences.maxOutputTokens]);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    void window.desktopApi.getApplicationDataPath()
+      .then((path) => {
+        if (!cancelled) setApplicationDataPath(normalizeWorkspacePath(path));
+      })
+      .catch(() => {
+        if (!cancelled) setApplicationDataPath("");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const commitMaxOutputTokens = () => {
     const maxOutputTokens = normalizeOutputTokenDraft(
@@ -226,6 +243,16 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
       onOpenWorkspace();
     } catch (err) {
       triggerToast(`打开目录失败: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  };
+
+  const handleOpenApplicationData = async () => {
+    try {
+      if (!(await window.desktopApi.openApplicationDataDirectory())) {
+        triggerToast("无法打开应用数据目录");
+      }
+    } catch (err) {
+      triggerToast(`打开应用数据目录失败: ${err instanceof Error ? err.message : String(err)}`);
     }
   };
 
@@ -314,6 +341,23 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
                   onBlur={(event) => commitOptionalGatewayText("webSearchEndpoint", event.target.value)}
                 />
               </IdeRow>
+              <IdeRow label="搜索超时">
+                <span className="ide-field-value">
+                  {Math.round((agentGatewayPreferences.webSearchTimeoutMs ?? 20_000) / 1000)} 秒
+                </span>
+                <input
+                  className="ide-range"
+                  type="range"
+                  min={5}
+                  max={120}
+                  step={5}
+                  value={Math.round((agentGatewayPreferences.webSearchTimeoutMs ?? 20_000) / 1000)}
+                  onChange={(event) => setAgentGatewayPreferences({
+                    ...agentGatewayPreferences,
+                    webSearchTimeoutMs: parseInt(event.target.value, 10) * 1000,
+                  })}
+                />
+              </IdeRow>
             </IdeSection>
           </div>
         ) : null}
@@ -352,23 +396,25 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
                 />
               </IdeRow>
               <IdeRow label="服务繁忙时备用模型">
-                <select
-                  className="ide-select"
+                <Select
+                  variant="ide"
+                  ariaLabel="服务繁忙时备用模型"
                   value={agentGatewayPreferences.fallbackModelId ?? ""}
-                  onChange={(event) => setAgentGatewayPreferences({
+                  onChange={(next) => setAgentGatewayPreferences({
                     ...agentGatewayPreferences,
-                    fallbackModelId: event.target.value || undefined,
+                    fallbackModelId: next || undefined,
                   })}
-                >
-                  <option value="">不启用</option>
-                  {models
-                    .filter((model) => model.id !== selectedModelId && isModelEnabled(model))
-                    .map((model) => (
-                      <option key={model.id} value={model.id}>
-                        {model.name} ({model.model})
-                      </option>
-                    ))}
-                </select>
+                  options={[
+                    { value: "", label: "不启用" },
+                    ...models
+                      .filter((model) => model.id !== selectedModelId && isModelEnabled(model))
+                      .map((model) => ({
+                        value: model.id,
+                        label: model.name,
+                        hint: model.model,
+                      })),
+                  ]}
+                />
               </IdeRow>
             </IdeSection>
           </div>
@@ -378,16 +424,16 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
           <div className="ide-panel">
             <IdeSection title="提交与审批（CommitGate）">
               <IdeRow label="审批模式">
-                <select
-                  className="ide-select"
+                <Select
+                  variant="ide"
+                  ariaLabel="审批模式"
                   value={executionStrategy}
-                  onChange={(event) => setExecutionStrategy(
-                    event.target.value as AgentExecutionStrategy,
-                  )}
-                >
-                  <option value="REQUEST_APPROVAL">手动确认每次修改</option>
-                  <option value="AUTO">自动应用低风险修改</option>
-                </select>
+                  onChange={(next) => setExecutionStrategy(next as AgentExecutionStrategy)}
+                  options={[
+                    { value: "REQUEST_APPROVAL", label: "手动确认每次修改" },
+                    { value: "AUTO", label: "自动应用低风险修改" },
+                  ]}
+                />
               </IdeRow>
               <p className="ide-hint">
                 自动模式仅直接应用低风险提案；中高风险修改仍由 CommitGate 请求确认。
@@ -472,6 +518,27 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
                   </button>
                 </div>
               </IdeRow>
+              <IdeRow label="应用数据">
+                <div className="ide-path">
+                  <FolderIcon size={14} />
+                  <span className="ide-path-text" title={applicationDataPath}>
+                    {applicationDataPath || "读取中…"}
+                  </span>
+                  <button
+                    type="button"
+                    className="ide-btn-secondary"
+                    disabled={!applicationDataPath}
+                    onClick={() => void handleOpenApplicationData()}
+                  >
+                    打开目录
+                  </button>
+                </div>
+              </IdeRow>
+              <IdeRow label="说明">
+                <span className="ide-hint">
+                  应用数据目录存放会话、日志与用量统计；可用环境变量 AGENT_PPT_DATA_DIR 覆盖。
+                </span>
+              </IdeRow>
             </IdeSection>
           </div>
         ) : null}
@@ -483,18 +550,19 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
                 <span className="ide-hint">16:9 宽屏（当前唯一导出比例）</span>
               </IdeRow>
               <IdeRow label="默认设计系统">
-                <select
-                  className="ide-select"
+                <Select
+                  variant="ide"
+                  ariaLabel="默认设计系统"
                   value={selectedDesignSystem.visualStyle}
-                  onChange={(event) => {
-                    const preset = DESIGN_PRESETS.find((item) => item.id === event.target.value);
+                  onChange={(next) => {
+                    const preset = DESIGN_PRESETS.find((item) => item.id === next);
                     if (preset) setSelectedDesignSystem(preset.system);
                   }}
-                >
-                  {DESIGN_PRESETS.map((preset) => (
-                    <option key={preset.id} value={preset.id}>{preset.label}</option>
-                  ))}
-                </select>
+                  options={DESIGN_PRESETS.map((preset) => ({
+                    value: preset.id,
+                    label: preset.label,
+                  }))}
+                />
               </IdeRow>
               <IdeRow label="当前设计语言">
                 <span className="ide-hint">
