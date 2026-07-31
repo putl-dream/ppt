@@ -262,20 +262,22 @@
 .message-action-btn--primary {
   background: var(--accent-primary);
   border-color: transparent;
-  color: #fff;
+  color: var(--text-on-accent);
   box-shadow: 0 2px 8px var(--accent-primary-glow);
 }
 
 .message-action-btn--primary:hover {
-  background: #0284c7;
-  color: #fff;
+  background: var(--accent-primary);
+  color: var(--text-on-accent);
   border-color: transparent;
+  filter: brightness(1.05);
 }
 
 .message-action-btn--primary:disabled:hover {
   background: var(--accent-primary);
   border-color: transparent;
-  color: #fff;
+  color: var(--text-on-accent);
+  filter: none;
 }
 
 @media (max-width: 620px) {

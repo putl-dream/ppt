@@ -345,7 +345,7 @@
 .ide-btn {
   border: 1px solid transparent;
   background: var(--accent-primary);
-  color: #fff;
+  color: var(--text-on-accent);
 }
 
 .ide-btn:hover {

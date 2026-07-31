@@ -113,7 +113,7 @@ aside {
   background: var(--accent-primary);
   border: none;
   border-radius: var(--button-border-radius);
-  color: #fff;
+  color: var(--text-on-accent);
   font-family: var(--font-display);
   font-size: 13px;
   font-weight: 500;
@@ -655,7 +655,7 @@ aside {
   width: 18px; height: 18px;
   border-radius: 50%;
   background: var(--accent-primary);
-  color: #fff;
+  color: var(--text-on-accent);
   display: grid;
   place-items: center;
 }
@@ -862,7 +862,7 @@ aside {
   background: var(--accent-primary);
   display: grid;
   place-items: center;
-  color: #fff;
+  color: var(--text-on-accent);
 }
 
 .profile-info {

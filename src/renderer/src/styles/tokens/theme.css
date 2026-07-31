@@ -17,6 +17,10 @@
   --text-primary: #0f172a;
   --text-secondary: #475569;
   --text-muted: #64748b;
+  --text-on-accent: #ffffff;
+
+  --diff-remove: #fca5a5;
+  --diff-add: #6ee7b7;
 
   --accent-cyan: #0284c7;
   --accent-cyan-glow: rgba(2, 132, 199, 0.12);
@@ -90,6 +94,10 @@
   --text-primary: #f8fafc;
   --text-secondary: #94a3b8;
   --text-muted: #64748b;
+  --text-on-accent: #ffffff;
+
+  --diff-remove: #fca5a5;
+  --diff-add: #6ee7b7;
 
   --accent-cyan: #0ea5e9;
   --accent-cyan-glow: rgba(14, 165, 233, 0.18);

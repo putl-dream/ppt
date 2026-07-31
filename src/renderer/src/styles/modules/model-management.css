@@ -37,8 +37,8 @@
   padding: 0 12px;
   border: 1px solid rgba(0, 0, 0, 0.14);
   border-radius: 3px;
-  background: #ffffff;
-  color: #111827;
+  background: var(--bg-input-field);
+  color: var(--text-primary);
   font-size: 13px;
   font-family: var(--font-body);
 }
@@ -141,7 +141,7 @@
 }
 
 .cursor-model-name-btn:hover {
-  color: #0f766e;
+  color: var(--accent-green);
 }
 
 .cursor-model-edit-btn {
@@ -183,7 +183,7 @@
   height: 14px;
   left: 2px;
   bottom: 2px;
-  background: #ffffff;
+  background: var(--text-on-accent);
 }
 
 .cursor-model-toggle input:checked + .toggle-slider {
@@ -206,7 +206,7 @@
   padding: 0;
   border: none;
   background: transparent;
-  color: #2f6fbd;
+  color: var(--accent-primary);
   font-size: 12px;
   font-family: var(--font-body);
   cursor: pointer;

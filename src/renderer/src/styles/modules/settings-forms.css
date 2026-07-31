@@ -133,7 +133,7 @@
   border: 1px solid var(--accent-primary);
   border-radius: var(--field-border-radius);
   background: var(--accent-primary);
-  color: #ffffff;
+  color: var(--text-on-accent);
   font-family: var(--font-body);
   font-size: 12px;
   font-weight: 650;
@@ -221,7 +221,7 @@
 }
 
 .log-entry-level {
-  color: #b45309;
+  color: var(--warning);
   font-family: var(--font-mono);
   font-size: 10px;
   font-weight: 700;
