@@ -270,6 +270,17 @@
   background: rgba(239, 68, 68, 0.15);
 }
 
+.btn-preview-affected {
+  background: color-mix(in srgb, var(--bg-glass) 80%, transparent);
+  border: 1px solid var(--border-glass);
+  color: var(--text-secondary);
+}
+
+.btn-preview-affected:hover {
+  background: color-mix(in srgb, var(--accent-primary-glow, rgba(42, 143, 155, 0.18)) 40%, transparent);
+  color: var(--text-primary);
+}
+
 .btn-apply {
   background: linear-gradient(135deg, var(--accent-primary) 0%, #0284c7 100%);
   border: none;

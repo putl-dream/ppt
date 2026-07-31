@@ -57,6 +57,7 @@ interface UseAgentRunControllerOptions {
   sessionLoaded: boolean;
   localStoragePath: string;
   generationMode: LeanGenerationMode;
+  selectedSlideId?: string;
   chatMessages: ChatMessage[];
   setChatMessages: Dispatch<SetStateAction<ChatMessage[]>>;
   setIsDraftChat: Dispatch<SetStateAction<boolean>>;
@@ -99,6 +100,7 @@ export function useAgentRunController({
   sessionLoaded,
   localStoragePath,
   generationMode,
+  selectedSlideId,
   chatMessages,
   setChatMessages,
   setIsDraftChat,
@@ -216,6 +218,7 @@ export function useAgentRunController({
           sessionId: context.sessionId,
           generationMode: runGenerationMode,
           layoutChoice: options?.layoutChoice,
+          currentSlideId: selectedSlideId || undefined,
         });
 
         console.info("Starting unified Agent run", {
@@ -287,6 +290,7 @@ export function useAgentRunController({
     notify,
     request,
     selectedModel,
+    selectedSlideId,
     setBusy,
     setChatMessages,
     setIsDraftChat,

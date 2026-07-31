@@ -10,6 +10,7 @@ import {
   getSlidePreviewBatchKey,
   selectLatestSlidePreviews,
 } from "../cards/select-slide-previews";
+import { confirmSvgExportExpectation } from "../app/presentation/exportExpectations";
 import { SlideElementRenderer } from "./SlideElementRenderer";
 import { SlidePreviewGallery } from "./SlidePreviewGallery";
 import {
@@ -198,6 +199,7 @@ export const PPTMirror: React.FC<PPTMirrorProps> = ({
 
   const handleDownload = async () => {
     if (!sessionId || isExporting) return;
+    if (!confirmSvgExportExpectation(presentation)) return;
     const needsApproval = hasUnverifiedCommercialAssets(presentation);
     const allowUnverifiedAssets = needsApproval
       ? window.confirm("演示文稿包含尚未核实商业授权的图片。是否明确批准本次导出？")

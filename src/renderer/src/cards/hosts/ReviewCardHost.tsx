@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useRef } from "react";
 import type { DisplayEvent } from "@shared/card-display-protocol";
 import { formatApprovalCommand } from "@shared/approval-command-display";
 import { FileIcon } from "../../components/Icons";
@@ -17,6 +17,7 @@ interface ReviewCardHostProps {
   busy: boolean;
   onResolveApproval: (event: CommandProposalEvent, approved: boolean) => void;
   onResolvePatch: (event: PatchEvent, accepted: boolean) => void;
+  onFocusAffectedSlides?: (slideIds: string[]) => void;
 }
 
 /** Renders revision-bound reviews from the review manager only. */
@@ -25,12 +26,28 @@ export const ReviewCardHost: React.FC<ReviewCardHostProps> = ({
   busy,
   onResolveApproval,
   onResolvePatch,
+  onFocusAffectedSlides,
 }) => {
   const cards = useReviewCardManager((state) => state.cards).filter((card) =>
     card.event.scope.anchorMessageId === anchorMessageId
     && card.status !== "dismissed"
     && card.status !== "superseded"
   );
+  const focusedProposalIdsRef = useRef(new Set<string>());
+
+  useEffect(() => {
+    if (!onFocusAffectedSlides) return;
+    for (const card of cards) {
+      if (card.status !== "active" || card.event.kind !== "review.command-proposal") continue;
+      const approval = card.event.payload;
+      const slideIds = approval.diff?.affectedSlideIds ?? [];
+      if (slideIds.length === 0) continue;
+      if (focusedProposalIdsRef.current.has(approval.proposalId)) continue;
+      focusedProposalIdsRef.current.add(approval.proposalId);
+      onFocusAffectedSlides(slideIds);
+      break;
+    }
+  }, [cards, onFocusAffectedSlides]);
 
   return (
     <>
@@ -72,6 +89,7 @@ export const ReviewCardHost: React.FC<ReviewCardHostProps> = ({
             />
           );
         }
+        const affectedSlideIds = approval.diff?.affectedSlideIds ?? [];
         const resolve = (approved: boolean) => {
           recordDisplayCardAction(
             event.eventId,
@@ -112,6 +130,16 @@ export const ReviewCardHost: React.FC<ReviewCardHostProps> = ({
               })}
             </div>
             <div className="approval-buttons">
+              {affectedSlideIds.length > 0 && onFocusAffectedSlides ? (
+                <button
+                  type="button"
+                  disabled={busy}
+                  className="btn-preview-affected"
+                  onClick={() => onFocusAffectedSlides(affectedSlideIds)}
+                >
+                  预览受影响页
+                </button>
+              ) : null}
               <button disabled={busy} onClick={() => resolve(false)} className="btn-reject">
                 拒绝变更
               </button>

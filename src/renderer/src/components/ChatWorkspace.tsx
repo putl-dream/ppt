@@ -19,7 +19,6 @@ import { filterTraceForDisplay, markTraceComplete } from "@shared/agent-activity
 import { TaskPlanCard } from "./TaskPlanCard";
 import type { ManagedModel } from "../modelCatalog";
 import type { Presentation } from "@shared/presentation";
-import type { LeanGenerationMode } from "@shared/lean-mode-contract";
 import {
   findActiveToolPermissionCard,
   usePermissionCardManager,
@@ -33,6 +32,8 @@ import {
 } from "@shared/team-session";
 import { FocusedTeamSession } from "./TeamSessionViews";
 import type { AgentRunPhase } from "../agentRunPresentation";
+import { useProjectStore } from "./project-store";
+import { PptJobStatusBar } from "./PptJobStatusBar";
 
 type ChatMessage = SessionChatMessage;
 type QuestionEvent = Extract<DisplayEvent, { kind: "interaction.question-requested" }>;
@@ -141,12 +142,11 @@ interface ChatWorkspaceProps {
   onResolvePatch: (event: PatchEvent, accepted: boolean) => void;
   onResolveQuestion: (event: QuestionEvent, resolved: AgentQuestionResolved) => void;
   onResolveToolApproval?: (approvalId: string, approved: boolean) => void;
-  onConfirmBrief: (event: ArtifactEvent) => void;
-  onConfirmOutline: (event: ArtifactEvent) => void;
   onReviseOutline: (event: ArtifactEvent) => void;
   onOpenDeckPreview: () => void;
   onExportDeck: () => void;
   isExportingDeck?: boolean;
+  onFocusAffectedSlides?: (slideIds: string[]) => void;
   activeRunId?: string | null;
   onCancelRun?: () => void;
   isCancellingRun?: boolean;
@@ -160,8 +160,6 @@ interface ChatWorkspaceProps {
   models: ManagedModel[];
   selectedModelId: string;
   setSelectedModelId: (val: string) => void;
-  generationMode: LeanGenerationMode;
-  onChangeGenerationMode?: (mode: LeanGenerationMode) => void;
   workspaceReady: boolean;
   sandboxName: string;
   onPrepareWorkspace: () => void;
@@ -184,12 +182,11 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
   onResolvePatch,
   onResolveQuestion,
   onResolveToolApproval,
-  onConfirmBrief,
-  onConfirmOutline,
   onReviseOutline,
   onOpenDeckPreview,
   onExportDeck,
   isExportingDeck,
+  onFocusAffectedSlides,
   activeRunId,
   onCancelRun,
   isCancellingRun = false,
@@ -203,13 +200,12 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
   models,
   selectedModelId,
   setSelectedModelId,
-  generationMode,
-  onChangeGenerationMode,
   workspaceReady,
   sandboxName,
   onPrepareWorkspace,
   triggerToast,
 }) => {
+  const pptJob = useProjectStore((state) => state.pptJob);
   const [showSlashMenu, setShowSlashMenu] = useState(false);
   const [editingMsgId, setEditingMsgId] = useState<string | null>(null);
   const [editingText, setEditingText] = useState("");
@@ -433,12 +429,11 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
     return () => observer.disconnect();
   }, [busy]);
 
-  const slashCommands = [
-    { cmd: "/design 商务蓝", desc: "应用商务蓝设计系统" },
-    { cmd: "/design 科技暗色", desc: "应用科技暗色设计系统" },
-    { cmd: "/add-page ", desc: "在末尾添加指定标题的新幻灯片页" },
-    { cmd: "/delete-page ", desc: "删除指定页码的幻灯片" },
-    { cmd: "/rewrite ", desc: "对选中页面文本进行局部润色优化" },
+  const promptTemplates = [
+    { cmd: "将整套演示统一为商务蓝视觉风格", desc: "提示：统一设计风格" },
+    { cmd: "在末尾新增一页：", desc: "提示：追加页面" },
+    { cmd: "删除第 页", desc: "提示：删除指定页" },
+    { cmd: "润色当前页的文案，保持论点不变", desc: "提示：局部润色" },
   ];
 
   const promptSuggestions = [
@@ -510,8 +505,6 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
             models={models}
             selectedModelId={selectedModelId}
             setSelectedModelId={setSelectedModelId}
-            generationMode={generationMode}
-            onChangeGenerationMode={onChangeGenerationMode}
             layoutMode="center"
             pendingToolApproval={pendingApprovalProps}
             onResolveToolApproval={onResolveToolApproval}
@@ -609,6 +602,8 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
           )}
         </div>
       </div>
+
+      {pptJob ? <PptJobStatusBar pptJob={pptJob} compact /> : null}
 
       {/* 核心 AI 对话信息流 */}
       <div className="chat-scroll-viewport" ref={scrollViewportRef}>
@@ -725,6 +720,7 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
                   busy={busy}
                   onResolveApproval={onResolveApproval}
                   onResolvePatch={onResolvePatch}
+                  onFocusAffectedSlides={onFocusAffectedSlides}
                 />
 
                 <ArtifactCardHost
@@ -732,8 +728,6 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
                   presentation={presentation}
                   busy={busy}
                   isExportingDeck={isExportingDeck}
-                  onConfirmBrief={onConfirmBrief}
-                  onConfirmOutline={onConfirmOutline}
                   onReviseOutline={onReviseOutline}
                   onOpenDeckPreview={onOpenDeckPreview}
                   onExportDeck={onExportDeck}
@@ -755,14 +749,13 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
           busy={busy}
           onResolveApproval={onResolveApproval}
           onResolvePatch={onResolvePatch}
+          onFocusAffectedSlides={onFocusAffectedSlides}
         />
 
         <ArtifactCardHost
           presentation={presentation}
           busy={busy}
           isExportingDeck={isExportingDeck}
-          onConfirmBrief={onConfirmBrief}
-          onConfirmOutline={onConfirmOutline}
           onReviseOutline={onReviseOutline}
           onOpenDeckPreview={onOpenDeckPreview}
           onExportDeck={onExportDeck}
@@ -804,9 +797,9 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
 
         {/* 斜杠弹出指令 */}
         {showSlashMenu && !pendingToolApproval && (
-          <div className="slash-menu-popup" role="listbox" aria-label="快捷指令">
-            <div className="slash-menu-header">斜杠快捷指令</div>
-            {slashCommands.map((command, index) => (
+          <div className="slash-menu-popup" role="listbox" aria-label="提示词模板">
+            <div className="slash-menu-header">提示词模板（填入输入框，不会直接执行）</div>
+            {promptTemplates.map((command, index) => (
               <button
                 type="button"
                 key={index}
@@ -839,8 +832,6 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
             models={models}
             selectedModelId={selectedModelId}
             setSelectedModelId={setSelectedModelId}
-            generationMode={generationMode}
-            onChangeGenerationMode={onChangeGenerationMode}
             layoutMode="bottom"
             pendingToolApproval={pendingApprovalProps}
             onResolveToolApproval={onResolveToolApproval}

@@ -1,10 +1,5 @@
 import { useEffect, useMemo, type KeyboardEvent } from "react";
-import type {
-  PptJobProjection,
-  PptJobStatus,
-  PptProposalStatus,
-  PptStage,
-} from "@shared/presentation-lifecycle";
+import type { PptJobProjection } from "@shared/presentation-lifecycle";
 import { CheckIcon, FileIcon, FolderIcon, RefreshIcon } from "./Icons";
 import {
   formatProjectFileSize,
@@ -15,6 +10,7 @@ import {
   type ProjectFilesController,
 } from "../app/project/useProjectFiles";
 import { useProjectStore } from "./project-store";
+import { PptJobStatusBar } from "./PptJobStatusBar";
 
 interface ProjectFilesPageProps {
   sessionId?: string;
@@ -33,35 +29,6 @@ export interface ProjectFilesPageContentProps {
   busy: boolean;
   pptJob?: PptJobProjection | null;
 }
-
-const JOB_STATUS_LABELS: Record<PptJobStatus, string> = {
-  running: "进行中",
-  waiting_user: "等待用户",
-  waiting_approval: "等待审批",
-  completed: "已完成",
-  cancelled: "已取消",
-  failed: "失败",
-};
-
-const PROPOSAL_STATUS_LABELS: Record<PptProposalStatus, string> = {
-  waiting_approval: "等待审批",
-  applied: "已应用",
-  rejected: "已拒绝",
-  superseded: "已失效",
-};
-
-const STAGE_LABELS: Record<PptStage, string> = {
-  intent: "意图",
-  design_spec: "设计规范",
-  page_plan: "逐页规划",
-  page_svg: "页面 SVG",
-  preview: "预览",
-  candidate: "候选稿",
-  quality: "质量检查",
-  proposal: "提案",
-  presentation: "演示文稿",
-  export: "导出",
-};
 
 function fileName(path: string): string {
   return path.split("/").at(-1) || path;
@@ -222,24 +189,7 @@ export function ProjectFilesPageContent({
       </header>
 
       {hasSession && pptJob ? (
-        <div className={`project-files-job-status is-${pptJob.status}`} role="status">
-          <span className="project-files-job-status__label">PPT JOB</span>
-          <strong>{JOB_STATUS_LABELS[pptJob.status]}</strong>
-          <span>阶段：{STAGE_LABELS[pptJob.stage]}</span>
-          {pptJob.proposalId && pptJob.proposalStatus ? (
-            <span>
-              Proposal：{PROPOSAL_STATUS_LABELS[pptJob.proposalStatus]}
-            </span>
-          ) : null}
-          {pptJob.waitingReason ? (
-            <span className="project-files-job-status__reason">{pptJob.waitingReason}</span>
-          ) : null}
-          {pptJob.staleArtifacts.length > 0 ? (
-            <span className="project-files-job-status__stale">
-              {pptJob.staleArtifacts.length} 个生命周期产物待更新
-            </span>
-          ) : null}
-        </div>
+        <PptJobStatusBar pptJob={pptJob} />
       ) : null}
 
       {!hasSession ? (

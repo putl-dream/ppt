@@ -44,6 +44,7 @@ export function App() {
     toggleMirrorExpanded,
     openDeckPreview,
     closeDeckPreview,
+    focusAffectedSlides,
   } = presentationController;
 
   const [activeMode, setActiveMode] = useState<AppMode>("workspace");
@@ -59,7 +60,6 @@ export function App() {
     computedTheme,
     logoUrl,
     selectedModelId,
-    selectedDesignSystem,
     selectModel: setSelectedModelId,
     visibleModels,
   } = settings;
@@ -122,6 +122,7 @@ export function App() {
     sessionLoaded,
     localStoragePath,
     generationMode,
+    selectedSlideId,
     chatMessages,
     setChatMessages,
     setIsDraftChat,
@@ -145,8 +146,6 @@ export function App() {
   const submitUserQuery = useUserQuerySubmission({
     request,
     busy,
-    generationMode,
-    selectedDesignSystem,
     presentation,
     activeSessionId,
     setRequest,
@@ -260,12 +259,11 @@ export function App() {
             onResolveQuestion: displayActions.resolveQuestion,
             onResolveToolApproval: (approvalId, approved) =>
               void resolveToolApproval(approvalId, approved),
-            onConfirmBrief: displayActions.confirmBrief,
-            onConfirmOutline: displayActions.confirmOutline,
             onReviseOutline: displayActions.reviseOutline,
             onOpenDeckPreview: openDeckPreview,
             onExportDeck: () => void exportDeck(),
             isExportingDeck,
+            onFocusAffectedSlides: focusAffectedSlides,
             activeRunId,
             onCancelRun: () => void cancelRun(),
             isCancellingRun,
@@ -278,7 +276,6 @@ export function App() {
             models: visibleModels,
             selectedModelId,
             setSelectedModelId,
-            generationMode,
             workspaceReady: Boolean(localStoragePath),
             sandboxName: getWorkspaceLabel(localStoragePath || undefined),
             onPrepareWorkspace: () => void selectWorkspaceFolder(),

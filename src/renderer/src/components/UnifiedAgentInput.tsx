@@ -4,7 +4,6 @@ import type { ManagedModel } from "../modelCatalog";
 import type { PendingToolApproval } from "./ToolApprovalOverlay";
 import { PermissionCardHost } from "../cards/hosts/PermissionCardHost";
 import { EnvironmentCardHost } from "../cards/hosts/EnvironmentCardHost";
-import type { LeanGenerationMode } from "@shared/lean-mode-contract";
 
 interface UnifiedAgentInputProps {
   request: string;
@@ -23,8 +22,6 @@ interface UnifiedAgentInputProps {
   sandboxReady?: boolean;
   sandboxName?: string;
   onPrepareWorkspace?: () => void;
-  generationMode?: LeanGenerationMode;
-  onChangeGenerationMode?: (mode: LeanGenerationMode) => void;
 }
 
 function resizeTextarea(textarea: HTMLTextAreaElement) {
@@ -51,8 +48,6 @@ export const UnifiedAgentInput: React.FC<UnifiedAgentInputProps> = ({
   sandboxReady = true,
   sandboxName,
   onPrepareWorkspace,
-  generationMode = "agent",
-  onChangeGenerationMode,
 }) => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const modelMenuRef = useRef<HTMLDivElement>(null);
@@ -106,9 +101,7 @@ export const UnifiedAgentInput: React.FC<UnifiedAgentInputProps> = ({
           <span className="center-welcome-eyebrow">AI PRESENTATION WORKSPACE</span>
           <h1 className="center-welcome-title">从一个清晰的目标开始</h1>
           <p className="center-welcome-subtitle">
-            {generationMode === "lean"
-              ? "Lean Mode 用一次模型调用生成商业叙事，再由本地编译器完成版式。"
-              : "描述受众、场景和希望传达的核心结论，其余工作交给 Agent。"}
+            描述受众、场景和希望传达的核心结论，其余工作交给 Agent。
           </p>
         </div>
       ) : null}
@@ -134,9 +127,7 @@ export const UnifiedAgentInput: React.FC<UnifiedAgentInputProps> = ({
                     resizeTextarea(event.target);
                   }}
                   onKeyDown={handleKeyDown}
-                  placeholder={generationMode === "lean"
-                    ? "描述商业场景、受众、目标与希望对方采取的行动…"
-                    : "描述目标，或粘贴网页链接生成演示文稿…"}
+                  placeholder="描述目标，或粘贴网页链接生成演示文稿…"
                   readOnly={busy}
                   autoFocus
                   rows={layoutMode === "center" ? 3 : 2}
@@ -147,42 +138,10 @@ export const UnifiedAgentInput: React.FC<UnifiedAgentInputProps> = ({
 
               <div className="functional-control-bar">
                 <div className="functional-left">
-                  {onChangeGenerationMode ? (
-                    <div
-                      className="generation-mode-switch"
-                      role="group"
-                      aria-label="选择生成模式"
-                    >
-                      <button
-                        type="button"
-                        className={generationMode === "lean" ? "is-active" : ""}
-                        aria-pressed={generationMode === "lean"}
-                        title="单次模型调用；仅用于新建商业 PPT"
-                        disabled={busy}
-                        onClick={() => onChangeGenerationMode("lean")}
-                      >
-                        Lean
-                      </button>
-                      <button
-                        type="button"
-                        className={generationMode === "agent" ? "is-active" : ""}
-                        aria-pressed={generationMode === "agent"}
-                        title="多轮 Agent；适合研究、修改和复杂任务"
-                        disabled={busy}
-                        onClick={() => onChangeGenerationMode("agent")}
-                      >
-                        Agent
-                      </button>
-                    </div>
-                  ) : null}
                   <span className={`action-dock-status${busy ? " is-running" : ""}`}>
                     <span className="action-dock-status-dot" aria-hidden="true" />
                     {busy
-                      ? generationMode === "lean"
-                        ? "Lean 正在生成"
-                        : "Agent 正在执行"
-                      : generationMode === "lean"
-                        ? "单次调用 · 新建商业 PPT"
+                      ? "Agent 正在执行"
                       : sandboxReady
                         ? `沙箱 · ${sandboxName?.trim() || "当前项目"}`
                         : "沙箱 · 发送后自动创建"}

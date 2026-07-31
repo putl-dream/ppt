@@ -32,6 +32,7 @@
     "src/renderer/src/app/project/projectFileMutations.ts",
     "src/renderer/src/app/agent/agentRunFailure.ts",
     "src/renderer/src/app/agent/agentRunPreparation.ts",
+    "src/renderer/src/app/presentation/exportExpectations.ts",
     "src/renderer/src/cards/**/*.ts",
     "tests/**/*.ts"
   ]

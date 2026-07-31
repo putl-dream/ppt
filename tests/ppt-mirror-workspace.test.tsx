@@ -130,8 +130,6 @@ describe("PPTMirror preview workspace", () => {
       <ArtifactCardHost
         presentation={presentation}
         busy={false}
-        onConfirmBrief={() => undefined}
-        onConfirmOutline={() => undefined}
         onReviseOutline={() => undefined}
         onOpenDeckPreview={() => undefined}
         onExportDeck={() => undefined}

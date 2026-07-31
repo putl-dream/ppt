@@ -8,6 +8,7 @@ interface BuildAgentRunRequestOptions {
   sessionId: string;
   generationMode: LeanGenerationMode;
   layoutChoice?: LayoutChoice;
+  currentSlideId?: string;
 }
 
 export function buildAgentRunRequest({
@@ -15,12 +16,16 @@ export function buildAgentRunRequest({
   sessionId,
   generationMode,
   layoutChoice,
+  currentSlideId,
 }: BuildAgentRunRequestOptions): AgentRunRequest {
   // 这里只构造 Renderer → Main 的业务请求；模型、Gateway 和步数限制属于执行配置。
   return {
     prompt,
     sessionId,
-    editorContext: { selectedElementIds: [] },
+    editorContext: {
+      ...(currentSlideId ? { currentSlideId } : {}),
+      selectedElementIds: [],
+    },
     generationMode,
     ...(layoutChoice ? { layoutChoice } : {}),
   };

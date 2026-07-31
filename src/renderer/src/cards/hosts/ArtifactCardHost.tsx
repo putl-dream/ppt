@@ -19,8 +19,6 @@ interface ArtifactCardHostProps {
   presentation?: Presentation;
   busy: boolean;
   isExportingDeck?: boolean;
-  onConfirmBrief: (event: ArtifactEvent) => void;
-  onConfirmOutline: (event: ArtifactEvent) => void;
   onReviseOutline: (event: ArtifactEvent) => void;
   onOpenDeckPreview: () => void;
   onExportDeck: () => void;
@@ -32,8 +30,6 @@ export const ArtifactCardHost: React.FC<ArtifactCardHostProps> = ({
   presentation,
   busy,
   isExportingDeck,
-  onConfirmBrief,
-  onConfirmOutline,
   onReviseOutline,
   onOpenDeckPreview,
   onExportDeck,
@@ -51,7 +47,6 @@ export const ArtifactCardHost: React.FC<ArtifactCardHostProps> = ({
         const event = card.event;
         if (event.kind !== "artifact.ready") return null;
         const type = event.payload.artifactType;
-        const resolved = card.status === "resolved" ? "confirmed" as const : undefined;
 
         if (type === "brief") {
           const content = project?.artifacts.brief.content ?? "";
@@ -60,13 +55,6 @@ export const ArtifactCardHost: React.FC<ArtifactCardHostProps> = ({
             <BriefCard
               key={event.eventId}
               fields={parseBriefFields(content, project?.name ?? "新演示文稿")}
-              resolved={resolved}
-              onConfirm={card.status === "active"
-                ? () => {
-                    recordDisplayCardAction(event.eventId, "approve", undefined, "resolved");
-                    onConfirmBrief(event);
-                  }
-                : undefined}
             />
           );
         }
@@ -82,14 +70,7 @@ export const ArtifactCardHost: React.FC<ArtifactCardHostProps> = ({
             <OutlineCard
               key={event.eventId}
               items={items}
-              resolved={resolved}
               busy={busy}
-              onConfirm={card.status === "active"
-                ? () => {
-                    recordDisplayCardAction(event.eventId, "approve", undefined, "resolved");
-                    onConfirmOutline(event);
-                  }
-                : undefined}
               onRevise={card.status === "active"
                 ? () => {
                     recordDisplayCardAction(event.eventId, "revise", undefined, "dismissed");
@@ -101,6 +82,7 @@ export const ArtifactCardHost: React.FC<ArtifactCardHostProps> = ({
         }
 
         if (type === "deck" && presentation) {
+          const resolved = card.status === "resolved" ? "confirmed" as const : undefined;
           return (
             <DeckPreviewCard
               key={event.eventId}

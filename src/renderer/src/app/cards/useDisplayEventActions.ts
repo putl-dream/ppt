@@ -40,8 +40,6 @@ export interface DisplayEventActions {
     messages: ChatMessage[],
   ) => void;
   resolveQuestion: (event: QuestionEvent, resolved: AgentQuestionResolved) => void;
-  confirmBrief: (event: ArtifactEvent) => Promise<void>;
-  confirmOutline: (event: ArtifactEvent) => Promise<void>;
   reviseOutline: (event: ArtifactEvent) => void;
   resolvePatch: (event: PatchEvent, accepted: boolean) => Promise<void>;
 }
@@ -116,8 +114,10 @@ export function useDisplayEventActions({
       }
 
       if (result.status === "completed" || result.status === "rejected") {
+        const affectedSlideId = approvalRequest.diff?.affectedSlideIds?.[0];
         await syncPresentation({
-          selectLastSlide: approved,
+          preferredSlideId: approved ? affectedSlideId : undefined,
+          selectLastSlide: approved && !affectedSlideId,
           openMirror: approved,
           highlightSlide: approved,
         });
@@ -202,14 +202,6 @@ export function useDisplayEventActions({
     });
   }, [setChatMessages, startAgent]);
 
-  const confirmBrief = useCallback(async (_event: ArtifactEvent) => {
-    notify("✅ Brief 已确认");
-  }, [notify]);
-
-  const confirmOutline = useCallback(async (_event: ArtifactEvent) => {
-    notify("✅ 大纲已确认");
-  }, [notify]);
-
   const reviseOutline = useCallback((_event: ArtifactEvent) => {
     void startAgent("请根据当前反馈继续修改大纲结构", undefined, {
       generationMode: "agent",
@@ -253,8 +245,6 @@ export function useDisplayEventActions({
     resolveApproval,
     updateMessageContent,
     resolveQuestion,
-    confirmBrief,
-    confirmOutline,
     reviseOutline,
     resolvePatch,
   };

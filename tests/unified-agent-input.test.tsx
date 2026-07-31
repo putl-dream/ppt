@@ -30,7 +30,7 @@ describe("UnifiedAgentInput draft workspace", () => {
     expect(sendButton).not.toContain("disabled");
   });
 
-  it("shows the Lean/Agent switch and explains the single-call boundary", () => {
+  it("does not expose the retired Lean mode switch", () => {
     const html = renderToStaticMarkup(
       <UnifiedAgentInput
         request="为管理层生成经营复盘"
@@ -41,14 +41,11 @@ describe("UnifiedAgentInput draft workspace", () => {
         selectedModelId=""
         setSelectedModelId={vi.fn()}
         layoutMode="center"
-        generationMode="lean"
-        onChangeGenerationMode={vi.fn()}
       />,
     );
 
-    expect(html).toContain("选择生成模式");
-    expect(html).toContain('aria-pressed="true"');
-    expect(html).toContain("单次模型调用");
-    expect(html).toContain("单次调用 · 新建商业 PPT");
+    expect(html).not.toContain("选择生成模式");
+    expect(html).not.toContain(">Lean<");
+    expect(html).toContain("描述受众、场景和希望传达的核心结论");
   });
 });

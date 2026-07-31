@@ -1,0 +1,51 @@
+/* PPT Job status bar — shared across workspace chat and project files */
+
+.ppt-job-status-bar {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 10px;
+  min-height: 34px;
+  padding: 7px 16px;
+  border-bottom: 1px solid var(--border-glass);
+  color: var(--text-secondary);
+  background: color-mix(in srgb, var(--bg-glass) 74%, transparent);
+  font-size: 12px;
+}
+
+.ppt-job-status-bar__label {
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.ppt-job-status-bar__reason {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ppt-job-status-bar__stale {
+  margin-left: auto;
+  color: var(--warning, #d09a37);
+  font-weight: 650;
+}
+
+.ppt-job-status-bar.is-waiting_approval {
+  color: var(--accent-primary, #2a8f9b);
+  background: color-mix(in srgb, var(--accent-primary-glow, rgba(42, 143, 155, 0.18)) 55%, transparent);
+}
+
+.ppt-job-status-bar.is-failed,
+.ppt-job-status-bar.is-cancelled {
+  color: var(--danger, #d96666);
+}
+
+.ppt-job-status-bar.is-compact {
+  padding: 6px 14px;
+  border-radius: 0;
+}

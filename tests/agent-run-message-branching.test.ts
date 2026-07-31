@@ -40,10 +40,11 @@ describe("agent run message branching", () => {
       sessionId: "session-1",
       generationMode: "agent",
       layoutChoice,
+      currentSlideId: "slide-2",
     })).toEqual({
       prompt: "Create a deck",
       sessionId: "session-1",
-      editorContext: { selectedElementIds: [] },
+      editorContext: { currentSlideId: "slide-2", selectedElementIds: [] },
       generationMode: "agent",
       layoutChoice,
     });

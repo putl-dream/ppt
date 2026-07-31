@@ -29,6 +29,8 @@ export interface PresentationController {
   toggleMirrorExpanded: () => void;
   openDeckPreview: () => void;
   closeDeckPreview: () => void;
+  /** Open mirror and highlight the first affected slide when a proposal needs review. */
+  focusAffectedSlides: (slideIds: string[]) => void;
 }
 
 export function usePresentationController(
@@ -140,6 +142,14 @@ export function usePresentationController(
     setIsMirrorOpen(true);
   }, []);
 
+  const focusAffectedSlides = useCallback((slideIds: string[]) => {
+    const targetId = slideIds.find((id) => id.trim().length > 0);
+    if (!targetId) return;
+    setIsMirrorOpen(true);
+    setSelectedSlideId(targetId);
+    highlightSlide(targetId);
+  }, [highlightSlide]);
+
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       const isMac = navigator.platform.toUpperCase().includes("MAC");
@@ -177,8 +187,10 @@ export function usePresentationController(
     toggleMirrorExpanded: () => setIsMirrorExpanded((expanded) => !expanded),
     openDeckPreview,
     closeDeckPreview: () => setIsDeckPreviewOpen(false),
+    focusAffectedSlides,
   }), [
     closeMirror,
+    focusAffectedSlides,
     highlightSlideId,
     isDeckPreviewOpen,
     isMirrorExpanded,

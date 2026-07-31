@@ -9,6 +9,7 @@ import { hasUnverifiedCommercialAssets } from "@shared/asset-license";
 import { createOpenExportFolderHref } from "@shared/export-links";
 import { formatPublicErrorMessage } from "@shared/agent-activity-display";
 import type { ChatMessage } from "../chatMessageRuntime";
+import { confirmSvgExportExpectation } from "./exportExpectations";
 
 interface UseDeckExportOptions {
   sessionId: string;
@@ -29,6 +30,7 @@ export function useDeckExport({
 
   const exportDeck = useCallback(async () => {
     if (!sessionId || !presentation || isExportingDeck) return;
+    if (!confirmSvgExportExpectation(presentation)) return;
     const needsApproval = hasUnverifiedCommercialAssets(presentation);
     const allowUnverifiedAssets = needsApproval
       ? window.confirm("演示文稿包含尚未核实商业授权的图片。是否明确批准本次导出？")
