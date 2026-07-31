@@ -9,6 +9,7 @@ import {
 } from "../src/shared/presentation-lifecycle";
 
 const mockDesktopApi = {
+  listProjectFiles: vi.fn(),
   readProjectArtifact: vi.fn(),
   openProjectFile: vi.fn(),
   saveProjectFile: vi.fn(),
@@ -17,6 +18,17 @@ const mockDesktopApi = {
 };
 
 const FILE_VERSION = `sha256:${"a".repeat(64)}`;
+const ALL_ARTIFACT_FILES = [
+  "design/design-spec.json",
+  "slides/page-plan.json",
+  "slides/svg/.gitkeep",
+  "assets/.gitkeep",
+  "deck/snapshot.json",
+  "history/exports.json",
+  "brief.md",
+  "outline.md",
+  "research/notes.md",
+];
 
 function pptJobProjection(
   overrides: Partial<PptJobProjection> = {},
@@ -95,6 +107,7 @@ describe("project-store zustand store", () => {
   });
 
   it("hydrates project artifacts correctly from backend", async () => {
+    mockDesktopApi.listProjectFiles.mockResolvedValue(ALL_ARTIFACT_FILES);
     mockDesktopApi.readProjectArtifact.mockImplementation(async (sessionId, path) => {
       if (path === "brief.md") {
         return { type: "file", content: "# Custom Brief Content" };
@@ -117,7 +130,62 @@ describe("project-store zustand store", () => {
     expect(brief?.isHydrated).toBe(true);
     expect(outline?.content).toBe("# Custom Outline Content");
     expect(outline?.isHydrated).toBe(true);
+    expect(mockDesktopApi.listProjectFiles).toHaveBeenCalledWith("test-session");
     expect(mockDesktopApi.readProjectArtifact).toHaveBeenCalledTimes(9);
+  });
+
+  it("skips optional workflow artifacts that do not exist yet", async () => {
+    mockDesktopApi.listProjectFiles.mockResolvedValue(
+      ALL_ARTIFACT_FILES.filter((path) => (
+        path !== "design/design-spec.json" && path !== "slides/page-plan.json"
+      )),
+    );
+    mockDesktopApi.readProjectArtifact.mockResolvedValue({ type: "file", content: "" });
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    try {
+      const store = useProjectStore.getState();
+      store.initializeProject("test-session", "Test Project");
+      await store.hydrateProjectArtifacts("test-session");
+
+      const state = useProjectStore.getState();
+      expect(state.activeProject?.artifacts["design-spec"].isHydrated).toBe(false);
+      expect(state.activeProject?.artifacts["page-plan"].isHydrated).toBe(false);
+      expect(mockDesktopApi.readProjectArtifact).not.toHaveBeenCalledWith(
+        "test-session",
+        "design/design-spec.json",
+      );
+      expect(mockDesktopApi.readProjectArtifact).not.toHaveBeenCalledWith(
+        "test-session",
+        "slides/page-plan.json",
+      );
+      expect(mockDesktopApi.readProjectArtifact).toHaveBeenCalledTimes(7);
+      expect(consoleError).not.toHaveBeenCalled();
+    } finally {
+      consoleError.mockRestore();
+    }
+  });
+
+  it("still reports a real read failure for an artifact that exists", async () => {
+    mockDesktopApi.listProjectFiles.mockResolvedValue(["brief.md"]);
+    const readError = Object.assign(new Error("permission denied"), { code: "EACCES" });
+    mockDesktopApi.readProjectArtifact.mockRejectedValue(readError);
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    try {
+      const store = useProjectStore.getState();
+      store.initializeProject("test-session", "Test Project");
+      await store.hydrateProjectArtifacts("test-session");
+
+      expect(mockDesktopApi.readProjectArtifact).toHaveBeenCalledWith(
+        "test-session",
+        "brief.md",
+      );
+      expect(consoleError).toHaveBeenCalledWith("读取项目产物失败: brief.md", readError);
+      expect(useProjectStore.getState().activeProject?.artifacts.brief.isHydrated).toBe(false);
+    } finally {
+      consoleError.mockRestore();
+    }
   });
 
   it("autosaves artifact content without manufacturing workflow status", async () => {

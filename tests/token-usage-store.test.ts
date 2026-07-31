@@ -134,6 +134,76 @@ describe("TokenUsageStore", () => {
       averageTaskDurationMs: 0,
       models: [],
     });
-    expect(JSON.parse(await readFile(filePath, "utf8")).version).toBe(2);
+    expect(JSON.parse(await readFile(filePath, "utf8")).version).toBe(3);
+  });
+
+  it("keeps identical provider model names separate by configuration ID", async () => {
+    const { store } = await createStore();
+    await store.recordModelUsage({
+      configurationId: "official-model",
+      provider: "openai",
+      model: "shared-name",
+      inputTokens: 100,
+      outputTokens: 10,
+      totalTokens: 110,
+      recordedAt: new Date(2026, 6, 10, 12),
+    });
+    await store.recordModelUsage({
+      configurationId: "proxy-model",
+      provider: "openai",
+      model: "shared-name",
+      inputTokens: 200,
+      outputTokens: 20,
+      totalTokens: 220,
+      recordedAt: new Date(2026, 6, 10, 13),
+    });
+
+    expect(store.getStats(new Date(2026, 6, 10)).models).toEqual([
+      expect.objectContaining({ configurationId: "proxy-model", totalTokens: 220 }),
+      expect.objectContaining({ configurationId: "official-model", totalTokens: 110 }),
+    ]);
+  });
+
+  it("migrates version 2 model usage without inventing configuration IDs", async () => {
+    const { filePath } = await createStore();
+    await writeFile(filePath, JSON.stringify({
+      version: 2,
+      days: [{
+        date: "2026-07-01",
+        inputTokens: 90,
+        outputTokens: 10,
+        totalTokens: 100,
+        cachedInputTokens: 0,
+        cacheCreationInputTokens: 0,
+        requestCount: 1,
+        taskCount: 0,
+        completedTaskCount: 0,
+        failedTaskCount: 0,
+        interruptedTaskCount: 0,
+        totalTaskDurationMs: 0,
+        durationSampleCount: 0,
+        longestTaskDurationMs: 0,
+        models: [{
+          provider: "openai",
+          model: "legacy-model",
+          inputTokens: 90,
+          outputTokens: 10,
+          totalTokens: 100,
+          cachedInputTokens: 0,
+          cacheCreationInputTokens: 0,
+          requestCount: 1,
+        }],
+      }],
+    }));
+
+    const migrated = new TokenUsageStore(filePath);
+    await migrated.initialize();
+    expect(migrated.getStats().models[0]).toMatchObject({
+      provider: "openai",
+      model: "legacy-model",
+      totalTokens: 100,
+    });
+    expect(migrated.getStats().models[0]).not.toHaveProperty("configurationId");
+    expect(JSON.parse(await readFile(filePath, "utf8")).version).toBe(3);
   });
 });

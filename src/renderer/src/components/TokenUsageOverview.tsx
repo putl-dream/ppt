@@ -1,10 +1,16 @@
 import React from "react";
 import type {
   TokenUsageDay,
-  TokenUsageModel,
   TokenUsageStats,
 } from "@shared/token-usage";
-import type { ManagedModel, ModelTokenPricing } from "../modelCatalog";
+import type { ManagedModel } from "../modelCatalog";
+import {
+  buildPricingIndex,
+  estimateModelCost,
+  estimateModelsCost,
+  resolveUsagePricing,
+  type ModelPricingCurrency,
+} from "../modelPricing";
 import { RefreshIcon } from "./Icons";
 
 type UsageView = "tokens" | "cost" | "tasks";
@@ -12,11 +18,6 @@ type UsageView = "tokens" | "cost" | "tasks";
 interface TokenUsageOverviewProps {
   models: ManagedModel[];
   selectedModelId: string;
-}
-
-interface CostEstimate {
-  costUsd: number;
-  coveredTokens: number;
 }
 
 const emptyStats: TokenUsageStats = {
@@ -49,10 +50,11 @@ function formatTokens(value: number): string {
   }).format(value);
 }
 
-function formatCost(value: number): string {
-  if (value === 0) return "$0.00";
-  if (value < 0.01) return `<$0.01`;
-  return `$${value.toFixed(2)}`;
+function formatCost(value: number, currency: ModelPricingCurrency): string {
+  const symbol = currency === "CNY" ? "¥" : "$";
+  if (value === 0) return `${symbol}0.00`;
+  if (value < 0.01) return `<${symbol}0.01`;
+  return `${symbol}${value.toFixed(2)}`;
 }
 
 function formatDuration(durationMs: number): string {
@@ -66,53 +68,6 @@ function formatDuration(durationMs: number): string {
 
 function modelKey(provider: string, model: string): string {
   return `${provider}\0${model}`;
-}
-
-function buildPricingMap(models: ManagedModel[]): Map<string, ModelTokenPricing> {
-  const result = new Map<string, ModelTokenPricing>();
-  for (const model of models) {
-    if (model.pricing && !(model.baseURL ?? "").trim()) {
-      result.set(modelKey(model.provider, model.model), model.pricing);
-    }
-  }
-  return result;
-}
-
-function estimateModelCost(
-  usage: TokenUsageModel,
-  pricing: ModelTokenPricing | undefined,
-): CostEstimate {
-  if (!pricing) return { costUsd: 0, coveredTokens: 0 };
-  const cachedInput = usage.cachedInputTokens;
-  const cacheCreationInput = usage.cacheCreationInputTokens;
-  const regularInput = usage.provider === "anthropic"
-    ? usage.inputTokens
-    : Math.max(0, usage.inputTokens - cachedInput - cacheCreationInput);
-  const costUsd = (
-    regularInput * pricing.inputPerMillionUsd
-    + cachedInput * pricing.cachedInputPerMillionUsd
-    + cacheCreationInput * (
-      pricing.cacheCreationInputPerMillionUsd ?? pricing.inputPerMillionUsd
-    )
-    + usage.outputTokens * pricing.outputPerMillionUsd
-  ) / 1_000_000;
-  return { costUsd, coveredTokens: usage.totalTokens };
-}
-
-function estimateModelsCost(
-  usageModels: TokenUsageModel[],
-  pricing: Map<string, ModelTokenPricing>,
-): CostEstimate {
-  return usageModels.reduce<CostEstimate>((total, usage) => {
-    const estimate = estimateModelCost(
-      usage,
-      pricing.get(modelKey(usage.provider, usage.model)),
-    );
-    return {
-      costUsd: total.costUsd + estimate.costUsd,
-      coveredTokens: total.coveredTokens + estimate.coveredTokens,
-    };
-  }, { costUsd: 0, coveredTokens: 0 });
 }
 
 function buildTrendDays(stats: TokenUsageStats): TokenUsageDay[] {
@@ -148,6 +103,12 @@ export const TokenUsageOverview: React.FC<TokenUsageOverviewProps> = ({
 }) => {
   const [stats, setStats] = React.useState<TokenUsageStats>(emptyStats);
   const [view, setView] = React.useState<UsageView>("tokens");
+  const [costCurrency, setCostCurrency] = React.useState<ModelPricingCurrency>(() =>
+    models.find((model) => model.id === selectedModelId)?.pricing?.currency
+      ?? (["CNY", "USD"] as const).find((currency) =>
+        models.some((model) => model.pricing?.currency === currency))
+      ?? "CNY");
+  const previousSelectedModelId = React.useRef(selectedModelId);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
 
@@ -167,7 +128,7 @@ export const TokenUsageOverview: React.FC<TokenUsageOverviewProps> = ({
     void loadStats();
   }, [loadStats]);
 
-  const pricing = React.useMemo(() => buildPricingMap(models), [models]);
+  const pricing = React.useMemo(() => buildPricingIndex(models), [models]);
   const totalEstimate = React.useMemo(
     () => estimateModelsCost(stats.models, pricing),
     [pricing, stats.models],
@@ -176,10 +137,26 @@ export const TokenUsageOverview: React.FC<TokenUsageOverviewProps> = ({
   const trendValues = trendDays.map((day) => {
     if (view === "tokens") return day.totalTokens;
     if (view === "tasks") return day.taskCount;
-    return estimateModelsCost(day.models, pricing).costUsd;
+    return estimateModelsCost(day.models, pricing).costs[costCurrency];
   });
   const trendMax = Math.max(0, ...trendValues);
   const selectedModel = models.find((model) => model.id === selectedModelId);
+  const configuredCurrencies = React.useMemo(
+    () => (["CNY", "USD"] as const).filter((currency) =>
+      models.some((model) => model.pricing?.currency === currency)),
+    [models],
+  );
+  React.useEffect(() => {
+    const selectionChanged = previousSelectedModelId.current !== selectedModelId;
+    previousSelectedModelId.current = selectedModelId;
+    if (selectionChanged && selectedModel?.pricing) {
+      setCostCurrency(selectedModel.pricing.currency);
+      return;
+    }
+    if (!configuredCurrencies.includes(costCurrency)) {
+      setCostCurrency(selectedModel?.pricing?.currency ?? configuredCurrencies[0] ?? "CNY");
+    }
+  }, [configuredCurrencies, costCurrency, selectedModel, selectedModelId]);
   const selectedModelEnabled = Boolean(selectedModel && selectedModel.enabled !== false);
   const measuredTasks = stats.completedTaskCount + stats.failedTaskCount;
   const successRate = measuredTasks > 0
@@ -188,12 +165,14 @@ export const TokenUsageOverview: React.FC<TokenUsageOverviewProps> = ({
   const coverage = stats.totalTokens > 0
     ? Math.round((totalEstimate.coveredTokens / stats.totalTokens) * 100)
     : 0;
+  const totalCostLabel = configuredCurrencies.length > 0
+    ? configuredCurrencies.map((currency) =>
+      formatCost(totalEstimate.costs[currency], currency)).join(" · ")
+    : "—";
 
   const metrics = [
     {
-      value: stats.totalTokens > 0 && totalEstimate.coveredTokens === 0
-        ? "—"
-        : formatCost(totalEstimate.costUsd),
+      value: stats.totalTokens > 0 && totalEstimate.coveredTokens === 0 ? "—" : totalCostLabel,
       label: "预估 API 费用",
       detail: stats.totalTokens > 0 ? `覆盖 ${coverage}% Token` : "等待产生用量",
     },
@@ -263,6 +242,22 @@ export const TokenUsageOverview: React.FC<TokenUsageOverviewProps> = ({
                 </button>
               ))}
             </div>
+            {view === "cost" && configuredCurrencies.length > 1 ? (
+              <div className="token-view-tabs" role="tablist" aria-label="费用币种">
+                {configuredCurrencies.map((currency) => (
+                  <button
+                    key={currency}
+                    type="button"
+                    role="tab"
+                    aria-selected={costCurrency === currency}
+                    className={costCurrency === currency ? "active" : ""}
+                    onClick={() => setCostCurrency(currency)}
+                  >
+                    {currency === "CNY" ? "人民币" : "美元"}
+                  </button>
+                ))}
+              </div>
+            ) : null}
             <button
               type="button"
               className="token-usage-refresh"
@@ -286,7 +281,7 @@ export const TokenUsageOverview: React.FC<TokenUsageOverviewProps> = ({
             {trendDays.map((day, index) => {
               const value = trendValues[index];
               const label = view === "cost"
-                ? formatCost(value)
+                ? formatCost(value, costCurrency)
                 : view === "tokens"
                   ? `${formatTokens(value)} Token`
                   : `${value} 个任务`;
@@ -318,11 +313,11 @@ export const TokenUsageOverview: React.FC<TokenUsageOverviewProps> = ({
             {stats.models.map((usage) => {
               const estimate = estimateModelCost(
                 usage,
-                pricing.get(modelKey(usage.provider, usage.model)),
+                resolveUsagePricing(usage, pricing),
               );
               const share = stats.totalTokens > 0 ? (usage.totalTokens / stats.totalTokens) * 100 : 0;
               return (
-                <div className="token-model-row" key={modelKey(usage.provider, usage.model)}>
+                <div className="token-model-row" key={usage.configurationId ?? modelKey(usage.provider, usage.model)}>
                   <div className="token-model-copy">
                     <strong>{usage.model}</strong>
                     <span>{usage.provider} · {usage.requestCount} 次调用</span>
@@ -332,7 +327,9 @@ export const TokenUsageOverview: React.FC<TokenUsageOverviewProps> = ({
                   </div>
                   <div className="token-model-values">
                     <strong>{formatTokens(usage.totalTokens)}</strong>
-                    <span>{estimate.coveredTokens > 0 ? formatCost(estimate.costUsd) : "费用未知"}</span>
+                    <span>{estimate.currency
+                      ? formatCost(estimate.cost, estimate.currency)
+                      : "费用未知"}</span>
                   </div>
                 </div>
               );
@@ -342,7 +339,7 @@ export const TokenUsageOverview: React.FC<TokenUsageOverviewProps> = ({
           <p className="token-usage-empty">完成下一次模型调用后，这里会开始记录模型用量。</p>
         )}
         <p className="token-pricing-note">
-          费用按内置模型公开单价估算；自定义 Base URL、代理服务折扣与工具调用费用不计入，实际账单以服务商为准。
+          费用按当前模型配置的单价估算，修改价格会重算历史用量；不包含折扣、税费与工具调用费用，实际账单以服务商为准。
         </p>
       </section>
     </div>

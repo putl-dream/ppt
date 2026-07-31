@@ -26,13 +26,13 @@
   overflow-y: auto;
   overflow-x: hidden;
   overflow-anchor: none;
-  scrollbar-gutter: stable;
+  scrollbar-gutter: stable both-edges;
   scrollbar-width: thin;
   scrollbar-color: var(--scrollbar-thumb-color) transparent;
 }
 
 .chat-scroll-viewport::-webkit-scrollbar {
-  width: 8px;
+  width: var(--chat-scrollbar-gutter);
 }
 
 .chat-scroll-viewport::-webkit-scrollbar-track {
@@ -81,6 +81,7 @@
 }
 
 .chat-workspace-column {
+  --chat-scrollbar-gutter: 8px;
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -686,7 +687,6 @@
 /* Measure only — prose size/leading live on .markdown-body */
 .assistant-response {
   width: auto;
-  max-width: 72ch;
   padding: 0;
 }
 

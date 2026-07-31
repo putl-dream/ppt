@@ -19,6 +19,10 @@ import type {
 } from "./turns/prepared-agent-run";
 import type { PptLifecycleToolBridge } from "../tools/tool-definition";
 import type { AgentRuntimeOptions } from "./runtime-types";
+import { createModuleLogger, withLogContext } from "../logger";
+import { isRuntimeCancellation } from "./lifecycle/runtime-cancellation";
+
+const logger = createModuleLogger("agent-runtime");
 
 /** Owns one run lifecycle and consumes the independent query state machine. */
 export class AgentRuntime {
@@ -47,18 +51,42 @@ export class AgentRuntime {
   async run(input: AgentRuntimeInput): Promise<AgentRuntimeResult> {
     const options = normalizeAgentRuntimeOptions(input);
     const scope = await this.runFactory.open(options);
-    try {
-      const prepared = await this.runFactory.prepare(scope);
-      const outcome: AgentLoopTerminalOutcome = prepared.type === "short_circuit"
-        ? { type: "terminal" as const, result: prepared.result }
-        : await this.runQuery(prepared.run);
-      return await this.finalizer.complete(scope, outcome.result, outcome.reason);
-    } catch (error) {
-      await this.finalizer.fail(scope, error);
-      throw error;
-    } finally {
-      await scope.close();
-    }
+    return withLogContext({
+      runId: scope.runId,
+      threadId: options.threadId,
+      queryId: scope.queryId,
+    }, async () => {
+      const startedAt = Date.now();
+      logger.info("agent.query.started", {
+        startMode: options.startMode.type,
+        executionStrategy: options.executionStrategy,
+        provider: options.model?.provider,
+        model: options.model?.model,
+      });
+      try {
+        const prepared = await this.runFactory.prepare(scope);
+        const outcome: AgentLoopTerminalOutcome = prepared.type === "short_circuit"
+          ? { type: "terminal" as const, result: prepared.result }
+          : await this.runQuery(prepared.run);
+        const result = await this.finalizer.complete(scope, outcome.result, outcome.reason);
+        logger.info("agent.query.completed", {
+          resultType: result.type,
+          reason: outcome.reason,
+          durationMs: Date.now() - startedAt,
+        });
+        return result;
+      } catch (error) {
+        const interrupted = isRuntimeCancellation(error, scope.signal, options.signal);
+        logger[interrupted ? "info" : "error"](
+          interrupted ? "agent.query.interrupted" : "agent.query.failed",
+          { durationMs: Date.now() - startedAt, error },
+        );
+        await this.finalizer.fail(scope, error);
+        throw error;
+      } finally {
+        await scope.close();
+      }
+    });
   }
 
   clearSession(threadId: string): void {

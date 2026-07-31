@@ -1,4 +1,5 @@
 import { createStream } from "rotating-file-stream";
+import { AsyncLocalStorage } from "node:async_hooks";
 import path from "node:path";
 import fs from "node:fs";
 import { getApplicationDataRoot } from "../application-data";
@@ -12,6 +13,29 @@ import type {
 type LogDetail = "minimal" | "full";
 
 type AgentLogData = Record<string, unknown>;
+
+export interface LogContext {
+  operation?: string;
+  sessionId?: string;
+  runId?: string;
+  threadId?: string;
+  queryId?: string;
+}
+
+export interface DiagnosticValuePreview {
+  valueType: string;
+  serializedLength: number;
+  preview: string;
+  truncated: boolean;
+  keys?: string[];
+}
+
+const logContextStorage = new AsyncLocalStorage<LogContext>();
+const MAX_DIAGNOSTIC_DEPTH = 6;
+const MAX_DIAGNOSTIC_ARRAY_ITEMS = 50;
+const MAX_DIAGNOSTIC_OBJECT_KEYS = 50;
+const MAX_DIAGNOSTIC_STRING_LENGTH = 16_384;
+const BINARY_FIELD_PATTERN = /(?:base64|binary|blob|image_?data|png_?data|jpe?g_?data|bytes)$/i;
 
 // Lazy-initialized log file stream
 let logFileStream: ReturnType<typeof createStream> | null | undefined;
@@ -84,7 +108,10 @@ const levelPriority: Record<AppLogLevel, number> = {
 function configuredLevel(): AppLogLevel {
   if (runtimeSettings.level) return runtimeSettings.level;
   const value = process.env.AGENT_LOG_LEVEL?.trim().toLowerCase();
-  return value === "debug" || value === "warn" || value === "error" ? value : "info";
+  if (value === "debug" || value === "info" || value === "warn" || value === "error") {
+    return value;
+  }
+  return process.env.VITEST === "true" || process.env.NODE_ENV === "test" ? "error" : "info";
 }
 
 function configuredRetentionDays(): number {
@@ -125,6 +152,96 @@ function redactSensitiveValue(key: string, value: unknown): unknown {
   return value;
 }
 
+export function withLogContext<T>(context: LogContext, task: () => T): T {
+  const current = logContextStorage.getStore();
+  return logContextStorage.run({ ...current, ...context }, task);
+}
+
+export function diagnosticValuePreview(
+  value: unknown,
+  maxCharacters: number,
+): DiagnosticValuePreview {
+  const safeLimit = Math.max(1, Math.trunc(maxCharacters));
+  const normalized = normalizeDiagnosticValue(value);
+  let serialized: string;
+  try {
+    serialized = JSON.stringify(normalized);
+  } catch (error) {
+    serialized = JSON.stringify({
+      logSerializationError: error instanceof Error ? error.message : String(error),
+    });
+  }
+  const truncated = serialized.length > safeLimit;
+  return {
+    valueType: diagnosticValueType(value),
+    serializedLength: serialized.length,
+    preview: truncated ? `${serialized.slice(0, Math.max(0, safeLimit - 3))}...` : serialized,
+    truncated,
+    ...(isPlainRecord(value) ? { keys: Object.keys(value).slice(0, MAX_DIAGNOSTIC_OBJECT_KEYS) } : {}),
+  };
+}
+
+function normalizeDiagnosticValue(
+  value: unknown,
+  parentKey = "",
+  depth = 0,
+  seen = new WeakSet<object>(),
+): unknown {
+  if (value instanceof Error) return serializeValue(value);
+  if (typeof value === "string") {
+    const redacted = redactSensitiveValue(parentKey, value) as string;
+    if (
+      (BINARY_FIELD_PATTERN.test(parentKey) && redacted.length > 128)
+      || /^data:[^;,]+;base64,/i.test(redacted)
+      || (
+        parentKey.toLowerCase() === "data"
+        && redacted.length > 512
+        && /^[a-z0-9+/=_-]+$/i.test(redacted)
+      )
+    ) {
+      return `[Binary data omitted: ${redacted.length} characters]`;
+    }
+    return redacted.length > MAX_DIAGNOSTIC_STRING_LENGTH
+      ? `${redacted.slice(0, MAX_DIAGNOSTIC_STRING_LENGTH)}...[${redacted.length} characters]`
+      : redacted;
+  }
+  if (typeof value === "bigint") return value.toString();
+  if (typeof value === "symbol" || typeof value === "function") return String(value);
+  if (!value || typeof value !== "object") return redactSensitiveValue(parentKey, value);
+  if (seen.has(value)) return "[Circular]";
+  if (depth >= MAX_DIAGNOSTIC_DEPTH) return "[Depth limit reached]";
+  seen.add(value);
+  if (Array.isArray(value)) {
+    const items = value
+      .slice(0, MAX_DIAGNOSTIC_ARRAY_ITEMS)
+      .map((item) => normalizeDiagnosticValue(item, parentKey, depth + 1, seen));
+    if (value.length > MAX_DIAGNOSTIC_ARRAY_ITEMS) {
+      items.push(`[${value.length - MAX_DIAGNOSTIC_ARRAY_ITEMS} more items]`);
+    }
+    return items;
+  }
+  const entries = Object.entries(value).slice(0, MAX_DIAGNOSTIC_OBJECT_KEYS);
+  const normalized = Object.fromEntries(entries.map(([key, entry]) => [
+    key,
+    normalizeDiagnosticValue(entry, key, depth + 1, seen),
+  ]));
+  if (Object.keys(value).length > MAX_DIAGNOSTIC_OBJECT_KEYS) {
+    normalized.__truncatedKeys = Object.keys(value).length - MAX_DIAGNOSTIC_OBJECT_KEYS;
+  }
+  return normalized;
+}
+
+function diagnosticValueType(value: unknown): string {
+  if (value === null) return "null";
+  if (Array.isArray(value)) return "array";
+  if (value instanceof Error) return "error";
+  return typeof value;
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value) && !(value instanceof Error);
+}
+
 function serializeValue(value: unknown, parentKey = "", seen = new WeakSet<object>()): unknown {
   if (value instanceof Error) {
     const details = value as Error & { code?: unknown; provider?: unknown };
@@ -159,19 +276,23 @@ function write(level: AppLogLevel, event: string, data: AgentLogData = {}): void
   if (levelPriority[level] < levelPriority[configuredLevel()]) return;
 
   let serializedData: AgentLogData;
+  let serializedContext: AgentLogData;
   try {
     serializedData = serializeValue(data) as AgentLogData;
+    serializedContext = serializeValue(logContextStorage.getStore() ?? {}) as AgentLogData;
   } catch (error) {
     serializedData = {
       logSerializationError: error instanceof Error ? error.message : String(error),
     };
+    serializedContext = {};
   }
   const entry = {
+    ...serializedData,
+    ...serializedContext,
     timestamp: new Date().toISOString(),
     level,
     scope: "agent",
     event: redactSensitiveValue("event", event) as string,
-    ...serializedData,
   };
   recentEntries.push(entry);
   if (recentEntries.length > MAX_RECENT_ENTRIES) recentEntries.shift();
@@ -184,21 +305,33 @@ function write(level: AppLogLevel, event: string, data: AgentLogData = {}): void
   const line = `[agent] ${json}`;
 
   // Console output (with Unicode escaping for terminal compatibility)
-  if (level === "error") {
-    console.error(line);
-  } else if (level === "warn") {
-    console.warn(line);
-  } else if (level === "debug") {
-    console.debug(line);
-  } else {
-    console.info(line);
+  try {
+    if (level === "error") {
+      console.error(line);
+    } else if (level === "warn") {
+      console.warn(line);
+    } else if (level === "debug") {
+      console.debug(line);
+    } else {
+      console.info(line);
+    }
+  } catch {
+    // Logging is observational and must never replace application control flow.
   }
 
   // File output (with original Unicode, no escaping needed)
-  const fileStream = getLogFileStream();
-  if (fileStream) {
-    const fileJson = JSON.stringify(entry);
-    fileStream.write(fileJson + "\n");
+  try {
+    const fileStream = getLogFileStream();
+    if (fileStream) {
+      const fileJson = JSON.stringify(entry);
+      fileStream.write(fileJson + "\n");
+    }
+  } catch (error) {
+    try {
+      console.error("[agent] Failed to append log entry:", error);
+    } catch {
+      // There is no safe fallback if both sinks fail.
+    }
   }
 }
 

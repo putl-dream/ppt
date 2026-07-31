@@ -12,9 +12,6 @@
 .agent-run-block--activity {
   padding: 0;
 }
-.agent-run-activity-cluster {
-  max-width: 72ch;
-}
 .agent-run-terminal-notice {
   display: flex;
   align-items: baseline;

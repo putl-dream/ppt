@@ -171,10 +171,15 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     const api = getDesktopApi();
     if (!project || !targetSessionId || targetSessionId === "draft_id" || !api) return;
 
+    const projectFiles = await api.listProjectFiles(targetSessionId);
     const loadedEntries = await Promise.all(
       projectArtifactIds.map(async (artifactId) => {
         const artifact = get().activeProject?.artifacts[artifactId];
         if (!artifact) return [artifactId, undefined] as const;
+        const exists = artifact.path.endsWith("/")
+          ? projectFiles.some((path) => path.startsWith(artifact.path))
+          : projectFiles.includes(artifact.path);
+        if (!exists) return [artifactId, undefined] as const;
         try {
           const result = await api.readProjectArtifact(targetSessionId, artifact.path);
           return [

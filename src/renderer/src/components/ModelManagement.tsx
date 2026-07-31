@@ -7,6 +7,7 @@ import {
   isModelEnabled,
   materializeModelVendorDraft,
   type ManagedModel,
+  type ModelTokenPricing,
   type ModelVendorDraft,
   type ModelVendorId,
 } from "../modelCatalog";
@@ -38,6 +39,28 @@ function validHttpURL(value: string): boolean {
   } catch {
     return false;
   }
+}
+
+function emptyPricing(): ModelTokenPricing {
+  return {
+    currency: "CNY",
+    inputPerMillion: 0,
+    cachedInputPerMillion: 0,
+    outputPerMillion: 0,
+    updatedAt: new Date().toISOString().slice(0, 10),
+  };
+}
+
+function validPricing(pricing: ManagedModel["pricing"]): boolean {
+  if (!pricing) return true;
+  return [
+    pricing.inputPerMillion,
+    pricing.cachedInputPerMillion,
+    pricing.outputPerMillion,
+  ].every((value) => Number.isFinite(value) && value >= 0)
+    && (pricing.cacheCreationInputPerMillion === undefined
+      || (Number.isFinite(pricing.cacheCreationInputPerMillion)
+        && pricing.cacheCreationInputPerMillion >= 0));
 }
 
 export function ModelManagement({
@@ -193,6 +216,10 @@ export function ModelManagement({
       triggerToast("请填写模型名称和模型标识");
       return;
     }
+    if (vendorDraft.models.some((model) => !validPricing(model.pricing))) {
+      triggerToast("请填写有效的非负模型单价");
+      return;
+    }
 
     const nextModels = materializeModelVendorDraft(vendorDraft);
     nextModels.forEach(onSaveModel);
@@ -211,6 +238,10 @@ export function ModelManagement({
       triggerToast("请填写模型名称和模型标识");
       return;
     }
+    if (!validPricing(dialogModel.pricing)) {
+      triggerToast("请填写有效的非负模型单价");
+      return;
+    }
 
     const next: ManagedModel = {
       ...dialogModel,
@@ -218,6 +249,10 @@ export function ModelManagement({
       model: modelId,
       baseURL: dialogModel.baseURL.trim().replace(/\/+$/, ""),
       apiKey: dialogModel.apiKey.trim(),
+      pricing: dialogModel.pricing ? {
+        ...dialogModel.pricing,
+        updatedAt: new Date().toISOString().slice(0, 10),
+      } : dialogModel.pricing,
     };
     onSaveModel(next);
     if (next.enabled !== false) onSelectModel(next.id);
@@ -237,6 +272,110 @@ export function ModelManagement({
     if (fallback) onSelectModel(fallback.id);
     closeDialog();
     triggerToast("自定义模型已删除");
+  };
+
+  const renderPricingFields = (
+    model: ManagedModel,
+    updatePricing: (pricing: ModelTokenPricing | null) => void,
+  ) => {
+    const pricing = model.pricing;
+    const updatePrice = (patch: Partial<ModelTokenPricing>) => {
+      if (pricing) updatePricing({ ...pricing, ...patch });
+    };
+    const numberValue = (value: number | undefined) =>
+      value === undefined || !Number.isFinite(value) ? "" : String(value);
+    const requiredNumber = (value: string) => value === "" ? Number.NaN : Number(value);
+
+    return (
+      <div className="model-pricing-section model-form-span">
+        <div className="model-capability-heading">
+          <span className="config-label">费用估算</span>
+          <label className="model-pricing-toggle">
+            <input
+              type="checkbox"
+              aria-label={`${model.name} 启用费用估算`}
+              checked={Boolean(pricing)}
+              onChange={(event) => updatePricing(event.target.checked ? emptyPricing() : null)}
+            />
+            <span>{pricing ? "已启用" : "未配置"}</span>
+          </label>
+        </div>
+        {pricing ? (
+          <div className="model-pricing-fields">
+            <div className="config-group model-pricing-currency">
+              <span className="config-label">币种</span>
+              <Select
+                variant="block"
+                ariaLabel={`${model.name} 定价币种`}
+                value={pricing.currency}
+                onChange={(value) => updatePrice({
+                  currency: value as ModelTokenPricing["currency"],
+                })}
+                options={[
+                  { value: "CNY", label: "人民币 (CNY)" },
+                  { value: "USD", label: "美元 (USD)" },
+                ]}
+              />
+            </div>
+            <label className="config-group">
+              <span className="config-label">普通输入 / 百万 Token</span>
+              <input
+                className="config-input"
+                aria-label={`${model.name} 普通输入单价`}
+                type="number"
+                min="0"
+                step="any"
+                value={numberValue(pricing.inputPerMillion)}
+                onChange={(event) => updatePrice({ inputPerMillion: requiredNumber(event.target.value) })}
+              />
+            </label>
+            <label className="config-group">
+              <span className="config-label">缓存命中 / 百万 Token</span>
+              <input
+                className="config-input"
+                aria-label={`${model.name} 缓存命中单价`}
+                type="number"
+                min="0"
+                step="any"
+                value={numberValue(pricing.cachedInputPerMillion)}
+                onChange={(event) => updatePrice({ cachedInputPerMillion: requiredNumber(event.target.value) })}
+              />
+            </label>
+            <label className="config-group">
+              <span className="config-label">缓存写入 / 百万 Token（可选）</span>
+              <input
+                className="config-input"
+                aria-label={`${model.name} 缓存写入单价`}
+                type="number"
+                min="0"
+                step="any"
+                placeholder="留空时按普通输入价"
+                value={numberValue(pricing.cacheCreationInputPerMillion)}
+                onChange={(event) => updatePrice({
+                  cacheCreationInputPerMillion: event.target.value === ""
+                    ? undefined
+                    : Number(event.target.value),
+                })}
+              />
+            </label>
+            <label className="config-group">
+              <span className="config-label">输出 / 百万 Token</span>
+              <input
+                className="config-input"
+                aria-label={`${model.name} 输出单价`}
+                type="number"
+                min="0"
+                step="any"
+                value={numberValue(pricing.outputPerMillion)}
+                onChange={(event) => updatePrice({ outputPerMillion: requiredNumber(event.target.value) })}
+              />
+            </label>
+          </div>
+        ) : (
+          <small className="model-pricing-hint">未配置价格时，用量页显示“费用未知”。</small>
+        )}
+      </div>
+    );
   };
 
   const renderDraftModelFields = (model: ManagedModel) => (
@@ -289,6 +428,7 @@ export function ModelManagement({
             <small>未勾选时使用默认 256K 上下文</small>
           </span>
         </label>
+        {renderPricingFields(model, (pricing) => updateVendorDraftModel(model.id, { pricing }))}
       </div>
     </div>
   );
@@ -585,6 +725,7 @@ export function ModelManagement({
                   </span>
                 </label>
               </div>
+              {renderPricingFields(dialogModel, (pricing) => updateDialogModel({ pricing }))}
             </div>
 
             <footer className="model-dialog-footer">

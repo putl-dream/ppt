@@ -19,6 +19,7 @@ const usageTotalsSchema = {
 };
 
 const tokenUsageModelSchema = z.object({
+  configurationId: z.string().optional(),
   provider: z.string(),
   model: z.string(),
   ...usageTotalsSchema,
@@ -49,11 +50,15 @@ const legacyTokenUsageFileSchema = z.object({
   days: z.array(legacyTokenUsageDaySchema),
 });
 
-const tokenUsageFileSchema = z.object({
+const legacyVersionTwoTokenUsageFileSchema = z.object({
   version: z.literal(2),
   firstRecordedAt: z.string().optional(),
   lastRecordedAt: z.string().optional(),
   days: z.array(tokenUsageDaySchema),
+});
+
+const tokenUsageFileSchema = legacyVersionTwoTokenUsageFileSchema.extend({
+  version: z.literal(3),
 });
 
 type TokenUsageFile = z.infer<typeof tokenUsageFileSchema>;
@@ -131,9 +136,14 @@ function migrateLegacyFile(value: unknown): TokenUsageFile {
   const current = tokenUsageFileSchema.safeParse(value);
   if (current.success) return current.data;
 
+  const versionTwo = legacyVersionTwoTokenUsageFileSchema.safeParse(value);
+  if (versionTwo.success) {
+    return { ...versionTwo.data, version: 3 };
+  }
+
   const legacy = legacyTokenUsageFileSchema.parse(value);
   return {
-    version: 2,
+    version: 3,
     firstRecordedAt: legacy.firstRecordedAt,
     lastRecordedAt: legacy.lastRecordedAt,
     days: legacy.days.map((day) => ({
@@ -149,13 +159,14 @@ function migrateLegacyFile(value: unknown): TokenUsageFile {
 }
 
 export interface ModelUsageRecord extends ProviderTokenUsage {
+  configurationId?: string;
   provider: string;
   model: string;
   recordedAt?: Date;
 }
 
 export class TokenUsageStore {
-  private data: TokenUsageFile = { version: 2, days: [] };
+  private data: TokenUsageFile = { version: 3, days: [] };
   private writeQueue = Promise.resolve();
 
   constructor(private readonly filePath: string) {}
@@ -165,7 +176,7 @@ export class TokenUsageStore {
     try {
       const stored = JSON.parse(await readFile(this.filePath, "utf8"));
       this.data = migrateLegacyFile(stored);
-      if (stored.version === 1) await this.persist();
+      if (stored.version !== 3) await this.persist();
     } catch (error) {
       const code = (error as NodeJS.ErrnoException).code;
       if (code !== "ENOENT" && !(error instanceof SyntaxError) && !(error instanceof z.ZodError)) {
@@ -185,7 +196,7 @@ export class TokenUsageStore {
           // Both copies are unusable. Optional statistics must not block startup.
         }
       }
-      this.data = { version: 2, days: [] };
+      this.data = { version: 3, days: [] };
       await writeTextFileAtomic(this.filePath, `${JSON.stringify(this.data, null, 2)}\n`);
     }
   }
@@ -197,10 +208,16 @@ export class TokenUsageStore {
       const day = this.getOrCreateDay(localDateKey(recordedAt));
       addUsage(day, record);
       let model = day.models.find(
-        (entry) => entry.provider === record.provider && entry.model === record.model,
+        (entry) => record.configurationId
+          ? entry.configurationId === record.configurationId
+            && entry.provider === record.provider
+            && entry.model === record.model
+          : !entry.configurationId
+            && entry.provider === record.provider
+            && entry.model === record.model,
       );
       if (!model) {
-        model = emptyModel(record.provider, record.model);
+        model = emptyModel(record.provider, record.model, record.configurationId);
         day.models.push(model);
       }
       addUsage(model, record);
@@ -235,8 +252,11 @@ export class TokenUsageStore {
     const models = new Map<string, TokenUsageModel>();
     for (const day of sortedDays) {
       for (const entry of day.models) {
-        const key = `${entry.provider}\0${entry.model}`;
-        const aggregate = models.get(key) ?? emptyModel(entry.provider, entry.model);
+        const key = entry.configurationId
+          ? `configuration\0${entry.configurationId}\0${entry.provider}\0${entry.model}`
+          : `legacy\0${entry.provider}\0${entry.model}`;
+        const aggregate = models.get(key)
+          ?? emptyModel(entry.provider, entry.model, entry.configurationId);
         addUsage(aggregate, entry, entry.requestCount);
         models.set(key, aggregate);
       }
@@ -291,8 +311,13 @@ export class TokenUsageStore {
   }
 }
 
-function emptyModel(provider: string, model: string): TokenUsageModel {
+function emptyModel(
+  provider: string,
+  model: string,
+  configurationId?: string,
+): TokenUsageModel {
   return {
+    ...(configurationId ? { configurationId } : {}),
     provider,
     model,
     inputTokens: 0,

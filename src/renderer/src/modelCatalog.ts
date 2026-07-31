@@ -1,10 +1,11 @@
 import type { AgentModelSettings, AgentProvider } from "@shared/agent";
 
 export interface ModelTokenPricing {
-  inputPerMillionUsd: number;
-  cachedInputPerMillionUsd: number;
-  cacheCreationInputPerMillionUsd?: number;
-  outputPerMillionUsd: number;
+  currency: "CNY" | "USD";
+  inputPerMillion: number;
+  cachedInputPerMillion: number;
+  cacheCreationInputPerMillion?: number;
+  outputPerMillion: number;
   updatedAt: string;
 }
 
@@ -19,7 +20,7 @@ export interface ManagedModel {
   supports1MContext?: boolean;
   enabled?: boolean;
   builtIn?: boolean;
-  pricing?: ModelTokenPricing;
+  pricing?: ModelTokenPricing | null;
 }
 
 export type ModelVendorId = "openai" | "anthropic" | "deepseek" | "custom";
@@ -65,9 +66,10 @@ export const MODEL_VENDOR_PRESETS: readonly ModelVendorPreset[] = [
         enabled: true,
         builtIn: true,
         pricing: {
-          inputPerMillionUsd: 5,
-          cachedInputPerMillionUsd: 0.5,
-          outputPerMillionUsd: 30,
+          currency: "USD",
+          inputPerMillion: 5,
+          cachedInputPerMillion: 0.5,
+          outputPerMillion: 30,
           updatedAt: "2026-07-26",
         },
       },
@@ -82,9 +84,10 @@ export const MODEL_VENDOR_PRESETS: readonly ModelVendorPreset[] = [
         enabled: true,
         builtIn: true,
         pricing: {
-          inputPerMillionUsd: 0.25,
-          cachedInputPerMillionUsd: 0.025,
-          outputPerMillionUsd: 2,
+          currency: "USD",
+          inputPerMillion: 0.25,
+          cachedInputPerMillion: 0.025,
+          outputPerMillion: 2,
           updatedAt: "2026-07-26",
         },
       },
@@ -110,10 +113,11 @@ export const MODEL_VENDOR_PRESETS: readonly ModelVendorPreset[] = [
         enabled: true,
         builtIn: true,
         pricing: {
-          inputPerMillionUsd: 3,
-          cachedInputPerMillionUsd: 0.3,
-          cacheCreationInputPerMillionUsd: 3.75,
-          outputPerMillionUsd: 15,
+          currency: "USD",
+          inputPerMillion: 3,
+          cachedInputPerMillion: 0.3,
+          cacheCreationInputPerMillion: 3.75,
+          outputPerMillion: 15,
           updatedAt: "2026-07-26",
         },
       },
@@ -128,10 +132,11 @@ export const MODEL_VENDOR_PRESETS: readonly ModelVendorPreset[] = [
         enabled: true,
         builtIn: true,
         pricing: {
-          inputPerMillionUsd: 5,
-          cachedInputPerMillionUsd: 0.5,
-          cacheCreationInputPerMillionUsd: 6.25,
-          outputPerMillionUsd: 25,
+          currency: "USD",
+          inputPerMillion: 5,
+          cachedInputPerMillion: 0.5,
+          cacheCreationInputPerMillion: 6.25,
+          outputPerMillion: 25,
           updatedAt: "2026-07-26",
         },
       },
@@ -160,6 +165,13 @@ export const MODEL_VENDOR_PRESETS: readonly ModelVendorPreset[] = [
         supports1MContext: true,
         enabled: true,
         builtIn: true,
+        pricing: {
+          currency: "CNY",
+          inputPerMillion: 1,
+          cachedInputPerMillion: 0.02,
+          outputPerMillion: 2,
+          updatedAt: "2026-07-31",
+        },
       },
       {
         id: "deepseek-v4-pro",
@@ -172,6 +184,13 @@ export const MODEL_VENDOR_PRESETS: readonly ModelVendorPreset[] = [
         supports1MContext: true,
         enabled: true,
         builtIn: true,
+        pricing: {
+          currency: "CNY",
+          inputPerMillion: 3,
+          cachedInputPerMillion: 0.025,
+          outputPerMillion: 6,
+          updatedAt: "2026-07-31",
+        },
       },
     ],
   },
@@ -224,14 +243,19 @@ export function buildModelVendorDraft(
         openaiApiMode: "chat-completions",
         supports1MContext: false,
         enabled: true,
+        pricing: null,
       }],
     };
   }
 
-  const models = preset.models.map((defaultModel) => ({
-    ...defaultModel,
-    ...existingModels.find((model) => model.id === defaultModel.id),
-  }));
+  const models = preset.models.map((defaultModel) => {
+    const existing = existingModels.find((model) => model.id === defaultModel.id);
+    return {
+      ...defaultModel,
+      ...existing,
+      pricing: existing?.pricing === undefined ? defaultModel.pricing : existing.pricing,
+    };
+  });
   const configuredReference = models.find((model) => model.apiKey.trim()) ?? models[0];
   const protocol = configuredReference
     && preset.supportedProviders.includes(configuredReference.provider)
@@ -288,7 +312,67 @@ export function materializeModelVendorDraft(draft: ModelVendorDraft): ManagedMod
     baseURL,
     enabled: true,
     builtIn: false,
+    pricing: model.pricing ? {
+      ...model.pricing,
+      updatedAt: new Date().toISOString().slice(0, 10),
+    } : model.pricing,
   }));
+}
+
+interface LegacyUsdPricing {
+  inputPerMillionUsd?: unknown;
+  cachedInputPerMillionUsd?: unknown;
+  cacheCreationInputPerMillionUsd?: unknown;
+  outputPerMillionUsd?: unknown;
+  updatedAt?: unknown;
+}
+
+function validPrice(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0;
+}
+
+export function normalizeModelTokenPricing(value: unknown): ModelTokenPricing | null | undefined {
+  if (value === null) return null;
+  if (!value || typeof value !== "object") return undefined;
+  const candidate = value as Partial<ModelTokenPricing> & LegacyUsdPricing;
+  if (
+    (candidate.currency === "CNY" || candidate.currency === "USD")
+    && validPrice(candidate.inputPerMillion)
+    && validPrice(candidate.cachedInputPerMillion)
+    && (candidate.cacheCreationInputPerMillion === undefined
+      || validPrice(candidate.cacheCreationInputPerMillion))
+    && validPrice(candidate.outputPerMillion)
+  ) {
+    return {
+      currency: candidate.currency,
+      inputPerMillion: candidate.inputPerMillion,
+      cachedInputPerMillion: candidate.cachedInputPerMillion,
+      ...(candidate.cacheCreationInputPerMillion === undefined ? {} : {
+        cacheCreationInputPerMillion: candidate.cacheCreationInputPerMillion,
+      }),
+      outputPerMillion: candidate.outputPerMillion,
+      updatedAt: typeof candidate.updatedAt === "string" ? candidate.updatedAt : "",
+    };
+  }
+  if (
+    validPrice(candidate.inputPerMillionUsd)
+    && validPrice(candidate.cachedInputPerMillionUsd)
+    && (candidate.cacheCreationInputPerMillionUsd === undefined
+      || validPrice(candidate.cacheCreationInputPerMillionUsd))
+    && validPrice(candidate.outputPerMillionUsd)
+  ) {
+    return {
+      currency: "USD",
+      inputPerMillion: candidate.inputPerMillionUsd,
+      cachedInputPerMillion: candidate.cachedInputPerMillionUsd,
+      ...(candidate.cacheCreationInputPerMillionUsd === undefined ? {} : {
+        cacheCreationInputPerMillion: candidate.cacheCreationInputPerMillionUsd,
+      }),
+      outputPerMillion: candidate.outputPerMillionUsd,
+      updatedAt: typeof candidate.updatedAt === "string" ? candidate.updatedAt : "",
+    };
+  }
+  return undefined;
 }
 
 export function loadManagedModels(): ManagedModel[] {
@@ -303,12 +387,13 @@ export function loadManagedModels(): ManagedModel[] {
     ).flatMap((item) => {
       const bundledModel = MODEL_VENDOR_MODELS.find((model) => isSameModel(item, model));
       if (bundledModel && !item.apiKey.trim()) return [];
+      const storedPricing = normalizeModelTokenPricing(item.pricing);
       return {
         ...item,
         ...(bundledModel ? { builtIn: false } : {}),
         supports1MContext: item.supports1MContext === true,
         enabled: item.enabled !== false,
-        pricing: bundledModel?.pricing ?? item.pricing,
+        pricing: storedPricing === undefined ? bundledModel?.pricing : storedPricing,
       };
     });
   } catch {
@@ -322,6 +407,7 @@ export function isModelEnabled(model: ManagedModel): boolean {
 
 export function toAgentModelSettings(model: ManagedModel): AgentModelSettings {
   return {
+    configurationId: model.id,
     provider: model.provider,
     model: model.model.trim(),
     apiKey: model.apiKey.trim() || undefined,

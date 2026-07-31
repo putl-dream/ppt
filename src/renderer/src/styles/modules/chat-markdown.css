@@ -22,7 +22,6 @@
 
 .markdown-body.assistant-response {
   width: auto;
-  max-width: 72ch;
   padding: 0;
 }
 

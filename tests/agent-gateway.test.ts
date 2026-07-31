@@ -191,6 +191,7 @@ describe("resolveAgentModelConfig", () => {
         timeoutMs: 180_000,
         maxOutputTokens: 16_384,
         fallbackModel: {
+          configurationId: "fallback-config",
           provider: "anthropic",
           model: "claude-sonnet-4-6",
           apiKey: "secret",
@@ -198,7 +199,11 @@ describe("resolveAgentModelConfig", () => {
       },
     );
 
-    expect(fallback).toEqual({ provider: "anthropic", model: "claude-sonnet-4-6" });
+    expect(fallback).toEqual({
+      configurationId: "fallback-config",
+      provider: "anthropic",
+      model: "claude-sonnet-4-6",
+    });
   });
 
   it("reports a clear configuration error when no key is available", () => {

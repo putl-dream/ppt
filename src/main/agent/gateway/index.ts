@@ -54,6 +54,7 @@ export class AgentGateway implements AgentModelGateway {
       }
     }
     return {
+      ...(settings.configurationId ? { configurationId: settings.configurationId } : {}),
       provider: settings.provider,
       model: settings.model,
       ...(settings.supports1MContext ? { supports1MContext: true } : {}),
@@ -73,7 +74,7 @@ export class AgentGateway implements AgentModelGateway {
   }
 
   private resolveConfig(
-    selection?: Pick<AgentModelSettings, "provider" | "model">,
+    selection?: AgentModelSelection,
   ) {
     return resolveAgentModelConfig(selection, this.runtimeSettings, process.env, this.gatewayConfig);
   }
@@ -109,6 +110,7 @@ export class AgentGateway implements AgentModelGateway {
       if (response.usage) {
         await this.recordUsage({
           ...response.usage,
+          ...(config.configurationId ? { configurationId: config.configurationId } : {}),
           provider: response.provider,
           model: response.model,
         });
@@ -168,6 +170,7 @@ export class AgentGateway implements AgentModelGateway {
         } else if (chunk.type === "complete" && chunk.usage) {
           await this.recordUsage({
             ...chunk.usage,
+            ...(config.configurationId ? { configurationId: config.configurationId } : {}),
             provider: config.provider,
             model: config.model,
           });

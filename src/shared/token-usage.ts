@@ -7,6 +7,7 @@ export interface ProviderTokenUsage {
 }
 
 export interface TokenUsageModel extends Required<ProviderTokenUsage> {
+  configurationId?: string;
   provider: string;
   model: string;
   requestCount: number;

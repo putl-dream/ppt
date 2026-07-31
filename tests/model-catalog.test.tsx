@@ -9,6 +9,7 @@ import {
   changeModelVendorDraftProtocol,
   loadManagedModels,
   materializeModelVendorDraft,
+  normalizeModelTokenPricing,
   toAgentModelSettings,
 } from "../src/renderer/src/modelCatalog";
 
@@ -48,7 +49,22 @@ describe("model catalog", () => {
       openaiApiMode: "chat-completions",
       supports1MContext: true,
     });
+    expect(flash?.pricing).toEqual(expect.objectContaining({
+      currency: "CNY",
+      inputPerMillion: 1,
+      cachedInputPerMillion: 0.02,
+      outputPerMillion: 2,
+    }));
+    expect(pro?.pricing).toEqual(expect.objectContaining({
+      currency: "CNY",
+      inputPerMillion: 3,
+      cachedInputPerMillion: 0.025,
+      outputPerMillion: 6,
+    }));
     expect(toAgentModelSettings(flash!)).toMatchObject({ supports1MContext: true });
+    expect(toAgentModelSettings(flash!)).toMatchObject({
+      configurationId: "deepseek-v4-flash",
+    });
   });
 
   it("switches DeepSeek to its OpenAI URL and model-specific API modes", () => {
@@ -98,6 +114,7 @@ describe("model catalog", () => {
       models: [{ id: "custom-test", model: "" }],
     });
     expect(draft.models[0]).not.toHaveProperty("builtIn");
+    expect(draft.models[0].pricing).toBeNull();
   });
 
   it("starts empty instead of injecting the vendor templates", () => {
@@ -123,5 +140,46 @@ describe("model catalog", () => {
       apiKey: "configured-key",
       builtIn: false,
     });
+  });
+
+  it("migrates legacy USD prices and preserves saved or disabled preset pricing", () => {
+    expect(normalizeModelTokenPricing({
+      inputPerMillionUsd: 4,
+      cachedInputPerMillionUsd: 0.4,
+      outputPerMillionUsd: 20,
+      updatedAt: "2026-07-01",
+    })).toEqual({
+      currency: "USD",
+      inputPerMillion: 4,
+      cachedInputPerMillion: 0.4,
+      outputPerMillion: 20,
+      updatedAt: "2026-07-01",
+    });
+
+    const configured = MODEL_VENDOR_MODELS.find((model) => model.id === "openai-gpt-5-5")!;
+    window.localStorage.setItem(MODEL_STORAGE_KEY, JSON.stringify([
+      {
+        ...configured,
+        apiKey: "configured-key",
+        pricing: {
+          currency: "CNY",
+          inputPerMillion: 8,
+          cachedInputPerMillion: 0.8,
+          outputPerMillion: 40,
+          updatedAt: "2026-08-01",
+        },
+      },
+      {
+        ...MODEL_VENDOR_MODELS.find((model) => model.id === "openai-gpt-5-mini")!,
+        apiKey: "configured-key",
+        pricing: null,
+      },
+    ]));
+
+    const models = loadManagedModels();
+    expect(models.find((model) => model.id === "openai-gpt-5-5")?.pricing).toEqual(
+      expect.objectContaining({ currency: "CNY", inputPerMillion: 8 }),
+    );
+    expect(models.find((model) => model.id === "openai-gpt-5-mini")?.pricing).toBeNull();
   });
 });

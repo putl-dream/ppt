@@ -52,12 +52,14 @@ import { RiskPolicy } from "./agent/gate/risk-policy";
 import {
   clearLogFiles,
   createModuleLogger,
+  diagnosticValuePreview,
   getLogDirectory,
   getLogManagerStatus,
   getRecentLogEntries,
   initializeLogManager,
   requestSummary,
   updateLogManagerSettings,
+  withLogContext,
 } from "./agent/logger";
 import type { AppLogLevel, LogManagerSettings, RendererLogReport } from "@shared/logging";
 import { FileSessionStore } from "./session-store";
@@ -234,7 +236,40 @@ function createAgentStreamEmitter(
     logger.info("agent.run.aborted", { runId, reason });
   };
 
-  return (streamEvent: AgentServiceEvent) => {
+  return (streamEvent: AgentServiceEvent) => withLogContext({ sessionId, runId, threadId }, () => {
+    if (streamEvent.type === "teammate-tool-started") {
+      logger.info("teammate.tool.started", {
+        teammateName: streamEvent.teammateName,
+        activityId: streamEvent.activityId,
+        taskId: streamEvent.taskId,
+        toolName: streamEvent.toolName,
+      });
+    } else if (streamEvent.type === "teammate-tool-finished") {
+      logger[streamEvent.status === "failed" ? "warn" : "info"]("teammate.tool.finished", {
+        teammateName: streamEvent.teammateName,
+        activityId: streamEvent.activityId,
+        taskId: streamEvent.taskId,
+        toolName: streamEvent.toolName,
+        status: streamEvent.status,
+        message: streamEvent.message,
+      });
+    } else if (streamEvent.type === "tool-approval-waiting") {
+      logger.info("agent.tool-approval.requested", {
+        approvalId: streamEvent.approvalId,
+        toolName: streamEvent.toolName,
+        reason: streamEvent.reason,
+      });
+      logger.debug("agent.tool-approval.detail", {
+        approvalId: streamEvent.approvalId,
+        detail: diagnosticValuePreview(streamEvent.detail, 8 * 1024),
+      });
+    } else if (streamEvent.type === "tool-approval-resolved") {
+      logger.info("agent.tool-approval.observed", {
+        approvalId: streamEvent.approvalId,
+        toolName: streamEvent.toolName,
+        status: streamEvent.status,
+      });
+    }
     const eventKind: ConversationEventKind = (() => {
       switch (streamEvent.type) {
         case "thinking-chunk":
@@ -299,7 +334,7 @@ function createAgentStreamEmitter(
       logger.warn("agent.stream.send-failed", { runId, error });
       abortRun("stream-send-failed");
     }
-  };
+  });
 }
 
 function createWindow(onWindowCreated?: (window: BrowserWindow) => void): BrowserWindow {
@@ -592,100 +627,103 @@ app.whenReady().then(async () => {
     operation: string,
     sessionId: string,
     runId: string | undefined,
+    request: string | undefined,
     details: Record<string, unknown>,
     signal: AbortSignal | undefined,
     task: () => Promise<AgentRunResult>,
   ): Promise<AgentRunResult> => {
-    const startedAt = Date.now();
-    let taskOutcome: "completed" | "failed" | "interrupted" = "completed";
-    logger.info("session.operation.started", {
-      operation,
-      sessionId,
-      runId,
-      ...details,
-    });
-    try {
-      const result = await task();
-      taskOutcome = result.status === "interrupted"
-        ? "interrupted"
-        : result.status === "failed"
-          ? "failed"
-          : "completed";
-      if (runId) {
-        sessionStore.conversationDatabase.finishRun({
-          runId,
-          status: result.status === "interrupted"
-            ? "interrupted"
-            : result.status === "failed"
-              ? "failed"
-              : "completed",
-          result,
-          ...(result.status === "failed" ? { error: result.error } : {}),
-          threadId: "threadId" in result && typeof result.threadId === "string"
-            ? result.threadId
-            : runId,
+    const threadId = typeof details.threadId === "string" ? details.threadId : runId;
+    return withLogContext({ operation, sessionId, runId, threadId }, async () => {
+      const startedAt = Date.now();
+      let taskOutcome: "completed" | "failed" | "interrupted" = "completed";
+      if (request !== undefined) {
+        logger.info("agent.request.received", requestSummary(request));
+        logger.debug("agent.request.detail", {
+          request: diagnosticValuePreview(request, 8 * 1024),
         });
-        await sessionStore.finalizeAgentRunMessage(sessionId, runId, result);
       }
-      logger.info("session.operation.completed", {
-        operation,
-        sessionId,
-        runId,
-        status: result.status,
-        durationMs: Date.now() - startedAt,
-      });
-      return result;
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      const interrupted = isRuntimeCancellation(error, signal);
-      taskOutcome = interrupted ? "interrupted" : "failed";
-      const failureThreadId = typeof details.threadId === "string"
-        ? details.threadId
-        : runId;
-      const result: AgentRunResult = interrupted
-        ? {
-            status: "interrupted",
-            ...(failureThreadId ? { threadId: failureThreadId } : {}),
-          }
-        : {
-            status: "failed",
-            error: formatPublicErrorMessage(
-              error,
-              "处理请求时遇到问题，请稍后重试。",
-            ),
-            ...(failureThreadId ? { threadId: failureThreadId } : {}),
-          };
-      if (runId) {
-        sessionStore.conversationDatabase.finishRun({
-          runId,
-          status: interrupted ? "interrupted" : "failed",
-          error: message,
-          result,
+      logger.info("session.operation.started", details);
+      try {
+        const result = await task();
+        taskOutcome = result.status === "interrupted"
+          ? "interrupted"
+          : result.status === "failed"
+            ? "failed"
+            : "completed";
+        if (runId) {
+          sessionStore.conversationDatabase.finishRun({
+            runId,
+            status: result.status === "interrupted"
+              ? "interrupted"
+              : result.status === "failed"
+                ? "failed"
+                : "completed",
+            result,
+            ...(result.status === "failed" ? { error: result.error } : {}),
+            threadId: "threadId" in result && typeof result.threadId === "string"
+              ? result.threadId
+              : runId,
+          });
+          await sessionStore.finalizeAgentRunMessage(sessionId, runId, result);
+        }
+        logger.info("session.operation.completed", {
+          status: result.status,
+          durationMs: Date.now() - startedAt,
         });
-        await sessionStore.finalizeAgentRunMessage(sessionId, runId, result);
-      }
-      logger.error("session.operation.failed", {
-        operation,
-        sessionId,
-        runId,
-        durationMs: Date.now() - startedAt,
-        error,
-      });
-      if (runId) return result;
-      throw error;
-    } finally {
-      await tokenUsageStore.recordTask(
-        Date.now() - startedAt,
-        new Date(),
-        taskOutcome,
-      ).catch((error) => {
-        logger.error("session.operation.usage-persist-failed", {
-          operation,
-          sessionId,
-          runId,
+        return result;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        const interrupted = isRuntimeCancellation(error, signal);
+        taskOutcome = interrupted ? "interrupted" : "failed";
+        const failureThreadId = typeof details.threadId === "string"
+          ? details.threadId
+          : runId;
+        const result: AgentRunResult = interrupted
+          ? {
+              status: "interrupted",
+              ...(failureThreadId ? { threadId: failureThreadId } : {}),
+            }
+          : {
+              status: "failed",
+              error: formatPublicErrorMessage(
+                error,
+                "处理请求时遇到问题，请稍后重试。",
+              ),
+              ...(failureThreadId ? { threadId: failureThreadId } : {}),
+            };
+        if (runId) {
+          sessionStore.conversationDatabase.finishRun({
+            runId,
+            status: interrupted ? "interrupted" : "failed",
+            error: message,
+            result,
+          });
+          await sessionStore.finalizeAgentRunMessage(sessionId, runId, result);
+        }
+        logger.error("session.operation.failed", {
+          durationMs: Date.now() - startedAt,
           error,
         });
-      });
+        if (runId) return result;
+        throw error;
+      } finally {
+        await tokenUsageStore.recordTask(
+          Date.now() - startedAt,
+          new Date(),
+          taskOutcome,
+        ).catch((error) => {
+          logger.error("session.operation.usage-persist-failed", { error });
+        });
+      }
+    });
+  };
+
+  const parseAgentRequest = (operation: string, rawRequest: unknown) => {
+    try {
+      return agentRunRequestSchema.parse(rawRequest);
+    } catch (error) {
+      logger.warn("agent.request.invalid", { operation, error });
+      throw error;
     }
   };
 
@@ -1161,8 +1199,17 @@ app.whenReady().then(async () => {
 
   ipcMain.handle(
     "agent:resolve-tool-approval",
-    async (_, runId: string, approvalId: string, approved: boolean) =>
-      toolApprovalBroker.resolve(approvalId, approved),
+    async (_, runId: string, approvalId: string, approved: boolean) => {
+      const resolved = toolApprovalBroker.resolve(approvalId, approved);
+      withLogContext({ runId }, () => {
+        logger.info("agent.tool-approval.resolved", {
+          approvalId,
+          approved,
+          resolved,
+        });
+      });
+      return resolved;
+    },
   );
 
   ipcMain.handle("agent:poll-lead-inbox", async (_, sessionId: string) => {
@@ -1193,16 +1240,23 @@ app.whenReady().then(async () => {
       rawGatewayConfig?: AgentGatewayConfig,
       runId?: string,
     ) => {
-      const request = agentRunRequestSchema.parse(rawRequest);
+      const request = parseAgentRequest("start", rawRequest);
       const sessionId = request.sessionId;
+      const currentRunId = runId || crypto.randomUUID();
 
       // 当前桌面端采用单窗口、单前台运行模型；Main 同步执行这一约束，
       // 让模型配置和交互状态在一次 run 内保持稳定。
       if (activeRuns.size > 0) {
+        withLogContext({ operation: "start", sessionId, runId: currentRunId, threadId: currentRunId }, () => {
+          logger.warn("agent.request.rejected", {
+            reason: "concurrency-conflict",
+            activeRunIds: [...activeRuns.keys()],
+            ...requestSummary(request.prompt),
+          });
+        });
         throw new Error("Concurrency Conflict: An active agent run is already in progress.");
       }
 
-      const currentRunId = runId || crypto.randomUUID();
       const controller = new AbortController();
       activeRuns.set(currentRunId, controller);
       sessionActiveRuns.set(sessionId, currentRunId);
@@ -1245,8 +1299,9 @@ app.whenReady().then(async () => {
           "start",
           sessionId,
           currentRunId,
+          request.prompt,
           {
-            ...requestSummary(request.prompt),
+            threadId: currentRunId,
             provider: selection?.provider,
             model: selection?.model,
             executionStrategy,
@@ -1296,15 +1351,22 @@ app.whenReady().then(async () => {
     rawGatewayConfig?: AgentGatewayConfig,
     runId?: string,
   ) => {
-    const request = agentRunRequestSchema.parse(rawRequest);
+    const request = parseAgentRequest("continue-agent-run", rawRequest);
     const sessionId = request.sessionId;
+    const currentRunId = runId || crypto.randomUUID();
 
     // 与 start 保持同一条全局串行边界，避免继续会话与新运行交错。
     if (activeRuns.size > 0) {
+      withLogContext({ operation: "continue-agent-run", sessionId, runId: currentRunId, threadId }, () => {
+        logger.warn("agent.request.rejected", {
+          reason: "concurrency-conflict",
+          activeRunIds: [...activeRuns.keys()],
+          ...requestSummary(request.prompt),
+        });
+      });
       throw new Error("Concurrency Conflict: An active agent run is already in progress.");
     }
 
-    const currentRunId = runId || crypto.randomUUID();
     const controller = new AbortController();
     activeRuns.set(currentRunId, controller);
     sessionActiveRuns.set(sessionId, currentRunId);
@@ -1349,7 +1411,8 @@ app.whenReady().then(async () => {
         "continue-agent-run",
         sessionId,
         currentRunId,
-        { threadId, ...requestSummary(request.prompt) },
+        request.prompt,
+        { threadId },
         controller.signal,
         async () => {
           await runtime.agentService.restoreDurableThread(threadId);
@@ -1420,9 +1483,17 @@ app.whenReady().then(async () => {
     const proposalId = asProposalId(rawProposalId);
     const runtime = await getRuntimeForSession(sessionId);
     const chat = sessionStore.findProposalChatContext(sessionId, proposalId);
+    withLogContext({
+      operation: "resolve-proposal",
+      sessionId,
+      threadId: chat?.threadId,
+    }, () => {
+      logger.info("agent.proposal.resolution.received", { proposalId, approved });
+    });
     return runAgentOperation(
       "resolve-proposal",
       sessionId,
+      undefined,
       undefined,
       {
         proposalId,

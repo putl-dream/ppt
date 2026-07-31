@@ -392,7 +392,7 @@
 
 .chat-workspace-footer-unified {
   flex-shrink: 0;
-  padding: var(--space-2) 0 var(--space-3);
+  padding: var(--space-2) var(--chat-scrollbar-gutter) var(--space-3);
   border-top: none;
   background: var(--surface-raised);
 }

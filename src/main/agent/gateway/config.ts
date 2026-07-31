@@ -66,6 +66,7 @@ export function resolveFallbackModelSelection(
       return undefined;
     }
     return {
+      ...(configured.configurationId ? { configurationId: configured.configurationId } : {}),
       provider: configured.provider,
       model: configured.model,
       ...(configured.supports1MContext ? { supports1MContext: true } : {}),
@@ -109,6 +110,9 @@ export function resolveAgentModelConfig(
   const baseURL = runtime?.baseURL ?? environmentBaseURL;
 
   return {
+    ...((selection?.configurationId ?? runtime?.configurationId)
+      ? { configurationId: selection?.configurationId ?? runtime?.configurationId }
+      : {}),
     provider,
     model,
     apiKey,
