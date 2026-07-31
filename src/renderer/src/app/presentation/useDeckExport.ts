@@ -52,7 +52,7 @@ export function useDeckExport({
             : "已取消导出。",
         },
       ]);
-      if (savedPath) notify(`🎉 成功导出至: ${savedPath}`);
+      if (savedPath) notify(`已成功导出至: ${savedPath}`);
     } catch (error) {
       console.error("Export failed:", error);
       const message = formatPublicErrorMessage(error, "导出时遇到问题，请重试。");
@@ -64,7 +64,7 @@ export function useDeckExport({
           content: `导出失败：${message}`,
         },
       ]);
-      notify(`❌ 导出失败: ${message}`);
+      notify(`导出失败: ${message}`);
     } finally {
       setIsExportingDeck(false);
     }

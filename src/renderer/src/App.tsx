@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { DEFAULT_DESIGN_SYSTEM } from "@design-system";
-import type { LeanGenerationMode } from "@shared/lean-mode-contract";
 import { getWorkspaceLabel } from "@shared/workspace";
 import {
   setDisplayCardStatus,
@@ -65,7 +64,6 @@ export function App() {
   } = settings;
 
   const [request, setRequest] = useState("");
-  const generationMode: LeanGenerationMode = "agent";
   const [busy, setBusy] = useState(false);
   const resetRequest = useCallback(() => setRequest(""), []);
   const sessionController = useSessionController({
@@ -121,7 +119,6 @@ export function App() {
     activeSessionId,
     sessionLoaded,
     localStoragePath,
-    generationMode,
     selectedSlideId,
     chatMessages,
     setChatMessages,

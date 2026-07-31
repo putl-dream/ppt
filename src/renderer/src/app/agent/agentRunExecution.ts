@@ -2,7 +2,6 @@ import type { AgentGatewayPreferences } from "@shared/agent-gateway-config";
 import type { AgentStepLimits } from "@shared/agent-step-limits";
 import type { AgentExecutionStrategy } from "@shared/agent";
 import type { AgentRunRequest, AgentRunResult } from "@shared/ipc";
-import type { LeanGenerationMode } from "@shared/lean-mode-contract";
 import { buildAgentGatewayConfig } from "../../agentGatewayConfig";
 import { getPersistedDisplayCards } from "../../cards/display-card-managers";
 import { toAgentModelSettings, type ManagedModel } from "../../modelCatalog";
@@ -10,7 +9,6 @@ import { findActiveThreadId, type ChatMessage } from "../chatMessageRuntime";
 
 interface ExecuteAgentRunOptions {
   request: AgentRunRequest;
-  generationMode: LeanGenerationMode;
   sourceMessages: ChatMessage[];
   forkedMessages?: ChatMessage[];
   gatewayPreferences: AgentGatewayPreferences;
@@ -27,7 +25,6 @@ interface ExecuteAgentRunOptions {
  */
 export function executeAgentRun({
   request,
-  generationMode,
   sourceMessages,
   forkedMessages,
   gatewayPreferences,
@@ -44,8 +41,7 @@ export function executeAgentRun({
     getPersistedDisplayCards(),
   );
 
-  // 只有完整 Agent 模式可以续接 thread；Lean 等模式始终开启独立运行。
-  if (generationMode === "agent" && activeThreadId) {
+  if (activeThreadId) {
     return window.desktopApi.continueAgentRun(
       activeThreadId,
       request,

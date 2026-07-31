@@ -69,7 +69,7 @@ export const DeckPreviewCard: React.FC<DeckPreviewCardProps> = ({
 
       <div className="inline-artifact-actions">
         {onPreview && (
-          <button type="button" className="btn-reject" onClick={onPreview}>
+          <button type="button" className="btn-secondary" onClick={onPreview}>
             <OpenPreviewIcon size={13} />
             <span>预览 PPT</span>
           </button>

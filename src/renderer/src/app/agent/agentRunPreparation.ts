@@ -1,12 +1,10 @@
 import type { AgentRunRequest } from "@shared/ipc";
 import type { LayoutChoice } from "@shared/layout-preference";
-import type { LeanGenerationMode } from "@shared/lean-mode-contract";
 import type { ChatMessage } from "../chatMessageRuntime";
 
 interface BuildAgentRunRequestOptions {
   prompt: string;
   sessionId: string;
-  generationMode: LeanGenerationMode;
   layoutChoice?: LayoutChoice;
   currentSlideId?: string;
 }
@@ -14,11 +12,11 @@ interface BuildAgentRunRequestOptions {
 export function buildAgentRunRequest({
   prompt,
   sessionId,
-  generationMode,
   layoutChoice,
   currentSlideId,
 }: BuildAgentRunRequestOptions): AgentRunRequest {
   // 这里只构造 Renderer → Main 的业务请求；模型、Gateway 和步数限制属于执行配置。
+  // generationMode 由 IPC schema 默认 "agent"；产品路径不再透传 Mode。
   return {
     prompt,
     sessionId,
@@ -26,7 +24,7 @@ export function buildAgentRunRequest({
       ...(currentSlideId ? { currentSlideId } : {}),
       selectedElementIds: [],
     },
-    generationMode,
+    generationMode: "agent",
     ...(layoutChoice ? { layoutChoice } : {}),
   };
 }

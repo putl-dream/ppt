@@ -351,7 +351,6 @@ describe("display event approval actions", () => {
       undefined,
       {
         userDisplayContent: "管理层",
-        generationMode: "agent",
       },
     );
   });

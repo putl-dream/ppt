@@ -1,6 +1,5 @@
 import { useCallback, type Dispatch, type SetStateAction } from "react";
 import type { AgentRunResult } from "@shared/ipc";
-import { formatLeanRunMetrics } from "@shared/lean-mode-contract";
 import {
   formatTerminalAgentRunContent,
   mergeWaitingUserRunContent,
@@ -194,11 +193,9 @@ export function useAgentResultHandler({
     }
 
     if (result.status === "approval-required") {
-      const content = result.leanMetrics
-        ? `已生成 Lean 商业 PPT 草稿，请在下方审核后应用。\n\n${formatLeanRunMetrics(result.leanMetrics)}`
-        : isSidechainRun && messageId
-          ? "后台任务已提出排版更新方案，请在下方审核后应用。"
-          : "已提出排版更新方案，请在下方审核后应用。";
+      const content = isSidechainRun && messageId
+        ? "后台任务已提出排版更新方案，请在下方审核后应用。"
+        : "已提出排版更新方案，请在下方审核后应用。";
       if (messageId) {
         setChatMessages((current) => current.map((message) =>
           message.id === messageId
@@ -225,9 +222,7 @@ export function useAgentResultHandler({
           },
         ]);
       }
-      notify(result.leanMetrics
-        ? "Lean PPT 草稿已生成，请进行审核"
-        : "AI 已提出排版变更方案，请进行审核");
+      notify("AI 已提出排版变更方案，请进行审核");
       return;
     }
 

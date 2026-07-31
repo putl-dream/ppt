@@ -18,12 +18,12 @@ export function PptJobStatusBar({ pptJob, compact = false }: PptJobStatusBarProp
       role="status"
       aria-label="演示文稿任务状态"
     >
-      <span className="ppt-job-status-bar__label">PPT JOB</span>
+      <span className="ppt-job-status-bar__label">演示任务</span>
       <strong>{JOB_STATUS_LABELS[pptJob.status]}</strong>
       <span>{CAPABILITY_LABELS[pptJob.capability]}</span>
       <span>阶段：{STAGE_LABELS[pptJob.stage]}</span>
       {pptJob.proposalId && pptJob.proposalStatus ? (
-        <span>Proposal：{PROPOSAL_STATUS_LABELS[pptJob.proposalStatus]}</span>
+        <span>提案：{PROPOSAL_STATUS_LABELS[pptJob.proposalStatus]}</span>
       ) : null}
       {pptJob.waitingReason ? (
         <span className="ppt-job-status-bar__reason">{pptJob.waitingReason}</span>

@@ -7,7 +7,7 @@ import {
   CopyIcon,
   Edit3Icon,
   OpenPreviewIcon,
-  SparklesIcon,
+  LayoutIcon,
 } from "./Icons";
 import { UnifiedAgentInput } from "./UnifiedAgentInput";
 import { AgentRunLoader } from "./AgentRunLoader";
@@ -437,10 +437,10 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
   ];
 
   const promptSuggestions = [
-    "新增一页关于产品推广的市场页",
-    "将幻灯片整体语气调整得更具有商业说服力",
-    "把第一页幻灯片文本内容提炼为要点列表",
-    "将排版风格套用为商务蔚蓝主题",
+    "做一份 8 页的产品发布会演示，面向企业客户，语气专业且有冲击力",
+    "帮我准备季度业务汇报 PPT，包含进展、风险和下一步计划",
+    "生成一套面向新员工的入职培训课件，结构清晰、便于讲解",
+    "写一份产品方案介绍，突出问题、方案价值与落地路径",
   ];
 
   const handleSlashSelect = (cmd: string) => {
@@ -482,10 +482,10 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
   // Render State A: Center Focal Mode (新建会话阶段 —— “居中巨幕控制台”)
   if (showInitChat) {
     return (
-      <section className="canvas-column chat-workspace-column center-focal-wrapper" style={{ background: "var(--bg-canvas)", height: "100%", display: "flex", flexDirection: "column" }}>
+      <section className="canvas-column chat-workspace-column center-focal-wrapper">
 
         {/* Top Header */}
-        <div className="panel-header canvas-header" style={{ background: "transparent" }}>
+        <div className="panel-header canvas-header center-focal-header">
           <div className="canvas-header-left">
             <div className="chat-session-title" title={displayConversationTitle}>
               <span>{displayConversationTitle}</span>
@@ -495,7 +495,7 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
         </div>
 
         {/* Center content container */}
-        <div className="center-focal-content-area" style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", padding: "40px 20px" }}>
+        <div className="center-focal-content-area">
 
           <UnifiedAgentInput
             request={request}
@@ -516,26 +516,15 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
             onPrepareWorkspace={onPrepareWorkspace}
           />
 
-          {/* Quick recommendations suggestions below */}
-          <div className="center-suggestions" style={{ marginTop: "28px", maxWidth: "680px", display: "flex", flexWrap: "wrap", gap: "10px", justifyContent: "center" }}>
+          <div className="center-suggestions">
             {promptSuggestions.map((suggestion, index) => (
               <button
                 key={index}
+                type="button"
                 className="suggestion-chip"
                 onClick={() => onProposePrompt(suggestion)}
-                style={{
-                  background: "var(--bg-input-field)",
-                  border: "1px solid var(--border-glass)",
-                  padding: "8px 16px",
-                  borderRadius: "20px",
-                  fontSize: "12px",
-                  color: "var(--text-secondary)",
-                  cursor: "pointer",
-                  transition: "var(--transition-smooth)",
-                  boxShadow: "0 2px 6px rgba(0,0,0,0.01)"
-                }}
               >
-                ✨ {suggestion}
+                {suggestion}
               </button>
             ))}
           </div>
@@ -548,7 +537,7 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
 
   // Render State B: Bottom-Anchored Split View (伴随式会话与双轨生成阶段 —— “底部承托控制台”)
   return (
-    <section className="canvas-column chat-workspace-column" style={{ background: "var(--bg-canvas)" }}>
+    <section className="canvas-column chat-workspace-column">
 
       {/* 顶部中央状态控制栏 */}
       <div className="panel-header canvas-header">
@@ -662,10 +651,10 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
               ) : (
                 <div className="assistant-message-shell">
                   <div className="assistant-message-avatar" aria-hidden="true">
-                    <SparklesIcon size={16} />
+                    <LayoutIcon size={14} />
                   </div>
                   <div className="assistant-message-main">
-                    <div className="assistant-message-sender">PPT Agent</div>
+                    <div className="assistant-message-sender">助手</div>
                   {(() => {
                     const useLiveTrace = busy && streamingMessageId === msg.id;
                     const resolvedTrace = useLiveTrace

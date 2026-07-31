@@ -7,7 +7,6 @@ import {
 } from "react";
 import type { SessionBootstrap } from "@shared/session";
 import type { LayoutChoice } from "@shared/layout-preference";
-import type { LeanGenerationMode } from "@shared/lean-mode-contract";
 import {
   appendStep,
 } from "@shared/agent-activity";
@@ -45,7 +44,6 @@ interface StartAgentOptions {
   userDisplayContent?: string | false;
   layoutChoice?: LayoutChoice;
   sidechain?: boolean;
-  generationMode?: LeanGenerationMode;
 }
 
 interface UseAgentRunControllerOptions {
@@ -56,7 +54,6 @@ interface UseAgentRunControllerOptions {
   activeSessionId: string;
   sessionLoaded: boolean;
   localStoragePath: string;
-  generationMode: LeanGenerationMode;
   selectedSlideId?: string;
   chatMessages: ChatMessage[];
   setChatMessages: Dispatch<SetStateAction<ChatMessage[]>>;
@@ -99,7 +96,6 @@ export function useAgentRunController({
   activeSessionId,
   sessionLoaded,
   localStoragePath,
-  generationMode,
   selectedSlideId,
   chatMessages,
   setChatMessages,
@@ -154,8 +150,6 @@ export function useAgentRunController({
     const runId = crypto.randomUUID();
     const runLock = runLockRef.current;
     if (!runLock.acquire(runId)) return;
-
-    const runGenerationMode = options?.generationMode ?? generationMode;
 
     const userDisplayContent = options?.userDisplayContent === false
       ? null
@@ -216,7 +210,6 @@ export function useAgentRunController({
         const agentRequest = buildAgentRunRequest({
           prompt: activeRequest,
           sessionId: context.sessionId,
-          generationMode: runGenerationMode,
           layoutChoice: options?.layoutChoice,
           currentSlideId: selectedSlideId || undefined,
         });
@@ -224,7 +217,6 @@ export function useAgentRunController({
         console.info("Starting unified Agent run", {
           sessionId: agentRequest.sessionId,
           editorContext: agentRequest.editorContext,
-          generationMode: runGenerationMode,
         });
 
         if (preparedMessages.retainedMessageIds) {
@@ -241,7 +233,6 @@ export function useAgentRunController({
         }
         return executeAgentRun({
           request: agentRequest,
-          generationMode: runGenerationMode,
           sourceMessages,
           forkedMessages: preparedMessages.forkedMessages,
           gatewayPreferences: agentGatewayPreferences,
@@ -285,7 +276,6 @@ export function useAgentRunController({
     chatMessages,
     enabledModels,
     finishRunActivity,
-    generationMode,
     localStoragePath,
     notify,
     request,
@@ -306,7 +296,7 @@ export function useAgentRunController({
     onInboxTurn: (prompt) => startAgent(
       prompt,
       undefined,
-      { userDisplayContent: false, sidechain: true, generationMode: "agent" },
+      { userDisplayContent: false, sidechain: true },
     ),
     onError: (error) => {
       console.error("轮询队友收件箱失败:", error);

@@ -39,11 +39,12 @@
   --accent-primary-hover-shadow: rgba(16, 185, 129, 0.32);
 }
 
+/* Legacy purple accent maps to cyan — purple is no longer a UI accent option. */
 :root[data-accent="purple"],
 [data-accent="purple"] {
-  --accent-primary: var(--accent-purple);
-  --accent-primary-glow: var(--accent-purple-glow);
-  --accent-primary-hover-shadow: rgba(168, 85, 247, 0.32);
+  --accent-primary: var(--accent-cyan);
+  --accent-primary-glow: var(--accent-cyan-glow);
+  --accent-primary-hover-shadow: rgba(14, 165, 233, 0.35);
 }
 
 :root[data-accent="orange"],

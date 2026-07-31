@@ -83,7 +83,7 @@ export function useSettingsController(
   const uiReadingTone: UiReadingTone = themeMode === "cyan" || themeMode === "orange" ? themeMode : "classic";
   const [uiAccentColor, setUiAccentColorState] = useState<UiAccentColor>(() => {
     const accent = persisted.uiAccentColor;
-    return accent === "green" || accent === "purple" || accent === "orange" ? accent : "cyan";
+    return accent === "green" || accent === "orange" ? accent : "cyan";
   });
   const [uiControlShape, setUiControlShapeState] = useState<UiControlShape>(() => {
     const shape = persisted.uiControlShape;

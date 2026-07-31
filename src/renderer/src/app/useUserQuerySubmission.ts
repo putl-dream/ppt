@@ -47,9 +47,7 @@ export function useUserQuerySubmission({
     });
     if (handledLocally) return;
 
-    void startAgent(undefined, undefined, {
-      generationMode: "agent",
-    });
+    void startAgent();
   }, [
     activeSessionId,
     busy,

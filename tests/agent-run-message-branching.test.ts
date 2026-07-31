@@ -38,7 +38,6 @@ describe("agent run message branching", () => {
     expect(buildAgentRunRequest({
       prompt: "Create a deck",
       sessionId: "session-1",
-      generationMode: "agent",
       layoutChoice,
       currentSlideId: "slide-2",
     })).toEqual({

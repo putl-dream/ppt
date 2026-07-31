@@ -144,7 +144,7 @@ export function useDisplayEventActions({
             }
           ));
         }
-        notify(approved ? "✅ 变更已应用" : "❌ 变更已取消");
+        notify(approved ? "变更已应用" : "变更已取消");
       } else {
         setDisplayCardStatus(event.eventId, "active");
         notify(
@@ -198,14 +198,11 @@ export function useDisplayEventActions({
     }
     void startAgent(resolved.value, undefined, {
       userDisplayContent: resolved.label ?? resolved.value,
-      generationMode: "agent",
     });
   }, [setChatMessages, startAgent]);
 
   const reviseOutline = useCallback((_event: ArtifactEvent) => {
-    void startAgent("请根据当前反馈继续修改大纲结构", undefined, {
-      generationMode: "agent",
-    });
+    void startAgent("请根据当前反馈继续修改大纲结构");
   }, [startAgent]);
 
   const resolvePatch = useCallback(async (event: PatchEvent, accepted: boolean) => {

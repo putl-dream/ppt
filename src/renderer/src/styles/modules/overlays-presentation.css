@@ -395,14 +395,14 @@
 }
 
 [data-reading-tone="orange"] .rounded-canvas {
-  --bg-canvas: #fff8ef;
-  --bg-canvas-gradient-start: #fffaf3;
-  --bg-canvas-gradient-end: #f6ecdd;
-  --bg-glass: #fff7ec;
-  --bg-input-field: #fff3e3;
-  --bg-darker: #f4e9da;
-  --border-glass: rgba(148, 95, 37, 0.16);
-  --border-glass-focused: rgba(148, 95, 37, 0.28);
+  --bg-canvas: #f7f6f4;
+  --bg-canvas-gradient-start: #f9f8f6;
+  --bg-canvas-gradient-end: #efeeec;
+  --bg-glass: #f7f6f4;
+  --bg-input-field: #f3f2f0;
+  --bg-darker: #ebeae8;
+  --border-glass: rgba(100, 100, 95, 0.16);
+  --border-glass-focused: rgba(100, 100, 95, 0.28);
 }
 
 .rounded-canvas .canvas-column,
@@ -578,8 +578,8 @@
   flex: 0 0 auto;
   padding: 10px 12px 11px;
   border-bottom: 1px solid var(--border-glass);
-  background: color-mix(in srgb, var(--bg-canvas) 92%, var(--bg-input-field) 8%);
-  box-shadow: 0 8px 20px color-mix(in srgb, var(--bg-darker) 8%, transparent);
+  background: var(--bg-canvas);
+  box-shadow: none;
 }
 
 .mirror-view-tabs {

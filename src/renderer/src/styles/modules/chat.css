@@ -1,40 +1,12 @@
 /* 右侧：AI 对话工作流控制台 */
-.right-panel-body {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  background: rgba(255, 255, 255, 0.01);
-}
-
-.dark-theme .right-panel-body {
-  background: rgba(8, 10, 15, 0.2);
-}
-
-.status-indicator {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 11px;
-  color: var(--text-secondary);
-}
-
 .status-dot {
   width: 7px; height: 7px;
   border-radius: 50%;
-  background-color: #22c55e;
+  background-color: var(--accent-green);
 }
 
 .status-dot.active {
   background: var(--accent-primary);
-  box-shadow: 0 0 8px var(--accent-primary);
-  animation: pulse-glow 1.5s infinite;
-}
-
-@keyframes pulse-glow {
-  0% { transform: scale(1); opacity: 1; }
-  50% { transform: scale(1.3); opacity: 0.5; }
-  100% { transform: scale(1); opacity: 1; }
 }
 
 .right-header-title {
@@ -104,11 +76,6 @@
   background: var(--bg-glass-hover);
   border-color: var(--border-glass-focused);
   color: var(--text-primary);
-}
-
-.brain-glow-icon {
-  color: var(--accent-primary);
-  filter: drop-shadow(0 0 4px var(--accent-primary-glow));
 }
 
 /* Chat 气泡列表 */
@@ -652,7 +619,7 @@
   border-radius: var(--control-radius-xs);
   background: var(--bg-darker);
   border: 1px solid var(--border-glass);
-  color: var(--accent-purple);
+  color: var(--accent-primary);
 }
 
 .markdown-body pre {
@@ -1875,8 +1842,9 @@ button.chat-session-crumb:hover {
   height: 28px;
   margin-top: 1px;
   border-radius: 8px;
-  color: var(--accent-primary);
-  background: color-mix(in srgb, var(--accent-primary) 9%, transparent);
+  color: var(--text-secondary);
+  background: var(--bg-darker);
+  border: 1px solid var(--border-glass);
 }
 
 .assistant-message-main {
@@ -1885,10 +1853,10 @@ button.chat-session-crumb:hover {
 
 .assistant-message-sender {
   margin: 0 0 7px;
-  color: var(--text-primary);
+  color: var(--text-muted);
   font-family: var(--font-display);
-  font-size: 12px;
-  font-weight: 650;
+  font-size: 11.5px;
+  font-weight: 600;
   letter-spacing: 0.01em;
 }
 

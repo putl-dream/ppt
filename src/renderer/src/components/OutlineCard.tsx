@@ -47,7 +47,7 @@ export const OutlineCard: React.FC<OutlineCardProps> = ({
         <button
           type="button"
           disabled={busy}
-          className="btn-reject"
+          className="btn-secondary"
           onClick={onRevise}
         >
           继续修改

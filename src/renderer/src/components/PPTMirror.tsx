@@ -212,7 +212,7 @@ export const PPTMirror: React.FC<PPTMirrorProps> = ({
         allowUnverifiedAssets,
       });
       if (savedPath) {
-        triggerToast?.(`🎉 成功导出至: ${savedPath}`);
+        triggerToast?.(`已成功导出至: ${savedPath}`);
       }
     } catch (error) {
       console.error(error);

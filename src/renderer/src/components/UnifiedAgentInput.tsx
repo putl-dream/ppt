@@ -98,10 +98,9 @@ export const UnifiedAgentInput: React.FC<UnifiedAgentInputProps> = ({
     <div className={`unified-agent-input-container ${layoutMode === "center" ? "center-focal-mode" : "bottom-anchored-mode"}`}>
       {layoutMode === "center" ? (
         <div className="center-welcome-header">
-          <span className="center-welcome-eyebrow">AI PRESENTATION WORKSPACE</span>
-          <h1 className="center-welcome-title">从一个清晰的目标开始</h1>
+          <h1 className="center-welcome-title">Agent PPT</h1>
           <p className="center-welcome-subtitle">
-            描述受众、场景和希望传达的核心结论，其余工作交给 Agent。
+            说明受众、场景和核心结论，从零生成一套演示文稿。
           </p>
         </div>
       ) : null}
@@ -127,7 +126,11 @@ export const UnifiedAgentInput: React.FC<UnifiedAgentInputProps> = ({
                     resizeTextarea(event.target);
                   }}
                   onKeyDown={handleKeyDown}
-                  placeholder="描述目标，或粘贴网页链接生成演示文稿…"
+                  placeholder={
+                    layoutMode === "center"
+                      ? "例如：做一份面向管理层的季度汇报，8 页左右…"
+                      : "继续描述修改目标，或提出新的演示需求…"
+                  }
                   readOnly={busy}
                   autoFocus
                   rows={layoutMode === "center" ? 3 : 2}

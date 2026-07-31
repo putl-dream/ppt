@@ -67,25 +67,17 @@
   text-align: center;
 }
 
-.center-welcome-eyebrow {
-  display: block;
-  margin-bottom: 10px;
-  color: var(--accent-primary);
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.16em;
-}
-
 .center-welcome-title {
-  font-size: 26px;
+  font-size: 28px;
   font-weight: 700;
   margin: 0;
   font-family: var(--font-display);
   color: var(--text-primary);
+  letter-spacing: -0.02em;
 }
 
 .center-welcome-subtitle {
-  max-width: 560px;
+  max-width: 520px;
   margin: 10px auto 0;
   color: var(--text-secondary);
   font-size: 13px;
@@ -194,41 +186,6 @@
   min-width: 0;
 }
 
-.generation-mode-switch {
-  display: inline-flex;
-  align-items: center;
-  flex: 0 0 auto;
-  padding: 2px;
-  border: 1px solid var(--border-glass);
-  border-radius: var(--field-border-radius);
-  background: color-mix(in srgb, var(--bg-input-field) 82%, var(--text-primary) 18%);
-}
-
-.generation-mode-switch button {
-  min-height: 24px;
-  padding: 0 8px;
-  border: 0;
-  border-radius: calc(var(--field-border-radius) - 2px);
-  background: transparent;
-  color: var(--text-muted);
-  font-family: var(--font-body);
-  font-size: 10.5px;
-  font-weight: 700;
-  cursor: pointer;
-  transition: var(--transition-smooth);
-}
-
-.generation-mode-switch button.is-active {
-  background: var(--accent-primary);
-  color: #fff;
-  box-shadow: 0 2px 8px var(--accent-primary-glow);
-}
-
-.generation-mode-switch button:disabled {
-  cursor: default;
-  opacity: 0.65;
-}
-
 .action-dock-status {
   display: inline-flex;
   align-items: center;
@@ -315,7 +272,6 @@
   height: 6px;
   border-radius: 50%;
   background-color: var(--accent-green);
-  box-shadow: 0 0 6px var(--accent-green);
 }
 
 .context-text-label {
@@ -344,36 +300,6 @@
 .context-git-branch-tag {
   font-family: var(--font-mono);
   color: var(--text-muted);
-}
-
-/* 选中幻灯片页 Pill */
-.active-context-slide-pill {
-  background: var(--accent-primary-glow);
-  border: 1px solid var(--accent-primary);
-  color: var(--accent-primary);
-  font-weight: 600;
-  font-size: 10px;
-  padding: 2px 8px;
-  border-radius: var(--panel-border-radius);
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.close-slide-pill-btn {
-  background: none;
-  border: none;
-  color: inherit;
-  cursor: pointer;
-  padding: 0;
-  font-size: 8px;
-  font-weight: bold;
-}
-
-.context-global-pill {
-  color: var(--text-muted);
-  font-size: 10.5px;
-  font-weight: 500;
 }
 
 /* Dropdown styling */
@@ -662,24 +588,6 @@
   gap: 6px;
 }
 
-.generation-mode-switch {
-  padding: 1px;
-  border-color: color-mix(in srgb, var(--text-muted) 20%, transparent);
-  background: transparent;
-}
-
-.generation-mode-switch button {
-  min-height: 23px;
-  padding-inline: 7px;
-  font-size: 10.5px;
-}
-
-.generation-mode-switch button.is-active {
-  background: color-mix(in srgb, var(--accent-primary) 10%, transparent);
-  color: var(--accent-primary);
-  box-shadow: none;
-}
-
 .action-dock-status {
   font-size: 10.5px;
   font-weight: 500;
@@ -715,6 +623,56 @@
   border-top: 1px solid color-mix(in srgb, var(--text-muted) 10%, transparent);
   background: color-mix(in srgb, var(--bg-canvas) 94%, transparent);
   backdrop-filter: blur(12px);
+}
+
+.center-focal-wrapper {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-canvas);
+}
+
+.center-focal-header {
+  background: transparent;
+}
+
+.center-focal-content-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding: 40px 20px;
+}
+
+.center-suggestions {
+  margin-top: 28px;
+  max-width: 680px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: min(680px, 100%);
+}
+
+.suggestion-chip {
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: 1px solid var(--border-glass);
+  padding: 10px 14px;
+  border-radius: var(--button-border-radius);
+  font-family: var(--font-body);
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: var(--transition-smooth);
+}
+
+.suggestion-chip:hover {
+  border-color: var(--border-glass-focused);
+  color: var(--text-primary);
+  background: var(--bg-glass-hover);
 }
 
 @media (max-width: 620px) {

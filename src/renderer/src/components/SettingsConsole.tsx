@@ -26,7 +26,7 @@ import {
 import type { SettingsCategory } from "../settingsCategories";
 
 type UiThemeMode = "light" | "dark" | "cyan" | "orange";
-type UiAccentColor = "cyan" | "green" | "purple" | "orange";
+type UiAccentColor = "cyan" | "green" | "orange";
 type UiControlShape = "sharp" | "soft" | "round";
 
 interface SettingsConsoleProps {
@@ -154,7 +154,6 @@ function ThemePreview({ mode }: { mode: UiThemeMode }) {
 const accentOptions: Array<{ value: UiAccentColor; label: string; color: string }> = [
   { value: "cyan", label: "湖蓝", color: "#0ea5e9" },
   { value: "green", label: "科技绿", color: "#10b981" },
-  { value: "purple", label: "薰衣紫", color: "#a855f7" },
   { value: "orange", label: "珊瑚橙", color: "#f97316" },
 ];
 
@@ -272,11 +271,11 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
     event.target.value = "";
 
     if (!SUPPORTED_LOGO_TYPES.has(file.type)) {
-      triggerToast("❌ Logo 仅支持 PNG、JPEG 或 GIF 文件");
+      triggerToast("Logo 仅支持 PNG、JPEG 或 GIF 文件");
       return;
     }
     if (file.size === 0 || file.size > MAX_LOGO_BYTES) {
-      triggerToast("❌ Logo 文件必须大于 0 且不超过 12 MB");
+      triggerToast("Logo 文件必须大于 0 且不超过 12 MB");
       return;
     }
 

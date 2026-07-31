@@ -33,8 +33,9 @@ const READING_TONE_PALETTE: ReadingTonePalette = {
     dark: { hue: 188, saturation: 18, app: 11, canvas: 15, field: 18, darker: 12 },
   },
   orange: {
-    light: { hue: 34, saturation: 34, app: 90, canvas: 97, field: 96, darker: 91 },
-    dark: { hue: 30, saturation: 18, app: 11, canvas: 15, field: 18, darker: 12 },
+    /* Warm graphite — avoid cream-serif landing-page palette. */
+    light: { hue: 30, saturation: 8, app: 90, canvas: 97, field: 98, darker: 92 },
+    dark: { hue: 28, saturation: 6, app: 11, canvas: 15, field: 18, darker: 12 },
   },
 };
 

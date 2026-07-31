@@ -14,7 +14,7 @@ import {
 export const UI_SETTINGS_STORAGE_KEY = "agent-ppt.ui-settings.v1";
 
 export type UiThemeMode = "light" | "dark" | "cyan" | "orange";
-export type UiAccentColor = "cyan" | "green" | "purple" | "orange";
+export type UiAccentColor = "cyan" | "green" | "orange";
 export type UiControlShape = "sharp" | "soft" | "round";
 export type UiReadingTone = "classic" | "cyan" | "orange";
 

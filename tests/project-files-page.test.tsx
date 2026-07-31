@@ -170,10 +170,10 @@ describe("ProjectFilesPageContent", () => {
       />,
     );
 
-    expect(html).toContain("PPT JOB");
+    expect(html).toContain("演示任务");
     expect(html).toContain("等待用户");
     expect(html).toContain("阶段：预览");
-    expect(html).toContain("Proposal：等待审批");
+    expect(html).toContain("提案：等待审批");
     expect(html).toContain("请确认页面预览");
     expect(html).toContain("1 个产物待更新");
   });

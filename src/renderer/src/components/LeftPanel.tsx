@@ -43,12 +43,12 @@ function SessionRow({
   return (
     <button
       type="button"
-      className={`cursor-session-row ${isActive ? "active" : ""}`}
+      className={`session-row ${isActive ? "active" : ""}`}
       onClick={onSelect}
       onContextMenu={onContextMenu}
       title={session.title}
     >
-      <span className="cursor-session-title">{session.title}</span>
+      <span className="session-title">{session.title}</span>
     </button>
   );
 }
@@ -73,9 +73,9 @@ function WorkspaceSection({
   const toggleCollapsed = () => setIsCollapsed((value) => !value);
 
   return (
-    <div className="cursor-workspace-section">
+    <div className="workspace-section">
       <div
-        className="cursor-workspace-header"
+        className="workspace-header"
         role="button"
         tabIndex={0}
         aria-expanded={!isCollapsed}
@@ -89,10 +89,10 @@ function WorkspaceSection({
           }
         }}
       >
-        <FolderIcon size={14} className="cursor-workspace-icon" />
-        <span className="cursor-workspace-label">{label}</span>
+        <FolderIcon size={14} className="workspace-icon" />
+        <span className="workspace-label">{label}</span>
         <span
-          className="cursor-workspace-toggle-btn"
+          className="workspace-toggle-btn"
           title={isCollapsed ? "打开文件夹" : "折叠文件夹"}
           aria-hidden="true"
         >
@@ -100,7 +100,7 @@ function WorkspaceSection({
         </span>
         <button
           type="button"
-          className="cursor-workspace-add-btn"
+          className="workspace-add-btn"
           title="在此目录下新建会话"
           onClick={(event) => {
             event.stopPropagation();
@@ -111,7 +111,7 @@ function WorkspaceSection({
         </button>
       </div>
       {!isCollapsed ? (
-        <div className="cursor-session-list">
+        <div className="session-list">
           {workspaceSessions.map((session) => (
             <SessionRow
               key={session.id}
@@ -222,7 +222,7 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
 
   if (collapsed) {
     return (
-      <aside className="left-panel cursor-sidebar cursor-sidebar--rail" aria-label="折叠的工作台导航">
+      <aside className="left-panel workbench-sidebar workbench-sidebar--rail" aria-label="折叠的工作台导航">
         <div className="sidebar-brand-mark" title="Agent PPT" aria-label="Agent PPT">
           <img src="./icon.png" alt="" />
         </div>
@@ -279,49 +279,49 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
   }
 
   return (
-    <aside className="left-panel cursor-sidebar">
-      <div className="cursor-sidebar-top">
-        <div className="cursor-sidebar-heading">
-          <div className="cursor-sidebar-brand">
+    <aside className="left-panel workbench-sidebar">
+      <div className="workbench-sidebar-top">
+        <div className="workbench-sidebar-heading">
+          <div className="workbench-sidebar-brand">
             <img src="./icon.png" alt="" />
             <span>Agent PPT</span>
           </div>
         </div>
-        <button type="button" className="cursor-sidebar-action-row" onClick={onNewSession}>
-          <PlusIcon size={14} className="cursor-workspace-icon" />
+        <button type="button" className="workbench-sidebar-action-row" onClick={onNewSession}>
+          <PlusIcon size={14} className="workspace-icon" />
           <span>新建会话</span>
         </button>
         <button
           type="button"
-          className={`cursor-sidebar-action-row${activeMode === "workspace" ? " active" : ""}`}
+          className={`workbench-sidebar-action-row${activeMode === "workspace" ? " active" : ""}`}
           onClick={onOpenWorkspace}
           aria-current={activeMode === "workspace" ? "page" : undefined}
         >
-          <FolderIcon size={14} className="cursor-workspace-icon" />
+          <FolderIcon size={14} className="workspace-icon" />
           <span>Agent 工作区</span>
         </button>
         <button
           type="button"
-          className={`cursor-sidebar-action-row${activeMode === "files" ? " active" : ""}`}
+          className={`workbench-sidebar-action-row${activeMode === "files" ? " active" : ""}`}
           onClick={onOpenFiles}
           aria-current={activeMode === "files" ? "page" : undefined}
         >
-          <FileIcon size={14} className="cursor-workspace-icon" />
+          <FileIcon size={14} className="workspace-icon" />
           <span>项目文件</span>
         </button>
         <div ref={searchAreaRef}>
           <button
             type="button"
-            className={`cursor-sidebar-action-row ${isSearchOpen ? "active" : ""}`}
+            className={`workbench-sidebar-action-row ${isSearchOpen ? "active" : ""}`}
             onClick={() => setIsSearchOpen((value) => !value)}
           >
-            <SearchIcon size={14} className="cursor-workspace-icon" />
+            <SearchIcon size={14} className="workspace-icon" />
             <span>搜索会话</span>
           </button>
           {isSearchOpen ? (
             <input
               ref={searchInputRef}
-              className="cursor-sidebar-search-input"
+              className="workbench-sidebar-search-input"
               value={sessionSearchQuery}
               placeholder="输入关键词"
               onChange={(event) => setSessionSearchQuery(event.target.value)}
@@ -336,8 +336,8 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
         </div>
       </div>
 
-      <div className="cursor-sidebar-list">
-        <div className="cursor-sidebar-section-label">项目</div>
+      <div className="workbench-sidebar-list">
+        <div className="workbench-sidebar-section-label">项目</div>
         {hasSessionList ? (
           <>
             {orphanSessions.map((session) => (
@@ -362,7 +362,7 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
             ))}
           </>
         ) : (
-          <div className="cursor-sidebar-empty">
+          <div className="workbench-sidebar-empty">
             {sessionSearchQuery.trim() ? "没有找到匹配会话" : "暂无会话"}
           </div>
         )}
