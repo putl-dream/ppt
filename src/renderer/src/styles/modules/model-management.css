@@ -353,10 +353,10 @@
   justify-content: center;
   gap: 7px;
   padding: 5px 10px;
-  border: 1px solid rgba(239, 68, 68, 0.28);
+  border: 1px solid color-mix(in srgb, var(--danger) 28%, transparent);
   border-radius: var(--field-border-radius);
-  background: rgba(239, 68, 68, 0.08);
-  color: #ef4444;
+  background: color-mix(in srgb, var(--danger) 8%, transparent);
+  color: var(--danger);
   font-family: var(--font-body);
   font-size: 12px;
   font-weight: 600;
@@ -364,7 +364,7 @@
 }
 
 .model-dialog-danger-btn:hover {
-  background: rgba(239, 68, 68, 0.13);
+  background: color-mix(in srgb, var(--danger) 13%, transparent);
 }
 
 .model-delete-btn {
@@ -373,9 +373,9 @@
   width: 34px;
   height: 34px;
   border-radius: var(--button-border-radius);
-  border: 1px solid rgba(239, 68, 68, 0.25);
-  background: rgba(239, 68, 68, 0.08);
-  color: #ef4444;
+  border: 1px solid color-mix(in srgb, var(--danger) 25%, transparent);
+  background: color-mix(in srgb, var(--danger) 8%, transparent);
+  color: var(--danger);
   cursor: pointer;
 }
 

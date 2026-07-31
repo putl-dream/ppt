@@ -1,22 +1,7 @@
 /*
- * IDE density language â€” shared by settings preference sheet and workbench chrome.
- * Chrome uses Graphite tokens; do not reintroduce glow or marketing cards here.
+ * IDE shared chrome vocabulary — settings and preference UIs.
+ * Density tokens: tokens/ide-density.css.
  */
-
-:root {
-  --ide-font-ui: 12.5px;
-  --ide-font-title: 15px;
-  --ide-font-section: 12px;
-  --ide-font-nav: 12.5px;
-  --ide-row-height: 30px;
-  --ide-gap: 8px;
-  --ide-section-pad: 12px 0;
-  --ide-page-pad: 16px 20px 28px;
-  --ide-label-width: 168px;
-  --ide-control-height: 28px;
-  --ide-radius: 4px;
-  --shadow-premium: none;
-}
 
 .ide-page {
   height: 100%;

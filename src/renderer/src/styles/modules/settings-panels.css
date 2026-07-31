@@ -1,0 +1,245 @@
+﻿.settings-console-container {
+  height: 100%;
+  overflow-y: auto;
+  background: var(--bg-canvas);
+}
+
+.settings-layout-grid {
+  width: 100%;
+  max-width: 880px;
+  min-height: 100%;
+  display: grid;
+  align-content: start;
+  gap: 18px;
+  margin: 0 auto;
+  padding: 26px 24px 34px;
+}
+
+.settings-page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 2px 2px 4px;
+}
+
+.settings-page-kicker {
+  display: block;
+  margin-bottom: 5px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.settings-page-header h1 {
+  margin: 0;
+  color: var(--text-primary);
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.settings-header-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  margin-top: 4px;
+  padding: 6px 10px;
+  border: 1px solid var(--border-glass);
+  border-radius: 999px;
+  background: var(--bg-input-field);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.settings-header-pill svg {
+  color: var(--accent-green);
+}
+
+.settings-header-pill.is-saving svg {
+  color: var(--accent-primary);
+  animation: settingsSavingSpin 0.9s linear infinite;
+}
+
+@keyframes settingsSavingSpin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.settings-panel-fade {
+  display: grid;
+  gap: 16px;
+  animation: settingsFadeIn 0.22s ease-out;
+}
+
+.settings-card {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 16px;
+  border: 1px solid var(--border-glass);
+  border-radius: var(--panel-border-radius);
+  background: var(--bg-input-field);
+  box-shadow: none;
+  transition: border-color 0.14s ease, background 0.14s ease;
+}
+
+.dark-theme .settings-card {
+  box-shadow: none;
+}
+
+.settings-card:hover {
+  border-color: var(--border-glass-focused);
+}
+
+.settings-card-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 28px;
+}
+
+.settings-card-icon {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  border-radius: var(--field-border-radius);
+  background: var(--bg-darker);
+  color: var(--text-secondary);
+}
+
+.settings-card-title-block {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  min-height: 28px;
+}
+
+.settings-card-title-block h3 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.settings-card-meta {
+  flex: 0 0 auto;
+  align-self: center;
+  color: var(--accent-primary);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.settings-profile-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+}
+
+.settings-avatar-large {
+  width: 46px;
+  height: 46px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--card-border-radius);
+  background: var(--accent-primary-glow);
+  color: var(--accent-primary);
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.settings-profile-copy h3 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 15px;
+  font-weight: 650;
+}
+
+.settings-profile-copy p {
+  margin: 4px 0 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.settings-profile-status {
+  display: grid;
+  justify-items: end;
+  gap: 3px;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.settings-profile-status strong {
+  color: var(--text-primary);
+  font-size: 16px;
+}
+
+.settings-progress-track {
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--bg-darker);
+}
+
+.settings-progress-bar {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent-primary);
+}
+
+.settings-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.settings-stat-grid div {
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--border-glass);
+  border-radius: var(--button-border-radius);
+  background: var(--bg-darker);
+}
+
+.settings-stat-grid span {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.settings-stat-grid strong {
+  display: block;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-trend-chart {
+  display: grid;
+  gap: 8px;
+}
+
+.settings-trend-chart svg {
+  overflow: visible;
+}
+
+.settings-chart-labels {
+  display: flex;
+  justify-content: space-between;
+  color: var(--text-muted);
+  font-size: 10.5px;
+}
+

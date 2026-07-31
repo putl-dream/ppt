@@ -13,12 +13,12 @@
   --accent-selected-text: var(--accent-primary);
 
   /* Component shape aliases for buttons, fields, chips, and cards. */
-  --control-radius-xs: calc(4px * var(--border-radius-scale));
-  --control-radius-sm: calc(6px * var(--border-radius-scale));
-  --control-radius-md: calc(8px * var(--border-radius-scale));
-  --control-radius-lg: calc(10px * var(--border-radius-scale));
-  --control-radius-xl: calc(12px * var(--border-radius-scale));
-  --control-radius-pill: 999px;
+  --control-radius-xs: calc(var(--radius-xs) * var(--border-radius-scale));
+  --control-radius-sm: calc(var(--radius-sm) * var(--border-radius-scale));
+  --control-radius-md: calc(var(--radius-md) * var(--border-radius-scale));
+  --control-radius-lg: calc(var(--radius-lg) * var(--border-radius-scale));
+  --control-radius-xl: calc(var(--radius-xl) * var(--border-radius-scale));
+  --control-radius-pill: var(--radius-pill);
   --field-border-radius: var(--control-radius-sm);
   --button-border-radius: var(--control-radius-md);
   --card-border-radius: var(--control-radius-lg);

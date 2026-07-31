@@ -101,7 +101,7 @@
   opacity: 0.85;
 }
 
-/* Action Dock 阻塞授权态 */
+/* Action Dock 阻塞授权�?*/
 .unified-agent-input-shell {
   position: relative;
 }
@@ -168,9 +168,9 @@
 }
 
 .tool-approval-gate-btn--deny:hover {
-  background: rgba(239, 68, 68, 0.08);
-  border-color: rgba(239, 68, 68, 0.3);
-  color: #ef4444;
+  background: color-mix(in srgb, var(--danger) 8%, transparent);
+  border-color: color-mix(in srgb, var(--danger) 30%, transparent);
+  color: var(--danger);
 }
 
 .tool-approval-gate-btn--allow {
@@ -260,27 +260,9 @@
   filter: brightness(1.05);
 }
 
-.btn-reject {
-  background: rgba(239, 68, 68, 0.08);
-  border: 1px solid rgba(239, 68, 68, 0.2);
-  color: #ef4444;
-}
 
-.btn-reject:hover {
-  background: rgba(239, 68, 68, 0.15);
-}
 
-.btn-secondary {
-  background: transparent;
-  border: 1px solid var(--border-glass);
-  color: var(--text-secondary);
-}
 
-.btn-secondary:hover {
-  background: var(--bg-glass-hover);
-  border-color: var(--border-glass-focused);
-  color: var(--text-primary);
-}
 
 .btn-preview-affected {
   background: color-mix(in srgb, var(--bg-glass) 80%, transparent);
@@ -293,16 +275,7 @@
   color: var(--text-primary);
 }
 
-.btn-apply {
-  background: var(--accent-primary);
-  border: none;
-  color: #fff;
-  box-shadow: none;
-}
 
-.btn-apply:hover {
-  filter: brightness(1.05);
-}
 
 /* 产物 Patch 审核卡片 */
 .patch-review-card {
@@ -310,8 +283,8 @@
   width: 100%;
   max-width: none;
   box-sizing: border-box;
-  background: rgba(245, 158, 11, 0.06);
-  border: 1px solid rgba(245, 158, 11, 0.35);
+  background: var(--warning-glow);
+  border: 1px solid var(--warning-border);
   border-radius: var(--button-border-radius);
   padding: 14px;
 }
@@ -326,8 +299,8 @@
 
 .patch-review-badge {
   font-size: 10px;
-  background: rgba(245, 158, 11, 0.15);
-  color: #f59e0b;
+  background: color-mix(in srgb, var(--warning) 15%, transparent);
+  color: var(--warning);
   padding: 2px 6px;
   border-radius: var(--control-radius-xs);
   font-weight: 700;
@@ -347,13 +320,13 @@
 }
 
 .patch-resolved-accepted {
-  background: rgba(16, 185, 129, 0.12);
-  color: #10b981;
+  background: var(--success-glow);
+  color: var(--success);
 }
 
 .patch-resolved-rejected {
-  background: rgba(239, 68, 68, 0.12);
-  color: #ef4444;
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  color: var(--danger);
 }
 
 .patch-review-summary {
@@ -381,13 +354,13 @@
 }
 
 .patch-diff-column-before {
-  background: rgba(239, 68, 68, 0.04);
-  border: 1px solid rgba(239, 68, 68, 0.15);
+  background: color-mix(in srgb, var(--danger) 4%, transparent);
+  border: 1px solid color-mix(in srgb, var(--danger) 15%, transparent);
 }
 
 .patch-diff-column-after {
-  background: rgba(16, 185, 129, 0.04);
-  border: 1px solid rgba(16, 185, 129, 0.15);
+  background: color-mix(in srgb, var(--success) 4%, transparent);
+  border: 1px solid var(--success-border);
 }
 
 .patch-diff-label {
@@ -397,11 +370,11 @@
 }
 
 .patch-diff-column-before .patch-diff-label {
-  color: #f87171;
+  color: var(--danger);
 }
 
 .patch-diff-column-after .patch-diff-label {
-  color: #34d399;
+  color: var(--success);
 }
 
 .patch-diff-line {
@@ -413,12 +386,12 @@
 }
 
 .patch-diff-line-before {
-  background: rgba(239, 68, 68, 0.06);
+  background: color-mix(in srgb, var(--danger) 6%, transparent);
   color: #fca5a5;
 }
 
 .patch-diff-line-after {
-  background: rgba(16, 185, 129, 0.06);
+  background: color-mix(in srgb, var(--success) 6%, transparent);
   color: #6ee7b7;
 }
 
@@ -936,7 +909,7 @@
 }
 
 /* ==========================================================================
-   Decision and artifact surfaces — one neutral visual language
+   Decision and artifact surfaces �?one neutral visual language
    ========================================================================== */
 
 .inline-artifact-card,
@@ -1053,6 +1026,13 @@
   font-size: 12px;
   font-weight: 620;
 }
+
+
+
+
+
+
+
 
 .btn-reject {
   border: 1px solid color-mix(in srgb, var(--text-muted) 24%, transparent);

@@ -1,0 +1,111 @@
+/* Agent run timeline, loaders, and terminal notices */
+
+.agent-run-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+.agent-run-block {
+  min-width: 0;
+}
+.agent-run-block--activity {
+  padding: 0 2px;
+}
+.agent-run-tail {
+  margin-top: -8px;
+}
+.agent-run-tail-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 4px 2px;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+.agent-run-tail-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.agent-run-tail-elapsed {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+.agent-run-terminal-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 2px 2px 8px;
+  padding: 9px 10px;
+  border: 1px solid var(--border-glass);
+  border-radius: var(--button-border-radius);
+  background: var(--bg-darker);
+  color: var(--text-secondary);
+}
+.agent-run-terminal-notice--failed {
+  border-color: color-mix(in srgb, var(--danger) 28%, var(--border-glass));
+}
+.agent-run-terminal-notice-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 700;
+}
+.agent-run-terminal-notice--failed .agent-run-terminal-notice-icon {
+  color: var(--danger);
+}
+.agent-run-terminal-notice-copy {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  line-height: 1.45;
+}
+.agent-run-terminal-notice-copy strong {
+  color: var(--text-primary);
+  font-size: 11.5px;
+  font-weight: 650;
+}
+.agent-run-terminal-notice-copy small {
+  color: var(--text-muted);
+  font-size: 10.5px;
+}
+.agent-run-terminal-notice button {
+  padding: 2px 7px;
+  border: 1px solid var(--border-glass-focused);
+  border-radius: var(--field-border-radius);
+  background: transparent;
+  color: var(--accent-primary);
+  font: inherit;
+  font-size: 10.5px;
+  cursor: pointer;
+}
+.agent-run-terminal-notice button:hover {
+  background: var(--bg-glass-hover);
+}
+
+/* Loader dots share rules with process-trace in chat.css */
+
+.agent-run-timeline {
+  gap: 13px;
+}
+.agent-run-activity-cluster {
+  max-width: 72ch;
+}
+.agent-run-block--activity {
+  padding: 0;
+}
+.agent-run-tail-status {
+  padding-left: 42px;
+  font-size: 12px;
+}

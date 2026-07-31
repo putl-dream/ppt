@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { ChevronRightIcon } from "./Icons";
 import type { SettingsCategory } from "../settingsCategories";
+import { cx } from "../lib/cx";
 
 interface SettingsSidebarProps {
   activeCategory: SettingsCategory;
@@ -84,7 +85,7 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = ({
                 <button
                   key={item.id}
                   type="button"
-                  className={`ide-nav-item${activeCategory === item.id ? " is-active" : ""}`}
+                  className={cx("ide-nav-item", activeCategory === item.id && "is-active")}
                   onClick={() => onSelectCategory(item.id)}
                   aria-current={activeCategory === item.id ? "page" : undefined}
                 >

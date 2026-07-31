@@ -1,4 +1,4 @@
-/* PPT Job status bar â€” shared across workspace chat and project files */
+/* PPT Job status bar â€?shared across workspace chat and project files */
 
 .ppt-job-status-bar {
   display: flex;
@@ -31,7 +31,7 @@
 
 .ppt-job-status-bar__stale {
   margin-left: auto;
-  color: var(--warning, #d09a37);
+  color: var(--warning);
   font-weight: 650;
 }
 
@@ -42,7 +42,7 @@
 
 .ppt-job-status-bar.is-failed,
 .ppt-job-status-bar.is-cancelled {
-  color: var(--danger, #d96666);
+  color: var(--danger);
 }
 
 .ppt-job-status-bar.is-compact {

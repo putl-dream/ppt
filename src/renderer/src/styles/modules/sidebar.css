@@ -183,9 +183,9 @@ aside {
   background: var(--bg-darker);
 }
 
-/* 历史卡片列表 — legacy unused */
+/* 历史卡片列表 �?legacy unused */
 
-/* Cursor 风格侧边栏 */
+/* Cursor 风格侧边�?*/
 .workbench-sidebar {
   display: flex;
   flex-direction: column;
@@ -765,7 +765,7 @@ aside {
 .remove-logo-btn {
   background: none;
   border: none;
-  color: #ef4444;
+  color: var(--danger);
   cursor: pointer;
   font-size: 10px;
   padding: 0;
@@ -814,7 +814,7 @@ aside {
 }
 
 .select-wrapper::after {
-  content: "▼";
+  content: "�?;
   font-size: 8px;
   color: var(--text-muted);
   position: absolute;
@@ -882,4 +882,11 @@ aside {
   font-weight: 600;
 }
 
-
+/* Session card text truncation */
+.truncate {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 170px;
+  display: inline-block;
+}

@@ -1,0 +1,112 @@
+/* Fullscreen slideshow lightbox */
+
+/* 全屏放映灯箱模态窗�?*/
+.slideshow-lightbox-overlay {
+  --slideshow-slide-shadow: 0 25px 60px rgba(15, 23, 42, 0.15);
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: color-mix(in srgb, var(--bg-app) 94%, transparent);
+  backdrop-filter: blur(15px);
+  -webkit-backdrop-filter: blur(15px);
+  z-index: var(--z-fullscreen);
+  display: grid;
+  place-items: center;
+  color: var(--text-primary);
+}
+
+.slideshow-lightbox-overlay.dark-theme {
+  --slideshow-slide-shadow: 0 25px 60px rgba(0, 0, 0, 0.8);
+}
+
+.slideshow-lightbox-content {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+}
+
+.slideshow-top-bar {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 64px;
+  padding: 0 40px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: color-mix(in srgb, var(--bg-glass) 80%, transparent);
+  border-bottom: 1px solid var(--border-glass);
+  color: var(--text-primary);
+  z-index: var(--z-sticky);
+}
+
+.slideshow-title {
+  font-size: 15px;
+  font-weight: 600;
+  font-family: var(--font-display);
+}
+
+.slideshow-progress {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.slideshow-close {
+  background: var(--bg-input-field);
+  border: 1px solid var(--border-glass);
+  color: var(--text-primary);
+  padding: 6px 14px;
+  border-radius: var(--field-border-radius);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  font-family: var(--font-display);
+  transition: var(--transition-smooth);
+}
+
+.slideshow-close:hover {
+  background: var(--bg-glass-hover);
+}
+
+.slideshow-viewport-container {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  padding: 80px 40px 40px 40px;
+  overflow: hidden;
+}
+
+.slideshow-nav-arrow {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  background: var(--bg-input-field);
+  border: 1px solid var(--border-glass);
+  color: var(--text-primary);
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  font-size: 32px;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition: var(--transition-smooth);
+  user-select: none;
+  z-index: var(--z-dropdown);
+}
+
+.slideshow-nav-arrow:hover:not(:disabled) {
+  background: var(--bg-glass-hover);
+  transform: translateY(-50%) scale(1.06);
+}
+
+.slideshow-nav-arrow:disabled {
+  opacity: 0.15;
+  cursor: not-allowed;
+}
+
+.slideshow-nav-arrow.left { left: 40px; }
+.slideshow-nav-arrow.right { right: 40px; }

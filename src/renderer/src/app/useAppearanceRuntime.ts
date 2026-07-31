@@ -23,6 +23,11 @@ type ReadingTonePalette = Record<
   >
 >;
 
+/**
+ * Sole author of surface background CSS variables (--bg-app, --bg-canvas,
+ * --bg-glass, --bg-input-field, --bg-darker). theme.css keeps first-paint
+ * fallbacks only and must not redefine these on .dark-theme.
+ */
 const READING_TONE_PALETTE: ReadingTonePalette = {
   classic: {
     light: { hue: 0, saturation: 0, app: 90.6, canvas: 100, field: 100, darker: 95 },
@@ -38,6 +43,13 @@ const READING_TONE_PALETTE: ReadingTonePalette = {
     dark: { hue: 28, saturation: 6, app: 11, canvas: 15, field: 18, darker: 12 },
   },
 };
+
+function setSurface(
+  name: "--bg-app" | "--bg-canvas" | "--bg-glass" | "--bg-input-field" | "--bg-darker",
+  value: string,
+): void {
+  document.documentElement.style.setProperty(name, value);
+}
 
 interface AppearanceRuntimeOptions {
   themeMode: UiThemeMode;
@@ -64,6 +76,7 @@ export function useAppearanceRuntime({
 }: AppearanceRuntimeOptions): void {
   useEffect(() => {
     document.documentElement.style.colorScheme = computedTheme;
+    document.documentElement.classList.toggle("dark-theme", computedTheme === "dark");
     const desktopApi = window.desktopApi;
     if (!desktopApi?.setWindowThemeMode) return;
 
@@ -99,11 +112,11 @@ export function useAppearanceRuntime({
       const canvasLightness = Math.min(24, Math.max(10, tone.canvas - colorContrastOffset * 0.25));
       const fieldLightness = Math.min(28, Math.max(12, tone.field - colorContrastOffset * 0.18));
       const darkerLightness = Math.min(20, Math.max(8, tone.darker - colorContrastOffset * 0.18));
-      document.documentElement.style.setProperty("--bg-app", `hsl(${tone.hue}, ${tone.saturation}%, ${appLightness}%)`);
-      document.documentElement.style.setProperty("--bg-canvas", `hsl(${tone.hue}, ${tone.saturation}%, ${canvasLightness}%)`);
-      document.documentElement.style.setProperty("--bg-glass", `hsl(${tone.hue}, ${tone.saturation}%, ${canvasLightness}%)`);
-      document.documentElement.style.setProperty("--bg-input-field", `hsl(${tone.hue}, ${tone.saturation}%, ${fieldLightness}%)`);
-      document.documentElement.style.setProperty("--bg-darker", `hsl(${tone.hue}, ${tone.saturation}%, ${darkerLightness}%)`);
+      setSurface("--bg-app", `hsl(${tone.hue}, ${tone.saturation}%, ${appLightness}%)`);
+      setSurface("--bg-canvas", `hsl(${tone.hue}, ${tone.saturation}%, ${canvasLightness}%)`);
+      setSurface("--bg-glass", `hsl(${tone.hue}, ${tone.saturation}%, ${canvasLightness}%)`);
+      setSurface("--bg-input-field", `hsl(${tone.hue}, ${tone.saturation}%, ${fieldLightness}%)`);
+      setSurface("--bg-darker", `hsl(${tone.hue}, ${tone.saturation}%, ${darkerLightness}%)`);
       return;
     }
 
@@ -111,10 +124,10 @@ export function useAppearanceRuntime({
     const canvasLightness = Math.min(100, Math.max(94, tone.canvas - Math.max(0, colorContrastOffset) * 0.25));
     const fieldLightness = Math.min(100, Math.max(92, tone.field - Math.max(0, colorContrastOffset) * 0.2));
     const darkerLightness = Math.min(96, Math.max(86, tone.darker - Math.max(0, colorContrastOffset) * 0.25));
-    document.documentElement.style.setProperty("--bg-app", `hsl(${tone.hue}, ${tone.saturation}%, ${appLightness}%)`);
-    document.documentElement.style.setProperty("--bg-canvas", `hsl(${tone.hue}, ${tone.saturation}%, ${canvasLightness}%)`);
-    document.documentElement.style.setProperty("--bg-glass", `hsl(${tone.hue}, ${tone.saturation}%, ${fieldLightness}%)`);
-    document.documentElement.style.setProperty("--bg-input-field", `hsl(${tone.hue}, ${tone.saturation}%, ${fieldLightness}%)`);
-    document.documentElement.style.setProperty("--bg-darker", `hsl(${tone.hue}, ${tone.saturation}%, ${darkerLightness}%)`);
+    setSurface("--bg-app", `hsl(${tone.hue}, ${tone.saturation}%, ${appLightness}%)`);
+    setSurface("--bg-canvas", `hsl(${tone.hue}, ${tone.saturation}%, ${canvasLightness}%)`);
+    setSurface("--bg-glass", `hsl(${tone.hue}, ${tone.saturation}%, ${fieldLightness}%)`);
+    setSurface("--bg-input-field", `hsl(${tone.hue}, ${tone.saturation}%, ${fieldLightness}%)`);
+    setSurface("--bg-darker", `hsl(${tone.hue}, ${tone.saturation}%, ${darkerLightness}%)`);
   }, [computedTheme, colorContrastOffset, uiReadingTone]);
 }

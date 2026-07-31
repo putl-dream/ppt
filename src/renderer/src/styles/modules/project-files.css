@@ -75,13 +75,13 @@
 
 .project-files-job-status__stale {
   margin-left: auto;
-  color: var(--warning, #d09a37);
+  color: var(--warning);
   font-weight: 650;
 }
 
 .project-files-job-status.is-failed,
 .project-files-job-status.is-cancelled {
-  color: var(--danger, #d96666);
+  color: var(--danger);
 }
 
 .project-files-body {
@@ -429,9 +429,9 @@
 }
 
 .project-files-notice.is-error {
-  color: #dc2626;
-  border-color: color-mix(in srgb, #dc2626 30%, transparent);
-  background: color-mix(in srgb, #dc2626 8%, transparent);
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 30%, transparent);
+  background: color-mix(in srgb, var(--danger) 8%, transparent);
 }
 
 .project-files-notice button {

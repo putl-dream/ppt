@@ -20,6 +20,7 @@ import {
   normalizeOutputTokenDraft,
 } from "@shared/generation-settings-inputs";
 import type { SettingsCategory } from "../settingsCategories";
+import { cx } from "../lib/cx";
 
 type UiThemeMode = "light" | "dark" | "cyan" | "orange";
 type UiAccentColor = "cyan" | "green" | "orange";
@@ -86,7 +87,7 @@ function IdeRow({
   children: React.ReactNode;
 }) {
   return (
-    <div className={`ide-row${muted ? " is-muted" : ""}`}>
+    <div className={cx("ide-row", muted && "is-muted")}>
       <div className="ide-row-label">{label}</div>
       <div className="ide-row-control">{children}</div>
     </div>
@@ -255,7 +256,7 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
         <header className="ide-page-header">
           <h1 className="ide-page-title">{currentMeta.title}</h1>
           {activeCategory !== "usage-overview" ? (
-            <span className={`ide-status${saveStatus === "saving" ? " is-saving" : ""}`}>
+            <span className={cx("ide-status", saveStatus === "saving" && "is-saving")}>
               {saveStatus === "saving" ? "保存中…" : "已保存"}
             </span>
           ) : null}
@@ -536,7 +537,7 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
                     <button
                       key={option.value}
                       type="button"
-                      className={`ide-choice${themeMode === option.value ? " is-active" : ""}`}
+                      className={cx("ide-choice", themeMode === option.value && "is-active")}
                       onClick={() => setThemeMode(option.value)}
                       aria-pressed={themeMode === option.value}
                     >
@@ -555,7 +556,7 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
                     <button
                       key={option.value}
                       type="button"
-                      className={`ide-choice${uiAccentColor === option.value ? " is-active" : ""}`}
+                      className={cx("ide-choice", uiAccentColor === option.value && "is-active")}
                       onClick={() => setUiAccentColor(option.value)}
                       aria-pressed={uiAccentColor === option.value}
                     >
@@ -574,7 +575,7 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
                     <button
                       key={option.value}
                       type="button"
-                      className={`ide-choice${uiControlShape === option.value ? " is-active" : ""}`}
+                      className={cx("ide-choice", uiControlShape === option.value && "is-active")}
                       onClick={() => setUiControlShape(option.value)}
                       aria-pressed={uiControlShape === option.value}
                     >
