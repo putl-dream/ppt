@@ -13,7 +13,6 @@ export interface LogManagerSettings {
   level: AppLogLevel;
   fileEnabled: boolean;
   retentionDays: number;
-  maxFileSizeMb: number;
 }
 
 export interface LogManagerStatus extends LogManagerSettings {

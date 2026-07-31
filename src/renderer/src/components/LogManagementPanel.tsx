@@ -39,7 +39,6 @@ export const LogManagementPanel: React.FC<LogManagementPanelProps> = ({ notify }
   const [entries, setEntries] = React.useState<AppLogEntry[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [retentionDraft, setRetentionDraft] = React.useState(7);
-  const [maxFileSizeDraft, setMaxFileSizeDraft] = React.useState(10);
 
   const refresh = React.useCallback(async () => {
     setLoading(true);
@@ -50,7 +49,6 @@ export const LogManagementPanel: React.FC<LogManagementPanelProps> = ({ notify }
       ]);
       setStatus(nextStatus);
       setRetentionDraft(nextStatus.retentionDays);
-      setMaxFileSizeDraft(nextStatus.maxFileSizeMb);
       setEntries(nextEntries);
     } catch (error) {
       notify(`读取日志状态失败: ${error instanceof Error ? error.message : String(error)}`);
@@ -67,7 +65,6 @@ export const LogManagementPanel: React.FC<LogManagementPanelProps> = ({ notify }
     level: AppLogLevel;
     fileEnabled: boolean;
     retentionDays: number;
-    maxFileSizeMb: number;
   }>) => {
     try {
       await window.desktopApi.updateLogManagerSettings(patch);
@@ -81,11 +78,6 @@ export const LogManagementPanel: React.FC<LogManagementPanelProps> = ({ notify }
   const commitRetention = () => {
     if (!status || retentionDraft === status.retentionDays) return;
     void updateSettings({ retentionDays: retentionDraft });
-  };
-
-  const commitMaxFileSize = () => {
-    if (!status || maxFileSizeDraft === status.maxFileSizeMb) return;
-    void updateSettings({ maxFileSizeMb: maxFileSizeDraft });
   };
 
   const openDirectory = async () => {
@@ -115,7 +107,7 @@ export const LogManagementPanel: React.FC<LogManagementPanelProps> = ({ notify }
           <div><span>文件</span><strong>{status?.fileCount ?? "—"}</strong></div>
           <div><span>占用空间</span><strong>{status ? formatBytes(status.totalBytes) : "—"}</strong></div>
           <div><span>保留周期</span><strong>{status ? `${status.retentionDays} 天` : "—"}</strong></div>
-          <div><span>单文件上限</span><strong>{status ? `${status.maxFileSizeMb} MB` : "—"}</strong></div>
+          <div><span>归档方式</span><strong>每日一个文件</strong></div>
         </div>
 
         <div className="settings-form-stack">
@@ -171,28 +163,6 @@ export const LogManagementPanel: React.FC<LogManagementPanelProps> = ({ notify }
                 onTouchEnd={commitRetention}
                 onKeyUp={commitRetention}
                 aria-label="日志保留天数"
-              />
-            </span>
-          </div>
-          <div className="setting-row">
-            <span className="setting-row-copy">
-              <span className="setting-row-title">单文件上限</span>
-              <span className="ide-hint">{maxFileSizeDraft} MB</span>
-            </span>
-            <span className="setting-row-control">
-              <input
-                className="ide-range"
-                type="range"
-                min={1}
-                max={100}
-                step={1}
-                disabled={!status}
-                value={maxFileSizeDraft}
-                onChange={(event) => setMaxFileSizeDraft(parseInt(event.target.value, 10))}
-                onMouseUp={commitMaxFileSize}
-                onTouchEnd={commitMaxFileSize}
-                onKeyUp={commitMaxFileSize}
-                aria-label="日志单文件上限"
               />
             </span>
           </div>

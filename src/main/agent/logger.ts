@@ -1,4 +1,3 @@
-import { createStream } from "rotating-file-stream";
 import { AsyncLocalStorage } from "node:async_hooks";
 import path from "node:path";
 import fs from "node:fs";
@@ -37,60 +36,63 @@ const MAX_DIAGNOSTIC_OBJECT_KEYS = 50;
 const MAX_DIAGNOSTIC_STRING_LENGTH = 16_384;
 const BINARY_FIELD_PATTERN = /(?:base64|binary|blob|image_?data|png_?data|jpe?g_?data|bytes)$/i;
 
+interface DailyLogFileStream {
+  dateKey: string;
+  stream: fs.WriteStream;
+}
+
 // Lazy-initialized log file stream
-let logFileStream: ReturnType<typeof createStream> | null | undefined;
+let logFileStream: DailyLogFileStream | null | undefined;
 let runtimeSettings: Partial<LogManagerSettings> = {};
 const recentEntries: AppLogEntry[] = [];
 const MAX_RECENT_ENTRIES = 300;
 export const DEFAULT_LOG_RETENTION_DAYS = 7;
-export const DEFAULT_LOG_MAX_FILE_SIZE_MB = 10;
 const MIN_LOG_RETENTION_DAYS = 1;
 const MAX_LOG_RETENTION_DAYS = 90;
-const MIN_LOG_MAX_FILE_SIZE_MB = 1;
-const MAX_LOG_MAX_FILE_SIZE_MB = 100;
 const SETTINGS_FILE_NAME = "settings.json";
+const DAILY_LOG_FILE_PATTERN = /^agent-(\d{4})-(\d{2})-(\d{2})\.log$/;
+const LEGACY_HISTORY_FILE_PATTERN = /^agent\.log\.txt$/;
 
 function clampRetentionDays(value: unknown): number | undefined {
   if (typeof value !== "number" || !Number.isFinite(value)) return undefined;
   return Math.min(MAX_LOG_RETENTION_DAYS, Math.max(MIN_LOG_RETENTION_DAYS, Math.trunc(value)));
 }
 
-function clampMaxFileSizeMb(value: unknown): number | undefined {
-  if (typeof value !== "number" || !Number.isFinite(value)) return undefined;
-  return Math.min(MAX_LOG_MAX_FILE_SIZE_MB, Math.max(MIN_LOG_MAX_FILE_SIZE_MB, Math.trunc(value)));
-}
-
 export function getLogDirectory(): string {
   return path.join(getApplicationDataRoot(), "logs");
 }
 
-function getLogFileStream() {
-  if (logFileStream !== undefined) return logFileStream;
-
+function getLogFileStream(now = new Date()): fs.WriteStream | null {
   const shouldWriteToFile = runtimeSettings.fileEnabled ?? process.env.AGENT_LOG_FILE !== "false";
   if (!shouldWriteToFile) {
     logFileStream = null;
     return null;
   }
 
+  const dateKey = localDateKey(now);
+  if (logFileStream?.dateKey === dateKey) return logFileStream.stream;
+  if (logFileStream) {
+    logFileStream.stream.end();
+    logFileStream = undefined;
+  }
+
   const logDir = getLogDirectory();
 
   try {
     fs.mkdirSync(logDir, { recursive: true });
-
-    logFileStream = createStream("agent.log", {
-      interval: "1d",
-      size: `${configuredMaxFileSizeMb()}M`,
-      maxFiles: configuredRetentionDays(),
-      path: logDir,
-      compress: "gzip",
+    const stream = fs.createWriteStream(path.join(logDir, `agent-${dateKey}.log`), {
+      flags: "a",
+      encoding: "utf8",
     });
-
-    logFileStream.on("error", (error) => {
+    logFileStream = { dateKey, stream };
+    stream.on("error", (error) => {
       console.error("[agent] Failed to write to log file:", error);
+      if (logFileStream?.stream === stream) logFileStream = undefined;
     });
-
-    return logFileStream;
+    void pruneExpiredLogFiles(now).catch((error) => {
+      console.error("[agent] Failed to prune expired log files:", error);
+    });
+    return stream;
   } catch (error) {
     console.error("[agent] Failed to initialize log file stream:", error);
     logFileStream = null;
@@ -116,10 +118,6 @@ function configuredLevel(): AppLogLevel {
 
 function configuredRetentionDays(): number {
   return runtimeSettings.retentionDays ?? DEFAULT_LOG_RETENTION_DAYS;
-}
-
-function configuredMaxFileSizeMb(): number {
-  return runtimeSettings.maxFileSizeMb ?? DEFAULT_LOG_MAX_FILE_SIZE_MB;
 }
 
 function configuredDetail(): LogDetail {
@@ -242,6 +240,26 @@ function isPlainRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value) && !(value instanceof Error);
 }
 
+function localIsoTimestamp(date = new Date()): string {
+  const offsetMinutes = -date.getTimezoneOffset();
+  const sign = offsetMinutes >= 0 ? "+" : "-";
+  const absoluteOffset = Math.abs(offsetMinutes);
+  const hours = Math.floor(absoluteOffset / 60).toString().padStart(2, "0");
+  const minutes = (absoluteOffset % 60).toString().padStart(2, "0");
+  const localTime = new Date(date.getTime() + offsetMinutes * 60_000)
+    .toISOString()
+    .slice(0, -1);
+  return `${localTime}${sign}${hours}:${minutes}`;
+}
+
+function localDateKey(date = new Date()): string {
+  return [
+    date.getFullYear().toString().padStart(4, "0"),
+    (date.getMonth() + 1).toString().padStart(2, "0"),
+    date.getDate().toString().padStart(2, "0"),
+  ].join("-");
+}
+
 function serializeValue(value: unknown, parentKey = "", seen = new WeakSet<object>()): unknown {
   if (value instanceof Error) {
     const details = value as Error & { code?: unknown; provider?: unknown };
@@ -289,7 +307,7 @@ function write(level: AppLogLevel, event: string, data: AgentLogData = {}): void
   const entry = {
     ...serializedData,
     ...serializedContext,
-    timestamp: new Date().toISOString(),
+    timestamp: localIsoTimestamp(),
     level,
     scope: "agent",
     event: redactSensitiveValue("event", event) as string,
@@ -336,14 +354,128 @@ function write(level: AppLogLevel, event: string, data: AgentLogData = {}): void
 }
 
 async function closeLogFileStream(): Promise<void> {
-  const stream = logFileStream;
+  const active = logFileStream;
   logFileStream = undefined;
-  if (!stream) return;
-  await new Promise<void>((resolve) => stream.end(resolve));
+  if (!active || active.stream.destroyed) return;
+  await new Promise<void>((resolve) => active.stream.end(resolve));
 }
 
 function isLogFile(name: string): boolean {
-  return name === "agent.log" || name.endsWith(".log") || name.endsWith(".log.gz");
+  return DAILY_LOG_FILE_PATTERN.test(name)
+    || name === "agent.log"
+    || name.endsWith(".log")
+    || name.endsWith(".log.gz");
+}
+
+function isManagedLogArtifact(name: string): boolean {
+  return isLogFile(name) || LEGACY_HISTORY_FILE_PATTERN.test(name);
+}
+
+function dateKeyFromDailyLogFile(name: string): string | undefined {
+  const match = DAILY_LOG_FILE_PATTERN.exec(name);
+  if (!match) return undefined;
+  const [, year, month, day] = match;
+  const parsed = new Date(Number(year), Number(month) - 1, Number(day));
+  return localDateKey(parsed) === `${year}-${month}-${day}` ? `${year}-${month}-${day}` : undefined;
+}
+
+function retentionCutoff(now = new Date()): Date {
+  const cutoff = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  cutoff.setDate(cutoff.getDate() - configuredRetentionDays() + 1);
+  return cutoff;
+}
+
+async function pruneExpiredLogFiles(now = new Date()): Promise<void> {
+  const directory = getLogDirectory();
+  const files = await fs.promises.readdir(directory, { withFileTypes: true }).catch(() => []);
+  const cutoff = retentionCutoff(now);
+  const cutoffKey = localDateKey(cutoff);
+  await Promise.all(files.filter((entry) => entry.isFile() && isLogFile(entry.name)).map(async (entry) => {
+    const dateKey = dateKeyFromDailyLogFile(entry.name);
+    if (dateKey) {
+      if (dateKey < cutoffKey) await fs.promises.unlink(path.join(directory, entry.name));
+      return;
+    }
+    const filename = path.join(directory, entry.name);
+    const stat = await fs.promises.stat(filename);
+    if (stat.mtimeMs < cutoff.getTime()) await fs.promises.unlink(filename);
+  }));
+}
+
+function parseLogLine(line: string): AppLogEntry | undefined {
+  if (!line.trim()) return undefined;
+  try {
+    const entry = JSON.parse(line) as AppLogEntry;
+    if (
+      entry
+      && typeof entry.timestamp === "string"
+      && typeof entry.event === "string"
+      && entry.level in levelPriority
+    ) {
+      return entry;
+    }
+  } catch {
+    // A partially written final line should not make diagnostics unavailable.
+  }
+  return undefined;
+}
+
+async function readNewestLogEntries(filename: string, limit: number): Promise<AppLogEntry[]> {
+  const handle = await fs.promises.open(filename, "r");
+  try {
+    const { size } = await handle.stat();
+    const entries: AppLogEntry[] = [];
+    let position = size;
+    let suffix = Buffer.alloc(0);
+    const chunkSize = 64 * 1024;
+
+    while (position > 0 && entries.length < limit) {
+      const bytesToRead = Math.min(chunkSize, position);
+      position -= bytesToRead;
+      const chunk = Buffer.allocUnsafe(bytesToRead);
+      await handle.read(chunk, 0, bytesToRead, position);
+      const content = Buffer.concat([chunk, suffix]);
+      let lineEnd = content.length;
+      for (let index = content.length - 1; index >= 0 && entries.length < limit; index -= 1) {
+        if (content[index] !== 0x0a) continue;
+        const entry = parseLogLine(content.subarray(index + 1, lineEnd).toString("utf8"));
+        if (entry) entries.push(entry);
+        lineEnd = index;
+      }
+      suffix = Buffer.from(content.subarray(0, lineEnd));
+    }
+
+    if (position === 0 && entries.length < limit) {
+      const entry = parseLogLine(suffix.toString("utf8"));
+      if (entry) entries.push(entry);
+    }
+    return entries;
+  } finally {
+    await handle.close();
+  }
+}
+
+async function loadRecentLogEntries(): Promise<void> {
+  recentEntries.length = 0;
+  const directory = getLogDirectory();
+  const files = await fs.promises.readdir(directory, { withFileTypes: true }).catch(() => []);
+  const dailyFiles = files
+    .filter((entry) => entry.isFile() && dateKeyFromDailyLogFile(entry.name))
+    .map((entry) => entry.name)
+    .sort((left, right) => right.localeCompare(left));
+  const sourceFiles = dailyFiles.length > 0
+    ? dailyFiles
+    : (files.some((entry) => entry.isFile() && entry.name === "agent.log") ? ["agent.log"] : []);
+  const newestFirst: AppLogEntry[] = [];
+  for (const name of sourceFiles) {
+    const entries = await readNewestLogEntries(
+      path.join(directory, name),
+      MAX_RECENT_ENTRIES - newestFirst.length,
+    );
+    newestFirst.push(...entries);
+    if (newestFirst.length >= MAX_RECENT_ENTRIES) break;
+  }
+  recentEntries.push(...newestFirst.reverse());
 }
 
 export function getLogManagerSettings(): LogManagerSettings {
@@ -351,45 +483,28 @@ export function getLogManagerSettings(): LogManagerSettings {
     level: configuredLevel(),
     fileEnabled: runtimeSettings.fileEnabled ?? process.env.AGENT_LOG_FILE !== "false",
     retentionDays: configuredRetentionDays(),
-    maxFileSizeMb: configuredMaxFileSizeMb(),
   };
 }
 
 export async function initializeLogManager(): Promise<LogManagerSettings> {
+  await closeLogFileStream();
   const settingsPath = path.join(getLogDirectory(), SETTINGS_FILE_NAME);
   runtimeSettings = {};
   try {
     const parsed = JSON.parse(await fs.promises.readFile(settingsPath, "utf8")) as Partial<LogManagerSettings>;
     const retentionDays = clampRetentionDays(parsed.retentionDays);
-    const maxFileSizeMb = clampMaxFileSizeMb(parsed.maxFileSizeMb);
     runtimeSettings = {
       ...(parsed.level && parsed.level in levelPriority ? { level: parsed.level } : {}),
       ...(typeof parsed.fileEnabled === "boolean" ? { fileEnabled: parsed.fileEnabled } : {}),
       ...(retentionDays !== undefined ? { retentionDays } : {}),
-      ...(maxFileSizeMb !== undefined ? { maxFileSizeMb } : {}),
     };
   } catch (error) {
     const code = (error as NodeJS.ErrnoException).code;
     if (code !== "ENOENT") console.error("[agent] Failed to load log settings:", error);
   }
-  recentEntries.length = 0;
   try {
-    const activeLog = await fs.promises.readFile(path.join(getLogDirectory(), "agent.log"), "utf8");
-    for (const line of activeLog.trim().split(/\r?\n/).slice(-MAX_RECENT_ENTRIES)) {
-      try {
-        const entry = JSON.parse(line) as AppLogEntry;
-        if (
-          entry
-          && typeof entry.timestamp === "string"
-          && typeof entry.event === "string"
-          && entry.level in levelPriority
-        ) {
-          recentEntries.push(entry);
-        }
-      } catch {
-        // A partially written final line should not make diagnostics unavailable.
-      }
-    }
+    await pruneExpiredLogFiles();
+    await loadRecentLogEntries();
   } catch (error) {
     const code = (error as NodeJS.ErrnoException).code;
     if (code !== "ENOENT") console.error("[agent] Failed to load recent logs:", error);
@@ -407,14 +522,11 @@ export async function updateLogManagerSettings(
   }
   const retentionDays = clampRetentionDays(patch.retentionDays);
   if (retentionDays !== undefined) runtimeSettings.retentionDays = retentionDays;
-  const maxFileSizeMb = clampMaxFileSizeMb(patch.maxFileSizeMb);
-  if (maxFileSizeMb !== undefined) runtimeSettings.maxFileSizeMb = maxFileSizeMb;
 
   const next = getLogManagerSettings();
-  const streamConfigChanged = next.fileEnabled !== previous.fileEnabled
-    || next.retentionDays !== previous.retentionDays
-    || next.maxFileSizeMb !== previous.maxFileSizeMb;
+  const streamConfigChanged = next.fileEnabled !== previous.fileEnabled;
   if (streamConfigChanged) await closeLogFileStream();
+  if (next.retentionDays !== previous.retentionDays) await pruneExpiredLogFiles();
 
   const directory = getLogDirectory();
   await fs.promises.mkdir(directory, { recursive: true });
@@ -431,7 +543,7 @@ export async function getLogManagerStatus(): Promise<LogManagerStatus> {
   const files = await fs.promises.readdir(directory, { withFileTypes: true }).catch(() => []);
   const stats = await Promise.all(
     files
-      .filter((entry) => entry.isFile() && isLogFile(entry.name))
+      .filter((entry) => entry.isFile() && isManagedLogArtifact(entry.name))
       .map((entry) => fs.promises.stat(path.join(directory, entry.name))),
   );
   const lastWrittenMs = stats.reduce((latest, stat) => Math.max(latest, stat.mtimeMs), 0);
@@ -462,7 +574,7 @@ export async function clearLogFiles(): Promise<number> {
   const directory = getLogDirectory();
   await closeLogFileStream();
   const files = await fs.promises.readdir(directory, { withFileTypes: true }).catch(() => []);
-  const targets = files.filter((entry) => entry.isFile() && isLogFile(entry.name));
+  const targets = files.filter((entry) => entry.isFile() && isManagedLogArtifact(entry.name));
   await Promise.all(targets.map((entry) => fs.promises.unlink(path.join(directory, entry.name))));
   recentEntries.length = 0;
   return targets.length;

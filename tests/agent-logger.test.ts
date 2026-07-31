@@ -11,6 +11,7 @@ import {
   getLogManagerSettings,
   getLogManagerStatus,
   getRecentLogEntries,
+  initializeLogManager,
   requestSummary,
   updateLogManagerSettings,
   withLogContext,
@@ -162,6 +163,17 @@ describe("createModuleLogger", () => {
       threadId: "thread-b",
     });
   });
+
+  it("writes timestamps with an explicit local timezone offset", () => {
+    const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
+
+    agentLogger.info("timestamp.local");
+
+    const line = String(info.mock.calls[0][0]);
+    const parsed = JSON.parse(line.slice(line.indexOf("{"))) as { timestamp: string };
+    expect(parsed.timestamp).toMatch(/[+-]\d{2}:\d{2}$/);
+    expect(Number.isNaN(Date.parse(parsed.timestamp))).toBe(false);
+  });
 });
 
 describe("diagnosticValuePreview", () => {
@@ -264,7 +276,7 @@ describe("recent log diagnostics", () => {
 });
 
 describe("log management", () => {
-  it("persists settings, reports disk usage, and clears logs without deleting settings", async () => {
+  it("persists settings, reports managed disk usage, and clears new and legacy artifacts", async () => {
     const tempRoot = await fs.promises.mkdtemp(path.join(os.tmpdir(), "agent-ppt-logs-"));
     const originalSettings = getLogManagerSettings();
     process.env.AGENT_PPT_DATA_DIR = tempRoot;
@@ -275,31 +287,164 @@ describe("log management", () => {
         level: "warn",
         fileEnabled: false,
         retentionDays: 7,
-        maxFileSizeMb: 10,
       });
       expect(JSON.parse(await fs.promises.readFile(path.join(getLogDirectory(), "settings.json"), "utf8")))
         .toEqual(settings);
 
-      await fs.promises.writeFile(path.join(getLogDirectory(), "agent.log"), "diagnostic\n", "utf8");
-      expect(await getLogManagerStatus()).toMatchObject({ fileCount: 1, totalBytes: 11 });
-      expect(await clearLogFiles()).toBe(1);
-      await expect(fs.promises.stat(path.join(getLogDirectory(), "agent.log"))).rejects.toThrow();
+      const artifacts = [
+        "agent-2026-08-01.log",
+        "agent.log",
+        "0731-0000-01-agent.log.gz",
+        "agent.log.txt",
+      ];
+      await Promise.all(artifacts.map((name) =>
+        fs.promises.writeFile(path.join(getLogDirectory(), name), "diagnostic\n", "utf8")
+      ));
+      expect(await getLogManagerStatus()).toMatchObject({ fileCount: 4, totalBytes: 44 });
+      expect(await clearLogFiles()).toBe(4);
+      for (const name of artifacts) {
+        await expect(fs.promises.stat(path.join(getLogDirectory(), name))).rejects.toThrow();
+      }
       await expect(fs.promises.stat(path.join(getLogDirectory(), "settings.json"))).resolves.toBeDefined();
 
-      const retentionSettings = await updateLogManagerSettings({
-        retentionDays: 14,
-        maxFileSizeMb: 25,
-      });
-      expect(retentionSettings).toMatchObject({
-        retentionDays: 14,
-        maxFileSizeMb: 25,
-      });
-      expect(await getLogManagerStatus()).toMatchObject({
-        retentionDays: 14,
-        maxFileSizeMb: 25,
-      });
+      const retentionSettings = await updateLogManagerSettings({ retentionDays: 14 });
+      expect(retentionSettings).toMatchObject({ retentionDays: 14 });
+      expect(await getLogManagerStatus()).toMatchObject({ retentionDays: 14 });
     } finally {
       await updateLogManagerSettings(originalSettings);
+      await fs.promises.rm(tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("appends to exactly one file for the same local day, including after reopening", async () => {
+    const tempRoot = await fs.promises.mkdtemp(path.join(os.tmpdir(), "agent-ppt-daily-log-"));
+    process.env.AGENT_PPT_DATA_DIR = tempRoot;
+
+    try {
+      await initializeLogManager();
+      await updateLogManagerSettings({ level: "info", fileEnabled: true });
+      vi.spyOn(console, "info").mockImplementation(() => undefined);
+      agentLogger.info("daily.first");
+      await updateLogManagerSettings({ fileEnabled: false });
+      await updateLogManagerSettings({ fileEnabled: true });
+      agentLogger.info("daily.second");
+      await updateLogManagerSettings({ fileEnabled: false });
+
+      const files = (await fs.promises.readdir(getLogDirectory()))
+        .filter((name) => /^agent-\d{4}-\d{2}-\d{2}\.log$/.test(name));
+      expect(files).toHaveLength(1);
+      const content = await fs.promises.readFile(path.join(getLogDirectory(), files[0]), "utf8");
+      expect(content).toContain('"event":"daily.first"');
+      expect(content).toContain('"event":"daily.second"');
+    } finally {
+      await updateLogManagerSettings({ fileEnabled: false });
+      await fs.promises.rm(tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("switches files at local midnight", async () => {
+    const tempRoot = await fs.promises.mkdtemp(path.join(os.tmpdir(), "agent-ppt-midnight-log-"));
+    process.env.AGENT_PPT_DATA_DIR = tempRoot;
+    vi.useFakeTimers();
+
+    try {
+      vi.setSystemTime(new Date(2026, 6, 31, 23, 59, 59));
+      await initializeLogManager();
+      await updateLogManagerSettings({ level: "info", fileEnabled: true });
+      vi.spyOn(console, "info").mockImplementation(() => undefined);
+      agentLogger.info("midnight.before");
+      vi.setSystemTime(new Date(2026, 7, 1, 0, 0, 1));
+      agentLogger.info("midnight.after");
+      await updateLogManagerSettings({ fileEnabled: false });
+
+      const before = await fs.promises.readFile(path.join(getLogDirectory(), "agent-2026-07-31.log"), "utf8");
+      const after = await fs.promises.readFile(path.join(getLogDirectory(), "agent-2026-08-01.log"), "utf8");
+      expect(before).toContain('"event":"midnight.before"');
+      expect(before).not.toContain('"event":"midnight.after"');
+      expect(after).toContain('"event":"midnight.after"');
+    } finally {
+      await updateLogManagerSettings({ fileEnabled: false });
+      vi.useRealTimers();
+      await fs.promises.rm(tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("prunes daily files outside the local-day retention boundary", async () => {
+    const tempRoot = await fs.promises.mkdtemp(path.join(os.tmpdir(), "agent-ppt-retention-log-"));
+    process.env.AGENT_PPT_DATA_DIR = tempRoot;
+    vi.useFakeTimers();
+
+    try {
+      vi.setSystemTime(new Date(2026, 0, 10, 12));
+      await fs.promises.mkdir(getLogDirectory(), { recursive: true });
+      await fs.promises.writeFile(
+        path.join(getLogDirectory(), "settings.json"),
+        JSON.stringify({ level: "info", fileEnabled: false, retentionDays: 3 }),
+        "utf8",
+      );
+      for (const date of ["2026-01-07", "2026-01-08", "2026-01-10"]) {
+        await fs.promises.writeFile(path.join(getLogDirectory(), `agent-${date}.log`), "\n", "utf8");
+      }
+
+      await initializeLogManager();
+
+      await expect(fs.promises.stat(path.join(getLogDirectory(), "agent-2026-01-07.log"))).rejects.toThrow();
+      await expect(fs.promises.stat(path.join(getLogDirectory(), "agent-2026-01-08.log"))).resolves.toBeDefined();
+      await expect(fs.promises.stat(path.join(getLogDirectory(), "agent-2026-01-10.log"))).resolves.toBeDefined();
+    } finally {
+      vi.useRealTimers();
+      await fs.promises.rm(tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("loads recent entries across daily files in newest-first query order", async () => {
+    const tempRoot = await fs.promises.mkdtemp(path.join(os.tmpdir(), "agent-ppt-recent-log-"));
+    process.env.AGENT_PPT_DATA_DIR = tempRoot;
+    vi.useFakeTimers();
+
+    try {
+      vi.setSystemTime(new Date(2026, 7, 1, 12));
+      await fs.promises.mkdir(getLogDirectory(), { recursive: true });
+      await fs.promises.writeFile(
+        path.join(getLogDirectory(), "agent-2026-07-31.log"),
+        `${JSON.stringify({ timestamp: "2026-07-31T23:59:00+08:00", level: "warn", scope: "agent", event: "older" })}\n`,
+        "utf8",
+      );
+      await fs.promises.writeFile(
+        path.join(getLogDirectory(), "agent-2026-08-01.log"),
+        `${JSON.stringify({ timestamp: "2026-08-01T00:01:00+08:00", level: "error", scope: "agent", event: "newer" })}\n`,
+        "utf8",
+      );
+
+      await initializeLogManager();
+
+      expect(getRecentLogEntries(2).map((entry) => entry.event)).toEqual(["newer", "older"]);
+    } finally {
+      vi.useRealTimers();
+      await fs.promises.rm(tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("ignores the legacy maxFileSizeMb setting and omits it on the next save", async () => {
+    const tempRoot = await fs.promises.mkdtemp(path.join(os.tmpdir(), "agent-ppt-settings-migration-"));
+    process.env.AGENT_PPT_DATA_DIR = tempRoot;
+
+    try {
+      await fs.promises.mkdir(getLogDirectory(), { recursive: true });
+      await fs.promises.writeFile(
+        path.join(getLogDirectory(), "settings.json"),
+        JSON.stringify({ level: "warn", fileEnabled: false, retentionDays: 14, maxFileSizeMb: 25 }),
+        "utf8",
+      );
+
+      const settings = await initializeLogManager();
+      expect(settings).toEqual({ level: "warn", fileEnabled: false, retentionDays: 14 });
+      await updateLogManagerSettings({ level: "error" });
+      const persisted = JSON.parse(
+        await fs.promises.readFile(path.join(getLogDirectory(), "settings.json"), "utf8"),
+      ) as Record<string, unknown>;
+      expect(persisted).not.toHaveProperty("maxFileSizeMb");
+    } finally {
       await fs.promises.rm(tempRoot, { recursive: true, force: true });
     }
   });
