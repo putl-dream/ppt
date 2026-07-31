@@ -215,6 +215,7 @@
   font-size: var(--ide-font-nav);
   cursor: pointer;
   text-align: left;
+  transition: var(--transition-color);
 }
 
 .ide-nav-back:hover {

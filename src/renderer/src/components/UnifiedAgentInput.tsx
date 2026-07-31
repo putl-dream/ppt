@@ -185,7 +185,7 @@ export const UnifiedAgentInput: React.FC<UnifiedAgentInputProps> = ({
                               }}
                             >
                               <span className="model-tier-option-name">{model.name}</span>
-                              {selected ? <CheckIcon size={13} className="model-tier-option-check" /> : null}
+                              {selected ? <CheckIcon size={11} className="model-tier-option-check" /> : null}
                             </button>
                           );
                         })}
