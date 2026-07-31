@@ -2,7 +2,7 @@
 
 [English](./README.en.md) · [文档索引](./docs/README.md)
 
-![Electron](https://img.shields.io/badge/Electron-37-47848F?logo=electron&logoColor=white)
+![Electron](https://img.shields.io/badge/Electron-43-47848F?logo=electron&logoColor=white)
 ![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=111)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178C6?logo=typescript&logoColor=white)
 ![Vitest](https://img.shields.io/badge/Vitest-3.2-6E9F18?logo=vitest&logoColor=white)
@@ -16,6 +16,21 @@ Agent PPT 是一个本地优先的 AI 演示文稿工作台。它会根据任务
 - 在已有稿件上追加页面、改写文案、统一风格或一键美化
 - 用本地项目文件追踪 Brief、大纲、分镜、设计主题、导出记录和对话过程
 - 研究“AI 如何可靠地参与文档编辑”，包括工具调用、审批、风险控制和视觉质检
+
+## 界面一览
+
+三栏工作台：左侧管理会话与项目文件，中间查看 Agent 过程与审批，右侧实时预览幻灯片。Agent 生成的演示可直接进入放映，预览与导出共用同一套 SVG 视觉源；设置台可管理模型、搜索与联网、提交与审批、用量与费用等。下方样张（入职培训结构化页、深色创意封面）为 Agent 生成示例，不是产品品牌。
+
+<table>
+  <tr>
+    <td width="50%"><img src="./images/首页.png" alt="工作台" /><br/><sub>三栏工作台</sub></td>
+    <td width="50%"><img src="./images/设置.png" alt="设置：用量与费用" /><br/><sub>设置：用量与费用</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="./images/放映.png" alt="放映示例：结构化页面" /><br/><sub>放映示例：结构化页面</sub></td>
+    <td width="50%"><img src="./images/放映-暗.png" alt="放映示例：深色创意封面" /><br/><sub>放映示例：深色创意封面</sub></td>
+  </tr>
+</table>
 
 ## 为什么不一样
 
@@ -97,13 +112,15 @@ flowchart LR
 
 ## 你能在应用里做什么
 
-- 用居中的 AI 输入框新建会话，输入自然语言需求开始生成
-- 在左侧管理本地会话和工作区
-- 在聊天流里审阅 Brief、大纲、一体化内容与视觉方案，以及必要的工具审批
+- 用居中的 AI 输入框新建对话，输入自然语言需求开始生成
+- 在左侧切换 Agent 工作区、浏览项目文件、搜索历史会话
+- 在聊天流里审阅 Brief、大纲、一体化内容与视觉方案，以及必要的工具审批卡
 - 查看 Agent 的任务计划、阶段进度、工具调用和子任务执行痕迹
-- 打开右侧 PPT 实时预览，选择页面、放映、导出或触发全局 AI 美化
-- 选择 OpenAI 或 Anthropic 模型，并配置 endpoint、timeout、输出上限和 fallback 模型
-- 通过主题、调色板、Logo、比例、深浅色和视觉参数控制演示风格
+- 打开右侧 PPT 镜像：选页、放映、导出、全屏，或触发全局 AI 美化
+- 在 Settings 配置模型（OpenAI / Anthropic 兼容端点）、运行参数、提交与审批策略
+- 在 **Settings -> 搜索与联网** 配置 Tavily，让 Agent 可做联网调研
+- 在 **Settings -> 用量与费用** 查看 Token、预估费用、任务成功率与按模型分摊
+- 通过演示与品牌、界面外观控制主题、调色板、Logo、比例和深浅色
 - 使用斜杠指令快速改主题、加页、删页或重写局部内容
 
 ## 示例指令
@@ -135,7 +152,9 @@ npm.cmd run dev
 
 当前模型与搜索 API Key 会以明文保存在 Renderer 的 `localStorage`，并在调用时传给主进程；它们不会自动写入仓库 `.env`，但也尚未使用系统凭据库加密。请把本机用户账户视为信任边界。开发诊断和 CI 覆盖项可以参考 [.env.example](./.env.example)。
 
-如需让 Agent 联网调研，请在 **Settings -> 生成参数** 填写 Tavily API Key。开发环境也可设置 `TAVILY_API_KEY`；搜索结果会以标题、URL 和摘要返回给主 Agent 及任务图 teammate。
+如需让 Agent 联网调研，请在 **Settings -> 搜索与联网** 填写 Tavily API Key。开发环境也可设置 `TAVILY_API_KEY`；搜索结果会以标题、URL 和摘要返回给主 Agent 及任务图 teammate。
+
+用量与费用可在 **Settings -> 用量与费用** 查看；数据保存在本机应用数据目录。
 
 ## 常用命令
 
@@ -146,17 +165,7 @@ npm.cmd run typecheck
 npm.cmd run build
 npm.cmd run preview
 npm.cmd run generate:pptx
-npm.cmd run generate:commercial-pptx
 ```
-
-`generate:commercial-pptx` 会用固定 8 页 DeckSpec 走完整的 Lean v2 商业生成链路，并在 `output/commercial/` 产出：
-
-- `growth-operating-system.pptx`：原生可编辑的商业样稿
-- `growth-operating-system.contact-sheet.html`：标注 Scene/Variant 的整套缩略图
-- `growth-operating-system.quality.json`：商业质量门、确定性 hash 与 PPTX postflight 报告
-- `growth-operating-system.presentation.json`：三端渲染共用的 Presentation 快照
-
-生成命令只有在商业质量门和导出后结构检查同时通过时才成功；示例中的业务数字均明确标注为示意数据。
 
 平台打包：
 
@@ -210,7 +219,7 @@ PPTX exporter
 
 Agent PPT 的默认运行方式是本地优先：
 
-- 项目产物与 deck snapshot 保存在 workspace；History、checkpoint、transcript 和部分设置也可能保存在本机应用数据目录
+- 项目产物与 deck snapshot 保存在 workspace；History、checkpoint、transcript、用量统计和部分设置也可能保存在本机应用数据目录
 - API Key 当前明文保存在 Renderer `localStorage`，不写入仓库环境文件
 - 模型只能通过已注册工具和结构化命令影响演示文稿
 - 高风险或不可自动应用的变更会要求用户审批

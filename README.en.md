@@ -2,7 +2,7 @@
 
 [中文](./README.md) · [Docs](./docs/README.md)
 
-![Electron](https://img.shields.io/badge/Electron-37-47848F?logo=electron&logoColor=white)
+![Electron](https://img.shields.io/badge/Electron-43-47848F?logo=electron&logoColor=white)
 ![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=111)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178C6?logo=typescript&logoColor=white)
 ![Vitest](https://img.shields.io/badge/Vitest-3.2-6E9F18?logo=vitest&logoColor=white)
@@ -17,11 +17,28 @@ It is useful when you want to:
 - Track brief, outline, storyboard, design theme, export history, and conversation context as local project files
 - Study reliable AI document editing with tool calls, approvals, risk control, and visual review loops
 
+## Screenshots
+
+Three-column workspace: sessions and project files on the left, agent progress and approvals in the center, live slide preview on the right. Generated decks can enter slideshow mode directly, and preview and export share the same SVG visual source; Settings manages models, search and networking, submission and approval, usage and billing, and more. The slides below (structured onboarding page, dark creative cover) are sample agent output, not product branding.
+
+<table>
+  <tr>
+    <td width="50%"><img src="./images/首页.png" alt="Workspace" /><br/><sub>Three-column workspace</sub></td>
+    <td width="50%"><img src="./images/设置.png" alt="Settings: usage and billing" /><br/><sub>Settings: usage and billing</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="./images/放映.png" alt="Slideshow sample: structured page" /><br/><sub>Slideshow sample: structured page</sub></td>
+    <td width="50%"><img src="./images/放映-暗.png" alt="Slideshow sample: dark creative cover" /><br/><sub>Slideshow sample: dark creative cover</sub></td>
+  </tr>
+</table>
+
 ## What Makes It Different
 
 **It is model-driven tool collaboration, not a fixed stage machine.**
 
 The runtime gives the model current workspace facts, available skills, and a dynamic tool set. Complex creation jobs can produce Brief / Outline / Storyboard / Layout Plan artifacts as needed; local edits, reviews, and exports can take a short path. Interaction pauses only for missing critical constraints, risky changes, or an explicitly requested comparison.
+
+When creating a full deck or a batch of pages, the agent chooses a Design System and per-slide layouts from audience, topic, and delivery context, then merges content and visual commands into a single proposal. It does not ask you to pick “standard layout” or “creative decoration” after a content draft, unless you explicitly want a content-only draft.
 
 **The model does not directly mutate the deck.**
 
@@ -43,11 +60,11 @@ flowchart LR
   B --> C{"Model chooses a safe path"}
   C -->|Complex creation| D["Optional Brief / Outline / Storyboard / Layout Plan"]
   C -->|Focused task| E["Direct edit / review / export"]
-  D --> F["Visual execution and review"]
+  D --> F["Content + Design System + per-slide layouts"]
   E --> G["Tool results"]
-  F --> G
+  F --> I["Single Proposal → CommitGate → approval when required"]
   G --> H{"Presentation mutation required?"}
-  H -->|Yes| I["Proposal → CommitGate → approval when required"]
+  H -->|Yes| I
   H -->|No| J["Return observations or export"]
   I --> K["Live preview / Slideshow / PPTX"]
   J --> K
@@ -95,13 +112,15 @@ Each agent run creates an independent proposal card. If one conversation thread 
 
 ## In The App
 
-- Start a new session from a focused AI input box
-- Manage local sessions and workspaces from the left panel
-- Confirm brief, outline, layout mode, and tool approvals inside the chat stream
+- Start a new chat from the centered AI input box with a natural-language request
+- Switch between Agent Workspace, Project Files, and session search in the left panel
+- Review briefs, outlines, combined content/visual proposals, and tool approval cards in the chat stream
 - Inspect task plans, stage progress, tool calls, and sub-agent traces
-- Open the right-side PPT mirror to select slides, present, export, or run global AI beautification
-- Configure OpenAI or Anthropic models, endpoints, timeouts, output limits, and fallbacks
-- Control theme, palette, logo, aspect ratio, light/dark mode, and visual preferences
+- Use the right-side PPT mirror to select slides, present, export, go fullscreen, or run global AI beautification
+- Configure models (OpenAI / Anthropic-compatible endpoints), runtime limits, and CommitGate approval policy in Settings
+- Set a Tavily API key under **Settings -> 搜索与联网** for optional web research
+- Review tokens, estimated cost, task success rate, and per-model breakdown under **Settings -> 用量与费用**
+- Control theme, palette, logo, aspect ratio, and light/dark preferences under presentation and appearance settings
 - Use slash commands to change themes, add pages, delete pages, or rewrite local content
 
 ## Example Prompts
@@ -132,6 +151,10 @@ npm.cmd run dev
 After launch, open **Settings -> 模型** in the desktop app to configure the provider, API key, endpoint, timeout, output limits, and fallback models.
 
 Model and search API keys are currently stored as plaintext in Renderer `localStorage` and passed to the main process when used. They are not automatically written to the repository `.env`, but they are not yet protected by an operating-system credential vault. Treat the local user account as the trust boundary. Developer diagnostics and CI overrides are documented in [.env.example](./.env.example).
+
+For optional web research, set a Tavily API key under **Settings -> 搜索与联网**. You can also set `TAVILY_API_KEY` in development; search results return as title, URL, and snippet to the main agent and task-graph teammates.
+
+Usage and billing live under **Settings -> 用量与费用**; metrics are stored in the local application-data directory.
 
 ## Commands
 
@@ -196,7 +219,7 @@ Key areas:
 
 Agent PPT is local-first by default:
 
-- Project artifacts and deck snapshots stay in the workspace; history, checkpoints, transcripts, and some settings may live in the local application-data directory
+- Project artifacts and deck snapshots stay in the workspace; history, checkpoints, transcripts, usage metrics, and some settings may live in the local application-data directory
 - API keys currently remain as plaintext in Renderer `localStorage` and are not written to repository environment files
 - The model can affect a deck only through registered tools and structured commands
 - Risky or non-auto-applicable changes require user approval
