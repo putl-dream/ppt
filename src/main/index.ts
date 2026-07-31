@@ -393,6 +393,18 @@ function createWindow(onWindowCreated?: (window: BrowserWindow) => void): Browse
     void window.loadFile(join(__dirname, "../renderer/index.html"));
   }
 
+  // #region agent log
+  debugLog("H5", "index.ts:createWindow", "main window created with initial chrome", {
+    windowId: window.id,
+    activeWindowThemeMode,
+    resolvedPreset: resolveWindowThemeMode(),
+    initialOverlay: getWindowTitleBarOverlay(),
+    initialBackgroundColor: getWindowBackgroundColor(),
+    nativeThemeSource: nativeTheme.themeSource,
+    shouldUseDarkColors: nativeTheme.shouldUseDarkColors,
+    totalWindows: BrowserWindow.getAllWindows().length,
+  });
+  // #endregion
   onWindowCreated?.(window);
   return window;
 }
@@ -432,6 +444,38 @@ function resolveAppIconPath(): string | undefined {
   return candidates.find((candidate) => existsSync(candidate));
 }
 
+// #region agent log
+function debugLog(
+  hypothesisId: string,
+  location: string,
+  message: string,
+  data: Record<string, unknown>,
+): void {
+  fetch("http://127.0.0.1:7758/ingest/f715bfbd-c4b3-4d7c-91d3-b40633f1a70c", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Debug-Session-Id": "6f9302",
+    },
+    body: JSON.stringify({
+      sessionId: "6f9302",
+      runId: "titlebar-overlay-theme",
+      hypothesisId,
+      location,
+      message,
+      data,
+      timestamp: Date.now(),
+    }),
+  }).catch(() => {});
+}
+
+debugLog("H0", "index.ts:module-load", "instrumented main process module loaded", {
+  pid: process.pid,
+  execPath: process.execPath,
+  rendererUrl: process.env.ELECTRON_RENDERER_URL ?? null,
+});
+// #endregion
+
 function resolveWindowThemeMode(themeMode: WindowThemeMode = activeWindowThemeMode): WindowThemePreset {
   if (themeMode === "system") {
     return nativeTheme.shouldUseDarkColors ? "dark" : "light";
@@ -468,16 +512,52 @@ function applyWindowBackgroundColor(): void {
   const titleBarOverlay = getWindowTitleBarOverlay();
 
   for (const browserWindow of BrowserWindow.getAllWindows()) {
-    browserWindow.setBackgroundColor(backgroundColor);
-    browserWindow.setTitleBarOverlay(titleBarOverlay);
+    // #region agent log
+    let overlayError: string | null = null;
+    try {
+      browserWindow.setBackgroundColor(backgroundColor);
+      browserWindow.setTitleBarOverlay(titleBarOverlay);
+    } catch (error) {
+      overlayError = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+    }
+    debugLog("H3|H4", "index.ts:applyWindowBackgroundColor", "applied window chrome", {
+      windowId: browserWindow.id,
+      isDestroyed: browserWindow.isDestroyed(),
+      isVisible: browserWindow.isDestroyed() ? null : browserWindow.isVisible(),
+      title: browserWindow.isDestroyed() ? null : browserWindow.getTitle(),
+      backgroundColor,
+      overlayColor: titleBarOverlay.color,
+      overlaySymbolColor: titleBarOverlay.symbolColor,
+      overlayError,
+      totalWindows: BrowserWindow.getAllWindows().length,
+    });
+    if (overlayError) throw new Error(overlayError);
+    // #endregion
   }
 }
 
 function applyWindowThemeMode(themeMode: WindowThemeMode): "light" | "dark" {
+  // #region agent log
+  debugLog("H1|H2", "index.ts:applyWindowThemeMode", "theme mode request received", {
+    requestedThemeMode: themeMode,
+    previousActiveThemeMode: activeWindowThemeMode,
+    themeSourceBefore: nativeTheme.themeSource,
+    shouldUseDarkColorsBefore: nativeTheme.shouldUseDarkColors,
+  });
+  // #endregion
   activeWindowThemeMode = themeMode;
   const resolvedMode = resolveWindowThemeMode(themeMode);
   nativeTheme.themeSource = WINDOW_FRAME_BY_THEME[resolvedMode].nativeTheme;
   const resolvedTheme = nativeTheme.shouldUseDarkColors ? "dark" : "light";
+  // #region agent log
+  debugLog("H2", "index.ts:applyWindowThemeMode", "theme mode resolved", {
+    requestedThemeMode: themeMode,
+    resolvedPreset: resolvedMode,
+    themeSourceAfter: nativeTheme.themeSource,
+    resolvedTheme,
+    overlay: WINDOW_FRAME_BY_THEME[resolvedMode],
+  });
+  // #endregion
   applyWindowBackgroundColor();
 
   return resolvedTheme;
