@@ -14,12 +14,13 @@ import { saveAgentGatewayPreferences } from "../agentGatewayConfig";
 import {
   savePersistedUiSettings,
   type AppBootstrapSnapshot,
+  type ComputedColorScheme,
   type UiAccentColor,
+  type UiColorScheme,
   type UiControlShape,
-  type UiReadingTone,
-  type UiThemeMode,
+  type UiSkin,
 } from "./appBootstrap";
-import { getComputedTheme, useAppearanceRuntime } from "./useAppearanceRuntime";
+import { getComputedScheme, useAppearanceRuntime } from "./useAppearanceRuntime";
 import {
   DEFAULT_DESIGN_SYSTEM,
   designSystemV2Schema,
@@ -48,9 +49,11 @@ export interface SettingsController {
   setAgentGatewayPreferences: (value: AgentGatewayPreferences) => void;
   executionStrategy: AgentExecutionStrategy;
   setExecutionStrategy: (value: AgentExecutionStrategy) => void;
-  themeMode: UiThemeMode;
-  setThemeMode: (value: UiThemeMode) => void;
-  computedTheme: "light" | "dark";
+  skin: UiSkin;
+  setSkin: (value: UiSkin) => void;
+  colorScheme: UiColorScheme;
+  setColorScheme: (value: UiColorScheme) => void;
+  computedScheme: ComputedColorScheme;
   uiAccentColor: UiAccentColor;
   setUiAccentColor: (value: UiAccentColor) => void;
   uiControlShape: UiControlShape;
@@ -79,8 +82,12 @@ export function useSettingsController(
   const [executionStrategy, setExecutionStrategyState] = useState<AgentExecutionStrategy>(
     () => persisted.executionStrategy === "AUTO" ? "AUTO" : "REQUEST_APPROVAL",
   );
-  const [themeMode, setThemeModeState] = useState<UiThemeMode>(() => bootstrap.initialThemeMode);
-  const uiReadingTone: UiReadingTone = themeMode === "cyan" || themeMode === "orange" ? themeMode : "classic";
+  const [skin, setSkinState] = useState<UiSkin>(() =>
+    persisted.skin === "studio" ? "studio" : "studio",
+  );
+  const [colorScheme, setColorSchemeState] = useState<UiColorScheme>(
+    () => bootstrap.initialColorScheme,
+  );
   const [uiAccentColor, setUiAccentColorState] = useState<UiAccentColor>(() => {
     const accent = persisted.uiAccentColor;
     return accent === "green" || accent === "orange" ? accent : "cyan";
@@ -90,7 +97,7 @@ export function useSettingsController(
     return shape === "sharp" || shape === "round" ? shape : "soft";
   });
   const [borderRadiusScale, setBorderRadiusScaleState] = useState(() =>
-    typeof persisted.borderRadiusScale === "number" ? persisted.borderRadiusScale : 0,
+    typeof persisted.borderRadiusScale === "number" ? persisted.borderRadiusScale : 0.2,
   );
   const [colorContrastOffset, setColorContrastOffsetState] = useState(() =>
     typeof persisted.colorContrastOffset === "number" ? persisted.colorContrastOffset : 0,
@@ -108,7 +115,7 @@ export function useSettingsController(
     [enabledModels, models],
   );
   const selectedModel = visibleModels.find((model) => model.id === selectedModelId) ?? visibleModels[0];
-  const computedTheme = getComputedTheme(themeMode);
+  const computedScheme = getComputedScheme(colorScheme);
 
   const markSaving = useCallback(() => {
     setSaveStatus("saving");
@@ -142,10 +149,10 @@ export function useSettingsController(
       autoDownload: false,
       autoCloudSync,
       defaultRatio: "16:9",
-      themeMode,
+      skin,
+      colorScheme,
       uiAccentColor,
       uiControlShape,
-      uiReadingTone,
       borderRadiusScale,
       colorContrastOffset,
       selectedDesignSystem,
@@ -156,23 +163,23 @@ export function useSettingsController(
     autoCloudSync,
     borderRadiusScale,
     colorContrastOffset,
+    colorScheme,
     executionStrategy,
     logoUrl,
     selectedDesignSystem,
-    themeMode,
+    skin,
     uiAccentColor,
     uiControlShape,
-    uiReadingTone,
   ]);
 
   useAppearanceRuntime({
-    themeMode,
-    computedTheme,
+    skin,
+    colorScheme,
+    computedScheme,
     borderRadiusScale,
     colorContrastOffset,
     uiAccentColor,
     uiControlShape,
-    uiReadingTone,
   });
 
   useEffect(() => {
@@ -234,9 +241,11 @@ export function useSettingsController(
     setAgentGatewayPreferences: update(setAgentGatewayPreferencesState),
     executionStrategy,
     setExecutionStrategy: update(setExecutionStrategyState),
-    themeMode,
-    setThemeMode: update(setThemeModeState),
-    computedTheme,
+    skin,
+    setSkin: update(setSkinState),
+    colorScheme,
+    setColorScheme: update(setColorSchemeState),
+    computedScheme,
     uiAccentColor,
     setUiAccentColor: update(setUiAccentColorState),
     uiControlShape,

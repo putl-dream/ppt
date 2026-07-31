@@ -33,7 +33,7 @@ Prompt stage 只提供当前事实和推荐能力，不能强迫所有请求经�
 
 ## 2. 产品创建路径：SVG-native Agent
 
-产品入口仅接受 Agent 模式。IPC 拒绝 `generationMode === "lean"`（文案：Lean Mode 已退役，请以 SVG-native 工作流继续）。
+产品入口只走 Agent SVG-native 创建路径。
 
 新建整套 PPT 的权威流程由 `skills/ppt-workflow` 约定：
 
@@ -66,14 +66,7 @@ request
 `src/main/agent/tools/core/submit-svg-deck.ts`、
 `src/main/agent/tools/core/svg-deck-lifecycle.ts`、`skills/ppt-workflow/SKILL.md`。
 
-## 3. 残余与遗留路径
-
-### Lean / Commercial compiler（非产品 Mode）
-
-`src/main/agent/lean/*`、`scripts/generate-commercial-pptx.ts` 与相关测试仍保留
-DeckSpec → Director → compile → quality gate 管线，供离线脚本与回归使用。
-它不是 `agent:start` 可达路径。细节见
-[Commercial Visual Compiler](./commercial-pipeline.md)。
+## 3. 遗留路径
 
 ### Layout Plan（非新建主路径）
 
@@ -258,7 +251,7 @@ dev 阶段不迁移 AppData 旧路径，不 backfill/hydrate 旧 session 或 wor
 - `src/main/agent/tools/core/preview-svg-page.ts`
 - `src/main/agent/tools/core/submit-svg-deck.ts`
 - `src/main/agent/tools/core/submit-ppt-review.ts`
-- `src/main/index.ts`（拒绝 lean generationMode）
+- `src/main/index.ts`
 - `src/main/project/`
 - `src/main/project/project-file-service.ts`
 - `src/shared/ipc.ts`

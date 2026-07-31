@@ -60,7 +60,7 @@
   padding: 0.5em 0 0.5em 1em;
   border-left: 3px solid var(--accent-primary);
   color: var(--text-secondary);
-  background: var(--bg-darker);
+  background: var(--surface-sunken);
   border-radius: 0 6px 6px 0;
 }
 .markdown-body blockquote > :first-child {
@@ -74,16 +74,16 @@
   font-size: 0.88em;
   padding: 0.15em 0.4em;
   border-radius: var(--control-radius-xs);
-  background: var(--bg-darker);
-  border: 1px solid var(--border-glass);
+  background: var(--surface-sunken);
+  border: 1px solid var(--border-default);
   color: var(--accent-primary);
 }
 .markdown-body pre {
   margin: 0.75em 0;
   padding: 12px 14px;
   border-radius: var(--button-border-radius);
-  background: var(--bg-darker);
-  border: 1px solid var(--border-glass);
+  background: var(--surface-sunken);
+  border: 1px solid var(--border-default);
   overflow-x: auto;
 }
 .markdown-body pre code {
@@ -104,7 +104,7 @@
 .markdown-body hr {
   margin: 1em 0;
   border: none;
-  border-top: 1px solid var(--border-glass);
+  border-top: 1px solid var(--border-default);
 }
 .markdown-body table {
   width: 100%;
@@ -115,15 +115,15 @@
 .markdown-body th,
 .markdown-body td {
   padding: 6px 10px;
-  border: 1px solid var(--border-glass);
+  border: 1px solid var(--border-default);
   text-align: left;
 }
 .markdown-body th {
-  background: var(--bg-darker);
+  background: var(--surface-sunken);
   font-weight: 600;
 }
 .markdown-body tr:nth-child(even) td {
-  background: var(--bg-darker);
+  background: var(--surface-sunken);
 }
 .markdown-body strong {
   font-weight: 600;
@@ -154,6 +154,6 @@
 .markdown-body h5,
 .markdown-body h6 {
   margin-top: 1.4em;
-  font-weight: 650;
+  font-weight: var(--font-weight-semibold);
   letter-spacing: -0.01em;
 }

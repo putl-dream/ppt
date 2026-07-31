@@ -1,11 +1,11 @@
 /* Fullscreen slideshow lightbox */
 
-/* 全屏放映灯箱模态窗�?*/
+/* 全屏放映灯箱模态窗�?*/
 .slideshow-lightbox-overlay {
   --slideshow-slide-shadow: 0 25px 60px rgba(15, 23, 42, 0.15);
   position: fixed;
   top: 0; left: 0; right: 0; bottom: 0;
-  background: color-mix(in srgb, var(--bg-app) 94%, transparent);
+  background: color-mix(in srgb, var(--surface-canvas) 94%, transparent);
   backdrop-filter: blur(15px);
   -webkit-backdrop-filter: blur(15px);
   z-index: var(--z-fullscreen);
@@ -36,8 +36,8 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  background: color-mix(in srgb, var(--bg-glass) 80%, transparent);
-  border-bottom: 1px solid var(--border-glass);
+  background: color-mix(in srgb, var(--surface-raised) 80%, transparent);
+  border-bottom: 1px solid var(--border-default);
   color: var(--text-primary);
   z-index: var(--z-sticky);
 }
@@ -54,8 +54,8 @@
 }
 
 .slideshow-close {
-  background: var(--bg-input-field);
-  border: 1px solid var(--border-glass);
+  background: var(--surface-sunken);
+  border: 1px solid var(--border-default);
   color: var(--text-primary);
   padding: 6px 14px;
   border-radius: var(--field-border-radius);
@@ -63,11 +63,11 @@
   font-size: 12px;
   font-weight: 500;
   font-family: var(--font-display);
-  transition: var(--transition-smooth);
+  transition: var(--transition-color);
 }
 
 .slideshow-close:hover {
-  background: var(--bg-glass-hover);
+  background: var(--surface-hover);
 }
 
 .slideshow-viewport-container {
@@ -83,8 +83,8 @@
   position: absolute;
   top: 50%;
   transform: translateY(-50%);
-  background: var(--bg-input-field);
-  border: 1px solid var(--border-glass);
+  background: var(--surface-sunken);
+  border: 1px solid var(--border-default);
   color: var(--text-primary);
   width: 54px;
   height: 54px;
@@ -93,13 +93,13 @@
   display: grid;
   place-items: center;
   cursor: pointer;
-  transition: var(--transition-smooth);
+  transition: var(--transition-color);
   user-select: none;
   z-index: var(--z-dropdown);
 }
 
 .slideshow-nav-arrow:hover:not(:disabled) {
-  background: var(--bg-glass-hover);
+  background: var(--surface-hover);
   transform: translateY(-50%) scale(1.06);
 }
 

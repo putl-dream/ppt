@@ -1,6 +1,9 @@
-@import './styles/tokens/theme.css';
+@import './styles/tokens/primitives.css';
+@import './styles/tokens/typography.css';
+@import './styles/tokens/motion.css';
+@import './styles/tokens/semantic.css';
+@import './styles/tokens/skins/studio.css';
 @import './styles/tokens/fonts.css';
-@import './styles/tokens/personalization.css';
 @import './styles/tokens/ide-density.css';
 @import './styles/components/ide.css';
 @import './styles/components/controls.css';

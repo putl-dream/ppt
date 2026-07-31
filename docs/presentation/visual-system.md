@@ -151,10 +151,9 @@ SVG-native 路径要求图片以 workspace 相对 `href` 写入 SVG；`SubmitSvg
 - layout slot 与 grammar handler 继续收敛（遗留路径）；
 - captioned image 建立独立内容模型；
 - deck-review 增强母题、锚点、密度和页面差异度；
-- 从内容自动推导 Brand Profile，并允许用户自然语言调节；
-- 使用真实人工样本验证机器评分相关性（残余 compiler 见质量规范）。
+- 从内容自动推导 Brand Profile，并允许用户自然语言调节。
 
-剩余项集中维护在本文件、[工作流](./workflow.md) 和 [质量规范](./quality-rubric.md)，不再保留多个视觉建设 plan。
+剩余项集中维护在本文件和 [工作流](./workflow.md)，不再保留多个视觉建设 plan。
 
 ## 10. 关键实现
 

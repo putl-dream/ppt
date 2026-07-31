@@ -44,7 +44,6 @@ describe("agent run message branching", () => {
       prompt: "Create a deck",
       sessionId: "session-1",
       editorContext: { currentSlideId: "slide-2", selectedElementIds: [] },
-      generationMode: "agent",
       layoutChoice,
     });
   });

@@ -62,8 +62,8 @@ Agent PPT 不需要复制这些入口和命令，但需要吸收其中与长任�
 | 后台任务 | **Partial** | `src/main/agent/runtime/background/` | 已有 manager 与 inbox 输入，尚非 daemon/跨进程后台平台 |
 | 持久化与恢复 | **Implemented** | `src/main/agent/persistence/`、`src/main/agent/runtime/lifecycle/checkpoint-coordinator.ts` | History、checkpoint、lease、CAS 与 inflight 恢复分层 |
 | Web / 图片检索 | **Implemented** | `src/main/agent/search/`、`src/main/agent/tools/core/web-search.ts`、`src/main/agent/tools/core/search-slide-images.ts` | 作为受控外部能力进入工具管线 |
-| SVG-native 创建 | **Implemented** | `skills/ppt-workflow/`、`preview-svg-page.ts`、`submit-svg-deck.ts` | 产品唯一新建路径；IPC 拒绝 lean |
-| Presentation 编译（残余） | **Implemented** | `src/shared/commercial-visual/`、`src/main/agent/lean/`、layout registry | 离线/脚本与遗留 grammar；非产品 Mode |
+| SVG-native 创建 | **Implemented** | `skills/ppt-workflow/`、`preview-svg-page.ts`、`submit-svg-deck.ts` | 产品唯一新建路径 |
+| Layout Grammar 编译（遗留） | **Implemented** | layout registry / ExecuteLayoutPlan | 非新建主路径 |
 | 渲染反馈与质量门 | **Implemented** | `src/main/agent/runtime/presentation/render-feedback-loop.ts`、deck validators、quality gate | 模型复盘有界，最终约束由确定性代码执行 |
 | Artifact / Job 生命周期 | **Implemented** | `src/shared/presentation-lifecycle.ts`、`src/main/presentation-lifecycle/` | 跨 Query PptJob、immutable revision graph、Proposal/Presentation/Export 与恢复 |
 | MCP / Plugin / LSP | **Not adopted** | 无对应产品入口 | 不是当前 PPT 主链路所必需 |
@@ -263,9 +263,8 @@ Claude Code 提供通用 Agent 骨架，Agent PPT 的产品价值来自以下领
 
 ### 5.1 产品创建路径
 
-- **Agent SVG-native（产品唯一创建路径）**：`design/design-spec.json` → `slides/page-plan.json` → `slides/svg/PNN.svg` → `PreviewSvgPage` → `SubmitSvgDeck` → CommitGate。IPC 拒绝 `generationMode: lean`。
+- **Agent SVG-native（产品唯一创建路径）**：`design/design-spec.json` → `slides/page-plan.json` → `slides/svg/PNN.svg` → `PreviewSvgPage` → `SubmitSvgDeck` → CommitGate。
 - **Layout Plan / ExecuteLayoutPlan**：遗留布局编译，非新建主路径。
-- **Commercial Visual Compiler**：离线/脚本残余（`src/main/agent/lean/*`、`scripts/generate-commercial-pptx.ts`），不是产品 Mode。
 
 所有可达写入最终进入同一 Presentation schema、CommitGate、renderer 与 exporter，不能各自产生不兼容的“第二套 slide 事实”。
 
@@ -276,7 +275,6 @@ Claude Code 提供通用 Agent 骨架，Agent PPT 的产品价值来自以下领
 - SVG-native 页面作者源与 `visualSource.kind === "svg"`；
 - `src/design-system/` 中的 DesignSystemV2 schema、preset、brand profile、颜色、背景与图片处理；
 - Layout Grammar、variant、slot、text fit 和内置 layout handler（遗留/并行路径）；
-- commercial scene 与 deterministic ID（compiler 残余）；
 - chart、table、shape、icon 和 image 等可编辑视觉元素；
 - HTML 预览、Renderer 镜像与 PPTX 导出使用共享的语义模型。
 
@@ -298,11 +296,10 @@ tool proposal（SubmitSvgDeck 或遗留 SubmitCommands / ExecuteLayoutPlan）
   → postflight
 ```
 
-自动质量能力覆盖 SVG 预览门禁、layout/style/asset、overflow、标题重复、deck consistency；商业视觉 quality gate 仍用于残余 compiler。`src/main/agent/runtime/presentation/render-feedback-loop.ts` 允许模型基于渲染结果做有限轮次修正，但必须受迭代预算约束，且不能绕过最终 validator。
+自动质量能力覆盖 SVG 预览门禁、layout/style/asset、overflow、标题重复、deck consistency。`src/main/agent/runtime/presentation/render-feedback-loop.ts` 允许模型基于渲染结果做有限轮次修正，但必须受迭代预算约束，且不能绕过最终 validator。
 
-详见 [工作流与状态](../presentation/workflow.md)、
-[Visual Expression System](../presentation/visual-system.md) 和
-[Commercial Visual Compiler](../presentation/commercial-pipeline.md)（残余）。
+详见 [工作流与状态](../presentation/workflow.md) 和
+[Visual Expression System](../presentation/visual-system.md)。
 
 ## 6. 明确不复制的 Claude Code 能力
 

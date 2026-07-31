@@ -240,12 +240,6 @@ export function formatPublicErrorMessage(
     return "当前操作缺少必要权限，请检查项目目录权限。";
   }
   if (
-    /lean deckspec.*校验失败|modeloutputerror.*lean|lean mode.*(?:deckspec|无效 json|提交工具)/i
-      .test(value)
-  ) {
-    return "模型未按 Lean Mode 契约返回内容。本次未自动重试，也未修改 PPT；请重新生成。";
-  }
-  if (
     /zod|schema|validation|json|tool[_ -]?use|modeloutputerror|unrecognized key|invalid input: expected|校验失败|stack|\bat\s+\S+\s*\(/i
       .test(value)
   ) {

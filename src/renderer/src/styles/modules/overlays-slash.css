@@ -6,12 +6,12 @@
   bottom: calc(100% + 10px);
   left: 0;
   right: 0;
-  background: var(--bg-glass);
+  background: var(--surface-raised);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
-  border: 1px solid var(--border-glass-focused);
+  border: 1px solid var(--border-focused);
   border-radius: var(--button-border-radius);
-  box-shadow: var(--shadow-premium);
+  box-shadow: var(--elevation-2);
   z-index: var(--z-dropdown);
   padding: 8px 0;
   max-height: 220px;
@@ -29,7 +29,7 @@
   font-weight: 700;
   color: var(--text-muted);
   padding: 6px 16px;
-  border-bottom: 1px solid var(--border-glass);
+  border-bottom: 1px solid var(--border-default);
   letter-spacing: 0.1em;
   text-transform: uppercase;
 }
@@ -45,11 +45,11 @@
   background: transparent;
   text-align: left;
   font: inherit;
-  transition: var(--transition-smooth);
+  transition: var(--transition-color);
 }
 
 .slash-menu-item:hover {
-  background: var(--bg-glass-hover);
+  background: var(--surface-hover);
 }
 
 .cmd-text {
@@ -64,7 +64,7 @@
   color: var(--text-muted);
 }
 
-/* 上下文锚定标�?Chip */
+/* 上下文锚定标�?Chip */
 .context-chip-row {
   margin-bottom: 8px;
   display: flex;

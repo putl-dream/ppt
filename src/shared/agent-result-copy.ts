@@ -1,5 +1,4 @@
 import type { AgentRunResult } from "./ipc";
-import { formatLeanRunMetrics } from "./lean-mode-contract";
 import { countSlidesNeedingLayout } from "./presentation-draft";
 
 export type TerminalAgentRunResult = Extract<
@@ -15,25 +14,19 @@ export function formatTerminalAgentRunContent(result: TerminalAgentRunResult): s
   const slidesNeedingDesign = result.status === "completed"
     ? countSlidesNeedingLayout(result.presentation)
     : 0;
-  const base = result.status === "rejected"
-    ? "已放弃排版变更提案。"
-    : slidesNeedingDesign > 0
-      ? `内容草稿已就绪（${slidesNeedingDesign} 页待设计）。`
-      : "已成功应用演示文稿更新。";
-
-  return result.leanMetrics
-    ? `${base}\n\n${formatLeanRunMetrics(result.leanMetrics)}`
-    : base;
+  if (result.status === "rejected") {
+    return "已放弃排版变更提案。";
+  }
+  return slidesNeedingDesign > 0
+    ? `内容草稿已就绪（${slidesNeedingDesign} 页待设计）。`
+    : "已成功应用演示文稿更新。";
 }
 
 export function mergeApprovalTerminalContent(
   result: TerminalAgentRunResult,
-  waitingContent: string,
+  _waitingContent: string,
 ): string {
-  const terminalContent = formatTerminalAgentRunContent(result);
-  return waitingContent.startsWith("已生成 Lean 商业 PPT 草稿")
-    ? `${terminalContent}\n\n${waitingContent}`
-    : terminalContent;
+  return formatTerminalAgentRunContent(result);
 }
 
 export function mergeWaitingUserRunContent(

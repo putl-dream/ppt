@@ -1,0 +1,106 @@
+/*
+ * Semantic token contract. Skins assign values; modules consume only these names.
+ * Add a new skin by creating tokens/skins/<name>.css and setting data-skin.
+ */
+
+:root {
+  /* Surfaces — assigned by skin */
+  --surface-canvas: var(--raw-neutral-975);
+  --surface-base: var(--raw-neutral-900);
+  --surface-raised: var(--raw-neutral-850);
+  --surface-overlay: var(--raw-neutral-800);
+  --surface-sunken: var(--raw-neutral-950);
+  --surface-hover: rgba(255, 255, 255, 0.04);
+  --surface-active: rgba(255, 255, 255, 0.07);
+
+  /* Text */
+  --text-primary: var(--raw-neutral-50);
+  --text-secondary: var(--raw-neutral-300);
+  --text-muted: var(--raw-neutral-400);
+  --text-on-accent: var(--raw-neutral-0);
+
+  /* Borders */
+  --border-subtle: rgba(255, 255, 255, 0.06);
+  --border-default: rgba(255, 255, 255, 0.09);
+  --border-strong: rgba(255, 255, 255, 0.14);
+  --border-focused: rgba(255, 255, 255, 0.2);
+
+  /* Elevation */
+  --elevation-1: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --elevation-2: 0 4px 12px rgba(0, 0, 0, 0.45);
+  --elevation-3: 0 16px 40px rgba(0, 0, 0, 0.5);
+
+  /* Accent (overridden by data-accent) */
+  --accent-primary: var(--raw-cyan-500);
+  --accent-primary-glow: var(--raw-cyan-glow);
+  --accent-primary-contrast: var(--raw-neutral-0);
+  --accent-primary-hover-shadow: rgba(14, 165, 233, 0.35);
+  --accent-selected-bg: var(--accent-primary-glow);
+  --accent-selected-border: var(--accent-primary);
+  --accent-selected-text: var(--accent-primary);
+
+  /* Status */
+  --danger: var(--raw-danger-400);
+  --danger-glow: var(--raw-danger-glow);
+  --danger-border: rgba(248, 113, 113, 0.32);
+  --success: var(--raw-success-400);
+  --success-glow: var(--raw-success-glow);
+  --success-border: rgba(52, 211, 153, 0.32);
+  --warning: var(--raw-warning-400);
+  --warning-glow: var(--raw-warning-glow);
+  --warning-border: rgba(251, 191, 36, 0.35);
+
+  --diff-remove: var(--raw-diff-remove);
+  --diff-add: var(--raw-diff-add);
+
+  /* Palette aliases used by settings swatches */
+  --accent-cyan: var(--raw-cyan-500);
+  --accent-cyan-glow: var(--raw-cyan-glow);
+  --accent-green: var(--raw-green-500);
+  --accent-green-glow: var(--raw-green-glow);
+  --accent-purple: #a855f7;
+  --accent-purple-glow: rgba(168, 85, 247, 0.18);
+  --accent-orange: var(--raw-orange-500);
+
+  /* Shape family */
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-pill: 999px;
+  --border-radius-scale: 1;
+  --content-radius-scale: 0.2;
+
+  --control-radius-xs: calc(var(--radius-xs) * var(--border-radius-scale));
+  --control-radius-sm: calc(var(--radius-sm) * var(--border-radius-scale));
+  --control-radius-md: calc(var(--radius-md) * var(--border-radius-scale));
+  --control-radius-lg: calc(var(--radius-lg) * var(--border-radius-scale));
+  --control-radius-xl: calc(var(--radius-xl) * var(--border-radius-scale));
+  --control-radius-pill: var(--radius-pill);
+  --field-border-radius: var(--control-radius-sm);
+  --button-border-radius: var(--control-radius-md);
+  --card-border-radius: var(--control-radius-lg);
+  --panel-border-radius: var(--control-radius-xl);
+
+  /* Spacing */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+
+  /* Z-index */
+  --z-base: 0;
+  --z-sticky: 100;
+  --z-dropdown: 300;
+  --z-overlay: 600;
+  --z-modal: 900;
+  --z-toast: 1100;
+  --z-fullscreen: 1200;
+
+  /* Scrollbar */
+  --scrollbar-thumb-color: rgba(255, 255, 255, 0.12);
+}

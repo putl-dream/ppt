@@ -8,7 +8,7 @@
   margin-top: 10px;
   border: 1px solid color-mix(in srgb, var(--text-muted) 20%, transparent);
   border-radius: 9px;
-  background: color-mix(in srgb, var(--bg-input-field) 96%, var(--text-primary) 4%);
+  background: color-mix(in srgb, var(--surface-sunken) 96%, var(--text-primary) 4%);
   box-shadow: none;
 }
 
@@ -43,7 +43,7 @@
 
 .inline-artifact-title {
   font-size: 12.5px;
-  font-weight: 650;
+  font-weight: var(--font-weight-semibold);
 }
 
 .inline-artifact-resolved,
@@ -54,7 +54,7 @@
 .approval-card-title {
   margin-bottom: 7px;
   font-size: 13px;
-  font-weight: 650;
+  font-weight: var(--font-weight-semibold);
 }
 
 .approval-summary,
@@ -114,7 +114,7 @@
   border-radius: 7px;
   font-family: var(--font-body);
   font-size: 12px;
-  font-weight: 620;
+  font-weight: var(--font-weight-semibold);
 }
 
 
@@ -132,7 +132,7 @@
 
 .btn-reject:hover {
   border-color: color-mix(in srgb, var(--text-muted) 38%, transparent);
-  background: var(--bg-glass-hover);
+  background: var(--surface-hover);
   color: var(--text-primary);
 }
 
@@ -144,7 +144,7 @@
 
 .btn-secondary:hover {
   border-color: color-mix(in srgb, var(--text-muted) 38%, transparent);
-  background: var(--bg-glass-hover);
+  background: var(--surface-hover);
   color: var(--text-primary);
 }
 
@@ -219,14 +219,14 @@
 .resolved-card-label {
   color: var(--text-muted);
   font-size: 10.5px;
-  font-weight: 650;
+  font-weight: var(--font-weight-semibold);
   letter-spacing: 0.04em;
 }
 
 .resolved-card-copy strong {
   color: var(--text-primary);
   font-size: 12px;
-  font-weight: 650;
+  font-weight: var(--font-weight-semibold);
 }
 
 .resolved-card-detail {
@@ -262,14 +262,14 @@
   margin: 0;
   width: 100%;
   border-color: color-mix(in srgb, var(--text-muted) 22%, transparent);
-  background: color-mix(in srgb, var(--bg-input-field) 84%, transparent);
+  background: color-mix(in srgb, var(--surface-sunken) 84%, transparent);
 }
 
 .slide-preview-gallery--panel .inline-artifact-card-header {
   position: sticky;
   top: -14px;
   z-index: 2;
-  background: color-mix(in srgb, var(--bg-canvas) 94%, transparent);
+  background: color-mix(in srgb, var(--surface-raised) 94%, transparent);
   backdrop-filter: blur(10px);
 }
 
@@ -311,7 +311,7 @@
   place-items: center;
   aspect-ratio: 16 / 9;
   overflow: hidden;
-  background: color-mix(in srgb, var(--bg-darker) 80%, #fff 20%);
+  background: color-mix(in srgb, var(--surface-sunken) 80%, #fff 20%);
 }
 
 .slide-preview-gallery-media img {
@@ -365,7 +365,7 @@
   max-height: 90vh;
   overflow: auto;
   border-radius: 10px;
-  background: var(--bg-input-field);
+  background: var(--surface-sunken);
   box-shadow: 0 24px 72px rgba(0, 0, 0, 0.28);
 }
 
@@ -392,7 +392,7 @@
 }
 
 .slide-preview-lightbox-header button:hover {
-  background: var(--bg-glass-hover);
+  background: var(--surface-hover);
 }
 
 .slide-preview-lightbox-navigation {

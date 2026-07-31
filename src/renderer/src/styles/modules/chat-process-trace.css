@@ -14,7 +14,7 @@
   align-items: center;
   justify-content: flex-start;
   gap: 8px;
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--text-muted);
   cursor: pointer;
   user-select: none;
@@ -70,7 +70,7 @@
 .process-trace-panel-elapsed {
   flex-shrink: 0;
   color: var(--text-muted);
-  font-size: 10px;
+  font-size: var(--text-2xs);
   font-variant-numeric: tabular-nums;
 }
 .process-trace-panel-caret {
@@ -98,7 +98,7 @@
   align-items: center;
   gap: 6px;
   padding: 2px 0;
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-weight: 500;
   line-height: 1.5;
   color: var(--text-muted);
@@ -122,14 +122,14 @@
 }
 .process-trace-row-status--completed {
   color: var(--accent-green);
-  font-size: 10px;
+  font-size: var(--text-2xs);
   font-weight: 700;
 }
 .process-trace-row-status--failed,
 .process-trace-row-status--denied,
 .process-trace-row-status--invalid-input {
   color: var(--danger);
-  font-size: 9px;
+  font-size: var(--text-2xs);
   font-weight: 700;
 }
 .process-trace-row-status--denied {
@@ -181,14 +181,14 @@
   -webkit-text-fill-color: var(--text-primary);
 }
 .process-trace-row-line {
-  font-size: 11.5px;
+  font-size: var(--text-xs);
   line-height: 1.55;
   color: var(--text-secondary);
   white-space: pre-wrap;
 }
 .process-trace-row-text {
   margin: 0;
-  font-size: 11.5px;
+  font-size: var(--text-xs);
   line-height: 1.55;
   color: var(--text-secondary);
   white-space: pre-wrap;
@@ -203,14 +203,14 @@
 .process-trace-panel-header {
   min-height: 26px;
   padding: 3px 0;
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 .process-trace-panel-header-left {
   gap: 7px;
 }
 .process-trace-panel-label {
   color: var(--text-secondary);
-  font-weight: 520;
+  font-weight: var(--font-weight-medium);
 }
 .process-trace-panel-body {
   gap: 1px;
@@ -224,7 +224,7 @@
   gap: 7px;
   padding: 2px 0;
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--text-sm);
   line-height: 1.55;
 }
 .process-trace-row-status,
@@ -236,7 +236,7 @@
 }
 .process-trace-progress-content {
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--text-sm);
   line-height: 1.55;
 }
 .process-trace-row-body {
@@ -244,6 +244,6 @@
 }
 .process-trace-row-text,
 .process-trace-row-line {
-  font-size: 11.5px;
+  font-size: var(--text-xs);
   line-height: 1.55;
 }

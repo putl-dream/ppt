@@ -4,9 +4,9 @@
   width: 100%;
   max-width: none;
   box-sizing: border-box;
-  border: 1px solid var(--border-glass);
+  border: 1px solid var(--border-default);
   border-radius: var(--card-border-radius);
-  background: var(--bg-input-field);
+  background: var(--surface-sunken);
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
   overflow: hidden;
 }
@@ -16,7 +16,7 @@
   align-items: center;
   gap: 8px;
   padding: 10px 14px;
-  border-bottom: 1px solid var(--border-glass);
+  border-bottom: 1px solid var(--border-default);
   background: rgba(255, 255, 255, 0.02);
 }
 
@@ -127,7 +127,7 @@
   width: 108px;
   height: 61px;
   border-radius: var(--field-border-radius);
-  border: 1px solid var(--border-glass);
+  border: 1px solid var(--border-default);
   position: relative;
   overflow: hidden;
   display: flex;
@@ -163,7 +163,7 @@
   width: 108px;
   height: 61px;
   border-radius: var(--field-border-radius);
-  border: 1px dashed var(--border-glass);
+  border: 1px dashed var(--border-default);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -189,7 +189,7 @@
   font-weight: 500;
   border-radius: var(--field-border-radius);
   cursor: pointer;
-  transition: var(--transition-smooth);
+  transition: var(--transition-color);
 }
 
 .inline-artifact-actions button:disabled {
@@ -226,10 +226,10 @@
   min-height: 76px;
   resize: vertical;
   padding: 9px 10px;
-  border: 1px solid var(--border-glass);
+  border: 1px solid var(--border-default);
   border-radius: var(--field-border-radius);
   outline: none;
-  background: var(--bg-input-field);
+  background: var(--surface-sunken);
   color: var(--text-primary);
   font: inherit;
   font-size: 12px;
@@ -253,11 +253,11 @@
 }
 
 .agent-question-option {
-  border: 1px solid var(--border-glass);
-  background: var(--bg-glass);
+  border: 1px solid var(--border-default);
+  background: var(--surface-raised);
   color: var(--text-primary);
   cursor: pointer;
-  transition: var(--transition-smooth);
+  transition: var(--transition-color);
   text-align: left;
   font-family: var(--font-display);
 }

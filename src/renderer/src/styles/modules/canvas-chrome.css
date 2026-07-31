@@ -2,7 +2,7 @@
 .canvas-column {
   display: flex;
   flex-direction: column;
-  background-color: var(--bg-canvas);
+  background-color: var(--surface-raised);
   height: 100%;
   overflow: hidden;
   transition: background-color var(--transition-panel);
@@ -11,8 +11,8 @@
 .canvas-header {
   height: 44px;
   padding: 8px 14px;
-  border-bottom: 1px solid var(--border-glass);
-  background: var(--bg-canvas);
+  border-bottom: 1px solid var(--border-default);
+  background: var(--surface-raised);
 }
 
 .canvas-header-left {
@@ -28,7 +28,7 @@
   max-width: min(560px, 62vw);
   font-family: var(--font-display);
   font-size: 14px;
-  font-weight: 650;
+  font-weight: var(--font-weight-semibold);
   line-height: 1.2;
   color: var(--text-primary);
 }
@@ -45,19 +45,19 @@
 }
 
 .action-icon-btn {
-  background: var(--bg-input-field);
-  border: 1px solid var(--border-glass);
+  background: var(--surface-sunken);
+  border: 1px solid var(--border-default);
   border-radius: var(--field-border-radius);
   color: var(--text-secondary);
   padding: 7px;
   cursor: pointer;
   display: grid;
   place-items: center;
-  transition: var(--transition-smooth);
+  transition: var(--transition-color);
 }
 
 .action-icon-btn:hover:not(:disabled) {
-  background: var(--bg-glass-hover);
+  background: var(--surface-hover);
   color: var(--text-primary);
 }
 
@@ -71,10 +71,10 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  background: var(--bg-input-field);
+  background: var(--surface-sunken);
   padding: 4px 12px;
   border-radius: 20px;
-  border: 1px solid var(--border-glass);
+  border: 1px solid var(--border-default);
 }
 
 .nav-arrow-btn {
@@ -116,7 +116,7 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  transition: var(--transition-smooth);
+  transition: var(--transition-color);
 }
 
 .optimize-slide-btn:hover {
@@ -125,18 +125,18 @@
 }
 
 .secondary-btn {
-  background: var(--bg-input-field);
-  border: 1px solid var(--border-glass-focused);
+  background: var(--surface-sunken);
+  border: 1px solid var(--border-focused);
   border-radius: var(--field-border-radius);
   color: var(--text-primary);
   font-size: 12px;
   padding: 7px 12px;
   cursor: pointer;
-  transition: var(--transition-smooth);
+  transition: var(--transition-color);
 }
 
 .secondary-btn:hover {
-  background: var(--bg-glass-hover);
+  background: var(--surface-hover);
 }
 
 /* 画布工作空间 */
@@ -160,7 +160,7 @@
   place-items: center;
   font-size: 14px;
   color: var(--text-muted);
-  border: 2px dashed var(--border-glass-focused);
+  border: 2px dashed var(--border-focused);
   border-radius: var(--panel-border-radius);
 }
 
@@ -168,7 +168,7 @@
 .slide-viewport {
   width: 1280px;
   height: 720px;
-  box-shadow: var(--shadow-premium);
+  box-shadow: var(--elevation-2);
   position: absolute;
   overflow: hidden;
   border-radius: var(--button-border-radius);

@@ -1,7 +1,7 @@
 ﻿.settings-console-container {
   height: 100%;
   overflow-y: auto;
-  background: var(--bg-canvas);
+  background: var(--surface-raised);
 }
 
 .settings-layout-grid {
@@ -47,9 +47,9 @@
   flex: 0 0 auto;
   margin-top: 4px;
   padding: 6px 10px;
-  border: 1px solid var(--border-glass);
+  border: 1px solid var(--border-default);
   border-radius: 999px;
-  background: var(--bg-input-field);
+  background: var(--surface-sunken);
   color: var(--text-secondary);
   font-size: 12px;
   font-weight: 500;
@@ -80,9 +80,9 @@
   flex-direction: column;
   gap: 16px;
   padding: 16px;
-  border: 1px solid var(--border-glass);
+  border: 1px solid var(--border-default);
   border-radius: var(--panel-border-radius);
-  background: var(--bg-input-field);
+  background: var(--surface-sunken);
   box-shadow: none;
   transition: border-color 0.14s ease, background 0.14s ease;
 }
@@ -92,7 +92,7 @@
 }
 
 .settings-card:hover {
-  border-color: var(--border-glass-focused);
+  border-color: var(--border-focused);
 }
 
 .settings-card-header {
@@ -109,7 +109,7 @@
   place-items: center;
   flex: 0 0 auto;
   border-radius: var(--field-border-radius);
-  background: var(--bg-darker);
+  background: var(--surface-sunken);
   color: var(--text-secondary);
 }
 
@@ -160,7 +160,7 @@
   margin: 0;
   color: var(--text-primary);
   font-size: 15px;
-  font-weight: 650;
+  font-weight: var(--font-weight-semibold);
 }
 
 .settings-profile-copy p {
@@ -186,7 +186,7 @@
   height: 8px;
   overflow: hidden;
   border-radius: 999px;
-  background: var(--bg-darker);
+  background: var(--surface-sunken);
 }
 
 .settings-progress-bar {
@@ -205,9 +205,9 @@
 .settings-stat-grid div {
   min-width: 0;
   padding: 10px;
-  border: 1px solid var(--border-glass);
+  border: 1px solid var(--border-default);
   border-radius: var(--button-border-radius);
-  background: var(--bg-darker);
+  background: var(--surface-sunken);
 }
 
 .settings-stat-grid span {
@@ -222,7 +222,7 @@
   overflow: hidden;
   color: var(--text-primary);
   font-size: 12px;
-  font-weight: 650;
+  font-weight: var(--font-weight-semibold);
   text-overflow: ellipsis;
   white-space: nowrap;
 }

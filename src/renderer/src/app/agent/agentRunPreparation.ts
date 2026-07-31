@@ -16,7 +16,6 @@ export function buildAgentRunRequest({
   currentSlideId,
 }: BuildAgentRunRequestOptions): AgentRunRequest {
   // 这里只构造 Renderer → Main 的业务请求；模型、Gateway 和步数限制属于执行配置。
-  // generationMode 由 IPC schema 默认 "agent"；产品路径不再透传 Mode。
   return {
     prompt,
     sessionId,
@@ -24,7 +23,6 @@ export function buildAgentRunRequest({
       ...(currentSlideId ? { currentSlideId } : {}),
       selectedElementIds: [],
     },
-    generationMode: "agent",
     ...(layoutChoice ? { layoutChoice } : {}),
   };
 }

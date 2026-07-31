@@ -22,9 +22,10 @@ import {
 import type { SettingsCategory } from "../settingsCategories";
 import { cx } from "../lib/cx";
 
-type UiThemeMode = "light" | "dark" | "cyan" | "orange";
+type UiColorScheme = "light" | "dark" | "system";
 type UiAccentColor = "cyan" | "green" | "orange";
 type UiControlShape = "sharp" | "soft" | "round";
+type UiSkin = "studio";
 
 interface SettingsConsoleProps {
   activeCategory: SettingsCategory;
@@ -49,8 +50,10 @@ interface SettingsConsoleProps {
   executionStrategy: AgentExecutionStrategy;
   setExecutionStrategy: (val: AgentExecutionStrategy) => void;
 
-  themeMode: UiThemeMode;
-  setThemeMode: (val: UiThemeMode) => void;
+  colorScheme: UiColorScheme;
+  setColorScheme: (val: UiColorScheme) => void;
+  skin: UiSkin;
+  setSkin: (val: UiSkin) => void;
   uiAccentColor: UiAccentColor;
   setUiAccentColor: (val: UiAccentColor) => void;
   uiControlShape: UiControlShape;
@@ -129,15 +132,18 @@ const controlShapeOptions: Array<{ value: UiControlShape; label: string }> = [
 const SUPPORTED_LOGO_TYPES = new Set(["image/png", "image/jpeg", "image/gif"]);
 const MAX_LOGO_BYTES = 12 * 1024 * 1024;
 
-const themeModeOptions: Array<{
-  value: UiThemeMode;
+const colorSchemeOptions: Array<{
+  value: UiColorScheme;
   label: string;
   icon: React.ReactNode;
 }> = [
-  { value: "light", label: "浅色", icon: <SunIcon size={13} /> },
   { value: "dark", label: "暗色", icon: <MoonIcon size={13} /> },
-  { value: "cyan", label: "青色", icon: <PaletteIcon size={13} /> },
-  { value: "orange", label: "橙色", icon: <PaletteIcon size={13} /> },
+  { value: "light", label: "浅色", icon: <SunIcon size={13} /> },
+  { value: "system", label: "跟随系统", icon: <PaletteIcon size={13} /> },
+];
+
+const skinOptions: Array<{ value: UiSkin; label: string }> = [
+  { value: "studio", label: "Studio" },
 ];
 
 export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
@@ -160,8 +166,10 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
   setAgentGatewayPreferences,
   executionStrategy,
   setExecutionStrategy,
-  themeMode,
-  setThemeMode,
+  colorScheme,
+  setColorScheme,
+  skin,
+  setSkin,
   uiAccentColor,
   setUiAccentColor,
   uiControlShape,
@@ -177,7 +185,8 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
   const currentMeta = categoryMeta[activeCategory];
   const selectedAccentLabel = accentOptions.find((option) => option.value === uiAccentColor)?.label ?? "湖蓝";
   const selectedShapeLabel = controlShapeOptions.find((option) => option.value === uiControlShape)?.label ?? "柔和";
-  const selectedThemeModeLabel = themeModeOptions.find((option) => option.value === themeMode)?.label ?? "浅色";
+  const selectedSchemeLabel = colorSchemeOptions.find((option) => option.value === colorScheme)?.label ?? "暗色";
+  const selectedSkinLabel = skinOptions.find((option) => option.value === skin)?.label ?? "Studio";
   const selectedColorSchemeName = typeof selectedDesignSystem.colorScheme === "string"
     ? selectedDesignSystem.colorScheme
     : selectedDesignSystem.colorScheme.name ?? "custom";
@@ -530,16 +539,34 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
           <div className="ide-panel">
             <p className="ide-hint">只改变软件自身皮肤与控件，不影响导出的演示文档。</p>
 
-            <IdeSection title="主题色" hint={selectedThemeModeLabel}>
-              <IdeRow label="界面主题">
-                <div className="ide-choice-group" role="group" aria-label="界面主题">
-                  {themeModeOptions.map((option) => (
+            <IdeSection title="皮肤" hint={selectedSkinLabel}>
+              <IdeRow label="设计语言">
+                <div className="ide-choice-group" role="group" aria-label="皮肤">
+                  {skinOptions.map((option) => (
                     <button
                       key={option.value}
                       type="button"
-                      className={cx("ide-choice", themeMode === option.value && "is-active")}
-                      onClick={() => setThemeMode(option.value)}
-                      aria-pressed={themeMode === option.value}
+                      className={cx("ide-choice", skin === option.value && "is-active")}
+                      onClick={() => setSkin(option.value)}
+                      aria-pressed={skin === option.value}
+                    >
+                      <span>{option.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </IdeRow>
+            </IdeSection>
+
+            <IdeSection title="明暗" hint={selectedSchemeLabel}>
+              <IdeRow label="配色方案">
+                <div className="ide-choice-group" role="group" aria-label="配色方案">
+                  {colorSchemeOptions.map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      className={cx("ide-choice", colorScheme === option.value && "is-active")}
+                      onClick={() => setColorScheme(option.value)}
+                      aria-pressed={colorScheme === option.value}
                     >
                       {option.icon}
                       <span>{option.label}</span>
@@ -616,7 +643,7 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
             </IdeSection>
 
             <p className="ide-hint">
-              当前：{selectedThemeModeLabel} · {selectedAccentLabel} · {selectedShapeLabel} · 内容圆角 {Math.round(18 * borderRadiusScale)}px
+              当前：{selectedSkinLabel} · {selectedSchemeLabel} · {selectedAccentLabel} · {selectedShapeLabel} · 内容圆角 {Math.round(18 * borderRadiusScale)}px
             </p>
           </div>
         ) : null}

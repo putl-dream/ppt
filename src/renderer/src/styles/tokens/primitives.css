@@ -1,0 +1,56 @@
+/*
+ * Raw color primitives. Skins map these into semantic tokens.
+ * Modules must not consume --raw-* directly.
+ */
+
+:root {
+  /* Neutral — near-black graphite (dark-first) */
+  --raw-neutral-0: #ffffff;
+  --raw-neutral-50: #f6f7f8;
+  --raw-neutral-100: #eceef0;
+  --raw-neutral-200: #d5d8dc;
+  --raw-neutral-300: #b0b5bc;
+  --raw-neutral-400: #858b94;
+  --raw-neutral-500: #646a74;
+  --raw-neutral-600: #4a4f57;
+  --raw-neutral-700: #32363d;
+  --raw-neutral-800: #1c1f24;
+  --raw-neutral-850: #16181c;
+  --raw-neutral-900: #111316;
+  --raw-neutral-950: #0d0e11;
+  --raw-neutral-975: #0b0c0e;
+  --raw-neutral-1000: #000000;
+
+  /* Accent — cyan */
+  --raw-cyan-400: #38bdf8;
+  --raw-cyan-500: #0ea5e9;
+  --raw-cyan-600: #0284c7;
+  --raw-cyan-glow: rgba(14, 165, 233, 0.16);
+
+  /* Accent — green */
+  --raw-green-400: #34d399;
+  --raw-green-500: #10b981;
+  --raw-green-600: #059669;
+  --raw-green-glow: rgba(16, 185, 129, 0.16);
+
+  /* Accent — orange */
+  --raw-orange-400: #fb923c;
+  --raw-orange-500: #f97316;
+  --raw-orange-600: #ea580c;
+  --raw-orange-glow: rgba(249, 115, 22, 0.18);
+
+  /* Status */
+  --raw-danger-400: #f87171;
+  --raw-danger-500: #ef4444;
+  --raw-danger-glow: rgba(239, 68, 68, 0.14);
+  --raw-success-400: #34d399;
+  --raw-success-500: #10b981;
+  --raw-success-glow: rgba(16, 185, 129, 0.14);
+  --raw-warning-400: #fbbf24;
+  --raw-warning-500: #f59e0b;
+  --raw-warning-glow: rgba(245, 158, 11, 0.14);
+
+  /* Diff */
+  --raw-diff-remove: #fca5a5;
+  --raw-diff-add: #6ee7b7;
+}

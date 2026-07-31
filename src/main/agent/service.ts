@@ -600,9 +600,9 @@ export class AgentService {
   }
 
   /**
-   * Submits commands produced by a bounded non-agent pipeline (for example
-   * Lean Mode) through the exact same gate, preview and durable approval path
-   * as an AgentRuntime command proposal.
+   * Submits commands produced by a bounded non-agent pipeline through the exact
+   * same gate, preview and durable approval path as an AgentRuntime command
+   * proposal.
    */
   async submitDirectProposal(input: DirectCommandProposal): Promise<AgentRunResult> {
     const {
@@ -679,7 +679,7 @@ export class AgentService {
 
     this.runtime.clearSession(threadId);
     this.conversations.delete(threadId);
-    listener?.({ type: "approval-waiting", message: "Lean 生成结果等待确认。" });
+    listener?.({ type: "approval-waiting", message: "生成结果等待确认。" });
     return {
       status: "approval-required",
       approval: {

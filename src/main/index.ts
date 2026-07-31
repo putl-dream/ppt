@@ -359,28 +359,18 @@ let presentationLifecycleOrchestrator: PresentationLifecycleOrchestrator;
 let lifecycleBlobStore: ContentAddressedBlobStore;
 let lifecycleArtifactChangeObserver: PresentationArtifactChangeObserver;
 
-let activeWindowThemeMode: WindowThemeMode = "light";
+let activeWindowThemeMode: WindowThemeMode = "dark";
 
 const WINDOW_FRAME_BY_THEME: Record<WindowThemePreset, { background: string; symbol: string; nativeTheme: "light" | "dark" }> = {
   light: {
-    background: "#e7e7e7",
-    symbol: "#0f172a",
+    background: "#e8eaed",
+    symbol: "#0f1217",
     nativeTheme: "light",
   },
   dark: {
-    background: "#141414",
-    symbol: "#f8fafc",
+    background: "#0b0c0e",
+    symbol: "#f4f5f6",
     nativeTheme: "dark",
-  },
-  cyan: {
-    background: "#d8edf0",
-    symbol: "#0f172a",
-    nativeTheme: "light",
-  },
-  orange: {
-    background: "#efe2cf",
-    symbol: "#0f172a",
-    nativeTheme: "light",
   },
 };
 
@@ -405,16 +395,14 @@ function resolveWindowThemeMode(themeMode: WindowThemeMode = activeWindowThemeMo
 }
 
 function normalizeWindowThemeMode(themeMode: unknown): WindowThemeMode {
-  if (
-    themeMode === "light"
-    || themeMode === "dark"
-    || themeMode === "cyan"
-    || themeMode === "orange"
-    || themeMode === "system"
-  ) {
+  if (themeMode === "light" || themeMode === "dark" || themeMode === "system") {
     return themeMode;
   }
-  return "light";
+  /* Legacy cyan/orange theme modes map to light chrome. */
+  if (themeMode === "cyan" || themeMode === "orange") {
+    return "light";
+  }
+  return "dark";
 }
 
 function getWindowBackgroundColor(): string {
@@ -1185,11 +1173,6 @@ app.whenReady().then(async () => {
       runId?: string,
     ) => {
       const request = agentRunRequestSchema.parse(rawRequest);
-      if (request.generationMode === "lean") {
-        throw new Error(
-          "Lean Mode 已退役；新建 PPT 必须使用 Agent 的 SVG-native 逐页设计与预览门禁。",
-        );
-      }
       const sessionId = request.sessionId;
 
       // 当前桌面端采用单窗口、单前台运行模型；Main 同步执行这一约束，
@@ -1246,7 +1229,6 @@ app.whenReady().then(async () => {
             provider: selection?.provider,
             model: selection?.model,
             executionStrategy,
-            generationMode: request.generationMode,
           },
           controller.signal,
           async () => {
@@ -1294,11 +1276,6 @@ app.whenReady().then(async () => {
     runId?: string,
   ) => {
     const request = agentRunRequestSchema.parse(rawRequest);
-    if (request.generationMode === "lean") {
-      throw new Error(
-        "Lean Mode 已退役；请以 Agent 模式继续 SVG-native 工作流。",
-      );
-    }
     const sessionId = request.sessionId;
 
     // 与 start 保持同一条全局串行边界，避免继续会话与新运行交错。
@@ -1351,7 +1328,7 @@ app.whenReady().then(async () => {
         "continue-agent-run",
         sessionId,
         currentRunId,
-        { threadId, generationMode: request.generationMode, ...requestSummary(request.prompt) },
+        { threadId, ...requestSummary(request.prompt) },
         controller.signal,
         async () => {
           await runtime.agentService.restoreDurableThread(threadId);

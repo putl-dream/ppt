@@ -118,7 +118,7 @@ describe("agent run terminal state", () => {
     });
   });
 
-  it("does not expose Lean schema diagnostics in the structured error", () => {
+  it("does not expose schema diagnostics in the structured error", () => {
     const state = createMessageState([
       {
         id: "assistant-1",
@@ -132,8 +132,7 @@ describe("agent run terminal state", () => {
     handleAgentRunFailure({
       error: new Error(
         "Error invoking remote method 'agent:start': ModelOutputError: "
-        + "Lean DeckSpec 校验失败：Unrecognized key: \"language\"; "
-        + "Invalid input: expected 1 at version",
+        + "Unrecognized key: \"language\"; Invalid input: expected 1 at version",
       ),
       isSidechain: false,
       runMessageId: "assistant-1",
@@ -142,7 +141,7 @@ describe("agent run terminal state", () => {
       notify: vi.fn(),
     });
 
-    expect(state.messages[0]?.runError).toContain("本次未自动重试，也未修改 PPT");
+    expect(state.messages[0]?.runError).toBe("处理请求时遇到问题，请稍后重试。");
     expect(state.messages[0]?.runError).not.toContain("ModelOutputError");
     expect(state.messages[0]?.runError).not.toContain("language");
   });

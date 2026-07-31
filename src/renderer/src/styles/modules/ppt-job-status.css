@@ -1,4 +1,4 @@
-/* PPT Job status bar â€?shared across workspace chat and project files */
+/* PPT Job status bar ï¿½?shared across workspace chat and project files */
 
 .ppt-job-status-bar {
   display: flex;
@@ -8,9 +8,9 @@
   gap: 8px 10px;
   min-height: 34px;
   padding: 7px 16px;
-  border-bottom: 1px solid var(--border-glass);
+  border-bottom: 1px solid var(--border-default);
   color: var(--text-secondary);
-  background: color-mix(in srgb, var(--bg-glass) 74%, transparent);
+  background: color-mix(in srgb, var(--surface-raised) 74%, transparent);
   font-size: 12px;
 }
 
@@ -32,7 +32,7 @@
 .ppt-job-status-bar__stale {
   margin-left: auto;
   color: var(--warning);
-  font-weight: 650;
+  font-weight: var(--font-weight-semibold);
 }
 
 .ppt-job-status-bar.is-waiting_approval {

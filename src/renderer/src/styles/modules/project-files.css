@@ -5,7 +5,7 @@
   min-height: 0;
   flex-direction: column;
   color: var(--text-primary);
-  background: var(--bg-canvas);
+  background: var(--surface-raised);
 }
 
 .project-files-header {
@@ -15,8 +15,8 @@
   justify-content: space-between;
   gap: 24px;
   padding: 20px 24px 18px;
-  border-bottom: 1px solid var(--border-glass);
-  background: color-mix(in srgb, var(--bg-canvas) 86%, transparent);
+  border-bottom: 1px solid var(--border-default);
+  background: color-mix(in srgb, var(--surface-raised) 86%, transparent);
 }
 
 .project-files-heading {
@@ -52,9 +52,9 @@
   gap: 9px;
   min-height: 34px;
   padding: 7px 24px;
-  border-bottom: 1px solid var(--border-glass);
+  border-bottom: 1px solid var(--border-default);
   color: var(--text-secondary);
-  background: color-mix(in srgb, var(--bg-glass) 74%, transparent);
+  background: color-mix(in srgb, var(--surface-raised) 74%, transparent);
   font-size: 12px;
 }
 
@@ -76,7 +76,7 @@
 .project-files-job-status__stale {
   margin-left: auto;
   color: var(--warning);
-  font-weight: 650;
+  font-weight: var(--font-weight-semibold);
 }
 
 .project-files-job-status.is-failed,
@@ -96,8 +96,8 @@
   min-width: 0;
   min-height: 0;
   flex-direction: column;
-  border-right: 1px solid var(--border-glass);
-  background: color-mix(in srgb, var(--bg-glass) 68%, transparent);
+  border-right: 1px solid var(--border-default);
+  background: color-mix(in srgb, var(--surface-raised) 68%, transparent);
 }
 
 .project-files-browser-summary {
@@ -106,7 +106,7 @@
   justify-content: space-between;
   gap: 8px;
   padding: 11px 14px;
-  border-bottom: 1px solid var(--border-glass);
+  border-bottom: 1px solid var(--border-default);
   color: var(--text-muted);
   font-size: 11px;
 }
@@ -141,7 +141,7 @@
 
 .project-files-group > summary:hover {
   color: var(--text-primary);
-  background: var(--bg-glass-hover);
+  background: var(--surface-hover);
 }
 
 .project-files-group-title {
@@ -149,7 +149,7 @@
   min-width: 0;
   overflow: hidden;
   font-size: 12px;
-  font-weight: 650;
+  font-weight: var(--font-weight-semibold);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -183,7 +183,7 @@
 
 .project-files-file:hover {
   color: var(--text-primary);
-  background: var(--bg-glass-hover);
+  background: var(--surface-hover);
 }
 
 .project-files-file.active {
@@ -328,9 +328,9 @@
 
 .project-files-metadata span {
   padding: 3px 6px;
-  border: 1px solid var(--border-glass);
+  border: 1px solid var(--border-default);
   border-radius: 999px;
-  background: var(--bg-glass);
+  background: var(--surface-raised);
 }
 
 .project-files-toolbar {
@@ -347,10 +347,10 @@
   justify-content: center;
   gap: 5px;
   padding: 5px 10px;
-  border: 1px solid var(--border-glass);
+  border: 1px solid var(--border-default);
   border-radius: var(--button-border-radius);
   color: var(--text-secondary);
-  background: var(--bg-glass);
+  background: var(--surface-raised);
   font-family: var(--font-body);
   font-size: 11px;
   cursor: pointer;
@@ -358,8 +358,8 @@
 
 .project-files-button:hover:not(:disabled) {
   color: var(--text-primary);
-  border-color: var(--border-glass-focused);
-  background: var(--bg-glass-hover);
+  border-color: var(--border-focused);
+  background: var(--surface-hover);
 }
 
 .project-files-button:disabled {
@@ -384,11 +384,11 @@
   flex: 1;
   resize: none;
   padding: 14px 16px;
-  border: 1px solid var(--border-glass);
+  border: 1px solid var(--border-default);
   border-radius: var(--card-border-radius);
   outline: none;
   color: var(--text-primary);
-  background: color-mix(in srgb, var(--bg-input-field) 94%, transparent);
+  background: color-mix(in srgb, var(--surface-sunken) 94%, transparent);
   box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.04);
   font-family: var(--font-body);
   font-size: 14px;
@@ -405,7 +405,7 @@
 .project-files-textarea[readonly] {
   cursor: default;
   color: var(--text-secondary);
-  background: var(--bg-darker);
+  background: var(--surface-sunken);
 }
 
 .project-files-notice {
@@ -415,10 +415,10 @@
   justify-content: space-between;
   gap: 12px;
   padding: 8px 10px;
-  border: 1px solid var(--border-glass);
+  border: 1px solid var(--border-default);
   border-radius: var(--field-border-radius);
   color: var(--text-secondary);
-  background: var(--bg-darker);
+  background: var(--surface-sunken);
   font-size: 11px;
 }
 
@@ -451,9 +451,9 @@
   flex: 0 1 auto;
   flex-direction: column;
   overflow: hidden;
-  border: 1px solid var(--border-glass);
+  border: 1px solid var(--border-default);
   border-radius: var(--card-border-radius);
-  background: var(--bg-input-field);
+  background: var(--surface-sunken);
 }
 
 .project-files-diff > div {
@@ -462,7 +462,7 @@
   align-items: center;
   justify-content: space-between;
   padding: 8px 10px;
-  border-bottom: 1px solid var(--border-glass);
+  border-bottom: 1px solid var(--border-default);
   color: var(--text-secondary);
   font-size: 10px;
 }

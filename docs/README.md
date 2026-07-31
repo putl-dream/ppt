@@ -36,8 +36,6 @@
 | [工作流与状态](./presentation/workflow.md) | SVG-native Agent 创建路径、artifact、workspace 文件管理、Proposal 与 CommitGate |
 | [Presentation Artifact 与 Job 生命周期](./roadmap/presentation-lifecycle.md) | 已落地的 Query/PptJob/ArtifactRevision、事务、恢复与数据根契约 |
 | [Visual Expression System](./presentation/visual-system.md) | DesignSystemV2、SVG visualSource、Layout Grammar 遗留路径、三端渲染 |
-| [Commercial Visual Compiler](./presentation/commercial-pipeline.md) | 离线/脚本残余编译管线（Lean 已退役，非产品创建路径） |
-| [商业视觉质量规范](./presentation/quality-rubric.md) | 残余 compiler 的机器证据与人工评分边界 |
 
 ## 活跃路线图
 
@@ -60,9 +58,8 @@
     `ArtifactRevision` 证明已校验阶段产出。三者身份与 `runId/threadId` 分离。
 11. 项目文件管理只投影当前 workspace 文件；文本保存必须携带隔离的编辑凭证和读取时
     SHA-256 version，不能把文件保存等同于 artifact revision 或验证完成。
-12. 产品创建路径仅为 Agent SVG-native（`PreviewSvgPage` → `SubmitSvgDeck`）；
-    IPC 拒绝 `generationMode: lean`。`executionStrategy`（AUTO / REQUEST_APPROVAL）
-    是审批策略，不是创建模式。
+12. 产品创建路径仅为 Agent SVG-native（`PreviewSvgPage` → `SubmitSvgDeck`）。
+    `executionStrategy`（AUTO / REQUEST_APPROVAL）是审批策略，不是创建模式。
 13. Query completed、Proposal ready、Presentation applied 与 Export completed 是四个
     独立事实；Renderer 通过只读 `PptJobProjection` 消费业务状态。
 14. 应用持久数据只写入 `~/.agent-ppt`，Electron userData 位于
@@ -80,7 +77,7 @@
 | System Prompt | Implemented | Section Registry、稳定/动态边界、契约级 cache key、stage 建议化 |
 | File operations | Implemented | Main/teammate 共用 read receipt、精确 Edit、冲突检测与受保护提交 |
 | Project file management | Implemented | design-spec/page-plan/Page SVG/assets/deck/export history 为第一公民；注册文本 artifact 用隔离 `editToken` + SHA-256 CAS 编辑 |
-| SVG-native create | Implemented | durable DesignSpec/PagePlan/SourceAsset/PageSvg/PreviewReceipt → Candidate/Quality/Proposal；Lean Mode 已退役 |
+| SVG-native create | Implemented | durable DesignSpec/PagePlan/SourceAsset/PageSvg/PreviewReceipt → Candidate/Quality/Proposal |
 | Presentation lifecycle | Implemented | 每个 Presentation 一个跨 Query PptJob；immutable revision/dependency/stale、Proposal/Presentation/Review/Export 与 side-effect recovery |
 | Application data root | Implemented | SQLite、blobs、logs、runtime、token usage 位于 `~/.agent-ppt`；Electron userData 位于 `~/.agent-ppt/electron` |
 

@@ -65,8 +65,10 @@ export function SettingsView({
           setAgentGatewayPreferences={controller.setAgentGatewayPreferences}
           executionStrategy={controller.executionStrategy}
           setExecutionStrategy={controller.setExecutionStrategy}
-          themeMode={controller.themeMode}
-          setThemeMode={controller.setThemeMode}
+          colorScheme={controller.colorScheme}
+          setColorScheme={controller.setColorScheme}
+          skin={controller.skin}
+          setSkin={controller.setSkin}
           uiAccentColor={controller.uiAccentColor}
           setUiAccentColor={controller.setUiAccentColor}
           uiControlShape={controller.uiControlShape}

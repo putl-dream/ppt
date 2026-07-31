@@ -37,7 +37,7 @@
   padding: 0 12px;
   border: 1px solid rgba(0, 0, 0, 0.14);
   border-radius: 3px;
-  background: var(--bg-input-field);
+  background: var(--surface-sunken);
   color: var(--text-primary);
   font-size: 13px;
   font-family: var(--font-body);
@@ -61,9 +61,9 @@
   justify-content: center;
   gap: 7px;
   margin-bottom: 6px;
-  border: 1px solid var(--border-glass);
+  border: 1px solid var(--border-default);
   border-radius: var(--field-border-radius);
-  background: var(--bg-input-field);
+  background: var(--surface-sunken);
   color: var(--text-primary);
   font-family: var(--font-body);
   font-size: 12px;
@@ -73,8 +73,8 @@
 }
 
 .cursor-model-add-btn:hover {
-  background: var(--bg-glass-hover);
-  border-color: var(--border-glass-focused);
+  background: var(--surface-hover);
+  border-color: var(--border-focused);
 }
 
 .cursor-model-icon-btn {
@@ -164,7 +164,7 @@
 }
 
 .cursor-model-edit-btn:hover {
-  background: var(--bg-glass-hover);
+  background: var(--surface-hover);
   color: var(--text-primary);
 }
 
@@ -279,10 +279,10 @@
   flex-direction: column;
   gap: 18px;
   padding: 20px;
-  border: 1px solid var(--border-glass-focused);
+  border: 1px solid var(--border-focused);
   border-radius: var(--button-border-radius);
-  background: var(--bg-glass);
-  box-shadow: var(--shadow-premium);
+  background: var(--surface-raised);
+  box-shadow: var(--elevation-2);
   overflow-y: auto;
   animation: modelDialogIn 0.18s ease-out;
 }
@@ -334,7 +334,7 @@
 }
 
 .model-dialog-close-btn:hover {
-  background: var(--bg-glass-hover);
+  background: var(--surface-hover);
   color: var(--text-primary);
 }
 
@@ -414,18 +414,18 @@
   margin: 0;
   color: var(--text-primary);
   font-size: 14px;
-  font-weight: 650;
+  font-weight: var(--font-weight-semibold);
 }
 
 .settings-console-container .cursor-model-card {
   padding: 12px;
-  border: 1px solid var(--border-glass);
+  border: 1px solid var(--border-default);
   border-radius: var(--panel-border-radius);
-  background: var(--bg-input-field);
+  background: var(--surface-sunken);
 }
 
 .dark-theme .settings-console-container .cursor-model-card {
-  background: var(--bg-input-field);
+  background: var(--surface-sunken);
 }
 
 .settings-console-container .cursor-model-search-row {
@@ -435,15 +435,15 @@
 
 .settings-console-container .cursor-model-search {
   height: 34px;
-  border-color: var(--border-glass);
+  border-color: var(--border-default);
   border-radius: var(--field-border-radius);
-  background: var(--bg-input-field);
+  background: var(--surface-sunken);
   color: var(--text-primary);
 }
 
 .settings-console-container .cursor-model-row {
   min-height: 40px;
-  border-top-color: var(--border-glass);
+  border-top-color: var(--border-default);
 }
 
 .settings-console-container .cursor-model-view-all {

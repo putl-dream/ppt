@@ -14,28 +14,31 @@
 body {
   margin: 0;
   font-family: var(--font-body);
+  font-size: var(--text-sm);
+  line-height: var(--text-sm-lh);
+  font-weight: var(--font-weight-regular);
   color: var(--text-primary);
-  background-color: var(--bg-app);
+  background-color: var(--surface-canvas);
   overflow: hidden;
   -webkit-font-smoothing: antialiased;
-  transition: background-color var(--transition-panel);
+  -moz-osx-font-smoothing: grayscale;
+  transition: var(--transition-panel);
 }
 
-/* 自定义滚动条 */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
+
 ::-webkit-scrollbar-track {
   background: transparent;
 }
+
 ::-webkit-scrollbar-thumb {
   background: var(--scrollbar-thumb-color);
   border-radius: 3px;
-  transition: var(--transition-smooth);
 }
+
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.25);
+  background: color-mix(in srgb, var(--scrollbar-thumb-color) 140%, transparent);
 }
-
-

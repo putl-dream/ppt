@@ -1,17 +1,18 @@
 /*
  * IDE density tokens — primitives only. Component classes live in components/ide.css.
+ * Aligned to the typography scale.
  */
 
 :root {
-  --ide-font-ui: 12.5px;
-  --ide-font-title: 15px;
-  --ide-font-section: 12px;
-  --ide-font-nav: 12.5px;
-  --ide-row-height: 30px;
-  --ide-gap: 8px;
+  --ide-font-ui: var(--text-base);
+  --ide-font-title: var(--text-md);
+  --ide-font-section: var(--text-sm);
+  --ide-font-nav: var(--text-base);
+  --ide-row-height: 32px;
+  --ide-gap: var(--space-2);
   --ide-section-pad: 12px 0;
   --ide-page-pad: 16px 20px 28px;
   --ide-label-width: 168px;
   --ide-control-height: 28px;
-  --ide-radius: 4px;
+  --ide-radius: var(--control-radius-xs);
 }

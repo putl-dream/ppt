@@ -17,10 +17,6 @@ import type {
 import type { TokenUsageStats } from "./token-usage";
 import type { ConversationEventPage } from "./conversation-events";
 import type { PptJobProjection } from "./presentation-lifecycle";
-import {
-  leanGenerationModeSchema,
-  type LeanRunMetrics,
-} from "./lean-mode-contract";
 import type {
   AgentApprovalRequest,
   DisplayEvent,
@@ -58,14 +54,13 @@ export const agentAttachmentSchema = z.object({
   mimeType: z.string().optional(),
 });
 
-/** Renderer 发送给 Main 的 query 协议；Main 必须解析成功后才能进入 Agent/Lean 执行链。 */
+/** Renderer 发送给 Main 的 query 协议；Main 必须解析成功后才能进入 Agent 执行链。 */
 export const agentRunRequestSchema = z.object({
   prompt: z.string().trim().min(1),
   sessionId: z.string().trim().min(1),
   editorContext: agentEditorContextSchema.optional(),
   attachments: z.array(agentAttachmentSchema).optional(),
   layoutChoice: layoutChoiceSchema.optional(),
-  generationMode: leanGenerationModeSchema.optional().default("agent"),
 });
 
 export type AgentAttachment = z.infer<typeof agentAttachmentSchema>;
@@ -175,7 +170,6 @@ export type AgentStreamEvent = (
 
 type AgentRunResultDisplay = {
   displayEvents?: DisplayEvent[];
-  leanMetrics?: LeanRunMetrics;
 };
 
 export type AgentRunResult = (
@@ -195,7 +189,7 @@ export interface AgentInboxPollResult {
   types: string[];
 }
 
-export type WindowThemeMode = "light" | "dark" | "cyan" | "orange" | "system";
+export type WindowThemeMode = "light" | "dark" | "system";
 
 export interface ProjectArtifactReadResult {
   path: string;

@@ -11,21 +11,26 @@ import {
   type ManagedModel,
 } from "../modelCatalog";
 
-export const UI_SETTINGS_STORAGE_KEY = "agent-ppt.ui-settings.v1";
+export const UI_SETTINGS_STORAGE_KEY = "agent-ppt.ui-settings.v2";
+const LEGACY_UI_SETTINGS_STORAGE_KEY = "agent-ppt.ui-settings.v1";
 
-export type UiThemeMode = "light" | "dark" | "cyan" | "orange";
+export type UiSkin = "studio";
+export type UiColorScheme = "light" | "dark" | "system";
 export type UiAccentColor = "cyan" | "green" | "orange";
 export type UiControlShape = "sharp" | "soft" | "round";
-export type UiReadingTone = "classic" | "cyan" | "orange";
+export type ComputedColorScheme = "light" | "dark";
+
+/** @deprecated Use UiColorScheme. Kept for migration typing only. */
+type LegacyThemeMode = "light" | "dark" | "cyan" | "orange" | "system";
 
 export interface PersistedUiSettings {
   autoDownload: boolean;
   autoCloudSync: boolean;
   defaultRatio: "16:9" | "4:3";
-  themeMode: UiThemeMode | "system";
+  skin: UiSkin;
+  colorScheme: UiColorScheme;
   uiAccentColor: UiAccentColor;
   uiControlShape: UiControlShape;
-  uiReadingTone: UiReadingTone;
   borderRadiusScale: number;
   colorContrastOffset: number;
   selectedDesignSystem: DesignSystemV2;
@@ -35,7 +40,8 @@ export interface PersistedUiSettings {
 
 export interface AppBootstrapSnapshot {
   persistedUiSettings: Partial<PersistedUiSettings>;
-  initialThemeMode: UiThemeMode;
+  initialColorScheme: UiColorScheme;
+  initialComputedScheme: ComputedColorScheme;
   models: ManagedModel[];
   selectedModelId: string;
   agentStepLimits: AgentStepLimits;
@@ -54,46 +60,117 @@ function readStorageItem(key: string): string | null {
   }
 }
 
+function writeStorageItem(key: string, value: string): void {
+  try {
+    getBrowserStorage()?.setItem(key, value);
+  } catch (error) {
+    console.error("保存 UI 设置失败:", error);
+  }
+}
+
+function removeStorageItem(key: string): void {
+  try {
+    getBrowserStorage()?.removeItem(key);
+  } catch {
+    /* ignore */
+  }
+}
+
+export function prefersDarkColorScheme(): boolean {
+  return typeof window !== "undefined"
+    && typeof window.matchMedia === "function"
+    && window.matchMedia("(prefers-color-scheme: dark)").matches;
+}
+
+/**
+ * Migrate v1 settings (themeMode / uiReadingTone / cyan|orange modes)
+ * into v2 (skin × colorScheme). Defaults to dark studio.
+ */
+function migrateLegacySettings(raw: Record<string, unknown>): Partial<PersistedUiSettings> {
+  const migrated: Partial<PersistedUiSettings> = { ...raw } as Partial<PersistedUiSettings>;
+
+  if (!migrated.skin) migrated.skin = "studio";
+
+  if (!migrated.colorScheme) {
+    const legacyMode = raw.themeMode as LegacyThemeMode | undefined;
+    if (legacyMode === "dark") {
+      migrated.colorScheme = "dark";
+    } else if (legacyMode === "system") {
+      migrated.colorScheme = "system";
+    } else if (legacyMode === "cyan" || legacyMode === "orange") {
+      migrated.colorScheme = "light";
+      if (!migrated.uiAccentColor) {
+        migrated.uiAccentColor = legacyMode;
+      }
+    } else if (legacyMode === "light") {
+      migrated.colorScheme = "light";
+    } else {
+      const legacyTone = raw.uiReadingTone;
+      if (legacyTone === "cyan" || legacyTone === "orange") {
+        migrated.colorScheme = "light";
+        if (!migrated.uiAccentColor) {
+          migrated.uiAccentColor = legacyTone;
+        }
+      } else {
+        migrated.colorScheme = "dark";
+      }
+    }
+  }
+
+  delete (migrated as Record<string, unknown>).themeMode;
+  delete (migrated as Record<string, unknown>).uiReadingTone;
+
+  return migrated;
+}
+
 export function loadPersistedUiSettings(): Partial<PersistedUiSettings> {
   try {
-    const stored = readStorageItem(UI_SETTINGS_STORAGE_KEY);
-    if (!stored) return {};
-    const parsed = JSON.parse(stored) as Partial<PersistedUiSettings>;
-    return parsed && typeof parsed === "object" ? parsed : {};
+    const v2 = readStorageItem(UI_SETTINGS_STORAGE_KEY);
+    if (v2) {
+      const parsed = JSON.parse(v2) as Partial<PersistedUiSettings>;
+      return parsed && typeof parsed === "object" ? parsed : {};
+    }
+
+    const v1 = readStorageItem(LEGACY_UI_SETTINGS_STORAGE_KEY);
+    if (!v1) return {};
+
+    const parsed = JSON.parse(v1) as Record<string, unknown>;
+    if (!parsed || typeof parsed !== "object") return {};
+
+    const migrated = migrateLegacySettings(parsed);
+    writeStorageItem(UI_SETTINGS_STORAGE_KEY, JSON.stringify(migrated));
+    removeStorageItem(LEGACY_UI_SETTINGS_STORAGE_KEY);
+    return migrated;
   } catch {
     return {};
   }
 }
 
 export function savePersistedUiSettings(settings: PersistedUiSettings): void {
-  try {
-    getBrowserStorage()?.setItem(UI_SETTINGS_STORAGE_KEY, JSON.stringify(settings));
-  } catch (error) {
-    console.error("保存 UI 设置失败:", error);
-  }
+  writeStorageItem(UI_SETTINGS_STORAGE_KEY, JSON.stringify(settings));
 }
 
-function prefersDarkColorScheme(): boolean {
-  return typeof window !== "undefined"
-    && typeof window.matchMedia === "function"
-    && window.matchMedia("(prefers-color-scheme: dark)").matches;
+export function resolveColorScheme(scheme: UiColorScheme | undefined): ComputedColorScheme {
+  if (scheme === "light") return "light";
+  if (scheme === "dark") return "dark";
+  if (scheme === "system") return prefersDarkColorScheme() ? "dark" : "light";
+  return "dark";
 }
 
-export function resolveInitialThemeMode(settings: Partial<PersistedUiSettings>): UiThemeMode {
-  const mode = settings.themeMode;
-  if (mode === "dark" || mode === "cyan" || mode === "orange") return mode;
-  if (mode === "system") return prefersDarkColorScheme() ? "dark" : "light";
-
-  const legacyTone = settings.uiReadingTone;
-  return legacyTone === "cyan" || legacyTone === "orange" ? legacyTone : "light";
+export function resolveInitialColorScheme(settings: Partial<PersistedUiSettings>): UiColorScheme {
+  const scheme = settings.colorScheme;
+  if (scheme === "light" || scheme === "dark" || scheme === "system") return scheme;
+  return "dark";
 }
 
 export function loadAppBootstrapSnapshot(): AppBootstrapSnapshot {
   const persistedUiSettings = loadPersistedUiSettings();
+  const initialColorScheme = resolveInitialColorScheme(persistedUiSettings);
 
   return {
     persistedUiSettings,
-    initialThemeMode: resolveInitialThemeMode(persistedUiSettings),
+    initialColorScheme,
+    initialComputedScheme: resolveColorScheme(initialColorScheme),
     models: loadManagedModels(),
     selectedModelId: readStorageItem(SELECTED_MODEL_STORAGE_KEY) ?? DEFAULT_MODELS[0].id,
     agentStepLimits: loadAgentStepLimits(),

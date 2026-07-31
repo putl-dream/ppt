@@ -20,8 +20,8 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background-color: var(--bg-darker);
-  border: 1px solid var(--border-glass);
+  background-color: var(--surface-sunken);
+  border: 1px solid var(--border-default);
   transition: 0.3s;
   border-radius: 24px;
 }

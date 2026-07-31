@@ -75,7 +75,6 @@ import { agentTaskNodeSchema } from "@shared/agent-task-list";
 import { formatPublicErrorMessage } from "@shared/agent-activity-display";
 import { ConversationDatabase } from "./conversation-database";
 import type { AgentRunResult } from "@shared/ipc";
-import { formatLeanRunMetrics } from "@shared/lean-mode-contract";
 import { createModuleLogger } from "./agent/logger";
 
 const storedSessionSchema = sessionSnapshotSchema;
@@ -570,9 +569,7 @@ export class FileSessionStore {
       content = merged.content;
       message.threadId = result.threadId;
     } else if (result.status === "approval-required") {
-      const approvalContent = result.leanMetrics
-        ? `已生成 Lean 商业 PPT 草稿，请在下方审核后应用。\n\n${formatLeanRunMetrics(result.leanMetrics)}`
-        : "已提出排版更新方案，请在下方审核后应用。";
+      const approvalContent = "已提出排版更新方案，请在下方审核后应用。";
       const merged = mergeResponseText(trace, content, approvalContent);
       trace = merged.trace;
       content = merged.content;
