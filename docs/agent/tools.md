@@ -48,6 +48,11 @@ interface ToolRuntimeBehavior<Input> {
     isRequested(input: Input): boolean;
     describe(input: Input): string;
   };
+  concurrency?: {
+    mode: "parallel";
+    resourceKeys?(input: Input, context: ToolContext): string[];
+    conflictScope?: "workspace_path";
+  };
   delegation?: {
     resolve(input: Input, context: ToolContext): ToolDelegationTarget;
     allowedCategories: ToolCategory[];
@@ -149,9 +154,17 @@ Provider 结果仍与原 dispatcher `tool_use.id` 配对。
 
 ## 7. 并发
 
-当前一个 assistant batch 默认按调用顺序串行。声明 terminal completion 的工具必须
+模型应把参数互不依赖的调用放在同一个 assistant batch，减少不必要的模型往返；
+参数依赖兄弟结果的调用仍须等待下一轮。Runtime 只并发执行显式声明
+`behavior.concurrency.mode="parallel"` 的工具，未声明者保持串行，不能根据名称、risk
+或 permission effects 推断。连续可并发调用按最多四个一组形成 wave；资源键相交时
+分到不同 wave，结果仍按 Provider 调用顺序提交。
+
+Workspace `ReadFile` / `WriteFile` / `EditFile` 使用规范化路径作为资源键，所以同一路径
+读写有序，不同路径可以并行。生命周期 artifact observation 使用独立串行队列，不会
+把不同文件的实际 IO 重新全局串行化。声明 terminal completion 的工具必须
 `exclusiveBatch: true`；若它出现在 mixed batch，整批在执行前拒绝，并为每个
-`tool_use` 生成配对错误结果。未来只有引入显式只读并发元数据后才允许并行。
+`tool_use` 生成配对错误结果。
 
 ## 8. 权限层
 

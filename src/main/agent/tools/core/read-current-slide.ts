@@ -18,6 +18,7 @@ export const readCurrentSlideTool: ToolDefinition<
   category: "core",
   loadPolicy: "core",
   inputSchema: readCurrentSlideSchema,
+  behavior: { concurrency: { mode: "parallel" } },
   mapResultToModelContent: (result) => {
     const slide = result.slide;
     if (!slide) return JSON.stringify({ slide: null });

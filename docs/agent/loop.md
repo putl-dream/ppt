@@ -97,8 +97,10 @@ Loop 必须支持以下“继续而非失败”路径：
 - 未知工具、参数错误、权限拒绝、异常、取消都生成 `isError` 结果。
 - Terminal tool 不与普通写工具执行半个混合批次。
 - Terminal/独占语义来自 ToolDefinition metadata；mixed batch 在任何工具执行前整批拒绝。
-- 当前所有前台工具都按调用顺序串行执行。
-- 只读并发需要未来新增显式 concurrency metadata，并保证结果仍按原调用顺序提交；当前契约没有这项元数据。
+- 参数独立的调用应由模型放在同一 assistant batch；本地是否并发由工具显式 concurrency metadata 决定。
+- 连续且资源不冲突的 opt-in 工具最多四路并发；未声明工具、后台工具、动态依赖和资源冲突形成串行屏障。
+- PreToolUse、PostToolUse、transcript、State reduce 与 `tool_result` 提交保持原调用顺序。
+- 每个并发 wave 启动前以 `activeToolUses[]` checkpoint 全部活动调用；恢复时逐一生成副作用不确定结果，绝不自动重放。
 
 ## 6. 流式 attempt
 

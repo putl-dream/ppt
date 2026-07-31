@@ -170,6 +170,7 @@ describe("Agent Architecture Skeletons & Types", () => {
     expect(card.name).toBe("AutoLayoutSlide");
     expect(card.risk).toBe("medium");
     expect(card.approvalRequired).toBe(true);
+    expect(card.execution).toEqual({ batch: "allowed", mode: "serial" });
     expect(card.parameterSummary).toHaveProperty("slideId");
     expect(card.parameterSummary).toHaveProperty("layout");
   });
@@ -195,6 +196,8 @@ describe("Agent Architecture Skeletons & Types", () => {
 
     expect(prompt).toContain("AskUser");
     expect(prompt).toContain("不要询问工具名");
+    expect(prompt).toContain("参数彼此独立的工具调用应在同一个 assistant 响应中一次发出");
+    expect(prompt).toContain("execution.batch=exclusive");
   });
 
   it("AgentRuntime executes a Gateway-driven Core Tool loop", async () => {

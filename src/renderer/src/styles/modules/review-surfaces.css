@@ -429,6 +429,8 @@
 }
 
 .tool-approval-attached {
+  overflow: hidden;
+  border-radius: var(--control-radius-md) var(--control-radius-md) 0 0;
   border-bottom: 1px solid color-mix(in srgb, var(--text-muted) 16%, transparent);
 }
 

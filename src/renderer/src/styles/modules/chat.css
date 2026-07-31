@@ -782,10 +782,16 @@
 
 .user-message-bubble {
   max-width: min(84%, 640px);
+  padding: 6px 11px;
   border: 0;
   border-radius: 8px 8px 2px 8px;
   background: color-mix(in srgb, var(--text-primary) 6%, var(--surface-sunken));
   box-shadow: none;
+}
+
+/* The inline editor supplies its own padding. */
+.user-message-bubble.is-editing {
+  padding: 0;
 }
 
 :root[data-color-scheme="dark"] .user-message-bubble {

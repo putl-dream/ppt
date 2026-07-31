@@ -173,6 +173,9 @@ export function buildToolsSection(input: ToolsSectionInput): string {
     : "目录会把当前上下文相关项排在前面，任何已注册 Skill 都保留在目录中；只有实际工具清单提供加载能力时才能展开全文。";
   const guidance = [
     "- 用最直接的能力完成任务，不要为了遵守阶段模板而制造额外 Task、文件或模型轮次。",
+    "- 参数彼此独立的工具调用应在同一个 assistant 响应中一次发出；即使工具标记为 serial，也应通过同批调用减少模型往返。",
+    "- 如果某个调用的参数依赖兄弟调用的结果，必须等待结果后在下一轮调用；execution.batch=exclusive 的工具必须单独调用。",
+    "- execution.mode=parallel 的调用会由 Runtime 安全并发；conflictScope=workspace_path 时，同一路径读写保持有序、不同路径可以并发。",
   ];
   const availableFileTools = input.enabledTools.filter((tool) =>
     tool.permission?.effects.some((effect) =>

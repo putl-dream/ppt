@@ -149,12 +149,26 @@ export interface ToolPresentationBehavior<TArgs = unknown> {
   isRequired?: (args: TArgs) => boolean;
 }
 
+export interface ToolConcurrencyBehavior<TArgs = unknown> {
+  /** Only explicitly opted-in tools may execute alongside sibling calls. */
+  mode: "parallel";
+  /**
+   * Calls whose resource-key sets intersect are placed in different waves.
+   * An empty set means the tool owns no mutable runtime resource shared with
+   * sibling calls. Keys are runtime-only and are never accepted from models.
+   */
+  resourceKeys?: (args: TArgs, context: ToolContext) => ReadonlyArray<string>;
+  /** Short model-facing explanation of the conflict boundary. */
+  conflictScope?: "workspace_path";
+}
+
 export interface ToolRuntimeBehavior<TArgs = unknown> {
   capabilities?: ReadonlyArray<ToolRuntimeCapability>;
   completion?: ToolCompletionBehavior;
   background?: ToolBackgroundBehavior<TArgs>;
   delegation?: ToolDelegationBehavior<TArgs>;
   presentation?: ToolPresentationBehavior<TArgs>;
+  concurrency?: ToolConcurrencyBehavior<TArgs>;
   /**
    * The tool has already enforced content-exact rendered previews for every
    * visual source in its proposal, so the legacy command render loop must not

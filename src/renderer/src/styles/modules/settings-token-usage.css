@@ -10,7 +10,6 @@
   gap: 18px;
   padding: 12px 0;
   border: 0;
-  border-bottom: 1px solid var(--border-subtle);
   border-radius: 0;
   background: transparent;
 }
@@ -64,16 +63,6 @@
   gap: 5px;
   padding: 15px 10px 13px;
   text-align: center;
-}
-
-.token-usage-metric + .token-usage-metric::before {
-  content: "";
-  position: absolute;
-  top: 12px;
-  bottom: 12px;
-  left: 0;
-  width: 1px;
-  background: var(--border-default);
 }
 
 .token-usage-metric strong {

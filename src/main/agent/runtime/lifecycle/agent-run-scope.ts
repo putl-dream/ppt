@@ -429,16 +429,17 @@ export class AgentRunScope {
       return workspace;
     }
 
-    const activeToolUse = inflight?.activeToolUse
+    const activeToolUses = inflight?.activeToolUses
+      ?? (inflight?.activeToolUse ? [inflight.activeToolUse] : undefined)
       ?? (
-        this.recovered?.version === 1
-          ? this.recovered.activeToolUse
-          : undefined
+        this.recovered?.version === 1 && this.recovered.activeToolUse
+          ? [this.recovered.activeToolUse]
+          : []
       );
-    if (
-      activeToolUse
-      && !workspace.toolResults.some((result) => result.toolUseId === activeToolUse.id)
-    ) {
+    for (const activeToolUse of activeToolUses) {
+      if (workspace.toolResults.some((result) => result.toolUseId === activeToolUse.id)) {
+        continue;
+      }
       workspace.toolResults.push(interruptedToolResult(activeToolUse.id));
       this.session.appendTranscript({
         role: "system",
@@ -489,12 +490,14 @@ export class AgentRunScope {
   setInflightQuery(
     phase: DurableQueryInflightSnapshot["phase"],
     workspace: AgentIterationWorkspace,
-    activeToolUse?: import("../../gateway/types").AgentModelToolUseBlock,
+    activeToolUses?: readonly import("../../gateway/types").AgentModelToolUseBlock[],
   ): void {
     this.inflightQuery = {
       phase,
       workspace: iterationWorkspaceSnapshot(workspace),
-      ...(activeToolUse ? { activeToolUse: structuredClone(activeToolUse) } : {}),
+      ...(activeToolUses?.length
+        ? { activeToolUses: structuredClone([...activeToolUses]) }
+        : {}),
     };
   }
 

@@ -6,10 +6,11 @@
   color: var(--text-primary);
   word-break: break-word;
 }
+/* Padding belongs to .user-message-bubble; keep the markdown body flush. */
 .markdown-body.user-message-text {
   font-size: 14px;
   line-height: 1.6;
-  padding: 12px 16px;
+  padding: 0;
 }
 .markdown-body > :first-child {
   margin-top: 0;
@@ -136,7 +137,7 @@
   color: var(--text-muted);
 }
 .markdown-body.user-message-text {
-  padding: 11px 15px;
+  padding: 0;
   font-size: 14px;
   line-height: 1.65;
 }

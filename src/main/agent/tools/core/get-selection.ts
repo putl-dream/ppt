@@ -17,6 +17,7 @@ export const getSelectionTool: ToolDefinition<
   category: "core",
   loadPolicy: "core",
   inputSchema: getSelectionSchema,
+  behavior: { concurrency: { mode: "parallel" } },
   risk: "low",
   execute: async (_, context) => {
     return {

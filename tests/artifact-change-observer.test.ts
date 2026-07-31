@@ -17,6 +17,10 @@ import { PresentationLifecycleOrchestrator } from
   "@main/presentation-lifecycle/presentation-lifecycle-orchestrator";
 import { PresentationLifecycleRepository } from
   "@main/presentation-lifecycle/presentation-lifecycle-repository";
+import { PresentationLifecycleToolBridge } from
+  "@main/presentation-lifecycle/presentation-lifecycle-tool-bridge";
+import type { ArtifactChangeObserverPort } from
+  "@main/presentation-lifecycle/artifact-change-observer-types";
 import {
   readFileContract,
   writeFileContract,
@@ -364,6 +368,63 @@ describe("PresentationArtifactChangeObserver", () => {
 });
 
 describe("artifact change observer boundaries", () => {
+  it("serializes lifecycle observations issued by concurrent tools", async () => {
+    const fixture = await createLifecycle("bridge-queue");
+    let active = 0;
+    let peak = 0;
+    const events: string[] = [];
+    let releaseFirst!: () => void;
+    let firstStarted!: () => void;
+    const gate = new Promise<void>((resolve) => { releaseFirst = resolve; });
+    const started = new Promise<void>((resolve) => { firstStarted = resolve; });
+    const observer: ArtifactChangeObserverPort = {
+      async observe(input) {
+        const path = input.paths?.[0] ?? "unknown";
+        active += 1;
+        peak = Math.max(peak, active);
+        events.push(`start:${path}`);
+        if (path === "first.svg") {
+          firstStarted();
+          await gate;
+        }
+        events.push(`end:${path}`);
+        active -= 1;
+      },
+    };
+    const bridge = new PresentationLifecycleToolBridge(
+      fixture.orchestrator,
+      asProjectId("project-bridge-queue"),
+      fixture.presentationId,
+      asQueryId("query-bridge-queue"),
+      "Create",
+      undefined,
+      observer,
+    );
+
+    const first = bridge.observeArtifactChanges({
+      workspaceRoot: fixture.workspaceRoot,
+      paths: ["first.svg"],
+      source: "agent_write",
+    });
+    await started;
+    const second = bridge.observeArtifactChanges({
+      workspaceRoot: fixture.workspaceRoot,
+      paths: ["second.svg"],
+      source: "agent_write",
+    });
+    await Promise.resolve();
+    expect(peak).toBe(1);
+    expect(events).toEqual(["start:first.svg"]);
+    releaseFirst();
+    await Promise.all([first, second]);
+    expect(events).toEqual([
+      "start:first.svg",
+      "end:first.svg",
+      "start:second.svg",
+      "end:second.svg",
+    ]);
+  });
+
   it("notifies the same observer for project reads and edits", async () => {
     const directory = await mkdtemp(join(tmpdir(), "ppt-project-observer-"));
     temporaryDirectories.push(directory);

@@ -41,6 +41,7 @@ implements PptLifecycleToolBridge {
 
   private readonly presentationId: PresentationId;
   private readonly artifactChangeObserver: ArtifactChangeObserverPort;
+  private artifactObservationTail: Promise<void> = Promise.resolve();
   /**
    * A resumed waiting-user Query may continue without repeating
    * BeginPptCapability, but that implicit resume is valid only at the first
@@ -57,20 +58,27 @@ implements PptLifecycleToolBridge {
   async observeArtifactChanges(
     input: Parameters<PptLifecycleToolBridge["observeArtifactChanges"]>[0],
   ): Promise<void> {
-    const projection = this.orchestrator.getProjection(this.presentationId);
-    if (
-      !projection
-      || projection.queryId !== this.queryId
-      || projection.status !== "running"
-    ) {
-      return;
-    }
-    await this.artifactChangeObserver.observe({
-      presentationId: this.presentationId,
-      workspaceRoot: input.workspaceRoot,
-      paths: input.paths,
-      source: input.source,
+    const observation = this.artifactObservationTail.then(async () => {
+      const projection = this.orchestrator.getProjection(this.presentationId);
+      if (
+        !projection
+        || projection.queryId !== this.queryId
+        || projection.status !== "running"
+      ) {
+        return;
+      }
+      await this.artifactChangeObserver.observe({
+        presentationId: this.presentationId,
+        workspaceRoot: input.workspaceRoot,
+        paths: input.paths,
+        source: input.source,
+      });
     });
+    this.artifactObservationTail = observation.then(
+      () => undefined,
+      () => undefined,
+    );
+    await observation;
   }
 
   beginCapability(input: {

@@ -92,6 +92,7 @@ export const searchSlideImagesTool: ToolDefinition<
     JSON.stringify({ slideId: "slide-5", query: "industrial robot assembly line", visualKind: "evidence" }),
   ],
   behavior: {
+    concurrency: { mode: "parallel" },
     presentation: {
       allowedCapabilities: ["create", "edit", "restyle"],
     },

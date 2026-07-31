@@ -59,6 +59,51 @@ export type ToolPreflightOutcome =
 export class ToolPreflight {
   constructor(private readonly registry: ToolRegistry) {}
 
+  concurrencyDescriptor(
+    toolCall: AgentModelToolUseBlock,
+    context: ToolContext,
+  ): { resourceKeys: readonly string[] } | undefined {
+    if (toolCall.parseError) return undefined;
+    const requestedTool = this.registry.get(toolCall.name);
+    if (
+      !requestedTool
+      || requestedTool.category !== "core"
+      || requestedTool.loadPolicy !== "core"
+      || requestedTool.behavior?.completion
+    ) {
+      return undefined;
+    }
+    const requestedArgs = parseDefinedToolInput(requestedTool, toolCall.input);
+    if (!requestedArgs.success) return undefined;
+
+    let tool = requestedTool;
+    let args = requestedArgs.data;
+    const delegation = requestedTool.behavior?.delegation;
+    if (delegation) {
+      try {
+        const resolved = delegation.resolve(args, context);
+        const target = this.registry.get(resolved.toolName);
+        if (!target || target.behavior?.completion || target.behavior?.delegation) {
+          return undefined;
+        }
+        const targetArgs = parseDefinedToolInput(target, resolved.input);
+        if (!targetArgs.success) return undefined;
+        tool = target;
+        args = targetArgs.data;
+      } catch {
+        return undefined;
+      }
+    }
+
+    const concurrency = tool.behavior?.concurrency;
+    if (!concurrency || tool.behavior?.background?.isRequested(args)) return undefined;
+    try {
+      return { resourceKeys: [...new Set(concurrency.resourceKeys?.(args, context) ?? [])] };
+    } catch {
+      return undefined;
+    }
+  }
+
   requiresExclusiveBatch(
     toolCall: AgentModelToolUseBlock,
     context: ToolContext,

@@ -22,7 +22,7 @@ aside {
 
 .left-panel .left-footer {
   background: transparent !important;
-  border-top: 1px solid var(--border-subtle) !important;
+  border-top: none !important;
 }
 
 .right-panel {
@@ -525,24 +525,21 @@ aside {
 }
 
 .workbench-settings-entry {
+  width: calc(100% - 8px);
+  margin-inline: 4px;
   border-top: 0;
-  min-height: 36px;
+  min-height: 30px;
   padding-inline: 10px;
 }
 
 .left-footer {
-  border-top: 1px solid var(--border-subtle);
+  border-top: none;
   padding: 6px 8px;
   background: transparent;
 }
 
 .settings-sidebar-footer {
-  padding: 0;
-  border-top: 0;
-}
-
-.settings-sidebar-footer {
-  padding: 0;
+  padding: 8px 6px;
   border-top: 0;
   background: transparent;
 }
@@ -857,13 +854,13 @@ aside {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  border-top: 1px solid var(--border-default);
+  border-top: none;
   padding: 14px 18px;
-  background: rgba(0, 0, 0, 0.01);
+  background: transparent;
 }
 
 :root[data-color-scheme="dark"] .left-footer {
-  background: rgba(10, 12, 18, 0.3);
+  background: transparent;
 }
 
 .profile-badge {

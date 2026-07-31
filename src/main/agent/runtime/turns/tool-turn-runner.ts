@@ -9,6 +9,25 @@ import {
 } from "../lifecycle/runtime-cancellation";
 import type { AgentIterationWorkspace, AgentQueryState } from "../query/query-types";
 import type { ToolExecutionOutcome } from "../tools/tool-execution-engine";
+import type { PreparedToolCall, ToolPreflightOutcome } from "../tools/tool-preflight";
+
+const MAX_PARALLEL_TOOLS = 4;
+
+type ParallelEntry =
+  | {
+      type: "ready";
+      toolCall: AgentModelToolUseBlock;
+      prepared: PreparedToolCall;
+    }
+  | {
+      type: "preflight";
+      toolCall: AgentModelToolUseBlock;
+      preflight: Exclude<ToolPreflightOutcome, { type: "ready" | "hook_stopped" }>;
+    }
+  | {
+      type: "not_permitted";
+      toolCall: AgentModelToolUseBlock;
+    };
 
 /** Runs claim → checkpoint → preflight → dispatch → interpretation as one transaction. */
 export class ToolTurnRunner {
@@ -59,14 +78,452 @@ export class ToolTurnRunner {
       return { type: "continue" };
     }
 
-    for (const toolCall of toolCalls) {
+    for (let index = 0; index < toolCalls.length;) {
+      const toolCall = toolCalls[index]!;
       throwIfRunCancelled(run.scope.signal, run.params.deps.externalSignal);
-      if (workspace.toolResults.some((result) => result.toolUseId === toolCall.id)) continue;
+      if (workspace.toolResults.some((result) => result.toolUseId === toolCall.id)) {
+        index += 1;
+        continue;
+      }
+      const first = run.input.toolPreflight.concurrencyDescriptor(
+        toolCall,
+        workspace.updatedToolUseContext,
+      );
+      if (first) {
+        const wave = [toolCall];
+        const resourceKeys = new Set(first.resourceKeys);
+        let cursor = index + 1;
+        while (cursor < toolCalls.length && wave.length < MAX_PARALLEL_TOOLS) {
+          const candidate = toolCalls[cursor]!;
+          if (workspace.toolResults.some((result) => result.toolUseId === candidate.id)) {
+            cursor += 1;
+            continue;
+          }
+          const descriptor = run.input.toolPreflight.concurrencyDescriptor(
+            candidate,
+            workspace.updatedToolUseContext,
+          );
+          if (!descriptor || descriptor.resourceKeys.some((key) => resourceKeys.has(key))) break;
+          wave.push(candidate);
+          descriptor.resourceKeys.forEach((key) => resourceKeys.add(key));
+          cursor += 1;
+        }
+        if (wave.length > 1) {
+          const outcome = await this.runParallelWave(run, wave, workspace, state);
+          if (outcome.type === "terminal") return outcome;
+          index = cursor;
+          continue;
+        }
+      }
       const outcome = await this.runOne(run, toolCall, workspace, state);
       if (outcome.type === "terminal") return outcome;
       await run.scope.persistCheckpoint();
+      index += 1;
     }
     return { type: "continue" };
+  }
+
+  private async runParallelWave(
+    run: PreparedAgentRun,
+    toolCalls: readonly AgentModelToolUseBlock[],
+    workspace: AgentIterationWorkspace,
+    state: AgentQueryState,
+  ): Promise<AgentLoopTurnOutcome> {
+    const { scope, params } = run;
+    const { session } = scope;
+    const deps = params.deps;
+    const entries: ParallelEntry[] = [];
+
+    for (const toolCall of toolCalls) {
+      throwIfRunCancelled(scope.signal, deps.externalSignal);
+      run.appendRuntimeEvent("tool_call", {
+        toolUseId: toolCall.id,
+        toolName: toolCall.name,
+        input: structuredClone(toolCall.input),
+        parseError: toolCall.parseError,
+      }, "model_only");
+      const canUseTool = await params.canUseTool(toolCall, workspace.updatedToolUseContext);
+      throwIfRunCancelled(scope.signal, deps.externalSignal);
+      if (!canUseTool) {
+        entries.push({ type: "not_permitted", toolCall });
+        continue;
+      }
+      const preflight = await run.input.toolPreflight.prepare({
+        toolCall,
+        context: workspace.updatedToolUseContext,
+        workspaceRoot: deps.workspaceRoot,
+        threadId: deps.threadId,
+        requestToolApproval: deps.requestToolApproval,
+        signal: scope.signal,
+        policyGuidance: async () => undefined,
+      });
+      throwIfRunCancelled(scope.signal, deps.externalSignal);
+      if (preflight.repairs.length > 0) {
+        run.appendRuntimeEvent("workflow_progress", {
+          type: "tool-input-repaired",
+          toolName: toolCall.name,
+          toolUseId: toolCall.id,
+          repairs: preflight.repairs,
+        }, "internal");
+      }
+      if (preflight.type === "hook_stopped") {
+        for (const sibling of toolCalls) {
+          const result: AgentModelToolResultBlock = {
+            type: "tool_result",
+            toolUseId: sibling.id,
+            isError: true,
+            content: [{
+              type: "text",
+              text: sibling.id === toolCall.id
+                ? preflight.reason
+                : `Tool batch stopped before execution because ${toolCall.name} was blocked by a PreToolUse hook.`,
+            }],
+          };
+          this.recordToolResultBlock(run, workspace, sibling, result);
+          run.emitProgress({
+            type: "tool-state",
+            toolCallId: sibling.id,
+            toolName: sibling.name,
+            status: "failed",
+            message: `工具 ${sibling.name} 未执行`,
+            error: preflight.reason,
+          });
+        }
+        await scope.persistCheckpoint();
+        return { type: "terminal", result: { type: "message", content: preflight.reason } };
+      }
+      if (preflight.type === "ready") {
+        entries.push({ type: "ready", toolCall, prepared: preflight.prepared });
+      } else {
+        entries.push({ type: "preflight", toolCall, preflight });
+      }
+    }
+
+    const ready = entries.filter(
+      (entry): entry is Extract<ParallelEntry, { type: "ready" }> => entry.type === "ready",
+    );
+    if (ready.length > 0) {
+      for (const entry of ready) {
+        scope.applyTransition({ type: "tool_claimed", toolUse: entry.toolCall });
+        run.emitProgress({
+          type: "tool-state",
+          toolCallId: entry.toolCall.id,
+          message: `正在调用工具 ${entry.prepared.tool.name}...`,
+          toolName: entry.prepared.tool.name,
+          status: "running",
+        });
+      }
+      scope.setInflightQuery(
+        "tool_running",
+        workspace,
+        ready.map((entry) => entry.toolCall),
+      );
+      await scope.persistCheckpoint();
+    }
+
+    const hookGates = ready.map(() => deferredVoid());
+    const hookInvoked = ready.map(() => false);
+    const executions = ready.map((entry, index) => {
+      const prior = index === 0 ? Promise.resolve() : hookGates[index - 1]!.promise;
+      const execution = run.input.toolExecutionEngine.execute({
+        tool: entry.prepared.tool,
+        args: entry.prepared.args,
+        context: workspace.updatedToolUseContext,
+        toolCall: entry.toolCall,
+        modelArtifactRoot: deps.workspaceRoot,
+        threadId: deps.threadId,
+        signal: scope.signal,
+        runPostToolUseHook: async (block) => {
+          hookInvoked[index] = true;
+          await prior;
+          try {
+            return await run.input.runPostToolUseHook(block);
+          } finally {
+            hookGates[index]!.resolve();
+          }
+        },
+      });
+      void execution.finally(() => {
+        if (!hookInvoked[index]) {
+          void prior.then(() => hookGates[index]!.resolve());
+        }
+      }).catch(() => undefined);
+      return execution;
+    });
+    const settled = await Promise.allSettled(executions);
+    const cancellation = settled.find(
+      (item) => item.status === "rejected"
+        && isRuntimeCancellation(item.reason, scope.signal, deps.externalSignal),
+    );
+    if (
+      cancellation?.status === "rejected"
+      || scope.signal.aborted
+      || deps.externalSignal?.aborted
+    ) {
+      for (const entry of ready) {
+        run.emitProgress({
+          type: "tool-state",
+          toolCallId: entry.toolCall.id,
+          message: `工具 ${entry.prepared.tool.name} 已取消`,
+          toolName: entry.prepared.tool.name,
+          status: "denied",
+        });
+      }
+      throw cancellation?.status === "rejected"
+        ? cancellation.reason
+        : new Error("Run aborted by user.");
+    }
+
+    const outcomes = new Map<string, ToolExecutionOutcome>();
+    ready.forEach((entry, index) => {
+      const result = settled[index]!;
+      outcomes.set(
+        entry.toolCall.id,
+        result.status === "fulfilled"
+          ? result.value
+          : unexpectedExecutionFailure(entry.toolCall, result.reason),
+      );
+    });
+
+    for (const entry of entries) {
+      let outcome: AgentLoopTurnOutcome;
+      if (entry.type === "ready") {
+        outcome = await this.finalizeExecutionOutcome(
+          run,
+          entry.toolCall,
+          entry.prepared.tool,
+          outcomes.get(entry.toolCall.id)!,
+          workspace,
+          state,
+        );
+      } else if (entry.type === "preflight") {
+        this.finalizePreflightFailure(run, entry.toolCall, entry.preflight, workspace);
+        outcome = { type: "continue" };
+      } else {
+        const result: AgentModelToolResultBlock = {
+          type: "tool_result",
+          toolUseId: entry.toolCall.id,
+          content: [{ type: "text", text: `Tool ${entry.toolCall.name} is not permitted in this query.` }],
+          isError: true,
+        };
+        session.appendTranscript({
+          role: "tool",
+          toolName: entry.toolCall.name,
+          error: textFromResult(result),
+          executionStatus: "not_started",
+          sideEffects: "none",
+        });
+        run.emitProgress({
+          type: "tool-state",
+          toolCallId: entry.toolCall.id,
+          toolName: entry.toolCall.name,
+          status: "denied",
+          message: `工具 ${entry.toolCall.name} 在当前任务中不可用`,
+        });
+        this.recordToolResultBlock(run, workspace, entry.toolCall, result);
+        outcome = { type: "continue" };
+      }
+      if (outcome.type === "terminal") return outcome;
+    }
+    scope.setInflightQuery("model_received", workspace);
+    await scope.persistCheckpoint();
+    return { type: "continue" };
+  }
+
+  private finalizePreflightFailure(
+    run: PreparedAgentRun,
+    toolCall: AgentModelToolUseBlock,
+    preflight: Extract<ParallelEntry, { type: "preflight" }>["preflight"],
+    workspace: AgentIterationWorkspace,
+  ): void {
+    const { session } = run.scope;
+    if (preflight.type === "denied") {
+      run.emitProgress({
+        type: "tool-state",
+        toolCallId: toolCall.id,
+        message: `工具 ${preflight.tool.name} 被拒绝: ${preflight.reason}`,
+        toolName: preflight.tool.name,
+        status: "denied",
+      });
+      session.appendTranscript({
+        role: "tool",
+        toolName: preflight.tool.name,
+        error: preflight.reason,
+        executionStatus: "not_started",
+        sideEffects: "none",
+      });
+      this.recordToolResultBlock(run, workspace, toolCall, preflight.modelResult);
+      return;
+    }
+
+    const text = textFromResult(preflight.outcome.modelResult);
+    if (preflight.kind === "validation_error") {
+      const failures = (workspace.validationFailuresByTool.get(toolCall.name) ?? 0) + 1;
+      workspace.validationFailuresByTool.set(toolCall.name, failures);
+      if (failures <= 2) {
+        run.emitProgress({
+          type: "request-status",
+          message: `正在自动修正工具 ${toolCall.name} 的参数…`,
+          progress: 0,
+        });
+      }
+    } else if (preflight.kind === "policy_blocked") {
+      run.emitProgress({
+        type: "workflow-progress",
+        message: "正在先建立可见任务计划...",
+        progress: 0,
+      });
+    }
+    const status = preflight.kind === "pre_hook_failed"
+      ? "failed"
+      : preflight.kind === "policy_blocked"
+        ? "denied"
+        : "invalid-input";
+    run.emitProgress({
+      type: "tool-state",
+      toolCallId: toolCall.id,
+      toolName: toolCall.name,
+      status,
+      message: preflight.kind === "parse_error"
+        ? `工具 ${toolCall.name} 参数 JSON 解析失败`
+        : preflight.kind === "unavailable"
+          ? `工具 ${toolCall.name} 无法直接调用`
+          : preflight.kind === "validation_error"
+            ? `工具 ${toolCall.name} 参数校验失败`
+            : preflight.kind === "policy_blocked"
+              ? `工具 ${toolCall.name} 被当前任务策略阻止`
+              : `工具 ${toolCall.name} 执行前检查失败`,
+      error: preflight.validationError ?? text,
+    });
+    session.appendTranscript({
+      role: "tool",
+      toolName: toolCall.name,
+      error: text,
+      executionStatus: "not_started",
+      sideEffects: "none",
+    });
+    this.recordToolResultBlock(run, workspace, toolCall, preflight.outcome.modelResult);
+  }
+
+  private async finalizeExecutionOutcome(
+    run: PreparedAgentRun,
+    toolCall: AgentModelToolUseBlock,
+    tool: PreparedToolCall["tool"],
+    outcome: ToolExecutionOutcome,
+    workspace: AgentIterationWorkspace,
+    state: AgentQueryState,
+  ): Promise<AgentLoopTurnOutcome> {
+    const { scope } = run;
+    const outcomeText = textFromResult(outcome.modelResult);
+    if (outcome.executionStatus === "threw") {
+      run.emitProgress({
+        type: "tool-state",
+        toolCallId: toolCall.id,
+        message: `工具 ${tool.name} 执行失败: ${outcomeText}`,
+        toolName: tool.name,
+        status: "failed",
+      });
+      scope.session.appendTranscript({
+        role: "tool",
+        toolName: tool.name,
+        error: outcomeText,
+        sideEffects: outcome.sideEffects,
+      });
+      this.recordToolResultBlock(run, workspace, toolCall, outcome.modelResult);
+      return { type: "continue" };
+    }
+    if (outcome.deliveryStatus === "validation_failed") {
+      run.emitProgress({
+        type: "tool-state",
+        toolCallId: toolCall.id,
+        message: `工具 ${tool.name} 返回结果未通过校验`,
+        toolName: tool.name,
+        status: "invalid-input",
+        error: outcomeText,
+      });
+      scope.session.appendTranscript({
+        role: "tool",
+        toolName: tool.name,
+        error: outcomeText,
+        executionStatus: "returned",
+        sideEffects: outcome.sideEffects,
+      });
+      this.recordToolResultBlock(run, workspace, toolCall, outcome.modelResult);
+      return { type: "continue" };
+    }
+
+    run.emitProgress({
+      type: "tool-state",
+      toolCallId: toolCall.id,
+      message: `工具 ${tool.name} 执行完成。`,
+      toolName: tool.name,
+      status: "completed",
+    });
+    try {
+      const decision = await run.input.presentationCompletionPolicy.interpret({
+        tool,
+        toolUseId: toolCall.id,
+        outcome,
+        context: workspace.updatedToolUseContext,
+        promptStage: workspace.updatedToolUseContext.promptStage,
+        renderFeedbackUsed: workspace.renderFeedbackUsed,
+        emitProgress: (event) => run.emitProgress(event),
+      });
+      if (decision.type === "terminal") {
+        if (decision.modelResult) {
+          this.recordToolResultBlock(run, workspace, toolCall, decision.modelResult);
+        }
+        if (decision.result.type === "ask_user") {
+          scope.setInflightQuery("waiting_user", workspace);
+        } else {
+          scope.stageConversationHistory(state, workspace);
+        }
+        return { type: "terminal", result: decision.result };
+      }
+      if (decision.markRenderFeedbackUsed) workspace.renderFeedbackUsed = true;
+      scope.session.appendTranscript(decision.transcriptEntry);
+      this.recordToolResultBlock(run, workspace, toolCall, decision.modelResult);
+      return { type: "continue" };
+    } catch (error) {
+      rethrowIfRuntimeCancellation(error, scope.signal, run.params.deps.externalSignal);
+      const message = error instanceof Error ? error.message : String(error);
+      const guidance =
+        `Tool ${tool.name} executed successfully, but result post-processing failed: ${message}. `
+        + "Do not retry blindly; inspect durable artifacts first.";
+      scope.session.appendTranscript({
+        role: "tool",
+        toolName: tool.name,
+        result: outcome.validatedResult,
+        postProcessingError: message,
+        executionStatus: "returned",
+      });
+      this.recordToolResultBlock(run, workspace, toolCall, {
+        type: "tool_result",
+        toolUseId: toolCall.id,
+        content: [{ type: "text", text: guidance }],
+      });
+      return { type: "continue" };
+    }
+  }
+
+  private recordToolResultBlock(
+    run: PreparedAgentRun,
+    workspace: AgentIterationWorkspace,
+    toolCall: AgentModelToolUseBlock,
+    result: AgentModelToolResultBlock,
+  ): void {
+    workspace.toolResults.push(structuredClone(result));
+    const decision = run.scope.applyTransition({ type: "tool_processed", result });
+    if (decision !== "commit_before_next") {
+      throw new Error("CheckpointPolicy rejected a normal tool result transition.");
+    }
+    run.scope.setInflightQuery("model_received", workspace);
+    run.appendRuntimeEvent("tool_result", {
+      toolUseId: toolCall.id,
+      toolName: toolCall.name,
+      isError: result.isError === true,
+      content: structuredClone(result.content),
+    }, "model_only");
   }
 
   private async runOne(
@@ -86,7 +543,7 @@ export class ToolTurnRunner {
     };
 
     throwIfCancelled();
-    scope.setInflightQuery("tool_running", workspace, toolCall);
+    scope.setInflightQuery("tool_running", workspace, [toolCall]);
     const claimDecision = scope.applyTransition({ type: "tool_claimed", toolUse: toolCall });
     run.appendRuntimeEvent("tool_call", {
       toolUseId: toolCall.id,
@@ -536,4 +993,36 @@ function throwIfRunCancelled(...signals: Array<AbortSignal | undefined>): void {
   if (signals.some((signal) => signal?.aborted)) {
     throw new Error("Run aborted by user.");
   }
+}
+
+function deferredVoid(): { promise: Promise<void>; resolve: () => void } {
+  let resolve!: () => void;
+  const promise = new Promise<void>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
+
+function unexpectedExecutionFailure(
+  toolCall: AgentModelToolUseBlock,
+  error: unknown,
+): ToolExecutionOutcome {
+  const message = error instanceof Error ? error.message : String(error);
+  return {
+    executionStatus: "threw",
+    sideEffects: "uncertain",
+    deliveryStatus: "delivered",
+    modelResult: {
+      type: "tool_result",
+      toolUseId: toolCall.id,
+      isError: true,
+      content: [{
+        type: "text",
+        text: `Tool ${toolCall.name} failed outside its normal error boundary: ${message}. `
+          + "Side effects are uncertain; inspect durable artifacts before retrying.",
+      }],
+    },
+    error: message,
+    warnings: [],
+  };
 }

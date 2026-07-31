@@ -40,6 +40,7 @@ export const readPresentationSnapshotTool: ToolDefinition<
   category: "core",
   loadPolicy: "core",
   inputSchema: readPresentationSnapshotSchema,
+  behavior: { concurrency: { mode: "parallel" } },
   outputSchema: readPresentationSnapshotOutputSchema,
   mapResultToModelContent: (result) => JSON.stringify({
     presentation: {

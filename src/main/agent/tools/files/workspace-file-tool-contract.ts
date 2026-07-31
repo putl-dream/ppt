@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { posix } from "node:path";
+import { normalize, posix, resolve } from "node:path";
 import {
   WORKSPACE_FILE_TOOL_PERMISSION_PROFILES,
   type ToolPermissionProfile,
@@ -112,6 +112,7 @@ export const readFileContract: WorkspaceFileToolContract<
   outputSchema: readFileOutputSchema,
   risk: "low",
   permission: WORKSPACE_FILE_TOOL_PERMISSION_PROFILES.ReadFile,
+  behavior: workspacePathParallelBehavior(),
   isEnabled: hasWorkspaceFileService,
   execute: async (args, context) => {
     await observeArtifactChange(context, [args.path], "agent_read");
@@ -154,6 +155,7 @@ export const writeFileContract: WorkspaceFileToolContract<
   inputSchema: writeFileSchema,
   outputSchema: writeFileOutputSchema,
   behavior: {
+    ...workspacePathParallelBehavior(),
     presentation: {
       allowedCapabilities: ["create", "edit", "restyle"],
       isRequired: (args) => isPresentationOwnedWorkspacePath(args.path),
@@ -184,6 +186,7 @@ export const editFileContract: WorkspaceFileToolContract<
   inputSchema: editFileSchema,
   outputSchema: editFileOutputSchema,
   behavior: {
+    ...workspacePathParallelBehavior(),
     presentation: {
       allowedCapabilities: ["create", "edit", "restyle"],
       isRequired: (args) => isPresentationOwnedWorkspacePath(args.path),
@@ -216,6 +219,19 @@ export const workspaceFileToolContracts = [
 
 function hasWorkspaceFileService(context: WorkspaceFileToolContext): boolean {
   return Boolean(context.workspaceRoot && context.fileService);
+}
+
+function workspacePathParallelBehavior(): ToolRuntimeBehavior<{ path: string }> {
+  return {
+    concurrency: {
+      mode: "parallel",
+      conflictScope: "workspace_path",
+      resourceKeys: (args, context) => {
+        const absolute = normalize(resolve(context.workspaceRoot ?? ".", args.path));
+        return [`workspace-path:${process.platform === "win32" ? absolute.toLowerCase() : absolute}`];
+      },
+    },
+  };
 }
 
 function isPresentationOwnedWorkspacePath(input: string): boolean {

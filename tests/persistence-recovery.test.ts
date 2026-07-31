@@ -39,6 +39,7 @@ import {
   asProposalId,
   asQueryId,
 } from "../src/shared/presentation-lifecycle";
+import { asRunId, asThreadId } from "../src/main/agent/runtime/query/query-types";
 
 function gatewayFor(turns: AgentModelContentBlock[][]): AgentModelGateway & {
   requests: AgentModelRequest[];
@@ -353,6 +354,79 @@ describe("durable agent recovery", () => {
       toolUseId: "uncertain-tool",
       isError: true,
     });
+  });
+
+  it("pairs every unfinished tool in a recovered concurrent wave", async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), "agent-tool-wave-recovery-"));
+    const toolUses = [
+      { type: "tool_use" as const, id: "uncertain-a", name: "WriteFile", input: {} },
+      { type: "tool_use" as const, id: "uncertain-b", name: "WriteFile", input: {} },
+    ];
+    const userMessage = { role: "user" as const, content: [{ type: "text" as const, text: "write" }] };
+    const assistantMessage = { role: "assistant" as const, content: toolUses };
+    const now = new Date().toISOString();
+    await new DurableRunStore(workspaceRoot).save({
+      version: 2,
+      threadId: asThreadId("interrupted-wave-thread"),
+      queryId: asQueryId("interrupted-wave-query"),
+      lastRunId: asRunId("interrupted-wave-run"),
+      status: "running",
+      phase: "tool_running",
+      request: "write",
+      baseRevision: 0,
+      transcript: [{ role: "user", content: "write" }],
+      pendingUserContent: [],
+      discoveredToolNames: [],
+      loadedSkillNames: [],
+      committedState: {
+        messages: [userMessage],
+        turnCount: 0,
+        maxOutputTokensRecoveryCount: 0,
+        hasAttemptedReactiveCompact: false,
+        renderFeedbackUsed: false,
+        validationFailuresByTool: [],
+      },
+      inflight: {
+        phase: "tool_running",
+        workspace: {
+          messagesForQuery: [userMessage],
+          assistantMessages: [assistantMessage],
+          toolUseBlocks: toolUses,
+          toolResults: [],
+          userContent: [],
+          followUpMessages: [],
+          needsFollowUp: false,
+          maxOutputTokensRecoveryCount: 0,
+          hasAttemptedReactiveCompact: false,
+          renderFeedbackUsed: false,
+          validationFailuresByTool: [],
+        },
+        activeToolUses: toolUses,
+      },
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const gateway = gatewayFor([[{ type: "text", text: "reconciled" }]]);
+    await new AgentRuntime(new ToolRegistry(), gateway).run({
+      threadId: "interrupted-wave-thread",
+      runId: "replacement-wave-run",
+      request: "continue",
+      presentationSnapshot: createStarterPresentation(),
+      selectedElementIds: [],
+      workspaceRoot,
+      startMode: { type: "resume_query", reason: "crash_recovery" },
+    });
+
+    const recoveredResults = gateway.requests[0]!.messages!
+      .flatMap((message) => message.content)
+      .filter((block) => block.type === "tool_result");
+    expect(recoveredResults.map((result) => result.toolUseId)).toEqual([
+      "uncertain-a",
+      "uncertain-b",
+    ]);
+    expect(recoveredResults.every((result) => result.isError)).toBe(true);
+    await rm(workspaceRoot, { recursive: true, force: true });
   });
 
   it("replays a model_streaming attempt instead of committing an empty turn", async () => {

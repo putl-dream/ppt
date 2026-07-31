@@ -15,6 +15,7 @@ export const webSearchTool: ToolDefinition<typeof webSearchSchema, WebSearchOutp
   category: "core",
   loadPolicy: "core",
   inputSchema: webSearchSchema,
+  behavior: { concurrency: { mode: "parallel" } },
   risk: "low",
   permission: {
     profile: "web-search",

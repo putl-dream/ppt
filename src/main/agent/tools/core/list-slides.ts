@@ -38,6 +38,7 @@ export const listSlidesTool: ToolDefinition<
   category: "core",
   loadPolicy: "core",
   inputSchema: listSlidesSchema,
+  behavior: { concurrency: { mode: "parallel" } },
   outputSchema: listSlidesOutputSchema,
   risk: "low",
   execute: async (_, context) => {

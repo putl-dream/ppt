@@ -14,6 +14,11 @@ export interface ToolCard {
   parameterSummary: Record<string, { type: string; description: string; required: boolean }>;
   examples: string[];
   approvalRequired: boolean;
+  execution: {
+    batch: "allowed" | "exclusive";
+    mode: "serial" | "parallel";
+    conflictScope?: "workspace_path";
+  };
 }
 
 function isSchemaRecord(value: unknown): value is Record<string, unknown> {
@@ -67,5 +72,14 @@ export function toToolCard(definition: ToolDefinition<any, any>): ToolCard {
     parameterSummary: paramSummary,
     examples: definition.examples ?? [],
     approvalRequired,
+    execution: {
+      batch: definition.behavior?.completion?.exclusiveBatch
+        ? "exclusive"
+        : "allowed",
+      mode: definition.behavior?.concurrency?.mode ?? "serial",
+      ...(definition.behavior?.concurrency?.conflictScope
+        ? { conflictScope: definition.behavior.concurrency.conflictScope }
+        : {}),
+    },
   };
 }

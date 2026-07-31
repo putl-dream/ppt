@@ -144,6 +144,9 @@ export interface DurableQueryLifecycleSnapshot {
 export interface DurableQueryInflightSnapshot {
   phase: "model_streaming" | "model_received" | "tool_running" | "waiting_user";
   workspace: DurableIterationWorkspaceSnapshot;
+  /** Canonical v2 representation for one serial call or a concurrent wave. */
+  activeToolUses?: AgentModelToolUseBlock[];
+  /** Backward-compatible reader for checkpoints written before concurrent waves. */
   activeToolUse?: AgentModelToolUseBlock;
 }
 
