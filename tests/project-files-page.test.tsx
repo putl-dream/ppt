@@ -175,7 +175,7 @@ describe("ProjectFilesPageContent", () => {
     expect(html).toContain("阶段：预览");
     expect(html).toContain("Proposal：等待审批");
     expect(html).toContain("请确认页面预览");
-    expect(html).toContain("1 个生命周期产物待更新");
+    expect(html).toContain("1 个产物待更新");
   });
 
   it("derives committed and stale file badges from the PptJob projection", () => {
