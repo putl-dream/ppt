@@ -166,7 +166,7 @@
 .user-message-editor-hint,
 .user-message-editor-shortcut {
   color: var(--text-muted);
-  font-size: 10.5px;
+  font-size: 11px;
   line-height: 1.4;
 }
 
@@ -180,7 +180,7 @@
   border-radius: var(--button-border-radius);
   color: var(--text-primary);
   font-family: var(--font-body);
-  font-size: 13.5px;
+  font-size: 14px;
   line-height: 1.6;
   padding: 12px 14px;
   resize: none;
@@ -540,7 +540,7 @@
   border: none;
   background: transparent;
   color: var(--text-secondary);
-  font-size: 11.5px;
+  font-size: 12px;
   cursor: pointer;
   text-align: left;
 }
@@ -560,7 +560,7 @@
 .task-plan-card-title {
   overflow: hidden;
   color: var(--text-primary);
-  font-size: 11.5px;
+  font-size: 12px;
   font-weight: var(--font-weight-semibold);
   line-height: 1.35;
   text-overflow: ellipsis;
@@ -570,7 +570,7 @@
 .task-plan-card-activity {
   overflow: hidden;
   color: var(--text-muted);
-  font-size: 10.5px;
+  font-size: 11px;
   line-height: 1.35;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -605,7 +605,7 @@
 
 .task-plan-card-goal-text {
   margin: 0;
-  font-size: 11.5px;
+  font-size: 12px;
   line-height: 1.5;
   color: var(--text-secondary);
   white-space: pre-wrap;
@@ -627,7 +627,7 @@
   gap: 8px;
   min-height: 34px;
   padding: 4px 2px;
-  font-size: 11.5px;
+  font-size: 12px;
   line-height: 1.45;
   color: var(--text-secondary);
 }
@@ -685,7 +685,7 @@
 
 .task-plan-item-title {
   color: var(--text-primary);
-  font-size: 11.5px;
+  font-size: 12px;
 }
 
 .task-plan-item--completed .task-plan-item-title {
@@ -929,7 +929,7 @@
   border: 1px solid var(--accent-primary);
   border-radius: var(--control-radius-xs);
   color: var(--text-primary);
-  font-size: 13.5px;
+  font-size: 14px;
   padding: 2px 6px;
   width: 100%;
 }

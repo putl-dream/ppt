@@ -1,56 +1,49 @@
-/* Custom model management */
+/*
+ * Custom model management. Rendered only inside the settings console, so it
+ * follows the same surface ramp: page = raised, cards/controls = overlay.
+ */
+
 .model-management-layout {
-  width: min(680px, 100%);
-  display: flex;
-  flex-direction: column;
+  width: 100%;
+  display: grid;
   gap: 12px;
 }
 
-.cursor-model-heading h3 {
-  margin: 0 0 8px 8px;
-  font-size: 17px;
-  font-weight: 700;
-  color: var(--text-primary);
-}
-
 .cursor-model-card {
-  padding: 12px 14px 10px;
-  border-radius: var(--card-border-radius);
-  background: #f2f2f2;
-}
-
-.dark-theme .cursor-model-card {
-  background: rgba(255, 255, 255, 0.06);
+  padding: 12px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--panel-border-radius);
+  background: var(--surface-overlay);
 }
 
 .cursor-model-search-row {
   display: grid;
-  grid-template-columns: 1fr 32px;
-  gap: 14px;
+  grid-template-columns: minmax(0, 1fr) 30px;
+  gap: 10px;
   align-items: center;
   margin-bottom: 10px;
 }
 
 .cursor-model-search {
   width: 100%;
-  height: 31px;
+  height: 34px;
   padding: 0 12px;
-  border: 1px solid rgba(0, 0, 0, 0.14);
-  border-radius: 3px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--field-border-radius);
   background: var(--surface-sunken);
   color: var(--text-primary);
-  font-size: 13px;
+  font-size: var(--text-base);
   font-family: var(--font-body);
+  outline: none;
+  transition: border-color 0.14s ease;
 }
 
-.dark-theme .cursor-model-search {
-  border-color: rgba(255, 255, 255, 0.16);
-  background: rgba(0, 0, 0, 0.2);
-  color: var(--text-primary);
+.cursor-model-search:focus {
+  border-color: var(--accent-primary);
 }
 
 .cursor-model-search::placeholder {
-  color: #a5a5a5;
+  color: var(--text-muted);
 }
 
 .cursor-model-add-btn {
@@ -66,8 +59,8 @@
   background: var(--surface-sunken);
   color: var(--text-primary);
   font-family: var(--font-body);
-  font-size: 12px;
-  font-weight: 600;
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-semibold);
   cursor: pointer;
   transition: background 0.14s ease, border-color 0.14s ease, color 0.14s ease;
 }
@@ -83,19 +76,15 @@
   display: grid;
   place-items: center;
   border: none;
-  border-radius: 5px;
+  border-radius: var(--field-border-radius);
   background: transparent;
   color: var(--text-secondary);
   cursor: pointer;
 }
 
 .cursor-model-icon-btn:hover {
-  background: rgba(0, 0, 0, 0.05);
+  background: var(--surface-hover);
   color: var(--text-primary);
-}
-
-.dark-theme .cursor-model-icon-btn:hover {
-  background: rgba(255, 255, 255, 0.08);
 }
 
 .cursor-model-list {
@@ -104,16 +93,12 @@
 }
 
 .cursor-model-row {
-  min-height: 42px;
+  min-height: 40px;
   display: grid;
   grid-template-columns: minmax(0, 1fr) 30px auto;
   gap: 8px;
   align-items: center;
-  border-top: 1px solid rgba(0, 0, 0, 0.045);
-}
-
-.dark-theme .cursor-model-row {
-  border-top-color: rgba(255, 255, 255, 0.08);
+  border-top: 1px solid var(--border-default);
 }
 
 .cursor-model-row:first-child {
@@ -121,7 +106,7 @@
 }
 
 .cursor-model-row.selected .cursor-model-name-btn {
-  font-weight: 600;
+  font-weight: var(--font-weight-semibold);
 }
 
 .cursor-model-name-btn {
@@ -131,7 +116,7 @@
   border: none;
   background: transparent;
   color: var(--text-primary);
-  font-size: 12.5px;
+  font-size: var(--text-base);
   font-family: var(--font-body);
   text-align: left;
   cursor: pointer;
@@ -141,7 +126,7 @@
 }
 
 .cursor-model-name-btn:hover {
-  color: var(--accent-green);
+  color: var(--accent-primary);
 }
 
 .cursor-model-edit-btn {
@@ -174,31 +159,33 @@
 }
 
 .cursor-model-toggle .toggle-slider {
-  background: #c4c4c4;
-  border: none;
+  background: var(--surface-raised);
+  border: 1px solid var(--border-strong);
+  transition: background 0.14s ease, border-color 0.14s ease;
 }
 
 .cursor-model-toggle .toggle-slider:before {
-  width: 14px;
-  height: 14px;
+  width: 12px;
+  height: 12px;
   left: 2px;
   bottom: 2px;
-  background: var(--text-on-accent);
+  background: var(--text-muted);
 }
 
 .cursor-model-toggle input:checked + .toggle-slider {
-  background: #27956e;
-  border-color: #27956e;
+  background: var(--accent-primary);
+  border-color: var(--accent-primary);
 }
 
 .cursor-model-toggle input:checked + .toggle-slider:before {
   transform: translateX(12px);
+  background: var(--text-on-accent);
 }
 
 .cursor-model-empty {
   padding: 12px 0 8px;
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 
 .cursor-model-view-all {
@@ -206,13 +193,14 @@
   padding: 0;
   border: none;
   background: transparent;
-  color: var(--accent-primary);
-  font-size: 12px;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
   font-family: var(--font-body);
   cursor: pointer;
 }
 
 .cursor-model-view-all:hover {
+  color: var(--text-primary);
   text-decoration: underline;
 }
 
@@ -226,13 +214,17 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 10px 8px;
+  padding: 9px 2px;
   border: none;
   background: transparent;
-  color: var(--text-primary);
-  font-size: 13px;
+  color: var(--text-secondary);
+  font-size: var(--text-base);
   font-family: var(--font-body);
   cursor: pointer;
+}
+
+.cursor-api-trigger:hover {
+  color: var(--text-primary);
 }
 
 .cursor-api-trigger svg:first-child {
@@ -246,7 +238,7 @@
 
 .cursor-api-panel {
   position: relative;
-  margin-top: 6px;
+  margin-top: 4px;
   padding-right: 62px;
 }
 
@@ -267,7 +259,7 @@
   display: grid;
   place-items: center;
   padding: 24px;
-  background: rgba(15, 23, 42, 0.34);
+  background: rgba(0, 0, 0, 0.55);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
 }
@@ -279,10 +271,10 @@
   flex-direction: column;
   gap: 18px;
   padding: 20px;
-  border: 1px solid var(--border-focused);
-  border-radius: var(--button-border-radius);
-  background: var(--surface-raised);
-  box-shadow: var(--elevation-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--panel-border-radius);
+  background: var(--surface-overlay);
+  box-shadow: var(--elevation-3);
   overflow-y: auto;
   animation: modelDialogIn 0.18s ease-out;
 }
@@ -308,14 +300,14 @@
 .model-dialog-header h3 {
   margin: 0;
   color: var(--text-primary);
-  font-size: 16px;
-  font-weight: 700;
+  font-size: var(--text-lg);
+  font-weight: var(--font-weight-semibold);
 }
 
 .model-dialog-header p {
   margin: 5px 0 0;
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 
 .model-dialog-close-btn {
@@ -327,8 +319,8 @@
   border-radius: var(--field-border-radius);
   background: transparent;
   color: var(--text-muted);
-  font-size: 16px;
-  font-weight: 700;
+  font-size: var(--text-lg);
+  font-weight: var(--font-weight-bold);
   line-height: 1;
   cursor: pointer;
 }
@@ -358,8 +350,8 @@
   background: color-mix(in srgb, var(--danger) 8%, transparent);
   color: var(--danger);
   font-family: var(--font-body);
-  font-size: 12px;
-  font-weight: 600;
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-semibold);
   cursor: pointer;
 }
 
@@ -386,10 +378,6 @@
 }
 
 @media (max-width: 720px) {
-  .model-management-layout {
-    width: 100%;
-  }
-
   .model-form-grid {
     grid-template-columns: 1fr;
   }
@@ -403,64 +391,3 @@
     margin-top: 14px;
   }
 }
-
-.settings-console-container .model-management-layout {
-  width: 100%;
-  display: grid;
-  gap: 12px;
-}
-
-.settings-console-container .cursor-model-heading h3 {
-  margin: 0;
-  color: var(--text-primary);
-  font-size: 14px;
-  font-weight: var(--font-weight-semibold);
-}
-
-.settings-console-container .cursor-model-card {
-  padding: 12px;
-  border: 1px solid var(--border-default);
-  border-radius: var(--panel-border-radius);
-  background: var(--surface-sunken);
-}
-
-.dark-theme .settings-console-container .cursor-model-card {
-  background: var(--surface-sunken);
-}
-
-.settings-console-container .cursor-model-search-row {
-  grid-template-columns: minmax(0, 1fr) 30px;
-  gap: 10px;
-}
-
-.settings-console-container .cursor-model-search {
-  height: 34px;
-  border-color: var(--border-default);
-  border-radius: var(--field-border-radius);
-  background: var(--surface-sunken);
-  color: var(--text-primary);
-}
-
-.settings-console-container .cursor-model-row {
-  min-height: 40px;
-  border-top-color: var(--border-default);
-}
-
-.settings-console-container .cursor-model-view-all {
-  color: var(--text-secondary);
-}
-
-.settings-console-container .cursor-api-trigger {
-  padding: 9px 2px;
-  color: var(--text-secondary);
-}
-
-.settings-console-container .cursor-api-trigger:hover {
-  color: var(--text-primary);
-}
-
-.settings-console-container .cursor-api-panel {
-  margin-top: 4px;
-}
-
-

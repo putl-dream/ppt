@@ -1,4 +1,4 @@
-﻿/* ==========================================================================
+/* ==========================================================================
    PPT mirror workspace (moved from overlays-presentation)
    ========================================================================== */
 
@@ -371,7 +371,7 @@
   min-width: 0;
   overflow: hidden;
   color: var(--text-primary);
-  font-size: 11.5px;
+  font-size: 12px;
   font-weight: var(--font-weight-semibold);
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -571,7 +571,7 @@
   min-width: 0;
   overflow: hidden;
   color: var(--text-secondary);
-  font-size: 9.5px;
+  font-size: 10px;
   font-weight: var(--font-weight-medium);
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -599,7 +599,7 @@
 }
 
 .mirror-panel.is-expanded .mirror-card-title {
-  font-size: 10.5px;
+  font-size: 11px;
 }
 
 

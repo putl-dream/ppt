@@ -15,4 +15,6 @@
   --ide-label-width: 168px;
   --ide-control-height: 28px;
   --ide-radius: var(--control-radius-xs);
+  /* Settings content stays readable instead of stretching across a wide window. */
+  --ide-content-width: 880px;
 }

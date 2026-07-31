@@ -233,7 +233,7 @@ button.chat-session-crumb:hover {
 .team-session-card-status {
   gap: 6px;
   color: var(--text-muted);
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 600;
 }
 
@@ -272,14 +272,14 @@ button.chat-session-crumb:hover {
   overflow: hidden;
   color: var(--text-muted);
   font-family: var(--font-mono);
-  font-size: 9.5px;
+  font-size: 10px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .team-session-card-title {
   overflow: hidden;
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: var(--font-weight-semibold);
   line-height: 1.35;
   text-overflow: ellipsis;
@@ -289,7 +289,7 @@ button.chat-session-crumb:hover {
 .team-session-card-activity {
   overflow: hidden;
   color: var(--text-secondary);
-  font-size: 11.5px;
+  font-size: 12px;
   line-height: 1.45;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -441,7 +441,7 @@ button.chat-session-crumb:hover {
   gap: 8px 16px;
   margin-top: 16px;
   color: var(--text-muted);
-  font-size: 10.5px;
+  font-size: 11px;
   flex-wrap: wrap;
 }
 
@@ -478,7 +478,7 @@ button.chat-session-crumb:hover {
   border: 1px dashed var(--border-focused);
   border-radius: var(--button-border-radius);
   color: var(--text-muted);
-  font-size: 11.5px;
+  font-size: 12px;
   text-align: center;
 }
 
@@ -501,12 +501,12 @@ button.chat-session-crumb:hover {
 
 .lead-waiting-state strong {
   color: var(--text-primary);
-  font-size: 11.5px;
+  font-size: 12px;
 }
 
 .lead-waiting-state small {
   color: var(--text-muted);
-  font-size: 10.5px;
+  font-size: 11px;
 }
 
 .lead-waiting-state-dots {

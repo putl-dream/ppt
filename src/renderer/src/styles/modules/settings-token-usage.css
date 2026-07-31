@@ -1,4 +1,4 @@
-﻿.token-usage-shell {
+.token-usage-shell {
   display: grid;
   gap: 16px;
 }
@@ -96,7 +96,7 @@
 .token-usage-metric small {
   min-height: 14px;
   color: var(--text-muted);
-  font-size: 9.5px;
+  font-size: 10px;
   line-height: 1.35;
 }
 
@@ -124,7 +124,7 @@
 .token-activity-header p {
   margin: 5px 0 0;
   color: var(--text-muted);
-  font-size: 10.5px;
+  font-size: 11px;
 }
 
 .token-activity-actions,
@@ -141,7 +141,7 @@
   background: transparent;
   color: var(--text-muted);
   font-family: var(--font-body);
-  font-size: 11.5px;
+  font-size: 12px;
   font-weight: var(--font-weight-medium);
   cursor: pointer;
   transition: color 0.14s ease, background 0.14s ease;
@@ -306,7 +306,7 @@
   border: 1px dashed var(--border-default);
   border-radius: var(--button-border-radius);
   color: var(--text-muted);
-  font-size: 11.5px;
+  font-size: 12px;
   text-align: center;
 }
 

@@ -13,10 +13,10 @@
   --surface-canvas: #0b0c0e;
   --surface-base: #111316;
   --surface-raised: #16181c;
-  --surface-overlay: #1c1f24;
-  --surface-sunken: #0d0e11;
-  --surface-hover: rgba(255, 255, 255, 0.04);
-  --surface-active: rgba(255, 255, 255, 0.07);
+  --surface-sunken: #1c1f24;
+  --surface-overlay: #23272e;
+  --surface-hover: rgba(255, 255, 255, 0.05);
+  --surface-active: rgba(255, 255, 255, 0.08);
 
   --text-primary: #f4f5f6;
   --text-secondary: #a8b0b8;

@@ -4,12 +4,18 @@
  */
 
 :root {
-  /* Surfaces — assigned by skin */
+  /*
+   * Surfaces — assigned by skin. Ordered by elevation, not by lightness:
+   * canvas < base < raised < sunken < overlay.
+   * In a dark skin every step above `raised` gets lighter, so `sunken` reads as
+   * a mild lift on a page and as a recess inside an `overlay` card. Making
+   * `sunken` darker than `raised` here would turn every input into a black hole.
+   */
   --surface-canvas: var(--raw-neutral-975);
   --surface-base: var(--raw-neutral-900);
   --surface-raised: var(--raw-neutral-850);
-  --surface-overlay: var(--raw-neutral-800);
-  --surface-sunken: var(--raw-neutral-950);
+  --surface-sunken: var(--raw-neutral-800);
+  --surface-overlay: var(--raw-neutral-750);
   --surface-hover: rgba(255, 255, 255, 0.04);
   --surface-active: rgba(255, 255, 255, 0.07);
 

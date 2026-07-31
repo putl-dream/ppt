@@ -199,10 +199,6 @@ export function ModelManagement({
 
   return (
     <div className="model-management-layout settings-panel-fade">
-      <div className="cursor-model-heading">
-        <h3>模型列表</h3>
-      </div>
-
       <section className="cursor-model-card">
         <div className="cursor-model-search-row">
           <input

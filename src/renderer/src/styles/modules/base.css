@@ -20,8 +20,10 @@ body {
   color: var(--text-primary);
   background-color: var(--surface-canvas);
   overflow: hidden;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+  /*
+   * No -webkit-font-smoothing override: on Windows it replaces ClearType
+   * subpixel AA with grayscale AA, which renders small UI text thin and blurry.
+   */
   transition: var(--transition-panel);
 }
 

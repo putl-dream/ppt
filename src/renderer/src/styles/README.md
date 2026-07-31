@@ -43,13 +43,18 @@ When a module stays above ~400–600 lines and covers multiple concerns, split i
 
 ## Studio surfaces (dark)
 
+Ordered by **elevation, not lightness**: `canvas < base < raised < sunken < overlay`.
+In a dark skin every step above `raised` gets lighter, so `sunken` reads as a mild
+lift on a page and as a recess inside an `overlay` card. Never give `sunken` a value
+darker than `raised` in a near-black skin — that turns every input into a black hole.
+
 | Token | Role |
 |-------|------|
 | `--surface-canvas` | Window chrome / app background |
 | `--surface-base` | Titlebar + sidebar (continuous chrome) |
-| `--surface-raised` | Floating main canvas, cards |
-| `--surface-overlay` | Menus, composer card |
-| `--surface-sunken` | Inputs, code blocks |
+| `--surface-raised` | Floating main canvas, settings page |
+| `--surface-sunken` | Inputs, code blocks, inset controls |
+| `--surface-overlay` | Composer, cards on a page, menus |
 | `--elevation-1/2/3` | Soft depth (prefer over hard borders) |
 
 ## Typography scale
