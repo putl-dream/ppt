@@ -1,12 +1,8 @@
 import React from "react";
 import {
-  BrainIcon,
-  CheckCircleIcon,
   FolderIcon,
   MoonIcon,
   PaletteIcon,
-  RefreshIcon,
-  SettingsIcon,
   SunIcon,
   UploadIcon,
 } from "./Icons";
@@ -68,86 +64,52 @@ interface SettingsConsoleProps {
 }
 
 const categoryMeta: Record<SettingsCategory, { title: string }> = {
-  "models-list": {
-    title: "模型列表",
-  },
-  "models-search": {
-    title: "搜索与联网",
-  },
-  "models-runtime": {
-    title: "运行参数",
-  },
-  "preferences-presentation": {
-    title: "演示文档默认项",
-  },
-  "preferences-storage": {
-    title: "存储与目录",
-  },
-  "preferences-appearance": {
-    title: "界面外观（UI）",
-  },
-  "agent-approval": {
-    title: "提交与审批",
-  },
-  "agent-limits": {
-    title: "调用频率限制",
-  },
-  "agent-logs": {
-    title: "系统日志",
-  },
-  "usage-overview": {
-    title: "用量统计与趋势",
-  },
+  "models-list": { title: "模型列表" },
+  "models-search": { title: "搜索与联网" },
+  "models-runtime": { title: "运行参数" },
+  "preferences-presentation": { title: "演示文档默认项" },
+  "preferences-storage": { title: "存储与目录" },
+  "preferences-appearance": { title: "界面外观" },
+  "agent-approval": { title: "提交与审批" },
+  "agent-limits": { title: "调用频率限制" },
+  "agent-logs": { title: "系统日志" },
+  "usage-overview": { title: "用量统计与趋势" },
 };
 
-function SettingsCardHeader({
-  icon,
-  title,
-  meta,
-}: {
-  icon?: React.ReactNode;
-  title: string;
-  meta?: React.ReactNode;
-}) {
-  return (
-    <div className="settings-card-header">
-      {icon && <div className="settings-card-icon">{icon}</div>}
-      <div className="settings-card-title-block">
-        <h3>{title}</h3>
-      </div>
-      {meta && <div className="settings-card-meta">{meta}</div>}
-    </div>
-  );
-}
-
-function SettingRow({
-  title,
+function IdeRow({
+  label,
   muted = false,
   children,
 }: {
-  title: string;
+  label: string;
   muted?: boolean;
   children: React.ReactNode;
 }) {
   return (
-    <div className={`setting-row ${muted ? "is-muted" : ""}`}>
-      <div className="setting-row-copy">
-        <div className="setting-row-title">{title}</div>
-      </div>
-      <div className="setting-row-control">{children}</div>
+    <div className={`ide-row${muted ? " is-muted" : ""}`}>
+      <div className="ide-row-label">{label}</div>
+      <div className="ide-row-control">{children}</div>
     </div>
   );
 }
 
-function ThemePreview({ mode }: { mode: UiThemeMode }) {
+function IdeSection({
+  title,
+  hint,
+  children,
+}: {
+  title: string;
+  hint?: React.ReactNode;
+  children: React.ReactNode;
+}) {
   return (
-    <div className={`settings-theme-preview settings-theme-preview--${mode}`}>
-      <span className="settings-theme-sidebar" />
-      <span className="settings-theme-content">
-        <span />
-        <span />
-      </span>
-    </div>
+    <section className="ide-section">
+      <div className="ide-section-title">
+        <h3>{title}</h3>
+        {hint ? <span className="ide-hint">{hint}</span> : null}
+      </div>
+      {children}
+    </section>
   );
 }
 
@@ -157,10 +119,10 @@ const accentOptions: Array<{ value: UiAccentColor; label: string; color: string 
   { value: "orange", label: "珊瑚橙", color: "#f97316" },
 ];
 
-const controlShapeOptions: Array<{ value: UiControlShape; label: string; radius: string }> = [
-  { value: "sharp", label: "利落", radius: "4px" },
-  { value: "soft", label: "柔和", radius: "8px" },
-  { value: "round", label: "圆润", radius: "14px" },
+const controlShapeOptions: Array<{ value: UiControlShape; label: string }> = [
+  { value: "sharp", label: "利落" },
+  { value: "soft", label: "柔和" },
+  { value: "round", label: "圆润" },
 ];
 
 const SUPPORTED_LOGO_TYPES = new Set(["image/png", "image/jpeg", "image/gif"]);
@@ -171,10 +133,10 @@ const themeModeOptions: Array<{
   label: string;
   icon: React.ReactNode;
 }> = [
-  { value: "cyan", label: "青色主题", icon: <PaletteIcon size={14} /> },
-  { value: "orange", label: "橙色主题", icon: <PaletteIcon size={14} /> },
-  { value: "light", label: "浅色主题", icon: <SunIcon size={14} /> },
-  { value: "dark", label: "暗色主题", icon: <MoonIcon size={14} /> },
+  { value: "light", label: "浅色", icon: <SunIcon size={13} /> },
+  { value: "dark", label: "暗色", icon: <MoonIcon size={13} /> },
+  { value: "cyan", label: "青色", icon: <PaletteIcon size={13} /> },
+  { value: "orange", label: "橙色", icon: <PaletteIcon size={13} /> },
 ];
 
 export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
@@ -214,7 +176,7 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
   const currentMeta = categoryMeta[activeCategory];
   const selectedAccentLabel = accentOptions.find((option) => option.value === uiAccentColor)?.label ?? "湖蓝";
   const selectedShapeLabel = controlShapeOptions.find((option) => option.value === uiControlShape)?.label ?? "柔和";
-  const selectedThemeModeLabel = themeModeOptions.find((option) => option.value === themeMode)?.label ?? "浅色主题";
+  const selectedThemeModeLabel = themeModeOptions.find((option) => option.value === themeMode)?.label ?? "浅色";
   const selectedColorSchemeName = typeof selectedDesignSystem.colorScheme === "string"
     ? selectedDesignSystem.colorScheme
     : selectedDesignSystem.colorScheme.name ?? "custom";
@@ -288,28 +250,25 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
   };
 
   return (
-    <div className="settings-console-container">
-      <div className="settings-layout-grid">
-        <header className="settings-page-header">
-          <div>
-            <h1>{currentMeta.title}</h1>
-          </div>
-          {activeCategory !== "usage-overview" && (
-            <div className={`settings-header-pill ${saveStatus === "saving" ? "is-saving" : ""}`}>
-              {saveStatus === "saving" ? <RefreshIcon size={15} /> : <CheckCircleIcon size={15} />}
-              <span>{saveStatus === "saving" ? "正在保存" : "本地已保存"}</span>
-            </div>
-          )}
+    <div className="ide-page settings-console-container">
+      <div className="ide-page-inner">
+        <header className="ide-page-header">
+          <h1 className="ide-page-title">{currentMeta.title}</h1>
+          {activeCategory !== "usage-overview" ? (
+            <span className={`ide-status${saveStatus === "saving" ? " is-saving" : ""}`}>
+              {saveStatus === "saving" ? "保存中…" : "已保存"}
+            </span>
+          ) : null}
         </header>
 
-        {activeCategory === "usage-overview" && (
-          <div className="settings-panel-fade">
+        {activeCategory === "usage-overview" ? (
+          <div className="ide-panel">
             <TokenUsageOverview models={models} selectedModelId={selectedModelId} />
           </div>
-        )}
+        ) : null}
 
-        {activeCategory === "models-list" && (
-          <div className="settings-panel-fade">
+        {activeCategory === "models-list" ? (
+          <div className="ide-panel">
             <ModelManagement
               models={models}
               selectedModelId={selectedModelId}
@@ -319,134 +278,102 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
               triggerToast={triggerToast}
             />
           </div>
-        )}
+        ) : null}
 
-        {activeCategory === "models-search" && (
-          <div className="settings-panel-fade">
-            <section className="settings-card">
-              <SettingsCardHeader
-                icon={<BrainIcon size={16} />}
-                title="搜索与联网"
-                meta={<span>可选</span>}
-              />
-
-              <div className="settings-form-stack">
-                <label className="config-group">
-                  <span className="config-label">Tavily API Key</span>
-                  <input
-                    className="config-input"
-                    type="password"
-                    value={agentGatewayPreferences.webSearchApiKey ?? ""}
-                    placeholder="tvly-...（也可设置 TAVILY_API_KEY）"
-                    onChange={(event) => setAgentGatewayPreferences({
-                      ...agentGatewayPreferences,
-                      webSearchApiKey: event.target.value || undefined,
-                    })}
-                    onBlur={(event) => commitOptionalGatewayText("webSearchApiKey", event.target.value)}
-                  />
-                </label>
-
-                <label className="config-group">
-                  <span className="config-label">Search Endpoint</span>
-                  <input
-                    className="config-input"
-                    value={agentGatewayPreferences.webSearchEndpoint ?? ""}
-                    placeholder="https://api.tavily.com/search"
-                    onChange={(event) => setAgentGatewayPreferences({
-                      ...agentGatewayPreferences,
-                      webSearchEndpoint: event.target.value || undefined,
-                    })}
-                    onBlur={(event) => commitOptionalGatewayText("webSearchEndpoint", event.target.value)}
-                  />
-                </label>
-              </div>
-            </section>
+        {activeCategory === "models-search" ? (
+          <div className="ide-panel">
+            <IdeSection title="搜索与联网" hint="可选">
+              <IdeRow label="Tavily API Key">
+                <input
+                  className="ide-field"
+                  type="password"
+                  value={agentGatewayPreferences.webSearchApiKey ?? ""}
+                  placeholder="tvly-...（也可设置 TAVILY_API_KEY）"
+                  onChange={(event) => setAgentGatewayPreferences({
+                    ...agentGatewayPreferences,
+                    webSearchApiKey: event.target.value || undefined,
+                  })}
+                  onBlur={(event) => commitOptionalGatewayText("webSearchApiKey", event.target.value)}
+                />
+              </IdeRow>
+              <IdeRow label="Search Endpoint">
+                <input
+                  className="ide-field"
+                  value={agentGatewayPreferences.webSearchEndpoint ?? ""}
+                  placeholder="https://api.tavily.com/search"
+                  onChange={(event) => setAgentGatewayPreferences({
+                    ...agentGatewayPreferences,
+                    webSearchEndpoint: event.target.value || undefined,
+                  })}
+                  onBlur={(event) => commitOptionalGatewayText("webSearchEndpoint", event.target.value)}
+                />
+              </IdeRow>
+            </IdeSection>
           </div>
-        )}
+        ) : null}
 
-        {activeCategory === "models-runtime" && (
-          <div className="settings-panel-fade">
-            <section className="settings-card">
-              <SettingsCardHeader
-                icon={<SettingsIcon size={16} />}
-                title="运行参数"
-                meta={<span>{enabledModelCount} 个模型可用</span>}
-              />
-
-              <div className="settings-form-stack">
-                <label className="config-group">
-                  <div className="settings-field-topline">
-                    <span className="config-label">最长等待时间</span>
-                    <span className="settings-field-value">{Math.round(agentGatewayPreferences.timeoutMs / 1000)} 秒</span>
-                  </div>
-                  <input
-                    className="settings-range"
-                    type="range"
-                    min={60}
-                    max={900}
-                    step={30}
-                    value={Math.round(agentGatewayPreferences.timeoutMs / 1000)}
-                    onChange={(event) => setAgentGatewayPreferences({
-                      ...agentGatewayPreferences,
-                      timeoutMs: parseInt(event.target.value, 10) * 1000,
-                    })}
-                  />
-                </label>
-
-                <label className="config-group">
-                  <span className="config-label">单次输出长度上限</span>
-                  <input
-                    className="config-input"
-                    type="number"
-                    min={MIN_OUTPUT_TOKENS}
-                    max={MAX_OUTPUT_TOKENS}
-                    step={1024}
-                    value={maxOutputTokensDraft}
-                    onChange={(event) => setMaxOutputTokensDraft(event.target.value)}
-                    onBlur={commitMaxOutputTokens}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter") event.currentTarget.blur();
-                    }}
-                  />
-                </label>
-
-                <label className="config-group">
-                  <span className="config-label">服务繁忙时备用模型</span>
-                  <select
-                    className="model-select"
-                    value={agentGatewayPreferences.fallbackModelId ?? ""}
-                    onChange={(event) => setAgentGatewayPreferences({
-                      ...agentGatewayPreferences,
-                      fallbackModelId: event.target.value || undefined,
-                    })}
-                  >
-                    <option value="">不启用</option>
-                    {models
-                      .filter((model) => model.id !== selectedModelId && isModelEnabled(model))
-                      .map((model) => (
-                        <option key={model.id} value={model.id}>
-                          {model.name} ({model.model})
-                        </option>
-                      ))}
-                  </select>
-                </label>
-              </div>
-            </section>
-          </div>
-        )}
-
-        {activeCategory === "agent-approval" && (
-          <div className="settings-panel-fade">
-            <section className="settings-card">
-              <SettingsCardHeader
-                icon={<CheckCircleIcon size={16} />}
-                title="提交与审批（CommitGate）"
-              />
-
-              <label className="config-group">
-                <span className="config-label">审批模式</span>
+        {activeCategory === "models-runtime" ? (
+          <div className="ide-panel">
+            <IdeSection title="运行参数" hint={`${enabledModelCount} 个模型可用`}>
+              <IdeRow label="最长等待时间">
+                <span className="ide-field-value">{Math.round(agentGatewayPreferences.timeoutMs / 1000)} 秒</span>
+                <input
+                  className="ide-range"
+                  type="range"
+                  min={60}
+                  max={900}
+                  step={30}
+                  value={Math.round(agentGatewayPreferences.timeoutMs / 1000)}
+                  onChange={(event) => setAgentGatewayPreferences({
+                    ...agentGatewayPreferences,
+                    timeoutMs: parseInt(event.target.value, 10) * 1000,
+                  })}
+                />
+              </IdeRow>
+              <IdeRow label="单次输出长度上限">
+                <input
+                  className="ide-field"
+                  type="number"
+                  min={MIN_OUTPUT_TOKENS}
+                  max={MAX_OUTPUT_TOKENS}
+                  step={1024}
+                  value={maxOutputTokensDraft}
+                  onChange={(event) => setMaxOutputTokensDraft(event.target.value)}
+                  onBlur={commitMaxOutputTokens}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") event.currentTarget.blur();
+                  }}
+                />
+              </IdeRow>
+              <IdeRow label="服务繁忙时备用模型">
                 <select
-                  className="model-select"
+                  className="ide-select"
+                  value={agentGatewayPreferences.fallbackModelId ?? ""}
+                  onChange={(event) => setAgentGatewayPreferences({
+                    ...agentGatewayPreferences,
+                    fallbackModelId: event.target.value || undefined,
+                  })}
+                >
+                  <option value="">不启用</option>
+                  {models
+                    .filter((model) => model.id !== selectedModelId && isModelEnabled(model))
+                    .map((model) => (
+                      <option key={model.id} value={model.id}>
+                        {model.name} ({model.model})
+                      </option>
+                    ))}
+                </select>
+              </IdeRow>
+            </IdeSection>
+          </div>
+        ) : null}
+
+        {activeCategory === "agent-approval" ? (
+          <div className="ide-panel">
+            <IdeSection title="提交与审批（CommitGate）">
+              <IdeRow label="审批模式">
+                <select
+                  className="ide-select"
                   value={executionStrategy}
                   onChange={(event) => setExecutionStrategy(
                     event.target.value as AgentExecutionStrategy,
@@ -455,309 +382,243 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
                   <option value="REQUEST_APPROVAL">手动确认每次修改</option>
                   <option value="AUTO">自动应用低风险修改</option>
                 </select>
-                <span className="settings-help-text">
-                  自动模式仅直接应用低风险提案；中高风险修改仍由 CommitGate 请求确认。
-                </span>
-              </label>
-            </section>
+              </IdeRow>
+              <p className="ide-hint">
+                自动模式仅直接应用低风险提案；中高风险修改仍由 CommitGate 请求确认。
+              </p>
+            </IdeSection>
           </div>
-        )}
+        ) : null}
 
-        {activeCategory === "agent-limits" && (
-          <div className="settings-panel-fade">
-            <section className="settings-card">
-              <SettingsCardHeader
-                icon={<BrainIcon size={16} />}
-                title="调用频率限制"
-              />
-
-              <SettingRow title="启用调用次数限制">
+        {activeCategory === "agent-limits" ? (
+          <div className="ide-panel">
+            <IdeSection title="调用频率限制">
+              <IdeRow label="启用调用次数限制">
                 <label className="toggle-switch">
                   <input
                     type="checkbox"
                     checked={agentStepLimits.enabled}
-                    onChange={(event) => setAgentStepLimits({ ...agentStepLimits, enabled: event.target.checked })}
+                    onChange={(event) => setAgentStepLimits({
+                      ...agentStepLimits,
+                      enabled: event.target.checked,
+                    })}
                   />
                   <span className="toggle-slider" />
                 </label>
-              </SettingRow>
-
-              <div className={`settings-form-stack ${agentStepLimits.enabled ? "" : "is-disabled"}`}>
-                <label className="config-group">
-                  <div className="settings-field-topline">
-                    <span className="config-label">主 Agent 单次上限</span>
-                    <span className="settings-field-value">{agentStepLimits.mainMaxSteps} 次</span>
-                  </div>
-                  <input
-                    className="settings-range"
-                    type="range"
-                    min="8"
-                    max="80"
-                    step="1"
-                    value={agentStepLimits.mainMaxSteps}
-                    disabled={!agentStepLimits.enabled}
-                    onChange={(event) => setAgentStepLimits({
-                      ...agentStepLimits,
-                      mainMaxSteps: parseInt(event.target.value, 10),
-                    })}
-                  />
-                </label>
-
-                <label className="config-group">
-                  <div className="settings-field-topline">
-                    <span className="config-label">子 Agent 单次上限</span>
-                    <span className="settings-field-value">{agentStepLimits.subMaxSteps} 次</span>
-                  </div>
-                  <input
-                    className="settings-range"
-                    type="range"
-                    min="4"
-                    max="40"
-                    step="1"
-                    value={agentStepLimits.subMaxSteps}
-                    disabled={!agentStepLimits.enabled}
-                    onChange={(event) => setAgentStepLimits({
-                      ...agentStepLimits,
-                      subMaxSteps: parseInt(event.target.value, 10),
-                    })}
-                  />
-                </label>
-              </div>
-            </section>
-
+              </IdeRow>
+              <IdeRow label="主 Agent 单次上限" muted={!agentStepLimits.enabled}>
+                <span className="ide-field-value">{agentStepLimits.mainMaxSteps} 次</span>
+                <input
+                  className="ide-range"
+                  type="range"
+                  min="8"
+                  max="80"
+                  step="1"
+                  value={agentStepLimits.mainMaxSteps}
+                  disabled={!agentStepLimits.enabled}
+                  onChange={(event) => setAgentStepLimits({
+                    ...agentStepLimits,
+                    mainMaxSteps: parseInt(event.target.value, 10),
+                  })}
+                />
+              </IdeRow>
+              <IdeRow label="子 Agent 单次上限" muted={!agentStepLimits.enabled}>
+                <span className="ide-field-value">{agentStepLimits.subMaxSteps} 次</span>
+                <input
+                  className="ide-range"
+                  type="range"
+                  min="4"
+                  max="40"
+                  step="1"
+                  value={agentStepLimits.subMaxSteps}
+                  disabled={!agentStepLimits.enabled}
+                  onChange={(event) => setAgentStepLimits({
+                    ...agentStepLimits,
+                    subMaxSteps: parseInt(event.target.value, 10),
+                  })}
+                />
+              </IdeRow>
+            </IdeSection>
           </div>
-        )}
+        ) : null}
 
-        {activeCategory === "agent-logs" && (
-          <div className="settings-panel-fade">
+        {activeCategory === "agent-logs" ? (
+          <div className="ide-panel">
             <LogManagementPanel notify={triggerToast} />
           </div>
-        )}
+        ) : null}
 
-        {activeCategory === "preferences-storage" && (
-          <div className="settings-panel-fade">
-            <section className="settings-card settings-preferences-storage">
-              <SettingsCardHeader
-                icon={<FolderIcon size={16} />}
-                title="存储与目录"
-              />
-
-              <div className="settings-path-display">
-                <FolderIcon size={15} />
-                <span title={localStoragePath}>{localStoragePath || "尚未打开项目目录"}</span>
-                <button className="settings-secondary-btn" onClick={() => void handleOpenWorkspace()}>
-                  打开目录
-                </button>
-              </div>
-            </section>
-
-          </div>
-        )}
-
-        {activeCategory === "preferences-presentation" && (
-          <div className="settings-panel-fade">
-            <section className="settings-card settings-preferences-presentation">
-              <SettingsCardHeader
-                icon={<PaletteIcon size={16} />}
-                title="演示文档默认项"
-              />
-
-              <div className="settings-choice-grid">
-                <button
-                  className="settings-choice-card active"
-                  type="button"
-                >
-                  <span className="settings-ratio-preview settings-ratio-preview--wide" />
-                  <span>16:9 宽屏</span>
-                </button>
-              </div>
-              <p className="settings-help-text">当前画布与 PPTX 导出统一采用 16:9 宽屏比例。</p>
-
-              <div className="settings-inline-grid">
-                <label className="config-group">
-                  <span className="config-label">默认设计系统</span>
-                  <select
-                    value={selectedDesignSystem.visualStyle}
-                    onChange={(event) => {
-                      const preset = DESIGN_PRESETS.find((item) => item.id === event.target.value);
-                      if (preset) setSelectedDesignSystem(preset.system);
-                    }}
-                    className="model-select"
-                  >
-                    {DESIGN_PRESETS.map((preset) => (
-                      <option key={preset.id} value={preset.id}>{preset.label}</option>
-                    ))}
-                  </select>
-                </label>
-                <div className="config-group">
-                  <span className="config-label">当前设计语言</span>
-                  <span>
-                    {selectedDesignSystem.argumentMode} · {selectedDesignSystem.visualStyle} ·{" "}
-                    {selectedDesignSystem.readingMode} · {selectedColorSchemeName}
+        {activeCategory === "preferences-storage" ? (
+          <div className="ide-panel">
+            <IdeSection title="存储与目录">
+              <IdeRow label="项目目录">
+                <div className="ide-path">
+                  <FolderIcon size={14} />
+                  <span className="ide-path-text" title={localStoragePath}>
+                    {localStoragePath || "尚未打开项目目录"}
                   </span>
+                  <button
+                    type="button"
+                    className="ide-btn-secondary"
+                    onClick={() => void handleOpenWorkspace()}
+                  >
+                    打开目录
+                  </button>
                 </div>
-              </div>
+              </IdeRow>
+            </IdeSection>
+          </div>
+        ) : null}
 
-              <div className="config-group">
-                <span className="config-label">品牌水印 Logo</span>
+        {activeCategory === "preferences-presentation" ? (
+          <div className="ide-panel">
+            <IdeSection title="演示文档默认项">
+              <IdeRow label="画布比例">
+                <span className="ide-hint">16:9 宽屏（当前唯一导出比例）</span>
+              </IdeRow>
+              <IdeRow label="默认设计系统">
+                <select
+                  className="ide-select"
+                  value={selectedDesignSystem.visualStyle}
+                  onChange={(event) => {
+                    const preset = DESIGN_PRESETS.find((item) => item.id === event.target.value);
+                    if (preset) setSelectedDesignSystem(preset.system);
+                  }}
+                >
+                  {DESIGN_PRESETS.map((preset) => (
+                    <option key={preset.id} value={preset.id}>{preset.label}</option>
+                  ))}
+                </select>
+              </IdeRow>
+              <IdeRow label="当前设计语言">
+                <span className="ide-hint">
+                  {selectedDesignSystem.argumentMode} · {selectedDesignSystem.visualStyle} ·{" "}
+                  {selectedDesignSystem.readingMode} · {selectedColorSchemeName}
+                </span>
+              </IdeRow>
+              <IdeRow label="品牌水印 Logo">
                 {logoUrl ? (
                   <div className="settings-logo-preview">
                     <img src={logoUrl} alt="Logo" />
-                    <button className="settings-secondary-btn" onClick={onRemoveLogo}>
+                    <button type="button" className="ide-btn-secondary" onClick={onRemoveLogo}>
                       移除 Logo
                     </button>
                   </div>
                 ) : (
-                  <button className="logo-dropzone settings-logo-dropzone" onClick={handleLogoUploadReal}>
+                  <button
+                    type="button"
+                    className="logo-dropzone settings-logo-dropzone"
+                    onClick={handleLogoUploadReal}
+                  >
                     <input
                       type="file"
                       ref={logoFileInputRef}
                       onChange={handleLogoFileChange}
                       accept="image/png,image/jpeg,image/gif"
                     />
-                    <UploadIcon size={18} className="upload-icon" />
+                    <UploadIcon size={16} className="upload-icon" />
                     <span>选择品牌 Logo</span>
                   </button>
                 )}
-              </div>
-            </section>
+              </IdeRow>
+            </IdeSection>
           </div>
-        )}
+        ) : null}
 
-        {activeCategory === "preferences-appearance" && (
-          <div className="settings-panel-fade">
-            <div className="settings-section-heading">
-              <h2>界面外观</h2>
-              <p>以下设置只改变软件自身的皮肤与控件，不影响导出的演示文档。</p>
-            </div>
-            <section className="settings-card">
-              <SettingsCardHeader
-                icon={<SunIcon size={16} />}
-                title="主题色"
-                meta={<span>{selectedThemeModeLabel}</span>}
-              />
+        {activeCategory === "preferences-appearance" ? (
+          <div className="ide-panel">
+            <p className="ide-hint">只改变软件自身皮肤与控件，不影响导出的演示文档。</p>
 
-              <div className="settings-theme-grid">
-                {themeModeOptions.map((option) => (
-                  <button
-                    key={option.value}
-                    className={`settings-theme-card ${themeMode === option.value ? "active" : ""}`}
-                    onClick={() => setThemeMode(option.value)}
-                    aria-pressed={themeMode === option.value}
-                  >
-                    <ThemePreview mode={option.value} />
-                    <span>{option.icon} {option.label}</span>
-                  </button>
-                ))}
-              </div>
-            </section>
-
-            <section className="settings-card">
-              <SettingsCardHeader
-                icon={<PaletteIcon size={16} />}
-                title="界面重点色"
-              />
-
-              <div className="settings-accent-grid">
-                {accentOptions.map((option) => (
-                  <button
-                    key={option.value}
-                    className={`settings-accent-card ${uiAccentColor === option.value ? "active" : ""}`}
-                    onClick={() => setUiAccentColor(option.value)}
-                    aria-pressed={uiAccentColor === option.value}
-                  >
-                    <span className="settings-accent-swatch" style={{ background: option.color }} />
-                    <span>{option.label}</span>
-                  </button>
-                ))}
-              </div>
-            </section>
-
-            <section className="settings-card">
-              <SettingsCardHeader
-                icon={<SettingsIcon size={16} />}
-                title="控件形状"
-              />
-
-              <div className="settings-control-shape-grid">
-                {controlShapeOptions.map((option) => (
-                  <button
-                    key={option.value}
-                    className={`settings-control-shape-card ${uiControlShape === option.value ? "active" : ""}`}
-                    onClick={() => setUiControlShape(option.value)}
-                    aria-pressed={uiControlShape === option.value}
-                  >
-                    <span className="settings-shape-preview" style={{ borderRadius: option.radius }}>
-                      <span />
-                      <span />
-                    </span>
-                    <span>{option.label}</span>
-                  </button>
-                ))}
-              </div>
-            </section>
-
-            <section className="settings-card">
-              <SettingsCardHeader
-                icon={<SettingsIcon size={16} />}
-                title="界面参数"
-              />
-
-              <div className="settings-form-stack">
-                <label className="config-group">
-                  <div className="settings-field-topline">
-                    <span className="config-label">内容区域圆角</span>
-                    <span className="settings-field-value">{Math.round(18 * borderRadiusScale)}px</span>
-                  </div>
-                  <input
-                    className="settings-range"
-                    type="range"
-                    min="0"
-                    max="2.2"
-                    step="0.1"
-                    value={borderRadiusScale}
-                    onChange={(event) => setBorderRadiusScale(parseFloat(event.target.value))}
-                  />
-                </label>
-
-                <label className="config-group">
-                  <div className="settings-field-topline">
-                    <span className="config-label">双层背景明暗偏置</span>
-                    <span className="settings-field-value">
-                      {colorContrastOffset > 0 ? `+${colorContrastOffset}` : colorContrastOffset}%
-                    </span>
-                  </div>
-                  <input
-                    className="settings-range"
-                    type="range"
-                    min="-10"
-                    max="15"
-                    step="1"
-                    value={colorContrastOffset}
-                    onChange={(event) => setColorContrastOffset(parseInt(event.target.value, 10))}
-                  />
-                </label>
-              </div>
-            </section>
-
-            <section className="settings-card settings-preview-card">
-              <SettingsCardHeader
-                icon={<PaletteIcon size={16} />}
-                title="实时预览"
-              />
-              <div className="settings-preview-surface">
-                <div className="settings-preview-icon">
-                  <BrainIcon size={15} />
+            <IdeSection title="主题色" hint={selectedThemeModeLabel}>
+              <IdeRow label="界面主题">
+                <div className="ide-choice-group" role="group" aria-label="界面主题">
+                  {themeModeOptions.map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      className={`ide-choice${themeMode === option.value ? " is-active" : ""}`}
+                      onClick={() => setThemeMode(option.value)}
+                      aria-pressed={themeMode === option.value}
+                    >
+                      {option.icon}
+                      <span>{option.label}</span>
+                    </button>
+                  ))}
                 </div>
-                <div>
-                  <strong>Agent Canvas Card</strong>
-                  <span>{selectedThemeModeLabel} · {selectedAccentLabel} · {selectedShapeLabel} · 内容圆角 {Math.round(18 * borderRadiusScale)}px</span>
+              </IdeRow>
+            </IdeSection>
+
+            <IdeSection title="界面重点色" hint={selectedAccentLabel}>
+              <IdeRow label="强调色">
+                <div className="ide-choice-group" role="group" aria-label="强调色">
+                  {accentOptions.map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      className={`ide-choice${uiAccentColor === option.value ? " is-active" : ""}`}
+                      onClick={() => setUiAccentColor(option.value)}
+                      aria-pressed={uiAccentColor === option.value}
+                    >
+                      <span className="ide-swatch" style={{ background: option.color }} />
+                      <span>{option.label}</span>
+                    </button>
+                  ))}
                 </div>
-                <span className="settings-preview-badge">Active</span>
-              </div>
-            </section>
+              </IdeRow>
+            </IdeSection>
+
+            <IdeSection title="控件形状" hint={selectedShapeLabel}>
+              <IdeRow label="圆角风格">
+                <div className="ide-choice-group" role="group" aria-label="控件形状">
+                  {controlShapeOptions.map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      className={`ide-choice${uiControlShape === option.value ? " is-active" : ""}`}
+                      onClick={() => setUiControlShape(option.value)}
+                      aria-pressed={uiControlShape === option.value}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+              </IdeRow>
+            </IdeSection>
+
+            <IdeSection title="界面参数">
+              <IdeRow label="内容区域圆角">
+                <span className="ide-field-value">{Math.round(18 * borderRadiusScale)}px</span>
+                <input
+                  className="ide-range"
+                  type="range"
+                  min="0"
+                  max="2.2"
+                  step="0.1"
+                  value={borderRadiusScale}
+                  onChange={(event) => setBorderRadiusScale(parseFloat(event.target.value))}
+                />
+              </IdeRow>
+              <IdeRow label="背景明暗偏置">
+                <span className="ide-field-value">
+                  {colorContrastOffset > 0 ? `+${colorContrastOffset}` : colorContrastOffset}%
+                </span>
+                <input
+                  className="ide-range"
+                  type="range"
+                  min="-10"
+                  max="15"
+                  step="1"
+                  value={colorContrastOffset}
+                  onChange={(event) => setColorContrastOffset(parseInt(event.target.value, 10))}
+                />
+              </IdeRow>
+            </IdeSection>
+
+            <p className="ide-hint">
+              当前：{selectedThemeModeLabel} · {selectedAccentLabel} · {selectedShapeLabel} · 内容圆角 {Math.round(18 * borderRadiusScale)}px
+            </p>
           </div>
-        )}
+        ) : null}
       </div>
     </div>
   );

@@ -48,9 +48,9 @@
 
 .double-deck-panel-card {
   background: var(--bg-input-field);
-  border: 1px solid var(--border-glass-focused);
-  border-radius: var(--panel-border-radius);
-  box-shadow: var(--shadow-premium);
+  border: 1px solid var(--border-glass);
+  border-radius: var(--ide-radius, 4px);
+  box-shadow: none;
   overflow: visible;
   display: flex;
   flex-direction: column;
@@ -58,8 +58,8 @@
 }
 
 .double-deck-panel-card:focus-within {
-  border-color: var(--border-glass-focused);
-  box-shadow: var(--shadow-premium);
+  border-color: var(--accent-primary);
+  box-shadow: none;
 }
 
 .center-welcome-header {
@@ -552,16 +552,16 @@
 
 .double-deck-panel-card {
   overflow: hidden;
-  border-color: color-mix(in srgb, var(--text-muted) 25%, transparent);
-  border-radius: 12px;
+  border-color: var(--border-glass);
+  border-radius: 8px;
   background: var(--bg-input-field);
-  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.045);
-  transition: border-color 140ms ease, box-shadow 140ms ease;
+  box-shadow: none;
+  transition: border-color 140ms ease;
 }
 
 .double-deck-panel-card:focus-within {
-  border-color: color-mix(in srgb, var(--accent-primary) 50%, transparent);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-primary) 12%, transparent);
+  border-color: var(--accent-primary);
+  box-shadow: none;
 }
 
 .input-textarea-row {
@@ -621,8 +621,8 @@
 .chat-workspace-footer-unified {
   padding: 8px 0 10px;
   border-top: 1px solid color-mix(in srgb, var(--text-muted) 10%, transparent);
-  background: color-mix(in srgb, var(--bg-canvas) 94%, transparent);
-  backdrop-filter: blur(12px);
+  background: var(--bg-canvas);
+  backdrop-filter: none;
 }
 
 .center-focal-wrapper {

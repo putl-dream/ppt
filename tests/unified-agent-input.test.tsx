@@ -46,6 +46,6 @@ describe("UnifiedAgentInput draft workspace", () => {
 
     expect(html).not.toContain("选择生成模式");
     expect(html).not.toContain(">Lean<");
-    expect(html).toContain("描述受众、场景和希望传达的核心结论");
+    expect(html).toContain("从零生成一套演示文稿");
   });
 });

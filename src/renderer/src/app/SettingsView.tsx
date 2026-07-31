@@ -1,3 +1,4 @@
+import type { ComponentProps } from "react";
 import { SettingsConsole } from "../components/SettingsConsole";
 import { SettingsSidebar } from "../components/SettingsSidebar";
 import type { SettingsController } from "./useSettingsController";
@@ -81,4 +82,3 @@ export function SettingsView({
     </>
   );
 }
-import type { ComponentProps } from "react";

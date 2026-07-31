@@ -337,25 +337,11 @@
 }
 
 /* ==========================================================================
-   双模态同构画布 (Right Rounded Canvas)
+   Workbench canvas — inherits Graphite tokens (no dual palette)
    ========================================================================== */
 .rounded-canvas {
-  --bg-canvas: #f6f8fb;
-  --bg-canvas-gradient-start: #f8fafc;
-  --bg-canvas-gradient-end: #eef3f8;
-  --bg-glass: #ffffff;
-  --bg-input-field: #ffffff;
-  --bg-darker: #eef3f8;
-  --bg-glass-hover: rgba(2, 132, 199, 0.07);
-  --bg-glass-active: rgba(2, 132, 199, 0.11);
-  --border-glass: rgba(148, 163, 184, 0.26);
-  --border-glass-focused: rgba(148, 163, 184, 0.42);
-  --text-primary: #0f172a;
-  --text-secondary: #475569;
-  --text-muted: #64748b;
-  --shadow-premium: 0 18px 46px rgba(15, 23, 42, 0.12);
   margin: 0;
-  border-radius: calc(18px * var(--content-radius-scale)) 0 0 0;
+  border-radius: 0;
   border-top: 1px solid var(--border-glass);
   border-left: 1px solid var(--border-glass);
   background: var(--bg-canvas);
@@ -366,49 +352,9 @@
   transition: var(--transition-panel);
 }
 
-.dark-theme .rounded-canvas {
-  --bg-canvas: #151515;
-  --bg-canvas-gradient-start: #171717;
-  --bg-canvas-gradient-end: #121212;
-  --bg-glass: #1e1e1e;
-  --bg-input-field: #202020;
-  --bg-darker: #1a1a1a;
-  --bg-glass-hover: rgba(255, 255, 255, 0.055);
-  --bg-glass-active: rgba(255, 255, 255, 0.08);
-  --border-glass: rgba(255, 255, 255, 0.1);
-  --border-glass-focused: rgba(255, 255, 255, 0.16);
-  --text-primary: #f8fafc;
-  --text-secondary: #cbd5e1;
-  --text-muted: #94a3b8;
-  --shadow-premium: 0 20px 48px rgba(0, 0, 0, 0.45);
-}
-
-[data-reading-tone="cyan"] .rounded-canvas {
-  --bg-canvas: #f4fbfb;
-  --bg-canvas-gradient-start: #f7fdfd;
-  --bg-canvas-gradient-end: #eaf6f7;
-  --bg-glass: #f3fbfc;
-  --bg-input-field: #eff9fa;
-  --bg-darker: #eaf4f5;
-  --border-glass: rgba(35, 115, 126, 0.16);
-  --border-glass-focused: rgba(35, 115, 126, 0.28);
-}
-
-[data-reading-tone="orange"] .rounded-canvas {
-  --bg-canvas: #f7f6f4;
-  --bg-canvas-gradient-start: #f9f8f6;
-  --bg-canvas-gradient-end: #efeeec;
-  --bg-glass: #f7f6f4;
-  --bg-input-field: #f3f2f0;
-  --bg-darker: #ebeae8;
-  --border-glass: rgba(100, 100, 95, 0.16);
-  --border-glass-focused: rgba(100, 100, 95, 0.28);
-}
-
 .rounded-canvas .canvas-column,
 .rounded-canvas .settings-console-container {
-  background-color: var(--bg-canvas) !important;
-  background-image: linear-gradient(180deg, var(--bg-canvas-gradient-start) 0%, var(--bg-canvas-gradient-end) 100%);
+  background: var(--bg-canvas);
 }
 
 .rounded-canvas .canvas-header,

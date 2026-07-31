@@ -8,7 +8,6 @@ import {
   SearchIcon,
   SettingsIcon,
   SidebarPanelIcon,
-  UserIcon,
   TrashIcon,
   FileIcon,
   FolderIcon,
@@ -369,21 +368,15 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
       </div>
 
       <div className="panel-footer left-footer flex justify-between items-center">
-        <div className="profile-badge flex-1">
-          <div className="avatar-mock">
-            <UserIcon size={16} />
-          </div>
-          <div className="profile-info">
-            <div className="profile-name">PPT 创作者</div>
-            <div className="profile-tier">AI 协同版</div>
-          </div>
-        </div>
         <button
-          className="action-icon-btn settings-cog-btn"
+          type="button"
+          className="ide-nav-back workbench-settings-entry"
           onClick={onToggleSettings}
           title="设置"
+          aria-label="打开设置"
         >
-          <SettingsIcon size={18} className="text-secondary hover:text-primary transition-colors" />
+          <SettingsIcon size={14} />
+          <span>设置</span>
         </button>
       </div>
 
