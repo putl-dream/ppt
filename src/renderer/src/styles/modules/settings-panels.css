@@ -24,16 +24,17 @@
 .settings-card {
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  padding: 16px;
-  border: 1px solid var(--border-default);
-  border-radius: var(--panel-border-radius);
-  background: var(--surface-overlay);
-  transition: border-color 0.14s ease, background 0.14s ease;
+  gap: 12px;
+  padding: 12px 0;
+  border: 0;
+  border-bottom: 1px solid var(--border-subtle);
+  border-radius: 0;
+  background: transparent;
+  transition: none;
 }
 
 .settings-card:hover {
-  border-color: var(--border-focused);
+  border-color: var(--border-subtle);
 }
 
 .settings-card-header {
@@ -62,7 +63,7 @@
 .settings-card-meta {
   flex: 0 0 auto;
   align-self: center;
-  color: var(--accent-primary);
+  color: var(--text-muted);
   font-size: var(--text-sm);
   font-weight: var(--font-weight-medium);
 }

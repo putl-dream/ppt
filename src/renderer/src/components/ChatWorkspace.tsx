@@ -7,7 +7,6 @@ import {
   CopyIcon,
   Edit3Icon,
   OpenPreviewIcon,
-  LayoutIcon,
 } from "./Icons";
 import { UnifiedAgentInput } from "./UnifiedAgentInput";
 import { AgentRunLoader } from "./AgentRunLoader";
@@ -650,11 +649,7 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
                 </div>
               ) : (
                 <div className="assistant-message-shell">
-                  <div className="assistant-message-avatar" aria-hidden="true">
-                    <LayoutIcon size={14} />
-                  </div>
                   <div className="assistant-message-main">
-                    <div className="assistant-message-sender">助手</div>
                   {(() => {
                     const useLiveTrace = busy && streamingMessageId === msg.id;
                     const resolvedTrace = useLiveTrace

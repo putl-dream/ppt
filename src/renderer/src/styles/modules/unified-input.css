@@ -1,13 +1,13 @@
 /* ==========================================================================
-   UnifiedAgentInput (统一 Agent 输入面板)
+   UnifiedAgentInput (?? Agent ????)
    ========================================================================== */
 
-/* 新会话布局：单列满�?*/
+/* ???????????*/
 .workspace-canvas-content.new-session-layout {
   grid-template-columns: 1fr !important;
 }
 
-/* 统一 Agent 输入面板容器 */
+/* ?? Agent ?????? */
 .unified-agent-input-container {
   width: 100%;
   transition: var(--transition-panel);
@@ -15,7 +15,7 @@
   flex-direction: column;
 }
 
-/* 居中舞台聚焦模式 */
+/* ???????? */
 .unified-agent-input-container.center-focal-mode {
   max-width: 760px;
   margin: 0 auto;
@@ -28,7 +28,7 @@
   to { opacity: 1; transform: translateY(-20px) scale(1); }
 }
 
-/* 底部收缩托底模式 */
+/* ???????? */
 .unified-agent-input-container.bottom-anchored-mode {
   max-width: 100%;
   animation: bottomAnchoredSlideIn 0.35s ease-out;
@@ -39,7 +39,7 @@
   to { opacity: 1; transform: translateY(0); }
 }
 
-/* 双层面板容器卡片 (Double-Deck Container) */
+/* ???????? (Double-Deck Container) */
 .unified-agent-input-stack {
   display: flex;
   flex-direction: column;
@@ -47,10 +47,10 @@
 }
 
 .double-deck-panel-card {
-  background: var(--surface-overlay);
-  border: 1px solid var(--border-default);
+  background: var(--surface-raised);
+  border: 1px solid var(--border-subtle);
   border-radius: var(--control-radius-lg);
-  box-shadow: var(--elevation-2);
+  box-shadow: none;
   overflow: visible;
   display: flex;
   flex-direction: column;
@@ -59,8 +59,8 @@
 }
 
 .double-deck-panel-card:focus-within {
-  border-color: color-mix(in srgb, var(--accent-primary) 55%, transparent);
-  box-shadow: var(--elevation-2), 0 0 0 3px var(--accent-primary-glow);
+  border-color: var(--border-focused);
+  box-shadow: none;
 }
 
 .center-welcome-header {
@@ -146,7 +146,7 @@
   border-top-right-radius: 0;
 }
 
-/* 主文本域 Textarea */
+/* ???? Textarea */
 .input-textarea {
   display: block;
   width: 100%;
@@ -223,7 +223,7 @@
   border-color: rgba(234, 88, 12, 0.35);
 }
 
-/* 上层：意图捕获与执行流控�?Row */
+/* ??????????????Row */
 .upper-deck-row {
   display: flex;
   align-items: flex-start;
@@ -244,7 +244,7 @@
   color: var(--text-muted);
 }
 
-/* 下层：上下文与环境锚定区 Bar */
+/* ???????????? Bar */
 .lower-deck-bar {
   display: flex;
   justify-content: space-between;
@@ -277,7 +277,7 @@
   font-weight: 500;
 }
 
-/* 文件夹锚�?Tag */
+/* ??????Tag */
 .context-anchor-tag {
   background: var(--surface-sunken);
   border: 1px solid var(--border-default);
@@ -522,7 +522,7 @@
   to { transform: scale(1.08); box-shadow: 0 0 8px color-mix(in srgb, var(--danger) 35%, transparent); }
 }
 
-/* 底部输入框在伴随视图下的样式微调 */
+/* ???????????????? */
 .chat-workspace-footer-unified {
   background: var(--surface-raised);
   border-top: none;
@@ -552,51 +552,68 @@
 .double-deck-panel-card {
   overflow: hidden;
   border-radius: var(--control-radius-md);
+  background: var(--surface-raised);
+  border-color: var(--border-subtle);
+  box-shadow: none;
+}
+
+.double-deck-panel-card:focus-within {
+  border-color: var(--border-focused);
+  box-shadow: none;
 }
 
 .input-textarea-row {
-  padding: 10px 12px 5px;
+  padding: 8px 12px 4px;
   border-radius: 0;
 }
 
 .input-textarea {
-  min-height: 34px;
-  max-height: 180px;
+  min-height: 28px;
+  max-height: 160px;
   padding: 0;
+  font-size: var(--text-base);
+  line-height: var(--text-base-lh);
 }
 
 .functional-control-bar {
-  gap: 8px;
-  padding: 4px 7px 7px;
+  gap: 6px;
+  min-height: 32px;
+  padding: 2px 6px 6px;
   border-radius: 0;
 }
 
 .functional-left,
 .functional-right {
-  gap: 6px;
+  gap: 4px;
 }
 
 .action-dock-status {
-  font-size: 11px;
-  font-weight: 500;
+  font-size: var(--text-xs);
+  font-weight: var(--font-weight-medium);
 }
 
 .mini-model-select {
-  min-height: 28px;
+  min-height: 24px;
+  max-width: 148px;
+  padding: 2px 2px 2px 4px;
   border-color: transparent;
   background: transparent;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  font-weight: var(--font-weight-medium);
 }
 
 .mini-model-select:hover:not(:disabled) {
-  border-color: color-mix(in srgb, var(--text-muted) 20%, transparent);
+  border-color: transparent;
   background: var(--surface-hover);
+  color: var(--text-secondary);
 }
 
 .send-cta-btn,
 .stop-cta-btn {
-  width: 30px;
-  height: 30px;
-  border-radius: 8px;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--control-radius-sm);
   box-shadow: none;
 }
 

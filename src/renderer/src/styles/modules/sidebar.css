@@ -1,4 +1,4 @@
-/* 侧边栏基础样式 */
+/* ??????? */
 aside {
   height: 100%;
   background: var(--surface-base);
@@ -51,7 +51,7 @@ aside {
   margin-bottom: 4px;
 }
 
-/* 项目名称区域 */
+/* ?????? */
 .title-section {
   flex: 1;
   min-width: 0;
@@ -103,7 +103,7 @@ aside {
   width: 100%;
 }
 
-/* 新建幻灯片页按钮 */
+/* ???????? */
 .new-slide-btn {
   background: var(--accent-primary);
   border: none;
@@ -127,7 +127,7 @@ aside {
   filter: brightness(1.05);
 }
 
-/* 折叠容器区域 */
+/* ?????? */
 .sections-container {
   flex: 1;
   overflow-y: auto;
@@ -178,7 +178,7 @@ aside {
   background: var(--surface-sunken);
 }
 
-/* 历史卡片列表 legacy unused */
+/* ?????? legacy unused */
 
 /* Studio workbench sidebar */
 .workbench-sidebar {
@@ -262,9 +262,9 @@ aside {
 }
 
 .sidebar-rail-btn.active {
-  background: color-mix(in srgb, var(--accent-primary) 14%, transparent);
+  background: var(--surface-active);
   border-color: transparent;
-  color: var(--accent-primary);
+  color: var(--text-primary);
 }
 
 .workbench-sidebar--rail {
@@ -308,8 +308,8 @@ aside {
 }
 
 .workbench-sidebar-action-row.active {
-  background: color-mix(in srgb, var(--accent-primary) 12%, transparent);
-  color: var(--accent-primary);
+  background: var(--surface-active);
+  color: var(--text-primary);
 }
 
 .workbench-sidebar-search-input {
@@ -328,8 +328,8 @@ aside {
 }
 
 .workbench-sidebar-search-input:focus {
-  border-color: color-mix(in srgb, var(--accent-primary) 50%, transparent);
-  box-shadow: 0 0 0 2px var(--accent-primary-glow);
+  border-color: var(--border-focused);
+  box-shadow: none;
 }
 
 .workbench-sidebar-search-input::placeholder {
@@ -444,16 +444,16 @@ aside {
 .session-list {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 1px;
   padding-left: 0;
 }
 
 .session-row {
   width: 100%;
   display: block;
-  padding: 7px 10px 7px 28px;
+  padding: 5px 10px 5px 28px;
   border: none;
-  border-radius: var(--control-radius-md);
+  border-radius: var(--control-radius-sm);
   background: transparent;
   text-align: left;
   cursor: pointer;
@@ -465,7 +465,7 @@ aside {
 }
 
 .session-row.active {
-  background: color-mix(in srgb, var(--accent-primary) 14%, transparent);
+  background: var(--surface-active);
 }
 
 .session-title {
@@ -596,7 +596,7 @@ aside {
   color: var(--text-muted);
 }
 
-/* 模版网格 */
+/* ???? */
 .templates-grid {
   display: grid;
   grid-template-columns: 1fr;
@@ -676,7 +676,7 @@ aside {
   place-items: center;
 }
 
-/* 品牌视觉资产 */
+/* ?????? */
 .brand-assets-content {
   display: flex;
   flex-direction: column;
@@ -791,7 +791,7 @@ aside {
   text-decoration: underline;
 }
 
-/* 系统配置 */
+/* ???? */
 .settings-content {
   display: flex;
   flex-direction: column;
@@ -830,7 +830,7 @@ aside {
 }
 
 .select-wrapper::after {
-  content: "▼";
+  content: "?";
   font-size: 8px;
   color: var(--text-muted);
   position: absolute;

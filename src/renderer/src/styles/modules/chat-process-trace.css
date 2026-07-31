@@ -197,24 +197,24 @@
 }
 .process-trace-panel {
   margin: 0;
-  border-left: 1px solid color-mix(in srgb, var(--text-muted) 22%, transparent);
-  padding-left: 11px;
+  border-left: none;
+  padding-left: 0;
 }
 .process-trace-panel-header {
-  min-height: 26px;
-  padding: 3px 0;
+  min-height: 22px;
+  padding: 1px 0;
   font-size: var(--text-sm);
 }
 .process-trace-panel-header-left {
-  gap: 7px;
+  gap: 6px;
 }
 .process-trace-panel-label {
-  color: var(--text-secondary);
+  color: var(--text-muted);
   font-weight: var(--font-weight-medium);
 }
 .process-trace-panel-body {
-  gap: 1px;
-  padding: 3px 0 7px 2px;
+  gap: 0;
+  padding: 1px 0 4px;
 }
 .process-trace-row {
   padding: 1px 0;

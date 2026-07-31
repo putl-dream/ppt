@@ -8,10 +8,11 @@
   align-items: center;
   justify-content: space-between;
   gap: 18px;
-  padding: 16px 18px;
-  border: 1px solid var(--border-default);
-  border-radius: var(--panel-border-radius);
-  background: var(--surface-sunken);
+  padding: 12px 0;
+  border: 0;
+  border-bottom: 1px solid var(--border-subtle);
+  border-radius: 0;
+  background: transparent;
 }
 
 .token-current-model > div {
@@ -50,9 +51,9 @@
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
   overflow: hidden;
-  border: 1px solid var(--border-default);
-  border-radius: var(--panel-border-radius);
-  background: var(--surface-sunken);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--control-radius-sm);
+  background: transparent;
 }
 
 .token-usage-metric {

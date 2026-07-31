@@ -149,15 +149,17 @@
 }
 
 .btn-apply {
-  border: 1px solid transparent;
-  background: var(--accent-primary);
-  color: var(--text-on-accent);
+  border: 1px solid var(--border-default);
+  background: var(--surface-sunken);
+  color: var(--text-primary);
   box-shadow: none;
 }
 
 .btn-apply:hover {
   box-shadow: none;
-  filter: brightness(1.04);
+  filter: none;
+  background: var(--surface-hover);
+  border-color: var(--border-focused);
   transform: none;
 }
 

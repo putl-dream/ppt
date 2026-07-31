@@ -130,21 +130,24 @@
   align-items: center;
   justify-content: center;
   padding: 5px 12px;
-  border: 1px solid var(--accent-primary);
+  border: 1px solid var(--border-default);
   border-radius: var(--field-border-radius);
-  background: var(--accent-primary);
-  color: var(--text-on-accent);
+  background: var(--surface-sunken);
+  color: var(--text-primary);
   font-family: var(--font-body);
   font-size: 12px;
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
   cursor: pointer;
-  transition: transform 0.14s ease, box-shadow 0.14s ease, filter 0.14s ease;
+  transition: var(--transition-color);
+  box-shadow: none;
 }
 
 .settings-primary-btn:hover {
-  filter: brightness(1.04);
-  box-shadow: 0 8px 20px var(--accent-primary-glow);
-  transform: translateY(-0.5px);
+  filter: none;
+  background: var(--surface-hover);
+  border-color: var(--border-focused);
+  box-shadow: none;
+  transform: none;
 }
 
 .log-status-grid {

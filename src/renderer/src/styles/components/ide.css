@@ -194,9 +194,9 @@
 }
 
 .ide-nav-item.is-active {
-  background: color-mix(in srgb, var(--accent-primary) 10%, transparent);
-  color: var(--accent-primary);
-  font-weight: 600;
+  background: var(--surface-active);
+  color: var(--text-primary);
+  font-weight: 500;
 }
 
 .ide-nav-back {
@@ -254,9 +254,9 @@
 }
 
 .ide-choice.is-active {
-  border-color: var(--accent-primary);
-  color: var(--accent-primary);
-  background: color-mix(in srgb, var(--accent-primary) 8%, transparent);
+  border-color: var(--border-focused);
+  color: var(--text-primary);
+  background: var(--surface-active);
 }
 
 .ide-swatch {
@@ -343,13 +343,15 @@
 }
 
 .ide-btn {
-  border: 1px solid transparent;
-  background: var(--accent-primary);
-  color: var(--text-on-accent);
+  border: 1px solid var(--border-default);
+  background: var(--surface-sunken);
+  color: var(--text-primary);
 }
 
 .ide-btn:hover {
-  filter: brightness(1.04);
+  filter: none;
+  background: var(--surface-hover);
+  border-color: var(--border-focused);
 }
 
 .ide-btn-secondary {
