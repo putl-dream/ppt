@@ -148,7 +148,8 @@ Provider 结果仍与原 dispatcher `tool_use.id` 配对。
 2. `outputSchema` 在中央边界验证。
 3. `mapResultToModelContent()` 生成紧凑模型内容。
 4. 超预算结果保存到 workspace 的 `.task_outputs/tool-results/`，模型收到受沙箱
-   `ReadFile` 可读取的路径、大小和预览；application runtimeRoot 不作为模型文件区。
+   `ReadFile` 可分页读取的路径、大小和预览；读取方必须沿 `nextOffset` 使用同一
+   `expected_version` 直到 `hasMore=false`。application runtimeRoot 不作为模型文件区。
 
 不能为了 UI 展示扩大 Provider ContentBlock，也不能把截断后的模型文本当作完整本地事实。
 

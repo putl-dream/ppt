@@ -155,6 +155,7 @@ describe("SVG deck lifecycle tools", () => {
     );
     expect(result.type).toBe("command_proposal");
 
+    await submitFileService.readWindow("slides/svg/P01.svg");
     await submitFileService.write(
       "slides/svg/P01.svg",
       `${svgPage("First")} `,

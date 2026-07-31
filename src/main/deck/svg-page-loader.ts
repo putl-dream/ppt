@@ -33,7 +33,7 @@ export async function loadWorkspaceSvgPage(input: {
   workspaceRoot: string;
   fileService: WorkspaceFileService;
 }): Promise<HydratedSvgPage> {
-  const receipt = await input.fileService.read(input.requestedPath, {
+  const receipt = await input.fileService.inspect(input.requestedPath, {
     maxBytes: 4 * 1024 * 1024,
   });
   const resources: SvgPageResource[] = [];

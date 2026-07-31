@@ -7,6 +7,7 @@ import { createStarterPresentation } from "../src/shared/presentation";
 import {
   SVG_DECK_DESIGN_SPEC_MINI_SCHEMA,
   SVG_DECK_PAGE_PLAN_MINI_SCHEMA,
+  readSvgDeckLocks,
   validateSvgDeckLockContent,
 } from "../src/main/agent/tools/core/svg-deck-locks";
 import { previewSvgPageTool } from "../src/main/agent/tools/core/preview-svg-page";
@@ -24,6 +25,7 @@ import type { ToolContext } from "../src/main/agent/tools/tool-definition";
 import { buildWorkspaceSection } from "../src/main/agent/runtime/prompts/prompt-sections";
 import { slideThumbnailService } from "../src/main/deck/slide-thumbnail-service";
 import { classifyToolExecutionError } from "../src/main/agent/runtime/tools/tool-execution-error";
+import { loadWorkspaceSvgPage } from "../src/main/deck/svg-page-loader";
 
 const temporaryRoots: string[] = [];
 
@@ -130,6 +132,32 @@ describe("SVG deck lock contract", () => {
       /PreviewSvgPage lock precheck failed/,
     );
     expect(capture).not.toHaveBeenCalled();
+  });
+
+  it("does not grant mutation authority through internal lock or SVG reads", async () => {
+    const root = await mkdtemp(join(tmpdir(), "ppt-lock-inspect-"));
+    temporaryRoots.push(root);
+    const writer = new WorkspaceFileService(root);
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" '
+      + 'viewBox="0 0 1280 720"><rect width="1280" height="720"/></svg>';
+    await writer.write("design/design-spec.json", SVG_DECK_DESIGN_SPEC_MINI_SCHEMA);
+    await writer.write("slides/page-plan.json", SVG_DECK_PAGE_PLAN_MINI_SCHEMA);
+    await writer.write("slides/svg/P01.svg", svg);
+
+    const reader = new WorkspaceFileService(root);
+    await readSvgDeckLocks(reader, "test");
+    await loadWorkspaceSvgPage({
+      requestedPath: "slides/svg/P01.svg",
+      workspaceRoot: root,
+      fileService: reader,
+    });
+
+    await expect(reader.write(
+      "slides/page-plan.json",
+      SVG_DECK_PAGE_PLAN_MINI_SCHEMA,
+    )).rejects.toMatchObject({ code: "READ_REQUIRED" });
+    await expect(reader.write("slides/svg/P01.svg", svg))
+      .rejects.toMatchObject({ code: "READ_REQUIRED" });
   });
 
   it("exposes invalid artifact reasons and injects the lock contract in the workspace prompt", () => {

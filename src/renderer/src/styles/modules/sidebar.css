@@ -815,6 +815,7 @@ aside {
   pointer-events: none;
 }
 
+/* Form controls do not inherit font-family; match .model-select explicitly. */
 .config-input {
   width: 100%;
   background: var(--surface-sunken);
@@ -822,6 +823,7 @@ aside {
   border-radius: var(--field-border-radius);
   padding: 8px 10px;
   color: var(--text-primary);
+  font-family: var(--font-body);
   font-size: 12px;
 }
 

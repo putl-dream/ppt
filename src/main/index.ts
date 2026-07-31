@@ -327,6 +327,16 @@ function createWindow(onWindowCreated?: (window: BrowserWindow) => void): Browse
   window.webContents.on("did-finish-load", () => {
     logger.info("renderer.load.completed", { webContentsId: window.webContents.id });
   });
+  // 应用菜单已被移除，默认的开发者工具快捷键随之失效，这里手动补回。
+  window.webContents.on("before-input-event", (event, input) => {
+    if (input.type !== "keyDown") return;
+    const toggleDevTools =
+      input.key === "F12"
+      || (input.control && input.shift && input.key.toLowerCase() === "i");
+    if (!toggleDevTools) return;
+    event.preventDefault();
+    window.webContents.toggleDevTools();
+  });
   const openInSystemBrowser = (rawUrl: string) => {
     const externalUrl = resolveExternalHttpUrl(rawUrl);
     if (!externalUrl) return;

@@ -9,6 +9,8 @@ import {
   findLastToolResultBlock,
   microCompactTranscript,
   prepareContext,
+  resolveContextSoftTokenThreshold,
+  resolveContextTokenThreshold,
   snipCompactConversation,
   snipCompactTranscript,
   toolResultBudget,
@@ -291,6 +293,16 @@ describe("compact_history", () => {
 });
 
 describe("prepareContext", () => {
+  it("defaults to 256K and opts into the model's 1M context window", () => {
+    const defaultThreshold = resolveContextTokenThreshold({});
+    const extendedThreshold = resolveContextTokenThreshold({}, true);
+
+    expect(defaultThreshold).toBe(256_000);
+    expect(resolveContextSoftTokenThreshold(defaultThreshold, {})).toBe(204_800);
+    expect(extendedThreshold).toBe(1_000_000);
+    expect(resolveContextSoftTokenThreshold(extendedThreshold, {})).toBe(800_000);
+  });
+
   it("does not compact solely because more than three tool results exist", async () => {
     const progress: string[] = [];
     const transcript = Array.from({ length: 8 }, (_, index) => ({

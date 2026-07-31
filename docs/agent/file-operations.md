@@ -61,9 +61,25 @@ interface FileReadReceipt {
 }
 ```
 
-Service 在当前 thread/workspace 实例中记录最近收据及完整 inode snapshot。收据用于
-证明 Write/Edit 的基线，不要求模型手工计算 hash；可选 `expected_version` 只能匹配
-当前 service 已签发的 receipt，不能代替一次真实读取。
+模型读取采用有界窗口。首次调用默认从 `offset=0` 开始；返回 `hasMore=true` 时，
+下一次调用必须原样传入 `nextOffset` 和首次返回的 `version`（作为
+`expected_version`），直到 `hasMore=false`。窗口元数据为：
+
+```ts
+interface FileReadWindow {
+  startOffset: number;
+  endOffset: number;
+  totalCharacters: number;
+  hasMore: boolean;
+  nextOffset?: number;
+  content: string;
+}
+```
+
+Service 在当前 thread/workspace 实例中记录同一版本的已读区间。只有区间覆盖完整
+文件后才签发可用于 Write/Edit 的 receipt；内部预览、锁校验和诊断读取使用
+`inspect`，不会授予写权限。`expected_version` 不要求模型计算 hash，但只能匹配首次
+窗口返回的版本，不能代替真实的完整读取。
 
 项目文件编辑的 token 绑定 session、workspace root、规范化相对路径和独立
 `WorkspaceFileService` 读取 scope。另一位调用者读取同一文件不会刷新这份 receipt；
@@ -76,7 +92,10 @@ Read 行为：
 - 只读取普通 UTF-8 文本；非法 UTF-8 返回 `INVALID_UTF8`；
 - 通过 handle 前后 stat 与路径 lstat 验证同一 inode 和稳定大小/时间；
 - 目录、FIFO/device、symlink/junction 返回 `UNSAFE_FILE_TYPE`；
-- 当前返回完整内容，尚未实现大文件窗口或截断协议；
+- 单次最多返回 4000 个 UTF-16 单元，边界不会拆分 Unicode 代理对；
+- 文件在分页期间变化时返回 `STALE_FILE`，调用方必须从 `offset=0` 重新读取；
+- `.task_outputs/tool-results/` 中的持久化大结果也通过同一窗口协议恢复，不能把预览
+  或持久化包装文件的首段当作完整事实；
 - 如发现未完成的受保护替换，先依据 durable manifest 恢复或显式报
   `uncertain`，再建立 receipt。
 

@@ -35,14 +35,21 @@ export const COMPACT_HISTORY_MAX_FAILURES = 3;
 /** Rough chars-per-token ratio for JSON payloads (no tokenizer dependency). */
 export const CHARS_PER_TOKEN_ESTIMATE = 4;
 
-export const DEFAULT_CONTEXT_TOKEN_THRESHOLD = 100_000;
+export const DEFAULT_CONTEXT_TOKEN_THRESHOLD = 256_000;
+export const EXTENDED_CONTEXT_TOKEN_THRESHOLD = 1_000_000;
 export const DEFAULT_CONTEXT_COMPACT_SOFT_RATIO = 0.8;
 
-export function resolveContextTokenThreshold(env: NodeJS.ProcessEnv = process.env): number {
+export function resolveContextTokenThreshold(
+  env: NodeJS.ProcessEnv = process.env,
+  supports1MContext = false,
+): number {
   const raw = env.AGENT_CONTEXT_TOKEN_THRESHOLD?.trim();
-  if (!raw) return DEFAULT_CONTEXT_TOKEN_THRESHOLD;
+  const modelThreshold = supports1MContext
+    ? EXTENDED_CONTEXT_TOKEN_THRESHOLD
+    : DEFAULT_CONTEXT_TOKEN_THRESHOLD;
+  if (!raw) return modelThreshold;
   const parsed = Number(raw);
-  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : DEFAULT_CONTEXT_TOKEN_THRESHOLD;
+  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : modelThreshold;
 }
 
 export function resolveContextSoftTokenThreshold(

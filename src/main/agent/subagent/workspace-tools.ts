@@ -48,6 +48,7 @@ export interface SubAgentToolDefinition<
   description: string;
   inputSchema: TParams;
   outputSchema?: z.ZodType<TResult>;
+  mapResultToModelContent?(result: TResult): string | Promise<string>;
   permission: ToolPermissionProfile;
   execute: (args: z.infer<TParams>, context: SubAgentToolContext) => Promise<TResult>;
 }
@@ -69,6 +70,9 @@ function toSubAgentWorkspaceTool<
     description: contract.description,
     inputSchema: contract.inputSchema,
     outputSchema: contract.outputSchema,
+    ...(contract.formatResultForModel
+      ? { mapResultToModelContent: contract.formatResultForModel }
+      : {}),
     permission: contract.permission,
     execute: async (args, context) => contract.execute(args, {
       workspaceRoot: context.workspaceRoot,
@@ -275,7 +279,7 @@ async function prepareDiagnosticCommand(
       throw unsafeCommand("Only `node --check <workspace-file>` is allowed.");
     }
     const relativePath = assertSafeRelativeCommandPath(tokens[2]!);
-    await resolveFileService(context).read(relativePath);
+    await resolveFileService(context).inspect(relativePath);
     return {
       file: process.execPath,
       args: ["--check", resolve(context.workspaceRoot, relativePath)],
@@ -360,7 +364,7 @@ async function assertSafeGitRepository(
   }
 
   const fileService = resolveFileService(context);
-  const config = (await fileService.read(".git/config")).content;
+  const config = (await fileService.inspect(".git/config")).content;
   const meaningfulConfig = config
     .split(/\r?\n/)
     .filter((line) => !line.trimStart().startsWith("#")
@@ -415,7 +419,7 @@ async function assertSafeGitRepository(
   }
   for (const attributePath of attributePaths) {
     assertSafeRelativeCommandPath(attributePath);
-    const attributes = (await fileService.read(attributePath)).content;
+    const attributes = (await fileService.inspect(attributePath)).content;
     if (containsExternalGitAttribute(attributes)) {
       throw unsafeCommand(
         `Git attributes may activate an external filter or diff driver: ${attributePath}`,

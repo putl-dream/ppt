@@ -23,7 +23,7 @@ allowed-tools:
 
 ## 开始前
 
-1. 用 `ReadFile` 读取设计规格、页面计划和当前页所引用的素材清单。
+1. 用 `ReadFile` 读取设计规格、页面计划和当前页所引用的素材清单；`hasMore=true` 时沿 `nextOffset` 和同一 `expected_version` 续读，直到取得完整文件。
 2. 确认设计规格已经锁定 `argumentMode`、`visualStyle`、`readingMode`、`imageLanguage`、颜色角色与字体角色。
 3. 确认每页都有最终的 `finalCopy`、`coreMessage`、`audienceMove`、`rhythm`、`layoutIntent`。
 4. 保持页面 id 与文件名一一对应：`P01` → `slides/svg/P01.svg`。
@@ -62,7 +62,7 @@ allowed-tools:
 
 按 `slides/page-plan.json` 的顺序逐页工作：
 
-1. 用 `ReadFile` 取得当前页计划与必要素材信息。
+1. 用 `ReadFile` 取得当前页计划与必要素材信息；分页结果必须读到 `hasMore=false`。
 2. 只为当前页设计完整构图。
 3. 用 `WriteFile` 写入对应 SVG。
 4. P01 之外先完成剩余作者源，不调用后处理器重新布局。

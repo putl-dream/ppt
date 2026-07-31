@@ -22,6 +22,24 @@ describe("AgentGateway", () => {
     providerMocks.anthropic.mockReset();
   });
 
+  it("preserves a declared 1M context capability in the model selection", () => {
+    const gateway = new AgentGateway();
+
+    const selection = gateway.configure({
+      provider: "openai",
+      model: "extended-context-model",
+      apiKey: "secret",
+      supports1MContext: true,
+    });
+
+    expect(selection).toEqual({
+      provider: "openai",
+      model: "extended-context-model",
+      supports1MContext: true,
+    });
+    expect(selection).not.toHaveProperty("apiKey");
+  });
+
   it("routes an OpenAI selection to the OpenAI adapter", async () => {
     providerMocks.openai.mockResolvedValue({
       provider: "openai",

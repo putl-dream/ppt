@@ -466,7 +466,7 @@
 .settings-preview-surface strong {
   color: var(--text-primary);
   font-size: 13px;
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
 }
 
 .settings-preview-surface span {
@@ -482,7 +482,7 @@
   background: var(--surface-sunken);
   color: var(--text-secondary) !important;
   font-size: 10px !important;
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
 }
 
 .settings-range {

@@ -29,6 +29,7 @@ function createDraft(name: string): ManagedModel {
     apiKey: "",
     baseURL: "",
     openaiApiMode: "chat-completions",
+    supports1MContext: false,
     enabled: true,
   };
 }
@@ -384,6 +385,26 @@ export function ModelManagement({
                   </select>
                 </label>
               )}
+
+              <div className="model-capability-section model-form-span">
+                <div className="model-capability-heading">
+                  <span className="config-label">模型能力</span>
+                  <span className="model-capability-default">默认 256K</span>
+                </div>
+                <label className="model-capability-option">
+                  <input
+                    type="checkbox"
+                    checked={dialogModel.supports1MContext === true}
+                    onChange={(event) => updateDialogModel({
+                      supports1MContext: event.target.checked,
+                    })}
+                  />
+                  <span>
+                    <strong>支持 1M 上下文</strong>
+                    <small>仅当服务商明确支持 1,000,000 token 上下文时勾选</small>
+                  </span>
+                </label>
+              </div>
             </div>
 
             <footer className="model-dialog-footer">

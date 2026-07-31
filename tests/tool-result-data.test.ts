@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { z } from "zod";
 import { prepareToolResultData } from "../src/main/agent/runtime/tools/tool-result-data";
 import { WorkspaceFileService } from "../src/main/agent/tools/files/workspace-file-service";
+import { formatReadFileResultForModel } from "../src/main/agent/tools/files/workspace-file-tool-contract";
 import { ToolOutputValidationError, validateToolOutput } from "../src/main/agent/tools/tool-validation";
 import type { ToolDefinition } from "../src/main/agent/tools/tool-definition";
 
@@ -18,7 +19,7 @@ describe("tool result data boundary", () => {
   it("keeps rich data locally and persists oversized provider content", async () => {
     const workspaceRoot = await mkdtemp(join(tmpdir(), "agent-ppt-tool-result-"));
     temporaryRoots.push(workspaceRoot);
-    const data = { rows: [{ id: 1, value: "x".repeat(200) }] };
+    const data = { rows: [{ id: 1, value: "x".repeat(12_000) }] };
 
     const prepared = await prepareToolResultData({
       data,
@@ -35,8 +36,19 @@ describe("tool result data boundary", () => {
     expect(prepared.persistedPath).toMatch(/^\.task_outputs\/tool-results\//);
     const stored = await readFile(join(workspaceRoot, prepared.persistedPath!), "utf8");
     expect(JSON.parse(stored)).toEqual(data);
-    await expect(new WorkspaceFileService(workspaceRoot).read(prepared.persistedPath!))
-      .resolves.toMatchObject({ content: stored });
+    const service = new WorkspaceFileService(workspaceRoot);
+    const first = await service.readWindow(prepared.persistedPath!);
+    let restored = first.content;
+    let current = first;
+    while (current.hasMore) {
+      current = await service.readWindow(prepared.persistedPath!, {
+        offset: current.nextOffset,
+        expectedVersion: first.version,
+      });
+      restored += current.content;
+    }
+    expect(restored).toBe(stored);
+    expect(restored.at(-1)).toBe(stored.at(-1));
   });
 
   it("injects a completion marker for empty results", async () => {
@@ -49,6 +61,36 @@ describe("tool result data boundary", () => {
 
     expect(prepared.modelContent).toContain("completed successfully");
     expect(prepared.truncated).toBe(false);
+  });
+
+  it("keeps a maximum ReadFile window below the generic truncation boundary", async () => {
+    const content = "x".repeat(4_000);
+    const data = {
+      path: "slides/page-plan.json",
+      version: `sha256:${"a".repeat(64)}`,
+      mtimeMs: 1,
+      size: 4_000,
+      encoding: "utf8" as const,
+      newline: "none" as const,
+      startOffset: 0,
+      endOffset: 4_000,
+      totalCharacters: 8_000,
+      hasMore: true,
+      nextOffset: 4_000,
+      content,
+    };
+    const prepared = await prepareToolResultData({
+      data,
+      modelContent: formatReadFileResultForModel(data),
+      threadId: "thread",
+      toolUseId: "read",
+      toolName: "ReadFile",
+    });
+
+    expect(prepared.truncated).toBe(false);
+    expect(prepared.persistedPath).toBeUndefined();
+    expect(prepared.modelContent).toContain(content);
+    expect(prepared.modelContent).toContain('"nextOffset":4000');
   });
 
   it("validates declared output schemas at runtime", () => {

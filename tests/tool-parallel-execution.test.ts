@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { z } from "zod";
@@ -13,7 +13,10 @@ import { AgentRuntime } from "../src/main/agent/runtime/agent-runtime";
 import { clearHooks, registerHook } from "../src/main/agent/runtime/hooks/hook-registry";
 import type { ToolDefinition } from "../src/main/agent/tools/tool-definition";
 import { ToolRegistry } from "../src/main/agent/tools/tool-registry";
-import { writeFileTool } from "../src/main/agent/tools/core/workspace-files";
+import {
+  readFileTool,
+  writeFileTool,
+} from "../src/main/agent/tools/core/workspace-files";
 import { createStarterPresentation } from "../src/shared/presentation";
 
 const temporaryRoots: string[] = [];
@@ -294,5 +297,43 @@ describe("parallel tool waves", () => {
       .filter((block) => block.type === "tool_result")
       .map((block) => block.toolUseId);
     expect(resultIds).toEqual(["write-a", "write-b"]);
+  });
+
+  it("keeps parallel ReadFile results paired with their path and toolUseId", async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), "parallel-file-read-"));
+    temporaryRoots.push(workspaceRoot);
+    await Promise.all([
+      writeFile(join(workspaceRoot, "a.txt"), "alpha", "utf8"),
+      writeFile(join(workspaceRoot, "b.txt"), "beta", "utf8"),
+    ]);
+    const registry = new ToolRegistry();
+    registry.register(readFileTool);
+    const gateway = gatewayFor([[
+      { type: "tool_use", id: "read-a", name: "ReadFile", input: { path: "a.txt" } },
+      { type: "tool_use", id: "read-b", name: "ReadFile", input: { path: "b.txt" } },
+    ], [{ type: "text", text: "done" }]]);
+
+    await new AgentRuntime(registry, gateway).run({
+      threadId: "parallel-file-read",
+      request: "read files",
+      presentationSnapshot: createStarterPresentation(),
+      selectedElementIds: [],
+      workspaceRoot,
+    });
+
+    const results = gateway.requests[1]!.messages!
+      .flatMap((message) => message.content)
+      .filter((block) => block.type === "tool_result");
+    const resultText = (index: number) => results[index]!.content
+      .filter((block) => block.type === "text")
+      .map((block) => block.text)
+      .join("\n");
+    expect(results.map((result) => result.toolUseId)).toEqual(["read-a", "read-b"]);
+    expect(resultText(0)).toContain('"path":"a.txt"');
+    expect(resultText(0)).toContain("alpha");
+    expect(resultText(1)).toContain('"path":"b.txt"');
+    expect(resultText(1)).toContain("beta");
+    expect(results.map((_, index) => resultText(index)).join("\n"))
+      .not.toContain("transcript");
   });
 });

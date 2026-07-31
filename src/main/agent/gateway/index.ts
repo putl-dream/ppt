@@ -53,7 +53,11 @@ export class AgentGateway implements AgentModelGateway {
         this.runtimeSettings[fallback.provider] = { ...fallback };
       }
     }
-    return { provider: settings.provider, model: settings.model };
+    return {
+      provider: settings.provider,
+      model: settings.model,
+      ...(settings.supports1MContext ? { supports1MContext: true } : {}),
+    };
   }
 
   applyGatewayConfig(gatewayConfig: AgentGatewayConfig): void {

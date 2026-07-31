@@ -100,6 +100,67 @@ describe("WorkspaceFileService", () => {
     expect(await readFile(join(root, "new.txt"), "utf8")).toBe("new");
   });
 
+  it("pages Unicode text exactly and grants mutation authority only after full coverage", async () => {
+    const root = await createWorkspace();
+    const prefix = `${"甲".repeat(3_997)}\r\n`;
+    const content = `${prefix}😀${"尾".repeat(5_000)}`;
+    await writeFile(join(root, "page-plan.json"), content, "utf8");
+    const service = new WorkspaceFileService(root);
+
+    const first = await service.readWindow("page-plan.json");
+    expect(first).toMatchObject({
+      startOffset: 0,
+      endOffset: 3_999,
+      totalCharacters: content.length,
+      hasMore: true,
+      nextOffset: 3_999,
+    });
+    expect(first.content).toBe(prefix);
+    await expect(service.write("page-plan.json", "blind overwrite", {
+      expectedVersion: first.version,
+    })).rejects.toMatchObject({ code: "READ_REQUIRED" });
+    await expect(service.readWindow("page-plan.json", {
+      offset: first.nextOffset,
+    })).rejects.toMatchObject({ code: "INVALID_EXPECTED_VERSION" });
+
+    let combined = first.content;
+    let current = first;
+    while (current.hasMore) {
+      current = await service.readWindow("page-plan.json", {
+        offset: current.nextOffset,
+        expectedVersion: first.version,
+      });
+      combined += current.content;
+    }
+
+    expect(combined).toBe(content);
+    expect(current.endOffset).toBe(content.length);
+    const written = await service.write("page-plan.json", content.replace("尾", "终"), {
+      expectedVersion: first.version,
+    });
+    expect(written.created).toBe(false);
+  });
+
+  it("does not grant a receipt for internal inspection or a stale page continuation", async () => {
+    const root = await createWorkspace();
+    const path = join(root, "notes.md");
+    await writeFile(path, "a".repeat(5_000), "utf8");
+    const service = new WorkspaceFileService(root);
+
+    await service.inspect("notes.md");
+    await expect(service.write("notes.md", "after inspect"))
+      .rejects.toMatchObject({ code: "READ_REQUIRED" });
+
+    const first = await service.readWindow("notes.md");
+    await writeFile(path, "external".repeat(800), "utf8");
+    await expect(service.readWindow("notes.md", {
+      offset: first.nextOffset,
+      expectedVersion: first.version,
+    })).rejects.toMatchObject({ code: "STALE_FILE" });
+    await expect(service.write("notes.md", "after stale continuation"))
+      .rejects.toMatchObject({ code: "READ_REQUIRED" });
+  });
+
   it("preserves existing file permissions across atomic replacement", async () => {
     if (process.platform === "win32") return;
     const root = await createWorkspace();
@@ -405,6 +466,8 @@ describe("WorkspaceFileService", () => {
       expect(teammateTool?.inputSchema).toBe(mainTool.inputSchema);
       expect(teammateTool?.outputSchema).toBe(mainTool.outputSchema);
       expect(teammateTool?.permission).toBe(mainTool.permission);
+      expect(teammateTool?.mapResultToModelContent)
+        .toBe(mainTool.mapResultToModelContent);
     }
   });
 

@@ -16,6 +16,7 @@ export interface ManagedModel {
   apiKey: string;
   baseURL: string;
   openaiApiMode: "responses" | "chat-completions";
+  supports1MContext?: boolean;
   enabled?: boolean;
   builtIn?: boolean;
   pricing?: ModelTokenPricing;
@@ -92,10 +93,46 @@ export const DEFAULT_MODELS: ManagedModel[] = [
       updatedAt: "2026-07-26",
     },
   },
+  {
+    id: "deepseek-v4-flash",
+    name: "DeepSeek V4 Flash",
+    provider: "openai",
+    model: "deepseek-v4-flash",
+    apiKey: "",
+    baseURL: "https://api.deepseek.com",
+    openaiApiMode: "responses",
+    supports1MContext: true,
+    enabled: true,
+    builtIn: true,
+  },
+  {
+    id: "deepseek-v4-pro",
+    name: "DeepSeek V4 Pro",
+    provider: "openai",
+    model: "deepseek-v4-pro",
+    apiKey: "",
+    baseURL: "https://api.deepseek.com",
+    openaiApiMode: "chat-completions",
+    supports1MContext: true,
+    enabled: true,
+    builtIn: true,
+  },
 ];
 
 export const MODEL_STORAGE_KEY = "agent-ppt.models.v1";
 export const SELECTED_MODEL_STORAGE_KEY = "agent-ppt.selected-model.v1";
+
+function normalizedBaseURL(value: string | undefined): string {
+  return (value ?? "").trim().replace(/\/+$/, "").toLowerCase();
+}
+
+function isSameModel(left: ManagedModel, right: ManagedModel): boolean {
+  return left.id === right.id || (
+    left.provider === right.provider
+    && left.model === right.model
+    && normalizedBaseURL(left.baseURL) === normalizedBaseURL(right.baseURL)
+  );
+}
 
 export function loadManagedModels(): ManagedModel[] {
   try {
@@ -103,20 +140,21 @@ export function loadManagedModels(): ManagedModel[] {
     if (!stored) return DEFAULT_MODELS;
     const parsed = JSON.parse(stored) as ManagedModel[];
     if (!Array.isArray(parsed) || parsed.length === 0) return DEFAULT_MODELS;
-    return parsed.filter(
+    const models = parsed.filter(
       (item) => item && item.id && item.name && item.model &&
         (item.provider === "openai" || item.provider === "anthropic"),
     ).map((item) => {
-      const builtIn = DEFAULT_MODELS.find((model) =>
-        model.provider === item.provider
-        && model.model === item.model
-        && !(item.baseURL ?? "").trim());
+      const builtIn = DEFAULT_MODELS.find((model) => isSameModel(item, model));
       return {
         ...item,
+        supports1MContext: item.supports1MContext === true,
         enabled: item.enabled !== false,
         pricing: builtIn?.pricing,
       };
     });
+    const missingDefaults = DEFAULT_MODELS.filter((defaultModel) =>
+      !models.some((model) => isSameModel(model, defaultModel)));
+    return [...models, ...missingDefaults];
   } catch {
     return DEFAULT_MODELS;
   }
@@ -133,5 +171,6 @@ export function toAgentModelSettings(model: ManagedModel): AgentModelSettings {
     apiKey: model.apiKey.trim() || undefined,
     baseURL: model.baseURL.trim() || undefined,
     openaiApiMode: model.provider === "openai" ? model.openaiApiMode : undefined,
+    supports1MContext: model.supports1MContext === true,
   };
 }

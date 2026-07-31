@@ -54,7 +54,10 @@ export async function prepareContext(
   payload = { ...payload, transcript: budgetResult.transcript };
   notes.push(...budgetResult.notes);
 
-  const tokenThreshold = options.tokenThreshold ?? resolveContextTokenThreshold();
+  const tokenThreshold = options.tokenThreshold ?? resolveContextTokenThreshold(
+    process.env,
+    options.model?.supports1MContext === true,
+  );
   const softTokenThreshold = Math.min(
     options.softTokenThreshold ?? resolveContextSoftTokenThreshold(tokenThreshold),
     tokenThreshold,

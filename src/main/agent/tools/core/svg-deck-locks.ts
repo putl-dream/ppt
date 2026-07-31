@@ -412,7 +412,7 @@ async function readSvgDeckLock(
 ): Promise<SvgDeckDesignSpec | SvgDeckPagePlan> {
   let content: string;
   try {
-    content = (await fileService.read(path, {
+    content = (await fileService.inspect(path, {
       maxBytes: MAX_SVG_DECK_LOCK_BYTES,
     })).content;
   } catch (error) {

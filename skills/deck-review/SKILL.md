@@ -23,7 +23,7 @@ allowed-tools:
 
 1. 若本 Query 尚未声明 PPT 工作，先调用一次 `BeginPptCapability({"capability":"review", ...})`。只审查时不要声明 edit/restyle。
 2. 用 `ListSlides` 取得完整有序页面及每页已提交的 `svgSourcePath`、`svgSha256`。
-3. 当前页可用 `ReadCurrentSlide` 确认 `visualSource.sourcePath`；其他页使用 `ListSlides.svgSourcePath`。再用 `ReadFile` 读取完整 SVG。
+3. 当前页可用 `ReadCurrentSlide` 确认 `visualSource.sourcePath`；其他页使用 `ListSlides.svgSourcePath`。再用 `ReadFile` 分页读取完整 SVG，沿 `nextOffset` 和同一 `expected_version` 续读到 `hasMore=false`。
 4. 对每个作者源调用 `PreviewSvgPage`，检查该文件的真实渲染。页面已提交时可用 `PreviewSlide` 对照当前 deck，但不能用已提交预览替代源文件审查；任何修复都会使该页先前的预览凭据失效。
 5. 读取 `design/design-spec.json` 和 `slides/page-plan.json`，只用于核对设计与内容意图；它们不能补充 SVG 中缺失的可见对象。
 
@@ -97,7 +97,7 @@ review capability 默认只报告，并以 `SubmitPptReview` 完成本次请求�
 
 后续 edit capability 的修复步骤：
 
-1. 用 `ReadFile` 重新读取目标页完整 SVG，避免基于旧上下文覆盖并发修改。
+1. 用 `ReadFile` 重新分页读取目标页完整 SVG直到 `hasMore=false`，避免基于旧上下文或截断首段覆盖并发修改。
 2. 用 `WriteFile` 只修改作者 SVG；不可写 commands、elements 或第二份布局状态。
 3. 每个修复页重新 `PreviewSvgPage`，确认问题已消失且未引入回归。
 4. 全部修复通过后调用一次 `SubmitSvgDeck`，提交所有有序页面；显式传入 `"designSpecPath":"design/design-spec.json"` 与 `"pagePlanPath":"slides/page-plan.json"`，并让 `communication`、`designSystem`、每页 `id/path/narrative` 与锁文件完全一致。

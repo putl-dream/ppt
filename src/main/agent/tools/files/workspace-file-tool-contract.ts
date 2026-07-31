@@ -37,6 +37,7 @@ export interface WorkspaceFileToolContract<
   description: string;
   inputSchema: TParams;
   outputSchema: z.ZodType<TResult>;
+  formatResultForModel?: (result: TResult) => string;
   behavior?: ToolRuntimeBehavior<z.infer<TParams>>;
   risk: ToolRisk;
   permission: ToolPermissionProfile;
@@ -58,9 +59,23 @@ export const fileReceiptSchema = z.object({
 
 export const readFileSchema = z.object({
   path: z.string().min(1).describe("Workspace-relative file path"),
+  offset: z.number().int().min(0).optional().describe(
+    "Zero-based text offset. For continuation, pass nextOffset from the previous result.",
+  ),
+  limit: z.number().int().min(2).max(4_000).optional().describe(
+    "Maximum UTF-16 text units to return in this window.",
+  ),
+  expected_version: z.string().optional().describe(
+    "Required when offset > 0. Pass version from the first window to prevent mixed-version reads.",
+  ),
 });
 
 export const readFileOutputSchema = fileReceiptSchema.extend({
+  startOffset: z.number().int().nonnegative(),
+  endOffset: z.number().int().nonnegative(),
+  totalCharacters: z.number().int().nonnegative(),
+  hasMore: z.boolean(),
+  nextOffset: z.number().int().nonnegative().optional(),
   content: z.string(),
 });
 
@@ -112,17 +127,23 @@ export const readFileContract: WorkspaceFileToolContract<
 > = {
   name: "ReadFile",
   description:
-    "读取 workspace 内的 UTF-8 文本文件，并返回内容、版本和修改时间。"
-    + "覆盖或编辑已有文件前必须先在当前 thread 调用此工具。",
+    "分页读取 workspace 内的 UTF-8 文本文件，并返回内容窗口、版本和续读位置。"
+    + "hasMore=true 时必须用 nextOffset 和同一 version 继续读取，直到 hasMore=false。"
+    + "只有完整读取同一版本后，才可覆盖或编辑已有文件。",
   inputSchema: readFileSchema,
   outputSchema: readFileOutputSchema,
+  formatResultForModel: formatReadFileResultForModel,
   risk: "low",
   permission: WORKSPACE_FILE_TOOL_PERMISSION_PROFILES.ReadFile,
   behavior: workspacePathParallelBehavior(),
   isEnabled: hasWorkspaceFileService,
   execute: async (args, context) => {
     await observeArtifactChange(context, [args.path], "agent_read");
-    return requireFileService(context).read(args.path);
+    return requireFileService(context).readWindow(args.path, {
+      offset: args.offset,
+      limit: args.limit,
+      expectedVersion: args.expected_version,
+    });
   },
 };
 
@@ -207,7 +228,7 @@ export const editFileContract: WorkspaceFileToolContract<
   execute: async (args, context) => {
     const fileService = requireFileService(context);
     if (isSvgDeckLockPath(args.path)) {
-      const current = await fileService.read(args.path);
+      const current = await fileService.inspect(args.path);
       const replacements = countOccurrences(current.content, args.old_string);
       if (replacements === 0) {
         throw new WorkspaceFileError(
@@ -310,4 +331,28 @@ function assertSvgDeckLockContentIfNeeded(path: string, content: string): void {
       error instanceof Error ? error.message : String(error),
     );
   }
+}
+
+export function formatReadFileResultForModel(
+  result: z.infer<typeof readFileOutputSchema>,
+): string {
+  const metadata = JSON.stringify({
+    path: result.path,
+    version: result.version,
+    mtimeMs: result.mtimeMs,
+    size: result.size,
+    encoding: result.encoding,
+    newline: result.newline,
+    startOffset: result.startOffset,
+    endOffset: result.endOffset,
+    totalCharacters: result.totalCharacters,
+    hasMore: result.hasMore,
+    ...(result.nextOffset !== undefined ? { nextOffset: result.nextOffset } : {}),
+  });
+  return [
+    metadata,
+    "---BEGIN EXACT FILE CONTENT---",
+    result.content,
+    "---END EXACT FILE CONTENT---",
+  ].join("\n");
 }

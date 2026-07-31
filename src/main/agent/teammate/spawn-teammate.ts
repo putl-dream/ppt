@@ -1248,7 +1248,9 @@ async function executeTeammateToolBatch(input: {
       });
     }
     transcriptEntries.push({ role: "tool", toolName: tool.name, result: output });
-    record(formatTeammateToolResult(output));
+    record(tool.mapResultToModelContent
+      ? await tool.mapResultToModelContent(output)
+      : formatTeammateToolResult(output));
     finishToolProgress("completed");
   }
 

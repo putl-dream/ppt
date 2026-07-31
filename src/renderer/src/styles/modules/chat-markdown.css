@@ -1,7 +1,13 @@
 /* Markdown rendering inside chat messages — single typography source of truth */
 
-/* CJK body copy needs tracking and leading above the Latin default to breathe. */
+/*
+ * CJK chat prose: keep regular (400) weight. On Windows, YaHei UI has no
+ * Semibold face — font-weight 600 resolves to Bold (700) for CJK, which at
+ * 14px fills glyph counters and reads as blur rather than emphasis. Mild
+ * tracking/leading above Latin defaults so dense paragraphs can breathe.
+ */
 .markdown-body {
+  font-family: var(--font-body);
   font-size: var(--text-md);
   line-height: 1.8;
   letter-spacing: 0.02em;

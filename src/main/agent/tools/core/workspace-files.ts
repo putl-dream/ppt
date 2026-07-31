@@ -26,6 +26,9 @@ function toMainAgentTool<TParams extends WorkspaceFileToolContract["inputSchema"
     ...contract,
     category: "core",
     loadPolicy: "core",
+    ...(contract.formatResultForModel
+      ? { mapResultToModelContent: contract.formatResultForModel }
+      : {}),
   };
 }
 

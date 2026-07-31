@@ -26,7 +26,7 @@ allowed-tools:
 1. 若本 Query 尚未声明 PPT 工作，先调用一次 `BeginPptCapability({"capability":"edit", ...})`；不得复用 threadId/runId 充当请求身份。
 2. 用 `ListSlides` 取得全部页面的稳定 id、顺序、`svgSourcePath` 与 `svgSha256`。
 3. 目标是当前页时调用 `ReadCurrentSlide`，确认其真实 `visualSource.sourcePath`；其他页使用 `ListSlides.svgSourcePath`。不要凭页码猜路径。
-4. 用 `ReadFile` 读取该路径的完整 SVG。必须基于完整源文件编辑，不得根据缩略图重建页面。
+4. 用 `ReadFile` 读取该路径的完整 SVG；`hasMore=true` 时沿 `nextOffset` 和同一 `expected_version` 续读到结束。必须基于完整源文件编辑，不得根据缩略图或首段内容重建页面。
 5. 明确修改边界：哪些页、哪些文案或视觉对象、是否改变页序。未在范围内的页面保持字节不变。
 
 ## 编辑原则

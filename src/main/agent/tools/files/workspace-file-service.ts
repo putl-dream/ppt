@@ -29,6 +29,7 @@ export type WorkspaceFileErrorCode =
   | "UNSAFE_FILE_TYPE"
   | "INVALID_UTF8"
   | "FILE_TOO_LARGE"
+  | "INVALID_READ_RANGE"
   | "UNSAFE_COMMAND"
   | "LOCK_SCHEMA_INVALID";
 
@@ -61,6 +62,21 @@ export interface WorkspaceFileReadResult extends WorkspaceFileReceipt {
 
 export interface WorkspaceFileReadOptions {
   maxBytes?: number;
+}
+
+export interface WorkspaceFileWindowReadOptions extends WorkspaceFileReadOptions {
+  offset?: number;
+  limit?: number;
+  expectedVersion?: string;
+}
+
+export interface WorkspaceFileWindowReadResult extends WorkspaceFileReceipt {
+  content: string;
+  startOffset: number;
+  endOffset: number;
+  totalCharacters: number;
+  hasMore: boolean;
+  nextOffset?: number;
 }
 
 export interface WorkspaceFileWriteOptions {
@@ -104,6 +120,11 @@ interface WorkspacePathGuard {
   validate: () => Promise<void>;
 }
 
+interface ObservedFileCoverage {
+  version: string;
+  ranges: Array<{ start: number; end: number }>;
+}
+
 const FILE_MUTATION_LOCKS = new Map<string, Promise<void>>();
 
 /**
@@ -118,6 +139,7 @@ export class WorkspaceFileService {
 
   private readonly receipts = new Map<string, WorkspaceFileReceipt>();
   private readonly receiptSnapshots = new Map<string, StableFileSnapshot>();
+  private readonly observedCoverage = new Map<string, ObservedFileCoverage>();
 
   constructor(workspaceRoot: string) {
     if (!workspaceRoot.trim()) {
@@ -130,6 +152,92 @@ export class WorkspaceFileService {
     path: string,
     options: WorkspaceFileReadOptions = {},
   ): Promise<WorkspaceFileReadResult> {
+    const snapshot = await this.readSnapshot(path, options);
+    const receipt = this.recordReceipt(snapshot);
+    return {
+      ...receipt,
+      content: snapshot.content,
+    };
+  }
+
+  /** Read a complete stable snapshot without granting mutation authority. */
+  async inspect(
+    path: string,
+    options: WorkspaceFileReadOptions = {},
+  ): Promise<WorkspaceFileReadResult> {
+    const snapshot = await this.readSnapshot(path, options);
+    return {
+      ...this.createReceipt(snapshot),
+      content: snapshot.content,
+    };
+  }
+
+  /**
+   * Return a bounded model-visible window. Mutation authority is granted only
+   * after this service has observed every character of the same file version.
+   */
+  async readWindow(
+    path: string,
+    options: WorkspaceFileWindowReadOptions = {},
+  ): Promise<WorkspaceFileWindowReadResult> {
+    const offset = options.offset ?? 0;
+    const limit = options.limit ?? 4_000;
+    assertReadWindowNumber("offset", offset, { min: 0 });
+    assertReadWindowNumber("limit", limit, { min: 2, max: 4_000 });
+    if (offset > 0 && !options.expectedVersion) {
+      throw new WorkspaceFileError(
+        "INVALID_EXPECTED_VERSION",
+        "expected_version is required when continuing a paged ReadFile call.",
+      );
+    }
+
+    const snapshot = await this.readSnapshot(path, options);
+    if (
+      options.expectedVersion !== undefined
+      && options.expectedVersion !== snapshot.version
+    ) {
+      throw new WorkspaceFileError(
+        "STALE_FILE",
+        `File changed between paged reads: ${this.relativePath(snapshot.absolutePath)}. `
+        + "Restart from offset 0.",
+      );
+    }
+
+    const totalCharacters = snapshot.content.length;
+    if (offset > totalCharacters || (offset === totalCharacters && totalCharacters > 0)) {
+      throw new WorkspaceFileError(
+        "INVALID_READ_RANGE",
+        `ReadFile offset ${offset} is outside ${this.relativePath(snapshot.absolutePath)} `
+        + `(${totalCharacters} UTF-16 units).`,
+      );
+    }
+    if (splitsSurrogatePair(snapshot.content, offset)) {
+      throw new WorkspaceFileError(
+        "INVALID_READ_RANGE",
+        `ReadFile offset ${offset} splits a Unicode surrogate pair in `
+        + `${this.relativePath(snapshot.absolutePath)}. Use nextOffset from the previous result.`,
+      );
+    }
+
+    const endOffset = unicodeSafeEndOffset(snapshot.content, offset, limit);
+    const content = snapshot.content.slice(offset, endOffset);
+    this.recordObservedWindow(snapshot, offset, endOffset);
+    const hasMore = endOffset < totalCharacters;
+    return {
+      ...this.createReceipt(snapshot),
+      content,
+      startOffset: offset,
+      endOffset,
+      totalCharacters,
+      hasMore,
+      ...(hasMore ? { nextOffset: endOffset } : {}),
+    };
+  }
+
+  private async readSnapshot(
+    path: string,
+    options: WorkspaceFileReadOptions,
+  ): Promise<StableFileSnapshot> {
     if (
       options.maxBytes !== undefined
       && (!Number.isSafeInteger(options.maxBytes) || options.maxBytes < 0)
@@ -182,11 +290,7 @@ export class WorkspaceFileService {
           }
           throw error;
         }
-        const receipt = this.recordReceipt(snapshot);
-        return {
-          ...receipt,
-          content: snapshot.content,
-        };
+        return snapshot;
       },
     );
   }
@@ -375,6 +479,7 @@ export class WorkspaceFileService {
   clear(): void {
     this.receipts.clear();
     this.receiptSnapshots.clear();
+    this.observedCoverage.clear();
   }
 
   private async resolveContainedPath(path: string): Promise<string> {
@@ -421,7 +526,14 @@ export class WorkspaceFileService {
   }
 
   private recordReceipt(snapshot: StableFileSnapshot): WorkspaceFileReceipt {
-    const receipt = {
+    const receipt = this.createReceipt(snapshot);
+    this.receipts.set(snapshot.absolutePath, receipt);
+    this.receiptSnapshots.set(snapshot.absolutePath, structuredClone(snapshot));
+    return receipt;
+  }
+
+  private createReceipt(snapshot: StableFileSnapshot): WorkspaceFileReceipt {
+    return {
       path: this.relativePath(snapshot.absolutePath),
       version: snapshot.version,
       mtimeMs: snapshot.mtimeMs,
@@ -429,9 +541,30 @@ export class WorkspaceFileService {
       encoding: "utf8" as const,
       newline: detectNewlineStyle(snapshot.content),
     };
-    this.receipts.set(snapshot.absolutePath, receipt);
-    this.receiptSnapshots.set(snapshot.absolutePath, structuredClone(snapshot));
-    return receipt;
+  }
+
+  private recordObservedWindow(
+    snapshot: StableFileSnapshot,
+    start: number,
+    end: number,
+  ): void {
+    const existing = this.observedCoverage.get(snapshot.absolutePath);
+    const coverage = existing?.version === snapshot.version
+      ? existing
+      : { version: snapshot.version, ranges: [] };
+    if (existing?.version !== snapshot.version) {
+      this.receipts.delete(snapshot.absolutePath);
+      this.receiptSnapshots.delete(snapshot.absolutePath);
+    }
+    coverage.ranges = mergeCoverageRanges([...coverage.ranges, { start, end }]);
+    this.observedCoverage.set(snapshot.absolutePath, coverage);
+    if (
+      coverage.ranges.length === 1
+      && coverage.ranges[0]!.start === 0
+      && coverage.ranges[0]!.end === snapshot.content.length
+    ) {
+      this.recordReceipt(snapshot);
+    }
   }
 
   private relativePath(absolutePath: string): string {
@@ -720,6 +853,63 @@ function assertFileSizeWithinLimit(
     "FILE_TOO_LARGE",
     `File exceeds the ${maxBytes}-byte read limit (${size} bytes): ${path}`,
   );
+}
+
+function assertReadWindowNumber(
+  name: "offset" | "limit",
+  value: number,
+  bounds: { min: number; max?: number },
+): void {
+  if (
+    !Number.isSafeInteger(value)
+    || value < bounds.min
+    || (bounds.max !== undefined && value > bounds.max)
+  ) {
+    const range = bounds.max === undefined
+      ? `at least ${bounds.min}`
+      : `between ${bounds.min} and ${bounds.max}`;
+    throw new WorkspaceFileError(
+      "INVALID_READ_RANGE",
+      `ReadFile ${name} must be a safe integer ${range}.`,
+    );
+  }
+}
+
+function splitsSurrogatePair(content: string, offset: number): boolean {
+  if (offset <= 0 || offset >= content.length) return false;
+  const previous = content.charCodeAt(offset - 1);
+  const current = content.charCodeAt(offset);
+  return previous >= 0xD800 && previous <= 0xDBFF
+    && current >= 0xDC00 && current <= 0xDFFF;
+}
+
+function unicodeSafeEndOffset(content: string, offset: number, limit: number): number {
+  let end = Math.min(content.length, offset + limit);
+  if (!splitsSurrogatePair(content, end)) return end;
+  if (end === offset + 1) {
+    end += 1;
+  } else {
+    end -= 1;
+  }
+  return end;
+}
+
+function mergeCoverageRanges(
+  ranges: Array<{ start: number; end: number }>,
+): Array<{ start: number; end: number }> {
+  const sorted = ranges
+    .filter((range) => range.end >= range.start)
+    .sort((left, right) => left.start - right.start || left.end - right.end);
+  const merged: Array<{ start: number; end: number }> = [];
+  for (const range of sorted) {
+    const previous = merged.at(-1);
+    if (!previous || range.start > previous.end) {
+      merged.push({ ...range });
+      continue;
+    }
+    previous.end = Math.max(previous.end, range.end);
+  }
+  return merged;
 }
 
 function assertSameSnapshot(

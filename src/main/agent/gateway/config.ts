@@ -65,7 +65,11 @@ export function resolveFallbackModelSelection(
     if (current?.provider === configured.provider && current.model === configured.model) {
       return undefined;
     }
-    return { provider: configured.provider, model: configured.model };
+    return {
+      provider: configured.provider,
+      model: configured.model,
+      ...(configured.supports1MContext ? { supports1MContext: true } : {}),
+    };
   }
 
   const fallbackProvider = env.AGENT_FALLBACK_PROVIDER?.trim().toLowerCase();
