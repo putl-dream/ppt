@@ -11,6 +11,7 @@ import { exportToPptx } from "../ppt-exporter";
 import { exportToHtml } from "@shared/html-exporter";
 import { deckValidationService } from "./deck-validation-service";
 import { inspectPptxExport } from "./pptx-postflight";
+import { createPptxExportIdentity } from "./export-identity";
 import {
   assertSupportedLocalImageFile,
   resolveLocalImagePath,
@@ -97,7 +98,11 @@ export class DeckExportService {
       );
       try {
         await exportToPptx(presentation, options, temporaryPath, input.workspaceRoot);
-        const postflight = await inspectPptxExport(temporaryPath, presentation);
+        const postflight = await inspectPptxExport(
+          temporaryPath,
+          presentation,
+          createPptxExportIdentity(presentation, options),
+        );
         if (!postflight.passed) {
           throw new Error(
             `PPTX postflight failed: ${postflight.errors.join("; ")}`,

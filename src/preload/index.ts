@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer } from "electron";
 import type { AgentStreamEvent, DesktopApi } from "@shared/ipc";
+import type { PptJobProjection } from "@shared/presentation-lifecycle";
 
 const api: DesktopApi = {
   // Session 与工作区
@@ -44,16 +45,23 @@ const api: DesktopApi = {
       editToken,
       expectedVersion,
     ),
-  markProjectArtifactStatus: (sessionId, artifactId, status) =>
-    ipcRenderer.invoke("project:mark-artifact-status", sessionId, artifactId, status),
+  getPptJob: (sessionId) => ipcRenderer.invoke("ppt-job:get", sessionId),
+  onPptJobChanged: (listener) => {
+    const handler = (
+      _event: Electron.IpcRendererEvent,
+      projection: PptJobProjection,
+    ) => listener(projection);
+    ipcRenderer.on("ppt-job:changed", handler);
+    return () => ipcRenderer.removeListener("ppt-job:changed", handler);
+  },
 
   // 演示文稿编辑与导出
   getPresentation: () => ipcRenderer.invoke("presentation:get"),
   undo: () => ipcRenderer.invoke("presentation:undo"),
   redo: () => ipcRenderer.invoke("presentation:redo"),
   executeCommand: (command) => ipcRenderer.invoke("presentation:execute", command),
-  exportPresentation: (presentation, options) =>
-    ipcRenderer.invoke("presentation:export", presentation, options),
+  exportPresentation: (sessionId, options) =>
+    ipcRenderer.invoke("presentation:export", sessionId, options),
   openExportFolder: (filePath) => ipcRenderer.invoke("shell:open-export-folder", filePath),
 
   // Agent 运行与交互
@@ -79,8 +87,8 @@ const api: DesktopApi = {
     ipcRenderer.on("agent:stream", handler);
     return () => ipcRenderer.removeListener("agent:stream", handler);
   },
-  resumeAgentRun: (sessionId, threadId, approved) =>
-    ipcRenderer.invoke("agent:resume", sessionId, threadId, approved),
+  resumeAgentRun: (sessionId, proposalId, approved) =>
+    ipcRenderer.invoke("agent:resume", sessionId, proposalId, approved),
   cancelAgentRun: (runId) => ipcRenderer.invoke("agent:cancel", runId),
   cancelAgentSession: (sessionId) => ipcRenderer.invoke("agent:cancel-session", sessionId),
   resolveToolApproval: (runId, approvalId, approved) =>

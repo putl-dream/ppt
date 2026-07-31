@@ -20,6 +20,11 @@ export const autoLayoutSlideTool: ToolDefinition<
   category: "deferred",
   loadPolicy: "deferred",
   inputSchema: autoLayoutSlideSchema,
+  behavior: {
+    presentation: {
+      allowedCapabilities: ["edit", "restyle"],
+    },
+  },
   risk: "medium",
   execute: async (args, context) => {
     if (!context.presentation.slides.some((slide) => slide.id === args.slideId)) {

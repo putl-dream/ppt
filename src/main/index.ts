@@ -1,5 +1,6 @@
 import { existsSync, mkdirSync } from "node:fs";
-import { join } from "node:path";
+import { readFile, stat } from "node:fs/promises";
+import { extname, join, resolve } from "node:path";
 import {
   app,
   BrowserWindow,
@@ -11,7 +12,6 @@ import {
   type MessageBoxOptions,
   type WebContents,
 } from "electron";
-import type { Presentation } from "@shared/presentation";
 import { CommandBus, type PresentationCommand } from "@shared/commands";
 import {
   agentRunRequestSchema,
@@ -27,6 +27,8 @@ import {
   type WindowThemeMode,
 } from "@shared/ipc";
 import { deckExportService } from "./deck/deck-export-service";
+import { recoverInterruptedExport } from
+  "./deck/export-recovery";
 import { slideThumbnailService } from "./deck/slide-thumbnail-service";
 import { AgentService, type AgentServiceEvent } from "./agent/service";
 import {
@@ -61,7 +63,6 @@ import type { AppLogLevel, LogManagerSettings, RendererLogReport } from "@shared
 import { FileSessionStore } from "./session-store";
 import type { SessionChatMessage, SessionSnapshot } from "@shared/session";
 import type { PersistedDisplayCard } from "@shared/card-display-protocol";
-import { projectArtifactStatusSchema } from "@shared/session";
 import {
   findRecoverableConversation,
 } from "@shared/session-recovery";
@@ -76,6 +77,33 @@ import {
 import { isRuntimeCancellation } from "./agent/runtime/lifecycle/runtime-cancellation";
 import { formatPublicErrorMessage } from "@shared/agent-activity-display";
 import { isTeammateProgressEvent } from "@shared/teammate-progress";
+import { configureApplicationDataRoot } from "./application-data";
+import {
+  asPresentationId,
+  asProjectId,
+  asProposalId,
+  type ProjectId,
+  type PptJobProjection,
+} from "@shared/presentation-lifecycle";
+import {
+  ContentAddressedBlobStore,
+  canonicalJson,
+  hashArtifactValue,
+  hashBytes,
+} from
+  "./presentation-lifecycle/content-addressed-blob-store";
+import { PresentationLifecycleOrchestrator } from
+  "./presentation-lifecycle/presentation-lifecycle-orchestrator";
+import { PresentationLifecycleRepository } from
+  "./presentation-lifecycle/presentation-lifecycle-repository";
+import { PresentationLifecycleToolBridge } from
+  "./presentation-lifecycle/presentation-lifecycle-tool-bridge";
+import { PresentationCommitService } from
+  "./presentation-lifecycle/presentation-commit-service";
+import { PresentationArtifactChangeObserver } from
+  "./presentation-lifecycle/artifact-change-observer";
+
+const { applicationDataRoot } = configureApplicationDataRoot(app);
 
 const logger = createModuleLogger("main");
 const agentGateway = new AgentGateway();
@@ -103,6 +131,8 @@ async function resolveSkillRegistry(): Promise<SkillRegistry> {
 
 interface SessionRuntime {
   commandBus: CommandBus;
+  presentationCommitService: PresentationCommitService;
+  projectId: ProjectId;
   agentService: AgentService;
   messageBus?: MessageBus;
   teammateManager?: TeammateManager;
@@ -122,11 +152,51 @@ function createSessionRuntime(
   const commandBus = new CommandBus(snapshot.presentation);
   const registry = createDefaultToolRegistry();
   const runtimeRoot = join(applicationDataRoot, "runtime", snapshot.session.id);
+  const projectStorageIdentity = snapshot.session.workspacePath
+    ?? `session:${snapshot.session.id}`;
+  const projectId = asProjectId(
+    sessionStore.conversationDatabase.ensureProject(
+      projectStorageIdentity,
+      snapshot.presentation.title,
+    ),
+  );
   const messageBus = new MessageBus(MessageBus.defaultMailboxDir(runtimeRoot));
   const teammateManager = new TeammateManager(messageBus);
+  const presentationCommitService = new PresentationCommitService(
+    snapshot.session.id,
+    projectId,
+    asPresentationId(snapshot.presentation.id),
+    commandBus,
+    sessionStore,
+    presentationLifecycleOrchestrator,
+    lifecycleBlobStore,
+  );
   const agentService = new AgentService(
     commandBus,
-    new AgentRuntime(registry, agentGateway, skillRegistry, sessionStore.conversationDatabase),
+    new AgentRuntime(
+      registry,
+      agentGateway,
+      skillRegistry,
+      sessionStore.conversationDatabase,
+      ({ queryId, options }) => {
+        if (options.runId) {
+          sessionStore.conversationDatabase.bindRunQueryId(
+            options.runId,
+            queryId,
+          );
+        }
+        return new PresentationLifecycleToolBridge(
+          presentationLifecycleOrchestrator,
+          projectId,
+          snapshot.presentation.id,
+          queryId,
+          options.request,
+          lifecycleBlobStore,
+          lifecycleArtifactChangeObserver,
+          options.startMode.type === "resume_query",
+        );
+      },
+    ),
     new CommitGate(new RiskPolicy()),
     snapshot.project?.rootPath,
     toolApprovalBroker,
@@ -134,9 +204,14 @@ function createSessionRuntime(
     teammateManager,
     sessionStore.conversationDatabase,
     runtimeRoot,
+    presentationLifecycleOrchestrator,
+    presentationCommitService,
+    lifecycleBlobStore,
   );
   return {
     commandBus,
+    presentationCommitService,
+    projectId,
     agentService,
     messageBus,
     teammateManager,
@@ -279,6 +354,10 @@ function createWindow(onWindowCreated?: (window: BrowserWindow) => void): Browse
 
 let sessionStore: FileSessionStore;
 let tokenUsageStore: TokenUsageStore;
+let presentationLifecycleRepository: PresentationLifecycleRepository;
+let presentationLifecycleOrchestrator: PresentationLifecycleOrchestrator;
+let lifecycleBlobStore: ContentAddressedBlobStore;
+let lifecycleArtifactChangeObserver: PresentationArtifactChangeObserver;
 
 let activeWindowThemeMode: WindowThemeMode = "light";
 
@@ -377,8 +456,6 @@ app.whenReady().then(async () => {
   }
 
   Menu.setApplicationMenu(null);
-  const applicationDataRoot = join(app.getPath("appData"), ".agent-ppt");
-  process.env.AGENT_PPT_DATA_DIR = applicationDataRoot;
   await initializeLogManager();
   logger.info("application.started", {
     version: app.getVersion(),
@@ -387,6 +464,29 @@ app.whenReady().then(async () => {
   });
   sessionStore = new FileSessionStore(join(applicationDataRoot, "conversations.sqlite"));
   await sessionStore.initialize();
+  presentationLifecycleRepository = new PresentationLifecycleRepository(
+    {
+      filePath: join(applicationDataRoot, "conversations.sqlite"),
+      connection: sessionStore.conversationDatabase.sqliteConnection,
+    },
+  );
+  presentationLifecycleOrchestrator = new PresentationLifecycleOrchestrator(
+    presentationLifecycleRepository,
+  );
+  lifecycleArtifactChangeObserver = new PresentationArtifactChangeObserver(
+    presentationLifecycleOrchestrator,
+  );
+  sessionStore.setArtifactChangeObserver(lifecycleArtifactChangeObserver);
+  lifecycleBlobStore = new ContentAddressedBlobStore(
+    join(applicationDataRoot, "blobs"),
+  );
+  presentationLifecycleOrchestrator.subscribe((projection: PptJobProjection) => {
+    for (const window of BrowserWindow.getAllWindows()) {
+      if (!window.webContents.isDestroyed()) {
+        window.webContents.send("ppt-job:changed", projection);
+      }
+    }
+  });
   tokenUsageStore = new TokenUsageStore(join(applicationDataRoot, "token-usage.json"));
   await tokenUsageStore.initialize();
   agentGateway.setUsageRecorder((record) => tokenUsageStore.recordModelUsage(record));
@@ -418,34 +518,49 @@ app.whenReady().then(async () => {
   const getRuntimeForSession = (sessionId: string): Promise<SessionRuntime> =>
     ensureRuntime(sessionStore.getSession(sessionId));
 
+  const ensureCurrentPresentationRevision = async (runtime: SessionRuntime) => {
+    const presentation = runtime.commandBus.getSnapshot();
+    const presentationId = asPresentationId(presentation.id);
+    const existing = presentationLifecycleOrchestrator.getState(presentationId);
+    if (
+      existing?.presentationRevisionId
+      && existing.presentationRevisionNumber === presentation.revision
+    ) {
+      return existing;
+    }
+    const registration = presentationLifecycleOrchestrator.beginCapability({
+      projectId: runtime.projectId,
+      presentationId,
+      capability: "edit",
+      instruction: "Register the current authoritative Presentation revision.",
+      basePresentationRevisionId: existing?.presentationRevisionId,
+    });
+    const presentationBlob = await lifecycleBlobStore.put(
+      Buffer.from(canonicalJson(presentation), "utf8"),
+      "application/vnd.agent-ppt.presentation+json",
+    );
+    return presentationLifecycleOrchestrator.completePresentation({
+      jobId: registration.jobId,
+      presentationBlob,
+      presentationRevisionNumber: presentation.revision,
+    });
+  };
+
   const initialBootstrap = sessionStore.getBootstrap();
   if (initialBootstrap.activeSession) {
     await ensureRuntime(initialBootstrap.activeSession);
   }
 
-  /** 将 CommandBus 的当前快照同步到会话数据库和项目 deck/snapshot.json。 */
-  const persistPresentation = async (sessionId: string, runtime: SessionRuntime) => {
-    const presentation = runtime.commandBus.getSnapshot();
-    await sessionStore.savePresentation(sessionId, presentation);
-    return presentation;
-  };
-
   /**
-   * 收口一次 Agent 运行：仅在状态已落定时持久化 Presentation，
-   * 并把领域结果转换为 Renderer 可回放的展示事件。
+   * Presentation 已由 PresentationCommitService 原子提交；这里仅把领域
+   * 结果转换为 Renderer 可回放的展示事件。
    */
   const finalizeAgentResult = async (
     sessionId: string,
-    runtime: SessionRuntime,
+    _runtime: SessionRuntime,
     result: AgentRunResult,
     runId?: string,
   ): Promise<AgentRunResult> => {
-    if (result.status === "completed") {
-      await persistPresentation(sessionId, runtime);
-      await sessionStore.markProjectArtifactStatus(sessionId, "deck", "ready");
-    } else if (result.status === "rejected") {
-      await persistPresentation(sessionId, runtime);
-    }
     const displayEvents = [
       ...(result.displayEvents ?? []),
       ...toResultDisplayEvents(result, sessionId, runId),
@@ -687,6 +802,12 @@ app.whenReady().then(async () => {
     (_, sessionId: string, cursor?: number, limit?: number) =>
       sessionStore.conversationDatabase.listEvents(sessionId, cursor, limit),
   );
+  ipcMain.handle("ppt-job:get", (_, sessionId: string) => {
+    const snapshot = sessionStore.getSession(sessionId);
+    return presentationLifecycleRepository.getProjectionByPresentationId(
+      asPresentationId(snapshot.presentation.id),
+    );
+  });
 
   ipcMain.handle("project:list-artifacts", (_, sessionId: string) =>
     sessionStore.listProjectArtifacts(sessionId),
@@ -760,44 +881,27 @@ app.whenReady().then(async () => {
       );
     },
   );
-  ipcMain.handle(
-    "project:mark-artifact-status",
-    (_, sessionId: string, artifactId: string, status: unknown) =>
-      sessionStore.markProjectArtifactStatus(
-        sessionId,
-        artifactId,
-        projectArtifactStatusSchema.parse(status),
-      ),
-  );
-
   ipcMain.handle("presentation:get", async () =>
     (await getActiveRuntime()).commandBus.getSnapshot(),
   );
   ipcMain.handle("presentation:undo", async () => {
-    const sessionId = activeSessionId;
     const runtime = await getActiveRuntime();
-    runtime.commandBus.undo();
-    return persistPresentation(sessionId, runtime);
+    return runtime.presentationCommitService.undo();
   });
   ipcMain.handle("presentation:redo", async () => {
-    const sessionId = activeSessionId;
     const runtime = await getActiveRuntime();
-    runtime.commandBus.redo();
-    return persistPresentation(sessionId, runtime);
+    return runtime.presentationCommitService.redo();
   });
   ipcMain.handle("presentation:execute", async (_, command: PresentationCommand) => {
-    const sessionId = activeSessionId;
     const runtime = await getActiveRuntime();
-    runtime.commandBus.execute(command);
-    return persistPresentation(sessionId, runtime);
+    return runtime.presentationCommitService.execute(command);
   });
   ipcMain.handle(
     "presentation:export",
-    async (_, _presentation: Presentation, options: ExportPresentationOptions) => {
+    async (_, sessionId: string, options: ExportPresentationOptions) => {
       const startedAt = Date.now();
-      const sessionId = activeSessionId;
       const validatedOptions = exportPresentationOptionsSchema.parse(options);
-      const runtime = await getActiveRuntime();
+      const runtime = await getRuntimeForSession(sessionId);
       const presentation = runtime.commandBus.getSnapshot();
       const window = BrowserWindow.getFocusedWindow();
       const dialogOptions = {
@@ -818,38 +922,180 @@ app.whenReady().then(async () => {
         return null;
       }
 
+      const format = extname(filePath).slice(1).toLowerCase();
+      if (format !== "pptx" && format !== "html" && format !== "json") {
+        throw new Error("Unsupported export format.");
+      }
+      const presentationState = await ensureCurrentPresentationRevision(runtime);
+      const exportState = presentationLifecycleOrchestrator.beginCapability({
+        projectId: runtime.projectId,
+        presentationId: asPresentationId(presentation.id),
+        capability: "export",
+        instruction: `Export the current Presentation as ${format}.`,
+        basePresentationRevisionId: presentationState.presentationRevisionId,
+      });
+      if (!presentationState.presentationRevisionId) {
+        throw new Error("Current PresentationRevision is unavailable for export.");
+      }
+      const destination = resolve(filePath);
+      const effectKey = hashArtifactValue({
+        presentationRevisionId: presentationState.presentationRevisionId,
+        options: validatedOptions,
+        destination,
+      });
+      let claimed = false;
+      let lifecycleCompleted = false;
+
       logger.info("presentation.export.started", {
         sessionId,
         revision: presentation.revision,
         slideCount: presentation.slides.length,
-        format: filePath.split(".").pop()?.toLowerCase(),
+        format,
       });
       try {
-        const result = await deckExportService.exportDeck({
-          presentation,
-          options: validatedOptions,
-          filePath,
-          workspaceRoot: runtime.workspaceRoot,
+        const claim = presentationLifecycleRepository.claimSideEffect({
+          jobId: exportState.jobId,
+          operation: "export",
+          key: effectKey,
+          claimedAt: new Date().toISOString(),
         });
+        let recoveredExport: Awaited<
+          ReturnType<typeof recoverInterruptedExport>
+        > | undefined;
+        if (claim.type === "in_progress") {
+          recoveredExport = await recoverInterruptedExport({
+            lifecycle: presentationLifecycleOrchestrator,
+            jobId: exportState.jobId,
+            effectKey,
+            presentationRevisionId:
+              presentationState.presentationRevisionId,
+            presentation,
+            options: validatedOptions,
+            destination,
+            format,
+          });
+          lifecycleCompleted = true;
+        }
+        if (claim.type === "failed") {
+          presentationLifecycleOrchestrator.waitForUser(
+            exportState.jobId,
+            "The previous export attempt failed and cannot be blindly replayed.",
+          );
+          throw new Error(
+            `This export attempt will not be replayed: ${claim.error}`,
+          );
+        }
+        claimed = claim.type === "claimed";
 
-        if (filePath.endsWith(".pptx")) {
+        let exportedPath = destination;
+        let exportedSlideCount = presentation.slides.length;
+        if (claim.type === "succeeded") {
+          const settled = claim.result as {
+            destination?: unknown;
+            fileHash?: unknown;
+            byteLength?: unknown;
+            format?: unknown;
+          };
+          if (
+            settled.destination !== destination
+            || typeof settled.fileHash !== "string"
+            || settled.format !== format
+          ) {
+            presentationLifecycleOrchestrator.waitForUser(
+              exportState.jobId,
+              "The recorded export proof does not match this request.",
+            );
+            throw new Error("The recorded export proof does not match this request.");
+          }
+          const existingBytes = await readFile(destination);
+          if (
+            hashBytes(existingBytes) !== settled.fileHash
+            || existingBytes.byteLength !== settled.byteLength
+          ) {
+            presentationLifecycleOrchestrator.waitForUser(
+              exportState.jobId,
+              "The exported file no longer matches its durable hash.",
+            );
+            throw new Error("The exported file no longer matches its durable hash.");
+          }
+        } else if (claim.type === "claimed") {
+          const result = await deckExportService.exportDeck({
+            presentation,
+            options: validatedOptions,
+            filePath: destination,
+            workspaceRoot: runtime.workspaceRoot,
+          });
+          exportedPath = result.filePath;
+          exportedSlideCount = result.slideCount;
+        } else {
+          exportedSlideCount = recoveredExport!.proof.slideCount;
+        }
+        if (!recoveredExport) {
+          const exportedBytes = await readFile(exportedPath);
+          const exportedStat = await stat(exportedPath);
+          const fileHash = hashBytes(exportedBytes);
+          presentationLifecycleOrchestrator.completeExport({
+            jobId: exportState.jobId,
+            effectKey,
+            presentationRevisionId: presentationState.presentationRevisionId,
+            options: validatedOptions,
+            destination: exportedPath,
+            format,
+            fileHash,
+            byteLength: exportedStat.size,
+            postflight: {
+              passed: true,
+              validator: "export-service",
+              slideCount: exportedSlideCount,
+            },
+          });
+          lifecycleCompleted = true;
+        }
+
+        if (format === "pptx") {
           await sessionStore.recordDeckExport(sessionId, {
             revision: presentation.revision,
-            filePath: result.filePath,
+            filePath: exportedPath,
             designSystem: presentation.designSystem,
+          }).catch((error) => {
+            logger.error("presentation.export-history.sync-failed", {
+              sessionId,
+              filePath: exportedPath,
+              error,
+            });
           });
         }
 
         logger.info("presentation.export.completed", {
           sessionId,
-          filePath: result.filePath,
+          filePath: exportedPath,
           durationMs: Date.now() - startedAt,
         });
-        return result.filePath;
+        return exportedPath;
       } catch (error) {
+        if (claimed && !lifecycleCompleted) {
+          presentationLifecycleRepository.completeSideEffect({
+            jobId: exportState.jobId,
+            operation: "export",
+            key: effectKey,
+            status: "failed",
+            error: error instanceof Error ? error.message : String(error),
+            completedAt: new Date().toISOString(),
+          });
+          const latest = presentationLifecycleRepository.getJob(exportState.jobId);
+          if (
+            latest?.currentRequest.requestId === exportState.currentRequest.requestId
+            && latest.status === "running"
+          ) {
+            presentationLifecycleOrchestrator.waitForUser(
+              exportState.jobId,
+              "Export failed; choose whether to retry with a new destination.",
+            );
+          }
+        }
         logger.error("presentation.export.failed", {
           sessionId,
-          filePath,
+          filePath: destination,
           durationMs: Date.now() - startedAt,
           error,
         });
@@ -1167,20 +1413,30 @@ app.whenReady().then(async () => {
     }
   });
 
-  ipcMain.handle("agent:resume", async (_event, sessionId: string, threadId: string, approved: boolean) => {
+  ipcMain.handle("agent:resume", async (
+    _event,
+    sessionId: string,
+    rawProposalId: string,
+    approved: boolean,
+  ) => {
+    const proposalId = asProposalId(rawProposalId);
     const runtime = await getRuntimeForSession(sessionId);
-    const runId = sessionStore.findWaitingAgentRunId(sessionId, threadId);
+    const chat = sessionStore.findProposalChatContext(sessionId, proposalId);
     return runAgentOperation(
-      "resume",
+      "resolve-proposal",
       sessionId,
-      runId,
-      { threadId, approved },
+      undefined,
+      {
+        proposalId,
+        ...(chat?.threadId ? { threadId: chat.threadId } : {}),
+        approved,
+      },
       undefined,
       async () => finalizeAgentResult(
         sessionId,
         runtime,
-        await runtime.agentService.resume(threadId, approved),
-        runId,
+        await runtime.agentService.resumeProposal(proposalId, approved),
+        undefined,
       ),
     );
   });
@@ -1200,6 +1456,7 @@ app.on("window-all-closed", () => {
 app.on("will-quit", () => {
   logger.info("application.stopping");
   slideThumbnailService.dispose();
+  presentationLifecycleRepository?.close();
   sessionStore?.conversationDatabase.close();
 });
 

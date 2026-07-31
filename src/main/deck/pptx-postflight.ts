@@ -269,6 +269,7 @@ async function inspectSvgFallbackPng(
 export async function inspectPptxExport(
   filePath: string,
   presentation: Presentation,
+  expectedExportIdentity?: string,
 ): Promise<PptxPostflightReport> {
   const errors: string[] = [];
   const warnings: string[] = [];
@@ -282,6 +283,20 @@ export async function inspectPptxExport(
   for (const requiredPart of ["[Content_Types].xml", "ppt/presentation.xml"]) {
     if (!archive.file(requiredPart)) {
       errors.push(`Missing required PPTX part: ${requiredPart}`);
+    }
+  }
+  if (expectedExportIdentity) {
+    const coreProperties = archive.file("docProps/core.xml");
+    if (!coreProperties) {
+      errors.push("Missing required PPTX export identity metadata.");
+    } else {
+      const coreXml = await coreProperties.async("string");
+      const subject = coreXml.match(
+        /<dc:subject(?:\s[^>]*)?>([\s\S]*?)<\/dc:subject>/i,
+      )?.[1];
+      if (subject !== expectedExportIdentity) {
+        errors.push("PPTX export identity does not match the requested Presentation revision.");
+      }
     }
   }
   const presentationFile = archive.file("ppt/presentation.xml");

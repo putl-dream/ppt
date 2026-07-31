@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { posix } from "node:path";
 import {
   WORKSPACE_FILE_TOOL_PERMISSION_PROFILES,
   type ToolPermissionProfile,
@@ -8,10 +9,18 @@ import {
   globWorkspaceFiles,
   type WorkspaceFileService,
 } from "./workspace-file-service";
+import type {
+  PptLifecycleToolBridge,
+  ToolRuntimeBehavior,
+} from "../tool-definition";
 
 export interface WorkspaceFileToolContext {
   readonly workspaceRoot?: string;
   readonly fileService?: WorkspaceFileService;
+  readonly presentationLifecycle?: Pick<
+    PptLifecycleToolBridge,
+    "observeArtifactChanges"
+  >;
 }
 
 export interface WorkspaceFileToolContract<
@@ -22,6 +31,7 @@ export interface WorkspaceFileToolContract<
   description: string;
   inputSchema: TParams;
   outputSchema: z.ZodType<TResult>;
+  behavior?: ToolRuntimeBehavior<z.infer<TParams>>;
   risk: ToolRisk;
   permission: ToolPermissionProfile;
   isEnabled: (context: WorkspaceFileToolContext) => boolean;
@@ -103,7 +113,10 @@ export const readFileContract: WorkspaceFileToolContract<
   risk: "low",
   permission: WORKSPACE_FILE_TOOL_PERMISSION_PROFILES.ReadFile,
   isEnabled: hasWorkspaceFileService,
-  execute: async (args, context) => requireFileService(context).read(args.path),
+  execute: async (args, context) => {
+    await observeArtifactChange(context, [args.path], "agent_read");
+    return requireFileService(context).read(args.path);
+  },
 };
 
 export const globFilesContract: WorkspaceFileToolContract<
@@ -121,6 +134,7 @@ export const globFilesContract: WorkspaceFileToolContract<
   isEnabled: hasWorkspaceFileService,
   execute: async (args, context) => {
     const matches = await globWorkspaceFiles(context.workspaceRoot!, args.pattern);
+    await observeArtifactChange(context, matches, "capability_probe");
     return {
       matches: matches.slice(0, args.limit),
       totalMatches: matches.length,
@@ -139,14 +153,24 @@ export const writeFileContract: WorkspaceFileToolContract<
     + "必须具有当前 thread 的 ReadFile receipt；磁盘版本变化会拒绝写入。",
   inputSchema: writeFileSchema,
   outputSchema: writeFileOutputSchema,
+  behavior: {
+    presentation: {
+      allowedCapabilities: ["create", "edit", "restyle"],
+      isRequired: (args) => isPresentationOwnedWorkspacePath(args.path),
+    },
+  },
   risk: "medium",
   permission: WORKSPACE_FILE_TOOL_PERMISSION_PROFILES.WriteFile,
   isEnabled: hasWorkspaceFileService,
-  execute: async (args, context) => requireFileService(context).write(
-    args.path,
-    args.content,
-    { expectedVersion: args.expected_version },
-  ),
+  execute: async (args, context) => {
+    const result = await requireFileService(context).write(
+      args.path,
+      args.content,
+      { expectedVersion: args.expected_version },
+    );
+    await observeArtifactChange(context, [result.path], "agent_write");
+    return result;
+  },
 };
 
 export const editFileContract: WorkspaceFileToolContract<
@@ -159,18 +183,28 @@ export const editFileContract: WorkspaceFileToolContract<
     + "只有显式 replace_all=true 才会替换所有匹配，版本冲突时拒绝修改。",
   inputSchema: editFileSchema,
   outputSchema: editFileOutputSchema,
+  behavior: {
+    presentation: {
+      allowedCapabilities: ["create", "edit", "restyle"],
+      isRequired: (args) => isPresentationOwnedWorkspacePath(args.path),
+    },
+  },
   risk: "medium",
   permission: WORKSPACE_FILE_TOOL_PERMISSION_PROFILES.EditFile,
   isEnabled: hasWorkspaceFileService,
-  execute: async (args, context) => requireFileService(context).edit(
-    args.path,
-    args.old_string,
-    args.new_string,
-    {
-      expectedVersion: args.expected_version,
-      replaceAll: args.replace_all,
-    },
-  ),
+  execute: async (args, context) => {
+    const result = await requireFileService(context).edit(
+      args.path,
+      args.old_string,
+      args.new_string,
+      {
+        expectedVersion: args.expected_version,
+        replaceAll: args.replace_all,
+      },
+    );
+    await observeArtifactChange(context, [result.path], "agent_write");
+    return result;
+  },
 };
 
 export const workspaceFileToolContracts = [
@@ -184,9 +218,37 @@ function hasWorkspaceFileService(context: WorkspaceFileToolContext): boolean {
   return Boolean(context.workspaceRoot && context.fileService);
 }
 
+function isPresentationOwnedWorkspacePath(input: string): boolean {
+  const path = posix.normalize(input.replace(/\\/g, "/"))
+    .replace(/^\.\//, "")
+    .toLowerCase();
+  return path === "design/design-spec.json"
+    || path === "slides/page-plan.json"
+    || path === "slides/storyboard.json"
+    || path === "slides/layout-plan.json"
+    || path === "slides/layout-choice.json"
+    || path === "slides/layout-input.json"
+    || path === "deck/snapshot.json"
+    || path.startsWith("slides/svg/")
+    || path.startsWith("assets/");
+}
+
 function requireFileService(context: WorkspaceFileToolContext): WorkspaceFileService {
   if (!context.workspaceRoot || !context.fileService) {
     throw new Error("Workspace file tools require a configured workspace.");
   }
   return context.fileService;
+}
+
+async function observeArtifactChange(
+  context: WorkspaceFileToolContext,
+  paths: readonly string[],
+  source: "capability_probe" | "agent_read" | "agent_write",
+): Promise<void> {
+  if (!context.workspaceRoot || !context.presentationLifecycle) return;
+  await context.presentationLifecycle.observeArtifactChanges({
+    workspaceRoot: context.workspaceRoot,
+    paths,
+    source,
+  });
 }

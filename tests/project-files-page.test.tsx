@@ -2,6 +2,15 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import type { ProjectArtifact } from "../src/shared/session";
+import {
+  asArtifactId,
+  asArtifactRevisionId,
+  asPptCapabilityRequestId,
+  asPptJobId,
+  asPresentationId,
+  asProposalId,
+  type PptJobProjection,
+} from "../src/shared/presentation-lifecycle";
 import type { ProjectFilesController } from "../src/renderer/src/app/project/useProjectFiles";
 import { LeftPanel } from "../src/renderer/src/components/LeftPanel";
 import { ProjectFilesPageContent } from "../src/renderer/src/components/ProjectFilesPage";
@@ -11,27 +20,47 @@ const ARTIFACTS: ProjectArtifact[] = [
     id: "brief",
     title: "需求简报",
     path: "brief.md",
-    kind: "brief",
-    status: "ready",
-    dependsOn: [],
+    kind: "reference",
   },
   {
     id: "deck",
     title: "演示文稿",
     path: "deck/",
     kind: "deck",
-    status: "draft",
-    dependsOn: ["brief"],
   },
   {
-    id: "history",
-    title: "历史版本",
-    path: "history/",
-    kind: "history",
-    status: "stale",
-    dependsOn: [],
+    id: "export-history",
+    title: "导出记录",
+    path: "history/exports.json",
+    kind: "export-history",
   },
 ];
+
+const WAITING_JOB: PptJobProjection = {
+  jobId: asPptJobId("job-1"),
+  presentationId: asPresentationId("presentation-1"),
+  capability: "create",
+  requestId: asPptCapabilityRequestId("request-1"),
+  status: "waiting_user",
+  stage: "preview",
+  stateRevision: 4,
+  committedArtifacts: [],
+  staleArtifacts: [{
+    artifactId: asArtifactId("page:P01"),
+    revisionId: asArtifactRevisionId("revision-page-1"),
+    staleBecause: {
+      artifactId: asArtifactId("design-spec"),
+      revisionId: asArtifactRevisionId("revision-design-2"),
+      contentHash: `sha256:${"a".repeat(64)}`,
+    },
+    reason: "设计规范已更新",
+    detectedAt: "2026-07-30T00:00:00.000Z",
+  }],
+  waitingReason: "请确认页面预览",
+  proposalId: asProposalId("proposal-1"),
+  proposalStatus: "waiting_approval",
+  updatedAt: "2026-07-30T00:00:00.000Z",
+};
 
 function createController(
   overrides: Partial<ProjectFilesController> = {},
@@ -115,7 +144,7 @@ describe("ProjectFilesPageContent", () => {
 
     expect(html).toContain("需求简报");
     expect(html).toContain("演示文稿");
-    expect(html).toContain("历史版本");
+    expect(html).toContain("导出记录");
     expect(html).toContain("brief.md");
     expect(html).toContain("# 更新简报");
     expect(html).toContain("与磁盘版本的差异");
@@ -127,6 +156,76 @@ describe("ProjectFilesPageContent", () => {
     )?.[0];
     expect(saveButton).toBeDefined();
     expect(saveButton).not.toContain("disabled");
+  });
+
+  it("renders PptJob status, stage, waiting reason, and lifecycle stale count", () => {
+    const html = renderToStaticMarkup(
+      <ProjectFilesPageContent
+        controller={createController({ artifacts: ARTIFACTS })}
+        hasSession
+        sessionTitle="季度汇报"
+        workspaceLabel="Acme"
+        busy={false}
+        pptJob={WAITING_JOB}
+      />,
+    );
+
+    expect(html).toContain("PPT JOB");
+    expect(html).toContain("等待用户");
+    expect(html).toContain("阶段：预览");
+    expect(html).toContain("Proposal：等待审批");
+    expect(html).toContain("请确认页面预览");
+    expect(html).toContain("1 个生命周期产物待更新");
+  });
+
+  it("derives committed and stale file badges from the PptJob projection", () => {
+    const lifecycleJob: PptJobProjection = {
+      ...WAITING_JOB,
+      committedArtifacts: [
+        {
+          artifactId: asArtifactId("design-spec"),
+          revisionId: asArtifactRevisionId("revision-design-1"),
+          contentHash: `sha256:${"b".repeat(64)}`,
+          kind: "design_spec",
+          stage: "design_spec",
+        },
+        {
+          artifactId: asArtifactId("page-svg:slides/svg/P01.svg"),
+          revisionId: asArtifactRevisionId("revision-page-1"),
+          contentHash: `sha256:${"c".repeat(64)}`,
+          kind: "page_svg",
+          stage: "page_svg",
+        },
+      ],
+      staleArtifacts: [{
+        artifactId: asArtifactId("page-svg:slides/svg/P01.svg"),
+        revisionId: asArtifactRevisionId("revision-page-1"),
+        staleBecause: {
+          artifactId: asArtifactId("design-spec"),
+          revisionId: asArtifactRevisionId("revision-design-2"),
+          contentHash: `sha256:${"a".repeat(64)}`,
+        },
+        reason: "设计规范已更新",
+        detectedAt: "2026-07-30T00:00:00.000Z",
+      }],
+    };
+    const html = renderToStaticMarkup(
+      <ProjectFilesPageContent
+        controller={createController({
+          artifacts: ARTIFACTS,
+          files: ["design/design-spec.json", "slides/svg/P01.svg", "brief.md"],
+        })}
+        hasSession
+        sessionTitle="季度汇报"
+        workspaceLabel="Acme"
+        busy={false}
+        pptJob={lifecycleJob}
+      />,
+    );
+
+    expect(html).toContain("已提交");
+    expect(html).toContain("待更新");
+    expect(html.match(/project-files-artifact-badge/g)).toHaveLength(2);
   });
 
   it("allows browsing but disables saving while the agent is running", () => {

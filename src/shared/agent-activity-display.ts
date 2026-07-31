@@ -24,6 +24,7 @@ interface AgentToolDisplayCopy {
  */
 const TOOL_DISPLAY_COPY = {
   AskUser: { action: "确认需求", category: "coordinate" },
+  BeginPptCapability: { action: "开始演示文稿任务", category: "coordinate" },
   EditFile: { action: "编辑工作文件", category: "change" },
   ExecuteExtraTool: { action: "执行扩展操作", category: "change" },
   ExecuteLayoutPlan: { action: "应用页面布局", category: "change" },
@@ -43,6 +44,7 @@ const TOOL_DISPLAY_COPY = {
   shutdown_teammate: { action: "结束协作任务", category: "coordinate" },
   spawn_teammate: { action: "启动协作任务", category: "coordinate" },
   SubmitCommands: { action: "提交修改方案", category: "change" },
+  SubmitPptReview: { action: "提交演示文稿审查", category: "read" },
   SubmitSvgDeck: { action: "提交 SVG 演示文稿", category: "change" },
   task_worker: { action: "分配任务步骤", category: "coordinate" },
   TaskCreate: { action: "建立任务", category: "coordinate" },

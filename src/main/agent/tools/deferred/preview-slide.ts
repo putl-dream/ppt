@@ -166,6 +166,9 @@ export const previewSlideTool: ToolDefinition<
     ];
   },
   behavior: {
+    presentation: {
+      allowedCapabilities: ["edit", "restyle", "review"],
+    },
     background: {
       isRequested: (args) => args.run_in_background === true,
       describe: (args) => `PreviewSlide: ${args.slideId}`,

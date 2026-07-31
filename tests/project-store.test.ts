@@ -1,14 +1,40 @@
 import { beforeAll, afterEach, describe, expect, it, vi } from "vitest";
 import { useProjectStore } from "../src/renderer/src/components/project-store";
+import {
+  asPptCapabilityRequestId,
+  asPptJobId,
+  asPresentationId,
+  asProposalId,
+  type PptJobProjection,
+} from "../src/shared/presentation-lifecycle";
 
 const mockDesktopApi = {
   readProjectArtifact: vi.fn(),
   openProjectFile: vi.fn(),
   saveProjectFile: vi.fn(),
-  markProjectArtifactStatus: vi.fn(),
+  getPptJob: vi.fn(),
+  onPptJobChanged: vi.fn(),
 };
 
 const FILE_VERSION = `sha256:${"a".repeat(64)}`;
+
+function pptJobProjection(
+  overrides: Partial<PptJobProjection> = {},
+): PptJobProjection {
+  return {
+    jobId: asPptJobId("job-1"),
+    presentationId: asPresentationId("presentation-1"),
+    capability: "create",
+    requestId: asPptCapabilityRequestId("request-1"),
+    status: "running",
+    stage: "page_svg",
+    stateRevision: 2,
+    committedArtifacts: [],
+    staleArtifacts: [],
+    updatedAt: "2026-07-30T00:00:00.000Z",
+    ...overrides,
+  };
+}
 
 function openedProjectFile(
   path: string,
@@ -91,44 +117,14 @@ describe("project-store zustand store", () => {
     expect(brief?.isHydrated).toBe(true);
     expect(outline?.content).toBe("# Custom Outline Content");
     expect(outline?.isHydrated).toBe(true);
-    expect(mockDesktopApi.readProjectArtifact).toHaveBeenCalledTimes(6); // brief, outline, research, slides, design, deck
+    expect(mockDesktopApi.readProjectArtifact).toHaveBeenCalledTimes(9);
   });
 
-  it("updates artifact content and propagates stale status to downstream artifacts", async () => {
+  it("autosaves artifact content without manufacturing workflow status", async () => {
     vi.useFakeTimers();
-
-    mockDesktopApi.openProjectFile.mockImplementation(async (_sessionId, path) =>
-      openedProjectFile(path, ""));
-    mockDesktopApi.saveProjectFile.mockImplementation(async (_sessionId, path) => ({
-      path,
-      changed: false,
-      staleArtifactIds: [],
-      version: FILE_VERSION,
-      mtimeMs: 2,
-      size: 0,
-      encoding: "utf8",
-      newline: "none",
-      characterCount: 0,
-      editToken: "11111111-1111-4111-8111-111111111111",
-    }));
-    mockDesktopApi.markProjectArtifactStatus.mockImplementation(async (_sessionId, id) => ({
-      id,
-      title: id,
-      path: `${id}.md`,
-      status: "ready",
-      dependsOn: [],
-    }));
 
     const store = useProjectStore.getState();
     store.initializeProject("test-session", "Test Project");
-
-    // mark all stages ready first
-    for (const stage of ["brief", "outline", "research", "design", "slides", "deck"] as const) {
-      await store.markStageReady(stage);
-    }
-
-    mockDesktopApi.openProjectFile.mockClear();
-    mockDesktopApi.saveProjectFile.mockClear();
     mockDesktopApi.openProjectFile.mockResolvedValue(
       openedProjectFile("brief.md", "# Previous Brief"),
     );
@@ -136,7 +132,6 @@ describe("project-store zustand store", () => {
       path: "brief.md",
       changed: true,
       changedArtifactId: "brief",
-      staleArtifactIds: ["outline", "research", "design", "slides", "deck"],
       version: `sha256:${"b".repeat(64)}`,
       mtimeMs: 2,
       size: 19,
@@ -146,24 +141,14 @@ describe("project-store zustand store", () => {
       editToken: "11111111-1111-4111-8111-111111111111",
     });
 
-    let state = useProjectStore.getState();
-    expect(state.activeProject?.artifacts.brief.status).toBe("ready");
-    expect(state.activeProject?.artifacts.outline.status).toBe("ready");
-
-    // update brief content
     store.updateArtifactContent("brief", "# New Brief Content", "user");
 
-    state = useProjectStore.getState();
+    let state = useProjectStore.getState();
     expect(state.activeProject?.artifacts.brief.content).toBe("# New Brief Content");
-    // status propagates to stale immediately for downstream due to local propagateStale
-    expect(state.activeProject?.artifacts.brief.status).toBe("ready"); // upstream edited locally
-    expect(state.activeProject?.artifacts.outline.status).toBe("stale");
-    expect(state.activeProject?.artifacts.deck.status).toBe("stale");
+    expect(state.activeProject?.artifacts.brief).not.toHaveProperty("status");
+    expect(state.activeProject?.artifacts.outline).not.toHaveProperty("status");
 
-    // Fast-forward write debouncer
     vi.advanceTimersByTime(400);
-
-    // wait for promises to resolve
     await vi.runAllTimersAsync();
 
     expect(mockDesktopApi.openProjectFile).toHaveBeenCalledWith(
@@ -178,59 +163,110 @@ describe("project-store zustand store", () => {
       FILE_VERSION,
     );
 
-    // after write resolves, check applied write result
     state = useProjectStore.getState();
-    expect(state.activeProject?.artifacts.brief.status).toBe("draft");
-    expect(state.activeProject?.artifacts.outline.status).toBe("stale");
+    expect(state.activeProject?.artifacts.brief.lastWriteError).toBeUndefined();
   });
 
-  it("marks stage ready and calls backend write + status updates", async () => {
-    mockDesktopApi.markProjectArtifactStatus.mockResolvedValue({
-      id: "brief",
-      title: "Brief",
-      path: "brief.md",
-      status: "ready",
-      dependsOn: [],
+  it("hydrates and updates the current lifecycle projection independently of chat status", async () => {
+    const initial = pptJobProjection();
+    mockDesktopApi.getPptJob.mockResolvedValue(initial);
+
+    const store = useProjectStore.getState();
+    store.initializeProject(
+      "test-session",
+      "Test Project",
+      undefined,
+      "presentation-1",
+    );
+    await store.hydratePptJob("test-session");
+
+    expect(mockDesktopApi.getPptJob).toHaveBeenCalledWith("test-session");
+    expect(useProjectStore.getState().pptJob).toEqual(initial);
+
+    store.applyPptJobProjection(pptJobProjection({
+      status: "waiting_user",
+      stage: "preview",
+      stateRevision: 3,
+      waitingReason: "请确认预览",
+    }));
+    expect(useProjectStore.getState().pptJob).toMatchObject({
+      status: "waiting_user",
+      stage: "preview",
+      waitingReason: "请确认预览",
     });
 
-    const store = useProjectStore.getState();
-    store.initializeProject("test-session", "Test Project");
-    const briefContent = useProjectStore.getState().activeProject!.artifacts.brief.content;
-    mockDesktopApi.openProjectFile.mockResolvedValue(
-      openedProjectFile("brief.md", briefContent),
-    );
-    
-    await store.markStageReady("brief");
+    store.applyPptJobProjection(pptJobProjection({
+      status: "running",
+      stateRevision: 1,
+    }));
+    expect(useProjectStore.getState().pptJob?.stateRevision).toBe(3);
 
-    const state = useProjectStore.getState();
-    expect(state.activeProject?.artifacts.brief.status).toBe("ready");
-    expect(mockDesktopApi.openProjectFile).toHaveBeenCalledWith(
-      "test-session",
-      "brief.md",
-    );
-    expect(mockDesktopApi.saveProjectFile).not.toHaveBeenCalled();
-    expect(mockDesktopApi.markProjectArtifactStatus).toHaveBeenCalledWith(
-      "test-session",
-      "brief",
-      "ready",
-    );
+    store.applyPptJobProjection(pptJobProjection({
+      presentationId: asPresentationId("other-presentation"),
+      status: "failed",
+      stateRevision: 4,
+    }));
+    expect(useProjectStore.getState().pptJob?.status).toBe("waiting_user");
   });
 
-  it("does not report a stage as ready when persistence fails", async () => {
-    mockDesktopApi.openProjectFile.mockResolvedValue(
-      openedProjectFile("brief.md", "persisted"),
-    );
-    mockDesktopApi.saveProjectFile.mockRejectedValue(new Error("disk full"));
+  it("does not let an older hydration response replace a newer change projection", async () => {
+    let resolveHydration!: (projection: PptJobProjection | undefined) => void;
+    mockDesktopApi.getPptJob.mockReturnValueOnce(new Promise((resolve) => {
+      resolveHydration = resolve;
+    }));
 
     const store = useProjectStore.getState();
-    store.initializeProject("test-session", "Test Project");
+    store.initializeProject(
+      "test-session",
+      "Test Project",
+      undefined,
+      "presentation-1",
+    );
+    const hydration = store.hydratePptJob("test-session");
 
-    await expect(store.markStageReady("brief")).rejects.toThrow("disk full");
+    store.applyPptJobProjection(pptJobProjection({
+      status: "waiting_approval",
+      stage: "proposal",
+      stateRevision: 3,
+      proposalId: asProposalId("proposal-3"),
+    }));
+    resolveHydration(pptJobProjection({
+      status: "running",
+      stage: "intent",
+      stateRevision: 1,
+    }));
+    await hydration;
 
-    const brief = useProjectStore.getState().activeProject?.artifacts.brief;
-    expect(brief?.status).toBe("draft");
-    expect(brief?.lastWriteError).toBe("disk full");
-    expect(mockDesktopApi.markProjectArtifactStatus).not.toHaveBeenCalled();
+    expect(useProjectStore.getState()).toMatchObject({
+      pptJobLoading: false,
+      pptJob: {
+        status: "waiting_approval",
+        stage: "proposal",
+        stateRevision: 3,
+        proposalId: "proposal-3",
+      },
+    });
+  });
+
+  it("ignores a hydration projection that belongs to another presentation", async () => {
+    mockDesktopApi.getPptJob.mockResolvedValueOnce(pptJobProjection({
+      presentationId: asPresentationId("other-presentation"),
+    }));
+
+    const store = useProjectStore.getState();
+    store.initializeProject(
+      "test-session",
+      "Test Project",
+      undefined,
+      "presentation-1",
+    );
+    await store.hydratePptJob("test-session");
+
+    expect(useProjectStore.getState()).toMatchObject({
+      pptJob: null,
+      pptJobLoading: false,
+      pptJobError: undefined,
+    });
   });
 
   it("opens each autosave baseline and uses the next receipt for continued edits", async () => {
@@ -246,7 +282,6 @@ describe("project-store zustand store", () => {
         path: "brief.md",
         changed: true,
         changedArtifactId: "brief",
-        staleArtifactIds: [],
         version: nextVersion,
         mtimeMs: 2,
         size: 8,
@@ -259,7 +294,6 @@ describe("project-store zustand store", () => {
         path: "brief.md",
         changed: true,
         changedArtifactId: "brief",
-        staleArtifactIds: [],
         version: `sha256:${"c".repeat(64)}`,
         mtimeMs: 3,
         size: 9,

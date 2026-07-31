@@ -131,6 +131,9 @@ export const executeLayoutPlanTool: ToolDefinition<
   loadPolicy: "core",
   inputSchema: executeLayoutPlanSchema,
   behavior: {
+    presentation: {
+      allowedCapabilities: ["create", "edit", "restyle"],
+    },
     capabilities: ["command_proposal"],
     completion: {
       terminalResult: "command_proposal",
@@ -140,6 +143,11 @@ export const executeLayoutPlanTool: ToolDefinition<
   },
   risk: "low",
   execute: async (args, context) => {
+    context.presentationLifecycle?.requireActiveCapability([
+      "create",
+      "edit",
+      "restyle",
+    ]);
     const planPath = args.path?.trim() || LAYOUT_PLAN_PATH;
     if (!context.workspaceRoot) {
       return failure(planPath, [{

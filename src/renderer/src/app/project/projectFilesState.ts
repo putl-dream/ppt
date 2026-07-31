@@ -2,7 +2,7 @@ import type {
   ProjectFileEditorReadResult,
   ProjectFileEditorWriteResult,
 } from "@shared/ipc";
-import type { ProjectArtifact, ProjectArtifactStatus } from "@shared/session";
+import type { ProjectArtifact } from "@shared/session";
 
 const BINARY_FILE_EXTENSIONS = new Set([
   "7z",
@@ -43,7 +43,6 @@ export interface ProjectFileGroup {
   id: string;
   title: string;
   rootPath: string;
-  status?: ProjectArtifactStatus;
   files: string[];
 }
 
@@ -81,7 +80,6 @@ export function groupProjectFiles(
     id: artifact.id,
     title: artifact.title,
     rootPath: normalizeProjectPath(artifact.path),
-    status: artifact.status,
     files: filesByArtifact.get(artifact.id) ?? [],
   }));
   if (otherFiles.length > 0) {

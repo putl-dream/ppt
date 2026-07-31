@@ -13,6 +13,8 @@ import { previewCommandsTool } from "../src/main/agent/tools/core/preview-comman
 import { readCurrentSlideTool } from "../src/main/agent/tools/core/read-current-slide";
 import { readPresentationSnapshotTool } from "../src/main/agent/tools/core/read-presentation-snapshot";
 import { submitCommandsTool } from "../src/main/agent/tools/core/submit-commands";
+import { beginPptCapabilityTool } from
+  "../src/main/agent/tools/core/begin-ppt-capability";
 import { analyzeDeckConsistencyTool } from "../src/main/agent/tools/deferred/analyze-deck-consistency";
 import { applyDesignSystemTool } from "../src/main/agent/tools/deferred/apply-design-system";
 import { TEST_DESIGN_SYSTEM } from "./design-engine-test-utils";
@@ -42,6 +44,17 @@ import { CommandBus } from "../src/shared/commands";
 import { AgentGatewayError, type AgentModelGateway, type AgentModelRequest } from "../src/main/agent/gateway";
 import type { AgentModelContentBlock } from "../src/main/agent/gateway/types";
 import { DurableServiceStore } from "../src/main/agent/persistence/durable-service-store";
+import { PresentationLifecycleOrchestrator } from
+  "../src/main/presentation-lifecycle/presentation-lifecycle-orchestrator";
+import { PresentationLifecycleRepository } from
+  "../src/main/presentation-lifecycle/presentation-lifecycle-repository";
+import { PresentationLifecycleToolBridge } from
+  "../src/main/presentation-lifecycle/presentation-lifecycle-tool-bridge";
+import { ContentAddressedBlobStore } from
+  "../src/main/presentation-lifecycle/content-addressed-blob-store";
+import {
+  asProjectId,
+} from "../src/shared/presentation-lifecycle";
 
 function createSequenceGateway(
   responses: Array<AgentModelContentBlock | Error>,
@@ -97,6 +110,8 @@ describe("Agent Architecture Skeletons & Types", () => {
     expect(registry.get("TaskCreate")?.loadPolicy).toBe("core");
     expect(registry.get("TaskReviewApprove")?.loadPolicy).toBe("core");
     expect(registry.get("AutoLayoutSlide")?.loadPolicy).toBe("deferred");
+    expect(registry.get("ExportPptx")).toBeUndefined();
+    expect(registry.searchDeferredTools("ExportPptx")).toEqual([]);
     expect(registry.get("PreviewSlide")?.loadPolicy).toBe("core");
     expect(registry.get("ValidateDeckLayout")?.loadPolicy).toBe("core");
     expect(registry.get("ExecuteLayoutPlan")?.loadPolicy).toBe("core");
@@ -243,7 +258,7 @@ describe("Agent Architecture Skeletons & Types", () => {
     expect(result.type).toBe("command_proposal");
   });
 
-  it("keeps AskUser context until the continued action reaches a proposal", async () => {
+  it("keeps AskUser context but refuses an ephemeral proposal after continuation", async () => {
     const registry = new ToolRegistry();
     registry.register(askUserTool);
     registry.register(searchExtraToolsTool);
@@ -280,15 +295,12 @@ describe("Agent Architecture Skeletons & Types", () => {
     expect(clarification.question?.variant).toBe("cards");
     expect(clarification.question?.options?.map((option) => option.id)).toEqual(["default", "custom"]);
 
-    const proposal = await service.continueAgentRun(
+    await expect(service.continueAgentRun(
       clarification.threadId!,
       "按默认方案",
+    )).rejects.toThrow(
+      "Presentation proposals require the durable lifecycle repository",
     );
-
-    expect(proposal.status).toBe("approval-required");
-    if (proposal.status === "approval-required") {
-      expect(proposal.approval.assumptions).toEqual(["中文为主，关键术语保留英文"]);
-    }
   });
 
   it("uses the current model selection when continuing a restored conversation", async () => {
@@ -559,7 +571,7 @@ describe("Agent Architecture Skeletons & Types", () => {
     expect(LayoutPolicy.isWithinSafeZone({ x: 50, y: 50, width: 100, height: 100 })).toBe(true);
   });
 
-  it("REQUEST_APPROVAL pauses and applies commands only after resume", async () => {
+  it("does not create an in-memory REQUEST_APPROVAL fallback", async () => {
     const registry = new ToolRegistry();
     registry.register(askUserTool);
     registry.register(submitCommandsTool);
@@ -577,17 +589,17 @@ describe("Agent Architecture Skeletons & Types", () => {
     const bus = new CommandBus(presentation);
 
     const service = new AgentService(bus, runtime, commitGate);
-    const result = await service.start("Make a title presentation", undefined, "REQUEST_APPROVAL");
-
-    expect(result.status).toBe("approval-required");
-    expect(bus.getSnapshot().title).toBe(presentation.title);
-    if (result.status !== "approval-required") throw new Error("Expected approval");
-    const completed = await service.resume(result.approval.threadId, true);
-    expect(completed.status).toBe("completed");
-    expect(bus.getSnapshot().title).toBe("Approved title");
+    await expect(service.start(
+      "Make a title presentation",
+      undefined,
+      "REQUEST_APPROVAL",
+    )).rejects.toThrow(
+      "Presentation proposals require the durable lifecycle repository",
+    );
+    expect(bus.getSnapshot()).toEqual(presentation);
   });
 
-  it("AUTO applies only low-risk proposals", async () => {
+  it("does not auto-apply a proposal without durable lifecycle services", async () => {
     const registry = new ToolRegistry();
     registry.register(submitCommandsTool);
     const runtime = new AgentRuntime(registry, createSequenceGateway([
@@ -599,12 +611,14 @@ describe("Agent Architecture Skeletons & Types", () => {
     ]));
     const bus = new CommandBus(createStarterPresentation());
     const service = new AgentService(bus, runtime, new CommitGate(new RiskPolicy()));
-    const result = await service.start("Update title", undefined, "AUTO");
-    expect(result.status).toBe("completed");
-    expect(bus.getSnapshot().title).toBe("Auto title");
+    const before = bus.getSnapshot();
+    await expect(service.start("Update title", undefined, "AUTO")).rejects.toThrow(
+      "Presentation proposals require the durable lifecycle repository",
+    );
+    expect(bus.getSnapshot()).toEqual(before);
   });
 
-  it("applies an updated execution strategy when continuing a conversation", async () => {
+  it("keeps a continued AUTO request fail-closed without lifecycle services", async () => {
     const registry = new ToolRegistry();
     registry.register(submitCommandsTool);
     const runtime = new AgentRuntime(registry, createSequenceGateway([
@@ -622,7 +636,8 @@ describe("Agent Architecture Skeletons & Types", () => {
       { role: "assistant", content: "准备好了。" },
     ]);
 
-    const result = await service.continueAgentRun(
+    const before = bus.getSnapshot();
+    await expect(service.continueAgentRun(
       threadId,
       "更新标题",
       undefined,
@@ -633,44 +648,80 @@ describe("Agent Architecture Skeletons & Types", () => {
       undefined,
       undefined,
       "AUTO",
+    )).rejects.toThrow(
+      "Presentation proposals require the durable lifecycle repository",
     );
-
-    expect(result.status).toBe("completed");
-    expect(bus.getSnapshot().title).toBe("Continued auto title");
+    expect(bus.getSnapshot()).toEqual(before);
   });
 
   it("rejects an approved proposal when the presentation changed after preview", async () => {
     const workspaceRoot = await mkdtemp(join(tmpdir(), "agent-stale-approval-"));
+    const repository = new PresentationLifecycleRepository(
+      join(workspaceRoot, "lifecycle.sqlite"),
+    );
+    const lifecycle = new PresentationLifecycleOrchestrator(repository);
+    const blobStore = new ContentAddressedBlobStore(join(workspaceRoot, "blobs"));
+    const projectId = asProjectId("stale-approval-project");
+    const presentation = createStarterPresentation();
     const registry = new ToolRegistry();
+    registry.register(beginPptCapabilityTool);
     registry.register(submitCommandsTool);
-    const runtime = new AgentRuntime(registry, createSequenceGateway([
-      modelToolCall("SubmitCommands", {
+    const runtime = new AgentRuntime(
+      registry,
+      createSequenceGateway([
+        modelToolCall("BeginPptCapability", {
+          capability: "edit",
+          instruction: "Update title",
+        }),
+        modelToolCall("SubmitCommands", {
         summary: "Update title",
         commands: [{ id: "cmd-stale", type: "set-presentation-title", title: "Stale title" }],
         risk: "low",
       }),
-    ]));
-    const bus = new CommandBus(createStarterPresentation());
+      ]),
+      undefined,
+      undefined,
+      ({ queryId, options }) => new PresentationLifecycleToolBridge(
+        lifecycle,
+        projectId,
+        presentation.id,
+        queryId,
+        options.request,
+        blobStore,
+      ),
+    );
+    const bus = new CommandBus(presentation);
     const service = new AgentService(
       bus,
       runtime,
       new CommitGate(new RiskPolicy()),
       workspaceRoot,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      lifecycle,
+      undefined,
+      blobStore,
     );
     try {
       const result = await service.start("Update title", undefined, "REQUEST_APPROVAL");
       if (result.status !== "approval-required") throw new Error("Expected approval");
       bus.execute({ id: "external-change", type: "set-presentation-title", title: "Newer title" });
 
-      await expect(service.resume(result.approval.threadId, true)).rejects.toThrow(
+      await expect(service.resumeProposal(result.approval.proposalId, true)).rejects.toThrow(
         "changed after preview",
       );
       expect(bus.getSnapshot().title).toBe("Newer title");
       const durableState = await new DurableServiceStore(workspaceRoot)
         .load(result.approval.threadId);
-      expect(durableState?.status).toBe("rejected");
+      // The Query completed when it produced the proposal. A later approval
+      // decision must not rewrite Query/service-thread completion state.
+      expect(durableState?.status).toBe("completed");
       expect(durableState).not.toHaveProperty("pendingApproval");
     } finally {
+      repository.close();
       await rm(workspaceRoot, { recursive: true, force: true });
     }
   });

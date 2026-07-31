@@ -285,7 +285,7 @@ describe("AgentRuntime terminal boundaries", () => {
     const checkpoint = await new DurableRunStore(workspaceRoot)
       .load("terminal-tool-history-thread");
     expect(checkpoint).toMatchObject({
-      status: "proposal_ready",
+      status: "completed",
       committedState: {
         turnCount: 1,
         transition: { reason: "completed" },

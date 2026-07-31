@@ -45,7 +45,6 @@ export class GenerationJobsService {
       snapshot,
       projectArtifactFilePaths.deckGenerationJobs,
       serializeJson(parsed),
-      { markStale: false },
     );
   }
 
@@ -88,7 +87,6 @@ export class ExportHistoryService {
       snapshot,
       projectArtifactFilePaths.exportHistory,
       serializeJson(parsed),
-      { markStale: false },
     );
   }
 

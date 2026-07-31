@@ -7,6 +7,7 @@ stages:
   - design
   - style
 allowed-tools:
+  - BeginPptCapability
   - ReadFile
   - WriteFile
   - GetDesignReference
@@ -15,6 +16,8 @@ allowed-tools:
 # SVG-native 设计锁
 
 ## 目标
+
+本技能必须运行在本 Query 已声明的 `create` capability 内；若尚未声明，先调用一次 `BeginPptCapability`。
 
 在写任何页面 SVG 前，先决定这套演示如何推动受众，再锁定一套可执行的视觉语言。将唯一 deck-wide 设计事实写入 `design/design-spec.json`；不要创建旧 Design System commands，也不要直接生成可见页面对象。
 

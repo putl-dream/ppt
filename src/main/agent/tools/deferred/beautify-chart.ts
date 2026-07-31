@@ -20,6 +20,11 @@ export const beautifyChartTool: ToolDefinition<
   category: "deferred",
   loadPolicy: "deferred",
   inputSchema: beautifyChartSchema,
+  behavior: {
+    presentation: {
+      allowedCapabilities: ["edit", "restyle"],
+    },
+  },
   risk: "medium",
   execute: async (args, context) => {
     const slide = context.presentation.slides.find((item) => item.id === args.slideId);

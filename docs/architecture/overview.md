@@ -108,7 +108,9 @@ Renderer 将一次运行投影为有序的可见 block 流：`response` 通过�
 
 描述 design-spec、page-plan、SVG 页、candidate、proposal、committed deck 和 export
 （以及遗留 storyboard/layout-plan）。它跨多个 Query 存活，不能塞进 `AgentQueryState`。
-产品新建为 SVG-native Agent；跨 Query 的统一 Job/revision 仍见路线图。
+现行实现以 `PresentationId` 唯一关联长期 `PptJob`，用 immutable ArtifactRevision
+记录 stage 证据，并通过 `PptJobProjection` 向 Renderer 提供只读状态。产品新建为
+SVG-native Agent；Proposal、PresentationRevision 与 ExportArtifact 分别提交。
 
 ## 6. 自主性与确定性边界
 

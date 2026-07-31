@@ -73,6 +73,7 @@ export function useSessionController({
 }: UseSessionControllerOptions): SessionController {
   const initializeProject = useProjectStore((state) => state.initializeProject);
   const hydrateProjectArtifacts = useProjectStore((state) => state.hydrateProjectArtifacts);
+  const hydratePptJob = useProjectStore((state) => state.hydratePptJob);
   const [startupError, setStartupError] = useState<string>();
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [activeSessionId, setActiveSessionId] = useState("");
@@ -124,10 +125,18 @@ export function useSessionController({
     setWorkspacePath(resolvedWorkspace ?? "");
     setLocalStoragePath(resolvedWorkspace ?? "");
 
-    initializeProject(snapshot.session.id, snapshot.session.title, snapshot.project?.artifacts);
+    initializeProject(
+      snapshot.session.id,
+      snapshot.session.title,
+      snapshot.project?.artifacts,
+      snapshot.presentation.id,
+    );
     void hydrateProjectArtifacts(snapshot.session.id).catch((error) => {
       console.error("加载项目产物失败:", error);
       notify(formatPublicErrorMessage(error, "加载项目内容失败，请重试。"));
+    });
+    void hydratePptJob(snapshot.session.id).catch((error) => {
+      console.error("加载演示文稿生命周期失败:", error);
     });
     void syncPresentation({
       preferredSlideId: snapshot.presentation.slides[0]?.id,
@@ -136,12 +145,20 @@ export function useSessionController({
   }, [
     enterDraftChat,
     hydrateProjectArtifacts,
+    hydratePptJob,
     initializeProject,
     loadPresentation,
     notify,
     resetRequest,
     syncPresentation,
   ]);
+
+  useEffect(() => {
+    if (!window.desktopApi?.onPptJobChanged) return;
+    return window.desktopApi.onPptJobChanged((projection) => {
+      useProjectStore.getState().applyPptJobProjection(projection);
+    });
+  }, []);
 
   useEffect(() => {
     if (!window.desktopApi) {

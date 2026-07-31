@@ -17,6 +17,8 @@ import type {
   AgentLoopTerminalOutcome,
   PreparedAgentRun,
 } from "./turns/prepared-agent-run";
+import type { PptLifecycleToolBridge } from "../tools/tool-definition";
+import type { AgentRuntimeOptions } from "./runtime-types";
 
 /** Owns one run lifecycle and consumes the independent query state machine. */
 export class AgentRuntime {
@@ -28,12 +30,17 @@ export class AgentRuntime {
     gateway: AgentModelGateway,
     skillRegistry: SkillRegistry = createEmptySkillRegistry(),
     conversationDatabase?: ConversationDatabase,
+    resolvePresentationLifecycle?: (input: {
+      queryId: import("@shared/presentation-lifecycle").QueryId;
+      options: AgentRuntimeOptions;
+    }) => PptLifecycleToolBridge | undefined,
   ) {
     this.runFactory = new PresentationAgentRunFactory(
       registry,
       gateway,
       skillRegistry,
       conversationDatabase,
+      resolvePresentationLifecycle,
     );
   }
 

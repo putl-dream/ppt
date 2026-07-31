@@ -25,6 +25,11 @@ export const applyTypographyTool: ToolDefinition<
   category: "deferred",
   loadPolicy: "deferred",
   inputSchema: applyTypographySchema,
+  behavior: {
+    presentation: {
+      allowedCapabilities: ["edit", "restyle"],
+    },
+  },
   risk: "medium",
   execute: async (args, context) => {
     const commands: PresentationCommand[] = [];

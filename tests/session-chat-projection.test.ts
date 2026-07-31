@@ -21,6 +21,9 @@ function pendingReview(): PersistedDisplayCard {
       scope: { sessionId: "session-1", threadId: "thread-1", anchorMessageId: "a-1" },
       semantics: { blocking: true, requiresResponse: true, priority: "high" },
       payload: {
+        jobId: "job-1",
+        queryId: "query-1",
+        proposalId: "proposal-1",
         threadId: "thread-1",
         summary: "更新排版",
         commands: [],

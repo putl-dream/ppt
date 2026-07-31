@@ -14,25 +14,19 @@ const ARTIFACTS: ProjectArtifact[] = [
     id: "brief",
     title: "需求简报",
     path: "brief.md",
-    kind: "brief",
-    status: "ready",
-    dependsOn: [],
+    kind: "reference",
   },
   {
     id: "deck",
     title: "演示文稿",
     path: "deck/",
     kind: "deck",
-    status: "draft",
-    dependsOn: ["slides"],
   },
   {
-    id: "history",
-    title: "历史版本",
-    path: "history/",
-    kind: "history",
-    status: "stale",
-    dependsOn: [],
+    id: "export-history",
+    title: "导出记录",
+    path: "history/exports.json",
+    kind: "export-history",
   },
 ];
 
@@ -52,7 +46,7 @@ describe("project file presentation state", () => {
     expect(groups.map((group) => group.id)).toEqual([
       "brief",
       "deck",
-      "history",
+      "export-history",
       "__other__",
     ]);
     expect(groups.find((group) => group.id === "brief")?.files).toEqual(["brief.md"]);
@@ -60,7 +54,7 @@ describe("project file presentation state", () => {
       "deck/assets/chart.svg",
       "deck/deck.json",
     ]);
-    expect(groups.find((group) => group.id === "history")?.files).toEqual([]);
+    expect(groups.find((group) => group.id === "export-history")?.files).toEqual([]);
     expect(groups.find((group) => group.id === "__other__")?.files).toEqual(["notes.txt"]);
   });
 
@@ -104,7 +98,6 @@ describe("project file presentation state", () => {
       characterCount: 11,
       changed: true,
       changedArtifactId: "brief",
-      staleArtifactIds: ["outline"],
     };
 
     const withNewTyping = reconcileProjectFileSave(

@@ -20,6 +20,11 @@ export const updateSlideVariantTool: ToolDefinition<
   category: "deferred",
   loadPolicy: "deferred",
   inputSchema: updateSlideVariantSchema,
+  behavior: {
+    presentation: {
+      allowedCapabilities: ["edit", "restyle"],
+    },
+  },
   risk: "low",
   execute: async (args, context) => {
     if (!context.presentation.slides.some((slide) => slide.id === args.slideId)) {

@@ -96,6 +96,7 @@ export function buildIdentitySection(_input: IdentitySectionInput = {}): string 
 ## 工作原则
 
 - 先理解用户本轮真实目标；问答就直接回答，需要行动就使用工具完成，不把所有输入强行套入固定流程。
+- 普通问答不要创建 PPT capability。只要本 Query 将开始 create、edit、restyle 或 review，必须先且只需调用一次 \`BeginPptCapability\` 声明对应 capability；后续 Presentation 工具必须沿用该 Query 的 active request，不能用 runId 或 threadId 代替 QueryId。
 - 根据当前 Presentation、Workspace、任务状态和工具结果决定下一步。阶段标签只是上下文提示，不是控制流或能力白名单。
 - 在合理范围内自主推进：先检查必要事实，再修改，再验证。不要只描述将来会做什么。
 - 新建整套 PPT 或整套重做时，以完整页面 SVG 为唯一视觉事实源：先锁定沟通契约、argument mode、visual style、reading mode 和逐页 audience move / rhythm / layout intent，再用 WriteFile 逐页写 1280×720 的自包含 SVG，最后只用 SubmitSvgDeck 提交。每份 SVG 必须已经包含标题、背景、页码、图表、图片和装饰；不要调用固定 layout handler，也不要依赖预览器或导出器补视觉 chrome。
@@ -233,10 +234,15 @@ function formatArtifactState(artifacts?: WorkspaceArtifacts): string {
   if (!artifacts) return "（未探测 Workspace 产物）";
   const format = (ready: boolean) => ready ? "verified" : "missing/unverified";
   return [
-    `- brief.md: ${format(artifacts.brief)}`,
-    `- outline.md: ${format(artifacts.outline)}`,
-    `- slides/storyboard.json: ${format(artifacts.storyboard)}`,
-    `- slides/layout-plan.json: ${format(artifacts.layoutPlan)}`,
+    `- design/design-spec.json: ${format(artifacts.designSpec)}`,
+    `- slides/page-plan.json: ${format(artifacts.pagePlan)}`,
+    `- slides/svg/*.svg: ${format(artifacts.pageSvg)}`,
+    `- assets/**: ${format(artifacts.assets)}`,
+    `- deck/snapshot.json: ${format(artifacts.deck)}`,
+    `- history/exports.json: ${format(artifacts.exportHistory)}`,
+    `- optional brief.md: ${format(artifacts.brief)}`,
+    `- optional outline.md: ${format(artifacts.outline)}`,
+    `- optional research/**: ${format(artifacts.research)}`,
   ].join("\n");
 }
 
@@ -251,9 +257,9 @@ export function buildWorkspaceSection(input: WorkspaceSectionInput): string {
 
 ${formatArtifactState(input.artifacts)}
 
-文件系统探测结果和 Presentation snapshot 是事实源；聊天中的旧计划不是。已验证产物默认复用，除非用户要求重做或验证发现不一致。
+文件系统探测只描述当前作者文件；业务完成、等待与 stale 以 PptJob 投影为准，聊天中的旧计划和文件存在本身都不是完成证明。
 
-常用中间产物包括 brief.md、outline.md、research/notes.md、slides/storyboard.json 和 slides/layout-plan.json，但它们不是每个任务都必须创建。主 Agent 与 teammate 都可使用受沙箱和权限保护的文件工具直接处理 Workspace。
+新建流程的作者文件是 design/design-spec.json、slides/page-plan.json、slides/svg/*.svg 与 assets/**。brief.md、outline.md、research/** 仅为可选参考；storyboard/layout-plan 不属于新建生命周期事实源。主 Agent 与 teammate 都可使用受沙箱和权限保护的文件工具直接处理 Workspace。
 
 画布为 1280x720，Presentation ID 必须唯一。设计或图片变更后应依据当前可用的预览、校验或导出产物检查结果；图片来源与授权状态必须保留。`;
 }

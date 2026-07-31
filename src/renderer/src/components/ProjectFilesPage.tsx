@@ -1,5 +1,10 @@
 import { useEffect, useMemo, type KeyboardEvent } from "react";
-import type { ProjectArtifactStatus } from "@shared/session";
+import type {
+  PptJobProjection,
+  PptJobStatus,
+  PptProposalStatus,
+  PptStage,
+} from "@shared/presentation-lifecycle";
 import { CheckIcon, FileIcon, FolderIcon, RefreshIcon } from "./Icons";
 import {
   formatProjectFileSize,
@@ -9,6 +14,7 @@ import {
   useProjectFiles,
   type ProjectFilesController,
 } from "../app/project/useProjectFiles";
+import { useProjectStore } from "./project-store";
 
 interface ProjectFilesPageProps {
   sessionId?: string;
@@ -25,16 +31,95 @@ export interface ProjectFilesPageContentProps {
   sessionTitle: string;
   workspaceLabel: string;
   busy: boolean;
+  pptJob?: PptJobProjection | null;
 }
 
-const STATUS_LABELS: Record<ProjectArtifactStatus, string> = {
-  draft: "草稿",
-  ready: "就绪",
-  stale: "待更新",
+const JOB_STATUS_LABELS: Record<PptJobStatus, string> = {
+  running: "进行中",
+  waiting_user: "等待用户",
+  waiting_approval: "等待审批",
+  completed: "已完成",
+  cancelled: "已取消",
+  failed: "失败",
+};
+
+const PROPOSAL_STATUS_LABELS: Record<PptProposalStatus, string> = {
+  waiting_approval: "等待审批",
+  applied: "已应用",
+  rejected: "已拒绝",
+  superseded: "已失效",
+};
+
+const STAGE_LABELS: Record<PptStage, string> = {
+  intent: "意图",
+  design_spec: "设计规范",
+  page_plan: "逐页规划",
+  page_svg: "页面 SVG",
+  preview: "预览",
+  candidate: "候选稿",
+  quality: "质量检查",
+  proposal: "提案",
+  presentation: "演示文稿",
+  export: "导出",
 };
 
 function fileName(path: string): string {
   return path.split("/").at(-1) || path;
+}
+
+function normalizeProjectPath(path: string): string {
+  return path.replaceAll("\\", "/").replace(/^\.?\//, "");
+}
+
+function getLifecycleArtifactIds(
+  path: string,
+  pptJob: PptJobProjection,
+): string[] {
+  const normalizedPath = normalizeProjectPath(path);
+  if (normalizedPath === "design/design-spec.json") return ["design-spec"];
+  if (normalizedPath === "slides/page-plan.json") return ["page-plan"];
+  if (normalizedPath.startsWith("slides/svg/") && normalizedPath.endsWith(".svg")) {
+    return [`page-svg:${normalizedPath}`];
+  }
+  if (normalizedPath.startsWith("assets/")) {
+    return [`source-asset:${normalizedPath}`];
+  }
+  if (normalizedPath === "deck/snapshot.json") {
+    return pptJob.committedArtifacts
+      .filter((artifact) => artifact.kind === "presentation_revision")
+      .map((artifact) => artifact.artifactId);
+  }
+  if (normalizedPath === "history/exports.json") {
+    return pptJob.committedArtifacts
+      .filter(
+        (artifact) =>
+          artifact.kind === "export_artifact"
+          && artifact.revisionId === pptJob.exportArtifactRevisionId,
+      )
+      .map((artifact) => artifact.artifactId);
+  }
+  return [];
+}
+
+function lifecycleArtifactBadge(
+  path: string,
+  pptJob: PptJobProjection | null,
+): "committed" | "stale" | null {
+  if (!pptJob) return null;
+  const artifactIds = getLifecycleArtifactIds(path, pptJob);
+  if (artifactIds.length === 0) return null;
+  if (
+    pptJob.staleArtifacts.some(
+      (artifact) => artifactIds.includes(artifact.artifactId),
+    )
+  ) {
+    return "stale";
+  }
+  return pptJob.committedArtifacts.some(
+    (artifact) => artifactIds.includes(artifact.artifactId),
+  )
+    ? "committed"
+    : null;
 }
 
 export function ProjectFilesPage({
@@ -46,6 +131,7 @@ export function ProjectFilesPage({
   onDirtyChange,
 }: ProjectFilesPageProps) {
   const controller = useProjectFiles({ sessionId, busy, notify });
+  const pptJob = useProjectStore((state) => state.pptJob);
 
   useEffect(() => {
     onDirtyChange?.(controller.dirty);
@@ -73,6 +159,7 @@ export function ProjectFilesPage({
       sessionTitle={sessionTitle}
       workspaceLabel={workspaceLabel}
       busy={busy}
+      pptJob={pptJob}
     />
   );
 }
@@ -83,6 +170,7 @@ export function ProjectFilesPageContent({
   sessionTitle,
   workspaceLabel,
   busy,
+  pptJob = null,
 }: ProjectFilesPageContentProps) {
   const groups = useMemo(
     () => groupProjectFiles(controller.files, controller.artifacts),
@@ -133,6 +221,27 @@ export function ProjectFilesPageContent({
         </button>
       </header>
 
+      {hasSession && pptJob ? (
+        <div className={`project-files-job-status is-${pptJob.status}`} role="status">
+          <span className="project-files-job-status__label">PPT JOB</span>
+          <strong>{JOB_STATUS_LABELS[pptJob.status]}</strong>
+          <span>阶段：{STAGE_LABELS[pptJob.stage]}</span>
+          {pptJob.proposalId && pptJob.proposalStatus ? (
+            <span>
+              Proposal：{PROPOSAL_STATUS_LABELS[pptJob.proposalStatus]}
+            </span>
+          ) : null}
+          {pptJob.waitingReason ? (
+            <span className="project-files-job-status__reason">{pptJob.waitingReason}</span>
+          ) : null}
+          {pptJob.staleArtifacts.length > 0 ? (
+            <span className="project-files-job-status__stale">
+              {pptJob.staleArtifacts.length} 个生命周期产物待更新
+            </span>
+          ) : null}
+        </div>
+      ) : null}
+
       {!hasSession ? (
         <div className="project-files-empty" role="status">
           <FolderIcon size={30} />
@@ -152,34 +261,39 @@ export function ProjectFilesPageContent({
                   <summary>
                     <FolderIcon size={14} />
                     <span className="project-files-group-title">{group.title}</span>
-                    {group.status ? (
-                      <span className={`project-files-status is-${group.status}`}>
-                        {STATUS_LABELS[group.status]}
-                      </span>
-                    ) : null}
                     <span className="project-files-count">{group.files.length}</span>
                   </summary>
                   {group.files.length > 0 ? (
                     <div className="project-files-list">
-                      {group.files.map((path) => (
-                        <button
-                          type="button"
-                          key={path}
-                          className={`project-files-file${controller.selectedPath === path ? " active" : ""}`}
-                          onClick={() => void controller.selectFile(path)}
-                          title={path}
-                          aria-current={controller.selectedPath === path ? "page" : undefined}
-                        >
-                          <FileIcon size={14} />
-                          <span>
-                            <strong>{fileName(path)}</strong>
-                            <small>{path}</small>
-                          </span>
-                          {controller.selectedPath === path && controller.dirty ? (
-                            <i aria-label="有未保存修改" title="有未保存修改" />
-                          ) : null}
-                        </button>
-                      ))}
+                      {group.files.map((path) => {
+                        const lifecycleBadge = lifecycleArtifactBadge(path, pptJob);
+                        return (
+                          <button
+                            type="button"
+                            key={path}
+                            className={`project-files-file${controller.selectedPath === path ? " active" : ""}`}
+                            onClick={() => void controller.selectFile(path)}
+                            title={path}
+                            aria-current={controller.selectedPath === path ? "page" : undefined}
+                          >
+                            <FileIcon size={14} />
+                            <span>
+                              <strong>{fileName(path)}</strong>
+                              <small>{path}</small>
+                            </span>
+                            {lifecycleBadge ? (
+                              <em
+                                className={`project-files-artifact-badge is-${lifecycleBadge}`}
+                              >
+                                {lifecycleBadge === "stale" ? "待更新" : "已提交"}
+                              </em>
+                            ) : null}
+                            {controller.selectedPath === path && controller.dirty ? (
+                              <i aria-label="有未保存修改" title="有未保存修改" />
+                            ) : null}
+                          </button>
+                        );
+                      })}
                     </div>
                   ) : (
                     <div className="project-files-group-empty">

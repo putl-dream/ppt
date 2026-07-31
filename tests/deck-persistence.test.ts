@@ -30,27 +30,28 @@ afterEach(async () => {
 });
 
 describe("deck persistence (problem 2)", () => {
-  it("materializes design constraints, generation jobs, and export history templates", async () => {
+  it("materializes the SVG-native project scaffold without legacy authoring facts", async () => {
     const { store } = await createStore();
     const created = await store.createSession();
     const sessionId = created.activeSession!.session.id;
     const rootPath = store.getSession(sessionId).project!.rootPath;
 
-    const constraints = JSON.parse(
-      await readFile(join(rootPath, projectArtifactFilePaths.designConstraints), "utf8"),
-    );
-    expect(constraints.typography.titleMinFontSize).toBe(36);
-    expect(constraints.forbidden.length).toBeGreaterThan(0);
-
-    const jobs = JSON.parse(
-      await readFile(join(rootPath, projectArtifactFilePaths.deckGenerationJobs), "utf8"),
-    );
-    expect(jobs.jobs).toEqual([]);
-
     const exportsFile = JSON.parse(
       await readFile(join(rootPath, projectArtifactFilePaths.exportHistory), "utf8"),
     );
     expect(exportsFile.exports).toEqual([]);
+    await expect(
+      readFile(join(rootPath, projectArtifactFilePaths.designConstraints), "utf8"),
+    ).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(
+      readFile(join(rootPath, projectArtifactFilePaths.deckGenerationJobs), "utf8"),
+    ).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(
+      readFile(join(rootPath, "slides/storyboard.json"), "utf8"),
+    ).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(
+      readFile(join(rootPath, "slides/layout-plan.json"), "utf8"),
+    ).rejects.toMatchObject({ code: "ENOENT" });
   });
 
   it("syncs deck/snapshot.json on savePresentation without marking history stale", async () => {
@@ -74,10 +75,14 @@ describe("deck persistence (problem 2)", () => {
     );
     expect(deckSnapshot).toEqual(presentation);
 
-    const historyArtifact = store
+    const exportHistoryArtifact = store
       .listProjectArtifacts(sessionId)
-      .find((artifact) => artifact.id === "history");
-    expect(historyArtifact?.status).not.toBe("stale");
+      .find((artifact) => artifact.id === "export-history");
+    expect(exportHistoryArtifact).toMatchObject({
+      path: "history/exports.json",
+      kind: "export-history",
+    });
+    expect(exportHistoryArtifact).not.toHaveProperty("status");
   });
 
   it("persists generation jobs through GenerationJobsService", async () => {

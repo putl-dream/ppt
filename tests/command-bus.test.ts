@@ -3,6 +3,59 @@ import { CommandBus } from "../src/shared/commands";
 import { createStarterPresentation } from "../src/shared/presentation";
 
 describe("CommandBus", () => {
+  it("keeps a prepared execution invisible until it is committed", () => {
+    const bus = new CommandBus(createStarterPresentation());
+    const original = bus.getSnapshot();
+
+    const prepared = bus.prepareExecute({
+      id: crypto.randomUUID(),
+      type: "set-presentation-title",
+      title: "Prepared title",
+    });
+
+    expect(prepared.noOp).toBe(false);
+    expect(prepared.presentation.title).toBe("Prepared title");
+    expect(bus.getSnapshot()).toEqual(original);
+
+    const committed = bus.commitPreparedMutation(prepared);
+    expect(committed.title).toBe("Prepared title");
+    expect(bus.getSnapshot()).toEqual(committed);
+  });
+
+  it("rejects a prepared mutation after another mutation commits", () => {
+    const bus = new CommandBus(createStarterPresentation());
+    const first = bus.prepareExecute({
+      id: crypto.randomUUID(),
+      type: "set-presentation-title",
+      title: "First title",
+    });
+    const stale = bus.prepareExecute({
+      id: crypto.randomUUID(),
+      type: "set-presentation-title",
+      title: "Stale title",
+    });
+
+    bus.commitPreparedMutation(first);
+
+    expect(() => bus.commitPreparedMutation(stale)).toThrow("Stale prepared mutation");
+    expect(bus.getSnapshot().title).toBe("First title");
+  });
+
+  it("prepares explicit no-ops when undo or redo history is empty", () => {
+    const bus = new CommandBus(createStarterPresentation());
+    const original = bus.getSnapshot();
+
+    const undo = bus.prepareUndo();
+    expect(undo.noOp).toBe(true);
+    expect(undo.presentation).toEqual(original);
+    expect(bus.commitPreparedMutation(undo)).toEqual(original);
+
+    const redo = bus.prepareRedo();
+    expect(redo.noOp).toBe(true);
+    expect(redo.presentation).toEqual(original);
+    expect(bus.commitPreparedMutation(redo)).toEqual(original);
+  });
+
   it("executes, undoes, and redoes a title change", () => {
     const bus = new CommandBus(createStarterPresentation());
     const original = bus.getSnapshot();
@@ -97,6 +150,28 @@ describe("CommandBus", () => {
           id: crypto.randomUUID(),
           type: "set-presentation-title",
           title: "Should not stick",
+        },
+        {
+          id: crypto.randomUUID(),
+          type: "remove-slide",
+          slideId: "missing-slide",
+        },
+      ]),
+    ).toThrow("Slide not found");
+
+    expect(bus.getSnapshot()).toEqual(original);
+  });
+
+  it("does not expose partial state when preparing a failing command batch", () => {
+    const bus = new CommandBus(createStarterPresentation());
+    const original = bus.getSnapshot();
+
+    expect(() =>
+      bus.prepareExecuteMany([
+        {
+          id: crypto.randomUUID(),
+          type: "set-presentation-title",
+          title: "Prepared but invalid",
         },
         {
           id: crypto.randomUUID(),

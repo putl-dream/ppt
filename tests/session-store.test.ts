@@ -353,7 +353,7 @@ describe("SQLite session store", () => {
     expect(store.getSession(sessionId).messages.at(-1)?.runStatus).toBe("completed");
   });
 
-  it("settles the original approval run without allowing a stale waiting snapshot to roll it back", async () => {
+  it("keeps the Query completed while Proposal approval records a later Presentation fact", async () => {
     const { store } = await createStore();
     const created = await store.createSession({ title: "Approval" });
     const sessionId = created.activeSession!.session.id;
@@ -361,20 +361,24 @@ describe("SQLite session store", () => {
     await store.finalizeAgentRunMessage(sessionId, "run-approval", {
       status: "approval-required",
       approval: {
+        jobId: "job-approval",
+        queryId: "query-approval",
+        proposalId: "proposal-approval",
         threadId: "thread-approval",
         summary: "应用排版",
         commands: [],
       },
     });
-    const staleWaitingMessages = store.getSession(sessionId).messages;
-    expect(store.findWaitingAgentRunId(sessionId, "thread-approval")).toBe("run-approval");
+    const proposalReadyMessages = store.getSession(sessionId).messages;
+    expect(proposalReadyMessages.at(-1)?.runStatus).toBe("completed");
+    expect(store.findWaitingAgentRunId(sessionId, "thread-approval")).toBeUndefined();
 
     const terminalResult = {
       status: "completed" as const,
       presentation: created.activeSession!.presentation,
     };
     await store.finalizeAgentRunMessage(sessionId, "run-approval", terminalResult);
-    await store.saveMessages(sessionId, staleWaitingMessages);
+    await store.saveMessages(sessionId, proposalReadyMessages);
 
     const messages = store.getSession(sessionId).messages;
     expect(messages.filter((message) => message.role === "assistant")).toHaveLength(1);
@@ -422,6 +426,9 @@ describe("SQLite session store", () => {
     await store.finalizeAgentRunMessage(sessionId, runId, {
       status: "approval-required",
       approval: {
+        jobId: "job-approval-transcript",
+        queryId: "query-approval-transcript",
+        proposalId: "proposal-approval-transcript",
         threadId: "thread-approval-transcript",
         summary: "应用排版",
         commands: [],

@@ -205,7 +205,7 @@ export function useAgentResultHandler({
             ? {
                 ...message,
                 ...projectResponse(message.content, message.activityTrace, content),
-                runStatus: "waiting",
+                runStatus: "completed",
                 runError: undefined,
                 threadId: result.approval.threadId,
               }
@@ -220,7 +220,7 @@ export function useAgentResultHandler({
             role: "assistant",
             ...projected,
             runId,
-            runStatus: "waiting",
+            runStatus: "completed",
             threadId: result.approval.threadId,
           },
         ]);

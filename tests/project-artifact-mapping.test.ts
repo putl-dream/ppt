@@ -4,33 +4,50 @@ import {
   getPrimaryProjectArtifactPath,
   primaryProjectArtifactPaths,
   projectArtifactFilePaths,
-  projectStageIds,
+  projectArtifactIds,
 } from "@shared/project";
 
 describe("project artifact mapping", () => {
-  it("keeps renderer stages aligned with persisted project artifacts", () => {
-    expect(projectStageIds).toEqual(["brief", "outline", "research", "slides", "design", "deck"]);
-    expect(defaultProjectArtifacts.map((artifact) => artifact.id)).toEqual([
+  it("registers SVG-native author files before optional references", () => {
+    expect(projectArtifactIds).toEqual([
+      "design-spec",
+      "page-plan",
+      "page-svg",
+      "assets",
+      "deck",
+      "export-history",
       "brief",
       "outline",
       "research",
-      "slides",
-      "design",
-      "deck",
-      "history",
     ]);
+    expect(defaultProjectArtifacts.map((artifact) => artifact.id)).toEqual([
+      "design-spec",
+      "page-plan",
+      "page-svg",
+      "assets",
+      "deck",
+      "export-history",
+      "brief",
+      "outline",
+      "research",
+    ]);
+    expect(defaultProjectArtifacts.every((artifact) => !("status" in artifact))).toBe(true);
+    expect(defaultProjectArtifacts.every((artifact) => !("dependsOn" in artifact))).toBe(true);
   });
 
-  it("maps directory artifacts to their primary editable files", () => {
+  it("maps lifecycle author files and optional references to stable paths", () => {
     const artifactById = new Map(defaultProjectArtifacts.map((artifact) => [artifact.id, artifact]));
 
-    expect(artifactById.get("slides")).toMatchObject({
-      path: "slides/",
-      kind: "slide-plan",
+    expect(artifactById.get("page-svg")).toMatchObject({
+      path: "slides/svg/",
+      kind: "page-svg",
     });
-    expect(primaryProjectArtifactPaths.slides).toBe("slides/storyboard.json");
+    expect(primaryProjectArtifactPaths["design-spec"]).toBe("design/design-spec.json");
+    expect(primaryProjectArtifactPaths["page-plan"]).toBe("slides/page-plan.json");
+    expect(primaryProjectArtifactPaths["page-svg"]).toBe("slides/svg/");
+    expect(primaryProjectArtifactPaths.assets).toBe("assets/");
+    expect(primaryProjectArtifactPaths["export-history"]).toBe("history/exports.json");
     expect(getPrimaryProjectArtifactPath(artifactById.get("research")!)).toBe("research/notes.md");
-    expect(getPrimaryProjectArtifactPath(artifactById.get("design")!)).toBe("design/system.json");
     expect(getPrimaryProjectArtifactPath(artifactById.get("deck")!)).toBe("deck/snapshot.json");
     expect(projectArtifactFilePaths.designConstraints).toBe("design/constraints.json");
     expect(projectArtifactFilePaths.brandProfile).toBe("design/brand-profile.json");

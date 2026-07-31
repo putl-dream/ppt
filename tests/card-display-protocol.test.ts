@@ -219,6 +219,9 @@ describe("card display protocol", () => {
     const [event] = toResultDisplayEvents({
       status: "approval-required",
       approval: {
+        jobId: "job-review",
+        queryId: "query-review",
+        proposalId: "proposal-review",
         threadId: "thread-review",
         summary: "更新标题",
         commands: [{ id: "command-1", type: "set-presentation-title", title: "新标题" }],
@@ -232,21 +235,31 @@ describe("card display protocol", () => {
     expect(event.payload.commands).toHaveLength(1);
   });
 
-  it("creates a fresh approval card for each proposal in the same thread", () => {
-    const proposal = {
+  it("creates a fresh approval card for each ProposalId in the same thread", () => {
+    const firstProposal = {
       status: "approval-required" as const,
       approval: {
+        jobId: "job-review",
+        queryId: "query-review",
+        proposalId: "proposal-review-1",
         threadId: "thread-review",
         summary: "更新标题",
         commands: [{ id: "command-1", type: "set-presentation-title" as const, title: "新标题" }],
       },
     };
-    const [first] = toResultDisplayEvents(proposal, "session-1", "run-1");
-    const [second] = toResultDisplayEvents(proposal, "session-1", "run-2");
+    const secondProposal = {
+      ...firstProposal,
+      approval: {
+        ...firstProposal.approval,
+        proposalId: "proposal-review-2",
+      },
+    };
+    const [first] = toResultDisplayEvents(firstProposal, "session-1", "run-1");
+    const [second] = toResultDisplayEvents(secondProposal, "session-1", "run-2");
     if (!first || !second) throw new Error("missing proposal events");
 
-    expect(first?.eventId).toBe("command-proposal:run-1");
-    expect(second?.eventId).toBe("command-proposal:run-2");
+    expect(first?.eventId).toBe("command-proposal:proposal-review-1");
+    expect(second?.eventId).toBe("command-proposal:proposal-review-2");
     expect(second?.eventId).not.toBe(first?.eventId);
 
     ingestDisplayEvent(first);
@@ -256,11 +269,11 @@ describe("card display protocol", () => {
     const cards = useReviewCardManager.getState().cards;
     expect(cards).toHaveLength(2);
     expect(cards[0]).toMatchObject({
-      event: { eventId: "command-proposal:run-1" },
+      event: { eventId: "command-proposal:proposal-review-1" },
       status: "resolved",
     });
     expect(cards[1]).toMatchObject({
-      event: { eventId: "command-proposal:run-2" },
+      event: { eventId: "command-proposal:proposal-review-2" },
       status: "active",
     });
     expect(cards[1]).not.toHaveProperty("lastAction");
@@ -270,6 +283,9 @@ describe("card display protocol", () => {
     const [event] = toResultDisplayEvents({
       status: "approval-required",
       approval: {
+        jobId: "job-review",
+        queryId: "query-review",
+        proposalId: "proposal-svg",
         threadId: "thread-review",
         summary: "提交 SVG 幻灯片",
         commands: [{ id: "command-2", type: "set-presentation-title", title: "SVG 版本" }],

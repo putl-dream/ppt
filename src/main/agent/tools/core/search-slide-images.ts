@@ -91,6 +91,11 @@ export const searchSlideImagesTool: ToolDefinition<
     JSON.stringify({ slideId: "slide-3" }),
     JSON.stringify({ slideId: "slide-5", query: "industrial robot assembly line", visualKind: "evidence" }),
   ],
+  behavior: {
+    presentation: {
+      allowedCapabilities: ["create", "edit", "restyle"],
+    },
+  },
   risk: "low",
   permission: {
     profile: "web-search",

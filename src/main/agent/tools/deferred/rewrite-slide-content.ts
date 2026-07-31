@@ -23,6 +23,11 @@ export const rewriteSlideContentTool: ToolDefinition<
   category: "deferred",
   loadPolicy: "deferred",
   inputSchema: rewriteSlideContentSchema,
+  behavior: {
+    presentation: {
+      allowedCapabilities: ["edit", "restyle"],
+    },
+  },
   risk: "medium",
   execute: async (args, context) => {
     const slide = context.presentation.slides.find((s) => s.id === args.slideId);

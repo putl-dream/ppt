@@ -25,8 +25,18 @@ export const previewCommandsTool: ToolDefinition<
   category: "core",
   loadPolicy: "core",
   inputSchema: previewCommandsSchema,
+  behavior: {
+    presentation: {
+      allowedCapabilities: ["create", "edit", "restyle"],
+    },
+  },
   risk: "low",
   execute: async (args, context) => {
+    context.presentationLifecycle?.requireActiveCapability([
+      "create",
+      "edit",
+      "restyle",
+    ]);
     const errors: string[] = [];
     let draft = structuredClone(context.presentation);
     for (const cmd of args.commands) {

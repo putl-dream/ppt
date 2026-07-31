@@ -8,7 +8,6 @@ import {
 import {
   createDefaultSessionTitle,
   createSessionPresentation,
-  type ProjectArtifactStatus,
   sessionChatMessageSchema,
   sessionSnapshotSchema,
   type SessionBootstrap,
@@ -31,6 +30,8 @@ import {
   type ProjectFileEditorReadResult,
   type ProjectFileEditorWriteResult,
 } from "./project/project-file-service";
+import type { ArtifactChangeObserverPort } from
+  "./presentation-lifecycle/artifact-change-observer-types";
 import {
   ExportHistoryService,
   GenerationJobsService,
@@ -75,8 +76,10 @@ import { formatPublicErrorMessage } from "@shared/agent-activity-display";
 import { ConversationDatabase } from "./conversation-database";
 import type { AgentRunResult } from "@shared/ipc";
 import { formatLeanRunMetrics } from "@shared/lean-mode-contract";
+import { createModuleLogger } from "./agent/logger";
 
 const storedSessionSchema = sessionSnapshotSchema;
+const logger = createModuleLogger("session-store");
 const sessionFileSchema = z.object({
   version: z.literal(1),
   activeSessionId: z.string(),
@@ -148,6 +151,12 @@ export class FileSessionStore {
     this.projectFileService = new ProjectFileService(this.projectsRootPath);
     this.generationJobsService = new GenerationJobsService(this.projectFileService);
     this.exportHistoryService = new ExportHistoryService(this.projectFileService);
+  }
+
+  setArtifactChangeObserver(
+    observer: ArtifactChangeObserverPort | undefined,
+  ): void {
+    this.projectFileService.setArtifactChangeObserver(observer);
   }
 
   async initialize(): Promise<void> {
@@ -233,6 +242,20 @@ export class FileSessionStore {
         && message.threadId === threadId
         && Boolean(message.runId),
     )?.runId;
+  }
+
+  findProposalChatContext(
+    sessionId: string,
+    proposalId: string,
+  ): { threadId: string } | undefined {
+    const snapshot = this.findSession(sessionId);
+    const card = [...snapshot.displayCards].reverse().find(
+      (item) =>
+        item.event.kind === "review.command-proposal"
+        && item.event.payload.proposalId === proposalId,
+    );
+    if (!card || card.event.kind !== "review.command-proposal") return undefined;
+    return { threadId: card.event.payload.threadId };
   }
 
   getAgentMessageHistory(
@@ -335,9 +358,67 @@ export class FileSessionStore {
       ),
       lastMessageAt: snapshot.session.lastMessageAt,
     };
-    await this.projectFileService.writeDeckSnapshot(snapshot, { markStale: false });
+    await this.projectFileService.writeDeckSnapshot(snapshot);
     await this.persist();
     await this.syncWorkspacePersistence(snapshot);
+  }
+
+  /**
+   * Commits the authoritative session snapshot and a synchronous lifecycle
+   * mutation on the shared SQLite connection. Workspace mirrors are updated
+   * only after the database transaction succeeds.
+   */
+  async commitPresentationTransaction<T>(input: {
+    sessionId: string;
+    presentation: Presentation;
+    commitLifecycle: () => T;
+    afterDatabaseCommit?: () => void;
+  }): Promise<T> {
+    const validatedPresentation = presentationSchema.parse(
+      structuredClone(input.presentation),
+    );
+    let lifecycleResult!: T;
+    const write = this.writeQueue.catch(() => undefined).then(async () => {
+      const nextData = structuredClone(this.requireData());
+      const snapshot = nextData.sessions.find(
+        (item) => item.session.id === input.sessionId,
+      );
+      if (!snapshot) throw new Error(`Session not found: ${input.sessionId}`);
+      snapshot.presentation = validatedPresentation;
+      snapshot.session = {
+        ...this.toSummary(
+          snapshot.session.id,
+          snapshot.session.createdAt,
+          new Date().toISOString(),
+          validatedPresentation,
+        ),
+        lastMessageAt: snapshot.session.lastMessageAt,
+      };
+
+      this.conversationDatabase.withTransaction(() => {
+        this.conversationDatabase.replaceState({
+          activeSessionId: nextData.activeSessionId,
+          sessions: nextData.sessions,
+        });
+        lifecycleResult = input.commitLifecycle();
+      });
+
+      this.data = nextData;
+      input.afterDatabaseCommit?.();
+      try {
+        await this.projectFileService.writeDeckSnapshot(snapshot);
+        await this.syncWorkspacePersistence(snapshot);
+      } catch (error) {
+        logger.error("presentation.workspace-mirror.sync-failed", {
+          sessionId: input.sessionId,
+          revision: validatedPresentation.revision,
+          error,
+        });
+      }
+    });
+    this.writeQueue = write;
+    await write;
+    return lifecycleResult;
   }
 
   async recordDeckExport(
@@ -477,8 +558,7 @@ export class FileSessionStore {
     );
     const interrupted = result.status === "interrupted";
     const failed = result.status === "failed";
-    const waiting = result.status === "approval-required"
-      || result.status === "waiting-user";
+    const waiting = result.status === "waiting-user";
     let content = projected.content || message.content;
     let trace = projected.trace.length > 0
       ? projected.trace
@@ -851,19 +931,6 @@ export class FileSessionStore {
     return postCommitWarnings.length > 0
       ? { ...result, postCommitWarnings }
       : result;
-  }
-
-  async markProjectArtifactStatus(
-    sessionId: string,
-    artifactId: string,
-    status: ProjectArtifactStatus,
-  ) {
-    const snapshot = this.findSession(sessionId);
-    const artifact = this.projectFileService.markArtifactStatus(snapshot, artifactId, status);
-    snapshot.session.updatedAt = new Date().toISOString();
-    await this.persist();
-    await this.syncWorkspacePersistence(snapshot);
-    return artifact;
   }
 
   private createInitialData(): SessionFile {

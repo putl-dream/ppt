@@ -61,6 +61,11 @@ export const insertSlideImageTool: ToolDefinition<
       description: "Industrial robot working on an assembly line",
     }),
   ],
+  behavior: {
+    presentation: {
+      allowedCapabilities: ["edit", "restyle"],
+    },
+  },
   risk: "medium",
   execute: async (args, context) => {
     const warnings: string[] = [];

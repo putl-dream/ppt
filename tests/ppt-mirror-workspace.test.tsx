@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import React, { useState } from "react";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DEFAULT_DESIGN_SYSTEM } from "../src/design-system";
 import type { DisplayEvent } from "../src/shared/card-display-protocol";
@@ -54,6 +54,7 @@ function MirrorHarness() {
   const [selectedSlideId, setSelectedSlideId] = useState("slide-1");
   return (
     <PPTMirror
+      sessionId="session-1"
       presentation={presentation}
       selectedSlideId={selectedSlideId}
       onSelectSlide={setSelectedSlideId}
@@ -66,12 +67,19 @@ function MirrorHarness() {
 }
 
 describe("PPTMirror preview workspace", () => {
+  const exportPresentation = vi.fn(async () => null);
+
   beforeEach(() => {
     clearAllDisplayCardManagers();
     Object.defineProperty(Element.prototype, "scrollIntoView", {
       configurable: true,
       value: vi.fn(),
     });
+    Object.defineProperty(window, "desktopApi", {
+      configurable: true,
+      value: { exportPresentation },
+    });
+    exportPresentation.mockClear();
     ingestDisplayEvent(preview(1));
     ingestDisplayEvent(preview(2));
   });
@@ -98,6 +106,23 @@ describe("PPTMirror preview workspace", () => {
     expect(screen.getByRole("button", { name: "放大查看第 2 页：核心结论" })).not.toBeNull();
     expect(screen.getByRole("button", { name: "选择第 2 页：核心结论" })
       .getAttribute("aria-current")).toBe("page");
+  });
+
+  it("exports by session id without uploading the renderer presentation snapshot", async () => {
+    render(<MirrorHarness />);
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "下载 PPT" }));
+    });
+
+    expect(exportPresentation).toHaveBeenCalledWith("session-1", {
+      logoUrl: null,
+      allowUnverifiedAssets: false,
+    });
+    expect(exportPresentation).not.toHaveBeenCalledWith(
+      expect.objectContaining({ id: "deck-1" }),
+      expect.anything(),
+    );
   });
 
   it("does not render inspection previews in the chat artifact host", () => {

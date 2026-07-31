@@ -1,89 +1,100 @@
 import type { ProjectArtifact } from "./session";
 import { projectArtifactFilePaths } from "./deck-persistence";
 
-export const projectStageIds = ["brief", "outline", "research", "slides", "design", "deck"] as const;
-export type ProjectStageId = (typeof projectStageIds)[number];
+export const projectArtifactIds = [
+  "design-spec",
+  "page-plan",
+  "page-svg",
+  "assets",
+  "deck",
+  "export-history",
+  "brief",
+  "outline",
+  "research",
+] as const;
+export type ProjectArtifactId = (typeof projectArtifactIds)[number];
 
 /** 目录型 artifact 下的关键子文件路径 */
 export { projectArtifactFilePaths };
 
 export const defaultProjectArtifacts: ProjectArtifact[] = [
   {
-    id: "brief",
-    title: "目的、方向与受众",
-    path: "brief.md",
-    kind: "brief",
-    status: "draft",
-    dependsOn: [],
+    id: "design-spec",
+    title: "设计规范",
+    path: "design/design-spec.json",
+    kind: "design-spec",
   },
   {
-    id: "outline",
-    title: "内容大纲",
-    path: "outline.md",
-    kind: "outline",
-    status: "draft",
-    dependsOn: ["brief"],
+    id: "page-plan",
+    title: "逐页规划",
+    path: "slides/page-plan.json",
+    kind: "page-plan",
   },
   {
-    id: "research",
-    title: "资料与素材",
-    path: "research/",
-    kind: "research",
-    status: "draft",
-    dependsOn: ["outline"],
+    id: "page-svg",
+    title: "页面 SVG",
+    path: "slides/svg/",
+    kind: "page-svg",
   },
   {
-    id: "slides",
-    title: "逐页内容与设计方案",
-    path: "slides/",
-    kind: "slide-plan",
-    status: "draft",
-    dependsOn: ["outline", "research", "design"],
-  },
-  {
-    id: "design",
-    title: "设计系统与版式偏好",
-    path: "design/",
-    kind: "design",
-    status: "draft",
-    dependsOn: ["brief"],
+    id: "assets",
+    title: "本地素材",
+    path: "assets/",
+    kind: "assets",
   },
   {
     id: "deck",
-    title: "PPT 结构化快照与导出物",
-    path: "deck/",
+    title: "已应用演示文稿",
+    path: "deck/snapshot.json",
     kind: "deck",
-    status: "draft",
-    dependsOn: ["slides", "design"],
   },
   {
-    id: "history",
-    title: "关键版本记录",
-    path: "history/",
-    kind: "history",
-    status: "draft",
-    dependsOn: ["brief", "outline", "slides", "deck"],
+    id: "export-history",
+    title: "导出记录",
+    path: "history/exports.json",
+    kind: "export-history",
+  },
+  {
+    id: "brief",
+    title: "可选资料 · Brief",
+    path: "brief.md",
+    kind: "reference",
+  },
+  {
+    id: "outline",
+    title: "可选资料 · 大纲",
+    path: "outline.md",
+    kind: "reference",
+  },
+  {
+    id: "research",
+    title: "可选资料 · 研究与来源",
+    path: "research/",
+    kind: "reference",
   },
 ];
 
-export const primaryProjectArtifactPaths: Record<ProjectStageId, string> = {
+export const primaryProjectArtifactPaths: Record<ProjectArtifactId, string> = {
+  "design-spec": "design/design-spec.json",
+  "page-plan": "slides/page-plan.json",
+  "page-svg": "slides/svg/",
+  assets: "assets/",
+  deck: "deck/snapshot.json",
+  "export-history": "history/exports.json",
   brief: "brief.md",
   outline: "outline.md",
   research: "research/notes.md",
-  slides: "slides/storyboard.json",
-  design: "design/system.json",
-  deck: "deck/snapshot.json",
 };
 
 export function getPrimaryProjectArtifactPath(
   artifact: Pick<ProjectArtifact, "id" | "path">,
 ): string {
-  if (isProjectStageId(artifact.id)) {
+  if (isProjectArtifactId(artifact.id)) {
     return primaryProjectArtifactPaths[artifact.id];
   }
   return artifact.path;
 }
 
-export function isProjectStageId(value: string): value is ProjectStageId {
-  return projectStageIds.includes(value as ProjectStageId);
+export function isProjectArtifactId(value: string): value is ProjectArtifactId {
+  return projectArtifactIds.includes(value as ProjectArtifactId);
 }

@@ -55,7 +55,7 @@ Agent PPT 不需要复制这些入口和命令，但需要吸收其中与长任�
 | System Prompt 分区 | **Implemented** | `src/main/agent/runtime/prompts/` | section registry、稳定/动态边界、stage 建议化 |
 | 动态工具系统 | **Implemented** | `src/main/agent/tools/tool-registry.ts`、`src/main/agent/tools/tool-loader.ts`、`src/main/agent/runtime/tools/` | 注册、暴露、权限和执行解耦 |
 | 文件安全操作 | **Implemented** | `src/main/agent/tools/files/workspace-file-service.ts`、`src/main/agent/tools/core/workspace-files.ts` | Main/teammate 共享 read-before-write 与原子提交 |
-| 项目文件管理 | **Implemented** | `src/main/project/project-file-service.ts`、`src/shared/ipc.ts`、`src/renderer/src/app/ProjectFilesView.tsx` | workspace-level artifact 分组、list/detail/diff；注册文本 artifact 使用隔离编辑凭证与 SHA-256 CAS |
+| 项目文件管理 | **Implemented** | `src/main/project/project-file-service.ts`、`src/shared/ipc.ts`、`src/renderer/src/components/ProjectFilesPage.tsx` | SVG-native artifact 分组、list/detail/diff；注册文本 artifact 使用隔离编辑凭证与 SHA-256 CAS |
 | 权限与审批 | **Implemented** | `src/main/agent/runtime/tools/permission-check.ts`、`src/main/agent/runtime/tools/tool-approval-broker.ts`、`src/main/agent/gate/commit-gate.ts` | Prompt 不承担权限；Presentation 变更有独立提交门 |
 | Skill 渐进加载 | **Implemented** | `src/main/agent/skills/loadSkillsDir.ts`、`src/main/agent/tools/core/load-skill.ts`、`skills/` | Skill 是知识/流程注入，不是硬编码阶段机 |
 | Task / teammate | **Implemented** | `src/main/agent/task/`、`src/main/agent/teammate/`、`src/main/agent/subagent/` | 有持久化任务、独立会话、消息总线和生命周期 |
@@ -65,7 +65,7 @@ Agent PPT 不需要复制这些入口和命令，但需要吸收其中与长任�
 | SVG-native 创建 | **Implemented** | `skills/ppt-workflow/`、`preview-svg-page.ts`、`submit-svg-deck.ts` | 产品唯一新建路径；IPC 拒绝 lean |
 | Presentation 编译（残余） | **Implemented** | `src/shared/commercial-visual/`、`src/main/agent/lean/`、layout registry | 离线/脚本与遗留 grammar；非产品 Mode |
 | 渲染反馈与质量门 | **Implemented** | `src/main/agent/runtime/presentation/render-feedback-loop.ts`、deck validators、quality gate | 模型复盘有界，最终约束由确定性代码执行 |
-| Artifact / Job 生命周期 | **Proposed** | `docs/roadmap/presentation-lifecycle.md` | 当前最大结构性缺口 |
+| Artifact / Job 生命周期 | **Implemented** | `src/shared/presentation-lifecycle.ts`、`src/main/presentation-lifecycle/` | 跨 Query PptJob、immutable revision graph、Proposal/Presentation/Export 与恢复 |
 | MCP / Plugin / LSP | **Not adopted** | 无对应产品入口 | 不是当前 PPT 主链路所必需 |
 | Daemon / Remote Control / ACP | **Not adopted** | 无对应产品入口 | Electron 本地应用暂不需要复制远程运行面 |
 | 通用 Shell / Computer Use | **Partial** | teammate-only `src/main/agent/subagent/workspace-tools.ts` | Bash 为 fail-closed 的只读 direct-exec allowlist；无任意 shell 或 Computer Use |
@@ -322,21 +322,20 @@ tool proposal（SubmitSvgDeck 或遗留 SubmitCommands / ExecuteLayoutPlan）
 
 ## 7. 当前能力缺口与优先级
 
-### P0：Artifact 与 Job 生命周期
+### 已完成：Artifact 与 Job 生命周期
 
-当前 Query/Run 已有可靠生命周期，但 design-spec、page-plan、SVG 页、遗留 storyboard/layout-plan、candidate、proposal、committed deck 与 export 之间仍缺统一 revision graph 和 job identity。它会影响：
+现行实现已经建立每个 `PresentationId` 唯一的长期 `PptJob`，并用 immutable
+ArtifactRevision 串联 design-spec、page-plan、SVG、preview、candidate、quality、
+proposal、committed Presentation 与 export：
 
-- 上游内容修改后的 stale 传播；
-- preview/candidate 与已提交 deck 的身份；
-- 跨 Query 恢复；
-- 重试时的幂等性；
-- 导出物追溯。
+- Query completion 与 PptJob 业务状态正交；
+- dependency revision/hash 驱动精确 stale 传播；
+- ProposalId、PresentationRevisionId 与 ExportArtifact 分别证明审批、应用与交付；
+- apply/export 使用 side-effect claim，恢复时不盲目重放；
+- Renderer 通过只读 PptJobProjection 消费状态。
 
-workspace 项目文件管理页已经让当前 artifact 可安全浏览和编辑，但它只提供文件级
-SHA-256 CAS，不保存 immutable revision、dependency snapshot 或 Job transition，
-因此没有关闭该缺口。
-
-该能力仍为 **Proposed**，唯一设计入口是
+文件页面的 SHA-256 CAS 仍只负责编辑并发，不等于 ArtifactRevision。详细实现与
+dev 数据策略见
 [Presentation Artifact 与 Job 生命周期](../roadmap/presentation-lifecycle.md)。
 
 ### P1：后台执行产品闭环

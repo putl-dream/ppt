@@ -32,7 +32,6 @@ const lockfile = require("proper-lockfile") as ProperLockfile;
 export type DurableRunStatus =
   | "running"
   | "waiting_user"
-  | "proposal_ready"
   | "completed"
   | "interrupted"
   | "failed";

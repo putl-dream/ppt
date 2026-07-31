@@ -5,7 +5,7 @@ import type {
 
 export type ProjectFileMutationResult = Pick<
   ProjectFileEditorWriteResult,
-  "path" | "changed" | "changedArtifactId" | "staleArtifactIds"
+  "path" | "changed" | "changedArtifactId"
 > & {
   postCommitWarnings?: ProjectFileEditorWriteResult["postCommitWarnings"];
 };
@@ -31,7 +31,6 @@ export async function saveExistingProjectFile(
     return {
       path: opened.path,
       changed: false,
-      staleArtifactIds: [],
     };
   }
   return await api.saveProjectFile(

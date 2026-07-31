@@ -11,6 +11,7 @@ import {
   resolveLocalImagePath,
 } from "./local-image-file";
 import { utf8ToBase64 } from "@shared/base64";
+import { createPptxExportIdentity } from "./deck/export-identity";
 
 const logger = createModuleLogger("ppt-exporter");
 const PPTX_LAYOUT_NAME = "AGENT_PPT_WIDE";
@@ -52,6 +53,8 @@ export async function exportToPptx(
   workspaceRoot?: string,
 ): Promise<void> {
   const pptx = new pptxgen();
+  pptx.subject = createPptxExportIdentity(presentation, options);
+  pptx.title = presentation.title;
   pptx.defineLayout({
     name: PPTX_LAYOUT_NAME,
     width: PPTX_SLIDE_WIDTH_INCHES,

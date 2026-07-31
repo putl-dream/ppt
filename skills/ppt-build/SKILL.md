@@ -6,6 +6,7 @@ stages:
   - author
   - design
 allowed-tools:
+  - BeginPptCapability
   - ReadFile
   - WriteFile
   - PreviewSvgPage
@@ -15,6 +16,8 @@ allowed-tools:
 # Deck 构建 — SVG-native Executor
 
 ## 目标
+
+本技能必须运行在本 Query 已声明的 `create` capability 内；若尚未声明，先调用一次 `BeginPptCapability`。
 
 读取 `design/design-spec.json` 与 `slides/page-plan.json`，把每页直接写成 `slides/svg/P<NN>.svg`。SVG 是页面的唯一视觉事实源；预览和提交都读取这些原文件，不再生成 Presentation commands，也不经过固定 layout 或自动排版。
 

@@ -98,6 +98,7 @@ export function App() {
     deleteSession,
   } = sessionController;
   const { isExportingDeck, exportDeck } = useDeckExport({
+    sessionId: activeSessionId,
     presentation,
     logoUrl,
     setChatMessages,
@@ -284,6 +285,7 @@ export function App() {
             triggerToast: notify,
           }}
           mirrorProps={isMirrorVisible && presentation ? {
+            sessionId: activeSessionId,
             presentation,
             selectedSlideId,
             onSelectSlide: setSelectedSlideId,

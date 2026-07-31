@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createStarterPresentation } from "../src/shared/presentation";
 import { AgentQueryAssembler } from "../src/main/agent/runtime/query/agent-query-assembler";
 import { normalizeAgentRuntimeOptions } from "../src/main/agent/runtime/runtime-types";
+import { asQueryId } from "../src/shared/presentation-lifecycle";
 import {
   createInitialQueryState,
   createIterationWorkspace,
@@ -37,6 +38,7 @@ describe("agent query lifecycle boundaries", () => {
       content: [{ type: "text" as const, text: "hello" }],
     }];
     const params = new AgentQueryAssembler().assemble({
+      queryId: asQueryId("query-stable"),
       options: normalizeAgentRuntimeOptions({
         threadId: "thread",
         runId: "run",
@@ -61,6 +63,9 @@ describe("agent query lifecycle boundaries", () => {
     expect(state.messages).not.toBe(params.messages);
     expect(state.turnCount).toBe(0);
     expect(params.querySource).toBe("user");
+    expect(params.queryId).toBe("query-stable");
+    expect(params.queryId).not.toBe(params.systemContext.threadId);
+    expect(params.queryId).not.toBe(params.systemContext.runId);
     expect(params.fallbackModel).toEqual({ provider: "anthropic", model: "fallback" });
     expect(params.userContext).toEqual({ locale: "zh-CN" });
     expect(params.systemContext).toMatchObject({
@@ -73,6 +78,7 @@ describe("agent query lifecycle boundaries", () => {
 
   it("commits a complete multi-tool batch in one user result message", () => {
     const params = new AgentQueryAssembler().assemble({
+      queryId: asQueryId("query-multi-tool"),
       options: normalizeAgentRuntimeOptions({
         threadId: "thread",
         request: "inspect",
@@ -127,6 +133,7 @@ describe("agent query lifecycle boundaries", () => {
 
   it("rejects an incomplete batch before changing committed state", () => {
     const params = new AgentQueryAssembler().assemble({
+      queryId: asQueryId("query-incomplete"),
       options: normalizeAgentRuntimeOptions({
         threadId: "thread",
         request: "inspect",

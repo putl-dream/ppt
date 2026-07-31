@@ -31,7 +31,7 @@ export interface StopBlock {
   threadId?: string;
   scope: "main" | "subagent";
   result: AgentRuntimeResult | string;
-  reason: "completed" | "waiting_user" | "proposal_ready" | "step_limit" | "aborted" | "failed";
+  reason: "completed" | "waiting_user" | "step_limit" | "aborted" | "failed";
 }
 
 export type RuntimeHookContext = {

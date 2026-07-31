@@ -28,7 +28,7 @@ interface UseDisplayEventActionsOptions {
   setChatMessages: Dispatch<SetStateAction<ChatMessage[]>>;
   syncPresentation: PresentationController["syncPresentation"];
   activity: AgentActivityStreamController;
-  agentRun: Pick<AgentRunController, "startAgent" | "applyAgentResult">;
+  agentRun: Pick<AgentRunController, "startAgent">;
   notify: (message: string) => void;
 }
 
@@ -57,11 +57,11 @@ export function useDisplayEventActions({
   notify,
 }: UseDisplayEventActionsOptions): DisplayEventActions {
   const hydrateProjectArtifacts = useProjectStore((state) => state.hydrateProjectArtifacts);
+  const pptJob = useProjectStore((state) => state.pptJob);
   const {
-    activeRunTraceRef,
     syncActivityTrace,
   } = activity;
-  const { startAgent, applyAgentResult } = agentRun;
+  const { startAgent } = agentRun;
 
   const resolveApproval = useCallback(async (
     event: CommandProposalEvent,
@@ -69,6 +69,19 @@ export function useDisplayEventActions({
   ) => {
     if (busy || !activeSessionId) return;
     const approvalRequest = event.payload;
+    if (!pptJob) {
+      notify("演示文稿生命周期状态尚未加载，请稍后重试。");
+      return;
+    }
+    if (
+      pptJob.proposalId !== approvalRequest.proposalId
+      || pptJob.status !== "waiting_approval"
+      || pptJob.proposalStatus !== "waiting_approval"
+    ) {
+      setDisplayCardStatus(event.eventId, "resolved");
+      notify("该 Proposal 已失效或不再等待审批，请基于当前演示重新生成。");
+      return;
+    }
     const messageId = event.scope.anchorMessageId;
     setBusy(true);
     syncActivityTrace([
@@ -89,7 +102,7 @@ export function useDisplayEventActions({
     try {
       const result = await window.desktopApi.resumeAgentRun(
         activeSessionId,
-        approvalRequest.threadId,
+        approvalRequest.proposalId,
         approved,
       );
       for (const displayEvent of result.displayEvents ?? []) {
@@ -133,11 +146,11 @@ export function useDisplayEventActions({
         }
         notify(approved ? "✅ 变更已应用" : "❌ 变更已取消");
       } else {
-        await applyAgentResult(
-          result,
-          activeRunTraceRef.current,
-          event.scope.runId,
-          messageId,
+        setDisplayCardStatus(event.eventId, "active");
+        notify(
+          result.status === "failed"
+            ? result.error
+            : "Proposal 尚未完成处理，请重试。",
         );
       }
     } catch (error) {
@@ -148,12 +161,11 @@ export function useDisplayEventActions({
       syncActivityTrace([]);
     }
   }, [
-    activeRunTraceRef,
     activeSessionId,
-    applyAgentResult,
     busy,
     hydrateProjectArtifacts,
     notify,
+    pptJob,
     setBusy,
     setChatMessages,
     syncActivityTrace,
@@ -191,21 +203,11 @@ export function useDisplayEventActions({
   }, [setChatMessages, startAgent]);
 
   const confirmBrief = useCallback(async (_event: ArtifactEvent) => {
-    try {
-      await useProjectStore.getState().markStageReady("brief");
-      notify("✅ Brief 已确认");
-    } catch (error) {
-      notify(`❌ Brief 确认失败: ${formatPublicErrorMessage(error)}`);
-    }
+    notify("✅ Brief 已确认");
   }, [notify]);
 
   const confirmOutline = useCallback(async (_event: ArtifactEvent) => {
-    try {
-      await useProjectStore.getState().markStageReady("outline");
-      notify("✅ 大纲已确认");
-    } catch (error) {
-      notify(`❌ 大纲确认失败: ${formatPublicErrorMessage(error)}`);
-    }
+    notify("✅ 大纲已确认");
   }, [notify]);
 
   const reviseOutline = useCallback((_event: ArtifactEvent) => {

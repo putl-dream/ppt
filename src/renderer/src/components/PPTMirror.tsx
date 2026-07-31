@@ -24,6 +24,7 @@ import {
 
 
 interface PPTMirrorProps {
+  sessionId: string;
   presentation: Presentation;
   selectedSlideId: string;
   onSelectSlide: (slideId: string) => void;
@@ -167,6 +168,7 @@ function MirrorSlideFrame({
 }
 
 export const PPTMirror: React.FC<PPTMirrorProps> = ({
+  sessionId,
   presentation,
   selectedSlideId,
   onSelectSlide,
@@ -195,7 +197,7 @@ export const PPTMirror: React.FC<PPTMirrorProps> = ({
   const cardRefs = useRef<Record<string, HTMLButtonElement | null>>({});
 
   const handleDownload = async () => {
-    if (isExporting) return;
+    if (!sessionId || isExporting) return;
     const needsApproval = hasUnverifiedCommercialAssets(presentation);
     const allowUnverifiedAssets = needsApproval
       ? window.confirm("演示文稿包含尚未核实商业授权的图片。是否明确批准本次导出？")
@@ -203,7 +205,7 @@ export const PPTMirror: React.FC<PPTMirrorProps> = ({
     if (needsApproval && !allowUnverifiedAssets) return;
     setIsExporting(true);
     try {
-      const savedPath = await window.desktopApi.exportPresentation(presentation, {
+      const savedPath = await window.desktopApi.exportPresentation(sessionId, {
         logoUrl: logoUrl,
         allowUnverifiedAssets,
       });

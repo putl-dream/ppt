@@ -5,6 +5,7 @@ when_to_use: SVG-native deck 已生成，需要视觉美化、排版修复、内
 stages:
   - style
 allowed-tools:
+  - BeginPptCapability
   - ListSlides
   - ReadCurrentSlide
   - ReadFile
@@ -23,12 +24,13 @@ allowed-tools:
 
 ## 固定工作流
 
-1. 用 `ListSlides` 获取完整有序页面清单及每页 `svgSourcePath`、`svgSha256`。
-2. 目标是当前页时用 `ReadCurrentSlide` 确认 `visualSource.sourcePath`；其他页使用 `ListSlides.svgSourcePath`。再用 `ReadFile` 读取完整 SVG。
-3. 对照 `design/design-spec.json` 与 `slides/page-plan.json` 判断问题来自当前页还是 deck-wide 设计语言。
-4. 直接修改 SVG 中的文字、几何、图表、图片、分组、渐变、裁切和装饰。用 `WriteFile` 将完整 SVG 写回原路径。
-5. 对每个新增或修改页调用 `PreviewSvgPage`；若有越界、溢出、重叠、图片失败或视觉层级问题，继续修源并重新预览。未修改且 hash 与当前已提交页面一致的作者源可以直接复用。
-6. 全部修改页通过后，调用一次 `SubmitSvgDeck`，提交所有有序页面。未修改页也必须包含在提交列表中，以保持完整 deck。参数显式使用 `"designSpecPath":"design/design-spec.json"` 与 `"pagePlanPath":"slides/page-plan.json"`，并让 `communication`、`designSystem`、每页 `id/path/narrative` 与锁文件完全一致。
+1. 若本 Query 尚未声明 PPT 工作，先调用一次 `BeginPptCapability({"capability":"restyle", ...})`。
+2. 用 `ListSlides` 获取完整有序页面清单及每页 `svgSourcePath`、`svgSha256`。
+3. 目标是当前页时用 `ReadCurrentSlide` 确认 `visualSource.sourcePath`；其他页使用 `ListSlides.svgSourcePath`。再用 `ReadFile` 读取完整 SVG。
+4. 对照 `design/design-spec.json` 与 `slides/page-plan.json` 判断问题来自当前页还是 deck-wide 设计语言。
+5. 直接修改 SVG 中的文字、几何、图表、图片、分组、渐变、裁切和装饰。用 `WriteFile` 将完整 SVG 写回原路径。
+6. 对每个新增或修改页调用 `PreviewSvgPage`；若有越界、溢出、重叠、图片失败或视觉层级问题，继续修源并重新预览。未修改且 hash 与当前已提交页面一致的作者源可以直接复用。
+7. 全部修改页通过后，调用一次 `SubmitSvgDeck`，提交所有有序页面。未修改页也必须包含在提交列表中，以保持完整 deck。参数显式使用 `"designSpecPath":"design/design-spec.json"` 与 `"pagePlanPath":"slides/page-plan.json"`，并让 `communication`、`designSystem`、每页 `id/path/narrative` 与锁文件完全一致。
 
 ## 美化判断
 

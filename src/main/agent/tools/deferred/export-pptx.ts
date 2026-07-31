@@ -24,6 +24,9 @@ export const exportPptxTool: ToolDefinition<
   loadPolicy: "deferred",
   inputSchema: exportPptxSchema,
   behavior: {
+    presentation: {
+      allowedCapabilities: ["export"],
+    },
     background: {
       isRequested: (args) => args.run_in_background === true,
       describe: (args) => `ExportPptx: ${args.format}`,

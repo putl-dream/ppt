@@ -1,4 +1,5 @@
-import { mkdtemp } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -7,6 +8,8 @@ import { AgentService } from "../src/main/agent/service";
 import { ToolRegistry } from "../src/main/agent/tools/tool-registry";
 import { askUserTool } from "../src/main/agent/tools/core/ask-user";
 import { submitCommandsTool } from "../src/main/agent/tools/core/submit-commands";
+import { beginPptCapabilityTool } from
+  "../src/main/agent/tools/core/begin-ppt-capability";
 import { CommitGate } from "../src/main/agent/gate/commit-gate";
 import { RiskPolicy } from "../src/main/agent/gate/risk-policy";
 import { CommandBus } from "../src/shared/commands";
@@ -19,6 +22,23 @@ import type {
 } from "../src/main/agent/gateway/types";
 import { DurableRunStore } from "../src/main/agent/persistence/durable-run-store";
 import { MessageBus } from "../src/main/agent/teammate/message-bus";
+import { PresentationLifecycleOrchestrator } from
+  "../src/main/presentation-lifecycle/presentation-lifecycle-orchestrator";
+import { PresentationLifecycleRepository } from
+  "../src/main/presentation-lifecycle/presentation-lifecycle-repository";
+import { ContentAddressedBlobStore } from
+  "../src/main/presentation-lifecycle/content-addressed-blob-store";
+import { PresentationLifecycleToolBridge } from
+  "../src/main/presentation-lifecycle/presentation-lifecycle-tool-bridge";
+import { PresentationCommitService } from
+  "../src/main/presentation-lifecycle/presentation-commit-service";
+import { FileSessionStore } from "../src/main/session-store";
+import {
+  asPresentationId,
+  asProjectId,
+  asProposalId,
+  asQueryId,
+} from "../src/shared/presentation-lifecycle";
 
 function gatewayFor(turns: AgentModelContentBlock[][]): AgentModelGateway & {
   requests: AgentModelRequest[];
@@ -41,6 +61,201 @@ function gatewayFor(turns: AgentModelContentBlock[][]): AgentModelGateway & {
 }
 
 describe("durable agent recovery", () => {
+  it("keeps an ordinary completed chat Query out of the Presentation lifecycle", async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), "agent-ordinary-chat-"));
+    const repository = new PresentationLifecycleRepository(
+      join(workspaceRoot, "lifecycle.sqlite"),
+    );
+    const lifecycle = new PresentationLifecycleOrchestrator(repository);
+    const presentation = createStarterPresentation();
+    const runtime = new AgentRuntime(
+      new ToolRegistry(),
+      gatewayFor([[{ type: "text", text: "这是普通问答。" }]]),
+      undefined,
+      undefined,
+      ({ queryId, options }) => new PresentationLifecycleToolBridge(
+        lifecycle,
+        asProjectId("ordinary-chat-project"),
+        presentation.id,
+        queryId,
+        options.request,
+      ),
+    );
+    const service = new AgentService(
+      new CommandBus(presentation),
+      runtime,
+      new CommitGate(new RiskPolicy()),
+      workspaceRoot,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      lifecycle,
+    );
+
+    try {
+      await expect(service.start("解释一下演示结构")).resolves.toEqual({
+        status: "chat",
+        message: "这是普通问答。",
+      });
+      expect(lifecycle.getState(asPresentationId(presentation.id))).toBeUndefined();
+    } finally {
+      repository.close();
+      await rm(workspaceRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("moves an active PPT Query ending in a message to waiting_user at its committed stage", async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), "agent-ppt-message-"));
+    const repository = new PresentationLifecycleRepository(
+      join(workspaceRoot, "lifecycle.sqlite"),
+    );
+    const lifecycle = new PresentationLifecycleOrchestrator(repository);
+    const presentation = createStarterPresentation();
+    const registry = new ToolRegistry();
+    registry.register(beginPptCapabilityTool);
+    const runtime = new AgentRuntime(
+      registry,
+      gatewayFor([
+        [{
+          type: "tool_use",
+          id: "begin-create",
+          name: "BeginPptCapability",
+          input: { capability: "create", instruction: "Create a deck" },
+        }],
+        [{ type: "text", text: "我还需要用户补充素材。" }],
+      ]),
+      undefined,
+      undefined,
+      ({ queryId, options }) => new PresentationLifecycleToolBridge(
+        lifecycle,
+        asProjectId("ppt-message-project"),
+        presentation.id,
+        queryId,
+        options.request,
+      ),
+    );
+    const service = new AgentService(
+      new CommandBus(presentation),
+      runtime,
+      new CommitGate(new RiskPolicy()),
+      workspaceRoot,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      lifecycle,
+    );
+
+    try {
+      await expect(service.start("创建演示文稿")).resolves.toEqual({
+        status: "chat",
+        message: "我还需要用户补充素材。",
+      });
+      expect(lifecycle.getState(asPresentationId(presentation.id))).toMatchObject({
+        status: "waiting_user",
+        currentStage: "intent",
+        waitingReason: expect.stringContaining("Last committed stage: intent"),
+      });
+    } finally {
+      repository.close();
+      await rm(workspaceRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("fails an active PptJob when CommitGate rejects a completed Query candidate", async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), "agent-gate-rejection-"));
+    const lifecyclePath = join(workspaceRoot, "lifecycle.sqlite");
+    const repository = new PresentationLifecycleRepository(lifecyclePath);
+    const lifecycle = new PresentationLifecycleOrchestrator(repository);
+    const blobStore = new ContentAddressedBlobStore(join(workspaceRoot, "blobs"));
+    const presentation = createStarterPresentation();
+    const registry = new ToolRegistry();
+    registry.register(beginPptCapabilityTool);
+    registry.register(submitCommandsTool);
+    const gateway = gatewayFor([
+      [{
+        type: "tool_use",
+        id: "begin-edit",
+        name: "BeginPptCapability",
+        input: { capability: "edit", instruction: "Apply an invalid edit" },
+      }],
+      [{
+        type: "tool_use",
+        id: "submit-invalid",
+        name: "SubmitCommands",
+        input: {
+          summary: "Remove a slide that does not exist",
+          risk: "low",
+          commands: [{
+            id: "missing-slide",
+            type: "remove-slide",
+            slideId: "does-not-exist",
+          }],
+        },
+      }],
+    ]);
+    const runtime = new AgentRuntime(
+      registry,
+      gateway,
+      undefined,
+      undefined,
+      ({ queryId, options }) => new PresentationLifecycleToolBridge(
+        lifecycle,
+        asProjectId("gate-project"),
+        presentation.id,
+        queryId,
+        options.request,
+        blobStore,
+        undefined,
+        options.startMode.type === "resume_query",
+      ),
+    );
+    const service = new AgentService(
+      new CommandBus(presentation),
+      runtime,
+      new CommitGate(new RiskPolicy()),
+      workspaceRoot,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      lifecycle,
+      undefined,
+      blobStore,
+    );
+
+    try {
+      await expect(service.start(
+        "Apply an invalid edit",
+        undefined,
+        "REQUEST_APPROVAL",
+      )).rejects.toThrow("Commit Gate rejected proposal");
+
+      const job = lifecycle.getState(asPresentationId(presentation.id))!;
+      expect(job.status).toBe("failed");
+      const candidateAttempts = repository.listStageAttempts(job.jobId)
+        .filter((attempt) => attempt.stage === "candidate");
+      expect(candidateAttempts).toEqual([
+        expect.objectContaining({
+          status: "failed",
+        }),
+      ]);
+      expect(candidateAttempts[0]).not.toHaveProperty("artifactRevisionId");
+      expect(repository.listArtifactRevisions(job.jobId)
+        .filter((revision) =>
+          revision.kind === "candidate_commands"
+          || revision.kind === "candidate_deck"
+        )).toHaveLength(0);
+    } finally {
+      repository.close();
+      await rm(workspaceRoot, { recursive: true, force: true });
+    }
+  });
+
   it("acks a replayed Inbox claim without exposing an already committed message twice", async () => {
     const workspaceRoot = await mkdtemp(join(tmpdir(), "agent-inbox-recovery-"));
     const bus = new MessageBus(MessageBus.defaultMailboxDir(workspaceRoot));
@@ -234,11 +449,55 @@ describe("durable agent recovery", () => {
     const blocks = secondGateway.requests[0].messages!.flatMap((message) => message.content);
     expect(blocks).toContainEqual(expect.objectContaining({ type: "tool_use", id: "ask-1" }));
     expect(blocks).toContainEqual(expect.objectContaining({ type: "tool_result", toolUseId: "ask-1" }));
+    const resumedCheckpoint = await new DurableRunStore(workspaceRoot)
+      .load("thread-recovery");
+    expect(resumedCheckpoint?.version).toBe(2);
+    if (resumedCheckpoint?.version !== 2) {
+      throw new Error("expected a resumed version 2 checkpoint");
+    }
+    expect(resumedCheckpoint.queryId).toBe(checkpoint.queryId);
+    expect(resumedCheckpoint.lastRunId).toBe("run-2");
+    expect(resumedCheckpoint.queryId).not.toBe(resumedCheckpoint.lastRunId);
+    expect(resumedCheckpoint.queryId).not.toBe(resumedCheckpoint.threadId);
+
+    await new AgentRuntime(
+      registry,
+      gatewayFor([[{ type: "text", text: "新的请求已完成。" }]]),
+    ).run({
+      threadId: "thread-recovery",
+      runId: "run-3",
+      request: "开始一个独立的新请求",
+      presentationSnapshot: createStarterPresentation(),
+      selectedElementIds: [],
+      workspaceRoot,
+      startMode: { type: "new_query" },
+    });
+    const newQueryCheckpoint = await new DurableRunStore(workspaceRoot)
+      .load("thread-recovery");
+    expect(newQueryCheckpoint?.version).toBe(2);
+    if (newQueryCheckpoint?.version !== 2) {
+      throw new Error("expected a new-query version 2 checkpoint");
+    }
+    expect(newQueryCheckpoint.queryId).not.toBe(resumedCheckpoint.queryId);
+    expect(newQueryCheckpoint.lastRunId).toBe("run-3");
   });
 
   it("restores and applies a command approval after service reconstruction", async () => {
     const workspaceRoot = await mkdtemp(join(tmpdir(), "agent-approval-recovery-"));
-    const presentation = createStarterPresentation();
+    const lifecyclePath = join(workspaceRoot, "lifecycle.sqlite");
+    const blobStore = new ContentAddressedBlobStore(join(workspaceRoot, "blobs"));
+    const sessionStore = new FileSessionStore(
+      lifecyclePath,
+      join(workspaceRoot, "projects"),
+    );
+    await sessionStore.initialize();
+    const bootstrap = await sessionStore.createSession({
+      title: "Approval recovery",
+    });
+    const sessionId = bootstrap.activeSession!.session.id;
+    const presentation = bootstrap.activeSession!.presentation;
+    const projectId = asProjectId("recovery-project");
+    const presentationId = asPresentationId(presentation.id);
     const registry = new ToolRegistry();
     registry.register(submitCommandsTool);
     const gateway = gatewayFor([[
@@ -253,11 +512,41 @@ describe("durable agent recovery", () => {
         },
       },
     ]]);
+    const firstRepository = new PresentationLifecycleRepository({
+      filePath: lifecyclePath,
+      connection: sessionStore.conversationDatabase.sqliteConnection,
+    });
+    const firstLifecycle = new PresentationLifecycleOrchestrator(firstRepository);
+    firstLifecycle.beginCapability({
+      projectId,
+      presentationId,
+      queryId: asQueryId("recovery-query"),
+      capability: "edit",
+      instruction: "更新标题",
+    });
+    const firstBus = new CommandBus(presentation);
+    const firstCommitService = new PresentationCommitService(
+      sessionId,
+      projectId,
+      presentationId,
+      firstBus,
+      sessionStore,
+      firstLifecycle,
+      blobStore,
+    );
     const firstService = new AgentService(
-      new CommandBus(presentation),
+      firstBus,
       new AgentRuntime(registry, gateway),
       new CommitGate(new RiskPolicy()),
       workspaceRoot,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      firstLifecycle,
+      firstCommitService,
+      blobStore,
     );
     const proposed = await firstService.start(
       "更新标题",
@@ -270,16 +559,297 @@ describe("durable agent recovery", () => {
       "approval-thread",
     );
     expect(proposed.status).toBe("approval-required");
+    if (proposed.status !== "approval-required") throw new Error("Expected approval");
+    const foreignPresentation = createStarterPresentation();
+    const foreignService = new AgentService(
+      new CommandBus(foreignPresentation),
+      new AgentRuntime(registry, gatewayFor([])),
+      new CommitGate(new RiskPolicy()),
+      workspaceRoot,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      firstLifecycle,
+      undefined,
+      blobStore,
+    );
+    await expect(foreignService.resumeProposal(
+      proposed.approval.proposalId,
+      false,
+    )).rejects.toThrow(/belongs to Presentation/);
+    await expect(foreignService.resumeProposal(
+      proposed.approval.proposalId,
+      true,
+    )).rejects.toThrow(/belongs to Presentation/);
+    expect(firstRepository.getProposal(
+      asProposalId(proposed.approval.proposalId),
+    )?.status).toBe("waiting_approval");
+    firstRepository.close();
 
-    const restoredBus = new CommandBus(presentation);
+    const restoredBus = new CommandBus(
+      sessionStore.getSession(sessionId).presentation,
+    );
+    const restoredRepository = new PresentationLifecycleRepository({
+      filePath: lifecyclePath,
+      connection: sessionStore.conversationDatabase.sqliteConnection,
+    });
+    const restoredLifecycle = new PresentationLifecycleOrchestrator(restoredRepository);
+    const restoredCommitService = new PresentationCommitService(
+      sessionId,
+      projectId,
+      presentationId,
+      restoredBus,
+      sessionStore,
+      restoredLifecycle,
+      blobStore,
+    );
     const restoredService = new AgentService(
       restoredBus,
       new AgentRuntime(registry, gatewayFor([])),
       new CommitGate(new RiskPolicy()),
       workspaceRoot,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      restoredLifecycle,
+      restoredCommitService,
+      blobStore,
     );
-    const applied = await restoredService.resume("approval-thread", true);
+    const applied = await restoredService.resumeProposal(
+      proposed.approval.proposalId,
+      true,
+    );
     expect(applied.status).toBe("completed");
     expect(restoredBus.getSnapshot().title).toBe("持久化标题");
+    expect(
+      restoredRepository.getProposal(
+        asProposalId(proposed.approval.proposalId),
+      )?.status,
+    ).toBe("applied");
+    const appliedRevision = restoredBus.getSnapshot().revision;
+    await expect(restoredService.resumeProposal(
+      proposed.approval.proposalId,
+      true,
+    )).resolves.toMatchObject({ status: "completed" });
+    expect(restoredBus.getSnapshot().revision).toBe(appliedRevision);
+    restoredRepository.close();
+    sessionStore.close();
+    await rm(workspaceRoot, { recursive: true, force: true });
+  });
+
+  it("keeps SVG proposal markup in blobs and rejects a tampered command blob", async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), "agent-blob-proposal-"));
+    const lifecyclePath = join(workspaceRoot, "lifecycle.sqlite");
+    const blobStore = new ContentAddressedBlobStore(join(workspaceRoot, "blobs"));
+    const sessionStore = new FileSessionStore(
+      lifecyclePath,
+      join(workspaceRoot, "projects"),
+    );
+    await sessionStore.initialize();
+    const bootstrap = await sessionStore.createSession({
+      title: "SVG proposal recovery",
+    });
+    const sessionId = bootstrap.activeSession!.session.id;
+    const presentation = bootstrap.activeSession!.presentation;
+    const presentationId = asPresentationId(presentation.id);
+    const projectId = asProjectId("blob-proposal-project");
+    const marker = "LIFECYCLE_BLOB_ONLY_MARKUP";
+    const markup = [
+      '<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720"',
+      ' viewBox="0 0 1280 720">',
+      '<rect width="1280" height="720" fill="#ffffff"/>',
+      `<text x="80" y="140" font-size="48">${marker}</text>`,
+      "</svg>",
+    ].join("");
+    const sha256 = createHash("sha256").update(markup, "utf8").digest("hex");
+    const commands = [{
+      id: "add-svg-slide",
+      type: "add-slide" as const,
+      index: presentation.slides.length,
+      slide: {
+        id: "svg-blob-slide",
+        title: "Blob-backed SVG",
+        elements: [],
+        narrative: {
+          role: "opening",
+          coreMessage: "Lifecycle command blobs preserve complete SVG pages.",
+          audienceMove: "Understand that approval can recover the exact page.",
+          rhythm: "anchor" as const,
+          layoutIntent: "Full-page SVG opening statement.",
+        },
+        visualSource: {
+          kind: "svg" as const,
+          markup,
+          width: 1280 as const,
+          height: 720 as const,
+          sha256,
+          sourcePath: "slides/svg/P01.svg",
+          resources: [],
+        },
+      },
+    }];
+    let repository = new PresentationLifecycleRepository({
+      filePath: lifecyclePath,
+      connection: sessionStore.conversationDatabase.sqliteConnection,
+    });
+    let lifecycle = new PresentationLifecycleOrchestrator(repository);
+    lifecycle.beginCapability({
+      projectId,
+      presentationId,
+      queryId: asQueryId("blob-proposal-query"),
+      capability: "create",
+      instruction: "Create an SVG-native slide",
+    });
+    const registry = new ToolRegistry();
+    const firstBus = new CommandBus(presentation);
+    const firstCommitService = new PresentationCommitService(
+      sessionId,
+      projectId,
+      presentationId,
+      firstBus,
+      sessionStore,
+      lifecycle,
+      blobStore,
+    );
+    const firstService = new AgentService(
+      firstBus,
+      new AgentRuntime(registry, gatewayFor([])),
+      new CommitGate(new RiskPolicy()),
+      workspaceRoot,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      lifecycle,
+      firstCommitService,
+      blobStore,
+    );
+
+    try {
+      const proposed = await firstService.submitDirectProposal({
+        threadId: "blob-proposal-thread",
+        request: "Create an SVG-native slide",
+        commands,
+        summary: "Add the SVG-native slide",
+        risk: "low",
+      });
+      expect(proposed.status).toBe("approval-required");
+      if (proposed.status !== "approval-required") {
+        throw new Error("Expected approval");
+      }
+
+      const job = lifecycle.getState(presentationId)!;
+      const lifecycleJson = repository.listArtifactRevisions(job.jobId)
+        .map((revision) => JSON.stringify(revision))
+        .join("\n");
+      expect(lifecycleJson).not.toContain(marker);
+      const proposalArtifact = lifecycle.getCommandProposalArtifact(
+        asProposalId(proposed.approval.proposalId),
+      );
+      expect(proposalArtifact.value).toMatchObject({
+        commandCount: 1,
+        commandsBlob: {
+          mediaType: "application/vnd.agent-ppt.presentation-commands+json",
+          byteLength: expect.any(Number),
+        },
+      });
+      expect(
+        (await blobStore.get(proposalArtifact.value.commandsBlob))
+          .toString("utf8"),
+      ).toContain(marker);
+
+      repository.close();
+      repository = new PresentationLifecycleRepository({
+        filePath: lifecyclePath,
+        connection: sessionStore.conversationDatabase.sqliteConnection,
+      });
+      lifecycle = new PresentationLifecycleOrchestrator(repository);
+      const restoredBus = new CommandBus(
+        sessionStore.getSession(sessionId).presentation,
+      );
+      const restoredCommitService = new PresentationCommitService(
+        sessionId,
+        projectId,
+        presentationId,
+        restoredBus,
+        sessionStore,
+        lifecycle,
+        blobStore,
+      );
+      const restoredService = new AgentService(
+        restoredBus,
+        new AgentRuntime(registry, gatewayFor([])),
+        new CommitGate(new RiskPolicy()),
+        workspaceRoot,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        lifecycle,
+        restoredCommitService,
+        blobStore,
+      );
+      await expect(restoredService.resumeProposal(
+        proposed.approval.proposalId,
+        true,
+      )).resolves.toMatchObject({ status: "completed" });
+      expect(
+        restoredBus.getSnapshot().slides
+          .find((slide) => slide.id === "svg-blob-slide")
+          ?.visualSource?.markup,
+      ).toBe(markup);
+
+      const applied = lifecycle.getState(presentationId)!;
+      lifecycle.beginCapability({
+        projectId,
+        presentationId,
+        queryId: asQueryId("tampered-blob-query"),
+        capability: "edit",
+        instruction: "Rename after SVG creation",
+        basePresentationRevisionId: applied.presentationRevisionId,
+      });
+      const tamperedProposal = await restoredService.submitDirectProposal({
+        threadId: "tampered-blob-thread",
+        request: "Rename the deck",
+        commands: [{
+          id: "tampered-title",
+          type: "set-presentation-title",
+          title: "Must not apply",
+        }],
+        summary: "Rename the deck",
+        risk: "low",
+      });
+      expect(tamperedProposal.status).toBe("approval-required");
+      if (tamperedProposal.status !== "approval-required") {
+        throw new Error("Expected approval");
+      }
+      const tamperedArtifact = lifecycle.getCommandProposalArtifact(
+        asProposalId(tamperedProposal.approval.proposalId),
+      );
+      await writeFile(
+        blobStore.pathFor(tamperedArtifact.value.commandsBlob.contentHash),
+        Buffer.alloc(tamperedArtifact.value.commandsBlob.byteLength, 0x78),
+      );
+      const beforeRejectedApply = restoredBus.getSnapshot();
+
+      await expect(restoredService.resumeProposal(
+        tamperedProposal.approval.proposalId,
+        true,
+      )).rejects.toThrow("failed integrity validation");
+      expect(restoredBus.getSnapshot()).toEqual(beforeRejectedApply);
+      expect(repository.getProposal(
+        asProposalId(tamperedProposal.approval.proposalId),
+      )?.status).toBe("waiting_approval");
+    } finally {
+      repository.close();
+      sessionStore.close();
+      await rm(workspaceRoot, { recursive: true, force: true });
+    }
   });
 });

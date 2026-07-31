@@ -15,6 +15,11 @@ export const detectRepeatedTitlesTool: ToolDefinition<
   category: "deferred",
   loadPolicy: "deferred",
   inputSchema: detectRepeatedTitlesSchema,
+  behavior: {
+    presentation: {
+      allowedCapabilities: ["edit", "restyle", "review"],
+    },
+  },
   risk: "low",
   execute: async (_, context) => {
     const titleMap = new Map<string, string[]>();

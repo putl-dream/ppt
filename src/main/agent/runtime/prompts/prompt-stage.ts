@@ -70,18 +70,20 @@ export function resolvePromptStage(input: PromptStageResolveInput): PromptStage 
     (slide) => !slide.visualSource && !slide.layout,
   );
 
-  if (input.artifacts.layoutPlan && slideCount > 0) {
-    return hasUnstyledSlides ? "style" : "edit";
-  }
-
   if (hasUnstyledSlides) {
     return "design";
   }
 
+  if (input.artifacts.pageSvg) {
+    return slideCount > 0 ? "edit" : "style";
+  }
+
   if (
-    input.artifacts.storyboard
+    input.artifacts.pagePlan
+    || input.artifacts.designSpec
     || input.artifacts.outline
     || input.artifacts.brief
+    || input.artifacts.research
   ) {
     return "author";
   }
@@ -91,10 +93,10 @@ export function resolvePromptStage(input: PromptStageResolveInput): PromptStage 
 
 export function describePromptStage(stage: PromptStage): string {
   const labels: Record<PromptStage, string> = {
-    discover: "路径选择与规划（brief / outline / storyboard）",
-    author: "内容与视觉一体化创作（单一 proposal）",
-    design: "自主选择设计系统并规划逐页版式",
-    style: "视觉排版执行与质检",
+    discover: "确认演示目标与 SVG-native 创作路径",
+    author: "设计规范、逐页规划与页面 SVG 创作",
+    design: "为已有页面补全设计与视觉来源",
+    style: "SVG 页面预览、质量检查与提交",
     edit: "轻量单页修改",
     export: "导出交付",
   };

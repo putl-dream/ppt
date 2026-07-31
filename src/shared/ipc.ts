@@ -10,13 +10,13 @@ import { layoutChoiceSchema } from "./layout-preference";
 import { z } from "zod";
 import type {
   ProjectArtifact,
-  ProjectArtifactStatus,
   SessionBootstrap,
   SessionChatMessage,
   SessionSummary,
 } from "./session";
 import type { TokenUsageStats } from "./token-usage";
 import type { ConversationEventPage } from "./conversation-events";
+import type { PptJobProjection } from "./presentation-lifecycle";
 import {
   leanGenerationModeSchema,
   type LeanRunMetrics,
@@ -237,7 +237,6 @@ export interface ProjectFileEditorWriteResult
   extends ProjectFileReceipt {
   changed: boolean;
   changedArtifactId?: string;
-  staleArtifactIds: string[];
   characterCount: number;
   editToken: string;
   postCommitWarnings?: Array<
@@ -285,11 +284,8 @@ export interface DesktopApi {
     editToken: string,
     expectedVersion: string,
   ): Promise<ProjectFileEditorWriteResult>;
-  markProjectArtifactStatus(
-    sessionId: string,
-    artifactId: string,
-    status: ProjectArtifactStatus,
-  ): Promise<ProjectArtifact>;
+  getPptJob(sessionId: string): Promise<PptJobProjection | undefined>;
+  onPptJobChanged(listener: (projection: PptJobProjection) => void): () => void;
   getPresentation(): Promise<Presentation>;
   startAgentRun(
     request: AgentRunRequest,
@@ -309,12 +305,12 @@ export interface DesktopApi {
     runId?: string,
   ): Promise<AgentRunResult>;
   onAgentStream(listener: (event: AgentStreamEvent) => void): () => void;
-  resumeAgentRun(sessionId: string, threadId: string, approved: boolean): Promise<AgentRunResult>;
+  resumeAgentRun(sessionId: string, proposalId: string, approved: boolean): Promise<AgentRunResult>;
   undo(): Promise<Presentation>;
   redo(): Promise<Presentation>;
   executeCommand(command: PresentationCommand): Promise<Presentation>;
   exportPresentation(
-    presentation: Presentation,
+    sessionId: string,
     options: ExportPresentationOptions,
   ): Promise<string | null>;
   openExportFolder(filePath: string): Promise<boolean>;

@@ -52,6 +52,11 @@ export const detectOverflowTextTool: ToolDefinition<
   category: "deferred",
   loadPolicy: "deferred",
   inputSchema: detectOverflowTextSchema,
+  behavior: {
+    presentation: {
+      allowedCapabilities: ["edit", "restyle", "review"],
+    },
+  },
   risk: "low",
   execute: async (args, context) => {
     const overflowElements: OverflowElement[] = [];

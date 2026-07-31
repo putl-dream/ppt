@@ -1,280 +1,222 @@
-import { describe, expect, it } from "vitest";
-import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
+import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { TEST_DESIGN_SYSTEM } from "./design-engine-test-utils";
+import { dirname, join } from "node:path";
+
+import { DEFAULT_DESIGN_SYSTEM } from "../src/design-system";
+import {
+  createDefaultBriefMarkdown,
+  createDefaultOutlineMarkdown,
+  createDefaultResearchMarkdown,
+} from "../src/shared/project-artifacts";
+import { createStarterPresentation } from "../src/shared/presentation";
 import {
   probeWorkspaceArtifactDetails,
   probeWorkspaceArtifacts,
 } from "../src/main/agent/runtime/presentation/workspace-artifacts";
-import {
-  createDefaultBriefMarkdown,
-  createDefaultOutlineMarkdown,
-} from "../src/shared/project-artifacts";
-import { createDefaultStoryboardSlide } from "../src/shared/storyboard";
-import { buildSystemPromptContext } from "../src/main/agent/runtime/prompts/prompt-context";
-import { askUserTool } from "../src/main/agent/tools/core/ask-user";
+
+const workspaces: string[] = [];
 
 async function createWorkspace(): Promise<string> {
-  return mkdtemp(join(tmpdir(), "ppt-workspace-artifacts-"));
+  const root = await mkdtemp(join(tmpdir(), "ppt-workspace-artifacts-"));
+  workspaces.push(root);
+  return root;
 }
 
-async function writeDefaultScaffold(root: string): Promise<void> {
-  await mkdir(join(root, "slides"), { recursive: true });
-  await writeFile(join(root, "brief.md"), createDefaultBriefMarkdown("测试项目"), "utf8");
-  await writeFile(join(root, "outline.md"), createDefaultOutlineMarkdown("测试项目"), "utf8");
-  await writeFile(
-    join(root, "slides/storyboard.json"),
-    `${JSON.stringify([createDefaultStoryboardSlide("测试项目", 0)], null, 2)}\n`,
-    "utf8",
-  );
+async function writeWorkspaceFile(
+  root: string,
+  relativePath: string,
+  content: string,
+): Promise<void> {
+  const filePath = join(root, relativePath);
+  await mkdir(dirname(filePath), { recursive: true });
+  await writeFile(filePath, content, "utf8");
 }
+
+function designSpec() {
+  return {
+    version: 1,
+    canvas: { width: 1280, height: 720 },
+    communicationContract: {
+      audience: "Executive team",
+      objective: "Approve the plan",
+      desiredOutcome: "Approve",
+      coreMessage: "The plan is ready",
+      deliveryContext: "Board meeting",
+      afterUse: "Decision record",
+    },
+    presentationDesignSystem: DEFAULT_DESIGN_SYSTEM,
+    argumentMode: DEFAULT_DESIGN_SYSTEM.argumentMode,
+    visualStyle: { id: DEFAULT_DESIGN_SYSTEM.visualStyle },
+    readingMode: DEFAULT_DESIGN_SYSTEM.readingMode,
+  };
+}
+
+function pagePlan(path = "slides/svg/P01.svg") {
+  return {
+    version: 1,
+    designSpec: "design/design-spec.json",
+    slides: [{
+      id: "P01",
+      path,
+      narrativeRole: "cover",
+      finalCopy: { title: "First" },
+      coreMessage: "The plan is ready",
+      audienceMove: "Create confidence",
+      rhythm: "anchor",
+      layoutIntent: "One dominant statement.",
+    }],
+  };
+}
+
+function svgPage(): string {
+  return [
+    '<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">',
+    '<rect width="1280" height="720" fill="#111827"/>',
+    '<text x="80" y="180" fill="#fff" font-size="64">First</text>',
+    "</svg>",
+  ].join("");
+}
+
+afterEach(async () => {
+  await Promise.all(
+    workspaces.splice(0).map((directory) =>
+      rm(directory, { recursive: true, force: true })
+    ),
+  );
+});
 
 describe("workspace artifact probing", () => {
-  it("ignores scaffolded default project files", async () => {
+  it("reports every SVG-native artifact and optional reference as absent", async () => {
     const root = await createWorkspace();
-    await writeDefaultScaffold(root);
 
     await expect(probeWorkspaceArtifacts(root)).resolves.toEqual({
+      designSpec: false,
+      pagePlan: false,
+      pageSvg: false,
+      assets: false,
+      deck: false,
+      exportHistory: false,
       brief: false,
       outline: false,
-      storyboard: false,
-      layoutPlan: false,
+      research: false,
     });
   });
 
-  it("detects a real outline after the default scaffold is edited", async () => {
+  it("does not treat optional reference scaffolds as lifecycle progress", async () => {
     const root = await createWorkspace();
-    await writeDefaultScaffold(root);
-    await writeFile(
-      join(root, "outline.md"),
-      "# 演示大纲\n\n## 1. 会话隔离问题复盘 [预计 2 页]\n- 现象与影响\n- 修复方案\n",
-      "utf8",
-    );
+    await writeWorkspaceFile(root, "brief.md", createDefaultBriefMarkdown("Test"));
+    await writeWorkspaceFile(root, "outline.md", createDefaultOutlineMarkdown("Test"));
+    await writeWorkspaceFile(root, "research/notes.md", createDefaultResearchMarkdown());
 
-    const artifacts = await probeWorkspaceArtifacts(root);
-    expect(artifacts.outline).toBe(true);
-    expect(artifacts.brief).toBe(false);
-    expect(artifacts.storyboard).toBe(false);
-  });
-
-  it("accepts a detailed numbered outline without explicit page annotations", async () => {
-    const root = await createWorkspace();
-    await writeDefaultScaffold(root);
-    await writeFile(
-      join(root, "outline.md"),
-      [
-        "# PPT 内容大纲",
-        "",
-        "## 1. 封面",
-        "- 建立主题与学习目标",
-        "",
-        "## 2. 核心分析",
-        "- 拆解文章结构",
-        "- 总结写作启示",
-      ].join("\n"),
-      "utf8",
-    );
-
-    await expect(probeWorkspaceArtifacts(root)).resolves.toMatchObject({ outline: true });
-  });
-
-  it("detects a brief with real content beyond the scaffold", async () => {
-    const root = await createWorkspace();
-    await writeDefaultScaffold(root);
-    await writeFile(
-      join(root, "brief.md"),
-      `${createDefaultBriefMarkdown("测试项目")}\n## 背景\n- 需要复盘会话隔离漏洞。\n`,
-      "utf8",
-    );
-
-    const artifacts = await probeWorkspaceArtifacts(root);
-    expect(artifacts.brief).toBe(true);
-    expect(artifacts.outline).toBe(false);
-    expect(artifacts.storyboard).toBe(false);
-  });
-
-  it("does not treat invalid storyboard JSON as a usable artifact", async () => {
-    const root = await createWorkspace();
-    await writeDefaultScaffold(root);
-    await writeFile(
-      join(root, "slides/storyboard.json"),
-      JSON.stringify({ slides: [{ title: "缺字段", keyPoints: [] }] }, null, 2),
-      "utf8",
-    );
-
-    const artifacts = await probeWorkspaceArtifacts(root);
     const details = await probeWorkspaceArtifactDetails(root);
-
-    expect(artifacts.storyboard).toBe(false);
-    expect(details.storyboard.status).toBe("invalid");
-    expect(details.storyboard.reason).toContain("lacks title, role, layout, or key points");
+    expect(details.brief.status).toBe("default");
+    expect(details.outline.status).toBe("default");
+    expect(details.research.status).toBe("default");
+    expect(details.designSpec.status).toBe("missing");
   });
 
-  it("does not treat an existing but invalid layout plan as verified", async () => {
+  it("validates design-spec, page-plan, and the exact planned SVG page set", async () => {
     const root = await createWorkspace();
-    await writeDefaultScaffold(root);
-    await writeFile(
-      join(root, "slides/layout-plan.json"),
-      JSON.stringify({ version: 2, slides: [] }),
-      "utf8",
+    await writeWorkspaceFile(
+      root,
+      "design/design-spec.json",
+      JSON.stringify(designSpec()),
     );
+    await writeWorkspaceFile(
+      root,
+      "slides/page-plan.json",
+      JSON.stringify(pagePlan()),
+    );
+    await writeWorkspaceFile(root, "slides/svg/P01.svg", svgPage());
+    await writeWorkspaceFile(root, "assets/hero.png", "not-decoded-by-probe");
 
     const artifacts = await probeWorkspaceArtifacts(root);
-    const details = await probeWorkspaceArtifactDetails(root);
-
-    expect(artifacts.layoutPlan).toBe(false);
-    expect(details.layoutPlan.status).toBe("invalid");
+    expect(artifacts).toMatchObject({
+      designSpec: true,
+      pagePlan: true,
+      pageSvg: true,
+      assets: true,
+    });
   });
 
-  it("verifies a schema-valid layout plan", async () => {
+  it("rejects downstream author files when their lock dependency is invalid", async () => {
     const root = await createWorkspace();
-    await writeDefaultScaffold(root);
-    await writeFile(
-      join(root, "slides/layout-plan.json"),
+    await writeWorkspaceFile(root, "design/design-spec.json", "{}");
+    await writeWorkspaceFile(
+      root,
+      "slides/page-plan.json",
+      JSON.stringify(pagePlan()),
+    );
+    await writeWorkspaceFile(root, "slides/svg/P01.svg", svgPage());
+
+    const details = await probeWorkspaceArtifactDetails(root);
+    expect(details.designSpec.status).toBe("invalid");
+    expect(details.pagePlan.status).toBe("invalid");
+    expect(details.pagePlan.reason).toContain("requires a verified");
+    expect(details.pageSvg.status).toBe("invalid");
+  });
+
+  it("rejects page SVG drift from the current page plan", async () => {
+    const root = await createWorkspace();
+    await writeWorkspaceFile(
+      root,
+      "design/design-spec.json",
+      JSON.stringify(designSpec()),
+    );
+    await writeWorkspaceFile(
+      root,
+      "slides/page-plan.json",
+      JSON.stringify(pagePlan("slides/svg/P02.svg")),
+    );
+    await writeWorkspaceFile(root, "slides/svg/P01.svg", svgPage());
+
+    const details = await probeWorkspaceArtifactDetails(root);
+    expect(details.pageSvg.status).toBe("invalid");
+    expect(details.pageSvg.reason).toContain("Missing planned SVG pages");
+    expect(details.pageSvg.reason).toContain("Unexpected SVG pages");
+  });
+
+  it("treats deck and export history as proof only when they contain committed output", async () => {
+    const root = await createWorkspace();
+    await writeWorkspaceFile(
+      root,
+      "deck/snapshot.json",
+      JSON.stringify(createStarterPresentation()),
+    );
+    await writeWorkspaceFile(
+      root,
+      "history/exports.json",
       JSON.stringify({
-        version: 2,
-        communicationContract: {
-          audience: "产品与研发负责人",
-          objective: "对齐下一阶段的产品演进方案。",
-          desiredOutcome: "批准推荐方向并明确首个里程碑。",
-          coreMessage: "先收敛关键场景，再分阶段扩展能力。",
-          deliveryContext: "15 分钟内部决策会。",
-          afterUse: "听众可以选择方向并指定首个负责人。",
-        },
-        selectionSource: "user-locked",
-        directions: [{
-          id: "locked-direction",
-          tier: "locked",
-          label: "用户指定方向",
-          rationale: "严格采用用户已经确认的设计语言。",
-          designSystem: TEST_DESIGN_SYSTEM,
-        }],
-        selectedDirectionId: "locked-direction",
-        slides: [{
-          slideId: "slide-cover",
-          title: "封面",
-          narrativeRole: "cover",
-          audienceMove: "理解本次决策的主题与边界。",
-          rhythm: "anchor",
-          layoutIntent: "用单一主张和克制层级建立开场。",
-          layout: "cover",
-          rationale: "建立主题。",
+        exports: [{
+          revision: 1,
+          filePath: "C:/exports/deck.pptx",
+          exportedAt: "2026-07-30T00:00:00.000Z",
+          designSystem: DEFAULT_DESIGN_SYSTEM,
         }],
       }),
-      "utf8",
     );
 
     const artifacts = await probeWorkspaceArtifacts(root);
-    const details = await probeWorkspaceArtifactDetails(root);
-
-    expect(artifacts.layoutPlan).toBe(true);
-    expect(details.layoutPlan.status).toBe("verified");
+    expect(artifacts.deck).toBe(true);
+    expect(artifacts.exportHistory).toBe(true);
   });
 
-  it("verifies generated storyboard objects with slides wrappers", async () => {
+  it("ignores legacy storyboard and layout-plan files as new-flow facts", async () => {
     const root = await createWorkspace();
-    await writeDefaultScaffold(root);
-    await writeFile(
-      join(root, "slides/storyboard.json"),
-      JSON.stringify({
-        slides: [
-          {
-            slideId: "slide-cover",
-            title: "PPT 智能助手",
-            narrativeRole: "hook",
-            layout: "cover",
-            keyPoints: ["展示从一句话到完整演示的生成路径。"],
-          },
-          {
-            slideId: "slide-plan",
-            title: "智能规划",
-            narrativeRole: "core",
-            layout: "concept",
-            keyPoints: ["将 brief、outline 和 storyboard 串成稳定流程。"],
-          },
-        ],
-      }, null, 2),
-      "utf8",
-    );
+    await writeWorkspaceFile(root, "slides/storyboard.json", JSON.stringify([{
+      id: "legacy",
+      title: "Legacy",
+      keyPoints: ["Old route"],
+    }]));
+    await writeWorkspaceFile(root, "slides/layout-plan.json", JSON.stringify({
+      version: 1,
+      slides: [],
+    }));
 
     const artifacts = await probeWorkspaceArtifacts(root);
-    const details = await probeWorkspaceArtifactDetails(root);
-
-    expect(artifacts.storyboard).toBe(true);
-    expect(details.storyboard.status).toBe("verified");
-  });
-
-  it("invalidates storyboard when its slide count drifts from the verified outline", async () => {
-    const root = await createWorkspace();
-    await writeDefaultScaffold(root);
-    await writeFile(
-      join(root, "outline.md"),
-      "# 演示大纲\n\n## 1. 开场 [预计 1 页]\n- 建立主题\n\n## 2. 总结 [预计 1 页]\n- 收束价值\n",
-      "utf8",
-    );
-    await writeFile(
-      join(root, "slides/storyboard.json"),
-      JSON.stringify({
-        slides: [
-          {
-            slideId: "slide-cover",
-            title: "开场",
-            narrativeRole: "hook",
-            layout: "cover",
-            keyPoints: ["建立主题。"],
-          },
-          {
-            slideId: "slide-extra",
-            title: "额外页面",
-            narrativeRole: "context",
-            layout: "concept",
-            keyPoints: ["这页没有出现在 outline 中。"],
-          },
-          {
-            slideId: "slide-summary",
-            title: "总结",
-            narrativeRole: "takeaway",
-            layout: "summary",
-            keyPoints: ["收束价值。"],
-          },
-        ],
-      }, null, 2),
-      "utf8",
-    );
-
-    const artifacts = await probeWorkspaceArtifacts(root);
-    const details = await probeWorkspaceArtifactDetails(root);
-
-    expect(artifacts.outline).toBe(true);
-    expect(artifacts.storyboard).toBe(false);
-    expect(details.storyboard.status).toBe("invalid");
-    expect(details.storyboard.reason).toContain("outline expects 2 pages");
-  });
-
-  it("keeps a greeting in discover when only default files exist", async () => {
-    const root = await createWorkspace();
-    await writeDefaultScaffold(root);
-
-    const context = await buildSystemPromptContext({
-      request: "你好呀",
-      presentation: {
-        id: "presentation-1",
-        title: "测试项目",
-        revision: 0,
-        designSystem: TEST_DESIGN_SYSTEM,
-        slides: [],
-      },
-      coreTools: [askUserTool],
-      workspaceRoot: root,
-    });
-
-    expect(context.stage).toBe("discover");
-    expect(context.artifacts).toEqual({
-      brief: false,
-      outline: false,
-      storyboard: false,
-      layoutPlan: false,
-    });
+    expect(artifacts.designSpec).toBe(false);
+    expect(artifacts.pagePlan).toBe(false);
+    expect(artifacts.pageSvg).toBe(false);
   });
 });

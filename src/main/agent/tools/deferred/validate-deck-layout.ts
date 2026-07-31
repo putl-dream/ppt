@@ -31,6 +31,11 @@ export const validateDeckLayoutTool: ToolDefinition<
   category: "core",
   loadPolicy: "core",
   inputSchema: validateDeckLayoutSchema,
+  behavior: {
+    presentation: {
+      allowedCapabilities: ["edit", "restyle", "review"],
+    },
+  },
   risk: "low",
   execute: async (_, context) => {
     const issues = validateDeckRhythm(context.presentation);

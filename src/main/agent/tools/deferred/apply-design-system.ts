@@ -19,6 +19,11 @@ export const applyDesignSystemTool: ToolDefinition<
   category: "deferred",
   loadPolicy: "deferred",
   inputSchema: applyDesignSystemSchema,
+  behavior: {
+    presentation: {
+      allowedCapabilities: ["edit", "restyle"],
+    },
+  },
   risk: "medium",
   execute: async (args) => ({
     commands: [{

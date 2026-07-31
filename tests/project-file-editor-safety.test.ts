@@ -86,44 +86,25 @@ describe("project file editor safety boundary", () => {
 
     const files = await fixture.store.listProjectFiles(sessionId);
     const expectedFiles = [
+      "assets/.gitkeep",
       "brief.md",
-      "deck/generation-jobs.json",
       "deck/snapshot.json",
-      "design/brand-profile.json",
-      "design/constraints.json",
-      "design/layout-notes.md",
-      "design/system.json",
-      "history/README.md",
       "history/exports.json",
       "history/versions/001-initial.md",
       "outline.md",
       "research/assets/.gitkeep",
       "research/notes.md",
       "research/sources.md",
-      "slides/001-title.md",
-      "slides/README.md",
-      "slides/storyboard.json",
+      "slides/svg/.gitkeep",
     ];
 
     expect(new Set(files)).toEqual(new Set(expectedFiles));
     expect(files).toHaveLength(expectedFiles.length);
   });
 
-  it("updates the receipt across saves and persists downstream stale state", async () => {
+  it("updates the receipt across saves without persisting workflow status", async () => {
     let fixture = await createStore();
     const { sessionId } = await createProject(fixture);
-    const artifactIds = [
-      "brief",
-      "outline",
-      "research",
-      "slides",
-      "design",
-      "deck",
-      "history",
-    ];
-    for (const artifactId of artifactIds) {
-      await fixture.store.markProjectArtifactStatus(sessionId, artifactId, "ready");
-    }
 
     const opened = await fixture.store.openProjectFile(sessionId, "brief.md");
     expect(opened).toMatchObject({
@@ -150,7 +131,6 @@ describe("project file editor safety boundary", () => {
       editToken: opened.editToken,
       changed: true,
       changedArtifactId: "brief",
-      staleArtifactIds: ["outline", "research", "slides", "design", "deck", "history"],
       characterCount: firstContent.length,
     });
     expect(firstSave.version).toBe(contentVersion(firstContent));
@@ -171,19 +151,19 @@ describe("project file editor safety boundary", () => {
     ).toBe(secondContent);
 
     fixture = await reopenStore(fixture);
-    const statusById = Object.fromEntries(
+    expect(fixture.store.listProjectArtifacts(sessionId))
+      .toEqual(expect.arrayContaining([
+        expect.objectContaining({ id: "design-spec" }),
+        expect.objectContaining({ id: "page-plan" }),
+        expect.objectContaining({ id: "page-svg" }),
+        expect.objectContaining({ id: "assets" }),
+        expect.objectContaining({ id: "deck" }),
+        expect.objectContaining({ id: "export-history" }),
+      ]));
+    expect(
       fixture.store.listProjectArtifacts(sessionId)
-        .map((artifact) => [artifact.id, artifact.status]),
-    );
-    expect(statusById).toEqual({
-      brief: "draft",
-      outline: "stale",
-      research: "stale",
-      slides: "stale",
-      design: "stale",
-      deck: "stale",
-      history: "stale",
-    });
+        .every((artifact) => !("status" in artifact)),
+    ).toBe(true);
     expect(
       (await fixture.store.openProjectFile(sessionId, "brief.md")).content,
     ).toBe(secondContent);
@@ -291,7 +271,7 @@ describe("project file editor safety boundary", () => {
     expect(await readFile(join(second.rootPath, "brief.md"), "utf8")).toBe(secondBriefBefore);
   }, 10_000);
 
-  it("opens deck, history, and unregistered files read-only and refuses their saves", async () => {
+  it("opens deck, export history, and unregistered files read-only and refuses their saves", async () => {
     const fixture = await createStore();
     const { sessionId, rootPath } = await createProject(fixture);
     await mkdir(join(rootPath, "misc"), { recursive: true });
@@ -299,7 +279,7 @@ describe("project file editor safety boundary", () => {
 
     for (const relativePath of [
       "deck/snapshot.json",
-      "history/README.md",
+      "history/exports.json",
       "misc/notes.md",
     ]) {
       const opened = await fixture.store.openProjectFile(sessionId, relativePath);

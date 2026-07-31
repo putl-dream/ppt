@@ -1,4 +1,8 @@
 import type { AgentModelSelection } from "@shared/agent";
+import {
+  asQueryId,
+  type QueryId,
+} from "@shared/presentation-lifecycle";
 import type {
   AgentModelMessage,
   AgentModelToolResultBlock,
@@ -11,7 +15,8 @@ declare const identityBrand: unique symbol;
 export type SessionId = string & { readonly [identityBrand]: "SessionId" };
 export type ThreadId = string & { readonly [identityBrand]: "ThreadId" };
 export type RunId = string & { readonly [identityBrand]: "RunId" };
-export type QueryId = string & { readonly [identityBrand]: "QueryId" };
+export type { QueryId };
+export { asQueryId };
 
 export function asThreadId(value: string): ThreadId {
   return value as ThreadId;
@@ -23,10 +28,6 @@ export function asSessionId(value: string): SessionId {
 
 export function asRunId(value: string): RunId {
   return value as RunId;
-}
-
-export function asQueryId(value: string): QueryId {
-  return value as QueryId;
 }
 
 export type QueryStartMode =
@@ -50,6 +51,7 @@ export type CanUseToolFn = (
  * factory supplies them, while the loop consumes only this assembled boundary.
  */
 export interface AgentQueryParams<TDeps = unknown> {
+  queryId: QueryId;
   messages: readonly AgentModelMessage[];
   systemPrompt: string;
   userContext: Readonly<Record<string, string>>;
@@ -81,7 +83,7 @@ export interface AgentQueryContinue {
  * AgentRuntime, and tests can assert state movement without depending on the
  * concrete loop implementation.
  */
-export type AgentQueryLoopEvent =
+export type AgentQueryLoopEvent = (
   | { type: "query_started"; turnCount: number }
   | {
       type: "workspace_recovered";
@@ -118,7 +120,8 @@ export type AgentQueryLoopEvent =
       type: "query_failed";
       turnCount: number;
       error: string;
-    };
+    }
+) & { queryId: QueryId };
 
 /** The committed snapshot shared by consecutive agentic turns in one query. */
 export interface AgentQueryState {

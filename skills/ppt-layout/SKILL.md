@@ -7,6 +7,7 @@ stages:
   - design
   - style
 allowed-tools:
+  - BeginPptCapability
   - ReadFile
   - WriteFile
 ---
@@ -14,6 +15,8 @@ allowed-tools:
 # 自由构图执行说明
 
 ## 目标
+
+本技能必须运行在本 Query 已声明的 `create` capability 内；若尚未声明，先调用一次 `BeginPptCapability`。
 
 把 `slides/page-plan.json` 的页面意图翻译为可直接绘制的页面级构图判断。不要选择固定 layout、grammarVariant 或坐标模板；新建 deck 的实际 SVG 写入、P01 校验与提交统一由 `ppt-build` 完成。
 

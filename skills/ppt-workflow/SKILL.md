@@ -7,6 +7,7 @@ stages:
   - author
   - design
 allowed-tools:
+  - BeginPptCapability
   - ReadFile
   - WriteFile
   - PreviewSvgPage
@@ -23,14 +24,15 @@ allowed-tools:
 
 ## 固定顺序
 
-1. 建立沟通契约：`audience`、`objective`、`desiredOutcome`、deck-wide `coreMessage`、`deliveryContext`、`afterUse`。只有缺少会改变内容事实或交付目标的信息时才询问。
-2. 应用 `ppt-design`，先锁定唯一的 `argumentMode`、`visualStyle`、`readingMode` 和 `imageLanguage`，同时锁定语义色彩与字体角色。将结果写入 `design/design-spec.json`。
-3. 应用 `ppt-design-layout`，为每页冻结 `finalCopy`、`coreMessage`、`audienceMove`、`rhythm`、`layoutIntent` 和素材引用，按顺序写入 `slides/page-plan.json`。
-4. 应用 `ppt-build`。先用 `WriteFile` 只写 `slides/svg/P01.svg`。
-5. 立即用 `PreviewSvgPage({"path":"slides/svg/P01.svg"})` 校验并真实渲染 P01。若有越界、缺字、素材失败、视觉层级或 SVG 兼容问题，修改同一个文件并重新预览；P01 未通过前禁止生成 P02。
-6. P01 通过后，逐页用 `WriteFile` 写 `P02.svg`、`P03.svg`……；每次只改当前页，不让后处理器重新布局。
-7. 全部写完后进入最终视觉门禁：按页调用 `PreviewSvgPage`，确保每个新建或改动 SVG 的当前内容与素材都成功产出 PNG。任何修订都会使旧凭据失效，必须重新预览该页。
-8. 最后只调用一次 `SubmitSvgDeck`，显式传入 `"designSpecPath":"design/design-spec.json"`、`"pagePlanPath":"slides/page-plan.json"` 及有序 SVG 页面。`communication`、`designSystem`、每页 `id/path/narrative` 必须原样来自这两个锁文件；提交工具会重新读取并核对，再校验与内联 workspace 相对图片。任何锁漂移或页面失败都不视为完成。
+1. 若本 Query 尚未声明 PPT 工作，先调用一次 `BeginPptCapability({"capability":"create", ...})`。恢复同一 waiting-user Query 时沿用该 request；新的跨请求继续操作会获得新的 QueryId，但推进同一 PptJob。
+2. 建立沟通契约：`audience`、`objective`、`desiredOutcome`、deck-wide `coreMessage`、`deliveryContext`、`afterUse`。只有缺少会改变内容事实或交付目标的信息时才询问。
+3. 应用 `ppt-design`，先锁定唯一的 `argumentMode`、`visualStyle`、`readingMode` 和 `imageLanguage`，同时锁定语义色彩与字体角色。将结果写入 `design/design-spec.json`。
+4. 应用 `ppt-design-layout`，为每页冻结 `finalCopy`、`coreMessage`、`audienceMove`、`rhythm`、`layoutIntent` 和素材引用，按顺序写入 `slides/page-plan.json`。
+5. 应用 `ppt-build`。先用 `WriteFile` 只写 `slides/svg/P01.svg`。
+6. 立即用 `PreviewSvgPage({"path":"slides/svg/P01.svg"})` 校验并真实渲染 P01。若有越界、缺字、素材失败、视觉层级或 SVG 兼容问题，修改同一个文件并重新预览；P01 未通过前禁止生成 P02。
+7. P01 通过后，逐页用 `WriteFile` 写 `P02.svg`、`P03.svg`……；每次只改当前页，不让后处理器重新布局。
+8. 全部写完后进入最终视觉门禁：按页调用 `PreviewSvgPage`，确保每个新建或改动 SVG 的当前内容与素材都成功产出 PNG。任何修订都会使旧凭据失效，必须重新预览该页。
+9. 最后只调用一次 `SubmitSvgDeck`，显式传入 `"designSpecPath":"design/design-spec.json"`、`"pagePlanPath":"slides/page-plan.json"` 及有序 SVG 页面。`communication`、`designSystem`、每页 `id/path/narrative` 必须原样来自这两个锁文件；提交工具会重新读取并核对，再校验与内联 workspace 相对图片。任何锁漂移或页面失败都不视为完成。
 
 ## 作者文件
 

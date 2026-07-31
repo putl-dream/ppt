@@ -1,26 +1,45 @@
-import { readFile } from "node:fs/promises";
-import { join } from "node:path";
+import { readdir, readFile } from "node:fs/promises";
+import { join, relative } from "node:path";
+import type { ZodType } from "zod";
 
+import { deckExportHistoryFileSchema } from "@shared/deck-persistence";
+import { presentationSchema } from "@shared/presentation";
 import {
-  LAYOUT_PLAN_PATH,
-  parseLayoutPlan,
-  validateLayoutPlan,
-} from "@shared/layout-plan";
+  hasMeaningfulArtifactContent,
+  isDefaultArtifactContent,
+} from "@shared/project-artifact-state";
 import {
   isDefaultBriefMarkdown,
   isDefaultOutlineMarkdown,
   parseOutlineItems,
 } from "@shared/project-artifacts";
-import { isDefaultStoryboardContent, parseStoryboard } from "@shared/storyboard";
+import { validateSvgPage } from "@shared/svg-page";
+import {
+  SVG_DECK_DESIGN_SPEC_PATH,
+  SVG_DECK_PAGE_PLAN_PATH,
+  svgDeckDesignSpecSchema,
+  svgDeckPagePlanSchema,
+  type SvgDeckPagePlan,
+} from "../../tools/core/svg-deck-locks";
 
 export interface WorkspaceArtifacts {
+  designSpec: boolean;
+  pagePlan: boolean;
+  pageSvg: boolean;
+  assets: boolean;
+  deck: boolean;
+  exportHistory: boolean;
   brief: boolean;
   outline: boolean;
-  storyboard: boolean;
-  layoutPlan: boolean;
+  research: boolean;
 }
 
-export type WorkspaceArtifactStatus = "missing" | "empty" | "default" | "invalid" | "verified";
+export type WorkspaceArtifactStatus =
+  | "missing"
+  | "empty"
+  | "default"
+  | "invalid"
+  | "verified";
 
 export interface WorkspaceArtifactProbe {
   path: string;
@@ -30,24 +49,35 @@ export interface WorkspaceArtifactProbe {
 }
 
 export interface WorkspaceArtifactProbeDetails {
+  designSpec: WorkspaceArtifactProbe;
+  pagePlan: WorkspaceArtifactProbe;
+  pageSvg: WorkspaceArtifactProbe;
+  assets: WorkspaceArtifactProbe;
+  deck: WorkspaceArtifactProbe;
+  exportHistory: WorkspaceArtifactProbe;
   brief: WorkspaceArtifactProbe;
   outline: WorkspaceArtifactProbe;
-  storyboard: WorkspaceArtifactProbe;
-  layoutPlan: WorkspaceArtifactProbe;
+  research: WorkspaceArtifactProbe;
 }
 
 const EMPTY_ARTIFACTS: WorkspaceArtifacts = {
+  designSpec: false,
+  pagePlan: false,
+  pageSvg: false,
+  assets: false,
+  deck: false,
+  exportHistory: false,
   brief: false,
   outline: false,
-  storyboard: false,
-  layoutPlan: false,
+  research: false,
 };
 
 async function readOptionalText(path: string): Promise<string | undefined> {
   try {
     return await readFile(path, "utf8");
-  } catch {
-    return undefined;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+    throw error;
   }
 }
 
@@ -55,18 +85,27 @@ function missingProbe(path: string): WorkspaceArtifactProbe {
   return { path, status: "missing", verified: false, reason: "File does not exist." };
 }
 
+function invalidProbe(path: string, reason: string): WorkspaceArtifactProbe {
+  return { path, status: "invalid", verified: false, reason };
+}
+
 function validateBriefContent(path: string, content: string | undefined): WorkspaceArtifactProbe {
   if (content === undefined) return missingProbe(path);
   const trimmed = content.trim();
   if (!trimmed) return { path, status: "empty", verified: false, reason: "Brief is empty." };
   if (isDefaultBriefMarkdown(trimmed)) {
-    return { path, status: "default", verified: false, reason: "Brief still matches the default scaffold." };
+    return {
+      path,
+      status: "default",
+      verified: false,
+      reason: "Brief still matches the optional scaffold.",
+    };
   }
 
   const hasHeading = /^#\s+/m.test(trimmed);
   const hasBriefSignal = /目的|受众|听众|页|页面|幻灯片|规划|大纲|要点|背景|痛点|风格/.test(trimmed);
   if (!hasHeading || !hasBriefSignal) {
-    return { path, status: "invalid", verified: false, reason: "Brief lacks recognizable planning signals." };
+    return invalidProbe(path, "Brief lacks recognizable planning signals.");
   }
 
   return { path, status: "verified", verified: true };
@@ -77,7 +116,12 @@ function validateOutlineContent(path: string, content: string | undefined): Work
   const trimmed = content.trim();
   if (!trimmed) return { path, status: "empty", verified: false, reason: "Outline is empty." };
   if (isDefaultOutlineMarkdown(trimmed)) {
-    return { path, status: "default", verified: false, reason: "Outline still matches the default scaffold." };
+    return {
+      path,
+      status: "default",
+      verified: false,
+      reason: "Outline still matches the optional scaffold.",
+    };
   }
 
   const hasOutlineShape = /^##\s+\d+[.、]/m.test(trimmed) || /^\d+[.、]\s+/m.test(trimmed);
@@ -86,162 +130,308 @@ function validateOutlineContent(path: string, content: string | undefined): Work
   const hasDetailedNumberedSections = items.length >= 2
     && items.every((item) => item.title.trim() && item.points.some((point) => point.trim()));
   if (items.length < 1 || !hasOutlineShape || (!hasSectionGuidance && !hasDetailedNumberedSections)) {
-    return {
-      path,
-      status: "invalid",
-      verified: false,
-      reason: "Outline lacks slide structure or section guidance.",
-    };
+    return invalidProbe(path, "Outline lacks slide structure or section guidance.");
   }
 
   return { path, status: "verified", verified: true };
 }
 
-function validateStoryboardContent(path: string, content: string | undefined): WorkspaceArtifactProbe {
-  if (content === undefined) return missingProbe(path);
-  const trimmed = content.trim();
-  if (!trimmed) return { path, status: "empty", verified: false, reason: "Storyboard is empty." };
+function validateJsonArtifact<T>(
+  path: string,
+  content: string | undefined,
+  schema: ZodType<T>,
+): { probe: WorkspaceArtifactProbe; value?: T } {
+  if (content === undefined) return { probe: missingProbe(path) };
+  if (!content.trim()) {
+    return {
+      probe: { path, status: "empty", verified: false, reason: "File is empty." },
+    };
+  }
 
-  let slides;
+  let source: unknown;
   try {
-    slides = parseStoryboard(trimmed);
+    source = JSON.parse(content);
   } catch (error) {
     return {
-      path,
-      status: "invalid",
-      verified: false,
-      reason: error instanceof Error ? error.message : "Storyboard JSON is invalid.",
+      probe: invalidProbe(
+        path,
+        error instanceof Error ? error.message : "File does not contain valid JSON.",
+      ),
     };
   }
-
-  if (isDefaultStoryboardContent(trimmed)) {
-    return { path, status: "default", verified: false, reason: "Storyboard still matches the default scaffold." };
+  const result = schema.safeParse(source);
+  if (!result.success) {
+    const reason = result.error.issues
+      .slice(0, 6)
+      .map((issue) => `${issue.path.join(".") || "<root>"}: ${issue.message}`)
+      .join("; ");
+    return { probe: invalidProbe(path, reason) };
   }
-
-  const invalidSlide = slides.find((slide) =>
-    !slide.title.trim()
-      || !slide.narrativeRole
-      || !(slide.layout ?? slide.suggestedLayout)
-      || slide.keyPoints.length === 0
-      || slide.keyPoints.some((point) => !point.trim())
-  );
-  if (invalidSlide) {
-    return {
-      path,
-      status: "invalid",
-      verified: false,
-      reason: `Storyboard slide ${invalidSlide.id} lacks title, role, layout, or key points.`,
-    };
-  }
-
-  return { path, status: "verified", verified: true };
-}
-
-function invalidateProbe(
-  probe: WorkspaceArtifactProbe,
-  reason: string,
-): WorkspaceArtifactProbe {
   return {
-    ...probe,
-    status: "invalid",
-    verified: false,
-    reason,
+    probe: { path, status: "verified", verified: true },
+    value: result.data,
   };
 }
 
-function countOutlinePages(content: string): number {
-  return parseOutlineItems(content)
-    .reduce((total, item) => total + Math.max(1, item.pages || 1), 0);
+async function listFilesRecursively(directory: string): Promise<string[] | undefined> {
+  let entries;
+  try {
+    entries = await readdir(directory, { withFileTypes: true });
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+    throw error;
+  }
+
+  const files: string[] = [];
+  for (const entry of entries) {
+    const entryPath = join(directory, entry.name);
+    if (entry.isSymbolicLink()) {
+      throw new Error(`Symbolic links are not supported in project artifacts: ${entryPath}`);
+    }
+    if (entry.isDirectory()) {
+      const nested = await listFilesRecursively(entryPath);
+      if (nested) files.push(...nested);
+    } else if (entry.isFile()) {
+      files.push(entryPath);
+    }
+  }
+  return files.sort((left, right) => left.localeCompare(right));
 }
 
-async function probeLayoutPlan(path: string): Promise<WorkspaceArtifactProbe> {
-  const content = await readOptionalText(path);
-  if (content === undefined) return missingProbe(path);
-  if (!content.trim()) {
-    return {
-      path,
-      status: "empty",
-      verified: false,
-      reason: "Layout plan is empty.",
-    };
-  }
-
+async function probeDirectory(
+  path: string,
+  meaningfulFile: (filePath: string) => boolean = (filePath) =>
+    !filePath.endsWith(".gitkeep"),
+): Promise<WorkspaceArtifactProbe> {
   try {
-    const plan = parseLayoutPlan(content);
-    const blockingIssue = validateLayoutPlan(plan)
-      .find((issue) => issue.severity === "error");
-    if (blockingIssue) {
+    const files = await listFilesRecursively(path);
+    if (files === undefined) {
+      return { ...missingProbe(path), reason: "Directory does not exist." };
+    }
+    if (!files.some(meaningfulFile)) {
       return {
         path,
-        status: "invalid",
+        status: "empty",
         verified: false,
-        reason: blockingIssue.message,
+        reason: "Directory contains no authored files.",
       };
     }
+    return { path, status: "verified", verified: true };
   } catch (error) {
+    return invalidProbe(path, error instanceof Error ? error.message : "Directory probe failed.");
+  }
+}
+
+async function probeSvgPages(
+  workspaceRoot: string,
+  directory: string,
+  pagePlan?: SvgDeckPagePlan,
+): Promise<WorkspaceArtifactProbe> {
+  let files: string[] | undefined;
+  try {
+    files = await listFilesRecursively(directory);
+  } catch (error) {
+    return invalidProbe(directory, error instanceof Error ? error.message : "SVG probe failed.");
+  }
+  if (files === undefined) {
+    return { ...missingProbe(directory), reason: "SVG page directory does not exist." };
+  }
+  const svgFiles = files.filter((filePath) => filePath.toLowerCase().endsWith(".svg"));
+  if (svgFiles.length === 0) {
     return {
-      path,
-      status: "invalid",
+      path: directory,
+      status: "empty",
       verified: false,
-      reason: error instanceof Error ? error.message : "Layout plan JSON is invalid.",
+      reason: "No SVG pages have been authored.",
     };
   }
+  if (!pagePlan) {
+    return invalidProbe(directory, "SVG pages require a verified slides/page-plan.json.");
+  }
 
-  return { path, status: "verified", verified: true };
+  const actualPaths = svgFiles.map((filePath) =>
+    relative(workspaceRoot, filePath).replace(/\\/g, "/")
+  );
+  const plannedPaths = pagePlan.slides.map((slide) => slide.path.replace(/\\/g, "/"));
+  const missing = plannedPaths.filter((plannedPath) => !actualPaths.includes(plannedPath));
+  const unexpected = actualPaths.filter((actualPath) => !plannedPaths.includes(actualPath));
+  if (missing.length > 0 || unexpected.length > 0) {
+    return invalidProbe(
+      directory,
+      [
+        missing.length > 0 ? `Missing planned SVG pages: ${missing.join(", ")}.` : "",
+        unexpected.length > 0 ? `Unexpected SVG pages: ${unexpected.join(", ")}.` : "",
+      ].filter(Boolean).join(" "),
+    );
+  }
+
+  for (const filePath of svgFiles) {
+    const validation = validateSvgPage(await readFile(filePath, "utf8"));
+    if (!validation.valid) {
+      const projectPath = relative(workspaceRoot, filePath).replace(/\\/g, "/");
+      return invalidProbe(
+        directory,
+        `${projectPath}: ${validation.issues[0]?.message ?? "SVG validation failed."}`,
+      );
+    }
+  }
+  return { path: directory, status: "verified", verified: true };
+}
+
+async function probeResearch(directory: string): Promise<WorkspaceArtifactProbe> {
+  const directoryProbe = await probeDirectory(directory);
+  if (!directoryProbe.verified) return directoryProbe;
+
+  const notesPath = join(directory, "notes.md");
+  const notes = await readOptionalText(notesPath);
+  if (notes !== undefined && isDefaultArtifactContent("research", notes)) {
+    const files = await listFilesRecursively(directory);
+    const otherMeaningful = files?.some((filePath) =>
+      !filePath.endsWith(".gitkeep")
+      && filePath !== notesPath
+      && !filePath.endsWith("sources.md")
+    );
+    if (!otherMeaningful) {
+      return {
+        path: directory,
+        status: "default",
+        verified: false,
+        reason: "Research still matches the optional scaffold.",
+      };
+    }
+  }
+  if (notes !== undefined && hasMeaningfulArtifactContent("research", notes)) {
+    return { path: directory, status: "verified", verified: true };
+  }
+  return directoryProbe;
 }
 
 export async function probeWorkspaceArtifactDetails(
   workspaceRoot?: string,
 ): Promise<WorkspaceArtifactProbeDetails> {
   const root = workspaceRoot ?? "";
-  const briefPath = join(root, "brief.md");
-  const outlinePath = join(root, "outline.md");
-  const storyboardPath = join(root, "slides/storyboard.json");
-  const layoutPlanPath = join(root, LAYOUT_PLAN_PATH);
+  const paths = {
+    designSpec: join(root, SVG_DECK_DESIGN_SPEC_PATH),
+    pagePlan: join(root, SVG_DECK_PAGE_PLAN_PATH),
+    pageSvg: join(root, "slides/svg"),
+    assets: join(root, "assets"),
+    deck: join(root, "deck/snapshot.json"),
+    exportHistory: join(root, "history/exports.json"),
+    brief: join(root, "brief.md"),
+    outline: join(root, "outline.md"),
+    research: join(root, "research"),
+  };
 
   if (!workspaceRoot) {
     return {
-      brief: missingProbe(briefPath),
-      outline: missingProbe(outlinePath),
-      storyboard: missingProbe(storyboardPath),
-      layoutPlan: missingProbe(layoutPlanPath),
+      designSpec: missingProbe(paths.designSpec),
+      pagePlan: missingProbe(paths.pagePlan),
+      pageSvg: missingProbe(paths.pageSvg),
+      assets: missingProbe(paths.assets),
+      deck: missingProbe(paths.deck),
+      exportHistory: missingProbe(paths.exportHistory),
+      brief: missingProbe(paths.brief),
+      outline: missingProbe(paths.outline),
+      research: missingProbe(paths.research),
     };
   }
 
-  const [briefContent, outlineContent, storyboardContent, layoutPlan] = await Promise.all([
-    readOptionalText(briefPath),
-    readOptionalText(outlinePath),
-    readOptionalText(storyboardPath),
-    probeLayoutPlan(layoutPlanPath),
+  const [
+    designSpecContent,
+    pagePlanContent,
+    deckContent,
+    exportHistoryContent,
+    briefContent,
+    outlineContent,
+  ] = await Promise.all([
+    readOptionalText(paths.designSpec),
+    readOptionalText(paths.pagePlan),
+    readOptionalText(paths.deck),
+    readOptionalText(paths.exportHistory),
+    readOptionalText(paths.brief),
+    readOptionalText(paths.outline),
   ]);
 
-  const brief = validateBriefContent(briefPath, briefContent);
-  const outline = validateOutlineContent(outlinePath, outlineContent);
-  let storyboard = validateStoryboardContent(storyboardPath, storyboardContent);
-
-  if (outline.verified && storyboard.verified && outlineContent && storyboardContent) {
-    const outlinePages = countOutlinePages(outlineContent);
-    const storyboardSlides = parseStoryboard(storyboardContent).length;
-    if (outlinePages > 0 && storyboardSlides !== outlinePages) {
-      storyboard = invalidateProbe(
-        storyboard,
-        `Storyboard has ${storyboardSlides} slides but outline expects ${outlinePages} pages.`,
-      );
-    }
+  const designSpecResult = validateJsonArtifact(
+    paths.designSpec,
+    designSpecContent,
+    svgDeckDesignSpecSchema,
+  );
+  const pagePlanResult = validateJsonArtifact(
+    paths.pagePlan,
+    pagePlanContent,
+    svgDeckPagePlanSchema,
+  );
+  let pagePlan = pagePlanResult.probe;
+  if (pagePlan.verified && !designSpecResult.probe.verified) {
+    pagePlan = invalidProbe(
+      paths.pagePlan,
+      "Page plan requires a verified design/design-spec.json.",
+    );
   }
 
-  return { brief, outline, storyboard, layoutPlan };
+  const [pageSvg, assets, research] = await Promise.all([
+    probeSvgPages(
+      workspaceRoot,
+      paths.pageSvg,
+      pagePlan.verified ? pagePlanResult.value : undefined,
+    ),
+    probeDirectory(paths.assets),
+    probeResearch(paths.research),
+  ]);
+
+  const deckResult = validateJsonArtifact(paths.deck, deckContent, presentationSchema);
+  const deck = deckResult.probe.verified && deckResult.value?.slides.length === 0
+    ? {
+        path: paths.deck,
+        status: "default" as const,
+        verified: false,
+        reason: "Presentation snapshot contains no applied slides.",
+      }
+    : deckResult.probe;
+
+  const exportResult = validateJsonArtifact(
+    paths.exportHistory,
+    exportHistoryContent,
+    deckExportHistoryFileSchema,
+  );
+  const exportHistory =
+    exportResult.probe.verified && exportResult.value?.exports.length === 0
+      ? {
+          path: paths.exportHistory,
+          status: "default" as const,
+          verified: false,
+          reason: "No export has been recorded.",
+        }
+      : exportResult.probe;
+
+  return {
+    designSpec: designSpecResult.probe,
+    pagePlan,
+    pageSvg,
+    assets,
+    deck,
+    exportHistory,
+    brief: validateBriefContent(paths.brief, briefContent),
+    outline: validateOutlineContent(paths.outline, outlineContent),
+    research,
+  };
 }
 
-/** Probe workspace files — drives stage resolution, not message keywords. */
+/** Probe current workspace files; lifecycle completion is projected from PptJob, not these booleans. */
 export async function probeWorkspaceArtifacts(workspaceRoot?: string): Promise<WorkspaceArtifacts> {
   if (!workspaceRoot) return { ...EMPTY_ARTIFACTS };
 
   const details = await probeWorkspaceArtifactDetails(workspaceRoot);
   return {
+    designSpec: details.designSpec.verified,
+    pagePlan: details.pagePlan.verified,
+    pageSvg: details.pageSvg.verified,
+    assets: details.assets.verified,
+    deck: details.deck.verified,
+    exportHistory: details.exportHistory.verified,
     brief: details.brief.verified,
     outline: details.outline.verified,
-    storyboard: details.storyboard.verified,
-    layoutPlan: details.layoutPlan.verified,
+    research: details.research.verified,
   };
 }

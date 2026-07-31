@@ -46,6 +46,9 @@ export const submitCommandsTool: ToolDefinition<
   inputSchema: submitCommandsSchema,
   outputSchema: agentCommandProposalResultSchema,
   behavior: {
+    presentation: {
+      allowedCapabilities: ["create", "edit", "restyle"],
+    },
     capabilities: ["command_proposal"],
     completion: {
       terminalResult: "command_proposal",
@@ -55,6 +58,11 @@ export const submitCommandsTool: ToolDefinition<
   },
   risk: "low",
   execute: async (args, context) => {
+    context.presentationLifecycle?.requireActiveCapability([
+      "create",
+      "edit",
+      "restyle",
+    ]);
     const introducesSvgPage = args.commands.some(
       (command) =>
         (command.type === "add-slide" || command.type === "restore-slide")

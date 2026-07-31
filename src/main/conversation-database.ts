@@ -14,6 +14,7 @@ import {
   type SessionSnapshot,
 } from "@shared/session";
 import { repairPresentationIdentities } from "@shared/presentation-repair";
+import { withSqliteTransaction } from "./sqlite-transaction";
 
 interface StoredSessionRow {
   id: string;
@@ -72,6 +73,14 @@ export class ConversationDatabase {
     this.database.close();
   }
 
+  get sqliteConnection(): DatabaseSync {
+    return this.database;
+  }
+
+  withTransaction<T>(operation: () => T): T {
+    return withSqliteTransaction(this.database, operation);
+  }
+
   private initializeSchema(): void {
     this.database.exec(`
       PRAGMA journal_mode = WAL;
@@ -123,6 +132,7 @@ export class ConversationDatabase {
         run_id TEXT PRIMARY KEY,
         session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
         thread_id TEXT,
+        query_id TEXT,
         provider TEXT,
         model TEXT,
         status TEXT NOT NULL,
@@ -138,6 +148,8 @@ export class ConversationDatabase {
         ON runs(session_id, started_at);
       CREATE INDEX IF NOT EXISTS runs_thread
         ON runs(thread_id);
+      CREATE INDEX IF NOT EXISTS runs_query
+        ON runs(query_id);
 
       CREATE TABLE IF NOT EXISTS conversation_events (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -380,6 +392,42 @@ export class ConversationDatabase {
       kind: "assistant_started",
       payload: {},
     });
+  }
+
+  bindRunQueryId(runId: string, queryId: string): void {
+    const row = this.database.prepare(
+      "SELECT session_id, thread_id, query_id FROM runs WHERE run_id = ?",
+    ).get(runId) as {
+      session_id: string;
+      thread_id: string | null;
+      query_id: string | null;
+    } | undefined;
+    if (!row) throw new Error(`Run not found: ${runId}`);
+    if (queryId === runId || queryId === row.thread_id) {
+      throw new Error("QueryId must be distinct from runId and threadId.");
+    }
+    if (row.query_id === queryId) return;
+    if (row.query_id) {
+      throw new Error(`Run ${runId} is already bound to QueryId ${row.query_id}.`);
+    }
+    this.database.prepare(
+      "UPDATE runs SET query_id = ?, updated_at = ? WHERE run_id = ? AND query_id IS NULL",
+    ).run(queryId, new Date().toISOString(), runId);
+    this.appendEvent({
+      sessionId: row.session_id,
+      runId,
+      threadId: row.thread_id ?? undefined,
+      kind: "query_started",
+      visibility: "internal",
+      payload: { queryId },
+    });
+  }
+
+  getRunQueryId(runId: string): string | undefined {
+    const row = this.database.prepare(
+      "SELECT query_id FROM runs WHERE run_id = ?",
+    ).get(runId) as { query_id: string | null } | undefined;
+    return row?.query_id ?? undefined;
   }
 
   finishRun(input: {
@@ -809,14 +857,6 @@ export class ConversationDatabase {
   }
 
   private transaction<T>(task: () => T): T {
-    this.database.exec("BEGIN IMMEDIATE");
-    try {
-      const result = task();
-      this.database.exec("COMMIT");
-      return result;
-    } catch (error) {
-      this.database.exec("ROLLBACK");
-      throw error;
-    }
+    return this.withTransaction(task);
   }
 }

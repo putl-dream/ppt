@@ -1,12 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { lstat, mkdir } from "node:fs/promises";
 import { isAbsolute, relative, resolve } from "node:path";
-import type { ProjectArtifact, ProjectArtifactStatus, SessionSnapshot } from "@shared/session";
+import type { ProjectArtifact, SessionSnapshot } from "@shared/session";
+import { asPresentationId } from "@shared/presentation-lifecycle";
 import { createArtifactDiff, type ArtifactDiff } from "./artifact-diff";
-import {
-  findArtifactByProjectPath,
-  markDownstreamArtifactsStale,
-} from "./artifact-graph";
+import { findArtifactByProjectPath } from "./artifact-graph";
 import {
   createDeckSnapshotContent,
   createDefaultProjectFiles,
@@ -18,6 +16,10 @@ import {
   type WorkspaceFileReadResult,
   type WorkspaceFileReceipt,
 } from "../agent/tools/files/workspace-file-service";
+import type {
+  ArtifactChangeObserverPort,
+  ArtifactChangeObservationSource,
+} from "../presentation-lifecycle/artifact-change-observer-types";
 
 const MAX_PROJECT_FILE_ENTRIES = 2_000;
 const MAX_EDITOR_FILE_BYTES = 5 * 1024 * 1024;
@@ -38,14 +40,12 @@ export interface ProjectArtifactReadResult {
 
 export interface ProjectArtifactWriteOptions {
   overwrite?: boolean;
-  markStale?: boolean;
 }
 
 export interface ProjectArtifactWriteResult {
   path: string;
   changed: boolean;
   changedArtifactId?: string;
-  staleArtifactIds: string[];
 }
 
 export interface ProjectFileEditorReadResult extends WorkspaceFileReceipt {
@@ -84,8 +84,15 @@ interface ProjectFileEditorSession {
  */
 export class ProjectFileService {
   private readonly editorSessions = new Map<string, ProjectFileEditorSession>();
+  private artifactChangeObserver?: ArtifactChangeObserverPort;
 
   constructor(private readonly projectRootPath: string) {}
+
+  setArtifactChangeObserver(
+    observer: ArtifactChangeObserverPort | undefined,
+  ): void {
+    this.artifactChangeObserver = observer;
+  }
 
   /**
    * 为会话创建或补齐本地项目沙箱与默认产物文件。
@@ -100,7 +107,6 @@ export class ProjectFileService {
     for (const template of createDefaultProjectFiles(snapshot)) {
       await this.writeArtifact(snapshot, template.path, template.content, {
         overwrite: false,
-        markStale: false,
       });
     }
 
@@ -130,6 +136,11 @@ export class ProjectFileService {
     artifactIdOrPath: string,
   ): Promise<ProjectArtifactReadResult> {
     const relativePath = this.resolveArtifactPath(snapshot, artifactIdOrPath);
+    await this.observeArtifactChanges(
+      snapshot,
+      [relativePath],
+      "project_read",
+    );
     const filePath = this.resolveProjectPath(snapshot, relativePath);
     const fileStat = await lstat(filePath);
 
@@ -137,10 +148,11 @@ export class ProjectFileService {
       throw new Error(`Symbolic links are not supported in project artifacts: ${relativePath}`);
     }
     if (fileStat.isDirectory()) {
+      const entries = await this.listDirectoryFiles(snapshot, relativePath);
       return {
         path: relativePath,
         type: "directory",
-        entries: await this.listDirectoryFiles(snapshot, relativePath),
+        entries,
       };
     }
 
@@ -157,6 +169,11 @@ export class ProjectFileService {
   ): Promise<ProjectFileEditorReadResult> {
     this.pruneEditorSessions();
     this.resolveProjectPath(snapshot, relativePath);
+    await this.observeArtifactChanges(
+      snapshot,
+      [relativePath],
+      "project_read",
+    );
     const service = this.createWorkspaceFileService(snapshot);
     let result: WorkspaceFileReadResult;
     try {
@@ -184,7 +201,6 @@ export class ProjectFileService {
         + `limit ${MAX_EDITOR_FILE_BYTES}): ${result.path}`,
       );
     }
-
     while (this.editorSessions.size >= MAX_EDITOR_SESSIONS) {
       const oldestToken = this.editorSessions.keys().next().value as string | undefined;
       if (!oldestToken) break;
@@ -236,28 +252,29 @@ export class ProjectFileService {
       );
     }
 
+    let result: Awaited<ReturnType<WorkspaceFileService["write"]>>;
     try {
-      const result = await editorSession.service.write(
+      result = await editorSession.service.write(
         editorSession.path,
         content,
         { expectedVersion },
       );
-      editorSession.touchedAt = Date.now();
-      const artifactChange = this.recordArtifactChange(
-        snapshot,
-        result.path,
-        true,
-      );
-      return {
-        ...result,
-        ...artifactChange,
-        changed: true,
-        editToken,
-      };
     } catch (error) {
       this.editorSessions.delete(editToken);
       throw error;
     }
+    editorSession.touchedAt = Date.now();
+    const artifactChange = this.recordArtifactChange(
+      snapshot,
+      result.path,
+    );
+    await this.observeArtifactChanges(snapshot, [result.path], "project_edit");
+    return {
+      ...result,
+      ...artifactChange,
+      changed: true,
+      editToken,
+    };
   }
 
   async writeArtifact(
@@ -267,23 +284,22 @@ export class ProjectFileService {
     options: ProjectArtifactWriteOptions = {},
   ): Promise<ProjectArtifactWriteResult> {
     const overwrite = options.overwrite ?? true;
-    const markStale = options.markStale ?? true;
     this.resolveProjectPath(snapshot, relativePath);
     const service = this.createWorkspaceFileService(snapshot);
     const before = await readWorkspaceFileIfPresent(service, relativePath);
 
     if (!overwrite && before) {
+      await this.observeArtifactChanges(snapshot, [before.path], "project_read");
       return {
         path: before.path,
         changed: false,
-        staleArtifactIds: [],
       };
     }
     if (before?.content === content) {
+      await this.observeArtifactChanges(snapshot, [before.path], "project_read");
       return {
         path: before.path,
         changed: false,
-        staleArtifactIds: [],
       };
     }
 
@@ -292,10 +308,11 @@ export class ProjectFileService {
       content,
       { expectedVersion: before?.version },
     );
+    await this.observeArtifactChanges(snapshot, [result.path], "project_edit");
     return {
       path: result.path,
       changed: true,
-      ...this.recordArtifactChange(snapshot, result.path, markStale),
+      ...this.recordArtifactChange(snapshot, result.path),
     };
   }
 
@@ -308,7 +325,7 @@ export class ProjectFileService {
       snapshot,
       "deck/snapshot.json",
       createDeckSnapshotContent(snapshot.presentation),
-      { markStale: false, ...options },
+      options,
     );
   }
 
@@ -324,37 +341,34 @@ export class ProjectFileService {
     return createArtifactDiff(relativePath, before?.content ?? "", nextContent);
   }
 
-  markArtifactStatus(
-    snapshot: SessionSnapshot,
-    artifactId: string,
-    status: ProjectArtifactStatus,
-  ): ProjectArtifact {
-    const artifact = this.requireProject(snapshot).artifacts.find((item) => item.id === artifactId);
-    if (!artifact) throw new Error(`Project artifact not found: ${artifactId}`);
-    artifact.status = status;
-    return structuredClone(artifact);
-  }
-
   private recordArtifactChange(
     snapshot: SessionSnapshot,
     relativePath: string,
-    markStale: boolean,
-  ): Pick<ProjectArtifactWriteResult, "changedArtifactId" | "staleArtifactIds"> {
+  ): Pick<ProjectArtifactWriteResult, "changedArtifactId"> {
     const changedArtifact = findArtifactByProjectPath(
       this.requireProject(snapshot).artifacts,
       relativePath,
     );
-    const staleArtifactIds =
-      markStale && changedArtifact
-        ? markDownstreamArtifactsStale(
-            this.requireProject(snapshot).artifacts,
-            changedArtifact.id,
-          )
-        : [];
     return {
       changedArtifactId: changedArtifact?.id,
-      staleArtifactIds,
     };
+  }
+
+  private async observeArtifactChanges(
+    snapshot: SessionSnapshot,
+    paths: readonly string[],
+    source: Extract<
+      ArtifactChangeObservationSource,
+      "project_read" | "project_edit"
+    >,
+  ): Promise<void> {
+    const project = this.requireProject(snapshot);
+    await this.artifactChangeObserver?.observe({
+      presentationId: asPresentationId(snapshot.presentation.id),
+      workspaceRoot: project.rootPath,
+      paths,
+      source,
+    });
   }
 
   private getEditPolicy(
@@ -371,13 +385,13 @@ export class ProjectFileService {
         readOnlyReason: "该文件不属于已注册的项目产物，只能预览。",
       };
     }
-    if (artifact.kind === "deck" || artifact.kind === "history") {
+    if (artifact.kind === "deck" || artifact.kind === "export-history") {
       return {
         editable: false,
         readOnlyReason:
           artifact.kind === "deck"
             ? "Deck 文件由 Presentation 与导出服务维护，只能预览。"
-            : "History 文件由版本与导出记录服务维护，只能预览。",
+            : "导出记录由导出服务维护，只能预览。",
       };
     }
     return { editable: true };

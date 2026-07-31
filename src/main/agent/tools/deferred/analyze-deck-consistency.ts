@@ -30,6 +30,11 @@ export const analyzeDeckConsistencyTool: ToolDefinition<
   category: "deferred",
   loadPolicy: "deferred",
   inputSchema: analyzeDeckConsistencySchema,
+  behavior: {
+    presentation: {
+      allowedCapabilities: ["edit", "restyle", "review"],
+    },
+  },
   risk: "low",
   execute: async (_, context) => {
     const result = deckValidationService.validate(context.presentation);

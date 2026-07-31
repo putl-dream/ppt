@@ -4,7 +4,8 @@
 
 - **现行架构**：代码正在遵守的稳定契约；
 - **本轮目标契约**：正在收敛、不得反向引入旧设计的边界；
-- **活跃提案**：尚未实现，明确放在 `roadmap/`。
+- **活跃提案或实施记录**：未实现设计明确标记 Proposed；已落地路线图明确标记
+  Implemented，并作为架构决策与数据策略记录保留。
 
 已完成、已被替代的实施计划不归档在主文档树中。行为事实以代码和测试为准。
 
@@ -33,6 +34,7 @@
 | 文档 | 内容 |
 |---|---|
 | [工作流与状态](./presentation/workflow.md) | SVG-native Agent 创建路径、artifact、workspace 文件管理、Proposal 与 CommitGate |
+| [Presentation Artifact 与 Job 生命周期](./roadmap/presentation-lifecycle.md) | 已落地的 Query/PptJob/ArtifactRevision、事务、恢复与数据根契约 |
 | [Visual Expression System](./presentation/visual-system.md) | DesignSystemV2、SVG visualSource、Layout Grammar 遗留路径、三端渲染 |
 | [Commercial Visual Compiler](./presentation/commercial-pipeline.md) | 离线/脚本残余编译管线（Lean 已退役，非产品创建路径） |
 | [商业视觉质量规范](./presentation/quality-rubric.md) | 残余 compiler 的机器证据与人工评分边界 |
@@ -41,7 +43,6 @@
 
 | 文档 | 状态 |
 |---|---|
-| [Presentation Artifact 与 Job 生命周期](./roadmap/presentation-lifecycle.md) | Proposed；尚未成为现行代码事实 |
 | [Presentation 模板管理与自动选择](./roadmap/template-management.md) | Proposed；模板上传、内容匹配、默认回退与母版复用边界 |
 
 ## 核心设计约束
@@ -55,12 +56,18 @@
 7. Skill stage 只影响推荐和排序，不是权限 allow-list。
 8. System Prompt 使用稳定前缀、动态后缀和 Section Registry。
 9. 权限、tool pairing、CommitGate 和持久化不变量由代码执行，不依赖 Prompt。
-10. Presentation 业务状态与单次 Agent Query 状态正交。
+10. `QueryId` 管一次请求；每个 `PresentationId` 只有一个长期 `PptJob`；
+    `ArtifactRevision` 证明已校验阶段产出。三者身份与 `runId/threadId` 分离。
 11. 项目文件管理只投影当前 workspace 文件；文本保存必须携带隔离的编辑凭证和读取时
     SHA-256 version，不能把文件保存等同于 artifact revision 或验证完成。
 12. 产品创建路径仅为 Agent SVG-native（`PreviewSvgPage` → `SubmitSvgDeck`）；
     IPC 拒绝 `generationMode: lean`。`executionStrategy`（AUTO / REQUEST_APPROVAL）
     是审批策略，不是创建模式。
+13. Query completed、Proposal ready、Presentation applied 与 Export completed 是四个
+    独立事实；Renderer 通过只读 `PptJobProjection` 消费业务状态。
+14. 应用持久数据只写入 `~/.agent-ppt`，Electron userData 位于
+    `~/.agent-ppt/electron`；workspace/sandbox 仍在用户项目目录。
+15. dev 阶段不 backfill、hydrate 或迁移 AppData 旧数据；旧路径由开发者手工清理。
 
 ## 本轮重构状态
 
@@ -72,9 +79,10 @@
 | Tools | Implemented | 动态可用性、definition-owned behavior、统一 permission/hook/execution 管线 |
 | System Prompt | Implemented | Section Registry、稳定/动态边界、契约级 cache key、stage 建议化 |
 | File operations | Implemented | Main/teammate 共用 read receipt、精确 Edit、冲突检测与受保护提交 |
-| Project file management | Implemented | artifact 分组、文件列表/详情/diff；注册文本 artifact 用隔离 `editToken` + SHA-256 CAS 编辑，deck/history/未知文件只读 |
-| SVG-native create | Implemented | `design-spec` / `page-plan` / `slides/svg/*` → PreviewSvgPage → SubmitSvgDeck；Lean Mode 已退役 |
-| Presentation lifecycle | Proposed | 跨 Query 的 Artifact Revision / PptJob 仍只在 roadmap |
+| Project file management | Implemented | design-spec/page-plan/Page SVG/assets/deck/export history 为第一公民；注册文本 artifact 用隔离 `editToken` + SHA-256 CAS 编辑 |
+| SVG-native create | Implemented | durable DesignSpec/PagePlan/SourceAsset/PageSvg/PreviewReceipt → Candidate/Quality/Proposal；Lean Mode 已退役 |
+| Presentation lifecycle | Implemented | 每个 Presentation 一个跨 Query PptJob；immutable revision/dependency/stale、Proposal/Presentation/Review/Export 与 side-effect recovery |
+| Application data root | Implemented | SQLite、blobs、logs、runtime、token usage 位于 `~/.agent-ppt`；Electron userData 位于 `~/.agent-ppt/electron` |
 
 ## 参考项目的使用方式
 
@@ -95,6 +103,8 @@
 
 - 代码重构完成后，更新现行文档并删除对应阶段计划。
 - 活跃提案必须标记 `Proposed`，不能写成“当前已经如此”。
+- 已落地且因架构决策或 dev 数据策略需要保留的路线图必须标记 `Implemented`，
+  并同步现行 workflow 与本索引。
 - 文档引用实际路径；移动文件时同步运行链接检查。
 - 状态转换优先用类型、表格或图表达，不用模糊进度文案。
 - 新规则先判断它属于模型建议还是代码不变量；只有后者进入 Runtime/Policy。

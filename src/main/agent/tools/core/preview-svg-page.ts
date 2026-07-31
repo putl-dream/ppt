@@ -8,6 +8,7 @@ import {
   recordSvgPagePreview,
 } from "../../../deck/svg-page-loader";
 import type { ToolDefinition } from "../tool-definition";
+import { commitSvgPagePreviewLifecycle } from "./svg-deck-lifecycle";
 
 export const previewSvgPageSchema = z.object({
   path: z.string().trim().min(1).describe(
@@ -46,6 +47,11 @@ export const previewSvgPageTool: ToolDefinition<
   category: "core",
   loadPolicy: "core",
   inputSchema: previewSvgPageSchema,
+  behavior: {
+    presentation: {
+      allowedCapabilities: ["create", "edit", "restyle", "review"],
+    },
+  },
   isEnabled: (context) => Boolean(context.workspaceRoot && context.fileService),
   mapResultToModelBlocks: (result) => [
     {
@@ -71,6 +77,16 @@ export const previewSvgPageTool: ToolDefinition<
     if (!context.workspaceRoot || !context.fileService) {
       throw new Error("PreviewSvgPage requires a configured workspace.");
     }
+    context.presentationLifecycle?.requireActiveCapability([
+      "create",
+      "edit",
+      "restyle",
+      "review",
+    ]);
+    await context.presentationLifecycle?.observeArtifactChanges({
+      workspaceRoot: context.workspaceRoot,
+      source: "preview",
+    });
     const page = await loadWorkspaceSvgPage({
       requestedPath: args.path,
       workspaceRoot: context.workspaceRoot,
@@ -104,6 +120,13 @@ export const previewSvgPageTool: ToolDefinition<
     }
     const previewGatePassed = args.includeThumbnail && thumbnail !== null;
     if (previewGatePassed) {
+      if (context.presentationLifecycle) {
+        await commitSvgPagePreviewLifecycle({
+          lifecycle: context.presentationLifecycle,
+          fileService: context.fileService,
+          page,
+        });
+      }
       recordSvgPagePreview(context.fileService, page);
     }
 

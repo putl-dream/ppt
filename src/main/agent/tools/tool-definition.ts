@@ -19,6 +19,21 @@ import type {
   AgentModelImageBlock,
   AgentModelTextBlock,
 } from "../gateway/types";
+import type {
+  ArtifactDependency,
+  ArtifactKind,
+  ArtifactPointer,
+  BlobReference,
+  PptCapability,
+  PptJobProjection,
+  PptStage,
+  QueryId,
+  ValidationReport,
+} from "@shared/presentation-lifecycle";
+import type { PptReviewReport } from
+  "../../presentation-lifecycle/presentation-lifecycle-orchestrator";
+import type { ArtifactChangeObservationSource } from
+  "../../presentation-lifecycle/artifact-change-observer-types";
 
 /**
  * 工具加载策略。
@@ -37,6 +52,43 @@ export type ToolLoadPolicy = "core" | "deferred" | "runtime" | "disabled";
  */
 export interface ToolDiscoverySession {
   discoveredToolNames: Set<string>;
+}
+
+export interface PptLifecycleToolBridge {
+  readonly queryId: QueryId;
+  withTransaction<T>(operation: () => T): T;
+  observeArtifactChanges(input: {
+    workspaceRoot: string;
+    paths?: readonly string[];
+    source: Extract<
+      ArtifactChangeObservationSource,
+      | "capability_probe"
+      | "agent_read"
+      | "agent_write"
+      | "preview"
+      | "submit"
+    >;
+  }): Promise<void>;
+  beginCapability(input: {
+    capability: PptCapability;
+    instruction: string;
+  }): PptJobProjection;
+  requireActiveCapability(
+    allowedCapabilities?: readonly PptCapability[],
+    options?: { allowCompleted?: boolean },
+  ): PptJobProjection;
+  commitArtifact(input: {
+    artifactId: string;
+    kind: ArtifactKind;
+    stage: PptStage;
+    value: unknown;
+    dependencies?: ArtifactDependency[];
+    validation: ValidationReport;
+    idempotencyKey: string;
+  }): ArtifactPointer;
+  storeBlob(value: Uint8Array, mediaType: string): Promise<BlobReference>;
+  assertBlob(reference: BlobReference): Promise<void>;
+  submitReview(report: PptReviewReport): PptJobProjection;
 }
 
 export type ToolRuntimeCapability =
@@ -86,11 +138,23 @@ export interface ToolDelegationBehavior<TArgs = unknown> {
   allowedLoadPolicies: ReadonlyArray<ToolLoadPolicy>;
 }
 
+export interface ToolPresentationBehavior<TArgs = unknown> {
+  /**
+   * Product runtimes with a lifecycle bridge require one of these active
+   * capabilities before the tool can execute. Isolated/offline tool runtimes
+   * without a bridge remain usable.
+   */
+  allowedCapabilities: ReadonlyArray<PptCapability>;
+  /** Limit the guard to inputs that address Presentation-owned artifacts. */
+  isRequired?: (args: TArgs) => boolean;
+}
+
 export interface ToolRuntimeBehavior<TArgs = unknown> {
   capabilities?: ReadonlyArray<ToolRuntimeCapability>;
   completion?: ToolCompletionBehavior;
   background?: ToolBackgroundBehavior<TArgs>;
   delegation?: ToolDelegationBehavior<TArgs>;
+  presentation?: ToolPresentationBehavior<TArgs>;
   /**
    * The tool has already enforced content-exact rendered previews for every
    * visual source in its proposal, so the legacy command render loop must not
@@ -160,6 +224,8 @@ export interface ToolContext {
   readonly messageBus?: MessageBus;
   /** Long-lived teammate manager for spawn_teammate. */
   readonly teammateManager?: TeammateManager;
+  /** Presentation business lifecycle for this Query; absent in isolated tool tests. */
+  readonly presentationLifecycle?: PptLifecycleToolBridge;
 }
 
 /**

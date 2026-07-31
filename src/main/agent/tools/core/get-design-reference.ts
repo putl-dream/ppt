@@ -33,6 +33,11 @@ export const getDesignReferenceTool: ToolDefinition<
   category: "core",
   loadPolicy: "core",
   inputSchema: getDesignReferenceSchema,
+  behavior: {
+    presentation: {
+      allowedCapabilities: ["create", "edit", "restyle"],
+    },
+  },
   risk: "low",
   execute: async (args) => resolveReference(args),
 };

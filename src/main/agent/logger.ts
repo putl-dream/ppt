@@ -1,7 +1,7 @@
 import { createStream } from "rotating-file-stream";
 import path from "node:path";
 import fs from "node:fs";
-import os from "node:os";
+import { getApplicationDataRoot } from "../application-data";
 import type {
   AppLogEntry,
   AppLogLevel,
@@ -23,11 +23,7 @@ const MAX_FILE_SIZE_MB = 10;
 const SETTINGS_FILE_NAME = "settings.json";
 
 export function getLogDirectory(): string {
-  const applicationDataRoot = process.env.AGENT_PPT_DATA_DIR
-    ?? (process.env.APPDATA
-      ? path.join(process.env.APPDATA, ".agent-ppt")
-      : path.join(os.homedir(), ".agent-ppt"));
-  return path.join(applicationDataRoot, "logs");
+  return path.join(getApplicationDataRoot(), "logs");
 }
 
 function getLogFileStream() {

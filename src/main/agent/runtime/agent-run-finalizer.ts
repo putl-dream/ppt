@@ -13,15 +13,11 @@ export class AgentRunFinalizer {
   ): Promise<AgentRuntimeResult> {
     const status = result.type === "ask_user"
       ? "waiting_user"
-      : result.type === "command_proposal"
-        ? "proposal_ready"
-        : "completed";
+      : "completed";
     const reason = requestedReason
       ?? (result.type === "ask_user"
         ? "waiting_user"
-        : result.type === "command_proposal"
-          ? "proposal_ready"
-          : "completed");
+        : "completed");
     scope.stageTerminalConversationHistory(result);
     const checkpointDecision = scope.applyTransition({ type: "run_terminal", status, result });
     if (checkpointDecision !== "terminal") {

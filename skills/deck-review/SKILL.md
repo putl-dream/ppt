@@ -6,6 +6,7 @@ stages:
   - style
   - export
 allowed-tools:
+  - BeginPptCapability
   - ListSlides
   - ReadCurrentSlide
   - ReadFile
@@ -13,16 +14,18 @@ allowed-tools:
   - PreviewSvgPage
   - PreviewSlide
   - SubmitSvgDeck
+  - SubmitPptReview
 ---
 
 # SVG-native Deck 视觉审查
 
 ## 前提
 
-1. 用 `ListSlides` 取得完整有序页面及每页已提交的 `svgSourcePath`、`svgSha256`。
-2. 当前页可用 `ReadCurrentSlide` 确认 `visualSource.sourcePath`；其他页使用 `ListSlides.svgSourcePath`。再用 `ReadFile` 读取完整 SVG。
-3. 对每个作者源调用 `PreviewSvgPage`，检查该文件的真实渲染。页面已提交时可用 `PreviewSlide` 对照当前 deck，但不能用已提交预览替代源文件审查；任何修复都会使该页先前的预览凭据失效。
-4. 读取 `design/design-spec.json` 和 `slides/page-plan.json`，只用于核对设计与内容意图；它们不能补充 SVG 中缺失的可见对象。
+1. 若本 Query 尚未声明 PPT 工作，先调用一次 `BeginPptCapability({"capability":"review", ...})`。只审查时不要声明 edit/restyle。
+2. 用 `ListSlides` 取得完整有序页面及每页已提交的 `svgSourcePath`、`svgSha256`。
+3. 当前页可用 `ReadCurrentSlide` 确认 `visualSource.sourcePath`；其他页使用 `ListSlides.svgSourcePath`。再用 `ReadFile` 读取完整 SVG。
+4. 对每个作者源调用 `PreviewSvgPage`，检查该文件的真实渲染。页面已提交时可用 `PreviewSlide` 对照当前 deck，但不能用已提交预览替代源文件审查；任何修复都会使该页先前的预览凭据失效。
+5. 读取 `design/design-spec.json` 和 `slides/page-plan.json`，只用于核对设计与内容意图；它们不能补充 SVG 中缺失的可见对象。
 
 没有逐页渲染结果时，不把 XML 结构或 hash 检查冒充视觉验收。若 `svgSourcePath`/`svgSha256` 缺失，或 `PreviewSvgPage` 返回的当前源 `sha256` 与已提交 `svgSha256` 不一致，先报告来源漂移并阻断导出判断。
 
@@ -87,7 +90,12 @@ allowed-tools:
 
 ## 修复规则
 
-默认只报告。用户已授权修复时：
+review capability 默认只报告，并以 `SubmitPptReview` 完成本次请求。即使用户同时表达了修复意图，
+也不要在同一 Query 内把 review request 改成 edit/restyle，或直接调用作者写入与
+`SubmitSvgDeck`；先提交结构化审查，再让后续新的用户请求以
+`BeginPptCapability({"capability":"edit", ...})` 开始修复。
+
+后续 edit capability 的修复步骤：
 
 1. 用 `ReadFile` 重新读取目标页完整 SVG，避免基于旧上下文覆盖并发修改。
 2. 用 `WriteFile` 只修改作者 SVG；不可写 commands、elements 或第二份布局状态。
@@ -96,6 +104,8 @@ allowed-tools:
 5. 不允许 `PreviewSlide`、提交器或导出器直接修复页面；已提交视图只能用于对照。
 
 ## 输出
+
+把以下内容同时整理为 `SubmitPptReview` 的结构化 `verdict / summary / overallScore / findings` 并提交；只有该 QualityReport 成功绑定当前 PresentationRevision，本次 review request 才完成。Markdown 可作为给用户的可读摘要，但不能代替结构化提交。
 
 ```markdown
 ## 审查摘要

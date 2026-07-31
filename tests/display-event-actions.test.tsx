@@ -6,6 +6,10 @@ import { cleanup, render } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { DisplayEvent } from "../src/shared/card-display-protocol";
 import type { AgentActivityItem } from "../src/shared/agent-activity";
+import {
+  pptJobProjectionSchema,
+  type PptJobProjection,
+} from "../src/shared/presentation-lifecycle";
 import type { ChatMessage } from "../src/renderer/src/app/chatMessageRuntime";
 import {
   useAgentResultHandler,
@@ -43,6 +47,9 @@ const approvalEvent = {
     priority: "high" as const,
   },
   payload: {
+    jobId: "job-1",
+    queryId: "query-1",
+    proposalId: "proposal-1",
     threadId: "thread-1",
     summary: "更新标题",
     commands: [{
@@ -52,6 +59,22 @@ const approvalEvent = {
     }],
   },
 } satisfies Extract<DisplayEvent, { kind: "review.command-proposal" }>;
+
+const matchingPptJob = pptJobProjectionSchema.parse({
+  jobId: "job-1",
+  presentationId: "presentation-1",
+  capability: "edit",
+  requestId: "request-1",
+  queryId: "query-1",
+  status: "waiting_approval",
+  stage: "proposal",
+  stateRevision: 1,
+  committedArtifacts: [],
+  staleArtifacts: [],
+  proposalId: "proposal-1",
+  proposalStatus: "waiting_approval",
+  updatedAt: "2026-07-25T00:00:00.000Z",
+});
 
 const patchEvent = {
   protocolVersion: 1 as const,
@@ -104,7 +127,7 @@ function Harness() {
     content: "已提出排版更新方案，请在下方审核后应用。",
     activityTrace: initialTrace,
     runId: "run-1",
-    runStatus: "waiting",
+    runStatus: "completed",
     threadId: "thread-1",
   }]);
   const activeRunTraceRef = useRef<AgentActivityItem[]>(initialTrace);
@@ -164,22 +187,27 @@ describe("display event approval actions", () => {
     startAgent.mockClear();
     useProjectStore.setState({
       hydrateProjectArtifacts: vi.fn(async () => undefined),
+      pptJob: matchingPptJob,
     });
   });
 
   afterEach(() => {
     cleanup();
-    useProjectStore.setState({ hydrateProjectArtifacts: originalHydrate });
+    useProjectStore.setState({
+      hydrateProjectArtifacts: originalHydrate,
+      pptJob: null,
+    });
   });
 
-  it("settles a failed resume on the original waiting message", async () => {
+  it("keeps the completed Query intact when Proposal application fails", async () => {
+    const resumeAgentRun = vi.fn(async () => ({
+      status: "failed" as const,
+      error: "演示文稿已变化，请重新生成方案。",
+    }));
     Object.defineProperty(window, "desktopApi", {
       configurable: true,
       value: {
-        resumeAgentRun: vi.fn(async () => ({
-          status: "failed" as const,
-          error: "演示文稿已变化，请重新生成方案。",
-        })),
+        resumeAgentRun,
       },
     });
     render(<Harness />);
@@ -191,9 +219,71 @@ describe("display event approval actions", () => {
     expect(messages).toHaveLength(1);
     expect(messages[0]).toMatchObject({
       id: "assistant-1",
-      runStatus: "failed",
-      runError: "演示文稿已变化，请重新生成方案。",
+      runStatus: "completed",
     });
+    expect(messages[0]?.runError).toBeUndefined();
+    expect(resumeAgentRun).toHaveBeenCalledWith("session-1", "proposal-1", true);
+    expect(notify).toHaveBeenCalledWith("演示文稿已变化，请重新生成方案。");
+    expect(busy).toBe(false);
+  });
+
+  it("keeps the Proposal active while the lifecycle projection is unavailable", async () => {
+    const resumeAgentRun = vi.fn();
+    useProjectStore.setState({ pptJob: null });
+    Object.defineProperty(window, "desktopApi", {
+      configurable: true,
+      value: { resumeAgentRun },
+    });
+    ingestDisplayEvent(approvalEvent);
+    render(<Harness />);
+
+    await act(async () => {
+      await actions.resolveApproval(approvalEvent, true);
+    });
+
+    expect(resumeAgentRun).not.toHaveBeenCalled();
+    expect(useReviewCardManager.getState().cards[0]?.status).toBe("active");
+    expect(notify).toHaveBeenCalledWith(
+      "演示文稿生命周期状态尚未加载，请稍后重试。",
+    );
+    expect(busy).toBe(false);
+  });
+
+  it.each<[string, PptJobProjection]>([
+    ["the ProposalId differs", {
+      ...matchingPptJob,
+      proposalId: "proposal-2",
+      stateRevision: 2,
+    }],
+    ["the Job is not waiting for approval", {
+      ...matchingPptJob,
+      status: "waiting_user",
+      stateRevision: 2,
+    }],
+    ["the Proposal is no longer waiting for approval", {
+      ...matchingPptJob,
+      proposalStatus: "superseded",
+      stateRevision: 2,
+    }],
+  ])("refuses a persisted Proposal card when %s", async (_case, pptJob) => {
+    const resumeAgentRun = vi.fn();
+    useProjectStore.setState({ pptJob });
+    Object.defineProperty(window, "desktopApi", {
+      configurable: true,
+      value: { resumeAgentRun },
+    });
+    ingestDisplayEvent(approvalEvent);
+    render(<Harness />);
+
+    await act(async () => {
+      await actions.resolveApproval(approvalEvent, true);
+    });
+
+    expect(resumeAgentRun).not.toHaveBeenCalled();
+    expect(useReviewCardManager.getState().cards[0]?.status).toBe("resolved");
+    expect(notify).toHaveBeenCalledWith(
+      "该 Proposal 已失效或不再等待审批，请基于当前演示重新生成。",
+    );
     expect(busy).toBe(false);
   });
 
@@ -215,7 +305,7 @@ describe("display event approval actions", () => {
     });
 
     expect(messages).toHaveLength(1);
-    expect(messages[0]?.runStatus).toBe("waiting");
+    expect(messages[0]?.runStatus).toBe("completed");
     expect(useReviewCardManager.getState().cards[0]?.status).toBe("active");
     expect(notify).toHaveBeenCalledWith("确认变更失败，请重试。");
     expect(busy).toBe(false);
@@ -282,7 +372,6 @@ describe("display event approval actions", () => {
       path: "brief.md",
       changed: true,
       changedArtifactId: "brief",
-      staleArtifactIds: ["outline"],
       version: `sha256:${"b".repeat(64)}`,
       mtimeMs: 2,
       size: 8,

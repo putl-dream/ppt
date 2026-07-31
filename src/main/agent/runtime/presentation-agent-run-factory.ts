@@ -5,7 +5,11 @@ import type { TeammateProgressEvent } from "@shared/teammate-progress";
 import type { AgentModelGateway } from "../gateway";
 import { createEmptySkillRegistry, type SkillRegistry } from "../skills/loadSkillsDir";
 import type { SkillSession } from "../skills/skill-types";
-import type { ToolContext, ToolDiscoverySession } from "../tools/tool-definition";
+import type {
+  PptLifecycleToolBridge,
+  ToolContext,
+  ToolDiscoverySession,
+} from "../tools/tool-definition";
 import { ToolRegistry } from "../tools/tool-registry";
 import { LEAD_TASK_PERMISSIONS } from "../task/task-store";
 import { toToolSchemas } from "../tools/tool-schema";
@@ -41,6 +45,10 @@ export class PresentationAgentRunFactory {
     private readonly gateway: AgentModelGateway,
     private readonly skillRegistry: SkillRegistry = createEmptySkillRegistry(),
     private readonly conversationDatabase?: ConversationDatabase,
+    private readonly resolvePresentationLifecycle?: (input: {
+      queryId: AgentRunScope["queryId"];
+      options: AgentRuntimeOptions;
+    }) => PptLifecycleToolBridge | undefined,
   ) {}
 
   async open(options: AgentRuntimeOptions): Promise<AgentRunScope> {
@@ -98,6 +106,10 @@ export class PresentationAgentRunFactory {
       taskListOwner: scope.taskListOwner,
       messageBus: options.messageBus,
       teammateManager: options.teammateManager,
+      presentationLifecycle: this.resolvePresentationLifecycle?.({
+        queryId: scope.queryId,
+        options,
+      }),
     };
     const coreTools = this.registry.getCoreTools(contextBase);
     const promptContext = await buildSystemPromptContext({

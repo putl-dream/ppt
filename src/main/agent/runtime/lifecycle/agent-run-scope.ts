@@ -330,7 +330,7 @@ export class AgentRunScope {
       ...(this.inflightQuery
         ? { inflight: structuredClone(this.inflightQuery) }
         : {}),
-      ...(status === "completed" || status === "proposal_ready"
+      ...(status === "completed"
         ? {
             terminalHistory: structuredClone(
               this.conversationHistorySnapshot
@@ -601,7 +601,7 @@ function completedConversationHistory(
 ): AgentModelMessage[] | undefined {
   if (
     !checkpoint
-    || (checkpoint.status !== "completed" && checkpoint.status !== "proposal_ready")
+    || checkpoint.status !== "completed"
   ) return undefined;
   if (checkpoint.version === 2) {
     return checkpoint.terminalHistory

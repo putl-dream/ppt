@@ -1,6 +1,7 @@
 import type { ToolContext, ToolDefinition } from "./tool-definition";
 import { ToolLoader } from "./tool-loader";
 import { askUserTool } from "./core/ask-user";
+import { beginPptCapabilityTool } from "./core/begin-ppt-capability";
 import { executeExtraToolTool } from "./core/execute-extra-tool";
 import { executeLayoutPlanTool } from "./core/execute-layout-plan";
 import { getSelectionTool } from "./core/get-selection";
@@ -16,6 +17,7 @@ import { searchExtraToolsTool } from "./core/search-extra-tools";
 import { sendTeammateMessageTool } from "./core/send-teammate-message";
 import { shutdownTeammateTool } from "./core/shutdown-teammate";
 import { submitCommandsTool } from "./core/submit-commands";
+import { submitPptReviewTool } from "./core/submit-ppt-review";
 import { submitSvgDeckTool } from "./core/submit-svg-deck";
 import { spawnTeammateTool } from "./core/spawn-teammate";
 import { taskTools } from "./core/task-tools";
@@ -32,7 +34,6 @@ import { beautifyTableTool } from "./deferred/beautify-table";
 import { compressTextTool } from "./deferred/compress-text";
 import { detectOverflowTextTool } from "./deferred/detect-overflow-text";
 import { detectRepeatedTitlesTool } from "./deferred/detect-repeated-titles";
-import { exportPptxTool } from "./deferred/export-pptx";
 import { rewriteSlideContentTool } from "./deferred/rewrite-slide-content";
 import { resolveDesignPlanTool } from "./deferred/resolve-design-plan";
 import { applyTypographyTool } from "./deferred/apply-typography";
@@ -152,6 +153,7 @@ export function createDefaultToolRegistry(): ToolRegistry {
   const registry = new ToolRegistry();
   [
     askUserTool,
+    beginPptCapabilityTool,
     executeExtraToolTool,
     executeLayoutPlanTool,
     getDesignReferenceTool,
@@ -168,6 +170,7 @@ export function createDefaultToolRegistry(): ToolRegistry {
     shutdownTeammateTool,
     spawnTeammateTool,
     submitCommandsTool,
+    submitPptReviewTool,
     submitSvgDeckTool,
     ...taskTools,
     loadSkillTool,
@@ -183,7 +186,6 @@ export function createDefaultToolRegistry(): ToolRegistry {
     compressTextTool,
     detectOverflowTextTool,
     detectRepeatedTitlesTool,
-    exportPptxTool,
     rewriteSlideContentTool,
     resolveDesignPlanTool,
     applyTypographyTool,

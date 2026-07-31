@@ -37,6 +37,11 @@ export const resolveDesignPlanTool: ToolDefinition<
   category: "deferred",
   loadPolicy: "deferred",
   inputSchema: resolveDesignPlanSchema,
+  behavior: {
+    presentation: {
+      allowedCapabilities: ["create", "edit", "restyle"],
+    },
+  },
   risk: "low",
   execute: async (args) => resolveDesignPlan(args),
 };

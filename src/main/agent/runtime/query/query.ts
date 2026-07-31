@@ -45,6 +45,7 @@ export async function* query(
   } catch (error) {
     yield {
       type: "query_failed",
+      queryId: run.scope.queryId,
       turnCount,
       error: error instanceof Error ? error.message : String(error),
     };
@@ -59,11 +60,16 @@ async function* runQueryMachine(
   const { scope } = run;
   let state = run.initialState;
   scope.setCommittedQueryState(state);
-  yield { type: "query_started", turnCount: state.turnCount };
+  yield {
+    type: "query_started",
+    queryId: scope.queryId,
+    turnCount: state.turnCount,
+  };
 
   if (run.initialWorkspace) {
     yield {
       type: "workspace_recovered",
+      queryId: scope.queryId,
       turnCount: state.turnCount,
       phase: run.initialWorkspacePhase ?? "model_received",
       toolUseCount: run.initialWorkspace.toolUseBlocks.length,
@@ -83,6 +89,7 @@ async function* runQueryMachine(
       );
       yield {
         type: "tool_batch_completed",
+        queryId: scope.queryId,
         turnCount: state.turnCount,
         toolUseCount: workspace.toolUseBlocks.length,
         toolResultCount: workspace.toolResults.length,
@@ -99,12 +106,14 @@ async function* runQueryMachine(
         if (committed.didCommit) {
           yield {
             type: "state_committed",
+            queryId: scope.queryId,
             turnCount: state.turnCount,
             reason: "completed",
           };
         }
         yield {
           type: "query_completed",
+          queryId: scope.queryId,
           turnCount: state.turnCount,
           reason: "terminal",
           resultType: toolOutcome.result.type,
@@ -117,6 +126,7 @@ async function* runQueryMachine(
     await scope.persistCheckpoint();
     yield {
       type: "state_committed",
+      queryId: scope.queryId,
       turnCount: state.turnCount,
       reason: state.transition?.reason ?? "next_turn",
     };
@@ -131,6 +141,7 @@ async function* runQueryMachine(
       const outcome = await run.resolveStepLimit();
       yield {
         type: "query_completed",
+        queryId: scope.queryId,
         turnCount: state.turnCount,
         reason: "step_limit",
         resultType: outcome.result.type,
@@ -149,6 +160,7 @@ async function* runQueryMachine(
     const modelOutcome = await driver.modelTurns.run(run, state, workspace);
     yield {
       type: "model_turn_completed",
+      queryId: scope.queryId,
       turnCount: state.turnCount,
       decision: modelOutcome.type,
       toolUseCount: workspace.toolUseBlocks.length,
@@ -164,12 +176,14 @@ async function* runQueryMachine(
       if (committed.didCommit) {
         yield {
           type: "state_committed",
+          queryId: scope.queryId,
           turnCount: state.turnCount,
           reason: "completed",
         };
       }
       yield {
         type: "query_completed",
+        queryId: scope.queryId,
         turnCount: state.turnCount,
         reason: "terminal",
         resultType: modelOutcome.result.type,
@@ -186,6 +200,7 @@ async function* runQueryMachine(
       );
       yield {
         type: "tool_batch_completed",
+        queryId: scope.queryId,
         turnCount: state.turnCount,
         toolUseCount: workspace.toolUseBlocks.length,
         toolResultCount: workspace.toolResults.length,
@@ -202,12 +217,14 @@ async function* runQueryMachine(
         if (committed.didCommit) {
           yield {
             type: "state_committed",
+            queryId: scope.queryId,
             turnCount: state.turnCount,
             reason: "completed",
           };
         }
         yield {
           type: "query_completed",
+          queryId: scope.queryId,
           turnCount: state.turnCount,
           reason: "terminal",
           resultType: toolOutcome.result.type,
@@ -226,6 +243,7 @@ async function* runQueryMachine(
     await scope.persistCheckpoint();
     yield {
       type: "state_committed",
+      queryId: scope.queryId,
       turnCount: state.turnCount,
       reason: transition.reason,
     };

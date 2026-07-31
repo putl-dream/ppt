@@ -47,6 +47,45 @@
   white-space: nowrap;
 }
 
+.project-files-job-status {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 9px;
+  min-height: 34px;
+  padding: 7px 24px;
+  border-bottom: 1px solid var(--border-glass);
+  color: var(--text-secondary);
+  background: color-mix(in srgb, var(--bg-glass) 74%, transparent);
+  font-size: 12px;
+}
+
+.project-files-job-status__label {
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.project-files-job-status__reason {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-files-job-status__stale {
+  margin-left: auto;
+  color: var(--warning, #d09a37);
+  font-weight: 650;
+}
+
+.project-files-job-status.is-failed,
+.project-files-job-status.is-cancelled {
+  color: var(--danger, #d96666);
+}
+
 .project-files-body {
   display: grid;
   flex: 1;
@@ -122,25 +161,6 @@
   font-size: 10px;
 }
 
-.project-files-status {
-  padding: 2px 5px;
-  border-radius: 999px;
-  color: var(--text-muted);
-  background: var(--bg-darker);
-  font-size: 9px;
-  line-height: 1.3;
-}
-
-.project-files-status.is-ready {
-  color: var(--accent-green);
-  background: var(--accent-green-glow);
-}
-
-.project-files-status.is-stale {
-  color: var(--accent-orange);
-  background: color-mix(in srgb, var(--accent-orange) 14%, transparent);
-}
-
 .project-files-list {
   display: flex;
   flex-direction: column;
@@ -205,6 +225,27 @@
   font-size: 11px;
   font-weight: 500;
   line-height: 1.45;
+}
+
+.project-files-artifact-badge {
+  flex: 0 0 auto;
+  margin-top: 1px;
+  padding: 2px 5px;
+  border: 1px solid color-mix(in srgb, var(--accent-green) 36%, transparent);
+  border-radius: 999px;
+  color: var(--accent-green);
+  background: color-mix(in srgb, var(--accent-green) 9%, transparent);
+  font-size: 9px;
+  font-style: normal;
+  font-weight: 700;
+  line-height: 1.35;
+  white-space: nowrap;
+}
+
+.project-files-artifact-badge.is-stale {
+  border-color: color-mix(in srgb, var(--accent-orange) 42%, transparent);
+  color: var(--accent-orange);
+  background: color-mix(in srgb, var(--accent-orange) 10%, transparent);
 }
 
 .project-files-file i {

@@ -130,6 +130,32 @@ export interface ExecutedCommand {
   inverse: PresentationCommand;
 }
 
+export type PreparedCommandMutationKind = "execute" | "execute-many" | "undo" | "redo";
+
+/**
+ * A CommandBus mutation calculated against a specific in-memory revision.
+ *
+ * The presentation is a detached preview for validation/persistence. The bus
+ * keeps the authoritative prepared state private so callers cannot mutate the
+ * eventual commit by changing this object.
+ */
+export interface PreparedCommandMutation {
+  readonly id: string;
+  readonly kind: PreparedCommandMutationKind;
+  readonly baseMutationRevision: number;
+  readonly presentation: Presentation;
+  readonly noOp: boolean;
+}
+
+interface PreparedCommandMutationState {
+  readonly kind: PreparedCommandMutationKind;
+  readonly baseMutationRevision: number;
+  readonly presentation: Presentation;
+  readonly undoStack: ExecutedCommand[];
+  readonly redoStack: ExecutedCommand[];
+  readonly noOp: boolean;
+}
+
 function nextRevision(presentation: Presentation): Presentation {
   return { ...presentation, revision: presentation.revision + 1 };
 }
@@ -620,28 +646,36 @@ export function executeCommand(
 export class CommandBus {
   private undoStack: ExecutedCommand[] = [];
   private redoStack: ExecutedCommand[] = [];
+  private mutationRevision = 0;
+  private readonly preparedMutations = new Map<string, PreparedCommandMutationState>();
+  private presentation: Presentation;
 
-  constructor(private presentation: Presentation) {}
+  constructor(presentation: Presentation) {
+    this.presentation = structuredClone(presentation);
+  }
 
   /** 返回深拷贝快照，避免调用方绕过命令系统直接修改内部状态。 */
   getSnapshot(): Presentation {
     return structuredClone(this.presentation);
   }
 
-  /** 原子执行单条命令；成功后记录逆命令，并清空 redo 历史。 */
-  execute(command: PresentationCommand): Presentation {
+  /** 在临时快照中计算单条命令，不改变当前 Presentation 或历史栈。 */
+  prepareExecute(command: PresentationCommand): PreparedCommandMutation {
     const result = executeCommand(this.presentation, command);
-    this.presentation = result.presentation;
-    this.undoStack.push(result.executed);
-    this.redoStack = [];
-    return this.getSnapshot();
+    return this.createPreparedMutation(
+      "execute",
+      result.presentation,
+      [...this.undoStack, result.executed],
+      [],
+      false,
+    );
   }
 
   /**
-   * 以事务方式执行一组命令：全部在临时快照成功后才提交到真实状态，
+   * 以事务方式准备一组命令：全部在临时快照成功后才产生 prepared mutation，
    * 任一命令抛错时不会产生部分写入。
    */
-  executeMany(commands: PresentationCommand[]): Presentation {
+  prepareExecuteMany(commands: PresentationCommand[]): PreparedCommandMutation {
     let stagedPresentation = this.presentation;
     const stagedExecutions: ExecutedCommand[] = [];
 
@@ -651,29 +685,147 @@ export class CommandBus {
       stagedExecutions.push(result.executed);
     }
 
-    this.presentation = stagedPresentation;
-    this.undoStack.push(...stagedExecutions);
-    this.redoStack = [];
+    return this.createPreparedMutation(
+      "execute-many",
+      stagedPresentation,
+      [...this.undoStack, ...stagedExecutions],
+      [],
+      false,
+    );
+  }
+
+  /** 准备撤销；没有可撤销命令时返回明确的 no-op。 */
+  prepareUndo(): PreparedCommandMutation {
+    const executed = this.undoStack.at(-1);
+    if (!executed) {
+      return this.createPreparedMutation(
+        "undo",
+        this.presentation,
+        this.undoStack,
+        this.redoStack,
+        true,
+      );
+    }
+
+    const result = executeCommand(this.presentation, executed.inverse);
+    return this.createPreparedMutation(
+      "undo",
+      result.presentation,
+      this.undoStack.slice(0, -1),
+      [...this.redoStack, executed],
+      false,
+    );
+  }
+
+  /** 准备重做；没有可重做命令时返回明确的 no-op。 */
+  prepareRedo(): PreparedCommandMutation {
+    const executed = this.redoStack.at(-1);
+    if (!executed) {
+      return this.createPreparedMutation(
+        "redo",
+        this.presentation,
+        this.undoStack,
+        this.redoStack,
+        true,
+      );
+    }
+
+    const result = executeCommand(this.presentation, executed.command);
+    return this.createPreparedMutation(
+      "redo",
+      result.presentation,
+      [...this.undoStack, result.executed],
+      this.redoStack.slice(0, -1),
+      false,
+    );
+  }
+
+  /**
+   * 原子提交先前准备的 mutation。
+   *
+   * 任意其他真实提交都会推进内部 revision，使旧 prepared mutation 失效。
+   */
+  commitPreparedMutation(prepared: PreparedCommandMutation): Presentation {
+    if (prepared.baseMutationRevision !== this.mutationRevision) {
+      this.preparedMutations.delete(prepared.id);
+      throw new Error(
+        `Stale prepared mutation: expected CommandBus revision ${prepared.baseMutationRevision}, current revision is ${this.mutationRevision}`,
+      );
+    }
+
+    const state = this.preparedMutations.get(prepared.id);
+    if (!state) {
+      throw new Error(`Unknown or already committed prepared mutation: ${prepared.id}`);
+    }
+    if (
+      state.baseMutationRevision !== prepared.baseMutationRevision
+      || state.kind !== prepared.kind
+      || state.noOp !== prepared.noOp
+    ) {
+      throw new Error(`Prepared mutation metadata mismatch: ${prepared.id}`);
+    }
+
+    const nextPresentation = structuredClone(state.presentation);
+    const nextUndoStack = structuredClone(state.undoStack);
+    const nextRedoStack = structuredClone(state.redoStack);
+
+    this.preparedMutations.delete(prepared.id);
+    if (state.noOp) return this.getSnapshot();
+
+    this.presentation = nextPresentation;
+    this.undoStack = nextUndoStack;
+    this.redoStack = nextRedoStack;
+    this.mutationRevision += 1;
     return this.getSnapshot();
+  }
+
+  discardPreparedMutation(prepared: PreparedCommandMutation): void {
+    this.preparedMutations.delete(prepared.id);
+  }
+
+  /** 原子执行单条命令；成功后记录逆命令，并清空 redo 历史。 */
+  execute(command: PresentationCommand): Presentation {
+    return this.commitPreparedMutation(this.prepareExecute(command));
+  }
+
+  /** 原子执行一组命令；任一命令失败都不会改变真实状态。 */
+  executeMany(commands: PresentationCommand[]): Presentation {
+    return this.commitPreparedMutation(this.prepareExecuteMany(commands));
   }
 
   /** 撤销最近一次已提交命令，并把原命令移入 redo 栈。 */
   undo(): Presentation {
-    const executed = this.undoStack.pop();
-    if (!executed) return this.getSnapshot();
-    const result = executeCommand(this.presentation, executed.inverse);
-    this.presentation = result.presentation;
-    this.redoStack.push(executed);
-    return this.getSnapshot();
+    return this.commitPreparedMutation(this.prepareUndo());
   }
 
   /** 重做最近一次撤销的命令，并重新生成可撤销记录。 */
   redo(): Presentation {
-    const executed = this.redoStack.pop();
-    if (!executed) return this.getSnapshot();
-    const result = executeCommand(this.presentation, executed.command);
-    this.presentation = result.presentation;
-    this.undoStack.push(result.executed);
-    return this.getSnapshot();
+    return this.commitPreparedMutation(this.prepareRedo());
+  }
+
+  private createPreparedMutation(
+    kind: PreparedCommandMutationKind,
+    presentation: Presentation,
+    undoStack: ExecutedCommand[],
+    redoStack: ExecutedCommand[],
+    noOp: boolean,
+  ): PreparedCommandMutation {
+    const id = crypto.randomUUID();
+    const state: PreparedCommandMutationState = {
+      kind,
+      baseMutationRevision: this.mutationRevision,
+      presentation: structuredClone(presentation),
+      undoStack: structuredClone(undoStack),
+      redoStack: structuredClone(redoStack),
+      noOp,
+    };
+    this.preparedMutations.set(id, state);
+    return Object.freeze({
+      id,
+      kind,
+      baseMutationRevision: state.baseMutationRevision,
+      presentation: structuredClone(state.presentation),
+      noOp,
+    });
   }
 }

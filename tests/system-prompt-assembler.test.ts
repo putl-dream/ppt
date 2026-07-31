@@ -46,7 +46,17 @@ stages:
 `;
 
 function emptyArtifacts() {
-  return { brief: false, outline: false, storyboard: false, layoutPlan: false };
+  return {
+    designSpec: false,
+    pagePlan: false,
+    pageSvg: false,
+    assets: false,
+    deck: false,
+    exportHistory: false,
+    brief: false,
+    outline: false,
+    research: false,
+  };
 }
 
 function baseContext(overrides: Record<string, unknown> = {}) {
@@ -90,7 +100,7 @@ describe("system prompt assembly", () => {
     expect(text).toContain("阶段标签只是上下文提示，不是控制流或能力白名单");
     expect(text).toContain("先检查必要事实，再修改，再验证");
     expect(text).toContain("简单任务直接完成");
-    expect(text).toContain("已验证产物默认复用");
+    expect(text).toContain("业务完成、等待与 stale 以 PptJob 投影为准");
     expect(text).not.toContain("阶段契约：收敛而非发散");
     expect(text).not.toContain("当前仅执行本阶段");
     expect(text).not.toContain("主 Agent 可以直接执行的工作限于");

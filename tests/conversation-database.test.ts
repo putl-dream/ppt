@@ -184,6 +184,39 @@ describe("ConversationDatabase", () => {
     database.close();
   });
 
+  it("binds one QueryId across resume attempts without reusing run or thread identity", async () => {
+    const database = await createDatabase();
+    database.replaceState({ activeSessionId: "s1", sessions: [snapshot("s1")] });
+    database.beginRun({
+      runId: "run-1",
+      sessionId: "s1",
+      threadId: "thread-1",
+      request: "start",
+    });
+    database.bindRunQueryId("run-1", "query-1");
+    database.beginRun({
+      runId: "run-2",
+      sessionId: "s1",
+      threadId: "thread-1",
+      request: "continue",
+    });
+    database.bindRunQueryId("run-2", "query-1");
+
+    expect(database.getRunQueryId("run-1")).toBe("query-1");
+    expect(database.getRunQueryId("run-2")).toBe("query-1");
+    expect(database.listRunEvents("run-1").at(-1)).toMatchObject({
+      kind: "query_started",
+      payload: { queryId: "query-1" },
+    });
+    expect(() => database.bindRunQueryId("run-2", "run-2")).toThrow(
+      "QueryId must be distinct",
+    );
+    expect(() => database.bindRunQueryId("run-2", "thread-1")).toThrow(
+      "QueryId must be distinct",
+    );
+    database.close();
+  });
+
   it("stores checkpoints and compacted model context separately", async () => {
     const database = await createDatabase();
     database.replaceState({ activeSessionId: "s1", sessions: [snapshot("s1")] });

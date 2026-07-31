@@ -1,12 +1,25 @@
 # Presentation 工作流与状态
 
 > 文档类型：现行架构
-> 最后核对：2026-07-30
-> 活跃演进方案见 [Presentation 生命周期路线图](../roadmap/presentation-lifecycle.md)
+> 最后核对：2026-07-31
+> 生命周期实施记录见 [Presentation Artifact 与 Job 生命周期](../roadmap/presentation-lifecycle.md)
 
 ## 1. 工作流不是 Agent Loop
 
 Agent Loop 负责一个 Query 内的模型和工具推进；Presentation 工作流负责一份演示从需求到交付的业务产物。
+
+现行身份边界是：
+
+```text
+QueryId：一次用户请求的模型/工具执行
+PresentationId → PptJobId：一份演示跨 Query 的长期业务演化
+ArtifactId → ArtifactRevisionId：一个阶段已经校验并提交的不可变证据
+PresentationRevisionId：已应用 deck snapshot 的不可变业务版本
+```
+
+`runId` 只标识一次执行尝试，`threadId` 只负责对话关联与恢复；二者都不能代替
+`QueryId`。数字 `Presentation.revision` 是 CommandBus CAS，也不能代替
+`PresentationRevisionId`。
 
 模型可以根据用户目标选择：
 
@@ -26,13 +39,16 @@ Prompt stage 只提供当前事实和推荐能力，不能强迫所有请求经�
 
 ```text
 request
+  → BeginPptCapability（PptCapabilityRequest + Intent revision）
   → design/design-spec.json（沟通契约 + deck-wide 设计锁）
   → slides/page-plan.json（逐页内容与构图意图）
   → slides/svg/PNN.svg（唯一页面视觉作者源）
-  → PreviewSvgPage（逐页真实 PNG 门禁）
+  → PreviewSvgPage（逐页真实 PNG 门禁 + durable revisions）
   → SubmitSvgDeck（锁文件核对 + 素材内联）
-  → approval + CommitGate
-  → committed Presentation
+  → CandidateDeck + QualityReport + CommandProposal
+  → Query completed / PptJob waiting_approval
+  → approval + CommitGate + PresentationCommitService
+  → committed PresentationRevision
 ```
 
 硬约束：
@@ -41,9 +57,14 @@ request
 - 除 SVG 显式引用的本地 `assets/**` 图片外，背景、标题、正文、页码、图示与装饰都必须已在 SVG 中；
 - 新建流程禁止调用 `PreviewCommands`、`SubmitCommands`、`ExecuteLayoutPlan`；
 - `SubmitSvgDeck` 要求 `communication` / `designSystem` / 每页 `id/path/narrative` 与锁文件一致；修订 SVG 会使旧 Preview 凭据失效。
+- PreviewReceipt 是 durable ArtifactRevision，不再依赖进程内 WeakMap；Submit 时当前
+  文件 hash、PageSvg head 与 PreviewReceipt dependency 必须全部匹配。
+- SVG、素材、完整命令和 Presentation snapshot 等大值进入 content-addressed blob
+  store；lifecycle SQLite 只保存 blob reference。
 
 相关实现：`src/main/agent/tools/core/preview-svg-page.ts`、
-`src/main/agent/tools/core/submit-svg-deck.ts`、`skills/ppt-workflow/SKILL.md`。
+`src/main/agent/tools/core/submit-svg-deck.ts`、
+`src/main/agent/tools/core/svg-deck-lifecycle.ts`、`skills/ppt-workflow/SKILL.md`。
 
 ## 3. 残余与遗留路径
 
@@ -70,27 +91,32 @@ DeckSpec → Director → compile → quality gate 管线，供离线脚本与�
 | Page SVG | 唯一页面视觉作者源 | `slides/svg/PNN.svg` | SVG-native 视觉事实 |
 | Assets | SVG 显式引用的本地资源 | `assets/**` | 素材 |
 | Brief / Outline / Research | 可选早期叙事材料 | `brief.md` / `outline.md` / `research/` | 可选 |
-| Storyboard | 页级叙事（遗留/兼容） | `slides/storyboard.json` | 遗留；现行 probe 仍检测 |
-| Layout Plan | 逐页 layout/variant（遗留） | `slides/layout-plan.json` | 遗留；非新建主路径 |
+| Storyboard | 页级叙事（遗留/兼容） | `slides/storyboard.json` | 非新建旁路；不是 lifecycle 事实源 |
+| Layout Plan | 逐页 layout/variant（遗留） | `slides/layout-plan.json` | 非新建旁路；不是 lifecycle 事实源 |
 | Brand / Design System | 品牌与视觉偏好 | `design/` | 与 Design Spec 并存演进 |
-| Presentation | 已应用可编辑 deck | deck snapshot | CommitGate 后事实 |
-| Export | PPTX/HTML 与 postflight | export history | 交付物 |
+| Presentation | 已应用可编辑 deck | `deck/snapshot.json` + PresentationRevision | CommitGate 后事实 |
+| Export | PPTX/HTML/JSON 与 postflight | export history + ExportArtifact | 交付物 |
 
-文件存在不等于 artifact 已验证。消费方必须解析 schema、检查依赖和当前 Presentation revision。
-项目默认 artifact 注册表（如 `storyboard` / `design/system.json`）与 SVG skill 作者文件尚未完全对齐，属已知后续项，不以文档假装已统一。
+文件存在不等于 artifact 已验证。默认项目注册表与 probe 已将 design-spec、page-plan、
+Page SVG、assets、deck 与 export history 作为第一公民；brief、outline、research
+是可选资料。只有 schema、依赖和领域校验通过后提交的 ArtifactRevision 才是阶段事实。
 
-## 5. 当前状态来源
+## 5. 业务状态与 UI 投影
 
-当前代码仍有两种状态视图：
+Presentation 业务状态的唯一权威来源是持久化 `PptJobState`：
 
-- workspace probe：文件是否 missing/default/invalid/verified（现行 probe 集仍覆盖 brief/outline/storyboard/layout-plan，尚未扩展为 design-spec/page-plan/svg 全量）；
-- project artifact metadata：draft/ready/stale。
+- `running / waiting_user / waiting_approval / completed / cancelled / failed`；
+- 当前 capability、stage、committed heads 与 stage attempt；
+- precise stale edge 与最早需重跑 stage；
+- Proposal、PresentationRevision 与 ExportArtifact 指针；
+- waiting reason。
 
-它们是当前兼容事实，不应继续扩成第三套工作流状态。跨 Query 的统一 revision/dependency 状态属于路线图中的 `PptJob`。
+Renderer 通过只读 `PptJobProjection` 和 `ppt-job:get/changed` IPC 消费这些事实。
+项目状态区、artifact badge 与 Proposal card 都使用该投影。
 
-workspace 项目文件管理页只投影这两类现有事实：文件分组与内容来自 workspace，
-artifact 标签来自现有 metadata/validator。页面自己的 loading、dirty、diff 或保存
-状态不是新的 Presentation 工作流状态。
+`draft/ready/stale` 手工 metadata 与确认 IPC 已移除。文件页面自己的 loading、
+dirty、diff、保存冲突仍是局部 UI 状态，不会推进 PptJob。聊天 activity/runStatus
+只显示 Query 执行，不推断 artifact ready 或 Presentation applied。
 
 ## 6. 读取和写入
 
@@ -111,8 +137,10 @@ Renderer 提供 workspace-level 项目文件管理页：
   compare-and-commit；Agent、外部编辑器或另一个页面先修改文件时返回冲突；
 - 只有归属于已注册、可编辑 artifact 的文本文件允许保存；`deck`、`history` 与未知
   artifact 文件只读，Main 在保存入口再次强制校验，不能由 Renderer 绕过；
-- 保存成功后沿用现有 artifact dependency 规则标记下游 stale，但不能仅凭保存把
-  当前 artifact 标记成 `ready/verified`。
+- design-spec、page-plan、SVG 或素材变化通过统一 artifact-change observer 精确标记
+  传递下游 stale，同时保留旧 revision 与已应用 Presentation；
+- Agent Query 自身写入时 Job 保持 `running`；用户或外部修改在下一次
+  read/probe/preview/submit 检出后进入 `waiting_user`。系统不新增常驻文件 watcher。
 
 现有 `ProjectFileService` 的 artifact 读写同样委托 `WorkspaceFileService`，不再维护
 一套弱化的路径、编码和原子写语义。当前页面不提供删除、重命名或二进制编辑。
@@ -126,25 +154,35 @@ Renderer 提供 workspace-level 项目文件管理页：
 ```text
 Tool result
   → PresentationCommand[]
-  → proposal
-  → schema + sandbox apply
-  → diff
-  → validation + risk
-  → auto apply or user approval
-  → CommandBus CAS
-  → new Presentation revision
+  → StageAttempt(candidate)
+  → schema + sandbox apply + diff + risk
+  → CandidateDeck/Commands + QualityReport revisions
+  → CommandProposal revision + stable ProposalId
+  → auto apply or ProposalId user approval
+  → prepare CommandBus mutation
+  → atomic session + lifecycle commit
+  → new PresentationRevision
 ```
 
 `SubmitSvgDeck` 与遗留 `SubmitCommands` / `ExecuteLayoutPlan` 均产出提案，再进入同一 CommitGate。
 `executionStrategy`（AUTO / REQUEST_APPROVAL）只控制审批，不是创建模式。
 
+自动审批与人工审批进入同一个 `PresentationCommitService`。它重新读取 command blob，
+核对 Proposal、base revision 与 stale edge，在临时 snapshot 中 prepare，再把 session
+snapshot、PresentationRevision、Proposal transition、PptJob State 和 apply claim
+提交到同一 SQLite transaction。成功后才同步内存 CommandBus 与 workspace deck。
+
+Main 的 `presentation:execute/undo/redo` 也通过该服务，每次真实变更都产生
+PresentationRevision。结构化 review 通过 `SubmitPptReview` 提交依赖当前
+PresentationRevision 的 QualityReport。
+
 必须区分：
 
-- 工具执行成功；
-- proposal 已生成；
-- proposal 已批准；
-- commands 已应用；
-- export 已发布。
+- Query completed；
+- Proposal ready / PptJob `waiting_approval`；
+- Proposal approved 或 rejected；
+- PresentationRevision applied；
+- ExportArtifact completed。
 
 任何一步都不能用普通聊天文本冒充下一步完成。
 
@@ -176,26 +214,56 @@ SVG-native deck 的可见修改应改对应 `slides/svg/PNN.svg` 并重新 `Prev
 
 ## 10. 恢复
 
-- Query checkpoint 恢复模型/工具批次。
-- Project artifact 文件恢复中间内容。
-- Presentation revision 恢复已应用 deck。
-- Export history 恢复已发布交付物。
+- Query checkpoint 恢复模型/工具批次；`waiting_user` 恢复沿用原 `QueryId`。
+- PptJob repository 恢复 committed heads、attempt、stale edge、Proposal 与业务状态。
+- command、Presentation、SVG 与素材 blob 在读取时校验 byte length 和 content hash；
+  缺失或篡改会拒绝 submit/apply。
+- PresentationRevision 恢复已应用 deck；Project 作者文件恢复可继续编辑的中间内容。
+- apply/export 使用 durable side-effect claim。可以用已写文件和 hash 证明成功时补交
+  revision；无法证明时进入 `waiting_user`，不盲目重放。
+- 导出 IPC 只接收 `sessionId + options`，Main 读取权威 Presentation。ExportArtifact
+  依赖当前 PresentationRevision，并记录 destination、format、file hash、byte length
+  与 postflight。
 
 它们不能互相替代。恢复时先读 durable facts，再让模型决定继续、修复或重新生成。
 
-## 11. 关键实现
+## 11. 持久数据与 workspace
+
+应用级持久数据的唯一根是 `~/.agent-ppt`：
+
+```text
+~/.agent-ppt/
+  conversations.sqlite
+  blobs/
+  logs/
+  runtime/
+  electron/              # Electron userData / Renderer localStorage
+  token-usage.json
+```
+
+入口在 Electron `whenReady` 前调用 `app.setPath("userData",
+join(homedir(), ".agent-ppt", "electron"))`，并设置 `AGENT_PPT_DATA_DIR`。
+Workspace / sandbox 仍位于用户选择的项目目录，不迁入应用数据根。
+
+dev 阶段不迁移 AppData 旧路径，不 backfill/hydrate 旧 session 或 workspace。开发者需要
+手工删除 `%APPDATA%\.agent-ppt`、`%APPDATA%\agent-ppt` 等旧数据并使用新 workspace。
+
+## 12. 关键实现
 
 - `skills/ppt-workflow/SKILL.md`
+- `src/main/application-data.ts`
+- `src/shared/presentation-lifecycle.ts`
+- `src/main/presentation-lifecycle/`
+- `src/main/agent/tools/core/begin-ppt-capability.ts`
 - `src/main/agent/tools/core/preview-svg-page.ts`
 - `src/main/agent/tools/core/submit-svg-deck.ts`
+- `src/main/agent/tools/core/submit-ppt-review.ts`
 - `src/main/index.ts`（拒绝 lean generationMode）
 - `src/main/project/`
 - `src/main/project/project-file-service.ts`
 - `src/shared/ipc.ts`
-- `src/renderer/src/app/ProjectFilesView.tsx`
-- `src/renderer/src/app/project/useProjectFiles.ts`
+- `src/renderer/src/components/project-store.ts`
 - `src/renderer/src/components/ProjectFilesPage.tsx`
-- `src/shared/project-artifacts.ts`
 - `src/shared/project-artifact-state.ts`
 - `src/shared/layout-plan.ts`（遗留）
 - `src/main/agent/tools/core/execute-layout-plan.ts`（遗留）
@@ -204,13 +272,11 @@ SVG-native deck 的可见修改应改对应 `slides/svg/PNN.svg` 并重新 `Prev
 - `src/shared/commands.ts`（`CommandBus`）
 - `src/shared/presentation.ts`
 
-## 12. 当前已知结构性缺口
+## 13. 非目标与兼容边界
 
-- artifact 缺少统一 immutable revision 和 dependency hash。
-- candidate、preview 和 committed Presentation 边界仍需进一步收敛。
-- 完整工作流状态尚未成为跨 Query 的单一 `PptJob`。
 - 文件管理页的 SHA-256 version 是并发前置条件，不是 immutable Artifact Revision。
-- 现行 workspace probe / 默认 project artifact 注册与 SVG-native 作者文件未完全对齐。
-- Lean 库与部分 UI 文案仍可能残留，但不构成产品 Mode。
-
-这些问题只在 [路线图](../roadmap/presentation-lifecycle.md) 中维护（生命周期部分），不再创建新的阶段性 plan 文档。
+- Lean commercial compiler 仍可供离线脚本与测试使用，但不接产品入口，也不决定
+  lifecycle stage/kind。
+- storyboard/layout-plan 只保留非新建旁路，不是 SVG-native 或 PptJob 事实源。
+- 不实现旧 AppData/session/workspace 的 backfill、hydrate、启动迁移或双轨兼容。
+- 不把 TaskStore、Query checkpoint、聊天文案或局部文件 UI 状态当作 PptJob。

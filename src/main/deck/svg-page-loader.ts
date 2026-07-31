@@ -15,6 +15,12 @@ export interface HydratedSvgPage {
   sha256: string;
   byteSize: number;
   resources: SvgPageResource[];
+  resourceContents: HydratedSvgPageResourceContent[];
+}
+
+export interface HydratedSvgPageResourceContent {
+  resource: SvgPageResource;
+  bytes: Uint8Array;
 }
 
 export const MAX_HYDRATED_SVG_PAGE_BYTES = 25 * 1024 * 1024;
@@ -31,7 +37,12 @@ export async function loadWorkspaceSvgPage(input: {
     maxBytes: 4 * 1024 * 1024,
   });
   const resources: SvgPageResource[] = [];
-  const cachedResources = new Map<string, { dataUri: string; resource: SvgPageResource }>();
+  const resourceContents: HydratedSvgPageResourceContent[] = [];
+  const cachedResources = new Map<string, {
+    dataUri: string;
+    resource: SvgPageResource;
+    bytes: Uint8Array;
+  }>();
   const resourceHashes = new Set<string>();
   let markup = receipt.content;
   let projectedHydratedBytes = Buffer.byteLength(markup, "utf8");
@@ -47,9 +58,10 @@ export async function loadWorkspaceSvgPage(input: {
     const href = hrefAttribute.value.trim();
     if (/^data:image\//i.test(href)) {
       const embedded = inspectEmbeddedRaster(href, receipt.path);
-      if (!resourceHashes.has(embedded.sha256)) {
-        resources.push(embedded);
-        resourceHashes.add(embedded.sha256);
+      if (!resourceHashes.has(embedded.resource.sha256)) {
+        resources.push(embedded.resource);
+        resourceContents.push(embedded);
+        resourceHashes.add(embedded.resource.sha256);
       }
       continue;
     }
@@ -67,6 +79,10 @@ export async function loadWorkspaceSvgPage(input: {
       cachedResources.set(assetPath, localized);
       if (!resourceHashes.has(localized.resource.sha256)) {
         resources.push(localized.resource);
+        resourceContents.push({
+          resource: localized.resource,
+          bytes: localized.bytes,
+        });
         resourceHashes.add(localized.resource.sha256);
       }
     }
@@ -114,6 +130,7 @@ export async function loadWorkspaceSvgPage(input: {
     sha256: sha256(markup),
     byteSize: hydratedBytes,
     resources,
+    resourceContents,
   };
 }
 
@@ -234,7 +251,10 @@ function findTagEnd(markup: string, start: number): number {
   return -1;
 }
 
-function inspectEmbeddedRaster(href: string, svgPath: string): SvgPageResource {
+function inspectEmbeddedRaster(
+  href: string,
+  svgPath: string,
+): HydratedSvgPageResourceContent {
   const match = /^data:(image\/(?:png|jpeg|gif|webp));base64,([a-z0-9+/]+={0,2})$/i
     .exec(href);
   if (!match) {
@@ -257,10 +277,13 @@ function inspectEmbeddedRaster(href: string, svgPath: string): SvgPageResource {
   }
   const digest = createHash("sha256").update(bytes).digest("hex");
   return {
-    sourcePath: `embedded:${digest}`,
-    mimeType: actualMimeType,
-    byteSize: bytes.byteLength,
-    sha256: digest,
+    resource: {
+      sourcePath: `embedded:${digest}`,
+      mimeType: actualMimeType,
+      byteSize: bytes.byteLength,
+      sha256: digest,
+    },
+    bytes,
   };
 }
 
@@ -278,7 +301,11 @@ function detectSvgRasterMime(
 async function readWorkspaceRaster(
   workspaceRoot: string,
   workspacePath: string,
-): Promise<{ dataUri: string; resource: SvgPageResource }> {
+): Promise<{
+  dataUri: string;
+  resource: SvgPageResource;
+  bytes: Uint8Array;
+}> {
   const resolvedWorkspaceRoot = resolve(workspaceRoot);
   const canonicalRoot = await realpath(resolvedWorkspaceRoot);
   const candidate = resolve(canonicalRoot, workspacePath);
@@ -345,6 +372,7 @@ async function readWorkspaceRaster(
         byteSize: bytes.byteLength,
         sha256: digest,
       },
+      bytes,
     };
   } finally {
     await handle.close();

@@ -384,7 +384,7 @@ describe("Lean Mode", () => {
     },
   );
 
-  it("persists direct approval and resumes it after service reconstruction", async () => {
+  it("fails closed when an offline direct proposal has no lifecycle repository", async () => {
     const workspaceRoot = await mkdtemp(join(tmpdir(), "lean-approval-"));
     const starter = createStarterPresentation();
     const compiled = compileLeanDeckSpec(createSpec(), starter);
@@ -397,28 +397,21 @@ describe("Lean Mode", () => {
       workspaceRoot,
     );
 
-    const proposed = await service.submitDirectProposal({
-      threadId: "lean-thread",
-      request: "生成经营复盘",
-      commands: compiled.commands,
-      summary: "Lean 草稿已生成",
-      assumptions: ["一次调用"],
-      risk: "high",
-    });
-    expect(proposed.status).toBe("approval-required");
-    expect(commandBus.getSnapshot().slides).toHaveLength(1);
-
-    const restoredBus = new CommandBus(starter);
-    const restoredService = new AgentService(
-      restoredBus,
-      new AgentRuntime(new ToolRegistry(), new FakeGateway()),
-      new CommitGate(new RiskPolicy()),
-      workspaceRoot,
-    );
-    const applied = await restoredService.resume("lean-thread", true);
-    expect(applied.status).toBe("completed");
-    expect(restoredBus.getSnapshot().slides).toHaveLength(6);
-    expect(restoredBus.getSnapshot().title).toBe("增长经营复盘");
+    try {
+      await expect(service.submitDirectProposal({
+        threadId: "lean-thread",
+        request: "生成经营复盘",
+        commands: compiled.commands,
+        summary: "Lean 草稿已生成",
+        assumptions: ["一次调用"],
+        risk: "high",
+      })).rejects.toThrow(
+        "Presentation proposals require the durable lifecycle repository",
+      );
+      expect(commandBus.getSnapshot()).toEqual(starter);
+    } finally {
+      await rm(workspaceRoot, { recursive: true, force: true });
+    }
   });
 
   it("uses exactly one model request and reports provider token usage", async () => {
@@ -671,6 +664,9 @@ describe("Lean Mode", () => {
       await store.finalizeAgentRunMessage(sessionId, "lean-run", {
         status: "approval-required",
         approval: {
+          jobId: "job-lean",
+          queryId: "query-lean",
+          proposalId: "proposal-lean",
           threadId: "lean-run",
           summary: "Lean Mode 已生成",
           commands: [],

@@ -4,10 +4,12 @@ import type { AgentRuntimeOptions } from "../runtime-types";
 import type {
   AgentQueryParams,
   AgentQuerySource,
+  QueryId,
   QueryStartMode,
 } from "./query-types";
 
 export interface AgentQueryAssemblyInput<TDeps> {
+  queryId: QueryId;
   options: AgentRuntimeOptions;
   messages: readonly AgentModelMessage[];
   systemPrompt: string;
@@ -25,6 +27,7 @@ export class AgentQueryAssembler {
   assemble<TDeps>(input: AgentQueryAssemblyInput<TDeps>): AgentQueryParams<TDeps> {
     const startMode = input.options.startMode;
     return Object.freeze({
+      queryId: input.queryId,
       messages: structuredClone(input.messages),
       systemPrompt: input.systemPrompt,
       userContext: Object.freeze({ ...(input.options.userContext ?? {}) }),

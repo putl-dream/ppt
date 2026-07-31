@@ -21,6 +21,11 @@ export const compressTextTool: ToolDefinition<
   category: "deferred",
   loadPolicy: "deferred",
   inputSchema: compressTextSchema,
+  behavior: {
+    presentation: {
+      allowedCapabilities: ["create", "edit", "restyle"],
+    },
+  },
   risk: "low",
   execute: async (args, context) => {
     if (args.text.length <= args.maxLength) {

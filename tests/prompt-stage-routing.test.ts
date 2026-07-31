@@ -9,10 +9,15 @@ import type { WorkspaceArtifacts } from "../src/main/agent/runtime/presentation/
 import { TEST_DESIGN_SYSTEM } from "./design-engine-test-utils";
 
 const emptyArtifacts: WorkspaceArtifacts = {
+  designSpec: false,
+  pagePlan: false,
+  pageSvg: false,
+  assets: false,
+  deck: false,
+  exportHistory: false,
   brief: false,
   outline: false,
-  storyboard: false,
-  layoutPlan: false,
+  research: false,
 };
 
 function deck(slideCount: number, styled = false): Presentation {
@@ -95,16 +100,16 @@ describe("resolvePromptStage (advisory capability hint)", () => {
     })).toBe("author");
   });
 
-  it("uses a layout plan as evidence for style work until slides are styled", () => {
+  it("uses authored SVG pages as evidence for preview/quality work before apply", () => {
     expect(resolvePromptStage({
       request: "任意请求",
-      presentation: deck(3),
-      artifacts: { ...emptyArtifacts, layoutPlan: true },
+      presentation: deck(0),
+      artifacts: { ...emptyArtifacts, pageSvg: true },
     })).toBe("style");
     expect(resolvePromptStage({
       request: "任意请求",
       presentation: deck(3, true),
-      artifacts: { ...emptyArtifacts, layoutPlan: true },
+      artifacts: { ...emptyArtifacts, pageSvg: true },
     })).toBe("edit");
   });
 

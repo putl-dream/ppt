@@ -111,10 +111,15 @@ export function buildSystemPromptContextSync(
   input: SystemPromptContextInput,
 ): SystemPromptContext {
   const artifacts = input.artifacts ?? {
+    designSpec: false,
+    pagePlan: false,
+    pageSvg: false,
+    assets: false,
+    deck: false,
+    exportHistory: false,
     brief: false,
     outline: false,
-    storyboard: false,
-    layoutPlan: false,
+    research: false,
   };
 
   const stage = resolvePromptStage({

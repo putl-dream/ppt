@@ -6,6 +6,7 @@ stages:
   - author
   - design
 allowed-tools:
+  - BeginPptCapability
   - ReadFile
   - WriteFile
 ---
@@ -13,6 +14,8 @@ allowed-tools:
 # SVG-native 逐页设计
 
 ## 角色
+
+本技能必须运行在本 Query 已声明的 `create` capability 内；若尚未声明，先调用一次 `BeginPptCapability`。
 
 读取 `design/design-spec.json` 和用户内容，为每一页写最终内容与页面级构图意图。输出唯一文件 `slides/page-plan.json`。本技能不生成 SVG，不调用 layout handler，也不选择固定 layout / grammarVariant。
 

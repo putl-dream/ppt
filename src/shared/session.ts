@@ -6,24 +6,20 @@ import { DEFAULT_DESIGN_SYSTEM } from "@design-system";
 import { persistedDisplayCardSchema } from "./card-display-protocol";
 
 export const projectArtifactKindSchema = z.enum([
-  "brief",
-  "outline",
-  "research",
-  "slide-plan",
-  "design",
+  "design-spec",
+  "page-plan",
+  "page-svg",
+  "assets",
   "deck",
-  "history",
+  "export-history",
+  "reference",
 ]);
-
-export const projectArtifactStatusSchema = z.enum(["draft", "ready", "stale"]);
 
 export const projectArtifactSchema = z.object({
   id: z.string(),
   title: z.string(),
   path: z.string(),
   kind: projectArtifactKindSchema,
-  status: projectArtifactStatusSchema,
-  dependsOn: z.array(z.string()),
 });
 
 export const projectSandboxSchema = z.object({
@@ -122,7 +118,6 @@ export const sessionBootstrapSchema = z.object({
 });
 
 export type SessionChatMessage = z.infer<typeof sessionChatMessageSchema>;
-export type ProjectArtifactStatus = z.infer<typeof projectArtifactStatusSchema>;
 export type ProjectArtifact = z.infer<typeof projectArtifactSchema>;
 export type ProjectSandbox = z.infer<typeof projectSandboxSchema>;
 export type SessionSummary = z.infer<typeof sessionSummarySchema>;
@@ -181,7 +176,7 @@ export function createWelcomeMessage(title?: string): SessionChatMessage {
     id: "init",
     role: "assistant",
     content: title
-      ? `已为您创建 PPT 项目【${title}】。这个会话现在以项目目录为沙箱：先整理 brief.md 的目的、受众和方向，再推进 outline.md、research/、slides/、design/ 与 deck/。`
-      : "已初始化一个 PPT 项目沙箱。我们会先明确目的、方向和受众，再沉淀大纲、资料、逐页方案，最后制作 PPT。",
+      ? `已为您创建 PPT 项目【${title}】。这个会话以项目目录为沙箱；新建演示将依次产出 design/design-spec.json、slides/page-plan.json 与 slides/svg/ 页面，并由预览、提案和应用记录证明进度。`
+      : "已初始化一个 PPT 项目沙箱。新建演示会以设计规范、逐页规划和完整页面 SVG 作为作者文件；Brief、大纲和研究资料按需使用。",
   };
 }

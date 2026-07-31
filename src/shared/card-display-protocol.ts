@@ -120,6 +120,9 @@ export const agentApprovalDiffSchema = z.object({
 
 export const agentApprovalRequestSchema = z.object({
   threadId: z.string().trim().min(1),
+  jobId: z.string().trim().min(1),
+  queryId: z.string().trim().min(1),
+  proposalId: z.string().trim().min(1),
   summary: z.string().trim().min(1),
   commands: z.array(presentationCommandSchema),
   risk: z.enum(["low", "medium", "high"]).optional(),

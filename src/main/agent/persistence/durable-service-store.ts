@@ -1,8 +1,6 @@
 import { join } from "node:path";
 import type { AgentExecutionStrategy, AgentModelSelection } from "@shared/agent";
-import type { PresentationCommand } from "@shared/commands";
 import type { AgentConversationMessage } from "@shared/session-recovery";
-import type { CommitGateResult } from "../gate/commit-gate";
 import { readJsonFile, writeJsonFileAtomic, writeTextFileAtomic } from "./atomic-json-file";
 import { ConversationDatabase } from "../../conversation-database";
 
@@ -14,23 +12,13 @@ interface DurableMemoryEntry {
   updatedAt: string;
 }
 
-export interface DurablePendingApproval {
-  commands: PresentationCommand[];
-  summary: string;
-  assumptions?: string[];
-  modelRisk: "low" | "medium" | "high";
-  baseRevision: number;
-  gate: CommitGateResult;
-}
-
 export interface DurableServiceThread {
   version: 1;
   threadId: string;
-  status: "active" | "waiting_user" | "waiting_approval" | "completed" | "rejected" | "interrupted";
+  status: "active" | "waiting_user" | "completed" | "rejected" | "interrupted";
   messages: AgentConversationMessage[];
   model?: AgentModelSelection;
   executionStrategy: AgentExecutionStrategy;
-  pendingApproval?: DurablePendingApproval;
   updatedAt: string;
 }
 

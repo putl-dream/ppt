@@ -119,15 +119,17 @@ Prompt stage 不可以：
 ## 7. 工作流信息的表达
 
 将冗长的“六阶段必须执行”替换为事实和建议。产品新建以 SVG-native 为准
-（见 `skills/ppt-workflow`）；下列示例反映**现行 prompt probe 投影**
-（仍以 brief/outline/storyboard 等为主，尚未全量换成 design-spec/page-plan/svg）：
+（见 `skills/ppt-workflow`）；现行 prompt probe 以 SVG-native 作者文件与
+Presentation lifecycle 投影为主，brief/outline/research 仅作为可选资料：
 
 ```text
 Workspace facts:
-- brief: verified
-- outline: missing
-- storyboard: missing
-- presentation: 3 slides
+- design-spec: verified
+- page-plan: verified
+- page-svg: 2 pages
+- assets: present
+- presentation: revision 3
+- ppt-job: waiting_user at page_svg
 
 Suggested skills:
 - ppt-workflow

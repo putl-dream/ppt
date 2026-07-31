@@ -19,6 +19,7 @@ export const conversationEventKindSchema = z.enum([
   "artifact_written",
   "assistant_completed",
   "run_started",
+  "query_started",
   "run_completed",
   "run_failed",
   "run_interrupted",

@@ -94,6 +94,7 @@ export class PreparedAgentRun {
       }
     }
     this.params = new AgentQueryAssembler().assemble({
+      queryId: input.scope.queryId,
       options,
       messages: input.scope.initialMessages,
       systemPrompt: input.systemPrompt,

@@ -11,6 +11,7 @@ import { formatPublicErrorMessage } from "@shared/agent-activity-display";
 import type { ChatMessage } from "../chatMessageRuntime";
 
 interface UseDeckExportOptions {
+  sessionId: string;
   presentation: Presentation | undefined;
   logoUrl: string | null;
   setChatMessages: Dispatch<SetStateAction<ChatMessage[]>>;
@@ -18,6 +19,7 @@ interface UseDeckExportOptions {
 }
 
 export function useDeckExport({
+  sessionId,
   presentation,
   logoUrl,
   setChatMessages,
@@ -26,7 +28,7 @@ export function useDeckExport({
   const [isExportingDeck, setIsExportingDeck] = useState(false);
 
   const exportDeck = useCallback(async () => {
-    if (!presentation || isExportingDeck) return;
+    if (!sessionId || !presentation || isExportingDeck) return;
     const needsApproval = hasUnverifiedCommercialAssets(presentation);
     const allowUnverifiedAssets = needsApproval
       ? window.confirm("演示文稿包含尚未核实商业授权的图片。是否明确批准本次导出？")
@@ -34,7 +36,7 @@ export function useDeckExport({
     if (needsApproval && !allowUnverifiedAssets) return;
     setIsExportingDeck(true);
     try {
-      const savedPath = await window.desktopApi.exportPresentation(presentation, {
+      const savedPath = await window.desktopApi.exportPresentation(sessionId, {
         logoUrl,
         allowUnverifiedAssets,
       });
@@ -64,7 +66,7 @@ export function useDeckExport({
     } finally {
       setIsExportingDeck(false);
     }
-  }, [isExportingDeck, logoUrl, notify, presentation, setChatMessages]);
+  }, [isExportingDeck, logoUrl, notify, presentation, sessionId, setChatMessages]);
 
   return { isExportingDeck, exportDeck };
 }
