@@ -12,6 +12,7 @@ import type {
   StopReason,
 } from "./types";
 import type { DriverResolvedConfig } from "./config";
+import type { AgentProviderDriver } from "./driver";
 
 function tokenCount(value: unknown): number {
   return typeof value === "number" && Number.isFinite(value) && value > 0
@@ -217,3 +218,8 @@ export async function* generateStreamWithAnthropic(
     ...(usage ? { usage } : {}),
   };
 }
+
+export const anthropicDriver = {
+  generate: generateWithAnthropic,
+  generateStream: generateStreamWithAnthropic,
+} satisfies AgentProviderDriver;

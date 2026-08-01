@@ -1,9 +1,10 @@
 import type { AgentModelSelection, AgentModelSettings, AgentProvider } from "@shared/agent";
 import type { AgentGatewayConfig } from "@shared/agent-gateway-config";
 import { resolveAgentGatewayConfig } from "@shared/agent-gateway-config";
-import { generateWithAnthropic, generateStreamWithAnthropic } from "./anthropic";
+import { anthropicDriver } from "./anthropic";
 import { resolveAgentModelConfig, type DriverResolvedConfig } from "./config";
-import { generateWithOpenAI, generateStreamWithOpenAI } from "./openai";
+import type { AgentProviderDriver } from "./driver";
+import { openaiDriver } from "./openai";
 import { AgentGatewayError, normalizeProviderError } from "./errors";
 import {
   prepareAgentModelRequest,
@@ -21,6 +22,23 @@ import { textFromContentBlocks } from "./content-blocks";
 import type { ModelUsageRecord } from "../../token-usage-store";
 
 const logger = createModuleLogger("gateway");
+
+const DRIVERS = {
+  openai: openaiDriver,
+  anthropic: anthropicDriver,
+} satisfies Record<AgentProvider, AgentProviderDriver>;
+
+function resolveDriver(provider: AgentProvider): AgentProviderDriver {
+  const driver = DRIVERS[provider];
+  if (!Object.hasOwn(DRIVERS, provider) || !driver) {
+    throw new AgentGatewayError(
+      `No provider driver registered for ${provider}.`,
+      "configuration",
+      provider,
+    );
+  }
+  return driver;
+}
 
 export class AgentGateway implements AgentModelGateway {
   private readonly runtimeSettings: Partial<Record<AgentProvider, AgentModelSettings>> = {};
@@ -96,6 +114,7 @@ export class AgentGateway implements AgentModelGateway {
 
     try {
       config = this.resolveConfig(selection);
+      const driver = resolveDriver(config.provider);
       const preparedRequest = prepareAgentModelRequest(request, config);
       logger.info("model.request.started", {
         gatewayRequestId,
@@ -108,9 +127,7 @@ export class AgentGateway implements AgentModelGateway {
         maxOutputTokens: preparedRequest.maxOutputTokens,
       });
 
-      const response = config.provider === "openai"
-        ? await generateWithOpenAI(config, preparedRequest)
-        : await generateWithAnthropic(config, preparedRequest);
+      const response = await driver.generate(config, preparedRequest);
       validateAgentModelResponse(response, config);
 
       if (response.usage) {
@@ -158,6 +175,7 @@ export class AgentGateway implements AgentModelGateway {
 
     try {
       config = this.resolveConfig(selection);
+      const driver = resolveDriver(config.provider);
       const preparedRequest = prepareAgentModelRequest(request, config);
       logger.info("model.stream.started", {
         gatewayRequestId,
@@ -172,9 +190,7 @@ export class AgentGateway implements AgentModelGateway {
 
       let totalLength = 0;
       let completed = false;
-      const generator = config.provider === "openai"
-        ? generateStreamWithOpenAI(config, preparedRequest)
-        : generateStreamWithAnthropic(config, preparedRequest);
+      const generator = driver.generateStream(config, preparedRequest);
 
       for await (const chunk of generator) {
         if (completed) {

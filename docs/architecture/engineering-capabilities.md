@@ -121,6 +121,8 @@ provider SDK。
 `anthropic.ts` 与 `openai.ts` 是 Gateway 私有的 SDK 适配器，只被 `AgentGateway`
 调用。它们负责统一消息与 SDK 类型的双向映射、一次 SDK 调用、原生流事件转换和
 `stopReason` 映射，不得在 driver 内做隐藏重试或跨 attempt 合并 usage。
+`AgentGateway` 通过显式 `AgentProviderDriver` 注册表管理和调度这些驱动；各 driver
+内部的 SDK content type / role 映射差异属于 provider 方言，不在 Gateway 合并统一。
 `openaiApiMode` 是 driver 私有配置，不出现在 `ResolvedAgentModelConfig`。
 
 **Runtime 恢复：**

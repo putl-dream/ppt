@@ -10,11 +10,19 @@ const providerMocks = vi.hoisted(() => ({
 vi.mock("../src/main/agent/gateway/openai", () => ({
   generateWithOpenAI: providerMocks.openai,
   generateStreamWithOpenAI: providerMocks.openaiStream,
+  openaiDriver: {
+    generate: providerMocks.openai,
+    generateStream: providerMocks.openaiStream,
+  },
 }));
 
 vi.mock("../src/main/agent/gateway/anthropic", () => ({
   generateWithAnthropic: providerMocks.anthropic,
   generateStreamWithAnthropic: providerMocks.anthropicStream,
+  anthropicDriver: {
+    generate: providerMocks.anthropic,
+    generateStream: providerMocks.anthropicStream,
+  },
 }));
 
 import { AgentGateway } from "../src/main/agent/gateway";
@@ -94,6 +102,48 @@ describe("AgentGateway", () => {
     expect(selection).not.toHaveProperty("apiKey");
     expect(providerMocks.anthropic).toHaveBeenCalledOnce();
     expect(providerMocks.openai).not.toHaveBeenCalled();
+  });
+
+  it("routes an Anthropic stream through the registered driver", async () => {
+    providerMocks.anthropicStream.mockImplementation(async function* () {
+      yield { type: "text_delta", text: "hello" };
+      yield { type: "complete", content: [{ type: "text", text: "hello" }] };
+    });
+    const gateway = new AgentGateway();
+    const selection = gateway.configure({
+      provider: "anthropic",
+      model: "anthropic-test",
+      apiKey: "secret",
+    });
+    const chunks = [];
+
+    for await (const chunk of gateway.generateTextStream({ prompt: "Hello" }, selection)) {
+      chunks.push(chunk);
+    }
+
+    expect(chunks).toEqual([
+      { type: "text_delta", text: "hello" },
+      { type: "complete", content: [{ type: "text", text: "hello" }] },
+    ]);
+    expect(providerMocks.anthropicStream).toHaveBeenCalledOnce();
+    expect(providerMocks.openaiStream).not.toHaveBeenCalled();
+  });
+
+  it("rejects a provider without a registered driver", async () => {
+    const unsupportedProvider = "unsupported" as "openai";
+    const gateway = new AgentGateway();
+    const selection = gateway.configure({
+      provider: unsupportedProvider,
+      model: "unsupported-test",
+      apiKey: "secret",
+    });
+
+    await expect(gateway.generateText({ prompt: "Hello" }, selection)).rejects.toMatchObject({
+      code: "configuration",
+      provider: "unsupported",
+    });
+    expect(providerMocks.openai).not.toHaveBeenCalled();
+    expect(providerMocks.anthropic).not.toHaveBeenCalled();
   });
 
   it("records configuration IDs for regular and streaming usage", async () => {
