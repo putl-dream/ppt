@@ -129,14 +129,3 @@ export function readFrontmatterStringList(
   }
   return undefined;
 }
-
-export function readFrontmatterBoolean(
-  frontmatter: Record<string, unknown>,
-  key: string,
-): boolean | undefined {
-  const value = frontmatter[key];
-  if (typeof value === "boolean") return value;
-  if (value === "true") return true;
-  if (value === "false") return false;
-  return undefined;
-}

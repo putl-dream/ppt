@@ -223,7 +223,7 @@ Key areas:
 - `src/shared/`: presentation model, command model, session and IPC types
 - `src/main/project/`: local project sandbox, artifact IO, diffs, dependency status
 - `src/main/deck/`: thumbnails, export history, PPTX export services
-- `skills/`: `ppt-workflow`, `ppt-design`, `ppt-build`, `ppt-edit`, `ppt-beautify`, `deck-review`, and related skills
+- `skills/`: core create `ppt-workflow` → `ppt-design` → `ppt-design-layout` → `ppt-build`; short paths `ppt-edit` / `ppt-beautify` / `deck-review` / `ppt-export`; optional upstream `ppt-brief` / `ppt-outline` / `ppt-storyboard` / `ppt-research`
 - `tests/`: coverage for Agent behavior, export, context compaction, approvals, and project artifacts
 
 ## Local Files And Privacy

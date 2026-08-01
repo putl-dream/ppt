@@ -6,11 +6,6 @@ stages:
   - discover
   - design
   - style
-allowed-tools:
-  - BeginPptCapability
-  - ReadFile
-  - WriteFile
-  - GetDesignReference
 ---
 
 # SVG-native 设计锁

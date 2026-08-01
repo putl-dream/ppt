@@ -11,7 +11,7 @@ stages:
 
 ## 目标
 
-teammate 自主领取任务并维护精简的 `research/notes.md`——事实清单，不是报告。
+由主 Agent 直接维护精简的 `research/notes.md`——事实清单，不是报告。默认跳过本阶段；仅用户提供资料或明确要求调研时执行。
 
 ## research/notes.md 结构
 
@@ -29,15 +29,14 @@ teammate 自主领取任务并维护精简的 `research/notes.md`——事实清
 ## 工作流
 
 1. 仅当用户提供了资料或明确要求调研时才执行。
-2. teammate 读取 `brief.md` 主题方向。
-3. 需要外部事实或最新资料时：teammate 使用 `web_search`，lead Agent 使用 `WebSearch`；
-   重要结论至少交叉核验两个来源。需要视觉素材候选时可设置 `include_images: true`；
-   图片结果仅用于发现，必须保留来源并核对授权后才能进入 deck。
-4. 结构化写入 notes；每条事实标注来源 URL。
-5. teammate 调用 `TaskReviewRequest`，并摘要事实条数 + 待核实项；lead 使用 approve/reject 验收。
+2. 用 `ReadFile` 读取 `brief.md` 主题方向（若存在）。
+3. 需要外部事实或最新资料时使用 `WebSearch`；重要结论至少交叉核验两个来源。需要视觉素材候选时可设置 `include_images: true`；图片结果仅用于发现，必须保留来源并核对授权后才能进入 deck。
+4. 用 `WriteFile` 结构化写入 notes；每条事实标注来源 URL。
+5. 向用户摘要事实条数与待核实项。
 
 ## 约束
 
 - 默认跳过此阶段；小型 PPT 不需要 research。
 - notes 是素材清单，不是幻灯片正文。
 - 不把未核实数据写成定论。
+- 本技能由主 Agent 直接执行；不要为此阶段 `spawn_teammate` 或走 Task 验收回路。

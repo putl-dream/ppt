@@ -46,7 +46,7 @@
 | 持久化与恢复 | **Implemented** | `src/main/agent/persistence/`、`src/main/agent/runtime/lifecycle/checkpoint-coordinator.ts` |
 | Web / 图片检索 | **Implemented** | `src/main/agent/search/`、`src/main/agent/tools/core/web-search.ts`、`src/main/agent/tools/core/search-slide-images.ts` |
 | SVG-native 创建 | **Implemented** | `skills/ppt-workflow/`、`preview-svg-page.ts`、`submit-svg-deck.ts` |
-| Layout Grammar / element-IR | **Unregistered** | 产品作者表面已下架；共享库与未注册实现可能仍残留待清理 |
+| Layout Grammar / element-IR | **Not adopted** | 作者工具与共享库已从仓库删除；产品 STRICT SVG-only。空 Deferred 壳（`SearchExtraTools` / `ExecuteExtraTool`）有意保留且不进默认注册表 |
 | 渲染反馈与质量门 | **Implemented** | deck validators、quality gate、`PreviewSvgPage` 预览门禁 |
 | Artifact / Job 生命周期 | **Implemented** | `src/shared/presentation-lifecycle.ts`、`src/main/presentation-lifecycle/` |
 | MCP / Plugin / LSP | **Not adopted** | 无对应产品入口 |
@@ -243,8 +243,9 @@ immutable Artifact Revision，也不把一次保存自动解释为 `ready/verifi
 | Hook | 在确定执行点观察、阻塞或补充行为 | 修改 canonical state 的任意旁路 |
 
 Prompt 采用稳定前缀和动态后缀，section 顺序与 cache key 由 assembler 管理。PPT 的
-`ppt-workflow`（SVG-native 新建）、design、layout、beautify、review、export 等 Skill
-是渐进式知识包；stage policy 只改变推荐度，不应把其他安全工具变为不可用。
+`ppt-workflow`（SVG-native 新建）、`ppt-design`、`ppt-design-layout`、`ppt-build`、
+`ppt-edit`、`ppt-beautify`、`deck-review`、`ppt-export` 等 Skill 是渐进式知识包；
+`stages` frontmatter 是唯一推荐真相源，只改变推荐度，不应把其他安全工具变为不可用。
 
 ### 3.7 多 Agent、任务与后台工作
 
@@ -299,7 +300,8 @@ Agent PPT 的产品价值来自以下领域层。
 - HTML 预览、Renderer 镜像与 PPTX 导出使用 SVG-native Presentation 模型。
 
 SVG-native 路径下模型直接写作完整页面 SVG；产品作者表面不含 layout handler、
-element-IR 或 Grammar 工具。共享库残骸不得写成「仓库已删除」。
+element-IR 或 Grammar 工具。Grammar / layout-plan 共享库与未注册实现已从仓库删除；
+空 Deferred 平台（搜索/委托壳）属有意工程保留，见 [Tool 系统](../agent/tools.md)。
 
 ### 4.3 提案、质量与交付
 
@@ -393,7 +395,18 @@ dev 数据策略见
 
 文档更新至少应检查 Markdown 相对链接和代码路径是否存在。真实网关测试需要凭据，PPTX 视觉验收需要生成 artifact 后人工检查，二者不能被普通单元测试替代。
 
-## 8. 维护规则
+## 8. 清扫收工后的工作流划分
+
+Grammar / 未接线双轨 / 频谱残骸清扫已结束。后续不要再开「扫死代码」轮次覆盖下列事项：
+
+| 类别 | 内容 | 入口 |
+|---|---|---|
+| **产品主线** | 模板管理与自动选择（已选定） | [template-management.md](../roadmap/template-management.md) |
+| **远期导出** | 原生可编辑图表/形状 | [visual-system.md](../presentation/visual-system.md) §6；不与模板争主线 |
+| **有意保留** | 空 Deferred 壳、`evaluation.ts`、Skill `allowed-tools` 不 enforce | [tools.md](../agent/tools.md)、design-system/evaluation |
+| **风险 backlog** | 凭据明文、daemon、E2E/Office 证据、AppData 迁移 | [capability-scorecard.md](./capability-scorecard.md) |
+
+## 9. 维护规则
 
 - 能力状态必须由代码和验证入口支持，目录存在不等于 **Implemented**；
 - 新能力只有在改善 PPT 主链路正确性时才进入本表；

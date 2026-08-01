@@ -4,7 +4,6 @@ import { normalizePromptStage, type PromptStage } from "../runtime/prompts/promp
 import type { SkillCard, SkillEntry, SkillFrontmatter } from "./skill-types";
 import {
   parseSkillFrontmatterFields,
-  readFrontmatterBoolean,
   readFrontmatterString,
   readFrontmatterStringList,
 } from "./parseSkillFrontmatterFields";
@@ -40,12 +39,6 @@ function buildFrontmatter(
     description,
     when_to_use: whenToUse,
     stages: readFrontmatterStages(raw),
-    allowedTools: readFrontmatterStringList(raw, "allowed-tools"),
-    context: readFrontmatterString(raw, "context") === "fork" ? "fork" : "inline",
-    model: readFrontmatterString(raw, "model"),
-    hooks: raw.hooks,
-    paths: readFrontmatterStringList(raw, "paths"),
-    userInvocable: readFrontmatterBoolean(raw, "user-invocable"),
   };
 }
 

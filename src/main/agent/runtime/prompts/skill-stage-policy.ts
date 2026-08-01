@@ -2,29 +2,16 @@ import type { SkillCard, SkillEntry } from "../../skills/skill-types";
 import type { PromptStage } from "./prompt-stage";
 import { normalizePromptStage } from "./prompt-stage";
 
-/** Default recommended stages per skill (overridable via SKILL.md frontmatter). */
-export const DEFAULT_SKILL_STAGES: Record<string, PromptStage[]> = {
-  "ppt-workflow": ["discover", "author"],
-  "ppt-brief": ["discover"],
-  "ppt-outline": ["discover", "author"],
-  "ppt-storyboard": ["discover", "author"],
-  "ppt-research": ["discover", "author"],
-  "ppt-build": ["author"],
-  "ppt-edit": ["author", "edit"],
-  "ppt-design": ["author", "design", "style"],
-  "ppt-design-layout": ["author", "design"],
-  "ppt-layout": ["author", "design", "style"],
-  "ppt-beautify": ["style"],
-  "deck-review": ["style", "export"],
-  "ppt-export": ["export", "style"],
-};
-
+/**
+ * Resolve recommended stages from SKILL.md frontmatter only.
+ * Missing or empty stages means the skill is never marked as recommended.
+ */
 export function resolveSkillStages(entry: SkillEntry): PromptStage[] {
   const fromFrontmatter = entry.frontmatter.stages;
-  if (fromFrontmatter && fromFrontmatter.length > 0) {
-    return fromFrontmatter.map((stage) => normalizePromptStage(stage));
+  if (!fromFrontmatter || fromFrontmatter.length === 0) {
+    return [];
   }
-  return DEFAULT_SKILL_STAGES[entry.name] ?? ["discover"];
+  return fromFrontmatter.map((stage) => normalizePromptStage(stage));
 }
 
 export function isSkillRecommendedForStage(
@@ -32,9 +19,9 @@ export function isSkillRecommendedForStage(
   stage: PromptStage,
   entry?: SkillEntry,
 ): boolean {
-  const stages = entry ? resolveSkillStages(entry) : DEFAULT_SKILL_STAGES[skillName];
-  if (!stages) return false;
-  return stages.includes(stage);
+  void skillName;
+  if (!entry) return false;
+  return resolveSkillStages(entry).includes(stage);
 }
 
 export function rankSkillCatalogForStage(

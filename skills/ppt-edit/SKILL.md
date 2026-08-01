@@ -5,14 +5,6 @@ when_to_use: deck 已存在，用户要求修改某页、替换图片、调整�
 stages:
   - author
   - edit
-allowed-tools:
-  - BeginPptCapability
-  - ListSlides
-  - ReadCurrentSlide
-  - ReadFile
-  - WriteFile
-  - PreviewSvgPage
-  - SubmitSvgDeck
 ---
 
 # SVG 作者源编辑

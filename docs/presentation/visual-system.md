@@ -112,13 +112,28 @@ shape / chart parts。图表应画在页面 SVG 内，与预览同源。
 
 ## 9. 当前剩余工作
 
+Grammar / 双轨 / 频谱残骸清扫已收工。以下按工作流分类，**不要**再当作「扫死代码」继续切。
+
+### 9.1 产品主线（已选定）：模板管理
+
+下一产品立项优先 [template-management.md](../roadmap/template-management.md)
+（Proposed）：内置模板 catalog、项目 template policy、与 `design/design-spec.json` 单锁对齐。
+原生可编辑图表/形状（§6）保持远期目标，**不**与模板争主线。
+
+### 9.2 视觉与内容增强（模板落地后或并行小项）
+
 - 默认 project artifact / workspace probe 与 SVG-native 作者文件对齐；
 - captioned image 建立独立内容模型；
 - deck-review 增强母题、锚点、密度和页面差异度；
-- 从内容自动推导 Brand Profile，并允许用户自然语言调节；
-- 继续避免把已移除或未接线模块写成现行能力。
+- 从内容自动推导 Brand Profile，并允许用户自然语言调节。
 
-### Grammar / element-IR 作者表面（已下架）
+### 9.3 风险 backlog（独立专项）
+
+凭据明文存储、后台 daemon、E2E/Office 视觉证据、AppData 迁移——见
+[capability-scorecard.md](../architecture/capability-scorecard.md)「风险 backlog」表；
+不并入清理轮，也不阻塞模板 Phase 1。
+
+### Grammar / element-IR 作者表面（已移除）
 
 默认注册表不含 Grammar/命令轨作者工具；Deferred 发现面为空，且默认不注册
 `SearchExtraTools` / `ExecuteExtraTool`（`tests/svg-native-tool-surface.test.ts`）。

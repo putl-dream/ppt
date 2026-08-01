@@ -196,7 +196,7 @@ PresentationRevisionId + options + destination
 
 默认项目 artifact / probe 已以 design-spec、page-plan、Page SVG、assets、deck 与
 export history 为第一公民。brief、outline、research 是可选资料；
-storyboard/layout-plan 只保留非新建旁路，不是 lifecycle 事实源。
+storyboard 是可选叙事上游，不是 lifecycle 事实源；layout-plan 只保留遗留旁路。
 
 所有 Agent 与项目编辑入口复用 artifact change 观察逻辑：
 
@@ -227,7 +227,7 @@ Query checkpoint 与 PptJob persistence 正交：
 
 - 产品创建仅为 Agent SVG-native。
 - 不把已下线的「Lean commercial compiler」叙事当作 lifecycle 入口或 stage 依据。
-- Layout Plan / storyboard 可服务遗留或非新建旁路，但不是新建事实源。
+- storyboard 是可选叙事上游；Layout Plan 仅遗留旁路；二者都不是新建事实源。
 - 不为旧 AppData、session 或 workspace 添加 backfill、hydrate、双写或启动迁移。
 
 ## 12. 关键实现

@@ -36,13 +36,13 @@ stages:
 # Build
 `;
 
-const LAYOUT_SKILL = `---
-name: ppt-layout
-description: Apply visual layout
+const STYLE_SKILL = `---
+name: ppt-beautify
+description: Polish visual style
 stages:
   - style
 ---
-# Layout
+# Beautify
 `;
 
 function emptyArtifacts() {
@@ -125,7 +125,7 @@ describe("system prompt assembly", () => {
   it("shows every registered skill while ranking current recommendations first", () => {
     const registry = createEmptySkillRegistry();
     registerSkillFromContent(registry, "/tmp/build", "ppt-build", SAMPLE_SKILL);
-    registerSkillFromContent(registry, "/tmp/layout", "ppt-layout", LAYOUT_SKILL);
+    registerSkillFromContent(registry, "/tmp/beautify", "ppt-beautify", STYLE_SKILL);
 
     const text = assembleSystemPrompt(baseContext({
       stage: "author",
@@ -134,15 +134,15 @@ describe("system prompt assembly", () => {
     })).text;
 
     expect(text).toContain("`ppt-build` [当前上下文推荐]");
-    expect(text).toContain("`ppt-layout`");
-    expect(text).not.toContain("`ppt-layout` [当前上下文推荐]");
-    expect(text.indexOf("`ppt-build`")).toBeLessThan(text.indexOf("`ppt-layout`"));
+    expect(text).toContain("`ppt-beautify`");
+    expect(text).not.toContain("`ppt-beautify` [当前上下文推荐]");
+    expect(text.indexOf("`ppt-build`")).toBeLessThan(text.indexOf("`ppt-beautify`"));
     expect(text).toContain("任何已注册 Skill 都保留");
   });
 
   it("allows loading a skill outside its suggested stage", async () => {
     const registry = createEmptySkillRegistry();
-    registerSkillFromContent(registry, "/tmp/layout", "ppt-layout", LAYOUT_SKILL);
+    registerSkillFromContent(registry, "/tmp/beautify", "ppt-beautify", STYLE_SKILL);
     const context = {
       presentation: createStarterPresentation(),
       selectedElementIds: [],
@@ -155,10 +155,10 @@ describe("system prompt assembly", () => {
     };
 
     const result = await loadSkillTool.execute(
-      { skillName: "ppt-layout" },
+      { skillName: "ppt-beautify" },
       context as any,
     );
-    expect(result.name).toBe("ppt-layout");
+    expect(result.name).toBe("ppt-beautify");
     expect(result.guidance).toContain("not normally suggested");
   });
 

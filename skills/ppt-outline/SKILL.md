@@ -11,9 +11,9 @@ stages:
 
 ## 目标
 
-teammate 自主领取任务并创建精简 `outline.md`，为 storyboard 提供带叙事弧的章节骨架。
+由主 Agent 直接创建精简 `outline.md`，为后续 storyboard 或 page-plan 提供带叙事弧的章节骨架。本技能不写 SVG，也不提交 deck。
 
-## 叙事弧（guizang 适配）
+## 叙事弧
 
 ```
 钩子 Hook     → 1 页
@@ -23,7 +23,7 @@ teammate 自主领取任务并创建精简 `outline.md`，为 storyboard 提供�
 收束 Takeaway → 1–2 页
 ```
 
-详细叙事结构见 brief 中的页数分配；版式节奏在排版设计阶段再定。
+详细叙事结构见 brief 中的页数分配；版式节奏在 `ppt-design-layout` / `ppt-build` 阶段再定。
 
 ## outline.md 结构
 
@@ -48,11 +48,11 @@ teammate 自主领取任务并创建精简 `outline.md`，为 storyboard 提供�
 
 ## 工作流
 
-1. teammate 读取 `brief.md`（需求已清晰且无 brief 时，可内联推断）。
+1. 用 `ReadFile` 读取 `brief.md`（需求已清晰且无 brief 时，可内联推断）。
 2. 按 brief 时长→页数拆章节；顺序：Hook → Context → Core → Shift → Takeaway。
 3. 每章标注是否需 `section` 分隔页。
-4. 写回 `outline.md`。
-5. teammate 调用 `TaskReviewRequest`，并摘要章节数、总页数、1 处待确认项（若有）；lead 使用 approve/reject 验收。
+4. 用 `WriteFile` 写回 `outline.md`。
+5. 向用户摘要章节数、总页数，以及最多 1 处待确认项（若有）。
 
 ## 质量
 
@@ -62,4 +62,4 @@ teammate 自主领取任务并创建精简 `outline.md`，为 storyboard 提供�
 
 ## 衔接
 
-完成后 LoadSkill `ppt-storyboard`。
+复杂或长篇演示完成后可 LoadSkill `ppt-storyboard`；简单 deck 可跳过 storyboard，进入 `ppt-design` → `ppt-design-layout`。

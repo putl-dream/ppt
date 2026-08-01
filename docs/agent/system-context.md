@@ -114,7 +114,9 @@ Prompt stage 不可以：
 - 强制模型先生成固定 artifact；
 - 代替模型判断简单任务是否应跳过完整流程。
 
-`stages:` frontmatter 是 `recommendedStages`，不是 authorization allow-list。
+`stages:` frontmatter 是唯一的 `recommendedStages` 真相源（不再有代码内默认表覆盖），
+也不是 authorization allow-list。Skill frontmatter 不含工具 ACL；权限只由工具注册与
+permission 管线决定。
 
 ## 7. 工作流信息的表达
 

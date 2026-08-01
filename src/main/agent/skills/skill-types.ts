@@ -1,10 +1,13 @@
 import type { PromptStage } from "../runtime/prompts/prompt-stage";
 
 /**
- * Skill catalog and session types for the two-layer load_skill design.
+ * Skill catalog and session types for the two-layer LoadSkill design.
  *
  * Layer 1: SkillCard[] injected into system prompt (~100 tokens/skill).
  * Layer 2: full SKILL.md body returned via LoadSkill tool (~2000 tokens/skill, on demand).
+ *
+ * Frontmatter is advisory metadata only: name/description/when_to_use/stages.
+ * Skills do not grant tool permissions or change runtime ACL.
  */
 
 export interface SkillFrontmatter {
@@ -13,14 +16,6 @@ export interface SkillFrontmatter {
   when_to_use?: string;
   /** Advisory prompt stages used only to rank and recommend this skill. */
   stages?: PromptStage[];
-  /** Tool names the skill may auto-allow when applied */
-  allowedTools?: string[];
-  context?: "inline" | "fork";
-  model?: string;
-  hooks?: unknown;
-  /** Glob patterns for conditional activation */
-  paths?: string[];
-  userInvocable?: boolean;
 }
 
 /** Lightweight catalog entry for system prompt injection */

@@ -28,10 +28,10 @@
 | B. 安全与一致性 | 20% | **7.6** | 1.52 |
 | C. Presentation / SVG 领域 | 20% | **6.4** | 1.28 |
 | D. 产品体验与交付（含 CSS 主题） | 20% | **6.3** | 1.26 |
-| E. 工程卫生与可运营 | 15% | **5.6** | 0.84 |
-| **综合** | 100% | | **6.9 / 10** |
+| E. 工程卫生与可运营 | 15% | **6.2** | 0.93 |
+| **综合** | 100% | | **7.0 / 10** |
 
-**一句话：** 工程内核 Solid（约 8），工作台 CSS/主题 Solid（约 7.2），产品交付 Early（约 6.3），综合 **6.9（Early–Solid 交界）**。
+**一句话：** 工程内核 Solid（约 8），工作台 CSS/主题 Solid（约 7.2），产品交付 Early（约 6.3），综合 **7.0（Early–Solid 交界）**。Grammar 残骸清扫已收工；短板转向模板产品与风险专项。
 
 ```mermaid
 quadrantChart
@@ -65,7 +65,7 @@ quadrantChart
 | Model Gateway | **8.0** | Solid | Anthropic+OpenAI 中性协议；错误/路由/流测较全 |
 | 模型调用恢复 | **8.0** | Solid | 压缩、截断续写、fallback、thinking-only 恢复 |
 | Context 压缩与预算 | **8.0** | Solid | micro/snip/canonical/emergency 分层 |
-| System Prompt / Skill | **7.5** | Solid | Section Registry；Skill 建议化正确；叙事 Skill 并存有干扰 |
+| System Prompt / Skill | **8.0** | Solid | Section Registry；Skill 建议化；stages 仅 frontmatter；叙事 Skill 已收敛为 Lead 直写 |
 | 动态工具系统 | **8.0** | Solid | Core/Deferred/Runtime；统一 permission/hook 管线 |
 | Task / Teammate | **6.5** | Early | 基本协作在；非作者主路径，产品闭环浅 |
 | 后台执行平台 | **4.5** | Fragile | manager 有；无 daemon/跨进程/退出语义（文档 Partial） |
@@ -137,20 +137,20 @@ quadrantChart
 
 ---
 
-## E. 工程卫生与可运营（类均 5.6）
+## E. 工程卫生与可运营（类均 6.2）
 
 | 维度 | 分 | 等级 | 依据摘要 |
 |---|---|---|---|
 | 架构文档与契约 | **8.0** | Solid | docs 索引、能力地图与代码大体对齐 |
 | CSS/主题文档与测试 | **7.5** | Solid | ui-themes 架构+手册；`ui-themes.test.ts` / `user-ui-theme.test.ts` |
 | README / 对外叙事准确性 | **5.0** | Early | 仍有双路径/原生元素等过时表述 |
-| 死代码 / Grammar 清理 | **4.0** | Fragile | 作者面已切 SVG；库与未注册工具仍在树内 |
+| 死代码 / Grammar 清理 | **7.5** | Solid | 作者工具与 Grammar/layout 共享库已删；空 Deferred 壳有意保留且不进默认注册表 |
 | 单元测试密度 | **7.5** | Solid | ~140 tests；Runtime/Gate/生命周期/主题覆盖好 |
 | 集成 / E2E 质量证据 | **3.5** | Fragile | 仅可选网关集成；视觉/Office 人工；主题多为手工验收 |
 | 可观测性（日志/关联） | **6.0** | Early | JSONL + 关联身份；无 metrics 平台 |
 | 数据迁移 / 升级耐久 | **3.0** | Fragile | dev 明确不迁移旧 AppData |
 | Typecheck / 构建纪律 | **8.0** | Solid | strict TS；typecheck+build 脚本清晰 |
-| **E 类均** | **5.6** | | 纳入 CSS 文档/测试后微升 |
+| **E 类均** | **6.2** | | Grammar 清扫完成后卫生分回升；E2E/迁移仍拖后腿 |
 
 ---
 
@@ -163,8 +163,8 @@ quadrantChart
 | SVG/领域管线 | 6.4 |
 | 产品交付（含 CSS） | 6.3 |
 | 其中：工作台 CSS/主题 | **7.2** |
-| 工程可运营 | 5.6 |
-| **综合加权** | **6.9** |
+| 工程可运营 | 6.2 |
+| **综合加权** | **7.0** |
 
 最高：**Query / CommitGate / 文件 CAS（8.5）**；**UI↔DesignSystem 分离（8.5）**。  
 最低：**模板（2.5）、数据迁移（3.0）、E2E 质量证据（3.5）**。  
@@ -176,17 +176,34 @@ CSS 谷底：**主题包本地资源（4.5）、CSS sanitize（5.5）**——多
 
 | 问题 | 答案 |
 |---|---|
-| 综合多少分？ | **6.9 / 10**（纳入 CSS 后由 6.7 微升） |
+| 综合多少分？ | **7.0 / 10**（Grammar 清扫收工后工程卫生回升） |
 | CSS/主题多少分？ | **7.2 / 10（Solid）**——token/区域契约与加载链路成熟；资源包与消毒不做 |
 | 最强什么？ | Agent 协议、CommitGate、文件 CAS、UI/幻灯片视觉轴分离 |
 | 最弱什么？ | 模板、迁移、E2E 视觉/Office 证据、凭据存放 |
 | 怎么用这个分？ | 按「严肃本地 Agent×PPT + 可换肤工作台」合理；按「主题市场/生产 SaaS」会高估 |
 
-提分顺序（不扩范围）：
+### 下一工作流（清扫已收工；勿再并入死代码轮次）
 
-1. README/死代码与 STRICT SVG 对齐
-2. 真实网关 + 导出人工验收矩阵
-3. 若需要主题氛围图，再评估本地 `url()` 资源加载（仍保持无远程主题）
+**产品主线（已选定）：模板管理**  
+优先落地 [template-management.md](../roadmap/template-management.md)（Proposed → 实现）：内置 catalog、项目 policy、与 `design-spec` 单锁对齐。  
+**不**把「PPTX 原生可编辑图表/形状」并作本轮主线——现行整页 SVG 导出可接受；原生图表另开导出专项。
+
+**风险 backlog（独立专项，不并入清理轮）：**
+
+| 项 | 当前分 | 说明 |
+|---|---|---|
+| 凭据明文 | 4.5 | API keys 在 localStorage；需 OS keychain / 安全存储专项 |
+| 后台 daemon / 跨进程 | 4.5 | 现有 background manager ≠ daemon；退出/恢复语义另开平台专项 |
+| E2E / 商业视觉证据 | 3.5 | 网关集成 + 导出人工矩阵；`evaluation.ts` 不是产品门禁 |
+| Office 兼容矩阵 | 4.0 | 人工验收为主 |
+| AppData 迁移 | 3.0 | 当前无 backfill；是否做由产品决定 |
+
+提分顺序：
+
+1. 模板协议 Phase 1（产品主线）
+2. 真实网关 + 导出人工验收矩阵（风险/质量 backlog）
+3. 凭据存储专项（安全 backlog）
+4. 若需要主题氛围图，再评估本地 `url()` 资源加载（仍保持无远程主题）
 
 ## 维护
 

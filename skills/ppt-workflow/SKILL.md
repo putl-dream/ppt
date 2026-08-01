@@ -6,12 +6,6 @@ stages:
   - discover
   - author
   - design
-allowed-tools:
-  - BeginPptCapability
-  - ReadFile
-  - WriteFile
-  - PreviewSvgPage
-  - SubmitSvgDeck
 ---
 
 # SVG-native 端到端工作流

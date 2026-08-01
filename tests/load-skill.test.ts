@@ -26,10 +26,6 @@ when_to_use: User asks for a PR or code review
 stages:
   - author
   - discover
-allowed-tools:
-  - Read
-  - Grep
-context: inline
 ---
 
 # Code Review

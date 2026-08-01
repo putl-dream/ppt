@@ -5,8 +5,6 @@ when_to_use: 用户询问如何导出、下载或生成最终 pptx 文件时
 stages:
   - export
   - style
-allowed-tools:
-  - ListSlides
 ---
 
 # 导出 SVG-native PPTX

@@ -1,10 +1,12 @@
 # Presentation 模板管理与自动选择路线图
 
 > 文档类型：活跃提案
-> 状态：Proposed，尚未成为现行代码事实
+> 状态：Proposed，**已选定为清扫收工后的下一产品主线**（尚未成为现行代码事实）
 > 最后更新：2026-08-01
 >
 > 说明：本文件仅为提案；仓库中尚无独立模板领域模块。勿因 roadmap 存在而当作已实现。
+> 产品优先级：优先于「PPTX 原生可编辑图表」专项；风险项（凭据/daemon/E2E）另见
+> [capability-scorecard.md](../architecture/capability-scorecard.md) 风险 backlog，不阻塞本提案 Phase 1。
 > 产品创建路径以 [工作流](../presentation/workflow.md) 的 SVG-native 为准；
 > ArtifactRevision / PptJob 以 [Presentation Artifact 与 Job 生命周期](./presentation-lifecycle.md)
 > （Implemented）为准。

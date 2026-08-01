@@ -17,9 +17,11 @@ decisions here. Read this file before making any changes.
   - `src/shared/`: presentation model, command model, session and IPC types
   - `src/main/project/`: local project sandbox, artifact IO, diffs
   - `src/main/deck/`: thumbnails, export history, PPTX export
-  - `skills/`: SVG-native workflow skills (`ppt-workflow`, `ppt-design`,
-    `ppt-design-layout`, `ppt-build`, `ppt-edit`, `ppt-beautify`, `deck-review`,
-    plus optional brief / outline / storyboard / research / export)
+  - `skills/`: SVG-native workflow skills. Core create:
+    `ppt-workflow` → `ppt-design` → `ppt-design-layout` → `ppt-build`. Short
+    paths: `ppt-edit`, `ppt-beautify`, `deck-review`, `ppt-export`. Optional
+    upstream: `ppt-brief`, `ppt-outline`, `ppt-storyboard`, `ppt-research`.
+    Loader code lives in `src/main/agent/skills/` (scan/registry only).
   - `tests/`: unit tests; files matching `*.integration.test.ts` require real
     model credentials and are excluded from the default test run
 - See `README.md` / `README.en.md` and the index at `docs/README.md` for

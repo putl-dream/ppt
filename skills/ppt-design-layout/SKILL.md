@@ -5,10 +5,6 @@ when_to_use: 沟通契约与设计语言已锁定，需要把大纲或原始内�
 stages:
   - author
   - design
-allowed-tools:
-  - BeginPptCapability
-  - ReadFile
-  - WriteFile
 ---
 
 # SVG-native 逐页设计

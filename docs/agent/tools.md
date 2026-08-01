@@ -193,12 +193,15 @@ Presentation 写入仍有独立的 `CommitGate`。允许调用 `SubmitSvgDeck` �
 应用所有命令。产品作者路径仅为 `PreviewSvgPage` → `SubmitSvgDeck`。
 
 Grammar / 命令轨作者工具（`ExecuteLayoutPlan`、`PreviewCommands`、`SubmitCommands`、
-`InsertSlideImage`、beautify/layout 等）已从**默认注册表下架**；产品作者路径仅为
-SVG-native，不得再发现或调用这些工具。未注册源文件若仍残留，属于清理项，不是可用能力。
+`InsertSlideImage`、beautify/layout 等）已从仓库与默认注册表**移除**；产品作者路径仅为
+SVG-native，不得再发现或调用这些工具。空 Deferred 壳（`SearchExtraTools` /
+`ExecuteExtraTool`）有意保留供管线测试，默认不注册，不是 Grammar 作者能力。
 
 ## 9. Skill 与工具
 
-Skill 提供知识和工作建议，不拥有工具权限。`LoadSkill`：
+Skill 提供知识和工作建议，不拥有工具权限。SKILL.md frontmatter 只保留
+`name` / `description` / `when_to_use` / `stages`；不存在 `allowed-tools` 等 ACL 字段。
+`LoadSkill`：
 
 - 可以按 stage 提高排序或展示推荐；
 - 不应仅因 stage 不匹配而拒绝加载一个安全 Skill；

@@ -86,7 +86,7 @@ request
 | Page SVG | 唯一页面视觉作者源 | `slides/svg/PNN.svg` | SVG-native 视觉事实 |
 | Assets | SVG 显式引用的本地资源 | `assets/**` | 素材 |
 | Brief / Outline / Research | 可选早期叙事材料 | `brief.md` / `outline.md` / `research/` | 可选 |
-| Storyboard | 页级叙事（遗留/兼容） | `slides/storyboard.json` | 非新建旁路；不是 lifecycle 事实源 |
+| Storyboard | 可选页级叙事上游 | `slides/storyboard.json` | 复杂 deck 可选；不是 lifecycle 事实源 |
 | Layout Plan | 逐页 layout/variant（遗留） | `slides/layout-plan.json` | 非新建旁路；不是 lifecycle 事实源 |
 | Brand / Design System | 品牌与视觉偏好 | `design/` | 与 Design Spec 并存演进 |
 | Presentation | 已应用可编辑 deck | `deck/snapshot.json` + PresentationRevision | CommitGate 后事实 |
@@ -268,7 +268,7 @@ dev 阶段不迁移 AppData 旧路径，不 backfill/hydrate 旧 session 或 wor
 
 - 文件管理页的 SHA-256 version 是并发前置条件，不是 immutable Artifact Revision。
 - 不保留已下线的「Lean commercial compiler」产品叙事；lifecycle stage/kind 不以该名称为准。
-- storyboard 只保留非新建旁路内容规划，不是 SVG-native 或 PptJob 视觉事实源；
+- storyboard 是可选叙事上游，不是 SVG-native 或 PptJob 视觉事实源；
   `slides/layout-plan.json` / Layout Grammar 不是产品新建路径（作者表面已下架）。
 - 不实现旧 AppData/session/workspace 的 backfill、hydrate、启动迁移或双轨兼容。
 - 不把 TaskStore、Query checkpoint、聊天文案或局部文件 UI 状态当作 PptJob。

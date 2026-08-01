@@ -1,20 +1,19 @@
 ---
 name: ppt-storyboard
-description: 根据 outline 生成 page-plan 的叙事上游 storyboard，规划页序、页面职责、核心信息草案和素材意图
+description: 根据 outline 生成可选叙事分镜 storyboard，供 page-plan 参考；不是生命周期视觉事实源
 when_to_use: outline 已就绪，复杂或长篇演示需要先规划逐页叙事再冻结最终 page plan 时
 stages:
   - discover
   - author
-allowed-tools:
-  - ReadFile
-  - WriteFile
 ---
 
 # Storyboard 分镜
 
 ## 目标
 
-用 `ReadFile` 读取 outline、brief 和事实来源，写出 `slides/storyboard.json`。它是 `slides/page-plan.json` 的可选叙事上游，不是视觉作者源；本阶段不写 SVG 几何或提交调用。
+由主 Agent 用 `ReadFile` 读取 outline、brief 和事实来源，写出 `slides/storyboard.json`。它是 `slides/page-plan.json` 的**可选叙事上游**，不是 lifecycle 视觉事实源，也不是 SVG 作者源；本阶段不写 SVG 几何或提交调用。
+
+简单 deck 应跳过本技能，由 `ppt-design-layout` 直接从 outline / brief 生成 page plan。
 
 ## storyboard.json 结构
 
@@ -69,6 +68,4 @@ allowed-tools:
 
 ## 衔接
 
-`ppt-design` 将 deck-wide 设计事实写入 `design/design-spec.json`；随后 `ppt-design-layout` 合并 design spec 与本 storyboard，冻结 `slides/page-plan.json` 的 `finalCopy`、`coreMessage`、`audienceMove`、`rhythm` 和 `layoutIntent`。最后才由 `ppt-build` 写逐页 SVG。
-
-简单 deck 可以跳过 storyboard，由 `ppt-design-layout` 直接从 outline 生成 page plan。
+`ppt-design` 将 deck-wide 设计事实写入 `design/design-spec.json`；随后 `ppt-design-layout` 可合并 design spec 与本 storyboard（若存在），冻结 `slides/page-plan.json`。最后才由 `ppt-build` 写逐页 SVG。生命周期与提交只认 design-spec、page-plan 与 SVG，不认 storyboard。

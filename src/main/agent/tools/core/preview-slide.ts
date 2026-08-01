@@ -39,7 +39,6 @@ export interface SlidePreviewSummary {
     ReturnType<typeof resolveSlideStyle>,
     "argumentMode" | "visualStyle" | "readingMode" | "layoutTokens" | "typography"
   >;
-  backgroundVariant?: string;
   backgroundCss?: string;
   /** Present when the slide is not SVG-native. */
   notSvgNative?: true;
@@ -138,7 +137,6 @@ export const previewSlideTool: ToolDefinition<
             layoutTokens: style!.layoutTokens,
             typography: style!.typography,
           },
-          backgroundVariant: "default",
           backgroundCss: style!.background.css,
           description: describeSlide(slide),
         }

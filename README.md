@@ -223,7 +223,7 @@ PPTX exporter (full-page SVG images)
 - `src/shared/`：演示文稿模型、命令模型、会话与 IPC 类型
 - `src/main/project/`：本地项目沙箱、产物读写、diff 和依赖状态
 - `src/main/deck/`：缩略图、导出历史、PPTX 导出服务
-- `skills/`：`ppt-workflow` / `ppt-design` / `ppt-build` / `ppt-edit` / `ppt-beautify` / `deck-review` 等
+- `skills/`：核心创建 `ppt-workflow` → `ppt-design` → `ppt-design-layout` → `ppt-build`；短路径 `ppt-edit` / `ppt-beautify` / `deck-review` / `ppt-export`；可选上游 `ppt-brief` / `ppt-outline` / `ppt-storyboard` / `ppt-research`
 - `tests/`：Agent、导出、上下文压缩、工具审批和项目产物测试
 
 ## 本地文件与隐私

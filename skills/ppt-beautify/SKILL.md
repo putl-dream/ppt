@@ -4,14 +4,6 @@ description: 直接编辑 SVG 作者源以优化构图、排印、图表、图�
 when_to_use: SVG-native deck 已生成，需要视觉美化、排版修复、内容精简、统一风格或单页润色时
 stages:
   - style
-allowed-tools:
-  - BeginPptCapability
-  - ListSlides
-  - ReadCurrentSlide
-  - ReadFile
-  - WriteFile
-  - PreviewSvgPage
-  - SubmitSvgDeck
 ---
 
 # SVG 美化与增强

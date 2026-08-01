@@ -4,10 +4,6 @@ description: 起草 brief.md，统一受众、沟通目标、期望结果、核�
 when_to_use: 大型新建且 workspace 尚无 brief.md，或用户只给模糊主题、需要先对齐沟通契约时
 stages:
   - discover
-allowed-tools:
-  - AskUser
-  - ReadFile
-  - WriteFile
 ---
 
 # PPT Brief 起草

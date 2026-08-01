@@ -5,16 +5,6 @@ when_to_use: SVG 页面生成、编辑或换肤后，导出前，或用户要求
 stages:
   - style
   - export
-allowed-tools:
-  - BeginPptCapability
-  - ListSlides
-  - ReadCurrentSlide
-  - ReadFile
-  - WriteFile
-  - PreviewSvgPage
-  - PreviewSlide
-  - SubmitSvgDeck
-  - SubmitPptReview
 ---
 
 # SVG-native Deck 视觉审查
