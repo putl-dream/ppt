@@ -9,7 +9,7 @@ function normalizeProtectedFact(value: string): string {
     .toLowerCase();
 }
 
-export function extractProtectedFacts(text: string): string[] {
+function extractProtectedFacts(text: string): string[] {
   return [
     ...new Set(
       (text.match(PROTECTED_FACT_PATTERN) ?? [])

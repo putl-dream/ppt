@@ -6,15 +6,6 @@ import { DESIGN_PRESETS } from "../src/design-system";
 
 import { CommitGate } from "../src/main/agent/gate/commit-gate";
 import { RiskPolicy } from "../src/main/agent/gate/risk-policy";
-import {
-  LEAN_SYSTEM_PROMPT,
-  LEAN_SUBMIT_TOOL_NAME,
-  LeanPresentationService,
-} from "../src/main/agent/lean/lean-presentation-service";
-import {
-  LeanCommercialVisualReviewer,
-  selectCommercialReviewSlideIndices,
-} from "../src/main/agent/lean/commercial-visual-review";
 import { AgentService } from "../src/main/agent/service";
 import { FileSessionStore } from "../src/main/session-store";
 import { AgentRuntime } from "../src/main/agent/runtime/agent-runtime";
@@ -37,7 +28,6 @@ import {
   createStarterPresentation,
   presentationSchema,
 } from "../src/shared/presentation";
-import { migrateLeanDeckSpecV1ToV2 } from "../src/shared/lean/deck-spec-v2";
 
 function slide(
   input: Pick<LeanSlideSpec, "kind" | "purpose" | "title"> & Partial<LeanSlideSpec>,
@@ -139,29 +129,15 @@ function createSpec(): LeanDeckSpec {
   };
 }
 
-type FakeResponseContent = AgentModelResponse["content"];
-
 class FakeGateway implements AgentModelGateway {
   readonly requests: AgentModelRequest[] = [];
-
-  constructor(
-    private readonly response: string | FakeResponseContent = JSON.stringify(createSpec()),
-  ) {}
 
   async generateText(request: AgentModelRequest): Promise<AgentModelResponse> {
     this.requests.push(request);
     return {
       provider: "openai",
       model: "test-model",
-      content: typeof this.response === "string"
-        ? [{ type: "text", text: this.response }]
-        : this.response,
-      usage: {
-        inputTokens: 1_200,
-        outputTokens: 800,
-        totalTokens: 2_000,
-        cachedInputTokens: 100,
-      },
+      content: [{ type: "text", text: "{}" }],
     };
   }
 
@@ -170,85 +146,7 @@ class FakeGateway implements AgentModelGateway {
   }
 }
 
-describe("Lean Mode", () => {
-  it("selects an evenly distributed bounded thumbnail set", () => {
-    expect(selectCommercialReviewSlideIndices(12)).toEqual([0, 2, 4, 7, 9, 11]);
-    expect(selectCommercialReviewSlideIndices(3)).toEqual([0, 1, 2]);
-  });
-
-  it("performs at most one image-backed commercial visual review call", async () => {
-    const gateway = new FakeGateway([{
-      type: "tool_use",
-      id: "review-1",
-      name: "submit_commercial_visual_review",
-      input: {
-        verdict: "approve",
-        rationale: "Hierarchy and cross-slide rhythm are delivery-ready.",
-        revisions: [],
-      },
-    }]);
-    const reviewer = new LeanCommercialVisualReviewer(gateway, {
-      async captureSlide() {
-        return {
-          pngBase64: "AA==",
-          width: 320,
-          height: 180,
-          mimeType: "image/png" as const,
-        };
-      },
-    });
-    const presentation = createStarterPresentation();
-    const result = await reviewer.review({
-      spec: migrateLeanDeckSpecV1ToV2(createSpec()),
-      presentation,
-    });
-
-    expect(result).toMatchObject({
-      status: "approved",
-      thumbnailCount: 1,
-      modelCallMade: true,
-    });
-    expect(gateway.requests).toHaveLength(1);
-    expect(gateway.requests[0]?.messages?.[0]?.content).toEqual(expect.arrayContaining([
-      expect.objectContaining({ type: "image", mediaType: "image/png" }),
-    ]));
-    expect(gateway.requests[0]?.requiredToolName).toBe("submit_commercial_visual_review");
-  });
-
-  it("applies visual-only revisions without changing slide content", async () => {
-    const original = migrateLeanDeckSpecV1ToV2(createSpec());
-    const gateway = new FakeGateway([{
-      type: "tool_use",
-      id: "review-2",
-      name: "submit_commercial_visual_review",
-      input: {
-        verdict: "revise",
-        rationale: "The opening needs a quieter composition.",
-        revisions: [{
-          slideIndex: 0,
-          composition: "minimal-statement",
-          imageMode: "none",
-          assetBrief: "",
-          emphasis: [original.slides[0]!.title],
-        }],
-      },
-    }]);
-    const reviewer = new LeanCommercialVisualReviewer(gateway, {
-      async captureSlide() {
-        return { pngBase64: "AA==", width: 320, height: 180, mimeType: "image/png" as const };
-      },
-    });
-    const result = await reviewer.review({
-      spec: original,
-      presentation: createStarterPresentation(),
-    });
-
-    expect(result.status).toBe("revised");
-    expect(result.revisedSpec?.slides[0]?.title).toBe(original.slides[0]!.title);
-    expect(result.revisedSpec?.slides[0]?.items).toEqual(original.slides[0]!.items);
-    expect(result.revisedSpec?.slides[0]?.visual.composition).toBe("minimal-statement");
-  });
-
+describe("Lean Mode shared contract", () => {
   it("defaults legacy Agent requests to Agent mode", () => {
     expect(agentRunRequestSchema.parse({
       prompt: "生成季度汇报",
@@ -262,25 +160,7 @@ describe("Lean Mode", () => {
     }).generationMode).toBe("lean");
   });
 
-  it("keeps provider instructions aligned with local cross-slide rules", () => {
-    expect(LEAN_SYSTEM_PROMPT).toContain("9–12 页必须恰有一页 agenda");
-    expect(LEAN_SYSTEM_PROMPT).toContain("10–12 页必须有 1–2 页 section");
-    expect(LEAN_SYSTEM_PROMPT).toContain("两页 proof");
-    expect(LEAN_SYSTEM_PROMPT).toContain("不得连续三页 bullets");
-    expect(LEAN_SYSTEM_PROMPT).toContain("version 必须是数字 2");
-    expect(LEAN_SYSTEM_PROMPT).toContain("designPreset 必须是以下视觉风格之一");
-    expect(LEAN_SYSTEM_PROMPT).toContain("swiss-minimal");
-    expect(LEAN_SYSTEM_PROMPT).toContain("pixel-art");
-    expect(LEAN_SYSTEM_PROMPT).toContain("字段名必须是 locale（不要 language）");
-    expect(LEAN_SYSTEM_PROMPT).toContain("不要输出 body、agenda、bullets");
-    expect(LEAN_SYSTEM_PROMPT).toContain("可取标题或正文的子串");
-    expect(LEAN_SYSTEM_PROMPT).toContain("imageMode=none 时 assetBrief 必须是空字符串");
-    expect(LEAN_SYSTEM_PROMPT).toContain("composition 只能是 full-bleed");
-    expect(LEAN_SYSTEM_PROMPT).toContain("数值 14 应写 \"14\"");
-    expect(LEAN_SYSTEM_PROMPT).toContain("coreMessage、presentationContext、afterUse");
-    expect(LEAN_SYSTEM_PROMPT).toContain("restructurePermission 只能是 preserve、reorder、rewrite-and-merge");
-    expect(LEAN_SYSTEM_PROMPT).toContain("每页 audienceMove 必须能回扣 objective 或 desiredAction");
-
+  it("rejects nine-slide decks without agenda via shared schema", () => {
     const base = createSpec();
     const extraSlides = [
       slide({
@@ -414,237 +294,6 @@ describe("Lean Mode", () => {
     }
   });
 
-  it("uses exactly one model request and reports provider token usage", async () => {
-    const spec = createSpec();
-    const gateway = new FakeGateway([{
-      type: "tool_use",
-      id: "lean-submit-1",
-      name: LEAN_SUBMIT_TOOL_NAME,
-      input: spec,
-    }]);
-    const service = new LeanPresentationService(gateway);
-    const proposal = await service.createProposal({
-      request: "给管理层做一份增长经营复盘",
-      presentation: createStarterPresentation(),
-      model: { provider: "openai", model: "test-model" },
-    });
-
-    expect(gateway.requests).toHaveLength(1);
-    expect(gateway.requests[0].tools).toEqual([
-      expect.objectContaining({ name: LEAN_SUBMIT_TOOL_NAME }),
-    ]);
-    expect(gateway.requests[0].requiredToolName).toBe(LEAN_SUBMIT_TOOL_NAME);
-    expect(gateway.requests[0].messages).toBeUndefined();
-    expect(gateway.requests[0].outputFormat).toBeUndefined();
-    expect(gateway.requests[0].prompt).toContain(
-      "closing/close 不能代替 ask",
-    );
-    expect(gateway.requests[0].tools?.[0]?.inputSchema).toMatchObject({
-      properties: {
-        slides: {
-          description: expect.stringContaining(
-            "closing/close does not satisfy ask",
-          ),
-        },
-      },
-    });
-    expect(proposal.metrics).toMatchObject({
-      mode: "lean",
-      modelCalls: 1,
-      inputTokens: 1_200,
-      outputTokens: 800,
-      totalTokens: 2_000,
-      slideCount: 6,
-    });
-  });
-
-  it("normalizes the observed version and language aliases without another model call", async () => {
-    const payload: Record<string, unknown> = {
-      ...createSpec(),
-      version: "1",
-      language: "zh-CN",
-    };
-    delete payload.locale;
-    const gateway = new FakeGateway(JSON.stringify(payload));
-    const service = new LeanPresentationService(gateway);
-
-    const proposal = await service.createProposal({
-      request: "生成一份经营复盘",
-      presentation: createStarterPresentation(),
-    });
-
-    expect(gateway.requests).toHaveLength(1);
-    expect(proposal.spec.version).toBe(2);
-    expect(proposal.spec.locale).toBe("zh-CN");
-  });
-
-  it("drops an unused asset brief when image mode is none without another model call", async () => {
-    const spec = migrateLeanDeckSpecV1ToV2(createSpec());
-    spec.slides[2]!.visual.assetBrief = "这段图片说明不会被使用";
-    spec.slides[5]!.visual.assetBrief = "另一段不会被使用的图片说明";
-    const gateway = new FakeGateway(JSON.stringify(spec));
-    const service = new LeanPresentationService(gateway);
-
-    const proposal = await service.createProposal({
-      request: "生成一份经营复盘",
-      presentation: createStarterPresentation(),
-    });
-
-    expect(gateway.requests).toHaveLength(1);
-    expect(proposal.spec.slides[2]?.visual).toMatchObject({
-      imageMode: "none",
-      assetBrief: "",
-    });
-    expect(proposal.spec.slides[5]?.visual).toMatchObject({
-      imageMode: "none",
-      assetBrief: "",
-    });
-  });
-
-  it("normalizes a composition alias and equivalent numeric emphasis without another model call", async () => {
-    const spec = migrateLeanDeckSpecV1ToV2(createSpec());
-    spec.slides[3]!.metric!.value = "14";
-    const payload = structuredClone(spec) as unknown as {
-      slides: Array<{ visual: { composition: string; emphasis: string[] } }>;
-    };
-    payload.slides[3]!.visual.composition = "dashboard";
-    payload.slides[3]!.visual.emphasis = ["续费", "14.0"];
-    const gateway = new FakeGateway(JSON.stringify(payload));
-    const service = new LeanPresentationService(gateway);
-
-    const proposal = await service.createProposal({
-      request: "生成一份经营复盘",
-      presentation: createStarterPresentation(),
-    });
-
-    expect(gateway.requests).toHaveLength(1);
-    expect(proposal.spec.slides[3]?.visual).toMatchObject({
-      composition: "metric-story",
-      emphasis: ["续费", "14"],
-    });
-  });
-
-  it("caps excessive native tool emphasis hints without another model call", async () => {
-    const spec = migrateLeanDeckSpecV1ToV2(createSpec());
-    const payload = structuredClone(spec) as unknown as {
-      slides: Array<{ visual: { emphasis: string[] } }>;
-    };
-    payload.slides[1]!.visual.emphasis = [
-      "规模增长",
-      "客户结构",
-      "高价值客户",
-      "渠道结构",
-      "自然流量",
-    ];
-    const gateway = new FakeGateway([{
-      type: "tool_use",
-      id: "lean-submit-excessive-emphasis",
-      name: LEAN_SUBMIT_TOOL_NAME,
-      input: payload,
-    }]);
-    const service = new LeanPresentationService(gateway);
-
-    const proposal = await service.createProposal({
-      request: "给管理层做一份增长经营复盘",
-      presentation: createStarterPresentation(),
-    });
-
-    expect(gateway.requests).toHaveLength(1);
-    expect(proposal.spec.slides[1]?.visual.emphasis).toEqual([
-      "规模增长",
-      "客户结构",
-      "高价值客户",
-    ]);
-  });
-
-  it("fills omitted neutral slide fields without another model call", async () => {
-    const spec = migrateLeanDeckSpecV1ToV2(createSpec());
-    const payload = structuredClone(spec) as unknown as {
-      sources: Array<{ asOf?: string | null }>;
-      slides: Array<Record<string, unknown>>;
-    };
-    delete payload.sources[0]!.asOf;
-    delete payload.slides[3]!.subtitle;
-    delete payload.slides[3]!.items;
-    delete payload.slides[3]!.left;
-    delete payload.slides[3]!.right;
-    delete payload.slides[3]!.steps;
-    delete payload.slides[3]!.chart;
-    const gateway = new FakeGateway(JSON.stringify(payload));
-    const service = new LeanPresentationService(gateway);
-
-    const proposal = await service.createProposal({
-      request: "生成一份经营复盘",
-      presentation: createStarterPresentation(),
-    });
-
-    expect(gateway.requests).toHaveLength(1);
-    expect(proposal.spec.sources[0]?.asOf).toBeNull();
-    expect(proposal.spec.slides[3]).toMatchObject({
-      subtitle: "",
-      items: [],
-      left: null,
-      right: null,
-      steps: [],
-      chart: null,
-    });
-  });
-
-  it("still rejects an omitted field that is semantically required by the slide kind", async () => {
-    const spec = migrateLeanDeckSpecV1ToV2(createSpec());
-    const payload = structuredClone(spec) as unknown as {
-      slides: Array<Record<string, unknown>>;
-    };
-    delete payload.slides[1]!.items;
-    const gateway = new FakeGateway(JSON.stringify(payload));
-    const service = new LeanPresentationService(gateway);
-
-    await expect(service.createProposal({
-      request: "生成一份经营复盘",
-      presentation: createStarterPresentation(),
-    })).rejects.toThrow("Bullets requires 2 to 4 items");
-    expect(gateway.requests).toHaveLength(1);
-  });
-
-  it("keeps unknown fields strict after compatibility normalization", async () => {
-    const gateway = new FakeGateway(JSON.stringify({
-      ...createSpec(),
-      unexpected: true,
-    }));
-    const service = new LeanPresentationService(gateway);
-
-    await expect(service.createProposal({
-      request: "生成一份经营复盘",
-      presentation: createStarterPresentation(),
-    })).rejects.toThrow("Lean DeckSpec 校验失败");
-    expect(gateway.requests).toHaveLength(1);
-  });
-
-  it("rejects conflicting locale aliases without another model call", async () => {
-    const gateway = new FakeGateway(JSON.stringify({
-      ...createSpec(),
-      language: "en-US",
-    }));
-    const service = new LeanPresentationService(gateway);
-
-    await expect(service.createProposal({
-      request: "生成一份经营复盘",
-      presentation: createStarterPresentation(),
-    })).rejects.toThrow("Lean DeckSpec 校验失败");
-    expect(gateway.requests).toHaveLength(1);
-  });
-
-  it("does not spend a second model call repairing invalid structured output", async () => {
-    const gateway = new FakeGateway('{"version":1}');
-    const service = new LeanPresentationService(gateway);
-
-    await expect(service.createProposal({
-      request: "生成一份经营复盘",
-      presentation: createStarterPresentation(),
-    })).rejects.toThrow("不会自动重试");
-    expect(gateway.requests).toHaveLength(1);
-  });
-
   it("persists Lean metrics in the authoritative assistant message", async () => {
     const directory = await mkdtemp(join(tmpdir(), "lean-session-metrics-"));
     const store = new FileSessionStore(
@@ -697,21 +346,5 @@ describe("Lean Mode", () => {
       store.close();
       await rm(directory, { recursive: true, force: true });
     }
-  });
-
-  it("rejects an existing formal deck before spending a model call", async () => {
-    const gateway = new FakeGateway();
-    const service = new LeanPresentationService(gateway);
-    const existing = createStarterPresentation();
-    existing.slides[0] = {
-      ...existing.slides[0],
-      title: "正式汇报",
-    };
-
-    await expect(service.createProposal({
-      request: "重做这份汇报",
-      presentation: existing,
-    })).rejects.toThrow("仅支持新建 PPT");
-    expect(gateway.requests).toHaveLength(0);
   });
 });

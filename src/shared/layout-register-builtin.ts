@@ -1,7 +1,7 @@
 import { layoutRegistry } from "./layout-registry";
 import { SLIDE_LAYOUTS } from "./slide-layouts";
 
-/** Register built-in layout metadata. Handlers remain in layout.ts until fully extracted. */
+/** Register built-in layout metadata (background/slide variants). Grammar apply lives in layout-handlers. */
 export function registerBuiltinLayouts(): void {
   const definitions: Array<{
     id: (typeof SLIDE_LAYOUTS)[number];
@@ -25,14 +25,7 @@ export function registerBuiltinLayouts(): void {
 
   for (const def of definitions) {
     if (layoutRegistry.has(def.id)) continue;
-    layoutRegistry.register({
-      ...def,
-      apply: () => {
-        throw new Error(
-          `Layout handler for "${def.id}" is applied via applyLayout() in layout.ts`,
-        );
-      },
-    });
+    layoutRegistry.register(def);
   }
 }
 

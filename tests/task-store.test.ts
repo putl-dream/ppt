@@ -9,7 +9,6 @@ import {
   type TaskListIdentity,
 } from "../src/main/agent/task/task-store";
 import { TaskSubscriptionService } from "../src/main/agent/task/task-subscription-service";
-import { TaskRetentionService } from "../src/main/agent/task/task-retention-service";
 
 async function fixture(scope: TaskListIdentity["scope"] = "conversation") {
   const root = await mkdtemp(join(tmpdir(), "task-store-v1-"));
@@ -444,21 +443,4 @@ describe("TaskStore v1 contract", () => {
     service.dispose();
   });
 
-  it("retention cleanup removes only archived list directories without mutating revisions", async () => {
-    const { root, store, lead } = await fixture();
-    await createLeadTask(store, lead);
-    let snapshot = await store.getSnapshot();
-    snapshot = await store.mutate({
-      type: "update", taskId: "1", expectedRevision: 0, status: "completed",
-    }, lead);
-    snapshot = await store.mutate({
-      type: "close_list", expectedListRevision: snapshot.listRevision,
-    }, lead);
-    await store.mutate({
-      type: "archive_list", expectedListRevision: snapshot.listRevision, outcome: "completed",
-    }, lead);
-    expect(await new TaskRetentionService(root).cleanupArchivedBefore(new Date(Date.now() + 1_000)))
-      .toEqual(["thread-1"]);
-    await expect(store.getSnapshot()).rejects.toMatchObject({ code: "ENOENT" });
-  });
 });

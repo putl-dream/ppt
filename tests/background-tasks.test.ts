@@ -15,7 +15,6 @@ import { ToolRegistry } from "../src/main/agent/tools/tool-registry";
 import type { ToolDefinition } from "../src/main/agent/tools/tool-definition";
 import { executeExtraToolTool } from "../src/main/agent/tools/core/execute-extra-tool";
 import { searchExtraToolsTool } from "../src/main/agent/tools/core/search-extra-tools";
-import { exportPptxTool } from "../src/main/agent/tools/deferred/export-pptx";
 import { previewSlideTool } from "../src/main/agent/tools/deferred/preview-slide";
 import { toToolSchema } from "../src/main/agent/tools/tool-schema";
 import { createStarterPresentation } from "../src/shared/presentation";
@@ -186,16 +185,12 @@ describe("AgentRuntime background tool path", () => {
     expect(executeSpec.inputSchema.properties as Record<string, unknown>)
       .toHaveProperty("run_in_background");
 
-    const exportSpec = toToolSchema(exportPptxTool);
-    expect(exportSpec.inputSchema.properties as Record<string, unknown>)
-      .toHaveProperty("run_in_background");
-
     const previewSpec = toToolSchema(previewSlideTool);
     expect(previewSpec.inputSchema.properties as Record<string, unknown>)
       .toHaveProperty("run_in_background");
   });
 
-  it("backgrounds ExecuteExtraTool when it runs ExportPptx", async () => {
+  it("backgrounds ExecuteExtraTool when it runs a slow deferred tool", async () => {
     const exportWork = deferred<{ success: boolean; filePath: string }>();
     const events: string[] = [];
     let exportResolved = false;

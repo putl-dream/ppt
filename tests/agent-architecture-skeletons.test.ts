@@ -24,7 +24,6 @@ import { beautifyTableTool } from "../src/main/agent/tools/deferred/beautify-tab
 import { compressTextTool } from "../src/main/agent/tools/deferred/compress-text";
 import { detectOverflowTextTool } from "../src/main/agent/tools/deferred/detect-overflow-text";
 import { detectRepeatedTitlesTool } from "../src/main/agent/tools/deferred/detect-repeated-titles";
-import { exportPptxTool } from "../src/main/agent/tools/deferred/export-pptx";
 import { previewSlideTool } from "../src/main/agent/tools/deferred/preview-slide";
 import { validateDeckLayoutTool } from "../src/main/agent/tools/deferred/validate-deck-layout";
 import { rewriteSlideContentTool } from "../src/main/agent/tools/deferred/rewrite-slide-content";
@@ -145,7 +144,6 @@ describe("Agent Architecture Skeletons & Types", () => {
     registry.register(compressTextTool);
     registry.register(detectOverflowTextTool);
     registry.register(detectRepeatedTitlesTool);
-    registry.register(exportPptxTool);
     registry.register(rewriteSlideContentTool);
     registry.register(resolveDesignPlanTool);
 

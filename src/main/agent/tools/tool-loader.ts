@@ -20,25 +20,4 @@ export class ToolLoader {
   static loadDeferredTools(tools: ToolDefinition<any, any>[]): ToolDefinition<any, any>[] {
     return tools.filter((tool) => tool.loadPolicy === "deferred" && tool.category === "deferred");
   }
-
-  /**
-   * 获取运行时系统内部工具（Runtime Tools）
-   * 这些工具绝不对模型公开，只能在系统级别或 Gate/workflow 内部使用
-   */
-  static loadRuntimeTools(tools: ToolDefinition<any, any>[]): ToolDefinition<any, any>[] {
-    return tools.filter((tool) => tool.loadPolicy === "runtime" || tool.category === "runtime");
-  }
-
-  /**
-   * 判定某个工具在当前执行上下文是否被允许加载
-   */
-  static isAllowed(tool: ToolDefinition<any, any>, policyOverride?: Map<string, boolean>): boolean {
-    if (tool.loadPolicy === "disabled") {
-      return false;
-    }
-    if (policyOverride && policyOverride.has(tool.name)) {
-      return policyOverride.get(tool.name) ?? false;
-    }
-    return true;
-  }
 }

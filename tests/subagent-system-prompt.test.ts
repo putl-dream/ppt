@@ -1,13 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { buildSubAgentSystemPrompt } from "../src/main/agent/subagent/sub-system-prompt";
+import { buildTeammateSystemPrompt } from "../src/main/agent/teammate/teammate-system-prompt";
 import { SUB_AGENT_TOOLS } from "../src/main/agent/subagent/workspace-tools";
 
-describe("sub-agent system prompt", () => {
+describe("teammate system prompt", () => {
   it("directs file operations to workspace tools before bash", () => {
-    const prompt = buildSubAgentSystemPrompt(SUB_AGENT_TOOLS);
+    const prompt = buildTeammateSystemPrompt({
+      name: "worker",
+      role: "workspace teammate",
+      tools: SUB_AGENT_TOOLS,
+    });
 
-    expect(prompt).toContain("`WriteFile` automatically creates parent directories");
-    expect(prompt).toContain("Do not call `bash` for mkdir/cat/echo redirection/copy/move style file operations");
+    expect(prompt).toContain("WriteFile creates parent directories automatically");
+    expect(prompt).toContain("Never use it for mkdir/cat/echo redirection/copy/move style file operations");
     expect(prompt.indexOf("- WriteFile")).toBeLessThan(prompt.indexOf("- bash"));
   });
 });

@@ -11,6 +11,7 @@ export const LAYOUT_GRAMMAR_VARIANTS = {
   comparison: ["split", "before-after", "verdict"],
   quote: ["centered-card", "editorial-pullquote", "quote-band"],
   summary: ["action-list", "three-takeaways", "closing-checklist"],
+  architecture: ["layers"],
 } as const satisfies Partial<Record<SlideLayoutType, readonly string[]>>;
 
 export function getSupportedGrammarVariants(layout: SlideLayoutType): readonly string[] {

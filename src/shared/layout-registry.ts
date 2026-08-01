@@ -63,7 +63,8 @@ export interface LayoutDefinition {
   defaultBackgroundVariant: BackgroundVariant;
   defaultSlideVariant?: SlideVariant;
   isChrome: boolean;
-  apply: LayoutHandler;
+  /** Deprecated: layout application lives in layoutGrammarRegistry handlers. */
+  apply?: LayoutHandler;
 }
 
 class LayoutRegistryImpl {

@@ -1,18 +1,15 @@
 import type { SessionSnapshot } from "@shared/session";
 import {
-  createDefaultDesignConstraints,
   createDefaultExportHistoryFile,
   createDefaultGenerationJobsFile,
   deckExportHistoryFileSchema,
   deckExportRecordSchema,
   deckGenerationJobsFileSchema,
-  designConstraintsSchema,
   projectArtifactFilePaths,
   type DeckExportRecord,
   type DeckGenerationJob,
   type DeckGenerationJobsFile,
   type DeckExportHistoryFile,
-  type DesignConstraints,
 } from "@shared/deck-persistence";
 import type { ProjectFileService } from "../project/project-file-service";
 import type { ProjectArtifactWriteResult } from "../project/project-file-service";
@@ -98,21 +95,5 @@ export class ExportHistoryService {
     const file = await this.read(snapshot);
     file.exports.push(parsedRecord);
     return this.save(snapshot, file);
-  }
-}
-
-export class DesignConstraintsService {
-  constructor(private readonly projectFileService: ProjectFileService) {}
-
-  async read(snapshot: SessionSnapshot): Promise<DesignConstraints> {
-    try {
-      const artifact = await this.projectFileService.readArtifact(
-        snapshot,
-        projectArtifactFilePaths.designConstraints,
-      );
-      return designConstraintsSchema.parse(JSON.parse(artifact.content ?? "{}"));
-    } catch {
-      return createDefaultDesignConstraints();
-    }
   }
 }
