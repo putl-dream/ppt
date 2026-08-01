@@ -38,13 +38,13 @@ function createNativeGateway(
   const requests: AgentModelRequest[] = [];
   return {
     requests,
-    async generateText(request): Promise<AgentModelResponse> {
+    async queryModel(request): Promise<AgentModelResponse> {
       requests.push(request);
       const response = await handler(request, index);
       index += 1;
       return response;
     },
-    async *generateTextStream(request) {
+    async *queryModelStream(request) {
       requests.push(request);
       const response = await handler(request, index);
       index += 1;

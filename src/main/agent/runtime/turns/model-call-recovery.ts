@@ -184,7 +184,7 @@ async function invokeGateway(
     let streamedText = "";
     let content: AgentModelContentBlock[] = [];
     let stopReason: StopReason | undefined;
-    for await (const chunk of gateway.generateTextStream(request, model)) {
+    for await (const chunk of gateway.queryModelStream(request, model)) {
       if (chunk.type === "thinking_delta") {
         stream.onThinkingChunk?.(chunk.thinking);
       } else if (chunk.type === "text_delta") {
@@ -201,7 +201,7 @@ async function invokeGateway(
     return { content, stopReason };
   }
 
-  const response = await gateway.generateText(request, model);
+  const response = await gateway.queryModel(request, model);
   return { content: response.content, stopReason: response.stopReason };
 }
 

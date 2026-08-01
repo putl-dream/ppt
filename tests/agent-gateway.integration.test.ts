@@ -31,7 +31,7 @@ async function expectUsefulStream(
   const selection = gateway.configure({ provider, model, apiKey });
   const chunks: AgentModelStreamChunk[] = [];
 
-  for await (const chunk of gateway.generateTextStream(
+  for await (const chunk of gateway.queryModelStream(
     {
       systemPrompt: "You are a connectivity test. Reply with one short sentence only.",
       prompt: `Confirm that the ${provider} streaming gateway request succeeded.`,
@@ -68,7 +68,7 @@ describe.sequential("AgentGateway real provider integration", () => {
         apiKey: requiredEnvironment("OPENAI_API_KEY"),
       });
 
-      const response = await gateway.generateText(
+      const response = await gateway.queryModel(
         {
           systemPrompt: "You are a connectivity test. Reply with one short sentence only.",
           prompt: "Confirm that the OpenAI-compatible gateway request succeeded.",
@@ -106,7 +106,7 @@ describe.sequential("AgentGateway real provider integration", () => {
         apiKey: requiredEnvironment("ANTHROPIC_API_KEY"),
       });
 
-      const response = await gateway.generateText(
+      const response = await gateway.queryModel(
         {
           systemPrompt: "You are a connectivity test. Reply with one short sentence only.",
           prompt: "Confirm that the Anthropic-compatible gateway request succeeded.",

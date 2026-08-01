@@ -60,14 +60,14 @@ describe("canonical conversation history store", () => {
       [{ type: "text", text: "second completed" }],
     ];
     const gateway: AgentModelGateway = {
-      async generateText(request) {
+      async queryModel(request) {
         requests.push(request);
         const content = responses.shift();
         if (!content) throw new Error("Unexpected gateway call");
         return { provider: "openai", model: "test", content };
       },
-      async *generateTextStream(request) {
-        const response = await this.generateText(request);
+      async *queryModelStream(request) {
+        const response = await this.queryModel(request);
         yield { type: "complete" as const, content: response.content };
       },
     };
@@ -123,14 +123,14 @@ describe("canonical conversation history store", () => {
       [{ type: "text", text: "second answer" }],
     ];
     const gateway: AgentModelGateway = {
-      async generateText(request) {
+      async queryModel(request) {
         requests.push(request);
         const content = responses.shift();
         if (!content) throw new Error("Unexpected gateway call");
         return { provider: "openai", model: "test", content };
       },
-      async *generateTextStream(request) {
-        const response = await this.generateText(request);
+      async *queryModelStream(request) {
+        const response = await this.queryModel(request);
         yield { type: "complete" as const, content: response.content };
       },
     };
@@ -182,14 +182,14 @@ describe("canonical conversation history store", () => {
       [{ type: "text", text: "third answer" }],
     ];
     const gateway: AgentModelGateway = {
-      async generateText(request) {
+      async queryModel(request) {
         requests.push(request);
         const content = responses.shift();
         if (!content) throw new Error("Unexpected gateway call");
         return { provider: "openai", model: "test", content };
       },
-      async *generateTextStream(request) {
-        const response = await this.generateText(request);
+      async *queryModelStream(request) {
+        const response = await this.queryModel(request);
         yield { type: "complete" as const, content: response.content };
       },
     };
@@ -264,7 +264,7 @@ describe("canonical conversation history store", () => {
       });
     const requests: AgentModelRequest[] = [];
     const gateway: AgentModelGateway = {
-      async generateText(request) {
+      async queryModel(request) {
         requests.push(request);
         return {
           provider: "openai",
@@ -272,8 +272,8 @@ describe("canonical conversation history store", () => {
           content: [{ type: "text", text: "new owner answer" }],
         };
       },
-      async *generateTextStream(request) {
-        const response = await this.generateText(request);
+      async *queryModelStream(request) {
+        const response = await this.queryModel(request);
         yield { type: "complete" as const, content: response.content };
       },
     };

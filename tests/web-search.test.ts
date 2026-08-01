@@ -180,8 +180,8 @@ describe("web search", () => {
         getSearchConfig: () => ({
           webSearchApiKey: "tvly-runtime-key",
         }),
-        async generateText() { throw new Error("not used"); },
-        async *generateTextStream() { throw new Error("not used"); },
+        async queryModel() { throw new Error("not used"); },
+        async *queryModelStream() { throw new Error("not used"); },
       },
     };
 
@@ -238,8 +238,8 @@ describe("web search", () => {
         getSearchConfig: () => ({
           webSearchApiKey: "tvly-runtime-key",
         }),
-        async generateText() { throw new Error("not used"); },
-        async *generateTextStream() { throw new Error("not used"); },
+        async queryModel() { throw new Error("not used"); },
+        async *queryModelStream() { throw new Error("not used"); },
       },
     };
 

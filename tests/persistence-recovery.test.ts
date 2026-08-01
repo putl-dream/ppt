@@ -48,14 +48,14 @@ function gatewayFor(turns: AgentModelContentBlock[][]): AgentModelGateway & {
   const requests: AgentModelRequest[] = [];
   return {
     requests,
-    async generateText(request): Promise<AgentModelResponse> {
+    async queryModel(request): Promise<AgentModelResponse> {
       requests.push(request);
       const content = turns[index++];
       if (!content) throw new Error("Unexpected gateway call");
       return { provider: "openai", model: "test", content };
     },
-    async *generateTextStream(request) {
-      const response = await this.generateText(request);
+    async *queryModelStream(request) {
+      const response = await this.queryModel(request);
       yield { type: "complete" as const, content: response.content };
     },
   };
@@ -428,10 +428,10 @@ describe("durable agent recovery", () => {
   it("replays a model_streaming attempt instead of committing an empty turn", async () => {
     const workspaceRoot = await mkdtemp(join(tmpdir(), "agent-model-stream-recovery-"));
     const failingGateway: AgentModelGateway = {
-      async generateText() {
+      async queryModel() {
         throw new Error("provider disconnected during streaming");
       },
-      async *generateTextStream() {
+      async *queryModelStream() {
         throw new Error("provider disconnected during streaming");
       },
     };

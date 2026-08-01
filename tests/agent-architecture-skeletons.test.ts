@@ -50,7 +50,7 @@ function createSequenceGateway(
   const requests: AgentModelRequest[] = [];
   return {
     requests,
-    async generateText(request) {
+    async queryModel(request) {
       requests.push(request);
       const value = responses[index++];
       if (value === undefined) throw new Error("Unexpected gateway call");
@@ -61,7 +61,7 @@ function createSequenceGateway(
         content: [value],
       };
     },
-    async *generateTextStream(request) {
+    async *queryModelStream(request) {
       requests.push(request);
       const value = responses[index++];
       if (value === undefined) throw new Error("Unexpected gateway call");
@@ -296,7 +296,7 @@ describe("Agent Architecture Skeletons & Types", () => {
   it("uses the current model selection when continuing a restored conversation", async () => {
     let usedSelection: AgentModelSelection | undefined;
     const gateway: AgentModelGateway = {
-      async generateText(_request, selection) {
+      async queryModel(_request, selection) {
         usedSelection = selection;
         return {
           provider: "anthropic",
@@ -304,7 +304,7 @@ describe("Agent Architecture Skeletons & Types", () => {
           content: [modelMessage("Inbox processed.")],
         };
       },
-      async *generateTextStream(_request, selection) {
+      async *queryModelStream(_request, selection) {
         usedSelection = selection;
         yield { type: "complete" as const, content: [modelMessage("Inbox processed.")] };
       },
@@ -342,7 +342,7 @@ describe("Agent Architecture Skeletons & Types", () => {
   it("keeps a failed continuation request in the next runtime context", async () => {
     const requests: AgentModelRequest[] = [];
     const gateway: AgentModelGateway = {
-      async generateText(request) {
+      async queryModel(request) {
         requests.push(request);
         if (requests.length === 1) {
           return {
@@ -360,7 +360,7 @@ describe("Agent Architecture Skeletons & Types", () => {
           content: [modelAskUser("上一条是 Agent 范式与架构演进。", ["confirmation"])],
         };
       },
-      async *generateTextStream() {
+      async *queryModelStream() {
         yield { type: "complete" as const, content: [] };
       },
     };
@@ -404,7 +404,7 @@ describe("Agent Architecture Skeletons & Types", () => {
     const service = new AgentService(
       new CommandBus(createStarterPresentation()),
       new AgentRuntime(createDefaultToolRegistry(), {
-        async generateText(request) {
+        async queryModel(request) {
           modelRequest = request;
           return {
             provider: "openai",
@@ -412,7 +412,7 @@ describe("Agent Architecture Skeletons & Types", () => {
             content: [modelMessage("你刚才说的是 Agent 范式与架构演进。")],
           };
         },
-        async *generateTextStream() {
+        async *queryModelStream() {
           yield { type: "complete" as const, content: [] };
         },
       }),

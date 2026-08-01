@@ -16,10 +16,10 @@ import { createFakeCommandProposalTool } from "./fake-command-proposal-tool";
 
 function textGateway(text: string): AgentModelGateway {
   return {
-    async generateText() {
+    async queryModel() {
       return { provider: "anthropic", model: "test", content: [{ type: "text", text }] };
     },
-    async *generateTextStream() {
+    async *queryModelStream() {
       yield { type: "complete" as const, content: [{ type: "text" as const, text }] };
     },
   };
@@ -27,8 +27,8 @@ function textGateway(text: string): AgentModelGateway {
 
 function failingGateway(message: string): AgentModelGateway {
   return {
-    async generateText() { throw new Error(message); },
-    async *generateTextStream() { throw new Error(message); },
+    async queryModel() { throw new Error(message); },
+    async *queryModelStream() { throw new Error(message); },
   };
 }
 
@@ -107,7 +107,7 @@ describe("AgentRuntime terminal boundaries", () => {
       reason: "Tool stopped by policy hook.",
     }));
     const gateway: AgentModelGateway = {
-      async generateText() {
+      async queryModel() {
         return {
           provider: "anthropic",
           model: "test",
@@ -119,7 +119,7 @@ describe("AgentRuntime terminal boundaries", () => {
           }],
         };
       },
-      async *generateTextStream() {
+      async *queryModelStream() {
         yield {
           type: "complete" as const,
           content: [{
@@ -169,7 +169,7 @@ describe("AgentRuntime terminal boundaries", () => {
     const registry = new ToolRegistry();
     registry.register(tool);
     const gateway: AgentModelGateway = {
-      async generateText() {
+      async queryModel() {
         return {
           provider: "anthropic",
           model: "test",
@@ -181,7 +181,7 @@ describe("AgentRuntime terminal boundaries", () => {
           }],
         };
       },
-      async *generateTextStream() {
+      async *queryModelStream() {
         yield {
           type: "complete" as const,
           content: [{
@@ -223,7 +223,7 @@ describe("AgentRuntime terminal boundaries", () => {
     const registry = new ToolRegistry();
     registry.register(createFakeCommandProposalTool());
     const gateway: AgentModelGateway = {
-      async generateText() {
+      async queryModel() {
         return {
           provider: "anthropic",
           model: "test",
@@ -243,7 +243,7 @@ describe("AgentRuntime terminal boundaries", () => {
           }],
         };
       },
-      async *generateTextStream() {
+      async *queryModelStream() {
         yield {
           type: "complete" as const,
           content: [{
@@ -344,8 +344,8 @@ describe("AgentRuntime terminal boundaries", () => {
     registerHook("Stop", (block) => { stops.push(block as StopBlock); return null; });
     const abortError = Object.assign(new Error("provider cancelled"), { name: "AbortError" });
     const gateway: AgentModelGateway = {
-      async generateText() { throw abortError; },
-      async *generateTextStream() { throw abortError; },
+      async queryModel() { throw abortError; },
+      async *queryModelStream() { throw abortError; },
     };
 
     await expect(new AgentRuntime(new ToolRegistry(), gateway).run({
@@ -386,7 +386,7 @@ describe("AgentRuntime terminal boundaries", () => {
     registry.register(previewTool);
     let modelStep = 0;
     const gateway: AgentModelGateway = {
-      async generateText() {
+      async queryModel() {
         modelStep += 1;
         if (modelStep === 1) {
           return {
@@ -402,7 +402,7 @@ describe("AgentRuntime terminal boundaries", () => {
         }
         throw new Error("model failed while preview was running");
       },
-      async *generateTextStream() { throw new Error("streaming not expected"); },
+      async *queryModelStream() { throw new Error("streaming not expected"); },
     };
 
     await expect(new AgentRuntime(registry, gateway).run({

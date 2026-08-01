@@ -83,7 +83,7 @@ async function requestHistorySummary(
   model: AgentModelSelection | undefined,
   signal: AbortSignal | undefined,
 ): Promise<string> {
-  const response = await gateway.generateText(
+  const response = await gateway.queryModel(
     {
       systemPrompt: SUMMARY_SYSTEM_PROMPT,
       responseContract: "markdown-summary",

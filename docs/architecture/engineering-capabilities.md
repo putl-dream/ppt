@@ -99,7 +99,7 @@ Renderer / IPC
 - 程序消费者应只从 barrel import，不应 deep-import 子模块。
 - 退避延时、用户可读错误文案、主 agent 响应协议 guidance 在 Runtime / prompts /
   service；不属于 Gateway 合同。one-shot `callLLM` / `callTool` 包装已删除：
-  调用方直接 `generateText` / `generateTextStream`；compact 摘要在本地断言
+  调用方直接 `queryModel` / `queryModelStream`；compact 摘要在本地断言
   （非空 markdown、拒 tool_use、拒截断）。
 
 **配置身份与路由：**

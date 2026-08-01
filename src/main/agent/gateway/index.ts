@@ -118,8 +118,8 @@ export class AgentGateway implements AgentModelGateway {
     return resolveAgentModelConfig(selection, this.runtimeSettings, process.env, this.gatewayConfig);
   }
 
-  /** Route one prepared provider-neutral request through a call-path driver. */
-  async generateText(
+  /** One complete model round-trip through the unified call-path driver. */
+  async queryModel(
     request: AgentModelRequest,
     selection?: AgentModelSelection,
   ): Promise<AgentModelResponse> {
@@ -179,8 +179,8 @@ export class AgentGateway implements AgentModelGateway {
     }
   }
 
-  /** generateText 的流式版本；向上层暴露统一 chunk 协议而非 provider 原生事件。 */
-  async *generateTextStream(
+  /** queryModel 的流式版本；向上层暴露统一 chunk 协议而非 provider 原生事件。 */
+  async *queryModelStream(
     request: AgentModelRequest,
     selection?: AgentModelSelection,
   ): AsyncGenerator<AgentModelStreamChunk> {

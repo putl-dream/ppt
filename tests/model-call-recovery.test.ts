@@ -135,7 +135,7 @@ describe("compactTranscript", () => {
 describe("callModelWithRecovery", () => {
   it("projects provider-neutral content blocks into the compatibility result", async () => {
     const gateway: AgentModelGateway = {
-      async generateText() {
+      async queryModel() {
         return {
           provider: "anthropic",
           model: "test",
@@ -147,7 +147,7 @@ describe("callModelWithRecovery", () => {
           }],
         };
       },
-      async *generateTextStream() {
+      async *queryModelStream() {
         yield { type: "complete" as const, content: [] };
       },
     };
@@ -173,14 +173,14 @@ describe("callModelWithRecovery", () => {
       "rate-limit",
       "openai",
     );
-    const generateText = vi
+    const queryModel = vi
       .fn()
       .mockRejectedValueOnce(rateLimit)
       .mockResolvedValueOnce({ provider: "openai", model: "gpt", content: textContent("ok") });
 
     const gateway: AgentModelGateway = {
-      generateText,
-      async *generateTextStream() {
+      queryModel,
+      async *queryModelStream() {
         yield { type: "complete" as const, content: [] };
       },
     };
@@ -196,12 +196,12 @@ describe("callModelWithRecovery", () => {
     await vi.runAllTimersAsync();
     const result = await promise;
     expect(result.content).toEqual(textContent("ok"));
-    expect(generateText).toHaveBeenCalledTimes(2);
-    expect(JSON.parse(generateText.mock.calls[0][0].prompt)).toEqual({
+    expect(queryModel).toHaveBeenCalledTimes(2);
+    expect(JSON.parse(queryModel.mock.calls[0][0].prompt)).toEqual({
       transcript: [],
       request: "hello",
     });
-    expect(JSON.parse(generateText.mock.calls[1][0].prompt)).toEqual({
+    expect(JSON.parse(queryModel.mock.calls[1][0].prompt)).toEqual({
       transcript: [],
       request: "hello",
     });
@@ -213,11 +213,11 @@ describe("callModelWithRecovery", () => {
   it.each([400, 404])("fails fast on HTTP %s without entering backoff", async (status) => {
     const source = Object.assign(new Error("invalid request"), { status });
     const error = normalizeProviderError("openai", source);
-    const generateText = vi.fn().mockRejectedValue(error);
+    const queryModel = vi.fn().mockRejectedValue(error);
     const progress: string[] = [];
     const gateway: AgentModelGateway = {
-      generateText,
-      async *generateTextStream() {
+      queryModel,
+      async *queryModelStream() {
         yield { type: "complete" as const, content: [] };
       },
     };
@@ -229,17 +229,17 @@ describe("callModelWithRecovery", () => {
       onRecovery: (message) => progress.push(message),
     })).rejects.toBe(error);
 
-    expect(generateText).toHaveBeenCalledTimes(1);
+    expect(queryModel).toHaveBeenCalledTimes(1);
     expect(progress).toEqual([]);
   });
 
   it("fails fast on raw 429 that bypassed Gateway normalization", async () => {
     const error = Object.assign(new Error("rate limited"), { status: 429 });
-    const generateText = vi.fn().mockRejectedValue(error);
+    const queryModel = vi.fn().mockRejectedValue(error);
     const progress: string[] = [];
     const gateway: AgentModelGateway = {
-      generateText,
-      async *generateTextStream() {
+      queryModel,
+      async *queryModelStream() {
         yield { type: "complete" as const, content: [] };
       },
     };
@@ -251,7 +251,7 @@ describe("callModelWithRecovery", () => {
       onRecovery: (message) => progress.push(message),
     })).rejects.toBe(error);
 
-    expect(generateText).toHaveBeenCalledTimes(1);
+    expect(queryModel).toHaveBeenCalledTimes(1);
     expect(progress).toEqual([]);
   });
 
@@ -265,11 +265,11 @@ describe("callModelWithRecovery", () => {
       undefined,
       1_000,
     );
-    const generateText = vi.fn().mockRejectedValue(error);
+    const queryModel = vi.fn().mockRejectedValue(error);
     const progress: string[] = [];
     const gateway: AgentModelGateway = {
-      generateText,
-      async *generateTextStream() {
+      queryModel,
+      async *queryModelStream() {
         yield { type: "complete" as const, content: [] };
       },
     };
@@ -285,7 +285,7 @@ describe("callModelWithRecovery", () => {
 
     await vi.runAllTimersAsync();
     await rejection;
-    expect(generateText).toHaveBeenCalledTimes(8);
+    expect(queryModel).toHaveBeenCalledTimes(8);
     expect(progress).toHaveLength(7);
     expect(Date.now() - startedAt).toBe(7_000);
     vi.useRealTimers();
@@ -301,13 +301,13 @@ describe("callModelWithRecovery", () => {
       undefined,
       2_500,
     );
-    const generateText = vi
+    const queryModel = vi
       .fn()
       .mockRejectedValueOnce(rateLimit)
       .mockResolvedValueOnce({ provider: "anthropic", model: "test", content: textContent("ok") });
     const gateway: AgentModelGateway = {
-      generateText,
-      async *generateTextStream() {
+      queryModel,
+      async *queryModelStream() {
         yield { type: "complete" as const, content: [] };
       },
     };
@@ -324,7 +324,7 @@ describe("callModelWithRecovery", () => {
     const result = await promise;
 
     expect(result.content).toEqual(textContent("ok"));
-    expect(generateText).toHaveBeenCalledTimes(2);
+    expect(queryModel).toHaveBeenCalledTimes(2);
     expect(Date.now() - startedAt).toBe(2_500);
     expect(result.recoveryNotes[0]).toMatch(/Retry-After/);
     expect(notes).toEqual(["服务暂时繁忙，正在重试…"]);
@@ -332,7 +332,7 @@ describe("callModelWithRecovery", () => {
   });
 
   it("emergency-trims transcript on prompt-too-long before retrying", async () => {
-    const generateText = vi
+    const queryModel = vi
       .fn()
       .mockRejectedValueOnce(
         new AgentGatewayError("openai prompt too long: prompt is too long", "prompt-too-long", "openai"),
@@ -340,8 +340,8 @@ describe("callModelWithRecovery", () => {
       .mockResolvedValueOnce({ provider: "openai", model: "gpt", content: textContent("ok") });
 
     const gateway: AgentModelGateway = {
-      generateText,
-      async *generateTextStream() {
+      queryModel,
+      async *queryModelStream() {
         yield { type: "complete" as const, content: [] };
       },
     };
@@ -360,13 +360,13 @@ describe("callModelWithRecovery", () => {
 
     expect(result.content).toEqual(textContent("ok"));
     expect(result.hasAttemptedReactiveCompact).toBe(true);
-    const retriedPrompt = JSON.parse(generateText.mock.calls[1][0].prompt);
+    const retriedPrompt = JSON.parse(queryModel.mock.calls[1][0].prompt);
     expect(retriedPrompt.transcript[0]).toMatchObject({ kind: "compact_boundary" });
     expect(retriedPrompt.transcript.length).toBeLessThanOrEqual(5);
   });
 
   it("emergency-trims canonical native messages and keeps the caller history immutable", async () => {
-    const generateText = vi
+    const queryModel = vi
       .fn()
       .mockRejectedValueOnce(
         new AgentGatewayError(
@@ -381,8 +381,8 @@ describe("callModelWithRecovery", () => {
         content: textContent("ok"),
       });
     const gateway: AgentModelGateway = {
-      generateText,
-      async *generateTextStream() {
+      queryModel,
+      async *queryModelStream() {
         yield { type: "complete" as const, content: [] };
       },
     };
@@ -401,13 +401,13 @@ describe("callModelWithRecovery", () => {
     });
 
     expect(result.content).toEqual(textContent("ok"));
-    expect(generateText.mock.calls[1][0].messages.length).toBeLessThan(messages.length);
+    expect(queryModel.mock.calls[1][0].messages.length).toBeLessThan(messages.length);
     expect(preparedSnapshots.some((snapshot) => snapshot.length < messages.length)).toBe(true);
     expect(messages).toEqual(original);
   });
 
   it("upgrades max tokens before using continuation prompt", async () => {
-    const generateText = vi
+    const queryModel = vi
       .fn()
       .mockResolvedValueOnce({
         provider: "anthropic",
@@ -423,8 +423,8 @@ describe("callModelWithRecovery", () => {
       });
 
     const gateway: AgentModelGateway = {
-      generateText,
-      async *generateTextStream() {
+      queryModel,
+      async *queryModelStream() {
         yield { type: "complete" as const, content: [] };
       },
     };
@@ -439,9 +439,9 @@ describe("callModelWithRecovery", () => {
     });
 
     expect(result.content).toEqual(textContent("done"));
-    expect(generateText.mock.calls[0][0].maxOutputTokens).toBeUndefined();
-    expect(generateText.mock.calls[1][0].maxOutputTokens).toBe(65536);
-    expect(JSON.parse(generateText.mock.calls[1][0].prompt)).toEqual({
+    expect(queryModel.mock.calls[0][0].maxOutputTokens).toBeUndefined();
+    expect(queryModel.mock.calls[1][0].maxOutputTokens).toBe(65536);
+    expect(JSON.parse(queryModel.mock.calls[1][0].prompt)).toEqual({
       transcript: [],
       request: "hello",
     });
@@ -452,7 +452,7 @@ describe("callModelWithRecovery", () => {
   });
 
   it("owns thinking-only max-token recovery instead of relying on a provider driver retry", async () => {
-    const generateText = vi
+    const queryModel = vi
       .fn()
       .mockResolvedValueOnce({
         provider: "anthropic",
@@ -467,8 +467,8 @@ describe("callModelWithRecovery", () => {
         stopReason: "end",
       });
     const gateway: AgentModelGateway = {
-      generateText,
-      async *generateTextStream() {
+      queryModel,
+      async *queryModelStream() {
         yield { type: "complete" as const, content: [] };
       },
     };
@@ -480,15 +480,15 @@ describe("callModelWithRecovery", () => {
       model: { provider: "anthropic", model: "claude" },
     });
 
-    expect(generateText).toHaveBeenCalledTimes(2);
-    expect(generateText.mock.calls[0][0].maxOutputTokens).toBeUndefined();
-    expect(generateText.mock.calls[1][0].maxOutputTokens).toBe(65_536);
+    expect(queryModel).toHaveBeenCalledTimes(2);
+    expect(queryModel.mock.calls[0][0].maxOutputTokens).toBeUndefined();
+    expect(queryModel.mock.calls[1][0].maxOutputTokens).toBe(65_536);
     expect(result.content).toEqual(textContent("answer"));
     expect(result.maxOutputTokensRecoveryCount).toBe(1);
   });
 
   it("merges every max-output continuation and keeps detecting repeated truncation", async () => {
-    const generateText = vi
+    const queryModel = vi
       .fn()
       .mockResolvedValueOnce({
         provider: "anthropic",
@@ -509,8 +509,8 @@ describe("callModelWithRecovery", () => {
         stopReason: "end",
       });
     const gateway: AgentModelGateway = {
-      generateText,
-      async *generateTextStream() {
+      queryModel,
+      async *queryModelStream() {
         yield { type: "complete" as const, content: [] };
       },
     };
@@ -523,16 +523,16 @@ describe("callModelWithRecovery", () => {
     });
 
     expect(result.content).toEqual(textContent("alphabetagamma"));
-    expect(generateText).toHaveBeenCalledTimes(3);
-    expect(JSON.parse(generateText.mock.calls[1][0].prompt).continuation.partialOutput)
+    expect(queryModel).toHaveBeenCalledTimes(3);
+    expect(JSON.parse(queryModel.mock.calls[1][0].prompt).continuation.partialOutput)
       .toBe("alpha");
-    expect(JSON.parse(generateText.mock.calls[2][0].prompt).continuation.partialOutput)
+    expect(JSON.parse(queryModel.mock.calls[2][0].prompt).continuation.partialOutput)
       .toBe("alphabeta");
     expect(result.stopReason).toBe("end");
   });
 
   it("continues native history from an ephemeral assistant partial", async () => {
-    const generateText = vi
+    const queryModel = vi
       .fn()
       .mockResolvedValueOnce({
         provider: "anthropic",
@@ -547,8 +547,8 @@ describe("callModelWithRecovery", () => {
         stopReason: "end",
       });
     const gateway: AgentModelGateway = {
-      generateText,
-      async *generateTextStream() {
+      queryModel,
+      async *queryModelStream() {
         yield { type: "complete" as const, content: [] };
       },
     };
@@ -574,13 +574,13 @@ describe("callModelWithRecovery", () => {
     });
 
     expect(result.content).toEqual(textContent("first-half-second-half"));
-    expect(generateText.mock.calls[1][0].prompt).toBe("");
-    expect(generateText.mock.calls[1][0].messages.at(-2)).toEqual({
+    expect(queryModel.mock.calls[1][0].prompt).toBe("");
+    expect(queryModel.mock.calls[1][0].messages.at(-2)).toEqual({
       role: "assistant",
       content: [{ type: "text", text: "first-half" }],
     });
     const continuationContext = JSON.parse(
-      generateText.mock.calls[1][0].messages.at(-3).content[0].text,
+      queryModel.mock.calls[1][0].messages.at(-3).content[0].text,
     );
     expect(continuationContext.queryContext.user.locale).toBe("zh-CN");
     expect(messages).toEqual(original);
@@ -588,7 +588,7 @@ describe("callModelWithRecovery", () => {
 
   it("never reports success while every continuation remains truncated", async () => {
     const gateway: AgentModelGateway = {
-      async generateText() {
+      async queryModel() {
         return {
           provider: "anthropic",
           model: "claude",
@@ -596,7 +596,7 @@ describe("callModelWithRecovery", () => {
           stopReason: "max_tokens",
         };
       },
-      async *generateTextStream() {
+      async *queryModelStream() {
         yield { type: "complete" as const, content: [] };
       },
     };
@@ -611,7 +611,7 @@ describe("callModelWithRecovery", () => {
 
   it("uses the query fallback model after consecutive overloads", async () => {
     vi.useFakeTimers();
-    const generateText = vi
+    const queryModel = vi
       .fn()
       .mockRejectedValueOnce(
         normalizeProviderError(
@@ -631,8 +631,8 @@ describe("callModelWithRecovery", () => {
         content: textContent("ok"),
       });
     const gateway: AgentModelGateway = {
-      generateText,
-      async *generateTextStream() {
+      queryModel,
+      async *queryModelStream() {
         yield { type: "complete" as const, content: [] };
       },
     };
@@ -647,7 +647,7 @@ describe("callModelWithRecovery", () => {
     await vi.runAllTimersAsync();
     const result = await promise;
 
-    expect(generateText.mock.calls.map((call) => call[1])).toEqual([
+    expect(queryModel.mock.calls.map((call) => call[1])).toEqual([
       { provider: "openai", model: "primary" },
       { provider: "openai", model: "primary" },
       { provider: "anthropic", model: "fallback" },

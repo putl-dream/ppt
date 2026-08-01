@@ -69,7 +69,7 @@ describe("AgentGateway", () => {
     const gateway = new AgentGateway();
     gateway.configure({ provider: "openai", model: "openai-test", apiKey: "secret" });
 
-    const response = await gateway.generateText(
+    const response = await gateway.queryModel(
       { prompt: "Hello" },
       { provider: "openai", model: "openai-test" },
     );
@@ -122,9 +122,9 @@ describe("AgentGateway", () => {
       model: "shared-model",
     };
 
-    await gateway.generateText({ prompt: "primary" }, primary);
-    await gateway.generateText({ prompt: "fallback" }, fallback);
-    for await (const _chunk of gateway.generateTextStream({ prompt: "stream" }, fallback)) {
+    await gateway.queryModel({ prompt: "primary" }, primary);
+    await gateway.queryModel({ prompt: "fallback" }, fallback);
+    for await (const _chunk of gateway.queryModelStream({ prompt: "stream" }, fallback)) {
       // Consume the stream to exercise the same identity lookup path.
     }
 
@@ -182,8 +182,8 @@ describe("AgentGateway", () => {
       },
     });
 
-    await gateway.generateText({ prompt: "primary" }, primary);
-    await gateway.generateText(
+    await gateway.queryModel({ prompt: "primary" }, primary);
+    await gateway.queryModel(
       { prompt: "fallback" },
       { provider: "openai", model: "fallback-model" },
     );
@@ -211,7 +211,7 @@ describe("AgentGateway", () => {
       apiKey: "primary-key",
     });
 
-    await expect(gateway.generateText({ prompt: "Hello" }, selection)).rejects.toMatchObject({
+    await expect(gateway.queryModel({ prompt: "Hello" }, selection)).rejects.toMatchObject({
       code: "configuration",
       provider: selection.provider,
     });
@@ -252,12 +252,12 @@ describe("AgentGateway", () => {
       },
     });
 
-    await expect(gateway.generateText({ prompt: "old" }, {
+    await expect(gateway.queryModel({ prompt: "old" }, {
       configurationId: "old-fallback",
       provider: "openai",
       model: "old-model",
     })).rejects.toMatchObject({ code: "configuration" });
-    await gateway.generateText({ prompt: "new" }, {
+    await gateway.queryModel({ prompt: "new" }, {
       configurationId: "new-fallback",
       provider: "openai",
       model: "new-model",
@@ -269,7 +269,7 @@ describe("AgentGateway", () => {
 
     gateway.applyGatewayConfig({ timeoutMs: 180_000, maxOutputTokens: 16_384 });
 
-    await expect(gateway.generateText({ prompt: "new" }, {
+    await expect(gateway.queryModel({ prompt: "new" }, {
       configurationId: "new-fallback",
       provider: "openai",
       model: "new-model",
@@ -289,7 +289,7 @@ describe("AgentGateway", () => {
       apiKey: "secret",
     });
 
-    await gateway.generateText({ prompt: "Hello" }, selection);
+    await gateway.queryModel({ prompt: "Hello" }, selection);
 
     expect(selection).toEqual({ provider: "anthropic", model: "anthropic-test" });
     expect(selection).not.toHaveProperty("apiKey");
@@ -310,7 +310,7 @@ describe("AgentGateway", () => {
     });
     const chunks = [];
 
-    for await (const chunk of gateway.generateTextStream({ prompt: "Hello" }, selection)) {
+    for await (const chunk of gateway.queryModelStream({ prompt: "Hello" }, selection)) {
       chunks.push(chunk);
     }
 
@@ -336,7 +336,7 @@ describe("AgentGateway", () => {
       openaiApiMode: "chat-completions",
     });
 
-    await gateway.generateText(
+    await gateway.queryModel(
       { prompt: "Hello" },
       { provider: "openai", model: "openai-test" },
     );
@@ -370,8 +370,8 @@ describe("AgentGateway", () => {
       apiKey: "secret",
     });
 
-    await gateway.generateText({ prompt: "Hello" }, selection);
-    for await (const _chunk of gateway.generateTextStream({ prompt: "Hello" }, selection)) {
+    await gateway.queryModel({ prompt: "Hello" }, selection);
+    for await (const _chunk of gateway.queryModelStream({ prompt: "Hello" }, selection)) {
       // Consume the stream so the completion usage is recorded.
     }
 
@@ -403,7 +403,7 @@ describe("AgentGateway", () => {
     }];
     const original = structuredClone(messages);
 
-    await gateway.generateText({
+    await gateway.queryModel({
       prompt: "request context",
       systemPrompt: "system",
       responseContract: "markdown",
@@ -435,7 +435,7 @@ describe("AgentGateway", () => {
       model: "openai-test",
       content: [],
     });
-    await expect(gateway.generateText({ prompt: "Hello" }, selection)).rejects.toMatchObject({
+    await expect(gateway.queryModel({ prompt: "Hello" }, selection)).rejects.toMatchObject({
       code: "empty-response",
       provider: "openai",
     });
@@ -445,7 +445,7 @@ describe("AgentGateway", () => {
       model: "openai-test",
       content: [{ type: "text", text: "   " }],
     });
-    await expect(gateway.generateText({ prompt: "Hello" }, selection)).rejects.toMatchObject({
+    await expect(gateway.queryModel({ prompt: "Hello" }, selection)).rejects.toMatchObject({
       code: "empty-response",
       provider: "openai",
     });
@@ -455,7 +455,7 @@ describe("AgentGateway", () => {
       model: "openai-test",
       content: [{ type: "tool_use", id: "", name: "Read", input: {} }],
     });
-    await expect(gateway.generateText({ prompt: "Hello" }, selection)).rejects.toMatchObject({
+    await expect(gateway.queryModel({ prompt: "Hello" }, selection)).rejects.toMatchObject({
       code: "provider-error",
       provider: "openai",
     });
@@ -466,7 +466,7 @@ describe("AgentGateway", () => {
       content: [{ type: "text", text: "hello" }],
       usage: { inputTokens: 1, outputTokens: -1, totalTokens: 0 },
     });
-    await expect(gateway.generateText({ prompt: "Hello" }, selection)).rejects.toMatchObject({
+    await expect(gateway.queryModel({ prompt: "Hello" }, selection)).rejects.toMatchObject({
       code: "provider-error",
       provider: "openai",
     });
@@ -477,7 +477,7 @@ describe("AgentGateway", () => {
       content: [{ type: "text", text: "hello" }],
       stopReason: "length",
     });
-    await expect(gateway.generateText({ prompt: "Hello" }, selection)).rejects.toMatchObject({
+    await expect(gateway.queryModel({ prompt: "Hello" }, selection)).rejects.toMatchObject({
       code: "provider-error",
       provider: "openai",
     });
@@ -491,7 +491,7 @@ describe("AgentGateway", () => {
       apiKey: "secret",
     });
     providerMocks.openai.mockRejectedValueOnce(Object.assign(new Error("slow down"), { status: 429 }));
-    await expect(gateway.generateText({ prompt: "Hello" }, selection)).rejects.toMatchObject({
+    await expect(gateway.queryModel({ prompt: "Hello" }, selection)).rejects.toMatchObject({
       code: "rate-limit",
       provider: "openai",
     });
@@ -500,7 +500,7 @@ describe("AgentGateway", () => {
       yield { type: "complete", content: [{ type: "text", text: "done" }], stopReason: "length" };
     });
     const consume = async () => {
-      for await (const _chunk of gateway.generateTextStream({ prompt: "Hello" }, selection)) {
+      for await (const _chunk of gateway.queryModelStream({ prompt: "Hello" }, selection)) {
         // consume
       }
     };

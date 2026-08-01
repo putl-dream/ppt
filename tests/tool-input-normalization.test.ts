@@ -100,11 +100,11 @@ describe("tool input normalization", () => {
       }],
     };
     const gateway: AgentModelGateway = {
-      async generateText(request) {
+      async queryModel(request) {
         requests.push(request);
         return response;
       },
-      async *generateTextStream(request) {
+      async *queryModelStream(request) {
         requests.push(request);
         yield { type: "complete" as const, content: response.content };
       },

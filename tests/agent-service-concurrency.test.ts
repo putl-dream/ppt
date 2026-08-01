@@ -16,7 +16,7 @@ describe("AgentService thread run ownership", () => {
     const modelStarted = new Promise<void>((resolve) => { markModelStarted = resolve; });
     let modelCalls = 0;
     const gateway: AgentModelGateway = {
-      async generateText() {
+      async queryModel() {
         modelCalls += 1;
         markModelStarted();
         await modelGate;
@@ -26,7 +26,7 @@ describe("AgentService thread run ownership", () => {
           content: [{ type: "text", text: "done" }],
         };
       },
-      async *generateTextStream() {
+      async *queryModelStream() {
         throw new Error("streaming not expected");
       },
     };

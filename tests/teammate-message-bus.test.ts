@@ -57,7 +57,7 @@ describe("mailbox history formatting", () => {
 function createSequenceGateway(responses: AgentModelContentBlock[]): AgentModelGateway {
   let index = 0;
   return {
-    async generateText() {
+    async queryModel() {
       const value = responses[index++];
       if (value === undefined) throw new Error("Unexpected gateway call");
       return {
@@ -66,7 +66,7 @@ function createSequenceGateway(responses: AgentModelContentBlock[]): AgentModelG
         content: [value],
       };
     },
-    async *generateTextStream() {
+    async *queryModelStream() {
       const value = responses[index++];
       if (value === undefined) throw new Error("Unexpected gateway call");
       if (value.type === "text") yield { type: "text_delta" as const, text: value.text };
@@ -80,12 +80,12 @@ function createThinkingSequenceGateway(
 ): AgentModelGateway {
   let index = 0;
   return {
-    async generateText() {
+    async queryModel() {
       const value = responses[index++];
       if (value === undefined) throw new Error("Unexpected gateway call");
       return { provider: "anthropic", model: "test-model", content: [value] };
     },
-    async *generateTextStream() {
+    async *queryModelStream() {
       const value = responses[index++];
       if (value === undefined) throw new Error("Unexpected gateway call");
       yield { type: "thinking_delta" as const, thinking: `reasoning-${index}` };
@@ -97,10 +97,10 @@ function createThinkingSequenceGateway(
 
 function createFailingGateway(error: Error): AgentModelGateway {
   return {
-    async generateText() {
+    async queryModel() {
       throw error;
     },
-    async *generateTextStream() {
+    async *queryModelStream() {
       throw error;
     },
   };
@@ -136,10 +136,10 @@ function createBoardWorkerGateway(): AgentModelGateway {
   };
 
   return {
-    async generateText(request) {
+    async queryModel(request) {
       return { provider: "anthropic", model: "test-model", content: [next(request)] };
     },
-    async *generateTextStream(request) {
+    async *queryModelStream(request) {
       const value = next(request);
       if (value.type === "text") yield { type: "text_delta" as const, text: value.text };
       yield { type: "complete" as const, content: [value] };
@@ -159,10 +159,10 @@ function createActiveContinuationGateway() {
   const requests: AgentModelRequest[] = [];
   let step = 0;
   const gateway: AgentModelGateway = {
-    async generateText() {
+    async queryModel() {
       throw new Error("Streaming path expected.");
     },
-    async *generateTextStream(request) {
+    async *queryModelStream(request) {
       requests.push(request);
       step += 1;
       if (step === 1) {
@@ -184,10 +184,10 @@ function createActiveContinuationGateway() {
 
 function createAbortableGateway(onStarted: () => void): AgentModelGateway {
   return {
-    async generateText() {
+    async queryModel() {
       throw new Error("Streaming path expected.");
     },
-    async *generateTextStream(request) {
+    async *queryModelStream(request) {
       onStarted();
       await new Promise<void>((_resolve, reject) => {
         const signal = request.signal;
@@ -480,14 +480,14 @@ describe("TeammateManager", () => {
       ];
       let responseIndex = 0;
       const gateway: AgentModelGateway = {
-        async generateText(request) {
+        async queryModel(request) {
           requests.push(request);
           const value = responses[responseIndex++];
           if (!value) throw new Error("Unexpected gateway call");
           return { provider: "anthropic", model: "test-model", content: [value] };
         },
-        async *generateTextStream(request) {
-          const response = await this.generateText(request);
+        async *queryModelStream(request) {
+          const response = await this.queryModel(request);
           yield { type: "complete" as const, content: response.content };
         },
       };

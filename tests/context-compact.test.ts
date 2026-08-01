@@ -185,7 +185,7 @@ describe("compact_history", () => {
     const workspaceRoot = await createWorkspace();
     let responseContract: string | undefined;
     const gateway: AgentModelGateway = {
-      async generateText(request) {
+      async queryModel(request) {
         responseContract = request.responseContract;
         return {
           provider: "openai",
@@ -193,7 +193,7 @@ describe("compact_history", () => {
           content: [{ type: "text", text: "## Goal\nFinish slides." }],
         };
       },
-      async *generateTextStream() {
+      async *queryModelStream() {
         yield { type: "complete" as const, content: [] };
       },
     };
@@ -228,7 +228,7 @@ describe("compact_history", () => {
   it("does not replace canonical history with a truncated summary", async () => {
     const workspaceRoot = await createWorkspace();
     const gateway: AgentModelGateway = {
-      async generateText() {
+      async queryModel() {
         return {
           provider: "openai",
           model: "gpt",
@@ -236,7 +236,7 @@ describe("compact_history", () => {
           stopReason: "max_tokens",
         };
       },
-      async *generateTextStream() {
+      async *queryModelStream() {
         yield { type: "complete" as const, content: [] };
       },
     };
@@ -261,7 +261,7 @@ describe("compact_history", () => {
   it("does not replace canonical history when the summary emits tool_use", async () => {
     const workspaceRoot = await createWorkspace();
     const gateway: AgentModelGateway = {
-      async generateText() {
+      async queryModel() {
         return {
           provider: "openai",
           model: "gpt",
@@ -271,7 +271,7 @@ describe("compact_history", () => {
           ],
         };
       },
-      async *generateTextStream() {
+      async *queryModelStream() {
         yield { type: "complete" as const, content: [] };
       },
     };
@@ -295,10 +295,10 @@ describe("compact_history", () => {
 
   it("opens circuit breaker after consecutive failures", async () => {
     const gateway: AgentModelGateway = {
-      async generateText() {
+      async queryModel() {
         throw new Error("summary failed");
       },
-      async *generateTextStream() {
+      async *queryModelStream() {
         yield { type: "complete" as const, content: [] };
       },
     };
@@ -389,7 +389,7 @@ describe("prepareContext", () => {
     }));
     let summaryInput: Record<string, unknown> | undefined;
     const gateway: AgentModelGateway = {
-      async generateText(request) {
+      async queryModel(request) {
         summaryInput = JSON.parse(request.prompt) as Record<string, unknown>;
         return {
           provider: "openai",
@@ -397,7 +397,7 @@ describe("prepareContext", () => {
           content: [{ type: "text", text: "Native history summary." }],
         };
       },
-      async *generateTextStream() {
+      async *queryModelStream() {
         yield { type: "complete" as const, content: [] };
       },
     };
@@ -428,10 +428,10 @@ describe("prepareContext", () => {
   });
 
   it("uses preview-preserving micro compaction only after the soft threshold", async () => {
-    const generateText = vi.fn();
+    const queryModel = vi.fn();
     const gateway: AgentModelGateway = {
-      generateText,
-      async *generateTextStream() {
+      queryModel,
+      async *queryModelStream() {
         yield { type: "complete" as const, content: [] };
       },
     };
@@ -451,7 +451,7 @@ describe("prepareContext", () => {
       onProgress: (message) => progress.push(message),
     });
 
-    expect(generateText).not.toHaveBeenCalled();
+    expect(queryModel).not.toHaveBeenCalled();
     expect(result.contextChanged).toBe(true);
     expect(result.notes.some((note) => note.startsWith("L2 micro_compact:"))).toBe(true);
     expect(String(result.payload.transcript[0].result)).toContain("important-0");
@@ -462,14 +462,14 @@ describe("prepareContext", () => {
 
   it("persists large results and triggers L4 when still over the hard threshold", async () => {
     const workspaceRoot = await createWorkspace();
-    const generateText = vi.fn().mockResolvedValue({
+    const queryModel = vi.fn().mockResolvedValue({
       provider: "openai",
       model: "gpt",
       content: [{ type: "text", text: "compressed summary" }],
     });
     const gateway: AgentModelGateway = {
-      generateText,
-      async *generateTextStream() {
+      queryModel,
+      async *queryModelStream() {
         yield { type: "complete" as const, content: [] };
       },
     };
@@ -495,7 +495,7 @@ describe("prepareContext", () => {
     });
 
     expect(result.payload.transcript.length).toBeLessThan(transcript.length);
-    expect(generateText).toHaveBeenCalledTimes(1);
+    expect(queryModel).toHaveBeenCalledTimes(1);
     expect(result.notes.some((note) => /L[1-4]|Persisted oversized/.test(note))).toBe(true);
     expect(result.contextChanged).toBe(true);
     expect(userProgress).toEqual([

@@ -30,14 +30,14 @@ function gatewayFor(turns: AgentModelContentBlock[][]): AgentModelGateway & {
   let index = 0;
   return {
     requests,
-    async generateText(request) {
+    async queryModel(request) {
       requests.push(request);
       const content = turns[index++];
       if (!content) throw new Error("Unexpected gateway call");
       return { provider: "openai", model: "test", content };
     },
-    async *generateTextStream(request) {
-      const response = await this.generateText(request);
+    async *queryModelStream(request) {
+      const response = await this.queryModel(request);
       yield { type: "complete" as const, content: response.content };
     },
   };
@@ -93,10 +93,10 @@ describe("agent query loop batches", () => {
   it("emits a query_failed observation before propagating execution errors", async () => {
     const events: AgentQueryLoopEvent[] = [];
     const gateway: AgentModelGateway = {
-      async generateText() {
+      async queryModel() {
         throw new Error("provider unavailable");
       },
-      async *generateTextStream() {
+      async *queryModelStream() {
         throw new Error("provider unavailable");
       },
     };

@@ -23,13 +23,13 @@ function createGateway(turns: AgentModelContentBlock[][]): AgentModelGateway & {
   const requests: AgentModelRequest[] = [];
   return {
     requests,
-    async generateText(request): Promise<AgentModelResponse> {
+    async queryModel(request): Promise<AgentModelResponse> {
       requests.push(request);
       const content = turns[index++];
       if (!content) throw new Error("Unexpected gateway call");
       return { provider: "anthropic", model: "test-model", content };
     },
-    async *generateTextStream(request) {
+    async *queryModelStream(request) {
       requests.push(request);
       const content = turns[index++];
       if (!content) throw new Error("Unexpected gateway call");
@@ -125,10 +125,10 @@ describe("native ContentBlock runtime path", () => {
     try {
       let invocation = 0;
       const gateway: AgentModelGateway = {
-        async generateText() {
+        async queryModel() {
           throw new Error("Unexpected non-streaming call");
         },
-        async *generateTextStream() {
+        async *queryModelStream() {
           invocation += 1;
           if (invocation === 1) {
             yield { type: "text_delta" as const, text: "failed partial" };

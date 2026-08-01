@@ -68,10 +68,10 @@ describe("runtime cancellation classification", () => {
       },
     ];
     const gateway: AgentModelGateway = {
-      async generateText() {
+      async queryModel() {
         return { provider: "anthropic", model: "test", content };
       },
-      async *generateTextStream() {
+      async *queryModelStream() {
         yield { type: "complete" as const, content };
       },
     };
@@ -131,10 +131,10 @@ describe("runtime cancellation classification", () => {
       input: {},
     }];
     const gateway: AgentModelGateway = {
-      async generateText() {
+      async queryModel() {
         return { provider: "anthropic", model: "test", content };
       },
-      async *generateTextStream() {
+      async *queryModelStream() {
         yield { type: "complete" as const, content };
       },
     };

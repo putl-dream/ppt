@@ -145,16 +145,17 @@ export interface AgentModelGateway {
   /** Optional search credentials; not part of the model I/O contract. */
   getSearchConfig?(): AgentSearchConfig;
 
-  generateText(
+  /** One complete model round-trip; returns neutral content blocks. */
+  queryModel(
     request: AgentModelRequest,
     selection?: AgentModelSelection,
   ): Promise<AgentModelResponse>;
 
   /**
-   * 流式生成文本。返回AsyncIterable，调用者可以逐chunk接收生成的内容。
-   * 最后一个chunk的type为'complete'，表示生成完成。
+   * Streaming form of queryModel. Yields text/thinking deltas, then a final
+   * `complete` chunk with the authoritative content and stopReason.
    */
-  generateTextStream(
+  queryModelStream(
     request: AgentModelRequest,
     selection?: AgentModelSelection,
   ): AsyncIterable<AgentModelStreamChunk>;

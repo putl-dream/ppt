@@ -59,13 +59,13 @@ describe("discover-stage WebSearch routing", () => {
       getSearchConfig: () => ({
         webSearchApiKey: "tvly-test-key",
       }),
-      async generateText(request): Promise<AgentModelResponse> {
+      async queryModel(request): Promise<AgentModelResponse> {
         requests.push(request);
         const content = responses[responseIndex++];
         if (!content) throw new Error("Unexpected gateway call");
         return { provider: "openai", model: "test-model", content };
       },
-      async *generateTextStream() {
+      async *queryModelStream() {
         throw new Error("Streaming was not expected in this test");
       },
     };
