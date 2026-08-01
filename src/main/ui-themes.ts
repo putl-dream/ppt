@@ -1,5 +1,5 @@
 import { mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
-import { basename, extname, join, resolve, sep } from "node:path";
+import { basename, join, resolve, sep } from "node:path";
 import type { UiThemeSummary } from "@shared/ipc";
 import { getApplicationDataRoot } from "./application-data";
 
@@ -7,17 +7,31 @@ export type { UiThemeSummary };
 
 export const BUILTIN_UI_THEME_ID = "studio";
 export const UI_THEMES_DIRECTORY_NAME = "themes";
+export const UI_THEME_ENTRY_FILE_NAME = "theme.css";
 export const UI_THEME_MAX_BYTES = 256 * 1024;
 
-const THEME_ID_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9_-]*$/;
+/** Directory name = theme id. Unicode letters/numbers plus - _ ; no dots or separators. */
+const THEME_ID_PATTERN = /^[\p{L}\p{N}][\p{L}\p{N}_-]*$/u;
 
 const THEMES_README = `# UI themes
 
-Drop a \`.css\` file here to add a workbench appearance theme (Typora-style).
+Put each workbench theme in its own folder under this directory:
+
+\`\`\`text
+themes/
+  example/
+    theme.css
+  my-theme/
+    theme.css
+\`\`\`
+
+The folder name is the theme id. Only folders that contain \`theme.css\` are listed.
+
+Open this root from Settings → 界面外观 → 打开主题根目录, then refresh the list.
 
 ## Stable contract (recommended)
 
-Override semantic CSS variables for light/dark:
+Override semantic CSS variables for light/dark in \`theme.css\`:
 
 \`\`\`css
 :root[data-color-scheme="dark"] {
@@ -49,21 +63,21 @@ Override semantic CSS variables for light/dark:
 
 ## Deep customization
 
-Prefer region hooks when targeting chrome:
+Prefer region hooks:
 
 - \`[data-ui-region="sidebar"]\`
 - \`[data-ui-region="composer"]\`
 - \`[data-ui-region="canvas"]\`
 - \`[data-ui-region="settings"]\`
 
-Component class names may change between versions. Slide paper / deck preview surfaces are intentionally not theme-driven.
-
-Select the theme in Settings → 界面外观. Refresh the list after adding files.
+Relative \`url(./asset.png)\` inside the theme folder is not loaded yet — use \`https:\` or \`data:\` for images.
+The reserved id \`studio\` cannot be used as a folder name.
 `;
 
 const EXAMPLE_THEME_CSS = `/*
  * example — token-only workbench theme for verifying UI theme loading.
- * Select it in Settings → 界面外观 after placing this file in the themes folder.
+ * Path: ~/.agent-ppt/themes/example/theme.css
+ * Select it in Settings → 界面外观.
  */
 
 :root[data-color-scheme="dark"] {
@@ -119,10 +133,18 @@ function isPathInsideDirectory(candidatePath: string, directoryPath: string): bo
 }
 
 export function isValidUiThemeId(id: string): boolean {
-  return THEME_ID_PATTERN.test(id) && id !== BUILTIN_UI_THEME_ID;
+  if (typeof id !== "string" || !id.trim() || id !== id.trim()) return false;
+  if (id === BUILTIN_UI_THEME_ID) return false;
+  if (id.includes("\0") || id.includes("/") || id.includes("\\") || id.includes("..")) {
+    return false;
+  }
+  return THEME_ID_PATTERN.test(id);
 }
 
 function themeDisplayName(id: string): string {
+  if (/^[\u4e00-\u9fff]/u.test(id) || !/[-_]/.test(id)) {
+    return id;
+  }
   return id
     .split(/[-_]+/)
     .filter(Boolean)
@@ -132,9 +154,13 @@ function themeDisplayName(id: string): string {
 
 function resolveThemeCssPath(themesDirectory: string, id: string): string | null {
   if (!isValidUiThemeId(id)) return null;
-  const filePath = resolve(themesDirectory, `${id}.css`);
-  if (!isPathInsideDirectory(filePath, themesDirectory)) return null;
-  if (basename(filePath) !== `${id}.css`) return null;
+  const themeDirectory = resolve(themesDirectory, id);
+  if (!isPathInsideDirectory(themeDirectory, themesDirectory)) return null;
+  if (basename(themeDirectory) !== id) return null;
+
+  const filePath = resolve(themeDirectory, UI_THEME_ENTRY_FILE_NAME);
+  if (!isPathInsideDirectory(filePath, themeDirectory)) return null;
+  if (basename(filePath) !== UI_THEME_ENTRY_FILE_NAME) return null;
   return filePath;
 }
 
@@ -149,7 +175,9 @@ export function ensureUiThemesDirectory(applicationDataRoot?: string): string {
     writeFileSync(readmePath, THEMES_README, "utf8");
   }
 
-  const examplePath = join(themesDirectory, "example.css");
+  const exampleDirectory = join(themesDirectory, "example");
+  mkdirSync(exampleDirectory, { recursive: true });
+  const examplePath = join(exampleDirectory, UI_THEME_ENTRY_FILE_NAME);
   try {
     statSync(examplePath);
   } catch {
@@ -168,22 +196,36 @@ export function listUiThemes(applicationDataRoot?: string): UiThemeSummary[] {
     return [];
   }
 
-  return entries
-    .filter((fileName) => {
-      if (fileName.startsWith("README")) return false;
-      if (extname(fileName).toLowerCase() !== ".css") return false;
-      const id = basename(fileName, extname(fileName));
-      return isValidUiThemeId(id);
-    })
-    .map((fileName) => {
-      const id = basename(fileName, extname(fileName));
-      return {
-        id,
-        name: themeDisplayName(id),
-        fileName,
-      };
-    })
-    .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
+  const themes: UiThemeSummary[] = [];
+  for (const entryName of entries) {
+    if (entryName.startsWith("README")) continue;
+    if (!isValidUiThemeId(entryName)) continue;
+
+    const themeDirectory = join(themesDirectory, entryName);
+    let directoryStats;
+    try {
+      directoryStats = statSync(themeDirectory);
+    } catch {
+      continue;
+    }
+    if (!directoryStats.isDirectory()) continue;
+
+    const entryPath = join(themeDirectory, UI_THEME_ENTRY_FILE_NAME);
+    try {
+      const entryStats = statSync(entryPath);
+      if (!entryStats.isFile()) continue;
+    } catch {
+      continue;
+    }
+
+    themes.push({
+      id: entryName,
+      name: themeDisplayName(entryName),
+      fileName: `${entryName}/${UI_THEME_ENTRY_FILE_NAME}`,
+    });
+  }
+
+  return themes.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
 }
 
 export function readUiThemeCss(

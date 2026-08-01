@@ -35,9 +35,9 @@ To add a future **document** skin: create `tokens/skins/document.css`, add `"doc
 
 Default: `skin=studio`, `colorScheme=dark`.
 
-## User CSS themes (Typora-style)
+## User CSS themes
 
-Custom workbench themes live in `{applicationDataRoot}/themes/*.css` (usually `~/.agent-ppt/themes/`). Settings → 界面外观 lists `Studio` plus discovered files; selecting one injects the full stylesheet into `<style id="user-ui-theme">`.
+Custom workbench themes live in `{applicationDataRoot}/themes/<id>/theme.css` (usually `~/.agent-ppt/themes/<id>/theme.css`). Settings → 界面外观 lists `Studio` plus discovered folders; selecting one injects the full stylesheet into `<style id="user-ui-theme">`. The theme root path is fixed (no custom directory picker).
 
 **Stable contract (recommended):** override semantic variables under `:root[data-color-scheme="dark|light"]` (`--surface-*`, `--text-*`, `--border-*`, accents/status). A token-only theme should recolor window chrome, sidebar, composer, and settings without targeting component classes.
 
@@ -50,7 +50,7 @@ Custom workbench themes live in `{applicationDataRoot}/themes/*.css` (usually `~
 
 Component class names may change. Slide paper / deck preview surfaces intentionally keep fixed light paper colors and are not part of the theme contract.
 
-Built-in id `studio` is reserved; a user file named `studio.css` is ignored.
+Built-in id `studio` is reserved; a user folder named `studio` is ignored. Relative `url(./asset)` inside theme folders is not loaded yet.
 
 ## Placement: three questions
 
@@ -90,7 +90,7 @@ Prefer `var(--transition-color)` / `var(--transition-panel)` / property-specific
 
 - `components/ide.css` — settings chrome vocabulary
 - `components/controls.css` — shared `.toggle-switch`
-- `components/select.css` — shared Cursor-style `.ui-select` (portal menu)
+- `components/select.css` — shared portal `.ui-select` menu
 
 ## Modules ownership
 

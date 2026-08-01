@@ -109,7 +109,7 @@ export const ProcessTracePanel: React.FC<ProcessTracePanelProps> = ({
         <div className="process-trace-panel-body">
           {rows.map((row) => {
             // Live panel header is a neutral group label — don't nest a
-            // second "思考中" title under it (Cursor: one Thinking line).
+            // second "思考中" title under it.
             const suppressThoughtTitle = live
               && row.kind === "thought"
               && Boolean(row.active);

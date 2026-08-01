@@ -353,7 +353,7 @@
   animation: cursor-blink 1s infinite;
 }
 
-/* Cursor-style live status: shimmer on the label, square pulse for running rows */
+/* Live status: shimmer on the label, square pulse for running rows */
 .agent-run-status--shimmer {
   background-image: linear-gradient(
     90deg,

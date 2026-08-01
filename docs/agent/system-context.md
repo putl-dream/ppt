@@ -7,7 +7,7 @@
 
 System Prompt 是有序 Section 的组装结果，不是一份不断追加规则的巨型字符串。
 
-参考 Claude Code，当前实现与扩展方向共同遵守：
+当前实现遵守：
 
 - 稳定内容获得稳定前缀和 Prompt Cache；
 - workspace、artifact、selection、记忆、工具和预算等动态事实可独立更新；

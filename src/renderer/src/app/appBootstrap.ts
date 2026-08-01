@@ -25,7 +25,7 @@ type LegacyThemeMode = "light" | "dark" | "cyan" | "orange" | "system";
 export interface PersistedUiSettings {
   defaultRatio: "16:9" | "4:3";
   skin: UiSkin;
-  /** Built-in `studio` or a custom theme id from `~/.agent-ppt/themes/*.css`. */
+  /** Built-in `studio` or a custom theme id from `~/.agent-ppt/themes/<id>/theme.css`. */
   uiThemeId: string;
   colorScheme: UiColorScheme;
   uiAccentColor: UiAccentColor;

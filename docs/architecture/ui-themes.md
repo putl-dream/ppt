@@ -2,10 +2,12 @@
 
 状态：Implemented。
 
-Agent PPT 支持类 Typora 的工作台外观定制：在应用数据目录的 `themes/` 下放置
-`*.css`，即可在设置中切换。主题只影响**软件自身界面**，不影响幻灯片
-DesignSystem、SVG 预览纸面或 PPTX 导出。
+Agent PPT 支持文件夹 CSS 工作台外观定制：在固定根目录
+`~/.agent-ppt/theme/<主题名>/theme.css` 放置主题包，即可在设置中切换。
+主题只影响**软件自身界面**，不影响幻灯片 DesignSystem、SVG 预览纸面或 PPTX 导出。
+旧版扁平 `themes/*.css` 已废弃，不做自动迁移。
 
+用户向「能做什么 / 食谱」见 [CSS 主题指南](../user-manual/css-themes.md)。
 实现与样式契约的代码侧说明见
 [`src/renderer/src/styles/README.md`](../../src/renderer/src/styles/README.md)。
 
@@ -13,25 +15,25 @@ DesignSystem、SVG 预览纸面或 PPTX 导出。
 
 | 轴 | 作用对象 | 形态 |
 |---|---|---|
-| 工作台 UI 主题（本文） | 侧栏、输入框、设置页、窗口壳 | 用户 `*.css` + 内置 Studio skin |
+| 工作台 UI 主题（本文） | 侧栏、输入框、设置页、窗口壳 | 用户 `theme/<名>/theme.css` + 内置 Studio skin |
 | DesignSystemV2 | 演示文稿配色 / 版式语气 | JSON（`design/design-spec.json` 等） |
 
 二者不要混用：改 UI 主题不会改导出的 PPT；改 design-spec 也不会换工作台皮肤。
 
 ## 目录与发现
 
-- 默认路径：`~/.agent-ppt/themes/`
-- 尊重 `AGENT_PPT_DATA_DIR`：主题目录为 `{applicationDataRoot}/themes/`
-- 仅扫描目录**顶层**的 `*.css`；忽略 `README*`、子目录、非 css 文件
-- 文件名 stem 即主题 id（如 `midnight.css` → `midnight`）
-- 内置 id `studio` 保留；用户放置的 `studio.css` 会被忽略
-- 单文件上限 256KB；路径穿越与越界读取会被拒绝
-- 首次启动会创建目录，并写入 `README.md` 与示例 `example.css`（不会自动选中）
+- 固定根目录：`~/.agent-ppt/theme/`（不提供自选路径）
+- 尊重 `AGENT_PPT_DATA_DIR`：根目录为 `{applicationDataRoot}/theme/`
+- 扫描**一级子目录**；仅当存在 `theme.css` 时列入
+- 子目录名即主题 id（Unicode 字母数字与 `-` `_`，如 `midnight`、`午夜蓝`）
+- 内置 id `studio` 保留；名为 `studio` 的文件夹会被忽略
+- `theme.css` 上限 256KB；路径穿越与越界读取会被拒绝
+- 首次启动创建根目录，写入 `README.md` 与示例 `example/theme.css`（不自动选中）
 
 ## 使用方式
 
-1. 设置 → **界面外观** → **打开主题文件夹**
-2. 放入或编辑 `*.css`
+1. 设置 → **界面外观** → **打开主题根目录**
+2. 新建或编辑 `theme/<主题名>/theme.css`
 3. **刷新列表**，选择主题
 
 选中项持久化在 UI 设置（`uiThemeId`）。未知或已删除的自定义 id 回退为
@@ -40,7 +42,7 @@ DesignSystem、SVG 预览纸面或 PPTX 导出。
 ## 加载机制
 
 ```text
-themes/*.css
+theme/<id>/theme.css
   → Main list/read（IPC: ui-themes:*）
   → Renderer useAppearanceRuntime
   → <style id="user-ui-theme"> 注入完整 CSS
@@ -50,7 +52,7 @@ themes/*.css
 - 内置 `data-skin="studio"` 始终作为底座
 - 自定义主题是**叠加层**，不是替换整棵样式树
 - CSP 允许 `style-src 'unsafe-inline'`，因此直接注入文本即可，无需自定义协议
-- 主题 CSS **不裁剪选择器**（与 Typora 相同）；安全边界是目录隔离与体积上限
+- 主题 CSS **不裁剪选择器**；安全边界是目录隔离与体积上限
 
 相关代码：
 
@@ -135,7 +137,9 @@ themes/*.css
 ## 明确边界
 
 - 不做主题市场、zip 包、远程 URL 主题
-- 不做子文件夹皮肤包或 `theme.json`（首版保持扁平 `*.css`）
+- 不提供「选择任意文件夹作为主题源」；根目录固定
+- 不做旧 `themes/*.css` 自动迁移
+- 本轮不加载主题包内相对路径资源（`url(./bg.png)`）；目录结构为后续预留
 - 不把 `UiSkin` 扩成任意字符串；自定义主题走独立的 `uiThemeId`
 - 不做 CSS 选择器白名单 / sanitize
 

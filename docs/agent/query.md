@@ -16,23 +16,7 @@ Query 不是：
 - 一份长期 Session；
 - PPT 工作流中的一个固定阶段。
 
-项目中的正式术语是 `query`、`AgentQueryParams`、`AgentQueryState` 和 `AgentIterationWorkspace`。参考项目不存在 `queryOramas/queryOrama` 契约；不在本项目中虚构这一层。
-
-### 1.1 `queryOramas` 术语核对
-
-对 `/mnt/e/Coding/claude-code` 的源码核对结果如下：
-
-| 参考符号 | 责任 | 本项目映射 |
-|---|---|---|
-| `query()` / `queryLoop()` | 主 Agent 多圈编排 | `src/main/agent/runtime/query/query.ts` |
-| `queryModelWithStreaming()` | 流式 Provider 调用 | Gateway + `ModelTurnRunner` |
-| `queryModelWithoutStreaming()` | 消费同一模型流并返回最终消息 | Gateway 一次性调用边界 |
-| `sideQuery()` | 权限分类、记忆相关性、会话搜索等脱离主 Loop 的小查询 | 按用途放在窄 service；不得共享/修改主 Query State |
-
-因此，若 `queryOramas` 原意是“Query Orchestration”，对应的是本章的
-`QueryParams → State → IterationWorkspace → transition`；若原意是旁路模型查询，
-对应参考项目的 `sideQuery()`。旁路查询只能返回有界结果，不能偷偷推进主
-`turnCount`、写入主 History 或执行副作用工具。
+项目中的正式术语是 `query`、`AgentQueryParams`、`AgentQueryState` 和 `AgentIterationWorkspace`。
 
 ## 2. 身份边界
 

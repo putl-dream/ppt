@@ -2,7 +2,6 @@
 
 > 文档类型：现行架构
 > 最后核对：2026-07-30
-> 参考实现：`/mnt/e/Coding/claude-code` 的 `QueryEngine → query() → tools → provider` 分层
 
 ## 1. 核心定位
 
@@ -30,9 +29,7 @@ Tool Registry / Permission / Hooks / Gateway / Persistence
 Presentation Command Proposal → CommitGate → CommandBus
 ```
 
-## 2. 从 Claude Code 提炼的设计原则
-
-参考项目最值得复刻的不是命令名或提示词，而是以下工程边界：
+## 2. 设计原则
 
 1. **Query 是独立异步状态机**：核心循环是可单独调用、测试和观察的 `AsyncGenerator`，不是 UI、Service 或 Runtime 大类中的隐藏循环。
 2. **输入、状态和单圈工作区分离**：`QueryParams` 只组装一次；`State` 只保存跨圈事实；未完成的模型/工具批次只存在于 `Workspace`。

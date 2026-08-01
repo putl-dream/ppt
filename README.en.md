@@ -228,7 +228,7 @@ Agent PPT is local-first by default:
 
 - [docs/README.md](./docs/README.md): documentation index
 - [Architecture overview](./docs/architecture/overview.md): current layers, data flow, and state boundaries
-- [Engineering capability map](./docs/architecture/engineering-capabilities.md): Claude Code reference capabilities, current mappings, and gaps
+- [Engineering capability map](./docs/architecture/engineering-capabilities.md): current capability mappings, maturity, and gaps
 - [Query and Agent Loop](./docs/agent/query.md): QueryParams, State, Workspace, events, and recovery
 - [Tools and file operations](./docs/agent/tools.md): dynamic capabilities, permissions, and Read/Write/Edit contracts
 - [System Prompt and Context](./docs/agent/system-context.md): section registry and stable/dynamic boundaries

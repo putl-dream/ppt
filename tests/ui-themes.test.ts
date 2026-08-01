@@ -8,6 +8,7 @@ import {
   ensureUiThemesDirectory,
   listUiThemes,
   readUiThemeCss,
+  UI_THEME_ENTRY_FILE_NAME,
   UI_THEME_MAX_BYTES,
 } from "@main/ui-themes";
 
@@ -27,32 +28,54 @@ async function createAppRoot(): Promise<string> {
   return root;
 }
 
+function writeTheme(
+  themesDirectory: string,
+  id: string,
+  css: string,
+): void {
+  const themeDirectory = join(themesDirectory, id);
+  mkdirSync(themeDirectory, { recursive: true });
+  writeFileSync(join(themeDirectory, UI_THEME_ENTRY_FILE_NAME), css, "utf8");
+}
+
 describe("ui themes directory", () => {
-  it("creates themes directory with README and example.css", async () => {
+  it("creates theme/ with README and example/theme.css", async () => {
     const root = await createAppRoot();
     const themesDirectory = ensureUiThemesDirectory(root);
 
     expect(themesDirectory).toBe(join(root, "themes"));
     const themes = listUiThemes(root);
     expect(themes.some((theme) => theme.id === "example")).toBe(true);
+    expect(themes.find((theme) => theme.id === "example")?.fileName).toBe(
+      `example/${UI_THEME_ENTRY_FILE_NAME}`,
+    );
     expect(readUiThemeCss("example", root)).toContain("--surface-canvas");
   });
 
-  it("lists only top-level *.css themes and skips reserved studio id", async () => {
+  it("lists only first-level folders that contain theme.css", async () => {
     const root = await createAppRoot();
     const themesDirectory = ensureUiThemesDirectory(root);
-    writeFileSync(join(themesDirectory, "midnight.css"), ":root { --surface-canvas: #000; }", "utf8");
-    writeFileSync(join(themesDirectory, "studio.css"), ":root { --surface-canvas: #111; }", "utf8");
-    writeFileSync(join(themesDirectory, "notes.txt"), "ignore", "utf8");
-    mkdirSync(join(themesDirectory, "nested"), { recursive: true });
-    writeFileSync(join(themesDirectory, "nested", "hidden.css"), ":root{}", "utf8");
+    writeTheme(themesDirectory, "midnight", ":root { --surface-canvas: #000; }");
+    writeTheme(themesDirectory, "午夜蓝", ":root { --surface-canvas: #001; }");
+    writeTheme(themesDirectory, "studio", ":root { --surface-canvas: #111; }");
+    writeFileSync(join(themesDirectory, "legacy-flat.css"), ":root{}", "utf8");
+    mkdirSync(join(themesDirectory, "empty-folder"), { recursive: true });
+    mkdirSync(join(themesDirectory, "nested", "hidden"), { recursive: true });
+    writeFileSync(
+      join(themesDirectory, "nested", "hidden", UI_THEME_ENTRY_FILE_NAME),
+      ":root{}",
+      "utf8",
+    );
 
     const themes = listUiThemes(root);
     const ids = themes.map((theme) => theme.id);
     expect(ids).toContain("midnight");
     expect(ids).toContain("example");
+    expect(ids).toContain("午夜蓝");
     expect(ids).not.toContain(BUILTIN_UI_THEME_ID);
+    expect(ids).not.toContain("empty-folder");
     expect(ids).not.toContain("hidden");
+    expect(ids).not.toContain("legacy-flat");
   });
 
   it("rejects path traversal and invalid ids when reading", async () => {
@@ -63,15 +86,16 @@ describe("ui themes directory", () => {
     expect(readUiThemeCss("..\\secrets", root)).toBeNull();
     expect(readUiThemeCss("studio", root)).toBeNull();
     expect(readUiThemeCss("", root)).toBeNull();
+    expect(readUiThemeCss("a/b", root)).toBeNull();
   });
 
-  it("rejects oversized theme files", async () => {
+  it("rejects oversized theme.css files", async () => {
     const root = await createAppRoot();
     const themesDirectory = ensureUiThemesDirectory(root);
-    writeFileSync(
-      join(themesDirectory, "huge.css"),
+    writeTheme(
+      themesDirectory,
+      "huge",
       "x".repeat(UI_THEME_MAX_BYTES + 1),
-      "utf8",
     );
 
     expect(listUiThemes(root).some((theme) => theme.id === "huge")).toBe(true);

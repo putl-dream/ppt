@@ -1,78 +1,59 @@
-# 工程能力地图：Claude Code 参考与 Agent PPT 落点
+# Agent PPT 工程能力地图
 
 > 文档类型：现行能力盘点
 > 最后核对：2026-08-01
-> 事实来源：`/mnt/e/Coding/claude-code`、`src/`、`skills/`、`tests/` 与 `package.json`
+> 事实来源：`src/`、`skills/`、`tests/` 与 `package.json`
 
-下文中 `/mnt/e/Coding/claude-code/...` 是参考项目绝对路径；`src/...`、`tests/...`
-和 `docs/...` 均相对本仓库根目录。
+下文中 `src/...`、`tests/...` 和 `docs/...` 均相对本仓库根目录。
 
 ## 1. 文档目的
 
-本文回答三个问题：
+本文回答两个问题：
 
-1. `claude-code` 作为通用 Coding Agent，具备哪些可复用的工程能力；
-2. 这些能力在 Agent PPT 中应当如何落位；
-3. 当前代码已经实现到哪里，哪些只是部分能力或路线图。
+1. Agent PPT 需要哪些让 Agent 长期、可恢复、安全执行任务的工程能力；
+2. 当前代码已经实现到哪里，哪些只是部分能力或路线图。
 
-这里的“工程能力”不是功能菜单，而是让 Agent 可以长期、可恢复、安全地执行任务的机制。能力状态统一使用：
+这里的“工程能力”不是功能菜单，而是运行时机制。能力状态统一使用：
 
 | 状态 | 含义 |
 |---|---|
 | **Implemented** | 当前代码已有明确实现，并有测试或可执行入口 |
 | **Partial** | 主链路存在，但覆盖范围、协议或产品闭环尚未完整 |
 | **Proposed** | 只存在于 `docs/roadmap/`，不能作为当前行为依赖 |
-| **Not adopted** | Claude Code 具备，但不属于当前 PPT 产品边界 |
+| **Not adopted** | 不属于当前 PPT 产品边界 |
 
-状态描述的是 Agent PPT，不评价参考项目自身的完成度。`claude-code` 是反编译恢复项目，部分模块由 feature flag 控制或仍是 stub，不能仅凭目录名判断能力可用。
+状态描述的是 Agent PPT；目录存在不等于能力可用，必须以代码与验证入口为准。
 
-## 2. Claude Code 的工程能力分层
+## 2. Agent PPT 能力总表
 
-从源码结构看，Claude Code 的能力可归纳为八层。
-
-| 层 | Claude Code 的代表实现 | 可复用的工程原则 |
+| 能力域 | 当前状态 | Agent PPT 落点 |
 |---|---|---|
-| 入口与运行形态 | `/mnt/e/Coding/claude-code/src/entrypoints/cli.tsx`、`/mnt/e/Coding/claude-code/src/main.tsx`、pipe、daemon、bridge、background session | 快速路径与完整 Agent 启动分离；运行形态共享核心能力 |
-| Query 编排 | `/mnt/e/Coding/claude-code/src/query.ts`、`/mnt/e/Coding/claude-code/src/QueryEngine.ts` | Query Loop 独立；跨圈状态与单圈临时状态分离 |
-| 模型适配 | `/mnt/e/Coding/claude-code/src/services/api/`、provider registry | Provider 差异在边界层收敛，下游消费统一内容块 |
-| 工具与权限 | `/mnt/e/Coding/claude-code/src/Tool.ts`、`/mnt/e/Coding/claude-code/src/tools.ts`、`/mnt/e/Coding/claude-code/packages/builtin-tools/`、`/mnt/e/Coding/claude-code/src/hooks/` | 工具动态暴露；校验、权限、Hook、执行和结果归一化形成单管线 |
-| Context 与记忆 | `/mnt/e/Coding/claude-code/src/context.ts`、`/mnt/e/Coding/claude-code/src/utils/claudemd.ts`、compact、memory services | 稳定 Prompt 与动态上下文分区；超预算时有确定性降级 |
-| 任务与协作 | `/mnt/e/Coding/claude-code/src/tasks/`、`/mnt/e/Coding/claude-code/src/coordinator/`、teammate、workflow engine | Task 是持久化协调协议；子 Agent 有独立身份、收件箱和终态 |
-| 恢复与远程 | transcript、session、background、daemon、bridge、ACP、RCS | 执行状态可持久化；交互端与执行端可解耦 |
-| 扩展与运维 | skills、plugins、MCP、LSP、telemetry、health、feature flags | 扩展能力与核心循环解耦；构建、诊断和可观测性是产品能力的一部分 |
+| 独立 Query Loop | **Implemented** | `src/main/agent/runtime/query/query.ts`、`src/main/agent/runtime/query/query-types.ts` |
+| Run 生命周期 | **Implemented** | `src/main/agent/runtime/agent-runtime.ts`、`src/main/agent/runtime/lifecycle/agent-run-scope.ts`、`src/main/agent/runtime/agent-run-finalizer.ts` |
+| Provider Gateway | **Implemented** | `src/main/agent/gateway/anthropic.ts`、`src/main/agent/gateway/openai.ts`、`src/main/agent/gateway/content-blocks.ts` |
+| 模型调用恢复 | **Implemented** | `src/main/agent/runtime/turns/model-call-recovery.ts`、`src/main/agent/gateway/withRetry.ts` |
+| Context 压缩 | **Implemented** | `src/main/agent/runtime/context-compact/` |
+| System Prompt 分区 | **Implemented** | `src/main/agent/runtime/prompts/` |
+| 动态工具系统 | **Implemented** | `src/main/agent/tools/tool-registry.ts`、`src/main/agent/tools/tool-loader.ts`、`src/main/agent/runtime/tools/` |
+| 文件安全操作 | **Implemented** | `src/main/agent/tools/files/workspace-file-service.ts`、`src/main/agent/tools/core/workspace-files.ts` |
+| 项目文件管理 | **Implemented** | `src/main/project/project-file-service.ts`、`src/shared/ipc.ts`、`src/renderer/src/components/ProjectFilesPage.tsx` |
+| 权限与审批 | **Implemented** | `src/main/agent/runtime/tools/permission-check.ts`、`src/main/agent/runtime/tools/tool-approval-broker.ts`、`src/main/agent/gate/commit-gate.ts` |
+| Skill 渐进加载 | **Implemented** | `src/main/agent/skills/loadSkillsDir.ts`、`src/main/agent/tools/core/load-skill.ts`、`skills/` |
+| Task / teammate | **Implemented** | `src/main/agent/task/`、`src/main/agent/teammate/`、`src/main/agent/subagent/` |
+| 后台任务 | **Partial** | `src/main/agent/runtime/background/` |
+| 持久化与恢复 | **Implemented** | `src/main/agent/persistence/`、`src/main/agent/runtime/lifecycle/checkpoint-coordinator.ts` |
+| Web / 图片检索 | **Implemented** | `src/main/agent/search/`、`src/main/agent/tools/core/web-search.ts`、`src/main/agent/tools/core/search-slide-images.ts` |
+| SVG-native 创建 | **Implemented** | `skills/ppt-workflow/`、`preview-svg-page.ts`、`submit-svg-deck.ts` |
+| Layout Grammar / element-IR | **Removed** | 共享库、element-IR 模型与 Agent 作者工具均已删除 |
+| 渲染反馈与质量门 | **Implemented** | deck validators、quality gate、`PreviewSvgPage` 预览门禁 |
+| Artifact / Job 生命周期 | **Implemented** | `src/shared/presentation-lifecycle.ts`、`src/main/presentation-lifecycle/` |
+| MCP / Plugin / LSP | **Not adopted** | 无对应产品入口 |
+| Daemon / Remote Control / ACP | **Not adopted** | 无对应产品入口 |
+| 通用 Shell / Computer Use | **Partial** | teammate-only `src/main/agent/subagent/workspace-tools.ts` |
 
-Agent PPT 不需要复制这些入口和命令，但需要吸收其中与长任务正确性相关的边界。
+## 3. 核心 Agent 能力细节
 
-## 3. Agent PPT 能力总表
-
-| 能力域 | 当前状态 | Agent PPT 落点 | 与 Claude Code 的关系 |
-|---|---|---|---|
-| 独立 Query Loop | **Implemented** | `src/main/agent/runtime/query/query.ts`、`src/main/agent/runtime/query/query-types.ts` | 采用独立循环与显式 transition，不复制 CLI 状态 |
-| Run 生命周期 | **Implemented** | `src/main/agent/runtime/agent-runtime.ts`、`src/main/agent/runtime/lifecycle/agent-run-scope.ts`、`src/main/agent/runtime/agent-run-finalizer.ts` | 将 Query 编排与资源/提交生命周期分开 |
-| Provider Gateway | **Implemented** | `src/main/agent/gateway/anthropic.ts`、`src/main/agent/gateway/openai.ts`、`src/main/agent/gateway/content-blocks.ts` | 在适配层统一流与内容块 |
-| 模型调用恢复 | **Implemented** | `src/main/agent/runtime/turns/model-call-recovery.ts`、`src/main/agent/gateway/withRetry.ts` | 将可恢复错误与终止错误显式分类 |
-| Context 压缩 | **Implemented** | `src/main/agent/runtime/context-compact/` | 具备预算、micro/snip/full compact 与 emergency trim |
-| System Prompt 分区 | **Implemented** | `src/main/agent/runtime/prompts/` | section registry、稳定/动态边界、stage 建议化 |
-| 动态工具系统 | **Implemented** | `src/main/agent/tools/tool-registry.ts`、`src/main/agent/tools/tool-loader.ts`、`src/main/agent/runtime/tools/` | 注册、暴露、权限和执行解耦 |
-| 文件安全操作 | **Implemented** | `src/main/agent/tools/files/workspace-file-service.ts`、`src/main/agent/tools/core/workspace-files.ts` | Main/teammate 共享 read-before-write 与原子提交 |
-| 项目文件管理 | **Implemented** | `src/main/project/project-file-service.ts`、`src/shared/ipc.ts`、`src/renderer/src/components/ProjectFilesPage.tsx` | SVG-native artifact 分组、list/detail/diff；注册文本 artifact 使用隔离编辑凭证与 SHA-256 CAS |
-| 权限与审批 | **Implemented** | `src/main/agent/runtime/tools/permission-check.ts`、`src/main/agent/runtime/tools/tool-approval-broker.ts`、`src/main/agent/gate/commit-gate.ts` | Prompt 不承担权限；Presentation 变更有独立提交门 |
-| Skill 渐进加载 | **Implemented** | `src/main/agent/skills/loadSkillsDir.ts`、`src/main/agent/tools/core/load-skill.ts`、`skills/` | Skill 是知识/流程注入，不是硬编码阶段机 |
-| Task / teammate | **Implemented** | `src/main/agent/task/`、`src/main/agent/teammate/`、`src/main/agent/subagent/` | 六项目标；Lead 协作工具 Deferred；独立会话、消息总线与生命周期 |
-| 后台任务 | **Partial** | `src/main/agent/runtime/background/` | 已有 manager 与 inbox 输入，尚非 daemon/跨进程后台平台 |
-| 持久化与恢复 | **Implemented** | `src/main/agent/persistence/`、`src/main/agent/runtime/lifecycle/checkpoint-coordinator.ts` | History、checkpoint、lease、CAS 与 inflight 恢复分层 |
-| Web / 图片检索 | **Implemented** | `src/main/agent/search/`、`src/main/agent/tools/core/web-search.ts`、`src/main/agent/tools/core/search-slide-images.ts` | 作为受控外部能力进入工具管线 |
-| SVG-native 创建 | **Implemented** | `skills/ppt-workflow/`、`preview-svg-page.ts`、`submit-svg-deck.ts` | 产品唯一新建路径 |
-| Layout Grammar / element-IR | **Removed** | 共享库、element-IR 模型与 Agent 作者工具均已删除 | 产品 STRICT SVG-only |
-| 渲染反馈与质量门 | **Implemented** | deck validators、quality gate、`PreviewSvgPage` 预览门禁 | 最终约束由确定性代码执行；旧 render-feedback-loop 已移除 |
-| Artifact / Job 生命周期 | **Implemented** | `src/shared/presentation-lifecycle.ts`、`src/main/presentation-lifecycle/` | 跨 Query PptJob、immutable revision graph、Proposal/Presentation/Export 与恢复 |
-| MCP / Plugin / LSP | **Not adopted** | 无对应产品入口 | 不是当前 PPT 主链路所必需 |
-| Daemon / Remote Control / ACP | **Not adopted** | 无对应产品入口 | Electron 本地应用暂不需要复制远程运行面 |
-| 通用 Shell / Computer Use | **Partial** | teammate-only `src/main/agent/subagent/workspace-tools.ts` | Bash 为 fail-closed 的只读 direct-exec allowlist；无任意 shell 或 Computer Use |
-
-## 4. 核心 Agent 能力细节
-
-### 4.1 Query、Run 与应用三层
+### 3.1 Query、Run 与应用三层
 
 当前主链路不是一个“大 AgentService”完成所有工作，而是三层：
 
@@ -97,7 +78,7 @@ Renderer / IPC
 详见 [Query](../agent/query.md)、[Agent Loop](../agent/loop.md) 和
 [Agent Runtime](../agent/runtime.md)。
 
-### 4.2 Gateway 与内容协议
+### 3.2 Gateway 与内容协议
 
 Gateway 当前支持 Anthropic 与 OpenAI 两条 driver 路径。`AgentGateway` 是整个程序
 内部唯一的模型 I/O 边界——程序其余部分只依赖 Gateway 的中性协议类型，不直接接触
@@ -160,7 +141,7 @@ prepared-request/response driver 协议，不能把 Provider 分支扩散进 Que
 - `tests/agent-gateway-errors.test.ts`
 - `tests/agent-gateway.integration.test.ts`（按 provider 凭据可选执行）
 
-### 4.3 Context 预算与压缩
+### 3.3 Context 预算与压缩
 
 Context 管理已经不是简单截断聊天数组。当前能力包含：
 
@@ -177,7 +158,7 @@ Context 管理已经不是简单截断聊天数组。当前能力包含：
 
 压缩必须保留 system/user 意图、未完成工具配对、关键决策和当前任务状态。Renderer transcript 可以更丰富，但不能拿 UI 文本代替 canonical provider messages。
 
-### 4.4 工具注册、发现与执行
+### 3.4 工具注册、发现与执行
 
 工具系统分为三个概念：
 
@@ -207,9 +188,9 @@ Core tools 提供高频基础能力；Deferred tools 通过搜索后按需进入
 
 详见 [Tool 系统](../agent/tools.md)。
 
-### 4.5 文件操作与并发安全
+### 3.5 文件操作与并发安全
 
-Claude Code 的 FileRead/Edit/Write 体现了一个重要原则：读写工具不是薄文件 API，而是并发协议。Agent PPT 当前将该协议集中到 `WorkspaceFileService`：
+读写工具不是薄文件 API，而是并发协议。Agent PPT 将该协议集中到 `WorkspaceFileService`：
 
 - 所有路径相对受控 workspace 解析；
 - 读文件建立 receipt/baseline；
@@ -249,7 +230,7 @@ immutable Artifact Revision，也不把一次保存自动解释为 `ready/verifi
 
 详见 [文件操作](../agent/file-operations.md)。
 
-### 4.6 Prompt、Skill 与 Hook
+### 3.6 Prompt、Skill 与 Hook
 
 三者职责不同：
 
@@ -263,7 +244,7 @@ Prompt 采用稳定前缀和动态后缀，section 顺序与 cache key 由 assem
 `ppt-workflow`（SVG-native 新建）、design、layout、beautify、review、export 等 Skill
 是渐进式知识包；stage policy 只改变推荐度，不应把其他安全工具变为不可用。
 
-### 4.7 多 Agent、任务与后台工作
+### 3.7 多 Agent、任务与后台工作
 
 多 Agent 的目标方向是六项能力：并行处理、上下文隔离、专业化、独立判断与交叉验证、长任务委派与生命周期管理、组织协作。它是可选协作层，不是 SVG-native 作者路径的必经步骤。
 
@@ -276,11 +257,12 @@ Prompt 采用稳定前缀和动态后缀，section 顺序与 cache key 由 assem
 
 teammate 必须有独立 Agent identity，但共享 workspace 安全边界和文件服务。任务完成、失败、取消和 shutdown 都应进入终态，不能只靠进程/Promise 消失判断完成。Lead 侧 Task\* / `spawn_teammate` 等协作工具为 Deferred，经 `SearchExtraTools` 按需发现，避免常驻 Core schema。
 
-当前 `Partial` 的是“后台平台”而非基本后台执行：Agent PPT 尚未具备 Claude Code 的 daemon、跨进程 attach、`ps/logs/kill`、Remote Control 或 ACP 接入。
+当前 `Partial` 的是“后台平台”而非基本后台执行：Agent PPT 尚未具备 daemon、跨进程
+attach、`ps/logs/kill`、Remote Control 或 ACP 接入。
 
 详见 [Multi-Agent](../agent/multi-agent.md)。
 
-### 4.8 持久化、恢复与取消
+### 3.8 持久化、恢复与取消
 
 持久化分为三类事实：
 
@@ -294,11 +276,11 @@ writer lease 防止两个执行者同时推进同一 Run；CAS 防止旧快照�
 
 详见 [持久化与恢复](../agent/persistence.md)。
 
-## 5. Presentation 专属工程能力
+## 4. Presentation 专属工程能力
 
-Claude Code 提供通用 Agent 骨架，Agent PPT 的产品价值来自以下领域层。
+Agent PPT 的产品价值来自以下领域层。
 
-### 5.1 产品创建路径
+### 4.1 产品创建路径
 
 - **Agent SVG-native（产品唯一创建/作者路径）**：`design/design-spec.json` → `slides/page-plan.json` → `slides/svg/PNN.svg` → `PreviewSvgPage` → `SubmitSvgDeck` → CommitGate。
 - **Layout Grammar / element-IR**：共享库、element-IR slide 模型与 Agent 作者工具均已**移除**
@@ -306,7 +288,7 @@ Claude Code 提供通用 Agent 骨架，Agent PPT 的产品价值来自以下领
 
 所有可达写入最终进入同一 Presentation schema、CommitGate、renderer 与 exporter，不能各自产生不兼容的“第二套 slide 事实”。
 
-### 5.2 设计与布局
+### 4.2 设计与布局
 
 当前能力包括：
 
@@ -317,7 +299,7 @@ Claude Code 提供通用 Agent 骨架，Agent PPT 的产品价值来自以下领
 SVG-native 路径下模型直接写作完整页面 SVG；不再存在 layout handler、element-IR 或
 Grammar 作者工具面。
 
-### 5.3 提案、质量与交付
+### 4.3 提案、质量与交付
 
 写入链路是：
 
@@ -338,9 +320,9 @@ tool proposal（SubmitSvgDeck）
 详见 [工作流与状态](../presentation/workflow.md) 和
 [Visual Expression System](../presentation/visual-system.md)。
 
-## 6. 明确不复制的 Claude Code 能力
+## 5. 明确不采用的能力
 
-以下能力有价值，但现在不应因为参考项目存在就进入 PPT Runtime：
+以下能力有价值，但当前不属于 PPT Runtime 产品边界：
 
 | 能力 | 暂不采用的原因 | 重新评估条件 |
 |---|---|---|
@@ -352,9 +334,9 @@ tool proposal（SubmitSvgDeck）
 | 多 Provider 全兼容 | 维护成本高，且语义能力并不等价 | 有明确用户、模型能力和测试矩阵 |
 | Feature flag 大矩阵 | 当前规模下会隐藏真实行为组合 | 发布渠道或实验数量确实需要 |
 
-新增这些能力前，必须先定义产品用例、权限模型、持久化影响和验收矩阵，不能只移植入口。
+新增这些能力前，必须先定义产品用例、权限模型、持久化影响和验收矩阵。
 
-## 7. 当前能力缺口与优先级
+## 6. 当前能力缺口与优先级
 
 ### 已完成：Artifact 与 Job 生命周期
 
@@ -394,7 +376,7 @@ dev 数据策略见
 - PowerPoint/WPS/Keynote 兼容抽查；
 - 商业质量评分表。
 
-## 8. 验证矩阵
+## 7. 验证矩阵
 
 | 变更范围 | 最小验证 | 扩展验证 |
 |---|---|---|
@@ -409,10 +391,10 @@ dev 数据策略见
 
 文档更新至少应检查 Markdown 相对链接和代码路径是否存在。真实网关测试需要凭据，PPTX 视觉验收需要生成 artifact 后人工检查，二者不能被普通单元测试替代。
 
-## 9. 维护规则
+## 8. 维护规则
 
 - 能力状态必须由代码和验证入口支持，目录存在不等于 **Implemented**；
-- Claude Code 新增功能只有在改善 PPT 主链路正确性时才进入本表；
+- 新能力只有在改善 PPT 主链路正确性时才进入本表；
 - 实现能力后同步更新状态、关键代码入口、测试入口和相应专题文档；
 - 路线图能力落地前保持 **Proposed**，不要在现行架构中使用未来时态伪装现状；
 - 删除或移动实现时先更新本表，避免能力索引成为失效目录清单；

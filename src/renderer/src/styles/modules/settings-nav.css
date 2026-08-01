@@ -2,7 +2,7 @@
  * Settings sidebar shell. The nav itself uses the shared `ide-nav-*` vocabulary
  * from components/ide.css — do not reintroduce a parallel `settings-nav-*` set.
  *
- * Cluster layout follows Cursor-style settings: no group titles, spacing between
+ * Cluster layout: no group titles, spacing between
  * groups, slightly taller rows and compound labels for horizontal rhythm.
  */
 

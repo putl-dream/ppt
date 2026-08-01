@@ -6,7 +6,7 @@
 
 ## 1. 为什么 Loop 必须独立
 
-参考 Claude Code 的核心经验是：Agentic Loop 本身应是一个独立 `AsyncGenerator`。它接收已经准备好的 Query，产出可观察事件，并以显式 Terminal outcome 返回。
+Agentic Loop 本身应是一个独立 `AsyncGenerator`。它接收已经准备好的 Query，产出可观察事件，并以显式 Terminal outcome 返回。
 
 ```ts
 async function* query(

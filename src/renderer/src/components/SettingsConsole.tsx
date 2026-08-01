@@ -628,14 +628,14 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
                   ))}
                 </div>
               </IdeRow>
-              <IdeRow label="主题文件夹">
-                <div className="ide-choice-group" role="group" aria-label="主题文件夹操作">
+              <IdeRow label="主题根目录">
+                <div className="ide-choice-group" role="group" aria-label="主题根目录操作">
                   <button
                     type="button"
                     className="ide-choice"
                     onClick={() => onOpenUiThemesDirectory()}
                   >
-                    <span>打开主题文件夹</span>
+                    <span>打开主题根目录</span>
                   </button>
                   <button
                     type="button"
@@ -647,10 +647,8 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
                 </div>
               </IdeRow>
               <p className="ide-hint">
-                在主题文件夹放入 <code>*.css</code> 后刷新列表即可切换。推荐覆盖 semantic token；深度定制可用
-                {" "}
-                <code>data-ui-region</code>
-                。
+                在固定目录 <code>themes/&lt;主题名&gt;/theme.css</code> 放置主题后刷新列表即可切换。推荐覆盖
+                semantic token；深度定制可用 <code>data-ui-region</code>。
               </p>
             </IdeSection>
 

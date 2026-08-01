@@ -228,7 +228,7 @@ Agent PPT 的默认运行方式是本地优先：
 
 - [docs/README.md](./docs/README.md)：文档索引
 - [架构总览](./docs/architecture/overview.md)：现行分层、数据流与状态边界
-- [工程能力地图](./docs/architecture/engineering-capabilities.md)：Claude Code 参考能力、当前落点与缺口
+- [工程能力地图](./docs/architecture/engineering-capabilities.md)：当前能力落点、成熟度与缺口
 - [Query 与 Agent Loop](./docs/agent/query.md)：QueryParams、State、Workspace、事件和恢复
 - [Tools 与文件操作](./docs/agent/tools.md)：动态能力、权限、Read/Write/Edit 契约
 - [System Prompt 与 Context](./docs/agent/system-context.md)：Section Registry 与稳定/动态分区

@@ -1,6 +1,6 @@
 /**
  * Parses YAML frontmatter from SKILL.md files.
- * Handles common Cursor skill fields without a full YAML dependency.
+ * Handles common skill frontmatter fields without a full YAML dependency.
  */
 
 function parseScalarValue(raw: string): unknown {

@@ -7,7 +7,7 @@
 
 工具是模型可调用的能力集合。Query Loop 只处理通用的 `tool_use → tool_result` 协议，不知道具体工具名称和 PPT 工作流顺序。
 
-目标是接近 Claude Code 的能力模型：
+设计目标：
 
 - 单一 Tool 契约；
 - 每个 Query 按当前 Context 解析工具池，执行前再次检查可用性；
