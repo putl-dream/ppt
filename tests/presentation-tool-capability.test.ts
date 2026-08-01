@@ -26,6 +26,7 @@ import { createStarterPresentation } from "../src/shared/presentation-fixtures";
 
 const PRESENTATION_TOOL_NAMES = [
   "GetDesignReference",
+  "ResolveProjectTemplate",
   "PreviewSlide",
   "PreviewSvgPage",
   "SearchSlideImages",

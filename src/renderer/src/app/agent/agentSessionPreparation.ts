@@ -1,5 +1,11 @@
 import { formatPublicErrorMessage } from "@shared/agent-activity-display";
 import { createSessionTitleFromPrompt, type SessionBootstrap } from "@shared/session";
+import {
+  APPLICATION_DEFAULT_TEMPLATE_ID,
+  isUploadedTemplateId,
+} from "@shared/template-protocol";
+import { getBuiltinTemplate } from "@shared/template-catalog";
+import { loadPersistedUiSettings } from "../appBootstrap";
 import { useProjectStore } from "../../components/project-store";
 
 interface EnsureAgentSessionOptions {
@@ -27,10 +33,15 @@ export async function ensureAgentSession({
 
   try {
     const title = createSessionTitleFromPrompt(prompt);
+    const persisted = loadPersistedUiSettings();
+    const requestedTemplateId = persisted.defaultTemplateId ?? APPLICATION_DEFAULT_TEMPLATE_ID;
+    const defaultTemplateId = isUploadedTemplateId(requestedTemplateId)
+      ? requestedTemplateId
+      : getBuiltinTemplate(requestedTemplateId)?.id ?? APPLICATION_DEFAULT_TEMPLATE_ID;
     const state = await window.desktopApi.createSession(
       localStoragePath
-        ? { rootPath: localStoragePath, title }
-        : { title },
+        ? { rootPath: localStoragePath, title, defaultTemplateId }
+        : { title, defaultTemplateId },
     );
     applySessionState(state);
     setIsDraftChat(false);

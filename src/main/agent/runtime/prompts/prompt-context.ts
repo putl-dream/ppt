@@ -88,6 +88,8 @@ export async function buildSystemPromptContext(
 
   const artifacts = input.artifacts ?? {
     designSpec: artifactDetails.designSpec.verified,
+    templatePolicy: artifactDetails.templatePolicy.verified,
+    templatePack: artifactDetails.templatePack.verified,
     pagePlan: artifactDetails.pagePlan.verified,
     pageSvg: artifactDetails.pageSvg.verified,
     assets: artifactDetails.assets.verified,
@@ -128,6 +130,8 @@ export function buildSystemPromptContextSync(
 ): SystemPromptContext {
   const artifacts = input.artifacts ?? {
     designSpec: false,
+    templatePolicy: false,
+    templatePack: false,
     pagePlan: false,
     pageSvg: false,
     assets: false,

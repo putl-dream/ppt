@@ -89,6 +89,7 @@ describe("project file editor safety boundary", () => {
       "assets/.gitkeep",
       "brief.md",
       "deck/snapshot.json",
+      "design/template-policy.json",
       "history/exports.json",
       "history/versions/001-initial.md",
       "outline.md",

@@ -8,10 +8,21 @@ import {
   createDefaultResearchMarkdown,
 } from "@shared/project-artifacts";
 import { createDefaultExportHistoryFile } from "@shared/deck-persistence";
+import {
+  APPLICATION_DEFAULT_TEMPLATE_ID,
+  formatProjectTemplatePolicy,
+  createDefaultProjectTemplatePolicy,
+} from "@shared/template-protocol";
+import { getBuiltinTemplate } from "@shared/template-catalog";
 
 export interface ProjectFileTemplate {
   path: string;
   content: string;
+}
+
+export interface CreateDefaultProjectFilesOptions {
+  /** Application default template id snapshotted into new projects only. */
+  defaultTemplateId?: string;
 }
 
 export function createProjectSandbox(
@@ -25,8 +36,21 @@ export function createProjectSandbox(
   return { rootPath, artifacts };
 }
 
-export function createDefaultProjectFiles(snapshot: SessionSnapshot): ProjectFileTemplate[] {
+export function createDefaultProjectFiles(
+  snapshot: SessionSnapshot,
+  options: CreateDefaultProjectFilesOptions = {},
+): ProjectFileTemplate[] {
+  const requestedDefault = options.defaultTemplateId ?? APPLICATION_DEFAULT_TEMPLATE_ID;
+  const resolved = getBuiltinTemplate(requestedDefault);
+  const defaultTemplateId = resolved ? requestedDefault : APPLICATION_DEFAULT_TEMPLATE_ID;
+
   return [
+    {
+      path: "design/template-policy.json",
+      content: formatProjectTemplatePolicy(
+        createDefaultProjectTemplatePolicy(defaultTemplateId),
+      ),
+    },
     {
       path: "brief.md",
       content: createBriefTemplate(snapshot.session.title),

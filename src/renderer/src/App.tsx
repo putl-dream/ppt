@@ -346,6 +346,7 @@ export function App() {
           onOpenWorkspace={() => void openWorkspace()}
           notify={notify}
           onStartPanelResize={workbenchLayout.startPanelResize}
+          activeSessionId={activeSessionId || undefined}
         />
       )}
     </AppShell>

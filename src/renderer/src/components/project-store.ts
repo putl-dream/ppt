@@ -65,6 +65,7 @@ interface ProjectState {
 
 const ARTIFACT_NAMES: Record<ProjectArtifactId, string> = {
   "design-spec": "设计规范 (Design Spec)",
+  "template-policy": "模板策略 (Template Policy)",
   "page-plan": "逐页规划 (Page Plan)",
   "page-svg": "页面 SVG",
   assets: "本地素材 (Assets)",
@@ -77,6 +78,7 @@ const ARTIFACT_NAMES: Record<ProjectArtifactId, string> = {
 
 export const DEFAULT_CONTENTS: Record<ProjectArtifactId, string> = {
   "design-spec": "",
+  "template-policy": "",
   "page-plan": "",
   "page-svg": "",
   assets: "",

@@ -16,9 +16,12 @@ import type {
   ToolRuntimeBehavior,
 } from "../tool-definition";
 import {
+  SVG_DECK_DESIGN_SPEC_PATH,
   isSvgDeckLockPath,
   validateSvgDeckLockContent,
+  type SvgDeckDesignSpec,
 } from "../core/svg-deck-locks";
+import { assertDesignSpecMatchesTemplatePolicy } from "../core/project-template-state";
 
 export interface WorkspaceFileToolContext {
   readonly workspaceRoot?: string;
@@ -193,8 +196,9 @@ export const writeFileContract: WorkspaceFileToolContract<
   permission: WORKSPACE_FILE_TOOL_PERMISSION_PROFILES.WriteFile,
   isEnabled: hasWorkspaceFileService,
   execute: async (args, context) => {
-    assertSvgDeckLockContentIfNeeded(args.path, args.content);
-    const result = await requireFileService(context).write(
+    const fileService = requireFileService(context);
+    await assertSvgDeckLockContentIfNeeded(args.path, args.content, fileService);
+    const result = await fileService.write(
       args.path,
       args.content,
       { expectedVersion: args.expected_version },
@@ -246,7 +250,7 @@ export const editFileContract: WorkspaceFileToolContract<
       const updated = args.replace_all
         ? current.content.split(args.old_string).join(args.new_string)
         : current.content.replace(args.old_string, args.new_string);
-      assertSvgDeckLockContentIfNeeded(args.path, updated);
+      await assertSvgDeckLockContentIfNeeded(args.path, updated, fileService);
     }
     const result = await fileService.edit(
       args.path,
@@ -318,10 +322,21 @@ async function observeArtifactChange(
   });
 }
 
-function assertSvgDeckLockContentIfNeeded(path: string, content: string): void {
+async function assertSvgDeckLockContentIfNeeded(
+  path: string,
+  content: string,
+  fileService: WorkspaceFileService,
+): Promise<void> {
   if (!isSvgDeckLockPath(path)) return;
   try {
-    validateSvgDeckLockContent(path, content);
+    const validated = validateSvgDeckLockContent(path, content);
+    const normalized = path.replace(/\\/g, "/").replace(/^\.\//, "");
+    if (normalized === SVG_DECK_DESIGN_SPEC_PATH) {
+      await assertDesignSpecMatchesTemplatePolicy(
+        fileService,
+        validated as SvgDeckDesignSpec,
+      );
+    }
   } catch (error) {
     throw new WorkspaceFileError(
       "LOCK_SCHEMA_INVALID",

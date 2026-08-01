@@ -277,6 +277,8 @@ function formatArtifactState(
   if (!artifacts && !details) return "（未探测 Workspace 产物）";
   return [
     formatArtifactProbe("design/design-spec.json", details?.designSpec, artifacts?.designSpec),
+    formatTemplatePolicyProbe(details?.templatePolicy, artifacts?.templatePolicy),
+    formatTemplatePackProbe(details?.templatePack, artifacts?.templatePack),
     formatArtifactProbe("slides/page-plan.json", details?.pagePlan, artifacts?.pagePlan),
     formatArtifactProbe("slides/svg/*.svg", details?.pageSvg, artifacts?.pageSvg),
     formatArtifactProbe("assets/**", details?.assets, artifacts?.assets),
@@ -286,6 +288,56 @@ function formatArtifactState(
     formatArtifactProbe("optional outline.md", details?.outline, artifacts?.outline),
     formatArtifactProbe("optional research/**", details?.research, artifacts?.research),
   ].join("\n");
+}
+
+function formatTemplatePolicyProbe(
+  probe: { status: string; verified: boolean; reason?: string } | undefined,
+  fallbackVerified?: boolean,
+): string {
+  if (probe) {
+    const detail = probe.reason ? `: ${probe.reason}` : "";
+    if (probe.verified) return `- design/template-policy.json: ${probe.status}${detail}`;
+    if (probe.status === "invalid" && probe.reason) {
+      return `- design/template-policy.json: invalid: ${probe.reason}`;
+    }
+    if (probe.status === "missing") return `- design/template-policy.json: missing`;
+    return `- design/template-policy.json: ${probe.status}${detail}`;
+  }
+  if (fallbackVerified === undefined) return `- design/template-policy.json: （未探测）`;
+  return `- design/template-policy.json: ${fallbackVerified ? "verified" : "missing/unverified"}`;
+}
+
+function formatTemplatePackProbe(
+  probe: { status: string; verified: boolean; reason?: string } | undefined,
+  fallbackVerified?: boolean,
+): string {
+  if (probe) {
+    const detail = probe.reason ? `: ${probe.reason}` : "";
+    if (probe.verified) return `- design/template-pack.json: ${probe.status}${detail}`;
+    if (probe.status === "invalid" && probe.reason) {
+      return `- design/template-pack.json: invalid: ${probe.reason}`;
+    }
+    if (probe.status === "missing") return `- design/template-pack.json: missing`;
+    return `- design/template-pack.json: ${probe.status}${detail}`;
+  }
+  if (fallbackVerified === undefined) return `- design/template-pack.json: （未探测）`;
+  return `- design/template-pack.json: ${fallbackVerified ? "verified" : "missing/unverified"}`;
+}
+
+function formatActiveTemplateSection(
+  details?: WorkspaceArtifactProbeDetails,
+): string {
+  const pack = details?.templatePack;
+  if (!pack?.verified || !pack.reason) return "";
+  return `
+
+### Template Active (design-reference)
+
+- ${pack.reason}
+- 必须调用 ResolveProjectTemplate（或直接沿用已种子化的 design-spec axes），把 selection → resolvedTemplate 与 designSystem 写入 design/design-spec.json。
+- 禁止另选冲突 builtin visualStyle / 调色板 / 字体；GetDesignReference 仅提供构图纪律，不得覆盖 pack 外观。
+- 不继承：PowerPoint 母版切换、原 placeholder 编辑、导出母版关系。
+- 页面仍重生为 1280×720 SVG；logo/页眉页脚/标题框按 pack chrome 与 assets 路径绘制。`;
 }
 
 function shouldInjectSvgDeckLockContract(
@@ -322,9 +374,11 @@ ${formatArtifactState(input.artifacts, input.artifactDetails)}
 
 文件系统探测只描述当前作者文件；业务完成、等待与 stale 以 PptJob 投影为准，聊天中的旧计划和文件存在本身都不是完成证明。
 
-新建流程的作者文件是 design/design-spec.json、slides/page-plan.json、slides/svg/*.svg 与 assets/**。brief.md、outline.md、research/** 仅为可选参考；storyboard/layout-plan 不属于新建生命周期事实源。主 Agent 与 teammate 都可使用受沙箱和权限保护的文件工具直接处理 Workspace。
+新建流程的作者文件是 design/design-spec.json、design/template-policy.json、design/template-pack.json、slides/page-plan.json、slides/svg/*.svg 与 assets/**。上传参考模板位于 design/templates/**（design-reference only，非母版保真）。brief.md、outline.md、research/** 仅为可选参考；storyboard/layout-plan 不属于新建生命周期事实源。主 Agent 与 teammate 都可使用受沙箱和权限保护的文件工具直接处理 Workspace。
 
-画布为 1280x720，Presentation ID 必须唯一。设计或图片变更后应依据当前可用的预览、校验或导出产物检查结果；图片来源与授权状态必须保留。${lockContract}`;
+写 design-spec 前调用 ResolveProjectTemplate；将返回的 designSystem 与 selection（写入 resolvedTemplate）写入锁文件，不要另选冲突 visualStyle。若 design/template-pack.json 已 verified，以其为唯一外观事实源。
+
+画布为 1280x720，Presentation ID 必须唯一。设计或图片变更后应依据当前可用的预览、校验或导出产物检查结果；图片来源与授权状态必须保留。${formatActiveTemplateSection(input.artifactDetails)}${lockContract}`;
 }
 
 export function buildMemorySection(input: MemorySectionInput): string {

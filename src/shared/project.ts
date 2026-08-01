@@ -3,6 +3,7 @@ import { projectArtifactFilePaths } from "./deck-persistence";
 
 export const projectArtifactIds = [
   "design-spec",
+  "template-policy",
   "page-plan",
   "page-svg",
   "assets",
@@ -23,6 +24,12 @@ export const defaultProjectArtifacts: ProjectArtifact[] = [
     title: "设计规范",
     path: "design/design-spec.json",
     kind: "design-spec",
+  },
+  {
+    id: "template-policy",
+    title: "模板策略",
+    path: "design/template-policy.json",
+    kind: "template-policy",
   },
   {
     id: "page-plan",
@@ -76,6 +83,7 @@ export const defaultProjectArtifacts: ProjectArtifact[] = [
 
 export const primaryProjectArtifactPaths: Record<ProjectArtifactId, string> = {
   "design-spec": "design/design-spec.json",
+  "template-policy": "design/template-policy.json",
   "page-plan": "slides/page-plan.json",
   "page-svg": "slides/svg/",
   assets: "assets/",

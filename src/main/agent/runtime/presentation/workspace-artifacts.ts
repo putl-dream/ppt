@@ -15,6 +15,14 @@ import {
 } from "@shared/project-artifacts";
 import { validateSvgPage } from "@shared/svg-page";
 import {
+  TEMPLATE_PACK_PATH,
+  TEMPLATE_POLICY_PATH,
+  createDefaultProjectTemplatePolicy,
+  formatProjectTemplatePolicy,
+  projectTemplatePolicySchema,
+  templatePackSchema,
+} from "@shared/template-protocol";
+import {
   SVG_DECK_DESIGN_SPEC_PATH,
   SVG_DECK_PAGE_PLAN_PATH,
   formatSvgDeckLockIssues,
@@ -25,6 +33,8 @@ import {
 
 export interface WorkspaceArtifacts {
   designSpec: boolean;
+  templatePolicy: boolean;
+  templatePack: boolean;
   pagePlan: boolean;
   pageSvg: boolean;
   assets: boolean;
@@ -51,6 +61,8 @@ export interface WorkspaceArtifactProbe {
 
 export interface WorkspaceArtifactProbeDetails {
   designSpec: WorkspaceArtifactProbe;
+  templatePolicy: WorkspaceArtifactProbe;
+  templatePack: WorkspaceArtifactProbe;
   pagePlan: WorkspaceArtifactProbe;
   pageSvg: WorkspaceArtifactProbe;
   assets: WorkspaceArtifactProbe;
@@ -63,6 +75,8 @@ export interface WorkspaceArtifactProbeDetails {
 
 const EMPTY_ARTIFACTS: WorkspaceArtifacts = {
   designSpec: false,
+  templatePolicy: false,
+  templatePack: false,
   pagePlan: false,
   pageSvg: false,
   assets: false,
@@ -167,6 +181,56 @@ function validateJsonArtifact<T>(
   return {
     probe: { path, status: "verified", verified: true },
     value: result.data,
+  };
+}
+
+function validateTemplatePolicyContent(
+  path: string,
+  content: string | undefined,
+): WorkspaceArtifactProbe {
+  const result = validateJsonArtifact(path, content, projectTemplatePolicySchema);
+  if (!result.probe.verified || !result.value) return result.probe;
+  const defaultPolicy = formatProjectTemplatePolicy(createDefaultProjectTemplatePolicy());
+  if (content?.trim() === defaultPolicy.trim()) {
+    return {
+      path,
+      status: "default",
+      verified: true,
+      reason: `mode=${result.value.mode}; defaultTemplateId=${result.value.defaultTemplateId}`,
+    };
+  }
+  const customSuffix = result.value.mode === "custom"
+    ? `; custom=${result.value.customTemplateId}@${result.value.customTemplateRevisionId}`
+    : "";
+  return {
+    path,
+    status: "verified",
+    verified: true,
+    reason: `mode=${result.value.mode}; defaultTemplateId=${result.value.defaultTemplateId}${customSuffix}`,
+  };
+}
+
+function validateTemplatePackContent(
+  path: string,
+  content: string | undefined,
+): WorkspaceArtifactProbe {
+  const result = validateJsonArtifact(path, content, templatePackSchema);
+  if (!result.probe.verified || !result.value) return result.probe;
+  const pack = result.value;
+  const scheme = pack.designSystem.colorScheme;
+  const palette = typeof scheme === "string"
+    ? scheme
+    : `${scheme.primary}/${scheme.accent}/${scheme.background}`;
+  return {
+    path,
+    status: "verified",
+    verified: true,
+    reason:
+      `${pack.name} · ${pack.templateId}@${pack.revisionId} · palette=${palette}`
+      + ` · fonts=${pack.typography.sourceMajor ?? "mapped"}`
+      + ` · assets=${pack.assets.length}`
+      + ` · headerFooter=${pack.inheritance.headerFooter}`
+      + ` · titleFrame=${pack.inheritance.titleFrame}`,
   };
 }
 
@@ -309,6 +373,8 @@ export async function probeWorkspaceArtifactDetails(
   const root = workspaceRoot ?? "";
   const paths = {
     designSpec: join(root, SVG_DECK_DESIGN_SPEC_PATH),
+    templatePolicy: join(root, TEMPLATE_POLICY_PATH),
+    templatePack: join(root, TEMPLATE_PACK_PATH),
     pagePlan: join(root, SVG_DECK_PAGE_PLAN_PATH),
     pageSvg: join(root, "slides/svg"),
     assets: join(root, "assets"),
@@ -322,6 +388,8 @@ export async function probeWorkspaceArtifactDetails(
   if (!workspaceRoot) {
     return {
       designSpec: missingProbe(paths.designSpec),
+      templatePolicy: missingProbe(paths.templatePolicy),
+      templatePack: missingProbe(paths.templatePack),
       pagePlan: missingProbe(paths.pagePlan),
       pageSvg: missingProbe(paths.pageSvg),
       assets: missingProbe(paths.assets),
@@ -335,6 +403,8 @@ export async function probeWorkspaceArtifactDetails(
 
   const [
     designSpecContent,
+    templatePolicyContent,
+    templatePackContent,
     pagePlanContent,
     deckContent,
     exportHistoryContent,
@@ -342,6 +412,8 @@ export async function probeWorkspaceArtifactDetails(
     outlineContent,
   ] = await Promise.all([
     readOptionalText(paths.designSpec),
+    readOptionalText(paths.templatePolicy),
+    readOptionalText(paths.templatePack),
     readOptionalText(paths.pagePlan),
     readOptionalText(paths.deck),
     readOptionalText(paths.exportHistory),
@@ -353,6 +425,14 @@ export async function probeWorkspaceArtifactDetails(
     paths.designSpec,
     designSpecContent,
     svgDeckDesignSpecSchema,
+  );
+  const templatePolicy = validateTemplatePolicyContent(
+    paths.templatePolicy,
+    templatePolicyContent,
+  );
+  const templatePack = validateTemplatePackContent(
+    paths.templatePack,
+    templatePackContent,
   );
   const pagePlanResult = validateJsonArtifact(
     paths.pagePlan,
@@ -404,6 +484,8 @@ export async function probeWorkspaceArtifactDetails(
 
   return {
     designSpec: designSpecResult.probe,
+    templatePolicy,
+    templatePack,
     pagePlan,
     pageSvg,
     assets,
@@ -422,6 +504,8 @@ export async function probeWorkspaceArtifacts(workspaceRoot?: string): Promise<W
   const details = await probeWorkspaceArtifactDetails(workspaceRoot);
   return {
     designSpec: details.designSpec.verified,
+    templatePolicy: details.templatePolicy.verified,
+    templatePack: details.templatePack.verified,
     pagePlan: details.pagePlan.verified,
     pageSvg: details.pageSvg.verified,
     assets: details.assets.verified,

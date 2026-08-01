@@ -13,7 +13,13 @@ import type { AgentExecutionStrategy } from "@shared/agent";
 import { TokenUsageOverview } from "./TokenUsageOverview";
 import { LogManagementPanel } from "./LogManagementPanel";
 import { Select } from "./Select";
-import { DESIGN_PRESETS, type DesignSystemV2 } from "@design-system";
+import { type DesignSystemV2 } from "@design-system";
+import { listAutoPoolTemplates, getBuiltinTemplate } from "@shared/template-catalog";
+import {
+  APPLICATION_DEFAULT_TEMPLATE_ID,
+  type ProjectTemplatePolicy,
+} from "@shared/template-protocol";
+import type { ProjectTemplateSummary, UiThemeSummary } from "@shared/ipc";
 import {
   MAX_OUTPUT_TOKENS,
   MIN_OUTPUT_TOKENS,
@@ -21,7 +27,6 @@ import {
 } from "@shared/generation-settings-inputs";
 import type { SettingsCategory } from "../settingsCategories";
 import { normalizeWorkspacePath } from "@shared/workspace";
-import type { UiThemeSummary } from "@shared/ipc";
 import { BUILTIN_UI_THEMES, DEFAULT_UI_THEME_ID } from "@shared/ui-themes";
 import { cx } from "../lib/cx";
 import {
@@ -36,6 +41,16 @@ import {
 
 type UiColorScheme = "light" | "dark" | "system";
 
+type ProjectTemplatePackSummary = Awaited<
+  ReturnType<typeof window.desktopApi.getProjectTemplatePack>
+>;
+
+type ProjectTemplateStatus = {
+  policy: ProjectTemplatePolicy;
+  templates: ProjectTemplateSummary[];
+  pack: ProjectTemplatePackSummary;
+};
+
 interface SettingsConsoleProps {
   activeCategory: SettingsCategory;
   models: ManagedModel[];
@@ -46,6 +61,9 @@ interface SettingsConsoleProps {
 
   selectedDesignSystem: DesignSystemV2;
   setSelectedDesignSystem: (val: DesignSystemV2) => void;
+  defaultTemplateId: string;
+  setDefaultTemplateId: (val: string) => void;
+  activeSessionId?: string;
 
   localStoragePath: string;
   onOpenWorkspace: () => void;
@@ -150,6 +168,9 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
   onDeleteModel,
   selectedDesignSystem,
   setSelectedDesignSystem,
+  defaultTemplateId,
+  setDefaultTemplateId,
+  activeSessionId,
   localStoragePath,
   onOpenWorkspace,
   agentStepLimits,
@@ -193,6 +214,93 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
   const [fontSizeDraft, setFontSizeDraft] = React.useState(() => String(uiFontSize));
   const [lineHeightDraft, setLineHeightDraft] = React.useState(() => String(uiLineHeight));
   const [applicationDataPath, setApplicationDataPath] = React.useState("");
+  const [projectTemplateStatus, setProjectTemplateStatus] = React.useState<
+    ProjectTemplateStatus | null
+  >(null);
+  const [projectTemplateStatusError, setProjectTemplateStatusError] = React.useState<string | null>(
+    null,
+  );
+  const [libraryTemplates, setLibraryTemplates] = React.useState<ProjectTemplateSummary[]>([]);
+
+  const refreshLibraryTemplates = React.useCallback(async () => {
+    try {
+      setLibraryTemplates(await window.desktopApi.listApplicationTemplates());
+    } catch {
+      setLibraryTemplates([]);
+    }
+  }, []);
+
+  const refreshProjectTemplateStatus = React.useCallback(async (sessionId: string) => {
+    try {
+      const [policy, templates, pack] = await Promise.all([
+        window.desktopApi.getProjectTemplatePolicy(sessionId),
+        window.desktopApi.listProjectTemplates(sessionId),
+        window.desktopApi.getProjectTemplatePack(sessionId),
+      ]);
+      setProjectTemplateStatus({ policy, templates, pack });
+      setProjectTemplateStatusError(null);
+    } catch (error) {
+      setProjectTemplateStatus(null);
+      setProjectTemplateStatusError(
+        error instanceof Error ? error.message : "读取项目模板状态失败",
+      );
+    }
+  }, []);
+
+  React.useEffect(() => {
+    void refreshLibraryTemplates();
+  }, [refreshLibraryTemplates]);
+
+  React.useEffect(() => {
+    if (!activeSessionId) {
+      setProjectTemplateStatus(null);
+      setProjectTemplateStatusError(null);
+      return;
+    }
+    void refreshProjectTemplateStatus(activeSessionId);
+  }, [activeSessionId, refreshProjectTemplateStatus]);
+
+  const uploadedTemplates = (projectTemplateStatus?.templates ?? []).filter(
+    (item) => item.kind === "uploaded",
+  );
+  const activeCustomTemplate = uploadedTemplates.find((item) => (
+    item.id === projectTemplateStatus?.policy.customTemplateId
+    && item.revisionId === projectTemplateStatus?.policy.customTemplateRevisionId
+  ));
+  const projectPolicyMode = projectTemplateStatus?.policy.mode;
+  const activePack = projectTemplateStatus?.pack ?? null;
+  const projectPolicyLabel = !activeSessionId
+    ? "无活动会话"
+    : projectTemplateStatusError
+      ? `读取失败：${projectTemplateStatusError}`
+      : !projectTemplateStatus
+        ? "读取中…"
+        : projectPolicyMode === "custom" && activePack
+          ? `已应用到当前项目 · ${activePack.name}（design-reference）`
+          : projectPolicyMode === "custom" && activeCustomTemplate
+            ? `自定义 · ${activeCustomTemplate.name}（缺 pack，请重新应用）`
+            : projectPolicyMode === "custom"
+              ? `自定义 · ${projectTemplateStatus.policy.customTemplateId ?? "?"}@`
+                + `${projectTemplateStatus.policy.customTemplateRevisionId ?? "?"}（缺失，需重导）`
+              : projectPolicyMode === "default"
+                ? `固定默认 · ${projectTemplateStatus.policy.defaultTemplateId}`
+                : `自动匹配 · 低置信回退 ${projectTemplateStatus.policy.defaultTemplateId}`;
+  const packPalette = activePack && activePack.designSystem
+    && typeof activePack.designSystem === "object"
+    && activePack.designSystem !== null
+    && "colorScheme" in activePack.designSystem
+    && typeof (activePack.designSystem as { colorScheme?: unknown }).colorScheme === "object"
+    ? (activePack.designSystem as {
+        colorScheme: {
+          background?: string;
+          primary?: string;
+          accent?: string;
+          bodyText?: string;
+          secondaryBg?: string;
+          secondaryAccent?: string;
+        };
+      }).colorScheme
+    : null;
 
   React.useEffect(() => {
     setMaxOutputTokensDraft(String(agentGatewayPreferences.maxOutputTokens));
@@ -544,26 +652,317 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
               <IdeRow label="画布比例">
                 <span className="ide-hint">16:9 宽屏（当前唯一导出比例）</span>
               </IdeRow>
-              <IdeRow label="本地设计系统预设">
+              <IdeRow label="新项目默认模板">
                 <Select
                   variant="ide"
-                  ariaLabel="本地设计系统预设"
-                  value={selectedDesignSystem.visualStyle}
-                  onChange={(next) => {
-                    const preset = DESIGN_PRESETS.find((item) => item.id === next);
-                    if (preset) setSelectedDesignSystem(preset.system);
-                  }}
-                  options={DESIGN_PRESETS.map((preset) => ({
-                    value: preset.id,
-                    label: preset.label,
-                  }))}
+                  ariaLabel="新项目默认模板"
+                  value={defaultTemplateId}
+                  onChange={(next) => setDefaultTemplateId(next)}
+                  options={[
+                    ...(listAutoPoolTemplates().length > 0
+                      ? listAutoPoolTemplates()
+                      : [getBuiltinTemplate(APPLICATION_DEFAULT_TEMPLATE_ID)!].filter(Boolean)
+                    ).map((template) => ({
+                      value: template.id,
+                      label: `${template.name}（${template.designSystem.visualStyle}）`,
+                    })),
+                    ...libraryTemplates.map((template) => ({
+                      value: template.id,
+                      label: `${template.name}（导入参考模板）`,
+                    })),
+                  ]}
                 />
               </IdeRow>
-              <IdeRow label="当前设计语言">
+              <IdeRow label="说明">
+                <span className="ide-hint">
+                  仅影响之后新建的项目。选择导入的参考模板时，新建对话会自动物化
+                  template-pack + custom 策略。已打开项目请用下方「应用到当前项目」。
+                  自动模式低置信度时回退到内置默认模板（非上传模板）。
+                </span>
+              </IdeRow>
+              <IdeRow label="本地设计系统预览">
                 <span className="ide-hint">
                   {selectedDesignSystem.argumentMode} · {selectedDesignSystem.visualStyle} ·{" "}
                   {selectedDesignSystem.readingMode} · {selectedColorSchemeName}
-                  {" · "}仅 Renderer 本地偏好，不写入 Agent 的 design-spec
+                </span>
+              </IdeRow>
+            </IdeSection>
+
+            <IdeSection title="参考模板导入">
+              <IdeRow label="模板库（跨项目保留）">
+                <span className="ide-hint">
+                  {libraryTemplates.length === 0
+                    ? "暂无导入模板"
+                    : libraryTemplates.map((item) => item.name).join("、")}
+                </span>
+              </IdeRow>
+              <IdeRow label="当前项目策略">
+                <span className="ide-hint">{projectPolicyLabel}</span>
+              </IdeRow>
+              <IdeRow label="应用到当前项目">
+                <div className="ide-choice-group" role="group" aria-label="应用模板库模板">
+                  {libraryTemplates.length === 0 ? (
+                    <span className="ide-hint">先导入 PPTX/POTX 后可应用到项目</span>
+                  ) : libraryTemplates.map((template) => {
+                    const active = template.id === projectTemplateStatus?.policy.customTemplateId
+                      && template.revisionId
+                        === projectTemplateStatus?.policy.customTemplateRevisionId
+                      && projectPolicyMode === "custom"
+                      && Boolean(activePack);
+                    const isAppDefault = defaultTemplateId === template.id;
+                    return (
+                      <div key={`${template.id}@${template.revisionId}`} className="ide-choice-group">
+                        <button
+                          type="button"
+                          className={cx("ide-choice", active && "is-active")}
+                          disabled={!activeSessionId}
+                          aria-pressed={active}
+                          onClick={() => {
+                            void (async () => {
+                              if (!activeSessionId) return;
+                              try {
+                                await window.desktopApi.applyTemplateToProject(
+                                  activeSessionId,
+                                  template.id,
+                                  template.revisionId,
+                                );
+                                await refreshProjectTemplateStatus(activeSessionId);
+                                triggerToast(`已把「${template.name}」应用到当前项目`);
+                              } catch (error) {
+                                triggerToast(
+                                  error instanceof Error ? error.message : "应用模板失败",
+                                );
+                              }
+                            })();
+                          }}
+                        >
+                          <span>
+                            {template.name}
+                            {active ? "（已应用到当前项目）" : "（仅在模板库）"}
+                          </span>
+                        </button>
+                        <button
+                          type="button"
+                          className={cx("ide-choice", isAppDefault && "is-active")}
+                          aria-pressed={isAppDefault}
+                          onClick={() => {
+                            setDefaultTemplateId(template.id);
+                            triggerToast(
+                              `已把「${template.name}」设为新项目默认；之后新建对话将自动使用`,
+                            );
+                          }}
+                        >
+                          <span>{isAppDefault ? "新项目默认 ✓" : "设为新项目默认"}</span>
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </IdeRow>
+              <IdeRow label="继承预览">
+                {!activePack ? (
+                  <span className="ide-hint">
+                    {activeSessionId
+                      ? "当前项目未应用参考模板 pack（仅在模板库或未导入）"
+                      : "无活动会话"}
+                  </span>
+                ) : (
+                  <div className="ide-hint" style={{ display: "grid", gap: 8 }}>
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                      <span>配色：</span>
+                      {packPalette
+                        ? [
+                            packPalette.background,
+                            packPalette.primary,
+                            packPalette.accent,
+                            packPalette.bodyText,
+                            packPalette.secondaryBg,
+                            packPalette.secondaryAccent,
+                          ].filter(Boolean).map((hex) => (
+                            <span
+                              key={hex}
+                              title={hex}
+                              style={{
+                                width: 16,
+                                height: 16,
+                                borderRadius: 3,
+                                background: hex,
+                                border: "1px solid var(--border-color, #444)",
+                                display: "inline-block",
+                              }}
+                            />
+                          ))
+                        : "（无 custom palette）"}
+                    </div>
+                    <div>
+                      字体：
+                      {activePack.typography.sourceMajor || activePack.typography.title}
+                      {" / "}
+                      {activePack.typography.sourceMinor || activePack.typography.body}
+                    </div>
+                    <div>
+                      Logo：
+                      {activePack.inheritance.logo
+                        ? activePack.assets
+                          .filter((asset) => asset.role === "logo" || asset.role === "header")
+                          .map((asset) => asset.path)
+                          .join("、") || "已提取"
+                        : "未提取"}
+                      {" · "}
+                      页眉页脚：{activePack.inheritance.headerFooter ? "有" : "无"}
+                      {" · "}
+                      标题框：{activePack.inheritance.titleFrame ? "有" : "无"}
+                    </div>
+                    <div>
+                      不继承：PowerPoint 母版切换、原 placeholder 编辑、导出母版关系
+                    </div>
+                    {(activePack.warnings?.length ?? 0) > 0 ? (
+                      <div>警告：{activePack.warnings!.slice(0, 3).join("；")}</div>
+                    ) : null}
+                  </div>
+                )}
+              </IdeRow>
+              <IdeRow label="策略切换">
+                <div className="ide-choice-group" role="group" aria-label="项目模板策略">
+                  <button
+                    type="button"
+                    className={cx("ide-choice", projectPolicyMode === "auto" && "is-active")}
+                    disabled={!activeSessionId}
+                    onClick={() => {
+                      void (async () => {
+                        if (!activeSessionId || !projectTemplateStatus) return;
+                        try {
+                          await window.desktopApi.setProjectTemplatePolicy(activeSessionId, {
+                            mode: "auto",
+                            defaultTemplateId: projectTemplateStatus.policy.defaultTemplateId,
+                          });
+                          await refreshProjectTemplateStatus(activeSessionId);
+                          triggerToast("已切换为自动匹配模板");
+                        } catch (error) {
+                          triggerToast(
+                            error instanceof Error ? error.message : "切换模板策略失败",
+                          );
+                        }
+                      })();
+                    }}
+                    aria-pressed={projectPolicyMode === "auto"}
+                  >
+                    <span>自动</span>
+                  </button>
+                  <button
+                    type="button"
+                    className={cx("ide-choice", projectPolicyMode === "default" && "is-active")}
+                    disabled={!activeSessionId}
+                    onClick={() => {
+                      void (async () => {
+                        if (!activeSessionId || !projectTemplateStatus) return;
+                        try {
+                          await window.desktopApi.setProjectTemplatePolicy(activeSessionId, {
+                            mode: "default",
+                            defaultTemplateId: projectTemplateStatus.policy.defaultTemplateId,
+                          });
+                          await refreshProjectTemplateStatus(activeSessionId);
+                          triggerToast("已切换为固定默认模板");
+                        } catch (error) {
+                          triggerToast(
+                            error instanceof Error ? error.message : "切换模板策略失败",
+                          );
+                        }
+                      })();
+                    }}
+                    aria-pressed={projectPolicyMode === "default"}
+                  >
+                    <span>默认</span>
+                  </button>
+                  <button
+                    type="button"
+                    className={cx("ide-choice", projectPolicyMode === "custom" && "is-active")}
+                    disabled={
+                      !activeSessionId
+                      || (libraryTemplates.length === 0 && uploadedTemplates.length === 0)
+                    }
+                    onClick={() => {
+                      void (async () => {
+                        if (!activeSessionId) return;
+                        const target = activeCustomTemplate
+                          ?? libraryTemplates[0]
+                          ?? uploadedTemplates[0];
+                        if (!target) {
+                          triggerToast("请先导入参考模板");
+                          return;
+                        }
+                        try {
+                          await window.desktopApi.applyTemplateToProject(
+                            activeSessionId,
+                            target.id,
+                            target.revisionId,
+                          );
+                          await refreshProjectTemplateStatus(activeSessionId);
+                          triggerToast(`已应用自定义模板「${target.name}」`);
+                        } catch (error) {
+                          triggerToast(
+                            error instanceof Error ? error.message : "切换模板策略失败",
+                          );
+                        }
+                      })();
+                    }}
+                    aria-pressed={projectPolicyMode === "custom"}
+                  >
+                    <span>自定义</span>
+                  </button>
+                </div>
+              </IdeRow>
+              <IdeRow label="能力等级">
+                <span className="ide-hint">
+                  仅支持 design-reference（参考风格重生 SVG：配色/字体/logo/页眉页脚/标题框）。
+                  不承诺 PowerPoint 母版/占位符保真（master-backed 尚未启用）。
+                </span>
+              </IdeRow>
+              <IdeRow label="导入 PPTX/POTX">
+                <div className="ide-choice-group" role="group" aria-label="导入参考模板">
+                  <button
+                    type="button"
+                    className="ide-btn-secondary"
+                    onClick={() => {
+                      void (async () => {
+                        try {
+                          const selected = await window.desktopApi.selectTemplatePackage();
+                          if (!selected) return;
+                          const imported = await window.desktopApi.importProjectTemplate(
+                            activeSessionId,
+                            selected,
+                          );
+                          if (activeSessionId) {
+                            await refreshProjectTemplateStatus(activeSessionId);
+                          }
+                          await refreshLibraryTemplates();
+                          const warningSuffix = imported.warnings.length > 0
+                            ? `（${imported.warnings.length} 条警告）`
+                            : "";
+                          const scope = activeSessionId
+                            ? "并已应用到当前项目（写入 template-pack）"
+                            : "到模板库（可设为新项目默认或稍后应用）";
+                          triggerToast(
+                            `${imported.reusedExisting ? "已复用" : "已导入"}参考模板`
+                            + `「${imported.name}」${scope}${warningSuffix}`,
+                          );
+                        } catch (error) {
+                          triggerToast(
+                            error instanceof Error ? error.message : "导入参考模板失败",
+                          );
+                        }
+                      })();
+                    }}
+                  >
+                    选择并导入参考模板
+                  </button>
+                </div>
+              </IdeRow>
+              <IdeRow label="说明">
+                <span className="ide-hint">
+                  模板存入应用模板库，切换会话不会丢失。应用到项目或设为新项目默认后，会物化
+                  design/template-pack.json（配色/字体/chrome/assets）并种子化 design-spec。
+                  Agent 必须沿用 pack，不得另选 builtin 风格。页面仍由 SVG 重生；导出不保留原母版。
                 </span>
               </IdeRow>
             </IdeSection>

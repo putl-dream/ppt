@@ -11,6 +11,8 @@ import { TEST_DESIGN_SYSTEM } from "./design-engine-test-utils";
 
 const emptyArtifacts: WorkspaceArtifacts = {
   designSpec: false,
+  templatePolicy: false,
+  templatePack: false,
   pagePlan: false,
   pageSvg: false,
   assets: false,

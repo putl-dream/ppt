@@ -44,6 +44,7 @@ function getLifecycleArtifactIds(
 ): string[] {
   const normalizedPath = normalizeProjectPath(path);
   if (normalizedPath === "design/design-spec.json") return ["design-spec"];
+  if (normalizedPath === "design/template-policy.json") return [];
   if (normalizedPath === "slides/page-plan.json") return ["page-plan"];
   if (normalizedPath.startsWith("slides/svg/") && normalizedPath.endsWith(".svg")) {
     return [`page-svg:${normalizedPath}`];

@@ -4,6 +4,7 @@ import { askUserTool } from "./core/ask-user";
 import { beginPptCapabilityTool } from "./core/begin-ppt-capability";
 import { getSelectionTool } from "./core/get-selection";
 import { getDesignReferenceTool } from "./core/get-design-reference";
+import { resolveProjectTemplateTool } from "./core/resolve-project-template";
 import { listTeammatesTool } from "./core/list-teammates";
 import { listSlidesTool } from "./core/list-slides";
 import { previewSlideTool } from "./core/preview-slide";
@@ -130,6 +131,7 @@ const DEFAULT_TOOL_DEFINITIONS: ToolDefinition<any, any>[] = [
   askUserTool,
   beginPptCapabilityTool,
   getDesignReferenceTool,
+  resolveProjectTemplateTool,
   getSelectionTool,
   listTeammatesTool,
   listSlidesTool,

@@ -22,7 +22,7 @@ stages:
 
 1. 若本 Query 尚未声明 PPT 工作，先调用一次 `BeginPptCapability({"capability":"create", ...})`。恢复同一 waiting-user Query 时沿用该 request；新的跨请求继续操作会获得新的 QueryId，但推进同一 PptJob。
 2. 建立沟通契约：`audience`、`objective`、`desiredOutcome`、deck-wide `coreMessage`、`deliveryContext`、`afterUse`。只有缺少会改变内容事实或交付目标的信息时才询问。
-3. 需要技能正文时，可同批 `LoadSkill("ppt-design")`（以及已知随后需要时的 `LoadSkill("ppt-design-layout")` / `LoadSkill("ppt-build")`），不要一技能一轮。应用 `ppt-design`，先锁定唯一的 `argumentMode`、`visualStyle`、`readingMode` 和 `imageLanguage`，同时锁定语义色彩与字体角色。将结果写入 `design/design-spec.json`。
+3. 需要技能正文时，可同批 `LoadSkill("ppt-design")`（以及已知随后需要时的 `LoadSkill("ppt-design-layout")` / `LoadSkill("ppt-build")`），不要一技能一轮。应用 `ppt-design`：若 workspace 已有 `design/template-pack.json` 或 `template-policy` 为 `custom`，先 `ResolveProjectTemplate`（必要时同批 `GetDesignReference`），沿用 pack 的 designSystem/typography/chrome/assets，**不得另选 builtin 风格**；否则再按沟通信号解析模板。将结果写入 `design/design-spec.json`（`selection` → `resolvedTemplate`）。
 4. 应用 `ppt-design-layout`，为每页冻结 `finalCopy`、`coreMessage`、`audienceMove`、`rhythm`、`layoutIntent` 和素材引用，按顺序写入 `slides/page-plan.json`。若 design-spec 已写完且 layout 技能正文已在上下文中，本步写入不必再单独空转一轮旁白。
 5. 应用 `ppt-build`。先用 `WriteFile` 只写 `slides/svg/P01.svg`；同一 assistant 响应中可紧随 `PreviewSvgPage({"path":"slides/svg/P01.svg"})`（写在前、预览在后）。
 6. 查看 P01 PNG：若有越界、缺字、素材失败、视觉层级或 SVG 兼容问题，修改同一个文件并重新预览；P01 未通过前禁止生成 P02。看图校准是必要轮界，不要用过渡旁白填充。
@@ -39,9 +39,10 @@ stages:
 ## 作者文件
 
 - `design/design-spec.json`：沟通契约和 deck-wide 设计锁。
+- `design/template-policy.json` / `design/template-pack.json`：项目模板策略与可执行参考模板 pack（若已应用）。
 - `slides/page-plan.json`：有序逐页内容与构图意图。
 - `slides/svg/P01.svg`、`P02.svg`……：唯一视觉作者源。
-- `assets/**`：SVG 显式引用的本地图片或其他资源。
+- `assets/**`：SVG 显式引用的本地图片或其他资源（含 `assets/template/**` 提取的 logo 等）。
 
 设计规格和页面计划可以重建；一旦开始写 SVG，任何可见修改都必须直接修改对应 SVG，不能只改计划后期待提交工具代为更新。
 

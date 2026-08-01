@@ -29,11 +29,21 @@ stages:
 
 已有事实不要重复询问。仅当缺失信息会改变内容事实或交付目标时才暂停；不要询问“标准还是创意”“要不要卡片”等内部设计选项。
 
-## 2. 先锁定四个设计轴
+## 2. 解析项目模板并锁定设计轴
 
-### Argument mode
+先检查 `design/template-pack.json` 与 `design/template-policy.json`。若 pack 已存在（或 policy `mode=custom`），**必须**调用一次 `ResolveProjectTemplate` 并沿用其返回值；不得另选 builtin `visualStyle` 或自造调色板。
 
-选择唯一的 deck-wide 论证方式：
+若无 pack：读取 `design/template-policy.json`（若存在），再调用一次 `ResolveProjectTemplate`，传入沟通契约字段；若用户明确点名风格或模板，分别传 `explicitVisualStyle` / `explicitTemplateId`。
+
+工具返回的 `designSystem`、`selection`（写入 `resolvedTemplate`）、`typography` / `chrome` / `assets`（若有）与 `authoringGuidance` 是唯一允许的 deck-wide 风格事实源。不要发明模板 ID，也不要覆盖已解析的 `visualStyle`。
+
+- `supportLevel=native`：内置模板，锁定 Design System 与构图指引。
+- `supportLevel=design-reference`：上传参考模板；按 pack 配色/字体/logo/页眉页脚/标题框重生 SVG；**不**保留 PowerPoint 母版或占位符。
+- `master-backed` 尚未启用；不得向用户承诺母版保真。
+
+### Argument / reading / image language
+
+在已解析的 `designSystem` 轴之上补充行为细节：
 
 | `argumentMode` | 论证方式 | 适用目标 |
 |---|---|---|
@@ -43,46 +53,24 @@ stages:
 | `showcase` | 大图/大数字主导，情绪节奏 | 发布、品牌揭晓、活动 |
 | `briefing` | 中性、完整、便于检索 | 状态同步、会议包、交接 |
 
-用户已经给定顺序或事实结构时，不为迁就 mode 擅自重排或改写事实。
+用户已经给定顺序或事实结构时，不为迁就 mode 擅自重排或改写事实。`readingMode` 必须与返回的 `designSystem.readingMode` 一致。
 
-### Visual style
-
-选择唯一风格并写出具体 `visualStyleBehavior`，至少说明构图重心、几何语言、留白、层级、线条/质感和应避免的视觉习惯。风格不能只是一枚名称或一组颜色。
-
-可用起点：
-
-`swiss-minimal`、`soft-rounded`、`glassmorphism`、`dark-tech`、`blueprint`、`editorial`、`photo-editorial`、`data-journalism`、`brutalist`、`memphis`、`zine`、`vintage-poster`、`paper-cut`、`sketch-notes`、`ink-notes`、`chalkboard`、`ink-wash`、`pixel-art`。
-
-用户明确指定时直接锁定；未指定时根据沟通契约自主选择一个最合适的方向。除非用户明确要求比较方案，不展示 safe/shifted/bold 选择题。
-
-### Reading mode
-
-锁定 `text`（近读）、`balanced`（均衡）或 `presentation`（投影）。该值必须与 `SubmitSvgDeck.designSystem.readingMode` 完全一致；它决定信息密度、正文基线、留白与讲者依赖，不能在执行时靠任意缩字改变。
-
-### Image language
-
-即使决定不用图片，也要显式锁定。至少记录：
-
-- `usage`：`none`、`selective` 或 `image-led`。
-- `rendering`：照片、拼贴、线稿、3D、信息图插画等一致的渲染家族。
-- `motif`：跨页重复的视觉母题。
-- `framing`：满版、裁切、边到边、独立对象等规则。
-- `tone`：光线、颗粒、材质、情绪和与页面颜色的关系。
-- `textPolicy`：默认 `none`，不要让生成图片承担精确标题、数字或数据标签。
+即使决定不用图片，也要显式锁定 image language：`usage`、`rendering`、`motif`、`framing`、`tone`、`textPolicy`（默认 `none`）。
 
 ### 读取完整执行参考
 
-四轴确定后立即调用一次 `GetDesignReference`，传入精确的 `argumentMode`、`visualStyle` 和 `readingMode`。将返回的论证骨架、标题语气、构图、shape/elevation/whitespace/typography/background/texture、image language 和 `avoid` 约束写入设计规格。风格名称本身不算设计锁；SVG 作者必须拿到这些行为细节。
+模板解析后立即调用一次 `GetDesignReference`，传入解析结果中的 `argumentMode`、`visualStyle` 和 `readingMode`。当 pack 激活时，该工具会合并 pack 配色/字体/chrome；**不得**用内置样板覆盖 pack 外观。将返回的论证骨架、标题语气、构图纪律、image language 和 `avoid`/`mustUse` 写入设计规格。
 
-`GetDesignReference` 的参数在四轴选定后即已知：可与同轮其他独立读取同批发出；写入 `design/design-spec.json` 须等参考正文返回后再发（下一轮或同响应中不可依赖未返回的兄弟结果）。不要为“加载参考”单独插入过渡旁白轮。
+`ResolveProjectTemplate` 与 `GetDesignReference` 可在沟通契约就绪后同批发出（后者参数取前者结果时须等返回）；写入 `design/design-spec.json` 须等两工具结果返回后再发。若 Main 已种子化 design-spec 且 axes/`resolvedTemplate` 已匹配 pack，可补全真实 communicationContract 后保留轴与色。不要为“加载参考”单独插入过渡旁白轮。除非用户明确要求比较方案，不展示 safe/shifted/bold 选择题。
 
 ## 3. 锁定配套视觉事实
 
-- 定义语义色彩角色：`background`、`surface`、`primaryText`、`secondaryText`、`accent`、`signal`，使用明确 HEX；正文对背景对比度至少 4.5:1。
+- 有 pack 时：色彩 HEX、字体角色、logo 路径、页眉页脚与标题框**直接复制 pack**；只补充 surface/secondary 等派生角色说明。
+- 无 pack 时：定义语义色彩角色 `background`、`surface`、`primaryText`、`secondaryText`、`accent`、`signal`，使用明确 HEX；正文对背景对比度至少 4.5:1。
 - 定义 `title`、`body`、`emphasis`、`code/data` 字体角色和大致字号层级；选择预览与提交环境可用的字体。
-- 定义页面边距、常用对齐线、圆角/直角倾向、描边、阴影与纹理纪律。
+- 定义页面边距、常用对齐线、圆角/直角倾向、描边、阴影与纹理纪律；有 pack chrome.margins / titleFrame 时优先使用。
 - 定义 `anchor`、`dense`、`breathing` 三种页面节奏如何在本风格中呈现。
-- 明确禁止项，至少包括自动 chrome、全套卡片网格和仅换色不换构图。
+- 明确禁止项，至少包括自动 chrome、全套卡片网格和仅换色不换构图；有 pack 时并入其 `avoid`/`mustUse`。
 
 ## 4. 写入设计规格
 
@@ -110,6 +98,13 @@ stages:
   "argumentMode": "pyramid",
   "visualStyle": {"id": "swiss-minimal", "reference": {}},
   "readingMode": "balanced",
+  "resolvedTemplate": {
+    "templateId": "builtin/swiss-minimal",
+    "templateRevisionId": "1",
+    "source": "auto",
+    "reasons": ["..."],
+    "supportLevel": "native"
+  },
   "imageLanguage": {},
   "colors": {},
   "typography": {},
@@ -119,6 +114,6 @@ stages:
 }
 ```
 
-`communicationContract` 六个字符串字段、`presentationDesignSystem`（Design System v2）以及顶层 `argumentMode` / `visualStyle.id` / `readingMode` 必须齐全且轴一致；空对象 `{}` 不能代替沟通契约。字段值必须具体，不能把待决定项留给 SVG Executor。该文件不含可见对象，也不授权预览或提交工具补对象。
+`communicationContract` 六个字符串字段、`presentationDesignSystem`（须与 `ResolveProjectTemplate` 返回值一致）、顶层 `argumentMode` / `visualStyle.id` / `readingMode`、以及 `resolvedTemplate` 必须齐全且轴一致；空对象 `{}` 不能代替沟通契约。字段值必须具体，不能把待决定项留给 SVG Executor。该文件不含可见对象，也不授权预览或提交工具补对象。
 
 完成后由 `ppt-design-layout` 读取同一文件，为每页冻结最终文案和构图意图。若已知下一步需要 layout/build 技能，可在适当时机同批 `LoadSkill`，不要一技能一轮。后续不得无故重新选择 mode 或 style；若用户改变沟通目标，先更新设计规格，再继续页面规划。

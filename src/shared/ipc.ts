@@ -29,6 +29,29 @@ import type {
 export interface CreateSessionOptions {
   rootPath?: string;
   title?: string;
+  /** Snapshotted into design/template-policy.json for new projects only. */
+  defaultTemplateId?: string;
+}
+
+export interface ImportProjectTemplateResult {
+  templateId: string;
+  revisionId: string;
+  name: string;
+  supportLevel: "design-reference";
+  reusedExisting: boolean;
+  warnings: string[];
+  /** Relative project path of the immutable revision root. */
+  relativeRoot: string;
+}
+
+export interface ProjectTemplateSummary {
+  id: string;
+  revisionId: string;
+  name: string;
+  kind: "builtin" | "uploaded";
+  supportLevel: "native" | "design-reference" | "master-backed";
+  description: string;
+  autoPoolEligible?: boolean;
 }
 
 export type { AgentApprovalRequest } from "./card-display-protocol";
@@ -310,6 +333,63 @@ export interface DesktopApi {
   ): Promise<string | null>;
   openExportFolder(filePath: string): Promise<boolean>;
   selectDirectory(defaultPath?: string): Promise<string | null>;
+  selectTemplatePackage(defaultPath?: string): Promise<string | null>;
+  importProjectTemplate(
+    sessionId: string | undefined,
+    sourceFilePath: string,
+    displayName?: string,
+  ): Promise<ImportProjectTemplateResult>;
+  listProjectTemplates(sessionId: string): Promise<ProjectTemplateSummary[]>;
+  listApplicationTemplates(): Promise<ProjectTemplateSummary[]>;
+  applyTemplateToProject(
+    sessionId: string,
+    templateId: string,
+    revisionId: string,
+  ): Promise<void>;
+  getProjectTemplatePolicy(sessionId: string): Promise<{
+    version: 1;
+    mode: "auto" | "default" | "custom";
+    defaultTemplateId: string;
+    customTemplateId?: string;
+    customTemplateRevisionId?: string;
+  }>;
+  getProjectTemplatePack(sessionId: string): Promise<{
+    version: 1;
+    templateId: string;
+    revisionId: string;
+    name: string;
+    supportLevel: "design-reference";
+    designSystem: unknown;
+    typography: {
+      title: string;
+      body: string;
+      emphasis: string;
+      data: string;
+      sourceMajor?: string;
+      sourceMinor?: string;
+    };
+    chrome?: unknown;
+    assets: Array<{ role: string; path: string; contentHash?: string }>;
+    inheritance: {
+      colors: boolean;
+      fonts: string;
+      logo: boolean;
+      headerFooter: boolean;
+      titleFrame: boolean;
+      masters: false;
+      placeholders: false;
+    };
+    warnings?: string[];
+  } | null>;
+  setProjectTemplatePolicy(
+    sessionId: string,
+    policy: {
+      mode: "auto" | "default" | "custom";
+      defaultTemplateId: string;
+      customTemplateId?: string;
+      customTemplateRevisionId?: string;
+    },
+  ): Promise<void>;
   setWindowThemeMode(themeMode: WindowThemeMode): Promise<"light" | "dark">;
   cancelAgentRun(runId: string): Promise<boolean>;
   cancelAgentSession(sessionId: string): Promise<boolean>;

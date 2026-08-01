@@ -11,6 +11,7 @@ describe("project artifact mapping", () => {
   it("registers SVG-native author files before optional references", () => {
     expect(projectArtifactIds).toEqual([
       "design-spec",
+      "template-policy",
       "page-plan",
       "page-svg",
       "assets",
@@ -22,6 +23,7 @@ describe("project artifact mapping", () => {
     ]);
     expect(defaultProjectArtifacts.map((artifact) => artifact.id)).toEqual([
       "design-spec",
+      "template-policy",
       "page-plan",
       "page-svg",
       "assets",
@@ -43,6 +45,7 @@ describe("project artifact mapping", () => {
       kind: "page-svg",
     });
     expect(primaryProjectArtifactPaths["design-spec"]).toBe("design/design-spec.json");
+    expect(primaryProjectArtifactPaths["template-policy"]).toBe("design/template-policy.json");
     expect(primaryProjectArtifactPaths["page-plan"]).toBe("slides/page-plan.json");
     expect(primaryProjectArtifactPaths["page-svg"]).toBe("slides/svg/");
     expect(primaryProjectArtifactPaths.assets).toBe("assets/");

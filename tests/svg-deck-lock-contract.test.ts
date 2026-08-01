@@ -81,6 +81,36 @@ describe("SVG deck lock contract", () => {
     expect(classified.errorCode).toBe("LOCK_SCHEMA_INVALID");
   });
 
+  it("rejects design-spec writes that ignore a custom template policy pin", async () => {
+    const root = await mkdtemp(join(tmpdir(), "ppt-lock-template-pin-"));
+    temporaryRoots.push(root);
+    const fileService = new WorkspaceFileService(root);
+    const context = { workspaceRoot: root, fileService };
+
+    await writeFileContract.execute({
+      path: "design/template-policy.json",
+      content: JSON.stringify({
+        version: 1,
+        mode: "custom",
+        defaultTemplateId: "builtin/swiss-minimal",
+        customTemplateId: "uploaded/brand-kit",
+        customTemplateRevisionId: "abc123",
+      }, null, 2),
+    }, context);
+
+    await expect(writeFileContract.execute({
+      path: "design/design-spec.json",
+      content: SVG_DECK_DESIGN_SPEC_MINI_SCHEMA,
+    }, context)).rejects.toSatisfy((error: unknown) =>
+      error instanceof WorkspaceFileError
+      && error.code === "LOCK_SCHEMA_INVALID"
+      && (
+        error.message.includes("pins template")
+        || error.message.includes("missing under design/templates")
+      )
+    );
+  });
+
   it("rejects EditFile when the resulting page-plan would be invalid", async () => {
     const root = await mkdtemp(join(tmpdir(), "ppt-lock-edit-"));
     temporaryRoots.push(root);
@@ -166,6 +196,8 @@ describe("SVG deck lock contract", () => {
       workspaceRoot: "/tmp/project",
       artifacts: {
         designSpec: false,
+        templatePolicy: false,
+        templatePack: false,
         pagePlan: false,
         pageSvg: false,
         assets: false,
@@ -181,6 +213,18 @@ describe("SVG deck lock contract", () => {
           status: "invalid",
           verified: false,
           reason: "version: Required; canvas: Required",
+        },
+        templatePolicy: {
+          path: "design/template-policy.json",
+          status: "missing",
+          verified: false,
+          reason: "File does not exist.",
+        },
+        templatePack: {
+          path: "design/template-pack.json",
+          status: "missing",
+          verified: false,
+          reason: "File does not exist.",
         },
         pagePlan: {
           path: "slides/page-plan.json",

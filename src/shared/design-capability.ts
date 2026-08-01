@@ -15,12 +15,19 @@ Design capability: ${DESIGN_CAPABILITY_VERSION}
   independent deck-wide decisions.
 - Start from the communication contract: audience, objective, desired outcome,
   core message, delivery context, and after-use.
-- When the user has not named a style, lock one coherent Design System directly
-  into design/design-spec.json. Do not ask the user to pick among internal
+- Before writing design/design-spec.json, call ResolveProjectTemplate with the
+  communication signals (and any explicit visualStyle the user named). Copy the
+  returned designSystem and resolvedTemplate into the design-spec. Do not invent
+  template ids or override the resolved visualStyle.
+- Uploaded templates are design-reference only: regenerate SVG pages; never claim
+  PowerPoint master/placeholder fidelity.
+- When the user has not named a style, rely on ResolveProjectTemplate (auto /
+  default / custom policy). Do not ask the user to pick among internal
   design-candidate menus (for example safe / shifted / bold labels) unless they
   explicitly ask to compare alternatives.
-- When the user explicitly names a style or brand direction, lock it directly;
-  do not ask them to choose again.
+- When the user explicitly names a style or brand direction, pass it to
+  ResolveProjectTemplate as explicitVisualStyle / explicitTemplateId and lock the
+  returned system; do not ask them to choose again.
 - Lock deck-wide decisions in design/design-spec.json and per-page intent in
   slides/page-plan.json before writing page SVG.
 - Every slide must state audienceMove, rhythm (anchor/dense/breathing), and

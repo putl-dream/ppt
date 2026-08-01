@@ -13,6 +13,7 @@ interface SettingsViewProps {
   onOpenWorkspace: () => void;
   notify: (message: string) => void;
   onStartPanelResize: (panel: ResizablePanel, startClientX: number) => void;
+  activeSessionId?: string;
 }
 
 export function SettingsView({
@@ -24,6 +25,7 @@ export function SettingsView({
   onOpenWorkspace,
   notify,
   onStartPanelResize,
+  activeSessionId,
 }: SettingsViewProps) {
   return (
     <>
@@ -54,6 +56,9 @@ export function SettingsView({
           onDeleteModel={controller.deleteModel}
           selectedDesignSystem={controller.selectedDesignSystem}
           setSelectedDesignSystem={controller.setSelectedDesignSystem}
+          defaultTemplateId={controller.defaultTemplateId}
+          setDefaultTemplateId={controller.setDefaultTemplateId}
+          activeSessionId={activeSessionId}
           localStoragePath={localStoragePath}
           onOpenWorkspace={onOpenWorkspace}
           agentStepLimits={controller.agentStepLimits}

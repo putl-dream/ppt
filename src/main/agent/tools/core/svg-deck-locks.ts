@@ -9,8 +9,12 @@ import {
   VISUAL_STYLES,
   designSystemV2Schema,
 } from "@design-system";
+import { resolvedTemplateSelectionSchema } from "@shared/template-protocol";
+import { getBuiltinTemplate } from "@shared/template-catalog";
+import { assertDesignSystemMatchesTemplate } from "@shared/template-resolver";
 import type { ToolContext } from "../tool-definition";
 import { normalizeWorkspaceSvgPath } from "../../../deck/svg-page-loader";
+import { assertDesignSpecMatchesTemplatePolicy } from "./project-template-state";
 
 export const SVG_DECK_DESIGN_SPEC_PATH = "design/design-spec.json";
 export const SVG_DECK_PAGE_PLAN_PATH = "slides/page-plan.json";
@@ -39,6 +43,7 @@ export const svgDeckDesignSpecSchema = z.object({
     id: z.enum(VISUAL_STYLES),
   }).passthrough(),
   readingMode: z.enum(READING_MODES),
+  resolvedTemplate: resolvedTemplateSelectionSchema.optional(),
 }).passthrough().superRefine((spec, context) => {
   if (spec.argumentMode !== spec.presentationDesignSystem.argumentMode) {
     context.addIssue({
@@ -60,6 +65,36 @@ export const svgDeckDesignSpecSchema = z.object({
       path: ["readingMode"],
       message: "readingMode must match presentationDesignSystem.readingMode.",
     });
+  }
+  if (spec.resolvedTemplate) {
+    const builtin = getBuiltinTemplate(spec.resolvedTemplate.templateId);
+    if (builtin) {
+      try {
+        assertDesignSystemMatchesTemplate(spec.presentationDesignSystem, builtin);
+      } catch (error) {
+        context.addIssue({
+          code: "custom",
+          path: ["presentationDesignSystem"],
+          message: error instanceof Error ? error.message : String(error),
+        });
+      }
+      if (spec.resolvedTemplate.templateRevisionId !== builtin.revisionId) {
+        context.addIssue({
+          code: "custom",
+          path: ["resolvedTemplate", "templateRevisionId"],
+          message: `resolvedTemplate.templateRevisionId must be ${builtin.revisionId}.`,
+        });
+      }
+      if (spec.resolvedTemplate.supportLevel !== builtin.supportLevel) {
+        context.addIssue({
+          code: "custom",
+          path: ["resolvedTemplate", "supportLevel"],
+          message: `resolvedTemplate.supportLevel must be ${builtin.supportLevel}.`,
+        });
+      }
+    }
+    // Uploaded templates and project policy pins are enforced asynchronously
+    // via assertDesignSpecMatchesTemplatePolicy on WriteFile / lock reads.
   }
 });
 
@@ -110,7 +145,14 @@ export const SVG_DECK_DESIGN_SPEC_MINI_SCHEMA = `{
   },
   "argumentMode": "pyramid",
   "visualStyle": {"id": "swiss-minimal"},
-  "readingMode": "balanced"
+  "readingMode": "balanced",
+  "resolvedTemplate": {
+    "templateId": "builtin/swiss-minimal",
+    "templateRevisionId": "1",
+    "source": "auto",
+    "reasons": ["..."],
+    "supportLevel": "native"
+  }
 }`;
 
 export const SVG_DECK_PAGE_PLAN_MINI_SCHEMA = `{
@@ -139,11 +181,13 @@ export function isSvgDeckLockPath(path: string): boolean {
 export function svgDeckLockRecoveryHint(path: string): string {
   const normalized = normalizeLockPath(path);
   if (normalized === SVG_DECK_DESIGN_SPEC_PATH) {
-    return `LoadSkill("ppt-design") before rewriting ${SVG_DECK_DESIGN_SPEC_PATH}. `
-      + "Required top-level fields: version=1, canvas{width:1280,height:720}, "
+    return `Call ResolveProjectTemplate (and LoadSkill("ppt-design") if needed) before rewriting `
+      + `${SVG_DECK_DESIGN_SPEC_PATH}. Required top-level fields: version=1, canvas{width:1280,height:720}, `
       + "communicationContract{audience,objective,desiredOutcome,coreMessage,deliveryContext,afterUse}, "
       + "presentationDesignSystem (Design System v2), argumentMode, visualStyle.id, readingMode "
-      + "(axes must match presentationDesignSystem).";
+      + "(axes must match presentationDesignSystem). Include resolvedTemplate from "
+      + "ResolveProjectTemplate selection (do not invent template ids or override an active "
+      + "design/template-pack.json palette/fonts/chrome).";
   }
   if (normalized === SVG_DECK_PAGE_PLAN_PATH) {
     return `LoadSkill("ppt-design-layout") before rewriting ${SVG_DECK_PAGE_PLAN_PATH}. `
@@ -178,9 +222,11 @@ export function formatSvgDeckLockContractBlock(): string {
     "可同批加载多个 Skill（例如同时 LoadSkill ppt-design 与 ppt-design-layout），"
     + "不必一技能一轮。依赖上一步正文结果的写入仍须等 tool_result。",
     "推荐顺序（尽量合并独立调用，减少模型往返）："
+    + "BeginPptCapability → ResolveProjectTemplate → (optional GetDesignReference) → "
     + "LoadSkill(s) → WriteFile design-spec → WriteFile page-plan → "
     + "WriteFile P01 + PreviewSvgPage →（看图校准后）同批写剩余 SVG → "
-    + "同批 PreviewSvgPage → SubmitSvgDeck（独批）。",
+    + "同批 PreviewSvgPage → SubmitSvgDeck（独批）。"
+    + "若 design/template-pack.json 已 verified，Resolve 后必须沿用 pack，不得另选 visualStyle。",
     `非法锁文件不会通过 WriteFile、PreviewSvgPage 或 SubmitSvgDeck。`,
     "",
     `${SVG_DECK_DESIGN_SPEC_PATH} 最低结构：`,
@@ -571,7 +617,14 @@ async function readSvgDeckLock(
     },
   );
   // #endregion
-  return validateSvgDeckLockContent(path, content);
+  const validated = validateSvgDeckLockContent(path, content);
+  if (path === SVG_DECK_DESIGN_SPEC_PATH) {
+    await assertDesignSpecMatchesTemplatePolicy(
+      fileService,
+      validated as SvgDeckDesignSpec,
+    );
+  }
+  return validated;
 }
 
 function schemaForLockPath(

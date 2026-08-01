@@ -48,6 +48,8 @@ stages:
 function emptyArtifacts() {
   return {
     designSpec: false,
+    templatePolicy: false,
+    templatePack: false,
     pagePlan: false,
     pageSvg: false,
     assets: false,

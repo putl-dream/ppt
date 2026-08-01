@@ -32,6 +32,11 @@ import {
   designSystemV2Schema,
   type DesignSystemV2,
 } from "@design-system";
+import {
+  APPLICATION_DEFAULT_TEMPLATE_ID,
+  isUploadedTemplateId,
+} from "@shared/template-protocol";
+import { getBuiltinTemplate } from "@shared/template-catalog";
 
 export interface SettingsController {
   models: ManagedModel[];
@@ -44,6 +49,8 @@ export interface SettingsController {
   deleteModel: (id: string) => void;
   selectedDesignSystem: DesignSystemV2;
   setSelectedDesignSystem: (value: DesignSystemV2) => void;
+  defaultTemplateId: string;
+  setDefaultTemplateId: (value: string) => void;
   agentStepLimits: AgentStepLimits;
   setAgentStepLimits: (value: AgentStepLimits) => void;
   agentGatewayPreferences: AgentGatewayPreferences;
@@ -107,6 +114,11 @@ export function useSettingsController(
   const [selectedDesignSystem, setSelectedDesignSystemState] = useState<DesignSystemV2>(() => {
     const parsed = designSystemV2Schema.safeParse(persisted.selectedDesignSystem);
     return parsed.success ? parsed.data : DEFAULT_DESIGN_SYSTEM;
+  });
+  const [defaultTemplateId, setDefaultTemplateIdState] = useState<string>(() => {
+    const requested = persisted.defaultTemplateId ?? APPLICATION_DEFAULT_TEMPLATE_ID;
+    if (isUploadedTemplateId(requested)) return requested;
+    return getBuiltinTemplate(requested)?.id ?? APPLICATION_DEFAULT_TEMPLATE_ID;
   });
   const [models, setModels] = useState<ManagedModel[]>(() => bootstrap.models);
   const [selectedModelId, setSelectedModelId] = useState(() => bootstrap.selectedModelId);
@@ -186,10 +198,12 @@ export function useSettingsController(
       uiFontSize,
       uiLineHeight,
       selectedDesignSystem,
+      defaultTemplateId,
       executionStrategy,
     });
   }, [
     colorScheme,
+    defaultTemplateId,
     executionStrategy,
     selectedDesignSystem,
     skin,
@@ -246,6 +260,19 @@ export function useSettingsController(
     deleteModel,
     selectedDesignSystem,
     setSelectedDesignSystem: update(setSelectedDesignSystemState),
+    defaultTemplateId,
+    setDefaultTemplateId: (value: string) => {
+      if (isUploadedTemplateId(value)) {
+        markSaving();
+        setDefaultTemplateIdState(value);
+        return;
+      }
+      const template = getBuiltinTemplate(value);
+      if (!template) return;
+      markSaving();
+      setDefaultTemplateIdState(template.id);
+      setSelectedDesignSystemState(template.designSystem);
+    },
     agentStepLimits,
     setAgentStepLimits: update(setAgentStepLimitsState),
     agentGatewayPreferences,

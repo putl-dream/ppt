@@ -34,6 +34,8 @@ export interface PersistedUiSettings {
   /** Leading multiplier applied on top of the size scale. */
   uiLineHeight: number;
   selectedDesignSystem: DesignSystemV2;
+  /** Application default builtin template id for new projects. */
+  defaultTemplateId: string;
   executionStrategy: AgentExecutionStrategy;
 }
 

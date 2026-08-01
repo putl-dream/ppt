@@ -9,6 +9,7 @@ import {
   createDeckSnapshotContent,
   createDefaultProjectFiles,
   createProjectSandbox,
+  type CreateDefaultProjectFilesOptions,
 } from "./project-schema";
 import {
   globWorkspaceFiles,
@@ -98,13 +99,16 @@ export class ProjectFileService {
    * 为会话创建或补齐本地项目沙箱与默认产物文件。
    * 返回值表示项目元数据是否变化，调用方据此决定是否持久化 SessionSnapshot。
    */
-  async ensureProjectSandbox(snapshot: SessionSnapshot): Promise<boolean> {
+  async ensureProjectSandbox(
+    snapshot: SessionSnapshot,
+    options: CreateDefaultProjectFilesOptions = {},
+  ): Promise<boolean> {
     const project = createProjectSandbox(snapshot, this.projectRootPath);
     const changed = JSON.stringify(snapshot.project) !== JSON.stringify(project);
     snapshot.project = project;
 
     await mkdir(project.rootPath, { recursive: true });
-    for (const template of createDefaultProjectFiles(snapshot)) {
+    for (const template of createDefaultProjectFiles(snapshot, options)) {
       await this.writeArtifact(snapshot, template.path, template.content, {
         overwrite: false,
       });

@@ -30,6 +30,31 @@ import {
   type ProjectFileEditorReadResult,
   type ProjectFileEditorWriteResult,
 } from "./project/project-file-service";
+import {
+  applicationTemplateLibrary,
+  importTemplatePackage,
+  listTemplateDescriptors,
+  listUploadedTemplateDescriptors,
+} from "./project/template-import-service";
+import { materializeCustomTemplate } from "./project/template-materialize-service";
+import { getBuiltinTemplate, listBuiltinTemplates } from "@shared/template-catalog";
+import {
+  TEMPLATE_PACK_PATH,
+  TEMPLATE_POLICY_PATH,
+  formatProjectTemplatePolicy,
+  projectTemplatePolicySchema,
+  createDefaultProjectTemplatePolicy,
+  templatePackSchema,
+  templateRevisionPath,
+  type ProjectTemplatePolicy,
+  type TemplatePack,
+} from "@shared/template-protocol";
+import type {
+  AgentRunResult,
+  CreateSessionOptions,
+  ImportProjectTemplateResult,
+  ProjectTemplateSummary,
+} from "@shared/ipc";
 import type { ArtifactChangeObserverPort } from
   "./presentation-lifecycle/artifact-change-observer-types";
 import {
@@ -39,7 +64,6 @@ import {
 import type { DeckExportRecord, DeckGenerationJobsFile } from "@shared/deck-persistence";
 import { parseStoryboard, serializeStoryboard, type StoryboardSlideSpec } from "@shared/storyboard";
 import { defaultProjectArtifacts } from "@shared/project";
-import type { CreateSessionOptions } from "@shared/ipc";
 import {
   getSessionSandboxPath,
   isLegacyProjectSandboxPath,
@@ -74,7 +98,6 @@ import { isTeammateProgressEvent } from "@shared/teammate-progress";
 import { agentTaskNodeSchema } from "@shared/agent-task-list";
 import { formatPublicErrorMessage } from "@shared/agent-activity-display";
 import { ConversationDatabase } from "./conversation-database";
-import type { AgentRunResult } from "@shared/ipc";
 import { createModuleLogger } from "./agent/logger";
 
 const storedSessionSchema = sessionSnapshotSchema;
@@ -363,7 +386,10 @@ export class FileSessionStore {
       };
     }
 
-    await this.materializeProjectSandbox(snapshot);
+    await this.materializeProjectSandbox(snapshot, {
+      defaultTemplateId: options?.defaultTemplateId,
+    });
+    await this.seedUploadedDefaultTemplate(snapshot, options?.defaultTemplateId);
     data.sessions.unshift(snapshot);
     data.activeSessionId = snapshot.session.id;
     await this.persist();
@@ -1007,6 +1033,155 @@ export class FileSessionStore {
     return this.projectFileService.listArtifacts(this.findSession(sessionId));
   }
 
+  /**
+   * Imports into the application library so the template outlives the session
+   * that uploaded it, then mirrors the revision into the active project.
+   */
+  async importProjectTemplate(
+    sessionId: string | undefined,
+    sourceFilePath: string,
+    displayName?: string,
+  ): Promise<ImportProjectTemplateResult> {
+    const result = await importTemplatePackage({
+      library: applicationTemplateLibrary(),
+      sourceFilePath,
+      displayName,
+    });
+
+    let relativeRoot = result.relativeRoot;
+    if (sessionId) {
+      const snapshot = this.findSession(sessionId);
+      if (snapshot.project?.rootPath) {
+        const policy = await this.getProjectTemplatePolicy(sessionId);
+        await materializeCustomTemplate({
+          snapshot,
+          projectFileService: this.projectFileService,
+          templateId: result.descriptor.id,
+          revisionId: result.descriptor.revisionId,
+          defaultTemplateId: policy.defaultTemplateId,
+        });
+        relativeRoot = templateRevisionPath(
+          result.descriptor.id,
+          result.descriptor.revisionId,
+        );
+      }
+    }
+
+    return {
+      templateId: result.descriptor.id,
+      revisionId: result.descriptor.revisionId,
+      name: result.descriptor.name,
+      supportLevel: "design-reference",
+      reusedExisting: result.reusedExisting,
+      warnings: result.inspection.warnings,
+      relativeRoot,
+    };
+  }
+
+  async listApplicationTemplates(): Promise<ProjectTemplateSummary[]> {
+    const uploaded = await listTemplateDescriptors(applicationTemplateLibrary());
+    return uploaded.map((item) => ({
+      id: item.id,
+      revisionId: item.revisionId,
+      name: item.name,
+      kind: item.kind,
+      supportLevel: item.supportLevel,
+      description: item.description,
+      autoPoolEligible: false,
+    }));
+  }
+
+  /** Copies a library revision into the project and pins it as the custom template. */
+  async applyTemplateToProject(
+    sessionId: string,
+    templateId: string,
+    revisionId: string,
+  ): Promise<void> {
+    const snapshot = this.findSession(sessionId);
+    const policy = await this.getProjectTemplatePolicy(sessionId);
+    await materializeCustomTemplate({
+      snapshot,
+      projectFileService: this.projectFileService,
+      templateId,
+      revisionId,
+      defaultTemplateId: policy.defaultTemplateId,
+    });
+  }
+
+  async getProjectTemplatePack(sessionId: string): Promise<TemplatePack | null> {
+    const snapshot = this.findSession(sessionId);
+    try {
+      const artifact = await this.projectFileService.readArtifact(
+        snapshot,
+        TEMPLATE_PACK_PATH,
+      );
+      if (typeof artifact.content !== "string") return null;
+      return templatePackSchema.parse(JSON.parse(artifact.content));
+    } catch {
+      return null;
+    }
+  }
+
+  async listProjectTemplates(sessionId: string): Promise<ProjectTemplateSummary[]> {
+    const snapshot = this.findSession(sessionId);
+    const uploaded = snapshot.project?.rootPath
+      ? await listUploadedTemplateDescriptors(snapshot.project.rootPath)
+      : [];
+    return [
+      ...listBuiltinTemplates().map((item) => ({
+        id: item.id,
+        revisionId: item.revisionId,
+        name: item.name,
+        kind: item.kind,
+        supportLevel: item.supportLevel,
+        description: item.description,
+        autoPoolEligible: item.autoPoolEligible,
+      })),
+      ...uploaded.map((item) => ({
+        id: item.id,
+        revisionId: item.revisionId,
+        name: item.name,
+        kind: item.kind,
+        supportLevel: item.supportLevel,
+        description: item.description,
+        autoPoolEligible: false,
+      })),
+    ];
+  }
+
+  async getProjectTemplatePolicy(sessionId: string): Promise<ProjectTemplatePolicy> {
+    const snapshot = this.findSession(sessionId);
+    try {
+      const artifact = await this.projectFileService.readArtifact(
+        snapshot,
+        TEMPLATE_POLICY_PATH,
+      );
+      if (typeof artifact.content !== "string") {
+        return createDefaultProjectTemplatePolicy();
+      }
+      return projectTemplatePolicySchema.parse(JSON.parse(artifact.content));
+    } catch {
+      return createDefaultProjectTemplatePolicy();
+    }
+  }
+
+  async setProjectTemplatePolicy(
+    sessionId: string,
+    policyInput: Omit<ProjectTemplatePolicy, "version"> & { version?: 1 },
+  ): Promise<void> {
+    const snapshot = this.findSession(sessionId);
+    const policy = projectTemplatePolicySchema.parse({
+      version: 1,
+      ...policyInput,
+    });
+    await this.projectFileService.writeArtifact(
+      snapshot,
+      TEMPLATE_POLICY_PATH,
+      formatProjectTemplatePolicy(policy),
+      { overwrite: true },
+    );
+  }
+
   listProjectFiles(sessionId: string): Promise<string[]> {
     return this.projectFileService.listProjectFiles(this.findSession(sessionId));
   }
@@ -1085,6 +1260,30 @@ export class FileSessionStore {
     return data.sessions.find((item) => item.session.id === data.activeSessionId);
   }
 
+  /**
+   * When the application default points at an uploaded reference template, the
+   * new project needs a full materialization (copy + pack + policy + design-spec
+   * seed). Builtin defaults are already seeded by createDefaultProjectFiles.
+   */
+  private async seedUploadedDefaultTemplate(
+    snapshot: SessionSnapshot,
+    defaultTemplateId: string | undefined,
+  ): Promise<void> {
+    if (!defaultTemplateId || getBuiltinTemplate(defaultTemplateId)) return;
+    if (!snapshot.project?.rootPath) return;
+
+    const descriptor = (await listTemplateDescriptors(applicationTemplateLibrary()))
+      .find((item) => item.id === defaultTemplateId);
+    if (!descriptor) return;
+
+    await materializeCustomTemplate({
+      snapshot,
+      projectFileService: this.projectFileService,
+      templateId: descriptor.id,
+      revisionId: descriptor.revisionId,
+    });
+  }
+
   private async materializeProjectSandboxes(): Promise<boolean> {
     let changed = false;
     for (const snapshot of this.requireData().sessions) {
@@ -1093,8 +1292,14 @@ export class FileSessionStore {
     return changed;
   }
 
-  private async materializeProjectSandbox(snapshot: SessionSnapshot): Promise<boolean> {
-    const projectChanged = await this.projectFileService.ensureProjectSandbox(snapshot);
+  private async materializeProjectSandbox(
+    snapshot: SessionSnapshot,
+    options?: { defaultTemplateId?: string },
+  ): Promise<boolean> {
+    const projectChanged = await this.projectFileService.ensureProjectSandbox(
+      snapshot,
+      options,
+    );
     await this.syncWorkspacePersistence(snapshot);
     return projectChanged;
   }

@@ -96,6 +96,20 @@ const api: DesktopApi = {
 
   // 原生窗口与对话框
   selectDirectory: (defaultPath) => ipcRenderer.invoke("dialog:select-directory", defaultPath),
+  selectTemplatePackage: (defaultPath) =>
+    ipcRenderer.invoke("dialog:select-template-package", defaultPath),
+  importProjectTemplate: (sessionId, sourceFilePath, displayName) =>
+    ipcRenderer.invoke("template:import", sessionId, sourceFilePath, displayName),
+  listProjectTemplates: (sessionId) => ipcRenderer.invoke("template:list", sessionId),
+  listApplicationTemplates: () => ipcRenderer.invoke("template:list-application"),
+  applyTemplateToProject: (sessionId, templateId, revisionId) =>
+    ipcRenderer.invoke("template:apply", sessionId, templateId, revisionId),
+  getProjectTemplatePolicy: (sessionId) =>
+    ipcRenderer.invoke("template:get-policy", sessionId),
+  getProjectTemplatePack: (sessionId) =>
+    ipcRenderer.invoke("template:get-pack", sessionId),
+  setProjectTemplatePolicy: (sessionId, policy) =>
+    ipcRenderer.invoke("template:set-policy", sessionId, policy),
   setWindowThemeMode: (themeMode) => ipcRenderer.invoke("window:set-theme-mode", themeMode),
 };
 

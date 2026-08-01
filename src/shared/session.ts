@@ -7,6 +7,7 @@ import { persistedDisplayCardSchema } from "./card-display-protocol";
 
 export const projectArtifactKindSchema = z.enum([
   "design-spec",
+  "template-policy",
   "page-plan",
   "page-svg",
   "assets",

@@ -92,6 +92,8 @@ describe("workspace artifact probing", () => {
 
     await expect(probeWorkspaceArtifacts(root)).resolves.toEqual({
       designSpec: false,
+      templatePolicy: false,
+      templatePack: false,
       pagePlan: false,
       pageSvg: false,
       assets: false,

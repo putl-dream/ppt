@@ -27,6 +27,7 @@ const TOOL_DISPLAY_COPY = {
   BeginPptCapability: { action: "开始演示文稿任务", category: "coordinate" },
   EditFile: { action: "编辑工作文件", category: "change" },
   GetDesignReference: { action: "读取设计参考", category: "read" },
+  ResolveProjectTemplate: { action: "解析项目模板", category: "read" },
   GetSelection: { action: "读取当前选择", category: "read" },
   Glob: { action: "查找工作文件", category: "search" },
   list_teammates: { action: "查看协作进度", category: "coordinate" },

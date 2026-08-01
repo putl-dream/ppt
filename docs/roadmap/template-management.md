@@ -1,10 +1,12 @@
 # Presentation 模板管理与自动选择路线图
 
 > 文档类型：活跃提案
-> 状态：Proposed，**已选定为清扫收工后的下一产品主线**（尚未成为现行代码事实）
+> 状态：Proposed → **Phase 1–2 落地中**（协议 / 内置目录 / design-reference 导入）；**Phase 3 master-backed 明确暂缓**
 > 最后更新：2026-08-01
 >
-> 说明：本文件仅为提案；仓库中尚无独立模板领域模块。勿因 roadmap 存在而当作已实现。
+> 说明：Phase 1–2 代码路径已接入（`src/shared/template-*.ts`、`ResolveProjectTemplate`、
+> `design/template-policy.json`、PPTX/POTX design-reference 导入）。勿将 UI 中的
+> 「参考模板」表述成母版保真；`master-backed` 仍属 Phase 3，未实现前不得启用。
 > 产品优先级：优先于「PPTX 原生可编辑图表」专项；风险项（凭据/daemon/E2E）另见
 > [capability-scorecard.md](../architecture/capability-scorecard.md) 风险 backlog，不阻塞本提案 Phase 1。
 > 产品创建路径以 [工作流](../presentation/workflow.md) 的 SVG-native 为准；
@@ -188,10 +190,13 @@ interface ResolvedTemplateSelection {
 
 | 事实 | 位置 | 说明 |
 |---|---|---|
-| 应用默认模板 ID | App settings | 仅影响**新项目**初始化；不改已打开项目 |
-| 项目策略 | `design/template-policy.json`（建议） | `auto` / `default` / `custom` 与项目默认、自定义引用 |
+| 应用默认模板 ID | App settings | 仅影响**新项目**初始化；不改已打开项目。可指向内置模板或应用模板库中的上传模板 |
+| 项目策略 | `design/template-policy.json` | `auto` / `default` / `custom` 与项目默认、自定义引用 |
+| 可执行 pack | `design/template-pack.json` | Main 在 apply/seed 时写入；配色/字体/chrome/assets；Agent 只读 |
 | 本次解析结果 | `design/design-spec.json` 内 `ResolvedTemplateSelection` | 写入即进入 lifecycle `design_spec` 哈希与下游 stale |
-| 上传模板库 | `design/templates/**` | 二进制 + descriptor + inspection；见 §9 |
+| 应用模板库 | `<AGENT_PPT_DATA_DIR>/templates/**` | 导入落点；跨会话/跨项目保留，绑定项目时复制一份到项目内 |
+| 项目模板库 | `design/templates/**` | 项目内不可变副本（二进制 + descriptor + inspection）；见 §9 |
+| 提取媒体 | `assets/template/<revisionId>/**` | apply 时从源包抽出的 logo/装饰等 |
 
 约束：
 
@@ -362,7 +367,8 @@ communication contract（+ 可选结构化信号）
 ```text
 选择 .pptx / .potx
   → Main 读取并做边界校验
-  → 计算 hash，复制为项目内 immutable source
+  → 计算 hash，写入应用模板库 immutable source
+  → 绑定项目时复制同一 revision 到项目内 immutable source
   → 检查 OOXML 结构和风险项
   → 解析 theme / master / layout / placeholder / sample slides
   → 生成预览与 TemplateDescriptor

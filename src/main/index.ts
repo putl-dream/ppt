@@ -1253,6 +1253,87 @@ app.whenReady().then(async () => {
     if (canceled || !filePaths || filePaths.length === 0) return null;
     return filePaths[0];
   });
+  ipcMain.handle("dialog:select-template-package", async (event, defaultPath?: string) => {
+    const window = BrowserWindow.fromWebContents(event.sender);
+    const options = {
+      properties: ["openFile"] as Array<"openFile">,
+      defaultPath,
+      filters: [
+        { name: "PowerPoint / Template", extensions: ["pptx", "potx"] },
+      ],
+    };
+    const { filePaths, canceled } = window
+      ? await dialog.showOpenDialog(window, options)
+      : await dialog.showOpenDialog(options);
+    if (canceled || !filePaths || filePaths.length === 0) return null;
+    return filePaths[0];
+  });
+  ipcMain.handle(
+    "template:import",
+    async (_event, sessionId: unknown, sourceFilePath: unknown, displayName?: unknown) => {
+      if (typeof sourceFilePath !== "string" || !sourceFilePath.trim()) {
+        throw new Error("sourceFilePath is required");
+      }
+      return sessionStore.importProjectTemplate(
+        typeof sessionId === "string" && sessionId.trim() ? sessionId : undefined,
+        sourceFilePath,
+        typeof displayName === "string" ? displayName : undefined,
+      );
+    },
+  );
+  ipcMain.handle("template:list", async (_event, sessionId: unknown) => {
+    if (typeof sessionId !== "string" || !sessionId.trim()) {
+      throw new Error("sessionId is required");
+    }
+    return sessionStore.listProjectTemplates(sessionId);
+  });
+  ipcMain.handle("template:list-application", async () => {
+    return sessionStore.listApplicationTemplates();
+  });
+  ipcMain.handle(
+    "template:apply",
+    async (_event, sessionId: unknown, templateId: unknown, revisionId: unknown) => {
+      if (typeof sessionId !== "string" || !sessionId.trim()) {
+        throw new Error("sessionId is required");
+      }
+      if (typeof templateId !== "string" || !templateId.trim()) {
+        throw new Error("templateId is required");
+      }
+      if (typeof revisionId !== "string" || !revisionId.trim()) {
+        throw new Error("revisionId is required");
+      }
+      await sessionStore.applyTemplateToProject(sessionId, templateId, revisionId);
+    },
+  );
+  ipcMain.handle("template:get-policy", async (_event, sessionId: unknown) => {
+    if (typeof sessionId !== "string" || !sessionId.trim()) {
+      throw new Error("sessionId is required");
+    }
+    return sessionStore.getProjectTemplatePolicy(sessionId);
+  });
+  ipcMain.handle("template:get-pack", async (_event, sessionId: unknown) => {
+    if (typeof sessionId !== "string" || !sessionId.trim()) {
+      throw new Error("sessionId is required");
+    }
+    return sessionStore.getProjectTemplatePack(sessionId);
+  });
+  ipcMain.handle(
+    "template:set-policy",
+    async (_event, sessionId: unknown, policy: unknown) => {
+      if (typeof sessionId !== "string" || !sessionId.trim()) {
+        throw new Error("sessionId is required");
+      }
+      await sessionStore.setProjectTemplatePolicy(
+        sessionId,
+        policy as {
+          mode: "auto" | "default" | "custom";
+          defaultTemplateId: string;
+          customTemplateId?: string;
+          customTemplateRevisionId?: string;
+        },
+      );
+    },
+  );
   ipcMain.handle("shell:open-export-folder", async (_, filePath: string) => {
     if (typeof filePath !== "string" || !filePath.trim()) {
       return false;
