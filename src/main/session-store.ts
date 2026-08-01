@@ -374,7 +374,7 @@ export class FileSessionStore {
   async openWorkspace(rootPath: string): Promise<SessionBootstrap> {
     const normalized = normalizeWorkspacePath(rootPath);
     const matches = this.requireData().sessions
-      .filter((snapshot) => this.getWorkspaceRoot(snapshot) === normalized)
+      .filter((snapshot) => this.resolveWorkspaceRoot(snapshot) === normalized)
       .sort((left, right) => compareSessionsByActivity(left.session, right.session));
     if (matches.length > 0) return this.selectSession(matches[0].session.id);
     return this.createSession({ rootPath: normalized });
@@ -387,7 +387,7 @@ export class FileSessionStore {
   async listWorkspaceSessions(rootPath: string): Promise<SessionSummary[]> {
     const normalized = normalizeWorkspacePath(rootPath);
     return this.requireData().sessions
-      .filter((snapshot) => this.getWorkspaceRoot(snapshot) === normalized)
+      .filter((snapshot) => this.resolveWorkspaceRoot(snapshot) === normalized)
       .sort((left, right) => compareSessionsByActivity(left.session, right.session))
       .map((snapshot) => ({ ...structuredClone(snapshot.session), workspacePath: normalized }));
   }
@@ -433,6 +433,9 @@ export class FileSessionStore {
         validatedPresentation,
       ),
       lastMessageAt: snapshot.session.lastMessageAt,
+      ...(snapshot.session.workspacePath
+        ? { workspacePath: snapshot.session.workspacePath }
+        : {}),
     };
     await this.projectFileService.writeDeckSnapshot(snapshot);
     await this.persist();
@@ -469,6 +472,9 @@ export class FileSessionStore {
           validatedPresentation,
         ),
         lastMessageAt: snapshot.session.lastMessageAt,
+        ...(snapshot.session.workspacePath
+          ? { workspacePath: snapshot.session.workspacePath }
+          : {}),
       };
 
       this.conversationDatabase.withTransaction(() => {
@@ -1125,11 +1131,15 @@ export class FileSessionStore {
       .sort((a, b) => compareSessionsByActivity(a.session, b.session))
       .map((item) => ({
         ...structuredClone(item.session),
-        workspacePath: this.getWorkspaceRoot(item),
+        workspacePath: this.resolveWorkspaceRoot(item),
       }));
   }
 
-  private getWorkspaceRoot(snapshot: SessionSnapshot): string | undefined {
+  /**
+   * 工作区根的唯一解析规则。project 身份必须由此派生，
+   * 否则同一会话在不同调用路径会解析出不同 projectId。
+   */
+  resolveWorkspaceRoot(snapshot: SessionSnapshot): string | undefined {
     const resolved = resolveWorkspacePath(
       {
         workspacePath: snapshot.session.workspacePath,
@@ -1163,7 +1173,7 @@ export class FileSessionStore {
     snapshot: SessionSnapshot,
     options?: { active?: boolean },
   ): Promise<void> {
-    const workspaceRoot = this.getWorkspaceRoot(snapshot);
+    const workspaceRoot = this.resolveWorkspaceRoot(snapshot);
     if (!workspaceRoot) return;
     void options;
     const projectId = this.conversationDatabase.ensureProject(

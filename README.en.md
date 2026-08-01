@@ -56,7 +56,7 @@ All real slide changes pass through `CommitGate`: schema validation, sandbox exe
 
 **The product create path is SVG-native.**
 
-Each slide’s visual authoring source is a validated full-page SVG shared by preview and export. The current PPTX exporter embeds that SVG as a full-slide image so what you see matches the `.pptx`; it does not decompose pages into editable native PowerPoint shapes or charts.
+Each slide’s visual authoring source is a validated full-page SVG shared by preview and export. PPTX export uses a hybrid strategy: a text-stripped SVG becomes the slide background image, while title and body `<text>` nodes are lifted into editable PowerPoint text boxes. Charts and decoration stay in the image layer; they are not decomposed into native shapes or charts.
 
 **The process is preserved, not just the result.**
 
@@ -211,7 +211,7 @@ Main process
   Conversation DB / Runtime stores -> history, checkpoints, transcripts
         |
         v
-PPTX exporter (full-page SVG images)
+PPTX exporter (hybrid: SVG background + editable text)
 ```
 
 Key areas:

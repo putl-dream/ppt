@@ -44,13 +44,13 @@ describe("PPTX postflight", () => {
     expect(report.slideCount).toBe(1);
     expect(report.slides[0]).toMatchObject({
       pictures: 1,
-      shapes: 0,
-      textRuns: 0,
       graphicFrames: 0,
       svgSourcePresent: true,
       titlePresent: true,
     });
-    expect(report.totals.editableObjects).toBe(1);
+    expect(report.slides[0].textRuns).toBeGreaterThanOrEqual(1);
+    expect(report.slides[0].shapes).toBeGreaterThanOrEqual(1);
+    expect(report.totals.editableObjects).toBeGreaterThan(1);
   });
 
   it("verifies speaker notes for SVG pages", async () => {

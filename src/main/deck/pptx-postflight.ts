@@ -4,6 +4,10 @@ import { posix } from "node:path";
 import JSZip from "jszip";
 
 import type { Presentation } from "@shared/presentation";
+import {
+  expectedExportSvgHashSource,
+  liftSvgText,
+} from "./svg-text-lift";
 
 const PPTX_SLIDE_WIDTH_EMU = 9_144_000;
 const PPTX_SLIDE_HEIGHT_EMU = 5_143_500;
@@ -340,14 +344,31 @@ export async function inspectPptxExport(
 
     let svgSourcePresent = false;
     if (expectedSvgSource) {
+      const lifted = liftSvgText(expectedSvgSource.markup);
+      const expectedBackgroundHash = createHash("sha256")
+        .update(expectedExportSvgHashSource(expectedSvgSource.markup), "utf8")
+        .digest("hex");
+      const expectedLiftedTextCount = lifted.texts.length;
+
       if (pictures !== 1) {
         errors.push(
           `Slide ${index + 1} SVG page must contain exactly one p:pic; found ${pictures}.`,
         );
       }
-      if (shapes > 0 || textRuns > 0 || graphicFrames > 0) {
+      if (graphicFrames > 0) {
         errors.push(
-          `Slide ${index + 1} SVG page contains extra objects (p:sp=${shapes}, a:t=${textRuns}, p:graphicFrame=${graphicFrames}).`,
+          `Slide ${index + 1} SVG page must not contain native charts/tables (p:graphicFrame=${graphicFrames}).`,
+        );
+      }
+      if (expectedLiftedTextCount > 0) {
+        if (textRuns < expectedLiftedTextCount) {
+          errors.push(
+            `Slide ${index + 1} hybrid export expected at least ${expectedLiftedTextCount} editable text run(s); found ${textRuns}.`,
+          );
+        }
+      } else if (shapes > 0 || textRuns > 0) {
+        errors.push(
+          `Slide ${index + 1} SVG page without lifted text must not contain native text/shapes (p:sp=${shapes}, a:t=${textRuns}).`,
         );
       }
 
@@ -373,7 +394,7 @@ export async function inspectPptxExport(
         const svgHash = svgTarget
           ? svgMediaHashesByPath.get(svgTarget)
           : undefined;
-        svgSourcePresent = svgHash === expectedSvgSource.sha256;
+        svgSourcePresent = svgHash === expectedBackgroundHash;
 
         inspectSvgPictureGeometry(pictureXml, index + 1, errors);
         await inspectSvgFallbackPng(
@@ -387,7 +408,7 @@ export async function inspectPptxExport(
 
       if (!svgSourcePresent) {
         errors.push(
-          `Slide ${index + 1} SVG picture's asvg:svgBlip is not related to its exact SVG source ${expectedSvgSource.sha256.slice(0, 12)}.`,
+          `Slide ${index + 1} SVG picture's asvg:svgBlip is not related to its export background SVG ${expectedBackgroundHash.slice(0, 12)}.`,
         );
       }
     } else if (expectedSlide) {

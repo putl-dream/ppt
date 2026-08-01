@@ -160,7 +160,7 @@ function createSessionRuntime(
   const commandBus = new CommandBus(snapshot.presentation);
   const registry = createDefaultToolRegistry();
   const runtimeRoot = join(applicationDataRoot, "runtime", snapshot.session.id);
-  const projectStorageIdentity = snapshot.session.workspacePath
+  const projectStorageIdentity = sessionStore.resolveWorkspaceRoot(snapshot)
     ?? `session:${snapshot.session.id}`;
   const projectId = asProjectId(
     sessionStore.conversationDatabase.ensureProject(
@@ -168,6 +168,9 @@ function createSessionRuntime(
       snapshot.presentation.title,
     ),
   );
+  // #region agent log
+  fetch('http://127.0.0.1:7758/ingest/f715bfbd-c4b3-4d7c-91d3-b40633f1a70c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'4edd08'},body:JSON.stringify({sessionId:'4edd08',hypothesisId:'H1,H2,H3,H5',location:'index.ts:170',message:'createSessionRuntime resolved projectId',data:{runtimeSessionId:snapshot.session.id,sessionWorkspacePath:snapshot.session.workspacePath ?? null,projectRootPath:snapshot.project?.rootPath ?? null,projectStorageIdentity,projectId,presentationId:snapshot.presentation.id,presentationRevision:snapshot.presentation.revision},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
   const messageBus = new MessageBus(MessageBus.defaultMailboxDir(runtimeRoot));
   const teammateManager = new TeammateManager(messageBus);
   const presentationCommitService = new PresentationCommitService(
@@ -619,6 +622,9 @@ app.whenReady().then(async () => {
 
   const ensureRuntime = async (snapshot: SessionSnapshot): Promise<SessionRuntime> => {
     const existing = runtimes.get(snapshot.session.id);
+    // #region agent log
+    fetch('http://127.0.0.1:7758/ingest/f715bfbd-c4b3-4d7c-91d3-b40633f1a70c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'4edd08'},body:JSON.stringify({sessionId:'4edd08',hypothesisId:'H3,H5',location:'index.ts:621',message:'ensureRuntime cache decision',data:{requestedSessionId:snapshot.session.id,cacheHit:Boolean(existing),cachedWorkspaceRoot:existing?.workspaceRoot ?? null,snapshotProjectRootPath:snapshot.project?.rootPath ?? null,cachedProjectId:existing?.projectId ?? null,reused:Boolean(existing)&&existing?.workspaceRoot===snapshot.project?.rootPath},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
     if (existing && existing.workspaceRoot === snapshot.project?.rootPath) return existing;
     const runtimeRoot = join(applicationDataRoot, "runtime", snapshot.session.id);
     const runtime = createSessionRuntime(snapshot, skillRegistry, applicationDataRoot);
@@ -1053,6 +1059,9 @@ app.whenReady().then(async () => {
       if (format !== "pptx" && format !== "html" && format !== "json") {
         throw new Error("Unsupported export format.");
       }
+      // #region agent log
+      fetch('http://127.0.0.1:7758/ingest/f715bfbd-c4b3-4d7c-91d3-b40633f1a70c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'4edd08'},body:JSON.stringify({sessionId:'4edd08',hypothesisId:'H2,H3,H5',location:'index.ts:1056',message:'export handler runtime identity',data:{requestedSessionId:sessionId,activeSessionId,runtimeProjectId:runtime.projectId,runtimeWorkspaceRoot:runtime.workspaceRoot ?? null,presentationId:presentation.id,presentationRevision:presentation.revision,format},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
       const presentationState = await ensureCurrentPresentationRevision(runtime);
       const exportState = presentationLifecycleOrchestrator.beginCapability({
         projectId: runtime.projectId,

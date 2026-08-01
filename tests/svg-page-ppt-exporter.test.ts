@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { type SlideNarrative } from "../src/shared/presentation";
 import { createStarterPresentation, createSvgVisualSource } from "../src/shared/presentation-fixtures";
+import { liftSvgText } from "../src/main/deck/svg-text-lift";
+import { utf8ToBase64 } from "../src/shared/base64";
 
 const pptxMocks = vi.hoisted(() => {
   const slide = {
@@ -54,10 +56,12 @@ describe("SVG page PPTX export", () => {
     ].forEach((mock) => mock.mockClear());
   });
 
-  it("exports one full-slide SVG image and skips all legacy chrome", async () => {
+  it("exports a text-stripped SVG background plus native editable text", async () => {
     const markup =
       '<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">'
-      + '<text x="40" y="80">SVG page</text></svg>';
+      + '<rect width="1280" height="720" fill="#0f172a"/>'
+      + '<text x="40" y="80" font-size="32" fill="#ffffff">SVG page</text></svg>';
+    const lifted = liftSvgText(markup);
     const presentation = createStarterPresentation();
     presentation.id = "deck-1";
     presentation.title = "SVG deck";
@@ -89,20 +93,58 @@ describe("SVG page PPTX export", () => {
     expect(pptxMocks.slide.background).toEqual({ fill: "FFFFFF" });
     expect(pptxMocks.slide.addImage).toHaveBeenCalledTimes(1);
     expect(pptxMocks.slide.addImage).toHaveBeenCalledWith({
-      data: `data:image/svg+xml;base64,${Buffer.from(markup).toString("base64")}`,
+      data: `data:image/svg+xml;base64,${utf8ToBase64(lifted.backgroundSvg)}`,
       x: 0,
       y: 0,
       w: 10,
       h: 5.625,
     });
+    expect(pptxMocks.slide.addText).toHaveBeenCalledTimes(1);
+    expect(pptxMocks.slide.addText).toHaveBeenCalledWith(
+      "SVG page",
+      expect.objectContaining({
+        fontFace: "Arial",
+        color: "FFFFFF",
+        align: "left",
+        valign: "top",
+        bold: false,
+      }),
+    );
     expect(pptxMocks.slide.addNotes).toHaveBeenCalledWith("Speaker note");
-    expect(pptxMocks.slide.addText).not.toHaveBeenCalled();
     expect(pptxMocks.slide.addShape).not.toHaveBeenCalled();
     expect(pptxMocks.slide.addChart).not.toHaveBeenCalled();
     expect(pptxMocks.slide.addTable).not.toHaveBeenCalled();
     expect(pptxMocks.instance.writeFile).toHaveBeenCalledWith({
       fileName: "/tmp/svg-page.pptx",
     });
+  });
+
+  it("falls back to a full-page SVG image when there is no liftable text", async () => {
+    const markup =
+      '<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">'
+      + '<rect width="1280" height="720" fill="#0f172a"/></svg>';
+    const presentation = createStarterPresentation();
+    presentation.slides[0] = {
+      id: "slide-1",
+      title: "No text",
+      narrative: NARRATIVE,
+      visualSource: createSvgVisualSource({
+        markup,
+        sourcePath: "slides/svg/slide-1.svg",
+        title: "No text",
+      }),
+    };
+
+    await exportToPptx(presentation, {}, "/tmp/svg-page-no-text.pptx");
+
+    expect(pptxMocks.slide.addImage).toHaveBeenCalledWith({
+      data: `data:image/svg+xml;base64,${utf8ToBase64(markup)}`,
+      x: 0,
+      y: 0,
+      w: 10,
+      h: 5.625,
+    });
+    expect(pptxMocks.slide.addText).not.toHaveBeenCalled();
   });
 
   it("rejects a slide without SVG visualSource", async () => {

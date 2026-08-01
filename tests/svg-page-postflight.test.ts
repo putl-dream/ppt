@@ -19,7 +19,7 @@ afterEach(async () => {
 });
 
 describe("SVG page PPTX postflight", () => {
-  it("proves that the exported media contains the exact validated SVG source", async () => {
+  it("proves that the exported media matches the text-stripped export background", async () => {
     const directory = await mkdtemp(join(tmpdir(), "svg-page-postflight-"));
     temporaryDirectories.push(directory);
     const filePath = join(directory, "svg-deck.pptx");
@@ -56,12 +56,12 @@ describe("SVG page PPTX postflight", () => {
     expect(report.passed).toBe(true);
     expect(report.slides[0]).toMatchObject({
       pictures: 1,
-      shapes: 0,
-      textRuns: 0,
       graphicFrames: 0,
       svgSourcePresent: true,
       titlePresent: true,
     });
+    expect(report.slides[0].textRuns).toBeGreaterThanOrEqual(1);
+    expect(report.slides[0].shapes).toBeGreaterThanOrEqual(1);
     expect(report.warnings).toEqual(expect.arrayContaining([
       expect.stringContaining("fallback media is not a valid PNG"),
     ]));
@@ -93,12 +93,12 @@ describe("SVG page PPTX postflight", () => {
     const report = await inspectPptxExport(corruptedPath, presentation);
     expect(report.passed).toBe(false);
     expect(report.errors).toEqual(expect.arrayContaining([
-      expect.stringContaining("Slide 1 SVG picture's asvg:svgBlip is not related to its exact SVG source"),
-      expect.stringContaining("Slide 2 SVG picture's asvg:svgBlip is not related to its exact SVG source"),
+      expect.stringContaining("Slide 1 SVG picture's asvg:svgBlip is not related to its export background SVG"),
+      expect.stringContaining("Slide 2 SVG picture's asvg:svgBlip is not related to its export background SVG"),
     ]));
   });
 
-  it("rejects duplicate pictures, extra objects, and non-full-frame SVG geometry", async () => {
+  it("rejects duplicate pictures, native charts, and non-full-frame SVG geometry", async () => {
     const directory = await mkdtemp(join(tmpdir(), "svg-page-postflight-structure-"));
     temporaryDirectories.push(directory);
     const filePath = join(directory, "svg-deck.pptx");
@@ -137,7 +137,7 @@ describe("SVG page PPTX postflight", () => {
       .replace(picture!, malformedPicture)
       .replace(
         "</p:spTree>",
-        "<p:sp><a:t>extra text</a:t></p:sp><p:graphicFrame></p:graphicFrame></p:spTree>",
+        "<p:graphicFrame></p:graphicFrame></p:spTree>",
       );
     archive.file("ppt/slides/slide1.xml", malformedGeometry);
     await writeFile(corruptedPath, await archive.generateAsync({ type: "nodebuffer" }));
@@ -145,7 +145,7 @@ describe("SVG page PPTX postflight", () => {
     report = await inspectPptxExport(corruptedPath, presentation);
     expect(report.passed).toBe(false);
     expect(report.errors).toEqual(expect.arrayContaining([
-      expect.stringContaining("SVG page contains extra objects"),
+      expect.stringContaining("must not contain native charts/tables"),
       "Slide 1 SVG picture must not be rotated.",
       "Slide 1 SVG picture must not be flipped.",
       expect.stringContaining("SVG picture offset must be (0,0)"),
@@ -190,7 +190,7 @@ describe("SVG page PPTX postflight", () => {
     expect(report.passed).toBe(false);
     expect(report.errors).toEqual(expect.arrayContaining([
       expect.stringContaining(
-        "SVG picture's asvg:svgBlip is not related to its exact SVG source",
+        "SVG picture's asvg:svgBlip is not related to its export background SVG",
       ),
     ]));
   });
@@ -248,6 +248,7 @@ describe("SVG page PPTX postflight", () => {
 function svgSlide(id: string, text: string, sourcePath: string): Slide {
   const markup =
     '<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">'
+    + `<rect width="1280" height="720" fill="#${createHash("sha256").update(id).digest("hex").slice(0, 6)}"/>`
     + `<text x="80" y="140" fill="#111827" font-size="64">${text}</text>`
     + "</svg>";
   return {

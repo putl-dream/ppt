@@ -270,6 +270,9 @@ export class ConversationDatabase {
     const existing = this.database.prepare(
       "SELECT id FROM projects WHERE workspace_path = ?",
     ).get(workspacePath) as { id: string } | undefined;
+    // #region agent log
+    fetch('http://127.0.0.1:7758/ingest/f715bfbd-c4b3-4d7c-91d3-b40633f1a70c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'4edd08'},body:JSON.stringify({sessionId:'4edd08',hypothesisId:'H1,H2',location:'conversation-database.ts:270',message:'ensureProject lookup',data:{requestedWorkspacePath:workspacePath,existingProjectId:existing?.id ?? null,willInsert:!existing,allProjects:(this.database.prepare("SELECT id, workspace_path FROM projects").all() as Array<{id:string;workspace_path:string}>).map((row)=>({projectId:row.id,workspacePath:row.workspace_path}))},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
     const now = new Date().toISOString();
     if (existing) {
       this.database.prepare(

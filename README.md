@@ -56,7 +56,7 @@ Runtime 向模型提供当前 workspace 事实、可用 Skill 和动态工具。
 
 **产品作者路径是 SVG-native：整页 SVG 即预览与导出的共同视觉事实源。**
 
-每一页以经过校验的 `1280 × 720` SVG 作为视觉作者源；预览器与 PPTX 导出消费同一份 markup（导出时将整页 SVG 嵌入幻灯片图像，而非拆成可编辑的原生 shape/chart）。`design-spec` / DesignSystem 锁定整套语气，但不替代页面 SVG。
+每一页以经过校验的 `1280 × 720` SVG 作为视觉作者源；预览器与 PPTX 导出消费同一份 markup。导出采用混合策略：去文字后的 SVG 作为底图，标题与正文提升为可编辑文字框；图表与装饰仍留在底图中，不拆成原生 shape/chart。`design-spec` / DesignSystem 锁定整套语气，但不替代页面 SVG。
 
 **不是只保留最终结果，而是保留制作过程。**
 
@@ -211,7 +211,7 @@ Main process
   Conversation DB / Runtime stores -> history, checkpoints, transcripts
         |
         v
-PPTX exporter (full-page SVG images)
+PPTX exporter (hybrid: SVG background + editable text)
 ```
 
 关键模块：
