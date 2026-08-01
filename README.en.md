@@ -1,6 +1,6 @@
 # Agent PPT
 
-[中文](./README.md) · [Docs](./docs/README.md)
+[中文](./README.md) · [Docs](./docs/README.en.md) · [文档索引](./docs/README.md)
 
 ![Electron](https://img.shields.io/badge/Electron-43-47848F?logo=electron&logoColor=white)
 ![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=111)
@@ -19,16 +19,20 @@ It is useful when you want to:
 
 ## Screenshots
 
-Three-column workspace: sessions and project files on the left, agent progress and approvals in the center, live slide preview on the right. Generated decks can enter slideshow mode directly, and preview and export share the same SVG visual source; Settings manages models, search and networking, submission and approval, usage and billing, and more. The slides below (structured onboarding page, dark creative cover) are sample agent output, not product branding.
+Three-column workspace: sessions and project files on the left, agent progress and approvals in the center, live slide preview on the right. Generated decks can enter slideshow mode directly, and preview and export share the same SVG visual source; Settings manages models, search and networking, submission and approval, usage and billing, and more. Workbench appearance can be customized with `themes/<name>/theme.css` (does not affect slide export). Screenshots below show the UI shell and sample agent output.
 
 <table>
   <tr>
     <td width="50%"><img src="./images/首页.png" alt="Workspace" /><br/><sub>Three-column workspace</sub></td>
-    <td width="50%"><img src="./images/设置.png" alt="Settings: usage and billing" /><br/><sub>Settings: usage and billing</sub></td>
+    <td width="50%"><img src="./images/猫娘定制版.png" alt="Catnip custom workbench theme" /><br/><sub>Custom workbench CSS theme (Catnip)</sub></td>
   </tr>
   <tr>
+    <td width="50%"><img src="./images/设置.png" alt="Settings: usage and billing" /><br/><sub>Settings: usage and billing</sub></td>
     <td width="50%"><img src="./images/放映.png" alt="Slideshow sample: structured page" /><br/><sub>Slideshow sample: structured page</sub></td>
+  </tr>
+  <tr>
     <td width="50%"><img src="./images/放映-暗.png" alt="Slideshow sample: dark creative cover" /><br/><sub>Slideshow sample: dark creative cover</sub></td>
+    <td width="50%"></td>
   </tr>
 </table>
 

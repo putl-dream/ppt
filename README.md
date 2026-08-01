@@ -1,6 +1,6 @@
 # Agent PPT
 
-[English](./README.en.md) · [文档索引](./docs/README.md)
+[English](./README.en.md) · [文档索引](./docs/README.md) · [Docs (EN)](./docs/README.en.md)
 
 ![Electron](https://img.shields.io/badge/Electron-43-47848F?logo=electron&logoColor=white)
 ![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=111)
@@ -19,16 +19,20 @@ Agent PPT 是一个本地优先的 AI 演示文稿工作台。它会根据任务
 
 ## 界面一览
 
-三栏工作台：左侧管理会话与项目文件，中间查看 Agent 过程与审批，右侧实时预览幻灯片。Agent 生成的演示可直接进入放映，预览与导出共用同一套 SVG 视觉源；设置台可管理模型、搜索与联网、提交与审批、用量与费用等。下方样张（入职培训结构化页、深色创意封面）为 Agent 生成示例，不是产品品牌。
+三栏工作台：左侧管理会话与项目文件，中间查看 Agent 过程与审批，右侧实时预览幻灯片。Agent 生成的演示可直接进入放映，预览与导出共用同一套 SVG 视觉源；设置台可管理模型、搜索与联网、提交与审批、用量与费用等。工作台外观可用 `themes/<名>/theme.css` 定制（不影响幻灯片导出）。下方样张为界面与 Agent 产出示例。
 
 <table>
   <tr>
     <td width="50%"><img src="./images/首页.png" alt="工作台" /><br/><sub>三栏工作台</sub></td>
-    <td width="50%"><img src="./images/设置.png" alt="设置：用量与费用" /><br/><sub>设置：用量与费用</sub></td>
+    <td width="50%"><img src="./images/猫娘定制版.png" alt="Catnip 定制工作台主题" /><br/><sub>工作台 CSS 主题定制（Catnip）</sub></td>
   </tr>
   <tr>
+    <td width="50%"><img src="./images/设置.png" alt="设置：用量与费用" /><br/><sub>设置：用量与费用</sub></td>
     <td width="50%"><img src="./images/放映.png" alt="放映示例：结构化页面" /><br/><sub>放映示例：结构化页面</sub></td>
+  </tr>
+  <tr>
     <td width="50%"><img src="./images/放映-暗.png" alt="放映示例：深色创意封面" /><br/><sub>放映示例：深色创意封面</sub></td>
+    <td width="50%"></td>
   </tr>
 </table>
 
