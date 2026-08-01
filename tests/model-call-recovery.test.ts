@@ -365,6 +365,42 @@ describe("callModelWithRecovery", () => {
     expect(result.maxOutputTokensRecoveryCount).toBe(1);
   });
 
+  it("owns thinking-only max-token recovery instead of relying on a provider driver retry", async () => {
+    const generateText = vi
+      .fn()
+      .mockResolvedValueOnce({
+        provider: "anthropic",
+        model: "claude",
+        content: [{ type: "thinking", thinking: "still reasoning", signature: "sig" }],
+        stopReason: "max_tokens",
+      })
+      .mockResolvedValueOnce({
+        provider: "anthropic",
+        model: "claude",
+        content: textContent("answer"),
+        stopReason: "end_turn",
+      });
+    const gateway: AgentModelGateway = {
+      generateText,
+      async *generateTextStream() {
+        yield { type: "complete" as const, content: [] };
+      },
+    };
+
+    const result = await callModelWithRecovery({
+      gateway,
+      systemPrompt: "system",
+      promptPayload: { transcript: [], request: "hello" },
+      model: { provider: "anthropic", model: "claude" },
+    });
+
+    expect(generateText).toHaveBeenCalledTimes(2);
+    expect(generateText.mock.calls[0][0].maxOutputTokens).toBeUndefined();
+    expect(generateText.mock.calls[1][0].maxOutputTokens).toBe(65_536);
+    expect(result.content).toEqual(textContent("answer"));
+    expect(result.maxOutputTokensRecoveryCount).toBe(1);
+  });
+
   it("merges every max-output continuation and keeps detecting repeated truncation", async () => {
     const generateText = vi
       .fn()

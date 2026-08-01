@@ -70,6 +70,9 @@ describe("AgentGateway", () => {
       model: "openai-test",
       apiKey: "secret",
     });
+    expect(providerMocks.openai.mock.calls[0][1]).toMatchObject({
+      messages: [{ role: "user", content: [{ type: "text", text: "Hello" }] }],
+    });
   });
 
   it("routes an Anthropic selection to the Anthropic adapter", async () => {
@@ -103,7 +106,7 @@ describe("AgentGateway", () => {
     providerMocks.openaiStream.mockImplementation(async function* () {
       yield {
         type: "complete",
-        content: [],
+        content: [{ type: "text", text: "streamed" }],
         usage: { inputTokens: 20, outputTokens: 10, totalTokens: 30 },
       };
     });
@@ -130,5 +133,140 @@ describe("AgentGateway", () => {
       configurationId: "price-config",
       totalTokens: 30,
     }));
+  });
+
+  it("prepares response contracts, pairing, and ephemeral context once before dispatch", async () => {
+    providerMocks.anthropic.mockResolvedValue({
+      provider: "anthropic",
+      model: "anthropic-test",
+      content: [{ type: "text", text: "ok" }],
+    });
+    const gateway = new AgentGateway();
+    const selection = gateway.configure({
+      provider: "anthropic",
+      model: "anthropic-test",
+      apiKey: "secret",
+    });
+    const messages = [{
+      role: "assistant" as const,
+      content: [{ type: "tool_use" as const, id: "call-1", name: "Read", input: {} }],
+    }];
+    const original = structuredClone(messages);
+
+    await gateway.generateText({
+      prompt: "request context",
+      systemPrompt: "system",
+      responseContract: "markdown",
+      messages,
+    }, selection);
+
+    const prepared = providerMocks.anthropic.mock.calls[0][1];
+    expect(prepared.systemPrompt).toContain("<!-- RESPONSE_CONTRACT:markdown -->");
+    expect(prepared.messages).toEqual([
+      messages[0],
+      {
+        role: "user",
+        content: [expect.objectContaining({ type: "tool_result", toolUseId: "call-1" })],
+      },
+      { role: "user", content: [{ type: "text", text: "request context" }] },
+    ]);
+    expect(messages).toEqual(original);
+  });
+
+  it("rejects empty and malformed driver responses at the Gateway boundary", async () => {
+    const gateway = new AgentGateway();
+    const selection = gateway.configure({
+      provider: "openai",
+      model: "openai-test",
+      apiKey: "secret",
+    });
+    providerMocks.openai.mockResolvedValueOnce({
+      provider: "openai",
+      model: "openai-test",
+      content: [],
+    });
+    await expect(gateway.generateText({ prompt: "Hello" }, selection)).rejects.toMatchObject({
+      code: "empty-response",
+      provider: "openai",
+    });
+
+    providerMocks.openai.mockResolvedValueOnce({
+      provider: "openai",
+      model: "openai-test",
+      content: [{ type: "text", text: "   " }],
+    });
+    await expect(gateway.generateText({ prompt: "Hello" }, selection)).rejects.toMatchObject({
+      code: "empty-response",
+      provider: "openai",
+    });
+
+    providerMocks.openai.mockResolvedValueOnce({
+      provider: "openai",
+      model: "openai-test",
+      content: [{ type: "tool_use", id: "", name: "Read", input: {} }],
+    });
+    await expect(gateway.generateText({ prompt: "Hello" }, selection)).rejects.toMatchObject({
+      code: "provider-error",
+      provider: "openai",
+    });
+
+    providerMocks.openai.mockResolvedValueOnce({
+      provider: "openai",
+      model: "openai-test",
+      content: [{ type: "text", text: "hello" }],
+      usage: { inputTokens: 1, outputTokens: -1, totalTokens: 0 },
+    });
+    await expect(gateway.generateText({ prompt: "Hello" }, selection)).rejects.toMatchObject({
+      code: "provider-error",
+      provider: "openai",
+    });
+
+    providerMocks.openai.mockResolvedValueOnce({
+      provider: "openai",
+      model: "openai-test",
+      content: [{ type: "text", text: "hello" }],
+      stopReason: 42,
+      usage: { inputTokens: 1, outputTokens: -1, totalTokens: 0 },
+    });
+    await expect(gateway.generateText({ prompt: "Hello" }, selection)).rejects.toMatchObject({
+      code: "provider-error",
+      provider: "openai",
+    });
+  });
+
+  it("normalizes driver errors and enforces one terminal stream event", async () => {
+    const gateway = new AgentGateway();
+    const selection = gateway.configure({
+      provider: "openai",
+      model: "openai-test",
+      apiKey: "secret",
+    });
+    providerMocks.openai.mockRejectedValueOnce(Object.assign(new Error("slow down"), { status: 429 }));
+    await expect(gateway.generateText({ prompt: "Hello" }, selection)).rejects.toMatchObject({
+      code: "rate-limit",
+      provider: "openai",
+    });
+
+    providerMocks.openaiStream.mockImplementationOnce(async function* () {
+      yield { type: "complete", content: [{ type: "text", text: "done" }] };
+      yield { type: "text_delta", text: "late" };
+    });
+    const consume = async () => {
+      for await (const _chunk of gateway.generateTextStream({ prompt: "Hello" }, selection)) {
+        // consume
+      }
+    };
+    await expect(consume()).rejects.toMatchObject({
+      code: "provider-error",
+      provider: "openai",
+    });
+
+    providerMocks.openaiStream.mockImplementationOnce(async function* () {
+      yield { type: "unexpected", content: [] };
+    });
+    await expect(consume()).rejects.toMatchObject({
+      code: "provider-error",
+      provider: "openai",
+    });
   });
 });

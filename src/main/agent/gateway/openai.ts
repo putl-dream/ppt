@@ -1,17 +1,14 @@
 import OpenAI from "openai";
-import { AgentGatewayError, normalizeProviderError } from "./errors";
-import { applyResponseContract } from "./response-contract";
-import { ensureToolResultPairing, withEphemeralPrompt } from "./message-pairing";
 import type { ProviderTokenUsage } from "@shared/token-usage";
 import type {
   AgentModelContentBlock,
   AgentModelImageBlock,
   AgentModelMessage,
-  AgentModelRequest,
   AgentModelResponse,
   AgentModelStreamChunk,
   AgentModelToolResultBlock,
   AgentModelToolUseBlock,
+  PreparedAgentModelRequest,
   ResolvedAgentModelConfig,
 } from "./types";
 
@@ -141,7 +138,7 @@ function toChatMessages(
   messages: AgentModelMessage[],
 ): OpenAI.Chat.Completions.ChatCompletionMessageParam[] {
   const out: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [];
-  for (const message of ensureToolResultPairing(messages)) {
+  for (const message of messages) {
     if (message.role === "assistant") {
       const toolUses = message.content.filter(
         (block): block is AgentModelToolUseBlock => block.type === "tool_use",
@@ -189,7 +186,7 @@ function toResponsesInput(
   messages: AgentModelMessage[],
 ): OpenAI.Responses.ResponseInput {
   const out: OpenAI.Responses.ResponseInput = [];
-  for (const message of ensureToolResultPairing(messages)) {
+  for (const message of messages) {
     if (message.role === "assistant") {
       const messageContent = toResponsesMessageContent(message.content);
       if (typeof messageContent === "string" ? messageContent : messageContent.length > 0) {
@@ -306,13 +303,10 @@ function stopReasonFromResponses(
   return response.incomplete_details?.reason ?? "incomplete";
 }
 
-/**
- * 把统一 AgentModelRequest 转成 OpenAI Responses/Chat Completions 请求，
- * 并把文本和 function_call 归一化为 provider-neutral 内容块。
- */
+/** Execute one non-streaming OpenAI driver attempt. */
 export async function generateWithOpenAI(
   config: ResolvedAgentModelConfig,
-  request: AgentModelRequest,
+  request: PreparedAgentModelRequest,
 ): Promise<AgentModelResponse> {
   const client = new OpenAI({
     apiKey: config.apiKey,
@@ -321,127 +315,71 @@ export async function generateWithOpenAI(
     maxRetries: 0,
   });
 
-  try {
-    const mode = config.openaiApiMode ?? "responses";
-    const maxOutputTokens = request.maxOutputTokens ?? config.maxOutputTokens;
-    const systemPrompt = applyResponseContract(request.systemPrompt, request.responseContract);
+  const mode = config.openaiApiMode ?? "responses";
 
-    if (mode === "chat-completions") {
-      const response = await client.chat.completions.create({
-        model: config.model,
-        messages: [
-          ...(systemPrompt ? [{ role: "system" as const, content: systemPrompt }] : []),
-          ...(request.messages
-            ? toChatMessages(withEphemeralPrompt(request.messages, request.prompt))
-            : [{ role: "user" as const, content: request.prompt }]),
-        ],
-        max_tokens: maxOutputTokens,
-        ...(request.outputFormat?.type === "json_schema"
-          ? {
-              response_format: {
-                type: "json_schema" as const,
-                json_schema: {
-                  name: request.outputFormat.name,
-                  description: request.outputFormat.description,
-                  schema: request.outputFormat.schema,
-                  strict: request.outputFormat.strict ?? true,
-                },
-              },
-            }
-          : {}),
-        ...(request.tools?.length
-          ? {
-              tools: request.tools.map((tool) => ({
-                type: "function" as const,
-                function: {
-                  name: tool.name,
-                  description: tool.description,
-                  parameters: tool.inputSchema,
-                  strict: true,
-                },
-              })),
-            }
-          : {}),
-        ...(request.requiredToolName
-          ? {
-              tool_choice: {
-                type: "function" as const,
-                function: { name: request.requiredToolName },
-              },
-            }
-          : {}),
-      }, { signal: request.signal });
-      const choice = response.choices[0];
-      const content = contentFromChatChoice(choice);
-      if (content.length === 0) {
-        throw new AgentGatewayError("OpenAI returned an empty response.", "empty-response", "openai");
-      }
-      return {
-        provider: "openai",
-        model: config.model,
-        content,
-        requestId: response._request_id ?? undefined,
-        stopReason: choice?.finish_reason ?? undefined,
-        ...openAIUsageProperty(response.usage),
-      };
-    }
-
-    const response = await client.responses.create({
+  if (mode === "chat-completions") {
+    const response = await client.chat.completions.create({
       model: config.model,
-      instructions: systemPrompt,
-      input: request.messages
-        ? toResponsesInput(withEphemeralPrompt(request.messages, request.prompt))
-        : request.prompt,
-      max_output_tokens: maxOutputTokens,
-      ...(request.outputFormat?.type === "json_schema"
-        ? {
-            text: {
-              format: {
-                type: "json_schema" as const,
-                name: request.outputFormat.name,
-                description: request.outputFormat.description,
-                schema: request.outputFormat.schema,
-                strict: request.outputFormat.strict ?? true,
-              },
-            },
-          }
-        : {}),
+      messages: [
+        ...(request.systemPrompt
+          ? [{ role: "system" as const, content: request.systemPrompt }]
+          : []),
+        ...toChatMessages(request.messages),
+      ],
+      max_tokens: request.maxOutputTokens,
       ...(request.tools?.length
         ? {
             tools: request.tools.map((tool) => ({
               type: "function" as const,
-              name: tool.name,
-              description: tool.description,
-              parameters: tool.inputSchema,
-              strict: true,
+              function: {
+                name: tool.name,
+                description: tool.description,
+                parameters: tool.inputSchema,
+                strict: true,
+              },
             })),
           }
         : {}),
-      ...(request.requiredToolName
-        ? {
-            tool_choice: {
-              type: "function" as const,
-              name: request.requiredToolName,
-            },
-          }
-        : {}),
     }, { signal: request.signal });
-    const content = contentFromResponsesOutput(response);
-    if (content.length === 0) {
-      throw new AgentGatewayError("OpenAI returned an empty response.", "empty-response", "openai");
-    }
-    const stopReason = stopReasonFromResponses(response);
+    const choice = response.choices[0];
+    const content = contentFromChatChoice(choice);
     return {
       provider: "openai",
       model: config.model,
       content,
       requestId: response._request_id ?? undefined,
-      ...(stopReason ? { stopReason } : {}),
+      stopReason: choice?.finish_reason ?? undefined,
       ...openAIUsageProperty(response.usage),
     };
-  } catch (error) {
-    throw normalizeProviderError("openai", error, request.signal);
   }
+
+  const response = await client.responses.create({
+    model: config.model,
+    instructions: request.systemPrompt,
+    input: toResponsesInput(request.messages),
+    max_output_tokens: request.maxOutputTokens,
+    ...(request.tools?.length
+      ? {
+          tools: request.tools.map((tool) => ({
+            type: "function" as const,
+            name: tool.name,
+            description: tool.description,
+            parameters: tool.inputSchema,
+            strict: true,
+          })),
+        }
+      : {}),
+  }, { signal: request.signal });
+  const content = contentFromResponsesOutput(response);
+  const stopReason = stopReasonFromResponses(response);
+  return {
+    provider: "openai",
+    model: config.model,
+    content,
+    requestId: response._request_id ?? undefined,
+    ...(stopReason ? { stopReason } : {}),
+    ...openAIUsageProperty(response.usage),
+  };
 }
 
 /**
@@ -450,7 +388,7 @@ export async function generateWithOpenAI(
  */
 export async function* generateStreamWithOpenAI(
   config: ResolvedAgentModelConfig,
-  request: AgentModelRequest,
+  request: PreparedAgentModelRequest,
 ): AsyncGenerator<AgentModelStreamChunk> {
   const client = new OpenAI({
     apiKey: config.apiKey,
@@ -459,57 +397,52 @@ export async function* generateStreamWithOpenAI(
     maxRetries: 0,
   });
 
-  try {
-    const mode = config.openaiApiMode ?? "responses";
-    const systemPrompt = applyResponseContract(request.systemPrompt, request.responseContract);
+  const mode = config.openaiApiMode ?? "responses";
 
-    if (request.tools?.length || request.outputFormat?.type === "json_schema" || mode === "responses") {
-      const response = await generateWithOpenAI(config, request);
-      const text = textFromBlocks(response.content);
-      if (text) yield { type: "text_delta", text };
-      yield {
-        type: "complete",
-        content: response.content,
-        stopReason: response.stopReason,
-        ...(response.usage ? { usage: response.usage } : {}),
-      };
-      return;
-    }
-
-    const stream = await client.chat.completions.create({
-      model: config.model,
-      messages: [
-        ...(systemPrompt ? [{ role: "system" as const, content: systemPrompt }] : []),
-        ...(request.messages
-          ? toChatMessages(withEphemeralPrompt(request.messages, request.prompt))
-          : [{ role: "user" as const, content: request.prompt }]),
-      ],
-      max_tokens: request.maxOutputTokens ?? config.maxOutputTokens,
-      stream: true,
-      stream_options: { include_usage: true },
-    }, { signal: request.signal });
-
-    let text = "";
-    let finishReason: string | undefined;
-    let usage: ProviderTokenUsage | undefined;
-    for await (const chunk of stream) {
-      const delta = chunk.choices[0]?.delta?.content;
-      if (delta) {
-        text += delta;
-        yield { type: "text_delta", text: delta };
-      }
-      if (chunk.choices[0]?.finish_reason) {
-        finishReason = chunk.choices[0].finish_reason ?? undefined;
-      }
-      usage = extractOpenAIUsage(chunk.usage) ?? usage;
-    }
+  if (request.tools?.length || mode === "responses") {
+    const response = await generateWithOpenAI(config, request);
+    const text = textFromBlocks(response.content);
+    if (text) yield { type: "text_delta", text };
     yield {
       type: "complete",
-      content: text ? [{ type: "text", text }] : [],
-      stopReason: finishReason,
-      ...(usage ? { usage } : {}),
+      content: response.content,
+      stopReason: response.stopReason,
+      ...(response.usage ? { usage: response.usage } : {}),
     };
-  } catch (error) {
-    throw normalizeProviderError("openai", error, request.signal);
+    return;
   }
+
+  const stream = await client.chat.completions.create({
+    model: config.model,
+    messages: [
+      ...(request.systemPrompt
+        ? [{ role: "system" as const, content: request.systemPrompt }]
+        : []),
+      ...toChatMessages(request.messages),
+    ],
+    max_tokens: request.maxOutputTokens,
+    stream: true,
+    stream_options: { include_usage: true },
+  }, { signal: request.signal });
+
+  let text = "";
+  let finishReason: string | undefined;
+  let usage: ProviderTokenUsage | undefined;
+  for await (const chunk of stream) {
+    const delta = chunk.choices[0]?.delta?.content;
+    if (delta) {
+      text += delta;
+      yield { type: "text_delta", text: delta };
+    }
+    if (chunk.choices[0]?.finish_reason) {
+      finishReason = chunk.choices[0].finish_reason ?? undefined;
+    }
+    usage = extractOpenAIUsage(chunk.usage) ?? usage;
+  }
+  yield {
+    type: "complete",
+    content: text ? [{ type: "text", text }] : [],
+    stopReason: finishReason,
+    ...(usage ? { usage } : {}),
+  };
 }

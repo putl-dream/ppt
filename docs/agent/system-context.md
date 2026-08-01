@@ -166,13 +166,15 @@ messages
   → native tool_result micro compact
   → archive + summary
   → pair-safe hard/emergency trim
-  → provider request
+  → Gateway request projection + protocol preparation
+  → provider driver request
 ```
 
 压缩保持 `tool_use/tool_result` 配对，并通过 `onContextPrepared` 回写当前 Query
 Workspace。Reactive prompt-too-long 恢复从已压缩消息继续，不能用原始 messages
 覆盖裁剪结果。完整归档写入模型可读 workspace 的 `.transcripts/`；若没有
 workspace，则跳过依赖归档的 LLM summary，不向模型暴露 application runtimeRoot。
+Gateway 是出站请求准备的权威点；provider driver 不再重复配对或追加临时 prompt。
 
 ## 10. 安全
 

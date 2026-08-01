@@ -1,5 +1,4 @@
 import { describe, expect, it, vi } from "vitest";
-import { z } from "zod";
 import type {
   AgentModelContentBlock,
   AgentModelGateway,
@@ -7,7 +6,6 @@ import type {
 } from "../src/main/agent/gateway/types";
 import {
   callLLM,
-  callLLMJson,
   callTool,
   ModelOutputError,
 } from "../src/main/agent/gateway/model-calls";
@@ -76,46 +74,6 @@ describe("typed model calls", () => {
       name: "ModelOutputError",
       code: "truncated-output",
     });
-  });
-
-  it("callLLMJson sends a native JSON Schema contract and returns validated data", async () => {
-    const { gateway, requests } = createGateway([
-      { type: "text", text: '{"title":"Quarterly review","slides":8}' },
-    ]);
-    const schema = z.object({
-      title: z.string(),
-      slides: z.number().int().positive(),
-    });
-
-    const result = await callLLMJson(gateway, {
-      request: { prompt: "Extract deck metadata" },
-      schema,
-      schemaName: "deck metadata",
-    });
-
-    expect(result).toEqual({ title: "Quarterly review", slides: 8 });
-    expect(requests[0]?.outputFormat).toMatchObject({
-      type: "json_schema",
-      name: "deck_metadata",
-      strict: true,
-      schema: {
-        type: "object",
-        required: ["title", "slides"],
-      },
-    });
-  });
-
-  it("callLLMJson rejects JSON that violates the caller schema", async () => {
-    const { gateway } = createGateway([
-      { type: "text", text: '{"title":"Quarterly review","slides":"eight"}' },
-    ]);
-
-    const promise = callLLMJson(gateway, {
-      request: { prompt: "Extract deck metadata" },
-      schema: z.object({ title: z.string(), slides: z.number() }),
-    });
-    await expect(promise).rejects.toBeInstanceOf(ModelOutputError);
-    await expect(promise).rejects.toMatchObject({ code: "schema-validation" });
   });
 
   it("callTool classifies native tool calls and preserves accompanying Markdown", async () => {

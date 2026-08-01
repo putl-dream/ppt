@@ -4,18 +4,6 @@ import type { ProviderTokenUsage } from "@shared/token-usage";
 
 export type AgentResponseContract = "markdown" | "markdown-summary" | "none";
 
-/** Provider-neutral structured-output contract for one-shot JSON calls. */
-export interface AgentJsonSchemaOutputFormat {
-  type: "json_schema";
-  /** Provider-safe schema name (letters, numbers, underscores, and dashes). */
-  name: string;
-  description?: string;
-  schema: Record<string, unknown>;
-  strict?: boolean;
-}
-
-export type AgentModelOutputFormat = AgentJsonSchemaOutputFormat;
-
 /**
  * 原生 tool-use 的工具声明。inputSchema 为标准 JSON Schema（由 zod 转换而来），
  * 直接透传给 provider 的 tools 字段。
@@ -70,13 +58,7 @@ export type AgentModelContentBlock =
   | AgentModelThinkingBlock
   | AgentModelImageBlock
   | AgentModelToolUseBlock
-  | AgentModelToolResultBlock
-  | {
-      /** MCP, web-search, code-execution, or another provider-managed block. */
-      type: "server_tool";
-      providerType: string;
-      data: unknown;
-    };
+  | AgentModelToolResultBlock;
 
 /**
  * 单个多轮对话消息。原生 tool-use 路径用它承载 assistant 的 tool_use 与
@@ -93,19 +75,10 @@ export interface AgentModelRequest {
   systemPrompt?: string;
   /**
    * Output contract for the provider request. Runtime prompts may already
-   * include the contract text; adapters still apply this as a final guard when
+   * include the contract text; Gateway still applies this as a final guard when
    * a specialized call uses a shorter system prompt.
    */
   responseContract?: AgentResponseContract;
-  /** Native provider output format. Omit for normal text/tool ContentBlock calls. */
-  outputFormat?: AgentModelOutputFormat;
-  /**
-   * Prefer one named native tool for specialized one-shot submissions.
-   * Providers that support forced tool selection enforce it; Anthropic omits
-   * tool_choice because thinking-mode compatible endpoints reject that field.
-   * The named tool must also be present in `tools`.
-   */
-  requiredToolName?: string;
   signal?: AbortSignal;
   /** Per-request override; used by output-truncation recovery. */
   maxOutputTokens?: number;
@@ -119,6 +92,15 @@ export interface AgentModelRequest {
    * converted to one user text block for specialized one-shot calls.
    */
   messages?: AgentModelMessage[];
+}
+
+/** Gateway-prepared request consumed by exactly one provider driver attempt. */
+export interface PreparedAgentModelRequest {
+  systemPrompt?: string;
+  messages: AgentModelMessage[];
+  signal?: AbortSignal;
+  maxOutputTokens: number;
+  tools?: AgentToolSchema[];
 }
 
 export interface AgentModelResponse {

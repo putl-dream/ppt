@@ -99,21 +99,25 @@ Renderer / IPC
 
 ### 4.2 Gateway 与内容协议
 
-Gateway 当前支持 Anthropic 与 OpenAI 两条适配路径。工程边界不是让上层识别不同 SDK，而是把差异收敛到：
+Gateway 当前支持 Anthropic 与 OpenAI 两条 driver 路径。`AgentGateway` 是单次模型
+执行协议的权威边界，负责：
 
-- 配置与 provider 路由；
-- 请求消息与角色配对；
-- 流式 content block；
-- native tool use；
-- usage 与 finish reason；
-- 可重试错误、超长输出与响应契约错误。
+- 配置解析与 provider 路由；
+- response contract、临时 request projection 与消息配对；
+- 单次 driver 调用及统一 content block / stream complete 验收；
+- usage、finish reason 与请求日志；
+- 认证、限流、过载、超时、连接和协议错误的统一分类。
 
-`src/main/agent/gateway/content-blocks.ts` 和
-`src/main/agent/gateway/message-pairing.ts` 保护模型消息协议；
-`src/main/agent/gateway/response-contract.ts` 约束上层实际可消费的返回形态；
-`src/main/agent/runtime/turns/model-call-recovery.ts` 处理一次模型 attempt 失败后的恢复。
-新增 Provider 时应实现同一内部协议，不能把 Provider 分支扩散进 Query Loop 或
-Presentation 工具。
+`src/main/agent/gateway/protocol.ts`、`content-blocks.ts`、
+`message-pairing.ts` 和 `response-contract.ts` 保护上述协议。`anthropic.ts` 与
+`openai.ts` 只负责统一消息与 SDK 类型的双向映射、一次 SDK 调用和原生流事件转换，
+不得在 driver 内做隐藏重试或跨 attempt 合并 usage。
+
+`src/main/agent/runtime/turns/model-call-recovery.ts` 根据 Gateway 返回的错误和
+`stopReason` 决定 attempt 之间的恢复，包括退避、Context 压缩、输出 token 升级、
+截断续写和 fallback model。thinking-only 且因 token 上限结束也走这条 Runtime
+恢复路径。新增 Provider 时应实现相同的 prepared-request/response driver 协议，
+不能把 Provider 分支扩散进 Query Loop 或 Presentation 工具。
 
 验证入口：
 
@@ -138,7 +142,7 @@ Context 管理已经不是简单截断聊天数组。当前能力包含：
 | canonical compact | 生成可继续推理的紧凑历史 | `src/main/agent/runtime/context-compact/compact-history.ts` |
 | emergency trim | 正常压缩仍超限时保住协议有效性 | `src/main/agent/runtime/context-compact/emergency-trim.ts` |
 | native message compact | 压缩并保持 tool pairing | `src/main/agent/runtime/context-compact/model-messages.ts`、`src/main/agent/runtime/context-compact/prepare-context.ts` |
-| request projection | 临时注入 request context，不污染 History | `src/main/agent/gateway/message-pairing.ts`、`src/main/agent/gateway/anthropic.ts`、`src/main/agent/gateway/openai.ts` |
+| request projection | Gateway 临时注入 request context，不污染 History | `src/main/agent/gateway/protocol.ts`、`src/main/agent/gateway/message-pairing.ts` |
 
 压缩必须保留 system/user 意图、未完成工具配对、关键决策和当前任务状态。Renderer transcript 可以更丰富，但不能拿 UI 文本代替 canonical provider messages。
 

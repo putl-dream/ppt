@@ -8,11 +8,7 @@ const anthropicMock = vi.hoisted(() => ({
 
 vi.mock("@anthropic-ai/sdk", () => ({
   default: class Anthropic {
-    messages = {
-      create: anthropicMock.create,
-      stream: anthropicMock.stream,
-    };
-
+    messages = { create: anthropicMock.create, stream: anthropicMock.stream };
     constructor(options: unknown) {
       anthropicMock.constructorOptions = options;
     }
@@ -23,6 +19,7 @@ import {
   generateStreamWithAnthropic,
   generateWithAnthropic,
 } from "../src/main/agent/gateway/anthropic";
+import type { PreparedAgentModelRequest } from "../src/main/agent/gateway/types";
 
 const config = {
   provider: "anthropic" as const,
@@ -33,19 +30,29 @@ const config = {
   maxOutputTokens: 654,
 };
 
-describe("generateWithAnthropic", () => {
+function preparedRequest(
+  text: string,
+  overrides: Partial<PreparedAgentModelRequest> = {},
+): PreparedAgentModelRequest {
+  return {
+    messages: [{ role: "user", content: [{ type: "text", text }] }],
+    maxOutputTokens: config.maxOutputTokens,
+    ...overrides,
+  };
+}
+
+describe("Anthropic driver", () => {
   beforeEach(() => {
     anthropicMock.create.mockReset();
     anthropicMock.stream.mockReset();
     anthropicMock.constructorOptions = undefined;
   });
 
-  it("calls the Messages API and joins text content blocks", async () => {
+  it("maps a prepared request and provider response for one SDK attempt", async () => {
     anthropicMock.create.mockResolvedValue({
       content: [
-        { type: "text", text: "first" },
-        { type: "thinking", thinking: "hidden" },
-        { type: "text", text: "second" },
+        { type: "thinking", thinking: "hidden", signature: "sig" },
+        { type: "text", text: "answer" },
       ],
       _request_id: "req-anthropic",
       stop_reason: "end_turn",
@@ -57,10 +64,9 @@ describe("generateWithAnthropic", () => {
       },
     });
 
-    const response = await generateWithAnthropic(config, {
+    const response = await generateWithAnthropic(config, preparedRequest("User prompt", {
       systemPrompt: "System instruction",
-      prompt: "User prompt",
-    });
+    }));
 
     expect(anthropicMock.constructorOptions).toEqual({
       apiKey: "secret",
@@ -72,15 +78,14 @@ describe("generateWithAnthropic", () => {
       model: "anthropic-test",
       max_tokens: 654,
       system: "System instruction",
-      messages: [{ role: "user", content: "User prompt" }],
+      messages: [{ role: "user", content: [{ type: "text", text: "User prompt" }] }],
     }, { signal: undefined });
     expect(response).toEqual({
       provider: "anthropic",
       model: "anthropic-test",
       content: [
-        { type: "text", text: "first" },
-        { type: "thinking", thinking: "hidden", signature: "" },
-        { type: "text", text: "second" },
+        { type: "thinking", thinking: "hidden", signature: "sig" },
+        { type: "text", text: "answer" },
       ],
       requestId: "req-anthropic",
       stopReason: "end_turn",
@@ -94,215 +99,127 @@ describe("generateWithAnthropic", () => {
     });
   });
 
-  it("passes JSON Schema output contracts to the Messages API", async () => {
+  it("maps native tools, images, and paired tool results without repairing history", async () => {
     anthropicMock.create.mockResolvedValue({
-      content: [{ type: "text", text: '{"title":"Deck"}' }],
-      _request_id: "req-json",
-      stop_reason: "end_turn",
-    });
-
-    await generateWithAnthropic(config, {
-      prompt: "Return metadata",
-      outputFormat: {
-        type: "json_schema",
-        name: "deck_metadata",
-        schema: {
-          type: "object",
-          properties: { title: { type: "string" } },
-          required: ["title"],
-        },
-        strict: true,
-      },
-    });
-
-    expect(anthropicMock.create.mock.calls[0]?.[0]).toMatchObject({
-      output_config: {
-        format: {
-          type: "json_schema",
-          schema: { type: "object", required: ["title"] },
-        },
-      },
-    });
-  });
-
-  it("delivers request-scoped context alongside native history without mutating it", async () => {
-    anthropicMock.create.mockResolvedValue({
-      content: [{ type: "text", text: "ok" }],
-      _request_id: "req-native-context",
-      stop_reason: "end_turn",
-    });
-    const messages = [{
-      role: "user" as const,
-      content: [{ type: "text" as const, text: "canonical user request" }],
-    }];
-    const original = structuredClone(messages);
-    const prompt = JSON.stringify({
-      transcript: [],
-      queryContext: {
-        user: { locale: "zh-CN" },
-        system: { surface: "desktop" },
-      },
-    });
-
-    await generateWithAnthropic(config, {
-      systemPrompt: "System instruction",
-      prompt,
-      messages,
-    });
-
-    expect(anthropicMock.create.mock.calls[0]?.[0].messages).toEqual([
-      { role: "user", content: [{ type: "text", text: "canonical user request" }] },
-      { role: "user", content: [{ type: "text", text: prompt }] },
-    ]);
-    expect(messages).toEqual(original);
-  });
-
-  it("keeps named one-shot tools compatible with thinking mode", async () => {
-    anthropicMock.create.mockResolvedValue({
-      content: [{
-        type: "tool_use",
-        id: "tool-1",
-        name: "submit_deck",
-        input: { title: "Deck" },
-      }],
-      _request_id: "req-tool",
+      content: [{ type: "tool_use", id: "tool-2", name: "Read", input: { slide: 2 } }],
       stop_reason: "tool_use",
     });
-
-    await generateWithAnthropic(config, {
-      prompt: "Submit the deck",
-      tools: [{
-        name: "submit_deck",
-        description: "Submit a deck",
-        inputSchema: { type: "object", properties: { title: { type: "string" } } },
-      }],
-      requiredToolName: "submit_deck",
-    });
+    const response = await generateWithAnthropic(config, preparedRequest("", {
+      messages: [
+        {
+          role: "assistant",
+          content: [{ type: "tool_use", id: "tool-1", name: "Preview", input: {} }],
+        },
+        {
+          role: "user",
+          content: [{
+            type: "tool_result",
+            toolUseId: "tool-1",
+            content: [{ type: "image", mediaType: "image/png", data: "base64" }],
+          }],
+        },
+      ],
+      tools: [{ name: "Read", description: "Read slide", inputSchema: { type: "object" } }],
+    }));
 
     expect(anthropicMock.create.mock.calls[0]?.[0]).toMatchObject({
-      tools: [{ name: "submit_deck" }],
+      messages: [
+        { role: "assistant", content: [{ type: "tool_use", id: "tool-1" }] },
+        {
+          role: "user",
+          content: [{
+            type: "tool_result",
+            tool_use_id: "tool-1",
+            content: [{ type: "image", source: { media_type: "image/png", data: "base64" } }],
+          }],
+        },
+      ],
+      tools: [{ name: "Read" }],
     });
-    expect(anthropicMock.create.mock.calls[0]?.[0]).not.toHaveProperty("tool_choice");
+    expect(response.content).toEqual([
+      { type: "tool_use", id: "tool-2", name: "Read", input: { slide: 2 } },
+    ]);
   });
 
-  it("retries with a larger output budget when thinking consumes the response", async () => {
-    anthropicMock.create
-      .mockResolvedValueOnce({
-        content: [{ type: "thinking", thinking: "hidden" }],
-        _request_id: null,
-        stop_reason: "max_tokens",
-        usage: { input_tokens: 10, output_tokens: 20 },
-      })
-      .mockResolvedValueOnce({
-        content: [{ type: "text", text: "final answer" }],
-        _request_id: "req-retry",
+  it("returns thinking-only truncation without retrying", async () => {
+    anthropicMock.create.mockResolvedValue({
+      content: [{ type: "thinking", thinking: "still reasoning", signature: "sig" }],
+      stop_reason: "max_tokens",
+      usage: { input_tokens: 10, output_tokens: 20 },
+    });
+
+    const response = await generateWithAnthropic(config, preparedRequest("User prompt"));
+
+    expect(anthropicMock.create).toHaveBeenCalledTimes(1);
+    expect(response.content).toEqual([
+      { type: "thinking", thinking: "still reasoning", signature: "sig" },
+    ]);
+    expect(response.stopReason).toBe("max_tokens");
+  });
+
+  it("maps one stream and emits exactly one complete chunk", async () => {
+    anthropicMock.stream.mockReturnValue(mockAnthropicStream(
+      [
+        {
+          type: "content_block_delta",
+          index: 0,
+          delta: { type: "thinking_delta", thinking: "reasoning" },
+        },
+        {
+          type: "content_block_delta",
+          index: 1,
+          delta: { type: "text_delta", text: "answer" },
+        },
+      ],
+      {
+        content: [{ type: "text", text: "answer" }],
         stop_reason: "end_turn",
-        usage: { input_tokens: 30, output_tokens: 40 },
-      });
-
-    const response = await generateWithAnthropic(config, { prompt: "User prompt" });
-
-    expect(anthropicMock.create).toHaveBeenCalledTimes(2);
-    expect(anthropicMock.create.mock.calls[1][0]).toMatchObject({ max_tokens: 1308 });
-    expect(response.content).toEqual([{ type: "text", text: "final answer" }]);
-    expect(response.usage).toEqual({
-      inputTokens: 40,
-      outputTokens: 60,
-      totalTokens: 100,
-    });
-  });
-
-  it("also retries a thinking-only stream with a larger output budget", async () => {
-    anthropicMock.stream
-      .mockReturnValueOnce(mockAnthropicStream(
-        [{
-          type: "content_block_delta",
-          index: 0,
-          delta: { type: "thinking_delta", thinking: "still reasoning" },
-        }],
-        {
-          content: [{ type: "thinking", thinking: "still reasoning" }],
-          stop_reason: "max_tokens",
-          usage: { input_tokens: 10, output_tokens: 20 },
-        },
-      ))
-      .mockReturnValueOnce(mockAnthropicStream(
-        [{
-          type: "content_block_delta",
-          index: 0,
-          delta: { type: "text_delta", text: "final answer" },
-        }],
-        {
-          content: [{ type: "text", text: "final answer" }],
-          stop_reason: "end_turn",
-          usage: { input_tokens: 30, output_tokens: 40 },
-        },
-      ));
+        usage: { input_tokens: 3, output_tokens: 4 },
+      },
+    ));
 
     const chunks = [];
-    for await (const chunk of generateStreamWithAnthropic(config, {
-      prompt: "User prompt",
-    })) {
+    for await (const chunk of generateStreamWithAnthropic(config, preparedRequest("prompt"))) {
       chunks.push(chunk);
     }
 
-    expect(anthropicMock.stream).toHaveBeenCalledTimes(2);
-    expect(anthropicMock.stream.mock.calls[1][0]).toMatchObject({
-      max_tokens: 1308,
-    });
-    expect(chunks.at(-1)).toEqual({
-      type: "complete",
-      content: [{ type: "text", text: "final answer" }],
-      stopReason: "end_turn",
-      usage: {
-        inputTokens: 40,
-        outputTokens: 60,
-        totalTokens: 100,
+    expect(anthropicMock.stream).toHaveBeenCalledTimes(1);
+    expect(chunks).toEqual([
+      { type: "thinking_delta", thinking: "reasoning", index: 0 },
+      { type: "text_delta", text: "answer", index: 1 },
+      {
+        type: "complete",
+        content: [{ type: "text", text: "answer" }],
+        stopReason: "end_turn",
+        usage: { inputTokens: 3, outputTokens: 4, totalTokens: 7 },
       },
-    });
+    ]);
   });
 
-  it("rejects a response without any usable content", async () => {
-    anthropicMock.create.mockResolvedValue({
+  it("leaves empty-response validation and error normalization to Gateway", async () => {
+    anthropicMock.create.mockResolvedValueOnce({ content: [], stop_reason: "end_turn" });
+    await expect(generateWithAnthropic(config, preparedRequest("prompt"))).resolves.toMatchObject({
       content: [],
-      _request_id: null,
-      stop_reason: "end_turn",
     });
 
-    await expect(generateWithAnthropic(config, { prompt: "User prompt" })).rejects.toMatchObject({
-      code: "empty-response",
-      provider: "anthropic",
-    });
+    const source = Object.assign(new Error("slow down"), { status: 429 });
+    anthropicMock.create.mockRejectedValueOnce(source);
+    await expect(generateWithAnthropic(config, preparedRequest("prompt"))).rejects.toBe(source);
   });
 
-  it("accepts a string content field from a compatible endpoint", async () => {
+  it("keeps the narrow string-content compatibility fallback", async () => {
     anthropicMock.create.mockResolvedValue({
       content: "compatible response",
       _request_id: "req-compatible",
       stop_reason: "end_turn",
     });
 
-    const response = await generateWithAnthropic(config, { prompt: "User prompt" });
-
+    const response = await generateWithAnthropic(config, preparedRequest("prompt"));
     expect(response.content).toEqual([{ type: "text", text: "compatible response" }]);
-  });
-
-  it("normalizes provider rate-limit errors", async () => {
-    anthropicMock.create.mockRejectedValue(
-      Object.assign(new Error("slow down"), { status: 429 }),
-    );
-
-    await expect(generateWithAnthropic(config, { prompt: "User prompt" })).rejects.toMatchObject({
-      code: "rate-limit",
-      provider: "anthropic",
-    });
   });
 });
 
-function mockAnthropicStream(
-  events: unknown[],
-  finalMessage: unknown,
-) {
+function mockAnthropicStream(events: unknown[], finalMessage: unknown) {
   return {
     async *[Symbol.asyncIterator]() {
       yield* events;

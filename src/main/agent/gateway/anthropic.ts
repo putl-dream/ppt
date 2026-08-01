@@ -1,16 +1,13 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { AgentGatewayError, normalizeProviderError } from "./errors";
-import { applyResponseContract } from "./response-contract";
-import { ensureToolResultPairing, withEphemeralPrompt } from "./message-pairing";
 import type { ProviderTokenUsage } from "@shared/token-usage";
 import type {
   AgentModelContentBlock,
   AgentModelImageBlock,
   AgentModelMessage,
-  AgentModelRequest,
   AgentModelResponse,
   AgentModelStreamChunk,
   AgentModelToolResultBlock,
+  PreparedAgentModelRequest,
   ResolvedAgentModelConfig,
 } from "./types";
 
@@ -22,7 +19,7 @@ function tokenCount(value: unknown): number {
 
 function extractAnthropicUsage(value: unknown): ProviderTokenUsage | undefined {
   if (!value || typeof value !== "object") return undefined;
-  const usage = value as unknown as Record<string, unknown>;
+  const usage = value as Record<string, unknown>;
   const inputTokens = tokenCount(usage.input_tokens);
   const outputTokens = tokenCount(usage.output_tokens);
   const cachedInputTokens = tokenCount(usage.cache_read_input_tokens);
@@ -38,39 +35,13 @@ function extractAnthropicUsage(value: unknown): ProviderTokenUsage | undefined {
   };
 }
 
-function anthropicUsageProperty(value: unknown): { usage?: ProviderTokenUsage } {
-  const usage = extractAnthropicUsage(value);
-  return usage ? { usage } : {};
-}
-
-function combineUsage(
-  first: ProviderTokenUsage | undefined,
-  second: ProviderTokenUsage | undefined,
-): ProviderTokenUsage | undefined {
-  if (!first) return second;
-  if (!second) return first;
-  const cachedInputTokens = (first.cachedInputTokens ?? 0) + (second.cachedInputTokens ?? 0);
-  const cacheCreationInputTokens = (first.cacheCreationInputTokens ?? 0)
-    + (second.cacheCreationInputTokens ?? 0);
-  return {
-    inputTokens: first.inputTokens + second.inputTokens,
-    outputTokens: first.outputTokens + second.outputTokens,
-    totalTokens: first.totalTokens + second.totalTokens,
-    ...(cachedInputTokens > 0 ? { cachedInputTokens } : {}),
-    ...(cacheCreationInputTokens > 0 ? { cacheCreationInputTokens } : {}),
-  };
-}
-
 function toAnthropicImageBlock(image: AgentModelImageBlock): Anthropic.ImageBlockParam {
   return {
     type: "image",
-    source: {
-      type: "base64",
-      media_type: image.mediaType,
-      data: image.data,
-    },
+    source: { type: "base64", media_type: image.mediaType, data: image.data },
   };
 }
+
 function toAnthropicToolResultContent(
   result: AgentModelToolResultBlock,
 ): Anthropic.ToolResultBlockParam["content"] {
@@ -80,7 +51,7 @@ function toAnthropicToolResultContent(
       : toAnthropicImageBlock(block));
 }
 
-function toAnthropicBlock(block: AgentModelContentBlock): Anthropic.ContentBlockParam | null {
+function toAnthropicBlock(block: AgentModelContentBlock): Anthropic.ContentBlockParam {
   switch (block.type) {
     case "text":
       return { type: "text", text: block.text };
@@ -99,33 +70,18 @@ function toAnthropicBlock(block: AgentModelContentBlock): Anthropic.ContentBlock
         content: toAnthropicToolResultContent(block),
         ...(block.isError ? { is_error: true } : {}),
       };
-    case "server_tool":
-      return block.data as Anthropic.ContentBlockParam;
   }
 }
 
 function toAnthropicMessages(messages: AgentModelMessage[]): Anthropic.MessageParam[] {
-  return ensureToolResultPairing(messages).map((message) => ({
+  return messages.map((message) => ({
     role: message.role,
-    content: message.content
-      .map(toAnthropicBlock)
-      .filter((block): block is Anthropic.ContentBlockParam => block !== null),
+    content: message.content.map(toAnthropicBlock),
   }));
 }
 
-function extractImageBlock(block: Record<string, unknown>): AgentModelImageBlock | undefined {
-  const source = block.source;
-  if (!source || typeof source !== "object") return undefined;
-  const candidate = source as Record<string, unknown>;
-  if (candidate.type !== "base64" || typeof candidate.data !== "string") return undefined;
-  const mediaType = candidate.media_type;
-  if (
-    mediaType !== "image/png"
-    && mediaType !== "image/jpeg"
-    && mediaType !== "image/webp"
-    && mediaType !== "image/gif"
-  ) return undefined;
-  return { type: "image", mediaType, data: candidate.data };
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
 function extractContentBlocks(content: unknown): AgentModelContentBlock[] {
@@ -134,218 +90,118 @@ function extractContentBlocks(content: unknown): AgentModelContentBlock[] {
   }
   if (!Array.isArray(content)) return [];
 
-  const blocks: AgentModelContentBlock[] = [];
-  for (const value of content) {
-    if (!value || typeof value !== "object") continue;
-    const block = value as Record<string, unknown>;
-    const type = typeof block.type === "string" ? block.type : "unknown";
-    if (type === "text" && typeof block.text === "string") {
-      blocks.push({ type: "text", text: block.text });
-    } else if (type === "thinking" && typeof block.thinking === "string") {
-      blocks.push({
-        type: "thinking",
-        thinking: block.thinking,
-        signature: typeof block.signature === "string" ? block.signature : "",
-      });
-    } else if (type === "redacted_thinking" && typeof block.data === "string") {
-      blocks.push({ type: "redacted_thinking", data: block.data });
-    } else if (type === "tool_use") {
-      blocks.push({
-        type: "tool_use",
-        id: typeof block.id === "string" ? block.id : "",
-        name: typeof block.name === "string" ? block.name : "",
-        input: block.input && typeof block.input === "object" && !Array.isArray(block.input)
-          ? block.input as Record<string, unknown>
-          : {},
-      });
-    } else if (type === "image") {
-      const image = extractImageBlock(block);
-      if (image) blocks.push(image);
-    } else {
-      blocks.push({ type: "server_tool", providerType: type, data: value });
+  return content.map((value): AgentModelContentBlock => {
+    if (!isRecord(value) || typeof value.type !== "string") {
+      throw new Error("Anthropic returned a malformed content block.");
     }
-  }
-  return blocks;
+    switch (value.type) {
+      case "text":
+        if (typeof value.text === "string") return { type: "text", text: value.text };
+        break;
+      case "thinking":
+        if (typeof value.thinking === "string") {
+          return {
+            type: "thinking",
+            thinking: value.thinking,
+            signature: typeof value.signature === "string" ? value.signature : "",
+          };
+        }
+        break;
+      case "redacted_thinking":
+        if (typeof value.data === "string") {
+          return { type: "redacted_thinking", data: value.data };
+        }
+        break;
+      case "tool_use":
+        if (
+          typeof value.id === "string"
+          && typeof value.name === "string"
+          && isRecord(value.input)
+        ) {
+          return { type: "tool_use", id: value.id, name: value.name, input: value.input };
+        }
+        break;
+      default:
+        throw new Error(`Anthropic returned an unsupported content block: ${value.type}.`);
+    }
+    throw new Error(`Anthropic returned a malformed ${value.type} content block.`);
+  });
 }
 
-function hasUsableContent(blocks: AgentModelContentBlock[]): boolean {
-  return blocks.some((block) =>
-    block.type === "tool_use"
-    || block.type === "server_tool"
-    || (block.type === "text" && block.text.trim().length > 0));
+function createAnthropicClient(config: ResolvedAgentModelConfig): Anthropic {
+  return new Anthropic({
+    apiKey: config.apiKey,
+    baseURL: config.baseURL,
+    timeout: config.timeoutMs,
+    maxRetries: 0,
+  });
 }
 
-function hasThinkingContent(blocks: AgentModelContentBlock[]): boolean {
-  return blocks.some((block) => block.type === "thinking" || block.type === "redacted_thinking");
+function buildAnthropicRequest(
+  config: ResolvedAgentModelConfig,
+  request: PreparedAgentModelRequest,
+): Anthropic.MessageCreateParamsNonStreaming {
+  return {
+    model: config.model,
+    max_tokens: request.maxOutputTokens,
+    system: request.systemPrompt,
+    messages: toAnthropicMessages(request.messages),
+    ...(request.tools?.length
+      ? {
+          tools: request.tools.map((tool) => ({
+            name: tool.name,
+            description: tool.description,
+            input_schema: tool.inputSchema as Anthropic.Tool.InputSchema,
+          })),
+        }
+      : {}),
+  };
 }
 
-/**
- * 把统一 AgentModelRequest 转成 Anthropic Messages 请求，
- * 并把 text、thinking、tool_use 等原生块归一化为项目内容块协议。
- */
+/** Execute one non-streaming Anthropic driver attempt. */
 export async function generateWithAnthropic(
   config: ResolvedAgentModelConfig,
-  request: AgentModelRequest,
+  request: PreparedAgentModelRequest,
 ): Promise<AgentModelResponse> {
-  const client = new Anthropic({
-    apiKey: config.apiKey,
-    baseURL: config.baseURL,
-    timeout: config.timeoutMs,
-    maxRetries: 0,
-  });
-
-  try {
-    const systemPrompt = applyResponseContract(request.systemPrompt, request.responseContract);
-    const create = (maxTokens: number) => client.messages.create({
-      model: config.model,
-      max_tokens: maxTokens,
-      system: systemPrompt,
-      messages: request.messages
-        ? toAnthropicMessages(withEphemeralPrompt(request.messages, request.prompt))
-        : [{ role: "user", content: request.prompt }],
-      ...(request.outputFormat?.type === "json_schema"
-        ? {
-            output_config: {
-              format: {
-                type: "json_schema" as const,
-                schema: request.outputFormat.schema,
-              },
-            },
-          }
-        : {}),
-      ...(request.tools?.length
-        ? {
-            tools: request.tools.map((tool) => ({
-              name: tool.name,
-              description: tool.description,
-              input_schema: tool.inputSchema as Anthropic.Tool.InputSchema,
-            })),
-          }
-        : {}),
-    }, { signal: request.signal });
-
-    let maxTokens = request.maxOutputTokens ?? config.maxOutputTokens;
-    let response = await create(maxTokens);
-    let accumulatedUsage = extractAnthropicUsage(response.usage);
-    let content = extractContentBlocks(response.content);
-
-    if (
-      !hasUsableContent(content)
-      && hasThinkingContent(content)
-      && maxTokens < 8_192
-    ) {
-      maxTokens = Math.min(maxTokens * 2, 8_192);
-      response = await create(maxTokens);
-      accumulatedUsage = combineUsage(accumulatedUsage, extractAnthropicUsage(response.usage));
-      content = extractContentBlocks(response.content);
-    }
-
-    if (!hasUsableContent(content)) {
-      throw new AgentGatewayError(
-        `Anthropic returned no usable content (stop_reason=${response.stop_reason ?? "unknown"}).`,
-        "empty-response",
-        "anthropic",
-      );
-    }
-
-    return {
-      provider: "anthropic",
-      model: config.model,
-      content,
-      requestId: response._request_id ?? undefined,
-      stopReason: response.stop_reason ?? undefined,
-      ...(accumulatedUsage ? { usage: accumulatedUsage } : {}),
-    };
-  } catch (error) {
-    throw normalizeProviderError("anthropic", error, request.signal);
-  }
+  const response = await createAnthropicClient(config).messages.create(
+    buildAnthropicRequest(config, request),
+    { signal: request.signal },
+  );
+  const usage = extractAnthropicUsage(response.usage);
+  return {
+    provider: "anthropic",
+    model: config.model,
+    content: extractContentBlocks(response.content),
+    requestId: response._request_id ?? undefined,
+    stopReason: response.stop_reason ?? undefined,
+    ...(usage ? { usage } : {}),
+  };
 }
 
-/** 将 Anthropic 流事件归一化为 Runtime 使用的增量文本、思考块和完整响应事件。 */
+/** Execute one streaming Anthropic driver attempt. */
 export async function* generateStreamWithAnthropic(
   config: ResolvedAgentModelConfig,
-  request: AgentModelRequest,
+  request: PreparedAgentModelRequest,
 ): AsyncGenerator<AgentModelStreamChunk> {
-  const client = new Anthropic({
-    apiKey: config.apiKey,
-    baseURL: config.baseURL,
-    timeout: config.timeoutMs,
-    maxRetries: 0,
-  });
-
-  try {
-    const systemPrompt = applyResponseContract(request.systemPrompt, request.responseContract);
-    const createStream = (maxTokens: number) => client.messages.stream({
-      model: config.model,
-      max_tokens: maxTokens,
-      system: systemPrompt,
-      messages: request.messages
-        ? toAnthropicMessages(withEphemeralPrompt(request.messages, request.prompt))
-        : [{ role: "user", content: request.prompt }],
-      ...(request.outputFormat?.type === "json_schema"
-        ? {
-            output_config: {
-              format: {
-                type: "json_schema" as const,
-                schema: request.outputFormat.schema,
-              },
-            },
-          }
-        : {}),
-      ...(request.tools?.length
-        ? {
-            tools: request.tools.map((tool) => ({
-              name: tool.name,
-              description: tool.description,
-              input_schema: tool.inputSchema as Anthropic.Tool.InputSchema,
-            })),
-          }
-        : {}),
-    }, { signal: request.signal });
-
-    let maxTokens = request.maxOutputTokens ?? config.maxOutputTokens;
-    let accumulatedUsage: ProviderTokenUsage | undefined;
-    while (true) {
-      const stream = createStream(maxTokens);
-      for await (const event of stream) {
-        if (event.type !== "content_block_delta") continue;
-        if (event.delta.type === "text_delta") {
-          yield { type: "text_delta", text: event.delta.text, index: event.index };
-        } else if (event.delta.type === "thinking_delta") {
-          yield { type: "thinking_delta", thinking: event.delta.thinking, index: event.index };
-        }
-      }
-
-      const finalMessage = await stream.finalMessage();
-      accumulatedUsage = combineUsage(
-        accumulatedUsage,
-        extractAnthropicUsage(finalMessage.usage),
-      );
-      const content = extractContentBlocks(finalMessage.content);
-      if (
-        !hasUsableContent(content)
-        && hasThinkingContent(content)
-        && maxTokens < 8_192
-      ) {
-        maxTokens = Math.min(maxTokens * 2, 8_192);
-        continue;
-      }
-      if (!hasUsableContent(content)) {
-        throw new AgentGatewayError(
-          `Anthropic returned no usable content (stop_reason=${finalMessage.stop_reason ?? "unknown"}).`,
-          "empty-response",
-          "anthropic",
-        );
-      }
-      yield {
-        type: "complete",
-        content,
-        stopReason: finalMessage.stop_reason ?? undefined,
-        ...(accumulatedUsage ? { usage: accumulatedUsage } : {}),
-      };
-      return;
+  const stream = createAnthropicClient(config).messages.stream(
+    buildAnthropicRequest(config, request),
+    { signal: request.signal },
+  );
+  for await (const event of stream) {
+    if (event.type !== "content_block_delta") continue;
+    if (event.delta.type === "text_delta") {
+      yield { type: "text_delta", text: event.delta.text, index: event.index };
+    } else if (event.delta.type === "thinking_delta") {
+      yield { type: "thinking_delta", thinking: event.delta.thinking, index: event.index };
     }
-  } catch (error) {
-    throw normalizeProviderError("anthropic", error, request.signal);
   }
+
+  const finalMessage = await stream.finalMessage();
+  const usage = extractAnthropicUsage(finalMessage.usage);
+  yield {
+    type: "complete",
+    content: extractContentBlocks(finalMessage.content),
+    stopReason: finalMessage.stop_reason ?? undefined,
+    ...(usage ? { usage } : {}),
+  };
 }

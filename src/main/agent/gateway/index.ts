@@ -4,11 +4,18 @@ import { resolveAgentGatewayConfig } from "@shared/agent-gateway-config";
 import { generateWithAnthropic, generateStreamWithAnthropic } from "./anthropic";
 import { resolveAgentModelConfig } from "./config";
 import { generateWithOpenAI, generateStreamWithOpenAI } from "./openai";
+import { AgentGatewayError, normalizeProviderError } from "./errors";
+import {
+  prepareAgentModelRequest,
+  validateAgentModelResponse,
+  validateStreamChunk,
+} from "./protocol";
 import type {
   AgentModelGateway,
   AgentModelRequest,
   AgentModelResponse,
   AgentModelStreamChunk,
+  ResolvedAgentModelConfig,
 } from "./types";
 import { createModuleLogger } from "../logger";
 import { textFromContentBlocks } from "./content-blocks";
@@ -79,33 +86,33 @@ export class AgentGateway implements AgentModelGateway {
     return resolveAgentModelConfig(selection, this.runtimeSettings, process.env, this.gatewayConfig);
   }
 
-  /**
-   * 将 provider-neutral 请求路由到 OpenAI 或 Anthropic 适配器，
-   * 统一记录用量、超时与诊断信息，并返回标准 AgentModelResponse。
-   */
+  /** Route one prepared provider-neutral request through a provider driver. */
   async generateText(
     request: AgentModelRequest,
     selection?: Pick<AgentModelSettings, "provider" | "model">,
   ): Promise<AgentModelResponse> {
     const gatewayRequestId = crypto.randomUUID();
     const startedAt = Date.now();
+    let config: ResolvedAgentModelConfig | undefined;
 
     try {
-      const config = this.resolveConfig(selection);
+      config = this.resolveConfig(selection);
+      const preparedRequest = prepareAgentModelRequest(request, config);
       logger.info("model.request.started", {
         gatewayRequestId,
         provider: config.provider,
         model: config.model,
         apiMode: config.openaiApiMode,
         promptLength: request.prompt.length,
-        systemPromptLength: request.systemPrompt?.length ?? 0,
+        systemPromptLength: preparedRequest.systemPrompt?.length ?? 0,
         timeoutMs: config.timeoutMs,
-        maxOutputTokens: config.maxOutputTokens,
+        maxOutputTokens: preparedRequest.maxOutputTokens,
       });
 
       const response = config.provider === "openai"
-        ? await generateWithOpenAI(config, request)
-        : await generateWithAnthropic(config, request);
+        ? await generateWithOpenAI(config, preparedRequest)
+        : await generateWithAnthropic(config, preparedRequest);
+      validateAgentModelResponse(response, config);
 
       if (response.usage) {
         await this.recordUsage({
@@ -127,14 +134,17 @@ export class AgentGateway implements AgentModelGateway {
       });
       return response;
     } catch (error) {
+      const normalized = config
+        ? normalizeProviderError(config.provider, error, request.signal)
+        : error;
       logger.error("model.request.failed", {
         gatewayRequestId,
-        provider: selection?.provider,
-        model: selection?.model,
+        provider: config?.provider ?? selection?.provider,
+        model: config?.model ?? selection?.model,
         durationMs: Date.now() - startedAt,
-        error,
+        error: normalized,
       });
-      throw error;
+      throw normalized;
     }
   }
 
@@ -145,37 +155,58 @@ export class AgentGateway implements AgentModelGateway {
   ): AsyncGenerator<AgentModelStreamChunk> {
     const gatewayRequestId = crypto.randomUUID();
     const startedAt = Date.now();
+    let config: ResolvedAgentModelConfig | undefined;
 
     try {
-      const config = this.resolveConfig(selection);
+      config = this.resolveConfig(selection);
+      const preparedRequest = prepareAgentModelRequest(request, config);
       logger.info("model.stream.started", {
         gatewayRequestId,
         provider: config.provider,
         model: config.model,
         apiMode: config.openaiApiMode,
         promptLength: request.prompt.length,
-        systemPromptLength: request.systemPrompt?.length ?? 0,
+        systemPromptLength: preparedRequest.systemPrompt?.length ?? 0,
         timeoutMs: config.timeoutMs,
-        maxOutputTokens: config.maxOutputTokens,
+        maxOutputTokens: preparedRequest.maxOutputTokens,
       });
 
       let totalLength = 0;
+      let completed = false;
       const generator = config.provider === "openai"
-        ? generateStreamWithOpenAI(config, request)
-        : generateStreamWithAnthropic(config, request);
+        ? generateStreamWithOpenAI(config, preparedRequest)
+        : generateStreamWithAnthropic(config, preparedRequest);
 
       for await (const chunk of generator) {
+        if (completed) {
+          throw new AgentGatewayError(
+            `${config.provider} stream emitted data after complete.`,
+            "provider-error",
+            config.provider,
+          );
+        }
+        validateStreamChunk(chunk, config);
         if (chunk.type === "text_delta") {
           totalLength += chunk.text.length;
-        } else if (chunk.type === "complete" && chunk.usage) {
-          await this.recordUsage({
-            ...chunk.usage,
-            ...(config.configurationId ? { configurationId: config.configurationId } : {}),
-            provider: config.provider,
-            model: config.model,
-          });
+        } else if (chunk.type === "complete") {
+          completed = true;
+          if (chunk.usage) {
+            await this.recordUsage({
+              ...chunk.usage,
+              ...(config.configurationId ? { configurationId: config.configurationId } : {}),
+              provider: config.provider,
+              model: config.model,
+            });
+          }
         }
         yield chunk;
+      }
+      if (!completed) {
+        throw new AgentGatewayError(
+          `${config.provider} stream ended without a complete event.`,
+          "empty-response",
+          config.provider,
+        );
       }
 
       logger.info("model.stream.completed", {
@@ -186,14 +217,17 @@ export class AgentGateway implements AgentModelGateway {
         durationMs: Date.now() - startedAt,
       });
     } catch (error) {
+      const normalized = config
+        ? normalizeProviderError(config.provider, error, request.signal)
+        : error;
       logger.error("model.stream.failed", {
         gatewayRequestId,
-        provider: selection?.provider,
-        model: selection?.model,
+        provider: config?.provider ?? selection?.provider,
+        model: config?.model ?? selection?.model,
         durationMs: Date.now() - startedAt,
-        error,
+        error: normalized,
       });
-      throw error;
+      throw normalized;
     }
   }
 }
@@ -204,16 +238,12 @@ export type {
   AgentModelResponse,
   AgentModelStreamChunk,
   AgentResponseContract,
-  AgentModelOutputFormat,
-  AgentJsonSchemaOutputFormat,
 } from "./types";
 export { AgentGatewayError } from "./errors";
 export {
   callLLM,
-  callLLMJson,
   callTool,
   ModelOutputError,
-  type JsonModelCallOptions,
   type MarkdownModelRequest,
   type ModelOutputErrorCode,
   type ToolModelRequest,

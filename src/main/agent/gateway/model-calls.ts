@@ -1,4 +1,3 @@
-import { z } from "zod";
 import type { AgentModelSelection } from "@shared/agent";
 import { textFromContentBlocks, toolUseBlocksFromContent } from "./content-blocks";
 import { isOutputTruncated } from "./errors";
@@ -14,8 +13,6 @@ import type {
 export type ModelOutputErrorCode =
   | "empty-markdown"
   | "unexpected-tool-use"
-  | "invalid-json"
-  | "schema-validation"
   | "missing-tools"
   | "malformed-tool-use"
   | "truncated-output";
@@ -31,23 +28,13 @@ export class ModelOutputError extends Error {
   }
 }
 
-type BaseOneShotRequest = Omit<
-  AgentModelRequest,
-  "tools" | "outputFormat" | "requiredToolName" | "responseContract"
->;
+type BaseOneShotRequest = Omit<AgentModelRequest, "tools" | "responseContract">;
 
 export type MarkdownModelRequest = BaseOneShotRequest & {
   responseContract?: Extract<AgentResponseContract, "markdown" | "markdown-summary">;
 };
 
-export interface JsonModelCallOptions<T> {
-  request: BaseOneShotRequest;
-  schema: z.ZodType<T>;
-  schemaName?: string;
-  description?: string;
-}
-
-export type ToolModelRequest = Omit<AgentModelRequest, "outputFormat"> & {
+export type ToolModelRequest = AgentModelRequest & {
   tools: AgentToolSchema[];
 };
 
@@ -65,23 +52,7 @@ export type ToolModelTurn =
       response: AgentModelResponse;
     };
 
-function normalizeSchemaName(value: string | undefined): string {
-  const normalized = (value ?? "structured_response")
-    .replace(/[^a-zA-Z0-9_-]/g, "_")
-    .slice(0, 64);
-  return normalized || "structured_response";
-}
-
-function toOutputJsonSchema(schema: z.ZodType): Record<string, unknown> {
-  const jsonSchema = z.toJSONSchema(schema, {
-    unrepresentable: "throw",
-    io: "output",
-  }) as Record<string, unknown>;
-  delete jsonSchema.$schema;
-  return jsonSchema;
-}
-
-function assertNoToolCalls(response: AgentModelResponse, mode: "markdown" | "json"): void {
+function assertNoToolCalls(response: AgentModelResponse, mode: "markdown"): void {
   if (toolUseBlocksFromContent(response.content).length === 0) return;
   throw new ModelOutputError(
     `Model returned tool_use content during a ${mode} call.`,
@@ -118,48 +89,6 @@ export async function callLLM(
     );
   }
   return markdown;
-}
-
-/** One-shot model call whose public contract is a Zod-validated JSON value. */
-export async function callLLMJson<T>(
-  gateway: AgentModelGateway,
-  options: JsonModelCallOptions<T>,
-  selection?: AgentModelSelection,
-): Promise<T> {
-  const response = await gateway.generateText({
-    ...options.request,
-    outputFormat: {
-      type: "json_schema",
-      name: normalizeSchemaName(options.schemaName),
-      description: options.description,
-      schema: toOutputJsonSchema(options.schema),
-      strict: true,
-    },
-  }, selection);
-  assertCompleteResponse(response);
-  assertNoToolCalls(response, "json");
-
-  const text = textFromContentBlocks(response.content);
-  let decoded: unknown;
-  try {
-    decoded = JSON.parse(text);
-  } catch (error) {
-    throw new ModelOutputError(
-      "Model returned invalid JSON for a structured call.",
-      "invalid-json",
-      error,
-    );
-  }
-
-  const parsed = options.schema.safeParse(decoded);
-  if (!parsed.success) {
-    throw new ModelOutputError(
-      `Model JSON failed schema validation: ${z.prettifyError(parsed.error)}`,
-      "schema-validation",
-      parsed.error,
-    );
-  }
-  return parsed.data;
 }
 
 /**
