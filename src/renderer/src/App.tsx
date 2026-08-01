@@ -56,7 +56,6 @@ export function App() {
   });
   const settings = useSettingsController(bootstrap, presentation, notify);
   const {
-    logoUrl,
     selectedModelId,
     selectModel: setSelectedModelId,
     visibleModels,
@@ -99,7 +98,6 @@ export function App() {
   const { isExportingDeck, exportDeck } = useDeckExport({
     sessionId: activeSessionId,
     presentation,
-    logoUrl,
     setChatMessages,
     notify,
   });
@@ -296,7 +294,6 @@ export function App() {
             presentation,
             selectedSlideId,
             onSelectSlide: setSelectedSlideId,
-            logoUrl,
             onCloseMirror: closeMirror,
             highlightSlideId,
             isExpanded: isMirrorExpanded,
@@ -313,7 +310,6 @@ export function App() {
               slides: [],
             },
             selectedSlideId,
-            logoUrl,
             onSelectSlide: setSelectedSlideId,
             onClose: closeDeckPreview,
           }}

@@ -1,5 +1,4 @@
-import { rasterDataImageSourceSchema, type Presentation } from "./presentation";
-import type { PresentationCommand } from "./commands";
+import type { Presentation } from "./presentation";
 import type { AgentExecutionStrategy, AgentModelSettings } from "./agent";
 import type { AgentQuestion } from "./agent-question";
 import type { AgentGatewayConfig } from "./agent-gateway-config";
@@ -11,10 +10,8 @@ import type {
   ProjectArtifact,
   SessionBootstrap,
   SessionChatMessage,
-  SessionSummary,
 } from "./session";
 import type { TokenUsageStats } from "./token-usage";
-import type { ConversationEventPage } from "./conversation-events";
 import type { PptJobProjection } from "./presentation-lifecycle";
 import type {
   AgentApprovalRequest,
@@ -259,12 +256,10 @@ export interface DesktopApi {
   reportRendererLog(report: RendererLogReport): void;
   createSession(options?: CreateSessionOptions): Promise<SessionBootstrap>;
   openWorkspace(rootPath: string): Promise<SessionBootstrap>;
-  listWorkspaceSessions(rootPath: string): Promise<SessionSummary[]>;
   selectSession(sessionId: string): Promise<SessionBootstrap>;
   deleteSession(sessionId: string): Promise<SessionBootstrap>;
   saveSessionMessages(sessionId: string, messages: SessionChatMessage[]): Promise<void>;
   saveSessionDisplayCards(sessionId: string, cards: PersistedDisplayCard[]): Promise<void>;
-  loadConversationEvents(sessionId: string, cursor?: number, limit?: number): Promise<ConversationEventPage>;
   listProjectArtifacts(sessionId: string): Promise<ProjectArtifact[]>;
   readProjectArtifact(
     sessionId: string,
@@ -309,9 +304,6 @@ export interface DesktopApi {
   ): Promise<AgentRunResult>;
   onAgentStream(listener: (event: AgentStreamEvent) => void): () => void;
   resumeAgentRun(sessionId: string, proposalId: string, approved: boolean): Promise<AgentRunResult>;
-  undo(): Promise<Presentation>;
-  redo(): Promise<Presentation>;
-  executeCommand(command: PresentationCommand): Promise<Presentation>;
   exportPresentation(
     sessionId: string,
     options: ExportPresentationOptions,
@@ -326,7 +318,6 @@ export interface DesktopApi {
 }
 
 export const exportPresentationOptionsSchema = z.object({
-  logoUrl: rasterDataImageSourceSchema.nullable().optional(),
   /** Explicit human approval for assets whose commercial license is not yet verified. */
   allowUnverifiedAssets: z.boolean().optional(),
 }).strict();

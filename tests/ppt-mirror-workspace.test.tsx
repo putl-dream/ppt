@@ -59,7 +59,6 @@ function MirrorHarness() {
       presentation={presentation}
       selectedSlideId={selectedSlideId}
       onSelectSlide={setSelectedSlideId}
-      logoUrl={null}
       onCloseMirror={() => undefined}
       highlightSlideId={null}
     />
@@ -121,7 +120,6 @@ describe("PPTMirror preview workspace", () => {
     });
 
     expect(exportPresentation).toHaveBeenCalledWith("session-1", {
-      logoUrl: null,
       allowUnverifiedAssets: false,
     });
     expect(exportPresentation).not.toHaveBeenCalledWith(

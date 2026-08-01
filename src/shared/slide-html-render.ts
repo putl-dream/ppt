@@ -7,9 +7,7 @@ export const SLIDE_HEIGHT = 720;
 export const THUMBNAIL_WIDTH = 640;
 export const THUMBNAIL_HEIGHT = 360;
 
-export interface DeckHtmlRenderOptions {
-  logoUrl?: string | null;
-}
+export interface DeckHtmlRenderOptions {}
 
 function escapeHtml(text: string): string {
   return text

@@ -17,9 +17,8 @@ import type {
 } from "./schema";
 
 /**
- * Adapted from the MIT-licensed ppt-master reference catalogs:
- *   skills/ppt-master/references/visual-styles/*.md
- *   skills/ppt-master/references/modes/*.md
+ * Adapted from the MIT-licensed ppt-master reference catalogs and inlined here
+ * (see THIRD_PARTY_NOTICES.md). There is no `skills/ppt-master/` path in-repo.
  *
  * Deliberately contains no HEX values. A visual style specifies how colors are
  * used; the independent color scheme supplies the actual colors.

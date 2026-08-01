@@ -43,6 +43,8 @@ describe("SVG-native Agent tool surface", () => {
     expect(coreNames.has("PreviewSvgPage")).toBe(true);
     expect(coreNames.has("SubmitSvgDeck")).toBe(true);
     expect(coreNames.has("PreviewSlide")).toBe(true);
+    expect(coreNames.has("SearchExtraTools")).toBe(false);
+    expect(coreNames.has("ExecuteExtraTool")).toBe(false);
     expect(deferredNames.size).toBe(0);
   });
 });

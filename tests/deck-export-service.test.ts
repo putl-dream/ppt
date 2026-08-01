@@ -107,15 +107,15 @@ describe("DeckExportService", () => {
     expect(html).toContain('class="slide-svg-source"');
   });
 
-  it("rejects forged local paths in export options", async () => {
+  it("rejects unknown export option keys", async () => {
     const presentation = exportReadyPresentation();
     const filePath = await createTempExportPath("deck-export-options-", "pptx");
 
     await expect(service.exportDeck({
       presentation,
-      options: { logoUrl: "C:\\private\\logo.png" } as ExportPresentationOptions,
+      options: { unexpected: true } as unknown as ExportPresentationOptions,
       filePath,
-    })).rejects.toThrow("Image data must be");
+    })).rejects.toThrow();
   });
 
   it("generates a default export path when filePath is omitted", async () => {

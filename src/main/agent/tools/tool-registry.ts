@@ -2,7 +2,6 @@ import type { ToolContext, ToolDefinition } from "./tool-definition";
 import { ToolLoader } from "./tool-loader";
 import { askUserTool } from "./core/ask-user";
 import { beginPptCapabilityTool } from "./core/begin-ppt-capability";
-import { executeExtraToolTool } from "./core/execute-extra-tool";
 import { getSelectionTool } from "./core/get-selection";
 import { getDesignReferenceTool } from "./core/get-design-reference";
 import { listTeammatesTool } from "./core/list-teammates";
@@ -12,7 +11,6 @@ import { previewSvgPageTool } from "./core/preview-svg-page";
 import { readCurrentSlideTool } from "./core/read-current-slide";
 import { readPresentationSnapshotTool } from "./core/read-presentation-snapshot";
 import { respondPlanApprovalTool } from "./core/respond-plan-approval";
-import { searchExtraToolsTool } from "./core/search-extra-tools";
 import { sendTeammateMessageTool } from "./core/send-teammate-message";
 import { shutdownTeammateTool } from "./core/shutdown-teammate";
 import { submitPptReviewTool } from "./core/submit-ppt-review";
@@ -131,7 +129,6 @@ function stableToolOrder(
 const DEFAULT_TOOL_DEFINITIONS: ToolDefinition<any, any>[] = [
   askUserTool,
   beginPptCapabilityTool,
-  executeExtraToolTool,
   getDesignReferenceTool,
   getSelectionTool,
   listTeammatesTool,
@@ -141,7 +138,6 @@ const DEFAULT_TOOL_DEFINITIONS: ToolDefinition<any, any>[] = [
   readCurrentSlideTool,
   readPresentationSnapshotTool,
   respondPlanApprovalTool,
-  searchExtraToolsTool,
   sendTeammateMessageTool,
   shutdownTeammateTool,
   spawnTeammateTool,
@@ -156,7 +152,8 @@ const DEFAULT_TOOL_DEFINITIONS: ToolDefinition<any, any>[] = [
 
 /**
  * 构建每个 SessionRuntime 使用的标准工具集合。
- * Core Tools 可由模型直接调用；Deferred Tools 只能经发现与 ExecuteExtraTool 间接执行。
+ * 产品默认 Deferred 发现面为空，因此不注册 SearchExtraTools / ExecuteExtraTool。
+ * 管线测试仍可手动注册这两枚壳工具与 deferred target。
  */
 export function createDefaultToolRegistry(): ToolRegistry {
   return createToolRegistryFromDefinitions(DEFAULT_TOOL_DEFINITIONS);

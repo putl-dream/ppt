@@ -34,7 +34,6 @@ export interface PersistedUiSettings {
   /** Leading multiplier applied on top of the size scale. */
   uiLineHeight: number;
   selectedDesignSystem: DesignSystemV2;
-  logoUrl: string | null;
   executionStrategy: AgentExecutionStrategy;
 }
 
@@ -115,6 +114,7 @@ function migrateLegacySettings(raw: Record<string, unknown>): Partial<PersistedU
   delete (migrated as Record<string, unknown>).uiAccentColor;
   delete (migrated as Record<string, unknown>).uiControlShape;
   delete (migrated as Record<string, unknown>).borderRadiusScale;
+  delete (migrated as Record<string, unknown>).logoUrl;
 
   return migrated;
 }
@@ -129,6 +129,7 @@ export function loadPersistedUiSettings(): Partial<PersistedUiSettings> {
       delete parsed.uiAccentColor;
       delete parsed.uiControlShape;
       delete parsed.borderRadiusScale;
+      delete parsed.logoUrl;
       return parsed as Partial<PersistedUiSettings>;
     }
 

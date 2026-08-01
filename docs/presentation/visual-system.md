@@ -8,9 +8,10 @@
 
 ## 1. 系统定位
 
-产品 Agent **作者路径**仅为完整页面 SVG。Layout Grammar / element-IR 共享库与
-相关作者工具均已**移除**（见 `tests/svg-native-tool-surface.test.ts`）。产品新建只写入
-`visualSource.kind === "svg"` 的 Presentation，供 Editor / HTML / PPTX 使用。
+产品 Agent **作者路径**仅为完整页面 SVG。Layout Grammar / element-IR 已从**产品作者表面
+下架**（默认注册表不含相关工具；见 `tests/svg-native-tool-surface.test.ts`）；共享库与
+未注册实现可能仍残留待清理。产品新建只写入 `visualSource.kind === "svg"` 的
+Presentation，供 Editor / HTML / PPTX 使用。
 
 ```text
 产品作者（Agent SVG-native）:
@@ -74,13 +75,13 @@ SVG-native 路径要求图片以 workspace 相对 `href` 写入 SVG；`SubmitSvg
 
 声明依赖图片的设计若没有有效素材，应质量失败或更换不依赖图片的设计，不能留下空框。
 
-## 6. 图表与可编辑性
+## 6. 图表与可编辑性（目标 / Partial）
 
-优先使用 PowerPoint 原生可编辑图表。复杂视觉不得简单将整页栅格化：
+**现行事实**：PPTX 导出将整页 SVG 嵌入为幻灯片图像，不把页面拆成可编辑的原生
+shape / chart parts。图表应画在页面 SVG 内，与预览同源。
 
-- 文字、关键形状、表格和图表保持原生；
-- 背景渐变可栅格化；
-- 导出后 postflight 检查 chart parts、notes 和对象数量。
+**远期目标**（未承诺为现行行为）：在不破坏所见即所得的前提下，探索原生可编辑图表
+或混合导出；不得把「目标」写成当前已实现的导出契约。
 
 ## 7. 模型控制边界
 
@@ -92,18 +93,18 @@ SVG-native 路径要求图片以 workspace 相对 `href` 写入 SVG；`SubmitSvg
 - SubmitSvgDeck 锁文件核对、素材内联与 schema 校验；
 - CommitGate 与导出。
 
-### Layout Grammar / element-IR（已移除）
+### Layout Grammar / element-IR（作者表面已下架）
 
-Layout Grammar 共享库、element-IR slide 模型与 Grammar / 命令轨作者工具均已从产品中移除。
-Presentation slide 现为 STRICT SVG-only（`visualSource` 必填；无 `elements` / `layout` /
-`grammarVariant`）。遗留文档中的 handler / variant / slot 语义不再适用。
+产品 slide 为 STRICT SVG-only（`visualSource` 必填；无 `elements` / `layout` /
+`grammarVariant`）。Grammar / 命令轨作者工具不在默认注册表；handler / variant / slot
+语义不再适用产品新建。共享库与未注册实现的物理删除见清理工作，不能写成「仓库已无文件」。
 
-## 8. Render Feedback
+## 8. Render Feedback（Partial）
 
-反馈分两层：
+**已落地**：`PreviewSvgPage` PNG 门禁与 deck validators 的确定性检查。
 
-1. 结构化 deterministic checks：overflow、重叠、资产缺失、节奏、token 一致性；SVG 路径另含 PreviewSvgPage PNG 门禁。
-2. 有界视觉复盘：仅在成功渲染 PNG 时，最多审查有限页面和有限字段。
+**未接线**：`render-feedback-loop` 所描述的有界多页视觉复盘仅有模块/测试，未挂入产品
+Agent Run。不得把该循环写成现行能力。
 
 视觉模型不能无限返工，也不能修改事实、数字、来源、页序和商业目标。
 
@@ -112,13 +113,14 @@ Presentation slide 现为 STRICT SVG-only（`visualSource` 必填；无 `element
 - 默认 project artifact / workspace probe 与 SVG-native 作者文件对齐；
 - captioned image 建立独立内容模型；
 - deck-review 增强母题、锚点、密度和页面差异度；
-- 从内容自动推导 Brand Profile，并允许用户自然语言调节。
+- 从内容自动推导 Brand Profile，并允许用户自然语言调节；
+- 继续避免把未接线模块写成现行能力（Render Feedback 等）。
 
-### Grammar / element-IR 清理（已完成）
+### Grammar / element-IR 作者表面（已下架）
 
-Layout Grammar / element-IR 共享库、element-IR 渲染与导出分支，以及 Grammar / 命令轨
-Agent 作者工具均已移除。默认注册表与 Deferred 发现面为空
-（`tests/svg-native-tool-surface.test.ts`）。
+默认注册表不含 Grammar/命令轨作者工具；Deferred 发现面为空，且默认不注册
+`SearchExtraTools` / `ExecuteExtraTool`（`tests/svg-native-tool-surface.test.ts`）。
+未接线的 modular IPC / session-runtime 双轨与未消费 logo 管道已从产品面移除。
 
 [template-management](../roadmap/template-management.md)（Proposed）与 Grammar 零耦合：
 内置模板只锁定 Design System 与 SVG 作者指引。

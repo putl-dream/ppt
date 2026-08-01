@@ -18,8 +18,8 @@ export const getDesignReferenceSchema = z.object({
 }).strict();
 
 /**
- * Exposes the executable behavior distilled from ppt-master's mode/style
- * references after the strategist has selected one coherent direction.
+ * Exposes executable mode/style guidance from the inlined DesignSystem catalog
+ * (historically adapted from ppt-master; see THIRD_PARTY_NOTICES.md).
  */
 export const getDesignReferenceTool: ToolDefinition<
   typeof getDesignReferenceSchema,
@@ -29,7 +29,7 @@ export const getDesignReferenceTool: ToolDefinition<
   description:
     "在写 SVG 前读取已锁定 argument mode、visual style、reading mode 的完整执行参考："
     + "论证骨架、标题语气、构图几何、留白、字体、质感、图像语言与明确禁用项。"
-    + "它把 ppt-master 参考目录的行为约束直接交给 SVG 作者，避免只拿到风格枚举。",
+    + "数据来自仓库内联的 DesignSystem 目录（非外部 skill 路径），避免只拿到风格枚举。",
   category: "core",
   loadPolicy: "core",
   inputSchema: getDesignReferenceSchema,

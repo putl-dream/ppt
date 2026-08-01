@@ -44,9 +44,6 @@ export interface SettingsController {
   deleteModel: (id: string) => void;
   selectedDesignSystem: DesignSystemV2;
   setSelectedDesignSystem: (value: DesignSystemV2) => void;
-  logoUrl: string | null;
-  uploadLogo: (url: string) => void;
-  removeLogo: () => void;
   agentStepLimits: AgentStepLimits;
   setAgentStepLimits: (value: AgentStepLimits) => void;
   agentGatewayPreferences: AgentGatewayPreferences;
@@ -111,7 +108,6 @@ export function useSettingsController(
     const parsed = designSystemV2Schema.safeParse(persisted.selectedDesignSystem);
     return parsed.success ? parsed.data : DEFAULT_DESIGN_SYSTEM;
   });
-  const [logoUrl, setLogoUrl] = useState<string | null>(() => persisted.logoUrl ?? null);
   const [models, setModels] = useState<ManagedModel[]>(() => bootstrap.models);
   const [selectedModelId, setSelectedModelId] = useState(() => bootstrap.selectedModelId);
   const enabledModels = useMemo(() => models.filter(isModelEnabled), [models]);
@@ -190,13 +186,11 @@ export function useSettingsController(
       uiFontSize,
       uiLineHeight,
       selectedDesignSystem,
-      logoUrl,
       executionStrategy,
     });
   }, [
     colorScheme,
     executionStrategy,
-    logoUrl,
     selectedDesignSystem,
     skin,
     uiFontFamily,
@@ -241,17 +235,6 @@ export function useSettingsController(
       if (fallback) setSelectedModelId(fallback.id);
     }
   };
-  const uploadLogo = (url: string) => {
-    markSaving();
-    setLogoUrl(url);
-    notify("🖼️ 品牌 Logo 已应用至演示文稿模板");
-  };
-  const removeLogo = () => {
-    markSaving();
-    setLogoUrl(null);
-    notify("🗑️ 品牌 Logo 已移除");
-  };
-
   return {
     models,
     enabledModels,
@@ -263,9 +246,6 @@ export function useSettingsController(
     deleteModel,
     selectedDesignSystem,
     setSelectedDesignSystem: update(setSelectedDesignSystemState),
-    logoUrl,
-    uploadLogo,
-    removeLogo,
     agentStepLimits,
     setAgentStepLimits: update(setAgentStepLimitsState),
     agentGatewayPreferences,

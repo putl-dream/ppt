@@ -55,7 +55,7 @@ request
 
 - 页面视觉事实源是完整页面 SVG（`viewBox="0 0 1280 720"`），不是 layout handler 填槽片段；
 - 除 SVG 显式引用的本地 `assets/**` 图片外，背景、标题、正文、页码、图示与装饰都必须已在 SVG 中；
-- 新建流程只走 `PreviewSvgPage` → `SubmitSvgDeck`（Grammar/命令轨作者工具已移除）；
+- 新建流程只走 `PreviewSvgPage` → `SubmitSvgDeck`（Grammar/命令轨作者工具已从默认注册表下架）；
 - `SubmitSvgDeck` 要求 `communication` / `designSystem` / 每页 `id/path/narrative` 与锁文件一致；修订 SVG 会使旧 Preview 凭据失效。
 - PreviewReceipt 是 durable ArtifactRevision，不再依赖进程内 WeakMap；Submit 时当前
   文件 hash、PageSvg head 与 PreviewReceipt dependency 必须全部匹配。
@@ -68,10 +68,10 @@ request
 
 ## 3. 作者表面（SVG-only）
 
-产品 Agent **作者表面**仅为 SVG-native。Layout Grammar / element-IR 共享库与
-Grammar / 命令轨作者工具均已**移除**；`createDefaultToolRegistry()` 不再注册
-`ExecuteLayoutPlan`、`PreviewCommands`、`SubmitCommands`、`InsertSlideImage` 或旧
-beautify/layout 工具。该不变量由 `tests/svg-native-tool-surface.test.ts` 锁定。
+产品 Agent **作者表面**仅为 SVG-native。Grammar / 命令轨作者工具已从默认注册表
+**下架**；`createDefaultToolRegistry()` 不再注册 `ExecuteLayoutPlan`、
+`PreviewCommands`、`SubmitCommands`、`InsertSlideImage` 或旧 beautify/layout 工具。
+该不变量由 `tests/svg-native-tool-surface.test.ts` 锁定。共享库物理删除是清理项。
 
 产品新建只走 SVG；Presentation slide 必须带 `visualSource.kind === "svg"`。
 遗留 element-IR / layout / grammarVariant 页应在加载或恢复时迁到 SVG-native，
@@ -267,8 +267,8 @@ dev 阶段不迁移 AppData 旧路径，不 backfill/hydrate 旧 session 或 wor
 ## 13. 非目标与兼容边界
 
 - 文件管理页的 SHA-256 version 是并发前置条件，不是 immutable Artifact Revision。
-- Lean commercial compiler 仍可供离线脚本与测试使用，但不接产品入口，也不决定
-  lifecycle stage/kind。
-- storyboard 只保留非新建旁路内容规划，不是 SVG-native 或 PptJob 视觉事实源；layout-plan / Layout Grammar 已移除。
+- 不保留已下线的「Lean commercial compiler」产品叙事；lifecycle stage/kind 不以该名称为准。
+- storyboard 只保留非新建旁路内容规划，不是 SVG-native 或 PptJob 视觉事实源；
+  `slides/layout-plan.json` / Layout Grammar 不是产品新建路径（作者表面已下架）。
 - 不实现旧 AppData/session/workspace 的 backfill、hydrate、启动迁移或双轨兼容。
 - 不把 TaskStore、Query checkpoint、聊天文案或局部文件 UI 状态当作 PptJob。

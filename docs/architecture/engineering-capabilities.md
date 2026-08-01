@@ -46,7 +46,7 @@
 | 持久化与恢复 | **Implemented** | `src/main/agent/persistence/`、`src/main/agent/runtime/lifecycle/checkpoint-coordinator.ts` |
 | Web / 图片检索 | **Implemented** | `src/main/agent/search/`、`src/main/agent/tools/core/web-search.ts`、`src/main/agent/tools/core/search-slide-images.ts` |
 | SVG-native 创建 | **Implemented** | `skills/ppt-workflow/`、`preview-svg-page.ts`、`submit-svg-deck.ts` |
-| Layout Grammar / element-IR | **Removed** | 共享库、element-IR 模型与 Agent 作者工具均已删除 |
+| Layout Grammar / element-IR | **Unregistered** | 产品作者表面已下架；共享库与未注册实现可能仍残留待清理 |
 | 渲染反馈与质量门 | **Implemented** | deck validators、quality gate、`PreviewSvgPage` 预览门禁 |
 | Artifact / Job 生命周期 | **Implemented** | `src/shared/presentation-lifecycle.ts`、`src/main/presentation-lifecycle/` |
 | MCP / Plugin / LSP | **Not adopted** | 无对应产品入口 |
@@ -186,7 +186,7 @@ resolve registered core tool
   → emit paired tool_result
 ```
 
-Core tools 提供高频基础能力；Deferred tools 通过搜索后按需进入上下文；Runtime-only 能力服务宿主运行，不应暴露给模型。`SearchExtraTools` 降低工具描述常驻上下文的成本，但不能绕过权限策略。
+Core tools 提供高频基础能力；Deferred 机制保留在 ToolLoader / ToolRegistry 上，但**产品默认 Deferred 发现面为空**，也不注册空壳 `SearchExtraTools` / `ExecuteExtraTool`。Runtime-only 能力服务宿主运行，不应暴露给模型。协作工具（Task\* / teammate）当前注册为 Core。
 
 详见 [Tool 系统](../agent/tools.md)。
 
@@ -257,7 +257,7 @@ Prompt 采用稳定前缀和动态后缀，section 顺序与 cache key 由 assem
 - message bus / inbox：Agent 间消息传递；
 - background task manager：前台 Query 之外的受控执行。
 
-teammate 必须有独立 Agent identity，但共享 workspace 安全边界和文件服务。任务完成、失败、取消和 shutdown 都应进入终态，不能只靠进程/Promise 消失判断完成。Lead 侧 Task\* / `spawn_teammate` 等协作工具为 Deferred，经 `SearchExtraTools` 按需发现，避免常驻 Core schema。
+teammate 必须有独立 Agent identity，但共享 workspace 安全边界和文件服务。任务完成、失败、取消和 shutdown 都应进入终态，不能只靠进程/Promise 消失判断完成。Lead 侧 Task\* / `spawn_teammate` 等协作工具当前注册为 Core（产品默认无 Deferred 发现壳）。
 
 当前 `Partial` 的是“后台平台”而非基本后台执行：Agent PPT 尚未具备 daemon、跨进程
 attach、`ps/logs/kill`、Remote Control 或 ACP 接入。
@@ -298,8 +298,8 @@ Agent PPT 的产品价值来自以下领域层。
 - `src/design-system/` 中的 DesignSystemV2 schema、preset、brand profile、颜色、背景与图片处理；
 - HTML 预览、Renderer 镜像与 PPTX 导出使用 SVG-native Presentation 模型。
 
-SVG-native 路径下模型直接写作完整页面 SVG；不再存在 layout handler、element-IR 或
-Grammar 作者工具面。
+SVG-native 路径下模型直接写作完整页面 SVG；产品作者表面不含 layout handler、
+element-IR 或 Grammar 工具。共享库残骸不得写成「仓库已删除」。
 
 ### 4.3 提案、质量与交付
 

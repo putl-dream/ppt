@@ -13,12 +13,13 @@ decisions here. Read this file before making any changes.
   - `src/renderer/`: React workspace, chat stream, PPT mirror, settings panel
   - `src/main/agent/`: Agent runtime, tool registry, model gateways, commit
     gate, sub-agents
-  - `src/shared/`: presentation model, command model, layout system, design
-    tokens
+  - `src/design-system/`: DesignSystemV2 schema, presets, and resolution
+  - `src/shared/`: presentation model, command model, session and IPC types
   - `src/main/project/`: local project sandbox, artifact IO, diffs
   - `src/main/deck/`: thumbnails, export history, PPTX export
-  - `skills/`: workflow skills (brief / outline / storyboard / layout /
-    beautify / export / review)
+  - `skills/`: SVG-native workflow skills (`ppt-workflow`, `ppt-design`,
+    `ppt-design-layout`, `ppt-build`, `ppt-edit`, `ppt-beautify`, `deck-review`,
+    plus optional brief / outline / storyboard / research / export)
   - `tests/`: unit tests; files matching `*.integration.test.ts` require real
     model credentials and are excluded from the default test run
 - See `README.md` / `README.en.md` and the index at `docs/README.md` for

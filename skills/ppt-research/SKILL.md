@@ -30,8 +30,9 @@ teammate 自主领取任务并维护精简的 `research/notes.md`——事实清
 
 1. 仅当用户提供了资料或明确要求调研时才执行。
 2. teammate 读取 `brief.md` 主题方向。
-3. 需要外部事实或最新资料时使用 `web_search`；重要结论至少交叉核验两个来源。
-   需要视觉素材候选时可设置 `include_images: true`；图片结果仅用于发现，必须保留来源并核对授权后才能进入 deck。
+3. 需要外部事实或最新资料时：teammate 使用 `web_search`，lead Agent 使用 `WebSearch`；
+   重要结论至少交叉核验两个来源。需要视觉素材候选时可设置 `include_images: true`；
+   图片结果仅用于发现，必须保留来源并核对授权后才能进入 deck。
 4. 结构化写入 notes；每条事实标注来源 URL。
 5. teammate 调用 `TaskReviewRequest`，并摘要事实条数 + 待核实项；lead 使用 approve/reject 验收。
 

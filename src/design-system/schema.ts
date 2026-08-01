@@ -4,9 +4,9 @@ import { createLayoutTokens } from "./catalog";
 
 /**
  * Design System v2 separates the deck's argument, visual language, colors, and
- * reading density. The catalog data is adapted from ppt-master's MIT-licensed
- * references:
- *   skills/ppt-master/references/{modes,visual-styles}/
+ * reading density. Catalog data is adapted from ppt-master's MIT-licensed
+ * references and inlined under `src/design-system/` (see THIRD_PARTY_NOTICES.md);
+ * there is no live `skills/ppt-master/` tree in this repository.
  */
 export const ARGUMENT_MODES = [
   "pyramid",

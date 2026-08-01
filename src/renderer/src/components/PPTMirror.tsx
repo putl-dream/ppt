@@ -27,7 +27,6 @@ interface PPTMirrorProps {
   presentation: Presentation;
   selectedSlideId: string;
   onSelectSlide: (slideId: string) => void;
-  logoUrl: string | null;
   onCloseMirror: () => void;
   highlightSlideId: string | null; // AI 当前正在更新的页面 ID
   isExpanded?: boolean;
@@ -125,7 +124,6 @@ export const PPTMirror: React.FC<PPTMirrorProps> = ({
   presentation,
   selectedSlideId,
   onSelectSlide,
-  logoUrl,
   onCloseMirror,
   highlightSlideId,
   isExpanded = false,
@@ -159,7 +157,6 @@ export const PPTMirror: React.FC<PPTMirrorProps> = ({
     setIsExporting(true);
     try {
       const savedPath = await window.desktopApi.exportPresentation(sessionId, {
-        logoUrl: logoUrl,
         allowUnverifiedAssets,
       });
       if (savedPath) {

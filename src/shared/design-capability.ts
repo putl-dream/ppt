@@ -21,10 +21,10 @@ Design capability: ${DESIGN_CAPABILITY_VERSION}
   independent deck-wide decisions.
 - Start from the communication contract: audience, objective, desired outcome,
   core message, delivery context, and after-use.
-- When the user has not named a style, produce exactly three coherent design
-  directions: safe, shifted, and bold, then adopt recommendedDirectionId by
-  default. A direction is a complete combination, not a list of unrelated
-  tokens.
+- When the user has not named a style, lock one coherent Design System directly
+  into design/design-spec.json. Do not ask the user to pick among safe / shifted /
+  bold, “标准排版 / 创意装饰”, or other internal design-candidate menus unless
+  they explicitly ask to compare alternatives.
 - When the user explicitly names a style or brand direction, lock it directly;
   do not ask them to choose again.
 - Lock deck-wide decisions in design/design-spec.json and per-page intent in
@@ -36,9 +36,10 @@ Design capability: ${DESIGN_CAPABILITY_VERSION}
   rewrite slide content without an explicit lead instruction.
 - Use breathing pages deliberately. Do not turn the whole deck into a uniform
   rounded-card grid.
-- For image-heavy pages, call SearchSlideImages (or web_search with
-  include_images=true), localize assets into the workspace, and embed them in
-  the page SVG. Keep source metadata; never claim unverified licensing.
+- For image-heavy pages, teammates may call web_search with include_images=true;
+  the lead uses SearchSlideImages / WebSearch. Localize assets into the
+  workspace and embed them in the page SVG. Keep source metadata; never claim
+  unverified licensing.
 - Preview each page with PreviewSvgPage. Only the lead submits the deck with
   SubmitSvgDeck after locks and previews match.
 `.trim();

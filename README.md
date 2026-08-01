@@ -8,13 +8,13 @@
 ![Vitest](https://img.shields.io/badge/Vitest-3.2-6E9F18?logo=vitest&logoColor=white)
 ![Local First](https://img.shields.io/badge/local--first-desktop-111827)
 
-Agent PPT 是一个本地优先的 AI 演示文稿工作台。它会根据任务需要生成可确认的 Brief、大纲、分镜、一体化内容与视觉方案、排版计划或 PPTX，让模型像一个会使用工具并交付证据的演示设计搭档，而不是一次性吐出不可控的黑箱文件。
+Agent PPT 是一个本地优先的 AI 演示文稿工作台。它按任务需要产出可确认的 Brief、大纲、分镜、设计锁、逐页 SVG 与 PPTX，让模型像一个会使用工具并交付证据的演示设计搭档，而不是一次性吐出不可控的黑箱文件。
 
 它尤其适合这些场景：
 
-- 从零生成一套汇报、方案、课程或产品介绍 PPT
-- 在已有稿件上追加页面、改写文案、统一风格或一键美化
-- 用本地项目文件追踪 Brief、大纲、分镜、设计主题、导出记录和对话过程
+- 从零生成一套汇报、方案、课程或产品介绍 PPT（SVG-native 整页作者路径）
+- 在已有稿件上追加页面、改写文案或统一风格（经聊天中的 Agent / Skill，如 `ppt-beautify`）
+- 用本地项目文件追踪 Brief、大纲、分镜、设计规格、导出记录和对话过程
 - 研究“AI 如何可靠地参与文档编辑”，包括工具调用、审批、风险控制和视觉质检
 
 ## 界面一览
@@ -46,21 +46,21 @@ Agent PPT 是一个本地优先的 AI 演示文稿工作台。它会根据任务
 
 **不是固定阶段机，而是模型驱动的工具协作。**
 
-Runtime 向模型提供当前 workspace 事实、可用 Skill 和动态工具。复杂创建任务可以按需产出 Brief / Outline / Storyboard / Layout Plan；局部编辑、审查或导出可以直接走短路径。只有缺少关键约束、发生高风险变更或用户明确要求比较方案时才暂停交互。
+Runtime 向模型提供当前 workspace 事实、可用 Skill 和动态工具。复杂创建任务可以按需产出 Brief / Outline / Storyboard，再锁定 `design/design-spec.json` 与 `slides/page-plan.json` 并写作逐页 SVG；局部编辑、审查或导出可以直接走短路径。只有缺少关键约束、发生高风险变更或用户明确要求比较方案时才暂停交互。
 
-新建整套 PPT 或批量创建页面时，Agent 默认依据受众、主题和交付场景自主选择 Design System 与逐页版式，并把内容和视觉命令合并成一个 proposal；不会在内容草稿后要求用户再选“标准排版”或“创意装饰”。用户明确只要内容草稿时除外。
+新建整套 PPT 或批量创建页面时，Agent 默认依据受众、主题和交付场景自主选择 Design System 与逐页构图意图，经 `PreviewSvgPage` → `SubmitSvgDeck` 合并为一个 proposal；不会在内容草稿后要求用户再选“标准排版”或“创意装饰”。用户明确只要内容草稿时除外。
 
 **不是让模型直接改文件，而是让模型提交结构化命令。**
 
 所有真实幻灯片修改都会进入 `CommitGate`：先做 schema 校验、沙箱执行、diff 摘要和风险评估，再自动应用或请求用户确认。你能看到模型想改什么，也能拒绝它。
 
-**不是只会写文字，而是有完整的演示文稿模型和 SVG 页面模式。**
+**产品作者路径是 SVG-native：整页 SVG 即预览与导出的共同视觉事实源。**
 
-内部文档模型支持文本、图片、形状、图表、表格、图标、背景变体、版式、设计 token、主题和调色板。结构化页面会转换为原生 PowerPoint 元素；SVG-native 页面则以经过校验的整页 SVG 作为预览和导出的共同视觉事实源，确保应用内看到的效果与导出的 `.pptx` 一致。
+每一页以经过校验的 `1280 × 720` SVG 作为视觉作者源；预览器与 PPTX 导出消费同一份 markup（导出时将整页 SVG 嵌入幻灯片图像，而非拆成可编辑的原生 shape/chart）。`design-spec` / DesignSystem 锁定整套语气，但不替代页面 SVG。
 
 **不是只保留最终结果，而是保留制作过程。**
 
-本地 workspace 会按任务产生 `brief.md`、`outline.md`、`slides/storyboard.json`、`slides/layout-plan.json`、`deck/snapshot.json` 等 artifact；History、checkpoint、transcript 和导出记录由各自的持久化服务维护，便于复盘、调试和继续迭代。
+本地 workspace 会按任务产生 `brief.md`、`outline.md`、`slides/storyboard.json`、`design/design-spec.json`、`slides/page-plan.json`、`slides/svg/*.svg`、`deck/snapshot.json` 等 artifact；History、checkpoint、transcript 和导出记录由各自的持久化服务维护，便于复盘、调试和继续迭代。
 
 ## 工作流一览
 
@@ -68,11 +68,11 @@ Runtime 向模型提供当前 workspace 事实、可用 Skill 和动态工具。
 flowchart LR
   A["用户需求"] --> B["读取当前事实与动态能力"]
   B --> C{"模型选择安全路径"}
-  C -->|复杂创建| D["可选 Brief / Outline / Storyboard / Layout Plan"]
+  C -->|复杂创建| D["可选 Brief / Outline / Storyboard"]
   C -->|轻量任务| E["直接编辑 / 审查 / 导出"]
-  D --> F["内容 + Design System + 逐页版式"]
+  D --> F["design-spec + page-plan + 逐页 SVG"]
   E --> G["工具结果"]
-  F --> I["单一 Proposal → CommitGate → 必要时审批"]
+  F --> I["SubmitSvgDeck → CommitGate → 必要时审批"]
   G --> H{"需要修改 Presentation？"}
   H -->|是| I
   H -->|否| J["直接交付观察或导出结果"]
@@ -126,12 +126,12 @@ flowchart LR
 - 在左侧切换 Agent 工作区、浏览项目文件、搜索历史会话
 - 在聊天流里审阅 Brief、大纲、一体化内容与视觉方案，以及必要的工具审批卡
 - 查看 Agent 的任务计划、阶段进度、工具调用和子任务执行痕迹
-- 打开右侧 PPT 镜像：选页、放映、导出、全屏，或触发全局 AI 美化
+- 打开右侧 PPT 镜像：选页、放映、导出、全屏
 - 在 Settings 配置模型（OpenAI / Anthropic 兼容端点）、运行参数、提交与审批策略
 - 在 **Settings -> 搜索与联网** 配置 Tavily，让 Agent 可做联网调研
 - 在 **Settings -> 用量与费用** 查看 Token、预估费用、任务成功率与按模型分摊
-- 通过演示与品牌、界面外观控制主题、调色板、Logo、比例和深浅色
-- 使用斜杠指令快速改主题、加页、删页或重写局部内容
+- 在演示偏好中查看/选择本地 Design System 预设（不影响 Agent 写入的 `design-spec`）
+- 使用斜杠菜单插入**提示词模板**（只填入输入框，不会直接改 deck）
 
 ## 示例指令
 
@@ -206,24 +206,25 @@ Preload IPC boundary
         v
 Main process
   Agent runtime -> Gateway -> OpenAI / Anthropic
-  Tool registry -> Core tools + Deferred tools + Skills
+  Tool registry -> Core tools + Skills
   CommitGate -> CommandBus -> Presentation snapshot
   ProjectFileService -> project artifacts and snapshots
   Conversation DB / Runtime stores -> history, checkpoints, transcripts
         |
         v
-PPTX exporter
+PPTX exporter (full-page SVG images)
 ```
 
 关键模块：
 
 - `src/renderer/`：React 工作台、聊天流、实时 PPT 镜像、设置台
 - `src/main/agent/`：Agent runtime、工具注册、模型网关、审批门禁、子任务
-- `src/shared/`：演示文稿模型、命令模型、布局系统、设计 token、会话类型
+- `src/design-system/`：DesignSystemV2 schema、预设与解析
+- `src/shared/`：演示文稿模型、命令模型、会话与 IPC 类型
 - `src/main/project/`：本地项目沙箱、产物读写、diff 和依赖状态
 - `src/main/deck/`：缩略图、导出历史、PPTX 导出服务
-- `skills/`：PPT brief、outline、storyboard、layout、beautify、export、review 等工作流能力
-- `tests/`：Agent、布局、导出、上下文压缩、工具审批和项目产物测试
+- `skills/`：`ppt-workflow` / `ppt-design` / `ppt-build` / `ppt-edit` / `ppt-beautify` / `deck-review` 等
+- `tests/`：Agent、导出、上下文压缩、工具审批和项目产物测试
 
 ## 本地文件与隐私
 

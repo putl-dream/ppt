@@ -12,7 +12,7 @@ import {
   type MessageBoxOptions,
   type WebContents,
 } from "electron";
-import { CommandBus, type PresentationCommand } from "@shared/commands";
+import { CommandBus } from "@shared/commands";
 import {
   agentRunRequestSchema,
   exportPresentationOptionsSchema,
@@ -896,9 +896,6 @@ app.whenReady().then(async () => {
     });
     return state;
   });
-  ipcMain.handle("workspace:list-sessions", async (_, rootPath: string) =>
-    sessionStore.listWorkspaceSessions(rootPath),
-  );
   ipcMain.handle("session:select", async (_, sessionId: string) => {
     const startedAt = Date.now();
     const state = await sessionStore.selectSession(sessionId);
@@ -943,11 +940,6 @@ app.whenReady().then(async () => {
     "session:save-display-cards",
     (_, sessionId: string, cards: PersistedDisplayCard[]) =>
       sessionStore.saveDisplayCards(sessionId, cards),
-  );
-  ipcMain.handle(
-    "conversation:load-events",
-    (_, sessionId: string, cursor?: number, limit?: number) =>
-      sessionStore.conversationDatabase.listEvents(sessionId, cursor, limit),
   );
   ipcMain.handle("ppt-job:get", (_, sessionId: string) => {
     const snapshot = sessionStore.getSession(sessionId);
@@ -1031,18 +1023,6 @@ app.whenReady().then(async () => {
   ipcMain.handle("presentation:get", async () =>
     (await getActiveRuntime()).commandBus.getSnapshot(),
   );
-  ipcMain.handle("presentation:undo", async () => {
-    const runtime = await getActiveRuntime();
-    return runtime.presentationCommitService.undo();
-  });
-  ipcMain.handle("presentation:redo", async () => {
-    const runtime = await getActiveRuntime();
-    return runtime.presentationCommitService.redo();
-  });
-  ipcMain.handle("presentation:execute", async (_, command: PresentationCommand) => {
-    const runtime = await getActiveRuntime();
-    return runtime.presentationCommitService.execute(command);
-  });
   ipcMain.handle(
     "presentation:export",
     async (_, sessionId: string, options: ExportPresentationOptions) => {

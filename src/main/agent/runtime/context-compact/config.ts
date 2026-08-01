@@ -22,7 +22,6 @@ export const MICRO_COMPACT_PRESERVE_LATEST_TOOLS = [
   "TaskGet",
   "TaskList",
   "respond_plan_approval",
-  "task_worker",
 ] as const;
 
 export const TOOL_RESULT_BUDGET_BYTES = 200 * 1024;

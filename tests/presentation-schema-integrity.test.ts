@@ -5,21 +5,11 @@ import { rasterDataImageSourceSchema, slideSchema, svgPageResourceSchema, svgPag
 import { createMinimalSvgMarkup, createSvgVisualSource } from "../src/shared/presentation-fixtures";
 
 describe("presentation SVG schema integrity", () => {
-  it("accepts only supported raster data URLs for export logos", () => {
-    expect(exportPresentationOptionsSchema.safeParse({
-      logoUrl: "data:image/png;base64,iVBORw0KGgo=",
-    }).success).toBe(true);
-    expect(exportPresentationOptionsSchema.safeParse({ logoUrl: "C:\\private\\logo.png" }).success)
-      .toBe(false);
-    expect(exportPresentationOptionsSchema.safeParse({
-      logoUrl: "data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=",
-    }).success).toBe(false);
-    expect(exportPresentationOptionsSchema.safeParse({
-      logoUrl: "data:image/png;base64,PHN2Zz48L3N2Zz4=",
-    }).success).toBe(false);
+  it("accepts only known export presentation options", () => {
     expect(exportPresentationOptionsSchema.safeParse({ unexpected: true }).success).toBe(false);
     expect(exportPresentationOptionsSchema.safeParse({ allowUnverifiedAssets: true }).success)
       .toBe(true);
+    expect(exportPresentationOptionsSchema.safeParse({}).success).toBe(true);
   });
 
   it("requires a complete SVG visual source with fixed page dimensions", () => {

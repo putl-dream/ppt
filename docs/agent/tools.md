@@ -108,12 +108,12 @@ model turn 重新解析，而不是把变化藏进 Prompt。
 
 这三类是加载策略，不是安全级别。Core 也必须过权限；Deferred 被发现后也不能绕过策略。
 
-协作面（Task\*、`spawn_teammate`、`list_teammates`、`send_teammate_message`、`shutdown_teammate`）为 Deferred：服务多 Agent 的六项目标，但不常驻主 SVG 作者路径的 Core schema。
+协作面（Task\*、`spawn_teammate`、`list_teammates`、`send_teammate_message`、`shutdown_teammate`）当前注册为 **Core**。
 
-`SearchExtraTools` 只登记本 Query 实际发现的 Deferred Tool。模型调用
-`ExecuteExtraTool` 后，Preflight 将其解析成真实 ToolDefinition；目标工具再进入与
-直接调用完全相同的权限、Hook、输入/输出校验、后台调度和结果映射管线。
-Dispatcher 自身不执行目标，因此不存在 wrapper 的低风险身份覆盖目标策略。
+产品默认 Deferred 发现面为空，因此**不**在默认注册表暴露 `SearchExtraTools` /
+`ExecuteExtraTool`。Deferred 解析管线仍保留：若测试或未来重新注册 deferred target，
+`ExecuteExtraTool` 经 Preflight 解析后与直接调用共用权限、Hook、校验与结果映射；
+Dispatcher 自身不执行目标。
 
 ## 5. 单一执行管线
 
@@ -190,8 +190,8 @@ Presentation 写入仍有独立的 `CommitGate`。允许调用 `SubmitSvgDeck` �
 应用所有命令。产品作者路径仅为 `PreviewSvgPage` → `SubmitSvgDeck`。
 
 Grammar / 命令轨作者工具（`ExecuteLayoutPlan`、`PreviewCommands`、`SubmitCommands`、
-`InsertSlideImage`、beautify/layout 等）的实现与默认注册表均已移除；产品作者路径仅为
-SVG-native，不得再发现或调用这些工具。
+`InsertSlideImage`、beautify/layout 等）已从**默认注册表下架**；产品作者路径仅为
+SVG-native，不得再发现或调用这些工具。未注册源文件若仍残留，属于清理项，不是可用能力。
 
 ## 9. Skill 与工具
 

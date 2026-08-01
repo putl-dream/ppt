@@ -226,8 +226,7 @@ Query checkpoint 与 PptJob persistence 正交：
 ## 11. 产品路径与兼容边界
 
 - 产品创建仅为 Agent SVG-native。
-- Lean commercial compiler 只保留离线脚本、测试或可选导入代码，不接产品入口，
-  也不决定 lifecycle stage/kind。
+- 不把已下线的「Lean commercial compiler」叙事当作 lifecycle 入口或 stage 依据。
 - Layout Plan / storyboard 可服务遗留或非新建旁路，但不是新建事实源。
 - 不为旧 AppData、session 或 workspace 添加 backfill、hydrate、双写或启动迁移。
 

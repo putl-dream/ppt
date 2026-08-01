@@ -9,6 +9,8 @@ import type {
 } from "../src/main/agent/tools/tool-definition";
 import { createDefaultToolRegistry, ToolRegistry } from
   "../src/main/agent/tools/tool-registry";
+import { executeExtraToolTool } from
+  "../src/main/agent/tools/core/execute-extra-tool";
 import { WorkspaceFileService } from
   "../src/main/agent/tools/files/workspace-file-service";
 import {
@@ -113,6 +115,9 @@ function createCapabilityTestRegistry(): ToolRegistry {
   for (const tool of defaults.getCoreTools()) {
     registry.register(tool);
   }
+  // Product default registry omits the empty Deferred discovery shells;
+  // capability preflight still exercises ExecuteExtraTool → deferred target.
+  registry.register(executeExtraToolTool);
   registry.register(deferredRestyleTool);
   return registry;
 }

@@ -61,8 +61,8 @@ describe("agent activity display", () => {
       "输出被截断，提升 max_tokens 至 65536 后重试。",
     )).toBe("回复内容较长，正在继续生成…");
     expect(formatAgentProgressMessage(
-      "后台任务 bg_0001 已启动：ExportPptx: pptx",
-    )).toBe("已开始后台处理：导出演示文稿");
+      "后台任务 bg_0001 已启动：PreviewSvgPage: P01",
+    )).toBe("已开始后台处理：预览 SVG 页面");
   });
 
   it("keeps approval impact readable without exposing raw JSON fallbacks", () => {

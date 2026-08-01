@@ -8,13 +8,13 @@
 ![Vitest](https://img.shields.io/badge/Vitest-3.2-6E9F18?logo=vitest&logoColor=white)
 ![Local First](https://img.shields.io/badge/local--first-desktop-111827)
 
-Agent PPT is a local-first AI workspace for presentations. It creates reviewable briefs, outlines, storyboards, slide drafts, layout plans, or PPTX exports when the task calls for them, making the model a tool-using, traceable presentation partner instead of a one-shot black box.
+Agent PPT is a local-first AI workspace for presentations. It creates reviewable briefs, outlines, storyboards, SVG pages, and PPTX exports when the task calls for them, making the model a tool-using, traceable presentation partner instead of a one-shot black box.
 
 It is useful when you want to:
 
-- Generate a report, proposal, class deck, or product presentation from scratch
-- Add slides, rewrite copy, unify style, or beautify an existing deck
-- Track brief, outline, storyboard, design theme, export history, and conversation context as local project files
+- Generate a report, proposal, class deck, or product presentation from scratch (SVG-native full-page authoring)
+- Add slides, rewrite copy, or unify style on an existing deck (via agent skills and approvals)
+- Track brief, outline, storyboard, design-spec, export history, and conversation context as local project files
 - Study reliable AI document editing with tool calls, approvals, risk control, and visual review loops
 
 ## Screenshots
@@ -46,21 +46,21 @@ Workbench chrome is separate from the slide DesignSystem: drop a pack at `~/.age
 
 **It is model-driven tool collaboration, not a fixed stage machine.**
 
-The runtime gives the model current workspace facts, available skills, and a dynamic tool set. Complex creation jobs can produce Brief / Outline / Storyboard / Layout Plan artifacts as needed; local edits, reviews, and exports can take a short path. Interaction pauses only for missing critical constraints, risky changes, or an explicitly requested comparison.
+The runtime gives the model current workspace facts, available skills, and a dynamic tool set. Complex creation jobs can produce Brief / Outline / Storyboard artifacts plus locked `design-spec` and per-page `page-plan` files as needed; local edits, reviews, and exports can take a short path. Interaction pauses only for missing critical constraints, risky changes, or an explicitly requested comparison.
 
-When creating a full deck or a batch of pages, the agent chooses a Design System and per-slide layouts from audience, topic, and delivery context, then merges content and visual commands into a single proposal. It does not ask you to pick “standard layout” or “creative decoration” after a content draft, unless you explicitly want a content-only draft.
+When creating a full deck, the agent locks a Design System from audience, topic, and delivery context, authors each page as a complete `1280 × 720` SVG, then submits through `PreviewSvgPage` → `SubmitSvgDeck` into a single proposal. It does not ask you to pick “standard layout” or “creative decoration” after a content draft, unless you explicitly want a content-only draft.
 
 **The model does not directly mutate the deck.**
 
 All real slide changes pass through `CommitGate`: schema validation, sandbox execution, diff generation, and risk evaluation. Changes can be auto-applied only when safe; otherwise the UI asks for your approval.
 
-**The deck model is richer than text and also supports SVG-native pages.**
+**The product create path is SVG-native.**
 
-The internal presentation model supports text, images, shapes, charts, tables, icons, background variants, layouts, design tokens, themes, and palettes. Structured slides are converted into native PowerPoint elements. SVG-native slides use a validated full-page SVG as the shared visual source of truth for preview and export, keeping the in-app result consistent with the exported `.pptx`.
+Each slide’s visual authoring source is a validated full-page SVG shared by preview and export. The current PPTX exporter embeds that SVG as a full-slide image so what you see matches the `.pptx`; it does not decompose pages into editable native PowerPoint shapes or charts.
 
 **The process is preserved, not just the result.**
 
-The local workspace can contain task-specific artifacts such as `brief.md`, `outline.md`, `slides/storyboard.json`, `slides/layout-plan.json`, and `deck/snapshot.json`. Dedicated persistence services retain history, checkpoints, transcripts, and export records for review and recovery.
+The local workspace can contain task-specific artifacts such as `brief.md`, `outline.md`, `slides/storyboard.json`, `design/design-spec.json`, `slides/page-plan.json`, `slides/svg/*.svg`, and `deck/snapshot.json`. Dedicated persistence services retain history, checkpoints, transcripts, and export records for review and recovery.
 
 ## Workflow
 
@@ -68,11 +68,11 @@ The local workspace can contain task-specific artifacts such as `brief.md`, `out
 flowchart LR
   A["User request"] --> B["Read current facts and dynamic capabilities"]
   B --> C{"Model chooses a safe path"}
-  C -->|Complex creation| D["Optional Brief / Outline / Storyboard / Layout Plan"]
+  C -->|Complex creation| D["Optional Brief / Outline / Storyboard"]
   C -->|Focused task| E["Direct edit / review / export"]
-  D --> F["Content + Design System + per-slide layouts"]
+  D --> F["design-spec + page-plan + per-page SVG"]
   E --> G["Tool results"]
-  F --> I["Single Proposal → CommitGate → approval when required"]
+  F --> I["SubmitSvgDeck → CommitGate → approval when required"]
   G --> H{"Presentation mutation required?"}
   H -->|Yes| I
   H -->|No| J["Return observations or export"]
@@ -126,12 +126,12 @@ Each agent run creates an independent proposal card. If one conversation thread 
 - Switch between Agent Workspace, Project Files, and session search in the left panel
 - Review briefs, outlines, combined content/visual proposals, and tool approval cards in the chat stream
 - Inspect task plans, stage progress, tool calls, and sub-agent traces
-- Use the right-side PPT mirror to select slides, present, export, go fullscreen, or run global AI beautification
+- Use the right-side PPT mirror to select slides, present, export, or go fullscreen
 - Configure models (OpenAI / Anthropic-compatible endpoints), runtime limits, and CommitGate approval policy in Settings
 - Set a Tavily API key under **Settings -> 搜索与联网** for optional web research
 - Review tokens, estimated cost, task success rate, and per-model breakdown under **Settings -> 用量与费用**
-- Control theme, palette, logo, aspect ratio, and light/dark preferences under presentation and appearance settings
-- Use slash commands to change themes, add pages, delete pages, or rewrite local content
+- Browse local Design System presets under presentation preferences (these do not write Agent `design-spec`)
+- Use the slash menu to insert **prompt templates** (fills the input only; does not mutate the deck)
 
 ## Example Prompts
 
@@ -206,24 +206,25 @@ Preload IPC boundary
         v
 Main process
   Agent runtime -> Gateway -> OpenAI / Anthropic
-  Tool registry -> Core tools + Deferred tools + Skills
+  Tool registry -> Core tools + Skills
   CommitGate -> CommandBus -> Presentation snapshot
   ProjectFileService -> project artifacts and snapshots
   Conversation DB / Runtime stores -> history, checkpoints, transcripts
         |
         v
-PPTX exporter
+PPTX exporter (full-page SVG images)
 ```
 
 Key areas:
 
 - `src/renderer/`: React workspace, chat stream, live PPT mirror, settings console
 - `src/main/agent/`: Agent runtime, tool registry, model gateways, commit gate, sub-agents
-- `src/shared/`: presentation model, command model, layout system, design tokens, session types
+- `src/design-system/`: DesignSystemV2 schema, presets, and resolution
+- `src/shared/`: presentation model, command model, session and IPC types
 - `src/main/project/`: local project sandbox, artifact IO, diffs, dependency status
 - `src/main/deck/`: thumbnails, export history, PPTX export services
-- `skills/`: workflow skills for brief, outline, storyboard, layout, beautify, export, and review
-- `tests/`: coverage for Agent behavior, layout, export, context compaction, approvals, and project artifacts
+- `skills/`: `ppt-workflow`, `ppt-design`, `ppt-build`, `ppt-edit`, `ppt-beautify`, `deck-review`, and related skills
+- `tests/`: coverage for Agent behavior, export, context compaction, approvals, and project artifacts
 
 ## Local Files And Privacy
 

@@ -76,7 +76,7 @@ describe("SVG page PPTX export", () => {
 
     await exportToPptx(
       presentation,
-      { logoUrl: "data:image/png;base64,ignored" },
+      {},
       "/tmp/svg-page.pptx",
     );
 

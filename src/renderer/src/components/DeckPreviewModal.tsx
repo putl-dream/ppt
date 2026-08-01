@@ -8,7 +8,6 @@ interface DeckPreviewModalProps {
   open: boolean;
   presentation: Presentation;
   selectedSlideId: string;
-  logoUrl: string | null;
   onSelectSlide: (slideId: string) => void;
   onClose: () => void;
 }

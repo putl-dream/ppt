@@ -54,9 +54,6 @@ export function SettingsView({
           onDeleteModel={controller.deleteModel}
           selectedDesignSystem={controller.selectedDesignSystem}
           setSelectedDesignSystem={controller.setSelectedDesignSystem}
-          logoUrl={controller.logoUrl}
-          onLogoUpload={controller.uploadLogo}
-          onRemoveLogo={controller.removeLogo}
           localStoragePath={localStoragePath}
           onOpenWorkspace={onOpenWorkspace}
           agentStepLimits={controller.agentStepLimits}

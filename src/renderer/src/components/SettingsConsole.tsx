@@ -4,7 +4,6 @@ import {
   MoonIcon,
   PaletteIcon,
   SunIcon,
-  UploadIcon,
 } from "./Icons";
 import { isModelEnabled, type ManagedModel } from "../modelCatalog";
 import { ModelManagement } from "./ModelManagement";
@@ -47,9 +46,6 @@ interface SettingsConsoleProps {
 
   selectedDesignSystem: DesignSystemV2;
   setSelectedDesignSystem: (val: DesignSystemV2) => void;
-  logoUrl: string | null;
-  onLogoUpload: (url: string) => void;
-  onRemoveLogo: () => void;
 
   localStoragePath: string;
   onOpenWorkspace: () => void;
@@ -135,9 +131,6 @@ const fontFamilyOptions: Array<{ value: UiFontFamily; label: string }> = [
   { value: "segoe", label: "Segoe UI" },
 ];
 
-const SUPPORTED_LOGO_TYPES = new Set(["image/png", "image/jpeg", "image/gif"]);
-const MAX_LOGO_BYTES = 12 * 1024 * 1024;
-
 const colorSchemeOptions: Array<{
   value: UiColorScheme;
   label: string;
@@ -157,9 +150,6 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
   onDeleteModel,
   selectedDesignSystem,
   setSelectedDesignSystem,
-  logoUrl,
-  onLogoUpload,
-  onRemoveLogo,
   localStoragePath,
   onOpenWorkspace,
   agentStepLimits,
@@ -197,7 +187,6 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
   const selectedColorSchemeName = typeof selectedDesignSystem.colorScheme === "string"
     ? selectedDesignSystem.colorScheme
     : selectedDesignSystem.colorScheme.name ?? "custom";
-  const logoFileInputRef = React.useRef<HTMLInputElement>(null);
   const [maxOutputTokensDraft, setMaxOutputTokensDraft] = React.useState(
     () => String(agentGatewayPreferences.maxOutputTokens),
   );
@@ -285,32 +274,6 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
     } catch (err) {
       triggerToast(`打开应用数据目录失败: ${err instanceof Error ? err.message : String(err)}`);
     }
-  };
-
-  const handleLogoUploadReal = () => {
-    logoFileInputRef.current?.click();
-  };
-
-  const handleLogoFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    event.target.value = "";
-
-    if (!SUPPORTED_LOGO_TYPES.has(file.type)) {
-      triggerToast("Logo 仅支持 PNG、JPEG 或 GIF 文件");
-      return;
-    }
-    if (file.size === 0 || file.size > MAX_LOGO_BYTES) {
-      triggerToast("Logo 文件必须大于 0 且不超过 12 MB");
-      return;
-    }
-
-    const reader = new FileReader();
-    reader.onload = (loadEvent) => {
-      const result = loadEvent.target?.result as string;
-      onLogoUpload(result);
-    };
-    reader.readAsDataURL(file);
   };
 
   return (
@@ -581,10 +544,10 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
               <IdeRow label="画布比例">
                 <span className="ide-hint">16:9 宽屏（当前唯一导出比例）</span>
               </IdeRow>
-              <IdeRow label="默认设计系统">
+              <IdeRow label="本地设计系统预设">
                 <Select
                   variant="ide"
-                  ariaLabel="默认设计系统"
+                  ariaLabel="本地设计系统预设"
                   value={selectedDesignSystem.visualStyle}
                   onChange={(next) => {
                     const preset = DESIGN_PRESETS.find((item) => item.id === next);
@@ -600,32 +563,8 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
                 <span className="ide-hint">
                   {selectedDesignSystem.argumentMode} · {selectedDesignSystem.visualStyle} ·{" "}
                   {selectedDesignSystem.readingMode} · {selectedColorSchemeName}
+                  {" · "}仅 Renderer 本地偏好，不写入 Agent 的 design-spec
                 </span>
-              </IdeRow>
-              <IdeRow label="品牌水印 Logo">
-                {logoUrl ? (
-                  <div className="settings-logo-preview">
-                    <img src={logoUrl} alt="Logo" />
-                    <button type="button" className="ide-btn-secondary" onClick={onRemoveLogo}>
-                      移除 Logo
-                    </button>
-                  </div>
-                ) : (
-                  <button
-                    type="button"
-                    className="logo-dropzone settings-logo-dropzone"
-                    onClick={handleLogoUploadReal}
-                  >
-                    <input
-                      type="file"
-                      ref={logoFileInputRef}
-                      onChange={handleLogoFileChange}
-                      accept="image/png,image/jpeg,image/gif"
-                    />
-                    <UploadIcon size={16} className="upload-icon" />
-                    <span>选择品牌 Logo</span>
-                  </button>
-                )}
               </IdeRow>
             </IdeSection>
           </div>

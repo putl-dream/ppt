@@ -39,7 +39,7 @@ function preset(
   };
 }
 
-/** One first-class preset for every ppt-master visual style. */
+/** One first-class preset for every inlined visual style in the catalog. */
 export const DESIGN_PRESETS: readonly DesignPreset[] = Object.freeze([
   preset("swiss-minimal", "瑞士极简", "网格严谨、强留白的高端咨询表达", "pyramid", "business-blue", "balanced"),
   preset("soft-rounded", "柔和圆角", "友好圆角容器与克制柔影", "instructional", "business-blue", "balanced"),

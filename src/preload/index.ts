@@ -7,15 +7,12 @@ const api: DesktopApi = {
   getSessionState: () => ipcRenderer.invoke("session:get-state"),
   createSession: (options) => ipcRenderer.invoke("session:create", options),
   openWorkspace: (rootPath) => ipcRenderer.invoke("workspace:open", rootPath),
-  listWorkspaceSessions: (rootPath) => ipcRenderer.invoke("workspace:list-sessions", rootPath),
   selectSession: (sessionId) => ipcRenderer.invoke("session:select", sessionId),
   deleteSession: (sessionId) => ipcRenderer.invoke("session:delete", sessionId),
   saveSessionMessages: (sessionId, messages) =>
     ipcRenderer.invoke("session:save-messages", sessionId, messages),
   saveSessionDisplayCards: (sessionId, cards) =>
     ipcRenderer.invoke("session:save-display-cards", sessionId, cards),
-  loadConversationEvents: (sessionId, cursor, limit) =>
-    ipcRenderer.invoke("conversation:load-events", sessionId, cursor, limit),
 
   // 日志与用量统计
   getTokenUsageStats: () => ipcRenderer.invoke("token-usage:get-stats"),
@@ -60,11 +57,8 @@ const api: DesktopApi = {
     return () => ipcRenderer.removeListener("ppt-job:changed", handler);
   },
 
-  // 演示文稿编辑与导出
+  // 演示文稿读取与导出（变更经 Agent CommitGate，不暴露直接 execute/undo/redo）
   getPresentation: () => ipcRenderer.invoke("presentation:get"),
-  undo: () => ipcRenderer.invoke("presentation:undo"),
-  redo: () => ipcRenderer.invoke("presentation:redo"),
-  executeCommand: (command) => ipcRenderer.invoke("presentation:execute", command),
   exportPresentation: (sessionId, options) =>
     ipcRenderer.invoke("presentation:export", sessionId, options),
   openExportFolder: (filePath) => ipcRenderer.invoke("shell:open-export-folder", filePath),

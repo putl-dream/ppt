@@ -10,7 +10,7 @@
 > （Implemented）为准。
 >
 > **与 Layout Grammar 的关系（已对照代码）**：模板方案**零依赖** Grammar。
-> Layout Grammar / element-IR 共享库与 Agent 作者工具均已移除；产品 STRICT SVG-only
+> Layout Grammar / element-IR 已从产品作者表面下架；产品 STRICT SVG-only
 >（`visualSource.kind === "svg"`）。由 `tests/svg-native-tool-surface.test.ts` 锁定
 > 作者工具表面；模板交付面只走 design-spec + page-plan + 完整页面 SVG。
 

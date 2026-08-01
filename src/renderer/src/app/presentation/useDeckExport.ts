@@ -14,7 +14,6 @@ import { confirmSvgExportExpectation } from "./exportExpectations";
 interface UseDeckExportOptions {
   sessionId: string;
   presentation: Presentation | undefined;
-  logoUrl: string | null;
   setChatMessages: Dispatch<SetStateAction<ChatMessage[]>>;
   notify: (message: string) => void;
 }
@@ -22,7 +21,6 @@ interface UseDeckExportOptions {
 export function useDeckExport({
   sessionId,
   presentation,
-  logoUrl,
   setChatMessages,
   notify,
 }: UseDeckExportOptions) {
@@ -39,7 +37,6 @@ export function useDeckExport({
     setIsExportingDeck(true);
     try {
       const savedPath = await window.desktopApi.exportPresentation(sessionId, {
-        logoUrl,
         allowUnverifiedAssets,
       });
       setChatMessages((current) => [
@@ -68,7 +65,7 @@ export function useDeckExport({
     } finally {
       setIsExportingDeck(false);
     }
-  }, [isExportingDeck, logoUrl, notify, presentation, sessionId, setChatMessages]);
+  }, [isExportingDeck, notify, presentation, sessionId, setChatMessages]);
 
   return { isExportingDeck, exportDeck };
 }

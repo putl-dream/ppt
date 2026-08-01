@@ -21,9 +21,7 @@ describe("SVG page HTML rendering", () => {
       }),
     };
 
-    const html = renderSlideHtml(slide, 0, TEST_DESIGN_SYSTEM, {
-      logoUrl: "data:image/png;base64,ignored",
-    });
+    const html = renderSlideHtml(slide, 0, TEST_DESIGN_SYSTEM);
     const encoded = html.match(/src="data:image\/svg\+xml;base64,([^"]+)"/)?.[1];
 
     expect(encoded).toBeDefined();
