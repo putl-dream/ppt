@@ -29,24 +29,23 @@ describe("agent activity display", () => {
       expect(getAgentToolDisplayCopy(tool.name).action).not.toBe(tool.name);
     }
 
-    // Historical authoring tool names keep display copy for session history,
-    // even though they are no longer registered in the default tool surface.
     for (const name of [
       "SubmitCommands",
       "ExecuteLayoutPlan",
       "PreviewCommands",
       "AutoLayoutSlide",
       "BeautifyChart",
+      "InsertSlideImage",
     ]) {
       expect(registry.get(name), name).toBeUndefined();
-      expect(hasAgentToolDisplayCopy(name), name).toBe(true);
+      expect(hasAgentToolDisplayCopy(name), name).toBe(false);
     }
   });
 
   it("uses natural status copy and a safe fallback for unknown tools", () => {
-    expect(formatAgentToolActivity("PreviewCommands", "running")).toBe("正在检查修改方案…");
-    expect(formatAgentToolActivity("PreviewCommands", "completed")).toBe("已检查修改方案");
-    expect(formatAgentToolActivity("PreviewCommands", "failed")).toBe("检查修改方案未完成");
+    expect(formatAgentToolActivity("PreviewSvgPage", "running")).toBe("正在预览 SVG 页面…");
+    expect(formatAgentToolActivity("PreviewSvgPage", "completed")).toBe("已预览 SVG 页面");
+    expect(formatAgentToolActivity("SubmitSvgDeck", "failed")).toBe("提交 SVG 演示文稿未完成");
     expect(formatAgentToolActivity("InternalFoo_v2", "completed")).toBe("已处理当前任务");
     expect(formatAgentToolActivity("InternalFoo_v2", "completed")).not.toContain("InternalFoo_v2");
   });

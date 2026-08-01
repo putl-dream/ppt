@@ -66,17 +66,16 @@ request
 `src/main/agent/tools/core/submit-svg-deck.ts`、
 `src/main/agent/tools/core/svg-deck-lifecycle.ts`、`skills/ppt-workflow/SKILL.md`。
 
-## 3. 内部编译（非 Agent 作者路径）
+## 3. 作者表面（SVG-only）
 
-产品 Agent **作者表面**仅为 SVG-native。Grammar / 命令轨作者工具已从
-`createDefaultToolRegistry()` **移除**（不是仅 `loadPolicy: disabled`）；模型不得再调用
+产品 Agent **作者表面**仅为 SVG-native。Layout Grammar / element-IR 共享库与
+Grammar / 命令轨作者工具均已**移除**；`createDefaultToolRegistry()` 不再注册
 `ExecuteLayoutPlan`、`PreviewCommands`、`SubmitCommands`、`InsertSlideImage` 或旧
 beautify/layout 工具。该不变量由 `tests/svg-native-tool-surface.test.ts` 锁定。
 
-共享库中的 Layout Grammar / `applyLayout` / `slides/layout-plan.json` 约定**尚未删除**，
-仍可能被非 SVG 的 element-IR 渲染或 CommandBus 路径使用，但不是 Agent 新建或美化入口。
-若需对无 `visualSource.kind === "svg"` 的遗留页做 Agent 编辑，应先迁到 SVG-native。
-删除共享 Grammar 库是独立遗留清理，不是产品创建或模板管理的前置。
+产品新建只走 SVG；Presentation slide 必须带 `visualSource.kind === "svg"`。
+遗留 element-IR / layout / grammarVariant 页应在加载或恢复时迁到 SVG-native，
+而不是经 Grammar 再编译。
 
 ## 4. 当前 artifact
 
@@ -261,16 +260,15 @@ dev 阶段不迁移 AppData 旧路径，不 backfill/hydrate 旧 session 或 wor
 - `src/renderer/src/components/project-store.ts`
 - `src/renderer/src/components/ProjectFilesPage.tsx`
 - `src/shared/project-artifact-state.ts`
-- `src/shared/layout-plan.ts`（内部编译 / 遗留 element-IR）
 - `src/main/agent/gate/`
-- `src/shared/commands.ts`（`CommandBus`）
-- `src/shared/presentation.ts`
+- `src/shared/commands.ts`（`CommandBus`；SVG deck 命令：add/remove-slide、titles、set-design-system、restore-slide）
+- `src/shared/presentation.ts`（STRICT SVG-only `visualSource`）
 
 ## 13. 非目标与兼容边界
 
 - 文件管理页的 SHA-256 version 是并发前置条件，不是 immutable Artifact Revision。
 - Lean commercial compiler 仍可供离线脚本与测试使用，但不接产品入口，也不决定
   lifecycle stage/kind。
-- storyboard/layout-plan 只保留非新建旁路，不是 SVG-native 或 PptJob 事实源。
+- storyboard 只保留非新建旁路内容规划，不是 SVG-native 或 PptJob 视觉事实源；layout-plan / Layout Grammar 已移除。
 - 不实现旧 AppData/session/workspace 的 backfill、hydrate、启动迁移或双轨兼容。
 - 不把 TaskStore、Query checkpoint、聊天文案或局部文件 UI 状态当作 PptJob。

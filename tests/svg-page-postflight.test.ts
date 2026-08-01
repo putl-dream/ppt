@@ -34,7 +34,6 @@ describe("SVG page PPTX postflight", () => {
     presentation.slides = [{
       id: "svg-slide",
       title: "Exact source",
-      elements: [],
       narrative: {
         role: "cover",
         coreMessage: "Exact source",
@@ -256,7 +255,6 @@ function svgSlide(id: string, text: string, sourcePath: string): Slide {
   return {
     id,
     title: text,
-    elements: [],
     narrative: {
       role: "evidence",
       coreMessage: text,

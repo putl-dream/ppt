@@ -136,7 +136,7 @@ export function toResultDisplayEvents(
       emittedAt: now(),
       kind: "review.command-proposal",
       category: "review",
-      source: { kind: "tool", toolName: "SubmitCommands" },
+      source: { kind: "tool", toolName: "SubmitSvgDeck" },
       scope: {
         ...scope,
         threadId: result.approval.threadId,

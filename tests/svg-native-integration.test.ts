@@ -6,7 +6,6 @@ import type {
   Slide,
   SlideNarrative,
 } from "../src/shared/presentation";
-import { slideNeedsLayoutChoice } from "../src/shared/presentation-draft";
 import { LayoutValidator } from "../src/main/deck/validators/layout-validator";
 import {
   applyCommandsToDraft,
@@ -45,8 +44,6 @@ function svgSlide(
   return {
     id,
     title: "SVG-native",
-    layout: "concept",
-    elements: [],
     visualSource: {
       kind: "svg",
       markup: SVG_MARKUP,
@@ -82,19 +79,16 @@ function toolContext(deck: Presentation): ToolContext {
 }
 
 describe("SVG-native integration", () => {
-  it("LayoutValidator accepts a valid SVG+narrative without legacy empty-element issues and rejects hash tampering", () => {
+  it("LayoutValidator accepts a valid SVG+narrative and rejects hash tampering", () => {
     const validator = new LayoutValidator();
     const slide = svgSlide();
 
     const validIssues = validator.validate(presentation([slide]));
     expect(validIssues).toEqual([]);
-    expect(
-      validIssues.some((issue) => issue.message.includes("no canvas elements")),
-    ).toBe(false);
 
     const tampered = svgSlide("tampered", {
       visualSource: {
-        ...slide.visualSource!,
+        ...slide.visualSource,
         markup: SVG_MARKUP.replace("SVG-native page", "Tampered page"),
       },
     });
@@ -110,26 +104,8 @@ describe("SVG-native integration", () => {
     );
   });
 
-  it("slideNeedsLayoutChoice treats a complete SVG page as already designed", () => {
-    expect(slideNeedsLayoutChoice(svgSlide())).toBe(false);
-  });
-
-  it("collectAffectedSlideIds excludes a removed legacy page after a deck design change", () => {
-    const oldSlide: Slide = {
-      id: "old-slide",
-      title: "Legacy page",
-      layout: "concept",
-      elements: [{
-        id: "old-copy",
-        type: "text",
-        x: 120,
-        y: 160,
-        width: 600,
-        height: 80,
-        text: "Old content",
-        fontSize: 32,
-      }],
-    };
+  it("collectAffectedSlideIds excludes a removed SVG page after a deck design change", () => {
+    const oldSlide = svgSlide("old-svg-slide");
     const newSlide = svgSlide("new-svg-slide");
     const commands: PresentationCommand[] = [
       {

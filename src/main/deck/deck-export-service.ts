@@ -1,4 +1,4 @@
-import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
+import { mkdir, rename, unlink, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { presentationSchema, type Presentation } from "@shared/presentation";
@@ -12,10 +12,6 @@ import { exportToHtml } from "@shared/html-exporter";
 import { deckValidationService } from "./deck-validation-service";
 import { inspectPptxExport } from "./pptx-postflight";
 import { createPptxExportIdentity } from "./export-identity";
-import {
-  assertSupportedLocalImageFile,
-  resolveLocalImagePath,
-} from "../local-image-file";
 
 export interface DeckExportInput {
   presentation: Presentation;
@@ -31,22 +27,7 @@ function sanitizeFileName(title: string): string {
 
 async function inlineHtmlImageAssets(
   presentation: Presentation,
-  workspaceRoot?: string,
 ): Promise<Presentation> {
-  for (const slide of presentation.slides) {
-    for (const element of slide.elements) {
-      if (element.type !== "image" || /^data:image\/(?:png|jpeg|gif);base64,/i.test(element.url)) {
-        continue;
-      }
-      if (!workspaceRoot) {
-        throw new Error(`Cannot embed local image '${element.id}' without a workspace root.`);
-      }
-      const imagePath = resolveLocalImagePath(element.url, workspaceRoot);
-      const mimeType = await assertSupportedLocalImageFile(imagePath);
-      const data = await readFile(imagePath);
-      element.url = `data:${mimeType};base64,${data.toString("base64")}`;
-    }
-  }
   return presentation;
 }
 
@@ -81,7 +62,7 @@ export class DeckExportService {
       }
 
       if (filePath.endsWith(".html")) {
-        const portablePresentation = await inlineHtmlImageAssets(presentation, input.workspaceRoot);
+        const portablePresentation = await inlineHtmlImageAssets(presentation);
         const html = exportToHtml(portablePresentation, options);
         await writeFile(filePath, html, "utf8");
         return {

@@ -28,7 +28,7 @@ describe("slide-html-render", () => {
     const html = exportToHtml(presentation);
 
     expect(html).toContain(presentation.title);
-    expect(html).toContain('class="slide"');
+    expect(html).toContain("slide-svg");
   });
 
   it("defines thumbnail target dimensions", () => {

@@ -8,11 +8,9 @@
 
 ## 1. 系统定位
 
-产品 Agent **作者路径**仅为完整页面 SVG。Layout Grammar **不是** Agent 可发现的作者轨：
-相关作者工具已从 `createDefaultToolRegistry()` 移除（见
-`tests/svg-native-tool-surface.test.ts`）。共享库中的 `applyLayout` / layout-handlers
-仍可能服务无 `visualSource.kind === "svg"` 的 element-IR 页或 CommandBus 路径，但这不是
-产品新建入口。两条消费链最终仍进入同一 Presentation，供 Editor / HTML / PPTX 使用。
+产品 Agent **作者路径**仅为完整页面 SVG。Layout Grammar / element-IR 共享库与
+相关作者工具均已**移除**（见 `tests/svg-native-tool-surface.test.ts`）。产品新建只写入
+`visualSource.kind === "svg"` 的 Presentation，供 Editor / HTML / PPTX 使用。
 
 ```text
 产品作者（Agent SVG-native）:
@@ -20,11 +18,6 @@
     → slides/svg/PNN.svg
     → PreviewSvgPage / SubmitSvgDeck
     → Presentation（visualSource.kind = "svg"）
-
-共享遗留编译（非 Agent 作者表面；库仍在，工具未注册）:
-  Brand Profile / DesignSystemV2 / Tokens
-    → Layout Grammar + Variant（applyLayout）
-    → Presentation elements（非 SVG 遗留页）
 ```
 
 ## 2. 已形成的能力层
@@ -34,14 +27,11 @@
 | SVG page source | 完整页面 SVG（1280×720）；`visualSource.kind === "svg"`；预览 PNG 门禁 |
 | Design System | DesignSystemV2：颜色、字体、密度、背景、图片和图表默认值 |
 | Brand Profile | 稳定视觉人格到 DesignSystem 的确定性映射 |
-| Layout Registry | cover、section、concept、comparison、process、architecture、case、summary、toc、quote、image-grid（共享遗留库；非 Agent 作者面） |
-| Grammar Handler | 同一 layout 下的多种可执行 variant（共享遗留库；非 Agent 作者面） |
 | Visual Tokens | spacing、radii、elevation、motif |
-| Element vocabulary | text、shape、image、chart、table、icon、背景 |
-| Rendering | Editor、HTML/contact sheet、PPTX 共用 Presentation |
-| Evaluation | SVG 预览校验；layout/style/asset/商业视觉结构评分（后者偏残余 compiler） |
+| Rendering | Editor、HTML/contact sheet、PPTX 共用 SVG-native Presentation |
+| Evaluation | SVG 预览校验；deck 结构与 designSystem 一致性评分 |
 
-当前实现位于 `src/design-system/`、`src/shared/layout-*`、`src/shared/visual-*`、
+当前实现位于 `src/design-system/`、`src/shared/visual-*`、
 `src/main/agent/tools/core/preview-svg-page.ts`、`src/main/agent/tools/core/submit-svg-deck.ts`。
 
 ## 3. 核心契约
@@ -52,19 +42,8 @@
 
 ### SVG visualSource
 
-当 slide 带有 `visualSource.kind === "svg"` 时，该页的视觉作者源是对应 SVG 文件；元素树由提交工具从 SVG/内联素材派生。可见修改必须改 SVG 并重新预览，不能只改 page-plan 期待自动重绘。
-
-### Grammar Variant（共享遗留库，非产品作者面）
-
-`applyLayout` 与 `layoutGrammarRegistry` 仍在 `src/shared/`：handler 可为非 SVG
-element-IR 页决定坐标、层级、默认装饰和可编辑元素。Agent 注册表**不再**暴露
-`ExecuteLayoutPlan`、`PreviewCommands`、`SubmitCommands`、`InsertSlideImage` 或旧
-beautify/layout 工具；产品新建与美化不得依赖此路径。源文件若仍留在
-`src/main/agent/tools/core|deferred/`，也不表示已注册。
-
-### Provenance
-
-元素记录 `layout / user / agent / asset` 等来源。重排只清理可安全重建的 layout 生成物，不吞掉用户手工元素。
+当 slide 带有 `visualSource.kind === "svg"` 时，该页的视觉作者源是对应 SVG 文件。
+可见修改必须改 SVG 并重新预览，不能只改 page-plan 期待自动重绘。
 
 ## 4. 单一渲染事实
 
@@ -89,7 +68,7 @@ Presentation
 - 焦点裁切；
 - cover/contain；
 - plain/framed/masked 等 treatment；
-- layout slot 与宽高比适配（遗留 element-IR）；SVG 路径用显式 `href`。
+- layout slot 与宽高比适配；SVG 路径用显式 `href`。
 
 SVG-native 路径要求图片以 workspace 相对 `href` 写入 SVG；`SubmitSvgDeck` 内联同一字节。禁止远程 URL。
 
@@ -113,22 +92,11 @@ SVG-native 路径要求图片以 workspace 相对 `href` 写入 SVG；`SubmitSvg
 - SubmitSvgDeck 锁文件核对、素材内联与 schema 校验；
 - CommitGate 与导出。
 
-### Layout Grammar（遗留库行为说明；模型不可调用作者工具）
+### Layout Grammar / element-IR（已移除）
 
-Grammar 作者工具已从注册表移除。以下边界仅描述**若**仍有非 SVG element-IR 页经
-确定性代码走 `applyLayout` 时的职责划分，不是 Agent 可操作的作者协议：
-
-确定性代码决定：
-
-- 坐标；
-- 字号和 spacing 下限；
-- 颜色可读性；
-- slot 几何；
-- 元素 ID；
-- 导出降级；
-- overflow 和硬质量门。
-
-在 SVG-native 路径上，几何写在 SVG 内，不经 layout handler 填槽。
+Layout Grammar 共享库、element-IR slide 模型与 Grammar / 命令轨作者工具均已从产品中移除。
+Presentation slide 现为 STRICT SVG-only（`visualSource` 必填；无 `elements` / `layout` /
+`grammarVariant`）。遗留文档中的 handler / variant / slot 语义不再适用。
 
 ## 8. Render Feedback
 
@@ -146,16 +114,11 @@ Grammar 作者工具已从注册表移除。以下边界仅描述**若**仍有�
 - deck-review 增强母题、锚点、密度和页面差异度；
 - 从内容自动推导 Brand Profile，并允许用户自然语言调节。
 
-### Grammar 遗留清理前提（非本轮必做；非模板前置）
+### Grammar / element-IR 清理（已完成）
 
-**已完成**：Grammar/命令轨 Agent 作者工具从默认注册表移除；Deferred 发现面为空
+Layout Grammar / element-IR 共享库、element-IR 渲染与导出分支，以及 Grammar / 命令轨
+Agent 作者工具均已移除。默认注册表与 Deferred 发现面为空
 （`tests/svg-native-tool-surface.test.ts`）。
-
-**尚未完成**：删除或冻结共享库
-`src/shared/layout-grammar.ts`、`layout-grammar-variants.ts`、`layout-handlers/*`、
-`applyLayout`，以及停止对非 SVG 页写入 `layout` / `grammarVariant`。须先确认
-Editor / PPTX / 快照恢复 / CommandBus **不再依赖**这些路径。这是独立遗留清理，
-**不是** [template-management](../roadmap/template-management.md) Phase 1 前置。
 
 [template-management](../roadmap/template-management.md)（Proposed）与 Grammar 零耦合：
 内置模板只锁定 Design System 与 SVG 作者指引。
@@ -169,10 +132,6 @@ Editor / PPTX / 快照恢复 / CommandBus **不再依赖**这些路径。这是�
 - `src/main/agent/tools/core/preview-svg-page.ts`
 - `src/main/agent/tools/core/submit-svg-deck.ts`
 - `src/main/agent/tools/tool-registry.ts`（默认注册表不含 Grammar 作者工具）
-- `src/shared/layout-grammar.ts`（共享遗留编译；未删）
-- `src/shared/layout-grammar-variants.ts`
-- `src/shared/layout-handlers/`
-- `src/shared/layout-slots.ts`
 - `src/shared/visual-tokens.ts`
 - `src/shared/visual-asset-audit.ts`
 - `src/shared/shape-render-utils.ts`

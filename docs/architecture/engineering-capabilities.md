@@ -63,8 +63,8 @@ Agent PPT 不需要复制这些入口和命令，但需要吸收其中与长任�
 | 持久化与恢复 | **Implemented** | `src/main/agent/persistence/`、`src/main/agent/runtime/lifecycle/checkpoint-coordinator.ts` | History、checkpoint、lease、CAS 与 inflight 恢复分层 |
 | Web / 图片检索 | **Implemented** | `src/main/agent/search/`、`src/main/agent/tools/core/web-search.ts`、`src/main/agent/tools/core/search-slide-images.ts` | 作为受控外部能力进入工具管线 |
 | SVG-native 创建 | **Implemented** | `skills/ppt-workflow/`、`preview-svg-page.ts`、`submit-svg-deck.ts` | 产品唯一新建路径 |
-| Layout Grammar 共享遗留库 | **Partial** | `layout-grammar` / `applyLayout` / handlers 仍在；Agent 作者工具已从注册表移除 | 产品作者面已切 SVG-native；库删除待确认无依赖后另做 |
-| 渲染反馈与质量门 | **Implemented** | `src/main/agent/runtime/presentation/render-feedback-loop.ts`、deck validators、quality gate | 模型复盘有界，最终约束由确定性代码执行 |
+| Layout Grammar / element-IR | **Removed** | 共享库、element-IR 模型与 Agent 作者工具均已删除 | 产品 STRICT SVG-only |
+| 渲染反馈与质量门 | **Implemented** | deck validators、quality gate、`PreviewSvgPage` 预览门禁 | 最终约束由确定性代码执行；旧 render-feedback-loop 已移除 |
 | Artifact / Job 生命周期 | **Implemented** | `src/shared/presentation-lifecycle.ts`、`src/main/presentation-lifecycle/` | 跨 Query PptJob、immutable revision graph、Proposal/Presentation/Export 与恢复 |
 | MCP / Plugin / LSP | **Not adopted** | 无对应产品入口 | 不是当前 PPT 主链路所必需 |
 | Daemon / Remote Control / ACP | **Not adopted** | 无对应产品入口 | Electron 本地应用暂不需要复制远程运行面 |
@@ -266,9 +266,8 @@ Claude Code 提供通用 Agent 骨架，Agent PPT 的产品价值来自以下领
 ### 5.1 产品创建路径
 
 - **Agent SVG-native（产品唯一创建/作者路径）**：`design/design-spec.json` → `slides/page-plan.json` → `slides/svg/PNN.svg` → `PreviewSvgPage` → `SubmitSvgDeck` → CommitGate。
-- **Layout Grammar**：Agent 作者工具已从默认注册表**移除**（`tests/svg-native-tool-surface.test.ts`）。
-  `src/shared/layout-grammar*` / `layout-handlers` / `applyLayout` **库代码仍在**，可服务非 SVG
-  element-IR；删除库是独立遗留清理，不是创建路径前置。
+- **Layout Grammar / element-IR**：共享库、element-IR slide 模型与 Agent 作者工具均已**移除**
+  （`tests/svg-native-tool-surface.test.ts`）。Presentation 现为 STRICT SVG-only。
 
 所有可达写入最终进入同一 Presentation schema、CommitGate、renderer 与 exporter，不能各自产生不兼容的“第二套 slide 事实”。
 
@@ -278,12 +277,10 @@ Claude Code 提供通用 Agent 骨架，Agent PPT 的产品价值来自以下领
 
 - SVG-native 页面作者源与 `visualSource.kind === "svg"`；
 - `src/design-system/` 中的 DesignSystemV2 schema、preset、brand profile、颜色、背景与图片处理；
-- Layout Grammar、variant、slot、text fit 和内置 layout handler（**共享遗留库** / 非 SVG element-IR；Agent 不可调用作者工具）；
-- chart、table、shape、icon 和 image 等可编辑视觉元素；
-- HTML 预览、Renderer 镜像与 PPTX 导出使用共享的语义模型。
+- HTML 预览、Renderer 镜像与 PPTX 导出使用 SVG-native Presentation 模型。
 
-SVG-native 路径下模型直接写作完整页面 SVG；grammar handler 仅可能由确定性代码在
-非 SVG Presentation 路径上消费，不作为 Agent 作者工具暴露，也不是模板管理依赖。
+SVG-native 路径下模型直接写作完整页面 SVG；不再存在 layout handler、element-IR 或
+Grammar 作者工具面。
 
 ### 5.3 提案、质量与交付
 
@@ -301,7 +298,7 @@ tool proposal（SubmitSvgDeck）
   → postflight
 ```
 
-自动质量能力覆盖 SVG 预览门禁、layout/style/asset、overflow、标题重复、deck consistency。`src/main/agent/runtime/presentation/render-feedback-loop.ts` 允许模型基于渲染结果做有限轮次修正，但必须受迭代预算约束，且不能绕过最终 validator。
+自动质量能力覆盖 SVG 预览门禁、layout/style/asset 与 deck validators。最终约束由确定性代码执行，不能由模型绕过。
 
 详见 [工作流与状态](../presentation/workflow.md) 和
 [Visual Expression System](../presentation/visual-system.md)。

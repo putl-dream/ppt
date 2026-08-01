@@ -184,7 +184,19 @@ describe("system prompt assembly", () => {
   it("does not infer a control-flow stage from request keywords", () => {
     const presentation = {
       ...createStarterPresentation(),
-      slides: [{ id: "s1", title: "T", layout: "concept" as const, elements: [] }],
+      slides: [{
+        id: "s1",
+        title: "T",
+        visualSource: {
+          kind: "svg" as const,
+          markup: "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 1280 720\"/>",
+          width: 1280 as const,
+          height: 720 as const,
+          sha256: "c".repeat(64),
+          sourcePath: "slides/svg/s1.svg",
+          resources: [],
+        },
+      }],
     };
     const exportRequest = resolvePromptStage({
       request: "请导出 PPT 文件",

@@ -1,15 +1,7 @@
 import { z } from "zod";
 import type { ToolDefinition } from "../tool-definition";
-import type {
-  ImageAssetMetadata,
-  ImageElement,
-  ShapeElement,
-  Slide,
-  TextElement,
-} from "@shared/presentation";
+import type { Slide } from "@shared/presentation";
 import { resolveSlideStyle, type SlideDesignOverride } from "@design-system";
-import { listLayoutSlots } from "@shared/layout-slots";
-import { fontFamilyToCss } from "@shared/typography";
 import { slideThumbnailService } from "../../../deck/slide-thumbnail-service";
 
 export const previewSlideSchema = z.object({
@@ -42,42 +34,15 @@ export interface SlidePreviewSummary {
     resourceCount: number;
   };
   narrative?: Slide["narrative"];
-  layout?: string;
-  grammarVariant?: string;
   designOverride?: SlideDesignOverride;
-  resolvedDesign: Pick<
+  resolvedDesign?: Pick<
     ReturnType<typeof resolveSlideStyle>,
     "argumentMode" | "visualStyle" | "readingMode" | "layoutTokens" | "typography"
   >;
-  backgroundVariant: string;
-  slideVariant?: string;
-  backgroundCss: string;
-  imageSlots: string[];
-  textElements: Array<{
-    id: string;
-    text: string;
-    textRole?: string;
-    fontFamily: string;
-    fontCss: string;
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-  }>;
-  images: Array<{
-    id: string;
-    url: string;
-    imageSlot?: string;
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-    asset?: ImageAssetMetadata;
-  }>;
-  shapeCount: number;
-  chartCount: number;
-  tableCount: number;
-  iconCount: number;
+  backgroundVariant?: string;
+  backgroundCss?: string;
+  /** Present when the slide is not SVG-native. */
+  notSvgNative?: true;
   description: string;
 }
 
@@ -92,27 +57,7 @@ function describeSlide(slide: Slide): string {
     ].join(" · ");
   }
 
-  const texts = slide.elements.filter((el): el is TextElement => el.type === "text");
-  const images = slide.elements.filter((el): el is ImageElement => el.type === "image");
-  const shapes = slide.elements.filter((el): el is ShapeElement => el.type === "shape");
-  const cardCount = shapes.filter((el) => el.id.startsWith("card-")).length;
-  const shadowCount = shapes.filter((el) => el.shadow).length;
-  const roundedCount = shapes.filter(
-    (el) => el.shapeType === "roundedRect" || el.cornerRadius != null,
-  ).length;
-
-  const parts = [
-    `Layout: ${slide.layout ?? "unset"}${slide.grammarVariant ? `/${slide.grammarVariant}` : ""}`,
-    `${texts.length} text, ${images.length} image, ${shapes.length} shape`,
-  ];
-  if (cardCount > 0) parts.push(`${cardCount} cards`);
-  if (shadowCount > 0) parts.push(`${shadowCount} shadow`);
-  if (roundedCount > 0) parts.push(`${roundedCount} rounded`);
-  if (slide.layout === "case") {
-    const metric = texts.find((el) => el.textRole === "metric");
-    if (metric) parts.push(`KPI: ${metric.text}`);
-  }
-  return parts.join(" · ");
+  return "Element-IR preview removed — slide is not SVG-native. Use ReadFile on the page SVG source or author a new SVG page.";
 }
 
 /**
@@ -128,7 +73,7 @@ export const previewSlideTool: ToolDefinition<
   }
 > = {
   name: "PreviewSlide",
-  description: "获取单页幻灯片的视觉摘要（layout、槽位、元素位置、背景）及 PNG 缩略图，用于排版后自检。",
+  description: "获取单页 SVG 幻灯片的视觉摘要（visualSource、narrative、背景）及 PNG 缩略图，用于排版后自检。",
   category: "core",
   loadPolicy: "core",
   inputSchema: previewSlideSchema,
@@ -139,16 +84,7 @@ export const previewSlideTool: ToolDefinition<
       description: result.preview.description,
       svgPage: result.preview.svgPage,
       narrative: result.preview.narrative,
-      layout: result.preview.layout,
-      grammarVariant: result.preview.grammarVariant,
-      elementCounts: {
-        text: result.preview.textElements.length,
-        image: result.preview.images.length,
-        shape: result.preview.shapeCount,
-        chart: result.preview.chartCount,
-        table: result.preview.tableCount,
-        icon: result.preview.iconCount,
-      },
+      notSvgNative: result.preview.notSvgNative,
       thumbnail: result.thumbnail
         ? { width: result.thumbnail.width, height: result.thumbnail.height }
         : null,
@@ -179,76 +115,39 @@ export const previewSlideTool: ToolDefinition<
     const slide = context.presentation.slides.find((item) => item.id === args.slideId);
     if (!slide) throw new Error(`Slide '${args.slideId}' was not found.`);
 
-    const style = resolveSlideStyle(context.presentation.designSystem, slide);
+    const isSvg = slide.visualSource?.kind === "svg";
+    const style = isSvg ? resolveSlideStyle(context.presentation.designSystem, slide) : undefined;
 
-    const preview: SlidePreviewSummary = {
-      slideId: slide.id,
-      title: slide.title,
-      ...(slide.visualSource?.kind === "svg"
-        ? {
-            svgPage: {
-              sourcePath: slide.visualSource.sourcePath,
-              sha256: slide.visualSource.sha256,
-              width: slide.visualSource.width,
-              height: slide.visualSource.height,
-              resourceCount: slide.visualSource.resources.length,
-            },
-            narrative: slide.narrative,
-          }
-        : {}),
-      layout: slide.layout,
-      grammarVariant: slide.grammarVariant,
-      designOverride: slide.designOverride,
-      resolvedDesign: {
-        argumentMode: style.argumentMode,
-        visualStyle: style.visualStyle,
-        readingMode: style.readingMode,
-        layoutTokens: style.layoutTokens,
-        typography: style.typography,
-      },
-      backgroundVariant: slide.backgroundVariant ?? "default",
-      slideVariant: slide.slideVariant,
-      backgroundCss: style.background.css,
-      imageSlots: listLayoutSlots(slide.layout ?? "", slide.grammarVariant),
-      textElements: slide.elements
-        .filter((el): el is TextElement => el.type === "text")
-        .map((el) => {
-          const roleTypography = el.textRole === "metric"
-            ? style.typography.data
-            : el.textRole === "kicker"
-              ? style.typography.heading
-              : style.typography.body;
-          const fontFamily = el.fontFamily ?? roleTypography.family;
-          return {
-            id: el.id,
-            text: el.text,
-            textRole: el.textRole,
-            fontFamily,
-            fontCss: fontFamilyToCss(fontFamily),
-            x: el.x,
-            y: el.y,
-            width: el.width,
-            height: el.height,
-          };
-        }),
-      images: slide.elements
-        .filter((el): el is ImageElement => el.type === "image")
-        .map((el) => ({
-          id: el.id,
-          url: el.url,
-          imageSlot: el.imageSlot,
-          x: el.x,
-          y: el.y,
-          width: el.width,
-          height: el.height,
-          asset: el.asset,
-        })),
-      shapeCount: slide.elements.filter((el) => el.type === "shape").length,
-      chartCount: slide.elements.filter((el) => el.type === "chart").length,
-      tableCount: slide.elements.filter((el) => el.type === "table").length,
-      iconCount: slide.elements.filter((el) => el.type === "icon").length,
-      description: describeSlide(slide),
-    };
+    const preview: SlidePreviewSummary = isSvg
+      ? {
+          slideId: slide.id,
+          title: slide.title,
+          svgPage: {
+            sourcePath: slide.visualSource!.sourcePath,
+            sha256: slide.visualSource!.sha256,
+            width: slide.visualSource!.width,
+            height: slide.visualSource!.height,
+            resourceCount: slide.visualSource!.resources.length,
+          },
+          narrative: slide.narrative,
+          designOverride: slide.designOverride,
+          resolvedDesign: {
+            argumentMode: style!.argumentMode,
+            visualStyle: style!.visualStyle,
+            readingMode: style!.readingMode,
+            layoutTokens: style!.layoutTokens,
+            typography: style!.typography,
+          },
+          backgroundVariant: slide.backgroundVariant ?? "default",
+          backgroundCss: style!.background.css,
+          description: describeSlide(slide),
+        }
+      : {
+          slideId: slide.id,
+          title: slide.title,
+          notSvgNative: true,
+          description: describeSlide(slide),
+        };
 
     let thumbnail: SlidePreviewThumbnail | null = null;
     let thumbnailError: string | undefined;

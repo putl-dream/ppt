@@ -43,13 +43,6 @@ export interface PptxPostflightReport {
   warnings: string[];
 }
 
-function xmlText(value: string): string {
-  return value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;");
-}
-
 function countMatches(value: string, expression: RegExp): number {
   return value.match(expression)?.length ?? 0;
 }
@@ -344,27 +337,6 @@ export async function inspectPptxExport(
     const expectedSvgSource = expectedSlide?.visualSource?.kind === "svg"
       ? expectedSlide.visualSource
       : undefined;
-    const expectedChartPrimitives = expectedSvgSource
-      ? 0
-      : (
-          expectedSlide?.elements.reduce((sum, element) => {
-            if (
-              element.type !== "chart"
-              || element.chartType === "bar"
-              || element.chartType === "h-bar"
-            ) return sum;
-            return sum
-              + (element.data.items?.length ?? element.data.labels?.length ?? 0);
-          }, 0) ?? 0
-        );
-    const expectedNativeCharts = expectedSvgSource
-      ? 0
-      : (
-          expectedSlide?.elements.filter((element) =>
-            element.type === "chart"
-            && (element.chartType === "bar" || element.chartType === "h-bar")
-          ).length ?? 0
-        );
 
     let svgSourcePresent = false;
     if (expectedSvgSource) {
@@ -418,29 +390,18 @@ export async function inspectPptxExport(
           `Slide ${index + 1} SVG picture's asvg:svgBlip is not related to its exact SVG source ${expectedSvgSource.sha256.slice(0, 12)}.`,
         );
       }
+    } else if (expectedSlide) {
+      errors.push(
+        `Slide ${index + 1} is not SVG-native; element-IR postflight checks have been removed.`,
+      );
     }
-    const titlePresent = expectedSvgSource
-      ? svgSourcePresent
-      : expectedSlide
-        ? xml.includes(xmlText(expectedSlide.title))
-        : false;
+
+    const titlePresent = svgSourcePresent;
 
     if (editableObjects === 0) {
       errors.push(`Slide ${index + 1} contains no renderable page objects.`);
     }
-    if (!expectedSvgSource && expectedSlide && !titlePresent) {
-      errors.push(`Slide ${index + 1} is missing its title text after export.`);
-    }
-    if (expectedChartPrimitives > 0 && shapes < expectedChartPrimitives) {
-      errors.push(
-        `Slide ${index + 1} exported ${shapes} shape(s), fewer than the ${expectedChartPrimitives} required chart primitives.`,
-      );
-    }
-    if (graphicFrames < expectedNativeCharts) {
-      errors.push(
-        `Slide ${index + 1} exported ${graphicFrames} graphic frame(s), fewer than the ${expectedNativeCharts} required native chart(s).`,
-      );
-    }
+
     slides.push({
       slideNumber: index + 1,
       textRuns,
@@ -448,8 +409,8 @@ export async function inspectPptxExport(
       pictures,
       graphicFrames,
       editableObjects,
-      expectedChartPrimitives,
-      expectedNativeCharts,
+      expectedChartPrimitives: 0,
+      expectedNativeCharts: 0,
       titlePresent,
       svgSourcePresent,
     });
@@ -459,30 +420,12 @@ export async function inspectPptxExport(
     .filter((path) => /^ppt\/media\/[^/]+$/.test(path)).length;
   const expectedImages = presentation.slides.filter(
     (slide) => slide.visualSource?.kind === "svg",
-  ).length + presentation.slides.flatMap((slide) =>
-    slide.visualSource?.kind === "svg" ? [] : slide.elements
-  )
-    .filter((element) => element.type === "image").length;
+  ).length;
   if (expectedImages > 0 && mediaCount === 0) {
-    errors.push("Presentation contains image elements but the PPTX has no media parts.");
-  }
-  if (expectedImages === 0 && mediaCount === 0) {
-    warnings.push("The deck intentionally uses native typography, shapes and data visuals without raster media.");
+    errors.push("Presentation contains SVG slides but the PPTX has no media parts.");
   }
   const chartPartCount = Object.keys(archive.files)
     .filter((path) => /^ppt\/charts\/chart\d+\.xml$/.test(path)).length;
-  const expectedNativeChartCount = presentation.slides.flatMap((slide) =>
-    slide.visualSource?.kind === "svg" ? [] : slide.elements
-  )
-    .filter((element) =>
-      element.type === "chart"
-      && (element.chartType === "bar" || element.chartType === "h-bar")
-    ).length;
-  if (chartPartCount < expectedNativeChartCount) {
-    errors.push(
-      `PPTX contains ${chartPartCount} native chart part(s), fewer than the ${expectedNativeChartCount} required by the Presentation.`,
-    );
-  }
   const notesPartCount = Object.keys(archive.files)
     .filter((path) => /^ppt\/notesSlides\/notesSlide\d+\.xml$/.test(path)).length;
   const expectedNotesCount = presentation.slides.filter((slide) => Boolean(slide.speakerNotes)).length;

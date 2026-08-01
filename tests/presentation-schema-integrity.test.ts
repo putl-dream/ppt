@@ -1,15 +1,16 @@
 import { describe, expect, it } from "vitest";
 
-import { chartDataToSvgString } from "../src/shared/chart-utils";
 import { exportPresentationOptionsSchema } from "../src/shared/ipc";
 import {
-  chartElementSchema,
-  imageElementSchema,
-  tableElementSchema,
-  textElementSchema,
+  createMinimalSvgMarkup,
+  createSvgVisualSource,
+  rasterDataImageSourceSchema,
+  slideSchema,
+  svgPageResourceSchema,
+  svgPageVisualSourceSchema,
 } from "../src/shared/presentation";
 
-describe("presentation element integrity", () => {
+describe("presentation SVG schema integrity", () => {
   it("accepts only supported raster data URLs for export logos", () => {
     expect(exportPresentationOptionsSchema.safeParse({
       logoUrl: "data:image/png;base64,iVBORw0KGgo=",
@@ -27,109 +28,57 @@ describe("presentation element integrity", () => {
       .toBe(true);
   });
 
-  it("rejects empty, mismatched, or ambiguous chart data", () => {
-    const base = {
-      id: "chart",
-      type: "chart" as const,
-      x: 100,
-      y: 180,
-      width: 500,
-      height: 280,
-      chartType: "bar" as const,
+  it("requires a complete SVG visual source with fixed page dimensions", () => {
+    const markup = createMinimalSvgMarkup("Schema test");
+    const visualSource = createSvgVisualSource({ markup });
+
+    expect(svgPageVisualSourceSchema.safeParse(visualSource).success).toBe(true);
+    expect(svgPageVisualSourceSchema.safeParse({
+      ...visualSource,
+      width: 1920,
+    }).success).toBe(false);
+    expect(svgPageVisualSourceSchema.safeParse({
+      ...visualSource,
+      kind: "html",
+    }).success).toBe(false);
+    expect(svgPageVisualSourceSchema.safeParse({
+      ...visualSource,
+      markup: "   ",
+    }).success).toBe(false);
+  });
+
+  it("validates embedded SVG raster resources", () => {
+    expect(svgPageResourceSchema.safeParse({
+      sourcePath: "assets/photo.png",
+      mimeType: "image/png",
+      byteSize: 1024,
+      sha256: "a".repeat(64),
+    }).success).toBe(true);
+    expect(svgPageResourceSchema.safeParse({
+      sourcePath: "assets/photo.png",
+      mimeType: "image/svg+xml",
+      byteSize: 1024,
+      sha256: "a".repeat(64),
+    }).success).toBe(false);
+  });
+
+  it("rejects legacy element-IR fields on slides", () => {
+    const slide = {
+      id: "slide-1",
+      title: "Legacy",
+      visualSource: createSvgVisualSource(),
+      elements: [{ id: "text-1", type: "text" }],
     };
 
-    expect(chartElementSchema.safeParse({ ...base, data: {} }).success).toBe(false);
-    expect(chartElementSchema.safeParse({
-      ...base,
-      data: { labels: ["A", "B"], values: [1] },
-    }).success).toBe(false);
-    expect(chartElementSchema.safeParse({
-      ...base,
-      data: {
-        items: [{ label: "A", value: 1 }],
-        labels: ["A"],
-        values: [1],
-      },
-    }).success).toBe(false);
+    expect(slideSchema.safeParse(slide).success).toBe(false);
   });
 
-  it("renders every KPI item without fabricated defaults or label slicing", () => {
-    const svg = chartDataToSvgString({
-      id: "chart",
-      type: "chart",
-      x: 100,
-      y: 180,
-      width: 500,
-      height: 280,
-      chartType: "kpi-tower",
-      chartStyle: "dashboard",
-      unit: "%",
-      highlightIndex: 4,
-      data: {
-        items: [
-          { label: "First metric", value: 10 },
-          { label: "Second metric", value: 20 },
-          { label: "Third metric", value: 30 },
-          { label: "Fourth metric", value: 40 },
-          { label: "Fifth metric with full label", value: 50 },
-        ],
-      },
-    });
-
-    expect(svg).toContain("First metric");
-    expect(svg).toContain("Fifth metric with full label");
-    expect(svg).toContain("50%");
-    expect(svg).not.toContain("Item 5");
-  });
-
-  it("does not fabricate chart values when legacy invalid data reaches the renderer", () => {
-    const svg = chartDataToSvgString({
-      id: "chart",
-      type: "chart",
-      x: 100,
-      y: 180,
-      width: 500,
-      height: 280,
-      chartType: "bar",
-      data: {},
-    });
-
-    expect(svg).toContain("No chart data");
-    expect(svg).not.toContain(">50<");
-    expect(svg).not.toContain(">75<");
-  });
-
-  it("rejects unsafe colors, image schemes, and ragged tables", () => {
-    expect(textElementSchema.safeParse({
-      id: "text",
-      type: "text",
-      x: 0,
-      y: 0,
-      width: 100,
-      height: 40,
-      text: "Unsafe",
-      fontSize: 20,
-      color: "red;position:fixed",
-    }).success).toBe(false);
-
-    expect(imageElementSchema.safeParse({
-      id: "image",
-      type: "image",
-      x: 0,
-      y: 0,
-      width: 100,
-      height: 100,
-      url: "javascript:alert(1)",
-    }).success).toBe(false);
-
-    expect(tableElementSchema.safeParse({
-      id: "table",
-      type: "table",
-      x: 0,
-      y: 0,
-      width: 300,
-      height: 200,
-      rows: [["A", "B"], ["1"]],
-    }).success).toBe(false);
+  it("rejects mismatched raster data URL signatures", () => {
+    expect(rasterDataImageSourceSchema.safeParse(
+      "data:image/png;base64,PHN2Zz48L3N2Zz4=",
+    ).success).toBe(false);
+    expect(rasterDataImageSourceSchema.safeParse(
+      "data:image/jpeg;base64,iVBORw0KGgo=",
+    ).success).toBe(false);
   });
 });

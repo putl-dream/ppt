@@ -110,7 +110,6 @@ export const previewSvgPageTool: ToolDefinition<
     const slide: Slide = {
       id: `svg-preview-${page.sha256.slice(0, 16)}`,
       title,
-      elements: [],
       visualSource: {
         kind: "svg",
         markup: page.markup,

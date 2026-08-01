@@ -34,7 +34,7 @@ const approvalEvent = {
   emittedAt: "2026-07-25T00:00:00.000Z",
   kind: "review.command-proposal" as const,
   category: "review" as const,
-  source: { kind: "tool" as const, toolName: "SubmitCommands" },
+  source: { kind: "tool" as const, toolName: "SubmitSvgDeck" },
   scope: {
     sessionId: "session-1",
     runId: "run-1",

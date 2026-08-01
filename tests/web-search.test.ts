@@ -163,8 +163,6 @@ describe("web search", () => {
 
     const presentation = createStarterPresentation();
     const slideId = presentation.slides[0].id;
-    presentation.slides[0].layout = "case";
-    presentation.slides[0].grammarVariant = "evidence";
     const context = {
       presentation,
       selectedElementIds: [],
@@ -190,13 +188,11 @@ describe("web search", () => {
       maxImages: 3,
     }, context);
 
-    expect(output.slot).toBe("side");
     expect(output.candidates[0]).toMatchObject({
       provider: "Pexels",
       sourcePageUrl: "https://www.pexels.com/photo/factory-123",
       assetArgs: {
         slideId,
-        slot: "side",
         aspectRatio: "auto",
         sourcePageUrl: "https://www.pexels.com/photo/factory-123",
       },

@@ -236,12 +236,11 @@ describe("svg-page", () => {
     expect(result.issues.at(-1)?.code).toBe("validation-limit");
   });
 
-  it("preserves SVG bytes in schema parsing and forbids mixed visual sources", () => {
+  it("preserves SVG bytes in schema parsing and rejects legacy element fields", () => {
     const markup = `\n${page("<rect width=\"1280\" height=\"720\"/>")}\n`;
     const baseSlide = {
       id: "svg-schema",
       title: "Schema",
-      elements: [],
       visualSource: {
         kind: "svg" as const,
         markup,
@@ -256,16 +255,7 @@ describe("svg-page", () => {
     expect(slideSchema.parse(baseSlide).visualSource?.markup).toBe(markup);
     expect(slideSchema.safeParse({
       ...baseSlide,
-      elements: [{
-        id: "legacy",
-        type: "text",
-        x: 0,
-        y: 0,
-        width: 100,
-        height: 40,
-        text: "legacy",
-        fontSize: 20,
-      }],
+      elements: [],
     }).success).toBe(false);
   });
 

@@ -486,38 +486,21 @@ describe("SQLite session store", () => {
     expect(() => sessionChatMessageSchema.parse(durable)).not.toThrow();
   });
 
-  it("persists content-only terminal copy without asking for a layout choice", async () => {
+  it("persists SVG terminal copy without asking for a layout choice", async () => {
     const { store } = await createStore();
-    const created = await store.createSession({ title: "Layout choice" });
+    const created = await store.createSession({ title: "SVG deck" });
     const sessionId = created.activeSession!.session.id;
     const terminalResult = {
       status: "completed" as const,
-      presentation: {
-        ...created.activeSession!.presentation,
-        slides: [{
-          id: "slide-needs-layout",
-          title: "核心观点",
-          layout: "concept" as const,
-          elements: [{
-            id: "body",
-            type: "text" as const,
-            x: 0,
-            y: 0,
-            width: 400,
-            height: 80,
-            text: "需要选择版式的正文",
-            fontSize: 24,
-          }],
-        }],
-      },
+      presentation: created.activeSession!.presentation,
     };
 
-    await store.finalizeAgentRunMessage(sessionId, "run-layout", terminalResult);
+    await store.finalizeAgentRunMessage(sessionId, "run-svg", terminalResult);
 
     expect(store.getSession(sessionId).messages.at(-1)?.content)
       .toBe(formatTerminalAgentRunContent(terminalResult));
     expect(store.getSession(sessionId).messages.at(-1)?.content)
-      .toContain("1 页待设计");
+      .toContain("已成功应用演示文稿更新");
     expect(store.getSession(sessionId).messages.at(-1)?.content)
       .not.toContain("请选择设计方向");
   });

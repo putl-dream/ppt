@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { mkdir } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { exportToPptx } from "../src/main/ppt-exporter";
@@ -7,67 +8,32 @@ import {
 } from "../src/design-system";
 import type { Presentation, Slide } from "../src/shared/presentation";
 
-const TINY_PNG_DATA_URL =
-  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
-
-function visualSlide(
+function svgSlide(
   id: string,
   title: string,
   designOverride: SlideDesignOverride,
-  chartType: "bar" | "h-bar" | "timeline" | "kpi-tower",
+  accent: string,
 ): Slide {
+  const markup =
+    `<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">`
+    + `<rect width="1280" height="720" fill="${accent}"/>`
+    + `<text x="80" y="120" font-family="sans-serif" font-size="40" fill="#ffffff">${title}</text>`
+    + `</svg>`;
   return {
     id,
     title,
     layout: "concept",
     designOverride,
-    elements: [
-      {
-        id: `${id}-lead`,
-        type: "text",
-        x: 120,
-        y: 170,
-        width: 440,
-        height: 110,
-        text: "One contract\nThree renderers",
-        fontSize: 28,
-        bold: true,
-      },
-      {
-        id: `${id}-body`,
-        type: "text",
-        x: 120,
-        y: 310,
-        width: 440,
-        height: 120,
-        text: "Colors, typography, background, image treatment and chart defaults resolve once per slide.",
-        fontSize: 20,
-      },
-      {
-        id: `${id}-image`,
-        type: "image",
-        x: 120,
-        y: 470,
-        width: 440,
-        height: 120,
-        url: TINY_PNG_DATA_URL,
-        borderRadius: 0,
-        asset: { description: "Image treatment fixture" },
-      },
-      {
-        id: `${id}-chart`,
-        type: "chart",
-        x: 650,
-        y: 180,
-        width: 470,
-        height: 380,
-        chartType,
-        data: {
-          labels: ["Research", "Story", "Visual", "Export"],
-          values: [62, 78, 91, 86],
-        },
-      },
-    ],
+    elements: [],
+    visualSource: {
+      kind: "svg",
+      markup,
+      width: 1280,
+      height: 720,
+      sha256: createHash("sha256").update(markup, "utf8").digest("hex"),
+      sourcePath: `slides/svg/${id}.svg`,
+      resources: [],
+    },
   };
 }
 
@@ -77,7 +43,7 @@ const presentation: Presentation = {
   revision: 1,
   designSystem: DEFAULT_DESIGN_SYSTEM,
   slides: [
-    visualSlide(
+    svgSlide(
       "warm-grid",
       "Warm paper · grid · report",
       {
@@ -88,9 +54,9 @@ const presentation: Presentation = {
         imageTreatment: "framed",
         chartStyle: "report",
       },
-      "h-bar",
+      "#92400e",
     ),
-    visualSlide(
+    svgSlide(
       "tech-dashboard",
       "Tech dark · dashboard",
       {
@@ -101,9 +67,9 @@ const presentation: Presentation = {
         imageTreatment: "plain",
         chartStyle: "dashboard",
       },
-      "kpi-tower",
+      "#0f172a",
     ),
-    visualSlide(
+    svgSlide(
       "blue-editorial",
       "Blue gradient · editorial",
       {
@@ -114,7 +80,7 @@ const presentation: Presentation = {
         imageTreatment: "masked",
         chartStyle: "editorial",
       },
-      "timeline",
+      "#1d4ed8",
     ),
   ],
 };

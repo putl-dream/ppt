@@ -113,7 +113,7 @@ export const CARD_PRESENTATION_POLICIES: Record<DisplayEventKind, CardPresentati
 /** Tool bindings are semantic defaults, not a one-tool/one-card restriction. */
 export const TOOL_DISPLAY_BINDINGS: Readonly<Record<string, readonly DisplayEventKind[]>> = {
   AskUser: ["interaction.question-requested"],
-  SubmitCommands: ["review.command-proposal"],
+  SubmitSvgDeck: ["review.command-proposal"],
   TaskCreate: ["progress.task-list-updated"],
   TaskUpdate: ["progress.task-list-updated"],
   TaskClaim: ["progress.task-list-updated"],

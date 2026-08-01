@@ -36,7 +36,7 @@ export const readPresentationSnapshotTool: ToolDefinition<
   { presentation: Presentation; visualAssetAudit: PresentationVisualAssetAudit }
 > = {
   name: "ReadPresentationSnapshot",
-  description: "读取整套演示文稿，并返回缺图、图片槽位与重复图片审计；有缺图项时按 nextAction 主动搜图。",
+  description: "读取整套演示文稿，并返回 SVG 页面摘要与视觉素材审计；有缺图项时按 nextAction 主动搜图。",
   category: "core",
   loadPolicy: "core",
   inputSchema: readPresentationSnapshotSchema,
@@ -64,13 +64,7 @@ export const readPresentationSnapshotTool: ToolDefinition<
               readInstruction: `Use ReadFile("${slide.visualSource.sourcePath}") to inspect or edit the author source.`,
             }
           : undefined,
-        legacy: slide.visualSource
-          ? undefined
-          : {
-              layout: slide.layout,
-              grammarVariant: slide.grammarVariant,
-              elementCount: slide.elements.length,
-            },
+        notSvgNative: slide.visualSource?.kind === "svg" ? undefined : true,
       })),
     },
     visualAssetAudit: result.visualAssetAudit,

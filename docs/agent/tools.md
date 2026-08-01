@@ -190,7 +190,7 @@ Presentation 写入仍有独立的 `CommitGate`。允许调用 `SubmitSvgDeck` �
 应用所有命令。产品作者路径仅为 `PreviewSvgPage` → `SubmitSvgDeck`。
 
 Grammar / 命令轨作者工具（`ExecuteLayoutPlan`、`PreviewCommands`、`SubmitCommands`、
-`InsertSlideImage`、beautify/layout 等）已从默认注册表移除；产品作者路径仅为
+`InsertSlideImage`、beautify/layout 等）的实现与默认注册表均已移除；产品作者路径仅为
 SVG-native，不得再发现或调用这些工具。
 
 ## 9. Skill 与工具

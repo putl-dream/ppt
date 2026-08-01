@@ -1,12 +1,10 @@
-import type { TextElement } from "./presentation";
+export const FONT_FAMILIES = ["serif", "sans", "mono"] as const;
+export type FontFamily = (typeof FONT_FAMILIES)[number];
 
 export const TEXT_ROLES = ["kicker", "body", "metric", "caption"] as const;
 export type TextRole = (typeof TEXT_ROLES)[number];
 
-export const FONT_FAMILIES = ["serif", "sans", "mono"] as const;
-export type FontFamily = (typeof FONT_FAMILIES)[number];
-
-/** Resolve element font from explicit fontFamily, textRole, and resolved deck typography. */
+/** Resolve font from explicit fontFamily, textRole, and resolved deck typography. */
 export function resolveFontFamily(
   fontFamily: FontFamily | undefined,
   textRole: TextRole | undefined,
@@ -25,10 +23,6 @@ export function resolveFontFamily(
   }
 
   return fallback;
-}
-
-export function resolveElementFontFamily(element: TextElement, fallback: FontFamily = "sans"): FontFamily {
-  return resolveFontFamily(element.fontFamily, element.textRole, fallback);
 }
 
 export function fontFamilyToCss(family: FontFamily): string {

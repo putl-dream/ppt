@@ -1,5 +1,12 @@
-import type { ShapeElement } from "./presentation";
 import type { BackgroundGradient } from "@design-system";
+
+export type CardShadow = {
+  color: string;
+  blur: number;
+  offsetX: number;
+  offsetY: number;
+  opacity: number;
+};
 
 /** Shared visual vocabulary tokens for layouts and style strategies. */
 export const VISUAL_TOKENS = {
@@ -63,7 +70,7 @@ export const VISUAL_TOKENS = {
 
 export type ElevationLevel = keyof typeof VISUAL_TOKENS.elevation;
 
-export function cardShadow(level: ElevationLevel = "md"): ShapeElement["shadow"] {
+export function cardShadow(level: ElevationLevel = "md"): CardShadow | undefined {
   return VISUAL_TOKENS.elevation[level];
 }
 

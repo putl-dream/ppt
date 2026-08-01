@@ -3,7 +3,6 @@ import { createPortal } from "react-dom";
 import type { Presentation, Slide } from "@shared/presentation";
 import { hasUnverifiedCommercialAssets } from "@shared/asset-license";
 import { formatPublicErrorMessage } from "@shared/agent-activity-display";
-import { resolveChromeTitleFontSize, resolveSlideStyle } from "@design-system";
 import { utf8ToBase64 } from "@shared/base64";
 import { useArtifactCardManager } from "../cards/display-card-managers";
 import {
@@ -11,7 +10,6 @@ import {
   selectLatestSlidePreviews,
 } from "../cards/select-slide-previews";
 import { confirmSvgExportExpectation } from "../app/presentation/exportExpectations";
-import { SlideElementRenderer } from "./SlideElementRenderer";
 import { SlidePreviewGallery } from "./SlidePreviewGallery";
 import {
   CheckIcon,
@@ -54,29 +52,29 @@ function SvgSlideSurface({ slide }: { slide: Slide }) {
   );
 }
 
+function NonSvgSlidePlaceholder({ slide }: { slide: Slide }) {
+  return (
+    <div className="slide-non-svg-placeholder">
+      <span>{slide.title}</span>
+      <small>此页非 SVG 原生，无法预览</small>
+    </div>
+  );
+}
+
 interface MirrorSlideFrameProps {
-  presentation: Presentation;
   slide: Slide;
-  slideIndex: number;
-  logoUrl: string | null;
   fallbackWidth: number;
   className?: string;
 }
 
 function MirrorSlideFrame({
-  presentation,
   slide,
-  slideIndex,
-  logoUrl,
   fallbackWidth,
   className,
 }: MirrorSlideFrameProps) {
   const frameRef = useRef<HTMLDivElement>(null);
   const [frameWidth, setFrameWidth] = useState(fallbackWidth);
   const isSvgSlide = slide.visualSource?.kind === "svg";
-  const slideStyle = isSvgSlide
-    ? undefined
-    : resolveSlideStyle(presentation.designSystem, slide);
 
   useEffect(() => {
     const frame = frameRef.current;
@@ -105,62 +103,17 @@ function MirrorSlideFrame({
         style={{
           width: 1280,
           height: 720,
-          background: isSvgSlide ? "#ffffff" : slideStyle?.background.css,
-          fontFamily: slideStyle?.typography.body.css,
+          background: "#ffffff",
           transform: `scale(${frameWidth / 1280})`,
           transformOrigin: "top left",
           position: "absolute",
           inset: 0,
-          border: isSvgSlide ? undefined : `1px solid ${slideStyle?.colors.cardStroke}`,
         }}
       >
         {isSvgSlide ? (
           <SvgSlideSurface slide={slide} />
         ) : (
-          <>
-            {logoUrl && (
-              <div className="slide-brand-logo">
-                <img src={logoUrl} alt="Logo" />
-              </div>
-            )}
-
-            <div className="slide-page-number" style={{ color: slideStyle?.colors.body }}>
-              {slideIndex + 1}
-            </div>
-
-            {slide.layout !== "cover" && slide.layout !== "section" && (
-              <div
-                className="slide-header-text"
-                style={{
-                  color: slideStyle?.colors.title,
-                  borderBottom: `2px solid ${slideStyle?.colors.accent}`,
-                  fontSize: resolveChromeTitleFontSize(slide.title),
-                }}
-              >
-                {slide.title}
-              </div>
-            )}
-
-            {slide.elements.map((element) => (
-              <div
-                key={element.id}
-                style={{
-                  position: "absolute",
-                  left: element.x,
-                  top: element.y,
-                  width: element.width,
-                  height: element.height,
-                  display: "flex",
-                  alignItems: "center",
-                }}
-              >
-                <SlideElementRenderer
-                  element={element}
-                  style={slideStyle!}
-                />
-              </div>
-            ))}
-          </>
+          <NonSvgSlidePlaceholder slide={slide} />
         )}
       </div>
     </div>
@@ -294,11 +247,6 @@ export const PPTMirror: React.FC<PPTMirrorProps> = ({
     }
   }, [fullscreenIndex, isFullscreen]);
 
-  const fullscreenSlide = slides[fullscreenIndex];
-  const fullscreenSystem = fullscreenSlide && fullscreenSlide.visualSource?.kind !== "svg"
-    ? resolveSlideStyle(presentation.designSystem, fullscreenSlide)
-    : undefined;
-
   const handleFullscreenOpen = () => {
     const idx = slides.findIndex((s) => s.id === selectedSlideId);
     setFullscreenIndex(idx >= 0 ? idx : 0);
@@ -323,10 +271,7 @@ export const PPTMirror: React.FC<PPTMirrorProps> = ({
     if (!slide) return null;
     return (
       <MirrorSlideFrame
-        presentation={presentation}
         slide={slide}
-        slideIndex={index}
-        logoUrl={logoUrl}
         fallbackWidth={960}
       />
     );
@@ -502,10 +447,7 @@ export const PPTMirror: React.FC<PPTMirrorProps> = ({
                   aria-label={`放大查看第 ${Math.max(0, selectedSlideIndex) + 1} 页：${selectedSlide.title}`}
                 >
                   <MirrorSlideFrame
-                    presentation={presentation}
                     slide={selectedSlide}
-                    slideIndex={Math.max(0, selectedSlideIndex)}
-                    logoUrl={logoUrl}
                     fallbackWidth={isExpanded ? 960 : 320}
                     className="mirror-focus-frame"
                   />
@@ -534,10 +476,7 @@ export const PPTMirror: React.FC<PPTMirrorProps> = ({
                     aria-current={isSelected ? "page" : undefined}
                   >
                     <MirrorSlideFrame
-                      presentation={presentation}
                       slide={slide}
-                      slideIndex={index}
-                      logoUrl={logoUrl}
                       fallbackWidth={isExpanded ? 220 : 150}
                       className="mirror-slide-wrapper"
                     />
@@ -607,69 +546,18 @@ export const PPTMirror: React.FC<PPTMirrorProps> = ({
                   style={{
                     width: 1280,
                     height: 720,
-                    background: fullscreenSystem?.background.css ?? "#ffffff",
-                    fontFamily: fullscreenSystem?.typography.body.css,
+                    background: "#ffffff",
                     boxShadow: "var(--slideshow-slide-shadow)",
                     borderRadius: 8,
                     position: "relative",
                     transform: `scale(${Math.min(window.innerWidth / 1380, window.innerHeight / 820)})`,
                     transformOrigin: "center center",
-                    border: fullscreenSystem
-                      ? `1px solid ${fullscreenSystem.colors.cardStroke}`
-                      : undefined,
                   }}
                 >
                   {slides[fullscreenIndex].visualSource?.kind === "svg" ? (
                     <SvgSlideSurface slide={slides[fullscreenIndex]} />
                   ) : (
-                    <>
-                      {/* Logo */}
-                      {logoUrl && (
-                        <div className="slide-brand-logo">
-                          <img src={logoUrl} alt="Logo" />
-                        </div>
-                      )}
-
-                      {/* 页码 */}
-                      <div className="slide-page-number" style={{ color: fullscreenSystem?.colors.body }}>
-                        {fullscreenIndex + 1}
-                      </div>
-
-                      {/* 标题 */}
-                      {slides[fullscreenIndex].layout !== "cover" && slides[fullscreenIndex].layout !== "section" && (
-                        <div
-                          className="slide-header-text"
-                          style={{
-                            color: fullscreenSystem?.colors.title,
-                            borderBottom: `2px solid ${fullscreenSystem?.colors.accent}`,
-                            fontSize: resolveChromeTitleFontSize(slides[fullscreenIndex].title),
-                          }}
-                        >
-                          {slides[fullscreenIndex].title}
-                        </div>
-                      )}
-
-                      {/* 元素 */}
-                      {slides[fullscreenIndex].elements.map((element) => (
-                        <div
-                          key={element.id}
-                          style={{
-                            position: "absolute",
-                            left: element.x,
-                            top: element.y,
-                            width: element.width,
-                            height: element.height,
-                            display: "flex",
-                            alignItems: "center",
-                          }}
-                        >
-                          <SlideElementRenderer
-                            element={element}
-                            style={fullscreenSystem!}
-                          />
-                        </div>
-                      ))}
-                    </>
+                    <NonSvgSlidePlaceholder slide={slides[fullscreenIndex]} />
                   )}
                 </div>
               ) : (

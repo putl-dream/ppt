@@ -67,7 +67,7 @@ export function resolvePromptStage(input: PromptStageResolveInput): PromptStage 
 
   const slideCount = input.presentation.slides?.length ?? 0;
   const hasUnstyledSlides = input.presentation.slides.some(
-    (slide) => !slide.visualSource && !slide.layout,
+    (slide) => slide.visualSource?.kind !== "svg",
   );
 
   if (hasUnstyledSlides) {

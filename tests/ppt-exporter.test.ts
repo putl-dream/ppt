@@ -1,20 +1,27 @@
-import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { pathToFileURL } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import { exportToPptx } from "../src/main/ppt-exporter";
 import { CommandBus } from "../src/shared/commands";
-import { applyLayout } from "../src/shared/layout";
-import type { Presentation, Slide } from "../src/shared/presentation";
-import { createStarterPresentation } from "../src/shared/presentation";
+import {
+  createStarterPresentation,
+  createSvgTestSlide,
+  type Presentation,
+  type SlideNarrative,
+} from "../src/shared/presentation";
 import type { ExportPresentationOptions } from "../src/shared/ipc";
-import { TEST_DESIGN_SYSTEM, testDesignSystem, testSlideStyle } from "./design-engine-test-utils";
-
-const TINY_PNG_DATA_URL =
-  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+import { testDesignSystem } from "./design-engine-test-utils";
 
 const defaultExportOptions: ExportPresentationOptions = {};
+
+const NARRATIVE: SlideNarrative = {
+  role: "cover",
+  coreMessage: "Export smoke test",
+  audienceMove: "Review the deck",
+  rhythm: "anchor",
+  layoutIntent: "One full-page SVG slide.",
+};
 
 let tempDirs: string[] = [];
 
@@ -46,86 +53,45 @@ async function assertValidPptxFile(filePath: string, expectedSlideCount: number)
   expect(new Set(slideParts).size).toBe(expectedSlideCount);
 }
 
-function createRichPresentation(): Presentation {
-  const slideOneId = crypto.randomUUID();
-  const slideTwoId = crypto.randomUUID();
+function exportReadyPresentation(): Presentation {
+  const presentation = createStarterPresentation();
+  presentation.slides[0].narrative = NARRATIVE;
+  return presentation;
+}
 
+function createMultiSlidePresentation(): Presentation {
   return {
     id: crypto.randomUUID(),
-    title: "PPT Export Smoke Test",
+    title: "SVG Export Smoke Test",
     revision: 3,
     designSystem: testDesignSystem({ visualStyle: "dark-tech", colorScheme: "tech-dark" }),
     slides: [
-      {
-        id: slideOneId,
+      createSvgTestSlide({
         title: "Opening Slide",
-        layout: "cover",
-        elements: [
-          {
-            id: crypto.randomUUID(),
-            type: "text",
-            x: 120,
-            y: 220,
-            width: 1040,
-            height: 120,
-            text: "Agent PPT Export Test",
-            fontSize: 48,
-            bold: true,
-            color: "#f8fafc",
-            align: "center",
-          },
-          {
-            id: crypto.randomUUID(),
-            type: "shape",
-            x: 120,
-            y: 380,
-            width: 1040,
-            height: 8,
-            shapeType: "rectangle",
-            fillColor: "#10b981",
-            strokeColor: "#10b981",
-          },
-        ],
-      },
-      {
-        id: slideTwoId,
+        markup: [
+          '<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">',
+          '<rect width="1280" height="720" fill="#0f172a"/>',
+          '<text x="640" y="360" fill="#f8fafc" font-size="48" text-anchor="middle">Opening</text>',
+          "</svg>",
+        ].join(""),
+        narrative: NARRATIVE,
+      }),
+      createSvgTestSlide({
         title: "Content Slide",
-        layout: "concept",
-        elements: [
-          {
-            id: crypto.randomUUID(),
-            type: "text",
-            x: 120,
-            y: 180,
-            width: 640,
-            height: 320,
-            text: "- Bullet one\n- Bullet two\n- Bullet three",
-            fontSize: 28,
-            color: "#cbd5e1",
-          },
-          {
-            id: crypto.randomUUID(),
-            type: "image",
-            x: 820,
-            y: 180,
-            width: 340,
-            height: 240,
-            url: TINY_PNG_DATA_URL,
-            borderRadius: 0,
-          },
-          {
-            id: crypto.randomUUID(),
-            type: "shape",
-            x: 860,
-            y: 460,
-            width: 120,
-            height: 120,
-            shapeType: "circle",
-            fillColor: "#38bdf8",
-            strokeColor: "#0ea5e9",
-          },
-        ],
-      },
+        markup: [
+          '<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">',
+          '<rect width="1280" height="720" fill="#111827"/>',
+          '<text x="120" y="180" fill="#e5e7eb" font-size="36">Evidence page</text>',
+          "</svg>",
+        ].join(""),
+        narrative: {
+          role: "evidence",
+          coreMessage: "Supporting detail",
+          audienceMove: "Build conviction",
+          rhythm: "dense",
+          layoutIntent: "Layer evidence with a clear reading path.",
+        },
+      }),
     ],
   };
 }
@@ -133,81 +99,42 @@ function createRichPresentation(): Presentation {
 describe("ppt-exporter", () => {
   it("exports the starter presentation to a valid pptx file", async () => {
     const filePath = await createTempPptxPath("ppt-export-starter-");
-    const presentation = createStarterPresentation();
-
-    await exportToPptx(presentation, defaultExportOptions, filePath);
-
+    await exportToPptx(exportReadyPresentation(), defaultExportOptions, filePath);
     await assertValidPptxFile(filePath, 1);
   });
 
-  it("exports text, image, and shape elements across multiple slides", async () => {
-    const filePath = await createTempPptxPath("ppt-export-rich-");
-    const presentation = createRichPresentation();
-
-    await exportToPptx(presentation, defaultExportOptions, filePath);
-
+  it("exports multiple SVG pages across slides", async () => {
+    const filePath = await createTempPptxPath("ppt-export-multi-svg-");
+    await exportToPptx(createMultiSlidePresentation(), defaultExportOptions, filePath);
     await assertValidPptxFile(filePath, 2);
   });
 
-  it("exports a localized file URL with spaces and native contain sizing", async () => {
-    const dir = await mkdtemp(join(tmpdir(), "ppt export localized image-"));
-    tempDirs.push(dir);
-    const assetDir = join(dir, "asset folder");
-    await mkdir(assetDir, { recursive: true });
-    const imagePath = join(assetDir, "evidence image.png");
-    await writeFile(imagePath, Buffer.from(TINY_PNG_DATA_URL.split(",")[1]!, "base64"));
-    const filePath = join(dir, "export.pptx");
-    const presentation: Presentation = {
-      id: crypto.randomUUID(),
-      title: "Localized image export",
-      revision: 1,
-      designSystem: TEST_DESIGN_SYSTEM,
-      slides: [{
-        id: crypto.randomUUID(),
-        title: "Evidence",
-        layout: "case",
-        elements: [{
-          id: crypto.randomUUID(),
-          type: "image",
-          x: 760,
-          y: 180,
-          width: 360,
-          height: 320,
-          url: pathToFileURL(imagePath).toString(),
-          borderRadius: 0,
-          objectFit: "contain",
-          asset: { description: "Localized evidence image" },
-        }],
-      }],
-    };
+  it("exports speaker notes for SVG pages", async () => {
+    const filePath = await createTempPptxPath("ppt-export-notes-");
+    const presentation = exportReadyPresentation();
+    presentation.slides[0].speakerNotes = "Explain the opening and ask for approval.";
 
     await exportToPptx(presentation, defaultExportOptions, filePath);
     await assertValidPptxFile(filePath, 1);
+
+    const archiveText = (await readFile(filePath)).toString("latin1");
+    expect(archiveText).toContain("ppt/notesSlides/notesSlide1.xml");
   });
 
-  it("fails instead of silently exporting a deck with a missing image", async () => {
-    const filePath = await createTempPptxPath("ppt-export-missing-image-");
-    const presentation = createStarterPresentation();
-    presentation.slides[0].elements.push({
-      id: "missing-image",
-      type: "image",
-      x: 760,
-      y: 180,
-      width: 360,
-      height: 320,
-      url: pathToFileURL(join(tempDirs[0], "missing.png")).toString(),
-      borderRadius: 0,
-    });
+  it("rejects a slide without SVG visualSource", async () => {
+    const filePath = await createTempPptxPath("ppt-export-non-svg-");
+    const presentation = exportReadyPresentation();
+    (presentation.slides[0] as { visualSource?: unknown }).visualSource = undefined;
 
     await expect(exportToPptx(
       presentation,
       defaultExportOptions,
       filePath,
-    )).rejects.toThrow("Unable to export image");
+    )).rejects.toThrow("not SVG-native");
   });
 
-  it("exports a presentation built through CommandBus and layout commands", async () => {
-    const bus = new CommandBus(createStarterPresentation());
+  it("exports a presentation built through CommandBus SVG commands", async () => {
+    const bus = new CommandBus(exportReadyPresentation());
     const firstSlideId = bus.getSnapshot().slides[0].id;
 
     bus.execute({
@@ -224,144 +151,30 @@ describe("ppt-exporter", () => {
       id: crypto.randomUUID(),
       type: "add-slide",
       index: 1,
-      slide: {
-        id: crypto.randomUUID(),
+      slide: createSvgTestSlide({
         title: "Generated Slide",
-        elements: [
-          {
-            id: crypto.randomUUID(),
-            type: "text",
-            x: 120,
-            y: 220,
-            width: 1040,
-            height: 200,
-            text: "Created by PresentationCommand pipeline",
-            fontSize: 32,
-          },
-        ],
-      },
+        narrative: {
+          role: "summary",
+          coreMessage: "Created by PresentationCommand pipeline",
+          audienceMove: "Confirm next steps",
+          rhythm: "breathing",
+          layoutIntent: "Close with one clear action.",
+        },
+      }),
     });
     bus.execute({
       id: crypto.randomUUID(),
-      type: "add-element",
+      type: "set-slide-title",
       slideId: firstSlideId,
-      element: {
-        id: crypto.randomUUID(),
-        type: "text",
-        x: 120,
-        y: 220,
-        width: 1040,
-        height: 200,
-        text: "Key takeaway from the deck",
-        fontSize: 24,
-      },
-    });
-    bus.execute({
-      id: crypto.randomUUID(),
-      type: "update-slide-layout",
-      slideId: firstSlideId,
-      layout: "summary",
+      title: "Updated opening",
     });
 
     const presentation = bus.getSnapshot();
     expect(presentation.slides).toHaveLength(2);
-    expect(presentation.slides[0].elements.length).toBeGreaterThan(0);
+    expect(presentation.slides.every((slide) => slide.visualSource.kind === "svg")).toBe(true);
 
     const filePath = await createTempPptxPath("ppt-export-command-bus-");
-    await exportToPptx(
-      presentation,
-      {},
-      filePath,
-    );
-
+    await exportToPptx(presentation, {}, filePath);
     await assertValidPptxFile(filePath, 2);
-  });
-
-  it("keeps layout-generated slide content exportable", async () => {
-    const slideId = crypto.randomUUID();
-    const presentation: Presentation = {
-      id: crypto.randomUUID(),
-      title: "Layout Export Test",
-      revision: 0,
-      designSystem: testDesignSystem({ visualStyle: "editorial", colorScheme: "warm-paper" }),
-      slides: [
-        (() => {
-          const base: Slide = {
-            id: slideId,
-            title: "Architecture",
-            elements: [
-              {
-                id: crypto.randomUUID(),
-                type: "text",
-                x: 0,
-                y: 0,
-                width: 100,
-                height: 100,
-                text: "Legacy body",
-                fontSize: 24,
-              },
-            ],
-          };
-          return applyLayout(base, "architecture", testSlideStyle(base, {
-            visualStyle: "editorial",
-            colorScheme: "warm-paper",
-          }));
-        })(),
-      ],
-    };
-
-    expect(presentation.slides[0].elements.length).toBeGreaterThan(1);
-
-    const filePath = await createTempPptxPath("ppt-export-layout-");
-    await exportToPptx(
-      presentation,
-      {},
-      filePath,
-    );
-
-    await assertValidPptxFile(filePath, 1);
-  });
-
-  it("exports resolved grid, framed image and report chart treatments", async () => {
-    const filePath = await createTempPptxPath("ppt-export-design-system-");
-    const presentation: Presentation = {
-      id: crypto.randomUUID(),
-      title: "Resolved design system",
-      revision: 1,
-      designSystem: testDesignSystem({
-        visualStyle: "blueprint",
-        colorScheme: "soft-academic",
-      }),
-      slides: [{
-        id: crypto.randomUUID(),
-        title: "Visual contract",
-        layout: "concept",
-        elements: [
-          {
-            id: crypto.randomUUID(),
-            type: "image",
-            x: 120,
-            y: 180,
-            width: 400,
-            height: 260,
-            url: TINY_PNG_DATA_URL,
-            borderRadius: 0,
-          },
-          {
-            id: crypto.randomUUID(),
-            type: "chart",
-            x: 620,
-            y: 180,
-            width: 500,
-            height: 260,
-            chartType: "kpi-tower",
-            data: { labels: ["A", "B"], values: [42, 75] },
-          },
-        ],
-      }],
-    };
-
-    await exportToPptx(presentation, defaultExportOptions, filePath);
-    await assertValidPptxFile(filePath, 1);
   });
 });

@@ -10,11 +10,9 @@
 > （Implemented）为准。
 >
 > **与 Layout Grammar 的关系（已对照代码）**：模板方案**零依赖** Grammar。
-> Agent 作者工具（`ExecuteLayoutPlan` / `PreviewCommands` / `SubmitCommands` /
-> `InsertSlideImage` 及旧 beautify/layout 工具）已不在
-> `createDefaultToolRegistry()`；由 `tests/svg-native-tool-surface.test.ts` 锁定。
-> `src/shared/layout-grammar*`、`layout-handlers/`、`applyLayout` 仍存在，仅服务
-> 非 SVG 的 element-IR / CommandBus 路径，不是产品新建轨，也不是本路线图交付面。
+> Layout Grammar / element-IR 共享库与 Agent 作者工具均已移除；产品 STRICT SVG-only
+>（`visualSource.kind === "svg"`）。由 `tests/svg-native-tool-surface.test.ts` 锁定
+> 作者工具表面；模板交付面只走 design-spec + page-plan + 完整页面 SVG。
 
 ## 1. 背景
 
@@ -73,8 +71,8 @@ explicit custom / explicit built-in > auto-selected built-in > project default >
 一组可执行的设计约束和能力声明。
 
 产品页面视觉作者源是完整页面 SVG（见 [Visual Expression System](../presentation/visual-system.md)）。
-模板选择之后的页面构图只走 page-plan + SVG；**不**经过 Layout Grammar /
-`grammarVariant` / `applyLayout`。共享库中残留的 Grammar 编译器与模板协议无关，
+模板选择之后的页面构图只走 page-plan + SVG；**不**经过 Layout Grammar。
+Grammar / element-IR 已从产品中移除，与模板协议无关，
 不得作为 Phase 1 可执行载荷或验收条件。
 
 ### 3.1 内置模板
@@ -334,8 +332,7 @@ communication contract（+ 可选结构化信号）
 用户明确指定视觉风格时，解析为显式内置模板；用户明确选择上传模板时，使用上传模板
 的已验证 revision。只有没有显式选择时才执行自动匹配。
 
-非 SVG 的 element-IR 页若仍经 `applyLayout` 消费同一 `DesignSystemV2`，属于共享渲染
-遗留行为，**不在本路线图范围内**，也不构成模板验收项。
+产品页模型为 STRICT SVG-only；模板验收不依赖 element-IR / `applyLayout`。
 
 ## 8. 默认模板
 

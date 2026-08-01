@@ -1,21 +1,13 @@
+import { createHash } from "node:crypto";
 import { z } from "zod";
-import { FONT_FAMILIES, TEXT_ROLES } from "./typography";
 import { BACKGROUND_VARIANTS } from "./slide-background";
 import { SLIDE_VARIANTS } from "./slide-variant";
-import { ICON_NAMES } from "./icon-registry";
 import { SVG_PAGE_HEIGHT, SVG_PAGE_WIDTH } from "./svg-page";
 import {
-  CHART_STYLES,
-  IMAGE_TREATMENTS,
   DEFAULT_DESIGN_SYSTEM,
   designSystemV2Schema,
   slideDesignOverrideSchema,
 } from "../design-system";
-
-export const CHART_TYPES = ["bar", "h-bar", "timeline", "kpi-tower"] as const;
-export const ELEMENT_PROVENANCE = ["layout", "user", "agent", "asset"] as const;
-
-export const elementProvenanceSchema = z.enum(ELEMENT_PROVENANCE);
 
 export const hexColorSchema = z.string()
   .regex(/^#[0-9a-f]{6}$/i, "Color must be a six-digit hex value such as #2563eb.");
@@ -39,6 +31,7 @@ function hasMatchingRasterSignature(value: string): boolean {
   return false;
 }
 
+/** Raster data-URL helper retained for workspace asset ingestion. */
 export const rasterDataImageSourceSchema = z.string().trim().min(1).max(18 * 1024 * 1024)
   .regex(
     SUPPORTED_DATA_IMAGE_RE,
@@ -67,126 +60,6 @@ export const imageSourceSchema = z.string().trim().min(1).max(18 * 1024 * 1024)
     });
   });
 
-const chartItemSchema = z.object({
-  label: z.string().trim().min(1),
-  value: z.number().finite(),
-});
-
-export const chartDataSchema = z.object({
-  labels: z.array(z.string().trim().min(1)).optional(),
-  values: z.array(z.number().finite()).optional(),
-  items: z.array(chartItemSchema).optional(),
-}).superRefine((data, context) => {
-  const itemCount = data.items?.length ?? 0;
-  const labelCount = data.labels?.length ?? 0;
-  const valueCount = data.values?.length ?? 0;
-  const hasParallelData = labelCount > 0 || valueCount > 0;
-
-  if (itemCount > 0 && hasParallelData) {
-    context.addIssue({
-      code: "custom",
-      message: "Chart data must use either items or labels/values, not both.",
-    });
-    return;
-  }
-
-  if (itemCount === 0) {
-    if (labelCount === 0 || valueCount === 0) {
-      context.addIssue({
-        code: "custom",
-        message: "Chart data requires at least one item or a non-empty labels/values pair.",
-      });
-      return;
-    }
-    if (labelCount !== valueCount) {
-      context.addIssue({
-        code: "custom",
-        message: "Chart labels and values must have the same length.",
-      });
-    }
-  }
-});
-
-export const chartElementSchema = z.object({
-  id: z.string(),
-  type: z.literal("chart"),
-  provenance: elementProvenanceSchema.optional(),
-  x: z.number(),
-  y: z.number(),
-  width: z.number().positive(),
-  height: z.number().positive(),
-  chartType: z.enum(CHART_TYPES),
-  data: chartDataSchema,
-  accentColor: hexColorSchema.optional(),
-  chartStyle: z.enum(CHART_STYLES).optional(),
-  unit: z.string().trim().max(30).optional(),
-  highlightIndex: z.number().int().nonnegative().optional(),
-}).superRefine((element, context) => {
-  const dataLength = element.data.items?.length
-    ?? Math.min(element.data.labels?.length ?? 0, element.data.values?.length ?? 0);
-  if (element.highlightIndex !== undefined && element.highlightIndex >= dataLength) {
-    context.addIssue({
-      code: "custom",
-      path: ["highlightIndex"],
-      message: `highlightIndex must be smaller than the chart data length (${dataLength}).`,
-    });
-  }
-});
-
-export const tableElementSchema = z.object({
-  id: z.string(),
-  type: z.literal("table"),
-  provenance: elementProvenanceSchema.optional(),
-  x: z.number(),
-  y: z.number(),
-  width: z.number().positive(),
-  height: z.number().positive(),
-  rows: z.array(z.array(z.string()).min(1)).min(1),
-  headerRow: z.boolean().optional().default(true),
-  zebraStripe: z.boolean().optional().default(true),
-}).superRefine((element, context) => {
-  const columnCount = element.rows[0]?.length ?? 0;
-  element.rows.forEach((row, rowIndex) => {
-    if (row.length !== columnCount) {
-      context.addIssue({
-        code: "custom",
-        path: ["rows", rowIndex],
-        message: `Table rows must all contain ${columnCount} column(s).`,
-      });
-    }
-  });
-});
-
-export const iconElementSchema = z.object({
-  id: z.string(),
-  type: z.literal("icon"),
-  provenance: elementProvenanceSchema.optional(),
-  x: z.number(),
-  y: z.number(),
-  width: z.number().positive(),
-  height: z.number().positive(),
-  name: z.enum(ICON_NAMES),
-  color: hexColorSchema.optional(),
-  strokeWidth: z.number().positive().optional().default(2),
-});
-
-export const textElementSchema = z.object({
-  id: z.string(),
-  type: z.literal("text"),
-  provenance: elementProvenanceSchema.optional(),
-  x: z.number(),
-  y: z.number(),
-  width: z.number().positive(),
-  height: z.number().positive(),
-  text: z.string(),
-  fontSize: z.number().positive().default(32),
-  bold: z.boolean().optional(),
-  color: hexColorSchema.optional(),
-  align: z.enum(["left", "center", "right"]).optional(),
-  textRole: z.enum(TEXT_ROLES).optional(),
-  fontFamily: z.enum(FONT_FAMILIES).optional(),
-});
-
 export const imageAssetMetadataSchema = z.object({
   provider: z.string().optional(),
   sourceUrl: z.string().url().optional(),
@@ -203,82 +76,6 @@ export const imageAssetMetadataSchema = z.object({
   pixelHeight: z.number().int().positive().optional(),
   sha256: z.string().regex(/^[a-f0-9]{64}$/).optional(),
   fetchedAt: z.string().datetime().optional(),
-});
-
-export const imageElementSchema = z.object({
-  id: z.string(),
-  type: z.literal("image"),
-  provenance: elementProvenanceSchema.optional(),
-  x: z.number(),
-  y: z.number(),
-  width: z.number().positive(),
-  height: z.number().positive(),
-  url: imageSourceSchema,
-  borderRadius: z.number().optional().default(0),
-  imageSlot: z.string().optional(),
-  objectFit: z.enum(["cover", "contain"]).optional(),
-  crop: z.object({
-    x: z.number().min(0).max(1),
-    y: z.number().min(0).max(1),
-    width: z.number().positive().max(1),
-    height: z.number().positive().max(1),
-  }).strict().superRefine((crop, context) => {
-    if (crop.x + crop.width > 1 || crop.y + crop.height > 1) {
-      context.addIssue({
-        code: "custom",
-        message: "Image crop must stay inside normalized image bounds.",
-      });
-    }
-  }).optional(),
-  imageTreatment: z.enum(IMAGE_TREATMENTS).optional(),
-  asset: imageAssetMetadataSchema.optional(),
-});
-
-export const shadowSchema = z.object({
-  color: hexColorSchema.default("#000000"),
-  blur: z.number().default(12),
-  offsetX: z.number().default(0),
-  offsetY: z.number().default(4),
-  opacity: z.number().min(0).max(1).default(0.15),
-});
-
-export const shapeElementSchema = z.object({
-  id: z.string(),
-  type: z.literal("shape"),
-  provenance: elementProvenanceSchema.optional(),
-  x: z.number(),
-  y: z.number(),
-  width: z.number().positive(),
-  height: z.number().positive(),
-  shapeType: z.enum(["rectangle", "circle", "arrow", "line", "roundedRect"]),
-  fillColor: paintColorSchema.default("#3b82f6"),
-  strokeColor: paintColorSchema.default("#1d4ed8"),
-  cornerRadius: z.number().optional(),
-  fillOpacity: z.number().min(0).max(1).optional(),
-  shadow: shadowSchema.optional(),
-});
-
-export const slideElementSchema = z.discriminatedUnion("type", [
-  textElementSchema,
-  imageElementSchema,
-  shapeElementSchema,
-  chartElementSchema,
-  tableElementSchema,
-  iconElementSchema,
-]);
-
-export const slideElementsSchema = z.array(slideElementSchema).superRefine((elements, context) => {
-  const seen = new Set<string>();
-  elements.forEach((element, index) => {
-    if (seen.has(element.id)) {
-      context.addIssue({
-        code: "custom",
-        path: [index, "id"],
-        message: `Duplicate element id: ${element.id}`,
-      });
-    }
-    seen.add(element.id);
-  });
 });
 
 export { SVG_PAGE_HEIGHT, SVG_PAGE_WIDTH } from "./svg-page";
@@ -317,11 +114,8 @@ export const slideSchema = z.object({
   id: z.string(),
   title: z.string(),
   speakerNotes: z.string().trim().max(20_000).optional(),
-  elements: slideElementsSchema,
-  visualSource: svgPageVisualSourceSchema.optional(),
+  visualSource: svgPageVisualSourceSchema,
   narrative: slideNarrativeSchema.optional(),
-  layout: z.string().optional(),
-  grammarVariant: z.string().optional(),
   designOverride: slideDesignOverrideSchema.optional(),
   backgroundVariant: z.enum(BACKGROUND_VARIANTS).optional(),
   slideVariant: z.enum(SLIDE_VARIANTS).optional(),
@@ -330,15 +124,7 @@ export const slideSchema = z.object({
     sceneId: z.string().trim().min(1),
     variantId: z.string().trim().min(1),
   }).strict().optional(),
-}).superRefine((slide, context) => {
-  if (slide.visualSource?.kind === "svg" && slide.elements.length > 0) {
-    context.addIssue({
-      code: "custom",
-      path: ["elements"],
-      message: "SVG-native slides must use the complete SVG page as their only visual source.",
-    });
-  }
-});
+}).strict();
 
 export const presentationSlidesSchema = z.array(slideSchema).superRefine((slides, context) => {
   const seen = new Set<string>();
@@ -362,21 +148,67 @@ export const presentationSchema = z.object({
   designSystem: designSystemV2Schema,
 });
 
-export type TextElement = z.infer<typeof textElementSchema>;
 export type ImageAssetMetadata = z.infer<typeof imageAssetMetadataSchema>;
-export type ImageElement = z.infer<typeof imageElementSchema>;
-export type ShapeElement = z.infer<typeof shapeElementSchema>;
-export type ChartElement = z.infer<typeof chartElementSchema>;
-export type TableElement = z.infer<typeof tableElementSchema>;
-export type IconElement = z.infer<typeof iconElementSchema>;
-export type SlideElement = z.infer<typeof slideElementSchema>;
-export type ChartData = z.infer<typeof chartDataSchema>;
 export type SlideNarrative = z.infer<typeof slideNarrativeSchema>;
 export type SvgPageResource = z.infer<typeof svgPageResourceSchema>;
 export type SvgPageVisualSource = z.infer<typeof svgPageVisualSourceSchema>;
 export type Slide = z.infer<typeof slideSchema>;
 export type Presentation = z.infer<typeof presentationSchema>;
-export type ElementProvenance = z.infer<typeof elementProvenanceSchema>;
+
+/** Minimal valid 1280×720 SVG page for tests and sample scripts. */
+export function createMinimalSvgMarkup(title = "Agent PPT"): string {
+  const safeTitle = title
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
+  return [
+    `<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">`,
+    `<rect width="1280" height="720" fill="#0f172a"/>`,
+    `<text x="640" y="360" fill="#f8fafc" font-size="64" text-anchor="middle"`,
+    ` font-family="Arial, sans-serif">${safeTitle}</text>`,
+    `</svg>`,
+  ].join("");
+}
+
+export function createSvgVisualSource(input?: {
+  markup?: string;
+  sourcePath?: string;
+  title?: string;
+}): SvgPageVisualSource {
+  const markup = input?.markup ?? createMinimalSvgMarkup(input?.title ?? "Agent PPT");
+  return {
+    kind: "svg",
+    markup,
+    width: SVG_PAGE_WIDTH,
+    height: SVG_PAGE_HEIGHT,
+    sha256: createHash("sha256").update(markup, "utf8").digest("hex"),
+    sourcePath: input?.sourcePath ?? "slides/svg/P01.svg",
+    resources: [],
+  };
+}
+
+export function createSvgTestSlide(input?: {
+  id?: string;
+  title?: string;
+  markup?: string;
+  sourcePath?: string;
+  narrative?: SlideNarrative;
+  speakerNotes?: string;
+}): Slide {
+  const title = input?.title ?? "Opening";
+  return {
+    id: input?.id ?? crypto.randomUUID(),
+    title,
+    ...(input?.speakerNotes !== undefined ? { speakerNotes: input.speakerNotes } : {}),
+    visualSource: createSvgVisualSource({
+      markup: input?.markup,
+      sourcePath: input?.sourcePath,
+      title,
+    }),
+    ...(input?.narrative ? { narrative: input.narrative } : {}),
+  };
+}
 
 export function createStarterPresentation(): Presentation {
   return {
@@ -384,24 +216,6 @@ export function createStarterPresentation(): Presentation {
     title: "Untitled presentation",
     revision: 0,
     designSystem: DEFAULT_DESIGN_SYSTEM,
-    slides: [
-      {
-        id: crypto.randomUUID(),
-        title: "Opening",
-        elements: [
-          {
-            id: crypto.randomUUID(),
-            type: "text",
-            x: 120,
-            y: 180,
-            width: 1040,
-            height: 160,
-            text: "Agent PPT",
-            fontSize: 64,
-          },
-        ],
-      },
-    ],
+    slides: [createSvgTestSlide({ title: "Opening" })],
   };
 }
-

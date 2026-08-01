@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createStarterPresentation } from "../src/shared/presentation";
+import {
+  createStarterPresentation,
+  createSvgVisualSource,
+  type SlideNarrative,
+} from "../src/shared/presentation";
 
 const pptxMocks = vi.hoisted(() => {
   const slide = {
@@ -27,6 +31,14 @@ vi.mock("pptxgenjs", () => ({
 }));
 
 import { exportToPptx } from "../src/main/ppt-exporter";
+
+const NARRATIVE: SlideNarrative = {
+  role: "cover",
+  coreMessage: "SVG page export",
+  audienceMove: "Review",
+  rhythm: "anchor",
+  layoutIntent: "One full-page SVG.",
+};
 
 describe("SVG page PPTX export", () => {
   beforeEach(() => {
@@ -57,16 +69,12 @@ describe("SVG page PPTX export", () => {
       id: "slide-1",
       title: "Legacy chrome must not appear",
       speakerNotes: "Speaker note",
-      elements: [],
-      visualSource: {
-        kind: "svg",
+      narrative: NARRATIVE,
+      visualSource: createSvgVisualSource({
         markup,
-        width: 1280,
-        height: 720,
-        sha256: "b".repeat(64),
         sourcePath: "slides/svg/slide-1.svg",
-        resources: [],
-      },
+        title: "Legacy chrome must not appear",
+      }),
     };
 
     await exportToPptx(
@@ -100,37 +108,14 @@ describe("SVG page PPTX export", () => {
     });
   });
 
-  it("rejects a mixed SVG and legacy-element slide", async () => {
+  it("rejects a slide without SVG visualSource", async () => {
     const presentation = createStarterPresentation();
-    presentation.slides[0] = {
-      id: "mixed-slide",
-      title: "Mixed visual truth",
-      elements: [{
-        id: "legacy-text",
-        type: "text",
-        x: 20,
-        y: 20,
-        width: 200,
-        height: 80,
-        text: "Legacy element",
-        fontSize: 24,
-      }],
-      visualSource: {
-        kind: "svg",
-        markup:
-          '<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720"></svg>',
-        width: 1280,
-        height: 720,
-        sha256: "b".repeat(64),
-        sourcePath: "slides/svg/mixed.svg",
-        resources: [],
-      },
-    };
+    (presentation.slides[0] as { visualSource?: unknown }).visualSource = undefined;
 
     await expect(exportToPptx(
       presentation,
       {},
-      "/tmp/mixed-svg-page.pptx",
-    )).rejects.toThrow("contains legacy canvas elements");
+      "/tmp/non-svg-page.pptx",
+    )).rejects.toThrow("not SVG-native");
   });
 });

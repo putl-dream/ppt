@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { CommandBus } from "../src/shared/commands";
-import { createStarterPresentation } from "../src/shared/presentation";
+import { createStarterPresentation, createSvgTestSlide } from "../src/shared/presentation";
 
 describe("CommandBus", () => {
   it("keeps a prepared execution invisible until it is committed", () => {
@@ -82,11 +82,7 @@ describe("CommandBus", () => {
       id: crypto.randomUUID(),
       type: "add-slide",
       index: 1,
-      slide: {
-        id: crypto.randomUUID(),
-        title: "Second slide",
-        elements: [],
-      },
+      slide: createSvgTestSlide({ title: "Second slide" }),
     });
     expect(bus.getSnapshot().slides).toHaveLength(originalCount + 1);
 
@@ -102,11 +98,10 @@ describe("CommandBus", () => {
       id: crypto.randomUUID(),
       type: "add-slide",
       index: 1,
-      slide: {
+      slide: createSvgTestSlide({
         id: original.slides[0].id,
         title: "Duplicate identity",
-        elements: [],
-      },
+      }),
     })).toThrow(`Duplicate slide id: ${original.slides[0].id}`);
 
     expect(bus.getSnapshot()).toEqual(original);
@@ -127,13 +122,13 @@ describe("CommandBus", () => {
         id: crypto.randomUUID(),
         type: "add-slide",
         index: 1,
-        slide: { id: duplicateId, title: "First", elements: [] },
+        slide: createSvgTestSlide({ id: duplicateId, title: "First" }),
       },
       {
         id: crypto.randomUUID(),
         type: "add-slide",
         index: 2,
-        slide: { id: duplicateId, title: "Second", elements: [] },
+        slide: createSvgTestSlide({ id: duplicateId, title: "Second" }),
       },
     ])).toThrow(`Duplicate slide id: ${duplicateId}`);
 
@@ -184,168 +179,44 @@ describe("CommandBus", () => {
     expect(bus.getSnapshot()).toEqual(original);
   });
 
-  it("adds, updates, and removes slide elements", () => {
-    const bus = new CommandBus(createStarterPresentation());
-    const slideId = bus.getSnapshot().slides[0].id;
-    const elementId = crypto.randomUUID();
-
-    // 1. Add element
-    bus.execute({
-      id: crypto.randomUUID(),
-      type: "add-element",
-      slideId,
-      element: {
-        id: elementId,
-        type: "text",
-        x: 10,
-        y: 20,
-        width: 100,
-        height: 50,
-        text: "Element content",
-        fontSize: 24,
-      },
-    });
-
-    const added = bus.getSnapshot().slides[0].elements;
-    expect(added).toHaveLength(2); // starter has 1, now 2
-    expect(added[1].id).toBe(elementId);
-    expect((added[1] as any).text).toBe("Element content");
-
-    // 2. Update element
-    bus.execute({
-      id: crypto.randomUUID(),
-      type: "update-element",
-      slideId,
-      elementId,
-      element: {
-        id: elementId,
-        type: "text",
-        x: 10,
-        y: 20,
-        width: 100,
-        height: 50,
-        text: "Updated content",
-        fontSize: 24,
-      },
-    });
-    expect((bus.getSnapshot().slides[0].elements[1] as any).text).toBe("Updated content");
-
-    // 3. Undo update
-    bus.undo();
-    expect((bus.getSnapshot().slides[0].elements[1] as any).text).toBe("Element content");
-
-    // 4. Undo add
-    bus.undo();
-    expect(bus.getSnapshot().slides[0].elements).toHaveLength(1);
-  });
-
-  it("rejects duplicate element identities in add and update commands", () => {
-    const bus = new CommandBus(createStarterPresentation());
-    const initial = bus.getSnapshot();
-    const slideId = initial.slides[0].id;
-    const existingElementId = initial.slides[0].elements[0].id;
-
-    expect(() => bus.execute({
-      id: crypto.randomUUID(),
-      type: "add-element",
-      slideId,
-      element: {
-        id: existingElementId,
-        type: "text",
-        x: 10,
-        y: 10,
-        width: 100,
-        height: 40,
-        text: "Duplicate",
-        fontSize: 20,
-      },
-    })).toThrow(`Duplicate element id: ${existingElementId}`);
-    expect(bus.getSnapshot()).toEqual(initial);
-
-    const secondElementId = "second-element";
-    bus.execute({
-      id: crypto.randomUUID(),
-      type: "add-element",
-      slideId,
-      element: {
-        id: secondElementId,
-        type: "text",
-        x: 10,
-        y: 60,
-        width: 100,
-        height: 40,
-        text: "Second",
-        fontSize: 20,
-      },
-    });
-    const beforeUpdate = bus.getSnapshot();
-
-    expect(() => bus.execute({
-      id: crypto.randomUUID(),
-      type: "update-element",
-      slideId,
-      elementId: secondElementId,
-      element: {
-        ...beforeUpdate.slides[0].elements[1],
-        id: existingElementId,
-      },
-    })).toThrow(`Duplicate element id: ${existingElementId}`);
-    expect(bus.getSnapshot()).toEqual(beforeUpdate);
-  });
-
-  it("rejects duplicate element identities in restore commands", () => {
-    const bus = new CommandBus(createStarterPresentation());
-    const original = bus.getSnapshot();
-    const slide = original.slides[0];
-    const duplicateElements = [
-      slide.elements[0],
-      { ...slide.elements[0], text: "Duplicate restored element" },
-    ];
-
-    expect(() => bus.execute({
-      id: crypto.randomUUID(),
-      type: "restore-slide-elements",
-      slideId: slide.id,
-      elements: duplicateElements,
-    })).toThrow("Duplicate element id");
-    expect(bus.getSnapshot()).toEqual(original);
-
-    expect(() => bus.execute({
-      id: crypto.randomUUID(),
-      type: "restore-slide",
-      slide: { ...slide, elements: duplicateElements },
-    })).toThrow("Duplicate element id");
-    expect(bus.getSnapshot()).toEqual(original);
-  });
-
-  it("undoes slide layout with layout metadata restored", () => {
+  it("updates slide title and restores a slide through undo", () => {
     const bus = new CommandBus(createStarterPresentation());
     const original = bus.getSnapshot();
     const slideId = original.slides[0].id;
 
     bus.execute({
       id: crypto.randomUUID(),
-      type: "update-slide-layout",
+      type: "set-slide-title",
       slideId,
-      layout: "cover",
-      grammarVariant: "signal-dark",
-      designOverride: {
-        palette: "tech-dark",
-        fontMood: "technical",
-        shapeLanguage: "geometric",
-        backgroundStyle: "dark",
-        motif: "arc",
-        density: "standard",
-        imageTreatment: "masked",
-        chartStyle: "dashboard",
-      },
+      title: "Renamed slide",
     });
-
-    expect(bus.getSnapshot().slides[0].layout).toBe("cover");
-    expect(bus.getSnapshot().slides[0].grammarVariant).toBe("signal-dark");
-    expect(bus.getSnapshot().slides[0].designOverride?.palette).toBe("tech-dark");
+    expect(bus.getSnapshot().slides[0].title).toBe("Renamed slide");
 
     bus.undo();
-    expect(bus.getSnapshot().slides[0]).toEqual(original.slides[0]);
+    expect(bus.getSnapshot().slides[0].title).toBe(original.slides[0].title);
+  });
+
+  it("restores a slide snapshot and undoes the replacement", () => {
+    const bus = new CommandBus(createStarterPresentation());
+    const originalSlide = structuredClone(bus.getSnapshot().slides[0]);
+    const slideId = originalSlide.id;
+
+    bus.execute({
+      id: crypto.randomUUID(),
+      type: "set-slide-title",
+      slideId,
+      title: "Changed title",
+    });
+    expect(bus.getSnapshot().slides[0].title).toBe("Changed title");
+
+    bus.execute({
+      id: crypto.randomUUID(),
+      type: "restore-slide",
+      slide: originalSlide,
+    });
+    expect(bus.getSnapshot().slides[0]).toEqual(originalSlide);
+
+    bus.undo();
+    expect(bus.getSnapshot().slides[0].title).toBe("Changed title");
   });
 });

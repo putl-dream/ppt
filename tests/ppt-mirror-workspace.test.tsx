@@ -5,7 +5,7 @@ import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DEFAULT_DESIGN_SYSTEM } from "../src/design-system";
 import type { DisplayEvent } from "../src/shared/card-display-protocol";
-import type { Presentation } from "../src/shared/presentation";
+import { createSvgTestSlide, type Presentation } from "../src/shared/presentation";
 import { PPTMirror } from "../src/renderer/src/components/PPTMirror";
 import { ArtifactCardHost } from "../src/renderer/src/cards/hosts/ArtifactCardHost";
 import {
@@ -21,8 +21,8 @@ const presentation: Presentation = {
   revision: 2,
   designSystem: DEFAULT_DESIGN_SYSTEM,
   slides: [
-    { id: "slide-1", title: "封面", layout: "cover", elements: [] },
-    { id: "slide-2", title: "核心结论", layout: "content", elements: [] },
+    createSvgTestSlide({ id: "slide-1", title: "封面", sourcePath: "slides/svg/P01.svg" }),
+    createSvgTestSlide({ id: "slide-2", title: "核心结论", sourcePath: "slides/svg/P02.svg" }),
   ],
 };
 
@@ -78,6 +78,10 @@ describe("PPTMirror preview workspace", () => {
       configurable: true,
       value: { exportPresentation },
     });
+    Object.defineProperty(window, "confirm", {
+      configurable: true,
+      value: vi.fn(() => true),
+    });
     exportPresentation.mockClear();
     ingestDisplayEvent(preview(1));
     ingestDisplayEvent(preview(2));
@@ -94,7 +98,7 @@ describe("PPTMirror preview workspace", () => {
     expect(screen.getByText("PPT 预览")).not.toBeNull();
     expect(screen.getByRole("tab", { name: /检查结果\s*2/ }).getAttribute("aria-selected"))
       .toBe("true");
-    expect(screen.getByText(/覆盖 2 \/ 2 页/)).not.toBeNull();
+    expect(screen.getByText(/覆盖 2 \/ 2 /)).not.toBeNull();
     expect(screen.queryByText("点击查看大图")).toBeNull();
     expect(screen.queryByText("页面预览")).toBeNull();
 
@@ -137,6 +141,6 @@ describe("PPTMirror preview workspace", () => {
     );
 
     expect(screen.queryByText("页面预览")).toBeNull();
-    expect(screen.queryByText("已检查 2 页")).toBeNull();
+    expect(screen.queryByText(/已检.*2/)).toBeNull();
   });
 });

@@ -4,7 +4,10 @@ import {
   normalizePromptStage,
   resolvePromptStage,
 } from "../src/main/agent/runtime/prompts/prompt-stage";
-import type { Presentation } from "../src/shared/presentation";
+import {
+  createSvgTestSlide,
+  type Presentation,
+} from "../src/shared/presentation";
 import type { WorkspaceArtifacts } from "../src/main/agent/runtime/presentation/workspace-artifacts";
 import { TEST_DESIGN_SYSTEM } from "./design-engine-test-utils";
 
@@ -20,18 +23,25 @@ const emptyArtifacts: WorkspaceArtifacts = {
   research: false,
 };
 
-function deck(slideCount: number, styled = false): Presentation {
+function deck(slideCount: number, svg = false): Presentation {
   return {
     id: "p",
     title: "t",
     revision: 1,
     designSystem: TEST_DESIGN_SYSTEM,
-    slides: Array.from({ length: slideCount }, (_, i) => ({
-      id: `slide-${i}`,
-      title: `s${i}`,
-      ...(styled ? { layout: "concept" as const } : {}),
-      elements: [],
-    })),
+    slides: Array.from({ length: slideCount }, (_, i) => (
+      svg
+        ? createSvgTestSlide({
+            id: `slide-${i}`,
+            title: `s${i}`,
+            sourcePath: `slides/svg/slide-${i}.svg`,
+          })
+        : {
+            id: `slide-${i}`,
+            title: `s${i}`,
+            visualSource: undefined,
+          } as unknown as Presentation["slides"][number]
+    )),
   };
 }
 
@@ -87,7 +97,7 @@ describe("resolvePromptStage (advisory capability hint)", () => {
     })).toBe("discover");
   });
 
-  it("routes unstyled slides to autonomous design and authored artifacts to authoring", () => {
+  it("routes slides missing SVG visualSource to design", () => {
     expect(resolvePromptStage({
       request: "任意请求",
       presentation: deck(3),

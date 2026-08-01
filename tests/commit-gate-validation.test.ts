@@ -1,137 +1,123 @@
 import { describe, expect, it } from "vitest";
 import { CommitGate } from "../src/main/agent/gate/commit-gate";
 import { RiskPolicy } from "../src/main/agent/gate/risk-policy";
-import type { Presentation, TextElement } from "../src/shared/presentation";
+import {
+  createStarterPresentation,
+  createSvgTestSlide,
+  type Presentation,
+} from "../src/shared/presentation";
 import { TEST_DESIGN_SYSTEM } from "./design-engine-test-utils";
 
-function createPresentation(text = "Stable body text"): {
-  presentation: Presentation;
-  slideId: string;
-  element: TextElement;
-} {
-  const slideId = "slide-1";
-  const element: TextElement = {
-    id: "text-1",
-    type: "text",
-    x: 120,
-    y: 180,
-    width: 500,
-    height: 120,
-    text,
-    fontSize: 24,
-  };
+const testNarrative = {
+  role: "anchor",
+  coreMessage: "Core message for validation",
+  audienceMove: "Understand the slide purpose",
+  rhythm: "anchor" as const,
+  layoutIntent: "Present the headline clearly",
+};
+
+function createPresentation(): Presentation {
   return {
-    slideId,
-    element,
-    presentation: {
-      id: "deck-1",
-      title: "Deck",
-      revision: 1,
-      designSystem: TEST_DESIGN_SYSTEM,
-      slides: [{
-        id: slideId,
-        title: "Safe slide",
-        elements: [element],
-      }],
-    },
+    ...createStarterPresentation(),
+    designSystem: TEST_DESIGN_SYSTEM,
   };
 }
 
 describe("CommitGate validation integration", () => {
-  it("rejects severe in-place text truncation", async () => {
-    const source = "A".repeat(200);
-    const { presentation, slideId, element } = createPresentation(source);
+  it("rejects restoring a slide with invalid SVG markup", async () => {
+    const presentation = createPresentation();
+    const slideId = presentation.slides[0].id;
     const gate = new CommitGate(new RiskPolicy());
+    const invalidSlide = createSvgTestSlide({
+      id: slideId,
+      title: "Broken SVG",
+      markup: "<svg><script>alert(1)</script></svg>",
+    });
+
     const result = await gate.evaluate(
       presentation,
       [{
-        id: "cmd-truncate",
-        type: "update-element",
-        slideId,
-        elementId: element.id,
-        element: { ...element, text: "Short" },
+        id: "cmd-invalid-svg",
+        type: "restore-slide",
+        slide: invalidSlide,
       }],
       "low",
     );
 
     expect(result.success).toBe(false);
     expect(result.decision).toBe("REJECT");
-    expect(result.errors.join(" ")).toContain("lost more than 75%");
+    expect(result.errors.join(" ")).toMatch(/invalid|SVG/i);
   });
 
-  it("rejects newly introduced layout errors", async () => {
-    const { presentation, slideId } = createPresentation();
+  it("rejects restoring a slide whose sha256 no longer matches markup", async () => {
+    const presentation = createPresentation();
+    const slideId = presentation.slides[0].id;
     const gate = new CommitGate(new RiskPolicy());
+    const tampered = createSvgTestSlide({ id: slideId, title: "Tampered" });
+    tampered.visualSource.sha256 = "0".repeat(64);
+
     const result = await gate.evaluate(
       presentation,
       [{
-        id: "cmd-outside",
-        type: "add-element",
-        slideId,
-        element: {
-          id: "outside",
-          type: "text",
-          x: 10,
-          y: 10,
-          width: 200,
-          height: 80,
-          text: "Outside safe margin",
-          fontSize: 20,
-        },
+        id: "cmd-hash-mismatch",
+        type: "restore-slide",
+        slide: tampered,
       }],
       "low",
     );
 
     expect(result.success).toBe(false);
-    expect(result.errors.join(" ")).toContain("outside the safe margin");
+    expect(result.decision).toBe("REJECT");
+    expect(result.errors.join(" ")).toContain("source hash");
   });
 
-  it("requires approval for newly introduced validation warnings", async () => {
-    const { presentation, slideId } = createPresentation();
+  it("requires approval when duplicate SVG image resources are introduced", async () => {
+    const presentation = createPresentation();
+    const sharedPath = "assets/shared-photo.png";
+    const resource = {
+      sourcePath: sharedPath,
+      mimeType: "image/png" as const,
+      byteSize: 1024,
+      sha256: "a".repeat(64),
+    };
+    const firstSlide = createSvgTestSlide({ id: "slide-a", title: "A", narrative: testNarrative });
+    firstSlide.visualSource.resources = [resource];
+    const secondSlide = createSvgTestSlide({ id: "slide-b", title: "B", narrative: testNarrative });
+    secondSlide.visualSource.resources = [resource];
+
     const gate = new CommitGate(new RiskPolicy());
     const result = await gate.evaluate(
       presentation,
-      [{
-        id: "cmd-overlap",
-        type: "add-element",
-        slideId,
-        element: {
-          id: "overlap",
-          type: "text",
-          x: 160,
-          y: 200,
-          width: 300,
-          height: 80,
-          text: "Overlapping content",
-          fontSize: 20,
-        },
-      }],
+      [
+        { id: "cmd-add-a", type: "add-slide", index: 1, slide: firstSlide },
+        { id: "cmd-add-b", type: "add-slide", index: 2, slide: secondSlide },
+      ],
       "low",
     );
 
     expect(result.success).toBe(true);
     expect(result.decision).toBe("REQUIRES_APPROVAL");
-    expect(result.warnings?.join(" ")).toContain("overlap");
+    expect(result.warnings?.join(" ")).toContain("same image source");
   });
 
-  it("rejects switching to an image-dependent layout without an image", async () => {
-    const { presentation, slideId } = createPresentation();
+  it("auto-approves a valid slide title change", async () => {
+    const presentation = createPresentation();
+    const slideId = presentation.slides[0].id;
     const gate = new CommitGate(new RiskPolicy());
+
     const result = await gate.evaluate(
       presentation,
       [{
-        id: "cmd-evidence-layout",
-        type: "update-slide-layout",
+        id: "cmd-title",
+        type: "set-slide-title",
         slideId,
-        layout: "case",
-        grammarVariant: "evidence",
+        title: "Updated title",
       }],
       "low",
-      { workspaceRoot: "C:\\workspace" },
     );
 
-    expect(result.success).toBe(false);
-    expect(result.decision).toBe("REJECT");
-    expect(result.errors.join(" ")).toContain("missing a required image");
+    expect(result.success).toBe(true);
+    expect(result.decision).toBe("AUTO");
+    expect(result.preview?.slides[0].title).toBe("Updated title");
   });
 });

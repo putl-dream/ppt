@@ -23,7 +23,6 @@ import { AgentRuntime } from "../src/main/agent/runtime/agent-runtime";
 import { CommitGate } from "../src/main/agent/gate/commit-gate";
 import { RiskPolicy } from "../src/main/agent/gate/risk-policy";
 import { DesignPolicy } from "../src/main/agent/design/design-policy";
-import { LayoutPolicy } from "../src/main/agent/design/layout-policy";
 import { AgentService } from "../src/main/agent/service";
 import { createStarterPresentation } from "../src/shared/presentation";
 import type { AgentModelSelection } from "../src/shared/agent";
@@ -518,42 +517,15 @@ describe("Agent Architecture Skeletons & Types", () => {
     expect(result3.errors.length).toBeGreaterThan(0);
   });
 
-  it("DesignPolicy checks semantic conservation rules", () => {
+  it("DesignPolicy passes through without element-IR constraints", () => {
     const policy = new DesignPolicy();
     const before = createStarterPresentation();
     const after = structuredClone(before);
-    const textElement = {
-      id: "semantic-text",
-      type: "text" as const,
-      x: 120,
-      y: 180,
-      width: 800,
-      height: 160,
-      text: "This is important source content that must not be silently removed.",
-      fontSize: 24,
-    };
-    before.slides[0].elements = [textElement];
-    after.slides[0].elements = [structuredClone(textElement)];
+    after.slides[0].title = "Updated SVG slide title";
 
-    const check1 = policy.validate(before, after);
-    expect(check1.valid).toBe(true);
-
-    after.slides[0].elements = [];
-    const check2 = policy.validate(before, after);
-    expect(check2.valid).toBe(false);
-    expect(check2.errors[0]).toContain("语义保持校验");
-  });
-
-  it("LayoutPolicy checks overlap and safety zones", () => {
-    const elementA = { id: "a", type: "text" as const, x: 50, y: 50, width: 100, height: 100 };
-    const elementB = { id: "b", type: "text" as const, x: 80, y: 80, width: 100, height: 100 };
-    const elementC = { id: "c", type: "text" as const, x: 200, y: 200, width: 50, height: 50 };
-
-    expect(LayoutPolicy.isOverlapping(elementA, elementB)).toBe(true);
-    expect(LayoutPolicy.isOverlapping(elementA, elementC)).toBe(false);
-
-    expect(LayoutPolicy.isWithinSafeZone({ x: 10, y: 10, width: 100, height: 100 })).toBe(false);
-    expect(LayoutPolicy.isWithinSafeZone({ x: 50, y: 50, width: 100, height: 100 })).toBe(true);
+    expect(policy.validate(before, after).valid).toBe(true);
+    expect(before.slides[0].visualSource.kind).toBe("svg");
+    expect(after.slides[0].visualSource.kind).toBe("svg");
   });
 
   it("does not create an in-memory REQUEST_APPROVAL fallback", async () => {

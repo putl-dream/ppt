@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AgentActivityItem } from "../src/shared/agent-activity";
 import { formatTerminalAgentRunContent } from "../src/shared/agent-result-copy";
 import type { AgentRunResult } from "../src/shared/ipc";
+import { createSvgTestSlide } from "../src/shared/presentation";
 import { createSessionPresentation } from "../src/shared/session";
 import {
   useAgentResultHandler,
@@ -149,24 +150,16 @@ describe("agent result projection", () => {
     });
   });
 
-  it("reports an explicit content-only result without asking for a layout choice", async () => {
+  it("reports a completed SVG-native result without asking for a layout choice", async () => {
     const presentation = {
-      ...createSessionPresentation("Layout result"),
-      slides: [{
-        id: "slide-needs-layout",
-        title: "核心观点",
-        layout: "concept" as const,
-        elements: [{
-          id: "body",
-          type: "text" as const,
-          x: 0,
-          y: 0,
-          width: 400,
-          height: 80,
-          text: "需要选择版式的正文",
-          fontSize: 24,
-        }],
-      }],
+      ...createSessionPresentation("SVG result"),
+      slides: [
+        createSvgTestSlide({
+          id: "slide-svg",
+          title: "核心观点",
+          sourcePath: "slides/svg/P01.svg",
+        }),
+      ],
     };
     const result: AgentRunResult = { status: "completed", presentation };
 
@@ -180,7 +173,7 @@ describe("agent result projection", () => {
       content: formatTerminalAgentRunContent(result),
       runStatus: "completed",
     });
-    expect(messages.at(-1)?.content).toContain("1 页待设计");
+    expect(messages.at(-1)?.content).toBe("已成功应用演示文稿更新。");
     expect(messages.at(-1)?.content).not.toContain("请选择设计方向");
   });
 });

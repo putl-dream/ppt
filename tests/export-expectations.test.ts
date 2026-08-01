@@ -1,37 +1,20 @@
 // @vitest-environment jsdom
 
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { Presentation } from "../src/shared/presentation";
+import { createSvgTestSlide } from "../src/shared/presentation";
 import { DEFAULT_DESIGN_SYSTEM } from "../src/design-system";
 import {
   confirmSvgExportExpectation,
   presentationUsesSvgPages,
 } from "../src/renderer/src/app/presentation/exportExpectations";
 
-const SVG_SHA = "a".repeat(64);
-
-function svgPresentation(): Presentation {
+function svgPresentation() {
   return {
     id: "deck-1",
     title: "SVG deck",
     revision: 1,
     designSystem: DEFAULT_DESIGN_SYSTEM,
-    slides: [
-      {
-        id: "svg-1",
-        title: "SVG",
-        elements: [],
-        visualSource: {
-          kind: "svg",
-          width: 1280,
-          height: 720,
-          markup: "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"1280\" height=\"720\"></svg>",
-          sha256: SVG_SHA,
-          sourcePath: "slides/svg/P01.svg",
-          resources: [],
-        },
-      },
-    ],
+    slides: [createSvgTestSlide({ id: "svg-1", title: "SVG" })],
   };
 }
 

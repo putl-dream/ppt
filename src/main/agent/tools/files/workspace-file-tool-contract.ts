@@ -293,9 +293,6 @@ function isPresentationOwnedWorkspacePath(input: string): boolean {
   return path === "design/design-spec.json"
     || path === "slides/page-plan.json"
     || path === "slides/storyboard.json"
-    || path === "slides/layout-plan.json"
-    || path === "slides/layout-choice.json"
-    || path === "slides/layout-input.json"
     || path === "deck/snapshot.json"
     || path.startsWith("slides/svg/")
     || path.startsWith("assets/");

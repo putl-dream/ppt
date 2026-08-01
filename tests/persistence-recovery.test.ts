@@ -747,7 +747,6 @@ describe("durable agent recovery", () => {
       slide: {
         id: "svg-blob-slide",
         title: "Blob-backed SVG",
-        elements: [],
         narrative: {
           role: "opening",
           coreMessage: "Lifecycle command blobs preserve complete SVG pages.",

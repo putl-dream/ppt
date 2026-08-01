@@ -5,22 +5,39 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { inspectPptxExport } from "../src/main/deck/pptx-postflight";
 import { exportToPptx } from "../src/main/ppt-exporter";
-import { createStarterPresentation } from "../src/shared/presentation";
+import {
+  createStarterPresentation,
+  type SlideNarrative,
+} from "../src/shared/presentation";
 
 const tempDirs: string[] = [];
 
+const NARRATIVE: SlideNarrative = {
+  role: "cover",
+  coreMessage: "Postflight smoke test",
+  audienceMove: "Review the export",
+  rhythm: "anchor",
+  layoutIntent: "One full-page SVG slide.",
+};
+
 afterEach(async () => {
   await Promise.all(tempDirs.splice(0).map((dir) =>
-    rm(dir, { recursive: true, force: true })
+    rm(dir, { recursive: true, force: true }),
   ));
 });
 
+function exportReadyPresentation() {
+  const presentation = createStarterPresentation();
+  presentation.slides[0].narrative = NARRATIVE;
+  return presentation;
+}
+
 describe("PPTX postflight", () => {
-  it("verifies slide parts, titles and editable native objects", async () => {
+  it("verifies SVG slide parts and exact source presence", async () => {
     const dir = await mkdtemp(join(tmpdir(), "pptx-postflight-"));
     tempDirs.push(dir);
-    const path = join(dir, "commercial.pptx");
-    const presentation = createStarterPresentation();
+    const path = join(dir, "svg-deck.pptx");
+    const presentation = exportReadyPresentation();
 
     await exportToPptx(presentation, {}, path);
     const report = await inspectPptxExport(path, presentation);
@@ -28,35 +45,29 @@ describe("PPTX postflight", () => {
     expect(report.passed).toBe(true);
     expect(report.slideCount).toBe(1);
     expect(report.slides[0]).toMatchObject({
+      pictures: 1,
+      shapes: 0,
+      textRuns: 0,
+      graphicFrames: 0,
+      svgSourcePresent: true,
       titlePresent: true,
     });
-    expect(report.totals.editableObjects).toBeGreaterThan(0);
+    expect(report.totals.editableObjects).toBe(1);
   });
 
-  it("verifies editable native charts and speaker notes", async () => {
-    const dir = await mkdtemp(join(tmpdir(), "pptx-postflight-native-"));
+  it("verifies speaker notes for SVG pages", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "pptx-postflight-notes-"));
     tempDirs.push(dir);
-    const path = join(dir, "native.pptx");
-    const presentation = createStarterPresentation();
+    const path = join(dir, "svg-notes.pptx");
+    const presentation = exportReadyPresentation();
     presentation.slides[0].speakerNotes = "Explain the revenue inflection and ask for approval.";
-    presentation.slides[0].elements.push({
-      id: "revenue-chart",
-      type: "chart",
-      x: 160,
-      y: 180,
-      width: 900,
-      height: 380,
-      chartType: "bar",
-      data: { items: [{ label: "2025", value: 42 }, { label: "2026", value: 68 }] },
-    });
 
     await exportToPptx(presentation, {}, path);
     const report = await inspectPptxExport(path, presentation);
 
     expect(report.passed).toBe(true);
-    expect(report.chartPartCount).toBe(1);
     expect(report.notesPartCount).toBe(1);
-    expect(report.slides[0]).toMatchObject({ expectedNativeCharts: 1 });
+    expect(report.chartPartCount).toBe(0);
   });
 
   it("rejects a non-ZIP file", async () => {
@@ -67,7 +78,7 @@ describe("PPTX postflight", () => {
 
     await expect(inspectPptxExport(
       path,
-      createStarterPresentation(),
+      exportReadyPresentation(),
     )).rejects.toThrow("not a ZIP-based Office document");
   });
 });

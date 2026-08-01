@@ -1,10 +1,17 @@
 import type { AgentRunResult } from "./ipc";
-import { countSlidesNeedingLayout } from "./presentation-draft";
+import type { Presentation } from "./presentation";
 
 export type TerminalAgentRunResult = Extract<
   AgentRunResult,
   { status: "completed" | "rejected" }
 >;
+
+function countSlidesMissingSvgVisualSource(
+  presentation: Presentation | undefined,
+): number {
+  if (!presentation?.slides) return 0;
+  return presentation.slides.filter((slide) => slide.visualSource?.kind !== "svg").length;
+}
 
 /**
  * Main and Renderer must project the same durable terminal copy. Keeping this
@@ -12,7 +19,7 @@ export type TerminalAgentRunResult = Extract<
  */
 export function formatTerminalAgentRunContent(result: TerminalAgentRunResult): string {
   const slidesNeedingDesign = result.status === "completed"
-    ? countSlidesNeedingLayout(result.presentation)
+    ? countSlidesMissingSvgVisualSource(result.presentation)
     : 0;
   if (result.status === "rejected") {
     return "已放弃排版变更提案。";

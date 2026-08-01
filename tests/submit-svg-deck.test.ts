@@ -92,7 +92,6 @@ describe("SubmitSvgDeck", () => {
     const addSlide = result.commands.find((command) => command.type === "add-slide");
     expect(addSlide?.type).toBe("add-slide");
     if (addSlide?.type !== "add-slide") throw new Error("Missing add-slide command");
-    expect(addSlide.slide.elements).toEqual([]);
     expect(addSlide.slide.visualSource).toMatchObject({
       kind: "svg",
       width: 1280,

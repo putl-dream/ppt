@@ -18,6 +18,7 @@ import {
   useReviewCardManager,
 } from "../src/renderer/src/cards/display-card-managers";
 import { getCardPresentationPolicy } from "../src/renderer/src/cards/card-presentation-policy";
+import { createSvgTestSlide } from "../src/shared/presentation";
 import { createSessionPresentation } from "../src/shared/session";
 
 const permissionEvent = {
@@ -117,25 +118,14 @@ describe("card display protocol", () => {
     expect(resultEvents[0]?.scope.threadId).toBe("thread-1");
   });
 
-  it("projects an unstyled completed deck as an artifact without reopening layout choice", () => {
+  it("projects a completed SVG deck as an artifact without reopening layout choice", () => {
     const presentation = {
       ...createSessionPresentation("Content-only result"),
       revision: 4,
-      slides: [{
-        id: "slide-needs-layout",
+      slides: [createSvgTestSlide({
+        id: "slide-svg-ready",
         title: "核心观点",
-        layout: "concept" as const,
-        elements: [{
-          id: "body",
-          type: "text" as const,
-          x: 0,
-          y: 0,
-          width: 400,
-          height: 80,
-          text: "明确要求的内容草稿",
-          fontSize: 24,
-        }],
-      }],
+      })],
     };
 
     const resultEvents = toResultDisplayEvents({

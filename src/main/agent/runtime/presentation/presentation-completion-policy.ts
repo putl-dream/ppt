@@ -1,6 +1,6 @@
 import type { AgentModelToolResultBlock } from "../../gateway/types";
 import type { ToolContext, ToolDefinition } from "../../tools/tool-definition";
-import { slideNeedsLayoutChoice } from "@shared/presentation-draft";
+import type { Slide } from "@shared/presentation";
 import {
   agentAskUserResultSchema,
   agentCommandProposalResultSchema,
@@ -68,7 +68,7 @@ export class PresentationCompletionPolicy {
         const guidance = [
           "本次创建提案中的新页面尚未完成视觉设计，不能作为默认新建结果提交。",
           `以下新页面仍只有内容草稿，缺少实际视觉排版：${incompleteSlideIds.join("、")}。`,
-          "请放弃 element/layout 草稿，加载 ppt-workflow，锁定沟通契约与设计语言，",
+          "请加载 ppt-workflow，锁定沟通契约与设计语言，",
           "用 WriteFile 编写每页完整 1280×720 SVG，并以 PreviewSvgPage 查看每页当前 PNG，",
           "最后只用 SubmitSvgDeck 提交同一批 SVG。不要让用户选择标准/创意排版或 safe/shifted/bold。",
         ].join("");
@@ -196,8 +196,12 @@ function findAddedSlidesMissingVisualDesign(
   const addedIdSet = new Set(addedSlideIds);
   const draft = applyCommandsToDraft(context.presentation, commands);
   return draft.slides
-    .filter((slide) => addedIdSet.has(slide.id) && slideNeedsLayoutChoice(slide))
+    .filter((slide) => addedIdSet.has(slide.id) && slideMissingSvgVisualSource(slide))
     .map((slide) => slide.id);
+}
+
+function slideMissingSvgVisualSource(slide: Slide): boolean {
+  return slide.visualSource?.kind !== "svg";
 }
 
 function textResult(toolUseId: string, text: string): AgentModelToolResultBlock {

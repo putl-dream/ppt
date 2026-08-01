@@ -10,17 +10,26 @@ import {
   resolveBrandProfileDesignSystem,
 } from "@design-system";
 import { executeCommand } from "../src/shared/commands";
-import { applyLayout } from "../src/shared/layout";
-import { exportSlideThumbnailHtml } from "../src/shared/slide-html-render";
-import type { Presentation, Slide } from "../src/shared/presentation";
+import {
+  createSvgTestSlide,
+  type Slide,
+  type SlideNarrative,
+} from "../src/shared/presentation";
 import { testDesignSystem } from "./design-engine-test-utils";
 
-const slide: Slide = {
+const NARRATIVE: SlideNarrative = {
+  role: "cover",
+  coreMessage: "Design engine",
+  audienceMove: "Review",
+  rhythm: "anchor",
+  layoutIntent: "One full-page SVG.",
+};
+
+const slide: Slide = createSvgTestSlide({
   id: "slide-1",
   title: "Design engine",
-  layout: "concept",
-  elements: [],
-};
+  narrative: NARRATIVE,
+});
 
 describe("design engine", () => {
   it("maps six brand personas to distinct deterministic token systems", () => {
@@ -36,52 +45,10 @@ describe("design engine", () => {
         persona,
       });
       expect(first).toEqual(second);
-      return JSON.stringify(resolveSlideStyle(first, {}).layoutTokens);
+      return JSON.stringify(resolveSlideStyle(first, slide).layoutTokens);
     });
 
     expect(new Set(signatures).size).toBe(BRAND_PERSONAS.length);
-  });
-
-  it("changes the rendered grammar silhouette when brand persona changes", () => {
-    const contentSlide: Slide = {
-      id: "persona-slide",
-      title: "同一份内容",
-      elements: ["观点一", "观点二", "观点三"].map((text, index) => ({
-        id: `persona-text-${index}`,
-        type: "text" as const,
-        x: 0,
-        y: 0,
-        width: 300,
-        height: 80,
-        text,
-        fontSize: 20,
-      })),
-    };
-    const editorial = resolveBrandProfileDesignSystem({
-      ...DEFAULT_BRAND_PROFILE,
-      brandName: "Editorial",
-      persona: "financial-editorial",
-    });
-    const launch = resolveBrandProfileDesignSystem({
-      ...DEFAULT_BRAND_PROFILE,
-      brandName: "Launch",
-      persona: "brand-launch",
-    });
-    const editorialSlide = applyLayout(
-      contentSlide,
-      "concept",
-      resolveSlideStyle(editorial, contentSlide),
-    );
-    const launchSlide = applyLayout(
-      contentSlide,
-      "concept",
-      resolveSlideStyle(launch, contentSlide),
-    );
-
-    expect(editorialSlide.grammarVariant).toBe("editorial-columns");
-    expect(launchSlide.grammarVariant).toBe("statement-stack");
-    expect(editorialSlide.elements.map(({ x, y, width, height }) => [x, y, width, height]))
-      .not.toEqual(launchSlide.elements.map(({ x, y, width, height }) => [x, y, width, height]));
   });
 
   it("requires a complete DesignSystemV2 contract", () => {
@@ -110,42 +77,25 @@ describe("design engine", () => {
     expect(light.colors.title).toBe("#31251b");
   });
 
-  it("uses the same style contract in thumbnail HTML", () => {
-    const system = testDesignSystem({
-      visualStyle: "dark-tech",
-      colorScheme: "tech-dark",
-    });
-    const html = exportSlideThumbnailHtml({
-      ...slide,
-      elements: [{
-        id: "image-1", type: "image", x: 100, y: 100, width: 400, height: 200,
-        url: "data:image/png;base64,AA==", borderRadius: 0,
-      }],
-    }, { designSystem: system });
-    expect(html).toContain("32px 32px");
-    expect(html).toContain("border-radius:9999px");
-  });
-
-  it("recompiles laid-out slides when the deck design system changes", () => {
-    const presentation: Presentation = {
-      id: "deck", title: "Deck", revision: 0, designSystem: DEFAULT_DESIGN_SYSTEM,
-      slides: [{
-        ...slide,
-        elements: [
-          { id: "a", type: "text", x: 0, y: 0, width: 400, height: 80, text: "A", fontSize: 24 },
-          { id: "b", type: "text", x: 0, y: 0, width: 400, height: 80, text: "B", fontSize: 20 },
-        ],
-      }],
+  it("stores design system changes without mutating SVG page content", () => {
+    const presentation = {
+      id: "deck",
+      title: "Deck",
+      revision: 0,
+      designSystem: DEFAULT_DESIGN_SYSTEM,
+      slides: [slide],
     };
     const system = testDesignSystem({
       visualStyle: "dark-tech",
       colorScheme: "tech-dark",
     });
     const result = executeCommand(presentation, {
-      id: "set-design", type: "set-design-system", designSystem: system,
+      id: "set-design",
+      type: "set-design-system",
+      designSystem: system,
     }).presentation;
     expect(result.designSystem).toEqual(system);
-    expect(result.slides[0].elements.some((element) => element.type === "text" && element.color === "#bad3ee")).toBe(true);
+    expect(result.slides[0].visualSource).toEqual(slide.visualSource);
   });
 
   it("resolves image treatment independently from renderers", () => {
@@ -156,25 +106,19 @@ describe("design engine", () => {
     expect(treatment.borderColor).toBe("#ddd");
   });
 
-  it("scores visual quality and returns actionable issues", () => {
-    const result = evaluateDeckVisualQuality(DEFAULT_DESIGN_SYSTEM, [{
-      id: "dense-slide",
-      layout: "concept",
-      elements: [{
-        type: "text",
-        x: 120,
-        y: 180,
-        width: 1040,
-        height: 440,
-        text: "A".repeat(1200),
-        fontSize: 12,
-      }],
-    }]);
-    expect(result.scores.readability).toBeLessThan(75);
-    expect(result.scores.density).toBeLessThan(75);
-    expect(result.slides[0].issues.map((issue) => issue.code)).toEqual(
-      expect.arrayContaining(["readability", "over-density", "missing-visual-anchor"]),
-    );
+  it("scores SVG-native slides with high baseline quality", () => {
+    const result = evaluateDeckVisualQuality(DEFAULT_DESIGN_SYSTEM, [slide]);
+    expect(result.scores.overall).toBeGreaterThanOrEqual(85);
+    expect(result.slides[0].issues).toEqual([]);
+  });
+
+  it("warns when an SVG page is missing its narrative contract", () => {
+    const result = evaluateDeckVisualQuality(DEFAULT_DESIGN_SYSTEM, [
+      createSvgTestSlide({ id: "missing-narrative", title: "No narrative" }),
+    ]);
+    expect(result.slides[0].issues).toEqual([
+      expect.objectContaining({ code: "missing-narrative", severity: "warning" }),
+    ]);
   });
 
   it("does not award an empty deck a perfect score", () => {
@@ -185,35 +129,15 @@ describe("design engine", () => {
     ]));
   });
 
-  it("penalizes overlapping foreground content", () => {
+  it("penalizes non-SVG slides during visual evaluation", () => {
     const result = evaluateDeckVisualQuality(DEFAULT_DESIGN_SYSTEM, [{
-      id: "overlap-slide",
-      layout: "concept",
-      elements: [
-        {
-          type: "text",
-          x: 120,
-          y: 180,
-          width: 500,
-          height: 160,
-          text: "Primary content",
-          fontSize: 28,
-        },
-        {
-          type: "text",
-          x: 180,
-          y: 220,
-          width: 500,
-          height: 160,
-          text: "Overlapping content",
-          fontSize: 24,
-        },
-      ],
-    }]);
-
-    expect(result.slides[0].scores.composition).toBeLessThan(80);
+      id: "legacy-slide",
+      title: "Legacy",
+      visualSource: undefined,
+    } as unknown as Slide]);
+    expect(result.slides[0].scores.overall).toBeLessThan(50);
     expect(result.slides[0].issues).toEqual(expect.arrayContaining([
-      expect.objectContaining({ code: "composition-bounds", severity: "error" }),
+      expect.objectContaining({ code: "non-svg-slide", severity: "error" }),
     ]));
   });
 });

@@ -1,6 +1,5 @@
 import React from "react";
 import type { Presentation } from "@shared/presentation";
-import { resolveSlideStyle } from "@design-system";
 import { utf8ToBase64 } from "@shared/base64";
 import { DownloadIcon, OpenPreviewIcon } from "./Icons";
 
@@ -33,17 +32,13 @@ export const DeckPreviewCard: React.FC<DeckPreviewCardProps> = ({
       </div>
 
       <div className="deck-preview-thumbnails">
-        {previewSlides.map((slide, index) => (
+        {previewSlides.map((slide) => (
           <div key={slide.id} className="deck-preview-thumb" title={slide.title}>
             <div
               className={`deck-preview-thumb-inner ${
                 slide.visualSource?.kind === "svg" ? "deck-preview-thumb-inner-svg" : ""
               }`}
-              style={{
-                background: slide.visualSource?.kind === "svg"
-                  ? "#ffffff"
-                  : resolveSlideStyle(presentation.designSystem, slide).background.css,
-              }}
+              style={{ background: "#ffffff" }}
             >
               {slide.visualSource?.kind === "svg" ? (
                 <img
@@ -52,10 +47,7 @@ export const DeckPreviewCard: React.FC<DeckPreviewCardProps> = ({
                   style={{ width: "100%", height: "100%", objectFit: "fill", display: "block" }}
                 />
               ) : (
-                <>
-                  <span className="deck-preview-thumb-index">{index + 1}</span>
-                  <span className="deck-preview-thumb-title">{slide.title}</span>
-                </>
+                <span className="deck-preview-thumb-non-svg">非 SVG</span>
               )}
             </div>
           </div>

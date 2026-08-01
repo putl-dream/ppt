@@ -6,10 +6,7 @@ import type { Presentation } from "@shared/presentation";
 export const LAYOUT_VISUAL_COMMAND_TYPES = new Set<PresentationCommand["type"]>([
   "add-slide",
   "set-design-system",
-  "set-slide-design",
-  "update-slide-layout",
-  "update-slide-variant",
-  "update-text-style",
+  "set-presentation-title",
   "restore-slide",
 ]);
 

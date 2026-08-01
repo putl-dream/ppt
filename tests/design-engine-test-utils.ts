@@ -6,7 +6,6 @@ import {
   type SlideDesignOverride,
 } from "@design-system";
 import type { Presentation, Slide } from "../src/shared/presentation";
-import { createLockedLayoutChoice } from "../src/shared/layout-preference";
 
 export const TEST_DESIGN_SYSTEM = DEFAULT_DESIGN_SYSTEM;
 
@@ -25,7 +24,7 @@ export function testDesignSystem(
 }
 
 export function testSlideStyle(
-  slide: Pick<Slide, "layout" | "slideVariant" | "designOverride"> = {},
+  slide: Pick<Slide, "slideVariant" | "designOverride"> = {},
   systemOverrides: TestDesignSystemOverrides = {},
   designOverride?: SlideDesignOverride,
 ) {
@@ -42,15 +41,4 @@ export function testPresentation(
     ...input,
     designSystem: input.designSystem ?? TEST_DESIGN_SYSTEM,
   } as Presentation;
-}
-
-export function testLayoutChoice(designSystem: DesignSystemV2 = TEST_DESIGN_SYSTEM) {
-  return createLockedLayoutChoice({
-    audience: "Test audience",
-    objective: "Verify the presentation workflow",
-    desiredOutcome: "Produce an executable design plan",
-    coreMessage: "The confirmed direction is the design source of truth",
-    deliveryContext: "Automated test",
-    afterUse: "Regression verification",
-  }, designSystem, "Deterministic locked direction for tests.");
 }

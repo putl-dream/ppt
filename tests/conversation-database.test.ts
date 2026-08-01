@@ -4,6 +4,10 @@ import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it } from "vitest";
 import { ConversationDatabase } from "@main/conversation-database";
 import {
+  createMinimalSvgMarkup,
+  createSvgVisualSource,
+} from "@shared/presentation";
+import {
   createSessionPresentation,
   type SessionSnapshot,
 } from "@shared/session";
@@ -81,14 +85,17 @@ describe("ConversationDatabase", () => {
     database.close();
   });
 
-  it("repairs duplicate legacy presentation identities before schema parsing", async () => {
+  it("repairs duplicate legacy slide ids and migrates element slides to SVG-only", async () => {
     const database = await createDatabase();
     const legacy = snapshot("legacy");
+    const markup = createMinimalSvgMarkup("First slide");
+    const visualSource = createSvgVisualSource({ markup, sourcePath: "slides/P01.svg" });
     legacy.session.slideCount = 2;
     legacy.presentation.slides = [
       {
         id: "slide-1",
         title: "First slide",
+        visualSource,
         elements: [
           {
             id: "element-1",
@@ -97,45 +104,30 @@ describe("ConversationDatabase", () => {
             y: 10,
             width: 200,
             height: 40,
-            text: "First element",
-            fontSize: 20,
-          },
-          {
-            id: "element-1",
-            type: "text",
-            x: 10,
-            y: 60,
-            width: 200,
-            height: 40,
-            text: "Second element",
+            text: "Legacy element",
             fontSize: 20,
           },
         ],
+        layout: "concept",
       },
       {
         id: "slide-1",
         title: "Second slide",
         elements: [],
+        layout: "cover",
       },
-    ];
+    ] as unknown as typeof legacy.presentation.slides;
     database.replaceState({ activeSessionId: "legacy", sessions: [legacy] });
 
     const restored = database.loadState().sessions[0].presentation;
-    expect(restored.slides.map((slide) => slide.id)).toEqual([
-      "slide-1",
-      "slide-1__duplicate_2",
-    ]);
-    expect(restored.slides.map((slide) => slide.title)).toEqual([
-      "First slide",
-      "Second slide",
-    ]);
-    expect(restored.slides[0].elements.map((element) => element.id)).toEqual([
-      "element-1",
-      "element-1__duplicate_2",
-    ]);
-    expect(restored.slides[0].elements.map((element) =>
-      element.type === "text" ? element.text : ""
-    )).toEqual(["First element", "Second element"]);
+    expect(restored.slides).toHaveLength(1);
+    expect(restored.slides[0]).toMatchObject({
+      id: "slide-1",
+      title: "First slide",
+    });
+    expect(restored.slides[0].visualSource.kind).toBe("svg");
+    expect(restored.slides[0]).not.toHaveProperty("elements");
+    expect(restored.slides[0]).not.toHaveProperty("layout");
     database.close();
   });
 

@@ -1,26 +1,24 @@
 import { describe, expect, it } from "vitest";
 import { renderSlideHtml } from "../src/shared/slide-html-render";
-import { createStarterPresentation } from "../src/shared/presentation";
+import { createSvgVisualSource } from "../src/shared/presentation";
 import { TEST_DESIGN_SYSTEM } from "./design-engine-test-utils";
 
 describe("SVG page HTML rendering", () => {
   it("renders the SVG source as the only full-canvas visual", () => {
-    const slide = createStarterPresentation().slides[0]!;
     const markup = [
       '<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">',
       '<rect width="1280" height="720" fill="#123456"/>',
       '<text x="80" y="120">SVG 同源页面</text>',
       "</svg>",
     ].join("");
-    slide.elements = [];
-    slide.visualSource = {
-      kind: "svg",
-      markup,
-      width: 1280,
-      height: 720,
-      sha256: "a".repeat(64),
-      sourcePath: "slides/svg/slide-1.svg",
-      resources: [],
+    const slide = {
+      id: "slide-1",
+      title: "SVG page",
+      visualSource: createSvgVisualSource({
+        markup,
+        sourcePath: "slides/svg/slide-1.svg",
+        title: "SVG page",
+      }),
     };
 
     const html = renderSlideHtml(slide, 0, TEST_DESIGN_SYSTEM, {

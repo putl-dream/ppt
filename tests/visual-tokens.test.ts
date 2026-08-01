@@ -1,12 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { DESIGN_PRESETS, resolveSlideStyle } from "../src/design-system";
-import {
-  createMarginNoteMotif,
-  createPathLineMotif,
-  type MotifColors,
-} from "../src/shared/motif-system";
-import { slideElementSchema } from "../src/shared/presentation";
-import { VISUAL_TOKENS } from "../src/shared/visual-tokens";
+import { VISUAL_TOKENS, cardShadow, type CardShadow } from "../src/shared/visual-tokens";
 
 describe("visual tokens", () => {
   it("defines radii and elevation presets", () => {
@@ -26,22 +20,13 @@ describe("visual tokens", () => {
     expect(style.layoutTokens.chartStyle).toBe("dashboard");
   });
 
-  it("creates schema-valid motif line elements", () => {
-    const colors: MotifColors = {
-      bg: "#ffffff",
-      accent: "#0ea5e9",
-      cardBg: "#f8fafc",
-      cardStroke: "#cbd5e1",
-    };
-
-    const motifs = [
-      ...createMarginNoteMotif(colors),
-      ...createPathLineMotif(colors),
-    ];
-
-    expect(motifs.filter((element) => element.shapeType === "line")).toHaveLength(2);
-    for (const element of motifs) {
-      expect(slideElementSchema.safeParse(element).success).toBe(true);
-    }
+  it("returns typed card shadow presets", () => {
+    const shadow: CardShadow | undefined = cardShadow("md");
+    expect(shadow).toMatchObject({
+      blur: 16,
+      offsetY: 4,
+      opacity: 0.1,
+    });
+    expect(cardShadow("none")).toBeUndefined();
   });
 });

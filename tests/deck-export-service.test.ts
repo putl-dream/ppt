@@ -1,14 +1,24 @@
-import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { DeckExportService } from "../src/main/deck/deck-export-service";
-import { createStarterPresentation } from "../src/shared/presentation";
+import {
+  createStarterPresentation,
+  createSvgTestSlide,
+  type SlideNarrative,
+} from "../src/shared/presentation";
 import type { ExportPresentationOptions } from "../src/shared/ipc";
 
 const defaultExportOptions: ExportPresentationOptions = {};
-const TINY_PNG_DATA_URL =
-  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+
+const NARRATIVE: SlideNarrative = {
+  role: "cover",
+  coreMessage: "Deck export service test",
+  audienceMove: "Review export output",
+  rhythm: "anchor",
+  layoutIntent: "One full-page SVG slide.",
+};
 
 let tempDirs: string[] = [];
 
@@ -40,11 +50,17 @@ async function assertValidPptxFile(filePath: string, expectedSlideCount: number)
   expect(new Set(slideParts).size).toBe(expectedSlideCount);
 }
 
+function exportReadyPresentation() {
+  const presentation = createStarterPresentation();
+  presentation.slides[0].narrative = NARRATIVE;
+  return presentation;
+}
+
 describe("DeckExportService", () => {
   const service = new DeckExportService();
 
   it("exports presentation to a valid pptx file", async () => {
-    const presentation = createStarterPresentation();
+    const presentation = exportReadyPresentation();
     const filePath = await createTempExportPath("deck-export-pptx-", "pptx");
 
     const result = await service.exportDeck({
@@ -59,7 +75,7 @@ describe("DeckExportService", () => {
   });
 
   it("exports presentation to json when file path ends with .json", async () => {
-    const presentation = createStarterPresentation();
+    const presentation = exportReadyPresentation();
     const filePath = await createTempExportPath("deck-export-json-", "json");
 
     const result = await service.exportDeck({
@@ -74,10 +90,11 @@ describe("DeckExportService", () => {
     const saved = JSON.parse(await readFile(filePath, "utf8"));
     expect(saved.title).toBe(presentation.title);
     expect(saved.slides).toHaveLength(presentation.slides.length);
+    expect(saved.slides[0].visualSource.kind).toBe("svg");
   });
 
   it("exports presentation to html when file path ends with .html", async () => {
-    const presentation = createStarterPresentation();
+    const presentation = exportReadyPresentation();
     const filePath = await createTempExportPath("deck-export-html-", "html");
 
     const result = await service.exportDeck({
@@ -90,44 +107,11 @@ describe("DeckExportService", () => {
     const html = await readFile(filePath, "utf8");
     expect(html).toContain("<!DOCTYPE html>");
     expect(html).toContain(presentation.title);
-  });
-
-  it("embeds local images and the configured logo into portable HTML", async () => {
-    const workspaceRoot = await mkdtemp(join(tmpdir(), "deck-export-html-assets-"));
-    tempDirs.push(workspaceRoot);
-    const imagePath = join(workspaceRoot, "photo.png");
-    await writeFile(imagePath, Buffer.from(TINY_PNG_DATA_URL.split(",")[1], "base64"));
-
-    const presentation = createStarterPresentation();
-    presentation.slides[0].elements.push({
-      id: "local-image",
-      type: "image",
-      x: 120,
-      y: 200,
-      width: 400,
-      height: 240,
-      url: "photo.png",
-      borderRadius: 0,
-    });
-    const filePath = join(workspaceRoot, "export.html");
-
-    await service.exportDeck({
-      presentation,
-      options: { logoUrl: TINY_PNG_DATA_URL },
-      filePath,
-      workspaceRoot,
-    });
-
-    const html = await readFile(filePath, "utf8");
-    expect(html).toContain(`src="${TINY_PNG_DATA_URL}"`);
-    expect(html).not.toContain("src=\"photo.png\"");
-    expect(html.match(/<img class="export-brand-logo"/g)).toHaveLength(
-      presentation.slides.length,
-    );
+    expect(html).toContain('class="slide-svg-source"');
   });
 
   it("rejects forged local paths in export options", async () => {
-    const presentation = createStarterPresentation();
+    const presentation = exportReadyPresentation();
     const filePath = await createTempExportPath("deck-export-options-", "pptx");
 
     await expect(service.exportDeck({
@@ -138,7 +122,7 @@ describe("DeckExportService", () => {
   });
 
   it("generates a default export path when filePath is omitted", async () => {
-    const presentation = createStarterPresentation();
+    const presentation = exportReadyPresentation();
 
     const result = await service.exportDeck({
       presentation,
@@ -152,39 +136,21 @@ describe("DeckExportService", () => {
     tempDirs.push(join(result.filePath, ".."));
   });
 
-  it("blocks renderable exports that still contain remote images", async () => {
-    const presentation = createStarterPresentation();
-    presentation.slides[0].elements.push({
-      id: "remote-image",
-      type: "image",
-      x: 120,
-      y: 200,
-      width: 400,
-      height: 240,
-      url: "https://example.com/image.png",
-      borderRadius: 0,
-    });
-    const filePath = await createTempExportPath("deck-export-remote-", "html");
+  it("blocks renderable exports when SVG validation fails", async () => {
+    const presentation = exportReadyPresentation();
+    presentation.slides[0].visualSource.sha256 = "0".repeat(64);
+    const filePath = await createTempExportPath("deck-export-invalid-svg-", "pptx");
 
     await expect(service.exportDeck({
       presentation,
       options: defaultExportOptions,
       filePath,
-    })).rejects.toThrow("remote URL");
+    })).rejects.toThrow("Export blocked by deck validation");
   });
 
-  it("still allows JSON recovery export for decks with unresolved assets", async () => {
-    const presentation = createStarterPresentation();
-    presentation.slides[0].elements.push({
-      id: "remote-image",
-      type: "image",
-      x: 120,
-      y: 200,
-      width: 400,
-      height: 240,
-      url: "https://example.com/image.png",
-      borderRadius: 0,
-    });
+  it("still allows JSON recovery export for decks with validation errors", async () => {
+    const presentation = exportReadyPresentation();
+    presentation.slides[0].visualSource.sha256 = "0".repeat(64);
     const filePath = await createTempExportPath("deck-export-recovery-", "json");
 
     await expect(service.exportDeck({
@@ -194,36 +160,27 @@ describe("DeckExportService", () => {
     })).resolves.toMatchObject({ filePath });
   });
 
-  it("blocks unverified commercial assets unless this export is explicitly approved", async () => {
-    const presentation = createStarterPresentation();
-    presentation.slides[0].elements.push({
-      id: "unverified-image",
-      type: "image",
-      provenance: "asset",
-      x: 120,
-      y: 200,
-      width: 400,
-      height: 240,
-      url: TINY_PNG_DATA_URL,
-      borderRadius: 0,
-      asset: {
-        sourceUrl: "https://cdn.example.com/photo.png",
-        sourcePageUrl: "https://example.com/photo",
-        licenseStatus: "unknown",
+  it("exports multi-slide SVG decks", async () => {
+    const presentation = exportReadyPresentation();
+    presentation.slides.push(createSvgTestSlide({
+      title: "Second page",
+      narrative: {
+        role: "evidence",
+        coreMessage: "More detail",
+        audienceMove: "Understand",
+        rhythm: "dense",
+        layoutIntent: "Evidence stack.",
       },
-    });
-    const blockedPath = await createTempExportPath("deck-export-license-blocked-", "pptx");
-    const approvedPath = await createTempExportPath("deck-export-license-approved-", "pptx");
+    }));
+    const filePath = await createTempExportPath("deck-export-multi-svg-", "pptx");
 
-    await expect(service.exportDeck({
+    const result = await service.exportDeck({
       presentation,
       options: defaultExportOptions,
-      filePath: blockedPath,
-    })).rejects.toThrow("commercial license verified");
-    await expect(service.exportDeck({
-      presentation,
-      options: { allowUnverifiedAssets: true },
-      filePath: approvedPath,
-    })).resolves.toMatchObject({ filePath: approvedPath });
+      filePath,
+    });
+
+    expect(result.slideCount).toBe(2);
+    await assertValidPptxFile(filePath, 2);
   });
 });

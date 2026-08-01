@@ -187,7 +187,6 @@ export const submitSvgDeckTool: ToolDefinition<
         ...(input.speakerNotes !== undefined
           ? { speakerNotes: input.speakerNotes }
           : {}),
-        elements: [],
         visualSource: {
           kind: "svg" as const,
           markup: hydrated.markup,

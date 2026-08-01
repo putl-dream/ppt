@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { FileSessionStore } from "@main/session-store";
 import { projectArtifactFilePaths } from "@shared/project";
 import type { DeckGenerationJob } from "@shared/deck-persistence";
+import { createSvgTestSlide } from "@shared/presentation";
 import { TEST_DESIGN_SYSTEM } from "./design-engine-test-utils";
 
 const temporaryDirectories: string[] = [];
@@ -65,7 +66,7 @@ describe("deck persistence (problem 2)", () => {
       title: "Persist Mirror Test",
       revision: 7,
       designSystem: TEST_DESIGN_SYSTEM,
-      slides: [{ id: "slide-1", title: "Slide One", elements: [] }],
+      slides: [createSvgTestSlide({ id: "slide-1", title: "Slide One" })],
     };
 
     await store.savePresentation(sessionId, presentation);
