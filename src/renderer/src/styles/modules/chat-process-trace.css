@@ -95,8 +95,7 @@
 }
 .process-trace-row-caret,
 .process-trace-row-toggle,
-.process-trace-row-status,
-.process-trace-row-tool-icon {
+.process-trace-row-status {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -106,41 +105,30 @@
   flex-basis: 14px;
   color: var(--text-muted);
 }
-.process-trace-row-tool-icon {
-  color: var(--text-muted);
+.process-trace-row-status {
+  transition: color var(--duration-base) var(--ease-out);
 }
-.process-trace-row--active .process-trace-row-tool-icon {
+.process-trace-row-status--running {
   color: var(--text-secondary);
+  width: 14px;
+  height: 14px;
+  flex: 0 0 14px;
 }
-.process-trace-row-status--completed {
-  color: var(--accent-green);
-  font-size: var(--text-2xs);
-  font-weight: 700;
+.process-trace-row-status--running .process-trace-row-tool-icon {
+  animation: process-trace-tool-icon-pulse 1.4s var(--ease-in-out) infinite;
 }
-.process-trace-row-status--failed,
-.process-trace-row-status--denied,
-.process-trace-row-status--invalid-input {
+.process-trace-row-status--failed {
   color: var(--danger);
-  font-size: var(--text-2xs);
-  font-weight: 700;
-}
-.process-trace-row-status--denied {
-  color: var(--text-muted);
 }
 .process-trace-row-status--invalid-input {
   color: var(--warning);
 }
-.process-trace-row-status--completed .process-trace-row-status-glyph {
-  stroke-dasharray: 24;
-  stroke-dashoffset: 24;
-  animation: process-trace-check-draw var(--duration-slow) var(--ease-out) forwards;
-}
-.process-trace-row-status--failed .process-trace-row-status-glyph,
-.process-trace-row-status--invalid-input .process-trace-row-status-glyph {
+.process-trace-row-status--failed .process-trace-row-tool-icon,
+.process-trace-row-status--invalid-input .process-trace-row-tool-icon {
   animation: process-trace-status-pop var(--duration-base) var(--ease-out) both;
 }
-.process-trace-row-status--denied .process-trace-row-status-glyph {
-  animation: process-trace-status-fade var(--duration-base) var(--ease-out) both;
+.process-trace-row-status--denied .process-trace-row-tool-icon {
+  opacity: 0.6;
 }
 .process-trace-row--tool.process-trace-row--enter {
   animation: process-trace-row-enter var(--duration-base) var(--ease-out) both;
@@ -237,9 +225,12 @@
   line-height: 1.7;
 }
 
-@keyframes process-trace-check-draw {
-  to {
-    stroke-dashoffset: 0;
+@keyframes process-trace-tool-icon-pulse {
+  0%, 100% {
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 1;
   }
 }
 
@@ -251,15 +242,6 @@
   to {
     opacity: 1;
     transform: scale(1);
-  }
-}
-
-@keyframes process-trace-status-fade {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
   }
 }
 
@@ -275,15 +257,10 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .process-trace-row-status--completed .process-trace-row-status-glyph,
-  .process-trace-row-status--failed .process-trace-row-status-glyph,
-  .process-trace-row-status--invalid-input .process-trace-row-status-glyph,
-  .process-trace-row-status--denied .process-trace-row-status-glyph,
+  .process-trace-row-status--running .process-trace-row-tool-icon,
+  .process-trace-row-status--failed .process-trace-row-tool-icon,
+  .process-trace-row-status--invalid-input .process-trace-row-tool-icon,
   .process-trace-row--tool.process-trace-row--enter {
     animation: none;
-  }
-
-  .process-trace-row-status--completed .process-trace-row-status-glyph {
-    stroke-dashoffset: 0;
   }
 }

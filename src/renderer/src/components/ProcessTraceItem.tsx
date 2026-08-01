@@ -1,8 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import type { AgentToolDisplayCategory } from "@shared/agent-activity-display";
 import {
-  AlertTriangleIcon,
-  CheckIcon,
   ChevronDownIcon,
   ChevronRightIcon,
   CircleIcon,
@@ -10,7 +8,6 @@ import {
   EyeIcon,
   FileIcon,
   SearchIcon,
-  SlashCircleIcon,
   UsersIcon,
 } from "./Icons";
 import { MessageMarkdown } from "./MessageMarkdown";
@@ -33,17 +30,6 @@ const TOOL_CATEGORY_ICONS: Record<AgentToolDisplayCategory, IconComponent> = {
   coordinate: UsersIcon,
   other: CircleIcon,
 };
-
-function renderStatusGlyph(status: NonNullable<ProcessTraceRow["status"]>) {
-  if (status === "running") return <i />;
-  if (status === "completed") {
-    return <CheckIcon size={12} className="process-trace-row-status-glyph" />;
-  }
-  if (status === "denied") {
-    return <SlashCircleIcon size={12} className="process-trace-row-status-glyph" />;
-  }
-  return <AlertTriangleIcon size={12} className="process-trace-row-status-glyph" />;
-}
 
 export const ProcessTraceItem: React.FC<ProcessTraceItemProps> = ({
   row,
@@ -77,21 +63,19 @@ export const ProcessTraceItem: React.FC<ProcessTraceItemProps> = ({
 
   const toggleExpanded = () => setExpanded((value) => !value);
 
+  // The tool icon doubles as the status slot: colour and motion carry the state
+  // so the row never repeats itself with a separate tick or exclamation mark.
   const statusIndicator = row.status ? (
     <span
       className={`process-trace-row-status process-trace-row-status--${row.status}`}
       aria-hidden="true"
     >
-      {renderStatusGlyph(row.status)}
-    </span>
-  ) : null;
-
-  const toolCategoryIcon = ToolCategoryIcon && row.toolCategory ? (
-    <span
-      className={`process-trace-row-tool-icon process-trace-row-tool-icon--${row.toolCategory}`}
-      aria-hidden="true"
-    >
-      <ToolCategoryIcon size={12} />
+      {ToolCategoryIcon && row.toolCategory ? (
+        <ToolCategoryIcon
+          size={12}
+          className={`process-trace-row-tool-icon process-trace-row-tool-icon--${row.toolCategory}`}
+        />
+      ) : <i />}
     </span>
   ) : null;
 
@@ -153,7 +137,6 @@ export const ProcessTraceItem: React.FC<ProcessTraceItemProps> = ({
           aria-expanded={effectiveExpanded}
         >
           {statusIndicator}
-          {toolCategoryIcon}
           <span className="process-trace-row-toggle" aria-hidden="true">
             <CaretIcon size={12} />
           </span>
@@ -164,7 +147,6 @@ export const ProcessTraceItem: React.FC<ProcessTraceItemProps> = ({
           {statusIndicator ?? (
             <span className="process-trace-row-caret" aria-hidden="true" />
           )}
-          {toolCategoryIcon}
           <span className="process-trace-row-label">{row.title}</span>
         </div>
       )}

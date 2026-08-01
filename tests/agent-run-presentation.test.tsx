@@ -259,19 +259,20 @@ describe("agent run presentation", () => {
     expect(rows.map((row) => row.toolCategory)).toEqual(["search", "change", "change"]);
 
     const search = render(<ProcessTraceItem row={rows[0]!} />);
-    expect(search.container.querySelector(".process-trace-row-tool-icon--search")).not.toBeNull();
-    expect(search.container.querySelector(".process-trace-row-status--completed")).not.toBeNull();
+    expect(search.container.querySelector(".process-trace-row-status--completed .process-trace-row-tool-icon--search")).not.toBeNull();
+    expect(search.container.querySelector(".process-trace-row-status-glyph")).toBeNull();
+    expect(search.container.textContent).not.toMatch(/[✓!]/);
     search.unmount();
 
     const change = render(<ProcessTraceItem row={rows[1]!} />);
-    expect(change.container.querySelector(".process-trace-row-tool-icon--change")).not.toBeNull();
-    expect(change.container.querySelector(".process-trace-row-status--failed")).not.toBeNull();
+    expect(change.container.querySelector(".process-trace-row-status--failed .process-trace-row-tool-icon--change")).not.toBeNull();
+    expect(change.container.textContent).not.toMatch(/[✓!]/);
     change.unmount();
 
     const denied = render(<ProcessTraceItem row={rows[2]!} />);
-    expect(denied.container.querySelector(".process-trace-row-tool-icon--change")).not.toBeNull();
-    expect(denied.container.querySelector(".process-trace-row-status--denied")).not.toBeNull();
+    expect(denied.container.querySelector(".process-trace-row-status--denied .process-trace-row-tool-icon--change")).not.toBeNull();
     expect(denied.container.querySelector(".process-trace-row-status--failed")).toBeNull();
+    expect(denied.container.textContent).not.toMatch(/[✓!]/);
   });
 
   it("exposes one keyboard target for an expandable trace row", () => {

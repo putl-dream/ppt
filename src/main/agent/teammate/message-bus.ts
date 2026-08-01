@@ -72,6 +72,9 @@ const LOCK_OPTIONS: LockOptions = {
   },
 };
 
+/** 每个 inbox 文件在本进程内的串行队列，避免同进程竞争者互相消耗文件锁的重试预算。 */
+const mailboxQueues = new Map<string, Promise<unknown>>();
+
 export function sanitizeAgentName(name: string): string {
   const sanitized = name.trim().replace(/[^a-zA-Z0-9_.-]+/g, "_");
   return sanitized || "agent";
@@ -208,7 +211,23 @@ export class MessageBus {
     );
   }
 
-  private async withMailboxLock<T>(inboxPath: string, fn: () => Promise<T>): Promise<T> {
+  /**
+   * 同一进程内的并发访问先在内存里排队，文件锁只用于跨进程互斥。
+   * proper-lockfile 的重试间隔固定，N 个同进程竞争者需要 N 个轮询周期才能排空，
+   * 竞争者稍多就会耗尽重试预算并抛出 ELOCKED。
+   */
+  private withMailboxLock<T>(inboxPath: string, fn: () => Promise<T>): Promise<T> {
+    const previous = mailboxQueues.get(inboxPath) ?? Promise.resolve();
+    const current = previous
+      .catch(() => undefined)
+      .then(() => this.withInterProcessLock(inboxPath, fn));
+    mailboxQueues.set(inboxPath, current);
+    return current.finally(() => {
+      if (mailboxQueues.get(inboxPath) === current) mailboxQueues.delete(inboxPath);
+    });
+  }
+
+  private async withInterProcessLock<T>(inboxPath: string, fn: () => Promise<T>): Promise<T> {
     await mkdir(this.mailboxDir, { recursive: true });
     const release = await lockfile.lock(inboxPath, LOCK_OPTIONS);
     try {
