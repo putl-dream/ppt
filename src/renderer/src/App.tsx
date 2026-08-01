@@ -59,6 +59,8 @@ export function App() {
     selectedModelId,
     selectModel: setSelectedModelId,
     visibleModels,
+    defaultTemplateId,
+    setDefaultTemplateId,
   } = settings;
 
   const [request, setRequest] = useState("");
@@ -245,6 +247,16 @@ export function App() {
       showSidebarToggle={activeMode !== "settings"}
       sidebarCollapsed={workbenchLayout.isPrimarySidebarCollapsed}
       onToggleSidebar={workbenchLayout.togglePrimarySidebar}
+      showTemplateMenu={activeMode !== "settings"}
+      activeSessionId={activeSessionId || undefined}
+      defaultTemplateId={defaultTemplateId}
+      setDefaultTemplateId={setDefaultTemplateId}
+      onOpenTemplateSettings={() => {
+        if (!confirmLeaveProjectFiles()) return;
+        setActiveMode("settings");
+        setSettingsCategory("preferences-presentation");
+      }}
+      notify={notify}
     >
       {activeMode === "workspace" ? (
         <WorkspaceView
