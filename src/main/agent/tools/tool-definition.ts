@@ -169,12 +169,6 @@ export interface ToolRuntimeBehavior<TArgs = unknown> {
   delegation?: ToolDelegationBehavior<TArgs>;
   presentation?: ToolPresentationBehavior<TArgs>;
   concurrency?: ToolConcurrencyBehavior<TArgs>;
-  /**
-   * The tool has already enforced content-exact rendered previews for every
-   * visual source in its proposal, so the legacy command render loop must not
-   * request a second submission.
-   */
-  visualReview?: { mode: "tool-managed" };
 }
 
 /**

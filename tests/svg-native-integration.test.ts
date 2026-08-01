@@ -1,21 +1,15 @@
 import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import type { PresentationCommand } from "../src/shared/commands";
 import type {
   Presentation,
   Slide,
   SlideNarrative,
 } from "../src/shared/presentation";
 import { LayoutValidator } from "../src/main/deck/validators/layout-validator";
-import {
-  applyCommandsToDraft,
-  collectAffectedSlideIds,
-} from "../src/main/agent/runtime/presentation/layout-command-utils";
 import { previewSlideTool } from "../src/main/agent/tools/core/preview-slide";
 import type { ToolContext } from "../src/main/agent/tools/tool-definition";
 import {
   TEST_DESIGN_SYSTEM,
-  testDesignSystem,
 } from "./design-engine-test-utils";
 
 const SVG_MARKUP = [
@@ -102,33 +96,6 @@ describe("SVG-native integration", () => {
     expect(tamperedIssues[0]?.message).toContain(
       "no longer matches its source hash",
     );
-  });
-
-  it("collectAffectedSlideIds excludes a removed SVG page after a deck design change", () => {
-    const oldSlide = svgSlide("old-svg-slide");
-    const newSlide = svgSlide("new-svg-slide");
-    const commands: PresentationCommand[] = [
-      {
-        id: "remove-old",
-        type: "remove-slide",
-        slideId: oldSlide.id,
-      },
-      {
-        id: "set-design",
-        type: "set-design-system",
-        designSystem: testDesignSystem({ visualStyle: "dark-tech" }),
-      },
-      {
-        id: "add-new",
-        type: "add-slide",
-        slide: newSlide,
-        index: 0,
-      },
-    ];
-    const draft = applyCommandsToDraft(presentation([oldSlide]), commands);
-
-    expect(draft.slides.map((slide) => slide.id)).toEqual(["new-svg-slide"]);
-    expect(collectAffectedSlideIds(commands, draft)).toEqual(["new-svg-slide"]);
   });
 
   it("PreviewSlide summarizes svgPage and narrative without requesting a thumbnail", async () => {

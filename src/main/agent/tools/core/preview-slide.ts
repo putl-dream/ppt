@@ -138,7 +138,7 @@ export const previewSlideTool: ToolDefinition<
             layoutTokens: style!.layoutTokens,
             typography: style!.typography,
           },
-          backgroundVariant: slide.backgroundVariant ?? "default",
+          backgroundVariant: "default",
           backgroundCss: style!.background.css,
           description: describeSlide(slide),
         }

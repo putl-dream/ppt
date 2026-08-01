@@ -114,9 +114,7 @@ export function exportDeckContactSheetHtml(
   const thumbnailWidth = Math.round(SLIDE_WIDTH * scale);
   const thumbnailHeight = Math.round(SLIDE_HEIGHT * scale);
   const items = presentation.slides.map((slide, index) => {
-    const scene = slide.sceneRef
-      ? `${slide.sceneRef.sceneId} / ${slide.sceneRef.variantId}`
-      : slide.narrative?.role ?? slide.visualSource.sourcePath;
+    const scene = slide.narrative?.role ?? slide.visualSource.sourcePath;
     return `
       <article class="contact-item">
         <div class="contact-meta">

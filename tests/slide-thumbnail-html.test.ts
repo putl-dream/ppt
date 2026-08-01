@@ -43,17 +43,19 @@ describe("slide-html-render", () => {
       ...structuredClone(presentation.slides[0]!),
       id: "second-slide",
       title: "Second slide",
-      sceneRef: {
-        packId: "editorial-business",
-        sceneId: "split-case",
-        variantId: "fact-sidebar",
+      narrative: {
+        role: "evidence",
+        coreMessage: "Second page evidence",
+        audienceMove: "Compare the options",
+        rhythm: "dense",
+        layoutIntent: "Two-column evidence",
       },
     });
 
     const html = exportDeckContactSheetHtml(presentation);
 
     expect(html.match(/class="contact-item"/g)).toHaveLength(2);
-    expect(html).toContain("split-case / fact-sidebar");
+    expect(html).toContain("evidence");
     expect(html).toContain("grid-template-columns: repeat(2,");
   });
 });

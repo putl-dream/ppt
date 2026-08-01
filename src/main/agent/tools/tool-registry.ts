@@ -153,6 +153,7 @@ const DEFAULT_TOOL_DEFINITIONS: ToolDefinition<any, any>[] = [
 /**
  * 构建每个 SessionRuntime 使用的标准工具集合。
  * 产品默认 Deferred 发现面为空，因此不注册 SearchExtraTools / ExecuteExtraTool。
+ * 空 Deferred 平台（搜索/委托/Preflight）有意保留供管线测试与未来复用；
  * 管线测试仍可手动注册这两枚壳工具与 deferred target。
  */
 export function createDefaultToolRegistry(): ToolRegistry {

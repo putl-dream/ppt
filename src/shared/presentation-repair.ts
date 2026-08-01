@@ -140,12 +140,7 @@ export function migratePresentationToSvgOnly(
       continue;
     }
 
-    for (const field of ["elements", "layout", "grammarVariant"] as const) {
-      if (field in slide) {
-        delete slide[field];
-        strippedLegacyFieldCount += 1;
-      }
-    }
+    strippedLegacyFieldCount += stripLegacySlideKeys(slide);
     kept.push(slide);
   }
 
@@ -157,7 +152,14 @@ export function migratePresentationToSvgOnly(
   };
 }
 
-const LEGACY_SLIDE_KEYS = ["elements", "layout", "grammarVariant"] as const;
+const LEGACY_SLIDE_KEYS = [
+  "elements",
+  "layout",
+  "grammarVariant",
+  "slideVariant",
+  "sceneRef",
+  "backgroundVariant",
+] as const;
 
 function stripLegacySlideKeys(slide: JsonRecord): number {
   let stripped = 0;

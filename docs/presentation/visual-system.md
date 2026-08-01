@@ -97,14 +97,16 @@ shape / chart parts。图表应画在页面 SVG 内，与预览同源。
 
 产品 slide 为 STRICT SVG-only（`visualSource` 必填；无 `elements` / `layout` /
 `grammarVariant`）。Grammar / 命令轨作者工具不在默认注册表；handler / variant / slot
-语义不再适用产品新建。共享库与未注册实现的物理删除见清理工作，不能写成「仓库已无文件」。
+语义不再适用产品新建。未注册的 Grammar/layout 实现与 layout-plan 共享库已从仓库移除；
+`tests/svg-native-tool-surface.test.ts` 继续断言这些工具名不出现在默认注册表。
 
-## 8. Render Feedback（Partial）
+## 8. Render Feedback（已移除）
 
 **已落地**：`PreviewSvgPage` PNG 门禁与 deck validators 的确定性检查。
 
-**未接线**：`render-feedback-loop` 所描述的有界多页视觉复盘仅有模块/测试，未挂入产品
-Agent Run。不得把该循环写成现行能力。
+**已移除**：有界多页视觉复盘循环（原 `render-feedback-loop`）及其专测已从仓库删除，
+不得写成现行或「仅未接线」的产品能力。内部启发式评分见 `design-system/evaluation.ts`
+（非产品质检路径）。
 
 视觉模型不能无限返工，也不能修改事实、数字、来源、页序和商业目标。
 
@@ -114,7 +116,7 @@ Agent Run。不得把该循环写成现行能力。
 - captioned image 建立独立内容模型；
 - deck-review 增强母题、锚点、密度和页面差异度；
 - 从内容自动推导 Brand Profile，并允许用户自然语言调节；
-- 继续避免把未接线模块写成现行能力（Render Feedback 等）。
+- 继续避免把已移除或未接线模块写成现行能力。
 
 ### Grammar / element-IR 作者表面（已下架）
 
@@ -129,7 +131,7 @@ Agent Run。不得把该循环写成现行能力。
 
 ## 10. 关键实现
 
-- `src/design-system/`
+- `src/design-system/`（含内部启发式 `evaluation.ts`；产品质检走 CommitGate / DeckValidationService）
 - `src/shared/presentation.ts`（`designSystemV2Schema`、`visualSource`）
 - `src/main/agent/tools/core/preview-svg-page.ts`
 - `src/main/agent/tools/core/submit-svg-deck.ts`

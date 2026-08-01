@@ -1,6 +1,4 @@
 import { z } from "zod";
-import { BACKGROUND_VARIANTS } from "./slide-background";
-import { SLIDE_VARIANTS } from "./slide-variant";
 import { SVG_PAGE_HEIGHT, SVG_PAGE_WIDTH } from "./svg-page";
 import {
   DEFAULT_DESIGN_SYSTEM,
@@ -116,13 +114,6 @@ export const slideSchema = z.object({
   visualSource: svgPageVisualSourceSchema,
   narrative: slideNarrativeSchema.optional(),
   designOverride: slideDesignOverrideSchema.optional(),
-  backgroundVariant: z.enum(BACKGROUND_VARIANTS).optional(),
-  slideVariant: z.enum(SLIDE_VARIANTS).optional(),
-  sceneRef: z.object({
-    packId: z.string().trim().min(1),
-    sceneId: z.string().trim().min(1),
-    variantId: z.string().trim().min(1),
-  }).strict().optional(),
 }).strict();
 
 export const presentationSlidesSchema = z.array(slideSchema).superRefine((slides, context) => {

@@ -19,9 +19,9 @@
 当前系统已经具备两类相邻能力：
 
 - `src/design-system/` 提供内置视觉风格、配色、阅读模式和 Design System；
-- `src/shared/design-recommendation.ts` 中的关键词推荐与 `SPECTRUM_PROFILES` 仍存在，
-  但 `ResolveDesignPlan` 已不在默认工具注册表；活路径由 `skills/ppt-design` 让模型选择
-  `visualStyle` 并写入 `design/design-spec.json`。
+- 活路径由 `skills/ppt-design` 让模型选择 `visualStyle` 并写入 `design/design-spec.json`。
+  历史三方向频谱（`SPECTRUM_PROFILES` / `ResolveDesignPlan`）已从仓库移除，不作为现行
+  推荐实现；其关键词信号思路可迁入本提案的 template catalog matching。
 
 但产品层还没有统一的“模板”领域能力：
 
@@ -200,7 +200,8 @@ interface ResolvedTemplateSelection {
 - selection 引用 immutable revision，不能只引用可能被覆盖的文件名；
 - uploaded source 的路径只由 Main/Project 层保存，Renderer 和模型只接触受控 ID、摘要和
   项目内相对路径；
-- 勿与遗留 `ConfirmedDesignSelection`（safe/shifted/bold spectrum）混名或共用存储。
+- 勿与已删除的历史 `ConfirmedDesignSelection`（safe/shifted/bold spectrum）混名或
+  共用存储命名。
 
 ### 5.1 单一事实源：resolver 与 SVG 锁
 
@@ -216,8 +217,8 @@ interface ResolvedTemplateSelection {
 3. 模型可以把自然语言归一化为 structured signals（受众、场景、密度偏好等），**不能**
    发明不存在的 template ID，也不能在 `mode=auto|default|custom` 下覆盖已解析的 template
    revision（除非用户本轮显式改选，并记为 `explicit-*`）。
-4. `ResolveDesignPlan` / `SPECTRUM_PROFILES` 三方向比较不作为产品默认 UI；其关键词信号可
-   迁移进 catalog matching，但不再隐藏在 spectrum 推荐里充当模板选择。
+4. 不提供三方向比较 UI；关键词/内容信号只进入本提案的 catalog matching，不复活
+   已删除的 spectrum 推荐路径。
 5. 内容大纲或页密度在首次锁定 `design-spec` 之后变化时，**不自动重选模板**；除非用户
    修改 project policy、显式要求重选，或 `design-spec` 被删除后重建。
 
@@ -552,7 +553,7 @@ Prompt 不能承担：
 - 建立 schema、catalog revision、`design/template-policy.json` 和
   `ResolvedTemplateSelection`；
 - 把 auto 池收敛到约 6–8 个可解释 builtin（自 `DESIGN_PRESETS` 选取），关键词 matching
-  迁出散落的 `SPECTRUM_PROFILES` 隐藏逻辑；
+  作为 catalog 一等元数据实现（不依赖已删除的 spectrum 推荐模块）；
 - selection 写入 `design/design-spec.json`，复用已有 `design_spec` revision / stale 传播；
 - 落实 §5.1：resolver 锁定 DS，`ppt-design` / Submit 不得另选冲突风格；
 - Agent 动态上下文读取 policy 与 resolved selection；

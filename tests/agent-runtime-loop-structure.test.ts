@@ -45,10 +45,10 @@ describe("AgentRuntime query-loop structure", () => {
     const session = await source("lifecycle/agent-session.ts");
 
     expect(combined).not.toMatch(
-      /session\.(?:modelMessages|queuedToolUses|pendingToolResults|renderFeedbackUsed|validationFailuresByTool)/,
+      /session\.(?:modelMessages|queuedToolUses|pendingToolResults|validationFailuresByTool)/,
     );
     expect(session).not.toMatch(
-      /modelMessagesValue|queuedToolUsesValue|pendingToolResultsValue|renderFeedbackUsedValue|validationFailuresByToolValue/,
+      /modelMessagesValue|queuedToolUsesValue|pendingToolResultsValue|validationFailuresByToolValue/,
     );
   });
 

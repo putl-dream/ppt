@@ -1,3 +1,10 @@
+/**
+ * Internal / experimental deck visual heuristics.
+ *
+ * Not a product quality gate: Preview/Submit and CommitGate do not call this
+ * module. Live apply-time quality is DeckValidationService + CommitGate
+ * `quality_report`. Keep this library for unit tests and offline experiments only.
+ */
 import type { Slide } from "@shared/presentation";
 import type { DesignSystemV2 } from "./schema";
 
@@ -44,7 +51,7 @@ export interface DeckVisualEvaluation {
 
 export type EvaluationSlide = Pick<
   Slide,
-  "id" | "visualSource" | "narrative" | "designOverride" | "slideVariant" | "title"
+  "id" | "visualSource" | "narrative" | "designOverride" | "title"
 >;
 
 const clamp = (value: number): number => Math.max(0, Math.min(100, Math.round(value)));
@@ -112,7 +119,7 @@ export function evaluateDeckVisualQuality(
   const layoutSignatures = new Set(slides.map((slide) =>
     slide.visualSource?.kind === "svg"
       ? `svg/${slide.narrative?.rhythm ?? "unset"}/${slide.narrative?.layoutIntent ?? slide.visualSource.sha256}`
-      : `legacy/${slide.slideVariant ?? "default"}`));
+      : "legacy/non-svg"));
   const differentiation = emptyDeck
     ? 0
     : slides.length <= 2

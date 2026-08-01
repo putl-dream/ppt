@@ -1,15 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { createStarterPresentation } from "../src/shared/presentation-fixtures";
-import {
-  resolveSlideVariant,
-  SLIDE_VARIANTS,
-} from "../src/shared/slide-variant";
+import { SLIDE_VARIANTS } from "../src/shared/slide-variant";
 import { resolveSlideStyle } from "@design-system";
 import { TEST_DESIGN_SYSTEM } from "./design-engine-test-utils";
 import { exportToHtml } from "../src/shared/html-exporter";
 
-describe("slide variant design system", () => {
-  it("supports light/dark/hero slide variants", () => {
+describe("design-engine slideVariant hints", () => {
+  it("supports light/dark/hero resolution hints", () => {
     expect(SLIDE_VARIANTS).toContain("light");
     expect(SLIDE_VARIANTS).toContain("dark");
     expect(SLIDE_VARIANTS).toContain("hero");
@@ -25,12 +22,6 @@ describe("slide variant design system", () => {
     const bg = resolveSlideStyle(TEST_DESIGN_SYSTEM, { slideVariant: "dark" }).background;
     expect(bg.fill).toBe("#07111f");
   });
-
-  it("preserves explicit slideVariant on SVG slides", () => {
-    const presentation = createStarterPresentation();
-    presentation.slides[0].slideVariant = "dark";
-    expect(resolveSlideVariant(presentation.slides[0])).toBe("dark");
-  });
 });
 
 describe("SVG HTML export", () => {
@@ -40,16 +31,5 @@ describe("SVG HTML export", () => {
     expect(html).toContain("<!DOCTYPE html>");
     expect(html).toContain("slide-svg");
     expect(html).toContain(presentation.title);
-  });
-});
-
-describe("resolveSlideVariant", () => {
-  it("returns undefined when no variant or layout hint exists", () => {
-    expect(resolveSlideVariant({})).toBeUndefined();
-  });
-
-  it("still infers hero and light variants from legacy layout hints", () => {
-    expect(resolveSlideVariant({ layout: "cover" })).toBe("hero");
-    expect(resolveSlideVariant({ layout: "quote" })).toBe("light");
   });
 });

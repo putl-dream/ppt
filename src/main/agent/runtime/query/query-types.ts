@@ -132,7 +132,6 @@ export interface AgentQueryState {
   maxOutputTokensOverride?: number;
   maxOutputTokensRecoveryCount: number;
   hasAttemptedReactiveCompact: boolean;
-  renderFeedbackUsed: boolean;
   validationFailuresByTool: ReadonlyMap<string, number>;
 }
 
@@ -149,7 +148,6 @@ export interface AgentIterationWorkspace {
   maxOutputTokensOverride?: number;
   maxOutputTokensRecoveryCount: number;
   hasAttemptedReactiveCompact: boolean;
-  renderFeedbackUsed: boolean;
   validationFailuresByTool: Map<string, number>;
 }
 
@@ -166,7 +164,6 @@ export function createInitialQueryState(
       recovered?.maxOutputTokensOverride ?? params.maxOutputTokensOverride,
     maxOutputTokensRecoveryCount: recovered?.maxOutputTokensRecoveryCount ?? 0,
     hasAttemptedReactiveCompact: recovered?.hasAttemptedReactiveCompact ?? false,
-    renderFeedbackUsed: recovered?.renderFeedbackUsed ?? false,
     validationFailuresByTool:
       new Map(recovered?.validationFailuresByTool ?? []),
   };
@@ -187,7 +184,6 @@ export function createIterationWorkspace(
     maxOutputTokensOverride: state.maxOutputTokensOverride,
     maxOutputTokensRecoveryCount: state.maxOutputTokensRecoveryCount,
     hasAttemptedReactiveCompact: state.hasAttemptedReactiveCompact,
-    renderFeedbackUsed: state.renderFeedbackUsed,
     validationFailuresByTool: new Map(state.validationFailuresByTool),
   };
 }
@@ -237,7 +233,6 @@ export function reduceQueryState(
     maxOutputTokensOverride: workspace.maxOutputTokensOverride,
     maxOutputTokensRecoveryCount: workspace.maxOutputTokensRecoveryCount,
     hasAttemptedReactiveCompact: workspace.hasAttemptedReactiveCompact,
-    renderFeedbackUsed: workspace.renderFeedbackUsed,
     validationFailuresByTool: new Map(workspace.validationFailuresByTool),
   };
 }

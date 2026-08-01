@@ -306,7 +306,6 @@ export class AgentRunScope {
       turnCount: 0,
       maxOutputTokensRecoveryCount: 0,
       hasAttemptedReactiveCompact: false,
-      renderFeedbackUsed: false,
       validationFailuresByTool: [],
     };
     return {
@@ -401,8 +400,6 @@ export class AgentRunScope {
           hasAttemptedReactiveCompact:
             snapshot.hasAttemptedReactiveCompact
             ?? state.hasAttemptedReactiveCompact,
-          renderFeedbackUsed:
-            snapshot.renderFeedbackUsed ?? state.renderFeedbackUsed,
           validationFailuresByTool: new Map<string, number>(
             snapshot.validationFailuresByTool
             ?? state.validationFailuresByTool,
@@ -634,7 +631,6 @@ function queryStateSnapshot(state: AgentQueryState): DurableQueryStateSnapshot {
     maxOutputTokensOverride: state.maxOutputTokensOverride,
     maxOutputTokensRecoveryCount: state.maxOutputTokensRecoveryCount,
     hasAttemptedReactiveCompact: state.hasAttemptedReactiveCompact,
-    renderFeedbackUsed: state.renderFeedbackUsed,
     validationFailuresByTool: [...state.validationFailuresByTool.entries()],
   };
 }
@@ -653,7 +649,6 @@ function iterationWorkspaceSnapshot(
     maxOutputTokensOverride: workspace.maxOutputTokensOverride,
     maxOutputTokensRecoveryCount: workspace.maxOutputTokensRecoveryCount,
     hasAttemptedReactiveCompact: workspace.hasAttemptedReactiveCompact,
-    renderFeedbackUsed: workspace.renderFeedbackUsed,
     validationFailuresByTool: [...workspace.validationFailuresByTool.entries()],
   };
 }
@@ -703,7 +698,6 @@ function legacyIterationWorkspace(
     maxOutputTokensOverride: state.maxOutputTokensOverride,
     maxOutputTokensRecoveryCount: state.maxOutputTokensRecoveryCount,
     hasAttemptedReactiveCompact: state.hasAttemptedReactiveCompact,
-    renderFeedbackUsed: checkpoint.renderFeedbackUsed,
     validationFailuresByTool: new Map(state.validationFailuresByTool),
   };
 }

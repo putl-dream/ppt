@@ -27,7 +27,6 @@ function checkpoint(threadId: string, status: DurableRunCheckpoint["status"]): D
     pendingUserContent: [],
     discoveredToolNames: [],
     loadedSkillNames: [],
-    renderFeedbackUsed: false,
     createdAt: now,
     updatedAt: now,
   };

@@ -89,7 +89,7 @@ describe("repairPresentationIdentities", () => {
 });
 
 describe("migratePresentationToSvgOnly", () => {
-  it("strips legacy element-IR fields from SVG slides", () => {
+  it("strips legacy element-IR and optional variant fields from SVG slides", () => {
     const presentation = createStarterPresentation();
     const slide = presentation.slides[0];
     const legacy = {
@@ -99,11 +99,18 @@ describe("migratePresentationToSvgOnly", () => {
         elements: [{ id: "legacy-text", type: "text" }],
         layout: "cover",
         grammarVariant: "signal-dark",
+        slideVariant: "dark",
+        backgroundVariant: "hero",
+        sceneRef: {
+          packId: "editorial-business",
+          sceneId: "split-case",
+          variantId: "fact-sidebar",
+        },
       }],
     };
 
     const migrated = migratePresentationToSvgOnly(legacy);
-    expect(migrated.strippedLegacyFieldCount).toBe(3);
+    expect(migrated.strippedLegacyFieldCount).toBe(6);
     expect(migrated.droppedLegacySlideCount).toBe(0);
 
     const parsed = presentationSchema.parse(migrated.value);
@@ -111,6 +118,9 @@ describe("migratePresentationToSvgOnly", () => {
     expect(parsed.slides[0]).not.toHaveProperty("elements");
     expect(parsed.slides[0]).not.toHaveProperty("layout");
     expect(parsed.slides[0]).not.toHaveProperty("grammarVariant");
+    expect(parsed.slides[0]).not.toHaveProperty("slideVariant");
+    expect(parsed.slides[0]).not.toHaveProperty("sceneRef");
+    expect(parsed.slides[0]).not.toHaveProperty("backgroundVariant");
     expect(parsed.slides[0].visualSource.kind).toBe("svg");
   });
 

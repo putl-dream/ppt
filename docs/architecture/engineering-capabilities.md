@@ -186,7 +186,7 @@ resolve registered core tool
   → emit paired tool_result
 ```
 
-Core tools 提供高频基础能力；Deferred 机制保留在 ToolLoader / ToolRegistry 上，但**产品默认 Deferred 发现面为空**，也不注册空壳 `SearchExtraTools` / `ExecuteExtraTool`。Runtime-only 能力服务宿主运行，不应暴露给模型。协作工具（Task\* / teammate）当前注册为 Core。
+Core tools 提供高频基础能力；Deferred 机制保留在 ToolLoader / ToolRegistry 上，但**产品默认 Deferred 发现面为空**，也不注册空壳 `SearchExtraTools` / `ExecuteExtraTool`。该空平台是有意工程能力（供管线测试与未来可发现工具复用），不是待删死代码；仅在确认永不恢复 Deferred 发现面后再考虑删壳并改写测试。Runtime-only 能力服务宿主运行，不应暴露给模型。协作工具（Task\* / teammate）当前注册为 Core。
 
 详见 [Tool 系统](../agent/tools.md)。
 

@@ -5,7 +5,7 @@ import {
   type DesignSystemV2,
   type SlideDesignOverride,
 } from "@design-system";
-import type { Presentation, Slide } from "../src/shared/presentation";
+import type { Presentation } from "../src/shared/presentation";
 
 export const TEST_DESIGN_SYSTEM = DEFAULT_DESIGN_SYSTEM;
 
@@ -24,7 +24,7 @@ export function testDesignSystem(
 }
 
 export function testSlideStyle(
-  slide: Pick<Slide, "slideVariant" | "designOverride"> = {},
+  slide: { slideVariant?: "light" | "dark" | "hero"; designOverride?: SlideDesignOverride } = {},
   systemOverrides: TestDesignSystemOverrides = {},
   designOverride?: SlideDesignOverride,
 ) {

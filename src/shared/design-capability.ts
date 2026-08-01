@@ -7,12 +7,6 @@
  */
 export const DESIGN_CAPABILITY_VERSION = "ppt-master-design-v2";
 
-export const DESIGN_DIRECTION_TIERS = ["safe", "shifted", "bold"] as const;
-export const PAGE_RHYTHMS = ["anchor", "dense", "breathing"] as const;
-
-export type DesignDirectionTier = (typeof DESIGN_DIRECTION_TIERS)[number];
-export type PageRhythm = (typeof PAGE_RHYTHMS)[number];
-
 /** SVG-native authoring contract shared by teammate prompts and design guidance. */
 export const LAYOUT_PLANNER_CONTRACT = `
 Design capability: ${DESIGN_CAPABILITY_VERSION}
@@ -22,9 +16,9 @@ Design capability: ${DESIGN_CAPABILITY_VERSION}
 - Start from the communication contract: audience, objective, desired outcome,
   core message, delivery context, and after-use.
 - When the user has not named a style, lock one coherent Design System directly
-  into design/design-spec.json. Do not ask the user to pick among safe / shifted /
-  bold, “标准排版 / 创意装饰”, or other internal design-candidate menus unless
-  they explicitly ask to compare alternatives.
+  into design/design-spec.json. Do not ask the user to pick among internal
+  design-candidate menus (for example safe / shifted / bold labels) unless they
+  explicitly ask to compare alternatives.
 - When the user explicitly names a style or brand direction, lock it directly;
   do not ask them to choose again.
 - Lock deck-wide decisions in design/design-spec.json and per-page intent in

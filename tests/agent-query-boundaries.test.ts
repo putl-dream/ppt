@@ -111,7 +111,6 @@ describe("agent query lifecycle boundaries", () => {
       { type: "tool_result", toolUseId: "a", content: [{ type: "text", text: "A" }] },
       { type: "tool_result", toolUseId: "b", content: [{ type: "text", text: "B" }] },
     );
-    workspace.renderFeedbackUsed = true;
     workspace.validationFailuresByTool.set("ReadA", 2);
     workspace.maxOutputTokensRecoveryCount = 1;
 
@@ -124,10 +123,8 @@ describe("agent query lifecycle boundaries", () => {
       content: workspace.toolResults,
     });
     expect(next.turnCount).toBe(1);
-    expect(next.renderFeedbackUsed).toBe(true);
     expect(next.validationFailuresByTool.get("ReadA")).toBe(2);
     expect(next.maxOutputTokensRecoveryCount).toBe(1);
-    expect(state.renderFeedbackUsed).toBe(false);
     expect(state.validationFailuresByTool.size).toBe(0);
   });
 

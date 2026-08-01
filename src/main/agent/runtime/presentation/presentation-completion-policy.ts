@@ -1,12 +1,10 @@
 import type { AgentModelToolResultBlock } from "../../gateway";
 import type { ToolContext, ToolDefinition } from "../../tools/tool-definition";
-import type { Slide } from "@shared/presentation";
 import {
   agentAskUserResultSchema,
   agentCommandProposalResultSchema,
   type AgentRuntimeResult,
 } from "../runtime-types";
-import { applyCommandsToDraft } from "./layout-command-utils";
 import type { ToolExecutionOutcome } from "../tools/tool-execution-engine";
 
 export type PresentationCompletionDecision =
@@ -57,39 +55,6 @@ export class PresentationCompletionPolicy {
       : undefined;
 
     if (commandProposal) {
-      const incompleteSlideIds = findAddedSlidesMissingVisualDesign(
-        input.context,
-        commandProposal.commands,
-      );
-      if (
-        incompleteSlideIds.length > 0
-        && !requestExplicitlyAllowsContentOnly(input.context.request)
-      ) {
-        const guidance = [
-          "本次创建提案中的新页面尚未完成视觉设计，不能作为默认新建结果提交。",
-          `以下新页面仍只有内容草稿，缺少实际视觉排版：${incompleteSlideIds.join("、")}。`,
-          "请加载 ppt-workflow，锁定沟通契约与设计语言，",
-          "用 WriteFile 编写每页完整 1280×720 SVG，并以 PreviewSvgPage 查看每页当前 PNG，",
-          "最后只用 SubmitSvgDeck 提交同一批 SVG。不要让用户选择标准/创意排版或 safe/shifted/bold。",
-        ].join("");
-        input.emitProgress({
-          type: "workflow-warning",
-          message: "检测到新页面尚未完成视觉设计，正在自动补全…",
-        });
-        return {
-          type: "continue",
-          transcriptEntry: {
-            role: "tool",
-            toolName,
-            result: commandProposal,
-            completionPostcondition: {
-              status: "incomplete",
-              missingVisualDesignSlideIds: incompleteSlideIds,
-            },
-          },
-          modelResult: textResult(input.toolUseId, guidance),
-        };
-      }
       return {
         type: "terminal",
         result: commandProposal,
@@ -171,37 +136,6 @@ export class PresentationCompletionPolicy {
       },
     };
   }
-}
-
-const CONTENT_ONLY_REQUEST_PATTERNS = [
-  /(?:只|仅)(?:要|需|需要|生成|创建|写|输出|提供)?.{0,8}(?:内容|文稿|草稿)/i,
-  /(?:不要|无需|暂不|不需要)(?:做|进行|添加)?(?:视觉)?(?:排版|设计|美化)/i,
-  /\bcontent[\s-]*only\b/i,
-  /\bwithout\s+(?:layout|design|styling)\b/i,
-];
-
-export function requestExplicitlyAllowsContentOnly(request: string | undefined): boolean {
-  if (!request?.trim()) return false;
-  return CONTENT_ONLY_REQUEST_PATTERNS.some((pattern) => pattern.test(request));
-}
-
-function findAddedSlidesMissingVisualDesign(
-  context: ToolContext,
-  commands: Extract<AgentRuntimeResult, { type: "command_proposal" }>["commands"],
-): string[] {
-  const addedSlideIds = commands.flatMap((command) =>
-    command.type === "add-slide" ? [command.slide.id] : []
-  );
-  if (addedSlideIds.length === 0) return [];
-  const addedIdSet = new Set(addedSlideIds);
-  const draft = applyCommandsToDraft(context.presentation, commands);
-  return draft.slides
-    .filter((slide) => addedIdSet.has(slide.id) && slideMissingSvgVisualSource(slide))
-    .map((slide) => slide.id);
-}
-
-function slideMissingSvgVisualSource(slide: Slide): boolean {
-  return slide.visualSource?.kind !== "svg";
 }
 
 function textResult(toolUseId: string, text: string): AgentModelToolResultBlock {

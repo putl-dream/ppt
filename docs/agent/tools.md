@@ -111,7 +111,10 @@ model turn 重新解析，而不是把变化藏进 Prompt。
 协作面（Task\*、`spawn_teammate`、`list_teammates`、`send_teammate_message`、`shutdown_teammate`）当前注册为 **Core**。
 
 产品默认 Deferred 发现面为空，因此**不**在默认注册表暴露 `SearchExtraTools` /
-`ExecuteExtraTool`。Deferred 解析管线仍保留：若测试或未来重新注册 deferred target，
+`ExecuteExtraTool`。空 Deferred 平台（ToolLoader / Registry 搜索 API、Preflight
+delegation、`ToolDiscoverySession`、以及可手动挂载的两枚壳工具）是**有意保留的工程能力**，
+不是待删死业务：管线测试依赖它验证发现→委托→权限共用路径。仅当产品确认永不恢复可发现
+Deferred 工具时，才另开「删壳 + 重写管线测试」专项。若测试或未来重新注册 deferred target，
 `ExecuteExtraTool` 经 Preflight 解析后与直接调用共用权限、Hook、校验与结果映射；
 Dispatcher 自身不执行目标。
 

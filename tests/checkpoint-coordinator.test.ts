@@ -24,7 +24,6 @@ function checkpoint(status: DurableRunCheckpoint["status"]): DurableRunCheckpoin
     pendingUserContent: [],
     discoveredToolNames: [],
     loadedSkillNames: [],
-    renderFeedbackUsed: false,
     createdAt: now,
     updatedAt: now,
   };

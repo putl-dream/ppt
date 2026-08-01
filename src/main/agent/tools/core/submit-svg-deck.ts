@@ -116,7 +116,6 @@ export const submitSvgDeckTool: ToolDefinition<
       expectation: "always",
       exclusiveBatch: true,
     },
-    visualReview: { mode: "tool-managed" },
   },
   risk: "low",
   execute: async (args, context) => {

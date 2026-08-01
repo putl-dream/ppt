@@ -61,7 +61,6 @@ export interface LegacyDurableRunCheckpoint {
   pendingUserContent: string[];
   discoveredToolNames: string[];
   loadedSkillNames: string[];
-  renderFeedbackUsed: boolean;
   activeToolUse?: AgentModelToolUseBlock;
   /** 每次运行的后台任务终态与通知消费状态。 */
   backgroundTasks?: DurableBackgroundTask[];
@@ -116,7 +115,6 @@ export interface DurableQueryStateSnapshot {
   maxOutputTokensOverride?: number;
   maxOutputTokensRecoveryCount: number;
   hasAttemptedReactiveCompact: boolean;
-  renderFeedbackUsed: boolean;
   validationFailuresByTool: Array<[string, number]>;
 }
 
@@ -131,7 +129,6 @@ export interface DurableIterationWorkspaceSnapshot {
   maxOutputTokensOverride?: number;
   maxOutputTokensRecoveryCount?: number;
   hasAttemptedReactiveCompact?: boolean;
-  renderFeedbackUsed?: boolean;
   validationFailuresByTool?: Array<[string, number]>;
 }
 
