@@ -140,7 +140,7 @@ aside {
 .collapsible-section {
   border: 1px solid var(--border-default);
   border-radius: var(--card-border-radius);
-  background: rgba(255, 255, 255, 0.015);
+  background: var(--surface-sunken);
   overflow: hidden;
 }
 
@@ -151,7 +151,7 @@ aside {
   justify-content: space-between;
   cursor: pointer;
   transition: var(--transition-color);
-  background: rgba(255, 255, 255, 0.01);
+  background: transparent;
 }
 
 .section-trigger:hover {
@@ -613,22 +613,22 @@ aside {
   width: 100px;
   padding: 8px;
   border-radius: var(--control-radius-xs);
-  background: rgba(255, 255, 255, 0.4);
+  background: var(--surface-overlay);
   backdrop-filter: blur(2px);
 }
 
 :root[data-color-scheme="dark"] .theme-inner-mock {
-  background: rgba(0, 0, 0, 0.2);
+  background: var(--surface-raised);
 }
 
 .theme-card-meta {
   padding: 8px 10px;
-  background: rgba(0, 0, 0, 0.02);
+  background: var(--surface-sunken);
   border-top: 1px solid var(--border-default);
 }
 
 :root[data-color-scheme="dark"] .theme-card-meta {
-  background: rgba(5, 5, 5, 0.2);
+  background: var(--surface-base);
 }
 
 .theme-name {
@@ -718,7 +718,7 @@ aside {
 
 .logo-dropzone:hover {
   border-color: var(--accent-primary);
-  background: rgba(14, 165, 233, 0.02);
+  background: var(--accent-primary-glow);
 }
 
 .logo-dropzone .upload-icon {

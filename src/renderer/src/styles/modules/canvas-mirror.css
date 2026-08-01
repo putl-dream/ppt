@@ -472,6 +472,7 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* Non-theme surface: slide paper stays light for deck fidelity. */
 .mirror-focus-canvas {
   position: relative;
   width: 100%;
@@ -514,6 +515,7 @@
   transform: translateY(0);
 }
 
+/* Non-theme surface: slide paper stays light for deck fidelity. */
 .mirror-slide-frame {
   position: relative;
   display: block;

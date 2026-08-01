@@ -22,12 +22,13 @@ import {
 } from "@shared/generation-settings-inputs";
 import type { SettingsCategory } from "../settingsCategories";
 import { normalizeWorkspacePath } from "@shared/workspace";
+import type { UiThemeSummary } from "@shared/ipc";
 import { cx } from "../lib/cx";
+import { BUILTIN_UI_THEME_ID } from "../app/userUiTheme";
 
 type UiColorScheme = "light" | "dark" | "system";
 type UiAccentColor = "cyan" | "green" | "orange";
 type UiControlShape = "sharp" | "soft" | "round";
-type UiSkin = "studio";
 
 interface SettingsConsoleProps {
   activeCategory: SettingsCategory;
@@ -54,8 +55,11 @@ interface SettingsConsoleProps {
 
   colorScheme: UiColorScheme;
   setColorScheme: (val: UiColorScheme) => void;
-  skin: UiSkin;
-  setSkin: (val: UiSkin) => void;
+  uiThemeId: string;
+  setUiThemeId: (val: string) => void;
+  uiThemes: UiThemeSummary[];
+  onRefreshUiThemes: () => void;
+  onOpenUiThemesDirectory: () => void;
   uiAccentColor: UiAccentColor;
   setUiAccentColor: (val: UiAccentColor) => void;
   uiControlShape: UiControlShape;
@@ -142,10 +146,6 @@ const colorSchemeOptions: Array<{
   { value: "system", label: "跟随系统", icon: <PaletteIcon size={13} /> },
 ];
 
-const skinOptions: Array<{ value: UiSkin; label: string }> = [
-  { value: "studio", label: "Studio" },
-];
-
 export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
   activeCategory,
   models,
@@ -168,8 +168,11 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
   setExecutionStrategy,
   colorScheme,
   setColorScheme,
-  skin,
-  setSkin,
+  uiThemeId,
+  setUiThemeId,
+  uiThemes,
+  onRefreshUiThemes,
+  onOpenUiThemesDirectory,
   uiAccentColor,
   setUiAccentColor,
   uiControlShape,
@@ -184,7 +187,12 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
   const selectedAccentLabel = accentOptions.find((option) => option.value === uiAccentColor)?.label ?? "湖蓝";
   const selectedShapeLabel = controlShapeOptions.find((option) => option.value === uiControlShape)?.label ?? "柔和";
   const selectedSchemeLabel = colorSchemeOptions.find((option) => option.value === colorScheme)?.label ?? "暗色";
-  const selectedSkinLabel = skinOptions.find((option) => option.value === skin)?.label ?? "Studio";
+  const themeOptions = [
+    { value: BUILTIN_UI_THEME_ID, label: "Studio" },
+    ...uiThemes.map((theme) => ({ value: theme.id, label: theme.name })),
+  ];
+  const selectedThemeLabel = themeOptions.find((option) => option.value === uiThemeId)?.label
+    ?? (uiThemeId === BUILTIN_UI_THEME_ID ? "Studio" : uiThemeId);
   const selectedColorSchemeName = typeof selectedDesignSystem.colorScheme === "string"
     ? selectedDesignSystem.colorScheme
     : selectedDesignSystem.colorScheme.name ?? "custom";
@@ -283,7 +291,7 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
   };
 
   return (
-    <div className="ide-page settings-console-container">
+    <div className="ide-page settings-console-container" data-ui-region="settings">
       <div className="ide-page-inner">
         <header className="ide-page-header">
           <h1 className="ide-page-title">{currentMeta.title}</h1>
@@ -294,6 +302,7 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
           ) : null}
         </header>
 
+        <div key={activeCategory} className="view-enter">
         {activeCategory === "usage-overview" ? (
           <div className="ide-panel">
             <TokenUsageOverview models={models} selectedModelId={selectedModelId} />
@@ -603,22 +612,46 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
           <div className="ide-panel">
             <p className="ide-hint">只改变软件自身皮肤与控件，不影响导出的演示文档。</p>
 
-            <IdeSection title="皮肤" hint={selectedSkinLabel}>
+            <IdeSection title="皮肤" hint={selectedThemeLabel}>
               <IdeRow label="设计语言">
                 <div className="ide-choice-group" role="group" aria-label="皮肤">
-                  {skinOptions.map((option) => (
+                  {themeOptions.map((option) => (
                     <button
                       key={option.value}
                       type="button"
-                      className={cx("ide-choice", skin === option.value && "is-active")}
-                      onClick={() => setSkin(option.value)}
-                      aria-pressed={skin === option.value}
+                      className={cx("ide-choice", uiThemeId === option.value && "is-active")}
+                      onClick={() => setUiThemeId(option.value)}
+                      aria-pressed={uiThemeId === option.value}
                     >
                       <span>{option.label}</span>
                     </button>
                   ))}
                 </div>
               </IdeRow>
+              <IdeRow label="主题文件夹">
+                <div className="ide-choice-group" role="group" aria-label="主题文件夹操作">
+                  <button
+                    type="button"
+                    className="ide-choice"
+                    onClick={() => onOpenUiThemesDirectory()}
+                  >
+                    <span>打开主题文件夹</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="ide-choice"
+                    onClick={() => onRefreshUiThemes()}
+                  >
+                    <span>刷新列表</span>
+                  </button>
+                </div>
+              </IdeRow>
+              <p className="ide-hint">
+                在主题文件夹放入 <code>*.css</code> 后刷新列表即可切换。推荐覆盖 semantic token；深度定制可用
+                {" "}
+                <code>data-ui-region</code>
+                。
+              </p>
             </IdeSection>
 
             <IdeSection title="明暗" hint={selectedSchemeLabel}>
@@ -693,10 +726,11 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
             </IdeSection>
 
             <p className="ide-hint">
-              当前：{selectedSkinLabel} · {selectedSchemeLabel} · {selectedAccentLabel} · {selectedShapeLabel} · 内容圆角 {Math.round(18 * borderRadiusScale)}px
+              当前：{selectedThemeLabel} · {selectedSchemeLabel} · {selectedAccentLabel} · {selectedShapeLabel} · 内容圆角 {Math.round(18 * borderRadiusScale)}px
             </p>
           </div>
         ) : null}
+        </div>
       </div>
     </div>
   );

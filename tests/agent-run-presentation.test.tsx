@@ -142,7 +142,7 @@ describe("agent run presentation", () => {
         />,
       );
 
-      expect(document.querySelector(".run-glyph")).not.toBeNull();
+      expect(document.querySelector(".loading-indicator--sm")).not.toBeNull();
       expect(document.querySelectorAll(".agent-run-status--shimmer")).toHaveLength(1);
       expect(screen.getByRole("status").textContent).toBeTruthy();
     },
@@ -175,7 +175,7 @@ describe("agent run presentation", () => {
 
     const surface = screen.getByTestId("surface");
     expect(surface.querySelector(".process-trace-panel-label")?.textContent).toBe("执行过程");
-    expect(surface.querySelector(".run-glyph")).not.toBeNull();
+    expect(surface.querySelector(".loading-indicator--sm")).not.toBeNull();
     expect(surface.querySelectorAll(".agent-run-status--shimmer")).toHaveLength(1);
     expect(screen.getByRole("status").textContent).toContain("正在思考页面内容");
     expect(surface.textContent).not.toContain("思考中");
@@ -196,7 +196,7 @@ describe("agent run presentation", () => {
     );
 
     expect(screen.getByRole("status").textContent).toContain("等待你的确认");
-    expect(document.querySelector(".run-glyph--paused")).not.toBeNull();
+    expect(document.querySelector(".loading-indicator--paused")).not.toBeNull();
     expect(document.querySelector(".agent-run-status--paused")).not.toBeNull();
     expect(document.querySelector(".agent-run-status--shimmer")).toBeNull();
   });

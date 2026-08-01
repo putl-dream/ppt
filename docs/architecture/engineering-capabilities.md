@@ -116,11 +116,24 @@ provider SDK。
   一律视为不可恢复；
 - 程序消费者应只从 barrel import，不应 deep-import 子模块。
 
+**配置身份与路由：**
+
+Gateway 的内存配置同时保留 provider 默认配置与 `configurationId` 精确配置。主模型
+始终注册为对应 provider 的默认配置；带 ID 的主模型和 fallback 另按 ID 注册，未带 ID
+的 fallback 则按 provider + model 注册，因此同 provider 的 fallback 不会覆盖主模型。
+显式携带 `configurationId` 的选择必须命中同一 provider/model 的精确配置，否则以
+`configuration` 错误 fail closed；未携带 ID 时依次查找 provider + model fallback、
+provider 默认配置，最后才使用进程环境配置。
+
 **私有 driver 层：**
 
-`anthropic.ts` 与 `openai.ts` 是 Gateway 私有的 SDK 适配器，只被 `AgentGateway`
-调用。它们负责统一消息与 SDK 类型的双向映射、一次 SDK 调用、原生流事件转换和
-`stopReason` 映射，不得在 driver 内做隐藏重试或跨 attempt 合并 usage。
+`anthropic.ts` 与 `openai.ts` 是 Gateway 私有的 SDK 适配入口，只被 `AgentGateway`
+调用；`openai.ts` 作为 façade 将请求分派到私有的 Chat Completions / Responses 实现。
+这些 driver 负责统一消息与 SDK 类型的双向映射、原生流事件转换和 `stopReason`
+映射。OpenAI 两种模式都使用 SDK 原生 stream，包括携带 tools 的请求；流中实时暴露
+`text_delta`，最终 `complete` 则以 SDK final response 为权威来源，包含完整 text、
+`tool_use`、usage 与 `stopReason`。每个 attempt 只允许一次 SDK 请求，不得在 driver
+内做隐藏重试、非流式 fallback 或跨 attempt 合并 usage。
 `AgentGateway` 通过显式 `AgentProviderDriver` 注册表管理和调度这些驱动；各 driver
 内部的 SDK content type / role 映射差异属于 provider 方言，不在 Gateway 合并统一。
 `openaiApiMode` 是 driver 私有配置，不出现在 `ResolvedAgentModelConfig`。
@@ -145,6 +158,7 @@ prepared-request/response driver 协议，不能把 Provider 分支扩散进 Que
 - `tests/response-contract.test.ts`
 - `tests/agent-gateway-routing.test.ts`
 - `tests/agent-gateway-errors.test.ts`
+- `tests/agent-gateway.integration.test.ts`（按 provider 凭据可选执行）
 
 ### 4.3 Context 预算与压缩
 

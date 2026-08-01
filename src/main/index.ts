@@ -81,6 +81,11 @@ import { formatPublicErrorMessage } from "@shared/agent-activity-display";
 import { isTeammateProgressEvent } from "@shared/teammate-progress";
 import { configureApplicationDataRoot, getApplicationDataRoot } from "./application-data";
 import {
+  ensureUiThemesDirectory,
+  listUiThemes,
+  readUiThemeCss,
+} from "./ui-themes";
+import {
   asPresentationId,
   asProjectId,
   asProposalId,
@@ -106,6 +111,7 @@ import { PresentationArtifactChangeObserver } from
   "./presentation-lifecycle/artifact-change-observer";
 
 const { applicationDataRoot } = configureApplicationDataRoot(app);
+ensureUiThemesDirectory(applicationDataRoot);
 
 const logger = createModuleLogger("main");
 const agentGateway = new AgentGateway();
@@ -836,6 +842,20 @@ app.whenReady().then(async () => {
     const errorMessage = await shell.openPath(directory);
     if (errorMessage) {
       logger.warn("app.data-directory.open-failed", { directory, errorMessage });
+      return false;
+    }
+    return true;
+  });
+  ipcMain.handle("ui-themes:list", () => listUiThemes());
+  ipcMain.handle("ui-themes:read", (_event, themeId: unknown) => {
+    if (typeof themeId !== "string") return null;
+    return readUiThemeCss(themeId);
+  });
+  ipcMain.handle("ui-themes:open-directory", async () => {
+    const directory = ensureUiThemesDirectory();
+    const errorMessage = await shell.openPath(directory);
+    if (errorMessage) {
+      logger.warn("ui-themes.directory.open-failed", { directory, errorMessage });
       return false;
     }
     return true;

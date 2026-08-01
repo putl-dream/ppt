@@ -3,13 +3,23 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const openAIMock = vi.hoisted(() => ({
   constructorOptions: undefined as unknown,
   chatCreate: vi.fn(),
+  chatStream: vi.fn(),
   responsesCreate: vi.fn(),
+  responsesStream: vi.fn(),
 }));
 
 vi.mock("openai", () => ({
   default: class OpenAI {
-    chat = { completions: { create: openAIMock.chatCreate } };
-    responses = { create: openAIMock.responsesCreate };
+    chat = {
+      completions: {
+        create: openAIMock.chatCreate,
+        stream: openAIMock.chatStream,
+      },
+    };
+    responses = {
+      create: openAIMock.responsesCreate,
+      stream: openAIMock.responsesStream,
+    };
     constructor(options: unknown) {
       openAIMock.constructorOptions = options;
     }
@@ -45,7 +55,9 @@ function preparedRequest(
 describe("OpenAI driver", () => {
   beforeEach(() => {
     openAIMock.chatCreate.mockReset();
+    openAIMock.chatStream.mockReset();
     openAIMock.responsesCreate.mockReset();
+    openAIMock.responsesStream.mockReset();
     openAIMock.constructorOptions = undefined;
   });
 
@@ -135,6 +147,7 @@ describe("OpenAI driver", () => {
       { type: "text", text: "Inspecting" },
       { type: "tool_use", id: "call-2", name: "Read", input: { slide: 2 } },
     ]);
+    expect(response.stopReason).toBe("tool_use");
     expect(response.usage).toEqual({
       inputTokens: 20,
       outputTokens: 5,
@@ -202,24 +215,36 @@ describe("OpenAI driver", () => {
   });
 
   it("streams Chat text and reports one complete chunk", async () => {
-    openAIMock.chatCreate.mockResolvedValue({
+    const finalChatCompletion = vi.fn().mockResolvedValue({
+      choices: [{ message: { content: "hello" }, finish_reason: "stop" }],
+      usage: { prompt_tokens: 2, completion_tokens: 1, total_tokens: 3 },
+    });
+    openAIMock.chatStream.mockReturnValue({
       async *[Symbol.asyncIterator]() {
         yield { choices: [{ delta: { content: "hel" }, finish_reason: null }] };
-        yield {
-          choices: [{ delta: { content: "lo" }, finish_reason: "stop" }],
-          usage: { prompt_tokens: 2, completion_tokens: 1, total_tokens: 3 },
-        };
+        yield { choices: [{ delta: { content: "lo" }, finish_reason: "stop" }] };
       },
+      finalChatCompletion,
     });
+    const controller = new AbortController();
 
     const chunks = [];
     for await (const chunk of generateStreamWithOpenAI(
       { ...baseConfig, openaiApiMode: "chat-completions" },
-      preparedRequest("prompt"),
+      preparedRequest("prompt", { signal: controller.signal }),
     )) {
       chunks.push(chunk);
     }
 
+    expect(openAIMock.chatCreate).not.toHaveBeenCalled();
+    expect(openAIMock.chatStream).toHaveBeenCalledTimes(1);
+    expect(openAIMock.chatStream).toHaveBeenCalledWith({
+      model: "openai-test",
+      messages: [{ role: "user", content: "prompt" }],
+      max_tokens: 321,
+      stream_options: { include_usage: true },
+    }, { signal: controller.signal });
+    expect(finalChatCompletion).toHaveBeenCalledTimes(1);
     expect(chunks).toEqual([
       { type: "text_delta", text: "hel" },
       { type: "text_delta", text: "lo" },
@@ -232,12 +257,153 @@ describe("OpenAI driver", () => {
     ]);
   });
 
-  it("adapts a non-streaming Responses attempt to the common stream protocol", async () => {
-    openAIMock.responsesCreate.mockResolvedValue({
+  it("streams Chat requests with tools and uses the final accumulated tool call", async () => {
+    const finalChatCompletion = vi.fn().mockResolvedValue({
+      choices: [{
+        message: {
+          content: null,
+          tool_calls: [{
+            id: "call-1",
+            type: "function",
+            function: { name: "Read", arguments: "{\"slide\":2}" },
+          }],
+        },
+        finish_reason: "tool_calls",
+      }],
+      usage: { prompt_tokens: 5, completion_tokens: 3, total_tokens: 8 },
+    });
+    openAIMock.chatStream.mockReturnValue({
+      async *[Symbol.asyncIterator]() {
+        yield {
+          choices: [{
+            delta: {
+              tool_calls: [{
+                index: 0,
+                id: "call-1",
+                function: { name: "Read", arguments: "{\"slide\":" },
+              }],
+            },
+            finish_reason: null,
+          }],
+        };
+        yield {
+          choices: [{
+            delta: { tool_calls: [{ index: 0, function: { arguments: "2}" } }] },
+            finish_reason: "tool_calls",
+          }],
+        };
+      },
+      finalChatCompletion,
+    });
+
+    const chunks = [];
+    for await (const chunk of generateStreamWithOpenAI(
+      { ...baseConfig, openaiApiMode: "chat-completions" },
+      preparedRequest("prompt", {
+        tools: [{ name: "Read", description: "Read", inputSchema: { type: "object" } }],
+      }),
+    )) {
+      chunks.push(chunk);
+    }
+
+    expect(openAIMock.chatCreate).not.toHaveBeenCalled();
+    expect(openAIMock.chatStream).toHaveBeenCalledTimes(1);
+    expect(openAIMock.chatStream.mock.calls[0]?.[0]).toMatchObject({
+      stream_options: { include_usage: true },
+      tools: [{
+        type: "function",
+        function: {
+          name: "Read",
+          description: "Read",
+          parameters: { type: "object" },
+          strict: true,
+        },
+      }],
+    });
+    expect(chunks).toEqual([{
+      type: "complete",
+      content: [{ type: "tool_use", id: "call-1", name: "Read", input: { slide: 2 } }],
+      stopReason: "tool_use",
+      usage: { inputTokens: 5, outputTokens: 3, totalTokens: 8 },
+    }]);
+  });
+
+  it("streams Responses text and uses finalResponse for complete content", async () => {
+    const finalResponse = vi.fn().mockResolvedValue({
       output_text: "answer",
-      output: [],
+      output: [{
+        type: "function_call",
+        call_id: "call-2",
+        name: "Read",
+        arguments: "{\"slide\":2}",
+      }],
       status: "completed",
       usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 },
+    });
+    openAIMock.responsesStream.mockReturnValue({
+      async *[Symbol.asyncIterator]() {
+        yield { type: "response.output_text.delta", delta: "ans" };
+        yield { type: "response.function_call_arguments.delta", delta: "{\"slide\":" };
+        yield { type: "response.output_text.delta", delta: "wer" };
+      },
+      finalResponse,
+    });
+    const controller = new AbortController();
+
+    const chunks = [];
+    for await (const chunk of generateStreamWithOpenAI(
+      baseConfig,
+      preparedRequest("prompt", {
+        signal: controller.signal,
+        tools: [{ name: "Read", description: "Read", inputSchema: { type: "object" } }],
+      }),
+    )) {
+      chunks.push(chunk);
+    }
+
+    expect(openAIMock.responsesCreate).not.toHaveBeenCalled();
+    expect(openAIMock.responsesStream).toHaveBeenCalledTimes(1);
+    expect(openAIMock.responsesStream).toHaveBeenCalledWith({
+      model: "openai-test",
+      instructions: undefined,
+      input: [{ role: "user", content: "prompt" }],
+      max_output_tokens: 321,
+      tools: [{
+        type: "function",
+        name: "Read",
+        description: "Read",
+        parameters: { type: "object" },
+        strict: true,
+      }],
+    }, { signal: controller.signal });
+    expect(finalResponse).toHaveBeenCalledTimes(1);
+    expect(chunks).toEqual([
+      { type: "text_delta", text: "ans" },
+      { type: "text_delta", text: "wer" },
+      {
+        type: "complete",
+        content: [
+          { type: "text", text: "answer" },
+          { type: "tool_use", id: "call-2", name: "Read", input: { slide: 2 } },
+        ],
+        stopReason: "tool_use",
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+      },
+    ]);
+  });
+
+  it("maps an incomplete final Responses stream to max_tokens", async () => {
+    const finalResponse = vi.fn().mockResolvedValue({
+      output_text: "partial",
+      output: [],
+      status: "incomplete",
+      incomplete_details: { reason: "max_output_tokens" },
+    });
+    openAIMock.responsesStream.mockReturnValue({
+      async *[Symbol.asyncIterator]() {
+        yield { type: "response.output_text.delta", delta: "partial" };
+      },
+      finalResponse,
     });
 
     const chunks = [];
@@ -245,16 +411,39 @@ describe("OpenAI driver", () => {
       chunks.push(chunk);
     }
 
-    expect(openAIMock.responsesCreate).toHaveBeenCalledTimes(1);
     expect(chunks).toEqual([
-      { type: "text_delta", text: "answer" },
+      { type: "text_delta", text: "partial" },
       {
         type: "complete",
-        content: [{ type: "text", text: "answer" }],
-        stopReason: undefined,
-        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+        content: [{ type: "text", text: "partial" }],
+        stopReason: "max_tokens",
       },
     ]);
+  });
+
+  it("preserves raw streaming SDK errors without issuing another request", async () => {
+    const source = Object.assign(new Error("rate limited"), { status: 429 });
+    const finalResponse = vi.fn();
+    openAIMock.responsesStream.mockReturnValue({
+      async *[Symbol.asyncIterator]() {
+        throw source;
+      },
+      finalResponse,
+    });
+
+    const collect = async () => {
+      for await (const _chunk of generateStreamWithOpenAI(
+        baseConfig,
+        preparedRequest("prompt"),
+      )) {
+        // Consume the attempt so the SDK error crosses the adapter boundary.
+      }
+    };
+
+    await expect(collect()).rejects.toBe(source);
+    expect(openAIMock.responsesStream).toHaveBeenCalledTimes(1);
+    expect(openAIMock.responsesCreate).not.toHaveBeenCalled();
+    expect(finalResponse).not.toHaveBeenCalled();
   });
 
   it("leaves empty-response validation and error normalization to Gateway", async () => {

@@ -98,6 +98,12 @@
   --space-6: 24px;
   --space-8: 32px;
 
+  /* Loading indicator (md default; --sm overrides locally) */
+  --loading-indicator-size: 48px;
+  --loading-indicator-mid: 38px;
+  --loading-indicator-inner: 28px;
+  --loading-indicator-stroke: 2px;
+
   /* Z-index */
   --z-base: 0;
   --z-sticky: 100;

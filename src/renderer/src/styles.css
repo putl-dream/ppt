@@ -9,8 +9,11 @@
 @import './styles/components/controls.css';
 @import './styles/components/select.css';
 @import './styles/components/run-status.css';
+@import './styles/components/loading-indicator.css';
 @import './styles/modules/base.css';
 @import './styles/modules/layout.css';
+@import './styles/modules/view-enter.css';
+@import './styles/modules/startup.css';
 @import './styles/modules/sidebar.css';
 @import './styles/modules/canvas-chrome.css';
 @import './styles/modules/canvas-mirror.css';

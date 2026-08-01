@@ -475,7 +475,7 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
   // Render State A: Center Focal Mode (新建会话阶段 —— “居中巨幕控制台”)
   if (showInitChat) {
     return (
-      <section className="canvas-column chat-workspace-column center-focal-wrapper">
+      <section className="canvas-column chat-workspace-column center-focal-wrapper view-enter">
 
         {/* Top Header */}
         <div className="panel-header canvas-header center-focal-header">
@@ -532,7 +532,7 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
 
   // Render State B: Bottom-Anchored Split View (伴随式会话与双轨生成阶段 —— “底部承托控制台”)
   return (
-    <section className="canvas-column chat-workspace-column">
+    <section className="canvas-column chat-workspace-column view-enter">
 
       {/* 顶部中央状态控制栏 */}
       <div className="panel-header canvas-header">

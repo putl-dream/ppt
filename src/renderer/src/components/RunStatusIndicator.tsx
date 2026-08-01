@@ -36,14 +36,13 @@ export const RunStatusIndicator: React.FC<RunStatusIndicatorProps> = ({
   return (
     <span className="run-status" role="status" aria-live="polite">
       <span
-        className={`run-glyph${presentation.animated ? "" : " run-glyph--paused"}`}
+        className={[
+          "loading-indicator",
+          "loading-indicator--sm",
+          presentation.animated ? "" : "loading-indicator--paused",
+        ].filter(Boolean).join(" ")}
         aria-hidden="true"
-      >
-        <svg viewBox="0 0 16 16" width="14" height="14">
-          <circle cx="8" cy="8" r="6" />
-          <circle cx="8" cy="8" r="6" />
-        </svg>
-      </span>
+      />
       <span
         className={[
           "run-status-label",

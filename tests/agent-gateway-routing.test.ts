@@ -83,6 +83,194 @@ describe("AgentGateway", () => {
     });
   });
 
+  it("keeps identified same-provider primary and fallback credentials isolated", async () => {
+    providerMocks.openai.mockImplementation(async (config: { model: string }) => ({
+      provider: "openai",
+      model: config.model,
+      content: [{ type: "text", text: config.model }],
+    }));
+    providerMocks.openaiStream.mockImplementation(async function* (config: { model: string }) {
+      yield { type: "complete", content: [{ type: "text", text: config.model }] };
+    });
+    const gateway = new AgentGateway();
+    const primary = gateway.configure({
+      configurationId: "primary-openai",
+      provider: "openai",
+      model: "shared-model",
+      apiKey: "primary-key",
+      baseURL: "https://primary.example.test/v1",
+      openaiApiMode: "responses",
+    }, {
+      timeoutMs: 180_000,
+      maxOutputTokens: 16_384,
+      fallbackModel: {
+        configurationId: "fallback-openai",
+        provider: "openai",
+        model: "shared-model",
+        apiKey: "fallback-key",
+        baseURL: "https://fallback.example.test/v1",
+        openaiApiMode: "chat-completions",
+      },
+    });
+    const fallback = {
+      configurationId: "fallback-openai",
+      provider: "openai" as const,
+      model: "shared-model",
+    };
+
+    await gateway.generateText({ prompt: "primary" }, primary);
+    await gateway.generateText({ prompt: "fallback" }, fallback);
+    for await (const _chunk of gateway.generateTextStream({ prompt: "stream" }, fallback)) {
+      // Consume the stream to exercise the same identity lookup path.
+    }
+
+    expect(providerMocks.openai).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        configurationId: "primary-openai",
+        model: "shared-model",
+        apiKey: "primary-key",
+        baseURL: "https://primary.example.test/v1",
+        openaiApiMode: "responses",
+      }),
+      expect.anything(),
+    );
+    expect(providerMocks.openai).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        configurationId: "fallback-openai",
+        model: "shared-model",
+        apiKey: "fallback-key",
+        baseURL: "https://fallback.example.test/v1",
+        openaiApiMode: "chat-completions",
+      }),
+      expect.anything(),
+    );
+    expect(providerMocks.openaiStream).toHaveBeenCalledWith(
+      expect.objectContaining({
+        configurationId: "fallback-openai",
+        model: "shared-model",
+        apiKey: "fallback-key",
+      }),
+      expect.anything(),
+    );
+  });
+
+  it("routes an unlabelled fallback by provider and model", async () => {
+    providerMocks.openai.mockImplementation(async (config: { model: string }) => ({
+      provider: "openai",
+      model: config.model,
+      content: [{ type: "text", text: config.model }],
+    }));
+    const gateway = new AgentGateway();
+    const primary = gateway.configure({
+      provider: "openai",
+      model: "primary-model",
+      apiKey: "primary-key",
+    }, {
+      timeoutMs: 180_000,
+      maxOutputTokens: 16_384,
+      fallbackModel: {
+        provider: "openai",
+        model: "fallback-model",
+        apiKey: "fallback-key",
+      },
+    });
+
+    await gateway.generateText({ prompt: "primary" }, primary);
+    await gateway.generateText(
+      { prompt: "fallback" },
+      { provider: "openai", model: "fallback-model" },
+    );
+
+    expect(providerMocks.openai.mock.calls[0][0]).toMatchObject({
+      model: "primary-model",
+      apiKey: "primary-key",
+    });
+    expect(providerMocks.openai.mock.calls[1][0]).toMatchObject({
+      model: "fallback-model",
+      apiKey: "fallback-key",
+    });
+  });
+
+  it.each([
+    ["unknown identity", { configurationId: "unknown", provider: "openai" as const, model: "primary-model" }],
+    ["model mismatch", { configurationId: "primary-openai", provider: "openai" as const, model: "other-model" }],
+    ["provider mismatch", { configurationId: "primary-openai", provider: "anthropic" as const, model: "primary-model" }],
+  ])("fails closed for an explicit %s", async (_label, selection) => {
+    const gateway = new AgentGateway();
+    gateway.configure({
+      configurationId: "primary-openai",
+      provider: "openai",
+      model: "primary-model",
+      apiKey: "primary-key",
+    });
+
+    await expect(gateway.generateText({ prompt: "Hello" }, selection)).rejects.toMatchObject({
+      code: "configuration",
+      provider: selection.provider,
+    });
+    expect(providerMocks.openai).not.toHaveBeenCalled();
+    expect(providerMocks.anthropic).not.toHaveBeenCalled();
+  });
+
+  it("replaces and clears fallback identities when gateway config changes", async () => {
+    providerMocks.openai.mockImplementation(async (config: { model: string }) => ({
+      provider: "openai",
+      model: config.model,
+      content: [{ type: "text", text: config.model }],
+    }));
+    const gateway = new AgentGateway();
+    gateway.configure({
+      configurationId: "primary-openai",
+      provider: "openai",
+      model: "primary-model",
+      apiKey: "primary-key",
+    }, {
+      timeoutMs: 180_000,
+      maxOutputTokens: 16_384,
+      fallbackModel: {
+        configurationId: "old-fallback",
+        provider: "openai",
+        model: "old-model",
+        apiKey: "old-key",
+      },
+    });
+    gateway.applyGatewayConfig({
+      timeoutMs: 180_000,
+      maxOutputTokens: 16_384,
+      fallbackModel: {
+        configurationId: "new-fallback",
+        provider: "openai",
+        model: "new-model",
+        apiKey: "new-key",
+      },
+    });
+
+    await expect(gateway.generateText({ prompt: "old" }, {
+      configurationId: "old-fallback",
+      provider: "openai",
+      model: "old-model",
+    })).rejects.toMatchObject({ code: "configuration" });
+    await gateway.generateText({ prompt: "new" }, {
+      configurationId: "new-fallback",
+      provider: "openai",
+      model: "new-model",
+    });
+    expect(providerMocks.openai).toHaveBeenCalledWith(
+      expect.objectContaining({ apiKey: "new-key", model: "new-model" }),
+      expect.anything(),
+    );
+
+    gateway.applyGatewayConfig({ timeoutMs: 180_000, maxOutputTokens: 16_384 });
+
+    await expect(gateway.generateText({ prompt: "new" }, {
+      configurationId: "new-fallback",
+      provider: "openai",
+      model: "new-model",
+    })).rejects.toMatchObject({ code: "configuration" });
+  });
+
   it("routes an Anthropic selection to the Anthropic adapter", async () => {
     providerMocks.anthropic.mockResolvedValue({
       provider: "anthropic",

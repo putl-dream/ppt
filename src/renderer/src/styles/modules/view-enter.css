@@ -1,0 +1,16 @@
+/* Shared enter motion for mode / panel / session canvas swaps */
+
+.view-enter {
+  animation: view-enter var(--duration-view) var(--ease-view);
+}
+
+@keyframes view-enter {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .view-enter {
+    animation: none;
+  }
+}

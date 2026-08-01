@@ -1,0 +1,65 @@
+/* Nested rotating frames — sizes / stroke / spin via tokens */
+
+.loading-indicator {
+  width: var(--loading-indicator-size);
+  height: var(--loading-indicator-size);
+  display: inline-block;
+  position: relative;
+  flex: 0 0 auto;
+  border: var(--loading-indicator-stroke) solid var(--border-strong);
+  box-sizing: border-box;
+  -webkit-app-region: no-drag;
+  animation: loading-spin-cw var(--duration-loading-outer) linear infinite;
+}
+
+.loading-indicator::after,
+.loading-indicator::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  border: var(--loading-indicator-stroke) solid var(--accent-primary);
+  width: var(--loading-indicator-mid);
+  height: var(--loading-indicator-mid);
+  box-sizing: border-box;
+  transform-origin: center center;
+  animation: loading-spin-ccw var(--duration-loading-mid) linear infinite;
+}
+
+.loading-indicator::before {
+  width: var(--loading-indicator-inner);
+  height: var(--loading-indicator-inner);
+  border-color: var(--border-strong);
+  animation: loading-spin-cw var(--duration-loading-inner) linear infinite;
+}
+
+.loading-indicator--sm {
+  --loading-indicator-size: 14px;
+  --loading-indicator-mid: 10px;
+  --loading-indicator-inner: 6px;
+  --loading-indicator-stroke: 1.5px;
+}
+
+.loading-indicator--paused,
+.loading-indicator--paused::after,
+.loading-indicator--paused::before {
+  animation: none;
+}
+
+@keyframes loading-spin-cw {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes loading-spin-ccw {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(-360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .loading-indicator,
+  .loading-indicator::after,
+  .loading-indicator::before {
+    animation: none;
+  }
+}

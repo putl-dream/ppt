@@ -12,6 +12,11 @@ import {
 import { getApplicationDataRoot } from "../application-data";
 import type { AppContext } from "../app-context";
 import {
+  ensureUiThemesDirectory,
+  listUiThemes,
+  readUiThemeCss,
+} from "../ui-themes";
+import {
   applyWindowThemeMode,
   normalizeWindowThemeMode,
 } from "../window/theme";
@@ -47,6 +52,20 @@ export function registerLogsAppIpc(ctx: AppContext): void {
     const errorMessage = await shell.openPath(directory);
     if (errorMessage) {
       logger.warn("app.data-directory.open-failed", { directory, errorMessage });
+      return false;
+    }
+    return true;
+  });
+  ipcMain.handle("ui-themes:list", () => listUiThemes());
+  ipcMain.handle("ui-themes:read", (_event, themeId: unknown) => {
+    if (typeof themeId !== "string") return null;
+    return readUiThemeCss(themeId);
+  });
+  ipcMain.handle("ui-themes:open-directory", async () => {
+    const directory = ensureUiThemesDirectory();
+    const errorMessage = await shell.openPath(directory);
+    if (errorMessage) {
+      logger.warn("ui-themes.directory.open-failed", { directory, errorMessage });
       return false;
     }
     return true;

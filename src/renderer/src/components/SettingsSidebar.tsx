@@ -83,7 +83,7 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = ({
   }, [query]);
 
   return (
-    <aside className="left-panel settings-sidebar">
+    <aside className="left-panel settings-sidebar" data-ui-region="sidebar">
       <div className="sections-container flex-1">
         <nav className="ide-nav" aria-label="设置导航">
           <input

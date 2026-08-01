@@ -41,7 +41,11 @@ export function ProjectFilesView({
         />
       ) : <div className="panel-resizer-placeholder" />}
 
-      <div className="rounded-canvas workbench-main-surface">
+      <div
+        key="files"
+        className="rounded-canvas workbench-main-surface view-enter"
+        data-ui-region="canvas"
+      >
         <ProjectFilesPage {...projectFilesProps} />
       </div>
     </>

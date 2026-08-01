@@ -102,7 +102,10 @@ export const UnifiedAgentInput: React.FC<UnifiedAgentInputProps> = ({
   }, [modelMenuOpen]);
 
   return (
-    <div className={`unified-agent-input-container ${layoutMode === "center" ? "center-focal-mode" : "bottom-anchored-mode"}`}>
+    <div
+      className={`unified-agent-input-container ${layoutMode === "center" ? "center-focal-mode" : "bottom-anchored-mode"}`}
+      data-ui-region="composer"
+    >
       {layoutMode === "center" ? (
         <div className="center-welcome-header">
           <h1 className="center-welcome-title">Agent PPT</h1>

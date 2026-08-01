@@ -3,6 +3,7 @@ import type { Presentation } from "@shared/presentation";
 import type { AgentGatewayPreferences } from "@shared/agent-gateway-config";
 import type { AgentStepLimits } from "@shared/agent-step-limits";
 import type { AgentExecutionStrategy } from "@shared/agent";
+import type { UiThemeSummary } from "@shared/ipc";
 import {
   MODEL_STORAGE_KEY,
   SELECTED_MODEL_STORAGE_KEY,
@@ -21,6 +22,7 @@ import {
   type UiSkin,
 } from "./appBootstrap";
 import { getComputedScheme, useAppearanceRuntime } from "./useAppearanceRuntime";
+import { normalizePersistedUiThemeId } from "./userUiTheme";
 import {
   DEFAULT_DESIGN_SYSTEM,
   designSystemV2Schema,
@@ -49,6 +51,11 @@ export interface SettingsController {
   setExecutionStrategy: (value: AgentExecutionStrategy) => void;
   skin: UiSkin;
   setSkin: (value: UiSkin) => void;
+  uiThemeId: string;
+  setUiThemeId: (value: string) => void;
+  uiThemes: UiThemeSummary[];
+  refreshUiThemes: () => Promise<void>;
+  openUiThemesDirectory: () => Promise<void>;
   colorScheme: UiColorScheme;
   setColorScheme: (value: UiColorScheme) => void;
   computedScheme: ComputedColorScheme;
@@ -80,6 +87,10 @@ export function useSettingsController(
   const [skin, setSkinState] = useState<UiSkin>(() =>
     persisted.skin === "studio" ? "studio" : "studio",
   );
+  const [uiThemeId, setUiThemeIdState] = useState<string>(() =>
+    normalizePersistedUiThemeId(persisted.uiThemeId),
+  );
+  const [uiThemes, setUiThemes] = useState<UiThemeSummary[]>([]);
   const [colorScheme, setColorSchemeState] = useState<UiColorScheme>(
     () => bootstrap.initialColorScheme,
   );
@@ -136,10 +147,42 @@ export function useSettingsController(
   useEffect(() => saveAgentStepLimits(agentStepLimits), [agentStepLimits]);
   useEffect(() => saveAgentGatewayPreferences(agentGatewayPreferences), [agentGatewayPreferences]);
 
+  const refreshUiThemes = useCallback(async () => {
+    const desktopApi = window.desktopApi;
+    if (!desktopApi?.listUiThemes) {
+      setUiThemes([]);
+      return;
+    }
+    try {
+      const themes = await desktopApi.listUiThemes();
+      setUiThemes(themes);
+      const availableIds = new Set(themes.map((theme) => theme.id));
+      setUiThemeIdState((current) => normalizePersistedUiThemeId(current, availableIds));
+    } catch (error) {
+      console.error("刷新 UI 主题列表失败:", error);
+      setUiThemes([]);
+    }
+  }, []);
+
+  const openUiThemesDirectory = useCallback(async () => {
+    try {
+      await window.desktopApi?.openUiThemesDirectory?.();
+      await refreshUiThemes();
+    } catch (error) {
+      console.error("打开 UI 主题目录失败:", error);
+      notify("无法打开主题文件夹");
+    }
+  }, [notify, refreshUiThemes]);
+
+  useEffect(() => {
+    void refreshUiThemes();
+  }, [refreshUiThemes]);
+
   useEffect(() => {
     savePersistedUiSettings({
       defaultRatio: "16:9",
       skin,
+      uiThemeId,
       colorScheme,
       uiAccentColor,
       uiControlShape,
@@ -157,10 +200,12 @@ export function useSettingsController(
     skin,
     uiAccentColor,
     uiControlShape,
+    uiThemeId,
   ]);
 
   useAppearanceRuntime({
     skin,
+    uiThemeId,
     colorScheme,
     computedScheme,
     borderRadiusScale,
@@ -227,6 +272,11 @@ export function useSettingsController(
     setExecutionStrategy: update(setExecutionStrategyState),
     skin,
     setSkin: update(setSkinState),
+    uiThemeId,
+    setUiThemeId: update(setUiThemeIdState),
+    uiThemes,
+    refreshUiThemes,
+    openUiThemesDirectory,
     colorScheme,
     setColorScheme: update(setColorSchemeState),
     computedScheme,

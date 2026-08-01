@@ -11,6 +11,7 @@ interface WorkspaceViewProps {
   mirrorProps?: ComponentProps<typeof PPTMirror>;
   deckPreviewProps: ComponentProps<typeof DeckPreviewModal>;
   isDraftChat: boolean;
+  activeSessionId?: string;
   isSessionSwitching?: boolean;
   isMirrorVisible: boolean;
   isMirrorExpanded: boolean;
@@ -25,6 +26,7 @@ export function WorkspaceView({
   mirrorProps,
   deckPreviewProps,
   isDraftChat,
+  activeSessionId = "",
   isSessionSwitching = false,
   isMirrorVisible,
   isMirrorExpanded,
@@ -55,7 +57,11 @@ export function WorkspaceView({
         />
       ) : <div className="panel-resizer-placeholder" />}
 
-      <div className="rounded-canvas workbench-main-surface">
+      <div
+        key="workspace"
+        className="rounded-canvas workbench-main-surface view-enter"
+        data-ui-region="canvas"
+      >
         <div
           className={[
             "workspace-canvas-content",
@@ -66,7 +72,10 @@ export function WorkspaceView({
           ].filter(Boolean).join(" ")}
           aria-busy={isSessionSwitching || undefined}
         >
-          <ChatWorkspace {...chatWorkspaceProps} />
+          <ChatWorkspace
+            key={activeSessionId || "draft"}
+            {...chatWorkspaceProps}
+          />
 
           {isMirrorVisible && mirrorProps ? (
             <>

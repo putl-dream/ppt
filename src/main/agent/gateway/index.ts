@@ -2,7 +2,11 @@ import type { AgentModelSelection, AgentModelSettings, AgentProvider } from "@sh
 import type { AgentGatewayConfig } from "@shared/agent-gateway-config";
 import { resolveAgentGatewayConfig } from "@shared/agent-gateway-config";
 import { anthropicDriver } from "./anthropic";
-import { resolveAgentModelConfig, type DriverResolvedConfig } from "./config";
+import {
+  AgentModelSettingsRegistry,
+  resolveAgentModelConfig,
+  type DriverResolvedConfig,
+} from "./config";
 import type { AgentProviderDriver } from "./driver";
 import { openaiDriver } from "./openai";
 import { AgentGatewayError, normalizeProviderError } from "./errors";
@@ -41,7 +45,7 @@ function resolveDriver(provider: AgentProvider): AgentProviderDriver {
 }
 
 export class AgentGateway implements AgentModelGateway {
-  private readonly runtimeSettings: Partial<Record<AgentProvider, AgentModelSettings>> = {};
+  private readonly runtimeSettings = new AgentModelSettingsRegistry();
   private gatewayConfig: AgentGatewayConfig = resolveAgentGatewayConfig();
   private usageRecorder?: (record: ModelUsageRecord) => Promise<void>;
 
@@ -69,13 +73,10 @@ export class AgentGateway implements AgentModelGateway {
     settings: AgentModelSettings,
     gatewayConfig?: AgentGatewayConfig,
   ): AgentModelSelection {
-    this.runtimeSettings[settings.provider] = { ...settings };
+    this.runtimeSettings.registerPrimary(settings);
     if (gatewayConfig) {
       this.gatewayConfig = resolveAgentGatewayConfig(gatewayConfig);
-      if (gatewayConfig.fallbackModel) {
-        const fallback = gatewayConfig.fallbackModel;
-        this.runtimeSettings[fallback.provider] = { ...fallback };
-      }
+      this.runtimeSettings.registerFallback(this.gatewayConfig.fallbackModel);
     }
     return {
       ...(settings.configurationId ? { configurationId: settings.configurationId } : {}),
@@ -87,10 +88,7 @@ export class AgentGateway implements AgentModelGateway {
 
   applyGatewayConfig(gatewayConfig: AgentGatewayConfig): void {
     this.gatewayConfig = resolveAgentGatewayConfig(gatewayConfig);
-    if (gatewayConfig.fallbackModel) {
-      const fallback = gatewayConfig.fallbackModel;
-      this.runtimeSettings[fallback.provider] = { ...fallback };
-    }
+    this.runtimeSettings.registerFallback(this.gatewayConfig.fallbackModel);
   }
 
   getGatewayConfig(): AgentGatewayConfig {
@@ -106,7 +104,7 @@ export class AgentGateway implements AgentModelGateway {
   /** Route one prepared provider-neutral request through a provider driver. */
   async generateText(
     request: AgentModelRequest,
-    selection?: Pick<AgentModelSettings, "provider" | "model">,
+    selection?: AgentModelSelection,
   ): Promise<AgentModelResponse> {
     const gatewayRequestId = crypto.randomUUID();
     const startedAt = Date.now();
@@ -167,7 +165,7 @@ export class AgentGateway implements AgentModelGateway {
   /** generateText 的流式版本；向上层暴露统一 chunk 协议而非 provider 原生事件。 */
   async *generateTextStream(
     request: AgentModelRequest,
-    selection?: Pick<AgentModelSettings, "provider" | "model">,
+    selection?: AgentModelSelection,
   ): AsyncGenerator<AgentModelStreamChunk> {
     const gatewayRequestId = crypto.randomUUID();
     const startedAt = Date.now();

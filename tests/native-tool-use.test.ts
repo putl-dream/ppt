@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { AgentRuntime } from "../src/main/agent/runtime/agent-runtime";
 import { ToolRegistry } from "../src/main/agent/tools/tool-registry";
@@ -11,6 +11,7 @@ import type {
   AgentModelRequest,
   AgentModelResponse,
 } from "../src/main/agent/gateway/types";
+import { AgentGatewayError } from "../src/main/agent/gateway";
 import { createStarterPresentation } from "../src/shared/presentation-fixtures";
 import type { ToolDefinition } from "../src/main/agent/tools/tool-definition";
 import { clearHooks, registerHook } from "../src/main/agent/runtime/hooks/hook-registry";
@@ -120,47 +121,61 @@ describe("native ContentBlock runtime path", () => {
   });
 
   it("resets a failed streamed attempt before committing the retry", async () => {
-    let invocation = 0;
-    const gateway: AgentModelGateway = {
-      async generateText() {
-        throw new Error("Unexpected non-streaming call");
-      },
-      async *generateTextStream() {
-        invocation += 1;
-        if (invocation === 1) {
-          yield { type: "text_delta" as const, text: "failed partial" };
-          throw Object.assign(new Error("rate limited"), { status: 429 });
-        }
-        yield { type: "text_delta" as const, text: "successful text" };
-        yield {
-          type: "complete" as const,
-          content: [{ type: "text" as const, text: "successful text" }],
-        };
-      },
-    };
-    const events: AgentRuntimeStreamEvent[] = [];
+    vi.useFakeTimers();
+    try {
+      let invocation = 0;
+      const gateway: AgentModelGateway = {
+        async generateText() {
+          throw new Error("Unexpected non-streaming call");
+        },
+        async *generateTextStream() {
+          invocation += 1;
+          if (invocation === 1) {
+            yield { type: "text_delta" as const, text: "failed partial" };
+            throw new AgentGatewayError(
+              "openai rate limit exceeded: rate limited",
+              "rate-limit",
+              "openai",
+              undefined,
+              1_000,
+            );
+          }
+          yield { type: "text_delta" as const, text: "successful text" };
+          yield {
+            type: "complete" as const,
+            content: [{ type: "text" as const, text: "successful text" }],
+          };
+        },
+      };
+      const events: AgentRuntimeStreamEvent[] = [];
 
-    const result = await new AgentRuntime(new ToolRegistry(), gateway).run({
-      threadId: "stream-attempt-reset",
-      request: "retry",
-      presentationSnapshot: createStarterPresentation(),
-      selectedElementIds: [],
-      onStreamEvent: (event) => events.push(event),
-    });
+      const runPromise = new AgentRuntime(new ToolRegistry(), gateway).run({
+        threadId: "stream-attempt-reset",
+        request: "retry",
+        presentationSnapshot: createStarterPresentation(),
+        selectedElementIds: [],
+        onStreamEvent: (event) => events.push(event),
+      });
+      await vi.runAllTimersAsync();
+      const result = await runPromise;
 
-    expect(result).toEqual({ type: "message", content: "successful text" });
-    expect(events.map((event) => event.type)).toEqual([
-      "attempt_started",
-      "delta",
-      "attempt_reset",
-      "attempt_started",
-      "delta",
-      "attempt_committed",
-    ]);
-    const attempts = events
-      .filter((event) => event.type === "attempt_started")
-      .map((event) => event.attemptId);
-    expect(new Set(attempts).size).toBe(2);
+      expect(invocation).toBe(2);
+      expect(result).toEqual({ type: "message", content: "successful text" });
+      expect(events.map((event) => event.type)).toEqual([
+        "attempt_started",
+        "delta",
+        "attempt_reset",
+        "attempt_started",
+        "delta",
+        "attempt_committed",
+      ]);
+      const attempts = events
+        .filter((event) => event.type === "attempt_started")
+        .map((event) => event.attemptId);
+      expect(new Set(attempts).size).toBe(2);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("accepts direct Markdown on the first turn", async () => {

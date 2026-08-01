@@ -180,8 +180,21 @@ export function App() {
     setDisplayCardStatus(latest.event.eventId, "resolved");
   }, [notificationCards, notify]);
 
-  if (startupError) return <main className="loading error">{startupError}</main>;
-  if (!sessionLoaded) return <main className="loading">正在打开本地演示文稿工作区...</main>;
+  if (startupError) {
+    return (
+      <main className="loading error">
+        <span className="loading-message">{startupError}</span>
+      </main>
+    );
+  }
+  if (!sessionLoaded) {
+    return (
+      <main className="loading">
+        <span className="loading-indicator" aria-hidden="true" />
+        <span className="loading-message">正在打开本地演示文稿工作区...</span>
+      </main>
+    );
+  }
 
   const activeSessionTitle =
     sessions.find((session) => session.id === activeSessionId)?.title.trim()
@@ -305,6 +318,7 @@ export function App() {
             onClose: closeDeckPreview,
           }}
           isDraftChat={isDraftChat}
+          activeSessionId={activeSessionId}
           isMirrorVisible={isMirrorVisible}
           isMirrorExpanded={isMirrorExpanded}
           isPrimarySidebarCollapsed={workbenchLayout.isPrimarySidebarCollapsed}

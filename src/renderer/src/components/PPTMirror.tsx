@@ -278,7 +278,10 @@ export const PPTMirror: React.FC<PPTMirrorProps> = ({
   };
 
   return (
-    <aside className={`right-panel mirror-panel${isExpanded ? " is-expanded" : ""}`}>
+    <aside
+      className={`right-panel mirror-panel${isExpanded ? " is-expanded" : ""}`}
+      data-ui-region="canvas"
+    >
       {/* 顶部工具栏 */}
       <div className="panel-header right-header mirror-header">
         <div className="mirror-header-copy">

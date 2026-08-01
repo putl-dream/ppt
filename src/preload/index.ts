@@ -27,6 +27,9 @@ const api: DesktopApi = {
   openLogDirectory: () => ipcRenderer.invoke("logs:open-directory"),
   getApplicationDataPath: () => ipcRenderer.invoke("app:get-data-path"),
   openApplicationDataDirectory: () => ipcRenderer.invoke("app:open-data-directory"),
+  listUiThemes: () => ipcRenderer.invoke("ui-themes:list"),
+  readUiThemeCss: (themeId) => ipcRenderer.invoke("ui-themes:read", themeId),
+  openUiThemesDirectory: () => ipcRenderer.invoke("ui-themes:open-directory"),
   reportRendererLog: (report) => ipcRenderer.send("logs:renderer-report", report),
 
   // 项目产物

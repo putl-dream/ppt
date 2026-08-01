@@ -237,6 +237,12 @@ export interface ProjectFileEditorWriteResult
   >;
 }
 
+export interface UiThemeSummary {
+  id: string;
+  name: string;
+  fileName: string;
+}
+
 export interface DesktopApi {
   getSessionState(): Promise<SessionBootstrap>;
   getTokenUsageStats(): Promise<TokenUsageStats>;
@@ -247,6 +253,9 @@ export interface DesktopApi {
   openLogDirectory(): Promise<boolean>;
   getApplicationDataPath(): Promise<string>;
   openApplicationDataDirectory(): Promise<boolean>;
+  listUiThemes(): Promise<UiThemeSummary[]>;
+  readUiThemeCss(themeId: string): Promise<string | null>;
+  openUiThemesDirectory(): Promise<boolean>;
   reportRendererLog(report: RendererLogReport): void;
   createSession(options?: CreateSessionOptions): Promise<SessionBootstrap>;
   openWorkspace(rootPath: string): Promise<SessionBootstrap>;

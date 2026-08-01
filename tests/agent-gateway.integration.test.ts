@@ -1,55 +1,71 @@
-import { readFile } from "node:fs/promises";
-import { resolve } from "node:path";
-import { parseEnv } from "node:util";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { AgentGateway } from "../src/main/agent/gateway";
-import { textFromContentBlocks } from "../src/main/agent/gateway/content-blocks";
+import { describe, expect, it } from "vitest";
+import {
+  AgentGateway,
+  textFromContentBlocks,
+  type AgentModelStreamChunk,
+} from "../src/main/agent/gateway";
 
-const ENV_KEYS = [
-  "OPENAI_BASE_URL",
-  "OPENAI_API_MODE",
-  "ANTHROPIC_BASE_URL",
-  "AGENT_TIMEOUT_MS",
-  "AGENT_MAX_OUTPUT_TOKENS",
-] as const;
+const OPENAI_AVAILABLE = hasEnvironment("OPENAI_API_KEY", "OPENAI_MODEL");
+const ANTHROPIC_AVAILABLE = hasEnvironment("ANTHROPIC_API_KEY", "ANTHROPIC_MODEL");
 
-const previousEnvironment: Partial<Record<(typeof ENV_KEYS)[number], string | undefined>> = {};
-let config: Record<string, string | undefined>;
+function environment(name: string): string | undefined {
+  return process.env[name]?.trim() || undefined;
+}
 
-function required(name: string): string {
-  const value = config[name]?.trim();
-  if (!value) throw new Error(`Missing ${name} in .env.example`);
+function hasEnvironment(...names: string[]): boolean {
+  return names.every((name) => Boolean(environment(name)));
+}
+
+function requiredEnvironment(name: string): string {
+  const value = environment(name);
+  if (!value) throw new Error(`Missing ${name} in the process environment.`);
   return value;
 }
 
-beforeAll(async () => {
-  config = parseEnv(await readFile(resolve(".env.example"), "utf8"));
+async function expectUsefulStream(
+  provider: "openai" | "anthropic",
+  model: string,
+  apiKey: string,
+): Promise<void> {
+  const gateway = new AgentGateway();
+  const selection = gateway.configure({ provider, model, apiKey });
+  const chunks: AgentModelStreamChunk[] = [];
 
-  for (const key of ENV_KEYS) {
-    previousEnvironment[key] = process.env[key];
-    const value = config[key]?.trim();
-    if (value) process.env[key] = value;
-    else delete process.env[key];
+  for await (const chunk of gateway.generateTextStream(
+    {
+      systemPrompt: "You are a connectivity test. Reply with one short sentence only.",
+      prompt: `Confirm that the ${provider} streaming gateway request succeeded.`,
+    },
+    selection,
+  )) {
+    chunks.push(chunk);
   }
-});
 
-afterAll(() => {
-  for (const key of ENV_KEYS) {
-    const value = previousEnvironment[key];
-    if (value === undefined) delete process.env[key];
-    else process.env[key] = value;
+  expect(chunks.filter((chunk) => chunk.type === "complete")).toHaveLength(1);
+  const finalChunk = chunks.at(-1);
+  expect(finalChunk?.type).toBe("complete");
+  if (!finalChunk || finalChunk.type !== "complete") {
+    throw new Error(`${provider} stream did not end with a complete chunk.`);
   }
-});
+
+  const streamedText = chunks
+    .filter((chunk) => chunk.type === "text_delta")
+    .map((chunk) => chunk.text)
+    .join("");
+  expect(streamedText.trim().length).toBeGreaterThan(0);
+  expect(textFromContentBlocks(finalChunk.content).trim().length).toBeGreaterThan(0);
+}
 
 describe.sequential("AgentGateway real provider integration", () => {
-  it(
+  it.skipIf(!OPENAI_AVAILABLE)(
     "generates text through the configured OpenAI-compatible endpoint",
     async () => {
+      const model = requiredEnvironment("OPENAI_MODEL");
       const gateway = new AgentGateway();
       const selection = gateway.configure({
         provider: "openai",
-        model: required("OPENAI_MODEL"),
-        apiKey: required("OPENAI_API_KEY"),
+        model,
+        apiKey: requiredEnvironment("OPENAI_API_KEY"),
       });
 
       const response = await gateway.generateText(
@@ -61,20 +77,33 @@ describe.sequential("AgentGateway real provider integration", () => {
       );
 
       expect(response.provider).toBe("openai");
-      expect(response.model).toBe(required("OPENAI_MODEL"));
-      expect(textFromContentBlocks(response.content).length).toBeGreaterThan(0);
+      expect(response.model).toBe(model);
+      expect(textFromContentBlocks(response.content).trim().length).toBeGreaterThan(0);
     },
     120_000,
   );
 
-  it(
+  it.skipIf(!OPENAI_AVAILABLE)(
+    "streams text through the configured OpenAI-compatible endpoint",
+    async () => {
+      await expectUsefulStream(
+        "openai",
+        requiredEnvironment("OPENAI_MODEL"),
+        requiredEnvironment("OPENAI_API_KEY"),
+      );
+    },
+    120_000,
+  );
+
+  it.skipIf(!ANTHROPIC_AVAILABLE)(
     "generates text through the configured Anthropic-compatible endpoint",
     async () => {
+      const model = requiredEnvironment("ANTHROPIC_MODEL");
       const gateway = new AgentGateway();
       const selection = gateway.configure({
         provider: "anthropic",
-        model: required("ANTHROPIC_MODEL"),
-        apiKey: required("ANTHROPIC_API_KEY"),
+        model,
+        apiKey: requiredEnvironment("ANTHROPIC_API_KEY"),
       });
 
       const response = await gateway.generateText(
@@ -86,8 +115,20 @@ describe.sequential("AgentGateway real provider integration", () => {
       );
 
       expect(response.provider).toBe("anthropic");
-      expect(response.model).toBe(required("ANTHROPIC_MODEL"));
-      expect(textFromContentBlocks(response.content).length).toBeGreaterThan(0);
+      expect(response.model).toBe(model);
+      expect(textFromContentBlocks(response.content).trim().length).toBeGreaterThan(0);
+    },
+    120_000,
+  );
+
+  it.skipIf(!ANTHROPIC_AVAILABLE)(
+    "streams text through the configured Anthropic-compatible endpoint",
+    async () => {
+      await expectUsefulStream(
+        "anthropic",
+        requiredEnvironment("ANTHROPIC_MODEL"),
+        requiredEnvironment("ANTHROPIC_API_KEY"),
+      );
     },
     120_000,
   );

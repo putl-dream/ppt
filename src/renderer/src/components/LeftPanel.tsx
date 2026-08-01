@@ -221,7 +221,11 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
 
   if (collapsed) {
     return (
-      <aside className="left-panel workbench-sidebar workbench-sidebar--rail" aria-label="折叠的工作台导航">
+      <aside
+        className="left-panel workbench-sidebar workbench-sidebar--rail"
+        data-ui-region="sidebar"
+        aria-label="折叠的工作台导航"
+      >
         <div className="sidebar-brand-mark" title="Agent PPT" aria-label="Agent PPT">
           <img src="./icon.png" alt="" />
         </div>
@@ -278,7 +282,7 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
   }
 
   return (
-    <aside className="left-panel workbench-sidebar">
+    <aside className="left-panel workbench-sidebar" data-ui-region="sidebar">
       <div className="workbench-sidebar-top">
         <div className="workbench-sidebar-heading">
           <div className="workbench-sidebar-brand">

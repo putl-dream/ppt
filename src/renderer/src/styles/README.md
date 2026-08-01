@@ -23,7 +23,7 @@ Workbench UI tokens are separate from the Presentation deck design system under 
 
 Appearance is applied by `useAppearanceRuntime` on `document.documentElement`:
 
-- `dataset.skin` — currently only `studio`
+- `dataset.skin` — currently only `studio` (built-in token base)
 - `dataset.colorScheme` — `light` \| `dark`
 - `dataset.accent` / `dataset.controlShape` — accent + radius family
 - `style.colorScheme` — native form controls / scrollbars
@@ -34,6 +34,23 @@ Deck layout chips may still use `data-theme="ocean|midnight|…"` — that is th
 To add a future **document** skin: create `tokens/skins/document.css`, add `"document"` to `UiSkin`, and leave modules unchanged.
 
 Default: `skin=studio`, `colorScheme=dark`.
+
+## User CSS themes (Typora-style)
+
+Custom workbench themes live in `{applicationDataRoot}/themes/*.css` (usually `~/.agent-ppt/themes/`). Settings → 界面外观 lists `Studio` plus discovered files; selecting one injects the full stylesheet into `<style id="user-ui-theme">`.
+
+**Stable contract (recommended):** override semantic variables under `:root[data-color-scheme="dark|light"]` (`--surface-*`, `--text-*`, `--border-*`, accents/status). A token-only theme should recolor window chrome, sidebar, composer, and settings without targeting component classes.
+
+**Region hooks (next-stable):**
+
+- `[data-ui-region="sidebar"]`
+- `[data-ui-region="composer"]`
+- `[data-ui-region="canvas"]`
+- `[data-ui-region="settings"]`
+
+Component class names may change. Slide paper / deck preview surfaces intentionally keep fixed light paper colors and are not part of the theme contract.
+
+Built-in id `studio` is reserved; a user file named `studio.css` is ignored.
 
 ## Placement: three questions
 

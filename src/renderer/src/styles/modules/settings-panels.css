@@ -4,15 +4,10 @@
   background: var(--surface-raised);
 }
 
+/* Layout helper; enter motion comes from shared .view-enter */
 .settings-panel-fade {
   display: grid;
   gap: 16px;
-  animation: settingsFadeIn 0.22s ease-out;
-}
-
-@keyframes settingsFadeIn {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
 }
 
 /* Consumed by settings-token-usage.css refresh spinner. */

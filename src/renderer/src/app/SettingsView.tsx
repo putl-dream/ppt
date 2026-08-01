@@ -44,7 +44,7 @@ export function SettingsView({
           onStartPanelResize("primary", event.clientX);
         }}
       />
-      <div className="rounded-canvas">
+      <div key="settings" className="rounded-canvas view-enter" data-ui-region="canvas">
         <SettingsConsole
           activeCategory={activeCategory}
           models={controller.models}
@@ -67,8 +67,15 @@ export function SettingsView({
           setExecutionStrategy={controller.setExecutionStrategy}
           colorScheme={controller.colorScheme}
           setColorScheme={controller.setColorScheme}
-          skin={controller.skin}
-          setSkin={controller.setSkin}
+          uiThemeId={controller.uiThemeId}
+          setUiThemeId={controller.setUiThemeId}
+          uiThemes={controller.uiThemes}
+          onRefreshUiThemes={() => {
+            void controller.refreshUiThemes();
+          }}
+          onOpenUiThemesDirectory={() => {
+            void controller.openUiThemesDirectory();
+          }}
           uiAccentColor={controller.uiAccentColor}
           setUiAccentColor={controller.setUiAccentColor}
           uiControlShape={controller.uiControlShape}

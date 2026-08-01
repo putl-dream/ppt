@@ -7,9 +7,14 @@ import type {
   UiSkin,
 } from "./appBootstrap";
 import { resolveColorScheme } from "./appBootstrap";
+import {
+  applyUserUiThemeCss,
+  BUILTIN_UI_THEME_ID,
+} from "./userUiTheme";
 
 interface AppearanceRuntimeOptions {
   skin: UiSkin;
+  uiThemeId: string;
   colorScheme: UiColorScheme;
   computedScheme: ComputedColorScheme;
   borderRadiusScale: number;
@@ -19,10 +24,11 @@ interface AppearanceRuntimeOptions {
 
 /**
  * Applies skin × color-scheme to the document. Surfaces come from CSS skins;
- * this hook only sets data attributes and window chrome.
+ * this hook only sets data attributes, optional user theme CSS, and window chrome.
  */
 export function useAppearanceRuntime({
   skin,
+  uiThemeId,
   colorScheme,
   computedScheme,
   borderRadiusScale,
@@ -114,6 +120,46 @@ export function useAppearanceRuntime({
         console.error("同步窗口主题失败:", error);
       });
   }, [skin, colorScheme, computedScheme]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const clearTheme = () => {
+      if (!cancelled) applyUserUiThemeCss(null);
+    };
+
+    if (uiThemeId === BUILTIN_UI_THEME_ID) {
+      clearTheme();
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    const desktopApi = window.desktopApi;
+    if (!desktopApi?.readUiThemeCss) {
+      clearTheme();
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    void desktopApi
+      .readUiThemeCss(uiThemeId)
+      .then((css) => {
+        if (cancelled) return;
+        applyUserUiThemeCss(typeof css === "string" && css.length > 0 ? css : null);
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          applyUserUiThemeCss(null);
+          console.error("加载自定义 UI 主题失败:", error);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [uiThemeId]);
 
   useEffect(() => {
     document.documentElement.style.setProperty(

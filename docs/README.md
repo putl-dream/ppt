@@ -16,6 +16,7 @@
 | [架构总览](./architecture/overview.md) | 五层架构、数据流、状态边界与自主性原则 |
 | [工程能力地图](./architecture/engineering-capabilities.md) | Claude Code 能力分层、PPT 落点、成熟度、缺口与验证入口 |
 | [本地日志与运行诊断](./architecture/observability.md) | JSONL 日志、关联身份、事件级别、脱敏与容量边界 |
+| [工作台 UI 主题](./architecture/ui-themes.md) | Typora 式 `themes/*.css`、semantic token 契约、`data-ui-region` |
 | [Query](./agent/query.md) | QueryParams、QueryState、IterationWorkspace、身份与恢复 |
 | [Agent Loop](./agent/loop.md) | 独立 AsyncGenerator、显式 outcome、工具批次与事件 |
 | [Agent Runtime](./agent/runtime.md) | Service、RunFactory、RunScope、Runtime 与 Finalizer |
@@ -80,7 +81,8 @@
 | Project file management | Implemented | design-spec/page-plan/Page SVG/assets/deck/export history 为第一公民；注册文本 artifact 用隔离 `editToken` + SHA-256 CAS 编辑 |
 | SVG-native create | Implemented | durable DesignSpec/PagePlan/SourceAsset/PageSvg/PreviewReceipt → Candidate/Quality/Proposal |
 | Presentation lifecycle | Implemented | 每个 Presentation 一个跨 Query PptJob；immutable revision/dependency/stale、Proposal/Presentation/Review/Export 与 side-effect recovery |
-| Application data root | Implemented | SQLite、blobs、logs、runtime、token usage 位于 `~/.agent-ppt`；Electron userData 位于 `~/.agent-ppt/electron` |
+| Application data root | Implemented | SQLite、blobs、logs、runtime、token usage、`themes/` 位于 `~/.agent-ppt`；Electron userData 位于 `~/.agent-ppt/electron` |
+| Workbench UI themes | Implemented | `themes/*.css` 注入、semantic token 稳定面、`data-ui-region`；不影响 DesignSystem / 导出 |
 
 ## 参考项目的使用方式
 
