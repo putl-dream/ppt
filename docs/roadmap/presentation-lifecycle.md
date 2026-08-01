@@ -2,11 +2,15 @@
 
 > 文档类型：活跃提案
 > 状态：Proposed，尚未成为现行代码事实
-> 最后更新：2026-07-25
+> 最后更新：2026-07-30
 
 ## 1. 要解决的问题
 
-当前 Agent Mode 与 Lean Mode 已能生成、校验、审批和导出，但前半段使用不同 artifact 和状态来源。文件存在、Task 完成、Query completed、proposal ready 和 Presentation applied 容易被混为一个“完成”。
+产品创建已统一为 Agent SVG-native（`design-spec` / `page-plan` / `slides/svg/*` →
+`PreviewSvgPage` → `SubmitSvgDeck`）；Lean Mode 已从 IPC 退役。仍存在的问题是：
+文件存在、Task 完成、Query completed、proposal ready 和 Presentation applied
+容易被混为一个“完成”；SVG 锁文件、遗留 storyboard/layout-plan、probe 与
+`draft/ready/stale` metadata 尚未收敛为统一 revision graph。
 
 现行代码已经提供 workspace-level 项目文件管理页，可按 artifact 分组浏览文件、查看
 详情/diff，并安全编辑已注册的普通 UTF-8 文本 artifact；`deck`、`history` 和未知
@@ -47,26 +51,24 @@ Project / Deck identity
 | `ArtifactRevisionId` | 不可变产物版本 |
 | `ProposalId` | 等待审批/应用的提案 |
 
-这些 ID 不与 thread/query/run/task ID 合并。
+这些 ID 不与 thread/query/run/task ID 合并。数字 `Presentation.revision`（CommandBus CAS）
+与 immutable `PresentationRevisionId` 若并存，必须文档化区分，不得混用。
 
 ## 4. Canonical Artifact Graph
 
-新建：
+新建（对齐现行 SVG-native）：
 
 ```text
-Intent
-  → NarrativePlan
-  → DeckSpec
-  → DeckDesignPlan
-  → AssetManifest
-  → CompiledDeck
-  → QualityReport
-  → CommandProposal
+Intent / DesignSpec
+  → PagePlan
+  → PageSvg[]
+  → PreviewReceipts
+  → SvgDeckProposal
   → PresentationRevision
   → ExportArtifact
 ```
 
-编辑：
+遗留 / 编辑旁路可继续映射到同一 Job 门面：
 
 ```text
 PresentationRevision
@@ -77,7 +79,9 @@ PresentationRevision
   → next PresentationRevision
 ```
 
-Agent/Lean 的区别只保留在执行策略，后半段共享 Design、Assets、Compile、Quality 和 Proposal 契约。
+执行策略差异（例如是否自动审批）留在 `executionStrategy` / CommitGate；不恢复
+Lean 作为对等产品创建 Mode。离线 commercial compiler 若保留，只作为可选导入源，
+其产出仍须进入同一 Artifact Revision 与 Proposal 边界。
 
 ## 5. Artifact Revision
 
@@ -107,7 +111,7 @@ interface ArtifactRevision<T> {
 candidate → validate → commit
 ```
 
-半写文件、失败 attempt 和未验证 teammate 结果不生成 revision。
+半写文件、失败 attempt、未通过 PreviewSvgPage 的 SVG 和未验证 teammate 结果不生成 revision。
 
 ## 6. Job State
 
@@ -143,10 +147,9 @@ Artifact 依赖精确 revision/hash。上游变化时：
 
 ## 8. Candidate、Preview 与 Presentation
 
-- Candidate：未验证或未批准的业务产物。
-- CompiledDeck：已编译但尚未应用。
-- Preview：Candidate 的只读渲染。
-- Proposal：Candidate 到当前 Presentation 的命令差异。
+- Candidate：未验证或未批准的业务产物（含未过门禁的 SVG）。
+- Preview：Candidate 的只读渲染（含 PreviewSvgPage PNG）。
+- Proposal：Candidate 到当前 Presentation 的命令差异（含 SubmitSvgDeck 产出）。
 - Presentation：用户当前已应用的 deck。
 
 创建内容草稿时不应提前把半成品伪装成 committed Presentation。
@@ -165,6 +168,7 @@ PptJob checkpoint 与 Query checkpoint 正交：
 
 ### 已落地的前置能力（不代表 Phase 1 完成）
 
+- 产品创建统一为 SVG-native；Lean 产品入口已退役。
 - workspace 当前 artifact 的分组、文件列表、详情、diff 与文本编辑入口。
 - `deck`、`history` 与未知 artifact 只读，避免通用编辑入口覆盖领域事实源。
 - Renderer、Agent 与项目持久化共享 `WorkspaceFileService` 的路径、UTF-8、symlink、
@@ -177,22 +181,23 @@ snapshot 或 validation snapshot，因此本路线整体仍为 **Proposed**。
 ### Phase 1：领域类型与 Artifact Index
 
 - 建立 ID、revision、hash、dependency 和 validation。
-- 兼容读取现有 brief/outline/storyboard/layout-plan。
+- 兼容读取 design-spec、page-plan、SVG 页，以及遗留 brief/outline/storyboard/layout-plan。
 
-### Phase 2：统一内容与设计契约
+### Phase 2：作者文件与注册表对齐
 
-- Agent storyboard 与 Lean DeckSpec 建立显式映射。
-- LayoutPlan 与 DirectedDeckPlan 共享可执行设计核心。
+- 默认 project artifact / workspace probe 与 SVG-native 锁文件对齐。
+- 明确遗留 storyboard/layout-plan 的导入或只读兼容边界。
 
 ### Phase 3：PptJob Orchestrator
 
 - Job Params/State/Stage Workspace。
 - durable transitions 和 UI projection。
+- 拆开 Query/run completed 与 job/artifact ready。
 
-### Phase 4：Compile、Quality 与 Proposal
+### Phase 4：Quality 与 Proposal 边界
 
-- Agent/Lean 共用后半段。
-- Candidate/Preview/Proposal 边界收敛。
+- Candidate/Preview/Proposal/Presentation 边界收敛。
+- SubmitSvgDeck 与遗留命令提案共用 Job 投影。
 
 ### Phase 5：Edit、Recovery、Export
 
@@ -202,18 +207,17 @@ snapshot 或 validation snapshot，因此本路线整体仍为 **Proposed**。
 ## 11. 不进入本路线
 
 - 不替换通用 Query Loop。
-- 不让模型输出坐标元素树。
-- 不取消 Lean 的一次内容调用优势。
+- 不把 Lean 重新挂回产品 Mode。
 - 不绕过 CommitGate。
 - 不用 TaskStore 代替 PptJob。
 - 不用无限视觉模型循环修稿。
+- 不取消 SVG-native 作为新建权威路径。
 
 ## 12. 完成定义
 
 - PPT Job 是跨 Query 的唯一业务工作流状态。
 - 关键 artifact 均有 immutable revision、hash、dependency 和 validation。
-- Agent/Lean 共享后半段。
+- 新建与编辑共用 Presentation / CommitGate / 导出门面。
 - candidate、proposal、committed Presentation 边界明确。
 - 上游修改确定性标记下游 stale。
-- 新建、编辑、重设计、审查和导出使用同一能力门面。
 - 崩溃恢复不重复 apply/export 等副作用。

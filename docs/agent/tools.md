@@ -1,7 +1,7 @@
 # Tool 系统
 
 > 文档类型：现行架构
-> 最后核对：2026-07-25
+> 最后核对：2026-07-30
 
 ## 1. 设计目标
 
@@ -170,7 +170,9 @@ hard deny
 高层 Hook 的 allow 不能越过更高优先级 deny。权限拒绝应告诉模型原因和可选替代
 方案，但不能泄露 Secret。
 
-Presentation 写入仍有独立的 `CommitGate`。允许调用 `SubmitCommands` 不等于允许自动应用所有命令。
+Presentation 写入仍有独立的 `CommitGate`。允许调用 `SubmitSvgDeck` 或 `SubmitCommands`
+不等于允许自动应用所有命令。新建整套演示应走 `PreviewSvgPage` → `SubmitSvgDeck`；
+`ExecuteLayoutPlan` / `SubmitCommands` 不是 SVG-native 新建主路径。
 
 ## 9. Skill 与工具
 
@@ -193,6 +195,10 @@ Skill 提供知识和工作建议，不拥有工具权限。`LoadSkill`：
 - `src/main/agent/runtime/tools/tool-access-policy.ts`
 - `src/main/agent/runtime/tools/tool-result-data.ts`
 - `src/main/agent/runtime/hooks/`
+- `src/main/agent/tools/core/preview-svg-page.ts`
+- `src/main/agent/tools/core/submit-svg-deck.ts`
+- `src/main/agent/tools/core/submit-commands.ts`
+- `src/main/agent/tools/core/execute-layout-plan.ts`
 
 ## 11. 验收
 

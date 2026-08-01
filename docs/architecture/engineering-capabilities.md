@@ -1,7 +1,7 @@
 # 工程能力地图：Claude Code 参考与 Agent PPT 落点
 
 > 文档类型：现行能力盘点
-> 最后核对：2026-07-25
+> 最后核对：2026-07-30
 > 事实来源：`/mnt/e/Coding/claude-code`、`src/`、`skills/`、`tests/` 与 `package.json`
 
 下文中 `/mnt/e/Coding/claude-code/...` 是参考项目绝对路径；`src/...`、`tests/...`
@@ -62,7 +62,8 @@ Agent PPT 不需要复制这些入口和命令，但需要吸收其中与长任�
 | 后台任务 | **Partial** | `src/main/agent/runtime/background/` | 已有 manager 与 inbox 输入，尚非 daemon/跨进程后台平台 |
 | 持久化与恢复 | **Implemented** | `src/main/agent/persistence/`、`src/main/agent/runtime/lifecycle/checkpoint-coordinator.ts` | History、checkpoint、lease、CAS 与 inflight 恢复分层 |
 | Web / 图片检索 | **Implemented** | `src/main/agent/search/`、`src/main/agent/tools/core/web-search.ts`、`src/main/agent/tools/core/search-slide-images.ts` | 作为受控外部能力进入工具管线 |
-| Presentation 编译 | **Implemented** | `src/shared/commercial-visual/`、`src/design-system/`、layout registry | PPT 自有领域能力，不从 Claude Code 复制 |
+| SVG-native 创建 | **Implemented** | `skills/ppt-workflow/`、`preview-svg-page.ts`、`submit-svg-deck.ts` | 产品唯一新建路径；IPC 拒绝 lean |
+| Presentation 编译（残余） | **Implemented** | `src/shared/commercial-visual/`、`src/main/agent/lean/`、layout registry | 离线/脚本与遗留 grammar；非产品 Mode |
 | 渲染反馈与质量门 | **Implemented** | `src/main/agent/runtime/presentation/render-feedback-loop.ts`、deck validators、quality gate | 模型复盘有界，最终约束由确定性代码执行 |
 | Artifact / Job 生命周期 | **Proposed** | `docs/roadmap/presentation-lifecycle.md` | 当前最大结构性缺口 |
 | MCP / Plugin / LSP | **Not adopted** | 无对应产品入口 | 不是当前 PPT 主链路所必需 |
@@ -223,7 +224,9 @@ immutable Artifact Revision，也不把一次保存自动解释为 `ready/verifi
 | Skill | 按需注入领域知识、步骤建议和检查表 | 强制 Runtime 阶段转换 |
 | Hook | 在确定执行点观察、阻塞或补充行为 | 修改 canonical state 的任意旁路 |
 
-Prompt 采用稳定前缀和动态后缀，section 顺序与 cache key 由 assembler 管理。PPT 的 brief、outline、storyboard、layout、beautify、review、export 等 Skill 是渐进式知识包；stage policy 只改变推荐度，不应把其他安全工具变为不可用。
+Prompt 采用稳定前缀和动态后缀，section 顺序与 cache key 由 assembler 管理。PPT 的
+`ppt-workflow`（SVG-native 新建）、design、layout、beautify、review、export 等 Skill
+是渐进式知识包；stage policy 只改变推荐度，不应把其他安全工具变为不可用。
 
 ### 4.7 多 Agent、任务与后台工作
 
@@ -258,31 +261,33 @@ writer lease 防止两个执行者同时推进同一 Run；CAS 防止旧快照�
 
 Claude Code 提供通用 Agent 骨架，Agent PPT 的产品价值来自以下领域层。
 
-### 5.1 双创建路径
+### 5.1 产品创建路径
 
-- **Agent Mode**：模型通过工具读取、规划、提出命令并经 CommitGate 写入；
-- **Lean Mode**：`DeckSpec v2 → Visual Director → asset resolver → deterministic compiler → quality gate`。
+- **Agent SVG-native（产品唯一创建路径）**：`design/design-spec.json` → `slides/page-plan.json` → `slides/svg/PNN.svg` → `PreviewSvgPage` → `SubmitSvgDeck` → CommitGate。IPC 拒绝 `generationMode: lean`。
+- **Layout Plan / ExecuteLayoutPlan**：遗留布局编译，非新建主路径。
+- **Commercial Visual Compiler**：离线/脚本残余（`src/main/agent/lean/*`、`scripts/generate-commercial-pptx.ts`），不是产品 Mode。
 
-两条路径可以共享 Presentation model、design system、layout registry、renderer 和 exporter，但不能各自产生不兼容的“第二套 slide 事实”。
+所有可达写入最终进入同一 Presentation schema、CommitGate、renderer 与 exporter，不能各自产生不兼容的“第二套 slide 事实”。
 
 ### 5.2 设计与布局
 
 当前能力包括：
 
-- `src/design-system/` 中的 schema、preset、brand profile、颜色、背景、chrome 与图片处理；
-- Layout Grammar、variant、slot、text fit 和内置 layout handler；
-- commercial scene 与 deterministic ID；
+- SVG-native 页面作者源与 `visualSource.kind === "svg"`；
+- `src/design-system/` 中的 DesignSystemV2 schema、preset、brand profile、颜色、背景与图片处理；
+- Layout Grammar、variant、slot、text fit 和内置 layout handler（遗留/并行路径）；
+- commercial scene 与 deterministic ID（compiler 残余）；
 - chart、table、shape、icon 和 image 等可编辑视觉元素；
 - HTML 预览、Renderer 镜像与 PPTX 导出使用共享的语义模型。
 
-模型选择叙事、场景和风格；确定性编译器负责坐标、约束、默认值和可重复输出。
+SVG-native 路径下模型直接写作完整页面 SVG；grammar handler 路径仍由确定性代码负责坐标与可重复布局。
 
 ### 5.3 提案、质量与交付
 
 写入链路是：
 
 ```text
-tool proposal
+tool proposal（SubmitSvgDeck 或遗留 SubmitCommands / ExecuteLayoutPlan）
   → preview / diff
   → schema and deck validators
   → risk policy
@@ -293,11 +298,11 @@ tool proposal
   → postflight
 ```
 
-自动质量能力覆盖 layout、style、asset、overflow、标题重复、deck consistency 和商业视觉 quality gate。`src/main/agent/runtime/presentation/render-feedback-loop.ts` 允许模型基于渲染结果做有限轮次修正，但必须受迭代预算约束，且不能绕过最终 validator。
+自动质量能力覆盖 SVG 预览门禁、layout/style/asset、overflow、标题重复、deck consistency；商业视觉 quality gate 仍用于残余 compiler。`src/main/agent/runtime/presentation/render-feedback-loop.ts` 允许模型基于渲染结果做有限轮次修正，但必须受迭代预算约束，且不能绕过最终 validator。
 
 详见 [工作流与状态](../presentation/workflow.md)、
 [Visual Expression System](../presentation/visual-system.md) 和
-[Commercial Visual Compiler](../presentation/commercial-pipeline.md)。
+[Commercial Visual Compiler](../presentation/commercial-pipeline.md)（残余）。
 
 ## 6. 明确不复制的 Claude Code 能力
 
@@ -319,7 +324,7 @@ tool proposal
 
 ### P0：Artifact 与 Job 生命周期
 
-当前 Query/Run 已有可靠生命周期，但 brief、outline、storyboard、layout plan、candidate、proposal、committed deck 与 export 之间仍缺统一 revision graph 和 job identity。它会影响：
+当前 Query/Run 已有可靠生命周期，但 design-spec、page-plan、SVG 页、遗留 storyboard/layout-plan、candidate、proposal、committed deck 与 export 之间仍缺统一 revision graph 和 job identity。它会影响：
 
 - 上游内容修改后的 stale 传播；
 - preview/candidate 与已提交 deck 的身份；

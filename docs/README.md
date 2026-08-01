@@ -32,10 +32,10 @@
 
 | 文档 | 内容 |
 |---|---|
-| [工作流与状态](./presentation/workflow.md) | Agent/Lean 路径、artifact、workspace 文件管理、Layout Plan、Proposal 与 CommitGate |
-| [Visual Expression System](./presentation/visual-system.md) | Design System、Layout Grammar、素材、三端渲染与反馈 |
-| [Commercial Visual Compiler](./presentation/commercial-pipeline.md) | DeckSpec v2、Visual Director、素材解析、编译与质量门 |
-| [商业视觉质量规范](./presentation/quality-rubric.md) | 机器证据与人工评分的边界 |
+| [工作流与状态](./presentation/workflow.md) | SVG-native Agent 创建路径、artifact、workspace 文件管理、Proposal 与 CommitGate |
+| [Visual Expression System](./presentation/visual-system.md) | DesignSystemV2、SVG visualSource、Layout Grammar 遗留路径、三端渲染 |
+| [Commercial Visual Compiler](./presentation/commercial-pipeline.md) | 离线/脚本残余编译管线（Lean 已退役，非产品创建路径） |
+| [商业视觉质量规范](./presentation/quality-rubric.md) | 残余 compiler 的机器证据与人工评分边界 |
 
 ## 活跃路线图
 
@@ -58,6 +58,9 @@
 10. Presentation 业务状态与单次 Agent Query 状态正交。
 11. 项目文件管理只投影当前 workspace 文件；文本保存必须携带隔离的编辑凭证和读取时
     SHA-256 version，不能把文件保存等同于 artifact revision 或验证完成。
+12. 产品创建路径仅为 Agent SVG-native（`PreviewSvgPage` → `SubmitSvgDeck`）；
+    IPC 拒绝 `generationMode: lean`。`executionStrategy`（AUTO / REQUEST_APPROVAL）
+    是审批策略，不是创建模式。
 
 ## 本轮重构状态
 
@@ -70,6 +73,7 @@
 | System Prompt | Implemented | Section Registry、稳定/动态边界、契约级 cache key、stage 建议化 |
 | File operations | Implemented | Main/teammate 共用 read receipt、精确 Edit、冲突检测与受保护提交 |
 | Project file management | Implemented | artifact 分组、文件列表/详情/diff；注册文本 artifact 用隔离 `editToken` + SHA-256 CAS 编辑，deck/history/未知文件只读 |
+| SVG-native create | Implemented | `design-spec` / `page-plan` / `slides/svg/*` → PreviewSvgPage → SubmitSvgDeck；Lean Mode 已退役 |
 | Presentation lifecycle | Proposed | 跨 Query 的 Artifact Revision / PptJob 仍只在 roadmap |
 
 ## 参考项目的使用方式

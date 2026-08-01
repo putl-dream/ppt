@@ -1,7 +1,7 @@
 # Agent PPT 架构总览
 
 > 文档类型：现行架构
-> 最后核对：2026-07-25
+> 最后核对：2026-07-30
 > 参考实现：`/mnt/e/Coding/claude-code` 的 `QueryEngine → query() → tools → provider` 分层
 
 ## 1. 核心定位
@@ -96,15 +96,19 @@ Renderer 将一次运行投影为有序的可见 block 流：`response` 通过�
 
 描述进程恢复和副作用边界：
 
-- status：`running / waiting_user / proposal_ready / completed / interrupted / failed`
+- status：`running / waiting_user / completed / interrupted / failed`
 - durable phase：`before_model / model_committed / tool_running / tool_committed / finished`
 - inflight phase：`model_streaming / model_received / tool_running / waiting_user`
 
-这些状态与 Query transition 相关，但不是同一个枚举。
+这些状态与 Query transition 相关，但不是同一个枚举。`command_proposal`
+只作为 Query 的结构化结果类型；是否正在等待审批由独立的 Presentation Job
+状态表达，不再写成 Run 终态。
 
 ### 5.3 Presentation 业务状态
 
-描述 brief、outline、storyboard、layout plan、candidate、proposal、committed deck 和 export。它跨多个 Query 存活，不能塞进 `AgentQueryState`。
+描述 design-spec、page-plan、SVG 页、candidate、proposal、committed deck 和 export
+（以及遗留 storyboard/layout-plan）。它跨多个 Query 存活，不能塞进 `AgentQueryState`。
+产品新建为 SVG-native Agent；跨 Query 的统一 Job/revision 仍见路线图。
 
 ## 6. 自主性与确定性边界
 

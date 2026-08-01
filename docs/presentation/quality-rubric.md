@@ -2,8 +2,9 @@
 
 > 版本：commercial-visual-human-v1
 > 日期：2026-07-21
-> 文档类型：现行质量规范
-> 适用范围：[Lean Commercial Visual Compiler v2](./commercial-pipeline.md)
+> 最后核对：2026-07-30
+> 文档类型：残余 compiler 质量规范
+> 适用范围：[Commercial Visual Compiler v2](./commercial-pipeline.md)（离线/脚本管线；非产品 SVG-native Mode）
 
 ## 1. 评分边界
 

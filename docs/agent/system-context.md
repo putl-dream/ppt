@@ -1,7 +1,7 @@
 # System Prompt 与 Context 管理
 
 > 文档类型：现行架构
-> 最后核对：2026-07-25
+> 最后核对：2026-07-30
 
 ## 1. 原则
 
@@ -118,7 +118,9 @@ Prompt stage 不可以：
 
 ## 7. 工作流信息的表达
 
-将冗长的“六阶段必须执行”替换为事实和建议：
+将冗长的“六阶段必须执行”替换为事实和建议。产品新建以 SVG-native 为准
+（见 `skills/ppt-workflow`）；下列示例反映**现行 prompt probe 投影**
+（仍以 brief/outline/storyboard 等为主，尚未全量换成 design-spec/page-plan/svg）：
 
 ```text
 Workspace facts:
@@ -128,11 +130,12 @@ Workspace facts:
 - presentation: 3 slides
 
 Suggested skills:
-- ppt-outline
-- ppt-storyboard
+- ppt-workflow
+- ppt-design
 
 The model may choose a shorter safe path when the user request does not
-require the full production workflow.
+require the full production workflow. For a full new deck, prefer
+SVG-native: design-spec → page-plan → slides/svg → PreviewSvgPage → SubmitSvgDeck.
 ```
 
 真正的不变量，如 Proposal 必须经过 CommitGate、文件覆盖必须 read-before-write，放在代码中执行。

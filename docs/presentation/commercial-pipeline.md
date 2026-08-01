@@ -1,11 +1,13 @@
 # Commercial Visual Compiler v2
 
-> 文档类型：现行架构
-> 状态：主链路已落地，当前重点为质量可信化和真实交付验证
+> 文档类型：残余能力 / 离线编译管线
+> 最后核对：2026-07-30
+> 状态：Lean Mode 已从产品入口退役；本管线供脚本、测试与回归使用，不是 `agent:start` 创建路径
+> 产品创建见 [工作流与状态](./workflow.md)（SVG-native Agent）
 
 ## 1. 目标
 
-Lean Mode 在一次结构化内容模型调用后，通过确定性本地管线生成商业初稿：
+在一次结构化内容模型调用后，通过确定性本地管线生成商业初稿（历史 Lean 路径）：
 
 - 每页有明确结论和视觉焦点；
 - 页面角色与节奏可辨认；
@@ -14,7 +16,7 @@ Lean Mode 在一次结构化内容模型调用后，通过确定性本地管线�
 - 主要对象保持可编辑；
 - 质量报告区分机器证据和人工审美。
 
-## 2. 主链路
+## 2. 管线步骤（离线）
 
 ```text
 request
@@ -158,11 +160,9 @@ AssetRequest
 - `src/main/deck/pptx-postflight.ts`
 - `scripts/generate-commercial-pptx.ts`
 
-## 12. 当前重点
+## 12. 当前定位
 
-- 建立真实商业样稿和三人盲评数据；
-- 验证机器指标与人工评分的相关性；
-- 扩大真实素材与授权覆盖；
-- 提高图片焦点和品牌适配；
-- 保持原生图表、notes 和三端一致性；
-- 与 Agent Mode 的后半段 artifact/quality/proposal 契约逐步统一。
+- 产品新建已统一到 SVG-native Agent；本文件描述的是可执行库与离线脚本，不是对等 Mode。
+- 继续服务 `scripts/generate-commercial-pptx.ts`、商业视觉单测与质量规范样本。
+- 质量可信化与人工评分相关性仍按 [质量规范](./quality-rubric.md) 维护。
+- 不规划把本管线重新挂回 IPC 产品入口；与 Presentation / CommitGate / 导出的共享契约已由 SVG-native 提交路径承接。
