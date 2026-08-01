@@ -112,6 +112,15 @@
   font-weight: var(--font-weight-semibold);
 }
 
+/* Artifact follow-ups are optional, not blocking decisions like approval and
+   patch buttons, so they stay a size down. */
+.inline-artifact-actions button {
+  min-width: 76px;
+  min-height: 28px;
+  padding: 5px 10px;
+  font-size: 11px;
+}
+
 
 
 

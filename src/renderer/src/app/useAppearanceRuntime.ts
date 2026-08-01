@@ -1,9 +1,8 @@
 import { useEffect } from "react";
 import type {
   ComputedColorScheme,
-  UiAccentColor,
   UiColorScheme,
-  UiControlShape,
+  UiFontFamily,
   UiSkin,
 } from "./appBootstrap";
 import { resolveColorScheme } from "./appBootstrap";
@@ -11,29 +10,30 @@ import {
   applyUserUiThemeCss,
   BUILTIN_UI_THEME_ID,
 } from "./userUiTheme";
+import { applyUiTypography } from "./uiTypography";
 
 interface AppearanceRuntimeOptions {
   skin: UiSkin;
   uiThemeId: string;
   colorScheme: UiColorScheme;
   computedScheme: ComputedColorScheme;
-  borderRadiusScale: number;
-  uiAccentColor: UiAccentColor;
-  uiControlShape: UiControlShape;
+  uiFontFamily: UiFontFamily;
+  uiFontSize: number;
+  uiLineHeight: number;
 }
 
 /**
  * Applies skin × color-scheme to the document. Surfaces come from CSS skins;
- * this hook only sets data attributes, optional user theme CSS, and window chrome.
+ * this hook only sets data attributes, optional user theme CSS, typography, and window chrome.
  */
 export function useAppearanceRuntime({
   skin,
   uiThemeId,
   colorScheme,
   computedScheme,
-  borderRadiusScale,
-  uiAccentColor,
-  uiControlShape,
+  uiFontFamily,
+  uiFontSize,
+  uiLineHeight,
 }: AppearanceRuntimeOptions): void {
   useEffect(() => {
     const root = document.documentElement;
@@ -162,19 +162,8 @@ export function useAppearanceRuntime({
   }, [uiThemeId]);
 
   useEffect(() => {
-    document.documentElement.style.setProperty(
-      "--content-radius-scale",
-      borderRadiusScale.toString(),
-    );
-  }, [borderRadiusScale]);
-
-  useEffect(() => {
-    document.documentElement.dataset.accent = uiAccentColor;
-  }, [uiAccentColor]);
-
-  useEffect(() => {
-    document.documentElement.dataset.controlShape = uiControlShape;
-  }, [uiControlShape]);
+    applyUiTypography(uiFontFamily, uiFontSize, uiLineHeight);
+  }, [uiFontFamily, uiFontSize, uiLineHeight]);
 }
 
 export function getComputedScheme(colorScheme: UiColorScheme): ComputedColorScheme {

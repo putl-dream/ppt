@@ -117,6 +117,9 @@
   gap: 8px;
   padding: 12px 14px;
   overflow-x: auto;
+  /* The horizontal scrollbar sits on the padding box edge, so only a margin
+     separates it from the action row below. */
+  margin-bottom: 10px;
 }
 
 .deck-preview-thumb {

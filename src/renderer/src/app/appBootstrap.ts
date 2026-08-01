@@ -9,15 +9,15 @@ import {
   loadManagedModels,
   type ManagedModel,
 } from "../modelCatalog";
+import type { UiFontFamily } from "./uiTypography";
 
 export const UI_SETTINGS_STORAGE_KEY = "agent-ppt.ui-settings.v2";
 const LEGACY_UI_SETTINGS_STORAGE_KEY = "agent-ppt.ui-settings.v1";
 
 export type UiSkin = "studio";
 export type UiColorScheme = "light" | "dark" | "system";
-export type UiAccentColor = "cyan" | "green" | "orange";
-export type UiControlShape = "sharp" | "soft" | "round";
 export type ComputedColorScheme = "light" | "dark";
+export type { UiFontFamily };
 
 /** @deprecated Use UiColorScheme. Kept for migration typing only. */
 type LegacyThemeMode = "light" | "dark" | "cyan" | "orange" | "system";
@@ -28,9 +28,11 @@ export interface PersistedUiSettings {
   /** Built-in `studio` or a custom theme id from `~/.agent-ppt/themes/<id>/theme.css`. */
   uiThemeId: string;
   colorScheme: UiColorScheme;
-  uiAccentColor: UiAccentColor;
-  uiControlShape: UiControlShape;
-  borderRadiusScale: number;
+  uiFontFamily: UiFontFamily;
+  /** Base UI font size in px. */
+  uiFontSize: number;
+  /** Leading multiplier applied on top of the size scale. */
+  uiLineHeight: number;
   selectedDesignSystem: DesignSystemV2;
   logoUrl: string | null;
   executionStrategy: AgentExecutionStrategy;
@@ -95,20 +97,12 @@ function migrateLegacySettings(raw: Record<string, unknown>): Partial<PersistedU
       migrated.colorScheme = "dark";
     } else if (legacyMode === "system") {
       migrated.colorScheme = "system";
-    } else if (legacyMode === "cyan" || legacyMode === "orange") {
-      migrated.colorScheme = "light";
-      if (!migrated.uiAccentColor) {
-        migrated.uiAccentColor = legacyMode;
-      }
-    } else if (legacyMode === "light") {
+    } else if (legacyMode === "cyan" || legacyMode === "orange" || legacyMode === "light") {
       migrated.colorScheme = "light";
     } else {
       const legacyTone = raw.uiReadingTone;
       if (legacyTone === "cyan" || legacyTone === "orange") {
         migrated.colorScheme = "light";
-        if (!migrated.uiAccentColor) {
-          migrated.uiAccentColor = legacyTone;
-        }
       } else {
         migrated.colorScheme = "dark";
       }
@@ -118,6 +112,9 @@ function migrateLegacySettings(raw: Record<string, unknown>): Partial<PersistedU
   delete (migrated as Record<string, unknown>).themeMode;
   delete (migrated as Record<string, unknown>).uiReadingTone;
   delete (migrated as Record<string, unknown>).colorContrastOffset;
+  delete (migrated as Record<string, unknown>).uiAccentColor;
+  delete (migrated as Record<string, unknown>).uiControlShape;
+  delete (migrated as Record<string, unknown>).borderRadiusScale;
 
   return migrated;
 }
@@ -129,6 +126,9 @@ export function loadPersistedUiSettings(): Partial<PersistedUiSettings> {
       const parsed = JSON.parse(v2) as Record<string, unknown>;
       if (!parsed || typeof parsed !== "object") return {};
       delete parsed.colorContrastOffset;
+      delete parsed.uiAccentColor;
+      delete parsed.uiControlShape;
+      delete parsed.borderRadiusScale;
       return parsed as Partial<PersistedUiSettings>;
     }
 

@@ -31,15 +31,18 @@ Open this root from Settings → 界面外观 → 打开主题根目录, then re
 
 ## Stable contract (recommended)
 
-Override semantic CSS variables for light/dark in \`theme.css\`:
+Override semantic CSS variables for light/dark in \`theme.css\`. Use the
+\`:root[data-skin][data-color-scheme="…"]\` form: the built-in skin defines the
+palette at that same specificity, so a plain \`:root[data-color-scheme="…"]\`
+block loses the cascade and its colors silently do nothing.
 
 \`\`\`css
-:root[data-color-scheme="dark"] {
+:root[data-skin][data-color-scheme="dark"] {
   --surface-canvas: #0f1419;
   --surface-base: #151b22;
   --surface-raised: #1b222c;
-  --surface-sunken: #10151b;
-  --surface-overlay: #222a35;
+  --surface-sunken: #212a35;
+  --surface-overlay: #27313d;
   --text-primary: #f3f6fa;
   --text-secondary: #a8b3c2;
   --text-muted: #7b8796;
@@ -47,7 +50,7 @@ Override semantic CSS variables for light/dark in \`theme.css\`:
   --border-default: rgba(255, 255, 255, 0.1);
 }
 
-:root[data-color-scheme="light"] {
+:root[data-skin][data-color-scheme="light"] {
   --surface-canvas: #e7ebf0;
   --surface-base: #eef1f5;
   --surface-raised: #ffffff;
@@ -78,14 +81,18 @@ const EXAMPLE_THEME_CSS = `/*
  * example — token-only workbench theme for verifying UI theme loading.
  * Path: ~/.agent-ppt/themes/example/theme.css
  * Select it in Settings → 界面外观.
+ *
+ * The [data-skin] part is required: the built-in skin defines the same
+ * variables at that specificity, so a plain :root[data-color-scheme] block
+ * would lose the cascade.
  */
 
-:root[data-color-scheme="dark"] {
+:root[data-skin][data-color-scheme="dark"] {
   --surface-canvas: #0f1419;
   --surface-base: #151b22;
   --surface-raised: #1b222c;
-  --surface-sunken: #10151b;
-  --surface-overlay: #222a35;
+  --surface-sunken: #212a35;
+  --surface-overlay: #27313d;
   --surface-hover: rgba(255, 255, 255, 0.06);
   --surface-active: rgba(255, 255, 255, 0.1);
 
@@ -99,7 +106,7 @@ const EXAMPLE_THEME_CSS = `/*
   --border-focused: rgba(255, 255, 255, 0.22);
 }
 
-:root[data-color-scheme="light"] {
+:root[data-skin][data-color-scheme="light"] {
   --surface-canvas: #dde3ea;
   --surface-base: #e7ecf2;
   --surface-raised: #f7f9fc;

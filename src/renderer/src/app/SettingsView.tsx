@@ -76,12 +76,12 @@ export function SettingsView({
           onOpenUiThemesDirectory={() => {
             void controller.openUiThemesDirectory();
           }}
-          uiAccentColor={controller.uiAccentColor}
-          setUiAccentColor={controller.setUiAccentColor}
-          uiControlShape={controller.uiControlShape}
-          setUiControlShape={controller.setUiControlShape}
-          borderRadiusScale={controller.borderRadiusScale}
-          setBorderRadiusScale={controller.setBorderRadiusScale}
+          uiFontFamily={controller.uiFontFamily}
+          setUiFontFamily={controller.setUiFontFamily}
+          uiFontSize={controller.uiFontSize}
+          setUiFontSize={controller.setUiFontSize}
+          uiLineHeight={controller.uiLineHeight}
+          setUiLineHeight={controller.setUiLineHeight}
           triggerToast={notify}
           saveStatus={controller.saveStatus}
         />

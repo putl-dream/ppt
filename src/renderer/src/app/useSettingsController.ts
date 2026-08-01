@@ -16,13 +16,17 @@ import {
   savePersistedUiSettings,
   type AppBootstrapSnapshot,
   type ComputedColorScheme,
-  type UiAccentColor,
   type UiColorScheme,
-  type UiControlShape,
+  type UiFontFamily,
   type UiSkin,
 } from "./appBootstrap";
 import { getComputedScheme, useAppearanceRuntime } from "./useAppearanceRuntime";
 import { normalizePersistedUiThemeId } from "./userUiTheme";
+import {
+  normalizePersistedUiFontFamily,
+  normalizePersistedUiFontSize,
+  normalizePersistedUiLineHeight,
+} from "./uiTypography";
 import {
   DEFAULT_DESIGN_SYSTEM,
   designSystemV2Schema,
@@ -59,12 +63,12 @@ export interface SettingsController {
   colorScheme: UiColorScheme;
   setColorScheme: (value: UiColorScheme) => void;
   computedScheme: ComputedColorScheme;
-  uiAccentColor: UiAccentColor;
-  setUiAccentColor: (value: UiAccentColor) => void;
-  uiControlShape: UiControlShape;
-  setUiControlShape: (value: UiControlShape) => void;
-  borderRadiusScale: number;
-  setBorderRadiusScale: (value: number) => void;
+  uiFontFamily: UiFontFamily;
+  setUiFontFamily: (value: UiFontFamily) => void;
+  uiFontSize: number;
+  setUiFontSize: (value: number) => void;
+  uiLineHeight: number;
+  setUiLineHeight: (value: number) => void;
   saveStatus: "saved" | "saving";
   markSaving: () => void;
 }
@@ -94,16 +98,14 @@ export function useSettingsController(
   const [colorScheme, setColorSchemeState] = useState<UiColorScheme>(
     () => bootstrap.initialColorScheme,
   );
-  const [uiAccentColor, setUiAccentColorState] = useState<UiAccentColor>(() => {
-    const accent = persisted.uiAccentColor;
-    return accent === "green" || accent === "orange" ? accent : "cyan";
-  });
-  const [uiControlShape, setUiControlShapeState] = useState<UiControlShape>(() => {
-    const shape = persisted.uiControlShape;
-    return shape === "sharp" || shape === "round" ? shape : "soft";
-  });
-  const [borderRadiusScale, setBorderRadiusScaleState] = useState(() =>
-    typeof persisted.borderRadiusScale === "number" ? persisted.borderRadiusScale : 0.2,
+  const [uiFontFamily, setUiFontFamilyState] = useState<UiFontFamily>(() =>
+    normalizePersistedUiFontFamily(persisted.uiFontFamily),
+  );
+  const [uiFontSize, setUiFontSizeState] = useState<number>(() =>
+    normalizePersistedUiFontSize(persisted.uiFontSize),
+  );
+  const [uiLineHeight, setUiLineHeightState] = useState<number>(() =>
+    normalizePersistedUiLineHeight(persisted.uiLineHeight),
   );
   const [selectedDesignSystem, setSelectedDesignSystemState] = useState<DesignSystemV2>(() => {
     const parsed = designSystemV2Schema.safeParse(persisted.selectedDesignSystem);
@@ -184,22 +186,22 @@ export function useSettingsController(
       skin,
       uiThemeId,
       colorScheme,
-      uiAccentColor,
-      uiControlShape,
-      borderRadiusScale,
+      uiFontFamily,
+      uiFontSize,
+      uiLineHeight,
       selectedDesignSystem,
       logoUrl,
       executionStrategy,
     });
   }, [
-    borderRadiusScale,
     colorScheme,
     executionStrategy,
     logoUrl,
     selectedDesignSystem,
     skin,
-    uiAccentColor,
-    uiControlShape,
+    uiFontFamily,
+    uiFontSize,
+    uiLineHeight,
     uiThemeId,
   ]);
 
@@ -208,9 +210,9 @@ export function useSettingsController(
     uiThemeId,
     colorScheme,
     computedScheme,
-    borderRadiusScale,
-    uiAccentColor,
-    uiControlShape,
+    uiFontFamily,
+    uiFontSize,
+    uiLineHeight,
   });
 
   useEffect(() => {
@@ -280,12 +282,12 @@ export function useSettingsController(
     colorScheme,
     setColorScheme: update(setColorSchemeState),
     computedScheme,
-    uiAccentColor,
-    setUiAccentColor: update(setUiAccentColorState),
-    uiControlShape,
-    setUiControlShape: update(setUiControlShapeState),
-    borderRadiusScale,
-    setBorderRadiusScale: update(setBorderRadiusScaleState),
+    uiFontFamily,
+    setUiFontFamily: update(setUiFontFamilyState),
+    uiFontSize,
+    setUiFontSize: update(setUiFontSizeState),
+    uiLineHeight,
+    setUiLineHeight: update(setUiLineHeightState),
     saveStatus,
     markSaving,
   };

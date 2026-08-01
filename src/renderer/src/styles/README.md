@@ -39,7 +39,9 @@ Default: `skin=studio`, `colorScheme=dark`.
 
 Custom workbench themes live in `{applicationDataRoot}/themes/<id>/theme.css` (usually `~/.agent-ppt/themes/<id>/theme.css`). Settings → 界面外观 lists `Studio` plus discovered folders; selecting one injects the full stylesheet into `<style id="user-ui-theme">`. The theme root path is fixed (no custom directory picker).
 
-**Stable contract (recommended):** override semantic variables under `:root[data-color-scheme="dark|light"]` (`--surface-*`, `--text-*`, `--border-*`, accents/status). A token-only theme should recolor window chrome, sidebar, composer, and settings without targeting component classes.
+**Stable contract (recommended):** override semantic variables under `:root[data-skin][data-color-scheme="dark|light"]` (`--surface-*`, `--text-*`, `--border-*`, accents/status). A token-only theme should recolor window chrome, sidebar, composer, and settings without targeting component classes.
+
+The `[data-skin]` part is load-bearing: `tokens/skins/studio.css` assigns the same variables at `:root[data-skin="studio"][data-color-scheme="…"]`, so a theme written as `:root[data-color-scheme="…"]` loses on specificity and its palette silently does nothing.
 
 **Region hooks (next-stable):**
 

@@ -69,13 +69,19 @@ themes/<id>/theme.css
 优先覆盖 semantic CSS 变量，并按明暗双轴书写。只改 token 的主题应能整体改变
 窗口背景、侧栏、主输入区与设置页，而无需绑定易变的组件 class。
 
+选择器固定写成 `:root[data-skin][data-color-scheme="…"]`。内置 skin 在
+`tokens/skins/studio.css` 里用 `:root[data-skin="studio"][data-color-scheme="…"]`
+（特异度 0,3,0）定义整套色板；主题若只写 `:root[data-color-scheme="…"]`
+（0,2,0）会输掉级联，颜色静默失效。`[data-skin]` 让特异度持平，注入的
+`<style id="user-ui-theme">` 位于 `<head>` 末尾，靠文档顺序取胜。
+
 ```css
-:root[data-color-scheme="dark"] {
+:root[data-skin][data-color-scheme="dark"] {
   --surface-canvas: #0f1419;   /* 窗口 / 应用背景 */
   --surface-base: #151b22;     /* 标题栏 + 侧栏连续壳 */
   --surface-raised: #1b222c;   /* 主画布、设置页、输入卡片 */
-  --surface-sunken: #10151b;   /* 凹陷输入、代码块 */
-  --surface-overlay: #222a35;  /* 浮层卡片、菜单 */
+  --surface-sunken: #212a35;   /* 凹陷输入、代码块 */
+  --surface-overlay: #27313d;  /* 浮层卡片、菜单 */
   --text-primary: #f3f6fa;
   --text-secondary: #a8b3c2;
   --text-muted: #7b8796;
@@ -85,7 +91,7 @@ themes/<id>/theme.css
   --border-focused: rgba(255, 255, 255, 0.22);
 }
 
-:root[data-color-scheme="light"] {
+:root[data-skin][data-color-scheme="light"] {
   --surface-canvas: #dde3ea;
   --surface-base: #e7ecf2;
   --surface-raised: #f7f9fc;

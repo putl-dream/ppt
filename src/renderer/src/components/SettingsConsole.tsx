@@ -25,10 +25,17 @@ import { normalizeWorkspacePath } from "@shared/workspace";
 import type { UiThemeSummary } from "@shared/ipc";
 import { cx } from "../lib/cx";
 import { BUILTIN_UI_THEME_ID } from "../app/userUiTheme";
+import {
+  MAX_UI_FONT_SIZE,
+  MAX_UI_LINE_HEIGHT,
+  MIN_UI_FONT_SIZE,
+  MIN_UI_LINE_HEIGHT,
+  normalizePersistedUiFontSize,
+  normalizePersistedUiLineHeight,
+  type UiFontFamily,
+} from "../app/uiTypography";
 
 type UiColorScheme = "light" | "dark" | "system";
-type UiAccentColor = "cyan" | "green" | "orange";
-type UiControlShape = "sharp" | "soft" | "round";
 
 interface SettingsConsoleProps {
   activeCategory: SettingsCategory;
@@ -60,12 +67,12 @@ interface SettingsConsoleProps {
   uiThemes: UiThemeSummary[];
   onRefreshUiThemes: () => void;
   onOpenUiThemesDirectory: () => void;
-  uiAccentColor: UiAccentColor;
-  setUiAccentColor: (val: UiAccentColor) => void;
-  uiControlShape: UiControlShape;
-  setUiControlShape: (val: UiControlShape) => void;
-  borderRadiusScale: number;
-  setBorderRadiusScale: (val: number) => void;
+  uiFontFamily: UiFontFamily;
+  setUiFontFamily: (val: UiFontFamily) => void;
+  uiFontSize: number;
+  setUiFontSize: (val: number) => void;
+  uiLineHeight: number;
+  setUiLineHeight: (val: number) => void;
 
   triggerToast: (msg: string) => void;
   saveStatus?: "saved" | "saving";
@@ -121,16 +128,11 @@ function IdeSection({
   );
 }
 
-const accentOptions: Array<{ value: UiAccentColor; label: string; color: string }> = [
-  { value: "cyan", label: "湖蓝", color: "#0ea5e9" },
-  { value: "green", label: "科技绿", color: "#10b981" },
-  { value: "orange", label: "珊瑚橙", color: "#f97316" },
-];
-
-const controlShapeOptions: Array<{ value: UiControlShape; label: string }> = [
-  { value: "sharp", label: "利落" },
-  { value: "soft", label: "柔和" },
-  { value: "round", label: "圆润" },
+const fontFamilyOptions: Array<{ value: UiFontFamily; label: string }> = [
+  { value: "system", label: "系统默认" },
+  { value: "yahei", label: "微软雅黑" },
+  { value: "pingfang", label: "苹方" },
+  { value: "segoe", label: "Segoe UI" },
 ];
 
 const SUPPORTED_LOGO_TYPES = new Set(["image/png", "image/jpeg", "image/gif"]);
@@ -173,20 +175,19 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
   uiThemes,
   onRefreshUiThemes,
   onOpenUiThemesDirectory,
-  uiAccentColor,
-  setUiAccentColor,
-  uiControlShape,
-  setUiControlShape,
-  borderRadiusScale,
-  setBorderRadiusScale,
+  uiFontFamily,
+  setUiFontFamily,
+  uiFontSize,
+  setUiFontSize,
+  uiLineHeight,
+  setUiLineHeight,
   triggerToast,
   saveStatus = "saved",
 }) => {
   const enabledModelCount = models.filter(isModelEnabled).length;
   const currentMeta = categoryMeta[activeCategory];
-  const selectedAccentLabel = accentOptions.find((option) => option.value === uiAccentColor)?.label ?? "湖蓝";
-  const selectedShapeLabel = controlShapeOptions.find((option) => option.value === uiControlShape)?.label ?? "柔和";
   const selectedSchemeLabel = colorSchemeOptions.find((option) => option.value === colorScheme)?.label ?? "暗色";
+  const selectedFontFamilyLabel = fontFamilyOptions.find((option) => option.value === uiFontFamily)?.label ?? "系统默认";
   const themeOptions = [
     { value: BUILTIN_UI_THEME_ID, label: "Studio" },
     ...uiThemes.map((theme) => ({ value: theme.id, label: theme.name })),
@@ -200,11 +201,21 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
   const [maxOutputTokensDraft, setMaxOutputTokensDraft] = React.useState(
     () => String(agentGatewayPreferences.maxOutputTokens),
   );
+  const [fontSizeDraft, setFontSizeDraft] = React.useState(() => String(uiFontSize));
+  const [lineHeightDraft, setLineHeightDraft] = React.useState(() => String(uiLineHeight));
   const [applicationDataPath, setApplicationDataPath] = React.useState("");
 
   React.useEffect(() => {
     setMaxOutputTokensDraft(String(agentGatewayPreferences.maxOutputTokens));
   }, [agentGatewayPreferences.maxOutputTokens]);
+
+  React.useEffect(() => {
+    setFontSizeDraft(String(uiFontSize));
+  }, [uiFontSize]);
+
+  React.useEffect(() => {
+    setLineHeightDraft(String(uiLineHeight));
+  }, [uiLineHeight]);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -232,6 +243,18 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
         maxOutputTokens,
       });
     }
+  };
+
+  const commitFontSize = () => {
+    const size = normalizePersistedUiFontSize(fontSizeDraft);
+    setFontSizeDraft(String(size));
+    if (size !== uiFontSize) setUiFontSize(size);
+  };
+
+  const commitLineHeight = () => {
+    const lineHeight = normalizePersistedUiLineHeight(lineHeightDraft);
+    setLineHeightDraft(String(lineHeight));
+    if (lineHeight !== uiLineHeight) setUiLineHeight(lineHeight);
   };
 
   const commitOptionalGatewayText = (
@@ -671,18 +694,17 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
               </IdeRow>
             </IdeSection>
 
-            <IdeSection title="界面重点色" hint={selectedAccentLabel}>
-              <IdeRow label="强调色">
-                <div className="ide-choice-group" role="group" aria-label="强调色">
-                  {accentOptions.map((option) => (
+            <IdeSection title="字体" hint={selectedFontFamilyLabel}>
+              <IdeRow label="界面字体">
+                <div className="ide-choice-group" role="group" aria-label="界面字体">
+                  {fontFamilyOptions.map((option) => (
                     <button
                       key={option.value}
                       type="button"
-                      className={cx("ide-choice", uiAccentColor === option.value && "is-active")}
-                      onClick={() => setUiAccentColor(option.value)}
-                      aria-pressed={uiAccentColor === option.value}
+                      className={cx("ide-choice", uiFontFamily === option.value && "is-active")}
+                      onClick={() => setUiFontFamily(option.value)}
+                      aria-pressed={uiFontFamily === option.value}
                     >
-                      <span className="ide-swatch" style={{ background: option.color }} />
                       <span>{option.label}</span>
                     </button>
                   ))}
@@ -690,41 +712,46 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
               </IdeRow>
             </IdeSection>
 
-            <IdeSection title="控件形状" hint={selectedShapeLabel}>
-              <IdeRow label="圆角风格">
-                <div className="ide-choice-group" role="group" aria-label="控件形状">
-                  {controlShapeOptions.map((option) => (
-                    <button
-                      key={option.value}
-                      type="button"
-                      className={cx("ide-choice", uiControlShape === option.value && "is-active")}
-                      onClick={() => setUiControlShape(option.value)}
-                      aria-pressed={uiControlShape === option.value}
-                    >
-                      {option.label}
-                    </button>
-                  ))}
-                </div>
-              </IdeRow>
-            </IdeSection>
-
-            <IdeSection title="界面参数">
-              <IdeRow label="内容区域圆角">
-                <span className="ide-field-value">{Math.round(18 * borderRadiusScale)}px</span>
+            <IdeSection title="字号" hint={`${uiFontSize}px · 行高 ${uiLineHeight}`}>
+              <IdeRow label="基准字号（px）">
                 <input
-                  className="ide-range"
-                  type="range"
-                  min="0"
-                  max="2.2"
-                  step="0.1"
-                  value={borderRadiusScale}
-                  onChange={(event) => setBorderRadiusScale(parseFloat(event.target.value))}
+                  className="ide-field"
+                  type="number"
+                  min={MIN_UI_FONT_SIZE}
+                  max={MAX_UI_FONT_SIZE}
+                  step={0.5}
+                  value={fontSizeDraft}
+                  aria-label="基准字号"
+                  onChange={(event) => setFontSizeDraft(event.target.value)}
+                  onBlur={commitFontSize}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") event.currentTarget.blur();
+                  }}
                 />
               </IdeRow>
+              <IdeRow label="行高（倍）">
+                <input
+                  className="ide-field"
+                  type="number"
+                  min={MIN_UI_LINE_HEIGHT}
+                  max={MAX_UI_LINE_HEIGHT}
+                  step={0.1}
+                  value={lineHeightDraft}
+                  aria-label="行高"
+                  onChange={(event) => setLineHeightDraft(event.target.value)}
+                  onBlur={commitLineHeight}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") event.currentTarget.blur();
+                  }}
+                />
+              </IdeRow>
+              <p className="ide-hint">
+                基准字号对应正文（默认 13px）；其余字号阶梯按同比例缩放。行高是相对字号的倍数。
+              </p>
             </IdeSection>
 
             <p className="ide-hint">
-              当前：{selectedThemeLabel} · {selectedSchemeLabel} · {selectedAccentLabel} · {selectedShapeLabel} · 内容圆角 {Math.round(18 * borderRadiusScale)}px
+              当前：{selectedThemeLabel} · {selectedSchemeLabel} · {selectedFontFamilyLabel} · {uiFontSize}px / {uiLineHeight}
             </p>
           </div>
         ) : null}

@@ -63,15 +63,17 @@
 
 界面大量样式读的是这些变量。只改变量，一般就能让窗口背景、侧栏、主输入区、设置页一起变色。
 
-请同时写 **dark** 与 **light**（设置里的「明暗」会切换 `data-color-scheme`）：
+请同时写 **dark** 与 **light**（设置里的「明暗」会切换 `data-color-scheme`）。
+
+选择器必须写成 `:root[data-skin][data-color-scheme="…"]`：内置 skin 就是在这个特异度（0,3,0）上定义整套色板的，只写 `:root[data-color-scheme="…"]`（0,2,0）会被它压过去，颜色**静默不生效**。加上 `[data-skin]` 后特异度持平，主题因为后加载而取胜。
 
 ```css
-:root[data-color-scheme="dark"] {
+:root[data-skin][data-color-scheme="dark"] {
   --surface-canvas: #0f1419;
   --surface-base: #151b22;
   --surface-raised: #1b222c;
-  --surface-sunken: #10151b;
-  --surface-overlay: #222a35;
+  --surface-sunken: #212a35;
+  --surface-overlay: #27313d;
   --surface-hover: rgba(255, 255, 255, 0.06);
   --surface-active: rgba(255, 255, 255, 0.1);
 
@@ -92,7 +94,7 @@
   --scrollbar-thumb-color: rgba(255, 255, 255, 0.14);
 }
 
-:root[data-color-scheme="light"] {
+:root[data-skin][data-color-scheme="light"] {
   --surface-canvas: #dde3ea;
   --surface-base: #e7ecf2;
   --surface-raised: #f7f9fc;
@@ -185,18 +187,26 @@
 
 ### 2. 窗口渐变背景
 
+渐变要画在 `.app-shell` 上。写在 `body` 上没用——`.app-shell` 铺满窗口且底色不透明，会把 `body` 完全盖住。想让渐变透到侧栏区域，再把标题栏和外层容器设为透明。
+
 ```css
-:root[data-color-scheme="dark"] body {
+:root[data-color-scheme="dark"] .app-shell {
   background:
     radial-gradient(1200px 600px at 10% -10%, rgba(56, 189, 248, 0.16), transparent 55%),
     radial-gradient(900px 500px at 90% 0%, rgba(168, 85, 247, 0.12), transparent 50%),
     var(--surface-canvas);
 }
 
-:root[data-color-scheme="light"] body {
+:root[data-color-scheme="light"] .app-shell {
   background:
     radial-gradient(1200px 600px at 10% -10%, rgba(14, 165, 233, 0.12), transparent 55%),
     var(--surface-canvas);
+}
+
+/* 可选：让渐变透到标题栏与侧栏区域 */
+.window-titlebar,
+.workspace-container {
+  background: transparent;
 }
 ```
 
@@ -228,13 +238,15 @@
 
 ### 5. 侧栏更「沉」一点
 
+侧栏自身被内置样式钉成 `background: transparent !important`，底色其实来自外层 `.workspace-container`。所以要改整块侧栏背景，改容器：
+
 ```css
-[data-ui-region="sidebar"] {
+.workspace-container {
   background: color-mix(in srgb, var(--surface-base) 92%, black);
 }
 
 [data-ui-region="sidebar"] .workbench-sidebar-action-row:hover,
-[data-ui-region="sidebar"] .sidebar-rail-btn:hover {
+[data-ui-region="sidebar"] .session-row:hover {
   background: var(--surface-hover);
 }
 ```
@@ -257,10 +269,12 @@
 |---|---|
 | 皮肤 / 主题 | 选 Studio 或某个 `themes/<名>/` 主题包 |
 | 明暗 | 切换 `data-color-scheme`（主题应提供两套变量） |
-| 强调色 | 设置 `data-accent`，影响 `--accent-primary` 等 |
-| 控件形状 / 内容圆角 | 影响圆角家族与 `--content-radius-scale` |
+| 字体 | 写入 `--font-display` / `--font-body` |
+| 字号 / 行高 | 按基准字号（默认 13px）与行高倍数（默认 1.6）等比缩放整套 `--text-*` 阶梯 |
 
-若主题里写死了 `--accent-primary`，可能盖过设置里的强调色——这是预期级联结果。想保留设置强调色，就不要在主题里覆盖 `--accent-primary`。
+字体与字号由设置以**内联 CSS 变量**写到 `:root` 上，特异度高于主题 stylesheet，因此会盖过主题里对 `--font-*` / `--text-*` 的赋值。主题仍可自由改色板、圆角与区域样式；若希望主题完全接管字体，用户需把设置保持为默认值（系统默认字体、13px、1.6），此时内联变量会被移除。
+
+强调色、控件形状、内容圆角滑杆已从设置面板移除；主题可直接覆盖 `--accent-*`、`--radius-*` 等 token。
 
 ## 不要改什么
 
@@ -273,6 +287,7 @@
 | 现象 | 排查 |
 |---|---|
 | 列表里没有新主题 | 是否为 `themes/<名>/theme.css`？点了「刷新列表」？文件夹名是否合法（字母数字/中文、`-`、`_`，无路径分隔符）？ |
+| 主题选中了，但整套颜色没变 | 色板块是不是写成了 `:root[data-color-scheme="…"]`？特异度不够，会被内置 skin 压过去。改成 `:root[data-skin][data-color-scheme="…"]` |
 | 选了没变化 | 选择器是否挂在正确的 `data-color-scheme` 上？是否被更具体规则盖住？打开开发者工具看 `#user-ui-theme` 是否注入 |
 | 选中后回到 Studio | 文件被删、过大（>256KB）、或 id 非法时会回退 |
 | 背景图不显示 | 是否用了 `file:` 本地路径？改用 `https:` 或 `data:` |
