@@ -17,7 +17,7 @@ allowed-tools:
 
 本技能必须运行在本 Query 已声明的 `create` capability 内；若尚未声明，先调用一次 `BeginPptCapability`。
 
-读取 `design/design-spec.json` 和用户内容，为每一页写最终内容与页面级构图意图。输出唯一文件 `slides/page-plan.json`。本技能不生成 SVG，不调用 layout handler，也不选择固定 layout / grammarVariant。
+读取 `design/design-spec.json` 和用户内容，为每一页写最终内容与页面级构图意图。输出唯一文件 `slides/page-plan.json`。本技能只写 page plan，不生成 SVG。
 
 设计不是为页面挑模板。每页必须回答：
 
@@ -57,7 +57,7 @@ allowed-tools:
 - `coreMessage`：本页唯一中心判断，不能只是主题名。
 - `audienceMove`：用具体动词描述受众变化，例如“接受先保留率、后拉新的增长判断”。
 - `rhythm`：`anchor`、`dense` 或 `breathing`。
-- `layoutIntent`：用自然语言描述主焦点、阅读顺序、主要区域比例、对齐关系、留白和图文关系；不要写固定 layout 名或组件模板。
+- `layoutIntent`：用自然语言描述主焦点、阅读顺序、主要区域比例、对齐关系、留白和图文关系；不要写模板名或组件清单。
 - `assetRefs`：本页显式需要的 workspace 相对素材路径及用途；无素材时为空数组。
 - 可选 `evidenceRefs`：事实或来源 id。
 
@@ -104,7 +104,7 @@ allowed-tools:
       "coreMessage": "本页唯一核心判断",
       "audienceMove": "受众看完本页后应理解或相信什么",
       "rhythm": "anchor",
-      "layoutIntent": "用自然语言描述页面级构图意图，不要写固定 layout 名",
+      "layoutIntent": "用自然语言描述页面级构图意图，不要写模板名",
       "assetRefs": []
     }
   ]
@@ -117,7 +117,7 @@ allowed-tools:
 1. 所有页面的 `finalCopy`、`coreMessage`、`audienceMove`、`rhythm`、`layoutIntent` 都具体且互相一致。
 2. 每页 `id`、`path` 与顺序一一对应：`P01` → `slides/svg/P01.svg`，不得省略 `path`。
 3. deck-wide `argumentMode`、`visualStyle`、`readingMode` 和 `imageLanguage` 只来自 `design/design-spec.json`。
-4. `layoutIntent` 描述页面级构图，而不是固定 layout 名、卡片数量或 handler 参数。
+4. `layoutIntent` 描述页面级构图，而不是模板名、卡片数量或坐标参数。
 5. 页面序列有清楚推进和节奏变化，不存在默认的全套卡片化。
 6. 所有素材引用可执行且用途明确。
 

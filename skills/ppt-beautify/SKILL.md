@@ -18,7 +18,7 @@ allowed-tools:
 
 ## 目标
 
-在不重建整套 deck 的前提下，直接改善目标页的完整 SVG。所有视觉修改都写回其 `visualSource.sourcePath`；不生成 commands，不把自动排版或 element schema 当作中间层。
+在不重建整套 deck 的前提下，直接改善目标页的完整 SVG。所有视觉修改都写回其 `visualSource.sourcePath`。
 
 默认保留事实、页面职责和未涉及页面。只有用户明确要求改写或压缩内容时才改变 `finalCopy`，并同步 `slides/page-plan.json`。
 
@@ -38,7 +38,7 @@ allowed-tools:
 
 - 先恢复 `coreMessage` 的主焦点，再调整阅读顺序、尺度、对齐和留白。
 - `anchor` 保持单一强锚点；`dense` 提升扫描性；`breathing` 不重新填满。
-- 不调用固定 layout 或自动布局。重排是对完整 SVG 的页面级重构，不是把内容换进另一个壳。
+- 重排是对完整 SVG 的页面级重构，不是把内容换进另一个壳。
 - 卡片仅用于确有语义边界的实体；禁止把全套页面统一成三卡、四卡或 2×2 圆角网格。
 
 ### 排印与文案

@@ -14,7 +14,7 @@ allowed-tools:
 
 ## 目标
 
-用 `ReadFile` 读取 outline、brief 和事实来源，写出 `slides/storyboard.json`。它是 `slides/page-plan.json` 的可选叙事上游，不是视觉作者源，不包含 commands、element、固定 layout 或 SVG 几何。
+用 `ReadFile` 读取 outline、brief 和事实来源，写出 `slides/storyboard.json`。它是 `slides/page-plan.json` 的可选叙事上游，不是视觉作者源；本阶段不写 SVG 几何或提交调用。
 
 ## storyboard.json 结构
 
@@ -63,9 +63,9 @@ allowed-tools:
 
 - 每条 `keyPoint` 表达完整意思，不强行压成短标签。
 - 单页要点数量按内容需要，不必压到 3–5 条。
-- 信息量超过一页可读容量时拆页，但不要依赖某种 layout 的卡片数量决定页数。
+- 信息量超过一页可读容量时拆页，但不要按固定卡片数量模板决定页数。
 - 不在本阶段锁定 visual style、reading mode、image language、rhythm 或 `layoutIntent`；它们由 design spec 与 page plan 阶段完成。
-- 不写 x/y、grammarVariant、layout 名、elements 或提交命令。
+- 本阶段只写内容规划，不写坐标、视觉实现细节或提交调用。
 
 ## 衔接
 

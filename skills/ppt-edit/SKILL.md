@@ -34,7 +34,7 @@ allowed-tools:
 - 改标题、页码、背景或品牌条时，直接改 SVG 中对应节点。
 - 改文案时同步检查换行、文字框宽度和附近元素，不能只替换字符串后忽略溢出。
 - 替换图片时使用 workspace 相对 `href`，例如 `assets/images/new-hero.jpg`；禁止绝对路径和远程 URL。提交工具会内联该本地资源。
-- 调整构图时自由修改 SVG 几何和分组，不调用固定 layout、grammar 或自动 chrome。
+- 调整构图时自由修改 SVG 几何和分组；标题、页码、背景与品牌条等可见对象须画在 SVG 内。
 - 新增页面时写出完整 `1280 × 720` SVG；删除或重排页面时，在最终提交的有序 sourcePath 列表中反映结果。删除页面属于显著结构变更，范围不明确时先确认。
 - 不把整页默认改成等宽圆角卡片；保留并强化原有视觉语言，除非用户明确要求重做。
 
@@ -44,7 +44,7 @@ allowed-tools:
 2. 对每个新增或修改页调用 `PreviewSvgPage`。检查文本截断、越界、重叠、图片、对比度和页面意图；未修改且 hash 与当前已提交页面一致的作者源可以直接复用。
 3. 若预览失败，继续修改同一个 SVG 并重新预览；预览工具不能替代源文件修复。
 4. 所有修改页通过后，调用一次 `SubmitSvgDeck`，传入 deck 的全部有序页面，而不是只提交改动页。显式传入 `"designSpecPath":"design/design-spec.json"` 与 `"pagePlanPath":"slides/page-plan.json"`；`communication`、`designSystem`、每页 `id/path/narrative` 必须与这两个锁文件完全一致。
-5. 提交失败时根据错误修复源 SVG 或素材，再重新提交；不要切换到旧提交流程。
+5. 提交失败时根据错误修复源 SVG 或素材，再重新提交。
 
 ## 同步
 
@@ -52,6 +52,6 @@ allowed-tools:
 
 ## 边界
 
-- 编辑目标是 SVG 作者源与 `SubmitSvgDeck`，不是 element id / layout handler。
+- 编辑目标是 SVG 作者源与 `SubmitSvgDeck`。
 - 不只看已提交预览就覆盖源文件；始终先读取完整 `visualSource.sourcePath`。
 - 不让提交或导出阶段补标题、页码、背景或其他自动 chrome。

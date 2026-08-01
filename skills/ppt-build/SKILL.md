@@ -19,7 +19,7 @@ allowed-tools:
 
 本技能必须运行在本 Query 已声明的 `create` capability 内；若尚未声明，先调用一次 `BeginPptCapability`。
 
-读取 `design/design-spec.json` 与 `slides/page-plan.json`，把每页直接写成 `slides/svg/P<NN>.svg`。SVG 是页面的唯一视觉事实源；预览和提交都读取这些原文件，不再生成 Presentation commands，也不经过固定 layout 或自动排版。
+读取 `design/design-spec.json` 与 `slides/page-plan.json`，把每页直接写成 `slides/svg/P<NN>.svg`。SVG 是页面的唯一视觉事实源；预览和提交都读取这些原文件。
 
 ## 开始前
 
@@ -79,16 +79,12 @@ allowed-tools:
 - 每个新建或改动页面的当前 SVG/素材哈希都有成功 PNG 预览，且没有仍未处理的阻断问题。
 - deck 内至少有有意义的节奏变化，且没有全套卡片化。
 
-只调用一次 `SubmitSvgDeck`，提交按顺序排列的 SVG 源文件及必要的 deck 元数据。参数必须显式包含 `"designSpecPath":"design/design-spec.json"` 和 `"pagePlanPath":"slides/page-plan.json"`；`communication` 原样使用设计规格的 `communicationContract`，`designSystem` 原样使用 `presentationDesignSystem`。每页提交项必须携带 page plan 中同序的 `id`、`path`，且 `narrative.role` 对应 `narrativeRole`，其余 narrative 字段也逐字来自 page plan。提交工具会重新读取两个锁文件并拒绝任何轴、页序、id、path 或 narrative 漂移。不得在提交前转换为旧 elements，也不得并行调用旧提交路线。
+只调用一次 `SubmitSvgDeck`，提交按顺序排列的 SVG 源文件及必要的 deck 元数据。参数必须显式包含 `"designSpecPath":"design/design-spec.json"` 和 `"pagePlanPath":"slides/page-plan.json"`；`communication` 原样使用设计规格的 `communicationContract`，`designSystem` 原样使用 `presentationDesignSystem`。每页提交项必须携带 page plan 中同序的 `id`、`path`，且 `narrative.role` 对应 `narrativeRole`，其余 narrative 字段也逐字来自 page plan。提交工具会重新读取两个锁文件并拒绝任何轴、页序、id、path 或 narrative 漂移。
 
 若 `SubmitSvgDeck` 因 SVG 或素材错误拒绝提交，修复作者 SVG/素材后再次提交；不要把失败报告为完成。
 
-作者源是完整页面 SVG；提交路径仅为 `SubmitSvgDeck`。不把 element schema、layout/grammarVariant 或自动页眉当作本技能的中间层。
+作者源是完整页面 SVG；标题、页码、背景与品牌条等可见对象须画在 SVG 内；提交路径仅为 `SubmitSvgDeck`。
 
 ## 协作边界
 
 本技能由主 Agent 直接执行。不要为逐页写 SVG、`PreviewSvgPage` 或 `SubmitSvgDeck` 而 `spawn_teammate`、创建 teammate Task，或把页面作者工作拆给子 Agent；一致性与 P01 预览闸门在 Lead 上下文内更便宜。
-
-## 退出的旧路线
-
-新建 deck 不调用 `SubmitCommands`、`PreviewCommands`、`ApplyDesignSystem`、`ExecuteLayoutPlan`、`AutoLayoutSlide` 或任何 layout handler。旧 `slide.title` 自动页眉、元素 schema、layout/grammarVariant 和设计 token 应用都不属于本技能。

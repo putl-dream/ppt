@@ -98,7 +98,7 @@ review capability 默认只报告，并以 `SubmitPptReview` 完成本次请求�
 后续 edit capability 的修复步骤：
 
 1. 用 `ReadFile` 重新分页读取目标页完整 SVG直到 `hasMore=false`，避免基于旧上下文或截断首段覆盖并发修改。
-2. 用 `WriteFile` 只修改作者 SVG；不可写 commands、elements 或第二份布局状态。
+2. 用 `WriteFile` 只修改作者 SVG；不要写第二份视觉模型。
 3. 每个修复页重新 `PreviewSvgPage`，确认问题已消失且未引入回归。
 4. 全部修复通过后调用一次 `SubmitSvgDeck`，提交所有有序页面；显式传入 `"designSpecPath":"design/design-spec.json"` 与 `"pagePlanPath":"slides/page-plan.json"`，并让 `communication`、`designSystem`、每页 `id/path/narrative` 与锁文件完全一致。
 5. 不允许 `PreviewSlide`、提交器或导出器直接修复页面；已提交视图只能用于对照。
@@ -129,7 +129,7 @@ review capability 默认只报告，并以 `SubmitPptReview` 完成本次请求�
 
 ## 边界
 
-- 审查基于 `PreviewSvgPage` 与作者 SVG/锁文件，不走 element/layout commands 修复路线。
+- 审查基于 `PreviewSvgPage` 与作者 SVG/锁文件；修复时直接改作者 SVG 并重新预览提交。
 - 不因自动分数好看而覆盖真实视觉判断。
 - 不在用户未授权时修改文件。
 - 不把缺失标题、页码、背景或图表归因于“导出时会自动补”；SVG 页面本身必须完整。

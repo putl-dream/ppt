@@ -20,7 +20,7 @@ allowed-tools:
 
 新建流程只认 `slides/svg/P<NN>.svg` 为页面视觉作者源。设计规格和逐页计划描述意图，不能在预览或提交时补出任何可见对象。图片可以作为 workspace 资源被 SVG 显式引用；除此之外，页面的背景、标题、正文、页码、图表、图示和装饰都必须已经存在于 SVG 中。
 
-预览与提交必须消费同一份 SVG。页面视觉只来自作者 SVG，不依赖固定 layout、layout handler 或自动 chrome。产品作者路径仅为 `PreviewSvgPage` → `SubmitSvgDeck`。
+预览与提交必须消费同一份 SVG。页面视觉只来自作者 SVG；标题、页码、背景与品牌条等可见对象须画在 SVG 内。产品作者路径仅为 `PreviewSvgPage` → `SubmitSvgDeck`。
 
 ## 固定顺序
 
@@ -46,7 +46,7 @@ allowed-tools:
 ## 页面硬约束
 
 - 画布固定为 `1280 × 720`，根节点使用 `viewBox="0 0 1280 720"`。
-- SVG 必须是完整页面构图，不是供模板或 layout handler 填槽的片段。
+- SVG 必须是完整 `1280 × 720` 页面构图，不是局部片段。
 - 禁止自动 chrome；若要标题、页码、章节标、品牌条或背景，必须在每页 SVG 中明确绘制。
 - 禁止把全套内容默认做成等宽圆角卡片网格；卡片仅在语义确实需要分组时使用。
 - 图片 `href` 使用 workspace 相对路径，例如 `assets/images/hero.jpg`；禁止远程 URL。提交时由 `SubmitSvgDeck` 内联同一字节。

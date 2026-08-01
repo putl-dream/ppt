@@ -18,7 +18,7 @@ allowed-tools:
 
 本技能必须运行在本 Query 已声明的 `create` capability 内；若尚未声明，先调用一次 `BeginPptCapability`。
 
-把 `slides/page-plan.json` 的页面意图翻译为可直接绘制的页面级构图判断。不要选择固定 layout、grammarVariant 或坐标模板；新建 deck 的实际 SVG 写入、P01 校验与提交统一由 `ppt-build` 完成。
+把 `slides/page-plan.json` 的页面意图翻译为可直接绘制的页面级构图判断。新建 deck 的实际 SVG 写入、P01 校验与提交统一由 `ppt-build` 完成。
 
 ## 输入
 
@@ -43,7 +43,7 @@ allowed-tools:
    - `breathing` 需要真正留白，不能重新塞成卡片网格。
 6. 风格兑现：几何、字体、颜色、纹理、图片处理和留白必须共同体现 `visualStyle`，不能只换色。
 
-`layoutIntent` 可以描述几何关系，但不要输出组件槽位、layout 名或 handler 参数。相似页面可以共享对齐逻辑，不能机械复制同一轮廓。
+`layoutIntent` 可以描述几何关系，但不要输出组件槽位、模板名或坐标参数。相似页面可以共享对齐逻辑，不能机械复制同一轮廓。
 
 ## 反卡片化
 
@@ -58,13 +58,13 @@ allowed-tools:
 
 ## 交付给 `ppt-build`
 
-新建页面时，不在本技能内写或提交 commands。确认页面计划足够具体后，应用 `ppt-build`：
+新建页面时，本技能不写 SVG、不调用预览或提交。确认页面计划足够具体后，应用 `ppt-build`：
 
 - 按页写 `slides/svg/P01.svg`、`P02.svg`……；
 - 每页完整包含背景、标题、页码、图表和装饰；
 - 先通过该技能定义的 P01 同源预览闸门，再继续其他页；
 - 最后按该技能定义的方式提交全部有序页面。
 
-若本技能发现 `layoutIntent` 仍是固定 layout 名或过于抽象，可用 `WriteFile` 修订 `slides/page-plan.json` 的自然语言意图，再交给 `ppt-build`。已存在 SVG 的重排由 `ppt-edit` 或 `ppt-beautify` 直接修改作者源。
+若本技能发现 `layoutIntent` 仍是模板名或过于抽象，可用 `WriteFile` 修订 `slides/page-plan.json` 的自然语言意图，再交给 `ppt-build`。已存在 SVG 的重排由 `ppt-edit` 或 `ppt-beautify` 直接修改作者源。
 
 布局意图写进 `slides/page-plan.json` 与页面 SVG；不要建立与 SVG 并行的 element/layout 模型，也不要让运行时追加自动 chrome。

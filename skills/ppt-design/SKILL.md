@@ -19,7 +19,7 @@ allowed-tools:
 
 本技能必须运行在本 Query 已声明的 `create` capability 内；若尚未声明，先调用一次 `BeginPptCapability`。
 
-在写任何页面 SVG 前，先决定这套演示如何推动受众，再锁定一套可执行的视觉语言。将唯一 deck-wide 设计事实写入 `design/design-spec.json`；不要创建旧 Design System commands，也不要直接生成可见页面对象。
+在写任何页面 SVG 前，先决定这套演示如何推动受众，再锁定一套可执行的视觉语言。将唯一 deck-wide 设计事实写入 `design/design-spec.json`；本技能不直接生成可见页面对象。
 
 ## 1. 建立沟通契约
 
@@ -85,7 +85,7 @@ allowed-tools:
 - 定义 `title`、`body`、`emphasis`、`code/data` 字体角色和大致字号层级；选择预览与提交环境可用的字体。
 - 定义页面边距、常用对齐线、圆角/直角倾向、描边、阴影与纹理纪律。
 - 定义 `anchor`、`dense`、`breathing` 三种页面节奏如何在本风格中呈现。
-- 明确禁止项，至少包括自动 chrome、固定 layout、全套卡片网格和仅换色不换构图。
+- 明确禁止项，至少包括自动 chrome、全套卡片网格和仅换色不换构图。
 
 ## 4. 写入设计规格
 
