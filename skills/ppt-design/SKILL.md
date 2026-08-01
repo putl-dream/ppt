@@ -74,6 +74,8 @@ stages:
 
 四轴确定后立即调用一次 `GetDesignReference`，传入精确的 `argumentMode`、`visualStyle` 和 `readingMode`。将返回的论证骨架、标题语气、构图、shape/elevation/whitespace/typography/background/texture、image language 和 `avoid` 约束写入设计规格。风格名称本身不算设计锁；SVG 作者必须拿到这些行为细节。
 
+`GetDesignReference` 的参数在四轴选定后即已知：可与同轮其他独立读取同批发出；写入 `design/design-spec.json` 须等参考正文返回后再发（下一轮或同响应中不可依赖未返回的兄弟结果）。不要为“加载参考”单独插入过渡旁白轮。
+
 ## 3. 锁定配套视觉事实
 
 - 定义语义色彩角色：`background`、`surface`、`primaryText`、`secondaryText`、`accent`、`signal`，使用明确 HEX；正文对背景对比度至少 4.5:1。
@@ -119,4 +121,4 @@ stages:
 
 `communicationContract` 六个字符串字段、`presentationDesignSystem`（Design System v2）以及顶层 `argumentMode` / `visualStyle.id` / `readingMode` 必须齐全且轴一致；空对象 `{}` 不能代替沟通契约。字段值必须具体，不能把待决定项留给 SVG Executor。该文件不含可见对象，也不授权预览或提交工具补对象。
 
-完成后由 `ppt-design-layout` 读取同一文件，为每页冻结最终文案和构图意图。后续不得无故重新选择 mode 或 style；若用户改变沟通目标，先更新设计规格，再继续页面规划。
+完成后由 `ppt-design-layout` 读取同一文件，为每页冻结最终文案和构图意图。若已知下一步需要 layout/build 技能，可在适当时机同批 `LoadSkill`，不要一技能一轮。后续不得无故重新选择 mode 或 style；若用户改变沟通目标，先更新设计规格，再继续页面规划。

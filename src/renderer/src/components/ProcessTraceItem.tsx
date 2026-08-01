@@ -1,5 +1,18 @@
 import React, { useEffect, useRef, useState } from "react";
-import { ChevronDownIcon, ChevronRightIcon } from "./Icons";
+import type { AgentToolDisplayCategory } from "@shared/agent-activity-display";
+import {
+  AlertTriangleIcon,
+  CheckIcon,
+  ChevronDownIcon,
+  ChevronRightIcon,
+  CircleIcon,
+  Edit3Icon,
+  EyeIcon,
+  FileIcon,
+  SearchIcon,
+  SlashCircleIcon,
+  UsersIcon,
+} from "./Icons";
 import { MessageMarkdown } from "./MessageMarkdown";
 import type { ProcessTraceRow } from "./process-trace-rows";
 
@@ -8,6 +21,28 @@ interface ProcessTraceItemProps {
   defaultExpanded?: boolean;
   /** Parent panel already shows the live status; render body only. */
   suppressTitle?: boolean;
+}
+
+type IconComponent = React.FC<{ size?: number; className?: string }>;
+
+const TOOL_CATEGORY_ICONS: Record<AgentToolDisplayCategory, IconComponent> = {
+  read: FileIcon,
+  search: SearchIcon,
+  inspect: EyeIcon,
+  change: Edit3Icon,
+  coordinate: UsersIcon,
+  other: CircleIcon,
+};
+
+function renderStatusGlyph(status: NonNullable<ProcessTraceRow["status"]>) {
+  if (status === "running") return <i />;
+  if (status === "completed") {
+    return <CheckIcon size={12} className="process-trace-row-status-glyph" />;
+  }
+  if (status === "denied") {
+    return <SlashCircleIcon size={12} className="process-trace-row-status-glyph" />;
+  }
+  return <AlertTriangleIcon size={12} className="process-trace-row-status-glyph" />;
 }
 
 export const ProcessTraceItem: React.FC<ProcessTraceItemProps> = ({
@@ -20,6 +55,9 @@ export const ProcessTraceItem: React.FC<ProcessTraceItemProps> = ({
   const hasBody = Boolean(row.content?.trim() || (row.lines && row.lines.length > 0));
   const effectiveExpanded = hasBody && (suppressTitle || expanded);
   const CaretIcon = effectiveExpanded ? ChevronDownIcon : ChevronRightIcon;
+  const ToolCategoryIcon = row.toolCategory
+    ? TOOL_CATEGORY_ICONS[row.toolCategory]
+    : null;
 
   useEffect(() => {
     if (suppressTitle) {
@@ -44,7 +82,16 @@ export const ProcessTraceItem: React.FC<ProcessTraceItemProps> = ({
       className={`process-trace-row-status process-trace-row-status--${row.status}`}
       aria-hidden="true"
     >
-      {row.status === "running" ? <i /> : row.status === "completed" ? "✓" : "!"}
+      {renderStatusGlyph(row.status)}
+    </span>
+  ) : null;
+
+  const toolCategoryIcon = ToolCategoryIcon && row.toolCategory ? (
+    <span
+      className={`process-trace-row-tool-icon process-trace-row-tool-icon--${row.toolCategory}`}
+      aria-hidden="true"
+    >
+      <ToolCategoryIcon size={12} />
     </span>
   ) : null;
 
@@ -95,6 +142,7 @@ export const ProcessTraceItem: React.FC<ProcessTraceItemProps> = ({
         `process-trace-row--${row.kind}`,
         row.active ? "process-trace-row--active" : "",
         row.status ? `process-trace-row--status-${row.status}` : "",
+        row.kind === "tool" ? "process-trace-row--enter" : "",
       ].filter(Boolean).join(" ")}
     >
       {hasBody ? (
@@ -105,6 +153,7 @@ export const ProcessTraceItem: React.FC<ProcessTraceItemProps> = ({
           aria-expanded={effectiveExpanded}
         >
           {statusIndicator}
+          {toolCategoryIcon}
           <span className="process-trace-row-toggle" aria-hidden="true">
             <CaretIcon size={12} />
           </span>
@@ -115,6 +164,7 @@ export const ProcessTraceItem: React.FC<ProcessTraceItemProps> = ({
           {statusIndicator ?? (
             <span className="process-trace-row-caret" aria-hidden="true" />
           )}
+          {toolCategoryIcon}
           <span className="process-trace-row-label">{row.title}</span>
         </div>
       )}

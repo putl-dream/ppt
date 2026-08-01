@@ -18,15 +18,23 @@ stages:
 
 ## 固定顺序
 
+顺序描述依赖关系，不是“一步一轮”。参数已知且互不依赖的调用应同批发出。
+
 1. 若本 Query 尚未声明 PPT 工作，先调用一次 `BeginPptCapability({"capability":"create", ...})`。恢复同一 waiting-user Query 时沿用该 request；新的跨请求继续操作会获得新的 QueryId，但推进同一 PptJob。
 2. 建立沟通契约：`audience`、`objective`、`desiredOutcome`、deck-wide `coreMessage`、`deliveryContext`、`afterUse`。只有缺少会改变内容事实或交付目标的信息时才询问。
-3. 应用 `ppt-design`，先锁定唯一的 `argumentMode`、`visualStyle`、`readingMode` 和 `imageLanguage`，同时锁定语义色彩与字体角色。将结果写入 `design/design-spec.json`。
-4. 应用 `ppt-design-layout`，为每页冻结 `finalCopy`、`coreMessage`、`audienceMove`、`rhythm`、`layoutIntent` 和素材引用，按顺序写入 `slides/page-plan.json`。
-5. 应用 `ppt-build`。先用 `WriteFile` 只写 `slides/svg/P01.svg`。
-6. 立即用 `PreviewSvgPage({"path":"slides/svg/P01.svg"})` 校验并真实渲染 P01。若有越界、缺字、素材失败、视觉层级或 SVG 兼容问题，修改同一个文件并重新预览；P01 未通过前禁止生成 P02。
-7. P01 通过后，逐页用 `WriteFile` 写 `P02.svg`、`P03.svg`……；每次只改当前页，不让后处理器重新布局。
-8. 全部写完后进入最终视觉门禁：按页调用 `PreviewSvgPage`，确保每个新建或改动 SVG 的当前内容与素材都成功产出 PNG。任何修订都会使旧凭据失效，必须重新预览该页。
-9. 最后只调用一次 `SubmitSvgDeck`，显式传入 `"designSpecPath":"design/design-spec.json"`、`"pagePlanPath":"slides/page-plan.json"` 及有序 SVG 页面。`communication`、`designSystem`、每页 `id/path/narrative` 必须原样来自这两个锁文件；提交工具会重新读取并核对，再校验与内联 workspace 相对图片。任何锁漂移或页面失败都不视为完成。
+3. 需要技能正文时，可同批 `LoadSkill("ppt-design")`（以及已知随后需要时的 `LoadSkill("ppt-design-layout")` / `LoadSkill("ppt-build")`），不要一技能一轮。应用 `ppt-design`，先锁定唯一的 `argumentMode`、`visualStyle`、`readingMode` 和 `imageLanguage`，同时锁定语义色彩与字体角色。将结果写入 `design/design-spec.json`。
+4. 应用 `ppt-design-layout`，为每页冻结 `finalCopy`、`coreMessage`、`audienceMove`、`rhythm`、`layoutIntent` 和素材引用，按顺序写入 `slides/page-plan.json`。若 design-spec 已写完且 layout 技能正文已在上下文中，本步写入不必再单独空转一轮旁白。
+5. 应用 `ppt-build`。先用 `WriteFile` 只写 `slides/svg/P01.svg`；同一 assistant 响应中可紧随 `PreviewSvgPage({"path":"slides/svg/P01.svg"})`（写在前、预览在后）。
+6. 查看 P01 PNG：若有越界、缺字、素材失败、视觉层级或 SVG 兼容问题，修改同一个文件并重新预览；P01 未通过前禁止生成 P02。看图校准是必要轮界，不要用过渡旁白填充。
+7. P01 通过后，在尽量少的轮次内用多个 `WriteFile` 同批写 `P02.svg`、`P03.svg`……（不同路径可并行）；不要写一页就预览一页，也不要每页重复读取已完整取得的 page-plan。
+8. 全部写完后进入最终视觉门禁：同一响应中按页发出多个 `PreviewSvgPage`，确保每个新建或改动 SVG 的当前内容与素材都成功产出 PNG。任何修订都会使旧凭据失效，必须重新预览该页。
+9. 最后只调用一次 `SubmitSvgDeck`（`execution.batch=exclusive`，必须独批），显式传入 `"designSpecPath":"design/design-spec.json"`、`"pagePlanPath":"slides/page-plan.json"` 及有序 SVG 页面。`communication`、`designSystem`、每页 `id/path/narrative` 必须原样来自这两个锁文件；提交工具会重新读取并核对，再校验与内联 workspace 相对图片。任何锁漂移或页面失败都不视为完成。
+
+## 轮次纪律
+
+- 只在开场说明目标、需要用户决策、或收尾交付时输出正文。
+- 工具批次之间禁止“继续推进 / 接着锁定 / 下一步我将…”类过渡旁白。
+- 必要轮界主要是：capability 声明、依赖 skill 正文后的首次写入、P01 看图校准、预览失败后的修订、以及独批的 `SubmitSvgDeck`。
 
 ## 作者文件
 

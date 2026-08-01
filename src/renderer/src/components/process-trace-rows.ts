@@ -3,6 +3,7 @@ import {
   formatAgentProgressMessage,
   formatAgentToolActivity,
   getAgentToolDisplayCopy,
+  type AgentToolDisplayCategory,
 } from "@shared/agent-activity-display";
 
 export interface ProcessTraceRow {
@@ -14,6 +15,7 @@ export interface ProcessTraceRow {
   streaming?: boolean;
   lines?: string[];
   status?: "running" | "completed" | "failed" | "denied" | "invalid-input";
+  toolCategory?: AgentToolDisplayCategory;
 }
 
 function pushRow(
@@ -69,6 +71,7 @@ export function buildProcessTraceRows(
         title: formatAgentToolActivity(item.toolName, item.status),
         active: isRunning && live,
         status: item.status,
+        toolCategory: getAgentToolDisplayCopy(item.toolName).category,
       });
       continue;
     }

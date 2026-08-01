@@ -221,6 +221,7 @@ describe("agent run presentation", () => {
 
     const running = render(<ProcessTraceItem row={rows[0]!} />);
     expect(running.container.querySelector(".process-trace-row-status--running")).not.toBeNull();
+    expect(running.container.querySelector(".process-trace-row-tool-icon--read")).not.toBeNull();
     expect(running.container.textContent).toContain("正在读取演示文稿");
     running.unmount();
 
@@ -228,6 +229,49 @@ describe("agent run presentation", () => {
     expect(failed.container.querySelector(".process-trace-row-status--failed")).not.toBeNull();
     expect(failed.container.textContent).toContain("读取演示文稿未完成");
     expect(failed.container.textContent).not.toContain("ReadPresentationSnapshot");
+  });
+
+  it("maps tool categories and terminal status glyphs into distinct class names", () => {
+    const rows = buildProcessTraceRows([
+      {
+        id: "tool-search",
+        kind: "tool",
+        toolCallId: "call-search",
+        toolName: "WebSearch",
+        status: "completed",
+      },
+      {
+        id: "tool-change",
+        kind: "tool",
+        toolCallId: "call-change",
+        toolName: "WriteFile",
+        status: "failed",
+      },
+      {
+        id: "tool-denied",
+        kind: "tool",
+        toolCallId: "call-denied",
+        toolName: "EditFile",
+        status: "denied",
+      },
+    ], false);
+
+    expect(rows.map((row) => row.toolCategory)).toEqual(["search", "change", "change"]);
+
+    const search = render(<ProcessTraceItem row={rows[0]!} />);
+    expect(search.container.querySelector(".process-trace-row-tool-icon--search")).not.toBeNull();
+    expect(search.container.querySelector(".process-trace-row-status--completed")).not.toBeNull();
+    search.unmount();
+
+    const change = render(<ProcessTraceItem row={rows[1]!} />);
+    expect(change.container.querySelector(".process-trace-row-tool-icon--change")).not.toBeNull();
+    expect(change.container.querySelector(".process-trace-row-status--failed")).not.toBeNull();
+    change.unmount();
+
+    const denied = render(<ProcessTraceItem row={rows[2]!} />);
+    expect(denied.container.querySelector(".process-trace-row-tool-icon--change")).not.toBeNull();
+    expect(denied.container.querySelector(".process-trace-row-status--denied")).not.toBeNull();
+    expect(denied.container.querySelector(".process-trace-row-status--failed")).toBeNull();
   });
 
   it("exposes one keyboard target for an expandable trace row", () => {

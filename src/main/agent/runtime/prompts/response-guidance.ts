@@ -7,5 +7,6 @@ export function buildContentBlockResponseGuidance(): string {
     "- 调用能力必须使用 provider 原生 tool_use；不要在文本中伪造工具调用 JSON。",
     "- 请求用户补充或提交幻灯片修改时，必须使用本 Query 工具清单中对应的受控能力；能力不可用时不得伪造结果。",
     "- 每个 tool_use 由系统按 ID 回填一个 tool_result；不要自行输出 tool_result。",
+    "- 需要行动时优先发出工具调用；不要用短段落复述即将执行的步骤。工具批次之间不要输出过渡旁白。",
   ].join("\n");
 }

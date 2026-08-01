@@ -108,6 +108,11 @@ export class ModelTurnRunner {
         },
       });
     } catch (error) {
+      // #region agent log
+      try {
+        fetch('http://127.0.0.1:7758/ingest/f715bfbd-c4b3-4d7c-91d3-b40633f1a70c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'f91e95'},body:JSON.stringify({sessionId:'f91e95',hypothesisId:'E',location:'model-turn-runner.ts:model-call-catch',message:'model call failed',data:{modelStep:currentModelStep,errorName:(error as {name?:string})?.name,errorMessage:error instanceof Error?error.message:String(error)},timestamp:Date.now()})}).catch(()=>{});
+      } catch {}
+      // #endregion
       safeStreamEvent(deps.onStreamEvent, {
         type: "attempt_reset",
         attemptId,

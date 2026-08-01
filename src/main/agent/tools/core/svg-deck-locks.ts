@@ -175,8 +175,12 @@ export function formatSvgDeckLockContractBlock(): string {
     "### SVG Deck Lock Contract",
     `写 ${SVG_DECK_DESIGN_SPEC_PATH} 前先 LoadSkill("ppt-design")；`
     + `写 ${SVG_DECK_PAGE_PLAN_PATH} 前先 LoadSkill("ppt-design-layout")。`,
-    "推荐顺序：LoadSkill(ppt-design) → WriteFile design-spec → "
-    + "LoadSkill(ppt-design-layout) → WriteFile page-plan → WriteFile SVG → PreviewSvgPage → SubmitSvgDeck。",
+    "可同批加载多个 Skill（例如同时 LoadSkill ppt-design 与 ppt-design-layout），"
+    + "不必一技能一轮。依赖上一步正文结果的写入仍须等 tool_result。",
+    "推荐顺序（尽量合并独立调用，减少模型往返）："
+    + "LoadSkill(s) → WriteFile design-spec → WriteFile page-plan → "
+    + "WriteFile P01 + PreviewSvgPage →（看图校准后）同批写剩余 SVG → "
+    + "同批 PreviewSvgPage → SubmitSvgDeck（独批）。",
     `非法锁文件不会通过 WriteFile、PreviewSvgPage 或 SubmitSvgDeck。`,
     "",
     `${SVG_DECK_DESIGN_SPEC_PATH} 最低结构：`,
@@ -194,10 +198,11 @@ export function formatSvgDeckLockContractBlock(): string {
 export function formatSvgDeckLockBootstrapGuidance(): string {
   return [
     "SVG-native create bootstrap:",
-    "1. LoadSkill(\"ppt-design\") then WriteFile design/design-spec.json.",
-    "2. LoadSkill(\"ppt-design-layout\") then WriteFile slides/page-plan.json.",
-    "3. WriteFile slides/svg/P01.svg then PreviewSvgPage; do not start P02 until P01 passes.",
-    "4. After all pages pass PreviewSvgPage, call SubmitSvgDeck once.",
+    "1. Batch LoadSkill(\"ppt-design\") (and LoadSkill(\"ppt-design-layout\") when you already know you need both); "
+    + "after skill bodies return, WriteFile design/design-spec.json.",
+    "2. WriteFile slides/page-plan.json in the earliest turn whose parameters do not depend on unread skill text.",
+    "3. Same turn when possible: WriteFile slides/svg/P01.svg then PreviewSvgPage; do not start P02 until P01 passes.",
+    "4. After P01 passes: batch-write remaining SVGs, then batch PreviewSvgPage for every page; call SubmitSvgDeck once alone.",
     "",
     formatSvgDeckLockContractBlock(),
   ].join("\n");

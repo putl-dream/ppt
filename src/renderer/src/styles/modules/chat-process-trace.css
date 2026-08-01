@@ -95,7 +95,8 @@
 }
 .process-trace-row-caret,
 .process-trace-row-toggle,
-.process-trace-row-status {
+.process-trace-row-status,
+.process-trace-row-tool-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -104,6 +105,12 @@
   height: 14px;
   flex-basis: 14px;
   color: var(--text-muted);
+}
+.process-trace-row-tool-icon {
+  color: var(--text-muted);
+}
+.process-trace-row--active .process-trace-row-tool-icon {
+  color: var(--text-secondary);
 }
 .process-trace-row-status--completed {
   color: var(--accent-green);
@@ -122,6 +129,21 @@
 }
 .process-trace-row-status--invalid-input {
   color: var(--warning);
+}
+.process-trace-row-status--completed .process-trace-row-status-glyph {
+  stroke-dasharray: 24;
+  stroke-dashoffset: 24;
+  animation: process-trace-check-draw var(--duration-slow) var(--ease-out) forwards;
+}
+.process-trace-row-status--failed .process-trace-row-status-glyph,
+.process-trace-row-status--invalid-input .process-trace-row-status-glyph {
+  animation: process-trace-status-pop var(--duration-base) var(--ease-out) both;
+}
+.process-trace-row-status--denied .process-trace-row-status-glyph {
+  animation: process-trace-status-fade var(--duration-base) var(--ease-out) both;
+}
+.process-trace-row--tool.process-trace-row--enter {
+  animation: process-trace-row-enter var(--duration-base) var(--ease-out) both;
 }
 .process-trace-row-toggle {
   padding: 0;
@@ -213,4 +235,55 @@
   color: var(--text-secondary);
   font-size: var(--text-sm);
   line-height: 1.7;
+}
+
+@keyframes process-trace-check-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes process-trace-status-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.7);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes process-trace-status-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes process-trace-row-enter {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .process-trace-row-status--completed .process-trace-row-status-glyph,
+  .process-trace-row-status--failed .process-trace-row-status-glyph,
+  .process-trace-row-status--invalid-input .process-trace-row-status-glyph,
+  .process-trace-row-status--denied .process-trace-row-status-glyph,
+  .process-trace-row--tool.process-trace-row--enter {
+    animation: none;
+  }
+
+  .process-trace-row-status--completed .process-trace-row-status-glyph {
+    stroke-dashoffset: 0;
+  }
 }

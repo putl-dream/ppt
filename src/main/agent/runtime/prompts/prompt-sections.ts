@@ -104,7 +104,8 @@ export function buildIdentitySection(_input: IdentitySectionInput = {}): string 
 - 普通问答不要创建 PPT capability。只要本 Query 将开始 create、edit、restyle 或 review，必须先且只需调用一次 \`BeginPptCapability\` 声明对应 capability；后续 Presentation 工具必须沿用该 Query 的 active request，不能用 runId 或 threadId 代替 QueryId。
 - 根据当前 Presentation、Workspace、任务状态和工具结果决定下一步。阶段标签只是上下文提示，不是控制流或能力白名单。
 - 在合理范围内自主推进：先检查必要事实，再修改，再验证。不要只描述将来会做什么。
-- 新建整套 PPT 或整套重做时，以完整页面 SVG 为唯一视觉事实源：先锁定沟通契约、argument mode、visual style、reading mode 和逐页 audience move / rhythm / layout intent，再用 WriteFile 逐页写 1280×720 的自包含 SVG，最后只用 SubmitSvgDeck 提交。每份 SVG 必须已经包含标题、背景、页码、图表、图片和装饰；不要调用固定 layout handler，也不要依赖预览器或导出器补视觉 chrome。
+- 降低模型往返：每一轮尽量把参数已知且互不依赖的读取、写入、预览、技能加载放进同一 assistant 响应；只有必须看见 tool_result 才能填下一参数时才开新轮。不要为了“看起来一步一步”而把独立工作拆成多轮。
+- 新建整套 PPT 或整套重做时，以完整页面 SVG 为唯一视觉事实源：先锁定沟通契约、argument mode、visual style、reading mode 和逐页 audience move / rhythm / layout intent，再用 WriteFile 写 1280×720 的自包含 SVG，最后只用 SubmitSvgDeck 提交。每份 SVG 必须已经包含标题、背景、页码、图表、图片和装饰；不要调用固定 layout handler，也不要依赖预览器或导出器补视觉 chrome。
 - 不要让用户在“标准排版 / 创意装饰”、safe / shifted / bold 或其他内部设计候选中做流程选择。只有用户明确要求比较方案时才展示候选；只有用户明确说“只要内容草稿”时才允许在未排版草稿处结束。
 - 简单任务直接完成；只有工作确实可并行、需跨回合恢复或存在依赖时才创建 Task/teammate。
 - 尊重用户范围和已有产物。不要因为模板流程而重做已完成工作，也不要把局部修改扩成整套重构。
@@ -181,7 +182,12 @@ export function buildToolsSection(input: ToolsSectionInput): string {
     "- 参数彼此独立的工具调用应在同一个 assistant 响应中一次发出；即使工具标记为 serial，也应通过同批调用减少模型往返。",
     "- 如果某个调用的参数依赖兄弟调用的结果，必须等待结果后在下一轮调用；execution.batch=exclusive 的工具必须单独调用。",
     "- execution.mode=parallel 的调用会由 Runtime 安全并发；conflictScope=workspace_path 时，同一路径读写保持有序、不同路径可以并发。",
+    "- 工具批次之间不要写“继续推进 / 接着我将…”这类过渡旁白；进度由工具结果承担。只在开场说明目标、需要用户决策、或收尾交付时输出正文。",
   ];
+  const batchExamples = buildIndependentBatchExamples(input.enabledTools);
+  if (batchExamples) {
+    guidance.splice(2, 0, `- 可同批示例：${batchExamples}`);
+  }
   const availableFileTools = input.enabledTools.filter((tool) =>
     tool.permission?.effects.some((effect) =>
       effect === "workspace.read" || effect === "workspace.write"
@@ -212,7 +218,10 @@ export function buildToolsSection(input: ToolsSectionInput): string {
     );
   }
   if (skillLoaders.length > 0) {
-    guidance.push(`- ${formatToolNames(skillLoaders)} 可加载任意已注册 Skill；阶段匹配只影响推荐顺序。`);
+    guidance.push(
+      `- ${formatToolNames(skillLoaders)} 可加载任意已注册 Skill；阶段匹配只影响推荐顺序。`
+      + "已知需要多个技能时可同批多次调用，不要一技能一轮。",
+    );
   }
   const interactionTools = input.enabledTools.filter((tool) =>
     tool.behavior?.capabilities?.includes("user_interaction")
@@ -328,4 +337,36 @@ ${input.memories}`;
 
 function formatToolNames(tools: readonly ToolDefinition<any, any>[]): string {
   return tools.map((tool) => `\`${tool.name}\``).join("、");
+}
+
+function hasToolName(
+  tools: readonly ToolDefinition<any, any>[],
+  name: string,
+): boolean {
+  return tools.some((tool) => tool.name === name);
+}
+
+/** Create-path batching hints, only naming tools present in this Query. */
+function buildIndependentBatchExamples(
+  tools: readonly ToolDefinition<any, any>[],
+): string | null {
+  const examples: string[] = [];
+  if (hasToolName(tools, "LoadSkill")) {
+    examples.push("多个 LoadSkill");
+  }
+  if (hasToolName(tools, "ReadFile")) {
+    examples.push("已知路径的多个 ReadFile");
+  }
+  if (hasToolName(tools, "WriteFile")) {
+    examples.push("不同路径的多个 WriteFile");
+    if (hasToolName(tools, "PreviewSvgPage")) {
+      examples.push("锁文件写完后同批写 P01 再 PreviewSvgPage");
+      examples.push("P01 通过后同批写剩余 SVG");
+    }
+  }
+  if (hasToolName(tools, "PreviewSvgPage")) {
+    examples.push("全部写完后同批多个 PreviewSvgPage");
+  }
+  if (examples.length === 0) return null;
+  return `${examples.join("；")}。`;
 }

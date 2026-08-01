@@ -20,6 +20,24 @@ describe("tool access policy", () => {
     }
   });
 
+  it("allows LoadSkill for both main and subagent scopes", () => {
+    expect(evaluateToolPermission({
+      toolName: "LoadSkill",
+      args: { skillName: "ppt-workflow" },
+      scope: "main",
+      risk: "low",
+    })).toEqual({ type: "allow" });
+
+    expect(evaluateToolPermission({
+      toolName: "LoadSkill",
+      args: { skillName: "ppt-workflow" },
+      scope: "subagent",
+      risk: "low",
+    })).toEqual({ type: "allow" });
+
+    expect(getToolPermissionProfile("LoadSkill")?.scopes).toEqual(["main", "subagent"]);
+  });
+
   it("preserves hard-deny and contextual approval behavior", () => {
     expect(evaluateToolPermission({
       toolName: "bash",

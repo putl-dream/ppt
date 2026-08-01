@@ -17,12 +17,13 @@ stages:
 
 ## 开始前
 
-1. 用 `ReadFile` 读取设计规格、页面计划和当前页所引用的素材清单；`hasMore=true` 时沿 `nextOffset` 和同一 `expected_version` 续读，直到取得完整文件。
+1. 用 `ReadFile` **一次**读取设计规格与完整页面计划（及当前页所引用的素材）；`hasMore=true` 时沿 `nextOffset` 和同一 `expected_version` 续读，直到取得完整文件。不要在后续每一页重复整文件读取。
 2. 确认设计规格已经锁定 `argumentMode`、`visualStyle`、`readingMode`、`imageLanguage`、颜色角色与字体角色。
 3. 确认每页都有最终的 `finalCopy`、`coreMessage`、`audienceMove`、`rhythm`、`layoutIntent`。
 4. 保持页面 id 与文件名一一对应：`P01` → `slides/svg/P01.svg`。
 5. 若计划或素材仍不完整，先补齐作者文件；不要用占位 SVG 掩盖缺口。
 6. 若 `layoutIntent` 仍是模板名或过于抽象，先用 `WriteFile` 修订 `slides/page-plan.json` 的自然语言意图，再写 SVG。
+7. 若尚未加载 `ppt-build` 正文，可与其他已知需要的 `LoadSkill` 同批发出；不要为加载技能单独空转一轮。
 
 ## SVG 页面契约
 
@@ -67,21 +68,21 @@ stages:
 ## P01 闸门
 
 1. 先只生成 P01。用一次 `WriteFile` 写完整 `slides/svg/P01.svg`，不要拆成多个临时片段。
-2. 立即调用 `PreviewSvgPage({"path":"slides/svg/P01.svg"})`，让模型直接查看该 SVG 的真实 PNG。
+2. 同一 assistant 响应中紧随调用 `PreviewSvgPage({"path":"slides/svg/P01.svg"})`（写在前、预览在后），让模型在下一轮直接查看真实 PNG。
 3. 同时检查：SVG 合法性、资源可解析、文本未截断、对象未越界、对比度与层级、风格兑现、封面是否形成足够强的第一印象。
 4. 失败时直接修订 P01 并重新预览。P01 未通过前不得批量生成其余页面。
 5. P01 通过后，将它视为 deck-wide 视觉校准样本；其余页面继承设计语言，不复制其具体构图。
 
 ## 逐页生成
 
-按 `slides/page-plan.json` 的顺序逐页工作：
+按 `slides/page-plan.json` 的顺序工作，但**降低轮次**：
 
-1. 用 `ReadFile` 取得当前页计划与必要素材信息；分页结果必须读到 `hasMore=false`。
-2. 只为当前页设计完整构图。
-3. 用 `WriteFile` 写入对应 SVG。
-4. P01 之外先完成剩余作者源，不调用后处理器重新布局。
-5. 全部页面写完后按页调用 `PreviewSvgPage`，逐张查看真实 PNG；文字密集、图片裁剪、复杂图表或强效果页面尤其仔细。
-6. 修复必须回写同一 SVG 并重新预览；禁止用提交阶段的 fallback 隐藏问题。
+1. 已在开始前完整读过 page-plan 时，不要每页再 `ReadFile` 整份计划。
+2. 只为当前页设计完整构图；每次 `WriteFile` 只写一个 SVG 文件。
+3. **P01 之外：先在尽量少的轮次内同批写完剩余作者源**（不同路径可并行），禁止“写一页 → 预览一页 → 旁白 → 再写下一页”。
+4. 全部页面写完后，在同一响应中按页发出多个 `PreviewSvgPage`，逐张查看真实 PNG；文字密集、图片裁剪、复杂图表或强效果页面尤其仔细。
+5. 修复必须回写同一 SVG 并重新预览；禁止用提交阶段的 fallback 隐藏问题。
+6. 工具批次之间不要写过渡旁白。
 
 ## 最终提交
 
