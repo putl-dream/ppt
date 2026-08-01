@@ -19,22 +19,28 @@ Agent PPT 是一个本地优先的 AI 演示文稿工作台。它会根据任务
 
 ## 界面一览
 
-三栏工作台：左侧管理会话与项目文件，中间查看 Agent 过程与审批，右侧实时预览幻灯片。Agent 生成的演示可直接进入放映，预览与导出共用同一套 SVG 视觉源；设置台可管理模型、搜索与联网、提交与审批、用量与费用等。工作台外观可用 `themes/<名>/theme.css` 定制（不影响幻灯片导出）。下方样张为界面与 Agent 产出示例。
+三栏工作台：左侧管理会话与项目文件，中间查看 Agent 过程与审批，右侧实时预览幻灯片。Agent 生成的演示可直接进入放映，预览与导出共用同一套 SVG 视觉源；设置台可管理模型、搜索与联网、提交与审批、用量与费用等。下方样张为默认界面与 Agent 产出示例。
 
 <table>
   <tr>
     <td width="50%"><img src="./images/首页.png" alt="工作台" /><br/><sub>三栏工作台</sub></td>
-    <td width="50%"><img src="./images/猫娘定制版.png" alt="Catnip 定制工作台主题" /><br/><sub>工作台 CSS 主题定制（Catnip）</sub></td>
-  </tr>
-  <tr>
     <td width="50%"><img src="./images/设置.png" alt="设置：用量与费用" /><br/><sub>设置：用量与费用</sub></td>
-    <td width="50%"><img src="./images/放映.png" alt="放映示例：结构化页面" /><br/><sub>放映示例：结构化页面</sub></td>
   </tr>
   <tr>
+    <td width="50%"><img src="./images/放映.png" alt="放映示例：结构化页面" /><br/><sub>放映示例：结构化页面</sub></td>
     <td width="50%"><img src="./images/放映-暗.png" alt="放映示例：深色创意封面" /><br/><sub>放映示例：深色创意封面</sub></td>
-    <td width="50%"></td>
   </tr>
 </table>
+
+## 工作台主题定制
+
+工作台外观与幻灯片 DesignSystem **分离**：在 `~/.agent-ppt/themes/<名>/theme.css` 放置主题包即可换肤，不改变 SVG 纸面与 PPTX 导出。下方为内置 Catnip 定制主题的宣传示意（非默认外观）。
+
+<p align="center">
+  <img src="./images/猫娘定制版.png" alt="Catnip 工作台主题宣传图" width="100%" />
+</p>
+
+<p align="center"><sub>Catnip：文件夹 CSS 主题示例 · 详见 <a href="./docs/user-manual/css-themes.md">CSS 主题指南</a></sub></p>
 
 ## 为什么不一样
 

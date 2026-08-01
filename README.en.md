@@ -19,22 +19,28 @@ It is useful when you want to:
 
 ## Screenshots
 
-Three-column workspace: sessions and project files on the left, agent progress and approvals in the center, live slide preview on the right. Generated decks can enter slideshow mode directly, and preview and export share the same SVG visual source; Settings manages models, search and networking, submission and approval, usage and billing, and more. Workbench appearance can be customized with `themes/<name>/theme.css` (does not affect slide export). Screenshots below show the UI shell and sample agent output.
+Three-column workspace: sessions and project files on the left, agent progress and approvals in the center, live slide preview on the right. Generated decks can enter slideshow mode directly, and preview and export share the same SVG visual source; Settings manages models, search and networking, submission and approval, usage and billing, and more. Screenshots below show the default UI shell and sample agent output.
 
 <table>
   <tr>
     <td width="50%"><img src="./images/首页.png" alt="Workspace" /><br/><sub>Three-column workspace</sub></td>
-    <td width="50%"><img src="./images/猫娘定制版.png" alt="Catnip custom workbench theme" /><br/><sub>Custom workbench CSS theme (Catnip)</sub></td>
-  </tr>
-  <tr>
     <td width="50%"><img src="./images/设置.png" alt="Settings: usage and billing" /><br/><sub>Settings: usage and billing</sub></td>
-    <td width="50%"><img src="./images/放映.png" alt="Slideshow sample: structured page" /><br/><sub>Slideshow sample: structured page</sub></td>
   </tr>
   <tr>
+    <td width="50%"><img src="./images/放映.png" alt="Slideshow sample: structured page" /><br/><sub>Slideshow sample: structured page</sub></td>
     <td width="50%"><img src="./images/放映-暗.png" alt="Slideshow sample: dark creative cover" /><br/><sub>Slideshow sample: dark creative cover</sub></td>
-    <td width="50%"></td>
   </tr>
 </table>
+
+## Workbench theme customization
+
+Workbench chrome is separate from the slide DesignSystem: drop a pack at `~/.agent-ppt/themes/<name>/theme.css` to restyle the app without changing SVG paper or PPTX export. The image below is a promotional shot of the built-in Catnip theme (not the default look).
+
+<p align="center">
+  <img src="./images/猫娘定制版.png" alt="Catnip workbench theme promo" width="100%" />
+</p>
+
+<p align="center"><sub>Catnip: folder CSS theme example · see the <a href="./docs/user-manual/css-themes.md">CSS theme guide</a></sub></p>
 
 ## What Makes It Different
 

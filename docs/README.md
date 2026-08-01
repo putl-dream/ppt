@@ -4,26 +4,30 @@
 
 本地优先的 AI 演示文稿工作台：模型通过工具协作产出可审批的 SVG-native 演示；代码以 CommitGate、权限与持久化约束安全边界。本文档集是**现行架构与契约索引**，行为事实以代码和测试为准。
 
-## 界面与定制一览
+## 界面一览
 
-三栏工作台（会话 / Agent 过程与审批 / PPT 镜像）。工作台外观可通过 `~/.agent-ppt/themes/<名>/theme.css` 定制，**不影响**幻灯片 DesignSystem 与 PPTX 导出。下方样张为界面与 Agent 产出示例。
+三栏工作台（会话 / Agent 过程与审批 / PPT 镜像）。下方为默认外观与 Agent 产出示例。
 
 <table>
   <tr>
     <td width="50%"><img src="../images/首页.png" alt="三栏工作台" /><br/><sub>三栏工作台（默认外观）</sub></td>
-    <td width="50%"><img src="../images/猫娘定制版.png" alt="Catnip 定制工作台主题" /><br/><sub>工作台 CSS 主题定制（Catnip）</sub></td>
-  </tr>
-  <tr>
     <td width="50%"><img src="../images/设置.png" alt="设置：用量与费用" /><br/><sub>设置：用量与费用</sub></td>
-    <td width="50%"><img src="../images/放映.png" alt="放映示例" /><br/><sub>放映：结构化页面示例</sub></td>
   </tr>
   <tr>
+    <td width="50%"><img src="../images/放映.png" alt="放映示例" /><br/><sub>放映：结构化页面示例</sub></td>
     <td width="50%"><img src="../images/放映-暗.png" alt="放映深色创意封面" /><br/><sub>放映：深色创意封面示例</sub></td>
-    <td width="50%"></td>
   </tr>
 </table>
 
-定制食谱见 [CSS 主题指南](./user-manual/css-themes.md)；契约见 [工作台 UI 主题](./architecture/ui-themes.md)。
+## 工作台主题定制（宣传）
+
+工作台外观可通过 `~/.agent-ppt/themes/<名>/theme.css` 定制，**不影响**幻灯片 DesignSystem 与 PPTX 导出。以下为 Catnip 定制主题宣传图（非默认外观）。
+
+<p align="center">
+  <img src="../images/猫娘定制版.png" alt="Catnip 工作台主题宣传图" width="100%" />
+</p>
+
+<p align="center"><sub>食谱见 <a href="./user-manual/css-themes.md">CSS 主题指南</a> · 契约见 <a href="./architecture/ui-themes.md">工作台 UI 主题</a></sub></p>
 
 ## 文档范围
 

@@ -4,26 +4,30 @@
 
 A local-first AI presentation workbench: the model collaborates through tools to produce reviewable SVG-native decks; code enforces safety via CommitGate, permissions, and persistence. This tree is the **architecture and contract index**. Behavior facts come from code and tests.
 
-## UI and customization
+## UI overview
 
-Three-column workbench (sessions / agent progress and approvals / PPT mirror). Workbench appearance can be customized with `~/.agent-ppt/themes/<name>/theme.css` and does **not** affect the slide DesignSystem or PPTX export. Screenshots below show the UI shell and sample agent output.
+Three-column workbench (sessions / agent progress and approvals / PPT mirror). Screenshots below show the default look and sample agent output.
 
 <table>
   <tr>
     <td width="50%"><img src="../images/首页.png" alt="Three-column workbench" /><br/><sub>Three-column workbench (default look)</sub></td>
-    <td width="50%"><img src="../images/猫娘定制版.png" alt="Catnip custom workbench theme" /><br/><sub>Custom workbench CSS theme (Catnip)</sub></td>
-  </tr>
-  <tr>
     <td width="50%"><img src="../images/设置.png" alt="Settings: usage and billing" /><br/><sub>Settings: usage and billing</sub></td>
-    <td width="50%"><img src="../images/放映.png" alt="Slideshow sample" /><br/><sub>Slideshow: structured page sample</sub></td>
   </tr>
   <tr>
+    <td width="50%"><img src="../images/放映.png" alt="Slideshow sample" /><br/><sub>Slideshow: structured page sample</sub></td>
     <td width="50%"><img src="../images/放映-暗.png" alt="Dark creative cover slideshow" /><br/><sub>Slideshow: dark creative cover sample</sub></td>
-    <td width="50%"></td>
   </tr>
 </table>
 
-Customization recipes: [CSS theme guide](./user-manual/css-themes.md). Contracts: [Workbench UI themes](./architecture/ui-themes.md).
+## Workbench theme customization (promo)
+
+Customize the app chrome with `~/.agent-ppt/themes/<name>/theme.css` without changing the slide DesignSystem or PPTX export. The image below is a Catnip theme promo shot (not the default look).
+
+<p align="center">
+  <img src="../images/猫娘定制版.png" alt="Catnip workbench theme promo" width="100%" />
+</p>
+
+<p align="center"><sub>Recipes: <a href="./user-manual/css-themes.md">CSS theme guide</a> · Contracts: <a href="./architecture/ui-themes.md">Workbench UI themes</a></sub></p>
 
 ## What belongs here
 
