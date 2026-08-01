@@ -11,6 +11,7 @@ interface WorkspaceViewProps {
   mirrorProps?: ComponentProps<typeof PPTMirror>;
   deckPreviewProps: ComponentProps<typeof DeckPreviewModal>;
   isDraftChat: boolean;
+  isSessionSwitching?: boolean;
   isMirrorVisible: boolean;
   isMirrorExpanded: boolean;
   isPrimarySidebarCollapsed: boolean;
@@ -24,6 +25,7 @@ export function WorkspaceView({
   mirrorProps,
   deckPreviewProps,
   isDraftChat,
+  isSessionSwitching = false,
   isMirrorVisible,
   isMirrorExpanded,
   isPrimarySidebarCollapsed,
@@ -60,7 +62,9 @@ export function WorkspaceView({
             isDraftChat ? "new-session-layout" : "",
             isMirrorVisible ? "ppt-mirror-open" : "ppt-mirror-closed workspace-canvas-content-chat-only",
             isMirrorVisible && isMirrorExpanded ? "mirror-expanded" : "",
+            isSessionSwitching ? "is-session-switching" : "",
           ].filter(Boolean).join(" ")}
+          aria-busy={isSessionSwitching || undefined}
         >
           <ChatWorkspace {...chatWorkspaceProps} />
 

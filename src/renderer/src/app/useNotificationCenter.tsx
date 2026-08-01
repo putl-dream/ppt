@@ -28,7 +28,9 @@ export function useNotificationCenter(timeoutMs = 3200): NotificationCenter {
 export function NotificationViewport({ message }: { message: string | null }) {
   return (
     <div className="toast-viewport" aria-live="polite" aria-atomic="true">
-      {message ? <div className="floating-toast-alert" role="status">{message}</div> : null}
+      {message
+        ? <div key={message} className="floating-toast-alert" role="status">{message}</div>
+        : null}
     </div>
   );
 }

@@ -81,6 +81,8 @@ export function App() {
     activeSessionId,
     activeSessionIdRef,
     sessionLoaded,
+    isSessionSwitching,
+    pendingSessionId,
     isDraftChat,
     setIsDraftChat,
     localStoragePath,
@@ -193,10 +195,10 @@ export function App() {
     );
   const leftPanelProps = {
     sessions,
-    activeSessionId,
+    activeSessionId: pendingSessionId ?? activeSessionId,
     activeMode: activeMode === "files" ? "files" as const : "workspace" as const,
     onSelectSession: (sessionId: string) => {
-      if (sessionId === activeSessionId || !confirmLeaveProjectFiles()) return;
+      if (sessionId === activeSessionId || isSessionSwitching || !confirmLeaveProjectFiles()) return;
       void selectSession(sessionId);
     },
     onNewSession: () => {
@@ -236,6 +238,7 @@ export function App() {
       {activeMode === "workspace" ? (
         <WorkspaceView
           leftPanelProps={leftPanelProps}
+          isSessionSwitching={isSessionSwitching}
           chatWorkspaceProps={{
             isNewChat: isDraftChat,
             conversationTitle: activeSessionTitle,

@@ -24,6 +24,7 @@
 @import './styles/modules/review-surfaces.css';
 @import './styles/modules/overlays-slash.css';
 @import './styles/modules/overlays-slideshow.css';
+@import './styles/modules/overlays-toast.css';
 @import './styles/modules/settings-nav.css';
 @import './styles/modules/settings-panels.css';
 @import './styles/modules/settings-token-usage.css';

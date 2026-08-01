@@ -146,7 +146,18 @@
   height: 100%;
   width: 100%;
   overflow: hidden;
-  transition: var(--transition-panel);
+  transition: var(--transition-panel), opacity var(--duration-base) var(--ease-out);
+}
+
+.workspace-canvas-content.is-session-switching {
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .workspace-canvas-content.is-session-switching {
+    transition: none;
+  }
 }
 
 .workspace-canvas-content .canvas-header {

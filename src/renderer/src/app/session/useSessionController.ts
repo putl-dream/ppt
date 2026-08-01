@@ -39,6 +39,10 @@ interface UseSessionControllerOptions {
   resetRequest: () => void;
 }
 
+export interface ApplySessionStateOptions {
+  syncPresentation?: boolean;
+}
+
 export interface SessionController {
   startupError: string | undefined;
   sessions: SessionSummary[];
@@ -46,13 +50,14 @@ export interface SessionController {
   activeSessionIdRef: MutableRefObject<string>;
   sessionLoaded: boolean;
   isSessionSwitching: boolean;
+  pendingSessionId: string | null;
   isDraftChat: boolean;
   setIsDraftChat: Dispatch<SetStateAction<boolean>>;
   workspacePath: string;
   localStoragePath: string;
   chatMessages: ChatMessage[];
   setChatMessages: Dispatch<SetStateAction<ChatMessage[]>>;
-  applySessionState: (state: SessionBootstrap) => void;
+  applySessionState: (state: SessionBootstrap, options?: ApplySessionStateOptions) => void;
   selectWorkspaceFolder: () => Promise<void>;
   openWorkspace: () => Promise<void>;
   newSession: () => Promise<void>;
@@ -80,6 +85,7 @@ export function useSessionController({
   const activeSessionIdRef = useRef("");
   const [sessionLoaded, setSessionLoaded] = useState(false);
   const [isSessionSwitching, setIsSessionSwitching] = useState(false);
+  const [pendingSessionId, setPendingSessionId] = useState<string | null>(null);
   const [isDraftChat, setIsDraftChat] = useState(true);
   const [workspacePath, setWorkspacePath] = useState("");
   const [localStoragePath, setLocalStoragePath] = useState("");
@@ -98,7 +104,11 @@ export function useSessionController({
     useProjectStore.getState().resetProject();
   }, [resetPresentation, resetRequest]);
 
-  const applySessionState = useCallback((state: SessionBootstrap) => {
+  const applySessionState = useCallback((
+    state: SessionBootstrap,
+    options: ApplySessionStateOptions = {},
+  ) => {
+    const shouldSyncPresentation = options.syncPresentation !== false;
     setSessions(state.sessions);
     if (!state.activeSession) {
       enterDraftChat();
@@ -138,10 +148,12 @@ export function useSessionController({
     void hydratePptJob(snapshot.session.id).catch((error) => {
       console.error("加载演示文稿生命周期失败:", error);
     });
-    void syncPresentation({
-      preferredSlideId: snapshot.presentation.slides[0]?.id,
-      openMirror: snapshot.presentation.revision > 0,
-    });
+    if (shouldSyncPresentation) {
+      void syncPresentation({
+        preferredSlideId: snapshot.presentation.slides[0]?.id,
+        openMirror: snapshot.presentation.revision > 0,
+      });
+    }
   }, [
     enterDraftChat,
     hydrateProjectArtifacts,
@@ -294,13 +306,17 @@ export function useSessionController({
       notify("当前任务执行中，请稍后再切换会话");
       return;
     }
+    setPendingSessionId(sessionId);
     setIsSessionSwitching(true);
     try {
-      applySessionState(await window.desktopApi.selectSession(sessionId));
-      notify("已恢复会话内容");
+      applySessionState(
+        await window.desktopApi.selectSession(sessionId),
+        { syncPresentation: false },
+      );
     } catch (error) {
       notify(formatPublicErrorMessage(error, "切换会话失败，请重试。"));
     } finally {
+      setPendingSessionId(null);
       setIsSessionSwitching(false);
     }
   }, [activeSessionId, applySessionState, busy, isSessionSwitching, notify]);
@@ -327,6 +343,7 @@ export function useSessionController({
     activeSessionIdRef,
     sessionLoaded,
     isSessionSwitching,
+    pendingSessionId,
     isDraftChat,
     setIsDraftChat,
     workspacePath,
