@@ -39,7 +39,7 @@ function writeTheme(
 }
 
 describe("ui themes directory", () => {
-  it("creates theme/ with README and example/theme.css", async () => {
+  it("creates themes/ with README and example/theme.css", async () => {
     const root = await createAppRoot();
     const themesDirectory = ensureUiThemesDirectory(root);
 

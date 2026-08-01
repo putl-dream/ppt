@@ -16,7 +16,7 @@
 | [架构总览](./architecture/overview.md) | 五层架构、数据流、状态边界与自主性原则 |
 | [工程能力地图](./architecture/engineering-capabilities.md) | 能力落点、成熟度、缺口与验证入口 |
 | [本地日志与运行诊断](./architecture/observability.md) | JSONL 日志、关联身份、事件级别、脱敏与容量边界 |
-| [工作台 UI 主题](./architecture/ui-themes.md) | 固定 `theme/<名>/theme.css`、semantic token 契约、`data-ui-region`（用户向指南见 [CSS 主题指南](./user-manual/css-themes.md)） |
+| [工作台 UI 主题](./architecture/ui-themes.md) | 固定 `themes/<名>/theme.css`、semantic token 契约、`data-ui-region`（用户向指南见 [CSS 主题指南](./user-manual/css-themes.md)） |
 | [Query](./agent/query.md) | QueryParams、QueryState、IterationWorkspace、身份与恢复 |
 | [Agent Loop](./agent/loop.md) | 独立 AsyncGenerator、显式 outcome、工具批次与事件 |
 | [Agent Runtime](./agent/runtime.md) | Service、RunFactory、RunScope、Runtime 与 Finalizer |
@@ -26,7 +26,7 @@
 | 文档 | 内容 |
 |---|---|
 | [用户手册索引](./user-manual/README.md) | 面向使用与定制的说明入口 |
-| [CSS 主题指南](./user-manual/css-themes.md) | 工作台 `theme/<名>/theme.css`：能力清单、变量、背景/输入区/字体食谱 |
+| [CSS 主题指南](./user-manual/css-themes.md) | 工作台 `themes/<名>/theme.css`：能力清单、变量、背景/输入区/字体食谱 |
 
 ## Agent 系统
 
@@ -88,8 +88,8 @@
 | Project file management | Implemented | design-spec/page-plan/Page SVG/assets/deck/export history 为第一公民；注册文本 artifact 用隔离 `editToken` + SHA-256 CAS 编辑 |
 | SVG-native create | Implemented | durable DesignSpec/PagePlan/SourceAsset/PageSvg/PreviewReceipt → Candidate/Quality/Proposal |
 | Presentation lifecycle | Implemented | 每个 Presentation 一个跨 Query PptJob；immutable revision/dependency/stale、Proposal/Presentation/Review/Export 与 side-effect recovery |
-| Application data root | Implemented | SQLite、blobs、logs、runtime、token usage、`theme/` 位于 `~/.agent-ppt`；Electron userData 位于 `~/.agent-ppt/electron` |
-| Workbench UI themes | Implemented | 固定 `theme/<名>/theme.css` 注入、semantic token 稳定面、`data-ui-region`；不影响 DesignSystem / 导出 |
+| Application data root | Implemented | SQLite、blobs、logs、runtime、token usage、`themes/` 位于 `~/.agent-ppt`；Electron userData 位于 `~/.agent-ppt/electron` |
+| Workbench UI themes | Implemented | 固定 `themes/<名>/theme.css` 注入、semantic token 稳定面、`data-ui-region`；不影响 DesignSystem / 导出 |
 
 ## 文档维护规则
 

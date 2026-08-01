@@ -9,14 +9,14 @@
 ## 5 分钟上手
 
 1. 打开应用 → **设置** → **界面外观**
-2. 点 **打开主题根目录**（固定为 `~/.agent-ppt/theme/`，不能自选路径）
+2. 点 **打开主题根目录**（固定为 `~/.agent-ppt/themes/`，不能自选路径）
 3. 编辑自带的 `example/theme.css`，或新建例如 `midnight/theme.css`
 4. 回到设置，点 **刷新列表**，选中你的主题
 
 目录长这样：
 
 ```text
-~/.agent-ppt/theme/
+~/.agent-ppt/themes/
   README.md
   example/
     theme.css
@@ -32,8 +32,8 @@
 | 名称 | 子文件夹名即主题 id（可用中文，如 `午夜蓝`） |
 | 保留名 | 不要用文件夹名 `studio`（内置 Studio 占用） |
 | 大小 | `theme.css` 不超过 256KB |
-| 环境变量 | 若设置了 `AGENT_PPT_DATA_DIR`，根目录为 `{该目录}/theme/` |
-| 旧布局 | 以前的扁平 `themes/*.css` 已废弃，不会自动迁移 |
+| 环境变量 | 若设置了 `AGENT_PPT_DATA_DIR`，根目录为 `{该目录}/themes/` |
+| 扁平文件 | 直接放在 `themes/*.css` 的文件不会列入列表 |
 
 ## 你能定制什么
 
@@ -56,7 +56,7 @@
 
 - **图片 / 背景**：`url(...)` 可用 `data:` 或 `https:`（以及应用自身资源）
 - **字体**：`font-src` 仅为 `'self'` 与 `data:`。优先改成**系统字体栈**；远程 `@font-face`（如 Google Fonts）通常加载不了，除非做成 `data:` 内嵌
-- 主题来自固定根目录 `theme/<名>/theme.css`，单文件有大小上限；不会执行主题里的 JavaScript
+- 主题来自固定根目录 `themes/<名>/theme.css`，单文件有大小上限；不会执行主题里的 JavaScript
 - 主题夹里的相对路径图片（如 `url(./bg.png)`）**尚未**支持加载；背景请用 `https:` 或 `data:`
 
 ## 稳定写法：改 semantic 变量
@@ -255,7 +255,7 @@
 
 | 设置项 | 作用 |
 |---|---|
-| 皮肤 / 主题 | 选 Studio 或某个 `theme/<名>/` 主题包 |
+| 皮肤 / 主题 | 选 Studio 或某个 `themes/<名>/` 主题包 |
 | 明暗 | 切换 `data-color-scheme`（主题应提供两套变量） |
 | 强调色 | 设置 `data-accent`，影响 `--accent-primary` 等 |
 | 控件形状 / 内容圆角 | 影响圆角家族与 `--content-radius-scale` |
@@ -272,7 +272,7 @@
 
 | 现象 | 排查 |
 |---|---|
-| 列表里没有新主题 | 是否为 `theme/<名>/theme.css`？点了「刷新列表」？文件夹名是否合法（字母数字/中文、`-`、`_`，无路径分隔符）？ |
+| 列表里没有新主题 | 是否为 `themes/<名>/theme.css`？点了「刷新列表」？文件夹名是否合法（字母数字/中文、`-`、`_`，无路径分隔符）？ |
 | 选了没变化 | 选择器是否挂在正确的 `data-color-scheme` 上？是否被更具体规则盖住？打开开发者工具看 `#user-ui-theme` 是否注入 |
 | 选中后回到 Studio | 文件被删、过大（>256KB）、或 id 非法时会回退 |
 | 背景图不显示 | 是否用了 `file:` 本地路径？改用 `https:` 或 `data:` |

@@ -3,9 +3,9 @@
 状态：Implemented。
 
 Agent PPT 支持文件夹 CSS 工作台外观定制：在固定根目录
-`~/.agent-ppt/theme/<主题名>/theme.css` 放置主题包，即可在设置中切换。
+`~/.agent-ppt/themes/<主题名>/theme.css` 放置主题包，即可在设置中切换。
 主题只影响**软件自身界面**，不影响幻灯片 DesignSystem、SVG 预览纸面或 PPTX 导出。
-旧版扁平 `themes/*.css` 已废弃，不做自动迁移。
+仅识别一级子目录中的 `theme.css`；根目录下的扁平 `*.css` 不会列入。
 
 用户向「能做什么 / 食谱」见 [CSS 主题指南](../user-manual/css-themes.md)。
 实现与样式契约的代码侧说明见
@@ -15,15 +15,15 @@ Agent PPT 支持文件夹 CSS 工作台外观定制：在固定根目录
 
 | 轴 | 作用对象 | 形态 |
 |---|---|---|
-| 工作台 UI 主题（本文） | 侧栏、输入框、设置页、窗口壳 | 用户 `theme/<名>/theme.css` + 内置 Studio skin |
+| 工作台 UI 主题（本文） | 侧栏、输入框、设置页、窗口壳 | 用户 `themes/<名>/theme.css` + 内置 Studio skin |
 | DesignSystemV2 | 演示文稿配色 / 版式语气 | JSON（`design/design-spec.json` 等） |
 
 二者不要混用：改 UI 主题不会改导出的 PPT；改 design-spec 也不会换工作台皮肤。
 
 ## 目录与发现
 
-- 固定根目录：`~/.agent-ppt/theme/`（不提供自选路径）
-- 尊重 `AGENT_PPT_DATA_DIR`：根目录为 `{applicationDataRoot}/theme/`
+- 固定根目录：`~/.agent-ppt/themes/`（不提供自选路径）
+- 尊重 `AGENT_PPT_DATA_DIR`：根目录为 `{applicationDataRoot}/themes/`
 - 扫描**一级子目录**；仅当存在 `theme.css` 时列入
 - 子目录名即主题 id（Unicode 字母数字与 `-` `_`，如 `midnight`、`午夜蓝`）
 - 内置 id `studio` 保留；名为 `studio` 的文件夹会被忽略
@@ -33,7 +33,7 @@ Agent PPT 支持文件夹 CSS 工作台外观定制：在固定根目录
 ## 使用方式
 
 1. 设置 → **界面外观** → **打开主题根目录**
-2. 新建或编辑 `theme/<主题名>/theme.css`
+2. 新建或编辑 `themes/<主题名>/theme.css`
 3. **刷新列表**，选择主题
 
 选中项持久化在 UI 设置（`uiThemeId`）。未知或已删除的自定义 id 回退为
@@ -42,7 +42,7 @@ Agent PPT 支持文件夹 CSS 工作台外观定制：在固定根目录
 ## 加载机制
 
 ```text
-theme/<id>/theme.css
+themes/<id>/theme.css
   → Main list/read（IPC: ui-themes:*）
   → Renderer useAppearanceRuntime
   → <style id="user-ui-theme"> 注入完整 CSS
@@ -138,7 +138,7 @@ theme/<id>/theme.css
 
 - 不做主题市场、zip 包、远程 URL 主题
 - 不提供「选择任意文件夹作为主题源」；根目录固定
-- 不做旧 `themes/*.css` 自动迁移
+- 不把根目录下的扁平 `themes/*.css` 列入主题列表
 - 本轮不加载主题包内相对路径资源（`url(./bg.png)`）；目录结构为后续预留
 - 不把 `UiSkin` 扩成任意字符串；自定义主题走独立的 `uiThemeId`
 - 不做 CSS 选择器白名单 / sanitize
