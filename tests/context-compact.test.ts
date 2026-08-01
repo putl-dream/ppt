@@ -233,7 +233,7 @@ describe("compact_history", () => {
           provider: "openai",
           model: "gpt",
           content: [{ type: "text", text: "Plausible but incomplete summary." }],
-          stopReason: "max_output_tokens",
+          stopReason: "max_tokens",
         };
       },
       async *generateTextStream() {

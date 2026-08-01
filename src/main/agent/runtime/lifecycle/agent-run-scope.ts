@@ -1,5 +1,5 @@
 import type { ConversationDatabase } from "../../../conversation-database";
-import type { AgentModelMessage } from "../../gateway/types";
+import type { AgentModelMessage } from "../../gateway";
 import {
   type DurableRunCheckpoint,
   type LegacyDurableRunCheckpoint,

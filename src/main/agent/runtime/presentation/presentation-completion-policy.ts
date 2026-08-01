@@ -1,4 +1,4 @@
-import type { AgentModelToolResultBlock } from "../../gateway/types";
+import type { AgentModelToolResultBlock } from "../../gateway";
 import type { ToolContext, ToolDefinition } from "../../tools/tool-definition";
 import type { Slide } from "@shared/presentation";
 import {

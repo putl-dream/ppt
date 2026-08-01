@@ -9,8 +9,9 @@ import type {
   AgentModelToolResultBlock,
   AgentModelToolUseBlock,
   PreparedAgentModelRequest,
-  ResolvedAgentModelConfig,
+  StopReason,
 } from "./types";
+import type { DriverResolvedConfig } from "./config";
 
 function tokenCount(value: unknown): number {
   return typeof value === "number" && Number.isFinite(value) && value > 0
@@ -40,6 +41,17 @@ function extractOpenAIUsage(value: unknown): ProviderTokenUsage | undefined {
 function openAIUsageProperty(value: unknown): { usage?: ProviderTokenUsage } {
   const usage = extractOpenAIUsage(value);
   return usage ? { usage } : {};
+}
+
+function toStopReasonFromChat(finishReason?: string): StopReason | undefined {
+  if (!finishReason) return undefined;
+  switch (finishReason) {
+    case "stop":          return "end";
+    case "length":        return "max_tokens";
+    case "tool_calls":
+    case "function_call": return "tool_use";
+    default:              return "other";
+  }
 }
 
 function toOpenAiImageUrl(image: AgentModelImageBlock): string {
@@ -298,14 +310,16 @@ function contentFromResponsesOutput(
 
 function stopReasonFromResponses(
   response: OpenAI.Responses.Response,
-): string | undefined {
+): StopReason | undefined {
   if (response.status !== "incomplete") return undefined;
-  return response.incomplete_details?.reason ?? "incomplete";
+  const reason = response.incomplete_details?.reason;
+  if (reason === "max_output_tokens") return "max_tokens";
+  return "other";
 }
 
 /** Execute one non-streaming OpenAI driver attempt. */
 export async function generateWithOpenAI(
-  config: ResolvedAgentModelConfig,
+  config: DriverResolvedConfig,
   request: PreparedAgentModelRequest,
 ): Promise<AgentModelResponse> {
   const client = new OpenAI({
@@ -348,7 +362,7 @@ export async function generateWithOpenAI(
       model: config.model,
       content,
       requestId: response._request_id ?? undefined,
-      stopReason: choice?.finish_reason ?? undefined,
+      stopReason: toStopReasonFromChat(choice?.finish_reason),
       ...openAIUsageProperty(response.usage),
     };
   }
@@ -387,7 +401,7 @@ export async function generateWithOpenAI(
  * 最终仍以统一的 text_delta/complete chunk 协议返回 Runtime。
  */
 export async function* generateStreamWithOpenAI(
-  config: ResolvedAgentModelConfig,
+  config: DriverResolvedConfig,
   request: PreparedAgentModelRequest,
 ): AsyncGenerator<AgentModelStreamChunk> {
   const client = new OpenAI({
@@ -442,7 +456,7 @@ export async function* generateStreamWithOpenAI(
   yield {
     type: "complete",
     content: text ? [{ type: "text", text }] : [],
-    stopReason: finishReason,
+    stopReason: toStopReasonFromChat(finishReason),
     ...(usage ? { usage } : {}),
   };
 }

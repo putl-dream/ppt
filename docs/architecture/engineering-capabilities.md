@@ -99,23 +99,32 @@ Renderer / IPC
 
 ### 4.2 Gateway 与内容协议
 
-Gateway 当前支持 Anthropic 与 OpenAI 两条 driver 路径。`AgentGateway` 是单次模型
-执行协议的权威边界，负责：
+Gateway 当前支持 Anthropic 与 OpenAI 两条 driver 路径。`AgentGateway` 是整个程序
+内部唯一的模型 I/O 边界——程序其余部分只依赖 Gateway 的中性协议类型，不直接接触
+provider SDK。
 
-- 配置解析与 provider 路由；
-- response contract、临时 request projection 与消息配对；
-- 单次 driver 调用及统一 content block / stream complete 验收；
-- usage、finish reason 与请求日志；
-- 认证、限流、过载、超时、连接和协议错误的统一分类。
+**对内协议面（barrel `src/main/agent/gateway`）：**
 
-`src/main/agent/gateway/protocol.ts`、`content-blocks.ts`、
-`message-pairing.ts` 和 `response-contract.ts` 保护上述协议。`anthropic.ts` 与
-`openai.ts` 只负责统一消息与 SDK 类型的双向映射、一次 SDK 调用和原生流事件转换，
-不得在 driver 内做隐藏重试或跨 attempt 合并 usage。
+- 统一类型：`AgentModelRequest`、`AgentModelResponse`、`AgentModelStreamChunk`、
+  `AgentModelContentBlock` 等；`stopReason` 已归一为 Gateway 枚举
+  （`end` / `max_tokens` / `tool_use` / `other`），Runtime 不再接触 raw provider 字符串；
+- 标准错误：`AgentGatewayError`（含 `retryAfterMs`、`code` 与 `provider`）；
+- 公共 helper：`textFromContentBlocks`、`toolUseBlocksFromContent`、
+  `ensureToolResultPairing`、`isOutputTruncated`、`classifyGatewayRecovery` 等；
+- 程序消费者应只从 barrel import，不应 deep-import 子模块。
 
-`src/main/agent/runtime/turns/model-call-recovery.ts` 根据 Gateway 返回的错误和
-`stopReason` 决定 attempt 之间的恢复，包括退避、Context 压缩、输出 token 升级、
-截断续写和 fallback model。thinking-only 且因 token 上限结束也走这条 Runtime
+**私有 driver 层：**
+
+`anthropic.ts` 与 `openai.ts` 是 Gateway 私有的 SDK 适配器，只被 `AgentGateway`
+调用。它们负责统一消息与 SDK 类型的双向映射、一次 SDK 调用、原生流事件转换和
+`stopReason` 映射，不得在 driver 内做隐藏重试或跨 attempt 合并 usage。
+`openaiApiMode` 是 driver 私有配置，不出现在 `ResolvedAgentModelConfig`。
+
+**Runtime 恢复：**
+
+`src/main/agent/runtime/turns/model-call-recovery.ts` 根据 Gateway 返回的标准错误
+和归一化 `stopReason` 决定 attempt 之间的恢复，包括退避、Context 压缩、输出 token
+升级、截断续写和 fallback model。thinking-only 且因 token 上限结束也走这条 Runtime
 恢复路径。新增 Provider 时应实现相同的 prepared-request/response driver 协议，
 不能把 Provider 分支扩散进 Query Loop 或 Presentation 工具。
 
@@ -128,6 +137,8 @@ Gateway 当前支持 Anthropic 与 OpenAI 两条 driver 路径。`AgentGateway` 
 - `tests/model-call-recovery.test.ts`
 - `tests/native-tool-use.test.ts`
 - `tests/response-contract.test.ts`
+- `tests/agent-gateway-routing.test.ts`
+- `tests/agent-gateway-errors.test.ts`
 
 ### 4.3 Context 预算与压缩
 

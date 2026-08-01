@@ -8,6 +8,7 @@ import type {
   AgentModelStreamChunk,
   PreparedAgentModelRequest,
   ResolvedAgentModelConfig,
+  StopReason,
 } from "./types";
 
 function protocolError(message: string, config: ResolvedAgentModelConfig): AgentGatewayError {
@@ -46,6 +47,20 @@ function validateOptionalString(
 ): void {
   if (value !== undefined && typeof value !== "string") {
     throw protocolError(`Provider returned malformed ${field}.`, config);
+  }
+}
+
+const VALID_STOP_REASONS: ReadonlySet<string> = new Set([
+  "end", "max_tokens", "tool_use", "other",
+]);
+
+function validateOptionalStopReason(
+  value: unknown,
+  field: string,
+  config: ResolvedAgentModelConfig,
+): void {
+  if (value !== undefined && !VALID_STOP_REASONS.has(value as string)) {
+    throw protocolError(`Provider returned an unknown ${field}: ${value}.`, config);
   }
 }
 
@@ -172,7 +187,7 @@ export function validateAgentModelResponse(
     throw protocolError("Provider driver returned mismatched provider or model metadata.", config);
   }
   validateOptionalString(value.requestId, "requestId", config);
-  validateOptionalString(value.stopReason, "stopReason", config);
+  validateOptionalStopReason(value.stopReason, "stopReason", config);
   validateUsage(value.usage, config);
   validateResponseContent(value.content as AgentModelContentBlock[], config);
 }
@@ -200,7 +215,7 @@ export function validateStreamChunk(
   if (value.type !== "complete") {
     throw protocolError(`Provider returned an unsupported stream event: ${value.type}.`, config);
   }
-  validateOptionalString(value.stopReason, "stream stopReason", config);
+  validateOptionalStopReason(value.stopReason, "stream stopReason", config);
   validateUsage(value.usage, config);
   validateResponseContent(value.content as AgentModelContentBlock[], config);
 }

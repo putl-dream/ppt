@@ -7,7 +7,7 @@ import type {
   AgentModelMessage,
   AgentModelToolResultBlock,
   AgentModelToolUseBlock,
-} from "../../gateway/types";
+} from "../../gateway";
 import type { ToolContext } from "../../tools/tool-definition";
 
 declare const identityBrand: unique symbol;

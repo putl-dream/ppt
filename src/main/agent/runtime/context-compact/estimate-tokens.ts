@@ -1,5 +1,5 @@
 import type { ModelPromptPayload } from "../turns/model-call-recovery";
-import type { AgentModelMessage } from "../../gateway/types";
+import type { AgentModelMessage } from "../../gateway";
 import { CHARS_PER_TOKEN_ESTIMATE } from "./config";
 
 /**

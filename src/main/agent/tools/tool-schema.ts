@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { ToolDefinition } from "./tool-definition";
-import type { AgentToolSchema } from "../gateway/types";
+import type { AgentToolSchema } from "../gateway";
 
 /**
  * 将工具的 zod inputSchema 转为 provider 可直接使用的 JSON Schema。

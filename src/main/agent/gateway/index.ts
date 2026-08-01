@@ -2,7 +2,7 @@ import type { AgentModelSelection, AgentModelSettings, AgentProvider } from "@sh
 import type { AgentGatewayConfig } from "@shared/agent-gateway-config";
 import { resolveAgentGatewayConfig } from "@shared/agent-gateway-config";
 import { generateWithAnthropic, generateStreamWithAnthropic } from "./anthropic";
-import { resolveAgentModelConfig } from "./config";
+import { resolveAgentModelConfig, type DriverResolvedConfig } from "./config";
 import { generateWithOpenAI, generateStreamWithOpenAI } from "./openai";
 import { AgentGatewayError, normalizeProviderError } from "./errors";
 import {
@@ -15,7 +15,6 @@ import type {
   AgentModelRequest,
   AgentModelResponse,
   AgentModelStreamChunk,
-  ResolvedAgentModelConfig,
 } from "./types";
 import { createModuleLogger } from "../logger";
 import { textFromContentBlocks } from "./content-blocks";
@@ -82,7 +81,7 @@ export class AgentGateway implements AgentModelGateway {
 
   private resolveConfig(
     selection?: AgentModelSelection,
-  ) {
+  ): DriverResolvedConfig {
     return resolveAgentModelConfig(selection, this.runtimeSettings, process.env, this.gatewayConfig);
   }
 
@@ -93,7 +92,7 @@ export class AgentGateway implements AgentModelGateway {
   ): Promise<AgentModelResponse> {
     const gatewayRequestId = crypto.randomUUID();
     const startedAt = Date.now();
-    let config: ResolvedAgentModelConfig | undefined;
+    let config: DriverResolvedConfig | undefined;
 
     try {
       config = this.resolveConfig(selection);
@@ -155,7 +154,7 @@ export class AgentGateway implements AgentModelGateway {
   ): AsyncGenerator<AgentModelStreamChunk> {
     const gatewayRequestId = crypto.randomUUID();
     const startedAt = Date.now();
-    let config: ResolvedAgentModelConfig | undefined;
+    let config: DriverResolvedConfig | undefined;
 
     try {
       config = this.resolveConfig(selection);
@@ -232,14 +231,60 @@ export class AgentGateway implements AgentModelGateway {
   }
 }
 
+// -- Types --
 export type {
   AgentModelGateway,
   AgentModelRequest,
   AgentModelResponse,
   AgentModelStreamChunk,
   AgentResponseContract,
+  // 补齐常用类型，避免外部 deep-import
+  AgentModelContentBlock,
+  AgentModelMessage,
+  AgentModelTextBlock,
+  AgentModelThinkingBlock,
+  AgentModelImageBlock,
+  AgentModelToolUseBlock,
+  AgentModelToolResultBlock,
+  AgentToolSchema,
+  PreparedAgentModelRequest,
+  ResolvedAgentModelConfig,
+  StopReason,
 } from "./types";
-export { AgentGatewayError } from "./errors";
+
+// -- Errors (Gateway 标准错误与恢复分类) --
+export {
+  AgentGatewayError,
+  isOutputTruncated,
+  classifyGatewayRecovery,
+  isAbortError,
+  formatRecoverableAgentError,
+} from "./errors";
+export type { AgentGatewayErrorCode, GatewayRecoveryKind } from "./errors";
+
+// -- Content blocks --
+export {
+  textFromContentBlocks,
+  toolUseBlocksFromContent,
+  thinkingFromContentBlocks,
+  toolResultBlocksFromContent,
+  textBlock,
+} from "./content-blocks";
+
+// -- Message pairing --
+export { ensureToolResultPairing, withEphemeralPrompt } from "./message-pairing";
+
+// -- Response contract --
+export { buildContentBlockResponseGuidance } from "./response-contract";
+
+// -- Config (仅 Runtime 需要的 fallback 选择) --
+export { resolveFallbackModelSelection } from "./config";
+
+// -- Retry --
+export { backoffBeforeRetry, computeBackoffDelayMs, sleepWithAbort } from "./withRetry";
+export type { RetryOptions } from "./withRetry";
+
+// -- Model calls --
 export {
   callLLM,
   callTool,

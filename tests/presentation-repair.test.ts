@@ -7,6 +7,7 @@ import {
   slideSchema,
 } from "../src/shared/presentation";
 import {
+  migrateDisplayCardsToSvgOnly,
   migratePresentationToSvgOnly,
   repairPresentationIdentities,
 } from "../src/shared/presentation-repair";
@@ -163,5 +164,103 @@ describe("migratePresentationToSvgOnly", () => {
     const parsed = presentationSchema.parse(migrated.value);
     expect(parsed.slides[0].visualSource.resources).toHaveLength(1);
     expect(parsed.slides[0].visualSource.resources[0].sourcePath).toBe("assets/photo.png");
+  });
+});
+
+describe("migrateDisplayCardsToSvgOnly", () => {
+  const svgSlide = () => ({
+    id: "slide-svg",
+    title: "SVG slide",
+    visualSource: createSvgVisualSource({ title: "SVG slide" }),
+  });
+
+  const legacySlide = () => ({
+    id: "slide-legacy",
+    title: "Legacy slide",
+    elements: [{ id: "el-1", type: "text", text: "hello" }],
+    layout: "cover",
+    visualSource: createSvgVisualSource({ title: "Legacy slide" }),
+  });
+
+  it("strips legacy keys from slides inside review.command-proposal commands", () => {
+    const cards = [{
+      event: {
+        kind: "review.command-proposal",
+        category: "review",
+        id: "evt-1",
+        threadId: "th-1",
+        receivedAt: Date.now(),
+        payload: {
+          threadId: "th-1",
+          jobId: "job-1",
+          queryId: "q-1",
+          proposalId: "p-1",
+          summary: "Test",
+          commands: [
+            { id: "cmd-1", type: "add-slide", slide: legacySlide(), index: 0 },
+          ],
+        },
+      },
+      status: "active",
+      receivedAt: Date.now(),
+    }];
+
+    const result = migrateDisplayCardsToSvgOnly(cards);
+    expect(result.strippedLegacyFieldCount).toBe(2); // elements + layout
+    expect(result.droppedLegacySlideCount).toBe(0);
+
+    const migrated = result.value as typeof cards;
+    const slide = (migrated[0] as Record<string, unknown>).event
+      ? (migrated[0].event as Record<string, unknown>).payload
+        ? ((migrated[0].event as Record<string, unknown>).payload as Record<string, unknown>).commands
+          ? (((migrated[0].event as Record<string, unknown>).payload as Record<string, unknown>).commands as Array<Record<string, unknown>>)[0].slide as Record<string, unknown>
+          : {}
+        : {}
+      : {};
+    expect(slide).not.toHaveProperty("elements");
+    expect(slide).not.toHaveProperty("layout");
+  });
+
+  it("strips legacy keys from slides inside review.command-proposal preview", () => {
+    const cards = [{
+      event: {
+        kind: "review.command-proposal",
+        category: "review",
+        id: "evt-2",
+        threadId: "th-2",
+        receivedAt: Date.now(),
+        payload: {
+          threadId: "th-2",
+          jobId: "job-2",
+          queryId: "q-2",
+          proposalId: "p-2",
+          summary: "Test",
+          commands: [],
+          preview: { id: "prez", title: "Test", revision: 0, slides: [legacySlide()], designSystem: {} },
+        },
+      },
+      status: "active",
+      receivedAt: Date.now(),
+    }];
+
+    const result = migrateDisplayCardsToSvgOnly(cards);
+    expect(result.strippedLegacyFieldCount).toBe(2);
+  });
+
+  it("leaves non command-proposal cards untouched", () => {
+    const cards = [{
+      event: { kind: "progress.task-list-updated", category: "progress", id: "evt-3", threadId: "th-3", receivedAt: Date.now(), payload: {} },
+      status: "active",
+      receivedAt: Date.now(),
+    }];
+
+    const result = migrateDisplayCardsToSvgOnly(cards);
+    expect(result.strippedLegacyFieldCount).toBe(0);
+    expect(result.value).toEqual(cards);
+  });
+
+  it("handles empty or non-array input gracefully", () => {
+    expect(migrateDisplayCardsToSvgOnly(null).strippedLegacyFieldCount).toBe(0);
+    expect(migrateDisplayCardsToSvgOnly([]).strippedLegacyFieldCount).toBe(0);
   });
 });

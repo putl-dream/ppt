@@ -7,7 +7,7 @@ import type {
   AgentModelMessage,
   AgentModelToolResultBlock,
   AgentModelToolUseBlock,
-} from "../gateway/types";
+} from "../gateway";
 import { readJsonFile, writeJsonFileAtomic } from "./atomic-json-file";
 import { ConversationDatabase } from "../../conversation-database";
 import type { DurableBackgroundTask } from "../runtime/background/background-task-manager";

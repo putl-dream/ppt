@@ -1,5 +1,5 @@
 import type { AgentStepLimits } from "@shared/agent-step-limits";
-import { buildContentBlockResponseGuidance } from "../../gateway/response-contract";
+import { buildContentBlockResponseGuidance } from "../../gateway";
 import type { SkillRegistry } from "../../skills/loadSkillsDir";
 import type { SkillCard } from "../../skills/skill-types";
 import type { ToolDefinition } from "../../tools/tool-definition";

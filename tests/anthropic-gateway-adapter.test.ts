@@ -88,7 +88,7 @@ describe("Anthropic driver", () => {
         { type: "text", text: "answer" },
       ],
       requestId: "req-anthropic",
-      stopReason: "end_turn",
+      stopReason: "end",
       usage: {
         inputTokens: 100,
         outputTokens: 40,
@@ -190,7 +190,7 @@ describe("Anthropic driver", () => {
       {
         type: "complete",
         content: [{ type: "text", text: "answer" }],
-        stopReason: "end_turn",
+        stopReason: "end",
         usage: { inputTokens: 3, outputTokens: 4, totalTokens: 7 },
       },
     ]);

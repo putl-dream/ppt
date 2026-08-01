@@ -225,8 +225,7 @@ describe("AgentGateway", () => {
       provider: "openai",
       model: "openai-test",
       content: [{ type: "text", text: "hello" }],
-      stopReason: 42,
-      usage: { inputTokens: 1, outputTokens: -1, totalTokens: 0 },
+      stopReason: "length",
     });
     await expect(gateway.generateText({ prompt: "Hello" }, selection)).rejects.toMatchObject({
       code: "provider-error",
@@ -248,14 +247,22 @@ describe("AgentGateway", () => {
     });
 
     providerMocks.openaiStream.mockImplementationOnce(async function* () {
-      yield { type: "complete", content: [{ type: "text", text: "done" }] };
-      yield { type: "text_delta", text: "late" };
+      yield { type: "complete", content: [{ type: "text", text: "done" }], stopReason: "length" };
     });
     const consume = async () => {
       for await (const _chunk of gateway.generateTextStream({ prompt: "Hello" }, selection)) {
         // consume
       }
     };
+    await expect(consume()).rejects.toMatchObject({
+      code: "provider-error",
+      provider: "openai",
+    });
+
+    providerMocks.openaiStream.mockImplementationOnce(async function* () {
+      yield { type: "complete", content: [{ type: "text", text: "done" }] };
+      yield { type: "text_delta", text: "late" };
+    });
     await expect(consume()).rejects.toMatchObject({
       code: "provider-error",
       provider: "openai",

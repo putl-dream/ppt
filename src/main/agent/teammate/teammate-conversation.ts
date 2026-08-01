@@ -2,7 +2,7 @@ import type {
   AgentModelContentBlock,
   AgentModelMessage,
   AgentModelToolResultBlock,
-} from "../gateway/types";
+} from "../gateway";
 
 export class TeammateConversation {
   private readonly transcript: Array<Record<string, unknown>>;

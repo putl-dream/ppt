@@ -2,7 +2,7 @@ import type {
   AgentModelContentBlock,
   AgentModelGateway,
   AgentModelToolResultBlock,
-} from "../gateway/types";
+} from "../gateway";
 import type { AgentModelSelection } from "@shared/agent";
 import type { AgentStepLimits } from "@shared/agent-step-limits";
 import type { AgentTaskNode } from "@shared/agent-task-list";

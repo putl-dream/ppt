@@ -1,4 +1,4 @@
-import type { AgentModelToolResultBlock, AgentModelToolUseBlock } from "../../gateway/types";
+import type { AgentModelToolResultBlock, AgentModelToolUseBlock } from "../../gateway";
 import type { ToolContext, ToolDefinition } from "../../tools/tool-definition";
 import type { ToolInputRepair } from "../../tools/tool-input";
 import { parseDefinedToolInput } from "../../tools/tool-input";

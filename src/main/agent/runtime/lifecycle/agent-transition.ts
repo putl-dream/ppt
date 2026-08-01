@@ -2,7 +2,7 @@ import type {
   AgentModelContentBlock,
   AgentModelToolResultBlock,
   AgentModelToolUseBlock,
-} from "../../gateway/types";
+} from "../../gateway";
 import type { DurableRunStatus } from "../../persistence/durable-run-store";
 import type { AgentRuntimeResult } from "../runtime-types";
 

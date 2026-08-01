@@ -6,6 +6,11 @@ import {
 import { AgentGatewayError } from "./errors";
 import type { ResolvedAgentModelConfig } from "./types";
 
+/** Internal config passed to provider drivers. Carries SDK routing details. */
+export interface DriverResolvedConfig extends ResolvedAgentModelConfig {
+  openaiApiMode?: "responses" | "chat-completions";
+}
+
 export const DEFAULT_AGENT_MODELS: Record<AgentProvider, string> = {
   openai: "gpt-5.5",
   anthropic: "claude-sonnet-4-6",
@@ -90,7 +95,7 @@ export function resolveAgentModelConfig(
   runtimeSettings: Partial<Record<AgentProvider, AgentModelSettings>>,
   env: NodeJS.ProcessEnv = process.env,
   gatewayConfig?: AgentGatewayConfig,
-): ResolvedAgentModelConfig {
+): DriverResolvedConfig {
   const provider = selection?.provider ?? inferProvider(env);
   const runtime = runtimeSettings[provider];
   const apiKey = runtime?.apiKey ??

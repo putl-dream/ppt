@@ -156,3 +156,63 @@ export function migratePresentationToSvgOnly(
     strippedLegacyFieldCount,
   };
 }
+
+const LEGACY_SLIDE_KEYS = ["elements", "layout", "grammarVariant"] as const;
+
+function stripLegacySlideKeys(slide: JsonRecord): number {
+  let stripped = 0;
+  for (const key of LEGACY_SLIDE_KEYS) {
+    if (key in slide) {
+      delete slide[key];
+      stripped += 1;
+    }
+  }
+  return stripped;
+}
+
+/**
+ * Strip legacy element-IR / Layout Grammar fields from slides embedded inside
+ * persisted display cards (review.command-proposal commands + preview), so that
+ * Zod strict() validation does not reject cached display state from earlier
+ * app versions.
+ */
+export function migrateDisplayCardsToSvgOnly(
+  displayCards: unknown,
+): PresentationSvgMigrationResult {
+  if (!Array.isArray(displayCards)) {
+    return { value: displayCards, droppedLegacySlideCount: 0, strippedLegacyFieldCount: 0 };
+  }
+
+  const value = structuredClone(displayCards);
+  if (!Array.isArray(value)) {
+    return { value: displayCards, droppedLegacySlideCount: 0, strippedLegacyFieldCount: 0 };
+  }
+
+  let strippedLegacyFieldCount = 0;
+
+  for (const card of value) {
+    if (!isRecord(card)) continue;
+    const event = isRecord(card.event) ? card.event : undefined;
+    if (!event || event.kind !== "review.command-proposal") continue;
+    const payload = isRecord(event.payload) ? event.payload : undefined;
+    if (!payload) continue;
+
+    // payload.commands[].slide
+    const commands = Array.isArray(payload.commands) ? payload.commands : [];
+    for (const cmd of commands) {
+      if (!isRecord(cmd)) continue;
+      const slide = isRecord(cmd.slide) ? cmd.slide : undefined;
+      if (slide) strippedLegacyFieldCount += stripLegacySlideKeys(slide);
+    }
+
+    // payload.preview.slides[]
+    const preview = isRecord(payload.preview) ? payload.preview : undefined;
+    if (preview && Array.isArray(preview.slides)) {
+      for (const slide of preview.slides) {
+        if (isRecord(slide)) strippedLegacyFieldCount += stripLegacySlideKeys(slide);
+      }
+    }
+  }
+
+  return { value, droppedLegacySlideCount: 0, strippedLegacyFieldCount };
+}

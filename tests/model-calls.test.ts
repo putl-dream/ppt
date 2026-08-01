@@ -3,16 +3,17 @@ import type {
   AgentModelContentBlock,
   AgentModelGateway,
   AgentModelRequest,
-} from "../src/main/agent/gateway/types";
+  StopReason,
+} from "../src/main/agent/gateway";
 import {
   callLLM,
   callTool,
   ModelOutputError,
-} from "../src/main/agent/gateway/model-calls";
+} from "../src/main/agent/gateway";
 
 function createGateway(
   content: AgentModelContentBlock[],
-  stopReason?: string,
+  stopReason?: StopReason,
 ) {
   const requests: AgentModelRequest[] = [];
   const generateText = vi.fn(async (request: AgentModelRequest) => {
@@ -64,7 +65,7 @@ describe("typed model calls", () => {
   it("callLLM rejects non-empty Markdown when the provider reports truncation", async () => {
     const { gateway } = createGateway(
       [{ type: "text", text: "A plausible but incomplete summary." }],
-      "max_output_tokens",
+      "max_tokens",
     );
 
     await expect(callLLM(gateway, {

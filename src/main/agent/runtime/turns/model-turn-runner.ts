@@ -1,8 +1,8 @@
-import { ensureToolResultPairing } from "../../gateway/message-pairing";
 import {
+  ensureToolResultPairing,
   textFromContentBlocks,
   toolUseBlocksFromContent,
-} from "../../gateway/content-blocks";
+} from "../../gateway";
 import { callModelWithRecovery } from "./model-call-recovery";
 import type { AgentLoopTurnOutcome, PreparedAgentRun } from "./prepared-agent-run";
 import type {

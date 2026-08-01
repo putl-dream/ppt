@@ -1,4 +1,4 @@
-import type { AgentModelMessage } from "../../gateway/types";
+import type { AgentModelMessage } from "../../gateway";
 import type { ToolContext } from "../../tools/tool-definition";
 import type { AgentRuntimeOptions } from "../runtime-types";
 import type {

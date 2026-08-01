@@ -9,7 +9,9 @@ import type {
   AgentModelToolResultBlock,
   PreparedAgentModelRequest,
   ResolvedAgentModelConfig,
+  StopReason,
 } from "./types";
+import type { DriverResolvedConfig } from "./config";
 
 function tokenCount(value: unknown): number {
   return typeof value === "number" && Number.isFinite(value) && value > 0
@@ -33,6 +35,16 @@ function extractAnthropicUsage(value: unknown): ProviderTokenUsage | undefined {
     ...(cachedInputTokens > 0 ? { cachedInputTokens } : {}),
     ...(cacheCreationInputTokens > 0 ? { cacheCreationInputTokens } : {}),
   };
+}
+
+function toStopReason(raw: string | null | undefined): StopReason | undefined {
+  if (!raw) return undefined;
+  switch (raw) {
+    case "end_turn":   return "end";
+    case "max_tokens": return "max_tokens";
+    case "tool_use":   return "tool_use";
+    default:           return "other";
+  }
 }
 
 function toAnthropicImageBlock(image: AgentModelImageBlock): Anthropic.ImageBlockParam {
@@ -138,7 +150,7 @@ function createAnthropicClient(config: ResolvedAgentModelConfig): Anthropic {
 }
 
 function buildAnthropicRequest(
-  config: ResolvedAgentModelConfig,
+  config: DriverResolvedConfig,
   request: PreparedAgentModelRequest,
 ): Anthropic.MessageCreateParamsNonStreaming {
   return {
@@ -160,7 +172,7 @@ function buildAnthropicRequest(
 
 /** Execute one non-streaming Anthropic driver attempt. */
 export async function generateWithAnthropic(
-  config: ResolvedAgentModelConfig,
+  config: DriverResolvedConfig,
   request: PreparedAgentModelRequest,
 ): Promise<AgentModelResponse> {
   const response = await createAnthropicClient(config).messages.create(
@@ -173,14 +185,14 @@ export async function generateWithAnthropic(
     model: config.model,
     content: extractContentBlocks(response.content),
     requestId: response._request_id ?? undefined,
-    stopReason: response.stop_reason ?? undefined,
+    stopReason: toStopReason(response.stop_reason),
     ...(usage ? { usage } : {}),
   };
 }
 
 /** Execute one streaming Anthropic driver attempt. */
 export async function* generateStreamWithAnthropic(
-  config: ResolvedAgentModelConfig,
+  config: DriverResolvedConfig,
   request: PreparedAgentModelRequest,
 ): AsyncGenerator<AgentModelStreamChunk> {
   const stream = createAnthropicClient(config).messages.stream(
@@ -201,7 +213,7 @@ export async function* generateStreamWithAnthropic(
   yield {
     type: "complete",
     content: extractContentBlocks(finalMessage.content),
-    stopReason: finalMessage.stop_reason ?? undefined,
+    stopReason: toStopReason(finalMessage.stop_reason),
     ...(usage ? { usage } : {}),
   };
 }

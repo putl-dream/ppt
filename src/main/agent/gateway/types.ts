@@ -4,6 +4,9 @@ import type { ProviderTokenUsage } from "@shared/token-usage";
 
 export type AgentResponseContract = "markdown" | "markdown-summary" | "none";
 
+/** Provider-neutral stop reason, normalized at the driver boundary. */
+export type StopReason = "end" | "max_tokens" | "tool_use" | "other";
+
 /**
  * 原生 tool-use 的工具声明。inputSchema 为标准 JSON Schema（由 zod 转换而来），
  * 直接透传给 provider 的 tools 字段。
@@ -15,9 +18,11 @@ export interface AgentToolSchema {
 }
 
 /**
- * 扩展思考模式返回的 thinking 块。开启 thinking 后，若 assistant 轮包含
- * tool_use，Anthropic 要求下一次请求原样回传这些块（含 signature），
- * 否则报错 `content[].thinking ... must be passed back`。
+ * Extended thinking block produced by providers that support thinking/reasoning.
+ * When an assistant turn includes thinking + tool_use, the provider may require
+ * the same blocks (with `signature`) to be round-tripped in the next request.
+ * Drivers that produce thinking blocks MUST populate both `thinking` and
+ * `signature` fields so the protocol remains provider-neutral.
  */
 export type AgentModelTextBlock = { type: "text"; text: string };
 
@@ -109,7 +114,7 @@ export interface AgentModelResponse {
   /** Sole model payload. */
   content: AgentModelContentBlock[];
   requestId?: string;
-  stopReason?: string;
+  stopReason?: StopReason;
   /** Provider-reported usage for this exact API request. */
   usage?: ProviderTokenUsage;
 }
@@ -123,7 +128,7 @@ export type AgentModelStreamChunk =
   | {
       type: "complete";
       content: AgentModelContentBlock[];
-      stopReason?: string;
+      stopReason?: StopReason;
       usage?: ProviderTokenUsage;
     };
 
@@ -134,14 +139,13 @@ export interface AgentModelStreamMetadata {
   provider: AgentProvider;
   model: string;
   requestId?: string;
-  stopReason?: string;
+  stopReason?: StopReason;
   usage?: ProviderTokenUsage;
 }
 
 export interface ResolvedAgentModelConfig extends AgentModelSelection {
   apiKey: string;
   baseURL?: string;
-  openaiApiMode?: "responses" | "chat-completions";
   timeoutMs: number;
   maxOutputTokens: number;
 }

@@ -3,7 +3,11 @@ import type { AgentModelSelection } from "@shared/agent";
 import type { AgentStepLimits } from "@shared/agent-step-limits";
 import type { AgentTaskNode } from "@shared/agent-task-list";
 import type { Presentation } from "@shared/presentation";
-import type { AgentModelGateway } from "../gateway";
+import type {
+  AgentModelGateway,
+  AgentModelImageBlock,
+  AgentModelTextBlock,
+} from "../gateway";
 import type { ToolApprovalHandler } from "../runtime/tools/permission-check";
 import type { ToolPermissionProfile, ToolRisk } from "../runtime/tools/tool-access-policy";
 import type { TeammateProgressListener } from "@shared/teammate-progress";
@@ -15,10 +19,6 @@ import type { PromptStage } from "../runtime/prompts/prompt-stage";
 import type { MessageBus } from "../teammate/message-bus";
 import type { TeammateManager } from "../teammate/spawn-teammate";
 import type { WorkspaceFileService } from "./files/workspace-file-service";
-import type {
-  AgentModelImageBlock,
-  AgentModelTextBlock,
-} from "../gateway/types";
 import type {
   ArtifactDependency,
   ArtifactKind,

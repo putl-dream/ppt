@@ -4,7 +4,7 @@ import type { ConversationDatabase } from "../../../conversation-database";
 import type {
   AgentModelGateway,
   AgentToolSchema,
-} from "../../gateway/types";
+} from "../../gateway";
 import type {
   ToolContext,
   ToolRuntimeCapability,

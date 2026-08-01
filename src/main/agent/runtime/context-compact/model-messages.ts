@@ -1,10 +1,8 @@
-import {
-  ensureToolResultPairing,
-} from "../../gateway/message-pairing";
 import type {
   AgentModelMessage,
   AgentModelToolResultBlock,
-} from "../../gateway/types";
+} from "../../gateway";
+import { ensureToolResultPairing } from "../../gateway";
 import {
   MICRO_COMPACT_ALWAYS_PRESERVE_TOOLS,
   MICRO_COMPACT_KEEP_TOOL_RESULTS,

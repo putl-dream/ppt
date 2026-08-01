@@ -23,45 +23,6 @@ export function computeBackoffDelayMs(attempt: number, retryAfterMs?: number): n
   return base + jitter;
 }
 
-export function extractRetryAfterMs(error: unknown): number | undefined {
-  if (!error || typeof error !== "object") return undefined;
-
-  const headers = (error as { headers?: unknown }).headers;
-  if (headers && typeof headers === "object") {
-    const get = (headers as { get?: (name: string) => string | null }).get;
-    if (typeof get === "function") {
-      const value = get.call(headers, "retry-after");
-      const parsed = parseRetryAfterHeader(value);
-      if (parsed !== undefined) return parsed;
-    }
-    const retryAfter = (headers as { "retry-after"?: unknown })["retry-after"];
-    const parsed = parseRetryAfterHeader(retryAfter);
-    if (parsed !== undefined) return parsed;
-  }
-
-  const retryAfter = (error as { retryAfter?: unknown }).retryAfter;
-  return parseRetryAfterHeader(retryAfter);
-}
-
-function parseRetryAfterHeader(value: unknown): number | undefined {
-  if (value === undefined || value === null) return undefined;
-  if (typeof value === "number" && Number.isFinite(value) && value > 0) {
-    return Math.ceil(value * 1000);
-  }
-  if (typeof value === "string") {
-    const seconds = Number(value);
-    if (Number.isFinite(seconds) && seconds > 0) {
-      return Math.ceil(seconds * 1000);
-    }
-    const dateMs = Date.parse(value);
-    if (Number.isFinite(dateMs)) {
-      const delay = dateMs - Date.now();
-      return delay > 0 ? delay : undefined;
-    }
-  }
-  return undefined;
-}
-
 export async function sleepWithAbort(ms: number, signal?: AbortSignal): Promise<void> {
   if (ms <= 0) return;
   if (signal?.aborted) {

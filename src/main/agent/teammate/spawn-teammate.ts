@@ -6,7 +6,7 @@ import type {
   AgentModelToolResultBlock,
   AgentModelToolUseBlock,
   AgentToolSchema,
-} from "../gateway/types";
+} from "../gateway";
 import type { AgentTaskNode } from "@shared/agent-task-list";
 import {
   formatTeammateToolProgress,
@@ -19,8 +19,11 @@ import {
   resolveAgentStepLimits,
 } from "@shared/agent-step-limits";
 import { callModelWithRecovery } from "../runtime/turns/model-call-recovery";
-import { textFromContentBlocks, toolUseBlocksFromContent } from "../gateway/content-blocks";
-import { ensureToolResultPairing } from "../gateway/message-pairing";
+import {
+  ensureToolResultPairing,
+  textFromContentBlocks,
+  toolUseBlocksFromContent,
+} from "../gateway";
 import { ensureDefaultHooks } from "../runtime/hooks/default-hooks";
 import { triggerHooks } from "../runtime/hooks/hook-registry";
 import type { PostToolUseBlock, StopBlock } from "../runtime/hooks/hook-blocks";

@@ -13,7 +13,7 @@ import {
   type SessionChatMessage,
   type SessionSnapshot,
 } from "@shared/session";
-import { repairPresentationIdentities, migratePresentationToSvgOnly } from "@shared/presentation-repair";
+import { repairPresentationIdentities, migratePresentationToSvgOnly, migrateDisplayCardsToSvgOnly } from "@shared/presentation-repair";
 import { withSqliteTransaction } from "./sqlite-transaction";
 
 interface StoredSessionRow {
@@ -242,12 +242,16 @@ export class ConversationDatabase {
       const repairedPresentation = migratePresentationToSvgOnly(
         repairPresentationIdentities(stored.presentation).value,
       ).value;
+      const repairedDisplayCards = migrateDisplayCardsToSvgOnly(
+        stored.displayCards ?? [],
+      ).value;
       const messageRows = this.database.prepare(
         "SELECT message_json FROM messages WHERE session_id = ? ORDER BY ordinal ASC",
       ).all(row.id) as unknown as StoredMessageRow[];
       return sessionSnapshotSchema.parse({
         ...stored,
         presentation: repairedPresentation,
+        displayCards: repairedDisplayCards,
         messages: messageRows.map((message) =>
           sessionChatMessageSchema.parse(JSON.parse(message.message_json))),
       });

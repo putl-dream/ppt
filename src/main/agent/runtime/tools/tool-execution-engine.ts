@@ -1,4 +1,4 @@
-import type { AgentModelToolResultBlock, AgentModelToolUseBlock } from "../../gateway/types";
+import type { AgentModelToolResultBlock, AgentModelToolUseBlock } from "../../gateway";
 import type { ToolContext, ToolDefinition } from "../../tools/tool-definition";
 import { validateToolOutput } from "../../tools/tool-validation";
 import type { PostToolUseBlock } from "../hooks/hook-blocks";

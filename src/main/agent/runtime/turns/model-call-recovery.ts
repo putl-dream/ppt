@@ -7,23 +7,25 @@ import type {
   AgentModelStreamChunk,
   AgentResponseContract,
   AgentToolSchema,
-} from "../../gateway/types";
-import { textFromContentBlocks, toolUseBlocksFromContent } from "../../gateway/content-blocks";
-import { resolveFallbackModelSelection } from "../../gateway/config";
+  StopReason,
+} from "../../gateway";
 import {
+  textFromContentBlocks,
+  toolUseBlocksFromContent,
+  resolveFallbackModelSelection,
   AgentGatewayError,
   classifyGatewayRecovery,
   isAbortError,
   isOutputTruncated,
-} from "../../gateway/errors";
-import { backoffBeforeRetry, extractRetryAfterMs } from "../../gateway/withRetry";
+  backoffBeforeRetry,
+  callTool,
+} from "../../gateway";
 import {
   emergencyTrimContext,
   emergencyTrimModelMessages,
   prepareContext,
 } from "../context-compact";
 import { createModuleLogger } from "../../logger";
-import { callTool } from "../../gateway/model-calls";
 
 const logger = createModuleLogger("model-call-recovery");
 const MAX_RECOVERY_ATTEMPTS = 8;
@@ -79,7 +81,7 @@ export interface ModelCallRecoveryOptions {
 
 export interface ModelCallRecoveryResult {
   content: AgentModelContentBlock[];
-  stopReason?: string;
+  stopReason?: StopReason;
   modelUsed?: AgentModelSelection;
   recoveryNotes: string[];
   maxOutputTokensOverride?: number;
@@ -178,11 +180,11 @@ async function invokeGateway(
   },
   model: AgentModelSelection | undefined,
   stream?: ModelCallRecoveryOptions["stream"],
-): Promise<{ content: AgentModelContentBlock[]; stopReason?: string }> {
+): Promise<{ content: AgentModelContentBlock[]; stopReason?: StopReason }> {
   if (stream?.onChunk || stream?.onThinkingChunk) {
     let streamedText = "";
     let content: AgentModelContentBlock[] = [];
-    let stopReason: string | undefined;
+    let stopReason: StopReason | undefined;
     for await (const chunk of gateway.generateTextStream(request, model)) {
       if (chunk.type === "thinking_delta") {
         stream.onThinkingChunk?.(chunk.thinking);
@@ -419,7 +421,7 @@ export async function callModelWithRecovery(
         }
       }
 
-      const retryAfterMs = extractRetryAfterMs(error);
+      const retryAfterMs = error instanceof AgentGatewayError ? error.retryAfterMs : undefined;
       notify(
         retryAfterMs
           ? `临时故障，按 Retry-After 等待后重试（第 ${attempt} 次）。`

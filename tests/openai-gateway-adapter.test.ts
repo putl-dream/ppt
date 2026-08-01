@@ -80,7 +80,7 @@ describe("OpenAI driver", () => {
       model: "openai-test",
       content: [{ type: "text", text: "answer" }],
       requestId: "req-chat",
-      stopReason: "stop",
+      stopReason: "end",
       usage: { inputTokens: 10, outputTokens: 4, totalTokens: 14 },
     });
   });
@@ -197,7 +197,7 @@ describe("OpenAI driver", () => {
       {
         type: "complete",
         content: [{ type: "text", text: "hello" }],
-        stopReason: "stop",
+        stopReason: "end",
         usage: { inputTokens: 2, outputTokens: 1, totalTokens: 3 },
       },
     ]);

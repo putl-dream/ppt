@@ -1,4 +1,4 @@
-import type { AgentModelToolResultBlock, AgentModelToolUseBlock } from "../../gateway/types";
+import type { AgentModelToolResultBlock, AgentModelToolUseBlock } from "../../gateway";
 import {
   describeBackgroundTask,
 } from "../background/background-task-manager";

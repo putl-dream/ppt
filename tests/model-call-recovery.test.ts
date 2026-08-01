@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
-import { computeBackoffDelayMs, extractRetryAfterMs } from "../src/main/agent/gateway/withRetry";
+import { computeBackoffDelayMs } from "../src/main/agent/gateway";
 import {
+  AgentGatewayError,
   classifyGatewayRecovery,
   isOutputTruncated,
   normalizeProviderError,
@@ -10,7 +11,7 @@ import { callModelWithRecovery } from "../src/main/agent/runtime/turns/model-cal
 import type {
   AgentModelGateway,
   AgentModelMessage,
-} from "../src/main/agent/gateway/types";
+} from "../src/main/agent/gateway";
 
 function textContent(text: string) {
   return [{ type: "text" as const, text }];
@@ -53,14 +54,17 @@ describe("computeBackoffDelayMs", () => {
   });
 });
 
-describe("extractRetryAfterMs", () => {
-  it("parses numeric seconds from headers", () => {
-    const error = {
+describe("retryAfterMs on AgentGatewayError", () => {
+  it("parses numeric seconds from headers and stores on error", () => {
+    const raw = {
+      status: 429,
       headers: {
         get: (name: string) => (name === "retry-after" ? "3" : null),
       },
+      message: "rate limited",
     };
-    expect(extractRetryAfterMs(error)).toBe(3000);
+    const error = normalizeProviderError("anthropic", raw) as AgentGatewayError;
+    expect(error.retryAfterMs).toBe(3000);
   });
 });
 
@@ -101,8 +105,8 @@ describe("gateway recovery classification", () => {
 
   it("detects output truncation stop reasons", () => {
     expect(isOutputTruncated("max_tokens")).toBe(true);
-    expect(isOutputTruncated("length")).toBe(true);
-    expect(isOutputTruncated("stop")).toBe(false);
+    expect(isOutputTruncated("end")).toBe(false);
+    expect(isOutputTruncated("tool_use")).toBe(false);
   });
 });
 
@@ -156,9 +160,14 @@ describe("callModelWithRecovery", () => {
 
   it("retries the same request on 429 without appending partial output", async () => {
     vi.useFakeTimers();
+    const rateLimit = new AgentGatewayError(
+      "openai rate limit exceeded: rate limited",
+      "rate-limit",
+      "openai",
+    );
     const generateText = vi
       .fn()
-      .mockRejectedValueOnce(Object.assign(new Error("rate limited"), { status: 429 }))
+      .mockRejectedValueOnce(rateLimit)
       .mockResolvedValueOnce({ provider: "openai", model: "gpt", content: textContent("ok") });
 
     const gateway: AgentModelGateway = {
@@ -219,10 +228,13 @@ describe("callModelWithRecovery", () => {
   it("does not notify or wait for another retry after the final failed attempt", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date(0));
-    const error = Object.assign(new Error("rate limited"), {
-      status: 429,
-      headers: { get: () => "1" },
-    });
+    const error = new AgentGatewayError(
+      "openai rate limit exceeded: rate limited",
+      "rate-limit",
+      "openai",
+      undefined,
+      1_000,
+    );
     const generateText = vi.fn().mockRejectedValue(error);
     const progress: string[] = [];
     const gateway: AgentModelGateway = {
@@ -249,11 +261,51 @@ describe("callModelWithRecovery", () => {
     vi.useRealTimers();
   });
 
+  it("honors AgentGatewayError.retryAfterMs when backing off", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(0));
+    const rateLimit = new AgentGatewayError(
+      "anthropic rate limit exceeded: rate limited",
+      "rate-limit",
+      "anthropic",
+      undefined,
+      2_500,
+    );
+    const generateText = vi
+      .fn()
+      .mockRejectedValueOnce(rateLimit)
+      .mockResolvedValueOnce({ provider: "anthropic", model: "test", content: textContent("ok") });
+    const gateway: AgentModelGateway = {
+      generateText,
+      async *generateTextStream() {
+        yield { type: "complete" as const, content: [] };
+      },
+    };
+    const notes: string[] = [];
+
+    const startedAt = Date.now();
+    const promise = callModelWithRecovery({
+      gateway,
+      systemPrompt: "system",
+      promptPayload: { transcript: [], request: "hello" },
+      onRecovery: (message) => notes.push(message),
+    });
+    await vi.runAllTimersAsync();
+    const result = await promise;
+
+    expect(result.content).toEqual(textContent("ok"));
+    expect(generateText).toHaveBeenCalledTimes(2);
+    expect(Date.now() - startedAt).toBe(2_500);
+    expect(result.recoveryNotes[0]).toMatch(/Retry-After/);
+    expect(notes).toEqual(["服务暂时繁忙，正在重试…"]);
+    vi.useRealTimers();
+  });
+
   it("emergency-trims transcript on prompt-too-long before retrying", async () => {
     const generateText = vi
       .fn()
       .mockRejectedValueOnce(
-        Object.assign(new Error("prompt is too long"), { status: 400 }),
+        new AgentGatewayError("openai prompt too long: prompt is too long", "prompt-too-long", "openai"),
       )
       .mockResolvedValueOnce({ provider: "openai", model: "gpt", content: textContent("ok") });
 
@@ -287,7 +339,11 @@ describe("callModelWithRecovery", () => {
     const generateText = vi
       .fn()
       .mockRejectedValueOnce(
-        Object.assign(new Error("maximum context length exceeded"), { status: 400 }),
+        new AgentGatewayError(
+          "openai prompt too long: maximum context length exceeded",
+          "prompt-too-long",
+          "openai",
+        ),
       )
       .mockResolvedValueOnce({
         provider: "openai",
@@ -333,7 +389,7 @@ describe("callModelWithRecovery", () => {
         provider: "anthropic",
         model: "claude",
         content: textContent("done"),
-        stopReason: "end_turn",
+        stopReason: "end",
       });
 
     const gateway: AgentModelGateway = {
@@ -378,7 +434,7 @@ describe("callModelWithRecovery", () => {
         provider: "anthropic",
         model: "claude",
         content: textContent("answer"),
-        stopReason: "end_turn",
+        stopReason: "end",
       });
     const gateway: AgentModelGateway = {
       generateText,
@@ -420,7 +476,7 @@ describe("callModelWithRecovery", () => {
         provider: "anthropic",
         model: "claude",
         content: textContent("gamma"),
-        stopReason: "end_turn",
+        stopReason: "end",
       });
     const gateway: AgentModelGateway = {
       generateText,
@@ -442,7 +498,7 @@ describe("callModelWithRecovery", () => {
       .toBe("alpha");
     expect(JSON.parse(generateText.mock.calls[2][0].prompt).continuation.partialOutput)
       .toBe("alphabeta");
-    expect(result.stopReason).toBe("end_turn");
+    expect(result.stopReason).toBe("end");
   });
 
   it("continues native history from an ephemeral assistant partial", async () => {
@@ -458,7 +514,7 @@ describe("callModelWithRecovery", () => {
         provider: "anthropic",
         model: "claude",
         content: textContent("-second-half"),
-        stopReason: "end_turn",
+        stopReason: "end",
       });
     const gateway: AgentModelGateway = {
       generateText,

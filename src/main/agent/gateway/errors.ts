@@ -1,4 +1,5 @@
 import type { AgentProvider } from "@shared/agent";
+import type { StopReason } from "./types";
 
 export type AgentGatewayErrorCode =
   | "configuration"
@@ -24,6 +25,7 @@ export class AgentGatewayError extends Error {
     readonly code: AgentGatewayErrorCode,
     readonly provider?: AgentProvider,
     readonly cause?: unknown,
+    readonly retryAfterMs?: number,
   ) {
     super(message);
     this.name = "AgentGatewayError";
@@ -111,6 +113,45 @@ export function formatRecoverableAgentError(error: unknown, signal?: AbortSignal
   return null;
 }
 
+function parseRetryAfterHeader(value: unknown): number | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value === "number" && Number.isFinite(value) && value > 0) {
+    return Math.ceil(value * 1000);
+  }
+  if (typeof value === "string") {
+    const seconds = Number(value);
+    if (Number.isFinite(seconds) && seconds > 0) {
+      return Math.ceil(seconds * 1000);
+    }
+    const dateMs = Date.parse(value);
+    if (Number.isFinite(dateMs)) {
+      const delay = dateMs - Date.now();
+      return delay > 0 ? delay : undefined;
+    }
+  }
+  return undefined;
+}
+
+function extractRetryAfterMs(error: unknown): number | undefined {
+  if (!error || typeof error !== "object") return undefined;
+
+  const headers = (error as { headers?: unknown }).headers;
+  if (headers && typeof headers === "object") {
+    const get = (headers as { get?: (name: string) => string | null }).get;
+    if (typeof get === "function") {
+      const value = get.call(headers, "retry-after");
+      const parsed = parseRetryAfterHeader(value);
+      if (parsed !== undefined) return parsed;
+    }
+    const retryAfter = (headers as { "retry-after"?: unknown })["retry-after"];
+    const parsed = parseRetryAfterHeader(retryAfter);
+    if (parsed !== undefined) return parsed;
+  }
+
+  const retryAfter = (error as { retryAfter?: unknown }).retryAfter;
+  return parseRetryAfterHeader(retryAfter);
+}
+
 export function normalizeProviderError(
   provider: AgentProvider,
   error: unknown,
@@ -118,8 +159,10 @@ export function normalizeProviderError(
 ): AgentGatewayError {
   if (error instanceof AgentGatewayError) return error;
 
+  const retryAfterMs = extractRetryAfterMs(error);
+
   if (isAbortLike(error, signal)) {
-    return new AgentGatewayError("Run aborted by user.", "provider-error", provider, error);
+    return new AgentGatewayError("Run aborted by user.", "provider-error", provider, error, retryAfterMs);
   }
 
   const status = (error as { status?: number }).status;
@@ -127,16 +170,16 @@ export function normalizeProviderError(
   const message = errorMessage(error);
 
   if (status === 401 || status === 403) {
-    return new AgentGatewayError(`${provider} authentication failed: ${message}`, "authentication", provider, error);
+    return new AgentGatewayError(`${provider} authentication failed: ${message}`, "authentication", provider, error, retryAfterMs);
   }
   if (status === 429) {
-    return new AgentGatewayError(`${provider} rate limit exceeded: ${message}`, "rate-limit", provider, error);
+    return new AgentGatewayError(`${provider} rate limit exceeded: ${message}`, "rate-limit", provider, error, retryAfterMs);
   }
   if (status === 529) {
-    return new AgentGatewayError(`${provider} service overloaded: ${message}`, "overloaded", provider, error);
+    return new AgentGatewayError(`${provider} service overloaded: ${message}`, "overloaded", provider, error, retryAfterMs);
   }
   if (status === 400 && isPromptTooLongMessage(message)) {
-    return new AgentGatewayError(`${provider} prompt too long: ${message}`, "prompt-too-long", provider, error);
+    return new AgentGatewayError(`${provider} prompt too long: ${message}`, "prompt-too-long", provider, error, retryAfterMs);
   }
   if (status === 408 || /timeout/i.test(name) || /timed out/i.test(message)) {
     return new AgentGatewayError(
@@ -144,6 +187,7 @@ export function normalizeProviderError(
       "timeout",
       provider,
       error,
+      retryAfterMs,
     );
   }
   if (isConnectionTerminated(error)) {
@@ -152,12 +196,13 @@ export function normalizeProviderError(
       "provider-error",
       provider,
       error,
+      retryAfterMs,
     );
   }
   if (isPromptTooLongMessage(message)) {
-    return new AgentGatewayError(`${provider} prompt too long: ${message}`, "prompt-too-long", provider, error);
+    return new AgentGatewayError(`${provider} prompt too long: ${message}`, "prompt-too-long", provider, error, retryAfterMs);
   }
-  return new AgentGatewayError(`${provider} request failed: ${message}`, "provider-error", provider, error);
+  return new AgentGatewayError(`${provider} request failed: ${message}`, "provider-error", provider, error, retryAfterMs);
 }
 
 function isPromptTooLongMessage(message: string): boolean {
@@ -172,14 +217,8 @@ function isPromptTooLongMessage(message: string): boolean {
     || normalized.includes("exceeds the maximum");
 }
 
-export function isOutputTruncated(stopReason?: string): boolean {
-  if (!stopReason) return false;
-  const normalized = stopReason.toLowerCase();
-  return normalized === "max_tokens"
-    || normalized === "max_output_tokens"
-    || normalized === "length"
-    || normalized === "model_length"
-    || normalized === "output_length";
+export function isOutputTruncated(stopReason?: StopReason): boolean {
+  return stopReason === "max_tokens";
 }
 
 export function classifyGatewayRecovery(error: unknown): GatewayRecoveryKind {
