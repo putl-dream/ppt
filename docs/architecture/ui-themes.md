@@ -15,7 +15,7 @@ Agent PPT 支持文件夹 CSS 工作台外观定制：在固定根目录
 
 | 轴 | 作用对象 | 形态 |
 |---|---|---|
-| 工作台 UI 主题（本文） | 侧栏、输入框、设置页、窗口壳 | 用户 `themes/<名>/theme.css` + 内置 Studio skin |
+| 工作台 UI 主题（本文） | 侧栏、输入框、设置页、窗口壳 | 内置 Studio / Catnip + 用户 `themes/<名>/theme.css` |
 | DesignSystemV2 | 演示文稿配色 / 版式语气 | JSON（`design/design-spec.json` 等） |
 
 二者不要混用：改 UI 主题不会改导出的 PPT；改 design-spec 也不会换工作台皮肤。
@@ -26,7 +26,7 @@ Agent PPT 支持文件夹 CSS 工作台外观定制：在固定根目录
 - 尊重 `AGENT_PPT_DATA_DIR`：根目录为 `{applicationDataRoot}/themes/`
 - 扫描**一级子目录**；仅当存在 `theme.css` 时列入
 - 子目录名即主题 id（Unicode 字母数字与 `-` `_`，如 `midnight`、`午夜蓝`）
-- 内置 id `studio` 保留；名为 `studio` 的文件夹会被忽略
+- 内置 id `studio`、`catnip` 保留；同名用户主题文件夹会被忽略
 - `theme.css` 上限 256KB；路径穿越与越界读取会被拒绝
 - 首次启动创建根目录，写入 `README.md` 与示例 `example/theme.css`（不自动选中）
 
@@ -36,17 +36,16 @@ Agent PPT 支持文件夹 CSS 工作台外观定制：在固定根目录
 2. 新建或编辑 `themes/<主题名>/theme.css`
 3. **刷新列表**，选择主题
 
-选中项持久化在 UI 设置（`uiThemeId`）。未知或已删除的自定义 id 回退为
-`studio`。
+选中项持久化在 UI 设置（`uiThemeId`）。内置 Catnip 直接从 renderer bundle
+注入；未知或已删除的自定义 id 回退为 Studio。
 
 ## 加载机制
 
 ```text
-themes/<id>/theme.css
-  → Main list/read（IPC: ui-themes:*）
-  → Renderer useAppearanceRuntime
-  → <style id="user-ui-theme"> 注入完整 CSS
-  → 覆盖 semantic token / 区域样式
+内置 Catnip raw CSS ───────────────┐
+                                  ├→ Renderer useAppearanceRuntime
+themes/<id>/theme.css             │  → <style id="user-ui-theme"> 注入完整 CSS
+  → Main list/read（IPC）─────────┘  → 覆盖 semantic token / 区域样式
 ```
 
 - 内置 `data-skin="studio"` 始终作为底座
@@ -60,7 +59,8 @@ themes/<id>/theme.css
 |---|---|
 | `src/main/ui-themes.ts` | 目录 ensure / list / read |
 | `ui-themes:list` / `read` / `open-directory` | IPC |
-| `src/renderer/src/app/userUiTheme.ts` | 注入 / 移除 style 节点 |
+| `src/renderer/src/styles/themes/catnip.css` | 随应用打包的 Catnip 主题 |
+| `src/renderer/src/app/userUiTheme.ts` | 内置主题映射、注入 / 移除 style 节点 |
 | `src/renderer/src/app/useAppearanceRuntime.ts` | 选中主题后加载 CSS |
 | 设置 → 界面外观 | 选择、打开文件夹、刷新 |
 

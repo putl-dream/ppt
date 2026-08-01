@@ -23,8 +23,8 @@ import {
 import type { SettingsCategory } from "../settingsCategories";
 import { normalizeWorkspacePath } from "@shared/workspace";
 import type { UiThemeSummary } from "@shared/ipc";
+import { BUILTIN_UI_THEMES, DEFAULT_UI_THEME_ID } from "@shared/ui-themes";
 import { cx } from "../lib/cx";
-import { BUILTIN_UI_THEME_ID } from "../app/userUiTheme";
 import {
   MAX_UI_FONT_SIZE,
   MAX_UI_LINE_HEIGHT,
@@ -189,11 +189,11 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
   const selectedSchemeLabel = colorSchemeOptions.find((option) => option.value === colorScheme)?.label ?? "暗色";
   const selectedFontFamilyLabel = fontFamilyOptions.find((option) => option.value === uiFontFamily)?.label ?? "系统默认";
   const themeOptions = [
-    { value: BUILTIN_UI_THEME_ID, label: "Studio" },
+    ...BUILTIN_UI_THEMES.map((theme) => ({ value: theme.id, label: theme.name })),
     ...uiThemes.map((theme) => ({ value: theme.id, label: theme.name })),
   ];
   const selectedThemeLabel = themeOptions.find((option) => option.value === uiThemeId)?.label
-    ?? (uiThemeId === BUILTIN_UI_THEME_ID ? "Studio" : uiThemeId);
+    ?? (uiThemeId === DEFAULT_UI_THEME_ID ? "Studio" : uiThemeId);
   const selectedColorSchemeName = typeof selectedDesignSystem.colorScheme === "string"
     ? selectedDesignSystem.colorScheme
     : selectedDesignSystem.colorScheme.name ?? "custom";

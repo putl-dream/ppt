@@ -58,6 +58,7 @@ describe("ui themes directory", () => {
     writeTheme(themesDirectory, "midnight", ":root { --surface-canvas: #000; }");
     writeTheme(themesDirectory, "午夜蓝", ":root { --surface-canvas: #001; }");
     writeTheme(themesDirectory, "studio", ":root { --surface-canvas: #111; }");
+    writeTheme(themesDirectory, "catnip", ":root { --surface-canvas: #222; }");
     writeFileSync(join(themesDirectory, "legacy-flat.css"), ":root{}", "utf8");
     mkdirSync(join(themesDirectory, "empty-folder"), { recursive: true });
     mkdirSync(join(themesDirectory, "nested", "hidden"), { recursive: true });
@@ -73,6 +74,7 @@ describe("ui themes directory", () => {
     expect(ids).toContain("example");
     expect(ids).toContain("午夜蓝");
     expect(ids).not.toContain(BUILTIN_UI_THEME_ID);
+    expect(ids).not.toContain("catnip");
     expect(ids).not.toContain("empty-folder");
     expect(ids).not.toContain("hidden");
     expect(ids).not.toContain("legacy-flat");
@@ -85,6 +87,7 @@ describe("ui themes directory", () => {
     expect(readUiThemeCss("../secrets", root)).toBeNull();
     expect(readUiThemeCss("..\\secrets", root)).toBeNull();
     expect(readUiThemeCss("studio", root)).toBeNull();
+    expect(readUiThemeCss("catnip", root)).toBeNull();
     expect(readUiThemeCss("", root)).toBeNull();
     expect(readUiThemeCss("a/b", root)).toBeNull();
   });

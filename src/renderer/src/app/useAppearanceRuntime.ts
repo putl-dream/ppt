@@ -8,7 +8,7 @@ import type {
 import { resolveColorScheme } from "./appBootstrap";
 import {
   applyUserUiThemeCss,
-  BUILTIN_UI_THEME_ID,
+  getBuiltinUiThemeCss,
 } from "./userUiTheme";
 import { applyUiTypography } from "./uiTypography";
 
@@ -128,8 +128,9 @@ export function useAppearanceRuntime({
       if (!cancelled) applyUserUiThemeCss(null);
     };
 
-    if (uiThemeId === BUILTIN_UI_THEME_ID) {
-      clearTheme();
+    const builtinCss = getBuiltinUiThemeCss(uiThemeId);
+    if (builtinCss !== undefined) {
+      if (!cancelled) applyUserUiThemeCss(builtinCss);
       return () => {
         cancelled = true;
       };

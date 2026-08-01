@@ -1,11 +1,15 @@
 import { mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { basename, join, resolve, sep } from "node:path";
 import type { UiThemeSummary } from "@shared/ipc";
+import {
+  BUILTIN_UI_THEME_IDS,
+  DEFAULT_UI_THEME_ID,
+} from "@shared/ui-themes";
 import { getApplicationDataRoot } from "./application-data";
 
 export type { UiThemeSummary };
 
-export const BUILTIN_UI_THEME_ID = "studio";
+export const BUILTIN_UI_THEME_ID = DEFAULT_UI_THEME_ID;
 export const UI_THEMES_DIRECTORY_NAME = "themes";
 export const UI_THEME_ENTRY_FILE_NAME = "theme.css";
 export const UI_THEME_MAX_BYTES = 256 * 1024;
@@ -74,7 +78,7 @@ Prefer region hooks:
 - \`[data-ui-region="settings"]\`
 
 Relative \`url(./asset.png)\` inside the theme folder is not loaded yet — use \`https:\` or \`data:\` for images.
-The reserved id \`studio\` cannot be used as a folder name.
+The built-in ids \`studio\` and \`catnip\` cannot be used as folder names.
 `;
 
 const EXAMPLE_THEME_CSS = `/*
@@ -141,7 +145,7 @@ function isPathInsideDirectory(candidatePath: string, directoryPath: string): bo
 
 export function isValidUiThemeId(id: string): boolean {
   if (typeof id !== "string" || !id.trim() || id !== id.trim()) return false;
-  if (id === BUILTIN_UI_THEME_ID) return false;
+  if (BUILTIN_UI_THEME_IDS.has(id)) return false;
   if (id.includes("\0") || id.includes("/") || id.includes("\\") || id.includes("..")) {
     return false;
   }

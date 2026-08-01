@@ -30,7 +30,7 @@
 |---|---|
 | 布局 | 每个主题一个子文件夹，入口文件必须是 `theme.css` |
 | 名称 | 子文件夹名即主题 id（可用中文，如 `午夜蓝`） |
-| 保留名 | 不要用文件夹名 `studio`（内置 Studio 占用） |
+| 保留名 | 不要用 `studio` 或 `catnip`（分别由内置 Studio / Catnip 占用） |
 | 大小 | `theme.css` 不超过 256KB |
 | 环境变量 | 若设置了 `AGENT_PPT_DATA_DIR`，根目录为 `{该目录}/themes/` |
 | 扁平文件 | 直接放在 `themes/*.css` 的文件不会列入列表 |
@@ -267,7 +267,7 @@
 
 | 设置项 | 作用 |
 |---|---|
-| 皮肤 / 主题 | 选 Studio 或某个 `themes/<名>/` 主题包 |
+| 皮肤 / 主题 | 选内置 Studio、Catnip，或某个 `themes/<名>/` 主题包 |
 | 明暗 | 切换 `data-color-scheme`（主题应提供两套变量） |
 | 字体 | 写入 `--font-display` / `--font-body` |
 | 字号 / 行高 | 按基准字号（默认 13px）与行高倍数（默认 1.6）等比缩放整套 `--text-*` 阶梯 |

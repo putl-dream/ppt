@@ -4,9 +4,11 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   applyUserUiThemeCss,
   BUILTIN_UI_THEME_ID,
+  getBuiltinUiThemeCss,
   normalizePersistedUiThemeId,
   USER_UI_THEME_STYLE_ID,
 } from "../src/renderer/src/app/userUiTheme";
+import { CATNIP_UI_THEME_ID } from "@shared/ui-themes";
 
 describe("user UI theme helpers", () => {
   afterEach(() => {
@@ -17,6 +19,17 @@ describe("user UI theme helpers", () => {
     expect(normalizePersistedUiThemeId(undefined)).toBe(BUILTIN_UI_THEME_ID);
     expect(normalizePersistedUiThemeId("")).toBe(BUILTIN_UI_THEME_ID);
     expect(normalizePersistedUiThemeId("studio")).toBe(BUILTIN_UI_THEME_ID);
+  });
+
+  it("keeps bundled theme ids even when they are absent from the user directory", () => {
+    expect(
+      normalizePersistedUiThemeId(CATNIP_UI_THEME_ID, new Set(["example"])),
+    ).toBe(CATNIP_UI_THEME_ID);
+    expect(getBuiltinUiThemeCss(BUILTIN_UI_THEME_ID)).toBeNull();
+    // Vitest stubs CSS modules to an empty string; the production Vite build
+    // resolves the ?raw import to the bundled stylesheet text.
+    expect(getBuiltinUiThemeCss(CATNIP_UI_THEME_ID)).toBeTypeOf("string");
+    expect(getBuiltinUiThemeCss("example")).toBeUndefined();
   });
 
   it("keeps custom ids until an availability set proves they are gone", () => {

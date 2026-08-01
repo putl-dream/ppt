@@ -1,0 +1,1085 @@
+/* ========================================================================== 
+   Agent PPT Workbench Theme — Catnip Atelier v3
+   猫系工作台 / 夜猫草莓 / 草莓牛奶
+
+   内置主题 id：catnip（由 renderer 以 raw CSS 打包）
+
+   设计约束：
+   1. 使用 :root[data-skin][data-color-scheme] 覆盖 Studio semantic token。
+   2. 优先使用 semantic token 与 data-ui-region；组件 class 只做局部增强。
+   3. 保留明暗模式联动；字号与字体仍由界面设置的内联变量接管。
+   4. 输入区只有外层卡片描边，内部 textarea 不出现第二层矩形线框。
+   5. 不覆盖幻灯片纸面与 DesignSystem 内容。
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   1. Dark — 夜猫草莓
+   表面顺序：canvas < base < raised < sunken < overlay
+   -------------------------------------------------------------------------- */
+:root[data-skin][data-color-scheme="dark"] {
+  --surface-canvas: #120f17;
+  --surface-base: #1a1520;
+  --surface-raised: #231b2b;
+  --surface-sunken: #2b2234;
+  --surface-overlay: #352940;
+  --surface-hover: rgba(255, 132, 188, 0.09);
+  --surface-active: rgba(255, 132, 188, 0.16);
+
+  --text-primary: #fff4fb;
+  --text-secondary: #d9bfd2;
+  --text-muted: #a28a9f;
+  --text-on-accent: #2b1020;
+
+  --border-subtle: rgba(255, 165, 207, 0.08);
+  --border-default: rgba(255, 165, 207, 0.18);
+  --border-strong: rgba(255, 165, 207, 0.34);
+  --border-focused: #ff78b5;
+
+  --elevation-1: 0 2px 8px rgba(8, 5, 11, 0.46);
+  --elevation-2: 0 10px 28px rgba(8, 5, 11, 0.56);
+  --elevation-3: 0 24px 64px rgba(8, 5, 11, 0.7);
+
+  /* 主题内部状态色与强调色别名 */
+  --accent-cyan: #ff78b5;
+  --accent-cyan-glow: rgba(255, 120, 181, 0.28);
+  --accent-green: #7de4c3;
+  --accent-green-glow: rgba(125, 228, 195, 0.24);
+  --accent-purple: #c895ff;
+  --accent-purple-glow: rgba(200, 149, 255, 0.25);
+  --accent-orange: #ffb67f;
+  --accent-orange-glow: rgba(255, 182, 127, 0.25);
+
+  --accent-primary-contrast: #2b1020;
+  --accent-primary-hover-shadow: rgba(255, 120, 181, 0.34);
+
+  --danger: #ff7088;
+  --danger-glow: rgba(255, 112, 136, 0.2);
+  --danger-border: rgba(255, 112, 136, 0.38);
+  --success: #7de6a5;
+  --success-glow: rgba(125, 230, 165, 0.18);
+  --success-border: rgba(125, 230, 165, 0.34);
+  --warning: #f0cf72;
+  --warning-glow: rgba(240, 207, 114, 0.18);
+  --warning-border: rgba(240, 207, 114, 0.36);
+
+  --diff-add: #a0f2c4;
+  --diff-remove: #ffb2bf;
+  --scrollbar-thumb-color: rgba(255, 165, 207, 0.26);
+
+  /* 主题私有变量 */
+  --catnip-shell-highlight: rgba(255, 130, 190, 0.15);
+  --catnip-shell-secondary: rgba(169, 115, 255, 0.13);
+  --catnip-panel-tint: rgba(255, 255, 255, 0.018);
+  --catnip-panel-highlight: rgba(255, 255, 255, 0.055);
+  --catnip-grid-line: rgba(255, 190, 220, 0.025);
+  --catnip-glass: rgba(26, 21, 32, 0.78);
+  --catnip-code-bg: #19141f;
+  --catnip-card-bg: color-mix(in srgb, var(--surface-base) 88%, var(--surface-canvas));
+}
+
+/* --------------------------------------------------------------------------
+   2. Light — 草莓牛奶
+   -------------------------------------------------------------------------- */
+:root[data-skin][data-color-scheme="light"] {
+  --surface-canvas: #f4e8ef;
+  --surface-base: #faeff4;
+  --surface-raised: #fffafd;
+  --surface-sunken: #f8edf3;
+  --surface-overlay: #ffffff;
+  --surface-hover: rgba(255, 87, 158, 0.075);
+  --surface-active: rgba(255, 87, 158, 0.135);
+
+  --text-primary: #3f2837;
+  --text-secondary: #76546c;
+  --text-muted: #9d8195;
+  --text-on-accent: #ffffff;
+
+  --border-subtle: rgba(222, 84, 148, 0.1);
+  --border-default: rgba(222, 84, 148, 0.22);
+  --border-strong: rgba(222, 84, 148, 0.38);
+  --border-focused: #f6539f;
+
+  --elevation-1: 0 2px 8px rgba(173, 94, 132, 0.12);
+  --elevation-2: 0 10px 28px rgba(173, 94, 132, 0.16);
+  --elevation-3: 0 24px 64px rgba(173, 94, 132, 0.22);
+
+  --accent-cyan: #f6539f;
+  --accent-cyan-glow: rgba(246, 83, 159, 0.2);
+  --accent-green: #16ad88;
+  --accent-green-glow: rgba(22, 173, 136, 0.16);
+  --accent-purple: #9254e8;
+  --accent-purple-glow: rgba(146, 84, 232, 0.16);
+  --accent-orange: #e87f32;
+  --accent-orange-glow: rgba(232, 127, 50, 0.17);
+
+  --accent-primary-contrast: #ffffff;
+  --accent-primary-hover-shadow: rgba(246, 83, 159, 0.28);
+
+  --danger: #e63f5d;
+  --danger-glow: rgba(230, 63, 93, 0.13);
+  --danger-border: rgba(230, 63, 93, 0.29);
+  --success: #119c77;
+  --success-glow: rgba(17, 156, 119, 0.13);
+  --success-border: rgba(17, 156, 119, 0.28);
+  --warning: #ce7900;
+  --warning-glow: rgba(206, 121, 0, 0.13);
+  --warning-border: rgba(206, 121, 0, 0.29);
+
+  --diff-add: #0b8463;
+  --diff-remove: #c93655;
+  --scrollbar-thumb-color: rgba(220, 82, 146, 0.28);
+
+  --catnip-shell-highlight: rgba(255, 168, 209, 0.5);
+  --catnip-shell-secondary: rgba(202, 180, 255, 0.38);
+  --catnip-panel-tint: rgba(255, 255, 255, 0.42);
+  --catnip-panel-highlight: rgba(255, 255, 255, 0.82);
+  --catnip-grid-line: rgba(175, 77, 126, 0.035);
+  --catnip-glass: rgba(255, 249, 252, 0.8);
+  --catnip-code-bg: #f6eaf1;
+  --catnip-card-bg: color-mix(in srgb, var(--surface-base) 88%, var(--surface-canvas));
+}
+
+/* --------------------------------------------------------------------------
+   3. 强调色兼容
+   保留 data-accent 兼容；当前设置未暴露强调色选择时使用 cyan 兜底。
+   -------------------------------------------------------------------------- */
+:root[data-accent="cyan"] {
+  --accent-primary-hover-shadow: var(--accent-cyan-glow);
+}
+
+:root[data-accent="green"] {
+  --accent-primary-hover-shadow: var(--accent-green-glow);
+}
+
+:root[data-accent="purple"] {
+  --accent-primary-hover-shadow: var(--accent-purple-glow);
+}
+
+:root[data-accent="orange"] {
+  --accent-primary-glow: var(--accent-orange-glow);
+  --accent-primary-hover-shadow: var(--accent-orange-glow);
+}
+
+/* 浅色绿色/橙色按钮使用深色文字，避免低对比度 */
+:root[data-skin][data-color-scheme="light"][data-accent="green"] {
+  --text-on-accent: #052c23;
+  --accent-primary-contrast: #052c23;
+}
+
+:root[data-skin][data-color-scheme="light"][data-accent="orange"] {
+  --text-on-accent: #321505;
+  --accent-primary-contrast: #321505;
+}
+
+/* 应用首帧尚未写入 data-accent 时的兜底 */
+:root:not([data-accent]) {
+  --accent-primary: var(--accent-cyan);
+  --accent-primary-glow: var(--accent-cyan-glow);
+}
+
+/* --------------------------------------------------------------------------
+   4. 基础形状、字体和动效
+   只改基础 radius，不覆盖控件形状缩放变量。
+   -------------------------------------------------------------------------- */
+:root {
+  --radius-xs: 6px;
+  --radius-sm: 9px;
+  --radius-md: 13px;
+  --radius-lg: 18px;
+  --radius-xl: 24px;
+
+  --font-display: "Segoe Print", "Comic Sans MS", "Microsoft YaHei UI", "PingFang SC", sans-serif;
+  --font-body: "Segoe UI", "Microsoft YaHei UI", "PingFang SC", system-ui, sans-serif;
+  --font-mono: "Cascadia Code", "JetBrains Mono", Consolas, monospace;
+
+  --ease-out: cubic-bezier(0.22, 1.08, 0.36, 1);
+  --duration-fast: 130ms;
+  --duration-base: 210ms;
+  --duration-slow: 360ms;
+}
+
+.app-shell :where(button, [role="button"], a, select):focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+::selection {
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--accent-primary) 24%, transparent);
+}
+
+/* --------------------------------------------------------------------------
+   5. 窗口壳与整体氛围
+   -------------------------------------------------------------------------- */
+:root[data-color-scheme="dark"] .app-shell,
+:root[data-color-scheme="light"] .app-shell {
+  background:
+    radial-gradient(960px 680px at 5% -14%, var(--catnip-shell-highlight), transparent 62%),
+    radial-gradient(820px 580px at 102% 108%, var(--catnip-shell-secondary), transparent 60%),
+    repeating-linear-gradient(135deg, transparent 0 29px, var(--catnip-grid-line) 29px 30px),
+    var(--surface-canvas);
+}
+
+.window-titlebar,
+.workspace-container {
+  background: transparent;
+}
+
+.window-titlebar {
+  border-bottom: 1px solid var(--border-subtle);
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--catnip-panel-highlight) 45%, transparent);
+  backdrop-filter: blur(16px) saturate(125%);
+}
+
+.workspace-container {
+  isolation: isolate;
+}
+
+[data-ui-region="canvas"] {
+  background:
+    linear-gradient(180deg, var(--catnip-panel-tint), transparent 180px),
+    transparent;
+}
+
+[data-ui-region="settings"] {
+  background:
+    radial-gradient(
+      600px 300px at 100% 0%,
+      color-mix(in srgb, var(--accent-primary) 7%, transparent),
+      transparent 70%
+    );
+}
+
+/* --------------------------------------------------------------------------
+   6. 滚动条
+   -------------------------------------------------------------------------- */
+::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb,
+:root[data-skin] .chat-scroll-viewport::-webkit-scrollbar-thumb {
+  min-height: 40px;
+  border: 2px solid transparent;
+  border-radius: var(--radius-pill);
+  background: var(--scrollbar-thumb-color);
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-thumb:hover,
+:root[data-skin] .chat-scroll-viewport::-webkit-scrollbar-thumb:hover {
+  border: 2px solid transparent;
+  background: var(--accent-primary);
+  background-clip: padding-box;
+}
+
+/* --------------------------------------------------------------------------
+   7. 侧栏
+   不强制覆盖侧栏容器底色，只建立边界、条目态和交互层级。
+   -------------------------------------------------------------------------- */
+[data-ui-region="sidebar"] {
+  border-right: 1px solid var(--border-subtle);
+  box-shadow:
+    10px 0 32px color-mix(in srgb, var(--surface-canvas) 44%, transparent),
+    inset -1px 0 0 color-mix(in srgb, var(--catnip-panel-highlight) 38%, transparent);
+  backdrop-filter: blur(14px) saturate(118%);
+}
+
+[data-ui-region="sidebar"] .workspace-header {
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+[data-ui-region="sidebar"] :is(
+  .workbench-sidebar-action-row,
+  .session-row,
+  .workspace-header,
+  .sidebar-rail-btn
+) {
+  transition:
+    background-color var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out),
+    box-shadow var(--duration-fast) var(--ease-out),
+    transform var(--duration-fast) var(--ease-out);
+}
+
+[data-ui-region="sidebar"] :is(.workbench-sidebar-action-row, .session-row) {
+  border-radius: var(--control-radius-md, var(--radius-md));
+}
+
+[data-ui-region="sidebar"] :is(.workbench-sidebar-action-row, .session-row):hover {
+  background: color-mix(in srgb, var(--accent-primary) 8%, var(--surface-hover));
+  transform: translateX(3px);
+}
+
+[data-ui-region="sidebar"] :is(.session-row.active, .workbench-sidebar-action-row.active) {
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--accent-primary) 17%, transparent), transparent 88%);
+  box-shadow:
+    inset 3px 0 0 var(--accent-primary),
+    inset 0 0 0 1px color-mix(in srgb, var(--accent-primary) 10%, transparent);
+}
+
+[data-ui-region="sidebar"] .session-row.active .session-title {
+  color: var(--accent-primary);
+  font-weight: var(--font-weight-semibold);
+}
+
+[data-ui-region="sidebar"] .sidebar-rail-btn {
+  border-radius: var(--button-border-radius);
+}
+
+[data-ui-region="sidebar"] .sidebar-rail-btn:hover {
+  color: var(--text-primary);
+  background: var(--surface-hover);
+  transform: translateY(-1px);
+}
+
+[data-ui-region="sidebar"] .sidebar-rail-btn.active {
+  color: var(--accent-primary);
+  background: color-mix(in srgb, var(--accent-primary) 14%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-primary) 24%, transparent);
+}
+
+[data-ui-region="sidebar"] .workbench-sidebar-search-input {
+  border-color: var(--border-subtle);
+  background: color-mix(in srgb, var(--surface-sunken) 86%, transparent);
+  transition:
+    border-color var(--duration-fast) var(--ease-out),
+    box-shadow var(--duration-fast) var(--ease-out),
+    background-color var(--duration-fast) var(--ease-out);
+}
+
+[data-ui-region="sidebar"] .workbench-sidebar-search-input:hover {
+  border-color: var(--border-default);
+}
+
+[data-ui-region="sidebar"] .workbench-sidebar-search-input:focus {
+  border-color: var(--accent-primary);
+  background: var(--surface-sunken);
+  box-shadow: 0 0 0 3px var(--accent-primary-glow);
+}
+
+/* --------------------------------------------------------------------------
+   8. Composer — 猫耳输入工作台
+   仅保留外层卡片描边；内层行、textarea 和 focus outline 全部清除。
+   -------------------------------------------------------------------------- */
+[data-ui-region="composer"] {
+  padding-top: 12px;
+}
+
+[data-ui-region="composer"] .double-deck-panel-card {
+  position: relative;
+  overflow: visible;
+  border: 1.5px solid var(--border-default);
+  border-radius: var(--card-border-radius);
+  background:
+    linear-gradient(180deg, var(--catnip-panel-highlight), transparent 44%),
+    radial-gradient(
+      420px 130px at 50% 0%,
+      color-mix(in srgb, var(--accent-primary) 8%, transparent),
+      transparent 72%
+    ),
+    var(--surface-raised);
+  box-shadow:
+    var(--elevation-2),
+    inset 0 1px 0 color-mix(in srgb, var(--catnip-panel-highlight) 75%, transparent);
+  transition:
+    border-color var(--duration-base) var(--ease-out),
+    box-shadow var(--duration-base) var(--ease-out),
+    transform var(--duration-base) var(--ease-out);
+}
+
+[data-ui-region="composer"] .double-deck-panel-card:hover {
+  border-color: color-mix(in srgb, var(--accent-primary) 36%, var(--border-default));
+}
+
+[data-ui-region="composer"] .double-deck-panel-card:focus-within {
+  border-color: var(--accent-primary);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--accent-primary) 28%, transparent),
+    0 0 24px var(--accent-primary-glow),
+    var(--elevation-2),
+    inset 0 1px 0 var(--catnip-panel-highlight);
+  transform: translateY(-1px);
+}
+
+/* 猫耳 */
+[data-ui-region="composer"] .unified-agent-input-shell {
+  position: relative;
+}
+
+[data-ui-region="composer"] .unified-agent-input-shell::before,
+[data-ui-region="composer"] .unified-agent-input-shell::after {
+  content: "";
+  position: absolute;
+  top: -13px;
+  z-index: 2;
+  width: 25px;
+  height: 19px;
+  pointer-events: none;
+  border: 1.5px solid var(--border-default);
+  border-bottom: 0;
+  background:
+    radial-gradient(
+      11px 13px at 50% 88%,
+      color-mix(in srgb, var(--accent-primary) 30%, transparent),
+      transparent 72%
+    ),
+    linear-gradient(180deg, var(--catnip-panel-highlight), transparent 70%),
+    var(--surface-raised);
+  transition:
+    border-color var(--duration-base) var(--ease-out),
+    filter var(--duration-base) var(--ease-out),
+    transform var(--duration-base) var(--ease-out);
+}
+
+[data-ui-region="composer"] .unified-agent-input-shell::before {
+  left: 28px;
+  border-top-left-radius: 16px 21px;
+  border-top-right-radius: 6px 4px;
+  transform: rotate(-12deg);
+  transform-origin: 80% 100%;
+}
+
+[data-ui-region="composer"] .unified-agent-input-shell::after {
+  right: 28px;
+  border-top-right-radius: 16px 21px;
+  border-top-left-radius: 6px 4px;
+  transform: rotate(12deg);
+  transform-origin: 20% 100%;
+}
+
+[data-ui-region="composer"] .unified-agent-input-shell:focus-within::before,
+[data-ui-region="composer"] .unified-agent-input-shell:focus-within::after {
+  border-color: var(--accent-primary);
+  filter: drop-shadow(0 -2px 6px var(--accent-primary-glow));
+}
+
+[data-ui-region="composer"] .unified-agent-input-shell:focus-within::before {
+  animation: catnip-ear-left 420ms var(--ease-out) 1;
+}
+
+[data-ui-region="composer"] .unified-agent-input-shell:focus-within::after {
+  animation: catnip-ear-right 420ms var(--ease-out) 1;
+}
+
+@keyframes catnip-ear-left {
+  0%, 100% { transform: rotate(-12deg); }
+  45% { transform: rotate(-18deg) translateY(-1px); }
+}
+
+@keyframes catnip-ear-right {
+  0%, 100% { transform: rotate(12deg); }
+  45% { transform: rotate(18deg) translateY(-1px); }
+}
+
+/* 清除截图中的内层粉色矩形线框。
+   !important 仅限 Composer 内部，避免误伤设置页表单。 */
+[data-ui-region="composer"] :is(
+  .input-textarea-row,
+  .input-textarea,
+  textarea
+) {
+  border: 0 !important;
+  outline: 0 !important;
+  box-shadow: none !important;
+}
+
+[data-ui-region="composer"] :is(
+  .input-textarea-row:focus,
+  .input-textarea-row:focus-within,
+  .input-textarea:focus,
+  .input-textarea:focus-visible,
+  textarea:focus,
+  textarea:focus-visible
+) {
+  border: 0 !important;
+  outline: 0 !important;
+  box-shadow: none !important;
+}
+
+[data-ui-region="composer"] .input-textarea-row {
+  padding: var(--space-3) var(--space-4) var(--space-2);
+  background: transparent !important;
+}
+
+[data-ui-region="composer"] .input-textarea {
+  appearance: none;
+  resize: none;
+  color: var(--text-primary);
+  caret-color: var(--accent-primary);
+  background: transparent !important;
+  font-size: var(--text-md);
+  line-height: var(--text-md-lh);
+}
+
+[data-ui-region="composer"] .input-textarea::placeholder {
+  color: color-mix(in srgb, var(--text-muted) 78%, transparent);
+}
+
+[data-ui-region="composer"] .send-cta-btn {
+  transition:
+    transform var(--duration-fast) var(--ease-out),
+    box-shadow var(--duration-fast) var(--ease-out),
+    filter var(--duration-fast) var(--ease-out);
+}
+
+[data-ui-region="composer"] .send-cta-btn.is-ready {
+  box-shadow:
+    0 5px 14px var(--accent-primary-glow),
+    inset 0 1px 0 rgba(255, 255, 255, 0.28);
+}
+
+[data-ui-region="composer"] .send-cta-btn.is-ready:hover {
+  filter: saturate(1.08);
+  transform: translateY(-1px) scale(1.025);
+}
+
+[data-ui-region="composer"] .send-cta-btn.is-ready:active {
+  transform: translateY(0) scale(0.97);
+}
+
+[data-ui-region="composer"] .suggestion-chip {
+  background: color-mix(in srgb, var(--surface-raised) 78%, transparent);
+  transition:
+    border-color var(--duration-fast) var(--ease-out),
+    background-color var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out),
+    transform var(--duration-fast) var(--ease-out);
+}
+
+[data-ui-region="composer"] .suggestion-chip:hover {
+  color: var(--text-primary);
+  border-color: var(--accent-primary);
+  background: color-mix(in srgb, var(--accent-primary) 10%, var(--surface-raised));
+  transform: translateY(-1px);
+}
+
+/* --------------------------------------------------------------------------
+   9. 聊天区与 Markdown
+   助手正文保持无气泡；用户消息、代码、引用和表格承担主题识别。
+   -------------------------------------------------------------------------- */
+[data-ui-region="canvas"] .user-message-bubble {
+  padding: 9px 14px;
+  border: 1px solid color-mix(in srgb, var(--accent-primary) 20%, var(--border-subtle));
+  border-radius: 19px 19px 6px 19px;
+  background:
+    linear-gradient(
+      145deg,
+      color-mix(in srgb, var(--accent-primary) 18%, var(--surface-sunken)),
+      var(--surface-sunken)
+    );
+  box-shadow:
+    var(--elevation-1),
+    inset 0 1px 0 color-mix(in srgb, var(--catnip-panel-highlight) 70%, transparent);
+}
+
+:root[data-color-scheme="dark"] [data-ui-region="canvas"] .user-message-bubble {
+  background:
+    linear-gradient(
+      145deg,
+      color-mix(in srgb, var(--accent-primary) 22%, var(--surface-sunken)),
+      var(--surface-sunken)
+    );
+}
+
+[data-ui-region="canvas"] .markdown-body {
+  color: var(--text-primary);
+}
+
+[data-ui-region="canvas"] .markdown-body :is(h1, h2, h3) {
+  letter-spacing: -0.018em;
+}
+
+[data-ui-region="canvas"] .markdown-body h2 {
+  padding-bottom: 0.34em;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+[data-ui-region="canvas"] .markdown-body a {
+  color: var(--accent-primary);
+  text-decoration-color: color-mix(in srgb, var(--accent-primary) 45%, transparent);
+  text-underline-offset: 3px;
+  transition:
+    color var(--duration-fast) var(--ease-out),
+    text-decoration-color var(--duration-fast) var(--ease-out);
+}
+
+[data-ui-region="canvas"] .markdown-body a:hover {
+  color: color-mix(in srgb, var(--accent-primary) 80%, var(--text-primary));
+  text-decoration-color: currentColor;
+}
+
+[data-ui-region="canvas"] .markdown-body li::marker {
+  color: var(--accent-primary);
+  font-weight: var(--font-weight-bold);
+}
+
+[data-ui-region="canvas"] .markdown-body :not(pre) > code {
+  padding: 0.12em 0.38em;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xs);
+  color: color-mix(in srgb, var(--accent-primary) 76%, var(--text-primary));
+  background: color-mix(in srgb, var(--accent-primary) 7%, var(--surface-sunken));
+}
+
+[data-ui-region="canvas"] .markdown-body pre {
+  border: 1px solid var(--border-default);
+  border-left: 3px solid color-mix(in srgb, var(--accent-primary) 72%, var(--border-strong));
+  border-radius: var(--card-border-radius);
+  background: var(--catnip-code-bg);
+  box-shadow: inset 0 1px 0 var(--catnip-panel-highlight);
+}
+
+[data-ui-region="canvas"] .markdown-body pre code {
+  color: var(--text-primary);
+}
+
+[data-ui-region="canvas"] .markdown-body blockquote {
+  margin-inline: 0;
+  padding: 0.72em 1em;
+  border-left: 3px solid var(--accent-primary);
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+  color: var(--text-secondary);
+  background: color-mix(in srgb, var(--accent-primary) 7%, var(--surface-sunken));
+}
+
+[data-ui-region="canvas"] .markdown-body hr {
+  height: 1px;
+  border: 0;
+  background: linear-gradient(90deg, transparent, var(--border-default), transparent);
+}
+
+[data-ui-region="canvas"] .markdown-body table {
+  overflow: hidden;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  border-collapse: separate;
+  border-spacing: 0;
+  box-shadow: var(--elevation-1);
+}
+
+[data-ui-region="canvas"] .markdown-body th {
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--accent-primary) 9%, var(--surface-sunken));
+}
+
+[data-ui-region="canvas"] .markdown-body :is(th, td) {
+  border-color: var(--border-subtle);
+}
+
+[data-ui-region="canvas"] .markdown-body tr:hover td {
+  background: color-mix(in srgb, var(--accent-primary) 4%, transparent);
+}
+
+/* --------------------------------------------------------------------------
+   9b. 聊天流卡片 — 顶部留白与猫耳
+   卡片有两种挂载位置：锚定在 .assistant-message-main 内，或直接挂在 .chat-stream
+   下，因此用后代选择器。以 .chat-stream 收口，避开镜像面板里复用
+   .inline-artifact-card 的 SlidePreviewGallery。
+   -------------------------------------------------------------------------- */
+.chat-stream :is(
+  .inline-artifact-card,
+  .approval-card,
+  .patch-review-card,
+  .resolved-card,
+  .task-plan-card
+) {
+  position: relative;
+  overflow: visible;
+  margin-top: 22px;
+  background: var(--catnip-card-bg);
+  box-shadow:
+    var(--elevation-1),
+    inset 0 1px 0 color-mix(in srgb, var(--catnip-panel-highlight) 70%, transparent);
+  transition:
+    border-color var(--duration-fast) var(--ease-out),
+    box-shadow var(--duration-fast) var(--ease-out);
+}
+
+.chat-stream :is(
+  .inline-artifact-card,
+  .approval-card,
+  .patch-review-card,
+  .resolved-card,
+  .task-plan-card
+)::before,
+.chat-stream :is(
+  .inline-artifact-card,
+  .approval-card,
+  .patch-review-card,
+  .resolved-card,
+  .task-plan-card
+)::after {
+  content: "";
+  position: absolute;
+  top: -11px;
+  z-index: 1;
+  width: 22px;
+  height: 16px;
+  pointer-events: none;
+  border: 1px solid var(--border-default);
+  border-bottom: 0;
+  background:
+    radial-gradient(
+      10px 11px at 50% 88%,
+      color-mix(in srgb, var(--accent-primary) 26%, transparent),
+      transparent 72%
+    ),
+    var(--catnip-card-bg);
+  transition:
+    border-color var(--duration-base) var(--ease-out),
+    transform var(--duration-base) var(--ease-out),
+    filter var(--duration-base) var(--ease-out);
+}
+
+.chat-stream :is(
+  .inline-artifact-card,
+  .approval-card,
+  .patch-review-card,
+  .resolved-card,
+  .task-plan-card
+)::before {
+  left: 26px;
+  border-top-left-radius: 14px 18px;
+  border-top-right-radius: 6px 4px;
+  transform: rotate(-11deg);
+  transform-origin: 80% 100%;
+}
+
+.chat-stream :is(
+  .inline-artifact-card,
+  .approval-card,
+  .patch-review-card,
+  .resolved-card,
+  .task-plan-card
+)::after {
+  right: 26px;
+  border-top-right-radius: 14px 18px;
+  border-top-left-radius: 6px 4px;
+  transform: rotate(11deg);
+  transform-origin: 20% 100%;
+}
+
+/* 矮折叠条用稍小的耳朵，避免比例失衡 */
+.chat-stream .resolved-card::before,
+.chat-stream .resolved-card::after {
+  top: -9px;
+  width: 18px;
+  height: 13px;
+}
+
+.chat-stream .resolved-card::before {
+  left: 22px;
+  border-top-left-radius: 12px 15px;
+  border-top-right-radius: 5px 3px;
+}
+
+.chat-stream .resolved-card::after {
+  right: 22px;
+  border-top-right-radius: 12px 15px;
+  border-top-left-radius: 5px 3px;
+}
+
+.chat-stream :is(
+  .inline-artifact-card,
+  .approval-card,
+  .patch-review-card,
+  .resolved-card,
+  .task-plan-card
+):hover::before {
+  border-color: color-mix(in srgb, var(--accent-primary) 40%, var(--border-default));
+  filter: drop-shadow(0 -1px 4px var(--accent-primary-glow));
+  transform: rotate(-15deg) translateY(-1px);
+}
+
+.chat-stream :is(
+  .inline-artifact-card,
+  .approval-card,
+  .patch-review-card,
+  .resolved-card,
+  .task-plan-card
+):hover::after {
+  border-color: color-mix(in srgb, var(--accent-primary) 40%, var(--border-default));
+  filter: drop-shadow(0 -1px 4px var(--accent-primary-glow));
+  transform: rotate(15deg) translateY(-1px);
+}
+
+/* overflow: visible 后，标题栏需自带顶部圆角，避免直角漏出 */
+.chat-stream .inline-artifact-card > .inline-artifact-card-header {
+  border-top-left-radius: inherit;
+  border-top-right-radius: inherit;
+}
+
+/* --------------------------------------------------------------------------
+   10. 设置页与表单
+   -------------------------------------------------------------------------- */
+[data-ui-region="settings"] :is(
+  .ide-field,
+  .config-input,
+  .title-input,
+  .cursor-model-search,
+  .user-message-editor-textarea,
+  .workspace-picker-btn
+) {
+  border-radius: var(--field-border-radius);
+  border-color: var(--border-default);
+  background: color-mix(in srgb, var(--surface-sunken) 92%, transparent);
+  transition:
+    border-color var(--duration-fast) var(--ease-out),
+    box-shadow var(--duration-fast) var(--ease-out),
+    background-color var(--duration-fast) var(--ease-out);
+}
+
+[data-ui-region="settings"] :is(
+  .ide-field,
+  .config-input,
+  .title-input,
+  .cursor-model-search,
+  .user-message-editor-textarea,
+  .workspace-picker-btn
+):hover {
+  border-color: var(--border-strong);
+}
+
+[data-ui-region="settings"] :is(
+  .ide-field,
+  .config-input,
+  .title-input,
+  .cursor-model-search,
+  .user-message-editor-textarea
+):focus {
+  border-color: var(--accent-primary);
+  background: var(--surface-sunken);
+  box-shadow: 0 0 0 3px var(--accent-primary-glow);
+}
+
+[data-ui-region="settings"] :is(.ide-range, .settings-range) {
+  accent-color: var(--accent-primary);
+}
+
+[data-ui-region="settings"] :is(
+  .ide-nav-item,
+  .ide-choice,
+  .settings-choice-card,
+  .settings-accent-card,
+  .settings-control-shape-card,
+  .theme-card
+) {
+  transition:
+    border-color var(--duration-fast) var(--ease-out),
+    background-color var(--duration-fast) var(--ease-out),
+    box-shadow var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out),
+    transform var(--duration-fast) var(--ease-out);
+}
+
+[data-ui-region="settings"] :is(
+  .ide-choice,
+  .settings-choice-card,
+  .settings-accent-card,
+  .settings-control-shape-card,
+  .theme-card
+):hover {
+  border-color: var(--border-strong);
+  background: color-mix(in srgb, var(--accent-primary) 5%, var(--surface-raised));
+  transform: translateY(-1px);
+}
+
+[data-ui-region="settings"] :is(
+  .ide-nav-item.is-active,
+  .ide-choice.is-active,
+  .settings-choice-card.active,
+  .settings-accent-card.active,
+  .settings-control-shape-card.active,
+  .theme-card.active
+) {
+  color: var(--text-primary);
+  border-color: var(--accent-primary);
+  background:
+    linear-gradient(145deg, color-mix(in srgb, var(--accent-primary) 13%, transparent), transparent),
+    var(--surface-raised);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--accent-primary) 12%, transparent),
+    0 6px 18px color-mix(in srgb, var(--accent-primary) 8%, transparent);
+}
+
+/* --------------------------------------------------------------------------
+   11. 按钮体系
+   按钮可能分布在设置页、画布和弹窗，因此不强制绑定单一区域。
+   -------------------------------------------------------------------------- */
+:is(.ide-btn-secondary, .settings-secondary-btn, .secondary-btn) {
+  border-radius: var(--button-border-radius);
+  transition:
+    border-color var(--duration-fast) var(--ease-out),
+    background-color var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out),
+    transform var(--duration-fast) var(--ease-out);
+}
+
+:is(.ide-btn-secondary, .settings-secondary-btn, .secondary-btn):hover {
+  color: var(--accent-primary);
+  border-color: var(--accent-primary);
+  background: color-mix(in srgb, var(--accent-primary) 7%, transparent);
+  transform: translateY(-1px);
+}
+
+:is(
+  .settings-primary-btn,
+  .sandbox-preflight-btn,
+  .btn-apply,
+  .message-action-btn--primary,
+  .cursor-model-add-btn
+) {
+  border-color: transparent;
+  border-radius: var(--button-border-radius);
+  color: var(--text-on-accent);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--accent-primary) 88%, white), var(--accent-primary));
+  font-weight: var(--font-weight-semibold);
+  box-shadow:
+    0 5px 14px var(--accent-primary-glow),
+    inset 0 1px 0 rgba(255, 255, 255, 0.32);
+  transition:
+    box-shadow var(--duration-fast) var(--ease-out),
+    filter var(--duration-fast) var(--ease-out),
+    transform var(--duration-fast) var(--ease-out);
+}
+
+:is(
+  .settings-primary-btn,
+  .sandbox-preflight-btn,
+  .btn-apply,
+  .message-action-btn--primary,
+  .cursor-model-add-btn
+):hover {
+  color: var(--text-on-accent);
+  border-color: transparent;
+  filter: saturate(1.08) brightness(1.03);
+  transform: translateY(-1px);
+  box-shadow:
+    0 8px 20px var(--accent-primary-hover-shadow),
+    inset 0 1px 0 rgba(255, 255, 255, 0.38);
+}
+
+:is(
+  .settings-primary-btn,
+  .sandbox-preflight-btn,
+  .btn-apply,
+  .message-action-btn--primary,
+  .cursor-model-add-btn
+):active {
+  transform: translateY(0) scale(0.98);
+}
+
+/* --------------------------------------------------------------------------
+   12. 浮层、菜单、Toast 和弹窗
+   -------------------------------------------------------------------------- */
+:is(
+  .model-tier-menu,
+  .custom-context-menu,
+  .slash-menu-popup,
+  .floating-toast-alert,
+  .model-dialog
+) {
+  overflow: hidden;
+  border-color: var(--border-strong);
+  border-radius: var(--panel-border-radius);
+  background:
+    linear-gradient(180deg, var(--catnip-panel-highlight), transparent 52%),
+    var(--catnip-glass);
+  box-shadow:
+    var(--elevation-3),
+    inset 0 1px 0 var(--catnip-panel-highlight);
+  backdrop-filter: blur(22px) saturate(135%);
+}
+
+:is(.model-tier-option, .slash-menu-item) {
+  border-radius: var(--control-radius-sm, var(--radius-sm));
+  transition:
+    background-color var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out),
+    transform var(--duration-fast) var(--ease-out);
+}
+
+:is(.model-tier-option:hover, .model-tier-option.is-selected, .slash-menu-item:hover) {
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--accent-primary) 14%, transparent);
+}
+
+:is(.model-tier-option:hover, .slash-menu-item:hover) {
+  transform: translateX(2px);
+}
+
+.model-tier-option-check {
+  color: var(--accent-primary);
+  filter: drop-shadow(0 0 5px var(--accent-primary-glow));
+}
+
+/* --------------------------------------------------------------------------
+   13. 响应式与无障碍
+   -------------------------------------------------------------------------- */
+@media (max-width: 720px) {
+  [data-ui-region="composer"] .unified-agent-input-shell::before {
+    left: 20px;
+  }
+
+  [data-ui-region="composer"] .unified-agent-input-shell::after {
+    right: 20px;
+  }
+
+  [data-ui-region="canvas"] .user-message-bubble {
+    padding: 8px 12px;
+  }
+
+  .chat-stream :is(
+    .inline-artifact-card,
+    .approval-card,
+    .patch-review-card,
+    .resolved-card,
+    .task-plan-card
+  )::before {
+    left: 18px;
+  }
+
+  .chat-stream :is(
+    .inline-artifact-card,
+    .approval-card,
+    .patch-review-card,
+    .resolved-card,
+    .task-plan-card
+  )::after {
+    right: 18px;
+  }
+
+  .chat-stream .resolved-card::before {
+    left: 16px;
+  }
+
+  .chat-stream .resolved-card::after {
+    right: 16px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   14. 非主题面
+   不对 .mirror-slide-frame、.mirror-focus-canvas、DesignSystem 或 SVG 页面
+   写任何覆盖规则，确保幻灯片预览和 PPTX 导出不受工作台主题影响。
+   -------------------------------------------------------------------------- */
