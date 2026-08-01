@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { DEFAULT_DESIGN_SYSTEM } from "../src/design-system";
-import { createStarterPresentation } from "../src/shared/presentation";
+import { createStarterPresentation } from "../src/shared/presentation-fixtures";
 import { WorkspaceFileService } from "../src/main/agent/tools/files/workspace-file-service";
 import { createDefaultToolRegistry } from "../src/main/agent/tools/tool-registry";
 import type { ToolContext } from "../src/main/agent/tools/tool-definition";

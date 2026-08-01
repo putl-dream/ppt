@@ -12,7 +12,7 @@ import type {
   AgentModelGateway,
   AgentModelRequest,
 } from "../src/main/agent/gateway/types";
-import { createStarterPresentation } from "../src/shared/presentation";
+import { createStarterPresentation } from "../src/shared/presentation-fixtures";
 import { DurableRunStore } from "../src/main/agent/persistence/durable-run-store";
 
 const history = [

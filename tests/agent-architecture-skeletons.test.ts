@@ -24,7 +24,7 @@ import { CommitGate } from "../src/main/agent/gate/commit-gate";
 import { RiskPolicy } from "../src/main/agent/gate/risk-policy";
 import { DesignPolicy } from "../src/main/agent/design/design-policy";
 import { AgentService } from "../src/main/agent/service";
-import { createStarterPresentation } from "../src/shared/presentation";
+import { createStarterPresentation } from "../src/shared/presentation-fixtures";
 import type { AgentModelSelection } from "../src/shared/agent";
 import { CommandBus } from "../src/shared/commands";
 import { AgentGatewayError, type AgentModelGateway, type AgentModelRequest } from "../src/main/agent/gateway";

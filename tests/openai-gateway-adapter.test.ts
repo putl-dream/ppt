@@ -170,6 +170,35 @@ describe("OpenAI driver", () => {
       input: {},
       parseError: expect.stringContaining("Invalid tool argument JSON"),
     }]);
+    expect(response.stopReason).toBe("tool_use");
+  });
+
+  it("maps Chat length finish_reason to max_tokens", async () => {
+    openAIMock.chatCreate.mockResolvedValue({
+      choices: [{ message: { content: "partial" }, finish_reason: "length" }],
+    });
+
+    const response = await generateWithOpenAI(
+      { ...baseConfig, openaiApiMode: "chat-completions" },
+      preparedRequest("prompt"),
+    );
+
+    expect(response.stopReason).toBe("max_tokens");
+    expect(response.content).toEqual([{ type: "text", text: "partial" }]);
+  });
+
+  it("maps Responses incomplete max_output_tokens to max_tokens", async () => {
+    openAIMock.responsesCreate.mockResolvedValue({
+      output_text: "partial",
+      output: [],
+      status: "incomplete",
+      incomplete_details: { reason: "max_output_tokens" },
+    });
+
+    const response = await generateWithOpenAI(baseConfig, preparedRequest("prompt"));
+
+    expect(response.stopReason).toBe("max_tokens");
+    expect(response.content).toEqual([{ type: "text", text: "partial" }]);
   });
 
   it("streams Chat text and reports one complete chunk", async () => {

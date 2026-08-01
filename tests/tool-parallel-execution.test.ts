@@ -17,7 +17,7 @@ import {
   readFileTool,
   writeFileTool,
 } from "../src/main/agent/tools/core/workspace-files";
-import { createStarterPresentation } from "../src/shared/presentation";
+import { createStarterPresentation } from "../src/shared/presentation-fixtures";
 
 const temporaryRoots: string[] = [];
 

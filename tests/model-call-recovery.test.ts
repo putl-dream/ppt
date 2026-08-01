@@ -108,6 +108,14 @@ describe("gateway recovery classification", () => {
     expect(isOutputTruncated("end")).toBe(false);
     expect(isOutputTruncated("tool_use")).toBe(false);
   });
+
+  it("rejects raw provider errors until Gateway normalizes them", () => {
+    expect(classifyGatewayRecovery(Object.assign(new Error("rate limited"), { status: 429 })))
+      .toBe("non-recoverable");
+    expect(classifyGatewayRecovery(Object.assign(new Error("overloaded"), { status: 529 })))
+      .toBe("non-recoverable");
+    expect(classifyGatewayRecovery(new Error("prompt is too long"))).toBe("non-recoverable");
+  });
 });
 
 describe("compactTranscript", () => {
@@ -205,6 +213,28 @@ describe("callModelWithRecovery", () => {
   it.each([400, 404])("fails fast on HTTP %s without entering backoff", async (status) => {
     const source = Object.assign(new Error("invalid request"), { status });
     const error = normalizeProviderError("openai", source);
+    const generateText = vi.fn().mockRejectedValue(error);
+    const progress: string[] = [];
+    const gateway: AgentModelGateway = {
+      generateText,
+      async *generateTextStream() {
+        yield { type: "complete" as const, content: [] };
+      },
+    };
+
+    await expect(callModelWithRecovery({
+      gateway,
+      systemPrompt: "system",
+      promptPayload: { transcript: [], request: "hello" },
+      onRecovery: (message) => progress.push(message),
+    })).rejects.toBe(error);
+
+    expect(generateText).toHaveBeenCalledTimes(1);
+    expect(progress).toEqual([]);
+  });
+
+  it("fails fast on raw 429 that bypassed Gateway normalization", async () => {
+    const error = Object.assign(new Error("rate limited"), { status: 429 });
     const generateText = vi.fn().mockRejectedValue(error);
     const progress: string[] = [];
     const gateway: AgentModelGateway = {

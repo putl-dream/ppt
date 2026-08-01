@@ -23,7 +23,7 @@ import type {
   ToolDefinition,
 } from "../src/main/agent/tools/tool-definition";
 import { ToolRegistry } from "../src/main/agent/tools/tool-registry";
-import { createStarterPresentation } from "../src/shared/presentation";
+import { createStarterPresentation } from "../src/shared/presentation-fixtures";
 
 function gatewayFor(turns: AgentModelContentBlock[][]): AgentModelGateway & {
   requests: AgentModelRequest[];

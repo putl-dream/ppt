@@ -39,8 +39,8 @@ import { PresentationLifecycleToolBridge } from
   "../src/main/presentation-lifecycle/presentation-lifecycle-tool-bridge";
 import { FileSessionStore } from "../src/main/session-store";
 import { CommandBus } from "../src/shared/commands";
-import { createStarterPresentation, type Presentation } from
-  "../src/shared/presentation";
+import { type Presentation } from "../src/shared/presentation";
+import { createStarterPresentation } from "../src/shared/presentation-fixtures";
 import {
   asPresentationId,
   asProjectId,

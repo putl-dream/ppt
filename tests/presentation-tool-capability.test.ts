@@ -20,7 +20,7 @@ import {
   type PptCapability,
   type PptJobProjection,
 } from "../src/shared/presentation-lifecycle";
-import { createStarterPresentation } from "../src/shared/presentation";
+import { createStarterPresentation } from "../src/shared/presentation-fixtures";
 
 const PRESENTATION_TOOL_NAMES = [
   "GetDesignReference",

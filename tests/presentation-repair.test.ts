@@ -1,11 +1,6 @@
 import { describe, expect, it } from "vitest";
-import {
-  createMinimalSvgMarkup,
-  createStarterPresentation,
-  createSvgVisualSource,
-  presentationSchema,
-  slideSchema,
-} from "../src/shared/presentation";
+import { presentationSchema, slideSchema } from "../src/shared/presentation";
+import { createMinimalSvgMarkup, createStarterPresentation, createSvgVisualSource } from "../src/shared/presentation-fixtures";
 import {
   migrateDisplayCardsToSvgOnly,
   migratePresentationToSvgOnly,

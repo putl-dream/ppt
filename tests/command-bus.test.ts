@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { CommandBus } from "../src/shared/commands";
-import { createStarterPresentation, createSvgTestSlide } from "../src/shared/presentation";
+import { createStarterPresentation, createSvgTestSlide } from "../src/shared/presentation-fixtures";
 
 describe("CommandBus", () => {
   it("keeps a prepared execution invisible until it is committed", () => {

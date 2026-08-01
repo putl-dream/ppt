@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { formatApprovalCommand } from "../src/shared/approval-command-display";
 import type { PresentationCommand } from "../src/shared/commands";
-import { createSvgTestSlide } from "../src/shared/presentation";
+import { createSvgTestSlide } from "../src/shared/presentation-fixtures";
 import { TEST_DESIGN_SYSTEM } from "./design-engine-test-utils";
 
 const slide = createSvgTestSlide({ id: "slide-1", title: "标题页" });

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { ToolExecutionEngine } from "../src/main/agent/runtime/tools/tool-execution-engine";
-import { createStarterPresentation } from "../src/shared/presentation";
+import { createStarterPresentation } from "../src/shared/presentation-fixtures";
 import { ToolRegistry } from "../src/main/agent/tools/tool-registry";
 import type {
   ToolContext,

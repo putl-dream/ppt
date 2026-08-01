@@ -11,7 +11,7 @@ import type {
   AgentModelRequest,
   AgentModelResponse,
 } from "../src/main/agent/gateway/types";
-import { createStarterPresentation } from "../src/shared/presentation";
+import { createStarterPresentation } from "../src/shared/presentation-fixtures";
 import type { ToolDefinition } from "../src/main/agent/tools/tool-definition";
 import { clearHooks, registerHook } from "../src/main/agent/runtime/hooks/hook-registry";
 import type { AgentRuntimeStreamEvent } from "../src/main/agent/runtime/runtime-types";

@@ -9,7 +9,7 @@ import {
   createDefaultOutlineMarkdown,
   createDefaultResearchMarkdown,
 } from "../src/shared/project-artifacts";
-import { createStarterPresentation } from "../src/shared/presentation";
+import { createStarterPresentation } from "../src/shared/presentation-fixtures";
 import {
   probeWorkspaceArtifactDetails,
   probeWorkspaceArtifacts,

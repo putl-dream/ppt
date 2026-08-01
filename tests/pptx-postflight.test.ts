@@ -5,10 +5,8 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { inspectPptxExport } from "../src/main/deck/pptx-postflight";
 import { exportToPptx } from "../src/main/ppt-exporter";
-import {
-  createStarterPresentation,
-  type SlideNarrative,
-} from "../src/shared/presentation";
+import { type SlideNarrative } from "../src/shared/presentation";
+import { createStarterPresentation } from "../src/shared/presentation-fixtures";
 
 const tempDirs: string[] = [];
 

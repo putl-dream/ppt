@@ -12,7 +12,7 @@ import { beginPptCapabilityTool } from
 import { CommitGate } from "../src/main/agent/gate/commit-gate";
 import { RiskPolicy } from "../src/main/agent/gate/risk-policy";
 import { CommandBus } from "../src/shared/commands";
-import { createStarterPresentation } from "../src/shared/presentation";
+import { createStarterPresentation } from "../src/shared/presentation-fixtures";
 import type {
   AgentModelContentBlock,
   AgentModelGateway,

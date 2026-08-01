@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { renderSlideHtml } from "../src/shared/slide-html-render";
-import { createSvgVisualSource } from "../src/shared/presentation";
+import { createSvgVisualSource } from "../src/shared/presentation-fixtures";
 import { TEST_DESIGN_SYSTEM } from "./design-engine-test-utils";
 
 describe("SVG page HTML rendering", () => {

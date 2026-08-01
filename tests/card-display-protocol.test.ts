@@ -18,7 +18,7 @@ import {
   useReviewCardManager,
 } from "../src/renderer/src/cards/display-card-managers";
 import { getCardPresentationPolicy } from "../src/renderer/src/cards/card-presentation-policy";
-import { createSvgTestSlide } from "../src/shared/presentation";
+import { createSvgTestSlide } from "../src/shared/presentation-fixtures";
 import { createSessionPresentation } from "../src/shared/session";
 
 const permissionEvent = {

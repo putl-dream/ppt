@@ -17,7 +17,7 @@ import { executeExtraToolTool } from "../src/main/agent/tools/core/execute-extra
 import { searchExtraToolsTool } from "../src/main/agent/tools/core/search-extra-tools";
 import { previewSlideTool } from "../src/main/agent/tools/core/preview-slide";
 import { toToolSchema } from "../src/main/agent/tools/tool-schema";
-import { createStarterPresentation } from "../src/shared/presentation";
+import { createStarterPresentation } from "../src/shared/presentation-fixtures";
 
 function deferred<T>() {
   let resolve!: (value: T) => void;

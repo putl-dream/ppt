@@ -221,32 +221,26 @@ export function isOutputTruncated(stopReason?: StopReason): boolean {
   return stopReason === "max_tokens";
 }
 
+/**
+ * Classify recovery for Runtime. Only AgentGatewayError is accepted — raw
+ * provider/HTTP errors must be normalized by AgentGateway first.
+ */
 export function classifyGatewayRecovery(error: unknown): GatewayRecoveryKind {
-  if (error instanceof AgentGatewayError) {
-    switch (error.code) {
-      case "rate-limit":
-      case "overloaded":
-        return "retry-backoff";
-      case "prompt-too-long":
-        return "compact-context";
-      case "timeout":
-        return errorStatus(error) === 408 ? "retry-backoff" : "non-recoverable";
-      case "provider-error":
-        return isDeterministicClientError(error) ? "non-recoverable" : "retry-backoff";
-      default:
-        return "non-recoverable";
-    }
+  if (!(error instanceof AgentGatewayError)) return "non-recoverable";
+
+  switch (error.code) {
+    case "rate-limit":
+    case "overloaded":
+      return "retry-backoff";
+    case "prompt-too-long":
+      return "compact-context";
+    case "timeout":
+      return errorStatus(error) === 408 ? "retry-backoff" : "non-recoverable";
+    case "provider-error":
+      return isDeterministicClientError(error) ? "non-recoverable" : "retry-backoff";
+    default:
+      return "non-recoverable";
   }
-
-  const status = (error as { status?: number }).status;
-  if (status === 429 || status === 529) return "retry-backoff";
-  if (status === 408) return "retry-backoff";
-  if (isConnectionTerminated(error)) return "retry-backoff";
-
-  const message = errorMessage(error);
-  if (isPromptTooLongMessage(message)) return "compact-context";
-
-  return "non-recoverable";
 }
 
 export function isAbortError(error: unknown, signal?: AbortSignal): boolean {

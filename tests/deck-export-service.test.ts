@@ -3,11 +3,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { DeckExportService } from "../src/main/deck/deck-export-service";
-import {
-  createStarterPresentation,
-  createSvgTestSlide,
-  type SlideNarrative,
-} from "../src/shared/presentation";
+import { type SlideNarrative } from "../src/shared/presentation";
+import { createStarterPresentation, createSvgTestSlide } from "../src/shared/presentation-fixtures";
 import type { ExportPresentationOptions } from "../src/shared/ipc";
 
 const defaultExportOptions: ExportPresentationOptions = {};

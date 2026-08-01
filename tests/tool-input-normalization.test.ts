@@ -11,7 +11,7 @@ import { ToolRegistry } from "../src/main/agent/tools/tool-registry";
 import { parseDefinedToolInput, parseToolInput } from "../src/main/agent/tools/tool-input";
 import { toToolCard } from "../src/main/agent/tools/tool-card";
 import { toToolSchema } from "../src/main/agent/tools/tool-schema";
-import { createStarterPresentation } from "../src/shared/presentation";
+import { createStarterPresentation } from "../src/shared/presentation-fixtures";
 
 describe("tool input normalization", () => {
   it("repairs a double-serialized AskUser responseUi object", () => {

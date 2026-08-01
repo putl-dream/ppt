@@ -5,10 +5,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   CommandBus,
 } from "@shared/commands";
-import {
-  createStarterPresentation,
-  type Presentation,
-} from "@shared/presentation";
+import { type Presentation } from "@shared/presentation";
+import { createStarterPresentation } from "@shared/presentation-fixtures";
 import {
   ContentAddressedBlobStore,
   canonicalJson,

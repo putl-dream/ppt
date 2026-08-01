@@ -4,10 +4,8 @@ import {
   normalizePromptStage,
   resolvePromptStage,
 } from "../src/main/agent/runtime/prompts/prompt-stage";
-import {
-  createSvgTestSlide,
-  type Presentation,
-} from "../src/shared/presentation";
+import { type Presentation } from "../src/shared/presentation";
+import { createSvgTestSlide } from "../src/shared/presentation-fixtures";
 import type { WorkspaceArtifacts } from "../src/main/agent/runtime/presentation/workspace-artifacts";
 import { TEST_DESIGN_SYSTEM } from "./design-engine-test-utils";
 

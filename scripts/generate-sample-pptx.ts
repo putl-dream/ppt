@@ -4,7 +4,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { exportToPptx } from "../src/main/ppt-exporter";
 import { DESIGN_PRESETS } from "../src/design-system";
-import { createStarterPresentation } from "../src/shared/presentation";
+import { createStarterPresentation } from "../src/shared/presentation-fixtures";
 import type { Presentation, Slide } from "../src/shared/presentation";
 
 function svgSlide(

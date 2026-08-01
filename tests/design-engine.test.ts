@@ -10,11 +10,8 @@ import {
   resolveBrandProfileDesignSystem,
 } from "@design-system";
 import { executeCommand } from "../src/shared/commands";
-import {
-  createSvgTestSlide,
-  type Slide,
-  type SlideNarrative,
-} from "../src/shared/presentation";
+import { type Slide, type SlideNarrative } from "../src/shared/presentation";
+import { createSvgTestSlide } from "../src/shared/presentation-fixtures";
 import { testDesignSystem } from "./design-engine-test-utils";
 
 const NARRATIVE: SlideNarrative = {

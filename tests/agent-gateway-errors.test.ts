@@ -56,4 +56,15 @@ describe("normalizeProviderError", () => {
 
     expect(error.message).toBe("Run aborted by user.");
   });
+
+  it("attaches retryAfterMs from numeric Retry-After headers", () => {
+    const source = Object.assign(new Error("rate limited"), {
+      status: 429,
+      headers: { get: (name: string) => (name === "retry-after" ? "3" : null) },
+    });
+    const error = normalizeProviderError("openai", source);
+
+    expect(error.code).toBe("rate-limit");
+    expect(error.retryAfterMs).toBe(3000);
+  });
 });

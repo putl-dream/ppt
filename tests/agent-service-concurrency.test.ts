@@ -6,7 +6,7 @@ import { ToolRegistry } from "../src/main/agent/tools/tool-registry";
 import { CommitGate } from "../src/main/agent/gate/commit-gate";
 import { RiskPolicy } from "../src/main/agent/gate/risk-policy";
 import { CommandBus } from "../src/shared/commands";
-import { createStarterPresentation } from "../src/shared/presentation";
+import { createStarterPresentation } from "../src/shared/presentation-fixtures";
 
 describe("AgentService thread run ownership", () => {
   it("rejects a concurrent run for the same thread before it reaches the Runtime", async () => {

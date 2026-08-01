@@ -4,12 +4,8 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { exportToPptx } from "../src/main/ppt-exporter";
 import { CommandBus } from "../src/shared/commands";
-import {
-  createStarterPresentation,
-  createSvgTestSlide,
-  type Presentation,
-  type SlideNarrative,
-} from "../src/shared/presentation";
+import { type Presentation, type SlideNarrative } from "../src/shared/presentation";
+import { createStarterPresentation, createSvgTestSlide } from "../src/shared/presentation-fixtures";
 import type { ExportPresentationOptions } from "../src/shared/ipc";
 import { testDesignSystem } from "./design-engine-test-utils";
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createSvgTestSlide } from "../src/shared/presentation";
+import { createSvgTestSlide } from "../src/shared/presentation-fixtures";
 import { auditPresentationVisualAssets } from "../src/shared/visual-asset-audit";
 import { TEST_DESIGN_SYSTEM } from "./design-engine-test-utils";
 

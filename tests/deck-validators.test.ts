@@ -1,11 +1,7 @@
 import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import {
-  createSvgTestSlide,
-  type Presentation,
-  type Slide,
-  type SlideNarrative,
-} from "../src/shared/presentation";
+import { type Presentation, type Slide, type SlideNarrative } from "../src/shared/presentation";
+import { createSvgTestSlide } from "../src/shared/presentation-fixtures";
 import { LayoutValidator } from "../src/main/deck/validators/layout-validator";
 import { StyleValidator } from "../src/main/deck/validators/style-validator";
 import { AssetValidator } from "../src/main/deck/validators/asset-validator";

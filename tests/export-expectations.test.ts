@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createSvgTestSlide } from "../src/shared/presentation";
+import { createSvgTestSlide } from "../src/shared/presentation-fixtures";
 import { DEFAULT_DESIGN_SYSTEM } from "../src/design-system";
 import {
   confirmSvgExportExpectation,

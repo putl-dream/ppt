@@ -1,11 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { CommitGate } from "../src/main/agent/gate/commit-gate";
 import { RiskPolicy } from "../src/main/agent/gate/risk-policy";
-import {
-  createStarterPresentation,
-  createSvgTestSlide,
-  type Presentation,
-} from "../src/shared/presentation";
+import { type Presentation } from "../src/shared/presentation";
+import { createStarterPresentation, createSvgTestSlide } from "../src/shared/presentation-fixtures";
 import { TEST_DESIGN_SYSTEM } from "./design-engine-test-utils";
 
 const testNarrative = {

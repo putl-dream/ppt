@@ -21,7 +21,7 @@ import {
   asProjectId,
   asQueryId,
 } from "../src/shared/presentation-lifecycle";
-import { createStarterPresentation } from "../src/shared/presentation";
+import { createStarterPresentation } from "../src/shared/presentation-fixtures";
 
 const directories: string[] = [];
 const repositories: PresentationLifecycleRepository[] = [];

@@ -1,9 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import {
-  createStarterPresentation,
-  createSvgVisualSource,
-  type SlideNarrative,
-} from "../src/shared/presentation";
+import { type SlideNarrative } from "../src/shared/presentation";
+import { createStarterPresentation, createSvgVisualSource } from "../src/shared/presentation-fixtures";
 
 const pptxMocks = vi.hoisted(() => {
   const slide = {

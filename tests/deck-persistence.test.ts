@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { FileSessionStore } from "@main/session-store";
 import { projectArtifactFilePaths } from "@shared/project";
 import type { DeckGenerationJob } from "@shared/deck-persistence";
-import { createSvgTestSlide } from "@shared/presentation";
+import { createSvgTestSlide } from "@shared/presentation-fixtures";
 import { TEST_DESIGN_SYSTEM } from "./design-engine-test-utils";
 
 const temporaryDirectories: string[] = [];

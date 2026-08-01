@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createStarterPresentation } from "../src/shared/presentation";
+import { createStarterPresentation } from "../src/shared/presentation-fixtures";
 import {
   exportDeckContactSheetHtml,
   exportSlideThumbnailHtml,

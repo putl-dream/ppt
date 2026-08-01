@@ -1,14 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import { exportPresentationOptionsSchema } from "../src/shared/ipc";
-import {
-  createMinimalSvgMarkup,
-  createSvgVisualSource,
-  rasterDataImageSourceSchema,
-  slideSchema,
-  svgPageResourceSchema,
-  svgPageVisualSourceSchema,
-} from "../src/shared/presentation";
+import { rasterDataImageSourceSchema, slideSchema, svgPageResourceSchema, svgPageVisualSourceSchema } from "../src/shared/presentation";
+import { createMinimalSvgMarkup, createSvgVisualSource } from "../src/shared/presentation-fixtures";
 
 describe("presentation SVG schema integrity", () => {
   it("accepts only supported raster data URLs for export logos", () => {

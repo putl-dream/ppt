@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AgentActivityItem } from "../src/shared/agent-activity";
 import { formatTerminalAgentRunContent } from "../src/shared/agent-result-copy";
 import type { AgentRunResult } from "../src/shared/ipc";
-import { createSvgTestSlide } from "../src/shared/presentation";
+import { createSvgTestSlide } from "../src/shared/presentation-fixtures";
 import { createSessionPresentation } from "../src/shared/session";
 import {
   useAgentResultHandler,

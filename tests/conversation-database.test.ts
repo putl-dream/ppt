@@ -3,10 +3,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it } from "vitest";
 import { ConversationDatabase } from "@main/conversation-database";
-import {
-  createMinimalSvgMarkup,
-  createSvgVisualSource,
-} from "@shared/presentation";
+import { createMinimalSvgMarkup, createSvgVisualSource } from "@shared/presentation-fixtures";
 import {
   createSessionPresentation,
   type SessionSnapshot,

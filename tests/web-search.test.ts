@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createStarterPresentation } from "../src/shared/presentation";
+import { createStarterPresentation } from "../src/shared/presentation-fixtures";
 import { TavilySearchAdapter } from "../src/main/agent/search/tavily-adapter";
 import { createSearchService } from "../src/main/agent/search/search-service";
 import { webSearchSchema } from "../src/main/agent/search/web-search";

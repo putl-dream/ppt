@@ -2,7 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it } from "vitest";
-import { createStarterPresentation } from "../src/shared/presentation";
+import { createStarterPresentation } from "../src/shared/presentation-fixtures";
 import { previewSvgPageTool } from "../src/main/agent/tools/core/preview-svg-page";
 import { WorkspaceFileService } from "../src/main/agent/tools/files/workspace-file-service";
 import { createDefaultToolRegistry } from "../src/main/agent/tools/tool-registry";

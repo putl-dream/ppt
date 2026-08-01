@@ -11,7 +11,7 @@ import {
   createEmptySkillRegistry,
 } from "../src/main/agent/skills/loadSkillsDir";
 import { createSkillSession } from "../src/main/agent/skills/skill-types";
-import { createStarterPresentation } from "../src/shared/presentation";
+import { createStarterPresentation } from "../src/shared/presentation-fixtures";
 import {
   buildSystemPromptContext,
   MEMORY_INDEX_RELATIVE_PATH,

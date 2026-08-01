@@ -9,7 +9,7 @@ import type { StopBlock } from "../src/main/agent/runtime/hooks/hook-blocks";
 import type { AgentModelGateway } from "../src/main/agent/gateway/types";
 import { ToolRegistry } from "../src/main/agent/tools/tool-registry";
 import type { ToolDefinition } from "../src/main/agent/tools/tool-definition";
-import { createStarterPresentation } from "../src/shared/presentation";
+import { createStarterPresentation } from "../src/shared/presentation-fixtures";
 import { DurableRunStore } from "../src/main/agent/persistence/durable-run-store";
 import { DurableConversationHistoryStore } from "../src/main/agent/persistence/conversation-history-store";
 import { createFakeCommandProposalTool } from "./fake-command-proposal-tool";

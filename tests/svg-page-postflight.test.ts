@@ -6,10 +6,8 @@ import JSZip from "jszip";
 import { afterEach, describe, expect, it } from "vitest";
 import { inspectPptxExport } from "../src/main/deck/pptx-postflight";
 import { exportToPptx } from "../src/main/ppt-exporter";
-import {
-  createStarterPresentation,
-  type Slide,
-} from "../src/shared/presentation";
+import { type Slide } from "../src/shared/presentation";
+import { createStarterPresentation } from "../src/shared/presentation-fixtures";
 
 const temporaryDirectories: string[] = [];
 

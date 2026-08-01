@@ -5,7 +5,8 @@ import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DEFAULT_DESIGN_SYSTEM } from "../src/design-system";
 import type { DisplayEvent } from "../src/shared/card-display-protocol";
-import { createSvgTestSlide, type Presentation } from "../src/shared/presentation";
+import { type Presentation } from "../src/shared/presentation";
+import { createSvgTestSlide } from "../src/shared/presentation-fixtures";
 import { PPTMirror } from "../src/renderer/src/components/PPTMirror";
 import { ArtifactCardHost } from "../src/renderer/src/cards/hosts/ArtifactCardHost";
 import {

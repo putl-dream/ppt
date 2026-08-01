@@ -11,7 +11,7 @@ import type {
   AgentModelRequest,
 } from "../src/main/agent/gateway/types";
 import type { ToolDefinition } from "../src/main/agent/tools/tool-definition";
-import { createStarterPresentation } from "../src/shared/presentation";
+import { createStarterPresentation } from "../src/shared/presentation-fixtures";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";

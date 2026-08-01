@@ -109,8 +109,11 @@ provider SDK。
   `AgentModelContentBlock` 等；`stopReason` 已归一为 Gateway 枚举
   （`end` / `max_tokens` / `tool_use` / `other`），Runtime 不再接触 raw provider 字符串；
 - 标准错误：`AgentGatewayError`（含 `retryAfterMs`、`code` 与 `provider`）；
+  raw provider/HTTP 错误只在 Gateway 内经 `normalizeProviderError` 吸入；
 - 公共 helper：`textFromContentBlocks`、`toolUseBlocksFromContent`、
   `ensureToolResultPairing`、`isOutputTruncated`、`classifyGatewayRecovery` 等；
+  其中 `classifyGatewayRecovery` 只接受 `AgentGatewayError`，裸 status/message
+  一律视为不可恢复；
 - 程序消费者应只从 barrel import，不应 deep-import 子模块。
 
 **私有 driver 层：**
@@ -122,11 +125,12 @@ provider SDK。
 
 **Runtime 恢复：**
 
-`src/main/agent/runtime/turns/model-call-recovery.ts` 根据 Gateway 返回的标准错误
-和归一化 `stopReason` 决定 attempt 之间的恢复，包括退避、Context 压缩、输出 token
-升级、截断续写和 fallback model。thinking-only 且因 token 上限结束也走这条 Runtime
-恢复路径。新增 Provider 时应实现相同的 prepared-request/response driver 协议，
-不能把 Provider 分支扩散进 Query Loop 或 Presentation 工具。
+`src/main/agent/runtime/turns/model-call-recovery.ts` 根据 Gateway 返回的
+`AgentGatewayError` 与归一化 `stopReason` 决定 attempt 之间的恢复，包括退避、
+Context 压缩、输出 token 升级、截断续写和 fallback model。thinking-only 且因
+token 上限结束也走这条 Runtime 恢复路径。新增 Provider 时应实现相同的
+prepared-request/response driver 协议，不能把 Provider 分支扩散进 Query Loop
+或 Presentation 工具。
 
 验证入口：
 

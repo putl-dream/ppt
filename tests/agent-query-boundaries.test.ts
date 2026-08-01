@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createStarterPresentation } from "../src/shared/presentation";
+import { createStarterPresentation } from "../src/shared/presentation-fixtures";
 import { AgentQueryAssembler } from "../src/main/agent/runtime/query/agent-query-assembler";
 import { normalizeAgentRuntimeOptions } from "../src/main/agent/runtime/runtime-types";
 import { asQueryId } from "../src/shared/presentation-lifecycle";

@@ -34,7 +34,7 @@ import {
 } from "../src/main/agent/task/task-store";
 import { createDefaultToolRegistry } from "../src/main/agent/tools/tool-registry";
 import type { ToolContext } from "../src/main/agent/tools/tool-definition";
-import { createStarterPresentation } from "../src/shared/presentation";
+import { createStarterPresentation } from "../src/shared/presentation-fixtures";
 import type { TeammateProgressEvent } from "../src/shared/teammate-progress";
 
 describe("mailbox history formatting", () => {

@@ -9,7 +9,7 @@ import {
 import { ToolApprovalBroker } from "../src/main/agent/runtime/tools/tool-approval-broker";
 import type { ToolDefinition } from "../src/main/agent/tools/tool-definition";
 import { ToolRegistry } from "../src/main/agent/tools/tool-registry";
-import { createStarterPresentation } from "../src/shared/presentation";
+import { createStarterPresentation } from "../src/shared/presentation-fixtures";
 
 describe("runtime cancellation classification", () => {
   it("prioritizes an aborted signal over an ordinary downstream error", () => {
