@@ -12,8 +12,7 @@ import type { ToolDefinition } from "../src/main/agent/tools/tool-definition";
 import { createStarterPresentation } from "../src/shared/presentation";
 import { DurableRunStore } from "../src/main/agent/persistence/durable-run-store";
 import { DurableConversationHistoryStore } from "../src/main/agent/persistence/conversation-history-store";
-import { testLayoutChoice } from "./design-engine-test-utils";
-import { submitCommandsTool } from "../src/main/agent/tools/core/submit-commands";
+import { createFakeCommandProposalTool } from "./fake-command-proposal-tool";
 
 function textGateway(text: string): AgentModelGateway {
   return {
@@ -219,10 +218,10 @@ describe("AgentRuntime terminal boundaries", () => {
     );
   });
 
-  it("persists a paired result for a terminal SubmitCommands call", async () => {
+  it("persists a paired result for a terminal command_proposal call", async () => {
     const workspaceRoot = await mkdtemp(join(tmpdir(), "runtime-terminal-tool-history-"));
     const registry = new ToolRegistry();
-    registry.register(submitCommandsTool);
+    registry.register(createFakeCommandProposalTool());
     const gateway: AgentModelGateway = {
       async generateText() {
         return {
@@ -231,7 +230,7 @@ describe("AgentRuntime terminal boundaries", () => {
           content: [{
             type: "tool_use",
             id: "terminal-submit",
-            name: "SubmitCommands",
+            name: "FakeSubmitCommands",
             input: {
               summary: "Update title",
               risk: "low",
@@ -250,7 +249,7 @@ describe("AgentRuntime terminal boundaries", () => {
           content: [{
             type: "tool_use" as const,
             id: "terminal-submit",
-            name: "SubmitCommands",
+            name: "FakeSubmitCommands",
             input: {
               summary: "Update title",
               risk: "low",
@@ -451,29 +450,6 @@ describe("AgentRuntime terminal boundaries", () => {
 
     expect(removeListener).toHaveBeenCalledWith("abort", expect.any(Function));
     await store.closeLease(opened.lease);
-  });
-
-  it("closes a lease when preparation fails after acquisition", async () => {
-    const workspaceRoot = await mkdtemp(join(tmpdir(), "runtime-prepare-failed-"));
-    await expect(new AgentRuntime(new ToolRegistry(), textGateway("unused")).run({
-      threadId: "prepare-failed-thread",
-      runId: "failed-preparation",
-      request: "layout",
-      presentationSnapshot: createStarterPresentation(),
-      selectedElementIds: [],
-      workspaceRoot,
-      layoutChoice: testLayoutChoice(),
-    })).rejects.toThrow("configured workspace task board");
-
-    const reopened = await new DurableRunStore(workspaceRoot).openLease({
-      threadId: "prepare-failed-thread",
-      runId: "replacement-run",
-      resume: false,
-    });
-    expect(reopened.type).toBe("opened");
-    if (reopened.type === "opened") {
-      await new DurableRunStore(workspaceRoot).closeLease(reopened.lease);
-    }
   });
 
   it("closes a newly acquired lease when the post-lease History read fails", async () => {

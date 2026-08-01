@@ -1,28 +1,30 @@
 # Visual Expression System
 
 > 文档类型：现行架构与剩余边界
-> 最后核对：2026-07-30
+> 最后核对：2026-08-01
 > 模板上传、内容自动选择与默认回退方案见
 > [Presentation 模板管理与自动选择](../roadmap/template-management.md)
+> （Proposed；零依赖 Grammar；对齐 SVG-native design-spec）
 
 ## 1. 系统定位
 
-产品新建路径以完整页面 SVG 为视觉作者源；Layout Grammar 仍服务于遗留布局编译与可编辑元素路径。两条路径最终都进入同一 Presentation，供 Editor / HTML / PPTX 消费。
+产品 Agent **作者路径**仅为完整页面 SVG。Layout Grammar **不是** Agent 可发现的作者轨：
+相关作者工具已从 `createDefaultToolRegistry()` 移除（见
+`tests/svg-native-tool-surface.test.ts`）。共享库中的 `applyLayout` / layout-handlers
+仍可能服务无 `visualSource.kind === "svg"` 的 element-IR 页或 CommandBus 路径，但这不是
+产品新建入口。两条消费链最终仍进入同一 Presentation，供 Editor / HTML / PPTX 使用。
 
 ```text
-SVG-native（产品新建）:
+产品作者（Agent SVG-native）:
   design-spec + page-plan
     → slides/svg/PNN.svg
     → PreviewSvgPage / SubmitSvgDeck
     → Presentation（visualSource.kind = "svg"）
 
-Layout Grammar（遗留/并行）:
-  Brand Profile
-    → DesignSystemV2
-    → Design Tokens
-    → Layout Grammar + Variant
-    → Motif / Image / Chart primitives
-    → Presentation elements
+共享遗留编译（非 Agent 作者表面；库仍在，工具未注册）:
+  Brand Profile / DesignSystemV2 / Tokens
+    → Layout Grammar + Variant（applyLayout）
+    → Presentation elements（非 SVG 遗留页）
 ```
 
 ## 2. 已形成的能力层
@@ -32,8 +34,8 @@ Layout Grammar（遗留/并行）:
 | SVG page source | 完整页面 SVG（1280×720）；`visualSource.kind === "svg"`；预览 PNG 门禁 |
 | Design System | DesignSystemV2：颜色、字体、密度、背景、图片和图表默认值 |
 | Brand Profile | 稳定视觉人格到 DesignSystem 的确定性映射 |
-| Layout Registry | cover、section、concept、comparison、process、architecture、case、summary、toc、quote、image-grid（遗留路径） |
-| Grammar Handler | 同一 layout 下的多种可执行 variant（遗留路径） |
+| Layout Registry | cover、section、concept、comparison、process、architecture、case、summary、toc、quote、image-grid（共享遗留库；非 Agent 作者面） |
+| Grammar Handler | 同一 layout 下的多种可执行 variant（共享遗留库；非 Agent 作者面） |
 | Visual Tokens | spacing、radii、elevation、motif |
 | Element vocabulary | text、shape、image、chart、table、icon、背景 |
 | Rendering | Editor、HTML/contact sheet、PPTX 共用 Presentation |
@@ -52,16 +54,13 @@ Layout Grammar（遗留/并行）:
 
 当 slide 带有 `visualSource.kind === "svg"` 时，该页的视觉作者源是对应 SVG 文件；元素树由提交工具从 SVG/内联素材派生。可见修改必须改 SVG 并重新预览，不能只改 page-plan 期待自动重绘。
 
-### Grammar Variant（遗留）
+### Grammar Variant（共享遗留库，非产品作者面）
 
-模型选择：
-
-- layout 语义；
-- grammar variant；
-- design token override；
-- 内容/图片槽。
-
-Handler 决定坐标、层级、默认装饰和可编辑元素。新建整套演示不得依赖此路径。
+`applyLayout` 与 `layoutGrammarRegistry` 仍在 `src/shared/`：handler 可为非 SVG
+element-IR 页决定坐标、层级、默认装饰和可编辑元素。Agent 注册表**不再**暴露
+`ExecuteLayoutPlan`、`PreviewCommands`、`SubmitCommands`、`InsertSlideImage` 或旧
+beautify/layout 工具；产品新建与美化不得依赖此路径。源文件若仍留在
+`src/main/agent/tools/core|deferred/`，也不表示已注册。
 
 ### Provenance
 
@@ -90,11 +89,11 @@ Presentation
 - 焦点裁切；
 - cover/contain；
 - plain/framed/masked 等 treatment；
-- layout slot 与宽高比适配。
+- layout slot 与宽高比适配（遗留 element-IR）；SVG 路径用显式 `href`。
 
 SVG-native 路径要求图片以 workspace 相对 `href` 写入 SVG；`SubmitSvgDeck` 内联同一字节。禁止远程 URL。
 
-声明 required image 的 Scene/Grammar 若没有有效素材，应质量失败或更换不依赖图片的设计，不能留下空框。
+声明依赖图片的设计若没有有效素材，应质量失败或更换不依赖图片的设计，不能留下空框。
 
 ## 6. 图表与可编辑性
 
@@ -114,17 +113,12 @@ SVG-native 路径要求图片以 workspace 相对 `href` 写入 SVG；`SubmitSvg
 - SubmitSvgDeck 锁文件核对、素材内联与 schema 校验；
 - CommitGate 与导出。
 
-### Layout Grammar（遗留）
+### Layout Grammar（遗留库行为说明；模型不可调用作者工具）
 
-模型应该决定：
+Grammar 作者工具已从注册表移除。以下边界仅描述**若**仍有非 SVG element-IR 页经
+确定性代码走 `applyLayout` 时的职责划分，不是 Agent 可操作的作者协议：
 
-- 页面叙事角色；
-- layout/variant；
-- 品牌方向；
-- 图片意图；
-- 哪个数据是视觉焦点。
-
-确定性代码应该决定：
+确定性代码决定：
 
 - 坐标；
 - 字号和 spacing 下限；
@@ -134,7 +128,7 @@ SVG-native 路径要求图片以 workspace 相对 `href` 写入 SVG；`SubmitSvg
 - 导出降级；
 - overflow 和硬质量门。
 
-在 grammar 路径上，模型不输出任意 `x/y/width/height` 元素树；在 SVG-native 路径上，几何写在 SVG 内，不经 layout handler 填槽。
+在 SVG-native 路径上，几何写在 SVG 内，不经 layout handler 填槽。
 
 ## 8. Render Feedback
 
@@ -148,10 +142,23 @@ SVG-native 路径要求图片以 workspace 相对 `href` 写入 SVG；`SubmitSvg
 ## 9. 当前剩余工作
 
 - 默认 project artifact / workspace probe 与 SVG-native 作者文件对齐；
-- layout slot 与 grammar handler 继续收敛（遗留路径）；
 - captioned image 建立独立内容模型；
 - deck-review 增强母题、锚点、密度和页面差异度；
 - 从内容自动推导 Brand Profile，并允许用户自然语言调节。
+
+### Grammar 遗留清理前提（非本轮必做；非模板前置）
+
+**已完成**：Grammar/命令轨 Agent 作者工具从默认注册表移除；Deferred 发现面为空
+（`tests/svg-native-tool-surface.test.ts`）。
+
+**尚未完成**：删除或冻结共享库
+`src/shared/layout-grammar.ts`、`layout-grammar-variants.ts`、`layout-handlers/*`、
+`applyLayout`，以及停止对非 SVG 页写入 `layout` / `grammarVariant`。须先确认
+Editor / PPTX / 快照恢复 / CommandBus **不再依赖**这些路径。这是独立遗留清理，
+**不是** [template-management](../roadmap/template-management.md) Phase 1 前置。
+
+[template-management](../roadmap/template-management.md)（Proposed）与 Grammar 零耦合：
+内置模板只锁定 Design System 与 SVG 作者指引。
 
 剩余项集中维护在本文件和 [工作流](./workflow.md)，不再保留多个视觉建设 plan。
 
@@ -161,7 +168,8 @@ SVG-native 路径要求图片以 workspace 相对 `href` 写入 SVG；`SubmitSvg
 - `src/shared/presentation.ts`（`designSystemV2Schema`、`visualSource`）
 - `src/main/agent/tools/core/preview-svg-page.ts`
 - `src/main/agent/tools/core/submit-svg-deck.ts`
-- `src/shared/layout-grammar.ts`
+- `src/main/agent/tools/tool-registry.ts`（默认注册表不含 Grammar 作者工具）
+- `src/shared/layout-grammar.ts`（共享遗留编译；未删）
 - `src/shared/layout-grammar-variants.ts`
 - `src/shared/layout-handlers/`
 - `src/shared/layout-slots.ts`
@@ -174,8 +182,8 @@ SVG-native 路径要求图片以 workspace 相对 `href` 写入 SVG；`SubmitSvg
 ## 11. 验收
 
 - 新建路径可仅凭 SVG 作者文件完成预览与提交。
-- 同一内容在遗留 grammar 路径下仍可生成至少三种明显不同的视觉气质。
+- 默认工具注册表不含 Grammar/命令轨作者工具；Deferred 发现面为空。
 - 缩略图可区分页面角色和整套节奏。
 - 同一 deck 的母题稳定，但页面不成为重复卡片墙。
 - Editor、HTML 和 PPTX 的结构语义一致。
-- 主要前景对象在 PPTX 中可编辑（在适用元素类型上）。
+- 对 SVG 页，视觉修改必须改 SVG 源并重新 Preview；不能只改派生元素树。

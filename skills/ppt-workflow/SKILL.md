@@ -20,7 +20,7 @@ allowed-tools:
 
 新建流程只认 `slides/svg/P<NN>.svg` 为页面视觉作者源。设计规格和逐页计划描述意图，不能在预览或提交时补出任何可见对象。图片可以作为 workspace 资源被 SVG 显式引用；除此之外，页面的背景、标题、正文、页码、图表、图示和装饰都必须已经存在于 SVG 中。
 
-预览与提交必须消费同一份 SVG。禁止把旧 Presentation element IR、固定 layout、layout handler、自动页眉/页码或其他 chrome 作为新建流程的一部分；不要调用 `PreviewCommands`、`SubmitCommands` 或 `ExecuteLayoutPlan`。无需兼容旧生成路线。
+预览与提交必须消费同一份 SVG。页面视觉只来自作者 SVG，不依赖固定 layout、layout handler 或自动 chrome。产品作者路径仅为 `PreviewSvgPage` → `SubmitSvgDeck`。
 
 ## 固定顺序
 

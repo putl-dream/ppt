@@ -13,7 +13,7 @@ import {
   type AgentCommandProposalResult,
 } from "../../runtime/runtime-types";
 import type { ToolDefinition } from "../tool-definition";
-import { assumptionsSchema } from "./submit-commands";
+import { assumptionsSchema } from "../assumptions-schema";
 import { assertSvgPageLifecycleCurrent } from "./svg-deck-lifecycle";
 import {
   assertSvgDeckLocksMatchSubmission,

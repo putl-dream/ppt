@@ -4,7 +4,6 @@ import {
   prepareAgentRunMessages,
 } from "../src/renderer/src/app/agent/agentRunPreparation";
 import type { ChatMessage } from "../src/renderer/src/app/chatMessageRuntime";
-import { testLayoutChoice } from "./design-engine-test-utils";
 
 const sourceMessages: ChatMessage[] = [
   { id: "user-1", role: "user", content: "first" },
@@ -33,18 +32,15 @@ function prepare(overrides: Partial<Parameters<typeof prepareAgentRunMessages>[0
 }
 
 describe("agent run message branching", () => {
-  it("builds the IPC request with the confirmed design direction", () => {
-    const layoutChoice = testLayoutChoice();
+  it("builds the IPC request without layoutChoice", () => {
     expect(buildAgentRunRequest({
       prompt: "Create a deck",
       sessionId: "session-1",
-      layoutChoice,
       currentSlideId: "slide-2",
     })).toEqual({
       prompt: "Create a deck",
       sessionId: "session-1",
       editorContext: { currentSlideId: "slide-2", selectedElementIds: [] },
-      layoutChoice,
     });
   });
 

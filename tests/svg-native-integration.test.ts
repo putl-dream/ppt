@@ -12,7 +12,7 @@ import {
   applyCommandsToDraft,
   collectAffectedSlideIds,
 } from "../src/main/agent/runtime/presentation/layout-command-utils";
-import { previewSlideTool } from "../src/main/agent/tools/deferred/preview-slide";
+import { previewSlideTool } from "../src/main/agent/tools/core/preview-slide";
 import type { ToolContext } from "../src/main/agent/tools/tool-definition";
 import {
   TEST_DESIGN_SYSTEM,

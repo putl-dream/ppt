@@ -5,10 +5,6 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { localizeImageAsset } from "../src/main/agent/assets/image-asset";
-import { insertSlideImageTool } from "../src/main/agent/tools/core/insert-slide-image";
-import { createDefaultToolRegistry } from "../src/main/agent/tools/tool-registry";
-import type { Presentation } from "../src/shared/presentation";
-import { TEST_DESIGN_SYSTEM } from "./design-engine-test-utils";
 
 const TINY_PNG = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl2n1cAAAAASUVORK5CYII=",
@@ -85,66 +81,5 @@ describe("image asset localization", () => {
       resolveHost: async () => ["93.184.216.34"],
     })).rejects.toThrow("private");
     expect(fetchImpl).toHaveBeenCalledOnce();
-  });
-
-  it("localizes remote InsertSlideImage assets when a workspace is available", async () => {
-    const workspaceRoot = await makeTempRoot();
-    vi.stubGlobal("fetch", vi.fn(async () => new Response(TINY_PNG, {
-      status: 200,
-      headers: { "content-type": "image/png" },
-    })));
-    const slideId = crypto.randomUUID();
-    const presentation: Presentation = {
-      id: crypto.randomUUID(),
-      title: "Deck",
-      revision: 1,
-      designSystem: TEST_DESIGN_SYSTEM,
-      slides: [{
-        id: slideId,
-        title: "Evidence",
-        layout: "case",
-        grammarVariant: "evidence",
-        elements: [{
-          id: crypto.randomUUID(),
-          type: "text",
-          x: 120,
-          y: 220,
-          width: 500,
-          height: 180,
-          text: "Evidence",
-          fontSize: 24,
-        }],
-      }],
-    };
-
-    const result = await insertSlideImageTool.execute({
-      slideId,
-      url: "https://93.184.216.34/evidence.png",
-      slot: "side",
-      provider: "tavily",
-      sourcePageUrl: "https://example.com/source",
-      description: "Evidence image",
-      license: "license-pending-verification",
-    }, {
-      presentation,
-      selectedElementIds: [],
-      discoverySession: { discoveredToolNames: new Set() },
-      registry: createDefaultToolRegistry(),
-      messageHistory: [],
-      workspaceRoot,
-    });
-
-    expect(result.commands).toHaveLength(1);
-    const command = result.commands[0];
-    expect(command?.type).toBe("restore-slide");
-    if (command?.type === "restore-slide") {
-      const image = command.slide.elements.find((element) => element.type === "image");
-      expect(image?.type === "image" ? image.url : "").toMatch(/^file:\/\/\//);
-      expect(image?.provenance).toBe("asset");
-      expect(image?.type === "image" ? image.asset?.sourcePageUrl : undefined)
-        .toBe("https://example.com/source");
-      expect(image?.type === "image" ? image.asset?.localPath : undefined)
-        .toMatch(/^assets\/images\//);
-    }
   });
 });

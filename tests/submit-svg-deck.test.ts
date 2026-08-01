@@ -12,7 +12,6 @@ import {
   submitSvgDeckSchema,
   submitSvgDeckTool,
 } from "../src/main/agent/tools/core/submit-svg-deck";
-import { submitCommandsTool } from "../src/main/agent/tools/core/submit-commands";
 import { slideThumbnailService } from "../src/main/deck/slide-thumbnail-service";
 import { loadWorkspaceSvgPage } from "../src/main/deck/svg-page-loader";
 import { CommitGate } from "../src/main/agent/gate/commit-gate";
@@ -371,38 +370,6 @@ describe("SubmitSvgDeck", () => {
     )).rejects.toThrow("slides[0].id must exactly match");
   });
 
-  it("does not let SubmitCommands bypass the SVG preview receipt gate", async () => {
-    const root = await createWorkspace();
-    const context: ToolContext = {
-      ...createContext(root, new WorkspaceFileService(root)),
-      request: "只改文案，不需要视觉审核",
-    };
-    const markup = textSvgPage("Bypass");
-
-    await expect(submitCommandsTool.execute({
-      summary: "Restore an unpreviewed SVG page.",
-      commands: [{
-        id: "restore-svg",
-        type: "restore-slide",
-        slide: {
-          id: context.presentation.slides[0].id,
-          title: "Bypass",
-          elements: [],
-          visualSource: {
-            kind: "svg",
-            markup,
-            width: 1280,
-            height: 720,
-            sha256: "a".repeat(64),
-            sourcePath: "slides/svg/P01.svg",
-            resources: [],
-          },
-        },
-      }],
-      risk: "low",
-    }, context)).rejects.toThrow("cannot introduce SVG-native pages");
-  });
-
   it.each(["../P01.svg", "/tmp/P01.svg", "C:\\tmp\\P01.svg"])(
     "reports invalid workspace paths as schema errors without throwing: %s",
     (path) => {
@@ -413,6 +380,7 @@ describe("SubmitSvgDeck", () => {
       expect(parsed?.success).toBe(false);
     },
   );
+
 
   it("does not read image-looking tags in comments or data-href attributes", async () => {
     const root = await createWorkspace();

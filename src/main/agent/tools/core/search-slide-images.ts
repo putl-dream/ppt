@@ -24,7 +24,8 @@ export interface SlideImageCandidate {
   provider?: string;
   sourcePageUrl?: string;
   licenseStatus: "unknown";
-  insertArgs: {
+  /** Metadata for localizing the asset and embedding it in page SVG. */
+  assetArgs: {
     slideId: string;
     url: string;
     slot?: string;
@@ -70,7 +71,7 @@ function formatSearchSlideImagesOutput(output: SearchSlideImagesOutput): string 
       `   provider: ${candidate.provider ?? "unknown"}`,
       `   source page: ${candidate.sourcePageUrl ?? "missing — verify before use"}`,
       `   license status: ${candidate.licenseStatus}`,
-      `   InsertSlideImage args: ${JSON.stringify(candidate.insertArgs)}`,
+      `   asset args: ${JSON.stringify(candidate.assetArgs)}`,
     ].join("\n")),
     output.guidance,
   ].join("\n\n");
@@ -82,8 +83,8 @@ export const searchSlideImagesTool: ToolDefinition<
 > = {
   name: "SearchSlideImages",
   description:
-    "为指定幻灯片主动搜索可用图片候选，自动开启 include_images、优先免费图库并生成可直接传给 InsertSlideImage 的参数。"
-    + "当 visualAssetAudit 报告缺图，或使用 image-grid、case/evidence、editorial-hero 时必须调用。",
+    "为指定幻灯片主动搜索可用图片候选，自动开启 include_images、优先免费图库，并给出可本地化后嵌入页面 SVG 的素材参数。"
+    + "当 visualAssetAudit 报告缺图，或页面需要照片/证据配图时调用。",
   category: "core",
   loadPolicy: "core",
   inputSchema: searchSlideImagesSchema,
@@ -151,7 +152,7 @@ export const searchSlideImagesTool: ToolDefinition<
         provider,
         sourcePageUrl,
         licenseStatus: "unknown",
-        insertArgs: {
+        assetArgs: {
           slideId: slide.id,
           url: image.url,
           ...(slot ? { slot } : {}),
@@ -170,8 +171,8 @@ export const searchSlideImagesTool: ToolDefinition<
       slot,
       candidates,
       guidance: slot
-        ? "Choose one semantically relevant candidate and call InsertSlideImage directly. Keep source metadata; license may stay unset when unverified, but retain the warning and never claim commercial clearance."
-        : "This layout has no image slot. Change to an image-capable layout/grammar before insertion.",
+        ? "Choose one semantically relevant candidate, localize it into the workspace assets, and embed it in the page SVG (then PreviewSvgPage). Keep source metadata; license may stay unset when unverified, but retain the warning and never claim commercial clearance."
+        : "This page has no image slot in its current layout metadata. Embed the image directly in the page SVG composition instead of relying on a grammar slot.",
       rawSearch,
     };
   },

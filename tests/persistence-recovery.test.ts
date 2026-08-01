@@ -7,7 +7,6 @@ import { AgentRuntime } from "../src/main/agent/runtime/agent-runtime";
 import { AgentService } from "../src/main/agent/service";
 import { ToolRegistry } from "../src/main/agent/tools/tool-registry";
 import { askUserTool } from "../src/main/agent/tools/core/ask-user";
-import { submitCommandsTool } from "../src/main/agent/tools/core/submit-commands";
 import { beginPptCapabilityTool } from
   "../src/main/agent/tools/core/begin-ppt-capability";
 import { CommitGate } from "../src/main/agent/gate/commit-gate";
@@ -40,6 +39,7 @@ import {
   asQueryId,
 } from "../src/shared/presentation-lifecycle";
 import { asRunId, asThreadId } from "../src/main/agent/runtime/query/query-types";
+import { createFakeCommandProposalTool } from "./fake-command-proposal-tool";
 
 function gatewayFor(turns: AgentModelContentBlock[][]): AgentModelGateway & {
   requests: AgentModelRequest[];
@@ -175,7 +175,7 @@ describe("durable agent recovery", () => {
     const presentation = createStarterPresentation();
     const registry = new ToolRegistry();
     registry.register(beginPptCapabilityTool);
-    registry.register(submitCommandsTool);
+    registry.register(createFakeCommandProposalTool());
     const gateway = gatewayFor([
       [{
         type: "tool_use",
@@ -186,7 +186,7 @@ describe("durable agent recovery", () => {
       [{
         type: "tool_use",
         id: "submit-invalid",
-        name: "SubmitCommands",
+        name: "FakeSubmitCommands",
         input: {
           summary: "Remove a slide that does not exist",
           risk: "low",
@@ -573,12 +573,12 @@ describe("durable agent recovery", () => {
     const projectId = asProjectId("recovery-project");
     const presentationId = asPresentationId(presentation.id);
     const registry = new ToolRegistry();
-    registry.register(submitCommandsTool);
+    registry.register(createFakeCommandProposalTool());
     const gateway = gatewayFor([[
       {
         type: "tool_use",
         id: "submit-1",
-        name: "SubmitCommands",
+        name: "FakeSubmitCommands",
         input: {
           summary: "更新标题",
           risk: "low",

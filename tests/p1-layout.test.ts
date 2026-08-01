@@ -3,9 +3,7 @@ import { applyLayout } from "../src/shared/layout";
 import { TEST_DESIGN_SYSTEM, testSlideStyle } from "./design-engine-test-utils";
 import { getLayoutSlotRect, listLayoutSlots } from "../src/shared/layout-slots";
 import { validateDeckRhythm } from "../src/shared/deck-rhythm";
-import { insertSlideImageTool } from "../src/main/agent/tools/core/insert-slide-image";
-import { validateDeckLayoutTool } from "../src/main/agent/tools/deferred/validate-deck-layout";
-import { previewSlideTool } from "../src/main/agent/tools/deferred/preview-slide";
+import { previewSlideTool } from "../src/main/agent/tools/core/preview-slide";
 import type { Presentation, Slide } from "../src/shared/presentation";
 import type { ToolContext } from "../src/main/agent/tools/tool-definition";
 
@@ -113,62 +111,7 @@ describe("deck rhythm", () => {
   });
 });
 
-describe("P1 deferred tools", () => {
-  it("InsertSlideImage places image in side slot without manual coords", async () => {
-    const slideId = crypto.randomUUID();
-    const presentation: Presentation = {
-      id: crypto.randomUUID(),
-      title: "Deck",
-      revision: 1,
-      designSystem: TEST_DESIGN_SYSTEM,
-      slides: [
-        {
-          id: slideId,
-          title: "指标",
-          layout: "case",
-          grammarVariant: "evidence",
-          elements: [
-            { id: crypto.randomUUID(), type: "text", x: 140, y: 220, width: 400, height: 200, text: "说明", fontSize: 20 },
-          ],
-        },
-      ],
-    };
-    const result = await insertSlideImageTool.execute(
-      {
-        slideId,
-        url: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl2n1cAAAAASUVORK5CYII=",
-        slot: "side",
-      },
-      makeContext(presentation),
-    );
-    expect(result.commands.length).toBe(1);
-    expect(result.commands[0]?.type).toBe("restore-slide");
-    if (result.commands[0]?.type === "restore-slide") {
-      const image = result.commands[0].slide.elements.find((element) => element.type === "image");
-      expect(image?.type === "image" ? image.imageSlot : undefined).toBe("side");
-      expect(image?.type === "image" ? image.width : 0).toBeGreaterThan(600);
-    }
-  });
-
-  it("ValidateDeckLayout reports rhythm issues", async () => {
-    const mk = (layout: string) => ({
-      id: crypto.randomUUID(),
-      title: layout,
-      layout,
-      elements: [],
-    });
-    const presentation: Presentation = {
-      id: crypto.randomUUID(),
-      title: "Deck",
-      revision: 1,
-      designSystem: TEST_DESIGN_SYSTEM,
-      slides: [mk("concept"), mk("concept"), mk("concept")],
-    };
-    const result = await validateDeckLayoutTool.execute({}, makeContext(presentation));
-    expect(result.summary.valid).toBe(false);
-    expect(result.issues.length).toBeGreaterThan(0);
-  });
-
+describe("P1 preview tools", () => {
   it("PreviewSlide returns structured summary", async () => {
     const slideId = crypto.randomUUID();
     const presentation: Presentation = {

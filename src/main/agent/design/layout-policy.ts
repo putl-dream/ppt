@@ -11,7 +11,7 @@ export interface BoundingBox {
  * PPT 元素布局的几何与范围约束。
  *
  * 规划定义页面安全区、对齐、间距、溢出、元素最小尺寸和 preserveLayout 规则，
- * 供 AutoLayoutSlide 与 Commit Gate 的预览检查使用。
+ * 供 Commit Gate 的预览检查与遗留 element-IR 布局校验使用。
  */
 export class LayoutPolicy {
   // 定义标准 16:9 画布尺寸 (常见宽 1280px，高 720px)

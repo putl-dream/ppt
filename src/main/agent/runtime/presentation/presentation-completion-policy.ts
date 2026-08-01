@@ -6,15 +6,8 @@ import {
   agentCommandProposalResultSchema,
   type AgentRuntimeResult,
 } from "../runtime-types";
-import {
-  buildRenderFeedback,
-  extractFeedbackImages,
-  formatRenderFeedbackMessage,
-  shouldOfferRenderFeedback,
-} from "./render-feedback-loop";
 import { applyCommandsToDraft } from "./layout-command-utils";
 import type { ToolExecutionOutcome } from "../tools/tool-execution-engine";
-import type { PromptStage } from "../prompts/prompt-stage";
 
 export type PresentationCompletionDecision =
   | {
@@ -26,7 +19,6 @@ export type PresentationCompletionDecision =
       type: "continue";
       modelResult: AgentModelToolResultBlock;
       transcriptEntry: Record<string, unknown>;
-      markRenderFeedbackUsed?: boolean;
     };
 
 /** Interprets validated tool facts without executing tools or mutating AgentSession. */
@@ -40,8 +32,6 @@ export class PresentationCompletionPolicy {
     toolUseId: string;
     outcome: ToolExecutionOutcome;
     context: ToolContext;
-    promptStage?: PromptStage;
-    renderFeedbackUsed: boolean;
     emitProgress(event: { type: string; message: string; [key: string]: unknown }): void;
   }): Promise<PresentationCompletionDecision> {
     const toolName = input.tool.name;
@@ -98,62 +88,6 @@ export class PresentationCompletionPolicy {
             },
           },
           modelResult: textResult(input.toolUseId, guidance),
-        };
-      }
-      if (
-        !requestExplicitlyAllowsContentOnly(input.context.request)
-        &&
-        input.tool.behavior?.visualReview?.mode !== "tool-managed"
-        &&
-        shouldOfferRenderFeedback(
-          input.promptStage,
-          commandProposal.commands,
-          input.renderFeedbackUsed,
-        )
-      ) {
-        input.emitProgress({
-          type: "render-feedback",
-          message: "正在生成排版视觉预览…",
-          progress: 0,
-        });
-        const feedback = await buildRenderFeedback({
-          presentation: input.context.presentation,
-          commands: commandProposal.commands,
-          proposalSummary: commandProposal.summary,
-          context: input.context,
-        });
-        input.emitProgress({
-          type: "render-feedback-ready",
-          message: feedback.hasThumbnails
-            ? `已生成 ${feedback.slides.length} 页视觉预览（含缩略图）`
-            : `已生成 ${feedback.slides.length} 页结构化预览`,
-          progress: 0,
-        });
-        const images = extractFeedbackImages(feedback);
-        const commandProposalToolNames = input.context.registry
-          .getCoreTools(input.context)
-          .filter((tool) => tool.behavior?.capabilities?.includes("command_proposal"))
-          .map((tool) => tool.name);
-        return {
-          type: "continue",
-          markRenderFeedbackUsed: true,
-          transcriptEntry: {
-            role: "tool",
-            toolName,
-            result: commandProposal,
-            renderFeedback: feedback,
-          },
-          modelResult: {
-            type: "tool_result",
-            toolUseId: input.toolUseId,
-            content: [
-              {
-                type: "text",
-                text: formatRenderFeedbackMessage(feedback, commandProposalToolNames),
-              },
-              ...images.map((image) => ({ type: "image" as const, ...image })),
-            ],
-          },
         };
       }
       return {

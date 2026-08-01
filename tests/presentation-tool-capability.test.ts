@@ -1,11 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
+import { z } from "zod";
 import { ToolPreflight } from
   "../src/main/agent/runtime/tools/tool-preflight";
 import type {
   PptLifecycleToolBridge,
   ToolContext,
+  ToolDefinition,
 } from "../src/main/agent/tools/tool-definition";
-import { createDefaultToolRegistry } from
+import { createDefaultToolRegistry, ToolRegistry } from
   "../src/main/agent/tools/tool-registry";
 import { WorkspaceFileService } from
   "../src/main/agent/tools/files/workspace-file-service";
@@ -21,31 +23,14 @@ import {
 import { createStarterPresentation } from "../src/shared/presentation";
 
 const PRESENTATION_TOOL_NAMES = [
-  "ExecuteLayoutPlan",
   "GetDesignReference",
-  "InsertSlideImage",
-  "PreviewCommands",
   "PreviewSlide",
   "PreviewSvgPage",
   "SearchSlideImages",
-  "SubmitCommands",
   "SubmitPptReview",
   "SubmitSvgDeck",
   "WriteFile",
   "EditFile",
-  "AnalyzeDeckConsistency",
-  "ApplyDesignSystem",
-  "ApplyTypography",
-  "AutoLayoutSlide",
-  "BeautifyChart",
-  "BeautifyTable",
-  "CompressText",
-  "DetectOverflowText",
-  "DetectRepeatedTitles",
-  "ResolveDesignPlan",
-  "RewriteSlideContent",
-  "UpdateSlideVariant",
-  "ValidateDeckLayout",
 ] as const;
 
 function projection(capability: PptCapability): PptJobProjection {
@@ -107,17 +92,41 @@ function lifecycleBridge(
   };
 }
 
+const deferredRestyleTool: ToolDefinition<any, any> = {
+  name: "DeferredRestyleProbe",
+  description: "Deferred presentation probe for capability preflight.",
+  category: "deferred",
+  loadPolicy: "deferred",
+  inputSchema: z.object({ note: z.string().optional() }),
+  risk: "low",
+  behavior: {
+    presentation: {
+      allowedCapabilities: ["edit", "restyle"],
+    },
+  },
+  execute: async () => ({ ok: true }),
+};
+
+function createCapabilityTestRegistry(): ToolRegistry {
+  const defaults = createDefaultToolRegistry();
+  const registry = new ToolRegistry();
+  for (const tool of defaults.getCoreTools()) {
+    registry.register(tool);
+  }
+  registry.register(deferredRestyleTool);
+  return registry;
+}
+
 function context(
   lifecycle?: PptLifecycleToolBridge,
 ): ToolContext {
-  const registry = createDefaultToolRegistry();
   return {
     presentation: createStarterPresentation(),
     selectedElementIds: [],
     discoverySession: {
-      discoveredToolNames: new Set(["ApplyDesignSystem"]),
+      discoveredToolNames: new Set(["DeferredRestyleProbe"]),
     },
-    registry,
+    registry: createCapabilityTestRegistry(),
     messageHistory: [],
     workspaceRoot: "C:\\workspace",
     fileService: new WorkspaceFileService("C:\\workspace"),
@@ -161,12 +170,8 @@ describe("Presentation tool capability preflight", () => {
   it("rejects a core Presentation tool before BeginPptCapability", async () => {
     const lifecycle = lifecycleBridge();
     const result = await prepare({
-      name: "InsertSlideImage",
-      args: {
-        slideId: createStarterPresentation().slides[0].id,
-        url: "data:image/png;base64,iVBORw0KGgo=",
-        slot: "hero",
-      },
+      name: "PreviewSvgPage",
+      args: { path: "slides/svg/P01.svg" },
       lifecycle,
     });
 
@@ -178,8 +183,10 @@ describe("Presentation tool capability preflight", () => {
       },
     });
     expect(lifecycle.requireActiveCapability).toHaveBeenCalledWith([
+      "create",
       "edit",
       "restyle",
+      "review",
     ]);
   });
 
@@ -188,10 +195,8 @@ describe("Presentation tool capability preflight", () => {
     const result = await prepare({
       name: "ExecuteExtraTool",
       args: {
-        toolName: "ApplyDesignSystem",
-        toolArgs: {
-          designSystem: createStarterPresentation().designSystem,
-        },
+        toolName: "DeferredRestyleProbe",
+        toolArgs: { note: "probe" },
       },
       lifecycle,
     });
@@ -199,7 +204,7 @@ describe("Presentation tool capability preflight", () => {
     expect(result).toMatchObject({
       type: "immediate_result",
       kind: "unavailable",
-      tool: { name: "ApplyDesignSystem" },
+      tool: { name: "DeferredRestyleProbe" },
       outcome: {
         error: expect.stringContaining("cannot use this tool"),
       },
@@ -257,17 +262,15 @@ describe("Presentation tool capability preflight", () => {
     const result = await prepare({
       name: "ExecuteExtraTool",
       args: {
-        toolName: "ApplyDesignSystem",
-        toolArgs: {
-          designSystem: createStarterPresentation().designSystem,
-        },
+        toolName: "DeferredRestyleProbe",
+        toolArgs: { note: "probe" },
       },
     });
 
     expect(result).toMatchObject({
       type: "ready",
       prepared: {
-        tool: { name: "ApplyDesignSystem" },
+        tool: { name: "DeferredRestyleProbe" },
       },
     });
   });

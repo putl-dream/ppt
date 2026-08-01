@@ -6,7 +6,6 @@ import {
   type SetStateAction,
 } from "react";
 import type { SessionBootstrap } from "@shared/session";
-import type { LayoutChoice } from "@shared/layout-preference";
 import {
   appendStep,
 } from "@shared/agent-activity";
@@ -42,7 +41,6 @@ import { prepareAgentContext } from "./agentSessionPreparation";
 
 interface StartAgentOptions {
   userDisplayContent?: string | false;
-  layoutChoice?: LayoutChoice;
   sidechain?: boolean;
 }
 
@@ -210,7 +208,6 @@ export function useAgentRunController({
         const agentRequest = buildAgentRunRequest({
           prompt: activeRequest,
           sessionId: context.sessionId,
-          layoutChoice: options?.layoutChoice,
           currentSlideId: selectedSlideId || undefined,
         });
 

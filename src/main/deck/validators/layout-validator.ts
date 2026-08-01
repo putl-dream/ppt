@@ -135,7 +135,7 @@ export class LayoutValidator {
         category: "layout",
         severity: "error",
         message: `Slide '${slide.title}' uses layout '${slide.layout}' but has no canvas elements.`,
-        fixHint: "Add body content or run AutoLayoutSlide for this slide.",
+        fixHint: "Add body content in the page SVG for this slide.",
       });
     } else if (slide.elements.length === 0) {
       issues.push({
@@ -183,7 +183,7 @@ export class LayoutValidator {
             category: "layout",
             severity: "warning",
             message: `Elements '${left.id}' and '${right.id}' overlap on slide '${slide.title}'.`,
-            fixHint: "Adjust positions or rerun AutoLayoutSlide.",
+            fixHint: "Adjust positions in the page SVG so elements no longer overlap.",
           });
         }
       }

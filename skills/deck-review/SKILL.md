@@ -127,9 +127,9 @@ review capability 默认只报告，并以 `SubmitPptReview` 完成本次请求�
 - ...
 ```
 
-## 禁止
+## 边界
 
-- 不使用 `ValidateDeckLayout`、`DetectOverflowText`、`AnalyzeDeckConsistency`、element/layout grammar 或任何 commands 修复路线。
+- 审查基于 `PreviewSvgPage` 与作者 SVG/锁文件，不走 element/layout commands 修复路线。
 - 不因自动分数好看而覆盖真实视觉判断。
 - 不在用户未授权时修改文件。
 - 不把缺失标题、页码、背景或图表归因于“导出时会自动补”；SVG 页面本身必须完整。

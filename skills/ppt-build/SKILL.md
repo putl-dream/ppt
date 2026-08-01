@@ -83,6 +83,12 @@ allowed-tools:
 
 若 `SubmitSvgDeck` 因 SVG 或素材错误拒绝提交，修复作者 SVG/素材后再次提交；不要把失败报告为完成。
 
+作者源是完整页面 SVG；提交路径仅为 `SubmitSvgDeck`。不把 element schema、layout/grammarVariant 或自动页眉当作本技能的中间层。
+
+## 协作边界
+
+本技能由主 Agent 直接执行。不要为逐页写 SVG、`PreviewSvgPage` 或 `SubmitSvgDeck` 而 `spawn_teammate`、创建 teammate Task，或把页面作者工作拆给子 Agent；一致性与 P01 预览闸门在 Lead 上下文内更便宜。
+
 ## 退出的旧路线
 
 新建 deck 不调用 `SubmitCommands`、`PreviewCommands`、`ApplyDesignSystem`、`ExecuteLayoutPlan`、`AutoLayoutSlide` 或任何 layout handler。旧 `slide.title` 自动页眉、元素 schema、layout/grammarVariant 和设计 token 应用都不属于本技能。

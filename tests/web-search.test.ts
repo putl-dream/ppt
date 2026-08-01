@@ -5,7 +5,6 @@ import { createSearchService } from "../src/main/agent/search/search-service";
 import { webSearchSchema } from "../src/main/agent/search/web-search";
 import { webSearchTool } from "../src/main/agent/tools/core/web-search";
 import { searchSlideImagesTool } from "../src/main/agent/tools/core/search-slide-images";
-import { insertSlideImageTool } from "../src/main/agent/tools/core/insert-slide-image";
 import { createDefaultToolRegistry } from "../src/main/agent/tools/tool-registry";
 import {
   SUB_AGENT_TOOLS,
@@ -140,8 +139,7 @@ describe("web search", () => {
   it("registers WebSearch for the main agent and web_search for teammate workspace agents", () => {
     expect(createDefaultToolRegistry().get("WebSearch")).toBe(webSearchTool);
     expect(createDefaultToolRegistry().get("SearchSlideImages")).toBe(searchSlideImagesTool);
-    expect(createDefaultToolRegistry().get("InsertSlideImage")).toBe(insertSlideImageTool);
-    expect(createDefaultToolRegistry().getCoreTools()).toContain(insertSlideImageTool);
+    expect(createDefaultToolRegistry().get("InsertSlideImage")).toBeUndefined();
     expect(SUB_AGENT_TOOLS).toContain(webSearchSubAgentTool);
     expect(webSearchSubAgentTool.permission).toBe(SUB_AGENT_TOOL_PERMISSION_PROFILES.web_search);
   });
@@ -196,7 +194,7 @@ describe("web search", () => {
     expect(output.candidates[0]).toMatchObject({
       provider: "Pexels",
       sourcePageUrl: "https://www.pexels.com/photo/factory-123",
-      insertArgs: {
+      assetArgs: {
         slideId,
         slot: "side",
         aspectRatio: "auto",

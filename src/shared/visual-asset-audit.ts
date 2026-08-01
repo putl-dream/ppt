@@ -146,7 +146,7 @@ export function auditPresentationVisualAssets(
     missingRecommendedCount,
     duplicateImageUrls,
     nextAction: missingRequiredCount + missingRecommendedCount > 0
-      ? "For each missing slide, call SearchSlideImages with slideId, then call InsertSlideImage with one selected candidate. Do not reuse the same image URL."
+      ? "For each missing slide, call SearchSlideImages with slideId, localize a selected candidate into the workspace, and embed it in the page SVG. Do not reuse the same image URL."
       : duplicateImageUrls.length > 0
         ? "Replace duplicate image URLs with unique, slide-specific visuals."
         : "No immediate image-search action is required.",

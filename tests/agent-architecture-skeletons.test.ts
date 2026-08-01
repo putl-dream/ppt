@@ -2,34 +2,22 @@ import { describe, expect, it, vi } from "vitest";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { z } from "zod";
 import { createDefaultToolRegistry, ToolRegistry } from "../src/main/agent/tools/tool-registry";
 import { askUserTool } from "../src/main/agent/tools/core/ask-user";
 import { searchExtraToolsTool } from "../src/main/agent/tools/core/search-extra-tools";
 import { executeExtraToolTool } from "../src/main/agent/tools/core/execute-extra-tool";
-import { executeLayoutPlanTool } from "../src/main/agent/tools/core/execute-layout-plan";
 import { getSelectionTool } from "../src/main/agent/tools/core/get-selection";
 import { listSlidesTool } from "../src/main/agent/tools/core/list-slides";
-import { previewCommandsTool } from "../src/main/agent/tools/core/preview-commands";
 import { readCurrentSlideTool } from "../src/main/agent/tools/core/read-current-slide";
 import { readPresentationSnapshotTool } from "../src/main/agent/tools/core/read-presentation-snapshot";
-import { submitCommandsTool } from "../src/main/agent/tools/core/submit-commands";
+import { previewSlideTool } from "../src/main/agent/tools/core/preview-slide";
 import { beginPptCapabilityTool } from
   "../src/main/agent/tools/core/begin-ppt-capability";
-import { analyzeDeckConsistencyTool } from "../src/main/agent/tools/deferred/analyze-deck-consistency";
-import { applyDesignSystemTool } from "../src/main/agent/tools/deferred/apply-design-system";
-import { TEST_DESIGN_SYSTEM } from "./design-engine-test-utils";
-import { autoLayoutSlideTool } from "../src/main/agent/tools/deferred/auto-layout-slide";
-import { beautifyChartTool } from "../src/main/agent/tools/deferred/beautify-chart";
-import { beautifyTableTool } from "../src/main/agent/tools/deferred/beautify-table";
-import { compressTextTool } from "../src/main/agent/tools/deferred/compress-text";
-import { detectOverflowTextTool } from "../src/main/agent/tools/deferred/detect-overflow-text";
-import { detectRepeatedTitlesTool } from "../src/main/agent/tools/deferred/detect-repeated-titles";
-import { previewSlideTool } from "../src/main/agent/tools/deferred/preview-slide";
-import { validateDeckLayoutTool } from "../src/main/agent/tools/deferred/validate-deck-layout";
-import { rewriteSlideContentTool } from "../src/main/agent/tools/deferred/rewrite-slide-content";
-import { resolveDesignPlanTool } from "../src/main/agent/tools/deferred/resolve-design-plan";
+import { assumptionsSchema } from "../src/main/agent/tools/assumptions-schema";
 import { toToolCard } from "../src/main/agent/tools/tool-card";
 import { ToolLoader } from "../src/main/agent/tools/tool-loader";
+import type { ToolDefinition } from "../src/main/agent/tools/tool-definition";
 import { SystemPromptBuilder } from "../src/main/agent/runtime/prompts/system-prompt";
 import { AgentRuntime } from "../src/main/agent/runtime/agent-runtime";
 import { CommitGate } from "../src/main/agent/gate/commit-gate";
@@ -54,6 +42,7 @@ import { ContentAddressedBlobStore } from
 import {
   asProjectId,
 } from "../src/shared/presentation-lifecycle";
+import { createFakeCommandProposalTool } from "./fake-command-proposal-tool";
 
 function createSequenceGateway(
   responses: Array<AgentModelContentBlock | Error>,
@@ -101,88 +90,89 @@ function modelAskUser(content: string, missingFields?: string[]) {
   return modelToolCall("AskUser", { message: content, missingFields });
 }
 
+function createDeferredProbeTool(name: string): ToolDefinition<any, any> {
+  return {
+    name,
+    description: `Deferred probe tool ${name} for discovery tests.`,
+    category: "deferred",
+    loadPolicy: "deferred",
+    inputSchema: z.object({}),
+    risk: "low",
+    execute: async () => ({ ok: true, toolName: name }),
+  };
+}
+
+const fakeSubmit = createFakeCommandProposalTool();
+
 describe("Agent Architecture Skeletons & Types", () => {
-  it("creates the production registry with Core and Deferred Tools", () => {
+  it("creates the production registry with Core tools and no Deferred surface", () => {
     const registry = createDefaultToolRegistry();
     expect(registry.get("ReadPresentationSnapshot")?.loadPolicy).toBe("core");
     expect(registry.get("Task")).toBeUndefined();
     expect(registry.get("TaskCreate")?.loadPolicy).toBe("core");
     expect(registry.get("TaskReviewApprove")?.loadPolicy).toBe("core");
-    expect(registry.get("AutoLayoutSlide")?.loadPolicy).toBe("deferred");
+    expect(registry.get("AutoLayoutSlide")).toBeUndefined();
     expect(registry.get("ExportPptx")).toBeUndefined();
     expect(registry.searchDeferredTools("ExportPptx")).toEqual([]);
     expect(registry.get("PreviewSlide")?.loadPolicy).toBe("core");
-    expect(registry.get("ValidateDeckLayout")?.loadPolicy).toBe("core");
-    expect(registry.get("ExecuteLayoutPlan")?.loadPolicy).toBe("core");
+    expect(registry.get("ValidateDeckLayout")).toBeUndefined();
+    expect(registry.get("ExecuteLayoutPlan")).toBeUndefined();
+    expect(registry.get("SubmitCommands")).toBeUndefined();
     expect(registry.getCoreTools().length).toBeGreaterThan(0);
-    expect(registry.getDeferredTools().length).toBeGreaterThan(0);
+    expect(registry.getCoreTools().map((tool) => tool.name)).toEqual(
+      expect.arrayContaining(["PreviewSvgPage", "SubmitSvgDeck", "PreviewSlide"]),
+    );
+    expect(registry.getDeferredTools()).toEqual([]);
   });
 
   it("ToolRegistry can register and retrieve tools by category", () => {
     const registry = new ToolRegistry();
+    const deferredAlpha = createDeferredProbeTool("DeferredAlpha");
+    const deferredBeta = createDeferredProbeTool("DeferredBeta");
 
-    // Register Core Tools
     registry.register(askUserTool);
     registry.register(searchExtraToolsTool);
     registry.register(executeExtraToolTool);
-    registry.register(executeLayoutPlanTool);
+    registry.register(fakeSubmit);
     registry.register(getSelectionTool);
     registry.register(listSlidesTool);
-    registry.register(previewCommandsTool);
     registry.register(readCurrentSlideTool);
     registry.register(readPresentationSnapshotTool);
-    registry.register(submitCommandsTool);
     registry.register(previewSlideTool);
-    registry.register(validateDeckLayoutTool);
+    registry.register(deferredAlpha);
+    registry.register(deferredBeta);
 
-    // Register Deferred Tools
-    registry.register(analyzeDeckConsistencyTool);
-    registry.register(applyDesignSystemTool);
-    registry.register(autoLayoutSlideTool);
-    registry.register(beautifyChartTool);
-    registry.register(beautifyTableTool);
-    registry.register(compressTextTool);
-    registry.register(detectOverflowTextTool);
-    registry.register(detectRepeatedTitlesTool);
-    registry.register(rewriteSlideContentTool);
-    registry.register(resolveDesignPlanTool);
-
-    // Assertions
     expect(registry.get("AskUser")).toBe(askUserTool);
     expect(registry.getCoreTools()).toContain(askUserTool);
     expect(registry.getCoreTools()).toContain(previewSlideTool);
-    expect(registry.getCoreTools()).toContain(validateDeckLayoutTool);
-    expect(registry.getCoreTools()).toContain(executeLayoutPlanTool);
-    expect(registry.getCoreTools()).not.toContain(autoLayoutSlideTool);
-    expect(registry.getDeferredTools()).toContain(autoLayoutSlideTool);
+    expect(registry.getCoreTools()).toContain(fakeSubmit);
+    expect(registry.getCoreTools()).not.toContain(deferredAlpha);
+    expect(registry.getDeferredTools()).toContain(deferredAlpha);
     expect(registry.getDeferredTools()).not.toContain(previewSlideTool);
     expect(registry.getDeferredTools()).not.toContain(askUserTool);
 
-    // Registry search
-    const results = registry.searchDeferredTools("consistency");
-    expect(results.map(r => r.name)).toContain("AnalyzeDeckConsistency");
-    expect(registry.searchDeferredTools("select:AutoLayoutSlide DetectRepeatedTitles").map(r => r.name))
-      .toEqual(expect.arrayContaining(["AutoLayoutSlide", "DetectRepeatedTitles"]));
+    const results = registry.searchDeferredTools("DeferredAlpha");
+    expect(results.map((r) => r.name)).toContain("DeferredAlpha");
+    expect(registry.searchDeferredTools("select:DeferredAlpha DeferredBeta").map((r) => r.name))
+      .toEqual(expect.arrayContaining(["DeferredAlpha", "DeferredBeta"]));
   });
 
   it("toToolCard converts complete tool definitions to model-visible summaries", () => {
-    const card = toToolCard(autoLayoutSlideTool);
-    expect(card.name).toBe("AutoLayoutSlide");
-    expect(card.risk).toBe("medium");
-    expect(card.approvalRequired).toBe(true);
-    expect(card.execution).toEqual({ batch: "allowed", mode: "serial" });
-    expect(card.parameterSummary).toHaveProperty("slideId");
-    expect(card.parameterSummary).toHaveProperty("layout");
+    const card = toToolCard(askUserTool);
+    expect(card.name).toBe("AskUser");
+    expect(card.risk).toBe("low");
+    expect(card.parameterSummary).toHaveProperty("message");
   });
 
   it("ToolLoader classifies tools correctly", () => {
-    const allTools = [askUserTool, autoLayoutSlideTool];
+    const deferredAlpha = createDeferredProbeTool("DeferredAlpha");
+    const allTools = [askUserTool, deferredAlpha];
     const core = ToolLoader.loadCoreTools(allTools);
     const deferred = ToolLoader.loadDeferredTools(allTools);
 
     expect(core).toContain(askUserTool);
-    expect(core).not.toContain(autoLayoutSlideTool);
-    expect(deferred).toContain(autoLayoutSlideTool);
+    expect(core).not.toContain(deferredAlpha);
+    expect(deferred).toContain(deferredAlpha);
     expect(deferred).not.toContain(askUserTool);
   });
 
@@ -203,14 +193,14 @@ describe("Agent Architecture Skeletons & Types", () => {
   it("AgentRuntime executes a Gateway-driven Core Tool loop", async () => {
     const registry = new ToolRegistry();
     registry.register(readPresentationSnapshotTool);
-    registry.register(submitCommandsTool);
+    registry.register(fakeSubmit);
     const runtime = new AgentRuntime(registry, createSequenceGateway([
       modelToolCall("ReadPresentationSnapshot"),
-      modelToolCall("SubmitCommands", {
-          summary: "Update title",
-          commands: [{ id: "cmd-runtime", type: "set-presentation-title", title: "Runtime title" }],
-          risk: "low",
-          assumptions: ["Only the title changes"],
+      modelToolCall("FakeSubmitCommands", {
+        summary: "Update title",
+        commands: [{ id: "cmd-runtime", type: "set-presentation-title", title: "Runtime title" }],
+        risk: "low",
+        assumptions: ["Only the title changes"],
       }),
     ]));
     const presentation = createStarterPresentation();
@@ -233,14 +223,14 @@ describe("Agent Architecture Skeletons & Types", () => {
   it("does not let an action continuation end with a narrative message", async () => {
     const registry = new ToolRegistry();
     registry.register(searchExtraToolsTool);
-    registry.register(submitCommandsTool);
+    registry.register(fakeSubmit);
     const runtime = new AgentRuntime(registry, createSequenceGateway([
       modelToolCall("SearchExtraTools", { query: "theme layout" }),
       modelMessage("我先搜索一下高级工具，然后再开始生成。"),
-      modelToolCall("SubmitCommands", {
-          summary: "Create the presentation",
-          commands: [{ id: "cmd-action-continuation", type: "set-presentation-title", title: "Vibe Coding" }],
-          risk: "low",
+      modelToolCall("FakeSubmitCommands", {
+        summary: "Create the presentation",
+        commands: [{ id: "cmd-action-continuation", type: "set-presentation-title", title: "Vibe Coding" }],
+        risk: "low",
       }),
     ]));
 
@@ -263,25 +253,25 @@ describe("Agent Architecture Skeletons & Types", () => {
     const registry = new ToolRegistry();
     registry.register(askUserTool);
     registry.register(searchExtraToolsTool);
-    registry.register(submitCommandsTool);
+    registry.register(fakeSubmit);
     const runtime = new AgentRuntime(registry, createSequenceGateway([
       modelToolCall("AskUser", {
-          message: "请确认语言、时长和代码示例。",
-          missingFields: ["language", "duration", "codeExamples"],
-          responseUi: {
-            variant: "cards",
-            options: [
-              { id: "default", title: "按默认方案", value: "按默认方案" },
-              { id: "custom", title: "我补充细节", value: "我需要补充细节" },
-            ],
-          },
+        message: "请确认语言、时长和代码示例。",
+        missingFields: ["language", "duration", "codeExamples"],
+        responseUi: {
+          variant: "cards",
+          options: [
+            { id: "default", title: "按默认方案", value: "按默认方案" },
+            { id: "custom", title: "我补充细节", value: "我需要补充细节" },
+          ],
+        },
       }),
       modelToolCall("SearchExtraTools", { query: "theme layout" }),
-      modelToolCall("SubmitCommands", {
-          summary: "Create the Vibe Coding presentation",
-          commands: [{ id: "cmd-service-context", type: "set-presentation-title", title: "Vibe Coding" }],
-          risk: "low",
-          assumptions: ["中文为主，关键术语保留英文"],
+      modelToolCall("FakeSubmitCommands", {
+        summary: "Create the Vibe Coding presentation",
+        commands: [{ id: "cmd-service-context", type: "set-presentation-title", title: "Vibe Coding" }],
+        risk: "low",
+        assumptions: ["中文为主，关键术语保留英文"],
       }),
     ]));
     const service = new AgentService(
@@ -343,7 +333,6 @@ describe("Agent Architecture Skeletons & Types", () => {
       undefined,
       undefined,
       undefined,
-      undefined,
       selectedModel,
     );
 
@@ -358,9 +347,9 @@ describe("Agent Architecture Skeletons & Types", () => {
         requests.push(request);
         if (requests.length === 1) {
           return {
-          provider: "openai",
-          model: "test-model",
-          content: [modelAskUser("请补充具体主题。", ["topic"])],
+            provider: "openai",
+            model: "test-model",
+            content: [modelAskUser("请补充具体主题。", ["topic"])],
           };
         }
         if (requests.length === 2) {
@@ -419,9 +408,9 @@ describe("Agent Architecture Skeletons & Types", () => {
         async generateText(request) {
           modelRequest = request;
           return {
-          provider: "openai",
-          model: "test-model",
-          content: [modelMessage("你刚才说的是 Agent 范式与架构演进。")],
+            provider: "openai",
+            model: "test-model",
+            content: [modelMessage("你刚才说的是 Agent 范式与架构演进。")],
           };
         },
         async *generateTextStream() {
@@ -462,9 +451,10 @@ describe("Agent Architecture Skeletons & Types", () => {
 
   it("requires Deferred Tools to be discovered in the same session before execution", async () => {
     const registry = new ToolRegistry();
+    const deferredProbe = createDeferredProbeTool("DeferredProbe");
     registry.register(searchExtraToolsTool);
     registry.register(executeExtraToolTool);
-    registry.register(detectRepeatedTitlesTool);
+    registry.register(deferredProbe);
     const context = {
       presentation: createStarterPresentation(),
       selectedElementIds: [],
@@ -474,21 +464,21 @@ describe("Agent Architecture Skeletons & Types", () => {
     };
 
     await expect(executeExtraToolTool.execute({
-      toolName: "DetectRepeatedTitles",
+      toolName: "DeferredProbe",
       toolArgs: {},
     }, context)).rejects.toThrow("has not been discovered");
 
-    const search = await searchExtraToolsTool.execute({ query: "DetectRepeatedTitles" }, context);
-    expect(search.tools.map((tool) => tool.name)).toContain("DetectRepeatedTitles");
+    const search = await searchExtraToolsTool.execute({ query: "DeferredProbe" }, context);
+    expect(search.tools.map((tool) => tool.name)).toContain("DeferredProbe");
     const emptySearch = await searchExtraToolsTool.execute({ query: "create-new-slide-tool" }, context);
     expect(emptySearch.tools).toEqual([]);
     expect(emptySearch.baseEditingAvailable).toBe(false);
     expect(emptySearch.guidance).toContain("No command-proposal capability");
     const execution = await executeExtraToolTool.execute({
-      toolName: "DetectRepeatedTitles",
+      toolName: "DeferredProbe",
       toolArgs: {},
     }, context);
-    expect(execution.toolName).toBe("DetectRepeatedTitles");
+    expect(execution.toolName).toBe("DeferredProbe");
   });
 
   it("CommitGate and RiskPolicy correctly filter and validate commands", async () => {
@@ -496,11 +486,10 @@ describe("Agent Architecture Skeletons & Types", () => {
     const gate = new CommitGate(riskPolicy);
     const presentation = createStarterPresentation();
 
-    // Valid commands
     const result1 = await gate.evaluate(
       presentation,
       [{ id: "cmd-1", type: "set-presentation-title", title: "Title A" }],
-      "low"
+      "low",
     );
 
     expect(result1.success).toBe(true);
@@ -509,22 +498,20 @@ describe("Agent Architecture Skeletons & Types", () => {
     expect(result1.risk).toBe("low");
     expect(result1.decision).toBe("AUTO");
 
-    // Destructive commands should elevate risk to high & require approval
     const result2 = await gate.evaluate(
       presentation,
       [{ id: "cmd-2", type: "remove-slide", slideId: presentation.slides[0].id }],
-      "low"
+      "low",
     );
 
     expect(result2.success).toBe(true);
     expect(result2.risk).toBe("high");
     expect(result2.decision).toBe("REQUIRES_APPROVAL");
 
-    // Invalid commands structure should fail validation
     const result3 = await gate.evaluate(
       presentation,
       [{ id: "cmd-3", type: "invalid-type" } as any],
-      "low"
+      "low",
     );
 
     expect(result3.success).toBe(false);
@@ -548,12 +535,10 @@ describe("Agent Architecture Skeletons & Types", () => {
     before.slides[0].elements = [textElement];
     after.slides[0].elements = [structuredClone(textElement)];
 
-    // Valid case: no text removal
     const check1 = policy.validate(before, after);
     expect(check1.valid).toBe(true);
 
-    // Invalid case: removing too much text (violates semantic conservation rule)
-    after.slides[0].elements = []; // clear elements
+    after.slides[0].elements = [];
     const check2 = policy.validate(before, after);
     expect(check2.valid).toBe(false);
     expect(check2.errors[0]).toContain("语义保持校验");
@@ -567,7 +552,6 @@ describe("Agent Architecture Skeletons & Types", () => {
     expect(LayoutPolicy.isOverlapping(elementA, elementB)).toBe(true);
     expect(LayoutPolicy.isOverlapping(elementA, elementC)).toBe(false);
 
-    // safe margins check: size 1280x720, margin 40
     expect(LayoutPolicy.isWithinSafeZone({ x: 10, y: 10, width: 100, height: 100 })).toBe(false);
     expect(LayoutPolicy.isWithinSafeZone({ x: 50, y: 50, width: 100, height: 100 })).toBe(true);
   });
@@ -575,10 +559,10 @@ describe("Agent Architecture Skeletons & Types", () => {
   it("does not create an in-memory REQUEST_APPROVAL fallback", async () => {
     const registry = new ToolRegistry();
     registry.register(askUserTool);
-    registry.register(submitCommandsTool);
+    registry.register(fakeSubmit);
 
     const runtime = new AgentRuntime(registry, createSequenceGateway([
-      modelToolCall("SubmitCommands", {
+      modelToolCall("FakeSubmitCommands", {
         summary: "Update title",
         commands: [{ id: "cmd-service", type: "set-presentation-title", title: "Approved title" }],
         risk: "low",
@@ -602,9 +586,9 @@ describe("Agent Architecture Skeletons & Types", () => {
 
   it("does not auto-apply a proposal without durable lifecycle services", async () => {
     const registry = new ToolRegistry();
-    registry.register(submitCommandsTool);
+    registry.register(fakeSubmit);
     const runtime = new AgentRuntime(registry, createSequenceGateway([
-      modelToolCall("SubmitCommands", {
+      modelToolCall("FakeSubmitCommands", {
         summary: "Update title",
         commands: [{ id: "cmd-auto", type: "set-presentation-title", title: "Auto title" }],
         risk: "low",
@@ -621,9 +605,9 @@ describe("Agent Architecture Skeletons & Types", () => {
 
   it("keeps a continued AUTO request fail-closed without lifecycle services", async () => {
     const registry = new ToolRegistry();
-    registry.register(submitCommandsTool);
+    registry.register(fakeSubmit);
     const runtime = new AgentRuntime(registry, createSequenceGateway([
-      modelToolCall("SubmitCommands", {
+      modelToolCall("FakeSubmitCommands", {
         summary: "Update title",
         commands: [{ id: "cmd-auto-continued", type: "set-presentation-title", title: "Continued auto title" }],
         risk: "low",
@@ -641,7 +625,6 @@ describe("Agent Architecture Skeletons & Types", () => {
     await expect(service.continueAgentRun(
       threadId,
       "更新标题",
-      undefined,
       undefined,
       undefined,
       undefined,
@@ -666,7 +649,7 @@ describe("Agent Architecture Skeletons & Types", () => {
     const presentation = createStarterPresentation();
     const registry = new ToolRegistry();
     registry.register(beginPptCapabilityTool);
-    registry.register(submitCommandsTool);
+    registry.register(fakeSubmit);
     const runtime = new AgentRuntime(
       registry,
       createSequenceGateway([
@@ -674,11 +657,11 @@ describe("Agent Architecture Skeletons & Types", () => {
           capability: "edit",
           instruction: "Update title",
         }),
-        modelToolCall("SubmitCommands", {
-        summary: "Update title",
-        commands: [{ id: "cmd-stale", type: "set-presentation-title", title: "Stale title" }],
-        risk: "low",
-      }),
+        modelToolCall("FakeSubmitCommands", {
+          summary: "Update title",
+          commands: [{ id: "cmd-stale", type: "set-presentation-title", title: "Stale title" }],
+          risk: "low",
+        }),
       ]),
       undefined,
       undefined,
@@ -717,8 +700,6 @@ describe("Agent Architecture Skeletons & Types", () => {
       expect(bus.getSnapshot().title).toBe("Newer title");
       const durableState = await new DurableServiceStore(workspaceRoot)
         .load(result.approval.threadId);
-      // The Query completed when it produced the proposal. A later approval
-      // decision must not rewrite Query/service-thread completion state.
       expect(durableState?.status).toBe("completed");
       expect(durableState).not.toHaveProperty("pendingApproval");
     } finally {
@@ -727,14 +708,13 @@ describe("Agent Architecture Skeletons & Types", () => {
     }
   });
 
-  it("coerces string assumptions to array for SubmitCommands", () => {
-    const parsed = submitCommandsTool.inputSchema.parse({
+  it("coerces string assumptions to array", () => {
+    expect(assumptionsSchema.parse("仅排版，不改文案")).toEqual(["仅排版，不改文案"]);
+    expect(fakeSubmit.inputSchema.parse({
       summary: "Apply theme and layouts",
-      commands: [{ id: "cmd-1", type: "set-design-system", designSystem: TEST_DESIGN_SYSTEM }],
+      commands: [{ id: "cmd-1", type: "set-presentation-title", title: "Assumptions" }],
       assumptions: "仅排版，不改文案",
-    });
-
-    expect(parsed.assumptions).toEqual(["仅排版，不改文案"]);
+    }).assumptions).toEqual(["仅排版，不改文案"]);
   });
 
   it("aborts production AgentService execution immediately when aborted signal is passed", async () => {

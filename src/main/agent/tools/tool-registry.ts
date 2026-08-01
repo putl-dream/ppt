@@ -3,12 +3,11 @@ import { ToolLoader } from "./tool-loader";
 import { askUserTool } from "./core/ask-user";
 import { beginPptCapabilityTool } from "./core/begin-ppt-capability";
 import { executeExtraToolTool } from "./core/execute-extra-tool";
-import { executeLayoutPlanTool } from "./core/execute-layout-plan";
 import { getSelectionTool } from "./core/get-selection";
 import { getDesignReferenceTool } from "./core/get-design-reference";
 import { listTeammatesTool } from "./core/list-teammates";
 import { listSlidesTool } from "./core/list-slides";
-import { previewCommandsTool } from "./core/preview-commands";
+import { previewSlideTool } from "./core/preview-slide";
 import { previewSvgPageTool } from "./core/preview-svg-page";
 import { readCurrentSlideTool } from "./core/read-current-slide";
 import { readPresentationSnapshotTool } from "./core/read-presentation-snapshot";
@@ -16,7 +15,6 @@ import { respondPlanApprovalTool } from "./core/respond-plan-approval";
 import { searchExtraToolsTool } from "./core/search-extra-tools";
 import { sendTeammateMessageTool } from "./core/send-teammate-message";
 import { shutdownTeammateTool } from "./core/shutdown-teammate";
-import { submitCommandsTool } from "./core/submit-commands";
 import { submitPptReviewTool } from "./core/submit-ppt-review";
 import { submitSvgDeckTool } from "./core/submit-svg-deck";
 import { spawnTeammateTool } from "./core/spawn-teammate";
@@ -24,22 +22,7 @@ import { taskTools } from "./core/task-tools";
 import { loadSkillTool } from "./core/load-skill";
 import { webSearchTool } from "./core/web-search";
 import { searchSlideImagesTool } from "./core/search-slide-images";
-import { insertSlideImageTool } from "./core/insert-slide-image";
 import { workspaceFileTools } from "./core/workspace-files";
-import { analyzeDeckConsistencyTool } from "./deferred/analyze-deck-consistency";
-import { applyDesignSystemTool } from "./deferred/apply-design-system";
-import { autoLayoutSlideTool } from "./deferred/auto-layout-slide";
-import { beautifyChartTool } from "./deferred/beautify-chart";
-import { beautifyTableTool } from "./deferred/beautify-table";
-import { compressTextTool } from "./deferred/compress-text";
-import { detectOverflowTextTool } from "./deferred/detect-overflow-text";
-import { detectRepeatedTitlesTool } from "./deferred/detect-repeated-titles";
-import { rewriteSlideContentTool } from "./deferred/rewrite-slide-content";
-import { resolveDesignPlanTool } from "./deferred/resolve-design-plan";
-import { applyTypographyTool } from "./deferred/apply-typography";
-import { previewSlideTool } from "./deferred/preview-slide";
-import { validateDeckLayoutTool } from "./deferred/validate-deck-layout";
-import { updateSlideVariantTool } from "./deferred/update-slide-variant";
 
 /**
  * 工具注册表与唯一查询入口。
@@ -145,53 +128,46 @@ function stableToolOrder(
   return left.name < right.name ? -1 : left.name > right.name ? 1 : 0;
 }
 
+const DEFAULT_TOOL_DEFINITIONS: ToolDefinition<any, any>[] = [
+  askUserTool,
+  beginPptCapabilityTool,
+  executeExtraToolTool,
+  getDesignReferenceTool,
+  getSelectionTool,
+  listTeammatesTool,
+  listSlidesTool,
+  previewSlideTool,
+  previewSvgPageTool,
+  readCurrentSlideTool,
+  readPresentationSnapshotTool,
+  respondPlanApprovalTool,
+  searchExtraToolsTool,
+  sendTeammateMessageTool,
+  shutdownTeammateTool,
+  spawnTeammateTool,
+  submitPptReviewTool,
+  submitSvgDeckTool,
+  ...taskTools,
+  loadSkillTool,
+  webSearchTool,
+  searchSlideImagesTool,
+  ...workspaceFileTools,
+];
+
 /**
  * 构建每个 SessionRuntime 使用的标准工具集合。
  * Core Tools 可由模型直接调用；Deferred Tools 只能经发现与 ExecuteExtraTool 间接执行。
  */
 export function createDefaultToolRegistry(): ToolRegistry {
+  return createToolRegistryFromDefinitions(DEFAULT_TOOL_DEFINITIONS);
+}
+
+function createToolRegistryFromDefinitions(
+  tools: readonly ToolDefinition<any, any>[],
+): ToolRegistry {
   const registry = new ToolRegistry();
-  [
-    askUserTool,
-    beginPptCapabilityTool,
-    executeExtraToolTool,
-    executeLayoutPlanTool,
-    getDesignReferenceTool,
-    getSelectionTool,
-    listTeammatesTool,
-    listSlidesTool,
-    previewCommandsTool,
-    previewSvgPageTool,
-    readCurrentSlideTool,
-    readPresentationSnapshotTool,
-    respondPlanApprovalTool,
-    searchExtraToolsTool,
-    sendTeammateMessageTool,
-    shutdownTeammateTool,
-    spawnTeammateTool,
-    submitCommandsTool,
-    submitPptReviewTool,
-    submitSvgDeckTool,
-    ...taskTools,
-    loadSkillTool,
-    webSearchTool,
-    searchSlideImagesTool,
-    insertSlideImageTool,
-    ...workspaceFileTools,
-    analyzeDeckConsistencyTool,
-    applyDesignSystemTool,
-    autoLayoutSlideTool,
-    beautifyChartTool,
-    beautifyTableTool,
-    compressTextTool,
-    detectOverflowTextTool,
-    detectRepeatedTitlesTool,
-    rewriteSlideContentTool,
-    resolveDesignPlanTool,
-    applyTypographyTool,
-    previewSlideTool,
-    validateDeckLayoutTool,
-    updateSlideVariantTool,
-  ].forEach((tool) => registry.register(tool));
+  for (const tool of tools) {
+    registry.register(tool);
+  }
   return registry;
 }

@@ -36,13 +36,13 @@
 |---|---|
 | [工作流与状态](./presentation/workflow.md) | SVG-native Agent 创建路径、artifact、workspace 文件管理、Proposal 与 CommitGate |
 | [Presentation Artifact 与 Job 生命周期](./roadmap/presentation-lifecycle.md) | 已落地的 Query/PptJob/ArtifactRevision、事务、恢复与数据根契约 |
-| [Visual Expression System](./presentation/visual-system.md) | DesignSystemV2、SVG visualSource、Layout Grammar 遗留路径、三端渲染 |
+| [Visual Expression System](./presentation/visual-system.md) | DesignSystemV2、SVG visualSource、Grammar 遗留库边界、三端渲染 |
 
 ## 活跃路线图
 
 | 文档 | 状态 |
 |---|---|
-| [Presentation 模板管理与自动选择](./roadmap/template-management.md) | Proposed；模板上传、内容匹配、默认回退与母版复用边界 |
+| [Presentation 模板管理与自动选择](./roadmap/template-management.md) | Proposed；SVG-native 对齐、与 Grammar 零耦合；自动选择 / 参考上传 / 母版分期 |
 
 ## 核心设计约束
 

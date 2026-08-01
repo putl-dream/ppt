@@ -43,7 +43,7 @@ export function createLockedLayoutChoice(
   });
 }
 
-/** Agent 内部执行指令（不直接展示在聊天气泡中）。 */
+/** Summarize a confirmed design direction for tests / internal diagnostics. */
 export function buildLayoutPhasePrompt(choice: LayoutChoice): string {
   const selected = getSelectedDesignDirection(choice);
   return [
@@ -52,6 +52,6 @@ export function buildLayoutPhasePrompt(choice: LayoutChoice): string {
     `argumentMode=${selected.designSystem.argumentMode}`,
     `visualStyle=${selected.designSystem.visualStyle}`,
     `readingMode=${selected.designSystem.readingMode}`,
-    "完整已确认选择作为结构化 layoutChoice 元数据提交；按 LayoutPlan v2 继续，不重新猜设计。",
+    "将方向锁入 design/design-spec.json 与 slides/page-plan.json，再编写 slides/svg/*.svg，经 PreviewSvgPage 后由 SubmitSvgDeck 提交。",
   ].join(" ");
 }

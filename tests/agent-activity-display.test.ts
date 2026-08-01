@@ -28,6 +28,19 @@ describe("agent activity display", () => {
       expect(hasAgentToolDisplayCopy(tool.name), tool.name).toBe(true);
       expect(getAgentToolDisplayCopy(tool.name).action).not.toBe(tool.name);
     }
+
+    // Historical authoring tool names keep display copy for session history,
+    // even though they are no longer registered in the default tool surface.
+    for (const name of [
+      "SubmitCommands",
+      "ExecuteLayoutPlan",
+      "PreviewCommands",
+      "AutoLayoutSlide",
+      "BeautifyChart",
+    ]) {
+      expect(registry.get(name), name).toBeUndefined();
+      expect(hasAgentToolDisplayCopy(name), name).toBe(true);
+    }
   });
 
   it("uses natural status copy and a safe fallback for unknown tools", () => {

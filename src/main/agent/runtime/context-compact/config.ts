@@ -11,10 +11,10 @@ export const MICRO_COMPACT_PREVIEW_TAIL_CHARS = 300;
 export const MICRO_COMPACT_ALWAYS_PRESERVE_TOOLS = ["LoadSkill"] as const;
 export const MICRO_COMPACT_PRESERVE_LATEST_TOOLS = [
   "AskUser",
-  "ExecuteLayoutPlan",
   "ListSlides",
+  "PreviewSvgPage",
   "ReadPresentationSnapshot",
-  "SubmitCommands",
+  "SubmitSvgDeck",
   "TaskClaim",
   "TaskReviewApprove",
   "TaskCreate",

@@ -8,7 +8,6 @@ import {
 } from "@shared/commands";
 import type { AgentEditorContext, AgentRunResult } from "@shared/ipc";
 import type { AgentConversationMessage } from "@shared/session-recovery";
-import type { LayoutChoice } from "@shared/layout-preference";
 import type { TeammateProgressEvent } from "@shared/teammate-progress";
 import { CommitGate, type CommitGateResult } from "./gate/commit-gate";
 import { AgentRuntime } from "./runtime/agent-runtime";
@@ -244,7 +243,6 @@ export class AgentService {
     signal?: AbortSignal,
     runId?: string,
     agentStepLimits?: AgentStepLimits,
-    layoutChoice?: LayoutChoice,
   ): Promise<AgentRunResult> {
     // A caller-provided run id is stable across renderer/main persistence and
     // doubles as the recoverable thread id for an interrupted first turn.
@@ -279,7 +277,6 @@ export class AgentService {
         signal,
         invocationRunId,
         agentStepLimits,
-        layoutChoice,
       );
     });
   }
@@ -292,7 +289,6 @@ export class AgentService {
     signal?: AbortSignal,
     runId?: string,
     agentStepLimits?: AgentStepLimits,
-    layoutChoice?: LayoutChoice,
     modelOverride?: AgentModelSelection,
     executionStrategyOverride?: AgentExecutionStrategy,
   ): Promise<AgentRunResult> {
@@ -328,7 +324,6 @@ export class AgentService {
         signal,
         invocationRunId,
         agentStepLimits,
-        layoutChoice,
         startMode,
       );
     });
@@ -351,7 +346,6 @@ export class AgentService {
     signal?: AbortSignal,
     runId?: string,
     agentStepLimits?: AgentStepLimits,
-    layoutChoice?: LayoutChoice,
     startMode: QueryStartMode = { type: "new_query" },
   ): Promise<AgentRunResult> {
     if (signal?.aborted) {
@@ -388,7 +382,6 @@ export class AgentService {
         startMode,
         messageHistory,
         requiredOutcome,
-        layoutChoice,
         signal,
         workspaceRoot: this.workspaceRoot,
         runtimeRoot: this.runtimeRoot,

@@ -1398,7 +1398,6 @@ app.whenReady().then(async () => {
               controller.signal,
               currentRunId,
               agentStepLimits,
-              request.layoutChoice,
             );
             return finalizeAgentResult(sessionId, runtime, result, currentRunId);
           },
@@ -1517,7 +1516,6 @@ app.whenReady().then(async () => {
                 controller.signal,
                 currentRunId,
                 agentStepLimits,
-                request.layoutChoice,
                 selection,
                 executionStrategy,
               )
@@ -1531,7 +1529,6 @@ app.whenReady().then(async () => {
                 controller.signal,
                 currentRunId,
                 agentStepLimits,
-                request.layoutChoice,
               );
 
           return finalizeAgentResult(sessionId, runtime, await run, currentRunId);

@@ -15,7 +15,7 @@ import { ToolRegistry } from "../src/main/agent/tools/tool-registry";
 import type { ToolDefinition } from "../src/main/agent/tools/tool-definition";
 import { executeExtraToolTool } from "../src/main/agent/tools/core/execute-extra-tool";
 import { searchExtraToolsTool } from "../src/main/agent/tools/core/search-extra-tools";
-import { previewSlideTool } from "../src/main/agent/tools/deferred/preview-slide";
+import { previewSlideTool } from "../src/main/agent/tools/core/preview-slide";
 import { toToolSchema } from "../src/main/agent/tools/tool-schema";
 import { createStarterPresentation } from "../src/shared/presentation";
 

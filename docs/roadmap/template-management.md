@@ -2,22 +2,34 @@
 
 > 文档类型：活跃提案
 > 状态：Proposed，尚未成为现行代码事实
-> 最后更新：2026-07-29
+> 最后更新：2026-08-01
 >
 > 说明：本文件仅为提案；仓库中尚无独立模板领域模块。勿因 roadmap 存在而当作已实现。
+> 产品创建路径以 [工作流](../presentation/workflow.md) 的 SVG-native 为准；
+> ArtifactRevision / PptJob 以 [Presentation Artifact 与 Job 生命周期](./presentation-lifecycle.md)
+> （Implemented）为准。
+>
+> **与 Layout Grammar 的关系（已对照代码）**：模板方案**零依赖** Grammar。
+> Agent 作者工具（`ExecuteLayoutPlan` / `PreviewCommands` / `SubmitCommands` /
+> `InsertSlideImage` 及旧 beautify/layout 工具）已不在
+> `createDefaultToolRegistry()`；由 `tests/svg-native-tool-surface.test.ts` 锁定。
+> `src/shared/layout-grammar*`、`layout-handlers/`、`applyLayout` 仍存在，仅服务
+> 非 SVG 的 element-IR / CommandBus 路径，不是产品新建轨，也不是本路线图交付面。
 
 ## 1. 背景
 
 当前系统已经具备两类相邻能力：
 
 - `src/design-system/` 提供内置视觉风格、配色、阅读模式和 Design System；
-- `src/shared/design-recommendation.ts` 可以根据主题、受众和使用场景推荐视觉方向。
+- `src/shared/design-recommendation.ts` 中的关键词推荐与 `SPECTRUM_PROFILES` 仍存在，
+  但 `ResolveDesignPlan` 已不在默认工具注册表；活路径由 `skills/ppt-design` 让模型选择
+  `visualStyle` 并写入 `design/design-spec.json`。
 
 但产品层还没有统一的“模板”领域能力：
 
 - 设置页的“默认设计系统”主要是 Renderer 本地偏好，不是 Agent Mode 每次生成都能读取的
   项目事实；
-- 自动推荐输出的是 Design System 方向，不是带版本、适用条件和能力说明的模板选择；
+- 活路径的自动风格选择是模型判断，不是带版本、适用条件、置信度回退的确定性模板解析；
 - 系统没有 PPTX/POTX 上传、校验、解析、预览和项目级绑定协议；
 - 当前 SVG-native 创建与 PPTX exporter 不会继承上传文件中的 master/layout，因此不能把
   “文件已上传”描述成“已严格套用模板”。
@@ -52,26 +64,33 @@ explicit custom / explicit built-in > auto-selected built-in > project default >
 - 上传模板是特殊定制入口，不进入普通自动推荐池；
 - 自动选择只选择系统能够完整渲染、验证和导出的内置模板；
 - 默认模板是自动选择的确定性回退，不是与自动选择并列的一次模型猜测；
-- 选择结果必须固化到项目/设计 artifact，不能只存在于聊天文案或 Renderer `localStorage`。
+- 选择结果必须固化到 `design/design-spec.json`（lifecycle `design_spec`），不能只存在于
+  聊天文案或 Renderer `localStorage`。
 
 ## 3. “模板”在系统中的含义
 
 现有视觉系统刻意避免让模型选择一套死坐标模板。本提案中的模板不是单页坐标壳，而是
 一组可执行的设计约束和能力声明。
 
+产品页面视觉作者源是完整页面 SVG（见 [Visual Expression System](../presentation/visual-system.md)）。
+模板选择之后的页面构图只走 page-plan + SVG；**不**经过 Layout Grammar /
+`grammarVariant` / `applyLayout`。共享库中残留的 Grammar 编译器与模板协议无关，
+不得作为 Phase 1 可执行载荷或验收条件。
+
 ### 3.1 内置模板
 
-内置模板是系统维护的 `TemplateDescriptor + DesignSystem + capability metadata`：
+内置模板是系统维护的 `TemplateDescriptor + DesignSystemV2 + matching / guidance metadata`：
 
-- deck 级视觉语言；
-- 支持的内容密度、图表、图片和页面角色；
-- 可用的 Layout Grammar / Scene / Variant；
+- deck 级视觉语言（锁定的 `DesignSystemV2` / preset）；
+- 支持的内容密度、图表、图片和叙事角色偏好；
+- SVG-native 构图指引与禁忌（来自 catalog behavior / composition prose，非 grammar variant）；
 - 适合的主题、受众和演示场景；
 - 版本和预览；
-- 默认 Design System。
+- 是否允许作为项目默认 / auto 回退候选。
 
-页面级构图仍由内容意图、Scene、Layout Grammar 和确定性编译器决定。选择内置模板不会
-让整套演示退化为重复卡片或固定坐标复制。
+页面级构图仍由 `slides/page-plan.json` 的内容与 `layoutIntent`、以及 Agent 写作的
+`slides/svg/*.svg` 决定。选择内置模板只锁定 deck 级视觉约束，不会把整套演示退化为
+重复卡片或固定坐标复制，也不会把已注销的 Grammar 作者工具重新注册进 Agent 表面。
 
 ### 3.2 上传模板
 
@@ -79,11 +98,13 @@ explicit custom / explicit built-in > auto-selected built-in > project default >
 
 | 等级 | 能力 | 生成与导出语义 |
 |---|---|---|
-| `design-reference` | 提取配色、字体信息、画布、母版/版式名称和示例页结构，作为设计约束 | 由现有 SVG-native/Presentation 管线重新生成；不承诺保留原始 master |
+| `design-reference` | 提取配色、字体信息、画布、母版/版式名称和示例页结构，作为设计约束 | 由现有 SVG-native 管线重新生成页面；页面事实源仍是 SVG；不承诺保留原始 master |
 | `master-backed` | 保留并复用原 PPTX/POTX 的 master、layout、placeholder、主题和重复元素 | 新页面绑定导入的 layout，导出继续携带原始母版关系 |
 
 MVP 可以先交付 `design-reference`，但 UI 和结果必须明确显示“参考模板”。只有
 master/layout/placeholder 和导出链路全部验证通过后，才能标记为 `master-backed`。
+`design-reference` 改变的是 Design System / brand constraints / 设计上下文指引，
+不改变“页面事实源仍是 SVG”。
 
 ## 4. 目标与非目标
 
@@ -94,7 +115,7 @@ master/layout/placeholder 和导出链路全部验证通过后，才能标记为
 - 没有可靠匹配时稳定回退默认模板；
 - 自定义模板上传后进入受控项目资源，不依赖原始外部路径长期可用；
 - 每次生成可以追溯“使用了哪个模板、哪个版本、为什么选择、是否发生回退”；
-- 模板选择进入 Design/Artifact 状态，并成为 Agent 的结构化动态上下文；
+- 模板选择写入 `design-spec`，并成为 Agent 的结构化动态上下文；
 - Editor、HTML 预览和 PPTX 导出对模板解析结果使用同一 Presentation 事实。
 
 ### 4.2 非目标
@@ -104,7 +125,11 @@ master/layout/placeholder 和导出链路全部验证通过后，才能标记为
 - 不通过 Prompt 假装实现 master/layout 复用；
 - 不允许模板绕过 Presentation schema、质量门、CommitGate 或 PPTX postflight；
 - 不把模板选择做成必须让用户比较 safe/shifted/bold 的固定流程；
-- 不在第一阶段实现 PowerPoint 所有动画、宏、ActiveX、嵌入对象和特殊字体兼容。
+- 不把已从注册表移除的 Grammar/命令轨作者工具重新暴露给模型；
+- 不把 `layout` / `grammarVariant` / Scene 写进模板 descriptor 的可执行字段；
+- 不在第一阶段实现 PowerPoint 所有动画、宏、ActiveX、嵌入对象和特殊字体兼容；
+- Phase 1–2 不交付 `master-backed`（见 Phase 3）；
+- 不把删除 `src/shared/layout-grammar*` 作为模板 Phase 1 的前置（那是独立遗留清理）。
 
 ## 5. 领域模型
 
@@ -134,6 +159,11 @@ interface TemplateDescriptor {
     density: Array<"calm" | "standard" | "dense">;
     capabilities: Array<"image" | "chart" | "table" | "diagram" | "long-text">;
   };
+  /** SVG-native 构图指引；不是 grammar variant allow-list */
+  authoringGuidance?: {
+    composition: string;
+    avoid: string[];
+  };
   source?: UploadedTemplateSource;
 }
 
@@ -141,6 +171,7 @@ interface ProjectTemplatePolicy {
   mode: TemplatePolicyMode;
   defaultTemplateId: string;
   customTemplateId?: string;
+  customTemplateRevisionId?: string;
 }
 
 interface ResolvedTemplateSelection {
@@ -153,35 +184,67 @@ interface ResolvedTemplateSelection {
 }
 ```
 
+持久化落点：
+
+| 事实 | 位置 | 说明 |
+|---|---|---|
+| 应用默认模板 ID | App settings | 仅影响**新项目**初始化；不改已打开项目 |
+| 项目策略 | `design/template-policy.json`（建议） | `auto` / `default` / `custom` 与项目默认、自定义引用 |
+| 本次解析结果 | `design/design-spec.json` 内 `ResolvedTemplateSelection` | 写入即进入 lifecycle `design_spec` 哈希与下游 stale |
+| 上传模板库 | `design/templates/**` | 二进制 + descriptor + inspection；见 §9 |
+
 约束：
 
 - `mode=custom` 必须引用可用、已验证的 uploaded template revision；
-- `mode=auto` 不保存一个永久模板结果，而是在设计 artifact 生成时解析并固化结果；
+- `mode=auto` 不在 policy 文件中保存永久选中模板，而是在生成/更新 `design-spec` 时解析并固化
+  `ResolvedTemplateSelection`；
 - `defaultTemplateId` 必须始终指向可执行的内置模板；
 - selection 引用 immutable revision，不能只引用可能被覆盖的文件名；
 - uploaded source 的路径只由 Main/Project 层保存，Renderer 和模型只接触受控 ID、摘要和
-  项目内相对路径。
+  项目内相对路径；
+- 勿与遗留 `ConfirmedDesignSelection`（safe/shifted/bold spectrum）混名或共用存储。
+
+### 5.1 单一事实源：resolver 与 SVG 锁
+
+现行活路径中，模型可在 `ppt-design` 中自由选择 `visualStyle`。模板能力落地后必须收敛为
+单一事实源，避免“代码已选模板”与“模型另选风格”双写。
+
+规则：
+
+1. 在写入或提交 `design/design-spec.json` 之前，由确定性 **template resolver** 根据
+   `ProjectTemplatePolicy` + 已验证 communication signals 产出 `ResolvedTemplateSelection`。
+2. `presentationDesignSystem` / `visualStyle` **必须**与 resolved template 的
+   `designSystem` 锁一致（与今日 `SubmitSvgDeck` 对 DS 的 deep-equal 同级）。
+3. 模型可以把自然语言归一化为 structured signals（受众、场景、密度偏好等），**不能**
+   发明不存在的 template ID，也不能在 `mode=auto|default|custom` 下覆盖已解析的 template
+   revision（除非用户本轮显式改选，并记为 `explicit-*`）。
+4. `ResolveDesignPlan` / `SPECTRUM_PROFILES` 三方向比较不作为产品默认 UI；其关键词信号可
+   迁移进 catalog matching，但不再隐藏在 spectrum 推荐里充当模板选择。
+5. 内容大纲或页密度在首次锁定 `design-spec` 之后变化时，**不自动重选模板**；除非用户
+   修改 project policy、显式要求重选，或 `design-spec` 被删除后重建。
 
 ## 6. 内置模板目录
 
-当前 `DESIGN_PRESETS` 可以成为首批内置模板的视觉来源，但需要增加匹配与能力元数据，
-不能继续只依赖散落在推荐函数中的关键词数组。
+当前 `DESIGN_PRESETS`（约 18 个 `VisualStyle`）可以成为视觉来源，但 **auto 池与项目默认**
+不直接等于全部 preset。Phase 1 收敛为少量带 matching 元数据的 builtin template
+（约 6–8 个），每个锁定一个 preset/`DesignSystemV2`；其余 style 仍可通过
+`explicit-builtin`（用户点名 visual style）选用，但不进入自动评分池。
 
 建议目录职责：
 
 ```text
 Builtin Template Catalog
   ├─ identity: id / revision / label
-  ├─ executable design system
+  ├─ executable design system（一个锁定的 DesignSystemV2）
   ├─ semantic matching metadata
-  ├─ supported scene / grammar capabilities
+  ├─ SVG-native authoring guidance（composition / avoid）
   ├─ preview assets
-  └─ fallback eligibility
+  └─ fallback eligibility（可否作项目默认 / auto 回退）
 ```
 
 目录是代码事实。模型可以说明和使用选择结果，但不能发明不存在的模板 ID。
 
-内置模板至少应区分：
+Phase 1 auto 池至少覆盖并可测出稳定差异：
 
 - 商务决策与咨询汇报；
 - 技术、架构与产品说明；
@@ -189,7 +252,7 @@ Builtin Template Catalog
 - 教育、课程和培训；
 - 品牌、发布和营销叙事；
 - 文化、历史与编辑出版；
-- 默认通用模板。
+- 默认通用模板（例如基于 `swiss-minimal`）。
 
 每个模板需要有稳定视觉差异，同时声明不擅长的内容。例如摄影主导模板不能在缺少图片
 素材时留下空框；高密度数据模板不应用于舞台式极简发布。
@@ -198,14 +261,19 @@ Builtin Template Catalog
 
 ### 7.1 输入
 
-自动选择读取已经存在或可从当前 Query 提取的结构化事实：
+自动选择读取已经存在或可从当前 Query 提取的结构化事实。
+
+**最小充分输入**（即可调用 resolver）：
 
 - communication contract：受众、目标、核心信息、交付场景、会后用途；
-- brief / outline / storyboard 中的主题与行业；
+- 用户本轮明确表达的视觉偏好和禁用项；
+- brand profile 中的硬约束（若已有）。
+
+**可选增强输入**（有则提高分数区分度，无则不得阻塞选择）：
+
+- brief / outline 中的主题与行业；
 - argument mode 和 reading mode；
-- 页数、平均文本密度、图表/表格/图片需求；
-- brand profile 中的硬约束；
-- 用户本轮明确表达的视觉偏好和禁用项。
+- 页数、平均文本密度、图表/表格/图片需求。
 
 不得使用：
 
@@ -225,7 +293,7 @@ hard filters
 candidate scoring
   → topic + audience + delivery + argument + reading + density + asset fit
 confidence gate
-  → select best built-in
+  → select best built-in（仅 auto 池）
   → or fallback to project default
 ```
 
@@ -249,29 +317,33 @@ interface TemplateMatchScore {
 - 第一名低于阈值，或前两名差距过小，均使用默认模板；
 - 同一结构化输入和同一 catalog revision 必须得到相同结果。
 
-### 7.3 与现有设计推荐的关系
+### 7.3 与 SVG-native 创建链的关系
 
-`ResolveDesignPlan` 仍负责沟通契约和设计方向，但模板选择不应再隐藏在
-`SPECTRUM_PROFILES` 中。推荐链收敛为：
+推荐 / 创建链收敛为：
 
 ```text
-communication contract
-  → resolve project template policy
-  → select/resolve TemplateDescriptor
-  → derive or lock DesignSystemV2
-  → page-level rhythm / layout intent
-  → Scene / Layout Grammar / SVG-native compile
+communication contract（+ 可选结构化信号）
+  → resolve project template policy（design/template-policy.json）
+  → select/resolve TemplateDescriptor（代码 resolver）
+  → lock DesignSystemV2 + ResolvedTemplateSelection into design/design-spec.json
+  → slides/page-plan.json（内容与 layoutIntent）
+  → slides/svg/*.svg（页面视觉作者源）
+  → PreviewSvgPage / SubmitSvgDeck
 ```
 
-用户明确指定视觉风格时，可以解析为显式内置模板；用户明确选择上传模板时，使用上传模板
+用户明确指定视觉风格时，解析为显式内置模板；用户明确选择上传模板时，使用上传模板
 的已验证 revision。只有没有显式选择时才执行自动匹配。
+
+非 SVG 的 element-IR 页若仍经 `applyLayout` 消费同一 `DesignSystemV2`，属于共享渲染
+遗留行为，**不在本路线图范围内**，也不构成模板验收项。
 
 ## 8. 默认模板
 
 默认模板分为两层：
 
-1. **应用默认**：安装时始终存在的内置模板，例如 `swiss-minimal`；
-2. **项目默认**：项目创建时从用户偏好快照得到，之后作为项目事实独立保存。
+1. **应用默认**：安装时始终存在的内置模板，例如 `swiss-minimal` 对应的 builtin id；
+2. **项目默认**：项目创建时从用户偏好快照得到，写入 `design/template-policy.json`，之后作为
+   项目事实独立保存。
 
 设置页修改应用默认不应悄悄改变已有项目。新项目初始化时复制当前应用默认 ID；项目内可
 再次修改。
@@ -294,7 +366,7 @@ communication contract
   → 检查 OOXML 结构和风险项
   → 解析 theme / master / layout / placeholder / sample slides
   → 生成预览与 TemplateDescriptor
-  → 用户显式设为当前项目模板
+  → 用户显式设为当前项目模板（写入 policy，不自动覆盖）
 ```
 
 导入成功和选择成功是两个不同事件。上传后可以先进入模板库，不自动覆盖当前项目策略。
@@ -325,10 +397,16 @@ design/templates/
       preview/
 ```
 
-这些文件未来应纳入
-[Presentation Artifact 与 Job 生命周期](./presentation-lifecycle.md) 的 immutable
-revision/dependency 体系。在该路线落地前，至少需要 content hash、schema validation
-和原子写，不能仅把外部路径保存到 `localStorage`。
+与已落地的 lifecycle 关系：
+
+- **`ResolvedTemplateSelection` 写入 `design/design-spec.json`**：Phase 1 即进入
+  `design_spec` ArtifactRevision；内容变化经现有 observer 传播
+  `page_plan` → `page_svg` → … stale。不必等待单独“lifecycle 整合阶段”。
+- **`design/templates/**` 上传库**：路径不与现有 `design-spec` / brand-profile 冲突；
+  Phase 2 起至少需要 content hash、schema validation 和原子写。将其提升为独立
+  artifact kind、并在模板文件变更时建立到 `design_spec` 的依赖边，属于后续增强
+  （见 Phase 4），不阻塞参考模板 MVP。
+- 不能仅把外部绝对路径保存到 `localStorage`。
 
 ### 9.3 解析产物
 
@@ -349,10 +427,11 @@ revision/dependency 体系。在该路线落地前，至少需要 content hash�
 
 ## 10. 真正的母版复用
 
-`master-backed` 是独立工程阶段，不等于解析出颜色和字体。完成它至少需要：
+`master-backed` 是**独立大工程阶段**，不等于解析出颜色和字体，也**不阻塞** Phase 1–2
+交付。它与当前“整页 SVG 作者 + 导出派生 Presentation”存在结构性张力，完成它至少需要：
 
 1. Presentation model 能表示 imported master/layout/placeholder 引用；
-2. Compiler 能按 placeholder 语义填充内容，而不是把固定坐标复制成普通元素；
+2. 填槽或编译路径能按 placeholder 语义填充内容，而不是把固定坐标复制成普通元素；
 3. 重复元素保留 master → layout → slide 层级；
 4. Editor/HTML 能预览继承后的实际页面；
 5. PPTX exporter 能保留或重建 OOXML master/layout relationship；
@@ -369,8 +448,8 @@ PowerPoint 中切换并编辑原模板母版。
 | 状态 | 归属 | 示例 |
 |---|---|---|
 | 应用偏好 | Renderer/App settings | 新项目默认模板 ID |
-| 项目策略 | Project/Presentation artifact | auto/default/custom、项目默认、自定义模板引用 |
-| 本次解析结果 | Deck Design artifact | resolved template revision、理由、分数、回退原因 |
+| 项目策略 | `design/template-policy.json` | auto/default/custom、项目默认、自定义模板引用 |
+| 本次解析结果 | `design/design-spec.json`（`design_spec` revision） | resolved template revision、理由、分数、回退原因 |
 
 模板选择结果进入动态 System Context，但 Prompt 只解释已经由代码解析的事实：
 
@@ -400,7 +479,7 @@ Prompt 不能承担：
 
 - 默认内置模板；
 - 查看内置模板预览；
-- 管理已上传模板库；
+- 管理已上传模板库（Phase 2+）；
 - 不直接改变当前已打开项目的选择。
 
 ### 12.2 项目级入口
@@ -409,7 +488,7 @@ Prompt 不能承担：
 
 - **自动选择（推荐）**：展示“系统将根据内容选择，无法判断时使用 ××”；
 - **使用默认模板**：展示当前项目默认模板；
-- **自定义模板**：选择已经导入的模板，或进入上传流程。
+- **自定义模板**：选择已经导入的模板，或进入上传流程（Phase 2+）。
 
 生成后在预览/设计摘要中显示：
 
@@ -417,10 +496,11 @@ Prompt 不能承担：
 - 自动选择理由或回退原因；
 - support level；
 - “参考模板”或“母版模板”状态；
-- 更换模板会使哪些下游设计/编译 artifact stale。
+- 更换模板会使哪些下游 artifact stale（至少 `design_spec` 及依赖它的
+  `page_plan` / `page_svg` / preview / proposal 链）。
 
 只有用户明确要求比较模板时才展示多候选对比。普通创建任务直接使用推荐结果，避免增加
-一次无意义确认。
+一次无意义确认。不默认展示 safe/shifted/bold 三方向选择。
 
 ## 13. 与现有架构的集成点
 
@@ -428,26 +508,29 @@ Prompt 不能承担：
 
 - 新增 template descriptor、policy、inspection 和 selection schema；
 - catalog 与 resolver 使用纯函数，便于确定性测试；
-- `DeckDesignPlan`/未来 Artifact Revision 保存 selection。
+- 扩展 `svgDeckDesignSpecSchema` / `design/design-spec.json`，持久化
+  `ResolvedTemplateSelection`（不要引入不存在的 `DeckDesignPlan` 类型名）。
 
 ### Main / Project
 
-- 新增 native file picker 和 template import service；
+- 新增 native file picker 和 template import service（Phase 2）；
 - 负责 OOXML 校验、受控复制、hash、inspection 和 preview；
-- 项目级 policy 与 template index 原子持久化；
+- 项目级 `template-policy.json` 与 template index 原子持久化；
 - 不通过通用文本编辑器修改二进制模板。
 
 ### Agent Runtime
 
 - RunFactory 从项目事实构建 template dynamic context；
 - 自动选择由领域 resolver 执行，模型只提供已验证的 communication signals；
-- resolved selection 进入 prompt cache key 和设计 artifact；
+- resolved selection 进入 prompt cache key 和 `design-spec`；
+- `ppt-design` / Submit 锁与 §5.1 一致；
 - 模板变更不修改 Query Loop，也不成为新的硬编码 Prompt stage。
 
 ### Presentation / Export
 
-- `design-reference` 转换为 Design System、brand constraints 和 layout guidance；
-- `master-backed` 需要独立 imported-deck compiler/exporter；
+- `design-reference` 转换为 Design System、brand constraints 和 SVG 作者指引；
+  页面仍经 PreviewSvgPage / SubmitSvgDeck；
+- `master-backed` 需要独立 imported-deck 模型与 exporter（Phase 3）；
 - 两种路径最终都经过 Presentation validation、CommitGate、preview 和 postflight。
 
 ## 14. 失败与回退
@@ -467,35 +550,42 @@ Prompt 不能承担：
 
 ## 15. 分阶段实施
 
-### Phase 1：模板协议与内置目录
+### Phase 1：模板协议与内置目录（对齐 SVG-native + 现有 lifecycle）
 
-- 建立 schema、catalog revision、project policy 和 resolved selection；
-- 把现有 `DESIGN_PRESETS` 与关键词推荐收敛到可解释 catalog/resolver；
-- Agent Mode 读取项目默认与自动选择结果；
-- 增加低置信度默认回退；
-- UI 提供自动/默认选择，不先做无效上传按钮。
+- 建立 schema、catalog revision、`design/template-policy.json` 和
+  `ResolvedTemplateSelection`；
+- 把 auto 池收敛到约 6–8 个可解释 builtin（自 `DESIGN_PRESETS` 选取），关键词 matching
+  迁出散落的 `SPECTRUM_PROFILES` 隐藏逻辑；
+- selection 写入 `design/design-spec.json`，复用已有 `design_spec` revision / stale 传播；
+- 落实 §5.1：resolver 锁定 DS，`ppt-design` / Submit 不得另选冲突风格；
+- Agent 动态上下文读取 policy 与 resolved selection；
+- UI 提供自动/默认选择；Phase 1 不提供无效上传按钮。
 
 ### Phase 2：上传参考模板
 
-- 增加 PPTX/POTX file picker、导入、hash、OOXML 安全检查和项目内存储；
+- 增加 PPTX/POTX file picker、导入、hash、OOXML 安全检查和项目内 `design/templates/` 存储；
 - 提取 theme、字体、master/layout 摘要和预览；
 - 生成 `design-reference` descriptor；
-- 选择后把约束投影到 Design System/Brand Profile/设计上下文；
-- 明确展示不能保留原始母版。
+- 选择后把约束投影到 Design System / Brand Profile / 设计上下文；
+- 明确展示不能保留原始母版；页面事实源仍是 SVG。
 
-### Phase 3：母版驱动编译与导出
+### Phase 3：母版驱动编译与导出（可选独立大工程）
 
 - 扩展 Presentation imported master/layout 模型；
-- placeholder-aware compile；
+- placeholder-aware 填槽或等价编译；
 - Editor/HTML/PPTX 三端继承一致；
 - master/layout OOXML export 与 postflight；
 - 通过真实 PowerPoint/WPS/Keynote 样例验收后启用 `master-backed`。
+- **不阻塞** Phase 1–2 的产品交付。
 
-### Phase 4：生命周期整合
+### Phase 4：上传库的 lifecycle 一等公民化（增强，非 selection 前提）
 
-- 模板 source、inspection、selection 和 compiled deck 接入 immutable Artifact Revision；
-- 模板 revision 变化确定性标记 DesignPlan、CompiledDeck、QualityReport 和 Export stale；
+- 将 template source / inspection 提升为可选 ArtifactRevision kind，或建立
+  `design/templates/**` → `design_spec` 的显式依赖边；
+- 模板库文件变更时确定性标记依赖该 revision 的 `design_spec` 及下游
+  `page_plan` / `page_svg` / preview / proposal / export；
 - 支持版本比较、恢复和项目迁移。
+- 注意：Phase 1 的 selection stale 已由 `design_spec` 覆盖；本阶段只补上传库缺口。
 
 ## 16. 验收标准
 
@@ -505,7 +595,9 @@ Prompt 不能承担：
 - 同一输入与 catalog revision 始终得到相同选择；
 - 弱信号和冲突信号可靠回退项目默认；
 - 用户显式选择永远覆盖自动选择；
-- 选择理由、分数和回退原因可测试、可展示。
+- 选择理由、分数和回退原因可测试、可展示；
+- `design-spec` 中 `ResolvedTemplateSelection` 与 `presentationDesignSystem` 一致，
+  Submit 不得接受冲突 DS。
 
 ### 上传
 
@@ -517,18 +609,20 @@ Prompt 不能承担：
 
 ### 生成与导出
 
-- resolved template revision 被写入设计 artifact；
-- 模板变更会使正确的下游 artifact stale；
+- resolved template revision 被写入 `design-spec` / `design_spec` revision；
+- 变更 `design-spec` 内 selection/DS 会使正确的下游 artifact stale；
 - Editor、HTML 和 PPTX 使用同一 resolved design；
-- master-backed 样例在 postflight 和真实 Office 应用中保留预期 master/layout；
+- `design-reference` 路径下导出不声称保留原母版；
+- master-backed 样例（仅 Phase 3）在 postflight 和真实 Office 应用中保留预期 master/layout；
 - 任意失败都不会静默改用另一模板并报告成功。
 
 ### 回归验证
 
 - catalog/resolver/schema 单元测试；
-- template import 的路径、ZIP、OOXML、hash 和幂等测试；
+- template import 的路径、ZIP、OOXML、hash 和幂等测试（Phase 2+）；
 - System Context 动态 section 与 cache invalidation 测试；
 - project policy 持久化和 session 隔离测试；
+- design-spec 锁与 Submit 一致性测试；
 - Presentation/HTML/PPTX 一致性与 postflight 测试；
 - `npm.cmd run typecheck`、`npm.cmd test`；
 - master-backed 阶段额外运行真实 PPTX 生成并人工打开检查。
@@ -538,7 +632,10 @@ Prompt 不能承担：
 1. 模板上传和模板自动选择是两条能力，不应共享一个模糊的“模板选择”状态。
 2. 自动选择只面向系统内置、可完整验证的模板；默认模板是低置信度回退。
 3. 自定义模板必须由用户显式选择，并保存为项目内受控 revision。
-4. Template、Design System、Layout Grammar 和单页 Scene 各有职责，不能互相替代。
-5. 模板决策由代码解析和持久化，Prompt 只消费可验证结果。
-6. “参考模板”与“母版保真模板”必须分级实现和展示。
-7. 模板能力最终应接入 Presentation Artifact/Job 生命周期，而不是形成第三套工作流状态。
+4. Template 锁定 Design System 与 SVG 作者指引；页面构图由 page-plan + SVG 完成。
+   Agent Grammar 作者面已从注册表移除；共享 Grammar 库与模板零耦合。
+5. 模板决策由代码解析并写入 `design-spec`；Prompt 只消费可验证结果；与模型选风格
+   不得双源。
+6. “参考模板”与“母版保真模板”必须分级实现和展示；Phase 3 不阻塞 Phase 1–2。
+7. selection 的 lifecycle/stale 在 Phase 1 即跟随 `design_spec`；上传库 artifact 一等公民化
+   是后续增强，不形成第三套工作流状态机。

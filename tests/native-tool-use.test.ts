@@ -4,7 +4,6 @@ import { AgentRuntime } from "../src/main/agent/runtime/agent-runtime";
 import { ToolRegistry } from "../src/main/agent/tools/tool-registry";
 import { readPresentationSnapshotTool } from "../src/main/agent/tools/core/read-presentation-snapshot";
 import { listSlidesTool } from "../src/main/agent/tools/core/list-slides";
-import { submitCommandsTool } from "../src/main/agent/tools/core/submit-commands";
 import { toToolSchema } from "../src/main/agent/tools/tool-schema";
 import type {
   AgentModelContentBlock,
@@ -16,6 +15,7 @@ import { createStarterPresentation } from "../src/shared/presentation";
 import type { ToolDefinition } from "../src/main/agent/tools/tool-definition";
 import { clearHooks, registerHook } from "../src/main/agent/runtime/hooks/hook-registry";
 import type { AgentRuntimeStreamEvent } from "../src/main/agent/runtime/runtime-types";
+import { createFakeCommandProposalTool } from "./fake-command-proposal-tool";
 
 function createGateway(turns: AgentModelContentBlock[][]): AgentModelGateway & { requests: AgentModelRequest[] } {
   let index = 0;
@@ -41,11 +41,12 @@ function createGateway(turns: AgentModelContentBlock[][]): AgentModelGateway & {
 }
 
 const text = (value: string): AgentModelContentBlock[] => [{ type: "text", text: value }];
+const fakeSubmit = createFakeCommandProposalTool();
 
 describe("native ContentBlock runtime path", () => {
   it("converts a zod tool schema to a JSON Schema tool spec", () => {
-    const spec = toToolSchema(submitCommandsTool);
-    expect(spec.name).toBe("SubmitCommands");
+    const spec = toToolSchema(fakeSubmit);
+    expect(spec.name).toBe("FakeSubmitCommands");
     expect(spec.inputSchema.type).toBe("object");
     expect(spec.inputSchema.properties as Record<string, unknown>).toHaveProperty("commands");
   });
@@ -53,13 +54,13 @@ describe("native ContentBlock runtime path", () => {
   it("drives the tool loop exclusively from tool_use blocks", async () => {
     const registry = new ToolRegistry();
     registry.register(readPresentationSnapshotTool);
-    registry.register(submitCommandsTool);
+    registry.register(fakeSubmit);
     const gateway = createGateway([
       [{ type: "tool_use", id: "call-1", name: "ReadPresentationSnapshot", input: {} }],
       [{
         type: "tool_use",
         id: "call-2",
-        name: "SubmitCommands",
+        name: "FakeSubmitCommands",
         input: {
           summary: "Set title",
           commands: [{ id: "cmd-1", type: "set-presentation-title", title: "Native title" }],
@@ -89,7 +90,7 @@ describe("native ContentBlock runtime path", () => {
 
   it("returns plain text blocks as the local message result", async () => {
     const registry = new ToolRegistry();
-    registry.register(submitCommandsTool);
+    registry.register(fakeSubmit);
     const gateway = createGateway([text("已完成，无需修改幻灯片。")]);
     const result = await new AgentRuntime(registry, gateway).run({
       threadId: "native-message-thread",
@@ -102,7 +103,7 @@ describe("native ContentBlock runtime path", () => {
 
   it("streams direct Markdown text without exposing any envelope", async () => {
     const registry = new ToolRegistry();
-    registry.register(submitCommandsTool);
+    registry.register(fakeSubmit);
     const gateway = createGateway([text("我是你的 PPT 智能助手。\n\n说说你的需求，我马上开干。")]);
     let streamed = "";
     const result = await new AgentRuntime(registry, gateway).run({
@@ -164,7 +165,7 @@ describe("native ContentBlock runtime path", () => {
 
   it("accepts direct Markdown on the first turn", async () => {
     const registry = new ToolRegistry();
-    registry.register(submitCommandsTool);
+    registry.register(fakeSubmit);
     const gateway = createGateway([text("**可以。** 先讲概念，再决定是否制作 PPT。")]);
     const result = await new AgentRuntime(registry, gateway).run({
       threadId: "native-markdown-thread",

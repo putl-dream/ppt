@@ -3,7 +3,7 @@ import type { ToolDefinition } from "../tool-definition";
 import { sanitizeAgentName } from "../../teammate/message-bus";
 
 export const spawnTeammateSchema = z.object({
-  name: z.string().optional().describe("Stable teammate name, e.g. researcher or layout_planner"),
+  name: z.string().optional().describe("Stable teammate name, e.g. researcher or fact_checker"),
   role: z.string().describe("Short teammate role, e.g. researcher, editor, layout planner"),
   prompt: z.string().describe("Initial task prompt for the teammate"),
 });

@@ -25,18 +25,24 @@ describe("layout phase prompt", () => {
 
     expect(prompt).toContain("设计方向已确认");
     expect(prompt).toContain("visualStyle=blueprint");
+    expect(prompt).toMatch(/design-spec|SubmitSvgDeck|PreviewSvgPage/);
     expect(prompt).not.toMatch(/Task|TaskList|Claim|LoadSkill|ExecuteLayoutPlan/);
   });
 
-  it("validates confirmed design selection as structured run metadata", () => {
-    const choice = confirmDesignPlan(candidate, "direction-bold");
+  it("validates agent run requests without layoutChoice short-circuit metadata", () => {
     const request = agentRunRequestSchema.parse({
       prompt: "设计方向已确认。",
       sessionId: "session-1",
-      layoutChoice: choice,
     });
 
-    expect(request.layoutChoice?.selectedDirectionId).toBe("direction-bold");
-    expect(request.layoutChoice?.directions).toHaveLength(3);
+    expect(request.prompt).toBe("设计方向已确认。");
+    expect(request.sessionId).toBe("session-1");
+    expect(request).not.toHaveProperty("layoutChoice");
+  });
+
+  it("still confirms a design direction for prompt construction", () => {
+    const choice = confirmDesignPlan(candidate, "direction-bold");
+    expect(choice.selectedDirectionId).toBe("direction-bold");
+    expect(choice.directions).toHaveLength(3);
   });
 });

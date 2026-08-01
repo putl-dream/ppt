@@ -44,7 +44,7 @@ export class AssetValidator {
             category: "asset",
             severity: "error",
             message: `Image '${element.id}' on slide '${slide.title}' still uses a remote URL.`,
-            fixHint: "Run InsertSlideImage with workspace localization before PPTX export.",
+            fixHint: "Localize the image into the workspace and embed it in the page SVG before PPTX export.",
           });
         }
 

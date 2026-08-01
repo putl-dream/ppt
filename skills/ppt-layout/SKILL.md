@@ -67,6 +67,4 @@ allowed-tools:
 
 若本技能发现 `layoutIntent` 仍是固定 layout 名或过于抽象，可用 `WriteFile` 修订 `slides/page-plan.json` 的自然语言意图，再交给 `ppt-build`。已存在 SVG 的重排由 `ppt-edit` 或 `ppt-beautify` 直接修改作者源。
 
-## 退出的旧路线
-
-不要调用 `ExecuteLayoutPlan`、`AutoLayoutSlide`、`PreviewCommands`、`SubmitCommands` 或任何 element/layout grammar 工具。不要建立与 SVG 并行的布局模型，也不要让运行时追加自动 chrome。
+布局意图写进 `slides/page-plan.json` 与页面 SVG；不要建立与 SVG 并行的 element/layout 模型，也不要让运行时追加自动 chrome。

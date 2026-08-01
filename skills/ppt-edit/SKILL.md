@@ -50,8 +50,8 @@ allowed-tools:
 
 若结构性改动改变了内容意图或页序，同步更新 `slides/page-plan.json`；页面 SVG 仍是可见结果的唯一作者源。纯视觉微调不必反写布局参数。
 
-## 禁止
+## 边界
 
-- 不使用 `SubmitCommands`、`PreviewCommands`、element id、layout handler 或自动排版。
+- 编辑目标是 SVG 作者源与 `SubmitSvgDeck`，不是 element id / layout handler。
 - 不只看已提交预览就覆盖源文件；始终先读取完整 `visualSource.sourcePath`。
 - 不让提交或导出阶段补标题、页码、背景或其他自动 chrome。

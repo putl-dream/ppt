@@ -108,6 +108,8 @@ model turn 重新解析，而不是把变化藏进 Prompt。
 
 这三类是加载策略，不是安全级别。Core 也必须过权限；Deferred 被发现后也不能绕过策略。
 
+协作面（Task\*、`spawn_teammate`、`list_teammates`、`send_teammate_message`、`shutdown_teammate`）为 Deferred：服务多 Agent 的六项目标，但不常驻主 SVG 作者路径的 Core schema。
+
 `SearchExtraTools` 只登记本 Query 实际发现的 Deferred Tool。模型调用
 `ExecuteExtraTool` 后，Preflight 将其解析成真实 ToolDefinition；目标工具再进入与
 直接调用完全相同的权限、Hook、输入/输出校验、后台调度和结果映射管线。
@@ -184,9 +186,12 @@ hard deny
 高层 Hook 的 allow 不能越过更高优先级 deny。权限拒绝应告诉模型原因和可选替代
 方案，但不能泄露 Secret。
 
-Presentation 写入仍有独立的 `CommitGate`。允许调用 `SubmitSvgDeck` 或 `SubmitCommands`
-不等于允许自动应用所有命令。新建整套演示应走 `PreviewSvgPage` → `SubmitSvgDeck`；
-`ExecuteLayoutPlan` / `SubmitCommands` 不是 SVG-native 新建主路径。
+Presentation 写入仍有独立的 `CommitGate`。允许调用 `SubmitSvgDeck` 不等于允许自动
+应用所有命令。产品作者路径仅为 `PreviewSvgPage` → `SubmitSvgDeck`。
+
+Grammar / 命令轨作者工具（`ExecuteLayoutPlan`、`PreviewCommands`、`SubmitCommands`、
+`InsertSlideImage`、beautify/layout 等）已从默认注册表移除；产品作者路径仅为
+SVG-native，不得再发现或调用这些工具。
 
 ## 9. Skill 与工具
 
@@ -211,8 +216,6 @@ Skill 提供知识和工作建议，不拥有工具权限。`LoadSkill`：
 - `src/main/agent/runtime/hooks/`
 - `src/main/agent/tools/core/preview-svg-page.ts`
 - `src/main/agent/tools/core/submit-svg-deck.ts`
-- `src/main/agent/tools/core/submit-commands.ts`
-- `src/main/agent/tools/core/execute-layout-plan.ts`
 
 ## 11. 验收
 

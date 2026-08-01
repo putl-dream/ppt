@@ -1,7 +1,7 @@
 # 工程能力地图：Claude Code 参考与 Agent PPT 落点
 
 > 文档类型：现行能力盘点
-> 最后核对：2026-07-30
+> 最后核对：2026-08-01
 > 事实来源：`/mnt/e/Coding/claude-code`、`src/`、`skills/`、`tests/` 与 `package.json`
 
 下文中 `/mnt/e/Coding/claude-code/...` 是参考项目绝对路径；`src/...`、`tests/...`
@@ -58,12 +58,12 @@ Agent PPT 不需要复制这些入口和命令，但需要吸收其中与长任�
 | 项目文件管理 | **Implemented** | `src/main/project/project-file-service.ts`、`src/shared/ipc.ts`、`src/renderer/src/components/ProjectFilesPage.tsx` | SVG-native artifact 分组、list/detail/diff；注册文本 artifact 使用隔离编辑凭证与 SHA-256 CAS |
 | 权限与审批 | **Implemented** | `src/main/agent/runtime/tools/permission-check.ts`、`src/main/agent/runtime/tools/tool-approval-broker.ts`、`src/main/agent/gate/commit-gate.ts` | Prompt 不承担权限；Presentation 变更有独立提交门 |
 | Skill 渐进加载 | **Implemented** | `src/main/agent/skills/loadSkillsDir.ts`、`src/main/agent/tools/core/load-skill.ts`、`skills/` | Skill 是知识/流程注入，不是硬编码阶段机 |
-| Task / teammate | **Implemented** | `src/main/agent/task/`、`src/main/agent/teammate/`、`src/main/agent/subagent/` | 有持久化任务、独立会话、消息总线和生命周期 |
+| Task / teammate | **Implemented** | `src/main/agent/task/`、`src/main/agent/teammate/`、`src/main/agent/subagent/` | 六项目标；Lead 协作工具 Deferred；独立会话、消息总线与生命周期 |
 | 后台任务 | **Partial** | `src/main/agent/runtime/background/` | 已有 manager 与 inbox 输入，尚非 daemon/跨进程后台平台 |
 | 持久化与恢复 | **Implemented** | `src/main/agent/persistence/`、`src/main/agent/runtime/lifecycle/checkpoint-coordinator.ts` | History、checkpoint、lease、CAS 与 inflight 恢复分层 |
 | Web / 图片检索 | **Implemented** | `src/main/agent/search/`、`src/main/agent/tools/core/web-search.ts`、`src/main/agent/tools/core/search-slide-images.ts` | 作为受控外部能力进入工具管线 |
 | SVG-native 创建 | **Implemented** | `skills/ppt-workflow/`、`preview-svg-page.ts`、`submit-svg-deck.ts` | 产品唯一新建路径 |
-| Layout Grammar 编译（遗留） | **Implemented** | layout registry / ExecuteLayoutPlan | 非新建主路径 |
+| Layout Grammar 共享遗留库 | **Partial** | `layout-grammar` / `applyLayout` / handlers 仍在；Agent 作者工具已从注册表移除 | 产品作者面已切 SVG-native；库删除待确认无依赖后另做 |
 | 渲染反馈与质量门 | **Implemented** | `src/main/agent/runtime/presentation/render-feedback-loop.ts`、deck validators、quality gate | 模型复盘有界，最终约束由确定性代码执行 |
 | Artifact / Job 生命周期 | **Implemented** | `src/shared/presentation-lifecycle.ts`、`src/main/presentation-lifecycle/` | 跨 Query PptJob、immutable revision graph、Proposal/Presentation/Export 与恢复 |
 | MCP / Plugin / LSP | **Not adopted** | 无对应产品入口 | 不是当前 PPT 主链路所必需 |
@@ -230,6 +230,8 @@ Prompt 采用稳定前缀和动态后缀，section 顺序与 cache key 由 assem
 
 ### 4.7 多 Agent、任务与后台工作
 
+多 Agent 的目标方向是六项能力：并行处理、上下文隔离、专业化、独立判断与交叉验证、长任务委派与生命周期管理、组织协作。它是可选协作层，不是 SVG-native 作者路径的必经步骤。
+
 当前协作能力由四个相互独立的对象构成：
 
 - `TaskStore`：任务身份、状态、依赖和持久化；
@@ -237,7 +239,7 @@ Prompt 采用稳定前缀和动态后缀，section 顺序与 cache key 由 assem
 - message bus / inbox：Agent 间消息传递；
 - background task manager：前台 Query 之外的受控执行。
 
-teammate 必须有独立 Agent identity，但共享 workspace 安全边界和文件服务。任务完成、失败、取消和 shutdown 都应进入终态，不能只靠进程/Promise 消失判断完成。
+teammate 必须有独立 Agent identity，但共享 workspace 安全边界和文件服务。任务完成、失败、取消和 shutdown 都应进入终态，不能只靠进程/Promise 消失判断完成。Lead 侧 Task\* / `spawn_teammate` 等协作工具为 Deferred，经 `SearchExtraTools` 按需发现，避免常驻 Core schema。
 
 当前 `Partial` 的是“后台平台”而非基本后台执行：Agent PPT 尚未具备 Claude Code 的 daemon、跨进程 attach、`ps/logs/kill`、Remote Control 或 ACP 接入。
 
@@ -263,8 +265,10 @@ Claude Code 提供通用 Agent 骨架，Agent PPT 的产品价值来自以下领
 
 ### 5.1 产品创建路径
 
-- **Agent SVG-native（产品唯一创建路径）**：`design/design-spec.json` → `slides/page-plan.json` → `slides/svg/PNN.svg` → `PreviewSvgPage` → `SubmitSvgDeck` → CommitGate。
-- **Layout Plan / ExecuteLayoutPlan**：遗留布局编译，非新建主路径。
+- **Agent SVG-native（产品唯一创建/作者路径）**：`design/design-spec.json` → `slides/page-plan.json` → `slides/svg/PNN.svg` → `PreviewSvgPage` → `SubmitSvgDeck` → CommitGate。
+- **Layout Grammar**：Agent 作者工具已从默认注册表**移除**（`tests/svg-native-tool-surface.test.ts`）。
+  `src/shared/layout-grammar*` / `layout-handlers` / `applyLayout` **库代码仍在**，可服务非 SVG
+  element-IR；删除库是独立遗留清理，不是创建路径前置。
 
 所有可达写入最终进入同一 Presentation schema、CommitGate、renderer 与 exporter，不能各自产生不兼容的“第二套 slide 事实”。
 
@@ -274,18 +278,19 @@ Claude Code 提供通用 Agent 骨架，Agent PPT 的产品价值来自以下领
 
 - SVG-native 页面作者源与 `visualSource.kind === "svg"`；
 - `src/design-system/` 中的 DesignSystemV2 schema、preset、brand profile、颜色、背景与图片处理；
-- Layout Grammar、variant、slot、text fit 和内置 layout handler（遗留/并行路径）；
+- Layout Grammar、variant、slot、text fit 和内置 layout handler（**共享遗留库** / 非 SVG element-IR；Agent 不可调用作者工具）；
 - chart、table、shape、icon 和 image 等可编辑视觉元素；
 - HTML 预览、Renderer 镜像与 PPTX 导出使用共享的语义模型。
 
-SVG-native 路径下模型直接写作完整页面 SVG；grammar handler 路径仍由确定性代码负责坐标与可重复布局。
+SVG-native 路径下模型直接写作完整页面 SVG；grammar handler 仅可能由确定性代码在
+非 SVG Presentation 路径上消费，不作为 Agent 作者工具暴露，也不是模板管理依赖。
 
 ### 5.3 提案、质量与交付
 
 写入链路是：
 
 ```text
-tool proposal（SubmitSvgDeck 或遗留 SubmitCommands / ExecuteLayoutPlan）
+tool proposal（SubmitSvgDeck）
   → preview / diff
   → schema and deck validators
   → risk policy

@@ -4,7 +4,6 @@ import { AgentRuntime } from "../src/main/agent/runtime/agent-runtime";
 import { ToolRegistry } from "../src/main/agent/tools/tool-registry";
 import { askUserTool } from "../src/main/agent/tools/core/ask-user";
 import { executeExtraToolTool } from "../src/main/agent/tools/core/execute-extra-tool";
-import { executeLayoutPlanTool } from "../src/main/agent/tools/core/execute-layout-plan";
 import { searchExtraToolsTool } from "../src/main/agent/tools/core/search-extra-tools";
 import type {
   AgentModelContentBlock,
@@ -22,6 +21,7 @@ import {
   agentCommandProposalResultSchema,
   type AgentCommandProposalResult,
 } from "../src/main/agent/runtime/runtime-types";
+import { createFakeCommandProposalTool } from "./fake-command-proposal-tool";
 
 function gatewayFor(turns: AgentModelContentBlock[][]): AgentModelGateway & {
   requests: AgentModelRequest[];
@@ -191,18 +191,22 @@ describe("agent query loop batches", () => {
     ]);
   });
 
-  it("isolates ExecuteLayoutPlan before execution and pairs every mixed tool_use", async () => {
+  it("isolates an exclusive terminal tool before execution and pairs every mixed tool_use", async () => {
     let executions = 0;
     const registry = new ToolRegistry();
-    registry.register(executeLayoutPlanTool);
+    registry.register(createFakeCommandProposalTool());
     registry.register(countingTool(() => { executions += 1; }));
     const gateway = gatewayFor([
       [
         {
           type: "tool_use",
           id: "layout",
-          name: "ExecuteLayoutPlan",
-          input: {},
+          name: "FakeSubmitCommands",
+          input: {
+            summary: "terminal",
+            risk: "low",
+            commands: [{ id: "cmd-1", type: "set-presentation-title", title: "X" }],
+          },
         },
         {
           type: "tool_use",

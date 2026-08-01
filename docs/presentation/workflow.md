@@ -1,7 +1,7 @@
 # Presentation 工作流与状态
 
 > 文档类型：现行架构
-> 最后核对：2026-07-31
+> 最后核对：2026-08-01
 > 生命周期实施记录见 [Presentation Artifact 与 Job 生命周期](../roadmap/presentation-lifecycle.md)
 
 ## 1. 工作流不是 Agent Loop
@@ -55,7 +55,7 @@ request
 
 - 页面视觉事实源是完整页面 SVG（`viewBox="0 0 1280 720"`），不是 layout handler 填槽片段；
 - 除 SVG 显式引用的本地 `assets/**` 图片外，背景、标题、正文、页码、图示与装饰都必须已在 SVG 中；
-- 新建流程禁止调用 `PreviewCommands`、`SubmitCommands`、`ExecuteLayoutPlan`；
+- 新建流程只走 `PreviewSvgPage` → `SubmitSvgDeck`（Grammar/命令轨作者工具已移除）；
 - `SubmitSvgDeck` 要求 `communication` / `designSystem` / 每页 `id/path/narrative` 与锁文件一致；修订 SVG 会使旧 Preview 凭据失效。
 - PreviewReceipt 是 durable ArtifactRevision，不再依赖进程内 WeakMap；Submit 时当前
   文件 hash、PageSvg head 与 PreviewReceipt dependency 必须全部匹配。
@@ -66,14 +66,17 @@ request
 `src/main/agent/tools/core/submit-svg-deck.ts`、
 `src/main/agent/tools/core/svg-deck-lifecycle.ts`、`skills/ppt-workflow/SKILL.md`。
 
-## 3. 遗留路径
+## 3. 内部编译（非 Agent 作者路径）
 
-### Layout Plan（非新建主路径）
+产品 Agent **作者表面**仅为 SVG-native。Grammar / 命令轨作者工具已从
+`createDefaultToolRegistry()` **移除**（不是仅 `loadPolicy: disabled`）；模型不得再调用
+`ExecuteLayoutPlan`、`PreviewCommands`、`SubmitCommands`、`InsertSlideImage` 或旧
+beautify/layout 工具。该不变量由 `tests/svg-native-tool-surface.test.ts` 锁定。
 
-`slides/layout-plan.json` + `ExecuteLayoutPlan` 仍可用于遗留或非 SVG 的布局编译，
-将 Plan 编译为命令提案。Skill 明确禁止将其用于新建整套演示。Plan 本身不直接修改 Presentation。
-
-简单局部编辑可跳过 Layout Plan / SVG 全流程，直接使用安全的 Presentation 工具（在非 SVG-native 创建场景下）。
+共享库中的 Layout Grammar / `applyLayout` / `slides/layout-plan.json` 约定**尚未删除**，
+仍可能被非 SVG 的 element-IR 渲染或 CommandBus 路径使用，但不是 Agent 新建或美化入口。
+若需对无 `visualSource.kind === "svg"` 的遗留页做 Agent 编辑，应先迁到 SVG-native。
+删除共享 Grammar 库是独立遗留清理，不是产品创建或模板管理的前置。
 
 ## 4. 当前 artifact
 
@@ -157,7 +160,7 @@ Tool result
   → new PresentationRevision
 ```
 
-`SubmitSvgDeck` 与遗留 `SubmitCommands` / `ExecuteLayoutPlan` 均产出提案，再进入同一 CommitGate。
+产品 Agent 提案入口为 `SubmitSvgDeck`（进入同一 CommitGate）。
 `executionStrategy`（AUTO / REQUEST_APPROVAL）只控制审批，不是创建模式。
 
 自动审批与人工审批进入同一个 `PresentationCommitService`。它重新读取 command blob，
@@ -258,9 +261,7 @@ dev 阶段不迁移 AppData 旧路径，不 backfill/hydrate 旧 session 或 wor
 - `src/renderer/src/components/project-store.ts`
 - `src/renderer/src/components/ProjectFilesPage.tsx`
 - `src/shared/project-artifact-state.ts`
-- `src/shared/layout-plan.ts`（遗留）
-- `src/main/agent/tools/core/execute-layout-plan.ts`（遗留）
-- `src/main/agent/tools/core/submit-commands.ts`
+- `src/shared/layout-plan.ts`（内部编译 / 遗留 element-IR）
 - `src/main/agent/gate/`
 - `src/shared/commands.ts`（`CommandBus`）
 - `src/shared/presentation.ts`

@@ -17,9 +17,6 @@ import { AgentRunScope } from "./lifecycle/agent-run-scope";
 import { ensureDefaultHooks } from "./hooks/default-hooks";
 import type { PostToolUseBlock, UserPromptSubmitBlock } from "./hooks/hook-blocks";
 import { triggerHooks } from "./hooks/hook-registry";
-import {
-  prepareLayoutChoiceTask,
-} from "./presentation/layout-choice-orchestrator";
 import { LeadInboxInputSource } from "./background/lead-inbox-input-source";
 import { PreparedAgentRun } from "./turns/prepared-agent-run";
 import { PresentationCompletionPolicy } from "./presentation/presentation-completion-policy";
@@ -130,24 +127,6 @@ export class PresentationAgentRunFactory {
       ...contextBase,
       promptStage: promptContext.stage,
     };
-
-    if (options.layoutChoice) {
-      if (!taskStore || !options.workspaceRoot) {
-        throw new Error("Layout choice requires a configured workspace task board.");
-      }
-      const prepared = await prepareLayoutChoiceTask({
-        choice: options.layoutChoice,
-        presentation: options.presentationSnapshot,
-        workspaceRoot: options.workspaceRoot,
-        taskStore,
-        toolContext: context,
-      });
-      emitProgress({ type: "workflow-progress", message: prepared.message, progress: 20 });
-      return {
-        type: "short_circuit",
-        result: { type: "message", content: prepared.message },
-      };
-    }
 
     const promptBlock: UserPromptSubmitBlock = {
       event: "UserPromptSubmit",

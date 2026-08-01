@@ -465,8 +465,6 @@ export class ToolTurnRunner {
         toolUseId: toolCall.id,
         outcome,
         context: workspace.updatedToolUseContext,
-        promptStage: workspace.updatedToolUseContext.promptStage,
-        renderFeedbackUsed: workspace.renderFeedbackUsed,
         emitProgress: (event) => run.emitProgress(event),
       });
       if (decision.type === "terminal") {
@@ -480,7 +478,6 @@ export class ToolTurnRunner {
         }
         return { type: "terminal", result: decision.result };
       }
-      if (decision.markRenderFeedbackUsed) workspace.renderFeedbackUsed = true;
       scope.session.appendTranscript(decision.transcriptEntry);
       this.recordToolResultBlock(run, workspace, toolCall, decision.modelResult);
       return { type: "continue" };
@@ -928,8 +925,6 @@ export class ToolTurnRunner {
         toolUseId: toolCall.id,
         outcome,
         context: workspace.updatedToolUseContext,
-        promptStage: workspace.updatedToolUseContext.promptStage,
-        renderFeedbackUsed: workspace.renderFeedbackUsed,
         emitProgress: (event) => run.emitProgress(event),
       });
       if (decision.type === "terminal") {
@@ -944,7 +939,6 @@ export class ToolTurnRunner {
         }
         return { type: "terminal", result: decision.result };
       }
-      if (decision.markRenderFeedbackUsed) workspace.renderFeedbackUsed = true;
       session.appendTranscript(decision.transcriptEntry);
       recordToolResultBlock(decision.modelResult);
       return { type: "continue" };

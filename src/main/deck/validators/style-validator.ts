@@ -64,7 +64,7 @@ export class StyleValidator {
         category: "style",
         severity: "error",
         message: "Presentation designSystem is invalid.",
-        fixHint: "Apply a complete DesignSystemV2 with ApplyDesignSystem.",
+        fixHint: "Lock a complete DesignSystemV2 in design/design-spec.json and resubmit via SubmitSvgDeck.",
       }];
     }
     return [];

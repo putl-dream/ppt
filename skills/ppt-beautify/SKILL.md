@@ -67,9 +67,8 @@ allowed-tools:
 
 只改设计规格而不改 SVG 不会改变可见结果。
 
-## 禁止
+## 边界
 
-- 不使用 `AutoLayoutSlide`、`ApplyDesignSystem`、`BeautifyChart`、`BeautifyTable`、`ApplyTypography`、`UpdateSlideVariant` 或任何返回 commands 的增强路线。
-- 不调用 `SubmitCommands`、`PreviewCommands`、element/layout grammar 工具。
+- 视觉修改只写回 SVG 作者源，再经 `PreviewSvgPage` → `SubmitSvgDeck` 提交。
 - 不让预览、提交或导出工具添加标题、页码、背景或其他自动 chrome。
 - 用户只要求审查时不要擅自修改；先按 `deck-review` 输出问题。

@@ -11,7 +11,9 @@ describe("teammate system prompt", () => {
     });
 
     expect(prompt).toContain("WriteFile creates parent directories automatically");
-    expect(prompt).toContain("Never use it for mkdir/cat/echo redirection/copy/move style file operations");
+    expect(prompt).toContain(
+      "Never use bash for mkdir/cat/echo redirection/copy/move style file operations",
+    );
     expect(prompt.indexOf("- WriteFile")).toBeLessThan(prompt.indexOf("- bash"));
   });
 });
