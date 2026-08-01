@@ -55,6 +55,8 @@ describe("discover-stage WebSearch routing", () => {
       getGatewayConfig: () => ({
         timeoutMs: 180_000,
         maxOutputTokens: 16_384,
+      }),
+      getSearchConfig: () => ({
         webSearchApiKey: "tvly-test-key",
       }),
       async generateText(request): Promise<AgentModelResponse> {

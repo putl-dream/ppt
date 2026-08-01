@@ -1,11 +1,15 @@
 import { appendFile, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import type { AgentModelGateway, AgentModelMessage } from "../../gateway";
+import {
+  isOutputTruncated,
+  textFromContentBlocks,
+  toolUseBlocksFromContent,
+} from "../../gateway";
 import type { AgentModelSelection } from "@shared/agent";
 import type { ModelPromptPayload } from "../turns/model-call-recovery";
 import { COMPACT_HISTORY_MAX_FAILURES, COMPACT_TRANSCRIPTS_DIR } from "./config";
 import type { TranscriptEntry } from "./types";
-import { callLLM } from "../../gateway";
 import {
   buildModelCompactionBoundary,
   takeRecentModelMessages,
@@ -79,8 +83,7 @@ async function requestHistorySummary(
   model: AgentModelSelection | undefined,
   signal: AbortSignal | undefined,
 ): Promise<string> {
-  return callLLM(
-    gateway,
+  const response = await gateway.generateText(
     {
       systemPrompt: SUMMARY_SYSTEM_PROMPT,
       responseContract: "markdown-summary",
@@ -96,6 +99,21 @@ async function requestHistorySummary(
     },
     model,
   );
+
+  if (isOutputTruncated(response.stopReason)) {
+    throw new Error(
+      `Model output was truncated (${response.stopReason}); refusing to accept a partial one-shot result.`,
+    );
+  }
+  if (toolUseBlocksFromContent(response.content).length > 0) {
+    throw new Error("Model returned tool_use content during a markdown call.");
+  }
+
+  const markdown = textFromContentBlocks(response.content);
+  if (!markdown) {
+    throw new Error("Model returned no Markdown text.");
+  }
+  return markdown;
 }
 
 function buildCompactedPayload(

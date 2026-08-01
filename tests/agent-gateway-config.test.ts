@@ -3,6 +3,8 @@ import {
   DEFAULT_AGENT_GATEWAY_CONFIG,
   resolveAgentGatewayConfig,
   resolveAgentGatewayPreferences,
+  resolveAgentSearchConfig,
+  splitAgentRunServicesConfig,
 } from "../src/shared/agent-gateway-config";
 
 describe("agent-gateway-config", () => {
@@ -25,14 +27,34 @@ describe("agent-gateway-config", () => {
     expect(config.fallbackModel?.provider).toBe("anthropic");
   });
 
-  it("passes optional Tavily search settings to the main process", () => {
-    const config = resolveAgentGatewayConfig({
+  it("resolves optional Tavily search settings separately from the gateway", () => {
+    const search = resolveAgentSearchConfig({
       webSearchApiKey: "tvly-secret",
       webSearchEndpoint: "https://api.tavily.com/search",
       webSearchTimeoutMs: 20_000,
     });
-    expect(config.webSearchApiKey).toBe("tvly-secret");
-    expect(config.webSearchEndpoint).toBe("https://api.tavily.com/search");
-    expect(config.webSearchTimeoutMs).toBe(20_000);
+    expect(search.webSearchApiKey).toBe("tvly-secret");
+    expect(search.webSearchEndpoint).toBe("https://api.tavily.com/search");
+    expect(search.webSearchTimeoutMs).toBe(20_000);
+  });
+
+  it("splits a legacy flat run-services payload into gateway and search configs", () => {
+    const { gateway, search } = splitAgentRunServicesConfig({
+      timeoutMs: 300_000,
+      maxOutputTokens: 8192,
+      webSearchApiKey: "tvly-secret",
+      webSearchEndpoint: "https://api.tavily.com/search",
+      webSearchTimeoutMs: 20_000,
+    });
+    expect(gateway).toEqual({
+      timeoutMs: 300_000,
+      maxOutputTokens: 8192,
+    });
+    expect(search).toEqual({
+      webSearchApiKey: "tvly-secret",
+      webSearchEndpoint: "https://api.tavily.com/search",
+      webSearchTimeoutMs: 20_000,
+    });
+    expect(gateway).not.toHaveProperty("webSearchApiKey");
   });
 });

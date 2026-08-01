@@ -32,8 +32,8 @@
 |---|---|---|
 | 独立 Query Loop | **Implemented** | `src/main/agent/runtime/query/query.ts`、`src/main/agent/runtime/query/query-types.ts` |
 | Run 生命周期 | **Implemented** | `src/main/agent/runtime/agent-runtime.ts`、`src/main/agent/runtime/lifecycle/agent-run-scope.ts`、`src/main/agent/runtime/agent-run-finalizer.ts` |
-| Provider Gateway | **Implemented** | `src/main/agent/gateway/anthropic.ts`、`src/main/agent/gateway/openai.ts`、`src/main/agent/gateway/content-blocks.ts` |
-| 模型调用恢复 | **Implemented** | `src/main/agent/runtime/turns/model-call-recovery.ts`、`src/main/agent/gateway/withRetry.ts` |
+| Provider Gateway | **Implemented** | `src/main/agent/gateway/`（统一调用源；对内 `chat` / `responses` / `anthropic`） |
+| 模型调用恢复 | **Implemented** | `src/main/agent/runtime/turns/model-call-recovery.ts`、`src/main/agent/runtime/model/with-retry.ts` |
 | Context 压缩 | **Implemented** | `src/main/agent/runtime/context-compact/` |
 | System Prompt 分区 | **Implemented** | `src/main/agent/runtime/prompts/` |
 | 动态工具系统 | **Implemented** | `src/main/agent/tools/tool-registry.ts`、`src/main/agent/tools/tool-loader.ts`、`src/main/agent/runtime/tools/` |
@@ -82,22 +82,25 @@ Renderer / IPC
 
 ### 3.2 Gateway 与内容协议
 
-Gateway 当前支持 Anthropic 与 OpenAI 两条 driver 路径。`AgentGateway` 是整个程序
-内部唯一的模型 I/O 边界——程序其余部分只依赖 Gateway 的中性协议类型，不直接接触
-provider SDK。
+`AgentGateway` 是系统**统一模型调用源**（类比 OAuth2 Client）：所有打模型的请求都经
+此出口，调用方只依赖中性协议，不直接接触 provider SDK，也不选择内部通路。
 
 **对内协议面（barrel `src/main/agent/gateway`）：**
 
 - 统一类型：`AgentModelRequest`、`AgentModelResponse`、`AgentModelStreamChunk`、
   `AgentModelContentBlock` 等；`stopReason` 已归一为 Gateway 枚举
   （`end` / `max_tokens` / `tool_use` / `other`），Runtime 不再接触 raw provider 字符串；
-- 标准错误：`AgentGatewayError`（含 `retryAfterMs`、`code` 与 `provider`）；
-  raw provider/HTTP 错误只在 Gateway 内经 `normalizeProviderError` 吸入；
+- 标准错误：`AgentGatewayError`（含 `retryAfterMs`、`code` 与 `provider`；用户中断为
+  `aborted`）；raw provider/HTTP 错误只在 Gateway 内经 `normalizeProviderError` 吸入；
 - 公共 helper：`textFromContentBlocks`、`toolUseBlocksFromContent`、
   `ensureToolResultPairing`、`isOutputTruncated`、`classifyGatewayRecovery` 等；
   其中 `classifyGatewayRecovery` 只接受 `AgentGatewayError`，裸 status/message
   一律视为不可恢复；
 - 程序消费者应只从 barrel import，不应 deep-import 子模块。
+- 退避延时、用户可读错误文案、主 agent 响应协议 guidance 在 Runtime / prompts /
+  service；不属于 Gateway 合同。one-shot `callLLM` / `callTool` 包装已删除：
+  调用方直接 `generateText` / `generateTextStream`；compact 摘要在本地断言
+  （非空 markdown、拒 tool_use、拒截断）。
 
 **配置身份与路由：**
 
@@ -108,26 +111,29 @@ Gateway 的内存配置同时保留 provider 默认配置与 `configurationId` �
 `configuration` 错误 fail closed；未携带 ID 时依次查找 provider + model fallback、
 provider 默认配置，最后才使用进程环境配置。
 
-**私有 driver 层：**
+`AgentGatewayConfig` 只含模型网关运行参数（`timeoutMs` / `maxOutputTokens` /
+`fallbackModel`）。搜索凭据在独立的 `AgentSearchConfig` 中；IPC 可仍传扁平 wire
+载荷，由 Main 一次 `splitAgentRunServicesConfig` 拆分。工具经 `ToolContext.searchConfig`
+取凭据，不再从 `getGatewayConfig()` 读取 webSearch 字段。
 
-`anthropic.ts` 与 `openai.ts` 是 Gateway 私有的 SDK 适配入口，只被 `AgentGateway`
-调用；`openai.ts` 作为 façade 将请求分派到私有的 Chat Completions / Responses 实现。
-这些 driver 负责统一消息与 SDK 类型的双向映射、原生流事件转换和 `stopReason`
-映射。OpenAI 两种模式都使用 SDK 原生 stream，包括携带 tools 的请求；流中实时暴露
-`text_delta`，最终 `complete` 则以 SDK final response 为权威来源，包含完整 text、
-`tool_use`、usage 与 `stopReason`。每个 attempt 只允许一次 SDK 请求，不得在 driver
-内做隐藏重试、非流式 fallback 或跨 attempt 合并 usage。
-`AgentGateway` 通过显式 `AgentProviderDriver` 注册表管理和调度这些驱动；各 driver
-内部的 SDK content type / role 映射差异属于 provider 方言，不在 Gateway 合并统一。
-`openaiApiMode` 是 driver 私有配置，不出现在 `ResolvedAgentModelConfig`。
+**私有 call-path / driver 层：**
+
+Gateway 对内归一三条通路 `callPath ∈ { chat, responses, anthropic }`，再经
+`AgentProviderDriver` 注册表调度。对外仍使用 `provider` + 可选 `openaiApiMode`
+（设置高级覆盖 / env / `baseURL` 启发式）；`callPath` 与 `openaiApiMode` 均不出现在
+`ResolvedAgentModelConfig`。`chat` / `responses` / `anthropic` 各自负责 SDK 双向映射、
+原生流事件与 `stopReason` 映射。流中实时暴露 `text_delta`（及 Anthropic
+`thinking_delta`），最终 `complete` 以 SDK final response 为权威来源。每个 attempt
+只允许一次 SDK 请求，不得在 driver 内做隐藏重试、非流式 fallback 或跨 attempt 合并
+usage。各 driver 内部的 content type / role 映射差异属于通路方言，不在 Gateway 合并统一。
 
 **Runtime 恢复：**
 
 `src/main/agent/runtime/turns/model-call-recovery.ts` 根据 Gateway 返回的
 `AgentGatewayError` 与归一化 `stopReason` 决定 attempt 之间的恢复，包括退避、
 Context 压缩、输出 token 升级、截断续写和 fallback model。thinking-only 且因
-token 上限结束也走这条 Runtime 恢复路径。新增 Provider 时应实现相同的
-prepared-request/response driver 协议，不能把 Provider 分支扩散进 Query Loop
+token 上限结束也走这条 Runtime 恢复路径。新增通路时应实现相同的
+prepared-request/response driver 协议，不能把通路分支扩散进 Query Loop
 或 Presentation 工具。
 
 验证入口：
@@ -135,8 +141,8 @@ prepared-request/response driver 协议，不能把 Provider 分支扩散进 Que
 - `tests/agent-gateway.test.ts`
 - `tests/anthropic-gateway-adapter.test.ts`
 - `tests/openai-gateway-adapter.test.ts`
-- `tests/model-calls.test.ts`
 - `tests/model-call-recovery.test.ts`
+- `tests/context-compact.test.ts`
 - `tests/native-tool-use.test.ts`
 - `tests/response-contract.test.ts`
 - `tests/agent-gateway-routing.test.ts`
@@ -244,7 +250,7 @@ immutable Artifact Revision，也不把一次保存自动解释为 `ready/verifi
 
 Prompt 采用稳定前缀和动态后缀，section 顺序与 cache key 由 assembler 管理。PPT 的
 `ppt-workflow`（SVG-native 新建）、`ppt-design`、`ppt-design-layout`、`ppt-build`、
-`ppt-edit`、`ppt-beautify`、`deck-review`、`ppt-export` 等 Skill 是渐进式知识包；
+`ppt-edit`、`ppt-beautify`、`ppt-review`、`ppt-export` 等 Skill 是渐进式知识包；
 `stages` frontmatter 是唯一推荐真相源，只改变推荐度，不应把其他安全工具变为不可用。
 
 ### 3.7 多 Agent、任务与后台工作
@@ -390,7 +396,7 @@ dev 数据策略见
 | 文件操作 / 项目文件管理 | `tests/workspace-file-service.test.ts`、`tests/project-file-editor-safety.test.ts` | 编辑 token 隔离、只读 artifact、并发修改、路径逃逸、UTF-8 与原子写失败；页面状态/交互测试 |
 | Multi-Agent | task、message bus、teammate recovery | background 与 shutdown 场景 |
 | Presentation model | schema、layout、design、compiler | sample fixture 与渲染快照 |
-| Export | exporter、postflight、deck export | `npm.cmd run generate:pptx` 后人工打开 |
+| Export | exporter、postflight、deck export | 应用内 / deck export 后人工打开 PPTX |
 | 全仓 | `npm.cmd run typecheck`、`npm.cmd test` | `npm.cmd run build` |
 
 文档更新至少应检查 Markdown 相对链接和代码路径是否存在。真实网关测试需要凭据，PPTX 视觉验收需要生成 artifact 后人工检查，二者不能被普通单元测试替代。

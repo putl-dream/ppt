@@ -10,6 +10,8 @@ stages:
 
 ## 目标
 
+本阶段无专用工具：用 `AskUser` / `ReadFile` / `WriteFile` 完成。产物不是 lifecycle 硬锁。
+
 创建精简的 `brief.md`，作为 `design/design-spec.json` 和内容结构的上游输入。brief 只记录沟通事实、内容边界和用户明确给出的品牌约束；不锁定视觉 style、reading mode、image language 或页面构图。
 
 ## 需求澄清

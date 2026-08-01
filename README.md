@@ -46,7 +46,7 @@ Agent PPT 是一个本地优先的 AI 演示文稿工作台。它按任务需要
 
 **不是固定阶段机，而是模型驱动的工具协作。**
 
-Runtime 向模型提供当前 workspace 事实、可用 Skill 和动态工具。复杂创建任务可以按需产出 Brief / Outline / Storyboard，再锁定 `design/design-spec.json` 与 `slides/page-plan.json` 并写作逐页 SVG；局部编辑、审查或导出可以直接走短路径。只有缺少关键约束、发生高风险变更或用户明确要求比较方案时才暂停交互。
+Runtime 向模型提供当前 workspace 事实、可用 Skill 和动态工具。复杂创建任务可以按需经可选上游 Skill（brief / outline / storyboard / research；无专用工具，用 WriteFile 写文件）再锁定 `design/design-spec.json` 与 `slides/page-plan.json` 并写作逐页 SVG；局部编辑、审查或导出可以直接走短路径。只有缺少关键约束、发生高风险变更或用户明确要求比较方案时才暂停交互。
 
 新建整套 PPT 或批量创建页面时，Agent 默认依据受众、主题和交付场景自主选择 Design System 与逐页构图意图，经 `PreviewSvgPage` → `SubmitSvgDeck` 合并为一个 proposal；不会在内容草稿后要求用户再选“标准排版”或“创意装饰”。用户明确只要内容草稿时除外。
 
@@ -174,7 +174,6 @@ npm.cmd test
 npm.cmd run typecheck
 npm.cmd run build
 npm.cmd run preview
-npm.cmd run generate:pptx
 ```
 
 平台打包：
@@ -223,7 +222,7 @@ PPTX exporter (full-page SVG images)
 - `src/shared/`：演示文稿模型、命令模型、会话与 IPC 类型
 - `src/main/project/`：本地项目沙箱、产物读写、diff 和依赖状态
 - `src/main/deck/`：缩略图、导出历史、PPTX 导出服务
-- `skills/`：核心创建 `ppt-workflow` → `ppt-design` → `ppt-design-layout` → `ppt-build`；短路径 `ppt-edit` / `ppt-beautify` / `deck-review` / `ppt-export`；可选上游 `ppt-brief` / `ppt-outline` / `ppt-storyboard` / `ppt-research`
+- `skills/`：核心创建 `ppt-workflow` → `ppt-design` → `ppt-design-layout` → `ppt-build`；短路径 `ppt-edit` / `ppt-beautify` / `ppt-review` / `ppt-export`；可选上游 Skill（`ppt-brief` / `ppt-outline` / `ppt-storyboard` / `ppt-research`）仅知识包，经 ReadFile/WriteFile 写入，非 lifecycle 硬锁
 - `tests/`：Agent、导出、上下文压缩、工具审批和项目产物测试
 
 ## 本地文件与隐私

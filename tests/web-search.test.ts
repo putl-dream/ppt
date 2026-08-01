@@ -169,10 +169,15 @@ describe("web search", () => {
       discoverySession: { discoveredToolNames: new Set<string>() },
       registry: createDefaultToolRegistry(),
       messageHistory: [],
+      searchConfig: {
+        webSearchApiKey: "tvly-runtime-key",
+      },
       gateway: {
         getGatewayConfig: () => ({
           timeoutMs: 180_000,
           maxOutputTokens: 16_384,
+        }),
+        getSearchConfig: () => ({
           webSearchApiKey: "tvly-runtime-key",
         }),
         async generateText() { throw new Error("not used"); },
@@ -206,7 +211,7 @@ describe("web search", () => {
     expect(requestBody.include_domains).toEqual(expect.arrayContaining(["pexels.com", "pixabay.com"]));
   });
 
-  it("uses per-run gateway configuration and returns citation-ready model content", async () => {
+  it("uses per-run search configuration and returns citation-ready model content", async () => {
     const fetchImpl = vi.fn(async () => new Response(JSON.stringify({
       results: [{
         title: "Official source",
@@ -222,10 +227,15 @@ describe("web search", () => {
       discoverySession: { discoveredToolNames: new Set<string>() },
       registry: createDefaultToolRegistry(),
       messageHistory: [],
+      searchConfig: {
+        webSearchApiKey: "tvly-runtime-key",
+      },
       gateway: {
         getGatewayConfig: () => ({
           timeoutMs: 180_000,
           maxOutputTokens: 16_384,
+        }),
+        getSearchConfig: () => ({
           webSearchApiKey: "tvly-runtime-key",
         }),
         async generateText() { throw new Error("not used"); },

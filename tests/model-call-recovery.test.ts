@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { computeBackoffDelayMs } from "../src/main/agent/gateway";
+import { computeBackoffDelayMs } from "../src/main/agent/runtime/model/with-retry";
 import {
   AgentGatewayError,
   classifyGatewayRecovery,

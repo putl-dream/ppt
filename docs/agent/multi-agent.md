@@ -65,7 +65,8 @@ Main 和 teammate 共享：
 - 不可卸载的权限检查与 Pre/Post Tool Hook 边界。
 
 teammate 仍使用专用 `SubAgentToolDefinition`、较小的 resolved tool pool 和独立
-编排器，也没有 Main Agent 的 `LoadSkill` 工具。文件能力例外地已经收敛到唯一契约：
+编排器。`LoadSkill` 已对 teammate 开放（独立 `SkillSession`，共享 Main 的
+`SkillRegistry` 与 catalog）。文件能力已经收敛到唯一契约：
 Main 与 teammate 都只暴露 `Glob`、`ReadFile`、`WriteFile`、`EditFile`，共享名称、
 schema、结构化输出、权限、错误副作用分类和 `WorkspaceFileService` 执行逻辑。旧
 snake_case 名称和 `ensure_dir` 不再注册；teammate 的 `bash` 仅保留只读诊断白名单。

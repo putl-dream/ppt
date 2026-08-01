@@ -112,6 +112,14 @@ export const SUB_AGENT_TOOL_PERMISSION_PROFILES = {
     sandbox: "none",
     approval: "never",
   },
+  LoadSkill: {
+    profile: "skill-load",
+    description: "Load registered skill instructions into the teammate context.",
+    scopes: ["subagent"],
+    effects: ["skill.load"],
+    sandbox: "none",
+    approval: "never",
+  },
 } satisfies Record<string, ToolPermissionProfile>;
 
 const TOOL_PERMISSION_PROFILES: Record<string, ToolPermissionProfile> = {

@@ -21,7 +21,7 @@ stages:
    - 页面顺序与 `slides/page-plan.json` 一致；
    - 没有占位页或重复 `svgSourcePath`。
 3. 若页面来源不完整、存在占位页或用户提到刚修改过作者文件，引导其先回到 SVG 预览/提交流程。
-4. 应用 `deck-review` 完成最终视觉审查；存在严重错误、来源漂移或未提交修改时先停止导出。
+4. 应用 `ppt-review` 完成最终视觉审查；存在严重错误、来源漂移或未提交修改时先停止导出。
 
 ## 工作流
 
@@ -39,4 +39,4 @@ stages:
 
 ## 衔接
 
-标准链路：brief → design spec → page plan → SVG pages → `SubmitSvgDeck` → deck-review → 本技能。
+标准链路：brief → design spec → page plan → SVG pages → `SubmitSvgDeck` → ppt-review → 本技能。

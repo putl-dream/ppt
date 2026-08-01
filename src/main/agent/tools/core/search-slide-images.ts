@@ -101,7 +101,7 @@ export const searchSlideImagesTool: ToolDefinition<
       sourceMode: args.sourceMode,
       visualKind: args.visualKind,
     }, {
-      gatewayConfig: context.gateway?.getGatewayConfig?.(),
+      searchConfig: context.searchConfig,
       signal: context.signal,
     });
     const { query, rawSearch } = search;

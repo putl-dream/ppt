@@ -19,9 +19,11 @@ decisions here. Read this file before making any changes.
   - `src/main/deck/`: thumbnails, export history, PPTX export
   - `skills/`: SVG-native workflow skills. Core create:
     `ppt-workflow` → `ppt-design` → `ppt-design-layout` → `ppt-build`. Short
-    paths: `ppt-edit`, `ppt-beautify`, `deck-review`, `ppt-export`. Optional
-    upstream: `ppt-brief`, `ppt-outline`, `ppt-storyboard`, `ppt-research`.
-    Loader code lives in `src/main/agent/skills/` (scan/registry only).
+    paths: `ppt-edit`, `ppt-beautify`, `ppt-review`, `ppt-export`. Optional
+    upstream skills (`ppt-brief`, `ppt-outline`, `ppt-storyboard`,
+    `ppt-research`): knowledge only; write via ReadFile/WriteFile (research
+    may use WebSearch); not lifecycle hard locks. Loader code lives in
+    `src/main/agent/skills/` (scan/registry only).
   - `tests/`: unit tests; files matching `*.integration.test.ts` require real
     model credentials and are excluded from the default test run
 - See `README.md` / `README.en.md` and the index at `docs/README.md` for
@@ -37,7 +39,6 @@ npm.cmd test                         # unit tests (excludes *.integration.test.t
 npm.cmd run test:integration:agent   # real-gateway integration tests; requires OPENAI_API_KEY / ANTHROPIC_API_KEY
 npm.cmd run typecheck                # tsc --noEmit for both node and web tsconfigs
 npm.cmd run build                    # typecheck + electron-vite build
-npm.cmd run generate:pptx            # generate a sample PPTX artifact for manual inspection
 ```
 
 ---
@@ -181,9 +182,9 @@ TypeScript strict mode must remain clean (`npm.cmd run typecheck`). Passing
 prove the model gateway, network calls, file I/O, or PPTX export work against
 real inputs. When a change touches those paths, also consider `npm.cmd run
 test:integration:agent` (requires `OPENAI_API_KEY` / `ANTHROPIC_API_KEY`) or a
-manual reproduction such as `npm.cmd run generate:pptx`. If the current
-environment cannot run that verification (missing credentials, no network),
-say so explicitly instead of treating a green unit test run as full
+manual export from the app / deck export path for visual PPTX inspection. If
+the current environment cannot run that verification (missing credentials, no
+network), say so explicitly instead of treating a green unit test run as full
 verification.
 
 When a check fails:

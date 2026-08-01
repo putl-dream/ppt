@@ -195,6 +195,8 @@ export interface ToolContext {
   readonly fileService?: WorkspaceFileService;
   /** Model gateway for teammate delegation. */
   readonly gateway?: AgentModelGateway;
+  /** Search credentials for web/image tools; not read from model gateway config. */
+  readonly searchConfig?: import("@shared/agent-gateway-config").AgentSearchConfig;
   /** Active model selection for teammate delegation. */
   readonly model?: AgentModelSelection;
   readonly signal?: AbortSignal;

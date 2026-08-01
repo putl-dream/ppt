@@ -57,6 +57,7 @@ export const spawnTeammateTool: ToolDefinition<typeof spawnTeammateSchema, Spawn
       onTaskListUpdated: context.notifyTaskListUpdated,
       onProgress: context.onTeammateProgress,
       taskStore: context.taskStore,
+      skillRegistry: context.skillRegistry,
     });
 
     return {

@@ -1,7 +1,7 @@
 import type { Presentation } from "./presentation";
 import type { AgentExecutionStrategy, AgentModelSettings } from "./agent";
 import type { AgentQuestion } from "./agent-question";
-import type { AgentGatewayConfig } from "./agent-gateway-config";
+import type { AgentRunServicesWire } from "./agent-gateway-config";
 import type { AgentStepLimits } from "./agent-step-limits";
 import type { AgentTaskNode } from "./agent-task-list";
 import type { TeammateProgressEvent } from "./teammate-progress";
@@ -290,7 +290,7 @@ export interface DesktopApi {
     model?: AgentModelSettings,
     executionStrategy?: AgentExecutionStrategy,
     stepLimits?: AgentStepLimits,
-    gatewayConfig?: AgentGatewayConfig,
+    gatewayConfig?: AgentRunServicesWire,
     runId?: string,
   ): Promise<AgentRunResult>;
   continueAgentRun(
@@ -299,7 +299,7 @@ export interface DesktopApi {
     model?: AgentModelSettings,
     executionStrategy?: AgentExecutionStrategy,
     stepLimits?: AgentStepLimits,
-    gatewayConfig?: AgentGatewayConfig,
+    gatewayConfig?: AgentRunServicesWire,
     runId?: string,
   ): Promise<AgentRunResult>;
   onAgentStream(listener: (event: AgentStreamEvent) => void): () => void;

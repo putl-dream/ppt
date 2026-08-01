@@ -26,7 +26,7 @@ export const webSearchTool: ToolDefinition<typeof webSearchSchema, WebSearchOutp
     approval: "never",
   },
   execute: async (args, context) => executeWebSearch(args, {
-    gatewayConfig: context.gateway?.getGatewayConfig?.(),
+    searchConfig: context.searchConfig,
     signal: context.signal,
   }),
   mapResultToModelContent: formatWebSearchOutput,

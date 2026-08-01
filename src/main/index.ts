@@ -38,7 +38,7 @@ import {
   type AgentModelSettings,
 } from "@shared/agent";
 import { agentStepLimitsSchema, type AgentStepLimits } from "@shared/agent-step-limits";
-import { agentGatewayConfigSchema, type AgentGatewayConfig } from "@shared/agent-gateway-config";
+import { agentRunServicesWireSchema, splitAgentRunServicesConfig, type AgentGatewayConfig } from "@shared/agent-gateway-config";
 import { AgentGateway } from "./agent/gateway";
 import { AgentRuntime } from "./agent/runtime/agent-runtime";
 import { ToolApprovalBroker } from "./agent/runtime/tools/tool-approval-broker";
@@ -1350,14 +1350,15 @@ app.whenReady().then(async () => {
         const agentStepLimits = rawStepLimits
           ? agentStepLimitsSchema.parse(rawStepLimits)
           : undefined;
-        const gatewayConfig = rawGatewayConfig
-          ? agentGatewayConfigSchema.parse(rawGatewayConfig)
+        const services = rawGatewayConfig
+          ? splitAgentRunServicesConfig(agentRunServicesWireSchema.parse(rawGatewayConfig))
           : undefined;
         let selection: AgentModelSelection | undefined;
         if (settings) {
-          selection = agentGateway.configure(settings, gatewayConfig);
-        } else if (gatewayConfig) {
-          agentGateway.applyGatewayConfig(gatewayConfig);
+          selection = agentGateway.configure(settings, services?.gateway, services?.search);
+        } else if (services) {
+          agentGateway.applyGatewayConfig(services.gateway);
+          agentGateway.applySearchConfig(services.search);
         }
         sessionStore.conversationDatabase.beginRun({
           runId: currentRunId,
@@ -1461,14 +1462,15 @@ app.whenReady().then(async () => {
       const agentStepLimits = rawStepLimits
         ? agentStepLimitsSchema.parse(rawStepLimits)
         : undefined;
-      const gatewayConfig = rawGatewayConfig
-        ? agentGatewayConfigSchema.parse(rawGatewayConfig)
+      const services = rawGatewayConfig
+        ? splitAgentRunServicesConfig(agentRunServicesWireSchema.parse(rawGatewayConfig))
         : undefined;
       let selection: AgentModelSelection | undefined;
       if (settings) {
-        selection = agentGateway.configure(settings, gatewayConfig);
-      } else if (gatewayConfig) {
-        agentGateway.applyGatewayConfig(gatewayConfig);
+        selection = agentGateway.configure(settings, services?.gateway, services?.search);
+      } else if (services) {
+        agentGateway.applyGatewayConfig(services.gateway);
+        agentGateway.applySearchConfig(services.search);
       }
       sessionStore.conversationDatabase.beginRun({
         runId: currentRunId,

@@ -8,7 +8,7 @@ import {
 } from "node:path";
 import { promisify } from "node:util";
 import { z } from "zod";
-import type { AgentGatewayConfig } from "@shared/agent-gateway-config";
+import type { AgentSearchConfig } from "@shared/agent-gateway-config";
 import {
   WorkspaceFileError,
   WorkspaceFileService,
@@ -29,6 +29,11 @@ import {
   formatWebSearchOutput,
   webSearchSchema,
 } from "../search/web-search";
+import { loadSkillSchema, type LoadSkillResult } from "../tools/core/load-skill";
+import { isSkillRecommendedForStage } from "../runtime/prompts/skill-stage-policy";
+import type { SkillRegistry } from "../skills/loadSkillsDir";
+import type { SkillSession } from "../skills/skill-types";
+import type { PromptStage } from "../runtime/prompts/prompt-stage";
 
 const execFileAsync = promisify(execFile);
 
@@ -36,8 +41,11 @@ export interface SubAgentToolContext {
   workspaceRoot: string;
   /** Session-scoped read receipts and optimistic file versions. */
   fileService?: WorkspaceFileService;
-  gatewayConfig?: AgentGatewayConfig;
+  searchConfig?: AgentSearchConfig;
   signal?: AbortSignal;
+  skillRegistry?: SkillRegistry;
+  skillSession?: SkillSession;
+  promptStage?: PromptStage;
 }
 
 export interface SubAgentToolDefinition<
@@ -128,9 +136,64 @@ export const webSearchSubAgentTool: SubAgentToolDefinition<typeof webSearchSchem
   permission: SUB_AGENT_TOOL_PERMISSION_PROFILES.web_search,
   async execute(args, context) {
     return formatWebSearchOutput(await executeWebSearch(args, {
-      gatewayConfig: context.gatewayConfig,
+      searchConfig: context.searchConfig,
       signal: context.signal,
     }));
+  },
+};
+
+export const loadSkillSubAgentTool: SubAgentToolDefinition<
+  typeof loadSkillSchema,
+  LoadSkillResult
+> = {
+  name: "LoadSkill",
+  description:
+    "Load full instructions for any registered skill when its specialized knowledge helps the current task.",
+  inputSchema: loadSkillSchema,
+  permission: SUB_AGENT_TOOL_PERMISSION_PROFILES.LoadSkill,
+  mapResultToModelContent(result) {
+    const header = [
+      `# Skill: ${result.name}`,
+      result.description ? `Description: ${result.description}` : undefined,
+      result.whenToUse ? `When to use: ${result.whenToUse}` : undefined,
+      result.guidance,
+      "",
+    ].filter((line): line is string => Boolean(line));
+    return `${header.join("\n")}\n${result.content}`;
+  },
+  async execute(args, context) {
+    const registry = context.skillRegistry;
+    if (!registry) {
+      throw new Error("Skill registry is not available in this teammate runtime.");
+    }
+
+    const entry = registry.get(args.skillName);
+    if (!entry) {
+      const available = registry.listCards().map((card) => card.name);
+      throw new Error(
+        available.length > 0
+          ? `Unknown skill '${args.skillName}'. Registered skills: ${available.join(", ")}`
+          : `Unknown skill '${args.skillName}'. No skills are registered.`,
+      );
+    }
+
+    const stage = context.promptStage ?? "discover";
+    const recommended = isSkillRecommendedForStage(entry.name, stage, entry);
+    const alreadyLoaded = context.skillSession?.loadedSkillNames.has(entry.name) ?? false;
+    context.skillSession?.loadedSkillNames.add(entry.name);
+
+    return {
+      name: entry.name,
+      description: entry.description,
+      whenToUse: entry.whenToUse,
+      content: entry.body,
+      alreadyLoaded,
+      guidance: alreadyLoaded
+        ? "Skill already loaded. Follow it; keep tool use minimal."
+        : recommended
+          ? "This skill matches the current context. Apply only the parts relevant to the user's task."
+          : `This skill is not normally suggested for '${stage}', but it is available. Apply it only where the current task requires it.`,
+    };
   },
 };
 
@@ -138,6 +201,7 @@ export const SUB_AGENT_TOOLS: SubAgentToolDefinition[] = [
   ...workspaceFileTools,
   bashTool,
   webSearchSubAgentTool,
+  loadSkillSubAgentTool,
 ];
 
 export const SUB_AGENT_TOOL_HANDLERS = new Map(

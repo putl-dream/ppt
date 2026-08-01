@@ -62,7 +62,7 @@ describe("resolveAgentModelConfig", () => {
       model: "selected-model",
       apiKey: "env-key",
       baseURL: "https://anthropic.example.test",
-      openaiApiMode: undefined,
+      callPath: "anthropic",
       timeoutMs: 15000,
       maxOutputTokens: 4096,
     });
@@ -101,7 +101,7 @@ describe("resolveAgentModelConfig", () => {
     );
 
     expect(config.baseURL).toBe("https://runtime.example.test/v1");
-    expect(config.openaiApiMode).toBe("chat-completions");
+    expect(config.callPath).toBe("chat");
   });
 
   it("uses the provider default model when no model override is supplied", () => {
@@ -124,7 +124,7 @@ describe("resolveAgentModelConfig", () => {
       },
     );
 
-    expect(config.openaiApiMode).toBe("chat-completions");
+    expect(config.callPath).toBe("chat");
   });
 
   it("allows the OpenAI API mode to be selected explicitly", () => {
@@ -138,7 +138,7 @@ describe("resolveAgentModelConfig", () => {
       },
     );
 
-    expect(config.openaiApiMode).toBe("responses");
+    expect(config.callPath).toBe("responses");
   });
 
   it("rejects an unsupported OpenAI API mode", () => {

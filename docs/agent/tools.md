@@ -210,6 +210,10 @@ Skill 提供知识和工作建议，不拥有工具权限。SKILL.md frontmatter
 
 模型可以跳过不需要的 Skill，也可以在发现问题后加载之前未推荐的 Skill。
 
+可选上游 Skill（`ppt-brief` / `ppt-outline` / `ppt-storyboard` / `ppt-research`）
+只提供写作规范：产物经通用 `ReadFile` / `WriteFile`（research 另可用 `WebSearch`）
+写入，**没有**专用工具，也**不是**与 `design-spec` / `page-plan` 同级的 lifecycle 硬锁。
+
 ## 10. 关键实现
 
 - `src/main/agent/tools/tool-definition.ts`

@@ -1,6 +1,6 @@
 ---
-name: deck-review
-description: 基于逐页 SVG 真渲染审查整套演示的硬性错误、设计兑现和跨页节奏，并只在授权后修改 SVG 作者源
+name: ppt-review
+description: 基于逐页 SVG 真渲染审查整套演示的硬性错误、设计兑现和跨页节奏；默认可在同一 review Query 内直接修复作者 SVG
 when_to_use: SVG 页面生成、编辑或换肤后，导出前，或用户要求视觉审查时
 stages:
   - style
@@ -11,7 +11,7 @@ stages:
 
 ## 前提
 
-1. 若本 Query 尚未声明 PPT 工作，先调用一次 `BeginPptCapability({"capability":"review", ...})`。只审查时不要声明 edit/restyle。
+1. 若本 Query 尚未声明 PPT 工作，先调用一次 `BeginPptCapability({"capability":"review", ...})`。审查（及同 Query 修复）不要改成 edit/restyle capability。
 2. 用 `ListSlides` 取得完整有序页面及每页已提交的 `svgSourcePath`、`svgSha256`。
 3. 当前页可用 `ReadCurrentSlide` 确认 `visualSource.sourcePath`；其他页使用 `ListSlides.svgSourcePath`。再用 `ReadFile` 分页读取完整 SVG，沿 `nextOffset` 和同一 `expected_version` 续读到 `hasMore=false`。
 4. 对每个作者源调用 `PreviewSvgPage`，检查该文件的真实渲染。页面已提交时可用 `PreviewSlide` 对照当前 deck，但不能用已提交预览替代源文件审查；任何修复都会使该页先前的预览凭据失效。
@@ -20,6 +20,11 @@ stages:
 没有逐页渲染结果时，不把 XML 结构或 hash 检查冒充视觉验收。若 `svgSourcePath`/`svgSha256` 缺失，或 `PreviewSvgPage` 返回的当前源 `sha256` 与已提交 `svgSha256` 不一致，先报告来源漂移并阻断导出判断。
 
 审查顺序：硬性渲染错误 → 页面意图兑现 → 软性构图 → 跨页节奏与一致性。
+
+## 模式选择
+
+- **只要报告**：用户明确只要问题清单、不要改稿时，只整理 findings 并 `SubmitPptReview`，不调用 `WriteFile` / `SubmitSvgDeck`。
+- **审查并修复（默认）**：用户要求审查、质检、导出前检查，或未禁止修改时，同一 `review` Query 内可直接修硬性/明显问题，再提交 QualityReport。不必改成 edit capability，也不必等待新的用户请求。
 
 ## 硬性规则：命中即修
 
@@ -35,7 +40,7 @@ stages:
 | H8 | SVG 使用远程 URL、绝对路径、脚本、`foreignObject` 或其他不支持依赖 | 本地化、移除或改写为受支持 SVG |
 | H9 | 当前 workspace SVG hash 与已提交 `svgSha256` 不一致 | 重新预览并用整套 source 重新提交 |
 
-如果问题来自 deck-wide 颜色、字体或 visual style，标为系统级问题；授权修复时逐页修改受影响 SVG，不能只改设计规格并假设页面自动更新。
+如果问题来自 deck-wide 颜色、字体或 visual style，标为系统级问题；修复时逐页修改受影响 SVG，不能只改设计规格并假设页面自动更新。
 
 ## 设计意图检查
 
@@ -65,7 +70,7 @@ stages:
 | S7 | breathing 页出现卡片网格或过量正文 |
 | S8 | 同类页面无理由地改变字体、圆角、边框或色彩语义 |
 
-软修复以克制为原则；一次只改一个原因，不为追求分数引入新问题。
+软修复以克制为原则；一次只改一个原因，不为追求分数引入新问题。「只要报告」模式下只记录这些问题，不落盘修改。
 
 ## 跨页检查
 
@@ -78,20 +83,18 @@ stages:
 - 标题、页码、背景与品牌锚点在 SVG 内保持有意的一致性，不依赖自动 chrome。
 - 全套不能退化成统一的三卡、四卡或 2×2 圆角网格。
 
-## 修复规则
+## 同 Query 修复步骤
 
-review capability 默认只报告，并以 `SubmitPptReview` 完成本次请求。即使用户同时表达了修复意图，
-也不要在同一 Query 内把 review request 改成 edit/restyle，或直接调用作者写入与
-`SubmitSvgDeck`；先提交结构化审查，再让后续新的用户请求以
-`BeginPptCapability({"capability":"edit", ...})` 开始修复。
+在「审查并修复」模式下，保持 `review` capability，按页：
 
-后续 edit capability 的修复步骤：
-
-1. 用 `ReadFile` 重新分页读取目标页完整 SVG直到 `hasMore=false`，避免基于旧上下文或截断首段覆盖并发修改。
+1. 用 `ReadFile` 重新分页读取目标页完整 SVG 直到 `hasMore=false`，避免基于旧上下文或截断首段覆盖并发修改。
 2. 用 `WriteFile` 只修改作者 SVG；不要写第二份视觉模型。
 3. 每个修复页重新 `PreviewSvgPage`，确认问题已消失且未引入回归。
 4. 全部修复通过后调用一次 `SubmitSvgDeck`，提交所有有序页面；显式传入 `"designSpecPath":"design/design-spec.json"` 与 `"pagePlanPath":"slides/page-plan.json"`，并让 `communication`、`designSystem`、每页 `id/path/narrative` 与锁文件完全一致。
 5. 不允许 `PreviewSlide`、提交器或导出器直接修复页面；已提交视图只能用于对照。
+6. 最后调用 `SubmitPptReview`，在 findings 中区分「已现场修复」与「仍待处理」。
+
+大规模重做、换肤或用户明确要求进入编辑工作流时，再开新的 `BeginPptCapability({"capability":"edit"|"restyle", ...})`。
 
 ## 输出
 
@@ -103,9 +106,10 @@ review capability 默认只报告，并以 `SubmitPptReview` 完成本次请求�
 - 设计方向：argumentMode / visualStyle / readingMode / imageLanguage
 - 节奏：anchor N / dense N / breathing N
 - 严重：N | 设计偏差：N | 建议：N
+- 本 Query 已修复：N 项 | 仍待处理：N 项
 
 ## 必须修复
-1. [页码][规则] 证据 → 最小修复
+1. [页码][规则] 证据 → 最小修复（已修 / 未修）
 
 ## 设计偏差
 1. [页码] plan 意图与实际呈现的差异
@@ -121,5 +125,5 @@ review capability 默认只报告，并以 `SubmitPptReview` 完成本次请求�
 
 - 审查基于 `PreviewSvgPage` 与作者 SVG/锁文件；修复时直接改作者 SVG 并重新预览提交。
 - 不因自动分数好看而覆盖真实视觉判断。
-- 不在用户未授权时修改文件。
+- 用户明确只要报告时，不修改文件。
 - 不把缺失标题、页码、背景或图表归因于“导出时会自动补”；SVG 页面本身必须完整。

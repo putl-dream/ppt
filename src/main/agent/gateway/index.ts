@@ -1,14 +1,18 @@
-import type { AgentModelSelection, AgentModelSettings, AgentProvider } from "@shared/agent";
-import type { AgentGatewayConfig } from "@shared/agent-gateway-config";
-import { resolveAgentGatewayConfig } from "@shared/agent-gateway-config";
+import type { AgentModelSelection, AgentModelSettings } from "@shared/agent";
+import type { AgentGatewayConfig, AgentSearchConfig } from "@shared/agent-gateway-config";
+import {
+  resolveAgentGatewayConfig,
+  resolveAgentSearchConfig,
+} from "@shared/agent-gateway-config";
 import { anthropicDriver } from "./anthropic";
 import {
   AgentModelSettingsRegistry,
   resolveAgentModelConfig,
+  type AgentCallPath,
   type DriverResolvedConfig,
 } from "./config";
 import type { AgentProviderDriver } from "./driver";
-import { openaiDriver } from "./openai";
+import { chatDriver, responsesDriver } from "./openai";
 import { AgentGatewayError, normalizeProviderError } from "./errors";
 import {
   prepareAgentModelRequest,
@@ -28,17 +32,17 @@ import type { ModelUsageRecord } from "../../token-usage-store";
 const logger = createModuleLogger("gateway");
 
 const DRIVERS = {
-  openai: openaiDriver,
+  chat: chatDriver,
+  responses: responsesDriver,
   anthropic: anthropicDriver,
-} satisfies Record<AgentProvider, AgentProviderDriver>;
+} satisfies Record<AgentCallPath, AgentProviderDriver>;
 
-function resolveDriver(provider: AgentProvider): AgentProviderDriver {
-  const driver = DRIVERS[provider];
-  if (!Object.hasOwn(DRIVERS, provider) || !driver) {
+function resolveDriver(callPath: AgentCallPath): AgentProviderDriver {
+  const driver = DRIVERS[callPath];
+  if (!Object.hasOwn(DRIVERS, callPath) || !driver) {
     throw new AgentGatewayError(
-      `No provider driver registered for ${provider}.`,
+      `No call-path driver registered for ${callPath}.`,
       "configuration",
-      provider,
     );
   }
   return driver;
@@ -47,6 +51,7 @@ function resolveDriver(provider: AgentProvider): AgentProviderDriver {
 export class AgentGateway implements AgentModelGateway {
   private readonly runtimeSettings = new AgentModelSettingsRegistry();
   private gatewayConfig: AgentGatewayConfig = resolveAgentGatewayConfig();
+  private searchConfig: AgentSearchConfig = resolveAgentSearchConfig();
   private usageRecorder?: (record: ModelUsageRecord) => Promise<void>;
 
   setUsageRecorder(recorder: (record: ModelUsageRecord) => Promise<void>): void {
@@ -72,11 +77,15 @@ export class AgentGateway implements AgentModelGateway {
   configure(
     settings: AgentModelSettings,
     gatewayConfig?: AgentGatewayConfig,
+    searchConfig?: AgentSearchConfig,
   ): AgentModelSelection {
     this.runtimeSettings.registerPrimary(settings);
     if (gatewayConfig) {
       this.gatewayConfig = resolveAgentGatewayConfig(gatewayConfig);
       this.runtimeSettings.registerFallback(this.gatewayConfig.fallbackModel);
+    }
+    if (searchConfig) {
+      this.searchConfig = resolveAgentSearchConfig(searchConfig);
     }
     return {
       ...(settings.configurationId ? { configurationId: settings.configurationId } : {}),
@@ -91,8 +100,16 @@ export class AgentGateway implements AgentModelGateway {
     this.runtimeSettings.registerFallback(this.gatewayConfig.fallbackModel);
   }
 
+  applySearchConfig(searchConfig: AgentSearchConfig): void {
+    this.searchConfig = resolveAgentSearchConfig(searchConfig);
+  }
+
   getGatewayConfig(): AgentGatewayConfig {
     return this.gatewayConfig;
+  }
+
+  getSearchConfig(): AgentSearchConfig {
+    return this.searchConfig;
   }
 
   private resolveConfig(
@@ -101,7 +118,7 @@ export class AgentGateway implements AgentModelGateway {
     return resolveAgentModelConfig(selection, this.runtimeSettings, process.env, this.gatewayConfig);
   }
 
-  /** Route one prepared provider-neutral request through a provider driver. */
+  /** Route one prepared provider-neutral request through a call-path driver. */
   async generateText(
     request: AgentModelRequest,
     selection?: AgentModelSelection,
@@ -112,13 +129,13 @@ export class AgentGateway implements AgentModelGateway {
 
     try {
       config = this.resolveConfig(selection);
-      const driver = resolveDriver(config.provider);
+      const driver = resolveDriver(config.callPath);
       const preparedRequest = prepareAgentModelRequest(request, config);
       logger.info("model.request.started", {
         gatewayRequestId,
         provider: config.provider,
         model: config.model,
-        apiMode: config.openaiApiMode,
+        callPath: config.callPath,
         promptLength: request.prompt.length,
         systemPromptLength: preparedRequest.systemPrompt?.length ?? 0,
         timeoutMs: config.timeoutMs,
@@ -173,13 +190,13 @@ export class AgentGateway implements AgentModelGateway {
 
     try {
       config = this.resolveConfig(selection);
-      const driver = resolveDriver(config.provider);
+      const driver = resolveDriver(config.callPath);
       const preparedRequest = prepareAgentModelRequest(request, config);
       logger.info("model.stream.started", {
         gatewayRequestId,
         provider: config.provider,
         model: config.model,
-        apiMode: config.openaiApiMode,
+        callPath: config.callPath,
         promptLength: request.prompt.length,
         systemPromptLength: preparedRequest.systemPrompt?.length ?? 0,
         timeoutMs: config.timeoutMs,
@@ -252,7 +269,6 @@ export type {
   AgentModelResponse,
   AgentModelStreamChunk,
   AgentResponseContract,
-  // 补齐常用类型，避免外部 deep-import
   AgentModelContentBlock,
   AgentModelMessage,
   AgentModelTextBlock,
@@ -272,7 +288,6 @@ export {
   isOutputTruncated,
   classifyGatewayRecovery,
   isAbortError,
-  formatRecoverableAgentError,
 } from "./errors";
 export type { AgentGatewayErrorCode, GatewayRecoveryKind } from "./errors";
 
@@ -288,23 +303,5 @@ export {
 // -- Message pairing --
 export { ensureToolResultPairing, withEphemeralPrompt } from "./message-pairing";
 
-// -- Response contract --
-export { buildContentBlockResponseGuidance } from "./response-contract";
-
 // -- Config (仅 Runtime 需要的 fallback 选择) --
 export { resolveFallbackModelSelection } from "./config";
-
-// -- Retry --
-export { backoffBeforeRetry, computeBackoffDelayMs, sleepWithAbort } from "./withRetry";
-export type { RetryOptions } from "./withRetry";
-
-// -- Model calls --
-export {
-  callLLM,
-  callTool,
-  ModelOutputError,
-  type MarkdownModelRequest,
-  type ModelOutputErrorCode,
-  type ToolModelRequest,
-  type ToolModelTurn,
-} from "./model-calls";

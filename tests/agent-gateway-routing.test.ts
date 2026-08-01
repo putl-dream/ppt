@@ -10,7 +10,11 @@ const providerMocks = vi.hoisted(() => ({
 vi.mock("../src/main/agent/gateway/openai", () => ({
   generateWithOpenAI: providerMocks.openai,
   generateStreamWithOpenAI: providerMocks.openaiStream,
-  openaiDriver: {
+  chatDriver: {
+    generate: providerMocks.openai,
+    generateStream: providerMocks.openaiStream,
+  },
+  responsesDriver: {
     generate: providerMocks.openai,
     generateStream: providerMocks.openaiStream,
   },
@@ -131,7 +135,7 @@ describe("AgentGateway", () => {
         model: "shared-model",
         apiKey: "primary-key",
         baseURL: "https://primary.example.test/v1",
-        openaiApiMode: "responses",
+        callPath: "responses",
       }),
       expect.anything(),
     );
@@ -142,7 +146,7 @@ describe("AgentGateway", () => {
         model: "shared-model",
         apiKey: "fallback-key",
         baseURL: "https://fallback.example.test/v1",
-        openaiApiMode: "chat-completions",
+        callPath: "chat",
       }),
       expect.anything(),
     );
@@ -151,6 +155,7 @@ describe("AgentGateway", () => {
         configurationId: "fallback-openai",
         model: "shared-model",
         apiKey: "fallback-key",
+        callPath: "chat",
       }),
       expect.anything(),
     );
@@ -317,21 +322,28 @@ describe("AgentGateway", () => {
     expect(providerMocks.openaiStream).not.toHaveBeenCalled();
   });
 
-  it("rejects a provider without a registered driver", async () => {
-    const unsupportedProvider = "unsupported" as "openai";
+  it("passes resolved callPath to the registered driver", async () => {
+    providerMocks.openai.mockResolvedValue({
+      provider: "openai",
+      model: "openai-test",
+      content: [{ type: "text", text: "hello" }],
+    });
     const gateway = new AgentGateway();
-    const selection = gateway.configure({
-      provider: unsupportedProvider,
-      model: "unsupported-test",
+    gateway.configure({
+      provider: "openai",
+      model: "openai-test",
       apiKey: "secret",
+      openaiApiMode: "chat-completions",
     });
 
-    await expect(gateway.generateText({ prompt: "Hello" }, selection)).rejects.toMatchObject({
-      code: "configuration",
-      provider: "unsupported",
+    await gateway.generateText(
+      { prompt: "Hello" },
+      { provider: "openai", model: "openai-test" },
+    );
+
+    expect(providerMocks.openai.mock.calls[0][0]).toMatchObject({
+      callPath: "chat",
     });
-    expect(providerMocks.openai).not.toHaveBeenCalled();
-    expect(providerMocks.anthropic).not.toHaveBeenCalled();
   });
 
   it("records configuration IDs for regular and streaming usage", async () => {

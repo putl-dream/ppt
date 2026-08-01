@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { AgentGatewayConfig } from "@shared/agent-gateway-config";
+import type { AgentSearchConfig } from "@shared/agent-gateway-config";
 import { createSearchService } from "./search-service";
 import type { WebSearchImageResult, WebSearchResult } from "./types";
 
@@ -39,7 +39,7 @@ export interface WebSearchOutput {
   sourcesGuidance: string;
 }
 
-function configFromGateway(config?: AgentGatewayConfig): {
+function configFromSearch(config?: AgentSearchConfig): {
   apiKey?: string;
   endpoint?: string;
   timeoutMs?: number;
@@ -53,9 +53,9 @@ function configFromGateway(config?: AgentGatewayConfig): {
 
 export async function executeWebSearch(
   args: WebSearchArgs,
-  options: { gatewayConfig?: AgentGatewayConfig; signal?: AbortSignal } = {},
+  options: { searchConfig?: AgentSearchConfig; signal?: AbortSignal } = {},
 ): Promise<WebSearchOutput> {
-  const service = createSearchService(configFromGateway(options.gatewayConfig));
+  const service = createSearchService(configFromSearch(options.searchConfig));
   const response = await service.search(args.query, {
     maxResults: args.max_results,
     searchDepth: args.search_depth,

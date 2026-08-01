@@ -134,7 +134,7 @@ function contentFromResponsesOutput(
 
 function stopReasonFromResponses(
   response: OpenAI.Responses.Response,
-): StopReason | undefined {
+): StopReason {
   if (response.status === "incomplete") {
     const reason = response.incomplete_details?.reason;
     if (reason === "max_output_tokens") return "max_tokens";
@@ -142,7 +142,7 @@ function stopReasonFromResponses(
   }
   return response.output.some((item) => item.type === "function_call")
     ? "tool_use"
-    : undefined;
+    : "end";
 }
 
 function responsesRequestBase(
@@ -176,13 +176,12 @@ function responseFromResponsesOutput(
   config: DriverResolvedConfig,
   response: ResponseWithRequestId,
 ): AgentModelResponse {
-  const stopReason = stopReasonFromResponses(response);
   return {
     provider: "openai",
     model: config.model,
     content: contentFromResponsesOutput(response),
     requestId: response._request_id ?? undefined,
-    ...(stopReason ? { stopReason } : {}),
+    stopReason: stopReasonFromResponses(response),
     ...openAIUsageProperty(response.usage),
   };
 }

@@ -6,9 +6,12 @@ import {
 import { AgentGatewayError } from "./errors";
 import type { ResolvedAgentModelConfig } from "./types";
 
+/** Internal Gateway call path; callers never select this directly. */
+export type AgentCallPath = "chat" | "responses" | "anthropic";
+
 /** Internal config passed to provider drivers. Carries SDK routing details. */
 export interface DriverResolvedConfig extends ResolvedAgentModelConfig {
-  openaiApiMode?: "responses" | "chat-completions";
+  callPath: AgentCallPath;
 }
 
 export const DEFAULT_AGENT_MODELS: Record<AgentProvider, string> = {
@@ -110,16 +113,27 @@ function inferProvider(env: NodeJS.ProcessEnv): AgentProvider {
   return env.ANTHROPIC_API_KEY && !env.OPENAI_API_KEY ? "anthropic" : "openai";
 }
 
-function resolveOpenAIApiMode(
+function resolveCallPath(
   provider: AgentProvider,
   baseURL: string | undefined,
   runtimeMode: AgentModelSettings["openaiApiMode"],
   env: NodeJS.ProcessEnv,
-): "responses" | "chat-completions" | undefined {
-  if (provider !== "openai") return undefined;
-  if (runtimeMode) return runtimeMode;
+): AgentCallPath {
+  if (provider === "anthropic") return "anthropic";
+
+  if (runtimeMode === "chat-completions") return "chat";
+  if (runtimeMode === "responses") return "responses";
+  if (runtimeMode) {
+    throw new AgentGatewayError(
+      `Unsupported openaiApiMode: ${runtimeMode}. Expected responses or chat-completions.`,
+      "configuration",
+      "openai",
+    );
+  }
+
   const configured = env.OPENAI_API_MODE?.trim().toLowerCase();
-  if (configured === "responses" || configured === "chat-completions") return configured;
+  if (configured === "chat-completions") return "chat";
+  if (configured === "responses") return "responses";
   if (configured) {
     throw new AgentGatewayError(
       `Unsupported OPENAI_API_MODE: ${configured}. Expected responses or chat-completions.`,
@@ -127,7 +141,7 @@ function resolveOpenAIApiMode(
       "openai",
     );
   }
-  return baseURL ? "chat-completions" : "responses";
+  return baseURL ? "chat" : "responses";
 }
 
 function isSameModelSelection(
@@ -205,7 +219,7 @@ export function resolveAgentModelConfig(
     model,
     apiKey,
     baseURL,
-    openaiApiMode: resolveOpenAIApiMode(provider, baseURL, runtime?.openaiApiMode, env),
+    callPath: resolveCallPath(provider, baseURL, runtime?.openaiApiMode, env),
     timeoutMs: gatewayConfig?.timeoutMs
       ?? positiveInteger(env.AGENT_TIMEOUT_MS, DEFAULT_AGENT_TIMEOUT_MS, "AGENT_TIMEOUT_MS"),
     maxOutputTokens: gatewayConfig?.maxOutputTokens

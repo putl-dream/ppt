@@ -37,6 +37,7 @@ const baseConfig = {
   model: "openai-test",
   apiKey: "secret",
   baseURL: "https://openai.example.test",
+  callPath: "responses" as const,
   timeoutMs: 2345,
   maxOutputTokens: 321,
 };
@@ -67,7 +68,7 @@ describe("OpenAI driver", () => {
       _request_id: "req-chat",
       usage: { prompt_tokens: 10, completion_tokens: 4, total_tokens: 14 },
     });
-    const config = { ...baseConfig, openaiApiMode: "chat-completions" as const };
+    const config = { ...baseConfig, callPath: "chat" as const };
 
     const response = await generateWithOpenAI(config, preparedRequest("prompt", {
       systemPrompt: "system",
@@ -172,7 +173,7 @@ describe("OpenAI driver", () => {
     });
 
     const response = await generateWithOpenAI(
-      { ...baseConfig, openaiApiMode: "chat-completions" },
+      { ...baseConfig, callPath: "chat" },
       preparedRequest("prompt"),
     );
 
@@ -192,7 +193,7 @@ describe("OpenAI driver", () => {
     });
 
     const response = await generateWithOpenAI(
-      { ...baseConfig, openaiApiMode: "chat-completions" },
+      { ...baseConfig, callPath: "chat" },
       preparedRequest("prompt"),
     );
 
@@ -230,7 +231,7 @@ describe("OpenAI driver", () => {
 
     const chunks = [];
     for await (const chunk of generateStreamWithOpenAI(
-      { ...baseConfig, openaiApiMode: "chat-completions" },
+      { ...baseConfig, callPath: "chat" },
       preparedRequest("prompt", { signal: controller.signal }),
     )) {
       chunks.push(chunk);
@@ -298,7 +299,7 @@ describe("OpenAI driver", () => {
 
     const chunks = [];
     for await (const chunk of generateStreamWithOpenAI(
-      { ...baseConfig, openaiApiMode: "chat-completions" },
+      { ...baseConfig, callPath: "chat" },
       preparedRequest("prompt", {
         tools: [{ name: "Read", description: "Read", inputSchema: { type: "object" } }],
       }),
@@ -454,6 +455,7 @@ describe("OpenAI driver", () => {
     });
     await expect(generateWithOpenAI(baseConfig, preparedRequest("prompt"))).resolves.toMatchObject({
       content: [],
+      stopReason: "end",
     });
 
     const source = Object.assign(new Error("rate limited"), { status: 429 });

@@ -86,6 +86,7 @@ export class PresentationAgentRunFactory {
       workspaceRoot: options.workspaceRoot,
       fileService: this.resolveFileService(options.threadId, options.workspaceRoot),
       gateway: this.gateway,
+      searchConfig: this.gateway.getSearchConfig?.(),
       model: options.model,
       signal: scope.signal,
       requestToolApproval: options.requestToolApproval,

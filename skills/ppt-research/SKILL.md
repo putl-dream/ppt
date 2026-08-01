@@ -11,6 +11,8 @@ stages:
 
 ## 目标
 
+本阶段无专用工具：用 `ReadFile` / `WriteFile`，需要外部事实时另用 `WebSearch`。产物不是 lifecycle 硬锁。
+
 由主 Agent 直接维护精简的 `research/notes.md`——事实清单，不是报告。默认跳过本阶段；仅用户提供资料或明确要求调研时执行。
 
 ## research/notes.md 结构

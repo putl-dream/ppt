@@ -546,6 +546,8 @@ describe("TeammateManager", () => {
     gateway.getGatewayConfig = () => ({
       timeoutMs: 180_000,
       maxOutputTokens: 16_384,
+    });
+    gateway.getSearchConfig = () => ({
       webSearchApiKey: "tvly-from-settings",
     });
     const bus = new MessageBus(MessageBus.defaultMailboxDir(workspaceRoot));

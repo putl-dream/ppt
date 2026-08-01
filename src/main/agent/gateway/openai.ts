@@ -1,10 +1,7 @@
 import type { DriverResolvedConfig } from "./config";
 import type { AgentProviderDriver } from "./driver";
 import { openAIChatDriver } from "./openai-chat";
-import {
-  createOpenAIClient,
-  type OpenAIModeDriver,
-} from "./openai-common";
+import { createOpenAIClient } from "./openai-common";
 import { openAIResponsesDriver } from "./openai-responses";
 import type {
   AgentModelResponse,
@@ -12,34 +9,52 @@ import type {
   PreparedAgentModelRequest,
 } from "./types";
 
-type OpenAIApiMode = NonNullable<DriverResolvedConfig["openaiApiMode"]>;
+/** Chat Completions call-path driver (OpenAI-compatible endpoints). */
+export const chatDriver = {
+  async generate(
+    config: DriverResolvedConfig,
+    request: PreparedAgentModelRequest,
+  ): Promise<AgentModelResponse> {
+    return openAIChatDriver.generate(createOpenAIClient(config), config, request);
+  },
+  async *generateStream(
+    config: DriverResolvedConfig,
+    request: PreparedAgentModelRequest,
+  ): AsyncGenerator<AgentModelStreamChunk> {
+    yield* openAIChatDriver.generateStream(createOpenAIClient(config), config, request);
+  },
+} satisfies AgentProviderDriver;
 
-const OPENAI_MODE_DRIVERS = {
-  responses: openAIResponsesDriver,
-  "chat-completions": openAIChatDriver,
-} satisfies Record<OpenAIApiMode, OpenAIModeDriver>;
+/** Responses API call-path driver. */
+export const responsesDriver = {
+  async generate(
+    config: DriverResolvedConfig,
+    request: PreparedAgentModelRequest,
+  ): Promise<AgentModelResponse> {
+    return openAIResponsesDriver.generate(createOpenAIClient(config), config, request);
+  },
+  async *generateStream(
+    config: DriverResolvedConfig,
+    request: PreparedAgentModelRequest,
+  ): AsyncGenerator<AgentModelStreamChunk> {
+    yield* openAIResponsesDriver.generateStream(createOpenAIClient(config), config, request);
+  },
+} satisfies AgentProviderDriver;
 
-function modeDriver(config: DriverResolvedConfig): OpenAIModeDriver {
-  return OPENAI_MODE_DRIVERS[config.openaiApiMode ?? "responses"];
-}
-
-/** Execute one non-streaming OpenAI driver attempt. */
+/** @deprecated Prefer chatDriver / responsesDriver via callPath registry. */
 export async function generateWithOpenAI(
   config: DriverResolvedConfig,
   request: PreparedAgentModelRequest,
 ): Promise<AgentModelResponse> {
-  return modeDriver(config).generate(createOpenAIClient(config), config, request);
+  const driver = config.callPath === "chat" ? chatDriver : responsesDriver;
+  return driver.generate(config, request);
 }
 
-/** Execute one native streaming OpenAI driver attempt. */
+/** @deprecated Prefer chatDriver / responsesDriver via callPath registry. */
 export async function* generateStreamWithOpenAI(
   config: DriverResolvedConfig,
   request: PreparedAgentModelRequest,
 ): AsyncGenerator<AgentModelStreamChunk> {
-  yield* modeDriver(config).generateStream(createOpenAIClient(config), config, request);
+  const driver = config.callPath === "chat" ? chatDriver : responsesDriver;
+  yield* driver.generateStream(config, request);
 }
-
-export const openaiDriver = {
-  generate: generateWithOpenAI,
-  generateStream: generateStreamWithOpenAI,
-} satisfies AgentProviderDriver;

@@ -17,9 +17,8 @@ import {
   classifyGatewayRecovery,
   isAbortError,
   isOutputTruncated,
-  backoffBeforeRetry,
-  callTool,
 } from "../../gateway";
+import { backoffBeforeRetry } from "../model/with-retry";
 import {
   emergencyTrimContext,
   emergencyTrimModelMessages,
@@ -200,17 +199,6 @@ async function invokeGateway(
       content = [{ type: "text", text: streamedText }];
     }
     return { content, stopReason };
-  }
-
-  if (request.tools?.length) {
-    const turn = await callTool(gateway, {
-      ...request,
-      tools: request.tools,
-    }, model);
-    return {
-      content: turn.response.content,
-      stopReason: turn.response.stopReason,
-    };
   }
 
   const response = await gateway.generateText(request, model);

@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   applyResponseContract,
-  buildContentBlockResponseGuidance,
   buildResponseContract,
 } from "../src/main/agent/gateway/response-contract";
+import { buildContentBlockResponseGuidance } from "../src/main/agent/runtime/prompts/response-guidance";
 
 describe("response contracts", () => {
   it("defines native ContentBlock guidance without a JSON envelope", () => {

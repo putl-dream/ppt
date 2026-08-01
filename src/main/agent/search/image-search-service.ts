@@ -1,4 +1,4 @@
-import type { AgentGatewayConfig } from "@shared/agent-gateway-config";
+import type { AgentSearchConfig } from "@shared/agent-gateway-config";
 import { executeWebSearch, type WebSearchOutput } from "./web-search";
 
 export const FREE_IMAGE_DOMAINS = [
@@ -47,7 +47,7 @@ export function imageProviderFromUrl(value?: string): string | undefined {
 export class ImageSearchService {
   async search(
     request: ImageSearchRequest,
-    options: { gatewayConfig?: AgentGatewayConfig; signal?: AbortSignal } = {},
+    options: { searchConfig?: AgentSearchConfig; signal?: AbortSignal } = {},
   ): Promise<ImageSearchResult> {
     const kindPhrase = {
       photo: "professional editorial photography",

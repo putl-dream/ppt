@@ -46,7 +46,7 @@ Workbench chrome is separate from the slide DesignSystem: drop a pack at `~/.age
 
 **It is model-driven tool collaboration, not a fixed stage machine.**
 
-The runtime gives the model current workspace facts, available skills, and a dynamic tool set. Complex creation jobs can produce Brief / Outline / Storyboard artifacts plus locked `design-spec` and per-page `page-plan` files as needed; local edits, reviews, and exports can take a short path. Interaction pauses only for missing critical constraints, risky changes, or an explicitly requested comparison.
+The runtime gives the model current workspace facts, available skills, and a dynamic tool set. Complex creation jobs can optionally load upstream skills (brief / outline / storyboard / research; knowledge-only, written via WriteFile) then lock `design-spec` and per-page `page-plan` files; local edits, reviews, and exports can take a short path. Interaction pauses only for missing critical constraints, risky changes, or an explicitly requested comparison.
 
 When creating a full deck, the agent locks a Design System from audience, topic, and delivery context, authors each page as a complete `1280 × 720` SVG, then submits through `PreviewSvgPage` → `SubmitSvgDeck` into a single proposal. It does not ask you to pick “standard layout” or “creative decoration” after a content draft, unless you explicitly want a content-only draft.
 
@@ -174,7 +174,6 @@ npm.cmd test
 npm.cmd run typecheck
 npm.cmd run build
 npm.cmd run preview
-npm.cmd run generate:pptx
 ```
 
 Platform packaging:
@@ -223,7 +222,7 @@ Key areas:
 - `src/shared/`: presentation model, command model, session and IPC types
 - `src/main/project/`: local project sandbox, artifact IO, diffs, dependency status
 - `src/main/deck/`: thumbnails, export history, PPTX export services
-- `skills/`: core create `ppt-workflow` → `ppt-design` → `ppt-design-layout` → `ppt-build`; short paths `ppt-edit` / `ppt-beautify` / `deck-review` / `ppt-export`; optional upstream `ppt-brief` / `ppt-outline` / `ppt-storyboard` / `ppt-research`
+- `skills/`: core create `ppt-workflow` → `ppt-design` → `ppt-design-layout` → `ppt-build`; short paths `ppt-edit` / `ppt-beautify` / `ppt-review` / `ppt-export`; optional upstream skills (`ppt-brief` / `ppt-outline` / `ppt-storyboard` / `ppt-research`) are knowledge-only and written via ReadFile/WriteFile — not lifecycle hard locks
 - `tests/`: coverage for Agent behavior, export, context compaction, approvals, and project artifacts
 
 ## Local Files And Privacy

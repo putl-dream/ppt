@@ -124,7 +124,7 @@ Grammar / 双轨 / 频谱残骸清扫已收工。以下按工作流分类，**�
 
 - 默认 project artifact / workspace probe 与 SVG-native 作者文件对齐；
 - captioned image 建立独立内容模型；
-- deck-review 增强母题、锚点、密度和页面差异度；
+- ppt-review 增强母题、锚点、密度和页面差异度；
 - 从内容自动推导 Brand Profile，并允许用户自然语言调节。
 
 ### 9.3 风险 backlog（独立专项）

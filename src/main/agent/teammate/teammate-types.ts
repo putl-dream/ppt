@@ -10,6 +10,7 @@ import type { TeammateProgressListener } from "@shared/teammate-progress";
 import type { TaskListSnapshotListener } from "../task/task-list-publisher";
 import type { TaskDispatchMode, TaskStore } from "../task/task-store";
 import type { AgentMailboxMessage } from "./message-bus";
+import type { SkillRegistry } from "../skills/loadSkillsDir";
 
 export type TeammateStatus = "running" | "idle" | "stopped" | "failed";
 
@@ -42,6 +43,8 @@ export interface SpawnTeammateThreadOptions {
   onProgress?: TeammateProgressListener;
   /** Shared durable task board. The board may live outside the project workspace. */
   taskStore?: TaskStore;
+  /** Shared skill registry from Main harness startup. */
+  skillRegistry?: SkillRegistry;
 }
 
 export type TeammateState = TeammateHandle & {

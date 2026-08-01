@@ -122,7 +122,8 @@ permission 管线决定。
 
 将冗长的“六阶段必须执行”替换为事实和建议。产品新建以 SVG-native 为准
 （见 `skills/ppt-workflow`）；现行 prompt probe 以 SVG-native 作者文件与
-Presentation lifecycle 投影为主，brief/outline/research 仅作为可选资料：
+Presentation lifecycle 投影为主；`ppt-brief` / `ppt-outline` / `ppt-storyboard` /
+`ppt-research` 仅是可选上游 Skill（经 WriteFile 写文件，无专用工具、非硬锁）：
 
 ```text
 Workspace facts:

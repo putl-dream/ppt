@@ -2,6 +2,7 @@ import {
   resolveAgentGatewayPreferences,
   type AgentGatewayConfig,
   type AgentGatewayPreferences,
+  type AgentSearchConfig,
 } from "@shared/agent-gateway-config";
 import type { ManagedModel } from "./modelCatalog";
 import { isModelEnabled, toAgentModelSettings } from "./modelCatalog";
@@ -33,9 +34,27 @@ export function buildAgentGatewayConfig(
   return {
     timeoutMs: preferences.timeoutMs,
     maxOutputTokens: preferences.maxOutputTokens,
+    ...(fallbackModel ? { fallbackModel: toAgentModelSettings(fallbackModel) } : {}),
+  };
+}
+
+export function buildAgentSearchConfig(
+  preferences: AgentGatewayPreferences,
+): AgentSearchConfig {
+  return {
     ...(preferences.webSearchApiKey ? { webSearchApiKey: preferences.webSearchApiKey } : {}),
     ...(preferences.webSearchEndpoint ? { webSearchEndpoint: preferences.webSearchEndpoint } : {}),
     ...(preferences.webSearchTimeoutMs ? { webSearchTimeoutMs: preferences.webSearchTimeoutMs } : {}),
-    ...(fallbackModel ? { fallbackModel: toAgentModelSettings(fallbackModel) } : {}),
+  };
+}
+
+/** Flat wire payload for IPC (gateway + search); main splits once. */
+export function buildAgentRunServicesWire(
+  preferences: AgentGatewayPreferences,
+  models: ManagedModel[],
+): AgentGatewayConfig & AgentSearchConfig {
+  return {
+    ...buildAgentGatewayConfig(preferences, models),
+    ...buildAgentSearchConfig(preferences),
   };
 }

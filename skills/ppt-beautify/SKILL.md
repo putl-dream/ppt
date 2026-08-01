@@ -63,4 +63,4 @@ stages:
 
 - 视觉修改只写回 SVG 作者源，再经 `PreviewSvgPage` → `SubmitSvgDeck` 提交。
 - 不让预览、提交或导出工具添加标题、页码、背景或其他自动 chrome。
-- 用户只要求审查时不要擅自修改；先按 `deck-review` 输出问题。
+- 用户只要求审查时不要擅自修改；先按 `ppt-review` 输出问题。

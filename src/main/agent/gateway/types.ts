@@ -1,5 +1,5 @@
 import type { AgentModelSelection, AgentProvider } from "@shared/agent";
-import type { AgentGatewayConfig } from "@shared/agent-gateway-config";
+import type { AgentGatewayConfig, AgentSearchConfig } from "@shared/agent-gateway-config";
 import type { ProviderTokenUsage } from "@shared/token-usage";
 
 export type AgentResponseContract = "markdown" | "markdown-summary" | "none";
@@ -132,17 +132,6 @@ export type AgentModelStreamChunk =
       usage?: ProviderTokenUsage;
     };
 
-/**
- * 流式传输完成后的元数据
- */
-export interface AgentModelStreamMetadata {
-  provider: AgentProvider;
-  model: string;
-  requestId?: string;
-  stopReason?: StopReason;
-  usage?: ProviderTokenUsage;
-}
-
 export interface ResolvedAgentModelConfig extends AgentModelSelection {
   apiKey: string;
   baseURL?: string;
@@ -151,8 +140,10 @@ export interface ResolvedAgentModelConfig extends AgentModelSelection {
 }
 
 export interface AgentModelGateway {
-  /** Optional runtime configuration exposed to tools owned by this application. */
+  /** Optional model-gateway runtime parameters (timeout / tokens / fallback). */
   getGatewayConfig?(): AgentGatewayConfig;
+  /** Optional search credentials; not part of the model I/O contract. */
+  getSearchConfig?(): AgentSearchConfig;
 
   generateText(
     request: AgentModelRequest,

@@ -11,6 +11,8 @@ stages:
 
 ## 目标
 
+本阶段无专用工具：用 `ReadFile` / `WriteFile` 完成。产物不是 lifecycle 硬锁。
+
 由主 Agent 直接创建精简 `outline.md`，为后续 storyboard 或 page-plan 提供带叙事弧的章节骨架。本技能不写 SVG，也不提交 deck。
 
 ## 叙事弧

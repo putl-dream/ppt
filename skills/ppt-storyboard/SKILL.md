@@ -11,6 +11,8 @@ stages:
 
 ## 目标
 
+本阶段无专用工具：用 `ReadFile` / `WriteFile` 完成。产物不是 lifecycle 硬锁。
+
 由主 Agent 用 `ReadFile` 读取 outline、brief 和事实来源，写出 `slides/storyboard.json`。它是 `slides/page-plan.json` 的**可选叙事上游**，不是 lifecycle 视觉事实源，也不是 SVG 作者源；本阶段不写 SVG 几何或提交调用。
 
 简单 deck 应跳过本技能，由 `ppt-design-layout` 直接从 outline / brief 生成 page plan。

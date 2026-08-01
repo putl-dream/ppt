@@ -2,7 +2,7 @@ import type { AgentGatewayPreferences } from "@shared/agent-gateway-config";
 import type { AgentStepLimits } from "@shared/agent-step-limits";
 import type { AgentExecutionStrategy } from "@shared/agent";
 import type { AgentRunRequest, AgentRunResult } from "@shared/ipc";
-import { buildAgentGatewayConfig } from "../../agentGatewayConfig";
+import { buildAgentRunServicesWire } from "../../agentGatewayConfig";
 import { getPersistedDisplayCards } from "../../cards/display-card-managers";
 import { toAgentModelSettings, type ManagedModel } from "../../modelCatalog";
 import { findActiveThreadId, type ChatMessage } from "../chatMessageRuntime";
@@ -34,7 +34,7 @@ export function executeAgentRun({
   executionStrategy,
   runId,
 }: ExecuteAgentRunOptions): Promise<AgentRunResult> {
-  const gatewayConfig = buildAgentGatewayConfig(gatewayPreferences, enabledModels);
+  const gatewayConfig = buildAgentRunServicesWire(gatewayPreferences, enabledModels);
   const modelSettings = selectedModel ? toAgentModelSettings(selectedModel) : undefined;
   const activeThreadId = findActiveThreadId(
     forkedMessages ?? sourceMessages,

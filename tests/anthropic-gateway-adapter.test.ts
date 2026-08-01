@@ -26,6 +26,7 @@ const config = {
   model: "anthropic-test",
   apiKey: "secret",
   baseURL: "https://anthropic.example.test",
+  callPath: "anthropic" as const,
   timeoutMs: 2345,
   maxOutputTokens: 654,
 };

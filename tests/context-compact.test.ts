@@ -258,6 +258,41 @@ describe("compact_history", () => {
     expect(result.payload).toEqual(payload);
   });
 
+  it("does not replace canonical history when the summary emits tool_use", async () => {
+    const workspaceRoot = await createWorkspace();
+    const gateway: AgentModelGateway = {
+      async generateText() {
+        return {
+          provider: "openai",
+          model: "gpt",
+          content: [
+            { type: "text", text: "Checking..." },
+            { type: "tool_use", id: "call-1", name: "Read", input: {} },
+          ],
+        };
+      },
+      async *generateTextStream() {
+        yield { type: "complete" as const, content: [] };
+      },
+    };
+    const payload = {
+      request: "build deck",
+      transcript: [{ role: "user", content: "retain this complete history" }],
+    };
+
+    const result = await compactHistory({
+      payload,
+      workspaceRoot,
+      threadId: "tool-use-summary",
+      gateway,
+    });
+
+    expect(result.skipped).toBe(true);
+    expect(result.failures).toBe(1);
+    expect(result.reason).toContain("tool_use");
+    expect(result.payload).toEqual(payload);
+  });
+
   it("opens circuit breaker after consecutive failures", async () => {
     const gateway: AgentModelGateway = {
       async generateText() {

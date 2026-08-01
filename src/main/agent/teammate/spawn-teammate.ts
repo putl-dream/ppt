@@ -39,6 +39,7 @@ import {
   type SubAgentToolContext,
   type SubAgentToolDefinition,
 } from "../subagent/workspace-tools";
+import { createSkillSession } from "../skills/skill-types";
 import { WorkspaceFileService } from "../tools/files/workspace-file-service";
 import { validateToolOutput } from "../tools/tool-validation";
 import { classifyToolExecutionError } from "../runtime/tools/tool-execution-error";
@@ -430,10 +431,14 @@ export class TeammateManager {
       ]
         .map((tool) => [tool.name, tool]),
     );
+    const skillSession = createSkillSession();
+    const skillCatalog = options.skillRegistry?.listCards() ?? [];
     const systemPrompt = buildTeammateSystemPrompt({
       name: state.name,
       role: state.role,
       tools,
+      skillCatalog,
+      skillRegistry: options.skillRegistry,
     });
     const toolSchemas: AgentToolSchema[] = tools.map((tool) => ({
       name: tool.name,
@@ -443,8 +448,11 @@ export class TeammateManager {
     const toolContext: SubAgentToolContext = {
       workspaceRoot: options.workspaceRoot,
       fileService: new WorkspaceFileService(options.workspaceRoot),
-      gatewayConfig: options.gateway.getGatewayConfig?.(),
+      searchConfig: options.gateway.getSearchConfig?.(),
       signal: state.controller.signal,
+      skillRegistry: options.skillRegistry,
+      skillSession,
+      promptStage: "discover",
     };
     const requestToolApproval = createTeammateApprovalHandler({
       bus: this.bus,

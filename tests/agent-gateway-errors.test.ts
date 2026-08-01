@@ -54,6 +54,8 @@ describe("normalizeProviderError", () => {
       controller.signal,
     );
 
+    expect(error).toBeInstanceOf(AgentGatewayError);
+    expect(error.code).toBe("aborted");
     expect(error.message).toBe("Run aborted by user.");
   });
 

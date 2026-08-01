@@ -85,8 +85,8 @@ request
 | Page Plan | 有序逐页内容与构图意图 | `slides/page-plan.json` | SVG-native 新建锁 |
 | Page SVG | 唯一页面视觉作者源 | `slides/svg/PNN.svg` | SVG-native 视觉事实 |
 | Assets | SVG 显式引用的本地资源 | `assets/**` | 素材 |
-| Brief / Outline / Research | 可选早期叙事材料 | `brief.md` / `outline.md` / `research/` | 可选 |
-| Storyboard | 可选页级叙事上游 | `slides/storyboard.json` | 复杂 deck 可选；不是 lifecycle 事实源 |
+| Brief / Outline / Research | 可选上游叙事材料（Skill + WriteFile） | `brief.md` / `outline.md` / `research/` | 可选知识产物；非硬锁 |
+| Storyboard | 可选页级叙事上游（Skill + WriteFile） | `slides/storyboard.json` | 复杂 deck 可选；不是 lifecycle 事实源 |
 | Layout Plan | 逐页 layout/variant（遗留） | `slides/layout-plan.json` | 非新建旁路；不是 lifecycle 事实源 |
 | Brand / Design System | 品牌与视觉偏好 | `design/` | 与 Design Spec 并存演进 |
 | Presentation | 已应用可编辑 deck | `deck/snapshot.json` + PresentationRevision | CommitGate 后事实 |
