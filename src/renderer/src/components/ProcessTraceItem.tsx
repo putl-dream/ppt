@@ -12,11 +12,7 @@ import {
 } from "./Icons";
 import { MessageMarkdown } from "./MessageMarkdown";
 import type { ProcessTraceRow } from "./process-trace-rows";
-import {
-  beginFoldScroll,
-  commitFoldScroll,
-  type FoldScrollSnapshot,
-} from "./chat-scroll-anchor";
+import { useChatScroll, type FoldToken } from "./useChatScroll";
 
 interface ProcessTraceItemProps {
   row: ProcessTraceRow;
@@ -42,9 +38,10 @@ export const ProcessTraceItem: React.FC<ProcessTraceItemProps> = ({
   suppressTitle = false,
 }) => {
   const [expanded, setExpanded] = useState(defaultExpanded || suppressTitle);
+  const chatScroll = useChatScroll();
   const liveBodyRef = useRef<HTMLDivElement>(null);
   const titleRef = useRef<HTMLButtonElement>(null);
-  const pendingFoldRef = useRef<FoldScrollSnapshot | null>(null);
+  const pendingFoldRef = useRef<FoldToken | null>(null);
   const hasBody = Boolean(row.content?.trim() || (row.lines && row.lines.length > 0));
   const effectiveExpanded = hasBody && (suppressTitle || expanded);
   const CaretIcon = effectiveExpanded ? ChevronDownIcon : ChevronRightIcon;
@@ -56,8 +53,8 @@ export const ProcessTraceItem: React.FC<ProcessTraceItemProps> = ({
     const pending = pendingFoldRef.current;
     if (!pending) return;
     pendingFoldRef.current = null;
-    commitFoldScroll(titleRef.current, pending);
-  }, [expanded]);
+    chatScroll.commitFold(pending);
+  }, [chatScroll, expanded]);
 
   useEffect(() => {
     if (suppressTitle) {
@@ -76,7 +73,7 @@ export const ProcessTraceItem: React.FC<ProcessTraceItemProps> = ({
   }, [row.content, row.streaming, suppressTitle]);
 
   const toggleExpanded = () => {
-    pendingFoldRef.current = beginFoldScroll(titleRef.current, "anchor");
+    pendingFoldRef.current = chatScroll.beginFold(titleRef.current);
     setExpanded((value) => !value);
   };
 

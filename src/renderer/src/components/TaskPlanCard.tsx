@@ -2,11 +2,7 @@ import React, { useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { AgentTaskNode } from "@shared/agent-task-list";
 import type { TeamSessionProjection } from "@shared/team-session";
 import { ChevronDownIcon, ChevronRightIcon } from "./Icons";
-import {
-  beginFoldScroll,
-  commitFoldScroll,
-  type FoldScrollSnapshot,
-} from "./chat-scroll-anchor";
+import { useChatScroll, type FoldToken } from "./useChatScroll";
 
 function TaskStatusIcon({ task }: { task: AgentTaskNode }) {
   if (task.review.state === "requested") return <span className="task-plan-icon review-requested" aria-hidden="true">◇</span>;
@@ -38,18 +34,19 @@ export const TaskPlanCard: React.FC<TaskPlanCardProps> = ({
   onOpenTask,
 }) => {
   const [expanded, setExpanded] = useState(false);
+  const chatScroll = useChatScroll();
   const headerRef = useRef<HTMLButtonElement>(null);
-  const pendingFoldRef = useRef<FoldScrollSnapshot | null>(null);
+  const pendingFoldRef = useRef<FoldToken | null>(null);
 
   useLayoutEffect(() => {
     const pending = pendingFoldRef.current;
     if (!pending) return;
     pendingFoldRef.current = null;
-    commitFoldScroll(headerRef.current, pending);
-  }, [expanded]);
+    chatScroll.commitFold(pending);
+  }, [chatScroll, expanded]);
 
   const toggleExpanded = () => {
-    pendingFoldRef.current = beginFoldScroll(headerRef.current, "anchor");
+    pendingFoldRef.current = chatScroll.beginFold(headerRef.current);
     setExpanded((value) => !value);
   };
 

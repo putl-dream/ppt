@@ -101,15 +101,12 @@ export const AgentRunTimeline: React.FC<AgentRunTimelineProps> = ({
           );
         }
 
-        const segmentLive = live && segment.items.some((item) =>
-          item.kind === "reasoning"
-            ? item.streaming
-            : item.kind === "tool"
-              ? item.status === "running"
-              : item.kind === "step"
-                ? item.status !== "done"
-                : false
-        );
+        // Keep the process panel open for the whole agent run (Cursor-style).
+        // Gating on per-tool/reasoning activity made segmentLive flicker false
+        // between steps and thrash open/close via collapseOnComplete.
+        // #region agent log
+        fetch('http://127.0.0.1:7758/ingest/f715bfbd-c4b3-4d7c-91d3-b40633f1a70c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'482d6b'},body:JSON.stringify({sessionId:'482d6b',runId:'post-fix',hypothesisId:'A',location:'AgentRunTimeline.tsx:segmentLive',message:'activity segment live calc',data:{runLive:live,segmentLive:live,collapseOnComplete:segment.items.length>1,itemCount:segment.items.length,panelKey:segment.items[0]?.id,statuses:segment.items.map((i)=>i.kind==='tool'?{id:i.id,kind:'tool',status:i.status}:i.kind==='reasoning'?{id:i.id,kind:'reasoning',streaming:i.streaming}:{id:i.id,kind:i.kind})},timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
         return (
           <div
             key={segment.items[0]!.id}
@@ -117,7 +114,7 @@ export const AgentRunTimeline: React.FC<AgentRunTimelineProps> = ({
           >
             <ProcessTracePanel
               items={segment.items}
-              live={segmentLive}
+              live={live}
               defaultOpen={segment.items.length === 1}
               collapseOnComplete={segment.items.length > 1}
             />

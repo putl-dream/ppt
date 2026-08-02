@@ -26,7 +26,7 @@
     "src/design-system/**/*.ts",
     "src/renderer/src/components/project-store.ts",
     "src/renderer/src/components/process-trace-rows.ts",
-    "src/renderer/src/components/chat-scroll-anchor.ts",
+    "src/renderer/src/components/chat-scroll-controller.ts",
     "src/renderer/src/agentRunPresentation.ts",
     "src/renderer/src/streamingText.ts",
     "src/renderer/src/app/chatMessageRuntime.ts",

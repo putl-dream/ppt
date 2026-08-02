@@ -4,13 +4,7 @@ import { summarizeProcessTrace } from "@shared/agent-activity";
 import { ChevronDownIcon, ChevronRightIcon } from "./Icons";
 import { ProcessTraceItem } from "./ProcessTraceItem";
 import { buildProcessTraceRows } from "./process-trace-rows";
-import {
-  beginFoldScroll,
-  commitFoldScroll,
-  findChatScrollViewport,
-  isChatNearBottom,
-  type FoldScrollSnapshot,
-} from "./chat-scroll-anchor";
+import { useChatScroll, type FoldToken } from "./useChatScroll";
 
 interface ProcessTracePanelProps {
   items: AgentActivityItem[];
@@ -29,6 +23,7 @@ export const ProcessTracePanel: React.FC<ProcessTracePanelProps> = ({
   defaultExpandRows = false,
   collapseOnComplete = false,
 }) => {
+  const chatScroll = useChatScroll();
   const [open, setOpen] = useState(
     defaultOpen || live,
   );
@@ -36,12 +31,15 @@ export const ProcessTracePanel: React.FC<ProcessTracePanelProps> = ({
   const wasLiveRef = useRef(live);
   const startedAtRef = useRef<number | null>(live ? (startedAt ?? Date.now()) : null);
   const headerRef = useRef<HTMLButtonElement>(null);
-  const pendingFoldRef = useRef<FoldScrollSnapshot | null>(null);
+  const pendingFoldRef = useRef<FoldToken | null>(null);
   const openRef = useRef(open);
   openRef.current = open;
 
-  const setOpenWithScroll = (nextOpen: boolean, mode: "anchor" | "stick") => {
-    pendingFoldRef.current = beginFoldScroll(headerRef.current, mode);
+  const setOpenWithScroll = (nextOpen: boolean) => {
+    // #region agent log
+    fetch('http://127.0.0.1:7758/ingest/f715bfbd-c4b3-4d7c-91d3-b40633f1a70c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'482d6b'},body:JSON.stringify({sessionId:'482d6b',hypothesisId:'B',location:'ProcessTracePanel.tsx:setOpenWithScroll',message:'fold open change',data:{nextOpen,prevOpen:openRef.current,live,collapseOnComplete,itemCount:items.length,itemIds:items.map((i)=>i.id).slice(0,8)},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+    pendingFoldRef.current = chatScroll.beginFold(headerRef.current);
     setOpen(nextOpen);
   };
 
@@ -49,8 +47,8 @@ export const ProcessTracePanel: React.FC<ProcessTracePanelProps> = ({
     const pending = pendingFoldRef.current;
     if (!pending) return;
     pendingFoldRef.current = null;
-    commitFoldScroll(headerRef.current, pending);
-  }, [open]);
+    chatScroll.commitFold(pending);
+  }, [chatScroll, open]);
 
   useEffect(() => {
     if (!live) {
@@ -76,24 +74,28 @@ export const ProcessTracePanel: React.FC<ProcessTracePanelProps> = ({
 
   useEffect(() => {
     const wasLive = wasLiveRef.current;
+    // #region agent log
+    fetch('http://127.0.0.1:7758/ingest/f715bfbd-c4b3-4d7c-91d3-b40633f1a70c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'482d6b'},body:JSON.stringify({sessionId:'482d6b',runId:'post-fix',hypothesisId:'A',location:'ProcessTracePanel.tsx:liveEffect',message:'live effect tick',data:{live,wasLive,open:openRef.current,collapseOnComplete,startedAt,itemCount:items.length,kinds:items.map((i)=>i.kind),toolStatuses:items.filter((i)=>i.kind==='tool').map((i)=>({id:i.id,status:i.status})),reasoning:items.filter((i)=>i.kind==='reasoning').map((i)=>({id:i.id,streaming:i.streaming}))},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
 
     if (live) {
       if (!wasLive) {
         if (startedAt !== undefined) startedAtRef.current = startedAt;
+        // #region agent log
+        fetch('http://127.0.0.1:7758/ingest/f715bfbd-c4b3-4d7c-91d3-b40633f1a70c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'482d6b'},body:JSON.stringify({sessionId:'482d6b',runId:'post-fix',hypothesisId:'A',location:'ProcessTracePanel.tsx:liveEdge',message:'became live -> open',data:{wasClosed:!openRef.current,itemCount:items.length},timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
         if (!openRef.current) {
-          const viewport = findChatScrollViewport(headerRef.current);
-          const stick = !viewport || isChatNearBottom(viewport);
-          setOpenWithScroll(true, stick ? "stick" : "anchor");
+          setOpenWithScroll(true);
         } else {
           setOpen(true);
         }
-      } else {
-        setOpen(true);
       }
+      // While the run stays live, keep current open state (do not re-force).
     } else if (wasLive && collapseOnComplete && openRef.current) {
-      const viewport = findChatScrollViewport(headerRef.current);
-      const stick = Boolean(viewport && isChatNearBottom(viewport));
-      setOpenWithScroll(false, stick ? "stick" : "anchor");
+      // #region agent log
+      fetch('http://127.0.0.1:7758/ingest/f715bfbd-c4b3-4d7c-91d3-b40633f1a70c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'482d6b'},body:JSON.stringify({sessionId:'482d6b',runId:'post-fix',hypothesisId:'A',location:'ProcessTracePanel.tsx:collapse',message:'live ended -> collapseOnComplete',data:{itemCount:items.length,toolStatuses:items.filter((i)=>i.kind==='tool').map((i)=>({id:i.id,status:i.status}))},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
+      setOpenWithScroll(false);
     }
 
     wasLiveRef.current = live;
@@ -112,7 +114,7 @@ export const ProcessTracePanel: React.FC<ProcessTracePanelProps> = ({
 
   const handleHeaderClick = () => {
     if (live) return;
-    setOpenWithScroll(!open, "anchor");
+    setOpenWithScroll(!open);
   };
 
   return (
