@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { AgentToolDisplayCategory } from "@shared/agent-activity-display";
 import {
   ChevronDownIcon,
@@ -12,6 +12,11 @@ import {
 } from "./Icons";
 import { MessageMarkdown } from "./MessageMarkdown";
 import type { ProcessTraceRow } from "./process-trace-rows";
+import {
+  beginFoldScroll,
+  commitFoldScroll,
+  type FoldScrollSnapshot,
+} from "./chat-scroll-anchor";
 
 interface ProcessTraceItemProps {
   row: ProcessTraceRow;
@@ -38,12 +43,21 @@ export const ProcessTraceItem: React.FC<ProcessTraceItemProps> = ({
 }) => {
   const [expanded, setExpanded] = useState(defaultExpanded || suppressTitle);
   const liveBodyRef = useRef<HTMLDivElement>(null);
+  const titleRef = useRef<HTMLButtonElement>(null);
+  const pendingFoldRef = useRef<FoldScrollSnapshot | null>(null);
   const hasBody = Boolean(row.content?.trim() || (row.lines && row.lines.length > 0));
   const effectiveExpanded = hasBody && (suppressTitle || expanded);
   const CaretIcon = effectiveExpanded ? ChevronDownIcon : ChevronRightIcon;
   const ToolCategoryIcon = row.toolCategory
     ? TOOL_CATEGORY_ICONS[row.toolCategory]
     : null;
+
+  useLayoutEffect(() => {
+    const pending = pendingFoldRef.current;
+    if (!pending) return;
+    pendingFoldRef.current = null;
+    commitFoldScroll(titleRef.current, pending);
+  }, [expanded]);
 
   useEffect(() => {
     if (suppressTitle) {
@@ -61,7 +75,10 @@ export const ProcessTraceItem: React.FC<ProcessTraceItemProps> = ({
     body.scrollTop = body.scrollHeight;
   }, [row.content, row.streaming, suppressTitle]);
 
-  const toggleExpanded = () => setExpanded((value) => !value);
+  const toggleExpanded = () => {
+    pendingFoldRef.current = beginFoldScroll(titleRef.current, "anchor");
+    setExpanded((value) => !value);
+  };
 
   // The tool icon doubles as the status slot: colour and motion carry the state
   // so the row never repeats itself with a separate tick or exclamation mark.
@@ -131,6 +148,7 @@ export const ProcessTraceItem: React.FC<ProcessTraceItemProps> = ({
     >
       {hasBody ? (
         <button
+          ref={titleRef}
           type="button"
           className="process-trace-row-title process-trace-row-title--interactive"
           onClick={toggleExpanded}

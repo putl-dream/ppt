@@ -1,7 +1,12 @@
-import React, { useMemo, useState } from "react";
+import React, { useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { AgentTaskNode } from "@shared/agent-task-list";
 import type { TeamSessionProjection } from "@shared/team-session";
 import { ChevronDownIcon, ChevronRightIcon } from "./Icons";
+import {
+  beginFoldScroll,
+  commitFoldScroll,
+  type FoldScrollSnapshot,
+} from "./chat-scroll-anchor";
 
 function TaskStatusIcon({ task }: { task: AgentTaskNode }) {
   if (task.review.state === "requested") return <span className="task-plan-icon review-requested" aria-hidden="true">◇</span>;
@@ -33,6 +38,21 @@ export const TaskPlanCard: React.FC<TaskPlanCardProps> = ({
   onOpenTask,
 }) => {
   const [expanded, setExpanded] = useState(false);
+  const headerRef = useRef<HTMLButtonElement>(null);
+  const pendingFoldRef = useRef<FoldScrollSnapshot | null>(null);
+
+  useLayoutEffect(() => {
+    const pending = pendingFoldRef.current;
+    if (!pending) return;
+    pendingFoldRef.current = null;
+    commitFoldScroll(headerRef.current, pending);
+  }, [expanded]);
+
+  const toggleExpanded = () => {
+    pendingFoldRef.current = beginFoldScroll(headerRef.current, "anchor");
+    setExpanded((value) => !value);
+  };
+
   const hasActive = tasks.some(
     (task) => task.status === "in_progress" || task.review.state === "requested",
   );
@@ -79,9 +99,10 @@ export const TaskPlanCard: React.FC<TaskPlanCardProps> = ({
       aria-label="任务进度"
     >
       <button
+        ref={headerRef}
         type="button"
         className="task-plan-card-header"
-        onClick={() => setExpanded((value) => !value)}
+        onClick={toggleExpanded}
         aria-expanded={expanded}
       >
         {currentTask && <TaskStatusIcon task={currentTask} />}

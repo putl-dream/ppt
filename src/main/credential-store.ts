@@ -424,13 +424,11 @@ export class CredentialStore {
             result: this.safeStorage.decryptString(encrypted),
             shouldReEncrypt: false,
           };
-      const envelope = encryptedCredentialEnvelopeSchema.parse(
-        JSON.parse(decrypted.result) as unknown,
-      );
-      if (envelope.fingerprint !== entry.fingerprint) {
-        throw new Error("The encrypted credential binding does not match its record.");
-      }
-      return { apiKey: envelope.apiKey, shouldReEncrypt: decrypted.shouldReEncrypt };
+      const credential = parseDecryptedCredential(decrypted.result, entry.fingerprint);
+      return {
+        apiKey: credential.apiKey,
+        shouldReEncrypt: decrypted.shouldReEncrypt || credential.isLegacy,
+      };
     } catch (error) {
       throw new CredentialStoreError(
         "DECRYPTION_FAILED",
@@ -674,4 +672,29 @@ function normalizePersistedBinding(
   return "configurationId" in binding
     ? normalizeModelCredentialBinding(binding)
     : normalizeWebSearchCredentialBinding(binding);
+}
+
+/**
+ * Current records encrypt a JSON envelope. Older development builds encrypted
+ * the raw API key string; accept that shape once and re-encrypt on resolve.
+ */
+function parseDecryptedCredential(
+  plainText: string,
+  expectedFingerprint: string,
+): { apiKey: string; isLegacy: boolean } {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(plainText) as unknown;
+  } catch {
+    return {
+      apiKey: credentialApiKeySchema.parse(plainText),
+      isLegacy: true,
+    };
+  }
+
+  const envelope = encryptedCredentialEnvelopeSchema.parse(parsed);
+  if (envelope.fingerprint !== expectedFingerprint) {
+    throw new Error("The encrypted credential binding does not match its record.");
+  }
+  return { apiKey: envelope.apiKey, isLegacy: false };
 }

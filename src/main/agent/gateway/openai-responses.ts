@@ -114,8 +114,21 @@ function contentFromResponsesOutput(
   response: OpenAI.Responses.Response,
 ): AgentModelContentBlock[] {
   const text = response.output_text.trim();
+  const thinking: AgentModelContentBlock[] = [];
   const toolCalls: AgentModelToolUseBlock[] = [];
   for (const item of response.output ?? []) {
+    if (item.type === "reasoning") {
+      const summary = item.summary.map((part) => part.text).join("\n\n").trim();
+      const reasoning = summary || item.content?.map((part) => part.text).join("\n\n").trim();
+      if (reasoning) {
+        thinking.push({
+          type: "thinking",
+          thinking: reasoning,
+          signature: item.id,
+        });
+      }
+      continue;
+    }
     if (item.type !== "function_call") continue;
     const { input, parseError } = parseToolArguments(item.arguments);
     toolCalls.push({
@@ -127,6 +140,7 @@ function contentFromResponsesOutput(
     });
   }
   return [
+    ...thinking,
     ...(text ? [{ type: "text" as const, text }] : []),
     ...toolCalls,
   ];
@@ -154,6 +168,7 @@ function responsesRequestBase(
     instructions: request.systemPrompt,
     input: toResponsesInput(request.messages),
     max_output_tokens: request.maxOutputTokens,
+    reasoning: { effort: "medium", summary: "auto" },
     ...(request.tools?.length
       ? {
           tools: request.tools.map((tool) => ({
@@ -208,7 +223,13 @@ async function* generateStreamWithResponses(
   );
 
   for await (const event of stream) {
-    if (event.type === "response.output_text.delta" && event.delta) {
+    if (
+      (event.type === "response.reasoning_summary_text.delta"
+        || event.type === "response.reasoning_text.delta")
+      && event.delta
+    ) {
+      yield { type: "thinking_delta", thinking: event.delta, index: event.output_index };
+    } else if (event.type === "response.output_text.delta" && event.delta) {
       yield { type: "text_delta", text: event.delta };
     }
   }

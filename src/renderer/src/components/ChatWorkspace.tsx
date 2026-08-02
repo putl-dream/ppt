@@ -30,6 +30,7 @@ import {
 } from "@shared/team-session";
 import { FocusedTeamSession } from "./TeamSessionViews";
 import type { AgentRunPhase } from "../agentRunPresentation";
+import { CHAT_FOLD_ANCHORED_EVENT, isChatFollowSuppressed } from "./chat-scroll-anchor";
 
 type ChatMessage = SessionChatMessage;
 type QuestionEvent = Extract<DisplayEvent, { kind: "interaction.question-requested" }>;
@@ -206,6 +207,7 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
   const scrollViewportRef = useRef<HTMLDivElement>(null);
   const chatStreamRef = useRef<HTMLDivElement>(null);
   const shouldFollowOutputRef = useRef(true);
+  const followFrameRef = useRef<number | null>(null);
   const activeRunStartedAtRef = useRef<number | null>(null);
   if (busy && activeRunStartedAtRef.current === null) {
     activeRunStartedAtRef.current = Date.now();
@@ -288,15 +290,21 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
 
   const canCancelRun = Boolean(busy && activeRunId && onCancelRun);
 
-  const scrollToBottom = useCallback((instant: boolean) => {
+  const scrollToBottomNow = useCallback(() => {
     const viewport = scrollViewportRef.current;
     if (!viewport) return;
-    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    if (instant || reducedMotion) {
+    viewport.scrollTop = viewport.scrollHeight;
+  }, []);
+
+  const stickToBottomIfFollowing = useCallback(() => {
+    if (followFrameRef.current !== null) return;
+    followFrameRef.current = window.requestAnimationFrame(() => {
+      followFrameRef.current = null;
+      const viewport = scrollViewportRef.current;
+      if (!viewport || !shouldFollowOutputRef.current) return;
+      if (isChatFollowSuppressed(viewport)) return;
       viewport.scrollTop = viewport.scrollHeight;
-      return;
-    }
-    viewport.scrollTo({ top: viewport.scrollHeight, behavior: "smooth" });
+    });
   }, []);
 
   const switchConversationFocus = useCallback((nextFocus: ConversationFocus) => {
@@ -319,9 +327,9 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
     switchConversationFocus({ kind: "main" });
     window.requestAnimationFrame(() => {
       shouldFollowOutputRef.current = true;
-      scrollToBottom(true);
+      scrollToBottomNow();
     });
-  }, [conversationFocus, pendingToolApproval, scrollToBottom, switchConversationFocus]);
+  }, [conversationFocus, pendingToolApproval, scrollToBottomNow, switchConversationFocus]);
 
   // 居中放大初始化页 vs 底部对话页，由 isNewChat 单独控制
   const showInitChat = isNewChat;
@@ -391,21 +399,31 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
 
   useLayoutEffect(() => {
     if (shouldFollowOutputRef.current) {
-      scrollToBottom(busy);
+      stickToBottomIfFollowing();
     }
-  }, [chatMessages, activityTrace, busy, agentRunPhase, scrollToBottom]);
+  }, [chatMessages, activityTrace, busy, agentRunPhase, stickToBottomIfFollowing]);
 
   useEffect(() => {
     const viewport = scrollViewportRef.current;
     if (!viewport) return;
 
     const updateFollowMode = () => {
+      // Ignore scroll events caused by fold compensation / stick writes.
+      if (isChatFollowSuppressed(viewport)) return;
       const distanceFromBottom = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight;
       shouldFollowOutputRef.current = distanceFromBottom <= 56;
     };
 
+    const onFoldAnchored = () => {
+      shouldFollowOutputRef.current = false;
+    };
+
     viewport.addEventListener("scroll", updateFollowMode, { passive: true });
-    return () => viewport.removeEventListener("scroll", updateFollowMode);
+    viewport.addEventListener(CHAT_FOLD_ANCHORED_EVENT, onFoldAnchored);
+    return () => {
+      viewport.removeEventListener("scroll", updateFollowMode);
+      viewport.removeEventListener(CHAT_FOLD_ANCHORED_EVENT, onFoldAnchored);
+    };
   }, []);
 
   useEffect(() => {
@@ -414,13 +432,17 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
     if (!stream || !viewport) return;
 
     const observer = new ResizeObserver(() => {
-      if (shouldFollowOutputRef.current) {
-        viewport.scrollTop = viewport.scrollHeight;
-      }
+      stickToBottomIfFollowing();
     });
     observer.observe(stream);
-    return () => observer.disconnect();
-  }, [busy]);
+    return () => {
+      observer.disconnect();
+      if (followFrameRef.current !== null) {
+        window.cancelAnimationFrame(followFrameRef.current);
+        followFrameRef.current = null;
+      }
+    };
+  }, [busy, stickToBottomIfFollowing]);
 
   const promptTemplates = [
     { cmd: "将整套演示统一为商务蓝视觉风格", desc: "提示：统一设计风格" },

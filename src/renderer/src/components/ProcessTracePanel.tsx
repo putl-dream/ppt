@@ -1,9 +1,16 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { AgentActivityItem } from "@shared/agent-activity";
 import { summarizeProcessTrace } from "@shared/agent-activity";
 import { ChevronDownIcon, ChevronRightIcon } from "./Icons";
 import { ProcessTraceItem } from "./ProcessTraceItem";
 import { buildProcessTraceRows } from "./process-trace-rows";
+import {
+  beginFoldScroll,
+  commitFoldScroll,
+  findChatScrollViewport,
+  isChatNearBottom,
+  type FoldScrollSnapshot,
+} from "./chat-scroll-anchor";
 
 interface ProcessTracePanelProps {
   items: AgentActivityItem[];
@@ -28,6 +35,22 @@ export const ProcessTracePanel: React.FC<ProcessTracePanelProps> = ({
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const wasLiveRef = useRef(live);
   const startedAtRef = useRef<number | null>(live ? (startedAt ?? Date.now()) : null);
+  const headerRef = useRef<HTMLButtonElement>(null);
+  const pendingFoldRef = useRef<FoldScrollSnapshot | null>(null);
+  const openRef = useRef(open);
+  openRef.current = open;
+
+  const setOpenWithScroll = (nextOpen: boolean, mode: "anchor" | "stick") => {
+    pendingFoldRef.current = beginFoldScroll(headerRef.current, mode);
+    setOpen(nextOpen);
+  };
+
+  useLayoutEffect(() => {
+    const pending = pendingFoldRef.current;
+    if (!pending) return;
+    pendingFoldRef.current = null;
+    commitFoldScroll(headerRef.current, pending);
+  }, [open]);
 
   useEffect(() => {
     if (!live) {
@@ -57,10 +80,20 @@ export const ProcessTracePanel: React.FC<ProcessTracePanelProps> = ({
     if (live) {
       if (!wasLive) {
         if (startedAt !== undefined) startedAtRef.current = startedAt;
+        if (!openRef.current) {
+          const viewport = findChatScrollViewport(headerRef.current);
+          const stick = !viewport || isChatNearBottom(viewport);
+          setOpenWithScroll(true, stick ? "stick" : "anchor");
+        } else {
+          setOpen(true);
+        }
+      } else {
+        setOpen(true);
       }
-      setOpen(true);
-    } else if (wasLive && collapseOnComplete) {
-      setOpen(false);
+    } else if (wasLive && collapseOnComplete && openRef.current) {
+      const viewport = findChatScrollViewport(headerRef.current);
+      const stick = Boolean(viewport && isChatNearBottom(viewport));
+      setOpenWithScroll(false, stick ? "stick" : "anchor");
     }
 
     wasLiveRef.current = live;
@@ -79,12 +112,13 @@ export const ProcessTracePanel: React.FC<ProcessTracePanelProps> = ({
 
   const handleHeaderClick = () => {
     if (live) return;
-    setOpen((value) => !value);
+    setOpenWithScroll(!open, "anchor");
   };
 
   return (
     <div className={`process-trace-panel${live ? " process-trace-panel--active" : ""}`}>
       <button
+        ref={headerRef}
         type="button"
         className="process-trace-panel-header"
         onClick={handleHeaderClick}

@@ -92,6 +92,42 @@ describe("CredentialStore", () => {
     })).resolves.toBeUndefined();
   });
 
+  it("upgrades legacy raw-api-key ciphertext to the envelope format", async () => {
+    const { store, safeStorage } = await createStore();
+    await store.setModelCredentials({ bindings: [MODEL_BINDING], apiKey: "envelope-key" });
+
+    const persisted = JSON.parse(await readFile(store.filePath, "utf8")) as {
+      version: 1;
+      credentials: Array<{
+        ref: string;
+        binding: ModelCredentialBinding;
+        fingerprint: string;
+        ciphertext: string;
+        updatedAt: string;
+      }>;
+    };
+    const legacyKey = "sk-legacy-raw-api-key";
+    persisted.credentials[0] = {
+      ...persisted.credentials[0],
+      ciphertext: safeStorage.encryptString(legacyKey).toString("base64"),
+    };
+    await writeFile(store.filePath, `${JSON.stringify(persisted, null, 2)}\n`, "utf8");
+
+    await expect(store.resolveModelCredential(MODEL_BINDING)).resolves.toBe(legacyKey);
+
+    const upgraded = JSON.parse(await readFile(store.filePath, "utf8")) as {
+      credentials: Array<{ ciphertext: string }>;
+    };
+    const upgradedPlainText = safeStorage.decryptString(
+      Buffer.from(upgraded.credentials[0].ciphertext, "base64"),
+    );
+    expect(JSON.parse(upgradedPlainText)).toMatchObject({
+      version: 1,
+      apiKey: legacyKey,
+    });
+    await expect(store.resolveModelCredential(MODEL_BINDING)).resolves.toBe(legacyKey);
+  });
+
   it("rejects plaintext credential transport except for loopback development endpoints", async () => {
     const { store } = await createStore();
 

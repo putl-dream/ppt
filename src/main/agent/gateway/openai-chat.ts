@@ -5,7 +5,6 @@ import {
   openAIUsageProperty,
   parseToolArguments,
   textFromBlocks,
-  toOpenAIImageUrl,
   toolResultText,
   type OpenAIClient,
   type OpenAIModeDriver,
@@ -16,11 +15,36 @@ import type {
   AgentModelMessage,
   AgentModelResponse,
   AgentModelStreamChunk,
+  AgentModelThinkingBlock,
   AgentModelToolResultBlock,
   AgentModelToolUseBlock,
   PreparedAgentModelRequest,
   StopReason,
 } from "./types";
+
+/** Stable signature for Chat Completions `reasoning_content` round-trips. */
+const CHAT_REASONING_SIGNATURE = "chat-reasoning";
+
+type ChatDeltaWithReasoning = {
+  content?: string | null;
+  reasoning_content?: string | null;
+};
+
+type ChatMessageWithReasoning = OpenAI.Chat.Completions.ChatCompletionMessage & {
+  reasoning_content?: string | null;
+};
+
+type ChatAssistantMessageWithReasoning =
+  OpenAI.Chat.Completions.ChatCompletionAssistantMessageParam & {
+    reasoning_content?: string;
+  };
+
+type ChatRequestParams = Omit<
+  OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming,
+  "stream"
+> & {
+  thinking?: { type: "enabled" | "disabled" };
+};
 
 function toStopReasonFromChat(finishReason?: string | null): StopReason | undefined {
   if (!finishReason) return undefined;
@@ -33,6 +57,16 @@ function toStopReasonFromChat(finishReason?: string | null): StopReason | undefi
   }
 }
 
+/**
+ * Chat Completions multimodal `image_url` parts are rejected by several
+ * OpenAI-compatible providers (observed: MiMo returns opaque HTTP 500 after
+ * PreviewSvgPage thumbnails). Keep a text stub so tool-result history stays
+ * coherent; Responses API retains real image parts for official vision models.
+ */
+function imagePlaceholderText(block: AgentModelImageBlock): string {
+  return `[Image omitted for Chat Completions compatibility: ${block.mediaType}, ${block.data.length} base64 characters]`;
+}
+
 function toOpenAIUserContent(
   blocks: AgentModelContentBlock[],
 ): OpenAI.Chat.Completions.ChatCompletionContentPart[] | string {
@@ -41,7 +75,7 @@ function toOpenAIUserContent(
     if (block.type === "text" && block.text.trim()) {
       parts.push({ type: "text", text: block.text });
     } else if (block.type === "image") {
-      parts.push({ type: "image_url", image_url: { url: toOpenAIImageUrl(block) } });
+      parts.push({ type: "text", text: imagePlaceholderText(block) });
     }
   }
   if (parts.length === 0) return "";
@@ -49,8 +83,34 @@ function toOpenAIUserContent(
   return parts;
 }
 
+/** MiMo (and similar) deep-thinking must be opted in via `thinking.type=enabled`. */
+function wantsCompatibleThinking(config: DriverResolvedConfig): boolean {
+  const model = config.model.trim().toLowerCase();
+  if (model.includes("mimo")) return true;
+  if (!config.baseURL) return false;
+  try {
+    const hostname = new URL(config.baseURL).hostname.toLowerCase();
+    return hostname === "xiaomimimo.com"
+      || hostname.endsWith(".xiaomimimo.com")
+      || hostname === "mimo.mi"
+      || hostname.endsWith(".mimo.mi");
+  } catch {
+    return false;
+  }
+}
+
+function reasoningFromBlocks(blocks: AgentModelContentBlock[]): string | undefined {
+  const parts = blocks
+    .filter((block): block is Extract<AgentModelThinkingBlock, { type: "thinking" }> =>
+      block.type === "thinking")
+    .map((block) => block.thinking);
+  if (parts.length === 0) return undefined;
+  return parts.join("\n");
+}
+
 function toChatMessages(
   messages: AgentModelMessage[],
+  options: { roundTripReasoning: boolean },
 ): OpenAI.Chat.Completions.ChatCompletionMessageParam[] {
   const out: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [];
   for (const message of messages) {
@@ -58,7 +118,8 @@ function toChatMessages(
       const toolUses = message.content.filter(
         (block): block is AgentModelToolUseBlock => block.type === "tool_use",
       );
-      out.push({
+      const reasoning = reasoningFromBlocks(message.content);
+      const assistantMessage: ChatAssistantMessageWithReasoning = {
         role: "assistant",
         content: textFromBlocks(message.content),
         ...(toolUses.length
@@ -70,7 +131,12 @@ function toChatMessages(
               })),
             }
           : {}),
-      });
+      };
+      // MiMo requires reasoning_content on assistant+tool_calls turns once thinking is on.
+      if (options.roundTripReasoning || reasoning !== undefined) {
+        assistantMessage.reasoning_content = reasoning ?? "";
+      }
+      out.push(assistantMessage);
       continue;
     }
 
@@ -119,24 +185,36 @@ function parseChatToolCalls(
 function contentFromChatChoice(
   choice: OpenAI.Chat.Completions.ChatCompletion.Choice | undefined,
 ): AgentModelContentBlock[] {
-  const text = (choice?.message.content ?? "").trim();
+  const message = choice?.message as ChatMessageWithReasoning | undefined;
+  const reasoning = message?.reasoning_content?.trim();
+  const text = (message?.content ?? "").trim();
   return [
+    ...(reasoning
+      ? [{
+          type: "thinking" as const,
+          thinking: reasoning,
+          signature: CHAT_REASONING_SIGNATURE,
+        }]
+      : []),
     ...(text ? [{ type: "text" as const, text }] : []),
-    ...parseChatToolCalls(choice?.message.tool_calls),
+    ...parseChatToolCalls(message?.tool_calls),
   ];
 }
 
 function chatRequestBase(
   config: DriverResolvedConfig,
   request: PreparedAgentModelRequest,
-): Omit<OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming, "stream"> {
+): ChatRequestParams {
+  const enableThinking = wantsCompatibleThinking(config);
   return {
     model: config.model,
     messages: [
       ...(request.systemPrompt
         ? [{ role: "system" as const, content: request.systemPrompt }]
         : []),
-      ...toChatMessages(request.messages),
+      ...toChatMessages(request.messages, {
+        roundTripReasoning: enableThinking,
+      }),
     ],
     max_tokens: request.maxOutputTokens,
     ...(request.tools?.length
@@ -152,6 +230,7 @@ function chatRequestBase(
           })),
         }
       : {}),
+    ...(enableThinking ? { thinking: { type: "enabled" as const } } : {}),
   };
 }
 
@@ -179,8 +258,7 @@ async function generateWithChatCompletions(
   config: DriverResolvedConfig,
   request: PreparedAgentModelRequest,
 ): Promise<AgentModelResponse> {
-  const params: OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming =
-    chatRequestBase(config, request);
+  const params = chatRequestBase(config, request);
   const response = await client.chat.completions.create(params, { signal: request.signal });
   return responseFromChatCompletion(config, response);
 }
@@ -197,8 +275,15 @@ async function* generateStreamWithChatCompletions(
   const stream = client.chat.completions.stream(params, { signal: request.signal });
 
   for await (const chunk of stream) {
-    const delta = chunk.choices[0]?.delta?.content;
-    if (delta) yield { type: "text_delta", text: delta };
+    const delta = chunk.choices[0]?.delta as ChatDeltaWithReasoning | undefined;
+    const reasoning = delta?.reasoning_content;
+    if (reasoning) {
+      yield { type: "thinking_delta", thinking: reasoning };
+    }
+    const text = delta?.content;
+    if (text) {
+      yield { type: "text_delta", text };
+    }
   }
 
   const response = await stream.finalChatCompletion();

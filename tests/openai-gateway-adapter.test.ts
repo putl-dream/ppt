@@ -98,15 +98,182 @@ describe("OpenAI driver", () => {
     });
   });
 
+  it("omits Chat Completions image_url parts from tool-result thumbnails", async () => {
+    openAIMock.chatCreate.mockResolvedValue({
+      choices: [{ message: { content: "ok" }, finish_reason: "stop" }],
+    });
+
+    await generateWithOpenAI({ ...baseConfig, callPath: "chat" }, preparedRequest("", {
+      messages: [
+        {
+          role: "assistant",
+          content: [{ type: "tool_use", id: "call-1", name: "PreviewSvgPage", input: {} }],
+        },
+        {
+          role: "user",
+          content: [{
+            type: "tool_result",
+            toolUseId: "call-1",
+            content: [
+              { type: "text", text: "{\"previewGatePassed\":true}" },
+              { type: "image", mediaType: "image/png", data: "aaa" },
+            ],
+          }],
+        },
+      ],
+    }));
+
+    const request = openAIMock.chatCreate.mock.calls[0]?.[0] as {
+      messages: Array<{ role: string; content: unknown }>;
+    };
+    expect(JSON.stringify(request.messages)).not.toContain("image_url");
+    expect(request.messages).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        role: "user",
+        content: expect.stringContaining(
+          "Image omitted for Chat Completions compatibility: image/png, 3 base64 characters",
+        ),
+      }),
+    ]));
+  });
+
+  it("enables MiMo thinking and streams reasoning_content as thinking deltas", async () => {
+    const finalChatCompletion = vi.fn().mockResolvedValue({
+      choices: [{
+        message: {
+          content: null,
+          reasoning_content: "plan the next tool",
+          tool_calls: [{
+            id: "call-1",
+            type: "function",
+            function: { name: "Read", arguments: "{}" },
+          }],
+        },
+        finish_reason: "tool_calls",
+      }],
+    });
+    openAIMock.chatStream.mockReturnValue({
+      async *[Symbol.asyncIterator]() {
+        yield {
+          choices: [{
+            delta: { reasoning_content: "plan " },
+            finish_reason: null,
+          }],
+        };
+        yield {
+          choices: [{
+            delta: { reasoning_content: "the next tool" },
+            finish_reason: null,
+          }],
+        };
+        yield {
+          choices: [{
+            delta: {
+              tool_calls: [{
+                index: 0,
+                id: "call-1",
+                function: { name: "Read", arguments: "{}" },
+              }],
+            },
+            finish_reason: "tool_calls",
+          }],
+        };
+      },
+      finalChatCompletion,
+    });
+
+    const chunks = [];
+    for await (const chunk of generateStreamWithOpenAI(
+      { ...baseConfig, callPath: "chat", model: "mimo-v2.5-pro" },
+      preparedRequest("prompt", {
+        tools: [{ name: "Read", description: "Read", inputSchema: { type: "object" } }],
+      }),
+    )) {
+      chunks.push(chunk);
+    }
+
+    expect(openAIMock.chatStream.mock.calls[0]?.[0]).toMatchObject({
+      model: "mimo-v2.5-pro",
+      thinking: { type: "enabled" },
+    });
+    expect(chunks).toEqual([
+      { type: "thinking_delta", thinking: "plan " },
+      { type: "thinking_delta", thinking: "the next tool" },
+      {
+        type: "complete",
+        content: [
+          {
+            type: "thinking",
+            thinking: "plan the next tool",
+            signature: "chat-reasoning",
+          },
+          { type: "tool_use", id: "call-1", name: "Read", input: {} },
+        ],
+        stopReason: "tool_use",
+      },
+    ]);
+  });
+
+  it("round-trips assistant reasoning_content for MiMo tool turns", async () => {
+    openAIMock.chatCreate.mockResolvedValue({
+      choices: [{ message: { content: "ok" }, finish_reason: "stop" }],
+    });
+
+    await generateWithOpenAI(
+      { ...baseConfig, callPath: "chat", model: "mimo-v2.5-pro" },
+      preparedRequest("", {
+        messages: [
+          {
+            role: "assistant",
+            content: [
+              {
+                type: "thinking",
+                thinking: "need Read",
+                signature: "chat-reasoning",
+              },
+              { type: "tool_use", id: "call-1", name: "Read", input: {} },
+            ],
+          },
+          {
+            role: "user",
+            content: [{
+              type: "tool_result",
+              toolUseId: "call-1",
+              content: [{ type: "text", text: "done" }],
+            }],
+          },
+        ],
+      }),
+    );
+
+    expect(openAIMock.chatCreate.mock.calls[0]?.[0]).toMatchObject({
+      thinking: { type: "enabled" },
+      messages: expect.arrayContaining([
+        expect.objectContaining({
+          role: "assistant",
+          reasoning_content: "need Read",
+          tool_calls: [expect.objectContaining({ id: "call-1" })],
+        }),
+      ]),
+    });
+  });
+
   it("maps Responses input, native tool calls, and cached usage", async () => {
     openAIMock.responsesCreate.mockResolvedValue({
       output_text: "Inspecting",
-      output: [{
-        type: "function_call",
-        call_id: "call-2",
-        name: "Read",
-        arguments: "{\"slide\":2}",
-      }],
+      output: [
+        {
+          type: "reasoning",
+          id: "reasoning-1",
+          summary: [{ type: "summary_text", text: "I should inspect slide 2." }],
+        },
+        {
+          type: "function_call",
+          call_id: "call-2",
+          name: "Read",
+          arguments: "{\"slide\":2}",
+        },
+      ],
       status: "completed",
       _request_id: "req-response",
       usage: {
@@ -142,9 +309,15 @@ describe("OpenAI driver", () => {
         { type: "function_call_output", call_id: "call-1", output: "done" },
       ],
       max_output_tokens: 321,
+      reasoning: { effort: "medium", summary: "auto" },
       tools: [{ type: "function", name: "Read" }],
     });
     expect(response.content).toEqual([
+      {
+        type: "thinking",
+        thinking: "I should inspect slide 2.",
+        signature: "reasoning-1",
+      },
       { type: "text", text: "Inspecting" },
       { type: "tool_use", id: "call-2", name: "Read", input: { slide: 2 } },
     ]);
@@ -332,17 +505,29 @@ describe("OpenAI driver", () => {
   it("streams Responses text and uses finalResponse for complete content", async () => {
     const finalResponse = vi.fn().mockResolvedValue({
       output_text: "answer",
-      output: [{
-        type: "function_call",
-        call_id: "call-2",
-        name: "Read",
-        arguments: "{\"slide\":2}",
-      }],
+      output: [
+        {
+          type: "reasoning",
+          id: "reasoning-2",
+          summary: [{ type: "summary_text", text: "Inspect the requested slide." }],
+        },
+        {
+          type: "function_call",
+          call_id: "call-2",
+          name: "Read",
+          arguments: "{\"slide\":2}",
+        },
+      ],
       status: "completed",
       usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 },
     });
     openAIMock.responsesStream.mockReturnValue({
       async *[Symbol.asyncIterator]() {
+        yield {
+          type: "response.reasoning_summary_text.delta",
+          delta: "Inspect the requested slide.",
+          output_index: 0,
+        };
         yield { type: "response.output_text.delta", delta: "ans" };
         yield { type: "response.function_call_arguments.delta", delta: "{\"slide\":" };
         yield { type: "response.output_text.delta", delta: "wer" };
@@ -369,6 +554,7 @@ describe("OpenAI driver", () => {
       instructions: undefined,
       input: [{ role: "user", content: "prompt" }],
       max_output_tokens: 321,
+      reasoning: { effort: "medium", summary: "auto" },
       tools: [{
         type: "function",
         name: "Read",
@@ -379,11 +565,21 @@ describe("OpenAI driver", () => {
     }, { signal: controller.signal });
     expect(finalResponse).toHaveBeenCalledTimes(1);
     expect(chunks).toEqual([
+      {
+        type: "thinking_delta",
+        thinking: "Inspect the requested slide.",
+        index: 0,
+      },
       { type: "text_delta", text: "ans" },
       { type: "text_delta", text: "wer" },
       {
         type: "complete",
         content: [
+          {
+            type: "thinking",
+            thinking: "Inspect the requested slide.",
+            signature: "reasoning-2",
+          },
           { type: "text", text: "answer" },
           { type: "tool_use", id: "call-2", name: "Read", input: { slide: 2 } },
         ],
