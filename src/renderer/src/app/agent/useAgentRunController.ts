@@ -144,6 +144,14 @@ export function useAgentRunController({
   ) => {
     const activeRequest = customRequest || request;
     if (!activeRequest.trim() || busy) return;
+    if (
+      enabledModels.length === 0
+      || !selectedModel
+      || !enabledModels.some((model) => model.id === selectedModel.id)
+    ) {
+      notify("没有可用的已配置模型；请先在设置中保存 API Key");
+      return;
+    }
 
     const runId = crypto.randomUUID();
     const runLock = runLockRef.current;

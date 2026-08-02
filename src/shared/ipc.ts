@@ -1,5 +1,5 @@
 import type { Presentation } from "./presentation";
-import type { AgentExecutionStrategy, AgentModelSettings } from "./agent";
+import type { AgentExecutionStrategy, AgentModelSelection } from "./agent";
 import type { AgentQuestion } from "./agent-question";
 import type { AgentRunServicesWire } from "./agent-gateway-config";
 import type { AgentStepLimits } from "./agent-step-limits";
@@ -25,6 +25,13 @@ import type {
   LogManagerStatus,
   RendererLogReport,
 } from "./logging";
+import type {
+  CredentialStatusRequest,
+  CredentialStatusSnapshot,
+  DeleteModelCredentialRequest,
+  SetModelCredentialsRequest,
+  SetWebSearchCredentialRequest,
+} from "./credentials";
 
 export interface CreateSessionOptions {
   rootPath?: string;
@@ -277,6 +284,11 @@ export interface DesktopApi {
   readUiThemeCss(themeId: string): Promise<string | null>;
   openUiThemesDirectory(): Promise<boolean>;
   reportRendererLog(report: RendererLogReport): void;
+  getCredentialStatus(request: CredentialStatusRequest): Promise<CredentialStatusSnapshot>;
+  setModelCredentials(request: SetModelCredentialsRequest): Promise<void>;
+  deleteModelCredential(request: DeleteModelCredentialRequest): Promise<void>;
+  setWebSearchCredential(request: SetWebSearchCredentialRequest): Promise<void>;
+  deleteWebSearchCredential(): Promise<void>;
   createSession(options?: CreateSessionOptions): Promise<SessionBootstrap>;
   openWorkspace(rootPath: string): Promise<SessionBootstrap>;
   selectSession(sessionId: string): Promise<SessionBootstrap>;
@@ -310,7 +322,7 @@ export interface DesktopApi {
   getPresentation(): Promise<Presentation>;
   startAgentRun(
     request: AgentRunRequest,
-    model?: AgentModelSettings,
+    model?: AgentModelSelection,
     executionStrategy?: AgentExecutionStrategy,
     stepLimits?: AgentStepLimits,
     gatewayConfig?: AgentRunServicesWire,
@@ -319,7 +331,7 @@ export interface DesktopApi {
   continueAgentRun(
     threadId: string,
     request: AgentRunRequest,
-    model?: AgentModelSettings,
+    model?: AgentModelSelection,
     executionStrategy?: AgentExecutionStrategy,
     stepLimits?: AgentStepLimits,
     gatewayConfig?: AgentRunServicesWire,

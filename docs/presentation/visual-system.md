@@ -131,7 +131,7 @@ Grammar / 双轨 / 频谱残骸清扫已收工。以下按工作流分类，**�
 
 ### 9.3 风险 backlog（独立专项）
 
-凭据明文存储、后台 daemon、E2E/Office 视觉证据、AppData 迁移——见
+Linux `basic_text` 凭据降级、后台 daemon、E2E/Office 视觉证据、AppData 迁移——见
 [capability-scorecard.md](../architecture/capability-scorecard.md)「风险 backlog」表；
 不并入清理轮，也不阻塞模板 Phase 1。
 

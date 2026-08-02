@@ -160,9 +160,6 @@ export class ToolPreflight {
       );
     }
     if (requestedTool.isEnabled && !requestedTool.isEnabled(input.context)) {
-      // #region agent log
-      fetch('http://127.0.0.1:7758/ingest/f715bfbd-c4b3-4d7c-91d3-b40633f1a70c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2488ed'},body:JSON.stringify({sessionId:'2488ed',runId:'pre-fix',hypothesisId:'C',location:'tool-preflight.ts:disabled',message:'Tool disabled in context',data:{toolName:requestedTool.name,hasPresentationLifecycle:Boolean(input.context.presentationLifecycle)},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
       return immediate(
         toolCall,
         "unavailable",
@@ -173,9 +170,6 @@ export class ToolPreflight {
 
     const requestedArgs = parseDefinedToolInput(requestedTool, toolCall.input);
     if (!requestedArgs.success) {
-      // #region agent log
-      fetch('http://127.0.0.1:7758/ingest/f715bfbd-c4b3-4d7c-91d3-b40633f1a70c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2488ed'},body:JSON.stringify({sessionId:'2488ed',runId:'pre-fix',hypothesisId:'B',location:'tool-preflight.ts:validation',message:'Tool input validation failed',data:{toolName:requestedTool.name,zodError:requestedArgs.error.message,issues:requestedArgs.error.issues?.slice(0,8).map((i)=>({path:i.path,code:i.code,message:i.message})),inputKeys:toolCall.input&&typeof toolCall.input==='object'&&!Array.isArray(toolCall.input)?Object.keys(toolCall.input as object):typeof toolCall.input,inputPreview:summarizeToolInput(toolCall.input),repairs:requestedArgs.repairs},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
       const correction = [
         `Tool ${requestedTool.name} input validation failed. Correct the arguments and retry the tool call.`,
         "Pass nested objects and arrays directly; do not JSON.stringify them.",
@@ -332,11 +326,6 @@ export class ToolPreflight {
     }
     if (authorization?.toolDenied) {
       const reason = authorization.reason || "Tool call denied.";
-      // #region agent log
-      try {
-        fetch('http://127.0.0.1:7758/ingest/f715bfbd-c4b3-4d7c-91d3-b40633f1a70c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'f91e95'},body:JSON.stringify({sessionId:'f91e95',hypothesisId:'B',location:'tool-preflight.ts:authorization-denied',message:'preflight denied by authorization',data:{toolName:tool.name,scope:permissionBlock.scope,hasToolPermission:Boolean(tool.permission),reason},timestamp:Date.now()})}).catch(()=>{});
-      } catch {}
-      // #endregion
       return {
         type: "denied",
         tool,
@@ -375,11 +364,6 @@ export class ToolPreflight {
     }
     if (stop) return { type: "hook_stopped", reason: stop.reason, repairs };
 
-    // #region agent log
-    if (tool.name === "AskUser" || tool.name === "BeginPptCapability") {
-      fetch('http://127.0.0.1:7758/ingest/f715bfbd-c4b3-4d7c-91d3-b40633f1a70c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2488ed'},body:JSON.stringify({sessionId:'2488ed',runId:'pre-fix',hypothesisId:'E',location:'tool-preflight.ts:ready',message:'Tool preflight ready',data:{toolName:tool.name,argKeys:args&&typeof args==='object'?Object.keys(args as object):[],hasExclusive:Boolean(tool.behavior?.completion?.exclusiveBatch),capability:(args as {capability?:string})?.capability,hasMessage:typeof (args as {message?:unknown})?.message==='string',hasResponseUi:Boolean((args as {responseUi?:unknown})?.responseUi)},timestamp:Date.now()})}).catch(()=>{});
-    }
-    // #endregion
     return {
       type: "ready",
       repairs,
@@ -395,28 +379,6 @@ export class ToolPreflight {
     };
   }
 }
-
-// #region agent log
-function summarizeToolInput(input: unknown): Record<string, unknown> {
-  if (!input || typeof input !== "object" || Array.isArray(input)) {
-    return { typeof: typeof input };
-  }
-  const record = input as Record<string, unknown>;
-  const summary: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(record)) {
-    if (typeof value === "string") {
-      summary[key] = { type: "string", length: value.length, preview: value.slice(0, 80) };
-    } else if (Array.isArray(value)) {
-      summary[key] = { type: "array", length: value.length };
-    } else if (value && typeof value === "object") {
-      summary[key] = { type: "object", keys: Object.keys(value as object).slice(0, 12) };
-    } else {
-      summary[key] = { type: typeof value, value };
-    }
-  }
-  return summary;
-}
-// #endregion
 
 function immediate(
   toolCall: AgentModelToolUseBlock,

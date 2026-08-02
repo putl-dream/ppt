@@ -18,7 +18,6 @@ function model(
     name: id,
     provider: "openai",
     model: "shared-model",
-    apiKey: "key",
     baseURL: "https://example.com/v1",
     openaiApiMode: "responses",
     pricing: {

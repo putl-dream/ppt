@@ -95,6 +95,11 @@ export class AgentGateway implements AgentModelGateway {
     };
   }
 
+  /** Drop decrypted primary credentials before configuring a new foreground run. */
+  clearPrimarySettings(): void {
+    this.runtimeSettings.clearPrimary();
+  }
+
   applyGatewayConfig(gatewayConfig: AgentGatewayConfig): void {
     this.gatewayConfig = resolveAgentGatewayConfig(gatewayConfig);
     this.runtimeSettings.registerFallback(this.gatewayConfig.fallbackModel);

@@ -160,7 +160,7 @@ npm.cmd run dev
 
 After launch, open **Settings -> 模型** in the desktop app to configure the provider, API key, endpoint, timeout, output limits, and fallback models.
 
-Model and search API keys are currently stored as plaintext in Renderer `localStorage` and passed to the main process when used. They are not automatically written to the repository `.env`, but they are not yet protected by an operating-system credential vault. Treat the local user account as the trust boundary. Developer diagnostics and CI overrides are documented in [.env.example](./.env.example).
+Model and search API keys are owned by the Main process and encrypted in the application-data directory by Electron `safeStorage` when a secure backend is available. Renderer persistence, `localStorage`, and agent-run IPC payloads contain no secrets: the Renderer holds a key only while it is being entered, submits it through a write-only credential IPC, and cannot read it back. The Linux `basic_text` backend remains usable but is explicitly reported as `degraded`. Plaintext keys from the legacy v1 `localStorage` records are not imported automatically; after upgrading, re-enter the keys and rotate the old ones. Development environments can still use the `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, and `TAVILY_API_KEY` fallbacks; an environment key is sent only to an official endpoint or one explicitly bound by the matching `OPENAI_BASE_URL`, `ANTHROPIC_BASE_URL`, or `TAVILY_SEARCH_ENDPOINT`. Remote credential-bearing endpoints must use HTTPS, with HTTP allowed only for loopback development services. Developer diagnostics and CI overrides are documented in [.env.example](./.env.example).
 
 For optional web research, set a Tavily API key under **Settings -> 搜索与联网**. You can also set `TAVILY_API_KEY` in development; search results return as title, URL, and snippet to the main agent and task-graph teammates.
 
@@ -230,7 +230,7 @@ Key areas:
 Agent PPT is local-first by default:
 
 - Project artifacts and deck snapshots stay in the workspace; history, checkpoints, transcripts, usage metrics, and some settings may live in the local application-data directory
-- API keys currently remain as plaintext in Renderer `localStorage` and are not written to repository environment files
+- API keys are managed by the Main-process Electron `safeStorage` credential store, not Renderer `localStorage` or agent-run IPC; development environment-variable fallbacks remain supported
 - The model can affect a deck only through registered tools and structured commands
 - Risky or non-auto-applicable changes require user approval
 

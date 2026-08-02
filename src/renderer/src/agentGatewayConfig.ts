@@ -2,25 +2,71 @@ import {
   resolveAgentGatewayPreferences,
   type AgentGatewayConfig,
   type AgentGatewayPreferences,
+  type AgentRunServicesWire,
   type AgentSearchConfig,
 } from "@shared/agent-gateway-config";
 import type { ManagedModel } from "./modelCatalog";
-import { isModelEnabled, toAgentModelSettings } from "./modelCatalog";
+import { isModelEnabled, toAgentModelSelection } from "./modelCatalog";
+import { markCredentialReentryRequired } from "./credentialMigration";
 
-export const AGENT_GATEWAY_CONFIG_STORAGE_KEY = "agent-ppt.gateway-config.v1";
+export const AGENT_GATEWAY_CONFIG_STORAGE_KEY = "agent-ppt.gateway-config.v2";
+export const LEGACY_AGENT_GATEWAY_CONFIG_STORAGE_KEY = "agent-ppt.gateway-config.v1";
+
+function hasPersistedWebSearchKey(value: unknown): boolean {
+  if (!value || typeof value !== "object") return false;
+  const apiKey = (value as Record<string, unknown>).webSearchApiKey;
+  return typeof apiKey === "string" && Boolean(apiKey.trim());
+}
+
+function sanitizePreferences(value: unknown): AgentGatewayPreferences {
+  if (hasPersistedWebSearchKey(value)) markCredentialReentryRequired();
+  return resolveAgentGatewayPreferences(value as Partial<AgentGatewayPreferences> | undefined);
+}
+
+function auditLegacyGatewayPreferences(raw: string): void {
+  try {
+    if (hasPersistedWebSearchKey(JSON.parse(raw) as unknown)) {
+      markCredentialReentryRequired();
+    }
+  } catch {
+    markCredentialReentryRequired();
+  }
+}
 
 export function loadAgentGatewayPreferences(): AgentGatewayPreferences {
   try {
     const stored = window.localStorage.getItem(AGENT_GATEWAY_CONFIG_STORAGE_KEY);
-    if (!stored) return resolveAgentGatewayPreferences();
-    return resolveAgentGatewayPreferences(JSON.parse(stored) as Partial<AgentGatewayPreferences>);
+    const legacy = window.localStorage.getItem(LEGACY_AGENT_GATEWAY_CONFIG_STORAGE_KEY);
+    if (legacy !== null) {
+      window.localStorage.removeItem(LEGACY_AGENT_GATEWAY_CONFIG_STORAGE_KEY);
+    }
+    if (stored !== null) {
+      if (legacy !== null) auditLegacyGatewayPreferences(legacy);
+      const preferences = sanitizePreferences(JSON.parse(stored));
+      saveAgentGatewayPreferences(preferences);
+      return preferences;
+    }
+    if (legacy === null) return resolveAgentGatewayPreferences();
+    const preferences = sanitizePreferences(JSON.parse(legacy));
+    saveAgentGatewayPreferences(preferences);
+    return preferences;
   } catch {
+    try {
+      window.localStorage.removeItem(AGENT_GATEWAY_CONFIG_STORAGE_KEY);
+      window.localStorage.removeItem(LEGACY_AGENT_GATEWAY_CONFIG_STORAGE_KEY);
+    } catch {
+      /* Storage may be unavailable; there is no safe browser fallback for secrets. */
+    }
+    markCredentialReentryRequired();
     return resolveAgentGatewayPreferences();
   }
 }
 
 export function saveAgentGatewayPreferences(preferences: AgentGatewayPreferences): void {
-  window.localStorage.setItem(AGENT_GATEWAY_CONFIG_STORAGE_KEY, JSON.stringify(preferences));
+  window.localStorage.setItem(
+    AGENT_GATEWAY_CONFIG_STORAGE_KEY,
+    JSON.stringify(resolveAgentGatewayPreferences(preferences)),
+  );
 }
 
 export function buildAgentGatewayConfig(
@@ -34,7 +80,7 @@ export function buildAgentGatewayConfig(
   return {
     timeoutMs: preferences.timeoutMs,
     maxOutputTokens: preferences.maxOutputTokens,
-    ...(fallbackModel ? { fallbackModel: toAgentModelSettings(fallbackModel) } : {}),
+    ...(fallbackModel ? { fallbackModel: toAgentModelSelection(fallbackModel) } : {}),
   };
 }
 
@@ -42,7 +88,6 @@ export function buildAgentSearchConfig(
   preferences: AgentGatewayPreferences,
 ): AgentSearchConfig {
   return {
-    ...(preferences.webSearchApiKey ? { webSearchApiKey: preferences.webSearchApiKey } : {}),
     ...(preferences.webSearchEndpoint ? { webSearchEndpoint: preferences.webSearchEndpoint } : {}),
     ...(preferences.webSearchTimeoutMs ? { webSearchTimeoutMs: preferences.webSearchTimeoutMs } : {}),
   };
@@ -52,7 +97,7 @@ export function buildAgentSearchConfig(
 export function buildAgentRunServicesWire(
   preferences: AgentGatewayPreferences,
   models: ManagedModel[],
-): AgentGatewayConfig & AgentSearchConfig {
+): AgentRunServicesWire {
   return {
     ...buildAgentGatewayConfig(preferences, models),
     ...buildAgentSearchConfig(preferences),

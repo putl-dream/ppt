@@ -68,7 +68,7 @@ describe("resolveAgentModelConfig", () => {
     });
   });
 
-  it("prefers runtime credentials over environment credentials", () => {
+  it("does not reuse runtime credentials for a different explicit model", () => {
     const config = resolveAgentModelConfig(
       { provider: "openai", model: "selected-model" },
       settingsRegistry({
@@ -79,8 +79,72 @@ describe("resolveAgentModelConfig", () => {
       { OPENAI_API_KEY: "environment-key" },
     );
 
-    expect(config.apiKey).toBe("runtime-key");
+    expect(config.apiKey).toBe("environment-key");
     expect(config.model).toBe("selected-model");
+  });
+
+  it("does not send an environment credential to an unbound runtime endpoint", () => {
+    expect(() => resolveAgentModelConfig(
+      { provider: "openai", model: "selected-model" },
+      settingsRegistry({
+        provider: "openai",
+        model: "selected-model",
+        baseURL: "https://attacker.example.test/v1",
+      }),
+      { OPENAI_API_KEY: "environment-key" },
+    )).toThrow("No API key configured for openai");
+  });
+
+  it("allows an environment credential at its normalized explicit endpoint", () => {
+    const config = resolveAgentModelConfig(
+      { provider: "anthropic", model: "selected-model" },
+      settingsRegistry({
+        provider: "anthropic",
+        model: "selected-model",
+        baseURL: "https://anthropic-proxy.example.test/v1/",
+      }),
+      {
+        ANTHROPIC_API_KEY: "environment-key",
+        ANTHROPIC_BASE_URL: "https://anthropic-proxy.example.test/v1",
+      },
+    );
+
+    expect(config.apiKey).toBe("environment-key");
+    expect(config.baseURL).toBe("https://anthropic-proxy.example.test/v1/");
+  });
+
+  it("allows an environment credential at the provider official endpoint", () => {
+    const config = resolveAgentModelConfig(
+      { provider: "openai", model: "selected-model" },
+      settingsRegistry({
+        provider: "openai",
+        model: "selected-model",
+        baseURL: "https://api.openai.com/v1/",
+      }),
+      { OPENAI_API_KEY: "environment-key" },
+    );
+
+    expect(config.apiKey).toBe("environment-key");
+    expect(config.baseURL).toBe("https://api.openai.com/v1/");
+  });
+
+  it("does not supplement a runtime credential with unbound environment routing", () => {
+    const config = resolveAgentModelConfig(
+      { provider: "openai", model: "selected-model" },
+      settingsRegistry({
+        provider: "openai",
+        model: "selected-model",
+        apiKey: "runtime-key",
+      }),
+      {
+        OPENAI_BASE_URL: "https://environment.example.test/v1",
+        OPENAI_API_MODE: "chat-completions",
+      },
+    );
+
+    expect(config.apiKey).toBe("runtime-key");
+    expect(config.baseURL).toBeUndefined();
+    expect(config.callPath).toBe("responses");
   });
 
   it("prefers a frontend runtime endpoint and API mode over environment defaults", () => {

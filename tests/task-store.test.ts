@@ -1,13 +1,15 @@
-import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { describe, expect, it, vi } from "vitest";
 import {
   LEAD_TASK_PERMISSIONS,
   TaskStore,
+  type PersistedTaskList,
   type TaskCommandPrincipal,
   type TaskListIdentity,
 } from "../src/main/agent/task/task-store";
+import { writeTextFileAtomic } from "../src/main/agent/persistence/atomic-json-file";
 import { TaskSubscriptionService } from "../src/main/agent/task/task-subscription-service";
 
 async function fixture(scope: TaskListIdentity["scope"] = "conversation") {
@@ -124,6 +126,71 @@ describe("TaskStore v1 contract", () => {
     ]);
     expect(outcomes.filter((outcome) => outcome.status === "fulfilled")).toHaveLength(1);
     expect(await store.getTask("1")).toMatchObject({ status: "pending", revision: 1 });
+  });
+
+  it("waits for an atomic replacement before existing and initializing readers load tasks", async () => {
+    const { root, identity, store, lead } = await fixture();
+    await createLeadTask(store, lead);
+    const { file } = await store.storageLocation();
+    const replacement = JSON.parse(await readFile(file, "utf8")) as PersistedTaskList;
+    replacement.tasks["1"].subject = "Committed replacement";
+    replacement.tasks["1"].revision += 1;
+    replacement.listRevision += 1;
+
+    let markDisplaced!: () => void;
+    const displaced = new Promise<void>((resolve) => {
+      markDisplaced = resolve;
+    });
+    let continueCommit!: () => void;
+    const commitRelease = new Promise<void>((resolve) => {
+      continueCommit = resolve;
+    });
+    let displacedPath: string | undefined;
+    const writer = writeTextFileAtomic(file, JSON.stringify(replacement), {
+      commitGuard: {
+        expectedTargetExists: true,
+        async validatePath() {},
+        async validateDisplaced(path) {
+          displacedPath = path;
+          markDisplaced();
+          await commitRelease;
+        },
+      },
+    });
+    await displaced;
+    expect(displacedPath).toBeDefined();
+
+    const observe = async (reader: Promise<unknown>) => {
+      try {
+        return { status: "fulfilled" as const, value: await reader };
+      } catch (reason) {
+        return { status: "rejected" as const, reason };
+      }
+    };
+    const existingReader = observe(store.getSnapshot());
+    const initializingReader = observe(new TaskStore(root, identity).getSnapshot());
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    continueCommit();
+
+    await expect(writer).resolves.toBeUndefined();
+    await expect(existingReader).resolves.toMatchObject({
+      status: "fulfilled",
+      value: { listRevision: replacement.listRevision },
+    });
+    await expect(initializingReader).resolves.toMatchObject({
+      status: "fulfilled",
+      value: { listRevision: replacement.listRevision },
+    });
+  });
+
+  it("fails closed when an initialized task-list file is genuinely missing", async () => {
+    const { root, identity, store } = await fixture();
+    const { file } = await store.storageLocation();
+    await unlink(file);
+
+    await expect(store.getSnapshot()).rejects.toMatchObject({ code: "MIGRATION_FAILED" });
+    await expect(new TaskStore(root, identity).getSnapshot())
+      .rejects.toMatchObject({ code: "MIGRATION_FAILED" });
   });
 
   it("keeps an owner busy while their current task is still executing", async () => {

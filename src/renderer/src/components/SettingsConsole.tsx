@@ -8,8 +8,15 @@ import {
 import { isModelEnabled, type ManagedModel } from "../modelCatalog";
 import { ModelManagement } from "./ModelManagement";
 import type { AgentStepLimits } from "@shared/agent-step-limits";
-import type { AgentGatewayPreferences } from "@shared/agent-gateway-config";
+import {
+  DEFAULT_WEB_SEARCH_ENDPOINT,
+  type AgentGatewayPreferences,
+} from "@shared/agent-gateway-config";
 import type { AgentExecutionStrategy } from "@shared/agent";
+import {
+  normalizeCredentialUrl,
+  type CredentialStorageStatus,
+} from "@shared/credentials";
 import { TokenUsageOverview } from "./TokenUsageOverview";
 import { LogManagementPanel } from "./LogManagementPanel";
 import { Select } from "./Select";
@@ -56,8 +63,13 @@ interface SettingsConsoleProps {
   models: ManagedModel[];
   selectedModelId: string;
   onSelectModel: (id: string) => void;
-  onSaveModel: (model: ManagedModel) => void;
-  onDeleteModel: (id: string) => void;
+  onSaveModel: (model: ManagedModel, apiKey?: string) => Promise<boolean>;
+  onSaveModels: (models: ManagedModel[], apiKey: string) => Promise<boolean>;
+  onDeleteModel: (id: string) => Promise<boolean>;
+  credentialStorageStatus: CredentialStorageStatus | null;
+  webSearchCredentialConfigured: boolean;
+  onSaveWebSearchCredential: (apiKey: string, endpoint?: string) => Promise<boolean>;
+  onDeleteWebSearchCredential: () => Promise<boolean>;
 
   selectedDesignSystem: DesignSystemV2;
   setSelectedDesignSystem: (val: DesignSystemV2) => void;
@@ -159,13 +171,36 @@ const colorSchemeOptions: Array<{
   { value: "system", label: "跟随系统", icon: <PaletteIcon size={13} /> },
 ];
 
+function credentialStorageLabel(status: CredentialStorageStatus | null): string {
+  if (!status) return "正在读取系统安全存储状态…";
+  if (status.state === "secure") return "系统安全存储可用";
+  if (status.state === "degraded") {
+    return "降级模式：Linux basic_text 后端不会提供强加密保护";
+  }
+  return "系统安全存储不可用；可改用进程环境变量提供凭据";
+}
+
+function normalizedSearchEndpoint(value: string): string | undefined {
+  const normalized = value.trim() || DEFAULT_WEB_SEARCH_ENDPOINT;
+  try {
+    return normalizeCredentialUrl(normalized);
+  } catch {
+    return undefined;
+  }
+}
+
 export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
   activeCategory,
   models,
   selectedModelId,
   onSelectModel,
   onSaveModel,
+  onSaveModels,
   onDeleteModel,
+  credentialStorageStatus,
+  webSearchCredentialConfigured,
+  onSaveWebSearchCredential,
+  onDeleteWebSearchCredential,
   selectedDesignSystem,
   setSelectedDesignSystem,
   defaultTemplateId,
@@ -195,7 +230,11 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
   triggerToast,
   saveStatus = "saved",
 }) => {
-  const enabledModelCount = models.filter(isModelEnabled).length;
+  const credentialStatusLoaded = credentialStorageStatus !== null;
+  const availableModels = models.filter((model) =>
+    isModelEnabled(model)
+    && (!credentialStatusLoaded || model.credentialConfigured === true));
+  const enabledModelCount = availableModels.length;
   const currentMeta = categoryMeta[activeCategory];
   const selectedSchemeLabel = colorSchemeOptions.find((option) => option.value === colorScheme)?.label ?? "暗色";
   const selectedFontFamilyLabel = fontFamilyOptions.find((option) => option.value === uiFontFamily)?.label ?? "系统默认";
@@ -213,6 +252,11 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
   );
   const [fontSizeDraft, setFontSizeDraft] = React.useState(() => String(uiFontSize));
   const [lineHeightDraft, setLineHeightDraft] = React.useState(() => String(uiLineHeight));
+  const [webSearchApiKeyDraft, setWebSearchApiKeyDraft] = React.useState("");
+  const [webSearchEndpointDraft, setWebSearchEndpointDraft] = React.useState(
+    () => agentGatewayPreferences.webSearchEndpoint ?? DEFAULT_WEB_SEARCH_ENDPOINT,
+  );
+  const [webSearchCredentialPending, setWebSearchCredentialPending] = React.useState(false);
   const [applicationDataPath, setApplicationDataPath] = React.useState("");
   const [projectTemplateStatus, setProjectTemplateStatus] = React.useState<
     ProjectTemplateStatus | null
@@ -354,16 +398,50 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
     if (lineHeight !== uiLineHeight) setUiLineHeight(lineHeight);
   };
 
-  const commitOptionalGatewayText = (
-    field: "webSearchApiKey" | "webSearchEndpoint",
-    value: string,
-  ) => {
-    const normalized = value.trim() || undefined;
-    if (agentGatewayPreferences[field] === normalized) return;
+  React.useEffect(() => {
+    setWebSearchEndpointDraft(
+      agentGatewayPreferences.webSearchEndpoint ?? DEFAULT_WEB_SEARCH_ENDPOINT,
+    );
+  }, [agentGatewayPreferences.webSearchEndpoint]);
+
+  const commitWebSearchEndpoint = (): string | undefined => {
+    const normalized = normalizedSearchEndpoint(webSearchEndpointDraft);
+    if (!normalized) {
+      triggerToast("请填写有效的 Search Endpoint");
+      return undefined;
+    }
+    setWebSearchEndpointDraft(normalized);
+    const persisted = normalized === DEFAULT_WEB_SEARCH_ENDPOINT ? undefined : normalized;
+    if (agentGatewayPreferences.webSearchEndpoint === persisted) return normalized;
     setAgentGatewayPreferences({
       ...agentGatewayPreferences,
-      [field]: normalized,
+      webSearchEndpoint: persisted,
     });
+    return normalized;
+  };
+
+  const saveWebSearchCredential = async () => {
+    const endpoint = commitWebSearchEndpoint();
+    if (!endpoint) return;
+    if (!webSearchApiKeyDraft.trim()) {
+      triggerToast("请填写 Tavily API Key");
+      return;
+    }
+    setWebSearchCredentialPending(true);
+    const saved = await onSaveWebSearchCredential(webSearchApiKeyDraft, endpoint);
+    setWebSearchCredentialPending(false);
+    if (!saved) return;
+    setWebSearchApiKeyDraft("");
+    triggerToast("Tavily API Key 已保存到系统安全存储");
+  };
+
+  const clearWebSearchCredential = async () => {
+    setWebSearchCredentialPending(true);
+    const deleted = await onDeleteWebSearchCredential();
+    setWebSearchCredentialPending(false);
+    if (!deleted) return;
+    setWebSearchApiKeyDraft("");
+    triggerToast("已清除系统安全存储中的 Tavily API Key；环境变量仍可能生效");
   };
 
   const handleOpenWorkspace = async () => {
@@ -405,11 +483,15 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
 
         {activeCategory === "models-list" ? (
           <div className="ide-panel">
+            <p className="settings-help-text">
+              {credentialStorageLabel(credentialStorageStatus)}。API Key 不会保存到浏览器存储。
+            </p>
             <ModelManagement
               models={models}
               selectedModelId={selectedModelId}
               onSelectModel={onSelectModel}
               onSaveModel={onSaveModel}
+              onSaveModels={onSaveModels}
               onDeleteModel={onDeleteModel}
               triggerToast={triggerToast}
             />
@@ -419,29 +501,55 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
         {activeCategory === "models-search" ? (
           <div className="ide-panel">
             <IdeSection title="搜索与联网" hint="可选">
+              <IdeRow label="凭据存储">
+                <span className="ide-field-value">
+                  {credentialStorageLabel(credentialStorageStatus)}
+                </span>
+              </IdeRow>
+              <IdeRow label="Tavily 状态">
+                <span className="ide-field-value">
+                  {webSearchCredentialConfigured
+                    ? "已配置（系统安全存储或环境变量）"
+                    : "未配置"}
+                </span>
+              </IdeRow>
               <IdeRow label="Tavily API Key">
-                <input
-                  className="ide-field"
-                  type="password"
-                  value={agentGatewayPreferences.webSearchApiKey ?? ""}
-                  placeholder="tvly-...（也可设置 TAVILY_API_KEY）"
-                  onChange={(event) => setAgentGatewayPreferences({
-                    ...agentGatewayPreferences,
-                    webSearchApiKey: event.target.value || undefined,
-                  })}
-                  onBlur={(event) => commitOptionalGatewayText("webSearchApiKey", event.target.value)}
-                />
+                <div className="model-dialog-actions">
+                  <input
+                    className="ide-field"
+                    aria-label="Tavily API Key"
+                    type="password"
+                    value={webSearchApiKeyDraft}
+                    placeholder={webSearchCredentialConfigured
+                      ? "留空不会覆盖当前凭据"
+                      : "tvly-...（也可设置 TAVILY_API_KEY）"}
+                    onChange={(event) => setWebSearchApiKeyDraft(event.target.value)}
+                  />
+                  <button
+                    type="button"
+                    className="settings-primary-btn"
+                    disabled={webSearchCredentialPending}
+                    onClick={() => void saveWebSearchCredential()}
+                  >
+                    保存
+                  </button>
+                  <button
+                    type="button"
+                    className="settings-secondary-btn"
+                    disabled={webSearchCredentialPending || !webSearchCredentialConfigured}
+                    onClick={() => void clearWebSearchCredential()}
+                  >
+                    清除
+                  </button>
+                </div>
               </IdeRow>
               <IdeRow label="Search Endpoint">
                 <input
                   className="ide-field"
-                  value={agentGatewayPreferences.webSearchEndpoint ?? ""}
-                  placeholder="https://api.tavily.com/search"
-                  onChange={(event) => setAgentGatewayPreferences({
-                    ...agentGatewayPreferences,
-                    webSearchEndpoint: event.target.value || undefined,
-                  })}
-                  onBlur={(event) => commitOptionalGatewayText("webSearchEndpoint", event.target.value)}
+                  value={webSearchEndpointDraft}
+                  placeholder={DEFAULT_WEB_SEARCH_ENDPOINT}
+                  onChange={(event) => setWebSearchEndpointDraft(event.target.value)}
+                  onBlur={() => void commitWebSearchEndpoint()}
                 />
               </IdeRow>
               <IdeRow label="搜索超时">
@@ -509,8 +617,8 @@ export const SettingsConsole: React.FC<SettingsConsoleProps> = ({
                   })}
                   options={[
                     { value: "", label: "不启用" },
-                    ...models
-                      .filter((model) => model.id !== selectedModelId && isModelEnabled(model))
+                    ...availableModels
+                      .filter((model) => model.id !== selectedModelId)
                       .map((model) => ({
                         value: model.id,
                         label: model.name,

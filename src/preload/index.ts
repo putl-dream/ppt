@@ -29,6 +29,17 @@ const api: DesktopApi = {
   openUiThemesDirectory: () => ipcRenderer.invoke("ui-themes:open-directory"),
   reportRendererLog: (report) => ipcRenderer.send("logs:renderer-report", report),
 
+  // 凭据只能写入 Main 的系统安全存储；Renderer 没有读取明文密钥的接口。
+  getCredentialStatus: (request) => ipcRenderer.invoke("credentials:get-status", request),
+  setModelCredentials: (request) =>
+    ipcRenderer.invoke("credentials:set-models", request),
+  deleteModelCredential: (request) =>
+    ipcRenderer.invoke("credentials:delete-model", request),
+  setWebSearchCredential: (request) =>
+    ipcRenderer.invoke("credentials:set-web-search", request),
+  deleteWebSearchCredential: () =>
+    ipcRenderer.invoke("credentials:delete-web-search"),
+
   // 项目产物
   listProjectArtifacts: (sessionId) => ipcRenderer.invoke("project:list-artifacts", sessionId),
   readProjectArtifact: (sessionId, artifactIdOrPath) =>

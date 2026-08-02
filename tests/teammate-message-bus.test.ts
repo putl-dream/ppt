@@ -293,6 +293,18 @@ async function waitFor<T>(read: () => Promise<T | undefined>): Promise<T> {
   throw new Error("Timed out waiting for condition.");
 }
 
+async function stopTeammate(manager: TeammateManager, name: string): Promise<void> {
+  const status = manager.get(name)?.status;
+  if (status !== "stopped" && status !== "failed") {
+    try {
+      await manager.requestShutdown(name);
+    } catch {
+      manager.abortTeammate(name, "Test cleanup.");
+    }
+  }
+  await manager.waitFor(name);
+}
+
 function createToolContext(input: {
   bus: MessageBus;
   manager: TeammateManager;
@@ -563,13 +575,14 @@ describe("TeammateManager", () => {
       idleTimeoutMs: 1_000,
     });
 
-    await waitFor(async () => fetchImpl.mock.calls.length > 0 ? true : undefined);
-    expect((fetchImpl.mock.calls[0]?.[1]?.headers as Record<string, string>).Authorization)
-      .toBe("Bearer tvly-from-settings");
-
-    await manager.requestShutdown("image_researcher");
-    await manager.waitFor("image_researcher");
-    vi.unstubAllGlobals();
+    try {
+      await waitFor(async () => fetchImpl.mock.calls.length > 0 ? true : undefined);
+      expect((fetchImpl.mock.calls[0]?.[1]?.headers as Record<string, string>).Authorization)
+        .toBe("Bearer tvly-from-settings");
+    } finally {
+      await stopTeammate(manager, "image_researcher");
+      vi.unstubAllGlobals();
+    }
   });
 
   it("starts idle and claims board work without an initial lead assignment", async () => {
@@ -596,23 +609,24 @@ describe("TeammateManager", () => {
       idleTimeoutMs: 1_000,
     });
 
-    await waitFor(async () =>
-      (await store.getTask(created.task!.id)).review.state === "requested" ? true : undefined,
-    );
-    const leadMessages = await waitFor(async () => {
-      const messages = await bus.peekInbox("lead");
-      return messages.some((message) => message.content === "Outline ready for review.")
-        ? messages
-        : undefined;
-    });
-    expect(leadMessages).toContainEqual(expect.objectContaining({
-      from: "task_worker",
-      type: "result",
-      content: "Outline ready for review.",
-    }));
-
-    await manager.requestShutdown("task_worker");
-    await manager.waitFor("task_worker");
+    try {
+      await waitFor(async () =>
+        (await store.getTask(created.task!.id)).review.state === "requested" ? true : undefined,
+      );
+      const leadMessages = await waitFor(async () => {
+        const messages = await bus.peekInbox("lead");
+        return messages.some((message) => message.content === "Outline ready for review.")
+          ? messages
+          : undefined;
+      });
+      expect(leadMessages).toContainEqual(expect.objectContaining({
+        from: "task_worker",
+        type: "result",
+        content: "Outline ready for review.",
+      }));
+    } finally {
+      await stopTeammate(manager, "task_worker");
+    }
   });
 
   it("streams task-linked reasoning and tool activity for the autonomous worker", async () => {
@@ -641,33 +655,34 @@ describe("TeammateManager", () => {
       idleTimeoutMs: 1_000,
     });
 
-    await waitFor(async () => events.some(
-      (event) => event.type === "teammate-assignment-finished",
-    ) ? true : undefined);
+    try {
+      await waitFor(async () => events.some(
+        (event) => event.type === "teammate-assignment-finished",
+      ) ? true : undefined);
 
-    expect(events.map((event) => event.type)).toEqual(expect.arrayContaining([
-      "teammate-assignment-started",
-      "teammate-thinking-chunk",
-      "teammate-tool-started",
-      "teammate-tool-finished",
-      "teammate-assignment-finished",
-    ]));
-    expect(events.every((event) => event.activityId === created.task!.id)).toBe(true);
-    expect(events.find((event) => event.type === "teammate-tool-started"))
-      .toEqual(expect.objectContaining({ toolName: "TaskUpdate", taskId: created.task!.id }));
-    expect(events.find(
-      (event) =>
-        event.type === "teammate-tool-finished"
-        && event.toolName === "TaskReviewRequest",
-    ))
-      .toEqual(expect.objectContaining({
-        toolName: "TaskReviewRequest",
-        taskId: created.task!.id,
-        status: "completed",
-      }));
-
-    await manager.requestShutdown("task_worker");
-    await manager.waitFor("task_worker");
+      expect(events.map((event) => event.type)).toEqual(expect.arrayContaining([
+        "teammate-assignment-started",
+        "teammate-thinking-chunk",
+        "teammate-tool-started",
+        "teammate-tool-finished",
+        "teammate-assignment-finished",
+      ]));
+      expect(events.every((event) => event.activityId === created.task!.id)).toBe(true);
+      expect(events.find((event) => event.type === "teammate-tool-started"))
+        .toEqual(expect.objectContaining({ toolName: "TaskUpdate", taskId: created.task!.id }));
+      expect(events.find(
+        (event) =>
+          event.type === "teammate-tool-finished"
+          && event.toolName === "TaskReviewRequest",
+      ))
+        .toEqual(expect.objectContaining({
+          toolName: "TaskReviewRequest",
+          taskId: created.task!.id,
+          status: "completed",
+        }));
+    } finally {
+      await stopTeammate(manager, "task_worker");
+    }
   });
 
   it("runs a teammate asynchronously and delivers result messages to lead", async () => {

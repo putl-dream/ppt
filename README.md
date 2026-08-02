@@ -160,7 +160,7 @@ npm.cmd run dev
 
 启动后，在桌面应用里打开 **Settings -> 模型**，配置模型供应商、API Key、端点、超时、输出上限和 fallback 模型。
 
-当前模型与搜索 API Key 会以明文保存在 Renderer 的 `localStorage`，并在调用时传给主进程；它们不会自动写入仓库 `.env`，但也尚未使用系统凭据库加密。请把本机用户账户视为信任边界。开发诊断和 CI 覆盖项可以参考 [.env.example](./.env.example)。
+模型与搜索 API Key 由 Main 进程托管，并由 Electron `safeStorage` 的正常后端加密后保存在应用数据目录。Renderer 的持久化设置、`localStorage` 和 Agent run IPC 不含 Secret；Renderer 只在录入时短暂持有 Key，并通过只写的凭据 IPC 交给 Main，不能再读取明文。Linux 的 `basic_text` 后端仍可使用，但会明确标记为 `degraded`。旧版 v1 `localStorage` 中的明文 Key 不会自动导入；升级后需要重新录入，并建议轮换旧 Key。开发环境仍支持 `OPENAI_API_KEY`、`ANTHROPIC_API_KEY` 和 `TAVILY_API_KEY` fallback；环境 Key 只会发送到官方端点，或与对应 `OPENAI_BASE_URL`、`ANTHROPIC_BASE_URL`、`TAVILY_SEARCH_ENDPOINT` 明确绑定的端点。携带凭据的远程端点必须使用 HTTPS，只有 loopback 开发服务可使用 HTTP。开发诊断和 CI 覆盖项可以参考 [.env.example](./.env.example)。
 
 如需让 Agent 联网调研，请在 **Settings -> 搜索与联网** 填写 Tavily API Key。开发环境也可设置 `TAVILY_API_KEY`；搜索结果会以标题、URL 和摘要返回给主 Agent 及任务图 teammate。
 
@@ -230,7 +230,7 @@ PPTX exporter (hybrid: SVG background + editable text)
 Agent PPT 的默认运行方式是本地优先：
 
 - 项目产物与 deck snapshot 保存在 workspace；History、checkpoint、transcript、用量统计和部分设置也可能保存在本机应用数据目录
-- API Key 当前明文保存在 Renderer `localStorage`，不写入仓库环境文件
+- API Key 由 Main 的 Electron `safeStorage` 凭据存储托管，不保存在 Renderer `localStorage`，也不随 Agent run IPC 传递；开发环境变量 fallback 仍受支持
 - 模型只能通过已注册工具和结构化命令影响演示文稿
 - 高风险或不可自动应用的变更会要求用户审批
 

@@ -1,4 +1,5 @@
-import type { AgentModelSettings, AgentProvider } from "@shared/agent";
+import type { AgentModelSelection, AgentProvider } from "@shared/agent";
+import { markCredentialReentryRequired } from "./credentialMigration";
 
 export interface ModelTokenPricing {
   currency: "CNY" | "USD";
@@ -14,12 +15,13 @@ export interface ManagedModel {
   name: string;
   provider: AgentProvider;
   model: string;
-  apiKey: string;
   baseURL: string;
   openaiApiMode: "responses" | "chat-completions";
   supports1MContext?: boolean;
   enabled?: boolean;
   builtIn?: boolean;
+  /** Runtime-only status from Main; never persisted in browser storage. */
+  credentialConfigured?: boolean;
   pricing?: ModelTokenPricing | null;
 }
 
@@ -60,7 +62,6 @@ export const MODEL_VENDOR_PRESETS: readonly ModelVendorPreset[] = [
         name: "OpenAI GPT-5.5",
         provider: "openai",
         model: "gpt-5.5",
-        apiKey: "",
         baseURL: "https://api.openai.com/v1",
         openaiApiMode: "responses",
         enabled: true,
@@ -78,7 +79,6 @@ export const MODEL_VENDOR_PRESETS: readonly ModelVendorPreset[] = [
         name: "OpenAI GPT-5 mini",
         provider: "openai",
         model: "gpt-5-mini",
-        apiKey: "",
         baseURL: "https://api.openai.com/v1",
         openaiApiMode: "responses",
         enabled: true,
@@ -107,7 +107,6 @@ export const MODEL_VENDOR_PRESETS: readonly ModelVendorPreset[] = [
         name: "Anthropic Claude Sonnet 4.6",
         provider: "anthropic",
         model: "claude-sonnet-4-6",
-        apiKey: "",
         baseURL: "https://api.anthropic.com",
         openaiApiMode: "responses",
         enabled: true,
@@ -126,7 +125,6 @@ export const MODEL_VENDOR_PRESETS: readonly ModelVendorPreset[] = [
         name: "Anthropic Claude Opus 4.6",
         provider: "anthropic",
         model: "claude-opus-4-6",
-        apiKey: "",
         baseURL: "https://api.anthropic.com",
         openaiApiMode: "responses",
         enabled: true,
@@ -159,7 +157,6 @@ export const MODEL_VENDOR_PRESETS: readonly ModelVendorPreset[] = [
         name: "DeepSeek V4 Flash",
         provider: "anthropic",
         model: "deepseek-v4-flash",
-        apiKey: "",
         baseURL: "https://api.deepseek.com/anthropic",
         openaiApiMode: "responses",
         supports1MContext: true,
@@ -178,7 +175,6 @@ export const MODEL_VENDOR_PRESETS: readonly ModelVendorPreset[] = [
         name: "DeepSeek V4 Pro",
         provider: "anthropic",
         model: "deepseek-v4-pro",
-        apiKey: "",
         baseURL: "https://api.deepseek.com/anthropic",
         openaiApiMode: "chat-completions",
         supports1MContext: true,
@@ -200,14 +196,18 @@ export const MODEL_VENDOR_MODELS: ManagedModel[] = MODEL_VENDOR_PRESETS.flatMap(
   preset.models.map((model) => ({ ...model })),
 );
 
-export const MODEL_STORAGE_KEY = "agent-ppt.models.v1";
+export const MODEL_STORAGE_KEY = "agent-ppt.models.v2";
+export const LEGACY_MODEL_STORAGE_KEY = "agent-ppt.models.v1";
 export const SELECTED_MODEL_STORAGE_KEY = "agent-ppt.selected-model.v1";
 
 function normalizedBaseURL(value: string | undefined): string {
   return (value ?? "").trim().replace(/\/+$/, "").toLowerCase();
 }
 
-function isSameModel(left: ManagedModel, right: ManagedModel): boolean {
+function isSameModel(
+  left: Pick<ManagedModel, "id" | "provider" | "model"> & { baseURL?: string },
+  right: ManagedModel,
+): boolean {
   return left.id === right.id || (
     left.provider === right.provider
     && left.model === right.model
@@ -238,7 +238,6 @@ export function buildModelVendorDraft(
         name: "自定义模型",
         provider: "openai",
         model: "",
-        apiKey: "",
         baseURL: "",
         openaiApiMode: "chat-completions",
         supports1MContext: false,
@@ -256,22 +255,18 @@ export function buildModelVendorDraft(
       pricing: existing?.pricing === undefined ? defaultModel.pricing : existing.pricing,
     };
   });
-  const configuredReference = models.find((model) => model.apiKey.trim()) ?? models[0];
+  const configuredReference = models[0];
   const protocol = configuredReference
     && preset.supportedProviders.includes(configuredReference.provider)
     ? configuredReference.provider
     : preset.defaultProvider;
-  const configuredKeys = [...new Set(
-    models.map((model) => model.apiKey.trim()).filter(Boolean),
-  )];
-
   return {
     vendorId,
     protocol,
     baseURL: configuredReference?.baseURL.trim()
       || preset.baseURLs[protocol]
       || "",
-    apiKey: configuredKeys.length === 1 ? configuredKeys[0] : "",
+    apiKey: "",
     models,
   };
 }
@@ -301,17 +296,16 @@ export function changeModelVendorDraftProtocol(
 }
 
 export function materializeModelVendorDraft(draft: ModelVendorDraft): ManagedModel[] {
-  const apiKey = draft.apiKey.trim();
   const baseURL = draft.baseURL.trim().replace(/\/+$/, "");
   return draft.models.map((model) => ({
     ...model,
     name: model.name.trim(),
     provider: draft.protocol,
     model: model.model.trim(),
-    apiKey,
     baseURL,
     enabled: true,
     builtIn: false,
+    credentialConfigured: true,
     pricing: model.pricing ? {
       ...model.pricing,
       updatedAt: new Date().toISOString().slice(0, 10),
@@ -375,28 +369,117 @@ export function normalizeModelTokenPricing(value: unknown): ModelTokenPricing | 
   return undefined;
 }
 
+function normalizeStoredModels(value: unknown, legacy: boolean): ManagedModel[] {
+  if (!Array.isArray(value) || value.length === 0) return [];
+  let foundSecret = false;
+  const models = value.flatMap((candidate) => {
+    if (!candidate || typeof candidate !== "object") return [];
+    const item = candidate as Partial<ManagedModel> & { apiKey?: unknown };
+    if (
+      typeof item.id !== "string"
+      || typeof item.name !== "string"
+      || typeof item.model !== "string"
+      || (item.provider !== "openai" && item.provider !== "anthropic")
+    ) return [];
+    const apiKey = typeof item.apiKey === "string" ? item.apiKey.trim() : "";
+    if (apiKey) foundSecret = true;
+    const bundledModel = MODEL_VENDOR_MODELS.find((model) => isSameModel({
+      id: item.id!,
+      provider: item.provider!,
+      model: item.model!,
+      baseURL: item.baseURL,
+    }, model));
+    if (legacy && bundledModel && !apiKey) return [];
+    const storedPricing = normalizeModelTokenPricing(item.pricing);
+    const model: ManagedModel = {
+      id: item.id,
+      name: item.name,
+      provider: item.provider,
+      model: item.model,
+      baseURL: typeof item.baseURL === "string" ? item.baseURL : "",
+      openaiApiMode: item.openaiApiMode === "responses" ? "responses" : "chat-completions",
+      ...(item.supports1MContext === true ? { supports1MContext: true } : {}),
+      enabled: item.enabled !== false,
+      ...(bundledModel ? { builtIn: false } : item.builtIn === true ? { builtIn: true } : {}),
+      credentialConfigured: false,
+      pricing: storedPricing === undefined ? bundledModel?.pricing : storedPricing,
+    };
+    return [model];
+  });
+  if (foundSecret) markCredentialReentryRequired();
+  return models;
+}
+
+function parseLegacyModelStorage(raw: string): unknown {
+  const value = JSON.parse(raw) as unknown;
+  if (
+    Array.isArray(value)
+    && value.some((candidate) => {
+      if (!candidate || typeof candidate !== "object") return false;
+      const apiKey = (candidate as { apiKey?: unknown }).apiKey;
+      return typeof apiKey === "string" && Boolean(apiKey.trim());
+    })
+  ) {
+    markCredentialReentryRequired();
+  }
+  return value;
+}
+
+function auditLegacyModelStorage(raw: string): void {
+  try {
+    parseLegacyModelStorage(raw);
+  } catch {
+    markCredentialReentryRequired();
+  }
+}
+
+export function serializeManagedModels(models: readonly ManagedModel[]): string {
+  return JSON.stringify(models.map((model) => ({
+    id: model.id,
+    name: model.name,
+    provider: model.provider,
+    model: model.model,
+    baseURL: model.baseURL,
+    openaiApiMode: model.openaiApiMode,
+    ...(model.supports1MContext === undefined
+      ? {}
+      : { supports1MContext: model.supports1MContext }),
+    ...(model.enabled === undefined ? {} : { enabled: model.enabled }),
+    ...(model.builtIn === undefined ? {} : { builtIn: model.builtIn }),
+    ...(model.pricing === undefined ? {} : { pricing: model.pricing }),
+  })));
+}
+
+export function saveManagedModels(models: readonly ManagedModel[]): void {
+  window.localStorage.setItem(MODEL_STORAGE_KEY, serializeManagedModels(models));
+}
+
 export function loadManagedModels(): ManagedModel[] {
   try {
     const stored = window.localStorage.getItem(MODEL_STORAGE_KEY);
-    if (!stored) return [];
-    const parsed = JSON.parse(stored) as ManagedModel[];
-    if (!Array.isArray(parsed) || parsed.length === 0) return [];
-    return parsed.filter(
-      (item) => item && item.id && item.name && item.model &&
-        (item.provider === "openai" || item.provider === "anthropic"),
-    ).flatMap((item) => {
-      const bundledModel = MODEL_VENDOR_MODELS.find((model) => isSameModel(item, model));
-      if (bundledModel && !item.apiKey.trim()) return [];
-      const storedPricing = normalizeModelTokenPricing(item.pricing);
-      return {
-        ...item,
-        ...(bundledModel ? { builtIn: false } : {}),
-        supports1MContext: item.supports1MContext === true,
-        enabled: item.enabled !== false,
-        pricing: storedPricing === undefined ? bundledModel?.pricing : storedPricing,
-      };
-    });
+    const legacy = window.localStorage.getItem(LEGACY_MODEL_STORAGE_KEY);
+    if (legacy !== null) {
+      window.localStorage.removeItem(LEGACY_MODEL_STORAGE_KEY);
+    }
+    if (stored !== null) {
+      if (legacy !== null) auditLegacyModelStorage(legacy);
+      const models = normalizeStoredModels(JSON.parse(stored), false);
+      saveManagedModels(models);
+      return models;
+    }
+
+    if (legacy === null) return [];
+    const models = normalizeStoredModels(parseLegacyModelStorage(legacy), true);
+    saveManagedModels(models);
+    return models;
   } catch {
+    try {
+      window.localStorage.removeItem(MODEL_STORAGE_KEY);
+      window.localStorage.removeItem(LEGACY_MODEL_STORAGE_KEY);
+    } catch {
+      /* Storage may be unavailable; there is no safe browser fallback for secrets. */
+    }
+    markCredentialReentryRequired();
     return [];
   }
 }
@@ -405,12 +488,11 @@ export function isModelEnabled(model: ManagedModel): boolean {
   return model.enabled !== false;
 }
 
-export function toAgentModelSettings(model: ManagedModel): AgentModelSettings {
+export function toAgentModelSelection(model: ManagedModel): AgentModelSelection {
   return {
     configurationId: model.id,
     provider: model.provider,
     model: model.model.trim(),
-    apiKey: model.apiKey.trim() || undefined,
     baseURL: model.baseURL.trim() || undefined,
     openaiApiMode: model.provider === "openai" ? model.openaiApiMode : undefined,
     supports1MContext: model.supports1MContext === true,

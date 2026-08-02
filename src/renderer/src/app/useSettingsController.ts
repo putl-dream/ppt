@@ -1,13 +1,23 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Presentation } from "@shared/presentation";
-import type { AgentGatewayPreferences } from "@shared/agent-gateway-config";
+import {
+  DEFAULT_WEB_SEARCH_ENDPOINT,
+  type AgentGatewayPreferences,
+} from "@shared/agent-gateway-config";
 import type { AgentStepLimits } from "@shared/agent-step-limits";
 import type { AgentExecutionStrategy } from "@shared/agent";
 import type { UiThemeSummary } from "@shared/ipc";
 import {
-  MODEL_STORAGE_KEY,
+  modelCredentialBindingFromSelection,
+  normalizeWebSearchCredentialBinding,
+  type CredentialStorageStatus,
+  type ModelCredentialBinding,
+} from "@shared/credentials";
+import {
   SELECTED_MODEL_STORAGE_KEY,
   isModelEnabled,
+  saveManagedModels,
+  toAgentModelSelection,
   type ManagedModel,
 } from "../modelCatalog";
 import { saveAgentStepLimits } from "../agentStepLimits";
@@ -45,8 +55,13 @@ export interface SettingsController {
   selectedModel?: ManagedModel;
   selectedModelId: string;
   selectModel: (id: string) => void;
-  saveModel: (model: ManagedModel) => void;
-  deleteModel: (id: string) => void;
+  saveModel: (model: ManagedModel, apiKey?: string) => Promise<boolean>;
+  saveModels: (models: ManagedModel[], apiKey: string) => Promise<boolean>;
+  deleteModel: (id: string) => Promise<boolean>;
+  credentialStorageStatus: CredentialStorageStatus | null;
+  webSearchCredentialConfigured: boolean;
+  saveWebSearchCredential: (apiKey: string, endpoint?: string) => Promise<boolean>;
+  deleteWebSearchCredential: () => Promise<boolean>;
   selectedDesignSystem: DesignSystemV2;
   setSelectedDesignSystem: (value: DesignSystemV2) => void;
   defaultTemplateId: string;
@@ -121,11 +136,26 @@ export function useSettingsController(
     return getBuiltinTemplate(requested)?.id ?? APPLICATION_DEFAULT_TEMPLATE_ID;
   });
   const [models, setModels] = useState<ManagedModel[]>(() => bootstrap.models);
+  const modelsRef = useRef(models);
+  modelsRef.current = models;
+  const [credentialStorageStatus, setCredentialStorageStatus] =
+    useState<CredentialStorageStatus | null>(null);
+  const [webSearchCredentialConfigured, setWebSearchCredentialConfigured] = useState(false);
+  const credentialRefreshIdRef = useRef(0);
   const [selectedModelId, setSelectedModelId] = useState(() => bootstrap.selectedModelId);
-  const enabledModels = useMemo(() => models.filter(isModelEnabled), [models]);
+  const credentialStatusLoaded = credentialStorageStatus !== null;
+  const enabledModels = useMemo(() => credentialStatusLoaded
+    ? models.filter((model) =>
+      isModelEnabled(model) && model.credentialConfigured === true)
+    : [], [
+    credentialStatusLoaded,
+    models,
+  ]);
   const visibleModels = useMemo(
-    () => (enabledModels.length > 0 ? enabledModels : models),
-    [enabledModels, models],
+    () => credentialStatusLoaded
+      ? enabledModels
+      : enabledModels.length > 0 ? enabledModels : models,
+    [credentialStatusLoaded, enabledModels, models],
   );
   const selectedModel = visibleModels.find((model) => model.id === selectedModelId) ?? visibleModels[0];
   const computedScheme = getComputedScheme(colorScheme);
@@ -144,7 +174,7 @@ export function useSettingsController(
   }, []);
 
   useEffect(() => {
-    window.localStorage.setItem(MODEL_STORAGE_KEY, JSON.stringify(models));
+    saveManagedModels(models);
     if (!visibleModels.some((model) => model.id === selectedModelId) && visibleModels[0]) {
       setSelectedModelId(visibleModels[0].id);
     }
@@ -156,6 +186,86 @@ export function useSettingsController(
 
   useEffect(() => saveAgentStepLimits(agentStepLimits), [agentStepLimits]);
   useEffect(() => saveAgentGatewayPreferences(agentGatewayPreferences), [agentGatewayPreferences]);
+
+  const modelCredentialBindings = useMemo(() => models.flatMap((model) => {
+    try {
+      return [modelCredentialBindingFromSelection(toAgentModelSelection(model))];
+    } catch {
+      return [];
+    }
+  }), [models]);
+  const modelCredentialBindingsFingerprint = JSON.stringify(modelCredentialBindings);
+  const webSearchEndpoint = agentGatewayPreferences.webSearchEndpoint?.trim()
+    || DEFAULT_WEB_SEARCH_ENDPOINT;
+
+  const refreshCredentialStatus = useCallback(async () => {
+    const desktopApi = window.desktopApi;
+    const refreshId = ++credentialRefreshIdRef.current;
+    setCredentialStorageStatus(null);
+    setWebSearchCredentialConfigured(false);
+    setModels((current) => current.map((model) =>
+      model.credentialConfigured === false
+        ? model
+        : { ...model, credentialConfigured: false }
+    ));
+    const failClosed = (message: string) => {
+      setCredentialStorageStatus({
+        state: "unavailable",
+        backend: "unknown",
+        warning: "safe-storage-unavailable",
+      });
+      setWebSearchCredentialConfigured(false);
+      setModels((current) => current.map((model) =>
+        model.credentialConfigured === false
+          ? model
+          : { ...model, credentialConfigured: false }
+      ));
+      notify(message);
+    };
+    if (!desktopApi?.getCredentialStatus) {
+      failClosed("凭据状态读取失败: 桌面安全存储接口不可用");
+      return;
+    }
+    let webSearch;
+    try {
+      webSearch = normalizeWebSearchCredentialBinding({ endpoint: webSearchEndpoint });
+    } catch (error) {
+      failClosed(
+        `搜索凭据状态读取失败: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return;
+    }
+
+    try {
+      const snapshot = await desktopApi.getCredentialStatus({
+        models: modelCredentialBindings,
+        webSearch,
+      });
+      if (refreshId !== credentialRefreshIdRef.current) return;
+      const configuredById = new Map(
+        snapshot.models.map((model) => [model.configurationId, model.configured]),
+      );
+      setCredentialStorageStatus(snapshot.storage);
+      setWebSearchCredentialConfigured(snapshot.webSearchConfigured);
+      setModels((current) => {
+        let changed = false;
+        const next = current.map((model) => {
+          const configured = configuredById.get(model.id) ?? false;
+          if (model.credentialConfigured === configured) return model;
+          changed = true;
+          return { ...model, credentialConfigured: configured };
+        });
+        return changed ? next : current;
+      });
+    } catch (error) {
+      if (refreshId !== credentialRefreshIdRef.current) return;
+      failClosed(`凭据状态读取失败: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }, [modelCredentialBindingsFingerprint, notify, webSearchEndpoint]);
+
+  useEffect(() => {
+    void refreshCredentialStatus();
+  }, [refreshCredentialStatus]);
 
   const refreshUiThemes = useCallback(async () => {
     const desktopApi = window.desktopApi;
@@ -235,18 +345,143 @@ export function useSettingsController(
   };
 
   const selectModel = update(setSelectedModelId);
-  const saveModel = (model: ManagedModel) => {
+  const credentialBindingForModel = (model: ManagedModel): ModelCredentialBinding =>
+    modelCredentialBindingFromSelection(toAgentModelSelection(model));
+
+  const saveModel = async (model: ManagedModel, apiKey?: string): Promise<boolean> => {
     markSaving();
-    setModels((current) => current.some((item) => item.id === model.id)
-      ? current.map((item) => item.id === model.id ? model : item)
-      : [...current, model]);
+    const nextApiKey = apiKey?.trim();
+    let binding: ModelCredentialBinding;
+    try {
+      binding = credentialBindingForModel(model);
+    } catch (error) {
+      notify(`模型连接配置无效: ${error instanceof Error ? error.message : String(error)}`);
+      return false;
+    }
+
+    const existing = modelsRef.current.find((item) => item.id === model.id);
+    let bindingChanged = !existing;
+    if (existing) {
+      try {
+        bindingChanged = JSON.stringify(credentialBindingForModel(existing))
+          !== JSON.stringify(binding);
+      } catch {
+        bindingChanged = true;
+      }
+    }
+
+    if (nextApiKey) {
+      try {
+        await window.desktopApi.setModelCredentials({ bindings: [binding], apiKey: nextApiKey });
+        credentialRefreshIdRef.current += 1;
+      } catch (error) {
+        notify(`API Key 保存失败: ${error instanceof Error ? error.message : String(error)}`);
+        return false;
+      }
+    } else if (bindingChanged && existing) {
+      try {
+        await window.desktopApi.deleteModelCredential({ configurationId: existing.id });
+        credentialRefreshIdRef.current += 1;
+      } catch (error) {
+        notify(`旧模型凭据清除失败: ${error instanceof Error ? error.message : String(error)}`);
+        return false;
+      }
+    }
+
+    const credentialConfigured = Boolean(nextApiKey)
+      || (!bindingChanged && existing?.credentialConfigured === true);
+    const persistedModel = { ...model, credentialConfigured };
+    setModels((current) => current.some((item) => item.id === persistedModel.id)
+      ? current.map((item) => item.id === persistedModel.id ? persistedModel : item)
+      : [...current, persistedModel]);
+    return true;
   };
-  const deleteModel = (id: string) => {
+
+  const saveModels = async (
+    nextModels: ManagedModel[],
+    apiKey: string,
+  ): Promise<boolean> => {
     markSaving();
+    const normalizedApiKey = apiKey.trim();
+    if (!normalizedApiKey) {
+      notify("请填写 API Key");
+      return false;
+    }
+    let bindings: ModelCredentialBinding[];
+    try {
+      bindings = nextModels.map(credentialBindingForModel);
+    } catch (error) {
+      notify(`模型连接配置无效: ${error instanceof Error ? error.message : String(error)}`);
+      return false;
+    }
+    try {
+      await window.desktopApi.setModelCredentials({ bindings, apiKey: normalizedApiKey });
+      credentialRefreshIdRef.current += 1;
+    } catch (error) {
+      notify(`API Key 保存失败: ${error instanceof Error ? error.message : String(error)}`);
+      return false;
+    }
+    const configuredModels = nextModels.map((model) => ({
+      ...model,
+      credentialConfigured: true,
+    }));
+    const replacementIds = new Set(configuredModels.map((model) => model.id));
+    setModels((current) => [
+      ...current.filter((model) => !replacementIds.has(model.id)),
+      ...configuredModels,
+    ]);
+    return true;
+  };
+
+  const deleteModel = async (id: string): Promise<boolean> => {
+    markSaving();
+    try {
+      await window.desktopApi.deleteModelCredential({ configurationId: id });
+      credentialRefreshIdRef.current += 1;
+    } catch (error) {
+      notify(`模型凭据删除失败: ${error instanceof Error ? error.message : String(error)}`);
+      return false;
+    }
     setModels((current) => current.filter((model) => model.id !== id));
     if (selectedModelId === id) {
-      const fallback = models.find((model) => model.id !== id && isModelEnabled(model));
+      const fallback = modelsRef.current.find((model) => model.id !== id && isModelEnabled(model));
       if (fallback) setSelectedModelId(fallback.id);
+    }
+    return true;
+  };
+
+  const saveWebSearchCredential = async (
+    apiKey: string,
+    endpoint = webSearchEndpoint,
+  ): Promise<boolean> => {
+    const normalizedApiKey = apiKey.trim();
+    if (!normalizedApiKey) {
+      notify("请填写 Tavily API Key");
+      return false;
+    }
+    try {
+      const binding = normalizeWebSearchCredentialBinding({ endpoint });
+      await window.desktopApi.setWebSearchCredential({ binding, apiKey: normalizedApiKey });
+      credentialRefreshIdRef.current += 1;
+      setWebSearchCredentialConfigured(true);
+      markSaving();
+      return true;
+    } catch (error) {
+      notify(`搜索 API Key 保存失败: ${error instanceof Error ? error.message : String(error)}`);
+      return false;
+    }
+  };
+
+  const deleteWebSearchCredential = async (): Promise<boolean> => {
+    try {
+      await window.desktopApi.deleteWebSearchCredential();
+      setWebSearchCredentialConfigured(false);
+      markSaving();
+      void refreshCredentialStatus();
+      return true;
+    } catch (error) {
+      notify(`搜索 API Key 清除失败: ${error instanceof Error ? error.message : String(error)}`);
+      return false;
     }
   };
   return {
@@ -257,7 +492,12 @@ export function useSettingsController(
     selectedModelId,
     selectModel,
     saveModel,
+    saveModels,
     deleteModel,
+    credentialStorageStatus,
+    webSearchCredentialConfigured,
+    saveWebSearchCredential,
+    deleteWebSearchCredential,
     selectedDesignSystem,
     setSelectedDesignSystem: update(setSelectedDesignSystemState),
     defaultTemplateId,

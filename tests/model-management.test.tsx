@@ -1,13 +1,16 @@
 // @vitest-environment jsdom
 
 import React from "react";
-import { fireEvent, render, screen, within } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { ModelManagement } from "../src/renderer/src/components/ModelManagement";
 
 describe("ModelManagement vendor onboarding", () => {
-  it("configures every DeepSeek model with one API key and selects Flash", () => {
+  afterEach(cleanup);
+
+  it("submits every DeepSeek binding and one API key as a single batch", async () => {
     const onSaveModel = vi.fn();
+    const onSaveModels = vi.fn().mockResolvedValue(true);
     const onSelectModel = vi.fn();
     const triggerToast = vi.fn();
     render(
@@ -16,7 +19,8 @@ describe("ModelManagement vendor onboarding", () => {
         selectedModelId=""
         onSelectModel={onSelectModel}
         onSaveModel={onSaveModel}
-        onDeleteModel={vi.fn()}
+        onSaveModels={onSaveModels}
+        onDeleteModel={vi.fn().mockResolvedValue(true)}
         triggerToast={triggerToast}
       />,
     );
@@ -34,13 +38,15 @@ describe("ModelManagement vendor onboarding", () => {
     });
     fireEvent.click(within(dialog).getByRole("button", { name: "添加模型" }));
 
-    expect(onSaveModel).toHaveBeenCalledTimes(2);
-    expect(onSaveModel.mock.calls.map(([model]) => model)).toEqual(expect.arrayContaining([
+    await waitFor(() => expect(onSaveModels).toHaveBeenCalledTimes(1));
+    const [savedModels, apiKey] = onSaveModels.mock.calls[0];
+    expect(apiKey).toBe("deepseek-secret");
+    expect(savedModels).toEqual(expect.arrayContaining([
       expect.objectContaining({
         id: "deepseek-v4-flash",
         provider: "anthropic",
         baseURL: "https://api.deepseek.com/anthropic",
-        apiKey: "deepseek-secret",
+        credentialConfigured: true,
         supports1MContext: true,
         pricing: expect.objectContaining({
           currency: "CNY",
@@ -53,7 +59,7 @@ describe("ModelManagement vendor onboarding", () => {
         id: "deepseek-v4-pro",
         provider: "anthropic",
         baseURL: "https://api.deepseek.com/anthropic",
-        apiKey: "deepseek-secret",
+        credentialConfigured: true,
         supports1MContext: true,
         pricing: expect.objectContaining({
           currency: "CNY",
@@ -63,12 +69,14 @@ describe("ModelManagement vendor onboarding", () => {
         }),
       }),
     ]));
+    expect(savedModels.every((model: Record<string, unknown>) => !("apiKey" in model))).toBe(true);
+    expect(onSaveModel).not.toHaveBeenCalled();
     expect(onSelectModel).toHaveBeenCalledWith("deepseek-v4-flash");
     expect(triggerToast).toHaveBeenCalledWith("DeepSeek 模型已配置");
   });
 
   it("edits pricing and rejects an empty required price", () => {
-    const onSaveModel = vi.fn();
+    const onSaveModel = vi.fn().mockResolvedValue(true);
     const triggerToast = vi.fn();
     render(
       <ModelManagement
@@ -77,7 +85,6 @@ describe("ModelManagement vendor onboarding", () => {
           name: "Priced Model",
           provider: "openai",
           model: "priced-model",
-          apiKey: "secret",
           baseURL: "https://example.com/v1",
           openaiApiMode: "responses",
           enabled: true,
@@ -92,7 +99,8 @@ describe("ModelManagement vendor onboarding", () => {
         selectedModelId="custom-priced"
         onSelectModel={vi.fn()}
         onSaveModel={onSaveModel}
-        onDeleteModel={vi.fn()}
+        onSaveModels={vi.fn().mockResolvedValue(true)}
+        onDeleteModel={vi.fn().mockResolvedValue(true)}
         triggerToast={triggerToast}
       />,
     );
@@ -108,5 +116,42 @@ describe("ModelManagement vendor onboarding", () => {
 
     expect(onSaveModel).not.toHaveBeenCalled();
     expect(triggerToast).toHaveBeenCalledWith("请填写有效的非负模型单价");
+  });
+
+  it("keeps an edited API key separate from persisted model metadata", async () => {
+    const onSaveModel = vi.fn().mockResolvedValue(true);
+    render(
+      <ModelManagement
+        models={[{
+          id: "custom-secure",
+          name: "Secure Model",
+          provider: "openai",
+          model: "secure-model",
+          baseURL: "https://example.com/v1",
+          openaiApiMode: "responses",
+          enabled: true,
+          credentialConfigured: true,
+        }]}
+        selectedModelId="custom-secure"
+        onSelectModel={vi.fn()}
+        onSaveModel={onSaveModel}
+        onSaveModels={vi.fn().mockResolvedValue(true)}
+        onDeleteModel={vi.fn().mockResolvedValue(true)}
+        triggerToast={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText(/凭据已配置/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "编辑模型 Secure Model" }));
+    const dialog = screen.getByRole("dialog", { name: "编辑模型" });
+    const keyInput = within(dialog).getByLabelText("API Key");
+    expect((keyInput as HTMLInputElement).value).toBe("");
+    fireEvent.change(keyInput, { target: { value: "replacement-secret" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "保存" }));
+
+    await waitFor(() => expect(onSaveModel).toHaveBeenCalledTimes(1));
+    const [savedModel, apiKey] = onSaveModel.mock.calls[0];
+    expect(apiKey).toBe("replacement-secret");
+    expect(savedModel).not.toHaveProperty("apiKey");
   });
 });

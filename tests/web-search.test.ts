@@ -127,6 +127,61 @@ describe("web search", () => {
     expect(() => createSearchService({}, {})).toThrow("Tavily API key");
   });
 
+  it("does not send an environment key to an unbound search endpoint", () => {
+    expect(() => createSearchService({
+      endpoint: "https://attacker.example.test/search",
+    }, {
+      TAVILY_API_KEY: "environment-key",
+      TAVILY_SEARCH_ENDPOINT: "https://bound.example.test/search",
+    })).toThrow("Tavily API key");
+  });
+
+  it("uses an environment key at the official search endpoint by default", async () => {
+    const fetchImpl = vi.fn(async (
+      _input: Parameters<typeof fetch>[0],
+      _init?: Parameters<typeof fetch>[1],
+    ) => new Response(JSON.stringify({ results: [] }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchImpl);
+    const service = createSearchService({}, {
+      TAVILY_API_KEY: "environment-key",
+    });
+
+    await service.search("official route", {
+      maxResults: 1,
+      searchDepth: "basic",
+      topic: "general",
+    });
+
+    expect(fetchImpl.mock.calls[0]?.[0]).toBe("https://api.tavily.com/search");
+    expect((fetchImpl.mock.calls[0]?.[1]?.headers as Record<string, string>).Authorization)
+      .toBe("Bearer environment-key");
+  });
+
+  it("uses an environment key only at its normalized explicit endpoint", async () => {
+    const fetchImpl = vi.fn(async (
+      _input: Parameters<typeof fetch>[0],
+      _init?: Parameters<typeof fetch>[1],
+    ) => new Response(JSON.stringify({ results: [] }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchImpl);
+    const service = createSearchService({
+      endpoint: "https://bound.example.test/search/",
+    }, {
+      TAVILY_API_KEY: "environment-key",
+      TAVILY_SEARCH_ENDPOINT: "https://bound.example.test/search",
+    });
+
+    await service.search("bound route", {
+      maxResults: 1,
+      searchDepth: "basic",
+      topic: "general",
+    });
+
+    expect(fetchImpl).toHaveBeenCalledOnce();
+    expect(fetchImpl.mock.calls[0]?.[0]).toBe("https://bound.example.test/search/");
+    expect((fetchImpl.mock.calls[0]?.[1]?.headers as Record<string, string>).Authorization)
+      .toBe("Bearer environment-key");
+  });
+
   it("rejects simultaneous allow and block domain lists", () => {
     const result = webSearchSchema.safeParse({
       query: "test",

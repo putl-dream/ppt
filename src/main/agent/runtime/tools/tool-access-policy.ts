@@ -167,13 +167,6 @@ export function isPathOutsideWorkspace(workspaceRoot: string | undefined, path: 
 
 export function evaluateToolPermission(block: ToolPermissionBlock): PermissionDecision {
   const profile = block.permission ?? getToolPermissionProfile(block.toolName);
-  // #region agent log
-  if (block.toolName === "LoadSkill" || block.toolName === "BeginPptCapability") {
-    try {
-      fetch('http://127.0.0.1:7758/ingest/f715bfbd-c4b3-4d7c-91d3-b40633f1a70c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'f91e95'},body:JSON.stringify({sessionId:'f91e95',hypothesisId:'A',location:'tool-access-policy.ts:evaluateToolPermission',message:'permission eval inputs',data:{toolName:block.toolName,scope:block.scope,hasBlockPermission:Boolean(block.permission),profileName:profile?.profile,profileScopes:profile?.scopes,risk:block.risk},timestamp:Date.now()})}).catch(()=>{});
-    } catch {}
-  }
-  // #endregion
   const hardDeny = matchHardDeny(block.args, profile);
   if (hardDeny) {
     return { type: "deny", reason: hardDeny };
@@ -187,11 +180,6 @@ export function evaluateToolPermission(block: ToolPermissionBlock): PermissionDe
   }
 
   if (profile && block.scope && !profile.scopes.includes(block.scope)) {
-    // #region agent log
-    try {
-      fetch('http://127.0.0.1:7758/ingest/f715bfbd-c4b3-4d7c-91d3-b40633f1a70c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'f91e95'},body:JSON.stringify({sessionId:'f91e95',hypothesisId:'A',location:'tool-access-policy.ts:scope-deny',message:'scope mismatch deny',data:{toolName:block.toolName,scope:block.scope,profileScopes:profile.scopes},timestamp:Date.now()})}).catch(()=>{});
-    } catch {}
-    // #endregion
     return {
       type: "deny",
       reason: `Tool ${block.toolName} is not permitted for ${block.scope} agents.`,
@@ -214,13 +202,6 @@ export function evaluateToolPermission(block: ToolPermissionBlock): PermissionDe
     };
   }
 
-  // #region agent log
-  if (block.toolName === "LoadSkill") {
-    try {
-      fetch('http://127.0.0.1:7758/ingest/f715bfbd-c4b3-4d7c-91d3-b40633f1a70c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'f91e95'},body:JSON.stringify({sessionId:'f91e95',runId:'post-fix',hypothesisId:'A',location:'tool-access-policy.ts:allow',message:'LoadSkill allowed',data:{scope:block.scope,profileScopes:profile?.scopes,hasBlockPermission:Boolean(block.permission)},timestamp:Date.now()})}).catch(()=>{});
-    } catch {}
-  }
-  // #endregion
   return { type: "allow" };
 }
 

@@ -1,3 +1,4 @@
+import { DEFAULT_WEB_SEARCH_ENDPOINT } from "@shared/agent-gateway-config";
 import type {
   WebSearchAdapter,
   WebSearchImageResult,
@@ -6,7 +7,7 @@ import type {
   WebSearchResult,
 } from "./types";
 
-const DEFAULT_TAVILY_ENDPOINT = "https://api.tavily.com/search";
+const DEFAULT_TAVILY_ENDPOINT = DEFAULT_WEB_SEARCH_ENDPOINT;
 const DEFAULT_TIMEOUT_MS = 20_000;
 
 type FetchImplementation = typeof fetch;

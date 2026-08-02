@@ -46,9 +46,6 @@ export class ToolTurnRunner {
           workspace.updatedToolUseContext,
         ))
     ) {
-      // #region agent log
-      fetch('http://127.0.0.1:7758/ingest/f715bfbd-c4b3-4d7c-91d3-b40633f1a70c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2488ed'},body:JSON.stringify({sessionId:'2488ed',runId:'pre-fix',hypothesisId:'A',location:'tool-turn-runner.ts:exclusive-batch',message:'Exclusive batch rejection',data:{batchSize:toolCalls.length,toolNames:toolCalls.map((c)=>c.name),exclusiveFlags:toolCalls.map((c)=>({name:c.name,exclusive:run.input.toolPreflight.requiresExclusiveBatch(c,workspace.updatedToolUseContext)})),inputs:toolCalls.map((c)=>({name:c.name,inputKeys:c.input&&typeof c.input==='object'&&!Array.isArray(c.input)?Object.keys(c.input as object):typeof c.input}))},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
       for (const toolCall of toolCalls) {
         throwIfRunCancelled(run.scope.signal, run.params.deps.externalSignal);
         const result: AgentModelToolResultBlock = {
@@ -964,11 +961,6 @@ export class ToolTurnRunner {
     } catch (error) {
       const cancelled = isRuntimeCancellation(error, scope.signal, deps.externalSignal);
       const errorText = error instanceof Error ? error.message : String(error);
-      // #region agent log
-      try {
-        fetch('http://127.0.0.1:7758/ingest/f715bfbd-c4b3-4d7c-91d3-b40633f1a70c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'f91e95'},body:JSON.stringify({sessionId:'f91e95',hypothesisId:'C',location:'tool-turn-runner.ts:runOne-catch',message:'tool execution threw/cancelled',data:{toolName:tool.name,cancelled,errorText},timestamp:Date.now()})}).catch(()=>{});
-      } catch {}
-      // #endregion
       run.emitProgress({
         type: "tool-state",
         toolCallId: toolCall.id,

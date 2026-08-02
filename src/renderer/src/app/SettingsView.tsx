@@ -53,7 +53,12 @@ export function SettingsView({
           selectedModelId={controller.selectedModelId}
           onSelectModel={controller.selectModel}
           onSaveModel={controller.saveModel}
+          onSaveModels={controller.saveModels}
           onDeleteModel={controller.deleteModel}
+          credentialStorageStatus={controller.credentialStorageStatus}
+          webSearchCredentialConfigured={controller.webSearchCredentialConfigured}
+          onSaveWebSearchCredential={controller.saveWebSearchCredential}
+          onDeleteWebSearchCredential={controller.deleteWebSearchCredential}
           selectedDesignSystem={controller.selectedDesignSystem}
           setSelectedDesignSystem={controller.setSelectedDesignSystem}
           defaultTemplateId={controller.defaultTemplateId}

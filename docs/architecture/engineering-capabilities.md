@@ -1,7 +1,7 @@
 # Agent PPT 工程能力地图
 
 > 文档类型：现行能力盘点
-> 最后核对：2026-08-01
+> 最后核对：2026-08-02
 > 事实来源：`src/`、`skills/`、`tests/` 与 `package.json`
 
 下文中 `src/...`、`tests/...` 和 `docs/...` 均相对本仓库根目录。
@@ -33,6 +33,7 @@
 | 独立 Query Loop | **Implemented** | `src/main/agent/runtime/query/query.ts`、`src/main/agent/runtime/query/query-types.ts` |
 | Run 生命周期 | **Implemented** | `src/main/agent/runtime/agent-runtime.ts`、`src/main/agent/runtime/lifecycle/agent-run-scope.ts`、`src/main/agent/runtime/agent-run-finalizer.ts` |
 | Provider Gateway | **Implemented** | `src/main/agent/gateway/`（统一调用源；对内 `chat` / `responses` / `anthropic`） |
+| 本地凭据存储 | **Implemented** | `src/main/credential-store.ts`、`src/shared/credentials.ts`（Main-only `safeStorage`；Renderer 只见状态） |
 | 模型调用恢复 | **Implemented** | `src/main/agent/runtime/turns/model-call-recovery.ts`、`src/main/agent/runtime/model/with-retry.ts` |
 | Context 压缩 | **Implemented** | `src/main/agent/runtime/context-compact/` |
 | System Prompt 分区 | **Implemented** | `src/main/agent/runtime/prompts/` |
@@ -112,9 +113,20 @@ Gateway 的内存配置同时保留 provider 默认配置与 `configurationId` �
 provider 默认配置，最后才使用进程环境配置。
 
 `AgentGatewayConfig` 只含模型网关运行参数（`timeoutMs` / `maxOutputTokens` /
-`fallbackModel`）。搜索凭据在独立的 `AgentSearchConfig` 中；IPC 可仍传扁平 wire
-载荷，由 Main 一次 `splitAgentRunServicesConfig` 拆分。工具经 `ToolContext.searchConfig`
-取凭据，不再从 `getGatewayConfig()` 读取 webSearch 字段。
+`fallbackModel`）。搜索凭据在独立的 `AgentSearchConfig` 中；Renderer 的持久化设置和
+Agent run IPC 只携带非敏感选择与搜索配置。Main 在配置 Gateway 和搜索服务前从
+`CredentialStore` 注入凭据，再由 `splitAgentRunServicesConfig` 拆分运行配置。工具经
+`ToolContext.searchConfig` 取凭据，不再从 `getGatewayConfig()` 读取 webSearch 字段。
+
+模型与 Tavily API Key 只由 Main 持久化，并通过 Electron `safeStorage` 的正常后端加密。
+Renderer 只在用户录入时短暂持有明文，并仅能调用写入/删除凭据 IPC；不存在读取 Secret
+的 IPC。凭据与模型配置身份或搜索端点绑定，绑定信息变化后必须重新录入，避免复用旧
+凭据指向不同服务。旧版 v1 Renderer `localStorage` 中的明文 Key 不自动导入，升级时保留
+非敏感设置但要求重新录入并建议轮换旧 Key。`OPENAI_API_KEY`、`ANTHROPIC_API_KEY` 和
+`TAVILY_API_KEY` 环境变量 fallback 继续可用，但只允许官方端点或由对应 Base URL/搜索
+端点环境变量显式绑定的路由；远程凭据端点强制 HTTPS，HTTP 仅允许 loopback。Linux
+`basic_text` 后端可用但状态明确为
+`degraded`，不能等同于安全凭据服务。
 
 **私有 call-path / driver 层：**
 
@@ -410,7 +422,7 @@ Grammar / 未接线双轨 / 频谱残骸清扫已结束。后续不要再开「�
 | **产品主线** | 模板管理与自动选择（已选定） | [template-management.md](../roadmap/template-management.md) |
 | **远期导出** | 原生可编辑图表/形状 | [visual-system.md](../presentation/visual-system.md) §6；不与模板争主线 |
 | **有意保留** | 空 Deferred 壳、`evaluation.ts`、Skill `allowed-tools` 不 enforce | [tools.md](../agent/tools.md)、design-system/evaluation |
-| **风险 backlog** | 凭据明文、daemon、E2E/Office 证据、AppData 迁移 | [capability-scorecard.md](./capability-scorecard.md) |
+| **风险 backlog** | Linux `basic_text` 凭据降级、daemon、E2E/Office 证据、AppData 迁移 | [capability-scorecard.md](./capability-scorecard.md) |
 
 ## 9. 维护规则
 

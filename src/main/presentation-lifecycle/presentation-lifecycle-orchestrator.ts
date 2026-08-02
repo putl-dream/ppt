@@ -256,9 +256,6 @@ export class PresentationLifecycleOrchestrator {
     const existingJob = this.repository.getJobByPresentationId(
       input.presentationId,
     );
-    // #region agent log
-    fetch('http://127.0.0.1:7758/ingest/f715bfbd-c4b3-4d7c-91d3-b40633f1a70c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'4edd08'},body:JSON.stringify({sessionId:'4edd08',hypothesisId:'H1,H2,H3,H4,H5',location:'presentation-lifecycle-orchestrator.ts:259',message:'beginCapability project ownership check',data:{presentationId:input.presentationId,inputProjectId:input.projectId,capability:input.capability,queryId:input.queryId,existingJobId:existingJob?.jobId,existingProjectId:existingJob?.params.projectId,existingJobStatus:existingJob?.status,mismatch:Boolean(existingJob)&&existingJob?.params.projectId!==input.projectId},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
     if (existingJob && existingJob.params.projectId !== input.projectId) {
       throw new Error(
         `Presentation ${input.presentationId} already belongs to project `

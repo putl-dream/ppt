@@ -3,6 +3,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import {
   MODEL_STORAGE_KEY,
+  LEGACY_MODEL_STORAGE_KEY,
   MODEL_VENDOR_MODELS,
   MODEL_VENDOR_PRESETS,
   buildModelVendorDraft,
@@ -10,8 +11,10 @@ import {
   loadManagedModels,
   materializeModelVendorDraft,
   normalizeModelTokenPricing,
-  toAgentModelSettings,
+  serializeManagedModels,
+  toAgentModelSelection,
 } from "../src/renderer/src/modelCatalog";
+import { CREDENTIAL_REENTRY_NOTICE_STORAGE_KEY } from "../src/renderer/src/credentialMigration";
 
 describe("model catalog", () => {
   beforeEach(() => {
@@ -61,10 +64,11 @@ describe("model catalog", () => {
       cachedInputPerMillion: 0.025,
       outputPerMillion: 6,
     }));
-    expect(toAgentModelSettings(flash!)).toMatchObject({ supports1MContext: true });
-    expect(toAgentModelSettings(flash!)).toMatchObject({
+    expect(toAgentModelSelection(flash!)).toMatchObject({ supports1MContext: true });
+    expect(toAgentModelSelection(flash!)).toMatchObject({
       configurationId: "deepseek-v4-flash",
     });
+    expect(toAgentModelSelection(flash!)).not.toHaveProperty("apiKey");
   });
 
   it("switches DeepSeek to its OpenAI URL and model-specific API modes", () => {
@@ -80,14 +84,13 @@ describe("model catalog", () => {
     ]));
   });
 
-  it("reuses existing vendor settings and materializes every preset model with one key", () => {
+  it("reuses existing vendor metadata without attaching the dialog key to models", () => {
     const existing = MODEL_VENDOR_MODELS
       .filter((model) => model.id.startsWith("deepseek-"))
       .map((model) => ({
         ...model,
         provider: "openai" as const,
         baseURL: "https://proxy.example.com/v1",
-        apiKey: "existing-key",
       }));
     existing[0] = { ...existing[0], name: "My Flash" };
 
@@ -97,11 +100,12 @@ describe("model catalog", () => {
     expect(draft).toMatchObject({
       protocol: "openai",
       baseURL: "https://proxy.example.com/v1",
-      apiKey: "existing-key",
+      apiKey: "",
     });
     expect(draft.models[0].name).toBe("My Flash");
     expect(saved).toHaveLength(2);
-    expect(saved.every((model) => model.apiKey === "new-key" && model.enabled)).toBe(true);
+    expect(saved.every((model) => model.credentialConfigured && model.enabled)).toBe(true);
+    expect(saved.every((model) => !("apiKey" in model))).toBe(true);
     expect(new Set(saved.map((model) => model.id)).size).toBe(2);
   });
 
@@ -127,7 +131,7 @@ describe("model catalog", () => {
       ...MODEL_VENDOR_MODELS.find((model) => model.id === "deepseek-v4-flash")!,
       apiKey: "configured-key",
     };
-    window.localStorage.setItem(MODEL_STORAGE_KEY, JSON.stringify([
+    window.localStorage.setItem(LEGACY_MODEL_STORAGE_KEY, JSON.stringify([
       unconfigured,
       configured,
     ]));
@@ -137,9 +141,38 @@ describe("model catalog", () => {
     expect(models).toHaveLength(1);
     expect(models[0]).toMatchObject({
       id: "deepseek-v4-flash",
-      apiKey: "configured-key",
       builtIn: false,
+      credentialConfigured: false,
     });
+    expect(models[0]).not.toHaveProperty("apiKey");
+    expect(window.localStorage.getItem(LEGACY_MODEL_STORAGE_KEY)).toBeNull();
+    expect(window.localStorage.getItem(MODEL_STORAGE_KEY)).not.toContain("configured-key");
+  });
+
+  it("allowlists persisted metadata even if a runtime object is polluted with an API key", () => {
+    const configured = {
+      ...MODEL_VENDOR_MODELS[0],
+      credentialConfigured: true,
+      apiKey: "must-not-persist",
+      unexpected: "must-not-persist-either",
+    };
+
+    const serialized = serializeManagedModels([configured]);
+
+    expect(serialized).not.toContain("must-not-persist");
+    expect(JSON.parse(serialized)).toEqual([
+      expect.objectContaining({ id: configured.id, model: configured.model }),
+    ]);
+    expect(JSON.parse(serialized)[0]).not.toHaveProperty("credentialConfigured");
+    expect(JSON.parse(serialized)[0]).not.toHaveProperty("unexpected");
+  });
+
+  it("deletes malformed legacy storage and requests credential re-entry", () => {
+    window.localStorage.setItem(LEGACY_MODEL_STORAGE_KEY, "{not-json");
+
+    expect(loadManagedModels()).toEqual([]);
+    expect(window.localStorage.getItem(LEGACY_MODEL_STORAGE_KEY)).toBeNull();
+    expect(window.localStorage.getItem(CREDENTIAL_REENTRY_NOTICE_STORAGE_KEY)).toBe("1");
   });
 
   it("migrates legacy USD prices and preserves saved or disabled preset pricing", () => {

@@ -26,6 +26,12 @@ import type { SettingsCategory } from "./settingsCategories";
 export function App() {
   const [bootstrap] = useState(loadAppBootstrapSnapshot);
   const { message: toastMessage, notify } = useNotificationCenter();
+  const credentialReentryNoticeShownRef = useRef(false);
+  useEffect(() => {
+    if (!bootstrap.credentialReentryRequired || credentialReentryNoticeShownRef.current) return;
+    credentialReentryNoticeShownRef.current = true;
+    notify("旧版明文 API Key 未迁移；请重新录入，并轮换此前使用的 Key");
+  }, [bootstrap.credentialReentryRequired, notify]);
   const presentationController = usePresentationController(notify);
   const {
     presentation,
@@ -58,7 +64,7 @@ export function App() {
   const {
     selectedModelId,
     selectModel: setSelectedModelId,
-    visibleModels,
+    enabledModels,
     defaultTemplateId,
     setDefaultTemplateId,
   } = settings;
@@ -294,7 +300,7 @@ export function App() {
             onUpdateMessageContent: (messageId, content) =>
               displayActions.updateMessageContent(messageId, content, chatMessages),
             onProposePrompt: suggestPrompt,
-            models: visibleModels,
+            models: enabledModels,
             selectedModelId,
             setSelectedModelId,
             workspaceReady: Boolean(localStoragePath),

@@ -5,6 +5,7 @@ import type {
   WebSearchResponse,
   WebSearchRuntimeConfig,
 } from "./types";
+import { resolveEnvironmentWebSearchApiKey } from "../../environment-credential-policy";
 
 export class SearchService {
   constructor(private readonly adapters: WebSearchAdapter[]) {
@@ -28,7 +29,12 @@ export function createSearchService(
   config: WebSearchRuntimeConfig = {},
   env: NodeJS.ProcessEnv = process.env,
 ): SearchService {
-  const apiKey = config.apiKey?.trim() || env.TAVILY_API_KEY?.trim();
+  const runtimeApiKey = config.apiKey?.trim();
+  const requestedEndpoint = config.endpoint?.trim();
+  const environmentApiKey = runtimeApiKey
+    ? undefined
+    : resolveEnvironmentWebSearchApiKey(requestedEndpoint, env);
+  const apiKey = runtimeApiKey || environmentApiKey;
   if (!apiKey) {
     throw new Error(
       "Web search is not configured. Add a Tavily API key in Settings → 生成参数, "
@@ -39,7 +45,8 @@ export function createSearchService(
   return new SearchService([
     new TavilySearchAdapter({
       apiKey,
-      endpoint: config.endpoint?.trim() || env.TAVILY_SEARCH_ENDPOINT?.trim(),
+      endpoint: requestedEndpoint
+        || (runtimeApiKey ? undefined : env.TAVILY_SEARCH_ENDPOINT?.trim()),
       timeoutMs: config.timeoutMs,
     }),
   ]);

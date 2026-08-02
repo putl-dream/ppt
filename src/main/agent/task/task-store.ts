@@ -10,7 +10,10 @@ import {
   type AgentTaskNode,
   type TaskCompletionPolicy,
 } from "@shared/agent-task-list";
-import { writeJsonFileAtomic } from "../persistence/atomic-json-file";
+import {
+  readJsonFile,
+  writeJsonFileAtomic,
+} from "../persistence/atomic-json-file";
 
 export type TaskPermission =
   | "task:create" | "task:update_own" | "task:update_any"
@@ -702,7 +705,13 @@ export class TaskStore {
   }
 
   private async readList(): Promise<PersistedTaskList> {
-    const parsed = JSON.parse(await readFile(this.dataPath, "utf8")) as PersistedTaskList;
+    const parsed = await readJsonFile<PersistedTaskList>(this.dataPath);
+    if (!parsed) {
+      throw new TaskStoreError(
+        "MIGRATION_FAILED",
+        `Task-list directory ${basename(this.listDir)} is missing tasks.json`,
+      );
+    }
     if (parsed.format !== "task-list" || parsed.version !== 1
       || parsed.identity.canonicalKey !== this.identity.canonicalKey
       || parsed.identity.taskListId !== this.identity.taskListId
@@ -741,17 +750,7 @@ export class TaskStore {
         entry.isDirectory() && entry.name === listDirectoryName
       );
       if (existingListDirectory) {
-        try {
-          await readFile(this.dataPath, "utf8");
-        } catch (error) {
-          if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-            throw new TaskStoreError(
-              "MIGRATION_FAILED",
-              `Task-list directory ${listDirectoryName} is missing tasks.json`,
-            );
-          }
-          throw error;
-        }
+        await this.readList();
       } else {
         await mkdir(this.listDir, { recursive: false });
         const initial: PersistedTaskList = {

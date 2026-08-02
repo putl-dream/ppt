@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   DEFAULT_AGENT_GATEWAY_CONFIG,
+  agentRunServicesWireSchema,
   resolveAgentGatewayConfig,
   resolveAgentGatewayPreferences,
   resolveAgentSearchConfig,
@@ -38,11 +39,10 @@ describe("agent-gateway-config", () => {
     expect(search.webSearchTimeoutMs).toBe(20_000);
   });
 
-  it("splits a legacy flat run-services payload into gateway and search configs", () => {
+  it("splits a secret-free run-services payload into gateway and search configs", () => {
     const { gateway, search } = splitAgentRunServicesConfig({
       timeoutMs: 300_000,
       maxOutputTokens: 8192,
-      webSearchApiKey: "tvly-secret",
       webSearchEndpoint: "https://api.tavily.com/search",
       webSearchTimeoutMs: 20_000,
     });
@@ -51,10 +51,26 @@ describe("agent-gateway-config", () => {
       maxOutputTokens: 8192,
     });
     expect(search).toEqual({
-      webSearchApiKey: "tvly-secret",
       webSearchEndpoint: "https://api.tavily.com/search",
       webSearchTimeoutMs: 20_000,
     });
     expect(gateway).not.toHaveProperty("webSearchApiKey");
+  });
+
+  it("rejects credentials at the Renderer run-services boundary", () => {
+    expect(() => agentRunServicesWireSchema.parse({
+      timeoutMs: 300_000,
+      maxOutputTokens: 8192,
+      webSearchApiKey: "tvly-must-not-cross-ipc",
+    })).toThrow();
+    expect(() => agentRunServicesWireSchema.parse({
+      timeoutMs: 300_000,
+      maxOutputTokens: 8192,
+      fallbackModel: {
+        provider: "openai",
+        model: "gpt-5.5",
+        apiKey: "sk-must-not-cross-ipc",
+      },
+    })).toThrow();
   });
 });

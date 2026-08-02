@@ -1,14 +1,16 @@
-import { existsSync, mkdirSync } from "node:fs";
+import { mkdirSync } from "node:fs";
 import { readFile, stat } from "node:fs/promises";
 import { extname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   app,
   BrowserWindow,
   ipcMain,
   Menu,
   dialog,
-  nativeTheme,
+  safeStorage,
   shell,
+  type IpcMainInvokeEvent,
   type MessageBoxOptions,
   type WebContents,
 } from "electron";
@@ -24,7 +26,6 @@ import {
   type AgentStreamEvent,
   type CreateSessionOptions,
   type ExportPresentationOptions,
-  type WindowThemeMode,
 } from "@shared/ipc";
 import { deckExportService } from "./deck/deck-export-service";
 import { recoverInterruptedExport } from
@@ -33,12 +34,11 @@ import { slideThumbnailService } from "./deck/slide-thumbnail-service";
 import { AgentService, type AgentServiceEvent } from "./agent/service";
 import {
   agentExecutionStrategySchema,
-  agentModelSettingsSchema,
   type AgentExecutionStrategy,
-  type AgentModelSettings,
+  type AgentModelSelection,
 } from "@shared/agent";
 import { agentStepLimitsSchema, type AgentStepLimits } from "@shared/agent-step-limits";
-import { agentRunServicesWireSchema, splitAgentRunServicesConfig, type AgentGatewayConfig } from "@shared/agent-gateway-config";
+import type { AgentRunServicesWire } from "@shared/agent-gateway-config";
 import { AgentGateway } from "./agent/gateway";
 import { AgentRuntime } from "./agent/runtime/agent-runtime";
 import { ToolApprovalBroker } from "./agent/runtime/tools/tool-approval-broker";
@@ -68,8 +68,6 @@ import type { PersistedDisplayCard } from "@shared/card-display-protocol";
 import {
   findRecoverableConversation,
 } from "@shared/session-recovery";
-import { resolveExternalHttpUrl } from "./external-navigation";
-import type { AgentModelSelection } from "@shared/agent";
 import { TokenUsageStore } from "./token-usage-store";
 import type { ConversationEventKind } from "@shared/conversation-events";
 import {
@@ -109,6 +107,22 @@ import { PresentationCommitService } from
   "./presentation-lifecycle/presentation-commit-service";
 import { PresentationArtifactChangeObserver } from
   "./presentation-lifecycle/artifact-change-observer";
+import { createWindow } from "./window/create-window";
+import {
+  applyWindowThemeMode,
+  normalizeWindowThemeMode,
+} from "./window/theme";
+import {
+  deleteModelCredentialRequestSchema,
+  setModelCredentialsRequestSchema,
+  setWebSearchCredentialRequestSchema,
+} from "@shared/credentials";
+import { CredentialStore } from "./credential-store";
+import {
+  getCredentialStatusWithEnvironment,
+  hydrateAgentModelSettings,
+  hydrateAgentRunServices,
+} from "./credential-runtime";
 
 const { applicationDataRoot } = configureApplicationDataRoot(app);
 ensureUiThemesDirectory(applicationDataRoot);
@@ -116,7 +130,34 @@ ensureUiThemesDirectory(applicationDataRoot);
 const logger = createModuleLogger("main");
 const agentGateway = new AgentGateway();
 const toolApprovalBroker = new ToolApprovalBroker();
-type WindowThemePreset = Exclude<WindowThemeMode, "system">;
+
+function isTrustedRendererUrl(rawUrl: string): boolean {
+  try {
+    const actual = new URL(rawUrl);
+    const developmentUrl = process.env.ELECTRON_RENDERER_URL;
+    if (developmentUrl) {
+      return actual.origin === new URL(developmentUrl).origin;
+    }
+    if (actual.protocol !== "file:") return false;
+    return resolve(fileURLToPath(actual))
+      === resolve(join(__dirname, "../renderer/index.html"));
+  } catch {
+    return false;
+  }
+}
+
+function assertTrustedCredentialIpc(
+  event: IpcMainInvokeEvent,
+  trustedWebContentsIds: ReadonlySet<number>,
+): void {
+  if (
+    !trustedWebContentsIds.has(event.sender.id)
+    || event.senderFrame !== event.sender.mainFrame
+    || !isTrustedRendererUrl(event.senderFrame.url)
+  ) {
+    throw new Error("Credential IPC is restricted to the trusted application main frame.");
+  }
+}
 
 async function resolveSkillRegistry(): Promise<SkillRegistry> {
   const candidates = [
@@ -168,9 +209,6 @@ function createSessionRuntime(
       snapshot.presentation.title,
     ),
   );
-  // #region agent log
-  fetch('http://127.0.0.1:7758/ingest/f715bfbd-c4b3-4d7c-91d3-b40633f1a70c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'4edd08'},body:JSON.stringify({sessionId:'4edd08',hypothesisId:'H1,H2,H3,H5',location:'index.ts:170',message:'createSessionRuntime resolved projectId',data:{runtimeSessionId:snapshot.session.id,sessionWorkspacePath:snapshot.session.workspacePath ?? null,projectRootPath:snapshot.project?.rootPath ?? null,projectStorageIdentity,projectId,presentationId:snapshot.presentation.id,presentationRevision:snapshot.presentation.revision},timestamp:Date.now()})}).catch(()=>{});
-  // #endregion
   const messageBus = new MessageBus(MessageBus.defaultMailboxDir(runtimeRoot));
   const teammateManager = new TeammateManager(messageBus);
   const presentationCommitService = new PresentationCommitService(
@@ -346,231 +384,12 @@ function createAgentStreamEmitter(
   });
 }
 
-function createWindow(onWindowCreated?: (window: BrowserWindow) => void): BrowserWindow {
-  const icon = resolveAppIconPath();
-  const window = new BrowserWindow({
-    width: 1440,
-    height: 900,
-    minWidth: 1100,
-    minHeight: 700,
-    title: "Agent PPT",
-    titleBarStyle: "hidden",
-    titleBarOverlay: getWindowTitleBarOverlay(),
-    backgroundColor: getWindowBackgroundColor(),
-    ...(icon ? { icon } : {}),
-    webPreferences: {
-      preload: join(__dirname, "../preload/index.cjs"),
-      contextIsolation: true,
-      sandbox: true,
-    },
-  });
-
-  window.webContents.on("did-fail-load", (_, errorCode, errorDescription, validatedUrl) => {
-    logger.error("renderer.load.failed", { errorCode, errorDescription, validatedUrl });
-  });
-  window.webContents.on("did-finish-load", () => {
-    logger.info("renderer.load.completed", { webContentsId: window.webContents.id });
-  });
-  // 应用菜单已被移除，默认的开发者工具快捷键随之失效，这里手动补回。
-  window.webContents.on("before-input-event", (event, input) => {
-    if (input.type !== "keyDown") return;
-    const toggleDevTools =
-      input.key === "F12"
-      || (input.control && input.shift && input.key.toLowerCase() === "i");
-    if (!toggleDevTools) return;
-    event.preventDefault();
-    window.webContents.toggleDevTools();
-  });
-  const openInSystemBrowser = (rawUrl: string) => {
-    const externalUrl = resolveExternalHttpUrl(rawUrl);
-    if (!externalUrl) return;
-    void shell.openExternal(externalUrl).catch((error) => {
-      logger.warn("renderer.external-link.open-failed", { externalUrl, error });
-    });
-  };
-  window.webContents.on("will-navigate", (event, url) => {
-    event.preventDefault();
-    openInSystemBrowser(url);
-  });
-  window.webContents.setWindowOpenHandler(({ url }) => {
-    openInSystemBrowser(url);
-    return { action: "deny" };
-  });
-  if (process.env.ELECTRON_RENDERER_URL) {
-    void window.loadURL(process.env.ELECTRON_RENDERER_URL);
-  } else {
-    void window.loadFile(join(__dirname, "../renderer/index.html"));
-  }
-
-  // #region agent log
-  debugLog("H5", "index.ts:createWindow", "main window created with initial chrome", {
-    windowId: window.id,
-    activeWindowThemeMode,
-    resolvedPreset: resolveWindowThemeMode(),
-    initialOverlay: getWindowTitleBarOverlay(),
-    initialBackgroundColor: getWindowBackgroundColor(),
-    nativeThemeSource: nativeTheme.themeSource,
-    shouldUseDarkColors: nativeTheme.shouldUseDarkColors,
-    totalWindows: BrowserWindow.getAllWindows().length,
-  });
-  // #endregion
-  onWindowCreated?.(window);
-  return window;
-}
-
 let sessionStore: FileSessionStore;
 let tokenUsageStore: TokenUsageStore;
 let presentationLifecycleRepository: PresentationLifecycleRepository;
 let presentationLifecycleOrchestrator: PresentationLifecycleOrchestrator;
 let lifecycleBlobStore: ContentAddressedBlobStore;
 let lifecycleArtifactChangeObserver: PresentationArtifactChangeObserver;
-
-let activeWindowThemeMode: WindowThemeMode = "dark";
-
-const WINDOW_FRAME_BY_THEME: Record<WindowThemePreset, { background: string; symbol: string; nativeTheme: "light" | "dark" }> = {
-  light: {
-    background: "#e8eaed",
-    symbol: "#0f1217",
-    nativeTheme: "light",
-  },
-  dark: {
-    background: "#181818",
-    symbol: "#ffffff",
-    nativeTheme: "dark",
-  },
-};
-
-function resolveAppIconPath(): string | undefined {
-  const candidates = [
-    join(process.cwd(), "build", "icon.ico"),
-    join(process.cwd(), "build", "icon.png"),
-    join(process.resourcesPath, "icon.ico"),
-    join(process.resourcesPath, "icon.png"),
-    join(app.getAppPath(), "build", "icon.ico"),
-    join(app.getAppPath(), "build", "icon.png"),
-  ];
-
-  return candidates.find((candidate) => existsSync(candidate));
-}
-
-// #region agent log
-function debugLog(
-  hypothesisId: string,
-  location: string,
-  message: string,
-  data: Record<string, unknown>,
-): void {
-  fetch("http://127.0.0.1:7758/ingest/f715bfbd-c4b3-4d7c-91d3-b40633f1a70c", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Debug-Session-Id": "6f9302",
-    },
-    body: JSON.stringify({
-      sessionId: "6f9302",
-      runId: "titlebar-overlay-theme",
-      hypothesisId,
-      location,
-      message,
-      data,
-      timestamp: Date.now(),
-    }),
-  }).catch(() => {});
-}
-
-debugLog("H0", "index.ts:module-load", "instrumented main process module loaded", {
-  pid: process.pid,
-  execPath: process.execPath,
-  rendererUrl: process.env.ELECTRON_RENDERER_URL ?? null,
-});
-// #endregion
-
-function resolveWindowThemeMode(themeMode: WindowThemeMode = activeWindowThemeMode): WindowThemePreset {
-  if (themeMode === "system") {
-    return nativeTheme.shouldUseDarkColors ? "dark" : "light";
-  }
-  return themeMode;
-}
-
-function normalizeWindowThemeMode(themeMode: unknown): WindowThemeMode {
-  if (themeMode === "light" || themeMode === "dark" || themeMode === "system") {
-    return themeMode;
-  }
-  /* Legacy cyan/orange theme modes map to light chrome. */
-  if (themeMode === "cyan" || themeMode === "orange") {
-    return "light";
-  }
-  return "dark";
-}
-
-function getWindowBackgroundColor(): string {
-  return WINDOW_FRAME_BY_THEME[resolveWindowThemeMode()].background;
-}
-
-function getWindowTitleBarOverlay(): Electron.TitleBarOverlay {
-  const frame = WINDOW_FRAME_BY_THEME[resolveWindowThemeMode()];
-  return {
-    color: frame.background,
-    symbolColor: frame.symbol,
-    height: 30,
-  };
-}
-
-function applyWindowBackgroundColor(): void {
-  const backgroundColor = getWindowBackgroundColor();
-  const titleBarOverlay = getWindowTitleBarOverlay();
-
-  for (const browserWindow of BrowserWindow.getAllWindows()) {
-    // #region agent log
-    let overlayError: string | null = null;
-    try {
-      browserWindow.setBackgroundColor(backgroundColor);
-      browserWindow.setTitleBarOverlay(titleBarOverlay);
-    } catch (error) {
-      overlayError = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
-    }
-    debugLog("H3|H4", "index.ts:applyWindowBackgroundColor", "applied window chrome", {
-      windowId: browserWindow.id,
-      isDestroyed: browserWindow.isDestroyed(),
-      isVisible: browserWindow.isDestroyed() ? null : browserWindow.isVisible(),
-      title: browserWindow.isDestroyed() ? null : browserWindow.getTitle(),
-      backgroundColor,
-      overlayColor: titleBarOverlay.color,
-      overlaySymbolColor: titleBarOverlay.symbolColor,
-      overlayError,
-      totalWindows: BrowserWindow.getAllWindows().length,
-    });
-    if (overlayError) throw new Error(overlayError);
-    // #endregion
-  }
-}
-
-function applyWindowThemeMode(themeMode: WindowThemeMode): "light" | "dark" {
-  // #region agent log
-  debugLog("H1|H2", "index.ts:applyWindowThemeMode", "theme mode request received", {
-    requestedThemeMode: themeMode,
-    previousActiveThemeMode: activeWindowThemeMode,
-    themeSourceBefore: nativeTheme.themeSource,
-    shouldUseDarkColorsBefore: nativeTheme.shouldUseDarkColors,
-  });
-  // #endregion
-  activeWindowThemeMode = themeMode;
-  const resolvedMode = resolveWindowThemeMode(themeMode);
-  nativeTheme.themeSource = WINDOW_FRAME_BY_THEME[resolvedMode].nativeTheme;
-  const resolvedTheme = nativeTheme.shouldUseDarkColors ? "dark" : "light";
-  // #region agent log
-  debugLog("H2", "index.ts:applyWindowThemeMode", "theme mode resolved", {
-    requestedThemeMode: themeMode,
-    resolvedPreset: resolvedMode,
-    themeSourceAfter: nativeTheme.themeSource,
-    resolvedTheme,
-    overlay: WINDOW_FRAME_BY_THEME[resolvedMode],
-  });
-  // #endregion
-  applyWindowBackgroundColor();
-
-  return resolvedTheme;
-}
 
 app.whenReady().then(async () => {
   if (process.platform === "win32") {
@@ -618,13 +437,12 @@ app.whenReady().then(async () => {
   const runtimes = new Map<string, SessionRuntime>();
   const sessionActiveRuns = new Map<string, string>(); // sessionId -> runId
   const activeRuns = new Map<string, AbortController>(); // runId -> AbortController
+  const trustedRendererWebContentsIds = new Set<number>();
+  const credentialStore = new CredentialStore({ applicationDataRoot, safeStorage });
   let activeSessionId = sessionStore.getBootstrap().activeSession?.session.id ?? "";
 
   const ensureRuntime = async (snapshot: SessionSnapshot): Promise<SessionRuntime> => {
     const existing = runtimes.get(snapshot.session.id);
-    // #region agent log
-    fetch('http://127.0.0.1:7758/ingest/f715bfbd-c4b3-4d7c-91d3-b40633f1a70c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'4edd08'},body:JSON.stringify({sessionId:'4edd08',hypothesisId:'H3,H5',location:'index.ts:621',message:'ensureRuntime cache decision',data:{requestedSessionId:snapshot.session.id,cacheHit:Boolean(existing),cachedWorkspaceRoot:existing?.workspaceRoot ?? null,snapshotProjectRootPath:snapshot.project?.rootPath ?? null,cachedProjectId:existing?.projectId ?? null,reused:Boolean(existing)&&existing?.workspaceRoot===snapshot.project?.rootPath},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
     if (existing && existing.workspaceRoot === snapshot.project?.rootPath) return existing;
     const runtimeRoot = join(applicationDataRoot, "runtime", snapshot.session.id);
     const runtime = createSessionRuntime(snapshot, skillRegistry, applicationDataRoot);
@@ -703,6 +521,7 @@ app.whenReady().then(async () => {
   };
 
   const attachWindowLifecycle = (window: BrowserWindow) => {
+    trustedRendererWebContentsIds.add(window.webContents.id);
     window.webContents.on("render-process-gone", (_event, details) => {
       logger.error("renderer.process.gone", {
         webContentsId: window.webContents.id,
@@ -711,6 +530,7 @@ app.whenReady().then(async () => {
       abortAllActiveRuns(`render-process-gone:${details.reason}`);
     });
     window.on("closed", () => {
+      trustedRendererWebContentsIds.delete(window.webContents.id);
       abortAllActiveRuns("window-closed");
     });
   };
@@ -851,6 +671,32 @@ app.whenReady().then(async () => {
       return false;
     }
     return true;
+  });
+  ipcMain.handle("credentials:get-status", async (event, request: unknown) => {
+    assertTrustedCredentialIpc(event, trustedRendererWebContentsIds);
+    return getCredentialStatusWithEnvironment(credentialStore, request);
+  });
+  ipcMain.handle("credentials:set-models", async (event, request: unknown) => {
+    assertTrustedCredentialIpc(event, trustedRendererWebContentsIds);
+    await credentialStore.setModelCredentials(
+      setModelCredentialsRequestSchema.parse(request),
+    );
+  });
+  ipcMain.handle("credentials:delete-model", async (event, request: unknown) => {
+    assertTrustedCredentialIpc(event, trustedRendererWebContentsIds);
+    await credentialStore.deleteModelCredential(
+      deleteModelCredentialRequestSchema.parse(request),
+    );
+  });
+  ipcMain.handle("credentials:set-web-search", async (event, request: unknown) => {
+    assertTrustedCredentialIpc(event, trustedRendererWebContentsIds);
+    await credentialStore.setWebSearchCredential(
+      setWebSearchCredentialRequestSchema.parse(request),
+    );
+  });
+  ipcMain.handle("credentials:delete-web-search", async (event) => {
+    assertTrustedCredentialIpc(event, trustedRendererWebContentsIds);
+    await credentialStore.deleteWebSearchCredential();
   });
   ipcMain.handle("ui-themes:list", () => listUiThemes());
   ipcMain.handle("ui-themes:read", (_event, themeId: unknown) => {
@@ -1059,9 +905,6 @@ app.whenReady().then(async () => {
       if (format !== "pptx" && format !== "html" && format !== "json") {
         throw new Error("Unsupported export format.");
       }
-      // #region agent log
-      fetch('http://127.0.0.1:7758/ingest/f715bfbd-c4b3-4d7c-91d3-b40633f1a70c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'4edd08'},body:JSON.stringify({sessionId:'4edd08',hypothesisId:'H2,H3,H5',location:'index.ts:1056',message:'export handler runtime identity',data:{requestedSessionId:sessionId,activeSessionId,runtimeProjectId:runtime.projectId,runtimeWorkspaceRoot:runtime.workspaceRoot ?? null,presentationId:presentation.id,presentationRevision:presentation.revision,format},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
       const presentationState = await ensureCurrentPresentationRevision(runtime);
       const exportState = presentationLifecycleOrchestrator.beginCapability({
         projectId: runtime.projectId,
@@ -1404,10 +1247,10 @@ app.whenReady().then(async () => {
     async (
       event,
       rawRequest: unknown,
-      input?: AgentModelSettings,
+      input?: AgentModelSelection,
       strategy?: AgentExecutionStrategy,
       rawStepLimits?: AgentStepLimits,
-      rawGatewayConfig?: AgentGatewayConfig,
+      rawGatewayConfig?: AgentRunServicesWire,
       runId?: string,
     ) => {
       const request = parseAgentRequest("start", rawRequest);
@@ -1433,20 +1276,24 @@ app.whenReady().then(async () => {
 
       try {
         const runtime = await getRuntimeForSession(sessionId);
-        const settings = input ? agentModelSettingsSchema.parse(input) : undefined;
+        const settings = input
+          ? await hydrateAgentModelSettings(credentialStore, input)
+          : undefined;
         const executionStrategy = strategy
           ? agentExecutionStrategySchema.parse(strategy)
           : "REQUEST_APPROVAL";
         const agentStepLimits = rawStepLimits
           ? agentStepLimitsSchema.parse(rawStepLimits)
           : undefined;
-        const services = rawGatewayConfig
-          ? splitAgentRunServicesConfig(agentRunServicesWireSchema.parse(rawGatewayConfig))
-          : undefined;
+        const services = await hydrateAgentRunServices(
+          credentialStore,
+          rawGatewayConfig ?? {},
+        );
+        agentGateway.clearPrimarySettings();
         let selection: AgentModelSelection | undefined;
         if (settings) {
-          selection = agentGateway.configure(settings, services?.gateway, services?.search);
-        } else if (services) {
+          selection = agentGateway.configure(settings, services.gateway, services.search);
+        } else {
           agentGateway.applyGatewayConfig(services.gateway);
           agentGateway.applySearchConfig(services.search);
         }
@@ -1515,10 +1362,10 @@ app.whenReady().then(async () => {
     event,
     threadId: string,
     rawRequest: unknown,
-    rawModelSettings?: AgentModelSettings,
+    rawModelSettings?: AgentModelSelection,
     rawExecutionStrategy?: AgentExecutionStrategy,
     rawStepLimits?: AgentStepLimits,
-    rawGatewayConfig?: AgentGatewayConfig,
+    rawGatewayConfig?: AgentRunServicesWire,
     runId?: string,
   ) => {
     const request = parseAgentRequest("continue-agent-run", rawRequest);
@@ -1544,7 +1391,7 @@ app.whenReady().then(async () => {
     try {
       const runtime = await getRuntimeForSession(sessionId);
       const settings = rawModelSettings
-        ? agentModelSettingsSchema.parse(rawModelSettings)
+        ? await hydrateAgentModelSettings(credentialStore, rawModelSettings)
         : undefined;
       const executionStrategy = rawExecutionStrategy
         ? agentExecutionStrategySchema.parse(rawExecutionStrategy)
@@ -1552,13 +1399,15 @@ app.whenReady().then(async () => {
       const agentStepLimits = rawStepLimits
         ? agentStepLimitsSchema.parse(rawStepLimits)
         : undefined;
-      const services = rawGatewayConfig
-        ? splitAgentRunServicesConfig(agentRunServicesWireSchema.parse(rawGatewayConfig))
-        : undefined;
+      const services = await hydrateAgentRunServices(
+        credentialStore,
+        rawGatewayConfig ?? {},
+      );
+      agentGateway.clearPrimarySettings();
       let selection: AgentModelSelection | undefined;
       if (settings) {
-        selection = agentGateway.configure(settings, services?.gateway, services?.search);
-      } else if (services) {
+        selection = agentGateway.configure(settings, services.gateway, services.search);
+      } else {
         agentGateway.applyGatewayConfig(services.gateway);
         agentGateway.applySearchConfig(services.search);
       }

@@ -3,6 +3,16 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { UnifiedAgentInput } from "../src/renderer/src/components/UnifiedAgentInput";
 
+const CONFIGURED_MODEL = {
+  id: "configured-model",
+  name: "Configured Model",
+  provider: "openai" as const,
+  model: "configured-model",
+  baseURL: "https://api.openai.com/v1",
+  openaiApiMode: "responses" as const,
+  credentialConfigured: true,
+};
+
 describe("UnifiedAgentInput draft workspace", () => {
   it("keeps URL input and submission available before a workspace directory is selected", () => {
     const html = renderToStaticMarkup(
@@ -11,8 +21,8 @@ describe("UnifiedAgentInput draft workspace", () => {
         onChangeRequest={vi.fn()}
         onSubmitRequest={vi.fn()}
         busy={false}
-        models={[]}
-        selectedModelId=""
+        models={[CONFIGURED_MODEL]}
+        selectedModelId={CONFIGURED_MODEL.id}
         setSelectedModelId={vi.fn()}
         layoutMode="center"
         sandboxReady={false}
@@ -29,6 +39,26 @@ describe("UnifiedAgentInput draft workspace", () => {
     expect(sendButton).toBeDefined();
     expect(sendButton).not.toContain("disabled");
     expect(sendButton).toContain("send-cta-btn is-ready");
+  });
+
+  it("disables submission when no credential-backed model is available", () => {
+    const html = renderToStaticMarkup(
+      <UnifiedAgentInput
+        request="生成一份复盘"
+        onChangeRequest={vi.fn()}
+        onSubmitRequest={vi.fn()}
+        busy={false}
+        models={[]}
+        selectedModelId=""
+        setSelectedModelId={vi.fn()}
+        layoutMode="center"
+      />,
+    );
+
+    const sendButton = html.match(/<button[^>]*aria-label="发送指令"[^>]*>/)?.[0];
+    expect(sendButton).toBeDefined();
+    expect(sendButton).toContain("disabled");
+    expect(sendButton).not.toContain("is-ready");
   });
 
   it("does not expose the retired Lean mode switch", () => {

@@ -63,7 +63,7 @@ export const UnifiedAgentInput: React.FC<UnifiedAgentInputProps> = ({
   const isPermissionGateOpen = Boolean(pendingToolApproval && onResolveToolApproval);
 
   const handleSend = () => {
-    if (busy || !request.trim()) return;
+    if (busy || !request.trim() || models.length === 0) return;
     onSubmitRequest();
     window.setTimeout(() => textareaRef.current?.focus(), 0);
   };
@@ -205,10 +205,14 @@ export const UnifiedAgentInput: React.FC<UnifiedAgentInputProps> = ({
                   <button
                     type="button"
                     onClick={canCancelRun && onCancelRun ? onCancelRun : handleSend}
-                    disabled={canCancelRun ? isCancellingRun : busy || !request.trim()}
+                    disabled={canCancelRun
+                      ? isCancellingRun
+                      : busy || !request.trim() || models.length === 0}
                     className={canCancelRun
                       ? "stop-cta-btn"
-                      : `send-cta-btn${!busy && request.trim() ? " is-ready" : ""}`}
+                      : `send-cta-btn${!busy && request.trim() && models.length > 0
+                        ? " is-ready"
+                        : ""}`}
                     aria-label={canCancelRun ? "中止当前 Agent 会话" : "发送指令"}
                     title={canCancelRun ? "中止当前 Agent 会话" : "发送指令（Enter）"}
                   >

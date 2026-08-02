@@ -74,42 +74,6 @@ function resolveSvgExportLayers(
 ): { backgroundSvg: string; texts: LiftedText[] } {
   try {
     const lifted = liftSvgText(markup);
-    // #region agent log
-    const dbgSourceElements = (markup.match(new RegExp("<text\\b[^>]*>[\\s\\S]*?</text>", "g")) ?? [])
-      .slice(0, 20)
-      .map((element) => element.slice(0, 300));
-    const dbgResidualTextTags = (lifted.backgroundSvg.match(new RegExp("<text\\b", "g")) ?? []).length;
-    const dbgSourceTextTags = (markup.match(new RegExp("<text\\b", "g")) ?? []).length;
-    const dbgTexts = lifted.texts.map((t) => ({
-      content: t.content,
-      xIn: Number(t.xIn.toFixed(3)),
-      yIn: Number(t.yIn.toFixed(3)),
-      wIn: Number(t.wIn.toFixed(3)),
-      hIn: Number(t.hIn.toFixed(3)),
-      fontSizePt: Number(t.fontSizePt.toFixed(2)),
-      align: t.align,
-      bold: t.bold,
-    }));
-    void fetch("http://127.0.0.1:7758/ingest/f715bfbd-c4b3-4d7c-91d3-b40633f1a70c", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "4edd08" },
-      body: JSON.stringify({
-        sessionId: "4edd08",
-        hypothesisId: "H-A,H-B,H-C,H-D",
-        location: "ppt-exporter.ts:76",
-        message: "lift result for slide",
-        data: {
-          slideNumber,
-          liftedCount: lifted.texts.length,
-          backgroundResidualTextTags: dbgResidualTextTags,
-          sourceTextTags: dbgSourceTextTags,
-          texts: dbgTexts,
-          sourceElements: dbgSourceElements,
-        },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-    // #endregion
     if (lifted.texts.length === 0) {
       return { backgroundSvg: markup, texts: [] };
     }

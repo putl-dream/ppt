@@ -1,7 +1,4 @@
 import { isDeepStrictEqual } from "node:util";
-// #region agent log
-import { createHash } from "node:crypto";
-// #endregion
 import { z } from "zod";
 import {
   ARGUMENT_MODES,
@@ -352,78 +349,6 @@ export async function readSvgDeckLocks(
   return { designSpec, pagePlan };
 }
 
-// #region agent log
-const DEBUG_LOG_ENDPOINT =
-  "http://127.0.0.1:7758/ingest/f715bfbd-c4b3-4d7c-91d3-b40633f1a70c";
-
-function debugLog(
-  hypothesisId: string,
-  location: string,
-  message: string,
-  data: Record<string, unknown>,
-): void {
-  fetch(DEBUG_LOG_ENDPOINT, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Debug-Session-Id": "be1371",
-    },
-    body: JSON.stringify({
-      sessionId: "be1371",
-      runId: "svg-deck-lock-mismatch",
-      hypothesisId,
-      location,
-      message,
-      data,
-      timestamp: Date.now(),
-    }),
-  }).catch(() => {});
-}
-
-debugLog(
-  "H0",
-  "svg-deck-locks.ts:module-load",
-  "instrumented svg-deck-locks module loaded",
-  { pid: process.pid, execPath: process.execPath },
-);
-
-function debugStringDiff(
-  submitted: string,
-  planned: string,
-): Record<string, unknown> {
-  let index = 0;
-  while (
-    index < submitted.length
-    && index < planned.length
-    && submitted[index] === planned[index]
-  ) {
-    index += 1;
-  }
-  const window = (value: string) =>
-    JSON.stringify(value.slice(Math.max(0, index - 40), index + 60));
-  const collapse = (value: string) => value.replace(/\s+/gu, " ").trim();
-  return {
-    submittedLength: submitted.length,
-    plannedLength: planned.length,
-    firstDiffIndex: index,
-    submittedCodePoint: submitted.codePointAt(index) ?? null,
-    plannedCodePoint: planned.codePointAt(index) ?? null,
-    submittedWindow: window(submitted),
-    plannedWindow: window(planned),
-    submittedHead: JSON.stringify(submitted.slice(0, 160)),
-    plannedHead: JSON.stringify(planned.slice(0, 160)),
-    submittedTail: JSON.stringify(submitted.slice(-80)),
-    plannedTail: JSON.stringify(planned.slice(-80)),
-    equalAfterTrim: submitted.trim() === planned.trim(),
-    equalAfterWhitespaceCollapse: collapse(submitted) === collapse(planned),
-    equalAfterNfc: submitted.normalize("NFC") === planned.normalize("NFC"),
-    equalAfterNfkc: submitted.normalize("NFKC") === planned.normalize("NFKC"),
-    submittedIsPrefixOfPlanned: planned.startsWith(submitted),
-    plannedIsPrefixOfSubmitted: submitted.startsWith(planned),
-  };
-}
-// #endregion
-
 export function assertSvgDeckLocksMatchSubmission<
   T extends {
     communication: z.infer<typeof communicationContractSchema>;
@@ -470,50 +395,6 @@ export function assertSvgDeckLocksMatchSubmission<
       + `${SVG_DECK_DESIGN_SPEC_PATH}.presentationDesignSystem.`,
     );
   }
-
-  // #region agent log
-  {
-    const keys = [
-      "role",
-      "coreMessage",
-      "audienceMove",
-      "rhythm",
-      "layoutIntent",
-    ] as const;
-    debugLog(
-      "H1|H5",
-      "svg-deck-locks.ts:assertSvgDeckLocksMatchSubmission",
-      "submission vs page-plan narrative comparison map",
-      {
-        submittedSlideCount: args.slides.length,
-        plannedSlideCount: pagePlan.slides.length,
-        slides: args.slides.map((slide, index) => {
-          const planned = pagePlan.slides[index];
-          if (!planned) {
-            return { index, submittedId: slide.id, plannedId: null };
-          }
-          const plannedNarrative = {
-            role: planned.narrativeRole,
-            coreMessage: planned.coreMessage,
-            audienceMove: planned.audienceMove,
-            rhythm: planned.rhythm,
-            layoutIntent: planned.layoutIntent,
-          };
-          return {
-            index,
-            submittedId: slide.id,
-            plannedId: planned.id,
-            mismatchedKeys: keys.filter(
-              (key) => slide.narrative[key] !== plannedNarrative[key],
-            ),
-            submittedLayoutIntentLength: slide.narrative.layoutIntent.length,
-            plannedLayoutIntentLength: planned.layoutIntent.length,
-          };
-        }),
-      },
-    );
-  }
-  // #endregion
 
   if (args.slides.length !== pagePlan.slides.length) {
     throw new Error(
@@ -565,19 +446,6 @@ export function assertSvgDeckLocksMatchSubmission<
     };
     for (const key of narrativeKeys) {
       if (slide.narrative[key] !== plannedNarrative[key]) {
-        // #region agent log
-        debugLog(
-          "H1|H2|H3|H4",
-          "svg-deck-locks.ts:assertSvgDeckLocksMatchSubmission",
-          `narrative mismatch detail for ${pageLabel}.${key}`,
-          {
-            pageIndex: index,
-            slideId: slide.id,
-            key,
-            ...debugStringDiff(slide.narrative[key], plannedNarrative[key]),
-          },
-        );
-        // #endregion
         const planKey = key === "role" ? "narrativeRole" : key;
         throw new Error(
           `SubmitSvgDeck ${pageLabel}.narrative.${key} must exactly match `
@@ -603,20 +471,6 @@ async function readSvgDeckLock(
       `${caller} requires readable lock file ${path}: ${errorMessage(error)}`,
     );
   }
-  // #region agent log
-  debugLog(
-    "H5",
-    "svg-deck-locks.ts:readSvgDeckLock",
-    `lock file read by ${caller}`,
-    {
-      path,
-      caller,
-      contentLength: content.length,
-      contentSha256: createHash("sha256").update(content).digest("hex"),
-      hasCrlf: content.includes("\r\n"),
-    },
-  );
-  // #endregion
   const validated = validateSvgDeckLockContent(path, content);
   if (path === SVG_DECK_DESIGN_SPEC_PATH) {
     await assertDesignSpecMatchesTemplatePolicy(

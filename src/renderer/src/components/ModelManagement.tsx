@@ -11,6 +11,7 @@ import {
   type ModelVendorDraft,
   type ModelVendorId,
 } from "../modelCatalog";
+import { normalizeCredentialUrl } from "@shared/credentials";
 import { Edit3Icon, PlusIcon, RefreshIcon, TrashIcon } from "./Icons";
 import { Select } from "./Select";
 
@@ -18,8 +19,9 @@ interface ModelManagementProps {
   models: ManagedModel[];
   selectedModelId: string;
   onSelectModel: (id: string) => void;
-  onSaveModel: (model: ManagedModel) => void;
-  onDeleteModel: (id: string) => void;
+  onSaveModel: (model: ManagedModel, apiKey?: string) => Promise<boolean>;
+  onSaveModels: (models: ManagedModel[], apiKey: string) => Promise<boolean>;
+  onDeleteModel: (id: string) => Promise<boolean>;
   triggerToast: (message: string) => void;
 }
 
@@ -34,8 +36,8 @@ const VENDOR_OPTIONS = [
 
 function validHttpURL(value: string): boolean {
   try {
-    const url = new URL(value);
-    return url.protocol === "http:" || url.protocol === "https:";
+    normalizeCredentialUrl(value);
+    return true;
   } catch {
     return false;
   }
@@ -63,11 +65,23 @@ function validPricing(pricing: ManagedModel["pricing"]): boolean {
         && pricing.cacheCreationInputPerMillion >= 0));
 }
 
+function normalizedConnectionValue(value: string): string {
+  return value.trim().replace(/\/+$/, "");
+}
+
+function connectionBindingChanged(previous: ManagedModel, next: ManagedModel): boolean {
+  return previous.provider !== next.provider
+    || previous.model.trim() !== next.model.trim()
+    || normalizedConnectionValue(previous.baseURL) !== normalizedConnectionValue(next.baseURL)
+    || (next.provider === "openai" && previous.openaiApiMode !== next.openaiApiMode);
+}
+
 export function ModelManagement({
   models,
   selectedModelId,
   onSelectModel,
   onSaveModel,
+  onSaveModels,
   onDeleteModel,
   triggerToast,
 }: ModelManagementProps) {
@@ -75,6 +89,8 @@ export function ModelManagement({
   const [dialogModel, setDialogModel] = useState<ManagedModel | null>(null);
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [vendorDraft, setVendorDraft] = useState<ModelVendorDraft | null>(null);
+  const [dialogApiKey, setDialogApiKey] = useState("");
+  const [credentialPending, setCredentialPending] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const dialogRef = useRef<HTMLElement>(null);
   const returnFocusRef = useRef<HTMLElement | null>(null);
@@ -99,10 +115,10 @@ export function ModelManagement({
     rememberDialogFocus();
     setDialogModel({
       ...model,
-      apiKey: model.apiKey ?? "",
       baseURL: model.baseURL ?? "",
       openaiApiMode: model.openaiApiMode ?? "chat-completions",
     });
+    setDialogApiKey("");
   };
 
   const openAddDialog = () => {
@@ -116,6 +132,8 @@ export function ModelManagement({
     setDialogModel(null);
     setAddDialogOpen(false);
     setVendorDraft(null);
+    setDialogApiKey("");
+    setCredentialPending(false);
     setAdvancedOpen(false);
     window.setTimeout(() => returnFocusRef.current?.focus(), 0);
   };
@@ -188,7 +206,7 @@ export function ModelManagement({
       return;
     }
 
-    onSaveModel({ ...model, enabled: nextEnabled });
+    void onSaveModel({ ...model, enabled: nextEnabled });
     if (nextEnabled) {
       onSelectModel(model.id);
       return;
@@ -199,7 +217,7 @@ export function ModelManagement({
     }
   };
 
-  const saveVendorDraft = () => {
+  const saveVendorDraft = async () => {
     if (!vendorDraft) {
       triggerToast("请先选择模型厂商");
       return;
@@ -222,7 +240,10 @@ export function ModelManagement({
     }
 
     const nextModels = materializeModelVendorDraft(vendorDraft);
-    nextModels.forEach(onSaveModel);
+    setCredentialPending(true);
+    const saved = await onSaveModels(nextModels, vendorDraft.apiKey);
+    setCredentialPending(false);
+    if (!saved) return;
     const preset = getModelVendorPreset(vendorDraft.vendorId);
     onSelectModel(preset?.defaultModelId ?? nextModels[0].id);
     closeDialog();
@@ -230,7 +251,7 @@ export function ModelManagement({
     triggerToast(preset ? `${preset.label} 模型已配置` : "自定义模型已添加");
   };
 
-  const saveDialogModel = () => {
+  const saveDialogModel = async () => {
     if (!dialogModel) return;
     const name = dialogModel.name.trim();
     const modelId = dialogModel.model.trim();
@@ -242,25 +263,34 @@ export function ModelManagement({
       triggerToast("请填写有效的非负模型单价");
       return;
     }
+    if (dialogModel.baseURL.trim() && !validHttpURL(dialogModel.baseURL)) {
+      triggerToast("请填写有效的 Base URL");
+      return;
+    }
 
     const next: ManagedModel = {
       ...dialogModel,
       name,
       model: modelId,
       baseURL: dialogModel.baseURL.trim().replace(/\/+$/, ""),
-      apiKey: dialogModel.apiKey.trim(),
       pricing: dialogModel.pricing ? {
         ...dialogModel.pricing,
         updatedAt: new Date().toISOString().slice(0, 10),
       } : dialogModel.pricing,
     };
-    onSaveModel(next);
+    setCredentialPending(true);
+    const saved = await onSaveModel(next, dialogApiKey);
+    setCredentialPending(false);
+    if (!saved) return;
     if (next.enabled !== false) onSelectModel(next.id);
     closeDialog();
-    triggerToast("模型已保存");
+    const previous = models.find((model) => model.id === next.id);
+    triggerToast(previous && connectionBindingChanged(previous, next) && !dialogApiKey.trim()
+      ? "模型已保存，请重新录入 API Key"
+      : "模型已保存");
   };
 
-  const deleteDialogModel = () => {
+  const deleteDialogModel = async () => {
     if (!dialogModel || dialogModel.builtIn) return;
     if (isModelEnabled(dialogModel) && enabledCount <= 1) {
       triggerToast("至少保留一个可用模型");
@@ -268,7 +298,10 @@ export function ModelManagement({
     }
     const fallback = models.find((model) =>
       model.id !== dialogModel.id && isModelEnabled(model));
-    onDeleteModel(dialogModel.id);
+    setCredentialPending(true);
+    const deleted = await onDeleteModel(dialogModel.id);
+    setCredentialPending(false);
+    if (!deleted) return;
     if (fallback) onSelectModel(fallback.id);
     closeDialog();
     triggerToast("自定义模型已删除");
@@ -474,6 +507,7 @@ export function ModelManagement({
                   }}
                 >
                   {model.name}
+                  <small>{model.credentialConfigured ? " · 凭据已配置" : " · 凭据未配置"}</small>
                 </button>
                 <button
                   type="button"
@@ -625,7 +659,14 @@ export function ModelManagement({
               <span />
               <div className="model-dialog-actions">
                 <button type="button" className="settings-secondary-btn" onClick={closeDialog}>取消</button>
-                <button type="button" className="settings-primary-btn" onClick={saveVendorDraft}>添加模型</button>
+                <button
+                  type="button"
+                  className="settings-primary-btn"
+                  disabled={credentialPending}
+                  onClick={() => void saveVendorDraft()}
+                >
+                  {credentialPending ? "保存中…" : "添加模型"}
+                </button>
               </div>
             </footer>
           </section>
@@ -691,7 +732,25 @@ export function ModelManagement({
               </label>
               <label className="config-group model-form-span">
                 <span className="config-label">API Key</span>
-                <input className="config-input" type="password" value={dialogModel.apiKey} onChange={(event) => updateDialogModel({ apiKey: event.target.value })} />
+                <input
+                  className="config-input"
+                  type="password"
+                  value={dialogApiKey}
+                  placeholder={dialogModel.credentialConfigured
+                    ? "留空以保留当前安全存储中的凭据"
+                    : "填写 API Key"}
+                  onChange={(event) => setDialogApiKey(event.target.value)}
+                />
+                {models.find((model) => model.id === dialogModel.id)
+                  && connectionBindingChanged(
+                    models.find((model) => model.id === dialogModel.id)!,
+                    dialogModel,
+                  )
+                  && !dialogApiKey.trim() ? (
+                    <small className="model-pricing-hint">
+                      连接配置已更改；保存后原凭据不会复用，请重新录入 API Key。
+                    </small>
+                  ) : null}
               </label>
               {dialogModel.provider === "openai" ? (
                 <div className="config-group model-form-span">
@@ -730,14 +789,26 @@ export function ModelManagement({
 
             <footer className="model-dialog-footer">
               {!dialogModel.builtIn ? (
-                <button type="button" className="model-dialog-danger-btn" onClick={deleteDialogModel}>
+                <button
+                  type="button"
+                  className="model-dialog-danger-btn"
+                  disabled={credentialPending}
+                  onClick={() => void deleteDialogModel()}
+                >
                   <TrashIcon size={15} />
                   <span>删除模型</span>
                 </button>
               ) : <span />}
               <div className="model-dialog-actions">
                 <button type="button" className="settings-secondary-btn" onClick={closeDialog}>取消</button>
-                <button type="button" className="settings-primary-btn" onClick={saveDialogModel}>保存</button>
+                <button
+                  type="button"
+                  className="settings-primary-btn"
+                  disabled={credentialPending}
+                  onClick={() => void saveDialogModel()}
+                >
+                  {credentialPending ? "保存中…" : "保存"}
+                </button>
               </div>
             </footer>
           </section>

@@ -5,6 +5,7 @@ import {
 } from "@shared/agent-gateway-config";
 import { AgentGatewayError } from "./errors";
 import type { ResolvedAgentModelConfig } from "./types";
+import { resolveEnvironmentModelApiKey } from "../../environment-credential-policy";
 
 /** Internal Gateway call path; callers never select this directly. */
 export type AgentCallPath = "chat" | "responses" | "anthropic";
@@ -38,6 +39,11 @@ export class AgentModelSettingsRegistry {
     if (settings.configurationId) {
       this.primaryByConfigurationId.set(settings.configurationId, registered);
     }
+  }
+
+  clearPrimary(): void {
+    this.providerDefaults.clear();
+    this.primaryByConfigurationId.clear();
   }
 
   registerFallback(settings: AgentModelSettings | undefined): void {
@@ -85,10 +91,11 @@ export class AgentModelSettingsRegistry {
       );
     }
 
-    const modelFallback = selection?.model
-      ? this.fallbackByProviderModel.get(provider)?.get(selection.model)
-      : undefined;
-    return modelFallback ?? this.providerDefaults.get(provider);
+    const providerDefault = this.providerDefaults.get(provider);
+    if (!selection?.model) return providerDefault;
+    const modelFallback = this.fallbackByProviderModel.get(provider)?.get(selection.model);
+    if (modelFallback) return modelFallback;
+    return providerDefault?.model === selection.model ? providerDefault : undefined;
   }
 }
 
@@ -118,6 +125,7 @@ function resolveCallPath(
   baseURL: string | undefined,
   runtimeMode: AgentModelSettings["openaiApiMode"],
   env: NodeJS.ProcessEnv,
+  allowEnvironmentMode = true,
 ): AgentCallPath {
   if (provider === "anthropic") return "anthropic";
 
@@ -131,7 +139,9 @@ function resolveCallPath(
     );
   }
 
-  const configured = env.OPENAI_API_MODE?.trim().toLowerCase();
+  const configured = allowEnvironmentMode
+    ? env.OPENAI_API_MODE?.trim().toLowerCase()
+    : undefined;
   if (configured === "chat-completions") return "chat";
   if (configured === "responses") return "responses";
   if (configured) {
@@ -195,8 +205,14 @@ export function resolveAgentModelConfig(
 ): DriverResolvedConfig {
   const provider = selection?.provider ?? inferProvider(env);
   const runtime = runtimeSettings.resolve(selection, provider);
-  const apiKey = runtime?.apiKey ??
-    (provider === "openai" ? env.OPENAI_API_KEY : env.ANTHROPIC_API_KEY);
+  const runtimeApiKey = runtime?.apiKey?.trim();
+  const requestedBaseURL = runtime
+    ? runtime.baseURL
+    : selection?.baseURL;
+  const environmentApiKey = runtimeApiKey
+    ? undefined
+    : resolveEnvironmentModelApiKey(provider, requestedBaseURL, env);
+  const apiKey = runtimeApiKey ?? environmentApiKey;
 
   if (!apiKey) {
     throw new AgentGatewayError(
@@ -209,7 +225,8 @@ export function resolveAgentModelConfig(
   const providerModel = provider === "openai" ? env.OPENAI_MODEL : env.ANTHROPIC_MODEL;
   const model = selection?.model || runtime?.model || env.AGENT_MODEL || providerModel || DEFAULT_AGENT_MODELS[provider];
   const environmentBaseURL = provider === "openai" ? env.OPENAI_BASE_URL : env.ANTHROPIC_BASE_URL;
-  const baseURL = runtime?.baseURL ?? environmentBaseURL;
+  const usesRuntimeCredential = Boolean(runtimeApiKey);
+  const baseURL = requestedBaseURL ?? (usesRuntimeCredential ? undefined : environmentBaseURL);
 
   return {
     ...((selection?.configurationId ?? runtime?.configurationId)
@@ -219,7 +236,13 @@ export function resolveAgentModelConfig(
     model,
     apiKey,
     baseURL,
-    callPath: resolveCallPath(provider, baseURL, runtime?.openaiApiMode, env),
+    callPath: resolveCallPath(
+      provider,
+      baseURL,
+      runtime?.openaiApiMode,
+      env,
+      !usesRuntimeCredential,
+    ),
     timeoutMs: gatewayConfig?.timeoutMs
       ?? positiveInteger(env.AGENT_TIMEOUT_MS, DEFAULT_AGENT_TIMEOUT_MS, "AGENT_TIMEOUT_MS"),
     maxOutputTokens: gatewayConfig?.maxOutputTokens

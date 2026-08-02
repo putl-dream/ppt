@@ -12,7 +12,6 @@ const models: ManagedModel[] = [
     name: "CNY Model",
     provider: "openai",
     model: "same-model",
-    apiKey: "key",
     baseURL: "https://cn.example.com/v1",
     openaiApiMode: "responses",
     pricing: {
@@ -28,7 +27,6 @@ const models: ManagedModel[] = [
     name: "USD Model",
     provider: "openai",
     model: "same-model",
-    apiKey: "key",
     baseURL: "https://us.example.com/v1",
     openaiApiMode: "responses",
     pricing: {

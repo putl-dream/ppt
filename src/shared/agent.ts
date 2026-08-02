@@ -12,7 +12,9 @@ export const agentModelSettingsSchema = z.object({
   openaiApiMode: z.enum(["responses", "chat-completions"]).optional(),
   supports1MContext: z.boolean().optional(),
 });
-export const agentModelSelectionSchema = agentModelSettingsSchema.omit({ apiKey: true });
+export const agentModelSelectionSchema = agentModelSettingsSchema
+  .omit({ apiKey: true })
+  .strict();
 
 export type AgentProvider = z.infer<typeof agentProviderSchema>;
 export type AgentExecutionStrategy = z.infer<typeof agentExecutionStrategySchema>;

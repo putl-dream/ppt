@@ -4,7 +4,7 @@ import type { AgentExecutionStrategy } from "@shared/agent";
 import type { AgentRunRequest, AgentRunResult } from "@shared/ipc";
 import { buildAgentRunServicesWire } from "../../agentGatewayConfig";
 import { getPersistedDisplayCards } from "../../cards/display-card-managers";
-import { toAgentModelSettings, type ManagedModel } from "../../modelCatalog";
+import { toAgentModelSelection, type ManagedModel } from "../../modelCatalog";
 import { findActiveThreadId, type ChatMessage } from "../chatMessageRuntime";
 
 interface ExecuteAgentRunOptions {
@@ -35,7 +35,7 @@ export function executeAgentRun({
   runId,
 }: ExecuteAgentRunOptions): Promise<AgentRunResult> {
   const gatewayConfig = buildAgentRunServicesWire(gatewayPreferences, enabledModels);
-  const modelSettings = selectedModel ? toAgentModelSettings(selectedModel) : undefined;
+  const modelSelection = selectedModel ? toAgentModelSelection(selectedModel) : undefined;
   const activeThreadId = findActiveThreadId(
     forkedMessages ?? sourceMessages,
     getPersistedDisplayCards(),
@@ -45,7 +45,7 @@ export function executeAgentRun({
     return window.desktopApi.continueAgentRun(
       activeThreadId,
       request,
-      modelSettings,
+      modelSelection,
       executionStrategy,
       stepLimits,
       gatewayConfig,
@@ -55,7 +55,7 @@ export function executeAgentRun({
 
   return window.desktopApi.startAgentRun(
     request,
-    modelSettings,
+    modelSelection,
     executionStrategy,
     stepLimits,
     gatewayConfig,

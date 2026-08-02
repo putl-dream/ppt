@@ -10,6 +10,7 @@ import {
   type ManagedModel,
 } from "../modelCatalog";
 import type { UiFontFamily } from "./uiTypography";
+import { consumeCredentialReentryNotice } from "../credentialMigration";
 
 export const UI_SETTINGS_STORAGE_KEY = "agent-ppt.ui-settings.v2";
 const LEGACY_UI_SETTINGS_STORAGE_KEY = "agent-ppt.ui-settings.v1";
@@ -47,6 +48,7 @@ export interface AppBootstrapSnapshot {
   selectedModelId: string;
   agentStepLimits: AgentStepLimits;
   agentGatewayPreferences: AgentGatewayPreferences;
+  credentialReentryRequired: boolean;
 }
 
 function getBrowserStorage(): Storage | undefined {
@@ -172,6 +174,8 @@ export function loadAppBootstrapSnapshot(): AppBootstrapSnapshot {
   const initialColorScheme = resolveInitialColorScheme(persistedUiSettings);
   const models = loadManagedModels();
 
+  const agentGatewayPreferences = loadAgentGatewayPreferences();
+
   return {
     persistedUiSettings,
     initialColorScheme,
@@ -179,6 +183,7 @@ export function loadAppBootstrapSnapshot(): AppBootstrapSnapshot {
     models,
     selectedModelId: readStorageItem(SELECTED_MODEL_STORAGE_KEY) ?? models[0]?.id ?? "",
     agentStepLimits: loadAgentStepLimits(),
-    agentGatewayPreferences: loadAgentGatewayPreferences(),
+    agentGatewayPreferences,
+    credentialReentryRequired: consumeCredentialReentryNotice(),
   };
 }
