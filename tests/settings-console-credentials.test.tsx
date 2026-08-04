@@ -9,6 +9,8 @@ import {
   DEFAULT_WEB_SEARCH_ENDPOINT,
   resolveAgentGatewayPreferences,
 } from "../src/shared/agent-gateway-config";
+import { MAX_OUTPUT_TOKENS } from "../src/shared/generation-settings-inputs";
+import { MAX_UI_FONT_SIZE } from "../src/renderer/src/app/uiTypography";
 import { SettingsConsole } from "../src/renderer/src/components/SettingsConsole";
 
 function renderSearchSettings(
@@ -141,5 +143,141 @@ describe("SettingsConsole credential controls", () => {
     fireEvent.click(screen.getByRole("combobox", { name: "服务繁忙时备用模型" }));
     expect(screen.getByRole("option", { name: /Configured Fallback/ })).toBeTruthy();
     expect(screen.queryByRole("option", { name: /Missing Fallback/ })).toBeNull();
+  });
+
+  it("keeps an unsaved Tavily key draft while switching categories", () => {
+    const view = renderSearchSettings();
+    fireEvent.change(screen.getByLabelText("Tavily API Key"), {
+      target: { value: "tvly-unsaved" },
+    });
+
+    view.rerender(<SettingsConsole {...view.props} activeCategory="agent-approval" />);
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("提交与审批");
+    expect(screen.queryByLabelText("Tavily API Key")).toBeNull();
+
+    view.rerender(<SettingsConsole {...view.props} activeCategory="models-search" />);
+    expect((screen.getByLabelText("Tavily API Key") as HTMLInputElement).value)
+      .toBe("tvly-unsaved");
+  });
+
+  it("does not load presentation or storage data for unrelated categories", () => {
+    const listApplicationTemplates = vi.fn();
+    const getApplicationDataPath = vi.fn();
+    Object.defineProperty(window, "desktopApi", {
+      configurable: true,
+      value: { listApplicationTemplates, getApplicationDataPath },
+    });
+
+    renderSearchSettings({ activeCategory: "agent-approval", saveStatus: "saving" });
+
+    expect(screen.getByText("保存中…")).toBeTruthy();
+    expect(listApplicationTemplates).not.toHaveBeenCalled();
+    expect(getApplicationDataPath).not.toHaveBeenCalled();
+  });
+
+  it("normalizes output length and appearance drafts on blur", () => {
+    const setAgentGatewayPreferences = vi.fn();
+    const runtime = renderSearchSettings({
+      activeCategory: "models-runtime",
+      setAgentGatewayPreferences,
+    });
+    const outputLength = screen.getByRole("spinbutton");
+    fireEvent.change(outputLength, { target: { value: "999999999" } });
+    fireEvent.blur(outputLength);
+    expect(setAgentGatewayPreferences).toHaveBeenCalledWith(expect.objectContaining({
+      maxOutputTokens: MAX_OUTPUT_TOKENS,
+    }));
+
+    const setUiFontSize = vi.fn();
+    runtime.rerender(
+      <SettingsConsole
+        {...runtime.props}
+        activeCategory="preferences-appearance"
+        setUiFontSize={setUiFontSize}
+      />,
+    );
+    const fontSize = screen.getByLabelText("基准字号");
+    fireEvent.change(fontSize, { target: { value: "999" } });
+    fireEvent.blur(fontSize);
+    expect(setUiFontSize).toHaveBeenCalledWith(MAX_UI_FONT_SIZE);
+  });
+});
+
+describe("SettingsConsole presentation settings", () => {
+  afterEach(cleanup);
+
+  const libraryTemplate = {
+    id: "library-template",
+    revisionId: "revision-1",
+    name: "Brand Template",
+    kind: "uploaded" as const,
+    supportLevel: "design-reference" as const,
+    description: "Brand reference",
+  };
+
+  function installPresentationApi(applyTemplateToProject = vi.fn().mockResolvedValue(undefined)) {
+    const api = {
+      listApplicationTemplates: vi.fn().mockResolvedValue([libraryTemplate]),
+      getProjectTemplatePolicy: vi.fn().mockResolvedValue({
+        version: 1,
+        mode: "auto",
+        defaultTemplateId: "minimal",
+      }),
+      listProjectTemplates: vi.fn().mockResolvedValue([]),
+      getProjectTemplatePack: vi.fn().mockResolvedValue(null),
+      applyTemplateToProject,
+    };
+    Object.defineProperty(window, "desktopApi", {
+      configurable: true,
+      value: api,
+    });
+    return api;
+  }
+
+  it("loads template data only when the presentation category is active", async () => {
+    const api = installPresentationApi();
+    renderSearchSettings({
+      activeCategory: "preferences-presentation",
+      activeSessionId: "session-1",
+    });
+
+    await waitFor(() => expect(api.listApplicationTemplates).toHaveBeenCalledTimes(1));
+    expect(api.getProjectTemplatePolicy).toHaveBeenCalledWith("session-1");
+    expect(api.listProjectTemplates).toHaveBeenCalledWith("session-1");
+    expect(api.getProjectTemplatePack).toHaveBeenCalledWith("session-1");
+    expect(await screen.findByText(/Brand Template（仅在模板库）/)).toBeTruthy();
+  });
+
+  it("applies a library template and reports success", async () => {
+    const api = installPresentationApi();
+    const triggerToast = vi.fn();
+    renderSearchSettings({
+      activeCategory: "preferences-presentation",
+      activeSessionId: "session-1",
+      triggerToast,
+    });
+
+    fireEvent.click(await screen.findByRole("button", { name: /Brand Template（仅在模板库）/ }));
+    await waitFor(() => expect(api.applyTemplateToProject).toHaveBeenCalledWith(
+      "session-1",
+      "library-template",
+      "revision-1",
+    ));
+    await waitFor(() => expect(triggerToast).toHaveBeenCalledWith(
+      "已把「Brand Template」应用到当前项目",
+    ));
+  });
+
+  it("reports a template application failure", async () => {
+    installPresentationApi(vi.fn().mockRejectedValue(new Error("template failed")));
+    const triggerToast = vi.fn();
+    renderSearchSettings({
+      activeCategory: "preferences-presentation",
+      activeSessionId: "session-1",
+      triggerToast,
+    });
+
+    fireEvent.click(await screen.findByRole("button", { name: /Brand Template（仅在模板库）/ }));
+    await waitFor(() => expect(triggerToast).toHaveBeenCalledWith("template failed"));
   });
 });
