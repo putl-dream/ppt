@@ -8,8 +8,6 @@ const providerMocks = vi.hoisted(() => ({
 }));
 
 vi.mock("../src/main/agent/gateway/openai", () => ({
-  generateWithOpenAI: providerMocks.openai,
-  generateStreamWithOpenAI: providerMocks.openaiStream,
   chatDriver: {
     generate: providerMocks.openai,
     generateStream: providerMocks.openaiStream,

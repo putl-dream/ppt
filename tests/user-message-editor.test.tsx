@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
-import { UserMessageEditor } from "../src/renderer/src/components/ChatWorkspace";
+import { UserMessageEditor } from "../src/renderer/src/components/UserMessageEditor";
 
 describe("UserMessageEditor", () => {
   it("renders a stable inline editor with branch rerun guidance", () => {

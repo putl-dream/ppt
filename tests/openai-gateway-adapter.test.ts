@@ -26,10 +26,7 @@ vi.mock("openai", () => ({
   },
 }));
 
-import {
-  generateStreamWithOpenAI,
-  generateWithOpenAI,
-} from "../src/main/agent/gateway/openai";
+import { chatDriver, responsesDriver } from "../src/main/agent/gateway/openai";
 import type { PreparedAgentModelRequest } from "../src/main/agent/gateway/types";
 
 const baseConfig = {
@@ -70,7 +67,7 @@ describe("OpenAI driver", () => {
     });
     const config = { ...baseConfig, callPath: "chat" as const };
 
-    const response = await generateWithOpenAI(config, preparedRequest("prompt", {
+    const response = await chatDriver.generate(config, preparedRequest("prompt", {
       systemPrompt: "system",
     }));
 
@@ -103,7 +100,7 @@ describe("OpenAI driver", () => {
       choices: [{ message: { content: "ok" }, finish_reason: "stop" }],
     });
 
-    await generateWithOpenAI({ ...baseConfig, callPath: "chat" }, preparedRequest("", {
+    await chatDriver.generate({ ...baseConfig, callPath: "chat" }, preparedRequest("", {
       messages: [
         {
           role: "assistant",
@@ -183,7 +180,7 @@ describe("OpenAI driver", () => {
     });
 
     const chunks = [];
-    for await (const chunk of generateStreamWithOpenAI(
+    for await (const chunk of chatDriver.generateStream(
       { ...baseConfig, callPath: "chat", model: "mimo-v2.5-pro" },
       preparedRequest("prompt", {
         tools: [{ name: "Read", description: "Read", inputSchema: { type: "object" } }],
@@ -219,7 +216,7 @@ describe("OpenAI driver", () => {
       choices: [{ message: { content: "ok" }, finish_reason: "stop" }],
     });
 
-    await generateWithOpenAI(
+    await chatDriver.generate(
       { ...baseConfig, callPath: "chat", model: "mimo-v2.5-pro" },
       preparedRequest("", {
         messages: [
@@ -284,7 +281,7 @@ describe("OpenAI driver", () => {
       },
     });
 
-    const response = await generateWithOpenAI(baseConfig, preparedRequest("", {
+    const response = await responsesDriver.generate(baseConfig, preparedRequest("", {
       messages: [
         {
           role: "assistant",
@@ -345,7 +342,7 @@ describe("OpenAI driver", () => {
       }],
     });
 
-    const response = await generateWithOpenAI(
+    const response = await chatDriver.generate(
       { ...baseConfig, callPath: "chat" },
       preparedRequest("prompt"),
     );
@@ -365,7 +362,7 @@ describe("OpenAI driver", () => {
       choices: [{ message: { content: "partial" }, finish_reason: "length" }],
     });
 
-    const response = await generateWithOpenAI(
+    const response = await chatDriver.generate(
       { ...baseConfig, callPath: "chat" },
       preparedRequest("prompt"),
     );
@@ -382,7 +379,7 @@ describe("OpenAI driver", () => {
       incomplete_details: { reason: "max_output_tokens" },
     });
 
-    const response = await generateWithOpenAI(baseConfig, preparedRequest("prompt"));
+    const response = await responsesDriver.generate(baseConfig, preparedRequest("prompt"));
 
     expect(response.stopReason).toBe("max_tokens");
     expect(response.content).toEqual([{ type: "text", text: "partial" }]);
@@ -403,7 +400,7 @@ describe("OpenAI driver", () => {
     const controller = new AbortController();
 
     const chunks = [];
-    for await (const chunk of generateStreamWithOpenAI(
+    for await (const chunk of chatDriver.generateStream(
       { ...baseConfig, callPath: "chat" },
       preparedRequest("prompt", { signal: controller.signal }),
     )) {
@@ -471,7 +468,7 @@ describe("OpenAI driver", () => {
     });
 
     const chunks = [];
-    for await (const chunk of generateStreamWithOpenAI(
+    for await (const chunk of chatDriver.generateStream(
       { ...baseConfig, callPath: "chat" },
       preparedRequest("prompt", {
         tools: [{ name: "Read", description: "Read", inputSchema: { type: "object" } }],
@@ -537,7 +534,7 @@ describe("OpenAI driver", () => {
     const controller = new AbortController();
 
     const chunks = [];
-    for await (const chunk of generateStreamWithOpenAI(
+    for await (const chunk of responsesDriver.generateStream(
       baseConfig,
       preparedRequest("prompt", {
         signal: controller.signal,
@@ -604,7 +601,7 @@ describe("OpenAI driver", () => {
     });
 
     const chunks = [];
-    for await (const chunk of generateStreamWithOpenAI(baseConfig, preparedRequest("prompt"))) {
+    for await (const chunk of responsesDriver.generateStream(baseConfig, preparedRequest("prompt"))) {
       chunks.push(chunk);
     }
 
@@ -629,7 +626,7 @@ describe("OpenAI driver", () => {
     });
 
     const collect = async () => {
-      for await (const _chunk of generateStreamWithOpenAI(
+      for await (const _chunk of responsesDriver.generateStream(
         baseConfig,
         preparedRequest("prompt"),
       )) {
@@ -649,13 +646,13 @@ describe("OpenAI driver", () => {
       output: [],
       status: "completed",
     });
-    await expect(generateWithOpenAI(baseConfig, preparedRequest("prompt"))).resolves.toMatchObject({
+    await expect(responsesDriver.generate(baseConfig, preparedRequest("prompt"))).resolves.toMatchObject({
       content: [],
       stopReason: "end",
     });
 
     const source = Object.assign(new Error("rate limited"), { status: 429 });
     openAIMock.responsesCreate.mockRejectedValueOnce(source);
-    await expect(generateWithOpenAI(baseConfig, preparedRequest("prompt"))).rejects.toBe(source);
+    await expect(responsesDriver.generate(baseConfig, preparedRequest("prompt"))).rejects.toBe(source);
   });
 });

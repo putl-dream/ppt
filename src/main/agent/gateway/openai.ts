@@ -3,11 +3,7 @@ import type { AgentProviderDriver } from "./driver";
 import { openAIChatDriver } from "./openai-chat";
 import { createOpenAIClient } from "./openai-common";
 import { openAIResponsesDriver } from "./openai-responses";
-import type {
-  AgentModelResponse,
-  AgentModelStreamChunk,
-  PreparedAgentModelRequest,
-} from "./types";
+import type { AgentModelResponse, AgentModelStreamChunk, PreparedAgentModelRequest } from "./types";
 
 /** Chat Completions call-path driver (OpenAI-compatible endpoints). */
 export const chatDriver = {
@@ -40,21 +36,3 @@ export const responsesDriver = {
     yield* openAIResponsesDriver.generateStream(createOpenAIClient(config), config, request);
   },
 } satisfies AgentProviderDriver;
-
-/** @deprecated Prefer chatDriver / responsesDriver via callPath registry. */
-export async function generateWithOpenAI(
-  config: DriverResolvedConfig,
-  request: PreparedAgentModelRequest,
-): Promise<AgentModelResponse> {
-  const driver = config.callPath === "chat" ? chatDriver : responsesDriver;
-  return driver.generate(config, request);
-}
-
-/** @deprecated Prefer chatDriver / responsesDriver via callPath registry. */
-export async function* generateStreamWithOpenAI(
-  config: DriverResolvedConfig,
-  request: PreparedAgentModelRequest,
-): AsyncGenerator<AgentModelStreamChunk> {
-  const driver = config.callPath === "chat" ? chatDriver : responsesDriver;
-  yield* driver.generateStream(config, request);
-}
