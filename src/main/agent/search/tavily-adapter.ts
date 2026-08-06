@@ -56,11 +56,12 @@ function asSearchResult(value: unknown): WebSearchResult | null {
 }
 
 function asImageResult(value: unknown, sourceUrl?: string): WebSearchImageResult | null {
-  const candidate: TavilyImageCandidate = typeof value === "string"
-    ? { url: value }
-    : value && typeof value === "object"
-      ? value as TavilyImageCandidate
-      : {};
+  const candidate: TavilyImageCandidate =
+    typeof value === "string"
+      ? { url: value }
+      : value && typeof value === "object"
+        ? (value as TavilyImageCandidate)
+        : {};
   if (typeof candidate.url !== "string") return null;
 
   try {
@@ -78,7 +79,10 @@ function asImageResult(value: unknown, sourceUrl?: string): WebSearchImageResult
   }
 }
 
-function createRequestSignal(signal: AbortSignal | undefined, timeoutMs: number): {
+function createRequestSignal(
+  signal: AbortSignal | undefined,
+  timeoutMs: number,
+): {
   signal: AbortSignal;
   dispose: () => void;
 } {
@@ -138,12 +142,8 @@ export class TavilySearchAdapter implements WebSearchAdapter {
           include_raw_content: false,
           include_images: options.includeImages ?? false,
           include_image_descriptions: options.includeImages ?? false,
-          ...(options.allowedDomains?.length
-            ? { include_domains: options.allowedDomains }
-            : {}),
-          ...(options.blockedDomains?.length
-            ? { exclude_domains: options.blockedDomains }
-            : {}),
+          ...(options.allowedDomains?.length ? { include_domains: options.allowedDomains } : {}),
+          ...(options.blockedDomains?.length ? { exclude_domains: options.blockedDomains } : {}),
         }),
         signal: request.signal,
       });
@@ -152,7 +152,7 @@ export class TavilySearchAdapter implements WebSearchAdapter {
         throw new Error(`Tavily search failed with HTTP ${response.status}.`);
       }
 
-      const payload = await response.json() as { results?: unknown; images?: unknown };
+      const payload = (await response.json()) as { results?: unknown; images?: unknown };
       if (!Array.isArray(payload.results)) {
         throw new Error("Tavily search returned an invalid response.");
       }

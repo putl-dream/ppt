@@ -1,8 +1,5 @@
 import type { Presentation } from "@shared/presentation";
-
-export function presentationUsesSvgPages(presentation: Presentation): boolean {
-  return presentation.slides.some((slide) => slide.visualSource?.kind === "svg");
-}
+import { presentationUsesSvgPages } from "@shared/presentation-export";
 
 export function confirmSvgExportExpectation(presentation: Presentation): boolean {
   if (!presentationUsesSvgPages(presentation)) return true;

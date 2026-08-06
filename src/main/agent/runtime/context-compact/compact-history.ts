@@ -1,19 +1,12 @@
 import { appendFile, mkdir } from "node:fs/promises";
 import { join } from "node:path";
-import type { AgentModelGateway, AgentModelMessage } from "../../gateway";
-import {
-  isOutputTruncated,
-  textFromContentBlocks,
-  toolUseBlocksFromContent,
-} from "../../gateway";
 import type { AgentModelSelection } from "@shared/agent";
+import type { AgentModelGateway, AgentModelMessage } from "../../gateway";
+import { isOutputTruncated, textFromContentBlocks, toolUseBlocksFromContent } from "../../gateway";
 import type { ModelPromptPayload } from "../turns/model-call-recovery";
 import { COMPACT_HISTORY_MAX_FAILURES, COMPACT_TRANSCRIPTS_DIR } from "./config";
+import { buildModelCompactionBoundary, takeRecentModelMessages } from "./model-messages";
 import type { TranscriptEntry } from "./types";
-import {
-  buildModelCompactionBoundary,
-  takeRecentModelMessages,
-} from "./model-messages";
 
 const SUMMARY_SYSTEM_PROMPT = `You compress agent conversation history for context window management.
 Return a concise markdown summary that preserves:
@@ -147,10 +140,7 @@ function buildCompactedMessages(
 ): AgentModelMessage[] | undefined {
   if (!messages || messages.length === 0) return messages;
   const recentTail = takeRecentModelMessages(messages, 3) ?? [];
-  return [
-    buildModelCompactionBoundary(summary, savedPath),
-    ...recentTail,
-  ];
+  return [buildModelCompactionBoundary(summary, savedPath), ...recentTail];
 }
 
 /**

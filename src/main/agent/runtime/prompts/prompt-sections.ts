@@ -1,19 +1,16 @@
 import type { AgentStepLimits } from "@shared/agent-step-limits";
-import { buildContentBlockResponseGuidance } from "./response-guidance";
 import type { SkillRegistry } from "../../skills/loadSkillsDir";
 import type { SkillCard } from "../../skills/skill-types";
-import type { ToolDefinition } from "../../tools/tool-definition";
+import { formatSvgDeckLockContractBlock } from "../../tools/core/svg-deck-locks";
 import { toToolCard } from "../../tools/tool-card";
+import type { ToolDefinition } from "../../tools/tool-definition";
 import type {
   WorkspaceArtifactProbeDetails,
   WorkspaceArtifacts,
 } from "../presentation/workspace-artifacts";
 import { describePromptStage, type PromptStage } from "./prompt-stage";
-import {
-  isSkillRecommendedForStage,
-  rankSkillCatalogForStage,
-} from "./skill-stage-policy";
-import { formatSvgDeckLockContractBlock } from "../../tools/core/svg-deck-locks";
+import { buildContentBlockResponseGuidance } from "./response-guidance";
+import { isSkillRecommendedForStage, rankSkillCatalogForStage } from "./skill-stage-policy";
 
 export type PromptSectionId =
   | "identity"
@@ -133,16 +130,17 @@ export function buildRuntimeContextSection(input: RuntimeContextSectionInput): s
   const interactionTools = (input.enabledTools ?? [])
     .filter((tool) => tool.behavior?.capabilities?.includes("user_interaction"))
     .map((tool) => `\`${tool.name}\``);
-  const requiredOutcome = input.requiredOutcome === "command_proposal"
-    ? [
-        "",
-        `本回合要求产生 Presentation 行动结果：可执行时必须由 ${
-          outcomeTools.length > 0 ? outcomeTools.join("、") : "当前清单中的行动能力"
-        } 返回 command_proposal，不能用文字代替执行；信息不足时才使用 ${
-          interactionTools.length > 0 ? interactionTools.join("、") : "当前可用的用户交互能力"
-        }。`,
-      ].join("\n")
-    : "";
+  const requiredOutcome =
+    input.requiredOutcome === "command_proposal"
+      ? [
+          "",
+          `本回合要求产生 Presentation 行动结果：可执行时必须由 ${
+            outcomeTools.length > 0 ? outcomeTools.join("、") : "当前清单中的行动能力"
+          } 返回 command_proposal，不能用文字代替执行；信息不足时才使用 ${
+            interactionTools.length > 0 ? interactionTools.join("、") : "当前可用的用户交互能力"
+          }。`,
+        ].join("\n")
+      : "";
 
   return `## Runtime Context
 
@@ -152,31 +150,34 @@ export function buildRuntimeContextSection(input: RuntimeContextSectionInput): s
 }
 
 export function buildToolsSection(input: ToolsSectionInput): string {
-  const skillLoaders = input.enabledTools
-    .filter((tool) => tool.behavior?.capabilities?.includes("skill_load"));
+  const skillLoaders = input.enabledTools.filter((tool) =>
+    tool.behavior?.capabilities?.includes("skill_load"),
+  );
   const catalog = rankSkillCatalogForStage(
     input.skillCatalog ?? [],
     input.stage,
     input.skillRegistry,
   );
-  const skills = catalog.length > 0
-    ? catalog.map((skill) => {
-        const entry = input.skillRegistry?.get(skill.name);
-        const recommended = isSkillRecommendedForStage(skill.name, input.stage, entry)
-          ? " [当前上下文推荐]"
-          : "";
-        const whenToUse = skill.whenToUse ? ` | 适用: ${skill.whenToUse}` : "";
-        return `- \`${skill.name}\`${recommended}: ${skill.description}${whenToUse}`;
-      }).join("\n")
-    : "（没有已注册 Skill）";
-  const tools = input.enabledTools
-    .map((tool) => JSON.stringify(toToolCard(tool)))
-    .join("\n");
-  const skillLoadingGuidance = skillLoaders.length > 0
-    ? `目录会把当前上下文相关项排在前面，但任何已注册 Skill 都可以在确有需要时通过 ${
-        formatToolNames(skillLoaders)
-      } 加载。`
-    : "目录会把当前上下文相关项排在前面，任何已注册 Skill 都保留在目录中；只有实际工具清单提供加载能力时才能展开全文。";
+  const skills =
+    catalog.length > 0
+      ? catalog
+          .map((skill) => {
+            const entry = input.skillRegistry?.get(skill.name);
+            const recommended = isSkillRecommendedForStage(skill.name, input.stage, entry)
+              ? " [当前上下文推荐]"
+              : "";
+            const whenToUse = skill.whenToUse ? ` | 适用: ${skill.whenToUse}` : "";
+            return `- \`${skill.name}\`${recommended}: ${skill.description}${whenToUse}`;
+          })
+          .join("\n")
+      : "（没有已注册 Skill）";
+  const tools = input.enabledTools.map((tool) => JSON.stringify(toToolCard(tool))).join("\n");
+  const skillLoadingGuidance =
+    skillLoaders.length > 0
+      ? `目录会把当前上下文相关项排在前面，但任何已注册 Skill 都可以在确有需要时通过 ${formatToolNames(
+          skillLoaders,
+        )} 加载。`
+      : "目录会把当前上下文相关项排在前面，任何已注册 Skill 都保留在目录中；只有实际工具清单提供加载能力时才能展开全文。";
   const guidance = [
     "- 用最直接的能力完成任务，不要为了遵守阶段模板而制造额外 Task、文件或模型轮次。",
     "- 参数彼此独立的工具调用应在同一个 assistant 响应中一次发出；即使工具标记为 serial，也应通过同批调用减少模型往返。",
@@ -189,16 +190,17 @@ export function buildToolsSection(input: ToolsSectionInput): string {
     guidance.splice(2, 0, `- 可同批示例：${batchExamples}`);
   }
   const availableFileTools = input.enabledTools.filter((tool) =>
-    tool.permission?.effects.some((effect) =>
-      effect === "workspace.read" || effect === "workspace.write"
-    ));
+    tool.permission?.effects.some(
+      (effect) => effect === "workspace.read" || effect === "workspace.write",
+    ),
+  );
   if (availableFileTools.length > 0) {
     guidance.push(
       `- Workspace 文件能力（${formatToolNames(availableFileTools)}）受统一沙箱与版本协议保护；修改既有文件前先读取，冲突时重新读取后再编辑。`,
     );
   }
   const proposalTools = input.enabledTools.filter((tool) =>
-    tool.behavior?.capabilities?.includes("command_proposal")
+    tool.behavior?.capabilities?.includes("command_proposal"),
   );
   if (proposalTools.length > 0) {
     guidance.push(
@@ -206,7 +208,7 @@ export function buildToolsSection(input: ToolsSectionInput): string {
     );
   }
   const discoveryTools = input.enabledTools.filter((tool) =>
-    tool.behavior?.capabilities?.includes("tool_discovery")
+    tool.behavior?.capabilities?.includes("tool_discovery"),
   );
   const delegationTools = input.enabledTools.filter((tool) => tool.behavior?.delegation);
   if (discoveryTools.length > 0) {
@@ -219,15 +221,17 @@ export function buildToolsSection(input: ToolsSectionInput): string {
   }
   if (skillLoaders.length > 0) {
     guidance.push(
-      `- ${formatToolNames(skillLoaders)} 可加载任意已注册 Skill；阶段匹配只影响推荐顺序。`
-      + "已知需要多个技能时可同批多次调用，不要一技能一轮。",
+      `- ${formatToolNames(skillLoaders)} 可加载任意已注册 Skill；阶段匹配只影响推荐顺序。` +
+        "已知需要多个技能时可同批多次调用，不要一技能一轮。",
     );
   }
   const interactionTools = input.enabledTools.filter((tool) =>
-    tool.behavior?.capabilities?.includes("user_interaction")
+    tool.behavior?.capabilities?.includes("user_interaction"),
   );
   if (interactionTools.length > 0) {
-    guidance.push(`- 只有涉及会实质改变结果的用户决策时才调用 ${formatToolNames(interactionTools)}。`);
+    guidance.push(
+      `- 只有涉及会实质改变结果的用户决策时才调用 ${formatToolNames(interactionTools)}。`,
+    );
   }
 
   return `## Available Skills
@@ -324,9 +328,7 @@ function formatTemplatePackProbe(
   return `- design/template-pack.json: ${fallbackVerified ? "verified" : "missing/unverified"}`;
 }
 
-function formatActiveTemplateSection(
-  details?: WorkspaceArtifactProbeDetails,
-): string {
+function formatActiveTemplateSection(details?: WorkspaceArtifactProbeDetails): string {
   const pack = details?.templatePack;
   if (!pack?.verified || !pack.reason) return "";
   return `
@@ -393,17 +395,12 @@ function formatToolNames(tools: readonly ToolDefinition<any, any>[]): string {
   return tools.map((tool) => `\`${tool.name}\``).join("、");
 }
 
-function hasToolName(
-  tools: readonly ToolDefinition<any, any>[],
-  name: string,
-): boolean {
+function hasToolName(tools: readonly ToolDefinition<any, any>[], name: string): boolean {
   return tools.some((tool) => tool.name === name);
 }
 
 /** Create-path batching hints, only naming tools present in this Query. */
-function buildIndependentBatchExamples(
-  tools: readonly ToolDefinition<any, any>[],
-): string | null {
+function buildIndependentBatchExamples(tools: readonly ToolDefinition<any, any>[]): string | null {
   const examples: string[] = [];
   if (hasToolName(tools, "LoadSkill")) {
     examples.push("多个 LoadSkill");

@@ -1,9 +1,5 @@
 import type { DriverResolvedConfig } from "./config";
-import type {
-  AgentModelResponse,
-  AgentModelStreamChunk,
-  PreparedAgentModelRequest,
-} from "./types";
+import type { AgentModelResponse, AgentModelStreamChunk, PreparedAgentModelRequest } from "./types";
 
 /** Provider driver contract consumed exclusively by AgentGateway. */
 export interface AgentProviderDriver {

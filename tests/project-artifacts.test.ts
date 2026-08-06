@@ -1,20 +1,20 @@
 import { describe, expect, it } from "vitest";
 import {
-  createDefaultBriefMarkdown,
   createDefaultBrandProfile,
-  createDefaultProjectDesignSystem,
+  createDefaultBriefMarkdown,
   createDefaultOutlineMarkdown,
+  createDefaultProjectDesignSystem,
   createDefaultResearchMarkdown,
-  parseBriefFields,
   parseBrandProfileFile,
-  parseProjectDesignSystem,
+  parseBriefFields,
   parseOutlineItems,
+  parseProjectDesignSystem,
   parseResearchNotes,
-  serializeBriefMarkdown,
   serializeBrandProfile,
-  toCommercialCommunicationContract,
-  serializeProjectDesignSystem,
+  serializeBriefMarkdown,
   serializeOutlineMarkdown,
+  serializeProjectDesignSystem,
+  toCommercialCommunicationContract,
 } from "../src/shared/project-artifacts";
 
 describe("project artifact canonical formats", () => {
@@ -126,20 +126,26 @@ describe("project artifact canonical formats", () => {
   });
 
   it("rejects pre-v2 project design files", () => {
-    expect(() => parseProjectDesignSystem(JSON.stringify({ theme: "nordic", palette: "cyan" }))).toThrow();
-    expect(() => parseProjectDesignSystem(JSON.stringify({
-      version: 1,
-      tokens: {
-        palette: "business-blue",
-        fontMood: "formal",
-        shapeLanguage: "cards",
-        backgroundStyle: "clean",
-        motif: "none",
-        density: "standard",
-        imageTreatment: "plain",
-        chartStyle: "minimal",
-      },
-    }))).toThrow();
+    expect(() =>
+      parseProjectDesignSystem(JSON.stringify({ theme: "nordic", palette: "cyan" })),
+    ).toThrow();
+    expect(() =>
+      parseProjectDesignSystem(
+        JSON.stringify({
+          version: 1,
+          tokens: {
+            palette: "business-blue",
+            fontMood: "formal",
+            shapeLanguage: "cards",
+            backgroundStyle: "clean",
+            motif: "none",
+            density: "standard",
+            imageTreatment: "plain",
+            chartStyle: "minimal",
+          },
+        }),
+      ),
+    ).toThrow();
   });
 
   it("round-trips a strict brand profile file", () => {

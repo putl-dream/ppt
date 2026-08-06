@@ -1,8 +1,8 @@
 import {
   DEFAULT_DESIGN_SYSTEM,
+  type DesignSystemV2,
   designSystemV2Schema,
   resolveSlideStyle,
-  type DesignSystemV2,
   type SlideDesignOverride,
 } from "@design-system";
 import type { Presentation } from "../src/shared/presentation";
@@ -11,9 +11,7 @@ export const TEST_DESIGN_SYSTEM = DEFAULT_DESIGN_SYSTEM;
 
 export type TestDesignSystemOverrides = Partial<Omit<DesignSystemV2, "version">>;
 
-export function testDesignSystem(
-  overrides: TestDesignSystemOverrides = {},
-): DesignSystemV2 {
+export function testDesignSystem(overrides: TestDesignSystemOverrides = {}): DesignSystemV2 {
   return designSystemV2Schema.parse({
     ...DEFAULT_DESIGN_SYSTEM,
     ...overrides,

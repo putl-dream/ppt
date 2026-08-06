@@ -1,55 +1,53 @@
 import { mkdtemp, rm } from "node:fs/promises";
-import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { DEFAULT_DESIGN_SYSTEM } from "../src/design-system";
-import { createStarterPresentation } from "../src/shared/presentation-fixtures";
-import {
-  SVG_DECK_DESIGN_SPEC_MINI_SCHEMA,
-  SVG_DECK_PAGE_PLAN_MINI_SCHEMA,
-  readSvgDeckLocks,
-  validateSvgDeckLockContent,
-} from "../src/main/agent/tools/core/svg-deck-locks";
+import { buildWorkspaceSection } from "../src/main/agent/runtime/prompts/prompt-sections";
+import { classifyToolExecutionError } from "../src/main/agent/runtime/tools/tool-execution-error";
 import { previewSvgPageTool } from "../src/main/agent/tools/core/preview-svg-page";
 import {
-  writeFileContract,
-  editFileContract,
-  readFileContract,
-} from "../src/main/agent/tools/files/workspace-file-tool-contract";
+  readSvgDeckLocks,
+  SVG_DECK_DESIGN_SPEC_MINI_SCHEMA,
+  SVG_DECK_PAGE_PLAN_MINI_SCHEMA,
+  validateSvgDeckLockContent,
+} from "../src/main/agent/tools/core/svg-deck-locks";
 import {
   WorkspaceFileError,
   WorkspaceFileService,
 } from "../src/main/agent/tools/files/workspace-file-service";
-import { createDefaultToolRegistry } from "../src/main/agent/tools/tool-registry";
+import {
+  editFileContract,
+  readFileContract,
+  writeFileContract,
+} from "../src/main/agent/tools/files/workspace-file-tool-contract";
 import type { ToolContext } from "../src/main/agent/tools/tool-definition";
-import { buildWorkspaceSection } from "../src/main/agent/runtime/prompts/prompt-sections";
+import { createDefaultToolRegistry } from "../src/main/agent/tools/tool-registry";
 import { slideThumbnailService } from "../src/main/deck/slide-thumbnail-service";
-import { classifyToolExecutionError } from "../src/main/agent/runtime/tools/tool-execution-error";
 import { loadWorkspaceSvgPage } from "../src/main/deck/svg-page-loader";
+import { createStarterPresentation } from "../src/shared/presentation-fixtures";
 
 const temporaryRoots: string[] = [];
 
 afterEach(async () => {
   vi.restoreAllMocks();
-  await Promise.all(temporaryRoots.splice(0).map((root) => rm(root, {
-    recursive: true,
-    force: true,
-  })));
+  await Promise.all(
+    temporaryRoots.splice(0).map((root) =>
+      rm(root, {
+        recursive: true,
+        force: true,
+      }),
+    ),
+  );
 });
 
 describe("SVG deck lock contract", () => {
   it("accepts the shared mini schemas as valid lock content", () => {
     expect(() =>
-      validateSvgDeckLockContent(
-        "design/design-spec.json",
-        SVG_DECK_DESIGN_SPEC_MINI_SCHEMA,
-      )
+      validateSvgDeckLockContent("design/design-spec.json", SVG_DECK_DESIGN_SPEC_MINI_SCHEMA),
     ).not.toThrow();
     expect(() =>
-      validateSvgDeckLockContent(
-        "slides/page-plan.json",
-        SVG_DECK_PAGE_PLAN_MINI_SCHEMA,
-      )
+      validateSvgDeckLockContent("slides/page-plan.json", SVG_DECK_PAGE_PLAN_MINI_SCHEMA),
     ).not.toThrow();
   });
 
@@ -59,14 +57,20 @@ describe("SVG deck lock contract", () => {
     const fileService = new WorkspaceFileService(root);
     const context = { workspaceRoot: root, fileService };
 
-    await expect(writeFileContract.execute({
-      path: "design/design-spec.json",
-      content: JSON.stringify({ version: 1 }),
-    }, context)).rejects.toSatisfy((error: unknown) =>
-      error instanceof WorkspaceFileError
-      && error.code === "LOCK_SCHEMA_INVALID"
-      && error.message.includes("LoadSkill(\"ppt-design\")")
-      && error.message.includes("communicationContract")
+    await expect(
+      writeFileContract.execute(
+        {
+          path: "design/design-spec.json",
+          content: JSON.stringify({ version: 1 }),
+        },
+        context,
+      ),
+    ).rejects.toSatisfy(
+      (error: unknown) =>
+        error instanceof WorkspaceFileError &&
+        error.code === "LOCK_SCHEMA_INVALID" &&
+        error.message.includes('LoadSkill("ppt-design")') &&
+        error.message.includes("communicationContract"),
     );
 
     await expect(fileService.read("design/design-spec.json")).rejects.toThrow();
@@ -87,27 +91,38 @@ describe("SVG deck lock contract", () => {
     const fileService = new WorkspaceFileService(root);
     const context = { workspaceRoot: root, fileService };
 
-    await writeFileContract.execute({
-      path: "design/template-policy.json",
-      content: JSON.stringify({
-        version: 1,
-        mode: "custom",
-        defaultTemplateId: "builtin/swiss-minimal",
-        customTemplateId: "uploaded/brand-kit",
-        customTemplateRevisionId: "abc123",
-      }, null, 2),
-    }, context);
+    await writeFileContract.execute(
+      {
+        path: "design/template-policy.json",
+        content: JSON.stringify(
+          {
+            version: 1,
+            mode: "custom",
+            defaultTemplateId: "builtin/swiss-minimal",
+            customTemplateId: "uploaded/brand-kit",
+            customTemplateRevisionId: "abc123",
+          },
+          null,
+          2,
+        ),
+      },
+      context,
+    );
 
-    await expect(writeFileContract.execute({
-      path: "design/design-spec.json",
-      content: SVG_DECK_DESIGN_SPEC_MINI_SCHEMA,
-    }, context)).rejects.toSatisfy((error: unknown) =>
-      error instanceof WorkspaceFileError
-      && error.code === "LOCK_SCHEMA_INVALID"
-      && (
-        error.message.includes("pins template")
-        || error.message.includes("missing under design/templates")
-      )
+    await expect(
+      writeFileContract.execute(
+        {
+          path: "design/design-spec.json",
+          content: SVG_DECK_DESIGN_SPEC_MINI_SCHEMA,
+        },
+        context,
+      ),
+    ).rejects.toSatisfy(
+      (error: unknown) =>
+        error instanceof WorkspaceFileError &&
+        error.code === "LOCK_SCHEMA_INVALID" &&
+        (error.message.includes("pins template") ||
+          error.message.includes("missing under design/templates")),
     );
   });
 
@@ -116,23 +131,35 @@ describe("SVG deck lock contract", () => {
     temporaryRoots.push(root);
     const fileService = new WorkspaceFileService(root);
     const context = { workspaceRoot: root, fileService };
-    await writeFileContract.execute({
-      path: "slides/page-plan.json",
-      content: SVG_DECK_PAGE_PLAN_MINI_SCHEMA,
-    }, context);
-    const read = await readFileContract.execute({
-      path: "slides/page-plan.json",
-    }, context);
+    await writeFileContract.execute(
+      {
+        path: "slides/page-plan.json",
+        content: SVG_DECK_PAGE_PLAN_MINI_SCHEMA,
+      },
+      context,
+    );
+    const read = await readFileContract.execute(
+      {
+        path: "slides/page-plan.json",
+      },
+      context,
+    );
 
-    await expect(editFileContract.execute({
-      path: "slides/page-plan.json",
-      old_string: '"coreMessage": "..."',
-      new_string: '"coreMessage": ""',
-      expected_version: read.version,
-    }, context)).rejects.toSatisfy((error: unknown) =>
-      error instanceof WorkspaceFileError
-      && error.code === "LOCK_SCHEMA_INVALID"
-      && error.message.includes("LoadSkill(\"ppt-design-layout\")")
+    await expect(
+      editFileContract.execute(
+        {
+          path: "slides/page-plan.json",
+          old_string: '"coreMessage": "..."',
+          new_string: '"coreMessage": ""',
+          expected_version: read.version,
+        },
+        context,
+      ),
+    ).rejects.toSatisfy(
+      (error: unknown) =>
+        error instanceof WorkspaceFileError &&
+        error.code === "LOCK_SCHEMA_INVALID" &&
+        error.message.includes('LoadSkill("ppt-design-layout")'),
     );
   });
 
@@ -142,25 +169,27 @@ describe("SVG deck lock contract", () => {
     const fileService = new WorkspaceFileService(root);
     await fileService.write(
       "slides/svg/P01.svg",
-      '<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">'
-        + '<rect width="1280" height="720" fill="#111827"/>'
-        + '<text x="80" y="180" fill="#ffffff" font-size="64">First</text>'
-        + "</svg>",
+      '<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">' +
+        '<rect width="1280" height="720" fill="#111827"/>' +
+        '<text x="80" y="180" fill="#ffffff" font-size="64">First</text>' +
+        "</svg>",
     );
-    const capture = vi.spyOn(slideThumbnailService, "captureSlide")
-      .mockResolvedValue({
-        pngBase64: "should-not-render",
-        width: 640,
-        height: 360,
-        mimeType: "image/png",
-      });
+    const capture = vi.spyOn(slideThumbnailService, "captureSlide").mockResolvedValue({
+      pngBase64: "should-not-render",
+      width: 640,
+      height: 360,
+      mimeType: "image/png",
+    });
 
-    await expect(previewSvgPageTool.execute({
-      path: "slides/svg/P01.svg",
-      includeThumbnail: true,
-    }, createPreviewContext(root, fileService))).rejects.toThrow(
-      /PreviewSvgPage lock precheck failed/,
-    );
+    await expect(
+      previewSvgPageTool.execute(
+        {
+          path: "slides/svg/P01.svg",
+          includeThumbnail: true,
+        },
+        createPreviewContext(root, fileService),
+      ),
+    ).rejects.toThrow(/PreviewSvgPage lock precheck failed/);
     expect(capture).not.toHaveBeenCalled();
   });
 
@@ -168,8 +197,9 @@ describe("SVG deck lock contract", () => {
     const root = await mkdtemp(join(tmpdir(), "ppt-lock-inspect-"));
     temporaryRoots.push(root);
     const writer = new WorkspaceFileService(root);
-    const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" '
-      + 'viewBox="0 0 1280 720"><rect width="1280" height="720"/></svg>';
+    const svg =
+      '<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" ' +
+      'viewBox="0 0 1280 720"><rect width="1280" height="720"/></svg>';
     await writer.write("design/design-spec.json", SVG_DECK_DESIGN_SPEC_MINI_SCHEMA);
     await writer.write("slides/page-plan.json", SVG_DECK_PAGE_PLAN_MINI_SCHEMA);
     await writer.write("slides/svg/P01.svg", svg);
@@ -182,12 +212,12 @@ describe("SVG deck lock contract", () => {
       fileService: reader,
     });
 
-    await expect(reader.write(
-      "slides/page-plan.json",
-      SVG_DECK_PAGE_PLAN_MINI_SCHEMA,
-    )).rejects.toMatchObject({ code: "READ_REQUIRED" });
-    await expect(reader.write("slides/svg/P01.svg", svg))
-      .rejects.toMatchObject({ code: "READ_REQUIRED" });
+    await expect(
+      reader.write("slides/page-plan.json", SVG_DECK_PAGE_PLAN_MINI_SCHEMA),
+    ).rejects.toMatchObject({ code: "READ_REQUIRED" });
+    await expect(reader.write("slides/svg/P01.svg", svg)).rejects.toMatchObject({
+      code: "READ_REQUIRED",
+    });
   });
 
   it("exposes invalid artifact reasons and injects the lock contract in the workspace prompt", () => {

@@ -22,9 +22,7 @@ interface ElectronPathConfigurator {
  * development runs. Production startup sets it to the home-directory root
  * before any service initializes.
  */
-export function getApplicationDataRoot(
-  options: ApplicationDataOptions = {},
-): string {
+export function getApplicationDataRoot(options: ApplicationDataOptions = {}): string {
   const environment = options.environment ?? process.env;
   const override = environment[APPLICATION_DATA_ENVIRONMENT_VARIABLE]?.trim();
   return override || join(options.homeDirectory ?? homedir(), APPLICATION_DATA_DIRECTORY);

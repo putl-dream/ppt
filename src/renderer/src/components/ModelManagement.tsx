@@ -1,17 +1,17 @@
+import { normalizeCredentialUrl } from "@shared/credentials";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  MODEL_VENDOR_PRESETS,
   buildModelVendorDraft,
   changeModelVendorDraftProtocol,
   getModelVendorPreset,
   isModelEnabled,
-  materializeModelVendorDraft,
   type ManagedModel,
+  MODEL_VENDOR_PRESETS,
   type ModelTokenPricing,
   type ModelVendorDraft,
   type ModelVendorId,
+  materializeModelVendorDraft,
 } from "../modelCatalog";
-import { normalizeCredentialUrl } from "@shared/credentials";
 import { Edit3Icon, PlusIcon, RefreshIcon, TrashIcon } from "./Icons";
 import { Select } from "./Select";
 
@@ -55,14 +55,14 @@ function emptyPricing(): ModelTokenPricing {
 
 function validPricing(pricing: ManagedModel["pricing"]): boolean {
   if (!pricing) return true;
-  return [
-    pricing.inputPerMillion,
-    pricing.cachedInputPerMillion,
-    pricing.outputPerMillion,
-  ].every((value) => Number.isFinite(value) && value >= 0)
-    && (pricing.cacheCreationInputPerMillion === undefined
-      || (Number.isFinite(pricing.cacheCreationInputPerMillion)
-        && pricing.cacheCreationInputPerMillion >= 0));
+  return (
+    [pricing.inputPerMillion, pricing.cachedInputPerMillion, pricing.outputPerMillion].every(
+      (value) => Number.isFinite(value) && value >= 0,
+    ) &&
+    (pricing.cacheCreationInputPerMillion === undefined ||
+      (Number.isFinite(pricing.cacheCreationInputPerMillion) &&
+        pricing.cacheCreationInputPerMillion >= 0))
+  );
 }
 
 function normalizedConnectionValue(value: string): string {
@@ -70,10 +70,12 @@ function normalizedConnectionValue(value: string): string {
 }
 
 function connectionBindingChanged(previous: ManagedModel, next: ManagedModel): boolean {
-  return previous.provider !== next.provider
-    || previous.model.trim() !== next.model.trim()
-    || normalizedConnectionValue(previous.baseURL) !== normalizedConnectionValue(next.baseURL)
-    || (next.provider === "openai" && previous.openaiApiMode !== next.openaiApiMode);
+  return (
+    previous.provider !== next.provider ||
+    previous.model.trim() !== next.model.trim() ||
+    normalizedConnectionValue(previous.baseURL) !== normalizedConnectionValue(next.baseURL) ||
+    (next.provider === "openai" && previous.openaiApiMode !== next.openaiApiMode)
+  );
 }
 
 export function ModelManagement({
@@ -100,15 +102,15 @@ export function ModelManagement({
   const filteredModels = useMemo(() => {
     if (!normalizedQuery) return models;
     return models.filter((model) =>
-      `${model.name} ${model.model}`.toLowerCase().includes(normalizedQuery));
+      `${model.name} ${model.model}`.toLowerCase().includes(normalizedQuery),
+    );
   }, [models, normalizedQuery]);
 
   const enabledCount = models.filter(isModelEnabled).length;
 
   const rememberDialogFocus = () => {
-    returnFocusRef.current = document.activeElement instanceof HTMLElement
-      ? document.activeElement
-      : null;
+    returnFocusRef.current =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
   };
 
   const openModelDialog = (model: ManagedModel) => {
@@ -140,9 +142,10 @@ export function ModelManagement({
 
   useEffect(() => {
     if (!dialogVisible) return;
-    window.setTimeout(() => dialogRef.current?.querySelector<HTMLElement>(
-      "input, select, button",
-    )?.focus(), 0);
+    window.setTimeout(
+      () => dialogRef.current?.querySelector<HTMLElement>("input, select, button")?.focus(),
+      0,
+    );
 
     const handleDialogKeyDown = (event: globalThis.KeyboardEvent) => {
       if (event.key === "Escape") {
@@ -181,10 +184,16 @@ export function ModelManagement({
   };
 
   const updateVendorDraftModel = (id: string, patch: Partial<ManagedModel>) => {
-    setVendorDraft((current) => current ? {
-      ...current,
-      models: current.models.map((model) => model.id === id ? { ...model, ...patch } : model),
-    } : current);
+    setVendorDraft((current) =>
+      current
+        ? {
+            ...current,
+            models: current.models.map((model) =>
+              model.id === id ? { ...model, ...patch } : model,
+            ),
+          }
+        : current,
+    );
   };
 
   const selectVendor = (value: string) => {
@@ -194,9 +203,11 @@ export function ModelManagement({
   };
 
   const selectVendorProtocol = (value: string) => {
-    setVendorDraft((current) => current
-      ? changeModelVendorDraftProtocol(current, value as ManagedModel["provider"])
-      : current);
+    setVendorDraft((current) =>
+      current
+        ? changeModelVendorDraftProtocol(current, value as ManagedModel["provider"])
+        : current,
+    );
   };
 
   const toggleModel = (model: ManagedModel) => {
@@ -273,10 +284,12 @@ export function ModelManagement({
       name,
       model: modelId,
       baseURL: dialogModel.baseURL.trim().replace(/\/+$/, ""),
-      pricing: dialogModel.pricing ? {
-        ...dialogModel.pricing,
-        updatedAt: new Date().toISOString().slice(0, 10),
-      } : dialogModel.pricing,
+      pricing: dialogModel.pricing
+        ? {
+            ...dialogModel.pricing,
+            updatedAt: new Date().toISOString().slice(0, 10),
+          }
+        : dialogModel.pricing,
     };
     setCredentialPending(true);
     const saved = await onSaveModel(next, dialogApiKey);
@@ -285,9 +298,11 @@ export function ModelManagement({
     if (next.enabled !== false) onSelectModel(next.id);
     closeDialog();
     const previous = models.find((model) => model.id === next.id);
-    triggerToast(previous && connectionBindingChanged(previous, next) && !dialogApiKey.trim()
-      ? "模型已保存，请重新录入 API Key"
-      : "模型已保存");
+    triggerToast(
+      previous && connectionBindingChanged(previous, next) && !dialogApiKey.trim()
+        ? "模型已保存，请重新录入 API Key"
+        : "模型已保存",
+    );
   };
 
   const deleteDialogModel = async () => {
@@ -296,8 +311,7 @@ export function ModelManagement({
       triggerToast("至少保留一个可用模型");
       return;
     }
-    const fallback = models.find((model) =>
-      model.id !== dialogModel.id && isModelEnabled(model));
+    const fallback = models.find((model) => model.id !== dialogModel.id && isModelEnabled(model));
     setCredentialPending(true);
     const deleted = await onDeleteModel(dialogModel.id);
     setCredentialPending(false);
@@ -317,7 +331,7 @@ export function ModelManagement({
     };
     const numberValue = (value: number | undefined) =>
       value === undefined || !Number.isFinite(value) ? "" : String(value);
-    const requiredNumber = (value: string) => value === "" ? Number.NaN : Number(value);
+    const requiredNumber = (value: string) => (value === "" ? Number.NaN : Number(value));
 
     return (
       <div className="model-pricing-section model-form-span">
@@ -341,9 +355,11 @@ export function ModelManagement({
                 variant="block"
                 ariaLabel={`${model.name} 定价币种`}
                 value={pricing.currency}
-                onChange={(value) => updatePrice({
-                  currency: value as ModelTokenPricing["currency"],
-                })}
+                onChange={(value) =>
+                  updatePrice({
+                    currency: value as ModelTokenPricing["currency"],
+                  })
+                }
                 options={[
                   { value: "CNY", label: "人民币 (CNY)" },
                   { value: "USD", label: "美元 (USD)" },
@@ -359,7 +375,9 @@ export function ModelManagement({
                 min="0"
                 step="any"
                 value={numberValue(pricing.inputPerMillion)}
-                onChange={(event) => updatePrice({ inputPerMillion: requiredNumber(event.target.value) })}
+                onChange={(event) =>
+                  updatePrice({ inputPerMillion: requiredNumber(event.target.value) })
+                }
               />
             </label>
             <label className="config-group">
@@ -371,7 +389,9 @@ export function ModelManagement({
                 min="0"
                 step="any"
                 value={numberValue(pricing.cachedInputPerMillion)}
-                onChange={(event) => updatePrice({ cachedInputPerMillion: requiredNumber(event.target.value) })}
+                onChange={(event) =>
+                  updatePrice({ cachedInputPerMillion: requiredNumber(event.target.value) })
+                }
               />
             </label>
             <label className="config-group">
@@ -384,11 +404,12 @@ export function ModelManagement({
                 step="any"
                 placeholder="留空时按普通输入价"
                 value={numberValue(pricing.cacheCreationInputPerMillion)}
-                onChange={(event) => updatePrice({
-                  cacheCreationInputPerMillion: event.target.value === ""
-                    ? undefined
-                    : Number(event.target.value),
-                })}
+                onChange={(event) =>
+                  updatePrice({
+                    cacheCreationInputPerMillion:
+                      event.target.value === "" ? undefined : Number(event.target.value),
+                  })
+                }
               />
             </label>
             <label className="config-group">
@@ -400,7 +421,9 @@ export function ModelManagement({
                 min="0"
                 step="any"
                 value={numberValue(pricing.outputPerMillion)}
-                onChange={(event) => updatePrice({ outputPerMillion: requiredNumber(event.target.value) })}
+                onChange={(event) =>
+                  updatePrice({ outputPerMillion: requiredNumber(event.target.value) })
+                }
               />
             </label>
           </div>
@@ -438,9 +461,11 @@ export function ModelManagement({
               variant="block"
               ariaLabel={`${model.name} OpenAI API 模式`}
               value={model.openaiApiMode}
-              onChange={(value) => updateVendorDraftModel(model.id, {
-                openaiApiMode: value as ManagedModel["openaiApiMode"],
-              })}
+              onChange={(value) =>
+                updateVendorDraftModel(model.id, {
+                  openaiApiMode: value as ManagedModel["openaiApiMode"],
+                })
+              }
               options={[
                 { value: "responses", label: "Responses API" },
                 { value: "chat-completions", label: "Chat Completions 兼容模式" },
@@ -452,9 +477,11 @@ export function ModelManagement({
           <input
             type="checkbox"
             checked={model.supports1MContext === true}
-            onChange={(event) => updateVendorDraftModel(model.id, {
-              supports1MContext: event.target.checked,
-            })}
+            onChange={(event) =>
+              updateVendorDraftModel(model.id, {
+                supports1MContext: event.target.checked,
+              })
+            }
           />
           <span>
             <strong>支持 1M 上下文</strong>
@@ -518,7 +545,10 @@ export function ModelManagement({
                 >
                   <Edit3Icon size={14} />
                 </button>
-                <label className="toggle-switch cursor-model-toggle" title={enabled ? "关闭模型" : "开启模型"}>
+                <label
+                  className="toggle-switch cursor-model-toggle"
+                  title={enabled ? "关闭模型" : "开启模型"}
+                >
                   <input type="checkbox" checked={enabled} onChange={() => toggleModel(model)} />
                   <span className="toggle-slider"></span>
                 </label>
@@ -558,7 +588,12 @@ export function ModelManagement({
                 <h3 id="model-vendor-dialog-title">添加厂商模型</h3>
                 <p>选择厂商后只需填写 API Key，其余配置会自动完成</p>
               </div>
-              <button type="button" className="model-dialog-close-btn" onClick={closeDialog} aria-label="关闭模型表单">
+              <button
+                type="button"
+                className="model-dialog-close-btn"
+                onClick={closeDialog}
+                aria-label="关闭模型表单"
+              >
                 <span aria-hidden="true">x</span>
               </button>
             </header>
@@ -627,7 +662,10 @@ export function ModelManagement({
                           variant="block"
                           ariaLabel="服务商协议"
                           value={vendorDraft.protocol}
-                          disabled={(getModelVendorPreset(vendorDraft.vendorId)?.supportedProviders.length ?? 2) === 1}
+                          disabled={
+                            (getModelVendorPreset(vendorDraft.vendorId)?.supportedProviders
+                              .length ?? 2) === 1
+                          }
                           onChange={selectVendorProtocol}
                           options={[
                             { value: "openai", label: "OpenAI 兼容" },
@@ -640,7 +678,11 @@ export function ModelManagement({
                         <input
                           className="config-input"
                           value={vendorDraft.baseURL}
-                          placeholder={vendorDraft.protocol === "openai" ? "https://api.example.com/v1" : "https://api.example.com"}
+                          placeholder={
+                            vendorDraft.protocol === "openai"
+                              ? "https://api.example.com/v1"
+                              : "https://api.example.com"
+                          }
                           onChange={(event) => updateVendorDraft({ baseURL: event.target.value })}
                         />
                       </label>
@@ -651,14 +693,18 @@ export function ModelManagement({
                   ) : null}
                 </>
               ) : (
-                <p className="model-vendor-empty-hint">选择厂商后，将自动填入请求地址、协议和模型能力。</p>
+                <p className="model-vendor-empty-hint">
+                  选择厂商后，将自动填入请求地址、协议和模型能力。
+                </p>
               )}
             </div>
 
             <footer className="model-dialog-footer">
               <span />
               <div className="model-dialog-actions">
-                <button type="button" className="settings-secondary-btn" onClick={closeDialog}>取消</button>
+                <button type="button" className="settings-secondary-btn" onClick={closeDialog}>
+                  取消
+                </button>
                 <button
                   type="button"
                   className="settings-primary-btn"
@@ -692,9 +738,16 @@ export function ModelManagement({
             <header className="model-dialog-header">
               <div>
                 <h3 id="model-dialog-title">编辑模型</h3>
-                <p>{dialogModel.provider === "openai" ? "OpenAI 兼容服务" : "Anthropic 兼容服务"}</p>
+                <p>
+                  {dialogModel.provider === "openai" ? "OpenAI 兼容服务" : "Anthropic 兼容服务"}
+                </p>
               </div>
-              <button type="button" className="model-dialog-close-btn" onClick={closeDialog} aria-label="关闭模型表单">
+              <button
+                type="button"
+                className="model-dialog-close-btn"
+                onClick={closeDialog}
+                aria-label="关闭模型表单"
+              >
                 <span aria-hidden="true">x</span>
               </button>
             </header>
@@ -702,7 +755,11 @@ export function ModelManagement({
             <div className="model-form-grid">
               <label className="config-group">
                 <span className="config-label">显示名称</span>
-                <input className="config-input" value={dialogModel.name} onChange={(event) => updateDialogModel({ name: event.target.value })} />
+                <input
+                  className="config-input"
+                  value={dialogModel.name}
+                  onChange={(event) => updateDialogModel({ name: event.target.value })}
+                />
               </label>
               <div className="config-group">
                 <span className="config-label">服务商协议</span>
@@ -710,7 +767,9 @@ export function ModelManagement({
                   variant="block"
                   ariaLabel="服务商协议"
                   value={dialogModel.provider}
-                  onChange={(value) => updateDialogModel({ provider: value as ManagedModel["provider"] })}
+                  onChange={(value) =>
+                    updateDialogModel({ provider: value as ManagedModel["provider"] })
+                  }
                   options={[
                     { value: "openai", label: "OpenAI 兼容" },
                     { value: "anthropic", label: "Anthropic 兼容" },
@@ -719,14 +778,22 @@ export function ModelManagement({
               </div>
               <label className="config-group model-form-span">
                 <span className="config-label">模型标识</span>
-                <input className="config-input" value={dialogModel.model} onChange={(event) => updateDialogModel({ model: event.target.value })} />
+                <input
+                  className="config-input"
+                  value={dialogModel.model}
+                  onChange={(event) => updateDialogModel({ model: event.target.value })}
+                />
               </label>
               <label className="config-group model-form-span">
                 <span className="config-label">Base URL</span>
                 <input
                   className="config-input"
                   value={dialogModel.baseURL}
-                  placeholder={dialogModel.provider === "openai" ? "https://api.openai.com/v1" : "https://api.anthropic.com"}
+                  placeholder={
+                    dialogModel.provider === "openai"
+                      ? "https://api.openai.com/v1"
+                      : "https://api.anthropic.com"
+                  }
                   onChange={(event) => updateDialogModel({ baseURL: event.target.value })}
                 />
               </label>
@@ -736,21 +803,23 @@ export function ModelManagement({
                   className="config-input"
                   type="password"
                   value={dialogApiKey}
-                  placeholder={dialogModel.credentialConfigured
-                    ? "留空以保留当前安全存储中的凭据"
-                    : "填写 API Key"}
+                  placeholder={
+                    dialogModel.credentialConfigured
+                      ? "留空以保留当前安全存储中的凭据"
+                      : "填写 API Key"
+                  }
                   onChange={(event) => setDialogApiKey(event.target.value)}
                 />
-                {models.find((model) => model.id === dialogModel.id)
-                  && connectionBindingChanged(
-                    models.find((model) => model.id === dialogModel.id)!,
-                    dialogModel,
-                  )
-                  && !dialogApiKey.trim() ? (
-                    <small className="model-pricing-hint">
-                      连接配置已更改；保存后原凭据不会复用，请重新录入 API Key。
-                    </small>
-                  ) : null}
+                {models.find((model) => model.id === dialogModel.id) &&
+                connectionBindingChanged(
+                  models.find((model) => model.id === dialogModel.id)!,
+                  dialogModel,
+                ) &&
+                !dialogApiKey.trim() ? (
+                  <small className="model-pricing-hint">
+                    连接配置已更改；保存后原凭据不会复用，请重新录入 API Key。
+                  </small>
+                ) : null}
               </label>
               {dialogModel.provider === "openai" ? (
                 <div className="config-group model-form-span">
@@ -759,7 +828,9 @@ export function ModelManagement({
                     variant="block"
                     ariaLabel="OpenAI API 模式"
                     value={dialogModel.openaiApiMode}
-                    onChange={(value) => updateDialogModel({ openaiApiMode: value as ManagedModel["openaiApiMode"] })}
+                    onChange={(value) =>
+                      updateDialogModel({ openaiApiMode: value as ManagedModel["openaiApiMode"] })
+                    }
                     options={[
                       { value: "responses", label: "Responses API" },
                       { value: "chat-completions", label: "Chat Completions 兼容模式" },
@@ -776,7 +847,9 @@ export function ModelManagement({
                   <input
                     type="checkbox"
                     checked={dialogModel.supports1MContext === true}
-                    onChange={(event) => updateDialogModel({ supports1MContext: event.target.checked })}
+                    onChange={(event) =>
+                      updateDialogModel({ supports1MContext: event.target.checked })
+                    }
                   />
                   <span>
                     <strong>支持 1M 上下文</strong>
@@ -798,9 +871,13 @@ export function ModelManagement({
                   <TrashIcon size={15} />
                   <span>删除模型</span>
                 </button>
-              ) : <span />}
+              ) : (
+                <span />
+              )}
               <div className="model-dialog-actions">
-                <button type="button" className="settings-secondary-btn" onClick={closeDialog}>取消</button>
+                <button type="button" className="settings-secondary-btn" onClick={closeDialog}>
+                  取消
+                </button>
                 <button
                   type="button"
                   className="settings-primary-btn"

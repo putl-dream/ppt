@@ -1,16 +1,16 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
-import type { Presentation, Slide } from "@shared/presentation";
-import { hasUnverifiedCommercialAssets } from "@shared/asset-license";
 import { formatPublicErrorMessage } from "@shared/agent-activity-display";
+import { hasUnverifiedCommercialAssets } from "@shared/asset-license";
 import { utf8ToBase64 } from "@shared/base64";
-import { useArtifactCardManager } from "../cards/display-card-managers";
+import { useArtifactCardManager } from "@shared/cards/display-card-managers";
 import {
   getSlidePreviewBatchKey,
   selectLatestSlidePreviews,
-} from "../cards/select-slide-previews";
+} from "@shared/cards/select-slide-previews";
+import type { Presentation, Slide } from "@shared/presentation";
+import type React from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { confirmSvgExportExpectation } from "../app/presentation/exportExpectations";
-import { SlidePreviewGallery } from "./SlidePreviewGallery";
 import {
   CheckIcon,
   ClosePreviewIcon,
@@ -20,7 +20,7 @@ import {
   LayoutIcon,
   PlayIcon,
 } from "./Icons";
-
+import { SlidePreviewGallery } from "./SlidePreviewGallery";
 
 interface PPTMirrorProps {
   sessionId: string;
@@ -66,11 +66,7 @@ interface MirrorSlideFrameProps {
   className?: string;
 }
 
-function MirrorSlideFrame({
-  slide,
-  fallbackWidth,
-  className,
-}: MirrorSlideFrameProps) {
+function MirrorSlideFrame({ slide, fallbackWidth, className }: MirrorSlideFrameProps) {
   const frameRef = useRef<HTMLDivElement>(null);
   const [frameWidth, setFrameWidth] = useState(fallbackWidth);
   const isSvgSlide = slide.visualSource?.kind === "svg";
@@ -93,10 +89,7 @@ function MirrorSlideFrame({
   }, []);
 
   return (
-    <div
-      ref={frameRef}
-      className={["mirror-slide-frame", className].filter(Boolean).join(" ")}
-    >
+    <div ref={frameRef} className={["mirror-slide-frame", className].filter(Boolean).join(" ")}>
       <div
         className="slide-viewport"
         style={{
@@ -109,11 +102,7 @@ function MirrorSlideFrame({
           inset: 0,
         }}
       >
-        {isSvgSlide ? (
-          <SvgSlideSurface slide={slide} />
-        ) : (
-          <NonSvgSlidePlaceholder slide={slide} />
-        )}
+        {isSvgSlide ? <SvgSlideSurface slide={slide} /> : <NonSvgSlidePlaceholder slide={slide} />}
       </div>
     </div>
   );
@@ -139,8 +128,8 @@ export const PPTMirror: React.FC<PPTMirrorProps> = ({
     [artifactCards],
   );
   const inspectionBatchKey = getSlidePreviewBatchKey(inspectionPreviews);
-  const [activeView, setActiveView] = useState<"slides" | "inspection">(
-    () => inspectionPreviews.length > 0 ? "inspection" : "slides",
+  const [activeView, setActiveView] = useState<"slides" | "inspection">(() =>
+    inspectionPreviews.length > 0 ? "inspection" : "slides",
   );
   const surfacedInspectionBatchRef = useRef<string | undefined>(inspectionBatchKey);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -176,10 +165,12 @@ export const PPTMirror: React.FC<PPTMirrorProps> = ({
     [slides],
   );
   const orderedInspectionPreviews = useMemo(
-    () => [...inspectionPreviews].sort((left, right) =>
-      (slideOrder.get(left.payload.slideId) ?? Number.MAX_SAFE_INTEGER)
-      - (slideOrder.get(right.payload.slideId) ?? Number.MAX_SAFE_INTEGER)
-    ),
+    () =>
+      [...inspectionPreviews].sort(
+        (left, right) =>
+          (slideOrder.get(left.payload.slideId) ?? Number.MAX_SAFE_INTEGER) -
+          (slideOrder.get(right.payload.slideId) ?? Number.MAX_SAFE_INTEGER),
+      ),
     [inspectionPreviews, slideOrder],
   );
   const reviewedSlideIds = useMemo(
@@ -266,12 +257,7 @@ export const PPTMirror: React.FC<PPTMirrorProps> = ({
     if (index === undefined) return null;
     const slide = slides[index];
     if (!slide) return null;
-    return (
-      <MirrorSlideFrame
-        slide={slide}
-        fallbackWidth={960}
-      />
-    );
+    return <MirrorSlideFrame slide={slide} fallbackWidth={960} />;
   };
 
   return (
@@ -376,9 +362,9 @@ export const PPTMirror: React.FC<PPTMirrorProps> = ({
                 type="button"
                 onClick={() => selectRelativeSlide(1)}
                 disabled={
-                  slides.length === 0
-                  || selectedSlideIndex < 0
-                  || selectedSlideIndex >= slides.length - 1
+                  slides.length === 0 ||
+                  selectedSlideIndex < 0 ||
+                  selectedSlideIndex >= slides.length - 1
                 }
                 aria-label="选择下一页"
               >
@@ -406,9 +392,11 @@ export const PPTMirror: React.FC<PPTMirrorProps> = ({
             >
               <span
                 style={{
-                  width: `${slides.length > 0
-                    ? Math.min(100, (reviewedSlideCount / slides.length) * 100)
-                    : 0}%`,
+                  width: `${
+                    slides.length > 0
+                      ? Math.min(100, (reviewedSlideCount / slides.length) * 100)
+                      : 0
+                  }%`,
                 }}
               />
             </div>
@@ -438,7 +426,9 @@ export const PPTMirror: React.FC<PPTMirrorProps> = ({
               <section className="mirror-focus-preview" aria-label="当前页面预览">
                 <div className="mirror-focus-preview-label">
                   <span>当前页面</span>
-                  <span>{Math.max(0, selectedSlideIndex) + 1} / {slides.length}</span>
+                  <span>
+                    {Math.max(0, selectedSlideIndex) + 1} / {slides.length}
+                  </span>
                 </div>
                 <button
                   type="button"
@@ -485,7 +475,9 @@ export const PPTMirror: React.FC<PPTMirrorProps> = ({
                         <span className="slide-number">
                           {(index + 1).toString().padStart(2, "0")}
                         </span>
-                        <span className="mirror-card-title" title={slide.title}>{slide.title}</span>
+                        <span className="mirror-card-title" title={slide.title}>
+                          {slide.title}
+                        </span>
                       </span>
                       {isSelected && <span className="selected-tag">已选中</span>}
                     </span>
@@ -505,91 +497,86 @@ export const PPTMirror: React.FC<PPTMirrorProps> = ({
       </div>
 
       {/* 4. 全屏放映灯箱模态窗口 */}
-      {isFullscreen && createPortal(
-        <div
-          className="slideshow-lightbox-overlay"
-          onClick={() => setIsFullscreen(false)}
-        >
-          <div className="slideshow-lightbox-content" onClick={(e) => e.stopPropagation()}>
-            {/* 顶栏控制 */}
-            <div className="slideshow-top-bar">
-              <span className="slideshow-title">{presentation.title}</span>
-              <span className="slideshow-progress">
-                第 {fullscreenIndex + 1} 页 / 共 {slides.length} 页
-              </span>
-              <button
-                className="slideshow-close"
-                onClick={() => setIsFullscreen(false)}
+      {isFullscreen &&
+        createPortal(
+          <div className="slideshow-lightbox-overlay" onClick={() => setIsFullscreen(false)}>
+            <div className="slideshow-lightbox-content" onClick={(e) => e.stopPropagation()}>
+              {/* 顶栏控制 */}
+              <div className="slideshow-top-bar">
+                <span className="slideshow-title">{presentation.title}</span>
+                <span className="slideshow-progress">
+                  第 {fullscreenIndex + 1} 页 / 共 {slides.length} 页
+                </span>
+                <button className="slideshow-close" onClick={() => setIsFullscreen(false)}>
+                  ✕ 关闭放映
+                </button>
+              </div>
+
+              {/* 主幻灯片预览区 */}
+              <div
+                className="slideshow-viewport-container"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  const clickX = e.clientX - rect.left;
+                  if (clickX > rect.width / 2) {
+                    setFullscreenIndex((prev) => Math.min(slides.length - 1, prev + 1));
+                  } else {
+                    setFullscreenIndex((prev) => Math.max(0, prev - 1));
+                  }
+                }}
+                style={{ cursor: "pointer" }}
               >
-                ✕ 关闭放映
+                {slides[fullscreenIndex] ? (
+                  <div
+                    className="slide-viewport"
+                    style={{
+                      width: 1280,
+                      height: 720,
+                      background: "#ffffff",
+                      boxShadow: "var(--slideshow-slide-shadow)",
+                      borderRadius: 8,
+                      position: "relative",
+                      transform: `scale(${Math.min(window.innerWidth / 1380, window.innerHeight / 820)})`,
+                      transformOrigin: "center center",
+                    }}
+                  >
+                    {slides[fullscreenIndex].visualSource?.kind === "svg" ? (
+                      <SvgSlideSurface slide={slides[fullscreenIndex]} />
+                    ) : (
+                      <NonSvgSlidePlaceholder slide={slides[fullscreenIndex]} />
+                    )}
+                  </div>
+                ) : (
+                  <div className="text-white">无页面</div>
+                )}
+              </div>
+
+              {/* 左右翻页控制器 */}
+              <button
+                className="slideshow-nav-arrow left"
+                disabled={fullscreenIndex === 0}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setFullscreenIndex((i) => Math.max(0, i - 1));
+                }}
+              >
+                ‹
+              </button>
+              <button
+                className="slideshow-nav-arrow right"
+                disabled={fullscreenIndex === slides.length - 1}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setFullscreenIndex((i) => Math.min(slides.length - 1, i + 1));
+                }}
+              >
+                ›
               </button>
             </div>
-
-            {/* 主幻灯片预览区 */}
-            <div
-              className="slideshow-viewport-container"
-              onClick={(e) => {
-                e.stopPropagation();
-                const rect = e.currentTarget.getBoundingClientRect();
-                const clickX = e.clientX - rect.left;
-                if (clickX > rect.width / 2) {
-                  setFullscreenIndex((prev) => Math.min(slides.length - 1, prev + 1));
-                } else {
-                  setFullscreenIndex((prev) => Math.max(0, prev - 1));
-                }
-              }}
-              style={{ cursor: "pointer" }}
-            >
-              {slides[fullscreenIndex] ? (
-                <div
-                  className="slide-viewport"
-                  style={{
-                    width: 1280,
-                    height: 720,
-                    background: "#ffffff",
-                    boxShadow: "var(--slideshow-slide-shadow)",
-                    borderRadius: 8,
-                    position: "relative",
-                    transform: `scale(${Math.min(window.innerWidth / 1380, window.innerHeight / 820)})`,
-                    transformOrigin: "center center",
-                  }}
-                >
-                  {slides[fullscreenIndex].visualSource?.kind === "svg" ? (
-                    <SvgSlideSurface slide={slides[fullscreenIndex]} />
-                  ) : (
-                    <NonSvgSlidePlaceholder slide={slides[fullscreenIndex]} />
-                  )}
-                </div>
-              ) : (
-                <div className="text-white">无页面</div>
-              )}
-            </div>
-
-            {/* 左右翻页控制器 */}
-            <button
-              className="slideshow-nav-arrow left"
-              disabled={fullscreenIndex === 0}
-              onClick={(e) => {
-                e.stopPropagation();
-                setFullscreenIndex((i) => Math.max(0, i - 1));
-              }}
-            >
-              ‹
-            </button>
-            <button
-              className="slideshow-nav-arrow right"
-              disabled={fullscreenIndex === slides.length - 1}
-              onClick={(e) => {
-                e.stopPropagation();
-                setFullscreenIndex((i) => Math.min(slides.length - 1, i + 1));
-              }}
-            >
-              ›
-            </button>
-          </div>
-        </div>,
-        document.body
-      )}
+          </div>,
+          document.body,
+        )}
     </aside>
   );
 };

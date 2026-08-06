@@ -1,10 +1,10 @@
-import pptxgen from "pptxgenjs";
-import type { Presentation } from "@shared/presentation";
-import type { ExportPresentationOptions } from "@shared/ipc";
-import { createModuleLogger } from "./agent/logger";
 import { utf8ToBase64 } from "@shared/base64";
+import type { ExportPresentationOptions } from "@shared/ipc";
+import type { Presentation } from "@shared/presentation";
+import pptxgen from "pptxgenjs";
+import { createModuleLogger } from "./agent/logger";
 import { createPptxExportIdentity } from "./deck/export-identity";
-import { liftSvgText, type LiftedText } from "./deck/svg-text-lift";
+import { type LiftedText, liftSvgText } from "./deck/svg-text-lift";
 
 const logger = createModuleLogger("ppt-exporter");
 const PPTX_LAYOUT_NAME = "AGENT_PPT_WIDE";
@@ -32,10 +32,7 @@ export async function exportToPptx(
     const slide = pptx.addSlide();
     if (slideData.visualSource?.kind === "svg") {
       slide.background = { fill: "FFFFFF" };
-      const exportLayers = resolveSvgExportLayers(
-        slideData.visualSource.markup,
-        i + 1,
-      );
+      const exportLayers = resolveSvgExportLayers(slideData.visualSource.markup, i + 1);
       slide.addImage({
         data: `data:image/svg+xml;base64,${utf8ToBase64(exportLayers.backgroundSvg)}`,
         x: 0,
@@ -52,9 +49,7 @@ export async function exportToPptx(
       continue;
     }
 
-    throw new Error(
-      `Slide ${i + 1} is not SVG-native; element-IR export has been removed.`,
-    );
+    throw new Error(`Slide ${i + 1} is not SVG-native; element-IR export has been removed.`);
   }
 
   try {

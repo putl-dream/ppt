@@ -1,5 +1,7 @@
-import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { AgentToolDisplayCategory } from "@shared/agent-activity-display";
+import type { ProcessTraceRow } from "@shared/process-trace-rows";
+import type React from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   ChevronDownIcon,
   ChevronRightIcon,
@@ -11,8 +13,7 @@ import {
   UsersIcon,
 } from "./Icons";
 import { MessageMarkdown } from "./MessageMarkdown";
-import type { ProcessTraceRow } from "./process-trace-rows";
-import { useChatScroll, type FoldToken } from "./useChatScroll";
+import { type FoldToken, useChatScroll } from "./useChatScroll";
 
 interface ProcessTraceItemProps {
   row: ProcessTraceRow;
@@ -42,9 +43,7 @@ export const ProcessTraceItem: React.FC<ProcessTraceItemProps> = ({
   const hasBody = Boolean(row.content?.trim() || (row.lines && row.lines.length > 0));
   const effectiveExpanded = hasBody && expanded;
   const CaretIcon = effectiveExpanded ? ChevronDownIcon : ChevronRightIcon;
-  const ToolCategoryIcon = row.toolCategory
-    ? TOOL_CATEGORY_ICONS[row.toolCategory]
-    : null;
+  const ToolCategoryIcon = row.toolCategory ? TOOL_CATEGORY_ICONS[row.toolCategory] : null;
 
   useLayoutEffect(() => {
     const pending = pendingFoldRef.current;
@@ -92,13 +91,17 @@ export const ProcessTraceItem: React.FC<ProcessTraceItemProps> = ({
           size={12}
           className={`process-trace-row-tool-icon process-trace-row-tool-icon--${row.toolCategory}`}
         />
-      ) : <i />}
+      ) : (
+        <i />
+      )}
     </span>
   ) : null;
 
   if (row.kind === "progress") {
     return (
-      <div className={`process-trace-row process-trace-row--progress${row.active ? " process-trace-row--active" : ""}`}>
+      <div
+        className={`process-trace-row process-trace-row--progress${row.active ? " process-trace-row--active" : ""}`}
+      >
         <MessageMarkdown
           content={row.title}
           className="assistant-response process-trace-progress-content"
@@ -115,7 +118,9 @@ export const ProcessTraceItem: React.FC<ProcessTraceItemProps> = ({
         row.active ? "process-trace-row--active" : "",
         row.status ? `process-trace-row--status-${row.status}` : "",
         row.kind === "tool" ? "process-trace-row--enter" : "",
-      ].filter(Boolean).join(" ")}
+      ]
+        .filter(Boolean)
+        .join(" ")}
     >
       {hasBody ? (
         <button
@@ -133,19 +138,16 @@ export const ProcessTraceItem: React.FC<ProcessTraceItemProps> = ({
         </button>
       ) : (
         <div className="process-trace-row-title">
-          {statusIndicator ?? (
-            <span className="process-trace-row-caret" aria-hidden="true" />
-          )}
+          {statusIndicator ?? <span className="process-trace-row-caret" aria-hidden="true" />}
           <span className="process-trace-row-label">{row.title}</span>
         </div>
       )}
       {effectiveExpanded && (
         <div
           ref={row.streaming ? liveBodyRef : undefined}
-          className={[
-            "process-trace-row-body",
-            row.streaming ? "process-trace-row-body--live" : "",
-          ].filter(Boolean).join(" ")}
+          className={["process-trace-row-body", row.streaming ? "process-trace-row-body--live" : ""]
+            .filter(Boolean)
+            .join(" ")}
         >
           {row.content !== undefined && (
             <pre className="process-trace-row-text">
@@ -154,7 +156,9 @@ export const ProcessTraceItem: React.FC<ProcessTraceItemProps> = ({
             </pre>
           )}
           {row.lines?.map((line, index) => (
-            <div key={index} className="process-trace-row-line">{line}</div>
+            <div key={index} className="process-trace-row-line">
+              {line}
+            </div>
           ))}
         </div>
       )}

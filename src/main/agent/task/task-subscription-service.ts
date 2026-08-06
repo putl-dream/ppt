@@ -1,5 +1,5 @@
-import { watch, type FSWatcher } from "node:fs";
 import { createHash } from "node:crypto";
+import { type FSWatcher, watch } from "node:fs";
 import type { TaskMutationResult, TaskStore } from "./task-store";
 
 export type TaskListSnapshot = Omit<TaskMutationResult, "task" | "changed">;

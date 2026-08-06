@@ -1,19 +1,19 @@
 import { join } from "node:path";
+import { createDefaultExportHistoryFile } from "@shared/deck-persistence";
 import type { Presentation } from "@shared/presentation";
-import type { ProjectSandbox, SessionSnapshot } from "@shared/session";
 import { defaultProjectArtifacts } from "@shared/project";
 import {
   createDefaultBriefMarkdown,
   createDefaultOutlineMarkdown,
   createDefaultResearchMarkdown,
 } from "@shared/project-artifacts";
-import { createDefaultExportHistoryFile } from "@shared/deck-persistence";
+import type { ProjectSandbox, SessionSnapshot } from "@shared/session";
+import { getBuiltinTemplate } from "@shared/template-catalog";
 import {
   APPLICATION_DEFAULT_TEMPLATE_ID,
-  formatProjectTemplatePolicy,
   createDefaultProjectTemplatePolicy,
+  formatProjectTemplatePolicy,
 } from "@shared/template-protocol";
-import { getBuiltinTemplate } from "@shared/template-catalog";
 
 export interface ProjectFileTemplate {
   path: string;
@@ -47,9 +47,7 @@ export function createDefaultProjectFiles(
   return [
     {
       path: "design/template-policy.json",
-      content: formatProjectTemplatePolicy(
-        createDefaultProjectTemplatePolicy(defaultTemplateId),
-      ),
+      content: formatProjectTemplatePolicy(createDefaultProjectTemplatePolicy(defaultTemplateId)),
     },
     {
       path: "brief.md",

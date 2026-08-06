@@ -5,6 +5,8 @@ output/
 .vite/
 coverage/
 .tmp/
+.tmp-*
+.tmp-biome*
 *.tsbuildinfo
 
 # Logs

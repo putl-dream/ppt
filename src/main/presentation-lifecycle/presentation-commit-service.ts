@@ -1,8 +1,4 @@
-import type {
-  CommandBus,
-  PreparedCommandMutation,
-  PresentationCommand,
-} from "@shared/commands";
+import type { CommandBus, PreparedCommandMutation, PresentationCommand } from "@shared/commands";
 import type { Presentation } from "@shared/presentation";
 import type {
   PptJobId,
@@ -11,13 +7,12 @@ import type {
   ProposalId,
 } from "@shared/presentation-lifecycle";
 import type { FileSessionStore } from "../session-store";
-import type { PresentationLifecycleOrchestrator } from
-  "./presentation-lifecycle-orchestrator";
 import {
+  type ContentAddressedBlobStore,
   canonicalJson,
   hashArtifactValue,
-  type ContentAddressedBlobStore,
 } from "./content-addressed-blob-store";
+import type { PresentationLifecycleOrchestrator } from "./presentation-lifecycle-orchestrator";
 
 export interface ProposalCommitIdentity {
   jobId: PptJobId;
@@ -30,8 +25,7 @@ export interface ProposalCommitIdentity {
  * in SQLite, then publishes the prepared state to memory and the workspace.
  */
 export class PresentationCommitService {
-  private readonly inFlightProposalApplies =
-    new Map<ProposalId, Promise<Presentation>>();
+  private readonly inFlightProposalApplies = new Map<ProposalId, Promise<Presentation>>();
   private mutationQueue: Promise<void> = Promise.resolve();
 
   constructor(
@@ -48,11 +42,8 @@ export class PresentationCommitService {
     command: PresentationCommand,
     instruction = "Manual presentation command",
   ): Promise<Presentation> {
-    return this.enqueueMutation(
-      () => this.commitManual(
-        this.commandBus.prepareExecute(command),
-        instruction,
-      ),
+    return this.enqueueMutation(() =>
+      this.commitManual(this.commandBus.prepareExecute(command), instruction),
     );
   }
 
@@ -60,29 +51,20 @@ export class PresentationCommitService {
     commands: PresentationCommand[],
     instruction = "Apply validated presentation commands",
   ): Promise<Presentation> {
-    return this.enqueueMutation(
-      () => this.commitManual(
-        this.commandBus.prepareExecuteMany(commands),
-        instruction,
-      ),
+    return this.enqueueMutation(() =>
+      this.commitManual(this.commandBus.prepareExecuteMany(commands), instruction),
     );
   }
 
   undo(): Promise<Presentation> {
-    return this.enqueueMutation(
-      () => this.commitManual(
-        this.commandBus.prepareUndo(),
-        "Undo presentation edit",
-      ),
+    return this.enqueueMutation(() =>
+      this.commitManual(this.commandBus.prepareUndo(), "Undo presentation edit"),
     );
   }
 
   redo(): Promise<Presentation> {
-    return this.enqueueMutation(
-      () => this.commitManual(
-        this.commandBus.prepareRedo(),
-        "Redo presentation edit",
-      ),
+    return this.enqueueMutation(() =>
+      this.commitManual(this.commandBus.prepareRedo(), "Redo presentation edit"),
     );
   }
 
@@ -94,9 +76,7 @@ export class PresentationCommitService {
     const inFlight = this.inFlightProposalApplies.get(identity.proposalId);
     if (inFlight) return inFlight;
 
-    const operation = this.enqueueMutation(
-      () => this.applyProposalOnce(commands, identity),
-    );
+    const operation = this.enqueueMutation(() => this.applyProposalOnce(commands, identity));
     this.inFlightProposalApplies.set(identity.proposalId, operation);
     const clear = () => {
       if (this.inFlightProposalApplies.get(identity.proposalId) === operation) {
@@ -107,9 +87,7 @@ export class PresentationCommitService {
     return operation;
   }
 
-  private enqueueMutation<T>(
-    operation: () => Promise<T>,
-  ): Promise<T> {
+  private enqueueMutation<T>(operation: () => Promise<T>): Promise<T> {
     const pending = this.mutationQueue.then(operation);
     this.mutationQueue = pending.then(
       () => undefined,
@@ -138,18 +116,16 @@ export class PresentationCommitService {
       const job = this.lifecycle.repository.getJob(identity.jobId);
       const presentation = this.commandBus.getSnapshot();
       if (
-        typeof proof.presentationRevisionId === "string"
-        && typeof proof.presentationRevisionNumber === "number"
-        && job?.presentationRevisionId === proof.presentationRevisionId
-        && job.presentationRevisionNumber === proof.presentationRevisionNumber
-        && presentation.revision === proof.presentationRevisionNumber
+        typeof proof.presentationRevisionId === "string" &&
+        typeof proof.presentationRevisionNumber === "number" &&
+        job?.presentationRevisionId === proof.presentationRevisionId &&
+        job.presentationRevisionNumber === proof.presentationRevisionNumber &&
+        presentation.revision === proof.presentationRevisionNumber
       ) {
         this.lifecycle.assertPresentationSnapshot(identity.jobId, presentation);
         return presentation;
       }
-      throw new Error(
-        "The durable apply proof does not match the authoritative Presentation.",
-      );
+      throw new Error("The durable apply proof does not match the authoritative Presentation.");
     }
     if (claim.type === "in_progress") {
       this.lifecycle.waitForUser(
@@ -185,10 +161,7 @@ export class PresentationCommitService {
         completedAt: new Date().toISOString(),
       });
       const state = this.lifecycle.repository.getJob(identity.jobId);
-      if (
-        state
-        && (state.status === "running" || state.status === "waiting_approval")
-      ) {
+      if (state && (state.status === "running" || state.status === "waiting_approval")) {
         this.lifecycle.waitForUser(
           identity.jobId,
           "Proposal apply failed; generate or approve a fresh proposal after reconciliation.",
@@ -201,9 +174,9 @@ export class PresentationCommitService {
   private assertOwnedProposal(identity: ProposalCommitIdentity): void {
     const job = this.lifecycle.repository.getJob(identity.jobId);
     if (
-      !job
-      || job.params.projectId !== this.projectId
-      || job.params.presentationId !== this.presentationId
+      !job ||
+      job.params.projectId !== this.projectId ||
+      job.params.presentationId !== this.presentationId
     ) {
       throw new Error(
         `PptJob ${identity.jobId} does not belong to this Presentation commit service.`,
@@ -248,44 +221,45 @@ export class PresentationCommitService {
       "application/vnd.agent-ppt.presentation+json",
     );
     try {
-      await this.lifecycle.withProjectionNotificationBatch(
-        () => this.sessionStore.commitPresentationTransaction({
+      await this.lifecycle.withProjectionNotificationBatch(() =>
+        this.sessionStore.commitPresentationTransaction({
           sessionId: this.sessionId,
           presentation: prepared.presentation,
-          commitLifecycle: () => this.lifecycle.withTransaction(() => {
-            const resolved = identity();
-            const state = this.lifecycle.completePresentation({
-              jobId: resolved.jobId,
-              proposalId: resolved.proposalId,
-              presentationRevisionNumber: prepared.presentation.revision,
-              presentationBlob,
-            });
-            if (applyEffectKey) {
-              const completed = this.lifecycle.repository.completeSideEffect({
+          commitLifecycle: () =>
+            this.lifecycle.withTransaction(() => {
+              const resolved = identity();
+              const state = this.lifecycle.completePresentation({
                 jobId: resolved.jobId,
-                operation: "apply",
-                key: applyEffectKey,
-                status: "succeeded",
-                result: {
-                  proposalId: resolved.proposalId,
-                  presentationRevisionId: state.presentationRevisionId,
-                  presentationRevisionNumber: state.presentationRevisionNumber,
-                },
-                completedAt: new Date().toISOString(),
+                proposalId: resolved.proposalId,
+                presentationRevisionNumber: prepared.presentation.revision,
+                presentationBlob,
               });
-              if (!completed) {
-                throw new Error("Apply side-effect claim was not active.");
+              if (applyEffectKey) {
+                const completed = this.lifecycle.repository.completeSideEffect({
+                  jobId: resolved.jobId,
+                  operation: "apply",
+                  key: applyEffectKey,
+                  status: "succeeded",
+                  result: {
+                    proposalId: resolved.proposalId,
+                    presentationRevisionId: state.presentationRevisionId,
+                    presentationRevisionNumber: state.presentationRevisionNumber,
+                  },
+                  completedAt: new Date().toISOString(),
+                });
+                if (!completed) {
+                  throw new Error("Apply side-effect claim was not active.");
+                }
               }
-            }
-            return state;
-          }),
+              return state;
+            }),
           afterDatabaseCommit: () => {
             try {
               this.commandBus.commitPreparedMutation(prepared);
             } catch (error) {
               if (
-                hashArtifactValue(this.commandBus.getSnapshot())
-                === hashArtifactValue(prepared.presentation)
+                hashArtifactValue(this.commandBus.getSnapshot()) ===
+                hashArtifactValue(prepared.presentation)
               ) {
                 this.commandBus.discardPreparedMutation(prepared);
                 return;

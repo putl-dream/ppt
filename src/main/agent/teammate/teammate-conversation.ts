@@ -15,10 +15,7 @@ export class TeammateConversation {
       : [];
   }
 
-  appendUser(
-    content: string,
-    transcriptFields: Record<string, unknown> = {},
-  ): void {
+  appendUser(content: string, transcriptFields: Record<string, unknown> = {}): void {
     this.transcript.push({ role: "user", content, ...transcriptFields });
     this.modelMessages.push({
       role: "user",
@@ -26,10 +23,7 @@ export class TeammateConversation {
     });
   }
 
-  appendAssistant(
-    content: AgentModelContentBlock[],
-    transcriptText?: string,
-  ): void {
+  appendAssistant(content: AgentModelContentBlock[], transcriptText?: string): void {
     this.modelMessages.push({ role: "assistant", content });
     if (transcriptText !== undefined) {
       this.transcript.push({ role: "assistant", content: transcriptText });

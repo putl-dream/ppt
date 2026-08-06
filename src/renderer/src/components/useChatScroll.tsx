@@ -1,16 +1,16 @@
 import React, {
   createContext,
+  type ReactNode,
+  type RefObject,
   useCallback,
   useContext,
   useEffect,
   useMemo,
   useRef,
-  type ReactNode,
-  type RefObject,
 } from "react";
 import {
-  createChatScrollController,
   type ChatScrollController,
+  createChatScrollController,
   type FoldToken,
 } from "./chat-scroll-controller";
 
@@ -66,25 +66,24 @@ export function ChatScrollProvider({ children }: { children: ReactNode }) {
     return controller.attach();
   }, [controller]);
 
-  const api = useMemo<ChatScrollApi>(() => ({
-    viewportRef,
-    streamRef,
-    bind,
-    isFollowing: () => controller.isFollowing(),
-    setFollowing: (value) => controller.setFollowing(value),
-    scrollToBottom: () => controller.scrollToBottom(),
-    stickToBottomIfFollowing: () => controller.stickToBottomIfFollowing(),
-    beginFold: (anchor) => controller.beginFold(anchor),
-    commitFold: (token) => controller.commitFold(token),
-    getScrollTop: () => controller.getScrollTop(),
-    setScrollTop: (value) => controller.setScrollTop(value),
-  }), [bind, controller]);
-
-  return (
-    <ChatScrollContext.Provider value={api}>
-      {children}
-    </ChatScrollContext.Provider>
+  const api = useMemo<ChatScrollApi>(
+    () => ({
+      viewportRef,
+      streamRef,
+      bind,
+      isFollowing: () => controller.isFollowing(),
+      setFollowing: (value) => controller.setFollowing(value),
+      scrollToBottom: () => controller.scrollToBottom(),
+      stickToBottomIfFollowing: () => controller.stickToBottomIfFollowing(),
+      beginFold: (anchor) => controller.beginFold(anchor),
+      commitFold: (token) => controller.commitFold(token),
+      getScrollTop: () => controller.getScrollTop(),
+      setScrollTop: (value) => controller.setScrollTop(value),
+    }),
+    [bind, controller],
   );
+
+  return <ChatScrollContext.Provider value={api}>{children}</ChatScrollContext.Provider>;
 }
 
 /** Returns a no-op API when rendered outside ChatScrollProvider (unit tests). */

@@ -2,46 +2,44 @@ import type { AgentExecutionStrategy, AgentModelSelection } from "@shared/agent"
 import type { AgentStepLimits } from "@shared/agent-step-limits";
 import type { AgentTaskNode } from "@shared/agent-task-list";
 import {
-  presentationCommandSchema,
   type CommandBus,
   type PresentationCommand,
+  presentationCommandSchema,
 } from "@shared/commands";
 import type { AgentEditorContext, AgentRunResult } from "@shared/ipc";
-import type { AgentConversationMessage } from "@shared/session-recovery";
-import type { TeammateProgressEvent } from "@shared/teammate-progress";
-import { CommitGate, type CommitGateResult } from "./gate/commit-gate";
-import { AgentRuntime } from "./runtime/agent-runtime";
-import { formatRecoverableAgentError } from "./runtime/errors/user-facing";
-import type { ToolApprovalHandler } from "./runtime/tools/permission-check";
-import type { ToolApprovalBroker } from "./runtime/tools/tool-approval-broker";
-import type { MessageBus } from "./teammate/message-bus";
-import type { TeammateManager } from "./teammate/spawn-teammate";
+import type { Presentation } from "@shared/presentation";
 import {
-  DurableServiceStore,
-  type DurableServiceThread,
-} from "./persistence/durable-service-store";
-import type { ConversationDatabase } from "../conversation-database";
-import type { QueryStartMode } from "./runtime/query/query-types";
-import { isRuntimeCancellation } from "./runtime/lifecycle/runtime-cancellation";
-import {
+  type ArtifactDependency,
   asPresentationId,
   asProposalId,
-  type ArtifactDependency,
   type BlobReference,
   type PptJobId,
   type PptStageRunId,
   type ProposalId,
   type QueryId,
 } from "@shared/presentation-lifecycle";
-import type { Presentation } from "@shared/presentation";
-import type { PresentationLifecycleOrchestrator } from
-  "../presentation-lifecycle/presentation-lifecycle-orchestrator";
+import type { AgentConversationMessage } from "@shared/session-recovery";
+import type { TeammateProgressEvent } from "@shared/teammate-progress";
+import type { ConversationDatabase } from "../conversation-database";
 import {
+  type ContentAddressedBlobStore,
   canonicalJson,
   hashArtifactValue,
-  type ContentAddressedBlobStore,
-} from
-  "../presentation-lifecycle/content-addressed-blob-store";
+} from "../presentation-lifecycle/content-addressed-blob-store";
+import type { PresentationLifecycleOrchestrator } from "../presentation-lifecycle/presentation-lifecycle-orchestrator";
+import type { CommitGate, CommitGateResult } from "./gate/commit-gate";
+import {
+  DurableServiceStore,
+  type DurableServiceThread,
+} from "./persistence/durable-service-store";
+import type { AgentRuntime } from "./runtime/agent-runtime";
+import { formatRecoverableAgentError } from "./runtime/errors/user-facing";
+import { isRuntimeCancellation } from "./runtime/lifecycle/runtime-cancellation";
+import type { QueryStartMode } from "./runtime/query/query-types";
+import type { ToolApprovalHandler } from "./runtime/tools/permission-check";
+import type { ToolApprovalBroker } from "./runtime/tools/tool-approval-broker";
+import type { MessageBus } from "./teammate/message-bus";
+import type { TeammateManager } from "./teammate/spawn-teammate";
 
 export type AgentServiceEvent =
   | { type: "request-status"; message: string; progress: number }
@@ -250,10 +248,7 @@ export class AgentService {
     const invocationRunId = runId ?? crypto.randomUUID();
     return this.withThreadRun(threadId, async () => {
       this.conversations.set(threadId, {
-        messages: [
-          ...structuredClone(messageHistory),
-          { role: "user", content: request },
-        ],
+        messages: [...structuredClone(messageHistory), { role: "user", content: request }],
         model,
         executionStrategy,
         suspendedQuery: false,
@@ -468,11 +463,7 @@ export class AgentService {
     }
 
     if (runtimeResult.type === "ask_user") {
-      this.waitForActivePptQuery(
-        before,
-        activeQueryId,
-        runtimeResult.content,
-      );
+      this.waitForActivePptQuery(before, activeQueryId, runtimeResult.content);
       this.conversations.set(threadId, {
         messages: [
           ...messageHistory,
@@ -505,22 +496,16 @@ export class AgentService {
     const proposal = runtimeResult;
     let candidateAttempt: LifecycleCandidateAttempt | undefined;
     try {
-      candidateAttempt = await this.startLifecycleCandidateAttempt(
-        before,
-        proposal,
-      );
+      candidateAttempt = await this.startLifecycleCandidateAttempt(before, proposal);
     } catch (error) {
       this.failActivePptQuery(before, activeQueryId);
       throw error;
     }
     let gate: CommitGateResult;
     try {
-      gate = await this.commitGate.evaluate(
-        before,
-        proposal.commands,
-        proposal.risk,
-        { workspaceRoot: this.workspaceRoot },
-      );
+      gate = await this.commitGate.evaluate(before, proposal.commands, proposal.risk, {
+        workspaceRoot: this.workspaceRoot,
+      });
     } catch (error) {
       this.failLifecycleCandidateAttempt(candidateAttempt, error);
       this.failActivePptQuery(before, activeQueryId);
@@ -552,9 +537,7 @@ export class AgentService {
     }
     const completedMessages = [
       ...structuredClone(messageHistory),
-      ...(requestAlreadyInHistory
-        ? []
-        : [{ role: "user" as const, content: request }]),
+      ...(requestAlreadyInHistory ? [] : [{ role: "user" as const, content: request }]),
       { role: "assistant" as const, content: proposal.summary },
     ];
     await this.persistThread(threadId, {
@@ -564,10 +547,7 @@ export class AgentService {
       executionStrategy,
     });
     if (canAutoApply) {
-      const applied = await this.resumeProposal(
-        lifecycleProposal.proposalId,
-        true,
-      );
+      const applied = await this.resumeProposal(lifecycleProposal.proposalId, true);
       this.runtime.clearSession(threadId);
       this.conversations.delete(threadId);
       listener?.({ type: "workflow-progress", message: "修改已完成。", progress: 100 });
@@ -598,16 +578,7 @@ export class AgentService {
    * proposal.
    */
   async submitDirectProposal(input: DirectCommandProposal): Promise<AgentRunResult> {
-    const {
-      threadId,
-      request,
-      commands,
-      summary,
-      assumptions,
-      risk,
-      model,
-      listener,
-    } = input;
+    const { threadId, request, commands, summary, assumptions, risk, model, listener } = input;
     const executionStrategy = input.executionStrategy ?? "REQUEST_APPROVAL";
     const before = this.commandBus.getSnapshot();
 
@@ -620,12 +591,9 @@ export class AgentService {
     });
     let gate: CommitGateResult;
     try {
-      gate = await this.commitGate.evaluate(
-        before,
-        commands,
-        risk,
-        { workspaceRoot: this.workspaceRoot },
-      );
+      gate = await this.commitGate.evaluate(before, commands, risk, {
+        workspaceRoot: this.workspaceRoot,
+      });
     } catch (error) {
       this.failLifecycleCandidateAttempt(candidateAttempt, error);
       throw error;
@@ -662,10 +630,7 @@ export class AgentService {
       executionStrategy,
     });
     if (canAutoApply) {
-      const applied = await this.resumeProposal(
-        lifecycleProposal.proposalId,
-        true,
-      );
+      const applied = await this.resumeProposal(lifecycleProposal.proposalId, true);
       listener?.({ type: "workflow-progress", message: "修改已完成。", progress: 100 });
       return applied;
     }
@@ -710,13 +675,11 @@ export class AgentService {
     }
     const job = this.presentationLifecycle.repository.getJob(proposal.jobId);
     if (!job) throw new Error(`Unknown PptJob ${proposal.jobId}.`);
-    const currentPresentationId = asPresentationId(
-      this.commandBus.getSnapshot().id,
-    );
+    const currentPresentationId = asPresentationId(this.commandBus.getSnapshot().id);
     if (job.params.presentationId !== currentPresentationId) {
       throw new Error(
-        `Proposal ${proposalId} belongs to Presentation `
-        + `${job.params.presentationId}, not ${currentPresentationId}.`,
+        `Proposal ${proposalId} belongs to Presentation ` +
+          `${job.params.presentationId}, not ${currentPresentationId}.`,
       );
     }
     if (proposal.status === "applied") {
@@ -724,21 +687,17 @@ export class AgentService {
         throw new Error("The proposal was already applied and cannot be rejected.");
       }
       if (!this.presentationCommitService) {
-        throw new Error(
-          "Presentation proposal application requires PresentationCommitService.",
-        );
+        throw new Error("Presentation proposal application requires PresentationCommitService.");
       }
-      const artifact = this.presentationLifecycle.getCommandProposalArtifact(
-        proposalId,
-      );
+      const artifact = this.presentationLifecycle.getCommandProposalArtifact(proposalId);
       const commands = await this.loadLifecycleCommands(
         artifact.value.commandsBlob,
         artifact.value.commandCount,
       );
-      const presentation = await this.presentationCommitService.applyProposal(
-        commands,
-        { jobId: proposal.jobId, proposalId },
-      );
+      const presentation = await this.presentationCommitService.applyProposal(commands, {
+        jobId: proposal.jobId,
+        proposalId,
+      });
       return { status: "completed", presentation };
     }
     if (proposal.status === "rejected") {
@@ -757,13 +716,11 @@ export class AgentService {
     }
 
     if (
-      job.status !== "waiting_approval"
-      || job.proposalId !== proposalId
-      || job.currentRequest.requestId !== proposal.requestId
+      job.status !== "waiting_approval" ||
+      job.proposalId !== proposalId ||
+      job.currentRequest.requestId !== proposal.requestId
     ) {
-      throw new Error(
-        "The proposal is no longer the active approval for this Presentation.",
-      );
+      throw new Error("The proposal is no longer the active approval for this Presentation.");
     }
     const artifact = this.presentationLifecycle.getCommandProposalArtifact(proposalId);
     const commands = await this.loadLifecycleCommands(
@@ -774,12 +731,13 @@ export class AgentService {
     const artifactIsStale = job.staleArtifacts.some(
       (stale) => stale.revisionId === proposal.artifactRevisionId,
     );
-    const baseIdentityChanged = proposal.basePresentationRevisionId !== undefined
-      && job.presentationRevisionId !== proposal.basePresentationRevisionId;
+    const baseIdentityChanged =
+      proposal.basePresentationRevisionId !== undefined &&
+      job.presentationRevisionId !== proposal.basePresentationRevisionId;
     if (
-      artifactIsStale
-      || baseIdentityChanged
-      || current.revision !== proposal.basePresentationRevisionNumber
+      artifactIsStale ||
+      baseIdentityChanged ||
+      current.revision !== proposal.basePresentationRevisionNumber
     ) {
       this.presentationLifecycle.rejectProposal(proposalId);
       throw new Error(
@@ -789,26 +747,21 @@ export class AgentService {
       );
     }
 
-    const gate = await this.commitGate.evaluate(
-      current,
-      commands,
-      artifact.value.modelRisk,
-      { workspaceRoot: this.workspaceRoot },
-    );
+    const gate = await this.commitGate.evaluate(current, commands, artifact.value.modelRisk, {
+      workspaceRoot: this.workspaceRoot,
+    });
     if (!gate.success || !gate.preview) {
       this.presentationLifecycle.rejectProposal(proposalId);
       throw new Error(`Commit Gate rejected approved proposal: ${gate.errors.join("; ")}`);
     }
 
     if (!this.presentationCommitService) {
-      throw new Error(
-        "Presentation proposal application requires PresentationCommitService.",
-      );
+      throw new Error("Presentation proposal application requires PresentationCommitService.");
     }
-    const presentation = await this.presentationCommitService.applyProposal(
-      commands,
-      { jobId: proposal.jobId, proposalId },
-    );
+    const presentation = await this.presentationCommitService.applyProposal(commands, {
+      jobId: proposal.jobId,
+      proposalId,
+    });
     return { status: "completed", presentation };
   }
 
@@ -828,14 +781,10 @@ export class AgentService {
     proposalId: ProposalId;
   }> {
     if (!this.presentationLifecycle) {
-      throw new Error(
-        "Presentation proposals require the durable lifecycle repository.",
-      );
+      throw new Error("Presentation proposals require the durable lifecycle repository.");
     }
     return this.presentationLifecycle.withTransaction(() => {
-      const state = this.presentationLifecycle!.getState(
-      asPresentationId(before.id),
-      );
+      const state = this.presentationLifecycle!.getState(asPresentationId(before.id));
       if (!state || !state.currentRequest.queryId) {
         throw new Error(
           "Presentation proposal tools require BeginPptCapability in the current Query.",
@@ -847,90 +796,77 @@ export class AgentService {
         );
       }
       const committedAt = new Date().toISOString();
-      const isCandidateDeck = proposal.commands.some(
-        (command) => command.type === "add-slide",
-      );
+      const isCandidateDeck = proposal.commands.some((command) => command.type === "add-slide");
       const dependencyStages = isCandidateDeck
         ? new Set(["design_spec", "page_plan", "page_svg", "preview", "presentation"])
         : new Set(["presentation"]);
-      const staleRevisionIds = new Set(
-        state.staleArtifacts.map((artifact) => artifact.revisionId),
-      );
+      const staleRevisionIds = new Set(state.staleArtifacts.map((artifact) => artifact.revisionId));
       const baseDependencies = state.committedArtifacts
         .filter(
           (pointer) =>
-            dependencyStages.has(pointer.stage)
-            && !staleRevisionIds.has(pointer.revisionId),
+            dependencyStages.has(pointer.stage) && !staleRevisionIds.has(pointer.revisionId),
         )
         .map(toDependency);
       const candidate = this.presentationLifecycle!.commitArtifact({
-      jobId: state.jobId,
-      artifactId: `candidate:${state.currentRequest.requestId}`,
-      kind: isCandidateDeck ? "candidate_deck" : "candidate_commands",
-      stage: "candidate",
-      value: {
-        commandsBlob: candidateAttempt.commandsBlob,
-        commandCount: candidateAttempt.commandCount,
-        summary: proposal.summary,
-        risk: proposal.risk,
-        ...(proposal.assumptions
-          ? { assumptions: proposal.assumptions }
-          : {}),
-      },
-      dependencies: baseDependencies,
-      validation: passedLifecycleValidation(
-        "presentation-command-schema",
+        jobId: state.jobId,
+        artifactId: `candidate:${state.currentRequest.requestId}`,
+        kind: isCandidateDeck ? "candidate_deck" : "candidate_commands",
+        stage: "candidate",
+        value: {
+          commandsBlob: candidateAttempt.commandsBlob,
+          commandCount: candidateAttempt.commandCount,
+          summary: proposal.summary,
+          risk: proposal.risk,
+          ...(proposal.assumptions ? { assumptions: proposal.assumptions } : {}),
+        },
+        dependencies: baseDependencies,
+        validation: passedLifecycleValidation("presentation-command-schema", committedAt),
+        idempotencyKey: `candidate:${state.currentRequest.requestId}`,
         committedAt,
-      ),
-      idempotencyKey: `candidate:${state.currentRequest.requestId}`,
-      committedAt,
-    });
+      });
       this.presentationLifecycle!.finishStageAttempt({
         stageRunId: candidateAttempt.stageRunId,
         status: "succeeded",
         artifactRevisionId: candidate.pointer.revisionId,
-        validation: passedLifecycleValidation(
-          "presentation-command-schema",
-          committedAt,
-        ),
+        validation: passedLifecycleValidation("presentation-command-schema", committedAt),
         completedAt: committedAt,
       });
       const quality = this.presentationLifecycle!.commitArtifact({
-      jobId: state.jobId,
-      artifactId: `quality:${state.currentRequest.requestId}`,
-      kind: "quality_report",
-      stage: "quality",
-      value: {
-        success: gate.success,
-        errors: gate.errors,
-        risk: gate.risk,
-        decision: gate.decision,
-        ...(gate.warnings ? { warnings: gate.warnings } : {}),
-        ...(gate.diff ? { diff: gate.diff } : {}),
-      },
-      dependencies: [toDependency(candidate.pointer)],
-      validation: passedLifecycleValidation("commit-gate", committedAt),
-      idempotencyKey: `quality:${state.currentRequest.requestId}`,
-      committedAt,
-    });
+        jobId: state.jobId,
+        artifactId: `quality:${state.currentRequest.requestId}`,
+        kind: "quality_report",
+        stage: "quality",
+        value: {
+          success: gate.success,
+          errors: gate.errors,
+          risk: gate.risk,
+          decision: gate.decision,
+          ...(gate.warnings ? { warnings: gate.warnings } : {}),
+          ...(gate.diff ? { diff: gate.diff } : {}),
+        },
+        dependencies: [toDependency(candidate.pointer)],
+        validation: passedLifecycleValidation("commit-gate", committedAt),
+        idempotencyKey: `quality:${state.currentRequest.requestId}`,
+        committedAt,
+      });
       const stored = this.presentationLifecycle!.recordCommandProposal({
-      jobId: state.jobId,
-      queryId: state.currentRequest.queryId,
-      commandsBlob: candidateAttempt.commandsBlob,
-      commandCount: candidateAttempt.commandCount,
-      summary: proposal.summary,
-      modelRisk: proposal.risk,
-      assumptions: proposal.assumptions,
-      gate: {
-        risk: gate.risk,
-        decision: gate.decision === "AUTO" ? "AUTO" : "REQUIRES_APPROVAL",
-        warnings: gate.warnings,
-        diff: gate.diff,
-      },
-      basePresentationRevisionId: state.presentationRevisionId,
-      basePresentationRevisionNumber: before.revision,
-      createdAt: committedAt,
-    });
+        jobId: state.jobId,
+        queryId: state.currentRequest.queryId,
+        commandsBlob: candidateAttempt.commandsBlob,
+        commandCount: candidateAttempt.commandCount,
+        summary: proposal.summary,
+        modelRisk: proposal.risk,
+        assumptions: proposal.assumptions,
+        gate: {
+          risk: gate.risk,
+          decision: gate.decision === "AUTO" ? "AUTO" : "REQUIRES_APPROVAL",
+          warnings: gate.warnings,
+          diff: gate.diff,
+        },
+        basePresentationRevisionId: state.presentationRevisionId,
+        basePresentationRevisionNumber: before.revision,
+        createdAt: committedAt,
+      });
       return {
         jobId: state.jobId,
         queryId: state.currentRequest.queryId,
@@ -949,9 +885,7 @@ export class AgentService {
     },
   ): Promise<LifecycleCandidateAttempt | undefined> {
     if (!this.presentationLifecycle) return undefined;
-    const state = this.presentationLifecycle.getState(
-      asPresentationId(presentation.id),
-    );
+    const state = this.presentationLifecycle.getState(asPresentationId(presentation.id));
     if (!state?.currentRequest.queryId) return undefined;
     const commandsBlob = await this.putLifecycleCommands(proposal.commands);
     const candidate = {
@@ -959,17 +893,14 @@ export class AgentService {
       commandCount: proposal.commands.length,
       summary: proposal.summary,
       risk: proposal.risk,
-      ...(proposal.assumptions
-        ? { assumptions: proposal.assumptions }
-        : {}),
+      ...(proposal.assumptions ? { assumptions: proposal.assumptions } : {}),
     };
     const candidateHash = hashArtifactValue(candidate);
     const stageRunId = this.presentationLifecycle.startStageAttempt({
       jobId: state.jobId,
       stage: "candidate",
       candidate,
-      idempotencyKey:
-        `candidate:${state.currentRequest.requestId}:${candidateHash}`,
+      idempotencyKey: `candidate:${state.currentRequest.requestId}:${candidateHash}`,
     }).stageRunId;
     return {
       stageRunId,
@@ -985,9 +916,7 @@ export class AgentService {
   ): void {
     if (!this.presentationLifecycle || !candidateAttempt) return;
     const { stageRunId } = candidateAttempt;
-    const attempt = this.presentationLifecycle.repository.getStageAttempt(
-      stageRunId,
-    );
+    const attempt = this.presentationLifecycle.repository.getStageAttempt(stageRunId);
     if (!attempt || attempt.status !== "running") return;
     const completedAt = new Date().toISOString();
     this.presentationLifecycle.finishStageAttempt({
@@ -996,9 +925,10 @@ export class AgentService {
       validation: {
         status: "failed",
         validator: "commit-gate",
-        issues: (issues.length > 0 ? issues : [
-          error instanceof Error ? error.message : String(error),
-        ]).map((message) => ({
+        issues: (issues.length > 0
+          ? issues
+          : [error instanceof Error ? error.message : String(error)]
+        ).map((message) => ({
           severity: "error" as const,
           code: "commit_gate_rejected",
           message,
@@ -1010,9 +940,7 @@ export class AgentService {
     });
   }
 
-  private async putLifecycleCommands(
-    commands: PresentationCommand[],
-  ): Promise<BlobReference> {
+  private async putLifecycleCommands(commands: PresentationCommand[]): Promise<BlobReference> {
     if (!this.lifecycleBlobStore) {
       throw new Error(
         "Presentation lifecycle command persistence requires a content-addressed blob store.",
@@ -1044,8 +972,8 @@ export class AgentService {
     const commands = presentationCommandSchema.array().min(1).parse(decoded);
     if (commands.length !== expectedCount) {
       throw new Error(
-        `Command blob ${reference.contentHash} count mismatch: `
-        + `expected ${expectedCount}, received ${commands.length}.`,
+        `Command blob ${reference.contentHash} count mismatch: ` +
+          `expected ${expectedCount}, received ${commands.length}.`,
       );
     }
     return commands;
@@ -1079,34 +1007,23 @@ export class AgentService {
     }
   }
 
-  private failActivePptQuery(
-    presentation: Presentation,
-    queryId: QueryId | undefined,
-  ): void {
+  private failActivePptQuery(presentation: Presentation, queryId: QueryId | undefined): void {
     const state = this.activePptJobForQuery(presentation, queryId);
     if (state?.status === "running") {
       this.presentationLifecycle!.fail(state.jobId);
     }
   }
 
-  private cancelActivePptQuery(
-    presentation: Presentation,
-    queryId: QueryId | undefined,
-  ): void {
+  private cancelActivePptQuery(presentation: Presentation, queryId: QueryId | undefined): void {
     const state = this.activePptJobForQuery(presentation, queryId);
     if (state?.status === "running") {
       this.presentationLifecycle!.cancel(state.jobId);
     }
   }
 
-  private activePptJobForQuery(
-    presentation: Presentation,
-    queryId: QueryId | undefined,
-  ) {
+  private activePptJobForQuery(presentation: Presentation, queryId: QueryId | undefined) {
     if (!this.presentationLifecycle || !queryId) return undefined;
-    const state = this.presentationLifecycle.getState(
-      asPresentationId(presentation.id),
-    );
+    const state = this.presentationLifecycle.getState(asPresentationId(presentation.id));
     return state?.currentRequest.queryId === queryId ? state : undefined;
   }
 }
@@ -1123,10 +1040,7 @@ function toDependency(pointer: {
   };
 }
 
-function passedLifecycleValidation(
-  validator: string,
-  validatedAt: string,
-) {
+function passedLifecycleValidation(validator: string, validatedAt: string) {
   return {
     status: "passed" as const,
     validator,

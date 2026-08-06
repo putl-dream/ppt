@@ -1,10 +1,10 @@
 import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { type Presentation, type Slide, type SlideNarrative } from "../src/shared/presentation";
-import { createSvgTestSlide } from "../src/shared/presentation-fixtures";
+import { AssetValidator } from "../src/main/deck/validators/asset-validator";
 import { LayoutValidator } from "../src/main/deck/validators/layout-validator";
 import { StyleValidator } from "../src/main/deck/validators/style-validator";
-import { AssetValidator } from "../src/main/deck/validators/asset-validator";
+import type { Presentation, Slide, SlideNarrative } from "../src/shared/presentation";
+import { createSvgTestSlide } from "../src/shared/presentation-fixtures";
 import { TEST_DESIGN_SYSTEM, testDesignSystem } from "./design-engine-test-utils";
 
 const NARRATIVE: SlideNarrative = {
@@ -46,7 +46,9 @@ describe("LayoutValidator", () => {
       .digest("hex");
 
     const issues = validator.validate(createPresentation([slide]));
-    expect(issues.some((issue) => issue.severity === "error" && issue.category === "layout")).toBe(true);
+    expect(issues.some((issue) => issue.severity === "error" && issue.category === "layout")).toBe(
+      true,
+    );
   });
 
   it("flags hash tampering", () => {
@@ -109,11 +111,12 @@ describe("StyleValidator", () => {
   });
 
   it("flags an invalid deck design system", () => {
-    const presentation = createPresentation([
-      createSvgTestSlide({ title: "Cover", narrative: NARRATIVE }),
-    ], {
-      designSystem: { version: 1 } as unknown as Presentation["designSystem"],
-    });
+    const presentation = createPresentation(
+      [createSvgTestSlide({ title: "Cover", narrative: NARRATIVE })],
+      {
+        designSystem: { version: 1 } as unknown as Presentation["designSystem"],
+      },
+    );
 
     const issues = validator.validate(presentation);
     expect(issues).toEqual([
@@ -126,11 +129,12 @@ describe("StyleValidator", () => {
   });
 
   it("accepts a valid design system contract", () => {
-    const presentation = createPresentation([
-      createSvgTestSlide({ title: "Cover", narrative: NARRATIVE }),
-    ], {
-      designSystem: testDesignSystem({ visualStyle: "dark-tech" }),
-    });
+    const presentation = createPresentation(
+      [createSvgTestSlide({ title: "Cover", narrative: NARRATIVE })],
+      {
+        designSystem: testDesignSystem({ visualStyle: "dark-tech" }),
+      },
+    );
 
     const issues = validator.validate(presentation);
     expect(issues.filter((issue) => issue.category === "style")).toEqual([]);

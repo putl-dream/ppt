@@ -205,10 +205,7 @@ export function evaluateToolPermission(block: ToolPermissionBlock): PermissionDe
   return { type: "allow" };
 }
 
-function matchHardDeny(
-  args: unknown,
-  profile: ToolPermissionProfile | undefined,
-): string | null {
+function matchHardDeny(args: unknown, profile: ToolPermissionProfile | undefined): string | null {
   const command = extractStringArg(args, profile?.shellCommandArg);
   if (!command) return null;
 

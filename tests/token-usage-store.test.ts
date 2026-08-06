@@ -1,14 +1,17 @@
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { TokenUsageStore } from "../src/main/token-usage-store";
 
 const temporaryDirectories: string[] = [];
 
 afterEach(async () => {
-  await Promise.all(temporaryDirectories.splice(0).map((directory) =>
-    rm(directory, { recursive: true, force: true })));
+  await Promise.all(
+    temporaryDirectories
+      .splice(0)
+      .map((directory) => rm(directory, { recursive: true, force: true })),
+  );
 });
 
 async function createStore(): Promise<{ store: TokenUsageStore; filePath: string }> {
@@ -107,22 +110,27 @@ describe("TokenUsageStore", () => {
 
   it("migrates version 1 totals without inventing model attribution or task outcomes", async () => {
     const { filePath } = await createStore();
-    await writeFile(filePath, JSON.stringify({
-      version: 1,
-      firstRecordedAt: "2026-07-01T00:00:00.000Z",
-      lastRecordedAt: "2026-07-01T00:00:01.000Z",
-      days: [{
-        date: "2026-07-01",
-        inputTokens: 90,
-        outputTokens: 10,
-        totalTokens: 100,
-        cachedInputTokens: 0,
-        cacheCreationInputTokens: 0,
-        requestCount: 1,
-        taskCount: 1,
-        longestTaskDurationMs: 500,
-      }],
-    }));
+    await writeFile(
+      filePath,
+      JSON.stringify({
+        version: 1,
+        firstRecordedAt: "2026-07-01T00:00:00.000Z",
+        lastRecordedAt: "2026-07-01T00:00:01.000Z",
+        days: [
+          {
+            date: "2026-07-01",
+            inputTokens: 90,
+            outputTokens: 10,
+            totalTokens: 100,
+            cachedInputTokens: 0,
+            cacheCreationInputTokens: 0,
+            requestCount: 1,
+            taskCount: 1,
+            longestTaskDurationMs: 500,
+          },
+        ],
+      }),
+    );
 
     const migrated = new TokenUsageStore(filePath);
     await migrated.initialize();
@@ -166,35 +174,42 @@ describe("TokenUsageStore", () => {
 
   it("migrates version 2 model usage without inventing configuration IDs", async () => {
     const { filePath } = await createStore();
-    await writeFile(filePath, JSON.stringify({
-      version: 2,
-      days: [{
-        date: "2026-07-01",
-        inputTokens: 90,
-        outputTokens: 10,
-        totalTokens: 100,
-        cachedInputTokens: 0,
-        cacheCreationInputTokens: 0,
-        requestCount: 1,
-        taskCount: 0,
-        completedTaskCount: 0,
-        failedTaskCount: 0,
-        interruptedTaskCount: 0,
-        totalTaskDurationMs: 0,
-        durationSampleCount: 0,
-        longestTaskDurationMs: 0,
-        models: [{
-          provider: "openai",
-          model: "legacy-model",
-          inputTokens: 90,
-          outputTokens: 10,
-          totalTokens: 100,
-          cachedInputTokens: 0,
-          cacheCreationInputTokens: 0,
-          requestCount: 1,
-        }],
-      }],
-    }));
+    await writeFile(
+      filePath,
+      JSON.stringify({
+        version: 2,
+        days: [
+          {
+            date: "2026-07-01",
+            inputTokens: 90,
+            outputTokens: 10,
+            totalTokens: 100,
+            cachedInputTokens: 0,
+            cacheCreationInputTokens: 0,
+            requestCount: 1,
+            taskCount: 0,
+            completedTaskCount: 0,
+            failedTaskCount: 0,
+            interruptedTaskCount: 0,
+            totalTaskDurationMs: 0,
+            durationSampleCount: 0,
+            longestTaskDurationMs: 0,
+            models: [
+              {
+                provider: "openai",
+                model: "legacy-model",
+                inputTokens: 90,
+                outputTokens: 10,
+                totalTokens: 100,
+                cachedInputTokens: 0,
+                cacheCreationInputTokens: 0,
+                requestCount: 1,
+              },
+            ],
+          },
+        ],
+      }),
+    );
 
     const migrated = new TokenUsageStore(filePath);
     await migrated.initialize();

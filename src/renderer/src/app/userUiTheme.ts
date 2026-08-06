@@ -1,11 +1,8 @@
-import {
-  BUILTIN_UI_THEME_IDS,
-  CATNIP_UI_THEME_ID,
-  DEFAULT_UI_THEME_ID,
-} from "@shared/ui-themes";
+import { CATNIP_UI_THEME_ID, DEFAULT_UI_THEME_ID } from "@shared/ui-themes";
 import catnipThemeCss from "../styles/themes/catnip.css?raw";
 
-export const BUILTIN_UI_THEME_ID = DEFAULT_UI_THEME_ID;
+export { BUILTIN_UI_THEME_ID, normalizePersistedUiThemeId } from "@shared/ui-themes";
+
 export const USER_UI_THEME_STYLE_ID = "user-ui-theme";
 
 export function getBuiltinUiThemeCss(id: string): string | null | undefined {
@@ -30,15 +27,4 @@ export function applyUserUiThemeCss(css: string | null): void {
     document.head.appendChild(styleElement);
   }
   styleElement.textContent = css;
-}
-
-export function normalizePersistedUiThemeId(
-  value: unknown,
-  availableThemeIds: ReadonlySet<string> = new Set(),
-): string {
-  if (typeof value !== "string" || !value.trim()) return BUILTIN_UI_THEME_ID;
-  const id = value.trim();
-  if (BUILTIN_UI_THEME_IDS.has(id)) return id;
-  if (availableThemeIds.size === 0) return id;
-  return availableThemeIds.has(id) ? id : BUILTIN_UI_THEME_ID;
 }

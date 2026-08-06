@@ -52,24 +52,26 @@ export const agentQuestionInputSchema = z.discriminatedUnion("variant", [
   }),
 ]);
 
-export const agentQuestionSchema = z.object({
-  variant: agentQuestionVariantSchema.default("markdown"),
-  selectionMode: agentQuestionSelectionModeSchema.default("single"),
-  options: agentQuestionOptionListSchema.optional(),
-  allowFreeText: z.boolean().optional(),
-  submitLabel: z.string().trim().max(24).optional(),
-  placeholder: z.string().trim().max(120).optional(),
-  resolved: agentQuestionResolvedSchema.optional(),
-}).superRefine((question, ctx) => {
-  if (question.variant === "markdown") return;
-  if (!question.options || question.options.length === 0) {
-    ctx.addIssue({
-      code: "custom",
-      path: ["options"],
-      message: "choices/cards questions must include at least one option.",
-    });
-  }
-});
+export const agentQuestionSchema = z
+  .object({
+    variant: agentQuestionVariantSchema.default("markdown"),
+    selectionMode: agentQuestionSelectionModeSchema.default("single"),
+    options: agentQuestionOptionListSchema.optional(),
+    allowFreeText: z.boolean().optional(),
+    submitLabel: z.string().trim().max(24).optional(),
+    placeholder: z.string().trim().max(120).optional(),
+    resolved: agentQuestionResolvedSchema.optional(),
+  })
+  .superRefine((question, ctx) => {
+    if (question.variant === "markdown") return;
+    if (!question.options || question.options.length === 0) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["options"],
+        message: "choices/cards questions must include at least one option.",
+      });
+    }
+  });
 
 export type AgentQuestionVariant = z.infer<typeof agentQuestionVariantSchema>;
 export type AgentQuestionSelectionMode = z.infer<typeof agentQuestionSelectionModeSchema>;

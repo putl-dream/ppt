@@ -1,8 +1,5 @@
 import type { AgentModelSelection } from "@shared/agent";
-import {
-  asQueryId,
-  type QueryId,
-} from "@shared/presentation-lifecycle";
+import { asQueryId, type QueryId } from "@shared/presentation-lifecycle";
 import type {
   AgentModelMessage,
   AgentModelToolResultBlock,
@@ -67,12 +64,7 @@ export interface AgentQueryParams<TDeps = unknown> {
 }
 
 export interface AgentQueryContinue {
-  reason:
-    | "next_turn"
-    | "required_outcome"
-    | "background_result"
-    | "inbox"
-    | "completed";
+  reason: "next_turn" | "required_outcome" | "background_result" | "inbox" | "completed";
 }
 
 /**
@@ -160,18 +152,14 @@ export function createInitialQueryState(
     toolUseContext: recovered?.toolUseContext ?? params.toolUseContext,
     turnCount: recovered?.turnCount ?? 0,
     transition: recovered?.transition,
-    maxOutputTokensOverride:
-      recovered?.maxOutputTokensOverride ?? params.maxOutputTokensOverride,
+    maxOutputTokensOverride: recovered?.maxOutputTokensOverride ?? params.maxOutputTokensOverride,
     maxOutputTokensRecoveryCount: recovered?.maxOutputTokensRecoveryCount ?? 0,
     hasAttemptedReactiveCompact: recovered?.hasAttemptedReactiveCompact ?? false,
-    validationFailuresByTool:
-      new Map(recovered?.validationFailuresByTool ?? []),
+    validationFailuresByTool: new Map(recovered?.validationFailuresByTool ?? []),
   };
 }
 
-export function createIterationWorkspace(
-  state: AgentQueryState,
-): AgentIterationWorkspace {
+export function createIterationWorkspace(state: AgentQueryState): AgentIterationWorkspace {
   return {
     messagesForQuery: structuredClone(state.messages),
     assistantMessages: [],
@@ -211,14 +199,13 @@ export function reduceQueryState(
     .map((text) => ({ type: "text" as const, text }));
   const toolResultMessage: AgentModelMessage[] =
     workspace.toolResults.length > 0 || userContent.length > 0
-    ? [{
-        role: "user",
-        content: [
-          ...structuredClone(workspace.toolResults),
-          ...userContent,
-        ],
-      }]
-    : [];
+      ? [
+          {
+            role: "user",
+            content: [...structuredClone(workspace.toolResults), ...userContent],
+          },
+        ]
+      : [];
   return {
     ...state,
     messages: [

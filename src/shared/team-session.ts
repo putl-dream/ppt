@@ -19,9 +19,7 @@ export interface TeamSessionProjection {
   activity: TeamTaskActivity;
 }
 
-export function toTeamSessionStatus(
-  status: TeamTaskActivity["status"],
-): TeamSessionStatus {
+export function toTeamSessionStatus(status: TeamTaskActivity["status"]): TeamSessionStatus {
   if (status === "completed") return "completed";
   if (status === "failed") return "error";
   if (status === "interrupted" || status === "cancelled") return "cancelled";
@@ -33,10 +31,7 @@ export function projectTeamCurrentActivity(activity: TeamTaskActivity): string {
   if (activity.status === "completed") return "已完成";
   if (activity.status === "failed") {
     if (lastStep?.type === "tool") {
-      return formatAgentToolActivity(
-        lastStep.toolName ?? "task",
-        "failed",
-      );
+      return formatAgentToolActivity(lastStep.toolName ?? "task", "failed");
     }
     return "任务执行失败";
   }
@@ -46,21 +41,17 @@ export function projectTeamCurrentActivity(activity: TeamTaskActivity): string {
   if (!lastStep) return "正在准备任务…";
   if (lastStep.type === "reasoning") return "正在分析任务上下文…";
 
-  return formatAgentToolActivity(
-    lastStep.toolName ?? "task",
-    lastStep.status,
-  );
+  return formatAgentToolActivity(lastStep.toolName ?? "task", lastStep.status);
 }
 
 export function projectTeamSession(
   activity: TeamTaskActivity,
   graphTasks: readonly AgentTaskNode[] = [],
 ): TeamSessionProjection {
-  const taskListId = activity.taskListId
-    ?? (graphTasks.some((task) => task.id === activity.taskId) ? activity.taskId : undefined);
-  const graphTask = taskListId
-    ? graphTasks.find((task) => task.id === taskListId)
-    : undefined;
+  const taskListId =
+    activity.taskListId ??
+    (graphTasks.some((task) => task.id === activity.taskId) ? activity.taskId : undefined);
+  const graphTask = taskListId ? graphTasks.find((task) => task.id === taskListId) : undefined;
   const description = activity.description.trim();
   return {
     id: activity.taskId,
@@ -91,7 +82,7 @@ export function collectTeamSessions(
     }
   }
   return Array.from(activities.values()).map((activity) =>
-    projectTeamSession(activity, graphTasks)
+    projectTeamSession(activity, graphTasks),
   );
 }
 

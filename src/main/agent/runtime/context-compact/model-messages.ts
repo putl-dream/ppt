@@ -1,7 +1,4 @@
-import type {
-  AgentModelMessage,
-  AgentModelToolResultBlock,
-} from "../../gateway";
+import type { AgentModelMessage, AgentModelToolResultBlock } from "../../gateway";
 import { ensureToolResultPairing } from "../../gateway";
 import {
   MICRO_COMPACT_ALWAYS_PRESERVE_TOOLS,
@@ -21,13 +18,11 @@ const alwaysPreserveTools = new Set<string>(MICRO_COMPACT_ALWAYS_PRESERVE_TOOLS)
 const preserveLatestTools = new Set<string>(MICRO_COMPACT_PRESERVE_LATEST_TOOLS);
 
 function hasToolUse(message: AgentModelMessage): boolean {
-  return message.role === "assistant"
-    && message.content.some((block) => block.type === "tool_use");
+  return message.role === "assistant" && message.content.some((block) => block.type === "tool_use");
 }
 
 function hasToolResult(message: AgentModelMessage | undefined): boolean {
-  return message?.role === "user"
-    && message.content.some((block) => block.type === "tool_result");
+  return message?.role === "user" && message.content.some((block) => block.type === "tool_result");
 }
 
 /**
@@ -127,15 +122,17 @@ function compactResult(
   const omitted = Math.max(0, preview.length - head.length - tail.length);
   return {
     ...result,
-    content: [{
-      type: "text",
-      text: [
-        `<compacted-tool-result tool="${toolName}" original-chars="${originalChars}">`,
-        head,
-        ...(omitted > 0 ? [`\n[${omitted} preview characters omitted]\n`, tail] : []),
-        "</compacted-tool-result>",
-      ].join("\n"),
-    }],
+    content: [
+      {
+        type: "text",
+        text: [
+          `<compacted-tool-result tool="${toolName}" original-chars="${originalChars}">`,
+          head,
+          ...(omitted > 0 ? [`\n[${omitted} preview characters omitted]\n`, tail] : []),
+          "</compacted-tool-result>",
+        ].join("\n"),
+      },
+    ],
   };
 }
 
@@ -177,7 +174,8 @@ export function microCompactModelMessages(
   if (resultLocations.length <= keepRecent) return messages;
 
   const keep = new Set(
-    resultLocations.slice(-Math.max(0, keepRecent))
+    resultLocations
+      .slice(-Math.max(0, keepRecent))
       .map(({ messageIndex, blockIndex }) => `${messageIndex}:${blockIndex}`),
   );
   const latestPreserved = new Map<string, string>();
@@ -186,10 +184,7 @@ export function microCompactModelMessages(
     if (!preserveLatestTools.has(location.toolName) || latestPreserved.has(location.toolName)) {
       continue;
     }
-    latestPreserved.set(
-      location.toolName,
-      `${location.messageIndex}:${location.blockIndex}`,
-    );
+    latestPreserved.set(location.toolName, `${location.messageIndex}:${location.blockIndex}`);
   }
   for (const key of latestPreserved.values()) keep.add(key);
 
@@ -200,10 +195,10 @@ export function microCompactModelMessages(
       const key = `${messageIndex}:${blockIndex}`;
       const toolName = toolNames.get(block.toolUseId) ?? "tool";
       if (
-        keep.has(key)
-        || block.isError
-        || alwaysPreserveTools.has(toolName)
-        || serializedResultLength(block) < MICRO_COMPACT_MIN_RESULT_CHARS
+        keep.has(key) ||
+        block.isError ||
+        alwaysPreserveTools.has(toolName) ||
+        serializedResultLength(block) < MICRO_COMPACT_MIN_RESULT_CHARS
       ) {
         return block;
       }
@@ -216,11 +211,13 @@ export function buildModelCompactionBoundary(
   summary: string,
   savedPath?: string,
 ): AgentModelMessage {
-  return compactBoundary([
-    `<compacted-conversation-context${savedPath ? ` saved-transcript="${savedPath}"` : ""}>`,
-    summary,
-    "</compacted-conversation-context>",
-  ].join("\n"));
+  return compactBoundary(
+    [
+      `<compacted-conversation-context${savedPath ? ` saved-transcript="${savedPath}"` : ""}>`,
+      summary,
+      "</compacted-conversation-context>",
+    ].join("\n"),
+  );
 }
 
 /** Last-resort native-message trim used after provider prompt-too-long. */

@@ -35,10 +35,7 @@ export function AppShell({
   children,
 }: AppShellProps) {
   const templateMenuReady = Boolean(
-    showTemplateMenu
-    && setDefaultTemplateId
-    && onOpenTemplateSettings
-    && notify,
+    showTemplateMenu && setDefaultTemplateId && onOpenTemplateSettings && notify,
   );
 
   return (

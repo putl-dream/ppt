@@ -1,18 +1,20 @@
-import { mkdir, open, readFile, readdir, rm } from "node:fs/promises";
-import { join } from "node:path";
+import { mkdir, open, readdir, readFile, rm } from "node:fs/promises";
 import { createRequire } from "node:module";
+import { join } from "node:path";
 import { readJsonFile, writeJsonFileAtomic } from "../persistence/atomic-json-file";
 
 type LockRelease = () => Promise<void>;
 type LockOptions = {
   realpath?: boolean;
   stale?: number;
-  retries?: number | {
-    retries?: number;
-    factor?: number;
-    minTimeout?: number;
-    maxTimeout?: number;
-  };
+  retries?:
+    | number
+    | {
+        retries?: number;
+        factor?: number;
+        minTimeout?: number;
+        maxTimeout?: number;
+      };
 };
 type ProperLockfile = {
   lock(file: string, options?: LockOptions): Promise<LockRelease>;
@@ -84,40 +86,39 @@ export function formatMailboxMessagesForHistory(
   messages: AgentMailboxMessage[],
   maxContentChars?: number,
 ): string {
-  return messages.map((message) => {
-    const normalizedContent = message.content.trim();
-    const content = maxContentChars === undefined
-      ? normalizedContent
-      : normalizedContent.slice(0, Math.max(0, maxContentChars));
-    const prefix = `From ${message.from} [${message.type}]`;
-    if (message.type === "permission_request") {
-      const toolName = typeof message.payload?.toolName === "string"
-        ? message.payload.toolName
-        : "unknown";
-      const reason = typeof message.payload?.reason === "string"
-        ? message.payload.reason
-        : content;
-      return `${prefix}: permission requested for ${toolName}. ${reason}`;
-    }
-    if (message.type === "permission_response") {
-      const approved = message.payload?.approved === true ? "approved" : "denied";
-      return `${prefix}: permission ${approved}. ${content}`;
-    }
-    if (message.type === "shutdown_response" || message.type === "plan_approval_response") {
-      const status = message.payload?.approve === true ? "approved" : "rejected";
-      const requestId = typeof message.payload?.requestId === "string"
-        ? message.payload.requestId
-        : "unknown";
-      return `${prefix}: request ${requestId} ${status}. ${content}`;
-    }
-    if (message.type === "shutdown_request" || message.type === "plan_approval_request") {
-      const requestId = typeof message.payload?.requestId === "string"
-        ? message.payload.requestId
-        : "unknown";
-      return `${prefix}: request ${requestId}. ${content}`;
-    }
-    return `${prefix}: ${content}`;
-  }).join("\n");
+  return messages
+    .map((message) => {
+      const normalizedContent = message.content.trim();
+      const content =
+        maxContentChars === undefined
+          ? normalizedContent
+          : normalizedContent.slice(0, Math.max(0, maxContentChars));
+      const prefix = `From ${message.from} [${message.type}]`;
+      if (message.type === "permission_request") {
+        const toolName =
+          typeof message.payload?.toolName === "string" ? message.payload.toolName : "unknown";
+        const reason =
+          typeof message.payload?.reason === "string" ? message.payload.reason : content;
+        return `${prefix}: permission requested for ${toolName}. ${reason}`;
+      }
+      if (message.type === "permission_response") {
+        const approved = message.payload?.approved === true ? "approved" : "denied";
+        return `${prefix}: permission ${approved}. ${content}`;
+      }
+      if (message.type === "shutdown_response" || message.type === "plan_approval_response") {
+        const status = message.payload?.approve === true ? "approved" : "rejected";
+        const requestId =
+          typeof message.payload?.requestId === "string" ? message.payload.requestId : "unknown";
+        return `${prefix}: request ${requestId} ${status}. ${content}`;
+      }
+      if (message.type === "shutdown_request" || message.type === "plan_approval_request") {
+        const requestId =
+          typeof message.payload?.requestId === "string" ? message.payload.requestId : "unknown";
+        return `${prefix}: request ${requestId}. ${content}`;
+      }
+      return `${prefix}: ${content}`;
+    })
+    .join("\n");
 }
 
 export class MessageBus {
@@ -206,9 +207,7 @@ export class MessageBus {
 
   async peekInbox(agent: string): Promise<AgentMailboxMessage[]> {
     const inboxPath = this.getInboxPath(agent);
-    return this.withMailboxLock(inboxPath, async () =>
-      this.readMessagesUnlocked(inboxPath),
-    );
+    return this.withMailboxLock(inboxPath, async () => this.readMessagesUnlocked(inboxPath));
   }
 
   /**
@@ -251,7 +250,9 @@ export class MessageBus {
       throw error;
     }
     const prefix = `${sanitizeAgentName(agent)}-`;
-    for (const name of names.filter((entry) => entry.startsWith(prefix) && entry.endsWith(".json")).sort()) {
+    for (const name of names
+      .filter((entry) => entry.startsWith(prefix) && entry.endsWith(".json"))
+      .sort()) {
       const claim = await readJsonFile<InboxClaim>(join(directory, name));
       if (claim?.version === 1 && claim.agent === sanitizeAgentName(agent)) return claim;
     }
@@ -267,7 +268,8 @@ export class MessageBus {
       throw error;
     }
 
-    const messages = raw.split(/\r?\n/g)
+    const messages = raw
+      .split(/\r?\n/g)
       .map((line) => line.trim())
       .filter(Boolean)
       .flatMap((line) => {
@@ -305,16 +307,18 @@ function parseMailboxMessage(value: unknown): AgentMailboxMessage {
 }
 
 function isMailboxMessageType(value: unknown): value is AgentMailboxMessageType {
-  return value === "message"
-    || value === "result"
-    || value === "idle_notification"
-    || value === "permission_request"
-    || value === "permission_response"
-    || value === "shutdown_request"
-    || value === "shutdown_response"
-    || value === "plan_approval_request"
-    || value === "plan_approval_response"
-    || value === "error";
+  return (
+    value === "message" ||
+    value === "result" ||
+    value === "idle_notification" ||
+    value === "permission_request" ||
+    value === "permission_response" ||
+    value === "shutdown_request" ||
+    value === "shutdown_response" ||
+    value === "plan_approval_request" ||
+    value === "plan_approval_response" ||
+    value === "error"
+  );
 }
 
 function isNodeError(error: unknown): error is NodeJS.ErrnoException {

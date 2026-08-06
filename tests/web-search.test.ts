@@ -1,16 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createStarterPresentation } from "../src/shared/presentation-fixtures";
-import { TavilySearchAdapter } from "../src/main/agent/search/tavily-adapter";
-import { createSearchService } from "../src/main/agent/search/search-service";
-import { webSearchSchema } from "../src/main/agent/search/web-search";
-import { webSearchTool } from "../src/main/agent/tools/core/web-search";
-import { searchSlideImagesTool } from "../src/main/agent/tools/core/search-slide-images";
-import { createDefaultToolRegistry } from "../src/main/agent/tools/tool-registry";
-import {
-  SUB_AGENT_TOOLS,
-  webSearchSubAgentTool,
-} from "../src/main/agent/subagent/workspace-tools";
 import { SUB_AGENT_TOOL_PERMISSION_PROFILES } from "../src/main/agent/runtime/tools/tool-access-policy";
+import { createSearchService } from "../src/main/agent/search/search-service";
+import { TavilySearchAdapter } from "../src/main/agent/search/tavily-adapter";
+import { webSearchSchema } from "../src/main/agent/search/web-search";
+import { SUB_AGENT_TOOLS, webSearchSubAgentTool } from "../src/main/agent/subagent/workspace-tools";
+import { searchSlideImagesTool } from "../src/main/agent/tools/core/search-slide-images";
+import { webSearchTool } from "../src/main/agent/tools/core/web-search";
+import { createDefaultToolRegistry } from "../src/main/agent/tools/tool-registry";
+import { createStarterPresentation } from "../src/shared/presentation-fixtures";
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -18,25 +15,28 @@ afterEach(() => {
 
 describe("web search", () => {
   it("calls Tavily with bounded options and normalizes results", async () => {
-    const fetchMock = vi.fn(async (
-      _input: Parameters<typeof fetch>[0],
-      _init?: Parameters<typeof fetch>[1],
-    ) => new Response(JSON.stringify({
-      results: [
-        {
-          title: "Example result",
-          url: "https://example.com/article",
-          content: "A compact source-backed snippet.",
-          published_date: "2026-07-10",
-        },
-        {
-          title: "Duplicate",
-          url: "https://example.com/article",
-          content: "Should be removed.",
-        },
-        { title: "Unsafe URL", url: "javascript:alert(1)" },
-      ],
-    }), { status: 200 }));
+    const fetchMock = vi.fn(
+      async (_input: Parameters<typeof fetch>[0], _init?: Parameters<typeof fetch>[1]) =>
+        new Response(
+          JSON.stringify({
+            results: [
+              {
+                title: "Example result",
+                url: "https://example.com/article",
+                content: "A compact source-backed snippet.",
+                published_date: "2026-07-10",
+              },
+              {
+                title: "Duplicate",
+                url: "https://example.com/article",
+                content: "Should be removed.",
+              },
+              { title: "Unsafe URL", url: "javascript:alert(1)" },
+            ],
+          }),
+          { status: 200 },
+        ),
+    );
     const fetchImpl = fetchMock as unknown as typeof fetch;
     const adapter = new TavilySearchAdapter({
       apiKey: "tvly-secret",
@@ -52,12 +52,14 @@ describe("web search", () => {
       allowedDomains: ["example.com"],
     });
 
-    expect(output.results).toEqual([{
-      title: "Example result",
-      url: "https://example.com/article",
-      snippet: "A compact source-backed snippet.",
-      publishedDate: "2026-07-10",
-    }]);
+    expect(output.results).toEqual([
+      {
+        title: "Example result",
+        url: "https://example.com/article",
+        snippet: "A compact source-backed snippet.",
+        publishedDate: "2026-07-10",
+      },
+    ]);
     expect(output.images).toEqual([]);
     expect(fetchMock).toHaveBeenCalledOnce();
     const [url, request] = fetchMock.mock.calls[0]!;
@@ -76,24 +78,32 @@ describe("web search", () => {
   });
 
   it("optionally returns normalized image candidates with source pages", async () => {
-    const fetchMock = vi.fn(async (
-      _input: Parameters<typeof fetch>[0],
-      _init?: Parameters<typeof fetch>[1],
-    ) => new Response(JSON.stringify({
-      images: [
-        { url: "https://cdn.example.com/hero.jpg", description: "A wide technology landscape" },
-        "javascript:alert(1)",
-      ],
-      results: [{
-        title: "Source article",
-        url: "https://example.com/source",
-        content: "Source-backed context.",
-        images: [
-          "https://cdn.example.com/evidence.png",
-          "https://cdn.example.com/hero.jpg",
-        ],
-      }],
-    }), { status: 200 }));
+    const fetchMock = vi.fn(
+      async (_input: Parameters<typeof fetch>[0], _init?: Parameters<typeof fetch>[1]) =>
+        new Response(
+          JSON.stringify({
+            images: [
+              {
+                url: "https://cdn.example.com/hero.jpg",
+                description: "A wide technology landscape",
+              },
+              "javascript:alert(1)",
+            ],
+            results: [
+              {
+                title: "Source article",
+                url: "https://example.com/source",
+                content: "Source-backed context.",
+                images: [
+                  "https://cdn.example.com/evidence.png",
+                  "https://cdn.example.com/hero.jpg",
+                ],
+              },
+            ],
+          }),
+          { status: 200 },
+        ),
+    );
     const adapter = new TavilySearchAdapter({
       apiKey: "tvly-secret",
       fetchImpl: fetchMock as unknown as typeof fetch,
@@ -128,23 +138,31 @@ describe("web search", () => {
   });
 
   it("does not send an environment key to an unbound search endpoint", () => {
-    expect(() => createSearchService({
-      endpoint: "https://attacker.example.test/search",
-    }, {
-      TAVILY_API_KEY: "environment-key",
-      TAVILY_SEARCH_ENDPOINT: "https://bound.example.test/search",
-    })).toThrow("Tavily API key");
+    expect(() =>
+      createSearchService(
+        {
+          endpoint: "https://attacker.example.test/search",
+        },
+        {
+          TAVILY_API_KEY: "environment-key",
+          TAVILY_SEARCH_ENDPOINT: "https://bound.example.test/search",
+        },
+      ),
+    ).toThrow("Tavily API key");
   });
 
   it("uses an environment key at the official search endpoint by default", async () => {
-    const fetchImpl = vi.fn(async (
-      _input: Parameters<typeof fetch>[0],
-      _init?: Parameters<typeof fetch>[1],
-    ) => new Response(JSON.stringify({ results: [] }), { status: 200 }));
+    const fetchImpl = vi.fn(
+      async (_input: Parameters<typeof fetch>[0], _init?: Parameters<typeof fetch>[1]) =>
+        new Response(JSON.stringify({ results: [] }), { status: 200 }),
+    );
     vi.stubGlobal("fetch", fetchImpl);
-    const service = createSearchService({}, {
-      TAVILY_API_KEY: "environment-key",
-    });
+    const service = createSearchService(
+      {},
+      {
+        TAVILY_API_KEY: "environment-key",
+      },
+    );
 
     await service.search("official route", {
       maxResults: 1,
@@ -153,22 +171,26 @@ describe("web search", () => {
     });
 
     expect(fetchImpl.mock.calls[0]?.[0]).toBe("https://api.tavily.com/search");
-    expect((fetchImpl.mock.calls[0]?.[1]?.headers as Record<string, string>).Authorization)
-      .toBe("Bearer environment-key");
+    expect((fetchImpl.mock.calls[0]?.[1]?.headers as Record<string, string>).Authorization).toBe(
+      "Bearer environment-key",
+    );
   });
 
   it("uses an environment key only at its normalized explicit endpoint", async () => {
-    const fetchImpl = vi.fn(async (
-      _input: Parameters<typeof fetch>[0],
-      _init?: Parameters<typeof fetch>[1],
-    ) => new Response(JSON.stringify({ results: [] }), { status: 200 }));
+    const fetchImpl = vi.fn(
+      async (_input: Parameters<typeof fetch>[0], _init?: Parameters<typeof fetch>[1]) =>
+        new Response(JSON.stringify({ results: [] }), { status: 200 }),
+    );
     vi.stubGlobal("fetch", fetchImpl);
-    const service = createSearchService({
-      endpoint: "https://bound.example.test/search/",
-    }, {
-      TAVILY_API_KEY: "environment-key",
-      TAVILY_SEARCH_ENDPOINT: "https://bound.example.test/search",
-    });
+    const service = createSearchService(
+      {
+        endpoint: "https://bound.example.test/search/",
+      },
+      {
+        TAVILY_API_KEY: "environment-key",
+        TAVILY_SEARCH_ENDPOINT: "https://bound.example.test/search",
+      },
+    );
 
     await service.search("bound route", {
       maxResults: 1,
@@ -178,8 +200,9 @@ describe("web search", () => {
 
     expect(fetchImpl).toHaveBeenCalledOnce();
     expect(fetchImpl.mock.calls[0]?.[0]).toBe("https://bound.example.test/search/");
-    expect((fetchImpl.mock.calls[0]?.[1]?.headers as Record<string, string>).Authorization)
-      .toBe("Bearer environment-key");
+    expect((fetchImpl.mock.calls[0]?.[1]?.headers as Record<string, string>).Authorization).toBe(
+      "Bearer environment-key",
+    );
   });
 
   it("rejects simultaneous allow and block domain lists", () => {
@@ -200,20 +223,27 @@ describe("web search", () => {
   });
 
   it("searches slide images with image mode and free-source defaults", async () => {
-    const fetchImpl = vi.fn(async (
-      _input: Parameters<typeof fetch>[0],
-      _init?: Parameters<typeof fetch>[1],
-    ) => new Response(JSON.stringify({
-      results: [{
-        title: "Factory photo",
-        url: "https://www.pexels.com/photo/factory-123",
-        content: "Industrial automation photo.",
-        images: [{
-          url: "https://images.pexels.com/photos/123/factory.jpg",
-          description: "Robotic arm in a modern factory",
-        }],
-      }],
-    }), { status: 200 }));
+    const fetchImpl = vi.fn(
+      async (_input: Parameters<typeof fetch>[0], _init?: Parameters<typeof fetch>[1]) =>
+        new Response(
+          JSON.stringify({
+            results: [
+              {
+                title: "Factory photo",
+                url: "https://www.pexels.com/photo/factory-123",
+                content: "Industrial automation photo.",
+                images: [
+                  {
+                    url: "https://images.pexels.com/photos/123/factory.jpg",
+                    description: "Robotic arm in a modern factory",
+                  },
+                ],
+              },
+            ],
+          }),
+          { status: 200 },
+        ),
+    );
     vi.stubGlobal("fetch", fetchImpl);
 
     const presentation = createStarterPresentation();
@@ -235,18 +265,25 @@ describe("web search", () => {
         getSearchConfig: () => ({
           webSearchApiKey: "tvly-runtime-key",
         }),
-        async queryModel() { throw new Error("not used"); },
-        async *queryModelStream() { throw new Error("not used"); },
+        async queryModel() {
+          throw new Error("not used");
+        },
+        async *queryModelStream() {
+          throw new Error("not used");
+        },
       },
     };
 
-    const output = await searchSlideImagesTool.execute({
-      slideId,
-      query: "industrial robot assembly line",
-      visualKind: "evidence",
-      sourceMode: "free",
-      maxImages: 3,
-    }, context);
+    const output = await searchSlideImagesTool.execute(
+      {
+        slideId,
+        query: "industrial robot assembly line",
+        visualKind: "evidence",
+        sourceMode: "free",
+        maxImages: 3,
+      },
+      context,
+    );
 
     expect(output.candidates[0]).toMatchObject({
       provider: "Pexels",
@@ -263,17 +300,27 @@ describe("web search", () => {
       include_image_descriptions: true,
       search_depth: "basic",
     });
-    expect(requestBody.include_domains).toEqual(expect.arrayContaining(["pexels.com", "pixabay.com"]));
+    expect(requestBody.include_domains).toEqual(
+      expect.arrayContaining(["pexels.com", "pixabay.com"]),
+    );
   });
 
   it("uses per-run search configuration and returns citation-ready model content", async () => {
-    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({
-      results: [{
-        title: "Official source",
-        url: "https://docs.example.com/fact",
-        content: "Verified fact.",
-      }],
-    }), { status: 200 }));
+    const fetchImpl = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            results: [
+              {
+                title: "Official source",
+                url: "https://docs.example.com/fact",
+                content: "Verified fact.",
+              },
+            ],
+          }),
+          { status: 200 },
+        ),
+    );
     vi.stubGlobal("fetch", fetchImpl);
 
     const context = {
@@ -293,17 +340,24 @@ describe("web search", () => {
         getSearchConfig: () => ({
           webSearchApiKey: "tvly-runtime-key",
         }),
-        async queryModel() { throw new Error("not used"); },
-        async *queryModelStream() { throw new Error("not used"); },
+        async queryModel() {
+          throw new Error("not used");
+        },
+        async *queryModelStream() {
+          throw new Error("not used");
+        },
       },
     };
 
-    const output = await webSearchTool.execute({
-      query: "verified fact",
-      max_results: 3,
-      search_depth: "basic",
-      topic: "general",
-    }, context);
+    const output = await webSearchTool.execute(
+      {
+        query: "verified fact",
+        max_results: 3,
+        search_depth: "basic",
+        topic: "general",
+      },
+      context,
+    );
     const modelContent = await webSearchTool.mapResultToModelContent!(output, context);
 
     expect(modelContent).toContain("[Official source](https://docs.example.com/fact)");

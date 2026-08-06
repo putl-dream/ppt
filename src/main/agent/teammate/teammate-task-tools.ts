@@ -1,16 +1,10 @@
-import { z } from "zod";
 import type { AgentTaskNode } from "@shared/agent-task-list";
-import type {
-  TaskCommandPrincipal,
-  TaskDispatchCandidate,
-} from "../task/task-store";
-import { TaskStoreError, type TaskStore } from "../task/task-store";
-import type { SubAgentToolDefinition } from "../subagent/workspace-tools";
+import { z } from "zod";
 import type { ToolPermissionProfile } from "../runtime/tools/tool-access-policy";
-import {
-  publishCurrentTaskList,
-  type TaskListSnapshotListener,
-} from "../task/task-list-publisher";
+import type { SubAgentToolDefinition } from "../subagent/workspace-tools";
+import { publishCurrentTaskList, type TaskListSnapshotListener } from "../task/task-list-publisher";
+import type { TaskCommandPrincipal, TaskDispatchCandidate } from "../task/task-store";
+import { type TaskStore, TaskStoreError } from "../task/task-store";
 
 const TASK_TOOL_PERMISSION: ToolPermissionProfile = {
   profile: "teammate-task-board",
@@ -23,24 +17,30 @@ const TASK_TOOL_PERMISSION: ToolPermissionProfile = {
 
 const emptySchema = z.object({}).strict();
 const getSchema = z.object({ taskId: z.string().min(1) }).strict();
-const claimSchema = z.object({
-  taskId: z.string().min(1),
-  expectedRevision: z.number().int().nonnegative().optional(),
-}).strict();
-const updateSchema = z.object({
-  taskId: z.string().min(1),
-  expectedRevision: z.number().int().nonnegative(),
-  subject: z.string().min(1).optional(),
-  description: z.string().optional(),
-  activeForm: z.string().optional(),
-  status: z.enum(["pending", "in_progress"]).optional(),
-  userMetadata: z.record(z.string(), z.unknown()).optional(),
-}).strict();
-const reviewRequestSchema = z.object({
-  taskId: z.string().min(1),
-  requestId: z.string().min(1),
-  expectedRevision: z.number().int().nonnegative(),
-}).strict();
+const claimSchema = z
+  .object({
+    taskId: z.string().min(1),
+    expectedRevision: z.number().int().nonnegative().optional(),
+  })
+  .strict();
+const updateSchema = z
+  .object({
+    taskId: z.string().min(1),
+    expectedRevision: z.number().int().nonnegative(),
+    subject: z.string().min(1).optional(),
+    description: z.string().optional(),
+    activeForm: z.string().optional(),
+    status: z.enum(["pending", "in_progress"]).optional(),
+    userMetadata: z.record(z.string(), z.unknown()).optional(),
+  })
+  .strict();
+const reviewRequestSchema = z
+  .object({
+    taskId: z.string().min(1),
+    requestId: z.string().min(1),
+    expectedRevision: z.number().int().nonnegative(),
+  })
+  .strict();
 
 function teammatePrincipal(store: TaskStore, owner: string): TaskCommandPrincipal {
   return store.principal(owner, "teammate", new Set(["task:update_own"]));
@@ -96,7 +96,8 @@ export function createTeammateTaskTools(
   };
   const reviewTool: SubAgentToolDefinition<typeof reviewRequestSchema> = {
     name: "TaskReviewRequest",
-    description: "Persist a review request after completing concrete work. Reuse requestId only for retries.",
+    description:
+      "Persist a review request after completing concrete work. Reuse requestId only for retries.",
     inputSchema: reviewRequestSchema,
     permission: TASK_TOOL_PERMISSION,
     async execute(args) {
@@ -116,11 +117,14 @@ export async function claimNextDispatchTask(
   const principal = teammatePrincipal(store, owner);
   for (const candidate of await store.listDispatchCandidates(owner)) {
     try {
-      const result = await store.mutate({
-        type: "claim",
-        taskId: candidate.task.id,
-        expectedRevision: candidate.task.revision,
-      }, principal);
+      const result = await store.mutate(
+        {
+          type: "claim",
+          taskId: candidate.task.id,
+          expectedRevision: candidate.task.revision,
+        },
+        principal,
+      );
       await publishCurrentTaskList(store, onTasksUpdated);
       return { ...candidate, task: result.task! };
     } catch {
@@ -140,18 +144,21 @@ export async function releaseOwnedTasks(
   for (const task of await store.listTasks()) {
     if (task.owner !== owner) continue;
     try {
-      await store.mutate({
-        type: "release",
-        taskId: task.id,
-        expectedRevision: task.revision,
-      }, principal);
+      await store.mutate(
+        {
+          type: "release",
+          taskId: task.id,
+          expectedRevision: task.revision,
+        },
+        principal,
+      );
       released.push(task.id);
     } catch (error) {
       // Another writer may have removed or revised the task after listTasks().
       // Those facts are authoritative; operational and policy failures are not.
       if (
-        error instanceof TaskStoreError
-        && (error.code === "TASK_NOT_FOUND" || error.code === "REVISION_CONFLICT")
+        error instanceof TaskStoreError &&
+        (error.code === "TASK_NOT_FOUND" || error.code === "REVISION_CONFLICT")
       ) {
         continue;
       }
@@ -163,9 +170,10 @@ export async function releaseOwnedTasks(
 }
 
 export function formatTaskAssignment(candidate: TaskDispatchCandidate): string {
-  const recovery = candidate.mode === "new_pending"
-    ? "This is new work."
-    : "This is recovered work. Inspect existing artifacts and continue from the durable state; do not restart by default.";
+  const recovery =
+    candidate.mode === "new_pending"
+      ? "This is new work."
+      : "This is recovered work. Inspect existing artifacts and continue from the durable state; do not restart by default.";
   return `<task_assignment source="task_list" mode="${candidate.mode}" owner="${candidate.task.owner}">
 ${JSON.stringify(candidate.task, null, 2)}
 </task_assignment>

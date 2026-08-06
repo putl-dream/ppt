@@ -1,13 +1,17 @@
-import { executeCommand, presentationCommandSchema, type PresentationCommand } from "@shared/commands";
+import {
+  executeCommand,
+  type PresentationCommand,
+  presentationCommandSchema,
+} from "@shared/commands";
 import type { DeckValidationIssue } from "@shared/deck-validation";
 import type { Presentation } from "@shared/presentation";
 import {
-  DeckValidationService,
+  type DeckValidationService,
   deckValidationService,
 } from "../../deck/deck-validation-service";
 import { DesignPolicy } from "../design/design-policy";
-import { PresentationDiffGenerator, type PresentationDiff } from "./presentation-diff";
-import { RiskPolicy } from "./risk-policy";
+import { type PresentationDiff, PresentationDiffGenerator } from "./presentation-diff";
+import type { RiskPolicy } from "./risk-policy";
 
 export interface CommitGateResult {
   success: boolean;
@@ -60,7 +64,9 @@ export class CommitGate {
         const result = executeCommand(stagedPresentation, parseResult.data);
         stagedPresentation = result.presentation;
       } catch (err) {
-        errors.push(`Execution failed for command type '${cmd.type}': ${err instanceof Error ? err.message : String(err)}`);
+        errors.push(
+          `Execution failed for command type '${cmd.type}': ${err instanceof Error ? err.message : String(err)}`,
+        );
       }
     }
 
@@ -129,9 +135,8 @@ export class CommitGate {
     const riskResult = this.riskPolicy.evaluate({
       commands,
       diff,
-      modelReportedRisk: validationWarnings.length > 0
-        ? higherRisk(modelReportedRisk, "medium")
-        : modelReportedRisk,
+      modelReportedRisk:
+        validationWarnings.length > 0 ? higherRisk(modelReportedRisk, "medium") : modelReportedRisk,
     });
 
     return {
@@ -154,10 +159,7 @@ function higherRisk(
   return order[left] >= order[right] ? left : right;
 }
 
-function validationIssueKey(
-  issue: DeckValidationIssue,
-  presentation: Presentation,
-): string {
+function validationIssueKey(issue: DeckValidationIssue, presentation: Presentation): string {
   const slideTitle = issue.slideId
     ? presentation.slides.find((slide) => slide.id === issue.slideId)?.title
     : undefined;

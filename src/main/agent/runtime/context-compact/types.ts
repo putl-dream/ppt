@@ -1,5 +1,5 @@
-import type { ModelPromptPayload } from "../turns/model-call-recovery";
 import type { AgentModelMessage } from "../../gateway";
+import type { ModelPromptPayload } from "../turns/model-call-recovery";
 
 export type TranscriptEntry = Record<string, unknown>;
 

@@ -1,6 +1,6 @@
-import { contextBridge, ipcRenderer } from "electron";
 import type { AgentStreamEvent, DesktopApi } from "@shared/ipc";
 import type { PptJobProjection } from "@shared/presentation-lifecycle";
+import { contextBridge, ipcRenderer } from "electron";
 
 const api: DesktopApi = {
   // Session 与工作区
@@ -31,14 +31,10 @@ const api: DesktopApi = {
 
   // 凭据只能写入 Main 的系统安全存储；Renderer 没有读取明文密钥的接口。
   getCredentialStatus: (request) => ipcRenderer.invoke("credentials:get-status", request),
-  setModelCredentials: (request) =>
-    ipcRenderer.invoke("credentials:set-models", request),
-  deleteModelCredential: (request) =>
-    ipcRenderer.invoke("credentials:delete-model", request),
-  setWebSearchCredential: (request) =>
-    ipcRenderer.invoke("credentials:set-web-search", request),
-  deleteWebSearchCredential: () =>
-    ipcRenderer.invoke("credentials:delete-web-search"),
+  setModelCredentials: (request) => ipcRenderer.invoke("credentials:set-models", request),
+  deleteModelCredential: (request) => ipcRenderer.invoke("credentials:delete-model", request),
+  setWebSearchCredential: (request) => ipcRenderer.invoke("credentials:set-web-search", request),
+  deleteWebSearchCredential: () => ipcRenderer.invoke("credentials:delete-web-search"),
 
   // 项目产物
   listProjectArtifacts: (sessionId) => ipcRenderer.invoke("project:list-artifacts", sessionId),
@@ -60,10 +56,8 @@ const api: DesktopApi = {
     ),
   getPptJob: (sessionId) => ipcRenderer.invoke("ppt-job:get", sessionId),
   onPptJobChanged: (listener) => {
-    const handler = (
-      _event: Electron.IpcRendererEvent,
-      projection: PptJobProjection,
-    ) => listener(projection);
+    const handler = (_event: Electron.IpcRendererEvent, projection: PptJobProjection) =>
+      listener(projection);
     ipcRenderer.on("ppt-job:changed", handler);
     return () => ipcRenderer.removeListener("ppt-job:changed", handler);
   },
@@ -77,9 +71,25 @@ const api: DesktopApi = {
   // Agent 运行与交互
   // query 跨越 Renderer/Main 安全边界的唯一新运行入口；参数在 Main 端再次做 schema 校验。
   startAgentRun: (request, model, executionStrategy, stepLimits, gatewayConfig, runId) =>
-    ipcRenderer.invoke("agent:start", request, model, executionStrategy, stepLimits, gatewayConfig, runId),
+    ipcRenderer.invoke(
+      "agent:start",
+      request,
+      model,
+      executionStrategy,
+      stepLimits,
+      gatewayConfig,
+      runId,
+    ),
   // 继续运行会额外携带既有 threadId，使 Main 能恢复模型消息、工具结果和审批上下文。
-  continueAgentRun: (threadId, request, model, executionStrategy, stepLimits, gatewayConfig, runId) =>
+  continueAgentRun: (
+    threadId,
+    request,
+    model,
+    executionStrategy,
+    stepLimits,
+    gatewayConfig,
+    runId,
+  ) =>
     ipcRenderer.invoke(
       "agent:continue",
       threadId,
@@ -115,10 +125,8 @@ const api: DesktopApi = {
   listApplicationTemplates: () => ipcRenderer.invoke("template:list-application"),
   applyTemplateToProject: (sessionId, templateId, revisionId) =>
     ipcRenderer.invoke("template:apply", sessionId, templateId, revisionId),
-  getProjectTemplatePolicy: (sessionId) =>
-    ipcRenderer.invoke("template:get-policy", sessionId),
-  getProjectTemplatePack: (sessionId) =>
-    ipcRenderer.invoke("template:get-pack", sessionId),
+  getProjectTemplatePolicy: (sessionId) => ipcRenderer.invoke("template:get-policy", sessionId),
+  getProjectTemplatePack: (sessionId) => ipcRenderer.invoke("template:get-pack", sessionId),
   setProjectTemplatePolicy: (sessionId, policy) =>
     ipcRenderer.invoke("template:set-policy", sessionId, policy),
   setWindowThemeMode: (themeMode) => ipcRenderer.invoke("window:set-theme-mode", themeMode),

@@ -1,21 +1,14 @@
 import { createHash, randomUUID } from "node:crypto";
-import {
-  mkdir,
-  mkdtemp,
-  readFile,
-  rm,
-  symlink,
-  writeFile,
-} from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it, vi } from "vitest";
 import { FileSessionStore } from "@main/session-store";
 import {
   projectArtifactDiffRequestSchema,
   projectFileOpenRequestSchema,
   projectFileSaveRequestSchema,
 } from "@shared/ipc";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 interface StoreFixture {
   store: FileSessionStore;
@@ -67,9 +60,9 @@ afterEach(async () => {
   for (const store of openStores) store.close();
   openStores.clear();
   await Promise.all(
-    temporaryDirectories.splice(0).map((directory) =>
-      rm(directory, { recursive: true, force: true }),
-    ),
+    temporaryDirectories
+      .splice(0)
+      .map((directory) => rm(directory, { recursive: true, force: true })),
   );
 });
 
@@ -147,27 +140,27 @@ describe("project file editor safety boundary", () => {
     );
     expect(secondSave.version).toBe(contentVersion(secondContent));
     expect(secondSave.editToken).toBe(opened.editToken);
-    expect(
-      (await fixture.store.openProjectFile(sessionId, "brief.md")).content,
-    ).toBe(secondContent);
+    expect((await fixture.store.openProjectFile(sessionId, "brief.md")).content).toBe(
+      secondContent,
+    );
 
     fixture = await reopenStore(fixture);
-    expect(fixture.store.listProjectArtifacts(sessionId))
-      .toEqual(expect.arrayContaining([
+    expect(fixture.store.listProjectArtifacts(sessionId)).toEqual(
+      expect.arrayContaining([
         expect.objectContaining({ id: "design-spec" }),
         expect.objectContaining({ id: "page-plan" }),
         expect.objectContaining({ id: "page-svg" }),
         expect.objectContaining({ id: "assets" }),
         expect.objectContaining({ id: "deck" }),
         expect.objectContaining({ id: "export-history" }),
-      ]));
+      ]),
+    );
     expect(
-      fixture.store.listProjectArtifacts(sessionId)
-        .every((artifact) => !("status" in artifact)),
+      fixture.store.listProjectArtifacts(sessionId).every((artifact) => !("status" in artifact)),
     ).toBe(true);
-    expect(
-      (await fixture.store.openProjectFile(sessionId, "brief.md")).content,
-    ).toBe(secondContent);
+    expect((await fixture.store.openProjectFile(sessionId, "brief.md")).content).toBe(
+      secondContent,
+    );
   });
 
   it("reports post-commit persistence failures without describing the file save as failed", async () => {
@@ -212,22 +205,26 @@ describe("project file editor safety boundary", () => {
     const externalContent = "# External outline\n\nExternal writer wins.\n";
     await writeFile(join(rootPath, "outline.md"), externalContent, "utf8");
 
-    await expect(fixture.store.saveProjectFile(
-      sessionId,
-      "outline.md",
-      "# Stale editor payload\n",
-      opened.editToken,
-      opened.version,
-    )).rejects.toMatchObject({ code: "STALE_FILE" });
+    await expect(
+      fixture.store.saveProjectFile(
+        sessionId,
+        "outline.md",
+        "# Stale editor payload\n",
+        opened.editToken,
+        opened.version,
+      ),
+    ).rejects.toMatchObject({ code: "STALE_FILE" });
     expect(await readFile(join(rootPath, "outline.md"), "utf8")).toBe(externalContent);
 
-    await expect(fixture.store.saveProjectFile(
-      sessionId,
-      "outline.md",
-      "# Retry with consumed token\n",
-      opened.editToken,
-      opened.version,
-    )).rejects.toThrow("edit session is missing");
+    await expect(
+      fixture.store.saveProjectFile(
+        sessionId,
+        "outline.md",
+        "# Retry with consumed token\n",
+        opened.editToken,
+        opened.version,
+      ),
+    ).rejects.toThrow("edit session is missing");
     expect(await readFile(join(rootPath, "outline.md"), "utf8")).toBe(externalContent);
   });
 
@@ -239,32 +236,38 @@ describe("project file editor safety boundary", () => {
     const firstOutlineBefore = await readFile(join(first.rootPath, "outline.md"), "utf8");
     const secondBriefBefore = await readFile(join(second.rootPath, "brief.md"), "utf8");
 
-    await expect(fixture.store.saveProjectFile(
-      first.sessionId,
-      "outline.md",
-      "# Wrong path\n",
-      opened.editToken,
-      opened.version,
-    )).rejects.toThrow("does not match this file");
-    await expect(fixture.store.saveProjectFile(
-      second.sessionId,
-      "brief.md",
-      "# Wrong session\n",
-      opened.editToken,
-      opened.version,
-    )).rejects.toThrow("does not match this file");
+    await expect(
+      fixture.store.saveProjectFile(
+        first.sessionId,
+        "outline.md",
+        "# Wrong path\n",
+        opened.editToken,
+        opened.version,
+      ),
+    ).rejects.toThrow("does not match this file");
+    await expect(
+      fixture.store.saveProjectFile(
+        second.sessionId,
+        "brief.md",
+        "# Wrong session\n",
+        opened.editToken,
+        opened.version,
+      ),
+    ).rejects.toThrow("does not match this file");
 
     expect(await readFile(join(first.rootPath, "outline.md"), "utf8")).toBe(firstOutlineBefore);
     expect(await readFile(join(second.rootPath, "brief.md"), "utf8")).toBe(secondBriefBefore);
 
     const validContent = "# First project only\n";
-    await expect(fixture.store.saveProjectFile(
-      first.sessionId,
-      "brief.md",
-      validContent,
-      opened.editToken,
-      opened.version,
-    )).resolves.toMatchObject({
+    await expect(
+      fixture.store.saveProjectFile(
+        first.sessionId,
+        "brief.md",
+        validContent,
+        opened.editToken,
+        opened.version,
+      ),
+    ).resolves.toMatchObject({
       path: "brief.md",
       version: contentVersion(validContent),
     });
@@ -278,23 +281,21 @@ describe("project file editor safety boundary", () => {
     await mkdir(join(rootPath, "misc"), { recursive: true });
     await writeFile(join(rootPath, "misc", "notes.md"), "# Unregistered\n", "utf8");
 
-    for (const relativePath of [
-      "deck/snapshot.json",
-      "history/exports.json",
-      "misc/notes.md",
-    ]) {
+    for (const relativePath of ["deck/snapshot.json", "history/exports.json", "misc/notes.md"]) {
       const opened = await fixture.store.openProjectFile(sessionId, relativePath);
       const before = await readFile(join(rootPath, relativePath), "utf8");
       expect(opened.editable).toBe(false);
       expect(opened.readOnlyReason).toContain("只能预览");
 
-      await expect(fixture.store.saveProjectFile(
-        sessionId,
-        relativePath,
-        "must not be written",
-        opened.editToken,
-        opened.version,
-      )).rejects.toThrow("只能预览");
+      await expect(
+        fixture.store.saveProjectFile(
+          sessionId,
+          relativePath,
+          "must not be written",
+          opened.editToken,
+          opened.version,
+        ),
+      ).rejects.toThrow("只能预览");
       expect(await readFile(join(rootPath, relativePath), "utf8")).toBe(before);
     }
   });
@@ -304,25 +305,27 @@ describe("project file editor safety boundary", () => {
     const { sessionId, rootPath } = await createProject(fixture);
     const editableContent = "# Canonical editor brief\n";
     const opened = await fixture.store.openProjectFile(sessionId, "brief.md");
-    await expect(fixture.store.saveProjectFile(
-      sessionId,
-      "brief.md",
-      editableContent,
-      opened.editToken,
-      opened.version,
-    )).resolves.toMatchObject({
+    await expect(
+      fixture.store.saveProjectFile(
+        sessionId,
+        "brief.md",
+        editableContent,
+        opened.editToken,
+        opened.version,
+      ),
+    ).resolves.toMatchObject({
       path: "brief.md",
       changed: true,
       changedArtifactId: "brief",
     });
     expect(await readFile(join(rootPath, "brief.md"), "utf8")).toBe(editableContent);
 
-    await expect(fixture.store.openProjectFile(
-      sessionId,
-      "misc/unregistered.md",
-    )).rejects.toMatchObject({ code: "ENOENT" });
-    await expect(readFile(join(rootPath, "misc", "unregistered.md"), "utf8"))
-      .rejects.toMatchObject({ code: "ENOENT" });
+    await expect(
+      fixture.store.openProjectFile(sessionId, "misc/unregistered.md"),
+    ).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(readFile(join(rootPath, "misc", "unregistered.md"), "utf8")).rejects.toMatchObject(
+      { code: "ENOENT" },
+    );
   });
 
   it("returns a diff against the complete current artifact content", async () => {
@@ -332,11 +335,7 @@ describe("project file editor safety boundary", () => {
     const after = "# Brief\n\nKeep this line.\nReplacement is visible.\n";
     await writeFile(join(rootPath, "brief.md"), before, "utf8");
 
-    const diff = await fixture.store.getProjectArtifactDiff(
-      sessionId,
-      "brief.md",
-      after,
-    );
+    const diff = await fixture.store.getProjectArtifactDiff(sessionId, "brief.md", after);
     expect(diff).toMatchObject({
       path: "brief.md",
       before,
@@ -358,15 +357,17 @@ describe("project file editor safety boundary", () => {
 
     try {
       const opened = await fixture.store.openProjectFile(sessionId, "brief.md");
-      now.mockReturnValue(openedAt + (30 * 60 * 1_000) + 1);
+      now.mockReturnValue(openedAt + 30 * 60 * 1_000 + 1);
 
-      await expect(fixture.store.saveProjectFile(
-        sessionId,
-        "brief.md",
-        "# Expired editor payload\n",
-        opened.editToken,
-        opened.version,
-      )).rejects.toThrow("missing, expired");
+      await expect(
+        fixture.store.saveProjectFile(
+          sessionId,
+          "brief.md",
+          "# Expired editor payload\n",
+          opened.editToken,
+          opened.version,
+        ),
+      ).rejects.toThrow("missing, expired");
       expect(await readFile(join(rootPath, "brief.md"), "utf8")).toBe(before);
     } finally {
       now.mockRestore();
@@ -377,40 +378,34 @@ describe("project file editor safety boundary", () => {
     const fixture = await createStore();
     const { sessionId, rootPath } = await createProject(fixture);
     const relativePath = "research/oversized.txt";
-    await writeFile(
-      join(rootPath, relativePath),
-      "x".repeat((5 * 1024 * 1024) + 1),
-      "utf8",
-    );
+    await writeFile(join(rootPath, relativePath), "x".repeat(5 * 1024 * 1024 + 1), "utf8");
 
-    await expect(
-      fixture.store.openProjectFile(sessionId, relativePath),
-    ).rejects.toThrow("too large for the editor");
+    await expect(fixture.store.openProjectFile(sessionId, relativePath)).rejects.toThrow(
+      "too large for the editor",
+    );
   });
 
   it("rejects invalid UTF-8 files and invalid Unicode editor content", async () => {
     const fixture = await createStore();
     const { sessionId, rootPath } = await createProject(fixture);
-    await writeFile(
-      join(rootPath, "research", "invalid-utf8.bin"),
-      Uint8Array.from([0xc3, 0x28]),
-    );
+    await writeFile(join(rootPath, "research", "invalid-utf8.bin"), Uint8Array.from([0xc3, 0x28]));
 
-    expect(await fixture.store.listProjectFiles(sessionId))
-      .toContain("research/invalid-utf8.bin");
+    expect(await fixture.store.listProjectFiles(sessionId)).toContain("research/invalid-utf8.bin");
     await expect(
       fixture.store.openProjectFile(sessionId, "research/invalid-utf8.bin"),
     ).rejects.toMatchObject({ code: "INVALID_UTF8" });
 
     const opened = await fixture.store.openProjectFile(sessionId, "brief.md");
     const before = await readFile(join(rootPath, "brief.md"), "utf8");
-    await expect(fixture.store.saveProjectFile(
-      sessionId,
-      "brief.md",
-      "\ud800",
-      opened.editToken,
-      opened.version,
-    )).rejects.toMatchObject({ code: "INVALID_UTF8" });
+    await expect(
+      fixture.store.saveProjectFile(
+        sessionId,
+        "brief.md",
+        "\ud800",
+        opened.editToken,
+        opened.version,
+      ),
+    ).rejects.toMatchObject({ code: "INVALID_UTF8" });
     expect(await readFile(join(rootPath, "brief.md"), "utf8")).toBe(before);
   });
 
@@ -421,8 +416,7 @@ describe("project file editor safety boundary", () => {
       const { sessionId, rootPath } = await createProject(fixture);
       await symlink("brief.md", join(rootPath, "linked-brief.md"));
 
-      expect(await fixture.store.listProjectFiles(sessionId))
-        .not.toContain("linked-brief.md");
+      expect(await fixture.store.listProjectFiles(sessionId)).not.toContain("linked-brief.md");
       await expect(
         fixture.store.openProjectFile(sessionId, "linked-brief.md"),
       ).rejects.toMatchObject({ code: "UNSAFE_FILE_TYPE" });
@@ -439,63 +433,79 @@ describe("project file editor safety boundary", () => {
       sessionId,
       relativePath,
     });
-    expect(projectFileSaveRequestSchema.parse({
-      sessionId,
-      relativePath,
-      content: "# Brief\n",
-      editToken,
-      expectedVersion,
-    })).toMatchObject({ editToken, expectedVersion });
+    expect(
+      projectFileSaveRequestSchema.parse({
+        sessionId,
+        relativePath,
+        content: "# Brief\n",
+        editToken,
+        expectedVersion,
+      }),
+    ).toMatchObject({ editToken, expectedVersion });
 
-    expect(projectFileSaveRequestSchema.safeParse({
-      sessionId,
-      relativePath,
-      content: "# Brief\n",
-      editToken: "not-a-uuid",
-      expectedVersion,
-    }).success).toBe(false);
-    expect(projectFileSaveRequestSchema.safeParse({
-      sessionId,
-      relativePath,
-      content: "# Brief\n",
-      editToken,
-      expectedVersion: "sha256:not-a-receipt",
-    }).success).toBe(false);
-    expect(projectFileOpenRequestSchema.safeParse({
-      sessionId,
-      relativePath,
-      unexpected: true,
-    }).success).toBe(false);
+    expect(
+      projectFileSaveRequestSchema.safeParse({
+        sessionId,
+        relativePath,
+        content: "# Brief\n",
+        editToken: "not-a-uuid",
+        expectedVersion,
+      }).success,
+    ).toBe(false);
+    expect(
+      projectFileSaveRequestSchema.safeParse({
+        sessionId,
+        relativePath,
+        content: "# Brief\n",
+        editToken,
+        expectedVersion: "sha256:not-a-receipt",
+      }).success,
+    ).toBe(false);
+    expect(
+      projectFileOpenRequestSchema.safeParse({
+        sessionId,
+        relativePath,
+        unexpected: true,
+      }).success,
+    ).toBe(false);
   });
 
   it("rejects unsafe artifact diff IPC payloads", () => {
     const sessionId = "session-1";
     const relativePath = "brief.md";
-    const oversizedContent = "x".repeat((5 * 1024 * 1024) + 1);
+    const oversizedContent = "x".repeat(5 * 1024 * 1024 + 1);
 
-    expect(projectArtifactDiffRequestSchema.parse({
-      sessionId,
-      relativePath,
-      nextContent: "# Next brief\n",
-    })).toEqual({ sessionId, relativePath, nextContent: "# Next brief\n" });
+    expect(
+      projectArtifactDiffRequestSchema.parse({
+        sessionId,
+        relativePath,
+        nextContent: "# Next brief\n",
+      }),
+    ).toEqual({ sessionId, relativePath, nextContent: "# Next brief\n" });
 
-    expect(projectArtifactDiffRequestSchema.safeParse({
-      sessionId,
-      relativePath: "../outside.md",
-      nextContent: "escape",
-    }).success).toBe(false);
+    expect(
+      projectArtifactDiffRequestSchema.safeParse({
+        sessionId,
+        relativePath: "../outside.md",
+        nextContent: "escape",
+      }).success,
+    ).toBe(false);
 
-    expect(projectArtifactDiffRequestSchema.safeParse({
-      sessionId,
-      relativePath,
-      nextContent: oversizedContent,
-    }).success).toBe(false);
+    expect(
+      projectArtifactDiffRequestSchema.safeParse({
+        sessionId,
+        relativePath,
+        nextContent: oversizedContent,
+      }).success,
+    ).toBe(false);
 
-    expect(projectArtifactDiffRequestSchema.safeParse({
-      sessionId,
-      relativePath,
-      nextContent: "# Next brief\n",
-      unexpected: true,
-    }).success).toBe(false);
+    expect(
+      projectArtifactDiffRequestSchema.safeParse({
+        sessionId,
+        relativePath,
+        nextContent: "# Next brief\n",
+        unexpected: true,
+      }).success,
+    ).toBe(false);
   });
 });

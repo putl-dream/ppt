@@ -1,4 +1,3 @@
-import { describe, expect, it } from "vitest";
 import {
   defaultProjectArtifacts,
   getPrimaryProjectArtifactPath,
@@ -6,6 +5,7 @@ import {
   projectArtifactFilePaths,
   projectArtifactIds,
 } from "@shared/project";
+import { describe, expect, it } from "vitest";
 
 describe("project artifact mapping", () => {
   it("registers SVG-native author files before optional references", () => {
@@ -38,7 +38,9 @@ describe("project artifact mapping", () => {
   });
 
   it("maps lifecycle author files and optional references to stable paths", () => {
-    const artifactById = new Map(defaultProjectArtifacts.map((artifact) => [artifact.id, artifact]));
+    const artifactById = new Map(
+      defaultProjectArtifacts.map((artifact) => [artifact.id, artifact]),
+    );
 
     expect(artifactById.get("page-svg")).toMatchObject({
       path: "slides/svg/",

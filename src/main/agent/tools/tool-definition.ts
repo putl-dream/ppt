@@ -1,24 +1,7 @@
-import { z } from "zod";
 import type { AgentModelSelection } from "@shared/agent";
 import type { AgentStepLimits } from "@shared/agent-step-limits";
 import type { AgentTaskNode } from "@shared/agent-task-list";
 import type { Presentation } from "@shared/presentation";
-import type {
-  AgentModelGateway,
-  AgentModelImageBlock,
-  AgentModelTextBlock,
-} from "../gateway";
-import type { ToolApprovalHandler } from "../runtime/tools/permission-check";
-import type { ToolPermissionProfile, ToolRisk } from "../runtime/tools/tool-access-policy";
-import type { TeammateProgressListener } from "@shared/teammate-progress";
-import type { ToolRegistry } from "./tool-registry";
-import type { SkillRegistry } from "../skills/loadSkillsDir";
-import type { SkillSession } from "../skills/skill-types";
-import type { TaskCommandPrincipal, TaskStore } from "../task/task-store";
-import type { PromptStage } from "../runtime/prompts/prompt-stage";
-import type { MessageBus } from "../teammate/message-bus";
-import type { TeammateManager } from "../teammate/spawn-teammate";
-import type { WorkspaceFileService } from "./files/workspace-file-service";
 import type {
   ArtifactDependency,
   ArtifactKind,
@@ -30,10 +13,21 @@ import type {
   QueryId,
   ValidationReport,
 } from "@shared/presentation-lifecycle";
-import type { PptReviewReport } from
-  "../../presentation-lifecycle/presentation-lifecycle-orchestrator";
-import type { ArtifactChangeObservationSource } from
-  "../../presentation-lifecycle/artifact-change-observer-types";
+import type { TeammateProgressListener } from "@shared/teammate-progress";
+import type { z } from "zod";
+import type { ArtifactChangeObservationSource } from "../../presentation-lifecycle/artifact-change-observer-types";
+import type { PptReviewReport } from "../../presentation-lifecycle/presentation-lifecycle-orchestrator";
+import type { AgentModelGateway, AgentModelImageBlock, AgentModelTextBlock } from "../gateway";
+import type { PromptStage } from "../runtime/prompts/prompt-stage";
+import type { ToolApprovalHandler } from "../runtime/tools/permission-check";
+import type { ToolPermissionProfile, ToolRisk } from "../runtime/tools/tool-access-policy";
+import type { SkillRegistry } from "../skills/loadSkillsDir";
+import type { SkillSession } from "../skills/skill-types";
+import type { TaskCommandPrincipal, TaskStore } from "../task/task-store";
+import type { MessageBus } from "../teammate/message-bus";
+import type { TeammateManager } from "../teammate/spawn-teammate";
+import type { WorkspaceFileService } from "./files/workspace-file-service";
+import type { ToolRegistry } from "./tool-registry";
 
 /**
  * 工具加载策略。
@@ -62,17 +56,10 @@ export interface PptLifecycleToolBridge {
     paths?: readonly string[];
     source: Extract<
       ArtifactChangeObservationSource,
-      | "capability_probe"
-      | "agent_read"
-      | "agent_write"
-      | "preview"
-      | "submit"
+      "capability_probe" | "agent_read" | "agent_write" | "preview" | "submit"
     >;
   }): Promise<void>;
-  beginCapability(input: {
-    capability: PptCapability;
-    instruction: string;
-  }): PptJobProjection;
+  beginCapability(input: { capability: PptCapability; instruction: string }): PptJobProjection;
   requireActiveCapability(
     allowedCapabilities?: readonly PptCapability[],
     options?: { allowCompleted?: boolean },
@@ -97,9 +84,7 @@ export type ToolRuntimeCapability =
   | "skill_load"
   | "tool_discovery";
 
-export type ToolTerminalResultType =
-  | "command_proposal"
-  | "ask_user";
+export type ToolTerminalResultType = "command_proposal" | "ask_user";
 
 export interface ToolCompletionBehavior {
   /**
@@ -241,7 +226,10 @@ export interface ToolContext {
 /**
  * 所有 Agent 工具的统一元数据与执行契约。
  */
-export interface ToolDefinition<TParams extends z.ZodObject<any> = z.ZodObject<any>, TResult = any> {
+export interface ToolDefinition<
+  TParams extends z.ZodObject<any> = z.ZodObject<any>,
+  TResult = any,
+> {
   name: string;
   description: string;
   category: "core" | "deferred" | "runtime";
@@ -252,15 +240,13 @@ export interface ToolDefinition<TParams extends z.ZodObject<any> = z.ZodObject<a
   /** Optional runtime guard for the rich local result returned by execute(). */
   outputSchema?: z.ZodType<TResult>;
   /** Optional compact mapping for the result sent back to the model. */
-  mapResultToModelContent?: (
-    result: TResult,
-    context: ToolContext,
-  ) => string | Promise<string>;
+  mapResultToModelContent?: (result: TResult, context: ToolContext) => string | Promise<string>;
   /** Optional multimodal provider-facing result; rich local data remains available to hooks and UI. */
   mapResultToModelBlocks?: (
     result: TResult,
     context: ToolContext,
-  ) => Array<AgentModelTextBlock | AgentModelImageBlock>
+  ) =>
+    | Array<AgentModelTextBlock | AgentModelImageBlock>
     | Promise<Array<AgentModelTextBlock | AgentModelImageBlock>>;
   /** Runtime capability check; unavailable tools are not exposed or executable. */
   isEnabled?: (context: ToolContext) => boolean;

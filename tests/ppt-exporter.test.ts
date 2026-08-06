@@ -4,9 +4,9 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { exportToPptx } from "../src/main/ppt-exporter";
 import { CommandBus } from "../src/shared/commands";
-import { type Presentation, type SlideNarrative } from "../src/shared/presentation";
-import { createStarterPresentation, createSvgTestSlide } from "../src/shared/presentation-fixtures";
 import type { ExportPresentationOptions } from "../src/shared/ipc";
+import type { Presentation, SlideNarrative } from "../src/shared/presentation";
+import { createStarterPresentation, createSvgTestSlide } from "../src/shared/presentation-fixtures";
 import { testDesignSystem } from "./design-engine-test-utils";
 
 const defaultExportOptions: ExportPresentationOptions = {};
@@ -122,11 +122,9 @@ describe("ppt-exporter", () => {
     const presentation = exportReadyPresentation();
     (presentation.slides[0] as { visualSource?: unknown }).visualSource = undefined;
 
-    await expect(exportToPptx(
-      presentation,
-      defaultExportOptions,
-      filePath,
-    )).rejects.toThrow("not SVG-native");
+    await expect(exportToPptx(presentation, defaultExportOptions, filePath)).rejects.toThrow(
+      "not SVG-native",
+    );
   });
 
   it("exports a presentation built through CommandBus SVG commands", async () => {

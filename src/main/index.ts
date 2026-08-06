@@ -3,52 +3,60 @@ import { readFile, stat } from "node:fs/promises";
 import { extname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
-  app,
-  BrowserWindow,
-  ipcMain,
-  Menu,
-  dialog,
-  safeStorage,
-  shell,
-  type IpcMainInvokeEvent,
-  type MessageBoxOptions,
-  type WebContents,
-} from "electron";
+  type AgentExecutionStrategy,
+  type AgentModelSelection,
+  agentExecutionStrategySchema,
+} from "@shared/agent";
+import { formatPublicErrorMessage } from "@shared/agent-activity-display";
+import type { AgentRunServicesWire } from "@shared/agent-gateway-config";
+import { type AgentStepLimits, agentStepLimitsSchema } from "@shared/agent-step-limits";
+import type { PersistedDisplayCard } from "@shared/card-display-protocol";
 import { CommandBus } from "@shared/commands";
+import type { ConversationEventKind } from "@shared/conversation-events";
 import {
+  deleteModelCredentialRequestSchema,
+  setModelCredentialsRequestSchema,
+  setWebSearchCredentialRequestSchema,
+} from "@shared/credentials";
+import {
+  type AgentRunResult,
+  type AgentStreamEvent,
   agentRunRequestSchema,
+  type CreateSessionOptions,
+  type ExportPresentationOptions,
   exportPresentationOptionsSchema,
   projectArtifactDiffRequestSchema,
   projectFileOpenRequestSchema,
   projectFileSaveRequestSchema,
   projectFileSessionIdSchema,
-  type AgentRunResult,
-  type AgentStreamEvent,
-  type CreateSessionOptions,
-  type ExportPresentationOptions,
 } from "@shared/ipc";
-import { deckExportService } from "./deck/deck-export-service";
-import { recoverInterruptedExport } from
-  "./deck/export-recovery";
-import { slideThumbnailService } from "./deck/slide-thumbnail-service";
-import { AgentService, type AgentServiceEvent } from "./agent/service";
+import type { AppLogLevel, LogManagerSettings, RendererLogReport } from "@shared/logging";
 import {
-  agentExecutionStrategySchema,
-  type AgentExecutionStrategy,
-  type AgentModelSelection,
-} from "@shared/agent";
-import { agentStepLimitsSchema, type AgentStepLimits } from "@shared/agent-step-limits";
-import type { AgentRunServicesWire } from "@shared/agent-gateway-config";
-import { AgentGateway } from "./agent/gateway";
-import { AgentRuntime } from "./agent/runtime/agent-runtime";
-import { ToolApprovalBroker } from "./agent/runtime/tools/tool-approval-broker";
-import { createDefaultToolRegistry } from "./agent/tools/tool-registry";
-import { formatMailboxMessagesForHistory, MessageBus } from "./agent/teammate/message-bus";
-import { TeammateManager } from "./agent/teammate/spawn-teammate";
+  asPresentationId,
+  asProjectId,
+  asProposalId,
+  type PptJobProjection,
+  type ProjectId,
+} from "@shared/presentation-lifecycle";
+import type { SessionChatMessage, SessionSnapshot } from "@shared/session";
+import { findRecoverableConversation } from "@shared/session-recovery";
+import { isTeammateProgressEvent } from "@shared/teammate-progress";
+import {
+  app,
+  BrowserWindow,
+  dialog,
+  type IpcMainInvokeEvent,
+  ipcMain,
+  Menu,
+  type MessageBoxOptions,
+  safeStorage,
+  shell,
+  type WebContents,
+} from "electron";
+import { toResultDisplayEvents, toStreamDisplayEvent } from "./agent/display/display-event-adapter";
 import { CommitGate } from "./agent/gate/commit-gate";
-import { scanSkills, type SkillRegistry } from "./agent/skills/loadSkillsDir";
-import { createEmptySkillRegistry } from "./agent/skills/loadSkillsDir";
 import { RiskPolicy } from "./agent/gate/risk-policy";
+import { AgentGateway } from "./agent/gateway";
 import {
   clearLogFiles,
   createModuleLogger,
@@ -61,68 +69,44 @@ import {
   updateLogManagerSettings,
   withLogContext,
 } from "./agent/logger";
-import type { AppLogLevel, LogManagerSettings, RendererLogReport } from "@shared/logging";
-import { FileSessionStore } from "./session-store";
-import type { SessionChatMessage, SessionSnapshot } from "@shared/session";
-import type { PersistedDisplayCard } from "@shared/card-display-protocol";
-import {
-  findRecoverableConversation,
-} from "@shared/session-recovery";
-import { TokenUsageStore } from "./token-usage-store";
-import type { ConversationEventKind } from "@shared/conversation-events";
-import {
-  toResultDisplayEvents,
-  toStreamDisplayEvent,
-} from "./agent/display/display-event-adapter";
+import { AgentRuntime } from "./agent/runtime/agent-runtime";
 import { isRuntimeCancellation } from "./agent/runtime/lifecycle/runtime-cancellation";
-import { formatPublicErrorMessage } from "@shared/agent-activity-display";
-import { isTeammateProgressEvent } from "@shared/teammate-progress";
+import { ToolApprovalBroker } from "./agent/runtime/tools/tool-approval-broker";
+import { AgentService, type AgentServiceEvent } from "./agent/service";
+import {
+  createEmptySkillRegistry,
+  type SkillRegistry,
+  scanSkills,
+} from "./agent/skills/loadSkillsDir";
+import { formatMailboxMessagesForHistory, MessageBus } from "./agent/teammate/message-bus";
+import { TeammateManager } from "./agent/teammate/spawn-teammate";
+import { createDefaultToolRegistry } from "./agent/tools/tool-registry";
 import { configureApplicationDataRoot, getApplicationDataRoot } from "./application-data";
-import {
-  ensureUiThemesDirectory,
-  listUiThemes,
-  readUiThemeCss,
-} from "./ui-themes";
-import {
-  asPresentationId,
-  asProjectId,
-  asProposalId,
-  type ProjectId,
-  type PptJobProjection,
-} from "@shared/presentation-lifecycle";
-import {
-  ContentAddressedBlobStore,
-  canonicalJson,
-  hashArtifactValue,
-  hashBytes,
-} from
-  "./presentation-lifecycle/content-addressed-blob-store";
-import { PresentationLifecycleOrchestrator } from
-  "./presentation-lifecycle/presentation-lifecycle-orchestrator";
-import { PresentationLifecycleRepository } from
-  "./presentation-lifecycle/presentation-lifecycle-repository";
-import { PresentationLifecycleToolBridge } from
-  "./presentation-lifecycle/presentation-lifecycle-tool-bridge";
-import { PresentationCommitService } from
-  "./presentation-lifecycle/presentation-commit-service";
-import { PresentationArtifactChangeObserver } from
-  "./presentation-lifecycle/artifact-change-observer";
-import { createWindow } from "./window/create-window";
-import {
-  applyWindowThemeMode,
-  normalizeWindowThemeMode,
-} from "./window/theme";
-import {
-  deleteModelCredentialRequestSchema,
-  setModelCredentialsRequestSchema,
-  setWebSearchCredentialRequestSchema,
-} from "@shared/credentials";
-import { CredentialStore } from "./credential-store";
 import {
   getCredentialStatusWithEnvironment,
   hydrateAgentModelSettings,
   hydrateAgentRunServices,
 } from "./credential-runtime";
+import { CredentialStore } from "./credential-store";
+import { deckExportService } from "./deck/deck-export-service";
+import { recoverInterruptedExport } from "./deck/export-recovery";
+import { slideThumbnailService } from "./deck/slide-thumbnail-service";
+import { PresentationArtifactChangeObserver } from "./presentation-lifecycle/artifact-change-observer";
+import {
+  ContentAddressedBlobStore,
+  canonicalJson,
+  hashArtifactValue,
+  hashBytes,
+} from "./presentation-lifecycle/content-addressed-blob-store";
+import { PresentationCommitService } from "./presentation-lifecycle/presentation-commit-service";
+import { PresentationLifecycleOrchestrator } from "./presentation-lifecycle/presentation-lifecycle-orchestrator";
+import { PresentationLifecycleRepository } from "./presentation-lifecycle/presentation-lifecycle-repository";
+import { PresentationLifecycleToolBridge } from "./presentation-lifecycle/presentation-lifecycle-tool-bridge";
+import { FileSessionStore } from "./session-store";
+import { TokenUsageStore } from "./token-usage-store";
+import { ensureUiThemesDirectory, listUiThemes, readUiThemeCss } from "./ui-themes";
+import { createWindow } from "./window/create-window";
+import { applyWindowThemeMode, normalizeWindowThemeMode } from "./window/theme";
 
 const { applicationDataRoot } = configureApplicationDataRoot(app);
 ensureUiThemesDirectory(applicationDataRoot);
@@ -139,8 +123,7 @@ function isTrustedRendererUrl(rawUrl: string): boolean {
       return actual.origin === new URL(developmentUrl).origin;
     }
     if (actual.protocol !== "file:") return false;
-    return resolve(fileURLToPath(actual))
-      === resolve(join(__dirname, "../renderer/index.html"));
+    return resolve(fileURLToPath(actual)) === resolve(join(__dirname, "../renderer/index.html"));
   } catch {
     return false;
   }
@@ -151,9 +134,9 @@ function assertTrustedCredentialIpc(
   trustedWebContentsIds: ReadonlySet<number>,
 ): void {
   if (
-    !trustedWebContentsIds.has(event.sender.id)
-    || event.senderFrame !== event.sender.mainFrame
-    || !isTrustedRendererUrl(event.senderFrame.url)
+    !trustedWebContentsIds.has(event.sender.id) ||
+    event.senderFrame !== event.sender.mainFrame ||
+    !isTrustedRendererUrl(event.senderFrame.url)
   ) {
     throw new Error("Credential IPC is restricted to the trusted application main frame.");
   }
@@ -201,8 +184,8 @@ function createSessionRuntime(
   const commandBus = new CommandBus(snapshot.presentation);
   const registry = createDefaultToolRegistry();
   const runtimeRoot = join(applicationDataRoot, "runtime", snapshot.session.id);
-  const projectStorageIdentity = sessionStore.resolveWorkspaceRoot(snapshot)
-    ?? `session:${snapshot.session.id}`;
+  const projectStorageIdentity =
+    sessionStore.resolveWorkspaceRoot(snapshot) ?? `session:${snapshot.session.id}`;
   const projectId = asProjectId(
     sessionStore.conversationDatabase.ensureProject(
       projectStorageIdentity,
@@ -229,10 +212,7 @@ function createSessionRuntime(
       sessionStore.conversationDatabase,
       ({ queryId, options }) => {
         if (options.runId) {
-          sessionStore.conversationDatabase.bindRunQueryId(
-            options.runId,
-            queryId,
-          );
+          sessionStore.conversationDatabase.bindRunQueryId(options.runId, queryId);
         }
         return new PresentationLifecycleToolBridge(
           presentationLifecycleOrchestrator,
@@ -283,105 +263,107 @@ function createAgentStreamEmitter(
     logger.info("agent.run.aborted", { runId, reason });
   };
 
-  return (streamEvent: AgentServiceEvent) => withLogContext({ sessionId, runId, threadId }, () => {
-    if (streamEvent.type === "teammate-tool-started") {
-      logger.info("teammate.tool.started", {
-        teammateName: streamEvent.teammateName,
-        activityId: streamEvent.activityId,
-        taskId: streamEvent.taskId,
-        toolName: streamEvent.toolName,
-      });
-    } else if (streamEvent.type === "teammate-tool-finished") {
-      logger[streamEvent.status === "failed" ? "warn" : "info"]("teammate.tool.finished", {
-        teammateName: streamEvent.teammateName,
-        activityId: streamEvent.activityId,
-        taskId: streamEvent.taskId,
-        toolName: streamEvent.toolName,
-        status: streamEvent.status,
-        message: streamEvent.message,
-      });
-    } else if (streamEvent.type === "tool-approval-waiting") {
-      logger.info("agent.tool-approval.requested", {
-        approvalId: streamEvent.approvalId,
-        toolName: streamEvent.toolName,
-        reason: streamEvent.reason,
-      });
-      logger.debug("agent.tool-approval.detail", {
-        approvalId: streamEvent.approvalId,
-        detail: diagnosticValuePreview(streamEvent.detail, 8 * 1024),
-      });
-    } else if (streamEvent.type === "tool-approval-resolved") {
-      logger.info("agent.tool-approval.observed", {
-        approvalId: streamEvent.approvalId,
-        toolName: streamEvent.toolName,
-        status: streamEvent.status,
-      });
-    }
-    const eventKind: ConversationEventKind = (() => {
-      switch (streamEvent.type) {
-        case "thinking-chunk":
-        case "teammate-thinking-chunk":
-          return "reasoning_chunk";
-        case "text-chunk": return "text_chunk";
-        case "text-reset":
-        case "text-commit":
-          return "workflow_progress";
-        case "stage-started": return "stage_started";
-        case "workflow-progress":
-        case "request-status":
-        case "teammate-assignment-started":
-        case "teammate-assignment-finished":
-          return "workflow_progress";
-        case "tool-state":
-          return streamEvent.status === "running" ? "tool_started" : "tool_finished";
-        case "teammate-tool-started":
-          return "tool_started";
-        case "teammate-tool-finished":
-          return "tool_finished";
-        case "approval-waiting":
-        case "tool-approval-waiting":
-          return "approval_requested";
-        case "tool-approval-resolved":
-          return "approval_resolved";
-        case "task-list-updated": return "task_list_updated";
-        default: return "workflow_progress";
+  return (streamEvent: AgentServiceEvent) =>
+    withLogContext({ sessionId, runId, threadId }, () => {
+      if (streamEvent.type === "teammate-tool-started") {
+        logger.info("teammate.tool.started", {
+          teammateName: streamEvent.teammateName,
+          activityId: streamEvent.activityId,
+          taskId: streamEvent.taskId,
+          toolName: streamEvent.toolName,
+        });
+      } else if (streamEvent.type === "teammate-tool-finished") {
+        logger[streamEvent.status === "failed" ? "warn" : "info"]("teammate.tool.finished", {
+          teammateName: streamEvent.teammateName,
+          activityId: streamEvent.activityId,
+          taskId: streamEvent.taskId,
+          toolName: streamEvent.toolName,
+          status: streamEvent.status,
+          message: streamEvent.message,
+        });
+      } else if (streamEvent.type === "tool-approval-waiting") {
+        logger.info("agent.tool-approval.requested", {
+          approvalId: streamEvent.approvalId,
+          toolName: streamEvent.toolName,
+          reason: streamEvent.reason,
+        });
+        logger.debug("agent.tool-approval.detail", {
+          approvalId: streamEvent.approvalId,
+          detail: diagnosticValuePreview(streamEvent.detail, 8 * 1024),
+        });
+      } else if (streamEvent.type === "tool-approval-resolved") {
+        logger.info("agent.tool-approval.observed", {
+          approvalId: streamEvent.approvalId,
+          toolName: streamEvent.toolName,
+          status: streamEvent.status,
+        });
       }
-    })();
-    sessionStore.conversationDatabase.appendEvent({
-      sessionId,
-      runId,
-      threadId,
-      kind: eventKind,
-      payload: structuredClone(streamEvent) as unknown as Record<string, unknown>,
+      const eventKind: ConversationEventKind = (() => {
+        switch (streamEvent.type) {
+          case "thinking-chunk":
+          case "teammate-thinking-chunk":
+            return "reasoning_chunk";
+          case "text-chunk":
+            return "text_chunk";
+          case "text-reset":
+          case "text-commit":
+            return "workflow_progress";
+          case "stage-started":
+            return "stage_started";
+          case "workflow-progress":
+          case "request-status":
+          case "teammate-assignment-started":
+          case "teammate-assignment-finished":
+            return "workflow_progress";
+          case "tool-state":
+            return streamEvent.status === "running" ? "tool_started" : "tool_finished";
+          case "teammate-tool-started":
+            return "tool_started";
+          case "teammate-tool-finished":
+            return "tool_finished";
+          case "approval-waiting":
+          case "tool-approval-waiting":
+            return "approval_requested";
+          case "tool-approval-resolved":
+            return "approval_resolved";
+          case "task-list-updated":
+            return "task_list_updated";
+          default:
+            return "workflow_progress";
+        }
+      })();
+      sessionStore.conversationDatabase.appendEvent({
+        sessionId,
+        runId,
+        threadId,
+        kind: eventKind,
+        payload: structuredClone(streamEvent) as unknown as Record<string, unknown>,
+      });
+      if (streamEvent.type === "task-list-updated" || isTeammateProgressEvent(streamEvent)) {
+        void sessionStore.refreshAgentRunTrace(sessionId, runId).catch((error) => {
+          logger.warn("agent.run-trace.persist-failed", { sessionId, runId, error });
+        });
+      }
+      if (sender.isDestroyed()) {
+        abortRun("renderer-disposed");
+        return;
+      }
+      try {
+        sender.send("agent:stream", { ...streamEvent, runId, sessionId });
+        const displayEvent = toStreamDisplayEvent(streamEvent, sessionId, runId);
+        if (displayEvent) {
+          sender.send("agent:stream", {
+            type: "display-event",
+            runId,
+            sessionId,
+            event: displayEvent,
+          } satisfies AgentStreamEvent);
+        }
+      } catch (error) {
+        logger.warn("agent.stream.send-failed", { runId, error });
+        abortRun("stream-send-failed");
+      }
     });
-    if (
-      streamEvent.type === "task-list-updated"
-      || isTeammateProgressEvent(streamEvent)
-    ) {
-      void sessionStore.refreshAgentRunTrace(sessionId, runId).catch((error) => {
-        logger.warn("agent.run-trace.persist-failed", { sessionId, runId, error });
-      });
-    }
-    if (sender.isDestroyed()) {
-      abortRun("renderer-disposed");
-      return;
-    }
-    try {
-      sender.send("agent:stream", { ...streamEvent, runId, sessionId });
-      const displayEvent = toStreamDisplayEvent(streamEvent, sessionId, runId);
-      if (displayEvent) {
-        sender.send("agent:stream", {
-          type: "display-event",
-          runId,
-          sessionId,
-          event: displayEvent,
-        } satisfies AgentStreamEvent);
-      }
-    } catch (error) {
-      logger.warn("agent.stream.send-failed", { runId, error });
-      abortRun("stream-send-failed");
-    }
-  });
 }
 
 let sessionStore: FileSessionStore;
@@ -405,12 +387,10 @@ app.whenReady().then(async () => {
   });
   sessionStore = new FileSessionStore(join(applicationDataRoot, "conversations.sqlite"));
   await sessionStore.initialize();
-  presentationLifecycleRepository = new PresentationLifecycleRepository(
-    {
-      filePath: join(applicationDataRoot, "conversations.sqlite"),
-      connection: sessionStore.conversationDatabase.sqliteConnection,
-    },
-  );
+  presentationLifecycleRepository = new PresentationLifecycleRepository({
+    filePath: join(applicationDataRoot, "conversations.sqlite"),
+    connection: sessionStore.conversationDatabase.sqliteConnection,
+  });
   presentationLifecycleOrchestrator = new PresentationLifecycleOrchestrator(
     presentationLifecycleRepository,
   );
@@ -418,9 +398,7 @@ app.whenReady().then(async () => {
     presentationLifecycleOrchestrator,
   );
   sessionStore.setArtifactChangeObserver(lifecycleArtifactChangeObserver);
-  lifecycleBlobStore = new ContentAddressedBlobStore(
-    join(applicationDataRoot, "blobs"),
-  );
+  lifecycleBlobStore = new ContentAddressedBlobStore(join(applicationDataRoot, "blobs"));
   presentationLifecycleOrchestrator.subscribe((projection: PptJobProjection) => {
     for (const window of BrowserWindow.getAllWindows()) {
       if (!window.webContents.isDestroyed()) {
@@ -466,8 +444,8 @@ app.whenReady().then(async () => {
     const presentationId = asPresentationId(presentation.id);
     const existing = presentationLifecycleOrchestrator.getState(presentationId);
     if (
-      existing?.presentationRevisionId
-      && existing.presentationRevisionNumber === presentation.revision
+      existing?.presentationRevisionId &&
+      existing.presentationRevisionNumber === presentation.revision
     ) {
       return existing;
     }
@@ -557,24 +535,25 @@ app.whenReady().then(async () => {
       logger.info("session.operation.started", details);
       try {
         const result = await task();
-        taskOutcome = result.status === "interrupted"
-          ? "interrupted"
-          : result.status === "failed"
-            ? "failed"
-            : "completed";
+        taskOutcome =
+          result.status === "interrupted"
+            ? "interrupted"
+            : result.status === "failed"
+              ? "failed"
+              : "completed";
         if (runId) {
           sessionStore.conversationDatabase.finishRun({
             runId,
-            status: result.status === "interrupted"
-              ? "interrupted"
-              : result.status === "failed"
-                ? "failed"
-                : "completed",
+            status:
+              result.status === "interrupted"
+                ? "interrupted"
+                : result.status === "failed"
+                  ? "failed"
+                  : "completed",
             result,
             ...(result.status === "failed" ? { error: result.error } : {}),
-            threadId: "threadId" in result && typeof result.threadId === "string"
-              ? result.threadId
-              : runId,
+            threadId:
+              "threadId" in result && typeof result.threadId === "string" ? result.threadId : runId,
           });
           await sessionStore.finalizeAgentRunMessage(sessionId, runId, result);
         }
@@ -587,9 +566,7 @@ app.whenReady().then(async () => {
         const message = error instanceof Error ? error.message : String(error);
         const interrupted = isRuntimeCancellation(error, signal);
         taskOutcome = interrupted ? "interrupted" : "failed";
-        const failureThreadId = typeof details.threadId === "string"
-          ? details.threadId
-          : runId;
+        const failureThreadId = typeof details.threadId === "string" ? details.threadId : runId;
         const result: AgentRunResult = interrupted
           ? {
               status: "interrupted",
@@ -597,10 +574,7 @@ app.whenReady().then(async () => {
             }
           : {
               status: "failed",
-              error: formatPublicErrorMessage(
-                error,
-                "处理请求时遇到问题，请稍后重试。",
-              ),
+              error: formatPublicErrorMessage(error, "处理请求时遇到问题，请稍后重试。"),
               ...(failureThreadId ? { threadId: failureThreadId } : {}),
             };
         if (runId) {
@@ -619,13 +593,11 @@ app.whenReady().then(async () => {
         if (runId) return result;
         throw error;
       } finally {
-        await tokenUsageStore.recordTask(
-          Date.now() - startedAt,
-          new Date(),
-          taskOutcome,
-        ).catch((error) => {
-          logger.error("session.operation.usage-persist-failed", { error });
-        });
+        await tokenUsageStore
+          .recordTask(Date.now() - startedAt, new Date(), taskOutcome)
+          .catch((error) => {
+            logger.error("session.operation.usage-persist-failed", { error });
+          });
       }
     });
   };
@@ -678,15 +650,11 @@ app.whenReady().then(async () => {
   });
   ipcMain.handle("credentials:set-models", async (event, request: unknown) => {
     assertTrustedCredentialIpc(event, trustedRendererWebContentsIds);
-    await credentialStore.setModelCredentials(
-      setModelCredentialsRequestSchema.parse(request),
-    );
+    await credentialStore.setModelCredentials(setModelCredentialsRequestSchema.parse(request));
   });
   ipcMain.handle("credentials:delete-model", async (event, request: unknown) => {
     assertTrustedCredentialIpc(event, trustedRendererWebContentsIds);
-    await credentialStore.deleteModelCredential(
-      deleteModelCredentialRequestSchema.parse(request),
-    );
+    await credentialStore.deleteModelCredential(deleteModelCredentialRequestSchema.parse(request));
   });
   ipcMain.handle("credentials:set-web-search", async (event, request: unknown) => {
     assertTrustedCredentialIpc(event, trustedRendererWebContentsIds);
@@ -783,10 +751,8 @@ app.whenReady().then(async () => {
     logger.info("session.deleted", { sessionId, nextSessionId: activeSessionId || undefined });
     return state;
   });
-  ipcMain.handle(
-    "session:save-messages",
-    (_, sessionId: string, messages: SessionChatMessage[]) =>
-      sessionStore.saveMessages(sessionId, messages),
+  ipcMain.handle("session:save-messages", (_, sessionId: string, messages: SessionChatMessage[]) =>
+    sessionStore.saveMessages(sessionId, messages),
   );
   ipcMain.handle(
     "session:save-display-cards",
@@ -815,12 +781,7 @@ app.whenReady().then(async () => {
   );
   ipcMain.handle(
     "project:get-artifact-diff",
-    (
-      _,
-      rawSessionId: unknown,
-      rawRelativePath: unknown,
-      rawNextContent: unknown,
-    ) => {
+    (_, rawSessionId: unknown, rawRelativePath: unknown, rawNextContent: unknown) => {
       const request = projectArtifactDiffRequestSchema.parse({
         sessionId: rawSessionId,
         relativePath: rawRelativePath,
@@ -836,16 +797,13 @@ app.whenReady().then(async () => {
   ipcMain.handle("project:list-files", (_, rawSessionId: unknown) =>
     sessionStore.listProjectFiles(projectFileSessionIdSchema.parse(rawSessionId)),
   );
-  ipcMain.handle(
-    "project:open-file",
-    (_, rawSessionId: unknown, rawRelativePath: unknown) => {
-      const request = projectFileOpenRequestSchema.parse({
-        sessionId: rawSessionId,
-        relativePath: rawRelativePath,
-      });
-      return sessionStore.openProjectFile(request.sessionId, request.relativePath);
-    },
-  );
+  ipcMain.handle("project:open-file", (_, rawSessionId: unknown, rawRelativePath: unknown) => {
+    const request = projectFileOpenRequestSchema.parse({
+      sessionId: rawSessionId,
+      relativePath: rawRelativePath,
+    });
+    return sessionStore.openProjectFile(request.sessionId, request.relativePath);
+  });
   ipcMain.handle(
     "project:save-file",
     (
@@ -938,16 +896,13 @@ app.whenReady().then(async () => {
           key: effectKey,
           claimedAt: new Date().toISOString(),
         });
-        let recoveredExport: Awaited<
-          ReturnType<typeof recoverInterruptedExport>
-        > | undefined;
+        let recoveredExport: Awaited<ReturnType<typeof recoverInterruptedExport>> | undefined;
         if (claim.type === "in_progress") {
           recoveredExport = await recoverInterruptedExport({
             lifecycle: presentationLifecycleOrchestrator,
             jobId: exportState.jobId,
             effectKey,
-            presentationRevisionId:
-              presentationState.presentationRevisionId,
+            presentationRevisionId: presentationState.presentationRevisionId,
             presentation,
             options: validatedOptions,
             destination,
@@ -960,9 +915,7 @@ app.whenReady().then(async () => {
             exportState.jobId,
             "The previous export attempt failed and cannot be blindly replayed.",
           );
-          throw new Error(
-            `This export attempt will not be replayed: ${claim.error}`,
-          );
+          throw new Error(`This export attempt will not be replayed: ${claim.error}`);
         }
         claimed = claim.type === "claimed";
 
@@ -976,9 +929,9 @@ app.whenReady().then(async () => {
             format?: unknown;
           };
           if (
-            settled.destination !== destination
-            || typeof settled.fileHash !== "string"
-            || settled.format !== format
+            settled.destination !== destination ||
+            typeof settled.fileHash !== "string" ||
+            settled.format !== format
           ) {
             presentationLifecycleOrchestrator.waitForUser(
               exportState.jobId,
@@ -988,8 +941,8 @@ app.whenReady().then(async () => {
           }
           const existingBytes = await readFile(destination);
           if (
-            hashBytes(existingBytes) !== settled.fileHash
-            || existingBytes.byteLength !== settled.byteLength
+            hashBytes(existingBytes) !== settled.fileHash ||
+            existingBytes.byteLength !== settled.byteLength
           ) {
             presentationLifecycleOrchestrator.waitForUser(
               exportState.jobId,
@@ -1032,17 +985,19 @@ app.whenReady().then(async () => {
         }
 
         if (format === "pptx") {
-          await sessionStore.recordDeckExport(sessionId, {
-            revision: presentation.revision,
-            filePath: exportedPath,
-            designSystem: presentation.designSystem,
-          }).catch((error) => {
-            logger.error("presentation.export-history.sync-failed", {
-              sessionId,
+          await sessionStore
+            .recordDeckExport(sessionId, {
+              revision: presentation.revision,
               filePath: exportedPath,
-              error,
+              designSystem: presentation.designSystem,
+            })
+            .catch((error) => {
+              logger.error("presentation.export-history.sync-failed", {
+                sessionId,
+                filePath: exportedPath,
+                error,
+              });
             });
-          });
         }
 
         logger.info("presentation.export.completed", {
@@ -1063,8 +1018,8 @@ app.whenReady().then(async () => {
           });
           const latest = presentationLifecycleRepository.getJob(exportState.jobId);
           if (
-            latest?.currentRequest.requestId === exportState.currentRequest.requestId
-            && latest.status === "running"
+            latest?.currentRequest.requestId === exportState.currentRequest.requestId &&
+            latest.status === "running"
           ) {
             presentationLifecycleOrchestrator.waitForUser(
               exportState.jobId,
@@ -1101,9 +1056,7 @@ app.whenReady().then(async () => {
     const options = {
       properties: ["openFile"] as Array<"openFile">,
       defaultPath,
-      filters: [
-        { name: "PowerPoint / Template", extensions: ["pptx", "potx"] },
-      ],
+      filters: [{ name: "PowerPoint / Template", extensions: ["pptx", "potx"] }],
     };
     const { filePaths, canceled } = window
       ? await dialog.showOpenDialog(window, options)
@@ -1160,23 +1113,20 @@ app.whenReady().then(async () => {
     }
     return sessionStore.getProjectTemplatePack(sessionId);
   });
-  ipcMain.handle(
-    "template:set-policy",
-    async (_event, sessionId: unknown, policy: unknown) => {
-      if (typeof sessionId !== "string" || !sessionId.trim()) {
-        throw new Error("sessionId is required");
-      }
-      await sessionStore.setProjectTemplatePolicy(
-        sessionId,
-        policy as {
-          mode: "auto" | "default" | "custom";
-          defaultTemplateId: string;
-          customTemplateId?: string;
-          customTemplateRevisionId?: string;
-        },
-      );
-    },
-  );
+  ipcMain.handle("template:set-policy", async (_event, sessionId: unknown, policy: unknown) => {
+    if (typeof sessionId !== "string" || !sessionId.trim()) {
+      throw new Error("sessionId is required");
+    }
+    await sessionStore.setProjectTemplatePolicy(
+      sessionId,
+      policy as {
+        mode: "auto" | "default" | "custom";
+        defaultTemplateId: string;
+        customTemplateId?: string;
+        customTemplateRevisionId?: string;
+      },
+    );
+  });
   ipcMain.handle("shell:open-export-folder", async (_, filePath: string) => {
     if (typeof filePath !== "string" || !filePath.trim()) {
       return false;
@@ -1227,9 +1177,7 @@ app.whenReady().then(async () => {
 
   ipcMain.handle("agent:poll-lead-inbox", async (_, sessionId: string) => {
     const runtime = await getRuntimeForSession(sessionId);
-    const messages = runtime.messageBus
-      ? await runtime.messageBus.peekInbox("lead")
-      : [];
+    const messages = runtime.messageBus ? await runtime.messageBus.peekInbox("lead") : [];
     return {
       hasMessages: messages.length > 0,
       count: messages.length,
@@ -1260,13 +1208,16 @@ app.whenReady().then(async () => {
       // 当前桌面端采用单窗口、单前台运行模型；Main 同步执行这一约束，
       // 让模型配置和交互状态在一次 run 内保持稳定。
       if (activeRuns.size > 0) {
-        withLogContext({ operation: "start", sessionId, runId: currentRunId, threadId: currentRunId }, () => {
-          logger.warn("agent.request.rejected", {
-            reason: "concurrency-conflict",
-            activeRunIds: [...activeRuns.keys()],
-            ...requestSummary(request.prompt),
-          });
-        });
+        withLogContext(
+          { operation: "start", sessionId, runId: currentRunId, threadId: currentRunId },
+          () => {
+            logger.warn("agent.request.rejected", {
+              reason: "concurrency-conflict",
+              activeRunIds: [...activeRuns.keys()],
+              ...requestSummary(request.prompt),
+            });
+          },
+        );
         throw new Error("Concurrency Conflict: An active agent run is already in progress.");
       }
 
@@ -1285,10 +1236,7 @@ app.whenReady().then(async () => {
         const agentStepLimits = rawStepLimits
           ? agentStepLimitsSchema.parse(rawStepLimits)
           : undefined;
-        const services = await hydrateAgentRunServices(
-          credentialStore,
-          rawGatewayConfig ?? {},
-        );
+        const services = await hydrateAgentRunServices(credentialStore, rawGatewayConfig ?? {});
         agentGateway.clearPrimarySettings();
         let selection: AgentModelSelection | undefined;
         if (settings) {
@@ -1358,175 +1306,177 @@ app.whenReady().then(async () => {
     },
   );
 
-  ipcMain.handle("agent:continue", async (
-    event,
-    threadId: string,
-    rawRequest: unknown,
-    rawModelSettings?: AgentModelSelection,
-    rawExecutionStrategy?: AgentExecutionStrategy,
-    rawStepLimits?: AgentStepLimits,
-    rawGatewayConfig?: AgentRunServicesWire,
-    runId?: string,
-  ) => {
-    const request = parseAgentRequest("continue-agent-run", rawRequest);
-    const sessionId = request.sessionId;
-    const currentRunId = runId || crypto.randomUUID();
+  ipcMain.handle(
+    "agent:continue",
+    async (
+      event,
+      threadId: string,
+      rawRequest: unknown,
+      rawModelSettings?: AgentModelSelection,
+      rawExecutionStrategy?: AgentExecutionStrategy,
+      rawStepLimits?: AgentStepLimits,
+      rawGatewayConfig?: AgentRunServicesWire,
+      runId?: string,
+    ) => {
+      const request = parseAgentRequest("continue-agent-run", rawRequest);
+      const sessionId = request.sessionId;
+      const currentRunId = runId || crypto.randomUUID();
 
-    // 与 start 保持同一条全局串行边界，避免继续会话与新运行交错。
-    if (activeRuns.size > 0) {
-      withLogContext({ operation: "continue-agent-run", sessionId, runId: currentRunId, threadId }, () => {
-        logger.warn("agent.request.rejected", {
-          reason: "concurrency-conflict",
-          activeRunIds: [...activeRuns.keys()],
-          ...requestSummary(request.prompt),
-        });
-      });
-      throw new Error("Concurrency Conflict: An active agent run is already in progress.");
-    }
-
-    const controller = new AbortController();
-    activeRuns.set(currentRunId, controller);
-    sessionActiveRuns.set(sessionId, currentRunId);
-
-    try {
-      const runtime = await getRuntimeForSession(sessionId);
-      const settings = rawModelSettings
-        ? await hydrateAgentModelSettings(credentialStore, rawModelSettings)
-        : undefined;
-      const executionStrategy = rawExecutionStrategy
-        ? agentExecutionStrategySchema.parse(rawExecutionStrategy)
-        : undefined;
-      const agentStepLimits = rawStepLimits
-        ? agentStepLimitsSchema.parse(rawStepLimits)
-        : undefined;
-      const services = await hydrateAgentRunServices(
-        credentialStore,
-        rawGatewayConfig ?? {},
-      );
-      agentGateway.clearPrimarySettings();
-      let selection: AgentModelSelection | undefined;
-      if (settings) {
-        selection = agentGateway.configure(settings, services.gateway, services.search);
-      } else {
-        agentGateway.applyGatewayConfig(services.gateway);
-        agentGateway.applySearchConfig(services.search);
+      // 与 start 保持同一条全局串行边界，避免继续会话与新运行交错。
+      if (activeRuns.size > 0) {
+        withLogContext(
+          { operation: "continue-agent-run", sessionId, runId: currentRunId, threadId },
+          () => {
+            logger.warn("agent.request.rejected", {
+              reason: "concurrency-conflict",
+              activeRunIds: [...activeRuns.keys()],
+              ...requestSummary(request.prompt),
+            });
+          },
+        );
+        throw new Error("Concurrency Conflict: An active agent run is already in progress.");
       }
-      sessionStore.conversationDatabase.beginRun({
-        runId: currentRunId,
-        sessionId,
-        threadId,
-        provider: selection?.provider,
-        model: selection?.model,
-        request: request.prompt,
-      });
-      const emit = createAgentStreamEmitter(
-        event.sender,
-        sessionId,
-        currentRunId,
-        threadId,
-        controller,
-      );
 
-      const result = await runAgentOperation(
-        "continue-agent-run",
-        sessionId,
-        currentRunId,
-        request.prompt,
-        { threadId },
-        controller.signal,
-        async () => {
-          await runtime.agentService.restoreDurableThread(threadId);
-          if (!runtime.agentService.hasActiveConversation(threadId)) {
-            const recovered = findRecoverableConversation(
-              sessionStore.getSession(sessionId).messages,
-            );
-            if (recovered?.threadId === threadId) {
-              runtime.agentService.restoreAgentRunConversation(
-                threadId,
-                recovered.messages,
-              );
-            }
-          }
+      const controller = new AbortController();
+      activeRuns.set(currentRunId, controller);
+      sessionActiveRuns.set(sessionId, currentRunId);
 
-          const run = runtime.agentService.hasActiveConversation(threadId)
-            ? runtime.agentService.continueAgentRun(
-                threadId,
-                request.prompt,
-                emit,
-                request.editorContext,
-                controller.signal,
-                currentRunId,
-                agentStepLimits,
-                selection,
-                executionStrategy,
-              )
-            : runtime.agentService.start(
-                request.prompt,
-                selection,
-                executionStrategy ?? "REQUEST_APPROVAL",
-                emit,
-                request.editorContext,
-                sessionStore.getAgentMessageHistory(sessionId, request.prompt),
-                controller.signal,
-                currentRunId,
-                agentStepLimits,
-              );
-
-          return finalizeAgentResult(sessionId, runtime, await run, currentRunId);
-        },
-      );
-      if (!event.sender.isDestroyed()) {
-        event.sender.send("agent:stream", {
-          type: "stream-completed",
+      try {
+        const runtime = await getRuntimeForSession(sessionId);
+        const settings = rawModelSettings
+          ? await hydrateAgentModelSettings(credentialStore, rawModelSettings)
+          : undefined;
+        const executionStrategy = rawExecutionStrategy
+          ? agentExecutionStrategySchema.parse(rawExecutionStrategy)
+          : undefined;
+        const agentStepLimits = rawStepLimits
+          ? agentStepLimitsSchema.parse(rawStepLimits)
+          : undefined;
+        const services = await hydrateAgentRunServices(credentialStore, rawGatewayConfig ?? {});
+        agentGateway.clearPrimarySettings();
+        let selection: AgentModelSelection | undefined;
+        if (settings) {
+          selection = agentGateway.configure(settings, services.gateway, services.search);
+        } else {
+          agentGateway.applyGatewayConfig(services.gateway);
+          agentGateway.applySearchConfig(services.search);
+        }
+        sessionStore.conversationDatabase.beginRun({
           runId: currentRunId,
           sessionId,
-        } satisfies AgentStreamEvent);
-      }
-      return result;
-    } finally {
-      toolApprovalBroker.finishForRun(currentRunId);
-      activeRuns.delete(currentRunId);
-      if (sessionActiveRuns.get(sessionId) === currentRunId) {
-        sessionActiveRuns.delete(sessionId);
-      }
-    }
-  });
+          threadId,
+          provider: selection?.provider,
+          model: selection?.model,
+          request: request.prompt,
+        });
+        const emit = createAgentStreamEmitter(
+          event.sender,
+          sessionId,
+          currentRunId,
+          threadId,
+          controller,
+        );
 
-  ipcMain.handle("agent:resume", async (
-    _event,
-    sessionId: string,
-    rawProposalId: string,
-    approved: boolean,
-  ) => {
-    const proposalId = asProposalId(rawProposalId);
-    const runtime = await getRuntimeForSession(sessionId);
-    const chat = sessionStore.findProposalChatContext(sessionId, proposalId);
-    withLogContext({
-      operation: "resolve-proposal",
-      sessionId,
-      threadId: chat?.threadId,
-    }, () => {
-      logger.info("agent.proposal.resolution.received", { proposalId, approved });
-    });
-    return runAgentOperation(
-      "resolve-proposal",
-      sessionId,
-      undefined,
-      undefined,
-      {
-        proposalId,
-        ...(chat?.threadId ? { threadId: chat.threadId } : {}),
-        approved,
-      },
-      undefined,
-      async () => finalizeAgentResult(
+        const result = await runAgentOperation(
+          "continue-agent-run",
+          sessionId,
+          currentRunId,
+          request.prompt,
+          { threadId },
+          controller.signal,
+          async () => {
+            await runtime.agentService.restoreDurableThread(threadId);
+            if (!runtime.agentService.hasActiveConversation(threadId)) {
+              const recovered = findRecoverableConversation(
+                sessionStore.getSession(sessionId).messages,
+              );
+              if (recovered?.threadId === threadId) {
+                runtime.agentService.restoreAgentRunConversation(threadId, recovered.messages);
+              }
+            }
+
+            const run = runtime.agentService.hasActiveConversation(threadId)
+              ? runtime.agentService.continueAgentRun(
+                  threadId,
+                  request.prompt,
+                  emit,
+                  request.editorContext,
+                  controller.signal,
+                  currentRunId,
+                  agentStepLimits,
+                  selection,
+                  executionStrategy,
+                )
+              : runtime.agentService.start(
+                  request.prompt,
+                  selection,
+                  executionStrategy ?? "REQUEST_APPROVAL",
+                  emit,
+                  request.editorContext,
+                  sessionStore.getAgentMessageHistory(sessionId, request.prompt),
+                  controller.signal,
+                  currentRunId,
+                  agentStepLimits,
+                );
+
+            return finalizeAgentResult(sessionId, runtime, await run, currentRunId);
+          },
+        );
+        if (!event.sender.isDestroyed()) {
+          event.sender.send("agent:stream", {
+            type: "stream-completed",
+            runId: currentRunId,
+            sessionId,
+          } satisfies AgentStreamEvent);
+        }
+        return result;
+      } finally {
+        toolApprovalBroker.finishForRun(currentRunId);
+        activeRuns.delete(currentRunId);
+        if (sessionActiveRuns.get(sessionId) === currentRunId) {
+          sessionActiveRuns.delete(sessionId);
+        }
+      }
+    },
+  );
+
+  ipcMain.handle(
+    "agent:resume",
+    async (_event, sessionId: string, rawProposalId: string, approved: boolean) => {
+      const proposalId = asProposalId(rawProposalId);
+      const runtime = await getRuntimeForSession(sessionId);
+      const chat = sessionStore.findProposalChatContext(sessionId, proposalId);
+      withLogContext(
+        {
+          operation: "resolve-proposal",
+          sessionId,
+          threadId: chat?.threadId,
+        },
+        () => {
+          logger.info("agent.proposal.resolution.received", { proposalId, approved });
+        },
+      );
+      return runAgentOperation(
+        "resolve-proposal",
         sessionId,
-        runtime,
-        await runtime.agentService.resumeProposal(proposalId, approved),
         undefined,
-      ),
-    );
-  });
+        undefined,
+        {
+          proposalId,
+          ...(chat?.threadId ? { threadId: chat.threadId } : {}),
+          approved,
+        },
+        undefined,
+        async () =>
+          finalizeAgentResult(
+            sessionId,
+            runtime,
+            await runtime.agentService.resumeProposal(proposalId, approved),
+            undefined,
+          ),
+      );
+    },
+  );
 
   createWindow(attachWindowLifecycle);
   app.on("activate", () => {

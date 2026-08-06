@@ -1,5 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { ProviderTokenUsage } from "@shared/token-usage";
+import type { DriverResolvedConfig } from "./config";
+import type { AgentProviderDriver } from "./driver";
 import type {
   AgentModelContentBlock,
   AgentModelImageBlock,
@@ -11,13 +13,9 @@ import type {
   ResolvedAgentModelConfig,
   StopReason,
 } from "./types";
-import type { DriverResolvedConfig } from "./config";
-import type { AgentProviderDriver } from "./driver";
 
 function tokenCount(value: unknown): number {
-  return typeof value === "number" && Number.isFinite(value) && value > 0
-    ? Math.round(value)
-    : 0;
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? Math.round(value) : 0;
 }
 
 function extractAnthropicUsage(value: unknown): ProviderTokenUsage | undefined {
@@ -41,10 +39,14 @@ function extractAnthropicUsage(value: unknown): ProviderTokenUsage | undefined {
 function toStopReason(raw: string | null | undefined): StopReason | undefined {
   if (!raw) return undefined;
   switch (raw) {
-    case "end_turn":   return "end";
-    case "max_tokens": return "max_tokens";
-    case "tool_use":   return "tool_use";
-    default:           return "other";
+    case "end_turn":
+      return "end";
+    case "max_tokens":
+      return "max_tokens";
+    case "tool_use":
+      return "tool_use";
+    default:
+      return "other";
   }
 }
 
@@ -61,7 +63,8 @@ function toAnthropicToolResultContent(
   return result.content.map((block) =>
     block.type === "text"
       ? { type: "text" as const, text: block.text }
-      : toAnthropicImageBlock(block));
+      : toAnthropicImageBlock(block),
+  );
 }
 
 function toAnthropicBlock(block: AgentModelContentBlock): Anthropic.ContentBlockParam {
@@ -127,9 +130,9 @@ function extractContentBlocks(content: unknown): AgentModelContentBlock[] {
         break;
       case "tool_use":
         if (
-          typeof value.id === "string"
-          && typeof value.name === "string"
-          && isRecord(value.input)
+          typeof value.id === "string" &&
+          typeof value.name === "string" &&
+          isRecord(value.input)
         ) {
           return { type: "tool_use", id: value.id, name: value.name, input: value.input };
         }

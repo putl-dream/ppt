@@ -67,9 +67,12 @@ describe("OpenAI driver", () => {
     });
     const config = { ...baseConfig, callPath: "chat" as const };
 
-    const response = await chatDriver.generate(config, preparedRequest("prompt", {
-      systemPrompt: "system",
-    }));
+    const response = await chatDriver.generate(
+      config,
+      preparedRequest("prompt", {
+        systemPrompt: "system",
+      }),
+    );
 
     expect(openAIMock.constructorOptions).toEqual({
       apiKey: "secret",
@@ -77,14 +80,17 @@ describe("OpenAI driver", () => {
       timeout: 2345,
       maxRetries: 0,
     });
-    expect(openAIMock.chatCreate).toHaveBeenCalledWith({
-      model: "openai-test",
-      messages: [
-        { role: "system", content: "system" },
-        { role: "user", content: "prompt" },
-      ],
-      max_tokens: 321,
-    }, { signal: undefined });
+    expect(openAIMock.chatCreate).toHaveBeenCalledWith(
+      {
+        model: "openai-test",
+        messages: [
+          { role: "system", content: "system" },
+          { role: "user", content: "prompt" },
+        ],
+        max_tokens: 321,
+      },
+      { signal: undefined },
+    );
     expect(response).toEqual({
       provider: "openai",
       model: "openai-test",
@@ -100,80 +106,99 @@ describe("OpenAI driver", () => {
       choices: [{ message: { content: "ok" }, finish_reason: "stop" }],
     });
 
-    await chatDriver.generate({ ...baseConfig, callPath: "chat" }, preparedRequest("", {
-      messages: [
-        {
-          role: "assistant",
-          content: [{ type: "tool_use", id: "call-1", name: "PreviewSvgPage", input: {} }],
-        },
-        {
-          role: "user",
-          content: [{
-            type: "tool_result",
-            toolUseId: "call-1",
+    await chatDriver.generate(
+      { ...baseConfig, callPath: "chat" },
+      preparedRequest("", {
+        messages: [
+          {
+            role: "assistant",
+            content: [{ type: "tool_use", id: "call-1", name: "PreviewSvgPage", input: {} }],
+          },
+          {
+            role: "user",
             content: [
-              { type: "text", text: "{\"previewGatePassed\":true}" },
-              { type: "image", mediaType: "image/png", data: "aaa" },
+              {
+                type: "tool_result",
+                toolUseId: "call-1",
+                content: [
+                  { type: "text", text: '{"previewGatePassed":true}' },
+                  { type: "image", mediaType: "image/png", data: "aaa" },
+                ],
+              },
             ],
-          }],
-        },
-      ],
-    }));
+          },
+        ],
+      }),
+    );
 
     const request = openAIMock.chatCreate.mock.calls[0]?.[0] as {
       messages: Array<{ role: string; content: unknown }>;
     };
     expect(JSON.stringify(request.messages)).not.toContain("image_url");
-    expect(request.messages).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        role: "user",
-        content: expect.stringContaining(
-          "Image omitted for Chat Completions compatibility: image/png, 3 base64 characters",
-        ),
-      }),
-    ]));
+    expect(request.messages).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          role: "user",
+          content: expect.stringContaining(
+            "Image omitted for Chat Completions compatibility: image/png, 3 base64 characters",
+          ),
+        }),
+      ]),
+    );
   });
 
   it("enables MiMo thinking and streams reasoning_content as thinking deltas", async () => {
     const finalChatCompletion = vi.fn().mockResolvedValue({
-      choices: [{
-        message: {
-          content: null,
-          reasoning_content: "plan the next tool",
-          tool_calls: [{
-            id: "call-1",
-            type: "function",
-            function: { name: "Read", arguments: "{}" },
-          }],
+      choices: [
+        {
+          message: {
+            content: null,
+            reasoning_content: "plan the next tool",
+            tool_calls: [
+              {
+                id: "call-1",
+                type: "function",
+                function: { name: "Read", arguments: "{}" },
+              },
+            ],
+          },
+          finish_reason: "tool_calls",
         },
-        finish_reason: "tool_calls",
-      }],
+      ],
     });
     openAIMock.chatStream.mockReturnValue({
       async *[Symbol.asyncIterator]() {
         yield {
-          choices: [{
-            delta: { reasoning_content: "plan " },
-            finish_reason: null,
-          }],
-        };
-        yield {
-          choices: [{
-            delta: { reasoning_content: "the next tool" },
-            finish_reason: null,
-          }],
-        };
-        yield {
-          choices: [{
-            delta: {
-              tool_calls: [{
-                index: 0,
-                id: "call-1",
-                function: { name: "Read", arguments: "{}" },
-              }],
+          choices: [
+            {
+              delta: { reasoning_content: "plan " },
+              finish_reason: null,
             },
-            finish_reason: "tool_calls",
-          }],
+          ],
+        };
+        yield {
+          choices: [
+            {
+              delta: { reasoning_content: "the next tool" },
+              finish_reason: null,
+            },
+          ],
+        };
+        yield {
+          choices: [
+            {
+              delta: {
+                tool_calls: [
+                  {
+                    index: 0,
+                    id: "call-1",
+                    function: { name: "Read", arguments: "{}" },
+                  },
+                ],
+              },
+              finish_reason: "tool_calls",
+            },
+          ],
         };
       },
       finalChatCompletion,
@@ -233,11 +258,13 @@ describe("OpenAI driver", () => {
           },
           {
             role: "user",
-            content: [{
-              type: "tool_result",
-              toolUseId: "call-1",
-              content: [{ type: "text", text: "done" }],
-            }],
+            content: [
+              {
+                type: "tool_result",
+                toolUseId: "call-1",
+                content: [{ type: "text", text: "done" }],
+              },
+            ],
           },
         ],
       }),
@@ -268,7 +295,7 @@ describe("OpenAI driver", () => {
           type: "function_call",
           call_id: "call-2",
           name: "Read",
-          arguments: "{\"slide\":2}",
+          arguments: '{"slide":2}',
         },
       ],
       status: "completed",
@@ -281,23 +308,28 @@ describe("OpenAI driver", () => {
       },
     });
 
-    const response = await responsesDriver.generate(baseConfig, preparedRequest("", {
-      messages: [
-        {
-          role: "assistant",
-          content: [{ type: "tool_use", id: "call-1", name: "Preview", input: {} }],
-        },
-        {
-          role: "user",
-          content: [{
-            type: "tool_result",
-            toolUseId: "call-1",
-            content: [{ type: "text", text: "done" }],
-          }],
-        },
-      ],
-      tools: [{ name: "Read", description: "Read", inputSchema: { type: "object" } }],
-    }));
+    const response = await responsesDriver.generate(
+      baseConfig,
+      preparedRequest("", {
+        messages: [
+          {
+            role: "assistant",
+            content: [{ type: "tool_use", id: "call-1", name: "Preview", input: {} }],
+          },
+          {
+            role: "user",
+            content: [
+              {
+                type: "tool_result",
+                toolUseId: "call-1",
+                content: [{ type: "text", text: "done" }],
+              },
+            ],
+          },
+        ],
+        tools: [{ name: "Read", description: "Read", inputSchema: { type: "object" } }],
+      }),
+    );
 
     expect(openAIMock.responsesCreate.mock.calls[0]?.[0]).toMatchObject({
       instructions: undefined,
@@ -329,17 +361,21 @@ describe("OpenAI driver", () => {
 
   it("preserves malformed Chat tool arguments as a non-executable block", async () => {
     openAIMock.chatCreate.mockResolvedValue({
-      choices: [{
-        message: {
-          content: null,
-          tool_calls: [{
-            id: "call-1",
-            type: "function",
-            function: { name: "Read", arguments: "{" },
-          }],
+      choices: [
+        {
+          message: {
+            content: null,
+            tool_calls: [
+              {
+                id: "call-1",
+                type: "function",
+                function: { name: "Read", arguments: "{" },
+              },
+            ],
+          },
+          finish_reason: "tool_calls",
         },
-        finish_reason: "tool_calls",
-      }],
+      ],
     });
 
     const response = await chatDriver.generate(
@@ -347,13 +383,15 @@ describe("OpenAI driver", () => {
       preparedRequest("prompt"),
     );
 
-    expect(response.content).toEqual([{
-      type: "tool_use",
-      id: "call-1",
-      name: "Read",
-      input: {},
-      parseError: expect.stringContaining("Invalid tool argument JSON"),
-    }]);
+    expect(response.content).toEqual([
+      {
+        type: "tool_use",
+        id: "call-1",
+        name: "Read",
+        input: {},
+        parseError: expect.stringContaining("Invalid tool argument JSON"),
+      },
+    ]);
     expect(response.stopReason).toBe("tool_use");
   });
 
@@ -409,12 +447,15 @@ describe("OpenAI driver", () => {
 
     expect(openAIMock.chatCreate).not.toHaveBeenCalled();
     expect(openAIMock.chatStream).toHaveBeenCalledTimes(1);
-    expect(openAIMock.chatStream).toHaveBeenCalledWith({
-      model: "openai-test",
-      messages: [{ role: "user", content: "prompt" }],
-      max_tokens: 321,
-      stream_options: { include_usage: true },
-    }, { signal: controller.signal });
+    expect(openAIMock.chatStream).toHaveBeenCalledWith(
+      {
+        model: "openai-test",
+        messages: [{ role: "user", content: "prompt" }],
+        max_tokens: 321,
+        stream_options: { include_usage: true },
+      },
+      { signal: controller.signal },
+    );
     expect(finalChatCompletion).toHaveBeenCalledTimes(1);
     expect(chunks).toEqual([
       { type: "text_delta", text: "hel" },
@@ -430,38 +471,48 @@ describe("OpenAI driver", () => {
 
   it("streams Chat requests with tools and uses the final accumulated tool call", async () => {
     const finalChatCompletion = vi.fn().mockResolvedValue({
-      choices: [{
-        message: {
-          content: null,
-          tool_calls: [{
-            id: "call-1",
-            type: "function",
-            function: { name: "Read", arguments: "{\"slide\":2}" },
-          }],
+      choices: [
+        {
+          message: {
+            content: null,
+            tool_calls: [
+              {
+                id: "call-1",
+                type: "function",
+                function: { name: "Read", arguments: '{"slide":2}' },
+              },
+            ],
+          },
+          finish_reason: "tool_calls",
         },
-        finish_reason: "tool_calls",
-      }],
+      ],
       usage: { prompt_tokens: 5, completion_tokens: 3, total_tokens: 8 },
     });
     openAIMock.chatStream.mockReturnValue({
       async *[Symbol.asyncIterator]() {
         yield {
-          choices: [{
-            delta: {
-              tool_calls: [{
-                index: 0,
-                id: "call-1",
-                function: { name: "Read", arguments: "{\"slide\":" },
-              }],
+          choices: [
+            {
+              delta: {
+                tool_calls: [
+                  {
+                    index: 0,
+                    id: "call-1",
+                    function: { name: "Read", arguments: '{"slide":' },
+                  },
+                ],
+              },
+              finish_reason: null,
             },
-            finish_reason: null,
-          }],
+          ],
         };
         yield {
-          choices: [{
-            delta: { tool_calls: [{ index: 0, function: { arguments: "2}" } }] },
-            finish_reason: "tool_calls",
-          }],
+          choices: [
+            {
+              delta: { tool_calls: [{ index: 0, function: { arguments: "2}" } }] },
+              finish_reason: "tool_calls",
+            },
+          ],
         };
       },
       finalChatCompletion,
@@ -481,22 +532,26 @@ describe("OpenAI driver", () => {
     expect(openAIMock.chatStream).toHaveBeenCalledTimes(1);
     expect(openAIMock.chatStream.mock.calls[0]?.[0]).toMatchObject({
       stream_options: { include_usage: true },
-      tools: [{
-        type: "function",
-        function: {
-          name: "Read",
-          description: "Read",
-          parameters: { type: "object" },
-          strict: true,
+      tools: [
+        {
+          type: "function",
+          function: {
+            name: "Read",
+            description: "Read",
+            parameters: { type: "object" },
+            strict: true,
+          },
         },
-      }],
+      ],
     });
-    expect(chunks).toEqual([{
-      type: "complete",
-      content: [{ type: "tool_use", id: "call-1", name: "Read", input: { slide: 2 } }],
-      stopReason: "tool_use",
-      usage: { inputTokens: 5, outputTokens: 3, totalTokens: 8 },
-    }]);
+    expect(chunks).toEqual([
+      {
+        type: "complete",
+        content: [{ type: "tool_use", id: "call-1", name: "Read", input: { slide: 2 } }],
+        stopReason: "tool_use",
+        usage: { inputTokens: 5, outputTokens: 3, totalTokens: 8 },
+      },
+    ]);
   });
 
   it("streams Responses text and uses finalResponse for complete content", async () => {
@@ -512,7 +567,7 @@ describe("OpenAI driver", () => {
           type: "function_call",
           call_id: "call-2",
           name: "Read",
-          arguments: "{\"slide\":2}",
+          arguments: '{"slide":2}',
         },
       ],
       status: "completed",
@@ -526,7 +581,7 @@ describe("OpenAI driver", () => {
           output_index: 0,
         };
         yield { type: "response.output_text.delta", delta: "ans" };
-        yield { type: "response.function_call_arguments.delta", delta: "{\"slide\":" };
+        yield { type: "response.function_call_arguments.delta", delta: '{"slide":' };
         yield { type: "response.output_text.delta", delta: "wer" };
       },
       finalResponse,
@@ -546,20 +601,25 @@ describe("OpenAI driver", () => {
 
     expect(openAIMock.responsesCreate).not.toHaveBeenCalled();
     expect(openAIMock.responsesStream).toHaveBeenCalledTimes(1);
-    expect(openAIMock.responsesStream).toHaveBeenCalledWith({
-      model: "openai-test",
-      instructions: undefined,
-      input: [{ role: "user", content: "prompt" }],
-      max_output_tokens: 321,
-      reasoning: { effort: "medium", summary: "auto" },
-      tools: [{
-        type: "function",
-        name: "Read",
-        description: "Read",
-        parameters: { type: "object" },
-        strict: true,
-      }],
-    }, { signal: controller.signal });
+    expect(openAIMock.responsesStream).toHaveBeenCalledWith(
+      {
+        model: "openai-test",
+        instructions: undefined,
+        input: [{ role: "user", content: "prompt" }],
+        max_output_tokens: 321,
+        reasoning: { effort: "medium", summary: "auto" },
+        tools: [
+          {
+            type: "function",
+            name: "Read",
+            description: "Read",
+            parameters: { type: "object" },
+            strict: true,
+          },
+        ],
+      },
+      { signal: controller.signal },
+    );
     expect(finalResponse).toHaveBeenCalledTimes(1);
     expect(chunks).toEqual([
       {
@@ -601,7 +661,10 @@ describe("OpenAI driver", () => {
     });
 
     const chunks = [];
-    for await (const chunk of responsesDriver.generateStream(baseConfig, preparedRequest("prompt"))) {
+    for await (const chunk of responsesDriver.generateStream(
+      baseConfig,
+      preparedRequest("prompt"),
+    )) {
       chunks.push(chunk);
     }
 
@@ -646,13 +709,17 @@ describe("OpenAI driver", () => {
       output: [],
       status: "completed",
     });
-    await expect(responsesDriver.generate(baseConfig, preparedRequest("prompt"))).resolves.toMatchObject({
+    await expect(
+      responsesDriver.generate(baseConfig, preparedRequest("prompt")),
+    ).resolves.toMatchObject({
       content: [],
       stopReason: "end",
     });
 
     const source = Object.assign(new Error("rate limited"), { status: 429 });
     openAIMock.responsesCreate.mockRejectedValueOnce(source);
-    await expect(responsesDriver.generate(baseConfig, preparedRequest("prompt"))).rejects.toBe(source);
+    await expect(responsesDriver.generate(baseConfig, preparedRequest("prompt"))).rejects.toBe(
+      source,
+    );
   });
 });

@@ -1,35 +1,39 @@
 import { describe, expect, it } from "vitest";
 import { getDesignReferenceTool } from "../src/main/agent/tools/core/get-design-reference";
-import { createStarterPresentation } from "../src/shared/presentation-fixtures";
 import { ToolRegistry } from "../src/main/agent/tools/tool-registry";
+import { createStarterPresentation } from "../src/shared/presentation-fixtures";
 
 describe("GetDesignReference", () => {
   it("returns behavior-rich mode, style, reading, and image guidance", async () => {
-    const result = await getDesignReferenceTool.execute({
-      argumentMode: "pyramid",
-      visualStyle: "swiss-minimal",
-      readingMode: "presentation",
-    }, {
-      presentation: createStarterPresentation(),
-      selectedElementIds: [],
-      discoverySession: { discoveredToolNames: new Set() },
-      registry: new ToolRegistry(),
-      messageHistory: [],
-    });
+    const result = await getDesignReferenceTool.execute(
+      {
+        argumentMode: "pyramid",
+        visualStyle: "swiss-minimal",
+        readingMode: "presentation",
+      },
+      {
+        presentation: createStarterPresentation(),
+        selectedElementIds: [],
+        discoverySession: { discoveredToolNames: new Set() },
+        registry: new ToolRegistry(),
+        messageHistory: [],
+      },
+    );
 
     expect(result.argument).toMatchObject({
       id: "pyramid",
       titleVoice: "assertion",
     });
-    expect(result.argument.hardRules).toEqual(expect.arrayContaining([
-      expect.stringContaining("结论"),
-      expect.stringContaining("MECE"),
-      expect.stringContaining("比较"),
-    ]));
-    expect(result.argument.antiPatterns).toEqual(expect.arrayContaining([
-      expect.stringContaining("主题标题"),
-      expect.stringContaining("KPI"),
-    ]));
+    expect(result.argument.hardRules).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining("结论"),
+        expect.stringContaining("MECE"),
+        expect.stringContaining("比较"),
+      ]),
+    );
+    expect(result.argument.antiPatterns).toEqual(
+      expect.arrayContaining([expect.stringContaining("主题标题"), expect.stringContaining("KPI")]),
+    );
     expect(result.argument.titleExamples).toContainEqual({
       prefer: "续费而非拉新，已成为增长主引擎",
       avoid: "增长概览",
@@ -49,15 +53,9 @@ describe("GetDesignReference", () => {
     });
     expect(result.visual.composition).toContain("非对称");
     expect(result.visual.compositionDiscipline).toMatchObject({
-      primaryStructure: expect.arrayContaining([
-        expect.stringContaining("阅读顺序"),
-      ]),
-      decorationLayer: expect.arrayContaining([
-        expect.stringContaining("不承担核心信息"),
-      ]),
-      deckVariation: expect.arrayContaining([
-        expect.stringContaining("改变页面的主结构"),
-      ]),
+      primaryStructure: expect.arrayContaining([expect.stringContaining("阅读顺序")]),
+      decorationLayer: expect.arrayContaining([expect.stringContaining("不承担核心信息")]),
+      deckVariation: expect.arrayContaining([expect.stringContaining("改变页面的主结构")]),
     });
     expect(result.reading).toMatchObject({
       id: "presentation",
@@ -74,29 +72,32 @@ describe("GetDesignReference", () => {
   ] as const)(
     "returns executable rules and skeletons for %s",
     async (argumentMode, titleVoice, ruleFragment, skeletonId) => {
-      const result = await getDesignReferenceTool.execute({
-        argumentMode,
-        visualStyle: "swiss-minimal",
-        readingMode: "balanced",
-      }, {
-        presentation: createStarterPresentation(),
-        selectedElementIds: [],
-        discoverySession: { discoveredToolNames: new Set() },
-        registry: new ToolRegistry(),
-        messageHistory: [],
-      });
+      const result = await getDesignReferenceTool.execute(
+        {
+          argumentMode,
+          visualStyle: "swiss-minimal",
+          readingMode: "balanced",
+        },
+        {
+          presentation: createStarterPresentation(),
+          selectedElementIds: [],
+          discoverySession: { discoveredToolNames: new Set() },
+          registry: new ToolRegistry(),
+          messageHistory: [],
+        },
+      );
 
       expect(result.argument.titleVoice).toBe(titleVoice);
       expect(result.argument.hardRules.join(" ")).toContain(ruleFragment);
       expect(result.argument.hardRules.length).toBeGreaterThanOrEqual(5);
       expect(result.argument.antiPatterns.length).toBeGreaterThanOrEqual(4);
       expect(result.argument.titleExamples.length).toBeGreaterThanOrEqual(2);
-      expect(result.argument.pageSkeletons).toEqual(expect.arrayContaining([
-        expect.objectContaining({ id: skeletonId }),
-      ]));
-      expect(result.argument.pageSkeletons.every(
-        (skeleton) => skeleton.bodySequence.length >= 4,
-      )).toBe(true);
+      expect(result.argument.pageSkeletons).toEqual(
+        expect.arrayContaining([expect.objectContaining({ id: skeletonId })]),
+      );
+      expect(
+        result.argument.pageSkeletons.every((skeleton) => skeleton.bodySequence.length >= 4),
+      ).toBe(true);
     },
   );
 });

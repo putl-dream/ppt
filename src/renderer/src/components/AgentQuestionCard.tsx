@@ -1,5 +1,10 @@
-import React, { useMemo, useState } from "react";
-import type { AgentQuestion, AgentQuestionOption, AgentQuestionResolved } from "@shared/agent-question";
+import type {
+  AgentQuestion,
+  AgentQuestionOption,
+  AgentQuestionResolved,
+} from "@shared/agent-question";
+import type React from "react";
+import { useMemo, useState } from "react";
 import { ResolvedCard } from "./ResolvedCard";
 
 interface AgentQuestionCardProps {
@@ -36,11 +41,7 @@ export const AgentQuestionCard: React.FC<AgentQuestionCardProps> = ({
 
   if (resolved) {
     return (
-      <ResolvedCard
-        label="确认问题"
-        title="已回答"
-        detail={resolved.label ?? resolved.value}
-      />
+      <ResolvedCard label="确认问题" title="已回答" detail={resolved.label ?? resolved.value} />
     );
   }
 
@@ -77,17 +78,16 @@ export const AgentQuestionCard: React.FC<AgentQuestionCardProps> = ({
       return;
     }
     setSelectedIds((prev) =>
-      prev.includes(option.id)
-        ? prev.filter((id) => id !== option.id)
-        : [...prev, option.id],
+      prev.includes(option.id) ? prev.filter((id) => id !== option.id) : [...prev, option.id],
     );
   };
 
   const optionClass = (option: AgentQuestionOption) => {
     const selected = selectedIds.includes(option.id);
-    const styleClass = question.variant === "cards"
-      ? "agent-question-option agent-question-option--card"
-      : "agent-question-option agent-question-option--choice";
+    const styleClass =
+      question.variant === "cards"
+        ? "agent-question-option agent-question-option--card"
+        : "agent-question-option agent-question-option--choice";
     return `${styleClass}${selected ? " is-selected" : ""}`;
   };
 
@@ -115,7 +115,9 @@ export const AgentQuestionCard: React.FC<AgentQuestionCardProps> = ({
               onClick={() => toggleOption(option)}
             >
               <span className="agent-question-option-main">
-                {option.badge && <span className="agent-question-option-badge">{option.badge}</span>}
+                {option.badge && (
+                  <span className="agent-question-option-badge">{option.badge}</span>
+                )}
                 <strong>{option.title}</strong>
               </span>
               {option.description && (

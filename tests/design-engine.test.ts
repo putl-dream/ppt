@@ -1,16 +1,16 @@
-import { describe, expect, it } from "vitest";
 import {
+  BRAND_PERSONAS,
+  DEFAULT_BRAND_PROFILE,
   DEFAULT_DESIGN_SYSTEM,
   designSystemV2Schema,
   evaluateDeckVisualQuality,
+  resolveBrandProfileDesignSystem,
   resolveImageTreatment,
   resolveSlideStyle,
-  BRAND_PERSONAS,
-  DEFAULT_BRAND_PROFILE,
-  resolveBrandProfileDesignSystem,
 } from "@design-system";
+import { describe, expect, it } from "vitest";
 import { executeCommand } from "../src/shared/commands";
-import { type Slide, type SlideNarrative } from "../src/shared/presentation";
+import type { Slide, SlideNarrative } from "../src/shared/presentation";
 import { createSvgTestSlide } from "../src/shared/presentation-fixtures";
 import { testDesignSystem } from "./design-engine-test-utils";
 
@@ -97,7 +97,8 @@ describe("design engine", () => {
 
   it("resolves image treatment independently from renderers", () => {
     const treatment = resolveImageTreatment("framed", "plain", 0, {
-      cardBg: "#fff", cardStroke: "#ddd",
+      cardBg: "#fff",
+      cardStroke: "#ddd",
     });
     expect(treatment.padding).toBe(8);
     expect(treatment.borderColor).toBe("#ddd");
@@ -121,20 +122,24 @@ describe("design engine", () => {
   it("does not award an empty deck a perfect score", () => {
     const result = evaluateDeckVisualQuality(DEFAULT_DESIGN_SYSTEM, []);
     expect(result.scores.overall).toBe(0);
-    expect(result.issues).toEqual(expect.arrayContaining([
-      expect.objectContaining({ code: "empty-deck", severity: "error" }),
-    ]));
+    expect(result.issues).toEqual(
+      expect.arrayContaining([expect.objectContaining({ code: "empty-deck", severity: "error" })]),
+    );
   });
 
   it("penalizes non-SVG slides during visual evaluation", () => {
-    const result = evaluateDeckVisualQuality(DEFAULT_DESIGN_SYSTEM, [{
-      id: "legacy-slide",
-      title: "Legacy",
-      visualSource: undefined,
-    } as unknown as Slide]);
+    const result = evaluateDeckVisualQuality(DEFAULT_DESIGN_SYSTEM, [
+      {
+        id: "legacy-slide",
+        title: "Legacy",
+        visualSource: undefined,
+      } as unknown as Slide,
+    ]);
     expect(result.slides[0].scores.overall).toBeLessThan(50);
-    expect(result.slides[0].issues).toEqual(expect.arrayContaining([
-      expect.objectContaining({ code: "non-svg-slide", severity: "error" }),
-    ]));
+    expect(result.slides[0].issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: "non-svg-slide", severity: "error" }),
+      ]),
+    );
   });
 });

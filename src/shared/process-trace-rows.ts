@@ -1,9 +1,9 @@
 import type { AgentActivityItem } from "@shared/agent-activity";
 import {
+  type AgentToolDisplayCategory,
   formatAgentProgressMessage,
   formatAgentToolActivity,
   getAgentToolDisplayCopy,
-  type AgentToolDisplayCategory,
 } from "@shared/agent-activity-display";
 
 export interface ProcessTraceRow {
@@ -18,10 +18,7 @@ export interface ProcessTraceRow {
   toolCategory?: AgentToolDisplayCategory;
 }
 
-function pushRow(
-  rows: ProcessTraceRow[],
-  row: ProcessTraceRow,
-) {
+function pushRow(rows: ProcessTraceRow[], row: ProcessTraceRow) {
   if ((row.kind === "progress" || row.kind === "tool") && row.title.trim()) {
     rows.push(row);
     return;
@@ -94,7 +91,12 @@ export function buildProcessTraceRows(
         id: item.id,
         kind: "task",
         title,
-        lines: item.steps.length > 0 ? [item.description] : (isRunning && live ? ["正在准备任务…"] : [item.description]),
+        lines:
+          item.steps.length > 0
+            ? [item.description]
+            : isRunning && live
+              ? ["正在准备任务…"]
+              : [item.description],
         active: isRunning && live,
       });
 
@@ -112,10 +114,7 @@ export function buildProcessTraceRows(
         }
         const stepRunning = step.status === "running";
         const stepText = step.toolName
-          ? formatAgentToolActivity(
-              step.toolName,
-              step.status,
-            )
+          ? formatAgentToolActivity(step.toolName, step.status)
           : (formatAgentProgressMessage(step.text) ?? "正在处理任务…");
         pushRow(rows, {
           id: step.id,

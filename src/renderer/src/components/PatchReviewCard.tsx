@@ -1,5 +1,6 @@
-import React, { useState } from "react";
 import type { DisplayEvent } from "@shared/card-display-protocol";
+import type React from "react";
+import { useState } from "react";
 import { ResolvedCard } from "./ResolvedCard";
 
 type PatchEvent = Extract<DisplayEvent, { kind: "review.patch-ready" }>;
@@ -20,7 +21,9 @@ export const PatchReviewCard: React.FC<PatchReviewCardProps> = ({
 }) => {
   const [expanded, setExpanded] = useState(false);
   const isResolved = Boolean(patch.resolved);
-  const canShowDiff = Boolean(patch.contentBefore !== undefined && patch.contentAfter !== undefined);
+  const canShowDiff = Boolean(
+    patch.contentBefore !== undefined && patch.contentAfter !== undefined,
+  );
 
   if (patch.resolved) {
     return (
@@ -39,14 +42,9 @@ export const PatchReviewCard: React.FC<PatchReviewCardProps> = ({
     const afterLines = (patch.contentAfter ?? "").split("\n");
     const previewLimit = expanded ? undefined : 8;
 
-    const renderColumn = (
-      lines: string[],
-      variant: "before" | "after",
-    ) => (
+    const renderColumn = (lines: string[], variant: "before" | "after") => (
       <div className={`patch-diff-column patch-diff-column-${variant}`}>
-        <h5 className="patch-diff-label">
-          {variant === "before" ? "变更前" : "变更后"}
-        </h5>
+        <h5 className="patch-diff-label">{variant === "before" ? "变更前" : "变更后"}</h5>
         {(previewLimit ? lines.slice(0, previewLimit) : lines).map((line, index) => (
           <div key={index} className={`patch-diff-line patch-diff-line-${variant}`}>
             {variant === "before" ? "- " : "+ "}
@@ -54,9 +52,7 @@ export const PatchReviewCard: React.FC<PatchReviewCardProps> = ({
           </div>
         ))}
         {previewLimit && lines.length > previewLimit && (
-          <div className="patch-diff-truncated">
-            … 还有 {lines.length - previewLimit} 行
-          </div>
+          <div className="patch-diff-truncated">… 还有 {lines.length - previewLimit} 行</div>
         )}
       </div>
     );
@@ -81,9 +77,7 @@ export const PatchReviewCard: React.FC<PatchReviewCardProps> = ({
         )}
       </div>
 
-      <p className="patch-review-summary">
-        {patch.summary || "AI 建议修改此产物文件"}
-      </p>
+      <p className="patch-review-summary">{patch.summary || "AI 建议修改此产物文件"}</p>
 
       {canShowDiff && (
         <>
@@ -103,20 +97,10 @@ export const PatchReviewCard: React.FC<PatchReviewCardProps> = ({
 
       {!isResolved && (
         <div className="patch-review-buttons">
-          <button
-            type="button"
-            disabled={busy}
-            onClick={onReject}
-            className="btn-reject"
-          >
+          <button type="button" disabled={busy} onClick={onReject} className="btn-reject">
             拒绝变更
           </button>
-          <button
-            type="button"
-            disabled={busy}
-            onClick={onAccept}
-            className="btn-apply"
-          >
+          <button type="button" disabled={busy} onClick={onAccept} className="btn-apply">
             确认接受
           </button>
         </div>

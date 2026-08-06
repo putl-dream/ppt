@@ -1,31 +1,35 @@
-import type { ConversationDatabase } from "../../conversation-database";
 import { resolve } from "node:path";
 import { getEffectiveMainMaxSteps, resolveAgentStepLimits } from "@shared/agent-step-limits";
 import type { TeammateProgressEvent } from "@shared/teammate-progress";
+import type { ConversationDatabase } from "../../conversation-database";
 import type { AgentModelGateway } from "../gateway";
 import { createEmptySkillRegistry, type SkillRegistry } from "../skills/loadSkillsDir";
 import type { SkillSession } from "../skills/skill-types";
+import { LEAD_TASK_PERMISSIONS } from "../task/task-store";
+import { WorkspaceFileService } from "../tools/files/workspace-file-service";
 import type {
   PptLifecycleToolBridge,
   ToolContext,
   ToolDiscoverySession,
 } from "../tools/tool-definition";
-import { ToolRegistry } from "../tools/tool-registry";
-import { LEAD_TASK_PERMISSIONS } from "../task/task-store";
+import type { ToolRegistry } from "../tools/tool-registry";
 import { toToolSchemas } from "../tools/tool-schema";
-import { AgentRunScope } from "./lifecycle/agent-run-scope";
+import { LeadInboxInputSource } from "./background/lead-inbox-input-source";
 import { ensureDefaultHooks } from "./hooks/default-hooks";
 import type { PostToolUseBlock, UserPromptSubmitBlock } from "./hooks/hook-blocks";
 import { triggerHooks } from "./hooks/hook-registry";
-import { LeadInboxInputSource } from "./background/lead-inbox-input-source";
-import { PreparedAgentRun } from "./turns/prepared-agent-run";
-import { PresentationCompletionPolicy } from "./presentation/presentation-completion-policy";
+import { AgentRunScope } from "./lifecycle/agent-run-scope";
 import { rethrowIfRuntimeCancellation } from "./lifecycle/runtime-cancellation";
+import { PresentationCompletionPolicy } from "./presentation/presentation-completion-policy";
+import {
+  buildSystemPromptContext,
+  clearSystemPromptCache,
+  getSystemPrompt,
+} from "./prompts/system-prompt";
 import type { AgentRuntimeOptions, AgentRuntimeResult } from "./runtime-types";
-import { buildSystemPromptContext, clearSystemPromptCache, getSystemPrompt } from "./prompts/system-prompt";
 import { ToolExecutionEngine } from "./tools/tool-execution-engine";
 import { ToolPreflight } from "./tools/tool-preflight";
-import { WorkspaceFileService } from "../tools/files/workspace-file-service";
+import { PreparedAgentRun } from "./turns/prepared-agent-run";
 
 export type AgentRunPreparation =
   | { type: "ready"; run: PreparedAgentRun }

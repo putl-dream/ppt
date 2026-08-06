@@ -1,7 +1,8 @@
 import { mkdtemp, readFile, rm } from "node:fs/promises";
-import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { AgentModelGateway, AgentModelMessage } from "../src/main/agent/gateway/types";
 import {
   adjustSnipBoundary,
   emergencyTrimContext,
@@ -16,10 +17,6 @@ import {
   toolResultBudget,
 } from "../src/main/agent/runtime/context-compact";
 import { compactHistory } from "../src/main/agent/runtime/context-compact/compact-history";
-import type {
-  AgentModelGateway,
-  AgentModelMessage,
-} from "../src/main/agent/gateway/types";
 
 const temporaryDirectories: string[] = [];
 
@@ -33,36 +30,40 @@ function nativeToolHistory(count: number, resultChars: number): AgentModelMessag
   return Array.from({ length: count }, (_, index): AgentModelMessage[] => [
     {
       role: "assistant",
-      content: [{
-        type: "tool_use",
-        id: `native-call-${index}`,
-        name: "ReadFile",
-        input: { path: `file-${index}.txt` },
-      }],
+      content: [
+        {
+          type: "tool_use",
+          id: `native-call-${index}`,
+          name: "ReadFile",
+          input: { path: `file-${index}.txt` },
+        },
+      ],
     },
     {
       role: "user",
-      content: [{
-        type: "tool_result",
-        toolUseId: `native-call-${index}`,
-        content: [{ type: "text", text: `result-${index}-${"x".repeat(resultChars)}` }],
-      }],
+      content: [
+        {
+          type: "tool_result",
+          toolUseId: `native-call-${index}`,
+          content: [{ type: "text", text: `result-${index}-${"x".repeat(resultChars)}` }],
+        },
+      ],
     },
   ]).flat();
 }
 
 afterEach(async () => {
   await Promise.all(
-    temporaryDirectories.splice(0).map((directory) =>
-      rm(directory, { recursive: true, force: true }),
-    ),
+    temporaryDirectories
+      .splice(0)
+      .map((directory) => rm(directory, { recursive: true, force: true })),
   );
 });
 
 describe("snip_compact", () => {
   it("keeps head and tail when messages exceed threshold", () => {
     const conversation = Array.from({ length: 60 }, (_, index) => ({
-      role: index % 2 === 0 ? "user" as const : "assistant" as const,
+      role: index % 2 === 0 ? ("user" as const) : ("assistant" as const),
       content: `message-${index}`,
     }));
 
@@ -168,7 +169,11 @@ describe("tool_result_budget", () => {
     const block = findLastToolResultBlock(transcript);
     expect(block).toEqual([1, 2]);
 
-    const { transcript: compacted, notes } = await toolResultBudget(transcript, workspaceRoot, 200_000);
+    const { transcript: compacted, notes } = await toolResultBudget(
+      transcript,
+      workspaceRoot,
+      200_000,
+    );
     expect(notes.length).toBeGreaterThan(0);
     expect(String(compacted[1].result)).toContain("<persisted-output");
     expect(String(compacted[1].result)).toContain(".task_outputs/tool-results/");
@@ -384,7 +389,7 @@ describe("prepareContext", () => {
   it("summarizes canonical native history at the hard threshold", async () => {
     const workspaceRoot = await createWorkspace();
     const messages: AgentModelMessage[] = Array.from({ length: 16 }, (_, index) => ({
-      role: index % 2 === 0 ? "user" as const : "assistant" as const,
+      role: index % 2 === 0 ? ("user" as const) : ("assistant" as const),
       content: [{ type: "text" as const, text: `native-${index}-${"x".repeat(2_000)}` }],
     }));
     let summaryInput: Record<string, unknown> | undefined;
@@ -455,9 +460,7 @@ describe("prepareContext", () => {
     expect(result.contextChanged).toBe(true);
     expect(result.notes.some((note) => note.startsWith("L2 micro_compact:"))).toBe(true);
     expect(String(result.payload.transcript[0].result)).toContain("important-0");
-    expect(progress).toEqual([
-      "上下文空间接近阈值，已精简较早的工具结果并保留可恢复摘要…",
-    ]);
+    expect(progress).toEqual(["上下文空间接近阈值，已精简较早的工具结果并保留可恢复摘要…"]);
   });
 
   it("persists large results and triggers L4 when still over the hard threshold", async () => {
@@ -498,9 +501,7 @@ describe("prepareContext", () => {
     expect(queryModel).toHaveBeenCalledTimes(1);
     expect(result.notes.some((note) => /L[1-4]|Persisted oversized/.test(note))).toBe(true);
     expect(result.contextChanged).toBe(true);
-    expect(userProgress).toEqual([
-      "上下文空间接近上限，已总结较早的会话记录并继续处理…",
-    ]);
+    expect(userProgress).toEqual(["上下文空间接近上限，已总结较早的会话记录并继续处理…"]);
     expect(userProgress.join(" ")).not.toMatch(
       /snip_compact|micro_compact|compact_history|tool_result|\.task_outputs/i,
     );
@@ -512,7 +513,7 @@ describe("emergencyTrimContext", () => {
     const payload = {
       request: "task",
       conversation: Array.from({ length: 20 }, (_, index) => ({
-        role: index % 2 === 0 ? "user" as const : "assistant" as const,
+        role: index % 2 === 0 ? ("user" as const) : ("assistant" as const),
         content: `c-${index}`,
       })),
       transcript: Array.from({ length: 20 }, (_, index) => ({
@@ -535,11 +536,12 @@ describe("emergencyTrimContext", () => {
     for (let index = 0; index < trimmed.length; index += 1) {
       const message = trimmed[index]!;
       if (
-        message.role === "assistant"
-        && message.content.some((block) => block.type === "tool_use")
+        message.role === "assistant" &&
+        message.content.some((block) => block.type === "tool_use")
       ) {
-        expect(trimmed[index + 1]?.content.some((block) => block.type === "tool_result"))
-          .toBe(true);
+        expect(trimmed[index + 1]?.content.some((block) => block.type === "tool_result")).toBe(
+          true,
+        );
       }
     }
   });

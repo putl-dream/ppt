@@ -1,7 +1,4 @@
-import {
-  createDisplayEventId,
-  type DisplayEvent,
-} from "@shared/card-display-protocol";
+import { createDisplayEventId, type DisplayEvent } from "@shared/card-display-protocol";
 import type { AgentRunResult } from "@shared/ipc";
 import type { AgentServiceEvent } from "../service";
 
@@ -104,79 +101,85 @@ export function toResultDisplayEvents(
   };
 
   if (result.status === "waiting-user" && result.question) {
-    return [{
-      protocolVersion: 1,
-      eventId: createDisplayEventId("question"),
-      emittedAt: now(),
-      kind: "interaction.question-requested",
-      category: "interaction",
-      source: { kind: "tool", toolName: "AskUser" },
-      scope: {
-        ...scope,
-        ...(result.threadId ? { threadId: result.threadId } : {}),
+    return [
+      {
+        protocolVersion: 1,
+        eventId: createDisplayEventId("question"),
+        emittedAt: now(),
+        kind: "interaction.question-requested",
+        category: "interaction",
+        source: { kind: "tool", toolName: "AskUser" },
+        scope: {
+          ...scope,
+          ...(result.threadId ? { threadId: result.threadId } : {}),
+        },
+        semantics: {
+          blocking: true,
+          requiresResponse: true,
+          priority: "high",
+        },
+        payload: {
+          message: result.message,
+          question: result.question,
+        },
       },
-      semantics: {
-        blocking: true,
-        requiresResponse: true,
-        priority: "high",
-      },
-      payload: {
-        message: result.message,
-        question: result.question,
-      },
-    }];
+    ];
   }
 
   if (result.status === "approval-required") {
-    return [{
-      protocolVersion: 1,
-      // ProposalId is the durable business identity. Replaying the same Query
-      // or Renderer projection must address the same approval card.
-      eventId: `command-proposal:${result.approval.proposalId}`,
-      emittedAt: now(),
-      kind: "review.command-proposal",
-      category: "review",
-      source: { kind: "tool", toolName: "SubmitSvgDeck" },
-      scope: {
-        ...scope,
-        threadId: result.approval.threadId,
+    return [
+      {
+        protocolVersion: 1,
+        // ProposalId is the durable business identity. Replaying the same Query
+        // or Renderer projection must address the same approval card.
+        eventId: `command-proposal:${result.approval.proposalId}`,
+        emittedAt: now(),
+        kind: "review.command-proposal",
+        category: "review",
+        source: { kind: "tool", toolName: "SubmitSvgDeck" },
+        scope: {
+          ...scope,
+          threadId: result.approval.threadId,
+        },
+        semantics: {
+          blocking: true,
+          requiresResponse: true,
+          priority: result.approval.risk === "high" ? "critical" : "high",
+        },
+        payload: result.approval,
       },
-      semantics: {
-        blocking: true,
-        requiresResponse: true,
-        priority: result.approval.risk === "high" ? "critical" : "high",
-      },
-      payload: result.approval,
-    }];
+    ];
   }
 
   if (result.status === "completed") {
     const presentation = result.presentation;
-    return [{
-      protocolVersion: 1,
-      eventId: `artifact:deck:${sessionId}:${presentation.revision}`,
-      emittedAt: now(),
-      kind: "artifact.ready",
-      category: "artifact",
-      source: {
-        kind: "domain",
-        entityType: "presentation",
-        entityId: sessionId,
-        revision: presentation.revision,
+    return [
+      {
+        protocolVersion: 1,
+        eventId: `artifact:deck:${sessionId}:${presentation.revision}`,
+        emittedAt: now(),
+        kind: "artifact.ready",
+        category: "artifact",
+        source: {
+          kind: "domain",
+          entityType: "presentation",
+          entityId: sessionId,
+          revision: presentation.revision,
+        },
+        scope,
+        semantics: {
+          blocking: false,
+          requiresResponse: false,
+          priority: "normal",
+        },
+        payload: {
+          artifactId: "deck",
+          artifactType: "deck",
+          title: presentation.title,
+          revision: presentation.revision,
+        },
       },
-      scope,
-      semantics: {
-        blocking: false,
-        requiresResponse: false,
-        priority: "normal",
-      },
-      payload: {
-        artifactId: "deck",
-        artifactType: "deck",
-        title: presentation.title,
-        revision: presentation.revision,
-      },
-    }];
+    ];
   }
 
   return [];

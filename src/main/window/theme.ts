@@ -1,5 +1,5 @@
-import { BrowserWindow, nativeTheme } from "electron";
 import type { WindowThemeMode } from "@shared/ipc";
+import { BrowserWindow, nativeTheme } from "electron";
 
 type WindowThemePreset = Exclude<WindowThemeMode, "system">;
 

@@ -25,10 +25,7 @@ export class LayoutPolicy {
     const maxY = LayoutPolicy.CANVAS_HEIGHT - LayoutPolicy.SAFE_MARGIN;
 
     return (
-      box.x >= minX &&
-      box.x + box.width <= maxX &&
-      box.y >= minY &&
-      box.y + box.height <= maxY
+      box.x >= minX && box.x + box.width <= maxX && box.y >= minY && box.y + box.height <= maxY
     );
   }
 
@@ -43,10 +40,7 @@ export class LayoutPolicy {
 
   static isOverlapping(a: BoundingBox, b: BoundingBox): boolean {
     return (
-      a.x < b.x + b.width &&
-      a.x + a.width > b.x &&
-      a.y < b.y + b.height &&
-      a.y + a.height > b.y
+      a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y
     );
   }
 

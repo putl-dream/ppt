@@ -94,15 +94,17 @@ describe("CommandBus", () => {
     const bus = new CommandBus(createStarterPresentation());
     const original = bus.getSnapshot();
 
-    expect(() => bus.execute({
-      id: crypto.randomUUID(),
-      type: "add-slide",
-      index: 1,
-      slide: createSvgTestSlide({
-        id: original.slides[0].id,
-        title: "Duplicate identity",
+    expect(() =>
+      bus.execute({
+        id: crypto.randomUUID(),
+        type: "add-slide",
+        index: 1,
+        slide: createSvgTestSlide({
+          id: original.slides[0].id,
+          title: "Duplicate identity",
+        }),
       }),
-    })).toThrow(`Duplicate slide id: ${original.slides[0].id}`);
+    ).toThrow(`Duplicate slide id: ${original.slides[0].id}`);
 
     expect(bus.getSnapshot()).toEqual(original);
   });
@@ -112,25 +114,27 @@ describe("CommandBus", () => {
     const original = bus.getSnapshot();
     const duplicateId = "batch-slide";
 
-    expect(() => bus.executeMany([
-      {
-        id: crypto.randomUUID(),
-        type: "set-presentation-title",
-        title: "Should not stick",
-      },
-      {
-        id: crypto.randomUUID(),
-        type: "add-slide",
-        index: 1,
-        slide: createSvgTestSlide({ id: duplicateId, title: "First" }),
-      },
-      {
-        id: crypto.randomUUID(),
-        type: "add-slide",
-        index: 2,
-        slide: createSvgTestSlide({ id: duplicateId, title: "Second" }),
-      },
-    ])).toThrow(`Duplicate slide id: ${duplicateId}`);
+    expect(() =>
+      bus.executeMany([
+        {
+          id: crypto.randomUUID(),
+          type: "set-presentation-title",
+          title: "Should not stick",
+        },
+        {
+          id: crypto.randomUUID(),
+          type: "add-slide",
+          index: 1,
+          slide: createSvgTestSlide({ id: duplicateId, title: "First" }),
+        },
+        {
+          id: crypto.randomUUID(),
+          type: "add-slide",
+          index: 2,
+          slide: createSvgTestSlide({ id: duplicateId, title: "Second" }),
+        },
+      ]),
+    ).toThrow(`Duplicate slide id: ${duplicateId}`);
 
     expect(bus.getSnapshot()).toEqual(original);
   });

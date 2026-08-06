@@ -1,4 +1,4 @@
-import React from "react";
+import type React from "react";
 
 interface ResolvedCardProps {
   label: string;
@@ -7,15 +7,12 @@ interface ResolvedCardProps {
   children?: React.ReactNode;
 }
 
-export const ResolvedCard: React.FC<ResolvedCardProps> = ({
-  label,
-  title,
-  detail,
-  children,
-}) => (
+export const ResolvedCard: React.FC<ResolvedCardProps> = ({ label, title, detail, children }) => (
   <details className="resolved-card">
     <summary className="resolved-card-summary">
-      <span className="resolved-card-check" aria-hidden="true">✓</span>
+      <span className="resolved-card-check" aria-hidden="true">
+        ✓
+      </span>
       <span className="resolved-card-copy">
         <span className="resolved-card-label">{label}</span>
         <strong>{title}</strong>

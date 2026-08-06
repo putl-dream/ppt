@@ -36,16 +36,18 @@ export class AssetValidator {
     }
 
     for (const duplicateUrl of visualAudit.duplicateImageUrls) {
-      const duplicateSlides = presentation.slides.filter((slide) =>
-        slide.visualSource?.kind === "svg"
-          && slide.visualSource.resources.some((resource) => resource.sourcePath === duplicateUrl),
+      const duplicateSlides = presentation.slides.filter(
+        (slide) =>
+          slide.visualSource?.kind === "svg" &&
+          slide.visualSource.resources.some((resource) => resource.sourcePath === duplicateUrl),
       );
       if (slideIdSet && !duplicateSlides.some((slide) => slideIdSet.has(slide.id))) continue;
       issues.push({
         category: "asset",
         severity: "warning",
         message: `The same image source is reused across ${duplicateSlides.length} slides.`,
-        fixHint: "Use a unique, slide-specific visual unless repetition is intentional and approved.",
+        fixHint:
+          "Use a unique, slide-specific visual unless repetition is intentional and approved.",
       });
     }
 

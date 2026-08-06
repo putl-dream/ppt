@@ -1,21 +1,21 @@
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { DEFAULT_DESIGN_SYSTEM } from "../src/design-system";
-import { createStarterPresentation } from "../src/shared/presentation-fixtures";
-import { WorkspaceFileService } from "../src/main/agent/tools/files/workspace-file-service";
-import { createDefaultToolRegistry } from "../src/main/agent/tools/tool-registry";
-import type { ToolContext } from "../src/main/agent/tools/tool-definition";
+import { CommitGate } from "../src/main/agent/gate/commit-gate";
+import { RiskPolicy } from "../src/main/agent/gate/risk-policy";
 import { previewSvgPageTool } from "../src/main/agent/tools/core/preview-svg-page";
 import {
   submitSvgDeckSchema,
   submitSvgDeckTool,
 } from "../src/main/agent/tools/core/submit-svg-deck";
+import { WorkspaceFileService } from "../src/main/agent/tools/files/workspace-file-service";
+import type { ToolContext } from "../src/main/agent/tools/tool-definition";
+import { createDefaultToolRegistry } from "../src/main/agent/tools/tool-registry";
 import { slideThumbnailService } from "../src/main/deck/slide-thumbnail-service";
 import { loadWorkspaceSvgPage } from "../src/main/deck/svg-page-loader";
-import { CommitGate } from "../src/main/agent/gate/commit-gate";
-import { RiskPolicy } from "../src/main/agent/gate/risk-policy";
+import { createStarterPresentation } from "../src/shared/presentation-fixtures";
 
 const temporaryRoots: string[] = [];
 const VALID_PIXEL_PNG =
@@ -23,10 +23,14 @@ const VALID_PIXEL_PNG =
 
 afterEach(async () => {
   vi.restoreAllMocks();
-  await Promise.all(temporaryRoots.splice(0).map((root) => rm(root, {
-    recursive: true,
-    force: true,
-  })));
+  await Promise.all(
+    temporaryRoots.splice(0).map((root) =>
+      rm(root, {
+        recursive: true,
+        force: true,
+      }),
+    ),
+  );
 });
 
 describe("SubmitSvgDeck", () => {
@@ -56,19 +60,21 @@ describe("SubmitSvgDeck", () => {
         afterUse: "Decision record",
       },
       designSystem: DEFAULT_DESIGN_SYSTEM,
-      slides: [{
-        id: "P01",
-        title: "Opportunity",
-        path: "slides/svg/P01.svg",
-        speakerNotes: "Lead with the decision.",
-        narrative: {
-          role: "cover",
-          coreMessage: "The opportunity is ready to scale",
-          audienceMove: "Create confidence",
-          rhythm: "anchor",
-          layoutIntent: "A single dominant statement with asymmetric evidence.",
+      slides: [
+        {
+          id: "P01",
+          title: "Opportunity",
+          path: "slides/svg/P01.svg",
+          speakerNotes: "Lead with the decision.",
+          narrative: {
+            role: "cover",
+            coreMessage: "The opportunity is ready to scale",
+            audienceMove: "Create confidence",
+            rhythm: "anchor",
+            layoutIntent: "A single dominant statement with asymmetric evidence.",
+          },
         },
-      }],
+      ],
       summary: "Replace the deck with one SVG-native page.",
       risk: "medium",
     };
@@ -79,11 +85,14 @@ describe("SubmitSvgDeck", () => {
       height: 360,
       mimeType: "image/png",
     });
-    const preview = await previewSvgPageTool.execute({
-      path: "slides/svg/P01.svg",
-      title: "Opportunity",
-      includeThumbnail: true,
-    }, context);
+    const preview = await previewSvgPageTool.execute(
+      {
+        path: "slides/svg/P01.svg",
+        title: "Opportunity",
+        includeThumbnail: true,
+      },
+      context,
+    );
     expect(preview.preview.previewGatePassed).toBe(true);
 
     const result = await submitSvgDeckTool.execute(args, context);
@@ -115,17 +124,17 @@ describe("SubmitSvgDeck", () => {
       success: true,
       decision: "REQUIRES_APPROVAL",
     });
-    expect(gate.preview?.slides[0]?.visualSource?.sha256)
-      .toBe(addSlide.slide.visualSource?.sha256);
+    expect(gate.preview?.slides[0]?.visualSource?.sha256).toBe(addSlide.slide.visualSource?.sha256);
   });
 
   it("requires a successful, content-exact PNG preview of P01", async () => {
     const root = await createWorkspace();
     const fileService = new WorkspaceFileService(root);
     const context = createContext(root, fileService);
-    await fileService.write("slides/svg/P01.svg", svgPage(
-      `data:image/png;base64,${VALID_PIXEL_PNG}`,
-    ));
+    await fileService.write(
+      "slides/svg/P01.svg",
+      svgPage(`data:image/png;base64,${VALID_PIXEL_PNG}`),
+    );
     const args = submitArgs();
     await writeSubmissionLocks(fileService, args);
 
@@ -139,10 +148,13 @@ describe("SubmitSvgDeck", () => {
       height: 360,
       mimeType: "image/png",
     });
-    const preview = await previewSvgPageTool.execute({
-      path: "slides/svg/P01.svg",
-      includeThumbnail: true,
-    }, context);
+    const preview = await previewSvgPageTool.execute(
+      {
+        path: "slides/svg/P01.svg",
+        includeThumbnail: true,
+      },
+      context,
+    );
     expect(preview.preview.previewGatePassed).toBe(true);
 
     await fileService.write(
@@ -169,18 +181,24 @@ describe("SubmitSvgDeck", () => {
       mimeType: "image/png",
     });
 
-    await previewSvgPageTool.execute({
-      path: "slides/svg/P01.svg",
-      includeThumbnail: true,
-    }, context);
-    await expect(
-      submitSvgDeckTool.execute(args, context),
-    ).rejects.toThrow("P02 preview gate is missing or stale");
+    await previewSvgPageTool.execute(
+      {
+        path: "slides/svg/P01.svg",
+        includeThumbnail: true,
+      },
+      context,
+    );
+    await expect(submitSvgDeckTool.execute(args, context)).rejects.toThrow(
+      "P02 preview gate is missing or stale",
+    );
 
-    await previewSvgPageTool.execute({
-      path: "slides/svg/P02.svg",
-      includeThumbnail: true,
-    }, context);
+    await previewSvgPageTool.execute(
+      {
+        path: "slides/svg/P02.svg",
+        includeThumbnail: true,
+      },
+      context,
+    );
     const result = await submitSvgDeckTool.execute(args, context);
     expect(result.commands.filter((command) => command.type === "add-slide")).toHaveLength(2);
   });
@@ -199,15 +217,17 @@ describe("SubmitSvgDeck", () => {
       mimeType: "image/png",
     });
 
-    await previewSvgPageTool.execute({
-      path: "slides/svg/P01.svg",
-      includeThumbnail: true,
-    }, createContext(root, previewFileService));
+    await previewSvgPageTool.execute(
+      {
+        path: "slides/svg/P01.svg",
+        includeThumbnail: true,
+      },
+      createContext(root, previewFileService),
+    );
 
-    await expect(submitSvgDeckTool.execute(
-      args,
-      createContext(root, submitFileService),
-    )).rejects.toThrow("P01 preview gate is missing or stale");
+    await expect(
+      submitSvgDeckTool.execute(args, createContext(root, submitFileService)),
+    ).rejects.toThrow("P01 preview gate is missing or stale");
   });
 
   it("rejects remote image dependencies instead of exporting a partial page", async () => {
@@ -228,26 +248,25 @@ describe("SubmitSvgDeck", () => {
         afterUse: "Reference",
       },
       designSystem: DEFAULT_DESIGN_SYSTEM,
-      slides: [{
-        id: "P01",
-        title: "Unsafe",
-        path: "slides/svg/P01.svg",
-        narrative: {
-          role: "cover",
-          coreMessage: "One message",
-          audienceMove: "Focus attention",
-          rhythm: "anchor",
-          layoutIntent: "Hero image.",
+      slides: [
+        {
+          id: "P01",
+          title: "Unsafe",
+          path: "slides/svg/P01.svg",
+          narrative: {
+            role: "cover",
+            coreMessage: "One message",
+            audienceMove: "Focus attention",
+            rhythm: "anchor",
+            layoutIntent: "Hero image.",
+          },
         },
-      }],
+      ],
       summary: "Unsafe",
       risk: "low",
     };
     await writeSubmissionLocks(fileService, args);
-    await expect(submitSvgDeckTool.execute(
-      args,
-      createContext(root, fileService),
-    )).rejects.toThrow(
+    await expect(submitSvgDeckTool.execute(args, createContext(root, fileService))).rejects.toThrow(
       "image source must be workspace-relative or embedded",
     );
   });
@@ -256,12 +275,9 @@ describe("SubmitSvgDeck", () => {
     const root = await createWorkspace();
     const fileService = new WorkspaceFileService(root);
 
-    await expect(submitSvgDeckTool.execute(
-      submitArgs(),
-      createContext(root, fileService),
-    )).rejects.toThrow(
-      "requires readable lock file design/design-spec.json",
-    );
+    await expect(
+      submitSvgDeckTool.execute(submitArgs(), createContext(root, fileService)),
+    ).rejects.toThrow("requires readable lock file design/design-spec.json");
   });
 
   it("rejects invalid JSON and internally inconsistent design axes", async () => {
@@ -270,29 +286,17 @@ describe("SubmitSvgDeck", () => {
     const args = submitArgs();
     await fileService.write("design/design-spec.json", "{");
 
-    await expect(submitSvgDeckTool.execute(
-      args,
-      createContext(root, fileService),
-    )).rejects.toThrow("design/design-spec.json must contain valid JSON");
+    await expect(submitSvgDeckTool.execute(args, createContext(root, fileService))).rejects.toThrow(
+      "design/design-spec.json must contain valid JSON",
+    );
 
     await fileService.read("design/design-spec.json");
     const designSpec = designSpecFixture(args);
-    designSpec.argumentMode = designSpec.argumentMode === "briefing"
-      ? "pyramid"
-      : "briefing";
-    await fileService.write(
-      "design/design-spec.json",
-      JSON.stringify(designSpec),
-    );
-    await fileService.write(
-      "slides/page-plan.json",
-      JSON.stringify(pagePlanFixture(args)),
-    );
+    designSpec.argumentMode = designSpec.argumentMode === "briefing" ? "pyramid" : "briefing";
+    await fileService.write("design/design-spec.json", JSON.stringify(designSpec));
+    await fileService.write("slides/page-plan.json", JSON.stringify(pagePlanFixture(args)));
 
-    await expect(submitSvgDeckTool.execute(
-      args,
-      createContext(root, fileService),
-    )).rejects.toThrow(
+    await expect(submitSvgDeckTool.execute(args, createContext(root, fileService))).rejects.toThrow(
       "argumentMode must match presentationDesignSystem.argumentMode",
     );
   });
@@ -310,9 +314,8 @@ describe("SubmitSvgDeck", () => {
       mutate: (args: SubmissionArgs) => {
         args.designSystem = {
           ...args.designSystem,
-          visualStyle: args.designSystem.visualStyle === "dark-tech"
-            ? "swiss-minimal"
-            : "dark-tech",
+          visualStyle:
+            args.designSystem.visualStyle === "dark-tech" ? "swiss-minimal" : "dark-tech",
         };
       },
       expected: "designSystem.visualStyle must exactly match",
@@ -331,18 +334,17 @@ describe("SubmitSvgDeck", () => {
       },
       expected: "slides[0].path must exactly match",
     },
-    ...(["role", "coreMessage", "audienceMove", "rhythm", "layoutIntent"] as const)
-      .map((key) => ({
-        label: `narrative ${key}`,
-        mutate: (args: SubmissionArgs) => {
-          if (key === "rhythm") {
-            args.slides[0]!.narrative.rhythm = "dense";
-          } else {
-            args.slides[0]!.narrative[key] = `Changed ${key}`;
-          }
-        },
-        expected: `slides[0].narrative.${key} must exactly match`,
-      })),
+    ...(["role", "coreMessage", "audienceMove", "rhythm", "layoutIntent"] as const).map((key) => ({
+      label: `narrative ${key}`,
+      mutate: (args: SubmissionArgs) => {
+        if (key === "rhythm") {
+          args.slides[0]!.narrative.rhythm = "dense";
+        } else {
+          args.slides[0]!.narrative[key] = `Changed ${key}`;
+        }
+      },
+      expected: `slides[0].narrative.${key} must exactly match`,
+    })),
   ])("rejects $label drift from the lock files", async ({ mutate, expected }) => {
     const root = await createWorkspace();
     const fileService = new WorkspaceFileService(root);
@@ -350,10 +352,9 @@ describe("SubmitSvgDeck", () => {
     await writeSubmissionLocks(fileService, args);
     mutate(args);
 
-    await expect(submitSvgDeckTool.execute(
-      args,
-      createContext(root, fileService),
-    )).rejects.toThrow(expected);
+    await expect(submitSvgDeckTool.execute(args, createContext(root, fileService))).rejects.toThrow(
+      expected,
+    );
   });
 
   it("rejects reordered pages even when every page remains present", async () => {
@@ -363,10 +364,9 @@ describe("SubmitSvgDeck", () => {
     await writeSubmissionLocks(fileService, args);
     args.slides.reverse();
 
-    await expect(submitSvgDeckTool.execute(
-      args,
-      createContext(root, fileService),
-    )).rejects.toThrow("slides[0].id must exactly match");
+    await expect(submitSvgDeckTool.execute(args, createContext(root, fileService))).rejects.toThrow(
+      "slides[0].id must exactly match",
+    );
   });
 
   it.each(["../P01.svg", "/tmp/P01.svg", "C:\\tmp\\P01.svg"])(
@@ -380,7 +380,6 @@ describe("SubmitSvgDeck", () => {
     },
   );
 
-
   it("does not read image-looking tags in comments or data-href attributes", async () => {
     const root = await createWorkspace();
     const fileService = new WorkspaceFileService(root);
@@ -393,10 +392,13 @@ describe("SubmitSvgDeck", () => {
     ].join("");
     await fileService.write("slides/svg/P01.svg", markup);
 
-    const result = await previewSvgPageTool.execute({
-      path: "slides/svg/P01.svg",
-      includeThumbnail: false,
-    }, createContext(root, fileService));
+    const result = await previewSvgPageTool.execute(
+      {
+        path: "slides/svg/P01.svg",
+        includeThumbnail: false,
+      },
+      createContext(root, fileService),
+    );
 
     expect(result.preview.resourceCount).toBe(1);
     expect(result.preview.previewGatePassed).toBe(false);
@@ -406,17 +408,16 @@ describe("SubmitSvgDeck", () => {
     const root = await createWorkspace();
     const fileService = new WorkspaceFileService(root);
     await mkdir(join(root, "assets"), { recursive: true });
-    await writeFile(
-      join(root, "assets", "pixel.png"),
-      Buffer.from(VALID_PIXEL_PNG, "base64"),
-    );
+    await writeFile(join(root, "assets", "pixel.png"), Buffer.from(VALID_PIXEL_PNG, "base64"));
     const imageCount = 2_000;
     await fileService.write(
       "slides/svg/P01.svg",
       [
         '<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">',
-        ...Array.from({ length: imageCount }, (_, index) =>
-          `<image id="image-${index}" href="../../assets/pixel.png" x="0" y="0" width="1" height="1"/>`
+        ...Array.from(
+          { length: imageCount },
+          (_, index) =>
+            `<image id="image-${index}" href="../../assets/pixel.png" x="0" y="0" width="1" height="1"/>`,
         ),
         "</svg>",
       ].join(""),
@@ -440,28 +441,36 @@ describe("SubmitSvgDeck", () => {
     const fileService = new WorkspaceFileService(root);
     await fileService.write(
       "slides/svg/P01.svg",
-      '<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" '
-        + 'xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 1280 720">'
-        + `<image href="data:image/png;base64,${VALID_PIXEL_PNG}" `
-        + `xlink:href="data:image/png;base64,${VALID_PIXEL_PNG}"/>`
-        + "</svg>",
+      '<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" ' +
+        'xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 1280 720">' +
+        `<image href="data:image/png;base64,${VALID_PIXEL_PNG}" ` +
+        `xlink:href="data:image/png;base64,${VALID_PIXEL_PNG}"/>` +
+        "</svg>",
     );
-    await expect(previewSvgPageTool.execute({
-      path: "slides/svg/P01.svg",
-      includeThumbnail: false,
-    }, createContext(root, fileService))).rejects.toThrow("exactly one href");
+    await expect(
+      previewSvgPageTool.execute(
+        {
+          path: "slides/svg/P01.svg",
+          includeThumbnail: false,
+        },
+        createContext(root, fileService),
+      ),
+    ).rejects.toThrow("exactly one href");
 
     await fileService.read("slides/svg/P01.svg");
     await fileService.write(
       "slides/svg/P01.svg",
       svgPage(`data:image/jpeg;base64,${VALID_PIXEL_PNG}`),
     );
-    await expect(previewSvgPageTool.execute({
-      path: "slides/svg/P01.svg",
-      includeThumbnail: false,
-    }, createContext(root, fileService))).rejects.toThrow(
-      "signature does not match image/jpeg",
-    );
+    await expect(
+      previewSvgPageTool.execute(
+        {
+          path: "slides/svg/P01.svg",
+          includeThumbnail: false,
+        },
+        createContext(root, fileService),
+      ),
+    ).rejects.toThrow("signature does not match image/jpeg");
   });
 });
 
@@ -471,10 +480,7 @@ async function createWorkspace(): Promise<string> {
   return root;
 }
 
-function createContext(
-  workspaceRoot: string,
-  fileService: WorkspaceFileService,
-): ToolContext {
+function createContext(workspaceRoot: string, fileService: WorkspaceFileService): ToolContext {
   const registry = createDefaultToolRegistry();
   return {
     presentation: createStarterPresentation(),
@@ -519,14 +525,13 @@ function submitArgs(
       path,
       narrative: {
         role: index === 0 ? "cover" : "evidence",
-        coreMessage: index === 0
-          ? "The opportunity is ready to scale"
-          : `Evidence page ${index}`,
+        coreMessage: index === 0 ? "The opportunity is ready to scale" : `Evidence page ${index}`,
         audienceMove: index === 0 ? "Create confidence" : "Build conviction",
         rhythm: index === 0 ? "anchor" : "dense",
-        layoutIntent: index === 0
-          ? "A single dominant statement with asymmetric evidence."
-          : "Layer evidence with a clear reading path.",
+        layoutIntent:
+          index === 0
+            ? "A single dominant statement with asymmetric evidence."
+            : "Layer evidence with a clear reading path.",
       },
     })),
     summary: "Replace the deck with one SVG-native page.",

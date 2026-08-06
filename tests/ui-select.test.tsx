@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
-import React, { useState } from "react";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import React, { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Select, type SelectOption } from "../src/renderer/src/components/Select";
 

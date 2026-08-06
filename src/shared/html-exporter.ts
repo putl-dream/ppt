@@ -1,15 +1,15 @@
 import type { Presentation } from "@shared/presentation";
 import {
+  type DeckHtmlRenderOptions,
   exportDeckContactSheetHtml,
   exportDeckHtml,
-  type DeckHtmlRenderOptions,
 } from "./slide-html-render";
 
 export {
   exportDeckContactSheetHtml,
   exportSlideThumbnailHtml,
-  SLIDE_WIDTH,
   SLIDE_HEIGHT,
+  SLIDE_WIDTH,
 } from "./slide-html-render";
 
 export function exportToHtml(

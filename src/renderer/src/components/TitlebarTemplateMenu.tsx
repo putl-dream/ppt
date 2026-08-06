@@ -64,21 +64,15 @@ export function TitlebarTemplateMenu({
     try {
       const selected = await window.desktopApi.selectTemplatePackage();
       if (!selected) return;
-      const imported = await window.desktopApi.importProjectTemplate(
-        activeSessionId,
-        selected,
-      );
+      const imported = await window.desktopApi.importProjectTemplate(activeSessionId, selected);
       setLastImportedId(imported.templateId);
       await refreshLibraryCount();
-      const warningSuffix = imported.warnings.length > 0
-        ? `（${imported.warnings.length} 条警告）`
-        : "";
-      const scope = activeSessionId
-        ? "并已应用到当前项目"
-        : "到模板库";
+      const warningSuffix =
+        imported.warnings.length > 0 ? `（${imported.warnings.length} 条警告）` : "";
+      const scope = activeSessionId ? "并已应用到当前项目" : "到模板库";
       notify(
-        `${imported.reusedExisting ? "已复用" : "已导入"}参考模板`
-        + `「${imported.name}」${scope}${warningSuffix}`,
+        `${imported.reusedExisting ? "已复用" : "已导入"}参考模板` +
+          `「${imported.name}」${scope}${warningSuffix}`,
       );
       setOpen(false);
     } catch (error) {
@@ -112,10 +106,7 @@ export function TitlebarTemplateMenu({
   };
 
   return (
-    <div
-      ref={rootRef}
-      className={cx("window-titlebar-template-menu", open && "is-open")}
-    >
+    <div ref={rootRef} className={cx("window-titlebar-template-menu", open && "is-open")}>
       <button
         type="button"
         className="window-titlebar-menu-trigger"

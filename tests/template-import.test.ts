@@ -1,10 +1,10 @@
-import { mkdir, rm, writeFile } from "node:fs/promises";
-import { join } from "node:path";
-import { tmpdir } from "node:os";
 import { randomUUID } from "node:crypto";
+import { mkdir, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { FileSessionStore } from "@main/session-store";
 import JSZip from "jszip";
 import { afterEach, describe, expect, it } from "vitest";
-import { FileSessionStore } from "@main/session-store";
 import {
   applicationTemplateLibrary,
   copyTemplateRevision,
@@ -149,8 +149,8 @@ describe("template import service", () => {
     expect(copied.id).toBe(imported.descriptor.id);
     expect(copied.revisionId).toBe(imported.descriptor.revisionId);
     expect(copied.source?.sourcePath).toBe(
-      `design/templates/${copied.id.replace(/[^a-zA-Z0-9._-]+/g, "-")}`
-      + `/${copied.revisionId}/source.pptx`,
+      `design/templates/${copied.id.replace(/[^a-zA-Z0-9._-]+/g, "-")}` +
+        `/${copied.revisionId}/source.pptx`,
     );
 
     const reCopied = await copyTemplateRevision({
@@ -200,8 +200,9 @@ describe("imported templates across sessions", () => {
     const firstSessionId = first.activeSession!.session.id;
     const imported = await store.importProjectTemplate(firstSessionId, source, "Brand Deck");
     expect(
-      (await store.listProjectTemplates(firstSessionId))
-        .some((item) => item.id === imported.templateId),
+      (await store.listProjectTemplates(firstSessionId)).some(
+        (item) => item.id === imported.templateId,
+      ),
     ).toBe(true);
     const firstPack = await store.getProjectTemplatePack(firstSessionId);
     expect(firstPack?.templateId).toBe(imported.templateId);
@@ -210,17 +211,13 @@ describe("imported templates across sessions", () => {
 
     const second = await store.createSession({ title: "Second" });
     const secondSessionId = second.activeSession!.session.id;
-    expect(
-      (await store.listApplicationTemplates()).map((item) => item.id),
-    ).toContain(imported.templateId);
+    expect((await store.listApplicationTemplates()).map((item) => item.id)).toContain(
+      imported.templateId,
+    );
     expect((await store.getProjectTemplatePolicy(secondSessionId)).mode).toBe("auto");
     expect(await store.getProjectTemplatePack(secondSessionId)).toBeNull();
 
-    await store.applyTemplateToProject(
-      secondSessionId,
-      imported.templateId,
-      imported.revisionId,
-    );
+    await store.applyTemplateToProject(secondSessionId, imported.templateId, imported.revisionId);
     const appliedPolicy = await store.getProjectTemplatePolicy(secondSessionId);
     expect(appliedPolicy.mode).toBe("custom");
     expect(appliedPolicy.customTemplateId).toBe(imported.templateId);
@@ -230,8 +227,9 @@ describe("imported templates across sessions", () => {
       name: "imported-reference",
     });
     expect(
-      (await store.listProjectTemplates(secondSessionId))
-        .some((item) => item.id === imported.templateId),
+      (await store.listProjectTemplates(secondSessionId)).some(
+        (item) => item.id === imported.templateId,
+      ),
     ).toBe(true);
 
     const third = await store.createSession({
@@ -247,8 +245,9 @@ describe("imported templates across sessions", () => {
     expect(seededPack?.templateId).toBe(imported.templateId);
     expect(seededPack?.revisionId).toBe(imported.revisionId);
     expect(
-      (await store.listProjectTemplates(thirdSessionId))
-        .some((item) => item.id === imported.templateId),
+      (await store.listProjectTemplates(thirdSessionId)).some(
+        (item) => item.id === imported.templateId,
+      ),
     ).toBe(true);
   });
 });

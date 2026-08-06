@@ -40,14 +40,16 @@ export function isDefaultArtifactContent(
 
   switch (artifact) {
     case "brief":
-      return serializeBriefMarkdown(parseBriefFields(trimmed))
-        === serializeBriefMarkdown(parseBriefFields(createDefaultBriefMarkdown()));
+      return (
+        serializeBriefMarkdown(parseBriefFields(trimmed)) ===
+        serializeBriefMarkdown(parseBriefFields(createDefaultBriefMarkdown()))
+      );
     case "outline":
-      return outlineStructureKey(trimmed)
-        === outlineStructureKey(createDefaultOutlineMarkdown());
+      return outlineStructureKey(trimmed) === outlineStructureKey(createDefaultOutlineMarkdown());
     case "research":
-      return researchStructureKey(trimmed)
-        === researchStructureKey(createDefaultResearchMarkdown());
+      return (
+        researchStructureKey(trimmed) === researchStructureKey(createDefaultResearchMarkdown())
+      );
   }
 }
 

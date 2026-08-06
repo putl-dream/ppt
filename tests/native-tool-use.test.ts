@@ -1,24 +1,26 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
-import { AgentRuntime } from "../src/main/agent/runtime/agent-runtime";
-import { ToolRegistry } from "../src/main/agent/tools/tool-registry";
-import { readPresentationSnapshotTool } from "../src/main/agent/tools/core/read-presentation-snapshot";
-import { listSlidesTool } from "../src/main/agent/tools/core/list-slides";
-import { toToolSchema } from "../src/main/agent/tools/tool-schema";
+import { AgentGatewayError } from "../src/main/agent/gateway";
 import type {
   AgentModelContentBlock,
   AgentModelGateway,
   AgentModelRequest,
   AgentModelResponse,
 } from "../src/main/agent/gateway/types";
-import { AgentGatewayError } from "../src/main/agent/gateway";
-import { createStarterPresentation } from "../src/shared/presentation-fixtures";
-import type { ToolDefinition } from "../src/main/agent/tools/tool-definition";
+import { AgentRuntime } from "../src/main/agent/runtime/agent-runtime";
 import { clearHooks, registerHook } from "../src/main/agent/runtime/hooks/hook-registry";
 import type { AgentRuntimeStreamEvent } from "../src/main/agent/runtime/runtime-types";
+import { listSlidesTool } from "../src/main/agent/tools/core/list-slides";
+import { readPresentationSnapshotTool } from "../src/main/agent/tools/core/read-presentation-snapshot";
+import type { ToolDefinition } from "../src/main/agent/tools/tool-definition";
+import { ToolRegistry } from "../src/main/agent/tools/tool-registry";
+import { toToolSchema } from "../src/main/agent/tools/tool-schema";
+import { createStarterPresentation } from "../src/shared/presentation-fixtures";
 import { createFakeCommandProposalTool } from "./fake-command-proposal-tool";
 
-function createGateway(turns: AgentModelContentBlock[][]): AgentModelGateway & { requests: AgentModelRequest[] } {
+function createGateway(
+  turns: AgentModelContentBlock[][],
+): AgentModelGateway & { requests: AgentModelRequest[] } {
   let index = 0;
   const requests: AgentModelRequest[] = [];
   return {
@@ -58,16 +60,18 @@ describe("native ContentBlock runtime path", () => {
     registry.register(fakeSubmit);
     const gateway = createGateway([
       [{ type: "tool_use", id: "call-1", name: "ReadPresentationSnapshot", input: {} }],
-      [{
-        type: "tool_use",
-        id: "call-2",
-        name: "FakeSubmitCommands",
-        input: {
-          summary: "Set title",
-          commands: [{ id: "cmd-1", type: "set-presentation-title", title: "Native title" }],
-          risk: "low",
+      [
+        {
+          type: "tool_use",
+          id: "call-2",
+          name: "FakeSubmitCommands",
+          input: {
+            summary: "Set title",
+            commands: [{ id: "cmd-1", type: "set-presentation-title", title: "Native title" }],
+            risk: "low",
+          },
         },
-      }],
+      ],
     ]);
 
     const result = await new AgentRuntime(registry, gateway).run({
@@ -188,7 +192,10 @@ describe("native ContentBlock runtime path", () => {
       presentationSnapshot: createStarterPresentation(),
       selectedElementIds: [],
     });
-    expect(result).toEqual({ type: "message", content: "**可以。** 先讲概念，再决定是否制作 PPT。" });
+    expect(result).toEqual({
+      type: "message",
+      content: "**可以。** 先讲概念，再决定是否制作 PPT。",
+    });
     expect(gateway.requests).toHaveLength(1);
   });
 
@@ -210,9 +217,9 @@ describe("native ContentBlock runtime path", () => {
       selectedElementIds: [],
     });
     expect(result.type).toBe("message");
-    const results = gateway.requests[1]!.messages!
-      .flatMap((message) => message.content)
-      .filter((block) => block.type === "tool_result");
+    const results = gateway.requests[1]!.messages!.flatMap((message) => message.content).filter(
+      (block) => block.type === "tool_result",
+    );
     expect(results.map((block) => block.type === "tool_result" && block.toolUseId)).toEqual([
       "call-read",
       "call-list",
@@ -267,9 +274,21 @@ describe("tool lifecycle commit boundary", () => {
     let executions = 0;
     let postHooks = 0;
     const registry = new ToolRegistry();
-    registry.register(lifecycleTool({ execute: async () => { executions += 1; return { ok: true }; } }));
-    registerHook("PreToolUse", () => { throw new Error("pre-hook unavailable"); });
-    registerHook("PostToolUse", () => { postHooks += 1; return null; });
+    registry.register(
+      lifecycleTool({
+        execute: async () => {
+          executions += 1;
+          return { ok: true };
+        },
+      }),
+    );
+    registerHook("PreToolUse", () => {
+      throw new Error("pre-hook unavailable");
+    });
+    registerHook("PostToolUse", () => {
+      postHooks += 1;
+      return null;
+    });
     const gateway = lifecycleGateway();
 
     await new AgentRuntime(registry, gateway).run({
@@ -281,8 +300,9 @@ describe("tool lifecycle commit boundary", () => {
 
     expect(executions).toBe(0);
     expect(postHooks).toBe(0);
-    const toolResult = gateway.requests[1]!.messages!.flatMap((message) => message.content)
-      .find((block) => block.type === "tool_result");
+    const toolResult = gateway.requests[1]!.messages!.flatMap((message) => message.content).find(
+      (block) => block.type === "tool_result",
+    );
     expect(toolResult).toMatchObject({ isError: true });
   });
 
@@ -290,8 +310,18 @@ describe("tool lifecycle commit boundary", () => {
     let executions = 0;
     let postHooks = 0;
     const registry = new ToolRegistry();
-    registry.register(lifecycleTool({ execute: async () => { executions += 1; return { ok: true }; } }));
-    registerHook("PostToolUse", () => { postHooks += 1; throw new Error("audit sink unavailable"); });
+    registry.register(
+      lifecycleTool({
+        execute: async () => {
+          executions += 1;
+          return { ok: true };
+        },
+      }),
+    );
+    registerHook("PostToolUse", () => {
+      postHooks += 1;
+      throw new Error("audit sink unavailable");
+    });
     const gateway = lifecycleGateway();
 
     await new AgentRuntime(registry, gateway).run({
@@ -303,8 +333,9 @@ describe("tool lifecycle commit boundary", () => {
 
     expect(executions).toBe(1);
     expect(postHooks).toBe(1);
-    const toolResult = gateway.requests[1]!.messages!.flatMap((message) => message.content)
-      .find((block) => block.type === "tool_result");
+    const toolResult = gateway.requests[1]!.messages!.flatMap((message) => message.content).find(
+      (block) => block.type === "tool_result",
+    );
     expect(toolResult).toMatchObject({ type: "tool_result", toolUseId: "lifecycle-1" });
     expect(toolResult).not.toHaveProperty("isError");
   });
@@ -312,10 +343,15 @@ describe("tool lifecycle commit boundary", () => {
   it("marks invalid output as side-effect-uncertain without retrying execution", async () => {
     let executions = 0;
     const registry = new ToolRegistry();
-    registry.register(lifecycleTool({
-      execute: async () => { executions += 1; return { invalid: true }; },
-      outputSchema: z.object({ ok: z.literal(true) }),
-    }));
+    registry.register(
+      lifecycleTool({
+        execute: async () => {
+          executions += 1;
+          return { invalid: true };
+        },
+        outputSchema: z.object({ ok: z.literal(true) }),
+      }),
+    );
     const gateway = lifecycleGateway();
 
     await new AgentRuntime(registry, gateway).run({
@@ -326,18 +362,23 @@ describe("tool lifecycle commit boundary", () => {
     });
 
     expect(executions).toBe(1);
-    const toolResult = gateway.requests[1]!.messages!.flatMap((message) => message.content)
-      .find((block) => block.type === "tool_result");
+    const toolResult = gateway.requests[1]!.messages!.flatMap((message) => message.content).find(
+      (block) => block.type === "tool_result",
+    );
     expect(toolResult).toMatchObject({ isError: true });
     expect(JSON.stringify(toolResult)).toContain("side effects may already exist");
   });
 
   it("does not reclassify execution when model-content mapping fails", async () => {
     const registry = new ToolRegistry();
-    registry.register(lifecycleTool({
-      execute: async () => ({ ok: true }),
-      mapResultToModelContent: async () => { throw new Error("mapping failed"); },
-    }));
+    registry.register(
+      lifecycleTool({
+        execute: async () => ({ ok: true }),
+        mapResultToModelContent: async () => {
+          throw new Error("mapping failed");
+        },
+      }),
+    );
     const gateway = lifecycleGateway();
 
     await new AgentRuntime(registry, gateway).run({
@@ -347,8 +388,9 @@ describe("tool lifecycle commit boundary", () => {
       selectedElementIds: [],
     });
 
-    const toolResult = gateway.requests[1]!.messages!.flatMap((message) => message.content)
-      .find((block) => block.type === "tool_result");
+    const toolResult = gateway.requests[1]!.messages!.flatMap((message) => message.content).find(
+      (block) => block.type === "tool_result",
+    );
     expect(toolResult).not.toHaveProperty("isError");
     expect(JSON.stringify(toolResult)).toContain("executed successfully");
   });

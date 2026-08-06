@@ -237,7 +237,9 @@
   font: inherit;
   font-size: 12px;
   line-height: 1.5;
-  transition: border-color 120ms ease, box-shadow 120ms ease;
+  transition:
+    border-color 120ms ease,
+    box-shadow 120ms ease;
 }
 
 .agent-question-free-text textarea:focus {
@@ -466,7 +468,6 @@
   color: #64748b;
 }
 
-
 .slide-preview-card-image {
   display: block;
   width: 100%;
@@ -476,4 +477,3 @@
   border: 1px solid var(--border-subtle);
   background: #fff;
 }
-

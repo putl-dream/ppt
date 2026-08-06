@@ -1,12 +1,10 @@
 // @vitest-environment jsdom
 
+import { presentationUsesSvgPages } from "@shared/presentation-export";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createSvgTestSlide } from "../src/shared/presentation-fixtures";
 import { DEFAULT_DESIGN_SYSTEM } from "../src/design-system";
-import {
-  confirmSvgExportExpectation,
-  presentationUsesSvgPages,
-} from "../src/renderer/src/app/presentation/exportExpectations";
+import { confirmSvgExportExpectation } from "../src/renderer/src/app/presentation/exportExpectations";
+import { createSvgTestSlide } from "../src/shared/presentation-fixtures";
 
 function svgPresentation() {
   return {

@@ -1,7 +1,8 @@
 /* Chat stream, messages, and conversation chrome */
 
 .status-dot {
-  width: 7px; height: 7px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
   background-color: var(--accent-green);
 }
@@ -85,7 +86,11 @@
   display: flex;
   flex-direction: column;
   min-height: 0;
-  transition: opacity 0.35s cubic-bezier(0.16, 1, 0.3, 1), transform 0.45s cubic-bezier(0.16, 1, 0.3, 1), padding 0.45s cubic-bezier(0.16, 1, 0.3, 1), margin 0.45s cubic-bezier(0.16, 1, 0.3, 1);
+  transition:
+    opacity 0.35s cubic-bezier(0.16, 1, 0.3, 1),
+    transform 0.45s cubic-bezier(0.16, 1, 0.3, 1),
+    padding 0.45s cubic-bezier(0.16, 1, 0.3, 1),
+    margin 0.45s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .chat-stream {
@@ -132,7 +137,8 @@
   max-width: min(84%, 640px);
   padding: 6px 11px;
   border: 0;
-  border-radius: var(--control-radius-md) var(--control-radius-md) var(--control-radius-xs) var(--control-radius-md);
+  border-radius: var(--control-radius-md) var(--control-radius-md) var(--control-radius-xs)
+    var(--control-radius-md);
   background: color-mix(in srgb, var(--text-primary) 6%, var(--surface-sunken));
   color: var(--text-primary);
   box-shadow: none;
@@ -223,7 +229,9 @@
   opacity: 0;
   visibility: hidden;
   pointer-events: none;
-  transition: opacity 0.15s ease, visibility 0.15s ease;
+  transition:
+    opacity 0.15s ease,
+    visibility 0.15s ease;
 }
 
 .user-message-shell:hover .user-message-actions,
@@ -339,8 +347,14 @@
 }
 
 @keyframes typewriter-caret {
-  0%, 46% { opacity: 1; }
-  47%, 100% { opacity: 0; }
+  0%,
+  46% {
+    opacity: 1;
+  }
+  47%,
+  100% {
+    opacity: 0;
+  }
 }
 
 .reasoning-cursor {
@@ -398,13 +412,24 @@
 }
 
 @keyframes agent-run-shimmer {
-  0% { background-position: 100% 0; }
-  100% { background-position: -100% 0; }
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: -100% 0;
+  }
 }
 
 @keyframes run-status-pulse {
-  0%, 100% { opacity: 0.35; transform: scale(0.85); }
-  50% { opacity: 1; transform: scale(1); }
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: scale(0.85);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

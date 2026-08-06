@@ -1,19 +1,23 @@
 import { describe, expect, it } from "vitest";
-import { AgentService } from "../src/main/agent/service";
-import { AgentRuntime } from "../src/main/agent/runtime/agent-runtime";
-import type { AgentModelGateway } from "../src/main/agent/gateway/types";
-import { ToolRegistry } from "../src/main/agent/tools/tool-registry";
 import { CommitGate } from "../src/main/agent/gate/commit-gate";
 import { RiskPolicy } from "../src/main/agent/gate/risk-policy";
+import type { AgentModelGateway } from "../src/main/agent/gateway/types";
+import { AgentRuntime } from "../src/main/agent/runtime/agent-runtime";
+import { AgentService } from "../src/main/agent/service";
+import { ToolRegistry } from "../src/main/agent/tools/tool-registry";
 import { CommandBus } from "../src/shared/commands";
 import { createStarterPresentation } from "../src/shared/presentation-fixtures";
 
 describe("AgentService thread run ownership", () => {
   it("rejects a concurrent run for the same thread before it reaches the Runtime", async () => {
     let releaseModel!: () => void;
-    const modelGate = new Promise<void>((resolve) => { releaseModel = resolve; });
+    const modelGate = new Promise<void>((resolve) => {
+      releaseModel = resolve;
+    });
     let markModelStarted!: () => void;
-    const modelStarted = new Promise<void>((resolve) => { markModelStarted = resolve; });
+    const modelStarted = new Promise<void>((resolve) => {
+      markModelStarted = resolve;
+    });
     let modelCalls = 0;
     const gateway: AgentModelGateway = {
       async queryModel() {
@@ -48,16 +52,18 @@ describe("AgentService thread run ownership", () => {
     );
     await modelStarted;
 
-    await expect(service.start(
-      "second",
-      undefined,
-      "REQUEST_APPROVAL",
-      undefined,
-      undefined,
-      [],
-      undefined,
-      "shared-thread",
-    )).rejects.toThrow("already has an active run");
+    await expect(
+      service.start(
+        "second",
+        undefined,
+        "REQUEST_APPROVAL",
+        undefined,
+        undefined,
+        [],
+        undefined,
+        "shared-thread",
+      ),
+    ).rejects.toThrow("already has an active run");
 
     expect(modelCalls).toBe(1);
     releaseModel();

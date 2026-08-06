@@ -1,9 +1,9 @@
+import { resolveSlideStyle } from "@design-system";
 import { describe, expect, it } from "vitest";
+import { exportToHtml } from "../src/shared/html-exporter";
 import { createStarterPresentation } from "../src/shared/presentation-fixtures";
 import { SLIDE_VARIANTS } from "../src/shared/slide-variant";
-import { resolveSlideStyle } from "@design-system";
 import { TEST_DESIGN_SYSTEM } from "./design-engine-test-utils";
-import { exportToHtml } from "../src/shared/html-exporter";
 
 describe("design-engine slideVariant hints", () => {
   it("supports light/dark/hero resolution hints", () => {

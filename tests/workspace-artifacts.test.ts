@@ -1,19 +1,19 @@
-import { afterEach, describe, expect, it } from "vitest";
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
 
 import { DEFAULT_DESIGN_SYSTEM } from "../src/design-system";
+import {
+  probeWorkspaceArtifactDetails,
+  probeWorkspaceArtifacts,
+} from "../src/main/agent/runtime/presentation/workspace-artifacts";
+import { createStarterPresentation } from "../src/shared/presentation-fixtures";
 import {
   createDefaultBriefMarkdown,
   createDefaultOutlineMarkdown,
   createDefaultResearchMarkdown,
 } from "../src/shared/project-artifacts";
-import { createStarterPresentation } from "../src/shared/presentation-fixtures";
-import {
-  probeWorkspaceArtifactDetails,
-  probeWorkspaceArtifacts,
-} from "../src/main/agent/runtime/presentation/workspace-artifacts";
 
 const workspaces: string[] = [];
 
@@ -56,16 +56,18 @@ function pagePlan(path = "slides/svg/P01.svg") {
   return {
     version: 1,
     designSpec: "design/design-spec.json",
-    slides: [{
-      id: "P01",
-      path,
-      narrativeRole: "cover",
-      finalCopy: { title: "First" },
-      coreMessage: "The plan is ready",
-      audienceMove: "Create confidence",
-      rhythm: "anchor",
-      layoutIntent: "One dominant statement.",
-    }],
+    slides: [
+      {
+        id: "P01",
+        path,
+        narrativeRole: "cover",
+        finalCopy: { title: "First" },
+        coreMessage: "The plan is ready",
+        audienceMove: "Create confidence",
+        rhythm: "anchor",
+        layoutIntent: "One dominant statement.",
+      },
+    ],
   };
 }
 
@@ -80,9 +82,7 @@ function svgPage(): string {
 
 afterEach(async () => {
   await Promise.all(
-    workspaces.splice(0).map((directory) =>
-      rm(directory, { recursive: true, force: true })
-    ),
+    workspaces.splice(0).map((directory) => rm(directory, { recursive: true, force: true })),
   );
 });
 
@@ -120,16 +120,8 @@ describe("workspace artifact probing", () => {
 
   it("validates design-spec, page-plan, and the exact planned SVG page set", async () => {
     const root = await createWorkspace();
-    await writeWorkspaceFile(
-      root,
-      "design/design-spec.json",
-      JSON.stringify(designSpec()),
-    );
-    await writeWorkspaceFile(
-      root,
-      "slides/page-plan.json",
-      JSON.stringify(pagePlan()),
-    );
+    await writeWorkspaceFile(root, "design/design-spec.json", JSON.stringify(designSpec()));
+    await writeWorkspaceFile(root, "slides/page-plan.json", JSON.stringify(pagePlan()));
     await writeWorkspaceFile(root, "slides/svg/P01.svg", svgPage());
     await writeWorkspaceFile(root, "assets/hero.png", "not-decoded-by-probe");
 
@@ -145,11 +137,7 @@ describe("workspace artifact probing", () => {
   it("rejects downstream author files when their lock dependency is invalid", async () => {
     const root = await createWorkspace();
     await writeWorkspaceFile(root, "design/design-spec.json", "{}");
-    await writeWorkspaceFile(
-      root,
-      "slides/page-plan.json",
-      JSON.stringify(pagePlan()),
-    );
+    await writeWorkspaceFile(root, "slides/page-plan.json", JSON.stringify(pagePlan()));
     await writeWorkspaceFile(root, "slides/svg/P01.svg", svgPage());
 
     const details = await probeWorkspaceArtifactDetails(root);
@@ -161,11 +149,7 @@ describe("workspace artifact probing", () => {
 
   it("rejects page SVG drift from the current page plan", async () => {
     const root = await createWorkspace();
-    await writeWorkspaceFile(
-      root,
-      "design/design-spec.json",
-      JSON.stringify(designSpec()),
-    );
+    await writeWorkspaceFile(root, "design/design-spec.json", JSON.stringify(designSpec()));
     await writeWorkspaceFile(
       root,
       "slides/page-plan.json",
@@ -190,12 +174,14 @@ describe("workspace artifact probing", () => {
       root,
       "history/exports.json",
       JSON.stringify({
-        exports: [{
-          revision: 1,
-          filePath: "C:/exports/deck.pptx",
-          exportedAt: "2026-07-30T00:00:00.000Z",
-          designSystem: DEFAULT_DESIGN_SYSTEM,
-        }],
+        exports: [
+          {
+            revision: 1,
+            filePath: "C:/exports/deck.pptx",
+            exportedAt: "2026-07-30T00:00:00.000Z",
+            designSystem: DEFAULT_DESIGN_SYSTEM,
+          },
+        ],
       }),
     );
 
@@ -206,15 +192,25 @@ describe("workspace artifact probing", () => {
 
   it("ignores legacy storyboard and layout-plan files as new-flow facts", async () => {
     const root = await createWorkspace();
-    await writeWorkspaceFile(root, "slides/storyboard.json", JSON.stringify([{
-      id: "legacy",
-      title: "Legacy",
-      keyPoints: ["Old route"],
-    }]));
-    await writeWorkspaceFile(root, "slides/layout-plan.json", JSON.stringify({
-      version: 1,
-      slides: [],
-    }));
+    await writeWorkspaceFile(
+      root,
+      "slides/storyboard.json",
+      JSON.stringify([
+        {
+          id: "legacy",
+          title: "Legacy",
+          keyPoints: ["Old route"],
+        },
+      ]),
+    );
+    await writeWorkspaceFile(
+      root,
+      "slides/layout-plan.json",
+      JSON.stringify({
+        version: 1,
+        slides: [],
+      }),
+    );
 
     const artifacts = await probeWorkspaceArtifacts(root);
     expect(artifacts.designSpec).toBe(false);

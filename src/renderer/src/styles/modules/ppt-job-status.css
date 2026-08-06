@@ -37,7 +37,11 @@
 
 .ppt-job-status-bar.is-waiting_approval {
   color: var(--accent-primary);
-  background: color-mix(in srgb, var(--accent-primary-glow, rgba(42, 143, 155, 0.18)) 55%, transparent);
+  background: color-mix(
+    in srgb,
+    var(--accent-primary-glow, rgba(42, 143, 155, 0.18)) 55%,
+    transparent
+  );
 }
 
 .ppt-job-status-bar.is-failed,

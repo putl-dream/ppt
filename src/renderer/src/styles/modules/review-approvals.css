@@ -260,10 +260,6 @@
   filter: brightness(1.05);
 }
 
-
-
-
-
 .btn-preview-affected {
   background: color-mix(in srgb, var(--surface-raised) 80%, transparent);
   border: 1px solid var(--border-default);
@@ -271,11 +267,13 @@
 }
 
 .btn-preview-affected:hover {
-  background: color-mix(in srgb, var(--accent-primary-glow, rgba(42, 143, 155, 0.18)) 40%, transparent);
+  background: color-mix(
+    in srgb,
+    var(--accent-primary-glow, rgba(42, 143, 155, 0.18)) 40%,
+    transparent
+  );
   color: var(--text-primary);
 }
-
-
 
 /* 产物 Patch 审核卡片 */
 .patch-review-card {
@@ -431,4 +429,3 @@
   opacity: 0.5;
   cursor: not-allowed;
 }
-

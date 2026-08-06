@@ -1,19 +1,16 @@
+import { type SystemPromptContext, serializeSystemPromptContextKey } from "./prompt-context";
 import {
-  PROMPT_SECTION_DEFS,
-  SYSTEM_PROMPT_DYNAMIC_BOUNDARY,
   buildIdentitySection,
   buildMemorySection,
   buildResponseProtocolSection,
   buildRuntimeContextSection,
   buildToolsSection,
   buildWorkspaceSection,
+  PROMPT_SECTION_DEFS,
   type PromptSectionCacheScope,
   type PromptSectionId,
+  SYSTEM_PROMPT_DYNAMIC_BOUNDARY,
 } from "./prompt-sections";
-import {
-  serializeSystemPromptContextKey,
-  type SystemPromptContext,
-} from "./prompt-context";
 
 export interface AssembledPromptSection {
   id: PromptSectionId;
@@ -80,9 +77,7 @@ export class SystemPromptManager {
       .sort((left, right) => left.order - right.order)
       .flatMap((provider): AssembledPromptSection[] => {
         const content = provider.render(context)?.trim();
-        return content
-          ? [{ id: provider.id, content, cacheScope: provider.cacheScope }]
-          : [];
+        return content ? [{ id: provider.id, content, cacheScope: provider.cacheScope }] : [];
       });
     const staticSections = rendered.filter((section) => section.cacheScope === "global");
     const dynamicSections = rendered.filter((section) => section.cacheScope === null);
@@ -103,10 +98,7 @@ export class SystemPromptManager {
     const contextKey = serializeSystemPromptContextKey(context);
     if (threadId) {
       const cached = this.cacheByThread.get(threadId);
-      if (
-        cached?.contextKey === contextKey
-        && cached.registryRevision === this.registryRevision
-      ) {
+      if (cached?.contextKey === contextKey && cached.registryRevision === this.registryRevision) {
         return cached.result;
       }
     }
@@ -145,45 +137,45 @@ const defaultProviders: SystemPromptSectionProvider[] = [
   },
   {
     ...definition("runtimeContext"),
-    render: (context) => buildRuntimeContextSection({
-      stage: context.stage,
-      requiredOutcome: context.requiredOutcome,
-      stepLimits: context.stepLimits,
-      enabledTools: context.coreTools,
-    }),
+    render: (context) =>
+      buildRuntimeContextSection({
+        stage: context.stage,
+        requiredOutcome: context.requiredOutcome,
+        stepLimits: context.stepLimits,
+        enabledTools: context.coreTools,
+      }),
   },
   {
     ...definition("tools"),
-    render: (context) => buildToolsSection({
-      stage: context.stage,
-      enabledTools: context.coreTools,
-      skillCatalog: context.skillCatalog,
-      skillRegistry: context.skillRegistry,
-    }),
+    render: (context) =>
+      buildToolsSection({
+        stage: context.stage,
+        enabledTools: context.coreTools,
+        skillCatalog: context.skillCatalog,
+        skillRegistry: context.skillRegistry,
+      }),
   },
   {
     ...definition("workspace"),
-    render: (context) => buildWorkspaceSection({
-      stage: context.stage,
-      workspaceRoot: context.workspaceRoot,
-      currentSlideId: context.currentSlideId,
-      artifacts: context.artifacts,
-      artifactDetails: context.artifactDetails,
-    }),
+    render: (context) =>
+      buildWorkspaceSection({
+        stage: context.stage,
+        workspaceRoot: context.workspaceRoot,
+        currentSlideId: context.currentSlideId,
+        artifacts: context.artifacts,
+        artifactDetails: context.artifactDetails,
+      }),
   },
   {
     ...definition("memory"),
-    render: (context) => context.memories.trim()
-      ? buildMemorySection({ memories: context.memories })
-      : undefined,
+    render: (context) =>
+      context.memories.trim() ? buildMemorySection({ memories: context.memories }) : undefined,
   },
 ];
 
 const defaultManager = new SystemPromptManager(defaultProviders);
 
-export function registerSystemPromptSection(
-  provider: SystemPromptSectionProvider,
-): () => void {
+export function registerSystemPromptSection(provider: SystemPromptSectionProvider): () => void {
   return defaultManager.register(provider);
 }
 
@@ -199,10 +191,7 @@ export function getSystemPrompt(
 }
 
 /** @returns Section content array (static sections first, then dynamic). */
-export function getSystemPromptSections(
-  context: SystemPromptContext,
-  threadId?: string,
-): string[] {
+export function getSystemPromptSections(context: SystemPromptContext, threadId?: string): string[] {
   return getSystemPrompt(context, threadId).sections.map((section) => section.content);
 }
 

@@ -1,16 +1,13 @@
 import { describe, expect, it } from "vitest";
-import {
-  expectedExportSvgHashSource,
-  liftSvgText,
-} from "../src/main/deck/svg-text-lift";
+import { expectedExportSvgHashSource, liftSvgText } from "../src/main/deck/svg-text-lift";
 
 describe("liftSvgText", () => {
   it("lifts a simple left-aligned text node and strips it from the background", () => {
     const markup =
-      '<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">'
-      + '<rect width="1280" height="720" fill="#0f172a"/>'
-      + '<text x="80" y="180" font-size="64" fill="#ffffff">Opportunity</text>'
-      + "</svg>";
+      '<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">' +
+      '<rect width="1280" height="720" fill="#0f172a"/>' +
+      '<text x="80" y="180" font-size="64" fill="#ffffff">Opportunity</text>' +
+      "</svg>";
 
     const result = liftSvgText(markup);
 
@@ -31,10 +28,10 @@ describe("liftSvgText", () => {
 
   it("centers a middle-anchored title", () => {
     const markup =
-      '<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">'
-      + '<text x="640" y="360" fill="#f8fafc" font-size="64" text-anchor="middle"'
-      + ' font-family="Arial, sans-serif">Agent PPT</text>'
-      + "</svg>";
+      '<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">' +
+      '<text x="640" y="360" fill="#f8fafc" font-size="64" text-anchor="middle"' +
+      ' font-family="Arial, sans-serif">Agent PPT</text>' +
+      "</svg>";
 
     const result = liftSvgText(markup);
     expect(result.texts).toHaveLength(1);
@@ -42,19 +39,16 @@ describe("liftSvgText", () => {
     expect(result.texts[0].fontFace).toBe("Arial");
     // Box should start left of the anchor.
     expect(result.texts[0].xIn).toBeLessThan(640 * (10 / 1280));
-    expect(result.texts[0].xIn + result.texts[0].wIn / 2).toBeCloseTo(
-      640 * (10 / 1280),
-      1,
-    );
+    expect(result.texts[0].xIn + result.texts[0].wIn / 2).toBeCloseTo(640 * (10 / 1280), 1);
   });
 
   it("joins tspan lines when dy separates them", () => {
     const markup =
-      '<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">'
-      + '<text x="40" y="80" font-size="32" fill="#111827">'
-      + '<tspan x="40" dy="0">Line one</tspan>'
-      + '<tspan x="40" dy="40">Line two</tspan>'
-      + "</text></svg>";
+      '<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">' +
+      '<text x="40" y="80" font-size="32" fill="#111827">' +
+      '<tspan x="40" dy="0">Line one</tspan>' +
+      '<tspan x="40" dy="40">Line two</tspan>' +
+      "</text></svg>";
 
     const result = liftSvgText(markup);
     expect(result.texts).toHaveLength(1);
@@ -63,10 +57,10 @@ describe("liftSvgText", () => {
 
   it("skips text inside defs and leaves it in the background", () => {
     const markup =
-      '<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">'
-      + "<defs><text x=\"10\" y=\"20\" font-size=\"12\">Hidden</text></defs>"
-      + '<text x="80" y="140" font-size="48" fill="#000">Visible</text>'
-      + "</svg>";
+      '<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">' +
+      '<defs><text x="10" y="20" font-size="12">Hidden</text></defs>' +
+      '<text x="80" y="140" font-size="48" fill="#000">Visible</text>' +
+      "</svg>";
 
     const result = liftSvgText(markup);
     expect(result.texts).toHaveLength(1);
@@ -77,10 +71,10 @@ describe("liftSvgText", () => {
 
   it("does not lift transformed or textPath nodes", () => {
     const markup =
-      '<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">'
-      + '<text x="80" y="80" font-size="32" transform="rotate(15)">Rotated</text>'
-      + '<text x="80" y="200" font-size="32"><textPath href="#p">Path</textPath></text>'
-      + "</svg>";
+      '<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">' +
+      '<text x="80" y="80" font-size="32" transform="rotate(15)">Rotated</text>' +
+      '<text x="80" y="200" font-size="32"><textPath href="#p">Path</textPath></text>' +
+      "</svg>";
 
     const result = liftSvgText(markup);
     expect(result.texts).toHaveLength(0);
@@ -90,11 +84,11 @@ describe("liftSvgText", () => {
 
   it("sizes full-width CJK lines by their real advance width", () => {
     const markup =
-      '<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">'
-      + '<text x="72" y="120" font-size="34" font-weight="700" fill="#f8fafc">'
-      + '<tspan x="72" dy="0">决策仍在「周」的节奏，</tspan>'
-      + '<tspan x="72" dy="46">业务已在「小时」的战场</tspan>'
-      + "</text></svg>";
+      '<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">' +
+      '<text x="72" y="120" font-size="34" font-weight="700" fill="#f8fafc">' +
+      '<tspan x="72" dy="0">决策仍在「周」的节奏，</tspan>' +
+      '<tspan x="72" dy="46">业务已在「小时」的战场</tspan>' +
+      "</text></svg>";
 
     const result = liftSvgText(markup);
     expect(result.texts).toHaveLength(1);
@@ -107,9 +101,9 @@ describe("liftSvgText", () => {
 
   it("accounts for letter-spacing when sizing a Latin line", () => {
     const markup =
-      '<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">'
-      + '<text x="88" y="60" font-size="12" letter-spacing="2.5" fill="#7dd3fc">THE GAP</text>'
-      + "</svg>";
+      '<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">' +
+      '<text x="88" y="60" font-size="12" letter-spacing="2.5" fill="#7dd3fc">THE GAP</text>' +
+      "</svg>";
 
     const result = liftSvgText(markup);
     const [label] = result.texts;
@@ -119,8 +113,8 @@ describe("liftSvgText", () => {
 
   it("returns the original markup when there is no text", () => {
     const markup =
-      '<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">'
-      + '<rect width="1280" height="720" fill="#fff"/></svg>';
+      '<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">' +
+      '<rect width="1280" height="720" fill="#fff"/></svg>';
     const result = liftSvgText(markup);
     expect(result.texts).toEqual([]);
     expect(result.backgroundSvg).toBe(markup);
@@ -128,9 +122,9 @@ describe("liftSvgText", () => {
 
   it("marks bold weights and decodes entities", () => {
     const markup =
-      '<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">'
-      + '<text x="40" y="80" font-size="24" font-weight="700" fill="#abc">A &amp; B</text>'
-      + "</svg>";
+      '<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">' +
+      '<text x="40" y="80" font-size="24" font-weight="700" fill="#abc">A &amp; B</text>' +
+      "</svg>";
     const result = liftSvgText(markup);
     expect(result.texts[0].bold).toBe(true);
     expect(result.texts[0].content).toBe("A & B");

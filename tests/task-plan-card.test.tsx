@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
 
-import React from "react";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { TaskPlanCard } from "../src/renderer/src/components/TaskPlanCard";
 import type { AgentTaskNode } from "../src/shared/agent-task-list";
 import type { TeamSessionProjection } from "../src/shared/team-session";
-import { TaskPlanCard } from "../src/renderer/src/components/TaskPlanCard";
 
 afterEach(cleanup);
 
@@ -47,13 +47,7 @@ const session: TeamSessionProjection = {
 
 describe("TaskPlanCard", () => {
   it("merges task and execution activity into one compact summary", () => {
-    render(
-      <TaskPlanCard
-        tasks={[task]}
-        sessions={[session]}
-        live
-      />,
-    );
+    render(<TaskPlanCard tasks={[task]} sessions={[session]} live />);
 
     expect(screen.getByText(task.subject)).not.toBeNull();
     expect(screen.getByText("正在分析任务上下文…")).not.toBeNull();

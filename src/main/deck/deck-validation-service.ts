@@ -1,13 +1,13 @@
 import type { DesignConstraints } from "@shared/deck-persistence";
 import {
-  summarizeDeckValidation,
   type DeckValidationIssue,
   type DeckValidationResult,
+  summarizeDeckValidation,
 } from "@shared/deck-validation";
 import type { Presentation } from "@shared/presentation";
-import { LayoutValidator, layoutValidator } from "./validators/layout-validator";
-import { StyleValidator, styleValidator } from "./validators/style-validator";
-import { AssetValidator, assetValidator } from "./validators/asset-validator";
+import { type AssetValidator, assetValidator } from "./validators/asset-validator";
+import { type LayoutValidator, layoutValidator } from "./validators/layout-validator";
+import { type StyleValidator, styleValidator } from "./validators/style-validator";
 
 export interface DeckValidationOptions {
   constraints?: DesignConstraints;
@@ -33,7 +33,10 @@ export class DeckValidationService {
     return summarizeDeckValidation([...layoutIssues, ...styleIssues, ...assetIssues]);
   }
 
-  listIssues(presentation: Presentation, options: DeckValidationOptions = {}): DeckValidationIssue[] {
+  listIssues(
+    presentation: Presentation,
+    options: DeckValidationOptions = {},
+  ): DeckValidationIssue[] {
     return this.validate(presentation, options).issues;
   }
 }

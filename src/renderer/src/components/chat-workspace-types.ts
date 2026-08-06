@@ -1,9 +1,9 @@
 import type { AgentActivityItem } from "@shared/agent-activity";
 import type { AgentQuestionResolved } from "@shared/agent-question";
+import type { AgentRunPhase } from "@shared/agent-run-presentation";
 import type { DisplayEvent } from "@shared/card-display-protocol";
 import type { Presentation } from "@shared/presentation";
 import type { SessionChatMessage } from "@shared/session";
-import type { AgentRunPhase } from "../agentRunPresentation";
 import type { ManagedModel } from "../modelCatalog";
 
 export type ChatMessage = SessionChatMessage;

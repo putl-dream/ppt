@@ -39,7 +39,9 @@ export function ProjectFilesView({
             onStartPanelResize("primary", event.clientX);
           }}
         />
-      ) : <div className="panel-resizer-placeholder" />}
+      ) : (
+        <div className="panel-resizer-placeholder" />
+      )}
 
       <div
         key="files"

@@ -1,6 +1,6 @@
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { MessageBus } from "../src/main/agent/teammate/message-bus";
 import { TeammateManager } from "../src/main/agent/teammate/spawn-teammate";
@@ -11,17 +11,23 @@ describe("teammate cold-start recovery", () => {
     const bus = new MessageBus(MessageBus.defaultMailboxDir(workspaceRoot));
     const statePath = bus.getTeammateStatePath();
     await mkdir(dirname(statePath), { recursive: true });
-    await writeFile(statePath, JSON.stringify({
-      version: 1,
-      teammates: [{
-        name: "designer",
-        role: "layout designer",
-        status: "running",
-        startedAt: Date.now() - 1_000,
-        lastActiveAt: Date.now() - 500,
-        prompt: "Design the deck",
-      }],
-    }), "utf8");
+    await writeFile(
+      statePath,
+      JSON.stringify({
+        version: 1,
+        teammates: [
+          {
+            name: "designer",
+            role: "layout designer",
+            status: "running",
+            startedAt: Date.now() - 1_000,
+            lastActiveAt: Date.now() - 500,
+            prompt: "Design the deck",
+          },
+        ],
+      }),
+      "utf8",
+    );
 
     const manager = new TeammateManager(bus);
     await manager.reconcileInterrupted();
@@ -37,4 +43,3 @@ describe("teammate cold-start recovery", () => {
     expect(await bus.readInbox("lead")).toHaveLength(0);
   });
 });
-

@@ -2,12 +2,7 @@
  * Agent 循环的稳定扩展点。循环只调用 triggerHooks()，具体行为由注册表决定。
  */
 
-export const HOOK_EVENTS = [
-  "UserPromptSubmit",
-  "PreToolUse",
-  "PostToolUse",
-  "Stop",
-] as const;
+export const HOOK_EVENTS = ["UserPromptSubmit", "PreToolUse", "PostToolUse", "Stop"] as const;
 
 export type HookEvent = (typeof HOOK_EVENTS)[number];
 

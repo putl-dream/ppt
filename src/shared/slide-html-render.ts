@@ -1,5 +1,5 @@
-import type { Presentation, Slide } from "@shared/presentation";
 import type { DesignSystemV2 } from "@design-system";
+import type { Presentation, Slide } from "@shared/presentation";
 import { utf8ToBase64 } from "./base64";
 
 export const SLIDE_WIDTH = 1280;
@@ -7,7 +7,7 @@ export const SLIDE_HEIGHT = 720;
 export const THUMBNAIL_WIDTH = 640;
 export const THUMBNAIL_HEIGHT = 360;
 
-export interface DeckHtmlRenderOptions {}
+export type DeckHtmlRenderOptions = {};
 
 function escapeHtml(text: string): string {
   return text
@@ -113,9 +113,10 @@ export function exportDeckContactSheetHtml(
   const scale = 0.3;
   const thumbnailWidth = Math.round(SLIDE_WIDTH * scale);
   const thumbnailHeight = Math.round(SLIDE_HEIGHT * scale);
-  const items = presentation.slides.map((slide, index) => {
-    const scene = slide.narrative?.role ?? slide.visualSource.sourcePath;
-    return `
+  const items = presentation.slides
+    .map((slide, index) => {
+      const scene = slide.narrative?.role ?? slide.visualSource.sourcePath;
+      return `
       <article class="contact-item">
         <div class="contact-meta">
           <strong>${String(index + 1).padStart(2, "0")}</strong>
@@ -127,7 +128,8 @@ export function exportDeckContactSheetHtml(
           </div>
         </div>
       </article>`;
-  }).join("\n");
+    })
+    .join("\n");
 
   return `<!DOCTYPE html>
 <html lang="zh-CN">

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { CommitGate } from "../src/main/agent/gate/commit-gate";
 import { RiskPolicy } from "../src/main/agent/gate/risk-policy";
-import { type Presentation } from "../src/shared/presentation";
+import type { Presentation } from "../src/shared/presentation";
 import { createStarterPresentation, createSvgTestSlide } from "../src/shared/presentation-fixtures";
 import { TEST_DESIGN_SYSTEM } from "./design-engine-test-utils";
 
@@ -33,11 +33,13 @@ describe("CommitGate validation integration", () => {
 
     const result = await gate.evaluate(
       presentation,
-      [{
-        id: "cmd-invalid-svg",
-        type: "restore-slide",
-        slide: invalidSlide,
-      }],
+      [
+        {
+          id: "cmd-invalid-svg",
+          type: "restore-slide",
+          slide: invalidSlide,
+        },
+      ],
       "low",
     );
 
@@ -55,11 +57,13 @@ describe("CommitGate validation integration", () => {
 
     const result = await gate.evaluate(
       presentation,
-      [{
-        id: "cmd-hash-mismatch",
-        type: "restore-slide",
-        slide: tampered,
-      }],
+      [
+        {
+          id: "cmd-hash-mismatch",
+          type: "restore-slide",
+          slide: tampered,
+        },
+      ],
       "low",
     );
 
@@ -104,12 +108,14 @@ describe("CommitGate validation integration", () => {
 
     const result = await gate.evaluate(
       presentation,
-      [{
-        id: "cmd-title",
-        type: "set-slide-title",
-        slideId,
-        title: "Updated title",
-      }],
+      [
+        {
+          id: "cmd-title",
+          type: "set-slide-title",
+          slideId,
+          title: "Updated title",
+        },
+      ],
       "low",
     );
 

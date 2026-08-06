@@ -1,35 +1,35 @@
 import type { ConversationDatabase } from "../../../conversation-database";
 import type { AgentModelMessage } from "../../gateway";
+import { DurableConversationHistoryStore } from "../../persistence/conversation-history-store";
 import {
-  type DurableRunCheckpoint,
-  type LegacyDurableRunCheckpoint,
   type DurableIterationWorkspaceSnapshot,
   type DurableQueryInflightSnapshot,
   type DurableQueryStateSnapshot,
+  type DurableRunCheckpoint,
   type DurableRunPhase,
   type DurableRunStatus,
   DurableRunStore,
+  type LegacyDurableRunCheckpoint,
 } from "../../persistence/durable-run-store";
+import type { SkillSession } from "../../skills/skill-types";
+import { resolveTaskListIdentity } from "../../task/task-list-identity";
 import { createTaskStore } from "../../task/task-store";
 import { TaskSubscriptionService } from "../../task/task-subscription-service";
-import { resolveTaskListIdentity } from "../../task/task-list-identity";
 import type { ToolDiscoverySession } from "../../tools/tool-definition";
-import type { SkillSession } from "../../skills/skill-types";
-import type { AgentRuntimeOptions, AgentRuntimeResult } from "../runtime-types";
-import { AgentEventPorts } from "./agent-event-ports";
-import { AgentSession } from "./agent-session";
 import { BackgroundTaskManager } from "../background/background-task-manager";
-import { CheckpointCoordinator } from "./checkpoint-coordinator";
-import { CheckpointPolicy } from "./checkpoint-policy";
-import { DurableConversationHistoryStore } from "../../persistence/conversation-history-store";
 import {
+  type AgentIterationWorkspace,
+  type AgentQueryState,
   asQueryId,
   asRunId,
   type QueryId,
   type RunId,
-  type AgentIterationWorkspace,
-  type AgentQueryState,
 } from "../query/query-types";
+import type { AgentRuntimeOptions, AgentRuntimeResult } from "../runtime-types";
+import { AgentEventPorts } from "./agent-event-ports";
+import { AgentSession } from "./agent-session";
+import { CheckpointCoordinator } from "./checkpoint-coordinator";
+import { CheckpointPolicy } from "./checkpoint-policy";
 
 export interface AgentRunScopeOpenInput {
   options: AgentRuntimeOptions;
@@ -82,18 +82,12 @@ export class AgentRunScope {
         openedCheckpoint?.type === "opened" ? openedCheckpoint.lease : undefined,
         openedCheckpoint?.type === "opened" ? openedCheckpoint.currentRevision : 0,
       );
-      const previousCheckpoint = openedCheckpoint?.type === "opened"
-        ? openedCheckpoint.checkpoint
-        : undefined;
-      const recovered = startMode.type === "resume_query"
-        ? previousCheckpoint
-        : undefined;
-      const storedHistory = startMode.type === "new_query"
-        ? await historyStore?.load(options.threadId)
-        : undefined;
-      const completedCheckpoint = startMode.type === "new_query"
-        ? previousCheckpoint
-        : undefined;
+      const previousCheckpoint =
+        openedCheckpoint?.type === "opened" ? openedCheckpoint.checkpoint : undefined;
+      const recovered = startMode.type === "resume_query" ? previousCheckpoint : undefined;
+      const storedHistory =
+        startMode.type === "new_query" ? await historyStore?.load(options.threadId) : undefined;
+      const completedCheckpoint = startMode.type === "new_query" ? previousCheckpoint : undefined;
 
       const transcript: Array<Record<string, unknown>> = recovered
         ? [...structuredClone(recovered.transcript), { role: "user", content: options.request }]
@@ -101,34 +95,27 @@ export class AgentRunScope {
       const migratedHistory = completedConversationHistory(completedCheckpoint);
       const recoveredCommittedMessages = checkpointState(recovered)?.messages;
       const recoveredInflight = checkpointInflight(recovered);
-      const legacyInflightAssistantIndex = recovered?.version === 1
-        ? findLegacyInflightAssistantIndex(recovered)
-        : -1;
+      const legacyInflightAssistantIndex =
+        recovered?.version === 1 ? findLegacyInflightAssistantIndex(recovered) : -1;
       const modelMessages: AgentModelMessage[] = recovered
         ? structuredClone(
-            recoveredCommittedMessages
-            ?? (
-              legacyInflightAssistantIndex >= 0
+            recoveredCommittedMessages ??
+              (legacyInflightAssistantIndex >= 0
                 ? legacyMessages(recovered).slice(0, legacyInflightAssistantIndex)
-                : legacyMessages(recovered)
-            ),
+                : legacyMessages(recovered)),
           )
         : [
             ...structuredClone(
-              migratedHistory
-              ?? storedHistory
-              ?? legacyVisibleHistory(options).map((entry) => ({
-                role: entry.role,
-                content: [{ type: "text" as const, text: entry.content }],
-              })),
+              migratedHistory ??
+                storedHistory ??
+                legacyVisibleHistory(options).map((entry) => ({
+                  role: entry.role,
+                  content: [{ type: "text" as const, text: entry.content }],
+                })),
             ),
             { role: "user", content: [{ type: "text", text: options.request }] },
           ];
-      if (
-        recovered
-        && !recoveredInflight
-        && legacyInflightAssistantIndex < 0
-      ) {
+      if (recovered && !recoveredInflight && legacyInflightAssistantIndex < 0) {
         appendUserText(modelMessages, options.request);
       }
       const session = new AgentSession({
@@ -170,7 +157,7 @@ export class AgentRunScope {
         queryId: asQueryId(
           recovered
             ? recovered.version === 1
-              ? recovered.queryLifecycle?.queryId ?? crypto.randomUUID()
+              ? (recovered.queryLifecycle?.queryId ?? crypto.randomUUID())
               : recovered.queryId
             : crypto.randomUUID(),
         ),
@@ -326,14 +313,11 @@ export class AgentRunScope {
       backgroundTasks: this.backgroundTasks.snapshot(),
       processedInboxMessageIds: [...this.session.processedInboxMessageIds].sort(),
       committedState: structuredClone(committedState),
-      ...(this.inflightQuery
-        ? { inflight: structuredClone(this.inflightQuery) }
-        : {}),
+      ...(this.inflightQuery ? { inflight: structuredClone(this.inflightQuery) } : {}),
       ...(status === "completed"
         ? {
             terminalHistory: structuredClone(
-              this.conversationHistorySnapshot
-              ?? committedState.messages,
+              this.conversationHistorySnapshot ?? committedState.messages,
             ),
           }
         : {}),
@@ -344,9 +328,7 @@ export class AgentRunScope {
     };
   }
 
-  async persistCheckpoint(
-    input?: Parameters<AgentRunScope["createCheckpoint"]>[0],
-  ): Promise<void> {
+  async persistCheckpoint(input?: Parameters<AgentRunScope["createCheckpoint"]>[0]): Promise<void> {
     await this.checkpoints.commit(this.createCheckpoint(input));
   }
 
@@ -354,15 +336,15 @@ export class AgentRunScope {
     if (!this.historyStore) return;
     await this.historyStore.save(
       this.options.threadId,
-      this.conversationHistorySnapshot
-      ?? this.committedQueryState?.messages
-      ?? this.initialMessages,
+      this.conversationHistorySnapshot ??
+        this.committedQueryState?.messages ??
+        this.initialMessages,
     );
   }
 
-  restoreQueryState(toolUseContext: AgentQueryState["toolUseContext"]):
-    | Partial<AgentQueryState>
-    | undefined {
+  restoreQueryState(
+    toolUseContext: AgentQueryState["toolUseContext"],
+  ): Partial<AgentQueryState> | undefined {
     const snapshot = checkpointState(this.recovered);
     if (!snapshot) return undefined;
     return {
@@ -370,7 +352,11 @@ export class AgentRunScope {
       toolUseContext,
       validationFailuresByTool: new Map(snapshot.validationFailuresByTool),
       transition: snapshot.transition?.reason
-        ? { reason: snapshot.transition.reason as NonNullable<AgentQueryState["transition"]>["reason"] }
+        ? {
+            reason: snapshot.transition.reason as NonNullable<
+              AgentQueryState["transition"]
+            >["reason"],
+          }
         : undefined,
     };
   }
@@ -395,23 +381,17 @@ export class AgentRunScope {
           maxOutputTokensOverride:
             snapshot.maxOutputTokensOverride ?? state.maxOutputTokensOverride,
           maxOutputTokensRecoveryCount:
-            snapshot.maxOutputTokensRecoveryCount
-            ?? state.maxOutputTokensRecoveryCount,
+            snapshot.maxOutputTokensRecoveryCount ?? state.maxOutputTokensRecoveryCount,
           hasAttemptedReactiveCompact:
-            snapshot.hasAttemptedReactiveCompact
-            ?? state.hasAttemptedReactiveCompact,
+            snapshot.hasAttemptedReactiveCompact ?? state.hasAttemptedReactiveCompact,
           validationFailuresByTool: new Map<string, number>(
-            snapshot.validationFailuresByTool
-            ?? state.validationFailuresByTool,
+            snapshot.validationFailuresByTool ?? state.validationFailuresByTool,
           ),
         }
       : legacyIterationWorkspace(this.recovered, state, toolUseContext);
     if (!workspace) return undefined;
 
-    const resumedUserContent = [
-      this.options.request,
-      ...this.session.takePendingUserContent(),
-    ]
+    const resumedUserContent = [this.options.request, ...this.session.takePendingUserContent()]
       .map((part) => part.trim())
       .filter(Boolean);
     if (inflight?.phase === "model_streaming") {
@@ -426,13 +406,12 @@ export class AgentRunScope {
       return workspace;
     }
 
-    const activeToolUses = inflight?.activeToolUses
-      ?? (inflight?.activeToolUse ? [inflight.activeToolUse] : undefined)
-      ?? (
-        this.recovered?.version === 1 && this.recovered.activeToolUse
-          ? [this.recovered.activeToolUse]
-          : []
-      );
+    const activeToolUses =
+      inflight?.activeToolUses ??
+      (inflight?.activeToolUse ? [inflight.activeToolUse] : undefined) ??
+      (this.recovered?.version === 1 && this.recovered.activeToolUse
+        ? [this.recovered.activeToolUse]
+        : []);
     for (const activeToolUse of activeToolUses) {
       if (workspace.toolResults.some((result) => result.toolUseId === activeToolUse.id)) {
         continue;
@@ -460,10 +439,7 @@ export class AgentRunScope {
     this.conversationHistorySnapshot = structuredClone(state.messages);
   }
 
-  stageConversationHistory(
-    state: AgentQueryState,
-    workspace: AgentIterationWorkspace,
-  ): void {
+  stageConversationHistory(state: AgentQueryState, workspace: AgentIterationWorkspace): void {
     this.conversationHistorySnapshot = materializeWorkspaceMessages(state, workspace);
     this.terminalConversationHistoryStaged = true;
   }
@@ -472,9 +448,8 @@ export class AgentRunScope {
     if (result.type === "ask_user" || this.terminalConversationHistoryStaged) return;
     const content = result.type === "message" ? result.content : result.summary;
     const messages = structuredClone(
-      this.conversationHistorySnapshot
-      ?? this.committedQueryState?.messages
-      ?? [...this.initialMessages],
+      this.conversationHistorySnapshot ??
+        this.committedQueryState?.messages ?? [...this.initialMessages],
     );
     messages.push({
       role: "assistant",
@@ -492,9 +467,7 @@ export class AgentRunScope {
     this.inflightQuery = {
       phase,
       workspace: iterationWorkspaceSnapshot(workspace),
-      ...(activeToolUses?.length
-        ? { activeToolUses: structuredClone([...activeToolUses]) }
-        : {}),
+      ...(activeToolUses?.length ? { activeToolUses: structuredClone([...activeToolUses]) } : {}),
     };
   }
 
@@ -502,10 +475,7 @@ export class AgentRunScope {
     if (this.closed) return;
     this.closed = true;
     for (const task of this.backgroundTasks.snapshot()) {
-      if (
-        (task.status === "scheduled" || task.status === "running")
-        && task.toolUseId
-      ) {
+      if ((task.status === "scheduled" || task.status === "running") && task.toolUseId) {
         this.eventPorts.renderer({
           type: "tool-state",
           toolCallId: task.toolUseId,
@@ -544,34 +514,41 @@ export class AgentRunScope {
   private restoreBackgroundRecovery(): void {
     const { recovered, session } = this;
     if (
-      recovered
-      && recovered.backgroundTasks === undefined
-      && (recovered.status === "running" || recovered.status === "interrupted" || recovered.status === "failed")
+      recovered &&
+      recovered.backgroundTasks === undefined &&
+      (recovered.status === "running" ||
+        recovered.status === "interrupted" ||
+        recovered.status === "failed")
     ) {
       const interruptedBackgroundTasks = recovered.transcript.flatMap((entry) => {
         const result = entry.result;
         if (!result || typeof result !== "object" || Array.isArray(result)) return [];
         const record = result as Record<string, unknown>;
         if (record.status !== "running" || typeof record.backgroundTaskId !== "string") return [];
-        return [{
-          id: record.backgroundTaskId,
-          toolName: typeof entry.toolName === "string" ? entry.toolName : "background-task",
-        }];
+        return [
+          {
+            id: record.backgroundTaskId,
+            toolName: typeof entry.toolName === "string" ? entry.toolName : "background-task",
+          },
+        ];
       });
       if (interruptedBackgroundTasks.length > 0) {
-        const recoveryNotice = interruptedBackgroundTasks.map((task) => [
-          "<task_notification>",
-          `  <task_id>${task.id}</task_id>`,
-          "  <status>failed</status>",
-          `  <tool>${task.toolName}</tool>`,
-          "  <error>The application restarted before this background task committed its result. Inspect durable artifacts before retrying.</error>",
-          "</task_notification>",
-        ].join("\n")).join("\n\n");
+        const recoveryNotice = interruptedBackgroundTasks
+          .map((task) =>
+            [
+              "<task_notification>",
+              `  <task_id>${task.id}</task_id>`,
+              "  <status>failed</status>",
+              `  <tool>${task.toolName}</tool>`,
+              "  <error>The application restarted before this background task committed its result. Inspect durable artifacts before retrying.</error>",
+              "</task_notification>",
+            ].join("\n"),
+          )
+          .join("\n\n");
         session.appendPendingUserContent(recoveryNotice);
         session.appendTranscript({ role: "system", kind: "recovery", content: recoveryNotice });
       }
     }
-
   }
 
   private warn(message: string): void {
@@ -599,19 +576,11 @@ function pairPendingToolResults(
 function completedConversationHistory(
   checkpoint: DurableRunCheckpoint | undefined,
 ): AgentModelMessage[] | undefined {
-  if (
-    !checkpoint
-    || checkpoint.status !== "completed"
-  ) return undefined;
+  if (!checkpoint || checkpoint.status !== "completed") return undefined;
   if (checkpoint.version === 2) {
-    return checkpoint.terminalHistory
-      ? structuredClone(checkpoint.terminalHistory)
-      : undefined;
+    return checkpoint.terminalHistory ? structuredClone(checkpoint.terminalHistory) : undefined;
   }
-  return pairPendingToolResults(
-    checkpoint.modelMessages,
-    checkpoint.pendingToolResults,
-  );
+  return pairPendingToolResults(checkpoint.modelMessages, checkpoint.pendingToolResults);
 }
 
 function legacyVisibleHistory(
@@ -653,9 +622,7 @@ function iterationWorkspaceSnapshot(
   };
 }
 
-function findLegacyInflightAssistantIndex(
-  checkpoint: LegacyDurableRunCheckpoint,
-): number {
+function findLegacyInflightAssistantIndex(checkpoint: LegacyDurableRunCheckpoint): number {
   const inflightIds = new Set([
     ...checkpoint.queuedToolUses.map((toolUse) => toolUse.id),
     ...checkpoint.pendingToolResults.map((result) => result.toolUseId),
@@ -665,10 +632,10 @@ function findLegacyInflightAssistantIndex(
   for (let index = checkpoint.modelMessages.length - 1; index >= 0; index -= 1) {
     const message = checkpoint.modelMessages[index];
     if (
-      message?.role === "assistant"
-      && message.content.some((block) =>
-        block.type === "tool_use" && inflightIds.has(block.id))
-    ) return index;
+      message?.role === "assistant" &&
+      message.content.some((block) => block.type === "tool_use" && inflightIds.has(block.id))
+    )
+      return index;
   }
   return -1;
 }
@@ -683,9 +650,7 @@ function legacyIterationWorkspace(
   if (assistantIndex < 0) return undefined;
   const assistant = checkpoint.modelMessages[assistantIndex];
   if (!assistant || assistant.role !== "assistant") return undefined;
-  const toolUseBlocks = assistant.content.filter((block) =>
-    block.type === "tool_use"
-  );
+  const toolUseBlocks = assistant.content.filter((block) => block.type === "tool_use");
   return {
     messagesForQuery: structuredClone(state.messages),
     assistantMessages: [structuredClone(assistant)],
@@ -715,15 +680,11 @@ function checkpointInflight(
   checkpoint: DurableRunCheckpoint | undefined,
 ): DurableQueryInflightSnapshot | undefined {
   if (!checkpoint) return undefined;
-  return checkpoint.version === 1
-    ? checkpoint.queryLifecycle?.inflight
-    : checkpoint.inflight;
+  return checkpoint.version === 1 ? checkpoint.queryLifecycle?.inflight : checkpoint.inflight;
 }
 
 function legacyMessages(checkpoint: DurableRunCheckpoint): AgentModelMessage[] {
-  return checkpoint.version === 1
-    ? checkpoint.modelMessages
-    : checkpoint.committedState.messages;
+  return checkpoint.version === 1 ? checkpoint.modelMessages : checkpoint.committedState.messages;
 }
 
 function interruptedToolResult(toolUseId: string) {
@@ -731,10 +692,12 @@ function interruptedToolResult(toolUseId: string) {
     type: "tool_result" as const,
     toolUseId,
     isError: true,
-    content: [{
-      type: "text" as const,
-      text: "The application restarted while this tool was running. Its side effects are uncertain. Inspect durable workspace artifacts and task state before deciding whether to retry; do not assume either success or failure.",
-    }],
+    content: [
+      {
+        type: "text" as const,
+        text: "The application restarted while this tool was running. Its side effects are uncertain. Inspect durable workspace artifacts and task state before deciding whether to retry; do not assume either success or failure.",
+      },
+    ],
   };
 }
 
@@ -742,10 +705,7 @@ function appendUserText(messages: AgentModelMessage[], text: string): void {
   const trimmed = text.trim();
   if (!trimmed) return;
   const last = messages.at(-1);
-  if (
-    last?.role === "user"
-    && !last.content.some((block) => block.type === "tool_result")
-  ) {
+  if (last?.role === "user" && !last.content.some((block) => block.type === "tool_result")) {
     last.content.push({ type: "text", text: trimmed });
     return;
   }

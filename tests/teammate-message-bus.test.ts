@@ -1,11 +1,6 @@
-import {
-  mkdtemp,
-  readFile,
-  stat,
-  writeFile,
-} from "node:fs/promises";
-import { basename, join } from "node:path";
+import { mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
+import { basename, join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import type {
   AgentModelContentBlock,
@@ -13,41 +8,40 @@ import type {
   AgentModelRequest,
 } from "../src/main/agent/gateway/types";
 import { AgentRuntime } from "../src/main/agent/runtime/agent-runtime";
-import type {
-  PostToolUseBlock,
-  StopBlock,
-} from "../src/main/agent/runtime/hooks/hook-blocks";
-import { clearHooks, registerHook } from "../src/main/agent/runtime/hooks/hook-registry";
 import { resetDefaultHooksForTests } from "../src/main/agent/runtime/hooks/default-hooks";
+import type { PostToolUseBlock, StopBlock } from "../src/main/agent/runtime/hooks/hook-blocks";
+import { clearHooks, registerHook } from "../src/main/agent/runtime/hooks/hook-registry";
+import {
+  LEAD_TASK_PERMISSIONS,
+  type TaskCommand,
+  type TaskCommandPrincipal,
+  type TaskMutationResult,
+  TaskStore,
+} from "../src/main/agent/task/task-store";
 import {
   formatMailboxMessagesForHistory,
   MessageBus,
 } from "../src/main/agent/teammate/message-bus";
-import { TeammateManager } from "../src/main/agent/teammate/spawn-teammate";
 import { ProtocolStateStore } from "../src/main/agent/teammate/protocol-state";
-import {
-  LEAD_TASK_PERMISSIONS,
-  TaskStore,
-  type TaskCommand,
-  type TaskCommandPrincipal,
-  type TaskMutationResult,
-} from "../src/main/agent/task/task-store";
-import { createDefaultToolRegistry } from "../src/main/agent/tools/tool-registry";
+import { TeammateManager } from "../src/main/agent/teammate/spawn-teammate";
 import type { ToolContext } from "../src/main/agent/tools/tool-definition";
+import { createDefaultToolRegistry } from "../src/main/agent/tools/tool-registry";
 import { createStarterPresentation } from "../src/shared/presentation-fixtures";
 import type { TeammateProgressEvent } from "../src/shared/teammate-progress";
 
 describe("mailbox history formatting", () => {
   it("keeps full teammate content for model context and truncates only explicit previews", () => {
     const content = `result:${"x".repeat(1_500)}:tail`;
-    const messages = [{
-      id: "message-1",
-      from: "researcher",
-      to: "lead",
-      content,
-      type: "result" as const,
-      ts: 1,
-    }];
+    const messages = [
+      {
+        id: "message-1",
+        from: "researcher",
+        to: "lead",
+        content,
+        type: "result" as const,
+        ts: 1,
+      },
+    ];
 
     expect(formatMailboxMessagesForHistory(messages)).toContain(":tail");
     expect(formatMailboxMessagesForHistory(messages, 1_000)).not.toContain(":tail");
@@ -75,9 +69,7 @@ function createSequenceGateway(responses: AgentModelContentBlock[]): AgentModelG
   };
 }
 
-function createThinkingSequenceGateway(
-  responses: AgentModelContentBlock[],
-): AgentModelGateway {
+function createThinkingSequenceGateway(responses: AgentModelContentBlock[]): AgentModelGateway {
   let index = 0;
   return {
     async queryModel() {
@@ -112,9 +104,11 @@ function createBoardWorkerGateway(): AgentModelGateway {
     step += 1;
     if (step === 1) return modelMessage("Ready for shared board work.");
     if (step === 2 || step === 3) {
-      const text = (request.messages ?? []).flatMap((message) => message.content)
-        .filter((block): block is Extract<AgentModelContentBlock, { type: "text" }> =>
-          block.type === "text",
+      const text = (request.messages ?? [])
+        .flatMap((message) => message.content)
+        .filter(
+          (block): block is Extract<AgentModelContentBlock, { type: "text" }> =>
+            block.type === "text",
         )
         .map((block) => block.text)
         .join("\n");
@@ -247,13 +241,16 @@ class FailingCleanupTaskStore extends TaskStore {
 }
 
 async function createBoardTask(store: TaskStore, subject: string) {
-  return store.mutate({
-    type: "create",
-    subject,
-    description: "",
-    executionTarget: "teammate",
-    completionPolicy: "review_required",
-  }, store.principal("lead", "lead", LEAD_TASK_PERMISSIONS));
+  return store.mutate(
+    {
+      type: "create",
+      subject,
+      description: "",
+      executionTarget: "teammate",
+      completionPolicy: "review_required",
+    },
+    store.principal("lead", "lead", LEAD_TASK_PERMISSIONS),
+  );
 }
 
 function finishClaimedTask(taskId: string, requestId = `review-${taskId}`) {
@@ -335,10 +332,10 @@ describe("MessageBus", () => {
       content: "Please inspect the outline.",
     });
 
-    expect((await bus.peekInbox("researcher")).map((message) => message.content))
-      .toEqual(["Please inspect the outline."]);
-    expect((await bus.readInbox("researcher")).map((message) => message.from))
-      .toEqual(["lead"]);
+    expect((await bus.peekInbox("researcher")).map((message) => message.content)).toEqual([
+      "Please inspect the outline.",
+    ]);
+    expect((await bus.readInbox("researcher")).map((message) => message.from)).toEqual(["lead"]);
     expect(await bus.readInbox("researcher")).toEqual([]);
     await expect(stat(bus.getInboxPath("researcher"))).rejects.toMatchObject({ code: "ENOENT" });
   });
@@ -347,13 +344,15 @@ describe("MessageBus", () => {
     const workspaceRoot = await mkdtemp(join(tmpdir(), "ppt-bus-"));
     const bus = new MessageBus(MessageBus.defaultMailboxDir(workspaceRoot));
 
-    await Promise.all(Array.from({ length: 12 }, (_, index) =>
-      bus.send({
-        from: `agent-${index}`,
-        to: "lead",
-        content: `message-${index}`,
-      }),
-    ));
+    await Promise.all(
+      Array.from({ length: 12 }, (_, index) =>
+        bus.send({
+          from: `agent-${index}`,
+          to: "lead",
+          content: `message-${index}`,
+        }),
+      ),
+    );
 
     const messages = await bus.readInbox("lead");
     expect(messages).toHaveLength(12);
@@ -434,36 +433,44 @@ describe("ProtocolStateStore", () => {
       payload: "Refactor authentication.",
     });
 
-    expect(states.matchResponse({
-      responseType: "shutdown_response",
-      requestId: request.requestId,
-      approve: true,
-      sender: "lead",
-      target: "bob",
-    })).toBeUndefined();
-    expect(states.matchResponse({
-      responseType: "plan_approval_response",
-      requestId: request.requestId,
-      approve: true,
-      sender: "alice",
-      target: "bob",
-    })).toBeUndefined();
+    expect(
+      states.matchResponse({
+        responseType: "shutdown_response",
+        requestId: request.requestId,
+        approve: true,
+        sender: "lead",
+        target: "bob",
+      }),
+    ).toBeUndefined();
+    expect(
+      states.matchResponse({
+        responseType: "plan_approval_response",
+        requestId: request.requestId,
+        approve: true,
+        sender: "alice",
+        target: "bob",
+      }),
+    ).toBeUndefined();
     expect(states.get(request.requestId)?.status).toBe("pending");
 
-    expect(states.matchResponse({
-      responseType: "plan_approval_response",
-      requestId: request.requestId,
-      approve: false,
-      sender: "lead",
-      target: "bob",
-    })?.status).toBe("rejected");
-    expect(states.matchResponse({
-      responseType: "plan_approval_response",
-      requestId: request.requestId,
-      approve: true,
-      sender: "lead",
-      target: "bob",
-    })).toBeUndefined();
+    expect(
+      states.matchResponse({
+        responseType: "plan_approval_response",
+        requestId: request.requestId,
+        approve: false,
+        sender: "lead",
+        target: "bob",
+      })?.status,
+    ).toBe("rejected");
+    expect(
+      states.matchResponse({
+        responseType: "plan_approval_response",
+        requestId: request.requestId,
+        approve: true,
+        sender: "lead",
+        target: "bob",
+      }),
+    ).toBeUndefined();
     expect(states.get(request.requestId)?.status).toBe("rejected");
   });
 });
@@ -516,15 +523,17 @@ describe("TeammateManager", () => {
         idleTimeoutMs: 1_000,
       });
 
-      await waitFor(async () => manager.get("editor")?.status === "idle" ? true : undefined);
+      await waitFor(async () => (manager.get("editor")?.status === "idle" ? true : undefined));
 
-      expect(postToolBlocks).toContainEqual(expect.objectContaining({
-        toolName: "EditFile",
-        scope: "subagent",
-        executionStatus: "threw",
-        sideEffects: "none",
-        errorCode: "READ_REQUIRED",
-      }));
+      expect(postToolBlocks).toContainEqual(
+        expect.objectContaining({
+          toolName: "EditFile",
+          scope: "subagent",
+          executionStatus: "threw",
+          sideEffects: "none",
+          errorCode: "READ_REQUIRED",
+        }),
+      );
       expect(JSON.stringify(requests[1]?.messages)).toContain("[READ_REQUIRED]");
       expect(await readFile(join(workspaceRoot, "notes.md"), "utf8")).toBe("before");
 
@@ -538,12 +547,15 @@ describe("TeammateManager", () => {
 
   it("passes the runtime Tavily configuration to teammate web_search", async () => {
     const workspaceRoot = await mkdtemp(join(tmpdir(), "ppt-teammate-search-"));
-    const fetchImpl = vi.fn(async (
-      _input: Parameters<typeof fetch>[0],
-      _init?: Parameters<typeof fetch>[1],
-    ) => new Response(JSON.stringify({
-      results: [{ title: "Source", url: "https://example.com/source", content: "Context" }],
-    }), { status: 200 }));
+    const fetchImpl = vi.fn(
+      async (_input: Parameters<typeof fetch>[0], _init?: Parameters<typeof fetch>[1]) =>
+        new Response(
+          JSON.stringify({
+            results: [{ title: "Source", url: "https://example.com/source", content: "Context" }],
+          }),
+          { status: 200 },
+        ),
+    );
     vi.stubGlobal("fetch", fetchImpl);
     const gateway = createSequenceGateway([
       modelToolCall("web_search", {
@@ -576,9 +588,10 @@ describe("TeammateManager", () => {
     });
 
     try {
-      await waitFor(async () => fetchImpl.mock.calls.length > 0 ? true : undefined);
-      expect((fetchImpl.mock.calls[0]?.[1]?.headers as Record<string, string>).Authorization)
-        .toBe("Bearer tvly-from-settings");
+      await waitFor(async () => (fetchImpl.mock.calls.length > 0 ? true : undefined));
+      expect((fetchImpl.mock.calls[0]?.[1]?.headers as Record<string, string>).Authorization).toBe(
+        "Bearer tvly-from-settings",
+      );
     } finally {
       await stopTeammate(manager, "image_researcher");
       vi.unstubAllGlobals();
@@ -619,11 +632,13 @@ describe("TeammateManager", () => {
           ? messages
           : undefined;
       });
-      expect(leadMessages).toContainEqual(expect.objectContaining({
-        from: "task_worker",
-        type: "result",
-        content: "Outline ready for review.",
-      }));
+      expect(leadMessages).toContainEqual(
+        expect.objectContaining({
+          from: "task_worker",
+          type: "result",
+          content: "Outline ready for review.",
+        }),
+      );
     } finally {
       await stopTeammate(manager, "task_worker");
     }
@@ -656,30 +671,35 @@ describe("TeammateManager", () => {
     });
 
     try {
-      await waitFor(async () => events.some(
-        (event) => event.type === "teammate-assignment-finished",
-      ) ? true : undefined);
+      await waitFor(async () =>
+        events.some((event) => event.type === "teammate-assignment-finished") ? true : undefined,
+      );
 
-      expect(events.map((event) => event.type)).toEqual(expect.arrayContaining([
-        "teammate-assignment-started",
-        "teammate-thinking-chunk",
-        "teammate-tool-started",
-        "teammate-tool-finished",
-        "teammate-assignment-finished",
-      ]));
+      expect(events.map((event) => event.type)).toEqual(
+        expect.arrayContaining([
+          "teammate-assignment-started",
+          "teammate-thinking-chunk",
+          "teammate-tool-started",
+          "teammate-tool-finished",
+          "teammate-assignment-finished",
+        ]),
+      );
       expect(events.every((event) => event.activityId === created.task!.id)).toBe(true);
-      expect(events.find((event) => event.type === "teammate-tool-started"))
-        .toEqual(expect.objectContaining({ toolName: "TaskUpdate", taskId: created.task!.id }));
-      expect(events.find(
-        (event) =>
-          event.type === "teammate-tool-finished"
-          && event.toolName === "TaskReviewRequest",
-      ))
-        .toEqual(expect.objectContaining({
+      expect(events.find((event) => event.type === "teammate-tool-started")).toEqual(
+        expect.objectContaining({ toolName: "TaskUpdate", taskId: created.task!.id }),
+      );
+      expect(
+        events.find(
+          (event) =>
+            event.type === "teammate-tool-finished" && event.toolName === "TaskReviewRequest",
+        ),
+      ).toEqual(
+        expect.objectContaining({
           toolName: "TaskReviewRequest",
           taskId: created.task!.id,
           status: "completed",
-        }));
+        }),
+      );
     } finally {
       await stopTeammate(manager, "task_worker");
     }
@@ -710,9 +730,7 @@ describe("TeammateManager", () => {
     expect(handle.status).toBe("running");
     const messages = await waitFor(async () => {
       const inbox = await bus.peekInbox("lead");
-      return inbox.some((message) => message.type === "idle_notification")
-        ? inbox
-        : undefined;
+      return inbox.some((message) => message.type === "idle_notification") ? inbox : undefined;
     });
 
     expect(messages.map((message) => message.type)).toEqual([
@@ -726,14 +744,16 @@ describe("TeammateManager", () => {
     await manager.waitFor("reviewer");
     expect(manager.getProtocolState(shutdown.requestId)?.status).toBe("pending");
     const finalInbox = await manager.consumeLeadInbox();
-    expect(finalInbox).toContainEqual(expect.objectContaining({
-      from: "reviewer",
-      type: "shutdown_response",
-      payload: expect.objectContaining({
-        requestId: shutdown.requestId,
-        approve: true,
+    expect(finalInbox).toContainEqual(
+      expect.objectContaining({
+        from: "reviewer",
+        type: "shutdown_response",
+        payload: expect.objectContaining({
+          requestId: shutdown.requestId,
+          approve: true,
+        }),
       }),
-    }));
+    );
     expect(manager.getProtocolState(shutdown.requestId)?.status).toBe("approved");
     expect(manager.list().find((item) => item.name === "reviewer")?.status).toBe("stopped");
   });
@@ -771,17 +791,20 @@ describe("TeammateManager", () => {
     const requestId = requestMessage.payload?.requestId;
     expect(typeof requestId).toBe("string");
 
-    await waitFor(async () => manager.get("bob")?.status === "idle" ? true : undefined);
+    await waitFor(async () => (manager.get("bob")?.status === "idle" ? true : undefined));
     await manager.consumeLeadInbox();
     expect(manager.getProtocolState(requestId as string)?.status).toBe("pending");
 
     const respondTool = createDefaultToolRegistry().get("respond_plan_approval");
     expect(respondTool).toBeDefined();
-    await respondTool!.execute({
-      request_id: requestId,
-      approve: true,
-      reason: "The plan is scoped and reversible.",
-    }, createToolContext({ bus, manager, gateway, workspaceRoot }));
+    await respondTool!.execute(
+      {
+        request_id: requestId,
+        approve: true,
+        reason: "The plan is scoped and reversible.",
+      },
+      createToolContext({ bus, manager, gateway, workspaceRoot }),
+    );
 
     await waitFor(async () => {
       try {
@@ -794,7 +817,7 @@ describe("TeammateManager", () => {
     });
     expect(manager.getProtocolState(requestId as string)?.status).toBe("approved");
 
-    await waitFor(async () => manager.get("bob")?.status === "idle" ? true : undefined);
+    await waitFor(async () => (manager.get("bob")?.status === "idle" ? true : undefined));
     await manager.requestShutdown("bob");
     await manager.waitFor("bob");
   });
@@ -828,7 +851,7 @@ describe("TeammateManager", () => {
       return messages.find((message) => message.type === "plan_approval_request");
     });
     const requestId = requestMessage.payload?.requestId as string;
-    await waitFor(async () => manager.get("bob")?.status === "idle" ? true : undefined);
+    await waitFor(async () => (manager.get("bob")?.status === "idle" ? true : undefined));
     await manager.consumeLeadInbox();
     await manager.respondPlanApproval(requestId, false, "The rollback plan is missing.");
 
@@ -858,7 +881,7 @@ describe("TeammateManager", () => {
       maxSteps: 1,
       idlePollMs: 10,
     });
-    await waitFor(async () => manager.get("reviewer")?.status === "idle" ? true : undefined);
+    await waitFor(async () => (manager.get("reviewer")?.status === "idle" ? true : undefined));
 
     await bus.send({
       from: "alice",
@@ -904,11 +927,13 @@ describe("TeammateManager", () => {
     expect(manager.get("alice")?.status).toBe("stopped");
     expect((await store.getTask(first.task!.id)).review.state).toBe("requested");
     expect((await store.getTask(second.task!.id)).review.state).toBe("requested");
-    expect(await bus.readInbox("lead")).toContainEqual(expect.objectContaining({
-      from: "alice",
-      type: "result",
-      payload: expect.objectContaining({ reason: "idle timeout" }),
-    }));
+    expect(await bus.readInbox("lead")).toContainEqual(
+      expect.objectContaining({
+        from: "alice",
+        type: "result",
+        payload: expect.objectContaining({ reason: "idle timeout" }),
+      }),
+    );
   });
 
   it("lets two idle teammates atomically split independent board tasks", async () => {
@@ -935,8 +960,9 @@ describe("TeammateManager", () => {
     await Promise.all([manager.waitFor("alice"), manager.waitFor("bob")]);
     const tasks = await store.listTasks();
     expect(tasks.map((task) => task.review.state)).toEqual(["requested", "requested"]);
-    const results = (await bus.readInbox("lead"))
-      .filter((message) => message.content === "Shared board task complete.");
+    const results = (await bus.readInbox("lead")).filter(
+      (message) => message.content === "Shared board task complete.",
+    );
     expect(new Set(results.map((message) => message.from))).toEqual(new Set(["alice", "bob"]));
   });
 
@@ -960,7 +986,7 @@ describe("TeammateManager", () => {
       idlePollMs: 200,
       idleTimeoutMs: 1_000,
     });
-    await waitFor(async () => manager.get("alice")?.status === "idle" ? true : undefined);
+    await waitFor(async () => (manager.get("alice")?.status === "idle" ? true : undefined));
 
     await bus.send({
       from: "lead",
@@ -1006,41 +1032,49 @@ describe("TeammateManager", () => {
 
     const listTool = registry.get("list_teammates");
     expect(listTool).toBeDefined();
-    const listResult = await listTool!.execute({}, createToolContext({
-      bus,
-      manager,
-      gateway,
-      workspaceRoot,
-    }));
+    const listResult = await listTool!.execute(
+      {},
+      createToolContext({
+        bus,
+        manager,
+        gateway,
+        workspaceRoot,
+      }),
+    );
     expect(listResult.teammates).toEqual([
       expect.objectContaining({ name: "reviewer", status: "idle" }),
     ]);
 
     const sendTool = registry.get("send_teammate_message");
     expect(sendTool).toBeDefined();
-    await sendTool!.execute({
-      name: "reviewer",
-      content: "Now review the citations.",
-    }, createToolContext({ bus, manager, gateway, workspaceRoot }));
+    await sendTool!.execute(
+      {
+        name: "reviewer",
+        content: "Now review the citations.",
+      },
+      createToolContext({ bus, manager, gateway, workspaceRoot }),
+    );
 
     const messages = await waitFor(async () => {
       const inbox = await bus.peekInbox("lead");
-      return inbox.some((message) => message.content === "Second review done.")
-        ? inbox
-        : undefined;
+      return inbox.some((message) => message.content === "Second review done.") ? inbox : undefined;
     });
 
-    expect(messages.filter((message) => message.type === "result").map((message) => message.content))
-      .toEqual(["First review done.", "Second review done."]);
+    expect(
+      messages.filter((message) => message.type === "result").map((message) => message.content),
+    ).toEqual(["First review done.", "Second review done."]);
 
     const shutdownTool = registry.get("shutdown_teammate");
     expect(shutdownTool).toBeDefined();
-    await shutdownTool!.execute({ name: "reviewer" }, createToolContext({
-      bus,
-      manager,
-      gateway,
-      workspaceRoot,
-    }));
+    await shutdownTool!.execute(
+      { name: "reviewer" },
+      createToolContext({
+        bus,
+        manager,
+        gateway,
+        workspaceRoot,
+      }),
+    );
     await manager.waitFor("reviewer");
     expect(manager.get("reviewer")?.status).toBe("stopped");
   });
@@ -1107,8 +1141,9 @@ describe("TeammateManager", () => {
     });
     const secondTurnText = (controlled.requests[1]?.messages ?? [])
       .flatMap((message) => message.content)
-      .filter((block): block is Extract<AgentModelContentBlock, { type: "text" }> =>
-        block.type === "text",
+      .filter(
+        (block): block is Extract<AgentModelContentBlock, { type: "text" }> =>
+          block.type === "text",
       )
       .map((block) => block.text)
       .join("\n");
@@ -1158,11 +1193,14 @@ describe("TeammateManager", () => {
     );
     await waitFor(async () => {
       const messages = await bus.peekInbox("lead");
-      return messages.some((message) =>
-        message.from === "reviewer"
-        && message.type === "result"
-        && message.content === "The claimed task is now ready for review."
-      ) ? true : undefined;
+      return messages.some(
+        (message) =>
+          message.from === "reviewer" &&
+          message.type === "result" &&
+          message.content === "The claimed task is now ready for review.",
+      )
+        ? true
+        : undefined;
     });
 
     await manager.requestShutdown("reviewer");
@@ -1218,10 +1256,15 @@ describe("Lead teammate tools", () => {
     const tool = createDefaultToolRegistry().get("send_teammate_message");
 
     expect(tool).toBeDefined();
-    await expect(tool!.execute({
-      name: "missing",
-      content: "hello?",
-    }, createToolContext({ bus, manager, workspaceRoot }))).rejects.toThrow("Unknown teammate: missing");
+    await expect(
+      tool!.execute(
+        {
+          name: "missing",
+          content: "hello?",
+        },
+        createToolContext({ bus, manager, workspaceRoot }),
+      ),
+    ).rejects.toThrow("Unknown teammate: missing");
     await expect(stat(bus.getInboxPath("missing"))).rejects.toMatchObject({ code: "ENOENT" });
   });
 });
@@ -1292,11 +1335,14 @@ describe("Teammate terminal lifecycle", () => {
     const taskRoot = await mkdtemp(join(tmpdir(), "ppt-teammate-stopping-tasks-"));
     const store = new ControlledCleanupTaskStore(taskRoot);
     const cleanupTask = await createBoardTask(store, "Cleanup-owned task");
-    await store.mutate({
-      type: "claim",
-      taskId: cleanupTask.task!.id,
-      expectedRevision: cleanupTask.task!.revision,
-    }, store.principal("reviewer", "teammate", new Set(["task:update_own"])));
+    await store.mutate(
+      {
+        type: "claim",
+        taskId: cleanupTask.task!.id,
+        expectedRevision: cleanupTask.task!.revision,
+      },
+      store.principal("reviewer", "teammate", new Set(["task:update_own"])),
+    );
     const bus = new MessageBus(MessageBus.defaultMailboxDir(workspaceRoot));
     const manager = new TeammateManager(bus);
     manager.spawn({
@@ -1309,7 +1355,7 @@ describe("Teammate terminal lifecycle", () => {
       idlePollMs: 5,
       idleTimeoutMs: 1_000,
     });
-    await waitFor(async () => manager.get("reviewer")?.status === "idle" ? true : undefined);
+    await waitFor(async () => (manager.get("reviewer")?.status === "idle" ? true : undefined));
 
     await manager.requestShutdown("reviewer");
     await store.cleanupStarted;
@@ -1359,9 +1405,11 @@ describe("Teammate terminal lifecycle", () => {
           reason: "aborted",
         }),
       ]);
-      expect(await bus.peekInbox("lead")).not.toContainEqual(expect.objectContaining({
-        type: "error",
-      }));
+      expect(await bus.peekInbox("lead")).not.toContainEqual(
+        expect.objectContaining({
+          type: "error",
+        }),
+      );
       expect(manager.abortTeammate("reviewer")).toBe(false);
     } finally {
       clearHooks();
@@ -1397,18 +1445,19 @@ describe("Teammate terminal lifecycle", () => {
       await manager.waitFor("reviewer");
 
       expect(manager.get("reviewer")?.status).toBe("stopped");
-      expect(await bus.peekInbox("lead")).toContainEqual(expect.objectContaining({
-        from: "reviewer",
-        type: "result",
-        content: "Policy ended the teammate.",
-      }));
-      expect(events.filter((event) => event.type === "teammate-assignment-finished"))
-        .toEqual([
-          expect.objectContaining({
-            status: "completed",
-            message: "Policy ended the teammate.",
-          }),
-        ]);
+      expect(await bus.peekInbox("lead")).toContainEqual(
+        expect.objectContaining({
+          from: "reviewer",
+          type: "result",
+          content: "Policy ended the teammate.",
+        }),
+      );
+      expect(events.filter((event) => event.type === "teammate-assignment-finished")).toEqual([
+        expect.objectContaining({
+          status: "completed",
+          message: "Policy ended the teammate.",
+        }),
+      ]);
       expect(stopBlocks).toEqual([
         expect.objectContaining({ result: "stopped", reason: "completed" }),
       ]);
@@ -1434,11 +1483,14 @@ describe("Teammate terminal lifecycle", () => {
       const manager = new TeammateManager(bus);
       const cleanupStore = new FailingCleanupTaskStore(taskRoot);
       const cleanupTask = await createBoardTask(cleanupStore, "Cleanup failure task");
-      await cleanupStore.mutate({
-        type: "claim",
-        taskId: cleanupTask.task!.id,
-        expectedRevision: cleanupTask.task!.revision,
-      }, cleanupStore.principal("reviewer", "teammate", new Set(["task:update_own"])));
+      await cleanupStore.mutate(
+        {
+          type: "claim",
+          taskId: cleanupTask.task!.id,
+          expectedRevision: cleanupTask.task!.revision,
+        },
+        cleanupStore.principal("reviewer", "teammate", new Set(["task:update_own"])),
+      );
       manager.spawn({
         name: "reviewer",
         role: "outline reviewer",
@@ -1449,7 +1501,7 @@ describe("Teammate terminal lifecycle", () => {
         idlePollMs: 5,
         idleTimeoutMs: 1_000,
       });
-      await waitFor(async () => manager.get("reviewer")?.status === "idle" ? true : undefined);
+      await waitFor(async () => (manager.get("reviewer")?.status === "idle" ? true : undefined));
 
       await manager.requestShutdown("reviewer");
       await manager.waitFor("reviewer");
@@ -1459,13 +1511,17 @@ describe("Teammate terminal lifecycle", () => {
         expect.objectContaining({ result: "failed", reason: "aborted" }),
       ]);
       const leadMessages = await bus.peekInbox("lead");
-      expect(leadMessages).toContainEqual(expect.objectContaining({
-        type: "shutdown_response",
-      }));
-      expect(leadMessages).toContainEqual(expect.objectContaining({
-        type: "error",
-        content: "Teammate finalization failed.",
-      }));
+      expect(leadMessages).toContainEqual(
+        expect.objectContaining({
+          type: "shutdown_response",
+        }),
+      );
+      expect(leadMessages).toContainEqual(
+        expect.objectContaining({
+          type: "error",
+          content: "Teammate finalization failed.",
+        }),
+      );
     } finally {
       clearHooks();
       resetDefaultHooksForTests();

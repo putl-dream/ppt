@@ -1,5 +1,5 @@
 import type { AgentModelSelection } from "@shared/agent";
-import { resolveAgentGatewayConfig, type AgentGatewayConfig } from "@shared/agent-gateway-config";
+import { type AgentGatewayConfig, resolveAgentGatewayConfig } from "@shared/agent-gateway-config";
 import type {
   AgentModelContentBlock,
   AgentModelGateway,
@@ -10,21 +10,21 @@ import type {
   StopReason,
 } from "../../gateway";
 import {
-  textFromContentBlocks,
-  toolUseBlocksFromContent,
-  resolveFallbackModelSelection,
   AgentGatewayError,
   classifyGatewayRecovery,
   isAbortError,
   isOutputTruncated,
+  resolveFallbackModelSelection,
+  textFromContentBlocks,
+  toolUseBlocksFromContent,
 } from "../../gateway";
-import { backoffBeforeRetry } from "../model/with-retry";
+import { createModuleLogger } from "../../logger";
 import {
   emergencyTrimContext,
   emergencyTrimModelMessages,
   prepareContext,
 } from "../context-compact";
-import { createModuleLogger } from "../../logger";
+import { backoffBeforeRetry } from "../model/with-retry";
 
 const logger = createModuleLogger("model-call-recovery");
 const MAX_RECOVERY_ATTEMPTS = 8;
@@ -32,8 +32,8 @@ const TOKEN_UPGRADE_8K = 8_192;
 const TOKEN_UPGRADE_64K = 65_536;
 const CONSECUTIVE_OVERLOAD_SWITCH = 2;
 const CONTINUATION_INSTRUCTION =
-  "Continue exactly where the previous text response ended. "
-  + "Do not repeat content already written.";
+  "Continue exactly where the previous text response ended. " +
+  "Do not repeat content already written.";
 
 function readGatewayConfig(gateway: AgentModelGateway): AgentGatewayConfig {
   const reader = gateway as AgentModelGateway & { getGatewayConfig?: () => AgentGatewayConfig };
@@ -99,8 +99,7 @@ function buildContinuationPrompt(
   return JSON.stringify({
     ...originalPayload,
     continuation: {
-      instruction:
-        `Your previous text response was truncated by max_tokens. ${CONTINUATION_INSTRUCTION}`,
+      instruction: `Your previous text response was truncated by max_tokens. ${CONTINUATION_INSTRUCTION}`,
       partialOutput,
     },
   });
@@ -124,10 +123,12 @@ function buildContinuationMessages(
     },
     {
       role: "user",
-      content: [{
-        type: "text",
-        text: `The preceding assistant response was truncated by max_tokens. ${CONTINUATION_INSTRUCTION}`,
-      }],
+      content: [
+        {
+          type: "text",
+          text: `The preceding assistant response was truncated by max_tokens. ${CONTINUATION_INSTRUCTION}`,
+        },
+      ],
     },
   ];
 }
@@ -160,10 +161,7 @@ function mergeContinuationContent(
   const nextText = textFromContentBlocks(content);
   const combinedText = mergeContinuationText(previousText, nextText);
   const nonText = content.filter((block) => block.type !== "text");
-  return [
-    ...(combinedText ? [{ type: "text" as const, text: combinedText }] : []),
-    ...nonText,
-  ];
+  return [...(combinedText ? [{ type: "text" as const, text: combinedText }] : []), ...nonText];
 }
 
 async function invokeGateway(
@@ -225,9 +223,7 @@ export async function callModelWithRecovery(
   let continuationPartial: string | undefined;
   let consecutiveOverloaded = 0;
   let lastError: unknown;
-  let preparedMessages = options.messages
-    ? structuredClone(options.messages)
-    : undefined;
+  let preparedMessages = options.messages ? structuredClone(options.messages) : undefined;
 
   const recordDiagnostic = (message: string) => {
     recoveryNotes.push(message);
@@ -345,7 +341,10 @@ export async function callModelWithRecovery(
       }
 
       if (!text) {
-        throw new AgentGatewayError("Model returned no text or tool_use content.", "empty-response");
+        throw new AgentGatewayError(
+          "Model returned no text or tool_use content.",
+          "empty-response",
+        );
       }
 
       return {
@@ -389,15 +388,13 @@ export async function callModelWithRecovery(
       }
 
       if (consecutiveOverloaded >= CONSECUTIVE_OVERLOAD_SWITCH) {
-        const fallback = options.fallbackModel
-          && (
-            !modelSelection
-            ||
-            options.fallbackModel.provider !== modelSelection.provider
-            || options.fallbackModel.model !== modelSelection.model
-          )
-          ? options.fallbackModel
-          : resolveFallbackModelSelection(modelSelection, gatewayConfig);
+        const fallback =
+          options.fallbackModel &&
+          (!modelSelection ||
+            options.fallbackModel.provider !== modelSelection.provider ||
+            options.fallbackModel.model !== modelSelection.model)
+            ? options.fallbackModel
+            : resolveFallbackModelSelection(modelSelection, gatewayConfig);
         if (fallback) {
           modelSelection = fallback;
           consecutiveOverloaded = 0;

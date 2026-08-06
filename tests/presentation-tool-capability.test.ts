@@ -1,28 +1,24 @@
 import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
-import { ToolPreflight } from
-  "../src/main/agent/runtime/tools/tool-preflight";
+import { ToolPreflight } from "../src/main/agent/runtime/tools/tool-preflight";
+import { executeExtraToolTool } from "../src/main/agent/tools/core/execute-extra-tool";
+import { WorkspaceFileService } from "../src/main/agent/tools/files/workspace-file-service";
 import type {
   PptLifecycleToolBridge,
   ToolContext,
   ToolDefinition,
 } from "../src/main/agent/tools/tool-definition";
-import { createDefaultToolRegistry, ToolRegistry } from
-  "../src/main/agent/tools/tool-registry";
-import { executeExtraToolTool } from
-  "../src/main/agent/tools/core/execute-extra-tool";
-import { WorkspaceFileService } from
-  "../src/main/agent/tools/files/workspace-file-service";
+import { createDefaultToolRegistry, ToolRegistry } from "../src/main/agent/tools/tool-registry";
+import { createStarterPresentation } from "../src/shared/presentation-fixtures";
 import {
   asPptCapabilityRequestId,
   asPptJobId,
   asPresentationId,
   asQueryId,
-  pptJobProjectionSchema,
   type PptCapability,
   type PptJobProjection,
+  pptJobProjectionSchema,
 } from "../src/shared/presentation-lifecycle";
-import { createStarterPresentation } from "../src/shared/presentation-fixtures";
 
 const PRESENTATION_TOOL_NAMES = [
   "GetDesignReference",
@@ -52,30 +48,19 @@ function projection(capability: PptCapability): PptJobProjection {
   });
 }
 
-function lifecycleBridge(
-  activeCapability?: PptCapability,
-): PptLifecycleToolBridge & {
+function lifecycleBridge(activeCapability?: PptCapability): PptLifecycleToolBridge & {
   requireActiveCapability: ReturnType<typeof vi.fn>;
 } {
-  const activeProjection = activeCapability
-    ? projection(activeCapability)
-    : undefined;
-  const requireActiveCapability = vi.fn(
-    (allowedCapabilities?: readonly PptCapability[]) => {
-      if (!activeProjection) {
-        throw new Error("Call BeginPptCapability before using Presentation tools.");
-      }
-      if (
-        allowedCapabilities
-        && !allowedCapabilities.includes(activeProjection.capability)
-      ) {
-        throw new Error(
-          `PPT capability ${activeProjection.capability} cannot use this tool.`,
-        );
-      }
-      return activeProjection;
-    },
-  );
+  const activeProjection = activeCapability ? projection(activeCapability) : undefined;
+  const requireActiveCapability = vi.fn((allowedCapabilities?: readonly PptCapability[]) => {
+    if (!activeProjection) {
+      throw new Error("Call BeginPptCapability before using Presentation tools.");
+    }
+    if (allowedCapabilities && !allowedCapabilities.includes(activeProjection.capability)) {
+      throw new Error(`PPT capability ${activeProjection.capability} cannot use this tool.`);
+    }
+    return activeProjection;
+  });
   return {
     queryId: asQueryId("query-capability-test"),
     withTransaction: (operation) => operation(),
@@ -123,9 +108,7 @@ function createCapabilityTestRegistry(): ToolRegistry {
   return registry;
 }
 
-function context(
-  lifecycle?: PptLifecycleToolBridge,
-): ToolContext {
+function context(lifecycle?: PptLifecycleToolBridge): ToolContext {
   return {
     presentation: createStarterPresentation(),
     selectedElementIds: [],
@@ -140,13 +123,11 @@ function context(
   };
 }
 
-async function prepare(
-  input: {
-    name: string;
-    args: Record<string, unknown>;
-    lifecycle?: PptLifecycleToolBridge;
-  },
-) {
+async function prepare(input: {
+  name: string;
+  args: Record<string, unknown>;
+  lifecycle?: PptLifecycleToolBridge;
+}) {
   const toolContext = context(input.lifecycle);
   return new ToolPreflight(toolContext.registry).prepare({
     toolCall: {
@@ -166,10 +147,7 @@ describe("Presentation tool capability preflight", () => {
   it("marks every product Presentation work tool with an explicit capability contract", () => {
     const registry = createDefaultToolRegistry();
     for (const name of PRESENTATION_TOOL_NAMES) {
-      expect(
-        registry.get(name)?.behavior?.presentation?.allowedCapabilities,
-        name,
-      ).toBeTruthy();
+      expect(registry.get(name)?.behavior?.presentation?.allowedCapabilities, name).toBeTruthy();
     }
   });
 
@@ -215,10 +193,7 @@ describe("Presentation tool capability preflight", () => {
         error: expect.stringContaining("cannot use this tool"),
       },
     });
-    expect(lifecycle.requireActiveCapability).toHaveBeenCalledWith([
-      "edit",
-      "restyle",
-    ]);
+    expect(lifecycle.requireActiveCapability).toHaveBeenCalledWith(["edit", "restyle"]);
   });
 
   it("allows a review capability to render and record an SVG preview", async () => {

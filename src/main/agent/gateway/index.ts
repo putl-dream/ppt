@@ -1,19 +1,19 @@
 import type { AgentModelSelection, AgentModelSettings } from "@shared/agent";
 import type { AgentGatewayConfig, AgentSearchConfig } from "@shared/agent-gateway-config";
-import {
-  resolveAgentGatewayConfig,
-  resolveAgentSearchConfig,
-} from "@shared/agent-gateway-config";
+import { resolveAgentGatewayConfig, resolveAgentSearchConfig } from "@shared/agent-gateway-config";
+import type { ModelUsageRecord } from "../../token-usage-store";
+import { createModuleLogger } from "../logger";
 import { anthropicDriver } from "./anthropic";
 import {
-  AgentModelSettingsRegistry,
-  resolveAgentModelConfig,
   type AgentCallPath,
+  AgentModelSettingsRegistry,
   type DriverResolvedConfig,
+  resolveAgentModelConfig,
 } from "./config";
+import { textFromContentBlocks } from "./content-blocks";
 import type { AgentProviderDriver } from "./driver";
-import { chatDriver, responsesDriver } from "./openai";
 import { AgentGatewayError, normalizeProviderError } from "./errors";
+import { chatDriver, responsesDriver } from "./openai";
 import {
   prepareAgentModelRequest,
   validateAgentModelResponse,
@@ -25,9 +25,6 @@ import type {
   AgentModelResponse,
   AgentModelStreamChunk,
 } from "./types";
-import { createModuleLogger } from "../logger";
-import { textFromContentBlocks } from "./content-blocks";
-import type { ModelUsageRecord } from "../../token-usage-store";
 
 const logger = createModuleLogger("gateway");
 
@@ -40,10 +37,7 @@ const DRIVERS = {
 function resolveDriver(callPath: AgentCallPath): AgentProviderDriver {
   const driver = DRIVERS[callPath];
   if (!Object.hasOwn(DRIVERS, callPath) || !driver) {
-    throw new AgentGatewayError(
-      `No call-path driver registered for ${callPath}.`,
-      "configuration",
-    );
+    throw new AgentGatewayError(`No call-path driver registered for ${callPath}.`, "configuration");
   }
   return driver;
 }
@@ -117,10 +111,13 @@ export class AgentGateway implements AgentModelGateway {
     return this.searchConfig;
   }
 
-  private resolveConfig(
-    selection?: AgentModelSelection,
-  ): DriverResolvedConfig {
-    return resolveAgentModelConfig(selection, this.runtimeSettings, process.env, this.gatewayConfig);
+  private resolveConfig(selection?: AgentModelSelection): DriverResolvedConfig {
+    return resolveAgentModelConfig(
+      selection,
+      this.runtimeSettings,
+      process.env,
+      this.gatewayConfig,
+    );
   }
 
   /** One complete model round-trip through the unified call-path driver. */
@@ -267,46 +264,43 @@ export class AgentGateway implements AgentModelGateway {
   }
 }
 
+// -- Config (仅 Runtime 需要的 fallback 选择) --
+export { resolveFallbackModelSelection } from "./config";
+// -- Content blocks --
+export {
+  textBlock,
+  textFromContentBlocks,
+  thinkingFromContentBlocks,
+  toolResultBlocksFromContent,
+  toolUseBlocksFromContent,
+} from "./content-blocks";
+export type { AgentGatewayErrorCode, GatewayRecoveryKind } from "./errors";
+// -- Errors (Gateway 标准错误与恢复分类) --
+export {
+  AgentGatewayError,
+  classifyGatewayRecovery,
+  isAbortError,
+  isOutputTruncated,
+} from "./errors";
+
+// -- Message pairing --
+export { ensureToolResultPairing, withEphemeralPrompt } from "./message-pairing";
 // -- Types --
 export type {
+  AgentModelContentBlock,
   AgentModelGateway,
+  AgentModelImageBlock,
+  AgentModelMessage,
   AgentModelRequest,
   AgentModelResponse,
   AgentModelStreamChunk,
-  AgentResponseContract,
-  AgentModelContentBlock,
-  AgentModelMessage,
   AgentModelTextBlock,
   AgentModelThinkingBlock,
-  AgentModelImageBlock,
-  AgentModelToolUseBlock,
   AgentModelToolResultBlock,
+  AgentModelToolUseBlock,
+  AgentResponseContract,
   AgentToolSchema,
   PreparedAgentModelRequest,
   ResolvedAgentModelConfig,
   StopReason,
 } from "./types";
-
-// -- Errors (Gateway 标准错误与恢复分类) --
-export {
-  AgentGatewayError,
-  isOutputTruncated,
-  classifyGatewayRecovery,
-  isAbortError,
-} from "./errors";
-export type { AgentGatewayErrorCode, GatewayRecoveryKind } from "./errors";
-
-// -- Content blocks --
-export {
-  textFromContentBlocks,
-  toolUseBlocksFromContent,
-  thinkingFromContentBlocks,
-  toolResultBlocksFromContent,
-  textBlock,
-} from "./content-blocks";
-
-// -- Message pairing --
-export { ensureToolResultPairing, withEphemeralPrompt } from "./message-pairing";
-
-// -- Config (仅 Runtime 需要的 fallback 选择) --
-export { resolveFallbackModelSelection } from "./config";

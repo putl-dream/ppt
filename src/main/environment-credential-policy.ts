@@ -12,14 +12,16 @@ export function resolveEnvironmentModelApiKey(
   requestedBaseURL: string | undefined,
   environment: NodeJS.ProcessEnv = process.env,
 ): string | undefined {
-  const apiKey = provider === "openai"
-    ? environment.OPENAI_API_KEY?.trim()
-    : environment.ANTHROPIC_API_KEY?.trim();
+  const apiKey =
+    provider === "openai"
+      ? environment.OPENAI_API_KEY?.trim()
+      : environment.ANTHROPIC_API_KEY?.trim();
   if (!apiKey) return undefined;
 
-  const environmentBaseURL = provider === "openai"
-    ? environment.OPENAI_BASE_URL?.trim()
-    : environment.ANTHROPIC_BASE_URL?.trim();
+  const environmentBaseURL =
+    provider === "openai"
+      ? environment.OPENAI_BASE_URL?.trim()
+      : environment.ANTHROPIC_BASE_URL?.trim();
   return environmentCredentialMatchesRoute(
     requestedBaseURL,
     environmentBaseURL,
@@ -59,8 +61,7 @@ function environmentCredentialMatchesRoute(
   }
   if (!normalizedRequested) return false;
   if (normalizedRequested === normalizedOfficial) return true;
-  return normalizedEnvironment !== undefined
-    && normalizedRequested === normalizedEnvironment;
+  return normalizedEnvironment !== undefined && normalizedRequested === normalizedEnvironment;
 }
 
 function normalizeRoute(value: string | undefined): string | undefined {

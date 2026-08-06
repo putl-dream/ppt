@@ -1,7 +1,7 @@
 import { z } from "zod";
-import type { ToolDefinition } from "../tool-definition";
 import { isSkillRecommendedForStage } from "../../runtime/prompts/skill-stage-policy";
 import { SUB_AGENT_TOOL_PERMISSION_PROFILES } from "../../runtime/tools/tool-access-policy";
+import type { ToolDefinition } from "../tool-definition";
 
 export const loadSkillSchema = z.object({
   skillName: z.string().describe("Registered skill name from the Available Skills catalog"),
@@ -23,8 +23,8 @@ export interface LoadSkillResult {
 export const loadSkillTool: ToolDefinition<typeof loadSkillSchema, LoadSkillResult> = {
   name: "LoadSkill",
   description:
-    "Load full instructions for any registered skill when its specialized knowledge helps the current task. "
-    + "Independent skills may be loaded together in the same assistant response; do not open a new model turn per skill.",
+    "Load full instructions for any registered skill when its specialized knowledge helps the current task. " +
+    "Independent skills may be loaded together in the same assistant response; do not open a new model turn per skill.",
   category: "core",
   loadPolicy: "core",
   inputSchema: loadSkillSchema,

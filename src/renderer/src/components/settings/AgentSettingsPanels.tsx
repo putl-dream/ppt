@@ -64,10 +64,12 @@ export function AgentLimitsSettingsPanel({
             step="1"
             value={limits.mainMaxSteps}
             disabled={!limits.enabled}
-            onChange={(event) => setLimits({
-              ...limits,
-              mainMaxSteps: parseInt(event.target.value, 10),
-            })}
+            onChange={(event) =>
+              setLimits({
+                ...limits,
+                mainMaxSteps: parseInt(event.target.value, 10),
+              })
+            }
           />
         </SettingsRow>
         <SettingsRow label="子 Agent 单次上限" muted={!limits.enabled}>
@@ -80,10 +82,12 @@ export function AgentLimitsSettingsPanel({
             step="1"
             value={limits.subMaxSteps}
             disabled={!limits.enabled}
-            onChange={(event) => setLimits({
-              ...limits,
-              subMaxSteps: parseInt(event.target.value, 10),
-            })}
+            onChange={(event) =>
+              setLimits({
+                ...limits,
+                subMaxSteps: parseInt(event.target.value, 10),
+              })
+            }
           />
         </SettingsRow>
       </SettingsSection>

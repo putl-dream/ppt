@@ -8,7 +8,10 @@ export interface LayoutValidatorOptions {
 }
 
 export class LayoutValidator {
-  validate(presentation: Presentation, options: LayoutValidatorOptions = {}): DeckValidationIssue[] {
+  validate(
+    presentation: Presentation,
+    options: LayoutValidatorOptions = {},
+  ): DeckValidationIssue[] {
     const slideIdSet = options.slideIds ? new Set(options.slideIds) : undefined;
     const issues: DeckValidationIssue[] = [];
 
@@ -46,7 +49,8 @@ export class LayoutValidator {
           category: "layout",
           severity: "error",
           message: `SVG page '${slide.title}' no longer matches its source hash.`,
-          fixHint: "Resubmit the SVG page so validation, preview, and export share the same source.",
+          fixHint:
+            "Resubmit the SVG page so validation, preview, and export share the same source.",
         });
       }
       if (!slide.narrative) {

@@ -1,6 +1,5 @@
 import { mkdir, readFile } from "node:fs/promises";
 import { dirname } from "node:path";
-import { z } from "zod";
 import type {
   ProviderTokenUsage,
   TokenTaskOutcome,
@@ -8,6 +7,7 @@ import type {
   TokenUsageModel,
   TokenUsageStats,
 } from "@shared/token-usage";
+import { z } from "zod";
 import { writeJsonFileAtomic, writeTextFileAtomic } from "./agent/persistence/atomic-json-file";
 
 const usageTotalsSchema = {
@@ -74,8 +74,8 @@ function dateKeyDistance(from: string, to: string): number {
   const [fromYear, fromMonth, fromDay] = from.split("-").map(Number);
   const [toYear, toMonth, toDay] = to.split("-").map(Number);
   return Math.round(
-    (Date.UTC(toYear, toMonth - 1, toDay) - Date.UTC(fromYear, fromMonth - 1, fromDay))
-      / 86_400_000,
+    (Date.UTC(toYear, toMonth - 1, toDay) - Date.UTC(fromYear, fromMonth - 1, fromDay)) /
+      86_400_000,
   );
 }
 
@@ -99,7 +99,10 @@ function emptyDay(date: string): TokenUsageDay {
   };
 }
 
-function computeStreaks(activeDateKeys: string[], todayKey: string): {
+function computeStreaks(
+  activeDateKeys: string[],
+  todayKey: string,
+): {
   currentStreakDays: number;
   longestStreakDays: number;
 } {
@@ -184,13 +187,8 @@ export class TokenUsageStore {
       }
       if (code !== "ENOENT") {
         try {
-          this.data = migrateLegacyFile(
-            JSON.parse(await readFile(`${this.filePath}.bak`, "utf8")),
-          );
-          await writeTextFileAtomic(
-            this.filePath,
-            `${JSON.stringify(this.data, null, 2)}\n`,
-          );
+          this.data = migrateLegacyFile(JSON.parse(await readFile(`${this.filePath}.bak`, "utf8")));
+          await writeTextFileAtomic(this.filePath, `${JSON.stringify(this.data, null, 2)}\n`);
           return;
         } catch {
           // Both copies are unusable. Optional statistics must not block startup.
@@ -207,14 +205,14 @@ export class TokenUsageStore {
     await this.mutate(() => {
       const day = this.getOrCreateDay(localDateKey(recordedAt));
       addUsage(day, record);
-      let model = day.models.find(
-        (entry) => record.configurationId
-          ? entry.configurationId === record.configurationId
-            && entry.provider === record.provider
-            && entry.model === record.model
-          : !entry.configurationId
-            && entry.provider === record.provider
-            && entry.model === record.model,
+      let model = day.models.find((entry) =>
+        record.configurationId
+          ? entry.configurationId === record.configurationId &&
+            entry.provider === record.provider &&
+            entry.model === record.model
+          : !entry.configurationId &&
+            entry.provider === record.provider &&
+            entry.model === record.model,
       );
       if (!model) {
         model = emptyModel(record.provider, record.model, record.configurationId);
@@ -255,8 +253,8 @@ export class TokenUsageStore {
         const key = entry.configurationId
           ? `configuration\0${entry.configurationId}\0${entry.provider}\0${entry.model}`
           : `legacy\0${entry.provider}\0${entry.model}`;
-        const aggregate = models.get(key)
-          ?? emptyModel(entry.provider, entry.model, entry.configurationId);
+        const aggregate =
+          models.get(key) ?? emptyModel(entry.provider, entry.model, entry.configurationId);
         addUsage(aggregate, entry, entry.requestCount);
         models.set(key, aggregate);
       }
@@ -270,9 +268,10 @@ export class TokenUsageStore {
       completedTaskCount: sumDays(sortedDays, "completedTaskCount"),
       failedTaskCount: sumDays(sortedDays, "failedTaskCount"),
       interruptedTaskCount: sumDays(sortedDays, "interruptedTaskCount"),
-      averageTaskDurationMs: durationSampleCount > 0
-        ? Math.round(sumDays(sortedDays, "totalTaskDurationMs") / durationSampleCount)
-        : 0,
+      averageTaskDurationMs:
+        durationSampleCount > 0
+          ? Math.round(sumDays(sortedDays, "totalTaskDurationMs") / durationSampleCount)
+          : 0,
       longestTaskDurationMs: sortedDays.reduce(
         (peak, day) => Math.max(peak, day.longestTaskDurationMs),
         0,
@@ -311,11 +310,7 @@ export class TokenUsageStore {
   }
 }
 
-function emptyModel(
-  provider: string,
-  model: string,
-  configurationId?: string,
-): TokenUsageModel {
+function emptyModel(provider: string, model: string, configurationId?: string): TokenUsageModel {
   return {
     ...(configurationId ? { configurationId } : {}),
     provider,
@@ -330,9 +325,20 @@ function emptyModel(
 }
 
 function addUsage(
-  target: Omit<TokenUsageDay, "date" | "taskCount" | "completedTaskCount" | "failedTaskCount"
-    | "interruptedTaskCount" | "totalTaskDurationMs" | "durationSampleCount"
-    | "longestTaskDurationMs" | "models"> | TokenUsageModel,
+  target:
+    | Omit<
+        TokenUsageDay,
+        | "date"
+        | "taskCount"
+        | "completedTaskCount"
+        | "failedTaskCount"
+        | "interruptedTaskCount"
+        | "totalTaskDurationMs"
+        | "durationSampleCount"
+        | "longestTaskDurationMs"
+        | "models"
+      >
+    | TokenUsageModel,
   usage: ProviderTokenUsage,
   requestCount = 1,
 ): void {
@@ -346,8 +352,15 @@ function addUsage(
 
 function sumDays(
   days: TokenUsageDay[],
-  key: "totalTokens" | "requestCount" | "taskCount" | "completedTaskCount"
-    | "failedTaskCount" | "interruptedTaskCount" | "totalTaskDurationMs" | "durationSampleCount",
+  key:
+    | "totalTokens"
+    | "requestCount"
+    | "taskCount"
+    | "completedTaskCount"
+    | "failedTaskCount"
+    | "interruptedTaskCount"
+    | "totalTaskDurationMs"
+    | "durationSampleCount",
 ): number {
   return days.reduce((sum, day) => sum + day[key], 0);
 }

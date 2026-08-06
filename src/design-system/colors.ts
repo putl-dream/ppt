@@ -142,9 +142,7 @@ export function isDarkTokens(tokens: DesignTokens): boolean {
 function adaptSurface(base: ColorSpec, mode: "light" | "dark"): ColorSpec {
   const alreadyDark = isDarkColor(base.background);
   if ((mode === "dark") === alreadyDark) return base;
-  const surface = mode === "dark"
-    ? COLOR_SPECS["tech-dark"]
-    : COLOR_SPECS["business-blue"];
+  const surface = mode === "dark" ? COLOR_SPECS["tech-dark"] : COLOR_SPECS["business-blue"];
   return {
     ...surface,
     // Preserve the selected scheme's brand identity across surface variants.
@@ -158,10 +156,7 @@ function applyAnchorOverrides(base: ColorSpec, overrides?: ColorOverrides): Colo
   return {
     background: overrides.background ?? overrides.bg ?? base.background,
     secondaryBg:
-      overrides.secondaryBg
-      ?? overrides.secondaryBackground
-      ?? overrides.muted
-      ?? base.secondaryBg,
+      overrides.secondaryBg ?? overrides.secondaryBackground ?? overrides.muted ?? base.secondaryBg,
     primary: overrides.primary ?? overrides.title ?? base.primary,
     accent: overrides.accent ?? base.accent,
     secondaryAccent: overrides.secondaryAccent ?? overrides.softAccent ?? base.secondaryAccent,
@@ -177,9 +172,10 @@ export function resolveColors(
   mode?: "light" | "dark",
   overrides?: ColorOverrides,
 ): ResolvedColors {
-  const scheme: ColorScheme = typeof schemeOrTokens === "object" && "palette" in schemeOrTokens
-    ? schemeOrTokens.palette
-    : schemeOrTokens;
+  const scheme: ColorScheme =
+    typeof schemeOrTokens === "object" && "palette" in schemeOrTokens
+      ? schemeOrTokens.palette
+      : schemeOrTokens;
   const source = resolveSpec(scheme);
   const adapted = mode ? adaptSurface(source, mode) : source;
   const colors = applyAnchorOverrides(adapted, overrides);

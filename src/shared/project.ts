@@ -1,5 +1,5 @@
-import type { ProjectArtifact } from "./session";
 import { projectArtifactFilePaths } from "./deck-persistence";
+import type { ProjectArtifact } from "./session";
 
 export const projectArtifactIds = [
   "design-spec",

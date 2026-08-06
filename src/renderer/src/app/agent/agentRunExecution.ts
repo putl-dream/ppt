@@ -1,11 +1,11 @@
+import type { AgentExecutionStrategy } from "@shared/agent";
 import type { AgentGatewayPreferences } from "@shared/agent-gateway-config";
 import type { AgentStepLimits } from "@shared/agent-step-limits";
-import type { AgentExecutionStrategy } from "@shared/agent";
+import { getPersistedDisplayCards } from "@shared/cards/display-card-managers";
 import type { AgentRunRequest, AgentRunResult } from "@shared/ipc";
 import { buildAgentRunServicesWire } from "../../agentGatewayConfig";
-import { getPersistedDisplayCards } from "../../cards/display-card-managers";
-import { toAgentModelSelection, type ManagedModel } from "../../modelCatalog";
-import { findActiveThreadId, type ChatMessage } from "../chatMessageRuntime";
+import { type ManagedModel, toAgentModelSelection } from "../../modelCatalog";
+import { type ChatMessage, findActiveThreadId } from "../chatMessageRuntime";
 
 interface ExecuteAgentRunOptions {
   request: AgentRunRequest;
@@ -20,9 +20,7 @@ interface ExecuteAgentRunOptions {
 }
 
 /**
- * Agent 执行边界：集中解析 Renderer 配置，并选择继续既有 thread 或启动新运行。
- * Hook 只传入运行上下文，不需要了解 desktopApi 两个入口的参数差异。
- */
+ * Agent 执行边界：集中解析Renderer 配置，并选择继续既有 thread 或启动新运行。 * Hook 只传入运行上下文，不需要了解desktopApi 两个入口的参数差异。 */
 export function executeAgentRun({
   request,
   sourceMessages,

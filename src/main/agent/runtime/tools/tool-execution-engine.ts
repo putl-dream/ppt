@@ -2,9 +2,9 @@ import type { AgentModelToolResultBlock, AgentModelToolUseBlock } from "../../ga
 import type { ToolContext, ToolDefinition } from "../../tools/tool-definition";
 import { validateToolOutput } from "../../tools/tool-validation";
 import type { PostToolUseBlock } from "../hooks/hook-blocks";
-import { prepareToolResultData } from "./tool-result-data";
 import { rethrowIfRuntimeCancellation } from "../lifecycle/runtime-cancellation";
 import { classifyToolExecutionError } from "./tool-execution-error";
+import { prepareToolResultData } from "./tool-result-data";
 
 export interface ToolExecutionOutcome {
   executionStatus: "not_started" | "threw" | "returned";
@@ -127,9 +127,10 @@ export class ToolExecutionEngine {
           ? {
               type: "tool_result",
               toolUseId: toolCall.id,
-              content: modelBlocks.length > 0
-                ? modelBlocks
-                : [{ type: "text", text: preparedResult.modelContent }],
+              content:
+                modelBlocks.length > 0
+                  ? modelBlocks
+                  : [{ type: "text", text: preparedResult.modelContent }],
             }
           : toModelResult(toolCall.id, preparedResult.modelContent, false),
         validatedResult,

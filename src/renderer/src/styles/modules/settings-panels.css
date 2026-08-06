@@ -12,8 +12,12 @@
 
 /* Consumed by settings-token-usage.css refresh spinner. */
 @keyframes settingsSavingSpin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .settings-card {

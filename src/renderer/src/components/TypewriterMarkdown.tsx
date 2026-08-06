@@ -1,5 +1,6 @@
-import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { splitGraphemes, getTypewriterStepSize } from "../streamingText";
+import { getTypewriterStepSize, splitGraphemes } from "@shared/streaming-text";
+import type React from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { MessageMarkdown } from "./MessageMarkdown";
 
 interface TypewriterMarkdownProps {
@@ -9,9 +10,10 @@ interface TypewriterMarkdownProps {
 }
 
 function useReducedMotion(): boolean {
-  const [reduced, setReduced] = useState(() =>
-    typeof window !== "undefined"
-      && window.matchMedia("(prefers-reduced-motion: reduce)").matches
+  const [reduced, setReduced] = useState(
+    () =>
+      typeof window !== "undefined" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches,
   );
 
   useEffect(() => {
@@ -25,8 +27,8 @@ function useReducedMotion(): boolean {
 }
 
 function usePageVisible(): boolean {
-  const [visible, setVisible] = useState(() =>
-    typeof document === "undefined" || document.visibilityState !== "hidden"
+  const [visible, setVisible] = useState(
+    () => typeof document === "undefined" || document.visibilityState !== "hidden",
   );
 
   useEffect(() => {
@@ -51,9 +53,7 @@ export const TypewriterMarkdown: React.FC<TypewriterMarkdownProps> = ({
   activeRef.current = active;
   const reducedMotion = useReducedMotion();
   const pageVisible = usePageVisible();
-  const [revealedCount, setRevealedCount] = useState(() =>
-    active ? 0 : graphemes.length
-  );
+  const [revealedCount, setRevealedCount] = useState(() => (active ? 0 : graphemes.length));
 
   useLayoutEffect(() => {
     const previous = previousGraphemesRef.current;
@@ -63,8 +63,8 @@ export const TypewriterMarkdown: React.FC<TypewriterMarkdownProps> = ({
       let commonPrefixLength = 0;
       const comparableLength = Math.min(previous.length, graphemes.length);
       while (
-        commonPrefixLength < comparableLength
-        && previous[commonPrefixLength] === graphemes[commonPrefixLength]
+        commonPrefixLength < comparableLength &&
+        previous[commonPrefixLength] === graphemes[commonPrefixLength]
       ) {
         commonPrefixLength += 1;
       }
@@ -78,9 +78,7 @@ export const TypewriterMarkdown: React.FC<TypewriterMarkdownProps> = ({
   const showCaret = !reducedMotion && (active || animating);
   const hasStreamedRef = useRef(active);
   if (active) hasStreamedRef.current = true;
-  const completedAnnouncement = hasStreamedRef.current && !active && !animating
-    ? "回复已完成"
-    : "";
+  const completedAnnouncement = hasStreamedRef.current && !active && !animating ? "回复已完成" : "";
 
   useEffect(() => {
     if (!shouldTick) return;
@@ -111,17 +109,14 @@ export const TypewriterMarkdown: React.FC<TypewriterMarkdownProps> = ({
           className,
           "typewriter-markdown",
           showCaret ? "typewriter-markdown--active" : "",
-        ].filter(Boolean).join(" ")}
+        ]
+          .filter(Boolean)
+          .join(" ")}
         renderEmpty
         ariaBusy={active || animating}
       />
       {hasStreamedRef.current && (
-        <span
-          className="visually-hidden"
-          role="status"
-          aria-live="polite"
-          aria-atomic="true"
-        >
+        <span className="visually-hidden" role="status" aria-live="polite" aria-atomic="true">
           {completedAnnouncement}
         </span>
       )}

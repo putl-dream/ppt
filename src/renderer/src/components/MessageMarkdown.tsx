@@ -1,7 +1,7 @@
-import React from "react";
+import { getOpenExportFolderPath } from "@shared/export-links";
+import type React from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { getOpenExportFolderPath } from "@shared/export-links";
 
 interface MessageMarkdownProps {
   content: string;
@@ -19,10 +19,7 @@ export const MessageMarkdown: React.FC<MessageMarkdownProps> = ({
   if (!renderEmpty && !content.trim()) return null;
 
   return (
-    <div
-      className={`markdown-body${className ? ` ${className}` : ""}`}
-      aria-busy={ariaBusy}
-    >
+    <div className={`markdown-body${className ? ` ${className}` : ""}`} aria-busy={ariaBusy}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{

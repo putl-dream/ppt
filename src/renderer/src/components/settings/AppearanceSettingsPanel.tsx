@@ -1,6 +1,6 @@
-import React from "react";
 import type { UiThemeSummary } from "@shared/ipc";
 import { BUILTIN_UI_THEMES, DEFAULT_UI_THEME_ID } from "@shared/ui-themes";
+import React from "react";
 import {
   MAX_UI_FONT_SIZE,
   MAX_UI_LINE_HEIGHT,
@@ -71,13 +71,13 @@ export function AppearanceSettingsPanel({
     ...BUILTIN_UI_THEMES.map((theme) => ({ value: theme.id, label: theme.name })),
     ...uiThemes.map((theme) => ({ value: theme.id, label: theme.name })),
   ];
-  const selectedThemeLabel = themeOptions.find((option) => option.value === uiThemeId)?.label
-    ?? (uiThemeId === DEFAULT_UI_THEME_ID ? "Studio" : uiThemeId);
-  const selectedSchemeLabel = colorSchemeOptions.find((option) => option.value === colorScheme)?.label
-    ?? "暗色";
-  const selectedFontFamilyLabel = fontFamilyOptions.find(
-    (option) => option.value === uiFontFamily,
-  )?.label ?? "系统默认";
+  const selectedThemeLabel =
+    themeOptions.find((option) => option.value === uiThemeId)?.label ??
+    (uiThemeId === DEFAULT_UI_THEME_ID ? "Studio" : uiThemeId);
+  const selectedSchemeLabel =
+    colorSchemeOptions.find((option) => option.value === colorScheme)?.label ?? "暗色";
+  const selectedFontFamilyLabel =
+    fontFamilyOptions.find((option) => option.value === uiFontFamily)?.label ?? "系统默认";
 
   const commitFontSize = () => {
     const size = normalizePersistedUiFontSize(fontSizeDraft);
@@ -120,8 +120,9 @@ export function AppearanceSettingsPanel({
           </div>
         </SettingsRow>
         <p className="ide-hint">
-          在固定目录 <code>themes/&lt;主题名&gt;/theme.css</code> 放置主题后刷新列表即可切换。推荐覆盖
-          semantic token；深度定制可用 <code>data-ui-region</code>。
+          在固定目录 <code>themes/&lt;主题名&gt;/theme.css</code>{" "}
+          放置主题后刷新列表即可切换。推荐覆盖 semantic token；深度定制可用{" "}
+          <code>data-ui-region</code>。
         </p>
       </SettingsSection>
       <SettingsSection title="明暗" hint={selectedSchemeLabel}>
@@ -135,7 +136,8 @@ export function AppearanceSettingsPanel({
                 onClick={() => setColorScheme(option.value)}
                 aria-pressed={colorScheme === option.value}
               >
-                {option.icon}<span>{option.label}</span>
+                {option.icon}
+                <span>{option.label}</span>
               </button>
             ))}
           </div>
@@ -170,7 +172,9 @@ export function AppearanceSettingsPanel({
             aria-label="基准字号"
             onChange={(event) => setFontSizeDraft(event.target.value)}
             onBlur={commitFontSize}
-            onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") event.currentTarget.blur();
+            }}
           />
         </SettingsRow>
         <SettingsRow label="行高（倍）">
@@ -184,7 +188,9 @@ export function AppearanceSettingsPanel({
             aria-label="行高"
             onChange={(event) => setLineHeightDraft(event.target.value)}
             onBlur={commitLineHeight}
-            onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") event.currentTarget.blur();
+            }}
           />
         </SettingsRow>
         <p className="ide-hint">
@@ -192,7 +198,8 @@ export function AppearanceSettingsPanel({
         </p>
       </SettingsSection>
       <p className="ide-hint">
-        当前：{selectedThemeLabel} · {selectedSchemeLabel} · {selectedFontFamilyLabel} · {uiFontSize}px / {uiLineHeight}
+        当前：{selectedThemeLabel} · {selectedSchemeLabel} · {selectedFontFamilyLabel} ·{" "}
+        {uiFontSize}px / {uiLineHeight}
       </p>
     </SettingsPanel>
   );

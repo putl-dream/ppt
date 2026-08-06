@@ -139,7 +139,9 @@
   font-size: 12px;
   font-weight: var(--font-weight-medium);
   cursor: pointer;
-  transition: color 0.14s ease, background 0.14s ease;
+  transition:
+    color 0.14s ease,
+    background 0.14s ease;
 }
 
 .token-view-tabs button {
@@ -209,7 +211,9 @@
     var(--accent-primary),
     color-mix(in srgb, var(--accent-primary) 42%, var(--surface-sunken))
   );
-  transition: height 0.2s ease, opacity 0.14s ease;
+  transition:
+    height 0.2s ease,
+    opacity 0.14s ease;
 }
 
 .token-trend-column:hover .token-trend-bar {

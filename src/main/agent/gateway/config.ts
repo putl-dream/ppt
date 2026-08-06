@@ -1,11 +1,11 @@
 import type { AgentModelSelection, AgentModelSettings, AgentProvider } from "@shared/agent";
 import {
-  DEFAULT_AGENT_GATEWAY_CONFIG,
   type AgentGatewayConfig,
+  DEFAULT_AGENT_GATEWAY_CONFIG,
 } from "@shared/agent-gateway-config";
+import { resolveEnvironmentModelApiKey } from "../../environment-credential-policy";
 import { AgentGatewayError } from "./errors";
 import type { ResolvedAgentModelConfig } from "./types";
-import { resolveEnvironmentModelApiKey } from "../../environment-credential-policy";
 
 /** Internal Gateway call path; callers never select this directly. */
 export type AgentCallPath = "chat" | "responses" | "anthropic";
@@ -31,7 +31,10 @@ export class AgentModelSettingsRegistry {
   private readonly providerDefaults = new Map<AgentProvider, AgentModelSettings>();
   private readonly primaryByConfigurationId = new Map<string, AgentModelSettings>();
   private readonly fallbackByConfigurationId = new Map<string, AgentModelSettings>();
-  private readonly fallbackByProviderModel = new Map<AgentProvider, Map<string, AgentModelSettings>>();
+  private readonly fallbackByProviderModel = new Map<
+    AgentProvider,
+    Map<string, AgentModelSettings>
+  >();
 
   registerPrimary(settings: AgentModelSettings): void {
     const registered = { ...settings };
@@ -139,9 +142,7 @@ function resolveCallPath(
     );
   }
 
-  const configured = allowEnvironmentMode
-    ? env.OPENAI_API_MODE?.trim().toLowerCase()
-    : undefined;
+  const configured = allowEnvironmentMode ? env.OPENAI_API_MODE?.trim().toLowerCase() : undefined;
   if (configured === "chat-completions") return "chat";
   if (configured === "responses") return "responses";
   if (configured) {
@@ -206,9 +207,7 @@ export function resolveAgentModelConfig(
   const provider = selection?.provider ?? inferProvider(env);
   const runtime = runtimeSettings.resolve(selection, provider);
   const runtimeApiKey = runtime?.apiKey?.trim();
-  const requestedBaseURL = runtime
-    ? runtime.baseURL
-    : selection?.baseURL;
+  const requestedBaseURL = runtime ? runtime.baseURL : selection?.baseURL;
   const environmentApiKey = runtimeApiKey
     ? undefined
     : resolveEnvironmentModelApiKey(provider, requestedBaseURL, env);
@@ -223,7 +222,12 @@ export function resolveAgentModelConfig(
   }
 
   const providerModel = provider === "openai" ? env.OPENAI_MODEL : env.ANTHROPIC_MODEL;
-  const model = selection?.model || runtime?.model || env.AGENT_MODEL || providerModel || DEFAULT_AGENT_MODELS[provider];
+  const model =
+    selection?.model ||
+    runtime?.model ||
+    env.AGENT_MODEL ||
+    providerModel ||
+    DEFAULT_AGENT_MODELS[provider];
   const environmentBaseURL = provider === "openai" ? env.OPENAI_BASE_URL : env.ANTHROPIC_BASE_URL;
   const usesRuntimeCredential = Boolean(runtimeApiKey);
   const baseURL = requestedBaseURL ?? (usesRuntimeCredential ? undefined : environmentBaseURL);
@@ -243,9 +247,15 @@ export function resolveAgentModelConfig(
       env,
       !usesRuntimeCredential,
     ),
-    timeoutMs: gatewayConfig?.timeoutMs
-      ?? positiveInteger(env.AGENT_TIMEOUT_MS, DEFAULT_AGENT_TIMEOUT_MS, "AGENT_TIMEOUT_MS"),
-    maxOutputTokens: gatewayConfig?.maxOutputTokens
-      ?? positiveInteger(env.AGENT_MAX_OUTPUT_TOKENS, DEFAULT_AGENT_MAX_OUTPUT_TOKENS, "AGENT_MAX_OUTPUT_TOKENS"),
+    timeoutMs:
+      gatewayConfig?.timeoutMs ??
+      positiveInteger(env.AGENT_TIMEOUT_MS, DEFAULT_AGENT_TIMEOUT_MS, "AGENT_TIMEOUT_MS"),
+    maxOutputTokens:
+      gatewayConfig?.maxOutputTokens ??
+      positiveInteger(
+        env.AGENT_MAX_OUTPUT_TOKENS,
+        DEFAULT_AGENT_MAX_OUTPUT_TOKENS,
+        "AGENT_MAX_OUTPUT_TOKENS",
+      ),
   };
 }

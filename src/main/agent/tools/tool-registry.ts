@@ -1,27 +1,27 @@
-import type { ToolContext, ToolDefinition } from "./tool-definition";
-import { ToolLoader } from "./tool-loader";
 import { askUserTool } from "./core/ask-user";
 import { beginPptCapabilityTool } from "./core/begin-ppt-capability";
-import { getSelectionTool } from "./core/get-selection";
 import { getDesignReferenceTool } from "./core/get-design-reference";
-import { resolveProjectTemplateTool } from "./core/resolve-project-template";
-import { listTeammatesTool } from "./core/list-teammates";
+import { getSelectionTool } from "./core/get-selection";
 import { listSlidesTool } from "./core/list-slides";
+import { listTeammatesTool } from "./core/list-teammates";
+import { loadSkillTool } from "./core/load-skill";
 import { previewSlideTool } from "./core/preview-slide";
 import { previewSvgPageTool } from "./core/preview-svg-page";
 import { readCurrentSlideTool } from "./core/read-current-slide";
 import { readPresentationSnapshotTool } from "./core/read-presentation-snapshot";
+import { resolveProjectTemplateTool } from "./core/resolve-project-template";
 import { respondPlanApprovalTool } from "./core/respond-plan-approval";
+import { searchSlideImagesTool } from "./core/search-slide-images";
 import { sendTeammateMessageTool } from "./core/send-teammate-message";
 import { shutdownTeammateTool } from "./core/shutdown-teammate";
+import { spawnTeammateTool } from "./core/spawn-teammate";
 import { submitPptReviewTool } from "./core/submit-ppt-review";
 import { submitSvgDeckTool } from "./core/submit-svg-deck";
-import { spawnTeammateTool } from "./core/spawn-teammate";
 import { taskTools } from "./core/task-tools";
-import { loadSkillTool } from "./core/load-skill";
 import { webSearchTool } from "./core/web-search";
-import { searchSlideImagesTool } from "./core/search-slide-images";
 import { workspaceFileTools } from "./core/workspace-files";
+import type { ToolContext, ToolDefinition } from "./tool-definition";
+import { ToolLoader } from "./tool-loader";
 
 /**
  * 工具注册表与唯一查询入口。
@@ -44,7 +44,10 @@ export class ToolRegistry {
     if (tool.category === "core" && tool.loadPolicy === "runtime") {
       throw new Error("Core tools cannot have runtime load policy");
     }
-    if (tool.category === "runtime" && (tool.loadPolicy === "core" || tool.loadPolicy === "deferred")) {
+    if (
+      tool.category === "runtime" &&
+      (tool.loadPolicy === "core" || tool.loadPolicy === "deferred")
+    ) {
       throw new Error("Runtime-only tools cannot be exposed as core or deferred to the model");
     }
     if (!tool.permission && !tool.risk) {
@@ -54,15 +57,13 @@ export class ToolRegistry {
     }
 
     const terminalResult = tool.behavior?.completion?.terminalResult;
-    const requiredCapability = terminalResult === "command_proposal"
-      ? "command_proposal"
-      : terminalResult === "ask_user"
-        ? "user_interaction"
-        : undefined;
-    if (
-      requiredCapability
-      && !tool.behavior?.capabilities?.includes(requiredCapability)
-    ) {
+    const requiredCapability =
+      terminalResult === "command_proposal"
+        ? "command_proposal"
+        : terminalResult === "ask_user"
+          ? "user_interaction"
+          : undefined;
+    if (requiredCapability && !tool.behavior?.capabilities?.includes(requiredCapability)) {
       throw new Error(
         `Tool ${tool.name} completion '${terminalResult}' requires capability '${requiredCapability}'.`,
       );
@@ -108,7 +109,11 @@ export class ToolRegistry {
     }
     if (trimmed.toLowerCase().startsWith("select:")) {
       const names = new Set(
-        trimmed.slice("select:".length).split(/\s+/).filter(Boolean).map((name) => name.toLowerCase()),
+        trimmed
+          .slice("select:".length)
+          .split(/\s+/)
+          .filter(Boolean)
+          .map((name) => name.toLowerCase()),
       );
       return deferred.filter((tool) => names.has(tool.name.toLowerCase()));
     }
@@ -120,10 +125,7 @@ export class ToolRegistry {
   }
 }
 
-function stableToolOrder(
-  left: ToolDefinition<any, any>,
-  right: ToolDefinition<any, any>,
-): number {
+function stableToolOrder(left: ToolDefinition<any, any>, right: ToolDefinition<any, any>): number {
   return left.name < right.name ? -1 : left.name > right.name ? 1 : 0;
 }
 

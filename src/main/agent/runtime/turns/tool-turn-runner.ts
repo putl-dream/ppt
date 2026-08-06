@@ -1,8 +1,5 @@
 import type { AgentModelToolResultBlock, AgentModelToolUseBlock } from "../../gateway";
-import {
-  describeBackgroundTask,
-} from "../background/background-task-manager";
-import type { AgentLoopTurnOutcome, PreparedAgentRun } from "./prepared-agent-run";
+import { describeBackgroundTask } from "../background/background-task-manager";
 import {
   isRuntimeCancellation,
   rethrowIfRuntimeCancellation,
@@ -10,6 +7,7 @@ import {
 import type { AgentIterationWorkspace, AgentQueryState } from "../query/query-types";
 import type { ToolExecutionOutcome } from "../tools/tool-execution-engine";
 import type { PreparedToolCall, ToolPreflightOutcome } from "../tools/tool-preflight";
+import type { AgentLoopTurnOutcome, PreparedAgentRun } from "./prepared-agent-run";
 
 const MAX_PARALLEL_TOOLS = 4;
 
@@ -39,12 +37,10 @@ export class ToolTurnRunner {
   ): Promise<AgentLoopTurnOutcome> {
     throwIfRunCancelled(run.scope.signal, run.params.deps.externalSignal);
     if (
-      toolCalls.length > 1
-      && toolCalls.some((call) =>
-        run.input.toolPreflight.requiresExclusiveBatch(
-          call,
-          workspace.updatedToolUseContext,
-        ))
+      toolCalls.length > 1 &&
+      toolCalls.some((call) =>
+        run.input.toolPreflight.requiresExclusiveBatch(call, workspace.updatedToolUseContext),
+      )
     ) {
       for (const toolCall of toolCalls) {
         throwIfRunCancelled(run.scope.signal, run.params.deps.externalSignal);
@@ -52,21 +48,27 @@ export class ToolTurnRunner {
           type: "tool_result",
           toolUseId: toolCall.id,
           isError: true,
-          content: [{
-            type: "text",
-            text:
-              "Terminal tools must be called alone. No tool in this mixed batch was executed; "
-              + "call ordinary tools first, then issue the terminal tool in a separate assistant response.",
-          }],
+          content: [
+            {
+              type: "text",
+              text:
+                "Terminal tools must be called alone. No tool in this mixed batch was executed; " +
+                "call ordinary tools first, then issue the terminal tool in a separate assistant response.",
+            },
+          ],
         };
         run.scope.applyTransition({ type: "tool_processed", result });
         workspace.toolResults.push(structuredClone(result));
-        run.appendRuntimeEvent("tool_result", {
-          toolUseId: toolCall.id,
-          toolName: toolCall.name,
-          isError: true,
-          content: structuredClone(result.content),
-        }, "model_only");
+        run.appendRuntimeEvent(
+          "tool_result",
+          {
+            toolUseId: toolCall.id,
+            toolName: toolCall.name,
+            isError: true,
+            content: structuredClone(result.content),
+          },
+          "model_only",
+        );
         run.emitProgress({
           type: "tool-state",
           toolCallId: toolCall.id,
@@ -78,7 +80,7 @@ export class ToolTurnRunner {
       return { type: "continue" };
     }
 
-    for (let index = 0; index < toolCalls.length;) {
+    for (let index = 0; index < toolCalls.length; ) {
       const toolCall = toolCalls[index]!;
       throwIfRunCancelled(run.scope.signal, run.params.deps.externalSignal);
       if (workspace.toolResults.some((result) => result.toolUseId === toolCall.id)) {
@@ -136,12 +138,16 @@ export class ToolTurnRunner {
 
     for (const toolCall of toolCalls) {
       throwIfRunCancelled(scope.signal, deps.externalSignal);
-      run.appendRuntimeEvent("tool_call", {
-        toolUseId: toolCall.id,
-        toolName: toolCall.name,
-        input: structuredClone(toolCall.input),
-        parseError: toolCall.parseError,
-      }, "model_only");
+      run.appendRuntimeEvent(
+        "tool_call",
+        {
+          toolUseId: toolCall.id,
+          toolName: toolCall.name,
+          input: structuredClone(toolCall.input),
+          parseError: toolCall.parseError,
+        },
+        "model_only",
+      );
       const canUseTool = await params.canUseTool(toolCall, workspace.updatedToolUseContext);
       throwIfRunCancelled(scope.signal, deps.externalSignal);
       if (!canUseTool) {
@@ -159,12 +165,16 @@ export class ToolTurnRunner {
       });
       throwIfRunCancelled(scope.signal, deps.externalSignal);
       if (preflight.repairs.length > 0) {
-        run.appendRuntimeEvent("workflow_progress", {
-          type: "tool-input-repaired",
-          toolName: toolCall.name,
-          toolUseId: toolCall.id,
-          repairs: preflight.repairs,
-        }, "internal");
+        run.appendRuntimeEvent(
+          "workflow_progress",
+          {
+            type: "tool-input-repaired",
+            toolName: toolCall.name,
+            toolUseId: toolCall.id,
+            repairs: preflight.repairs,
+          },
+          "internal",
+        );
       }
       if (preflight.type === "hook_stopped") {
         for (const sibling of toolCalls) {
@@ -172,12 +182,15 @@ export class ToolTurnRunner {
             type: "tool_result",
             toolUseId: sibling.id,
             isError: true,
-            content: [{
-              type: "text",
-              text: sibling.id === toolCall.id
-                ? preflight.reason
-                : `Tool batch stopped before execution because ${toolCall.name} was blocked by a PreToolUse hook.`,
-            }],
+            content: [
+              {
+                type: "text",
+                text:
+                  sibling.id === toolCall.id
+                    ? preflight.reason
+                    : `Tool batch stopped before execution because ${toolCall.name} was blocked by a PreToolUse hook.`,
+              },
+            ],
           };
           this.recordToolResultBlock(run, workspace, sibling, result);
           run.emitProgress({
@@ -243,22 +256,25 @@ export class ToolTurnRunner {
           }
         },
       });
-      void execution.finally(() => {
-        if (!hookInvoked[index]) {
-          void prior.then(() => hookGates[index]!.resolve());
-        }
-      }).catch(() => undefined);
+      void execution
+        .finally(() => {
+          if (!hookInvoked[index]) {
+            void prior.then(() => hookGates[index]!.resolve());
+          }
+        })
+        .catch(() => undefined);
       return execution;
     });
     const settled = await Promise.allSettled(executions);
     const cancellation = settled.find(
-      (item) => item.status === "rejected"
-        && isRuntimeCancellation(item.reason, scope.signal, deps.externalSignal),
+      (item) =>
+        item.status === "rejected" &&
+        isRuntimeCancellation(item.reason, scope.signal, deps.externalSignal),
     );
     if (
-      cancellation?.status === "rejected"
-      || scope.signal.aborted
-      || deps.externalSignal?.aborted
+      cancellation?.status === "rejected" ||
+      scope.signal.aborted ||
+      deps.externalSignal?.aborted
     ) {
       for (const entry of ready) {
         run.emitProgress({
@@ -303,7 +319,9 @@ export class ToolTurnRunner {
         const result: AgentModelToolResultBlock = {
           type: "tool_result",
           toolUseId: entry.toolCall.id,
-          content: [{ type: "text", text: `Tool ${entry.toolCall.name} is not permitted in this query.` }],
+          content: [
+            { type: "text", text: `Tool ${entry.toolCall.name} is not permitted in this query.` },
+          ],
           isError: true,
         };
         session.appendTranscript({
@@ -374,25 +392,27 @@ export class ToolTurnRunner {
         progress: 0,
       });
     }
-    const status = preflight.kind === "pre_hook_failed"
-      ? "failed"
-      : preflight.kind === "policy_blocked"
-        ? "denied"
-        : "invalid-input";
+    const status =
+      preflight.kind === "pre_hook_failed"
+        ? "failed"
+        : preflight.kind === "policy_blocked"
+          ? "denied"
+          : "invalid-input";
     run.emitProgress({
       type: "tool-state",
       toolCallId: toolCall.id,
       toolName: toolCall.name,
       status,
-      message: preflight.kind === "parse_error"
-        ? `工具 ${toolCall.name} 参数 JSON 解析失败`
-        : preflight.kind === "unavailable"
-          ? `工具 ${toolCall.name} 无法直接调用`
-          : preflight.kind === "validation_error"
-            ? `工具 ${toolCall.name} 参数校验失败`
-            : preflight.kind === "policy_blocked"
-              ? `工具 ${toolCall.name} 被当前任务策略阻止`
-              : `工具 ${toolCall.name} 执行前检查失败`,
+      message:
+        preflight.kind === "parse_error"
+          ? `工具 ${toolCall.name} 参数 JSON 解析失败`
+          : preflight.kind === "unavailable"
+            ? `工具 ${toolCall.name} 无法直接调用`
+            : preflight.kind === "validation_error"
+              ? `工具 ${toolCall.name} 参数校验失败`
+              : preflight.kind === "policy_blocked"
+                ? `工具 ${toolCall.name} 被当前任务策略阻止`
+                : `工具 ${toolCall.name} 执行前检查失败`,
       error: preflight.validationError ?? text,
     });
     session.appendTranscript({
@@ -485,8 +505,8 @@ export class ToolTurnRunner {
       rethrowIfRuntimeCancellation(error, scope.signal, run.params.deps.externalSignal);
       const message = error instanceof Error ? error.message : String(error);
       const guidance =
-        `Tool ${tool.name} executed successfully, but result post-processing failed: ${message}. `
-        + "Do not retry blindly; inspect durable artifacts first.";
+        `Tool ${tool.name} executed successfully, but result post-processing failed: ${message}. ` +
+        "Do not retry blindly; inspect durable artifacts first.";
       scope.session.appendTranscript({
         role: "tool",
         toolName: tool.name,
@@ -515,12 +535,16 @@ export class ToolTurnRunner {
       throw new Error("CheckpointPolicy rejected a normal tool result transition.");
     }
     run.scope.setInflightQuery("model_received", workspace);
-    run.appendRuntimeEvent("tool_result", {
-      toolUseId: toolCall.id,
-      toolName: toolCall.name,
-      isError: result.isError === true,
-      content: structuredClone(result.content),
-    }, "model_only");
+    run.appendRuntimeEvent(
+      "tool_result",
+      {
+        toolUseId: toolCall.id,
+        toolName: toolCall.name,
+        isError: result.isError === true,
+        content: structuredClone(result.content),
+      },
+      "model_only",
+    );
   }
 
   private async runOne(
@@ -542,12 +566,16 @@ export class ToolTurnRunner {
     throwIfCancelled();
     scope.setInflightQuery("tool_running", workspace, [toolCall]);
     const claimDecision = scope.applyTransition({ type: "tool_claimed", toolUse: toolCall });
-    run.appendRuntimeEvent("tool_call", {
-      toolUseId: toolCall.id,
-      toolName: toolCall.name,
-      input: structuredClone(toolCall.input),
-      parseError: toolCall.parseError,
-    }, "model_only");
+    run.appendRuntimeEvent(
+      "tool_call",
+      {
+        toolUseId: toolCall.id,
+        toolName: toolCall.name,
+        input: structuredClone(toolCall.input),
+        parseError: toolCall.parseError,
+      },
+      "model_only",
+    );
     if (claimDecision === "commit") await scope.persistCheckpoint();
     throwIfCancelled();
 
@@ -560,12 +588,16 @@ export class ToolTurnRunner {
       // The active tool is no longer uncertain once its provider-facing result
       // exists. Refresh the durable Workspace before the batch advances.
       scope.setInflightQuery("model_received", workspace);
-      run.appendRuntimeEvent("tool_result", {
-        toolUseId: toolCall.id,
-        toolName: toolCall.name,
-        isError: result.isError === true,
-        content: structuredClone(result.content),
-      }, "model_only");
+      run.appendRuntimeEvent(
+        "tool_result",
+        {
+          toolUseId: toolCall.id,
+          toolName: toolCall.name,
+          isError: result.isError === true,
+          content: structuredClone(result.content),
+        },
+        "model_only",
+      );
     };
     const recordToolResult = (
       text: string,
@@ -612,19 +644,22 @@ export class ToolTurnRunner {
     });
     throwIfCancelled();
     if (preflight.repairs.length > 0) {
-      run.appendRuntimeEvent("workflow_progress", {
-        type: "tool-input-repaired",
-        toolName: toolCall.name,
-        toolUseId: toolCall.id,
-        repairs: preflight.repairs,
-      }, "internal");
+      run.appendRuntimeEvent(
+        "workflow_progress",
+        {
+          type: "tool-input-repaired",
+          toolName: toolCall.name,
+          toolUseId: toolCall.id,
+          repairs: preflight.repairs,
+        },
+        "internal",
+      );
     }
 
     if (preflight.type === "immediate_result") {
       const text = textFromResult(preflight.outcome.modelResult);
       if (preflight.kind === "validation_error") {
-        const failures =
-          (workspace.validationFailuresByTool.get(toolCall.name) ?? 0) + 1;
+        const failures = (workspace.validationFailuresByTool.get(toolCall.name) ?? 0) + 1;
         workspace.validationFailuresByTool.set(toolCall.name, failures);
         if (failures <= 2) {
           run.emitProgress({
@@ -640,25 +675,27 @@ export class ToolTurnRunner {
           progress: 0,
         });
       }
-      const status = preflight.kind === "pre_hook_failed"
-        ? "failed"
-        : preflight.kind === "policy_blocked"
-          ? "denied"
-          : "invalid-input";
+      const status =
+        preflight.kind === "pre_hook_failed"
+          ? "failed"
+          : preflight.kind === "policy_blocked"
+            ? "denied"
+            : "invalid-input";
       run.emitProgress({
         type: "tool-state",
         toolCallId: toolCall.id,
         toolName: toolCall.name,
         status,
-        message: preflight.kind === "parse_error"
-          ? `工具 ${toolCall.name} 参数 JSON 解析失败`
-          : preflight.kind === "unavailable"
-            ? `工具 ${toolCall.name} 无法直接调用`
-            : preflight.kind === "validation_error"
-              ? `工具 ${toolCall.name} 参数校验失败`
-              : preflight.kind === "policy_blocked"
-                ? `工具 ${toolCall.name} 被当前任务策略阻止`
-                : `工具 ${toolCall.name} 执行前检查失败`,
+        message:
+          preflight.kind === "parse_error"
+            ? `工具 ${toolCall.name} 参数 JSON 解析失败`
+            : preflight.kind === "unavailable"
+              ? `工具 ${toolCall.name} 无法直接调用`
+              : preflight.kind === "validation_error"
+                ? `工具 ${toolCall.name} 参数校验失败`
+                : preflight.kind === "policy_blocked"
+                  ? `工具 ${toolCall.name} 被当前任务策略阻止`
+                  : `工具 ${toolCall.name} 执行前检查失败`,
         error: preflight.validationError ?? text,
       });
       session.appendTranscript({
@@ -711,253 +748,252 @@ export class ToolTurnRunner {
       status: "running",
     });
     try {
-    if (
-      run.input.presentationCompletionPolicy.canTerminate(tool)
-      && (backgroundTasks.hasRunning() || backgroundTasks.hasPendingNotifications())
-    ) {
-      const guidance =
-        `Paused ${tool.name} because background task results are not yet incorporated. `
-        + "Review the task_notification content, then call the appropriate finish tool again.";
-      session.appendTranscript({
-        role: "tool",
-        toolName: tool.name,
-        result: { pausedForBackgroundTasks: true, guidance },
-      });
-      recordToolResult(guidance);
-      await run.drainBackgroundForModel(
-        workspace,
-        "Background tasks have completed. Reconsider these results before calling a finish tool.",
-      );
-      run.emitProgress({
-        type: "tool-state",
-        toolCallId: toolCall.id,
-        message: `工具 ${tool.name} 已等待后台任务结果。`,
-        toolName: tool.name,
-        status: "completed",
-      });
-      return { type: "continue" };
-    }
+      if (
+        run.input.presentationCompletionPolicy.canTerminate(tool) &&
+        (backgroundTasks.hasRunning() || backgroundTasks.hasPendingNotifications())
+      ) {
+        const guidance =
+          `Paused ${tool.name} because background task results are not yet incorporated. ` +
+          "Review the task_notification content, then call the appropriate finish tool again.";
+        session.appendTranscript({
+          role: "tool",
+          toolName: tool.name,
+          result: { pausedForBackgroundTasks: true, guidance },
+        });
+        recordToolResult(guidance);
+        await run.drainBackgroundForModel(
+          workspace,
+          "Background tasks have completed. Reconsider these results before calling a finish tool.",
+        );
+        run.emitProgress({
+          type: "tool-state",
+          toolCallId: toolCall.id,
+          message: `工具 ${tool.name} 已等待后台任务结果。`,
+          toolName: tool.name,
+          status: "completed",
+        });
+        return { type: "continue" };
+      }
 
-    if (mode === "background") {
-      const label = describeBackgroundTask(tool, args);
-      let bgId = "";
-      const scheduled = backgroundTasks.prepare({
-        toolName: tool.name,
-        label,
-        toolUseId: toolCall.id,
-        run: async () => {
-          throwIfCancelled();
-          let outcome: ToolExecutionOutcome;
-          try {
-            outcome = await run.input.toolExecutionEngine.execute({
-              tool,
-              args,
-              context: workspace.updatedToolUseContext,
-              toolCall,
-              modelArtifactRoot: deps.workspaceRoot,
-              threadId: deps.threadId,
-              signal: scope.signal,
-              runPostToolUseHook: run.input.runPostToolUseHook,
-            });
+      if (mode === "background") {
+        const label = describeBackgroundTask(tool, args);
+        let bgId = "";
+        const scheduled = backgroundTasks.prepare({
+          toolName: tool.name,
+          label,
+          toolUseId: toolCall.id,
+          run: async () => {
             throwIfCancelled();
-          } catch (error) {
-            const errorText = error instanceof Error ? error.message : String(error);
-            if (isRuntimeCancellation(error, scope.signal, deps.externalSignal)) {
+            let outcome: ToolExecutionOutcome;
+            try {
+              outcome = await run.input.toolExecutionEngine.execute({
+                tool,
+                args,
+                context: workspace.updatedToolUseContext,
+                toolCall,
+                modelArtifactRoot: deps.workspaceRoot,
+                threadId: deps.threadId,
+                signal: scope.signal,
+                runPostToolUseHook: run.input.runPostToolUseHook,
+              });
+              throwIfCancelled();
+            } catch (error) {
+              const errorText = error instanceof Error ? error.message : String(error);
+              if (isRuntimeCancellation(error, scope.signal, deps.externalSignal)) {
+                run.emitProgress({
+                  type: "tool-state",
+                  toolCallId: toolCall.id,
+                  message: `后台任务 ${bgId} 已取消`,
+                  toolName: tool.name,
+                  status: "denied",
+                });
+                throw error;
+              }
               run.emitProgress({
                 type: "tool-state",
                 toolCallId: toolCall.id,
-                message: `后台任务 ${bgId} 已取消`,
+                message: `后台任务 ${bgId} 执行失败：${errorText}`,
                 toolName: tool.name,
-                status: "denied",
+                status: "failed",
+                error: errorText,
               });
               throw error;
+            }
+            const content = textFromResult(outcome.modelResult);
+            if (
+              outcome.executionStatus === "threw" ||
+              outcome.deliveryStatus === "validation_failed"
+            ) {
+              run.emitProgress({
+                type: "tool-state",
+                toolCallId: toolCall.id,
+                message: `后台任务 ${bgId} 执行失败：${content}`,
+                toolName: tool.name,
+                status: "failed",
+              });
+              throw new Error(content);
             }
             run.emitProgress({
               type: "tool-state",
               toolCallId: toolCall.id,
-              message: `后台任务 ${bgId} 执行失败：${errorText}`,
+              message: `后台任务 ${bgId} 已完成：${tool.name}`,
               toolName: tool.name,
-              status: "failed",
-              error: errorText,
+              status: "completed",
             });
-            throw error;
-          }
-          const content = textFromResult(outcome.modelResult);
-          if (outcome.executionStatus === "threw" || outcome.deliveryStatus === "validation_failed") {
-            run.emitProgress({
-              type: "tool-state",
-              toolCallId: toolCall.id,
-              message: `后台任务 ${bgId} 执行失败：${content}`,
-              toolName: tool.name,
-              status: "failed",
-            });
-            throw new Error(content);
-          }
-          run.emitProgress({
-            type: "tool-state",
-            toolCallId: toolCall.id,
-            message: `后台任务 ${bgId} 已完成：${tool.name}`,
-            toolName: tool.name,
-            status: "completed",
-          });
-          return content;
-        },
-      });
-      bgId = scheduled.bgId;
-      const placeholder =
-        `[Background task ${bgId} started: ${label}] `
-        + "Result will arrive later as task_notification. Continue with independent work.";
-      session.appendTranscript({
-        role: "tool",
-        toolName: tool.name,
-        result: { backgroundTaskId: bgId, status: "running", label },
-      });
-      recordToolResult(placeholder);
-      await scope.persistCheckpoint();
-      scheduled.launch();
-      run.emitProgress({
-        type: "workflow-progress",
-        message: `后台任务 ${bgId} 已启动：${label}`,
-        progress: 0,
-      });
-      return { type: "continue" };
-    }
-
-    throwIfCancelled();
-    const outcome: ToolExecutionOutcome = await run.input.toolExecutionEngine.execute({
-      tool,
-      args,
-      context: workspace.updatedToolUseContext,
-      toolCall,
-      modelArtifactRoot: deps.workspaceRoot,
-      threadId: deps.threadId,
-      signal: scope.signal,
-      runPostToolUseHook: run.input.runPostToolUseHook,
-    });
-    throwIfCancelled();
-    const outcomeText = textFromResult(outcome.modelResult);
-    if (outcome.executionStatus === "threw") {
-      run.emitProgress({
-        type: "tool-state",
-        toolCallId: toolCall.id,
-        message: `工具 ${tool.name} 执行失败: ${outcomeText}`,
-        toolName: tool.name,
-        status: "failed",
-      });
-      session.appendTranscript({
-        role: "tool",
-        toolName: tool.name,
-        error: outcomeText,
-        sideEffects: outcome.sideEffects,
-      });
-      recordToolResultBlock(outcome.modelResult);
-      return { type: "continue" };
-    }
-    if (outcome.deliveryStatus === "validation_failed") {
-      run.emitProgress({
-        type: "tool-state",
-        toolCallId: toolCall.id,
-        message: `工具 ${tool.name} 返回结果未通过校验`,
-        toolName: tool.name,
-        status: "invalid-input",
-        error: outcomeText,
-      });
-      session.appendTranscript({
-        role: "tool",
-        toolName: tool.name,
-        error: outcomeText,
-        executionStatus: "returned",
-        sideEffects: outcome.sideEffects,
-      });
-      recordToolResultBlock(outcome.modelResult);
-      return { type: "continue" };
-    }
-
-    run.emitProgress({
-      type: "tool-state",
-      toolCallId: toolCall.id,
-      message: `工具 ${tool.name} 执行完成。`,
-      toolName: tool.name,
-      status: "completed",
-    });
-    if (tool.name === "PreviewSlide" || tool.name === "PreviewSvgPage") {
-      const result = outcome.validatedResult as {
-        preview?: {
-          slideId?: string;
-          sourcePath?: string;
-          sha256?: string;
-          title?: string;
-          description?: string;
-        };
-        thumbnail?: {
-          pngBase64: string;
-          width: number;
-          height: number;
-          mimeType: "image/png";
-        } | null;
-        thumbnailError?: string;
-      };
-      const previewId = result.preview?.slideId
-        ?? (
-          result.preview?.sha256
-            ? `svg-preview-${result.preview.sha256.slice(0, 16)}`
-            : undefined
-        );
-      if (previewId) {
-        run.emitProgress({
-          type: "slide-preview-ready",
-          toolCallId: toolCall.id,
-          toolName: tool.name,
-          slideId: previewId,
-          title: result.preview?.title ?? result.preview?.sourcePath ?? previewId,
-          description: result.preview?.description ?? "",
-          thumbnail: result.thumbnail ?? null,
-          ...(result.thumbnailError ? { thumbnailError: result.thumbnailError } : {}),
-          message: result.thumbnail
-            ? `已生成 ${result.preview?.title ?? result.preview?.sourcePath ?? previewId} 的页面预览`
-            : `已读取 ${result.preview?.title ?? result.preview?.sourcePath ?? previewId} 的页面结构`,
+            return content;
+          },
         });
+        bgId = scheduled.bgId;
+        const placeholder =
+          `[Background task ${bgId} started: ${label}] ` +
+          "Result will arrive later as task_notification. Continue with independent work.";
+        session.appendTranscript({
+          role: "tool",
+          toolName: tool.name,
+          result: { backgroundTaskId: bgId, status: "running", label },
+        });
+        recordToolResult(placeholder);
+        await scope.persistCheckpoint();
+        scheduled.launch();
+        run.emitProgress({
+          type: "workflow-progress",
+          message: `后台任务 ${bgId} 已启动：${label}`,
+          progress: 0,
+        });
+        return { type: "continue" };
       }
-    }
-    try {
-      const decision = await run.input.presentationCompletionPolicy.interpret({
+
+      throwIfCancelled();
+      const outcome: ToolExecutionOutcome = await run.input.toolExecutionEngine.execute({
         tool,
-        toolUseId: toolCall.id,
-        outcome,
+        args,
         context: workspace.updatedToolUseContext,
-        emitProgress: (event) => run.emitProgress(event),
+        toolCall,
+        modelArtifactRoot: deps.workspaceRoot,
+        threadId: deps.threadId,
+        signal: scope.signal,
+        runPostToolUseHook: run.input.runPostToolUseHook,
       });
-      if (decision.type === "terminal") {
-        if (decision.modelResult) recordToolResultBlock(decision.modelResult);
-        if (decision.result.type === "ask_user") {
-          scope.setInflightQuery("waiting_user", workspace);
-        } else {
-          scope.stageConversationHistory(
-            state,
-            workspace,
-          );
-        }
-        return { type: "terminal", result: decision.result };
+      throwIfCancelled();
+      const outcomeText = textFromResult(outcome.modelResult);
+      if (outcome.executionStatus === "threw") {
+        run.emitProgress({
+          type: "tool-state",
+          toolCallId: toolCall.id,
+          message: `工具 ${tool.name} 执行失败: ${outcomeText}`,
+          toolName: tool.name,
+          status: "failed",
+        });
+        session.appendTranscript({
+          role: "tool",
+          toolName: tool.name,
+          error: outcomeText,
+          sideEffects: outcome.sideEffects,
+        });
+        recordToolResultBlock(outcome.modelResult);
+        return { type: "continue" };
       }
-      session.appendTranscript(decision.transcriptEntry);
-      recordToolResultBlock(decision.modelResult);
-      return { type: "continue" };
-    } catch (error) {
-      rethrowIfCancelled(error);
-      const message = error instanceof Error ? error.message : String(error);
-      const guidance =
-        `Tool ${tool.name} executed successfully, but result post-processing failed: ${message}. `
-        + "Do not retry blindly; inspect durable artifacts first.";
-      session.appendTranscript({
-        role: "tool",
+      if (outcome.deliveryStatus === "validation_failed") {
+        run.emitProgress({
+          type: "tool-state",
+          toolCallId: toolCall.id,
+          message: `工具 ${tool.name} 返回结果未通过校验`,
+          toolName: tool.name,
+          status: "invalid-input",
+          error: outcomeText,
+        });
+        session.appendTranscript({
+          role: "tool",
+          toolName: tool.name,
+          error: outcomeText,
+          executionStatus: "returned",
+          sideEffects: outcome.sideEffects,
+        });
+        recordToolResultBlock(outcome.modelResult);
+        return { type: "continue" };
+      }
+
+      run.emitProgress({
+        type: "tool-state",
+        toolCallId: toolCall.id,
+        message: `工具 ${tool.name} 执行完成。`,
         toolName: tool.name,
-        result: outcome.validatedResult,
-        postProcessingError: message,
-        executionStatus: "returned",
+        status: "completed",
       });
-      recordToolResult(guidance);
-      return { type: "continue" };
-    }
+      if (tool.name === "PreviewSlide" || tool.name === "PreviewSvgPage") {
+        const result = outcome.validatedResult as {
+          preview?: {
+            slideId?: string;
+            sourcePath?: string;
+            sha256?: string;
+            title?: string;
+            description?: string;
+          };
+          thumbnail?: {
+            pngBase64: string;
+            width: number;
+            height: number;
+            mimeType: "image/png";
+          } | null;
+          thumbnailError?: string;
+        };
+        const previewId =
+          result.preview?.slideId ??
+          (result.preview?.sha256
+            ? `svg-preview-${result.preview.sha256.slice(0, 16)}`
+            : undefined);
+        if (previewId) {
+          run.emitProgress({
+            type: "slide-preview-ready",
+            toolCallId: toolCall.id,
+            toolName: tool.name,
+            slideId: previewId,
+            title: result.preview?.title ?? result.preview?.sourcePath ?? previewId,
+            description: result.preview?.description ?? "",
+            thumbnail: result.thumbnail ?? null,
+            ...(result.thumbnailError ? { thumbnailError: result.thumbnailError } : {}),
+            message: result.thumbnail
+              ? `已生成 ${result.preview?.title ?? result.preview?.sourcePath ?? previewId} 的页面预览`
+              : `已读取 ${result.preview?.title ?? result.preview?.sourcePath ?? previewId} 的页面结构`,
+          });
+        }
+      }
+      try {
+        const decision = await run.input.presentationCompletionPolicy.interpret({
+          tool,
+          toolUseId: toolCall.id,
+          outcome,
+          context: workspace.updatedToolUseContext,
+          emitProgress: (event) => run.emitProgress(event),
+        });
+        if (decision.type === "terminal") {
+          if (decision.modelResult) recordToolResultBlock(decision.modelResult);
+          if (decision.result.type === "ask_user") {
+            scope.setInflightQuery("waiting_user", workspace);
+          } else {
+            scope.stageConversationHistory(state, workspace);
+          }
+          return { type: "terminal", result: decision.result };
+        }
+        session.appendTranscript(decision.transcriptEntry);
+        recordToolResultBlock(decision.modelResult);
+        return { type: "continue" };
+      } catch (error) {
+        rethrowIfCancelled(error);
+        const message = error instanceof Error ? error.message : String(error);
+        const guidance =
+          `Tool ${tool.name} executed successfully, but result post-processing failed: ${message}. ` +
+          "Do not retry blindly; inspect durable artifacts first.";
+        session.appendTranscript({
+          role: "tool",
+          toolName: tool.name,
+          result: outcome.validatedResult,
+          postProcessingError: message,
+          executionStatus: "returned",
+        });
+        recordToolResult(guidance);
+        return { type: "continue" };
+      }
     } catch (error) {
       const cancelled = isRuntimeCancellation(error, scope.signal, deps.externalSignal);
       const errorText = error instanceof Error ? error.message : String(error);
@@ -1010,11 +1046,14 @@ function unexpectedExecutionFailure(
       type: "tool_result",
       toolUseId: toolCall.id,
       isError: true,
-      content: [{
-        type: "text",
-        text: `Tool ${toolCall.name} failed outside its normal error boundary: ${message}. `
-          + "Side effects are uncertain; inspect durable artifacts before retrying.",
-      }],
+      content: [
+        {
+          type: "text",
+          text:
+            `Tool ${toolCall.name} failed outside its normal error boundary: ${message}. ` +
+            "Side effects are uncertain; inspect durable artifacts before retrying.",
+        },
+      ],
     },
     error: message,
     warnings: [],

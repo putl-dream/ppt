@@ -1,6 +1,6 @@
 import type { AgentServiceEvent, AgentServiceEventListener } from "../../service";
-import type { ToolApprovalHandler, ToolApprovalRequest } from "./permission-check";
 import { formatToolApprovalDetail } from "./format-tool-approval";
+import type { ToolApprovalHandler, ToolApprovalRequest } from "./permission-check";
 
 type PendingApproval = {
   runId: string;
@@ -11,10 +11,7 @@ export class ToolApprovalBroker {
   private readonly pending = new Map<string, PendingApproval>();
   private readonly cancelledRuns = new Set<string>();
 
-  createHandler(
-    runId: string,
-    emit: AgentServiceEventListener,
-  ): ToolApprovalHandler {
+  createHandler(runId: string, emit: AgentServiceEventListener): ToolApprovalHandler {
     return async (request: ToolApprovalRequest) => {
       if (this.cancelledRuns.has(runId) || request.signal?.aborted) return false;
 

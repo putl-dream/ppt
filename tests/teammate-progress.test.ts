@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  type AgentActivityItem,
   applyTeammateProgressEvent,
   markTraceComplete,
-  type AgentActivityItem,
 } from "../src/shared/agent-activity";
 import {
   isTeammateProgressEvent,

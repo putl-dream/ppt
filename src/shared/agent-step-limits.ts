@@ -37,16 +37,20 @@ export function getEffectiveSubMaxSteps(limits: AgentStepLimits): number {
 
 export function buildMainStepLimitMessage(limits: AgentStepLimits): string {
   if (limits.enabled) {
-    return `本次请求的主 Agent 模型调用次数已超过上限（${limits.mainMaxSteps} 次）。`
-      + "请在「设置 → 工作流」中调高上限或关闭限制后重试。";
+    return (
+      `本次请求的主 Agent 模型调用次数已超过上限（${limits.mainMaxSteps} 次）。` +
+      "请在「设置 → 工作流」中调高上限或关闭限制后重试。"
+    );
   }
   return "本次请求的处理步骤过多，请缩小修改范围后重试。";
 }
 
 export function buildSubStepLimitMessage(limits: AgentStepLimits): string {
   if (limits.enabled) {
-    return `子 Agent 模型调用次数已超过上限（${limits.subMaxSteps} 次）。`
-      + "请在「设置 → 工作流」中调高子 Agent 上限。";
+    return (
+      `子 Agent 模型调用次数已超过上限（${limits.subMaxSteps} 次）。` +
+      "请在「设置 → 工作流」中调高子 Agent 上限。"
+    );
   }
   return "子 Agent 处理步骤过多，未能完成委派任务。";
 }

@@ -33,13 +33,15 @@ export class AgentEventPorts {
   private readonly requestedToolCallAt = new Map<string, number>();
   private readonly startedToolCallAt = new Map<string, number>();
 
-  constructor(private readonly input: {
-    threadId: string;
-    runId?: string;
-    onProgress?: (event: AgentRendererEvent) => void;
-    conversationDatabase?: ConversationDatabase;
-    appendTranscript(entry: Record<string, unknown>): void;
-  }) {}
+  constructor(
+    private readonly input: {
+      threadId: string;
+      runId?: string;
+      onProgress?: (event: AgentRendererEvent) => void;
+      conversationDatabase?: ConversationDatabase;
+      appendTranscript(entry: Record<string, unknown>): void;
+    },
+  ) {}
 
   renderer(event: AgentRendererEvent): void {
     if (event.type === "tool-state" && typeof event.toolCallId === "string") {
@@ -47,11 +49,11 @@ export class AgentEventPorts {
       if (this.terminalToolCalls.has(event.toolCallId)) return;
       if (terminal) {
         this.terminalToolCalls.add(event.toolCallId);
-        const startedAt = this.startedToolCallAt.get(event.toolCallId)
-          ?? this.requestedToolCallAt.get(event.toolCallId);
-        const level = event.status === "failed" || event.status === "invalid-input"
-          ? "warn"
-          : "info";
+        const startedAt =
+          this.startedToolCallAt.get(event.toolCallId) ??
+          this.requestedToolCallAt.get(event.toolCallId);
+        const level =
+          event.status === "failed" || event.status === "invalid-input" ? "warn" : "info";
         logger[level]("tool.execution.finished", {
           toolCallId: event.toolCallId,
           toolName: event.toolName,
@@ -146,8 +148,9 @@ export class AgentEventPorts {
       if (!block || typeof block !== "object" || !("text" in block)) return total;
       return total + (typeof block.text === "string" ? block.text.length : 0);
     }, 0);
-    const imageCount = content.filter((block) =>
-      Boolean(block) && typeof block === "object" && "type" in block && block.type === "image"
+    const imageCount = content.filter(
+      (block) =>
+        Boolean(block) && typeof block === "object" && "type" in block && block.type === "image",
     ).length;
     const result = diagnosticValuePreview(content, 512);
     logger.info("tool.result.delivered", {

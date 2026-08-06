@@ -1,26 +1,26 @@
 import { randomUUID } from "node:crypto";
 import { lstat, mkdir } from "node:fs/promises";
 import { isAbsolute, relative, resolve } from "node:path";
-import type { ProjectArtifact, SessionSnapshot } from "@shared/session";
 import { asPresentationId } from "@shared/presentation-lifecycle";
-import { createArtifactDiff, type ArtifactDiff } from "./artifact-diff";
+import type { ProjectArtifact, SessionSnapshot } from "@shared/session";
+import {
+  globWorkspaceFiles,
+  type WorkspaceFileReadResult,
+  type WorkspaceFileReceipt,
+  WorkspaceFileService,
+} from "../agent/tools/files/workspace-file-service";
+import type {
+  ArtifactChangeObservationSource,
+  ArtifactChangeObserverPort,
+} from "../presentation-lifecycle/artifact-change-observer-types";
+import { type ArtifactDiff, createArtifactDiff } from "./artifact-diff";
 import { findArtifactByProjectPath } from "./artifact-graph";
 import {
+  type CreateDefaultProjectFilesOptions,
   createDeckSnapshotContent,
   createDefaultProjectFiles,
   createProjectSandbox,
-  type CreateDefaultProjectFilesOptions,
 } from "./project-schema";
-import {
-  globWorkspaceFiles,
-  WorkspaceFileService,
-  type WorkspaceFileReadResult,
-  type WorkspaceFileReceipt,
-} from "../agent/tools/files/workspace-file-service";
-import type {
-  ArtifactChangeObserverPort,
-  ArtifactChangeObservationSource,
-} from "../presentation-lifecycle/artifact-change-observer-types";
 
 const MAX_PROJECT_FILE_ENTRIES = 2_000;
 const MAX_EDITOR_FILE_BYTES = 5 * 1024 * 1024;
@@ -57,13 +57,11 @@ export interface ProjectFileEditorReadResult extends WorkspaceFileReceipt {
 }
 
 export interface ProjectFileEditorWriteResult
-  extends WorkspaceFileReceipt, ProjectArtifactWriteResult {
+  extends WorkspaceFileReceipt,
+    ProjectArtifactWriteResult {
   characterCount: number;
   editToken: string;
-  postCommitWarnings?: Array<
-    "session-state-persistence-failed"
-    | "workspace-metadata-sync-failed"
-  >;
+  postCommitWarnings?: Array<"session-state-persistence-failed" | "workspace-metadata-sync-failed">;
 }
 
 interface ProjectFileEditorSession {
@@ -89,9 +87,7 @@ export class ProjectFileService {
 
   constructor(private readonly projectRootPath: string) {}
 
-  setArtifactChangeObserver(
-    observer: ArtifactChangeObserverPort | undefined,
-  ): void {
+  setArtifactChangeObserver(observer: ArtifactChangeObserverPort | undefined): void {
     this.artifactChangeObserver = observer;
   }
 
@@ -122,14 +118,11 @@ export class ProjectFileService {
   }
 
   async listProjectFiles(snapshot: SessionSnapshot): Promise<string[]> {
-    const files = await globWorkspaceFiles(
-      this.requireProject(snapshot).rootPath,
-      "**/*",
-    );
+    const files = await globWorkspaceFiles(this.requireProject(snapshot).rootPath, "**/*");
     if (files.length > MAX_PROJECT_FILE_ENTRIES) {
       throw new Error(
-        `Project contains ${files.length} files; the file manager limit is `
-        + `${MAX_PROJECT_FILE_ENTRIES}. Narrow the project before opening it.`,
+        `Project contains ${files.length} files; the file manager limit is ` +
+          `${MAX_PROJECT_FILE_ENTRIES}. Narrow the project before opening it.`,
       );
     }
     return files;
@@ -140,11 +133,7 @@ export class ProjectFileService {
     artifactIdOrPath: string,
   ): Promise<ProjectArtifactReadResult> {
     const relativePath = this.resolveArtifactPath(snapshot, artifactIdOrPath);
-    await this.observeArtifactChanges(
-      snapshot,
-      [relativePath],
-      "project_read",
-    );
+    await this.observeArtifactChanges(snapshot, [relativePath], "project_read");
     const filePath = this.resolveProjectPath(snapshot, relativePath);
     const fileStat = await lstat(filePath);
 
@@ -173,11 +162,7 @@ export class ProjectFileService {
   ): Promise<ProjectFileEditorReadResult> {
     this.pruneEditorSessions();
     this.resolveProjectPath(snapshot, relativePath);
-    await this.observeArtifactChanges(
-      snapshot,
-      [relativePath],
-      "project_read",
-    );
+    await this.observeArtifactChanges(snapshot, [relativePath], "project_read");
     const service = this.createWorkspaceFileService(snapshot);
     let result: WorkspaceFileReadResult;
     try {
@@ -186,14 +171,14 @@ export class ProjectFileService {
       });
     } catch (error) {
       if (
-        typeof error === "object"
-        && error !== null
-        && "code" in error
-        && error.code === "FILE_TOO_LARGE"
+        typeof error === "object" &&
+        error !== null &&
+        "code" in error &&
+        error.code === "FILE_TOO_LARGE"
       ) {
         throw new Error(
-          `Project file is too large for the editor (limit `
-          + `${MAX_EDITOR_FILE_BYTES} bytes): ${relativePath}`,
+          `Project file is too large for the editor (limit ` +
+            `${MAX_EDITOR_FILE_BYTES} bytes): ${relativePath}`,
           { cause: error },
         );
       }
@@ -201,8 +186,8 @@ export class ProjectFileService {
     }
     if (result.size > MAX_EDITOR_FILE_BYTES) {
       throw new Error(
-        `Project file is too large for the editor (${result.size} bytes; `
-        + `limit ${MAX_EDITOR_FILE_BYTES}): ${result.path}`,
+        `Project file is too large for the editor (${result.size} bytes; ` +
+          `limit ${MAX_EDITOR_FILE_BYTES}): ${result.path}`,
       );
     }
     while (this.editorSessions.size >= MAX_EDITOR_SESSIONS) {
@@ -239,12 +224,14 @@ export class ProjectFileService {
     const normalizedPath = normalizeProjectPath(relativePath);
     const currentRoot = resolve(this.requireProject(snapshot).rootPath);
     if (
-      !editorSession
-      || editorSession.sessionId !== snapshot.session.id
-      || editorSession.projectRootPath !== currentRoot
-      || editorSession.path !== normalizedPath
+      !editorSession ||
+      editorSession.sessionId !== snapshot.session.id ||
+      editorSession.projectRootPath !== currentRoot ||
+      editorSession.path !== normalizedPath
     ) {
-      throw new Error("Project file edit session is missing, expired, or does not match this file.");
+      throw new Error(
+        "Project file edit session is missing, expired, or does not match this file.",
+      );
     }
     const editPolicy = this.getEditPolicy(snapshot, editorSession.path);
     if (!editPolicy.editable) {
@@ -258,20 +245,13 @@ export class ProjectFileService {
 
     let result: Awaited<ReturnType<WorkspaceFileService["write"]>>;
     try {
-      result = await editorSession.service.write(
-        editorSession.path,
-        content,
-        { expectedVersion },
-      );
+      result = await editorSession.service.write(editorSession.path, content, { expectedVersion });
     } catch (error) {
       this.editorSessions.delete(editToken);
       throw error;
     }
     editorSession.touchedAt = Date.now();
-    const artifactChange = this.recordArtifactChange(
-      snapshot,
-      result.path,
-    );
+    const artifactChange = this.recordArtifactChange(snapshot, result.path);
     await this.observeArtifactChanges(snapshot, [result.path], "project_edit");
     return {
       ...result,
@@ -307,11 +287,7 @@ export class ProjectFileService {
       };
     }
 
-    const result = await service.write(
-      relativePath,
-      content,
-      { expectedVersion: before?.version },
-    );
+    const result = await service.write(relativePath, content, { expectedVersion: before?.version });
     await this.observeArtifactChanges(snapshot, [result.path], "project_edit");
     return {
       path: result.path,
@@ -361,10 +337,7 @@ export class ProjectFileService {
   private async observeArtifactChanges(
     snapshot: SessionSnapshot,
     paths: readonly string[],
-    source: Extract<
-      ArtifactChangeObservationSource,
-      "project_read" | "project_edit"
-    >,
+    source: Extract<ArtifactChangeObservationSource, "project_read" | "project_edit">,
   ): Promise<void> {
     const project = this.requireProject(snapshot);
     await this.artifactChangeObserver?.observe({
@@ -414,8 +387,7 @@ export class ProjectFileService {
   ): Promise<string[]> {
     const normalizedDirectory = normalizeProjectPath(relativePath);
     const prefix = normalizedDirectory ? `${normalizedDirectory}/` : "";
-    return (await this.listProjectFiles(snapshot))
-      .filter((path) => path.startsWith(prefix));
+    return (await this.listProjectFiles(snapshot)).filter((path) => path.startsWith(prefix));
   }
 
   private resolveProjectPath(snapshot: SessionSnapshot, relativePath: string): string {
@@ -448,10 +420,7 @@ export class ProjectFileService {
   }
 }
 
-async function readWorkspaceFileIfPresent(
-  service: WorkspaceFileService,
-  path: string,
-) {
+async function readWorkspaceFileIfPresent(service: WorkspaceFileService, path: string) {
   try {
     return await service.read(path);
   } catch (error) {

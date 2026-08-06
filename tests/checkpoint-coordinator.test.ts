@@ -1,10 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { CheckpointCoordinator } from "../src/main/agent/runtime/lifecycle/checkpoint-coordinator";
 import type { DurableRunCheckpoint } from "../src/main/agent/persistence/durable-run-store";
-import {
-  asRunId,
-  asThreadId,
-} from "../src/main/agent/runtime/query/query-types";
+import { CheckpointCoordinator } from "../src/main/agent/runtime/lifecycle/checkpoint-coordinator";
+import { asRunId, asThreadId } from "../src/main/agent/runtime/query/query-types";
 
 function checkpoint(status: DurableRunCheckpoint["status"]): DurableRunCheckpoint {
   const now = new Date().toISOString();
@@ -33,7 +30,9 @@ describe("CheckpointCoordinator", () => {
   it("freezes snapshots before they enter the write queue", async () => {
     const saved: DurableRunCheckpoint[] = [];
     const coordinator = new CheckpointCoordinator({
-      async save(value) { saved.push(value); },
+      async save(value) {
+        saved.push(value);
+      },
     });
     const source = checkpoint("running");
     const commit = coordinator.commit(source);
@@ -68,24 +67,29 @@ describe("CheckpointCoordinator", () => {
     let revision = 0;
     const saved: DurableRunCheckpoint[] = [];
     let writes = 0;
-    const coordinator = new CheckpointCoordinator({
-      async save() {},
-      async saveCas(input) {
-        writes += 1;
-        revision = input.nextRevision;
-        saved.push(structuredClone(input.checkpoint));
-        if (writes === 1) throw new Error("connection lost after commit");
-        return "saved" as const;
+    const coordinator = new CheckpointCoordinator(
+      {
+        async save() {},
+        async saveCas(input) {
+          writes += 1;
+          revision = input.nextRevision;
+          saved.push(structuredClone(input.checkpoint));
+          if (writes === 1) throw new Error("connection lost after commit");
+          return "saved" as const;
+        },
+        async inspectLease() {
+          return { type: "active" as const, revision };
+        },
+        async closeLease() {
+          return true;
+        },
       },
-      async inspectLease() {
-        return { type: "active" as const, revision };
+      {
+        threadId: asThreadId("thread"),
+        runId: asRunId("run"),
+        generation: 1,
       },
-      async closeLease() { return true; },
-    }, {
-      threadId: asThreadId("thread"),
-      runId: asRunId("run"),
-      generation: 1,
-    });
+    );
 
     await expect(coordinator.commit(checkpoint("running"))).rejects.toThrow("connection lost");
     await expect(coordinator.commitFailureTerminal(checkpoint("failed"))).resolves.toBe(true);

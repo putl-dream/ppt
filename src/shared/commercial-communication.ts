@@ -1,10 +1,6 @@
 import { z } from "zod";
 
-export const RESTRUCTURE_PERMISSIONS = [
-  "preserve",
-  "reorder",
-  "rewrite-and-merge",
-] as const;
+export const RESTRUCTURE_PERMISSIONS = ["preserve", "reorder", "rewrite-and-merge"] as const;
 
 export const NARRATIVE_MODES = [
   "executive-brief",
@@ -24,16 +20,18 @@ export const COMMERCIAL_COMMUNICATION_DEFAULTS = {
   narrativeMode: "executive-brief",
 } as const;
 
-export const commercialCommunicationSchema = z.object({
-  audience: z.string().trim().min(1).max(100),
-  objective: z.string().trim().min(1).max(140),
-  desiredAction: z.string().trim().min(1).max(120),
-  coreMessage: z.string().trim().min(1).max(160),
-  presentationContext: z.string().trim().min(1).max(120),
-  afterUse: z.string().trim().min(1).max(120),
-  restructurePermission: restructurePermissionSchema,
-  narrativeMode: narrativeModeSchema,
-}).strict();
+export const commercialCommunicationSchema = z
+  .object({
+    audience: z.string().trim().min(1).max(100),
+    objective: z.string().trim().min(1).max(140),
+    desiredAction: z.string().trim().min(1).max(120),
+    coreMessage: z.string().trim().min(1).max(160),
+    presentationContext: z.string().trim().min(1).max(120),
+    afterUse: z.string().trim().min(1).max(120),
+    restructurePermission: restructurePermissionSchema,
+    narrativeMode: narrativeModeSchema,
+  })
+  .strict();
 
 export type RestructurePermission = z.infer<typeof restructurePermissionSchema>;
 export type NarrativeMode = z.infer<typeof narrativeModeSchema>;
@@ -63,8 +61,10 @@ export function normalizeRestructurePermission(value: string): RestructurePermis
 
 export function normalizeNarrativeMode(value: string): NarrativeMode {
   const normalized = value.trim().toLowerCase();
-  if (["problem-solution", "问题—方案", "问题-方案"].includes(normalized)) return "problem-solution";
+  if (["problem-solution", "问题—方案", "问题-方案"].includes(normalized))
+    return "problem-solution";
   if (["evidence-led", "证据驱动"].includes(normalized)) return "evidence-led";
-  if (["vision-to-action", "愿景—行动", "愿景-行动"].includes(normalized)) return "vision-to-action";
+  if (["vision-to-action", "愿景—行动", "愿景-行动"].includes(normalized))
+    return "vision-to-action";
   return "executive-brief";
 }

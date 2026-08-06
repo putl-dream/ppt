@@ -1,13 +1,13 @@
 import { AsyncLocalStorage } from "node:async_hooks";
-import path from "node:path";
 import fs from "node:fs";
-import { getApplicationDataRoot } from "../application-data";
+import path from "node:path";
 import type {
   AppLogEntry,
   AppLogLevel,
   LogManagerSettings,
   LogManagerStatus,
 } from "@shared/logging";
+import { getApplicationDataRoot } from "../application-data";
 
 type LogDetail = "minimal" | "full";
 
@@ -175,7 +175,9 @@ export function diagnosticValuePreview(
     serializedLength: serialized.length,
     preview: truncated ? `${serialized.slice(0, Math.max(0, safeLimit - 3))}...` : serialized,
     truncated,
-    ...(isPlainRecord(value) ? { keys: Object.keys(value).slice(0, MAX_DIAGNOSTIC_OBJECT_KEYS) } : {}),
+    ...(isPlainRecord(value)
+      ? { keys: Object.keys(value).slice(0, MAX_DIAGNOSTIC_OBJECT_KEYS) }
+      : {}),
   };
 }
 
@@ -189,13 +191,11 @@ function normalizeDiagnosticValue(
   if (typeof value === "string") {
     const redacted = redactSensitiveValue(parentKey, value) as string;
     if (
-      (BINARY_FIELD_PATTERN.test(parentKey) && redacted.length > 128)
-      || /^data:[^;,]+;base64,/i.test(redacted)
-      || (
-        parentKey.toLowerCase() === "data"
-        && redacted.length > 512
-        && /^[a-z0-9+/=_-]+$/i.test(redacted)
-      )
+      (BINARY_FIELD_PATTERN.test(parentKey) && redacted.length > 128) ||
+      /^data:[^;,]+;base64,/i.test(redacted) ||
+      (parentKey.toLowerCase() === "data" &&
+        redacted.length > 512 &&
+        /^[a-z0-9+/=_-]+$/i.test(redacted))
     ) {
       return `[Binary data omitted: ${redacted.length} characters]`;
     }
@@ -219,10 +219,9 @@ function normalizeDiagnosticValue(
     return items;
   }
   const entries = Object.entries(value).slice(0, MAX_DIAGNOSTIC_OBJECT_KEYS);
-  const normalized = Object.fromEntries(entries.map(([key, entry]) => [
-    key,
-    normalizeDiagnosticValue(entry, key, depth + 1, seen),
-  ]));
+  const normalized = Object.fromEntries(
+    entries.map(([key, entry]) => [key, normalizeDiagnosticValue(entry, key, depth + 1, seen)]),
+  );
   if (Object.keys(value).length > MAX_DIAGNOSTIC_OBJECT_KEYS) {
     normalized.__truncatedKeys = Object.keys(value).length - MAX_DIAGNOSTIC_OBJECT_KEYS;
   }
@@ -237,18 +236,23 @@ function diagnosticValueType(value: unknown): string {
 }
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value) && !(value instanceof Error);
+  return (
+    Boolean(value) &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    !(value instanceof Error)
+  );
 }
 
 function localIsoTimestamp(date = new Date()): string {
   const offsetMinutes = -date.getTimezoneOffset();
   const sign = offsetMinutes >= 0 ? "+" : "-";
   const absoluteOffset = Math.abs(offsetMinutes);
-  const hours = Math.floor(absoluteOffset / 60).toString().padStart(2, "0");
+  const hours = Math.floor(absoluteOffset / 60)
+    .toString()
+    .padStart(2, "0");
   const minutes = (absoluteOffset % 60).toString().padStart(2, "0");
-  const localTime = new Date(date.getTime() + offsetMinutes * 60_000)
-    .toISOString()
-    .slice(0, -1);
+  const localTime = new Date(date.getTime() + offsetMinutes * 60_000).toISOString().slice(0, -1);
   return `${localTime}${sign}${hours}:${minutes}`;
 }
 
@@ -317,8 +321,9 @@ function write(level: AppLogLevel, event: string, data: AgentLogData = {}): void
   // Keep console output ASCII-only so Windows terminals using a legacy code page
   // cannot reinterpret UTF-8 log bytes as mojibake. JSON parsers restore the
   // original Unicode text from these escape sequences.
-  const json = JSON.stringify(entry).replace(/[\u007f-\uffff]/g, (character) =>
-    `\\u${character.charCodeAt(0).toString(16).padStart(4, "0")}`,
+  const json = JSON.stringify(entry).replace(
+    /[\u007f-\uffff]/g,
+    (character) => `\\u${character.charCodeAt(0).toString(16).padStart(4, "0")}`,
   );
   const line = `[agent] ${json}`;
 
@@ -361,10 +366,12 @@ async function closeLogFileStream(): Promise<void> {
 }
 
 function isLogFile(name: string): boolean {
-  return DAILY_LOG_FILE_PATTERN.test(name)
-    || name === "agent.log"
-    || name.endsWith(".log")
-    || name.endsWith(".log.gz");
+  return (
+    DAILY_LOG_FILE_PATTERN.test(name) ||
+    name === "agent.log" ||
+    name.endsWith(".log") ||
+    name.endsWith(".log.gz")
+  );
 }
 
 function isManagedLogArtifact(name: string): boolean {
@@ -390,16 +397,20 @@ async function pruneExpiredLogFiles(now = new Date()): Promise<void> {
   const files = await fs.promises.readdir(directory, { withFileTypes: true }).catch(() => []);
   const cutoff = retentionCutoff(now);
   const cutoffKey = localDateKey(cutoff);
-  await Promise.all(files.filter((entry) => entry.isFile() && isLogFile(entry.name)).map(async (entry) => {
-    const dateKey = dateKeyFromDailyLogFile(entry.name);
-    if (dateKey) {
-      if (dateKey < cutoffKey) await fs.promises.unlink(path.join(directory, entry.name));
-      return;
-    }
-    const filename = path.join(directory, entry.name);
-    const stat = await fs.promises.stat(filename);
-    if (stat.mtimeMs < cutoff.getTime()) await fs.promises.unlink(filename);
-  }));
+  await Promise.all(
+    files
+      .filter((entry) => entry.isFile() && isLogFile(entry.name))
+      .map(async (entry) => {
+        const dateKey = dateKeyFromDailyLogFile(entry.name);
+        if (dateKey) {
+          if (dateKey < cutoffKey) await fs.promises.unlink(path.join(directory, entry.name));
+          return;
+        }
+        const filename = path.join(directory, entry.name);
+        const stat = await fs.promises.stat(filename);
+        if (stat.mtimeMs < cutoff.getTime()) await fs.promises.unlink(filename);
+      }),
+  );
 }
 
 function parseLogLine(line: string): AppLogEntry | undefined {
@@ -407,10 +418,10 @@ function parseLogLine(line: string): AppLogEntry | undefined {
   try {
     const entry = JSON.parse(line) as AppLogEntry;
     if (
-      entry
-      && typeof entry.timestamp === "string"
-      && typeof entry.event === "string"
-      && entry.level in levelPriority
+      entry &&
+      typeof entry.timestamp === "string" &&
+      typeof entry.event === "string" &&
+      entry.level in levelPriority
     ) {
       return entry;
     }
@@ -463,9 +474,12 @@ async function loadRecentLogEntries(): Promise<void> {
     .filter((entry) => entry.isFile() && dateKeyFromDailyLogFile(entry.name))
     .map((entry) => entry.name)
     .sort((left, right) => right.localeCompare(left));
-  const sourceFiles = dailyFiles.length > 0
-    ? dailyFiles
-    : (files.some((entry) => entry.isFile() && entry.name === "agent.log") ? ["agent.log"] : []);
+  const sourceFiles =
+    dailyFiles.length > 0
+      ? dailyFiles
+      : files.some((entry) => entry.isFile() && entry.name === "agent.log")
+        ? ["agent.log"]
+        : [];
   const newestFirst: AppLogEntry[] = [];
   for (const name of sourceFiles) {
     const entries = await readNewestLogEntries(
@@ -491,7 +505,9 @@ export async function initializeLogManager(): Promise<LogManagerSettings> {
   const settingsPath = path.join(getLogDirectory(), SETTINGS_FILE_NAME);
   runtimeSettings = {};
   try {
-    const parsed = JSON.parse(await fs.promises.readFile(settingsPath, "utf8")) as Partial<LogManagerSettings>;
+    const parsed = JSON.parse(
+      await fs.promises.readFile(settingsPath, "utf8"),
+    ) as Partial<LogManagerSettings>;
     const retentionDays = clampRetentionDays(parsed.retentionDays);
     runtimeSettings = {
       ...(parsed.level && parsed.level in levelPriority ? { level: parsed.level } : {}),

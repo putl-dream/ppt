@@ -1,19 +1,13 @@
+import { getCardPresentationPolicy } from "@shared/cards/card-presentation-policy";
+import type { ManagedDisplayCard } from "@shared/cards/display-card-managers";
+import {
+  type SlidePreviewEvent,
+  selectLatestSlidePreviews,
+} from "@shared/cards/select-slide-previews";
 import { describe, expect, it } from "vitest";
 import type { DisplayEvent } from "../src/shared/card-display-protocol";
-import {
-  getCardPresentationPolicy,
-} from "../src/renderer/src/cards/card-presentation-policy";
-import type { ManagedDisplayCard } from "../src/renderer/src/cards/display-card-managers";
-import {
-  selectLatestSlidePreviews,
-  type SlidePreviewEvent,
-} from "../src/renderer/src/cards/select-slide-previews";
 
-function preview(
-  eventId: string,
-  slideId: string,
-  runId?: string,
-): SlidePreviewEvent {
+function preview(eventId: string, slideId: string, runId?: string): SlidePreviewEvent {
   return {
     protocolVersion: 1,
     eventId,
@@ -55,8 +49,10 @@ describe("slide preview workspace selection", () => {
       card(preview("dismissed", "slide-3", "run-new"), 5, "dismissed"),
     ];
 
-    expect(selectLatestSlidePreviews(cards).map((event) => event.eventId))
-      .toEqual(["new-2", "new-1b"]);
+    expect(selectLatestSlidePreviews(cards).map((event) => event.eventId)).toEqual([
+      "new-2",
+      "new-1b",
+    ]);
   });
 
   it("treats events without a run/thread/message scope as separate batches", () => {
@@ -65,8 +61,9 @@ describe("slide preview workspace selection", () => {
       card(preview("standalone-2", "slide-2"), 2),
     ];
 
-    expect(selectLatestSlidePreviews(cards).map((event) => event.eventId))
-      .toEqual(["standalone-2"]);
+    expect(selectLatestSlidePreviews(cards).map((event) => event.eventId)).toEqual([
+      "standalone-2",
+    ]);
   });
 
   it("routes page inspection artifacts to the presentation preview host", () => {

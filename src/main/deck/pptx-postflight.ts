@@ -1,13 +1,9 @@
 import { createHash } from "node:crypto";
 import { readFile, stat } from "node:fs/promises";
 import { posix } from "node:path";
-import JSZip from "jszip";
-
 import type { Presentation } from "@shared/presentation";
-import {
-  expectedExportSvgHashSource,
-  liftSvgText,
-} from "./svg-text-lift";
+import JSZip from "jszip";
+import { expectedExportSvgHashSource, liftSvgText } from "./svg-text-lift";
 
 const PPTX_SLIDE_WIDTH_EMU = 9_144_000;
 const PPTX_SLIDE_HEIGHT_EMU = 5_143_500;
@@ -57,9 +53,7 @@ function slideNumberFromPath(path: string): number {
 
 function parseXmlAttributes(fragment: string): Map<string, string> {
   const attributes = new Map<string, string>();
-  for (const match of fragment.matchAll(
-    /([A-Za-z_][A-Za-z0-9_.:-]*)\s*=\s*(["'])(.*?)\2/g,
-  )) {
+  for (const match of fragment.matchAll(/([A-Za-z_][A-Za-z0-9_.:-]*)\s*=\s*(["'])(.*?)\2/g)) {
     attributes.set(
       match[1],
       match[3]
@@ -119,39 +113,36 @@ async function relationshipsForSlide(
 function extractXmlElements(xml: string, qualifiedName: string): string[] {
   const escapedName = qualifiedName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   return Array.from(
-    xml.matchAll(new RegExp(
-      `<${escapedName}\\b[^>]*>[\\s\\S]*?<\\/${escapedName}>`,
-      "gi",
-    )),
+    xml.matchAll(new RegExp(`<${escapedName}\\b[^>]*>[\\s\\S]*?<\\/${escapedName}>`, "gi")),
     (match) => match[0],
   );
 }
 
 function isNonFalseOpenXmlValue(value: string | undefined): boolean {
-  return value !== undefined
-    && value !== "0"
-    && value.toLowerCase() !== "false";
+  return value !== undefined && value !== "0" && value.toLowerCase() !== "false";
 }
 
 function hasPngSignature(bytes: Uint8Array): boolean {
-  return bytes.length >= 8
-    && Buffer.from(bytes.subarray(0, 8)).toString("hex") === PNG_SIGNATURE_HEX;
+  return (
+    bytes.length >= 8 && Buffer.from(bytes.subarray(0, 8)).toString("hex") === PNG_SIGNATURE_HEX
+  );
 }
 
 function readUint32BigEndian(bytes: Uint8Array, offset: number): number {
   return (
-    (bytes[offset] * 0x1000000)
-    + (bytes[offset + 1] << 16)
-    + (bytes[offset + 2] << 8)
-    + bytes[offset + 3]
-  ) >>> 0;
+    (bytes[offset] * 0x1000000 +
+      (bytes[offset + 1] << 16) +
+      (bytes[offset + 2] << 8) +
+      bytes[offset + 3]) >>>
+    0
+  );
 }
 
 function readPngDimensions(bytes: Uint8Array): { width: number; height: number } | undefined {
   if (
-    !hasPngSignature(bytes)
-    || bytes.length < 24
-    || Buffer.from(bytes.subarray(12, 16)).toString("ascii") !== "IHDR"
+    !hasPngSignature(bytes) ||
+    bytes.length < 24 ||
+    Buffer.from(bytes.subarray(12, 16)).toString("ascii") !== "IHDR"
   ) {
     return undefined;
   }
@@ -177,24 +168,21 @@ function inspectSvgPictureGeometry(
   const transformAttributes = parseXmlAttributes(transform[1]);
   const rotationValue = transformAttributes.get("rot");
   if (
-    rotationValue !== undefined
-    && (!/^-?\d+$/.test(rotationValue) || Number(rotationValue) !== 0)
+    rotationValue !== undefined &&
+    (!/^-?\d+$/.test(rotationValue) || Number(rotationValue) !== 0)
   ) {
     errors.push(`Slide ${slideNumber} SVG picture must not be rotated.`);
   }
   if (
-    isNonFalseOpenXmlValue(transformAttributes.get("flipH"))
-    || isNonFalseOpenXmlValue(transformAttributes.get("flipV"))
+    isNonFalseOpenXmlValue(transformAttributes.get("flipH")) ||
+    isNonFalseOpenXmlValue(transformAttributes.get("flipV"))
   ) {
     errors.push(`Slide ${slideNumber} SVG picture must not be flipped.`);
   }
 
   const offset = transform[2].match(/<a:off\b([^>]*)\/?>/i);
   const offsetAttributes = offset ? parseXmlAttributes(offset[1]) : new Map<string, string>();
-  if (
-    offsetAttributes.get("x") !== "0"
-    || offsetAttributes.get("y") !== "0"
-  ) {
+  if (offsetAttributes.get("x") !== "0" || offsetAttributes.get("y") !== "0") {
     errors.push(
       `Slide ${slideNumber} SVG picture offset must be (0,0), found (${offsetAttributes.get("x") ?? "missing"},${offsetAttributes.get("y") ?? "missing"}).`,
     );
@@ -203,8 +191,8 @@ function inspectSvgPictureGeometry(
   const extent = transform[2].match(/<a:ext\b([^>]*)\/?>/i);
   const extentAttributes = extent ? parseXmlAttributes(extent[1]) : new Map<string, string>();
   if (
-    extentAttributes.get("cx") !== String(PPTX_SLIDE_WIDTH_EMU)
-    || extentAttributes.get("cy") !== String(PPTX_SLIDE_HEIGHT_EMU)
+    extentAttributes.get("cx") !== String(PPTX_SLIDE_WIDTH_EMU) ||
+    extentAttributes.get("cy") !== String(PPTX_SLIDE_HEIGHT_EMU)
   ) {
     errors.push(
       `Slide ${slideNumber} SVG picture extent must be ${PPTX_SLIDE_WIDTH_EMU}x${PPTX_SLIDE_HEIGHT_EMU}, found ${extentAttributes.get("cx") ?? "missing"}x${extentAttributes.get("cy") ?? "missing"}.`,
@@ -253,9 +241,9 @@ async function inspectSvgFallbackPng(
 
   const dimensions = readPngDimensions(bytes);
   if (
-    !dimensions
-    || dimensions.width !== SVG_PAGE_WIDTH_PX
-    || dimensions.height !== SVG_PAGE_HEIGHT_PX
+    !dimensions ||
+    dimensions.width !== SVG_PAGE_WIDTH_PX ||
+    dimensions.height !== SVG_PAGE_HEIGHT_PX
   ) {
     warnings.push(
       `Slide ${slideNumber} SVG picture has a valid PNG fallback, but it is not the canonical ${SVG_PAGE_WIDTH_PX}x${SVG_PAGE_HEIGHT_PX} page raster${dimensions ? ` (${dimensions.width}x${dimensions.height})` : ""}.`,
@@ -288,9 +276,7 @@ export async function inspectPptxExport(
       errors.push("Missing required PPTX export identity metadata.");
     } else {
       const coreXml = await coreProperties.async("string");
-      const subject = coreXml.match(
-        /<dc:subject(?:\s[^>]*)?>([\s\S]*?)<\/dc:subject>/i,
-      )?.[1];
+      const subject = coreXml.match(/<dc:subject(?:\s[^>]*)?>([\s\S]*?)<\/dc:subject>/i)?.[1];
       if (subject !== expectedExportIdentity) {
         errors.push("PPTX export identity does not match the requested Presentation revision.");
       }
@@ -304,8 +290,8 @@ export async function inspectPptxExport(
       ? parseXmlAttributes(slideSize[1])
       : new Map<string, string>();
     if (
-      slideSizeAttributes.get("cx") !== String(PPTX_SLIDE_WIDTH_EMU)
-      || slideSizeAttributes.get("cy") !== String(PPTX_SLIDE_HEIGHT_EMU)
+      slideSizeAttributes.get("cx") !== String(PPTX_SLIDE_WIDTH_EMU) ||
+      slideSizeAttributes.get("cy") !== String(PPTX_SLIDE_HEIGHT_EMU)
     ) {
       errors.push(
         `Presentation slide size must be ${PPTX_SLIDE_WIDTH_EMU}x${PPTX_SLIDE_HEIGHT_EMU}, found ${slideSizeAttributes.get("cx") ?? "missing"}x${slideSizeAttributes.get("cy") ?? "missing"}.`,
@@ -320,12 +306,17 @@ export async function inspectPptxExport(
       `Slide part count ${slidePaths.length} does not match Presentation count ${presentation.slides.length}.`,
     );
   }
-  const svgMediaPaths = Object.keys(archive.files)
-    .filter((path) => /^ppt\/media\/[^/]+\.svg$/i.test(path));
-  const svgMediaHashesByPath = new Map(await Promise.all(svgMediaPaths.map(async (path) => {
-    const bytes = await archive.file(path)!.async("uint8array");
-    return [path, createHash("sha256").update(bytes).digest("hex")] as const;
-  })));
+  const svgMediaPaths = Object.keys(archive.files).filter((path) =>
+    /^ppt\/media\/[^/]+\.svg$/i.test(path),
+  );
+  const svgMediaHashesByPath = new Map(
+    await Promise.all(
+      svgMediaPaths.map(async (path) => {
+        const bytes = await archive.file(path)!.async("uint8array");
+        return [path, createHash("sha256").update(bytes).digest("hex")] as const;
+      }),
+    ),
+  );
 
   const slides: PptxSlidePostflight[] = [];
   for (const [index, path] of slidePaths.entries()) {
@@ -338,9 +329,8 @@ export async function inspectPptxExport(
     const graphicFrames = countMatches(xml, /<p:graphicFrame(?:\s[^>]*)?>/g);
     const editableObjects = textRuns + shapes + pictures + graphicFrames;
     const expectedSlide = presentation.slides[index];
-    const expectedSvgSource = expectedSlide?.visualSource?.kind === "svg"
-      ? expectedSlide.visualSource
-      : undefined;
+    const expectedSvgSource =
+      expectedSlide?.visualSource?.kind === "svg" ? expectedSlide.visualSource : undefined;
 
     let svgSourcePresent = false;
     if (expectedSvgSource) {
@@ -374,36 +364,25 @@ export async function inspectPptxExport(
 
       if (pictureElements.length === 1) {
         const pictureXml = pictureElements[0];
-        const svgBlips = Array.from(
-          pictureXml.matchAll(/<asvg:svgBlip\b([^>]*)\/?>/gi),
-        );
+        const svgBlips = Array.from(pictureXml.matchAll(/<asvg:svgBlip\b([^>]*)\/?>/gi));
         if (svgBlips.length !== 1) {
           errors.push(
             `Slide ${index + 1} SVG picture must contain exactly one asvg:svgBlip; found ${svgBlips.length}.`,
           );
         }
-        const svgRelationshipId = svgBlips.length === 1
-          ? parseXmlAttributes(svgBlips[0][1]).get("r:embed")
-          : undefined;
+        const svgRelationshipId =
+          svgBlips.length === 1 ? parseXmlAttributes(svgBlips[0][1]).get("r:embed") : undefined;
         const svgRelationship = svgRelationshipId
           ? relationships.get(svgRelationshipId)
           : undefined;
         const svgTarget = svgRelationship?.type?.endsWith("/image")
           ? svgRelationship.target
           : undefined;
-        const svgHash = svgTarget
-          ? svgMediaHashesByPath.get(svgTarget)
-          : undefined;
+        const svgHash = svgTarget ? svgMediaHashesByPath.get(svgTarget) : undefined;
         svgSourcePresent = svgHash === expectedBackgroundHash;
 
         inspectSvgPictureGeometry(pictureXml, index + 1, errors);
-        await inspectSvgFallbackPng(
-          archive,
-          pictureXml,
-          relationships,
-          index + 1,
-          warnings,
-        );
+        await inspectSvgFallbackPng(archive, pictureXml, relationships, index + 1, warnings);
       }
 
       if (!svgSourcePresent) {
@@ -437,19 +416,24 @@ export async function inspectPptxExport(
     });
   }
 
-  const mediaCount = Object.keys(archive.files)
-    .filter((path) => /^ppt\/media\/[^/]+$/.test(path)).length;
+  const mediaCount = Object.keys(archive.files).filter((path) =>
+    /^ppt\/media\/[^/]+$/.test(path),
+  ).length;
   const expectedImages = presentation.slides.filter(
     (slide) => slide.visualSource?.kind === "svg",
   ).length;
   if (expectedImages > 0 && mediaCount === 0) {
     errors.push("Presentation contains SVG slides but the PPTX has no media parts.");
   }
-  const chartPartCount = Object.keys(archive.files)
-    .filter((path) => /^ppt\/charts\/chart\d+\.xml$/.test(path)).length;
-  const notesPartCount = Object.keys(archive.files)
-    .filter((path) => /^ppt\/notesSlides\/notesSlide\d+\.xml$/.test(path)).length;
-  const expectedNotesCount = presentation.slides.filter((slide) => Boolean(slide.speakerNotes)).length;
+  const chartPartCount = Object.keys(archive.files).filter((path) =>
+    /^ppt\/charts\/chart\d+\.xml$/.test(path),
+  ).length;
+  const notesPartCount = Object.keys(archive.files).filter((path) =>
+    /^ppt\/notesSlides\/notesSlide\d+\.xml$/.test(path),
+  ).length;
+  const expectedNotesCount = presentation.slides.filter((slide) =>
+    Boolean(slide.speakerNotes),
+  ).length;
   if (notesPartCount < expectedNotesCount) {
     errors.push(
       `PPTX contains ${notesPartCount} notes slide part(s), fewer than the ${expectedNotesCount} required by the Presentation.`,

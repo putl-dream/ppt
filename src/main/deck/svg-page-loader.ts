@@ -3,11 +3,8 @@ import { constants, type Stats } from "node:fs";
 import { lstat, open, realpath } from "node:fs/promises";
 import { isAbsolute, posix, relative, resolve } from "node:path";
 import type { SvgPageResource } from "@shared/presentation";
-import {
-  detectSupportedRasterMime,
-  MAX_LOCAL_IMAGE_BYTES,
-} from "../local-image-file";
 import type { WorkspaceFileService } from "../agent/tools/files/workspace-file-service";
+import { detectSupportedRasterMime, MAX_LOCAL_IMAGE_BYTES } from "../local-image-file";
 
 export interface HydratedSvgPage {
   markup: string;
@@ -38,11 +35,14 @@ export async function loadWorkspaceSvgPage(input: {
   });
   const resources: SvgPageResource[] = [];
   const resourceContents: HydratedSvgPageResourceContent[] = [];
-  const cachedResources = new Map<string, {
-    dataUri: string;
-    resource: SvgPageResource;
-    bytes: Uint8Array;
-  }>();
+  const cachedResources = new Map<
+    string,
+    {
+      dataUri: string;
+      resource: SvgPageResource;
+      bytes: Uint8Array;
+    }
+  >();
   const resourceHashes = new Set<string>();
   let markup = receipt.content;
   let projectedHydratedBytes = Buffer.byteLength(markup, "utf8");
@@ -66,13 +66,14 @@ export async function loadWorkspaceSvgPage(input: {
       continue;
     }
     if (/^[a-z][a-z0-9+.-]*:/i.test(href) || href.startsWith("//") || isAbsolute(href)) {
-      throw new Error(`${receipt.path}: image source must be workspace-relative or embedded: ${href}`);
+      throw new Error(
+        `${receipt.path}: image source must be workspace-relative or embedded: ${href}`,
+      );
     }
 
-    const assetPath = normalizeWorkspacePath(posix.join(
-      posix.dirname(normalizeWorkspacePath(receipt.path)),
-      href.replace(/\\/g, "/"),
-    ));
+    const assetPath = normalizeWorkspacePath(
+      posix.join(posix.dirname(normalizeWorkspacePath(receipt.path)), href.replace(/\\/g, "/")),
+    );
     let localized = cachedResources.get(assetPath);
     if (!localized) {
       localized = await readWorkspaceRaster(input.workspaceRoot, assetPath);
@@ -86,16 +87,17 @@ export async function loadWorkspaceSvgPage(input: {
         resourceHashes.add(localized.resource.sha256);
       }
     }
-    projectedHydratedBytes += Buffer.byteLength(localized.dataUri, "utf8")
-      - Buffer.byteLength(hrefAttribute.value, "utf8");
+    projectedHydratedBytes +=
+      Buffer.byteLength(localized.dataUri, "utf8") - Buffer.byteLength(hrefAttribute.value, "utf8");
     if (projectedHydratedBytes > MAX_HYDRATED_SVG_PAGE_BYTES) {
       throw new Error(
         `${receipt.path}: hydrated SVG would exceed ${MAX_HYDRATED_SVG_PAGE_BYTES} bytes.`,
       );
     }
-    const hydratedTag = tag.slice(0, hrefAttribute.valueStart)
-      + localized.dataUri
-      + tag.slice(hrefAttribute.valueEnd);
+    const hydratedTag =
+      tag.slice(0, hrefAttribute.valueStart) +
+      localized.dataUri +
+      tag.slice(hrefAttribute.valueEnd);
     replacements.push({
       start: match.start,
       end: match.end,
@@ -107,10 +109,7 @@ export async function loadWorkspaceSvgPage(input: {
     const hydratedParts: string[] = [];
     let sourceCursor = 0;
     for (const replacement of replacements) {
-      hydratedParts.push(
-        markup.slice(sourceCursor, replacement.start),
-        replacement.value,
-      );
+      hydratedParts.push(markup.slice(sourceCursor, replacement.start), replacement.value);
       sourceCursor = replacement.end;
     }
     hydratedParts.push(markup.slice(sourceCursor));
@@ -119,8 +118,8 @@ export async function loadWorkspaceSvgPage(input: {
   const hydratedBytes = Buffer.byteLength(markup, "utf8");
   if (hydratedBytes > MAX_HYDRATED_SVG_PAGE_BYTES) {
     throw new Error(
-      `${receipt.path}: hydrated SVG is ${hydratedBytes} bytes, exceeding `
-      + `${MAX_HYDRATED_SVG_PAGE_BYTES} bytes.`,
+      `${receipt.path}: hydrated SVG is ${hydratedBytes} bytes, exceeding ` +
+        `${MAX_HYDRATED_SVG_PAGE_BYTES} bytes.`,
     );
   }
 
@@ -146,10 +145,7 @@ interface ImageHrefAttribute {
   valueEnd: number;
 }
 
-function findImageHrefAttribute(
-  tag: string,
-  svgPath: string,
-): ImageHrefAttribute | undefined {
+function findImageHrefAttribute(tag: string, svgPath: string): ImageHrefAttribute | undefined {
   let cursor = 1;
   while (/\s/.test(tag[cursor] ?? "")) cursor += 1;
   const tagName = /^[A-Za-z_][A-Za-z0-9_.:-]*/.exec(tag.slice(cursor))?.[0];
@@ -160,8 +156,7 @@ function findImageHrefAttribute(
   while (cursor < tag.length) {
     while (/\s/.test(tag[cursor] ?? "")) cursor += 1;
     if (cursor >= tag.length || tag[cursor] === ">" || tag[cursor] === "/") break;
-    const attributeName = /^[A-Za-z_][A-Za-z0-9_.:-]*/
-      .exec(tag.slice(cursor))?.[0];
+    const attributeName = /^[A-Za-z_][A-Za-z0-9_.:-]*/.exec(tag.slice(cursor))?.[0];
     if (!attributeName) break;
     cursor += attributeName.length;
     while (/\s/.test(tag[cursor] ?? "")) cursor += 1;
@@ -182,9 +177,7 @@ function findImageHrefAttribute(
         valueEnd,
       });
     } else if (normalizedName.endsWith(":href")) {
-      throw new Error(
-        `${svgPath}: <image> may use only href or xlink:href, not ${attributeName}.`,
-      );
+      throw new Error(`${svgPath}: <image> may use only href or xlink:href, not ${attributeName}.`);
     }
     cursor = valueEnd + 1;
   }
@@ -223,9 +216,7 @@ function findImageStartTags(markup: string): ImageStartTag[] {
     if (end < 0) break;
     const value = markup.slice(start, end + 1);
     const name = value.match(/^<\s*([A-Za-z_][A-Za-z0-9_.:-]*)/)?.[1];
-    const localName = name?.includes(":")
-      ? name.slice(name.lastIndexOf(":") + 1)
-      : name;
+    const localName = name?.includes(":") ? name.slice(name.lastIndexOf(":") + 1) : name;
     if (localName?.toLowerCase() === "image") {
       tags.push({ start, end: end + 1, value });
     }
@@ -251,29 +242,27 @@ function findTagEnd(markup: string, start: number): number {
   return -1;
 }
 
-function inspectEmbeddedRaster(
-  href: string,
-  svgPath: string,
-): HydratedSvgPageResourceContent {
-  const match = /^data:(image\/(?:png|jpeg|gif|webp));base64,([a-z0-9+/]+={0,2})$/i
-    .exec(href);
+function inspectEmbeddedRaster(href: string, svgPath: string): HydratedSvgPageResourceContent {
+  const match = /^data:(image\/(?:png|jpeg|gif|webp));base64,([a-z0-9+/]+={0,2})$/i.exec(href);
   if (!match) {
-    throw new Error(`${svgPath}: embedded image must be a canonical PNG, JPEG, GIF, or WebP base64 data URI.`);
+    throw new Error(
+      `${svgPath}: embedded image must be a canonical PNG, JPEG, GIF, or WebP base64 data URI.`,
+    );
   }
   const bytes = Buffer.from(match[2], "base64");
   if (
-    bytes.length === 0
-    || bytes.length > MAX_LOCAL_IMAGE_BYTES
-    || bytes.toString("base64").replace(/=+$/, "") !== match[2].replace(/=+$/, "")
+    bytes.length === 0 ||
+    bytes.length > MAX_LOCAL_IMAGE_BYTES ||
+    bytes.toString("base64").replace(/=+$/, "") !== match[2].replace(/=+$/, "")
   ) {
-    throw new Error(`${svgPath}: embedded image base64 is invalid or exceeds ${MAX_LOCAL_IMAGE_BYTES} bytes.`);
+    throw new Error(
+      `${svgPath}: embedded image base64 is invalid or exceeds ${MAX_LOCAL_IMAGE_BYTES} bytes.`,
+    );
   }
   const actualMimeType = detectSvgRasterMime(bytes);
   const declaredMimeType = match[1].toLowerCase();
   if (!actualMimeType || actualMimeType !== declaredMimeType) {
-    throw new Error(
-      `${svgPath}: embedded image signature does not match ${declaredMimeType}.`,
-    );
+    throw new Error(`${svgPath}: embedded image signature does not match ${declaredMimeType}.`);
   }
   const digest = createHash("sha256").update(bytes).digest("hex");
   return {
@@ -287,14 +276,13 @@ function inspectEmbeddedRaster(
   };
 }
 
-function detectSvgRasterMime(
-  bytes: Uint8Array,
-): SvgPageResource["mimeType"] | undefined {
+function detectSvgRasterMime(bytes: Uint8Array): SvgPageResource["mimeType"] | undefined {
   const supported = detectSupportedRasterMime(bytes.subarray(0, 8));
   if (supported) return supported;
-  const isWebp = bytes.length >= 12
-    && Buffer.from(bytes.subarray(0, 4)).toString("ascii") === "RIFF"
-    && Buffer.from(bytes.subarray(8, 12)).toString("ascii") === "WEBP";
+  const isWebp =
+    bytes.length >= 12 &&
+    Buffer.from(bytes.subarray(0, 4)).toString("ascii") === "RIFF" &&
+    Buffer.from(bytes.subarray(8, 12)).toString("ascii") === "WEBP";
   return isWebp ? "image/webp" : undefined;
 }
 
@@ -318,12 +306,8 @@ async function readWorkspaceRaster(
 
   const handle = await open(
     canonicalPath,
-    constants.O_RDONLY
-      | (
-        process.platform === "win32"
-          ? 0
-          : constants.O_NONBLOCK | constants.O_NOFOLLOW
-      ),
+    constants.O_RDONLY |
+      (process.platform === "win32" ? 0 : constants.O_NONBLOCK | constants.O_NOFOLLOW),
   );
   try {
     const before = await handle.stat();
@@ -338,12 +322,12 @@ async function readWorkspaceRaster(
     assertRasterFileStat(after, workspacePath);
     assertRasterFileStat(pathAfter, workspacePath);
     if (
-      !sameFileIdentity(before, after)
-      || !sameFileIdentity(after, pathAfter)
-      || before.size !== after.size
-      || before.mtimeMs !== after.mtimeMs
-      || before.ctimeMs !== after.ctimeMs
-      || bytes.byteLength !== after.size
+      !sameFileIdentity(before, after) ||
+      !sameFileIdentity(after, pathAfter) ||
+      before.size !== after.size ||
+      before.mtimeMs !== after.mtimeMs ||
+      before.ctimeMs !== after.ctimeMs ||
+      bytes.byteLength !== after.size
     ) {
       throw new Error(`Image source changed while it was being read: ${workspacePath}`);
     }
@@ -352,16 +336,15 @@ async function readWorkspaceRaster(
       realpath(resolvedWorkspaceRoot),
       realpath(candidate),
     ]);
-    if (
-      canonicalRootAfter !== canonicalRoot
-      || canonicalPathAfter !== canonicalPath
-    ) {
+    if (canonicalRootAfter !== canonicalRoot || canonicalPathAfter !== canonicalPath) {
       throw new Error(`Image path identity changed while it was being read: ${workspacePath}`);
     }
 
     const mimeType = detectSvgRasterMime(bytes);
     if (!mimeType) {
-      throw new Error(`Unsupported raster image; expected PNG, JPEG, GIF, or WebP: ${workspacePath}`);
+      throw new Error(
+        `Unsupported raster image; expected PNG, JPEG, GIF, or WebP: ${workspacePath}`,
+      );
     }
     const digest = createHash("sha256").update(bytes).digest("hex");
     return {
@@ -426,21 +409,19 @@ export function hasSvgPagePreviewReceipt(
   fileService: WorkspaceFileService,
   page: Pick<HydratedSvgPage, "sourcePath" | "sha256">,
 ): boolean {
-  return previewReceiptSet(fileService).has(
-    previewReceiptKey(fileService.workspaceRoot, page),
-  );
+  return previewReceiptSet(fileService).has(previewReceiptKey(fileService.workspaceRoot, page));
 }
 
 function normalizeWorkspacePath(value: string): string {
   const normalized = posix.normalize(value.replace(/\\/g, "/"));
   if (
-    !normalized
-    || normalized === "."
-    || normalized === ".."
-    || normalized.startsWith("../")
-    || normalized.startsWith("/")
-    || /^[A-Za-z]:\//.test(normalized)
-    || normalized.includes(":")
+    !normalized ||
+    normalized === "." ||
+    normalized === ".." ||
+    normalized.startsWith("../") ||
+    normalized.startsWith("/") ||
+    /^[A-Za-z]:\//.test(normalized) ||
+    normalized.includes(":")
   ) {
     throw new Error(`Path must stay inside the workspace: ${value}`);
   }

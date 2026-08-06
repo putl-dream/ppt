@@ -1,11 +1,11 @@
 import { z } from "zod";
-import { agentTaskNodeSchema, TASK_LIST_TRACE_ID, type AgentTaskNode } from "./agent-task-list";
 import {
-  formatAgentToolActivity,
-  getAgentToolDisplayCopy,
   type AgentToolActivityState,
   type AgentToolDisplayCategory,
+  formatAgentToolActivity,
+  getAgentToolDisplayCopy,
 } from "./agent-activity-display";
+import { type AgentTaskNode, agentTaskNodeSchema, TASK_LIST_TRACE_ID } from "./agent-task-list";
 import type { TeammateProgressEvent } from "./teammate-progress";
 
 export const agentActivityItemSchema = z.discriminatedUnion("kind", [
@@ -65,34 +65,30 @@ export const agentActivityItemSchema = z.discriminatedUnion("kind", [
     parentTaskId: z.string().optional(),
     description: z.string(),
     status: z.enum(["running", "completed", "failed", "interrupted", "cancelled"]),
-    steps: z.array(z.object({
-      id: z.string(),
-      type: z.enum(["reasoning", "tool"]),
-      text: z.string(),
-      toolName: z.string().optional(),
-      status: z.enum(["running", "completed", "failed"]),
-      streaming: z.boolean().optional(),
-    })),
+    steps: z.array(
+      z.object({
+        id: z.string(),
+        type: z.enum(["reasoning", "tool"]),
+        text: z.string(),
+        toolName: z.string().optional(),
+        status: z.enum(["running", "completed", "failed"]),
+        streaming: z.boolean().optional(),
+      }),
+    ),
   }),
 ]);
 
 export type AgentActivityItem = z.infer<typeof agentActivityItemSchema>;
 
-export function sealResponseBlocks(
-  trace: AgentActivityItem[],
-): AgentActivityItem[] {
+export function sealResponseBlocks(trace: AgentActivityItem[]): AgentActivityItem[] {
   return trace.map((item) =>
-    item.kind === "response" && item.streaming
-      ? { ...item, streaming: false }
-      : item,
+    item.kind === "response" && item.streaming ? { ...item, streaming: false } : item,
   );
 }
 
 export function sealAllReasoning(trace: AgentActivityItem[]): AgentActivityItem[] {
   return trace.map((item) =>
-    item.kind === "reasoning" && item.streaming
-      ? { ...item, streaming: false }
-      : item,
+    item.kind === "reasoning" && item.streaming ? { ...item, streaming: false } : item,
   );
 }
 
@@ -157,15 +153,12 @@ export function appendResponseChunk(
   const last = sealed.at(-1);
   const contentEnd = contentStart + chunkLength;
   if (
-    last?.kind === "response"
-    && last.streaming
-    && last.end === contentStart
-    && last.attemptId === attemptId
+    last?.kind === "response" &&
+    last.streaming &&
+    last.end === contentStart &&
+    last.attemptId === attemptId
   ) {
-    return [
-      ...sealed.slice(0, -1),
-      { ...last, end: contentEnd },
-    ];
+    return [...sealed.slice(0, -1), { ...last, end: contentEnd }];
   }
   return [
     ...sealResponseBlocks(sealed),
@@ -185,9 +178,7 @@ export function commitResponseAttempt(
   attemptId: string,
 ): AgentActivityItem[] {
   return trace.map((item) =>
-    item.kind === "response"
-      && item.attemptId === attemptId
-      && item.streaming
+    item.kind === "response" && item.attemptId === attemptId && item.streaming
       ? { ...item, streaming: false }
       : item,
   );
@@ -252,11 +243,7 @@ export function mergeResponseText(
   const last = trace.at(-1);
   if (last?.kind === "response" && last.end === content.length) {
     const tail = getResponseBlockContent(last, content);
-    if (
-      tail === nextText
-      || tail === `\n${nextText}`
-      || tail === `\n\n${nextText}`
-    ) {
+    if (tail === nextText || tail === `\n${nextText}` || tail === `\n\n${nextText}`) {
       return { trace, content };
     }
   }
@@ -322,9 +309,7 @@ export function updateStepText(
   text: string,
 ): AgentActivityItem[] {
   return trace.map((item) =>
-    item.id === stepId && item.kind === "step"
-      ? { ...item, text }
-      : item,
+    item.id === stepId && item.kind === "step" ? { ...item, text } : item,
   );
 }
 
@@ -333,11 +318,7 @@ export function appendToolStart(
   toolCallId: string,
   toolName: string,
 ): AgentActivityItem[] {
-  if (
-    trace.some(
-      (item) => item.kind === "tool" && item.toolCallId === toolCallId,
-    )
-  ) {
+  if (trace.some((item) => item.kind === "tool" && item.toolCallId === toolCallId)) {
     return trace;
   }
   return [
@@ -381,9 +362,7 @@ export function resolveToolApprovalItem(
   status: "approved" | "denied",
 ): AgentActivityItem[] {
   return trace.map((item) =>
-    item.kind === "tool-approval" && item.approvalId === approvalId
-      ? { ...item, status }
-      : item,
+    item.kind === "tool-approval" && item.approvalId === approvalId ? { ...item, status } : item,
   );
 }
 
@@ -436,10 +415,12 @@ export function finishTool(
 export function findPendingToolApproval(
   trace: AgentActivityItem[],
 ): Extract<AgentActivityItem, { kind: "tool-approval" }> | undefined {
-  return [...trace].reverse().find(
-    (item): item is Extract<AgentActivityItem, { kind: "tool-approval" }> =>
-      item.kind === "tool-approval" && item.status === "pending",
-  );
+  return [...trace]
+    .reverse()
+    .find(
+      (item): item is Extract<AgentActivityItem, { kind: "tool-approval" }> =>
+        item.kind === "tool-approval" && item.status === "pending",
+    );
 }
 
 export function filterTraceForDisplay(
@@ -526,17 +507,16 @@ export function compactActivityTraceForPersistence(
     .filter((item) => item.kind === "tool-approval" && item.status === "pending")
     .slice(-MAX_PERSISTED_APPROVAL_ITEMS);
   const completedApprovalBudget = MAX_PERSISTED_APPROVAL_ITEMS - pendingApprovals.length;
-  const completedApprovals = completedApprovalBudget > 0
-    ? compacted
-        .filter((item) => item.kind === "tool-approval" && item.status !== "pending")
-        .slice(-completedApprovalBudget)
-    : [];
+  const completedApprovals =
+    completedApprovalBudget > 0
+      ? compacted
+          .filter((item) => item.kind === "tool-approval" && item.status !== "pending")
+          .slice(-completedApprovalBudget)
+      : [];
   // Response markers are structural: dropping one would make the remaining
   // content offsets lie about the visual order. Keep them outside the process
   // item budget, then retain the newest process activity around them.
-  const responseIds = compacted
-    .filter((item) => item.kind === "response")
-    .map((item) => item.id);
+  const responseIds = compacted.filter((item) => item.kind === "response").map((item) => item.id);
   const keptIds = new Set<string>([
     ...responseIds,
     ...(latestTaskList ? [latestTaskList.id] : []),
@@ -554,9 +534,9 @@ export function compactActivityTraceForPersistence(
   }
 
   const kept = compacted.filter((item) => keptIds.has(item.id));
-  const latestProcessItem = [...compacted].reverse().find(
-    (item) => item.kind !== "response" && item.kind !== "tasklist",
-  );
+  const latestProcessItem = [...compacted]
+    .reverse()
+    .find((item) => item.kind !== "response" && item.kind !== "tasklist");
   const mandatoryIds = new Set<string>([
     ...responseIds,
     ...(latestTaskList ? [latestTaskList.id] : []),
@@ -593,10 +573,7 @@ const PROCESS_TRACE_CATEGORY_ORDER: AgentToolDisplayCategory[] = [
   "other",
 ];
 
-const PROCESS_TRACE_CATEGORY_LABEL: Record<
-  AgentToolDisplayCategory,
-  (count: number) => string
-> = {
+const PROCESS_TRACE_CATEGORY_LABEL: Record<AgentToolDisplayCategory, (count: number) => string> = {
   read: (count) => `已查看 ${count} 项`,
   search: (count) => `搜索 ${count} 次`,
   inspect: (count) => `检查 ${count} 次`,
@@ -650,14 +627,13 @@ export function summarizeProcessTrace(
     counts[category] = (counts[category] ?? 0) + 1;
   }
 
-  const parts = PROCESS_TRACE_CATEGORY_ORDER
-    .filter((category) => (counts[category] ?? 0) > 0)
-    .map((category) => PROCESS_TRACE_CATEGORY_LABEL[category](counts[category]!));
+  const parts = PROCESS_TRACE_CATEGORY_ORDER.filter((category) => (counts[category] ?? 0) > 0).map(
+    (category) => PROCESS_TRACE_CATEGORY_LABEL[category](counts[category]!),
+  );
 
-  const incomplete = tools.filter((tool) =>
-    tool.status === "failed"
-    || tool.status === "denied"
-    || tool.status === "invalid-input"
+  const incomplete = tools.filter(
+    (tool) =>
+      tool.status === "failed" || tool.status === "denied" || tool.status === "invalid-input",
   ).length;
   if (incomplete > 0) {
     parts.push(`${incomplete} 项未完成`);
@@ -686,11 +662,15 @@ type TaskStep = Extract<AgentActivityItem, { kind: "task" }>["steps"][number];
 function upsertTask(
   trace: AgentActivityItem[],
   taskId: string,
-  updater: (task: Extract<AgentActivityItem, { kind: "task" }>) => Extract<AgentActivityItem, { kind: "task" }>,
+  updater: (
+    task: Extract<AgentActivityItem, { kind: "task" }>,
+  ) => Extract<AgentActivityItem, { kind: "task" }>,
 ): AgentActivityItem[] {
   const index = trace.findIndex((item) => item.kind === "task" && item.taskId === taskId);
   if (index < 0) return trace;
-  return trace.map((item, i) => (i === index ? updater(item as Extract<AgentActivityItem, { kind: "task" }>) : item));
+  return trace.map((item, i) =>
+    i === index ? updater(item as Extract<AgentActivityItem, { kind: "task" }>) : item,
+  );
 }
 
 export function upsertTaskStarted(
@@ -760,8 +740,9 @@ export function appendTaskToolStart(
   message: string,
 ): AgentActivityItem[] {
   return upsertTask(trace, taskId, (task) => {
-    const steps = task.steps.map((step): TaskStep =>
-      step.streaming ? { ...step, streaming: false, status: "completed" } : step,
+    const steps = task.steps.map(
+      (step): TaskStep =>
+        step.streaming ? { ...step, streaming: false, status: "completed" } : step,
     );
     steps.push({
       id: crypto.randomUUID(),
@@ -814,10 +795,11 @@ export function finishTask(
   return upsertTask(trace, taskId, (task) => ({
     ...task,
     status,
-    steps: task.steps.map((step): TaskStep =>
-      step.streaming || step.status === "running"
-        ? { ...step, streaming: false, status: unfinishedStepStatus }
-        : step,
+    steps: task.steps.map(
+      (step): TaskStep =>
+        step.streaming || step.status === "running"
+          ? { ...step, streaming: false, status: unfinishedStepStatus }
+          : step,
     ),
   }));
 }
@@ -838,20 +820,9 @@ export function applyTeammateProgressEvent(
     case "teammate-thinking-chunk":
       return appendTaskReasoningChunk(trace, event.activityId, event.chunk);
     case "teammate-tool-started":
-      return appendTaskToolStart(
-        trace,
-        event.activityId,
-        event.toolName,
-        event.message,
-      );
+      return appendTaskToolStart(trace, event.activityId, event.toolName, event.message);
     case "teammate-tool-finished":
-      return finishTaskTool(
-        trace,
-        event.activityId,
-        event.toolName,
-        event.message,
-        event.status,
-      );
+      return finishTaskTool(trace, event.activityId, event.toolName, event.message, event.status);
     case "teammate-assignment-finished":
       return finishTask(
         trace,
@@ -920,9 +891,8 @@ function mergeActivityItem(
     return incoming;
   }
   if (current.kind === "reasoning" && incoming.kind === "reasoning") {
-    const content = incoming.content.length >= current.content.length
-      ? incoming.content
-      : current.content;
+    const content =
+      incoming.content.length >= current.content.length ? incoming.content : current.content;
     return {
       ...incoming,
       content,
@@ -935,15 +905,12 @@ function mergeActivityItem(
     const incomingStatus = incoming.status ?? "done";
     return {
       ...incoming,
-      status: statusRank[currentStatus] > statusRank[incomingStatus]
-        ? currentStatus
-        : incomingStatus,
+      status:
+        statusRank[currentStatus] > statusRank[incomingStatus] ? currentStatus : incomingStatus,
     };
   }
   if (current.kind === "tool-approval" && incoming.kind === "tool-approval") {
-    return current.status !== "pending" && incoming.status === "pending"
-      ? current
-      : incoming;
+    return current.status !== "pending" && incoming.status === "pending" ? current : incoming;
   }
   return incoming;
 }

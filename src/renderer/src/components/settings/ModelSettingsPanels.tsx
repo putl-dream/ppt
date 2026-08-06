@@ -1,7 +1,6 @@
-import React from "react";
 import {
-  DEFAULT_WEB_SEARCH_ENDPOINT,
   type AgentGatewayPreferences,
+  DEFAULT_WEB_SEARCH_ENDPOINT,
 } from "@shared/agent-gateway-config";
 import type { CredentialStorageStatus } from "@shared/credentials";
 import { normalizeCredentialUrl } from "@shared/credentials";
@@ -10,6 +9,7 @@ import {
   MIN_OUTPUT_TOKENS,
   normalizeOutputTokenDraft,
 } from "@shared/generation-settings-inputs";
+import React from "react";
 import { isModelEnabled, type ManagedModel } from "../../modelCatalog";
 import { ModelManagement } from "../ModelManagement";
 import { Select } from "../Select";
@@ -185,9 +185,11 @@ export function WebSearchSettingsPanel({
               aria-label="Tavily API Key"
               type="password"
               value={controller.apiKeyDraft}
-              placeholder={credentialConfigured
-                ? "留空不会覆盖当前凭据"
-                : "tvly-...（也可设置 TAVILY_API_KEY）"}
+              placeholder={
+                credentialConfigured
+                  ? "留空不会覆盖当前凭据"
+                  : "tvly-...（也可设置 TAVILY_API_KEY）"
+              }
               onChange={(event) => controller.setApiKeyDraft(event.target.value)}
             />
             <button
@@ -228,10 +230,12 @@ export function WebSearchSettingsPanel({
             max={120}
             step={5}
             value={Math.round((preferences.webSearchTimeoutMs ?? 20_000) / 1000)}
-            onChange={(event) => setPreferences({
-              ...preferences,
-              webSearchTimeoutMs: parseInt(event.target.value, 10) * 1000,
-            })}
+            onChange={(event) =>
+              setPreferences({
+                ...preferences,
+                webSearchTimeoutMs: parseInt(event.target.value, 10) * 1000,
+              })
+            }
           />
         </SettingsRow>
       </SettingsSection>
@@ -252,16 +256,18 @@ export function ModelRuntimeSettingsPanel({
   preferences: AgentGatewayPreferences;
   setPreferences: (value: AgentGatewayPreferences) => void;
 }) {
-  const [maxOutputTokensDraft, setMaxOutputTokensDraft] = React.useState(
-    () => String(preferences.maxOutputTokens),
+  const [maxOutputTokensDraft, setMaxOutputTokensDraft] = React.useState(() =>
+    String(preferences.maxOutputTokens),
   );
   React.useEffect(() => {
     setMaxOutputTokensDraft(String(preferences.maxOutputTokens));
   }, [preferences.maxOutputTokens]);
 
-  const availableModels = models.filter((model) =>
-    isModelEnabled(model)
-    && (credentialStorageStatus === null || model.credentialConfigured === true));
+  const availableModels = models.filter(
+    (model) =>
+      isModelEnabled(model) &&
+      (credentialStorageStatus === null || model.credentialConfigured === true),
+  );
   const commitMaxOutputTokens = () => {
     const maxOutputTokens = normalizeOutputTokenDraft(
       maxOutputTokensDraft,
@@ -285,10 +291,12 @@ export function ModelRuntimeSettingsPanel({
             max={900}
             step={30}
             value={Math.round(preferences.timeoutMs / 1000)}
-            onChange={(event) => setPreferences({
-              ...preferences,
-              timeoutMs: parseInt(event.target.value, 10) * 1000,
-            })}
+            onChange={(event) =>
+              setPreferences({
+                ...preferences,
+                timeoutMs: parseInt(event.target.value, 10) * 1000,
+              })
+            }
           />
         </SettingsRow>
         <SettingsRow label="单次输出长度上限">
@@ -311,10 +319,12 @@ export function ModelRuntimeSettingsPanel({
             variant="ide"
             ariaLabel="服务繁忙时备用模型"
             value={preferences.fallbackModelId ?? ""}
-            onChange={(next) => setPreferences({
-              ...preferences,
-              fallbackModelId: next || undefined,
-            })}
+            onChange={(next) =>
+              setPreferences({
+                ...preferences,
+                fallbackModelId: next || undefined,
+              })
+            }
             options={[
               { value: "", label: "不启用" },
               ...availableModels

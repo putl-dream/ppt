@@ -2,16 +2,7 @@ import { readdir, readFile } from "node:fs/promises";
 import { extname, join, relative, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
-const SOURCE_EXTENSIONS = new Set([
-  ".css",
-  ".html",
-  ".js",
-  ".jsx",
-  ".json",
-  ".md",
-  ".ts",
-  ".tsx",
-]);
+const SOURCE_EXTENSIONS = new Set([".css", ".html", ".js", ".jsx", ".json", ".md", ".ts", ".tsx"]);
 
 const FORBIDDEN_DEBUG_MARKERS = [
   ["debug collector endpoint", "http://127.0.0.1:7758"],
@@ -27,13 +18,13 @@ const FORBIDDEN_DEBUG_MARKERS = [
 
 async function listSourceFiles(directory: string): Promise<string[]> {
   const entries = await readdir(directory, { withFileTypes: true });
-  const files = await Promise.all(entries.map(async (entry) => {
-    const path = join(directory, entry.name);
-    if (entry.isDirectory()) return listSourceFiles(path);
-    return entry.isFile() && SOURCE_EXTENSIONS.has(extname(entry.name))
-      ? [path]
-      : [];
-  }));
+  const files = await Promise.all(
+    entries.map(async (entry) => {
+      const path = join(directory, entry.name);
+      if (entry.isDirectory()) return listSourceFiles(path);
+      return entry.isFile() && SOURCE_EXTENSIONS.has(extname(entry.name)) ? [path] : [];
+    }),
+  );
   return files.flat();
 }
 

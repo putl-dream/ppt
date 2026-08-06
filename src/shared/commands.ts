@@ -1,7 +1,7 @@
+import { designSystemV2Schema } from "@design-system";
 import { z } from "zod";
 import type { Presentation, Slide } from "./presentation";
 import { slideSchema } from "./presentation";
-import { designSystemV2Schema } from "@design-system";
 
 export const presentationCommandSchema = z.discriminatedUnion("type", [
   z.object({
@@ -172,9 +172,7 @@ export function executeCommand(
     if (slideIndex < 0) throw new Error(`Slide not found: ${command.slide.id}`);
     const targetSlide = presentation.slides[slideIndex];
 
-    const slides = presentation.slides.map((s) =>
-      s.id === command.slide.id ? command.slide : s
-    );
+    const slides = presentation.slides.map((s) => (s.id === command.slide.id ? command.slide : s));
 
     return {
       presentation: nextRevision({ ...presentation, slides }),
@@ -311,9 +309,9 @@ export class CommandBus {
       throw new Error(`Unknown or already committed prepared mutation: ${prepared.id}`);
     }
     if (
-      state.baseMutationRevision !== prepared.baseMutationRevision
-      || state.kind !== prepared.kind
-      || state.noOp !== prepared.noOp
+      state.baseMutationRevision !== prepared.baseMutationRevision ||
+      state.kind !== prepared.kind ||
+      state.noOp !== prepared.noOp
     ) {
       throw new Error(`Prepared mutation metadata mismatch: ${prepared.id}`);
     }

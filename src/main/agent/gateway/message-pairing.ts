@@ -1,10 +1,10 @@
+import { toolResultBlocksFromContent, toolUseBlocksFromContent } from "./content-blocks";
 import type {
   AgentModelContentBlock,
   AgentModelMessage,
   AgentModelToolResultBlock,
   AgentModelToolUseBlock,
 } from "./types";
-import { toolResultBlocksFromContent, toolUseBlocksFromContent } from "./content-blocks";
 
 const MISSING_RESULT_PREFIX = "Tool execution did not produce a result";
 
@@ -29,21 +29,22 @@ function pairResults(
     byCallId.set(result.toolUseId, result);
   }
 
-  return calls.map((call) => byCallId.get(call.id) ?? ({
-    type: "tool_result",
-    toolUseId: call.id,
-    content: [{ type: "text", text: `${MISSING_RESULT_PREFIX} for ${call.name}.` }],
-    isError: true,
-  }));
+  return calls.map(
+    (call) =>
+      byCallId.get(call.id) ?? {
+        type: "tool_result",
+        toolUseId: call.id,
+        content: [{ type: "text", text: `${MISSING_RESULT_PREFIX} for ${call.name}.` }],
+        isError: true,
+      },
+  );
 }
 
 /**
  * Repair ContentBlock history immediately before a provider request.
  * Every assistant tool_use receives exactly one result in the next user turn.
  */
-export function ensureToolResultPairing(
-  messages: AgentModelMessage[],
-): AgentModelMessage[] {
+export function ensureToolResultPairing(messages: AgentModelMessage[]): AgentModelMessage[] {
   const repaired: AgentModelMessage[] = [];
   let pendingCalls: AgentModelToolUseBlock[] = [];
 
@@ -66,12 +67,10 @@ export function ensureToolResultPairing(
     }
 
     const nonResults = source.content.filter((block) => block.type !== "tool_result");
-    const content = pendingCalls.length > 0
-      ? [
-          ...pairResults(pendingCalls, toolResultBlocksFromContent(source.content)),
-          ...nonResults,
-        ]
-      : nonResults;
+    const content =
+      pendingCalls.length > 0
+        ? [...pairResults(pendingCalls, toolResultBlocksFromContent(source.content)), ...nonResults]
+        : nonResults;
     pendingCalls = [];
     if (content.length > 0) repaired.push({ role: "user", content });
   }

@@ -1,18 +1,20 @@
-import type { SessionSnapshot } from "@shared/session";
 import {
   createDefaultExportHistoryFile,
   createDefaultGenerationJobsFile,
+  type DeckExportHistoryFile,
+  type DeckExportRecord,
+  type DeckGenerationJob,
+  type DeckGenerationJobsFile,
   deckExportHistoryFileSchema,
   deckExportRecordSchema,
   deckGenerationJobsFileSchema,
   projectArtifactFilePaths,
-  type DeckExportRecord,
-  type DeckGenerationJob,
-  type DeckGenerationJobsFile,
-  type DeckExportHistoryFile,
 } from "@shared/deck-persistence";
-import type { ProjectFileService } from "../project/project-file-service";
-import type { ProjectArtifactWriteResult } from "../project/project-file-service";
+import type { SessionSnapshot } from "@shared/session";
+import type {
+  ProjectArtifactWriteResult,
+  ProjectFileService,
+} from "../project/project-file-service";
 
 function serializeJson(value: unknown): string {
   return `${JSON.stringify(value, null, 2)}\n`;

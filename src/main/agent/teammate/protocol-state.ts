@@ -1,5 +1,5 @@
-import type { AgentMailboxMessage } from "./message-bus";
 import { readJsonFile, writeJsonFileAtomic } from "../persistence/atomic-json-file";
+import type { AgentMailboxMessage } from "./message-bus";
 
 export type ProtocolType = "shutdown" | "plan_approval";
 export type ProtocolStatus = "pending" | "approved" | "rejected";
@@ -81,11 +81,12 @@ export class ProtocolStateStore {
     sender?: string;
     target?: string;
   }): ProtocolState | undefined {
-    const state = Array.from(this.requests.values()).find((candidate) =>
-      candidate.type === input.type
-      && candidate.status === "pending"
-      && (!input.sender || candidate.sender === input.sender)
-      && (!input.target || candidate.target === input.target),
+    const state = Array.from(this.requests.values()).find(
+      (candidate) =>
+        candidate.type === input.type &&
+        candidate.status === "pending" &&
+        (!input.sender || candidate.sender === input.sender) &&
+        (!input.target || candidate.target === input.target),
     );
     return state ? { ...state } : undefined;
   }
@@ -134,9 +135,7 @@ export function routeProtocolResponses(
   return matched;
 }
 
-export function readProtocolRequestId(
-  payload: Record<string, unknown> | undefined,
-): string {
+export function readProtocolRequestId(payload: Record<string, unknown> | undefined): string {
   if (typeof payload?.requestId === "string") return payload.requestId;
   if (typeof payload?.request_id === "string") return payload.request_id;
   return "";

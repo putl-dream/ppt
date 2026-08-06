@@ -1,31 +1,31 @@
+import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
-import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
-import { join } from "node:path";
-import { tmpdir } from "node:os";
-import { askUserTool } from "../src/main/agent/tools/core/ask-user";
-import { loadSkillTool } from "../src/main/agent/tools/core/load-skill";
-import { createDefaultToolRegistry } from "../src/main/agent/tools/tool-registry";
-import {
-  registerSkillFromContent,
-  createEmptySkillRegistry,
-} from "../src/main/agent/skills/loadSkillsDir";
-import { createSkillSession } from "../src/main/agent/skills/skill-types";
-import { createStarterPresentation } from "../src/shared/presentation-fixtures";
 import {
   buildSystemPromptContext,
   MEMORY_INDEX_RELATIVE_PATH,
 } from "../src/main/agent/runtime/prompts/prompt-context";
+import { SYSTEM_PROMPT_DYNAMIC_BOUNDARY } from "../src/main/agent/runtime/prompts/prompt-sections";
+import { resolvePromptStage } from "../src/main/agent/runtime/prompts/prompt-stage";
+import { SystemPromptBuilder } from "../src/main/agent/runtime/prompts/system-prompt";
 import {
   assembleSystemPrompt,
   clearSystemPromptCache,
   getSystemPrompt,
-  splitSystemPromptPrefix,
   SystemPromptManager,
+  splitSystemPromptPrefix,
 } from "../src/main/agent/runtime/prompts/system-prompt-assembler";
-import { SYSTEM_PROMPT_DYNAMIC_BOUNDARY } from "../src/main/agent/runtime/prompts/prompt-sections";
-import { SystemPromptBuilder } from "../src/main/agent/runtime/prompts/system-prompt";
-import { resolvePromptStage } from "../src/main/agent/runtime/prompts/prompt-stage";
+import {
+  createEmptySkillRegistry,
+  registerSkillFromContent,
+} from "../src/main/agent/skills/loadSkillsDir";
+import { createSkillSession } from "../src/main/agent/skills/skill-types";
+import { askUserTool } from "../src/main/agent/tools/core/ask-user";
+import { loadSkillTool } from "../src/main/agent/tools/core/load-skill";
+import { createDefaultToolRegistry } from "../src/main/agent/tools/tool-registry";
+import { createStarterPresentation } from "../src/shared/presentation-fixtures";
 
 const SAMPLE_SKILL = `---
 name: ppt-build
@@ -79,13 +79,7 @@ describe("system prompt assembly", () => {
     const assembled = assembleSystemPrompt(baseContext());
     const ids = assembled.sections.map((section) => section.id);
 
-    expect(ids).toEqual([
-      "identity",
-      "responseProtocol",
-      "runtimeContext",
-      "tools",
-      "workspace",
-    ]);
+    expect(ids).toEqual(["identity", "responseProtocol", "runtimeContext", "tools", "workspace"]);
     expect(assembled.staticPrefix).toContain("工程型智能体");
     expect(assembled.staticPrefix).toContain("provider 原生 tool_use");
     expect(assembled.staticPrefix).not.toContain('"name":"AskUser"');
@@ -129,11 +123,13 @@ describe("system prompt assembly", () => {
     registerSkillFromContent(registry, "/tmp/build", "ppt-build", SAMPLE_SKILL);
     registerSkillFromContent(registry, "/tmp/beautify", "ppt-beautify", STYLE_SKILL);
 
-    const text = assembleSystemPrompt(baseContext({
-      stage: "author",
-      skillCatalog: registry.listCards(),
-      skillRegistry: registry,
-    })).text;
+    const text = assembleSystemPrompt(
+      baseContext({
+        stage: "author",
+        skillCatalog: registry.listCards(),
+        skillRegistry: registry,
+      }),
+    ).text;
 
     expect(text).toContain("`ppt-build` [当前上下文推荐]");
     expect(text).toContain("`ppt-beautify`");
@@ -156,10 +152,7 @@ describe("system prompt assembly", () => {
       promptStage: "author" as const,
     };
 
-    const result = await loadSkillTool.execute(
-      { skillName: "ppt-beautify" },
-      context as any,
-    );
+    const result = await loadSkillTool.execute({ skillName: "ppt-beautify" }, context as any);
     expect(result.name).toBe("ppt-beautify");
     expect(result.guidance).toContain("not normally suggested");
   });
@@ -186,19 +179,21 @@ describe("system prompt assembly", () => {
   it("does not infer a control-flow stage from request keywords", () => {
     const presentation = {
       ...createStarterPresentation(),
-      slides: [{
-        id: "s1",
-        title: "T",
-        visualSource: {
-          kind: "svg" as const,
-          markup: "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 1280 720\"/>",
-          width: 1280 as const,
-          height: 720 as const,
-          sha256: "c".repeat(64),
-          sourcePath: "slides/svg/s1.svg",
-          resources: [],
+      slides: [
+        {
+          id: "s1",
+          title: "T",
+          visualSource: {
+            kind: "svg" as const,
+            markup: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720"/>',
+            width: 1280 as const,
+            height: 720 as const,
+            sha256: "c".repeat(64),
+            sourcePath: "slides/svg/s1.svg",
+            resources: [],
+          },
         },
-      }],
+      ],
     };
     const exportRequest = resolvePromptStage({
       request: "请导出 PPT 文件",
@@ -257,9 +252,12 @@ describe("system prompt assembly", () => {
         approval: "always" as const,
       },
     };
-    const second = getSystemPrompt(baseContext({
-      coreTools: [changedTool],
-    }), "thread-tool-contract");
+    const second = getSystemPrompt(
+      baseContext({
+        coreTools: [changedTool],
+      }),
+      "thread-tool-contract",
+    );
 
     expect(second).not.toBe(first);
     expect(second.dynamicSuffix).toContain("Updated interaction contract");
@@ -271,11 +269,14 @@ describe("system prompt assembly", () => {
     clearSystemPromptCache();
     const authorRegistry = createEmptySkillRegistry();
     registerSkillFromContent(authorRegistry, "/tmp/build-author", "ppt-build", SAMPLE_SKILL);
-    const first = getSystemPrompt(baseContext({
-      stage: "author",
-      skillCatalog: authorRegistry.listCards(),
-      skillRegistry: authorRegistry,
-    }), "thread-skill-contract");
+    const first = getSystemPrompt(
+      baseContext({
+        stage: "author",
+        skillCatalog: authorRegistry.listCards(),
+        skillRegistry: authorRegistry,
+      }),
+      "thread-skill-contract",
+    );
 
     const styleRegistry = createEmptySkillRegistry();
     registerSkillFromContent(
@@ -284,11 +285,14 @@ describe("system prompt assembly", () => {
       "ppt-build",
       SAMPLE_SKILL.replace("  - author", "  - style"),
     );
-    const second = getSystemPrompt(baseContext({
-      stage: "author",
-      skillCatalog: styleRegistry.listCards(),
-      skillRegistry: styleRegistry,
-    }), "thread-skill-contract");
+    const second = getSystemPrompt(
+      baseContext({
+        stage: "author",
+        skillCatalog: styleRegistry.listCards(),
+        skillRegistry: styleRegistry,
+      }),
+      "thread-skill-contract",
+    );
 
     expect(second).not.toBe(first);
     expect(first.dynamicSuffix).toContain("`ppt-build` [当前上下文推荐]");
@@ -321,9 +325,11 @@ describe("system prompt assembly", () => {
   });
 
   it("places the explicit cache boundary between stable and dynamic sections", () => {
-    const assembled = assembleSystemPrompt(baseContext({
-      memories: "记住：封面用 hero",
-    }));
+    const assembled = assembleSystemPrompt(
+      baseContext({
+        memories: "记住：封面用 hero",
+      }),
+    );
     const split = splitSystemPromptPrefix(assembled.text);
 
     expect(assembled.text).toContain(SYSTEM_PROMPT_DYNAMIC_BOUNDARY);
@@ -333,12 +339,7 @@ describe("system prompt assembly", () => {
 
   it("injects skill cards without eagerly copying SKILL.md bodies", () => {
     const registry = createEmptySkillRegistry();
-    registerSkillFromContent(
-      registry,
-      "/tmp/pdf",
-      "pdf",
-      SAMPLE_SKILL.replace("ppt-build", "pdf"),
-    );
+    registerSkillFromContent(registry, "/tmp/pdf", "pdf", SAMPLE_SKILL.replace("ppt-build", "pdf"));
 
     const prompt = SystemPromptBuilder.build({
       request: "写内容草稿",

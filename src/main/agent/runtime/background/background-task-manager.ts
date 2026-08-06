@@ -36,13 +36,15 @@ export class BackgroundTaskManager {
       if (task.status === "scheduled") {
         task.status = "failed";
         task.isError = true;
-        task.content = "The application restarted before this background task started. It is safe to schedule it again.";
+        task.content =
+          "The application restarted before this background task started. It is safe to schedule it again.";
       } else if (task.status === "running") {
         // 进程重启后无法恢复内存 Promise；直接持久化终态“不确定”通知，
         // 不再通过扫描 Transcript 推断任务状态。
         task.status = "failed";
         task.isError = true;
-        task.content = "The application restarted before this background task committed its result. Inspect durable artifacts before retrying.";
+        task.content =
+          "The application restarted before this background task committed its result. Inspect durable artifacts before retrying.";
       }
       this.tasks.set(task.bgId, task);
     }
@@ -101,7 +103,8 @@ export class BackgroundTaskManager {
         void this.onStateChange?.();
         void input.run().then(
           (result) => this.settle(bgId, stringifyBackgroundResult(result), false),
-          (error) => this.settle(bgId, error instanceof Error ? error.message : String(error), true),
+          (error) =>
+            this.settle(bgId, error instanceof Error ? error.message : String(error), true),
         );
       },
     };
@@ -161,35 +164,29 @@ export class BackgroundTaskManager {
   }
 }
 
-export function shouldRunBackground(
-  tool: ToolDefinition<any, any>,
-  args: unknown,
-): boolean {
+export function shouldRunBackground(tool: ToolDefinition<any, any>, args: unknown): boolean {
   return tool.behavior?.background?.isRequested(args) === true;
 }
 
-export function describeBackgroundTask(
-  tool: ToolDefinition<any, any>,
-  args: unknown,
-): string {
+export function describeBackgroundTask(tool: ToolDefinition<any, any>, args: unknown): string {
   return tool.behavior?.background?.describe(args) ?? tool.name;
 }
 
-export function formatBackgroundNotifications(
-  notifications: BackgroundTaskNotification[],
-): string {
-  return notifications.map((notification) => {
-    const tagName = notification.isError ? "error" : "summary";
-    return [
-      "<task_notification>",
-      `  <task_id>${escapeXml(notification.bgId)}</task_id>`,
-      `  <status>${notification.status}</status>`,
-      `  <tool>${escapeXml(notification.toolName)}</tool>`,
-      `  <label>${escapeXml(notification.label)}</label>`,
-      `  <${tagName}>${escapeXml(truncateForNotification(notification.content, 1_000))}</${tagName}>`,
-      "</task_notification>",
-    ].join("\n");
-  }).join("\n\n");
+export function formatBackgroundNotifications(notifications: BackgroundTaskNotification[]): string {
+  return notifications
+    .map((notification) => {
+      const tagName = notification.isError ? "error" : "summary";
+      return [
+        "<task_notification>",
+        `  <task_id>${escapeXml(notification.bgId)}</task_id>`,
+        `  <status>${notification.status}</status>`,
+        `  <tool>${escapeXml(notification.toolName)}</tool>`,
+        `  <label>${escapeXml(notification.label)}</label>`,
+        `  <${tagName}>${escapeXml(truncateForNotification(notification.content, 1_000))}</${tagName}>`,
+        "</task_notification>",
+      ].join("\n");
+    })
+    .join("\n\n");
 }
 
 function stringifyBackgroundResult(result: unknown): string {

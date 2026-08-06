@@ -1,13 +1,13 @@
-import OpenAI from "openai";
+import type OpenAI from "openai";
 import type { DriverResolvedConfig } from "./config";
 import {
   completeChunkFromResponse,
+  type OpenAIClient,
+  type OpenAIModeDriver,
   openAIUsageProperty,
   parseToolArguments,
   textFromBlocks,
   toolResultText,
-  type OpenAIClient,
-  type OpenAIModeDriver,
 } from "./openai-common";
 import type {
   AgentModelContentBlock,
@@ -49,11 +49,15 @@ type ChatRequestParams = Omit<
 function toStopReasonFromChat(finishReason?: string | null): StopReason | undefined {
   if (!finishReason) return undefined;
   switch (finishReason) {
-    case "stop":          return "end";
-    case "length":        return "max_tokens";
+    case "stop":
+      return "end";
+    case "length":
+      return "max_tokens";
     case "tool_calls":
-    case "function_call": return "tool_use";
-    default:              return "other";
+    case "function_call":
+      return "tool_use";
+    default:
+      return "other";
   }
 }
 
@@ -90,10 +94,12 @@ function wantsCompatibleThinking(config: DriverResolvedConfig): boolean {
   if (!config.baseURL) return false;
   try {
     const hostname = new URL(config.baseURL).hostname.toLowerCase();
-    return hostname === "xiaomimimo.com"
-      || hostname.endsWith(".xiaomimimo.com")
-      || hostname === "mimo.mi"
-      || hostname.endsWith(".mimo.mi");
+    return (
+      hostname === "xiaomimimo.com" ||
+      hostname.endsWith(".xiaomimimo.com") ||
+      hostname === "mimo.mi" ||
+      hostname.endsWith(".mimo.mi")
+    );
   } catch {
     return false;
   }
@@ -101,8 +107,10 @@ function wantsCompatibleThinking(config: DriverResolvedConfig): boolean {
 
 function reasoningFromBlocks(blocks: AgentModelContentBlock[]): string | undefined {
   const parts = blocks
-    .filter((block): block is Extract<AgentModelThinkingBlock, { type: "thinking" }> =>
-      block.type === "thinking")
+    .filter(
+      (block): block is Extract<AgentModelThinkingBlock, { type: "thinking" }> =>
+        block.type === "thinking",
+    )
     .map((block) => block.thinking);
   if (parts.length === 0) return undefined;
   return parts.join("\n");
@@ -151,10 +159,12 @@ function toChatMessages(
       });
     }
 
-    const userBlocks = message.content.filter((block) =>
-      block.type === "text" || block.type === "image");
+    const userBlocks = message.content.filter(
+      (block) => block.type === "text" || block.type === "image",
+    );
     const resultImages = toolResults.flatMap((result) =>
-      result.content.filter((block): block is AgentModelImageBlock => block.type === "image"));
+      result.content.filter((block): block is AgentModelImageBlock => block.type === "image"),
+    );
     const combined = [...userBlocks, ...resultImages];
     if (combined.length > 0) {
       out.push({ role: "user", content: toOpenAIUserContent(combined) });
@@ -190,11 +200,13 @@ function contentFromChatChoice(
   const text = (message?.content ?? "").trim();
   return [
     ...(reasoning
-      ? [{
-          type: "thinking" as const,
-          thinking: reasoning,
-          signature: CHAT_REASONING_SIGNATURE,
-        }]
+      ? [
+          {
+            type: "thinking" as const,
+            thinking: reasoning,
+            signature: CHAT_REASONING_SIGNATURE,
+          },
+        ]
       : []),
     ...(text ? [{ type: "text" as const, text }] : []),
     ...parseChatToolCalls(message?.tool_calls),
@@ -209,9 +221,7 @@ function chatRequestBase(
   return {
     model: config.model,
     messages: [
-      ...(request.systemPrompt
-        ? [{ role: "system" as const, content: request.systemPrompt }]
-        : []),
+      ...(request.systemPrompt ? [{ role: "system" as const, content: request.systemPrompt }] : []),
       ...toChatMessages(request.messages, {
         roundTripReasoning: enableThinking,
       }),

@@ -1,6 +1,6 @@
 import { createDisplayEventId } from "@shared/card-display-protocol";
+import { ingestDisplayEvent } from "@shared/cards/display-card-managers";
 import type { Presentation } from "@shared/presentation";
-import { ingestDisplayEvent } from "../cards/display-card-managers";
 import type { ChatMessage } from "./chatMessageRuntime";
 
 const PREVIEW_PROMPT_PATTERN =
@@ -71,9 +71,7 @@ const handlePreviewCommand: LocalQueryCommandHandler = ({
 };
 
 // 用户输入在进入 Agent Controller 前依次匹配这些纯前端命令。
-const LOCAL_QUERY_COMMAND_HANDLERS: LocalQueryCommandHandler[] = [
-  handlePreviewCommand,
-];
+const LOCAL_QUERY_COMMAND_HANDLERS: LocalQueryCommandHandler[] = [handlePreviewCommand];
 
 export function tryHandleLocalQueryCommand(context: LocalQueryCommandContext): boolean {
   return LOCAL_QUERY_COMMAND_HANDLERS.some((handler) => handler(context));

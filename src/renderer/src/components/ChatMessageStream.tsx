@@ -1,17 +1,12 @@
-import { useState, type ReactNode } from "react";
+import { filterTraceForDisplay, markTraceComplete } from "@shared/agent-activity";
 import type { AgentTaskNode } from "@shared/agent-task-list";
 import type { TeamSessionProjection } from "@shared/team-session";
-import { filterTraceForDisplay, markTraceComplete } from "@shared/agent-activity";
-import { AgentRunTimeline } from "./AgentRunTimeline";
-import { AgentRunTerminalNotice } from "./AgentRunTerminalNotice";
+import { type ReactNode, useState } from "react";
 import { ArtifactCardHost } from "../cards/hosts/ArtifactCardHost";
-import { CopyIcon, Edit3Icon } from "./Icons";
-import { FocusedTeamSession } from "./TeamSessionViews";
 import { InteractionCardHost } from "../cards/hosts/InteractionCardHost";
-import { MessageMarkdown } from "./MessageMarkdown";
 import { ReviewCardHost } from "../cards/hosts/ReviewCardHost";
-import { TaskPlanCard } from "./TaskPlanCard";
-import { UserMessageEditor } from "./UserMessageEditor";
+import { AgentRunTerminalNotice } from "./AgentRunTerminalNotice";
+import { AgentRunTimeline } from "./AgentRunTimeline";
 import { CHAT_WORKSPACE_COPY_ZH_CN as copy } from "./chat-workspace-copy";
 import type {
   ChatWorkspaceActions,
@@ -19,6 +14,11 @@ import type {
   ChatWorkspaceRun,
   ChatWorkspaceSession,
 } from "./chat-workspace-types";
+import { CopyIcon, Edit3Icon } from "./Icons";
+import { MessageMarkdown } from "./MessageMarkdown";
+import { TaskPlanCard } from "./TaskPlanCard";
+import { FocusedTeamSession } from "./TeamSessionViews";
+import { UserMessageEditor } from "./UserMessageEditor";
 import { useChatScroll } from "./useChatScroll";
 
 interface ChatMessageStreamProps {
@@ -96,8 +96,12 @@ export function ChatMessageStream({
             className={`chat-message ${message.role}${isLiveAssistantMessage ? " is-active-run" : ""}`}
           >
             {message.role === "user" ? (
-              <div className={`user-message-shell${editingMessageId === message.id ? " is-editing" : ""}`}>
-                <div className={`user-message-bubble${editingMessageId === message.id ? " is-editing" : ""}`}>
+              <div
+                className={`user-message-shell${editingMessageId === message.id ? " is-editing" : ""}`}
+              >
+                <div
+                  className={`user-message-bubble${editingMessageId === message.id ? " is-editing" : ""}`}
+                >
                   {editingMessageId === message.id ? (
                     <UserMessageEditor
                       value={editingText}
@@ -138,11 +142,7 @@ export function ChatMessageStream({
             ) : (
               <div className="assistant-message-shell">
                 <div className="assistant-message-main">
-                  <AssistantMessageContent
-                    message={message}
-                    run={run}
-                    activeTasks={activeTasks}
-                  />
+                  <AssistantMessageContent message={message} run={run} activeTasks={activeTasks} />
 
                   <AgentRunTerminalNotice
                     status={message.runStatus}

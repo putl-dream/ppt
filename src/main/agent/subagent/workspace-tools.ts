@@ -1,39 +1,27 @@
 import { execFile } from "node:child_process";
 import { lstat, realpath } from "node:fs/promises";
-import {
-  delimiter,
-  isAbsolute,
-  relative,
-  resolve,
-} from "node:path";
+import { delimiter, isAbsolute, relative, resolve } from "node:path";
 import { promisify } from "node:util";
-import { z } from "zod";
 import type { AgentSearchConfig } from "@shared/agent-gateway-config";
-import {
-  WorkspaceFileError,
-  WorkspaceFileService,
-} from "../tools/files/workspace-file-service";
-import {
-  editFileContract,
-  globFilesContract,
-  readFileContract,
-  writeFileContract,
-  type WorkspaceFileToolContract,
-} from "../tools/files/workspace-file-tool-contract";
+import { z } from "zod";
+import type { PromptStage } from "../runtime/prompts/prompt-stage";
+import { isSkillRecommendedForStage } from "../runtime/prompts/skill-stage-policy";
 import {
   SUB_AGENT_TOOL_PERMISSION_PROFILES,
   type ToolPermissionProfile,
 } from "../runtime/tools/tool-access-policy";
-import {
-  executeWebSearch,
-  formatWebSearchOutput,
-  webSearchSchema,
-} from "../search/web-search";
-import { loadSkillSchema, type LoadSkillResult } from "../tools/core/load-skill";
-import { isSkillRecommendedForStage } from "../runtime/prompts/skill-stage-policy";
+import { executeWebSearch, formatWebSearchOutput, webSearchSchema } from "../search/web-search";
 import type { SkillRegistry } from "../skills/loadSkillsDir";
 import type { SkillSession } from "../skills/skill-types";
-import type { PromptStage } from "../runtime/prompts/prompt-stage";
+import { type LoadSkillResult, loadSkillSchema } from "../tools/core/load-skill";
+import { WorkspaceFileError, WorkspaceFileService } from "../tools/files/workspace-file-service";
+import {
+  editFileContract,
+  globFilesContract,
+  readFileContract,
+  type WorkspaceFileToolContract,
+  writeFileContract,
+} from "../tools/files/workspace-file-tool-contract";
 
 const execFileAsync = promisify(execFile);
 
@@ -62,15 +50,14 @@ export interface SubAgentToolDefinition<
 }
 
 const bashSchema = z.object({
-  command: z.string().describe(
-    "A fail-closed workspace diagnostic command (pwd, rg, read-only git, or node --check)",
-  ),
+  command: z
+    .string()
+    .describe(
+      "A fail-closed workspace diagnostic command (pwd, rg, read-only git, or node --check)",
+    ),
 });
 
-function toSubAgentWorkspaceTool<
-  TParams extends z.ZodObject<any>,
-  TResult,
->(
+function toSubAgentWorkspaceTool<TParams extends z.ZodObject<any>, TResult>(
   contract: WorkspaceFileToolContract<TParams, TResult>,
 ): SubAgentToolDefinition<TParams, TResult> {
   return {
@@ -82,10 +69,11 @@ function toSubAgentWorkspaceTool<
       ? { mapResultToModelContent: contract.formatResultForModel }
       : {}),
     permission: contract.permission,
-    execute: async (args, context) => contract.execute(args, {
-      workspaceRoot: context.workspaceRoot,
-      fileService: resolveFileService(context),
-    }),
+    execute: async (args, context) =>
+      contract.execute(args, {
+        workspaceRoot: context.workspaceRoot,
+        fileService: resolveFileService(context),
+      }),
   };
 }
 
@@ -99,30 +87,29 @@ export const workspaceFileTools: SubAgentToolDefinition[] = [
 export const bashTool: SubAgentToolDefinition<typeof bashSchema> = {
   name: "bash",
   description:
-    "Run an allowlisted workspace diagnostic without a shell. "
-    + "Pipelines, redirects, arbitrary executables, and mutating build scripts are rejected.",
+    "Run an allowlisted workspace diagnostic without a shell. " +
+    "Pipelines, redirects, arbitrary executables, and mutating build scripts are rejected.",
   inputSchema: bashSchema,
   permission: SUB_AGENT_TOOL_PERMISSION_PROFILES.bash,
   async execute(args, context) {
     const prepared = await prepareDiagnosticCommand(args.command, context);
     if ("output" in prepared) return prepared.output;
-    const { stdout, stderr } = await execFileAsync(
-      prepared.file,
-      prepared.args,
-      {
-        cwd: context.workspaceRoot,
-        timeout: 60_000,
-        maxBuffer: 512_000,
-        encoding: "utf8",
-        env: {
-          ...diagnosticEnvironment(context.workspaceRoot),
-          ...prepared.envOverrides,
-        },
-        signal: context.signal,
-        windowsHide: true,
+    const { stdout, stderr } = await execFileAsync(prepared.file, prepared.args, {
+      cwd: context.workspaceRoot,
+      timeout: 60_000,
+      maxBuffer: 512_000,
+      encoding: "utf8",
+      env: {
+        ...diagnosticEnvironment(context.workspaceRoot),
+        ...prepared.envOverrides,
       },
-    );
-    const output = [stdout, stderr].filter((chunk) => chunk.trim()).join("\n").trim();
+      signal: context.signal,
+      windowsHide: true,
+    });
+    const output = [stdout, stderr]
+      .filter((chunk) => chunk.trim())
+      .join("\n")
+      .trim();
     return output || "(no output)";
   },
 };
@@ -130,15 +117,17 @@ export const bashTool: SubAgentToolDefinition<typeof bashSchema> = {
 export const webSearchSubAgentTool: SubAgentToolDefinition<typeof webSearchSchema> = {
   name: "web_search",
   description:
-    "Search the web for current, source-backed facts and optional image candidates. "
-    + "Cite factual sources; verify image licensing and retain provenance before use.",
+    "Search the web for current, source-backed facts and optional image candidates. " +
+    "Cite factual sources; verify image licensing and retain provenance before use.",
   inputSchema: webSearchSchema,
   permission: SUB_AGENT_TOOL_PERMISSION_PROFILES.web_search,
   async execute(args, context) {
-    return formatWebSearchOutput(await executeWebSearch(args, {
-      searchConfig: context.searchConfig,
-      signal: context.signal,
-    }));
+    return formatWebSearchOutput(
+      await executeWebSearch(args, {
+        searchConfig: context.searchConfig,
+        signal: context.signal,
+      }),
+    );
   },
 };
 
@@ -210,8 +199,8 @@ export const SUB_AGENT_TOOL_HANDLERS = new Map(
 
 function resolveFileService(context: SubAgentToolContext): WorkspaceFileService {
   if (
-    !context.fileService
-    || context.fileService.workspaceRoot !== resolve(context.workspaceRoot)
+    !context.fileService ||
+    context.fileService.workspaceRoot !== resolve(context.workspaceRoot)
   ) {
     context.fileService = new WorkspaceFileService(context.workspaceRoot);
   }
@@ -221,10 +210,10 @@ function resolveFileService(context: SubAgentToolContext): WorkspaceFileService 
 type PreparedDiagnosticCommand =
   | { output: string }
   | {
-    file: string;
-    args: string[];
-    envOverrides?: NodeJS.ProcessEnv;
-  };
+      file: string;
+      args: string[];
+      envOverrides?: NodeJS.ProcessEnv;
+    };
 
 const READ_ONLY_GIT_SUBCOMMANDS = new Set([
   "diff",
@@ -257,17 +246,28 @@ const BLOCKED_GIT_ARGUMENTS = [
 ];
 
 const TRUSTED_GIT_CONFIG = [
-  "-c", "core.fsmonitor=false",
-  "-c", "core.untrackedCache=false",
-  "-c", "core.pager=cat",
-  "-c", "pager.status=false",
-  "-c", "pager.diff=false",
-  "-c", "pager.log=false",
-  "-c", "pager.show=false",
-  "-c", "diff.external=",
-  "-c", "diff.trustExitCode=false",
-  "-c", "log.showSignature=false",
-  "-c", "commit.gpgSign=false",
+  "-c",
+  "core.fsmonitor=false",
+  "-c",
+  "core.untrackedCache=false",
+  "-c",
+  "core.pager=cat",
+  "-c",
+  "pager.status=false",
+  "-c",
+  "pager.diff=false",
+  "-c",
+  "pager.log=false",
+  "-c",
+  "pager.show=false",
+  "-c",
+  "diff.external=",
+  "-c",
+  "diff.trustExitCode=false",
+  "-c",
+  "log.showSignature=false",
+  "-c",
+  "commit.gpgSign=false",
 ];
 
 const RG_BOOLEAN_OPTIONS = new Set([
@@ -336,10 +336,7 @@ async function prepareDiagnosticCommand(
     return { output: resolve(context.workspaceRoot) };
   }
   if (executable === "node") {
-    if (
-      tokens.length !== 3
-      || (tokens[1] !== "--check" && tokens[1] !== "-c")
-    ) {
+    if (tokens.length !== 3 || (tokens[1] !== "--check" && tokens[1] !== "-c")) {
       throw unsafeCommand("Only `node --check <workspace-file>` is allowed.");
     }
     const relativePath = assertSafeRelativeCommandPath(tokens[2]!);
@@ -359,8 +356,7 @@ async function prepareDiagnosticCommand(
     return prepareRipgrep(tokens.slice(1));
   }
   throw unsafeCommand(
-    `Executable is not allowlisted: ${tokens[0]}. `
-    + "Use dedicated file tools for mutations.",
+    `Executable is not allowlisted: ${tokens[0]}. ` + "Use dedicated file tools for mutations.",
   );
 }
 
@@ -390,12 +386,8 @@ async function prepareReadOnlyGit(
   await assertSafeGitRepository(context);
 
   const safetyOptions = [
-    ...(["diff", "log", "show"].includes(subcommand)
-      ? ["--no-ext-diff", "--no-textconv"]
-      : []),
-    ...(["diff", "log", "show", "status"].includes(subcommand)
-      ? ["--ignore-submodules=all"]
-      : []),
+    ...(["diff", "log", "show"].includes(subcommand) ? ["--no-ext-diff", "--no-textconv"] : []),
+    ...(["diff", "log", "show", "status"].includes(subcommand) ? ["--ignore-submodules=all"] : []),
   ];
   return {
     file: "git",
@@ -403,9 +395,7 @@ async function prepareReadOnlyGit(
   };
 }
 
-async function assertSafeGitRepository(
-  context: SubAgentToolContext,
-): Promise<void> {
+async function assertSafeGitRepository(context: SubAgentToolContext): Promise<void> {
   const workspaceRoot = resolve(context.workspaceRoot);
   const gitDirectory = resolve(workspaceRoot, ".git");
   let gitStats;
@@ -431,14 +421,15 @@ async function assertSafeGitRepository(
   const config = (await fileService.inspect(".git/config")).content;
   const meaningfulConfig = config
     .split(/\r?\n/)
-    .filter((line) => !line.trimStart().startsWith("#")
-      && !line.trimStart().startsWith(";"))
+    .filter((line) => !line.trimStart().startsWith("#") && !line.trimStart().startsWith(";"))
     .join("\n");
   if (
-    /^\s*\[(?:include(?:if)?|filter|diff|credential|gpg|pager|difftool|mergetool)\b/im
-      .test(meaningfulConfig)
-    || /^\s*(?:fsmonitor|hookspath|sshcommand|attributesfile|excludesfile|external|textconv|command|process|clean|smudge|helper|program|worktreeconfig)\s*=/im
-      .test(meaningfulConfig)
+    /^\s*\[(?:include(?:if)?|filter|diff|credential|gpg|pager|difftool|mergetool)\b/im.test(
+      meaningfulConfig,
+    ) ||
+    /^\s*(?:fsmonitor|hookspath|sshcommand|attributesfile|excludesfile|external|textconv|command|process|clean|smudge|helper|program|worktreeconfig)\s*=/im.test(
+      meaningfulConfig,
+    )
   ) {
     throw unsafeCommand(
       "Repository-local config contains an external helper or include and is not safe for unattended diagnostics.",
@@ -497,10 +488,13 @@ function containsExternalGitAttribute(content: string): boolean {
     const trimmed = line.trim();
     if (!trimmed || trimmed.startsWith("#")) continue;
     const attributes = trimmed.split(/\s+/).slice(1);
-    if (attributes.some((attribute) =>
-      /^(?:[-!]?(?:filter|diff|merge)|(?:filter|diff|merge|working-tree-encoding)=)/i
-        .test(attribute),
-    )) {
+    if (
+      attributes.some((attribute) =>
+        /^(?:[-!]?(?:filter|diff|merge)|(?:filter|diff|merge|working-tree-encoding)=)/i.test(
+          attribute,
+        ),
+      )
+    ) {
       return true;
     }
   }
@@ -588,10 +582,10 @@ function parseAttachedRipgrepOption(
 ): { kind: "glob" | "type" | "number"; value: string } | undefined {
   for (const [prefix, kind] of RG_VALUE_OPTIONS) {
     if (
-      prefix.startsWith("-")
-      && !prefix.startsWith("--")
-      && argument.startsWith(prefix)
-      && argument.length > prefix.length
+      prefix.startsWith("-") &&
+      !prefix.startsWith("--") &&
+      argument.startsWith(prefix) &&
+      argument.length > prefix.length
     ) {
       return { kind, value: argument.slice(prefix.length) };
     }
@@ -602,10 +596,7 @@ function parseAttachedRipgrepOption(
   return undefined;
 }
 
-function validateRipgrepOptionValue(
-  kind: "glob" | "type" | "number",
-  value: string,
-): void {
+function validateRipgrepOptionValue(kind: "glob" | "type" | "number", value: string): void {
   if (!value || value.includes("\0")) {
     throw unsafeCommand("ripgrep option values must not be empty.");
   }
@@ -622,10 +613,10 @@ function validateRipgrepOptionValue(
 
 function tokenizeDirectCommand(command: string): string[] {
   if (
-    !command.trim()
-    || command.length > 16_384
-    || /[\0\r\n;&|<>`]/.test(command)
-    || /\$\(|\$\{/.test(command)
+    !command.trim() ||
+    command.length > 16_384 ||
+    /[\0\r\n;&|<>`]/.test(command) ||
+    /\$\(|\$\{/.test(command)
   ) {
     throw unsafeCommand(
       "Shell operators, substitutions, multiline input, and oversized commands are not allowed.",
@@ -634,7 +625,7 @@ function tokenizeDirectCommand(command: string): string[] {
 
   const tokens: string[] = [];
   let token = "";
-  let quote: "'" | "\"" | undefined;
+  let quote: "'" | '"' | undefined;
   let tokenStarted = false;
   for (const character of command.trim()) {
     if (quote) {
@@ -646,7 +637,7 @@ function tokenizeDirectCommand(command: string): string[] {
       tokenStarted = true;
       continue;
     }
-    if (character === "'" || character === "\"") {
+    if (character === "'" || character === '"') {
       quote = character;
       tokenStarted = true;
       continue;
@@ -677,11 +668,7 @@ function assertSafeRelativeCommandPath(path: string): string {
 }
 
 function assertNoOutsidePathToken(value: string): void {
-  if (
-    isAbsolute(value)
-    || /^[a-z]:[\\/]/i.test(value)
-    || value.split(/[\\/]+/).includes("..")
-  ) {
+  if (isAbsolute(value) || /^[a-z]:[\\/]/i.test(value) || value.split(/[\\/]+/).includes("..")) {
     throw unsafeCommand(`Path traversal is not allowed in diagnostic commands: ${value}`);
   }
 }

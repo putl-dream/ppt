@@ -97,15 +97,21 @@ export function summarizeTaskNode(task: AgentTaskNode): string {
 export function formatTaskListSummary(tasks: AgentTaskNode[]): string {
   if (tasks.length === 0) return "暂无持久化任务";
   const byId = new Map(tasks.map((task) => [task.id, task]));
-  return tasks.map((task) => {
-    const blockers = getIncompleteBlockedBy(task, byId);
-    return `#${task.id} [${task.status}] ${task.subject}`
-      + (task.owner ? ` (${task.owner})` : "")
-      + (blockers.length ? ` [blocked by ${blockers.join(", ")}]` : "");
-  }).join("\n");
+  return tasks
+    .map((task) => {
+      const blockers = getIncompleteBlockedBy(task, byId);
+      return (
+        `#${task.id} [${task.status}] ${task.subject}` +
+        (task.owner ? ` (${task.owner})` : "") +
+        (blockers.length ? ` [blocked by ${blockers.join(", ")}]` : "")
+      );
+    })
+    .join("\n");
 }
 
-export function formatTaskOwnerForDisplay(task: Pick<AgentTaskNode, "owner" | "routing">): string | null {
+export function formatTaskOwnerForDisplay(
+  task: Pick<AgentTaskNode, "owner" | "routing">,
+): string | null {
   if (!task.owner) return null;
   return task.routing.executionTarget === "teammate" ? "协作助手" : "主助手";
 }
@@ -119,7 +125,9 @@ export function summarizeTaskListProgress(tasks: AgentTaskNode[]): string {
     `${completed}/${tasks.length} 已完成`,
     current ? `进行中: ${current.subject}` : undefined,
     reviews ? `${reviews} 项待验收` : undefined,
-  ].filter(Boolean).join(" · ");
+  ]
+    .filter(Boolean)
+    .join(" · ");
 }
 
 export function formatTaskPlanPosition(tasks: AgentTaskNode[]): string {
@@ -134,7 +142,9 @@ export function formatTaskPlanPosition(tasks: AgentTaskNode[]): string {
     return `步骤 ${currentIndex + 1}/${tasks.length} · ${formatTaskPositionLabel(task)}`;
   }
   const completed = tasks.filter((task) => task.status === "completed").length;
-  return completed === tasks.length && tasks.length ? `全部完成 · ${completed}/${tasks.length}` : summarizeTaskListProgress(tasks);
+  return completed === tasks.length && tasks.length
+    ? `全部完成 · ${completed}/${tasks.length}`
+    : summarizeTaskListProgress(tasks);
 }
 
 function formatTaskPositionLabel(task: AgentTaskNode): string {

@@ -1,18 +1,18 @@
 // @vitest-environment jsdom
 
-import React, { useState } from "react";
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { DEFAULT_DESIGN_SYSTEM } from "../src/design-system";
-import type { DisplayEvent } from "../src/shared/card-display-protocol";
-import { type Presentation } from "../src/shared/presentation";
-import { createSvgTestSlide } from "../src/shared/presentation-fixtures";
-import { PPTMirror } from "../src/renderer/src/components/PPTMirror";
-import { ArtifactCardHost } from "../src/renderer/src/cards/hosts/ArtifactCardHost";
 import {
   clearAllDisplayCardManagers,
   ingestDisplayEvent,
-} from "../src/renderer/src/cards/display-card-managers";
+} from "@shared/cards/display-card-managers";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import React, { useState } from "react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { DEFAULT_DESIGN_SYSTEM } from "../src/design-system";
+import { ArtifactCardHost } from "../src/renderer/src/cards/hosts/ArtifactCardHost";
+import { PPTMirror } from "../src/renderer/src/components/PPTMirror";
+import type { DisplayEvent } from "../src/shared/card-display-protocol";
+import type { Presentation } from "../src/shared/presentation";
+import { createSvgTestSlide } from "../src/shared/presentation-fixtures";
 
 type SlidePreviewEvent = Extract<DisplayEvent, { kind: "artifact.slide-preview" }>;
 
@@ -96,8 +96,9 @@ describe("PPTMirror preview workspace", () => {
     render(<MirrorHarness />);
 
     expect(screen.getByText("PPT 预览")).not.toBeNull();
-    expect(screen.getByRole("tab", { name: /检查结果\s*2/ }).getAttribute("aria-selected"))
-      .toBe("true");
+    expect(screen.getByRole("tab", { name: /检查结果\s*2/ }).getAttribute("aria-selected")).toBe(
+      "true",
+    );
     expect(screen.getByText(/覆盖 2 \/ 2 /)).not.toBeNull();
     expect(screen.queryByText("点击查看大图")).toBeNull();
     expect(screen.queryByText("页面预览")).toBeNull();
@@ -108,8 +109,9 @@ describe("PPTMirror preview workspace", () => {
 
     fireEvent.click(screen.getByRole("tab", { name: /幻灯片\s*2/ }));
     expect(screen.getByRole("button", { name: "放大查看第 2 页：核心结论" })).not.toBeNull();
-    expect(screen.getByRole("button", { name: "选择第 2 页：核心结论" })
-      .getAttribute("aria-current")).toBe("page");
+    expect(
+      screen.getByRole("button", { name: "选择第 2 页：核心结论" }).getAttribute("aria-current"),
+    ).toBe("page");
   });
 
   it("exports by session id without uploading the renderer presentation snapshot", async () => {

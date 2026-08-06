@@ -1,16 +1,16 @@
-import React from "react";
 import type { SessionSummary } from "@shared/session";
 import { getWorkspaceLabel, groupSessionsByWorkspace } from "@shared/workspace";
+import React from "react";
 import {
   ChevronDownIcon,
   ChevronRightIcon,
+  FileIcon,
+  FolderIcon,
   PlusIcon,
   SearchIcon,
   SettingsIcon,
   SidebarPanelIcon,
   TrashIcon,
-  FileIcon,
-  FolderIcon,
 } from "./Icons";
 
 interface LeftPanelProps {
@@ -195,14 +195,16 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
       const workspacePath = session.workspacePath ?? "";
       const workspaceLabel = getWorkspaceLabel(workspacePath).toLowerCase();
       const workspaceMatches =
-        workspacePath.toLowerCase().includes(query) ||
-        workspaceLabel.includes(query);
+        workspacePath.toLowerCase().includes(query) || workspaceLabel.includes(query);
 
       return titleMatches || workspaceMatches;
     });
   }, [sessions, sessionSearchQuery]);
 
-  const groupedSessions = React.useMemo(() => groupSessionsByWorkspace(visibleSessions), [visibleSessions]);
+  const groupedSessions = React.useMemo(
+    () => groupSessionsByWorkspace(visibleSessions),
+    [visibleSessions],
+  );
   const workspaceGroups = groupedSessions.filter((group) => group.workspacePath !== "__unknown__");
   const orphanSessions =
     groupedSessions.find((group) => group.workspacePath === "__unknown__")?.sessions ?? [];

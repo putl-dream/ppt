@@ -1,16 +1,10 @@
 import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import type {
-  Presentation,
-  Slide,
-  SlideNarrative,
-} from "../src/shared/presentation";
-import { LayoutValidator } from "../src/main/deck/validators/layout-validator";
 import { previewSlideTool } from "../src/main/agent/tools/core/preview-slide";
 import type { ToolContext } from "../src/main/agent/tools/tool-definition";
-import {
-  TEST_DESIGN_SYSTEM,
-} from "./design-engine-test-utils";
+import { LayoutValidator } from "../src/main/deck/validators/layout-validator";
+import type { Presentation, Slide, SlideNarrative } from "../src/shared/presentation";
+import { TEST_DESIGN_SYSTEM } from "./design-engine-test-utils";
 
 const SVG_MARKUP = [
   '<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">',
@@ -31,10 +25,7 @@ function sha256(value: string): string {
   return createHash("sha256").update(value, "utf8").digest("hex");
 }
 
-function svgSlide(
-  id = "svg-slide",
-  overrides: Partial<Slide> = {},
-): Slide {
+function svgSlide(id = "svg-slide", overrides: Partial<Slide> = {}): Slide {
   return {
     id,
     title: "SVG-native",
@@ -93,9 +84,7 @@ describe("SVG-native integration", () => {
       category: "layout",
       severity: "error",
     });
-    expect(tamperedIssues[0]?.message).toContain(
-      "no longer matches its source hash",
-    );
+    expect(tamperedIssues[0]?.message).toContain("no longer matches its source hash");
   });
 
   it("PreviewSlide summarizes svgPage and narrative without requesting a thumbnail", async () => {

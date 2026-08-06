@@ -40,17 +40,22 @@ export interface LocalizeImageAssetOptions {
 
 function isPrivateIpv4(address: string): boolean {
   const parts = address.split(".").map(Number);
-  if (parts.length !== 4 || parts.some((part) => !Number.isInteger(part) || part < 0 || part > 255)) {
+  if (
+    parts.length !== 4 ||
+    parts.some((part) => !Number.isInteger(part) || part < 0 || part > 255)
+  ) {
     return true;
   }
   const [a, b] = parts;
-  return a === 0
-    || a === 10
-    || a === 127
-    || (a === 169 && b === 254)
-    || (a === 172 && b >= 16 && b <= 31)
-    || (a === 192 && b === 168)
-    || a >= 224;
+  return (
+    a === 0 ||
+    a === 10 ||
+    a === 127 ||
+    (a === 169 && b === 254) ||
+    (a === 172 && b >= 16 && b <= 31) ||
+    (a === 192 && b === 168) ||
+    a >= 224
+  );
 }
 
 function isPrivateAddress(address: string): boolean {
@@ -59,13 +64,16 @@ function isPrivateAddress(address: string): boolean {
   if (normalized.startsWith("::ffff:")) {
     return isPrivateIpv4(normalized.slice("::ffff:".length));
   }
-  return normalized === "::" || normalized === "::1"
-    || normalized.startsWith("fc")
-    || normalized.startsWith("fd")
-    || normalized.startsWith("fe8")
-    || normalized.startsWith("fe9")
-    || normalized.startsWith("fea")
-    || normalized.startsWith("feb");
+  return (
+    normalized === "::" ||
+    normalized === "::1" ||
+    normalized.startsWith("fc") ||
+    normalized.startsWith("fd") ||
+    normalized.startsWith("fe8") ||
+    normalized.startsWith("fe9") ||
+    normalized.startsWith("fea") ||
+    normalized.startsWith("feb")
+  );
 }
 
 async function defaultResolveHost(hostname: string): Promise<string[]> {
@@ -96,9 +104,10 @@ async function assertPublicImageUrl(
 }
 
 function detectSupportedImage(buffer: Buffer): SupportedImage | null {
-  if (buffer.length >= 8 && buffer.subarray(0, 8).equals(Buffer.from([
-    0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
-  ]))) {
+  if (
+    buffer.length >= 8 &&
+    buffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))
+  ) {
     return { mimeType: "image/png", extension: "png" };
   }
   if (buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) {

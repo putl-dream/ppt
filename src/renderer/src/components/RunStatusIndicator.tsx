@@ -1,9 +1,7 @@
-import React, { useEffect, useRef, useState } from "react";
 import type { AgentActivityItem } from "@shared/agent-activity";
-import {
-  deriveAgentRunPresentation,
-  type AgentRunPhase,
-} from "../agentRunPresentation";
+import { type AgentRunPhase, deriveAgentRunPresentation } from "@shared/agent-run-presentation";
+import type React from "react";
+import { useEffect, useRef, useState } from "react";
 
 interface RunStatusIndicatorProps {
   phase: AgentRunPhase;
@@ -23,10 +21,7 @@ export const RunStatusIndicator: React.FC<RunStatusIndicatorProps> = ({
   useEffect(() => {
     if (startedAt !== undefined) startedAtRef.current = startedAt;
     const updateElapsed = () => {
-      setElapsedSeconds(Math.max(
-        0,
-        Math.floor((Date.now() - startedAtRef.current) / 1_000),
-      ));
+      setElapsedSeconds(Math.max(0, Math.floor((Date.now() - startedAtRef.current) / 1_000)));
     };
     updateElapsed();
     const timer = window.setInterval(updateElapsed, 1_000);
@@ -40,7 +35,9 @@ export const RunStatusIndicator: React.FC<RunStatusIndicatorProps> = ({
           "loading-indicator",
           "loading-indicator--sm",
           presentation.animated ? "" : "loading-indicator--paused",
-        ].filter(Boolean).join(" ")}
+        ]
+          .filter(Boolean)
+          .join(" ")}
         aria-hidden="true"
       />
       <span
@@ -51,9 +48,7 @@ export const RunStatusIndicator: React.FC<RunStatusIndicatorProps> = ({
       >
         {presentation.label}
       </span>
-      {elapsedSeconds > 0 && (
-        <span className="run-status-elapsed">{elapsedSeconds} 秒</span>
-      )}
+      {elapsedSeconds > 0 && <span className="run-status-elapsed">{elapsedSeconds} 秒</span>}
     </span>
   );
 };

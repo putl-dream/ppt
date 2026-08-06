@@ -1,16 +1,16 @@
+import type { AgentModelSelection } from "@shared/agent";
+import type { AgentStepLimits } from "@shared/agent-step-limits";
+import type { AgentTaskNode } from "@shared/agent-task-list";
+import type { TeammateProgressListener } from "@shared/teammate-progress";
 import type {
   AgentModelContentBlock,
   AgentModelGateway,
   AgentModelToolResultBlock,
 } from "../gateway";
-import type { AgentModelSelection } from "@shared/agent";
-import type { AgentStepLimits } from "@shared/agent-step-limits";
-import type { AgentTaskNode } from "@shared/agent-task-list";
-import type { TeammateProgressListener } from "@shared/teammate-progress";
+import type { SkillRegistry } from "../skills/loadSkillsDir";
 import type { TaskListSnapshotListener } from "../task/task-list-publisher";
 import type { TaskDispatchMode, TaskStore } from "../task/task-store";
 import type { AgentMailboxMessage } from "./message-bus";
-import type { SkillRegistry } from "../skills/loadSkillsDir";
 
 export type TeammateStatus = "running" | "idle" | "stopped" | "failed";
 
@@ -97,10 +97,7 @@ export type TeammateTerminalPhase =
       assignment?: TeammateAssignedPhase;
     };
 
-export type TeammatePhase =
-  | TeammateIdlePhase
-  | TeammateAssignedPhase
-  | TeammateTerminalPhase;
+export type TeammatePhase = TeammateIdlePhase | TeammateAssignedPhase | TeammateTerminalPhase;
 
 export type TeammateInboxOutcome =
   | { kind: "none" }

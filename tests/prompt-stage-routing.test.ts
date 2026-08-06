@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
+import type { WorkspaceArtifacts } from "../src/main/agent/runtime/presentation/workspace-artifacts";
 import {
   LEGACY_PROMPT_STAGE_MAP,
   normalizePromptStage,
   resolvePromptStage,
 } from "../src/main/agent/runtime/prompts/prompt-stage";
-import { type Presentation } from "../src/shared/presentation";
+import type { Presentation } from "../src/shared/presentation";
 import { createSvgTestSlide } from "../src/shared/presentation-fixtures";
-import type { WorkspaceArtifacts } from "../src/main/agent/runtime/presentation/workspace-artifacts";
 import { TEST_DESIGN_SYSTEM } from "./design-engine-test-utils";
 
 const emptyArtifacts: WorkspaceArtifacts = {
@@ -29,19 +29,19 @@ function deck(slideCount: number, svg = false): Presentation {
     title: "t",
     revision: 1,
     designSystem: TEST_DESIGN_SYSTEM,
-    slides: Array.from({ length: slideCount }, (_, i) => (
+    slides: Array.from({ length: slideCount }, (_, i) =>
       svg
         ? createSvgTestSlide({
             id: `slide-${i}`,
             title: `s${i}`,
             sourcePath: `slides/svg/slide-${i}.svg`,
           })
-        : {
+        : ({
             id: `slide-${i}`,
             title: `s${i}`,
             visualSource: undefined,
-          } as unknown as Presentation["slides"][number]
-    )),
+          } as unknown as Presentation["slides"][number]),
+    ),
   };
 }
 
@@ -90,37 +90,47 @@ describe("resolvePromptStage (advisory capability hint)", () => {
   });
 
   it("describes an empty workspace as discover", () => {
-    expect(resolvePromptStage({
-      request: "任意请求",
-      presentation: deck(0),
-      artifacts: emptyArtifacts,
-    })).toBe("discover");
+    expect(
+      resolvePromptStage({
+        request: "任意请求",
+        presentation: deck(0),
+        artifacts: emptyArtifacts,
+      }),
+    ).toBe("discover");
   });
 
   it("routes slides missing SVG visualSource to design", () => {
-    expect(resolvePromptStage({
-      request: "任意请求",
-      presentation: deck(3),
-      artifacts: emptyArtifacts,
-    })).toBe("design");
-    expect(resolvePromptStage({
-      request: "任意请求",
-      presentation: deck(0),
-      artifacts: { ...emptyArtifacts, outline: true },
-    })).toBe("author");
+    expect(
+      resolvePromptStage({
+        request: "任意请求",
+        presentation: deck(3),
+        artifacts: emptyArtifacts,
+      }),
+    ).toBe("design");
+    expect(
+      resolvePromptStage({
+        request: "任意请求",
+        presentation: deck(0),
+        artifacts: { ...emptyArtifacts, outline: true },
+      }),
+    ).toBe("author");
   });
 
   it("uses authored SVG pages as evidence for preview/quality work before apply", () => {
-    expect(resolvePromptStage({
-      request: "任意请求",
-      presentation: deck(0),
-      artifacts: { ...emptyArtifacts, pageSvg: true },
-    })).toBe("style");
-    expect(resolvePromptStage({
-      request: "任意请求",
-      presentation: deck(3, true),
-      artifacts: { ...emptyArtifacts, pageSvg: true },
-    })).toBe("edit");
+    expect(
+      resolvePromptStage({
+        request: "任意请求",
+        presentation: deck(0),
+        artifacts: { ...emptyArtifacts, pageSvg: true },
+      }),
+    ).toBe("style");
+    expect(
+      resolvePromptStage({
+        request: "任意请求",
+        presentation: deck(3, true),
+        artifacts: { ...emptyArtifacts, pageSvg: true },
+      }),
+    ).toBe("edit");
   });
 
   it("does not parse assistant prose as hidden workflow state", () => {
@@ -128,9 +138,7 @@ describe("resolvePromptStage (advisory capability hint)", () => {
       request: "继续",
       presentation: deck(2),
       artifacts: emptyArtifacts,
-      messageHistory: [
-        { role: "assistant", content: "内容草稿已就绪，请确认设计方向。" },
-      ],
+      messageHistory: [{ role: "assistant", content: "内容草稿已就绪，请确认设计方向。" }],
     });
     const withoutMessage = resolvePromptStage({
       request: "继续",
@@ -142,17 +150,21 @@ describe("resolvePromptStage (advisory capability hint)", () => {
   });
 
   it("accepts explicit current and legacy stage hints", () => {
-    expect(resolvePromptStage({
-      request: "x",
-      presentation: deck(0),
-      artifacts: emptyArtifacts,
-      stageHint: "export",
-    })).toBe("export");
-    expect(resolvePromptStage({
-      request: "x",
-      presentation: deck(0),
-      artifacts: emptyArtifacts,
-      stageHint: "layout-exec",
-    })).toBe("style");
+    expect(
+      resolvePromptStage({
+        request: "x",
+        presentation: deck(0),
+        artifacts: emptyArtifacts,
+        stageHint: "export",
+      }),
+    ).toBe("export");
+    expect(
+      resolvePromptStage({
+        request: "x",
+        presentation: deck(0),
+        artifacts: emptyArtifacts,
+        stageHint: "layout-exec",
+      }),
+    ).toBe("style");
   });
 });

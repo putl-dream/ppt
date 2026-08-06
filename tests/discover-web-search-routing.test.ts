@@ -1,53 +1,63 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createSessionPresentation } from "../src/shared/session";
-import { AgentRuntime } from "../src/main/agent/runtime/agent-runtime";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type {
   AgentModelContentBlock,
   AgentModelGateway,
   AgentModelRequest,
   AgentModelResponse,
 } from "../src/main/agent/gateway/types";
-import { ToolRegistry } from "../src/main/agent/tools/tool-registry";
+import { AgentRuntime } from "../src/main/agent/runtime/agent-runtime";
 import { webSearchTool } from "../src/main/agent/tools/core/web-search";
+import { ToolRegistry } from "../src/main/agent/tools/tool-registry";
+import { createSessionPresentation } from "../src/shared/session";
 
 const temporaryRoots: string[] = [];
 
 afterEach(async () => {
   vi.unstubAllGlobals();
-  await Promise.all(temporaryRoots.splice(0).map((path) =>
-    rm(path, { recursive: true, force: true })
-  ));
+  await Promise.all(
+    temporaryRoots.splice(0).map((path) => rm(path, { recursive: true, force: true })),
+  );
 });
 
 describe("discover-stage WebSearch routing", () => {
   it("allows a pasted URL to be researched before any persistent Task exists", async () => {
     const runtimeRoot = await mkdtemp(join(tmpdir(), "agent-ppt-url-search-"));
     temporaryRoots.push(runtimeRoot);
-    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({
-      results: [{
-        title: "Example article",
-        url: "https://example.com/article",
-        content: "The article argues for evidence-based writing.",
-      }],
-    }), { status: 200 }));
+    const fetchImpl = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            results: [
+              {
+                title: "Example article",
+                url: "https://example.com/article",
+                content: "The article argues for evidence-based writing.",
+              },
+            ],
+          }),
+          { status: 200 },
+        ),
+    );
     vi.stubGlobal("fetch", fetchImpl);
 
     const requests: AgentModelRequest[] = [];
     const responses: AgentModelContentBlock[][] = [
-      [{
-        type: "tool_use",
-        id: "search-url",
-        name: "WebSearch",
-        input: {
-          query: "https://example.com/article",
-          max_results: 3,
-          search_depth: "basic",
-          topic: "general",
+      [
+        {
+          type: "tool_use",
+          id: "search-url",
+          name: "WebSearch",
+          input: {
+            query: "https://example.com/article",
+            max_results: 3,
+            search_depth: "basic",
+            topic: "general",
+          },
         },
-      }],
+      ],
       [{ type: "text", text: "The article is clear and evidence-focused." }],
     ];
     let responseIndex = 0;

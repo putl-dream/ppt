@@ -1,25 +1,23 @@
-import type {
-  AgentMailboxMessage,
-  InboxClaim,
-  MessageBus,
-} from "../../teammate/message-bus";
+import type { AgentMailboxMessage, InboxClaim, MessageBus } from "../../teammate/message-bus";
 import { formatMailboxMessagesForHistory } from "../../teammate/message-bus";
 import type { TeammateManager } from "../../teammate/spawn-teammate";
-import type { ToolApprovalHandler } from "../tools/permission-check";
 import type { AgentSession } from "../lifecycle/agent-session";
+import type { ToolApprovalHandler } from "../tools/permission-check";
 
 /**
  * Claims and commits lead inbox input. Permission responses intentionally retain
  * at-least-once delivery with a stable response id; checkpoint precedes claim ack.
  */
 export class LeadInboxInputSource {
-  constructor(private readonly input: {
-    messageBus?: MessageBus;
-    teammateManager?: TeammateManager;
-    requestToolApproval?: ToolApprovalHandler;
-    session: AgentSession;
-    commit(): Promise<void>;
-  }) {}
+  constructor(
+    private readonly input: {
+      messageBus?: MessageBus;
+      teammateManager?: TeammateManager;
+      requestToolApproval?: ToolApprovalHandler;
+      session: AgentSession;
+      commit(): Promise<void>;
+    },
+  ) {}
 
   async drain(): Promise<string | undefined> {
     const { messageBus, teammateManager } = this.input;
@@ -51,9 +49,7 @@ export class LeadInboxInputSource {
       visibleMessages.length > 0
         ? `[Inbox]\n${formatMailboxMessagesForHistory(visibleMessages)}`
         : "",
-      systemNotes.length > 0
-        ? `[Inbox permissions]\n${systemNotes.join("\n")}`
-        : "",
+      systemNotes.length > 0 ? `[Inbox permissions]\n${systemNotes.join("\n")}` : "",
     ].filter(Boolean);
     if (parts.length === 0) return undefined;
 

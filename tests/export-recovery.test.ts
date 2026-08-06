@@ -10,9 +10,7 @@ const directories: string[] = [];
 
 afterEach(async () => {
   await Promise.all(
-    directories.splice(0).map((directory) =>
-      rm(directory, { recursive: true, force: true })
-    ),
+    directories.splice(0).map((directory) => rm(directory, { recursive: true, force: true })),
   );
 });
 
@@ -24,21 +22,14 @@ describe("export crash recovery proof", () => {
     const presentation = createStarterPresentation();
     await writeFile(filePath, JSON.stringify(presentation, null, 2), "utf8");
 
-    await expect(
-      proveExistingExport(filePath, "json", presentation, {}),
-    ).resolves.toMatchObject({
+    await expect(proveExistingExport(filePath, "json", presentation, {})).resolves.toMatchObject({
       passed: true,
       validator: "canonical-presentation-json",
       slideCount: presentation.slides.length,
     });
 
     await expect(
-      proveExistingExport(
-        filePath,
-        "json",
-        { ...presentation, title: "Different revision" },
-        {},
-      ),
+      proveExistingExport(filePath, "json", { ...presentation, title: "Different revision" }, {}),
     ).resolves.toBeUndefined();
   });
 
@@ -49,23 +40,14 @@ describe("export crash recovery proof", () => {
     const presentation = createStarterPresentation();
     await exportToPptx(presentation, {}, filePath);
 
-    await expect(
-      proveExistingExport(filePath, "pptx", presentation, {}),
-    ).resolves.toMatchObject({
+    await expect(proveExistingExport(filePath, "pptx", presentation, {})).resolves.toMatchObject({
       passed: true,
       validator: "pptx-postflight",
       slideCount: presentation.slides.length,
     });
+    await expect(proveExistingExport(filePath, "html", presentation, {})).resolves.toBeUndefined();
     await expect(
-      proveExistingExport(filePath, "html", presentation, {}),
-    ).resolves.toBeUndefined();
-    await expect(
-      proveExistingExport(
-        filePath,
-        "pptx",
-        presentation,
-        { allowUnverifiedAssets: true },
-      ),
+      proveExistingExport(filePath, "pptx", presentation, { allowUnverifiedAssets: true }),
     ).resolves.toBeUndefined();
   });
 });

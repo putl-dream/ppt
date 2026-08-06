@@ -1,50 +1,64 @@
 import { z } from "zod";
-import {
-  agentProviderSchema,
-  type AgentModelSelection,
-} from "./agent";
+import { type AgentModelSelection, agentProviderSchema } from "./agent";
 
 export const CREDENTIAL_STORE_FILE_NAME = "credentials.v1.json";
 
-const credentialIdentifierSchema = z.string().trim().min(1).max(256).refine(
-  (value) => !/[\u0000-\u001f\u007f]/.test(value),
-  "Credential identifiers must not contain control characters.",
-);
+const credentialIdentifierSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(256)
+  .refine(
+    (value) => !/[\u0000-\u001f\u007f]/.test(value),
+    "Credential identifiers must not contain control characters.",
+  );
 const credentialModelNameSchema = z.string().trim().min(1).max(512);
 const credentialUrlSchema = z.string().trim().min(1).max(2_048).url();
 
 export const credentialApiKeySchema = z.string().trim().min(1).max(16_384);
 
-export const modelCredentialBindingSchema = z.object({
-  configurationId: credentialIdentifierSchema,
-  provider: agentProviderSchema,
-  model: credentialModelNameSchema,
-  baseURL: credentialUrlSchema.optional(),
-  apiMode: z.enum(["responses", "chat-completions"]).optional(),
-}).strict();
+export const modelCredentialBindingSchema = z
+  .object({
+    configurationId: credentialIdentifierSchema,
+    provider: agentProviderSchema,
+    model: credentialModelNameSchema,
+    baseURL: credentialUrlSchema.optional(),
+    apiMode: z.enum(["responses", "chat-completions"]).optional(),
+  })
+  .strict();
 
-export const webSearchCredentialBindingSchema = z.object({
-  endpoint: credentialUrlSchema,
-}).strict();
+export const webSearchCredentialBindingSchema = z
+  .object({
+    endpoint: credentialUrlSchema,
+  })
+  .strict();
 
-export const setModelCredentialsRequestSchema = z.object({
-  bindings: z.array(modelCredentialBindingSchema).min(1).max(100),
-  apiKey: credentialApiKeySchema,
-}).strict();
+export const setModelCredentialsRequestSchema = z
+  .object({
+    bindings: z.array(modelCredentialBindingSchema).min(1).max(100),
+    apiKey: credentialApiKeySchema,
+  })
+  .strict();
 
-export const setWebSearchCredentialRequestSchema = z.object({
-  binding: webSearchCredentialBindingSchema,
-  apiKey: credentialApiKeySchema,
-}).strict();
+export const setWebSearchCredentialRequestSchema = z
+  .object({
+    binding: webSearchCredentialBindingSchema,
+    apiKey: credentialApiKeySchema,
+  })
+  .strict();
 
-export const deleteModelCredentialRequestSchema = z.object({
-  configurationId: credentialIdentifierSchema,
-}).strict();
+export const deleteModelCredentialRequestSchema = z
+  .object({
+    configurationId: credentialIdentifierSchema,
+  })
+  .strict();
 
-export const credentialStatusRequestSchema = z.object({
-  models: z.array(modelCredentialBindingSchema).max(500).default([]),
-  webSearch: webSearchCredentialBindingSchema.optional(),
-}).strict();
+export const credentialStatusRequestSchema = z
+  .object({
+    models: z.array(modelCredentialBindingSchema).max(500).default([]),
+    webSearch: webSearchCredentialBindingSchema.optional(),
+  })
+  .strict();
 
 export type ModelCredentialBinding = z.infer<typeof modelCredentialBindingSchema>;
 export type WebSearchCredentialBinding = z.infer<typeof webSearchCredentialBindingSchema>;
@@ -91,18 +105,18 @@ export function normalizeCredentialUrl(value: string): string {
 
   parsed.pathname = parsed.pathname.replace(/\/+$/, "") || "/";
   const normalized = parsed.toString();
-  return parsed.pathname === "/" && !parsed.search && !parsed.hash
-    ? parsed.origin
-    : normalized;
+  return parsed.pathname === "/" && !parsed.search && !parsed.hash ? parsed.origin : normalized;
 }
 
 function isLoopbackHostname(hostname: string): boolean {
   const normalized = hostname.toLowerCase().replace(/^\[|\]$/g, "");
   if (normalized === "localhost" || normalized === "::1") return true;
   const octets = normalized.split(".");
-  return octets.length === 4
-    && octets[0] === "127"
-    && octets.every((octet) => /^\d{1,3}$/.test(octet) && Number(octet) <= 255);
+  return (
+    octets.length === 4 &&
+    octets[0] === "127" &&
+    octets.every((octet) => /^\d{1,3}$/.test(octet) && Number(octet) <= 255)
+  );
 }
 
 export function normalizeModelCredentialBinding(
@@ -113,9 +127,7 @@ export function normalizeModelCredentialBinding(
     configurationId: binding.configurationId,
     provider: binding.provider,
     model: binding.model,
-    ...(binding.baseURL
-      ? { baseURL: normalizeCredentialUrl(binding.baseURL) }
-      : {}),
+    ...(binding.baseURL ? { baseURL: normalizeCredentialUrl(binding.baseURL) } : {}),
     ...(binding.apiMode ? { apiMode: binding.apiMode } : {}),
   };
 }

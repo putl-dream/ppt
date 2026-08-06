@@ -23,14 +23,16 @@ describe("approval command display", () => {
   });
 
   it("formats design system details", () => {
-    expect(formatApprovalCommand({
-      id: "design",
-      type: "set-design-system",
-      designSystem: TEST_DESIGN_SYSTEM,
-    }).detail).toBe(
-      `视觉风格: ${TEST_DESIGN_SYSTEM.visualStyle} `
-      + `论证模式: ${TEST_DESIGN_SYSTEM.argumentMode} `
-      + `阅读模式: ${TEST_DESIGN_SYSTEM.readingMode}`,
+    expect(
+      formatApprovalCommand({
+        id: "design",
+        type: "set-design-system",
+        designSystem: TEST_DESIGN_SYSTEM,
+      }).detail,
+    ).toBe(
+      `视觉风格: ${TEST_DESIGN_SYSTEM.visualStyle} ` +
+        `论证模式: ${TEST_DESIGN_SYSTEM.argumentMode} ` +
+        `阅读模式: ${TEST_DESIGN_SYSTEM.readingMode}`,
     );
   });
 });

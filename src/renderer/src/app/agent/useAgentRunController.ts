@@ -1,43 +1,26 @@
-import {
-  useCallback,
-  useRef,
-  useState,
-  type Dispatch,
-  type SetStateAction,
-} from "react";
-import type { SessionBootstrap } from "@shared/session";
-import {
-  appendStep,
-} from "@shared/agent-activity";
+import { appendStep } from "@shared/agent-activity";
 import { formatPublicErrorMessage } from "@shared/agent-activity-display";
 import {
+  type AgentRunContext,
   coordinateAgentRun,
   createAgentRunLock,
-  type AgentRunContext,
 } from "@shared/agent-run-lifecycle";
 import {
   pruneDisplayCardsForMessages,
   setDisplayCardStatus,
-} from "../../cards/display-card-managers";
-import {
-  toSessionChatMessages,
-  type ChatMessage,
-} from "../chatMessageRuntime";
-import type { SettingsController } from "../useSettingsController";
-import { useInboxPoller } from "../useInboxPoller";
+} from "@shared/cards/display-card-managers";
+import type { SessionBootstrap } from "@shared/session";
+import { type Dispatch, type SetStateAction, useCallback, useRef, useState } from "react";
+import { type ChatMessage, toSessionChatMessages } from "../chatMessageRuntime";
 import type { PresentationController } from "../presentation/usePresentationController";
-import type { AgentActivityStreamController } from "./useAgentActivityStream";
-import {
-  useAgentResultHandler,
-  type ApplyAgentResult,
-} from "./useAgentResultHandler";
-import { handleAgentRunFailure } from "./agentRunFailure";
+import { useInboxPoller } from "../useInboxPoller";
+import type { SettingsController } from "../useSettingsController";
 import { executeAgentRun } from "./agentRunExecution";
-import {
-  buildAgentRunRequest,
-  prepareAgentRunMessages,
-} from "./agentRunPreparation";
+import { handleAgentRunFailure } from "./agentRunFailure";
+import { buildAgentRunRequest, prepareAgentRunMessages } from "./agentRunPreparation";
 import { prepareAgentContext } from "./agentSessionPreparation";
+import type { AgentActivityStreamController } from "./useAgentActivityStream";
+import { type ApplyAgentResult, useAgentResultHandler } from "./useAgentResultHandler";
 
 interface StartAgentOptions {
   userDisplayContent?: string | false;
@@ -137,174 +120,171 @@ export function useAgentRunController({
    * 调用方应确保输入确实需要 Agent 处理；会话准备、消息构造、执行分流分别由
    * 独立模块负责。最终 Presentation 由 applyAgentResult 从主进程回读。
    */
-  const startAgent = useCallback(async (
-    customRequest?: string,
-    isEditOfMsgId?: string,
-    options?: StartAgentOptions,
-  ) => {
-    const activeRequest = customRequest || request;
-    if (!activeRequest.trim() || busy) return;
-    if (
-      enabledModels.length === 0
-      || !selectedModel
-      || !enabledModels.some((model) => model.id === selectedModel.id)
-    ) {
-      notify("没有可用的已配置模型；请先在设置中保存 API Key");
-      return;
-    }
+  const startAgent = useCallback(
+    async (customRequest?: string, isEditOfMsgId?: string, options?: StartAgentOptions) => {
+      const activeRequest = customRequest || request;
+      if (!activeRequest.trim() || busy) return;
+      if (
+        enabledModels.length === 0 ||
+        !selectedModel ||
+        !enabledModels.some((model) => model.id === selectedModel.id)
+      ) {
+        notify("没有可用的已配置模型；请先在设置中保存 API Key");
+        return;
+      }
 
-    const runId = crypto.randomUUID();
-    const runLock = runLockRef.current;
-    if (!runLock.acquire(runId)) return;
+      const runId = crypto.randomUUID();
+      const runLock = runLockRef.current;
+      if (!runLock.acquire(runId)) return;
 
-    const userDisplayContent = options?.userDisplayContent === false
-      ? null
-      : typeof options?.userDisplayContent === "string"
-        ? options.userDisplayContent
-        : activeRequest;
-    const isSidechain = options?.sidechain === true;
-    const sourceMessages = chatMessages;
-    const streamMessageId = crypto.randomUUID();
-    const streamMessage: ChatMessage = {
-      id: streamMessageId,
-      role: "assistant",
-      content: "",
-      runId,
-      runStatus: "running",
-    };
-    const preparedMessages = prepareAgentRunMessages({
-      sourceMessages,
-      activeRequest,
-      userDisplayContent,
-      isSidechain,
-      editedMessageId: isEditOfMsgId,
-      streamMessage,
-      createMessageId: () => crypto.randomUUID(),
-    });
-    // The assistant message groups one semantic turn. Its ordered run blocks are
-    // appended in event order; the transient activity indicator stays at list tail.
-    beginRunActivity(runId, streamMessageId, isSidechain);
-    setActiveRunId(runId);
-    setChatMessages(preparedMessages.runMessages);
-    setBusy(true);
-    await coordinateAgentRun({
-      prepareContext: async (): Promise<AgentRunContext | undefined> => {
-        const preparedContext = await prepareAgentContext({
-          activeSessionId,
-          prompt: activeRequest,
-          localStoragePath,
-          applySessionState: (state) => {
-            applySessionState(state);
-            // Session hydration and the provisional run anchor belong to one
-            // render transaction, so creating a draft session cannot remount
-            // the loader between standalone and message-local trees.
-            setChatMessages(preparedMessages.runMessages);
-          },
-          setIsDraftChat,
-          notify,
-        });
-        if (!preparedContext) {
-          throw new Error("Agent run context could not be prepared.");
-        }
-        return {
-          ...preparedContext,
-          runId,
-          sidechain: isSidechain,
-        };
-      },
-      execute: async (context) => {
-        const agentRequest = buildAgentRunRequest({
-          prompt: activeRequest,
-          sessionId: context.sessionId,
-          currentSlideId: selectedSlideId || undefined,
-        });
+      const userDisplayContent =
+        options?.userDisplayContent === false
+          ? null
+          : typeof options?.userDisplayContent === "string"
+            ? options.userDisplayContent
+            : activeRequest;
+      const isSidechain = options?.sidechain === true;
+      const sourceMessages = chatMessages;
+      const streamMessageId = crypto.randomUUID();
+      const streamMessage: ChatMessage = {
+        id: streamMessageId,
+        role: "assistant",
+        content: "",
+        runId,
+        runStatus: "running",
+      };
+      const preparedMessages = prepareAgentRunMessages({
+        sourceMessages,
+        activeRequest,
+        userDisplayContent,
+        isSidechain,
+        editedMessageId: isEditOfMsgId,
+        streamMessage,
+        createMessageId: () => crypto.randomUUID(),
+      });
+      // The assistant message groups one semantic turn. Its ordered run blocks are
+      // appended in event order; the transient activity indicator stays at list tail.
+      beginRunActivity(runId, streamMessageId, isSidechain);
+      setActiveRunId(runId);
+      setChatMessages(preparedMessages.runMessages);
+      setBusy(true);
+      await coordinateAgentRun({
+        prepareContext: async (): Promise<AgentRunContext | undefined> => {
+          const preparedContext = await prepareAgentContext({
+            activeSessionId,
+            prompt: activeRequest,
+            localStoragePath,
+            applySessionState: (state) => {
+              applySessionState(state);
+              // Session hydration and the provisional run anchor belong to one
+              // render transaction, so creating a draft session cannot remount
+              // the loader between standalone and message-local trees.
+              setChatMessages(preparedMessages.runMessages);
+            },
+            setIsDraftChat,
+            notify,
+          });
+          if (!preparedContext) {
+            throw new Error("Agent run context could not be prepared.");
+          }
+          return {
+            ...preparedContext,
+            runId,
+            sidechain: isSidechain,
+          };
+        },
+        execute: async (context) => {
+          const agentRequest = buildAgentRunRequest({
+            prompt: activeRequest,
+            sessionId: context.sessionId,
+            currentSlideId: selectedSlideId || undefined,
+          });
 
-        console.info("Starting unified Agent run", {
-          sessionId: agentRequest.sessionId,
-          editorContext: agentRequest.editorContext,
-        });
+          console.info("Starting unified Agent run", {
+            sessionId: agentRequest.sessionId,
+            editorContext: agentRequest.editorContext,
+          });
 
-        if (preparedMessages.retainedMessageIds) {
-          pruneDisplayCardsForMessages(preparedMessages.retainedMessageIds);
-        }
-        setChatMessages(preparedMessages.runMessages);
-        if (!customRequest) setRequest("");
+          if (preparedMessages.retainedMessageIds) {
+            pruneDisplayCardsForMessages(preparedMessages.retainedMessageIds);
+          }
+          setChatMessages(preparedMessages.runMessages);
+          if (!customRequest) setRequest("");
 
-        if (!context.sidechain) {
-          await window.desktopApi.saveSessionMessages(
-            context.sessionId,
-            toSessionChatMessages(preparedMessages.runMessages),
-          );
-        }
-        return executeAgentRun({
-          request: agentRequest,
-          sourceMessages,
-          forkedMessages: preparedMessages.forkedMessages,
-          gatewayPreferences: agentGatewayPreferences,
-          enabledModels,
-          selectedModel,
-          stepLimits: agentStepLimits,
-          executionStrategy,
-          runId: context.runId,
-        });
-      },
-      finalize: async (context, result) => {
-        // Wait for the stream (including final response text) before applying
-        // the result; cleanup then clears busy so UI collapses after summary lands.
-        await waitForRunStreamCompletion(context.runId);
-        await applyAgentResult(result, activeRunTraceRef.current, context.runId);
-      },
-      handleFailure: (error, context) => {
-        handleAgentRunFailure({
-          error,
-          isSidechain: context?.sidechain ?? isSidechain,
-          runMessageId: streamMessageIdsRef.current.get(runId),
-          activeTrace: activeRunTraceRef.current,
-          setChatMessages,
-          notify,
-        });
-      },
-      cleanup: () => {
-        finishRunActivity(runId);
-        setActiveRunId((current) => current === runId ? null : current);
-        setIsCancellingRun(false);
-        if (runLock.release(runId)) setBusy(false);
-      },
-    });
-  }, [
-    activeRunTraceRef,
-    activeSessionId,
-    agentGatewayPreferences,
-    agentStepLimits,
-    applyAgentResult,
-    applySessionState,
-    beginRunActivity,
-    busy,
-    chatMessages,
-    enabledModels,
-    finishRunActivity,
-    localStoragePath,
-    notify,
-    request,
-    selectedModel,
-    selectedSlideId,
-    setBusy,
-    setChatMessages,
-    setIsDraftChat,
-    setRequest,
-    streamMessageIdsRef,
-    waitForRunStreamCompletion,
-  ]);
+          if (!context.sidechain) {
+            await window.desktopApi.saveSessionMessages(
+              context.sessionId,
+              toSessionChatMessages(preparedMessages.runMessages),
+            );
+          }
+          return executeAgentRun({
+            request: agentRequest,
+            sourceMessages,
+            forkedMessages: preparedMessages.forkedMessages,
+            gatewayPreferences: agentGatewayPreferences,
+            enabledModels,
+            selectedModel,
+            stepLimits: agentStepLimits,
+            executionStrategy,
+            runId: context.runId,
+          });
+        },
+        finalize: async (context, result) => {
+          // Wait for the stream (including final response text) before applying
+          // the result; cleanup then clears busy so UI collapses after summary lands.
+          await waitForRunStreamCompletion(context.runId);
+          await applyAgentResult(result, activeRunTraceRef.current, context.runId);
+        },
+        handleFailure: (error, context) => {
+          handleAgentRunFailure({
+            error,
+            isSidechain: context?.sidechain ?? isSidechain,
+            runMessageId: streamMessageIdsRef.current.get(runId),
+            activeTrace: activeRunTraceRef.current,
+            setChatMessages,
+            notify,
+          });
+        },
+        cleanup: () => {
+          finishRunActivity(runId);
+          setActiveRunId((current) => (current === runId ? null : current));
+          setIsCancellingRun(false);
+          if (runLock.release(runId)) setBusy(false);
+        },
+      });
+    },
+    [
+      activeRunTraceRef,
+      activeSessionId,
+      agentGatewayPreferences,
+      agentStepLimits,
+      applyAgentResult,
+      applySessionState,
+      beginRunActivity,
+      busy,
+      chatMessages,
+      enabledModels,
+      finishRunActivity,
+      localStoragePath,
+      notify,
+      request,
+      selectedModel,
+      selectedSlideId,
+      setBusy,
+      setChatMessages,
+      setIsDraftChat,
+      setRequest,
+      streamMessageIdsRef,
+      waitForRunStreamCompletion,
+    ],
+  );
 
   useInboxPoller({
     activeSessionId,
     sessionLoaded,
     busy,
-    onInboxTurn: (prompt) => startAgent(
-      prompt,
-      undefined,
-      { userDisplayContent: false, sidechain: true },
-    ),
+    onInboxTurn: (prompt) =>
+      startAgent(prompt, undefined, { userDisplayContent: false, sidechain: true }),
     onError: (error) => {
       console.error("轮询队友收件箱失败:", error);
     },
@@ -314,9 +294,7 @@ export function useAgentRunController({
     if (!activeRunIdRef.current || isCancellingRun) return;
 
     setIsCancellingRun(true);
-    syncActivityTrace(
-      appendStep(activeRunTraceRef.current, "正在中断当前会话…", "running"),
-    );
+    syncActivityTrace(appendStep(activeRunTraceRef.current, "正在中断当前会话…", "running"));
 
     try {
       let cancelled = await window.desktopApi.cancelAgentRun(activeRunIdRef.current);
@@ -345,42 +323,46 @@ export function useAgentRunController({
     syncActivityTrace,
   ]);
 
-  const retryMessage = useCallback((messageId: string) => {
-    const index = chatMessages.findIndex((message) => message.id === messageId);
-    if (index === -1) return;
-    const priorUserMessage = chatMessages
-      .slice(0, index)
-      .reverse()
-      .find((message) => message.role === "user");
-    if (priorUserMessage) void startAgent(priorUserMessage.content);
-  }, [chatMessages, startAgent]);
+  const retryMessage = useCallback(
+    (messageId: string) => {
+      const index = chatMessages.findIndex((message) => message.id === messageId);
+      if (index === -1) return;
+      const priorUserMessage = chatMessages
+        .slice(0, index)
+        .reverse()
+        .find((message) => message.role === "user");
+      if (priorUserMessage) void startAgent(priorUserMessage.content);
+    },
+    [chatMessages, startAgent],
+  );
 
-  const suggestPrompt = useCallback((prompt: string) => {
-    setRequest(prompt);
-    void startAgent(prompt);
-  }, [setRequest, startAgent]);
+  const suggestPrompt = useCallback(
+    (prompt: string) => {
+      setRequest(prompt);
+      void startAgent(prompt);
+    },
+    [setRequest, startAgent],
+  );
 
-  const resolveToolApproval = useCallback(async (
-    approvalId: string,
-    approved: boolean,
-  ) => {
-    const runId = activeRunIdRef.current;
-    if (!runId) return;
-    try {
-      const resolved = await window.desktopApi.resolveToolApproval(runId, approvalId, approved);
-      if (!resolved) {
-        setDisplayCardStatus(`tool-approval:${approvalId}`, "dismissed");
-        notify("这项工具授权已失效");
+  const resolveToolApproval = useCallback(
+    async (approvalId: string, approved: boolean) => {
+      const runId = activeRunIdRef.current;
+      if (!runId) return;
+      try {
+        const resolved = await window.desktopApi.resolveToolApproval(runId, approvalId, approved);
+        if (!resolved) {
+          setDisplayCardStatus(`tool-approval:${approvalId}`, "dismissed");
+          notify("这项工具授权已失效");
+        }
+      } catch (error) {
+        notify(formatPublicErrorMessage(error, "工具授权提交失败，请重试。"));
       }
-    } catch (error) {
-      notify(formatPublicErrorMessage(error, "工具授权提交失败，请重试。"));
-    }
-  }, [activeRunIdRef, notify]);
+    },
+    [activeRunIdRef, notify],
+  );
 
   const streamingMessageId =
-    busy && activeRunId
-      ? streamMessageIdsRef.current.get(activeRunId) ?? null
-      : null;
+    busy && activeRunId ? (streamMessageIdsRef.current.get(activeRunId) ?? null) : null;
 
   return {
     activeRunId,

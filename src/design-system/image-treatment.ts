@@ -19,7 +19,14 @@ export function resolveImageTreatment(
   const treatment = requested ?? fallback;
   const explicitRadius = borderRadius ?? 0;
   if (treatment === "masked") {
-    return { treatment, borderRadius: Math.max(explicitRadius, 9999), borderWidth: 0, padding: 0, backgroundColor: "transparent", borderColor: "transparent" };
+    return {
+      treatment,
+      borderRadius: Math.max(explicitRadius, 9999),
+      borderWidth: 0,
+      padding: 0,
+      backgroundColor: "transparent",
+      borderColor: "transparent",
+    };
   }
   if (treatment === "framed" || treatment === "captioned") {
     return {
@@ -32,5 +39,12 @@ export function resolveImageTreatment(
       boxShadow: "0 8px 24px rgba(15, 23, 42, 0.12)",
     };
   }
-  return { treatment, borderRadius: explicitRadius, borderWidth: 0, padding: 0, backgroundColor: "transparent", borderColor: "transparent" };
+  return {
+    treatment,
+    borderRadius: explicitRadius,
+    borderWidth: 0,
+    padding: 0,
+    backgroundColor: "transparent",
+    borderColor: "transparent",
+  };
 }

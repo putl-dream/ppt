@@ -1,18 +1,7 @@
 import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  type Dispatch,
-  type MutableRefObject,
-  type SetStateAction,
-} from "react";
-import type { AgentStreamEvent } from "@shared/ipc";
-import { isTeammateProgressEvent } from "@shared/teammate-progress";
-import {
   type AgentActivityItem,
-  appendResponseChunk,
   appendReasoningChunk,
+  appendResponseChunk,
   appendStep,
   appendToolApprovalWaiting,
   appendToolStart,
@@ -27,12 +16,20 @@ import {
   upsertTaskListTrace,
 } from "@shared/agent-activity";
 import { formatAgentProgressMessage } from "@shared/agent-activity-display";
+import type { AgentRunPhase } from "@shared/agent-run-presentation";
+import { ingestDisplayEvent, setDisplayCardStatus } from "@shared/cards/display-card-managers";
+import type { AgentStreamEvent } from "@shared/ipc";
+import { isTeammateProgressEvent } from "@shared/teammate-progress";
 import {
-  ingestDisplayEvent,
-  setDisplayCardStatus,
-} from "../../cards/display-card-managers";
+  type Dispatch,
+  type MutableRefObject,
+  type SetStateAction,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import type { ChatMessage } from "../chatMessageRuntime";
-import type { AgentRunPhase } from "../../agentRunPresentation";
 
 interface UseAgentActivityStreamOptions {
   activeSessionIdRef: MutableRefObject<string>;
@@ -67,50 +64,55 @@ export function useAgentActivityStream({
   const completedStreamRunIdsRef = useRef(new Set<string>());
   const streamCompletionWaitersRef = useRef(new Map<string, () => void>());
 
-  const syncActivityTrace = useCallback((next: AgentActivityItem[]) => {
-    activeRunTraceRef.current = next;
-    setActivityTrace(next);
+  const syncActivityTrace = useCallback(
+    (next: AgentActivityItem[]) => {
+      activeRunTraceRef.current = next;
+      setActivityTrace(next);
 
-    const runId = activeRunIdRef.current;
-    if (!runId || next.length === 0) return;
-    const messageId = streamMessageIdsRef.current.get(runId);
-    if (!messageId) return;
+      const runId = activeRunIdRef.current;
+      if (!runId || next.length === 0) return;
+      const messageId = streamMessageIdsRef.current.get(runId);
+      if (!messageId) return;
 
-    setChatMessages((current) => {
-      if (!current.some((message) => message.id === messageId)) return current;
-      return current.map((message) =>
-        message.id === messageId
-          ? {
-              ...message,
-              activityTrace: next.length > 0 ? next : undefined,
-            }
-          : message,
+      setChatMessages((current) => {
+        if (!current.some((message) => message.id === messageId)) return current;
+        return current.map((message) =>
+          message.id === messageId
+            ? {
+                ...message,
+                activityTrace: next.length > 0 ? next : undefined,
+              }
+            : message,
+        );
+      });
+    },
+    [setChatMessages],
+  );
+
+  const syncRunTranscript = useCallback(
+    (nextTrace: AgentActivityItem[], nextContent: string) => {
+      activeRunTraceRef.current = nextTrace;
+      activeRunContentRef.current = nextContent;
+      setActivityTrace(nextTrace);
+
+      const runId = activeRunIdRef.current;
+      if (!runId) return;
+      const messageId = streamMessageIdsRef.current.get(runId);
+      if (!messageId) return;
+      setChatMessages((current) =>
+        current.map((message) =>
+          message.id === messageId
+            ? {
+                ...message,
+                content: nextContent,
+                activityTrace: nextTrace.length > 0 ? nextTrace : undefined,
+              }
+            : message,
+        ),
       );
-    });
-  }, [setChatMessages]);
-
-  const syncRunTranscript = useCallback((
-    nextTrace: AgentActivityItem[],
-    nextContent: string,
-  ) => {
-    activeRunTraceRef.current = nextTrace;
-    activeRunContentRef.current = nextContent;
-    setActivityTrace(nextTrace);
-
-    const runId = activeRunIdRef.current;
-    if (!runId) return;
-    const messageId = streamMessageIdsRef.current.get(runId);
-    if (!messageId) return;
-    setChatMessages((current) => current.map((message) =>
-      message.id === messageId
-        ? {
-            ...message,
-            content: nextContent,
-            activityTrace: nextTrace.length > 0 ? nextTrace : undefined,
-          }
-        : message
-    ));
-  }, [setChatMessages]);
+    },
+    [setChatMessages],
+  );
 
   useEffect(() => {
     const unsubscribe = window.desktopApi.onAgentStream((event: AgentStreamEvent) => {
@@ -142,22 +144,19 @@ export function useAgentActivityStream({
       if (isTeammateProgressEvent(event)) {
         if (event.sessionId && event.sessionId !== activeSessionIdRef.current) return;
         if (isCurrentRun) {
-          setAgentRunPhase(
-            event.type === "teammate-thinking-chunk" ? "thinking" : "working",
-          );
+          setAgentRunPhase(event.type === "teammate-thinking-chunk" ? "thinking" : "working");
           syncActivityTrace(applyTeammateProgressEvent(activeRunTraceRef.current, event));
         } else {
-          setChatMessages((current) => current.map((message) =>
-            message.role === "assistant" && message.runId === event.runId
-              ? {
-                  ...message,
-                  activityTrace: applyTeammateProgressEvent(
-                    message.activityTrace ?? [],
-                    event,
-                  ),
-                }
-              : message,
-          ));
+          setChatMessages((current) =>
+            current.map((message) =>
+              message.role === "assistant" && message.runId === event.runId
+                ? {
+                    ...message,
+                    activityTrace: applyTeammateProgressEvent(message.activityTrace ?? [], event),
+                  }
+                : message,
+            ),
+          );
         }
         return;
       }
@@ -194,11 +193,13 @@ export function useAgentActivityStream({
       const requestStatusStepId = requestStatusStepIdRef.current;
       if (requestStatusStepId) {
         requestStatusStepIdRef.current = null;
-        syncActivityTrace(activeRunTraceRef.current.map((item) =>
-          item.kind === "step" && item.id === requestStatusStepId
-            ? { ...item, status: "done" as const }
-            : item,
-        ));
+        syncActivityTrace(
+          activeRunTraceRef.current.map((item) =>
+            item.kind === "step" && item.id === requestStatusStepId
+              ? { ...item, status: "done" as const }
+              : item,
+          ),
+        );
       }
 
       if (event.type === "workflow-progress") {
@@ -219,21 +220,12 @@ export function useAgentActivityStream({
         if (event.status === "running") {
           setAgentRunPhase("tool");
           syncActivityTrace(
-            appendToolStart(
-              activeRunTraceRef.current,
-              event.toolCallId,
-              event.toolName,
-            ),
+            appendToolStart(activeRunTraceRef.current, event.toolCallId, event.toolName),
           );
         } else {
           setAgentRunPhase("working");
           syncActivityTrace(
-            finishTool(
-              activeRunTraceRef.current,
-              event.toolCallId,
-              event.toolName,
-              event.status,
-            ),
+            finishTool(activeRunTraceRef.current, event.toolCallId, event.toolName, event.status),
           );
         }
         return;
@@ -261,11 +253,7 @@ export function useAgentActivityStream({
       if (event.type === "tool-approval-resolved") {
         setAgentRunPhase("working");
         syncActivityTrace(
-          resolveToolApprovalItem(
-            activeRunTraceRef.current,
-            event.approvalId,
-            event.status,
-          ),
+          resolveToolApprovalItem(activeRunTraceRef.current, event.approvalId, event.status),
         );
         setDisplayCardStatus(
           `tool-approval:${event.approvalId}`,
@@ -289,11 +277,7 @@ export function useAgentActivityStream({
         const nextModelStep = event.modelStep ?? 0;
         setAgentRunPhase("thinking");
         syncActivityTrace(
-          appendReasoningChunk(
-            activeRunTraceRef.current,
-            event.chunk,
-            nextModelStep,
-          ),
+          appendReasoningChunk(activeRunTraceRef.current, event.chunk, nextModelStep),
         );
         return;
       }
@@ -310,9 +294,7 @@ export function useAgentActivityStream({
       }
 
       if (event.type === "text-commit") {
-        syncActivityTrace(
-          commitResponseAttempt(activeRunTraceRef.current, event.attemptId),
-        );
+        syncActivityTrace(commitResponseAttempt(activeRunTraceRef.current, event.attemptId));
         return;
       }
 
@@ -327,10 +309,7 @@ export function useAgentActivityStream({
           event.chunk.length,
           event.attemptId,
         );
-        syncRunTranscript(
-          nextTrace,
-          activeRunContentRef.current + event.chunk,
-        );
+        syncRunTranscript(nextTrace, activeRunContentRef.current + event.chunk);
       }
     });
     return () => {
@@ -339,41 +318,38 @@ export function useAgentActivityStream({
       streamCompletionWaitersRef.current.clear();
       completedStreamRunIdsRef.current.clear();
     };
-  }, [
-    activeSessionIdRef,
-    setChatMessages,
-    syncActivityTrace,
-    syncRunTranscript,
-  ]);
+  }, [activeSessionIdRef, setChatMessages, syncActivityTrace, syncRunTranscript]);
 
-  const beginRunActivity = useCallback((
-    runId: string,
-    messageId: string,
-    sidechain: boolean,
-  ) => {
-    syncActivityTrace([]);
-    setAgentRunPhase("requesting");
-    activeRunIdRef.current = runId;
-    activeRunTraceRef.current = [];
-    activeRunContentRef.current = "";
-    requestStatusStepIdRef.current = null;
-    streamMessageIdsRef.current.set(runId, messageId);
-    sidechainRunRef.current = sidechain ? runId : null;
-  }, [syncActivityTrace]);
+  const beginRunActivity = useCallback(
+    (runId: string, messageId: string, sidechain: boolean) => {
+      syncActivityTrace([]);
+      setAgentRunPhase("requesting");
+      activeRunIdRef.current = runId;
+      activeRunTraceRef.current = [];
+      activeRunContentRef.current = "";
+      requestStatusStepIdRef.current = null;
+      streamMessageIdsRef.current.set(runId, messageId);
+      sidechainRunRef.current = sidechain ? runId : null;
+    },
+    [syncActivityTrace],
+  );
 
-  const finishRunActivity = useCallback((runId: string) => {
-    streamMessageIdsRef.current.delete(runId);
-    completedStreamRunIdsRef.current.delete(runId);
-    streamCompletionWaitersRef.current.delete(runId);
-    if (activeRunIdRef.current !== runId) return;
-    if (sidechainRunRef.current === runId) sidechainRunRef.current = null;
-    activeRunIdRef.current = null;
-    setAgentRunPhase("idle");
-    syncActivityTrace([]);
-    requestStatusStepIdRef.current = null;
-    activeRunTraceRef.current = [];
-    activeRunContentRef.current = "";
-  }, [syncActivityTrace]);
+  const finishRunActivity = useCallback(
+    (runId: string) => {
+      streamMessageIdsRef.current.delete(runId);
+      completedStreamRunIdsRef.current.delete(runId);
+      streamCompletionWaitersRef.current.delete(runId);
+      if (activeRunIdRef.current !== runId) return;
+      if (sidechainRunRef.current === runId) sidechainRunRef.current = null;
+      activeRunIdRef.current = null;
+      setAgentRunPhase("idle");
+      syncActivityTrace([]);
+      requestStatusStepIdRef.current = null;
+      activeRunTraceRef.current = [];
+      activeRunContentRef.current = "";
+    },
+    [syncActivityTrace],
+  );
 
   const waitForRunStreamCompletion = useCallback((runId: string) => {
     if (completedStreamRunIdsRef.current.delete(runId)) return Promise.resolve();

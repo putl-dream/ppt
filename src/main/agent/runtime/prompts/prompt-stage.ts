@@ -14,14 +14,7 @@ import type { WorkspaceArtifacts } from "../presentation/workspace-artifacts";
  * | edit      | light-edit |
  * | export    | export |
  */
-export const PROMPT_STAGES = [
-  "discover",
-  "author",
-  "design",
-  "style",
-  "edit",
-  "export",
-] as const;
+export const PROMPT_STAGES = ["discover", "author", "design", "style", "edit", "export"] as const;
 
 export type PromptStage = (typeof PROMPT_STAGES)[number];
 
@@ -79,11 +72,11 @@ export function resolvePromptStage(input: PromptStageResolveInput): PromptStage 
   }
 
   if (
-    input.artifacts.pagePlan
-    || input.artifacts.designSpec
-    || input.artifacts.outline
-    || input.artifacts.brief
-    || input.artifacts.research
+    input.artifacts.pagePlan ||
+    input.artifacts.designSpec ||
+    input.artifacts.outline ||
+    input.artifacts.brief ||
+    input.artifacts.research
   ) {
     return "author";
   }

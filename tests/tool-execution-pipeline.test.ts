@@ -6,22 +6,14 @@ import type {
   AgentModelRequest,
 } from "../src/main/agent/gateway/types";
 import { AgentRuntime } from "../src/main/agent/runtime/agent-runtime";
-import {
-  clearHooks,
-  registerHook,
-} from "../src/main/agent/runtime/hooks/hook-registry";
-import type {
-  PostToolUseBlock,
-} from "../src/main/agent/runtime/hooks/hook-blocks";
+import type { PostToolUseBlock } from "../src/main/agent/runtime/hooks/hook-blocks";
+import { clearHooks, registerHook } from "../src/main/agent/runtime/hooks/hook-registry";
 import type { PreToolUseBlock } from "../src/main/agent/runtime/tools/permission-check";
 import { ToolExecutionEngine } from "../src/main/agent/runtime/tools/tool-execution-engine";
 import { executeExtraToolTool } from "../src/main/agent/tools/core/execute-extra-tool";
 import { searchExtraToolsTool } from "../src/main/agent/tools/core/search-extra-tools";
 import { WorkspaceFileError } from "../src/main/agent/tools/files/workspace-file-service";
-import type {
-  ToolContext,
-  ToolDefinition,
-} from "../src/main/agent/tools/tool-definition";
+import type { ToolContext, ToolDefinition } from "../src/main/agent/tools/tool-definition";
 import { ToolRegistry } from "../src/main/agent/tools/tool-registry";
 import { createStarterPresentation } from "../src/shared/presentation-fixtures";
 
@@ -113,10 +105,12 @@ describe("unified tool execution pipeline", () => {
     const dispatcherExecute = vi.spyOn(executeExtraToolTool, "execute");
     const gateway = gatewayFor([
       [toolCall("search", "SearchExtraTools", { query: target.name })],
-      [toolCall("execute", "ExecuteExtraTool", {
-        toolName: target.name,
-        toolArgs: { value: 7 },
-      })],
+      [
+        toolCall("execute", "ExecuteExtraTool", {
+          toolName: target.name,
+          toolArgs: { value: 7 },
+        }),
+      ],
       [{ type: "text", text: "done" }],
     ]);
 
@@ -135,10 +129,12 @@ describe("unified tool execution pipeline", () => {
     expect(dispatcherExecute).not.toHaveBeenCalled();
     expect(executions).toBe(1);
     expect(mappings).toBe(1);
-    expect(approvals).toEqual([{
-      toolName: target.name,
-      reason: `Tool ${target.name} declares medium risk.`,
-    }]);
+    expect(approvals).toEqual([
+      {
+        toolName: target.name,
+        reason: `Tool ${target.name} declares medium risk.`,
+      },
+    ]);
     expect(preHooks).toEqual([
       expect.objectContaining({ toolName: target.name, args: { value: 7 }, risk: "medium" }),
     ]);
@@ -151,9 +147,9 @@ describe("unified tool execution pipeline", () => {
         result: { normalized: "value=7" },
       }),
     ]);
-    const modelResult = gateway.requests[2]!.messages!
-      .flatMap((message) => message.content)
-      .find((block) => block.type === "tool_result" && block.toolUseId === "execute");
+    const modelResult = gateway.requests[2]!.messages!.flatMap((message) => message.content).find(
+      (block) => block.type === "tool_result" && block.toolUseId === "execute",
+    );
     expect(modelResult).toMatchObject({
       type: "tool_result",
       toolUseId: "execute",
@@ -185,10 +181,12 @@ describe("unified tool execution pipeline", () => {
     const approvals: string[] = [];
     const gateway = gatewayFor([
       [toolCall("search", "SearchExtraTools", { query: target.name })],
-      [toolCall("execute", "ExecuteExtraTool", {
-        toolName: target.name,
-        toolArgs: {},
-      })],
+      [
+        toolCall("execute", "ExecuteExtraTool", {
+          toolName: target.name,
+          toolArgs: {},
+        }),
+      ],
       [{ type: "text", text: "permission handled" }],
     ]);
 
@@ -206,9 +204,9 @@ describe("unified tool execution pipeline", () => {
     expect(result).toEqual({ type: "message", content: "permission handled" });
     expect(approvals).toEqual([target.name]);
     expect(executions).toBe(0);
-    const denied = gateway.requests[2]!.messages!
-      .flatMap((message) => message.content)
-      .find((block) => block.type === "tool_result" && block.toolUseId === "execute");
+    const denied = gateway.requests[2]!.messages!.flatMap((message) => message.content).find(
+      (block) => block.type === "tool_result" && block.toolUseId === "execute",
+    );
     expect(denied).toMatchObject({ type: "tool_result", isError: true });
   });
 
@@ -236,19 +234,24 @@ describe("unified tool execution pipeline", () => {
     registry.register(target);
     const context = createContext(registry);
 
-    const routed = await executeExtraToolTool.execute({
-      toolName: target.name,
-      toolArgs: {},
-    }, context);
+    const routed = await executeExtraToolTool.execute(
+      {
+        toolName: target.name,
+        toolArgs: {},
+      },
+      context,
+    );
     expect(routed).toMatchObject({ toolName: target.name, delegated: true });
     expect(executions).toBe(0);
 
     const gateway = gatewayFor([
       [toolCall("search", "SearchExtraTools", { query: target.name })],
-      [toolCall("execute", "ExecuteExtraTool", {
-        toolName: target.name,
-        toolArgs: {},
-      })],
+      [
+        toolCall("execute", "ExecuteExtraTool", {
+          toolName: target.name,
+          toolArgs: {},
+        }),
+      ],
       [{ type: "text", text: "invalid output handled" }],
     ]);
     await new AgentRuntime(registry, gateway).run({
@@ -260,9 +263,9 @@ describe("unified tool execution pipeline", () => {
 
     expect(executions).toBe(1);
     expect(mapResultToModelContent).not.toHaveBeenCalled();
-    const invalid = gateway.requests[2]!.messages!
-      .flatMap((message) => message.content)
-      .find((block) => block.type === "tool_result" && block.toolUseId === "execute");
+    const invalid = gateway.requests[2]!.messages!.flatMap((message) => message.content).find(
+      (block) => block.type === "tool_result" && block.toolUseId === "execute",
+    );
     expect(invalid).toMatchObject({ type: "tool_result", isError: true });
     expect(JSON.stringify(invalid)).toContain("returned invalid output");
   });

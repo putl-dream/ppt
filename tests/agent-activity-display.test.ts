@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { SUB_AGENT_TOOLS } from "../src/main/agent/subagent/workspace-tools";
+import { createDefaultToolRegistry } from "../src/main/agent/tools/tool-registry";
 import {
   formatAgentProgressMessage,
   formatAgentToolActivity,
@@ -7,22 +9,16 @@ import {
   getAgentToolDisplayCopy,
   hasAgentToolDisplayCopy,
 } from "../src/shared/agent-activity-display";
-import { createDefaultToolRegistry } from "../src/main/agent/tools/tool-registry";
-import { SUB_AGENT_TOOLS } from "../src/main/agent/subagent/workspace-tools";
 import {
+  type AgentTaskNode,
   formatTaskOwnerForDisplay,
   formatTaskPlanPosition,
-  type AgentTaskNode,
 } from "../src/shared/agent-task-list";
 
 describe("agent activity display", () => {
   it("covers every registered main and sub-agent tool", () => {
     const registry = createDefaultToolRegistry();
-    const tools = [
-      ...registry.getCoreTools(),
-      ...registry.getDeferredTools(),
-      ...SUB_AGENT_TOOLS,
-    ];
+    const tools = [...registry.getCoreTools(), ...registry.getDeferredTools(), ...SUB_AGENT_TOOLS];
 
     for (const tool of tools) {
       expect(hasAgentToolDisplayCopy(tool.name), tool.name).toBe(true);
@@ -51,34 +47,41 @@ describe("agent activity display", () => {
   });
 
   it("normalizes current runtime diagnostics", () => {
-    expect(formatAgentProgressMessage(
-      "L2 micro_compact: older tool results replaced with placeholders.",
-    )).toBe("已精简较早的运行记录");
-    expect(formatAgentProgressMessage(
-      "L4 compact_history skipped: compact_history circuit breaker open",
-    )).toBeNull();
-    expect(formatAgentProgressMessage(
-      "输出被截断，提升 max_tokens 至 65536 后重试。",
-    )).toBe("回复内容较长，正在继续生成…");
-    expect(formatAgentProgressMessage(
-      "后台任务 bg_0001 已启动：PreviewSvgPage: P01",
-    )).toBe("已开始后台处理：预览 SVG 页面");
+    expect(
+      formatAgentProgressMessage(
+        "L2 micro_compact: older tool results replaced with placeholders.",
+      ),
+    ).toBe("已精简较早的运行记录");
+    expect(
+      formatAgentProgressMessage(
+        "L4 compact_history skipped: compact_history circuit breaker open",
+      ),
+    ).toBeNull();
+    expect(formatAgentProgressMessage("输出被截断，提升 max_tokens 至 65536 后重试。")).toBe(
+      "回复内容较长，正在继续生成…",
+    );
+    expect(formatAgentProgressMessage("后台任务 bg_0001 已启动：PreviewSvgPage: P01")).toBe(
+      "已开始后台处理：预览 SVG 页面",
+    );
   });
 
   it("keeps approval impact readable without exposing raw JSON fallbacks", () => {
-    expect(formatAgentToolApprovalDetail("path: slides/cover.md"))
-      .toBe("位置：slides/cover.md");
-    expect(formatAgentToolApprovalDetail('{"internal_flag":true}'))
-      .toBe("此操作包含需要确认的高级设置");
+    expect(formatAgentToolApprovalDetail("path: slides/cover.md")).toBe("位置：slides/cover.md");
+    expect(formatAgentToolApprovalDetail('{"internal_flag":true}')).toBe(
+      "此操作包含需要确认的高级设置",
+    );
   });
 
   it("converts infrastructure errors into actionable public messages", () => {
-    expect(formatPublicErrorMessage(new Error("OPENAI_API_KEY missing")))
-      .toBe("模型服务尚未正确配置，请在设置中检查连接信息。");
-    expect(formatPublicErrorMessage(new Error("Zod validation failed"), "请重试。"))
-      .toBe("请重试。");
-    expect(formatPublicErrorMessage(new Error("Session not found"), "无法恢复会话。"))
-      .toBe("无法恢复会话。");
+    expect(formatPublicErrorMessage(new Error("OPENAI_API_KEY missing"))).toBe(
+      "模型服务尚未正确配置，请在设置中检查连接信息。",
+    );
+    expect(formatPublicErrorMessage(new Error("Zod validation failed"), "请重试。")).toBe(
+      "请重试。",
+    );
+    expect(formatPublicErrorMessage(new Error("Session not found"), "无法恢复会话。")).toBe(
+      "无法恢复会话。",
+    );
   });
 
   it("replaces internal task owner ids with collaboration roles", () => {

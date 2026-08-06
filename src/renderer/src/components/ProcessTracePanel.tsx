@@ -1,10 +1,11 @@
-import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { AgentActivityItem } from "@shared/agent-activity";
 import { summarizeProcessTrace } from "@shared/agent-activity";
+import { buildProcessTraceRows } from "@shared/process-trace-rows";
+import type React from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ChevronDownIcon, ChevronRightIcon } from "./Icons";
 import { ProcessTraceItem } from "./ProcessTraceItem";
-import { buildProcessTraceRows } from "./process-trace-rows";
-import { useChatScroll, type FoldToken } from "./useChatScroll";
+import { type FoldToken, useChatScroll } from "./useChatScroll";
 
 type UserPinned = "open" | "closed";
 
@@ -20,10 +21,7 @@ interface ProcessTracePanelProps {
   defaultExpandRows?: boolean;
 }
 
-function resolveAutoOpen(input: {
-  live: boolean;
-  shouldAutoCollapse: boolean;
-}): boolean {
+function resolveAutoOpen(input: { live: boolean; shouldAutoCollapse: boolean }): boolean {
   if (input.shouldAutoCollapse) return false;
   return input.live;
 }
@@ -37,9 +35,7 @@ export const ProcessTracePanel: React.FC<ProcessTracePanelProps> = ({
   defaultExpandRows = false,
 }) => {
   const chatScroll = useChatScroll();
-  const [userPinned, setUserPinned] = useState<UserPinned | null>(
-    defaultOpen ? "open" : null,
-  );
+  const [userPinned, setUserPinned] = useState<UserPinned | null>(defaultOpen ? "open" : null);
   const [open, setOpen] = useState(() => {
     if (defaultOpen) return true;
     return resolveAutoOpen({ live, shouldAutoCollapse });
@@ -104,12 +100,8 @@ export const ProcessTracePanel: React.FC<ProcessTracePanelProps> = ({
   if (rows.length === 0 && !live) return null;
 
   const processSummary = summarizeProcessTrace(items, { live });
-  const completedMeta = !live && elapsedSeconds > 0
-    ? `已工作 ${elapsedSeconds} 秒`
-    : null;
-  const titleAttribute = completedMeta
-    ? `${completedMeta} · ${processSummary}`
-    : processSummary;
+  const completedMeta = !live && elapsedSeconds > 0 ? `已工作 ${elapsedSeconds} 秒` : null;
+  const titleAttribute = completedMeta ? `${completedMeta} · ${processSummary}` : processSummary;
 
   const handleHeaderClick = () => {
     const nextOpen = !open;
@@ -132,7 +124,9 @@ export const ProcessTracePanel: React.FC<ProcessTracePanelProps> = ({
           {completedMeta ? (
             <>
               <span className="process-trace-panel-meta">{completedMeta}</span>
-              <span className="process-trace-panel-separator" aria-hidden="true">·</span>
+              <span className="process-trace-panel-separator" aria-hidden="true">
+                ·
+              </span>
               <span className="process-trace-panel-summary">{processSummary}</span>
             </>
           ) : (
@@ -158,9 +152,9 @@ export const ProcessTracePanel: React.FC<ProcessTracePanelProps> = ({
               <ProcessTraceItem
                 row={row}
                 defaultExpanded={
-                  defaultExpandRows
-                  || Boolean(row.streaming)
-                  || Boolean(row.active && row.kind !== "thought")
+                  defaultExpandRows ||
+                  Boolean(row.streaming) ||
+                  Boolean(row.active && row.kind !== "thought")
                 }
               />
             </div>

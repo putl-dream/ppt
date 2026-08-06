@@ -5,6 +5,3 @@ declare global {
     desktopApi: DesktopApi;
   }
 }
-
-export {};
-

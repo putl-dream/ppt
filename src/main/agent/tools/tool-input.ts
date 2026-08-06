@@ -1,4 +1,4 @@
-import { z } from "zod";
+import type { z } from "zod";
 import type { ToolDefinition } from "./tool-definition";
 import { toToolInputSchema } from "./tool-schema";
 
@@ -27,9 +27,7 @@ function schemaCandidates(schema: Record<string, unknown>): Record<string, unkno
   return combined.length > 0 ? combined : [schema];
 }
 
-function expectedContainerType(
-  schema: Record<string, unknown>,
-): "object" | "array" | undefined {
+function expectedContainerType(schema: Record<string, unknown>): "object" | "array" | undefined {
   const types = new Set<string>();
   for (const candidate of schemaCandidates(schema)) {
     if (typeof candidate.type === "string") types.add(candidate.type);
@@ -39,33 +37,31 @@ function expectedContainerType(
   return type === "object" || type === "array" ? type : undefined;
 }
 
-function selectCandidate(
-  schema: Record<string, unknown>,
-  value: unknown,
-): Record<string, unknown> {
+function selectCandidate(schema: Record<string, unknown>, value: unknown): Record<string, unknown> {
   const candidates = schemaCandidates(schema);
   if (candidates.length === 1) return candidates[0]!;
 
   if (isRecord(value)) {
     const discriminatorMatch = candidates.find((candidate) => {
       if (!isRecord(candidate.properties)) return false;
-      return Object.entries(candidate.properties).some(([key, property]) =>
-        isRecord(property) && "const" in property && property.const === value[key]);
+      return Object.entries(candidate.properties).some(
+        ([key, property]) =>
+          isRecord(property) && "const" in property && property.const === value[key],
+      );
     });
     if (discriminatorMatch) return discriminatorMatch;
   }
 
-  return candidates.find((candidate) => {
-    if (candidate.type === "object") return isRecord(value);
-    if (candidate.type === "array") return Array.isArray(value);
-    return false;
-  }) ?? schema;
+  return (
+    candidates.find((candidate) => {
+      if (candidate.type === "object") return isRecord(value);
+      if (candidate.type === "array") return Array.isArray(value);
+      return false;
+    }) ?? schema
+  );
 }
 
-function decodeContainerString(
-  value: unknown,
-  expected: "object" | "array",
-): unknown {
+function decodeContainerString(value: unknown, expected: "object" | "array"): unknown {
   if (typeof value !== "string" || value.length > MAX_JSON_STRING_LENGTH) return value;
   const trimmed = value.trim();
   if (expected === "object" && !trimmed.startsWith("{")) return value;
@@ -140,13 +136,7 @@ export function parseToolInput<TSchema extends z.ZodObject<any>>(
   input: unknown,
 ): ToolInputParseResult<TSchema> {
   const repairs: ToolInputRepair[] = [];
-  const repaired = repairValue(
-    input,
-    toToolInputSchema(schema),
-    "",
-    0,
-    repairs,
-  );
+  const repaired = repairValue(input, toToolInputSchema(schema), "", 0, repairs);
   const parsed = schema.safeParse(repaired);
   return parsed.success
     ? { success: true, data: parsed.data, repairs }

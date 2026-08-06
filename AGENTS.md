@@ -37,6 +37,8 @@ decisions here. Read this file before making any changes.
 npm.cmd run dev                      # start dev environment
 npm.cmd test                         # unit tests (excludes *.integration.test.ts)
 npm.cmd run test:integration:agent   # real-gateway integration tests; requires OPENAI_API_KEY / ANTHROPIC_API_KEY
+npm.cmd run lint                     # Biome lint + format check
+npm.cmd run lint:fix                # Biome autofix (local only)
 npm.cmd run typecheck                # tsc --noEmit for both node and web tsconfigs
 npm.cmd run build                    # typecheck + electron-vite build
 ```

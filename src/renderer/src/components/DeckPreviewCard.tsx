@@ -1,6 +1,6 @@
-import React from "react";
-import type { Presentation } from "@shared/presentation";
 import { utf8ToBase64 } from "@shared/base64";
+import type { Presentation } from "@shared/presentation";
+import type React from "react";
 import { DownloadIcon, OpenPreviewIcon } from "./Icons";
 
 interface DeckPreviewCardProps {
@@ -26,8 +26,7 @@ export const DeckPreviewCard: React.FC<DeckPreviewCardProps> = ({
         <span className="inline-artifact-badge">演示文稿</span>
         <span className="inline-artifact-title">{presentation.title || "演示文稿"}</span>
         <span className="deck-preview-count">
-          {presentation.slides.length} 页
-          {resolved === "confirmed" && " · 已导出"}
+          {presentation.slides.length} 页{resolved === "confirmed" && " · 已导出"}
         </span>
       </div>
 
@@ -67,12 +66,7 @@ export const DeckPreviewCard: React.FC<DeckPreviewCardProps> = ({
           </button>
         )}
         {onExport && (
-          <button
-            type="button"
-            className="btn-apply"
-            disabled={isExporting}
-            onClick={onExport}
-          >
+          <button type="button" className="btn-apply" disabled={isExporting} onClick={onExport}>
             <DownloadIcon size={13} />
             <span>{isExporting ? "导出中…" : "导出 PPT"}</span>
           </button>

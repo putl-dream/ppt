@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import type { ProjectArtifact } from "../src/shared/session";
 import {
   confirmProjectFileNavigation,
   formatProjectFileSize,
@@ -8,6 +7,7 @@ import {
   projectFileRequiresReload,
   reconcileProjectFileSave,
 } from "../src/renderer/src/app/project/projectFilesState";
+import type { ProjectArtifact } from "../src/shared/session";
 
 const ARTIFACTS: ProjectArtifact[] = [
   {
@@ -33,13 +33,7 @@ const ARTIFACTS: ProjectArtifact[] = [
 describe("project file presentation state", () => {
   it("groups flat paths under file and directory artifacts while preserving empty groups", () => {
     const groups = groupProjectFiles(
-      [
-        "./deck/deck.json",
-        "brief.md",
-        "deck/assets/chart.svg",
-        "notes.txt",
-        "deck/deck.json",
-      ],
+      ["./deck/deck.json", "brief.md", "deck/assets/chart.svg", "notes.txt", "deck/deck.json"],
       ARTIFACTS,
     );
 
@@ -110,9 +104,9 @@ describe("project file presentation state", () => {
     expect(withNewTyping.draft).toBe("saved draft plus new typing");
     expect(withNewTyping.dirty).toBe(true);
 
-    expect(
-      reconcileProjectFileSave(previous, result, "saved draft", "saved draft").dirty,
-    ).toBe(false);
+    expect(reconcileProjectFileSave(previous, result, "saved draft", "saved draft").dirty).toBe(
+      false,
+    );
   });
 
   it("asks before abandoning a dirty project-file draft", () => {

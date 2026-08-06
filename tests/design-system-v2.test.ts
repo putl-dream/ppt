@@ -2,33 +2,37 @@ import { describe, expect, it } from "vitest";
 
 import {
   ARGUMENT_MODES,
+  brandProfileV2Schema,
   DEFAULT_BRAND_PROFILE,
   DEFAULT_DESIGN_SYSTEM,
   DESIGN_PRESETS,
-  READING_MODES,
-  VISUAL_STYLES,
-  VISUAL_STYLE_CATALOG,
-  brandProfileV2Schema,
   designSystemV2Schema,
   getDesignPreset,
   queryDesignPresets,
+  READING_MODES,
   resolveBrandProfileDesignSystem,
   resolveSlideStyle,
   searchVisualStyles,
   selectDesignPreset,
+  VISUAL_STYLE_CATALOG,
+  VISUAL_STYLES,
 } from "../src/design-system";
 
 describe("DesignSystem v2", () => {
   it("accepts only the strict version-2 source contract", () => {
     expect(designSystemV2Schema.parse(DEFAULT_DESIGN_SYSTEM)).toEqual(DEFAULT_DESIGN_SYSTEM);
-    expect(() => designSystemV2Schema.parse({
-      version: 1,
-      tokens: {},
-    })).toThrow();
-    expect(() => designSystemV2Schema.parse({
-      ...DEFAULT_DESIGN_SYSTEM,
-      tokens: {},
-    })).toThrow();
+    expect(() =>
+      designSystemV2Schema.parse({
+        version: 1,
+        tokens: {},
+      }),
+    ).toThrow();
+    expect(() =>
+      designSystemV2Schema.parse({
+        ...DEFAULT_DESIGN_SYSTEM,
+        tokens: {},
+      }),
+    ).toThrow();
   });
 
   it("contains all argument, reading, and visual catalog axes", () => {
@@ -123,20 +127,23 @@ describe("DesignSystem v2", () => {
       colorScheme: "business-blue",
     });
     const warm = resolveSlideStyle({ ...base, colorScheme: "warm-paper" }, {});
-    const custom = resolveSlideStyle({
-      ...base,
-      colors: {
-        background: "#112233",
-        secondaryBg: "#223344",
-        primary: "#fefefe",
-        accent: "#ff3366",
-        secondaryAccent: "#ff99aa",
-        bodyText: "#eeeeee",
-        surface: "#1a2b3c",
-        grid: "#445566",
-        scrim: "#000000",
+    const custom = resolveSlideStyle(
+      {
+        ...base,
+        colors: {
+          background: "#112233",
+          secondaryBg: "#223344",
+          primary: "#fefefe",
+          accent: "#ff3366",
+          secondaryAccent: "#ff99aa",
+          bodyText: "#eeeeee",
+          surface: "#1a2b3c",
+          grid: "#445566",
+          scrim: "#000000",
+        },
       },
-    }, {});
+      {},
+    );
     expect({
       language: warm.shape.language,
       radius: warm.shape.radius,

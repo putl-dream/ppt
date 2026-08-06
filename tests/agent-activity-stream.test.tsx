@@ -1,19 +1,18 @@
 // @vitest-environment jsdom
 
-import React, { useRef, useState } from "react";
-import { act } from "react";
-import { cleanup, render } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { AgentStreamEvent } from "../src/shared/ipc";
-import {
-  useAgentActivityStream,
-  type AgentActivityStreamController,
-} from "../src/renderer/src/app/agent/useAgentActivityStream";
-import type { ChatMessage } from "../src/renderer/src/app/chatMessageRuntime";
 import {
   clearAllDisplayCardManagers,
   usePermissionCardManager,
-} from "../src/renderer/src/cards/display-card-managers";
+} from "@shared/cards/display-card-managers";
+import { cleanup, render } from "@testing-library/react";
+import React, { act, useRef, useState } from "react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  type AgentActivityStreamController,
+  useAgentActivityStream,
+} from "../src/renderer/src/app/agent/useAgentActivityStream";
+import type { ChatMessage } from "../src/renderer/src/app/chatMessageRuntime";
+import type { AgentStreamEvent } from "../src/shared/ipc";
 
 let emit: (event: AgentStreamEvent) => void;
 let controller: AgentActivityStreamController;
@@ -21,13 +20,15 @@ let messages: ChatMessage[];
 
 function Harness() {
   const activeSessionIdRef = useRef("session-1");
-  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([{
-    id: "message-1",
-    role: "assistant",
-    content: "",
-    runId: "run-1",
-    runStatus: "running",
-  }]);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
+    {
+      id: "message-1",
+      role: "assistant",
+      content: "",
+      runId: "run-1",
+      runStatus: "running",
+    },
+  ]);
   controller = useAgentActivityStream({
     activeSessionIdRef,
     setChatMessages,
@@ -57,28 +58,32 @@ describe("agent activity stream projection", () => {
     act(() => controller.beginRunActivity("run-1", "message-1", false));
     expect(controller.agentRunPhase).toBe("requesting");
 
-    act(() => emit({
-      runId: "run-1",
-      type: "thinking-chunk",
-      chunk: "检查页面结构",
-      modelStep: 0,
-    }));
+    act(() =>
+      emit({
+        runId: "run-1",
+        type: "thinking-chunk",
+        chunk: "检查页面结构",
+        modelStep: 0,
+      }),
+    );
     expect(controller.agentRunPhase).toBe("thinking");
 
-    act(() => emit({
-      runId: "run-1",
-      type: "text-chunk",
-      attemptId: "attempt-intro",
-      chunk: "我先检查。",
-    }));
-    act(() => emit({
-      runId: "run-1",
-      type: "text-commit",
-      attemptId: "attempt-intro",
-    }));
-    const firstResponse = controller.activityTrace.find(
-      (item) => item.kind === "response",
+    act(() =>
+      emit({
+        runId: "run-1",
+        type: "text-chunk",
+        attemptId: "attempt-intro",
+        chunk: "我先检查。",
+      }),
     );
+    act(() =>
+      emit({
+        runId: "run-1",
+        type: "text-commit",
+        attemptId: "attempt-intro",
+      }),
+    );
+    const firstResponse = controller.activityTrace.find((item) => item.kind === "response");
     expect(firstResponse).toMatchObject({
       kind: "response",
       start: 0,
@@ -86,71 +91,77 @@ describe("agent activity stream projection", () => {
       streaming: false,
     });
 
-    act(() => emit({
-      runId: "run-1",
-      type: "tool-state",
-      toolCallId: "call-a",
-      toolName: "ReadPresentationSnapshot",
-      status: "running",
-      message: "读取中",
-    }));
-    const runningTool = controller.activityTrace.find(
-      (item) => item.kind === "tool",
+    act(() =>
+      emit({
+        runId: "run-1",
+        type: "tool-state",
+        toolCallId: "call-a",
+        toolName: "ReadPresentationSnapshot",
+        status: "running",
+        message: "读取中",
+      }),
     );
-    act(() => emit({
-      runId: "run-1",
-      type: "tool-state",
-      toolCallId: "call-a",
-      toolName: "ReadPresentationSnapshot",
-      status: "completed",
-      message: "读取完成",
-    }));
+    const runningTool = controller.activityTrace.find((item) => item.kind === "tool");
+    act(() =>
+      emit({
+        runId: "run-1",
+        type: "tool-state",
+        toolCallId: "call-a",
+        toolName: "ReadPresentationSnapshot",
+        status: "completed",
+        message: "读取完成",
+      }),
+    );
 
-    const completedTool = controller.activityTrace.find(
-      (item) => item.kind === "tool",
-    );
+    const completedTool = controller.activityTrace.find((item) => item.kind === "tool");
     expect(completedTool).toMatchObject({
       id: runningTool?.id,
       toolCallId: "call-a",
       status: "completed",
     });
 
-    act(() => emit({
-      runId: "run-1",
-      type: "text-chunk",
-      attemptId: "attempt-bad",
-      chunk: "错误草稿",
-    }));
+    act(() =>
+      emit({
+        runId: "run-1",
+        type: "text-chunk",
+        attemptId: "attempt-bad",
+        chunk: "错误草稿",
+      }),
+    );
     expect(messages[0]?.content).toBe("我先检查。错误草稿");
     expect(controller.agentRunPhase).toBe("responding");
 
-    act(() => emit({
-      runId: "run-1",
-      type: "text-reset",
-      attemptId: "attempt-bad",
-    }));
+    act(() =>
+      emit({
+        runId: "run-1",
+        type: "text-reset",
+        attemptId: "attempt-bad",
+      }),
+    );
     expect(messages[0]?.content).toBe("我先检查。");
     expect(controller.activityTrace.filter((item) => item.kind === "response")).toEqual([
       firstResponse,
     ]);
     expect(controller.agentRunPhase).toBe("requesting");
 
-    act(() => emit({
-      runId: "run-1",
-      type: "text-chunk",
-      attemptId: "attempt-good",
-      chunk: "最终回复",
-    }));
-    act(() => emit({
-      runId: "run-1",
-      type: "text-commit",
-      attemptId: "attempt-good",
-    }));
+    act(() =>
+      emit({
+        runId: "run-1",
+        type: "text-chunk",
+        attemptId: "attempt-good",
+        chunk: "最终回复",
+      }),
+    );
+    act(() =>
+      emit({
+        runId: "run-1",
+        type: "text-commit",
+        attemptId: "attempt-good",
+      }),
+    );
     expect(messages[0]?.content).toBe("我先检查。最终回复");
     expect(
-      controller.activityTrace
-        .filter((item) => item.kind !== "reasoning")
-        .map((item) => item.kind),
+      controller.activityTrace.filter((item) => item.kind !== "reasoning").map((item) => item.kind),
     ).toEqual(["response", "tool", "response"]);
     expect(controller.activityTrace.filter((item) => item.kind === "response")).toMatchObject([
       {
@@ -176,11 +187,13 @@ describe("agent activity stream projection", () => {
     render(<Harness />);
     act(() => controller.beginRunActivity("run-1", "message-1", false));
 
-    act(() => emit({
-      runId: "run-stale",
-      type: "text-chunk",
-      chunk: "不应出现",
-    }));
+    act(() =>
+      emit({
+        runId: "run-stale",
+        type: "text-chunk",
+        chunk: "不应出现",
+      }),
+    );
     expect(messages[0]?.content).toBe("");
 
     const started: AgentStreamEvent = {
@@ -203,9 +216,7 @@ describe("agent activity stream projection", () => {
       emit(completed);
     });
 
-    expect(
-      controller.activityTrace.filter((item) => item.kind === "tool"),
-    ).toMatchObject([
+    expect(controller.activityTrace.filter((item) => item.kind === "tool")).toMatchObject([
       { toolCallId: "call-1", status: "completed" },
     ]);
   });
@@ -260,14 +271,16 @@ describe("agent activity stream projection", () => {
     ]);
     expect(usePermissionCardManager.getState().cards[0]?.status).toBe("active");
 
-    act(() => emit({
-      runId: "run-1",
-      type: "tool-approval-resolved",
-      message: "工具授权已拒绝",
-      approvalId: "approval-1",
-      toolName: "ExportPptx",
-      status: "denied",
-    }));
+    act(() =>
+      emit({
+        runId: "run-1",
+        type: "tool-approval-resolved",
+        message: "工具授权已拒绝",
+        approvalId: "approval-1",
+        toolName: "ExportPptx",
+        status: "denied",
+      }),
+    );
 
     expect(controller.agentRunPhase).toBe("working");
     expect(controller.activityTrace[0]).toMatchObject({ status: "denied" });

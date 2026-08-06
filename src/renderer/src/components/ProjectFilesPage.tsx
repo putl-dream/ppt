@@ -1,16 +1,10 @@
-import { useEffect, useMemo, type KeyboardEvent } from "react";
 import type { PptJobProjection } from "@shared/presentation-lifecycle";
+import { type KeyboardEvent, useEffect, useMemo } from "react";
+import { formatProjectFileSize, groupProjectFiles } from "../app/project/projectFilesState";
+import { type ProjectFilesController, useProjectFiles } from "../app/project/useProjectFiles";
 import { CheckIcon, FileIcon, FolderIcon, RefreshIcon } from "./Icons";
-import {
-  formatProjectFileSize,
-  groupProjectFiles,
-} from "../app/project/projectFilesState";
-import {
-  useProjectFiles,
-  type ProjectFilesController,
-} from "../app/project/useProjectFiles";
-import { useProjectStore } from "./project-store";
 import { PptJobStatusBar } from "./PptJobStatusBar";
+import { useProjectStore } from "./project-store";
 
 interface ProjectFilesPageProps {
   sessionId?: string;
@@ -38,10 +32,7 @@ function normalizeProjectPath(path: string): string {
   return path.replaceAll("\\", "/").replace(/^\.?\//, "");
 }
 
-function getLifecycleArtifactIds(
-  path: string,
-  pptJob: PptJobProjection,
-): string[] {
+function getLifecycleArtifactIds(path: string, pptJob: PptJobProjection): string[] {
   const normalizedPath = normalizeProjectPath(path);
   if (normalizedPath === "design/design-spec.json") return ["design-spec"];
   if (normalizedPath === "design/template-policy.json") return [];
@@ -61,8 +52,8 @@ function getLifecycleArtifactIds(
     return pptJob.committedArtifacts
       .filter(
         (artifact) =>
-          artifact.kind === "export_artifact"
-          && artifact.revisionId === pptJob.exportArtifactRevisionId,
+          artifact.kind === "export_artifact" &&
+          artifact.revisionId === pptJob.exportArtifactRevisionId,
       )
       .map((artifact) => artifact.artifactId);
   }
@@ -76,16 +67,10 @@ function lifecycleArtifactBadge(
   if (!pptJob) return null;
   const artifactIds = getLifecycleArtifactIds(path, pptJob);
   if (artifactIds.length === 0) return null;
-  if (
-    pptJob.staleArtifacts.some(
-      (artifact) => artifactIds.includes(artifact.artifactId),
-    )
-  ) {
+  if (pptJob.staleArtifacts.some((artifact) => artifactIds.includes(artifact.artifactId))) {
     return "stale";
   }
-  return pptJob.committedArtifacts.some(
-    (artifact) => artifactIds.includes(artifact.artifactId),
-  )
+  return pptJob.committedArtifacts.some((artifact) => artifactIds.includes(artifact.artifactId))
     ? "committed"
     : null;
 }
@@ -105,10 +90,7 @@ export function ProjectFilesPage({
     onDirtyChange?.(controller.dirty);
   }, [controller.dirty, onDirtyChange]);
 
-  useEffect(
-    () => () => onDirtyChange?.(false),
-    [onDirtyChange],
-  );
+  useEffect(() => () => onDirtyChange?.(false), [onDirtyChange]);
 
   useEffect(() => {
     if (!controller.dirty) return;
@@ -146,11 +128,8 @@ export function ProjectFilesPageContent({
   );
   const currentFile = controller.openedFile;
   const canEdit = Boolean(currentFile?.editable) && !controller.binary;
-  const canSave = canEdit
-    && controller.dirty
-    && !busy
-    && !controller.isSaving
-    && !controller.requiresReload;
+  const canSave =
+    canEdit && controller.dirty && !busy && !controller.isSaving && !controller.requiresReload;
   const readOnlyReason = controller.binary
     ? "二进制文件不支持文本编辑。"
     : currentFile && !currentFile.editable
@@ -189,9 +168,7 @@ export function ProjectFilesPageContent({
         </button>
       </header>
 
-      {hasSession && pptJob ? (
-        <PptJobStatusBar pptJob={pptJob} />
-      ) : null}
+      {hasSession && pptJob ? <PptJobStatusBar pptJob={pptJob} /> : null}
 
       {!hasSession ? (
         <div className="project-files-empty" role="status">
@@ -233,9 +210,7 @@ export function ProjectFilesPageContent({
                               <small>{path}</small>
                             </span>
                             {lifecycleBadge ? (
-                              <em
-                                className={`project-files-artifact-badge is-${lifecycleBadge}`}
-                              >
+                              <em className={`project-files-artifact-badge is-${lifecycleBadge}`}>
                                 {lifecycleBadge === "stale" ? "待更新" : "已提交"}
                               </em>
                             ) : null}
@@ -247,9 +222,7 @@ export function ProjectFilesPageContent({
                       })}
                     </div>
                   ) : (
-                    <div className="project-files-group-empty">
-                      {group.rootPath || "暂无文件"}
-                    </div>
+                    <div className="project-files-group-empty">{group.rootPath || "暂无文件"}</div>
                   )}
                 </details>
               ))}
@@ -308,7 +281,9 @@ export function ProjectFilesPageContent({
                   <div>
                     <h2>
                       {fileName(currentFile.path)}
-                      {controller.dirty ? <span className="project-files-dirty">未保存</span> : null}
+                      {controller.dirty ? (
+                        <span className="project-files-dirty">未保存</span>
+                      ) : null}
                     </h2>
                     <p title={currentFile.path}>{currentFile.path}</p>
                   </div>
@@ -322,7 +297,9 @@ export function ProjectFilesPageContent({
                 </div>
 
                 {readOnlyReason ? (
-                  <div className="project-files-notice" role="status">{readOnlyReason}</div>
+                  <div className="project-files-notice" role="status">
+                    {readOnlyReason}
+                  </div>
                 ) : null}
 
                 <div className="project-files-toolbar" role="toolbar" aria-label="文件编辑操作">

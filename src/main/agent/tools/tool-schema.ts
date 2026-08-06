@@ -1,6 +1,6 @@
 import { z } from "zod";
-import type { ToolDefinition } from "./tool-definition";
 import type { AgentToolSchema } from "../gateway";
+import type { ToolDefinition } from "./tool-definition";
 
 /**
  * 将工具的 zod inputSchema 转为 provider 可直接使用的 JSON Schema。
@@ -10,9 +10,7 @@ import type { AgentToolSchema } from "../gateway";
  * - 剥离 `$schema` 顶层键：Anthropic / OpenAI 的 tool schema 不需要它。
  * - 保证顶层为 `type: "object"`，符合两个 provider 对 tool 输入的要求。
  */
-export function toToolInputSchema(
-  schema: z.ZodObject<any>,
-): Record<string, unknown> {
+export function toToolInputSchema(schema: z.ZodObject<any>): Record<string, unknown> {
   const json = z.toJSONSchema(schema, {
     unrepresentable: "any",
     io: "input",
@@ -41,8 +39,6 @@ export function toToolSchema(definition: ToolDefinition<any, any>): AgentToolSch
 }
 
 /** 批量转换，供 runtime 每步构造 tools 清单。 */
-export function toToolSchemas(
-  definitions: ToolDefinition<any, any>[],
-): AgentToolSchema[] {
+export function toToolSchemas(definitions: ToolDefinition<any, any>[]): AgentToolSchema[] {
   return definitions.map(toToolSchema);
 }

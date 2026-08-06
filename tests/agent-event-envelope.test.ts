@@ -18,13 +18,15 @@ describe("agent event envelope", () => {
       status: "running",
     });
 
-    expect(received).toEqual([{
-      type: "tool-state",
-      message: "正在读取演示文稿",
-      toolCallId: "call-1",
-      toolName: "ReadPresentationSnapshot",
-      status: "running",
-    }]);
+    expect(received).toEqual([
+      {
+        type: "tool-state",
+        message: "正在读取演示文稿",
+        toolCallId: "call-1",
+        toolName: "ReadPresentationSnapshot",
+        status: "running",
+      },
+    ]);
   });
 
   it("isolates renderer failures and creates a namespaced run envelope", () => {
@@ -32,15 +34,18 @@ describe("agent event envelope", () => {
       threadId: "thread-1",
       runId: "run-1",
       appendTranscript: () => undefined,
-      onProgress: () => { throw new Error("renderer unavailable"); },
+      onProgress: () => {
+        throw new Error("renderer unavailable");
+      },
     });
 
-    expect(() => events.renderer({ type: "workflow-progress", message: "working" }))
-      .not.toThrow();
-    expect(events.envelope("tool", "tool_state", {
-      toolCallId: "call-1",
-      status: "completed",
-    })).toMatchObject({
+    expect(() => events.renderer({ type: "workflow-progress", message: "working" })).not.toThrow();
+    expect(
+      events.envelope("tool", "tool_state", {
+        toolCallId: "call-1",
+        status: "completed",
+      }),
+    ).toMatchObject({
       threadId: "thread-1",
       runId: "run-1",
       namespace: "tool",

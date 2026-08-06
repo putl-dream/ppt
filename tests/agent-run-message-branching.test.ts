@@ -33,11 +33,13 @@ function prepare(overrides: Partial<Parameters<typeof prepareAgentRunMessages>[0
 
 describe("agent run message branching", () => {
   it("builds the IPC request without layoutChoice", () => {
-    expect(buildAgentRunRequest({
-      prompt: "Create a deck",
-      sessionId: "session-1",
-      currentSlideId: "slide-2",
-    })).toEqual({
+    expect(
+      buildAgentRunRequest({
+        prompt: "Create a deck",
+        sessionId: "session-1",
+        currentSlideId: "slide-2",
+      }),
+    ).toEqual({
       prompt: "Create a deck",
       sessionId: "session-1",
       editorContext: { currentSlideId: "slide-2", selectedElementIds: [] },
@@ -66,10 +68,6 @@ describe("agent run message branching", () => {
       { id: "new-user-id", role: "user", content: "edited" },
     ]);
     expect(result.runMessages).toEqual([...result.forkedMessages!, streamMessage]);
-    expect([...result.retainedMessageIds!]).toEqual([
-      "user-1",
-      "assistant-1",
-      "new-user-id",
-    ]);
+    expect([...result.retainedMessageIds!]).toEqual(["user-1", "assistant-1", "new-user-id"]);
   });
 });

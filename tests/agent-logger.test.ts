@@ -1,7 +1,7 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   agentLogger,
   clearLogFiles,
@@ -151,8 +151,9 @@ describe("createModuleLogger", () => {
       }),
     ]);
 
-    const entries = info.mock.calls.map(([line]) =>
-      JSON.parse(String(line).slice(String(line).indexOf("{"))) as Record<string, unknown>
+    const entries = info.mock.calls.map(
+      ([line]) =>
+        JSON.parse(String(line).slice(String(line).indexOf("{"))) as Record<string, unknown>,
     );
     expect(entries.find((entry) => entry.event === "context.a")).toMatchObject({
       runId: "run-a",
@@ -223,7 +224,9 @@ describe("sensitive data redaction", () => {
       message: "request failed with Bearer abcdefghijklmnopqrstuvwxyz and sk-1234567890abcdefghij",
     });
 
-    const parsed = JSON.parse(String(info.mock.calls[0][0]).slice(String(info.mock.calls[0][0]).indexOf("{")));
+    const parsed = JSON.parse(
+      String(info.mock.calls[0][0]).slice(String(info.mock.calls[0][0]).indexOf("{")),
+    );
     expect(parsed.message).toContain("Bearer [REDACTED]");
     expect(parsed.message).not.toContain("sk-1234567890abcdefghij");
   });
@@ -249,8 +252,9 @@ describe("recent log diagnostics", () => {
 
     logger.warn("diagnostics.unique-warning", { error: new Error("network unavailable") });
 
-    const entry = getRecentLogEntries(50, "warn")
-      .find((candidate) => candidate.event === "diagnostics.unique-warning");
+    const entry = getRecentLogEntries(50, "warn").find(
+      (candidate) => candidate.event === "diagnostics.unique-warning",
+    );
     expect(entry).toMatchObject({ level: "warn", module: "diagnostics-test" });
     expect(entry?.error).toMatchObject({ message: "network unavailable" });
   });
@@ -262,7 +266,9 @@ describe("recent log diagnostics", () => {
 
     agentLogger.info("test.circular", { circular });
 
-    const parsed = JSON.parse(String(info.mock.calls[0][0]).slice(String(info.mock.calls[0][0]).indexOf("{")));
+    const parsed = JSON.parse(
+      String(info.mock.calls[0][0]).slice(String(info.mock.calls[0][0]).indexOf("{")),
+    );
     expect(parsed.circular.self).toBe("[Circular]");
   });
 
@@ -288,8 +294,11 @@ describe("log management", () => {
         fileEnabled: false,
         retentionDays: 7,
       });
-      expect(JSON.parse(await fs.promises.readFile(path.join(getLogDirectory(), "settings.json"), "utf8")))
-        .toEqual(settings);
+      expect(
+        JSON.parse(
+          await fs.promises.readFile(path.join(getLogDirectory(), "settings.json"), "utf8"),
+        ),
+      ).toEqual(settings);
 
       const artifacts = [
         "agent-2026-08-01.log",
@@ -297,15 +306,19 @@ describe("log management", () => {
         "0731-0000-01-agent.log.gz",
         "agent.log.txt",
       ];
-      await Promise.all(artifacts.map((name) =>
-        fs.promises.writeFile(path.join(getLogDirectory(), name), "diagnostic\n", "utf8")
-      ));
+      await Promise.all(
+        artifacts.map((name) =>
+          fs.promises.writeFile(path.join(getLogDirectory(), name), "diagnostic\n", "utf8"),
+        ),
+      );
       expect(await getLogManagerStatus()).toMatchObject({ fileCount: 4, totalBytes: 44 });
       expect(await clearLogFiles()).toBe(4);
       for (const name of artifacts) {
         await expect(fs.promises.stat(path.join(getLogDirectory(), name))).rejects.toThrow();
       }
-      await expect(fs.promises.stat(path.join(getLogDirectory(), "settings.json"))).resolves.toBeDefined();
+      await expect(
+        fs.promises.stat(path.join(getLogDirectory(), "settings.json")),
+      ).resolves.toBeDefined();
 
       const retentionSettings = await updateLogManagerSettings({ retentionDays: 14 });
       expect(retentionSettings).toMatchObject({ retentionDays: 14 });
@@ -330,8 +343,9 @@ describe("log management", () => {
       agentLogger.info("daily.second");
       await updateLogManagerSettings({ fileEnabled: false });
 
-      const files = (await fs.promises.readdir(getLogDirectory()))
-        .filter((name) => /^agent-\d{4}-\d{2}-\d{2}\.log$/.test(name));
+      const files = (await fs.promises.readdir(getLogDirectory())).filter((name) =>
+        /^agent-\d{4}-\d{2}-\d{2}\.log$/.test(name),
+      );
       expect(files).toHaveLength(1);
       const content = await fs.promises.readFile(path.join(getLogDirectory(), files[0]), "utf8");
       expect(content).toContain('"event":"daily.first"');
@@ -357,8 +371,14 @@ describe("log management", () => {
       agentLogger.info("midnight.after");
       await updateLogManagerSettings({ fileEnabled: false });
 
-      const before = await fs.promises.readFile(path.join(getLogDirectory(), "agent-2026-07-31.log"), "utf8");
-      const after = await fs.promises.readFile(path.join(getLogDirectory(), "agent-2026-08-01.log"), "utf8");
+      const before = await fs.promises.readFile(
+        path.join(getLogDirectory(), "agent-2026-07-31.log"),
+        "utf8",
+      );
+      const after = await fs.promises.readFile(
+        path.join(getLogDirectory(), "agent-2026-08-01.log"),
+        "utf8",
+      );
       expect(before).toContain('"event":"midnight.before"');
       expect(before).not.toContain('"event":"midnight.after"');
       expect(after).toContain('"event":"midnight.after"');
@@ -383,14 +403,24 @@ describe("log management", () => {
         "utf8",
       );
       for (const date of ["2026-01-07", "2026-01-08", "2026-01-10"]) {
-        await fs.promises.writeFile(path.join(getLogDirectory(), `agent-${date}.log`), "\n", "utf8");
+        await fs.promises.writeFile(
+          path.join(getLogDirectory(), `agent-${date}.log`),
+          "\n",
+          "utf8",
+        );
       }
 
       await initializeLogManager();
 
-      await expect(fs.promises.stat(path.join(getLogDirectory(), "agent-2026-01-07.log"))).rejects.toThrow();
-      await expect(fs.promises.stat(path.join(getLogDirectory(), "agent-2026-01-08.log"))).resolves.toBeDefined();
-      await expect(fs.promises.stat(path.join(getLogDirectory(), "agent-2026-01-10.log"))).resolves.toBeDefined();
+      await expect(
+        fs.promises.stat(path.join(getLogDirectory(), "agent-2026-01-07.log")),
+      ).rejects.toThrow();
+      await expect(
+        fs.promises.stat(path.join(getLogDirectory(), "agent-2026-01-08.log")),
+      ).resolves.toBeDefined();
+      await expect(
+        fs.promises.stat(path.join(getLogDirectory(), "agent-2026-01-10.log")),
+      ).resolves.toBeDefined();
     } finally {
       vi.useRealTimers();
       await fs.promises.rm(tempRoot, { recursive: true, force: true });
@@ -426,7 +456,9 @@ describe("log management", () => {
   });
 
   it("ignores the legacy maxFileSizeMb setting and omits it on the next save", async () => {
-    const tempRoot = await fs.promises.mkdtemp(path.join(os.tmpdir(), "agent-ppt-settings-migration-"));
+    const tempRoot = await fs.promises.mkdtemp(
+      path.join(os.tmpdir(), "agent-ppt-settings-migration-"),
+    );
     process.env.AGENT_PPT_DATA_DIR = tempRoot;
 
     try {

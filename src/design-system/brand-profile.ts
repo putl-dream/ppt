@@ -1,13 +1,13 @@
 import { z } from "zod";
 
 import {
+  ARGUMENT_MODES,
   colorOverridesSchema,
   colorSchemeSchema,
+  type DesignSystemV2,
   designSystemV2Schema,
   READING_MODES,
   VISUAL_STYLES,
-  ARGUMENT_MODES,
-  type DesignSystemV2,
 } from "./schema";
 
 export const BRAND_PERSONAS = [
@@ -19,23 +19,27 @@ export const BRAND_PERSONAS = [
   "youth-consumer",
 ] as const;
 
-export const brandDesignOverridesSchema = z.object({
-  argumentMode: z.enum(ARGUMENT_MODES).optional(),
-  visualStyle: z.enum(VISUAL_STYLES).optional(),
-  colorScheme: colorSchemeSchema.optional(),
-  readingMode: z.enum(READING_MODES).optional(),
-  colors: colorOverridesSchema.optional(),
-}).strict();
+export const brandDesignOverridesSchema = z
+  .object({
+    argumentMode: z.enum(ARGUMENT_MODES).optional(),
+    visualStyle: z.enum(VISUAL_STYLES).optional(),
+    colorScheme: colorSchemeSchema.optional(),
+    readingMode: z.enum(READING_MODES).optional(),
+    colors: colorOverridesSchema.optional(),
+  })
+  .strict();
 
-export const brandProfileV2Schema = z.object({
-  version: z.literal(2),
-  brandName: z.string().trim().min(1).max(80),
-  persona: z.enum(BRAND_PERSONAS),
-  audience: z.string().trim().min(1).max(120),
-  attributes: z.array(z.string().trim().min(1).max(40)).min(2).max(6),
-  avoid: z.array(z.string().trim().min(1).max(80)).max(8),
-  designOverrides: brandDesignOverridesSchema.default({}),
-}).strict();
+export const brandProfileV2Schema = z
+  .object({
+    version: z.literal(2),
+    brandName: z.string().trim().min(1).max(80),
+    persona: z.enum(BRAND_PERSONAS),
+    audience: z.string().trim().min(1).max(120),
+    attributes: z.array(z.string().trim().min(1).max(40)).min(2).max(6),
+    avoid: z.array(z.string().trim().min(1).max(80)).max(8),
+    designOverrides: brandDesignOverridesSchema.default({}),
+  })
+  .strict();
 
 export type BrandPersona = (typeof BRAND_PERSONAS)[number];
 export type BrandProfileV2 = z.infer<typeof brandProfileV2Schema>;

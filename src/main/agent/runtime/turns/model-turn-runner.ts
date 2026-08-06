@@ -3,13 +3,10 @@ import {
   textFromContentBlocks,
   toolUseBlocksFromContent,
 } from "../../gateway";
+import { formatBackgroundNotifications } from "../background/background-task-manager";
+import type { AgentIterationWorkspace, AgentQueryState } from "../query/query-types";
 import { callModelWithRecovery } from "./model-call-recovery";
 import type { AgentLoopTurnOutcome, PreparedAgentRun } from "./prepared-agent-run";
-import type {
-  AgentIterationWorkspace,
-  AgentQueryState,
-} from "../query/query-types";
-import { formatBackgroundNotifications } from "../background/background-task-manager";
 
 /** Runs one sealed model turn and returns an explicit loop decision. */
 export class ModelTurnRunner {
@@ -26,12 +23,12 @@ export class ModelTurnRunner {
     const inboxContent = await run.drainLeadInboxForModel();
     const notifications = backgroundTasks.collect();
     const userContent = [
-      notifications.length > 0
-        ? formatBackgroundNotifications(notifications)
-        : "",
+      notifications.length > 0 ? formatBackgroundNotifications(notifications) : "",
       ...session.takePendingUserContent(),
       inboxContent ?? "",
-    ].filter((part) => part.trim()).join("\n\n");
+    ]
+      .filter((part) => part.trim())
+      .join("\n\n");
     appendUserText(workspace.messagesForQuery, userContent);
     scope.setInflightQuery("model_streaming", workspace);
     if (checkpointDecision === "commit") await scope.persistCheckpoint();
@@ -100,8 +97,7 @@ export class ModelTurnRunner {
             scope.runId,
             {
               payload: preparedPayload,
-              messages: preparedMessages
-                ?? ensureToolResultPairing(workspace.messagesForQuery),
+              messages: preparedMessages ?? ensureToolResultPairing(workspace.messagesForQuery),
             },
             notes,
           );
@@ -117,18 +113,20 @@ export class ModelTurnRunner {
     }
     workspace.maxOutputTokensOverride = modelResult.maxOutputTokensOverride;
     workspace.maxOutputTokensRecoveryCount =
-      state.maxOutputTokensRecoveryCount
-      + modelResult.maxOutputTokensRecoveryCount;
+      state.maxOutputTokensRecoveryCount + modelResult.maxOutputTokensRecoveryCount;
     workspace.hasAttemptedReactiveCompact =
-      state.hasAttemptedReactiveCompact
-      || modelResult.hasAttemptedReactiveCompact;
+      state.hasAttemptedReactiveCompact || modelResult.hasAttemptedReactiveCompact;
     safeStreamEvent(deps.onStreamEvent, { type: "attempt_committed", attemptId });
-    run.appendRuntimeEvent("model_response", {
-      modelStep: currentModelStep,
-      content: structuredClone(modelResult.content),
-      stopReason: modelResult.stopReason,
-      model: modelResult.modelUsed,
-    }, "model_only");
+    run.appendRuntimeEvent(
+      "model_response",
+      {
+        modelStep: currentModelStep,
+        content: structuredClone(modelResult.content),
+        stopReason: modelResult.stopReason,
+        model: modelResult.modelUsed,
+      },
+      "model_only",
+    );
 
     const seenToolCallIds = new Set<string>();
     const toolUses = toolUseBlocksFromContent(modelResult.content).filter((call) => {
@@ -165,15 +163,17 @@ export class ModelTurnRunner {
     if (deps.requiredOutcome === "command_proposal") {
       const proposalTools = deps.capabilityToolNames.command_proposal ?? [];
       const interactionTools = deps.capabilityToolNames.user_interaction ?? [];
-      const proposalInstruction = proposalTools.length > 0
-        ? `finish with a tool that provides command_proposal capability (${proposalTools.join(", ")})`
-        : "continue until a command_proposal capability becomes available";
-      const interactionInstruction = interactionTools.length > 0
-        ? `Use ${interactionTools.join(", ")} if information is still missing`
-        : "If information is missing, explain the blocking facts through an available interaction capability";
+      const proposalInstruction =
+        proposalTools.length > 0
+          ? `finish with a tool that provides command_proposal capability (${proposalTools.join(", ")})`
+          : "continue until a command_proposal capability becomes available";
+      const interactionInstruction =
+        interactionTools.length > 0
+          ? `Use ${interactionTools.join(", ")} if information is still missing`
+          : "If information is missing, explain the blocking facts through an available interaction capability";
       const guidance =
-        "This is an unresolved presentation action. Do not narrate future work. "
-        + `${interactionInstruction}; otherwise continue tools and ${proposalInstruction}.`;
+        "This is an unresolved presentation action. Do not narrate future work. " +
+        `${interactionInstruction}; otherwise continue tools and ${proposalInstruction}.`;
       session.appendTranscript({ role: "assistant", content: responseText, error: guidance });
       workspace.followUpMessages.push({
         role: "user",
@@ -181,10 +181,12 @@ export class ModelTurnRunner {
       });
       return { type: "continue", reason: "required_outcome" };
     }
-    if (await run.drainBackgroundForModel(
-      workspace,
-      "Background tasks have completed. Use these results before giving the final response.",
-    )) {
+    if (
+      await run.drainBackgroundForModel(
+        workspace,
+        "Background tasks have completed. Use these results before giving the final response.",
+      )
+    ) {
       return { type: "continue", reason: "background_result" };
     }
 
@@ -205,17 +207,11 @@ export class ModelTurnRunner {
   }
 }
 
-function appendUserText(
-  messages: AgentQueryState["messages"],
-  text: string,
-): void {
+function appendUserText(messages: AgentQueryState["messages"], text: string): void {
   const trimmed = text.trim();
   if (!trimmed) return;
   const last = messages.at(-1);
-  if (
-    last?.role === "user"
-    && !last.content.some((block) => block.type === "tool_result")
-  ) {
+  if (last?.role === "user" && !last.content.some((block) => block.type === "tool_result")) {
     last.content.push({ type: "text", text: trimmed });
     return;
   }

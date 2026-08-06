@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   AGENT_STEP_LIMITS_FALLBACK,
-  DEFAULT_AGENT_STEP_LIMITS,
   buildMainStepLimitMessage,
   buildSubStepLimitMessage,
+  DEFAULT_AGENT_STEP_LIMITS,
   getEffectiveMainMaxSteps,
   getEffectiveSubMaxSteps,
   resolveAgentStepLimits,

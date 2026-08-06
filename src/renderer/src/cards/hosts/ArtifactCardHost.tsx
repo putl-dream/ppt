@@ -1,16 +1,19 @@
-import React from "react";
 import type { DisplayEvent } from "@shared/card-display-protocol";
-import type { Presentation } from "@shared/presentation";
-import { hasMeaningfulArtifactContent, isDefaultArtifactContent } from "@shared/project-artifact-state";
-import { parseBriefFields, parseOutlineItems } from "@shared/project-artifacts";
-import { BriefCard } from "../../components/BriefCard";
-import { OutlineCard } from "../../components/OutlineCard";
-import { DeckPreviewCard } from "../../components/DeckPreviewCard";
-import { useProjectStore } from "../../components/project-store";
 import {
   recordDisplayCardAction,
   useArtifactCardManager,
-} from "../display-card-managers";
+} from "@shared/cards/display-card-managers";
+import type { Presentation } from "@shared/presentation";
+import {
+  hasMeaningfulArtifactContent,
+  isDefaultArtifactContent,
+} from "@shared/project-artifact-state";
+import { parseBriefFields, parseOutlineItems } from "@shared/project-artifacts";
+import type React from "react";
+import { BriefCard } from "../../components/BriefCard";
+import { DeckPreviewCard } from "../../components/DeckPreviewCard";
+import { OutlineCard } from "../../components/OutlineCard";
+import { useProjectStore } from "../../components/project-store";
 
 type ArtifactEvent = Extract<DisplayEvent, { kind: "artifact.ready" }>;
 
@@ -35,10 +38,11 @@ export const ArtifactCardHost: React.FC<ArtifactCardHostProps> = ({
   onExportDeck,
 }) => {
   const project = useProjectStore((state) => state.activeProject);
-  const cards = useArtifactCardManager((state) => state.cards).filter((card) =>
-    card.event.scope.anchorMessageId === anchorMessageId
-    && card.status !== "dismissed"
-    && card.status !== "superseded"
+  const cards = useArtifactCardManager((state) => state.cards).filter(
+    (card) =>
+      card.event.scope.anchorMessageId === anchorMessageId &&
+      card.status !== "dismissed" &&
+      card.status !== "superseded",
   );
 
   return (
@@ -63,26 +67,29 @@ export const ArtifactCardHost: React.FC<ArtifactCardHostProps> = ({
           const content = project?.artifacts.outline.content ?? "";
           const items = parseOutlineItems(content);
           if (
-            !hasMeaningfulArtifactContent("outline", content)
-            || (items.length === 1 && isDefaultArtifactContent("outline", content))
-          ) return null;
+            !hasMeaningfulArtifactContent("outline", content) ||
+            (items.length === 1 && isDefaultArtifactContent("outline", content))
+          )
+            return null;
           return (
             <OutlineCard
               key={event.eventId}
               items={items}
               busy={busy}
-              onRevise={card.status === "active"
-                ? () => {
-                    recordDisplayCardAction(event.eventId, "revise", undefined, "dismissed");
-                    onReviseOutline(event);
-                  }
-                : undefined}
+              onRevise={
+                card.status === "active"
+                  ? () => {
+                      recordDisplayCardAction(event.eventId, "revise", undefined, "dismissed");
+                      onReviseOutline(event);
+                    }
+                  : undefined
+              }
             />
           );
         }
 
         if (type === "deck" && presentation) {
-          const resolved = card.status === "resolved" ? "confirmed" as const : undefined;
+          const resolved = card.status === "resolved" ? ("confirmed" as const) : undefined;
           return (
             <DeckPreviewCard
               key={event.eventId}

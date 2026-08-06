@@ -1,21 +1,18 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { Presentation } from "@shared/presentation";
-import type { ToolDefinition } from "../../tools/tool-definition";
-import { toToolCard } from "../../tools/tool-card";
-import { toToolInputSchema } from "../../tools/tool-schema";
-import type { SkillCard } from "../../skills/skill-types";
 import type { AgentStepLimits } from "@shared/agent-step-limits";
+import type { Presentation } from "@shared/presentation";
 import type { SkillRegistry } from "../../skills/loadSkillsDir";
-import {
-  resolvePromptStage,
-  type PromptStage,
-} from "./prompt-stage";
+import type { SkillCard } from "../../skills/skill-types";
+import { toToolCard } from "../../tools/tool-card";
+import type { ToolDefinition } from "../../tools/tool-definition";
+import { toToolInputSchema } from "../../tools/tool-schema";
 import {
   probeWorkspaceArtifactDetails,
   type WorkspaceArtifactProbeDetails,
   type WorkspaceArtifacts,
 } from "../presentation/workspace-artifacts";
+import { type PromptStage, resolvePromptStage } from "./prompt-stage";
 
 export const MEMORY_INDEX_RELATIVE_PATH = ".memory/MEMORY.md";
 export const DURABLE_MEMORY_STATE_RELATIVE_PATH = ".memory/STATE.md";
@@ -125,9 +122,7 @@ export async function buildSystemPromptContext(
 }
 
 /** Sync variant for tests; skips filesystem unless artifacts/memories provided. */
-export function buildSystemPromptContextSync(
-  input: SystemPromptContextInput,
-): SystemPromptContext {
+export function buildSystemPromptContextSync(input: SystemPromptContextInput): SystemPromptContext {
   const artifacts = input.artifacts ?? {
     designSpec: false,
     templatePolicy: false,

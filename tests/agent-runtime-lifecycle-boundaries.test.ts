@@ -3,15 +3,15 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
-import { AgentRuntime } from "../src/main/agent/runtime/agent-runtime";
-import { clearHooks, registerHook } from "../src/main/agent/runtime/hooks/hook-registry";
-import type { StopBlock } from "../src/main/agent/runtime/hooks/hook-blocks";
 import type { AgentModelGateway } from "../src/main/agent/gateway/types";
-import { ToolRegistry } from "../src/main/agent/tools/tool-registry";
-import type { ToolDefinition } from "../src/main/agent/tools/tool-definition";
-import { createStarterPresentation } from "../src/shared/presentation-fixtures";
-import { DurableRunStore } from "../src/main/agent/persistence/durable-run-store";
 import { DurableConversationHistoryStore } from "../src/main/agent/persistence/conversation-history-store";
+import { DurableRunStore } from "../src/main/agent/persistence/durable-run-store";
+import { AgentRuntime } from "../src/main/agent/runtime/agent-runtime";
+import type { StopBlock } from "../src/main/agent/runtime/hooks/hook-blocks";
+import { clearHooks, registerHook } from "../src/main/agent/runtime/hooks/hook-registry";
+import type { ToolDefinition } from "../src/main/agent/tools/tool-definition";
+import { ToolRegistry } from "../src/main/agent/tools/tool-registry";
+import { createStarterPresentation } from "../src/shared/presentation-fixtures";
 import { createFakeCommandProposalTool } from "./fake-command-proposal-tool";
 
 function textGateway(text: string): AgentModelGateway {
@@ -27,8 +27,12 @@ function textGateway(text: string): AgentModelGateway {
 
 function failingGateway(message: string): AgentModelGateway {
   return {
-    async queryModel() { throw new Error(message); },
-    async *queryModelStream() { throw new Error(message); },
+    async queryModel() {
+      throw new Error(message);
+    },
+    async *queryModelStream() {
+      throw new Error(message);
+    },
   };
 }
 
@@ -37,16 +41,17 @@ describe("AgentRuntime terminal boundaries", () => {
 
   it("returns an already committed result when the Stop hook throws", async () => {
     const workspaceRoot = await mkdtemp(join(tmpdir(), "runtime-stop-hook-"));
-    registerHook("Stop", () => { throw new Error("stop audit unavailable"); });
+    registerHook("Stop", () => {
+      throw new Error("stop audit unavailable");
+    });
 
-    const result = await new AgentRuntime(new ToolRegistry(), textGateway("completed"))
-      .run({
-        threadId: "stop-hook-thread",
-        request: "finish",
-        presentationSnapshot: createStarterPresentation(),
-        selectedElementIds: [],
-        workspaceRoot,
-      });
+    const result = await new AgentRuntime(new ToolRegistry(), textGateway("completed")).run({
+      threadId: "stop-hook-thread",
+      request: "finish",
+      presentationSnapshot: createStarterPresentation(),
+      selectedElementIds: [],
+      workspaceRoot,
+    });
 
     expect(result).toEqual({ type: "message", content: "completed" });
     const checkpoint = await new DurableRunStore(workspaceRoot).load("stop-hook-thread");
@@ -72,17 +77,18 @@ describe("AgentRuntime terminal boundaries", () => {
       type: "message",
       content: "Request stopped before model execution.",
     });
-    expect(await new DurableConversationHistoryStore(workspaceRoot)
-      .load("prompt-stop-history-thread")).toEqual([
-        {
-          role: "user",
-          content: [{ type: "text", text: "stop this request" }],
-        },
-        {
-          role: "assistant",
-          content: [{ type: "text", text: "Request stopped before model execution." }],
-        },
-      ]);
+    expect(
+      await new DurableConversationHistoryStore(workspaceRoot).load("prompt-stop-history-thread"),
+    ).toEqual([
+      {
+        role: "user",
+        content: [{ type: "text", text: "stop this request" }],
+      },
+      {
+        role: "assistant",
+        content: [{ type: "text", text: "Request stopped before model execution." }],
+      },
+    ]);
   });
 
   it("records a PreToolUse hook stop without persisting an unresolved tool_use", async () => {
@@ -111,23 +117,27 @@ describe("AgentRuntime terminal boundaries", () => {
         return {
           provider: "anthropic",
           model: "test",
-          content: [{
-            type: "tool_use",
-            id: "stopped-tool-use",
-            name: "StoppedTool",
-            input: { value: 1 },
-          }],
+          content: [
+            {
+              type: "tool_use",
+              id: "stopped-tool-use",
+              name: "StoppedTool",
+              input: { value: 1 },
+            },
+          ],
         };
       },
       async *queryModelStream() {
         yield {
           type: "complete" as const,
-          content: [{
-            type: "tool_use" as const,
-            id: "stopped-tool-use",
-            name: "StoppedTool",
-            input: { value: 1 },
-          }],
+          content: [
+            {
+              type: "tool_use" as const,
+              id: "stopped-tool-use",
+              name: "StoppedTool",
+              input: { value: 1 },
+            },
+          ],
         };
       },
     };
@@ -141,14 +151,16 @@ describe("AgentRuntime terminal boundaries", () => {
     });
 
     expect(result).toEqual({ type: "message", content: "Tool stopped by policy hook." });
-    const history = await new DurableConversationHistoryStore(workspaceRoot)
-      .load("tool-stop-history-thread");
+    const history = await new DurableConversationHistoryStore(workspaceRoot).load(
+      "tool-stop-history-thread",
+    );
     expect(history?.at(-1)).toEqual({
       role: "assistant",
       content: [{ type: "text", text: "Tool stopped by policy hook." }],
     });
-    expect(history?.flatMap((message) => message.content)
-      .some((block) => block.type === "tool_use")).toBe(false);
+    expect(
+      history?.flatMap((message) => message.content).some((block) => block.type === "tool_use"),
+    ).toBe(false);
   });
 
   it("records the visible step-limit result after the committed tool batch", async () => {
@@ -173,23 +185,27 @@ describe("AgentRuntime terminal boundaries", () => {
         return {
           provider: "anthropic",
           model: "test",
-          content: [{
-            type: "tool_use",
-            id: "one-step-tool-use",
-            name: "OneStepTool",
-            input: {},
-          }],
+          content: [
+            {
+              type: "tool_use",
+              id: "one-step-tool-use",
+              name: "OneStepTool",
+              input: {},
+            },
+          ],
         };
       },
       async *queryModelStream() {
         yield {
           type: "complete" as const,
-          content: [{
-            type: "tool_use" as const,
-            id: "one-step-tool-use",
-            name: "OneStepTool",
-            input: {},
-          }],
+          content: [
+            {
+              type: "tool_use" as const,
+              id: "one-step-tool-use",
+              name: "OneStepTool",
+              input: {},
+            },
+          ],
         };
       },
     };
@@ -204,8 +220,9 @@ describe("AgentRuntime terminal boundaries", () => {
     });
     if (result.type !== "message") throw new Error("Expected a visible step-limit message.");
 
-    const history = await new DurableConversationHistoryStore(workspaceRoot)
-      .load("step-limit-history-thread");
+    const history = await new DurableConversationHistoryStore(workspaceRoot).load(
+      "step-limit-history-thread",
+    );
     expect(history?.at(-1)).toEqual({
       role: "assistant",
       content: [{ type: "text", text: result.content }],
@@ -227,39 +244,47 @@ describe("AgentRuntime terminal boundaries", () => {
         return {
           provider: "anthropic",
           model: "test",
-          content: [{
-            type: "tool_use",
-            id: "terminal-submit",
-            name: "FakeSubmitCommands",
-            input: {
-              summary: "Update title",
-              risk: "low",
-              commands: [{
-                id: "title-command",
-                type: "set-presentation-title",
-                title: "Updated title",
-              }],
+          content: [
+            {
+              type: "tool_use",
+              id: "terminal-submit",
+              name: "FakeSubmitCommands",
+              input: {
+                summary: "Update title",
+                risk: "low",
+                commands: [
+                  {
+                    id: "title-command",
+                    type: "set-presentation-title",
+                    title: "Updated title",
+                  },
+                ],
+              },
             },
-          }],
+          ],
         };
       },
       async *queryModelStream() {
         yield {
           type: "complete" as const,
-          content: [{
-            type: "tool_use" as const,
-            id: "terminal-submit",
-            name: "FakeSubmitCommands",
-            input: {
-              summary: "Update title",
-              risk: "low",
-              commands: [{
-                id: "title-command",
-                type: "set-presentation-title",
-                title: "Updated title",
-              }],
+          content: [
+            {
+              type: "tool_use" as const,
+              id: "terminal-submit",
+              name: "FakeSubmitCommands",
+              input: {
+                summary: "Update title",
+                risk: "low",
+                commands: [
+                  {
+                    id: "title-command",
+                    type: "set-presentation-title",
+                    title: "Updated title",
+                  },
+                ],
+              },
             },
-          }],
+          ],
         };
       },
     };
@@ -273,16 +298,18 @@ describe("AgentRuntime terminal boundaries", () => {
     });
 
     expect(result.type).toBe("command_proposal");
-    const history = await new DurableConversationHistoryStore(workspaceRoot)
-      .load("terminal-tool-history-thread");
+    const history = await new DurableConversationHistoryStore(workspaceRoot).load(
+      "terminal-tool-history-thread",
+    );
     expect(history?.flatMap((message) => message.content)).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ type: "tool_use", id: "terminal-submit" }),
         expect.objectContaining({ type: "tool_result", toolUseId: "terminal-submit" }),
       ]),
     );
-    const checkpoint = await new DurableRunStore(workspaceRoot)
-      .load("terminal-tool-history-thread");
+    const checkpoint = await new DurableRunStore(workspaceRoot).load(
+      "terminal-tool-history-thread",
+    );
     expect(checkpoint).toMatchObject({
       status: "completed",
       committedState: {
@@ -296,16 +323,20 @@ describe("AgentRuntime terminal boundaries", () => {
   it("persists failed and emits a failed Stop reason without replacing the primary error", async () => {
     const workspaceRoot = await mkdtemp(join(tmpdir(), "runtime-failed-"));
     const stops: StopBlock[] = [];
-    registerHook("Stop", (block) => { stops.push(block as StopBlock); return null; });
+    registerHook("Stop", (block) => {
+      stops.push(block as StopBlock);
+      return null;
+    });
 
-    await expect(new AgentRuntime(new ToolRegistry(), failingGateway("primary model failure"))
-      .run({
+    await expect(
+      new AgentRuntime(new ToolRegistry(), failingGateway("primary model failure")).run({
         threadId: "failed-thread",
         request: "fail",
         presentationSnapshot: createStarterPresentation(),
         selectedElementIds: [],
         workspaceRoot,
-      })).rejects.toThrow("primary model failure");
+      }),
+    ).rejects.toThrow("primary model failure");
 
     const checkpoint = await new DurableRunStore(workspaceRoot).load("failed-thread");
     expect(checkpoint).toMatchObject({
@@ -321,17 +352,21 @@ describe("AgentRuntime terminal boundaries", () => {
     const controller = new AbortController();
     controller.abort("cancelled by test");
     const stops: StopBlock[] = [];
-    registerHook("Stop", (block) => { stops.push(block as StopBlock); return null; });
+    registerHook("Stop", (block) => {
+      stops.push(block as StopBlock);
+      return null;
+    });
 
-    await expect(new AgentRuntime(new ToolRegistry(), textGateway("unused"))
-      .run({
+    await expect(
+      new AgentRuntime(new ToolRegistry(), textGateway("unused")).run({
         threadId: "aborted-thread",
         request: "abort",
         presentationSnapshot: createStarterPresentation(),
         selectedElementIds: [],
         workspaceRoot,
         signal: controller.signal,
-      })).rejects.toThrow("Run aborted by user");
+      }),
+    ).rejects.toThrow("Run aborted by user");
 
     const checkpoint = await new DurableRunStore(workspaceRoot).load("aborted-thread");
     expect(checkpoint).toMatchObject({ status: "interrupted", phase: "finished" });
@@ -341,20 +376,29 @@ describe("AgentRuntime terminal boundaries", () => {
   it("classifies a downstream AbortError as interrupted even before the signal flips", async () => {
     const workspaceRoot = await mkdtemp(join(tmpdir(), "runtime-downstream-abort-"));
     const stops: StopBlock[] = [];
-    registerHook("Stop", (block) => { stops.push(block as StopBlock); return null; });
+    registerHook("Stop", (block) => {
+      stops.push(block as StopBlock);
+      return null;
+    });
     const abortError = Object.assign(new Error("provider cancelled"), { name: "AbortError" });
     const gateway: AgentModelGateway = {
-      async queryModel() { throw abortError; },
-      async *queryModelStream() { throw abortError; },
+      async queryModel() {
+        throw abortError;
+      },
+      async *queryModelStream() {
+        throw abortError;
+      },
     };
 
-    await expect(new AgentRuntime(new ToolRegistry(), gateway).run({
-      threadId: "downstream-abort-thread",
-      request: "abort",
-      presentationSnapshot: createStarterPresentation(),
-      selectedElementIds: [],
-      workspaceRoot,
-    })).rejects.toBe(abortError);
+    await expect(
+      new AgentRuntime(new ToolRegistry(), gateway).run({
+        threadId: "downstream-abort-thread",
+        request: "abort",
+        presentationSnapshot: createStarterPresentation(),
+        selectedElementIds: [],
+        workspaceRoot,
+      }),
+    ).rejects.toBe(abortError);
 
     const checkpoint = await new DurableRunStore(workspaceRoot).load("downstream-abort-thread");
     expect(checkpoint).toMatchObject({ status: "interrupted", phase: "finished" });
@@ -365,7 +409,9 @@ describe("AgentRuntime terminal boundaries", () => {
     const workspaceRoot = await mkdtemp(join(tmpdir(), "runtime-late-background-"));
     const progress: Array<{ type: string; [key: string]: unknown }> = [];
     let resolvePreview!: () => void;
-    const previewDone = new Promise<void>((resolve) => { resolvePreview = resolve; });
+    const previewDone = new Promise<void>((resolve) => {
+      resolvePreview = resolve;
+    });
     const schema = z.object({ slideId: z.string(), run_in_background: z.boolean().optional() });
     const previewTool: ToolDefinition<typeof schema, { ok: true }> = {
       name: "PreviewSlide",
@@ -380,7 +426,10 @@ describe("AgentRuntime terminal boundaries", () => {
         },
       },
       risk: "low",
-      execute: async () => { await previewDone; return { ok: true }; },
+      execute: async () => {
+        await previewDone;
+        return { ok: true };
+      },
     };
     const registry = new ToolRegistry();
     registry.register(previewTool);
@@ -392,35 +441,42 @@ describe("AgentRuntime terminal boundaries", () => {
           return {
             provider: "anthropic",
             model: "test",
-            content: [{
-              type: "tool_use" as const,
-              id: "late-preview",
-              name: "PreviewSlide",
-              input: { slideId: "slide-1", run_in_background: true },
-            }],
+            content: [
+              {
+                type: "tool_use" as const,
+                id: "late-preview",
+                name: "PreviewSlide",
+                input: { slideId: "slide-1", run_in_background: true },
+              },
+            ],
           };
         }
         throw new Error("model failed while preview was running");
       },
-      async *queryModelStream() { throw new Error("streaming not expected"); },
+      async *queryModelStream() {
+        throw new Error("streaming not expected");
+      },
     };
 
-    await expect(new AgentRuntime(registry, gateway).run({
-      threadId: "late-background-thread",
-      runId: "late-background-run",
-      request: "preview",
-      presentationSnapshot: createStarterPresentation(),
-      selectedElementIds: [],
-      workspaceRoot,
-      onProgress: (event) => progress.push(event),
-    })).rejects.toThrow("model failed while preview was running");
+    await expect(
+      new AgentRuntime(registry, gateway).run({
+        threadId: "late-background-thread",
+        runId: "late-background-run",
+        request: "preview",
+        presentationSnapshot: createStarterPresentation(),
+        selectedElementIds: [],
+        workspaceRoot,
+        onProgress: (event) => progress.push(event),
+      }),
+    ).rejects.toThrow("model failed while preview was running");
 
     resolvePreview();
     await new Promise((resolve) => setTimeout(resolve, 30));
-    expect(progress
-      .filter((event) => event.type === "tool-state" && event.toolCallId === "late-preview")
-      .map((event) => event.status))
-      .toEqual(["running", "denied"]);
+    expect(
+      progress
+        .filter((event) => event.type === "tool-state" && event.toolCallId === "late-preview")
+        .map((event) => event.status),
+    ).toEqual(["running", "denied"]);
     const checkpoint = await new DurableRunStore(workspaceRoot).load("late-background-thread");
     expect(checkpoint).toMatchObject({ status: "failed", phase: "finished" });
   });
@@ -438,15 +494,17 @@ describe("AgentRuntime terminal boundaries", () => {
 
     const controller = new AbortController();
     const removeListener = vi.spyOn(controller.signal, "removeEventListener");
-    await expect(new AgentRuntime(new ToolRegistry(), textGateway("unused")).run({
-      threadId: "busy-thread",
-      runId: "new-run",
-      request: "blocked",
-      presentationSnapshot: createStarterPresentation(),
-      selectedElementIds: [],
-      workspaceRoot,
-      signal: controller.signal,
-    })).rejects.toThrow("already owned");
+    await expect(
+      new AgentRuntime(new ToolRegistry(), textGateway("unused")).run({
+        threadId: "busy-thread",
+        runId: "new-run",
+        request: "blocked",
+        presentationSnapshot: createStarterPresentation(),
+        selectedElementIds: [],
+        workspaceRoot,
+        signal: controller.signal,
+      }),
+    ).rejects.toThrow("already owned");
 
     expect(removeListener).toHaveBeenCalledWith("abort", expect.any(Function));
     await store.closeLease(opened.lease);
@@ -454,17 +512,20 @@ describe("AgentRuntime terminal boundaries", () => {
 
   it("closes a newly acquired lease when the post-lease History read fails", async () => {
     const workspaceRoot = await mkdtemp(join(tmpdir(), "runtime-history-read-failed-"));
-    const historyLoad = vi.spyOn(DurableConversationHistoryStore.prototype, "load")
+    const historyLoad = vi
+      .spyOn(DurableConversationHistoryStore.prototype, "load")
       .mockRejectedValueOnce(new Error("History storage unavailable"));
     try {
-      await expect(new AgentRuntime(new ToolRegistry(), textGateway("unused")).run({
-        threadId: "history-read-failed-thread",
-        runId: "failed-history-reader",
-        request: "read previous History",
-        presentationSnapshot: createStarterPresentation(),
-        selectedElementIds: [],
-        workspaceRoot,
-      })).rejects.toThrow("History storage unavailable");
+      await expect(
+        new AgentRuntime(new ToolRegistry(), textGateway("unused")).run({
+          threadId: "history-read-failed-thread",
+          runId: "failed-history-reader",
+          request: "read previous History",
+          presentationSnapshot: createStarterPresentation(),
+          selectedElementIds: [],
+          workspaceRoot,
+        }),
+      ).rejects.toThrow("History storage unavailable");
     } finally {
       historyLoad.mockRestore();
     }

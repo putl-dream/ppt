@@ -1,5 +1,5 @@
-import type { SessionChatMessage } from "./session";
 import type { PersistedDisplayCard } from "./card-display-protocol";
+import type { SessionChatMessage } from "./session";
 
 export interface RecoverableConversation {
   threadId: string;
@@ -9,18 +9,18 @@ export interface RecoverableConversation {
 export type AgentConversationMessage = { role: "user" | "assistant"; content: string };
 
 function isIncompleteAgentTurn(message: SessionChatMessage): boolean {
-  return message.role === "assistant"
-    && (
-      message.runStatus === "running"
-      || message.runStatus === "interrupted"
-      || message.runStatus === "failed"
-    );
+  return (
+    message.role === "assistant" &&
+    (message.runStatus === "running" ||
+      message.runStatus === "interrupted" ||
+      message.runStatus === "failed")
+  );
 }
 
 function isConversationMessage(message: SessionChatMessage): boolean {
-  return message.id !== "init" &&
-    Boolean(message.content.trim()) &&
-    !isIncompleteAgentTurn(message);
+  return (
+    message.id !== "init" && Boolean(message.content.trim()) && !isIncompleteAgentTurn(message)
+  );
 }
 
 export function toAgentMessageHistory(
@@ -42,11 +42,15 @@ export function findRecoverableConversation(
   messages: SessionChatMessage[],
   displayCards: PersistedDisplayCard[] = [],
 ): RecoverableConversation | undefined {
-  if (displayCards.some((card) =>
-    card.status === "active"
-    && card.event.kind === "review.command-proposal"
-    && card.event.semantics.blocking
-  )) return undefined;
+  if (
+    displayCards.some(
+      (card) =>
+        card.status === "active" &&
+        card.event.kind === "review.command-proposal" &&
+        card.event.semantics.blocking,
+    )
+  )
+    return undefined;
   let threadIndex = -1;
   let threadId: string | undefined;
 
@@ -85,4 +89,3 @@ export function findRecoverableConversation(
     messages: toAgentMessageHistory(messages.slice(startIndex)),
   };
 }
-

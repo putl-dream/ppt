@@ -12,9 +12,7 @@ describe("desktop package resources", () => {
     };
 
     expect(manifest.build?.extraResources).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ from: "skills", to: "skills" }),
-      ]),
+      expect.arrayContaining([expect.objectContaining({ from: "skills", to: "skills" })]),
     );
   });
 });

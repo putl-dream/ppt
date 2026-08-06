@@ -1,22 +1,22 @@
 import { createHash, randomUUID } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { basename, extname, join } from "node:path";
-import JSZip from "jszip";
-import {
-  APPLICATION_TEMPLATE_LIBRARY_DIRECTORY,
-  TEMPLATE_LIBRARY_ROOT,
-  templateDescriptorSchema,
-  templateInspectionSchema,
-  templateLibraryIndexSchema,
-  templateRevisionSubPath,
-  type TemplateDescriptor,
-  type TemplateInspection,
-  type TemplateLibraryIndex,
-} from "@shared/template-protocol";
 import {
   projectDesignReferenceGuidance,
   projectDesignReferenceToDesignSystem,
 } from "@shared/template-projection";
+import {
+  APPLICATION_TEMPLATE_LIBRARY_DIRECTORY,
+  TEMPLATE_LIBRARY_ROOT,
+  type TemplateDescriptor,
+  type TemplateInspection,
+  type TemplateLibraryIndex,
+  templateDescriptorSchema,
+  templateInspectionSchema,
+  templateLibraryIndexSchema,
+  templateRevisionSubPath,
+} from "@shared/template-protocol";
+import JSZip from "jszip";
 import { getApplicationDataRoot } from "../application-data";
 
 const MAX_PACKAGE_BYTES = 40 * 1024 * 1024;
@@ -91,34 +91,30 @@ function decodeXmlEntities(value: string): string {
 }
 
 function extractAttribute(fragment: string, name: string): string | undefined {
-  const match = fragment.match(new RegExp(`${name}\\s*=\\s*([\"'])(.*?)\\1`, "i"));
+  const match = fragment.match(new RegExp(`${name}\\s*=\\s*(["'])(.*?)\\1`, "i"));
   return match ? decodeXmlEntities(match[2]) : undefined;
 }
 
 function extractThemeColor(xml: string, name: string): string | undefined {
-  const block = xml.match(new RegExp(`<a:${name}\\b[^>]*>[\\s\\S]*?<\\/a:${name}>`, "i"))
-    ?? xml.match(new RegExp(`<${name}\\b[^>]*>[\\s\\S]*?<\\/${name}>`, "i"));
+  const block =
+    xml.match(new RegExp(`<a:${name}\\b[^>]*>[\\s\\S]*?<\\/a:${name}>`, "i")) ??
+    xml.match(new RegExp(`<${name}\\b[^>]*>[\\s\\S]*?<\\/${name}>`, "i"));
   if (!block) return undefined;
-  const srgb = block[0].match(/srgbClr[^>]*val\s*=\s*([\"'])([0-9A-Fa-f]{6,8})\1/i);
+  const srgb = block[0].match(/srgbClr[^>]*val\s*=\s*(["'])([0-9A-Fa-f]{6,8})\1/i);
   if (srgb) return srgb[2];
-  const sys = block[0].match(/sysClr[^>]*lastClr\s*=\s*([\"'])([0-9A-Fa-f]{6,8})\1/i);
+  const sys = block[0].match(/sysClr[^>]*lastClr\s*=\s*(["'])([0-9A-Fa-f]{6,8})\1/i);
   return sys?.[2];
 }
 
 function extractTypeface(xml: string, tag: string): string | undefined {
-  const match = xml.match(new RegExp(`<a:${tag}\\b[^>]*typeface\\s*=\\s*([\"'])(.*?)\\1`, "i"));
+  const match = xml.match(new RegExp(`<a:${tag}\\b[^>]*typeface\\s*=\\s*(["'])(.*?)\\1`, "i"));
   return match ? decodeXmlEntities(match[2]) : undefined;
 }
 
 const DEFAULT_SLIDE_WIDTH_EMU = 9_144_000;
 const DEFAULT_SLIDE_HEIGHT_EMU = 5_143_500;
 
-function emuToCanvas(
-  emu: number,
-  axis: "x" | "y",
-  widthEmu: number,
-  heightEmu: number,
-): number {
+function emuToCanvas(emu: number, axis: "x" | "y", widthEmu: number, heightEmu: number): number {
   if (axis === "x") return (emu / widthEmu) * 1280;
   return (emu / heightEmu) * 720;
 }
@@ -153,7 +149,7 @@ function extractTextSnippet(xmlFragment: string): string | undefined {
 
 function extractSolidFill(xmlFragment: string): string | undefined {
   const srgb = xmlFragment.match(
-    /<a:solidFill[^>]*>[\s\S]*?<a:srgbClr[^>]*val\s*=\s*([\"'])([0-9A-Fa-f]{6,8})\1/i,
+    /<a:solidFill[^>]*>[\s\S]*?<a:srgbClr[^>]*val\s*=\s*(["'])([0-9A-Fa-f]{6,8})\1/i,
   );
   if (srgb) {
     const value = srgb[2].length === 8 ? srgb[2].slice(2) : srgb[2];
@@ -217,14 +213,14 @@ async function extractChromeAndMedia(
       const type = extractPlaceholderType(ph);
       const transform = extractTransform(shape);
       if (
-        transform.x === undefined
-        || transform.y === undefined
-        || transform.cx === undefined
-        || transform.cy === undefined
-        || Number.isNaN(transform.x)
-        || Number.isNaN(transform.y)
-        || Number.isNaN(transform.cx)
-        || Number.isNaN(transform.cy)
+        transform.x === undefined ||
+        transform.y === undefined ||
+        transform.cx === undefined ||
+        transform.cy === undefined ||
+        Number.isNaN(transform.x) ||
+        Number.isNaN(transform.y) ||
+        Number.isNaN(transform.cx) ||
+        Number.isNaN(transform.cy)
       ) {
         continue;
       }
@@ -282,12 +278,12 @@ async function extractChromeAndMedia(
     if (bytes.byteLength <= 0 || bytes.byteLength > MAX_ENTRY_BYTES) continue;
     const lower = entry.toLowerCase();
     const roleHint = /logo|brand|mark/i.test(lower)
-      ? "logo" as const
+      ? ("logo" as const)
       : /bg|background|cover/i.test(lower)
-        ? "background" as const
+        ? ("background" as const)
         : bytes.byteLength < 120_000
-          ? "logo" as const
-          : "decoration" as const;
+          ? ("logo" as const)
+          : ("decoration" as const);
     mediaCandidates.push({
       entry,
       roleHint,
@@ -295,10 +291,7 @@ async function extractChromeAndMedia(
     });
   }
 
-  if (
-    !mediaCandidates.some((item) => item.roleHint === "logo")
-    && mediaCandidates.length > 0
-  ) {
+  if (!mediaCandidates.some((item) => item.roleHint === "logo") && mediaCandidates.length > 0) {
     const smallest = [...mediaCandidates].sort(
       (left, right) => (left.byteLength ?? 0) - (right.byteLength ?? 0),
     )[0];
@@ -327,9 +320,7 @@ function revisionDirectory(
   return join(library.absoluteRoot, templateRevisionSubPath(templateId, revisionId));
 }
 
-async function readLibraryIndex(
-  library: TemplateLibraryLocation,
-): Promise<TemplateLibraryIndex> {
+async function readLibraryIndex(library: TemplateLibraryLocation): Promise<TemplateLibraryIndex> {
   try {
     const raw = await readFile(join(library.absoluteRoot, "index.json"), "utf8");
     return templateLibraryIndexSchema.parse(JSON.parse(raw));
@@ -418,9 +409,18 @@ async function inspectPackage(
   const themeColors: TemplateInspection["themeColors"] = {};
   if (themeXml) {
     for (const key of [
-      "dk1", "lt1", "dk2", "lt2",
-      "accent1", "accent2", "accent3", "accent4", "accent5", "accent6",
-      "hlink", "folHlink",
+      "dk1",
+      "lt1",
+      "dk2",
+      "lt2",
+      "accent1",
+      "accent2",
+      "accent3",
+      "accent4",
+      "accent5",
+      "accent6",
+      "hlink",
+      "folHlink",
     ] as const) {
       const value = extractThemeColor(themeXml, key);
       if (value) themeColors[key] = value;
@@ -437,7 +437,7 @@ async function inspectPackage(
     used: [] as string[],
   };
   if (themeXml) {
-    const typefaces = [...themeXml.matchAll(/typeface\s*=\s*([\"'])(.*?)\1/gi)]
+    const typefaces = [...themeXml.matchAll(/typeface\s*=\s*(["'])(.*?)\1/gi)]
       .map((match) => decodeXmlEntities(match[2]))
       .filter((name) => name && name !== "+mj-lt" && name !== "+mn-lt");
     fonts.used = [...new Set(typefaces)].slice(0, 24);
@@ -461,25 +461,32 @@ async function inspectPackage(
   let aspectRatio: string | undefined;
   if (widthEmu && heightEmu && heightEmu > 0) {
     const ratio = widthEmu / heightEmu;
-    aspectRatio = Math.abs(ratio - 16 / 9) < 0.03
-      ? "16:9"
-      : Math.abs(ratio - 4 / 3) < 0.03
-        ? "4:3"
-        : ratio.toFixed(3);
+    aspectRatio =
+      Math.abs(ratio - 16 / 9) < 0.03
+        ? "16:9"
+        : Math.abs(ratio - 4 / 3) < 0.03
+          ? "4:3"
+          : ratio.toFixed(3);
     if (aspectRatio !== "16:9") {
       warnings.push(`Source aspect ${aspectRatio} will be regenerated on 16:9 SVG canvas.`);
     }
   }
 
-  const masterFiles = Object.keys(zip.files).filter((name) => /ppt\/slideMasters\/slideMaster\d+\.xml$/i.test(name));
-  const layoutFiles = Object.keys(zip.files).filter((name) => /ppt\/slideLayouts\/slideLayout\d+\.xml$/i.test(name));
-  const slideFiles = Object.keys(zip.files).filter((name) => /ppt\/slides\/slide\d+\.xml$/i.test(name));
+  const masterFiles = Object.keys(zip.files).filter((name) =>
+    /ppt\/slideMasters\/slideMaster\d+\.xml$/i.test(name),
+  );
+  const layoutFiles = Object.keys(zip.files).filter((name) =>
+    /ppt\/slideLayouts\/slideLayout\d+\.xml$/i.test(name),
+  );
+  const slideFiles = Object.keys(zip.files).filter((name) =>
+    /ppt\/slides\/slide\d+\.xml$/i.test(name),
+  );
 
   const masters = [];
   for (const file of masterFiles.slice(0, 32)) {
     const xml = await zip.file(file)?.async("string");
-    const name = xml?.match(/<p:cSld\b[^>]*name\s*=\s*([\"'])(.*?)\1/i)?.[2]
-      ?? basename(file, ".xml");
+    const name =
+      xml?.match(/<p:cSld\b[^>]*name\s*=\s*(["'])(.*?)\1/i)?.[2] ?? basename(file, ".xml");
     const layoutCount = xml ? (xml.match(/slideLayoutId/gi)?.length ?? 0) : 0;
     masters.push({ name: decodeXmlEntities(name), layoutCount });
   }
@@ -487,8 +494,8 @@ async function inspectPackage(
   const layouts = [];
   for (const file of layoutFiles.slice(0, 64)) {
     const xml = await zip.file(file)?.async("string");
-    const name = xml?.match(/<p:cSld\b[^>]*name\s*=\s*([\"'])(.*?)\1/i)?.[2]
-      ?? basename(file, ".xml");
+    const name =
+      xml?.match(/<p:cSld\b[^>]*name\s*=\s*(["'])(.*?)\1/i)?.[2] ?? basename(file, ".xml");
     const placeholderCount = xml ? (xml.match(/<p:ph\b/gi)?.length ?? 0) : 0;
     layouts.push({ name: decodeXmlEntities(name), placeholderCount });
   }
@@ -567,8 +574,9 @@ export async function importTemplatePackage(
       descriptor: templateDescriptorSchema.parse(JSON.parse(descriptorRaw)),
       inspection: templateInspectionSchema.parse(JSON.parse(inspectionRaw)),
       reusedExisting: true,
-      relativeRoot: `${input.library.relativePrefix}/`
-        + templateRevisionSubPath(existing.id, existing.revisionId),
+      relativeRoot:
+        `${input.library.relativePrefix}/` +
+        templateRevisionSubPath(existing.id, existing.revisionId),
     };
   }
 
@@ -583,9 +591,10 @@ export async function importTemplatePackage(
   await mkdir(join(absoluteRoot, "preview"), { recursive: true });
 
   const originalFileName = basename(input.sourceFilePath);
-  const displayName = input.displayName?.trim()
-    || originalFileName.replace(/\.(pptx|potx)$/i, "")
-    || "Imported reference";
+  const displayName =
+    input.displayName?.trim() ||
+    originalFileName.replace(/\.(pptx|potx)$/i, "") ||
+    "Imported reference";
 
   const descriptor = templateDescriptorSchema.parse({
     id: templateId,
@@ -594,8 +603,8 @@ export async function importTemplatePackage(
     supportLevel: "design-reference",
     name: displayName.slice(0, 120),
     description:
-      "Uploaded PPTX/POTX design-reference. Pages are regenerated as SVG; "
-      + "PowerPoint masters/placeholders are not reused.",
+      "Uploaded PPTX/POTX design-reference. Pages are regenerated as SVG; " +
+      "PowerPoint masters/placeholders are not reused.",
     designSystem,
     matching: {
       topics: ["brand", "custom", "uploaded"],
@@ -653,7 +662,11 @@ export async function readTemplateRevision(
   library: TemplateLibraryLocation,
   templateId: string,
   revisionId: string,
-): Promise<{ descriptor: TemplateDescriptor; inspection: TemplateInspection; absoluteRoot: string }> {
+): Promise<{
+  descriptor: TemplateDescriptor;
+  inspection: TemplateInspection;
+  absoluteRoot: string;
+}> {
   const absoluteRoot = revisionDirectory(library, templateId, revisionId);
   const descriptor = templateDescriptorSchema.parse(
     JSON.parse(await readFile(join(absoluteRoot, "descriptor.json"), "utf8")),

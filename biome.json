@@ -1,0 +1,103 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.5.7/schema.json",
+  "vcs": {
+    "enabled": true,
+    "clientKind": "git",
+    "useIgnoreFile": true
+  },
+  "files": {
+    "includes": [
+      "**/*.{js,jsx,ts,tsx,json,css}",
+      "!**/node_modules",
+      "!**/dist",
+      "!**/out",
+      "!**/coverage",
+      "!**/.vite",
+      "!**/.tmp",
+      "!**/.tmp-*",
+      "!**/package-lock.json"
+    ]
+  },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 100
+  },
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "double",
+      "semicolons": "always",
+      "trailingCommas": "all"
+    }
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "preset": "recommended",
+      "style": {
+        "useImportType": "warn",
+        "noNonNullAssertion": "off",
+        "noDescendingSpecificity": "off"
+      },
+      "suspicious": {
+        "noExplicitAny": "off",
+        "noImplicitAnyLet": "off",
+        "useIterableCallbackReturn": "off",
+        "noControlCharactersInRegex": "off",
+        "noAssignInExpressions": "warn",
+        "noArrayIndexKey": "warn",
+        "noDuplicateProperties": "warn"
+      },
+      "complexity": {
+        "noForEach": "off",
+        "noImportantStyles": "off",
+        "noStaticOnlyClass": "off",
+        "useOptionalChain": "warn"
+      },
+      "a11y": {
+        "recommended": false
+      },
+      "correctness": {
+        "noUnusedImports": "warn",
+        "noUnusedVariables": "warn",
+        "noUnusedFunctionParameters": "warn",
+        "useExhaustiveDependencies": "warn",
+        "noUnsafeOptionalChaining": "warn",
+        "noUnsafeFinally": "warn"
+      }
+    }
+  },
+  "assist": {
+    "actions": {
+      "source": {
+        "organizeImports": "on"
+      }
+    }
+  },
+  "overrides": [
+    {
+      "includes": ["tests/**", "**/*.test.ts", "**/*.test.tsx"],
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "noExplicitAny": "off"
+          },
+          "correctness": {
+            "useYield": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["**/*.css"],
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "noUnknownAtRules": "off"
+          }
+        }
+      }
+    }
+  ]
+}

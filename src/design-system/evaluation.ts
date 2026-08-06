@@ -55,9 +55,8 @@ export type EvaluationSlide = Pick<
 >;
 
 const clamp = (value: number): number => Math.max(0, Math.min(100, Math.round(value)));
-const average = (values: number[]): number => values.length === 0
-  ? 0
-  : values.reduce((sum, value) => sum + value, 0) / values.length;
+const average = (values: number[]): number =>
+  values.length === 0 ? 0 : values.reduce((sum, value) => sum + value, 0) / values.length;
 
 const SVG_BASE_SCORES: SlideVisualScores = {
   hierarchy: 90,
@@ -78,16 +77,17 @@ function evaluateSlide(slide: EvaluationSlide): SlideVisualEvaluation {
       suggestion: "Provide role, coreMessage, audienceMove, rhythm, and layoutIntent.",
     });
   }
-  const scores = slide.visualSource?.kind === "svg"
-    ? { ...SVG_BASE_SCORES, overall: issues.length > 0 ? 82 : SVG_BASE_SCORES.overall }
-    : {
-      hierarchy: 45,
-      readability: 45,
-      density: 45,
-      visualAnchor: 45,
-      composition: 45,
-      overall: 45,
-    };
+  const scores =
+    slide.visualSource?.kind === "svg"
+      ? { ...SVG_BASE_SCORES, overall: issues.length > 0 ? 82 : SVG_BASE_SCORES.overall }
+      : {
+          hierarchy: 45,
+          readability: 45,
+          density: 45,
+          visualAnchor: 45,
+          composition: 45,
+          overall: 45,
+        };
   if (slide.visualSource?.kind !== "svg") {
     issues.push({
       code: "non-svg-slide",
@@ -105,26 +105,41 @@ export function evaluateDeckVisualQuality(
 ): DeckVisualEvaluation {
   const evaluations = slides.map((slide) => evaluateSlide(slide));
   const emptyDeck = slides.length === 0;
-  const keys: VisualScoreKey[] = ["hierarchy", "readability", "density", "visualAnchor", "composition"];
-  const base = Object.fromEntries(keys.map((key) => [key, clamp(average(evaluations.map((item) => item.scores[key])))]) ) as Record<VisualScoreKey, number>;
+  const keys: VisualScoreKey[] = [
+    "hierarchy",
+    "readability",
+    "density",
+    "visualAnchor",
+    "composition",
+  ];
+  const base = Object.fromEntries(
+    keys.map((key) => [key, clamp(average(evaluations.map((item) => item.scores[key])))]),
+  ) as Record<VisualScoreKey, number>;
 
-  const overrideSignatures = new Set(slides
-    .filter((slide) => slide.designOverride && Object.keys(slide.designOverride).length > 0)
-    .map((slide) => JSON.stringify(slide.designOverride, Object.keys(slide.designOverride ?? {}).sort())));
+  const overrideSignatures = new Set(
+    slides
+      .filter((slide) => slide.designOverride && Object.keys(slide.designOverride).length > 0)
+      .map((slide) =>
+        JSON.stringify(slide.designOverride, Object.keys(slide.designOverride ?? {}).sort()),
+      ),
+  );
   const allowedOverrides = Math.max(2, Math.ceil(slides.length * 0.25));
   const consistency = emptyDeck
     ? 0
     : clamp(100 - Math.max(0, overrideSignatures.size - allowedOverrides) * 12);
 
-  const layoutSignatures = new Set(slides.map((slide) =>
-    slide.visualSource?.kind === "svg"
-      ? `svg/${slide.narrative?.rhythm ?? "unset"}/${slide.narrative?.layoutIntent ?? slide.visualSource.sha256}`
-      : "legacy/non-svg"));
+  const layoutSignatures = new Set(
+    slides.map((slide) =>
+      slide.visualSource?.kind === "svg"
+        ? `svg/${slide.narrative?.rhythm ?? "unset"}/${slide.narrative?.layoutIntent ?? slide.visualSource.sha256}`
+        : "legacy/non-svg",
+    ),
+  );
   const differentiation = emptyDeck
     ? 0
     : slides.length <= 2
-    ? 100
-    : clamp(45 + Math.min(55, (layoutSignatures.size / slides.length) * 90));
+      ? 100
+      : clamp(45 + Math.min(55, (layoutSignatures.size / slides.length) * 90));
 
   const issues: VisualIssue[] = [];
   if (emptyDeck) {
@@ -157,13 +172,13 @@ export function evaluateDeckVisualQuality(
     consistency,
     differentiation,
     overall: clamp(
-      base.hierarchy * 0.17
-      + base.readability * 0.17
-      + base.density * 0.13
-      + base.visualAnchor * 0.11
-      + base.composition * 0.14
-      + consistency * 0.16
-      + differentiation * 0.12,
+      base.hierarchy * 0.17 +
+        base.readability * 0.17 +
+        base.density * 0.13 +
+        base.visualAnchor * 0.11 +
+        base.composition * 0.14 +
+        consistency * 0.16 +
+        differentiation * 0.12,
     ),
   };
   return { scores, slides: evaluations, issues };

@@ -46,4 +46,3 @@ export function fontFamilyToPptxFace(family: FontFamily): string {
       return "Arial";
   }
 }
-

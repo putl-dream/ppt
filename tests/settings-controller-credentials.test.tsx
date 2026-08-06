@@ -1,27 +1,29 @@
 // @vitest-environment jsdom
 
-import React from "react";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { DEFAULT_AGENT_STEP_LIMITS } from "../src/shared/agent-step-limits";
-import { resolveAgentGatewayPreferences } from "../src/shared/agent-gateway-config";
 import type { AppBootstrapSnapshot } from "../src/renderer/src/app/appBootstrap";
 import { useSettingsController } from "../src/renderer/src/app/useSettingsController";
+import { resolveAgentGatewayPreferences } from "../src/shared/agent-gateway-config";
+import { DEFAULT_AGENT_STEP_LIMITS } from "../src/shared/agent-step-limits";
 
 const bootstrap: AppBootstrapSnapshot = {
   persistedUiSettings: {},
   initialColorScheme: "dark",
   initialComputedScheme: "dark",
-  models: [{
-    id: "model-one",
-    name: "Model One",
-    provider: "openai",
-    model: "model-one",
-    baseURL: "https://old.example.com/v1",
-    openaiApiMode: "responses",
-    enabled: true,
-    credentialConfigured: false,
-  }],
+  models: [
+    {
+      id: "model-one",
+      name: "Model One",
+      provider: "openai",
+      model: "model-one",
+      baseURL: "https://old.example.com/v1",
+      openaiApiMode: "responses",
+      enabled: true,
+      credentialConfigured: false,
+    },
+  ],
   selectedModelId: "model-one",
   agentStepLimits: DEFAULT_AGENT_STEP_LIMITS,
   agentGatewayPreferences: resolveAgentGatewayPreferences(),
@@ -36,16 +38,15 @@ function SettingsHarness({ notify }: { notify: (message: string) => void }) {
       <output aria-label="enabled models">
         {controller.enabledModels.map((item) => item.id).join(",")}
       </output>
-      <output aria-label="credential configured">
-        {String(model?.credentialConfigured)}
-      </output>
+      <output aria-label="credential configured">{String(model?.credentialConfigured)}</output>
       <button
         type="button"
         onClick={() => {
-          if (model) void controller.saveModel({
-            ...model,
-            baseURL: "https://new.example.com/v1",
-          });
+          if (model)
+            void controller.saveModel({
+              ...model,
+              baseURL: "https://new.example.com/v1",
+            });
         }}
       >
         change binding
@@ -60,10 +61,12 @@ function SettingsHarness({ notify }: { notify: (message: string) => void }) {
       </button>
       <button
         type="button"
-        onClick={() => controller.setAgentGatewayPreferences({
-          ...controller.agentGatewayPreferences,
-          webSearchEndpoint: "https://search-proxy.example.com/v1",
-        })}
+        onClick={() =>
+          controller.setAgentGatewayPreferences({
+            ...controller.agentGatewayPreferences,
+            webSearchEndpoint: "https://search-proxy.example.com/v1",
+          })
+        }
       >
         change search endpoint
       </button>
@@ -93,15 +96,19 @@ describe("useSettingsController credentials", () => {
 
     render(<SettingsHarness notify={vi.fn()} />);
 
-    await waitFor(() => expect(screen.getByLabelText("enabled models").textContent)
-      .toBe("model-one"));
+    await waitFor(() =>
+      expect(screen.getByLabelText("enabled models").textContent).toBe("model-one"),
+    );
     fireEvent.click(screen.getByRole("button", { name: "change binding" }));
 
-    await waitFor(() => expect(deleteModelCredential).toHaveBeenCalledWith({
-      configurationId: "model-one",
-    }));
-    await waitFor(() => expect(screen.getByLabelText("credential configured").textContent)
-      .toBe("false"));
+    await waitFor(() =>
+      expect(deleteModelCredential).toHaveBeenCalledWith({
+        configurationId: "model-one",
+      }),
+    );
+    await waitFor(() =>
+      expect(screen.getByLabelText("credential configured").textContent).toBe("false"),
+    );
     expect(screen.getByLabelText("enabled models").textContent).toBe("");
   });
 
@@ -127,8 +134,9 @@ describe("useSettingsController credentials", () => {
     fireEvent.click(screen.getByRole("button", { name: "save key" }));
 
     await waitFor(() => expect(setModelCredentials).toHaveBeenCalledTimes(1));
-    await waitFor(() => expect(screen.getByLabelText("credential configured").textContent)
-      .toBe("true"));
+    await waitFor(() =>
+      expect(screen.getByLabelText("credential configured").textContent).toBe("true"),
+    );
     await act(async () => {
       resolveStatus({
         storage: { state: "secure", backend: "unknown" },
@@ -153,14 +161,15 @@ describe("useSettingsController credentials", () => {
     render(<SettingsHarness notify={notify} />);
 
     await waitFor(() => expect(screen.getByLabelText("enabled models").textContent).toBe(""));
-    await waitFor(() => expect(notify).toHaveBeenCalledWith(
-      expect.stringContaining("凭据状态读取失败"),
-    ));
+    await waitFor(() =>
+      expect(notify).toHaveBeenCalledWith(expect.stringContaining("凭据状态读取失败")),
+    );
   });
 
   it("clears a previously configured model when a later status refresh fails", async () => {
     const notify = vi.fn();
-    const getCredentialStatus = vi.fn()
+    const getCredentialStatus = vi
+      .fn()
       .mockResolvedValueOnce({
         storage: { state: "secure", backend: "unknown" },
         models: [{ configurationId: "model-one", configured: true }],
@@ -173,15 +182,16 @@ describe("useSettingsController credentials", () => {
     });
 
     render(<SettingsHarness notify={notify} />);
-    await waitFor(() => expect(screen.getByLabelText("enabled models").textContent)
-      .toBe("model-one"));
+    await waitFor(() =>
+      expect(screen.getByLabelText("enabled models").textContent).toBe("model-one"),
+    );
 
     fireEvent.click(screen.getByRole("button", { name: "change search endpoint" }));
 
     await waitFor(() => expect(getCredentialStatus).toHaveBeenCalledTimes(2));
     await waitFor(() => expect(screen.getByLabelText("enabled models").textContent).toBe(""));
-    await waitFor(() => expect(notify).toHaveBeenCalledWith(
-      expect.stringContaining("凭据状态读取失败"),
-    ));
+    await waitFor(() =>
+      expect(notify).toHaveBeenCalledWith(expect.stringContaining("凭据状态读取失败")),
+    );
   });
 });

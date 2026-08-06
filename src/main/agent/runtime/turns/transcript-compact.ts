@@ -76,9 +76,10 @@ export function compactConversation(
   const dropped = conversation.length - keepRecent;
   const recent = conversation.slice(-keepRecent).map((message) => ({
     role: message.role,
-    content: message.content.length > MAX_ENTRY_CHARS
-      ? `${message.content.slice(0, MAX_ENTRY_CHARS)}…`
-      : message.content,
+    content:
+      message.content.length > MAX_ENTRY_CHARS
+        ? `${message.content.slice(0, MAX_ENTRY_CHARS)}…`
+        : message.content,
   }));
   return [
     {

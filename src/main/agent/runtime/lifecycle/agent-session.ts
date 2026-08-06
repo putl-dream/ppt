@@ -1,7 +1,4 @@
-import type {
-  DurableRunPhase,
-  DurableRunStatus,
-} from "../../persistence/durable-run-store";
+import type { DurableRunPhase, DurableRunStatus } from "../../persistence/durable-run-store";
 import type { AgentRuntimeResult } from "../runtime-types";
 import type { AgentTransition } from "./agent-transition";
 
@@ -72,10 +69,7 @@ export class AgentSession {
     return this.processedInboxMessageIdsValue.has(id);
   }
 
-  recordInboxConsumption(
-    ids: readonly string[],
-    transcriptEntry: Record<string, unknown>,
-  ): void {
+  recordInboxConsumption(ids: readonly string[], transcriptEntry: Record<string, unknown>): void {
     this.transcriptValue.push(transcriptEntry);
     for (const id of ids) this.processedInboxMessageIdsValue.add(id);
   }

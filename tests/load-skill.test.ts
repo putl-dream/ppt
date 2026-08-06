@@ -1,23 +1,23 @@
-import { describe, expect, it } from "vitest";
-import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { describe, expect, it } from "vitest";
+import { SystemPromptBuilder } from "../src/main/agent/runtime/prompts/system-prompt";
+import {
+  createEmptySkillRegistry,
+  listSkills,
+  registerSkillFromContent,
+  scanSkills,
+} from "../src/main/agent/skills/loadSkillsDir";
 import {
   parseSkillFrontmatterFields,
   readFrontmatterString,
 } from "../src/main/agent/skills/parseSkillFrontmatterFields";
-import {
-  registerSkillFromContent,
-  scanSkills,
-  createEmptySkillRegistry,
-  listSkills,
-} from "../src/main/agent/skills/loadSkillsDir";
-import { loadSkillTool } from "../src/main/agent/tools/core/load-skill";
 import { createSkillSession } from "../src/main/agent/skills/skill-types";
-import { createStarterPresentation } from "../src/shared/presentation-fixtures";
-import { SystemPromptBuilder } from "../src/main/agent/runtime/prompts/system-prompt";
 import { askUserTool } from "../src/main/agent/tools/core/ask-user";
+import { loadSkillTool } from "../src/main/agent/tools/core/load-skill";
 import { createDefaultToolRegistry } from "../src/main/agent/tools/tool-registry";
+import { createStarterPresentation } from "../src/shared/presentation-fixtures";
 
 const SAMPLE_SKILL = `---
 name: code-review
@@ -60,7 +60,12 @@ describe("load_skill two-layer design", () => {
 
   it("LoadSkill resolves by registry name and rejects unknown skills", async () => {
     const registry = createEmptySkillRegistry();
-    registerSkillFromContent(registry, "/tmp/pdf", "pdf", SAMPLE_SKILL.replace("code-review", "pdf"));
+    registerSkillFromContent(
+      registry,
+      "/tmp/pdf",
+      "pdf",
+      SAMPLE_SKILL.replace("code-review", "pdf"),
+    );
 
     const skillSession = createSkillSession();
     const context = {
@@ -83,13 +88,19 @@ describe("load_skill two-layer design", () => {
     const again = await loadSkillTool.execute({ skillName: "pdf" }, context as any);
     expect(again.alreadyLoaded).toBe(true);
 
-    await expect(loadSkillTool.execute({ skillName: "../../../etc/passwd" }, context as any))
-      .rejects.toThrow("Unknown skill");
+    await expect(
+      loadSkillTool.execute({ skillName: "../../../etc/passwd" }, context as any),
+    ).rejects.toThrow("Unknown skill");
   });
 
   it("SystemPromptBuilder injects skill catalog without full SKILL.md body", () => {
     const registry = createEmptySkillRegistry();
-    registerSkillFromContent(registry, "/tmp/pdf", "pdf", SAMPLE_SKILL.replace("code-review", "pdf"));
+    registerSkillFromContent(
+      registry,
+      "/tmp/pdf",
+      "pdf",
+      SAMPLE_SKILL.replace("code-review", "pdf"),
+    );
 
     const prompt = SystemPromptBuilder.build({
       request: "写幻灯片",

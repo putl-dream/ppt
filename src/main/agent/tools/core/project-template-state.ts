@@ -1,18 +1,18 @@
 import type { ColorScheme, DesignSystemV2 } from "@design-system";
 import { getBuiltinTemplate } from "@shared/template-catalog";
 import {
+  createDefaultProjectTemplatePolicy,
+  type ProjectTemplatePolicy,
+  projectTemplatePolicySchema,
+  type ResolvedTemplateSelection,
   TEMPLATE_LIBRARY_INDEX_PATH,
   TEMPLATE_PACK_PATH,
   TEMPLATE_POLICY_PATH,
-  createDefaultProjectTemplatePolicy,
-  projectTemplatePolicySchema,
+  type TemplateDescriptor,
+  type TemplatePack,
   templateDescriptorSchema,
   templatePackSchema,
   templateRevisionPath,
-  type ProjectTemplatePolicy,
-  type ResolvedTemplateSelection,
-  type TemplateDescriptor,
-  type TemplatePack,
 } from "@shared/template-protocol";
 import {
   assertDesignSystemMatchesTemplate,
@@ -43,10 +43,8 @@ async function readJsonIfExists<T>(
 export async function loadProjectTemplatePolicy(
   fileService: WorkspaceFileService | undefined,
 ): Promise<ProjectTemplatePolicy> {
-  const policy = await readJsonIfExists(
-    fileService,
-    TEMPLATE_POLICY_PATH,
-    (value) => projectTemplatePolicySchema.parse(value),
+  const policy = await readJsonIfExists(fileService, TEMPLATE_POLICY_PATH, (value) =>
+    projectTemplatePolicySchema.parse(value),
   );
   return policy ?? createDefaultProjectTemplatePolicy();
 }
@@ -65,10 +63,8 @@ export async function loadUploadedTemplateDescriptors(
   const descriptors: TemplateDescriptor[] = [];
   for (const entry of index.templates) {
     const relative = `${templateRevisionPath(entry.id, entry.revisionId)}/descriptor.json`;
-    const descriptor = await readJsonIfExists(
-      fileService,
-      relative,
-      (value) => templateDescriptorSchema.parse(value),
+    const descriptor = await readJsonIfExists(fileService, relative, (value) =>
+      templateDescriptorSchema.parse(value),
     );
     if (descriptor) descriptors.push(descriptor);
   }
@@ -78,10 +74,8 @@ export async function loadUploadedTemplateDescriptors(
 export async function loadProjectTemplatePack(
   fileService: WorkspaceFileService | undefined,
 ): Promise<TemplatePack | undefined> {
-  return readJsonIfExists(
-    fileService,
-    TEMPLATE_PACK_PATH,
-    (value) => templatePackSchema.parse(value),
+  return readJsonIfExists(fileService, TEMPLATE_PACK_PATH, (value) =>
+    templatePackSchema.parse(value),
   );
 }
 
@@ -110,16 +104,16 @@ export function pinnedProjectTemplate(
     const customRevision = state.policy.customTemplateRevisionId;
     if (!customId || !customRevision) {
       throw new Error(
-        `${TEMPLATE_POLICY_PATH} mode=custom requires customTemplateId and `
-        + "customTemplateRevisionId.",
+        `${TEMPLATE_POLICY_PATH} mode=custom requires customTemplateId and ` +
+          "customTemplateRevisionId.",
       );
     }
     const custom = findProjectTemplate(state, customId, customRevision);
     if (!custom) {
       throw new Error(
-        `${TEMPLATE_POLICY_PATH} mode=custom pins ${customId}@${customRevision}, `
-        + "but that revision is missing under design/templates/**. "
-        + "Re-import the package or switch the policy away from custom.",
+        `${TEMPLATE_POLICY_PATH} mode=custom pins ${customId}@${customRevision}, ` +
+          "but that revision is missing under design/templates/**. " +
+          "Re-import the package or switch the policy away from custom.",
       );
     }
     return custom;
@@ -135,9 +129,9 @@ export function findProjectTemplate(
   templateId: string,
   revisionId?: string,
 ): TemplateDescriptor | undefined {
-  const uploaded = state.uploadedTemplates.find((item) => (
-    item.id === templateId && (!revisionId || item.revisionId === revisionId)
-  ));
+  const uploaded = state.uploadedTemplates.find(
+    (item) => item.id === templateId && (!revisionId || item.revisionId === revisionId),
+  );
   if (uploaded) return uploaded;
   const builtin = getBuiltinTemplate(templateId);
   if (builtin && (!revisionId || builtin.revisionId === revisionId)) return builtin;
@@ -163,39 +157,36 @@ function assertAgainstPack(
   const declared = spec.resolvedTemplate;
   if (!declared) {
     throw new Error(
-      `${TEMPLATE_PACK_PATH} pins ${pack.templateId}@${pack.revisionId}; `
-      + "call ResolveProjectTemplate and copy its selection → resolvedTemplate "
-      + "and designSystem into design/design-spec.json. "
-      + "Do not invent a conflicting builtin visualStyle.",
+      `${TEMPLATE_PACK_PATH} pins ${pack.templateId}@${pack.revisionId}; ` +
+        "call ResolveProjectTemplate and copy its selection → resolvedTemplate " +
+        "and designSystem into design/design-spec.json. " +
+        "Do not invent a conflicting builtin visualStyle.",
+    );
+  }
+  if (declared.templateId !== pack.templateId || declared.templateRevisionId !== pack.revisionId) {
+    throw new Error(
+      `resolvedTemplate ${declared.templateId}@${declared.templateRevisionId} contradicts ` +
+        `${TEMPLATE_PACK_PATH} which pins ${pack.templateId}@${pack.revisionId}.`,
     );
   }
   if (
-    declared.templateId !== pack.templateId
-    || declared.templateRevisionId !== pack.revisionId
+    formatColorScheme(spec.presentationDesignSystem.colorScheme) !==
+    formatColorScheme(pack.designSystem.colorScheme)
   ) {
     throw new Error(
-      `resolvedTemplate ${declared.templateId}@${declared.templateRevisionId} contradicts `
-      + `${TEMPLATE_PACK_PATH} which pins ${pack.templateId}@${pack.revisionId}.`,
+      `presentationDesignSystem.colorScheme must match ${TEMPLATE_PACK_PATH} palette; ` +
+        "copy designSystem from ResolveProjectTemplate / the pack verbatim.",
     );
   }
   if (
-    formatColorScheme(spec.presentationDesignSystem.colorScheme)
-      !== formatColorScheme(pack.designSystem.colorScheme)
+    spec.presentationDesignSystem.visualStyle !== pack.designSystem.visualStyle ||
+    spec.presentationDesignSystem.argumentMode !== pack.designSystem.argumentMode ||
+    spec.presentationDesignSystem.readingMode !== pack.designSystem.readingMode
   ) {
     throw new Error(
-      `presentationDesignSystem.colorScheme must match ${TEMPLATE_PACK_PATH} palette; `
-      + "copy designSystem from ResolveProjectTemplate / the pack verbatim.",
-    );
-  }
-  if (
-    spec.presentationDesignSystem.visualStyle !== pack.designSystem.visualStyle
-    || spec.presentationDesignSystem.argumentMode !== pack.designSystem.argumentMode
-    || spec.presentationDesignSystem.readingMode !== pack.designSystem.readingMode
-  ) {
-    throw new Error(
-      `presentationDesignSystem axes must match ${TEMPLATE_PACK_PATH} `
-      + `(${pack.designSystem.argumentMode}/${pack.designSystem.visualStyle}/`
-      + `${pack.designSystem.readingMode}).`,
+      `presentationDesignSystem axes must match ${TEMPLATE_PACK_PATH} ` +
+        `(${pack.designSystem.argumentMode}/${pack.designSystem.visualStyle}/` +
+        `${pack.designSystem.readingMode}).`,
     );
   }
   if (spec.typography && typeof spec.typography === "object") {
@@ -203,8 +194,8 @@ function assertAgainstPack(
     for (const key of ["title", "body", "emphasis", "data"] as const) {
       if (roles[key] && roles[key] !== pack.typography[key]) {
         throw new Error(
-          `design-spec typography.${key} must match ${TEMPLATE_PACK_PATH} `
-          + `(expected ${pack.typography[key]}).`,
+          `design-spec typography.${key} must match ${TEMPLATE_PACK_PATH} ` +
+            `(expected ${pack.typography[key]}).`,
         );
       }
     }
@@ -234,31 +225,32 @@ export function assertDesignSpecMatchesTemplateState(
 
   if (pinned && !declared) {
     throw new Error(
-      `${TEMPLATE_POLICY_PATH} mode=${state.policy.mode} pins template `
-      + `${pinned.id}@${pinned.revisionId}; call ResolveProjectTemplate and copy its `
-      + "resolvedTemplate + designSystem into design/design-spec.json. "
-      + `Also ensure ${TEMPLATE_PACK_PATH} was materialized via ApplyTemplate.`,
+      `${TEMPLATE_POLICY_PATH} mode=${state.policy.mode} pins template ` +
+        `${pinned.id}@${pinned.revisionId}; call ResolveProjectTemplate and copy its ` +
+        "resolvedTemplate + designSystem into design/design-spec.json. " +
+        `Also ensure ${TEMPLATE_PACK_PATH} was materialized via ApplyTemplate.`,
     );
   }
-  if (pinned && declared && (
-    declared.templateId !== pinned.id
-    || declared.templateRevisionId !== pinned.revisionId
-  )) {
+  if (
+    pinned &&
+    declared &&
+    (declared.templateId !== pinned.id || declared.templateRevisionId !== pinned.revisionId)
+  ) {
     throw new Error(
-      `resolvedTemplate ${declared.templateId}@${declared.templateRevisionId} contradicts `
-      + `${TEMPLATE_POLICY_PATH} mode=${state.policy.mode}, which pins `
-      + `${pinned.id}@${pinned.revisionId}.`,
+      `resolvedTemplate ${declared.templateId}@${declared.templateRevisionId} contradicts ` +
+        `${TEMPLATE_POLICY_PATH} mode=${state.policy.mode}, which pins ` +
+        `${pinned.id}@${pinned.revisionId}.`,
     );
   }
   if (!declared) return;
 
-  const template = pinned
-    ?? findProjectTemplate(state, declared.templateId, declared.templateRevisionId);
+  const template =
+    pinned ?? findProjectTemplate(state, declared.templateId, declared.templateRevisionId);
   if (!template) {
     throw new Error(
-      `resolvedTemplate.templateId ${declared.templateId}@${declared.templateRevisionId} `
-      + "is not in the builtin catalog or design/templates/**. Use ResolveProjectTemplate "
-      + "instead of inventing template ids.",
+      `resolvedTemplate.templateId ${declared.templateId}@${declared.templateRevisionId} ` +
+        "is not in the builtin catalog or design/templates/**. Use ResolveProjectTemplate " +
+        "instead of inventing template ids.",
     );
   }
   if (declared.supportLevel !== template.supportLevel) {
@@ -269,13 +261,13 @@ export function assertDesignSpecMatchesTemplateState(
   assertDesignSystemMatchesTemplate(spec.presentationDesignSystem, template);
 
   if (
-    template.kind === "uploaded"
-    && formatColorScheme(spec.presentationDesignSystem.colorScheme)
-      !== formatColorScheme(template.designSystem.colorScheme)
+    template.kind === "uploaded" &&
+    formatColorScheme(spec.presentationDesignSystem.colorScheme) !==
+      formatColorScheme(template.designSystem.colorScheme)
   ) {
     throw new Error(
-      `presentationDesignSystem.colorScheme must be the palette extracted from uploaded `
-      + `template ${template.id}; copy designSystem from ResolveProjectTemplate verbatim.`,
+      `presentationDesignSystem.colorScheme must be the palette extracted from uploaded ` +
+        `template ${template.id}; copy designSystem from ResolveProjectTemplate verbatim.`,
     );
   }
 }
@@ -289,8 +281,5 @@ export async function assertDesignSpecMatchesTemplatePolicy(
   },
 ): Promise<void> {
   if (!fileService) return;
-  assertDesignSpecMatchesTemplateState(
-    await readWorkspaceTemplateState(fileService),
-    spec,
-  );
+  assertDesignSpecMatchesTemplateState(await readWorkspaceTemplateState(fileService), spec);
 }

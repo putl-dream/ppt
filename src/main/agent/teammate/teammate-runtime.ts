@@ -111,10 +111,7 @@ export class TeammateRuntime {
     return this.requireAssigned();
   }
 
-  finishCurrentActivity(
-    status: "completed" | "failed" | "interrupted",
-    message?: string,
-  ): void {
+  finishCurrentActivity(status: "completed" | "failed" | "interrupted", message?: string): void {
     const assignment = this.assignmentForActivity();
     if (!assignment || assignment.activityFinished) return;
     assignment.activityFinished = true;
@@ -159,11 +156,12 @@ export class TeammateRuntime {
   }
 
   transitionToFailed(error: Error): void {
-    const assignment = this.phase.kind === "assigned"
-      ? this.phase
-      : this.phase.kind === "stopping" || this.phase.kind === "failed"
-        ? this.phase.assignment
-        : undefined;
+    const assignment =
+      this.phase.kind === "assigned"
+        ? this.phase
+        : this.phase.kind === "stopping" || this.phase.kind === "failed"
+          ? this.phase.assignment
+          : undefined;
     this.phase = {
       kind: "failed",
       exit: { kind: "failed", error },

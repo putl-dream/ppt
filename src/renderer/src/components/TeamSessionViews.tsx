@@ -1,5 +1,5 @@
-import React from "react";
 import type { TeamSessionProjection, TeamSessionStatus } from "@shared/team-session";
+import type React from "react";
 import { ProcessTracePanel } from "./ProcessTracePanel";
 
 const STATUS_COPY: Record<TeamSessionStatus, string> = {
@@ -11,11 +11,18 @@ const STATUS_COPY: Record<TeamSessionStatus, string> = {
 
 function TeamStatusMark({ status }: { status: TeamSessionStatus }) {
   if (status === "running") {
-    return <span className="run-status-pulse team-session-status-spinner" aria-hidden="true"><i /></span>;
+    return (
+      <span className="run-status-pulse team-session-status-spinner" aria-hidden="true">
+        <i />
+      </span>
+    );
   }
   const glyph = status === "completed" ? "✓" : status === "error" ? "!" : "×";
   return (
-    <span className={`team-session-status-mark team-session-status-mark--${status}`} aria-hidden="true">
+    <span
+      className={`team-session-status-mark team-session-status-mark--${status}`}
+      aria-hidden="true"
+    >
       {glyph}
     </span>
   );
@@ -38,7 +45,9 @@ export const FocusedTeamSession: React.FC<{ session: TeamSessionProjection }> = 
     <div className="focused-team-session-stream">
       <div className="focused-team-session-stream-heading">
         <span>执行记录</span>
-        {session.status === "running" && <span className="focused-team-session-live">实时更新</span>}
+        {session.status === "running" && (
+          <span className="focused-team-session-live">实时更新</span>
+        )}
       </div>
       {session.activity.steps.length > 0 ? (
         <ProcessTracePanel

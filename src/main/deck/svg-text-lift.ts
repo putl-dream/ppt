@@ -95,9 +95,7 @@ function tryLiftText(openAttrs: string, inner: string): LiftedText | null {
 
   const attrs = parseXmlAttributes(openAttrs);
   const style = parseStyleAttribute(attrs.get("style") ?? "");
-  const fontSizePx = parseFontSize(
-    attrs.get("font-size") ?? style["font-size"] ?? "16",
-  );
+  const fontSizePx = parseFontSize(attrs.get("font-size") ?? style["font-size"] ?? "16");
   if (!(fontSizePx > 0)) return null;
 
   const extracted = extractTextContent(inner);
@@ -106,30 +104,21 @@ function tryLiftText(openAttrs: string, inner: string): LiftedText | null {
 
   const xPx = parseNumber(attrs.get("x") ?? style.x ?? "0") ?? 0;
   const yPx = parseNumber(attrs.get("y") ?? style.y ?? "0") ?? 0;
-  const anchor = (attrs.get("text-anchor") ?? style["text-anchor"] ?? "start")
-    .trim()
-    .toLowerCase();
+  const anchor = (attrs.get("text-anchor") ?? style["text-anchor"] ?? "start").trim().toLowerCase();
   const align = anchorToAlign(anchor);
-  const fill = normalizeColor(
-    attrs.get("fill") ?? style.fill ?? "#000000",
-  );
-  const fontFace = firstFontFamily(
-    attrs.get("font-family") ?? style["font-family"] ?? "Arial",
-  );
-  const bold = isBold(
-    attrs.get("font-weight") ?? style["font-weight"] ?? "normal",
-  );
-  const letterSpacingPx = parseNumber(
-    attrs.get("letter-spacing") ?? style["letter-spacing"] ?? "0",
-  ) ?? 0;
+  const fill = normalizeColor(attrs.get("fill") ?? style.fill ?? "#000000");
+  const fontFace = firstFontFamily(attrs.get("font-family") ?? style["font-family"] ?? "Arial");
+  const bold = isBold(attrs.get("font-weight") ?? style["font-weight"] ?? "normal");
+  const letterSpacingPx =
+    parseNumber(attrs.get("letter-spacing") ?? style["letter-spacing"] ?? "0") ?? 0;
 
   const lines = content.split("\n");
-  const lineAdvancePx = extracted.lineAdvancePx
-    ?? fontSizePx * DEFAULT_LINE_ADVANCE;
-  const estimatedWidthPx = Math.max(
-    ...lines.map((line) => measureLineWidthPx(line, fontSizePx, letterSpacingPx)),
-    fontSizePx,
-  ) * WIDTH_SAFETY;
+  const lineAdvancePx = extracted.lineAdvancePx ?? fontSizePx * DEFAULT_LINE_ADVANCE;
+  const estimatedWidthPx =
+    Math.max(
+      ...lines.map((line) => measureLineWidthPx(line, fontSizePx, letterSpacingPx)),
+      fontSizePx,
+    ) * WIDTH_SAFETY;
   const heightPx = lineAdvancePx * lines.length;
 
   let leftPx = xPx;
@@ -220,10 +209,7 @@ function collectSkipRanges(markup: string): Array<{ start: number; end: number }
   return ranges;
 }
 
-function isInsideAnyRange(
-  index: number,
-  ranges: Array<{ start: number; end: number }>,
-): boolean {
+function isInsideAnyRange(index: number, ranges: Array<{ start: number; end: number }>): boolean {
   return ranges.some((range) => index >= range.start && index < range.end);
 }
 
@@ -239,9 +225,7 @@ function removeRangesFromString(
   return result;
 }
 
-function extractTextContent(
-  inner: string,
-): { content: string; lineAdvancePx?: number } {
+function extractTextContent(inner: string): { content: string; lineAdvancePx?: number } {
   // Prefer tspan-aware extraction so dy-separated lines become newlines.
   const tspanRe = /<tspan\b([^>]*)>([\s\S]*?)<\/tspan>/gi;
   const tspans: Array<{ attrs: string; body: string; index: number }> = [];
@@ -287,15 +271,10 @@ function extractTextContent(
  * metrics this only needs to be close enough that centered boxes stay centered;
  * export disables wrapping so a small underestimate cannot reflow the text.
  */
-function measureLineWidthPx(
-  line: string,
-  fontSizePx: number,
-  letterSpacingPx: number,
-): number {
+function measureLineWidthPx(line: string, fontSizePx: number, letterSpacingPx: number): number {
   let width = 0;
   for (const char of line) {
-    width += fontSizePx
-      * (FULL_WIDTH_PATTERN.test(char) ? FULL_WIDTH_ADVANCE : HALF_WIDTH_ADVANCE);
+    width += fontSizePx * (FULL_WIDTH_PATTERN.test(char) ? FULL_WIDTH_ADVANCE : HALF_WIDTH_ADVANCE);
     width += letterSpacingPx;
   }
   return width;
@@ -372,9 +351,7 @@ function normalizeColor(value: string): string {
     const [, r, g, b] = trimmed;
     return `${r}${r}${g}${g}${b}${b}`.toUpperCase();
   }
-  const rgb = trimmed.match(
-    /^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/i,
-  );
+  const rgb = trimmed.match(/^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/i);
   if (rgb) {
     return [rgb[1], rgb[2], rgb[3]]
       .map((part) => Number(part).toString(16).padStart(2, "0"))

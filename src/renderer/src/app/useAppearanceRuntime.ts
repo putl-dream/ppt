@@ -1,16 +1,8 @@
 import { useEffect } from "react";
-import type {
-  ComputedColorScheme,
-  UiColorScheme,
-  UiFontFamily,
-  UiSkin,
-} from "./appBootstrap";
+import type { ComputedColorScheme, UiColorScheme, UiFontFamily, UiSkin } from "./appBootstrap";
 import { resolveColorScheme } from "./appBootstrap";
-import {
-  applyUserUiThemeCss,
-  getBuiltinUiThemeCss,
-} from "./userUiTheme";
 import { applyUiTypography } from "./uiTypography";
+import { applyUserUiThemeCss, getBuiltinUiThemeCss } from "./userUiTheme";
 
 interface AppearanceRuntimeOptions {
   skin: UiSkin;

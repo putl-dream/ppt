@@ -14,12 +14,13 @@
   --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
   --ease-view: var(--ease-out);
 
-  --transition-color: color var(--duration-fast) var(--ease-out),
+  --transition-color:
+    color var(--duration-fast) var(--ease-out),
     background-color var(--duration-fast) var(--ease-out),
     border-color var(--duration-fast) var(--ease-out);
   --transition-transform: transform var(--duration-base) var(--ease-out);
   --transition-opacity: opacity var(--duration-fast) var(--ease-out);
-  --transition-panel: background-color var(--duration-slow) var(--ease-out),
-    color var(--duration-slow) var(--ease-out),
-    border-color var(--duration-slow) var(--ease-out);
+  --transition-panel:
+    background-color var(--duration-slow) var(--ease-out),
+    color var(--duration-slow) var(--ease-out), border-color var(--duration-slow) var(--ease-out);
 }

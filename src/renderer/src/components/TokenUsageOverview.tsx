@@ -1,15 +1,12 @@
+import type { TokenUsageDay, TokenUsageStats } from "@shared/token-usage";
 import React from "react";
-import type {
-  TokenUsageDay,
-  TokenUsageStats,
-} from "@shared/token-usage";
 import type { ManagedModel } from "../modelCatalog";
 import {
   buildPricingIndex,
   estimateModelCost,
   estimateModelsCost,
-  resolveUsagePricing,
   type ModelPricingCurrency,
+  resolveUsagePricing,
 } from "../modelPricing";
 import { RefreshIcon } from "./Icons";
 
@@ -77,23 +74,25 @@ function buildTrendDays(stats: TokenUsageStats): TokenUsageDay[] {
   return Array.from({ length: 30 }, (_, index) => {
     const date = new Date(today);
     date.setDate(today.getDate() - (29 - index));
-    return byDate.get(dateKey(date)) ?? {
-      date: dateKey(date),
-      inputTokens: 0,
-      outputTokens: 0,
-      totalTokens: 0,
-      cachedInputTokens: 0,
-      cacheCreationInputTokens: 0,
-      requestCount: 0,
-      taskCount: 0,
-      completedTaskCount: 0,
-      failedTaskCount: 0,
-      interruptedTaskCount: 0,
-      totalTaskDurationMs: 0,
-      durationSampleCount: 0,
-      longestTaskDurationMs: 0,
-      models: [],
-    };
+    return (
+      byDate.get(dateKey(date)) ?? {
+        date: dateKey(date),
+        inputTokens: 0,
+        outputTokens: 0,
+        totalTokens: 0,
+        cachedInputTokens: 0,
+        cacheCreationInputTokens: 0,
+        requestCount: 0,
+        taskCount: 0,
+        completedTaskCount: 0,
+        failedTaskCount: 0,
+        interruptedTaskCount: 0,
+        totalTaskDurationMs: 0,
+        durationSampleCount: 0,
+        longestTaskDurationMs: 0,
+        models: [],
+      }
+    );
   });
 }
 
@@ -103,11 +102,14 @@ export const TokenUsageOverview: React.FC<TokenUsageOverviewProps> = ({
 }) => {
   const [stats, setStats] = React.useState<TokenUsageStats>(emptyStats);
   const [view, setView] = React.useState<UsageView>("tokens");
-  const [costCurrency, setCostCurrency] = React.useState<ModelPricingCurrency>(() =>
-    models.find((model) => model.id === selectedModelId)?.pricing?.currency
-      ?? (["CNY", "USD"] as const).find((currency) =>
-        models.some((model) => model.pricing?.currency === currency))
-      ?? "CNY");
+  const [costCurrency, setCostCurrency] = React.useState<ModelPricingCurrency>(
+    () =>
+      models.find((model) => model.id === selectedModelId)?.pricing?.currency ??
+      (["CNY", "USD"] as const).find((currency) =>
+        models.some((model) => model.pricing?.currency === currency),
+      ) ??
+      "CNY",
+  );
   const previousSelectedModelId = React.useRef(selectedModelId);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
@@ -142,8 +144,10 @@ export const TokenUsageOverview: React.FC<TokenUsageOverviewProps> = ({
   const trendMax = Math.max(0, ...trendValues);
   const selectedModel = models.find((model) => model.id === selectedModelId);
   const configuredCurrencies = React.useMemo(
-    () => (["CNY", "USD"] as const).filter((currency) =>
-      models.some((model) => model.pricing?.currency === currency)),
+    () =>
+      (["CNY", "USD"] as const).filter((currency) =>
+        models.some((model) => model.pricing?.currency === currency),
+      ),
     [models],
   );
   React.useEffect(() => {
@@ -159,16 +163,16 @@ export const TokenUsageOverview: React.FC<TokenUsageOverviewProps> = ({
   }, [configuredCurrencies, costCurrency, selectedModel, selectedModelId]);
   const selectedModelEnabled = Boolean(selectedModel && selectedModel.enabled !== false);
   const measuredTasks = stats.completedTaskCount + stats.failedTaskCount;
-  const successRate = measuredTasks > 0
-    ? (stats.completedTaskCount / measuredTasks) * 100
-    : undefined;
-  const coverage = stats.totalTokens > 0
-    ? Math.round((totalEstimate.coveredTokens / stats.totalTokens) * 100)
-    : 0;
-  const totalCostLabel = configuredCurrencies.length > 0
-    ? configuredCurrencies.map((currency) =>
-      formatCost(totalEstimate.costs[currency], currency)).join(" · ")
-    : "—";
+  const successRate =
+    measuredTasks > 0 ? (stats.completedTaskCount / measuredTasks) * 100 : undefined;
+  const coverage =
+    stats.totalTokens > 0 ? Math.round((totalEstimate.coveredTokens / stats.totalTokens) * 100) : 0;
+  const totalCostLabel =
+    configuredCurrencies.length > 0
+      ? configuredCurrencies
+          .map((currency) => formatCost(totalEstimate.costs[currency], currency))
+          .join(" · ")
+      : "—";
 
   const metrics = [
     {
@@ -274,25 +278,36 @@ export const TokenUsageOverview: React.FC<TokenUsageOverviewProps> = ({
         {error ? (
           <div className="token-usage-state is-error">
             <span>统计读取失败：{error}</span>
-            <button type="button" onClick={() => void loadStats()}>重试</button>
+            <button type="button" onClick={() => void loadStats()}>
+              重试
+            </button>
           </div>
         ) : (
-          <div className={`token-trend-chart ${loading ? "is-loading" : ""}`} role="img" aria-label="最近 30 天用量柱状图">
+          <div
+            className={`token-trend-chart ${loading ? "is-loading" : ""}`}
+            role="img"
+            aria-label="最近 30 天用量柱状图"
+          >
             {trendDays.map((day, index) => {
               const value = trendValues[index];
-              const label = view === "cost"
-                ? formatCost(value, costCurrency)
-                : view === "tokens"
-                  ? `${formatTokens(value)} Token`
-                  : `${value} 个任务`;
+              const label =
+                view === "cost"
+                  ? formatCost(value, costCurrency)
+                  : view === "tokens"
+                    ? `${formatTokens(value)} Token`
+                    : `${value} 个任务`;
               return (
                 <div className="token-trend-column" key={day.date} title={`${day.date} · ${label}`}>
                   <span
                     className="token-trend-bar"
-                    style={{ height: `${trendMax > 0 ? Math.max(3, (value / trendMax) * 100) : 3}%` }}
+                    style={{
+                      height: `${trendMax > 0 ? Math.max(3, (value / trendMax) * 100) : 3}%`,
+                    }}
                   />
                   {(index === 0 || index === 29 || index % 7 === 1) && (
-                    <small>{Number(day.date.slice(5, 7))}/{Number(day.date.slice(8, 10))}</small>
+                    <small>
+                      {Number(day.date.slice(5, 7))}/{Number(day.date.slice(8, 10))}
+                    </small>
                   )}
                 </div>
               );
@@ -311,25 +326,30 @@ export const TokenUsageOverview: React.FC<TokenUsageOverviewProps> = ({
         {stats.models.length > 0 ? (
           <div className="token-model-list">
             {stats.models.map((usage) => {
-              const estimate = estimateModelCost(
-                usage,
-                resolveUsagePricing(usage, pricing),
-              );
-              const share = stats.totalTokens > 0 ? (usage.totalTokens / stats.totalTokens) * 100 : 0;
+              const estimate = estimateModelCost(usage, resolveUsagePricing(usage, pricing));
+              const share =
+                stats.totalTokens > 0 ? (usage.totalTokens / stats.totalTokens) * 100 : 0;
               return (
-                <div className="token-model-row" key={usage.configurationId ?? modelKey(usage.provider, usage.model)}>
+                <div
+                  className="token-model-row"
+                  key={usage.configurationId ?? modelKey(usage.provider, usage.model)}
+                >
                   <div className="token-model-copy">
                     <strong>{usage.model}</strong>
-                    <span>{usage.provider} · {usage.requestCount} 次调用</span>
+                    <span>
+                      {usage.provider} · {usage.requestCount} 次调用
+                    </span>
                   </div>
                   <div className="token-model-bar-track">
                     <span style={{ width: `${share}%` }} />
                   </div>
                   <div className="token-model-values">
                     <strong>{formatTokens(usage.totalTokens)}</strong>
-                    <span>{estimate.currency
-                      ? formatCost(estimate.cost, estimate.currency)
-                      : "费用未知"}</span>
+                    <span>
+                      {estimate.currency
+                        ? formatCost(estimate.cost, estimate.currency)
+                        : "费用未知"}
+                    </span>
                   </div>
                 </div>
               );

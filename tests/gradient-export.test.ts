@@ -1,6 +1,6 @@
+import { resolveSlideStyle } from "@design-system";
 import { describe, expect, it } from "vitest";
 import { renderGradientToPng } from "../src/shared/gradient-export";
-import { resolveSlideStyle } from "@design-system";
 import { testDesignSystem } from "./design-engine-test-utils";
 
 describe("gradient-export", () => {
@@ -30,7 +30,8 @@ describe("gradient-export", () => {
 
   it("design-engine gradient includes structured export stops", () => {
     const bg = resolveSlideStyle(testDesignSystem({ visualStyle: "soft-rounded" }), {
-      layout: "cover", slideVariant: "light",
+      layout: "cover",
+      slideVariant: "light",
     }).background;
     expect(bg.gradient).toBeDefined();
     expect(bg.gradient?.type).toBe("linear");

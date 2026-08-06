@@ -1,10 +1,6 @@
-import {
-  fontFamilyToCss,
-  fontFamilyToPptxFace,
-  type FontFamily,
-} from "@shared/typography";
+import { type FontFamily, fontFamilyToCss, fontFamilyToPptxFace } from "@shared/typography";
 
-import { resolveBackground, type ResolvedBackground } from "./backgrounds";
+import { type ResolvedBackground, resolveBackground } from "./backgrounds";
 import {
   getReadingModeDefinition,
   getVisualStyleDefinition,
@@ -12,14 +8,8 @@ import {
   type ImageRendering,
   type VisualStyleDefinition,
 } from "./catalog";
+import { isDarkColor, isDarkColorScheme, type ResolvedColors, resolveColors } from "./colors";
 import {
-  isDarkColor,
-  isDarkColorScheme,
-  resolveColors,
-  type ResolvedColors,
-} from "./colors";
-import {
-  resolveDesignTokens,
   type ChartStyle,
   type ColorOverrides,
   type Density,
@@ -28,6 +18,7 @@ import {
   type ImageTreatment,
   type Motif,
   type ReadingMode,
+  resolveDesignTokens,
   type SlideDesignOverride,
   type VisualStyle,
 } from "./schema";
@@ -120,8 +111,8 @@ function resolveMode(
 ): "light" | "dark" {
   if (slide.slideVariant === "light") return "light";
   if (slide.slideVariant === "dark") return "dark";
-  const slideBackground = slide.designOverride?.colors?.background
-    ?? slide.designOverride?.colors?.bg;
+  const slideBackground =
+    slide.designOverride?.colors?.background ?? slide.designOverride?.colors?.bg;
   const deckBackground = system.colors?.background ?? system.colors?.bg;
   if (slideBackground) return isDarkColor(slideBackground) ? "dark" : "light";
   if (deckBackground) return isDarkColor(deckBackground) ? "dark" : "light";

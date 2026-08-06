@@ -35,14 +35,20 @@ const ALLOWED_CONDITIONAL_SKIPS: AllowedConditionalSkip[] = [
 
 async function listTypescriptFiles(directory: string): Promise<string[]> {
   const entries = await readdir(directory, { withFileTypes: true });
-  const nested = await Promise.all(entries.map(async (entry) => {
-    const path = resolve(directory, entry.name);
-    if (entry.isDirectory()) return listTypescriptFiles(path);
-    if (!entry.isFile() || !TEST_EXTENSIONS.has(extname(entry.name)) || entry.name === THIS_FILE) {
-      return [];
-    }
-    return [path];
-  }));
+  const nested = await Promise.all(
+    entries.map(async (entry) => {
+      const path = resolve(directory, entry.name);
+      if (entry.isDirectory()) return listTypescriptFiles(path);
+      if (
+        !entry.isFile() ||
+        !TEST_EXTENSIONS.has(extname(entry.name)) ||
+        entry.name === THIS_FILE
+      ) {
+        return [];
+      }
+      return [path];
+    }),
+  );
   return nested.flat();
 }
 
@@ -79,10 +85,12 @@ describe("test source hygiene", () => {
       }
     }
 
-    const expected = new Map(ALLOWED_CONDITIONAL_SKIPS.map((entry) => {
-      expect(entry.reason.trim()).not.toBe("");
-      return [`${entry.file}\0${entry.condition}`, entry.count] as const;
-    }));
+    const expected = new Map(
+      ALLOWED_CONDITIONAL_SKIPS.map((entry) => {
+        expect(entry.reason.trim()).not.toBe("");
+        return [`${entry.file}\0${entry.condition}`, entry.count] as const;
+      }),
+    );
     expect([...discovered.entries()].sort()).toEqual([...expected.entries()].sort());
   });
 

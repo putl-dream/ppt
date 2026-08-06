@@ -3,10 +3,7 @@ import { join } from "node:path";
 import { app, BrowserWindow, shell } from "electron";
 import { createModuleLogger } from "../agent/logger";
 import { resolveExternalHttpUrl } from "../external-navigation";
-import {
-  getWindowBackgroundColor,
-  getWindowTitleBarOverlay,
-} from "./theme";
+import { getWindowBackgroundColor, getWindowTitleBarOverlay } from "./theme";
 
 const logger = createModuleLogger("main.window");
 
@@ -23,9 +20,7 @@ function resolveAppIconPath(): string | undefined {
   return candidates.find((candidate) => existsSync(candidate));
 }
 
-export function createWindow(
-  onWindowCreated?: (window: BrowserWindow) => void,
-): BrowserWindow {
+export function createWindow(onWindowCreated?: (window: BrowserWindow) => void): BrowserWindow {
   const icon = resolveAppIconPath();
   const window = new BrowserWindow({
     width: 1440,
@@ -54,8 +49,7 @@ export function createWindow(
   window.webContents.on("before-input-event", (event, input) => {
     if (input.type !== "keyDown") return;
     const toggleDevTools =
-      input.key === "F12"
-      || (input.control && input.shift && input.key.toLowerCase() === "i");
+      input.key === "F12" || (input.control && input.shift && input.key.toLowerCase() === "i");
     if (!toggleDevTools) return;
     event.preventDefault();
     window.webContents.toggleDevTools();

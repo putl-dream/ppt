@@ -6,9 +6,11 @@ function errorMessage(error: unknown): string {
 
 function isConnectionTerminated(error: unknown): boolean {
   const message = errorMessage(error);
-  return message === "terminated"
-    || /connection (?:closed|reset|terminated)/i.test(message)
-    || /socket hang up/i.test(message);
+  return (
+    message === "terminated" ||
+    /connection (?:closed|reset|terminated)/i.test(message) ||
+    /socket hang up/i.test(message)
+  );
 }
 
 /** User-facing Chinese copy for recoverable agent failures. */

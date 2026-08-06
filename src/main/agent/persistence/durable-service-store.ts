@@ -1,8 +1,8 @@
 import { join } from "node:path";
 import type { AgentExecutionStrategy, AgentModelSelection } from "@shared/agent";
 import type { AgentConversationMessage } from "@shared/session-recovery";
+import type { ConversationDatabase } from "../../conversation-database";
 import { readJsonFile, writeJsonFileAtomic, writeTextFileAtomic } from "./atomic-json-file";
-import { ConversationDatabase } from "../../conversation-database";
 
 interface DurableMemoryEntry {
   threadId: string;
@@ -60,12 +60,20 @@ export class DurableServiceStore {
     if (typeof this.storage !== "string") return;
     const statePath = join(this.storage, ".memory", "STATE.json");
     const markdownPath = join(this.storage, ".memory", "STATE.md");
-    const existing = await readJsonFile<{ version: 1; entries: DurableMemoryEntry[] }>(statePath)
-      ?? { version: 1 as const, entries: [] };
-    const objective = [...state.messages].reverse()
-      .find((message) => message.role === "user")?.content.trim().slice(0, 1_000) ?? "";
-    const outcome = [...state.messages].reverse()
-      .find((message) => message.role === "assistant")?.content.trim().slice(0, 1_000);
+    const existing = (await readJsonFile<{ version: 1; entries: DurableMemoryEntry[] }>(
+      statePath,
+    )) ?? { version: 1 as const, entries: [] };
+    const objective =
+      [...state.messages]
+        .reverse()
+        .find((message) => message.role === "user")
+        ?.content.trim()
+        .slice(0, 1_000) ?? "";
+    const outcome = [...state.messages]
+      .reverse()
+      .find((message) => message.role === "assistant")
+      ?.content.trim()
+      .slice(0, 1_000);
     const entry: DurableMemoryEntry = {
       threadId: state.threadId,
       status: state.status,

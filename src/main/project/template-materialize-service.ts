@@ -1,20 +1,20 @@
 import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { basename, extname, join } from "node:path";
-import JSZip from "jszip";
+import type { SessionSnapshot } from "@shared/session";
+import { buildTemplatePack } from "@shared/template-projection";
 import {
   APPLICATION_DEFAULT_TEMPLATE_ID,
-  TEMPLATE_PACK_PATH,
-  TEMPLATE_POLICY_PATH,
   formatProjectTemplatePolicy,
   formatTemplatePack,
   projectTemplatePolicySchema,
-  templateAssetDirectory,
+  TEMPLATE_PACK_PATH,
+  TEMPLATE_POLICY_PATH,
   type TemplatePack,
   type TemplatePackAsset,
+  templateAssetDirectory,
 } from "@shared/template-protocol";
-import { buildTemplatePack } from "@shared/template-projection";
-import type { SessionSnapshot } from "@shared/session";
+import JSZip from "jszip";
 import type { ProjectFileService } from "./project-file-service";
 import {
   applicationTemplateLibrary,
@@ -58,11 +58,12 @@ async function extractAssetsIntoProject(input: {
     // Skip EMF/WMF for SVG embedding — not usable as <image href> in product path.
     if (extension === ".emf" || extension === ".wmf") continue;
 
-    const role = candidate.roleHint === "background"
-      ? "background" as const
-      : candidate.roleHint === "logo" && logoCount === 0
-        ? "logo" as const
-        : "decoration" as const;
+    const role =
+      candidate.roleHint === "background"
+        ? ("background" as const)
+        : candidate.roleHint === "logo" && logoCount === 0
+          ? ("logo" as const)
+          : ("decoration" as const);
     if (role === "logo") logoCount += 1;
     if (role === "decoration") {
       decorationCount += 1;
@@ -112,9 +113,7 @@ function buildDesignSpecSeed(pack: TemplatePack): string {
       supportLevel: "design-reference",
     },
     typography: pack.typography,
-    colors: typeof ds.colorScheme === "string"
-      ? { named: ds.colorScheme }
-      : ds.colorScheme,
+    colors: typeof ds.colorScheme === "string" ? { named: ds.colorScheme } : ds.colorScheme,
     templateChrome: pack.chrome,
     templateAssets: pack.assets,
     forbidden: pack.authoringGuidance.avoid,
@@ -173,22 +172,23 @@ export async function materializeCustomTemplate(
 
   // Bind first logo into header chrome when present.
   const logo = assets.find((asset) => asset.role === "logo");
-  const inspectionWithLogo = logo && inspection.chrome
-    ? {
-        ...inspection,
-        chrome: {
-          ...inspection.chrome,
-          header: inspection.chrome.header
-            ? { ...inspection.chrome.header, logoAsset: logo.path }
-            : {
-                y: 24,
-                height: 40,
-                align: "left" as const,
-                logoAsset: logo.path,
-              },
-        },
-      }
-    : inspection;
+  const inspectionWithLogo =
+    logo && inspection.chrome
+      ? {
+          ...inspection,
+          chrome: {
+            ...inspection.chrome,
+            header: inspection.chrome.header
+              ? { ...inspection.chrome.header, logoAsset: logo.path }
+              : {
+                  y: 24,
+                  height: 40,
+                  align: "left" as const,
+                  logoAsset: logo.path,
+                },
+          },
+        }
+      : inspection;
 
   const pack = buildTemplatePack({
     descriptor,
@@ -230,8 +230,9 @@ export async function materializeCustomTemplate(
         resolvedTemplate?: { templateId?: string; templateRevisionId?: string };
         communicationContract?: { audience?: string };
       };
-      const matches = parsed.resolvedTemplate?.templateId === pack.templateId
-        && parsed.resolvedTemplate?.templateRevisionId === pack.revisionId;
+      const matches =
+        parsed.resolvedTemplate?.templateId === pack.templateId &&
+        parsed.resolvedTemplate?.templateRevisionId === pack.revisionId;
       const audience = parsed.communicationContract?.audience ?? "";
       const hasRealContract = audience.length > 0 && !audience.includes("待根据用户需求");
       shouldWriteSeed = !(matches && hasRealContract);

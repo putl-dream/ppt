@@ -44,9 +44,10 @@ export class RiskPolicy {
 
     const finalRisk = systemSeverity >= modelSeverity ? assessedRisk : input.modelReportedRisk;
 
-    const decision = finalRisk === "high" || finalRisk === "medium"
-      ? "REQUIRES_APPROVAL" as const
-      : "AUTO" as const;
+    const decision =
+      finalRisk === "high" || finalRisk === "medium"
+        ? ("REQUIRES_APPROVAL" as const)
+        : ("AUTO" as const);
 
     return {
       risk: finalRisk,

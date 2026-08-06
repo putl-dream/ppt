@@ -1,35 +1,29 @@
-import { z } from "zod";
 import { normalize, posix, resolve } from "node:path";
+import { z } from "zod";
 import {
-  WORKSPACE_FILE_TOOL_PERMISSION_PROFILES,
   type ToolPermissionProfile,
   type ToolRisk,
+  WORKSPACE_FILE_TOOL_PERMISSION_PROFILES,
 } from "../../runtime/tools/tool-access-policy";
+import { assertDesignSpecMatchesTemplatePolicy } from "../core/project-template-state";
 import {
-  globWorkspaceFiles,
+  isSvgDeckLockPath,
+  SVG_DECK_DESIGN_SPEC_PATH,
+  type SvgDeckDesignSpec,
+  validateSvgDeckLockContent,
+} from "../core/svg-deck-locks";
+import type { PptLifecycleToolBridge, ToolRuntimeBehavior } from "../tool-definition";
+import {
   countOccurrences,
+  globWorkspaceFiles,
   WorkspaceFileError,
   type WorkspaceFileService,
 } from "./workspace-file-service";
-import type {
-  PptLifecycleToolBridge,
-  ToolRuntimeBehavior,
-} from "../tool-definition";
-import {
-  SVG_DECK_DESIGN_SPEC_PATH,
-  isSvgDeckLockPath,
-  validateSvgDeckLockContent,
-  type SvgDeckDesignSpec,
-} from "../core/svg-deck-locks";
-import { assertDesignSpecMatchesTemplatePolicy } from "../core/project-template-state";
 
 export interface WorkspaceFileToolContext {
   readonly workspaceRoot?: string;
   readonly fileService?: WorkspaceFileService;
-  readonly presentationLifecycle?: Pick<
-    PptLifecycleToolBridge,
-    "observeArtifactChanges"
-  >;
+  readonly presentationLifecycle?: Pick<PptLifecycleToolBridge, "observeArtifactChanges">;
 }
 
 export interface WorkspaceFileToolContract<
@@ -45,10 +39,7 @@ export interface WorkspaceFileToolContract<
   risk: ToolRisk;
   permission: ToolPermissionProfile;
   isEnabled: (context: WorkspaceFileToolContext) => boolean;
-  execute: (
-    args: z.infer<TParams>,
-    context: WorkspaceFileToolContext,
-  ) => Promise<TResult>;
+  execute: (args: z.infer<TParams>, context: WorkspaceFileToolContext) => Promise<TResult>;
 }
 
 export const fileReceiptSchema = z.object({
@@ -62,15 +53,27 @@ export const fileReceiptSchema = z.object({
 
 export const readFileSchema = z.object({
   path: z.string().min(1).describe("Workspace-relative file path"),
-  offset: z.number().int().min(0).optional().describe(
-    "Zero-based text offset. For continuation, pass nextOffset from the previous result.",
-  ),
-  limit: z.number().int().min(2).max(4_000).optional().describe(
-    "Maximum UTF-16 text units to return in this window.",
-  ),
-  expected_version: z.string().optional().describe(
-    "Required when offset > 0. Pass version from the first window to prevent mixed-version reads.",
-  ),
+  offset: z
+    .number()
+    .int()
+    .min(0)
+    .optional()
+    .describe(
+      "Zero-based text offset. For continuation, pass nextOffset from the previous result.",
+    ),
+  limit: z
+    .number()
+    .int()
+    .min(2)
+    .max(4_000)
+    .optional()
+    .describe("Maximum UTF-16 text units to return in this window."),
+  expected_version: z
+    .string()
+    .optional()
+    .describe(
+      "Required when offset > 0. Pass version from the first window to prevent mixed-version reads.",
+    ),
 });
 
 export const readFileOutputSchema = fileReceiptSchema.extend({
@@ -83,9 +86,10 @@ export const readFileOutputSchema = fileReceiptSchema.extend({
 });
 
 export const globFilesSchema = z.object({
-  pattern: z.string().min(1).describe(
-    "Workspace-relative glob, for example **/*.md or slides/**/*.json",
-  ),
+  pattern: z
+    .string()
+    .min(1)
+    .describe("Workspace-relative glob, for example **/*.md or slides/**/*.json"),
   limit: z.number().int().min(1).max(1000).optional().default(200),
 });
 
@@ -98,9 +102,10 @@ export const globFilesOutputSchema = z.object({
 export const writeFileSchema = z.object({
   path: z.string().min(1).describe("Workspace-relative file path"),
   content: z.string().describe("Complete text content to write"),
-  expected_version: z.string().optional().describe(
-    "Version returned by ReadFile. Existing files must first be read in this thread.",
-  ),
+  expected_version: z
+    .string()
+    .optional()
+    .describe("Version returned by ReadFile. Existing files must first be read in this thread."),
 });
 
 export const writeFileOutputSchema = fileReceiptSchema.extend({
@@ -112,12 +117,14 @@ export const editFileSchema = z.object({
   path: z.string().min(1).describe("Workspace-relative file path"),
   old_string: z.string().min(1).describe("Exact text to replace"),
   new_string: z.string().describe("Replacement text"),
-  replace_all: z.boolean().optional().describe(
-    "Replace every exact match. Otherwise old_string must match exactly once.",
-  ),
-  expected_version: z.string().optional().describe(
-    "Version returned by ReadFile. Existing files must first be read in this thread.",
-  ),
+  replace_all: z
+    .boolean()
+    .optional()
+    .describe("Replace every exact match. Otherwise old_string must match exactly once."),
+  expected_version: z
+    .string()
+    .optional()
+    .describe("Version returned by ReadFile. Existing files must first be read in this thread."),
 });
 
 export const editFileOutputSchema = writeFileOutputSchema.extend({
@@ -130,9 +137,9 @@ export const readFileContract: WorkspaceFileToolContract<
 > = {
   name: "ReadFile",
   description:
-    "分页读取 workspace 内的 UTF-8 文本文件，并返回内容窗口、版本和续读位置。"
-    + "hasMore=true 时必须用 nextOffset 和同一 version 继续读取，直到 hasMore=false。"
-    + "只有完整读取同一版本后，才可覆盖或编辑已有文件。",
+    "分页读取 workspace 内的 UTF-8 文本文件，并返回内容窗口、版本和续读位置。" +
+    "hasMore=true 时必须用 nextOffset 和同一 version 继续读取，直到 hasMore=false。" +
+    "只有完整读取同一版本后，才可覆盖或编辑已有文件。",
   inputSchema: readFileSchema,
   outputSchema: readFileOutputSchema,
   formatResultForModel: formatReadFileResultForModel,
@@ -156,8 +163,8 @@ export const globFilesContract: WorkspaceFileToolContract<
 > = {
   name: "Glob",
   description:
-    "按 workspace-relative glob 列出文件。用于在读取前发现真实路径；"
-    + "不会跟随符号链接，也不会返回 workspace 外结果。",
+    "按 workspace-relative glob 列出文件。用于在读取前发现真实路径；" +
+    "不会跟随符号链接，也不会返回 workspace 外结果。",
   inputSchema: globFilesSchema,
   outputSchema: globFilesOutputSchema,
   risk: "low",
@@ -180,9 +187,9 @@ export const writeFileContract: WorkspaceFileToolContract<
 > = {
   name: "WriteFile",
   description:
-    "在 workspace 内创建或原子覆盖 UTF-8 文本文件。覆盖已有文件时，"
-    + "必须具有当前 thread 的 ReadFile receipt；磁盘版本变化会拒绝写入。"
-    + "写入 design/design-spec.json 或 slides/page-plan.json 时会按 SVG deck 锁契约做硬校验，非法内容不落盘。",
+    "在 workspace 内创建或原子覆盖 UTF-8 文本文件。覆盖已有文件时，" +
+    "必须具有当前 thread 的 ReadFile receipt；磁盘版本变化会拒绝写入。" +
+    "写入 design/design-spec.json 或 slides/page-plan.json 时会按 SVG deck 锁契约做硬校验，非法内容不落盘。",
   inputSchema: writeFileSchema,
   outputSchema: writeFileOutputSchema,
   behavior: {
@@ -198,11 +205,9 @@ export const writeFileContract: WorkspaceFileToolContract<
   execute: async (args, context) => {
     const fileService = requireFileService(context);
     await assertSvgDeckLockContentIfNeeded(args.path, args.content, fileService);
-    const result = await fileService.write(
-      args.path,
-      args.content,
-      { expectedVersion: args.expected_version },
-    );
+    const result = await fileService.write(args.path, args.content, {
+      expectedVersion: args.expected_version,
+    });
     await observeArtifactChange(context, [result.path], "agent_write");
     return result;
   },
@@ -214,9 +219,9 @@ export const editFileContract: WorkspaceFileToolContract<
 > = {
   name: "EditFile",
   description:
-    "在已读取的 workspace 文件中执行精确文本替换。默认要求 old_string 唯一匹配；"
-    + "只有显式 replace_all=true 才会替换所有匹配，版本冲突时拒绝修改。"
-    + "编辑 design/design-spec.json 或 slides/page-plan.json 时，替换后的完整内容必须满足 SVG deck 锁契约。",
+    "在已读取的 workspace 文件中执行精确文本替换。默认要求 old_string 唯一匹配；" +
+    "只有显式 replace_all=true 才会替换所有匹配，版本冲突时拒绝修改。" +
+    "编辑 design/design-spec.json 或 slides/page-plan.json 时，替换后的完整内容必须满足 SVG deck 锁契约。",
   inputSchema: editFileSchema,
   outputSchema: editFileOutputSchema,
   behavior: {
@@ -243,8 +248,8 @@ export const editFileContract: WorkspaceFileToolContract<
       if (!args.replace_all && replacements > 1) {
         throw new WorkspaceFileError(
           "AMBIGUOUS_EDIT",
-          `old_string matches ${replacements} locations in ${args.path}; `
-          + "provide more context or set replace_all=true.",
+          `old_string matches ${replacements} locations in ${args.path}; ` +
+            "provide more context or set replace_all=true.",
         );
       }
       const updated = args.replace_all
@@ -252,15 +257,10 @@ export const editFileContract: WorkspaceFileToolContract<
         : current.content.replace(args.old_string, args.new_string);
       await assertSvgDeckLockContentIfNeeded(args.path, updated, fileService);
     }
-    const result = await fileService.edit(
-      args.path,
-      args.old_string,
-      args.new_string,
-      {
-        expectedVersion: args.expected_version,
-        replaceAll: args.replace_all,
-      },
-    );
+    const result = await fileService.edit(args.path, args.old_string, args.new_string, {
+      expectedVersion: args.expected_version,
+      replaceAll: args.replace_all,
+    });
     await observeArtifactChange(context, [result.path], "agent_write");
     return result;
   },
@@ -284,22 +284,24 @@ function workspacePathParallelBehavior(): ToolRuntimeBehavior<{ path: string }> 
       conflictScope: "workspace_path",
       resourceKeys: (args, context) => {
         const absolute = normalize(resolve(context.workspaceRoot ?? ".", args.path));
-        return [`workspace-path:${process.platform === "win32" ? absolute.toLowerCase() : absolute}`];
+        return [
+          `workspace-path:${process.platform === "win32" ? absolute.toLowerCase() : absolute}`,
+        ];
       },
     },
   };
 }
 
 function isPresentationOwnedWorkspacePath(input: string): boolean {
-  const path = posix.normalize(input.replace(/\\/g, "/"))
-    .replace(/^\.\//, "")
-    .toLowerCase();
-  return path === "design/design-spec.json"
-    || path === "slides/page-plan.json"
-    || path === "slides/storyboard.json"
-    || path === "deck/snapshot.json"
-    || path.startsWith("slides/svg/")
-    || path.startsWith("assets/");
+  const path = posix.normalize(input.replace(/\\/g, "/")).replace(/^\.\//, "").toLowerCase();
+  return (
+    path === "design/design-spec.json" ||
+    path === "slides/page-plan.json" ||
+    path === "slides/storyboard.json" ||
+    path === "deck/snapshot.json" ||
+    path.startsWith("slides/svg/") ||
+    path.startsWith("assets/")
+  );
 }
 
 function requireFileService(context: WorkspaceFileToolContext): WorkspaceFileService {
@@ -332,10 +334,7 @@ async function assertSvgDeckLockContentIfNeeded(
     const validated = validateSvgDeckLockContent(path, content);
     const normalized = path.replace(/\\/g, "/").replace(/^\.\//, "");
     if (normalized === SVG_DECK_DESIGN_SPEC_PATH) {
-      await assertDesignSpecMatchesTemplatePolicy(
-        fileService,
-        validated as SvgDeckDesignSpec,
-      );
+      await assertDesignSpecMatchesTemplatePolicy(fileService, validated as SvgDeckDesignSpec);
     }
   } catch (error) {
     throw new WorkspaceFileError(
@@ -345,9 +344,7 @@ async function assertSvgDeckLockContentIfNeeded(
   }
 }
 
-export function formatReadFileResultForModel(
-  result: z.infer<typeof readFileOutputSchema>,
-): string {
+export function formatReadFileResultForModel(result: z.infer<typeof readFileOutputSchema>): string {
   const metadata = JSON.stringify({
     path: result.path,
     version: result.version,

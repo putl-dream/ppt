@@ -1,21 +1,19 @@
 // @vitest-environment jsdom
 
-import React, { type ComponentProps } from "react";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import React, { type ComponentProps } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DEFAULT_DESIGN_SYSTEM } from "../src/design-system";
-import { DEFAULT_AGENT_STEP_LIMITS } from "../src/shared/agent-step-limits";
+import { MAX_UI_FONT_SIZE } from "../src/renderer/src/app/uiTypography";
+import { SettingsConsole } from "../src/renderer/src/components/SettingsConsole";
 import {
   DEFAULT_WEB_SEARCH_ENDPOINT,
   resolveAgentGatewayPreferences,
 } from "../src/shared/agent-gateway-config";
+import { DEFAULT_AGENT_STEP_LIMITS } from "../src/shared/agent-step-limits";
 import { MAX_OUTPUT_TOKENS } from "../src/shared/generation-settings-inputs";
-import { MAX_UI_FONT_SIZE } from "../src/renderer/src/app/uiTypography";
-import { SettingsConsole } from "../src/renderer/src/components/SettingsConsole";
 
-function renderSearchSettings(
-  overrides: Partial<ComponentProps<typeof SettingsConsole>> = {},
-) {
+function renderSearchSettings(overrides: Partial<ComponentProps<typeof SettingsConsole>> = {}) {
   const props: ComponentProps<typeof SettingsConsole> = {
     activeCategory: "models-search",
     models: [],
@@ -87,10 +85,12 @@ describe("SettingsConsole credential controls", () => {
     fireEvent.change(keyInput, { target: { value: "tvly-secret" } });
     fireEvent.click(screen.getByRole("button", { name: "保存" }));
 
-    await waitFor(() => expect(onSaveWebSearchCredential).toHaveBeenCalledWith(
-      "tvly-secret",
-      DEFAULT_WEB_SEARCH_ENDPOINT,
-    ));
+    await waitFor(() =>
+      expect(onSaveWebSearchCredential).toHaveBeenCalledWith(
+        "tvly-secret",
+        DEFAULT_WEB_SEARCH_ENDPOINT,
+      ),
+    );
     expect((keyInput as HTMLInputElement).value).toBe("");
   });
 
@@ -156,8 +156,9 @@ describe("SettingsConsole credential controls", () => {
     expect(screen.queryByLabelText("Tavily API Key")).toBeNull();
 
     view.rerender(<SettingsConsole {...view.props} activeCategory="models-search" />);
-    expect((screen.getByLabelText("Tavily API Key") as HTMLInputElement).value)
-      .toBe("tvly-unsaved");
+    expect((screen.getByLabelText("Tavily API Key") as HTMLInputElement).value).toBe(
+      "tvly-unsaved",
+    );
   });
 
   it("does not load presentation or storage data for unrelated categories", () => {
@@ -184,9 +185,11 @@ describe("SettingsConsole credential controls", () => {
     const outputLength = screen.getByRole("spinbutton");
     fireEvent.change(outputLength, { target: { value: "999999999" } });
     fireEvent.blur(outputLength);
-    expect(setAgentGatewayPreferences).toHaveBeenCalledWith(expect.objectContaining({
-      maxOutputTokens: MAX_OUTPUT_TOKENS,
-    }));
+    expect(setAgentGatewayPreferences).toHaveBeenCalledWith(
+      expect.objectContaining({
+        maxOutputTokens: MAX_OUTPUT_TOKENS,
+      }),
+    );
 
     const setUiFontSize = vi.fn();
     runtime.rerender(
@@ -258,14 +261,16 @@ describe("SettingsConsole presentation settings", () => {
     });
 
     fireEvent.click(await screen.findByRole("button", { name: /Brand Template（仅在模板库）/ }));
-    await waitFor(() => expect(api.applyTemplateToProject).toHaveBeenCalledWith(
-      "session-1",
-      "library-template",
-      "revision-1",
-    ));
-    await waitFor(() => expect(triggerToast).toHaveBeenCalledWith(
-      "已把「Brand Template」应用到当前项目",
-    ));
+    await waitFor(() =>
+      expect(api.applyTemplateToProject).toHaveBeenCalledWith(
+        "session-1",
+        "library-template",
+        "revision-1",
+      ),
+    );
+    await waitFor(() =>
+      expect(triggerToast).toHaveBeenCalledWith("已把「Brand Template」应用到当前项目"),
+    );
   });
 
   it("reports a template application failure", async () => {

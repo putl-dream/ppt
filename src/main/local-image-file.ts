@@ -1,6 +1,6 @@
 import { open } from "node:fs/promises";
-import { fileURLToPath } from "node:url";
 import { isAbsolute } from "node:path";
+import { fileURLToPath } from "node:url";
 import { resolveWorkspacePath } from "./agent/subagent/workspace-path";
 
 export type SupportedRasterMimeType = "image/png" | "image/jpeg" | "image/gif";
@@ -13,27 +13,30 @@ export function resolveLocalImagePath(value: string, workspaceRoot?: string): st
   return resolveWorkspacePath(workspaceRoot, value);
 }
 
-export function detectSupportedRasterMime(signature: Uint8Array): SupportedRasterMimeType | undefined {
-  const isPng = signature.length >= 8
-    && signature[0] === 0x89
-    && signature[1] === 0x50
-    && signature[2] === 0x4e
-    && signature[3] === 0x47
-    && signature[4] === 0x0d
-    && signature[5] === 0x0a
-    && signature[6] === 0x1a
-    && signature[7] === 0x0a;
+export function detectSupportedRasterMime(
+  signature: Uint8Array,
+): SupportedRasterMimeType | undefined {
+  const isPng =
+    signature.length >= 8 &&
+    signature[0] === 0x89 &&
+    signature[1] === 0x50 &&
+    signature[2] === 0x4e &&
+    signature[3] === 0x47 &&
+    signature[4] === 0x0d &&
+    signature[5] === 0x0a &&
+    signature[6] === 0x1a &&
+    signature[7] === 0x0a;
   if (isPng) return "image/png";
 
-  const isJpeg = signature.length >= 3
-    && signature[0] === 0xff
-    && signature[1] === 0xd8
-    && signature[2] === 0xff;
+  const isJpeg =
+    signature.length >= 3 &&
+    signature[0] === 0xff &&
+    signature[1] === 0xd8 &&
+    signature[2] === 0xff;
   if (isJpeg) return "image/jpeg";
 
-  const gifSignature = signature.length >= 6
-    ? Buffer.from(signature.subarray(0, 6)).toString("ascii")
-    : "";
+  const gifSignature =
+    signature.length >= 6 ? Buffer.from(signature.subarray(0, 6)).toString("ascii") : "";
   if (gifSignature === "GIF87a" || gifSignature === "GIF89a") return "image/gif";
   return undefined;
 }

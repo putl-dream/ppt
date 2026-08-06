@@ -1,5 +1,5 @@
-import React from "react";
 import type { OutlineItem } from "@shared/project-artifacts";
+import type React from "react";
 
 interface OutlineCardProps {
   items: OutlineItem[];
@@ -7,11 +7,7 @@ interface OutlineCardProps {
   onRevise?: () => void;
 }
 
-export const OutlineCard: React.FC<OutlineCardProps> = ({
-  items,
-  busy,
-  onRevise,
-}) => (
+export const OutlineCard: React.FC<OutlineCardProps> = ({ items, busy, onRevise }) => (
   <div className="inline-artifact-card outline-card">
     <div className="inline-artifact-card-header">
       <span className="inline-artifact-badge">内容大纲</span>
@@ -24,9 +20,7 @@ export const OutlineCard: React.FC<OutlineCardProps> = ({
           <div className="outline-card-item-title">
             <span className="outline-card-index">{index + 1}</span>
             <span>{item.title}</span>
-            {item.pages > 1 && (
-              <span className="outline-card-pages">约 {item.pages} 页</span>
-            )}
+            {item.pages > 1 && <span className="outline-card-pages">约 {item.pages} 页</span>}
           </div>
           {item.points.length > 0 && (
             <ul className="outline-card-points">
@@ -44,12 +38,7 @@ export const OutlineCard: React.FC<OutlineCardProps> = ({
 
     {onRevise ? (
       <div className="inline-artifact-actions">
-        <button
-          type="button"
-          disabled={busy}
-          className="btn-secondary"
-          onClick={onRevise}
-        >
+        <button type="button" disabled={busy} className="btn-secondary" onClick={onRevise}>
           继续修改
         </button>
       </div>

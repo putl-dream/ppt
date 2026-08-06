@@ -121,13 +121,6 @@
   font-size: 11px;
 }
 
-
-
-
-
-
-
-
 .btn-reject {
   border: 1px solid color-mix(in srgb, var(--text-muted) 24%, transparent);
   background: transparent;
@@ -288,7 +281,9 @@
   color: var(--text-primary);
   cursor: zoom-in;
   text-align: left;
-  transition: border-color 140ms ease, transform 140ms ease;
+  transition:
+    border-color 140ms ease,
+    transform 140ms ease;
 }
 
 .slide-preview-gallery-item:hover:not(:disabled) {

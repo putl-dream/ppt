@@ -1,11 +1,5 @@
+import { type DesignSystemV2, designSystemV2Schema } from "@design-system";
 import {
-  designSystemV2Schema,
-  type DesignSystemV2,
-} from "@design-system";
-import {
-  templateAuthoringGuidanceSchema,
-  templatePackSchema,
-  templateTypographyRolesSchema,
   type TemplateAuthoringGuidance,
   type TemplateChrome,
   type TemplateDescriptor,
@@ -14,6 +8,9 @@ import {
   type TemplatePack,
   type TemplatePackAsset,
   type TemplateTypographyRoles,
+  templateAuthoringGuidanceSchema,
+  templatePackSchema,
+  templateTypographyRolesSchema,
 } from "./template-protocol";
 
 function normalizeHex(value: string | undefined): string | undefined {
@@ -33,9 +30,7 @@ function luminance(hex: string): number {
   const r = Number.parseInt(value.slice(0, 2), 16) / 255;
   const g = Number.parseInt(value.slice(2, 4), 16) / 255;
   const b = Number.parseInt(value.slice(4, 6), 16) / 255;
-  const channel = (c: number) => (
-    c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4
-  );
+  const channel = (c: number) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
   return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
 }
 
@@ -59,7 +54,10 @@ const DEFAULT_SANS = '"Inter", "Segoe UI", "PingFang SC", "Microsoft YaHei", san
 const DEFAULT_SERIF = '"Georgia", "Times New Roman", "Songti SC", serif';
 const DEFAULT_MONO = '"JetBrains Mono", "Consolas", monospace';
 
-export function mapTypefaceToStack(typeface: string | undefined, kind: "sans" | "serif" | "mono"): string {
+export function mapTypefaceToStack(
+  typeface: string | undefined,
+  kind: "sans" | "serif" | "mono",
+): string {
   if (!typeface) {
     return kind === "serif" ? DEFAULT_SERIF : kind === "mono" ? DEFAULT_MONO : DEFAULT_SANS;
   }
@@ -168,9 +166,7 @@ export function projectDesignReferenceGuidance(
     masterNames.length > 0
       ? `Observed masters: ${masterNames.join(", ")}.`
       : "No named masters were detected.",
-    layoutNames.length > 0
-      ? `Observed layouts: ${layoutNames.join(", ")}.`
-      : undefined,
+    layoutNames.length > 0 ? `Observed layouts: ${layoutNames.join(", ")}.` : undefined,
     fonts.length > 0
       ? `Prefer related typography when available: ${[...new Set(fonts)].slice(0, 4).join(", ")}.`
       : undefined,
@@ -201,9 +197,9 @@ export function projectDesignReferenceInheritance(
   assets: TemplatePackAsset[],
 ): TemplateInheritance {
   const hasCustomColors = Boolean(
-    normalizeHex(inspection.themeColors.lt1)
-    || normalizeHex(inspection.themeColors.dk1)
-    || normalizeHex(inspection.themeColors.accent1),
+    normalizeHex(inspection.themeColors.lt1) ||
+      normalizeHex(inspection.themeColors.dk1) ||
+      normalizeHex(inspection.themeColors.accent1),
   );
   const hasFonts = Boolean(inspection.fonts.major || inspection.fonts.minor);
   const hasLogo = assets.some((asset) => asset.role === "logo" || asset.role === "header");

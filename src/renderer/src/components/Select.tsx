@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { CheckIcon, ChevronDownIcon } from "./Icons";
 import { cx } from "../lib/cx";
+import { CheckIcon, ChevronDownIcon } from "./Icons";
 
 export interface SelectOption {
   value: string;
@@ -91,11 +91,14 @@ export function Select({
     setOpen(true);
   }, [disabled, options.length, selectedIndex]);
 
-  const selectValue = useCallback((next: string) => {
-    onChange(next);
-    close();
-    window.requestAnimationFrame(() => triggerRef.current?.focus());
-  }, [close, onChange]);
+  const selectValue = useCallback(
+    (next: string) => {
+      onChange(next);
+      close();
+      window.requestAnimationFrame(() => triggerRef.current?.focus());
+    },
+    [close, onChange],
+  );
 
   useLayoutEffect(() => {
     if (!open || !triggerRef.current) return;
@@ -179,66 +182,59 @@ export function Select({
     optionEl?.scrollIntoView?.({ block: "nearest" });
   }, [activeIndex, open]);
 
-  const activeOptionId = activeIndex >= 0
-    ? `${optionIdPrefix}-option-${activeIndex}`
-    : undefined;
+  const activeOptionId = activeIndex >= 0 ? `${optionIdPrefix}-option-${activeIndex}` : undefined;
 
-  const menu = open && position
-    ? createPortal(
-      <div
-        ref={menuRef}
-        id={listboxId}
-        role="listbox"
-        aria-label={ariaLabel}
-        className={cx(
-          "ui-select-menu",
-          position.placement === "above" && "is-above",
-        )}
-        style={{
-          top: position.placement === "above" ? undefined : position.top,
-          bottom: position.placement === "above"
-            ? window.innerHeight - position.top
-            : undefined,
-          left: position.left,
-          width: position.width,
-          maxHeight: MENU_MAX_HEIGHT,
-        }}
-      >
-        {options.map((option, index) => {
-          const isSelected = option.value === value;
-          const isActive = index === activeIndex;
-          return (
-            <button
-              key={option.value === "" ? "__empty__" : option.value}
-              id={`${optionIdPrefix}-option-${index}`}
-              type="button"
-              role="option"
-              aria-selected={isSelected}
-              data-option-index={index}
-              className={cx(
-                "ui-select-option",
-                isSelected && "is-selected",
-                isActive && "is-active",
-              )}
-              onMouseEnter={() => setActiveIndex(index)}
-              onClick={() => selectValue(option.value)}
-            >
-              <span className="ui-select-option-copy">
-                <span className="ui-select-option-label">{option.label}</span>
-                {option.hint ? (
-                  <span className="ui-select-option-hint">{option.hint}</span>
-                ) : null}
-              </span>
-              {isSelected ? (
-                <CheckIcon size={12} className="ui-select-option-check" />
-              ) : null}
-            </button>
-          );
-        })}
-      </div>,
-      document.body,
-    )
-    : null;
+  const menu =
+    open && position
+      ? createPortal(
+          <div
+            ref={menuRef}
+            id={listboxId}
+            role="listbox"
+            aria-label={ariaLabel}
+            className={cx("ui-select-menu", position.placement === "above" && "is-above")}
+            style={{
+              top: position.placement === "above" ? undefined : position.top,
+              bottom:
+                position.placement === "above" ? window.innerHeight - position.top : undefined,
+              left: position.left,
+              width: position.width,
+              maxHeight: MENU_MAX_HEIGHT,
+            }}
+          >
+            {options.map((option, index) => {
+              const isSelected = option.value === value;
+              const isActive = index === activeIndex;
+              return (
+                <button
+                  key={option.value === "" ? "__empty__" : option.value}
+                  id={`${optionIdPrefix}-option-${index}`}
+                  type="button"
+                  role="option"
+                  aria-selected={isSelected}
+                  data-option-index={index}
+                  className={cx(
+                    "ui-select-option",
+                    isSelected && "is-selected",
+                    isActive && "is-active",
+                  )}
+                  onMouseEnter={() => setActiveIndex(index)}
+                  onClick={() => selectValue(option.value)}
+                >
+                  <span className="ui-select-option-copy">
+                    <span className="ui-select-option-label">{option.label}</span>
+                    {option.hint ? (
+                      <span className="ui-select-option-hint">{option.hint}</span>
+                    ) : null}
+                  </span>
+                  {isSelected ? <CheckIcon size={12} className="ui-select-option-check" /> : null}
+                </button>
+              );
+            })}
+          </div>,
+          document.body,
+        )
+      : null;
 
   return (
     <div
@@ -278,9 +274,7 @@ export function Select({
           {selected ? (
             <>
               <span className="ui-select-value-label">{selected.label}</span>
-              {selected.hint ? (
-                <span className="ui-select-value-hint">{selected.hint}</span>
-              ) : null}
+              {selected.hint ? <span className="ui-select-value-hint">{selected.hint}</span> : null}
             </>
           ) : (
             placeholder

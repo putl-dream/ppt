@@ -4,7 +4,9 @@ export class ToolOutputValidationError extends Error {
     readonly toolName: string,
     readonly issues: z.ZodIssue[],
   ) {
-    super(`Tool ${toolName} returned invalid output: ${issues.map((issue) => issue.message).join("; ")}`);
+    super(
+      `Tool ${toolName} returned invalid output: ${issues.map((issue) => issue.message).join("; ")}`,
+    );
     this.name = "ToolOutputValidationError";
   }
 }
@@ -24,4 +26,3 @@ export function validateToolOutput<TResult>(
   }
   return parsed.data;
 }
-

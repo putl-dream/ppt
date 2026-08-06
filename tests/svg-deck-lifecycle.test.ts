@@ -3,6 +3,16 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { DEFAULT_DESIGN_SYSTEM } from "../src/design-system";
+import { previewSvgPageTool } from "../src/main/agent/tools/core/preview-svg-page";
+import { submitSvgDeckTool } from "../src/main/agent/tools/core/submit-svg-deck";
+import { WorkspaceFileService } from "../src/main/agent/tools/files/workspace-file-service";
+import type { PptLifecycleToolBridge, ToolContext } from "../src/main/agent/tools/tool-definition";
+import { createDefaultToolRegistry } from "../src/main/agent/tools/tool-registry";
+import { slideThumbnailService } from "../src/main/deck/slide-thumbnail-service";
+import { ContentAddressedBlobStore } from "../src/main/presentation-lifecycle/content-addressed-blob-store";
+import { PresentationLifecycleOrchestrator } from "../src/main/presentation-lifecycle/presentation-lifecycle-orchestrator";
+import { PresentationLifecycleRepository } from "../src/main/presentation-lifecycle/presentation-lifecycle-repository";
+import { PresentationLifecycleToolBridge } from "../src/main/presentation-lifecycle/presentation-lifecycle-tool-bridge";
 import { createStarterPresentation } from "../src/shared/presentation-fixtures";
 import {
   asPresentationId,
@@ -10,28 +20,6 @@ import {
   asQueryId,
   type BlobReference,
 } from "../src/shared/presentation-lifecycle";
-import { previewSvgPageTool } from
-  "../src/main/agent/tools/core/preview-svg-page";
-import { submitSvgDeckTool } from
-  "../src/main/agent/tools/core/submit-svg-deck";
-import type {
-  PptLifecycleToolBridge,
-  ToolContext,
-} from "../src/main/agent/tools/tool-definition";
-import { WorkspaceFileService } from
-  "../src/main/agent/tools/files/workspace-file-service";
-import { createDefaultToolRegistry } from
-  "../src/main/agent/tools/tool-registry";
-import { slideThumbnailService } from
-  "../src/main/deck/slide-thumbnail-service";
-import { PresentationLifecycleOrchestrator } from
-  "../src/main/presentation-lifecycle/presentation-lifecycle-orchestrator";
-import { PresentationLifecycleRepository } from
-  "../src/main/presentation-lifecycle/presentation-lifecycle-repository";
-import { PresentationLifecycleToolBridge } from
-  "../src/main/presentation-lifecycle/presentation-lifecycle-tool-bridge";
-import { ContentAddressedBlobStore } from
-  "../src/main/presentation-lifecycle/content-addressed-blob-store";
 
 const temporaryRoots: string[] = [];
 const repositories: PresentationLifecycleRepository[] = [];
@@ -42,9 +30,7 @@ afterEach(async () => {
   vi.restoreAllMocks();
   for (const repository of repositories.splice(0)) repository.close();
   await Promise.all(
-    temporaryRoots.splice(0).map((root) =>
-      rm(root, { recursive: true, force: true })
-    ),
+    temporaryRoots.splice(0).map((root) => rm(root, { recursive: true, force: true })),
   );
 });
 
@@ -53,12 +39,15 @@ describe("SVG deck lifecycle tools", () => {
     const { root, fileService, lifecycle } = await createHarness(false);
     await fileService.write("slides/svg/P01.svg", svgPage("First"));
 
-    await expect(previewSvgPageTool.execute({
-      path: "slides/svg/P01.svg",
-      includeThumbnail: false,
-    }, createContext(root, fileService, lifecycle))).rejects.toThrow(
-      "Call BeginPptCapability",
-    );
+    await expect(
+      previewSvgPageTool.execute(
+        {
+          path: "slides/svg/P01.svg",
+          includeThumbnail: false,
+        },
+        createContext(root, fileService, lifecycle),
+      ),
+    ).rejects.toThrow("Call BeginPptCapability");
   });
 
   it("allows a review capability to render and durably record the current SVG", async () => {
@@ -76,28 +65,25 @@ describe("SVG deck lifecycle tools", () => {
       mimeType: "image/png",
     });
 
-    const preview = await previewSvgPageTool.execute({
-      path: "slides/svg/P01.svg",
-      includeThumbnail: true,
-    }, createContext(root, fileService, lifecycle));
+    const preview = await previewSvgPageTool.execute(
+      {
+        path: "slides/svg/P01.svg",
+        includeThumbnail: true,
+      },
+      createContext(root, fileService, lifecycle),
+    );
 
     expect(preview.preview.previewGatePassed).toBe(true);
-    expect(lifecycle.requireActiveCapability(["review"]).committedArtifacts)
-      .toEqual(expect.arrayContaining([
+    expect(lifecycle.requireActiveCapability(["review"]).committedArtifacts).toEqual(
+      expect.arrayContaining([
         expect.objectContaining({ kind: "page_svg" }),
         expect.objectContaining({ kind: "preview_receipt" }),
-      ]));
+      ]),
+    );
   });
 
   it("persists current lock, page, and preview receipts across file services", async () => {
-    const {
-      root,
-      fileService,
-      lifecycle,
-      orchestrator,
-      repository,
-      blobStore,
-    } =
+    const { root, fileService, lifecycle, orchestrator, repository, blobStore } =
       await createHarness(true);
     const args = submitArgs();
     await writeSubmissionFiles(fileService, args, root, true);
@@ -108,20 +94,19 @@ describe("SVG deck lifecycle tools", () => {
       mimeType: "image/png",
     });
 
-    const preview = await previewSvgPageTool.execute({
-      path: "slides/svg/P01.svg",
-      includeThumbnail: true,
-    }, createContext(root, fileService, lifecycle));
+    const preview = await previewSvgPageTool.execute(
+      {
+        path: "slides/svg/P01.svg",
+        includeThumbnail: true,
+      },
+      createContext(root, fileService, lifecycle),
+    );
     expect(preview.preview.previewGatePassed).toBe(true);
 
     const projection = lifecycle.requireActiveCapability();
-    expect(projection.committedArtifacts.map((artifact) => artifact.kind))
-      .toEqual(expect.arrayContaining([
-        "design_spec",
-        "page_plan",
-        "page_svg",
-        "preview_receipt",
-      ]));
+    expect(projection.committedArtifacts.map((artifact) => artifact.kind)).toEqual(
+      expect.arrayContaining(["design_spec", "page_plan", "page_svg", "preview_receipt"]),
+    );
     const pagePointer = projection.committedArtifacts.find(
       (artifact) => artifact.kind === "page_svg",
     )!;
@@ -134,8 +119,9 @@ describe("SVG deck lifecycle tools", () => {
       byteLength: expect.any(Number),
     });
     expect(pageRevision.value).not.toHaveProperty("markup");
-    expect((await blobStore.get(pageRevision.value.blob)).toString("utf8"))
-      .toContain("data:image/png;base64,");
+    expect((await blobStore.get(pageRevision.value.blob)).toString("utf8")).toContain(
+      "data:image/png;base64,",
+    );
 
     const assetPointer = projection.committedArtifacts.find(
       (artifact) => artifact.kind === "source_asset",
@@ -145,8 +131,9 @@ describe("SVG deck lifecycle tools", () => {
       bytes?: unknown;
     }>(assetPointer.revisionId)!;
     expect(assetRevision.value).not.toHaveProperty("bytes");
-    expect(await blobStore.get(assetRevision.value.blob))
-      .toEqual(Buffer.from(VALID_PIXEL_PNG, "base64"));
+    expect(await blobStore.get(assetRevision.value.blob)).toEqual(
+      Buffer.from(VALID_PIXEL_PNG, "base64"),
+    );
 
     const submitFileService = new WorkspaceFileService(root);
     const result = await submitSvgDeckTool.execute(
@@ -156,25 +143,18 @@ describe("SVG deck lifecycle tools", () => {
     expect(result.type).toBe("command_proposal");
 
     await submitFileService.readWindow("slides/svg/P01.svg");
-    await submitFileService.write(
-      "slides/svg/P01.svg",
-      `${svgPage("First")} `,
-    );
-    await expect(submitSvgDeckTool.execute(
-      args,
-      createContext(root, submitFileService, lifecycle),
-    )).rejects.toThrow("PPT capability request is waiting_user");
+    await submitFileService.write("slides/svg/P01.svg", `${svgPage("First")} `);
+    await expect(
+      submitSvgDeckTool.execute(args, createContext(root, submitFileService, lifecycle)),
+    ).rejects.toThrow("PPT capability request is waiting_user");
 
-    expect(orchestrator.getProjection(asPresentationId("presentation-1"))?.status)
-      .toBe("waiting_user");
+    expect(orchestrator.getProjection(asPresentationId("presentation-1"))?.status).toBe(
+      "waiting_user",
+    );
   });
 
   it("allows waiting-user recovery only once at a resumed Query boundary", async () => {
-    const {
-      orchestrator,
-      repository,
-      blobStore,
-    } = await createHarness(true);
+    const { orchestrator, repository, blobStore } = await createHarness(true);
     const presentationId = asPresentationId("presentation-1");
     const active = orchestrator.getProjection(presentationId)!;
     orchestrator.waitForUser(active.jobId, "Need user input.");
@@ -199,14 +179,8 @@ describe("SVG deck lifecycle tools", () => {
   });
 
   it("commits a fresh revision when a later capability restores old SVG bytes", async () => {
-    const {
-      root,
-      fileService,
-      lifecycle,
-      orchestrator,
-      repository,
-      blobStore,
-    } = await createHarness(true);
+    const { root, fileService, lifecycle, orchestrator, repository, blobStore } =
+      await createHarness(true);
     const args = submitArgs();
     await writeSubmissionFiles(fileService, args, root);
     vi.spyOn(slideThumbnailService, "captureSlide").mockResolvedValue({
@@ -216,12 +190,16 @@ describe("SVG deck lifecycle tools", () => {
       mimeType: "image/png",
     });
     const context = createContext(root, fileService, lifecycle);
-    await previewSvgPageTool.execute({
-      path: "slides/svg/P01.svg",
-      includeThumbnail: true,
-    }, context);
-    const firstPage = lifecycle.requireActiveCapability().committedArtifacts
-      .find((artifact) => artifact.kind === "page_svg")!;
+    await previewSvgPageTool.execute(
+      {
+        path: "slides/svg/P01.svg",
+        includeThumbnail: true,
+      },
+      context,
+    );
+    const firstPage = lifecycle
+      .requireActiveCapability()
+      .committedArtifacts.find((artifact) => artifact.kind === "page_svg")!;
 
     await fileService.write("slides/svg/P01.svg", svgPage("Second"));
     const secondLifecycle = new PresentationLifecycleToolBridge(
@@ -240,12 +218,16 @@ describe("SVG deck lifecycle tools", () => {
       workspaceRoot: root,
       source: "capability_probe",
     });
-    await previewSvgPageTool.execute({
-      path: "slides/svg/P01.svg",
-      includeThumbnail: true,
-    }, createContext(root, fileService, secondLifecycle));
-    const secondPage = secondLifecycle.requireActiveCapability().committedArtifacts
-      .find((artifact) => artifact.kind === "page_svg")!;
+    await previewSvgPageTool.execute(
+      {
+        path: "slides/svg/P01.svg",
+        includeThumbnail: true,
+      },
+      createContext(root, fileService, secondLifecycle),
+    );
+    const secondPage = secondLifecycle
+      .requireActiveCapability()
+      .committedArtifacts.find((artifact) => artifact.kind === "page_svg")!;
     expect(secondPage.revisionId).not.toBe(firstPage.revisionId);
 
     await fileService.write("slides/svg/P01.svg", svgPage("First"));
@@ -265,10 +247,13 @@ describe("SVG deck lifecycle tools", () => {
       workspaceRoot: root,
       source: "capability_probe",
     });
-    await previewSvgPageTool.execute({
-      path: "slides/svg/P01.svg",
-      includeThumbnail: true,
-    }, createContext(root, fileService, restoredLifecycle));
+    await previewSvgPageTool.execute(
+      {
+        path: "slides/svg/P01.svg",
+        includeThumbnail: true,
+      },
+      createContext(root, fileService, restoredLifecycle),
+    );
     const restoredProjection = restoredLifecycle.requireActiveCapability();
     const restoredPage = restoredProjection.committedArtifacts.find(
       (artifact) => artifact.kind === "page_svg",
@@ -278,23 +263,18 @@ describe("SVG deck lifecycle tools", () => {
     expect(restoredProjection.staleArtifacts).not.toContainEqual(
       expect.objectContaining({ revisionId: restoredPage.revisionId }),
     );
-    await expect(submitSvgDeckTool.execute(
-      args,
-      createContext(root, fileService, restoredLifecycle),
-    )).resolves.toMatchObject({ type: "command_proposal" });
-    expect(repository.listArtifactRevisions(
-      orchestrator.getState(asPresentationId("presentation-1"))!.jobId,
-    ).filter((artifact) => artifact.kind === "page_svg")).toHaveLength(3);
+    await expect(
+      submitSvgDeckTool.execute(args, createContext(root, fileService, restoredLifecycle)),
+    ).resolves.toMatchObject({ type: "command_proposal" });
+    expect(
+      repository
+        .listArtifactRevisions(orchestrator.getState(asPresentationId("presentation-1"))!.jobId)
+        .filter((artifact) => artifact.kind === "page_svg"),
+    ).toHaveLength(3);
   });
 
   it("rejects submit when the durable SVG blob is missing or corrupted", async () => {
-    const {
-      root,
-      fileService,
-      lifecycle,
-      repository,
-      blobStore,
-    } = await createHarness(true);
+    const { root, fileService, lifecycle, repository, blobStore } = await createHarness(true);
     const args = submitArgs();
     await writeSubmissionFiles(fileService, args, root);
     vi.spyOn(slideThumbnailService, "captureSlide").mockResolvedValue({
@@ -303,36 +283,44 @@ describe("SVG deck lifecycle tools", () => {
       height: 360,
       mimeType: "image/png",
     });
-    await previewSvgPageTool.execute({
-      path: "slides/svg/P01.svg",
-      includeThumbnail: true,
-    }, createContext(root, fileService, lifecycle));
+    await previewSvgPageTool.execute(
+      {
+        path: "slides/svg/P01.svg",
+        includeThumbnail: true,
+      },
+      createContext(root, fileService, lifecycle),
+    );
 
-    const pagePointer = lifecycle.requireActiveCapability().committedArtifacts
-      .find((artifact) => artifact.kind === "page_svg")!;
+    const pagePointer = lifecycle
+      .requireActiveCapability()
+      .committedArtifacts.find((artifact) => artifact.kind === "page_svg")!;
     const pageRevision = repository.getArtifactRevision<{
       blob: BlobReference;
     }>(pagePointer.revisionId)!;
     const blobPath = blobStore.pathFor(pageRevision.value.blob.contentHash);
     await rm(blobPath);
-    await expect(submitSvgDeckTool.execute(
-      args,
-      createContext(root, new WorkspaceFileService(root), lifecycle),
-    )).rejects.toThrow("SVG lifecycle blob is missing or invalid");
+    await expect(
+      submitSvgDeckTool.execute(
+        args,
+        createContext(root, new WorkspaceFileService(root), lifecycle),
+      ),
+    ).rejects.toThrow("SVG lifecycle blob is missing or invalid");
 
-    await previewSvgPageTool.execute({
-      path: "slides/svg/P01.svg",
-      includeThumbnail: true,
-    }, createContext(root, fileService, lifecycle));
-    await writeFile(
-      blobPath,
-      Buffer.alloc(pageRevision.value.blob.byteLength),
+    await previewSvgPageTool.execute(
+      {
+        path: "slides/svg/P01.svg",
+        includeThumbnail: true,
+      },
+      createContext(root, fileService, lifecycle),
     );
+    await writeFile(blobPath, Buffer.alloc(pageRevision.value.blob.byteLength));
 
-    await expect(submitSvgDeckTool.execute(
-      args,
-      createContext(root, new WorkspaceFileService(root), lifecycle),
-    )).rejects.toThrow("SVG lifecycle blob is missing or invalid");
+    await expect(
+      submitSvgDeckTool.execute(
+        args,
+        createContext(root, new WorkspaceFileService(root), lifecycle),
+      ),
+    ).rejects.toThrow("SVG lifecycle blob is missing or invalid");
   });
 });
 
@@ -346,9 +334,7 @@ async function createHarness(begin: boolean): Promise<{
 }> {
   const root = await mkdtemp(join(tmpdir(), "agent-ppt-svg-lifecycle-"));
   temporaryRoots.push(root);
-  const repository = new PresentationLifecycleRepository(
-    join(root, "lifecycle.sqlite"),
-  );
+  const repository = new PresentationLifecycleRepository(join(root, "lifecycle.sqlite"));
   repositories.push(repository);
   const orchestrator = new PresentationLifecycleOrchestrator(repository);
   const blobStore = new ContentAddressedBlobStore(join(root, "blobs"));
@@ -409,18 +395,20 @@ function submitArgs(): SubmissionArgs {
       afterUse: "Decision record",
     },
     designSystem: DEFAULT_DESIGN_SYSTEM,
-    slides: [{
-      id: "P01",
-      title: "First",
-      path: "slides/svg/P01.svg",
-      narrative: {
-        role: "cover",
-        coreMessage: "The plan is ready",
-        audienceMove: "Create confidence",
-        rhythm: "anchor",
-        layoutIntent: "One dominant statement.",
+    slides: [
+      {
+        id: "P01",
+        title: "First",
+        path: "slides/svg/P01.svg",
+        narrative: {
+          role: "cover",
+          coreMessage: "The plan is ready",
+          audienceMove: "Create confidence",
+          rhythm: "anchor",
+          layoutIntent: "One dominant statement.",
+        },
       },
-    }],
+    ],
     summary: "Create one SVG page.",
     risk: "medium",
   };
@@ -434,38 +422,40 @@ async function writeSubmissionFiles(
 ): Promise<void> {
   if (withAsset) {
     await mkdir(join(root, "assets"), { recursive: true });
-    await writeFile(
-      join(root, "assets", "pixel.png"),
-      Buffer.from(VALID_PIXEL_PNG, "base64"),
-    );
+    await writeFile(join(root, "assets", "pixel.png"), Buffer.from(VALID_PIXEL_PNG, "base64"));
   }
+  await fileService.write("slides/svg/P01.svg", svgPage("First", withAsset));
   await fileService.write(
-    "slides/svg/P01.svg",
-    svgPage("First", withAsset),
+    "design/design-spec.json",
+    JSON.stringify({
+      version: 1,
+      canvas: { width: 1280, height: 720 },
+      communicationContract: args.communication,
+      presentationDesignSystem: args.designSystem,
+      argumentMode: args.designSystem.argumentMode,
+      visualStyle: { id: args.designSystem.visualStyle },
+      readingMode: args.designSystem.readingMode,
+    }),
   );
-  await fileService.write("design/design-spec.json", JSON.stringify({
-    version: 1,
-    canvas: { width: 1280, height: 720 },
-    communicationContract: args.communication,
-    presentationDesignSystem: args.designSystem,
-    argumentMode: args.designSystem.argumentMode,
-    visualStyle: { id: args.designSystem.visualStyle },
-    readingMode: args.designSystem.readingMode,
-  }));
-  await fileService.write("slides/page-plan.json", JSON.stringify({
-    version: 1,
-    designSpec: "design/design-spec.json",
-    slides: [{
-      id: "P01",
-      path: "slides/svg/P01.svg",
-      narrativeRole: "cover",
-      finalCopy: { title: "First" },
-      coreMessage: "The plan is ready",
-      audienceMove: "Create confidence",
-      rhythm: "anchor",
-      layoutIntent: "One dominant statement.",
-    }],
-  }));
+  await fileService.write(
+    "slides/page-plan.json",
+    JSON.stringify({
+      version: 1,
+      designSpec: "design/design-spec.json",
+      slides: [
+        {
+          id: "P01",
+          path: "slides/svg/P01.svg",
+          narrativeRole: "cover",
+          finalCopy: { title: "First" },
+          coreMessage: "The plan is ready",
+          audienceMove: "Create confidence",
+          rhythm: "anchor",
+          layoutIntent: "One dominant statement.",
+        },
+      ],
+    }),
+  );
 }
 
 function svgPage(text: string, withAsset = false): string {

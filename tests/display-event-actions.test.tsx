@@ -1,32 +1,31 @@
 // @vitest-environment jsdom
 
-import React, { useRef, useState } from "react";
-import { act } from "react";
-import { cleanup, render } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { DisplayEvent } from "../src/shared/card-display-protocol";
-import type { AgentActivityItem } from "../src/shared/agent-activity";
-import {
-  pptJobProjectionSchema,
-  type PptJobProjection,
-} from "../src/shared/presentation-lifecycle";
-import type { ChatMessage } from "../src/renderer/src/app/chatMessageRuntime";
-import {
-  useAgentResultHandler,
-  type ApplyAgentResult,
-} from "../src/renderer/src/app/agent/useAgentResultHandler";
-import {
-  useDisplayEventActions,
-  type DisplayEventActions,
-} from "../src/renderer/src/app/cards/useDisplayEventActions";
-import type { AgentActivityStreamController } from "../src/renderer/src/app/agent/useAgentActivityStream";
-import { useProjectStore } from "../src/renderer/src/components/project-store";
 import {
   clearAllDisplayCardManagers,
   ingestDisplayEvent,
   setDisplayCardStatus,
   useReviewCardManager,
-} from "../src/renderer/src/cards/display-card-managers";
+} from "@shared/cards/display-card-managers";
+import { cleanup, render } from "@testing-library/react";
+import React, { act, useRef, useState } from "react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { AgentActivityStreamController } from "../src/renderer/src/app/agent/useAgentActivityStream";
+import {
+  type ApplyAgentResult,
+  useAgentResultHandler,
+} from "../src/renderer/src/app/agent/useAgentResultHandler";
+import {
+  type DisplayEventActions,
+  useDisplayEventActions,
+} from "../src/renderer/src/app/cards/useDisplayEventActions";
+import type { ChatMessage } from "../src/renderer/src/app/chatMessageRuntime";
+import { useProjectStore } from "../src/renderer/src/components/project-store";
+import type { AgentActivityItem } from "../src/shared/agent-activity";
+import type { DisplayEvent } from "../src/shared/card-display-protocol";
+import {
+  type PptJobProjection,
+  pptJobProjectionSchema,
+} from "../src/shared/presentation-lifecycle";
 
 const approvalEvent = {
   protocolVersion: 1 as const,
@@ -52,11 +51,13 @@ const approvalEvent = {
     proposalId: "proposal-1",
     threadId: "thread-1",
     summary: "更新标题",
-    commands: [{
-      id: "command-1",
-      type: "set-presentation-title" as const,
-      title: "新标题",
-    }],
+    commands: [
+      {
+        id: "command-1",
+        type: "set-presentation-title" as const,
+        title: "新标题",
+      },
+    ],
   },
 } satisfies Extract<DisplayEvent, { kind: "review.command-proposal" }>;
 
@@ -113,23 +114,27 @@ const startAgent = vi.fn(async () => undefined);
 const originalHydrate = useProjectStore.getState().hydrateProjectArtifacts;
 
 function Harness() {
-  const initialTrace: AgentActivityItem[] = [{
-    id: "response-waiting",
-    kind: "response",
-    start: 0,
-    end: 20,
-    streaming: false,
-  }];
+  const initialTrace: AgentActivityItem[] = [
+    {
+      id: "response-waiting",
+      kind: "response",
+      start: 0,
+      end: 20,
+      streaming: false,
+    },
+  ];
   const [isBusy, setBusy] = useState(false);
-  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([{
-    id: "assistant-1",
-    role: "assistant",
-    content: "已提出排版更新方案，请在下方审核后应用。",
-    activityTrace: initialTrace,
-    runId: "run-1",
-    runStatus: "completed",
-    threadId: "thread-1",
-  }]);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
+    {
+      id: "assistant-1",
+      role: "assistant",
+      content: "已提出排版更新方案，请在下方审核后应用。",
+      activityTrace: initialTrace,
+      runId: "run-1",
+      runStatus: "completed",
+      threadId: "thread-1",
+    },
+  ]);
   const activeRunTraceRef = useRef<AgentActivityItem[]>(initialTrace);
   const streamMessageIdsRef = useRef(new Map<string, string>());
   const sidechainRunRef = useRef<string | null>(null);
@@ -243,28 +248,35 @@ describe("display event approval actions", () => {
 
     expect(resumeAgentRun).not.toHaveBeenCalled();
     expect(useReviewCardManager.getState().cards[0]?.status).toBe("active");
-    expect(notify).toHaveBeenCalledWith(
-      "演示文稿生命周期状态尚未加载，请稍后重试。",
-    );
+    expect(notify).toHaveBeenCalledWith("演示文稿生命周期状态尚未加载，请稍后重试。");
     expect(busy).toBe(false);
   });
 
   it.each<[string, PptJobProjection]>([
-    ["the ProposalId differs", {
-      ...matchingPptJob,
-      proposalId: "proposal-2",
-      stateRevision: 2,
-    }],
-    ["the Job is not waiting for approval", {
-      ...matchingPptJob,
-      status: "waiting_user",
-      stateRevision: 2,
-    }],
-    ["the Proposal is no longer waiting for approval", {
-      ...matchingPptJob,
-      proposalStatus: "superseded",
-      stateRevision: 2,
-    }],
+    [
+      "the ProposalId differs",
+      {
+        ...matchingPptJob,
+        proposalId: "proposal-2",
+        stateRevision: 2,
+      },
+    ],
+    [
+      "the Job is not waiting for approval",
+      {
+        ...matchingPptJob,
+        status: "waiting_user",
+        stateRevision: 2,
+      },
+    ],
+    [
+      "the Proposal is no longer waiting for approval",
+      {
+        ...matchingPptJob,
+        proposalStatus: "superseded",
+        stateRevision: 2,
+      },
+    ],
   ])("refuses a persisted Proposal card when %s", async (_case, pptJob) => {
     const resumeAgentRun = vi.fn();
     useProjectStore.setState({ pptJob });
@@ -346,13 +358,9 @@ describe("display event approval actions", () => {
     });
 
     expect(messages[0]?.runStatus).toBe("completed");
-    expect(startAgent).toHaveBeenCalledWith(
-      "面向管理层",
-      undefined,
-      {
-        userDisplayContent: "管理层",
-      },
-    );
+    expect(startAgent).toHaveBeenCalledWith("面向管理层", undefined, {
+      userDisplayContent: "管理层",
+    });
   });
 
   it("applies a patch only through open/save after matching its complete baseline", async () => {
@@ -397,8 +405,7 @@ describe("display event approval actions", () => {
       "11111111-1111-4111-8111-111111111111",
       `sha256:${"a".repeat(64)}`,
     );
-    expect(useProjectStore.getState().hydrateProjectArtifacts)
-      .toHaveBeenCalledWith("session-1");
+    expect(useProjectStore.getState().hydrateProjectArtifacts).toHaveBeenCalledWith("session-1");
     expect(notify).toHaveBeenCalledWith("补丁已应用");
   });
 
@@ -429,9 +436,7 @@ describe("display event approval actions", () => {
 
     expect(saveProjectFile).not.toHaveBeenCalled();
     expect(useReviewCardManager.getState().cards[0]?.status).toBe("active");
-    expect(notify).toHaveBeenCalledWith(
-      "补丁基线已变化，当前补丁未应用；请重新读取后生成新补丁。",
-    );
+    expect(notify).toHaveBeenCalledWith("补丁基线已变化，当前补丁未应用；请重新读取后生成新补丁。");
 
     const missingBaselineEvent = {
       ...patchEvent,
@@ -453,9 +458,11 @@ describe("display event approval actions", () => {
 
     expect(openProjectFile).not.toHaveBeenCalled();
     expect(saveProjectFile).not.toHaveBeenCalled();
-    expect(useReviewCardManager.getState().cards.find(
-      (card) => card.event.eventId === missingBaselineEvent.eventId,
-    )?.status).toBe("active");
+    expect(
+      useReviewCardManager
+        .getState()
+        .cards.find((card) => card.event.eventId === missingBaselineEvent.eventId)?.status,
+    ).toBe("active");
     expect(notify).toHaveBeenCalledWith("补丁缺少完整的读取基线，无法安全应用。");
   });
 });

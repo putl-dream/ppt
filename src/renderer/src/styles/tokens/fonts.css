@@ -12,8 +12,11 @@
 @import "@fontsource/jetbrains-mono/latin-500.css";
 
 :root {
-  --font-display: system-ui, "Segoe UI", "Microsoft YaHei UI", "PingFang SC", "Noto Sans CJK SC", sans-serif;
-  --font-body: system-ui, "Segoe UI", "Microsoft YaHei UI", "PingFang SC", "Noto Sans CJK SC", sans-serif;
+  --font-display:
+    system-ui, "Segoe UI", "Microsoft YaHei UI", "PingFang SC", "Noto Sans CJK SC", sans-serif;
+  --font-body:
+    system-ui, "Segoe UI", "Microsoft YaHei UI", "PingFang SC", "Noto Sans CJK SC", sans-serif;
   --font-serif: "Lora", Georgia, serif;
-  --font-mono: "JetBrains Mono", "Cascadia Code", "Cascadia Mono", "SFMono-Regular", Consolas, monospace;
+  --font-mono:
+    "JetBrains Mono", "Cascadia Code", "Cascadia Mono", "SFMono-Regular", Consolas, monospace;
 }

@@ -25,7 +25,8 @@ export class PresentationDiffGenerator {
     const affectedSlideIds = new Set<string>();
 
     const titleChanged = before.title !== after.title;
-    const designSystemChanged = JSON.stringify(before.designSystem) !== JSON.stringify(after.designSystem);
+    const designSystemChanged =
+      JSON.stringify(before.designSystem) !== JSON.stringify(after.designSystem);
 
     const beforeSlideIds = new Set(before.slides.map((s) => s.id));
     const afterSlideIds = new Set(after.slides.map((s) => s.id));
@@ -53,12 +54,12 @@ export class PresentationDiffGenerator {
       if (!beforeSlide) continue;
 
       const pageSourceChanged =
-        beforeSlide.visualSource?.sha256 !== afterSlide.visualSource?.sha256
-        || beforeSlide.visualSource?.sourcePath !== afterSlide.visualSource?.sourcePath;
+        beforeSlide.visualSource?.sha256 !== afterSlide.visualSource?.sha256 ||
+        beforeSlide.visualSource?.sourcePath !== afterSlide.visualSource?.sourcePath;
       const pageMetadataChanged =
-        beforeSlide.title !== afterSlide.title
-        || beforeSlide.speakerNotes !== afterSlide.speakerNotes
-        || JSON.stringify(beforeSlide.narrative) !== JSON.stringify(afterSlide.narrative);
+        beforeSlide.title !== afterSlide.title ||
+        beforeSlide.speakerNotes !== afterSlide.speakerNotes ||
+        JSON.stringify(beforeSlide.narrative) !== JSON.stringify(afterSlide.narrative);
 
       if (pageSourceChanged || pageMetadataChanged) {
         updatedCount++;

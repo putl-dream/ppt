@@ -1,13 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { createStarterPresentation } from "../src/shared/presentation-fixtures";
 import { AgentQueryAssembler } from "../src/main/agent/runtime/query/agent-query-assembler";
-import { normalizeAgentRuntimeOptions } from "../src/main/agent/runtime/runtime-types";
-import { asQueryId } from "../src/shared/presentation-lifecycle";
 import {
   createInitialQueryState,
   createIterationWorkspace,
   reduceQueryState,
 } from "../src/main/agent/runtime/query/query-types";
+import { normalizeAgentRuntimeOptions } from "../src/main/agent/runtime/runtime-types";
+import { createStarterPresentation } from "../src/shared/presentation-fixtures";
+import { asQueryId } from "../src/shared/presentation-lifecycle";
 
 function context() {
   return {
@@ -21,22 +21,26 @@ function context() {
 
 describe("agent query lifecycle boundaries", () => {
   it("normalizes public string identities and defaults a new query at the runtime boundary", () => {
-    expect(normalizeAgentRuntimeOptions({
-      threadId: "thread",
-      request: "start",
-      presentationSnapshot: createStarterPresentation(),
-      selectedElementIds: [],
-    })).toMatchObject({
+    expect(
+      normalizeAgentRuntimeOptions({
+        threadId: "thread",
+        request: "start",
+        presentationSnapshot: createStarterPresentation(),
+        selectedElementIds: [],
+      }),
+    ).toMatchObject({
       threadId: "thread",
       startMode: { type: "new_query" },
     });
   });
 
   it("assembles stable params once and creates an independent committed state", () => {
-    const messages = [{
-      role: "user" as const,
-      content: [{ type: "text" as const, text: "hello" }],
-    }];
+    const messages = [
+      {
+        role: "user" as const,
+        content: [{ type: "text" as const, text: "hello" }],
+      },
+    ];
     const params = new AgentQueryAssembler().assemble({
       queryId: asQueryId("query-stable"),
       options: normalizeAgentRuntimeOptions({
@@ -85,10 +89,12 @@ describe("agent query lifecycle boundaries", () => {
         presentationSnapshot: createStarterPresentation(),
         selectedElementIds: [],
       }),
-      messages: [{
-        role: "user",
-        content: [{ type: "text", text: "inspect" }],
-      }],
+      messages: [
+        {
+          role: "user",
+          content: [{ type: "text", text: "inspect" }],
+        },
+      ],
       systemPrompt: "system",
       toolUseContext: context(),
       maxTurns: 8,

@@ -1,11 +1,10 @@
 // @vitest-environment jsdom
 
-import React from "react";
-import { act } from "react";
+import { splitGraphemes } from "@shared/streaming-text";
 import { cleanup, render } from "@testing-library/react";
+import React, { act } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TypewriterMarkdown } from "../src/renderer/src/components/TypewriterMarkdown";
-import { splitGraphemes } from "../src/renderer/src/streamingText";
 
 function mockReducedMotion(matches: boolean) {
   Object.defineProperty(window, "matchMedia", {
@@ -42,15 +41,8 @@ describe("stream typewriter component", () => {
   });
 
   it("reveals complete Unicode graphemes one display tick at a time", () => {
-    expect(splitGraphemes("中A👩‍💻e\u0301")).toEqual([
-      "中",
-      "A",
-      "👩‍💻",
-      "e\u0301",
-    ]);
-    const view = render(
-      <TypewriterMarkdown content="中A👩‍💻e\u0301" active />,
-    );
+    expect(splitGraphemes("中A👩‍💻e\u0301")).toEqual(["中", "A", "👩‍💻", "e\u0301"]);
+    const view = render(<TypewriterMarkdown content="中A👩‍💻e\u0301" active />);
 
     expect(visibleText(view.container)).toBe("");
     act(() => vi.advanceTimersByTime(24));

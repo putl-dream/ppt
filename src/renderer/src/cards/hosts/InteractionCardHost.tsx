@@ -1,12 +1,12 @@
-import React from "react";
 import type { AgentQuestionResolved } from "@shared/agent-question";
 import type { DisplayEvent } from "@shared/card-display-protocol";
-import { AgentQuestionCard } from "../../components/AgentQuestionCard";
+import type { CardHostId } from "@shared/cards/card-presentation-policy";
 import {
   recordDisplayCardAction,
   useInteractionCardManager,
-} from "../display-card-managers";
-import type { CardHostId } from "../card-presentation-policy";
+} from "@shared/cards/display-card-managers";
+import type React from "react";
+import { AgentQuestionCard } from "../../components/AgentQuestionCard";
 
 type QuestionEvent = Extract<DisplayEvent, { kind: "interaction.question-requested" }>;
 
@@ -24,12 +24,13 @@ export const InteractionCardHost: React.FC<InteractionCardHostProps> = ({
   busy,
   onResolveQuestion,
 }) => {
-  const cards = useInteractionCardManager((state) => state.cards).filter((card) =>
-    card.policy.host === host
-    && (host !== "timeline" || card.event.scope.anchorMessageId === anchorMessageId)
-    && (host !== "composer-before-input" || card.status === "active")
-    && card.status !== "dismissed"
-    && card.status !== "superseded"
+  const cards = useInteractionCardManager((state) => state.cards).filter(
+    (card) =>
+      card.policy.host === host &&
+      (host !== "timeline" || card.event.scope.anchorMessageId === anchorMessageId) &&
+      (host !== "composer-before-input" || card.status === "active") &&
+      card.status !== "dismissed" &&
+      card.status !== "superseded",
   );
 
   return (
@@ -37,10 +38,10 @@ export const InteractionCardHost: React.FC<InteractionCardHostProps> = ({
       {cards.map((card) => {
         const event = card.event;
         if (event.kind === "interaction.question-requested") {
-          const resolved = card.status === "resolved"
-            && card.lastAction?.actionId === "answer"
-            ? card.lastAction.payload as AgentQuestionResolved
-            : undefined;
+          const resolved =
+            card.status === "resolved" && card.lastAction?.actionId === "answer"
+              ? (card.lastAction.payload as AgentQuestionResolved)
+              : undefined;
           const question = event.payload.question;
           if (!question) return null;
           return (

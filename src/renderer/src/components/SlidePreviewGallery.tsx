@@ -1,6 +1,7 @@
-import React, { useCallback, useEffect, useState } from "react";
+import type { SlidePreviewEvent } from "@shared/cards/select-slide-previews";
+import type React from "react";
+import { useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import type { SlidePreviewEvent } from "../cards/select-slide-previews";
 
 interface SlidePreviewGalleryProps {
   previews: SlidePreviewEvent[];
@@ -20,17 +21,23 @@ export const SlidePreviewGallery: React.FC<SlidePreviewGalleryProps> = ({
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const selected = selectedIndex === null ? undefined : previews[selectedIndex];
 
-  const openPreview = useCallback((index: number) => {
-    const preview = previews[index];
-    if (!preview?.payload.thumbnail) return;
-    setSelectedIndex(index);
-    onSelectSlide?.(preview.payload.slideId);
-  }, [onSelectSlide, previews]);
+  const openPreview = useCallback(
+    (index: number) => {
+      const preview = previews[index];
+      if (!preview?.payload.thumbnail) return;
+      setSelectedIndex(index);
+      onSelectSlide?.(preview.payload.slideId);
+    },
+    [onSelectSlide, previews],
+  );
 
-  const movePreview = useCallback((delta: number) => {
-    if (selectedIndex === null) return;
-    openPreview(Math.max(0, Math.min(previews.length - 1, selectedIndex + delta)));
-  }, [openPreview, previews.length, selectedIndex]);
+  const movePreview = useCallback(
+    (delta: number) => {
+      if (selectedIndex === null) return;
+      openPreview(Math.max(0, Math.min(previews.length - 1, selectedIndex + delta)));
+    },
+    [openPreview, previews.length, selectedIndex],
+  );
 
   useEffect(() => {
     if (selectedIndex === null) return;
@@ -58,9 +65,7 @@ export const SlidePreviewGallery: React.FC<SlidePreviewGalleryProps> = ({
   if (previews.length === 0) return null;
 
   const selectedThumbnail = selected?.payload.thumbnail;
-  const liveSlide = selected && renderSlide
-    ? renderSlide(selected.payload.slideId)
-    : null;
+  const liveSlide = selected && renderSlide ? renderSlide(selected.payload.slideId) : null;
 
   return (
     <>
@@ -69,7 +74,9 @@ export const SlidePreviewGallery: React.FC<SlidePreviewGalleryProps> = ({
           "inline-artifact-card",
           "slide-preview-gallery",
           variant === "panel" ? "slide-preview-gallery--panel" : "",
-        ].filter(Boolean).join(" ")}
+        ]
+          .filter(Boolean)
+          .join(" ")}
         aria-label="页面检查预览"
       >
         {variant === "panel" ? null : (
@@ -90,7 +97,9 @@ export const SlidePreviewGallery: React.FC<SlidePreviewGalleryProps> = ({
                 className={[
                   "slide-preview-gallery-item",
                   selectedSlideId === event.payload.slideId ? "is-current-slide" : "",
-                ].filter(Boolean).join(" ")}
+                ]
+                  .filter(Boolean)
+                  .join(" ")}
                 key={event.eventId}
                 onClick={() => openPreview(index)}
                 disabled={!thumbnail}
@@ -120,59 +129,62 @@ export const SlidePreviewGallery: React.FC<SlidePreviewGalleryProps> = ({
         </div>
       </section>
 
-      {selected && selectedThumbnail && createPortal(
-        <div
-          className="slide-preview-lightbox"
-          role="dialog"
-          aria-modal="true"
-          aria-label={`${selected.payload.title} 页面预览`}
-          onClick={() => setSelectedIndex(null)}
-        >
-          <div className="slide-preview-lightbox-panel" onClick={(event) => event.stopPropagation()}>
-            <div className="slide-preview-lightbox-header">
-              <span>{selected.payload.title}</span>
-              <div className="slide-preview-lightbox-navigation">
-                <button
-                  type="button"
-                  onClick={() => movePreview(-1)}
-                  disabled={selectedIndex === 0}
-                  aria-label="上一张检查预览"
-                >
-                  ‹
-                </button>
-                <span>{(selectedIndex ?? 0) + 1} / {previews.length}</span>
-                <button
-                  type="button"
-                  onClick={() => movePreview(1)}
-                  disabled={selectedIndex === previews.length - 1}
-                  aria-label="下一张检查预览"
-                >
-                  ›
+      {selected &&
+        selectedThumbnail &&
+        createPortal(
+          <div
+            className="slide-preview-lightbox"
+            role="dialog"
+            aria-modal="true"
+            aria-label={`${selected.payload.title} 页面预览`}
+            onClick={() => setSelectedIndex(null)}
+          >
+            <div
+              className="slide-preview-lightbox-panel"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="slide-preview-lightbox-header">
+                <span>{selected.payload.title}</span>
+                <div className="slide-preview-lightbox-navigation">
+                  <button
+                    type="button"
+                    onClick={() => movePreview(-1)}
+                    disabled={selectedIndex === 0}
+                    aria-label="上一张检查预览"
+                  >
+                    ‹
+                  </button>
+                  <span>
+                    {(selectedIndex ?? 0) + 1} / {previews.length}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => movePreview(1)}
+                    disabled={selectedIndex === previews.length - 1}
+                    aria-label="下一张检查预览"
+                  >
+                    ›
+                  </button>
+                </div>
+                <button type="button" onClick={() => setSelectedIndex(null)} aria-label="关闭预览">
+                  ×
                 </button>
               </div>
-              <button type="button" onClick={() => setSelectedIndex(null)} aria-label="关闭预览">
-                ×
-              </button>
+              {liveSlide ? (
+                <div className="slide-preview-lightbox-live">{liveSlide}</div>
+              ) : (
+                <img
+                  src={`data:${selectedThumbnail.mimeType};base64,${selectedThumbnail.pngBase64}`}
+                  width={selectedThumbnail.width}
+                  height={selectedThumbnail.height}
+                  alt={`${selected.payload.title} 页面预览`}
+                />
+              )}
+              {selected.payload.description && <p>{selected.payload.description}</p>}
             </div>
-            {liveSlide ? (
-              <div className="slide-preview-lightbox-live">
-                {liveSlide}
-              </div>
-            ) : (
-              <img
-                src={`data:${selectedThumbnail.mimeType};base64,${selectedThumbnail.pngBase64}`}
-                width={selectedThumbnail.width}
-                height={selectedThumbnail.height}
-                alt={`${selected.payload.title} 页面预览`}
-              />
-            )}
-            {selected.payload.description && (
-              <p>{selected.payload.description}</p>
-            )}
-          </div>
-        </div>,
-        document.body,
-      )}
+          </div>,
+          document.body,
+        )}
     </>
   );
 };

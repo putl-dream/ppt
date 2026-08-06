@@ -1,7 +1,6 @@
 import type { ExportPresentationOptions } from "@shared/ipc";
 import type { Presentation } from "@shared/presentation";
-import { hashArtifactValue } from
-  "../presentation-lifecycle/content-addressed-blob-store";
+import { hashArtifactValue } from "../presentation-lifecycle/content-addressed-blob-store";
 
 const PPTX_EXPORT_IDENTITY_PREFIX = "agent-ppt-export:";
 
@@ -17,9 +16,11 @@ export function createPptxExportIdentity(
   // Presentation command helpers may leave explicit `undefined` on optional
   // object properties. Export identity follows persisted JSON semantics:
   // object `undefined` fields are omitted before canonical hashing.
-  const persistedValue = JSON.parse(JSON.stringify({
-    presentation,
-    options,
-  })) as unknown;
+  const persistedValue = JSON.parse(
+    JSON.stringify({
+      presentation,
+      options,
+    }),
+  ) as unknown;
   return `${PPTX_EXPORT_IDENTITY_PREFIX}${hashArtifactValue(persistedValue)}`;
 }

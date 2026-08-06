@@ -1,41 +1,27 @@
-import {
-  mkdir,
-  mkdtemp,
-  rm,
-  writeFile,
-} from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it, vi } from "vitest";
-import {
-  PresentationArtifactChangeObserver,
-} from "@main/presentation-lifecycle/artifact-change-observer";
-import {
-  hashBytes,
-} from "@main/presentation-lifecycle/content-addressed-blob-store";
-import { PresentationLifecycleOrchestrator } from
-  "@main/presentation-lifecycle/presentation-lifecycle-orchestrator";
-import { PresentationLifecycleRepository } from
-  "@main/presentation-lifecycle/presentation-lifecycle-repository";
-import { PresentationLifecycleToolBridge } from
-  "@main/presentation-lifecycle/presentation-lifecycle-tool-bridge";
-import type { ArtifactChangeObserverPort } from
-  "@main/presentation-lifecycle/artifact-change-observer-types";
+import { WorkspaceFileService } from "@main/agent/tools/files/workspace-file-service";
 import {
   readFileContract,
   writeFileContract,
 } from "@main/agent/tools/files/workspace-file-tool-contract";
-import { WorkspaceFileService } from
-  "@main/agent/tools/files/workspace-file-service";
+import { PresentationArtifactChangeObserver } from "@main/presentation-lifecycle/artifact-change-observer";
+import type { ArtifactChangeObserverPort } from "@main/presentation-lifecycle/artifact-change-observer-types";
+import { hashBytes } from "@main/presentation-lifecycle/content-addressed-blob-store";
+import { PresentationLifecycleOrchestrator } from "@main/presentation-lifecycle/presentation-lifecycle-orchestrator";
+import { PresentationLifecycleRepository } from "@main/presentation-lifecycle/presentation-lifecycle-repository";
+import { PresentationLifecycleToolBridge } from "@main/presentation-lifecycle/presentation-lifecycle-tool-bridge";
 import { FileSessionStore } from "@main/session-store";
 import {
+  type ArtifactDependency,
+  type ArtifactPointer,
   asPresentationId,
   asProjectId,
   asQueryId,
-  type ArtifactDependency,
-  type ArtifactPointer,
   type ValidationReport,
 } from "@shared/presentation-lifecycle";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 const NOW = "2026-07-30T00:00:00.000Z";
 const temporaryDirectories: string[] = [];
@@ -58,9 +44,9 @@ afterEach(async () => {
     }
   }
   await Promise.all(
-    temporaryDirectories.splice(0).map(
-      (directory) => rm(directory, { recursive: true, force: true }),
-    ),
+    temporaryDirectories
+      .splice(0)
+      .map((directory) => rm(directory, { recursive: true, force: true })),
   );
 });
 
@@ -135,30 +121,19 @@ describe("PresentationArtifactChangeObserver", () => {
     const state = fixture.repository.getJob(fixture.jobId)!;
     expect(state.status).toBe("running");
     expect(state.staleArtifacts.map((item) => item.revisionId)).toEqual(
-      expect.arrayContaining([
-        asset.revisionId,
-        page1.revisionId,
-        preview1.revisionId,
-      ]),
+      expect.arrayContaining([asset.revisionId, page1.revisionId, preview1.revisionId]),
     );
-    expect(state.staleArtifacts.map((item) => item.revisionId)).not.toContain(
-      page2.revisionId,
-    );
+    expect(state.staleArtifacts.map((item) => item.revisionId)).not.toContain(page2.revisionId);
     expect(
-      state.staleArtifacts.find(
-        (item) => item.revisionId === asset.revisionId,
-      )?.observedContentHash,
+      state.staleArtifacts.find((item) => item.revisionId === asset.revisionId)
+        ?.observedContentHash,
     ).toBe(hashBytes(changed));
   });
 
   it("ignores JSON key order but waits for the user after a real project edit", async () => {
     const fixture = await createLifecycle("json");
     await mkdir(join(fixture.workspaceRoot, "design"), { recursive: true });
-    const designPath = join(
-      fixture.workspaceRoot,
-      "design",
-      "design-spec.json",
-    );
+    const designPath = join(fixture.workspaceRoot, "design", "design-spec.json");
     await writeFile(designPath, '{"b":2,"a":1}\n', "utf8");
 
     const design = commit(fixture, {
@@ -209,11 +184,7 @@ describe("PresentationArtifactChangeObserver", () => {
     });
     expect(state.waitingReason).toContain("Rerun from design_spec");
     expect(state.staleArtifacts.map((item) => item.revisionId)).toEqual(
-      expect.arrayContaining([
-        design.revisionId,
-        plan.revisionId,
-        presentation.revisionId,
-      ]),
+      expect.arrayContaining([design.revisionId, plan.revisionId, presentation.revisionId]),
     );
     expect(state.committedArtifacts).toContainEqual(presentation);
   });
@@ -227,13 +198,9 @@ describe("PresentationArtifactChangeObserver", () => {
     const png = Buffer.from("iVBORw0KGgo=", "base64");
     const embeddedPath = `embedded:${digest(png)}`;
     const markup =
-      '<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720">'
-      + '<image href="data:image/png;base64,iVBORw0KGgo="/></svg>';
-    await writeFile(
-      join(fixture.workspaceRoot, sourcePath),
-      markup,
-      "utf8",
-    );
+      '<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720">' +
+      '<image href="data:image/png;base64,iVBORw0KGgo="/></svg>';
+    await writeFile(join(fixture.workspaceRoot, sourcePath), markup, "utf8");
     const asset = commit(fixture, {
       artifactId: `source-asset:${embeddedPath}`,
       kind: "source_asset",
@@ -274,8 +241,8 @@ describe("PresentationArtifactChangeObserver", () => {
       });
       const sourcePath = "slides/svg/P01.svg";
       const original =
-        '<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720">'
-        + "<text>one</text></svg>";
+        '<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720">' +
+        "<text>one</text></svg>";
       await writeFile(join(fixture.workspaceRoot, sourcePath), original, "utf8");
       const page = commit(fixture, {
         artifactId: `page-svg:${sourcePath}`,
@@ -309,9 +276,7 @@ describe("PresentationArtifactChangeObserver", () => {
       });
       expect(fixture.repository.getJob(fixture.jobId)).toMatchObject({
         status: "waiting_user",
-        staleArtifacts: [
-          expect.objectContaining({ revisionId: page.revisionId }),
-        ],
+        staleArtifacts: [expect.objectContaining({ revisionId: page.revisionId })],
       });
     },
   );
@@ -319,11 +284,7 @@ describe("PresentationArtifactChangeObserver", () => {
   it("supersedes an active proposal when its source dependency becomes stale", async () => {
     const fixture = await createLifecycle("proposal");
     await mkdir(join(fixture.workspaceRoot, "design"), { recursive: true });
-    const designPath = join(
-      fixture.workspaceRoot,
-      "design",
-      "design-spec.json",
-    );
+    const designPath = join(fixture.workspaceRoot, "design", "design-spec.json");
     await writeFile(designPath, '{"theme":"light"}\n', "utf8");
     const design = commit(fixture, {
       artifactId: "design-spec",
@@ -354,9 +315,7 @@ describe("PresentationArtifactChangeObserver", () => {
       detectedAt: "2026-07-30T00:06:00.000Z",
     });
 
-    expect(fixture.repository.getProposal(proposal.proposalId)?.status).toBe(
-      "superseded",
-    );
+    expect(fixture.repository.getProposal(proposal.proposalId)?.status).toBe("superseded");
     expect(fixture.repository.getJob(fixture.jobId)).toMatchObject({
       status: "waiting_user",
       staleArtifacts: [
@@ -375,8 +334,12 @@ describe("artifact change observer boundaries", () => {
     const events: string[] = [];
     let releaseFirst!: () => void;
     let firstStarted!: () => void;
-    const gate = new Promise<void>((resolve) => { releaseFirst = resolve; });
-    const started = new Promise<void>((resolve) => { firstStarted = resolve; });
+    const gate = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+    const started = new Promise<void>((resolve) => {
+      firstStarted = resolve;
+    });
     const observer: ArtifactChangeObserverPort = {
       async observe(input) {
         const path = input.paths?.[0] ?? "unknown";
@@ -440,16 +403,9 @@ describe("artifact change observer boundaries", () => {
     const sessionId = bootstrap.activeSession!.session.id;
     const projectRoot = bootstrap.activeSession!.project!.rootPath;
     await mkdir(join(projectRoot, "design"), { recursive: true });
-    await writeFile(
-      join(projectRoot, "design", "design-spec.json"),
-      "{}\n",
-      "utf8",
-    );
+    await writeFile(join(projectRoot, "design", "design-spec.json"), "{}\n", "utf8");
 
-    const opened = await store.openProjectFile(
-      sessionId,
-      "design/design-spec.json",
-    );
+    const opened = await store.openProjectFile(sessionId, "design/design-spec.json");
     await store.saveProjectFile(
       sessionId,
       opened.path,
@@ -458,14 +414,18 @@ describe("artifact change observer boundaries", () => {
       opened.version,
     );
 
-    expect(observe).toHaveBeenCalledWith(expect.objectContaining({
-      source: "project_read",
-      paths: ["design/design-spec.json"],
-    }));
-    expect(observe).toHaveBeenCalledWith(expect.objectContaining({
-      source: "project_edit",
-      paths: ["design/design-spec.json"],
-    }));
+    expect(observe).toHaveBeenCalledWith(
+      expect.objectContaining({
+        source: "project_read",
+        paths: ["design/design-spec.json"],
+      }),
+    );
+    expect(observe).toHaveBeenCalledWith(
+      expect.objectContaining({
+        source: "project_edit",
+        paths: ["design/design-spec.json"],
+      }),
+    );
   });
 
   it("notifies the observer after Agent file reads and writes", async () => {
@@ -481,11 +441,14 @@ describe("artifact change observer boundaries", () => {
     };
 
     const read = await readFileContract.execute({ path: "notes.txt" }, context);
-    await writeFileContract.execute({
-      path: "notes.txt",
-      content: "after",
-      expected_version: read.version,
-    }, context);
+    await writeFileContract.execute(
+      {
+        path: "notes.txt",
+        content: "after",
+        expected_version: read.version,
+      },
+      context,
+    );
 
     expect(observeArtifactChanges).toHaveBeenNthCalledWith(1, {
       workspaceRoot,
@@ -505,9 +468,7 @@ async function createLifecycle(name: string) {
   temporaryDirectories.push(directory);
   const workspaceRoot = join(directory, "workspace");
   await mkdir(workspaceRoot, { recursive: true });
-  const repository = new PresentationLifecycleRepository(
-    join(directory, "conversations.sqlite"),
-  );
+  const repository = new PresentationLifecycleRepository(join(directory, "conversations.sqlite"));
   repositories.push(repository);
   const orchestrator = new PresentationLifecycleOrchestrator(repository);
   const presentationId = asPresentationId(`presentation-${name}`);
@@ -541,13 +502,7 @@ function commit(
       | "preview_receipt"
       | "command_proposal"
       | "presentation_revision";
-    stage:
-      | "design_spec"
-      | "page_plan"
-      | "page_svg"
-      | "preview"
-      | "proposal"
-      | "presentation";
+    stage: "design_spec" | "page_plan" | "page_svg" | "preview" | "proposal" | "presentation";
     value: unknown;
     dependencies?: ArtifactDependency[];
   },

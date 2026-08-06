@@ -55,7 +55,9 @@ export function WorkspaceView({
             onStartPanelResize("primary", event.clientX);
           }}
         />
-      ) : <div className="panel-resizer-placeholder" />}
+      ) : (
+        <div className="panel-resizer-placeholder" />
+      )}
 
       <div
         key="workspace"
@@ -66,16 +68,17 @@ export function WorkspaceView({
           className={[
             "workspace-canvas-content",
             isDraftChat ? "new-session-layout" : "",
-            isMirrorVisible ? "ppt-mirror-open" : "ppt-mirror-closed workspace-canvas-content-chat-only",
+            isMirrorVisible
+              ? "ppt-mirror-open"
+              : "ppt-mirror-closed workspace-canvas-content-chat-only",
             isMirrorVisible && isMirrorExpanded ? "mirror-expanded" : "",
             isSessionSwitching ? "is-session-switching" : "",
-          ].filter(Boolean).join(" ")}
+          ]
+            .filter(Boolean)
+            .join(" ")}
           aria-busy={isSessionSwitching || undefined}
         >
-          <ChatWorkspace
-            key={activeSessionId || "draft"}
-            {...chatWorkspaceProps}
-          />
+          <ChatWorkspace key={activeSessionId || "draft"} {...chatWorkspaceProps} />
 
           {isMirrorVisible && mirrorProps ? (
             <>

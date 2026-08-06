@@ -24,7 +24,11 @@ function lerpColor(a: string, b: string, t: number): [number, number, number] {
   ];
 }
 
-function sampleGradient(gradient: BackgroundGradient, x: number, y: number): [number, number, number] {
+function sampleGradient(
+  gradient: BackgroundGradient,
+  x: number,
+  y: number,
+): [number, number, number] {
   const stops = [...gradient.stops].sort((a, b) => a.pos - b.pos);
   if (stops.length === 0) return [255, 255, 255];
   if (stops.length === 1) return parseHex(stops[0].color);
@@ -50,10 +54,7 @@ function sampleGradient(gradient: BackgroundGradient, x: number, y: number): [nu
   return sampleStops(stops, t * 100);
 }
 
-function sampleStops(
-  stops: BackgroundGradient["stops"],
-  pos: number,
-): [number, number, number] {
+function sampleStops(stops: BackgroundGradient["stops"], pos: number): [number, number, number] {
   if (pos <= stops[0].pos) return parseHex(stops[0].color);
   const last = stops[stops.length - 1];
   if (pos >= last.pos) return parseHex(last.color);
@@ -71,11 +72,7 @@ function sampleStops(
 }
 
 /** Encode RGBA buffer as PNG data URI (works in Node/vitest without Electron). */
-function rgbaToPngDataUri(
-  width: number,
-  height: number,
-  rgba: Uint8Array,
-): string {
+function rgbaToPngDataUri(width: number, height: number, rgba: Uint8Array): string {
   const rowSize = width * 4 + 1;
   const raw = new Uint8Array(rowSize * height);
   for (let y = 0; y < height; y++) {
@@ -119,7 +116,7 @@ function rgbaToPngDataUri(
       const isFinal = offset + len >= data.length ? 1 : 0;
       blocks.push(isFinal);
       blocks.push(len & 0xff, (len >> 8) & 0xff);
-      blocks.push((~len) & 0xff, ((~len) >> 8) & 0xff);
+      blocks.push(~len & 0xff, (~len >> 8) & 0xff);
       for (let i = 0; i < len; i++) blocks.push(data[offset + i]);
     }
     const adler = adler32(data);

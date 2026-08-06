@@ -1,14 +1,14 @@
-import OpenAI from "openai";
+import type OpenAI from "openai";
 import type { DriverResolvedConfig } from "./config";
 import {
   completeChunkFromResponse,
+  type OpenAIClient,
+  type OpenAIModeDriver,
   openAIUsageProperty,
   parseToolArguments,
   toOpenAIImageUrl,
   toolResultBodyText,
   toolResultText,
-  type OpenAIClient,
-  type OpenAIModeDriver,
 } from "./openai-common";
 import type {
   AgentModelContentBlock,
@@ -69,9 +69,7 @@ function toResponsesToolOutput(
   return output;
 }
 
-function toResponsesInput(
-  messages: AgentModelMessage[],
-): OpenAI.Responses.ResponseInput {
+function toResponsesInput(messages: AgentModelMessage[]): OpenAI.Responses.ResponseInput {
   const out: OpenAI.Responses.ResponseInput = [];
   for (const message of messages) {
     if (message.role === "assistant") {
@@ -110,16 +108,22 @@ function toResponsesInput(
   return out;
 }
 
-function contentFromResponsesOutput(
-  response: OpenAI.Responses.Response,
-): AgentModelContentBlock[] {
+function contentFromResponsesOutput(response: OpenAI.Responses.Response): AgentModelContentBlock[] {
   const text = response.output_text.trim();
   const thinking: AgentModelContentBlock[] = [];
   const toolCalls: AgentModelToolUseBlock[] = [];
   for (const item of response.output ?? []) {
     if (item.type === "reasoning") {
-      const summary = item.summary.map((part) => part.text).join("\n\n").trim();
-      const reasoning = summary || item.content?.map((part) => part.text).join("\n\n").trim();
+      const summary = item.summary
+        .map((part) => part.text)
+        .join("\n\n")
+        .trim();
+      const reasoning =
+        summary ||
+        item.content
+          ?.map((part) => part.text)
+          .join("\n\n")
+          .trim();
       if (reasoning) {
         thinking.push({
           type: "thinking",
@@ -139,24 +143,16 @@ function contentFromResponsesOutput(
       ...(parseError ? { parseError } : {}),
     });
   }
-  return [
-    ...thinking,
-    ...(text ? [{ type: "text" as const, text }] : []),
-    ...toolCalls,
-  ];
+  return [...thinking, ...(text ? [{ type: "text" as const, text }] : []), ...toolCalls];
 }
 
-function stopReasonFromResponses(
-  response: OpenAI.Responses.Response,
-): StopReason {
+function stopReasonFromResponses(response: OpenAI.Responses.Response): StopReason {
   if (response.status === "incomplete") {
     const reason = response.incomplete_details?.reason;
     if (reason === "max_output_tokens") return "max_tokens";
     return "other";
   }
-  return response.output.some((item) => item.type === "function_call")
-    ? "tool_use"
-    : "end";
+  return response.output.some((item) => item.type === "function_call") ? "tool_use" : "end";
 }
 
 function responsesRequestBase(
@@ -206,8 +202,10 @@ async function generateWithResponses(
   config: DriverResolvedConfig,
   request: PreparedAgentModelRequest,
 ): Promise<AgentModelResponse> {
-  const params: OpenAI.Responses.ResponseCreateParamsNonStreaming =
-    responsesRequestBase(config, request);
+  const params: OpenAI.Responses.ResponseCreateParamsNonStreaming = responsesRequestBase(
+    config,
+    request,
+  );
   const response = await client.responses.create(params, { signal: request.signal });
   return responseFromResponsesOutput(config, response);
 }
@@ -217,16 +215,15 @@ async function* generateStreamWithResponses(
   config: DriverResolvedConfig,
   request: PreparedAgentModelRequest,
 ): AsyncGenerator<AgentModelStreamChunk> {
-  const stream = client.responses.stream(
-    responsesRequestBase(config, request),
-    { signal: request.signal },
-  );
+  const stream = client.responses.stream(responsesRequestBase(config, request), {
+    signal: request.signal,
+  });
 
   for await (const event of stream) {
     if (
-      (event.type === "response.reasoning_summary_text.delta"
-        || event.type === "response.reasoning_text.delta")
-      && event.delta
+      (event.type === "response.reasoning_summary_text.delta" ||
+        event.type === "response.reasoning_text.delta") &&
+      event.delta
     ) {
       yield { type: "thinking_delta", thinking: event.delta, index: event.output_index };
     } else if (event.type === "response.output_text.delta" && event.delta) {

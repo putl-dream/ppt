@@ -1,13 +1,9 @@
-import {
-  DESIGN_PRESETS,
-  getVisualStyleDefinition,
-  type VisualStyle,
-} from "@design-system";
+import { DESIGN_PRESETS, getVisualStyleDefinition, type VisualStyle } from "@design-system";
 import {
   TEMPLATE_CATALOG_REVISION,
-  templateDescriptorSchema,
   type TemplateCapability,
   type TemplateDescriptor,
+  templateDescriptorSchema,
 } from "./template-protocol";
 
 interface BuiltinTemplateSeed {
@@ -165,18 +161,14 @@ function seedToDescriptor(seed: BuiltinTemplateSeed): TemplateDescriptor {
     },
     authoringGuidance: {
       composition: seed.composition || style.summary,
-      avoid: seed.avoid.length > 0
-        ? seed.avoid
-        : [...style.grammarPreferences.avoid],
+      avoid: seed.avoid.length > 0 ? seed.avoid : [...style.grammarPreferences.avoid],
     },
     autoPoolEligible: seed.autoPoolEligible,
     fallbackEligible: seed.fallbackEligible,
   });
 }
 
-function presetToExplicitDescriptor(
-  visualStyle: VisualStyle,
-): TemplateDescriptor {
+function presetToExplicitDescriptor(visualStyle: VisualStyle): TemplateDescriptor {
   const preset = DESIGN_PRESETS.find((item) => item.id === visualStyle);
   if (!preset) {
     throw new Error(`Missing design preset for ${visualStyle}`);

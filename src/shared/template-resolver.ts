@@ -7,9 +7,9 @@ import {
 } from "./template-catalog";
 import {
   APPLICATION_DEFAULT_TEMPLATE_ID,
-  resolvedTemplateSelectionSchema,
   type ProjectTemplatePolicy,
   type ResolvedTemplateSelection,
+  resolvedTemplateSelectionSchema,
   type TemplateCommunicationSignals,
   type TemplateDescriptor,
   type TemplateMatchScore,
@@ -54,24 +54,30 @@ function scoreTemplate(
   template: TemplateDescriptor,
   signals: TemplateCommunicationSignals,
 ): TemplateMatchScore {
-  const corpus = normalizeText([
-    signals.audience,
-    signals.objective,
-    signals.desiredOutcome,
-    signals.coreMessage,
-    signals.deliveryContext,
-    signals.afterUse,
-    ...(signals.topics ?? []),
-  ].filter(Boolean).join(" "));
-  const tokens = new Set(tokenize(
-    signals.audience,
-    signals.objective,
-    signals.desiredOutcome,
-    signals.coreMessage,
-    signals.deliveryContext,
-    signals.afterUse,
-    ...(signals.topics ?? []),
-  ));
+  const corpus = normalizeText(
+    [
+      signals.audience,
+      signals.objective,
+      signals.desiredOutcome,
+      signals.coreMessage,
+      signals.deliveryContext,
+      signals.afterUse,
+      ...(signals.topics ?? []),
+    ]
+      .filter(Boolean)
+      .join(" "),
+  );
+  const tokens = new Set(
+    tokenize(
+      signals.audience,
+      signals.objective,
+      signals.desiredOutcome,
+      signals.coreMessage,
+      signals.deliveryContext,
+      signals.afterUse,
+      ...(signals.topics ?? []),
+    ),
+  );
 
   let score = 0;
   const matchedSignals: string[] = [];
@@ -96,8 +102,8 @@ function scoreTemplate(
   }
 
   if (
-    signals.preferredArgumentMode
-    && template.matching.argumentModes.includes(signals.preferredArgumentMode)
+    signals.preferredArgumentMode &&
+    template.matching.argumentModes.includes(signals.preferredArgumentMode)
   ) {
     score += 0.12;
     matchedSignals.push(`argumentMode:${signals.preferredArgumentMode}`);
@@ -107,17 +113,14 @@ function scoreTemplate(
   }
 
   if (
-    signals.preferredReadingMode
-    && template.matching.readingModes.includes(signals.preferredReadingMode)
+    signals.preferredReadingMode &&
+    template.matching.readingModes.includes(signals.preferredReadingMode)
   ) {
     score += 0.1;
     matchedSignals.push(`readingMode:${signals.preferredReadingMode}`);
   }
 
-  if (
-    signals.preferredDensity
-    && template.matching.density.includes(signals.preferredDensity)
-  ) {
+  if (signals.preferredDensity && template.matching.density.includes(signals.preferredDensity)) {
     score += 0.08;
     matchedSignals.push(`density:${signals.preferredDensity}`);
   }
@@ -153,10 +156,9 @@ function findUploaded(
   templateId: string,
   revisionId?: string,
 ): TemplateDescriptor | undefined {
-  return uploaded.find((item) => (
-    item.id === templateId
-    && (!revisionId || item.revisionId === revisionId)
-  ));
+  return uploaded.find(
+    (item) => item.id === templateId && (!revisionId || item.revisionId === revisionId),
+  );
 }
 
 function selectionFor(
@@ -180,9 +182,7 @@ function selectionFor(
   return { selection, template, scores: [] };
 }
 
-function resolveDefaultTemplate(
-  policy: ProjectTemplatePolicy,
-): TemplateDescriptor {
+function resolveDefaultTemplate(policy: ProjectTemplatePolicy): TemplateDescriptor {
   const builtin = getBuiltinTemplate(policy.defaultTemplateId);
   if (builtin?.fallbackEligible || builtin) {
     return builtin;
@@ -194,9 +194,7 @@ function resolveDefaultTemplate(
  * Deterministic template resolution. Models may supply signals / explicit
  * preferences; they must not invent template IDs outside the catalog/library.
  */
-export function resolveProjectTemplate(
-  input: ResolveTemplateInput,
-): ResolveTemplateResult {
+export function resolveProjectTemplate(input: ResolveTemplateInput): ResolveTemplateResult {
   const signals = input.signals ?? {};
   const uploaded = input.uploadedTemplates ?? [];
   const policy = input.policy;
@@ -218,9 +216,7 @@ export function resolveProjectTemplate(
   }
 
   if (signals.explicitVisualStyle) {
-    const template = getBuiltinTemplateByVisualStyle(
-      signals.explicitVisualStyle as VisualStyle,
-    );
+    const template = getBuiltinTemplateByVisualStyle(signals.explicitVisualStyle as VisualStyle);
     if (!template) {
       throw new Error(`Unknown visual style: ${signals.explicitVisualStyle}`);
     }
@@ -235,9 +231,9 @@ export function resolveProjectTemplate(
     const custom = findUploaded(uploaded, customId, customRevision);
     if (!custom) {
       throw new Error(
-        `Project policy mode=custom pins ${customId}@${customRevision ?? "?"}, `
-        + "but that revision is missing under design/templates/**. "
-        + "Re-import/apply the package or switch the policy away from custom.",
+        `Project policy mode=custom pins ${customId}@${customRevision ?? "?"}, ` +
+          "but that revision is missing under design/templates/**. " +
+          "Re-import/apply the package or switch the policy away from custom.",
       );
     }
     return selectionFor(custom, "explicit-custom", [
@@ -247,9 +243,9 @@ export function resolveProjectTemplate(
 
   if (policy.mode === "default") {
     const template = resolveDefaultTemplate(policy);
-    return selectionFor(template, "fallback", [
-      `Project policy mode=default → ${template.id}`,
-    ], { confidence: 1 });
+    return selectionFor(template, "fallback", [`Project policy mode=default → ${template.id}`], {
+      confidence: 1,
+    });
   }
 
   // mode=auto
@@ -257,35 +253,43 @@ export function resolveProjectTemplate(
   const scores = pool
     .map((template) => scoreTemplate(template, signals))
     .filter((item) => !item.penalties.some((penalty) => penalty.startsWith("missing-capability:")))
-    .sort((left, right) => right.score - left.score || left.templateId.localeCompare(right.templateId));
+    .sort(
+      (left, right) => right.score - left.score || left.templateId.localeCompare(right.templateId),
+    );
 
   const best = scores[0];
   const second = scores[1];
   const defaultTemplate = resolveDefaultTemplate(policy);
 
   if (
-    !best
-    || best.score < AUTO_CONFIDENCE_THRESHOLD
-    || (second && best.score - second.score < AUTO_SCORE_GAP_THRESHOLD)
+    !best ||
+    best.score < AUTO_CONFIDENCE_THRESHOLD ||
+    (second && best.score - second.score < AUTO_SCORE_GAP_THRESHOLD)
   ) {
-    const fallbackReason = !best || best.score < AUTO_CONFIDENCE_THRESHOLD
-      ? "low-confidence"
-      : "ambiguous-top-candidates";
-    const result = selectionFor(defaultTemplate, "fallback", [
-      `Auto-match ${fallbackReason}; using project default ${defaultTemplate.id}`,
-    ], {
-      confidence: best?.score ?? 0,
-      fallbackReason,
-    });
+    const fallbackReason =
+      !best || best.score < AUTO_CONFIDENCE_THRESHOLD
+        ? "low-confidence"
+        : "ambiguous-top-candidates";
+    const result = selectionFor(
+      defaultTemplate,
+      "fallback",
+      [`Auto-match ${fallbackReason}; using project default ${defaultTemplate.id}`],
+      {
+        confidence: best?.score ?? 0,
+        fallbackReason,
+      },
+    );
     return { ...result, scores };
   }
 
   const template = requireBuiltinTemplate(best.templateId);
   const confidence = Math.min(1, best.score);
-  const result = selectionFor(template, "auto", [
-    ...best.matchedSignals,
-    `score=${best.score.toFixed(2)}`,
-  ], { confidence });
+  const result = selectionFor(
+    template,
+    "auto",
+    [...best.matchedSignals, `score=${best.score.toFixed(2)}`],
+    { confidence },
+  );
   return { ...result, scores };
 }
 
@@ -294,13 +298,13 @@ export function assertDesignSystemMatchesTemplate(
   template: TemplateDescriptor,
 ): void {
   if (
-    designSystem.argumentMode !== template.designSystem.argumentMode
-    || designSystem.visualStyle !== template.designSystem.visualStyle
-    || designSystem.readingMode !== template.designSystem.readingMode
+    designSystem.argumentMode !== template.designSystem.argumentMode ||
+    designSystem.visualStyle !== template.designSystem.visualStyle ||
+    designSystem.readingMode !== template.designSystem.readingMode
   ) {
     throw new Error(
-      `presentationDesignSystem axes must match template ${template.id} `
-      + `(${template.designSystem.visualStyle}).`,
+      `presentationDesignSystem axes must match template ${template.id} ` +
+        `(${template.designSystem.visualStyle}).`,
     );
   }
 }

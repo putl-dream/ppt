@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   AgentGateway,
-  textFromContentBlocks,
   type AgentModelStreamChunk,
+  textFromContentBlocks,
 } from "../src/main/agent/gateway";
 
 const OPENAI_AVAILABLE = hasEnvironment("OPENAI_API_KEY", "OPENAI_MODEL");

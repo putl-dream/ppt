@@ -65,9 +65,12 @@ describe("Anthropic driver", () => {
       },
     });
 
-    const response = await generateWithAnthropic(config, preparedRequest("User prompt", {
-      systemPrompt: "System instruction",
-    }));
+    const response = await generateWithAnthropic(
+      config,
+      preparedRequest("User prompt", {
+        systemPrompt: "System instruction",
+      }),
+    );
 
     expect(anthropicMock.constructorOptions).toEqual({
       apiKey: "secret",
@@ -75,12 +78,15 @@ describe("Anthropic driver", () => {
       timeout: 2345,
       maxRetries: 0,
     });
-    expect(anthropicMock.create).toHaveBeenCalledWith({
-      model: "anthropic-test",
-      max_tokens: 654,
-      system: "System instruction",
-      messages: [{ role: "user", content: [{ type: "text", text: "User prompt" }] }],
-    }, { signal: undefined });
+    expect(anthropicMock.create).toHaveBeenCalledWith(
+      {
+        model: "anthropic-test",
+        max_tokens: 654,
+        system: "System instruction",
+        messages: [{ role: "user", content: [{ type: "text", text: "User prompt" }] }],
+      },
+      { signal: undefined },
+    );
     expect(response).toEqual({
       provider: "anthropic",
       model: "anthropic-test",
@@ -105,34 +111,41 @@ describe("Anthropic driver", () => {
       content: [{ type: "tool_use", id: "tool-2", name: "Read", input: { slide: 2 } }],
       stop_reason: "tool_use",
     });
-    const response = await generateWithAnthropic(config, preparedRequest("", {
-      messages: [
-        {
-          role: "assistant",
-          content: [{ type: "tool_use", id: "tool-1", name: "Preview", input: {} }],
-        },
-        {
-          role: "user",
-          content: [{
-            type: "tool_result",
-            toolUseId: "tool-1",
-            content: [{ type: "image", mediaType: "image/png", data: "base64" }],
-          }],
-        },
-      ],
-      tools: [{ name: "Read", description: "Read slide", inputSchema: { type: "object" } }],
-    }));
+    const response = await generateWithAnthropic(
+      config,
+      preparedRequest("", {
+        messages: [
+          {
+            role: "assistant",
+            content: [{ type: "tool_use", id: "tool-1", name: "Preview", input: {} }],
+          },
+          {
+            role: "user",
+            content: [
+              {
+                type: "tool_result",
+                toolUseId: "tool-1",
+                content: [{ type: "image", mediaType: "image/png", data: "base64" }],
+              },
+            ],
+          },
+        ],
+        tools: [{ name: "Read", description: "Read slide", inputSchema: { type: "object" } }],
+      }),
+    );
 
     expect(anthropicMock.create.mock.calls[0]?.[0]).toMatchObject({
       messages: [
         { role: "assistant", content: [{ type: "tool_use", id: "tool-1" }] },
         {
           role: "user",
-          content: [{
-            type: "tool_result",
-            tool_use_id: "tool-1",
-            content: [{ type: "image", source: { media_type: "image/png", data: "base64" } }],
-          }],
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: "tool-1",
+              content: [{ type: "image", source: { media_type: "image/png", data: "base64" } }],
+            },
+          ],
         },
       ],
       tools: [{ name: "Read" }],
@@ -159,25 +172,27 @@ describe("Anthropic driver", () => {
   });
 
   it("maps one stream and emits exactly one complete chunk", async () => {
-    anthropicMock.stream.mockReturnValue(mockAnthropicStream(
-      [
+    anthropicMock.stream.mockReturnValue(
+      mockAnthropicStream(
+        [
+          {
+            type: "content_block_delta",
+            index: 0,
+            delta: { type: "thinking_delta", thinking: "reasoning" },
+          },
+          {
+            type: "content_block_delta",
+            index: 1,
+            delta: { type: "text_delta", text: "answer" },
+          },
+        ],
         {
-          type: "content_block_delta",
-          index: 0,
-          delta: { type: "thinking_delta", thinking: "reasoning" },
+          content: [{ type: "text", text: "answer" }],
+          stop_reason: "end_turn",
+          usage: { input_tokens: 3, output_tokens: 4 },
         },
-        {
-          type: "content_block_delta",
-          index: 1,
-          delta: { type: "text_delta", text: "answer" },
-        },
-      ],
-      {
-        content: [{ type: "text", text: "answer" }],
-        stop_reason: "end_turn",
-        usage: { input_tokens: 3, output_tokens: 4 },
-      },
-    ));
+      ),
+    );
 
     const chunks = [];
     for await (const chunk of generateStreamWithAnthropic(config, preparedRequest("prompt"))) {

@@ -1,16 +1,16 @@
 import { describe, expect, it } from "vitest";
+import { slideSchema } from "../src/shared/presentation";
 import {
+  assertValidSvgPage,
   MAX_SVG_VALIDATION_ISSUES,
   SVG_NAMESPACE,
   SVG_PAGE_HEIGHT,
   SVG_PAGE_VIEW_BOX,
   SVG_PAGE_WIDTH,
   SvgPageValidationError,
-  assertValidSvgPage,
   svgMarkupToDataUri,
   validateSvgPage,
 } from "../src/shared/svg-page";
-import { slideSchema } from "../src/shared/presentation";
 
 function page(body = ""): string {
   return `<svg xmlns="${SVG_NAMESPACE}" width="${SVG_PAGE_WIDTH}" height="${SVG_PAGE_HEIGHT}" viewBox="${SVG_PAGE_VIEW_BOX}">${body}</svg>`;
@@ -41,9 +41,7 @@ describe("svg-page", () => {
   });
 
   it("requires the canonical svg root, namespace, and viewBox", () => {
-    const result = validateSvgPage(
-      '<g xmlns="http://example.com" viewBox="0 0 1920 1080"></g>',
-    );
+    const result = validateSvgPage('<g xmlns="http://example.com" viewBox="0 0 1920 1080"></g>');
 
     expect(result.valid).toBe(false);
     expect(result.issues.map((issue) => issue.code)).toEqual(
@@ -114,35 +112,37 @@ describe("svg-page", () => {
     expect(result.issues.map((issue) => issue.code)).toContain("invalid-image-href");
   });
 
-  it.each(["png", "jpeg", "gif", "webp"])(
-    "accepts hydrated base64 %s image hrefs",
-    (format) => {
-      expect(
-        validateSvgPage(page(`<image href="data:image/${format};base64,AAAA"/>`)).valid,
-      ).toBe(true);
-    },
-  );
+  it.each(["png", "jpeg", "gif", "webp"])("accepts hydrated base64 %s image hrefs", (format) => {
+    expect(validateSvgPage(page(`<image href="data:image/${format};base64,AAAA"/>`)).valid).toBe(
+      true,
+    );
+  });
 
   it("rejects missing, SVG, and non-base64 image hrefs", () => {
-    const result = validateSvgPage(page(`
+    const result = validateSvgPage(
+      page(`
       <image/>
       <image href="data:image/svg+xml;base64,PHN2Zy8+"/>
       <image href="data:image/png,AAAA"/>
-    `));
+    `),
+    );
 
     expect(result.issues.filter((issue) => issue.code === "invalid-image-href")).toHaveLength(3);
   });
 
   it("rejects remote, file, and javascript URLs outside image elements", () => {
-    const result = validateSvgPage(page(`
+    const result = validateSvgPage(
+      page(`
       <a href="https://example.com"/>
       <rect style="fill:url(file:///tmp/fill.png)"/>
       <use href="javascript:alert(1)"/>
-    `));
+    `),
+    );
 
     expect(result.valid).toBe(false);
-    expect(result.issues.filter((issue) => issue.code === "unsafe-url").length)
-      .toBeGreaterThanOrEqual(3);
+    expect(
+      result.issues.filter((issue) => issue.code === "unsafe-url").length,
+    ).toBeGreaterThanOrEqual(3);
   });
 
   it.each([
@@ -156,22 +156,21 @@ describe("svg-page", () => {
   });
 
   it("reports duplicate ids and every unresolved fragment reference", () => {
-    const result = validateSvgPage(page(`
+    const result = validateSvgPage(
+      page(`
       <defs><linearGradient id="duplicate"/></defs>
       <g id="duplicate"/>
       <rect fill="url(#missing-fill)"/>
       <use href="#missing-use"/>
-    `));
+    `),
+    );
 
     expect(result.issues.map((issue) => issue.code)).toContain("duplicate-id");
     expect(
       result.issues
         .filter((issue) => issue.code === "missing-reference")
         .map((issue) => issue.message),
-    ).toEqual([
-      expect.stringContaining("#missing-fill"),
-      expect.stringContaining("#missing-use"),
-    ]);
+    ).toEqual([expect.stringContaining("#missing-fill"), expect.stringContaining("#missing-use")]);
   });
 
   it.each([
@@ -202,18 +201,17 @@ describe("svg-page", () => {
     page("<!-- a --->"),
     `<?xml nonsense?>${page()}`,
   ])("rejects XML that a conforming renderer cannot parse", (markup) => {
-    expect(validateSvgPage(markup).issues.map((issue) => issue.code))
-      .toContain("invalid-xml");
+    expect(validateSvgPage(markup).issues.map((issue) => issue.code)).toContain("invalid-xml");
   });
 
   it("requires declared, closed namespaces", () => {
     expect(
-      validateSvgPage(page('<use xlink:href="#x"/><g id="x"/>')).issues
-        .map((issue) => issue.code),
+      validateSvgPage(page('<use xlink:href="#x"/><g id="x"/>')).issues.map((issue) => issue.code),
     ).toContain("invalid-namespace");
     expect(
-      validateSvgPage(page('<foo:g/><use foo:href="#x"/><g id="x"/>')).issues
-        .map((issue) => issue.code),
+      validateSvgPage(page('<foo:g/><use foo:href="#x"/><g id="x"/>')).issues.map(
+        (issue) => issue.code,
+      ),
     ).toContain("invalid-namespace");
 
     const withXlink = [
@@ -237,7 +235,7 @@ describe("svg-page", () => {
   });
 
   it("preserves SVG bytes in schema parsing and rejects legacy element fields", () => {
-    const markup = `\n${page("<rect width=\"1280\" height=\"720\"/>")}\n`;
+    const markup = `\n${page('<rect width="1280" height="720"/>')}\n`;
     const baseSlide = {
       id: "svg-schema",
       title: "Schema",
@@ -253,10 +251,12 @@ describe("svg-page", () => {
     };
 
     expect(slideSchema.parse(baseSlide).visualSource?.markup).toBe(markup);
-    expect(slideSchema.safeParse({
-      ...baseSlide,
-      elements: [],
-    }).success).toBe(false);
+    expect(
+      slideSchema.safeParse({
+        ...baseSlide,
+        elements: [],
+      }).success,
+    ).toBe(false);
   });
 
   it("throws one structured error whose message includes every issue", () => {

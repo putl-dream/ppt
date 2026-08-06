@@ -1,13 +1,13 @@
 import { describe, expect, it } from "vitest";
-import type { AgentModelSettings } from "../src/shared/agent";
 import {
   AgentModelSettingsRegistry,
-  DEFAULT_AGENT_TIMEOUT_MS,
   DEFAULT_AGENT_MODELS,
+  DEFAULT_AGENT_TIMEOUT_MS,
   resolveAgentModelConfig,
   resolveFallbackModelSelection,
 } from "../src/main/agent/gateway/config";
 import { AgentGatewayError } from "../src/main/agent/gateway/errors";
+import type { AgentModelSettings } from "../src/shared/agent";
 
 function settingsRegistry(...primarySettings: AgentModelSettings[]): AgentModelSettingsRegistry {
   const registry = new AgentModelSettingsRegistry();
@@ -35,11 +35,9 @@ describe("resolveAgentModelConfig", () => {
   });
 
   it("infers Anthropic when only its environment key is present", () => {
-    const config = resolveAgentModelConfig(
-      undefined,
-      settingsRegistry(),
-      { ANTHROPIC_API_KEY: "env-key" },
-    );
+    const config = resolveAgentModelConfig(undefined, settingsRegistry(), {
+      ANTHROPIC_API_KEY: "env-key",
+    });
 
     expect(config.provider).toBe("anthropic");
     expect(config.apiKey).toBe("env-key");
@@ -84,15 +82,17 @@ describe("resolveAgentModelConfig", () => {
   });
 
   it("does not send an environment credential to an unbound runtime endpoint", () => {
-    expect(() => resolveAgentModelConfig(
-      { provider: "openai", model: "selected-model" },
-      settingsRegistry({
-        provider: "openai",
-        model: "selected-model",
-        baseURL: "https://attacker.example.test/v1",
-      }),
-      { OPENAI_API_KEY: "environment-key" },
-    )).toThrow("No API key configured for openai");
+    expect(() =>
+      resolveAgentModelConfig(
+        { provider: "openai", model: "selected-model" },
+        settingsRegistry({
+          provider: "openai",
+          model: "selected-model",
+          baseURL: "https://attacker.example.test/v1",
+        }),
+        { OPENAI_API_KEY: "environment-key" },
+      ),
+    ).toThrow("No API key configured for openai");
   });
 
   it("allows an environment credential at its normalized explicit endpoint", () => {
@@ -169,11 +169,9 @@ describe("resolveAgentModelConfig", () => {
   });
 
   it("uses the provider default model when no model override is supplied", () => {
-    const config = resolveAgentModelConfig(
-      undefined,
-      settingsRegistry(),
-      { OPENAI_API_KEY: "env-key" },
-    );
+    const config = resolveAgentModelConfig(undefined, settingsRegistry(), {
+      OPENAI_API_KEY: "env-key",
+    });
 
     expect(config.model).toBe(DEFAULT_AGENT_MODELS.openai);
   });
@@ -282,34 +280,44 @@ describe("resolveAgentModelConfig", () => {
       apiKey: "new-key",
     });
 
-    expect(() => resolveAgentModelConfig(
-      { configurationId: "old-fallback", provider: "openai", model: "old-model" },
-      registry,
-      {},
-    )).toThrow("Unknown model configuration");
-    expect(resolveAgentModelConfig(
-      { configurationId: "primary-config", provider: "openai", model: "primary-model" },
-      registry,
-      {},
-    ).apiKey).toBe("primary-key");
-    expect(resolveAgentModelConfig(
-      { configurationId: "new-fallback", provider: "openai", model: "new-model" },
-      registry,
-      {},
-    ).apiKey).toBe("new-key");
+    expect(() =>
+      resolveAgentModelConfig(
+        { configurationId: "old-fallback", provider: "openai", model: "old-model" },
+        registry,
+        {},
+      ),
+    ).toThrow("Unknown model configuration");
+    expect(
+      resolveAgentModelConfig(
+        { configurationId: "primary-config", provider: "openai", model: "primary-model" },
+        registry,
+        {},
+      ).apiKey,
+    ).toBe("primary-key");
+    expect(
+      resolveAgentModelConfig(
+        { configurationId: "new-fallback", provider: "openai", model: "new-model" },
+        registry,
+        {},
+      ).apiKey,
+    ).toBe("new-key");
 
     registry.registerFallback(undefined);
 
-    expect(() => resolveAgentModelConfig(
-      { configurationId: "new-fallback", provider: "openai", model: "new-model" },
-      registry,
-      {},
-    )).toThrow("Unknown model configuration");
-    expect(resolveAgentModelConfig(
-      { configurationId: "primary-config", provider: "openai", model: "primary-model" },
-      registry,
-      {},
-    ).apiKey).toBe("primary-key");
+    expect(() =>
+      resolveAgentModelConfig(
+        { configurationId: "new-fallback", provider: "openai", model: "new-model" },
+        registry,
+        {},
+      ),
+    ).toThrow("Unknown model configuration");
+    expect(
+      resolveAgentModelConfig(
+        { configurationId: "primary-config", provider: "openai", model: "primary-model" },
+        registry,
+        {},
+      ).apiKey,
+    ).toBe("primary-key");
   });
 
   it("resolves fallback model from gateway config", () => {
@@ -346,38 +354,46 @@ describe("resolveAgentModelConfig", () => {
       },
     };
 
-    expect(resolveFallbackModelSelection({
-      configurationId: "primary-config",
-      provider: "openai",
-      model: "shared-model",
-    }, gatewayConfig)).toEqual({
+    expect(
+      resolveFallbackModelSelection(
+        {
+          configurationId: "primary-config",
+          provider: "openai",
+          model: "shared-model",
+        },
+        gatewayConfig,
+      ),
+    ).toEqual({
       configurationId: "fallback-config",
       provider: "openai",
       model: "shared-model",
     });
-    expect(resolveFallbackModelSelection({
-      configurationId: "fallback-config",
-      provider: "openai",
-      model: "shared-model",
-    }, gatewayConfig)).toBeUndefined();
-    expect(resolveFallbackModelSelection(
-      {
-        configurationId: "primary-config",
-        provider: "openai",
-        model: "shared-model",
-      },
-      undefined,
-      { AGENT_FALLBACK_PROVIDER: "openai", AGENT_FALLBACK_MODEL: "shared-model" },
-    )).toBeUndefined();
+    expect(
+      resolveFallbackModelSelection(
+        {
+          configurationId: "fallback-config",
+          provider: "openai",
+          model: "shared-model",
+        },
+        gatewayConfig,
+      ),
+    ).toBeUndefined();
+    expect(
+      resolveFallbackModelSelection(
+        {
+          configurationId: "primary-config",
+          provider: "openai",
+          model: "shared-model",
+        },
+        undefined,
+        { AGENT_FALLBACK_PROVIDER: "openai", AGENT_FALLBACK_MODEL: "shared-model" },
+      ),
+    ).toBeUndefined();
   });
 
   it("reports a clear configuration error when no key is available", () => {
     try {
-      resolveAgentModelConfig(
-        { provider: "openai", model: "test-model" },
-        settingsRegistry(),
-        {},
-      );
+      resolveAgentModelConfig({ provider: "openai", model: "test-model" }, settingsRegistry(), {});
       throw new Error("Expected configuration error");
     } catch (error) {
       expect(error).toBeInstanceOf(AgentGatewayError);

@@ -1,10 +1,7 @@
-import { mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { basename, join, resolve, sep } from "node:path";
 import type { UiThemeSummary } from "@shared/ipc";
-import {
-  BUILTIN_UI_THEME_IDS,
-  DEFAULT_UI_THEME_ID,
-} from "@shared/ui-themes";
+import { BUILTIN_UI_THEME_IDS, DEFAULT_UI_THEME_ID } from "@shared/ui-themes";
 import { getApplicationDataRoot } from "./application-data";
 
 export type { UiThemeSummary };
@@ -138,8 +135,7 @@ function isPathInsideDirectory(candidatePath: string, directoryPath: string): bo
   const resolvedCandidate = resolve(candidatePath);
   const resolvedDirectory = resolve(directoryPath);
   return (
-    resolvedCandidate === resolvedDirectory
-    || resolvedCandidate.startsWith(resolvedDirectory + sep)
+    resolvedCandidate === resolvedDirectory || resolvedCandidate.startsWith(resolvedDirectory + sep)
   );
 }
 
@@ -239,10 +235,7 @@ export function listUiThemes(applicationDataRoot?: string): UiThemeSummary[] {
   return themes.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
 }
 
-export function readUiThemeCss(
-  id: string,
-  applicationDataRoot?: string,
-): string | null {
+export function readUiThemeCss(id: string, applicationDataRoot?: string): string | null {
   const themesDirectory = ensureUiThemesDirectory(applicationDataRoot);
   const filePath = resolveThemeCssPath(themesDirectory, id);
   if (!filePath) return null;

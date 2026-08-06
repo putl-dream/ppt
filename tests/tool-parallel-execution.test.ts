@@ -1,7 +1,7 @@
-import { afterEach, describe, expect, it } from "vitest";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
 import { z } from "zod";
 import type {
   AgentModelContentBlock,
@@ -11,21 +11,18 @@ import type {
 import { DurableRunStore } from "../src/main/agent/persistence/durable-run-store";
 import { AgentRuntime } from "../src/main/agent/runtime/agent-runtime";
 import { clearHooks, registerHook } from "../src/main/agent/runtime/hooks/hook-registry";
+import { readFileTool, writeFileTool } from "../src/main/agent/tools/core/workspace-files";
 import type { ToolDefinition } from "../src/main/agent/tools/tool-definition";
 import { ToolRegistry } from "../src/main/agent/tools/tool-registry";
-import {
-  readFileTool,
-  writeFileTool,
-} from "../src/main/agent/tools/core/workspace-files";
 import { createStarterPresentation } from "../src/shared/presentation-fixtures";
 
 const temporaryRoots: string[] = [];
 
 afterEach(async () => {
   clearHooks();
-  await Promise.all(temporaryRoots.splice(0).map((root) =>
-    rm(root, { recursive: true, force: true })
-  ));
+  await Promise.all(
+    temporaryRoots.splice(0).map((root) => rm(root, { recursive: true, force: true })),
+  );
 });
 
 function gatewayFor(turns: AgentModelContentBlock[][]): AgentModelGateway & {
@@ -55,10 +52,9 @@ const delaySchema = z.object({
   fail: z.boolean().optional(),
 });
 
-function parallelTool(onState: (delta: number, order: number) => void): ToolDefinition<
-  typeof delaySchema,
-  { order: number }
-> {
+function parallelTool(
+  onState: (delta: number, order: number) => void,
+): ToolDefinition<typeof delaySchema, { order: number }> {
   return {
     name: "ParallelProbe",
     description: "Test-only explicitly parallel tool.",
@@ -69,7 +65,7 @@ function parallelTool(onState: (delta: number, order: number) => void): ToolDefi
     behavior: {
       concurrency: {
         mode: "parallel",
-        resourceKeys: (args) => args.resource ? [`probe:${args.resource}`] : [],
+        resourceKeys: (args) => (args.resource ? [`probe:${args.resource}`] : []),
       },
     },
     risk: "low",
@@ -104,10 +100,12 @@ describe("parallel tool waves", () => {
     let active = 0;
     let peak = 0;
     const registry = new ToolRegistry();
-    registry.register(parallelTool((delta) => {
-      active += delta;
-      peak = Math.max(peak, active);
-    }));
+    registry.register(
+      parallelTool((delta) => {
+        active += delta;
+        peak = Math.max(peak, active);
+      }),
+    );
     const gateway = gatewayFor([calls(6), [{ type: "text", text: "done" }]]);
 
     await new AgentRuntime(registry, gateway).run({
@@ -118,8 +116,7 @@ describe("parallel tool waves", () => {
     });
 
     expect(peak).toBe(4);
-    const results = gateway.requests[1]!.messages!
-      .filter((message) => message.role === "user")
+    const results = gateway.requests[1]!.messages!.filter((message) => message.role === "user")
       .flatMap((message) => message.content)
       .filter((block) => block.type === "tool_result");
     expect(results.map((result) => result.toolUseId)).toEqual([
@@ -130,22 +127,43 @@ describe("parallel tool waves", () => {
       "parallel-5",
       "parallel-6",
     ]);
-    expect(results.find((result) => result.toolUseId === "parallel-3"))
-      .toMatchObject({ isError: true });
+    expect(results.find((result) => result.toolUseId === "parallel-3")).toMatchObject({
+      isError: true,
+    });
     expect(results.filter((result) => result.isError)).toHaveLength(1);
   });
 
   it("treats a repeated resource key as an ordered wave boundary", async () => {
     const events: string[] = [];
     const registry = new ToolRegistry();
-    registry.register(parallelTool((delta, order) => {
-      events.push(`${delta > 0 ? "start" : "end"}-${order}`);
-    }));
-    const gateway = gatewayFor([[
-      { type: "tool_use", id: "a", name: "ParallelProbe", input: { order: 1, resource: "same", delayMs: 10 } },
-      { type: "tool_use", id: "b", name: "ParallelProbe", input: { order: 2, resource: "same", delayMs: 1 } },
-      { type: "tool_use", id: "c", name: "ParallelProbe", input: { order: 3, resource: "other", delayMs: 1 } },
-    ], [{ type: "text", text: "done" }]]);
+    registry.register(
+      parallelTool((delta, order) => {
+        events.push(`${delta > 0 ? "start" : "end"}-${order}`);
+      }),
+    );
+    const gateway = gatewayFor([
+      [
+        {
+          type: "tool_use",
+          id: "a",
+          name: "ParallelProbe",
+          input: { order: 1, resource: "same", delayMs: 10 },
+        },
+        {
+          type: "tool_use",
+          id: "b",
+          name: "ParallelProbe",
+          input: { order: 2, resource: "same", delayMs: 1 },
+        },
+        {
+          type: "tool_use",
+          id: "c",
+          name: "ParallelProbe",
+          input: { order: 3, resource: "other", delayMs: 1 },
+        },
+      ],
+      [{ type: "text", text: "done" }],
+    ]);
 
     await new AgentRuntime(registry, gateway).run({
       threadId: "parallel-resource",
@@ -167,11 +185,14 @@ describe("parallel tool waves", () => {
     });
     const registry = new ToolRegistry();
     registry.register(parallelTool(() => undefined));
-    const gateway = gatewayFor([[
-      { type: "tool_use", id: "slow", name: "ParallelProbe", input: { order: 1, delayMs: 12 } },
-      { type: "tool_use", id: "medium", name: "ParallelProbe", input: { order: 2, delayMs: 6 } },
-      { type: "tool_use", id: "fast", name: "ParallelProbe", input: { order: 3, delayMs: 1 } },
-    ], [{ type: "text", text: "done" }]]);
+    const gateway = gatewayFor([
+      [
+        { type: "tool_use", id: "slow", name: "ParallelProbe", input: { order: 1, delayMs: 12 } },
+        { type: "tool_use", id: "medium", name: "ParallelProbe", input: { order: 2, delayMs: 6 } },
+        { type: "tool_use", id: "fast", name: "ParallelProbe", input: { order: 3, delayMs: 1 } },
+      ],
+      [{ type: "text", text: "done" }],
+    ]);
 
     await new AgentRuntime(registry, gateway).run({
       threadId: "parallel-hook-order",
@@ -189,8 +210,12 @@ describe("parallel tool waves", () => {
     let started = 0;
     let release!: () => void;
     let markStarted!: () => void;
-    const allStarted = new Promise<void>((resolve) => { markStarted = resolve; });
-    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const allStarted = new Promise<void>((resolve) => {
+      markStarted = resolve;
+    });
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
     const registry = new ToolRegistry();
     registry.register({
       ...parallelTool(() => undefined),
@@ -217,10 +242,7 @@ describe("parallel tool waves", () => {
       version: 2,
       inflight: {
         phase: "tool_running",
-        activeToolUses: [
-          { id: "parallel-1" },
-          { id: "parallel-2" },
-        ],
+        activeToolUses: [{ id: "parallel-1" }, { id: "parallel-2" }],
       },
     });
     release();
@@ -243,21 +265,26 @@ describe("parallel tool waves", () => {
     });
     const gateway = gatewayFor([calls(6)]);
 
-    await expect(new AgentRuntime(registry, gateway).run({
-      threadId: "parallel-cancellation",
-      request: "run probes",
-      presentationSnapshot: createStarterPresentation(),
-      selectedElementIds: [],
-      signal: controller.signal,
-      onProgress: (event) => progress.push(event),
-    })).rejects.toThrow("Run aborted by user");
+    await expect(
+      new AgentRuntime(registry, gateway).run({
+        threadId: "parallel-cancellation",
+        request: "run probes",
+        presentationSnapshot: createStarterPresentation(),
+        selectedElementIds: [],
+        signal: controller.signal,
+        onProgress: (event) => progress.push(event),
+      }),
+    ).rejects.toThrow("Run aborted by user");
 
     expect(executions).toEqual([1, 2, 3, 4]);
     for (let index = 1; index <= 4; index += 1) {
-      expect(progress
-        .filter((event) => event.type === "tool-state" && event.toolCallId === `parallel-${index}`)
-        .map((event) => event.status))
-        .toEqual(["running", "denied"]);
+      expect(
+        progress
+          .filter(
+            (event) => event.type === "tool-state" && event.toolCallId === `parallel-${index}`,
+          )
+          .map((event) => event.status),
+      ).toEqual(["running", "denied"]);
     }
     expect(progress.some((event) => event.toolCallId === "parallel-5")).toBe(false);
   });
@@ -267,20 +294,23 @@ describe("parallel tool waves", () => {
     temporaryRoots.push(workspaceRoot);
     const registry = new ToolRegistry();
     registry.register(writeFileTool);
-    const gateway = gatewayFor([[
-      {
-        type: "tool_use",
-        id: "write-a",
-        name: "WriteFile",
-        input: { path: "notes/a.txt", content: "A" },
-      },
-      {
-        type: "tool_use",
-        id: "write-b",
-        name: "WriteFile",
-        input: { path: "notes/b.txt", content: "B" },
-      },
-    ], [{ type: "text", text: "done" }]]);
+    const gateway = gatewayFor([
+      [
+        {
+          type: "tool_use",
+          id: "write-a",
+          name: "WriteFile",
+          input: { path: "notes/a.txt", content: "A" },
+        },
+        {
+          type: "tool_use",
+          id: "write-b",
+          name: "WriteFile",
+          input: { path: "notes/b.txt", content: "B" },
+        },
+      ],
+      [{ type: "text", text: "done" }],
+    ]);
 
     await new AgentRuntime(registry, gateway).run({
       threadId: "parallel-file-write",
@@ -292,8 +322,7 @@ describe("parallel tool waves", () => {
 
     await expect(readFile(join(workspaceRoot, "notes/a.txt"), "utf8")).resolves.toBe("A");
     await expect(readFile(join(workspaceRoot, "notes/b.txt"), "utf8")).resolves.toBe("B");
-    const resultIds = gateway.requests[1]!.messages!
-      .flatMap((message) => message.content)
+    const resultIds = gateway.requests[1]!.messages!.flatMap((message) => message.content)
       .filter((block) => block.type === "tool_result")
       .map((block) => block.toolUseId);
     expect(resultIds).toEqual(["write-a", "write-b"]);
@@ -308,10 +337,13 @@ describe("parallel tool waves", () => {
     ]);
     const registry = new ToolRegistry();
     registry.register(readFileTool);
-    const gateway = gatewayFor([[
-      { type: "tool_use", id: "read-a", name: "ReadFile", input: { path: "a.txt" } },
-      { type: "tool_use", id: "read-b", name: "ReadFile", input: { path: "b.txt" } },
-    ], [{ type: "text", text: "done" }]]);
+    const gateway = gatewayFor([
+      [
+        { type: "tool_use", id: "read-a", name: "ReadFile", input: { path: "a.txt" } },
+        { type: "tool_use", id: "read-b", name: "ReadFile", input: { path: "b.txt" } },
+      ],
+      [{ type: "text", text: "done" }],
+    ]);
 
     await new AgentRuntime(registry, gateway).run({
       threadId: "parallel-file-read",
@@ -321,19 +353,18 @@ describe("parallel tool waves", () => {
       workspaceRoot,
     });
 
-    const results = gateway.requests[1]!.messages!
-      .flatMap((message) => message.content)
-      .filter((block) => block.type === "tool_result");
-    const resultText = (index: number) => results[index]!.content
-      .filter((block) => block.type === "text")
-      .map((block) => block.text)
-      .join("\n");
+    const results = gateway.requests[1]!.messages!.flatMap((message) => message.content).filter(
+      (block) => block.type === "tool_result",
+    );
+    const resultText = (index: number) =>
+      results[index]!.content.filter((block) => block.type === "text")
+        .map((block) => block.text)
+        .join("\n");
     expect(results.map((result) => result.toolUseId)).toEqual(["read-a", "read-b"]);
     expect(resultText(0)).toContain('"path":"a.txt"');
     expect(resultText(0)).toContain("alpha");
     expect(resultText(1)).toContain('"path":"b.txt"');
     expect(resultText(1)).toContain("beta");
-    expect(results.map((_, index) => resultText(index)).join("\n"))
-      .not.toContain("transcript");
+    expect(results.map((_, index) => resultText(index)).join("\n")).not.toContain("transcript");
   });
 });

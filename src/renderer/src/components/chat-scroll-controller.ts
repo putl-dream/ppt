@@ -42,10 +42,8 @@ export function createChatScrollController(
   options: ChatScrollControllerOptions = {},
 ): ChatScrollController {
   const followThresholdPx = options.followThresholdPx ?? CHAT_FOLLOW_THRESHOLD_PX;
-  const scheduleFrame = options.scheduleFrame
-    ?? ((cb) => window.requestAnimationFrame(cb));
-  const cancelFrame = options.cancelFrame
-    ?? ((id) => window.cancelAnimationFrame(id));
+  const scheduleFrame = options.scheduleFrame ?? ((cb) => window.requestAnimationFrame(cb));
+  const cancelFrame = options.cancelFrame ?? ((id) => window.cancelAnimationFrame(id));
 
   let viewport: HTMLElement | null = null;
   let stream: HTMLElement | null = null;

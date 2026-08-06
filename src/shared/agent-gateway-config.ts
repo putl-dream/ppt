@@ -15,7 +15,11 @@ export const DEFAULT_WEB_SEARCH_ENDPOINT = "https://api.tavily.com/search";
 /** Persisted in renderer settings (fallback resolved to full model at run time). */
 export const agentGatewayPreferencesSchema = z.object({
   timeoutMs: z.number().int().positive().default(DEFAULT_AGENT_GATEWAY_CONFIG.timeoutMs),
-  maxOutputTokens: z.number().int().positive().default(DEFAULT_AGENT_GATEWAY_CONFIG.maxOutputTokens),
+  maxOutputTokens: z
+    .number()
+    .int()
+    .positive()
+    .default(DEFAULT_AGENT_GATEWAY_CONFIG.maxOutputTokens),
   fallbackModelId: z.string().trim().optional(),
   webSearchEndpoint: z.string().trim().optional(),
   webSearchTimeoutMs: z.number().int().positive().optional(),
@@ -24,7 +28,11 @@ export const agentGatewayPreferencesSchema = z.object({
 /** Model-gateway runtime parameters passed into AgentGateway. */
 export const agentGatewayConfigSchema = z.object({
   timeoutMs: z.number().int().positive().default(DEFAULT_AGENT_GATEWAY_CONFIG.timeoutMs),
-  maxOutputTokens: z.number().int().positive().default(DEFAULT_AGENT_GATEWAY_CONFIG.maxOutputTokens),
+  maxOutputTokens: z
+    .number()
+    .int()
+    .positive()
+    .default(DEFAULT_AGENT_GATEWAY_CONFIG.maxOutputTokens),
   fallbackModel: agentModelSettingsSchema.optional(),
 });
 
@@ -36,13 +44,19 @@ export const agentSearchConfigSchema = z.object({
 });
 
 /** Secret-free Renderer -> Main run configuration. Main hydrates credentials locally. */
-export const agentRunServicesWireSchema = z.object({
-  timeoutMs: z.number().int().positive().default(DEFAULT_AGENT_GATEWAY_CONFIG.timeoutMs),
-  maxOutputTokens: z.number().int().positive().default(DEFAULT_AGENT_GATEWAY_CONFIG.maxOutputTokens),
-  fallbackModel: agentModelSelectionSchema.optional(),
-  webSearchEndpoint: z.string().trim().optional(),
-  webSearchTimeoutMs: z.number().int().positive().optional(),
-}).strict();
+export const agentRunServicesWireSchema = z
+  .object({
+    timeoutMs: z.number().int().positive().default(DEFAULT_AGENT_GATEWAY_CONFIG.timeoutMs),
+    maxOutputTokens: z
+      .number()
+      .int()
+      .positive()
+      .default(DEFAULT_AGENT_GATEWAY_CONFIG.maxOutputTokens),
+    fallbackModel: agentModelSelectionSchema.optional(),
+    webSearchEndpoint: z.string().trim().optional(),
+    webSearchTimeoutMs: z.number().int().positive().optional(),
+  })
+  .strict();
 
 export type AgentGatewayPreferences = z.infer<typeof agentGatewayPreferencesSchema>;
 export type AgentGatewayConfig = z.infer<typeof agentGatewayConfigSchema>;
@@ -58,27 +72,24 @@ export function resolveAgentGatewayPreferences(
   });
 }
 
-export function resolveAgentGatewayConfig(
-  input?: Partial<AgentGatewayConfig>,
-): AgentGatewayConfig {
+export function resolveAgentGatewayConfig(input?: Partial<AgentGatewayConfig>): AgentGatewayConfig {
   return agentGatewayConfigSchema.parse({
     ...DEFAULT_AGENT_GATEWAY_CONFIG,
     ...input,
   });
 }
 
-export function resolveAgentSearchConfig(
-  input?: Partial<AgentSearchConfig>,
-): AgentSearchConfig {
+export function resolveAgentSearchConfig(input?: Partial<AgentSearchConfig>): AgentSearchConfig {
   return agentSearchConfigSchema.parse({
     ...input,
   });
 }
 
 /** Split the secret-free wire payload. Main adds credentials after this boundary. */
-export function splitAgentRunServicesConfig(
-  input?: Partial<AgentRunServicesWire>,
-): { gateway: AgentGatewayConfig; search: AgentSearchConfig } {
+export function splitAgentRunServicesConfig(input?: Partial<AgentRunServicesWire>): {
+  gateway: AgentGatewayConfig;
+  search: AgentSearchConfig;
+} {
   const parsed = agentRunServicesWireSchema.parse({
     ...DEFAULT_AGENT_GATEWAY_CONFIG,
     ...input,

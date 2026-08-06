@@ -1,15 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
-import { AgentRuntime } from "../src/main/agent/runtime/agent-runtime";
 import type {
   AgentModelGateway,
   AgentModelRequest,
   AgentModelResponse,
 } from "../src/main/agent/gateway/types";
+import { AgentRuntime } from "../src/main/agent/runtime/agent-runtime";
 import { askUserTool } from "../src/main/agent/tools/core/ask-user";
-import { ToolRegistry } from "../src/main/agent/tools/tool-registry";
-import { parseDefinedToolInput, parseToolInput } from "../src/main/agent/tools/tool-input";
 import { toToolCard } from "../src/main/agent/tools/tool-card";
+import { parseDefinedToolInput, parseToolInput } from "../src/main/agent/tools/tool-input";
+import { ToolRegistry } from "../src/main/agent/tools/tool-registry";
 import { toToolSchema } from "../src/main/agent/tools/tool-schema";
 import { createStarterPresentation } from "../src/shared/presentation-fixtures";
 
@@ -83,21 +83,23 @@ describe("tool input normalization", () => {
     const response: AgentModelResponse = {
       provider: "anthropic",
       model: "test-model",
-      content: [{
-        type: "tool_use",
-        id: "call-ask-user",
-        name: "AskUser",
-        input: {
-          message: "请选择受众",
-          responseUi: JSON.stringify({
-            variant: "choices",
-            options: [
-              { id: "manager", title: "管理者" },
-              { id: "student", title: "学生" },
-            ],
-          }),
+      content: [
+        {
+          type: "tool_use",
+          id: "call-ask-user",
+          name: "AskUser",
+          input: {
+            message: "请选择受众",
+            responseUi: JSON.stringify({
+              variant: "choices",
+              options: [
+                { id: "manager", title: "管理者" },
+                { id: "student", title: "学生" },
+              ],
+            }),
+          },
         },
-      }],
+      ],
     };
     const gateway: AgentModelGateway = {
       async queryModel(request) {

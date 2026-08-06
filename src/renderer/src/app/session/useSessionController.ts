@@ -1,28 +1,24 @@
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  type Dispatch,
-  type MutableRefObject,
-  type SetStateAction,
-} from "react";
-import type { Presentation } from "@shared/presentation";
-import type { SessionBootstrap, SessionSummary } from "@shared/session";
-import {
-  getWorkspaceLabel,
-  normalizeWorkspacePath,
-  resolveWorkspacePath,
-} from "@shared/workspace";
 import { formatPublicErrorMessage } from "@shared/agent-activity-display";
-import { useProjectStore } from "../../components/project-store";
 import {
   clearAllDisplayCardManagers,
   getPersistedDisplayCards,
   hydrateDisplayCardManagers,
   subscribeDisplayCardManagers,
-} from "../../cards/display-card-managers";
-import { toSessionChatMessages, type ChatMessage } from "../chatMessageRuntime";
+} from "@shared/cards/display-card-managers";
+import type { Presentation } from "@shared/presentation";
+import type { SessionBootstrap, SessionSummary } from "@shared/session";
+import { getWorkspaceLabel, normalizeWorkspacePath, resolveWorkspacePath } from "@shared/workspace";
+import {
+  type Dispatch,
+  type MutableRefObject,
+  type SetStateAction,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+import { useProjectStore } from "../../components/project-store";
+import { type ChatMessage, toSessionChatMessages } from "../chatMessageRuntime";
 import type {
   PresentationController,
   PresentationSyncOptions,
@@ -91,79 +87,82 @@ export function useSessionController({
   const [localStoragePath, setLocalStoragePath] = useState("");
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
 
-  const enterDraftChat = useCallback((workspaceDir?: string) => {
-    activeSessionIdRef.current = "";
-    clearAllDisplayCardManagers();
-    setIsDraftChat(true);
-    setActiveSessionId("");
-    setChatMessages([]);
-    resetPresentation();
-    resetRequest();
-    setWorkspacePath("");
-    setLocalStoragePath(workspaceDir ? normalizeWorkspacePath(workspaceDir) : "");
-    useProjectStore.getState().resetProject();
-  }, [resetPresentation, resetRequest]);
+  const enterDraftChat = useCallback(
+    (workspaceDir?: string) => {
+      activeSessionIdRef.current = "";
+      clearAllDisplayCardManagers();
+      setIsDraftChat(true);
+      setActiveSessionId("");
+      setChatMessages([]);
+      resetPresentation();
+      resetRequest();
+      setWorkspacePath("");
+      setLocalStoragePath(workspaceDir ? normalizeWorkspacePath(workspaceDir) : "");
+      useProjectStore.getState().resetProject();
+    },
+    [resetPresentation, resetRequest],
+  );
 
-  const applySessionState = useCallback((
-    state: SessionBootstrap,
-    options: ApplySessionStateOptions = {},
-  ) => {
-    const shouldSyncPresentation = options.syncPresentation !== false;
-    setSessions(state.sessions);
-    if (!state.activeSession) {
-      enterDraftChat();
+  const applySessionState = useCallback(
+    (state: SessionBootstrap, options: ApplySessionStateOptions = {}) => {
+      const shouldSyncPresentation = options.syncPresentation !== false;
+      setSessions(state.sessions);
+      if (!state.activeSession) {
+        enterDraftChat();
+        setSessionLoaded(true);
+        return;
+      }
+
+      const snapshot = state.activeSession;
+      activeSessionIdRef.current = snapshot.session.id;
+      hydrateDisplayCardManagers(snapshot.displayCards);
+      setIsDraftChat(snapshot.messages.length === 0);
+      setActiveSessionId(snapshot.session.id);
+      loadPresentation(snapshot.presentation);
+      setChatMessages(snapshot.messages);
+      resetRequest();
       setSessionLoaded(true);
-      return;
-    }
 
-    const snapshot = state.activeSession;
-    activeSessionIdRef.current = snapshot.session.id;
-    hydrateDisplayCardManagers(snapshot.displayCards);
-    setIsDraftChat(snapshot.messages.length === 0);
-    setActiveSessionId(snapshot.session.id);
-    loadPresentation(snapshot.presentation);
-    setChatMessages(snapshot.messages);
-    resetRequest();
-    setSessionLoaded(true);
+      const resolvedWorkspace = snapshot.project?.rootPath
+        ? resolveWorkspacePath({
+            workspacePath: snapshot.session.workspacePath,
+            projectRootPath: snapshot.project.rootPath,
+          })
+        : undefined;
+      setWorkspacePath(resolvedWorkspace ?? "");
+      setLocalStoragePath(resolvedWorkspace ?? "");
 
-    const resolvedWorkspace = snapshot.project?.rootPath
-      ? resolveWorkspacePath({
-          workspacePath: snapshot.session.workspacePath,
-          projectRootPath: snapshot.project.rootPath,
-        })
-      : undefined;
-    setWorkspacePath(resolvedWorkspace ?? "");
-    setLocalStoragePath(resolvedWorkspace ?? "");
-
-    initializeProject(
-      snapshot.session.id,
-      snapshot.session.title,
-      snapshot.project?.artifacts,
-      snapshot.presentation.id,
-    );
-    void hydrateProjectArtifacts(snapshot.session.id).catch((error) => {
-      console.error("加载项目产物失败:", error);
-      notify(formatPublicErrorMessage(error, "加载项目内容失败，请重试。"));
-    });
-    void hydratePptJob(snapshot.session.id).catch((error) => {
-      console.error("加载演示文稿生命周期失败:", error);
-    });
-    if (shouldSyncPresentation) {
-      void syncPresentation({
-        preferredSlideId: snapshot.presentation.slides[0]?.id,
-        openMirror: snapshot.presentation.revision > 0,
+      initializeProject(
+        snapshot.session.id,
+        snapshot.session.title,
+        snapshot.project?.artifacts,
+        snapshot.presentation.id,
+      );
+      void hydrateProjectArtifacts(snapshot.session.id).catch((error) => {
+        console.error("加载项目产物失败:", error);
+        notify(formatPublicErrorMessage(error, "加载项目内容失败，请重试。"));
       });
-    }
-  }, [
-    enterDraftChat,
-    hydrateProjectArtifacts,
-    hydratePptJob,
-    initializeProject,
-    loadPresentation,
-    notify,
-    resetRequest,
-    syncPresentation,
-  ]);
+      void hydratePptJob(snapshot.session.id).catch((error) => {
+        console.error("加载演示文稿生命周期失败:", error);
+      });
+      if (shouldSyncPresentation) {
+        void syncPresentation({
+          preferredSlideId: snapshot.presentation.slides[0]?.id,
+          openMirror: snapshot.presentation.revision > 0,
+        });
+      }
+    },
+    [
+      enterDraftChat,
+      hydrateProjectArtifacts,
+      hydratePptJob,
+      initializeProject,
+      loadPresentation,
+      notify,
+      resetRequest,
+      syncPresentation,
+    ],
+  );
 
   useEffect(() => {
     if (!window.desktopApi?.onPptJobChanged) return;
@@ -187,16 +186,18 @@ export function useSessionController({
 
   useEffect(() => {
     if (!presentation || !activeSessionId) return;
-    setSessions((current) => current.map((session) =>
-      session.id === activeSessionId
-        ? {
-            ...session,
-            title: presentation.title || session.title,
-            slideCount: presentation.slides.length,
-            revision: presentation.revision,
-          }
-        : session,
-    ));
+    setSessions((current) =>
+      current.map((session) =>
+        session.id === activeSessionId
+          ? {
+              ...session,
+              title: presentation.title || session.title,
+              slideCount: presentation.slides.length,
+              revision: presentation.revision,
+            }
+          : session,
+      ),
+    );
   }, [activeSessionId, presentation]);
 
   useEffect(() => {
@@ -267,14 +268,7 @@ export function useSessionController({
       setSessionLoaded(true);
       notify(formatPublicErrorMessage(error, "打开项目目录失败，请重试。"));
     }
-  }, [
-    applySessionState,
-    busy,
-    localStoragePath,
-    markSettingsSaving,
-    notify,
-    workspacePath,
-  ]);
+  }, [applySessionState, busy, localStoragePath, markSettingsSaving, notify, workspacePath]);
 
   const newSession = useCallback(async () => {
     if (busy) {
@@ -292,49 +286,57 @@ export function useSessionController({
     }
   }, [busy, enterDraftChat, localStoragePath, notify, workspacePath]);
 
-  const newSessionInWorkspace = useCallback((targetWorkspacePath: string) => {
-    if (busy) {
-      notify("当前任务执行中，请稍后再新建会话");
-      return;
-    }
-    enterDraftChat(targetWorkspacePath);
-  }, [busy, enterDraftChat, notify]);
+  const newSessionInWorkspace = useCallback(
+    (targetWorkspacePath: string) => {
+      if (busy) {
+        notify("当前任务执行中，请稍后再新建会话");
+        return;
+      }
+      enterDraftChat(targetWorkspacePath);
+    },
+    [busy, enterDraftChat, notify],
+  );
 
-  const selectSession = useCallback(async (sessionId: string) => {
-    if (sessionId === activeSessionId || isSessionSwitching) return;
-    if (busy) {
-      notify("当前任务执行中，请稍后再切换会话");
-      return;
-    }
-    setPendingSessionId(sessionId);
-    setIsSessionSwitching(true);
-    try {
-      applySessionState(
-        await window.desktopApi.selectSession(sessionId),
-        { syncPresentation: false },
-      );
-    } catch (error) {
-      notify(formatPublicErrorMessage(error, "切换会话失败，请重试。"));
-    } finally {
-      setPendingSessionId(null);
-      setIsSessionSwitching(false);
-    }
-  }, [activeSessionId, applySessionState, busy, isSessionSwitching, notify]);
+  const selectSession = useCallback(
+    async (sessionId: string) => {
+      if (sessionId === activeSessionId || isSessionSwitching) return;
+      if (busy) {
+        notify("当前任务执行中，请稍后再切换会话");
+        return;
+      }
+      setPendingSessionId(sessionId);
+      setIsSessionSwitching(true);
+      try {
+        applySessionState(await window.desktopApi.selectSession(sessionId), {
+          syncPresentation: false,
+        });
+      } catch (error) {
+        notify(formatPublicErrorMessage(error, "切换会话失败，请重试。"));
+      } finally {
+        setPendingSessionId(null);
+        setIsSessionSwitching(false);
+      }
+    },
+    [activeSessionId, applySessionState, busy, isSessionSwitching, notify],
+  );
 
-  const deleteSession = useCallback(async (sessionId: string) => {
-    if (busy) {
-      notify("当前任务执行中，请稍后再删除会话");
-      return;
-    }
-    try {
-      const state = await window.desktopApi.deleteSession(sessionId);
-      const isDeleted = !state.sessions.some((session) => session.id === sessionId);
-      applySessionState(state);
-      if (isDeleted) notify("会话已删除");
-    } catch (error) {
-      notify(formatPublicErrorMessage(error, "删除会话失败，请重试。"));
-    }
-  }, [applySessionState, busy, notify]);
+  const deleteSession = useCallback(
+    async (sessionId: string) => {
+      if (busy) {
+        notify("当前任务执行中，请稍后再删除会话");
+        return;
+      }
+      try {
+        const state = await window.desktopApi.deleteSession(sessionId);
+        const isDeleted = !state.sessions.some((session) => session.id === sessionId);
+        applySessionState(state);
+        if (isDeleted) notify("会话已删除");
+      } catch (error) {
+        notify(formatPublicErrorMessage(error, "删除会话失败，请重试。"));
+      }
+    },
+    [applySessionState, busy, notify],
+  );
 
   return {
     startupError,

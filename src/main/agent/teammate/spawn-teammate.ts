@@ -1,3 +1,14 @@
+import {
+  buildSubStepLimitMessage,
+  getEffectiveSubMaxSteps,
+  resolveAgentStepLimits,
+} from "@shared/agent-step-limits";
+import type { AgentTaskNode } from "@shared/agent-task-list";
+import {
+  formatTeammateToolProgress,
+  type TeammateProgressEvent,
+  type TeammateProgressListener,
+} from "@shared/teammate-progress";
 import { z } from "zod";
 import type {
   AgentModelContentBlock,
@@ -7,60 +18,56 @@ import type {
   AgentModelToolUseBlock,
   AgentToolSchema,
 } from "../gateway";
-import type { AgentTaskNode } from "@shared/agent-task-list";
-import {
-  formatTeammateToolProgress,
-  type TeammateProgressEvent,
-  type TeammateProgressListener,
-} from "@shared/teammate-progress";
-import {
-  buildSubStepLimitMessage,
-  getEffectiveSubMaxSteps,
-  resolveAgentStepLimits,
-} from "@shared/agent-step-limits";
-import { callModelWithRecovery } from "../runtime/turns/model-call-recovery";
 import {
   ensureToolResultPairing,
   textFromContentBlocks,
   toolUseBlocksFromContent,
 } from "../gateway";
+import { readJsonFile, writeJsonFileAtomic } from "../persistence/atomic-json-file";
 import { ensureDefaultHooks } from "../runtime/hooks/default-hooks";
-import { triggerHooks } from "../runtime/hooks/hook-registry";
 import type { PostToolUseBlock, StopBlock } from "../runtime/hooks/hook-blocks";
-import {
-  authorizeToolUse,
-  type ToolApprovalHandler,
-} from "../runtime/tools/permission-check";
+import { triggerHooks } from "../runtime/hooks/hook-registry";
 import { formatToolApprovalDetail } from "../runtime/tools/format-tool-approval";
-import { TaskStore } from "../task/task-store";
+import { authorizeToolUse, type ToolApprovalHandler } from "../runtime/tools/permission-check";
+import { classifyToolExecutionError } from "../runtime/tools/tool-execution-error";
+import { callModelWithRecovery } from "../runtime/turns/model-call-recovery";
+import { createSkillSession } from "../skills/skill-types";
 import {
   SUB_AGENT_TOOL_HANDLERS,
   SUB_AGENT_TOOLS,
   type SubAgentToolContext,
   type SubAgentToolDefinition,
 } from "../subagent/workspace-tools";
-import { createSkillSession } from "../skills/skill-types";
+import type { TaskListSnapshotListener } from "../task/task-list-publisher";
+import { TaskStore } from "../task/task-store";
 import { WorkspaceFileService } from "../tools/files/workspace-file-service";
+import { parseToolInput } from "../tools/tool-input";
+import { toToolInputSchema } from "../tools/tool-schema";
 import { validateToolOutput } from "../tools/tool-validation";
-import { classifyToolExecutionError } from "../runtime/tools/tool-execution-error";
 import {
   type AgentMailboxMessage,
   type AgentMailboxMessageType,
   type InboxClaim,
-  MessageBus,
+  type MessageBus,
   sanitizeAgentName,
 } from "./message-bus";
 import {
+  isProtocolResponseType,
   type ProtocolState,
   ProtocolStateStore,
-  isProtocolResponseType,
   readProtocolRequestId,
   routeProtocolResponses,
 } from "./protocol-state";
-import { buildTeammateSystemPrompt } from "./teammate-system-prompt";
-import { TeammateConversation } from "./teammate-conversation";
+import type { TeammateConversation } from "./teammate-conversation";
 import { TeammateInboxBuffer } from "./teammate-inbox-buffer";
 import { TeammateCancellationError, TeammateRuntime } from "./teammate-runtime";
+import { buildTeammateSystemPrompt } from "./teammate-system-prompt";
+import {
+  claimNextDispatchTask,
+  createTeammateTaskTools,
+  formatTaskAssignment,
+  releaseOwnedTasks,
+} from "./teammate-task-tools";
 import type {
   AssignmentCompletionOutcome,
   PersistedTeammateState,
@@ -75,36 +82,31 @@ import type {
   TeammateToolBatchOutcome,
   TeammateTurnOutcome,
 } from "./teammate-types";
-import {
-  claimNextDispatchTask,
-  createTeammateTaskTools,
-  formatTaskAssignment,
-  releaseOwnedTasks,
-} from "./teammate-task-tools";
-import type { TaskListSnapshotListener } from "../task/task-list-publisher";
-import { toToolInputSchema } from "../tools/tool-schema";
-import { parseToolInput } from "../tools/tool-input";
-import { readJsonFile, writeJsonFileAtomic } from "../persistence/atomic-json-file";
 
 export type { SpawnTeammateThreadOptions, TeammateHandle };
 
 const sendMessageSchema = z.object({
   to_agent: z.string().describe("Recipient agent name, e.g. lead or a teammate name"),
   content: z.string().describe("Message content to deliver"),
-  msg_type: z.enum([
-    "message",
-    "result",
-    "idle_notification",
-    "permission_request",
-    "permission_response",
-    "error",
-  ]).optional().describe("Message type; defaults to message"),
+  msg_type: z
+    .enum([
+      "message",
+      "result",
+      "idle_notification",
+      "permission_request",
+      "permission_response",
+      "error",
+    ])
+    .optional()
+    .describe("Message type; defaults to message"),
 });
 
 const requestPlanApprovalSchema = z.object({
-  plan: z.string().trim().min(1).describe(
-    "Concrete implementation plan for lead to approve before high-risk or broad changes",
-  ),
+  plan: z
+    .string()
+    .trim()
+    .min(1)
+    .describe("Concrete implementation plan for lead to approve before high-risk or broad changes"),
 });
 
 export class TeammateManager {
@@ -143,26 +145,29 @@ export class TeammateManager {
       ...options,
       name,
       role: state.role,
-    }).catch(async (error) => {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      if (state.status !== "failed") state.status = "failed";
-      state.lastError ??= errorMessage;
-      state.lastActiveAt = Date.now();
-      try {
-        await this.bus.send({
-          from: state.name,
-          to: "lead",
-          type: "error",
-          content: errorMessage,
-        });
-      } catch (notifyError) {
-        const notifyMessage = notifyError instanceof Error ? notifyError.message : String(notifyError);
-        state.lastError = `${errorMessage}; failed to notify lead: ${notifyMessage}`;
-      }
-    }).finally(async () => {
-      state.lastActiveAt = Date.now();
-      await this.persistTeammateStates();
-    });
+    })
+      .catch(async (error) => {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        if (state.status !== "failed") state.status = "failed";
+        state.lastError ??= errorMessage;
+        state.lastActiveAt = Date.now();
+        try {
+          await this.bus.send({
+            from: state.name,
+            to: "lead",
+            type: "error",
+            content: errorMessage,
+          });
+        } catch (notifyError) {
+          const notifyMessage =
+            notifyError instanceof Error ? notifyError.message : String(notifyError);
+          state.lastError = `${errorMessage}; failed to notify lead: ${notifyMessage}`;
+        }
+      })
+      .finally(async () => {
+        state.lastActiveAt = Date.now();
+        await this.persistTeammateStates();
+      });
     this.teammates.set(name, state);
 
     return this.toHandle(state);
@@ -177,20 +182,14 @@ export class TeammateManager {
     return state ? this.toHandle(state) : undefined;
   }
 
-  updateTaskListListener(
-    name: string,
-    listener?: TaskListSnapshotListener,
-  ): boolean {
+  updateTaskListListener(name: string, listener?: TaskListSnapshotListener): boolean {
     const state = this.teammates.get(sanitizeAgentName(name));
     if (!state) return false;
     state.taskListListener = listener;
     return true;
   }
 
-  updateProgressListener(
-    name: string,
-    listener?: TeammateProgressListener,
-  ): boolean {
+  updateProgressListener(name: string, listener?: TeammateProgressListener): boolean {
     const state = this.teammates.get(sanitizeAgentName(name));
     if (!state) return false;
     state.progressListener = listener;
@@ -209,10 +208,10 @@ export class TeammateManager {
     const agent = sanitizeAgentName(name);
     const state = this.teammates.get(agent);
     if (
-      !state
-      || state.status === "stopped"
-      || state.status === "failed"
-      || state.controller.signal.aborted
+      !state ||
+      state.status === "stopped" ||
+      state.status === "failed" ||
+      state.controller.signal.aborted
     ) {
       return false;
     }
@@ -220,7 +219,10 @@ export class TeammateManager {
     return true;
   }
 
-  async requestShutdown(name: string, reason = "Lead requested teammate shutdown."): Promise<ProtocolState> {
+  async requestShutdown(
+    name: string,
+    reason = "Lead requested teammate shutdown.",
+  ): Promise<ProtocolState> {
     await this.protocolStates.hydrate();
     const agent = sanitizeAgentName(name);
     const state = this.teammates.get(agent);
@@ -332,22 +334,25 @@ export class TeammateManager {
     if (!this.reconcilePromise) {
       this.reconcilePromise = (async () => {
         const filePath = this.bus.getTeammateStatePath();
-        const stored = await readJsonFile<{ version: 1; teammates: PersistedTeammateState[] }>(filePath);
+        const stored = await readJsonFile<{ version: 1; teammates: PersistedTeammateState[] }>(
+          filePath,
+        );
         if (!stored) return;
         let changed = false;
         for (const teammate of stored.teammates) {
           if (teammate.status !== "running" && teammate.status !== "idle") continue;
           changed = true;
           teammate.status = "interrupted";
-          teammate.lastError = "Application restarted before the teammate committed its final result.";
+          teammate.lastError =
+            "Application restarted before the teammate committed its final result.";
           teammate.lastActiveAt = Date.now();
           await this.bus.send({
             from: teammate.name,
             to: "lead",
             type: "error",
             content:
-              `Teammate ${teammate.name} was interrupted by application restart. `
-              + "Its task claims will be reclaimed; inspect durable artifacts before re-delegating.",
+              `Teammate ${teammate.name} was interrupted by application restart. ` +
+              "Its task claims will be reclaimed; inspect durable artifacts before re-delegating.",
             payload: { role: teammate.role, prompt: teammate.prompt, recoverable: true },
           });
         }
@@ -360,15 +365,17 @@ export class TeammateManager {
   private async persistTeammateStates(): Promise<void> {
     await writeJsonFileAtomic(this.bus.getTeammateStatePath(), {
       version: 1,
-      teammates: Array.from(this.teammates.values()).map((state): PersistedTeammateState => ({
-        name: state.name,
-        role: state.role,
-        status: state.status,
-        startedAt: state.startedAt,
-        lastActiveAt: state.lastActiveAt,
-        prompt: state.prompt,
-        ...(state.lastError ? { lastError: state.lastError } : {}),
-      })),
+      teammates: Array.from(this.teammates.values()).map(
+        (state): PersistedTeammateState => ({
+          name: state.name,
+          role: state.role,
+          status: state.status,
+          startedAt: state.startedAt,
+          lastActiveAt: state.lastActiveAt,
+          prompt: state.prompt,
+          ...(state.lastError ? { lastError: state.lastError } : {}),
+        }),
+      ),
     });
   }
 
@@ -416,20 +423,14 @@ export class TeammateManager {
       state.name,
     );
     const taskTools = createTeammateTaskTools(taskStore, state.name, publishTaskList);
-    const tools = [
-      ...SUB_AGENT_TOOLS,
-      ...taskTools,
-      sendMessageTool,
-      requestPlanApprovalTool,
-    ];
+    const tools = [...SUB_AGENT_TOOLS, ...taskTools, sendMessageTool, requestPlanApprovalTool];
     const handlers = new Map<string, SubAgentToolDefinition>(
       [
         ...SUB_AGENT_TOOL_HANDLERS.values(),
         ...taskTools,
         sendMessageTool,
         requestPlanApprovalTool,
-      ]
-        .map((tool) => [tool.name, tool]),
+      ].map((tool) => [tool.name, tool]),
     );
     const skillSession = createSkillSession();
     const skillCatalog = options.skillRegistry?.listCards() ?? [];
@@ -503,8 +504,7 @@ export class TeammateManager {
             runtime.beginAssignment({
               assignment: nextAssignment,
               source: "message",
-              description:
-                `来自 lead 的协作任务：${inboxOutcome.messages[0]?.content ?? "继续处理"}`,
+              description: `来自 lead 的协作任务：${inboxOutcome.messages[0]?.content ?? "继续处理"}`,
             });
           }
         }
@@ -598,10 +598,7 @@ export class TeammateManager {
           break;
         }
 
-        runtime.conversation.appendAssistant(
-          turnOutcome.assistantContent,
-          turnOutcome.summary,
-        );
+        runtime.conversation.appendAssistant(turnOutcome.assistantContent, turnOutcome.summary);
         const completion = await evaluateAssignmentCompletion({
           taskStore,
           teammateName: state.name,
@@ -696,83 +693,89 @@ export class TeammateManager {
       try {
         await action();
       } catch (error) {
-        cleanupErrors.push(new Error(
-          `${label}: ${error instanceof Error ? error.message : String(error)}`,
-          { cause: error },
-        ));
+        cleanupErrors.push(
+          new Error(`${label}: ${error instanceof Error ? error.message : String(error)}`, {
+            cause: error,
+          }),
+        );
       }
     };
-    const releaseTasks = () => releaseOwnedTasks(
-      input.taskStore,
-      input.runtime.name,
-      input.publishTaskList,
-    );
+    const releaseTasks = () =>
+      releaseOwnedTasks(input.taskStore, input.runtime.name, input.publishTaskList);
     const exit = input.runtime.terminalExit();
 
     switch (exit.kind) {
       case "shutdown":
         await attempt("release owned tasks", releaseTasks);
-        await attempt("finish shutdown activity", () => input.runtime.finishCurrentActivity(
-          "interrupted",
-          "协作任务已按 lead 请求停止",
-        ));
-        await attempt("send shutdown lifecycle summary", () => this.sendLifecycleSummary(
-          input.runtime.name,
-          "shutdown requested",
-          input.runtime.workSummaries,
-        ));
-        await attempt("send shutdown response", () => this.bus.send({
-          from: input.runtime.name,
-          to: exit.sender,
-          type: "shutdown_response",
-          content: `${input.runtime.name} finished its current operation and is shutting down.`,
-          payload: { requestId: exit.requestId, approve: true },
-        }));
+        await attempt("finish shutdown activity", () =>
+          input.runtime.finishCurrentActivity("interrupted", "协作任务已按 lead 请求停止"),
+        );
+        await attempt("send shutdown lifecycle summary", () =>
+          this.sendLifecycleSummary(
+            input.runtime.name,
+            "shutdown requested",
+            input.runtime.workSummaries,
+          ),
+        );
+        await attempt("send shutdown response", () =>
+          this.bus.send({
+            from: input.runtime.name,
+            to: exit.sender,
+            type: "shutdown_response",
+            content: `${input.runtime.name} finished its current operation and is shutting down.`,
+            payload: { requestId: exit.requestId, approve: true },
+          }),
+        );
         break;
       case "idle-timeout":
-        await attempt("send idle lifecycle summary", () => this.sendLifecycleSummary(
-          input.runtime.name,
-          "idle timeout",
-          input.runtime.workSummaries,
-        ));
+        await attempt("send idle lifecycle summary", () =>
+          this.sendLifecycleSummary(
+            input.runtime.name,
+            "idle timeout",
+            input.runtime.workSummaries,
+          ),
+        );
         await attempt("release owned tasks", releaseTasks);
         break;
       case "hook-stop":
         await attempt("finish hook-stop activity", () =>
-          input.runtime.finishCurrentActivity("completed", exit.reason));
+          input.runtime.finishCurrentActivity("completed", exit.reason),
+        );
         await attempt("send hook-stop result", () =>
-          this.finishWithSummary(input.runtime.name, exit.reason, "completed"));
+          this.finishWithSummary(input.runtime.name, exit.reason, "completed"),
+        );
         await attempt("release owned tasks", releaseTasks);
         break;
       case "aborted":
-        await attempt("finish aborted activity", () => input.runtime.finishCurrentActivity(
-          "interrupted",
-          "协作任务已中断",
-        ));
+        await attempt("finish aborted activity", () =>
+          input.runtime.finishCurrentActivity("interrupted", "协作任务已中断"),
+        );
         await attempt("release owned tasks", releaseTasks);
         break;
       case "failed":
         await attempt("finish failed activity", () =>
-          input.runtime.finishCurrentActivity("failed", exit.error.message));
+          input.runtime.finishCurrentActivity("failed", exit.error.message),
+        );
         await attempt("release owned tasks", releaseTasks);
         break;
     }
 
     if (cleanupErrors.length > 0 && input.runtime.terminalExit().kind !== "failed") {
-      input.runtime.transitionToFailed(new AggregateError(
-        cleanupErrors,
-        "Teammate finalization failed before Stop hook.",
-      ));
+      input.runtime.transitionToFailed(
+        new AggregateError(cleanupErrors, "Teammate finalization failed before Stop hook."),
+      );
     }
 
     const stopExit = input.runtime.terminalExit();
-    await attempt("trigger Stop hook", () => triggerHooks("Stop", {
-      event: "Stop",
-      scope: "subagent",
-      result: stopExit.kind === "failed" ? "failed" : "stopped",
-      reason: toStopBlockReason(stopExit),
-      threadId: input.runtime.name,
-    } satisfies StopBlock));
+    await attempt("trigger Stop hook", () =>
+      triggerHooks("Stop", {
+        event: "Stop",
+        scope: "subagent",
+        result: stopExit.kind === "failed" ? "failed" : "stopped",
+        reason: toStopBlockReason(stopExit),
+        threadId: input.runtime.name,
+      } satisfies StopBlock),
+    );
 
     if (cleanupErrors.length === 0 && input.runtime.phase.kind === "stopping") {
       input.runtime.finalizeStopped();
@@ -835,16 +838,16 @@ async function routeTeammateInbox(input: {
 
   const matchedResponses = routeProtocolResponses(messages, input.protocolStates);
   if (matchedResponses.length > 0) await input.protocolStates.flush();
-  const matchedRequestIds = new Set(
-    matchedResponses.map((response) => response.requestId),
-  );
+  const matchedRequestIds = new Set(matchedResponses.map((response) => response.requestId));
   const shutdownRequest = messages.find((message) => {
     if (message.type !== "shutdown_request" || message.from !== "lead") return false;
     const request = input.protocolStates.get(readProtocolRequestId(message.payload));
-    return request?.type === "shutdown"
-      && request.status === "pending"
-      && request.sender === "lead"
-      && request.target === input.teammateName;
+    return (
+      request?.type === "shutdown" &&
+      request.status === "pending" &&
+      request.sender === "lead" &&
+      request.target === input.teammateName
+    );
   });
   if (shutdownRequest) {
     return {
@@ -854,12 +857,11 @@ async function routeTeammateInbox(input: {
     };
   }
 
-  const routedMessages = messages.filter((message) =>
-    message.type !== "shutdown_request"
-    && (
-      !isProtocolResponseType(message.type)
-      || matchedRequestIds.has(readProtocolRequestId(message.payload))
-    ),
+  const routedMessages = messages.filter(
+    (message) =>
+      message.type !== "shutdown_request" &&
+      (!isProtocolResponseType(message.type) ||
+        matchedRequestIds.has(readProtocolRequestId(message.payload))),
   );
   return routedMessages.length > 0
     ? { kind: "routed-messages", messages: routedMessages }
@@ -943,10 +945,11 @@ async function evaluateAssignmentCompletion(input: {
   teammateName: string;
   summary: string;
 }): Promise<AssignmentCompletionOutcome> {
-  const ownedInProgressTasks = (await input.taskStore.listTasks()).filter((task) =>
-    task.owner === input.teammateName
-    && task.status === "in_progress"
-    && task.review.state !== "requested"
+  const ownedInProgressTasks = (await input.taskStore.listTasks()).filter(
+    (task) =>
+      task.owner === input.teammateName &&
+      task.status === "in_progress" &&
+      task.review.state !== "requested",
   );
   return ownedInProgressTasks.length > 0
     ? {
@@ -961,9 +964,9 @@ function isTeammateCancellation(error: unknown, signal: AbortSignal): boolean {
   if (error === signal.reason || error instanceof TeammateCancellationError) return true;
   const name = error instanceof Error ? error.name : "";
   const message = error instanceof Error ? error.message : String(error);
-  return name === "AbortError"
-    || name === "APIUserAbortError"
-    || message === "Run aborted by user.";
+  return (
+    name === "AbortError" || name === "APIUserAbortError" || message === "Run aborted by user."
+  );
 }
 
 function normalizeError(error: unknown): Error {
@@ -988,10 +991,7 @@ async function pollForTeammateTask(input: {
 
   if (now < input.idle.nextPollAt && !idleTimeoutReached) {
     await sleep(
-      Math.min(
-        input.idle.nextPollAt - now,
-        input.idleTimeoutMs - (now - input.idle.since),
-      ),
+      Math.min(input.idle.nextPollAt - now, input.idleTimeoutMs - (now - input.idle.since)),
       input.signal,
     );
     return { kind: "wait", idle: input.idle };
@@ -1031,11 +1031,12 @@ async function executeTeammateToolBatch(input: {
       message = formatTeammateToolProgress(call.name, status),
     ): void => {
       if (!input.activityId) return;
-      const displayMessage = status === "failed"
-        && !message.includes("失败")
-        && !/\b(?:fail|error|denied|invalid)\b/i.test(message)
-        ? `${formatTeammateToolProgress(call.name, "failed")}：${message}`
-        : message;
+      const displayMessage =
+        status === "failed" &&
+        !message.includes("失败") &&
+        !/\b(?:fail|error|denied|invalid)\b/i.test(message)
+          ? `${formatTeammateToolProgress(call.name, "failed")}：${message}`
+          : message;
       input.emitProgress({
         type: "teammate-tool-finished",
         teammateName: input.teammateName,
@@ -1091,18 +1092,21 @@ async function executeTeammateToolBatch(input: {
       continue;
     }
 
-    const latestPlanRequest = input.protocolStates.list()
-      .filter((request) =>
-        request.type === "plan_approval" && request.sender === input.teammateName)
+    const latestPlanRequest = input.protocolStates
+      .list()
+      .filter(
+        (request) => request.type === "plan_approval" && request.sender === input.teammateName,
+      )
       .at(-1);
     if (
-      requiresApprovedPlan(tool.name)
-      && latestPlanRequest
-      && latestPlanRequest.status !== "approved"
+      requiresApprovedPlan(tool.name) &&
+      latestPlanRequest &&
+      latestPlanRequest.status !== "approved"
     ) {
-      const error = latestPlanRequest.status === "pending"
-        ? `Plan approval ${latestPlanRequest.requestId} is still pending.`
-        : `Plan approval ${latestPlanRequest.requestId} was rejected. Submit a revised plan before making changes.`;
+      const error =
+        latestPlanRequest.status === "pending"
+          ? `Plan approval ${latestPlanRequest.requestId} is still pending.`
+          : `Plan approval ${latestPlanRequest.requestId} was rejected. Submit a revised plan before making changes.`;
       transcriptEntries.push({ role: "tool", toolName: tool.name, error });
       record(error, true);
       finishToolProgress("failed", error);
@@ -1224,8 +1228,8 @@ async function executeTeammateToolBatch(input: {
         });
       }
       const guidance =
-        `${errorMessage}\nThe tool returned after execution; side effects may already exist. `
-        + "Do not retry blindly.";
+        `${errorMessage}\nThe tool returned after execution; side effects may already exist. ` +
+        "Do not retry blindly.";
       transcriptEntries.push({
         role: "tool",
         toolName: tool.name,
@@ -1259,9 +1263,11 @@ async function executeTeammateToolBatch(input: {
       });
     }
     transcriptEntries.push({ role: "tool", toolName: tool.name, result: output });
-    record(tool.mapResultToModelContent
-      ? await tool.mapResultToModelContent(output)
-      : formatTeammateToolResult(output));
+    record(
+      tool.mapResultToModelContent
+        ? await tool.mapResultToModelContent(output)
+        : formatTeammateToolResult(output),
+    );
     finishToolProgress("completed");
   }
 
@@ -1382,9 +1388,9 @@ function createTeammateApprovalHandler(input: {
         return false;
       }
 
-      const response = messages.find((message) =>
-        message.type === "permission_response"
-        && message.payload?.requestId === requestId,
+      const response = messages.find(
+        (message) =>
+          message.type === "permission_response" && message.payload?.requestId === requestId,
       );
       input.inbox.pushBack(messages.filter((message) => message !== response));
       if (response) {
@@ -1420,9 +1426,7 @@ async function generateTeammateResponse(input: {
     signal: input.signal,
     tools: input.tools,
     messages: ensureToolResultPairing(input.modelMessages),
-    stream: input.onThinkingChunk
-      ? { onThinkingChunk: input.onThinkingChunk }
-      : undefined,
+    stream: input.onThinkingChunk ? { onThinkingChunk: input.onThinkingChunk } : undefined,
   });
   return result.content;
 }
@@ -1451,9 +1455,7 @@ function withIdentityIfCompacted(
 }
 
 function requiresApprovedPlan(toolName: string): boolean {
-  return toolName === "WriteFile"
-    || toolName === "EditFile"
-    || toolName === "bash";
+  return toolName === "WriteFile" || toolName === "EditFile" || toolName === "bash";
 }
 
 function formatTeammateToolResult(output: unknown): string {
@@ -1473,9 +1475,13 @@ async function sleep(ms: number, signal?: AbortSignal): Promise<void> {
     if (typeof timeout === "object" && "unref" in timeout) {
       timeout.unref();
     }
-    signal?.addEventListener("abort", () => {
-      clearTimeout(timeout);
-      resolve();
-    }, { once: true });
+    signal?.addEventListener(
+      "abort",
+      () => {
+        clearTimeout(timeout);
+        resolve();
+      },
+      { once: true },
+    );
   });
 }

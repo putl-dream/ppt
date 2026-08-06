@@ -30,11 +30,7 @@ export function rankSkillCatalogForStage(
   registry?: { get(name: string): SkillEntry | undefined },
 ): SkillCard[] {
   return [...cards].sort((left, right) => {
-    const leftRecommended = isSkillRecommendedForStage(
-      left.name,
-      stage,
-      registry?.get(left.name),
-    );
+    const leftRecommended = isSkillRecommendedForStage(left.name, stage, registry?.get(left.name));
     const rightRecommended = isSkillRecommendedForStage(
       right.name,
       stage,

@@ -1,26 +1,26 @@
-import { useCallback, useEffect, useRef, useState } from "react";
 import { DEFAULT_DESIGN_SYSTEM } from "@design-system";
-import { getWorkspaceLabel } from "@shared/workspace";
 import {
   setDisplayCardStatus,
   useNotificationCardManager,
-} from "./cards/display-card-managers";
+} from "@shared/cards/display-card-managers";
+import { getWorkspaceLabel } from "@shared/workspace";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { AppShell } from "./app/AppShell";
-import { ProjectFilesView } from "./app/ProjectFilesView";
-import { SettingsView } from "./app/SettingsView";
-import { WorkspaceView } from "./app/WorkspaceView";
-import { loadAppBootstrapSnapshot } from "./app/appBootstrap";
-import { useNotificationCenter } from "./app/useNotificationCenter";
-import { useSettingsController } from "./app/useSettingsController";
-import { useWorkbenchLayout, type AppMode } from "./app/useWorkbenchLayout";
-import { usePresentationController } from "./app/presentation/usePresentationController";
-import { useDeckExport } from "./app/presentation/useDeckExport";
-import { useSessionController } from "./app/session/useSessionController";
 import { useAgentActivityStream } from "./app/agent/useAgentActivityStream";
 import { useAgentRunController } from "./app/agent/useAgentRunController";
+import { loadAppBootstrapSnapshot } from "./app/appBootstrap";
 import { useDisplayEventActions } from "./app/cards/useDisplayEventActions";
+import { ProjectFilesView } from "./app/ProjectFilesView";
+import { useDeckExport } from "./app/presentation/useDeckExport";
+import { usePresentationController } from "./app/presentation/usePresentationController";
 import { confirmProjectFileNavigation } from "./app/project/projectFilesState";
+import { SettingsView } from "./app/SettingsView";
+import { useSessionController } from "./app/session/useSessionController";
+import { useNotificationCenter } from "./app/useNotificationCenter";
+import { useSettingsController } from "./app/useSettingsController";
 import { useUserQuerySubmission } from "./app/useUserQuerySubmission";
+import { type AppMode, useWorkbenchLayout } from "./app/useWorkbenchLayout";
+import { WorkspaceView } from "./app/WorkspaceView";
 import type { SettingsCategory } from "./settingsCategories";
 
 export function App() {
@@ -114,10 +114,7 @@ export function App() {
     activeSessionIdRef,
     setChatMessages,
   });
-  const {
-    activityTrace,
-    agentRunPhase,
-  } = activity;
+  const { activityTrace, agentRunPhase } = activity;
   const agentRun = useAgentRunController({
     request,
     setRequest,
@@ -173,14 +170,15 @@ export function App() {
   const notificationCards = useNotificationCardManager((state) => state.cards);
   const lastNotificationEventIdRef = useRef<string | undefined>(undefined);
   useEffect(() => {
-    const latest = [...notificationCards].reverse().find((card) =>
-      card.status === "active" && card.event.kind === "notification.message"
-    );
+    const latest = [...notificationCards]
+      .reverse()
+      .find((card) => card.status === "active" && card.event.kind === "notification.message");
     if (
-      !latest
-      || latest.event.kind !== "notification.message"
-      || latest.event.eventId === lastNotificationEventIdRef.current
-    ) return;
+      !latest ||
+      latest.event.kind !== "notification.message" ||
+      latest.event.eventId === lastNotificationEventIdRef.current
+    )
+      return;
     lastNotificationEventIdRef.current = latest.event.eventId;
     notify(latest.event.payload.message);
     setDisplayCardStatus(latest.event.eventId, "resolved");
@@ -203,21 +201,21 @@ export function App() {
   }
 
   const activeSessionTitle =
-    sessions.find((session) => session.id === activeSessionId)?.title.trim()
-    || presentation?.title?.trim()
-    || (isDraftChat ? "AI 新建会话" : "当前对话");
+    sessions.find((session) => session.id === activeSessionId)?.title.trim() ||
+    presentation?.title?.trim() ||
+    (isDraftChat ? "AI 新建会话" : "当前对话");
   const confirmLeaveProjectFiles = () =>
-    activeMode !== "files"
-    || confirmProjectFileNavigation(
-      projectFilesDirty,
-      () => window.confirm("当前项目文件有未保存修改。要放弃草稿并离开吗？"),
+    activeMode !== "files" ||
+    confirmProjectFileNavigation(projectFilesDirty, () =>
+      window.confirm("当前项目文件有未保存修改。要放弃草稿并离开吗？"),
     );
   const leftPanelProps = {
     sessions,
     activeSessionId: pendingSessionId ?? activeSessionId,
-    activeMode: activeMode === "files" ? "files" as const : "workspace" as const,
+    activeMode: activeMode === "files" ? ("files" as const) : ("workspace" as const),
     onSelectSession: (sessionId: string) => {
-      if (sessionId === activeSessionId || isSessionSwitching || !confirmLeaveProjectFiles()) return;
+      if (sessionId === activeSessionId || isSessionSwitching || !confirmLeaveProjectFiles())
+        return;
       void selectSession(sessionId);
     },
     onNewSession: () => {
@@ -318,17 +316,21 @@ export function App() {
               notify,
             },
           }}
-          mirrorProps={isMirrorVisible && presentation ? {
-            sessionId: activeSessionId,
-            presentation,
-            selectedSlideId,
-            onSelectSlide: setSelectedSlideId,
-            onCloseMirror: closeMirror,
-            highlightSlideId,
-            isExpanded: isMirrorExpanded,
-            onToggleExpand: toggleMirrorExpanded,
-            triggerToast: notify,
-          } : undefined}
+          mirrorProps={
+            isMirrorVisible && presentation
+              ? {
+                  sessionId: activeSessionId,
+                  presentation,
+                  selectedSlideId,
+                  onSelectSlide: setSelectedSlideId,
+                  onCloseMirror: closeMirror,
+                  highlightSlideId,
+                  isExpanded: isMirrorExpanded,
+                  onToggleExpand: toggleMirrorExpanded,
+                  triggerToast: notify,
+                }
+              : undefined
+          }
           deckPreviewProps={{
             open: isDeckPreviewOpen && Boolean(presentation),
             presentation: presentation ?? {

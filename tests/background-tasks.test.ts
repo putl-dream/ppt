@@ -1,21 +1,21 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
-import { AgentRuntime } from "../src/main/agent/runtime/agent-runtime";
-import {
-  BackgroundTaskManager,
-  formatBackgroundNotifications,
-} from "../src/main/agent/runtime/background/background-task-manager";
 import type {
   AgentModelGateway,
   AgentModelRequest,
   AgentModelResponse,
   AgentModelToolUseBlock,
 } from "../src/main/agent/gateway/types";
-import { ToolRegistry } from "../src/main/agent/tools/tool-registry";
-import type { ToolDefinition } from "../src/main/agent/tools/tool-definition";
+import { AgentRuntime } from "../src/main/agent/runtime/agent-runtime";
+import {
+  BackgroundTaskManager,
+  formatBackgroundNotifications,
+} from "../src/main/agent/runtime/background/background-task-manager";
 import { executeExtraToolTool } from "../src/main/agent/tools/core/execute-extra-tool";
-import { searchExtraToolsTool } from "../src/main/agent/tools/core/search-extra-tools";
 import { previewSlideTool } from "../src/main/agent/tools/core/preview-slide";
+import { searchExtraToolsTool } from "../src/main/agent/tools/core/search-extra-tools";
+import type { ToolDefinition } from "../src/main/agent/tools/tool-definition";
+import { ToolRegistry } from "../src/main/agent/tools/tool-registry";
 import { toToolSchema } from "../src/main/agent/tools/tool-schema";
 import { createStarterPresentation } from "../src/shared/presentation-fixtures";
 
@@ -32,7 +32,10 @@ function deferred<T>() {
 const textContent = (text: string) => [{ type: "text" as const, text }];
 
 function createNativeGateway(
-  handler: (request: AgentModelRequest, index: number) => AgentModelResponse | Promise<AgentModelResponse>,
+  handler: (
+    request: AgentModelRequest,
+    index: number,
+  ) => AgentModelResponse | Promise<AgentModelResponse>,
 ): AgentModelGateway & { requests: AgentModelRequest[] } {
   let index = 0;
   const requests: AgentModelRequest[] = [];
@@ -119,12 +122,14 @@ describe("background task manager", () => {
     expect(bgId).toBe("run-a:bg_0001");
     const notifications = await manager.drain();
     expect(notifications).toMatchObject([{ bgId, status: "completed" }]);
-    expect(manager.snapshot()).toMatchObject([{
-      bgId,
-      runId: "run-a",
-      toolUseId: "tool-use-a",
-      status: "consumed",
-    }]);
+    expect(manager.snapshot()).toMatchObject([
+      {
+        bgId,
+        runId: "run-a",
+        toolUseId: "tool-use-a",
+        status: "consumed",
+      },
+    ]);
 
     const restored = new BackgroundTaskManager({
       runId: "run-b",
@@ -137,57 +142,67 @@ describe("background task manager", () => {
   it("turns only genuinely running recovered tasks into one failure notification", () => {
     const restored = new BackgroundTaskManager({
       runId: "new-run",
-      recovered: [{
-        bgId: "old-run:bg_0001",
-        runId: "old-run",
-        toolUseId: "old-tool-use",
-        toolName: "PreviewSlide",
-        label: "old preview",
-        status: "running",
-        startedAt: 1,
-      }],
+      recovered: [
+        {
+          bgId: "old-run:bg_0001",
+          runId: "old-run",
+          toolUseId: "old-tool-use",
+          toolName: "PreviewSlide",
+          label: "old preview",
+          status: "running",
+          startedAt: 1,
+        },
+      ],
     });
 
-    expect(restored.collect()).toMatchObject([{
-      bgId: "old-run:bg_0001",
-      status: "failed",
-      isError: true,
-    }]);
+    expect(restored.collect()).toMatchObject([
+      {
+        bgId: "old-run:bg_0001",
+        status: "failed",
+        isError: true,
+      },
+    ]);
     expect(restored.collect()).toEqual([]);
   });
 
   it("marks recovered scheduled tasks as safe to retry", () => {
     const restored = new BackgroundTaskManager({
       runId: "new-run",
-      recovered: [{
-        bgId: "old-run:bg_0002",
-        runId: "old-run",
-        toolUseId: "old-tool-use",
-        toolName: "PreviewSlide",
-        label: "old scheduled preview",
-        status: "scheduled",
-        startedAt: 1,
-      }],
+      recovered: [
+        {
+          bgId: "old-run:bg_0002",
+          runId: "old-run",
+          toolUseId: "old-tool-use",
+          toolName: "PreviewSlide",
+          label: "old scheduled preview",
+          status: "scheduled",
+          startedAt: 1,
+        },
+      ],
     });
 
-    expect(restored.collect()).toMatchObject([{
-      bgId: "old-run:bg_0002",
-      status: "failed",
-      isError: true,
-      content: expect.stringContaining("safe to schedule it again"),
-    }]);
+    expect(restored.collect()).toMatchObject([
+      {
+        bgId: "old-run:bg_0002",
+        status: "failed",
+        isError: true,
+        content: expect.stringContaining("safe to schedule it again"),
+      },
+    ]);
   });
 });
 
 describe("AgentRuntime background tool path", () => {
   it("exposes run_in_background on slow core/deferred execution schemas", () => {
     const executeSpec = toToolSchema(executeExtraToolTool);
-    expect(executeSpec.inputSchema.properties as Record<string, unknown>)
-      .toHaveProperty("run_in_background");
+    expect(executeSpec.inputSchema.properties as Record<string, unknown>).toHaveProperty(
+      "run_in_background",
+    );
 
     const previewSpec = toToolSchema(previewSlideTool);
-    expect(previewSpec.inputSchema.properties as Record<string, unknown>)
-      .toHaveProperty("run_in_background");
+    expect(previewSpec.inputSchema.properties as Record<string, unknown>).toHaveProperty(
+      "run_in_background",
+    );
   });
 
   it("backgrounds ExecuteExtraTool when it runs a slow deferred tool", async () => {
@@ -199,7 +214,10 @@ describe("AgentRuntime background tool path", () => {
       format: z.enum(["pptx", "html", "pdf"]).default("pptx"),
       run_in_background: z.boolean().optional(),
     });
-    const mockExportTool: ToolDefinition<typeof exportSchema, { success: boolean; filePath: string }> = {
+    const mockExportTool: ToolDefinition<
+      typeof exportSchema,
+      { success: boolean; filePath: string }
+    > = {
       name: "ExportPptx",
       description: "Mock slow export",
       category: "deferred",
@@ -280,16 +298,24 @@ describe("AgentRuntime background tool path", () => {
     expect(gateway.requests).toHaveLength(4);
 
     const thirdMessages = gateway.requests[2]!.messages!;
-    const exportPlaceholder = thirdMessages.flatMap((message) => message.content)
+    const exportPlaceholder = thirdMessages
+      .flatMap((message) => message.content)
       .find((block) => block.type === "tool_result" && block.toolUseId === "call-export");
     expect(exportPlaceholder).toMatchObject({ type: "tool_result", toolUseId: "call-export" });
 
     const fourthMessages = gateway.requests[3]!.messages!;
-    const notificationTurn = fourthMessages.find((message) =>
-      message.role === "user" && message.content.some((block) =>
-        block.type === "text" && block.text.includes("<task_notification>")));
-    const notificationText = notificationTurn?.content
-      .filter((block) => block.type === "text").map((block) => block.text).join("\n") ?? "";
+    const notificationTurn = fourthMessages.find(
+      (message) =>
+        message.role === "user" &&
+        message.content.some(
+          (block) => block.type === "text" && block.text.includes("<task_notification>"),
+        ),
+    );
+    const notificationText =
+      notificationTurn?.content
+        .filter((block) => block.type === "text")
+        .map((block) => block.text)
+        .join("\n") ?? "";
     expect(notificationText).toContain("<tool>ExportPptx</tool>");
     expect(notificationText).toContain("ExportPptx: pptx");
     expect(notificationText).toContain("deck.pptx");
@@ -320,10 +346,12 @@ describe("AgentRuntime background tool path", () => {
     const gateway = createNativeGateway(() => ({
       provider: "anthropic",
       model: "test-model",
-      content: [modelToolCall("preview-call", "PreviewSlide", {
-        slideId: "slide-1",
-        run_in_background: true,
-      })],
+      content: [
+        modelToolCall("preview-call", "PreviewSlide", {
+          slideId: "slide-1",
+          run_in_background: true,
+        }),
+      ],
     }));
 
     const result = await new AgentRuntime(registry, gateway).run({

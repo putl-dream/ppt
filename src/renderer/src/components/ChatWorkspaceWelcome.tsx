@@ -1,6 +1,6 @@
 import type React from "react";
-import { CHAT_WORKSPACE_COPY_ZH_CN as copy } from "./chat-workspace-copy";
 import { ChatWorkspaceInput } from "./ChatWorkspaceInput";
+import { CHAT_WORKSPACE_COPY_ZH_CN as copy } from "./chat-workspace-copy";
 import type {
   ChatWorkspaceActions,
   ChatWorkspaceComposer,

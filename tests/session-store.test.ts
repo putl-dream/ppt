@@ -1,11 +1,11 @@
 import { access, mkdtemp, readFile, rm } from "node:fs/promises";
-import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { afterEach, describe, expect, it } from "vitest";
+import { join } from "node:path";
 import { FileSessionStore } from "@main/session-store";
-import { formatTerminalAgentRunContent } from "@shared/agent-result-copy";
 import { getResponseBlockContent } from "@shared/agent-activity";
+import { formatTerminalAgentRunContent } from "@shared/agent-result-copy";
 import { sessionChatMessageSchema } from "@shared/session";
+import { afterEach, describe, expect, it } from "vitest";
 
 const temporaryDirectories: string[] = [];
 const stores: FileSessionStore[] = [];
@@ -24,9 +24,9 @@ async function createStore(rootPath?: string) {
 afterEach(async () => {
   for (const store of stores.splice(0)) store.close();
   await Promise.all(
-    temporaryDirectories.splice(0).map((directory) =>
-      rm(directory, { recursive: true, force: true }),
-    ),
+    temporaryDirectories
+      .splice(0)
+      .map((directory) => rm(directory, { recursive: true, force: true })),
   );
 });
 
@@ -43,13 +43,15 @@ describe("SQLite session store", () => {
         id: "a1",
         role: "assistant",
         content: "演示文稿已完成",
-        activityTrace: [{
-          id: "response-complete",
-          kind: "response",
-          start: 0,
-          end: 7,
-          streaming: false,
-        }],
+        activityTrace: [
+          {
+            id: "response-complete",
+            kind: "response",
+            start: 0,
+            end: 7,
+            streaming: false,
+          },
+        ],
         runId: "run-complete",
         runStatus: "completed",
       },
@@ -70,29 +72,31 @@ describe("SQLite session store", () => {
     const { store, databasePath, directory } = await createStore();
     const created = await store.createSession({ title: "Interrupted project" });
     const sessionId = created.activeSession!.session.id;
-    await store.saveMessages(sessionId, [{
-      id: "a-running",
-      role: "assistant",
-      content: "已生成部分内容",
-      runId: "run-stale",
-      runStatus: "running",
-      activityTrace: [
-        {
-          id: "response-partial",
-          kind: "response",
-          start: 0,
-          end: 7,
-          streaming: false,
-        },
-        {
-          id: "tool-running",
-          kind: "tool",
-          toolCallId: "call-running",
-          toolName: "ExportPptx",
-          status: "running",
-        },
-      ],
-    }]);
+    await store.saveMessages(sessionId, [
+      {
+        id: "a-running",
+        role: "assistant",
+        content: "已生成部分内容",
+        runId: "run-stale",
+        runStatus: "running",
+        activityTrace: [
+          {
+            id: "response-partial",
+            kind: "response",
+            start: 0,
+            end: 7,
+            streaming: false,
+          },
+          {
+            id: "tool-running",
+            kind: "tool",
+            toolCallId: "call-running",
+            toolName: "ExportPptx",
+            status: "running",
+          },
+        ],
+      },
+    ]);
     store.conversationDatabase.beginRun({
       runId: "run-stale",
       sessionId,
@@ -108,35 +112,36 @@ describe("SQLite session store", () => {
     expect(restored.getSession(sessionId).messages[0]).toMatchObject({
       content: "已生成部分内容",
       runStatus: "interrupted",
-      activityTrace: [
-        { kind: "response" },
-        { kind: "tool", status: "denied" },
-      ],
+      activityTrace: [{ kind: "response" }, { kind: "tool", status: "denied" }],
     });
-    expect(
-      restored.conversationDatabase.listRunEvents("run-stale").at(-1)?.kind,
-    ).toBe("run_interrupted");
+    expect(restored.conversationDatabase.listRunEvents("run-stale").at(-1)?.kind).toBe(
+      "run_interrupted",
+    );
   });
 
   it("recovers a terminal run result when the assistant message write was lost", async () => {
     const { store, databasePath, directory } = await createStore();
     const created = await store.createSession({ title: "Terminal recovery" });
     const sessionId = created.activeSession!.session.id;
-    await store.saveMessages(sessionId, [{
-      id: "a-terminal-window",
-      role: "assistant",
-      content: "最终答案",
-      runId: "run-terminal-window",
-      runStatus: "running",
-      activityTrace: [{
-        id: "response-terminal-window",
-        kind: "response",
-        start: 0,
-        end: 4,
-        attemptId: "terminal-attempt",
-        streaming: false,
-      }],
-    }]);
+    await store.saveMessages(sessionId, [
+      {
+        id: "a-terminal-window",
+        role: "assistant",
+        content: "最终答案",
+        runId: "run-terminal-window",
+        runStatus: "running",
+        activityTrace: [
+          {
+            id: "response-terminal-window",
+            kind: "response",
+            start: 0,
+            end: 4,
+            attemptId: "terminal-attempt",
+            streaming: false,
+          },
+        ],
+      },
+    ]);
     store.conversationDatabase.beginRun({
       runId: "run-terminal-window",
       sessionId,
@@ -171,9 +176,9 @@ describe("SQLite session store", () => {
       threadId: "thread-terminal",
       activityTrace: [{ kind: "response", start: 0, end: 4, streaming: false }],
     });
-    expect(
-      restored.conversationDatabase.listRunEvents("run-terminal-window").at(-1)?.kind,
-    ).toBe("run_completed");
+    expect(restored.conversationDatabase.listRunEvents("run-terminal-window").at(-1)?.kind).toBe(
+      "run_completed",
+    );
   });
 
   it("persists presentation state while keeping the deck snapshot in the sandbox", async () => {
@@ -187,10 +192,12 @@ describe("SQLite session store", () => {
     };
     await store.savePresentation(snapshot.session.id, presentation);
 
-    const deck = JSON.parse(await readFile(
-      join(store.getSession(snapshot.session.id).project!.rootPath, "deck", "snapshot.json"),
-      "utf8",
-    ));
+    const deck = JSON.parse(
+      await readFile(
+        join(store.getSession(snapshot.session.id).project!.rootPath, "deck", "snapshot.json"),
+        "utf8",
+      ),
+    );
     expect(deck.title).toBe("Stable deck");
     expect(store.getSession(snapshot.session.id).presentation.revision).toBe(2);
   });
@@ -219,10 +226,9 @@ describe("SQLite session store", () => {
     const second = await store.createSession({ rootPath: workspace, title: "Second" });
 
     const listed = await store.listWorkspaceSessions(workspace);
-    expect(listed.map((item) => item.id).sort()).toEqual([
-      first.activeSession!.session.id,
-      second.activeSession!.session.id,
-    ].sort());
+    expect(listed.map((item) => item.id).sort()).toEqual(
+      [first.activeSession!.session.id, second.activeSession!.session.id].sort(),
+    );
     const opened = await store.openWorkspace(workspace);
     expect(opened.activeSession?.session.id).toBe(second.activeSession!.session.id);
   });
@@ -250,9 +256,7 @@ describe("SQLite session store", () => {
     const { store, databasePath, directory } = await createStore();
     const created = await store.createSession({ title: "Run" });
     const sessionId = created.activeSession!.session.id;
-    await store.saveMessages(sessionId, [
-      { id: "u1", role: "user", content: "inspect" },
-    ]);
+    await store.saveMessages(sessionId, [{ id: "u1", role: "user", content: "inspect" }]);
     store.conversationDatabase.beginRun({ runId: "run-1", sessionId, request: "inspect" });
     store.conversationDatabase.appendRuntimeEvent("run-1", "reasoning_chunk", {
       chunk: "I should inspect the deck",
@@ -279,9 +283,14 @@ describe("SQLite session store", () => {
       attemptId: "attempt-2",
       chunk: "演示文稿已检查完成。",
     });
-    store.conversationDatabase.appendRuntimeEvent("run-1", "workflow_progress", {
-      message: "L2 micro_compact: older tool results replaced with placeholders.",
-    }, "internal");
+    store.conversationDatabase.appendRuntimeEvent(
+      "run-1",
+      "workflow_progress",
+      {
+        message: "L2 micro_compact: older tool results replaced with placeholders.",
+      },
+      "internal",
+    );
     await store.finalizeAgentRunMessage(sessionId, "run-1", {
       status: "chat",
       message: "演示文稿已检查完成。",
@@ -299,8 +308,10 @@ describe("SQLite session store", () => {
       "tool",
       "response",
     ]);
-    expect(assistant.activityTrace?.find((item) => item.kind === "tool"))
-      .toMatchObject({ toolCallId: "call-read", status: "completed" });
+    expect(assistant.activityTrace?.find((item) => item.kind === "tool")).toMatchObject({
+      toolCallId: "call-read",
+      status: "completed",
+    });
     expect(
       assistant.activityTrace
         ?.filter((item) => item.kind === "response")
@@ -346,10 +357,12 @@ describe("SQLite session store", () => {
     });
     expect(store.findWaitingAgentRunId(sessionId, "thread-question")).toBe("run-question");
 
-    await store.saveMessages(sessionId, [{
-      ...waiting,
-      runStatus: "completed",
-    }]);
+    await store.saveMessages(sessionId, [
+      {
+        ...waiting,
+        runStatus: "completed",
+      },
+    ]);
     expect(store.getSession(sessionId).messages.at(-1)?.runStatus).toBe("completed");
   });
 
@@ -434,18 +447,24 @@ describe("SQLite session store", () => {
         commands: [],
       },
     });
-    expect(store.getSession(sessionId).messages.at(-1)?.activityTrace?.map(
-      (item) => item.kind,
-    )).toEqual(["step", "tool", "response"]);
+    expect(
+      store
+        .getSession(sessionId)
+        .messages.at(-1)
+        ?.activityTrace?.map((item) => item.kind),
+    ).toEqual(["step", "tool", "response"]);
 
     store.conversationDatabase.appendRuntimeEvent(runId, "workflow_progress", {
       type: "workflow-progress",
       message: "审批结果已处理",
     });
     await store.refreshAgentRunTrace(sessionId, runId);
-    expect(store.getSession(sessionId).messages.at(-1)?.activityTrace?.map(
-      (item) => item.kind,
-    )).toEqual(["step", "tool", "response", "step"]);
+    expect(
+      store
+        .getSession(sessionId)
+        .messages.at(-1)
+        ?.activityTrace?.map((item) => item.kind),
+    ).toEqual(["step", "tool", "response", "step"]);
 
     const terminalResult = { status: "rejected" as const };
     await store.finalizeAgentRunMessage(sessionId, runId, terminalResult);
@@ -457,9 +476,7 @@ describe("SQLite session store", () => {
     });
 
     const terminal = store.getSession(sessionId).messages.at(-1)!;
-    const responseBlocks = terminal.activityTrace?.filter(
-      (item) => item.kind === "response",
-    ) ?? [];
+    const responseBlocks = terminal.activityTrace?.filter((item) => item.kind === "response") ?? [];
     let cursor = 0;
     for (const response of responseBlocks) {
       expect(response.start).toBe(cursor);
@@ -467,9 +484,7 @@ describe("SQLite session store", () => {
       cursor = response.end;
     }
     expect(cursor).toBe(terminal.content.length);
-    expect(responseBlocks.map(
-      (item) => getResponseBlockContent(item, terminal.content),
-    )).toEqual([
+    expect(responseBlocks.map((item) => getResponseBlockContent(item, terminal.content))).toEqual([
       "已提出排版更新方案，请在下方审核后应用。",
       `\n\n${formatTerminalAgentRunContent(terminalResult)}`,
     ]);
@@ -497,12 +512,13 @@ describe("SQLite session store", () => {
 
     await store.finalizeAgentRunMessage(sessionId, "run-svg", terminalResult);
 
-    expect(store.getSession(sessionId).messages.at(-1)?.content)
-      .toBe(formatTerminalAgentRunContent(terminalResult));
-    expect(store.getSession(sessionId).messages.at(-1)?.content)
-      .toContain("已成功应用演示文稿更新");
-    expect(store.getSession(sessionId).messages.at(-1)?.content)
-      .not.toContain("请选择设计方向");
+    expect(store.getSession(sessionId).messages.at(-1)?.content).toBe(
+      formatTerminalAgentRunContent(terminalResult),
+    );
+    expect(store.getSession(sessionId).messages.at(-1)?.content).toContain(
+      "已成功应用演示文稿更新",
+    );
+    expect(store.getSession(sessionId).messages.at(-1)?.content).not.toContain("请选择设计方向");
   });
 
   it("persists teammate reasoning and tools under the linked task activity", async () => {
@@ -553,8 +569,10 @@ describe("SQLite session store", () => {
       message: "Worker finished.",
     });
 
-    const task = store.getSession(sessionId).messages.at(-1)?.activityTrace
-      ?.find((item) => item.kind === "task");
+    const task = store
+      .getSession(sessionId)
+      .messages.at(-1)
+      ?.activityTrace?.find((item) => item.kind === "task");
     expect(task).toMatchObject({
       kind: "task",
       taskId: "task-outline",
@@ -593,11 +611,13 @@ describe("SQLite session store", () => {
       goal: "Build deck",
     });
     store.conversationDatabase.appendRuntimeEvent("run-task-graph", "task_list_updated", {
-      tasks: [{
-        ...baseTask,
-        status: "completed",
-        owner: undefined,
-      }],
+      tasks: [
+        {
+          ...baseTask,
+          status: "completed",
+          owner: undefined,
+        },
+      ],
       goal: "Build deck",
     });
 
@@ -648,22 +668,23 @@ describe("SQLite session store", () => {
     const staleRendererMessages = store.getSession(sessionId).messages;
 
     store.conversationDatabase.appendRuntimeEvent("run-background", "task_list_updated", {
-      tasks: [{
-        ...task,
-        status: "in_progress",
-        owner: "task_worker",
-        updatedAt: "2026-01-01T00:01:00.000Z",
-      }],
+      tasks: [
+        {
+          ...task,
+          status: "in_progress",
+          owner: "task_worker",
+          updatedAt: "2026-01-01T00:01:00.000Z",
+        },
+      ],
       goal: "Build deck",
     });
     await store.refreshAgentRunTrace(sessionId, "run-background");
     await store.saveMessages(sessionId, staleRendererMessages);
 
     const assistant = store.getSession(sessionId).messages.at(-1)!;
-    expect(assistant.activityTrace?.find((item) => item.kind === "tasklist"))
-      .toMatchObject({
-        tasks: [{ id: "task_background", status: "in_progress", owner: "task_worker" }],
-      });
+    expect(assistant.activityTrace?.find((item) => item.kind === "tasklist")).toMatchObject({
+      tasks: [{ id: "task_background", status: "in_progress", owner: "task_worker" }],
+    });
     expect(assistant).toMatchObject({
       runId: "run-background",
       runStatus: "completed",
@@ -704,12 +725,13 @@ describe("SQLite session store", () => {
       description: "Build layout",
     });
     await store.refreshAgentRunTrace(sessionId, runId);
-    expect(store.getSession(sessionId).messages.at(-1)?.activityTrace)
-      .toContainEqual(expect.objectContaining({
+    expect(store.getSession(sessionId).messages.at(-1)?.activityTrace).toContainEqual(
+      expect.objectContaining({
         kind: "task",
         taskId: "task-layout",
         status: "running",
-      }));
+      }),
+    );
 
     store.conversationDatabase.appendRuntimeEvent(runId, "reasoning_chunk", {
       ...common,
@@ -718,13 +740,17 @@ describe("SQLite session store", () => {
     });
     await store.refreshAgentRunTrace(sessionId, runId);
     expect(
-      store.getSession(sessionId).messages.at(-1)?.activityTrace
-        ?.find((item) => item.kind === "task"),
+      store
+        .getSession(sessionId)
+        .messages.at(-1)
+        ?.activityTrace?.find((item) => item.kind === "task"),
     ).toMatchObject({
-      steps: [expect.objectContaining({
-        type: "reasoning",
-        text: "Inspecting visual hierarchy.",
-      })],
+      steps: [
+        expect.objectContaining({
+          type: "reasoning",
+          text: "Inspecting visual hierarchy.",
+        }),
+      ],
     });
 
     store.conversationDatabase.appendRuntimeEvent(runId, "tool_started", {
@@ -735,8 +761,10 @@ describe("SQLite session store", () => {
     });
     await store.refreshAgentRunTrace(sessionId, runId);
     expect(
-      store.getSession(sessionId).messages.at(-1)?.activityTrace
-        ?.find((item) => item.kind === "task"),
+      store
+        .getSession(sessionId)
+        .messages.at(-1)
+        ?.activityTrace?.find((item) => item.kind === "task"),
     ).toMatchObject({
       steps: [
         expect.objectContaining({ type: "reasoning" }),
@@ -753,8 +781,10 @@ describe("SQLite session store", () => {
     });
     await store.refreshAgentRunTrace(sessionId, runId);
     expect(
-      store.getSession(sessionId).messages.at(-1)?.activityTrace
-        ?.find((item) => item.kind === "task"),
+      store
+        .getSession(sessionId)
+        .messages.at(-1)
+        ?.activityTrace?.find((item) => item.kind === "task"),
     ).toMatchObject({
       steps: [
         expect.objectContaining({ type: "reasoning" }),
@@ -774,22 +804,21 @@ describe("SQLite session store", () => {
       runId,
       runStatus: "completed",
     });
-    expect(durableMessage.activityTrace?.find((item) => item.kind === "task"))
-      .toMatchObject({
-        taskId: "task-layout",
-        status: "completed",
-        steps: [
-          expect.objectContaining({
-            type: "reasoning",
-            text: "Inspecting visual hierarchy.",
-          }),
-          expect.objectContaining({
-            type: "tool",
-            toolName: "WriteFile",
-            status: "completed",
-          }),
-        ],
-      });
+    expect(durableMessage.activityTrace?.find((item) => item.kind === "task")).toMatchObject({
+      taskId: "task-layout",
+      status: "completed",
+      steps: [
+        expect.objectContaining({
+          type: "reasoning",
+          text: "Inspecting visual hierarchy.",
+        }),
+        expect.objectContaining({
+          type: "tool",
+          toolName: "WriteFile",
+          status: "completed",
+        }),
+      ],
+    });
 
     store.close();
     stores.splice(stores.indexOf(store), 1);
@@ -803,9 +832,7 @@ describe("SQLite session store", () => {
     const { store } = await createStore();
     const created = await store.createSession({ title: "Failed run" });
     const sessionId = created.activeSession!.session.id;
-    await store.saveMessages(sessionId, [
-      { id: "u1", role: "user", content: "inspect" },
-    ]);
+    await store.saveMessages(sessionId, [{ id: "u1", role: "user", content: "inspect" }]);
     store.conversationDatabase.beginRun({
       runId: "run-failed",
       sessionId,
@@ -892,15 +919,14 @@ describe("SQLite session store", () => {
     });
 
     const message = store.getSession(sessionId).messages.at(-1)!;
-    expect(message.activityTrace?.map((item) => item.kind)).toEqual([
-      "tool-approval",
-      "response",
-    ]);
-    expect(message.activityTrace?.[0]).toEqual(expect.objectContaining({
-      kind: "tool-approval",
-      approvalId: "approval-1",
-      status: "approved",
-    }));
+    expect(message.activityTrace?.map((item) => item.kind)).toEqual(["tool-approval", "response"]);
+    expect(message.activityTrace?.[0]).toEqual(
+      expect.objectContaining({
+        kind: "tool-approval",
+        approvalId: "approval-1",
+        status: "approved",
+      }),
+    );
     const response = message.activityTrace?.find((item) => item.kind === "response");
     expect(response && getResponseBlockContent(response, message.content)).toBe("导出完成");
   });
@@ -937,37 +963,39 @@ describe("SQLite session store", () => {
       message: "cancelled",
     });
 
-    await store.saveMessages(sessionId, [{
-      id: "a-interrupt-tools",
-      role: "assistant",
-      content: "正在处理",
-      runId,
-      runStatus: "running",
-      activityTrace: [
-        {
-          id: "response-1",
-          kind: "response",
-          start: 0,
-          end: 4,
-          attemptId: "attempt-1",
-          streaming: false,
-        },
-        {
-          id: "tool-read",
-          kind: "tool",
-          toolCallId: "call-read",
-          toolName: "ReadPresentationSnapshot",
-          status: "running",
-        },
-        {
-          id: "tool-write",
-          kind: "tool",
-          toolCallId: "call-write",
-          toolName: "WriteFile",
-          status: "running",
-        },
-      ],
-    }]);
+    await store.saveMessages(sessionId, [
+      {
+        id: "a-interrupt-tools",
+        role: "assistant",
+        content: "正在处理",
+        runId,
+        runStatus: "running",
+        activityTrace: [
+          {
+            id: "response-1",
+            kind: "response",
+            start: 0,
+            end: 4,
+            attemptId: "attempt-1",
+            streaming: false,
+          },
+          {
+            id: "tool-read",
+            kind: "tool",
+            toolCallId: "call-read",
+            toolName: "ReadPresentationSnapshot",
+            status: "running",
+          },
+          {
+            id: "tool-write",
+            kind: "tool",
+            toolCallId: "call-write",
+            toolName: "WriteFile",
+            status: "running",
+          },
+        ],
+      },
+    ]);
 
     await store.finalizeAgentRunMessage(sessionId, runId, {
       status: "interrupted",
@@ -984,33 +1012,35 @@ describe("SQLite session store", () => {
     // Renderer saves an interrupted message whose process trace is thinner than
     // main's — equal status must not wipe tools that only main retained, and
     // must still fold renderer-only tools when main is the thin side.
-    await store.saveMessages(sessionId, [{
-      ...afterFinalize,
-      activityTrace: [
-        {
-          id: "response-1",
-          kind: "response",
-          start: 0,
-          end: 4,
-          attemptId: "attempt-1",
-          streaming: false,
-        },
-        {
-          id: "tool-read",
-          kind: "tool",
-          toolCallId: "call-read",
-          toolName: "ReadPresentationSnapshot",
-          status: "denied",
-        },
-        {
-          id: "tool-extra",
-          kind: "tool",
-          toolCallId: "call-extra",
-          toolName: "AskUserQuestion",
-          status: "denied",
-        },
-      ],
-    }]);
+    await store.saveMessages(sessionId, [
+      {
+        ...afterFinalize,
+        activityTrace: [
+          {
+            id: "response-1",
+            kind: "response",
+            start: 0,
+            end: 4,
+            attemptId: "attempt-1",
+            streaming: false,
+          },
+          {
+            id: "tool-read",
+            kind: "tool",
+            toolCallId: "call-read",
+            toolName: "ReadPresentationSnapshot",
+            status: "denied",
+          },
+          {
+            id: "tool-extra",
+            kind: "tool",
+            toolCallId: "call-extra",
+            toolName: "AskUserQuestion",
+            status: "denied",
+          },
+        ],
+      },
+    ]);
 
     const afterSave = store.getSession(sessionId).messages.at(-1)!;
     const toolIds = afterSave.activityTrace
@@ -1023,9 +1053,12 @@ describe("SQLite session store", () => {
     await store.selectSession(other.activeSession!.session.id);
     const restored = await store.selectSession(sessionId);
     const selected = restored.activeSession!.messages.at(-1)!;
-    expect(selected.activityTrace?.filter((item) => item.kind === "tool").map(
-      (item) => item.toolCallId,
-    ).sort()).toEqual(["call-extra", "call-read", "call-write"]);
+    expect(
+      selected.activityTrace
+        ?.filter((item) => item.kind === "tool")
+        .map((item) => item.toolCallId)
+        .sort(),
+    ).toEqual(["call-extra", "call-read", "call-write"]);
   });
 
   it("repairs a thin interrupted trace from conversation events on selectSession", async () => {
@@ -1059,32 +1092,35 @@ describe("SQLite session store", () => {
     });
 
     // Simulate a historically broken persist: terminal status + response only.
-    await store.saveMessages(sessionId, [{
-      id: "a-thin",
-      role: "assistant",
-      content: "已中断",
-      runId,
-      runStatus: "interrupted",
-      activityTrace: [{
-        id: "response-thin",
-        kind: "response",
-        start: 0,
-        end: 3,
-        streaming: false,
-      }],
-    }]);
+    await store.saveMessages(sessionId, [
+      {
+        id: "a-thin",
+        role: "assistant",
+        content: "已中断",
+        runId,
+        runStatus: "interrupted",
+        activityTrace: [
+          {
+            id: "response-thin",
+            kind: "response",
+            start: 0,
+            end: 3,
+            streaming: false,
+          },
+        ],
+      },
+    ]);
 
     expect(
-      store.getSession(sessionId).messages.at(-1)?.activityTrace
-        ?.some((item) => item.kind === "tool"),
+      store
+        .getSession(sessionId)
+        .messages.at(-1)
+        ?.activityTrace?.some((item) => item.kind === "tool"),
     ).toBe(false);
 
     const restored = await store.selectSession(sessionId);
     const message = restored.activeSession!.messages.at(-1)!;
-    expect(message.activityTrace?.map((item) => item.kind)).toEqual([
-      "tool",
-      "response",
-    ]);
+    expect(message.activityTrace?.map((item) => item.kind)).toEqual(["tool", "response"]);
     expect(message.activityTrace?.[0]).toMatchObject({
       kind: "tool",
       toolCallId: "call-export",

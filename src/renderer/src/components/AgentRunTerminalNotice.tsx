@@ -1,5 +1,5 @@
-import React from "react";
 import type { SessionChatMessage } from "@shared/session";
+import type React from "react";
 
 interface AgentRunTerminalNoticeProps {
   status: SessionChatMessage["runStatus"];
@@ -16,10 +16,7 @@ export const AgentRunTerminalNotice: React.FC<AgentRunTerminalNoticeProps> = ({
 
   const failed = status === "failed";
   return (
-    <div
-      className={`agent-run-terminal-notice agent-run-terminal-notice--${status}`}
-      role="status"
-    >
+    <div className={`agent-run-terminal-notice agent-run-terminal-notice--${status}`} role="status">
       <span className="agent-run-terminal-notice-copy">
         <strong>{failed ? "本次处理未完成" : "会话已中断"}</strong>
         {failed && error && <small>{error}</small>}

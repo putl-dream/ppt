@@ -14,7 +14,8 @@ export const getSelectionTool: ToolDefinition<
   { currentSlideId?: string; selectedElementIds: string[] }
 > = {
   name: "GetSelection",
-  description: "获取用户当前在 PPT 编辑器中选中的页面 ID。元素级选择已移除，selectedElementIds 恒为空。",
+  description:
+    "获取用户当前在 PPT 编辑器中选中的页面 ID。元素级选择已移除，selectedElementIds 恒为空。",
   category: "core",
   loadPolicy: "core",
   inputSchema: getSelectionSchema,

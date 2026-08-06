@@ -76,15 +76,11 @@ const FORBIDDEN_ELEMENTS = new Set([
   "switch",
 ]);
 
-const DATA_IMAGE_HREF =
-  /^data:image\/(?:png|jpeg|gif|webp);base64,[a-z0-9+/]+={0,2}$/i;
+const DATA_IMAGE_HREF = /^data:image\/(?:png|jpeg|gif|webp);base64,[a-z0-9+/]+={0,2}$/i;
 const NON_FINITE_NUMBER = /(^|[^a-z0-9_])(?:nan|[-+]?infinity)(?=$|[^a-z0-9_])/i;
 const XML_NAME = /^[A-Za-z_][A-Za-z0-9_.:-]*/;
 export const MAX_SVG_VALIDATION_ISSUES = 200;
-const issueKeysByCollection = new WeakMap<
-  SvgPageValidationIssue[],
-  Set<string>
->();
+const issueKeysByCollection = new WeakMap<SvgPageValidationIssue[], Set<string>>();
 const truncatedIssueCollections = new WeakSet<SvgPageValidationIssue[]>();
 
 function localName(name: string): string {
@@ -101,10 +97,7 @@ function createResult(issues: SvgPageValidationIssue[]): SvgPageValidationResult
   };
 }
 
-function addIssue(
-  issues: SvgPageValidationIssue[],
-  issue: SvgPageValidationIssue,
-): void {
+function addIssue(issues: SvgPageValidationIssue[], issue: SvgPageValidationIssue): void {
   let issueKeys = issueKeysByCollection.get(issues);
   if (!issueKeys) {
     issueKeys = new Set<string>();
@@ -115,8 +108,7 @@ function addIssue(
       truncatedIssueCollections.add(issues);
       issues.push({
         code: "validation-limit",
-        message:
-          `SVG validation stopped collecting issues after ${MAX_SVG_VALIDATION_ISSUES} findings.`,
+        message: `SVG validation stopped collecting issues after ${MAX_SVG_VALIDATION_ISSUES} findings.`,
       });
     }
     return;
@@ -128,12 +120,14 @@ function addIssue(
 }
 
 function isValidXmlCodePoint(codePoint: number): boolean {
-  return codePoint === 0x09
-    || codePoint === 0x0a
-    || codePoint === 0x0d
-    || (codePoint >= 0x20 && codePoint <= 0xd7ff)
-    || (codePoint >= 0xe000 && codePoint <= 0xfffd)
-    || (codePoint >= 0x10000 && codePoint <= 0x10ffff);
+  return (
+    codePoint === 0x09 ||
+    codePoint === 0x0a ||
+    codePoint === 0x0d ||
+    (codePoint >= 0x20 && codePoint <= 0xd7ff) ||
+    (codePoint >= 0xe000 && codePoint <= 0xfffd) ||
+    (codePoint >= 0x10000 && codePoint <= 0x10ffff)
+  );
 }
 
 function decodeXmlAttribute(
@@ -162,9 +156,9 @@ function decodeXmlAttribute(
         codePoint = Number.parseInt(normalized.slice(1), 10);
       }
       if (
-        codePoint === undefined
-        || !Number.isInteger(codePoint)
-        || !isValidXmlCodePoint(codePoint)
+        codePoint === undefined ||
+        !Number.isInteger(codePoint) ||
+        !isValidXmlCodePoint(codePoint)
       ) {
         invalidEntity = true;
         return token;
@@ -173,10 +167,7 @@ function decodeXmlAttribute(
     },
   );
 
-  const withoutValidEntities = rawValue.replace(
-    /&(?:#x[0-9a-f]+|#\d+|amp|apos|gt|lt|quot);/gi,
-    "",
-  );
+  const withoutValidEntities = rawValue.replace(/&(?:#x[0-9a-f]+|#\d+|amp|apos|gt|lt|quot);/gi, "");
   if (invalidEntity || withoutValidEntities.includes("&")) {
     addIssue(issues, {
       code: "invalid-xml",
@@ -322,17 +313,13 @@ function parseStartTag(
   return { name, attributes, selfClosing };
 }
 
-function attributeByName(
-  attributes: ParsedAttribute[],
-  name: string,
-): ParsedAttribute | undefined {
+function attributeByName(attributes: ParsedAttribute[], name: string): ParsedAttribute | undefined {
   return attributes.find((attribute) => attribute.name === name);
 }
 
 function hasUnsafeUrl(value: string): boolean {
   const compact = value.replace(/[\u0000-\u0020\u007f]+/g, "").toLowerCase();
-  return /(?:https?|ftp|ftps|ws|wss|file|javascript):/.test(compact)
-    || compact.startsWith("//");
+  return /(?:https?|ftp|ftps|ws|wss|file|javascript):/.test(compact) || compact.startsWith("//");
 }
 
 function collectCssUrlReferences(
@@ -395,8 +382,8 @@ function inspectElement(
       });
     }
     if (
-      !attribute.value.toLowerCase().startsWith("data:image/")
-      && NON_FINITE_NUMBER.test(attribute.value)
+      !attribute.value.toLowerCase().startsWith("data:image/") &&
+      NON_FINITE_NUMBER.test(attribute.value)
     ) {
       addIssue(issues, {
         code: "non-finite-number",
@@ -434,12 +421,11 @@ function inspectElement(
       });
     }
     if (
-      attributeLocalName === "style"
-      && (
-        /(?:^|[;\s])(?:filter|mask|mix-blend-mode|isolation|behavior|-moz-binding)\s*:/i
-          .test(attribute.value)
-        || /\bexpression\s*\(/i.test(attribute.value)
-      )
+      attributeLocalName === "style" &&
+      (/(?:^|[;\s])(?:filter|mask|mix-blend-mode|isolation|behavior|-moz-binding)\s*:/i.test(
+        attribute.value,
+      ) ||
+        /\bexpression\s*\(/i.test(attribute.value))
     ) {
       addIssue(issues, {
         code: "forbidden-css",
@@ -459,13 +445,7 @@ function inspectElement(
       });
     }
 
-    collectCssUrlReferences(
-      attribute.value,
-      tag.name,
-      attribute,
-      references,
-      issues,
-    );
+    collectCssUrlReferences(attribute.value, tag.name, attribute, references, issues);
 
     if (attributeLocalName === "id") {
       const previousIndex = ids.get(attribute.value);
@@ -488,8 +468,7 @@ function inspectElement(
       if (!DATA_IMAGE_HREF.test(attribute.value)) {
         addIssue(issues, {
           code: "invalid-image-href",
-          message:
-            `Image href on <${tag.name}> must be a base64 data URI using PNG, JPEG, GIF, or WebP.`,
+          message: `Image href on <${tag.name}> must be a base64 data URI using PNG, JPEG, GIF, or WebP.`,
           index: attribute.index,
           element: tag.name,
           attribute: attribute.name,
@@ -555,26 +534,20 @@ function inspectXmlTextEntities(
   issues: SvgPageValidationIssue[],
 ): void {
   let invalidEntity = false;
-  text.replace(
-    /&(#x[0-9a-f]+|#\d+|[A-Za-z][A-Za-z0-9._:-]*);/gi,
-    (_token, entity: string) => {
-      const normalized = entity.toLowerCase();
-      if (["amp", "apos", "gt", "lt", "quot"].includes(normalized)) return "";
-      const codePoint = normalized.startsWith("#x")
-        ? Number.parseInt(normalized.slice(2), 16)
-        : normalized.startsWith("#")
-          ? Number.parseInt(normalized.slice(1), 10)
-          : Number.NaN;
-      if (!Number.isInteger(codePoint) || !isValidXmlCodePoint(codePoint)) {
-        invalidEntity = true;
-      }
-      return "";
-    },
-  );
-  const withoutValidEntities = text.replace(
-    /&(?:#x[0-9a-f]+|#\d+|amp|apos|gt|lt|quot);/gi,
-    "",
-  );
+  text.replace(/&(#x[0-9a-f]+|#\d+|[A-Za-z][A-Za-z0-9._:-]*);/gi, (_token, entity: string) => {
+    const normalized = entity.toLowerCase();
+    if (["amp", "apos", "gt", "lt", "quot"].includes(normalized)) return "";
+    const codePoint = normalized.startsWith("#x")
+      ? Number.parseInt(normalized.slice(2), 16)
+      : normalized.startsWith("#")
+        ? Number.parseInt(normalized.slice(1), 10)
+        : Number.NaN;
+    if (!Number.isInteger(codePoint) || !isValidXmlCodePoint(codePoint)) {
+      invalidEntity = true;
+    }
+    return "";
+  });
+  const withoutValidEntities = text.replace(/&(?:#x[0-9a-f]+|#\d+|amp|apos|gt|lt|quot);/gi, "");
   if (invalidEntity || withoutValidEntities.includes("&")) {
     addIssue(issues, {
       code: "invalid-xml",
@@ -594,7 +567,7 @@ export function validateSvgPage(markup: string): SvgPageValidationResult {
     });
     return createResult(issues);
   }
-  for (let index = 0; index < markup.length;) {
+  for (let index = 0; index < markup.length; ) {
     const codePoint = markup.codePointAt(index)!;
     if (!isValidXmlCodePoint(codePoint)) {
       addIssue(issues, {
@@ -636,23 +609,11 @@ export function validateSvgPage(markup: string): SvgPageValidationResult {
     const tagStart = markup.indexOf("<", cursor);
     if (tagStart < 0) {
       inspectXmlTextEntities(markup.slice(cursor), cursor, issues);
-      inspectTextOutsideRoot(
-        markup.slice(cursor),
-        cursor,
-        rootSeen,
-        rootClosed,
-        issues,
-      );
+      inspectTextOutsideRoot(markup.slice(cursor), cursor, rootSeen, rootClosed, issues);
       break;
     }
     inspectXmlTextEntities(markup.slice(cursor, tagStart), cursor, issues);
-    inspectTextOutsideRoot(
-      markup.slice(cursor, tagStart),
-      cursor,
-      rootSeen,
-      rootClosed,
-      issues,
-    );
+    inspectTextOutsideRoot(markup.slice(cursor, tagStart), cursor, rootSeen, rootClosed, issues);
 
     if (markup.startsWith("<!--", tagStart)) {
       const commentEnd = markup.indexOf("-->", tagStart + 4);
@@ -709,13 +670,14 @@ export function validateSvgPage(markup: string): SvgPageValidationResult {
       }
       const instruction = markup.slice(tagStart + 2, instructionEnd).trim();
       const validXmlDeclaration =
-        /^xml\s+version\s*=\s*(["'])1\.0\1(?:\s+encoding\s*=\s*(["'])utf-8\2)?(?:\s+standalone\s*=\s*(["'])(?:yes|no)\3)?\s*$/i
-          .test(instruction);
+        /^xml\s+version\s*=\s*(["'])1\.0\1(?:\s+encoding\s*=\s*(["'])utf-8\2)?(?:\s+standalone\s*=\s*(["'])(?:yes|no)\3)?\s*$/i.test(
+          instruction,
+        );
       if (
-        !/^xml(?:\s|$)/i.test(instruction)
-        || xmlDeclarationSeen
-        || rootSeen
-        || markup.slice(0, tagStart).trim()
+        !/^xml(?:\s|$)/i.test(instruction) ||
+        xmlDeclarationSeen ||
+        rootSeen ||
+        markup.slice(0, tagStart).trim()
       ) {
         addIssue(issues, {
           code: "forbidden-declaration",
@@ -826,10 +788,8 @@ export function validateSvgPage(markup: string): SvgPageValidationResult {
       }
     }
     if (
-      tag.name.toLowerCase().startsWith("xlink:")
-      || tag.attributes.some((attribute) =>
-        attribute.name.toLowerCase().startsWith("xlink:")
-      )
+      tag.name.toLowerCase().startsWith("xlink:") ||
+      tag.attributes.some((attribute) => attribute.name.toLowerCase().startsWith("xlink:"))
     ) {
       usesXlinkPrefix = true;
     }
@@ -870,8 +830,8 @@ export function validateSvgPage(markup: string): SvgPageValidationResult {
     }
     const xlinkNamespace = attributeByName(root.attributes, "xmlns:xlink");
     if (
-      usesXlinkPrefix
-      && (!xlinkNamespace || xlinkNamespace.value !== "http://www.w3.org/1999/xlink")
+      usesXlinkPrefix &&
+      (!xlinkNamespace || xlinkNamespace.value !== "http://www.w3.org/1999/xlink")
     ) {
       addIssue(issues, {
         code: "invalid-namespace",
@@ -895,13 +855,12 @@ export function validateSvgPage(markup: string): SvgPageValidationResult {
     const width = attributeByName(root.attributes, "width");
     const height = attributeByName(root.attributes, "height");
     if (
-      width?.value.trim() !== String(SVG_PAGE_WIDTH)
-      || height?.value.trim() !== String(SVG_PAGE_HEIGHT)
+      width?.value.trim() !== String(SVG_PAGE_WIDTH) ||
+      height?.value.trim() !== String(SVG_PAGE_HEIGHT)
     ) {
       addIssue(issues, {
         code: "invalid-dimensions",
-        message:
-          `Root <svg> must declare width="${SVG_PAGE_WIDTH}" and height="${SVG_PAGE_HEIGHT}".`,
+        message: `Root <svg> must declare width="${SVG_PAGE_WIDTH}" and height="${SVG_PAGE_HEIGHT}".`,
         index: width?.index ?? height?.index ?? 0,
         element: root.name,
       });
@@ -910,7 +869,8 @@ export function validateSvgPage(markup: string): SvgPageValidationResult {
     if (rootTransform) {
       addIssue(issues, {
         code: "invalid-root",
-        message: "Root <svg> must not use transform; author geometry in the canonical page coordinates.",
+        message:
+          "Root <svg> must not use transform; author geometry in the canonical page coordinates.",
         index: rootTransform.index,
         element: root.name,
         attribute: rootTransform.name,
@@ -949,7 +909,9 @@ export class SvgPageValidationError extends Error {
     const details = issues
       .map((issue, index) => `${index + 1}. [${issue.code}] ${issue.message}`)
       .join("\n");
-    super(`Invalid SVG page (${issues.length} issue${issues.length === 1 ? "" : "s"}):\n${details}`);
+    super(
+      `Invalid SVG page (${issues.length} issue${issues.length === 1 ? "" : "s"}):\n${details}`,
+    );
     this.name = "SvgPageValidationError";
     this.issues = issues;
   }

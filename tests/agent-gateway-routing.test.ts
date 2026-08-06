@@ -95,25 +95,28 @@ describe("AgentGateway", () => {
       yield { type: "complete", content: [{ type: "text", text: config.model }] };
     });
     const gateway = new AgentGateway();
-    const primary = gateway.configure({
-      configurationId: "primary-openai",
-      provider: "openai",
-      model: "shared-model",
-      apiKey: "primary-key",
-      baseURL: "https://primary.example.test/v1",
-      openaiApiMode: "responses",
-    }, {
-      timeoutMs: 180_000,
-      maxOutputTokens: 16_384,
-      fallbackModel: {
-        configurationId: "fallback-openai",
+    const primary = gateway.configure(
+      {
+        configurationId: "primary-openai",
         provider: "openai",
         model: "shared-model",
-        apiKey: "fallback-key",
-        baseURL: "https://fallback.example.test/v1",
-        openaiApiMode: "chat-completions",
+        apiKey: "primary-key",
+        baseURL: "https://primary.example.test/v1",
+        openaiApiMode: "responses",
       },
-    });
+      {
+        timeoutMs: 180_000,
+        maxOutputTokens: 16_384,
+        fallbackModel: {
+          configurationId: "fallback-openai",
+          provider: "openai",
+          model: "shared-model",
+          apiKey: "fallback-key",
+          baseURL: "https://fallback.example.test/v1",
+          openaiApiMode: "chat-completions",
+        },
+      },
+    );
     const fallback = {
       configurationId: "fallback-openai",
       provider: "openai" as const,
@@ -166,19 +169,22 @@ describe("AgentGateway", () => {
       content: [{ type: "text", text: config.model }],
     }));
     const gateway = new AgentGateway();
-    const primary = gateway.configure({
-      provider: "openai",
-      model: "primary-model",
-      apiKey: "primary-key",
-    }, {
-      timeoutMs: 180_000,
-      maxOutputTokens: 16_384,
-      fallbackModel: {
+    const primary = gateway.configure(
+      {
         provider: "openai",
-        model: "fallback-model",
-        apiKey: "fallback-key",
+        model: "primary-model",
+        apiKey: "primary-key",
       },
-    });
+      {
+        timeoutMs: 180_000,
+        maxOutputTokens: 16_384,
+        fallbackModel: {
+          provider: "openai",
+          model: "fallback-model",
+          apiKey: "fallback-key",
+        },
+      },
+    );
 
     await gateway.queryModel({ prompt: "primary" }, primary);
     await gateway.queryModel(
@@ -197,9 +203,18 @@ describe("AgentGateway", () => {
   });
 
   it.each([
-    ["unknown identity", { configurationId: "unknown", provider: "openai" as const, model: "primary-model" }],
-    ["model mismatch", { configurationId: "primary-openai", provider: "openai" as const, model: "other-model" }],
-    ["provider mismatch", { configurationId: "primary-openai", provider: "anthropic" as const, model: "primary-model" }],
+    [
+      "unknown identity",
+      { configurationId: "unknown", provider: "openai" as const, model: "primary-model" },
+    ],
+    [
+      "model mismatch",
+      { configurationId: "primary-openai", provider: "openai" as const, model: "other-model" },
+    ],
+    [
+      "provider mismatch",
+      { configurationId: "primary-openai", provider: "anthropic" as const, model: "primary-model" },
+    ],
   ])("fails closed for an explicit %s", async (_label, selection) => {
     const gateway = new AgentGateway();
     gateway.configure({
@@ -224,21 +239,24 @@ describe("AgentGateway", () => {
       content: [{ type: "text", text: config.model }],
     }));
     const gateway = new AgentGateway();
-    gateway.configure({
-      configurationId: "primary-openai",
-      provider: "openai",
-      model: "primary-model",
-      apiKey: "primary-key",
-    }, {
-      timeoutMs: 180_000,
-      maxOutputTokens: 16_384,
-      fallbackModel: {
-        configurationId: "old-fallback",
+    gateway.configure(
+      {
+        configurationId: "primary-openai",
         provider: "openai",
-        model: "old-model",
-        apiKey: "old-key",
+        model: "primary-model",
+        apiKey: "primary-key",
       },
-    });
+      {
+        timeoutMs: 180_000,
+        maxOutputTokens: 16_384,
+        fallbackModel: {
+          configurationId: "old-fallback",
+          provider: "openai",
+          model: "old-model",
+          apiKey: "old-key",
+        },
+      },
+    );
     gateway.applyGatewayConfig({
       timeoutMs: 180_000,
       maxOutputTokens: 16_384,
@@ -250,16 +268,24 @@ describe("AgentGateway", () => {
       },
     });
 
-    await expect(gateway.queryModel({ prompt: "old" }, {
-      configurationId: "old-fallback",
-      provider: "openai",
-      model: "old-model",
-    })).rejects.toMatchObject({ code: "configuration" });
-    await gateway.queryModel({ prompt: "new" }, {
-      configurationId: "new-fallback",
-      provider: "openai",
-      model: "new-model",
-    });
+    await expect(
+      gateway.queryModel(
+        { prompt: "old" },
+        {
+          configurationId: "old-fallback",
+          provider: "openai",
+          model: "old-model",
+        },
+      ),
+    ).rejects.toMatchObject({ code: "configuration" });
+    await gateway.queryModel(
+      { prompt: "new" },
+      {
+        configurationId: "new-fallback",
+        provider: "openai",
+        model: "new-model",
+      },
+    );
     expect(providerMocks.openai).toHaveBeenCalledWith(
       expect.objectContaining({ apiKey: "new-key", model: "new-model" }),
       expect.anything(),
@@ -267,11 +293,16 @@ describe("AgentGateway", () => {
 
     gateway.applyGatewayConfig({ timeoutMs: 180_000, maxOutputTokens: 16_384 });
 
-    await expect(gateway.queryModel({ prompt: "new" }, {
-      configurationId: "new-fallback",
-      provider: "openai",
-      model: "new-model",
-    })).rejects.toMatchObject({ code: "configuration" });
+    await expect(
+      gateway.queryModel(
+        { prompt: "new" },
+        {
+          configurationId: "new-fallback",
+          provider: "openai",
+          model: "new-model",
+        },
+      ),
+    ).rejects.toMatchObject({ code: "configuration" });
   });
 
   it("routes an Anthropic selection to the Anthropic adapter", async () => {
@@ -334,10 +365,7 @@ describe("AgentGateway", () => {
       openaiApiMode: "chat-completions",
     });
 
-    await gateway.queryModel(
-      { prompt: "Hello" },
-      { provider: "openai", model: "openai-test" },
-    );
+    await gateway.queryModel({ prompt: "Hello" }, { provider: "openai", model: "openai-test" });
 
     expect(providerMocks.openai.mock.calls[0][0]).toMatchObject({
       callPath: "chat",
@@ -373,14 +401,20 @@ describe("AgentGateway", () => {
       // Consume the stream so the completion usage is recorded.
     }
 
-    expect(recorder).toHaveBeenNthCalledWith(1, expect.objectContaining({
-      configurationId: "price-config",
-      totalTokens: 15,
-    }));
-    expect(recorder).toHaveBeenNthCalledWith(2, expect.objectContaining({
-      configurationId: "price-config",
-      totalTokens: 30,
-    }));
+    expect(recorder).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        configurationId: "price-config",
+        totalTokens: 15,
+      }),
+    );
+    expect(recorder).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        configurationId: "price-config",
+        totalTokens: 30,
+      }),
+    );
   });
 
   it("prepares response contracts, pairing, and ephemeral context once before dispatch", async () => {
@@ -395,18 +429,23 @@ describe("AgentGateway", () => {
       model: "anthropic-test",
       apiKey: "secret",
     });
-    const messages = [{
-      role: "assistant" as const,
-      content: [{ type: "tool_use" as const, id: "call-1", name: "Read", input: {} }],
-    }];
+    const messages = [
+      {
+        role: "assistant" as const,
+        content: [{ type: "tool_use" as const, id: "call-1", name: "Read", input: {} }],
+      },
+    ];
     const original = structuredClone(messages);
 
-    await gateway.queryModel({
-      prompt: "request context",
-      systemPrompt: "system",
-      responseContract: "markdown",
-      messages,
-    }, selection);
+    await gateway.queryModel(
+      {
+        prompt: "request context",
+        systemPrompt: "system",
+        responseContract: "markdown",
+        messages,
+      },
+      selection,
+    );
 
     const prepared = providerMocks.anthropic.mock.calls[0][1];
     expect(prepared.systemPrompt).toContain("<!-- RESPONSE_CONTRACT:markdown -->");
@@ -488,7 +527,9 @@ describe("AgentGateway", () => {
       model: "openai-test",
       apiKey: "secret",
     });
-    providerMocks.openai.mockRejectedValueOnce(Object.assign(new Error("slow down"), { status: 429 }));
+    providerMocks.openai.mockRejectedValueOnce(
+      Object.assign(new Error("slow down"), { status: 429 }),
+    );
     await expect(gateway.queryModel({ prompt: "Hello" }, selection)).rejects.toMatchObject({
       code: "rate-limit",
       provider: "openai",

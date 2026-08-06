@@ -1,11 +1,11 @@
 import type React from "react";
-import { UnifiedAgentInput } from "./UnifiedAgentInput";
 import type {
   ChatWorkspaceActions,
   ChatWorkspaceComposer,
   ChatWorkspaceInputRuntime,
   ChatWorkspaceRun,
 } from "./chat-workspace-types";
+import { UnifiedAgentInput } from "./UnifiedAgentInput";
 
 interface ChatWorkspaceInputProps {
   composer: ChatWorkspaceComposer;

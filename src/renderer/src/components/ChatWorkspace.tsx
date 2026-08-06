@@ -1,11 +1,11 @@
-import { useRef, type ReactNode } from "react";
 import {
   findActiveToolPermissionCard,
   usePermissionCardManager,
-} from "../cards/display-card-managers";
-import { CHAT_WORKSPACE_COPY_ZH_CN as copy } from "./chat-workspace-copy";
+} from "@shared/cards/display-card-managers";
+import { type ReactNode, useRef } from "react";
 import { ChatWorkspaceConversation } from "./ChatWorkspaceConversation";
 import { ChatWorkspaceWelcome } from "./ChatWorkspaceWelcome";
+import { CHAT_WORKSPACE_COPY_ZH_CN as copy } from "./chat-workspace-copy";
 import type { ChatWorkspaceInputRuntime, ChatWorkspaceProps } from "./chat-workspace-types";
 import { ChatScrollProvider } from "./useChatScroll";
 
@@ -35,9 +35,10 @@ function ChatWorkspaceContent({
 
   const managedPermissionCards = usePermissionCardManager((state) => state.cards);
   const managedPermission = findActiveToolPermissionCard(managedPermissionCards, run.activeRunId);
-  const pendingToolApproval = managedPermission?.event.kind === "permission.tool-requested"
-    ? managedPermission.event.payload
-    : undefined;
+  const pendingToolApproval =
+    managedPermission?.event.kind === "permission.tool-requested"
+      ? managedPermission.event.payload
+      : undefined;
   const inputRuntime: ChatWorkspaceInputRuntime = {
     pendingToolApproval: pendingToolApproval
       ? {
@@ -50,8 +51,9 @@ function ChatWorkspaceContent({
     canCancelRun: Boolean(run.busy && run.activeRunId && run.onCancel),
     runStartedAt: activeRunStartedAtRef.current ?? undefined,
   };
-  const title = session.conversationTitle?.trim()
-    || (session.isNewChat ? copy.newChatTitle : copy.currentChatTitle);
+  const title =
+    session.conversationTitle?.trim() ||
+    (session.isNewChat ? copy.newChatTitle : copy.currentChatTitle);
 
   if (session.isNewChat) {
     return (

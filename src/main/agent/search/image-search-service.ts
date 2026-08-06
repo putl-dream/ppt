@@ -56,17 +56,18 @@ export class ImageSearchService {
       logo: "official logo transparent background",
     }[request.visualKind];
     const query = `${request.brief.trim()} ${kindPhrase} landscape no text`;
-    const rawSearch = await executeWebSearch({
-      query,
-      max_results: Math.max(3, request.maxImages),
-      search_depth: "basic",
-      topic: "general",
-      include_images: true,
-      max_images: request.maxImages,
-      ...(request.sourceMode === "free"
-        ? { allowed_domains: [...FREE_IMAGE_DOMAINS] }
-        : {}),
-    }, options);
+    const rawSearch = await executeWebSearch(
+      {
+        query,
+        max_results: Math.max(3, request.maxImages),
+        search_depth: "basic",
+        topic: "general",
+        include_images: true,
+        max_images: request.maxImages,
+        ...(request.sourceMode === "free" ? { allowed_domains: [...FREE_IMAGE_DOMAINS] } : {}),
+      },
+      options,
+    );
     return {
       query,
       rawSearch,

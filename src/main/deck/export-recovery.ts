@@ -1,16 +1,14 @@
 import { readFile } from "node:fs/promises";
-import { presentationSchema, type Presentation } from "@shared/presentation";
 import type { ExportPresentationOptions } from "@shared/ipc";
-import type {
-  PptJobId,
-  PresentationRevisionId,
-} from "@shared/presentation-lifecycle";
-import type { PresentationLifecycleOrchestrator } from
-  "../presentation-lifecycle/presentation-lifecycle-orchestrator";
-import { hashArtifactValue, hashBytes } from
-  "../presentation-lifecycle/content-addressed-blob-store";
-import { inspectPptxExport } from "./pptx-postflight";
+import { type Presentation, presentationSchema } from "@shared/presentation";
+import type { PptJobId, PresentationRevisionId } from "@shared/presentation-lifecycle";
+import {
+  hashArtifactValue,
+  hashBytes,
+} from "../presentation-lifecycle/content-addressed-blob-store";
+import type { PresentationLifecycleOrchestrator } from "../presentation-lifecycle/presentation-lifecycle-orchestrator";
 import { createPptxExportIdentity } from "./export-identity";
+import { inspectPptxExport } from "./pptx-postflight";
 
 export interface ExportRecoveryProof {
   passed: true;
@@ -97,8 +95,8 @@ export async function recoverInterruptedExport(input: {
       "A previous export attempt has an unproven outcome; it will not be replayed.",
     );
     throw new Error(
-      "A previous export attempt may have written this destination. "
-      + "Choose a new destination after verifying the file.",
+      "A previous export attempt may have written this destination. " +
+        "Choose a new destination after verifying the file.",
     );
   }
 

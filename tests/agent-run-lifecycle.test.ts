@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  type AgentRunContext,
   coordinateAgentRun,
   createAgentRunLock,
-  type AgentRunContext,
 } from "../src/shared/agent-run-lifecycle";
 
 const context: AgentRunContext = {
@@ -45,12 +45,7 @@ describe("agent run lifecycle", () => {
       cleanup: () => calls.push("cleanup"),
     });
 
-    expect(calls).toEqual([
-      "prepare",
-      "execute",
-      "finalize:result",
-      "cleanup",
-    ]);
+    expect(calls).toEqual(["prepare", "execute", "finalize:result", "cleanup"]);
   });
 
   it("handles preparation failures and always cleans up", async () => {

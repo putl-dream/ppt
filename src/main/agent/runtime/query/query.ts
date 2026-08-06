@@ -1,14 +1,11 @@
 import { ModelTurnRunner } from "../turns/model-turn-runner";
-import type {
-  AgentLoopTerminalOutcome,
-  PreparedAgentRun,
-} from "../turns/prepared-agent-run";
+import type { AgentLoopTerminalOutcome, PreparedAgentRun } from "../turns/prepared-agent-run";
 import { ToolTurnRunner } from "../turns/tool-turn-runner";
 import {
-  createIterationWorkspace,
-  reduceQueryState,
   type AgentQueryContinue,
   type AgentQueryLoopEvent,
+  createIterationWorkspace,
+  reduceQueryState,
 } from "./query-types";
 
 export interface AgentQueryDriver {
@@ -96,12 +93,7 @@ async function* runQueryMachine(
         terminal: toolOutcome.type === "terminal",
       };
       if (toolOutcome.type === "terminal") {
-        const committed = await commitTerminalWorkspace(
-          run,
-          state,
-          workspace,
-          toolOutcome,
-        );
+        const committed = await commitTerminalWorkspace(run, state, workspace, toolOutcome);
         state = committed.state;
         if (committed.didCommit) {
           yield {
@@ -132,9 +124,8 @@ async function* runQueryMachine(
     };
   }
 
-  let replayWorkspace = run.initialWorkspacePhase === "model_streaming"
-    ? run.initialWorkspace
-    : undefined;
+  let replayWorkspace =
+    run.initialWorkspacePhase === "model_streaming" ? run.initialWorkspace : undefined;
 
   while (true) {
     if (state.turnCount >= run.params.maxTurns) {
@@ -166,12 +157,7 @@ async function* runQueryMachine(
       toolUseCount: workspace.toolUseBlocks.length,
     };
     if (modelOutcome.type === "terminal") {
-      const committed = await commitTerminalWorkspace(
-        run,
-        state,
-        workspace,
-        modelOutcome,
-      );
+      const committed = await commitTerminalWorkspace(run, state, workspace, modelOutcome);
       state = committed.state;
       if (committed.didCommit) {
         yield {
@@ -207,12 +193,7 @@ async function* runQueryMachine(
         terminal: toolOutcome.type === "terminal",
       };
       if (toolOutcome.type === "terminal") {
-        const committed = await commitTerminalWorkspace(
-          run,
-          state,
-          workspace,
-          toolOutcome,
-        );
+        const committed = await commitTerminalWorkspace(run, state, workspace, toolOutcome);
         state = committed.state;
         if (committed.didCommit) {
           yield {
@@ -234,9 +215,7 @@ async function* runQueryMachine(
     }
 
     const transition: AgentQueryContinue = {
-      reason: modelOutcome.type === "continue"
-        ? modelOutcome.reason ?? "next_turn"
-        : "next_turn",
+      reason: modelOutcome.type === "continue" ? (modelOutcome.reason ?? "next_turn") : "next_turn",
     };
     state = reduceQueryState(state, workspace, transition);
     scope.setCommittedQueryState(state);
@@ -258,10 +237,7 @@ async function commitTerminalWorkspace(
 ): Promise<{ state: Parameters<typeof reduceQueryState>[0]; didCommit: boolean }> {
   // A user-interaction terminal deliberately keeps the paired batch inflight
   // so waiting_user resume can append the answer to the same logical Query.
-  if (
-    outcome.result.type === "ask_user"
-    || !hasCompleteToolPairing(workspace)
-  ) {
+  if (outcome.result.type === "ask_user" || !hasCompleteToolPairing(workspace)) {
     return { state, didCommit: false };
   }
 
@@ -272,9 +248,7 @@ async function commitTerminalWorkspace(
   return { state: nextState, didCommit: true };
 }
 
-function hasCompleteToolPairing(
-  workspace: Parameters<typeof reduceQueryState>[1],
-): boolean {
+function hasCompleteToolPairing(workspace: Parameters<typeof reduceQueryState>[1]): boolean {
   if (workspace.toolUseBlocks.length !== workspace.toolResults.length) return false;
   const resultIds = new Set(workspace.toolResults.map((result) => result.toolUseId));
   return workspace.toolUseBlocks.every((toolUse) => resultIds.has(toolUse.id));

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { ConversationDatabase } from "../src/main/conversation-database";
 import { withLogContext } from "../src/main/agent/logger";
 import { AgentEventPorts } from "../src/main/agent/runtime/lifecycle/agent-event-ports";
+import type { ConversationDatabase } from "../src/main/conversation-database";
 
 const originalLogLevel = process.env.AGENT_LOG_LEVEL;
 const originalLogFile = process.env.AGENT_LOG_FILE;
@@ -33,14 +33,18 @@ describe("AgentEventPorts logging", () => {
     });
 
     withLogContext({ runId: "run-1", threadId: "thread-1", queryId: "query-1" }, () => {
-      ports.audit("tool_call", {
-        toolUseId: "call-1",
-        toolName: "ExampleTool",
-        input: {
-          apiKey: "sk-1234567890abcdefghij",
-          pngBase64: "a".repeat(2_000),
+      ports.audit(
+        "tool_call",
+        {
+          toolUseId: "call-1",
+          toolName: "ExampleTool",
+          input: {
+            apiKey: "sk-1234567890abcdefghij",
+            pngBase64: "a".repeat(2_000),
+          },
         },
-      }, "model_only");
+        "model_only",
+      );
       ports.renderer({
         type: "tool-state",
         toolCallId: "call-1",
@@ -56,15 +60,19 @@ describe("AgentEventPorts logging", () => {
         status: "completed",
         message: "done",
       });
-      ports.audit("tool_result", {
-        toolUseId: "call-1",
-        toolName: "ExampleTool",
-        isError: false,
-        content: [
-          { type: "text", text: "completed" },
-          { type: "image", mediaType: "image/png", data: "b".repeat(2_000) },
-        ],
-      }, "model_only");
+      ports.audit(
+        "tool_result",
+        {
+          toolUseId: "call-1",
+          toolName: "ExampleTool",
+          isError: false,
+          content: [
+            { type: "text", text: "completed" },
+            { type: "image", mediaType: "image/png", data: "b".repeat(2_000) },
+          ],
+        },
+        "model_only",
+      );
     });
 
     const infoEntries = entriesFrom(info.mock.calls);
@@ -109,11 +117,13 @@ describe("AgentEventPorts logging", () => {
       error: "network unavailable",
     });
 
-    expect(entriesFrom(warn.mock.calls)).toContainEqual(expect.objectContaining({
-      event: "tool.execution.finished",
-      status: "failed",
-      toolCallId: "call-failed",
-    }));
+    expect(entriesFrom(warn.mock.calls)).toContainEqual(
+      expect.objectContaining({
+        event: "tool.execution.finished",
+        status: "failed",
+        toolCallId: "call-failed",
+      }),
+    );
   });
 
   it("does not let audit persistence or transcript failures affect runtime control flow", () => {
@@ -132,18 +142,21 @@ describe("AgentEventPorts logging", () => {
       },
     });
 
-    expect(() => ports.audit("workflow_progress", { message: "test" }, "internal"))
-      .not.toThrow();
+    expect(() => ports.audit("workflow_progress", { message: "test" }, "internal")).not.toThrow();
 
     const warnings = entriesFrom(warn.mock.calls);
-    expect(warnings).toContainEqual(expect.objectContaining({
-      event: "runtime.audit.persist-failed",
-      eventKind: "workflow_progress",
-    }));
-    expect(warnings).toContainEqual(expect.objectContaining({
-      event: "runtime.audit.transcript-failed",
-      eventKind: "workflow_progress",
-    }));
+    expect(warnings).toContainEqual(
+      expect.objectContaining({
+        event: "runtime.audit.persist-failed",
+        eventKind: "workflow_progress",
+      }),
+    );
+    expect(warnings).toContainEqual(
+      expect.objectContaining({
+        event: "runtime.audit.transcript-failed",
+        eventKind: "workflow_progress",
+      }),
+    );
   });
 });
 

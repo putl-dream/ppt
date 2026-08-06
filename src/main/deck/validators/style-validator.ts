@@ -1,6 +1,6 @@
+import { designSystemV2Schema } from "@design-system";
 import type { DeckValidationIssue } from "@shared/deck-validation";
 import type { Presentation } from "@shared/presentation";
-import { designSystemV2Schema } from "@design-system";
 
 export interface StyleValidatorOptions {
   slideIds?: string[];
@@ -50,12 +50,15 @@ export class StyleValidator {
     if (presentation.slides.length === 0) return [];
 
     if (!designSystemV2Schema.safeParse(presentation.designSystem).success) {
-      return [{
-        category: "style",
-        severity: "error",
-        message: "Presentation designSystem is invalid.",
-        fixHint: "Lock a complete DesignSystemV2 in design/design-spec.json and resubmit via SubmitSvgDeck.",
-      }];
+      return [
+        {
+          category: "style",
+          severity: "error",
+          message: "Presentation designSystem is invalid.",
+          fixHint:
+            "Lock a complete DesignSystemV2 in design/design-spec.json and resubmit via SubmitSvgDeck.",
+        },
+      ];
     }
     return [];
   }

@@ -1,19 +1,19 @@
-import { z } from "zod";
 import { designSystemV2Schema } from "@design-system";
 import type { PresentationCommand } from "@shared/commands";
-import { slideNarrativeSchema, type Slide } from "@shared/presentation";
+import { type Slide, slideNarrativeSchema } from "@shared/presentation";
 import { assertValidSvgPage } from "@shared/svg-page";
+import { z } from "zod";
 import {
   hasSvgPagePreviewReceipt,
   loadWorkspaceSvgPage,
   normalizeWorkspaceSvgPath,
 } from "../../../deck/svg-page-loader";
 import {
-  agentCommandProposalResultSchema,
   type AgentCommandProposalResult,
+  agentCommandProposalResultSchema,
 } from "../../runtime/runtime-types";
-import type { ToolDefinition } from "../tool-definition";
 import { assumptionsSchema } from "../assumptions-schema";
+import type { ToolDefinition } from "../tool-definition";
 import { assertSvgPageLifecycleCurrent } from "./svg-deck-lifecycle";
 import {
   assertSvgDeckLocksMatchSubmission,
@@ -30,59 +30,68 @@ export {
 
 export const MAX_HYDRATED_SVG_DECK_BYTES = 128 * 1024 * 1024;
 
-const submitSvgSlideSchema = z.object({
-  id: z.string().trim().min(1).max(80),
-  title: z.string().trim().min(1).max(500),
-  path: z.string().trim().min(1).describe(
-    "Workspace-relative path to a complete 1280x720 SVG page, for example slides/svg/P01.svg.",
-  ),
-  speakerNotes: z.string().trim().max(20_000).optional(),
-  narrative: slideNarrativeSchema,
-}).strict();
+const submitSvgSlideSchema = z
+  .object({
+    id: z.string().trim().min(1).max(80),
+    title: z.string().trim().min(1).max(500),
+    path: z
+      .string()
+      .trim()
+      .min(1)
+      .describe(
+        "Workspace-relative path to a complete 1280x720 SVG page, for example slides/svg/P01.svg.",
+      ),
+    speakerNotes: z.string().trim().max(20_000).optional(),
+    narrative: slideNarrativeSchema,
+  })
+  .strict();
 
-export const submitSvgDeckSchema = z.object({
-  title: z.string().trim().min(1).max(500),
-  designSpecPath: z.literal(SVG_DECK_DESIGN_SPEC_PATH),
-  pagePlanPath: z.literal(SVG_DECK_PAGE_PLAN_PATH),
-  communication: communicationContractSchema,
-  designSystem: designSystemV2Schema,
-  slides: z.array(submitSvgSlideSchema).min(1).max(100),
-  summary: z.string().trim().min(1),
-  risk: z.enum(["low", "medium", "high"]).default("medium"),
-  assumptions: assumptionsSchema,
-}).strict().superRefine((deck, context) => {
-  const paths = new Set<string>();
-  const ids = new Set<string>();
-  deck.slides.forEach((slide, index) => {
-    let normalizedPath: string;
-    try {
-      normalizedPath = normalizeWorkspaceSvgPath(slide.path);
-    } catch (error) {
-      context.addIssue({
-        code: "custom",
-        path: ["slides", index, "path"],
-        message: error instanceof Error ? error.message : String(error),
-      });
-      return;
-    }
-    if (paths.has(normalizedPath)) {
-      context.addIssue({
-        code: "custom",
-        path: ["slides", index, "path"],
-        message: `Duplicate SVG page path: ${slide.path}`,
-      });
-    }
-    paths.add(normalizedPath);
-    if (slide.id && ids.has(slide.id)) {
-      context.addIssue({
-        code: "custom",
-        path: ["slides", index, "id"],
-        message: `Duplicate slide id: ${slide.id}`,
-      });
-    }
-    if (slide.id) ids.add(slide.id);
+export const submitSvgDeckSchema = z
+  .object({
+    title: z.string().trim().min(1).max(500),
+    designSpecPath: z.literal(SVG_DECK_DESIGN_SPEC_PATH),
+    pagePlanPath: z.literal(SVG_DECK_PAGE_PLAN_PATH),
+    communication: communicationContractSchema,
+    designSystem: designSystemV2Schema,
+    slides: z.array(submitSvgSlideSchema).min(1).max(100),
+    summary: z.string().trim().min(1),
+    risk: z.enum(["low", "medium", "high"]).default("medium"),
+    assumptions: assumptionsSchema,
+  })
+  .strict()
+  .superRefine((deck, context) => {
+    const paths = new Set<string>();
+    const ids = new Set<string>();
+    deck.slides.forEach((slide, index) => {
+      let normalizedPath: string;
+      try {
+        normalizedPath = normalizeWorkspaceSvgPath(slide.path);
+      } catch (error) {
+        context.addIssue({
+          code: "custom",
+          path: ["slides", index, "path"],
+          message: error instanceof Error ? error.message : String(error),
+        });
+        return;
+      }
+      if (paths.has(normalizedPath)) {
+        context.addIssue({
+          code: "custom",
+          path: ["slides", index, "path"],
+          message: `Duplicate SVG page path: ${slide.path}`,
+        });
+      }
+      paths.add(normalizedPath);
+      if (slide.id && ids.has(slide.id)) {
+        context.addIssue({
+          code: "custom",
+          path: ["slides", index, "id"],
+          message: `Duplicate slide id: ${slide.id}`,
+        });
+      }
+      if (slide.id) ids.add(slide.id);
+    });
   });
-});
 
 /**
  * Terminal creation boundary for the SVG-native deck pipeline.
@@ -97,10 +106,10 @@ export const submitSvgDeckTool: ToolDefinition<
 > = {
   name: "SubmitSvgDeck",
   description:
-    "新建或重做整套 PPT 的唯一 SVG-native 提交入口。先用 WriteFile 写完整页面 SVG，"
-    + "逐页用 PreviewSvgPage 成功渲染当前版本，再传入有序路径；工具会验证每页预览凭据、"
-    + `强制读取 ${SVG_DECK_DESIGN_SPEC_PATH} 与 ${SVG_DECK_PAGE_PLAN_PATH} 并核对提交参数，`
-    + "内联本地图片、严格校验，并用同一 SVG 建立预览与导出所需的 Command Proposal。",
+    "新建或重做整套 PPT 的唯一 SVG-native 提交入口。先用 WriteFile 写完整页面 SVG，" +
+    "逐页用 PreviewSvgPage 成功渲染当前版本，再传入有序路径；工具会验证每页预览凭据、" +
+    `强制读取 ${SVG_DECK_DESIGN_SPEC_PATH} 与 ${SVG_DECK_PAGE_PLAN_PATH} 并核对提交参数，` +
+    "内联本地图片、严格校验，并用同一 SVG 建立预览与导出所需的 Command Proposal。",
   category: "core",
   loadPolicy: "core",
   inputSchema: submitSvgDeckSchema,
@@ -122,25 +131,19 @@ export const submitSvgDeckTool: ToolDefinition<
     if (!context.workspaceRoot || !context.fileService) {
       throw new Error("SubmitSvgDeck requires a configured workspace.");
     }
-    context.presentationLifecycle?.requireActiveCapability([
-      "create",
-      "edit",
-      "restyle",
-    ]);
+    context.presentationLifecycle?.requireActiveCapability(["create", "edit", "restyle"]);
     await context.presentationLifecycle?.observeArtifactChanges({
       workspaceRoot: context.workspaceRoot,
       source: "submit",
     });
-    const { designSpec, pagePlan } = await readSvgDeckLocks(
-      context.fileService,
-    );
+    const { designSpec, pagePlan } = await readSvgDeckLocks(context.fileService);
     assertSvgDeckLocksMatchSubmission(args, designSpec, pagePlan);
 
     const committedPageKeys = new Set(
       context.presentation.slides.flatMap((slide) =>
         slide.visualSource?.kind === "svg"
           ? [`${slide.visualSource.sourcePath}\0${slide.visualSource.sha256}`]
-          : []
+          : [],
       ),
     );
     const slides: Slide[] = [];
@@ -154,14 +157,12 @@ export const submitSvgDeckTool: ToolDefinition<
       hydratedDeckBytes += hydrated.byteSize;
       if (hydratedDeckBytes > MAX_HYDRATED_SVG_DECK_BYTES) {
         throw new Error(
-          `Hydrated SVG deck exceeds ${MAX_HYDRATED_SVG_DECK_BYTES} bytes. `
-          + "Reduce embedded raster size or split the presentation.",
+          `Hydrated SVG deck exceeds ${MAX_HYDRATED_SVG_DECK_BYTES} bytes. ` +
+            "Reduce embedded raster size or split the presentation.",
         );
       }
       assertValidSvgPage(hydrated.markup);
-      const alreadyCommitted = committedPageKeys.has(
-        `${hydrated.sourcePath}\0${hydrated.sha256}`,
-      );
+      const alreadyCommitted = committedPageKeys.has(`${hydrated.sourcePath}\0${hydrated.sha256}`);
       if (context.presentationLifecycle) {
         await assertSvgPageLifecycleCurrent({
           lifecycle: context.presentationLifecycle,
@@ -169,23 +170,18 @@ export const submitSvgDeckTool: ToolDefinition<
           page: hydrated,
           locks: { designSpec, pagePlan },
         });
-      } else if (
-        !alreadyCommitted
-        && !hasSvgPagePreviewReceipt(context.fileService, hydrated)
-      ) {
+      } else if (!alreadyCommitted && !hasSvgPagePreviewReceipt(context.fileService, hydrated)) {
         const pageLabel = `P${String(index + 1).padStart(2, "0")}`;
         throw new Error(
-          `${pageLabel} preview gate is missing or stale for ${hydrated.sourcePath}. `
-          + "Call PreviewSvgPage with includeThumbnail=true, inspect the rendered page, "
-          + "and retry without changing that SVG afterward.",
+          `${pageLabel} preview gate is missing or stale for ${hydrated.sourcePath}. ` +
+            "Call PreviewSvgPage with includeThumbnail=true, inspect the rendered page, " +
+            "and retry without changing that SVG afterward.",
         );
       }
       slides.push({
         id: input.id,
         title: input.title,
-        ...(input.speakerNotes !== undefined
-          ? { speakerNotes: input.speakerNotes }
-          : {}),
+        ...(input.speakerNotes !== undefined ? { speakerNotes: input.speakerNotes } : {}),
         visualSource: {
           kind: "svg" as const,
           markup: hydrated.markup,
@@ -230,10 +226,10 @@ export const submitSvgDeckTool: ToolDefinition<
       risk: args.risk,
       assumptions: [
         ...(args.assumptions ?? []),
-        `Communication contract — audience: ${args.communication.audience}; `
-          + `objective: ${args.communication.objective}; desired outcome: ${args.communication.desiredOutcome}; `
-          + `core message: ${args.communication.coreMessage}; delivery: ${args.communication.deliveryContext}; `
-          + `after-use: ${args.communication.afterUse}.`,
+        `Communication contract — audience: ${args.communication.audience}; ` +
+          `objective: ${args.communication.objective}; desired outcome: ${args.communication.desiredOutcome}; ` +
+          `core message: ${args.communication.coreMessage}; delivery: ${args.communication.deliveryContext}; ` +
+          `after-use: ${args.communication.afterUse}.`,
       ],
     };
   },

@@ -1,26 +1,26 @@
+import { mkdtemp } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
-import { AgentRuntime } from "../src/main/agent/runtime/agent-runtime";
-import { ToolRegistry } from "../src/main/agent/tools/tool-registry";
-import { askUserTool } from "../src/main/agent/tools/core/ask-user";
-import { executeExtraToolTool } from "../src/main/agent/tools/core/execute-extra-tool";
-import { searchExtraToolsTool } from "../src/main/agent/tools/core/search-extra-tools";
 import type {
   AgentModelContentBlock,
   AgentModelGateway,
   AgentModelRequest,
 } from "../src/main/agent/gateway/types";
-import type { ToolDefinition } from "../src/main/agent/tools/tool-definition";
-import { createStarterPresentation } from "../src/shared/presentation-fixtures";
-import { mkdtemp } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { DurableRunStore } from "../src/main/agent/persistence/durable-run-store";
+import { AgentRuntime } from "../src/main/agent/runtime/agent-runtime";
 import type { AgentQueryLoopEvent } from "../src/main/agent/runtime/query/query-types";
 import {
-  agentCommandProposalResultSchema,
   type AgentCommandProposalResult,
+  agentCommandProposalResultSchema,
 } from "../src/main/agent/runtime/runtime-types";
+import { askUserTool } from "../src/main/agent/tools/core/ask-user";
+import { executeExtraToolTool } from "../src/main/agent/tools/core/execute-extra-tool";
+import { searchExtraToolsTool } from "../src/main/agent/tools/core/search-extra-tools";
+import type { ToolDefinition } from "../src/main/agent/tools/tool-definition";
+import { ToolRegistry } from "../src/main/agent/tools/tool-registry";
+import { createStarterPresentation } from "../src/shared/presentation-fixtures";
 import { createFakeCommandProposalTool } from "./fake-command-proposal-tool";
 
 function gatewayFor(turns: AgentModelContentBlock[][]): AgentModelGateway & {
@@ -101,18 +101,17 @@ describe("agent query loop batches", () => {
       },
     };
 
-    await expect(new AgentRuntime(new ToolRegistry(), gateway).run({
-      threadId: "query-failed-events",
-      request: "inspect",
-      presentationSnapshot: createStarterPresentation(),
-      selectedElementIds: [],
-      onQueryEvent: (event) => events.push(event),
-    })).rejects.toThrow("provider unavailable");
+    await expect(
+      new AgentRuntime(new ToolRegistry(), gateway).run({
+        threadId: "query-failed-events",
+        request: "inspect",
+        presentationSnapshot: createStarterPresentation(),
+        selectedElementIds: [],
+        onQueryEvent: (event) => events.push(event),
+      }),
+    ).rejects.toThrow("provider unavailable");
 
-    expect(events.map((event) => event.type)).toEqual([
-      "query_started",
-      "query_failed",
-    ]);
+    expect(events.map((event) => event.type)).toEqual(["query_started", "query_failed"]);
     expect(events.at(-1)).toMatchObject({
       type: "query_failed",
       error: "provider unavailable",
@@ -152,7 +151,11 @@ describe("agent query loop batches", () => {
     let executions = 0;
     const registry = new ToolRegistry();
     registry.register(askUserTool);
-    registry.register(countingTool(() => { executions += 1; }));
+    registry.register(
+      countingTool(() => {
+        executions += 1;
+      }),
+    );
     const gateway = gatewayFor([
       [
         {
@@ -180,9 +183,9 @@ describe("agent query loop batches", () => {
 
     expect(result).toEqual({ type: "message", content: "retried with a valid batch" });
     expect(executions).toBe(0);
-    const resultTurns = gateway.requests[1]!.messages!.filter((message) =>
-      message.role === "user"
-      && message.content.some((block) => block.type === "tool_result")
+    const resultTurns = gateway.requests[1]!.messages!.filter(
+      (message) =>
+        message.role === "user" && message.content.some((block) => block.type === "tool_result"),
     );
     expect(resultTurns).toHaveLength(1);
     expect(resultTurns[0]!.content).toEqual([
@@ -195,7 +198,11 @@ describe("agent query loop batches", () => {
     let executions = 0;
     const registry = new ToolRegistry();
     registry.register(createFakeCommandProposalTool());
-    registry.register(countingTool(() => { executions += 1; }));
+    registry.register(
+      countingTool(() => {
+        executions += 1;
+      }),
+    );
     const gateway = gatewayFor([
       [
         {
@@ -227,8 +234,9 @@ describe("agent query loop batches", () => {
 
     expect(result).toEqual({ type: "message", content: "retried separately" });
     expect(executions).toBe(0);
-    const pairedResults = gateway.requests[1]!.messages!
-      .filter((message) => message.role === "user")
+    const pairedResults = gateway.requests[1]!.messages!.filter(
+      (message) => message.role === "user",
+    )
       .flatMap((message) => message.content)
       .filter((block) => block.type === "tool_result");
     expect(pairedResults).toEqual([
@@ -241,10 +249,7 @@ describe("agent query loop batches", () => {
     let terminalExecutions = 0;
     let ordinaryExecutions = 0;
     const terminalSchema = z.object({});
-    const terminalDeferred: ToolDefinition<
-      typeof terminalSchema,
-      AgentCommandProposalResult
-    > = {
+    const terminalDeferred: ToolDefinition<typeof terminalSchema, AgentCommandProposalResult> = {
       name: "DeferredTerminal",
       description: "A dynamically discovered terminal capability.",
       category: "deferred",
@@ -274,7 +279,11 @@ describe("agent query loop batches", () => {
     registry.register(searchExtraToolsTool);
     registry.register(executeExtraToolTool);
     registry.register(terminalDeferred);
-    registry.register(countingTool(() => { ordinaryExecutions += 1; }));
+    registry.register(
+      countingTool(() => {
+        ordinaryExecutions += 1;
+      }),
+    );
     const gateway = gatewayFor([
       [
         {
@@ -312,8 +321,9 @@ describe("agent query loop batches", () => {
     });
     expect(terminalExecutions).toBe(0);
     expect(ordinaryExecutions).toBe(0);
-    const pairedResults = gateway.requests[1]!.messages!
-      .filter((message) => message.role === "user")
+    const pairedResults = gateway.requests[1]!.messages!.filter(
+      (message) => message.role === "user",
+    )
       .flatMap((message) => message.content)
       .filter((block) => block.type === "tool_result");
     expect(pairedResults).toEqual([
@@ -329,10 +339,7 @@ describe("agent query loop batches", () => {
       type: z.literal("ask_user"),
       content: z.string(),
     });
-    const renamedTerminalTool: ToolDefinition<
-      typeof schema,
-      z.infer<typeof resultSchema>
-    > = {
+    const renamedTerminalTool: ToolDefinition<typeof schema, z.infer<typeof resultSchema>> = {
       name: "RequestMissingDecision",
       description: "Request a missing user decision.",
       category: "core",
@@ -354,14 +361,16 @@ describe("agent query loop batches", () => {
     };
     const registry = new ToolRegistry();
     registry.register(renamedTerminalTool);
-    const gateway = gatewayFor([[
-      {
-        type: "tool_use",
-        id: "renamed-terminal",
-        name: renamedTerminalTool.name,
-        input: { question: "Which audience should I target?" },
-      },
-    ]]);
+    const gateway = gatewayFor([
+      [
+        {
+          type: "tool_use",
+          id: "renamed-terminal",
+          name: renamedTerminalTool.name,
+          input: { question: "Which audience should I target?" },
+        },
+      ],
+    ]);
 
     const result = await new AgentRuntime(registry, gateway).run({
       threadId: "metadata-terminal-tool",
@@ -378,10 +387,7 @@ describe("agent query loop batches", () => {
 
   it("derives required-outcome guidance from registered capability metadata", async () => {
     const schema = z.object({});
-    const renamedProposalTool: ToolDefinition<
-      typeof schema,
-      AgentCommandProposalResult
-    > = {
+    const renamedProposalTool: ToolDefinition<typeof schema, AgentCommandProposalResult> = {
       name: "CompletePresentationAction",
       description: "Complete a presentation action.",
       category: "core",
@@ -401,11 +407,13 @@ describe("agent query loop batches", () => {
         return {
           type: "command_proposal",
           summary: "Update title",
-          commands: [{
-            id: "metadata-title",
-            type: "set-presentation-title",
-            title: "Metadata-driven completion",
-          }],
+          commands: [
+            {
+              id: "metadata-title",
+              type: "set-presentation-title",
+              title: "Metadata-driven completion",
+            },
+          ],
           risk: "low",
         };
       },
@@ -414,12 +422,14 @@ describe("agent query loop batches", () => {
     registry.register(renamedProposalTool);
     const gateway = gatewayFor([
       [{ type: "text", text: "I will do that later." }],
-      [{
-        type: "tool_use",
-        id: "renamed-proposal",
-        name: renamedProposalTool.name,
-        input: {},
-      }],
+      [
+        {
+          type: "tool_use",
+          id: "renamed-proposal",
+          name: renamedProposalTool.name,
+          input: {},
+        },
+      ],
     ]);
 
     const result = await new AgentRuntime(registry, gateway).run({
@@ -431,8 +441,9 @@ describe("agent query loop batches", () => {
     });
 
     expect(result.type).toBe("command_proposal");
-    const followUp = gateway.requests[1]!.messages!
-      .flatMap((message) => message.role === "user" ? message.content : [])
+    const followUp = gateway.requests[1]!.messages!.flatMap((message) =>
+      message.role === "user" ? message.content : [],
+    )
       .filter((block) => block.type === "text")
       .map((block) => block.text)
       .join("\n");
@@ -443,11 +454,17 @@ describe("agent query loop batches", () => {
     const workspaceRoot = await mkdtemp(join(tmpdir(), "agent-query-batch-"));
     let executions = 0;
     const registry = new ToolRegistry();
-    registry.register(countingTool(() => { executions += 1; }));
-    const gateway = gatewayFor([[
-      { type: "tool_use", id: "count-1", name: "CountingTool", input: { value: 1 } },
-      { type: "tool_use", id: "count-2", name: "CountingTool", input: { value: 2 } },
-    ]]);
+    registry.register(
+      countingTool(() => {
+        executions += 1;
+      }),
+    );
+    const gateway = gatewayFor([
+      [
+        { type: "tool_use", id: "count-1", name: "CountingTool", input: { value: 1 } },
+        { type: "tool_use", id: "count-2", name: "CountingTool", input: { value: 2 } },
+      ],
+    ]);
 
     const result = await new AgentRuntime(registry, gateway).run({
       threadId: "batch-turn-limit",
@@ -473,7 +490,8 @@ describe("agent query loop batches", () => {
     const workspaceRoot = await mkdtemp(join(tmpdir(), "agent-tool-result-checkpoint-"));
     const checkpoints: Parameters<DurableRunStore["saveCas"]>[0]["checkpoint"][] = [];
     const originalSaveCas = DurableRunStore.prototype.saveCas;
-    const saveSpy = vi.spyOn(DurableRunStore.prototype, "saveCas")
+    const saveSpy = vi
+      .spyOn(DurableRunStore.prototype, "saveCas")
       .mockImplementation(async function (this: DurableRunStore, input) {
         checkpoints.push(structuredClone(input.checkpoint));
         return await originalSaveCas.call(this, input);
@@ -497,31 +515,39 @@ describe("agent query loop batches", () => {
       saveSpy.mockRestore();
     }
 
-    expect(checkpoints.some((checkpoint) =>
-      checkpoint.version === 2
-      && checkpoint.status === "running"
-      && checkpoint.inflight?.phase === "model_received"
-      && checkpoint.inflight.workspace.toolResults.some((result) =>
-        result.toolUseId === "durable-result")
-    )).toBe(true);
+    expect(
+      checkpoints.some(
+        (checkpoint) =>
+          checkpoint.version === 2 &&
+          checkpoint.status === "running" &&
+          checkpoint.inflight?.phase === "model_received" &&
+          checkpoint.inflight.workspace.toolResults.some(
+            (result) => result.toolUseId === "durable-result",
+          ),
+      ),
+    ).toBe(true);
   });
 
   it("assembles canUseTool from the tools exposed to this query", async () => {
     let executions = 0;
     const registry = new ToolRegistry();
     registry.register({
-      ...countingTool(() => { executions += 1; }),
+      ...countingTool(() => {
+        executions += 1;
+      }),
       name: "DeferredCountingTool",
       category: "deferred",
       loadPolicy: "deferred",
     });
     const gateway = gatewayFor([
-      [{
-        type: "tool_use",
-        id: "deferred-direct",
-        name: "DeferredCountingTool",
-        input: { value: 1 },
-      }],
+      [
+        {
+          type: "tool_use",
+          id: "deferred-direct",
+          name: "DeferredCountingTool",
+          input: { value: 1 },
+        },
+      ],
       [{ type: "text", text: "used the available tool boundary" }],
     ]);
 
@@ -533,15 +559,18 @@ describe("agent query loop batches", () => {
     });
 
     expect(executions).toBe(0);
-    expect(gateway.requests[1]!.messages!.flatMap((message) => message.content))
-      .toContainEqual(expect.objectContaining({
+    expect(gateway.requests[1]!.messages!.flatMap((message) => message.content)).toContainEqual(
+      expect.objectContaining({
         type: "tool_result",
         toolUseId: "deferred-direct",
         isError: true,
-        content: [expect.objectContaining({
-          type: "text",
-          text: expect.stringContaining("not permitted in this query"),
-        })],
-      }));
+        content: [
+          expect.objectContaining({
+            type: "text",
+            text: expect.stringContaining("not permitted in this query"),
+          }),
+        ],
+      }),
+    );
   });
 });

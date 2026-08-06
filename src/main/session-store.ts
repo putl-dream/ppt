@@ -1,34 +1,84 @@
 import { mkdir } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { z } from "zod";
-import { presentationSchema, type Presentation } from "@shared/presentation";
 import {
-  formatTerminalAgentRunContent,
-} from "@shared/agent-result-copy";
+  type AgentActivityItem,
+  appendReasoningChunk,
+  appendResponseChunk,
+  appendStep,
+  appendToolApprovalWaiting,
+  appendToolStart,
+  applyTeammateProgressEvent,
+  commitResponseAttempt,
+  compactActivityTraceForPersistence,
+  finishTool,
+  markTraceComplete,
+  mergeResponseText,
+  removeResponseAttempt,
+  resolveToolApprovalItem,
+  sealAllReasoning,
+  sealResponseBlocks,
+  upsertTaskListTrace,
+} from "@shared/agent-activity";
+import { formatPublicErrorMessage } from "@shared/agent-activity-display";
+import { formatTerminalAgentRunContent } from "@shared/agent-result-copy";
+import { agentTaskNodeSchema } from "@shared/agent-task-list";
+import {
+  type PersistedDisplayCard,
+  persistedDisplayCardSchema,
+} from "@shared/card-display-protocol";
+import type { DeckExportRecord, DeckGenerationJobsFile } from "@shared/deck-persistence";
+import type {
+  AgentRunResult,
+  CreateSessionOptions,
+  ImportProjectTemplateResult,
+  ProjectTemplateSummary,
+} from "@shared/ipc";
+import { type Presentation, presentationSchema } from "@shared/presentation";
+import { defaultProjectArtifacts } from "@shared/project";
 import {
   createDefaultSessionTitle,
   createSessionPresentation,
-  sessionChatMessageSchema,
-  sessionSnapshotSchema,
   type SessionBootstrap,
   type SessionChatMessage,
   type SessionSnapshot,
   type SessionSummary,
+  sessionChatMessageSchema,
+  sessionSnapshotSchema,
 } from "@shared/session";
+import { type AgentConversationMessage, toAgentMessageHistory } from "@shared/session-recovery";
+import { parseStoryboard, type StoryboardSlideSpec, serializeStoryboard } from "@shared/storyboard";
+import { isTeammateProgressEvent } from "@shared/teammate-progress";
+import { getBuiltinTemplate, listBuiltinTemplates } from "@shared/template-catalog";
 import {
-  persistedDisplayCardSchema,
-  type PersistedDisplayCard,
-} from "@shared/card-display-protocol";
+  createDefaultProjectTemplatePolicy,
+  formatProjectTemplatePolicy,
+  type ProjectTemplatePolicy,
+  projectTemplatePolicySchema,
+  TEMPLATE_PACK_PATH,
+  TEMPLATE_POLICY_PATH,
+  type TemplatePack,
+  templatePackSchema,
+  templateRevisionPath,
+} from "@shared/template-protocol";
 import {
-  toAgentMessageHistory,
-  type AgentConversationMessage,
-} from "@shared/session-recovery";
-import { type ArtifactDiff } from "./project/artifact-diff";
+  compareSessionsByActivity,
+  getWorkspaceLabel,
+  normalizeWorkspacePath,
+  resolveWorkspacePath,
+} from "@shared/workspace";
+import { getSessionSandboxPath, isLegacyProjectSandboxPath } from "@shared/workspace-meta";
+import { z } from "zod";
+import { createModuleLogger } from "./agent/logger";
+import { writeTextFileAtomic } from "./agent/persistence/atomic-json-file";
+import { ConversationDatabase } from "./conversation-database";
+import { ExportHistoryService, GenerationJobsService } from "./deck/deck-persistence-services";
+import type { ArtifactChangeObserverPort } from "./presentation-lifecycle/artifact-change-observer-types";
+import type { ArtifactDiff } from "./project/artifact-diff";
 import {
-  ProjectFileService,
   type ProjectArtifactReadResult,
   type ProjectFileEditorReadResult,
   type ProjectFileEditorWriteResult,
+  ProjectFileService,
 } from "./project/project-file-service";
 import {
   applicationTemplateLibrary,
@@ -37,68 +87,6 @@ import {
   listUploadedTemplateDescriptors,
 } from "./project/template-import-service";
 import { materializeCustomTemplate } from "./project/template-materialize-service";
-import { getBuiltinTemplate, listBuiltinTemplates } from "@shared/template-catalog";
-import {
-  TEMPLATE_PACK_PATH,
-  TEMPLATE_POLICY_PATH,
-  formatProjectTemplatePolicy,
-  projectTemplatePolicySchema,
-  createDefaultProjectTemplatePolicy,
-  templatePackSchema,
-  templateRevisionPath,
-  type ProjectTemplatePolicy,
-  type TemplatePack,
-} from "@shared/template-protocol";
-import type {
-  AgentRunResult,
-  CreateSessionOptions,
-  ImportProjectTemplateResult,
-  ProjectTemplateSummary,
-} from "@shared/ipc";
-import type { ArtifactChangeObserverPort } from
-  "./presentation-lifecycle/artifact-change-observer-types";
-import {
-  ExportHistoryService,
-  GenerationJobsService,
-} from "./deck/deck-persistence-services";
-import type { DeckExportRecord, DeckGenerationJobsFile } from "@shared/deck-persistence";
-import { parseStoryboard, serializeStoryboard, type StoryboardSlideSpec } from "@shared/storyboard";
-import { defaultProjectArtifacts } from "@shared/project";
-import {
-  getSessionSandboxPath,
-  isLegacyProjectSandboxPath,
-} from "@shared/workspace-meta";
-import {
-  compareSessionsByActivity,
-  getWorkspaceLabel,
-  normalizeWorkspacePath,
-  resolveWorkspacePath,
-} from "@shared/workspace";
-import { writeTextFileAtomic } from "./agent/persistence/atomic-json-file";
-import {
-  applyTeammateProgressEvent,
-  appendResponseChunk,
-  appendReasoningChunk,
-  commitResponseAttempt,
-  mergeResponseText,
-  removeResponseAttempt,
-  appendStep,
-  appendToolStart,
-  appendToolApprovalWaiting,
-  compactActivityTraceForPersistence,
-  finishTool,
-  markTraceComplete,
-  sealAllReasoning,
-  sealResponseBlocks,
-  resolveToolApprovalItem,
-  upsertTaskListTrace,
-  type AgentActivityItem,
-} from "@shared/agent-activity";
-import { isTeammateProgressEvent } from "@shared/teammate-progress";
-import { agentTaskNodeSchema } from "@shared/agent-task-list";
-import { formatPublicErrorMessage } from "@shared/agent-activity-display";
-import { ConversationDatabase } from "./conversation-database";
-import { createModuleLogger } from "./agent/logger";
 
 const storedSessionSchema = sessionSnapshotSchema;
 const logger = createModuleLogger("session-store");
@@ -128,17 +116,19 @@ function sameProjectedActivity(
     }
     const existingText = existingContent.slice(existing.start, existing.end);
     const projectedText = projectedContent.slice(projected.start, projected.end);
-    return existingText === projectedText
-      || existingText.startsWith(projectedText)
-      || projectedText.startsWith(existingText);
+    return (
+      existingText === projectedText ||
+      existingText.startsWith(projectedText) ||
+      projectedText.startsWith(existingText)
+    );
   }
   if (existing.kind === "reasoning" && projected.kind === "reasoning") {
-    return (existing.modelStep ?? 0) === (projected.modelStep ?? 0)
-      && (
-        existing.content === projected.content
-        || existing.content.startsWith(projected.content)
-        || projected.content.startsWith(existing.content)
-      );
+    return (
+      (existing.modelStep ?? 0) === (projected.modelStep ?? 0) &&
+      (existing.content === projected.content ||
+        existing.content.startsWith(projected.content) ||
+        projected.content.startsWith(existing.content))
+    );
   }
   if (existing.kind === "tool" && projected.kind === "tool") {
     return existing.toolCallId === projected.toolCallId;
@@ -173,9 +163,7 @@ function missingProcessItems(
   candidates: AgentActivityItem[],
 ): AgentActivityItem[] {
   const presentKeys = new Set(
-    (present ?? [])
-      .filter((item) => item.kind !== "response")
-      .map(processActivityIdentity),
+    (present ?? []).filter((item) => item.kind !== "response").map(processActivityIdentity),
   );
   return candidates.filter(
     (item) => item.kind !== "response" && !presentKeys.has(processActivityIdentity(item)),
@@ -219,12 +207,7 @@ function activityInRemainingTrace(
   fromIndex: number,
 ): boolean {
   for (let index = fromIndex; index < haystack.length; index += 1) {
-    if (sameProjectedActivity(
-      needle,
-      needleContent,
-      haystack[index]!,
-      haystackContent,
-    )) {
+    if (sameProjectedActivity(needle, needleContent, haystack[index]!, haystackContent)) {
       return true;
     }
   }
@@ -240,7 +223,10 @@ export class FileSessionStore {
   private readonly generationJobsService: GenerationJobsService;
   private readonly exportHistoryService: ExportHistoryService;
 
-  constructor(private readonly filePath: string, projectRootPath?: string) {
+  constructor(
+    private readonly filePath: string,
+    projectRootPath?: string,
+  ) {
     this.projectsRootPath = projectRootPath ?? join(dirname(filePath), "projects");
     this.conversationDatabase = new ConversationDatabase(filePath);
     this.projectFileService = new ProjectFileService(this.projectsRootPath);
@@ -248,17 +234,13 @@ export class FileSessionStore {
     this.exportHistoryService = new ExportHistoryService(this.projectFileService);
   }
 
-  setArtifactChangeObserver(
-    observer: ArtifactChangeObserverPort | undefined,
-  ): void {
+  setArtifactChangeObserver(observer: ArtifactChangeObserverPort | undefined): void {
     this.projectFileService.setArtifactChangeObserver(observer);
   }
 
   async initialize(): Promise<void> {
     await mkdir(dirname(this.filePath), { recursive: true });
-    const interruptedRunIds = new Set(
-      this.conversationDatabase.interruptRunningRuns(),
-    );
+    const interruptedRunIds = new Set(this.conversationDatabase.interruptRunningRuns());
     const stored = this.conversationDatabase.loadState();
     this.data = sessionFileSchema.parse({
       version: 1,
@@ -273,13 +255,14 @@ export class FileSessionStore {
     for (const session of this.data.sessions) {
       for (const message of session.messages) {
         if (
-          message.role === "assistant"
-          && message.runStatus === "running"
-          && message.runId
-          && !interruptedRunIds.has(message.runId)
+          message.role === "assistant" &&
+          message.runStatus === "running" &&
+          message.runId &&
+          !interruptedRunIds.has(message.runId)
         ) {
-          const result = this.conversationDatabase
-            .loadTerminalRunResult<AgentRunResult>(message.runId);
+          const result = this.conversationDatabase.loadTerminalRunResult<AgentRunResult>(
+            message.runId,
+          );
           if (result) {
             terminalRecoveries.push({
               sessionId: session.session.id,
@@ -290,11 +273,9 @@ export class FileSessionStore {
           }
         }
         if (
-          message.role !== "assistant"
-          || (
-            message.runStatus !== "running"
-            && (!message.runId || !interruptedRunIds.has(message.runId))
-          )
+          message.role !== "assistant" ||
+          (message.runStatus !== "running" &&
+            (!message.runId || !interruptedRunIds.has(message.runId)))
         ) {
           continue;
         }
@@ -306,11 +287,7 @@ export class FileSessionStore {
       }
     }
     for (const recovery of terminalRecoveries) {
-      await this.finalizeAgentRunMessage(
-        recovery.sessionId,
-        recovery.runId,
-        recovery.result,
-      );
+      await this.finalizeAgentRunMessage(recovery.sessionId, recovery.runId, recovery.result);
     }
     for (const session of this.data.sessions) {
       this.repairThinTerminalRunTraces(session);
@@ -333,37 +310,33 @@ export class FileSessionStore {
   }
 
   findWaitingAgentRunId(sessionId: string, threadId: string): string | undefined {
-    return [...this.findSession(sessionId).messages].reverse().find(
-      (message) =>
-        message.role === "assistant"
-        && message.runStatus === "waiting"
-        && message.threadId === threadId
-        && Boolean(message.runId),
-    )?.runId;
+    return [...this.findSession(sessionId).messages]
+      .reverse()
+      .find(
+        (message) =>
+          message.role === "assistant" &&
+          message.runStatus === "waiting" &&
+          message.threadId === threadId &&
+          Boolean(message.runId),
+      )?.runId;
   }
 
-  findProposalChatContext(
-    sessionId: string,
-    proposalId: string,
-  ): { threadId: string } | undefined {
+  findProposalChatContext(sessionId: string, proposalId: string): { threadId: string } | undefined {
     const snapshot = this.findSession(sessionId);
-    const card = [...snapshot.displayCards].reverse().find(
-      (item) =>
-        item.event.kind === "review.command-proposal"
-        && item.event.payload.proposalId === proposalId,
-    );
+    const card = [...snapshot.displayCards]
+      .reverse()
+      .find(
+        (item) =>
+          item.event.kind === "review.command-proposal" &&
+          item.event.payload.proposalId === proposalId,
+      );
     if (!card || card.event.kind !== "review.command-proposal") return undefined;
     return { threadId: card.event.payload.threadId };
   }
 
-  getAgentMessageHistory(
-    sessionId: string,
-    currentRequest?: string,
-  ): AgentConversationMessage[] {
+  getAgentMessageHistory(sessionId: string, currentRequest?: string): AgentConversationMessage[] {
     return toAgentMessageHistory(this.findSession(sessionId).messages, currentRequest);
   }
-
-
 
   async createSession(options?: CreateSessionOptions): Promise<SessionBootstrap> {
     const data = this.requireData();
@@ -399,8 +372,8 @@ export class FileSessionStore {
 
   async openWorkspace(rootPath: string): Promise<SessionBootstrap> {
     const normalized = normalizeWorkspacePath(rootPath);
-    const matches = this.requireData().sessions
-      .filter((snapshot) => this.resolveWorkspaceRoot(snapshot) === normalized)
+    const matches = this.requireData()
+      .sessions.filter((snapshot) => this.resolveWorkspaceRoot(snapshot) === normalized)
       .sort((left, right) => compareSessionsByActivity(left.session, right.session));
     if (matches.length > 0) return this.selectSession(matches[0].session.id);
     return this.createSession({ rootPath: normalized });
@@ -412,8 +385,8 @@ export class FileSessionStore {
 
   async listWorkspaceSessions(rootPath: string): Promise<SessionSummary[]> {
     const normalized = normalizeWorkspacePath(rootPath);
-    return this.requireData().sessions
-      .filter((snapshot) => this.resolveWorkspaceRoot(snapshot) === normalized)
+    return this.requireData()
+      .sessions.filter((snapshot) => this.resolveWorkspaceRoot(snapshot) === normalized)
       .sort((left, right) => compareSessionsByActivity(left.session, right.session))
       .map((snapshot) => ({ ...structuredClone(snapshot.session), workspacePath: normalized }));
   }
@@ -459,9 +432,7 @@ export class FileSessionStore {
         validatedPresentation,
       ),
       lastMessageAt: snapshot.session.lastMessageAt,
-      ...(snapshot.session.workspacePath
-        ? { workspacePath: snapshot.session.workspacePath }
-        : {}),
+      ...(snapshot.session.workspacePath ? { workspacePath: snapshot.session.workspacePath } : {}),
     };
     await this.projectFileService.writeDeckSnapshot(snapshot);
     await this.persist();
@@ -479,51 +450,49 @@ export class FileSessionStore {
     commitLifecycle: () => T;
     afterDatabaseCommit?: () => void;
   }): Promise<T> {
-    const validatedPresentation = presentationSchema.parse(
-      structuredClone(input.presentation),
-    );
+    const validatedPresentation = presentationSchema.parse(structuredClone(input.presentation));
     let lifecycleResult!: T;
-    const write = this.writeQueue.catch(() => undefined).then(async () => {
-      const nextData = structuredClone(this.requireData());
-      const snapshot = nextData.sessions.find(
-        (item) => item.session.id === input.sessionId,
-      );
-      if (!snapshot) throw new Error(`Session not found: ${input.sessionId}`);
-      snapshot.presentation = validatedPresentation;
-      snapshot.session = {
-        ...this.toSummary(
-          snapshot.session.id,
-          snapshot.session.createdAt,
-          new Date().toISOString(),
-          validatedPresentation,
-        ),
-        lastMessageAt: snapshot.session.lastMessageAt,
-        ...(snapshot.session.workspacePath
-          ? { workspacePath: snapshot.session.workspacePath }
-          : {}),
-      };
+    const write = this.writeQueue
+      .catch(() => undefined)
+      .then(async () => {
+        const nextData = structuredClone(this.requireData());
+        const snapshot = nextData.sessions.find((item) => item.session.id === input.sessionId);
+        if (!snapshot) throw new Error(`Session not found: ${input.sessionId}`);
+        snapshot.presentation = validatedPresentation;
+        snapshot.session = {
+          ...this.toSummary(
+            snapshot.session.id,
+            snapshot.session.createdAt,
+            new Date().toISOString(),
+            validatedPresentation,
+          ),
+          lastMessageAt: snapshot.session.lastMessageAt,
+          ...(snapshot.session.workspacePath
+            ? { workspacePath: snapshot.session.workspacePath }
+            : {}),
+        };
 
-      this.conversationDatabase.withTransaction(() => {
-        this.conversationDatabase.replaceState({
-          activeSessionId: nextData.activeSessionId,
-          sessions: nextData.sessions,
+        this.conversationDatabase.withTransaction(() => {
+          this.conversationDatabase.replaceState({
+            activeSessionId: nextData.activeSessionId,
+            sessions: nextData.sessions,
+          });
+          lifecycleResult = input.commitLifecycle();
         });
-        lifecycleResult = input.commitLifecycle();
+
+        this.data = nextData;
+        input.afterDatabaseCommit?.();
+        try {
+          await this.projectFileService.writeDeckSnapshot(snapshot);
+          await this.syncWorkspacePersistence(snapshot);
+        } catch (error) {
+          logger.error("presentation.workspace-mirror.sync-failed", {
+            sessionId: input.sessionId,
+            revision: validatedPresentation.revision,
+            error,
+          });
+        }
       });
-
-      this.data = nextData;
-      input.afterDatabaseCommit?.();
-      try {
-        await this.projectFileService.writeDeckSnapshot(snapshot);
-        await this.syncWorkspacePersistence(snapshot);
-      } catch (error) {
-        logger.error("presentation.workspace-mirror.sync-failed", {
-          sessionId: input.sessionId,
-          revision: validatedPresentation.revision,
-          error,
-        });
-      }
-    });
     this.writeQueue = write;
     await write;
     return lifecycleResult;
@@ -599,10 +568,10 @@ export class FileSessionStore {
       snapshot.messages
         .filter(
           (message) =>
-            message.role === "assistant"
-            && message.runId
-            && message.runStatus
-            && message.runStatus !== "running",
+            message.role === "assistant" &&
+            message.runId &&
+            message.runStatus &&
+            message.runStatus !== "running",
         )
         .map((message) => [message.runId!, message] as const),
     );
@@ -622,10 +591,7 @@ export class FileSessionStore {
         ...message,
         content: authoritative.content,
         activityTrace: compactActivityTraceForPersistence(
-          foldMissingProcessActivity(
-            authoritative.activityTrace,
-            message.activityTrace,
-          ),
+          foldMissingProcessActivity(authoritative.activityTrace, message.activityTrace),
         ),
         runStatus: authoritativeStatus,
         runError: authoritative.runError,
@@ -651,9 +617,9 @@ export class FileSessionStore {
     result: AgentRunResult,
   ): Promise<void> {
     const snapshot = this.findSession(sessionId);
-    let message = [...snapshot.messages].reverse().find(
-      (item) => item.role === "assistant" && item.runId === runId,
-    );
+    let message = [...snapshot.messages]
+      .reverse()
+      .find((item) => item.role === "assistant" && item.runId === runId);
     if (!message) {
       message = {
         id: crypto.randomUUID(),
@@ -665,17 +631,12 @@ export class FileSessionStore {
       snapshot.messages.push(message);
     }
 
-    const projected = this.reconcileRunTranscript(
-      message,
-      this.projectRunTranscript(runId),
-    );
+    const projected = this.reconcileRunTranscript(message, this.projectRunTranscript(runId));
     const interrupted = result.status === "interrupted";
     const failed = result.status === "failed";
     const waiting = result.status === "waiting-user";
     let content = projected.content || message.content;
-    let trace = projected.trace.length > 0
-      ? projected.trace
-      : (message.activityTrace ?? []);
+    let trace = projected.trace.length > 0 ? projected.trace : (message.activityTrace ?? []);
 
     if (result.status === "waiting-user" || result.status === "chat") {
       const merged = mergeResponseText(trace, content, result.message);
@@ -689,11 +650,7 @@ export class FileSessionStore {
       content = merged.content;
       message.threadId = result.approval.threadId;
     } else if (result.status === "completed" || result.status === "rejected") {
-      const merged = mergeResponseText(
-        trace,
-        content,
-        formatTerminalAgentRunContent(result),
-      );
+      const merged = mergeResponseText(trace, content, formatTerminalAgentRunContent(result));
       trace = merged.trace;
       content = merged.content;
     } else {
@@ -701,19 +658,19 @@ export class FileSessionStore {
     }
 
     message.content = content;
-    message.activityTrace = trace.length > 0
-      ? compactActivityTraceForPersistence(markTraceComplete(
-          trace,
-          interrupted ? "denied" : "failed",
-        ))
-      : undefined;
+    message.activityTrace =
+      trace.length > 0
+        ? compactActivityTraceForPersistence(
+            markTraceComplete(trace, interrupted ? "denied" : "failed"),
+          )
+        : undefined;
     message.runStatus = interrupted
       ? "interrupted"
       : failed
         ? "failed"
-      : waiting
-        ? "waiting"
-        : "completed";
+        : waiting
+          ? "waiting"
+          : "completed";
     message.runError = failed
       ? formatPublicErrorMessage(result.error, "处理请求时遇到问题，请稍后重试。")
       : undefined;
@@ -738,27 +695,22 @@ export class FileSessionStore {
    */
   async refreshAgentRunTrace(sessionId: string, runId: string): Promise<void> {
     const snapshot = this.findSession(sessionId);
-    const message = [...snapshot.messages].reverse().find(
-      (item) => item.role === "assistant" && item.runId === runId,
-    );
+    const message = [...snapshot.messages]
+      .reverse()
+      .find((item) => item.role === "assistant" && item.runId === runId);
     if (!message) return;
 
-    const projected = this.reconcileRunTranscript(
-      message,
-      this.projectRunTranscript(runId),
-    );
+    const projected = this.reconcileRunTranscript(message, this.projectRunTranscript(runId));
     const trace = projected.trace;
     message.content = projected.content;
-    message.activityTrace = trace.length > 0
-      ? compactActivityTraceForPersistence(
-          message.runStatus === "running"
-            ? trace
-            : markTraceComplete(
-                trace,
-                unfinishedToolStateForRunStatus(message.runStatus),
-              ),
-        )
-      : undefined;
+    message.activityTrace =
+      trace.length > 0
+        ? compactActivityTraceForPersistence(
+            message.runStatus === "running"
+              ? trace
+              : markTraceComplete(trace, unfinishedToolStateForRunStatus(message.runStatus)),
+          )
+        : undefined;
     sessionChatMessageSchema.parse(structuredClone(message));
     snapshot.session.updatedAt = new Date().toISOString();
     await this.persist();
@@ -771,10 +723,10 @@ export class FileSessionStore {
   private repairThinTerminalRunTraces(snapshot: SessionSnapshot): void {
     for (const message of snapshot.messages) {
       if (
-        message.role !== "assistant"
-        || !message.runId
-        || message.runStatus === "running"
-        || message.runStatus === undefined
+        message.role !== "assistant" ||
+        !message.runId ||
+        message.runStatus === "running" ||
+        message.runStatus === undefined
       ) {
         continue;
       }
@@ -788,9 +740,7 @@ export class FileSessionStore {
       const processOnlyMessage: SessionChatMessage = {
         ...message,
         content: projected.content,
-        activityTrace: (message.activityTrace ?? []).filter(
-          (item) => item.kind !== "response",
-        ),
+        activityTrace: (message.activityTrace ?? []).filter((item) => item.kind !== "response"),
       };
       const reconciled = this.reconcileRunTranscript(processOnlyMessage, projected);
       let content = reconciled.content || projected.content || message.content;
@@ -801,14 +751,12 @@ export class FileSessionStore {
         trace = merged.trace;
       }
       message.content = content;
-      message.activityTrace = trace.length > 0
-        ? compactActivityTraceForPersistence(
-            markTraceComplete(
-              trace,
-              unfinishedToolStateForRunStatus(message.runStatus),
-            ),
-          )
-        : undefined;
+      message.activityTrace =
+        trace.length > 0
+          ? compactActivityTraceForPersistence(
+              markTraceComplete(trace, unfinishedToolStateForRunStatus(message.runStatus)),
+            )
+          : undefined;
       sessionChatMessageSchema.parse(structuredClone(message));
     }
   }
@@ -834,11 +782,7 @@ export class FileSessionStore {
 
     const trace: AgentActivityItem[] = [];
     let content = "";
-    const append = (
-      item: AgentActivityItem,
-      sourceContent: string,
-      stableId = item.id,
-    ): void => {
+    const append = (item: AgentActivityItem, sourceContent: string, stableId = item.id): void => {
       if (item.kind !== "response") {
         trace.push(stableId === item.id ? item : { ...item, id: stableId });
         return;
@@ -856,18 +800,10 @@ export class FileSessionStore {
 
     let existingIndex = 0;
     let projectedIndex = 0;
-    while (
-      existingIndex < existingTrace.length
-      && projectedIndex < projected.trace.length
-    ) {
+    while (existingIndex < existingTrace.length && projectedIndex < projected.trace.length) {
       const existing = existingTrace[existingIndex]!;
       const nextProjected = projected.trace[projectedIndex]!;
-      if (sameProjectedActivity(
-        existing,
-        message.content,
-        nextProjected,
-        projected.content,
-      )) {
+      if (sameProjectedActivity(existing, message.content, nextProjected, projected.content)) {
         append(nextProjected, projected.content, existing.id);
         existingIndex += 1;
         projectedIndex += 1;
@@ -881,13 +817,15 @@ export class FileSessionStore {
       // Prefer event projection when the existing process item still appears
       // later. Otherwise keep the existing item — incomplete projections must
       // not drop tools/reasoning the renderer already persisted.
-      if (!activityInRemainingTrace(
-        existing,
-        message.content,
-        projected.trace,
-        projected.content,
-        projectedIndex,
-      )) {
+      if (
+        !activityInRemainingTrace(
+          existing,
+          message.content,
+          projected.trace,
+          projected.content,
+          projectedIndex,
+        )
+      ) {
         append(existing, message.content);
         existingIndex += 1;
         continue;
@@ -922,35 +860,27 @@ export class FileSessionStore {
         continue;
       }
       if (
-        event.kind === "workflow_progress"
-        && payload.type === "text-reset"
-        && typeof payload.attemptId === "string"
+        event.kind === "workflow_progress" &&
+        payload.type === "text-reset" &&
+        typeof payload.attemptId === "string"
       ) {
-        const reset = removeResponseAttempt(
-          sealAllReasoning(trace),
-          content,
-          payload.attemptId,
-        );
+        const reset = removeResponseAttempt(sealAllReasoning(trace), content, payload.attemptId);
         trace = reset.trace;
         content = reset.content;
         continue;
       }
       if (
-        event.kind === "workflow_progress"
-        && payload.type === "text-commit"
-        && typeof payload.attemptId === "string"
+        event.kind === "workflow_progress" &&
+        payload.type === "text-commit" &&
+        typeof payload.attemptId === "string"
       ) {
         trace = commitResponseAttempt(trace, payload.attemptId);
         continue;
       }
-      const progressPayload = typeof payload.type === "string"
-        ? payload as { type: string }
-        : undefined;
+      const progressPayload =
+        typeof payload.type === "string" ? (payload as { type: string }) : undefined;
       if (progressPayload && isTeammateProgressEvent(progressPayload)) {
-        trace = applyTeammateProgressEvent(
-          trace,
-          progressPayload,
-        );
+        trace = applyTeammateProgressEvent(trace, progressPayload);
         continue;
       }
       if (event.kind === "reasoning_chunk" && typeof payload.chunk === "string") {
@@ -960,39 +890,28 @@ export class FileSessionStore {
           typeof payload.modelStep === "number" ? payload.modelStep : 0,
         );
       } else if (
-        event.kind === "tool_started"
-        && typeof payload.toolCallId === "string"
-        && typeof payload.toolName === "string"
+        event.kind === "tool_started" &&
+        typeof payload.toolCallId === "string" &&
+        typeof payload.toolName === "string"
       ) {
-        trace = appendToolStart(
-          trace,
-          payload.toolCallId,
-          payload.toolName,
-        );
+        trace = appendToolStart(trace, payload.toolCallId, payload.toolName);
       } else if (
-        event.kind === "tool_finished"
-        && typeof payload.toolCallId === "string"
-        && typeof payload.toolName === "string"
-        && (
-          payload.status === "completed"
-          || payload.status === "failed"
-          || payload.status === "denied"
-          || payload.status === "invalid-input"
-        )
+        event.kind === "tool_finished" &&
+        typeof payload.toolCallId === "string" &&
+        typeof payload.toolName === "string" &&
+        (payload.status === "completed" ||
+          payload.status === "failed" ||
+          payload.status === "denied" ||
+          payload.status === "invalid-input")
       ) {
-        trace = finishTool(
-          trace,
-          payload.toolCallId,
-          payload.toolName,
-          payload.status,
-        );
+        trace = finishTool(trace, payload.toolCallId, payload.toolName, payload.status);
       } else if (
-        event.kind === "approval_requested"
-        && payload.type === "tool-approval-waiting"
-        && typeof payload.approvalId === "string"
-        && typeof payload.toolName === "string"
-        && typeof payload.reason === "string"
-        && typeof payload.detail === "string"
+        event.kind === "approval_requested" &&
+        payload.type === "tool-approval-waiting" &&
+        typeof payload.approvalId === "string" &&
+        typeof payload.toolName === "string" &&
+        typeof payload.reason === "string" &&
+        typeof payload.detail === "string"
       ) {
         trace = appendToolApprovalWaiting(trace, {
           approvalId: payload.approvalId,
@@ -1001,15 +920,15 @@ export class FileSessionStore {
           detail: payload.detail,
         });
       } else if (
-        event.kind === "approval_resolved"
-        && payload.type === "tool-approval-resolved"
-        && typeof payload.approvalId === "string"
-        && (payload.status === "approved" || payload.status === "denied")
+        event.kind === "approval_resolved" &&
+        payload.type === "tool-approval-resolved" &&
+        typeof payload.approvalId === "string" &&
+        (payload.status === "approved" || payload.status === "denied")
       ) {
         trace = resolveToolApprovalItem(trace, payload.approvalId, payload.status);
       } else if (
-        (event.kind === "stage_started" || event.kind === "workflow_progress")
-        && typeof payload.message === "string"
+        (event.kind === "stage_started" || event.kind === "workflow_progress") &&
+        typeof payload.message === "string"
       ) {
         trace = appendStep(trace, payload.message, "done");
       } else if (event.kind === "task_list_updated") {
@@ -1017,9 +936,7 @@ export class FileSessionStore {
         if (!parsedTasks.success) continue;
         trace = upsertTaskListTrace(trace, {
           tasks: parsedTasks.data,
-          goal: typeof payload.goal === "string" || payload.goal === null
-            ? payload.goal
-            : null,
+          goal: typeof payload.goal === "string" || payload.goal === null ? payload.goal : null,
         });
       }
     }
@@ -1060,10 +977,7 @@ export class FileSessionStore {
           revisionId: result.descriptor.revisionId,
           defaultTemplateId: policy.defaultTemplateId,
         });
-        relativeRoot = templateRevisionPath(
-          result.descriptor.id,
-          result.descriptor.revisionId,
-        );
+        relativeRoot = templateRevisionPath(result.descriptor.id, result.descriptor.revisionId);
       }
     }
 
@@ -1111,10 +1025,7 @@ export class FileSessionStore {
   async getProjectTemplatePack(sessionId: string): Promise<TemplatePack | null> {
     const snapshot = this.findSession(sessionId);
     try {
-      const artifact = await this.projectFileService.readArtifact(
-        snapshot,
-        TEMPLATE_PACK_PATH,
-      );
+      const artifact = await this.projectFileService.readArtifact(snapshot, TEMPLATE_PACK_PATH);
       if (typeof artifact.content !== "string") return null;
       return templatePackSchema.parse(JSON.parse(artifact.content));
     } catch {
@@ -1152,10 +1063,7 @@ export class FileSessionStore {
   async getProjectTemplatePolicy(sessionId: string): Promise<ProjectTemplatePolicy> {
     const snapshot = this.findSession(sessionId);
     try {
-      const artifact = await this.projectFileService.readArtifact(
-        snapshot,
-        TEMPLATE_POLICY_PATH,
-      );
+      const artifact = await this.projectFileService.readArtifact(snapshot, TEMPLATE_POLICY_PATH);
       if (typeof artifact.content !== "string") {
         return createDefaultProjectTemplatePolicy();
       }
@@ -1193,14 +1101,8 @@ export class FileSessionStore {
     return this.projectFileService.readArtifact(this.findSession(sessionId), artifactIdOrPath);
   }
 
-  openProjectFile(
-    sessionId: string,
-    relativePath: string,
-  ): Promise<ProjectFileEditorReadResult> {
-    return this.projectFileService.openProjectFile(
-      this.findSession(sessionId),
-      relativePath,
-    );
+  openProjectFile(sessionId: string, relativePath: string): Promise<ProjectFileEditorReadResult> {
+    return this.projectFileService.openProjectFile(this.findSession(sessionId), relativePath);
   }
 
   getProjectArtifactDiff(
@@ -1231,9 +1133,7 @@ export class FileSessionStore {
       expectedVersion,
     );
     snapshot.session.updatedAt = new Date().toISOString();
-    const postCommitWarnings: NonNullable<
-      ProjectFileEditorWriteResult["postCommitWarnings"]
-    > = [];
+    const postCommitWarnings: NonNullable<ProjectFileEditorWriteResult["postCommitWarnings"]> = [];
     try {
       await this.persist();
     } catch (error) {
@@ -1246,9 +1146,7 @@ export class FileSessionStore {
       console.error("Project file was committed, but workspace metadata sync failed.", error);
       postCommitWarnings.push("workspace-metadata-sync-failed");
     }
-    return postCommitWarnings.length > 0
-      ? { ...result, postCommitWarnings }
-      : result;
+    return postCommitWarnings.length > 0 ? { ...result, postCommitWarnings } : result;
   }
 
   private createInitialData(): SessionFile {
@@ -1272,8 +1170,9 @@ export class FileSessionStore {
     if (!defaultTemplateId || getBuiltinTemplate(defaultTemplateId)) return;
     if (!snapshot.project?.rootPath) return;
 
-    const descriptor = (await listTemplateDescriptors(applicationTemplateLibrary()))
-      .find((item) => item.id === defaultTemplateId);
+    const descriptor = (await listTemplateDescriptors(applicationTemplateLibrary())).find(
+      (item) => item.id === defaultTemplateId,
+    );
     if (!descriptor) return;
 
     await materializeCustomTemplate({
@@ -1296,18 +1195,12 @@ export class FileSessionStore {
     snapshot: SessionSnapshot,
     options?: { defaultTemplateId?: string },
   ): Promise<boolean> {
-    const projectChanged = await this.projectFileService.ensureProjectSandbox(
-      snapshot,
-      options,
-    );
+    const projectChanged = await this.projectFileService.ensureProjectSandbox(snapshot, options);
     await this.syncWorkspacePersistence(snapshot);
     return projectChanged;
   }
 
-  private messagesChanged(
-    before: SessionChatMessage[],
-    after: SessionChatMessage[],
-  ): boolean {
+  private messagesChanged(before: SessionChatMessage[], after: SessionChatMessage[]): boolean {
     return JSON.stringify(before) !== JSON.stringify(after);
   }
 
@@ -1368,10 +1261,7 @@ export class FileSessionStore {
   }
 
   private isWorkspaceBoundRoot(rootPath: string): boolean {
-    return !isLegacyProjectSandboxPath(
-      normalizeWorkspacePath(rootPath),
-      this.projectsRootPath,
-    );
+    return !isLegacyProjectSandboxPath(normalizeWorkspacePath(rootPath), this.projectsRootPath);
   }
 
   private async syncWorkspacePersistence(
@@ -1387,22 +1277,28 @@ export class FileSessionStore {
     );
     await writeTextFileAtomic(
       join(workspaceRoot, ".agent-ppt-project.json"),
-      `${JSON.stringify({
-        version: 1,
-        projectId,
-        title: getWorkspaceLabel(workspaceRoot),
-      }, null, 2)}\n`,
+      `${JSON.stringify(
+        {
+          version: 1,
+          projectId,
+          title: getWorkspaceLabel(workspaceRoot),
+        },
+        null,
+        2,
+      )}\n`,
     );
   }
 
   private async persist(): Promise<void> {
     const state = structuredClone(this.requireData());
-    const write = this.writeQueue.catch(() => undefined).then(async () => {
-      this.conversationDatabase.replaceState({
-        activeSessionId: state.activeSessionId,
-        sessions: state.sessions,
+    const write = this.writeQueue
+      .catch(() => undefined)
+      .then(async () => {
+        this.conversationDatabase.replaceState({
+          activeSessionId: state.activeSessionId,
+          sessions: state.sessions,
+        });
       });
-    });
     this.writeQueue = write;
     await write;
   }

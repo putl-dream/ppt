@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
-import React from "react";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ModelManagement } from "../src/renderer/src/components/ModelManagement";
 
@@ -41,34 +41,36 @@ describe("ModelManagement vendor onboarding", () => {
     await waitFor(() => expect(onSaveModels).toHaveBeenCalledTimes(1));
     const [savedModels, apiKey] = onSaveModels.mock.calls[0];
     expect(apiKey).toBe("deepseek-secret");
-    expect(savedModels).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        id: "deepseek-v4-flash",
-        provider: "anthropic",
-        baseURL: "https://api.deepseek.com/anthropic",
-        credentialConfigured: true,
-        supports1MContext: true,
-        pricing: expect.objectContaining({
-          currency: "CNY",
-          inputPerMillion: 1,
-          cachedInputPerMillion: 0.02,
-          outputPerMillion: 2,
+    expect(savedModels).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "deepseek-v4-flash",
+          provider: "anthropic",
+          baseURL: "https://api.deepseek.com/anthropic",
+          credentialConfigured: true,
+          supports1MContext: true,
+          pricing: expect.objectContaining({
+            currency: "CNY",
+            inputPerMillion: 1,
+            cachedInputPerMillion: 0.02,
+            outputPerMillion: 2,
+          }),
         }),
-      }),
-      expect.objectContaining({
-        id: "deepseek-v4-pro",
-        provider: "anthropic",
-        baseURL: "https://api.deepseek.com/anthropic",
-        credentialConfigured: true,
-        supports1MContext: true,
-        pricing: expect.objectContaining({
-          currency: "CNY",
-          inputPerMillion: 3,
-          cachedInputPerMillion: 0.025,
-          outputPerMillion: 6,
+        expect.objectContaining({
+          id: "deepseek-v4-pro",
+          provider: "anthropic",
+          baseURL: "https://api.deepseek.com/anthropic",
+          credentialConfigured: true,
+          supports1MContext: true,
+          pricing: expect.objectContaining({
+            currency: "CNY",
+            inputPerMillion: 3,
+            cachedInputPerMillion: 0.025,
+            outputPerMillion: 6,
+          }),
         }),
-      }),
-    ]));
+      ]),
+    );
     expect(savedModels.every((model: Record<string, unknown>) => !("apiKey" in model))).toBe(true);
     expect(onSaveModel).not.toHaveBeenCalled();
     expect(onSelectModel).toHaveBeenCalledWith("deepseek-v4-flash");
@@ -80,22 +82,24 @@ describe("ModelManagement vendor onboarding", () => {
     const triggerToast = vi.fn();
     render(
       <ModelManagement
-        models={[{
-          id: "custom-priced",
-          name: "Priced Model",
-          provider: "openai",
-          model: "priced-model",
-          baseURL: "https://example.com/v1",
-          openaiApiMode: "responses",
-          enabled: true,
-          pricing: {
-            currency: "USD",
-            inputPerMillion: 5,
-            cachedInputPerMillion: 0.5,
-            outputPerMillion: 30,
-            updatedAt: "2026-08-01",
+        models={[
+          {
+            id: "custom-priced",
+            name: "Priced Model",
+            provider: "openai",
+            model: "priced-model",
+            baseURL: "https://example.com/v1",
+            openaiApiMode: "responses",
+            enabled: true,
+            pricing: {
+              currency: "USD",
+              inputPerMillion: 5,
+              cachedInputPerMillion: 0.5,
+              outputPerMillion: 30,
+              updatedAt: "2026-08-01",
+            },
           },
-        }]}
+        ]}
         selectedModelId="custom-priced"
         onSelectModel={vi.fn()}
         onSaveModel={onSaveModel}
@@ -122,16 +126,18 @@ describe("ModelManagement vendor onboarding", () => {
     const onSaveModel = vi.fn().mockResolvedValue(true);
     render(
       <ModelManagement
-        models={[{
-          id: "custom-secure",
-          name: "Secure Model",
-          provider: "openai",
-          model: "secure-model",
-          baseURL: "https://example.com/v1",
-          openaiApiMode: "responses",
-          enabled: true,
-          credentialConfigured: true,
-        }]}
+        models={[
+          {
+            id: "custom-secure",
+            name: "Secure Model",
+            provider: "openai",
+            model: "secure-model",
+            baseURL: "https://example.com/v1",
+            openaiApiMode: "responses",
+            enabled: true,
+            credentialConfigured: true,
+          },
+        ]}
         selectedModelId="custom-secure"
         onSelectModel={vi.fn()}
         onSaveModel={onSaveModel}

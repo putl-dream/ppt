@@ -1,33 +1,30 @@
+import type { DesignSystemV2 } from "@design-system";
 import type { AgentExecutionStrategy } from "@shared/agent";
 import type { AgentGatewayPreferences } from "@shared/agent-gateway-config";
 import type { AgentStepLimits } from "@shared/agent-step-limits";
 import type { CredentialStorageStatus } from "@shared/credentials";
-import type { DesignSystemV2 } from "@design-system";
 import type { UiThemeSummary } from "@shared/ipc";
 import type { UiFontFamily } from "../app/uiTypography";
+import { cx } from "../lib/cx";
 import type { ManagedModel } from "../modelCatalog";
 import type { SettingsCategory } from "../settingsCategories";
-import { cx } from "../lib/cx";
-import { TokenUsageOverview } from "./TokenUsageOverview";
 import {
   AgentApprovalSettingsPanel,
   AgentLimitsSettingsPanel,
   AgentLogsSettingsPanel,
 } from "./settings/AgentSettingsPanels";
-import {
-  AppearanceSettingsPanel,
-  type UiColorScheme,
-} from "./settings/AppearanceSettingsPanel";
+import { AppearanceSettingsPanel, type UiColorScheme } from "./settings/AppearanceSettingsPanel";
 import {
   ModelListSettingsPanel,
   ModelRuntimeSettingsPanel,
   useWebSearchSettings,
-  WebSearchSettingsPanel,
   type WebSearchSettingsController,
+  WebSearchSettingsPanel,
 } from "./settings/ModelSettingsPanels";
 import { PresentationSettingsPanel } from "./settings/PresentationSettingsPanel";
 import { SettingsPanel } from "./settings/SettingsPrimitives";
 import { StorageSettingsPanel } from "./settings/StorageSettingsPanel";
+import { TokenUsageOverview } from "./TokenUsageOverview";
 
 interface SettingsConsoleProps {
   activeCategory: SettingsCategory;

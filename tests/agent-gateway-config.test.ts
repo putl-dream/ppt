@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
-  DEFAULT_AGENT_GATEWAY_CONFIG,
   agentRunServicesWireSchema,
+  DEFAULT_AGENT_GATEWAY_CONFIG,
   resolveAgentGatewayConfig,
   resolveAgentGatewayPreferences,
   resolveAgentSearchConfig,
@@ -58,19 +58,23 @@ describe("agent-gateway-config", () => {
   });
 
   it("rejects credentials at the Renderer run-services boundary", () => {
-    expect(() => agentRunServicesWireSchema.parse({
-      timeoutMs: 300_000,
-      maxOutputTokens: 8192,
-      webSearchApiKey: "tvly-must-not-cross-ipc",
-    })).toThrow();
-    expect(() => agentRunServicesWireSchema.parse({
-      timeoutMs: 300_000,
-      maxOutputTokens: 8192,
-      fallbackModel: {
-        provider: "openai",
-        model: "gpt-5.5",
-        apiKey: "sk-must-not-cross-ipc",
-      },
-    })).toThrow();
+    expect(() =>
+      agentRunServicesWireSchema.parse({
+        timeoutMs: 300_000,
+        maxOutputTokens: 8192,
+        webSearchApiKey: "tvly-must-not-cross-ipc",
+      }),
+    ).toThrow();
+    expect(() =>
+      agentRunServicesWireSchema.parse({
+        timeoutMs: 300_000,
+        maxOutputTokens: 8192,
+        fallbackModel: {
+          provider: "openai",
+          model: "gpt-5.5",
+          apiKey: "sk-must-not-cross-ipc",
+        },
+      }),
+    ).toThrow();
   });
 });

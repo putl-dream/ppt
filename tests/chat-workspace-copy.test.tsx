@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_DESIGN_SYSTEM } from "../src/design-system";
+import { getChatPromptTemplates } from "../src/renderer/src/components/chat-workspace-copy";
 import type { Presentation } from "../src/shared/presentation";
 import { createSvgTestSlide } from "../src/shared/presentation-fixtures";
-import { getChatPromptTemplates } from "../src/renderer/src/components/chat-workspace-copy";
 
 const presentation: Presentation = {
   id: "deck-1",
@@ -28,7 +28,9 @@ describe("ChatWorkspace prompt templates", () => {
 
   it("hides the delete template when the current slide cannot be resolved", () => {
     expect(commands()).not.toEqual(expect.arrayContaining([expect.stringMatching(/^删除/)]));
-    expect(commands(presentation, "")).not.toEqual(expect.arrayContaining([expect.stringMatching(/^删除/)]));
+    expect(commands(presentation, "")).not.toEqual(
+      expect.arrayContaining([expect.stringMatching(/^删除/)]),
+    );
     expect(commands(presentation, "missing-slide")).not.toEqual(
       expect.arrayContaining([expect.stringMatching(/^删除/)]),
     );

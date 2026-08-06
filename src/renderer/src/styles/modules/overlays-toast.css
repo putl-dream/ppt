@@ -35,8 +35,14 @@
 }
 
 @keyframes toast-drop-in {
-  from { transform: translateY(-6px); opacity: 0; }
-  to { transform: translateY(0); opacity: 1; }
+  from {
+    transform: translateY(-6px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

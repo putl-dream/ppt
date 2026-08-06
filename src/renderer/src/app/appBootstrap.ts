@@ -1,16 +1,12 @@
+import type { DesignSystemV2 } from "@design-system";
+import type { AgentExecutionStrategy } from "@shared/agent";
 import type { AgentGatewayPreferences } from "@shared/agent-gateway-config";
 import type { AgentStepLimits } from "@shared/agent-step-limits";
-import type { AgentExecutionStrategy } from "@shared/agent";
-import type { DesignSystemV2 } from "@design-system";
 import { loadAgentGatewayPreferences } from "../agentGatewayConfig";
 import { loadAgentStepLimits } from "../agentStepLimits";
-import {
-  SELECTED_MODEL_STORAGE_KEY,
-  loadManagedModels,
-  type ManagedModel,
-} from "../modelCatalog";
-import type { UiFontFamily } from "./uiTypography";
 import { consumeCredentialReentryNotice } from "../credentialMigration";
+import { loadManagedModels, type ManagedModel, SELECTED_MODEL_STORAGE_KEY } from "../modelCatalog";
+import type { UiFontFamily } from "./uiTypography";
 
 export const UI_SETTINGS_STORAGE_KEY = "agent-ppt.ui-settings.v2";
 const LEGACY_UI_SETTINGS_STORAGE_KEY = "agent-ppt.ui-settings.v1";
@@ -80,9 +76,11 @@ function removeStorageItem(key: string): void {
 }
 
 export function prefersDarkColorScheme(): boolean {
-  return typeof window !== "undefined"
-    && typeof window.matchMedia === "function"
-    && window.matchMedia("(prefers-color-scheme: dark)").matches;
+  return (
+    typeof window !== "undefined" &&
+    typeof window.matchMedia === "function" &&
+    window.matchMedia("(prefers-color-scheme: dark)").matches
+  );
 }
 
 /**

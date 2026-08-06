@@ -2,39 +2,35 @@ import { mkdir, open } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import type { AgentExecutionStrategy, AgentModelSelection } from "@shared/agent";
-import type { AgentRuntimeResult } from "../runtime/runtime-types";
+import type { ConversationDatabase } from "../../conversation-database";
 import type {
   AgentModelMessage,
   AgentModelToolResultBlock,
   AgentModelToolUseBlock,
 } from "../gateway";
-import { readJsonFile, writeJsonFileAtomic } from "./atomic-json-file";
-import { ConversationDatabase } from "../../conversation-database";
 import type { DurableBackgroundTask } from "../runtime/background/background-task-manager";
-import type {
-  QueryId,
-  RunId,
-  ThreadId,
-} from "../runtime/query/query-types";
+import type { QueryId, RunId, ThreadId } from "../runtime/query/query-types";
 import { asRunId, asThreadId } from "../runtime/query/query-types";
+import type { AgentRuntimeResult } from "../runtime/runtime-types";
+import { readJsonFile, writeJsonFileAtomic } from "./atomic-json-file";
 
 type LockRelease = () => Promise<void>;
 type ProperLockfile = {
-  lock(file: string, options?: {
-    realpath?: boolean;
-    stale?: number;
-    retries?: number | { retries?: number; minTimeout?: number; maxTimeout?: number; factor?: number };
-  }): Promise<LockRelease>;
+  lock(
+    file: string,
+    options?: {
+      realpath?: boolean;
+      stale?: number;
+      retries?:
+        | number
+        | { retries?: number; minTimeout?: number; maxTimeout?: number; factor?: number };
+    },
+  ): Promise<LockRelease>;
 };
 const require = createRequire(import.meta.url);
 const lockfile = require("proper-lockfile") as ProperLockfile;
 
-export type DurableRunStatus =
-  | "running"
-  | "waiting_user"
-  | "completed"
-  | "interrupted"
-  | "failed";
+export type DurableRunStatus = "running" | "waiting_user" | "completed" | "interrupted" | "failed";
 
 export type DurableRunPhase =
   | "before_model"
@@ -104,9 +100,7 @@ export interface DurableRunCheckpointV2Payload {
   updatedAt: string;
 }
 
-export type DurableRunCheckpoint =
-  | LegacyDurableRunCheckpoint
-  | DurableRunCheckpointV2Payload;
+export type DurableRunCheckpoint = LegacyDurableRunCheckpoint | DurableRunCheckpointV2Payload;
 
 export interface DurableQueryStateSnapshot {
   messages: AgentModelMessage[];
@@ -203,10 +197,14 @@ export class DurableRunStore {
 
   async load(threadId: string): Promise<DurableRunCheckpoint | undefined> {
     if (typeof this.storage !== "string") {
-      const stored = this.storage.loadRunCheckpoint<DurableRunCheckpoint | DurableRunCheckpointEnvelope>(threadId);
+      const stored = this.storage.loadRunCheckpoint<
+        DurableRunCheckpoint | DurableRunCheckpointEnvelope
+      >(threadId);
       return checkpointPayload(stored, threadId);
     }
-    const stored = await readJsonFile<DurableRunCheckpoint | DurableRunCheckpointEnvelope>(this.pathFor(threadId));
+    const stored = await readJsonFile<DurableRunCheckpoint | DurableRunCheckpointEnvelope>(
+      this.pathFor(threadId),
+    );
     return checkpointPayload(stored, threadId);
   }
 
@@ -250,11 +248,7 @@ export class DurableRunStore {
       const path = this.pathFor(input.threadId);
       const stored = await readJsonFile<DurableRunCheckpoint | DurableRunCheckpointEnvelope>(path);
       const existingWriter = isCheckpointEnvelope(stored) ? stored.writer : undefined;
-      if (
-        existingWriter?.active
-        && existingWriter.runId !== input.runId
-        && !input.allowTakeover
-      ) {
+      if (existingWriter?.active && existingWriter.runId !== input.runId && !input.allowTakeover) {
         return {
           type: "lease_busy" as const,
           activeRunId: existingWriter.runId,
@@ -314,11 +308,12 @@ export class DurableRunStore {
       const path = this.pathFor(input.lease.threadId);
       const stored = await readJsonFile<DurableRunCheckpointEnvelope>(path);
       if (
-        stored?.version !== 2
-        || !stored.writer.active
-        || stored.writer.runId !== input.lease.runId
-        || stored.writer.generation !== input.lease.generation
-      ) return "stale_generation";
+        stored?.version !== 2 ||
+        !stored.writer.active ||
+        stored.writer.runId !== input.lease.runId ||
+        stored.writer.generation !== input.lease.generation
+      )
+        return "stale_generation";
 
       if (stored.writer.revision === input.nextRevision) {
         return JSON.stringify(stored.payload) === JSON.stringify(input.checkpoint)
@@ -326,9 +321,10 @@ export class DurableRunStore {
           : "revision_conflict";
       }
       if (
-        stored.writer.revision !== input.expectedRevision
-        || input.nextRevision !== input.expectedRevision + 1
-      ) return "revision_conflict";
+        stored.writer.revision !== input.expectedRevision ||
+        input.nextRevision !== input.expectedRevision + 1
+      )
+        return "revision_conflict";
 
       await writeJsonFileAtomic(path, {
         version: 2,
@@ -347,10 +343,11 @@ export class DurableRunStore {
       const path = this.pathFor(lease.threadId);
       const stored = await readJsonFile<DurableRunCheckpointEnvelope>(path);
       if (
-        stored?.version !== 2
-        || stored.writer.runId !== lease.runId
-        || stored.writer.generation !== lease.generation
-      ) return false;
+        stored?.version !== 2 ||
+        stored.writer.runId !== lease.runId ||
+        stored.writer.generation !== lease.generation
+      )
+        return false;
       await writeJsonFileAtomic(path, {
         ...stored,
         writer: { ...stored.writer, active: false },
@@ -375,11 +372,12 @@ export class DurableRunStore {
     return this.withFileLeaseLock(lease.threadId, async () => {
       const stored = await readJsonFile<DurableRunCheckpointEnvelope>(this.pathFor(lease.threadId));
       if (
-        stored?.version !== 2
-        || !stored.writer.active
-        || stored.writer.runId !== lease.runId
-        || stored.writer.generation !== lease.generation
-      ) return { type: "stale" as const };
+        stored?.version !== 2 ||
+        !stored.writer.active ||
+        stored.writer.runId !== lease.runId ||
+        stored.writer.generation !== lease.generation
+      )
+        return { type: "stale" as const };
       return {
         type: "active" as const,
         revision: stored.writer.revision,

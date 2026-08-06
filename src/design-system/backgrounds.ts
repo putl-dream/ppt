@@ -2,7 +2,10 @@ import type { VisualStyleDefinition } from "./catalog";
 import type { ResolvedColors } from "./colors";
 import type { DesignTokens } from "./schema";
 
-export interface GradientStop { color: string; pos: number }
+export interface GradientStop {
+  color: string;
+  pos: number;
+}
 export interface BackgroundGradient {
   type: "linear" | "radial";
   angle?: number;
@@ -103,9 +106,8 @@ function resolveBase(
   colors: ResolvedColors,
   behavior?: VisualStyleDefinition["background"],
 ): Pick<ResolvedBackground, "css" | "fill" | "gradient"> {
-  const gradientBehavior = behavior?.gradient ?? (
-    tokens.backgroundStyle === "gradient" ? "subtle" : "none"
-  );
+  const gradientBehavior =
+    behavior?.gradient ?? (tokens.backgroundStyle === "gradient" ? "subtle" : "none");
   if (gradientBehavior === "luminous") {
     return {
       css: `radial-gradient(circle at 72% 28%, ${colors.secondaryAccent} 0%, ${colors.background} 58%, ${colors.scrim} 100%)`,
@@ -157,13 +159,11 @@ export function resolveBackground(
   _mode: "light" | "dark",
   style?: VisualStyleDefinition,
 ): ResolvedBackground {
-  const behavior = style && style.background.style === tokens.backgroundStyle
-    ? style.background
-    : undefined;
+  const behavior =
+    style && style.background.style === tokens.backgroundStyle ? style.background : undefined;
   const base = resolveBase(tokens, colors, behavior);
-  const requestedPattern = tokens.backgroundStyle === "grid"
-    ? "grid"
-    : behavior?.pattern ?? "none";
+  const requestedPattern =
+    tokens.backgroundStyle === "grid" ? "grid" : (behavior?.pattern ?? "none");
   const resolvedPattern = resolvePattern(requestedPattern, colors);
   const textureCss = resolveTexture(style?.texture, colors);
   const layers = [resolvedPattern.css, textureCss, base.css].filter(Boolean);

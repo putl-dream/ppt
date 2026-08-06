@@ -1,8 +1,8 @@
-import React from "react";
 import {
   formatAgentToolApprovalDetail,
   getAgentToolDisplayCopy,
 } from "@shared/agent-activity-display";
+import type React from "react";
 
 export interface PendingToolApproval {
   approvalId: string;
@@ -22,11 +22,7 @@ export const ToolApprovalOverlay: React.FC<ToolApprovalOverlayProps> = ({
 }) => {
   const action = getAgentToolDisplayCopy(approval.toolName).action;
   const detail = formatAgentToolApprovalDetail(approval.detail);
-  const description = [
-    `即将${action}`,
-    approval.reason,
-    detail,
-  ].filter(Boolean).join("\n");
+  const description = [`即将${action}`, approval.reason, detail].filter(Boolean).join("\n");
 
   return (
     <section

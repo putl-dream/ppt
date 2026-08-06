@@ -1,14 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { buildTeammateSystemPrompt } from "../src/main/agent/teammate/teammate-system-prompt";
-import {
-  SUB_AGENT_TOOLS,
-  loadSkillSubAgentTool,
-} from "../src/main/agent/subagent/workspace-tools";
 import {
   createEmptySkillRegistry,
   registerSkillFromContent,
 } from "../src/main/agent/skills/loadSkillsDir";
 import { createSkillSession } from "../src/main/agent/skills/skill-types";
+import { loadSkillSubAgentTool, SUB_AGENT_TOOLS } from "../src/main/agent/subagent/workspace-tools";
+import { buildTeammateSystemPrompt } from "../src/main/agent/teammate/teammate-system-prompt";
 
 const SAMPLE_SKILL = `---
 name: ppt-brief

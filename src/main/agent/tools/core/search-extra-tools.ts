@@ -1,7 +1,7 @@
 import { z } from "zod";
-import type { ToolDefinition } from "../tool-definition";
 import type { ToolCard } from "../tool-card";
 import { toToolCard } from "../tool-card";
+import type { ToolDefinition } from "../tool-definition";
 
 export const searchExtraToolsSchema = z.object({
   query: z.string().describe("搜索词，支持按延迟工具名称或核心功能描述进行搜索"),
@@ -39,15 +39,17 @@ export const searchExtraToolsTool: ToolDefinition<
       context.discoverySession.discoveredToolNames.add(match.name);
     }
 
-    const proposalGuidance = proposalTools.length > 0
-      ? `Core command-proposal capability remains available through: ${proposalTools.join(", ")}.`
-      : "No command-proposal capability is currently available; do not claim that Presentation changes were applied.";
+    const proposalGuidance =
+      proposalTools.length > 0
+        ? `Core command-proposal capability remains available through: ${proposalTools.join(", ")}.`
+        : "No command-proposal capability is currently available; do not claim that Presentation changes were applied.";
     return {
       tools: matches,
       baseEditingAvailable: proposalTools.length > 0,
-      guidance: matches.length > 0
-        ? `Deferred tools are optional enhancements. ${proposalGuidance}`
-        : `No matching Deferred Tool was found. ${proposalGuidance}`,
+      guidance:
+        matches.length > 0
+          ? `Deferred tools are optional enhancements. ${proposalGuidance}`
+          : `No matching Deferred Tool was found. ${proposalGuidance}`,
     };
   },
 };

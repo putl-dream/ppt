@@ -162,12 +162,14 @@ const progressTaskListUpdatedEventSchema = z.object({
     goal: z.string().nullable().optional(),
     listRevision: z.number().int().nonnegative().optional(),
     state: z.enum(["open", "closed", "archived"]).optional(),
-    archive: z.object({
-      outcome: z.enum(["completed", "abandoned"]),
-      reason: z.string().optional(),
-      archivedBy: z.string(),
-      archivedAt: z.string(),
-    }).optional(),
+    archive: z
+      .object({
+        outcome: z.enum(["completed", "abandoned"]),
+        reason: z.string().optional(),
+        archivedBy: z.string(),
+        archivedAt: z.string(),
+      })
+      .optional(),
   }),
 });
 
@@ -191,12 +193,14 @@ const artifactSlidePreviewEventSchema = z.object({
     slideId: z.string().trim().min(1),
     title: z.string(),
     description: z.string(),
-    thumbnail: z.object({
-      pngBase64: z.string().min(1),
-      width: z.number().int().positive(),
-      height: z.number().int().positive(),
-      mimeType: z.literal("image/png"),
-    }).nullable(),
+    thumbnail: z
+      .object({
+        pngBase64: z.string().min(1),
+        width: z.number().int().positive(),
+        height: z.number().int().positive(),
+        mimeType: z.literal("image/png"),
+      })
+      .nullable(),
     thumbnailError: z.string().optional(),
   }),
 });
@@ -270,12 +274,7 @@ export const displayCardActionSchema = z.object({
 
 export type DisplayCardAction = z.infer<typeof displayCardActionSchema>;
 
-export const displayCardStatusSchema = z.enum([
-  "active",
-  "resolved",
-  "dismissed",
-  "superseded",
-]);
+export const displayCardStatusSchema = z.enum(["active", "resolved", "dismissed", "superseded"]);
 
 export const persistedDisplayCardSchema = z.object({
   event: displayEventSchema,

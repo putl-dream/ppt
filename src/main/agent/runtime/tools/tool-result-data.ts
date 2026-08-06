@@ -45,13 +45,14 @@ function serializeForStorage(value: unknown): string {
 }
 
 function safeSegment(value: string, fallback: string): string {
-  const safe = value.trim().replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/^-+|-+$/g, "");
+  const safe = value
+    .trim()
+    .replace(/[^a-zA-Z0-9._-]+/g, "-")
+    .replace(/^-+|-+$/g, "");
   return safe || fallback;
 }
 
-async function persistResult<T>(
-  options: PrepareToolResultOptions<T>,
-): Promise<string | undefined> {
+async function persistResult<T>(options: PrepareToolResultOptions<T>): Promise<string | undefined> {
   if (!options.workspaceRoot) return undefined;
 
   const thread = safeSegment(options.threadId, "thread");

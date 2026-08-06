@@ -11,10 +11,7 @@ const transactionStates = new WeakMap<DatabaseSync, TransactionState>();
  * already owns the same SQLite connection. That lets the session snapshot and
  * Presentation lifecycle records commit or roll back as one unit.
  */
-export function withSqliteTransaction<T>(
-  database: DatabaseSync,
-  operation: () => T,
-): T {
+export function withSqliteTransaction<T>(database: DatabaseSync, operation: () => T): T {
   const state = transactionStates.get(database) ?? { sequence: 0 };
   transactionStates.set(database, state);
   state.sequence += 1;

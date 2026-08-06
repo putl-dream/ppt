@@ -1,8 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { type SlideNarrative } from "../src/shared/presentation";
-import { createStarterPresentation, createSvgVisualSource } from "../src/shared/presentation-fixtures";
 import { liftSvgText } from "../src/main/deck/svg-text-lift";
 import { utf8ToBase64 } from "../src/shared/base64";
+import type { SlideNarrative } from "../src/shared/presentation";
+import {
+  createStarterPresentation,
+  createSvgVisualSource,
+} from "../src/shared/presentation-fixtures";
 
 const pptxMocks = vi.hoisted(() => {
   const slide = {
@@ -58,9 +61,9 @@ describe("SVG page PPTX export", () => {
 
   it("exports a text-stripped SVG background plus native editable text", async () => {
     const markup =
-      '<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">'
-      + '<rect width="1280" height="720" fill="#0f172a"/>'
-      + '<text x="40" y="80" font-size="32" fill="#ffffff">SVG page</text></svg>';
+      '<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">' +
+      '<rect width="1280" height="720" fill="#0f172a"/>' +
+      '<text x="40" y="80" font-size="32" fill="#ffffff">SVG page</text></svg>';
     const lifted = liftSvgText(markup);
     const presentation = createStarterPresentation();
     presentation.id = "deck-1";
@@ -78,11 +81,7 @@ describe("SVG page PPTX export", () => {
       }),
     };
 
-    await exportToPptx(
-      presentation,
-      {},
-      "/tmp/svg-page.pptx",
-    );
+    await exportToPptx(presentation, {}, "/tmp/svg-page.pptx");
 
     expect(pptxMocks.instance.defineLayout).toHaveBeenCalledWith({
       name: "AGENT_PPT_WIDE",
@@ -121,8 +120,8 @@ describe("SVG page PPTX export", () => {
 
   it("falls back to a full-page SVG image when there is no liftable text", async () => {
     const markup =
-      '<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">'
-      + '<rect width="1280" height="720" fill="#0f172a"/></svg>';
+      '<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">' +
+      '<rect width="1280" height="720" fill="#0f172a"/></svg>';
     const presentation = createStarterPresentation();
     presentation.slides[0] = {
       id: "slide-1",
@@ -151,10 +150,8 @@ describe("SVG page PPTX export", () => {
     const presentation = createStarterPresentation();
     (presentation.slides[0] as { visualSource?: unknown }).visualSource = undefined;
 
-    await expect(exportToPptx(
-      presentation,
-      {},
-      "/tmp/non-svg-page.pptx",
-    )).rejects.toThrow("not SVG-native");
+    await expect(exportToPptx(presentation, {}, "/tmp/non-svg-page.pptx")).rejects.toThrow(
+      "not SVG-native",
+    );
   });
 });

@@ -1,6 +1,6 @@
-import { applyResponseContract } from "./response-contract";
-import { withEphemeralPrompt } from "./message-pairing";
 import { AgentGatewayError } from "./errors";
+import { withEphemeralPrompt } from "./message-pairing";
+import { applyResponseContract } from "./response-contract";
 import type {
   AgentModelContentBlock,
   AgentModelRequest,
@@ -50,9 +50,7 @@ function validateOptionalString(
   }
 }
 
-const VALID_STOP_REASONS: ReadonlySet<string> = new Set([
-  "end", "max_tokens", "tool_use", "other",
-]);
+const VALID_STOP_REASONS: ReadonlySet<string> = new Set(["end", "max_tokens", "tool_use", "other"]);
 
 function validateOptionalStopReason(
   value: unknown,
@@ -71,10 +69,12 @@ export function prepareAgentModelRequest(
 ): PreparedAgentModelRequest {
   const messages = request.messages
     ? withEphemeralPrompt(request.messages, request.prompt)
-    : [{
-        role: "user" as const,
-        content: [{ type: "text" as const, text: request.prompt }],
-      }];
+    : [
+        {
+          role: "user" as const,
+          content: [{ type: "text" as const, text: request.prompt }],
+        },
+      ];
 
   return {
     systemPrompt: applyResponseContract(request.systemPrompt, request.responseContract),
@@ -112,21 +112,21 @@ function validateContentBlock(
       return;
     case "image":
       if (
-        typeof value.data !== "string"
-        || typeof value.mediaType !== "string"
-        || !["image/png", "image/jpeg", "image/webp", "image/gif"].includes(value.mediaType)
+        typeof value.data !== "string" ||
+        typeof value.mediaType !== "string" ||
+        !["image/png", "image/jpeg", "image/webp", "image/gif"].includes(value.mediaType)
       ) {
         throw protocolError("Provider returned a malformed image block.", config);
       }
       return;
     case "tool_use":
       if (
-        typeof value.id !== "string"
-        || !value.id
-        || typeof value.name !== "string"
-        || !value.name
-        || !isRecord(value.input)
-        || (value.parseError !== undefined && typeof value.parseError !== "string")
+        typeof value.id !== "string" ||
+        !value.id ||
+        typeof value.name !== "string" ||
+        !value.name ||
+        !isRecord(value.input) ||
+        (value.parseError !== undefined && typeof value.parseError !== "string")
       ) {
         throw protocolError("Provider returned a malformed tool_use block.", config);
       }

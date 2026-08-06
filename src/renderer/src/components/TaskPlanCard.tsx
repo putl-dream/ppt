@@ -1,17 +1,36 @@
-import React, { useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { AgentTaskNode } from "@shared/agent-task-list";
 import type { TeamSessionProjection } from "@shared/team-session";
+import type React from "react";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ChevronDownIcon, ChevronRightIcon } from "./Icons";
-import { useChatScroll, type FoldToken } from "./useChatScroll";
+import { type FoldToken, useChatScroll } from "./useChatScroll";
 
 function TaskStatusIcon({ task }: { task: AgentTaskNode }) {
-  if (task.review.state === "requested") return <span className="task-plan-icon review-requested" aria-hidden="true">◇</span>;
+  if (task.review.state === "requested")
+    return (
+      <span className="task-plan-icon review-requested" aria-hidden="true">
+        ◇
+      </span>
+    );
   const { status } = task;
-  if (status === "completed") return <span className="task-plan-icon done" aria-hidden="true">✓</span>;
+  if (status === "completed")
+    return (
+      <span className="task-plan-icon done" aria-hidden="true">
+        ✓
+      </span>
+    );
   if (status === "in_progress") {
-    return <span className="run-status-pulse task-plan-spinner" aria-hidden="true"><i /></span>;
+    return (
+      <span className="run-status-pulse task-plan-spinner" aria-hidden="true">
+        <i />
+      </span>
+    );
   }
-  return <span className="task-plan-icon pending" aria-hidden="true">○</span>;
+  return (
+    <span className="task-plan-icon pending" aria-hidden="true">
+      ○
+    </span>
+  );
 }
 
 interface TaskPlanCardProps {
@@ -60,27 +79,28 @@ export const TaskPlanCard: React.FC<TaskPlanCardProps> = ({
     }
     return result;
   }, [sessions]);
-  const currentTask = tasks.find((task) => task.review.state === "requested")
-    ?? tasks.find((task) => task.status === "in_progress")
-    ?? tasks.find((task) => task.status === "pending")
-    ?? tasks.at(-1);
-  const currentSession = currentTask
-    ? sessionByTaskId.get(currentTask.id)
-    : undefined;
+  const currentTask =
+    tasks.find((task) => task.review.state === "requested") ??
+    tasks.find((task) => task.status === "in_progress") ??
+    tasks.find((task) => task.status === "pending") ??
+    tasks.at(-1);
+  const currentSession = currentTask ? sessionByTaskId.get(currentTask.id) : undefined;
   const completedCount = tasks.filter((task) => task.status === "completed").length;
-  const summaryTitle = state === "archived"
-    ? archive?.outcome === "abandoned"
-      ? "任务已结束"
-      : "任务已完成"
-    : currentTask?.review.state === "requested"
-      ? `待验收 · ${currentTask.subject}`
-      : currentTask?.status === "in_progress"
-        ? currentTask.subject
-        : currentTask?.status === "pending"
-          ? `等待执行 · ${currentTask.subject}`
-          : "任务进度";
-  const summaryActivity = currentSession?.currentActivity
-    ?? (currentTask?.review.state === "requested"
+  const summaryTitle =
+    state === "archived"
+      ? archive?.outcome === "abandoned"
+        ? "任务已结束"
+        : "任务已完成"
+      : currentTask?.review.state === "requested"
+        ? `待验收 · ${currentTask.subject}`
+        : currentTask?.status === "in_progress"
+          ? currentTask.subject
+          : currentTask?.status === "pending"
+            ? `等待执行 · ${currentTask.subject}`
+            : "任务进度";
+  const summaryActivity =
+    currentSession?.currentActivity ??
+    (currentTask?.review.state === "requested"
       ? "结果已提交，正在等待验收"
       : currentTask?.status === "in_progress"
         ? "正在处理…"
@@ -105,9 +125,7 @@ export const TaskPlanCard: React.FC<TaskPlanCardProps> = ({
         {currentTask && <TaskStatusIcon task={currentTask} />}
         <span className="task-plan-card-summary">
           <span className="task-plan-card-title">{summaryTitle}</span>
-          {summaryActivity && (
-            <span className="task-plan-card-activity">{summaryActivity}</span>
-          )}
+          {summaryActivity && <span className="task-plan-card-activity">{summaryActivity}</span>}
         </span>
         <span className="task-plan-card-position" aria-label="任务完成进度">
           {state === "archived" && archive?.outcome === "abandoned"
@@ -130,13 +148,14 @@ export const TaskPlanCard: React.FC<TaskPlanCardProps> = ({
             <ul className="task-plan-list">
               {tasks.map((task) => {
                 const session = sessionByTaskId.get(task.id);
-                const taskState = task.review.state === "requested"
-                  ? "等待验收"
-                  : task.status === "completed"
-                    ? "已完成"
-                    : task.status === "in_progress"
-                      ? session?.currentActivity ?? "正在处理…"
-                      : "等待执行";
+                const taskState =
+                  task.review.state === "requested"
+                    ? "等待验收"
+                    : task.status === "completed"
+                      ? "已完成"
+                      : task.status === "in_progress"
+                        ? (session?.currentActivity ?? "正在处理…")
+                        : "等待执行";
                 return (
                   <li
                     key={task.id}

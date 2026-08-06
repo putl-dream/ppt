@@ -1,13 +1,10 @@
 import { mkdtemp, rm } from "node:fs/promises";
-import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { afterEach, describe, expect, it } from "vitest";
+import { join } from "node:path";
 import { ConversationDatabase } from "@main/conversation-database";
 import { createMinimalSvgMarkup, createSvgVisualSource } from "@shared/presentation-fixtures";
-import {
-  createSessionPresentation,
-  type SessionSnapshot,
-} from "@shared/session";
+import { createSessionPresentation, type SessionSnapshot } from "@shared/session";
+import { afterEach, describe, expect, it } from "vitest";
 
 const temporaryDirectories: string[] = [];
 
@@ -42,9 +39,9 @@ function snapshot(id: string): SessionSnapshot {
 
 afterEach(async () => {
   await Promise.all(
-    temporaryDirectories.splice(0).map((directory) =>
-      rm(directory, { recursive: true, force: true }),
-    ),
+    temporaryDirectories
+      .splice(0)
+      .map((directory) => rm(directory, { recursive: true, force: true })),
   );
 });
 
@@ -52,24 +49,26 @@ describe("ConversationDatabase", () => {
   it("stores sessions and messages without workspace transcripts", async () => {
     const database = await createDatabase();
     const session = snapshot("s1");
-    session.displayCards = [{
-      event: {
-        protocolVersion: 1,
-        eventId: "question-1",
-        emittedAt: "2026-07-15T00:00:00.000Z",
-        kind: "interaction.question-requested",
-        category: "interaction",
-        source: { kind: "tool", toolName: "AskUser" },
-        scope: { sessionId: "s1", threadId: "thread-1", anchorMessageId: "a1" },
-        semantics: { blocking: true, requiresResponse: true, priority: "high" },
-        payload: {
-          message: "请选择",
-          question: { variant: "markdown", selectionMode: "single" },
+    session.displayCards = [
+      {
+        event: {
+          protocolVersion: 1,
+          eventId: "question-1",
+          emittedAt: "2026-07-15T00:00:00.000Z",
+          kind: "interaction.question-requested",
+          category: "interaction",
+          source: { kind: "tool", toolName: "AskUser" },
+          scope: { sessionId: "s1", threadId: "thread-1", anchorMessageId: "a1" },
+          semantics: { blocking: true, requiresResponse: true, priority: "high" },
+          payload: {
+            message: "请选择",
+            question: { variant: "markdown", selectionMode: "single" },
+          },
         },
+        status: "active",
+        receivedAt: 1,
       },
-      status: "active",
-      receivedAt: 1,
-    }];
+    ];
     database.replaceState({ activeSessionId: "s1", sessions: [session] });
 
     const restored = database.loadState();
@@ -197,12 +196,8 @@ describe("ConversationDatabase", () => {
       kind: "query_started",
       payload: { queryId: "query-1" },
     });
-    expect(() => database.bindRunQueryId("run-2", "run-2")).toThrow(
-      "QueryId must be distinct",
-    );
-    expect(() => database.bindRunQueryId("run-2", "thread-1")).toThrow(
-      "QueryId must be distinct",
-    );
+    expect(() => database.bindRunQueryId("run-2", "run-2")).toThrow("QueryId must be distinct");
+    expect(() => database.bindRunQueryId("run-2", "thread-1")).toThrow("QueryId must be distinct");
     database.close();
   });
 

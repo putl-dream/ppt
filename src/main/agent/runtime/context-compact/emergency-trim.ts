@@ -1,7 +1,8 @@
 import type { ModelPromptPayload } from "../turns/model-call-recovery";
 import { compactConversation, compactTranscript } from "../turns/transcript-compact";
-import { snipCompactConversation, snipCompactTranscript } from "./snip-compact";
 import { microCompactTranscript } from "./micro-compact";
+import { snipCompactConversation, snipCompactTranscript } from "./snip-compact";
+
 export { emergencyTrimModelMessages } from "./model-messages";
 
 const EMERGENCY_KEEP_RECENT = 3;

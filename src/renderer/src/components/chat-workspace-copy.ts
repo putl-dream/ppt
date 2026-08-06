@@ -65,7 +65,7 @@ export function getChatPromptTemplates(
     CHAT_WORKSPACE_COPY_ZH_CN.templates.appendSlide,
   ];
   const selectedIndex = selectedSlideId
-    ? presentation?.slides.findIndex((slide) => slide.id === selectedSlideId) ?? -1
+    ? (presentation?.slides.findIndex((slide) => slide.id === selectedSlideId) ?? -1)
     : -1;
   if (selectedIndex >= 0) {
     templates.push(CHAT_WORKSPACE_COPY_ZH_CN.templates.deleteSlide(selectedIndex + 1));

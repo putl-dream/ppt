@@ -1,7 +1,9 @@
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import type { ProjectArtifact } from "../src/shared/session";
+import type { ProjectFilesController } from "../src/renderer/src/app/project/useProjectFiles";
+import { LeftPanel } from "../src/renderer/src/components/LeftPanel";
+import { ProjectFilesPageContent } from "../src/renderer/src/components/ProjectFilesPage";
 import {
   asArtifactId,
   asArtifactRevisionId,
@@ -11,9 +13,7 @@ import {
   asProposalId,
   type PptJobProjection,
 } from "../src/shared/presentation-lifecycle";
-import type { ProjectFilesController } from "../src/renderer/src/app/project/useProjectFiles";
-import { LeftPanel } from "../src/renderer/src/components/LeftPanel";
-import { ProjectFilesPageContent } from "../src/renderer/src/components/ProjectFilesPage";
+import type { ProjectArtifact } from "../src/shared/session";
 
 const ARTIFACTS: ProjectArtifact[] = [
   {
@@ -45,26 +45,26 @@ const WAITING_JOB: PptJobProjection = {
   stage: "preview",
   stateRevision: 4,
   committedArtifacts: [],
-  staleArtifacts: [{
-    artifactId: asArtifactId("page:P01"),
-    revisionId: asArtifactRevisionId("revision-page-1"),
-    staleBecause: {
-      artifactId: asArtifactId("design-spec"),
-      revisionId: asArtifactRevisionId("revision-design-2"),
-      contentHash: `sha256:${"a".repeat(64)}`,
+  staleArtifacts: [
+    {
+      artifactId: asArtifactId("page:P01"),
+      revisionId: asArtifactRevisionId("revision-page-1"),
+      staleBecause: {
+        artifactId: asArtifactId("design-spec"),
+        revisionId: asArtifactRevisionId("revision-design-2"),
+        contentHash: `sha256:${"a".repeat(64)}`,
+      },
+      reason: "设计规范已更新",
+      detectedAt: "2026-07-30T00:00:00.000Z",
     },
-    reason: "设计规范已更新",
-    detectedAt: "2026-07-30T00:00:00.000Z",
-  }],
+  ],
   waitingReason: "请确认页面预览",
   proposalId: asProposalId("proposal-1"),
   proposalStatus: "waiting_approval",
   updatedAt: "2026-07-30T00:00:00.000Z",
 };
 
-function createController(
-  overrides: Partial<ProjectFilesController> = {},
-): ProjectFilesController {
+function createController(overrides: Partial<ProjectFilesController> = {}): ProjectFilesController {
   return {
     artifacts: [],
     files: [],
@@ -197,17 +197,19 @@ describe("ProjectFilesPageContent", () => {
           stage: "page_svg",
         },
       ],
-      staleArtifacts: [{
-        artifactId: asArtifactId("page-svg:slides/svg/P01.svg"),
-        revisionId: asArtifactRevisionId("revision-page-1"),
-        staleBecause: {
-          artifactId: asArtifactId("design-spec"),
-          revisionId: asArtifactRevisionId("revision-design-2"),
-          contentHash: `sha256:${"a".repeat(64)}`,
+      staleArtifacts: [
+        {
+          artifactId: asArtifactId("page-svg:slides/svg/P01.svg"),
+          revisionId: asArtifactRevisionId("revision-page-1"),
+          staleBecause: {
+            artifactId: asArtifactId("design-spec"),
+            revisionId: asArtifactRevisionId("revision-design-2"),
+            contentHash: `sha256:${"a".repeat(64)}`,
+          },
+          reason: "设计规范已更新",
+          detectedAt: "2026-07-30T00:00:00.000Z",
         },
-        reason: "设计规范已更新",
-        detectedAt: "2026-07-30T00:00:00.000Z",
-      }],
+      ],
     };
     const html = renderToStaticMarkup(
       <ProjectFilesPageContent
@@ -372,9 +374,7 @@ describe("LeftPanel project file navigation", () => {
     expect(expanded).toContain("项目文件");
     expect(expanded).toContain('aria-current="page"');
 
-    const rail = renderToStaticMarkup(
-      <LeftPanel {...commonProps} activeMode="files" collapsed />,
-    );
+    const rail = renderToStaticMarkup(<LeftPanel {...commonProps} activeMode="files" collapsed />);
     expect(rail).toContain('aria-label="项目文件"');
     expect(rail).toContain('aria-current="page"');
   });

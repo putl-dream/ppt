@@ -1,4 +1,3 @@
-import { describe, expect, it } from "vitest";
 import {
   compareSessionsByActivity,
   getWorkspaceLabel,
@@ -6,6 +5,7 @@ import {
   normalizeWorkspacePath,
   sessionsForWorkspace,
 } from "@shared/workspace";
+import { describe, expect, it } from "vitest";
 
 describe("workspace helpers", () => {
   it("normalizes windows paths for comparison", () => {

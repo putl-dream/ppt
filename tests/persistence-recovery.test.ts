@@ -3,16 +3,8 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { AgentRuntime } from "../src/main/agent/runtime/agent-runtime";
-import { AgentService } from "../src/main/agent/service";
-import { ToolRegistry } from "../src/main/agent/tools/tool-registry";
-import { askUserTool } from "../src/main/agent/tools/core/ask-user";
-import { beginPptCapabilityTool } from
-  "../src/main/agent/tools/core/begin-ppt-capability";
 import { CommitGate } from "../src/main/agent/gate/commit-gate";
 import { RiskPolicy } from "../src/main/agent/gate/risk-policy";
-import { CommandBus } from "../src/shared/commands";
-import { createStarterPresentation } from "../src/shared/presentation-fixtures";
 import type {
   AgentModelContentBlock,
   AgentModelGateway,
@@ -20,25 +12,27 @@ import type {
   AgentModelResponse,
 } from "../src/main/agent/gateway/types";
 import { DurableRunStore } from "../src/main/agent/persistence/durable-run-store";
+import { AgentRuntime } from "../src/main/agent/runtime/agent-runtime";
+import { asRunId, asThreadId } from "../src/main/agent/runtime/query/query-types";
+import { AgentService } from "../src/main/agent/service";
 import { MessageBus } from "../src/main/agent/teammate/message-bus";
-import { PresentationLifecycleOrchestrator } from
-  "../src/main/presentation-lifecycle/presentation-lifecycle-orchestrator";
-import { PresentationLifecycleRepository } from
-  "../src/main/presentation-lifecycle/presentation-lifecycle-repository";
-import { ContentAddressedBlobStore } from
-  "../src/main/presentation-lifecycle/content-addressed-blob-store";
-import { PresentationLifecycleToolBridge } from
-  "../src/main/presentation-lifecycle/presentation-lifecycle-tool-bridge";
-import { PresentationCommitService } from
-  "../src/main/presentation-lifecycle/presentation-commit-service";
+import { askUserTool } from "../src/main/agent/tools/core/ask-user";
+import { beginPptCapabilityTool } from "../src/main/agent/tools/core/begin-ppt-capability";
+import { ToolRegistry } from "../src/main/agent/tools/tool-registry";
+import { ContentAddressedBlobStore } from "../src/main/presentation-lifecycle/content-addressed-blob-store";
+import { PresentationCommitService } from "../src/main/presentation-lifecycle/presentation-commit-service";
+import { PresentationLifecycleOrchestrator } from "../src/main/presentation-lifecycle/presentation-lifecycle-orchestrator";
+import { PresentationLifecycleRepository } from "../src/main/presentation-lifecycle/presentation-lifecycle-repository";
+import { PresentationLifecycleToolBridge } from "../src/main/presentation-lifecycle/presentation-lifecycle-tool-bridge";
 import { FileSessionStore } from "../src/main/session-store";
+import { CommandBus } from "../src/shared/commands";
+import { createStarterPresentation } from "../src/shared/presentation-fixtures";
 import {
   asPresentationId,
   asProjectId,
   asProposalId,
   asQueryId,
 } from "../src/shared/presentation-lifecycle";
-import { asRunId, asThreadId } from "../src/main/agent/runtime/query/query-types";
 import { createFakeCommandProposalTool } from "./fake-command-proposal-tool";
 
 function gatewayFor(turns: AgentModelContentBlock[][]): AgentModelGateway & {
@@ -64,9 +58,7 @@ function gatewayFor(turns: AgentModelContentBlock[][]): AgentModelGateway & {
 describe("durable agent recovery", () => {
   it("keeps an ordinary completed chat Query out of the Presentation lifecycle", async () => {
     const workspaceRoot = await mkdtemp(join(tmpdir(), "agent-ordinary-chat-"));
-    const repository = new PresentationLifecycleRepository(
-      join(workspaceRoot, "lifecycle.sqlite"),
-    );
+    const repository = new PresentationLifecycleRepository(join(workspaceRoot, "lifecycle.sqlite"));
     const lifecycle = new PresentationLifecycleOrchestrator(repository);
     const presentation = createStarterPresentation();
     const runtime = new AgentRuntime(
@@ -74,13 +66,14 @@ describe("durable agent recovery", () => {
       gatewayFor([[{ type: "text", text: "这是普通问答。" }]]),
       undefined,
       undefined,
-      ({ queryId, options }) => new PresentationLifecycleToolBridge(
-        lifecycle,
-        asProjectId("ordinary-chat-project"),
-        presentation.id,
-        queryId,
-        options.request,
-      ),
+      ({ queryId, options }) =>
+        new PresentationLifecycleToolBridge(
+          lifecycle,
+          asProjectId("ordinary-chat-project"),
+          presentation.id,
+          queryId,
+          options.request,
+        ),
     );
     const service = new AgentService(
       new CommandBus(presentation),
@@ -109,9 +102,7 @@ describe("durable agent recovery", () => {
 
   it("moves an active PPT Query ending in a message to waiting_user at its committed stage", async () => {
     const workspaceRoot = await mkdtemp(join(tmpdir(), "agent-ppt-message-"));
-    const repository = new PresentationLifecycleRepository(
-      join(workspaceRoot, "lifecycle.sqlite"),
-    );
+    const repository = new PresentationLifecycleRepository(join(workspaceRoot, "lifecycle.sqlite"));
     const lifecycle = new PresentationLifecycleOrchestrator(repository);
     const presentation = createStarterPresentation();
     const registry = new ToolRegistry();
@@ -119,23 +110,26 @@ describe("durable agent recovery", () => {
     const runtime = new AgentRuntime(
       registry,
       gatewayFor([
-        [{
-          type: "tool_use",
-          id: "begin-create",
-          name: "BeginPptCapability",
-          input: { capability: "create", instruction: "Create a deck" },
-        }],
+        [
+          {
+            type: "tool_use",
+            id: "begin-create",
+            name: "BeginPptCapability",
+            input: { capability: "create", instruction: "Create a deck" },
+          },
+        ],
         [{ type: "text", text: "我还需要用户补充素材。" }],
       ]),
       undefined,
       undefined,
-      ({ queryId, options }) => new PresentationLifecycleToolBridge(
-        lifecycle,
-        asProjectId("ppt-message-project"),
-        presentation.id,
-        queryId,
-        options.request,
-      ),
+      ({ queryId, options }) =>
+        new PresentationLifecycleToolBridge(
+          lifecycle,
+          asProjectId("ppt-message-project"),
+          presentation.id,
+          queryId,
+          options.request,
+        ),
     );
     const service = new AgentService(
       new CommandBus(presentation),
@@ -177,42 +171,49 @@ describe("durable agent recovery", () => {
     registry.register(beginPptCapabilityTool);
     registry.register(createFakeCommandProposalTool());
     const gateway = gatewayFor([
-      [{
-        type: "tool_use",
-        id: "begin-edit",
-        name: "BeginPptCapability",
-        input: { capability: "edit", instruction: "Apply an invalid edit" },
-      }],
-      [{
-        type: "tool_use",
-        id: "submit-invalid",
-        name: "FakeSubmitCommands",
-        input: {
-          summary: "Remove a slide that does not exist",
-          risk: "low",
-          commands: [{
-            id: "missing-slide",
-            type: "remove-slide",
-            slideId: "does-not-exist",
-          }],
+      [
+        {
+          type: "tool_use",
+          id: "begin-edit",
+          name: "BeginPptCapability",
+          input: { capability: "edit", instruction: "Apply an invalid edit" },
         },
-      }],
+      ],
+      [
+        {
+          type: "tool_use",
+          id: "submit-invalid",
+          name: "FakeSubmitCommands",
+          input: {
+            summary: "Remove a slide that does not exist",
+            risk: "low",
+            commands: [
+              {
+                id: "missing-slide",
+                type: "remove-slide",
+                slideId: "does-not-exist",
+              },
+            ],
+          },
+        },
+      ],
     ]);
     const runtime = new AgentRuntime(
       registry,
       gateway,
       undefined,
       undefined,
-      ({ queryId, options }) => new PresentationLifecycleToolBridge(
-        lifecycle,
-        asProjectId("gate-project"),
-        presentation.id,
-        queryId,
-        options.request,
-        blobStore,
-        undefined,
-        options.startMode.type === "resume_query",
-      ),
+      ({ queryId, options }) =>
+        new PresentationLifecycleToolBridge(
+          lifecycle,
+          asProjectId("gate-project"),
+          presentation.id,
+          queryId,
+          options.request,
+          blobStore,
+          undefined,
+          options.startMode.type === "resume_query",
+        ),
     );
     const service = new AgentService(
       new CommandBus(presentation),
@@ -230,15 +231,14 @@ describe("durable agent recovery", () => {
     );
 
     try {
-      await expect(service.start(
-        "Apply an invalid edit",
-        undefined,
-        "REQUEST_APPROVAL",
-      )).rejects.toThrow("Commit Gate rejected proposal");
+      await expect(
+        service.start("Apply an invalid edit", undefined, "REQUEST_APPROVAL"),
+      ).rejects.toThrow("Commit Gate rejected proposal");
 
       const job = lifecycle.getState(asPresentationId(presentation.id))!;
       expect(job.status).toBe("failed");
-      const candidateAttempts = repository.listStageAttempts(job.jobId)
+      const candidateAttempts = repository
+        .listStageAttempts(job.jobId)
         .filter((attempt) => attempt.stage === "candidate");
       expect(candidateAttempts).toEqual([
         expect.objectContaining({
@@ -246,11 +246,14 @@ describe("durable agent recovery", () => {
         }),
       ]);
       expect(candidateAttempts[0]).not.toHaveProperty("artifactRevisionId");
-      expect(repository.listArtifactRevisions(job.jobId)
-        .filter((revision) =>
-          revision.kind === "candidate_commands"
-          || revision.kind === "candidate_deck"
-        )).toHaveLength(0);
+      expect(
+        repository
+          .listArtifactRevisions(job.jobId)
+          .filter(
+            (revision) =>
+              revision.kind === "candidate_commands" || revision.kind === "candidate_deck",
+          ),
+      ).toHaveLength(0);
     } finally {
       repository.close();
       await rm(workspaceRoot, { recursive: true, force: true });
@@ -344,8 +347,8 @@ describe("durable agent recovery", () => {
       startMode: { type: "resume_query", reason: "crash_recovery" },
     });
     expect(result.type).toBe("message");
-    const resultBlock = gateway.requests[0].messages!
-      .flatMap((message) => message.content)
+    const resultBlock = gateway.requests[0]
+      .messages!.flatMap((message) => message.content)
       .find((block) => block.type === "tool_result");
     expect(resultBlock).toMatchObject({
       type: "tool_result",
@@ -360,7 +363,10 @@ describe("durable agent recovery", () => {
       { type: "tool_use" as const, id: "uncertain-a", name: "WriteFile", input: {} },
       { type: "tool_use" as const, id: "uncertain-b", name: "WriteFile", input: {} },
     ];
-    const userMessage = { role: "user" as const, content: [{ type: "text" as const, text: "write" }] };
+    const userMessage = {
+      role: "user" as const,
+      content: [{ type: "text" as const, text: "write" }],
+    };
     const assistantMessage = { role: "assistant" as const, content: toolUses };
     const now = new Date().toISOString();
     await new DurableRunStore(workspaceRoot).save({
@@ -414,9 +420,9 @@ describe("durable agent recovery", () => {
       startMode: { type: "resume_query", reason: "crash_recovery" },
     });
 
-    const recoveredResults = gateway.requests[0]!.messages!
-      .flatMap((message) => message.content)
-      .filter((block) => block.type === "tool_result");
+    const recoveredResults = gateway.requests[0]!.messages!.flatMap(
+      (message) => message.content,
+    ).filter((block) => block.type === "tool_result");
     expect(recoveredResults.map((result) => result.toolUseId)).toEqual([
       "uncertain-a",
       "uncertain-b",
@@ -435,20 +441,24 @@ describe("durable agent recovery", () => {
         throw new Error("provider disconnected during streaming");
       },
     };
-    await expect(new AgentRuntime(new ToolRegistry(), failingGateway).run({
-      threadId: "stream-recovery-thread",
-      runId: "failed-stream-run",
-      request: "original request",
-      presentationSnapshot: createStarterPresentation(),
-      selectedElementIds: [],
-      workspaceRoot,
-      maxSteps: 1,
-    })).rejects.toThrow("provider disconnected during streaming");
+    await expect(
+      new AgentRuntime(new ToolRegistry(), failingGateway).run({
+        threadId: "stream-recovery-thread",
+        runId: "failed-stream-run",
+        request: "original request",
+        presentationSnapshot: createStarterPresentation(),
+        selectedElementIds: [],
+        workspaceRoot,
+        maxSteps: 1,
+      }),
+    ).rejects.toThrow("provider disconnected during streaming");
 
-    const failedCheckpoint = await new DurableRunStore(workspaceRoot)
-      .load("stream-recovery-thread");
-    expect(failedCheckpoint?.version === 2 ? failedCheckpoint.inflight?.phase : undefined)
-      .toBe("model_streaming");
+    const failedCheckpoint = await new DurableRunStore(workspaceRoot).load(
+      "stream-recovery-thread",
+    );
+    expect(failedCheckpoint?.version === 2 ? failedCheckpoint.inflight?.phase : undefined).toBe(
+      "model_streaming",
+    );
 
     const recoveredGateway = gatewayFor([[{ type: "text", text: "replayed safely" }]]);
     const result = await new AgentRuntime(new ToolRegistry(), recoveredGateway).run({
@@ -464,22 +474,25 @@ describe("durable agent recovery", () => {
 
     expect(result).toEqual({ type: "message", content: "replayed safely" });
     expect(recoveredGateway.requests).toHaveLength(1);
-    expect(recoveredGateway.requests[0]!.messages!.flatMap((message) => message.content))
-      .toContainEqual({ type: "text", text: "continue after crash" });
+    expect(
+      recoveredGateway.requests[0]!.messages!.flatMap((message) => message.content),
+    ).toContainEqual({ type: "text", text: "continue after crash" });
   });
 
   it("restores canonical ContentBlock history after AskUser", async () => {
     const workspaceRoot = await mkdtemp(join(tmpdir(), "agent-run-recovery-"));
     const registry = new ToolRegistry();
     registry.register(askUserTool);
-    const firstGateway = gatewayFor([[
-      {
-        type: "tool_use",
-        id: "ask-1",
-        name: "AskUser",
-        input: { message: "需要确认受众" },
-      },
-    ]]);
+    const firstGateway = gatewayFor([
+      [
+        {
+          type: "tool_use",
+          id: "ask-1",
+          name: "AskUser",
+          input: { message: "需要确认受众" },
+        },
+      ],
+    ]);
     const first = await new AgentRuntime(registry, firstGateway).run({
       threadId: "thread-recovery",
       runId: "thread-recovery",
@@ -500,12 +513,9 @@ describe("durable agent recovery", () => {
     expect(checkpoint).not.toHaveProperty("pendingToolResults");
     expect(checkpoint).not.toHaveProperty("renderFeedbackUsed");
     expect(checkpoint.inflight?.phase).toBe("waiting_user");
-    expect(checkpoint.inflight?.workspace.toolResults[0])
-      .toMatchObject({ toolUseId: "ask-1" });
+    expect(checkpoint.inflight?.workspace.toolResults[0]).toMatchObject({ toolUseId: "ask-1" });
 
-    const secondGateway = gatewayFor([[
-      { type: "text", text: "已按管理层受众继续。" },
-    ]]);
+    const secondGateway = gatewayFor([[{ type: "text", text: "已按管理层受众继续。" }]]);
     const second = await new AgentRuntime(registry, secondGateway).run({
       threadId: "thread-recovery",
       runId: "run-2",
@@ -518,9 +528,10 @@ describe("durable agent recovery", () => {
     expect(second).toEqual({ type: "message", content: "已按管理层受众继续。" });
     const blocks = secondGateway.requests[0].messages!.flatMap((message) => message.content);
     expect(blocks).toContainEqual(expect.objectContaining({ type: "tool_use", id: "ask-1" }));
-    expect(blocks).toContainEqual(expect.objectContaining({ type: "tool_result", toolUseId: "ask-1" }));
-    const resumedCheckpoint = await new DurableRunStore(workspaceRoot)
-      .load("thread-recovery");
+    expect(blocks).toContainEqual(
+      expect.objectContaining({ type: "tool_result", toolUseId: "ask-1" }),
+    );
+    const resumedCheckpoint = await new DurableRunStore(workspaceRoot).load("thread-recovery");
     expect(resumedCheckpoint?.version).toBe(2);
     if (resumedCheckpoint?.version !== 2) {
       throw new Error("expected a resumed version 2 checkpoint");
@@ -542,8 +553,7 @@ describe("durable agent recovery", () => {
       workspaceRoot,
       startMode: { type: "new_query" },
     });
-    const newQueryCheckpoint = await new DurableRunStore(workspaceRoot)
-      .load("thread-recovery");
+    const newQueryCheckpoint = await new DurableRunStore(workspaceRoot).load("thread-recovery");
     expect(newQueryCheckpoint?.version).toBe(2);
     if (newQueryCheckpoint?.version !== 2) {
       throw new Error("expected a new-query version 2 checkpoint");
@@ -556,10 +566,7 @@ describe("durable agent recovery", () => {
     const workspaceRoot = await mkdtemp(join(tmpdir(), "agent-approval-recovery-"));
     const lifecyclePath = join(workspaceRoot, "lifecycle.sqlite");
     const blobStore = new ContentAddressedBlobStore(join(workspaceRoot, "blobs"));
-    const sessionStore = new FileSessionStore(
-      lifecyclePath,
-      join(workspaceRoot, "projects"),
-    );
+    const sessionStore = new FileSessionStore(lifecyclePath, join(workspaceRoot, "projects"));
     await sessionStore.initialize();
     const bootstrap = await sessionStore.createSession({
       title: "Approval recovery",
@@ -570,18 +577,20 @@ describe("durable agent recovery", () => {
     const presentationId = asPresentationId(presentation.id);
     const registry = new ToolRegistry();
     registry.register(createFakeCommandProposalTool());
-    const gateway = gatewayFor([[
-      {
-        type: "tool_use",
-        id: "submit-1",
-        name: "FakeSubmitCommands",
-        input: {
-          summary: "更新标题",
-          risk: "low",
-          commands: [{ id: "cmd-1", type: "set-presentation-title", title: "持久化标题" }],
+    const gateway = gatewayFor([
+      [
+        {
+          type: "tool_use",
+          id: "submit-1",
+          name: "FakeSubmitCommands",
+          input: {
+            summary: "更新标题",
+            risk: "low",
+            commands: [{ id: "cmd-1", type: "set-presentation-title", title: "持久化标题" }],
+          },
         },
-      },
-    ]]);
+      ],
+    ]);
     const firstRepository = new PresentationLifecycleRepository({
       filePath: lifecyclePath,
       connection: sessionStore.conversationDatabase.sqliteConnection,
@@ -645,22 +654,18 @@ describe("durable agent recovery", () => {
       undefined,
       blobStore,
     );
-    await expect(foreignService.resumeProposal(
-      proposed.approval.proposalId,
-      false,
-    )).rejects.toThrow(/belongs to Presentation/);
-    await expect(foreignService.resumeProposal(
-      proposed.approval.proposalId,
-      true,
-    )).rejects.toThrow(/belongs to Presentation/);
-    expect(firstRepository.getProposal(
-      asProposalId(proposed.approval.proposalId),
-    )?.status).toBe("waiting_approval");
+    await expect(
+      foreignService.resumeProposal(proposed.approval.proposalId, false),
+    ).rejects.toThrow(/belongs to Presentation/);
+    await expect(foreignService.resumeProposal(proposed.approval.proposalId, true)).rejects.toThrow(
+      /belongs to Presentation/,
+    );
+    expect(firstRepository.getProposal(asProposalId(proposed.approval.proposalId))?.status).toBe(
+      "waiting_approval",
+    );
     firstRepository.close();
 
-    const restoredBus = new CommandBus(
-      sessionStore.getSession(sessionId).presentation,
-    );
+    const restoredBus = new CommandBus(sessionStore.getSession(sessionId).presentation);
     const restoredRepository = new PresentationLifecycleRepository({
       filePath: lifecyclePath,
       connection: sessionStore.conversationDatabase.sqliteConnection,
@@ -689,22 +694,16 @@ describe("durable agent recovery", () => {
       restoredCommitService,
       blobStore,
     );
-    const applied = await restoredService.resumeProposal(
-      proposed.approval.proposalId,
-      true,
-    );
+    const applied = await restoredService.resumeProposal(proposed.approval.proposalId, true);
     expect(applied.status).toBe("completed");
     expect(restoredBus.getSnapshot().title).toBe("持久化标题");
-    expect(
-      restoredRepository.getProposal(
-        asProposalId(proposed.approval.proposalId),
-      )?.status,
-    ).toBe("applied");
+    expect(restoredRepository.getProposal(asProposalId(proposed.approval.proposalId))?.status).toBe(
+      "applied",
+    );
     const appliedRevision = restoredBus.getSnapshot().revision;
-    await expect(restoredService.resumeProposal(
-      proposed.approval.proposalId,
-      true,
-    )).resolves.toMatchObject({ status: "completed" });
+    await expect(
+      restoredService.resumeProposal(proposed.approval.proposalId, true),
+    ).resolves.toMatchObject({ status: "completed" });
     expect(restoredBus.getSnapshot().revision).toBe(appliedRevision);
     restoredRepository.close();
     sessionStore.close();
@@ -715,10 +714,7 @@ describe("durable agent recovery", () => {
     const workspaceRoot = await mkdtemp(join(tmpdir(), "agent-blob-proposal-"));
     const lifecyclePath = join(workspaceRoot, "lifecycle.sqlite");
     const blobStore = new ContentAddressedBlobStore(join(workspaceRoot, "blobs"));
-    const sessionStore = new FileSessionStore(
-      lifecyclePath,
-      join(workspaceRoot, "projects"),
-    );
+    const sessionStore = new FileSessionStore(lifecyclePath, join(workspaceRoot, "projects"));
     await sessionStore.initialize();
     const bootstrap = await sessionStore.createSession({
       title: "SVG proposal recovery",
@@ -736,31 +732,33 @@ describe("durable agent recovery", () => {
       "</svg>",
     ].join("");
     const sha256 = createHash("sha256").update(markup, "utf8").digest("hex");
-    const commands = [{
-      id: "add-svg-slide",
-      type: "add-slide" as const,
-      index: presentation.slides.length,
-      slide: {
-        id: "svg-blob-slide",
-        title: "Blob-backed SVG",
-        narrative: {
-          role: "opening",
-          coreMessage: "Lifecycle command blobs preserve complete SVG pages.",
-          audienceMove: "Understand that approval can recover the exact page.",
-          rhythm: "anchor" as const,
-          layoutIntent: "Full-page SVG opening statement.",
-        },
-        visualSource: {
-          kind: "svg" as const,
-          markup,
-          width: 1280 as const,
-          height: 720 as const,
-          sha256,
-          sourcePath: "slides/svg/P01.svg",
-          resources: [],
+    const commands = [
+      {
+        id: "add-svg-slide",
+        type: "add-slide" as const,
+        index: presentation.slides.length,
+        slide: {
+          id: "svg-blob-slide",
+          title: "Blob-backed SVG",
+          narrative: {
+            role: "opening",
+            coreMessage: "Lifecycle command blobs preserve complete SVG pages.",
+            audienceMove: "Understand that approval can recover the exact page.",
+            rhythm: "anchor" as const,
+            layoutIntent: "Full-page SVG opening statement.",
+          },
+          visualSource: {
+            kind: "svg" as const,
+            markup,
+            width: 1280 as const,
+            height: 720 as const,
+            sha256,
+            sourcePath: "slides/svg/P01.svg",
+            resources: [],
+          },
         },
       },
-    }];
+    ];
     let repository = new PresentationLifecycleRepository({
       filePath: lifecyclePath,
       connection: sessionStore.conversationDatabase.sqliteConnection,
@@ -813,7 +811,8 @@ describe("durable agent recovery", () => {
       }
 
       const job = lifecycle.getState(presentationId)!;
-      const lifecycleJson = repository.listArtifactRevisions(job.jobId)
+      const lifecycleJson = repository
+        .listArtifactRevisions(job.jobId)
         .map((revision) => JSON.stringify(revision))
         .join("\n");
       expect(lifecycleJson).not.toContain(marker);
@@ -827,10 +826,9 @@ describe("durable agent recovery", () => {
           byteLength: expect.any(Number),
         },
       });
-      expect(
-        (await blobStore.get(proposalArtifact.value.commandsBlob))
-          .toString("utf8"),
-      ).toContain(marker);
+      expect((await blobStore.get(proposalArtifact.value.commandsBlob)).toString("utf8")).toContain(
+        marker,
+      );
 
       repository.close();
       repository = new PresentationLifecycleRepository({
@@ -838,9 +836,7 @@ describe("durable agent recovery", () => {
         connection: sessionStore.conversationDatabase.sqliteConnection,
       });
       lifecycle = new PresentationLifecycleOrchestrator(repository);
-      const restoredBus = new CommandBus(
-        sessionStore.getSession(sessionId).presentation,
-      );
+      const restoredBus = new CommandBus(sessionStore.getSession(sessionId).presentation);
       const restoredCommitService = new PresentationCommitService(
         sessionId,
         projectId,
@@ -864,13 +860,11 @@ describe("durable agent recovery", () => {
         restoredCommitService,
         blobStore,
       );
-      await expect(restoredService.resumeProposal(
-        proposed.approval.proposalId,
-        true,
-      )).resolves.toMatchObject({ status: "completed" });
+      await expect(
+        restoredService.resumeProposal(proposed.approval.proposalId, true),
+      ).resolves.toMatchObject({ status: "completed" });
       expect(
-        restoredBus.getSnapshot().slides
-          .find((slide) => slide.id === "svg-blob-slide")
+        restoredBus.getSnapshot().slides.find((slide) => slide.id === "svg-blob-slide")
           ?.visualSource?.markup,
       ).toBe(markup);
 
@@ -886,11 +880,13 @@ describe("durable agent recovery", () => {
       const tamperedProposal = await restoredService.submitDirectProposal({
         threadId: "tampered-blob-thread",
         request: "Rename the deck",
-        commands: [{
-          id: "tampered-title",
-          type: "set-presentation-title",
-          title: "Must not apply",
-        }],
+        commands: [
+          {
+            id: "tampered-title",
+            type: "set-presentation-title",
+            title: "Must not apply",
+          },
+        ],
         summary: "Rename the deck",
         risk: "low",
       });
@@ -907,14 +903,13 @@ describe("durable agent recovery", () => {
       );
       const beforeRejectedApply = restoredBus.getSnapshot();
 
-      await expect(restoredService.resumeProposal(
-        tamperedProposal.approval.proposalId,
-        true,
-      )).rejects.toThrow("failed integrity validation");
+      await expect(
+        restoredService.resumeProposal(tamperedProposal.approval.proposalId, true),
+      ).rejects.toThrow("failed integrity validation");
       expect(restoredBus.getSnapshot()).toEqual(beforeRejectedApply);
-      expect(repository.getProposal(
-        asProposalId(tamperedProposal.approval.proposalId),
-      )?.status).toBe("waiting_approval");
+      expect(
+        repository.getProposal(asProposalId(tamperedProposal.approval.proposalId))?.status,
+      ).toBe("waiting_approval");
     } finally {
       repository.close();
       sessionStore.close();

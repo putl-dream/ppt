@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import type { TokenUsageModel } from "../src/shared/token-usage";
 import type { ManagedModel } from "../src/renderer/src/modelCatalog";
 import {
   buildPricingIndex,
@@ -7,12 +6,9 @@ import {
   estimateModelsCost,
   resolveUsagePricing,
 } from "../src/renderer/src/modelPricing";
+import type { TokenUsageModel } from "../src/shared/token-usage";
 
-function model(
-  id: string,
-  currency: "CNY" | "USD",
-  inputPerMillion: number,
-): ManagedModel {
+function model(id: string, currency: "CNY" | "USD", inputPerMillion: number): ManagedModel {
   return {
     id,
     name: id,
@@ -46,15 +42,9 @@ function usage(configurationId?: string): TokenUsageModel {
 
 describe("model pricing", () => {
   it("attributes identical model names by configuration ID and keeps currencies separate", () => {
-    const index = buildPricingIndex([
-      model("cny-config", "CNY", 1),
-      model("usd-config", "USD", 5),
-    ]);
+    const index = buildPricingIndex([model("cny-config", "CNY", 1), model("usd-config", "USD", 5)]);
 
-    const totals = estimateModelsCost([
-      usage("cny-config"),
-      usage("usd-config"),
-    ], index);
+    const totals = estimateModelsCost([usage("cny-config"), usage("usd-config")], index);
 
     expect(totals).toEqual({ costs: { CNY: 1, USD: 5 }, coveredTokens: 2_000_000 });
   });
@@ -72,15 +62,18 @@ describe("model pricing", () => {
 
   it("uses regular input pricing when cache creation has no separate price", () => {
     const pricedModel = model("cache-model", "CNY", 3);
-    const estimate = estimateModelCost({
-      ...usage("cache-model"),
-      provider: "anthropic",
-      inputTokens: 100_000,
-      cachedInputTokens: 200_000,
-      cacheCreationInputTokens: 300_000,
-      outputTokens: 400_000,
-      totalTokens: 1_000_000,
-    }, pricedModel.pricing ?? undefined);
+    const estimate = estimateModelCost(
+      {
+        ...usage("cache-model"),
+        provider: "anthropic",
+        inputTokens: 100_000,
+        cachedInputTokens: 200_000,
+        cacheCreationInputTokens: 300_000,
+        outputTokens: 400_000,
+        totalTokens: 1_000_000,
+      },
+      pricedModel.pricing ?? undefined,
+    );
 
     expect(estimate).toEqual({ currency: "CNY", cost: 3.66, coveredTokens: 1_000_000 });
   });

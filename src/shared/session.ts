@@ -1,9 +1,9 @@
-import { z } from "zod";
-import { agentActivityItemSchema } from "./agent-activity";
-import { presentationSchema, type Presentation } from "./presentation";
-import { agentExecutionStrategySchema, agentModelSelectionSchema } from "./agent";
 import { DEFAULT_DESIGN_SYSTEM } from "@design-system";
+import { z } from "zod";
+import { agentExecutionStrategySchema, agentModelSelectionSchema } from "./agent";
+import { agentActivityItemSchema } from "./agent-activity";
 import { persistedDisplayCardSchema } from "./card-display-protocol";
+import { type Presentation, presentationSchema } from "./presentation";
 
 export const projectArtifactKindSchema = z.enum([
   "design-spec",
@@ -31,68 +31,73 @@ export const projectSandboxSchema = z.object({
 const persistedOutlineSchema = z.object({
   threadId: z.string(),
   message: z.string(),
-  outline: z.object({
-    title: z.string(),
-    audience: z.string().optional(),
-    objective: z.string().optional(),
-    slides: z.array(z.object({
+  outline: z
+    .object({
       title: z.string(),
-      keyPoints: z.array(z.string()),
-    })),
-  }).optional(),
+      audience: z.string().optional(),
+      objective: z.string().optional(),
+      slides: z.array(
+        z.object({
+          title: z.string(),
+          keyPoints: z.array(z.string()),
+        }),
+      ),
+    })
+    .optional(),
   missingInformation: z.array(z.string()),
   model: agentModelSelectionSchema.optional(),
   executionStrategy: agentExecutionStrategySchema.optional(),
 });
 
-export const sessionChatMessageSchema = z.object({
-  id: z.string(),
-  role: z.enum(["user", "assistant"]),
-  content: z.string(),
-  /** Ordered run blocks; response ranges project content into the visual timeline. */
-  activityTrace: z.array(agentActivityItemSchema).optional(),
-  runId: z.string().optional(),
-  runStatus: z.enum(["running", "waiting", "completed", "interrupted", "failed"]).optional(),
-  runError: z.string().optional(),
-  threadId: z.string().optional(),
-}).strict().superRefine((message, context) => {
-  if (message.role !== "assistant" || !message.runId) return;
-  const responses = (message.activityTrace ?? []).filter(
-    (item) => item.kind === "response",
-  );
-  if (message.content.length > 0 && responses.length === 0) {
-    context.addIssue({
-      code: "custom",
-      path: ["activityTrace"],
-      message: "Run messages with text must describe it with ordered response blocks.",
-    });
-    return;
-  }
-
-  let cursor = 0;
-  for (const response of responses) {
-    if (
-      response.start !== cursor
-      || response.end < response.start
-      || response.end > message.content.length
-    ) {
+export const sessionChatMessageSchema = z
+  .object({
+    id: z.string(),
+    role: z.enum(["user", "assistant"]),
+    content: z.string(),
+    /** Ordered run blocks; response ranges project content into the visual timeline. */
+    activityTrace: z.array(agentActivityItemSchema).optional(),
+    runId: z.string().optional(),
+    runStatus: z.enum(["running", "waiting", "completed", "interrupted", "failed"]).optional(),
+    runError: z.string().optional(),
+    threadId: z.string().optional(),
+  })
+  .strict()
+  .superRefine((message, context) => {
+    if (message.role !== "assistant" || !message.runId) return;
+    const responses = (message.activityTrace ?? []).filter((item) => item.kind === "response");
+    if (message.content.length > 0 && responses.length === 0) {
       context.addIssue({
         code: "custom",
         path: ["activityTrace"],
-        message: "Response block offsets must be contiguous and within message content.",
+        message: "Run messages with text must describe it with ordered response blocks.",
       });
       return;
     }
-    cursor = response.end;
-  }
-  if (cursor !== message.content.length) {
-    context.addIssue({
-      code: "custom",
-      path: ["activityTrace"],
-      message: "Response blocks must cover the complete run message content.",
-    });
-  }
-});
+
+    let cursor = 0;
+    for (const response of responses) {
+      if (
+        response.start !== cursor ||
+        response.end < response.start ||
+        response.end > message.content.length
+      ) {
+        context.addIssue({
+          code: "custom",
+          path: ["activityTrace"],
+          message: "Response block offsets must be contiguous and within message content.",
+        });
+        return;
+      }
+      cursor = response.end;
+    }
+    if (cursor !== message.content.length) {
+      context.addIssue({
+        code: "custom",
+        path: ["activityTrace"],
+        message: "Response blocks must cover the complete run message content.",
+      });
+    }
+  });
 
 export const sessionSummarySchema = z.object({
   id: z.string(),
@@ -132,7 +137,10 @@ export function createDefaultSessionTitle(index: number): string {
   return `${DEFAULT_SESSION_TITLE_PREFIX} ${index}`;
 }
 
-export function createSessionTitleFromPrompt(prompt: string, fallback = DEFAULT_SESSION_TITLE_PREFIX): string {
+export function createSessionTitleFromPrompt(
+  prompt: string,
+  fallback = DEFAULT_SESSION_TITLE_PREFIX,
+): string {
   const normalized = prompt
     .replace(/[\r\n\t]+/g, " ")
     .replace(/\s+/g, " ")
@@ -148,9 +156,7 @@ export function createSessionTitleFromPrompt(prompt: string, fallback = DEFAULT_
     .replace(/^(?:一份|一个|一套|一页|一篇)\s*/u, "")
     .replace(/^(?:please\s+)?(?:create|make|generate|draft|build|design)\s+(?:a|an|the)?\s*/i, "")
     .trim();
-  const candidate = (withoutLeadIn || normalized)
-    .replace(/[。！？!?；;，,：:、\s]+$/u, "")
-    .trim();
+  const candidate = (withoutLeadIn || normalized).replace(/[。！？!?；;，,：:、\s]+$/u, "").trim();
 
   if (!candidate) return fallback;
 

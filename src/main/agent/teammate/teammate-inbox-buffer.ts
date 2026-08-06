@@ -1,5 +1,4 @@
-import type { AgentMailboxMessage } from "./message-bus";
-import { MessageBus } from "./message-bus";
+import type { AgentMailboxMessage, MessageBus } from "./message-bus";
 
 export class TeammateInboxBuffer {
   private readonly buffered: AgentMailboxMessage[] = [];

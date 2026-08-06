@@ -1,13 +1,13 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { CHAT_WORKSPACE_COPY_ZH_CN as copy, getChatPromptTemplates } from "./chat-workspace-copy";
-import { ChatWorkspaceInput } from "./ChatWorkspaceInput";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { InteractionCardHost } from "../cards/hosts/InteractionCardHost";
+import { ChatWorkspaceInput } from "./ChatWorkspaceInput";
+import { CHAT_WORKSPACE_COPY_ZH_CN as copy, getChatPromptTemplates } from "./chat-workspace-copy";
 import type {
   ChatWorkspaceActions,
-  ChatWorkspaceComposer as ComposerState,
   ChatWorkspaceDeck,
   ChatWorkspaceInputRuntime,
   ChatWorkspaceRun,
+  ChatWorkspaceComposer as ComposerState,
 } from "./chat-workspace-types";
 
 interface ChatWorkspaceComposerProps {

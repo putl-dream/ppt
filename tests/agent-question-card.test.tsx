@@ -1,8 +1,7 @@
 // @vitest-environment jsdom
 
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import React from "react";
-import { fireEvent, render, screen } from "@testing-library/react";
-import { cleanup } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AgentQuestionCard } from "../src/renderer/src/components/AgentQuestionCard";
 

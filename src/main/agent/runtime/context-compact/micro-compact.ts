@@ -12,9 +12,11 @@ const alwaysPreserveTools = new Set<string>(MICRO_COMPACT_ALWAYS_PRESERVE_TOOLS)
 const preserveLatestTools = new Set<string>(MICRO_COMPACT_PRESERVE_LATEST_TOOLS);
 
 function isToolResultEntry(entry: TranscriptEntry): boolean {
-  return entry.role === "tool"
-    || entry.kind === "tool_result"
-    || (entry.role === "user" && entry.kind === "tool_result");
+  return (
+    entry.role === "tool" ||
+    entry.kind === "tool_result" ||
+    (entry.role === "user" && entry.kind === "tool_result")
+  );
 }
 
 function serializeResult(entry: TranscriptEntry): string {
@@ -31,9 +33,7 @@ function getToolName(entry: TranscriptEntry): string {
 function getPersistedPath(entry: TranscriptEntry): string | undefined {
   if (!entry.modelResult || typeof entry.modelResult !== "object") return undefined;
   const persistedPath = (entry.modelResult as { persistedPath?: unknown }).persistedPath;
-  return typeof persistedPath === "string" && persistedPath.trim()
-    ? persistedPath
-    : undefined;
+  return typeof persistedPath === "string" && persistedPath.trim() ? persistedPath : undefined;
 }
 
 function buildCompactedResult(entry: TranscriptEntry, serialized: string): string {

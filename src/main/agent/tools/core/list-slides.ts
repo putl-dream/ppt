@@ -3,15 +3,17 @@ import type { ToolDefinition } from "../tool-definition";
 
 export const listSlidesSchema = z.object({});
 export const listSlidesOutputSchema = z.object({
-  slides: z.array(z.object({
-    id: z.string(),
-    index: z.number().int().nonnegative(),
-    title: z.string(),
-    svgSourcePath: z.string().optional(),
-    svgSha256: z.string().optional(),
-    narrativeRole: z.string().optional(),
-    rhythm: z.enum(["anchor", "dense", "breathing"]).optional(),
-  })),
+  slides: z.array(
+    z.object({
+      id: z.string(),
+      index: z.number().int().nonnegative(),
+      title: z.string(),
+      svgSourcePath: z.string().optional(),
+      svgSha256: z.string().optional(),
+      narrativeRole: z.string().optional(),
+      rhythm: z.enum(["anchor", "dense", "breathing"]).optional(),
+    }),
+  ),
 });
 
 /**

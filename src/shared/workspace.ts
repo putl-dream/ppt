@@ -40,8 +40,7 @@ export function sessionsForWorkspace<T extends { workspacePath?: string }>(
   const normalized = normalizeWorkspacePath(workspacePath);
   return sessions.filter(
     (session) =>
-      session.workspacePath &&
-      normalizeWorkspacePath(session.workspacePath) === normalized,
+      session.workspacePath && normalizeWorkspacePath(session.workspacePath) === normalized,
   );
 }
 
@@ -61,9 +60,10 @@ export function getSessionActivityTime(session: {
   return session.lastMessageAt ?? session.createdAt;
 }
 
-export function compareSessionsByActivity<
-  T extends { lastMessageAt?: string; createdAt: string },
->(left: T, right: T): number {
+export function compareSessionsByActivity<T extends { lastMessageAt?: string; createdAt: string }>(
+  left: T,
+  right: T,
+): number {
   return getSessionActivityTime(right).localeCompare(getSessionActivityTime(left));
 }
 

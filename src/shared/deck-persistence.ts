@@ -1,5 +1,5 @@
-import { z } from "zod";
 import { designSystemV2Schema } from "@design-system";
+import { z } from "zod";
 
 export const projectArtifactFilePaths = {
   brandProfile: "design/brand-profile.json",

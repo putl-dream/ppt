@@ -3,9 +3,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { DeckExportService } from "../src/main/deck/deck-export-service";
-import { type SlideNarrative } from "../src/shared/presentation";
-import { createStarterPresentation, createSvgTestSlide } from "../src/shared/presentation-fixtures";
 import type { ExportPresentationOptions } from "../src/shared/ipc";
+import type { SlideNarrative } from "../src/shared/presentation";
+import { createStarterPresentation, createSvgTestSlide } from "../src/shared/presentation-fixtures";
 
 const defaultExportOptions: ExportPresentationOptions = {};
 
@@ -111,11 +111,13 @@ describe("DeckExportService", () => {
     const presentation = exportReadyPresentation();
     const filePath = await createTempExportPath("deck-export-options-", "pptx");
 
-    await expect(service.exportDeck({
-      presentation,
-      options: { unexpected: true } as unknown as ExportPresentationOptions,
-      filePath,
-    })).rejects.toThrow();
+    await expect(
+      service.exportDeck({
+        presentation,
+        options: { unexpected: true } as unknown as ExportPresentationOptions,
+        filePath,
+      }),
+    ).rejects.toThrow();
   });
 
   it("generates a default export path when filePath is omitted", async () => {
@@ -138,11 +140,13 @@ describe("DeckExportService", () => {
     presentation.slides[0].visualSource.sha256 = "0".repeat(64);
     const filePath = await createTempExportPath("deck-export-invalid-svg-", "pptx");
 
-    await expect(service.exportDeck({
-      presentation,
-      options: defaultExportOptions,
-      filePath,
-    })).rejects.toThrow("Export blocked by deck validation");
+    await expect(
+      service.exportDeck({
+        presentation,
+        options: defaultExportOptions,
+        filePath,
+      }),
+    ).rejects.toThrow("Export blocked by deck validation");
   });
 
   it("still allows JSON recovery export for decks with validation errors", async () => {
@@ -150,25 +154,29 @@ describe("DeckExportService", () => {
     presentation.slides[0].visualSource.sha256 = "0".repeat(64);
     const filePath = await createTempExportPath("deck-export-recovery-", "json");
 
-    await expect(service.exportDeck({
-      presentation,
-      options: defaultExportOptions,
-      filePath,
-    })).resolves.toMatchObject({ filePath });
+    await expect(
+      service.exportDeck({
+        presentation,
+        options: defaultExportOptions,
+        filePath,
+      }),
+    ).resolves.toMatchObject({ filePath });
   });
 
   it("exports multi-slide SVG decks", async () => {
     const presentation = exportReadyPresentation();
-    presentation.slides.push(createSvgTestSlide({
-      title: "Second page",
-      narrative: {
-        role: "evidence",
-        coreMessage: "More detail",
-        audienceMove: "Understand",
-        rhythm: "dense",
-        layoutIntent: "Evidence stack.",
-      },
-    }));
+    presentation.slides.push(
+      createSvgTestSlide({
+        title: "Second page",
+        narrative: {
+          role: "evidence",
+          coreMessage: "More detail",
+          audienceMove: "Understand",
+          rhythm: "dense",
+          layoutIntent: "Evidence stack.",
+        },
+      }),
+    );
     const filePath = await createTempExportPath("deck-export-multi-svg-", "pptx");
 
     const result = await service.exportDeck({

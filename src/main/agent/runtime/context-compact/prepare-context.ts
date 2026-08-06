@@ -1,12 +1,9 @@
 import type { ModelPromptPayload } from "../turns/model-call-recovery";
-import { resolveContextSoftTokenThreshold, resolveContextTokenThreshold } from "./config";
 import { compactHistory } from "./compact-history";
+import { resolveContextSoftTokenThreshold, resolveContextTokenThreshold } from "./config";
 import { estimatePromptTokens } from "./estimate-tokens";
 import { microCompactTranscript } from "./micro-compact";
-import {
-  microCompactModelMessages,
-  snipCompactModelMessages,
-} from "./model-messages";
+import { microCompactModelMessages, snipCompactModelMessages } from "./model-messages";
 import { snipCompactConversation, snipCompactTranscript } from "./snip-compact";
 import { toolResultBudget } from "./tool-result-budget";
 import type { ContextCompactResult, PrepareContextOptions } from "./types";
@@ -28,8 +25,9 @@ function contextProgressMessage(notes: string[]): string | undefined {
   if (notes.some((note) => /^L2 micro_compact:/i.test(note))) {
     return CONTEXT_TOOL_RESULTS_COMPACTED_USER_MESSAGE;
   }
-  if (notes.some((note) =>
-    /^(?:L3 tool_result_budget:|Persisted oversized tool result)/i.test(note))) {
+  if (
+    notes.some((note) => /^(?:L3 tool_result_budget:|Persisted oversized tool result)/i.test(note))
+  ) {
     return CONTEXT_LARGE_RESULTS_PERSISTED_USER_MESSAGE;
   }
   return undefined;
@@ -46,18 +44,15 @@ export async function prepareContext(
   const notes: string[] = [];
   let compactHistoryFailures = options.compactHistoryFailures ?? 0;
   let payload: ModelPromptPayload = structuredClone(options.payload);
-  let messages = options.messages
-    ? structuredClone(options.messages)
-    : undefined;
+  let messages = options.messages ? structuredClone(options.messages) : undefined;
 
   const budgetResult = await toolResultBudget(payload.transcript, options.workspaceRoot);
   payload = { ...payload, transcript: budgetResult.transcript };
   notes.push(...budgetResult.notes);
 
-  const tokenThreshold = options.tokenThreshold ?? resolveContextTokenThreshold(
-    process.env,
-    options.model?.supports1MContext === true,
-  );
+  const tokenThreshold =
+    options.tokenThreshold ??
+    resolveContextTokenThreshold(process.env, options.model?.supports1MContext === true);
   const softTokenThreshold = Math.min(
     options.softTokenThreshold ?? resolveContextSoftTokenThreshold(tokenThreshold),
     tokenThreshold,
@@ -65,15 +60,15 @@ export async function prepareContext(
   let estimatedTokens = estimatePromptTokens(options.systemPrompt, payload, messages);
 
   if (estimatedTokens > softTokenThreshold) {
-    const beforeMicro = JSON.stringify(payload.transcript).length
-      + JSON.stringify(messages ?? []).length;
+    const beforeMicro =
+      JSON.stringify(payload.transcript).length + JSON.stringify(messages ?? []).length;
     payload = {
       ...payload,
       transcript: microCompactTranscript(payload.transcript),
     };
     messages = microCompactModelMessages(messages);
-    const afterMicro = JSON.stringify(payload.transcript).length
-      + JSON.stringify(messages ?? []).length;
+    const afterMicro =
+      JSON.stringify(payload.transcript).length + JSON.stringify(messages ?? []).length;
     if (afterMicro < beforeMicro) {
       notes.push(
         `L2 micro_compact: reduced older tool results by ${beforeMicro - afterMicro} characters.`,
@@ -110,9 +105,8 @@ export async function prepareContext(
   }
 
   if (estimatedTokens > tokenThreshold) {
-    const beforeSnip = payload.transcript.length
-      + (payload.conversation?.length ?? 0)
-      + (messages?.length ?? 0);
+    const beforeSnip =
+      payload.transcript.length + (payload.conversation?.length ?? 0) + (messages?.length ?? 0);
     const beforeSnipChars = JSON.stringify({
       conversation: payload.conversation,
       transcript: payload.transcript,
@@ -126,9 +120,8 @@ export async function prepareContext(
     // Hard overflow is size-driven. Use a paired native tail even when fewer
     // than the normal count threshold are individually very large.
     messages = snipCompactModelMessages(messages, 0, 1, 2);
-    const afterSnip = payload.transcript.length
-      + (payload.conversation?.length ?? 0)
-      + (messages?.length ?? 0);
+    const afterSnip =
+      payload.transcript.length + (payload.conversation?.length ?? 0) + (messages?.length ?? 0);
     const afterSnipChars = JSON.stringify({
       conversation: payload.conversation,
       transcript: payload.transcript,
@@ -136,8 +129,8 @@ export async function prepareContext(
     }).length;
     if (afterSnip < beforeSnip || afterSnipChars < beforeSnipChars) {
       notes.push(
-        `L1 snip_compact: removed ${Math.max(0, beforeSnip - afterSnip)} messages `
-        + `and ${Math.max(0, beforeSnipChars - afterSnipChars)} characters after summary was unavailable.`,
+        `L1 snip_compact: removed ${Math.max(0, beforeSnip - afterSnip)} messages ` +
+          `and ${Math.max(0, beforeSnipChars - afterSnipChars)} characters after summary was unavailable.`,
       );
     }
   }

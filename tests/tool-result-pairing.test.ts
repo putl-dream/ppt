@@ -4,13 +4,15 @@ import type { AgentModelMessage } from "../src/main/agent/gateway/types";
 
 describe("ensureToolResultPairing", () => {
   it("adds one synthetic error result for every missing tool result", () => {
-    const messages: AgentModelMessage[] = [{
-      role: "assistant",
-      content: [
-        { type: "tool_use", id: "call-1", name: "Read", input: {} },
-        { type: "tool_use", id: "call-2", name: "List", input: {} },
-      ],
-    }];
+    const messages: AgentModelMessage[] = [
+      {
+        role: "assistant",
+        content: [
+          { type: "tool_use", id: "call-1", name: "Read", input: {} },
+          { type: "tool_use", id: "call-2", name: "List", input: {} },
+        ],
+      },
+    ];
 
     const repaired = ensureToolResultPairing(messages);
     expect(repaired).toHaveLength(2);
@@ -33,7 +35,11 @@ describe("ensureToolResultPairing", () => {
         role: "user",
         content: [
           { type: "tool_result", toolUseId: "call-2", content: [{ type: "text", text: "second" }] },
-          { type: "tool_result", toolUseId: "call-2", content: [{ type: "text", text: "duplicate" }] },
+          {
+            type: "tool_result",
+            toolUseId: "call-2",
+            content: [{ type: "text", text: "duplicate" }],
+          },
           { type: "tool_result", toolUseId: "orphan", content: [{ type: "text", text: "orphan" }] },
           { type: "tool_result", toolUseId: "call-1", content: [{ type: "text", text: "first" }] },
         ],
@@ -42,7 +48,11 @@ describe("ensureToolResultPairing", () => {
         role: "user",
         content: [
           { type: "text", text: "keep this user message" },
-          { type: "tool_result", toolUseId: "orphan-2", content: [{ type: "text", text: "remove" }] },
+          {
+            type: "tool_result",
+            toolUseId: "orphan-2",
+            content: [{ type: "text", text: "remove" }],
+          },
         ],
       },
     ];
@@ -59,14 +69,18 @@ describe("ensureToolResultPairing", () => {
   });
 
   it("does not mutate the caller's message array", () => {
-    const messages: AgentModelMessage[] = [{
-      role: "user",
-      content: [{
-        type: "tool_result",
-        toolUseId: "orphan",
-        content: [{ type: "text", text: "remove" }],
-      }],
-    }];
+    const messages: AgentModelMessage[] = [
+      {
+        role: "user",
+        content: [
+          {
+            type: "tool_result",
+            toolUseId: "orphan",
+            content: [{ type: "text", text: "remove" }],
+          },
+        ],
+      },
+    ];
 
     ensureToolResultPairing(messages);
     expect(messages[0]?.content).toHaveLength(1);

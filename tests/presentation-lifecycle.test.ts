@@ -1,34 +1,29 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it, vi } from "vitest";
-import {
-  CommandBus,
-} from "@shared/commands";
-import { type Presentation } from "@shared/presentation";
-import { createStarterPresentation } from "@shared/presentation-fixtures";
 import {
   ContentAddressedBlobStore,
   canonicalJson,
   hashArtifactValue,
 } from "@main/presentation-lifecycle/content-addressed-blob-store";
-import { PresentationCommitService } from
-  "@main/presentation-lifecycle/presentation-commit-service";
-import { PresentationLifecycleOrchestrator } from
-  "@main/presentation-lifecycle/presentation-lifecycle-orchestrator";
-import { PresentationLifecycleRepository } from
-  "@main/presentation-lifecycle/presentation-lifecycle-repository";
+import { PresentationCommitService } from "@main/presentation-lifecycle/presentation-commit-service";
+import { PresentationLifecycleOrchestrator } from "@main/presentation-lifecycle/presentation-lifecycle-orchestrator";
+import { PresentationLifecycleRepository } from "@main/presentation-lifecycle/presentation-lifecycle-repository";
 import { FileSessionStore } from "@main/session-store";
+import { CommandBus } from "@shared/commands";
+import type { Presentation } from "@shared/presentation";
+import { createStarterPresentation } from "@shared/presentation-fixtures";
 import {
+  type ArtifactDependency,
   asArtifactId,
   asPresentationId,
   asProjectId,
   asProposalId,
   asQueryId,
   pptProposalSchema,
-  type ArtifactDependency,
   type ValidationReport,
 } from "@shared/presentation-lifecycle";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 const temporaryDirectories: string[] = [];
 const repositories: PresentationLifecycleRepository[] = [];
@@ -38,9 +33,7 @@ const NOW = "2026-07-30T00:00:00.000Z";
 async function createLifecycle() {
   const directory = await mkdtemp(join(tmpdir(), "ppt-lifecycle-"));
   temporaryDirectories.push(directory);
-  const repository = new PresentationLifecycleRepository(
-    join(directory, "conversations.sqlite"),
-  );
+  const repository = new PresentationLifecycleRepository(join(directory, "conversations.sqlite"));
   repositories.push(repository);
   return {
     directory,
@@ -53,10 +46,7 @@ async function createCommitService() {
   const directory = await mkdtemp(join(tmpdir(), "ppt-lifecycle-commit-"));
   temporaryDirectories.push(directory);
   const filePath = join(directory, "conversations.sqlite");
-  const sessionStore = new FileSessionStore(
-    filePath,
-    join(directory, "projects"),
-  );
+  const sessionStore = new FileSessionStore(filePath, join(directory, "projects"));
   sessionStores.push(sessionStore);
   await sessionStore.initialize();
   const bootstrap = await sessionStore.createSession({
@@ -96,11 +86,7 @@ async function createCommitService() {
   };
 }
 
-function putJsonBlob(
-  directory: string,
-  value: unknown,
-  mediaType = "application/json",
-) {
+function putJsonBlob(directory: string, value: unknown, mediaType = "application/json") {
   return new ContentAddressedBlobStore(join(directory, "blobs")).put(
     Buffer.from(canonicalJson(value), "utf8"),
     mediaType,
@@ -121,15 +107,8 @@ function presentationFixture(
   };
 }
 
-function putPresentationBlob(
-  directory: string,
-  presentation: Presentation,
-) {
-  return putJsonBlob(
-    directory,
-    presentation,
-    "application/vnd.agent-ppt.presentation+json",
-  );
+function putPresentationBlob(directory: string, presentation: Presentation) {
+  return putJsonBlob(directory, presentation, "application/vnd.agent-ppt.presentation+json");
 }
 
 function passed(validator = "test"): ValidationReport {
@@ -157,9 +136,9 @@ afterEach(async () => {
     }
   }
   await Promise.all(
-    temporaryDirectories.splice(0).map((directory) =>
-      rm(directory, { recursive: true, force: true }),
-    ),
+    temporaryDirectories
+      .splice(0)
+      .map((directory) => rm(directory, { recursive: true, force: true })),
   );
 });
 
@@ -170,10 +149,8 @@ describe("presentation lifecycle", () => {
     const store = new ContentAddressedBlobStore(directory);
     const bytes = Buffer.from("<svg>hello</svg>", "utf8");
 
-    expect(canonicalJson({ z: 1, a: { y: 2, x: 3 } }))
-      .toBe('{"a":{"x":3,"y":2},"z":1}');
-    expect(hashArtifactValue({ a: 1, b: 2 }))
-      .toBe(hashArtifactValue({ b: 2, a: 1 }));
+    expect(canonicalJson({ z: 1, a: { y: 2, x: 3 } })).toBe('{"a":{"x":3,"y":2},"z":1}');
+    expect(hashArtifactValue({ a: 1, b: 2 })).toBe(hashArtifactValue({ b: 2, a: 1 }));
 
     const first = await store.put(bytes, "image/svg+xml");
     const second = await store.put(bytes, "image/svg+xml");
@@ -191,24 +168,32 @@ describe("presentation lifecycle", () => {
       basePresentationRevisionNumber: 0,
       createdAt: NOW,
     };
-    expect(pptProposalSchema.safeParse({
-      ...proposal,
-      status: "waiting_approval",
-    }).success).toBe(true);
-    expect(pptProposalSchema.safeParse({
-      ...proposal,
-      status: "waiting_approval",
-      resolvedAt: "2026-07-30T00:01:00.000Z",
-    }).success).toBe(false);
-    expect(pptProposalSchema.safeParse({
-      ...proposal,
-      status: "rejected",
-    }).success).toBe(false);
-    expect(pptProposalSchema.safeParse({
-      ...proposal,
-      status: "rejected",
-      resolvedAt: "2026-07-30T00:01:00.000Z",
-    }).success).toBe(true);
+    expect(
+      pptProposalSchema.safeParse({
+        ...proposal,
+        status: "waiting_approval",
+      }).success,
+    ).toBe(true);
+    expect(
+      pptProposalSchema.safeParse({
+        ...proposal,
+        status: "waiting_approval",
+        resolvedAt: "2026-07-30T00:01:00.000Z",
+      }).success,
+    ).toBe(false);
+    expect(
+      pptProposalSchema.safeParse({
+        ...proposal,
+        status: "rejected",
+      }).success,
+    ).toBe(false);
+    expect(
+      pptProposalSchema.safeParse({
+        ...proposal,
+        status: "rejected",
+        resolvedAt: "2026-07-30T00:01:00.000Z",
+      }).success,
+    ).toBe(true);
   });
 
   it("requires a durable canonical Presentation blob with matching identity", async () => {
@@ -227,40 +212,50 @@ describe("presentation lifecycle", () => {
     const validReference = await putPresentationBlob(directory, presentation);
 
     await rm(store.pathFor(validReference.contentHash));
-    expect(() => orchestrator.completePresentation({
-      jobId: state.jobId,
-      presentationRevisionNumber: 1,
-      presentationBlob: validReference,
-    })).toThrow();
-    expect(repository.listArtifactRevisions(state.jobId)
-      .filter((revision) => revision.kind === "presentation_revision"))
-      .toHaveLength(0);
+    expect(() =>
+      orchestrator.completePresentation({
+        jobId: state.jobId,
+        presentationRevisionNumber: 1,
+        presentationBlob: validReference,
+      }),
+    ).toThrow();
+    expect(
+      repository
+        .listArtifactRevisions(state.jobId)
+        .filter((revision) => revision.kind === "presentation_revision"),
+    ).toHaveLength(0);
 
     const restoredReference = await putPresentationBlob(directory, presentation);
-    expect(() => orchestrator.completePresentation({
-      jobId: state.jobId,
-      presentationRevisionNumber: 1,
-      presentationBlob: {
-        ...restoredReference,
-        byteLength: restoredReference.byteLength + 1,
-      },
-    })).toThrow(/failed integrity validation/);
+    expect(() =>
+      orchestrator.completePresentation({
+        jobId: state.jobId,
+        presentationRevisionNumber: 1,
+        presentationBlob: {
+          ...restoredReference,
+          byteLength: restoredReference.byteLength + 1,
+        },
+      }),
+    ).toThrow(/failed integrity validation/);
 
     const wrongIdentityReference = await putPresentationBlob(
       directory,
       presentationFixture(asPresentationId("another-presentation"), 1),
     );
-    expect(() => orchestrator.completePresentation({
-      jobId: state.jobId,
-      presentationRevisionNumber: 1,
-      presentationBlob: wrongIdentityReference,
-    })).toThrow(/identity or CAS revision does not match/);
+    expect(() =>
+      orchestrator.completePresentation({
+        jobId: state.jobId,
+        presentationRevisionNumber: 1,
+        presentationBlob: wrongIdentityReference,
+      }),
+    ).toThrow(/identity or CAS revision does not match/);
 
-    expect(orchestrator.completePresentation({
-      jobId: state.jobId,
-      presentationRevisionNumber: 1,
-      presentationBlob: restoredReference,
-    })).toMatchObject({
+    expect(
+      orchestrator.completePresentation({
+        jobId: state.jobId,
+        presentationRevisionNumber: 1,
+        presentationBlob: restoredReference,
+      }),
+    ).toMatchObject({
       status: "completed",
       presentationRevisionNumber: 1,
     });
@@ -299,8 +294,11 @@ describe("presentation lifecycle", () => {
     expect(replay.jobId).toBe(first.jobId);
     expect(second.jobId).toBe(first.jobId);
     expect(second.currentRequest.queryId).toBe("query-2");
-    expect(repository.listArtifactRevisions(first.jobId)
-      .filter((revision) => revision.stage === "intent")).toHaveLength(2);
+    expect(
+      repository
+        .listArtifactRevisions(first.jobId)
+        .filter((revision) => revision.stage === "intent"),
+    ).toHaveLength(2);
     repository.close();
   });
 
@@ -341,33 +339,39 @@ describe("presentation lifecycle", () => {
       committedAt: "2026-07-30T00:02:00.000Z",
     });
 
-    expect(() => orchestrator.commitArtifact({
-      jobId: state.jobId,
-      artifactId: "invalid",
-      kind: "quality_report",
-      stage: "quality",
-      value: { ok: false },
-      validation: {
-        status: "failed",
-        validator: "quality",
-        issues: [{
-          severity: "error",
-          code: "bad",
-          message: "Invalid candidate",
-        }],
-        validatedAt: NOW,
-      },
-      idempotencyKey: "invalid",
-    })).toThrow(/Only validated/);
-    expect(() => orchestrator.commitArtifact({
-      jobId: state.jobId,
-      artifactId: "wrong-stage",
-      kind: "quality_report",
-      stage: "candidate",
-      value: { ok: true },
-      validation: passed("quality"),
-      idempotencyKey: "wrong-stage",
-    })).toThrow(/must be committed at stage quality/);
+    expect(() =>
+      orchestrator.commitArtifact({
+        jobId: state.jobId,
+        artifactId: "invalid",
+        kind: "quality_report",
+        stage: "quality",
+        value: { ok: false },
+        validation: {
+          status: "failed",
+          validator: "quality",
+          issues: [
+            {
+              severity: "error",
+              code: "bad",
+              message: "Invalid candidate",
+            },
+          ],
+          validatedAt: NOW,
+        },
+        idempotencyKey: "invalid",
+      }),
+    ).toThrow(/Only validated/);
+    expect(() =>
+      orchestrator.commitArtifact({
+        jobId: state.jobId,
+        artifactId: "wrong-stage",
+        kind: "quality_report",
+        stage: "candidate",
+        value: { ok: true },
+        validation: passed("quality"),
+        idempotencyKey: "wrong-stage",
+      }),
+    ).toThrow(/must be committed at stage quality/);
 
     orchestrator.commitArtifact({
       jobId: state.jobId,
@@ -387,30 +391,36 @@ describe("presentation lifecycle", () => {
         staleBecause: dependency,
       }),
     ]);
-    expect(() => orchestrator.commitArtifact({
-      jobId: state.jobId,
-      artifactId: "page:P02",
-      kind: "page_svg",
-      stage: "page_svg",
-      value: { markup: "<svg />" },
-      dependencies: [dependency],
-      validation: passed("svg"),
-      idempotencyKey: "page-2-with-historical-design",
-    })).toThrow(/not the current non-stale head/);
-    expect(() => orchestrator.commitArtifact({
-      jobId: state.jobId,
-      artifactId: "preview:P01",
-      kind: "preview_receipt",
-      stage: "preview",
-      value: { rendered: true },
-      dependencies: [{
-        artifactId: page.pointer.artifactId,
-        revisionId: page.pointer.revisionId,
-        contentHash: page.pointer.contentHash,
-      }],
-      validation: passed("preview"),
-      idempotencyKey: "preview-with-stale-page",
-    })).toThrow(/not the current non-stale head/);
+    expect(() =>
+      orchestrator.commitArtifact({
+        jobId: state.jobId,
+        artifactId: "page:P02",
+        kind: "page_svg",
+        stage: "page_svg",
+        value: { markup: "<svg />" },
+        dependencies: [dependency],
+        validation: passed("svg"),
+        idempotencyKey: "page-2-with-historical-design",
+      }),
+    ).toThrow(/not the current non-stale head/);
+    expect(() =>
+      orchestrator.commitArtifact({
+        jobId: state.jobId,
+        artifactId: "preview:P01",
+        kind: "preview_receipt",
+        stage: "preview",
+        value: { rendered: true },
+        dependencies: [
+          {
+            artifactId: page.pointer.artifactId,
+            revisionId: page.pointer.revisionId,
+            contentHash: page.pointer.contentHash,
+          },
+        ],
+        validation: passed("preview"),
+        idempotencyKey: "preview-with-stale-page",
+      }),
+    ).toThrow(/not the current non-stale head/);
     repository.close();
   });
 
@@ -443,22 +453,26 @@ describe("presentation lifecycle", () => {
       committedAt: "2026-07-30T00:01:00.000Z",
     });
 
-    expect(() => orchestrator.recordProposal({
-      jobId: second.jobId,
-      proposalArtifactRevisionId: artifact.pointer.revisionId,
-      basePresentationRevisionNumber: 0,
-      createdAt: "2026-07-30T00:02:00.000Z",
-    })).toThrow(/current non-stale command_proposal artifact/);
-    expect(() => repository.createProposal({
-      proposalId: asProposalId("cross-job-proposal"),
-      jobId: second.jobId,
-      requestId: second.currentRequest.requestId,
-      queryId: second.currentRequest.queryId,
-      artifactRevisionId: artifact.pointer.revisionId,
-      basePresentationRevisionNumber: 0,
-      status: "waiting_approval",
-      createdAt: "2026-07-30T00:02:00.000Z",
-    })).toThrow(/command_proposal artifact from the same PptJob/);
+    expect(() =>
+      orchestrator.recordProposal({
+        jobId: second.jobId,
+        proposalArtifactRevisionId: artifact.pointer.revisionId,
+        basePresentationRevisionNumber: 0,
+        createdAt: "2026-07-30T00:02:00.000Z",
+      }),
+    ).toThrow(/current non-stale command_proposal artifact/);
+    expect(() =>
+      repository.createProposal({
+        proposalId: asProposalId("cross-job-proposal"),
+        jobId: second.jobId,
+        requestId: second.currentRequest.requestId,
+        queryId: second.currentRequest.queryId,
+        artifactRevisionId: artifact.pointer.revisionId,
+        basePresentationRevisionNumber: 0,
+        status: "waiting_approval",
+        createdAt: "2026-07-30T00:02:00.000Z",
+      }),
+    ).toThrow(/command_proposal artifact from the same PptJob/);
     expect(repository.getJob(second.jobId)?.status).toBe("running");
     expect(repository.getJob(second.jobId)?.proposalId).toBeUndefined();
   });
@@ -482,34 +496,38 @@ describe("presentation lifecycle", () => {
       throw new Error("broken projection consumer");
     });
 
-    await expect(orchestrator.withProjectionNotificationBatch(
-      () => sessionStore.commitPresentationTransaction({
-        sessionId,
-        presentation: commandBus.getSnapshot(),
-        commitLifecycle: () => {
-          orchestrator.beginCapability({
-            projectId,
-            presentationId,
-            queryId: asQueryId("rolled-back-query"),
-            capability: "edit",
-            instruction: "This transaction will roll back",
-            requestedAt: NOW,
-          });
-          throw new Error("force outer rollback");
-        },
-      }),
-    )).rejects.toThrow(/force outer rollback/);
+    await expect(
+      orchestrator.withProjectionNotificationBatch(() =>
+        sessionStore.commitPresentationTransaction({
+          sessionId,
+          presentation: commandBus.getSnapshot(),
+          commitLifecycle: () => {
+            orchestrator.beginCapability({
+              projectId,
+              presentationId,
+              queryId: asQueryId("rolled-back-query"),
+              capability: "edit",
+              instruction: "This transaction will roll back",
+              requestedAt: NOW,
+            });
+            throw new Error("force outer rollback");
+          },
+        }),
+      ),
+    ).rejects.toThrow(/force outer rollback/);
     expect(projections).toEqual([]);
     expect(repository.getJobByPresentationId(presentationId)).toBeUndefined();
 
-    expect(() => orchestrator.beginCapability({
-      projectId,
-      presentationId,
-      queryId: asQueryId("committed-query"),
-      capability: "edit",
-      instruction: "This transaction commits",
-      requestedAt: NOW,
-    })).not.toThrow();
+    expect(() =>
+      orchestrator.beginCapability({
+        projectId,
+        presentationId,
+        queryId: asQueryId("committed-query"),
+        capability: "edit",
+        instruction: "This transaction commits",
+        requestedAt: NOW,
+      }),
+    ).not.toThrow();
     expect(projections).toHaveLength(1);
     expect(repository.getJobByPresentationId(presentationId)?.status).toBe("running");
     expect(log).toHaveBeenCalledTimes(1);
@@ -549,10 +567,7 @@ describe("presentation lifecycle", () => {
     });
     expect(repository.getJob(initial.jobId)?.presentationRevisionId).toBeUndefined();
 
-    const presentation = presentationFixture(
-      asPresentationId("presentation-1"),
-      1,
-    );
+    const presentation = presentationFixture(asPresentationId("presentation-1"), 1);
     const completed = orchestrator.completePresentation({
       jobId: initial.jobId,
       proposalId: proposal.proposalId,
@@ -598,14 +613,14 @@ describe("presentation lifecycle", () => {
       basePresentationRevisionId: initialPresentation.presentationRevisionId,
       requestedAt: "2026-07-30T00:02:00.000Z",
     });
-    const commands = [{
-      id: "rename-1",
-      type: "set-presentation-title" as const,
-      title: "Renamed",
-    }];
-    const commandsBlob = await new ContentAddressedBlobStore(
-      join(directory, "blobs"),
-    ).put(
+    const commands = [
+      {
+        id: "rename-1",
+        type: "set-presentation-title" as const,
+        title: "Renamed",
+      },
+    ];
+    const commandsBlob = await new ContentAddressedBlobStore(join(directory, "blobs")).put(
       Buffer.from(JSON.stringify(commands), "utf8"),
       "application/json",
     );
@@ -634,19 +649,16 @@ describe("presentation lifecycle", () => {
 
     expect(replay.proposal.proposalId).toBe(first.proposal.proposalId);
     expect(replay.artifact.revisionId).toBe(first.artifact.revisionId);
-    expect(orchestrator.getCommandProposalArtifact(first.proposal.proposalId).value)
-      .toMatchObject({
-        summary: "Rename",
-        modelRisk: "low",
-        commandsBlob,
-        commandCount: 1,
-      });
+    expect(orchestrator.getCommandProposalArtifact(first.proposal.proposalId).value).toMatchObject({
+      summary: "Rename",
+      modelRisk: "low",
+      commandsBlob,
+      commandCount: 1,
+    });
 
     const rejected = orchestrator.rejectProposal(first.proposal.proposalId);
     expect(repository.getProposal(first.proposal.proposalId)?.status).toBe("rejected");
-    expect(rejected.presentationRevisionId).toBe(
-      initialPresentation.presentationRevisionId,
-    );
+    expect(rejected.presentationRevisionId).toBe(initialPresentation.presentationRevisionId);
     expect(rejected.presentationRevisionNumber).toBe(1);
     repository.close();
   });
@@ -668,12 +680,14 @@ describe("presentation lifecycle", () => {
     };
     expect(repository.claimSideEffect(claim)).toEqual({ type: "claimed" });
     expect(repository.claimSideEffect(claim)).toEqual({ type: "in_progress" });
-    expect(repository.completeSideEffect({
-      ...claim,
-      status: "succeeded",
-      result: { hash: "sha256:done" },
-      completedAt: "2026-07-30T00:01:00.000Z",
-    })).toBe(true);
+    expect(
+      repository.completeSideEffect({
+        ...claim,
+        status: "succeeded",
+        result: { hash: "sha256:done" },
+        completedAt: "2026-07-30T00:01:00.000Z",
+      }),
+    ).toBe(true);
     expect(repository.claimSideEffect(claim)).toEqual({
       type: "succeeded",
       result: { hash: "sha256:done" },
@@ -706,11 +720,13 @@ describe("presentation lifecycle", () => {
       validation: {
         status: "failed",
         validator: "candidate-schema",
-        issues: [{
-          severity: "error",
-          code: "invalid_candidate",
-          message: "Candidate schema validation failed.",
-        }],
+        issues: [
+          {
+            severity: "error",
+            code: "invalid_candidate",
+            message: "Candidate schema validation failed.",
+          },
+        ],
         validatedAt: "2026-07-30T00:01:30.000Z",
       },
       error: "Candidate schema validation failed.",
@@ -730,9 +746,7 @@ describe("presentation lifecycle", () => {
       completedAt: "2026-07-30T00:04:00.000Z",
     });
 
-    expect(repository.listArtifactRevisions(state.jobId)).toHaveLength(
-      intentRevisionCount,
-    );
+    expect(repository.listArtifactRevisions(state.jobId)).toHaveLength(intentRevisionCount);
     const attempts = repository.listStageAttempts(state.jobId);
     expect(attempts).toEqual([
       expect.objectContaining({
@@ -750,9 +764,7 @@ describe("presentation lifecycle", () => {
         candidate: { source: "cancelled candidate" },
       }),
     ]);
-    expect(attempts.every(
-      (attempt) => attempt.artifactRevisionId === undefined,
-    )).toBe(true);
+    expect(attempts.every((attempt) => attempt.artifactRevisionId === undefined)).toBe(true);
   });
 
   it("links a successful stage attempt to its validated committed revision", async () => {
@@ -782,13 +794,15 @@ describe("presentation lifecycle", () => {
       idempotencyKey: "wrong-stage-revision",
       committedAt: "2026-07-30T00:01:15.000Z",
     });
-    expect(() => orchestrator.finishStageAttempt({
-      stageRunId: attempt.stageRunId,
-      status: "succeeded",
-      artifactRevisionId: wrongStage.pointer.revisionId,
-      validation: passed("candidate-schema"),
-      completedAt: "2026-07-30T00:01:20.000Z",
-    })).toThrow(/same PptJob and stage/);
+    expect(() =>
+      orchestrator.finishStageAttempt({
+        stageRunId: attempt.stageRunId,
+        status: "succeeded",
+        artifactRevisionId: wrongStage.pointer.revisionId,
+        validation: passed("candidate-schema"),
+        completedAt: "2026-07-30T00:01:20.000Z",
+      }),
+    ).toThrow(/same PptJob and stage/);
 
     const foreign = orchestrator.beginCapability({
       projectId: asProjectId("foreign-attempt-project"),
@@ -808,13 +822,15 @@ describe("presentation lifecycle", () => {
       idempotencyKey: "foreign-candidate-revision",
       committedAt: "2026-07-30T00:01:30.000Z",
     });
-    expect(() => orchestrator.finishStageAttempt({
-      stageRunId: attempt.stageRunId,
-      status: "succeeded",
-      artifactRevisionId: foreignCandidate.pointer.revisionId,
-      validation: passed("candidate-schema"),
-      completedAt: "2026-07-30T00:01:35.000Z",
-    })).toThrow(/same PptJob and stage/);
+    expect(() =>
+      orchestrator.finishStageAttempt({
+        stageRunId: attempt.stageRunId,
+        status: "succeeded",
+        artifactRevisionId: foreignCandidate.pointer.revisionId,
+        validation: passed("candidate-schema"),
+        completedAt: "2026-07-30T00:01:35.000Z",
+      }),
+    ).toThrow(/same PptJob and stage/);
 
     const candidate = orchestrator.commitArtifact({
       jobId: state.jobId,
@@ -838,9 +854,9 @@ describe("presentation lifecycle", () => {
       status: "succeeded",
       artifactRevisionId: candidate.pointer.revisionId,
     });
-    expect(
-      repository.getArtifactRevision(succeeded.artifactRevisionId!),
-    ).toEqual(candidate.revision);
+    expect(repository.getArtifactRevision(succeeded.artifactRevisionId!)).toEqual(
+      candidate.revision,
+    );
     expect(repository.getJob(state.jobId)?.currentStageRunId).toBeUndefined();
 
     const replay = orchestrator.startStageAttempt({
@@ -850,12 +866,14 @@ describe("presentation lifecycle", () => {
       idempotencyKey: "candidate-success",
     });
     expect(replay).toEqual(succeeded);
-    expect(() => orchestrator.startStageAttempt({
-      jobId: state.jobId,
-      stage: "candidate",
-      candidate: { commands: [{ type: "add-slide" }] },
-      idempotencyKey: "candidate-success",
-    })).toThrow(/idempotency conflict/);
+    expect(() =>
+      orchestrator.startStageAttempt({
+        jobId: state.jobId,
+        stage: "candidate",
+        candidate: { commands: [{ type: "add-slide" }] },
+        idempotencyKey: "candidate-success",
+      }),
+    ).toThrow(/idempotency conflict/);
   });
 
   it("keeps a completed Query separate from a waiting Proposal and applies it once", async () => {
@@ -907,14 +925,14 @@ describe("presentation lifecycle", () => {
       basePresentationRevisionId: initialState.presentationRevisionId,
       requestedAt: "2026-07-30T00:02:00.000Z",
     });
-    const commands = [{
-      id: "rename-once",
-      type: "set-presentation-title" as const,
-      title: "Approved once",
-    }];
-    const commandsBlob = await new ContentAddressedBlobStore(
-      join(directory, "blobs"),
-    ).put(
+    const commands = [
+      {
+        id: "rename-once",
+        type: "set-presentation-title" as const,
+        title: "Approved once",
+      },
+    ];
+    const commandsBlob = await new ContentAddressedBlobStore(join(directory, "blobs")).put(
       Buffer.from(JSON.stringify(commands), "utf8"),
       "application/json",
     );
@@ -943,9 +961,7 @@ describe("presentation lifecycle", () => {
       threadId: "thread-proposal",
     });
 
-    expect(
-      sessionStore.conversationDatabase.loadTerminalRunResult("run-proposal"),
-    ).toEqual({
+    expect(sessionStore.conversationDatabase.loadTerminalRunResult("run-proposal")).toEqual({
       status: "approval-required",
       proposalId: proposal.proposalId,
     });
@@ -983,15 +999,18 @@ describe("presentation lifecycle", () => {
     expect(repository.getProposal(proposal.proposalId)?.status).toBe("applied");
     expect(orchestrator.getProjection(presentationId)?.proposalStatus).toBe("applied");
     expect(
-      repository.listArtifactRevisions(create.jobId)
+      repository
+        .listArtifactRevisions(create.jobId)
         .filter((revision) => revision.kind === "presentation_revision"),
     ).toHaveLength(2);
-    expect(repository.claimSideEffect({
-      jobId: create.jobId,
-      operation: "apply",
-      key: `proposal:${proposal.proposalId}`,
-      claimedAt: "2026-07-30T00:05:00.000Z",
-    })).toMatchObject({
+    expect(
+      repository.claimSideEffect({
+        jobId: create.jobId,
+        operation: "apply",
+        key: `proposal:${proposal.proposalId}`,
+        claimedAt: "2026-07-30T00:05:00.000Z",
+      }),
+    ).toMatchObject({
       type: "succeeded",
       result: {
         proposalId: proposal.proposalId,
@@ -1011,12 +1030,12 @@ describe("presentation lifecycle", () => {
       orchestrator,
       blobStore,
     );
-    await expect(recoveringService.applyProposal(commands, {
-      jobId: create.jobId,
-      proposalId: proposal.proposalId,
-    })).rejects.toThrow(
-      /authoritative Presentation snapshot does not match its durable blob/,
-    );
+    await expect(
+      recoveringService.applyProposal(commands, {
+        jobId: create.jobId,
+        proposalId: proposal.proposalId,
+      }),
+    ).rejects.toThrow(/authoritative Presentation snapshot does not match its durable blob/);
     const foreignJob = orchestrator.beginCapability({
       projectId: asProjectId("foreign-project"),
       presentationId: asPresentationId("foreign-presentation"),
@@ -1025,10 +1044,12 @@ describe("presentation lifecycle", () => {
       instruction: "Edit another presentation",
       requestedAt: "2026-07-30T00:06:00.000Z",
     });
-    await expect(service.applyProposal(commands, {
-      jobId: foreignJob.jobId,
-      proposalId: proposal.proposalId,
-    })).rejects.toThrow(/does not belong to this Presentation commit service/);
+    await expect(
+      service.applyProposal(commands, {
+        jobId: foreignJob.jobId,
+        proposalId: proposal.proposalId,
+      }),
+    ).rejects.toThrow(/does not belong to this Presentation commit service/);
   });
 
   it("commits immutable Presentation revisions for direct execute, undo, and redo", async () => {
@@ -1067,27 +1088,29 @@ describe("presentation lifecycle", () => {
       status: "waiting_user",
       currentStage: "presentation",
     });
-    expect(waiting.staleArtifacts).toContainEqual(expect.objectContaining({
-      artifactId: stalePresentation.artifactId,
-      revisionId: stalePresentation.revisionId,
-    }));
+    expect(waiting.staleArtifacts).toContainEqual(
+      expect.objectContaining({
+        artifactId: stalePresentation.artifactId,
+        revisionId: stalePresentation.revisionId,
+      }),
+    );
 
     const undone = await service.undo();
     const rebased = orchestrator.getState(presentationId)!;
     const rebasedPresentation = rebased.committedArtifacts.find(
       (pointer) => pointer.kind === "presentation_revision",
     )!;
-    const rebasedRevision = repository.getArtifactRevision(
-      rebasedPresentation.revisionId,
-    )!;
+    const rebasedRevision = repository.getArtifactRevision(rebasedPresentation.revisionId)!;
     expect(rebasedRevision.dependencies).toContainEqual({
       artifactId: stalePresentation.artifactId,
       revisionId: stalePresentation.revisionId,
       contentHash: stalePresentation.contentHash,
     });
-    expect(rebased.staleArtifacts.some(
-      (artifact) => artifact.artifactId === stalePresentation.artifactId,
-    )).toBe(false);
+    expect(
+      rebased.staleArtifacts.some(
+        (artifact) => artifact.artifactId === stalePresentation.artifactId,
+      ),
+    ).toBe(false);
     const redone = await service.redo();
 
     expect(executed).toMatchObject({ title: "Direct edit", revision: 1 });
@@ -1097,16 +1120,17 @@ describe("presentation lifecycle", () => {
     expect(sessionStore.getSession(sessionId).presentation).toEqual(redone);
 
     const job = orchestrator.getState(presentationId)!;
-    const presentationRevisions = repository.listArtifactRevisions(job.jobId)
+    const presentationRevisions = repository
+      .listArtifactRevisions(job.jobId)
       .filter((revision) => revision.kind === "presentation_revision");
     expect(presentationRevisions).toHaveLength(3);
-    expect(new Set(
-      presentationRevisions.map((revision) => revision.revisionId),
-    ).size).toBe(3);
-    expect(presentationRevisions.map((revision) => {
-      const value = revision.value as { presentationRevisionNumber: number };
-      return value.presentationRevisionNumber;
-    })).toEqual([1, 2, 3]);
+    expect(new Set(presentationRevisions.map((revision) => revision.revisionId)).size).toBe(3);
+    expect(
+      presentationRevisions.map((revision) => {
+        const value = revision.value as { presentationRevisionNumber: number };
+        return value.presentationRevisionNumber;
+      }),
+    ).toEqual([1, 2, 3]);
     expect(job).toMatchObject({
       status: "completed",
       currentStage: "presentation",
@@ -1150,9 +1174,11 @@ describe("presentation lifecycle", () => {
     expect(sessionStore.getSession(sessionId).presentation).toEqual(second);
 
     const job = orchestrator.getState(presentationId)!;
-    expect(repository.listArtifactRevisions(job.jobId).filter(
-      (revision) => revision.kind === "presentation_revision",
-    )).toHaveLength(2);
+    expect(
+      repository
+        .listArtifactRevisions(job.jobId)
+        .filter((revision) => revision.kind === "presentation_revision"),
+    ).toHaveLength(2);
     expect(job).toMatchObject({
       status: "completed",
       presentationRevisionNumber: 2,
@@ -1170,11 +1196,7 @@ describe("presentation lifecycle", () => {
       instruction: "Create",
       requestedAt: NOW,
     });
-    const presentation = presentationFixture(
-      presentationId,
-      1,
-      "Export recovery",
-    );
+    const presentation = presentationFixture(presentationId, 1, "Export recovery");
     const applied = orchestrator.completePresentation({
       jobId: created.jobId,
       presentationRevisionNumber: 1,
@@ -1191,24 +1213,28 @@ describe("presentation lifecycle", () => {
     });
     const effectKey = "export:revision-1:pptx:C:/exports/recovered.pptx";
     const fileHash = hashArtifactValue("recovered export bytes");
-    expect(repository.claimSideEffect({
-      jobId: created.jobId,
-      operation: "export",
-      key: effectKey,
-      claimedAt: "2026-07-30T00:03:00.000Z",
-    })).toEqual({ type: "claimed" });
-    expect(repository.completeSideEffect({
-      jobId: created.jobId,
-      operation: "export",
-      key: effectKey,
-      status: "succeeded",
-      result: {
-        destination: "C:/exports/recovered.pptx",
-        fileHash,
-        byteLength: 42,
-      },
-      completedAt: "2026-07-30T00:04:00.000Z",
-    })).toBe(true);
+    expect(
+      repository.claimSideEffect({
+        jobId: created.jobId,
+        operation: "export",
+        key: effectKey,
+        claimedAt: "2026-07-30T00:03:00.000Z",
+      }),
+    ).toEqual({ type: "claimed" });
+    expect(
+      repository.completeSideEffect({
+        jobId: created.jobId,
+        operation: "export",
+        key: effectKey,
+        status: "succeeded",
+        result: {
+          destination: "C:/exports/recovered.pptx",
+          fileHash,
+          byteLength: 42,
+        },
+        completedAt: "2026-07-30T00:04:00.000Z",
+      }),
+    ).toBe(true);
 
     const input = {
       jobId: created.jobId,
@@ -1229,19 +1255,18 @@ describe("presentation lifecycle", () => {
       status: "completed",
       currentStage: "export",
     });
-    expect(replay.exportArtifactRevisionId).toBe(
-      recovered.exportArtifactRevisionId,
-    );
-    const exports = repository.listArtifactRevisions(created.jobId)
+    expect(replay.exportArtifactRevisionId).toBe(recovered.exportArtifactRevisionId);
+    const exports = repository
+      .listArtifactRevisions(created.jobId)
       .filter((revision) => revision.kind === "export_artifact");
     expect(exports).toHaveLength(1);
     expect(exports[0]).toMatchObject({
       revisionId: recovered.exportArtifactRevisionId,
       dependencies: [
         expect.objectContaining({
-          revisionId: repository.listArtifactRevisions(created.jobId)
-            .find((revision) => revision.kind === "presentation_revision")
-            ?.revisionId,
+          revisionId: repository
+            .listArtifactRevisions(created.jobId)
+            .find((revision) => revision.kind === "presentation_revision")?.revisionId,
         }),
       ],
       value: {
@@ -1254,12 +1279,14 @@ describe("presentation lifecycle", () => {
         postflight: { slideCount: 0, verified: true },
       },
     });
-    expect(repository.claimSideEffect({
-      jobId: created.jobId,
-      operation: "export",
-      key: effectKey,
-      claimedAt: "2026-07-30T00:06:00.000Z",
-    })).toMatchObject({
+    expect(
+      repository.claimSideEffect({
+        jobId: created.jobId,
+        operation: "export",
+        key: effectKey,
+        claimedAt: "2026-07-30T00:06:00.000Z",
+      }),
+    ).toMatchObject({
       type: "succeeded",
       result: {
         destination: "C:/exports/recovered.pptx",

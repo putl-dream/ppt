@@ -8,8 +8,8 @@ function parseScalarValue(raw: string): unknown {
   if (!trimmed) return "";
 
   if (
-    (trimmed.startsWith('"') && trimmed.endsWith('"'))
-    || (trimmed.startsWith("'") && trimmed.endsWith("'"))
+    (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+    (trimmed.startsWith("'") && trimmed.endsWith("'"))
   ) {
     return trimmed.slice(1, -1);
   }
@@ -46,15 +46,17 @@ function parseYamlLikeBlock(block: string): Record<string, unknown> {
         const next = lines[index];
         if (/^[A-Za-z0-9_-]+:\s*/.test(next) && !/^\s/.test(next)) break;
         if (/^\s*-\s+/.test(next)) break;
-        if (next.trim() === "" && index + 1 < lines.length && /^[A-Za-z0-9_-]+:\s*/.test(lines[index + 1])) {
+        if (
+          next.trim() === "" &&
+          index + 1 < lines.length &&
+          /^[A-Za-z0-9_-]+:\s*/.test(lines[index + 1])
+        ) {
           break;
         }
         collected.push(folded ? next.trim() : next.replace(/^\s{2,4}/, ""));
         index += 1;
       }
-      result[key] = folded
-        ? collected.filter(Boolean).join(" ")
-        : collected.join("\n").trimEnd();
+      result[key] = folded ? collected.filter(Boolean).join(" ") : collected.join("\n").trimEnd();
       continue;
     }
 
@@ -122,7 +124,9 @@ export function readFrontmatterStringList(
 ): string[] | undefined {
   const value = frontmatter[key];
   if (Array.isArray(value)) {
-    return value.filter((item): item is string => typeof item === "string" && item.trim().length > 0);
+    return value.filter(
+      (item): item is string => typeof item === "string" && item.trim().length > 0,
+    );
   }
   if (typeof value === "string" && value.trim()) {
     return value.split(/[,\s]+/).filter(Boolean);

@@ -83,14 +83,16 @@ function inferToolCategory(toolName: string): AgentToolDisplayCategory {
   if (/search|find|web|glob/i.test(toolName)) return "search";
   if (/read|get|list|load/i.test(toolName)) return "read";
   if (/preview|validate|analyze|detect|inspect/i.test(toolName)) return "inspect";
-  if (/submit|execute|apply|update|insert|rewrite|compress|beautify|export|write|edit/i.test(toolName)) {
+  if (
+    /submit|execute|apply|update|insert|rewrite|compress|beautify|export|write|edit/i.test(toolName)
+  ) {
     return "change";
   }
   return "other";
 }
 
 export function hasAgentToolDisplayCopy(toolName: string): boolean {
-  return Object.prototype.hasOwnProperty.call(TOOL_DISPLAY_COPY, toolName);
+  return Object.hasOwn(TOOL_DISPLAY_COPY, toolName);
 }
 
 export function getAgentToolDisplayCopy(toolName: string): AgentToolDisplayCopy {
@@ -138,10 +140,7 @@ function completedAction(action: string): string {
   return `${action}已完成`;
 }
 
-export function formatAgentToolActivity(
-  toolName: string,
-  state: AgentToolActivityState,
-): string {
+export function formatAgentToolActivity(toolName: string, state: AgentToolActivityState): string {
   const { action } = getAgentToolDisplayCopy(toolName);
   switch (state) {
     case "running":
@@ -196,7 +195,7 @@ export function formatAgentProgressMessage(message: string): string | null {
 
 export function formatAgentToolApprovalDetail(detail: string): string {
   const normalized = detail.trim().replace(/^path:\s*/gim, "位置：");
-  if (/^[\[{]/.test(normalized)) return "此操作包含需要确认的高级设置";
+  if (/^[[{]/.test(normalized)) return "此操作包含需要确认的高级设置";
   return normalized;
 }
 
@@ -220,8 +219,9 @@ export function formatPublicErrorMessage(
     return "当前操作缺少必要权限，请检查项目目录权限。";
   }
   if (
-    /zod|schema|validation|json|tool[_ -]?use|modeloutputerror|unrecognized key|invalid input: expected|校验失败|stack|\bat\s+\S+\s*\(/i
-      .test(value)
+    /zod|schema|validation|json|tool[_ -]?use|modeloutputerror|unrecognized key|invalid input: expected|校验失败|stack|\bat\s+\S+\s*\(/i.test(
+      value,
+    )
   ) {
     return fallback;
   }

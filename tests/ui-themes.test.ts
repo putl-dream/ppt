@@ -2,7 +2,6 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
 import {
   BUILTIN_UI_THEME_ID,
   ensureUiThemesDirectory,
@@ -11,14 +10,15 @@ import {
   UI_THEME_ENTRY_FILE_NAME,
   UI_THEME_MAX_BYTES,
 } from "@main/ui-themes";
+import { afterEach, describe, expect, it } from "vitest";
 
 const temporaryDirectories: string[] = [];
 
 afterEach(async () => {
   await Promise.all(
-    temporaryDirectories.splice(0).map((directory) =>
-      rm(directory, { recursive: true, force: true }),
-    ),
+    temporaryDirectories
+      .splice(0)
+      .map((directory) => rm(directory, { recursive: true, force: true })),
   );
 });
 
@@ -28,11 +28,7 @@ async function createAppRoot(): Promise<string> {
   return root;
 }
 
-function writeTheme(
-  themesDirectory: string,
-  id: string,
-  css: string,
-): void {
+function writeTheme(themesDirectory: string, id: string, css: string): void {
   const themeDirectory = join(themesDirectory, id);
   mkdirSync(themeDirectory, { recursive: true });
   writeFileSync(join(themeDirectory, UI_THEME_ENTRY_FILE_NAME), css, "utf8");
@@ -95,11 +91,7 @@ describe("ui themes directory", () => {
   it("rejects oversized theme.css files", async () => {
     const root = await createAppRoot();
     const themesDirectory = ensureUiThemesDirectory(root);
-    writeTheme(
-      themesDirectory,
-      "huge",
-      "x".repeat(UI_THEME_MAX_BYTES + 1),
-    );
+    writeTheme(themesDirectory, "huge", "x".repeat(UI_THEME_MAX_BYTES + 1));
 
     expect(listUiThemes(root).some((theme) => theme.id === "huge")).toBe(true);
     expect(readUiThemeCss("huge", root)).toBeNull();

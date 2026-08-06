@@ -7,9 +7,11 @@ import { writeJsonFileAtomic } from "../src/main/agent/persistence/atomic-json-f
 const temporaryDirectories: string[] = [];
 
 afterEach(async () => {
-  await Promise.all(temporaryDirectories.splice(0).map((directory) =>
-    rm(directory, { recursive: true, force: true })
-  ));
+  await Promise.all(
+    temporaryDirectories
+      .splice(0)
+      .map((directory) => rm(directory, { recursive: true, force: true })),
+  );
 });
 
 describe("atomic JSON persistence", () => {

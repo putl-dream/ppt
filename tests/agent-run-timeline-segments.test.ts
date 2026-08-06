@@ -1,10 +1,10 @@
-import { describe, expect, it } from "vitest";
-import type { AgentActivityItem } from "../src/shared/agent-activity";
 import {
   buildAgentRunTimelineSegments,
   isToolBatchActive,
   shouldAutoCollapseToolBatch,
-} from "../src/renderer/src/components/agent-run-timeline-segments";
+} from "@shared/agent-run-timeline-segments";
+import { describe, expect, it } from "vitest";
+import type { AgentActivityItem } from "../src/shared/agent-activity";
 
 describe("buildAgentRunTimelineSegments", () => {
   it("keeps thought and tool batches separate in order", () => {
@@ -94,11 +94,7 @@ describe("buildAgentRunTimelineSegments", () => {
     expect(segments).toHaveLength(1);
     expect(segments[0]?.kind).toBe("tool_batch");
     if (segments[0]?.kind === "tool_batch") {
-      expect(segments[0].items.map((item) => item.kind)).toEqual([
-        "tool",
-        "tool-approval",
-        "step",
-      ]);
+      expect(segments[0].items.map((item) => item.kind)).toEqual(["tool", "tool-approval", "step"]);
     }
   });
 });
@@ -115,41 +111,53 @@ describe("tool batch open helpers", () => {
   ];
 
   it("final text round collapses when later response exists", () => {
-    expect(shouldAutoCollapseToolBatch({
-      items: completedTools,
-      runLive: true,
-      hasLaterResponse: true,
-    })).toBe(true);
-    expect(isToolBatchActive({
-      items: completedTools,
-      runLive: true,
-      hasLaterResponse: true,
-    })).toBe(false);
+    expect(
+      shouldAutoCollapseToolBatch({
+        items: completedTools,
+        runLive: true,
+        hasLaterResponse: true,
+      }),
+    ).toBe(true);
+    expect(
+      isToolBatchActive({
+        items: completedTools,
+        runLive: true,
+        hasLaterResponse: true,
+      }),
+    ).toBe(false);
   });
 
   it("run end without trailing response still collapses (!live)", () => {
-    expect(shouldAutoCollapseToolBatch({
-      items: completedTools,
-      runLive: false,
-      hasLaterResponse: false,
-    })).toBe(true);
-    expect(isToolBatchActive({
-      items: completedTools,
-      runLive: false,
-      hasLaterResponse: false,
-    })).toBe(false);
+    expect(
+      shouldAutoCollapseToolBatch({
+        items: completedTools,
+        runLive: false,
+        hasLaterResponse: false,
+      }),
+    ).toBe(true);
+    expect(
+      isToolBatchActive({
+        items: completedTools,
+        runLive: false,
+        hasLaterResponse: false,
+      }),
+    ).toBe(false);
   });
 
   it("stays active while live with no later response", () => {
-    expect(isToolBatchActive({
-      items: completedTools,
-      runLive: true,
-      hasLaterResponse: false,
-    })).toBe(true);
-    expect(shouldAutoCollapseToolBatch({
-      items: completedTools,
-      runLive: true,
-      hasLaterResponse: false,
-    })).toBe(false);
+    expect(
+      isToolBatchActive({
+        items: completedTools,
+        runLive: true,
+        hasLaterResponse: false,
+      }),
+    ).toBe(true);
+    expect(
+      shouldAutoCollapseToolBatch({
+        items: completedTools,
+        runLive: true,
+        hasLaterResponse: false,
+      }),
+    ).toBe(false);
   });
 });

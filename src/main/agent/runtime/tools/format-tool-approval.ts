@@ -17,15 +17,13 @@ export function formatToolApprovalDetail(toolName: string, args: unknown): strin
     const newString = typeof record.new_string === "string" ? record.new_string : "";
     return `path: ${path}\n- ${oldString}\n+ ${newString}`;
   }
-  if (
-    toolName === "ReadFile"
-    || toolName === "Glob"
-  ) {
-    const path = typeof record.path === "string"
-      ? record.path
-      : typeof record.pattern === "string"
-        ? record.pattern
-        : "";
+  if (toolName === "ReadFile" || toolName === "Glob") {
+    const path =
+      typeof record.path === "string"
+        ? record.path
+        : typeof record.pattern === "string"
+          ? record.pattern
+          : "";
     return path;
   }
 

@@ -1,8 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  createOpenExportFolderHref,
-  getOpenExportFolderPath,
-} from "../src/shared/export-links";
+import { createOpenExportFolderHref, getOpenExportFolderPath } from "../src/shared/export-links";
 
 describe("export links", () => {
   it("round-trips exported file paths through markdown-safe hrefs", () => {

@@ -1,23 +1,25 @@
-import { z } from "zod";
 import {
   ARGUMENT_MODES,
-  READING_MODES,
-  VISUAL_STYLES,
-  SVG_COMPOSITION_DISCIPLINE,
   getArgumentModeDefinition,
   getReadingModeDefinition,
   getVisualStyleDefinition,
+  READING_MODES,
+  SVG_COMPOSITION_DISCIPLINE,
+  VISUAL_STYLES,
 } from "@design-system";
 import { DESIGN_CAPABILITY_VERSION } from "@shared/design-capability";
 import { TEMPLATE_PACK_PATH } from "@shared/template-protocol";
+import { z } from "zod";
 import type { ToolDefinition } from "../tool-definition";
 import { loadProjectTemplatePack } from "./project-template-state";
 
-export const getDesignReferenceSchema = z.object({
-  argumentMode: z.enum(ARGUMENT_MODES),
-  visualStyle: z.enum(VISUAL_STYLES),
-  readingMode: z.enum(READING_MODES),
-}).strict();
+export const getDesignReferenceSchema = z
+  .object({
+    argumentMode: z.enum(ARGUMENT_MODES),
+    visualStyle: z.enum(VISUAL_STYLES),
+    readingMode: z.enum(READING_MODES),
+  })
+  .strict();
 
 /**
  * Exposes executable mode/style guidance from the inlined DesignSystem catalog.
@@ -31,10 +33,10 @@ export const getDesignReferenceTool: ToolDefinition<
 > = {
   name: "GetDesignReference",
   description:
-    "在写 SVG 前读取已锁定 argument mode、visual style、reading mode 的完整执行参考："
-    + "论证骨架、标题语气、构图几何、留白、字体、质感、图像语言与明确禁用项。"
-    + "若 workspace 存在 design/template-pack.json，返回值会合并 pack 的配色/字体/chrome/mustUse，"
-    + "不得用内置样板覆盖参考模板外观。",
+    "在写 SVG 前读取已锁定 argument mode、visual style、reading mode 的完整执行参考：" +
+    "论证骨架、标题语气、构图几何、留白、字体、质感、图像语言与明确禁用项。" +
+    "若 workspace 存在 design/template-pack.json，返回值会合并 pack 的配色/字体/chrome/mustUse，" +
+    "不得用内置样板覆盖参考模板外观。",
   category: "core",
   loadPolicy: "core",
   inputSchema: getDesignReferenceSchema,
@@ -58,31 +60,32 @@ async function resolveReference(
 
   if (pack) {
     if (
-      args.argumentMode !== pack.designSystem.argumentMode
-      || args.visualStyle !== pack.designSystem.visualStyle
-      || args.readingMode !== pack.designSystem.readingMode
+      args.argumentMode !== pack.designSystem.argumentMode ||
+      args.visualStyle !== pack.designSystem.visualStyle ||
+      args.readingMode !== pack.designSystem.readingMode
     ) {
       throw new Error(
-        `${TEMPLATE_PACK_PATH} is active; GetDesignReference axes must be `
-        + `${pack.designSystem.argumentMode}/${pack.designSystem.visualStyle}/`
-        + `${pack.designSystem.readingMode} (got ${args.argumentMode}/`
-        + `${args.visualStyle}/${args.readingMode}).`,
+        `${TEMPLATE_PACK_PATH} is active; GetDesignReference axes must be ` +
+          `${pack.designSystem.argumentMode}/${pack.designSystem.visualStyle}/` +
+          `${pack.designSystem.readingMode} (got ${args.argumentMode}/` +
+          `${args.visualStyle}/${args.readingMode}).`,
       );
     }
   }
 
   const colorScheme = pack?.designSystem.colorScheme;
-  const paletteNote = colorScheme && typeof colorScheme !== "string"
-    ? {
-        name: colorScheme.name,
-        background: colorScheme.background,
-        secondaryBg: colorScheme.secondaryBg,
-        primary: colorScheme.primary,
-        accent: colorScheme.accent,
-        secondaryAccent: colorScheme.secondaryAccent,
-        bodyText: colorScheme.bodyText,
-      }
-    : undefined;
+  const paletteNote =
+    colorScheme && typeof colorScheme !== "string"
+      ? {
+          name: colorScheme.name,
+          background: colorScheme.background,
+          secondaryBg: colorScheme.secondaryBg,
+          primary: colorScheme.primary,
+          accent: colorScheme.accent,
+          secondaryAccent: colorScheme.secondaryAccent,
+          bodyText: colorScheme.bodyText,
+        }
+      : undefined;
 
   return {
     capabilityVersion: DESIGN_CAPABILITY_VERSION,
@@ -127,10 +130,7 @@ async function resolveReference(
       texture: style.texture,
       composition: style.grammarPreferences.composition,
       compositionDiscipline: SVG_COMPOSITION_DISCIPLINE,
-      avoid: [
-        ...style.grammarPreferences.avoid,
-        ...(pack?.authoringGuidance.avoid ?? []),
-      ],
+      avoid: [...style.grammarPreferences.avoid, ...(pack?.authoringGuidance.avoid ?? [])],
       imageLanguage: {
         rendering: style.imageRendering,
         treatment: style.imageTreatment,
@@ -153,11 +153,11 @@ async function resolveReference(
       visualBurden: reading.visualBurden,
     },
     authoringDirective: pack
-      ? `Active template pack ${pack.templateId}@${pack.revisionId}. `
-        + "Use packPalette HEX, packRoles fonts, packChrome anchors and packAssets paths. "
-        + "Builtin visualStyle only supplies composition discipline — do not replace the pack look."
-      : "Translate this behavior into page-specific SVG composition. Keep the deck-wide language, "
-        + "but do not copy a fixed coordinate template or repeat one card grid across pages.",
+      ? `Active template pack ${pack.templateId}@${pack.revisionId}. ` +
+        "Use packPalette HEX, packRoles fonts, packChrome anchors and packAssets paths. " +
+        "Builtin visualStyle only supplies composition discipline — do not replace the pack look."
+      : "Translate this behavior into page-specific SVG composition. Keep the deck-wide language, " +
+        "but do not copy a fixed coordinate template or repeat one card grid across pages.",
     templatePackPath: pack ? TEMPLATE_PACK_PATH : null,
   };
 }

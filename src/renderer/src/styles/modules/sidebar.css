@@ -40,7 +40,6 @@ aside {
   background: transparent;
 }
 
-
 .eyebrow {
   font-size: 10px;
   font-weight: 700;
@@ -420,7 +419,8 @@ aside {
   color: var(--text-muted);
   flex-shrink: 0;
   opacity: 0;
-  transition: opacity var(--duration-fast) var(--ease-out),
+  transition:
+    opacity var(--duration-fast) var(--ease-out),
     background-color var(--duration-fast) var(--ease-out),
     color var(--duration-fast) var(--ease-out);
 }
@@ -499,7 +499,9 @@ aside {
   color: var(--text-secondary);
   font-size: 12px;
   cursor: pointer;
-  transition: border-color 0.15s ease, color 0.15s ease;
+  transition:
+    border-color 0.15s ease,
+    color 0.15s ease;
   max-width: 220px;
 }
 
@@ -565,8 +567,12 @@ aside {
   border-radius: 1px;
 }
 
-.mini-line.w-full { width: 90%; }
-.mini-line.w-3-4 { width: 65%; }
+.mini-line.w-full {
+  width: 90%;
+}
+.mini-line.w-3-4 {
+  width: 65%;
+}
 
 .slide-count-badge {
   font-size: 10px;
@@ -644,8 +650,10 @@ aside {
 
 .theme-active-indicator {
   position: absolute;
-  top: 8px; right: 8px;
-  width: 18px; height: 18px;
+  top: 8px;
+  right: 8px;
+  width: 18px;
+  height: 18px;
   border-radius: 50%;
   background: var(--accent-primary);
   color: var(--text-on-accent);
@@ -679,12 +687,11 @@ aside {
 }
 
 .dot-outer {
-  display: block;
+  display: grid;
   width: 24px;
   height: 24px;
   border-radius: 50%;
   border: 1px solid transparent;
-  display: grid;
   place-items: center;
   transition: var(--transition-color);
 }
@@ -826,7 +833,8 @@ aside {
 }
 
 .avatar-mock {
-  width: 32px; height: 32px;
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
   background: var(--accent-primary);
   display: grid;

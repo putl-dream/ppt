@@ -1,4 +1,7 @@
-import React, { useMemo, useState } from "react";
+import type React from "react";
+import { useMemo, useState } from "react";
+import { cx } from "../lib/cx";
+import type { SettingsCategory } from "../settingsCategories";
 import {
   BrainIcon,
   ChartIcon,
@@ -12,8 +15,6 @@ import {
   SearchIcon,
   SlidersIcon,
 } from "./Icons";
-import type { SettingsCategory } from "../settingsCategories";
-import { cx } from "../lib/cx";
 
 interface SettingsSidebarProps {
   activeCategory: SettingsCategory;
@@ -71,15 +72,13 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = ({
 
   const visibleGroups = useMemo(() => {
     if (!query) return NAV_GROUPS;
-    return NAV_GROUPS
-      .map((group) => ({
-        ...group,
-        items: group.items.filter((item) =>
-          item.title.toLowerCase().includes(query)
-          || group.title.toLowerCase().includes(query),
-        ),
-      }))
-      .filter((group) => group.items.length > 0);
+    return NAV_GROUPS.map((group) => ({
+      ...group,
+      items: group.items.filter(
+        (item) =>
+          item.title.toLowerCase().includes(query) || group.title.toLowerCase().includes(query),
+      ),
+    })).filter((group) => group.items.length > 0);
   }, [query]);
 
   return (
@@ -95,12 +94,7 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = ({
             aria-label="筛选设置项"
           />
           {visibleGroups.map((group) => (
-            <div
-              className="ide-nav-group"
-              key={group.title}
-              role="group"
-              aria-label={group.title}
-            >
+            <div className="ide-nav-group" key={group.title} role="group" aria-label={group.title}>
               {group.items.map((item) => (
                 <button
                   key={item.id}
@@ -109,15 +103,15 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = ({
                   onClick={() => onSelectCategory(item.id)}
                   aria-current={activeCategory === item.id ? "page" : undefined}
                 >
-                  <span className="ide-nav-item-icon" aria-hidden="true">{item.icon}</span>
+                  <span className="ide-nav-item-icon" aria-hidden="true">
+                    {item.icon}
+                  </span>
                   <span>{item.title}</span>
                 </button>
               ))}
             </div>
           ))}
-          {visibleGroups.length === 0 ? (
-            <p className="ide-hint">没有匹配的设置项</p>
-          ) : null}
+          {visibleGroups.length === 0 ? <p className="ide-hint">没有匹配的设置项</p> : null}
         </nav>
       </div>
 

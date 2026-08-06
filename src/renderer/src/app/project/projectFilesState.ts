@@ -1,7 +1,4 @@
-import type {
-  ProjectFileEditorReadResult,
-  ProjectFileEditorWriteResult,
-} from "@shared/ipc";
+import type { ProjectFileEditorReadResult, ProjectFileEditorWriteResult } from "@shared/ipc";
 import type { ProjectArtifact } from "@shared/session";
 
 const BINARY_FILE_EXTENSIONS = new Set([
@@ -62,8 +59,9 @@ export function groupProjectFiles(
   paths: readonly string[],
   artifacts: readonly ProjectArtifact[],
 ): ProjectFileGroup[] {
-  const normalizedPaths = [...new Set(paths.map(normalizeProjectPath).filter(Boolean))]
-    .sort((left, right) => left.localeCompare(right));
+  const normalizedPaths = [...new Set(paths.map(normalizeProjectPath).filter(Boolean))].sort(
+    (left, right) => left.localeCompare(right),
+  );
   const filesByArtifact = new Map(artifacts.map((artifact) => [artifact.id, [] as string[]]));
   const otherFiles: string[] = [];
 
@@ -113,14 +111,16 @@ export function projectFileErrorMessage(error: unknown): string {
 }
 
 export function projectFileRequiresReload(error: unknown): boolean {
-  const code = typeof error === "object" && error !== null && "code" in error
-    ? String((error as { code?: unknown }).code ?? "")
-    : "";
+  const code =
+    typeof error === "object" && error !== null && "code" in error
+      ? String((error as { code?: unknown }).code ?? "")
+      : "";
   if (code === "STALE_FILE") return true;
 
   const message = projectFileErrorMessage(error);
-  return /stale|conflict|changed|read it again|expected_version|edit session.+(?:missing|expired|match)/i
-    .test(message);
+  return /stale|conflict|changed|read it again|expected_version|edit session.+(?:missing|expired|match)/i.test(
+    message,
+  );
 }
 
 export function reconcileProjectFileSave(

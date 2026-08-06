@@ -1,11 +1,8 @@
-import type { SubAgentToolDefinition } from "../subagent/workspace-tools";
-import {
-  DESIGN_CAPABILITY_VERSION,
-  LAYOUT_PLANNER_CONTRACT,
-} from "@shared/design-capability";
-import type { SkillCard } from "../skills/skill-types";
-import type { SkillRegistry } from "../skills/loadSkillsDir";
+import { DESIGN_CAPABILITY_VERSION, LAYOUT_PLANNER_CONTRACT } from "@shared/design-capability";
 import { rankSkillCatalogForStage } from "../runtime/prompts/skill-stage-policy";
+import type { SkillRegistry } from "../skills/loadSkillsDir";
+import type { SkillCard } from "../skills/skill-types";
+import type { SubAgentToolDefinition } from "../subagent/workspace-tools";
 
 function formatToolCard(tool: SubAgentToolDefinition): string {
   const fields = Object.entries(tool.inputSchema.shape).map(([key, field]) => {
@@ -16,18 +13,17 @@ function formatToolCard(tool: SubAgentToolDefinition): string {
   return [`- ${tool.name}: ${tool.description}`, ...fields].join("\n");
 }
 
-function formatSkillCatalog(
-  catalog: SkillCard[],
-  skillRegistry?: SkillRegistry,
-): string {
+function formatSkillCatalog(catalog: SkillCard[], skillRegistry?: SkillRegistry): string {
   if (catalog.length === 0) {
     return "No skills are registered in this session.";
   }
   const ranked = rankSkillCatalogForStage(catalog, "discover", skillRegistry);
-  return ranked.map((skill) => {
-    const when = skill.whenToUse ? ` — when: ${skill.whenToUse}` : "";
-    return `- \`${skill.name}\`: ${skill.description}${when}`;
-  }).join("\n");
+  return ranked
+    .map((skill) => {
+      const when = skill.whenToUse ? ` — when: ${skill.whenToUse}` : "";
+      return `- \`${skill.name}\`: ${skill.description}${when}`;
+    })
+    .join("\n");
 }
 
 export function buildTeammateSystemPrompt(input: {
@@ -37,9 +33,7 @@ export function buildTeammateSystemPrompt(input: {
   skillCatalog?: SkillCard[];
   skillRegistry?: SkillRegistry;
 }): string {
-  const catalog = input.skillCatalog
-    ?? input.skillRegistry?.listCards()
-    ?? [];
+  const catalog = input.skillCatalog ?? input.skillRegistry?.listCards() ?? [];
   const skillsSection = formatSkillCatalog(catalog, input.skillRegistry);
 
   return `You are "${input.name}", a teammate agent in a PPT project workspace. Your role: ${input.role}.

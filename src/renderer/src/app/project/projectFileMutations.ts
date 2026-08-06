@@ -1,7 +1,4 @@
-import type {
-  DesktopApi,
-  ProjectFileEditorWriteResult,
-} from "@shared/ipc";
+import type { DesktopApi, ProjectFileEditorWriteResult } from "@shared/ipc";
 
 export type ProjectFileMutationResult = Pick<
   ProjectFileEditorWriteResult,
@@ -22,10 +19,13 @@ export async function saveExistingProjectFile(
     throw new Error(opened.readOnlyReason ?? "This project file is read-only.");
   }
   if (expectedContent !== undefined && opened.content !== expectedContent) {
-    throw Object.assign(new Error(
-      `Project file changed after the proposed content was read: ${opened.path}. `
-      + "Reload it and create a new patch.",
-    ), { code: "STALE_FILE" });
+    throw Object.assign(
+      new Error(
+        `Project file changed after the proposed content was read: ${opened.path}. ` +
+          "Reload it and create a new patch.",
+      ),
+      { code: "STALE_FILE" },
+    );
   }
   if (opened.content === content) {
     return {

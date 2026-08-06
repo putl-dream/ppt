@@ -13,11 +13,13 @@ describe("ToolApprovalBroker", () => {
       reason: "Shell 命令：echo hi",
     });
 
-    expect(emit).toHaveBeenCalledWith(expect.objectContaining({
-      type: "tool-approval-waiting",
-      toolName: "bash",
-      reason: "Shell 命令：echo hi",
-    }));
+    expect(emit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "tool-approval-waiting",
+        toolName: "bash",
+        reason: "Shell 命令：echo hi",
+      }),
+    );
 
     const approvalId = emit.mock.calls[0]![0].approvalId as string;
     expect(broker.resolve(approvalId, true)).toBe(true);
@@ -43,10 +45,12 @@ describe("ToolApprovalBroker", () => {
 
     broker.cancelForRun("run-2");
     await expect(pending).resolves.toBe(false);
-    expect(emit).toHaveBeenLastCalledWith(expect.objectContaining({
-      type: "tool-approval-resolved",
-      status: "denied",
-    }));
+    expect(emit).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        type: "tool-approval-resolved",
+        status: "denied",
+      }),
+    );
   });
 
   it("rejects approvals created after the run was already cancelled", async () => {
@@ -56,11 +60,13 @@ describe("ToolApprovalBroker", () => {
 
     broker.cancelForRun("run-3");
 
-    await expect(handler({
-      toolName: "WriteFile",
-      args: { path: "late.md", content: "x" },
-      reason: "文件修改",
-    })).resolves.toBe(false);
+    await expect(
+      handler({
+        toolName: "WriteFile",
+        args: { path: "late.md", content: "x" },
+        reason: "文件修改",
+      }),
+    ).resolves.toBe(false);
     expect(emit).not.toHaveBeenCalled();
   });
 
@@ -89,22 +95,26 @@ describe("ToolApprovalBroker", () => {
       broker.cancelForRun("run-5");
     });
 
-    await expect(handler({
-      toolName: "bash",
-      args: { command: "echo hi" },
-      reason: "Shell 命令",
-    })).resolves.toBe(false);
+    await expect(
+      handler({
+        toolName: "bash",
+        args: { command: "echo hi" },
+        reason: "Shell 命令",
+      }),
+    ).resolves.toBe(false);
   });
 
   it("releases cancelled run state when the run lifecycle finishes", async () => {
     const broker = new ToolApprovalBroker();
     const firstHandler = broker.createHandler("run-reused", () => {});
     broker.cancelForRun("run-reused");
-    await expect(firstHandler({
-      toolName: "bash",
-      args: { command: "echo first" },
-      reason: "Shell 命令",
-    })).resolves.toBe(false);
+    await expect(
+      firstHandler({
+        toolName: "bash",
+        args: { command: "echo first" },
+        reason: "Shell 命令",
+      }),
+    ).resolves.toBe(false);
 
     broker.finishForRun("run-reused");
 

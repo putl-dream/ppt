@@ -1,17 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
-import { computeBackoffDelayMs } from "../src/main/agent/runtime/model/with-retry";
+import type { AgentModelGateway, AgentModelMessage } from "../src/main/agent/gateway";
 import {
   AgentGatewayError,
   classifyGatewayRecovery,
   isOutputTruncated,
   normalizeProviderError,
 } from "../src/main/agent/gateway/errors";
-import { compactTranscript } from "../src/main/agent/runtime/turns/transcript-compact";
+import { computeBackoffDelayMs } from "../src/main/agent/runtime/model/with-retry";
 import { callModelWithRecovery } from "../src/main/agent/runtime/turns/model-call-recovery";
-import type {
-  AgentModelGateway,
-  AgentModelMessage,
-} from "../src/main/agent/gateway";
+import { compactTranscript } from "../src/main/agent/runtime/turns/transcript-compact";
 
 function textContent(text: string) {
   return [{ type: "text" as const, text }];
@@ -21,20 +18,24 @@ function canonicalToolHistory(count: number): AgentModelMessage[] {
   return Array.from({ length: count }, (_, index): AgentModelMessage[] => [
     {
       role: "assistant",
-      content: [{
-        type: "tool_use",
-        id: `call-${index}`,
-        name: "ReadFile",
-        input: { path: `${index}.txt` },
-      }],
+      content: [
+        {
+          type: "tool_use",
+          id: `call-${index}`,
+          name: "ReadFile",
+          input: { path: `${index}.txt` },
+        },
+      ],
     },
     {
       role: "user",
-      content: [{
-        type: "tool_result",
-        toolUseId: `call-${index}`,
-        content: [{ type: "text", text: `result-${index}` }],
-      }],
+      content: [
+        {
+          type: "tool_result",
+          toolUseId: `call-${index}`,
+          content: [{ type: "text", text: `result-${index}` }],
+        },
+      ],
     },
   ]).flat();
 }
@@ -70,7 +71,10 @@ describe("retryAfterMs on AgentGatewayError", () => {
 
 describe("gateway recovery classification", () => {
   it("maps 529 to overloaded and retry-backoff", () => {
-    const error = normalizeProviderError("anthropic", Object.assign(new Error("overloaded"), { status: 529 }));
+    const error = normalizeProviderError(
+      "anthropic",
+      Object.assign(new Error("overloaded"), { status: 529 }),
+    );
     expect(error.code).toBe("overloaded");
     expect(classifyGatewayRecovery(error)).toBe("retry-backoff");
   });
@@ -84,16 +88,13 @@ describe("gateway recovery classification", () => {
     expect(classifyGatewayRecovery(error)).toBe("compact-context");
   });
 
-  it.each([400, 404, 422])(
-    "does not retry a deterministic HTTP %s provider error",
-    (status) => {
-      const error = normalizeProviderError(
-        "openai",
-        Object.assign(new Error("invalid request"), { status }),
-      );
-      expect(classifyGatewayRecovery(error)).toBe("non-recoverable");
-    },
-  );
+  it.each([400, 404, 422])("does not retry a deterministic HTTP %s provider error", (status) => {
+    const error = normalizeProviderError(
+      "openai",
+      Object.assign(new Error("invalid request"), { status }),
+    );
+    expect(classifyGatewayRecovery(error)).toBe("non-recoverable");
+  });
 
   it.each([408, 429])("keeps recoverable HTTP %s errors on backoff", (status) => {
     const error = normalizeProviderError(
@@ -110,10 +111,12 @@ describe("gateway recovery classification", () => {
   });
 
   it("rejects raw provider errors until Gateway normalizes them", () => {
-    expect(classifyGatewayRecovery(Object.assign(new Error("rate limited"), { status: 429 })))
-      .toBe("non-recoverable");
-    expect(classifyGatewayRecovery(Object.assign(new Error("overloaded"), { status: 529 })))
-      .toBe("non-recoverable");
+    expect(classifyGatewayRecovery(Object.assign(new Error("rate limited"), { status: 429 }))).toBe(
+      "non-recoverable",
+    );
+    expect(classifyGatewayRecovery(Object.assign(new Error("overloaded"), { status: 529 }))).toBe(
+      "non-recoverable",
+    );
     expect(classifyGatewayRecovery(new Error("prompt is too long"))).toBe("non-recoverable");
   });
 });
@@ -139,12 +142,14 @@ describe("callModelWithRecovery", () => {
         return {
           provider: "anthropic",
           model: "test",
-          content: [{
-            type: "tool_use",
-            id: "call-from-block",
-            name: "ReadPresentationSnapshot",
-            input: {},
-          }],
+          content: [
+            {
+              type: "tool_use",
+              id: "call-from-block",
+              name: "ReadPresentationSnapshot",
+              input: {},
+            },
+          ],
         };
       },
       async *queryModelStream() {
@@ -158,12 +163,14 @@ describe("callModelWithRecovery", () => {
       promptPayload: { transcript: [], request: "hello" },
     });
 
-    expect(result.content).toEqual([{
-      type: "tool_use",
-      id: "call-from-block",
-      name: "ReadPresentationSnapshot",
-      input: {},
-    }]);
+    expect(result.content).toEqual([
+      {
+        type: "tool_use",
+        id: "call-from-block",
+        name: "ReadPresentationSnapshot",
+        input: {},
+      },
+    ]);
   });
 
   it("retries the same request on 429 without appending partial output", async () => {
@@ -222,12 +229,14 @@ describe("callModelWithRecovery", () => {
       },
     };
 
-    await expect(callModelWithRecovery({
-      gateway,
-      systemPrompt: "system",
-      promptPayload: { transcript: [], request: "hello" },
-      onRecovery: (message) => progress.push(message),
-    })).rejects.toBe(error);
+    await expect(
+      callModelWithRecovery({
+        gateway,
+        systemPrompt: "system",
+        promptPayload: { transcript: [], request: "hello" },
+        onRecovery: (message) => progress.push(message),
+      }),
+    ).rejects.toBe(error);
 
     expect(queryModel).toHaveBeenCalledTimes(1);
     expect(progress).toEqual([]);
@@ -244,12 +253,14 @@ describe("callModelWithRecovery", () => {
       },
     };
 
-    await expect(callModelWithRecovery({
-      gateway,
-      systemPrompt: "system",
-      promptPayload: { transcript: [], request: "hello" },
-      onRecovery: (message) => progress.push(message),
-    })).rejects.toBe(error);
+    await expect(
+      callModelWithRecovery({
+        gateway,
+        systemPrompt: "system",
+        promptPayload: { transcript: [], request: "hello" },
+        onRecovery: (message) => progress.push(message),
+      }),
+    ).rejects.toBe(error);
 
     expect(queryModel).toHaveBeenCalledTimes(1);
     expect(progress).toEqual([]);
@@ -335,7 +346,11 @@ describe("callModelWithRecovery", () => {
     const queryModel = vi
       .fn()
       .mockRejectedValueOnce(
-        new AgentGatewayError("openai prompt too long: prompt is too long", "prompt-too-long", "openai"),
+        new AgentGatewayError(
+          "openai prompt too long: prompt is too long",
+          "prompt-too-long",
+          "openai",
+        ),
       )
       .mockResolvedValueOnce({ provider: "openai", model: "gpt", content: textContent("ok") });
 
@@ -524,10 +539,10 @@ describe("callModelWithRecovery", () => {
 
     expect(result.content).toEqual(textContent("alphabetagamma"));
     expect(queryModel).toHaveBeenCalledTimes(3);
-    expect(JSON.parse(queryModel.mock.calls[1][0].prompt).continuation.partialOutput)
-      .toBe("alpha");
-    expect(JSON.parse(queryModel.mock.calls[2][0].prompt).continuation.partialOutput)
-      .toBe("alphabeta");
+    expect(JSON.parse(queryModel.mock.calls[1][0].prompt).continuation.partialOutput).toBe("alpha");
+    expect(JSON.parse(queryModel.mock.calls[2][0].prompt).continuation.partialOutput).toBe(
+      "alphabeta",
+    );
     expect(result.stopReason).toBe("end");
   });
 
@@ -552,10 +567,12 @@ describe("callModelWithRecovery", () => {
         yield { type: "complete" as const, content: [] };
       },
     };
-    const messages: AgentModelMessage[] = [{
-      role: "user",
-      content: [{ type: "text", text: "canonical request" }],
-    }];
+    const messages: AgentModelMessage[] = [
+      {
+        role: "user",
+        content: [{ type: "text", text: "canonical request" }],
+      },
+    ];
     const original = structuredClone(messages);
 
     const result = await callModelWithRecovery({
@@ -601,12 +618,14 @@ describe("callModelWithRecovery", () => {
       },
     };
 
-    await expect(callModelWithRecovery({
-      gateway,
-      systemPrompt: "system",
-      promptPayload: { transcript: [], request: "hello" },
-      maxOutputTokensOverride: 65_536,
-    })).rejects.toThrow("remained truncated");
+    await expect(
+      callModelWithRecovery({
+        gateway,
+        systemPrompt: "system",
+        promptPayload: { transcript: [], request: "hello" },
+        maxOutputTokensOverride: 65_536,
+      }),
+    ).rejects.toThrow("remained truncated");
   });
 
   it("uses the query fallback model after consecutive overloads", async () => {
@@ -614,16 +633,10 @@ describe("callModelWithRecovery", () => {
     const queryModel = vi
       .fn()
       .mockRejectedValueOnce(
-        normalizeProviderError(
-          "openai",
-          Object.assign(new Error("overloaded"), { status: 529 }),
-        ),
+        normalizeProviderError("openai", Object.assign(new Error("overloaded"), { status: 529 })),
       )
       .mockRejectedValueOnce(
-        normalizeProviderError(
-          "openai",
-          Object.assign(new Error("overloaded"), { status: 529 }),
-        ),
+        normalizeProviderError("openai", Object.assign(new Error("overloaded"), { status: 529 })),
       )
       .mockResolvedValueOnce({
         provider: "anthropic",

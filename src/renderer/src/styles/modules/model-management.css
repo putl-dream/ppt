@@ -62,7 +62,10 @@
   font-size: var(--text-sm);
   font-weight: var(--font-weight-medium);
   cursor: pointer;
-  transition: background 0.14s ease, border-color 0.14s ease, color 0.14s ease;
+  transition:
+    background 0.14s ease,
+    border-color 0.14s ease,
+    color 0.14s ease;
 }
 
 .cursor-model-add-btn:hover {
@@ -140,7 +143,10 @@
   color: var(--text-muted);
   cursor: pointer;
   opacity: 0;
-  transition: opacity 0.14s ease, background 0.14s ease, color 0.14s ease;
+  transition:
+    opacity 0.14s ease,
+    background 0.14s ease,
+    color 0.14s ease;
 }
 
 .cursor-model-row:hover .cursor-model-edit-btn,
@@ -161,7 +167,9 @@
 .cursor-model-toggle .toggle-slider {
   background: var(--surface-raised);
   border: 1px solid var(--border-strong);
-  transition: background 0.14s ease, border-color 0.14s ease;
+  transition:
+    background 0.14s ease,
+    border-color 0.14s ease;
 }
 
 .cursor-model-toggle .toggle-slider:before {
@@ -502,8 +510,14 @@
 
 /* No scale step: fractional-scale rasterization softens the form text. */
 @keyframes modelDialogIn {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .model-dialog-header,

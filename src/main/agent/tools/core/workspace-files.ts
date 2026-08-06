@@ -2,8 +2,8 @@ import {
   editFileContract,
   globFilesContract,
   readFileContract,
-  writeFileContract,
   type WorkspaceFileToolContract,
+  writeFileContract,
 } from "../files/workspace-file-tool-contract";
 import type { ToolDefinition } from "../tool-definition";
 

@@ -1,30 +1,14 @@
-import type { Presentation } from "./presentation";
+import { z } from "zod";
 import type { AgentExecutionStrategy, AgentModelSelection } from "./agent";
-import type { AgentQuestion } from "./agent-question";
 import type { AgentRunServicesWire } from "./agent-gateway-config";
+import type { AgentQuestion } from "./agent-question";
 import type { AgentStepLimits } from "./agent-step-limits";
 import type { AgentTaskNode } from "./agent-task-list";
-import type { TeammateProgressEvent } from "./teammate-progress";
-import { z } from "zod";
-import type {
-  ProjectArtifact,
-  SessionBootstrap,
-  SessionChatMessage,
-} from "./session";
-import type { TokenUsageStats } from "./token-usage";
-import type { PptJobProjection } from "./presentation-lifecycle";
 import type {
   AgentApprovalRequest,
   DisplayEvent,
   PersistedDisplayCard,
 } from "./card-display-protocol";
-import type {
-  AppLogEntry,
-  AppLogLevel,
-  LogManagerSettings,
-  LogManagerStatus,
-  RendererLogReport,
-} from "./logging";
 import type {
   CredentialStatusRequest,
   CredentialStatusSnapshot,
@@ -32,6 +16,18 @@ import type {
   SetModelCredentialsRequest,
   SetWebSearchCredentialRequest,
 } from "./credentials";
+import type {
+  AppLogEntry,
+  AppLogLevel,
+  LogManagerSettings,
+  LogManagerStatus,
+  RendererLogReport,
+} from "./logging";
+import type { Presentation } from "./presentation";
+import type { PptJobProjection } from "./presentation-lifecycle";
+import type { ProjectArtifact, SessionBootstrap, SessionChatMessage } from "./session";
+import type { TeammateProgressEvent } from "./teammate-progress";
+import type { TokenUsageStats } from "./token-usage";
 
 export interface CreateSessionOptions {
   rootPath?: string;
@@ -92,29 +88,42 @@ export type AgentAttachment = z.infer<typeof agentAttachmentSchema>;
 export type AgentRunRequest = z.infer<typeof agentRunRequestSchema>;
 
 export const projectFileSessionIdSchema = z.string().trim().min(1).max(256);
-const projectFilePathSchema = z.string().trim().min(1).max(4_096).refine((path) => {
-  const normalized = path.replace(/\\/g, "/");
-  return !normalized.includes("\0")
-    && !normalized.startsWith("/")
-    && !/^[a-z]:\//i.test(normalized)
-    && !normalized.split("/").includes("..");
-}, "Project file path must be a contained relative path.");
+const projectFilePathSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(4_096)
+  .refine((path) => {
+    const normalized = path.replace(/\\/g, "/");
+    return (
+      !normalized.includes("\0") &&
+      !normalized.startsWith("/") &&
+      !/^[a-z]:\//i.test(normalized) &&
+      !normalized.split("/").includes("..")
+    );
+  }, "Project file path must be a contained relative path.");
 const projectFileContentSchema = z.string().max(5 * 1024 * 1024);
 
-export const projectFileOpenRequestSchema = z.object({
-  sessionId: projectFileSessionIdSchema,
-  relativePath: projectFilePathSchema,
-}).strict();
+export const projectFileOpenRequestSchema = z
+  .object({
+    sessionId: projectFileSessionIdSchema,
+    relativePath: projectFilePathSchema,
+  })
+  .strict();
 
-export const projectArtifactDiffRequestSchema = projectFileOpenRequestSchema.extend({
-  nextContent: projectFileContentSchema,
-}).strict();
+export const projectArtifactDiffRequestSchema = projectFileOpenRequestSchema
+  .extend({
+    nextContent: projectFileContentSchema,
+  })
+  .strict();
 
-export const projectFileSaveRequestSchema = projectFileOpenRequestSchema.extend({
-  content: projectFileContentSchema,
-  editToken: z.string().uuid(),
-  expectedVersion: z.string().regex(/^sha256:[a-f0-9]{64}$/),
-}).strict();
+export const projectFileSaveRequestSchema = projectFileOpenRequestSchema
+  .extend({
+    content: projectFileContentSchema,
+    editToken: z.string().uuid(),
+    expectedVersion: z.string().regex(/^sha256:[a-f0-9]{64}$/),
+  })
+  .strict();
 
 export type AgentStreamEvent = (
   | { runId: string; type: "request-status"; message: string; progress: number }
@@ -205,7 +214,8 @@ export type AgentRunResult = (
   | { status: "rejected"; presentation?: Presentation }
   | { status: "interrupted"; threadId?: string }
   | { status: "failed"; error: string; threadId?: string }
-) & AgentRunResultDisplay;
+) &
+  AgentRunResultDisplay;
 
 export interface AgentInboxPollResult {
   hasMessages: boolean;
@@ -252,16 +262,12 @@ export interface ProjectFileEditorReadResult extends ProjectFileReceipt {
   readOnlyReason?: string;
 }
 
-export interface ProjectFileEditorWriteResult
-  extends ProjectFileReceipt {
+export interface ProjectFileEditorWriteResult extends ProjectFileReceipt {
   changed: boolean;
   changedArtifactId?: string;
   characterCount: number;
   editToken: string;
-  postCommitWarnings?: Array<
-    "session-state-persistence-failed"
-    | "workspace-metadata-sync-failed"
-  >;
+  postCommitWarnings?: Array<"session-state-persistence-failed" | "workspace-metadata-sync-failed">;
 }
 
 export interface UiThemeSummary {
@@ -306,10 +312,7 @@ export interface DesktopApi {
     nextContent: string,
   ): Promise<ArtifactDiff>;
   listProjectFiles(sessionId: string): Promise<string[]>;
-  openProjectFile(
-    sessionId: string,
-    relativePath: string,
-  ): Promise<ProjectFileEditorReadResult>;
+  openProjectFile(sessionId: string, relativePath: string): Promise<ProjectFileEditorReadResult>;
   saveProjectFile(
     sessionId: string,
     relativePath: string,
@@ -339,10 +342,7 @@ export interface DesktopApi {
   ): Promise<AgentRunResult>;
   onAgentStream(listener: (event: AgentStreamEvent) => void): () => void;
   resumeAgentRun(sessionId: string, proposalId: string, approved: boolean): Promise<AgentRunResult>;
-  exportPresentation(
-    sessionId: string,
-    options: ExportPresentationOptions,
-  ): Promise<string | null>;
+  exportPresentation(sessionId: string, options: ExportPresentationOptions): Promise<string | null>;
   openExportFolder(filePath: string): Promise<boolean>;
   selectDirectory(defaultPath?: string): Promise<string | null>;
   selectTemplatePackage(defaultPath?: string): Promise<string | null>;
@@ -353,11 +353,7 @@ export interface DesktopApi {
   ): Promise<ImportProjectTemplateResult>;
   listProjectTemplates(sessionId: string): Promise<ProjectTemplateSummary[]>;
   listApplicationTemplates(): Promise<ProjectTemplateSummary[]>;
-  applyTemplateToProject(
-    sessionId: string,
-    templateId: string,
-    revisionId: string,
-  ): Promise<void>;
+  applyTemplateToProject(sessionId: string, templateId: string, revisionId: string): Promise<void>;
   getProjectTemplatePolicy(sessionId: string): Promise<{
     version: 1;
     mode: "auto" | "default" | "custom";
@@ -409,10 +405,12 @@ export interface DesktopApi {
   pollLeadInbox(sessionId: string): Promise<AgentInboxPollResult>;
 }
 
-export const exportPresentationOptionsSchema = z.object({
-  /** Explicit human approval for assets whose commercial license is not yet verified. */
-  allowUnverifiedAssets: z.boolean().optional(),
-}).strict();
+export const exportPresentationOptionsSchema = z
+  .object({
+    /** Explicit human approval for assets whose commercial license is not yet verified. */
+    allowUnverifiedAssets: z.boolean().optional(),
+  })
+  .strict();
 
 export type ExportPresentationOptions = z.infer<typeof exportPresentationOptionsSchema>;
 

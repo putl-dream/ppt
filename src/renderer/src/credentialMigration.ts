@@ -1,5 +1,4 @@
-export const CREDENTIAL_REENTRY_NOTICE_STORAGE_KEY =
-  "agent-ppt.credentials-reentry-notice.v1";
+export const CREDENTIAL_REENTRY_NOTICE_STORAGE_KEY = "agent-ppt.credentials-reentry-notice.v1";
 
 export function markCredentialReentryRequired(): void {
   try {

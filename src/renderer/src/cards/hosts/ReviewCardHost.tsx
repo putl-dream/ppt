@@ -1,13 +1,11 @@
-import React, { useEffect, useRef } from "react";
-import type { DisplayEvent } from "@shared/card-display-protocol";
 import { formatApprovalCommand } from "@shared/approval-command-display";
+import type { DisplayEvent } from "@shared/card-display-protocol";
+import { recordDisplayCardAction, useReviewCardManager } from "@shared/cards/display-card-managers";
+import type React from "react";
+import { useEffect, useRef } from "react";
 import { FileIcon } from "../../components/Icons";
 import { PatchReviewCard } from "../../components/PatchReviewCard";
 import { ResolvedCard } from "../../components/ResolvedCard";
-import {
-  recordDisplayCardAction,
-  useReviewCardManager,
-} from "../display-card-managers";
 
 type CommandProposalEvent = Extract<DisplayEvent, { kind: "review.command-proposal" }>;
 type PatchEvent = Extract<DisplayEvent, { kind: "review.patch-ready" }>;
@@ -28,10 +26,11 @@ export const ReviewCardHost: React.FC<ReviewCardHostProps> = ({
   onResolvePatch,
   onFocusAffectedSlides,
 }) => {
-  const cards = useReviewCardManager((state) => state.cards).filter((card) =>
-    card.event.scope.anchorMessageId === anchorMessageId
-    && card.status !== "dismissed"
-    && card.status !== "superseded"
+  const cards = useReviewCardManager((state) => state.cards).filter(
+    (card) =>
+      card.event.scope.anchorMessageId === anchorMessageId &&
+      card.status !== "dismissed" &&
+      card.status !== "superseded",
   );
   const focusedProposalIdsRef = useRef(new Set<string>());
 
@@ -60,9 +59,8 @@ export const ReviewCardHost: React.FC<ReviewCardHostProps> = ({
               key={event.eventId}
               patch={{
                 ...event.payload,
-                resolved: card.status === "resolved"
-                  ? (accepted ? "accepted" : "rejected")
-                  : undefined,
+                resolved:
+                  card.status === "resolved" ? (accepted ? "accepted" : "rejected") : undefined,
               }}
               busy={busy}
               onAccept={() => {
@@ -102,16 +100,22 @@ export const ReviewCardHost: React.FC<ReviewCardHostProps> = ({
 
         return (
           <div className="approval-card" key={event.eventId}>
-            <div className="approval-card-title"><span>待审核的排版更新</span></div>
+            <div className="approval-card-title">
+              <span>待审核的排版更新</span>
+            </div>
             <p className="approval-summary">{approval.summary}</p>
             {approval.risk ? (
               <p className="approval-summary">
-                风险等级：{approval.risk === "high" ? "高" : approval.risk === "medium" ? "中" : "低"}
+                风险等级：
+                {approval.risk === "high" ? "高" : approval.risk === "medium" ? "中" : "低"}
               </p>
             ) : null}
             {approval.diff ? (
               <p className="approval-summary">
-                影响范围：{approval.diff.affectedSlideIds.length} 页，新增元素 {approval.diff.elementChanges.addedCount} 个，删除元素 {approval.diff.elementChanges.removedCount} 个，更新元素 {approval.diff.elementChanges.updatedCount} 个
+                影响范围：{approval.diff.affectedSlideIds.length} 页，新增元素{" "}
+                {approval.diff.elementChanges.addedCount} 个，删除元素{" "}
+                {approval.diff.elementChanges.removedCount} 个，更新元素{" "}
+                {approval.diff.elementChanges.updatedCount} 个
               </p>
             ) : null}
             {approval.assumptions?.length ? (

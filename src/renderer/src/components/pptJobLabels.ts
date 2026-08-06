@@ -1,8 +1,8 @@
 import type {
+  PptCapability,
   PptJobStatus,
   PptProposalStatus,
   PptStage,
-  PptCapability,
 } from "@shared/presentation-lifecycle";
 
 export const JOB_STATUS_LABELS: Record<PptJobStatus, string> = {

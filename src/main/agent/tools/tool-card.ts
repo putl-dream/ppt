@@ -1,5 +1,5 @@
-import type { ToolDefinition } from "./tool-definition";
 import { isRiskApprovalHintRequired } from "../runtime/tools/tool-access-policy";
+import type { ToolDefinition } from "./tool-definition";
 import { toToolInputSchema } from "./tool-schema";
 
 /**
@@ -27,7 +27,8 @@ function isSchemaRecord(value: unknown): value is Record<string, unknown> {
 
 function summarizeSchemaType(schema: Record<string, unknown>): string {
   if ("const" in schema) return JSON.stringify(schema.const);
-  if (Array.isArray(schema.enum)) return schema.enum.map((value) => JSON.stringify(value)).join(" | ");
+  if (Array.isArray(schema.enum))
+    return schema.enum.map((value) => JSON.stringify(value)).join(" | ");
   const variants = [schema.oneOf, schema.anyOf]
     .filter(Array.isArray)
     .flatMap((value) => value as unknown[])
@@ -35,9 +36,7 @@ function summarizeSchemaType(schema: Record<string, unknown>): string {
     .map(summarizeSchemaType);
   if (variants.length > 0) return [...new Set(variants)].join(" | ");
   if (schema.type === "array") {
-    return isSchemaRecord(schema.items)
-      ? `array<${summarizeSchemaType(schema.items)}>`
-      : "array";
+    return isSchemaRecord(schema.items) ? `array<${summarizeSchemaType(schema.items)}>` : "array";
   }
   return typeof schema.type === "string" ? schema.type : "unknown";
 }
@@ -61,8 +60,8 @@ export function toToolCard(definition: ToolDefinition<any, any>): ToolCard {
     }
   }
 
-  const approvalRequired = definition.permission?.approval === "always"
-    || isRiskApprovalHintRequired(definition.risk);
+  const approvalRequired =
+    definition.permission?.approval === "always" || isRiskApprovalHintRequired(definition.risk);
 
   return {
     name: definition.name,
@@ -73,9 +72,7 @@ export function toToolCard(definition: ToolDefinition<any, any>): ToolCard {
     examples: definition.examples ?? [],
     approvalRequired,
     execution: {
-      batch: definition.behavior?.completion?.exclusiveBatch
-        ? "exclusive"
-        : "allowed",
+      batch: definition.behavior?.completion?.exclusiveBatch ? "exclusive" : "allowed",
       mode: definition.behavior?.concurrency?.mode ?? "serial",
       ...(definition.behavior?.concurrency?.conflictScope
         ? { conflictScope: definition.behavior.concurrency.conflictScope }

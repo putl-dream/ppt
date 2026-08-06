@@ -6,13 +6,18 @@ import { z } from "zod";
 import { prepareToolResultData } from "../src/main/agent/runtime/tools/tool-result-data";
 import { WorkspaceFileService } from "../src/main/agent/tools/files/workspace-file-service";
 import { formatReadFileResultForModel } from "../src/main/agent/tools/files/workspace-file-tool-contract";
-import { ToolOutputValidationError, validateToolOutput } from "../src/main/agent/tools/tool-validation";
 import type { ToolDefinition } from "../src/main/agent/tools/tool-definition";
+import {
+  ToolOutputValidationError,
+  validateToolOutput,
+} from "../src/main/agent/tools/tool-validation";
 
 const temporaryRoots: string[] = [];
 
 afterEach(async () => {
-  await Promise.all(temporaryRoots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
+  await Promise.all(
+    temporaryRoots.splice(0).map((root) => rm(root, { recursive: true, force: true })),
+  );
 });
 
 describe("tool result data boundary", () => {

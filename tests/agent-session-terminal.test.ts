@@ -32,7 +32,8 @@ describe("AgentSession terminal lifecycle", () => {
     });
     session.sealTerminal();
 
-    expect(() => session.overrideTerminalCandidate({ status: "failed", error: "late" }))
-      .toThrow("sealed");
+    expect(() => session.overrideTerminalCandidate({ status: "failed", error: "late" })).toThrow(
+      "sealed",
+    );
   });
 });

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  type AgentActivityItem,
   appendReasoningChunk,
   appendToolStart,
   applyTeammateProgressEvent,
@@ -9,7 +10,6 @@ import {
   markTraceComplete,
   mergeActivityTraces,
   mergeResponseText,
-  type AgentActivityItem,
 } from "../src/shared/agent-activity";
 
 describe("agent activity model", () => {
@@ -38,12 +38,7 @@ describe("agent activity model", () => {
 
   it("finishes a started tool once when result validation fails", () => {
     const started = appendToolStart([], "call-invalid", "SubmitCommands");
-    const trace = finishTool(
-      started,
-      "call-invalid",
-      "SubmitCommands",
-      "invalid-input",
-    );
+    const trace = finishTool(started, "call-invalid", "SubmitCommands", "invalid-input");
 
     expect(trace).toEqual([
       expect.objectContaining({
@@ -182,12 +177,14 @@ describe("agent activity model", () => {
       },
       { id: "step-1", kind: "step", text: "较长的旧快照", status: "done" },
     ];
-    const newer: AgentActivityItem[] = [{
-      id: "graph-new",
-      kind: "tasklist",
-      goal: "goal",
-      tasks: [{ ...task, status: "completed", owner: undefined }],
-    }];
+    const newer: AgentActivityItem[] = [
+      {
+        id: "graph-new",
+        kind: "tasklist",
+        goal: "goal",
+        tasks: [{ ...task, status: "completed", owner: undefined }],
+      },
+    ];
 
     const merged = mergeActivityTraces(older, newer);
     const graph = merged?.find((item) => item.kind === "tasklist");
@@ -292,12 +289,15 @@ describe("agent activity model", () => {
         goal: "layout",
         tasks: [],
       },
-      ...Array.from({ length: 100 }, (_, index): AgentActivityItem => ({
-        id: `step-${index}`,
-        kind: "step",
-        text: "x".repeat(10_000),
-        status: "done",
-      })),
+      ...Array.from(
+        { length: 100 },
+        (_, index): AgentActivityItem => ({
+          id: `step-${index}`,
+          kind: "step",
+          text: "x".repeat(10_000),
+          status: "done",
+        }),
+      ),
     ];
 
     const compacted = compactActivityTraceForPersistence(trace)!;
@@ -305,30 +305,28 @@ describe("agent activity model", () => {
     expect(compacted.length).toBeLessThanOrEqual(80);
     expect(compacted.some((item) => item.id === "graph")).toBe(true);
     expect(compacted.some((item) => item.id === "step-99")).toBe(true);
-    expect(new TextEncoder().encode(JSON.stringify(compacted)).byteLength)
-      .toBeLessThanOrEqual(96 * 1_024);
+    expect(new TextEncoder().encode(JSON.stringify(compacted)).byteLength).toBeLessThanOrEqual(
+      96 * 1_024,
+    );
   });
 
   it("keeps response ordering structural without evicting the newest tool", () => {
-    const trace = Array.from(
-      { length: 100 },
-      (_, index): AgentActivityItem[] => [
-        {
-          id: `response-${index}`,
-          kind: "response",
-          start: index,
-          end: index + 1,
-          streaming: false,
-        },
-        {
-          id: `tool-${index}`,
-          kind: "tool",
-          toolCallId: `call-${index}`,
-          toolName: "ReadPresentationSnapshot",
-          status: "completed",
-        },
-      ],
-    ).flat();
+    const trace = Array.from({ length: 100 }, (_, index): AgentActivityItem[] => [
+      {
+        id: `response-${index}`,
+        kind: "response",
+        start: index,
+        end: index + 1,
+        streaming: false,
+      },
+      {
+        id: `tool-${index}`,
+        kind: "tool",
+        toolCallId: `call-${index}`,
+        toolName: "ReadPresentationSnapshot",
+        status: "completed",
+      },
+    ]).flat();
 
     const compacted = compactActivityTraceForPersistence(trace)!;
 

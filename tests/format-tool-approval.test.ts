@@ -3,8 +3,7 @@ import { formatToolApprovalDetail } from "../src/main/agent/runtime/tools/format
 
 describe("formatToolApprovalDetail", () => {
   it("formats bash commands", () => {
-    expect(formatToolApprovalDetail("bash", { command: "rm notes.md" }))
-      .toBe("rm notes.md");
+    expect(formatToolApprovalDetail("bash", { command: "rm notes.md" })).toBe("rm notes.md");
   });
 
   it("formats WriteFile with truncated content", () => {
@@ -15,14 +14,16 @@ describe("formatToolApprovalDetail", () => {
   });
 
   it("formats main-agent workspace file tools with the same readable contract", () => {
-    expect(formatToolApprovalDetail("ReadFile", { path: "slides/outline.md" }))
-      .toBe("slides/outline.md");
-    expect(formatToolApprovalDetail("Glob", { pattern: "slides/**/*.md" }))
-      .toBe("slides/**/*.md");
-    expect(formatToolApprovalDetail("EditFile", {
-      path: "slides/outline.md",
-      old_string: "old",
-      new_string: "new",
-    })).toBe("path: slides/outline.md\n- old\n+ new");
+    expect(formatToolApprovalDetail("ReadFile", { path: "slides/outline.md" })).toBe(
+      "slides/outline.md",
+    );
+    expect(formatToolApprovalDetail("Glob", { pattern: "slides/**/*.md" })).toBe("slides/**/*.md");
+    expect(
+      formatToolApprovalDetail("EditFile", {
+        path: "slides/outline.md",
+        old_string: "old",
+        new_string: "new",
+      }),
+    ).toBe("path: slides/outline.md\n- old\n+ new");
   });
 });

@@ -1,7 +1,8 @@
-import React, { useEffect } from "react";
-import { createPortal } from "react-dom";
-import type { Presentation, Slide } from "@shared/presentation";
 import { utf8ToBase64 } from "@shared/base64";
+import type { Presentation, Slide } from "@shared/presentation";
+import type React from "react";
+import { useEffect } from "react";
+import { createPortal } from "react-dom";
 import { ClosePreviewIcon } from "./Icons";
 
 interface DeckPreviewModalProps {

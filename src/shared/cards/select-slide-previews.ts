@@ -1,16 +1,10 @@
 import type { DisplayEvent } from "@shared/card-display-protocol";
-import type { ManagedDisplayCard } from "./display-card-managers";
+import type { ManagedDisplayCard } from "@shared/cards/display-card-managers";
 
-export type SlidePreviewEvent = Extract<
-  DisplayEvent,
-  { kind: "artifact.slide-preview" }
->;
+export type SlidePreviewEvent = Extract<DisplayEvent, { kind: "artifact.slide-preview" }>;
 
 function previewBatchKey(event: SlidePreviewEvent): string {
-  return event.scope.runId
-    ?? event.scope.threadId
-    ?? event.scope.anchorMessageId
-    ?? event.eventId;
+  return event.scope.runId ?? event.scope.threadId ?? event.scope.anchorMessageId ?? event.eventId;
 }
 
 /**
@@ -22,9 +16,9 @@ export function selectLatestSlidePreviews(
 ): SlidePreviewEvent[] {
   const candidates = cards.filter(
     (card): card is ManagedDisplayCard & { event: SlidePreviewEvent } =>
-      card.event.kind === "artifact.slide-preview"
-      && card.status !== "dismissed"
-      && card.status !== "superseded",
+      card.event.kind === "artifact.slide-preview" &&
+      card.status !== "dismissed" &&
+      card.status !== "superseded",
   );
   const latest = candidates.reduce<(typeof candidates)[number] | undefined>(
     (current, candidate) =>

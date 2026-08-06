@@ -1,18 +1,18 @@
-import { create, type StoreApi, type UseBoundStore } from "zustand";
 import {
-  displayCardActionSchema,
-  displayEventSchema,
-  persistedDisplayCardSchema,
-  type DisplayCardCategory,
   type DisplayCardAction,
+  type DisplayCardCategory,
   type DisplayCardStatus,
   type DisplayEvent,
+  displayCardActionSchema,
+  displayEventSchema,
   type PersistedDisplayCard,
+  persistedDisplayCardSchema,
 } from "@shared/card-display-protocol";
 import {
-  getCardPresentationPolicy,
   type CardPresentationPolicy,
-} from "./card-presentation-policy";
+  getCardPresentationPolicy,
+} from "@shared/cards/card-presentation-policy";
+import { create, type StoreApi, type UseBoundStore } from "zustand";
 
 export type ManagedDisplayCardStatus = DisplayCardStatus;
 
@@ -36,86 +36,89 @@ type CategoryCardManager = UseBoundStore<StoreApi<CategoryCardManagerState>>;
 
 function sameScope(left: DisplayEvent, right: DisplayEvent): boolean {
   if (left.scope.runId || right.scope.runId) return left.scope.runId === right.scope.runId;
-  if (left.scope.threadId || right.scope.threadId) return left.scope.threadId === right.scope.threadId;
+  if (left.scope.threadId || right.scope.threadId)
+    return left.scope.threadId === right.scope.threadId;
   return left.scope.sessionId === right.scope.sessionId;
 }
 
 function createCategoryCardManager(category: DisplayCardCategory): CategoryCardManager {
   return create<CategoryCardManagerState>((set) => ({
     cards: [],
-    ingest: (event, policy) => set((state) => {
-      if (event.category !== category) return state;
-      const dedupeKey = policy.dedupeKey(event);
-      let matched = false;
-      const cards = state.cards.map((card) => {
-        const sameCard = card.policy.dedupeKey(card.event) === dedupeKey;
-        if (sameCard) {
-          matched = true;
-          if (card.event.eventId === event.eventId) {
-            if (
-              card.event.kind === "review.command-proposal"
-              && event.kind === "review.command-proposal"
-              && card.event.scope.runId
-              && event.scope.runId
-              && card.event.scope.runId !== event.scope.runId
-            ) {
+    ingest: (event, policy) =>
+      set((state) => {
+        if (event.category !== category) return state;
+        const dedupeKey = policy.dedupeKey(event);
+        let matched = false;
+        const cards = state.cards.map((card) => {
+          const sameCard = card.policy.dedupeKey(card.event) === dedupeKey;
+          if (sameCard) {
+            matched = true;
+            if (card.event.eventId === event.eventId) {
+              if (
+                card.event.kind === "review.command-proposal" &&
+                event.kind === "review.command-proposal" &&
+                card.event.scope.runId &&
+                event.scope.runId &&
+                card.event.scope.runId !== event.scope.runId
+              ) {
+                return {
+                  event,
+                  policy,
+                  status: "active" as const,
+                  receivedAt: Date.now(),
+                  lastAction: undefined,
+                };
+              }
+              // Display events can arrive once through the live stream and again
+              // in the terminal result. Refresh the event payload/scope without
+              // reopening a card the user has already resolved.
               return {
+                ...card,
                 event,
                 policy,
-                status: "active" as const,
-                receivedAt: Date.now(),
-                lastAction: undefined,
               };
             }
-            // Display events can arrive once through the live stream and again
-            // in the terminal result. Refresh the event payload/scope without
-            // reopening a card the user has already resolved.
+            if (card.status === "resolved" && policy.resolvedIsTerminal) {
+              // A layout choice is a one-time decision for the session. Background
+              // layout work can advance the presentation revision while some
+              // slides are still being processed; that must not resurrect the
+              // already-confirmed choice as another clickable request.
+              return card;
+            }
             return {
-              ...card,
               event,
               policy,
+              status: "active" as const,
+              receivedAt: Date.now(),
+              lastAction: undefined,
             };
           }
-          if (card.status === "resolved" && policy.resolvedIsTerminal) {
-            // A layout choice is a one-time decision for the session. Background
-            // layout work can advance the presentation revision while some
-            // slides are still being processed; that must not resurrect the
-            // already-confirmed choice as another clickable request.
-            return card;
+          if (
+            policy.replaceActiveInScope &&
+            card.status === "active" &&
+            sameScope(card.event, event)
+          ) {
+            return { ...card, status: "superseded" as const };
           }
-          return {
-            event,
-            policy,
-            status: "active" as const,
-            receivedAt: Date.now(),
-            lastAction: undefined,
-          };
-        }
-        if (
-          policy.replaceActiveInScope
-          && card.status === "active"
-          && sameScope(card.event, event)
-        ) {
-          return { ...card, status: "superseded" as const };
-        }
-        return card;
-      });
+          return card;
+        });
 
-      if (matched) return { cards };
-      const next = [
-        ...cards,
-        { event, policy, status: "active" as const, receivedAt: Date.now() },
-      ];
-      // Notifications are transient and should not grow without bound.
-      return { cards: category === "notification" ? next.slice(-50) : next };
-    }),
-    setStatus: (eventId, status, lastAction) => set((state) => ({
-      cards: state.cards.map((card) =>
-        card.event.eventId === eventId
-          ? { ...card, status, ...(lastAction ? { lastAction } : {}) }
-          : card
-      ),
-    })),
+        if (matched) return { cards };
+        const next = [
+          ...cards,
+          { event, policy, status: "active" as const, receivedAt: Date.now() },
+        ];
+        // Notifications are transient and should not grow without bound.
+        return { cards: category === "notification" ? next.slice(-50) : next };
+      }),
+    setStatus: (eventId, status, lastAction) =>
+      set((state) => ({
+        cards: state.cards.map((card) =>
+          card.event.eventId === eventId
+            ? { ...card, status, ...(lastAction ? { lastAction } : {}) }
+            : card,
+        ),
+      })),
     replace: (cards) => set({ cards }),
     clear: () => set({ cards: [] }),
   }));
@@ -183,9 +186,7 @@ export function recordDisplayCardAction(
         sessionId: card.event.scope.sessionId,
         runId: card.event.scope.runId,
         threadId: card.event.scope.threadId,
-        toolCallId: card.event.source.kind === "tool"
-          ? card.event.source.toolCallId
-          : undefined,
+        toolCallId: card.event.source.kind === "tool" ? card.event.source.toolCallId : undefined,
       },
     });
     manager.getState().setStatus(eventId, status, action);
@@ -196,12 +197,14 @@ export function recordDisplayCardAction(
 
 export function getPersistedDisplayCards(): PersistedDisplayCard[] {
   return Object.values(managers).flatMap((manager) =>
-    manager.getState().cards
-      .filter((card) =>
-        card.policy.persistence === "session"
-        && card.event.kind !== "interaction.layout-required"
+    manager
+      .getState()
+      .cards.filter(
+        (card) =>
+          card.policy.persistence === "session" &&
+          card.event.kind !== "interaction.layout-required",
       )
-      .map(({ policy: _policy, ...card }) => persistedDisplayCardSchema.parse(card))
+      .map(({ policy: _policy, ...card }) => persistedDisplayCardSchema.parse(card)),
   );
 }
 
@@ -219,19 +222,18 @@ export function hydrateDisplayCardManagers(input: PersistedDisplayCard[]): void 
     const parsedCard = persistedDisplayCardSchema.parse(rawCard);
     const actionRunId = parsedCard.lastAction?.correlation.runId;
     const eventRunId = parsedCard.event.scope.runId;
-    const card = (
-      parsedCard.event.kind === "review.command-proposal"
-      && parsedCard.status === "resolved"
-      && actionRunId
-      && eventRunId
-      && actionRunId !== eventRunId
-    )
-      ? {
-          event: parsedCard.event,
-          status: "active" as const,
-          receivedAt: parsedCard.receivedAt,
-        }
-      : parsedCard;
+    const card =
+      parsedCard.event.kind === "review.command-proposal" &&
+      parsedCard.status === "resolved" &&
+      actionRunId &&
+      eventRunId &&
+      actionRunId !== eventRunId
+        ? {
+            event: parsedCard.event,
+            status: "active" as const,
+            receivedAt: parsedCard.receivedAt,
+          }
+        : parsedCard;
     if (card.event.kind === "interaction.layout-required") continue;
     const policy = getCardPresentationPolicy(card.event);
     if (policy.persistence !== "session") continue;
@@ -254,9 +256,12 @@ export function subscribeDisplayCardManagers(listener: () => void): () => void {
 
 export function pruneDisplayCardsForMessages(messageIds: ReadonlySet<string>): void {
   for (const manager of Object.values(managers)) {
-    const next = manager.getState().cards.filter((card) =>
-      !card.event.scope.anchorMessageId || messageIds.has(card.event.scope.anchorMessageId)
-    );
+    const next = manager
+      .getState()
+      .cards.filter(
+        (card) =>
+          !card.event.scope.anchorMessageId || messageIds.has(card.event.scope.anchorMessageId),
+      );
     manager.getState().replace(next);
   }
 }
@@ -269,9 +274,12 @@ export function findActiveToolPermissionCard(
   cards: ManagedDisplayCard[],
   runId?: string | null,
 ): ManagedDisplayCard | undefined {
-  return [...cards].reverse().find((card) =>
-    card.status === "active"
-    && card.event.kind === "permission.tool-requested"
-    && (!runId || card.event.scope.runId === runId)
-  );
+  return [...cards]
+    .reverse()
+    .find(
+      (card) =>
+        card.status === "active" &&
+        card.event.kind === "permission.tool-requested" &&
+        (!runId || card.event.scope.runId === runId),
+    );
 }

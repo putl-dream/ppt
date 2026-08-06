@@ -1,11 +1,11 @@
 import { createHash, randomUUID } from "node:crypto";
 import { DEFAULT_DESIGN_SYSTEM } from "../design-system";
 import {
-  SVG_PAGE_HEIGHT,
-  SVG_PAGE_WIDTH,
   type Presentation,
   type Slide,
   type SlideNarrative,
+  SVG_PAGE_HEIGHT,
+  SVG_PAGE_WIDTH,
   type SvgPageVisualSource,
 } from "./presentation";
 

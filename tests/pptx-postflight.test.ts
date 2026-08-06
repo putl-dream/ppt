@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { inspectPptxExport } from "../src/main/deck/pptx-postflight";
 import { exportToPptx } from "../src/main/ppt-exporter";
-import { type SlideNarrative } from "../src/shared/presentation";
+import type { SlideNarrative } from "../src/shared/presentation";
 import { createStarterPresentation } from "../src/shared/presentation-fixtures";
 
 const tempDirs: string[] = [];
@@ -19,9 +19,7 @@ const NARRATIVE: SlideNarrative = {
 };
 
 afterEach(async () => {
-  await Promise.all(tempDirs.splice(0).map((dir) =>
-    rm(dir, { recursive: true, force: true }),
-  ));
+  await Promise.all(tempDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
 });
 
 function exportReadyPresentation() {
@@ -74,9 +72,8 @@ describe("PPTX postflight", () => {
     const path = join(dir, "invalid.pptx");
     await writeFile(path, "not a pptx", "utf8");
 
-    await expect(inspectPptxExport(
-      path,
-      exportReadyPresentation(),
-    )).rejects.toThrow("not a ZIP-based Office document");
+    await expect(inspectPptxExport(path, exportReadyPresentation())).rejects.toThrow(
+      "not a ZIP-based Office document",
+    );
   });
 });

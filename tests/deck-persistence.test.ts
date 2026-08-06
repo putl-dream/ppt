@@ -1,11 +1,11 @@
 import { mkdtemp, readFile, rm } from "node:fs/promises";
-import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { afterEach, describe, expect, it } from "vitest";
+import { join } from "node:path";
 import { FileSessionStore } from "@main/session-store";
-import { projectArtifactFilePaths } from "@shared/project";
 import type { DeckGenerationJob } from "@shared/deck-persistence";
 import { createSvgTestSlide } from "@shared/presentation-fixtures";
+import { projectArtifactFilePaths } from "@shared/project";
+import { afterEach, describe, expect, it } from "vitest";
 import { TEST_DESIGN_SYSTEM } from "./design-engine-test-utils";
 
 const temporaryDirectories: string[] = [];
@@ -24,9 +24,9 @@ async function createStore() {
 afterEach(async () => {
   for (const store of stores.splice(0)) store.close();
   await Promise.all(
-    temporaryDirectories.splice(0).map((directory) =>
-      rm(directory, { recursive: true, force: true }),
-    ),
+    temporaryDirectories
+      .splice(0)
+      .map((directory) => rm(directory, { recursive: true, force: true })),
   );
 });
 
@@ -47,12 +47,12 @@ describe("deck persistence (problem 2)", () => {
     await expect(
       readFile(join(rootPath, projectArtifactFilePaths.deckGenerationJobs), "utf8"),
     ).rejects.toMatchObject({ code: "ENOENT" });
-    await expect(
-      readFile(join(rootPath, "slides/storyboard.json"), "utf8"),
-    ).rejects.toMatchObject({ code: "ENOENT" });
-    await expect(
-      readFile(join(rootPath, "slides/layout-plan.json"), "utf8"),
-    ).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(readFile(join(rootPath, "slides/storyboard.json"), "utf8")).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+    await expect(readFile(join(rootPath, "slides/layout-plan.json"), "utf8")).rejects.toMatchObject(
+      { code: "ENOENT" },
+    );
   });
 
   it("syncs deck/snapshot.json on savePresentation without marking history stale", async () => {

@@ -1,9 +1,9 @@
 import type { AgentModelToolResultBlock } from "../../gateway";
 import type { ToolContext, ToolDefinition } from "../../tools/tool-definition";
 import {
+  type AgentRuntimeResult,
   agentAskUserResultSchema,
   agentCommandProposalResultSchema,
-  type AgentRuntimeResult,
 } from "../runtime-types";
 import type { ToolExecutionOutcome } from "../tools/tool-execution-engine";
 
@@ -35,24 +35,23 @@ export class PresentationCompletionPolicy {
     const toolName = input.tool.name;
     const result = input.outcome.validatedResult;
     const completion = input.tool.behavior?.completion;
-    const commandProposalResult = completion?.terminalResult === "command_proposal"
-      ? agentCommandProposalResultSchema.safeParse(result)
-      : undefined;
+    const commandProposalResult =
+      completion?.terminalResult === "command_proposal"
+        ? agentCommandProposalResultSchema.safeParse(result)
+        : undefined;
     if (
-      commandProposalResult
-      && !commandProposalResult.success
-      && result
-      && typeof result === "object"
-      && !Array.isArray(result)
-      && (result as { type?: unknown }).type === "command_proposal"
+      commandProposalResult &&
+      !commandProposalResult.success &&
+      result &&
+      typeof result === "object" &&
+      !Array.isArray(result) &&
+      (result as { type?: unknown }).type === "command_proposal"
     ) {
       throw new Error(
         `${toolName} returned an invalid command proposal: ${commandProposalResult.error.message}`,
       );
     }
-    const commandProposal = commandProposalResult?.success
-      ? commandProposalResult.data
-      : undefined;
+    const commandProposal = commandProposalResult?.success ? commandProposalResult.data : undefined;
 
     if (commandProposal) {
       return {
@@ -82,13 +81,11 @@ export class PresentationCompletionPolicy {
         };
       }
     }
-    if (
-      completion?.terminalResult === "command_proposal"
-      && completion.expectation === "always"
-    ) {
-      const error = commandProposalResult && !commandProposalResult.success
-        ? commandProposalResult.error.message
-        : "result did not match command_proposal";
+    if (completion?.terminalResult === "command_proposal" && completion.expectation === "always") {
+      const error =
+        commandProposalResult && !commandProposalResult.success
+          ? commandProposalResult.error.message
+          : "result did not match command_proposal";
       throw new Error(`${toolName} must return a command proposal result: ${error}`);
     }
 

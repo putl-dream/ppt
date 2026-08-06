@@ -3,13 +3,10 @@ import type { ToolContext, ToolDefinition } from "../../tools/tool-definition";
 import type { ToolInputRepair } from "../../tools/tool-input";
 import { parseDefinedToolInput } from "../../tools/tool-input";
 import type { ToolRegistry } from "../../tools/tool-registry";
-import { triggerHooks } from "../hooks/hook-registry";
-import {
-  authorizeToolUse,
-  type ToolApprovalHandler,
-} from "./permission-check";
-import { rethrowIfRuntimeCancellation } from "../lifecycle/runtime-cancellation";
 import { shouldRunBackground } from "../background/background-task-manager";
+import { triggerHooks } from "../hooks/hook-registry";
+import { rethrowIfRuntimeCancellation } from "../lifecycle/runtime-cancellation";
+import { authorizeToolUse, type ToolApprovalHandler } from "./permission-check";
 import type { ToolExecutionOutcome } from "./tool-execution-engine";
 
 export type ToolPreflightFailureKind =
@@ -66,10 +63,10 @@ export class ToolPreflight {
     if (toolCall.parseError) return undefined;
     const requestedTool = this.registry.get(toolCall.name);
     if (
-      !requestedTool
-      || requestedTool.category !== "core"
-      || requestedTool.loadPolicy !== "core"
-      || requestedTool.behavior?.completion
+      !requestedTool ||
+      requestedTool.category !== "core" ||
+      requestedTool.loadPolicy !== "core" ||
+      requestedTool.behavior?.completion
     ) {
       return undefined;
     }
@@ -104,10 +101,7 @@ export class ToolPreflight {
     }
   }
 
-  requiresExclusiveBatch(
-    toolCall: AgentModelToolUseBlock,
-    context: ToolContext,
-  ): boolean {
+  requiresExclusiveBatch(toolCall: AgentModelToolUseBlock, context: ToolContext): boolean {
     const requestedTool = this.registry.get(toolCall.name);
     if (!requestedTool) return false;
     if (requestedTool.behavior?.completion?.exclusiveBatch) return true;
@@ -149,9 +143,9 @@ export class ToolPreflight {
 
     const requestedTool = this.registry.get(toolCall.name);
     if (
-      !requestedTool
-      || requestedTool.category !== "core"
-      || requestedTool.loadPolicy !== "core"
+      !requestedTool ||
+      requestedTool.category !== "core" ||
+      requestedTool.loadPolicy !== "core"
     ) {
       return immediate(
         toolCall,
@@ -197,13 +191,7 @@ export class ToolPreflight {
         resolved = delegation.resolve(requestedArgs.data, input.context);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        return immediate(
-          toolCall,
-          "unavailable",
-          message,
-          requestedTool,
-          repairs,
-        );
+        return immediate(toolCall, "unavailable", message, requestedTool, repairs);
       }
       const target = this.registry.get(resolved.toolName);
       if (!target) {
@@ -216,8 +204,8 @@ export class ToolPreflight {
         );
       }
       if (
-        !delegation.allowedCategories.includes(target.category)
-        || !delegation.allowedLoadPolicies.includes(target.loadPolicy)
+        !delegation.allowedCategories.includes(target.category) ||
+        !delegation.allowedLoadPolicies.includes(target.loadPolicy)
       ) {
         return immediate(
           toolCall,
@@ -253,13 +241,10 @@ export class ToolPreflight {
           targetArgs.error.message,
         ].join("\n");
         return {
-          ...immediate(
-            toolCall,
-            "validation_error",
-            correction,
-            target,
-            [...repairs, ...targetArgs.repairs],
-          ),
+          ...immediate(toolCall, "validation_error", correction, target, [
+            ...repairs,
+            ...targetArgs.repairs,
+          ]),
           validationError: targetArgs.error.message,
         };
       }
@@ -270,12 +255,9 @@ export class ToolPreflight {
 
     const presentationRequirement = tool.behavior?.presentation;
     if (
-      input.context.presentationLifecycle
-      && presentationRequirement
-      && (
-        !presentationRequirement.isRequired
-        || presentationRequirement.isRequired(args)
-      )
+      input.context.presentationLifecycle &&
+      presentationRequirement &&
+      (!presentationRequirement.isRequired || presentationRequirement.isRequired(args))
     ) {
       try {
         input.context.presentationLifecycle.requireActiveCapability(
@@ -371,9 +353,7 @@ export class ToolPreflight {
         requestedTool,
         tool,
         args,
-        mode: shouldRunBackground(tool, args)
-          ? "background"
-          : "foreground",
+        mode: shouldRunBackground(tool, args) ? "background" : "foreground",
         repairs,
       },
     };

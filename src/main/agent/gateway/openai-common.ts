@@ -1,5 +1,5 @@
-import OpenAI from "openai";
 import type { ProviderTokenUsage } from "@shared/token-usage";
+import OpenAI from "openai";
 import type { DriverResolvedConfig } from "./config";
 import type {
   AgentModelContentBlock,
@@ -36,9 +36,7 @@ export function createOpenAIClient(config: DriverResolvedConfig): OpenAIClient {
 }
 
 function tokenCount(value: unknown): number {
-  return typeof value === "number" && Number.isFinite(value) && value > 0
-    ? Math.round(value)
-    : 0;
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? Math.round(value) : 0;
 }
 
 export function extractOpenAIUsage(value: unknown): ProviderTokenUsage | undefined {
@@ -48,9 +46,10 @@ export function extractOpenAIUsage(value: unknown): ProviderTokenUsage | undefin
   const outputTokens = tokenCount(usage.completion_tokens ?? usage.output_tokens);
   const totalTokens = tokenCount(usage.total_tokens) || inputTokens + outputTokens;
   const details = usage.prompt_tokens_details ?? usage.input_tokens_details;
-  const cachedInputTokens = details && typeof details === "object"
-    ? tokenCount((details as Record<string, unknown>).cached_tokens)
-    : 0;
+  const cachedInputTokens =
+    details && typeof details === "object"
+      ? tokenCount((details as Record<string, unknown>).cached_tokens)
+      : 0;
   if (totalTokens === 0) return undefined;
   return {
     inputTokens,
@@ -82,8 +81,9 @@ export function toOpenAIImageUrl(image: AgentModelImageBlock): string {
 
 export function textFromBlocks(blocks: AgentModelContentBlock[]): string {
   return blocks
-    .filter((block): block is Extract<AgentModelContentBlock, { type: "text" }> =>
-      block.type === "text")
+    .filter(
+      (block): block is Extract<AgentModelContentBlock, { type: "text" }> => block.type === "text",
+    )
     .map((block) => block.text)
     .join("\n");
 }
@@ -93,9 +93,7 @@ export function toolResultBodyText(result: AgentModelToolResultBlock): string {
     .filter((block): block is Extract<typeof block, { type: "text" }> => block.type === "text")
     .map((block) => block.text)
     .join("\n");
-  return result.isError
-    ? `[Tool error]${text ? `\n${text}` : ""}`
-    : text;
+  return result.isError ? `[Tool error]${text ? `\n${text}` : ""}` : text;
 }
 
 export function toolResultText(result: AgentModelToolResultBlock): string {
@@ -106,9 +104,10 @@ export function toolResultText(result: AgentModelToolResultBlock): string {
     : markedText;
 }
 
-export function parseToolArguments(
-  value: string | undefined,
-): { input: Record<string, unknown>; parseError?: string } {
+export function parseToolArguments(value: string | undefined): {
+  input: Record<string, unknown>;
+  parseError?: string;
+} {
   try {
     const parsed = value ? JSON.parse(value) : {};
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {

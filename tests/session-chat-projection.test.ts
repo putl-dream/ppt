@@ -1,13 +1,10 @@
 import { describe, expect, it } from "vitest";
-import type { PersistedDisplayCard } from "../src/shared/card-display-protocol";
-import {
-  sessionChatMessageSchema,
-  type SessionChatMessage,
-} from "../src/shared/session";
 import {
   findActiveThreadId,
   toSessionChatMessages,
 } from "../src/renderer/src/app/chatMessageRuntime";
+import type { PersistedDisplayCard } from "../src/shared/card-display-protocol";
+import { type SessionChatMessage, sessionChatMessageSchema } from "../src/shared/session";
 
 function pendingReview(): PersistedDisplayCard {
   return {
@@ -42,13 +39,15 @@ describe("session chat projection", () => {
         id: "a-1",
         role: "assistant",
         content: "请补充信息",
-        activityTrace: [{
-          id: "response-waiting",
-          kind: "response",
-          start: 0,
-          end: 5,
-          streaming: false,
-        }],
+        activityTrace: [
+          {
+            id: "response-waiting",
+            kind: "response",
+            start: 0,
+            end: 5,
+            streaming: false,
+          },
+        ],
         runId: "run-1",
         runStatus: "waiting",
         threadId: "thread-1",
@@ -96,17 +95,19 @@ describe("session chat projection", () => {
     expect(toSessionChatMessages(messages)).toEqual(messages);
     const serialized = JSON.stringify(toSessionChatMessages(messages));
     expect(serialized).not.toContain("revealedCount");
-    expect(serialized).not.toContain("\"loading\"");
-    expect(serialized).not.toContain("\"active\"");
+    expect(serialized).not.toContain('"loading"');
+    expect(serialized).not.toContain('"active"');
   });
 
   it("rejects the retired flat run-message shape", () => {
-    expect(sessionChatMessageSchema.safeParse({
-      id: "assistant-flat",
-      role: "assistant",
-      content: "正文不能脱离运行时间线",
-      runId: "run-flat",
-      runStatus: "completed",
-    }).success).toBe(false);
+    expect(
+      sessionChatMessageSchema.safeParse({
+        id: "assistant-flat",
+        role: "assistant",
+        content: "正文不能脱离运行时间线",
+        runId: "run-flat",
+        runStatus: "completed",
+      }).success,
+    ).toBe(false);
   });
 });

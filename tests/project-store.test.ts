@@ -1,4 +1,4 @@
-import { beforeAll, afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { useProjectStore } from "../src/renderer/src/components/project-store";
 import {
   asPptCapabilityRequestId,
@@ -30,9 +30,7 @@ const ALL_ARTIFACT_FILES = [
   "research/notes.md",
 ];
 
-function pptJobProjection(
-  overrides: Partial<PptJobProjection> = {},
-): PptJobProjection {
+function pptJobProjection(overrides: Partial<PptJobProjection> = {}): PptJobProjection {
   return {
     jobId: asPptJobId("job-1"),
     presentationId: asPresentationId("presentation-1"),
@@ -61,7 +59,7 @@ function openedProjectFile(
     mtimeMs: 1,
     size: content.length,
     encoding: "utf8" as const,
-    newline: content.includes("\n") ? "lf" as const : "none" as const,
+    newline: content.includes("\n") ? ("lf" as const) : ("none" as const),
     editToken,
     editable: true,
   };
@@ -136,9 +134,9 @@ describe("project-store zustand store", () => {
 
   it("skips optional workflow artifacts that do not exist yet", async () => {
     mockDesktopApi.listProjectFiles.mockResolvedValue(
-      ALL_ARTIFACT_FILES.filter((path) => (
-        path !== "design/design-spec.json" && path !== "slides/page-plan.json"
-      )),
+      ALL_ARTIFACT_FILES.filter(
+        (path) => path !== "design/design-spec.json" && path !== "slides/page-plan.json",
+      ),
     );
     mockDesktopApi.readProjectArtifact.mockResolvedValue({ type: "file", content: "" });
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
@@ -177,10 +175,7 @@ describe("project-store zustand store", () => {
       store.initializeProject("test-session", "Test Project");
       await store.hydrateProjectArtifacts("test-session");
 
-      expect(mockDesktopApi.readProjectArtifact).toHaveBeenCalledWith(
-        "test-session",
-        "brief.md",
-      );
+      expect(mockDesktopApi.readProjectArtifact).toHaveBeenCalledWith("test-session", "brief.md");
       expect(consoleError).toHaveBeenCalledWith("读取项目产物失败: brief.md", readError);
       expect(useProjectStore.getState().activeProject?.artifacts.brief.isHydrated).toBe(false);
     } finally {
@@ -219,10 +214,7 @@ describe("project-store zustand store", () => {
     vi.advanceTimersByTime(400);
     await vi.runAllTimersAsync();
 
-    expect(mockDesktopApi.openProjectFile).toHaveBeenCalledWith(
-      "test-session",
-      "brief.md",
-    );
+    expect(mockDesktopApi.openProjectFile).toHaveBeenCalledWith("test-session", "brief.md");
     expect(mockDesktopApi.saveProjectFile).toHaveBeenCalledWith(
       "test-session",
       "brief.md",
@@ -240,69 +232,71 @@ describe("project-store zustand store", () => {
     mockDesktopApi.getPptJob.mockResolvedValue(initial);
 
     const store = useProjectStore.getState();
-    store.initializeProject(
-      "test-session",
-      "Test Project",
-      undefined,
-      "presentation-1",
-    );
+    store.initializeProject("test-session", "Test Project", undefined, "presentation-1");
     await store.hydratePptJob("test-session");
 
     expect(mockDesktopApi.getPptJob).toHaveBeenCalledWith("test-session");
     expect(useProjectStore.getState().pptJob).toEqual(initial);
 
-    store.applyPptJobProjection(pptJobProjection({
-      status: "waiting_user",
-      stage: "preview",
-      stateRevision: 3,
-      waitingReason: "请确认预览",
-    }));
+    store.applyPptJobProjection(
+      pptJobProjection({
+        status: "waiting_user",
+        stage: "preview",
+        stateRevision: 3,
+        waitingReason: "请确认预览",
+      }),
+    );
     expect(useProjectStore.getState().pptJob).toMatchObject({
       status: "waiting_user",
       stage: "preview",
       waitingReason: "请确认预览",
     });
 
-    store.applyPptJobProjection(pptJobProjection({
-      status: "running",
-      stateRevision: 1,
-    }));
+    store.applyPptJobProjection(
+      pptJobProjection({
+        status: "running",
+        stateRevision: 1,
+      }),
+    );
     expect(useProjectStore.getState().pptJob?.stateRevision).toBe(3);
 
-    store.applyPptJobProjection(pptJobProjection({
-      presentationId: asPresentationId("other-presentation"),
-      status: "failed",
-      stateRevision: 4,
-    }));
+    store.applyPptJobProjection(
+      pptJobProjection({
+        presentationId: asPresentationId("other-presentation"),
+        status: "failed",
+        stateRevision: 4,
+      }),
+    );
     expect(useProjectStore.getState().pptJob?.status).toBe("waiting_user");
   });
 
   it("does not let an older hydration response replace a newer change projection", async () => {
     let resolveHydration!: (projection: PptJobProjection | undefined) => void;
-    mockDesktopApi.getPptJob.mockReturnValueOnce(new Promise((resolve) => {
-      resolveHydration = resolve;
-    }));
+    mockDesktopApi.getPptJob.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveHydration = resolve;
+      }),
+    );
 
     const store = useProjectStore.getState();
-    store.initializeProject(
-      "test-session",
-      "Test Project",
-      undefined,
-      "presentation-1",
-    );
+    store.initializeProject("test-session", "Test Project", undefined, "presentation-1");
     const hydration = store.hydratePptJob("test-session");
 
-    store.applyPptJobProjection(pptJobProjection({
-      status: "waiting_approval",
-      stage: "proposal",
-      stateRevision: 3,
-      proposalId: asProposalId("proposal-3"),
-    }));
-    resolveHydration(pptJobProjection({
-      status: "running",
-      stage: "intent",
-      stateRevision: 1,
-    }));
+    store.applyPptJobProjection(
+      pptJobProjection({
+        status: "waiting_approval",
+        stage: "proposal",
+        stateRevision: 3,
+        proposalId: asProposalId("proposal-3"),
+      }),
+    );
+    resolveHydration(
+      pptJobProjection({
+        status: "running",
+        stage: "intent",
+        stateRevision: 1,
+      }),
+    );
     await hydration;
 
     expect(useProjectStore.getState()).toMatchObject({
@@ -317,17 +311,14 @@ describe("project-store zustand store", () => {
   });
 
   it("ignores a hydration projection that belongs to another presentation", async () => {
-    mockDesktopApi.getPptJob.mockResolvedValueOnce(pptJobProjection({
-      presentationId: asPresentationId("other-presentation"),
-    }));
+    mockDesktopApi.getPptJob.mockResolvedValueOnce(
+      pptJobProjection({
+        presentationId: asPresentationId("other-presentation"),
+      }),
+    );
 
     const store = useProjectStore.getState();
-    store.initializeProject(
-      "test-session",
-      "Test Project",
-      undefined,
-      "presentation-1",
-    );
+    store.initializeProject("test-session", "Test Project", undefined, "presentation-1");
     await store.hydratePptJob("test-session");
 
     expect(useProjectStore.getState()).toMatchObject({

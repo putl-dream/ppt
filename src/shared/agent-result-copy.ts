@@ -1,14 +1,9 @@
 import type { AgentRunResult } from "./ipc";
 import type { Presentation } from "./presentation";
 
-export type TerminalAgentRunResult = Extract<
-  AgentRunResult,
-  { status: "completed" | "rejected" }
->;
+export type TerminalAgentRunResult = Extract<AgentRunResult, { status: "completed" | "rejected" }>;
 
-function countSlidesMissingSvgVisualSource(
-  presentation: Presentation | undefined,
-): number {
+function countSlidesMissingSvgVisualSource(presentation: Presentation | undefined): number {
   if (!presentation?.slides) return 0;
   return presentation.slides.filter((slide) => slide.visualSource?.kind !== "svg").length;
 }
@@ -18,9 +13,8 @@ function countSlidesMissingSvgVisualSource(
  * in Shared prevents a late Renderer snapshot from changing result semantics.
  */
 export function formatTerminalAgentRunContent(result: TerminalAgentRunResult): string {
-  const slidesNeedingDesign = result.status === "completed"
-    ? countSlidesMissingSvgVisualSource(result.presentation)
-    : 0;
+  const slidesNeedingDesign =
+    result.status === "completed" ? countSlidesMissingSvgVisualSource(result.presentation) : 0;
   if (result.status === "rejected") {
     return "已放弃排版变更提案。";
   }

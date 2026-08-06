@@ -1,9 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
-import { displayEventSchema } from "../src/shared/card-display-protocol";
-import {
-  toResultDisplayEvents,
-  toStreamDisplayEvent,
-} from "../src/main/agent/display/display-event-adapter";
+import { getCardPresentationPolicy } from "@shared/cards/card-presentation-policy";
 import {
   clearAllDisplayCardManagers,
   findActiveToolPermissionCard,
@@ -16,8 +11,13 @@ import {
   usePermissionCardManager,
   useProgressCardManager,
   useReviewCardManager,
-} from "../src/renderer/src/cards/display-card-managers";
-import { getCardPresentationPolicy } from "../src/renderer/src/cards/card-presentation-policy";
+} from "@shared/cards/display-card-managers";
+import { beforeEach, describe, expect, it } from "vitest";
+import {
+  toResultDisplayEvents,
+  toStreamDisplayEvent,
+} from "../src/main/agent/display/display-event-adapter";
+import { displayEventSchema } from "../src/shared/card-display-protocol";
 import { createSvgTestSlide } from "../src/shared/presentation-fixtures";
 import { createSessionPresentation } from "../src/shared/session";
 
@@ -56,10 +56,12 @@ describe("card display protocol", () => {
   });
 
   it("rejects a kind/category mismatch at the protocol boundary", () => {
-    expect(() => displayEventSchema.parse({
-      ...permissionEvent,
-      category: "notification",
-    })).toThrow();
+    expect(() =>
+      displayEventSchema.parse({
+        ...permissionEvent,
+        category: "notification",
+      }),
+    ).toThrow();
   });
 
   it("routes permission events to an independent blocking manager", () => {
@@ -70,48 +72,61 @@ describe("card display protocol", () => {
     expect(active?.event.kind).toBe("permission.tool-requested");
     expect(useProgressCardManager.getState().cards).toHaveLength(0);
     expect(setDisplayCardStatus(permissionEvent.eventId, "resolved")).toBe(true);
-    expect(findActiveToolPermissionCard(usePermissionCardManager.getState().cards, "run-1"))
-      .toBeUndefined();
+    expect(
+      findActiveToolPermissionCard(usePermissionCardManager.getState().cards, "run-1"),
+    ).toBeUndefined();
   });
 
   it("adapts runtime events and terminal results without naming React components", () => {
-    const streamDisplay = toStreamDisplayEvent({
-      type: "tool-approval-waiting",
-      message: "等待授权",
-      approvalId: "approval-2",
-      toolName: "RewriteSlideContent",
-      reason: "将修改演示文稿内容",
-      detail: "slide-2",
-    }, "session-1", "run-2");
+    const streamDisplay = toStreamDisplayEvent(
+      {
+        type: "tool-approval-waiting",
+        message: "等待授权",
+        approvalId: "approval-2",
+        toolName: "RewriteSlideContent",
+        reason: "将修改演示文稿内容",
+        detail: "slide-2",
+      },
+      "session-1",
+      "run-2",
+    );
 
     expect(streamDisplay?.kind).toBe("permission.tool-requested");
     expect(streamDisplay?.scope.runId).toBe("run-2");
 
-    const svgPreviewDisplay = toStreamDisplayEvent({
-      type: "slide-preview-ready",
-      message: "已生成页面预览",
-      toolCallId: "preview-svg-1",
-      toolName: "PreviewSvgPage",
-      slideId: "svg-preview-abc",
-      title: "P01",
-      description: "content-exact SVG preview",
-      thumbnail: null,
-    }, "session-1", "run-2");
+    const svgPreviewDisplay = toStreamDisplayEvent(
+      {
+        type: "slide-preview-ready",
+        message: "已生成页面预览",
+        toolCallId: "preview-svg-1",
+        toolName: "PreviewSvgPage",
+        slideId: "svg-preview-abc",
+        title: "P01",
+        description: "content-exact SVG preview",
+        thumbnail: null,
+      },
+      "session-1",
+      "run-2",
+    );
     expect(svgPreviewDisplay?.source).toMatchObject({
       kind: "tool",
       toolName: "PreviewSvgPage",
     });
 
-    const resultEvents = toResultDisplayEvents({
-      status: "waiting-user",
-      message: "请选择内容侧重点",
-      threadId: "thread-1",
-      question: {
-        variant: "choices",
-        selectionMode: "single",
-        options: [{ id: "practice", title: "实践案例" }],
+    const resultEvents = toResultDisplayEvents(
+      {
+        status: "waiting-user",
+        message: "请选择内容侧重点",
+        threadId: "thread-1",
+        question: {
+          variant: "choices",
+          selectionMode: "single",
+          options: [{ id: "practice", title: "实践案例" }],
+        },
       },
-    }, "session-1", "run-2");
+      "session-1",
+      "run-2",
+    );
 
     expect(resultEvents).toHaveLength(1);
     expect(resultEvents[0]?.kind).toBe("interaction.question-requested");
@@ -122,16 +137,22 @@ describe("card display protocol", () => {
     const presentation = {
       ...createSessionPresentation("Content-only result"),
       revision: 4,
-      slides: [createSvgTestSlide({
-        id: "slide-svg-ready",
-        title: "核心观点",
-      })],
+      slides: [
+        createSvgTestSlide({
+          id: "slide-svg-ready",
+          title: "核心观点",
+        }),
+      ],
     };
 
-    const resultEvents = toResultDisplayEvents({
-      status: "completed",
-      presentation,
-    }, "session-1", "run-4");
+    const resultEvents = toResultDisplayEvents(
+      {
+        status: "completed",
+        presentation,
+      },
+      "session-1",
+      "run-4",
+    );
 
     expect(resultEvents).toHaveLength(1);
     expect(resultEvents[0]?.kind).toBe("artifact.ready");
@@ -139,22 +160,31 @@ describe("card display protocol", () => {
   });
 
   it("persists manager status and actions independently from chat messages", () => {
-    const event = toResultDisplayEvents({
-      status: "waiting-user",
-      message: "请选择内容侧重点",
-      threadId: "thread-1",
-      question: {
-        variant: "choices",
-        selectionMode: "single",
-        options: [{ id: "practice", title: "实践案例" }],
+    const event = toResultDisplayEvents(
+      {
+        status: "waiting-user",
+        message: "请选择内容侧重点",
+        threadId: "thread-1",
+        question: {
+          variant: "choices",
+          selectionMode: "single",
+          options: [{ id: "practice", title: "实践案例" }],
+        },
       },
-    }, "session-1", "run-2")[0]!;
+      "session-1",
+      "run-2",
+    )[0]!;
     ingestDisplayEvent({ ...event, scope: { ...event.scope, anchorMessageId: "message-1" } });
-    recordDisplayCardAction(event.eventId, "answer", {
-      optionIds: ["practice"],
-      value: "practice",
-      label: "实践案例",
-    }, "resolved");
+    recordDisplayCardAction(
+      event.eventId,
+      "answer",
+      {
+        optionIds: ["practice"],
+        value: "practice",
+        label: "实践案例",
+      },
+      "resolved",
+    );
 
     const snapshot = getPersistedDisplayCards();
     expect(snapshot).toHaveLength(1);
@@ -195,29 +225,35 @@ describe("card display protocol", () => {
 
     ingestDisplayEvent(event);
     expect(useInteractionCardManager.getState().cards).toHaveLength(0);
-    hydrateDisplayCardManagers([{
-      event,
-      status: "active",
-      receivedAt: Date.now(),
-    }]);
+    hydrateDisplayCardManagers([
+      {
+        event,
+        status: "active",
+        receivedAt: Date.now(),
+      },
+    ]);
     expect(useInteractionCardManager.getState().cards).toHaveLength(0);
     expect(getPersistedDisplayCards()).toHaveLength(0);
     clearAllDisplayCardManagers();
   });
 
   it("keeps the complete approval request in the review event payload", () => {
-    const [event] = toResultDisplayEvents({
-      status: "approval-required",
-      approval: {
-        jobId: "job-review",
-        queryId: "query-review",
-        proposalId: "proposal-review",
-        threadId: "thread-review",
-        summary: "更新标题",
-        commands: [{ id: "command-1", type: "set-presentation-title", title: "新标题" }],
-        assumptions: ["保留现有页面"],
+    const [event] = toResultDisplayEvents(
+      {
+        status: "approval-required",
+        approval: {
+          jobId: "job-review",
+          queryId: "query-review",
+          proposalId: "proposal-review",
+          threadId: "thread-review",
+          summary: "更新标题",
+          commands: [{ id: "command-1", type: "set-presentation-title", title: "新标题" }],
+          assumptions: ["保留现有页面"],
+        },
       },
-    }, "session-1", "run-3");
+      "session-1",
+      "run-3",
+    );
 
     expect(event?.kind).toBe("review.command-proposal");
     if (event?.kind !== "review.command-proposal") throw new Error("missing review event");
@@ -270,37 +306,43 @@ describe("card display protocol", () => {
   });
 
   it("reactivates a legacy proposal card whose resolved action belongs to an older run", () => {
-    const [event] = toResultDisplayEvents({
-      status: "approval-required",
-      approval: {
-        jobId: "job-review",
-        queryId: "query-review",
-        proposalId: "proposal-svg",
-        threadId: "thread-review",
-        summary: "提交 SVG 幻灯片",
-        commands: [{ id: "command-2", type: "set-presentation-title", title: "SVG 版本" }],
-      },
-    }, "session-1", "run-new");
-    if (!event) throw new Error("missing proposal event");
-
-    hydrateDisplayCardManagers([{
-      event: {
-        ...event,
-        eventId: "command-proposal:thread-review",
-      },
-      status: "resolved",
-      receivedAt: Date.now(),
-      lastAction: {
-        protocolVersion: 1,
-        eventId: "command-proposal:thread-review",
-        actionId: "approve",
-        correlation: {
-          sessionId: "session-1",
-          runId: "run-old",
+    const [event] = toResultDisplayEvents(
+      {
+        status: "approval-required",
+        approval: {
+          jobId: "job-review",
+          queryId: "query-review",
+          proposalId: "proposal-svg",
           threadId: "thread-review",
+          summary: "提交 SVG 幻灯片",
+          commands: [{ id: "command-2", type: "set-presentation-title", title: "SVG 版本" }],
         },
       },
-    }]);
+      "session-1",
+      "run-new",
+    );
+    if (!event) throw new Error("missing proposal event");
+
+    hydrateDisplayCardManagers([
+      {
+        event: {
+          ...event,
+          eventId: "command-proposal:thread-review",
+        },
+        status: "resolved",
+        receivedAt: Date.now(),
+        lastAction: {
+          protocolVersion: 1,
+          eventId: "command-proposal:thread-review",
+          actionId: "approve",
+          correlation: {
+            sessionId: "session-1",
+            runId: "run-old",
+            threadId: "thread-review",
+          },
+        },
+      },
+    ]);
 
     const [card] = useReviewCardManager.getState().cards;
     expect(card).toMatchObject({

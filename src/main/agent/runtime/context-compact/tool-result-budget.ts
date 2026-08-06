@@ -1,18 +1,16 @@
+import { randomUUID } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { randomUUID } from "node:crypto";
-import {
-  TOOL_RESULT_BUDGET_BYTES,
-  TOOL_RESULT_PREVIEW_CHARS,
-  TOOL_RESULTS_DIR,
-} from "./config";
+import { TOOL_RESULT_BUDGET_BYTES, TOOL_RESULT_PREVIEW_CHARS, TOOL_RESULTS_DIR } from "./config";
 import { measureToolResultBytes } from "./micro-compact";
 import type { TranscriptEntry } from "./types";
 
 function isToolResultEntry(entry: TranscriptEntry): boolean {
-  return entry.role === "tool"
-    || entry.kind === "tool_result"
-    || (entry.role === "user" && entry.kind === "tool_result");
+  return (
+    entry.role === "tool" ||
+    entry.kind === "tool_result" ||
+    (entry.role === "user" && entry.kind === "tool_result")
+  );
 }
 
 /** Indices of the trailing tool-result block (since last non-tool entry). */
@@ -33,17 +31,15 @@ function serializeFullResult(entry: TranscriptEntry): string {
     return typeof entry.result === "string" ? entry.result : JSON.stringify(entry.result, null, 2);
   }
   if (entry.content !== undefined) {
-    return typeof entry.content === "string" ? entry.content : JSON.stringify(entry.content, null, 2);
+    return typeof entry.content === "string"
+      ? entry.content
+      : JSON.stringify(entry.content, null, 2);
   }
   if (entry.error !== undefined) return String(entry.error);
   return "";
 }
 
-function buildPersistedMarker(
-  relativePath: string,
-  toolName: string,
-  preview: string,
-): string {
+function buildPersistedMarker(relativePath: string, toolName: string, preview: string): string {
   return `<persisted-output path="${relativePath}" tool="${toolName}">\n${preview}\n</persisted-output>`;
 }
 
@@ -58,9 +54,10 @@ async function persistToolResult(
   await mkdir(join(workspaceRoot, TOOL_RESULTS_DIR), { recursive: true });
   await writeFile(absolutePath, fullText, "utf8");
 
-  const preview = fullText.length <= TOOL_RESULT_PREVIEW_CHARS
-    ? fullText
-    : `${fullText.slice(0, TOOL_RESULT_PREVIEW_CHARS)}…`;
+  const preview =
+    fullText.length <= TOOL_RESULT_PREVIEW_CHARS
+      ? fullText
+      : `${fullText.slice(0, TOOL_RESULT_PREVIEW_CHARS)}…`;
 
   return { relativePath, preview };
 }
@@ -102,7 +99,8 @@ export async function toolResultBudget(
   if (totalBytes <= budgetBytes) return { transcript, notes };
 
   const sorted = [...blockIndices].sort(
-    (left, right) => measureToolResultBytes(transcript[right]) - measureToolResultBytes(transcript[left]),
+    (left, right) =>
+      measureToolResultBytes(transcript[right]) - measureToolResultBytes(transcript[left]),
   );
 
   const next = [...transcript];

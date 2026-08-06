@@ -1,4 +1,16 @@
 import { describe, expect, it } from "vitest";
+import { DEFAULT_DESIGN_SYSTEM } from "../src/design-system";
+import { assertDesignSpecMatchesTemplateState } from "../src/main/agent/tools/core/project-template-state";
+import {
+  getBuiltinTemplate,
+  listAutoPoolTemplates,
+  listBuiltinTemplates,
+} from "../src/shared/template-catalog";
+import {
+  projectDesignReferenceGuidance,
+  projectDesignReferenceToDesignSystem,
+} from "../src/shared/template-projection";
+import type { TemplateInspection } from "../src/shared/template-protocol";
 import {
   APPLICATION_DEFAULT_TEMPLATE_ID,
   createDefaultProjectTemplatePolicy,
@@ -6,21 +18,7 @@ import {
   resolvedTemplateSelectionSchema,
   type TemplateDescriptor,
 } from "../src/shared/template-protocol";
-import {
-  getBuiltinTemplate,
-  listAutoPoolTemplates,
-  listBuiltinTemplates,
-} from "../src/shared/template-catalog";
 import { resolveProjectTemplate } from "../src/shared/template-resolver";
-import {
-  projectDesignReferenceGuidance,
-  projectDesignReferenceToDesignSystem,
-} from "../src/shared/template-projection";
-import type { TemplateInspection } from "../src/shared/template-protocol";
-import {
-  assertDesignSpecMatchesTemplateState,
-} from "../src/main/agent/tools/core/project-template-state";
-import { DEFAULT_DESIGN_SYSTEM } from "../src/design-system";
 
 describe("template catalog", () => {
   it("exposes an auto pool of 6–8 builtins and a default fallback", () => {
@@ -179,70 +177,76 @@ describe("design-spec template binding", () => {
   };
 
   it("rejects design-spec that omits the custom-bound uploaded template", () => {
-    expect(() => assertDesignSpecMatchesTemplateState(
-      {
-        policy: projectTemplatePolicySchema.parse({
-          version: 1,
-          mode: "custom",
-          defaultTemplateId: APPLICATION_DEFAULT_TEMPLATE_ID,
-          customTemplateId: uploaded.id,
-          customTemplateRevisionId: uploaded.revisionId,
-        }),
-        uploadedTemplates: [uploaded],
-      },
-      {
-        presentationDesignSystem: DEFAULT_DESIGN_SYSTEM,
-      },
-    )).toThrow(/pins template/);
+    expect(() =>
+      assertDesignSpecMatchesTemplateState(
+        {
+          policy: projectTemplatePolicySchema.parse({
+            version: 1,
+            mode: "custom",
+            defaultTemplateId: APPLICATION_DEFAULT_TEMPLATE_ID,
+            customTemplateId: uploaded.id,
+            customTemplateRevisionId: uploaded.revisionId,
+          }),
+          uploadedTemplates: [uploaded],
+        },
+        {
+          presentationDesignSystem: DEFAULT_DESIGN_SYSTEM,
+        },
+      ),
+    ).toThrow(/pins template/);
   });
 
   it("rejects design-spec that keeps the builtin palette after a custom import", () => {
-    expect(() => assertDesignSpecMatchesTemplateState(
-      {
-        policy: projectTemplatePolicySchema.parse({
-          version: 1,
-          mode: "custom",
-          defaultTemplateId: APPLICATION_DEFAULT_TEMPLATE_ID,
-          customTemplateId: uploaded.id,
-          customTemplateRevisionId: uploaded.revisionId,
-        }),
-        uploadedTemplates: [uploaded],
-      },
-      {
-        presentationDesignSystem: DEFAULT_DESIGN_SYSTEM,
-        resolvedTemplate: {
-          templateId: uploaded.id,
-          templateRevisionId: uploaded.revisionId,
-          source: "explicit-custom",
-          reasons: ["test"],
-          supportLevel: "design-reference",
+    expect(() =>
+      assertDesignSpecMatchesTemplateState(
+        {
+          policy: projectTemplatePolicySchema.parse({
+            version: 1,
+            mode: "custom",
+            defaultTemplateId: APPLICATION_DEFAULT_TEMPLATE_ID,
+            customTemplateId: uploaded.id,
+            customTemplateRevisionId: uploaded.revisionId,
+          }),
+          uploadedTemplates: [uploaded],
         },
-      },
-    )).toThrow(/colorScheme must be the palette extracted/);
+        {
+          presentationDesignSystem: DEFAULT_DESIGN_SYSTEM,
+          resolvedTemplate: {
+            templateId: uploaded.id,
+            templateRevisionId: uploaded.revisionId,
+            source: "explicit-custom",
+            reasons: ["test"],
+            supportLevel: "design-reference",
+          },
+        },
+      ),
+    ).toThrow(/colorScheme must be the palette extracted/);
   });
 
   it("accepts design-spec copied from the uploaded ResolveProjectTemplate result", () => {
-    expect(() => assertDesignSpecMatchesTemplateState(
-      {
-        policy: projectTemplatePolicySchema.parse({
-          version: 1,
-          mode: "custom",
-          defaultTemplateId: APPLICATION_DEFAULT_TEMPLATE_ID,
-          customTemplateId: uploaded.id,
-          customTemplateRevisionId: uploaded.revisionId,
-        }),
-        uploadedTemplates: [uploaded],
-      },
-      {
-        presentationDesignSystem: uploaded.designSystem,
-        resolvedTemplate: {
-          templateId: uploaded.id,
-          templateRevisionId: uploaded.revisionId,
-          source: "explicit-custom",
-          reasons: ["Project policy mode=custom"],
-          supportLevel: "design-reference",
+    expect(() =>
+      assertDesignSpecMatchesTemplateState(
+        {
+          policy: projectTemplatePolicySchema.parse({
+            version: 1,
+            mode: "custom",
+            defaultTemplateId: APPLICATION_DEFAULT_TEMPLATE_ID,
+            customTemplateId: uploaded.id,
+            customTemplateRevisionId: uploaded.revisionId,
+          }),
+          uploadedTemplates: [uploaded],
         },
-      },
-    )).not.toThrow();
+        {
+          presentationDesignSystem: uploaded.designSystem,
+          resolvedTemplate: {
+            templateId: uploaded.id,
+            templateRevisionId: uploaded.revisionId,
+            source: "explicit-custom",
+            reasons: ["Project policy mode=custom"],
+            supportLevel: "design-reference",
+          },
+        },
+      ),
+    ).not.toThrow();
   });
 });

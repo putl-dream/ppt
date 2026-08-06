@@ -1,12 +1,12 @@
 import { readdir, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { normalizePromptStage, type PromptStage } from "../runtime/prompts/prompt-stage";
-import type { SkillCard, SkillEntry, SkillFrontmatter } from "./skill-types";
 import {
   parseSkillFrontmatterFields,
   readFrontmatterString,
   readFrontmatterStringList,
 } from "./parseSkillFrontmatterFields";
+import type { SkillCard, SkillEntry, SkillFrontmatter } from "./skill-types";
 
 function readFrontmatterStages(frontmatter: Record<string, unknown>): PromptStage[] | undefined {
   const raw = readFrontmatterStringList(frontmatter, "stages");
@@ -25,14 +25,11 @@ function readFrontmatterStages(frontmatter: Record<string, unknown>): PromptStag
 
 const SKILL_FILE = "SKILL.md";
 
-function buildFrontmatter(
-  raw: Record<string, unknown>,
-  fallbackName: string,
-): SkillFrontmatter {
+function buildFrontmatter(raw: Record<string, unknown>, fallbackName: string): SkillFrontmatter {
   const name = readFrontmatterString(raw, "name") ?? fallbackName;
   const description = readFrontmatterString(raw, "description") ?? "";
-  const whenToUse = readFrontmatterString(raw, "when_to_use")
-    ?? readFrontmatterString(raw, "when-to-use");
+  const whenToUse =
+    readFrontmatterString(raw, "when_to_use") ?? readFrontmatterString(raw, "when-to-use");
 
   return {
     name,

@@ -1,12 +1,13 @@
-import React, { useEffect, useRef, useState } from "react";
 import type { AgentActivityItem } from "@shared/agent-activity";
-import { CheckIcon, ChevronDownIcon, SendIcon, StopIcon } from "./Icons";
-import type { ManagedModel } from "../modelCatalog";
-import type { AgentRunPhase } from "../agentRunPresentation";
-import type { PendingToolApproval } from "./ToolApprovalOverlay";
-import { PermissionCardHost } from "../cards/hosts/PermissionCardHost";
+import type { AgentRunPhase } from "@shared/agent-run-presentation";
+import type React from "react";
+import { useEffect, useRef, useState } from "react";
 import { EnvironmentCardHost } from "../cards/hosts/EnvironmentCardHost";
+import { PermissionCardHost } from "../cards/hosts/PermissionCardHost";
+import type { ManagedModel } from "../modelCatalog";
+import { CheckIcon, ChevronDownIcon, SendIcon, StopIcon } from "./Icons";
 import { RunStatusIndicator } from "./RunStatusIndicator";
+import type { PendingToolApproval } from "./ToolApprovalOverlay";
 
 interface UnifiedAgentInputProps {
   request: string;
@@ -123,103 +124,110 @@ export const UnifiedAgentInput: React.FC<UnifiedAgentInputProps> = ({
         >
           {isPermissionGateOpen && (
             <div className="tool-approval-attached">
-              <PermissionCardHost approval={pendingToolApproval} onResolve={onResolveToolApproval} />
+              <PermissionCardHost
+                approval={pendingToolApproval}
+                onResolve={onResolveToolApproval}
+              />
             </div>
           )}
           <>
-              <div className="input-textarea-row">
-                <textarea
-                  ref={textareaRef}
-                  value={request}
-                  onChange={(event) => {
-                    onChangeRequest(event.target.value);
-                    resizeTextarea(event.target);
-                  }}
-                  onKeyDown={handleKeyDown}
-                  placeholder={
-                    layoutMode === "center"
-                      ? "例如：做一份面向管理层的季度汇报，8 页左右…"
-                      : "继续描述修改目标，或提出新的演示需求…"
-                  }
-                  readOnly={busy}
-                  autoFocus
-                  rows={layoutMode === "center" ? 3 : 2}
-                  className={`input-textarea${busy ? " input-textarea--busy" : ""}`}
-                  aria-label="向演示文稿 Agent 输入指令"
-                />
+            <div className="input-textarea-row">
+              <textarea
+                ref={textareaRef}
+                value={request}
+                onChange={(event) => {
+                  onChangeRequest(event.target.value);
+                  resizeTextarea(event.target);
+                }}
+                onKeyDown={handleKeyDown}
+                placeholder={
+                  layoutMode === "center"
+                    ? "例如：做一份面向管理层的季度汇报，8 页左右…"
+                    : "继续描述修改目标，或提出新的演示需求…"
+                }
+                readOnly={busy}
+                autoFocus
+                rows={layoutMode === "center" ? 3 : 2}
+                className={`input-textarea${busy ? " input-textarea--busy" : ""}`}
+                aria-label="向演示文稿 Agent 输入指令"
+              />
+            </div>
+
+            <div className="functional-control-bar">
+              <div className="functional-left">
+                {busy ? (
+                  <RunStatusIndicator
+                    phase={agentRunPhase}
+                    activityTrace={activityTrace}
+                    startedAt={runStartedAt}
+                  />
+                ) : null}
               </div>
 
-              <div className="functional-control-bar">
-                <div className="functional-left">
-                  {busy ? (
-                    <RunStatusIndicator
-                      phase={agentRunPhase}
-                      activityTrace={activityTrace}
-                      startedAt={runStartedAt}
-                    />
+              <div className="functional-right">
+                <div
+                  ref={modelMenuRef}
+                  className={`model-tier-select-wrapper${modelMenuOpen ? " is-open" : ""}${busy || models.length === 0 ? " is-disabled" : ""}`}
+                >
+                  <button
+                    type="button"
+                    className="mini-model-select"
+                    disabled={busy || models.length === 0}
+                    aria-haspopup="listbox"
+                    aria-expanded={modelMenuOpen}
+                    onClick={() => setModelMenuOpen((open) => !open)}
+                  >
+                    <span>{selectedModel?.name ?? "选择模型"}</span>
+                    <ChevronDownIcon size={12} className="model-tier-select-icon" />
+                  </button>
+
+                  {modelMenuOpen && !busy && models.length > 0 ? (
+                    <div className="model-tier-menu" role="listbox" aria-label="选择智能体模型">
+                      {models.map((model) => {
+                        const selected = model.id === selectedModelId;
+                        return (
+                          <button
+                            key={model.id}
+                            type="button"
+                            role="option"
+                            aria-selected={selected}
+                            className={`model-tier-option${selected ? " is-selected" : ""}`}
+                            onClick={() => {
+                              setSelectedModelId(model.id);
+                              setModelMenuOpen(false);
+                            }}
+                          >
+                            <span className="model-tier-option-name">{model.name}</span>
+                            {selected ? (
+                              <CheckIcon size={11} className="model-tier-option-check" />
+                            ) : null}
+                          </button>
+                        );
+                      })}
+                    </div>
                   ) : null}
                 </div>
 
-                <div className="functional-right">
-                  <div
-                    ref={modelMenuRef}
-                    className={`model-tier-select-wrapper${modelMenuOpen ? " is-open" : ""}${busy || models.length === 0 ? " is-disabled" : ""}`}
-                  >
-                    <button
-                      type="button"
-                      className="mini-model-select"
-                      disabled={busy || models.length === 0}
-                      aria-haspopup="listbox"
-                      aria-expanded={modelMenuOpen}
-                      onClick={() => setModelMenuOpen((open) => !open)}
-                    >
-                      <span>{selectedModel?.name ?? "选择模型"}</span>
-                      <ChevronDownIcon size={12} className="model-tier-select-icon" />
-                    </button>
-
-                    {modelMenuOpen && !busy && models.length > 0 ? (
-                      <div className="model-tier-menu" role="listbox" aria-label="选择智能体模型">
-                        {models.map((model) => {
-                          const selected = model.id === selectedModelId;
-                          return (
-                            <button
-                              key={model.id}
-                              type="button"
-                              role="option"
-                              aria-selected={selected}
-                              className={`model-tier-option${selected ? " is-selected" : ""}`}
-                              onClick={() => {
-                                setSelectedModelId(model.id);
-                                setModelMenuOpen(false);
-                              }}
-                            >
-                              <span className="model-tier-option-name">{model.name}</span>
-                              {selected ? <CheckIcon size={11} className="model-tier-option-check" /> : null}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    ) : null}
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={canCancelRun && onCancelRun ? onCancelRun : handleSend}
-                    disabled={canCancelRun
-                      ? isCancellingRun
-                      : busy || !request.trim() || models.length === 0}
-                    className={canCancelRun
+                <button
+                  type="button"
+                  onClick={canCancelRun && onCancelRun ? onCancelRun : handleSend}
+                  disabled={
+                    canCancelRun ? isCancellingRun : busy || !request.trim() || models.length === 0
+                  }
+                  className={
+                    canCancelRun
                       ? "stop-cta-btn"
-                      : `send-cta-btn${!busy && request.trim() && models.length > 0
-                        ? " is-ready"
-                        : ""}`}
-                    aria-label={canCancelRun ? "中止当前 Agent 会话" : "发送指令"}
-                    title={canCancelRun ? "中止当前 Agent 会话" : "发送指令（Enter）"}
-                  >
-                    {canCancelRun ? <StopIcon size={13} /> : <SendIcon size={15} />}
-                  </button>
-                </div>
+                      : `send-cta-btn${
+                          !busy && request.trim() && models.length > 0 ? " is-ready" : ""
+                        }`
+                  }
+                  aria-label={canCancelRun ? "中止当前 Agent 会话" : "发送指令"}
+                  title={canCancelRun ? "中止当前 Agent 会话" : "发送指令（Enter）"}
+                >
+                  {canCancelRun ? <StopIcon size={13} /> : <SendIcon size={15} />}
+                </button>
               </div>
+            </div>
           </>
         </div>
       </div>

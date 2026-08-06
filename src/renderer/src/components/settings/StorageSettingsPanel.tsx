@@ -1,5 +1,5 @@
-import React from "react";
 import { normalizeWorkspacePath } from "@shared/workspace";
+import React from "react";
 import { FolderIcon } from "../Icons";
 import { SettingsPanel, SettingsRow, SettingsSection } from "./SettingsPrimitives";
 
@@ -16,7 +16,8 @@ export function StorageSettingsPanel({
 
   React.useEffect(() => {
     let cancelled = false;
-    void window.desktopApi.getApplicationDataPath()
+    void window.desktopApi
+      .getApplicationDataPath()
       .then((path) => {
         if (!cancelled) setApplicationDataPath(normalizeWorkspacePath(path));
       })

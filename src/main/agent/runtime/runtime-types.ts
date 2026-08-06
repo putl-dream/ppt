@@ -2,23 +2,23 @@
  * Agent Runtime 的稳定协议类型边界。
  */
 
-import { presentationCommandSchema } from "@shared/commands";
-import { agentQuestionSchema } from "@shared/agent-question";
-import { z } from "zod";
 import type { AgentExecutionStrategy, AgentModelSelection } from "@shared/agent";
+import { agentQuestionSchema } from "@shared/agent-question";
 import type { AgentStepLimits } from "@shared/agent-step-limits";
+import { presentationCommandSchema } from "@shared/commands";
 import type { Presentation } from "@shared/presentation";
-import type { ToolApprovalHandler } from "./tools/permission-check";
+import { z } from "zod";
 import type { MessageBus } from "../teammate/message-bus";
 import type { TeammateManager } from "../teammate/spawn-teammate";
 import {
+  type AgentQueryLoopEvent,
   asRunId,
   asThreadId,
-  type AgentQueryLoopEvent,
   type QueryStartMode,
   type RunId,
   type ThreadId,
 } from "./query/query-types";
+import type { ToolApprovalHandler } from "./tools/permission-check";
 
 export type AgentRuntimeRisk = "low" | "medium" | "high";
 
@@ -98,18 +98,13 @@ export interface AgentRuntimeOptions {
   stageHint?: string;
 }
 
-export type AgentRuntimeInput = Omit<
-  AgentRuntimeOptions,
-  "threadId" | "runId" | "startMode"
-> & {
+export type AgentRuntimeInput = Omit<AgentRuntimeOptions, "threadId" | "runId" | "startMode"> & {
   threadId: string;
   runId?: string;
   startMode?: QueryStartMode;
 };
 
-export function normalizeAgentRuntimeOptions(
-  input: AgentRuntimeInput,
-): AgentRuntimeOptions {
+export function normalizeAgentRuntimeOptions(input: AgentRuntimeInput): AgentRuntimeOptions {
   return {
     ...input,
     threadId: asThreadId(input.threadId),

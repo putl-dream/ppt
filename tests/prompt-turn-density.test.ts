@@ -1,17 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { askUserTool } from "../src/main/agent/tools/core/ask-user";
-import { loadSkillTool } from "../src/main/agent/tools/core/load-skill";
-import { previewSvgPageTool } from "../src/main/agent/tools/core/preview-svg-page";
-import { readFileTool, writeFileTool } from "../src/main/agent/tools/core/workspace-files";
-import { buildContentBlockResponseGuidance } from "../src/main/agent/runtime/prompts/response-guidance";
 import {
   buildIdentitySection,
   buildToolsSection,
 } from "../src/main/agent/runtime/prompts/prompt-sections";
+import { buildContentBlockResponseGuidance } from "../src/main/agent/runtime/prompts/response-guidance";
+import { askUserTool } from "../src/main/agent/tools/core/ask-user";
+import { loadSkillTool } from "../src/main/agent/tools/core/load-skill";
+import { previewSvgPageTool } from "../src/main/agent/tools/core/preview-svg-page";
 import {
   formatSvgDeckLockBootstrapGuidance,
   formatSvgDeckLockContractBlock,
 } from "../src/main/agent/tools/core/svg-deck-locks";
+import { readFileTool, writeFileTool } from "../src/main/agent/tools/core/workspace-files";
 
 /**
  * Soft create-path habits that inflate turnCount (not hard runtime gates):
@@ -29,13 +29,7 @@ describe("prompt turn-density guidance", () => {
   it("tool selection allows milestone intent and bans empty transition filler", () => {
     const section = buildToolsSection({
       stage: "author",
-      enabledTools: [
-        askUserTool,
-        loadSkillTool,
-        readFileTool,
-        writeFileTool,
-        previewSvgPageTool,
-      ],
+      enabledTools: [askUserTool, loadSkillTool, readFileTool, writeFileTool, previewSvgPageTool],
     });
     expect(section).toContain("多个 LoadSkill");
     expect(section).toContain("同批写剩余 SVG");

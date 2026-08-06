@@ -1,12 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { ToolExecutionEngine } from "../src/main/agent/runtime/tools/tool-execution-engine";
-import { createStarterPresentation } from "../src/shared/presentation-fixtures";
+import type { ToolContext, ToolDefinition } from "../src/main/agent/tools/tool-definition";
 import { ToolRegistry } from "../src/main/agent/tools/tool-registry";
-import type {
-  ToolContext,
-  ToolDefinition,
-} from "../src/main/agent/tools/tool-definition";
+import { createStarterPresentation } from "../src/shared/presentation-fixtures";
 
 describe("multimodal tool results", () => {
   it("delivers mapped image blocks without serializing base64 into text", async () => {

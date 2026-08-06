@@ -1,52 +1,45 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { Presentation } from "@shared/presentation";
+import { DEFAULT_DESIGN_SYSTEM, type DesignSystemV2, designSystemV2Schema } from "@design-system";
+import type { AgentExecutionStrategy } from "@shared/agent";
 import {
-  DEFAULT_WEB_SEARCH_ENDPOINT,
   type AgentGatewayPreferences,
+  DEFAULT_WEB_SEARCH_ENDPOINT,
 } from "@shared/agent-gateway-config";
 import type { AgentStepLimits } from "@shared/agent-step-limits";
-import type { AgentExecutionStrategy } from "@shared/agent";
-import type { UiThemeSummary } from "@shared/ipc";
 import {
-  modelCredentialBindingFromSelection,
-  normalizeWebSearchCredentialBinding,
   type CredentialStorageStatus,
   type ModelCredentialBinding,
+  modelCredentialBindingFromSelection,
+  normalizeWebSearchCredentialBinding,
 } from "@shared/credentials";
+import type { UiThemeSummary } from "@shared/ipc";
+import type { Presentation } from "@shared/presentation";
+import { getBuiltinTemplate } from "@shared/template-catalog";
+import { APPLICATION_DEFAULT_TEMPLATE_ID, isUploadedTemplateId } from "@shared/template-protocol";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { saveAgentGatewayPreferences } from "../agentGatewayConfig";
+import { saveAgentStepLimits } from "../agentStepLimits";
 import {
-  SELECTED_MODEL_STORAGE_KEY,
   isModelEnabled,
+  type ManagedModel,
+  SELECTED_MODEL_STORAGE_KEY,
   saveManagedModels,
   toAgentModelSelection,
-  type ManagedModel,
 } from "../modelCatalog";
-import { saveAgentStepLimits } from "../agentStepLimits";
-import { saveAgentGatewayPreferences } from "../agentGatewayConfig";
 import {
-  savePersistedUiSettings,
   type AppBootstrapSnapshot,
   type ComputedColorScheme,
+  savePersistedUiSettings,
   type UiColorScheme,
   type UiFontFamily,
   type UiSkin,
 } from "./appBootstrap";
-import { getComputedScheme, useAppearanceRuntime } from "./useAppearanceRuntime";
-import { normalizePersistedUiThemeId } from "./userUiTheme";
 import {
   normalizePersistedUiFontFamily,
   normalizePersistedUiFontSize,
   normalizePersistedUiLineHeight,
 } from "./uiTypography";
-import {
-  DEFAULT_DESIGN_SYSTEM,
-  designSystemV2Schema,
-  type DesignSystemV2,
-} from "@design-system";
-import {
-  APPLICATION_DEFAULT_TEMPLATE_ID,
-  isUploadedTemplateId,
-} from "@shared/template-protocol";
-import { getBuiltinTemplate } from "@shared/template-catalog";
+import { getComputedScheme, useAppearanceRuntime } from "./useAppearanceRuntime";
+import { normalizePersistedUiThemeId } from "./userUiTheme";
 
 export interface SettingsController {
   models: ManagedModel[];
@@ -104,8 +97,8 @@ export function useSettingsController(
   const [agentGatewayPreferences, setAgentGatewayPreferencesState] = useState(
     () => bootstrap.agentGatewayPreferences,
   );
-  const [executionStrategy, setExecutionStrategyState] = useState<AgentExecutionStrategy>(
-    () => persisted.executionStrategy === "AUTO" ? "AUTO" : "REQUEST_APPROVAL",
+  const [executionStrategy, setExecutionStrategyState] = useState<AgentExecutionStrategy>(() =>
+    persisted.executionStrategy === "AUTO" ? "AUTO" : "REQUEST_APPROVAL",
   );
   const [skin, setSkinState] = useState<UiSkin>(() =>
     persisted.skin === "studio" ? "studio" : "studio",
@@ -144,20 +137,20 @@ export function useSettingsController(
   const credentialRefreshIdRef = useRef(0);
   const [selectedModelId, setSelectedModelId] = useState(() => bootstrap.selectedModelId);
   const credentialStatusLoaded = credentialStorageStatus !== null;
-  const enabledModels = useMemo(() => credentialStatusLoaded
-    ? models.filter((model) =>
-      isModelEnabled(model) && model.credentialConfigured === true)
-    : [], [
-    credentialStatusLoaded,
-    models,
-  ]);
+  const enabledModels = useMemo(
+    () =>
+      credentialStatusLoaded
+        ? models.filter((model) => isModelEnabled(model) && model.credentialConfigured === true)
+        : [],
+    [credentialStatusLoaded, models],
+  );
   const visibleModels = useMemo(
-    () => credentialStatusLoaded
-      ? enabledModels
-      : enabledModels.length > 0 ? enabledModels : models,
+    () =>
+      credentialStatusLoaded ? enabledModels : enabledModels.length > 0 ? enabledModels : models,
     [credentialStatusLoaded, enabledModels, models],
   );
-  const selectedModel = visibleModels.find((model) => model.id === selectedModelId) ?? visibleModels[0];
+  const selectedModel =
+    visibleModels.find((model) => model.id === selectedModelId) ?? visibleModels[0];
   const computedScheme = getComputedScheme(colorScheme);
 
   const markSaving = useCallback(() => {
@@ -169,9 +162,12 @@ export function useSettingsController(
     }, 500);
   }, []);
 
-  useEffect(() => () => {
-    if (saveTimerRef.current !== null) window.clearTimeout(saveTimerRef.current);
-  }, []);
+  useEffect(
+    () => () => {
+      if (saveTimerRef.current !== null) window.clearTimeout(saveTimerRef.current);
+    },
+    [],
+  );
 
   useEffect(() => {
     saveManagedModels(models);
@@ -187,27 +183,31 @@ export function useSettingsController(
   useEffect(() => saveAgentStepLimits(agentStepLimits), [agentStepLimits]);
   useEffect(() => saveAgentGatewayPreferences(agentGatewayPreferences), [agentGatewayPreferences]);
 
-  const modelCredentialBindings = useMemo(() => models.flatMap((model) => {
-    try {
-      return [modelCredentialBindingFromSelection(toAgentModelSelection(model))];
-    } catch {
-      return [];
-    }
-  }), [models]);
+  const modelCredentialBindings = useMemo(
+    () =>
+      models.flatMap((model) => {
+        try {
+          return [modelCredentialBindingFromSelection(toAgentModelSelection(model))];
+        } catch {
+          return [];
+        }
+      }),
+    [models],
+  );
   const modelCredentialBindingsFingerprint = JSON.stringify(modelCredentialBindings);
-  const webSearchEndpoint = agentGatewayPreferences.webSearchEndpoint?.trim()
-    || DEFAULT_WEB_SEARCH_ENDPOINT;
+  const webSearchEndpoint =
+    agentGatewayPreferences.webSearchEndpoint?.trim() || DEFAULT_WEB_SEARCH_ENDPOINT;
 
   const refreshCredentialStatus = useCallback(async () => {
     const desktopApi = window.desktopApi;
     const refreshId = ++credentialRefreshIdRef.current;
     setCredentialStorageStatus(null);
     setWebSearchCredentialConfigured(false);
-    setModels((current) => current.map((model) =>
-      model.credentialConfigured === false
-        ? model
-        : { ...model, credentialConfigured: false }
-    ));
+    setModels((current) =>
+      current.map((model) =>
+        model.credentialConfigured === false ? model : { ...model, credentialConfigured: false },
+      ),
+    );
     const failClosed = (message: string) => {
       setCredentialStorageStatus({
         state: "unavailable",
@@ -215,11 +215,11 @@ export function useSettingsController(
         warning: "safe-storage-unavailable",
       });
       setWebSearchCredentialConfigured(false);
-      setModels((current) => current.map((model) =>
-        model.credentialConfigured === false
-          ? model
-          : { ...model, credentialConfigured: false }
-      ));
+      setModels((current) =>
+        current.map((model) =>
+          model.credentialConfigured === false ? model : { ...model, credentialConfigured: false },
+        ),
+      );
       notify(message);
     };
     if (!desktopApi?.getCredentialStatus) {
@@ -230,9 +230,7 @@ export function useSettingsController(
     try {
       webSearch = normalizeWebSearchCredentialBinding({ endpoint: webSearchEndpoint });
     } catch (error) {
-      failClosed(
-        `搜索凭据状态读取失败: ${error instanceof Error ? error.message : String(error)}`,
-      );
+      failClosed(`搜索凭据状态读取失败: ${error instanceof Error ? error.message : String(error)}`);
       return;
     }
 
@@ -334,15 +332,20 @@ export function useSettingsController(
   });
 
   useEffect(() => {
-    if (presentation?.designSystem && JSON.stringify(presentation.designSystem) !== JSON.stringify(selectedDesignSystem)) {
+    if (
+      presentation?.designSystem &&
+      JSON.stringify(presentation.designSystem) !== JSON.stringify(selectedDesignSystem)
+    ) {
       setSelectedDesignSystemState(presentation.designSystem);
     }
   }, [presentation, selectedDesignSystem]);
 
-  const update = <T,>(setter: (value: T) => void) => (value: T) => {
-    markSaving();
-    setter(value);
-  };
+  const update =
+    <T>(setter: (value: T) => void) =>
+    (value: T) => {
+      markSaving();
+      setter(value);
+    };
 
   const selectModel = update(setSelectedModelId);
   const credentialBindingForModel = (model: ManagedModel): ModelCredentialBinding =>
@@ -363,8 +366,8 @@ export function useSettingsController(
     let bindingChanged = !existing;
     if (existing) {
       try {
-        bindingChanged = JSON.stringify(credentialBindingForModel(existing))
-          !== JSON.stringify(binding);
+        bindingChanged =
+          JSON.stringify(credentialBindingForModel(existing)) !== JSON.stringify(binding);
       } catch {
         bindingChanged = true;
       }
@@ -388,19 +391,18 @@ export function useSettingsController(
       }
     }
 
-    const credentialConfigured = Boolean(nextApiKey)
-      || (!bindingChanged && existing?.credentialConfigured === true);
+    const credentialConfigured =
+      Boolean(nextApiKey) || (!bindingChanged && existing?.credentialConfigured === true);
     const persistedModel = { ...model, credentialConfigured };
-    setModels((current) => current.some((item) => item.id === persistedModel.id)
-      ? current.map((item) => item.id === persistedModel.id ? persistedModel : item)
-      : [...current, persistedModel]);
+    setModels((current) =>
+      current.some((item) => item.id === persistedModel.id)
+        ? current.map((item) => (item.id === persistedModel.id ? persistedModel : item))
+        : [...current, persistedModel],
+    );
     return true;
   };
 
-  const saveModels = async (
-    nextModels: ManagedModel[],
-    apiKey: string,
-  ): Promise<boolean> => {
+  const saveModels = async (nextModels: ManagedModel[], apiKey: string): Promise<boolean> => {
     markSaving();
     const normalizedApiKey = apiKey.trim();
     if (!normalizedApiKey) {

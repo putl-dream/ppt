@@ -1,13 +1,13 @@
 import {
-  resolveAgentGatewayPreferences,
   type AgentGatewayConfig,
   type AgentGatewayPreferences,
   type AgentRunServicesWire,
   type AgentSearchConfig,
+  resolveAgentGatewayPreferences,
 } from "@shared/agent-gateway-config";
+import { markCredentialReentryRequired } from "./credentialMigration";
 import type { ManagedModel } from "./modelCatalog";
 import { isModelEnabled, toAgentModelSelection } from "./modelCatalog";
-import { markCredentialReentryRequired } from "./credentialMigration";
 
 export const AGENT_GATEWAY_CONFIG_STORAGE_KEY = "agent-ppt.gateway-config.v2";
 export const LEGACY_AGENT_GATEWAY_CONFIG_STORAGE_KEY = "agent-ppt.gateway-config.v1";
@@ -84,12 +84,12 @@ export function buildAgentGatewayConfig(
   };
 }
 
-export function buildAgentSearchConfig(
-  preferences: AgentGatewayPreferences,
-): AgentSearchConfig {
+export function buildAgentSearchConfig(preferences: AgentGatewayPreferences): AgentSearchConfig {
   return {
     ...(preferences.webSearchEndpoint ? { webSearchEndpoint: preferences.webSearchEndpoint } : {}),
-    ...(preferences.webSearchTimeoutMs ? { webSearchTimeoutMs: preferences.webSearchTimeoutMs } : {}),
+    ...(preferences.webSearchTimeoutMs
+      ? { webSearchTimeoutMs: preferences.webSearchTimeoutMs }
+      : {}),
   };
 }
 

@@ -1,38 +1,29 @@
 import type { AgentStepLimits } from "@shared/agent-step-limits";
 import { buildMainStepLimitMessage } from "@shared/agent-step-limits";
 import type { ConversationDatabase } from "../../../conversation-database";
-import type {
-  AgentModelGateway,
-  AgentToolSchema,
-} from "../../gateway";
-import type {
-  ToolContext,
-  ToolRuntimeCapability,
-} from "../../tools/tool-definition";
+import type { AgentModelGateway, AgentToolSchema } from "../../gateway";
+import type { DurableQueryInflightSnapshot } from "../../persistence/durable-run-store";
+import type { ToolContext, ToolRuntimeCapability } from "../../tools/tool-definition";
+import { formatBackgroundNotifications } from "../background/background-task-manager";
+import type { LeadInboxInputSource } from "../background/lead-inbox-input-source";
+import type { PostToolUseBlock, StopBlock } from "../hooks/hook-blocks";
 import type { AgentRendererEvent } from "../lifecycle/agent-event-ports";
 import type { AgentRunScope } from "../lifecycle/agent-run-scope";
-import {
-  formatBackgroundNotifications,
-} from "../background/background-task-manager";
-import type { PostToolUseBlock, StopBlock } from "../hooks/hook-blocks";
-import type { LeadInboxInputSource } from "../background/lead-inbox-input-source";
 import type { PresentationCompletionPolicy } from "../presentation/presentation-completion-policy";
-import type { ToolExecutionEngine } from "../tools/tool-execution-engine";
-import type { ToolPreflight } from "../tools/tool-preflight";
-import type { AgentRuntimeResult } from "../runtime-types";
-import type { AgentRuntimeStreamEvent } from "../runtime-types";
 import { AgentQueryAssembler } from "../query/agent-query-assembler";
 import {
-  createInitialQueryState,
+  type AgentIterationWorkspace,
   type AgentQueryContinue,
   type AgentQueryLoopEvent,
-  type AgentIterationWorkspace,
   type AgentQueryParams,
   type AgentQueryState,
+  createInitialQueryState,
   type ThreadId,
 } from "../query/query-types";
+import type { AgentRuntimeResult, AgentRuntimeStreamEvent } from "../runtime-types";
 import type { ToolApprovalHandler } from "../tools/permission-check";
-import type { DurableQueryInflightSnapshot } from "../../persistence/durable-run-store";
+import type { ToolExecutionEngine } from "../tools/tool-execution-engine";
+import type { ToolPreflight } from "../tools/tool-preflight";
 
 export interface AgentLoopTerminalOutcome {
   type: "terminal";
@@ -69,21 +60,23 @@ export class PreparedAgentRun {
   readonly initialWorkspace?: AgentIterationWorkspace;
   readonly initialWorkspacePhase?: DurableQueryInflightSnapshot["phase"];
 
-  constructor(readonly input: {
-    scope: AgentRunScope;
-    gateway: AgentModelGateway;
-    conversationDatabase?: ConversationDatabase;
-    systemPrompt: string;
-    toolSchemas: AgentToolSchema[];
-    context: ToolContext;
-    maxSteps: number;
-    stepLimits: AgentStepLimits;
-    leadInbox: LeadInboxInputSource;
-    toolPreflight: ToolPreflight;
-    toolExecutionEngine: ToolExecutionEngine;
-    presentationCompletionPolicy: PresentationCompletionPolicy;
-    runPostToolUseHook(block: PostToolUseBlock): Promise<string[]>;
-  }) {
+  constructor(
+    readonly input: {
+      scope: AgentRunScope;
+      gateway: AgentModelGateway;
+      conversationDatabase?: ConversationDatabase;
+      systemPrompt: string;
+      toolSchemas: AgentToolSchema[];
+      context: ToolContext;
+      maxSteps: number;
+      stepLimits: AgentStepLimits;
+      leadInbox: LeadInboxInputSource;
+      toolPreflight: ToolPreflight;
+      toolExecutionEngine: ToolExecutionEngine;
+      presentationCompletionPolicy: PresentationCompletionPolicy;
+      runPostToolUseHook(block: PostToolUseBlock): Promise<string[]>;
+    },
+  ) {
     const { options } = input.scope;
     const exposedToolNames = new Set(input.toolSchemas.map((schema) => schema.name));
     const capabilityToolNames: Partial<Record<ToolRuntimeCapability, string[]>> = {};
@@ -122,10 +115,7 @@ export class PreparedAgentRun {
       this.params,
       input.scope.restoreQueryState(input.context),
     );
-    this.initialWorkspace = input.scope.restoreIterationWorkspace(
-      this.initialState,
-      input.context,
-    );
+    this.initialWorkspace = input.scope.restoreIterationWorkspace(this.initialState, input.context);
     this.initialWorkspacePhase = input.scope.restoredInflightPhase();
   }
 
@@ -170,9 +160,8 @@ export class PreparedAgentRun {
     const notifications = backgroundTasks.hasRunning()
       ? await backgroundTasks.drain(this.scope.signal)
       : backgroundTasks.collect();
-    const backgroundContent = notifications.length > 0
-      ? formatBackgroundNotifications(notifications)
-      : "";
+    const backgroundContent =
+      notifications.length > 0 ? formatBackgroundNotifications(notifications) : "";
     if (backgroundContent) {
       session.appendTranscript({
         role: "system",
@@ -182,9 +171,9 @@ export class PreparedAgentRun {
     }
     if (this.params.deps.requiredOutcome === "command_proposal") {
       throw new Error(
-        "Agent reached the tool-step limit before resolving the presentation action. "
-        + "The conversation remains active and can be continued."
-        + (backgroundContent ? `\n\n${backgroundContent}` : ""),
+        "Agent reached the tool-step limit before resolving the presentation action. " +
+          "The conversation remains active and can be continued." +
+          (backgroundContent ? `\n\n${backgroundContent}` : ""),
       );
     }
     return {

@@ -1,25 +1,16 @@
 import { createHash, randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
-import {
-  mkdir,
-  readFile,
-  rename,
-  stat,
-  unlink,
-  writeFile,
-} from "node:fs/promises";
+import { mkdir, readFile, rename, stat, unlink, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import {
-  blobReferenceSchema,
-  contentHashSchema,
   type BlobReference,
+  blobReferenceSchema,
   type ContentHash,
+  contentHashSchema,
 } from "@shared/presentation-lifecycle";
 
 export function hashBytes(value: Uint8Array): ContentHash {
-  return contentHashSchema.parse(
-    `sha256:${createHash("sha256").update(value).digest("hex")}`,
-  );
+  return contentHashSchema.parse(`sha256:${createHash("sha256").update(value).digest("hex")}`);
 }
 
 export function canonicalJson(value: unknown): string {
@@ -47,10 +38,7 @@ export function hashArtifactValue(value: unknown): ContentHash {
 export class ContentAddressedBlobStore {
   constructor(readonly rootPath: string) {}
 
-  async put(
-    value: Uint8Array,
-    mediaType: string,
-  ): Promise<BlobReference> {
+  async put(value: Uint8Array, mediaType: string): Promise<BlobReference> {
     const contentHash = hashBytes(value);
     const target = this.pathFor(contentHash);
     await mkdir(dirname(target), { recursive: true });
@@ -77,10 +65,7 @@ export class ContentAddressedBlobStore {
   async get(reference: BlobReference): Promise<Buffer> {
     const parsed = blobReferenceSchema.parse(reference);
     const value = await readFile(this.pathFor(parsed.contentHash));
-    if (
-      value.byteLength !== parsed.byteLength
-      || hashBytes(value) !== parsed.contentHash
-    ) {
+    if (value.byteLength !== parsed.byteLength || hashBytes(value) !== parsed.contentHash) {
       throw new Error(`Blob ${parsed.contentHash} failed integrity validation.`);
     }
     return value;
@@ -89,10 +74,7 @@ export class ContentAddressedBlobStore {
   getSync(reference: BlobReference): Buffer {
     const parsed = blobReferenceSchema.parse(reference);
     const value = readFileSync(this.pathFor(parsed.contentHash));
-    if (
-      value.byteLength !== parsed.byteLength
-      || hashBytes(value) !== parsed.contentHash
-    ) {
+    if (value.byteLength !== parsed.byteLength || hashBytes(value) !== parsed.contentHash) {
       throw new Error(`Blob ${parsed.contentHash} failed integrity validation.`);
     }
     return value;

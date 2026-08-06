@@ -11,12 +11,7 @@ export const storyboardNarrativeRoleSchema = z.enum([
   "summary",
 ]);
 
-export const storyboardSlideStatusSchema = z.enum([
-  "pending",
-  "generating",
-  "done",
-  "failed",
-]);
+export const storyboardSlideStatusSchema = z.enum(["pending", "generating", "done", "failed"]);
 
 export const storyboardSlideSpecSchema = z.object({
   id: z.string(),
@@ -75,9 +70,7 @@ function normalizeStoryboardNarrativeRole(
 
 export function normalizeStoryboardSlide(raw: unknown, index: number): StoryboardSlideSpec {
   const parsed = legacyStoryboardItemSchema.parse(raw);
-  const keyPoints = parsed.keyPoints.length > 0
-    ? parsed.keyPoints
-    : (parsed.bulletPoints ?? []);
+  const keyPoints = parsed.keyPoints.length > 0 ? parsed.keyPoints : (parsed.bulletPoints ?? []);
   const narrativeRole = normalizeStoryboardNarrativeRole(parsed.narrativeRole);
 
   return storyboardSlideSpecSchema.parse({
@@ -132,12 +125,14 @@ export function isDefaultStoryboardContent(content: string): boolean {
 
     const slide = slides[0];
     const title = slide.title.trim();
-    return title.length > 0
-      && slide.keyPoints.length === 1
-      && slide.keyPoints[0].trim() === title
-      && (slide.narrativeRole ?? "hook") === "hook"
-      && !(slide.quote ?? "").trim()
-      && (slide.status ?? "pending") === "pending";
+    return (
+      title.length > 0 &&
+      slide.keyPoints.length === 1 &&
+      slide.keyPoints[0].trim() === title &&
+      (slide.narrativeRole ?? "hook") === "hook" &&
+      !(slide.quote ?? "").trim() &&
+      (slide.status ?? "pending") === "pending"
+    );
   } catch {
     return false;
   }

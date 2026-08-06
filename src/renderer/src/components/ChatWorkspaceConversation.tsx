@@ -1,31 +1,29 @@
+import { useProgressCardManager } from "@shared/cards/display-card-managers";
+import { collectTeamSessions } from "@shared/team-session";
 import {
+  type ReactNode,
   useCallback,
   useEffect,
   useLayoutEffect,
   useMemo,
   useRef,
   useState,
-  type ReactNode,
 } from "react";
-import { collectTeamSessions } from "@shared/team-session";
-import { useProgressCardManager } from "../cards/display-card-managers";
-import { CHAT_WORKSPACE_COPY_ZH_CN as copy } from "./chat-workspace-copy";
 import { ChatMessageStream } from "./ChatMessageStream";
 import { ChatWorkspaceComposer } from "./ChatWorkspaceComposer";
-import { ChevronRightIcon, OpenPreviewIcon } from "./Icons";
+import { CHAT_WORKSPACE_COPY_ZH_CN as copy } from "./chat-workspace-copy";
 import type {
   ChatWorkspaceActions,
-  ChatWorkspaceComposer as ComposerState,
   ChatWorkspaceDeck,
   ChatWorkspaceInputRuntime,
   ChatWorkspaceRun,
   ChatWorkspaceSession,
+  ChatWorkspaceComposer as ComposerState,
 } from "./chat-workspace-types";
+import { ChevronRightIcon, OpenPreviewIcon } from "./Icons";
 import { useChatScroll } from "./useChatScroll";
 
-type ConversationFocus =
-  | { kind: "main" }
-  | { kind: "team-session"; sessionId: string };
+type ConversationFocus = { kind: "main" } | { kind: "team-session"; sessionId: string };
 
 function focusKey(focus: ConversationFocus): string {
   return focus.kind === "team-session" ? `team:${focus.sessionId}` : focus.kind;
@@ -61,14 +59,18 @@ export function ChatWorkspaceConversation({
   const sessionIdentityRef = useRef<string | null>(null);
 
   const managedProgressCards = useProgressCardManager((state) => state.cards);
-  const managedTaskList = [...managedProgressCards].reverse().find((card) =>
-    card.status === "active"
-    && card.event.kind === "progress.task-list-updated"
-    && (!run.activeRunId || card.event.scope.runId === run.activeRunId)
-  );
-  const managedTaskListPayload = managedTaskList?.event.kind === "progress.task-list-updated"
-    ? managedTaskList.event.payload
-    : undefined;
+  const managedTaskList = [...managedProgressCards]
+    .reverse()
+    .find(
+      (card) =>
+        card.status === "active" &&
+        card.event.kind === "progress.task-list-updated" &&
+        (!run.activeRunId || card.event.scope.runId === run.activeRunId),
+    );
+  const managedTaskListPayload =
+    managedTaskList?.event.kind === "progress.task-list-updated"
+      ? managedTaskList.event.payload
+      : undefined;
   const latestPlan = managedTaskListPayload
     ? {
         tasks: [...managedTaskListPayload.tasks],
@@ -78,18 +80,21 @@ export function ChatWorkspaceConversation({
       }
     : null;
   const activeTasks = latestPlan?.tasks ?? [];
-  const sessionGoal = session.messages.find((message) => message.role === "user")?.content.trim() || null;
+  const sessionGoal =
+    session.messages.find((message) => message.role === "user")?.content.trim() || null;
   const planGoal = latestPlan ? latestPlan.goal : sessionGoal;
-  const teamSessions = useMemo(() => collectTeamSessions(
-    [
-      ...session.messages.map((message) => message.activityTrace),
-      run.activityTrace,
-    ],
-    activeTasks,
-  ), [activeTasks, run.activityTrace, session.messages]);
-  const selectedTeamSession = conversationFocus.kind === "team-session"
-    ? teamSessions.find((teamSession) => teamSession.id === conversationFocus.sessionId)
-    : undefined;
+  const teamSessions = useMemo(
+    () =>
+      collectTeamSessions(
+        [...session.messages.map((message) => message.activityTrace), run.activityTrace],
+        activeTasks,
+      ),
+    [activeTasks, run.activityTrace, session.messages],
+  );
+  const selectedTeamSession =
+    conversationFocus.kind === "team-session"
+      ? teamSessions.find((teamSession) => teamSession.id === conversationFocus.sessionId)
+      : undefined;
   const currentFocusKey = focusKey(conversationFocus);
   const sessionIdentity = session.messages[0]?.id ?? `empty:${title}`;
   const mainFingerprint = useMemo(() => {
@@ -108,17 +113,23 @@ export function ChatWorkspaceConversation({
     ].join(":");
   }, [run.activityTrace, run.busy, session.messages]);
 
-  const switchConversationFocus = useCallback((nextFocus: ConversationFocus) => {
-    scrollPositionsRef.current.set(currentFocusKey, chatScroll.getScrollTop());
-    pendingScrollRestoreRef.current = focusKey(nextFocus);
-    chatScroll.setFollowing(false);
-    setConversationFocus(nextFocus);
-    if (nextFocus.kind === "main") setMainHasAttention(false);
-  }, [chatScroll, currentFocusKey]);
+  const switchConversationFocus = useCallback(
+    (nextFocus: ConversationFocus) => {
+      scrollPositionsRef.current.set(currentFocusKey, chatScroll.getScrollTop());
+      pendingScrollRestoreRef.current = focusKey(nextFocus);
+      chatScroll.setFollowing(false);
+      setConversationFocus(nextFocus);
+      if (nextFocus.kind === "main") setMainHasAttention(false);
+    },
+    [chatScroll, currentFocusKey],
+  );
 
-  const focusTeamSession = useCallback((sessionId: string) => {
-    switchConversationFocus({ kind: "team-session", sessionId });
-  }, [switchConversationFocus]);
+  const focusTeamSession = useCallback(
+    (sessionId: string) => {
+      switchConversationFocus({ kind: "team-session", sessionId });
+    },
+    [switchConversationFocus],
+  );
 
   const openPendingDecision = useCallback(() => {
     if (!inputRuntime.pendingToolApproval) return;
@@ -147,8 +158,8 @@ export function ChatWorkspaceConversation({
 
   useEffect(() => {
     if (
-      conversationFocus.kind === "team-session"
-      && !teamSessions.some((teamSession) => teamSession.id === conversationFocus.sessionId)
+      conversationFocus.kind === "team-session" &&
+      !teamSessions.some((teamSession) => teamSession.id === conversationFocus.sessionId)
     ) {
       switchConversationFocus({ kind: "main" });
     }
@@ -202,7 +213,11 @@ export function ChatWorkspaceConversation({
               )}
             </button>
             {conversationFocus.kind !== "main" && (
-              <ChevronRightIcon size={13} className="chat-session-crumb-separator" aria-hidden="true" />
+              <ChevronRightIcon
+                size={13}
+                className="chat-session-crumb-separator"
+                aria-hidden="true"
+              />
             )}
             {conversationFocus.kind === "team-session" && selectedTeamSession && (
               <span className="chat-session-crumb is-current" aria-current="page">
@@ -221,7 +236,9 @@ export function ChatWorkspaceConversation({
               aria-label={copy.approvalAria(inputRuntime.pendingToolApproval.reason)}
               title={copy.approvalJumpTitle}
             >
-              <span className="team-decision-alert-icon" aria-hidden="true">!</span>
+              <span className="team-decision-alert-icon" aria-hidden="true">
+                !
+              </span>
               <span>{copy.approvalRequired}</span>
               <b>1</b>
             </button>

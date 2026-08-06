@@ -16,29 +16,33 @@ describe("team session projection", () => {
       agentName: "outline_writer",
       description: "起草大纲",
       status: "running",
-      steps: [{
-        id: "step-1",
-        type: "tool",
-        toolName: "WriteFile",
-        text: "正在调用 WriteFile",
-        status: "running",
-      }],
+      steps: [
+        {
+          id: "step-1",
+          type: "tool",
+          toolName: "WriteFile",
+          text: "正在调用 WriteFile",
+          status: "running",
+        },
+      ],
     };
 
-    const session = projectTeamSession(activity, [{
-      id: "task-1",
-      revision: 0,
-      subject: "编写演示大纲",
-      description: "",
-      status: "in_progress",
-      routing: { executionTarget: "teammate" },
-      completionPolicy: "review_required",
-      owner: "outline_writer",
-      blocks: [],
-      blockedBy: [],
-      review: { state: "none" },
-      reviewReceipts: [],
-    }]);
+    const session = projectTeamSession(activity, [
+      {
+        id: "task-1",
+        revision: 0,
+        subject: "编写演示大纲",
+        description: "",
+        status: "in_progress",
+        routing: { executionTarget: "teammate" },
+        completionPolicy: "review_required",
+        owner: "outline_writer",
+        blocks: [],
+        blockedBy: [],
+        review: { state: "none" },
+        reviewReceipts: [],
+      },
+    ]);
 
     expect(session).toMatchObject({
       id: "task-1",
@@ -80,21 +84,21 @@ describe("team session projection", () => {
     };
     const later: AgentActivityItem = {
       ...early,
-      steps: [{
-        id: "step-1",
-        type: "reasoning",
-        text: "分析中",
-        status: "running",
-        streaming: true,
-      }],
+      steps: [
+        {
+          id: "step-1",
+          type: "reasoning",
+          text: "分析中",
+          status: "running",
+          streaming: true,
+        },
+      ],
     };
 
     const [earlySession] = collectTeamSessions([[early]]);
     const sessions = collectTeamSessions([[early], [later]]);
     expect(sessions).toHaveLength(1);
     expect(sessions[0]?.stepCount).toBe(1);
-    expect(teamSessionFingerprint(sessions[0]!)).not.toBe(
-      teamSessionFingerprint(earlySession!),
-    );
+    expect(teamSessionFingerprint(sessions[0]!)).not.toBe(teamSessionFingerprint(earlySession!));
   });
 });

@@ -50,9 +50,7 @@ const TEAMMATE_PROGRESS_TYPES = new Set<TeammateProgressEvent["type"]>([
   "teammate-assignment-finished",
 ]);
 
-export function isTeammateProgressEvent(
-  event: { type: string },
-): event is TeammateProgressEvent {
+export function isTeammateProgressEvent(event: { type: string }): event is TeammateProgressEvent {
   return TEAMMATE_PROGRESS_TYPES.has(event.type as TeammateProgressEvent["type"]);
 }
 

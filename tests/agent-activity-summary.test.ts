@@ -1,8 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  summarizeProcessTrace,
-  type AgentActivityItem,
-} from "../src/shared/agent-activity";
+import { type AgentActivityItem, summarizeProcessTrace } from "../src/shared/agent-activity";
 
 function tool(
   toolName: string,
@@ -31,10 +28,7 @@ describe("summarizeProcessTrace", () => {
 
   it("prefers the latest running tool while live", () => {
     const summary = summarizeProcessTrace(
-      [
-        tool("ReadFile", "completed"),
-        tool("WriteFile", "running"),
-      ],
+      [tool("ReadFile", "completed"), tool("WriteFile", "running")],
       { live: true },
     );
     expect(summary).toBe("正在保存工作文件…");
@@ -51,13 +45,15 @@ describe("summarizeProcessTrace", () => {
 
   it("falls back for reasoning-only and empty traces", () => {
     expect(summarizeProcessTrace([])).toBe("执行过程");
-    expect(summarizeProcessTrace([
-      {
-        id: "r1",
-        kind: "reasoning",
-        content: "thinking",
-      },
-    ])).toBe("思考片刻");
+    expect(
+      summarizeProcessTrace([
+        {
+          id: "r1",
+          kind: "reasoning",
+          content: "thinking",
+        },
+      ]),
+    ).toBe("思考片刻");
   });
 
   it("counts teammate task tool steps", () => {

@@ -53,28 +53,28 @@ function errorStatus(error: unknown): number | undefined {
 
 function isDeterministicClientError(error: unknown): boolean {
   const status = errorStatus(error);
-  return status !== undefined
-    && status >= 400
-    && status < 500
-    && status !== 408
-    && status !== 429;
+  return status !== undefined && status >= 400 && status < 500 && status !== 408 && status !== 429;
 }
 
 function isAbortLike(error: unknown, signal?: AbortSignal): boolean {
   if (signal?.aborted) return true;
   const name = errorName(error);
   const message = errorMessage(error);
-  return name === "APIUserAbortError"
-    || name === "AbortError"
-    || /aborted/i.test(message)
-    || /Request was aborted/i.test(message);
+  return (
+    name === "APIUserAbortError" ||
+    name === "AbortError" ||
+    /aborted/i.test(message) ||
+    /Request was aborted/i.test(message)
+  );
 }
 
 function isConnectionTerminated(error: unknown): boolean {
   const message = errorMessage(error);
-  return message === "terminated"
-    || /connection (?:closed|reset|terminated)/i.test(message)
-    || /socket hang up/i.test(message);
+  return (
+    message === "terminated" ||
+    /connection (?:closed|reset|terminated)/i.test(message) ||
+    /socket hang up/i.test(message)
+  );
 }
 
 function parseRetryAfterHeader(value: unknown): number | undefined {
@@ -134,16 +134,40 @@ export function normalizeProviderError(
   const message = errorMessage(error);
 
   if (status === 401 || status === 403) {
-    return new AgentGatewayError(`${provider} authentication failed: ${message}`, "authentication", provider, error, retryAfterMs);
+    return new AgentGatewayError(
+      `${provider} authentication failed: ${message}`,
+      "authentication",
+      provider,
+      error,
+      retryAfterMs,
+    );
   }
   if (status === 429) {
-    return new AgentGatewayError(`${provider} rate limit exceeded: ${message}`, "rate-limit", provider, error, retryAfterMs);
+    return new AgentGatewayError(
+      `${provider} rate limit exceeded: ${message}`,
+      "rate-limit",
+      provider,
+      error,
+      retryAfterMs,
+    );
   }
   if (status === 529) {
-    return new AgentGatewayError(`${provider} service overloaded: ${message}`, "overloaded", provider, error, retryAfterMs);
+    return new AgentGatewayError(
+      `${provider} service overloaded: ${message}`,
+      "overloaded",
+      provider,
+      error,
+      retryAfterMs,
+    );
   }
   if (status === 400 && isPromptTooLongMessage(message)) {
-    return new AgentGatewayError(`${provider} prompt too long: ${message}`, "prompt-too-long", provider, error, retryAfterMs);
+    return new AgentGatewayError(
+      `${provider} prompt too long: ${message}`,
+      "prompt-too-long",
+      provider,
+      error,
+      retryAfterMs,
+    );
   }
   if (status === 408 || /timeout/i.test(name) || /timed out/i.test(message)) {
     return new AgentGatewayError(
@@ -164,21 +188,35 @@ export function normalizeProviderError(
     );
   }
   if (isPromptTooLongMessage(message)) {
-    return new AgentGatewayError(`${provider} prompt too long: ${message}`, "prompt-too-long", provider, error, retryAfterMs);
+    return new AgentGatewayError(
+      `${provider} prompt too long: ${message}`,
+      "prompt-too-long",
+      provider,
+      error,
+      retryAfterMs,
+    );
   }
-  return new AgentGatewayError(`${provider} request failed: ${message}`, "provider-error", provider, error, retryAfterMs);
+  return new AgentGatewayError(
+    `${provider} request failed: ${message}`,
+    "provider-error",
+    provider,
+    error,
+    retryAfterMs,
+  );
 }
 
 function isPromptTooLongMessage(message: string): boolean {
   const normalized = message.toLowerCase();
-  return normalized.includes("prompt is too long")
-    || normalized.includes("prompt_too_long")
-    || normalized.includes("context length")
-    || normalized.includes("context_length")
-    || normalized.includes("maximum context")
-    || normalized.includes("too many tokens")
-    || normalized.includes("token limit")
-    || normalized.includes("exceeds the maximum");
+  return (
+    normalized.includes("prompt is too long") ||
+    normalized.includes("prompt_too_long") ||
+    normalized.includes("context length") ||
+    normalized.includes("context_length") ||
+    normalized.includes("maximum context") ||
+    normalized.includes("too many tokens") ||
+    normalized.includes("token limit") ||
+    normalized.includes("exceeds the maximum")
+  );
 }
 
 export function isOutputTruncated(stopReason?: StopReason): boolean {

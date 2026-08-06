@@ -2,14 +2,10 @@ import type {
   CheckpointLease,
   CheckpointSaveResult,
   DurableRunCheckpoint,
+  DurableRunStore,
 } from "../../persistence/durable-run-store";
-import type { DurableRunStore } from "../../persistence/durable-run-store";
 
-export type CheckpointCoordinatorState =
-  | "open"
-  | "terminal_fenced"
-  | "faulted"
-  | "closed";
+export type CheckpointCoordinatorState = "open" | "terminal_fenced" | "faulted" | "closed";
 
 /**
  * Serializes immutable checkpoint snapshots for one Runtime invocation.
@@ -24,8 +20,8 @@ export class CheckpointCoordinator {
   private lastConfirmedRevision: number;
 
   constructor(
-    private readonly store?: Pick<DurableRunStore, "save">
-      & Partial<Pick<DurableRunStore, "saveCas" | "closeLease" | "inspectLease">>,
+    private readonly store?: Pick<DurableRunStore, "save"> &
+      Partial<Pick<DurableRunStore, "saveCas" | "closeLease" | "inspectLease">>,
     private readonly lease?: CheckpointLease,
     currentRevision = 0,
   ) {

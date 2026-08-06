@@ -208,16 +208,15 @@ function isSameModel(
   left: Pick<ManagedModel, "id" | "provider" | "model"> & { baseURL?: string },
   right: ManagedModel,
 ): boolean {
-  return left.id === right.id || (
-    left.provider === right.provider
-    && left.model === right.model
-    && normalizedBaseURL(left.baseURL) === normalizedBaseURL(right.baseURL)
+  return (
+    left.id === right.id ||
+    (left.provider === right.provider &&
+      left.model === right.model &&
+      normalizedBaseURL(left.baseURL) === normalizedBaseURL(right.baseURL))
   );
 }
 
-export function getModelVendorPreset(
-  vendorId: ModelVendorId,
-): ModelVendorPreset | undefined {
+export function getModelVendorPreset(vendorId: ModelVendorId): ModelVendorPreset | undefined {
   return MODEL_VENDOR_PRESETS.find((preset) => preset.id === vendorId);
 }
 
@@ -233,17 +232,19 @@ export function buildModelVendorDraft(
       protocol: "openai",
       baseURL: "",
       apiKey: "",
-      models: [{
-        id: customModelId,
-        name: "自定义模型",
-        provider: "openai",
-        model: "",
-        baseURL: "",
-        openaiApiMode: "chat-completions",
-        supports1MContext: false,
-        enabled: true,
-        pricing: null,
-      }],
+      models: [
+        {
+          id: customModelId,
+          name: "自定义模型",
+          provider: "openai",
+          model: "",
+          baseURL: "",
+          openaiApiMode: "chat-completions",
+          supports1MContext: false,
+          enabled: true,
+          pricing: null,
+        },
+      ],
     };
   }
 
@@ -256,16 +257,14 @@ export function buildModelVendorDraft(
     };
   });
   const configuredReference = models[0];
-  const protocol = configuredReference
-    && preset.supportedProviders.includes(configuredReference.provider)
-    ? configuredReference.provider
-    : preset.defaultProvider;
+  const protocol =
+    configuredReference && preset.supportedProviders.includes(configuredReference.provider)
+      ? configuredReference.provider
+      : preset.defaultProvider;
   return {
     vendorId,
     protocol,
-    baseURL: configuredReference?.baseURL.trim()
-      || preset.baseURLs[protocol]
-      || "",
+    baseURL: configuredReference?.baseURL.trim() || preset.baseURLs[protocol] || "",
     apiKey: "",
     models,
   };
@@ -287,9 +286,10 @@ export function changeModelVendorDraftProtocol(
         ...model,
         provider: protocol,
         baseURL,
-        openaiApiMode: protocol === "openai"
-          ? defaultModel?.openaiApiMode ?? model.openaiApiMode
-          : model.openaiApiMode,
+        openaiApiMode:
+          protocol === "openai"
+            ? (defaultModel?.openaiApiMode ?? model.openaiApiMode)
+            : model.openaiApiMode,
       };
     }),
   };
@@ -306,10 +306,12 @@ export function materializeModelVendorDraft(draft: ModelVendorDraft): ManagedMod
     enabled: true,
     builtIn: false,
     credentialConfigured: true,
-    pricing: model.pricing ? {
-      ...model.pricing,
-      updatedAt: new Date().toISOString().slice(0, 10),
-    } : model.pricing,
+    pricing: model.pricing
+      ? {
+          ...model.pricing,
+          updatedAt: new Date().toISOString().slice(0, 10),
+        }
+      : model.pricing,
   }));
 }
 
@@ -330,38 +332,42 @@ export function normalizeModelTokenPricing(value: unknown): ModelTokenPricing | 
   if (!value || typeof value !== "object") return undefined;
   const candidate = value as Partial<ModelTokenPricing> & LegacyUsdPricing;
   if (
-    (candidate.currency === "CNY" || candidate.currency === "USD")
-    && validPrice(candidate.inputPerMillion)
-    && validPrice(candidate.cachedInputPerMillion)
-    && (candidate.cacheCreationInputPerMillion === undefined
-      || validPrice(candidate.cacheCreationInputPerMillion))
-    && validPrice(candidate.outputPerMillion)
+    (candidate.currency === "CNY" || candidate.currency === "USD") &&
+    validPrice(candidate.inputPerMillion) &&
+    validPrice(candidate.cachedInputPerMillion) &&
+    (candidate.cacheCreationInputPerMillion === undefined ||
+      validPrice(candidate.cacheCreationInputPerMillion)) &&
+    validPrice(candidate.outputPerMillion)
   ) {
     return {
       currency: candidate.currency,
       inputPerMillion: candidate.inputPerMillion,
       cachedInputPerMillion: candidate.cachedInputPerMillion,
-      ...(candidate.cacheCreationInputPerMillion === undefined ? {} : {
-        cacheCreationInputPerMillion: candidate.cacheCreationInputPerMillion,
-      }),
+      ...(candidate.cacheCreationInputPerMillion === undefined
+        ? {}
+        : {
+            cacheCreationInputPerMillion: candidate.cacheCreationInputPerMillion,
+          }),
       outputPerMillion: candidate.outputPerMillion,
       updatedAt: typeof candidate.updatedAt === "string" ? candidate.updatedAt : "",
     };
   }
   if (
-    validPrice(candidate.inputPerMillionUsd)
-    && validPrice(candidate.cachedInputPerMillionUsd)
-    && (candidate.cacheCreationInputPerMillionUsd === undefined
-      || validPrice(candidate.cacheCreationInputPerMillionUsd))
-    && validPrice(candidate.outputPerMillionUsd)
+    validPrice(candidate.inputPerMillionUsd) &&
+    validPrice(candidate.cachedInputPerMillionUsd) &&
+    (candidate.cacheCreationInputPerMillionUsd === undefined ||
+      validPrice(candidate.cacheCreationInputPerMillionUsd)) &&
+    validPrice(candidate.outputPerMillionUsd)
   ) {
     return {
       currency: "USD",
       inputPerMillion: candidate.inputPerMillionUsd,
       cachedInputPerMillion: candidate.cachedInputPerMillionUsd,
-      ...(candidate.cacheCreationInputPerMillionUsd === undefined ? {} : {
-        cacheCreationInputPerMillion: candidate.cacheCreationInputPerMillionUsd,
-      }),
+      ...(candidate.cacheCreationInputPerMillionUsd === undefined
+        ? {}
+        : {
+            cacheCreationInputPerMillion: candidate.cacheCreationInputPerMillionUsd,
+          }),
       outputPerMillion: candidate.outputPerMillionUsd,
       updatedAt: typeof candidate.updatedAt === "string" ? candidate.updatedAt : "",
     };
@@ -376,19 +382,25 @@ function normalizeStoredModels(value: unknown, legacy: boolean): ManagedModel[] 
     if (!candidate || typeof candidate !== "object") return [];
     const item = candidate as Partial<ManagedModel> & { apiKey?: unknown };
     if (
-      typeof item.id !== "string"
-      || typeof item.name !== "string"
-      || typeof item.model !== "string"
-      || (item.provider !== "openai" && item.provider !== "anthropic")
-    ) return [];
+      typeof item.id !== "string" ||
+      typeof item.name !== "string" ||
+      typeof item.model !== "string" ||
+      (item.provider !== "openai" && item.provider !== "anthropic")
+    )
+      return [];
     const apiKey = typeof item.apiKey === "string" ? item.apiKey.trim() : "";
     if (apiKey) foundSecret = true;
-    const bundledModel = MODEL_VENDOR_MODELS.find((model) => isSameModel({
-      id: item.id!,
-      provider: item.provider!,
-      model: item.model!,
-      baseURL: item.baseURL,
-    }, model));
+    const bundledModel = MODEL_VENDOR_MODELS.find((model) =>
+      isSameModel(
+        {
+          id: item.id!,
+          provider: item.provider!,
+          model: item.model!,
+          baseURL: item.baseURL,
+        },
+        model,
+      ),
+    );
     if (legacy && bundledModel && !apiKey) return [];
     const storedPricing = normalizeModelTokenPricing(item.pricing);
     const model: ManagedModel = {
@@ -413,8 +425,8 @@ function normalizeStoredModels(value: unknown, legacy: boolean): ManagedModel[] 
 function parseLegacyModelStorage(raw: string): unknown {
   const value = JSON.parse(raw) as unknown;
   if (
-    Array.isArray(value)
-    && value.some((candidate) => {
+    Array.isArray(value) &&
+    value.some((candidate) => {
       if (!candidate || typeof candidate !== "object") return false;
       const apiKey = (candidate as { apiKey?: unknown }).apiKey;
       return typeof apiKey === "string" && Boolean(apiKey.trim());
@@ -434,20 +446,22 @@ function auditLegacyModelStorage(raw: string): void {
 }
 
 export function serializeManagedModels(models: readonly ManagedModel[]): string {
-  return JSON.stringify(models.map((model) => ({
-    id: model.id,
-    name: model.name,
-    provider: model.provider,
-    model: model.model,
-    baseURL: model.baseURL,
-    openaiApiMode: model.openaiApiMode,
-    ...(model.supports1MContext === undefined
-      ? {}
-      : { supports1MContext: model.supports1MContext }),
-    ...(model.enabled === undefined ? {} : { enabled: model.enabled }),
-    ...(model.builtIn === undefined ? {} : { builtIn: model.builtIn }),
-    ...(model.pricing === undefined ? {} : { pricing: model.pricing }),
-  })));
+  return JSON.stringify(
+    models.map((model) => ({
+      id: model.id,
+      name: model.name,
+      provider: model.provider,
+      model: model.model,
+      baseURL: model.baseURL,
+      openaiApiMode: model.openaiApiMode,
+      ...(model.supports1MContext === undefined
+        ? {}
+        : { supports1MContext: model.supports1MContext }),
+      ...(model.enabled === undefined ? {} : { enabled: model.enabled }),
+      ...(model.builtIn === undefined ? {} : { builtIn: model.builtIn }),
+      ...(model.pricing === undefined ? {} : { pricing: model.pricing }),
+    })),
+  );
 }
 
 export function saveManagedModels(models: readonly ManagedModel[]): void {

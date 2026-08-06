@@ -27,23 +27,29 @@ async function makeTempRoot(): Promise<string> {
 describe("image asset localization", () => {
   it("downloads a public raster image into a content-addressed workspace path", async () => {
     const workspaceRoot = await makeTempRoot();
-    const localized = await localizeImageAsset({
-      url: "https://cdn.example.com/hero.png",
-      workspaceRoot,
-      provider: "tavily",
-      sourcePageUrl: "https://example.com/article",
-      description: "Wide hero image",
-      license: "license-pending-verification",
-    }, {
-      fetchImpl: vi.fn(async () => new Response(TINY_PNG, {
-        status: 200,
-        headers: {
-          "content-type": "image/png",
-          "content-length": String(TINY_PNG.length),
-        },
-      })) as unknown as typeof fetch,
-      resolveHost: async () => ["93.184.216.34"],
-    });
+    const localized = await localizeImageAsset(
+      {
+        url: "https://cdn.example.com/hero.png",
+        workspaceRoot,
+        provider: "tavily",
+        sourcePageUrl: "https://example.com/article",
+        description: "Wide hero image",
+        license: "license-pending-verification",
+      },
+      {
+        fetchImpl: vi.fn(
+          async () =>
+            new Response(TINY_PNG, {
+              status: 200,
+              headers: {
+                "content-type": "image/png",
+                "content-length": String(TINY_PNG.length),
+              },
+            }),
+        ) as unknown as typeof fetch,
+        resolveHost: async () => ["93.184.216.34"],
+      },
+    );
 
     expect(localized.fileUrl).toMatch(/^file:\/\/\//);
     expect(localized.metadata).toMatchObject({
@@ -60,26 +66,39 @@ describe("image asset localization", () => {
   it("rejects private network image URLs before download", async () => {
     const workspaceRoot = await makeTempRoot();
     const fetchImpl = vi.fn();
-    await expect(localizeImageAsset({
-      url: "http://127.0.0.1/private.png",
-      workspaceRoot,
-    }, { fetchImpl: fetchImpl as unknown as typeof fetch })).rejects.toThrow("private");
+    await expect(
+      localizeImageAsset(
+        {
+          url: "http://127.0.0.1/private.png",
+          workspaceRoot,
+        },
+        { fetchImpl: fetchImpl as unknown as typeof fetch },
+      ),
+    ).rejects.toThrow("private");
     expect(fetchImpl).not.toHaveBeenCalled();
   });
 
   it("rejects redirects to private network targets before following them", async () => {
     const workspaceRoot = await makeTempRoot();
-    const fetchImpl = vi.fn(async () => new Response(null, {
-      status: 302,
-      headers: { location: "http://127.0.0.1/private.png" },
-    }));
-    await expect(localizeImageAsset({
-      url: "https://cdn.example.com/redirect.png",
-      workspaceRoot,
-    }, {
-      fetchImpl: fetchImpl as unknown as typeof fetch,
-      resolveHost: async () => ["93.184.216.34"],
-    })).rejects.toThrow("private");
+    const fetchImpl = vi.fn(
+      async () =>
+        new Response(null, {
+          status: 302,
+          headers: { location: "http://127.0.0.1/private.png" },
+        }),
+    );
+    await expect(
+      localizeImageAsset(
+        {
+          url: "https://cdn.example.com/redirect.png",
+          workspaceRoot,
+        },
+        {
+          fetchImpl: fetchImpl as unknown as typeof fetch,
+          resolveHost: async () => ["93.184.216.34"],
+        },
+      ),
+    ).rejects.toThrow("private");
     expect(fetchImpl).toHaveBeenCalledOnce();
   });
 });

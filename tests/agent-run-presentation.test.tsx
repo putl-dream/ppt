@@ -1,14 +1,14 @@
 // @vitest-environment jsdom
 
-import React from "react";
+import { deriveAgentRunPresentation } from "@shared/agent-run-presentation";
+import { buildProcessTraceRows } from "@shared/process-trace-rows";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import React from "react";
 import { afterEach, describe, expect, it } from "vitest";
-import { deriveAgentRunPresentation } from "../src/renderer/src/agentRunPresentation";
-import { AgentRunTimeline } from "../src/renderer/src/components/AgentRunTimeline";
 import { AgentRunTerminalNotice } from "../src/renderer/src/components/AgentRunTerminalNotice";
+import { AgentRunTimeline } from "../src/renderer/src/components/AgentRunTimeline";
 import { ProcessTraceItem } from "../src/renderer/src/components/ProcessTraceItem";
 import { RunStatusIndicator } from "../src/renderer/src/components/RunStatusIndicator";
-import { buildProcessTraceRows } from "../src/renderer/src/components/process-trace-rows";
 import type { AgentActivityItem } from "../src/shared/agent-activity";
 import type { AgentTaskNode } from "../src/shared/agent-task-list";
 
@@ -39,22 +39,20 @@ describe("agent run presentation", () => {
       </div>
     );
 
-    const view = render(
-      <Surface items={[]} content="" busy />,
-    );
+    const view = render(<Surface items={[]} content="" busy />);
     const surface = screen.getByTestId("surface");
     expect(surface.querySelector("[data-run-block-kind]")).toBeNull();
 
-    const firstText: AgentActivityItem[] = [{
-      id: "response-1",
-      kind: "response",
-      start: 0,
-      end: 5,
-      streaming: true,
-    }];
-    view.rerender(
-      <Surface items={firstText} content="我先检查。" busy />,
-    );
+    const firstText: AgentActivityItem[] = [
+      {
+        id: "response-1",
+        kind: "response",
+        start: 0,
+        end: 5,
+        streaming: true,
+      },
+    ];
+    view.rerender(<Surface items={firstText} content="我先检查。" busy />);
     const firstResponse = surface.querySelector('[data-run-block-id="response-1"]');
     expect(firstResponse).not.toBeNull();
     expect(surface.querySelector(".process-trace-row-status--running")).toBeNull();
@@ -69,9 +67,7 @@ describe("agent run presentation", () => {
         status: "running",
       },
     ];
-    view.rerender(
-      <Surface items={withTool} content="我先检查。" busy />,
-    );
+    view.rerender(<Surface items={withTool} content="我先检查。" busy />);
     // Working tool batch stays expanded (Cursor-style).
     expect(screen.getByRole("button", { name: "收起执行过程" })).not.toBeNull();
     expect(surface.querySelector('[data-run-block-id="response-1"]')).toBe(firstResponse);
@@ -90,26 +86,21 @@ describe("agent run presentation", () => {
         streaming: true,
       },
     ];
-    view.rerender(
-      <Surface
-        items={finalItems}
-        content="我先检查。处理完成"
-        busy
-      />,
-    );
+    view.rerender(<Surface items={finalItems} content="我先检查。处理完成" busy />);
     // Tools finished and trailing response started → auto-collapse.
     expect(screen.getByRole("button", { name: "展开执行过程" })).not.toBeNull();
     expect(surface.querySelector('[data-run-block-id="tool-1"]')).toBeNull();
     expect(
-      [...surface.querySelectorAll("[data-run-block-kind]")]
-        .map((element) => element.getAttribute("data-run-block-kind")),
+      [...surface.querySelectorAll("[data-run-block-kind]")].map((element) =>
+        element.getAttribute("data-run-block-kind"),
+      ),
     ).toEqual(["response", "tool_batch", "response"]);
     expect(surface.querySelector('[data-run-block-id="response-1"]')).toBe(firstResponse);
 
     view.rerender(
       <Surface
         items={finalItems.map((item) =>
-          item.kind === "response" ? { ...item, streaming: false } : item
+          item.kind === "response" ? { ...item, streaming: false } : item,
         )}
         content="我先检查。处理完成"
         busy={false}
@@ -120,13 +111,15 @@ describe("agent run presentation", () => {
   });
 
   it("uses the active tool as the primary loading message", () => {
-    const trace: AgentActivityItem[] = [{
-      id: "tool-1",
-      kind: "tool",
-      toolCallId: "call-1",
-      toolName: "ReadPresentationSnapshot",
-      status: "running",
-    }];
+    const trace: AgentActivityItem[] = [
+      {
+        id: "tool-1",
+        kind: "tool",
+        toolCallId: "call-1",
+        toolName: "ReadPresentationSnapshot",
+        status: "running",
+      },
+    ];
 
     expect(deriveAgentRunPresentation("tool", trace)).toEqual({
       phase: "tool",
@@ -138,12 +131,7 @@ describe("agent run presentation", () => {
   it.each(["requesting", "thinking", "working"] as const)(
     "shows run status with glyph and shimmer during a %s gap",
     (phase) => {
-      render(
-        <RunStatusIndicator
-          phase={phase}
-          activityTrace={[]}
-        />,
-      );
+      render(<RunStatusIndicator phase={phase} activityTrace={[]} />);
 
       expect(document.querySelector(".loading-indicator--sm")).not.toBeNull();
       expect(document.querySelectorAll(".agent-run-status--shimmer")).toHaveLength(1);
@@ -157,21 +145,25 @@ describe("agent run presentation", () => {
         <AgentRunTimeline
           content=""
           live
-          items={[{
-            id: "reason-1",
-            kind: "reasoning",
-            content: "",
-            streaming: true,
-          }]}
+          items={[
+            {
+              id: "reason-1",
+              kind: "reasoning",
+              content: "",
+              streaming: true,
+            },
+          ]}
         />
         <RunStatusIndicator
           phase="thinking"
-          activityTrace={[{
-            id: "reason-1",
-            kind: "reasoning",
-            content: "",
-            streaming: true,
-          }]}
+          activityTrace={[
+            {
+              id: "reason-1",
+              kind: "reasoning",
+              content: "",
+              streaming: true,
+            },
+          ]}
         />
       </div>,
     );
@@ -211,9 +203,7 @@ describe("agent run presentation", () => {
       },
     ];
 
-    const view = render(
-      <AgentRunTimeline content="" live items={tools} />,
-    );
+    const view = render(<AgentRunTimeline content="" live items={tools} />);
     expect(document.querySelector('[data-run-block-id="tool-1"]')).not.toBeNull();
 
     view.rerender(
@@ -266,14 +256,10 @@ describe("agent run presentation", () => {
       },
     ];
 
-    const view = render(
-      <AgentRunTimeline content="" live items={tools} />,
-    );
+    const view = render(<AgentRunTimeline content="" live items={tools} />);
     expect(document.querySelector('[data-run-block-id="tool-1"]')).not.toBeNull();
 
-    view.rerender(
-      <AgentRunTimeline content="" live={false} items={tools} />,
-    );
+    view.rerender(<AgentRunTimeline content="" live={false} items={tools} />);
 
     expect(screen.getByRole("button", { name: "展开执行过程" })).not.toBeNull();
     expect(document.querySelector('[data-run-block-id="tool-1"]')).toBeNull();
@@ -307,9 +293,7 @@ describe("agent run presentation", () => {
       },
     ];
 
-    const view = render(
-      <AgentRunTimeline content="" live items={completedTools} />,
-    );
+    const view = render(<AgentRunTimeline content="" live items={completedTools} />);
     expect(document.querySelector('[data-run-block-id="preview-1"]')).not.toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "收起执行过程" }));
@@ -369,13 +353,15 @@ describe("agent run presentation", () => {
     render(
       <RunStatusIndicator
         phase="waiting"
-        activityTrace={[{
-          id: "tool-awaiting-approval",
-          kind: "tool",
-          toolCallId: "call-awaiting-approval",
-          toolName: "ExecuteCommand",
-          status: "running",
-        }]}
+        activityTrace={[
+          {
+            id: "tool-awaiting-approval",
+            kind: "tool",
+            toolCallId: "call-awaiting-approval",
+            toolName: "ExecuteCommand",
+            status: "running",
+          },
+        ]}
       />,
     );
 
@@ -386,22 +372,25 @@ describe("agent run presentation", () => {
   });
 
   it("renders independent running pulse and failure state for same-name tool calls", () => {
-    const rows = buildProcessTraceRows([
-      {
-        id: "tool-a",
-        kind: "tool",
-        toolCallId: "call-a",
-        toolName: "ReadPresentationSnapshot",
-        status: "running",
-      },
-      {
-        id: "tool-b",
-        kind: "tool",
-        toolCallId: "call-b",
-        toolName: "ReadPresentationSnapshot",
-        status: "failed",
-      },
-    ], true);
+    const rows = buildProcessTraceRows(
+      [
+        {
+          id: "tool-a",
+          kind: "tool",
+          toolCallId: "call-a",
+          toolName: "ReadPresentationSnapshot",
+          status: "running",
+        },
+        {
+          id: "tool-b",
+          kind: "tool",
+          toolCallId: "call-b",
+          toolName: "ReadPresentationSnapshot",
+          status: "failed",
+        },
+      ],
+      true,
+    );
 
     const running = render(<ProcessTraceItem row={rows[0]!} />);
     expect(running.container.querySelector(".process-trace-row-status--running")).not.toBeNull();
@@ -416,57 +405,76 @@ describe("agent run presentation", () => {
   });
 
   it("maps tool categories and terminal status glyphs into distinct class names", () => {
-    const rows = buildProcessTraceRows([
-      {
-        id: "tool-search",
-        kind: "tool",
-        toolCallId: "call-search",
-        toolName: "WebSearch",
-        status: "completed",
-      },
-      {
-        id: "tool-change",
-        kind: "tool",
-        toolCallId: "call-change",
-        toolName: "WriteFile",
-        status: "failed",
-      },
-      {
-        id: "tool-denied",
-        kind: "tool",
-        toolCallId: "call-denied",
-        toolName: "EditFile",
-        status: "denied",
-      },
-    ], false);
+    const rows = buildProcessTraceRows(
+      [
+        {
+          id: "tool-search",
+          kind: "tool",
+          toolCallId: "call-search",
+          toolName: "WebSearch",
+          status: "completed",
+        },
+        {
+          id: "tool-change",
+          kind: "tool",
+          toolCallId: "call-change",
+          toolName: "WriteFile",
+          status: "failed",
+        },
+        {
+          id: "tool-denied",
+          kind: "tool",
+          toolCallId: "call-denied",
+          toolName: "EditFile",
+          status: "denied",
+        },
+      ],
+      false,
+    );
 
     expect(rows.map((row) => row.toolCategory)).toEqual(["search", "change", "change"]);
 
     const search = render(<ProcessTraceItem row={rows[0]!} />);
-    expect(search.container.querySelector(".process-trace-row-status--completed .process-trace-row-tool-icon--search")).not.toBeNull();
+    expect(
+      search.container.querySelector(
+        ".process-trace-row-status--completed .process-trace-row-tool-icon--search",
+      ),
+    ).not.toBeNull();
     expect(search.container.querySelector(".process-trace-row-status-glyph")).toBeNull();
     expect(search.container.textContent).not.toMatch(/[✓!]/);
     search.unmount();
 
     const change = render(<ProcessTraceItem row={rows[1]!} />);
-    expect(change.container.querySelector(".process-trace-row-status--failed .process-trace-row-tool-icon--change")).not.toBeNull();
+    expect(
+      change.container.querySelector(
+        ".process-trace-row-status--failed .process-trace-row-tool-icon--change",
+      ),
+    ).not.toBeNull();
     expect(change.container.textContent).not.toMatch(/[✓!]/);
     change.unmount();
 
     const denied = render(<ProcessTraceItem row={rows[2]!} />);
-    expect(denied.container.querySelector(".process-trace-row-status--denied .process-trace-row-tool-icon--change")).not.toBeNull();
+    expect(
+      denied.container.querySelector(
+        ".process-trace-row-status--denied .process-trace-row-tool-icon--change",
+      ),
+    ).not.toBeNull();
     expect(denied.container.querySelector(".process-trace-row-status--failed")).toBeNull();
     expect(denied.container.textContent).not.toMatch(/[✓!]/);
   });
 
   it("exposes one keyboard target for an expandable trace row", () => {
-    render(<ProcessTraceItem row={{
-      id: "thought-1",
-      kind: "thought",
-      title: "查看思考过程",
-      content: "正在分析页面结构",
-      active: false,
-    }} />);
+    render(
+      <ProcessTraceItem
+        row={{
+          id: "thought-1",
+          kind: "thought",
+          title: "查看思考过程",
+          content: "正在分析页面结构",
+          active: false,
+        }}
+      />,
+    );
 
     expect(screen.getAllByRole("button")).toHaveLength(1);
     expect(screen.getByRole("button").textContent).toContain("查看思考过程");
@@ -525,16 +533,18 @@ describe("agent run presentation", () => {
         content=""
         live
         teamGraphTasks={[graphTask]}
-        items={[{
-          id: "layout-activity",
-          kind: "task",
-          taskId: "layout-task",
-          taskListId: "layout-task",
-          agentName: "layout_planner",
-          description: graphTask.description,
-          status: "running",
-          steps: [],
-        }]}
+        items={[
+          {
+            id: "layout-activity",
+            kind: "task",
+            taskId: "layout-task",
+            taskListId: "layout-task",
+            agentName: "layout_planner",
+            description: graphTask.description,
+            status: "running",
+            steps: [],
+          },
+        ]}
       />,
     );
 
@@ -543,9 +553,7 @@ describe("agent run presentation", () => {
   });
 
   it("renders interrupted and failed outcomes outside assistant transcript text", () => {
-    const interrupted = render(
-      <AgentRunTerminalNotice status="interrupted" />,
-    );
+    const interrupted = render(<AgentRunTerminalNotice status="interrupted" />);
     expect(interrupted.getByRole("status").textContent).toBe("会话已中断");
     interrupted.unmount();
 

@@ -1,34 +1,23 @@
 import { lstat, readFile, realpath } from "node:fs/promises";
 import { isAbsolute, relative, resolve } from "node:path";
-import {
-  type ArtifactPointer,
-  type ArtifactRevision,
-  type ContentHash,
+import type {
+  ArtifactPointer,
+  ArtifactRevision,
+  ContentHash,
 } from "@shared/presentation-lifecycle";
-import {
-  loadWorkspaceSvgPage,
-} from "../deck/svg-page-loader";
-import { WorkspaceFileService } from
-  "../agent/tools/files/workspace-file-service";
-import {
-  hashArtifactValue,
-  hashBytes,
-} from "./content-addressed-blob-store";
+import { WorkspaceFileService } from "../agent/tools/files/workspace-file-service";
+import { loadWorkspaceSvgPage } from "../deck/svg-page-loader";
 import type {
   ArtifactChangeObserverPort,
   ObserveArtifactChangesInput,
 } from "./artifact-change-observer-types";
-import { PresentationLifecycleOrchestrator } from
-  "./presentation-lifecycle-orchestrator";
+import { hashArtifactValue, hashBytes } from "./content-addressed-blob-store";
+import type { PresentationLifecycleOrchestrator } from "./presentation-lifecycle-orchestrator";
 
 const DESIGN_SPEC_PATH = "design/design-spec.json";
 const PAGE_PLAN_PATH = "slides/page-plan.json";
 
-type ObservableArtifactKind =
-  | "design_spec"
-  | "page_plan"
-  | "source_asset"
-  | "page_svg";
+type ObservableArtifactKind = "design_spec" | "page_plan" | "source_asset" | "page_svg";
 
 interface ObservableHead {
   pointer: ArtifactPointer;
@@ -48,11 +37,8 @@ interface FileObservation {
  * changed files only invalidate the immutable revision that proved the old
  * bytes, then repository dependencies determine the exact downstream set.
  */
-export class PresentationArtifactChangeObserver
-implements ArtifactChangeObserverPort {
-  constructor(
-    private readonly orchestrator: PresentationLifecycleOrchestrator,
-  ) {}
+export class PresentationArtifactChangeObserver implements ArtifactChangeObserverPort {
+  constructor(private readonly orchestrator: PresentationLifecycleOrchestrator) {}
 
   async observe(input: ObserveArtifactChangesInput): Promise<void> {
     const initial = this.orchestrator.getState(input.presentationId);
@@ -63,32 +49,25 @@ implements ArtifactChangeObserverPort {
       .filter((head): head is ObservableHead => Boolean(head))
       .filter(
         (head) =>
-          requestedPaths.length === 0
-          || requestedPaths.some(
-            (requested) => requested.matches(head.sourcePath),
-          ),
+          requestedPaths.length === 0 ||
+          requestedPaths.some((requested) => requested.matches(head.sourcePath)),
       )
       .sort(
         (left, right) =>
-          observationOrder(left.revision.kind)
-          - observationOrder(right.revision.kind),
+          observationOrder(left.revision.kind) - observationOrder(right.revision.kind),
       );
     if (heads.length === 0) return;
 
     const workspaceRoot = resolve(input.workspaceRoot);
     const fileService = new WorkspaceFileService(workspaceRoot);
     for (const head of heads) {
-      const observation = await observeHead(
-        workspaceRoot,
-        fileService,
-        head,
-      );
+      const observation = await observeHead(workspaceRoot, fileService, head);
       if (!observation.changed) continue;
       const reason = observation.detail
-        ? `${head.sourcePath} no longer matches committed revision `
-          + `${head.pointer.revisionId}: ${observation.detail}`
-        : `${head.sourcePath} no longer matches committed revision `
-          + `${head.pointer.revisionId}.`;
+        ? `${head.sourcePath} no longer matches committed revision ` +
+          `${head.pointer.revisionId}: ${observation.detail}`
+        : `${head.sourcePath} no longer matches committed revision ` +
+          `${head.pointer.revisionId}.`;
       this.orchestrator.markArtifactSourceChanged({
         jobId: initial.jobId,
         artifactId: head.pointer.artifactId,
@@ -96,22 +75,18 @@ implements ArtifactChangeObserverPort {
         observedContentHash: observation.contentHash,
         reason,
         waitForUser:
-          input.source === "project_read"
-          || input.source === "project_edit"
-          || input.source === "preview"
-          || input.source === "submit",
+          input.source === "project_read" ||
+          input.source === "project_edit" ||
+          input.source === "preview" ||
+          input.source === "submit",
         detectedAt: input.detectedAt,
       });
     }
   }
 
-  private toObservableHead(
-    pointer: ArtifactPointer,
-  ): ObservableHead | undefined {
+  private toObservableHead(pointer: ArtifactPointer): ObservableHead | undefined {
     if (!isObservableKind(pointer.kind)) return undefined;
-    const revision = this.orchestrator.repository.getArtifactRevision(
-      pointer.revisionId,
-    );
+    const revision = this.orchestrator.repository.getArtifactRevision(pointer.revisionId);
     if (!revision || revision.kind !== pointer.kind) return undefined;
     const sourcePath = sourcePathFor(revision);
     return sourcePath ? { pointer, revision, sourcePath } : undefined;
@@ -124,16 +99,11 @@ async function observeHead(
   head: ObservableHead,
 ): Promise<FileObservation> {
   try {
-    if (
-      head.revision.kind === "design_spec"
-      || head.revision.kind === "page_plan"
-    ) {
+    if (head.revision.kind === "design_spec" || head.revision.kind === "page_plan") {
       const bytes = await readContainedFile(workspaceRoot, head.sourcePath);
       let contentHash: ContentHash;
       try {
-        contentHash = hashArtifactValue(
-          JSON.parse(bytes.toString("utf8")),
-        );
+        contentHash = hashArtifactValue(JSON.parse(bytes.toString("utf8")));
       } catch {
         contentHash = hashBytes(bytes);
       }
@@ -177,10 +147,7 @@ async function observeHead(
   }
 }
 
-async function readContainedFile(
-  workspaceRoot: string,
-  sourcePath: string,
-): Promise<Buffer> {
+async function readContainedFile(workspaceRoot: string, sourcePath: string): Promise<Buffer> {
   const absolutePath = resolve(workspaceRoot, sourcePath);
   assertContained(workspaceRoot, absolutePath, sourcePath);
   const stats = await lstat(absolutePath);
@@ -195,32 +162,20 @@ async function readContainedFile(
   return readFile(canonicalPath);
 }
 
-function assertContained(
-  root: string,
-  target: string,
-  sourcePath: string,
-): void {
+function assertContained(root: string, target: string, sourcePath: string): void {
   const pathFromRoot = relative(root, target);
-  if (
-    pathFromRoot === ""
-    || pathFromRoot.startsWith("..")
-    || isAbsolute(pathFromRoot)
-  ) {
-    throw new Error(
-      `Lifecycle source is outside the workspace: ${sourcePath}`,
-    );
+  if (pathFromRoot === "" || pathFromRoot.startsWith("..") || isAbsolute(pathFromRoot)) {
+    throw new Error(`Lifecycle source is outside the workspace: ${sourcePath}`);
   }
 }
 
-function rawContentHash(
-  revision: ArtifactRevision,
-): ContentHash | undefined {
+function rawContentHash(revision: ArtifactRevision): ContentHash | undefined {
   if (
-    typeof revision.value !== "object"
-    || revision.value === null
-    || !("sha256" in revision.value)
-    || typeof revision.value.sha256 !== "string"
-    || !/^[a-f0-9]{64}$/.test(revision.value.sha256)
+    typeof revision.value !== "object" ||
+    revision.value === null ||
+    !("sha256" in revision.value) ||
+    typeof revision.value.sha256 !== "string" ||
+    !/^[a-f0-9]{64}$/.test(revision.value.sha256)
   ) {
     return undefined;
   }
@@ -231,10 +186,10 @@ function sourcePathFor(revision: ArtifactRevision): string | undefined {
   if (revision.kind === "design_spec") return DESIGN_SPEC_PATH;
   if (revision.kind === "page_plan") return PAGE_PLAN_PATH;
   if (
-    typeof revision.value === "object"
-    && revision.value !== null
-    && "sourcePath" in revision.value
-    && typeof revision.value.sourcePath === "string"
+    typeof revision.value === "object" &&
+    revision.value !== null &&
+    "sourcePath" in revision.value &&
+    typeof revision.value.sourcePath === "string"
   ) {
     if (revision.value.sourcePath.startsWith("embedded:")) {
       return undefined;
@@ -244,13 +199,10 @@ function sourcePathFor(revision: ArtifactRevision): string | undefined {
   return undefined;
 }
 
-function isObservableKind(
-  kind: ArtifactPointer["kind"],
-): kind is ObservableArtifactKind {
-  return kind === "design_spec"
-    || kind === "page_plan"
-    || kind === "source_asset"
-    || kind === "page_svg";
+function isObservableKind(kind: ArtifactPointer["kind"]): kind is ObservableArtifactKind {
+  return (
+    kind === "design_spec" || kind === "page_plan" || kind === "source_asset" || kind === "page_svg"
+  );
 }
 
 function observationOrder(kind: ArtifactPointer["kind"]): number {
@@ -269,8 +221,7 @@ function normalizeRequestedPaths(
     const normalized = normalizeWorkspacePath(path);
     return {
       matches: (sourcePath: string) =>
-        sourcePath === normalized
-        || (directory && sourcePath.startsWith(`${normalized}/`)),
+        sourcePath === normalized || (directory && sourcePath.startsWith(`${normalized}/`)),
     };
   });
 }

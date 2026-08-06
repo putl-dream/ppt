@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { exportToHtml } from "../src/shared/html-exporter";
 import { createStarterPresentation } from "../src/shared/presentation-fixtures";
 import {
   exportDeckContactSheetHtml,
@@ -8,7 +9,6 @@ import {
   THUMBNAIL_HEIGHT,
   THUMBNAIL_WIDTH,
 } from "../src/shared/slide-html-render";
-import { exportToHtml } from "../src/shared/html-exporter";
 import { TEST_DESIGN_SYSTEM } from "./design-engine-test-utils";
 
 describe("slide-html-render", () => {

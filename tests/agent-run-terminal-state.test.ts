@@ -1,5 +1,5 @@
-import { describe, expect, it, vi } from "vitest";
 import type { Dispatch, SetStateAction } from "react";
+import { describe, expect, it, vi } from "vitest";
 import { handleAgentRunFailure } from "../src/renderer/src/app/agent/agentRunFailure";
 import type { ChatMessage } from "../src/renderer/src/app/chatMessageRuntime";
 
@@ -56,34 +56,35 @@ describe("agent run terminal state", () => {
     expect(state.messages[0]).toMatchObject({
       content: "已生成部分内容",
       runStatus: "interrupted",
-      activityTrace: [
-        { kind: "response" },
-        { kind: "tool", status: "denied" },
-      ],
+      activityTrace: [{ kind: "response" }, { kind: "tool", status: "denied" }],
     });
     expect(state.messages[0]?.content).not.toContain("会话已中断");
     expect(notify).toHaveBeenCalledWith("会话已中断");
   });
 
   it("does not infer interruption from failure copy", () => {
-    const state = createMessageState([{
-      id: "assistant-1",
-      role: "assistant",
-      content: "部分回复",
-      runStatus: "running",
-    }]);
+    const state = createMessageState([
+      {
+        id: "assistant-1",
+        role: "assistant",
+        content: "部分回复",
+        runStatus: "running",
+      },
+    ]);
 
     handleAgentRunFailure({
       error: new Error("任务已取消。"),
       isSidechain: false,
       runMessageId: "assistant-1",
-      activeTrace: [{
-        id: "response-1",
-        kind: "response",
-        start: 0,
-        end: 6,
-        streaming: false,
-      }],
+      activeTrace: [
+        {
+          id: "response-1",
+          kind: "response",
+          start: 0,
+          end: 6,
+          streaming: false,
+        },
+      ],
       setChatMessages: state.setMessages,
       notify: vi.fn(),
     });
@@ -131,8 +132,8 @@ describe("agent run terminal state", () => {
 
     handleAgentRunFailure({
       error: new Error(
-        "Error invoking remote method 'agent:start': ModelOutputError: "
-        + "Unrecognized key: \"language\"; Invalid input: expected 1 at version",
+        "Error invoking remote method 'agent:start': ModelOutputError: " +
+          'Unrecognized key: "language"; Invalid input: expected 1 at version',
       ),
       isSidechain: false,
       runMessageId: "assistant-1",

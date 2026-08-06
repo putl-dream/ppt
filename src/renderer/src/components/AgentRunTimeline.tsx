@@ -1,16 +1,13 @@
-import React from "react";
-import {
-  getResponseBlockContent,
-  type AgentActivityItem,
-} from "@shared/agent-activity";
-import type { AgentTaskNode } from "@shared/agent-task-list";
+import { type AgentActivityItem, getResponseBlockContent } from "@shared/agent-activity";
 import {
   buildAgentRunTimelineSegments,
   isToolBatchActive,
   shouldAutoCollapseToolBatch,
-} from "./agent-run-timeline-segments";
+} from "@shared/agent-run-timeline-segments";
+import type { AgentTaskNode } from "@shared/agent-task-list";
+import { buildProcessTraceRows } from "@shared/process-trace-rows";
+import type React from "react";
 import { ProcessTraceItem } from "./ProcessTraceItem";
-import { buildProcessTraceRows } from "./process-trace-rows";
 import { ProcessTracePanel } from "./ProcessTracePanel";
 import { TypewriterMarkdown } from "./TypewriterMarkdown";
 
@@ -97,10 +94,7 @@ export const AgentRunTimeline: React.FC<AgentRunTimelineProps> = ({
               data-run-block-id={item.id}
               data-run-block-kind="thought"
             >
-              <ProcessTraceItem
-                row={row}
-                defaultExpanded={streaming}
-              />
+              <ProcessTraceItem row={row} defaultExpanded={streaming} />
             </div>
           );
         }

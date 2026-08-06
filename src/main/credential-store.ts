@@ -5,29 +5,26 @@ import { dirname, join } from "node:path";
 import { z } from "zod";
 import {
   CREDENTIAL_STORE_FILE_NAME,
-  credentialApiKeySchema,
-  credentialStatusRequestSchema,
-  deleteModelCredentialRequestSchema,
-  modelCredentialBindingSchema,
-  normalizeModelCredentialBinding,
-  normalizeWebSearchCredentialBinding,
-  setModelCredentialsRequestSchema,
-  setWebSearchCredentialRequestSchema,
-  webSearchCredentialBindingSchema,
   type CredentialStatusRequest,
   type CredentialStatusSnapshot,
   type CredentialStorageBackend,
   type CredentialStorageStatus,
+  credentialApiKeySchema,
+  credentialStatusRequestSchema,
   type DeleteModelCredentialRequest,
+  deleteModelCredentialRequestSchema,
   type ModelCredentialBinding,
+  modelCredentialBindingSchema,
+  normalizeModelCredentialBinding,
+  normalizeWebSearchCredentialBinding,
   type SetModelCredentialsRequest,
   type SetWebSearchCredentialRequest,
+  setModelCredentialsRequestSchema,
+  setWebSearchCredentialRequestSchema,
   type WebSearchCredentialBinding,
+  webSearchCredentialBindingSchema,
 } from "../shared/credentials";
-import {
-  readJsonFile,
-  writeTextFileAtomic,
-} from "./agent/persistence/atomic-json-file";
+import { readJsonFile, writeTextFileAtomic } from "./agent/persistence/atomic-json-file";
 
 const MODEL_CREDENTIAL_REF_PREFIX = "model:";
 const WEB_SEARCH_CREDENTIAL_REF = "web-search:tavily";
@@ -35,16 +32,21 @@ const MAX_PERSISTED_CREDENTIALS = 501;
 
 type LockRelease = () => Promise<void>;
 type ProperLockfile = {
-  lock(file: string, options?: {
-    realpath?: boolean;
-    stale?: number;
-    retries?: number | {
-      retries?: number;
-      factor?: number;
-      minTimeout?: number;
-      maxTimeout?: number;
-    };
-  }): Promise<LockRelease>;
+  lock(
+    file: string,
+    options?: {
+      realpath?: boolean;
+      stale?: number;
+      retries?:
+        | number
+        | {
+            retries?: number;
+            factor?: number;
+            minTimeout?: number;
+            maxTimeout?: number;
+          };
+    },
+  ): Promise<LockRelease>;
 };
 const lockfile = createRequire(import.meta.url)("proper-lockfile") as ProperLockfile;
 const STORE_LOCK_OPTIONS = {
@@ -58,33 +60,37 @@ const STORE_LOCK_OPTIONS = {
   },
 } as const;
 
-const encryptedPayloadSchema = z.string()
+const encryptedPayloadSchema = z
+  .string()
   .min(1)
   .max(65_536)
   .regex(/^(?:[A-Za-z\d+/]{4})*(?:[A-Za-z\d+/]{2}==|[A-Za-z\d+/]{3}=)?$/);
 const credentialFingerprintSchema = z.string().regex(/^[a-f\d]{64}$/);
 
-const encryptedCredentialEnvelopeSchema = z.object({
-  version: z.literal(1),
-  fingerprint: credentialFingerprintSchema,
-  apiKey: credentialApiKeySchema,
-}).strict();
+const encryptedCredentialEnvelopeSchema = z
+  .object({
+    version: z.literal(1),
+    fingerprint: credentialFingerprintSchema,
+    apiKey: credentialApiKeySchema,
+  })
+  .strict();
 
-const persistedCredentialSchema = z.object({
-  ref: z.string().min(1).max(512),
-  binding: z.union([
-    modelCredentialBindingSchema,
-    webSearchCredentialBindingSchema,
-  ]),
-  fingerprint: credentialFingerprintSchema,
-  ciphertext: encryptedPayloadSchema,
-  updatedAt: z.string().datetime({ offset: true }),
-}).strict();
+const persistedCredentialSchema = z
+  .object({
+    ref: z.string().min(1).max(512),
+    binding: z.union([modelCredentialBindingSchema, webSearchCredentialBindingSchema]),
+    fingerprint: credentialFingerprintSchema,
+    ciphertext: encryptedPayloadSchema,
+    updatedAt: z.string().datetime({ offset: true }),
+  })
+  .strict();
 
-const persistedCredentialFileSchema = z.object({
-  version: z.literal(1),
-  credentials: z.array(persistedCredentialSchema).max(MAX_PERSISTED_CREDENTIALS),
-}).strict();
+const persistedCredentialFileSchema = z
+  .object({
+    version: z.literal(1),
+    credentials: z.array(persistedCredentialSchema).max(MAX_PERSISTED_CREDENTIALS),
+  })
+  .strict();
 
 type PersistedCredential = z.infer<typeof persistedCredentialSchema>;
 type PersistedCredentialFile = z.infer<typeof persistedCredentialFileSchema>;
@@ -138,10 +144,7 @@ export class CredentialStore {
   constructor(options: CredentialStoreOptions) {
     const applicationDataRoot = options.applicationDataRoot.trim();
     if (!applicationDataRoot) {
-      throw new CredentialStoreError(
-        "INVALID_INPUT",
-        "The application data root is required.",
-      );
+      throw new CredentialStoreError("INVALID_INPUT", "The application data root is required.");
     }
     this.filePath = join(applicationDataRoot, CREDENTIAL_STORE_FILE_NAME);
     this.safeStorage = options.safeStorage;
@@ -152,9 +155,7 @@ export class CredentialStore {
     return await this.exclusive(async () => (await this.inspectStorage()).status);
   }
 
-  async getStatus(
-    input: CredentialStatusRequest = {},
-  ): Promise<CredentialStatusSnapshot> {
+  async getStatus(input: CredentialStatusRequest = {}): Promise<CredentialStatusSnapshot> {
     return await this.exclusive(async () => {
       const request = this.parseStatusRequest(input);
       const storage = (await this.inspectStorage()).status;
@@ -165,26 +166,25 @@ export class CredentialStore {
         storage,
         models: request.models.map((binding) => ({
           configurationId: binding.configurationId,
-          configured: storageUsable && Boolean(
-            findCredential(state, modelCredentialRef(binding.configurationId), binding),
-          ),
+          configured:
+            storageUsable &&
+            Boolean(findCredential(state, modelCredentialRef(binding.configurationId), binding)),
         })),
-        webSearchConfigured: storageUsable
-          && Boolean(
-            request.webSearch
-            && findCredential(state, WEB_SEARCH_CREDENTIAL_REF, request.webSearch),
+        webSearchConfigured:
+          storageUsable &&
+          Boolean(
+            request.webSearch &&
+              findCredential(state, WEB_SEARCH_CREDENTIAL_REF, request.webSearch),
           ),
       };
     });
   }
 
-  async setModelCredentials(
-    input: SetModelCredentialsRequest,
-  ): Promise<void> {
+  async setModelCredentials(input: SetModelCredentialsRequest): Promise<void> {
     await this.exclusive(async () => {
       const request = this.parseSetModelCredentialsRequest(input);
       const references = request.bindings.map((binding) =>
-        modelCredentialRef(binding.configurationId)
+        modelCredentialRef(binding.configurationId),
       );
       if (new Set(references).size !== references.length) {
         throw new CredentialStoreError(
@@ -194,30 +194,30 @@ export class CredentialStore {
       }
 
       const mode = await this.requireEncryptionMode();
-      const encrypted = await Promise.all(request.bindings.map(async (binding) => ({
-        binding,
-        ciphertext: await this.encryptCredential(request.apiKey, binding, mode),
-      })));
+      const encrypted = await Promise.all(
+        request.bindings.map(async (binding) => ({
+          binding,
+          ciphertext: await this.encryptCredential(request.apiKey, binding, mode),
+        })),
+      );
       const state = await this.readState();
       const replacedReferences = new Set(references);
       const updatedAt = this.now().toISOString();
-      const credentials = state.credentials.filter(
-        (entry) => !replacedReferences.has(entry.ref),
+      const credentials = state.credentials.filter((entry) => !replacedReferences.has(entry.ref));
+      credentials.push(
+        ...encrypted.map(({ binding, ciphertext }) => ({
+          ref: modelCredentialRef(binding.configurationId),
+          binding,
+          fingerprint: credentialFingerprint(binding),
+          ciphertext: ciphertext.toString("base64"),
+          updatedAt,
+        })),
       );
-      credentials.push(...encrypted.map(({ binding, ciphertext }) => ({
-        ref: modelCredentialRef(binding.configurationId),
-        binding,
-        fingerprint: credentialFingerprint(binding),
-        ciphertext: ciphertext.toString("base64"),
-        updatedAt,
-      })));
       await this.writeState({ version: 1, credentials });
     });
   }
 
-  async deleteModelCredential(
-    input: DeleteModelCredentialRequest | string,
-  ): Promise<void> {
+  async deleteModelCredential(input: DeleteModelCredentialRequest | string): Promise<void> {
     await this.exclusive(async () => {
       const request = this.parseDeleteModelCredentialRequest(input);
       const state = await this.readState();
@@ -229,17 +229,11 @@ export class CredentialStore {
     });
   }
 
-  async setWebSearchCredential(
-    input: SetWebSearchCredentialRequest,
-  ): Promise<void> {
+  async setWebSearchCredential(input: SetWebSearchCredentialRequest): Promise<void> {
     await this.exclusive(async () => {
       const request = this.parseSetWebSearchCredentialRequest(input);
       const mode = await this.requireEncryptionMode();
-      const encrypted = await this.encryptCredential(
-        request.apiKey,
-        request.binding,
-        mode,
-      );
+      const encrypted = await this.encryptCredential(request.apiKey, request.binding, mode);
       const state = await this.readState();
       const credentials = state.credentials.filter(
         (entry) => entry.ref !== WEB_SEARCH_CREDENTIAL_REF,
@@ -267,27 +261,17 @@ export class CredentialStore {
     });
   }
 
-  async resolveModelCredential(
-    input: ModelCredentialBinding,
-  ): Promise<string | undefined> {
+  async resolveModelCredential(input: ModelCredentialBinding): Promise<string | undefined> {
     return await this.exclusive(async () => {
       const binding = this.parseModelBinding(input);
-      return await this.resolveCredential(
-        modelCredentialRef(binding.configurationId),
-        binding,
-      );
+      return await this.resolveCredential(modelCredentialRef(binding.configurationId), binding);
     });
   }
 
-  async resolveWebSearchCredential(
-    input: WebSearchCredentialBinding,
-  ): Promise<string | undefined> {
+  async resolveWebSearchCredential(input: WebSearchCredentialBinding): Promise<string | undefined> {
     return await this.exclusive(async () => {
       const binding = this.parseWebSearchBinding(input);
-      return await this.resolveCredential(
-        WEB_SEARCH_CREDENTIAL_REF,
-        binding,
-      );
+      return await this.resolveCredential(WEB_SEARCH_CREDENTIAL_REF, binding);
     });
   }
 
@@ -302,11 +286,7 @@ export class CredentialStore {
     const mode = await this.requireEncryptionMode();
     const decrypted = await this.decryptCredential(entry, mode);
     if (decrypted.shouldReEncrypt) {
-      const ciphertext = await this.encryptCredential(
-        decrypted.apiKey,
-        entry.binding,
-        mode,
-      );
+      const ciphertext = await this.encryptCredential(decrypted.apiKey, entry.binding, mode);
       const credentials = state.credentials.map((candidate) =>
         candidate.ref === ref
           ? {
@@ -314,7 +294,7 @@ export class CredentialStore {
               ciphertext: ciphertext.toString("base64"),
               updatedAt: this.now().toISOString(),
             }
-          : candidate
+          : candidate,
       );
       await this.writeState({ version: 1, credentials });
     }
@@ -386,9 +366,10 @@ export class CredentialStore {
 
   private async encrypt(plainText: string, mode: EncryptionMode): Promise<Buffer> {
     try {
-      const encrypted = mode === "async"
-        ? await this.safeStorage.encryptStringAsync(plainText)
-        : this.safeStorage.encryptString(plainText);
+      const encrypted =
+        mode === "async"
+          ? await this.safeStorage.encryptStringAsync(plainText)
+          : this.safeStorage.encryptString(plainText);
       if (encrypted.length === 0) throw new Error("Empty encrypted payload.");
       return encrypted;
     } catch (error) {
@@ -405,11 +386,14 @@ export class CredentialStore {
     binding: ModelCredentialBinding | WebSearchCredentialBinding,
     mode: EncryptionMode,
   ): Promise<Buffer> {
-    return this.encrypt(JSON.stringify({
-      version: 1,
-      fingerprint: credentialFingerprint(binding),
-      apiKey,
-    }), mode);
+    return this.encrypt(
+      JSON.stringify({
+        version: 1,
+        fingerprint: credentialFingerprint(binding),
+        apiKey,
+      }),
+      mode,
+    );
   }
 
   private async decryptCredential(
@@ -418,12 +402,13 @@ export class CredentialStore {
   ): Promise<{ apiKey: string; shouldReEncrypt: boolean }> {
     try {
       const encrypted = Buffer.from(entry.ciphertext, "base64");
-      const decrypted = mode === "async"
-        ? await this.safeStorage.decryptStringAsync(encrypted)
-        : {
-            result: this.safeStorage.decryptString(encrypted),
-            shouldReEncrypt: false,
-          };
+      const decrypted =
+        mode === "async"
+          ? await this.safeStorage.decryptStringAsync(encrypted)
+          : {
+              result: this.safeStorage.decryptString(encrypted),
+              shouldReEncrypt: false,
+            };
       const credential = parseDecryptedCredential(decrypted.result, entry.fingerprint);
       return {
         apiKey: credential.apiKey,
@@ -446,11 +431,9 @@ export class CredentialStore {
       await chmod(this.filePath, 0o600);
     } catch (error) {
       if (error instanceof SyntaxError) {
-        throw new CredentialStoreError(
-          "CORRUPT_STORE",
-          "The credential store is not valid JSON.",
-          { cause: error },
-        );
+        throw new CredentialStoreError("CORRUPT_STORE", "The credential store is not valid JSON.", {
+          cause: error,
+        });
       }
       throw new CredentialStoreError(
         "PERSISTENCE_FAILED",
@@ -478,11 +461,9 @@ export class CredentialStore {
       );
     }
     try {
-      await writeTextFileAtomic(
-        this.filePath,
-        `${JSON.stringify(parsed.data, null, 2)}\n`,
-        { mode: 0o600 },
-      );
+      await writeTextFileAtomic(this.filePath, `${JSON.stringify(parsed.data, null, 2)}\n`, {
+        mode: 0o600,
+      });
     } catch (error) {
       throw new CredentialStoreError(
         "PERSISTENCE_FAILED",
@@ -498,9 +479,7 @@ export class CredentialStore {
       input,
       "The credential status request is invalid.",
       (request) => ({
-        models: request.models.map((binding) =>
-          normalizeModelCredentialBinding(binding)
-        ),
+        models: request.models.map((binding) => normalizeModelCredentialBinding(binding)),
         ...(request.webSearch
           ? { webSearch: normalizeWebSearchCredentialBinding(request.webSearch) }
           : {}),
@@ -508,28 +487,20 @@ export class CredentialStore {
     );
   }
 
-  private parseSetModelCredentialsRequest(
-    input: unknown,
-  ): SetModelCredentialsRequest {
+  private parseSetModelCredentialsRequest(input: unknown): SetModelCredentialsRequest {
     return this.parseInput(
       setModelCredentialsRequestSchema,
       input,
       "The model credential request is invalid.",
       (request) => ({
-        bindings: request.bindings.map((binding) =>
-          normalizeModelCredentialBinding(binding)
-        ),
+        bindings: request.bindings.map((binding) => normalizeModelCredentialBinding(binding)),
         apiKey: request.apiKey,
       }),
     );
   }
 
-  private parseDeleteModelCredentialRequest(
-    input: unknown,
-  ): DeleteModelCredentialRequest {
-    const request = typeof input === "string"
-      ? { configurationId: input }
-      : input;
+  private parseDeleteModelCredentialRequest(input: unknown): DeleteModelCredentialRequest {
+    const request = typeof input === "string" ? { configurationId: input } : input;
     return this.parseInput(
       deleteModelCredentialRequestSchema,
       request,
@@ -537,9 +508,7 @@ export class CredentialStore {
     );
   }
 
-  private parseSetWebSearchCredentialRequest(
-    input: unknown,
-  ): SetWebSearchCredentialRequest {
+  private parseSetWebSearchCredentialRequest(input: unknown): SetWebSearchCredentialRequest {
     return this.parseInput(
       setWebSearchCredentialRequestSchema,
       input,
@@ -577,7 +546,7 @@ export class CredentialStore {
   ): U {
     try {
       const parsed = schema.parse(input);
-      return normalize ? normalize(parsed) : parsed as unknown as U;
+      return normalize ? normalize(parsed) : (parsed as unknown as U);
     } catch (error) {
       throw new CredentialStoreError("INVALID_INPUT", message, { cause: error });
     }
@@ -628,9 +597,7 @@ function modelCredentialRef(configurationId: string): string {
 function credentialFingerprint(
   binding: ModelCredentialBinding | WebSearchCredentialBinding,
 ): string {
-  return createHash("sha256")
-    .update(JSON.stringify(binding), "utf8")
-    .digest("hex");
+  return createHash("sha256").update(JSON.stringify(binding), "utf8").digest("hex");
 }
 
 function findCredential(
@@ -639,9 +606,7 @@ function findCredential(
   binding: ModelCredentialBinding | WebSearchCredentialBinding,
 ): PersistedCredential | undefined {
   const fingerprint = credentialFingerprint(binding);
-  return state.credentials.find(
-    (entry) => entry.ref === ref && entry.fingerprint === fingerprint,
-  );
+  return state.credentials.find((entry) => entry.ref === ref && entry.fingerprint === fingerprint);
 }
 
 function isConsistentState(state: PersistedCredentialFile): boolean {
@@ -650,11 +615,11 @@ function isConsistentState(state: PersistedCredentialFile): boolean {
     if (references.has(entry.ref)) return false;
     references.add(entry.ref);
     const binding = normalizePersistedBinding(entry.binding);
-    const expectedRef = "configurationId" in binding
-      ? modelCredentialRef(binding.configurationId)
-      : WEB_SEARCH_CREDENTIAL_REF;
-    return entry.ref === expectedRef
-      && entry.fingerprint === credentialFingerprint(binding);
+    const expectedRef =
+      "configurationId" in binding
+        ? modelCredentialRef(binding.configurationId)
+        : WEB_SEARCH_CREDENTIAL_REF;
+    return entry.ref === expectedRef && entry.fingerprint === credentialFingerprint(binding);
   });
 }
 

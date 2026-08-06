@@ -19,11 +19,19 @@ describe("runtime cancellation classification", () => {
   });
 
   it("recognizes standard abort-shaped errors without an attached signal", () => {
-    expect(isRuntimeCancellation(Object.assign(new Error("aborted"), { name: "AbortError" }))).toBe(true);
-    expect(isRuntimeCancellation(Object.assign(new Error("aborted"), { code: "ABORT_ERR" }))).toBe(true);
-    expect(isRuntimeCancellation(new Error("wrapped", {
-      cause: Object.assign(new Error("provider stopped"), { name: "APIUserAbortError" }),
-    }))).toBe(true);
+    expect(isRuntimeCancellation(Object.assign(new Error("aborted"), { name: "AbortError" }))).toBe(
+      true,
+    );
+    expect(isRuntimeCancellation(Object.assign(new Error("aborted"), { code: "ABORT_ERR" }))).toBe(
+      true,
+    );
+    expect(
+      isRuntimeCancellation(
+        new Error("wrapped", {
+          cause: Object.assign(new Error("provider stopped"), { name: "APIUserAbortError" }),
+        }),
+      ),
+    ).toBe(true);
   });
 
   it("does not reclassify an ordinary tool failure", () => {
@@ -76,21 +84,21 @@ describe("runtime cancellation classification", () => {
       },
     };
 
-    await expect(new AgentRuntime(registry, gateway).run({
-      threadId: "cancel-multi-tool-batch",
-      request: "run both tools",
-      presentationSnapshot: createStarterPresentation(),
-      selectedElementIds: [],
-      signal: controller.signal,
-      onProgress: (event) => progress.push(event),
-    })).rejects.toThrow("Run aborted by user");
+    await expect(
+      new AgentRuntime(registry, gateway).run({
+        threadId: "cancel-multi-tool-batch",
+        request: "run both tools",
+        presentationSnapshot: createStarterPresentation(),
+        selectedElementIds: [],
+        signal: controller.signal,
+        onProgress: (event) => progress.push(event),
+      }),
+    ).rejects.toThrow("Run aborted by user");
     expect(executions).toEqual([1]);
-    const statusesFor = (toolCallId: string) => progress
-      .filter((event) =>
-        event.type === "tool-state"
-        && event.toolCallId === toolCallId
-      )
-      .map((event) => event.status);
+    const statusesFor = (toolCallId: string) =>
+      progress
+        .filter((event) => event.type === "tool-state" && event.toolCallId === toolCallId)
+        .map((event) => event.status);
     expect(statusesFor("cancel-first")).toEqual(["running", "denied"]);
     expect(statusesFor("cancel-first")).not.toContain("completed");
     expect(statusesFor("must-not-run")).toEqual([]);
@@ -124,12 +132,14 @@ describe("runtime cancellation classification", () => {
     };
     const registry = new ToolRegistry();
     registry.register(tool);
-    const content = [{
-      type: "tool_use" as const,
-      id: "approval-wait",
-      name: tool.name,
-      input: {},
-    }];
+    const content = [
+      {
+        type: "tool_use" as const,
+        id: "approval-wait",
+        name: tool.name,
+        input: {},
+      },
+    ];
     const gateway: AgentModelGateway = {
       async queryModel() {
         return { provider: "anthropic", model: "test", content };
@@ -140,15 +150,17 @@ describe("runtime cancellation classification", () => {
     };
     const runId = "cancel-approval-run";
 
-    await expect(new AgentRuntime(registry, gateway).run({
-      threadId: "cancel-approval-thread",
-      runId,
-      request: "run the protected tool",
-      presentationSnapshot: createStarterPresentation(),
-      selectedElementIds: [],
-      signal: controller.signal,
-      requestToolApproval: broker.createHandler(runId, () => controller.abort()),
-    })).rejects.toThrow("Run aborted by user");
+    await expect(
+      new AgentRuntime(registry, gateway).run({
+        threadId: "cancel-approval-thread",
+        runId,
+        request: "run the protected tool",
+        presentationSnapshot: createStarterPresentation(),
+        selectedElementIds: [],
+        signal: controller.signal,
+        requestToolApproval: broker.createHandler(runId, () => controller.abort()),
+      }),
+    ).rejects.toThrow("Run aborted by user");
     expect(executions).toBe(0);
     broker.finishForRun(runId);
   });

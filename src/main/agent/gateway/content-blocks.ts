@@ -7,8 +7,9 @@ import type {
 
 export function textFromContentBlocks(blocks: AgentModelContentBlock[] | undefined): string {
   return (blocks ?? [])
-    .filter((block): block is Extract<AgentModelContentBlock, { type: "text" }> =>
-      block.type === "text")
+    .filter(
+      (block): block is Extract<AgentModelContentBlock, { type: "text" }> => block.type === "text",
+    )
     .map((block) => block.text)
     .join("\n")
     .trim();
@@ -17,9 +18,10 @@ export function textFromContentBlocks(blocks: AgentModelContentBlock[] | undefin
 export function toolUseBlocksFromContent(
   blocks: AgentModelContentBlock[] | undefined,
 ): AgentModelToolUseBlock[] {
-  return (blocks ?? [])
-    .filter((block): block is Extract<AgentModelContentBlock, { type: "tool_use" }> =>
-      block.type === "tool_use");
+  return (blocks ?? []).filter(
+    (block): block is Extract<AgentModelContentBlock, { type: "tool_use" }> =>
+      block.type === "tool_use",
+  );
 }
 
 export function thinkingFromContentBlocks(
@@ -42,4 +44,3 @@ export function toolResultBlocksFromContent(
 export function textBlock(text: string): AgentModelContentBlock {
   return { type: "text", text };
 }
-

@@ -1,25 +1,24 @@
 // @vitest-environment jsdom
 
-import React, { useRef, useState } from "react";
-import { act } from "react";
+import {
+  clearAllDisplayCardManagers,
+  ingestDisplayEvent,
+  usePermissionCardManager,
+} from "@shared/cards/display-card-managers";
 import { cleanup, render } from "@testing-library/react";
+import React, { act, useRef, useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  type ApplyAgentResult,
+  useAgentResultHandler,
+} from "../src/renderer/src/app/agent/useAgentResultHandler";
+import { type ChatMessage, findActiveThreadId } from "../src/renderer/src/app/chatMessageRuntime";
+import { useProjectStore } from "../src/renderer/src/components/project-store";
 import type { AgentActivityItem } from "../src/shared/agent-activity";
 import { formatTerminalAgentRunContent } from "../src/shared/agent-result-copy";
 import type { AgentRunResult } from "../src/shared/ipc";
 import { createSvgTestSlide } from "../src/shared/presentation-fixtures";
 import { createSessionPresentation } from "../src/shared/session";
-import {
-  useAgentResultHandler,
-  type ApplyAgentResult,
-} from "../src/renderer/src/app/agent/useAgentResultHandler";
-import { findActiveThreadId, type ChatMessage } from "../src/renderer/src/app/chatMessageRuntime";
-import { useProjectStore } from "../src/renderer/src/components/project-store";
-import {
-  clearAllDisplayCardManagers,
-  ingestDisplayEvent,
-  usePermissionCardManager,
-} from "../src/renderer/src/cards/display-card-managers";
 
 let applyResult: ApplyAgentResult;
 let messages: ChatMessage[];
@@ -29,22 +28,26 @@ const originalHydrateProjectArtifacts = useProjectStore.getState().hydrateProjec
 
 function Harness({ initialContent = "" }: { initialContent?: string }) {
   const initialTrace: AgentActivityItem[] = initialContent
-    ? [{
-        id: "response-initial",
-        kind: "response",
-        start: 0,
-        end: initialContent.length,
-        streaming: false,
-      }]
+    ? [
+        {
+          id: "response-initial",
+          kind: "response",
+          start: 0,
+          end: initialContent.length,
+          streaming: false,
+        },
+      ]
     : [];
-  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([{
-    id: "assistant-1",
-    role: "assistant",
-    content: initialContent,
-    activityTrace: initialTrace,
-    runId: "run-1",
-    runStatus: "running",
-  }]);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
+    {
+      id: "assistant-1",
+      role: "assistant",
+      content: initialContent,
+      activityTrace: initialTrace,
+      runId: "run-1",
+      runStatus: "running",
+    },
+  ]);
   const activeRunTraceRef = useRef<AgentActivityItem[]>(initialTrace);
   const sidechainRunRef = useRef<string | null>(null);
   const streamMessageIdsRef = useRef(new Map([["run-1", "assistant-1"]]));
@@ -84,11 +87,15 @@ describe("agent result projection", () => {
   it("keeps a text-only AskUser result waiting on its durable thread", async () => {
     render(<Harness initialContent="我需要先确认一点。" />);
     await act(async () => {
-      await applyResult({
-        status: "waiting-user",
-        message: "请直接输入目标受众",
-        threadId: "thread-question",
-      }, [], "run-1");
+      await applyResult(
+        {
+          status: "waiting-user",
+          message: "请直接输入目标受众",
+          threadId: "thread-question",
+        },
+        [],
+        "run-1",
+      );
     });
 
     expect(messages.at(-1)).toMatchObject({
@@ -137,10 +144,14 @@ describe("agent result projection", () => {
   it("projects a recoverable service error as structural failure", async () => {
     render(<Harness initialContent="已经完成前两页" />);
     await act(async () => {
-      await applyResult({
-        status: "failed",
-        error: "服务暂时繁忙，请稍后重试。",
-      }, [], "run-1");
+      await applyResult(
+        {
+          status: "failed",
+          error: "服务暂时繁忙，请稍后重试。",
+        },
+        [],
+        "run-1",
+      );
     });
 
     expect(messages.at(-1)).toMatchObject({

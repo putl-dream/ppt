@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { presentationSchema, slideSchema } from "../src/shared/presentation";
-import { createMinimalSvgMarkup, createStarterPresentation, createSvgVisualSource } from "../src/shared/presentation-fixtures";
+import {
+  createMinimalSvgMarkup,
+  createStarterPresentation,
+  createSvgVisualSource,
+} from "../src/shared/presentation-fixtures";
 import {
   migrateDisplayCardsToSvgOnly,
   migratePresentationToSvgOnly,
@@ -18,12 +22,14 @@ describe("presentation identity validation", () => {
 
     expect(result.success).toBe(false);
     if (!result.success) {
-      expect(result.error.issues).toEqual(expect.arrayContaining([
-        expect.objectContaining({
-          path: ["slides", 1, "id"],
-          message: `Duplicate slide id: ${slide.id}`,
-        }),
-      ]));
+      expect(result.error.issues).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            path: ["slides", 1, "id"],
+            message: `Duplicate slide id: ${slide.id}`,
+          }),
+        ]),
+      );
     }
   });
 
@@ -76,10 +82,12 @@ describe("repairPresentationIdentities", () => {
   it("leaves malformed ids for schema validation instead of inventing identities", () => {
     const malformed = {
       ...createStarterPresentation(),
-      slides: [{
-        title: "Missing id",
-        visualSource: createSvgVisualSource({ title: "Missing id" }),
-      }],
+      slides: [
+        {
+          title: "Missing id",
+          visualSource: createSvgVisualSource({ title: "Missing id" }),
+        },
+      ],
     };
 
     const repaired = repairPresentationIdentities(malformed);
@@ -94,19 +102,21 @@ describe("migratePresentationToSvgOnly", () => {
     const slide = presentation.slides[0];
     const legacy = {
       ...presentation,
-      slides: [{
-        ...slide,
-        elements: [{ id: "legacy-text", type: "text" }],
-        layout: "cover",
-        grammarVariant: "signal-dark",
-        slideVariant: "dark",
-        backgroundVariant: "hero",
-        sceneRef: {
-          packId: "editorial-business",
-          sceneId: "split-case",
-          variantId: "fact-sidebar",
+      slides: [
+        {
+          ...slide,
+          elements: [{ id: "legacy-text", type: "text" }],
+          layout: "cover",
+          grammarVariant: "signal-dark",
+          slideVariant: "dark",
+          backgroundVariant: "hero",
+          sceneRef: {
+            packId: "editorial-business",
+            sceneId: "split-case",
+            variantId: "fact-sidebar",
+          },
         },
-      }],
+      ],
     };
 
     const migrated = migratePresentationToSvgOnly(legacy);
@@ -153,12 +163,14 @@ describe("migratePresentationToSvgOnly", () => {
     const slide = presentation.slides[0];
     const markup = createMinimalSvgMarkup("With image");
     const visualSource = createSvgVisualSource({ markup, sourcePath: "slides/P01.svg" });
-    visualSource.resources = [{
-      sourcePath: "assets/photo.png",
-      mimeType: "image/png",
-      byteSize: 2048,
-      sha256: "b".repeat(64),
-    }];
+    visualSource.resources = [
+      {
+        sourcePath: "assets/photo.png",
+        mimeType: "image/png",
+        byteSize: 2048,
+        sha256: "b".repeat(64),
+      },
+    ];
 
     const legacy = {
       ...presentation,
@@ -188,27 +200,27 @@ describe("migrateDisplayCardsToSvgOnly", () => {
   });
 
   it("strips legacy keys from slides inside review.command-proposal commands", () => {
-    const cards = [{
-      event: {
-        kind: "review.command-proposal",
-        category: "review",
-        id: "evt-1",
-        threadId: "th-1",
-        receivedAt: Date.now(),
-        payload: {
+    const cards = [
+      {
+        event: {
+          kind: "review.command-proposal",
+          category: "review",
+          id: "evt-1",
           threadId: "th-1",
-          jobId: "job-1",
-          queryId: "q-1",
-          proposalId: "p-1",
-          summary: "Test",
-          commands: [
-            { id: "cmd-1", type: "add-slide", slide: legacySlide(), index: 0 },
-          ],
+          receivedAt: Date.now(),
+          payload: {
+            threadId: "th-1",
+            jobId: "job-1",
+            queryId: "q-1",
+            proposalId: "p-1",
+            summary: "Test",
+            commands: [{ id: "cmd-1", type: "add-slide", slide: legacySlide(), index: 0 }],
+          },
         },
+        status: "active",
+        receivedAt: Date.now(),
       },
-      status: "active",
-      receivedAt: Date.now(),
-    }];
+    ];
 
     const result = migrateDisplayCardsToSvgOnly(cards);
     expect(result.strippedLegacyFieldCount).toBe(2); // elements + layout
@@ -217,8 +229,12 @@ describe("migrateDisplayCardsToSvgOnly", () => {
     const migrated = result.value as typeof cards;
     const slide = (migrated[0] as Record<string, unknown>).event
       ? (migrated[0].event as Record<string, unknown>).payload
-        ? ((migrated[0].event as Record<string, unknown>).payload as Record<string, unknown>).commands
-          ? (((migrated[0].event as Record<string, unknown>).payload as Record<string, unknown>).commands as Array<Record<string, unknown>>)[0].slide as Record<string, unknown>
+        ? ((migrated[0].event as Record<string, unknown>).payload as Record<string, unknown>)
+            .commands
+          ? ((
+              ((migrated[0].event as Record<string, unknown>).payload as Record<string, unknown>)
+                .commands as Array<Record<string, unknown>>
+            )[0].slide as Record<string, unknown>)
           : {}
         : {}
       : {};
@@ -227,37 +243,54 @@ describe("migrateDisplayCardsToSvgOnly", () => {
   });
 
   it("strips legacy keys from slides inside review.command-proposal preview", () => {
-    const cards = [{
-      event: {
-        kind: "review.command-proposal",
-        category: "review",
-        id: "evt-2",
-        threadId: "th-2",
-        receivedAt: Date.now(),
-        payload: {
+    const cards = [
+      {
+        event: {
+          kind: "review.command-proposal",
+          category: "review",
+          id: "evt-2",
           threadId: "th-2",
-          jobId: "job-2",
-          queryId: "q-2",
-          proposalId: "p-2",
-          summary: "Test",
-          commands: [],
-          preview: { id: "prez", title: "Test", revision: 0, slides: [legacySlide()], designSystem: {} },
+          receivedAt: Date.now(),
+          payload: {
+            threadId: "th-2",
+            jobId: "job-2",
+            queryId: "q-2",
+            proposalId: "p-2",
+            summary: "Test",
+            commands: [],
+            preview: {
+              id: "prez",
+              title: "Test",
+              revision: 0,
+              slides: [legacySlide()],
+              designSystem: {},
+            },
+          },
         },
+        status: "active",
+        receivedAt: Date.now(),
       },
-      status: "active",
-      receivedAt: Date.now(),
-    }];
+    ];
 
     const result = migrateDisplayCardsToSvgOnly(cards);
     expect(result.strippedLegacyFieldCount).toBe(2);
   });
 
   it("leaves non command-proposal cards untouched", () => {
-    const cards = [{
-      event: { kind: "progress.task-list-updated", category: "progress", id: "evt-3", threadId: "th-3", receivedAt: Date.now(), payload: {} },
-      status: "active",
-      receivedAt: Date.now(),
-    }];
+    const cards = [
+      {
+        event: {
+          kind: "progress.task-list-updated",
+          category: "progress",
+          id: "evt-3",
+          threadId: "th-3",
+          receivedAt: Date.now(),
+          payload: {},
+        },
+        status: "active",
+        receivedAt: Date.now(),
+      },
+    ];
 
     const result = migrateDisplayCardsToSvgOnly(cards);
     expect(result.strippedLegacyFieldCount).toBe(0);

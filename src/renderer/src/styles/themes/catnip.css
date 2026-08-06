@@ -236,18 +236,15 @@
 }
 
 [data-ui-region="canvas"] {
-  background:
-    linear-gradient(180deg, var(--catnip-panel-tint), transparent 180px),
-    transparent;
+  background: linear-gradient(180deg, var(--catnip-panel-tint), transparent 180px), transparent;
 }
 
 [data-ui-region="settings"] {
-  background:
-    radial-gradient(
-      600px 300px at 100% 0%,
-      color-mix(in srgb, var(--accent-primary) 7%, transparent),
-      transparent 70%
-    );
+  background: radial-gradient(
+    600px 300px at 100% 0%,
+    color-mix(in srgb, var(--accent-primary) 7%, transparent),
+    transparent 70%
+  );
 }
 
 /* --------------------------------------------------------------------------
@@ -294,12 +291,8 @@
   border-bottom: 1px solid var(--border-subtle);
 }
 
-[data-ui-region="sidebar"] :is(
-  .workbench-sidebar-action-row,
-  .session-row,
-  .workspace-header,
-  .sidebar-rail-btn
-) {
+[data-ui-region="sidebar"]
+  :is(.workbench-sidebar-action-row, .session-row, .workspace-header, .sidebar-rail-btn) {
   transition:
     background-color var(--duration-fast) var(--ease-out),
     border-color var(--duration-fast) var(--ease-out),
@@ -318,8 +311,11 @@
 }
 
 [data-ui-region="sidebar"] :is(.session-row.active, .workbench-sidebar-action-row.active) {
-  background:
-    linear-gradient(90deg, color-mix(in srgb, var(--accent-primary) 17%, transparent), transparent 88%);
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--accent-primary) 17%, transparent),
+    transparent 88%
+  );
   box-shadow:
     inset 3px 0 0 var(--accent-primary),
     inset 0 0 0 1px color-mix(in srgb, var(--accent-primary) 10%, transparent);
@@ -431,8 +427,7 @@
       color-mix(in srgb, var(--accent-primary) 30%, transparent),
       transparent 72%
     ),
-    linear-gradient(180deg, var(--catnip-panel-highlight), transparent 70%),
-    var(--surface-raised);
+    linear-gradient(180deg, var(--catnip-panel-highlight), transparent 70%), var(--surface-raised);
   transition:
     border-color var(--duration-base) var(--ease-out),
     filter var(--duration-base) var(--ease-out),
@@ -470,35 +465,42 @@
 }
 
 @keyframes catnip-ear-left {
-  0%, 100% { transform: rotate(-12deg); }
-  45% { transform: rotate(-18deg) translateY(-1px); }
+  0%,
+  100% {
+    transform: rotate(-12deg);
+  }
+  45% {
+    transform: rotate(-18deg) translateY(-1px);
+  }
 }
 
 @keyframes catnip-ear-right {
-  0%, 100% { transform: rotate(12deg); }
-  45% { transform: rotate(18deg) translateY(-1px); }
+  0%,
+  100% {
+    transform: rotate(12deg);
+  }
+  45% {
+    transform: rotate(18deg) translateY(-1px);
+  }
 }
 
 /* 清除截图中的内层粉色矩形线框。
    !important 仅限 Composer 内部，避免误伤设置页表单。 */
-[data-ui-region="composer"] :is(
-  .input-textarea-row,
-  .input-textarea,
-  textarea
-) {
+[data-ui-region="composer"] :is(.input-textarea-row, .input-textarea, textarea) {
   border: 0 !important;
   outline: 0 !important;
   box-shadow: none !important;
 }
 
-[data-ui-region="composer"] :is(
-  .input-textarea-row:focus,
-  .input-textarea-row:focus-within,
-  .input-textarea:focus,
-  .input-textarea:focus-visible,
-  textarea:focus,
-  textarea:focus-visible
-) {
+[data-ui-region="composer"]
+  :is(
+    .input-textarea-row:focus,
+    .input-textarea-row:focus-within,
+    .input-textarea:focus,
+    .input-textarea:focus-visible,
+    textarea:focus,
+    textarea:focus-visible
+  ) {
   border: 0 !important;
   outline: 0 !important;
   box-shadow: none !important;
@@ -569,24 +571,22 @@
   padding: 9px 14px;
   border: 1px solid color-mix(in srgb, var(--accent-primary) 20%, var(--border-subtle));
   border-radius: 19px 19px 6px 19px;
-  background:
-    linear-gradient(
-      145deg,
-      color-mix(in srgb, var(--accent-primary) 18%, var(--surface-sunken)),
-      var(--surface-sunken)
-    );
+  background: linear-gradient(
+    145deg,
+    color-mix(in srgb, var(--accent-primary) 18%, var(--surface-sunken)),
+    var(--surface-sunken)
+  );
   box-shadow:
     var(--elevation-1),
     inset 0 1px 0 color-mix(in srgb, var(--catnip-panel-highlight) 70%, transparent);
 }
 
 :root[data-color-scheme="dark"] [data-ui-region="canvas"] .user-message-bubble {
-  background:
-    linear-gradient(
-      145deg,
-      color-mix(in srgb, var(--accent-primary) 22%, var(--surface-sunken)),
-      var(--surface-sunken)
-    );
+  background: linear-gradient(
+    145deg,
+    color-mix(in srgb, var(--accent-primary) 22%, var(--surface-sunken)),
+    var(--surface-sunken)
+  );
 }
 
 [data-ui-region="canvas"] .markdown-body {
@@ -684,13 +684,8 @@
    下，因此用后代选择器。以 .chat-stream 收口，避开镜像面板里复用
    .inline-artifact-card 的 SlidePreviewGallery。
    -------------------------------------------------------------------------- */
-.chat-stream :is(
-  .inline-artifact-card,
-  .approval-card,
-  .patch-review-card,
-  .resolved-card,
-  .task-plan-card
-) {
+.chat-stream
+:is(.inline-artifact-card, .approval-card, .patch-review-card, .resolved-card, .task-plan-card) {
   position: relative;
   overflow: visible;
   margin-top: 22px;
@@ -703,20 +698,22 @@
     box-shadow var(--duration-fast) var(--ease-out);
 }
 
-.chat-stream :is(
-  .inline-artifact-card,
-  .approval-card,
-  .patch-review-card,
-  .resolved-card,
-  .task-plan-card
-)::before,
-.chat-stream :is(
-  .inline-artifact-card,
-  .approval-card,
-  .patch-review-card,
-  .resolved-card,
-  .task-plan-card
-)::after {
+.chat-stream
+  :is(
+    .inline-artifact-card,
+    .approval-card,
+    .patch-review-card,
+    .resolved-card,
+    .task-plan-card
+  )::before,
+.chat-stream
+  :is(
+    .inline-artifact-card,
+    .approval-card,
+    .patch-review-card,
+    .resolved-card,
+    .task-plan-card
+  )::after {
   content: "";
   position: absolute;
   top: -11px;
@@ -739,13 +736,14 @@
     filter var(--duration-base) var(--ease-out);
 }
 
-.chat-stream :is(
-  .inline-artifact-card,
-  .approval-card,
-  .patch-review-card,
-  .resolved-card,
-  .task-plan-card
-)::before {
+.chat-stream
+  :is(
+    .inline-artifact-card,
+    .approval-card,
+    .patch-review-card,
+    .resolved-card,
+    .task-plan-card
+  )::before {
   left: 26px;
   border-top-left-radius: 14px 18px;
   border-top-right-radius: 6px 4px;
@@ -753,13 +751,14 @@
   transform-origin: 80% 100%;
 }
 
-.chat-stream :is(
-  .inline-artifact-card,
-  .approval-card,
-  .patch-review-card,
-  .resolved-card,
-  .task-plan-card
-)::after {
+.chat-stream
+  :is(
+    .inline-artifact-card,
+    .approval-card,
+    .patch-review-card,
+    .resolved-card,
+    .task-plan-card
+  )::after {
   right: 26px;
   border-top-right-radius: 14px 18px;
   border-top-left-radius: 6px 4px;
@@ -787,25 +786,27 @@
   border-top-left-radius: 5px 3px;
 }
 
-.chat-stream :is(
-  .inline-artifact-card,
-  .approval-card,
-  .patch-review-card,
-  .resolved-card,
-  .task-plan-card
-):hover::before {
+.chat-stream
+  :is(
+    .inline-artifact-card,
+    .approval-card,
+    .patch-review-card,
+    .resolved-card,
+    .task-plan-card
+  ):hover::before {
   border-color: color-mix(in srgb, var(--accent-primary) 40%, var(--border-default));
   filter: drop-shadow(0 -1px 4px var(--accent-primary-glow));
   transform: rotate(-15deg) translateY(-1px);
 }
 
-.chat-stream :is(
-  .inline-artifact-card,
-  .approval-card,
-  .patch-review-card,
-  .resolved-card,
-  .task-plan-card
-):hover::after {
+.chat-stream
+  :is(
+    .inline-artifact-card,
+    .approval-card,
+    .patch-review-card,
+    .resolved-card,
+    .task-plan-card
+  ):hover::after {
   border-color: color-mix(in srgb, var(--accent-primary) 40%, var(--border-default));
   filter: drop-shadow(0 -1px 4px var(--accent-primary-glow));
   transform: rotate(15deg) translateY(-1px);
@@ -820,7 +821,8 @@
 /* --------------------------------------------------------------------------
    10. 设置页与表单
    -------------------------------------------------------------------------- */
-[data-ui-region="settings"] :is(
+[data-ui-region="settings"]
+:is(
   .ide-field,
   .config-input,
   .title-input,
@@ -837,24 +839,26 @@
     background-color var(--duration-fast) var(--ease-out);
 }
 
-[data-ui-region="settings"] :is(
-  .ide-field,
-  .config-input,
-  .title-input,
-  .cursor-model-search,
-  .user-message-editor-textarea,
-  .workspace-picker-btn
-):hover {
+[data-ui-region="settings"]
+  :is(
+    .ide-field,
+    .config-input,
+    .title-input,
+    .cursor-model-search,
+    .user-message-editor-textarea,
+    .workspace-picker-btn
+  ):hover {
   border-color: var(--border-strong);
 }
 
-[data-ui-region="settings"] :is(
-  .ide-field,
-  .config-input,
-  .title-input,
-  .cursor-model-search,
-  .user-message-editor-textarea
-):focus {
+[data-ui-region="settings"]
+  :is(
+    .ide-field,
+    .config-input,
+    .title-input,
+    .cursor-model-search,
+    .user-message-editor-textarea
+  ):focus {
   border-color: var(--accent-primary);
   background: var(--surface-sunken);
   box-shadow: 0 0 0 3px var(--accent-primary-glow);
@@ -864,14 +868,15 @@
   accent-color: var(--accent-primary);
 }
 
-[data-ui-region="settings"] :is(
-  .ide-nav-item,
-  .ide-choice,
-  .settings-choice-card,
-  .settings-accent-card,
-  .settings-control-shape-card,
-  .theme-card
-) {
+[data-ui-region="settings"]
+  :is(
+    .ide-nav-item,
+    .ide-choice,
+    .settings-choice-card,
+    .settings-accent-card,
+    .settings-control-shape-card,
+    .theme-card
+  ) {
   transition:
     border-color var(--duration-fast) var(--ease-out),
     background-color var(--duration-fast) var(--ease-out),
@@ -880,26 +885,28 @@
     transform var(--duration-fast) var(--ease-out);
 }
 
-[data-ui-region="settings"] :is(
-  .ide-choice,
-  .settings-choice-card,
-  .settings-accent-card,
-  .settings-control-shape-card,
-  .theme-card
-):hover {
+[data-ui-region="settings"]
+  :is(
+    .ide-choice,
+    .settings-choice-card,
+    .settings-accent-card,
+    .settings-control-shape-card,
+    .theme-card
+  ):hover {
   border-color: var(--border-strong);
   background: color-mix(in srgb, var(--accent-primary) 5%, var(--surface-raised));
   transform: translateY(-1px);
 }
 
-[data-ui-region="settings"] :is(
-  .ide-nav-item.is-active,
-  .ide-choice.is-active,
-  .settings-choice-card.active,
-  .settings-accent-card.active,
-  .settings-control-shape-card.active,
-  .theme-card.active
-) {
+[data-ui-region="settings"]
+  :is(
+    .ide-nav-item.is-active,
+    .ide-choice.is-active,
+    .settings-choice-card.active,
+    .settings-accent-card.active,
+    .settings-control-shape-card.active,
+    .theme-card.active
+  ) {
   color: var(--text-primary);
   border-color: var(--accent-primary);
   background:
@@ -940,8 +947,11 @@
   border-color: transparent;
   border-radius: var(--button-border-radius);
   color: var(--text-on-accent);
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--accent-primary) 88%, white), var(--accent-primary));
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--accent-primary) 88%, white),
+    var(--accent-primary)
+  );
   font-weight: var(--font-weight-semibold);
   box-shadow:
     0 5px 14px var(--accent-primary-glow),
@@ -992,8 +1002,7 @@
   border-color: var(--border-strong);
   border-radius: var(--panel-border-radius);
   background:
-    linear-gradient(180deg, var(--catnip-panel-highlight), transparent 52%),
-    var(--catnip-glass);
+    linear-gradient(180deg, var(--catnip-panel-highlight), transparent 52%), var(--catnip-glass);
   box-shadow:
     var(--elevation-3),
     inset 0 1px 0 var(--catnip-panel-highlight);
@@ -1038,23 +1047,25 @@
     padding: 8px 12px;
   }
 
-  .chat-stream :is(
-    .inline-artifact-card,
-    .approval-card,
-    .patch-review-card,
-    .resolved-card,
-    .task-plan-card
-  )::before {
+  .chat-stream
+    :is(
+      .inline-artifact-card,
+      .approval-card,
+      .patch-review-card,
+      .resolved-card,
+      .task-plan-card
+    )::before {
     left: 18px;
   }
 
-  .chat-stream :is(
-    .inline-artifact-card,
-    .approval-card,
-    .patch-review-card,
-    .resolved-card,
-    .task-plan-card
-  )::after {
+  .chat-stream
+    :is(
+      .inline-artifact-card,
+      .approval-card,
+      .patch-review-card,
+      .resolved-card,
+      .task-plan-card
+    )::after {
     right: 18px;
   }
 

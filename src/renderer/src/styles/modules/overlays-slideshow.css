@@ -4,7 +4,10 @@
 .slideshow-lightbox-overlay {
   --slideshow-slide-shadow: 0 25px 60px rgba(15, 23, 42, 0.15);
   position: fixed;
-  top: 0; left: 0; right: 0; bottom: 0;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
   background: color-mix(in srgb, var(--surface-canvas) 94%, transparent);
   backdrop-filter: blur(15px);
   -webkit-backdrop-filter: blur(15px);
@@ -30,10 +33,15 @@
 
 .slideshow-top-bar {
   position: absolute;
-  top: 0; left: 0; right: 0;
+  top: 0;
+  left: 0;
+  right: 0;
   height: 64px;
   padding-left: 40px;
-  padding-right: max(40px, calc(100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw) + 16px));
+  padding-right: max(
+    40px,
+    calc(100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw) + 16px)
+  );
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -109,5 +117,9 @@
   cursor: not-allowed;
 }
 
-.slideshow-nav-arrow.left { left: 40px; }
-.slideshow-nav-arrow.right { right: 40px; }
+.slideshow-nav-arrow.left {
+  left: 40px;
+}
+.slideshow-nav-arrow.right {
+  right: 40px;
+}

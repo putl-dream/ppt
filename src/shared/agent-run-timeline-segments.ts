@@ -7,15 +7,10 @@ export type AgentRunTimelineSegment =
   | { kind: "tool_batch"; items: AgentActivityItem[] };
 
 function isToolBatchItem(item: AgentActivityItem): boolean {
-  return item.kind === "tool"
-    || item.kind === "tool-approval"
-    || item.kind === "step";
+  return item.kind === "tool" || item.kind === "tool-approval" || item.kind === "step";
 }
 
-function flushToolBatch(
-  segments: AgentRunTimelineSegment[],
-  batch: AgentActivityItem[],
-): void {
+function flushToolBatch(segments: AgentRunTimelineSegment[], batch: AgentActivityItem[]): void {
   if (batch.length === 0) return;
   segments.push({ kind: "tool_batch", items: [...batch] });
   batch.length = 0;
@@ -51,7 +46,6 @@ export function buildAgentRunTimelineSegments(
 
     if (isToolBatchItem(item)) {
       toolBatch.push(item);
-      continue;
     }
   }
 
@@ -64,8 +58,8 @@ export function toolBatchHasRunning(items: AgentActivityItem[]): boolean {
 }
 
 export function toolBatchAllTerminal(items: AgentActivityItem[]): boolean {
-  const tools = items.filter((item): item is Extract<AgentActivityItem, { kind: "tool" }> =>
-    item.kind === "tool"
+  const tools = items.filter(
+    (item): item is Extract<AgentActivityItem, { kind: "tool" }> => item.kind === "tool",
   );
   if (tools.length === 0) return true;
   return tools.every((item) => item.status !== "running");

@@ -1,46 +1,43 @@
-import { describe, expect, it, vi } from "vitest";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
-import { createDefaultToolRegistry, ToolRegistry } from "../src/main/agent/tools/tool-registry";
+import { DesignPolicy } from "../src/main/agent/design/design-policy";
+import { CommitGate } from "../src/main/agent/gate/commit-gate";
+import { RiskPolicy } from "../src/main/agent/gate/risk-policy";
+import {
+  AgentGatewayError,
+  type AgentModelGateway,
+  type AgentModelRequest,
+} from "../src/main/agent/gateway";
+import type { AgentModelContentBlock } from "../src/main/agent/gateway/types";
+import { DurableServiceStore } from "../src/main/agent/persistence/durable-service-store";
+import { AgentRuntime } from "../src/main/agent/runtime/agent-runtime";
+import { SystemPromptBuilder } from "../src/main/agent/runtime/prompts/system-prompt";
+import { AgentService } from "../src/main/agent/service";
+import { assumptionsSchema } from "../src/main/agent/tools/assumptions-schema";
 import { askUserTool } from "../src/main/agent/tools/core/ask-user";
-import { searchExtraToolsTool } from "../src/main/agent/tools/core/search-extra-tools";
+import { beginPptCapabilityTool } from "../src/main/agent/tools/core/begin-ppt-capability";
 import { executeExtraToolTool } from "../src/main/agent/tools/core/execute-extra-tool";
 import { getSelectionTool } from "../src/main/agent/tools/core/get-selection";
 import { listSlidesTool } from "../src/main/agent/tools/core/list-slides";
+import { previewSlideTool } from "../src/main/agent/tools/core/preview-slide";
 import { readCurrentSlideTool } from "../src/main/agent/tools/core/read-current-slide";
 import { readPresentationSnapshotTool } from "../src/main/agent/tools/core/read-presentation-snapshot";
-import { previewSlideTool } from "../src/main/agent/tools/core/preview-slide";
-import { beginPptCapabilityTool } from
-  "../src/main/agent/tools/core/begin-ppt-capability";
-import { assumptionsSchema } from "../src/main/agent/tools/assumptions-schema";
+import { searchExtraToolsTool } from "../src/main/agent/tools/core/search-extra-tools";
 import { toToolCard } from "../src/main/agent/tools/tool-card";
-import { ToolLoader } from "../src/main/agent/tools/tool-loader";
 import type { ToolDefinition } from "../src/main/agent/tools/tool-definition";
-import { SystemPromptBuilder } from "../src/main/agent/runtime/prompts/system-prompt";
-import { AgentRuntime } from "../src/main/agent/runtime/agent-runtime";
-import { CommitGate } from "../src/main/agent/gate/commit-gate";
-import { RiskPolicy } from "../src/main/agent/gate/risk-policy";
-import { DesignPolicy } from "../src/main/agent/design/design-policy";
-import { AgentService } from "../src/main/agent/service";
-import { createStarterPresentation } from "../src/shared/presentation-fixtures";
+import { ToolLoader } from "../src/main/agent/tools/tool-loader";
+import { createDefaultToolRegistry, ToolRegistry } from "../src/main/agent/tools/tool-registry";
+import { ContentAddressedBlobStore } from "../src/main/presentation-lifecycle/content-addressed-blob-store";
+import { PresentationLifecycleOrchestrator } from "../src/main/presentation-lifecycle/presentation-lifecycle-orchestrator";
+import { PresentationLifecycleRepository } from "../src/main/presentation-lifecycle/presentation-lifecycle-repository";
+import { PresentationLifecycleToolBridge } from "../src/main/presentation-lifecycle/presentation-lifecycle-tool-bridge";
 import type { AgentModelSelection } from "../src/shared/agent";
 import { CommandBus } from "../src/shared/commands";
-import { AgentGatewayError, type AgentModelGateway, type AgentModelRequest } from "../src/main/agent/gateway";
-import type { AgentModelContentBlock } from "../src/main/agent/gateway/types";
-import { DurableServiceStore } from "../src/main/agent/persistence/durable-service-store";
-import { PresentationLifecycleOrchestrator } from
-  "../src/main/presentation-lifecycle/presentation-lifecycle-orchestrator";
-import { PresentationLifecycleRepository } from
-  "../src/main/presentation-lifecycle/presentation-lifecycle-repository";
-import { PresentationLifecycleToolBridge } from
-  "../src/main/presentation-lifecycle/presentation-lifecycle-tool-bridge";
-import { ContentAddressedBlobStore } from
-  "../src/main/presentation-lifecycle/content-addressed-blob-store";
-import {
-  asProjectId,
-} from "../src/shared/presentation-lifecycle";
+import { createStarterPresentation } from "../src/shared/presentation-fixtures";
+import { asProjectId } from "../src/shared/presentation-lifecycle";
 import { createFakeCommandProposalTool } from "./fake-command-proposal-tool";
 
 function createSequenceGateway(
@@ -152,8 +149,9 @@ describe("Agent Architecture Skeletons & Types", () => {
 
     const results = registry.searchDeferredTools("DeferredAlpha");
     expect(results.map((r) => r.name)).toContain("DeferredAlpha");
-    expect(registry.searchDeferredTools("select:DeferredAlpha DeferredBeta").map((r) => r.name))
-      .toEqual(expect.arrayContaining(["DeferredAlpha", "DeferredBeta"]));
+    expect(
+      registry.searchDeferredTools("select:DeferredAlpha DeferredBeta").map((r) => r.name),
+    ).toEqual(expect.arrayContaining(["DeferredAlpha", "DeferredBeta"]));
   });
 
   it("toToolCard converts complete tool definitions to model-visible summaries", () => {
@@ -193,15 +191,18 @@ describe("Agent Architecture Skeletons & Types", () => {
     const registry = new ToolRegistry();
     registry.register(readPresentationSnapshotTool);
     registry.register(fakeSubmit);
-    const runtime = new AgentRuntime(registry, createSequenceGateway([
-      modelToolCall("ReadPresentationSnapshot"),
-      modelToolCall("FakeSubmitCommands", {
-        summary: "Update title",
-        commands: [{ id: "cmd-runtime", type: "set-presentation-title", title: "Runtime title" }],
-        risk: "low",
-        assumptions: ["Only the title changes"],
-      }),
-    ]));
+    const runtime = new AgentRuntime(
+      registry,
+      createSequenceGateway([
+        modelToolCall("ReadPresentationSnapshot"),
+        modelToolCall("FakeSubmitCommands", {
+          summary: "Update title",
+          commands: [{ id: "cmd-runtime", type: "set-presentation-title", title: "Runtime title" }],
+          risk: "low",
+          assumptions: ["Only the title changes"],
+        }),
+      ]),
+    );
     const presentation = createStarterPresentation();
 
     const result = await runtime.run({
@@ -223,15 +224,20 @@ describe("Agent Architecture Skeletons & Types", () => {
     const registry = new ToolRegistry();
     registry.register(searchExtraToolsTool);
     registry.register(fakeSubmit);
-    const runtime = new AgentRuntime(registry, createSequenceGateway([
-      modelToolCall("SearchExtraTools", { query: "theme layout" }),
-      modelMessage("我先搜索一下高级工具，然后再开始生成。"),
-      modelToolCall("FakeSubmitCommands", {
-        summary: "Create the presentation",
-        commands: [{ id: "cmd-action-continuation", type: "set-presentation-title", title: "Vibe Coding" }],
-        risk: "low",
-      }),
-    ]));
+    const runtime = new AgentRuntime(
+      registry,
+      createSequenceGateway([
+        modelToolCall("SearchExtraTools", { query: "theme layout" }),
+        modelMessage("我先搜索一下高级工具，然后再开始生成。"),
+        modelToolCall("FakeSubmitCommands", {
+          summary: "Create the presentation",
+          commands: [
+            { id: "cmd-action-continuation", type: "set-presentation-title", title: "Vibe Coding" },
+          ],
+          risk: "low",
+        }),
+      ]),
+    );
 
     const result = await runtime.run({
       threadId: "test-action-continuation",
@@ -253,26 +259,31 @@ describe("Agent Architecture Skeletons & Types", () => {
     registry.register(askUserTool);
     registry.register(searchExtraToolsTool);
     registry.register(fakeSubmit);
-    const runtime = new AgentRuntime(registry, createSequenceGateway([
-      modelToolCall("AskUser", {
-        message: "请确认语言、时长和代码示例。",
-        missingFields: ["language", "duration", "codeExamples"],
-        responseUi: {
-          variant: "cards",
-          options: [
-            { id: "default", title: "按默认方案", value: "按默认方案" },
-            { id: "custom", title: "我补充细节", value: "我需要补充细节" },
+    const runtime = new AgentRuntime(
+      registry,
+      createSequenceGateway([
+        modelToolCall("AskUser", {
+          message: "请确认语言、时长和代码示例。",
+          missingFields: ["language", "duration", "codeExamples"],
+          responseUi: {
+            variant: "cards",
+            options: [
+              { id: "default", title: "按默认方案", value: "按默认方案" },
+              { id: "custom", title: "我补充细节", value: "我需要补充细节" },
+            ],
+          },
+        }),
+        modelToolCall("SearchExtraTools", { query: "theme layout" }),
+        modelToolCall("FakeSubmitCommands", {
+          summary: "Create the Vibe Coding presentation",
+          commands: [
+            { id: "cmd-service-context", type: "set-presentation-title", title: "Vibe Coding" },
           ],
-        },
-      }),
-      modelToolCall("SearchExtraTools", { query: "theme layout" }),
-      modelToolCall("FakeSubmitCommands", {
-        summary: "Create the Vibe Coding presentation",
-        commands: [{ id: "cmd-service-context", type: "set-presentation-title", title: "Vibe Coding" }],
-        risk: "low",
-        assumptions: ["中文为主，关键术语保留英文"],
-      }),
-    ]));
+          risk: "low",
+          assumptions: ["中文为主，关键术语保留英文"],
+        }),
+      ]),
+    );
     const service = new AgentService(
       new CommandBus(createStarterPresentation()),
       runtime,
@@ -283,12 +294,12 @@ describe("Agent Architecture Skeletons & Types", () => {
     expect(clarification.status).toBe("waiting-user");
     if (clarification.status !== "waiting-user") throw new Error("Expected clarification");
     expect(clarification.question?.variant).toBe("cards");
-    expect(clarification.question?.options?.map((option) => option.id)).toEqual(["default", "custom"]);
+    expect(clarification.question?.options?.map((option) => option.id)).toEqual([
+      "default",
+      "custom",
+    ]);
 
-    await expect(service.continueAgentRun(
-      clarification.threadId!,
-      "按默认方案",
-    )).rejects.toThrow(
+    await expect(service.continueAgentRun(clarification.threadId!, "按默认方案")).rejects.toThrow(
       "Presentation proposals require the durable lifecycle repository",
     );
   });
@@ -386,15 +397,17 @@ describe("Agent Architecture Skeletons & Types", () => {
 
     await service.continueAgentRun(first.threadId!, "我刚才说了什么？");
 
-    const textContent = requests[2]!.messages!
-      .flatMap((message) => message.content)
+    const textContent = requests[2]!
+      .messages!.flatMap((message) => message.content)
       .filter((block) => block.type === "text")
       .map((block) => block.text);
-    expect(textContent).toEqual(expect.arrayContaining([
-      "帮我做一份 PPT",
-      "Agent 范式与架构演进：从 ReAct / Plan / Workflow 看智能体设计",
-      "我刚才说了什么？",
-    ]));
+    expect(textContent).toEqual(
+      expect.arrayContaining([
+        "帮我做一份 PPT",
+        "Agent 范式与架构演进：从 ReAct / Plan / Workflow 看智能体设计",
+        "我刚才说了什么？",
+      ]),
+    );
     expect(JSON.parse(requests[2]!.prompt)).not.toHaveProperty("conversation");
     expect(JSON.parse(requests[2]!.prompt)).not.toHaveProperty("request");
   });
@@ -425,19 +438,19 @@ describe("Agent Architecture Skeletons & Types", () => {
       "REQUEST_APPROVAL",
       undefined,
       undefined,
-      [
-        { role: "user", content: "Agent 范式与架构演进：从 ReAct / Plan / Workflow 看智能体设计" },
-      ],
+      [{ role: "user", content: "Agent 范式与架构演进：从 ReAct / Plan / Workflow 看智能体设计" }],
     );
 
     expect(result.status).toBe("chat");
     expect(modelRequest?.messages).toEqual([
       {
         role: "user",
-        content: [{
-          type: "text",
-          text: "Agent 范式与架构演进：从 ReAct / Plan / Workflow 看智能体设计",
-        }],
+        content: [
+          {
+            type: "text",
+            text: "Agent 范式与架构演进：从 ReAct / Plan / Workflow 看智能体设计",
+          },
+        ],
       },
       {
         role: "user",
@@ -462,21 +475,32 @@ describe("Agent Architecture Skeletons & Types", () => {
       messageHistory: [],
     };
 
-    await expect(executeExtraToolTool.execute({
-      toolName: "DeferredProbe",
-      toolArgs: {},
-    }, context)).rejects.toThrow("has not been discovered");
+    await expect(
+      executeExtraToolTool.execute(
+        {
+          toolName: "DeferredProbe",
+          toolArgs: {},
+        },
+        context,
+      ),
+    ).rejects.toThrow("has not been discovered");
 
     const search = await searchExtraToolsTool.execute({ query: "DeferredProbe" }, context);
     expect(search.tools.map((tool) => tool.name)).toContain("DeferredProbe");
-    const emptySearch = await searchExtraToolsTool.execute({ query: "create-new-slide-tool" }, context);
+    const emptySearch = await searchExtraToolsTool.execute(
+      { query: "create-new-slide-tool" },
+      context,
+    );
     expect(emptySearch.tools).toEqual([]);
     expect(emptySearch.baseEditingAvailable).toBe(false);
     expect(emptySearch.guidance).toContain("No command-proposal capability");
-    const execution = await executeExtraToolTool.execute({
-      toolName: "DeferredProbe",
-      toolArgs: {},
-    }, context);
+    const execution = await executeExtraToolTool.execute(
+      {
+        toolName: "DeferredProbe",
+        toolArgs: {},
+      },
+      context,
+    );
     expect(execution.toolName).toBe("DeferredProbe");
   });
 
@@ -533,39 +557,43 @@ describe("Agent Architecture Skeletons & Types", () => {
     registry.register(askUserTool);
     registry.register(fakeSubmit);
 
-    const runtime = new AgentRuntime(registry, createSequenceGateway([
-      modelToolCall("FakeSubmitCommands", {
-        summary: "Update title",
-        commands: [{ id: "cmd-service", type: "set-presentation-title", title: "Approved title" }],
-        risk: "low",
-      }),
-    ]));
+    const runtime = new AgentRuntime(
+      registry,
+      createSequenceGateway([
+        modelToolCall("FakeSubmitCommands", {
+          summary: "Update title",
+          commands: [
+            { id: "cmd-service", type: "set-presentation-title", title: "Approved title" },
+          ],
+          risk: "low",
+        }),
+      ]),
+    );
     const riskPolicy = new RiskPolicy();
     const commitGate = new CommitGate(riskPolicy);
     const presentation = createStarterPresentation();
     const bus = new CommandBus(presentation);
 
     const service = new AgentService(bus, runtime, commitGate);
-    await expect(service.start(
-      "Make a title presentation",
-      undefined,
-      "REQUEST_APPROVAL",
-    )).rejects.toThrow(
-      "Presentation proposals require the durable lifecycle repository",
-    );
+    await expect(
+      service.start("Make a title presentation", undefined, "REQUEST_APPROVAL"),
+    ).rejects.toThrow("Presentation proposals require the durable lifecycle repository");
     expect(bus.getSnapshot()).toEqual(presentation);
   });
 
   it("does not auto-apply a proposal without durable lifecycle services", async () => {
     const registry = new ToolRegistry();
     registry.register(fakeSubmit);
-    const runtime = new AgentRuntime(registry, createSequenceGateway([
-      modelToolCall("FakeSubmitCommands", {
-        summary: "Update title",
-        commands: [{ id: "cmd-auto", type: "set-presentation-title", title: "Auto title" }],
-        risk: "low",
-      }),
-    ]));
+    const runtime = new AgentRuntime(
+      registry,
+      createSequenceGateway([
+        modelToolCall("FakeSubmitCommands", {
+          summary: "Update title",
+          commands: [{ id: "cmd-auto", type: "set-presentation-title", title: "Auto title" }],
+          risk: "low",
+        }),
+      ]),
+    );
     const bus = new CommandBus(createStarterPresentation());
     const service = new AgentService(bus, runtime, new CommitGate(new RiskPolicy()));
     const before = bus.getSnapshot();
@@ -578,13 +606,22 @@ describe("Agent Architecture Skeletons & Types", () => {
   it("keeps a continued AUTO request fail-closed without lifecycle services", async () => {
     const registry = new ToolRegistry();
     registry.register(fakeSubmit);
-    const runtime = new AgentRuntime(registry, createSequenceGateway([
-      modelToolCall("FakeSubmitCommands", {
-        summary: "Update title",
-        commands: [{ id: "cmd-auto-continued", type: "set-presentation-title", title: "Continued auto title" }],
-        risk: "low",
-      }),
-    ]));
+    const runtime = new AgentRuntime(
+      registry,
+      createSequenceGateway([
+        modelToolCall("FakeSubmitCommands", {
+          summary: "Update title",
+          commands: [
+            {
+              id: "cmd-auto-continued",
+              type: "set-presentation-title",
+              title: "Continued auto title",
+            },
+          ],
+          risk: "low",
+        }),
+      ]),
+    );
     const bus = new CommandBus(createStarterPresentation());
     const service = new AgentService(bus, runtime, new CommitGate(new RiskPolicy()));
     const threadId = "execution-strategy-override";
@@ -594,27 +631,25 @@ describe("Agent Architecture Skeletons & Types", () => {
     ]);
 
     const before = bus.getSnapshot();
-    await expect(service.continueAgentRun(
-      threadId,
-      "更新标题",
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      "AUTO",
-    )).rejects.toThrow(
-      "Presentation proposals require the durable lifecycle repository",
-    );
+    await expect(
+      service.continueAgentRun(
+        threadId,
+        "更新标题",
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        "AUTO",
+      ),
+    ).rejects.toThrow("Presentation proposals require the durable lifecycle repository");
     expect(bus.getSnapshot()).toEqual(before);
   });
 
   it("rejects an approved proposal when the presentation changed after preview", async () => {
     const workspaceRoot = await mkdtemp(join(tmpdir(), "agent-stale-approval-"));
-    const repository = new PresentationLifecycleRepository(
-      join(workspaceRoot, "lifecycle.sqlite"),
-    );
+    const repository = new PresentationLifecycleRepository(join(workspaceRoot, "lifecycle.sqlite"));
     const lifecycle = new PresentationLifecycleOrchestrator(repository);
     const blobStore = new ContentAddressedBlobStore(join(workspaceRoot, "blobs"));
     const projectId = asProjectId("stale-approval-project");
@@ -637,14 +672,15 @@ describe("Agent Architecture Skeletons & Types", () => {
       ]),
       undefined,
       undefined,
-      ({ queryId, options }) => new PresentationLifecycleToolBridge(
-        lifecycle,
-        projectId,
-        presentation.id,
-        queryId,
-        options.request,
-        blobStore,
-      ),
+      ({ queryId, options }) =>
+        new PresentationLifecycleToolBridge(
+          lifecycle,
+          projectId,
+          presentation.id,
+          queryId,
+          options.request,
+          blobStore,
+        ),
     );
     const bus = new CommandBus(presentation);
     const service = new AgentService(
@@ -670,8 +706,9 @@ describe("Agent Architecture Skeletons & Types", () => {
         "changed after preview",
       );
       expect(bus.getSnapshot().title).toBe("Newer title");
-      const durableState = await new DurableServiceStore(workspaceRoot)
-        .load(result.approval.threadId);
+      const durableState = await new DurableServiceStore(workspaceRoot).load(
+        result.approval.threadId,
+      );
       expect(durableState?.status).toBe("completed");
       expect(durableState).not.toHaveProperty("pendingApproval");
     } finally {
@@ -682,11 +719,13 @@ describe("Agent Architecture Skeletons & Types", () => {
 
   it("coerces string assumptions to array", () => {
     expect(assumptionsSchema.parse("仅排版，不改文案")).toEqual(["仅排版，不改文案"]);
-    expect(fakeSubmit.inputSchema.parse({
-      summary: "Apply theme and layouts",
-      commands: [{ id: "cmd-1", type: "set-presentation-title", title: "Assumptions" }],
-      assumptions: "仅排版，不改文案",
-    }).assumptions).toEqual(["仅排版，不改文案"]);
+    expect(
+      fakeSubmit.inputSchema.parse({
+        summary: "Apply theme and layouts",
+        commands: [{ id: "cmd-1", type: "set-presentation-title", title: "Assumptions" }],
+        assumptions: "仅排版，不改文案",
+      }).assumptions,
+    ).toEqual(["仅排版，不改文案"]);
   });
 
   it("aborts production AgentService execution immediately when aborted signal is passed", async () => {
@@ -695,11 +734,7 @@ describe("Agent Architecture Skeletons & Types", () => {
       run: vi.fn(),
       clearSession: vi.fn(),
     } as any;
-    const service = new AgentService(
-      bus,
-      mockRuntime,
-      new CommitGate(new RiskPolicy()),
-    );
+    const service = new AgentService(bus, mockRuntime, new CommitGate(new RiskPolicy()));
     const controller = new AbortController();
     controller.abort();
 

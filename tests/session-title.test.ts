@@ -1,8 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  createDefaultSessionTitle,
-  createSessionTitleFromPrompt,
-} from "../src/shared/session";
+import { createDefaultSessionTitle, createSessionTitleFromPrompt } from "../src/shared/session";
 
 describe("session title helpers", () => {
   it("creates numbered default titles", () => {
@@ -10,9 +7,9 @@ describe("session title helpers", () => {
   });
 
   it("derives a concise title from the first user prompt", () => {
-    expect(
-      createSessionTitleFromPrompt("请帮我制作一份关于 AI Agent 架构的 PPT。"),
-    ).toBe("关于 AI Agent 架构的 PPT");
+    expect(createSessionTitleFromPrompt("请帮我制作一份关于 AI Agent 架构的 PPT。")).toBe(
+      "关于 AI Agent 架构的 PPT",
+    );
   });
 
   it("falls back when the prompt is blank", () => {
@@ -20,8 +17,8 @@ describe("session title helpers", () => {
   });
 
   it("truncates very long prompts", () => {
-    expect(
-      createSessionTitleFromPrompt("生成 123456789012345678901234567890"),
-    ).toBe("1234567890123456789012345678...");
+    expect(createSessionTitleFromPrompt("生成 123456789012345678901234567890")).toBe(
+      "1234567890123456789012345678...",
+    );
   });
 });

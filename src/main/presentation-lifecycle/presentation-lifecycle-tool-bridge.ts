@@ -1,6 +1,6 @@
 import {
-  asPresentationId,
   type ArtifactPointer,
+  asPresentationId,
   type BlobReference,
   type PptCapability,
   type PptJobProjection,
@@ -8,21 +8,16 @@ import {
   type ProjectId,
   type QueryId,
 } from "@shared/presentation-lifecycle";
-import type { PptLifecycleToolBridge } from
-  "../agent/tools/tool-definition";
-import { PresentationLifecycleOrchestrator } from
-  "./presentation-lifecycle-orchestrator";
-import type { PptReviewReport } from
-  "./presentation-lifecycle-orchestrator";
-import { ContentAddressedBlobStore } from "./content-addressed-blob-store";
-import {
-  PresentationArtifactChangeObserver,
-} from "./artifact-change-observer";
-import type { ArtifactChangeObserverPort } from
-  "./artifact-change-observer-types";
+import type { PptLifecycleToolBridge } from "../agent/tools/tool-definition";
+import { PresentationArtifactChangeObserver } from "./artifact-change-observer";
+import type { ArtifactChangeObserverPort } from "./artifact-change-observer-types";
+import type { ContentAddressedBlobStore } from "./content-addressed-blob-store";
+import type {
+  PptReviewReport,
+  PresentationLifecycleOrchestrator,
+} from "./presentation-lifecycle-orchestrator";
 
-export class PresentationLifecycleToolBridge
-implements PptLifecycleToolBridge {
+export class PresentationLifecycleToolBridge implements PptLifecycleToolBridge {
   constructor(
     private readonly orchestrator: PresentationLifecycleOrchestrator,
     private readonly projectId: ProjectId,
@@ -34,8 +29,8 @@ implements PptLifecycleToolBridge {
     allowWaitingUserResume = false,
   ) {
     this.presentationId = asPresentationId(presentationId);
-    this.artifactChangeObserver = artifactChangeObserver
-      ?? new PresentationArtifactChangeObserver(orchestrator);
+    this.artifactChangeObserver =
+      artifactChangeObserver ?? new PresentationArtifactChangeObserver(orchestrator);
     this.resumeEligible = allowWaitingUserResume;
   }
 
@@ -60,11 +55,7 @@ implements PptLifecycleToolBridge {
   ): Promise<void> {
     const observation = this.artifactObservationTail.then(async () => {
       const projection = this.orchestrator.getProjection(this.presentationId);
-      if (
-        !projection
-        || projection.queryId !== this.queryId
-        || projection.status !== "running"
-      ) {
+      if (!projection || projection.queryId !== this.queryId || projection.status !== "running") {
         return;
       }
       await this.artifactChangeObserver.observe({
@@ -81,19 +72,16 @@ implements PptLifecycleToolBridge {
     await observation;
   }
 
-  beginCapability(input: {
-    capability: PptCapability;
-    instruction: string;
-  }): PptJobProjection {
+  beginCapability(input: { capability: PptCapability; instruction: string }): PptJobProjection {
     const current = this.orchestrator.getProjection(this.presentationId);
     if (
-      current?.queryId === this.queryId
-      && current.status === "waiting_user"
-      && !this.resumeEligible
+      current?.queryId === this.queryId &&
+      current.status === "waiting_user" &&
+      !this.resumeEligible
     ) {
       throw new Error(
-        "This PPT capability entered waiting_user during the current Query; "
-        + "resume it through a waiting-user continuation before using Presentation tools.",
+        "This PPT capability entered waiting_user during the current Query; " +
+          "resume it through a waiting-user continuation before using Presentation tools.",
       );
     }
     const state = this.orchestrator.beginCapability({
@@ -123,28 +111,23 @@ implements PptLifecycleToolBridge {
     }
     this.resumeEligible = false;
     if (
-      projection.status !== "running"
-      && !(options.allowCompleted && projection.status === "completed")
+      projection.status !== "running" &&
+      !(options.allowCompleted && projection.status === "completed")
     ) {
       throw new Error(
         `PPT capability request is ${projection.status}; only a running request can use this tool.`,
       );
     }
-    if (
-      allowedCapabilities
-      && !allowedCapabilities.includes(projection.capability)
-    ) {
+    if (allowedCapabilities && !allowedCapabilities.includes(projection.capability)) {
       throw new Error(
-        `PPT capability ${projection.capability} cannot use this tool. `
-        + `Allowed: ${allowedCapabilities.join(", ")}.`,
+        `PPT capability ${projection.capability} cannot use this tool. ` +
+          `Allowed: ${allowedCapabilities.join(", ")}.`,
       );
     }
     return projection;
   }
 
-  commitArtifact(
-    input: Parameters<PptLifecycleToolBridge["commitArtifact"]>[0],
-  ): ArtifactPointer {
+  commitArtifact(input: Parameters<PptLifecycleToolBridge["commitArtifact"]>[0]): ArtifactPointer {
     const active = this.requireActiveCapability();
     return this.orchestrator.commitArtifact({
       ...input,
@@ -161,10 +144,7 @@ implements PptLifecycleToolBridge {
   }
 
   submitReview(report: PptReviewReport): PptJobProjection {
-    const active = this.requireActiveCapability(
-      ["review"],
-      { allowCompleted: true },
-    );
+    const active = this.requireActiveCapability(["review"], { allowCompleted: true });
     const state = this.orchestrator.completeReview({
       jobId: active.jobId,
       report,
@@ -174,9 +154,7 @@ implements PptLifecycleToolBridge {
 
   private requireBlobStore(): ContentAddressedBlobStore {
     if (!this.blobStore) {
-      throw new Error(
-        "Presentation lifecycle blob storage is unavailable for this runtime.",
-      );
+      throw new Error("Presentation lifecycle blob storage is unavailable for this runtime.");
     }
     return this.blobStore;
   }

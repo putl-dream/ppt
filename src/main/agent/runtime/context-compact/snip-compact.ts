@@ -1,8 +1,4 @@
-import {
-  SNIP_KEEP_HEAD,
-  SNIP_KEEP_TAIL,
-  SNIP_MESSAGE_THRESHOLD,
-} from "./config";
+import { SNIP_KEEP_HEAD, SNIP_KEEP_TAIL, SNIP_MESSAGE_THRESHOLD } from "./config";
 import type { ConversationMessage, TranscriptEntry } from "./types";
 
 function isToolUseEntry(entry: TranscriptEntry): boolean {
@@ -66,7 +62,7 @@ export function snipCompactConversation(
 ): ConversationMessage[] | undefined {
   if (!conversation || conversation.length <= threshold) return conversation;
 
-  let tailStart = adjustSnipBoundary(conversation, conversation.length - keepTail, keepHead);
+  const tailStart = adjustSnipBoundary(conversation, conversation.length - keepTail, keepHead);
   const dropped = tailStart - keepHead;
   if (dropped <= 0) return conversation;
 
@@ -85,7 +81,7 @@ export function snipCompactTranscript(
 ): TranscriptEntry[] {
   if (transcript.length <= threshold) return transcript;
 
-  let tailStart = adjustSnipBoundary(transcript, transcript.length - keepTail, keepHead);
+  const tailStart = adjustSnipBoundary(transcript, transcript.length - keepTail, keepHead);
   const dropped = tailStart - keepHead;
   if (dropped <= 0) return transcript;
 

@@ -1,23 +1,23 @@
 import {
-  agentModelSelectionSchema,
   type AgentModelSelection,
   type AgentModelSettings,
+  agentModelSelectionSchema,
 } from "@shared/agent";
 import {
-  DEFAULT_WEB_SEARCH_ENDPOINT,
-  agentRunServicesWireSchema,
-  splitAgentRunServicesConfig,
   type AgentGatewayConfig,
   type AgentRunServicesWire,
   type AgentSearchConfig,
+  agentRunServicesWireSchema,
+  DEFAULT_WEB_SEARCH_ENDPOINT,
+  splitAgentRunServicesConfig,
 } from "@shared/agent-gateway-config";
 import {
-  credentialStatusRequestSchema,
-  modelCredentialBindingFromSelection,
   type CredentialStatusRequest,
   type CredentialStatusSnapshot,
+  credentialStatusRequestSchema,
+  modelCredentialBindingFromSelection,
 } from "@shared/credentials";
-import { CredentialStore, CredentialStoreError } from "./credential-store";
+import { type CredentialStore, CredentialStoreError } from "./credential-store";
 import {
   resolveEnvironmentModelApiKey,
   resolveEnvironmentWebSearchApiKey,
@@ -85,10 +85,12 @@ export async function hydrateAgentRunServices(
     search: {
       ...(search.webSearchEndpoint ? { webSearchEndpoint: search.webSearchEndpoint } : {}),
       ...(search.webSearchTimeoutMs ? { webSearchTimeoutMs: search.webSearchTimeoutMs } : {}),
-      ...(webSearchApiKey ? {
-        webSearchApiKey,
-        webSearchEndpoint: endpoint,
-      } : {}),
+      ...(webSearchApiKey
+        ? {
+            webSearchApiKey,
+            webSearchEndpoint: endpoint,
+          }
+        : {}),
     },
   };
 }
@@ -106,21 +108,16 @@ export async function getCredentialStatusWithEnvironment(
       const binding = request.models[index];
       return {
         ...modelStatus,
-        configured: modelStatus.configured || Boolean(
-          binding && resolveEnvironmentModelApiKey(
-            binding.provider,
-            binding.baseURL,
-            environment,
+        configured:
+          modelStatus.configured ||
+          Boolean(
+            binding &&
+              resolveEnvironmentModelApiKey(binding.provider, binding.baseURL, environment),
           ),
-        ),
       };
     }),
-    webSearchConfigured: status.webSearchConfigured
-      || Boolean(
-        resolveEnvironmentWebSearchApiKey(
-          request.webSearch?.endpoint,
-          environment,
-        ),
-      ),
+    webSearchConfigured:
+      status.webSearchConfigured ||
+      Boolean(resolveEnvironmentWebSearchApiKey(request.webSearch?.endpoint, environment)),
   };
 }

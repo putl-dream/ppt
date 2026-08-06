@@ -2,14 +2,10 @@
 
 import { act, cleanup, renderHook } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { AgentActivityStreamController } from "../src/renderer/src/app/agent/useAgentActivityStream";
+import { useAgentRunController } from "../src/renderer/src/app/agent/useAgentRunController";
 import { resolveAgentGatewayPreferences } from "../src/shared/agent-gateway-config";
 import { DEFAULT_AGENT_STEP_LIMITS } from "../src/shared/agent-step-limits";
-import {
-  useAgentRunController,
-} from "../src/renderer/src/app/agent/useAgentRunController";
-import type {
-  AgentActivityStreamController,
-} from "../src/renderer/src/app/agent/useAgentActivityStream";
 
 describe("useAgentRunController model guard", () => {
   afterEach(() => {
@@ -52,37 +48,37 @@ describe("useAgentRunController model guard", () => {
       waitForRunStreamCompletion: vi.fn().mockResolvedValue(undefined),
     };
 
-    const { result } = renderHook(() => useAgentRunController({
-      request: "生成一份季度经营复盘",
-      setRequest,
-      busy: false,
-      setBusy,
-      activeSessionId: "",
-      sessionLoaded: false,
-      localStoragePath: "",
-      chatMessages: [],
-      setChatMessages,
-      setIsDraftChat,
-      applySessionState,
-      syncPresentation,
-      settings: {
-        agentStepLimits: DEFAULT_AGENT_STEP_LIMITS,
-        agentGatewayPreferences: resolveAgentGatewayPreferences(),
-        enabledModels: [],
-        selectedModel: undefined,
-        executionStrategy: "REQUEST_APPROVAL",
-      },
-      activity,
-      notify,
-    }));
+    const { result } = renderHook(() =>
+      useAgentRunController({
+        request: "生成一份季度经营复盘",
+        setRequest,
+        busy: false,
+        setBusy,
+        activeSessionId: "",
+        sessionLoaded: false,
+        localStoragePath: "",
+        chatMessages: [],
+        setChatMessages,
+        setIsDraftChat,
+        applySessionState,
+        syncPresentation,
+        settings: {
+          agentStepLimits: DEFAULT_AGENT_STEP_LIMITS,
+          agentGatewayPreferences: resolveAgentGatewayPreferences(),
+          enabledModels: [],
+          selectedModel: undefined,
+          executionStrategy: "REQUEST_APPROVAL",
+        },
+        activity,
+        notify,
+      }),
+    );
 
     await act(async () => {
       await result.current.startAgent();
     });
 
-    expect(notify).toHaveBeenCalledWith(
-      "没有可用的已配置模型；请先在设置中保存 API Key",
-    );
+    expect(notify).toHaveBeenCalledWith("没有可用的已配置模型；请先在设置中保存 API Key");
     expect(setBusy).not.toHaveBeenCalled();
     expect(setChatMessages).not.toHaveBeenCalled();
     expect(setIsDraftChat).not.toHaveBeenCalled();

@@ -1,9 +1,9 @@
-import React from "react";
-import type { BriefFields } from "@shared/project-artifacts";
 import {
   NARRATIVE_MODE_LABELS,
   RESTRUCTURE_PERMISSION_LABELS,
 } from "@shared/commercial-communication";
+import type { BriefFields } from "@shared/project-artifacts";
+import type React from "react";
 
 interface BriefCardProps {
   fields: BriefFields;
@@ -23,9 +23,7 @@ const FIELD_LABELS: Array<{ key: keyof BriefFields; label: string }> = [
   { key: "style", label: "期望风格" },
 ];
 
-export const BriefCard: React.FC<BriefCardProps> = ({
-  fields,
-}) => (
+export const BriefCard: React.FC<BriefCardProps> = ({ fields }) => (
   <div className="inline-artifact-card brief-card">
     <div className="inline-artifact-card-header">
       <span className="inline-artifact-badge">需求简报</span>
@@ -36,11 +34,13 @@ export const BriefCard: React.FC<BriefCardProps> = ({
       {FIELD_LABELS.map(({ key, label }) => (
         <div key={key} className="brief-card-field">
           <dt>{label}</dt>
-          <dd>{key === "restructurePermission"
-            ? RESTRUCTURE_PERMISSION_LABELS[fields.restructurePermission]
-            : key === "narrativeMode"
-              ? NARRATIVE_MODE_LABELS[fields.narrativeMode]
-              : fields[key]}</dd>
+          <dd>
+            {key === "restructurePermission"
+              ? RESTRUCTURE_PERMISSION_LABELS[fields.restructurePermission]
+              : key === "narrativeMode"
+                ? NARRATIVE_MODE_LABELS[fields.narrativeMode]
+                : fields[key]}
+          </dd>
         </div>
       ))}
     </dl>

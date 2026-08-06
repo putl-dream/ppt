@@ -1,12 +1,9 @@
 import { formatPublicErrorMessage } from "@shared/agent-activity-display";
 import { createSessionTitleFromPrompt, type SessionBootstrap } from "@shared/session";
-import {
-  APPLICATION_DEFAULT_TEMPLATE_ID,
-  isUploadedTemplateId,
-} from "@shared/template-protocol";
 import { getBuiltinTemplate } from "@shared/template-catalog";
-import { loadPersistedUiSettings } from "../appBootstrap";
+import { APPLICATION_DEFAULT_TEMPLATE_ID, isUploadedTemplateId } from "@shared/template-protocol";
 import { useProjectStore } from "../../components/project-store";
+import { loadPersistedUiSettings } from "../appBootstrap";
 
 interface EnsureAgentSessionOptions {
   activeSessionId: string;
@@ -37,7 +34,7 @@ export async function ensureAgentSession({
     const requestedTemplateId = persisted.defaultTemplateId ?? APPLICATION_DEFAULT_TEMPLATE_ID;
     const defaultTemplateId = isUploadedTemplateId(requestedTemplateId)
       ? requestedTemplateId
-      : getBuiltinTemplate(requestedTemplateId)?.id ?? APPLICATION_DEFAULT_TEMPLATE_ID;
+      : (getBuiltinTemplate(requestedTemplateId)?.id ?? APPLICATION_DEFAULT_TEMPLATE_ID);
     const state = await window.desktopApi.createSession(
       localStoragePath
         ? { rootPath: localStoragePath, title, defaultTemplateId }

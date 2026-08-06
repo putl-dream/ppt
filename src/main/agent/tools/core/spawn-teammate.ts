@@ -1,6 +1,6 @@
 import { z } from "zod";
-import type { ToolDefinition } from "../tool-definition";
 import { sanitizeAgentName } from "../../teammate/message-bus";
+import type { ToolDefinition } from "../tool-definition";
 
 export const spawnTeammateSchema = z.object({
   name: z.string().optional().describe("Stable teammate name, e.g. researcher or fact_checker"),
@@ -15,11 +15,14 @@ export type SpawnTeammateToolResult = {
   message: string;
 };
 
-export const spawnTeammateTool: ToolDefinition<typeof spawnTeammateSchema, SpawnTeammateToolResult> = {
+export const spawnTeammateTool: ToolDefinition<
+  typeof spawnTeammateSchema,
+  SpawnTeammateToolResult
+> = {
   name: "spawn_teammate",
   description:
-    "Start a long-lived teammate agent in the shared workspace. "
-    + "The teammate runs asynchronously, can send messages through the inbox, and reports results back to lead.",
+    "Start a long-lived teammate agent in the shared workspace. " +
+    "The teammate runs asynchronously, can send messages through the inbox, and reports results back to lead.",
   category: "core",
   loadPolicy: "core",
   inputSchema: spawnTeammateSchema,

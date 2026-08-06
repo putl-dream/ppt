@@ -1,15 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { constants, type Stats } from "node:fs";
-import {
-  link,
-  lstat,
-  mkdir,
-  open,
-  readFile,
-  readdir,
-  rename,
-  unlink,
-} from "node:fs/promises";
+import { link, lstat, mkdir, open, readdir, readFile, rename, unlink } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { basename, dirname, join } from "node:path";
 
@@ -18,16 +9,21 @@ const REPLACEMENT_BACKUP_MARKER = ".atomic-old.";
 
 type LockRelease = () => Promise<void>;
 type ProperLockfile = {
-  lock(file: string, options?: {
-    realpath?: boolean;
-    stale?: number;
-    retries?: number | {
-      retries?: number;
-      factor?: number;
-      minTimeout?: number;
-      maxTimeout?: number;
-    };
-  }): Promise<LockRelease>;
+  lock(
+    file: string,
+    options?: {
+      realpath?: boolean;
+      stale?: number;
+      retries?:
+        | number
+        | {
+            retries?: number;
+            factor?: number;
+            minTimeout?: number;
+            maxTimeout?: number;
+          };
+    },
+  ): Promise<LockRelease>;
 };
 const lockfile = createRequire(import.meta.url)("proper-lockfile") as ProperLockfile;
 
@@ -96,9 +92,7 @@ export class AtomicWriteConflictError extends Error {
   }
 }
 
-type LockedRecovery = (
-  validatePath?: () => Promise<void>,
-) => Promise<boolean>;
+type LockedRecovery = (validatePath?: () => Promise<void>) => Promise<boolean>;
 
 /**
  * Serialize recovery and the caller's complete read/replace transaction across
@@ -123,52 +117,40 @@ export async function withAtomicFileTransaction<T>(
     },
   });
   try {
-    return await operation(async (validatePath) =>
-      await recoverInterruptedReplacementUnlocked(
-        filePath,
-        transactionDirectory,
-        validatePath,
-      ));
+    return await operation(
+      async (validatePath) =>
+        await recoverInterruptedReplacementUnlocked(filePath, transactionDirectory, validatePath),
+    );
   } finally {
     await release();
   }
 }
 
 export async function readJsonFile<T>(filePath: string): Promise<T | undefined> {
-  return await withAtomicFileTransaction(
-    filePath,
-    dirname(filePath),
-    async (recover) => {
-      await recover();
-      let primaryText: string;
-      try {
-        primaryText = (await readRegularFile(filePath)).bytes.toString("utf8");
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-          return undefined;
-        }
-        throw error;
+  return await withAtomicFileTransaction(filePath, dirname(filePath), async (recover) => {
+    await recover();
+    let primaryText: string;
+    try {
+      primaryText = (await readRegularFile(filePath)).bytes.toString("utf8");
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+        return undefined;
       }
+      throw error;
+    }
+    try {
+      return JSON.parse(primaryText) as T;
+    } catch (parseError) {
       try {
-        return JSON.parse(primaryText) as T;
-      } catch (parseError) {
-        try {
-          const backup = (await readRegularFile(`${filePath}.bak`))
-            .bytes.toString("utf8");
-          const parsed = JSON.parse(backup) as T;
-          await writeTextFileAtomicLocked(
-            filePath,
-            backup,
-            dirname(filePath),
-            {},
-          );
-          return parsed;
-        } catch {
-          throw parseError;
-        }
+        const backup = (await readRegularFile(`${filePath}.bak`)).bytes.toString("utf8");
+        const parsed = JSON.parse(backup) as T;
+        await writeTextFileAtomicLocked(filePath, backup, dirname(filePath), {});
+        return parsed;
+      } catch {
+        throw parseError;
       }
-    },
-  );
+    }
+  });
 }
 
 /**
@@ -196,28 +178,17 @@ export async function writeTextFileAtomic(
   await mkdir(targetDirectory, { recursive: true });
   const temporaryDirectory = options.temporaryDirectory ?? targetDirectory;
   await mkdir(temporaryDirectory, { recursive: true });
-  await withAtomicFileTransaction(
-    filePath,
-    temporaryDirectory,
-    async (recover) => {
-      const recoveredInterruptedCommit = await recover(
-        options.commitGuard?.validatePath,
+  await withAtomicFileTransaction(filePath, temporaryDirectory, async (recover) => {
+    const recoveredInterruptedCommit = await recover(options.commitGuard?.validatePath);
+    if (options.commitGuard && recoveredInterruptedCommit) {
+      throw new AtomicWriteConflictError(
+        "Recovered an interrupted replacement before this guarded write; re-read before retrying.",
+        undefined,
+        "uncertain",
       );
-      if (options.commitGuard && recoveredInterruptedCommit) {
-        throw new AtomicWriteConflictError(
-          "Recovered an interrupted replacement before this guarded write; re-read before retrying.",
-          undefined,
-          "uncertain",
-        );
-      }
-      await writeTextFileAtomicLocked(
-        filePath,
-        payload,
-        temporaryDirectory,
-        options,
-      );
-    },
-  );
+    }
+    await writeTextFileAtomicLocked(filePath, payload, temporaryDirectory, options);
+  });
 }
 
 async function writeTextFileAtomicLocked(
@@ -242,12 +213,7 @@ async function writeTextFileAtomicLocked(
     handle = undefined;
 
     if (options.commitGuard) {
-      await guardedReplace(
-        temporaryPath,
-        filePath,
-        temporaryDirectory,
-        options.commitGuard,
-      );
+      await guardedReplace(temporaryPath, filePath, temporaryDirectory, options.commitGuard);
     } else {
       await renameReplacingExisting(temporaryPath, filePath, temporaryDirectory);
     }
@@ -282,12 +248,12 @@ async function recoverInterruptedReplacementUnlocked(
   validatePath?: () => Promise<void>,
 ): Promise<boolean> {
   const manifestPath = replacementManifestPath(filePath, transactionDirectory);
-  if (!await pathExists(manifestPath)) {
+  if (!(await pathExists(manifestPath))) {
     const orphans = await findOrphanedBackups(filePath, transactionDirectory);
     if (orphans.length > 0) {
       throw recoveryAmbiguity(
-        `Found replacement backup(s) without a durable manifest for ${filePath}: `
-        + `${orphans.join(", ")}`,
+        `Found replacement backup(s) without a durable manifest for ${filePath}: ` +
+          `${orphans.join(", ")}`,
       );
     }
     return false;
@@ -305,8 +271,8 @@ async function recoverInterruptedReplacementUnlocked(
 
   if (backupFingerprint) {
     if (
-      !manifest.oldFingerprint
-      || !fingerprintsMatch(manifest.oldFingerprint, backupFingerprint)
+      !manifest.oldFingerprint ||
+      !fingerprintsMatch(manifest.oldFingerprint, backupFingerprint)
     ) {
       throw recoveryAmbiguity(
         `Replacement backup identity does not match its manifest for ${filePath}.`,
@@ -325,9 +291,7 @@ async function recoverInterruptedReplacementUnlocked(
       }
       const restored = await fingerprintPath(filePath);
       if (!fingerprintsMatch(manifest.oldFingerprint, restored)) {
-        throw recoveryAmbiguity(
-          `Restored file identity could not be verified for ${filePath}.`,
-        );
+        throw recoveryAmbiguity(`Restored file identity could not be verified for ${filePath}.`);
       }
       if (validatePath) {
         try {
@@ -352,17 +316,14 @@ async function recoverInterruptedReplacementUnlocked(
       await removeRecoveredTransaction(transaction, true);
       return true;
     }
-    if (
-      manifest.oldFingerprint
-      && fingerprintsMatch(manifest.oldFingerprint, targetFingerprint)
-    ) {
+    if (manifest.oldFingerprint && fingerprintsMatch(manifest.oldFingerprint, targetFingerprint)) {
       await validatePath?.();
       await removeRecoveredTransaction(transaction, true);
       return true;
     }
     throw recoveryAmbiguity(
-      `Target was replaced by an unknown inode while recovering ${filePath}; `
-      + "the original backup was preserved.",
+      `Target was replaced by an unknown inode while recovering ${filePath}; ` +
+        "the original backup was preserved.",
     );
   }
 
@@ -372,17 +333,12 @@ async function recoverInterruptedReplacementUnlocked(
       await removeRecoveredTransaction(transaction, false);
       return true;
     }
-    throw recoveryAmbiguity(
-      `Both the original backup and target are missing for ${filePath}.`,
-    );
+    throw recoveryAmbiguity(`Both the original backup and target are missing for ${filePath}.`);
   }
 
   if (
-    fingerprintsMatch(manifest.newFingerprint, targetFingerprint)
-    || (
-      manifest.oldFingerprint
-      && fingerprintsMatch(manifest.oldFingerprint, targetFingerprint)
-    )
+    fingerprintsMatch(manifest.newFingerprint, targetFingerprint) ||
+    (manifest.oldFingerprint && fingerprintsMatch(manifest.oldFingerprint, targetFingerprint))
   ) {
     await validatePath?.();
     await removeRecoveredTransaction(transaction, false);
@@ -429,9 +385,7 @@ async function guardedReplace(
       displaced = true;
       await syncReplacementDirectories(transaction);
     } else if (await pathExists(targetPath)) {
-      throw new AtomicWriteConflictError(
-        "Destination was created before guarded replacement.",
-      );
+      throw new AtomicWriteConflictError("Destination was created before guarded replacement.");
     }
 
     await guard.validateDisplaced(displaced ? transaction.backupPath : undefined);
@@ -491,13 +445,10 @@ async function guardedReplace(
       );
     }
     if (
-      error instanceof AtomicWriteConflictError
-      || (error as NodeJS.ErrnoException).code === "EEXIST"
+      error instanceof AtomicWriteConflictError ||
+      (error as NodeJS.ErrnoException).code === "EEXIST"
     ) {
-      throw new AtomicWriteConflictError(
-        "Destination changed during guarded replacement.",
-        error,
-      );
+      throw new AtomicWriteConflictError("Destination changed during guarded replacement.", error);
     }
     throw error;
   }
@@ -519,9 +470,7 @@ async function rollbackReplacement(
   if (state.installed && targetFingerprint) {
     if (fingerprintsMatch(transaction.manifest.newFingerprint, targetFingerprint)) {
       await unlink(targetPath);
-    } else if (
-      sameIdentity(transaction.manifest.newFingerprint, targetFingerprint)
-    ) {
+    } else if (sameIdentity(transaction.manifest.newFingerprint, targetFingerprint)) {
       // An external writer changed the inode installed by this operation.
       // Preserve it and the old backup for explicit reconciliation.
       return false;
@@ -547,10 +496,7 @@ async function rollbackReplacement(
 
   if (state.displaced) {
     const backupFingerprint = await fingerprintIfPresent(transaction.backupPath);
-    if (
-      !backupFingerprint
-      || await pathExists(targetPath)
-    ) {
+    if (!backupFingerprint || (await pathExists(targetPath))) {
       return false;
     }
     try {
@@ -606,9 +552,7 @@ async function renameReplacingExisting(
     installed = true;
     const committed = await fingerprintPath(targetPath);
     if (!fingerprintsMatch(transaction.manifest.newFingerprint, committed)) {
-      throw new AtomicWriteConflictError(
-        "Windows replacement inode could not be verified.",
-      );
+      throw new AtomicWriteConflictError("Windows replacement inode could not be verified.");
     }
     await unlink(sourcePath);
     await syncReplacementDirectories(transaction);
@@ -627,11 +571,10 @@ async function renameReplacingExisting(
     }
     let rollbackComplete = false;
     try {
-      rollbackComplete = await rollbackReplacement(
-        targetPath,
-        transaction,
-        { displaced, installed },
-      );
+      rollbackComplete = await rollbackReplacement(targetPath, transaction, {
+        displaced,
+        installed,
+      });
     } catch (rollbackError) {
       throw new AggregateError(
         [error, rollbackError],
@@ -696,9 +639,7 @@ async function readReplacementTransaction(
     );
   }
   if (!isReplacementManifest(parsed, targetPath)) {
-    throw recoveryAmbiguity(
-      `Replacement manifest does not match ${targetPath}; it was preserved.`,
-    );
+    throw recoveryAmbiguity(`Replacement manifest does not match ${targetPath}; it was preserved.`);
   }
   return {
     manifestPath,
@@ -720,9 +661,7 @@ async function removeRecoveredTransaction(
   await syncReplacementDirectories(transaction);
 }
 
-async function syncReplacementDirectories(
-  transaction: ReplacementTransaction,
-): Promise<void> {
+async function syncReplacementDirectories(transaction: ReplacementTransaction): Promise<void> {
   const targetDirectory = dirname(transaction.manifest.targetPath);
   const metadataDirectory = dirname(transaction.manifestPath);
   await syncDirectory(targetDirectory);
@@ -735,22 +674,17 @@ async function findOrphanedBackups(
   filePath: string,
   transactionDirectory: string,
 ): Promise<string[]> {
-  const prefix = `${basename(filePath)}.${replacementTargetKey(filePath)}`
-    + REPLACEMENT_BACKUP_MARKER;
+  const prefix =
+    `${basename(filePath)}.${replacementTargetKey(filePath)}` + REPLACEMENT_BACKUP_MARKER;
   try {
-    return (await readdir(transactionDirectory))
-      .filter((entry) => entry.startsWith(prefix))
-      .sort();
+    return (await readdir(transactionDirectory)).filter((entry) => entry.startsWith(prefix)).sort();
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
     throw error;
   }
 }
 
-function replacementManifestPath(
-  filePath: string,
-  transactionDirectory: string,
-): string {
+function replacementManifestPath(filePath: string, transactionDirectory: string): string {
   return join(
     transactionDirectory,
     `.${basename(filePath)}.${replacementTargetKey(filePath)}${REPLACEMENT_MANIFEST_SUFFIX}`,
@@ -761,9 +695,7 @@ function replacementTargetKey(filePath: string): string {
   return createHash("sha256").update(filePath, "utf8").digest("hex").slice(0, 20);
 }
 
-async function fingerprintIfPresent(
-  filePath: string,
-): Promise<AtomicFileFingerprint | undefined> {
+async function fingerprintIfPresent(filePath: string): Promise<AtomicFileFingerprint | undefined> {
   try {
     return await fingerprintPath(filePath);
   } catch (error) {
@@ -793,12 +725,8 @@ async function readRegularFile(filePath: string): Promise<StableBinaryFile> {
   try {
     handle = await open(
       filePath,
-      constants.O_RDONLY
-      | (
-        process.platform === "win32"
-          ? 0
-          : constants.O_NONBLOCK | constants.O_NOFOLLOW
-      ),
+      constants.O_RDONLY |
+        (process.platform === "win32" ? 0 : constants.O_NONBLOCK | constants.O_NOFOLLOW),
     );
     const before = await handle.stat();
     if (!before.isFile()) {
@@ -808,14 +736,14 @@ async function readRegularFile(filePath: string): Promise<StableBinaryFile> {
     const after = await handle.stat();
     const pathAfter = await lstat(filePath);
     if (
-      !pathAfter.isFile()
-      || pathAfter.isSymbolicLink()
-      || !sameIdentity(lexical, before)
-      || !sameIdentity(before, after)
-      || !sameIdentity(after, pathAfter)
-      || before.size !== after.size
-      || before.mtimeMs !== after.mtimeMs
-      || before.ctimeMs !== after.ctimeMs
+      !pathAfter.isFile() ||
+      pathAfter.isSymbolicLink() ||
+      !sameIdentity(lexical, before) ||
+      !sameIdentity(before, after) ||
+      !sameIdentity(after, pathAfter) ||
+      before.size !== after.size ||
+      before.mtimeMs !== after.mtimeMs ||
+      before.ctimeMs !== after.ctimeMs
     ) {
       throw new AtomicWriteConflictError(
         `File changed while computing an atomic fingerprint: ${filePath}`,
@@ -841,58 +769,44 @@ function fingerprintsMatch(
 }
 
 function hasStableIdentity(value: AtomicFileIdentity): boolean {
-  return Number.isFinite(value.dev)
-    && Number.isFinite(value.ino)
-    && value.ino !== 0;
+  return Number.isFinite(value.dev) && Number.isFinite(value.ino) && value.ino !== 0;
 }
 
-function sameIdentity(
-  expected: AtomicFileIdentity,
-  actual: AtomicFileIdentity,
-): boolean {
+function sameIdentity(expected: AtomicFileIdentity, actual: AtomicFileIdentity): boolean {
   return expected.dev === actual.dev && expected.ino === actual.ino;
 }
 
-function isReplacementManifest(
-  value: unknown,
-  targetPath: string,
-): value is ReplacementManifest {
+function isReplacementManifest(value: unknown, targetPath: string): value is ReplacementManifest {
   if (!value || typeof value !== "object") return false;
   const candidate = value as Partial<ReplacementManifest>;
-  const expectedPrefix = `${basename(targetPath)}.${replacementTargetKey(targetPath)}`
-    + REPLACEMENT_BACKUP_MARKER;
-  return candidate.version === 1
-    && candidate.targetPath === targetPath
-    && candidate.targetName === basename(targetPath)
-    && typeof candidate.backupName === "string"
-    && candidate.backupName.startsWith(expectedPrefix)
-    && !candidate.backupName.includes("/")
-    && !candidate.backupName.includes("\\")
-    && isFingerprint(candidate.newFingerprint)
-    && (
-      candidate.oldFingerprint === null
-      || isFingerprint(candidate.oldFingerprint)
-    );
+  const expectedPrefix =
+    `${basename(targetPath)}.${replacementTargetKey(targetPath)}` + REPLACEMENT_BACKUP_MARKER;
+  return (
+    candidate.version === 1 &&
+    candidate.targetPath === targetPath &&
+    candidate.targetName === basename(targetPath) &&
+    typeof candidate.backupName === "string" &&
+    candidate.backupName.startsWith(expectedPrefix) &&
+    !candidate.backupName.includes("/") &&
+    !candidate.backupName.includes("\\") &&
+    isFingerprint(candidate.newFingerprint) &&
+    (candidate.oldFingerprint === null || isFingerprint(candidate.oldFingerprint))
+  );
 }
 
 function isFingerprint(value: unknown): value is AtomicFileFingerprint {
   if (!value || typeof value !== "object") return false;
   const candidate = value as Partial<AtomicFileFingerprint>;
-  return [
-    candidate.dev,
-    candidate.ino,
-    candidate.size,
-    candidate.mtimeMs,
-    candidate.ctimeMs,
-  ].every((entry) => typeof entry === "number" && Number.isFinite(entry))
-    && typeof candidate.sha256 === "string"
-    && /^[a-f0-9]{64}$/.test(candidate.sha256);
+  return (
+    [candidate.dev, candidate.ino, candidate.size, candidate.mtimeMs, candidate.ctimeMs].every(
+      (entry) => typeof entry === "number" && Number.isFinite(entry),
+    ) &&
+    typeof candidate.sha256 === "string" &&
+    /^[a-f0-9]{64}$/.test(candidate.sha256)
+  );
 }
 
-function recoveryAmbiguity(
-  message: string,
-  cause?: unknown,
-): AtomicWriteConflictError {
+function recoveryAmbiguity(message: string, cause?: unknown): AtomicWriteConflictError {
   return new AtomicWriteConflictError(message, cause, "uncertain");
 }
 
@@ -914,10 +828,10 @@ async function syncDirectory(directoryPath: string): Promise<void> {
   } catch (error) {
     const code = (error as NodeJS.ErrnoException).code;
     if (
-      process.platform !== "win32"
-      && code !== "EINVAL"
-      && code !== "ENOTSUP"
-      && code !== "EISDIR"
+      process.platform !== "win32" &&
+      code !== "EINVAL" &&
+      code !== "ENOTSUP" &&
+      code !== "EISDIR"
     ) {
       throw error;
     }

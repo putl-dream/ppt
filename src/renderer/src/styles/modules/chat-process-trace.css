@@ -171,7 +171,9 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  transition: color 0.15s ease, filter 0.15s ease;
+  transition:
+    color 0.15s ease,
+    filter 0.15s ease;
 }
 .process-trace-row--active .process-trace-row-label {
   color: var(--text-secondary);
@@ -242,7 +244,8 @@
 }
 
 @keyframes process-trace-tool-icon-pulse {
-  0%, 100% {
+  0%,
+  100% {
     opacity: 0.45;
   }
   50% {

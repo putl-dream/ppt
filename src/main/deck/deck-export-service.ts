@@ -1,17 +1,17 @@
 import { mkdir, rename, unlink, writeFile } from "node:fs/promises";
-import { basename, dirname, join } from "node:path";
 import { tmpdir } from "node:os";
-import { presentationSchema, type Presentation } from "@shared/presentation";
+import { basename, dirname, join } from "node:path";
+import { exportToHtml } from "@shared/html-exporter";
 import {
-  exportPresentationOptionsSchema,
   type DeckExportResult,
   type ExportPresentationOptions,
+  exportPresentationOptionsSchema,
 } from "@shared/ipc";
+import { type Presentation, presentationSchema } from "@shared/presentation";
 import { exportToPptx } from "../ppt-exporter";
-import { exportToHtml } from "@shared/html-exporter";
 import { deckValidationService } from "./deck-validation-service";
-import { inspectPptxExport } from "./pptx-postflight";
 import { createPptxExportIdentity } from "./export-identity";
+import { inspectPptxExport } from "./pptx-postflight";
 
 export interface DeckExportInput {
   presentation: Presentation;
@@ -25,9 +25,7 @@ function sanitizeFileName(title: string): string {
   return title.replace(/[<>:"/\\|?*\x00-\x1f]/g, "_").trim() || "presentation";
 }
 
-async function inlineHtmlImageAssets(
-  presentation: Presentation,
-): Promise<Presentation> {
+async function inlineHtmlImageAssets(presentation: Presentation): Promise<Presentation> {
   return presentation;
 }
 
@@ -44,17 +42,17 @@ export class DeckExportService {
     const presentation = presentationSchema.parse(structuredClone(input.presentation));
     const options = exportPresentationOptionsSchema.parse(input.options);
     const format = input.format ?? "pptx";
-    const filePath =
-      input.filePath ??
-      (await this.createDefaultExportPath(presentation, format));
+    const filePath = input.filePath ?? (await this.createDefaultExportPath(presentation, format));
 
     if (filePath.endsWith(".json")) {
       await writeFile(filePath, JSON.stringify(presentation, null, 2), "utf8");
     } else {
-      const validationErrors = deckValidationService.validate(presentation, {
-        workspaceRoot: input.workspaceRoot,
-        allowUnverifiedAssets: options.allowUnverifiedAssets,
-      }).issues.filter((issue) => issue.severity === "error");
+      const validationErrors = deckValidationService
+        .validate(presentation, {
+          workspaceRoot: input.workspaceRoot,
+          allowUnverifiedAssets: options.allowUnverifiedAssets,
+        })
+        .issues.filter((issue) => issue.severity === "error");
       if (validationErrors.length > 0) {
         throw new Error(
           `Export blocked by deck validation: ${validationErrors.map((issue) => issue.message).join("; ")}`,
@@ -85,9 +83,7 @@ export class DeckExportService {
           createPptxExportIdentity(presentation, options),
         );
         if (!postflight.passed) {
-          throw new Error(
-            `PPTX postflight failed: ${postflight.errors.join("; ")}`,
-          );
+          throw new Error(`PPTX postflight failed: ${postflight.errors.join("; ")}`);
         }
         await rename(temporaryPath, filePath);
       } finally {

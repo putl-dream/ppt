@@ -1,8 +1,8 @@
 import type { StopBlock } from "./hooks/hook-blocks";
 import { triggerHooks } from "./hooks/hook-registry";
+import type { AgentRunScope } from "./lifecycle/agent-run-scope";
 import { isRuntimeCancellation } from "./lifecycle/runtime-cancellation";
 import type { AgentRuntimeResult } from "./runtime-types";
-import type { AgentRunScope } from "./lifecycle/agent-run-scope";
 
 /** Commits the authoritative terminal state before running observational hooks. */
 export class AgentRunFinalizer {
@@ -11,23 +11,20 @@ export class AgentRunFinalizer {
     result: AgentRuntimeResult,
     requestedReason?: StopBlock["reason"],
   ): Promise<AgentRuntimeResult> {
-    const status = result.type === "ask_user"
-      ? "waiting_user"
-      : "completed";
-    const reason = requestedReason
-      ?? (result.type === "ask_user"
-        ? "waiting_user"
-        : "completed");
+    const status = result.type === "ask_user" ? "waiting_user" : "completed";
+    const reason = requestedReason ?? (result.type === "ask_user" ? "waiting_user" : "completed");
     scope.stageTerminalConversationHistory(result);
     const checkpointDecision = scope.applyTransition({ type: "run_terminal", status, result });
     if (checkpointDecision !== "terminal") {
       throw new Error("CheckpointPolicy rejected a Runtime terminal transition.");
     }
-    await scope.checkpoints.commitTerminal(scope.createCheckpoint({
-      status,
-      phase: "finished",
-      result,
-    }));
+    await scope.checkpoints.commitTerminal(
+      scope.createCheckpoint({
+        status,
+        phase: "finished",
+        result,
+      }),
+    );
     scope.session.sealTerminal();
     if (status !== "waiting_user") {
       try {
@@ -60,21 +57,28 @@ export class AgentRunFinalizer {
       error: message,
     });
     try {
-      const terminalSaved = await scope.checkpoints.commitFailureTerminal(scope.createCheckpoint({
-        status: aborted ? "interrupted" : "failed",
-        phase: "finished",
-        error: message,
-      }));
+      const terminalSaved = await scope.checkpoints.commitFailureTerminal(
+        scope.createCheckpoint({
+          status: aborted ? "interrupted" : "failed",
+          phase: "finished",
+          error: message,
+        }),
+      );
       if (!terminalSaved) {
         throw new Error("Failed to persist the Runtime failure terminal checkpoint.");
       }
       scope.session.sealTerminal();
     } catch (checkpointError) {
-      scope.eventPorts.audit("workflow_progress", {
-        type: "checkpoint-fallback-error",
-        error: checkpointError instanceof Error ? checkpointError.message : String(checkpointError),
-        primaryError: message,
-      }, "internal");
+      scope.eventPorts.audit(
+        "workflow_progress",
+        {
+          type: "checkpoint-fallback-error",
+          error:
+            checkpointError instanceof Error ? checkpointError.message : String(checkpointError),
+          primaryError: message,
+        },
+        "internal",
+      );
     }
     await this.runStopHookSafely(scope, {
       event: "Stop",
@@ -96,10 +100,14 @@ export class AgentRunFinalizer {
         hook: "Stop",
         content: message,
       });
-      scope.eventPorts.audit("workflow_progress", {
-        type: "stop-hook-error",
-        message,
-      }, "internal");
+      scope.eventPorts.audit(
+        "workflow_progress",
+        {
+          type: "stop-hook-error",
+          message,
+        },
+        "internal",
+      );
     }
   }
 }

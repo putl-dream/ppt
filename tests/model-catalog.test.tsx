@@ -1,20 +1,20 @@
 // @vitest-environment jsdom
 
 import { beforeEach, describe, expect, it } from "vitest";
+import { CREDENTIAL_REENTRY_NOTICE_STORAGE_KEY } from "../src/renderer/src/credentialMigration";
 import {
-  MODEL_STORAGE_KEY,
-  LEGACY_MODEL_STORAGE_KEY,
-  MODEL_VENDOR_MODELS,
-  MODEL_VENDOR_PRESETS,
   buildModelVendorDraft,
   changeModelVendorDraftProtocol,
+  LEGACY_MODEL_STORAGE_KEY,
   loadManagedModels,
+  MODEL_STORAGE_KEY,
+  MODEL_VENDOR_MODELS,
+  MODEL_VENDOR_PRESETS,
   materializeModelVendorDraft,
   normalizeModelTokenPricing,
   serializeManagedModels,
   toAgentModelSelection,
 } from "../src/renderer/src/modelCatalog";
-import { CREDENTIAL_REENTRY_NOTICE_STORAGE_KEY } from "../src/renderer/src/credentialMigration";
 
 describe("model catalog", () => {
   beforeEach(() => {
@@ -52,18 +52,22 @@ describe("model catalog", () => {
       openaiApiMode: "chat-completions",
       supports1MContext: true,
     });
-    expect(flash?.pricing).toEqual(expect.objectContaining({
-      currency: "CNY",
-      inputPerMillion: 1,
-      cachedInputPerMillion: 0.02,
-      outputPerMillion: 2,
-    }));
-    expect(pro?.pricing).toEqual(expect.objectContaining({
-      currency: "CNY",
-      inputPerMillion: 3,
-      cachedInputPerMillion: 0.025,
-      outputPerMillion: 6,
-    }));
+    expect(flash?.pricing).toEqual(
+      expect.objectContaining({
+        currency: "CNY",
+        inputPerMillion: 1,
+        cachedInputPerMillion: 0.02,
+        outputPerMillion: 2,
+      }),
+    );
+    expect(pro?.pricing).toEqual(
+      expect.objectContaining({
+        currency: "CNY",
+        inputPerMillion: 3,
+        cachedInputPerMillion: 0.025,
+        outputPerMillion: 6,
+      }),
+    );
     expect(toAgentModelSelection(flash!)).toMatchObject({ supports1MContext: true });
     expect(toAgentModelSelection(flash!)).toMatchObject({
       configurationId: "deepseek-v4-flash",
@@ -78,20 +82,22 @@ describe("model catalog", () => {
 
     expect(switched.protocol).toBe("openai");
     expect(switched.baseURL).toBe("https://api.deepseek.com");
-    expect(switched.models).toEqual(expect.arrayContaining([
-      expect.objectContaining({ id: "deepseek-v4-flash", openaiApiMode: "responses" }),
-      expect.objectContaining({ id: "deepseek-v4-pro", openaiApiMode: "chat-completions" }),
-    ]));
+    expect(switched.models).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "deepseek-v4-flash", openaiApiMode: "responses" }),
+        expect.objectContaining({ id: "deepseek-v4-pro", openaiApiMode: "chat-completions" }),
+      ]),
+    );
   });
 
   it("reuses existing vendor metadata without attaching the dialog key to models", () => {
-    const existing = MODEL_VENDOR_MODELS
-      .filter((model) => model.id.startsWith("deepseek-"))
-      .map((model) => ({
+    const existing = MODEL_VENDOR_MODELS.filter((model) => model.id.startsWith("deepseek-")).map(
+      (model) => ({
         ...model,
         provider: "openai" as const,
         baseURL: "https://proxy.example.com/v1",
-      }));
+      }),
+    );
     existing[0] = { ...existing[0], name: "My Flash" };
 
     const draft = buildModelVendorDraft("deepseek", existing);
@@ -131,10 +137,10 @@ describe("model catalog", () => {
       ...MODEL_VENDOR_MODELS.find((model) => model.id === "deepseek-v4-flash")!,
       apiKey: "configured-key",
     };
-    window.localStorage.setItem(LEGACY_MODEL_STORAGE_KEY, JSON.stringify([
-      unconfigured,
-      configured,
-    ]));
+    window.localStorage.setItem(
+      LEGACY_MODEL_STORAGE_KEY,
+      JSON.stringify([unconfigured, configured]),
+    );
 
     const models = loadManagedModels();
 
@@ -176,12 +182,14 @@ describe("model catalog", () => {
   });
 
   it("migrates legacy USD prices and preserves saved or disabled preset pricing", () => {
-    expect(normalizeModelTokenPricing({
-      inputPerMillionUsd: 4,
-      cachedInputPerMillionUsd: 0.4,
-      outputPerMillionUsd: 20,
-      updatedAt: "2026-07-01",
-    })).toEqual({
+    expect(
+      normalizeModelTokenPricing({
+        inputPerMillionUsd: 4,
+        cachedInputPerMillionUsd: 0.4,
+        outputPerMillionUsd: 20,
+        updatedAt: "2026-07-01",
+      }),
+    ).toEqual({
       currency: "USD",
       inputPerMillion: 4,
       cachedInputPerMillion: 0.4,
@@ -190,24 +198,27 @@ describe("model catalog", () => {
     });
 
     const configured = MODEL_VENDOR_MODELS.find((model) => model.id === "openai-gpt-5-5")!;
-    window.localStorage.setItem(MODEL_STORAGE_KEY, JSON.stringify([
-      {
-        ...configured,
-        apiKey: "configured-key",
-        pricing: {
-          currency: "CNY",
-          inputPerMillion: 8,
-          cachedInputPerMillion: 0.8,
-          outputPerMillion: 40,
-          updatedAt: "2026-08-01",
+    window.localStorage.setItem(
+      MODEL_STORAGE_KEY,
+      JSON.stringify([
+        {
+          ...configured,
+          apiKey: "configured-key",
+          pricing: {
+            currency: "CNY",
+            inputPerMillion: 8,
+            cachedInputPerMillion: 0.8,
+            outputPerMillion: 40,
+            updatedAt: "2026-08-01",
+          },
         },
-      },
-      {
-        ...MODEL_VENDOR_MODELS.find((model) => model.id === "openai-gpt-5-mini")!,
-        apiKey: "configured-key",
-        pricing: null,
-      },
-    ]));
+        {
+          ...MODEL_VENDOR_MODELS.find((model) => model.id === "openai-gpt-5-mini")!,
+          apiKey: "configured-key",
+          pricing: null,
+        },
+      ]),
+    );
 
     const models = loadManagedModels();
     expect(models.find((model) => model.id === "openai-gpt-5-5")?.pricing).toEqual(

@@ -3,18 +3,18 @@
  * Shared by Main (templates), Renderer (editors), and Agent context helpers.
  */
 import {
-  DEFAULT_DESIGN_SYSTEM,
-  designSystemV2Schema,
-  type DesignSystemV2,
-  DEFAULT_BRAND_PROFILE,
-  brandProfileV2Schema,
   type BrandProfileV2,
+  brandProfileV2Schema,
+  DEFAULT_BRAND_PROFILE,
+  DEFAULT_DESIGN_SYSTEM,
+  type DesignSystemV2,
+  designSystemV2Schema,
 } from "@design-system";
 import {
   COMMERCIAL_COMMUNICATION_DEFAULTS,
+  type CommercialCommunicationContract,
   normalizeNarrativeMode,
   normalizeRestructurePermission,
-  type CommercialCommunicationContract,
 } from "./commercial-communication";
 
 export interface BriefFields extends CommercialCommunicationContract {
@@ -61,22 +61,29 @@ export function createDefaultBriefMarkdown(title = DEFAULT_BRIEF_FIELDS.title): 
 
 export function isDefaultBriefMarkdown(md: string): boolean {
   const fields = parseBriefFields(md, DEFAULT_BRIEF_FIELDS.title);
-  const hasDefaultFields = fields.objective === DEFAULT_BRIEF_FIELDS.objective
-    && fields.audience === DEFAULT_BRIEF_FIELDS.audience
-    && fields.desiredAction === DEFAULT_BRIEF_FIELDS.desiredAction
-    && fields.coreMessage === DEFAULT_BRIEF_FIELDS.coreMessage
-    && fields.presentationContext === DEFAULT_BRIEF_FIELDS.presentationContext
-    && fields.afterUse === DEFAULT_BRIEF_FIELDS.afterUse
-    && fields.restructurePermission === DEFAULT_BRIEF_FIELDS.restructurePermission
-    && fields.narrativeMode === DEFAULT_BRIEF_FIELDS.narrativeMode
-    && fields.duration === DEFAULT_BRIEF_FIELDS.duration
-    && fields.script === DEFAULT_BRIEF_FIELDS.script
-    && fields.style === DEFAULT_BRIEF_FIELDS.style;
-  return hasDefaultFields
-    && normalizeMarkdownForComparison(md) === normalizeMarkdownForComparison(createDefaultBriefMarkdown(fields.title));
+  const hasDefaultFields =
+    fields.objective === DEFAULT_BRIEF_FIELDS.objective &&
+    fields.audience === DEFAULT_BRIEF_FIELDS.audience &&
+    fields.desiredAction === DEFAULT_BRIEF_FIELDS.desiredAction &&
+    fields.coreMessage === DEFAULT_BRIEF_FIELDS.coreMessage &&
+    fields.presentationContext === DEFAULT_BRIEF_FIELDS.presentationContext &&
+    fields.afterUse === DEFAULT_BRIEF_FIELDS.afterUse &&
+    fields.restructurePermission === DEFAULT_BRIEF_FIELDS.restructurePermission &&
+    fields.narrativeMode === DEFAULT_BRIEF_FIELDS.narrativeMode &&
+    fields.duration === DEFAULT_BRIEF_FIELDS.duration &&
+    fields.script === DEFAULT_BRIEF_FIELDS.script &&
+    fields.style === DEFAULT_BRIEF_FIELDS.style;
+  return (
+    hasDefaultFields &&
+    normalizeMarkdownForComparison(md) ===
+      normalizeMarkdownForComparison(createDefaultBriefMarkdown(fields.title))
+  );
 }
 
-export function parseBriefFields(md: string, fallbackTitle = DEFAULT_BRIEF_FIELDS.title): BriefFields {
+export function parseBriefFields(
+  md: string,
+  fallbackTitle = DEFAULT_BRIEF_FIELDS.title,
+): BriefFields {
   const fields: BriefFields = { ...DEFAULT_BRIEF_FIELDS, title: fallbackTitle };
 
   type BriefTextKey = Exclude<keyof BriefFields, "restructurePermission" | "narrativeMode">;
@@ -169,30 +176,36 @@ export function toCommercialCommunicationContract(
 }
 
 export function createDefaultOutlineMarkdown(title = "新演示文稿"): string {
-  return serializeOutlineMarkdown([
-    {
-      id: createId("outline"),
-      title: "行业背景与痛点",
-      pages: 1,
-      points: ["行业增速放缓", "痛点分析"],
-    },
-    {
-      id: createId("outline"),
-      title: "解决方案",
-      pages: 1,
-      points: ["产品定位", "核心竞争力"],
-    },
-    {
-      id: createId("outline"),
-      title: "发展规划",
-      pages: 1,
-      points: ["下一步里程碑", "商业价值"],
-    },
-  ], title);
+  return serializeOutlineMarkdown(
+    [
+      {
+        id: createId("outline"),
+        title: "行业背景与痛点",
+        pages: 1,
+        points: ["行业增速放缓", "痛点分析"],
+      },
+      {
+        id: createId("outline"),
+        title: "解决方案",
+        pages: 1,
+        points: ["产品定位", "核心竞争力"],
+      },
+      {
+        id: createId("outline"),
+        title: "发展规划",
+        pages: 1,
+        points: ["下一步里程碑", "商业价值"],
+      },
+    ],
+    title,
+  );
 }
 
 export function isDefaultOutlineMarkdown(md: string): boolean {
-  return normalizeMarkdownForComparison(md) === normalizeMarkdownForComparison(createDefaultOutlineMarkdown());
+  return (
+    normalizeMarkdownForComparison(md) ===
+    normalizeMarkdownForComparison(createDefaultOutlineMarkdown())
+  );
 }
 
 function normalizeMarkdownForComparison(md: string): string {

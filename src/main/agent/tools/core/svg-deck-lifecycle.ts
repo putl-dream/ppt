@@ -18,10 +18,7 @@ import {
 } from "./svg-deck-locks";
 
 const SVG_AUTHORING_CAPABILITIES = ["create", "edit", "restyle"] as const;
-const SVG_PREVIEW_CAPABILITIES = [
-  ...SVG_AUTHORING_CAPABILITIES,
-  "review",
-] as const;
+const SVG_PREVIEW_CAPABILITIES = [...SVG_AUTHORING_CAPABILITIES, "review"] as const;
 
 interface SvgLifecycleValues {
   designSpec: SvgDeckDesignSpec;
@@ -38,11 +35,7 @@ export async function commitSvgPagePreviewLifecycle(input: {
   input.lifecycle.requireActiveCapability(SVG_PREVIEW_CAPABILITIES);
   const locks = await readSvgDeckLocks(input.fileService, "PreviewSvgPage");
   assertSvgPageBelongsToPlan(input.page.sourcePath, locks.pagePlan);
-  const values = await storeLifecycleValues(
-    input.lifecycle,
-    input.page,
-    locks,
-  );
+  const values = await storeLifecycleValues(input.lifecycle, input.page, locks);
 
   input.lifecycle.withTransaction(() => {
     const designSpec = ensureArtifact(input.lifecycle, {
@@ -69,18 +62,14 @@ export async function commitSvgPagePreviewLifecycle(input: {
         value: asset,
         dependencies: [],
         validator: "svg-page-source-asset",
-      })
+      }),
     );
     const page = ensureArtifact(input.lifecycle, {
       artifactId: pageArtifactId(input.page.sourcePath),
       kind: "page_svg",
       stage: "page_svg",
       value: values.page,
-      dependencies: [
-        dependency(designSpec),
-        dependency(pagePlan),
-        ...assets.map(dependency),
-      ],
+      dependencies: [dependency(designSpec), dependency(pagePlan), ...assets.map(dependency)],
       validator: "svg-page",
     });
     ensureArtifact(input.lifecycle, {
@@ -104,25 +93,15 @@ export async function assertSvgPageLifecycleCurrent(input: {
   };
 }): Promise<void> {
   input.lifecycle.requireActiveCapability(SVG_AUTHORING_CAPABILITIES);
-  const locks = input.locks ?? await readSvgDeckLocks(input.fileService);
+  const locks = input.locks ?? (await readSvgDeckLocks(input.fileService));
   assertSvgPageBelongsToPlan(input.page.sourcePath, locks.pagePlan);
   const values = currentLifecycleValues(input.page, locks);
-  const projection = input.lifecycle.requireActiveCapability(
-    SVG_AUTHORING_CAPABILITIES,
-  );
+  const projection = input.lifecycle.requireActiveCapability(SVG_AUTHORING_CAPABILITIES);
 
-  requireCurrentArtifact(
-    projection,
-    "design-spec",
-    values.designSpec,
-  );
+  requireCurrentArtifact(projection, "design-spec", values.designSpec);
   requireCurrentArtifact(projection, "page-plan", values.pagePlan);
   for (const asset of values.assets) {
-    requireCurrentArtifact(
-      projection,
-      sourceAssetArtifactId(asset.sourcePath),
-      asset,
-    );
+    requireCurrentArtifact(projection, sourceAssetArtifactId(asset.sourcePath), asset);
   }
   const page = requireCurrentArtifact(
     projection,
@@ -130,11 +109,7 @@ export async function assertSvgPageLifecycleCurrent(input: {
     values.page,
   );
   const receiptValue = previewReceiptValue(input.page, page);
-  requireCurrentArtifact(
-    projection,
-    previewReceiptArtifactId(input.page.sourcePath),
-    receiptValue,
-  );
+  requireCurrentArtifact(projection, previewReceiptArtifactId(input.page.sourcePath), receiptValue);
   await assertLifecycleBlobs(input.lifecycle, values);
 
   // The lock revisions are intentionally checked above even though the
@@ -157,9 +132,7 @@ function lifecycleValues(
     assets: page.resources.map((resource) => {
       const blob = assetBlobs.get(resource.sha256);
       if (!blob) {
-        throw new Error(
-          `Hydrated SVG resource bytes are missing for ${resource.sourcePath}.`,
-        );
+        throw new Error(`Hydrated SVG resource bytes are missing for ${resource.sourcePath}.`);
       }
       return sourceAssetValue(resource, blob);
     }),
@@ -174,10 +147,7 @@ async function storeLifecycleValues(
     pagePlan: SvgDeckPagePlan;
   },
 ): Promise<SvgLifecycleValues> {
-  const pageBlob = await lifecycle.storeBlob(
-    Buffer.from(page.markup, "utf8"),
-    "image/svg+xml",
-  );
+  const pageBlob = await lifecycle.storeBlob(Buffer.from(page.markup, "utf8"), "image/svg+xml");
   assertExpectedBlob(
     pageBlob,
     blobReference(page.sha256, "image/svg+xml", page.byteSize),
@@ -185,17 +155,10 @@ async function storeLifecycleValues(
   );
   const assetBlobs = new Map<string, BlobReference>();
   for (const content of page.resourceContents) {
-    const blob = await lifecycle.storeBlob(
-      content.bytes,
-      content.resource.mimeType,
-    );
+    const blob = await lifecycle.storeBlob(content.bytes, content.resource.mimeType);
     assertExpectedBlob(
       blob,
-      blobReference(
-        content.resource.sha256,
-        content.resource.mimeType,
-        content.resource.byteSize,
-      ),
+      blobReference(content.resource.sha256, content.resource.mimeType, content.resource.byteSize),
       content.resource.sourcePath,
     );
     assetBlobs.set(content.resource.sha256, blob);
@@ -217,11 +180,7 @@ function currentLifecycleValues(
     new Map(
       page.resources.map((resource) => [
         resource.sha256,
-        blobReference(
-          resource.sha256,
-          resource.mimeType,
-          resource.byteSize,
-        ),
+        blobReference(resource.sha256, resource.mimeType, resource.byteSize),
       ]),
     ),
   );
@@ -244,17 +203,14 @@ async function assertLifecycleBlobs(
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
       throw new Error(
-        `SVG lifecycle blob is missing or invalid for ${entry.sourcePath}: ${detail}. `
-        + "Call PreviewSvgPage with includeThumbnail=true for the current page.",
+        `SVG lifecycle blob is missing or invalid for ${entry.sourcePath}: ${detail}. ` +
+          "Call PreviewSvgPage with includeThumbnail=true for the current page.",
       );
     }
   }
 }
 
-function pageArtifactValue(
-  page: HydratedSvgPage,
-  blob: BlobReference,
-) {
+function pageArtifactValue(page: HydratedSvgPage, blob: BlobReference) {
   return {
     sourcePath: page.sourcePath,
     sha256: page.sha256,
@@ -266,10 +222,7 @@ function pageArtifactValue(
   };
 }
 
-function sourceAssetValue(
-  resource: HydratedSvgPage["resources"][number],
-  blob: BlobReference,
-) {
+function sourceAssetValue(resource: HydratedSvgPage["resources"][number], blob: BlobReference) {
   return {
     sourcePath: resource.sourcePath,
     sha256: resource.sha256,
@@ -279,11 +232,7 @@ function sourceAssetValue(
   };
 }
 
-function blobReference(
-  sha256: string,
-  mediaType: string,
-  byteLength: number,
-): BlobReference {
+function blobReference(sha256: string, mediaType: string, byteLength: number): BlobReference {
   return blobReferenceSchema.parse({
     contentHash: `sha256:${sha256}`,
     mediaType,
@@ -297,20 +246,15 @@ function assertExpectedBlob(
   sourcePath: string,
 ): void {
   if (
-    actual.contentHash !== expected.contentHash
-    || actual.mediaType !== expected.mediaType
-    || actual.byteLength !== expected.byteLength
+    actual.contentHash !== expected.contentHash ||
+    actual.mediaType !== expected.mediaType ||
+    actual.byteLength !== expected.byteLength
   ) {
-    throw new Error(
-      `Blob store returned inconsistent metadata for ${sourcePath}.`,
-    );
+    throw new Error(`Blob store returned inconsistent metadata for ${sourcePath}.`);
   }
 }
 
-function previewReceiptValue(
-  page: HydratedSvgPage,
-  pagePointer: ArtifactPointer,
-) {
+function previewReceiptValue(page: HydratedSvgPage, pagePointer: ArtifactPointer) {
   return {
     sourcePath: page.sourcePath,
     sha256: page.sha256,
@@ -330,20 +274,13 @@ function ensureArtifact(
     validator: string;
   },
 ): ArtifactPointer {
-  const projection = lifecycle.requireActiveCapability(
-    SVG_PREVIEW_CAPABILITIES,
-  );
+  const projection = lifecycle.requireActiveCapability(SVG_PREVIEW_CAPABILITIES);
   const expectedHash = hashArtifactValue(input.value);
   const current = currentArtifact(projection, input.artifactId);
-  if (
-    current?.contentHash === expectedHash
-    && !isStale(projection, current)
-  ) {
+  if (current?.contentHash === expectedHash && !isStale(projection, current)) {
     return current;
   }
-  const dependencyKey = input.dependencies
-    .map((item) => item.revisionId)
-    .join(",");
+  const dependencyKey = input.dependencies.map((item) => item.revisionId).join(",");
   return lifecycle.commitArtifact({
     artifactId: input.artifactId,
     kind: input.kind,
@@ -352,8 +289,8 @@ function ensureArtifact(
     dependencies: input.dependencies,
     validation: passedValidation(input.validator),
     idempotencyKey:
-      `svg-authoring:${projection.requestId}:${input.artifactId}:`
-      + `${current?.revisionId ?? "no-head"}:${expectedHash}:${dependencyKey}`,
+      `svg-authoring:${projection.requestId}:${input.artifactId}:` +
+      `${current?.revisionId ?? "no-head"}:${expectedHash}:${dependencyKey}`,
   });
 }
 
@@ -364,14 +301,10 @@ function requireCurrentArtifact(
 ): ArtifactPointer {
   const current = currentArtifact(projection, artifactId);
   const expectedHash = hashArtifactValue(value);
-  if (
-    !current
-    || current.contentHash !== expectedHash
-    || isStale(projection, current)
-  ) {
+  if (!current || current.contentHash !== expectedHash || isStale(projection, current)) {
     throw new Error(
-      `SVG lifecycle artifact ${artifactId} is missing or stale. `
-      + "Call PreviewSvgPage with includeThumbnail=true for the current page and locks.",
+      `SVG lifecycle artifact ${artifactId} is missing or stale. ` +
+        "Call PreviewSvgPage with includeThumbnail=true for the current page and locks.",
     );
   }
   return current;
@@ -381,18 +314,11 @@ function currentArtifact(
   projection: PptJobProjection,
   artifactId: string,
 ): ArtifactPointer | undefined {
-  return projection.committedArtifacts.find(
-    (pointer) => pointer.artifactId === artifactId,
-  );
+  return projection.committedArtifacts.find((pointer) => pointer.artifactId === artifactId);
 }
 
-function isStale(
-  projection: PptJobProjection,
-  pointer: ArtifactPointer,
-): boolean {
-  return projection.staleArtifacts.some(
-    (stale) => stale.revisionId === pointer.revisionId,
-  );
+function isStale(projection: PptJobProjection, pointer: ArtifactPointer): boolean {
+  return projection.staleArtifacts.some((stale) => stale.revisionId === pointer.revisionId);
 }
 
 function dependency(pointer: ArtifactPointer): ArtifactDependency {

@@ -1,7 +1,5 @@
 import { readdir, readFile } from "node:fs/promises";
 import { join, relative } from "node:path";
-import type { ZodType } from "zod";
-
 import { deckExportHistoryFileSchema } from "@shared/deck-persistence";
 import { presentationSchema } from "@shared/presentation";
 import {
@@ -15,20 +13,21 @@ import {
 } from "@shared/project-artifacts";
 import { validateSvgPage } from "@shared/svg-page";
 import {
-  TEMPLATE_PACK_PATH,
-  TEMPLATE_POLICY_PATH,
   createDefaultProjectTemplatePolicy,
   formatProjectTemplatePolicy,
   projectTemplatePolicySchema,
+  TEMPLATE_PACK_PATH,
+  TEMPLATE_POLICY_PATH,
   templatePackSchema,
 } from "@shared/template-protocol";
+import type { ZodType } from "zod";
 import {
+  formatSvgDeckLockIssues,
   SVG_DECK_DESIGN_SPEC_PATH,
   SVG_DECK_PAGE_PLAN_PATH,
-  formatSvgDeckLockIssues,
+  type SvgDeckPagePlan,
   svgDeckDesignSpecSchema,
   svgDeckPagePlanSchema,
-  type SvgDeckPagePlan,
 } from "../../tools/core/svg-deck-locks";
 
 export interface WorkspaceArtifacts {
@@ -45,12 +44,7 @@ export interface WorkspaceArtifacts {
   research: boolean;
 }
 
-export type WorkspaceArtifactStatus =
-  | "missing"
-  | "empty"
-  | "default"
-  | "invalid"
-  | "verified";
+export type WorkspaceArtifactStatus = "missing" | "empty" | "default" | "invalid" | "verified";
 
 export interface WorkspaceArtifactProbe {
   path: string;
@@ -118,7 +112,9 @@ function validateBriefContent(path: string, content: string | undefined): Worksp
   }
 
   const hasHeading = /^#\s+/m.test(trimmed);
-  const hasBriefSignal = /目的|受众|听众|页|页面|幻灯片|规划|大纲|要点|背景|痛点|风格/.test(trimmed);
+  const hasBriefSignal = /目的|受众|听众|页|页面|幻灯片|规划|大纲|要点|背景|痛点|风格/.test(
+    trimmed,
+  );
   if (!hasHeading || !hasBriefSignal) {
     return invalidProbe(path, "Brief lacks recognizable planning signals.");
   }
@@ -140,11 +136,17 @@ function validateOutlineContent(path: string, content: string | undefined): Work
   }
 
   const hasOutlineShape = /^##\s+\d+[.、]/m.test(trimmed) || /^\d+[.、]\s+/m.test(trimmed);
-  const hasSectionGuidance = /section|分隔页|章节|预计\s*\d+\s*页|Hook|Context|Core|Shift|Takeaway/i.test(trimmed);
+  const hasSectionGuidance =
+    /section|分隔页|章节|预计\s*\d+\s*页|Hook|Context|Core|Shift|Takeaway/i.test(trimmed);
   const items = parseOutlineItems(trimmed);
-  const hasDetailedNumberedSections = items.length >= 2
-    && items.every((item) => item.title.trim() && item.points.some((point) => point.trim()));
-  if (items.length < 1 || !hasOutlineShape || (!hasSectionGuidance && !hasDetailedNumberedSections)) {
+  const hasDetailedNumberedSections =
+    items.length >= 2 &&
+    items.every((item) => item.title.trim() && item.points.some((point) => point.trim()));
+  if (
+    items.length < 1 ||
+    !hasOutlineShape ||
+    (!hasSectionGuidance && !hasDetailedNumberedSections)
+  ) {
     return invalidProbe(path, "Outline lacks slide structure or section guidance.");
   }
 
@@ -199,9 +201,10 @@ function validateTemplatePolicyContent(
       reason: `mode=${result.value.mode}; defaultTemplateId=${result.value.defaultTemplateId}`,
     };
   }
-  const customSuffix = result.value.mode === "custom"
-    ? `; custom=${result.value.customTemplateId}@${result.value.customTemplateRevisionId}`
-    : "";
+  const customSuffix =
+    result.value.mode === "custom"
+      ? `; custom=${result.value.customTemplateId}@${result.value.customTemplateRevisionId}`
+      : "";
   return {
     path,
     status: "verified",
@@ -218,19 +221,18 @@ function validateTemplatePackContent(
   if (!result.probe.verified || !result.value) return result.probe;
   const pack = result.value;
   const scheme = pack.designSystem.colorScheme;
-  const palette = typeof scheme === "string"
-    ? scheme
-    : `${scheme.primary}/${scheme.accent}/${scheme.background}`;
+  const palette =
+    typeof scheme === "string" ? scheme : `${scheme.primary}/${scheme.accent}/${scheme.background}`;
   return {
     path,
     status: "verified",
     verified: true,
     reason:
-      `${pack.name} · ${pack.templateId}@${pack.revisionId} · palette=${palette}`
-      + ` · fonts=${pack.typography.sourceMajor ?? "mapped"}`
-      + ` · assets=${pack.assets.length}`
-      + ` · headerFooter=${pack.inheritance.headerFooter}`
-      + ` · titleFrame=${pack.inheritance.titleFrame}`,
+      `${pack.name} · ${pack.templateId}@${pack.revisionId} · palette=${palette}` +
+      ` · fonts=${pack.typography.sourceMajor ?? "mapped"}` +
+      ` · assets=${pack.assets.length}` +
+      ` · headerFooter=${pack.inheritance.headerFooter}` +
+      ` · titleFrame=${pack.inheritance.titleFrame}`,
   };
 }
 
@@ -261,8 +263,7 @@ async function listFilesRecursively(directory: string): Promise<string[] | undef
 
 async function probeDirectory(
   path: string,
-  meaningfulFile: (filePath: string) => boolean = (filePath) =>
-    !filePath.endsWith(".gitkeep"),
+  meaningfulFile: (filePath: string) => boolean = (filePath) => !filePath.endsWith(".gitkeep"),
 ): Promise<WorkspaceArtifactProbe> {
   try {
     const files = await listFilesRecursively(path);
@@ -311,7 +312,7 @@ async function probeSvgPages(
   }
 
   const actualPaths = svgFiles.map((filePath) =>
-    relative(workspaceRoot, filePath).replace(/\\/g, "/")
+    relative(workspaceRoot, filePath).replace(/\\/g, "/"),
   );
   const plannedPaths = pagePlan.slides.map((slide) => slide.path.replace(/\\/g, "/"));
   const missing = plannedPaths.filter((plannedPath) => !actualPaths.includes(plannedPath));
@@ -322,7 +323,9 @@ async function probeSvgPages(
       [
         missing.length > 0 ? `Missing planned SVG pages: ${missing.join(", ")}.` : "",
         unexpected.length > 0 ? `Unexpected SVG pages: ${unexpected.join(", ")}.` : "",
-      ].filter(Boolean).join(" "),
+      ]
+        .filter(Boolean)
+        .join(" "),
     );
   }
 
@@ -347,10 +350,11 @@ async function probeResearch(directory: string): Promise<WorkspaceArtifactProbe>
   const notes = await readOptionalText(notesPath);
   if (notes !== undefined && isDefaultArtifactContent("research", notes)) {
     const files = await listFilesRecursively(directory);
-    const otherMeaningful = files?.some((filePath) =>
-      !filePath.endsWith(".gitkeep")
-      && filePath !== notesPath
-      && !filePath.endsWith("sources.md")
+    const otherMeaningful = files?.some(
+      (filePath) =>
+        !filePath.endsWith(".gitkeep") &&
+        filePath !== notesPath &&
+        !filePath.endsWith("sources.md"),
     );
     if (!otherMeaningful) {
       return {
@@ -426,14 +430,8 @@ export async function probeWorkspaceArtifactDetails(
     designSpecContent,
     svgDeckDesignSpecSchema,
   );
-  const templatePolicy = validateTemplatePolicyContent(
-    paths.templatePolicy,
-    templatePolicyContent,
-  );
-  const templatePack = validateTemplatePackContent(
-    paths.templatePack,
-    templatePackContent,
-  );
+  const templatePolicy = validateTemplatePolicyContent(paths.templatePolicy, templatePolicyContent);
+  const templatePack = validateTemplatePackContent(paths.templatePack, templatePackContent);
   const pagePlanResult = validateJsonArtifact(
     paths.pagePlan,
     pagePlanContent,
@@ -458,14 +456,15 @@ export async function probeWorkspaceArtifactDetails(
   ]);
 
   const deckResult = validateJsonArtifact(paths.deck, deckContent, presentationSchema);
-  const deck = deckResult.probe.verified && deckResult.value?.slides.length === 0
-    ? {
-        path: paths.deck,
-        status: "default" as const,
-        verified: false,
-        reason: "Presentation snapshot contains no applied slides.",
-      }
-    : deckResult.probe;
+  const deck =
+    deckResult.probe.verified && deckResult.value?.slides.length === 0
+      ? {
+          path: paths.deck,
+          status: "default" as const,
+          verified: false,
+          reason: "Presentation snapshot contains no applied slides.",
+        }
+      : deckResult.probe;
 
   const exportResult = validateJsonArtifact(
     paths.exportHistory,

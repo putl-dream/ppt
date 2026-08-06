@@ -1,12 +1,6 @@
 import { describe, expect, it } from "vitest";
-import {
-  findRecoverableConversation,
-  toAgentMessageHistory,
-} from "../src/shared/session-recovery";
-import {
-  sessionChatMessageSchema,
-  type SessionChatMessage,
-} from "../src/shared/session";
+import { type SessionChatMessage, sessionChatMessageSchema } from "../src/shared/session";
+import { findRecoverableConversation, toAgentMessageHistory } from "../src/shared/session-recovery";
 
 describe("session run recovery", () => {
   it("excludes failed and interrupted turns by structured status, regardless of copy", () => {
@@ -102,13 +96,15 @@ describe("session run recovery", () => {
   });
 
   it("rejects removed legacy activity fields instead of silently stripping them", () => {
-    expect(() => sessionChatMessageSchema.parse({
-      id: "a1",
-      role: "assistant",
-      content: "",
-      thought: ["旧思考"],
-      reasoning: "旧推理",
-      progress: 80,
-    })).toThrow();
+    expect(() =>
+      sessionChatMessageSchema.parse({
+        id: "a1",
+        role: "assistant",
+        content: "",
+        thought: ["旧思考"],
+        reasoning: "旧推理",
+        progress: 80,
+      }),
+    ).toThrow();
   });
 });

@@ -1,9 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import type {
-  ArtifactDiff,
-  ProjectFileEditorReadResult,
-} from "@shared/ipc";
+import type { ArtifactDiff, ProjectFileEditorReadResult } from "@shared/ipc";
 import type { ProjectArtifact } from "@shared/session";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useProjectStore } from "../../components/project-store";
 import {
   isBinaryProjectFile,
@@ -102,49 +99,41 @@ export function useProjectFiles({
     setRequiresReload(false);
   }, [invalidateFileRequests]);
 
-  const loadProjectIndex = useCallback(async (
-    targetSessionId: string,
-    showLoading: boolean,
-    reportError = true,
-  ): Promise<boolean> => {
-    const requestId = ++listRequestRef.current;
-    if (showLoading) setIsLoadingProject(true);
-    setError(null);
+  const loadProjectIndex = useCallback(
+    async (targetSessionId: string, showLoading: boolean, reportError = true): Promise<boolean> => {
+      const requestId = ++listRequestRef.current;
+      if (showLoading) setIsLoadingProject(true);
+      setError(null);
 
-    try {
-      const [nextFiles, nextArtifacts] = await Promise.all([
-        window.desktopApi.listProjectFiles(targetSessionId),
-        window.desktopApi.listProjectArtifacts(targetSessionId),
-      ]);
-      if (
-        sessionRef.current !== targetSessionId
-        || listRequestRef.current !== requestId
-      ) return false;
+      try {
+        const [nextFiles, nextArtifacts] = await Promise.all([
+          window.desktopApi.listProjectFiles(targetSessionId),
+          window.desktopApi.listProjectArtifacts(targetSessionId),
+        ]);
+        if (sessionRef.current !== targetSessionId || listRequestRef.current !== requestId)
+          return false;
 
-      setFiles(nextFiles);
-      setArtifacts(nextArtifacts);
-      const currentPath = selectedPathRef.current;
-      if (currentPath && !nextFiles.includes(currentPath) && !dirtyRef.current) {
-        clearSelection();
+        setFiles(nextFiles);
+        setArtifacts(nextArtifacts);
+        const currentPath = selectedPathRef.current;
+        if (currentPath && !nextFiles.includes(currentPath) && !dirtyRef.current) {
+          clearSelection();
+        }
+        return true;
+      } catch (nextError) {
+        if (sessionRef.current !== targetSessionId || listRequestRef.current !== requestId)
+          return false;
+        if (!reportError) throw nextError;
+        setError(projectFileErrorMessage(nextError));
+        return false;
+      } finally {
+        if (sessionRef.current === targetSessionId && listRequestRef.current === requestId) {
+          setIsLoadingProject(false);
+        }
       }
-      return true;
-    } catch (nextError) {
-      if (
-        sessionRef.current !== targetSessionId
-        || listRequestRef.current !== requestId
-      ) return false;
-      if (!reportError) throw nextError;
-      setError(projectFileErrorMessage(nextError));
-      return false;
-    } finally {
-      if (
-        sessionRef.current === targetSessionId
-        && listRequestRef.current === requestId
-      ) {
-        setIsLoadingProject(false);
-      }
-    }
-  }, [clearSelection]);
+    },
+    [clearSelection],
+  );
 
   useEffect(() => {
     listRequestRef.current += 1;
@@ -165,71 +154,76 @@ export function useProjectFiles({
     await loadProjectIndex(targetSessionId, true);
   }, [loadProjectIndex]);
 
-  const openFile = useCallback(async (
-    path: string,
-    shouldConfirmDiscard: boolean,
-  ) => {
-    const targetSessionId = sessionRef.current;
-    if (!targetSessionId) return;
+  const openFile = useCallback(
+    async (path: string, shouldConfirmDiscard: boolean) => {
+      const targetSessionId = sessionRef.current;
+      if (!targetSessionId) return;
 
-    const switchingFiles = selectedPathRef.current !== path;
-    if (shouldConfirmDiscard && switchingFiles && dirtyRef.current && !confirmDiscardDraft()) {
-      return;
-    }
-
-    invalidateFileRequests();
-    const requestId = ++openRequestRef.current;
-    selectedPathRef.current = path;
-    openedFileRef.current = null;
-    draftRef.current = "";
-    dirtyRef.current = false;
-    setSelectedPath(path);
-    setOpenedFile(null);
-    setDraftState("");
-    setDiff(null);
-    setError(null);
-    setRequiresReload(false);
-
-    if (isBinaryProjectFile(path)) {
-      setIsOpening(false);
-      return;
-    }
-
-    setIsOpening(true);
-    try {
-      const result = await window.desktopApi.openProjectFile(targetSessionId, path);
-      if (
-        sessionRef.current !== targetSessionId
-        || openRequestRef.current !== requestId
-        || selectedPathRef.current !== path
-      ) return;
-
-      openedFileRef.current = result;
-      draftRef.current = result.content;
-      setOpenedFile(result);
-      setDraftState(result.content);
-    } catch (nextError) {
-      if (
-        sessionRef.current !== targetSessionId
-        || openRequestRef.current !== requestId
-        || selectedPathRef.current !== path
-      ) return;
-      setError(projectFileErrorMessage(nextError));
-    } finally {
-      if (
-        sessionRef.current === targetSessionId
-        && openRequestRef.current === requestId
-        && selectedPathRef.current === path
-      ) {
-        setIsOpening(false);
+      const switchingFiles = selectedPathRef.current !== path;
+      if (shouldConfirmDiscard && switchingFiles && dirtyRef.current && !confirmDiscardDraft()) {
+        return;
       }
-    }
-  }, [invalidateFileRequests]);
 
-  const selectFile = useCallback(async (path: string) => {
-    if (selectedPathRef.current === path && openedFileRef.current) return;
-    await openFile(path, true);
-  }, [openFile]);
+      invalidateFileRequests();
+      const requestId = ++openRequestRef.current;
+      selectedPathRef.current = path;
+      openedFileRef.current = null;
+      draftRef.current = "";
+      dirtyRef.current = false;
+      setSelectedPath(path);
+      setOpenedFile(null);
+      setDraftState("");
+      setDiff(null);
+      setError(null);
+      setRequiresReload(false);
+
+      if (isBinaryProjectFile(path)) {
+        setIsOpening(false);
+        return;
+      }
+
+      setIsOpening(true);
+      try {
+        const result = await window.desktopApi.openProjectFile(targetSessionId, path);
+        if (
+          sessionRef.current !== targetSessionId ||
+          openRequestRef.current !== requestId ||
+          selectedPathRef.current !== path
+        )
+          return;
+
+        openedFileRef.current = result;
+        draftRef.current = result.content;
+        setOpenedFile(result);
+        setDraftState(result.content);
+      } catch (nextError) {
+        if (
+          sessionRef.current !== targetSessionId ||
+          openRequestRef.current !== requestId ||
+          selectedPathRef.current !== path
+        )
+          return;
+        setError(projectFileErrorMessage(nextError));
+      } finally {
+        if (
+          sessionRef.current === targetSessionId &&
+          openRequestRef.current === requestId &&
+          selectedPathRef.current === path
+        ) {
+          setIsOpening(false);
+        }
+      }
+    },
+    [invalidateFileRequests],
+  );
+
+  const selectFile = useCallback(
+    async (path: string) => {
+      if (selectedPathRef.current === path && openedFileRef.current) return;
+      await openFile(path, true);
+    },
+    [openFile],
+  );
 
   const reloadSelected = useCallback(async () => {
     const path = selectedPathRef.current;
@@ -272,24 +266,26 @@ export function useProjectFiles({
         nextContent,
       );
       if (
-        sessionRef.current !== targetSessionId
-        || diffRequestRef.current !== requestId
-        || selectedPathRef.current !== path
-        || draftRef.current !== nextContent
-      ) return;
+        sessionRef.current !== targetSessionId ||
+        diffRequestRef.current !== requestId ||
+        selectedPathRef.current !== path ||
+        draftRef.current !== nextContent
+      )
+        return;
       setDiff(result);
     } catch (nextError) {
       if (
-        sessionRef.current !== targetSessionId
-        || diffRequestRef.current !== requestId
-        || selectedPathRef.current !== path
-      ) return;
+        sessionRef.current !== targetSessionId ||
+        diffRequestRef.current !== requestId ||
+        selectedPathRef.current !== path
+      )
+        return;
       setError(projectFileErrorMessage(nextError));
     } finally {
       if (
-        sessionRef.current === targetSessionId
-        && diffRequestRef.current === requestId
-        && selectedPathRef.current === path
+        sessionRef.current === targetSessionId &&
+        diffRequestRef.current === requestId &&
+        selectedPathRef.current === path
       ) {
         setIsLoadingDiff(false);
       }
@@ -302,15 +298,16 @@ export function useProjectFiles({
     const currentFile = openedFileRef.current;
     const content = draftRef.current;
     if (
-      !targetSessionId
-      || !path
-      || !currentFile
-      || busy
-      || requiresReload
-      || !currentFile.editable
-      || isBinaryProjectFile(path)
-      || content === currentFile.content
-    ) return;
+      !targetSessionId ||
+      !path ||
+      !currentFile ||
+      busy ||
+      requiresReload ||
+      !currentFile.editable ||
+      isBinaryProjectFile(path) ||
+      content === currentFile.content
+    )
+      return;
 
     const requestId = ++saveRequestRef.current;
     const token = currentFile.editToken;
@@ -327,18 +324,14 @@ export function useProjectFiles({
         expectedVersion,
       );
       if (
-        sessionRef.current !== targetSessionId
-        || saveRequestRef.current !== requestId
-        || selectedPathRef.current !== path
-        || openedFileRef.current?.editToken !== token
-      ) return;
+        sessionRef.current !== targetSessionId ||
+        saveRequestRef.current !== requestId ||
+        selectedPathRef.current !== path ||
+        openedFileRef.current?.editToken !== token
+      )
+        return;
 
-      const reconciled = reconcileProjectFileSave(
-        currentFile,
-        result,
-        content,
-        draftRef.current,
-      );
+      const reconciled = reconcileProjectFileSave(currentFile, result, content, draftRef.current);
       openedFileRef.current = reconciled.openedFile;
       draftRef.current = reconciled.draft;
       dirtyRef.current = reconciled.dirty;
@@ -360,14 +353,9 @@ export function useProjectFiles({
           useProjectStore.getState().hydrateProjectArtifacts(targetSessionId),
         ]);
       } catch (refreshError) {
-        postCommitWarnings.push(
-          `项目状态刷新失败：${projectFileErrorMessage(refreshError)}`,
-        );
+        postCommitWarnings.push(`项目状态刷新失败：${projectFileErrorMessage(refreshError)}`);
       }
-      if (
-        sessionRef.current === targetSessionId
-        && selectedPathRef.current === path
-      ) {
+      if (sessionRef.current === targetSessionId && selectedPathRef.current === path) {
         if (postCommitWarnings.length > 0) {
           setError(`文件内容已保存，但${postCommitWarnings.join("；")}。`);
           notify("文件已保存，但部分项目状态需要稍后重试");
@@ -377,10 +365,11 @@ export function useProjectFiles({
       }
     } catch (nextError) {
       if (
-        sessionRef.current !== targetSessionId
-        || saveRequestRef.current !== requestId
-        || selectedPathRef.current !== path
-      ) return;
+        sessionRef.current !== targetSessionId ||
+        saveRequestRef.current !== requestId ||
+        selectedPathRef.current !== path
+      )
+        return;
 
       setRequiresReload(true);
       setError(
@@ -390,9 +379,9 @@ export function useProjectFiles({
       );
     } finally {
       if (
-        sessionRef.current === targetSessionId
-        && saveRequestRef.current === requestId
-        && selectedPathRef.current === path
+        sessionRef.current === targetSessionId &&
+        saveRequestRef.current === requestId &&
+        selectedPathRef.current === path
       ) {
         setIsSaving(false);
       }

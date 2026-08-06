@@ -1,6 +1,6 @@
-import React from "react";
 import type { AppLogEntry, AppLogLevel, LogManagerStatus } from "@shared/logging";
 import { normalizeWorkspacePath } from "@shared/workspace";
+import React from "react";
 import { FolderIcon, RefreshIcon, TrashIcon } from "./Icons";
 import { Select } from "./Select";
 
@@ -23,13 +23,18 @@ function formatEntryDetail(entry: AppLogEntry): string | undefined {
   if (typeof entry.message === "string") return entry.message;
   if (typeof entry.reason === "string") return entry.reason;
   if (Array.isArray(entry.arguments)) {
-    return entry.arguments.map((argument) => {
-      if (typeof argument === "string") return argument;
-      if (argument && typeof argument === "object" && "message" in argument) {
-        return String((argument as { message?: unknown }).message ?? "");
-      }
-      return "";
-    }).filter(Boolean).join(" · ") || undefined;
+    return (
+      entry.arguments
+        .map((argument) => {
+          if (typeof argument === "string") return argument;
+          if (argument && typeof argument === "object" && "message" in argument) {
+            return String((argument as { message?: unknown }).message ?? "");
+          }
+          return "";
+        })
+        .filter(Boolean)
+        .join(" · ") || undefined
+    );
   }
   return undefined;
 }
@@ -61,11 +66,13 @@ export const LogManagementPanel: React.FC<LogManagementPanelProps> = ({ notify }
     void refresh();
   }, [refresh]);
 
-  const updateSettings = async (patch: Partial<{
-    level: AppLogLevel;
-    fileEnabled: boolean;
-    retentionDays: number;
-  }>) => {
+  const updateSettings = async (
+    patch: Partial<{
+      level: AppLogLevel;
+      fileEnabled: boolean;
+      retentionDays: number;
+    }>,
+  ) => {
     try {
       await window.desktopApi.updateLogManagerSettings(patch);
       await refresh();
@@ -99,20 +106,36 @@ export const LogManagementPanel: React.FC<LogManagementPanelProps> = ({ notify }
     <div className="settings-panel-fade">
       <section className="settings-card log-management-summary">
         <div className="settings-card-header">
-          <div className="settings-card-title-block"><h3>日志采集</h3></div>
+          <div className="settings-card-title-block">
+            <h3>日志采集</h3>
+          </div>
           <div className="settings-card-meta">{status?.fileEnabled ? "运行中" : "仅控制台"}</div>
         </div>
 
         <div className="log-status-grid">
-          <div><span>文件</span><strong>{status?.fileCount ?? "—"}</strong></div>
-          <div><span>占用空间</span><strong>{status ? formatBytes(status.totalBytes) : "—"}</strong></div>
-          <div><span>保留周期</span><strong>{status ? `${status.retentionDays} 天` : "—"}</strong></div>
-          <div><span>归档方式</span><strong>每日一个文件</strong></div>
+          <div>
+            <span>文件</span>
+            <strong>{status?.fileCount ?? "—"}</strong>
+          </div>
+          <div>
+            <span>占用空间</span>
+            <strong>{status ? formatBytes(status.totalBytes) : "—"}</strong>
+          </div>
+          <div>
+            <span>保留周期</span>
+            <strong>{status ? `${status.retentionDays} 天` : "—"}</strong>
+          </div>
+          <div>
+            <span>归档方式</span>
+            <strong>每日一个文件</strong>
+          </div>
         </div>
 
         <div className="settings-form-stack">
           <div className="setting-row">
-            <span className="setting-row-copy"><span className="setting-row-title">最低记录级别</span></span>
+            <span className="setting-row-copy">
+              <span className="setting-row-title">最低记录级别</span>
+            </span>
             <span className="setting-row-control">
               <Select
                 variant="block"
@@ -131,7 +154,9 @@ export const LogManagementPanel: React.FC<LogManagementPanelProps> = ({ notify }
             </span>
           </div>
           <label className="setting-row">
-            <span className="setting-row-copy"><span className="setting-row-title">写入日志文件</span></span>
+            <span className="setting-row-copy">
+              <span className="setting-row-title">写入日志文件</span>
+            </span>
             <span className="setting-row-control">
               <span className="toggle-switch">
                 <input
@@ -169,7 +194,11 @@ export const LogManagementPanel: React.FC<LogManagementPanelProps> = ({ notify }
         </div>
 
         <div className="log-management-actions">
-          <button className="settings-secondary-btn" onClick={() => void refresh()} disabled={loading}>
+          <button
+            className="settings-secondary-btn"
+            onClick={() => void refresh()}
+            disabled={loading}
+          >
             <RefreshIcon size={14} /> {loading ? "刷新中" : "刷新"}
           </button>
           <button className="settings-secondary-btn" onClick={() => void openDirectory()}>
@@ -189,22 +218,32 @@ export const LogManagementPanel: React.FC<LogManagementPanelProps> = ({ notify }
 
       <section className="settings-card">
         <div className="settings-card-header">
-          <div className="settings-card-title-block"><h3>最近问题</h3></div>
+          <div className="settings-card-title-block">
+            <h3>最近问题</h3>
+          </div>
           <div className="settings-card-meta">Warn / Error · {entries.length}</div>
         </div>
         <div className="log-entry-list">
           {entries.length === 0 ? (
             <div className="log-empty-state">最近日志中没有捕获到警告或错误</div>
-          ) : entries.map((entry, index) => (
-            <div className={`log-entry log-entry--${entry.level}`} key={`${entry.timestamp}-${entry.event}-${index}`}>
-              <div className="log-entry-topline">
-                <span className="log-entry-level">{entry.level}</span>
-                <code>{entry.module ? `${entry.module} · ` : ""}{entry.event}</code>
-                <time>{new Date(entry.timestamp).toLocaleTimeString()}</time>
+          ) : (
+            entries.map((entry, index) => (
+              <div
+                className={`log-entry log-entry--${entry.level}`}
+                key={`${entry.timestamp}-${entry.event}-${index}`}
+              >
+                <div className="log-entry-topline">
+                  <span className="log-entry-level">{entry.level}</span>
+                  <code>
+                    {entry.module ? `${entry.module} · ` : ""}
+                    {entry.event}
+                  </code>
+                  <time>{new Date(entry.timestamp).toLocaleTimeString()}</time>
+                </div>
+                {formatEntryDetail(entry) && <p>{formatEntryDetail(entry)}</p>}
               </div>
-              {formatEntryDetail(entry) && <p>{formatEntryDetail(entry)}</p>}
-            </div>
-          ))}
+            ))
+          )}
         </div>
       </section>
     </div>

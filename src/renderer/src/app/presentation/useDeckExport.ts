@@ -1,13 +1,8 @@
-import {
-  useCallback,
-  useState,
-  type Dispatch,
-  type SetStateAction,
-} from "react";
-import type { Presentation } from "@shared/presentation";
+import { formatPublicErrorMessage } from "@shared/agent-activity-display";
 import { hasUnverifiedCommercialAssets } from "@shared/asset-license";
 import { createOpenExportFolderHref } from "@shared/export-links";
-import { formatPublicErrorMessage } from "@shared/agent-activity-display";
+import type { Presentation } from "@shared/presentation";
+import { type Dispatch, type SetStateAction, useCallback, useState } from "react";
 import type { ChatMessage } from "../chatMessageRuntime";
 import { confirmSvgExportExpectation } from "./exportExpectations";
 

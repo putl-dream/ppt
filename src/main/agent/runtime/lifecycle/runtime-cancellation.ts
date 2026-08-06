@@ -6,9 +6,9 @@ export function isRuntimeCancellation(
   if (!error || typeof error !== "object") return false;
   const candidate = error as { name?: unknown; code?: unknown; cause?: unknown };
   if (
-    candidate.name === "AbortError"
-    || candidate.name === "APIUserAbortError"
-    || candidate.code === "ABORT_ERR"
+    candidate.name === "AbortError" ||
+    candidate.name === "APIUserAbortError" ||
+    candidate.code === "ABORT_ERR"
   ) {
     return true;
   }

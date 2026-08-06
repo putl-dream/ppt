@@ -1,19 +1,19 @@
-import { create } from "zustand";
 import type { DesktopApi } from "@shared/ipc";
-import type { ProjectArtifact } from "@shared/session";
 import type { PptJobProjection } from "@shared/presentation-lifecycle";
 import {
   getPrimaryProjectArtifactPath,
   isProjectArtifactId,
+  type ProjectArtifactId,
   primaryProjectArtifactPaths,
   projectArtifactIds,
-  type ProjectArtifactId,
 } from "@shared/project";
 import {
   createDefaultBriefMarkdown,
   createDefaultOutlineMarkdown,
   createDefaultResearchMarkdown,
 } from "@shared/project-artifacts";
+import type { ProjectArtifact } from "@shared/session";
+import { create } from "zustand";
 import { saveExistingProjectFile } from "../app/project/projectFileMutations";
 
 export interface Artifact {
@@ -55,11 +55,7 @@ interface ProjectState {
   hydrateProjectArtifacts: (sessionId?: string) => Promise<void>;
   hydratePptJob: (sessionId?: string) => Promise<void>;
   applyPptJobProjection: (projection: PptJobProjection) => void;
-  updateArtifactContent: (
-    id: ProjectArtifactId,
-    content: string,
-    by?: "user" | "agent",
-  ) => void;
+  updateArtifactContent: (id: ProjectArtifactId, content: string, by?: "user" | "agent") => void;
   resetProject: () => void;
 }
 
@@ -105,18 +101,21 @@ function getDesktopApi(): DesktopApi | undefined {
 }
 
 function projectStoreWriteError(error: unknown): string {
-  const code = typeof error === "object" && error !== null && "code" in error
-    ? String((error as { code?: unknown }).code ?? "")
-    : "";
-  const message = error instanceof Error && error.message.trim()
-    ? error.message
-    : typeof error === "string" && error.trim()
-      ? error
-      : "写入项目产物失败";
+  const code =
+    typeof error === "object" && error !== null && "code" in error
+      ? String((error as { code?: unknown }).code ?? "")
+      : "";
+  const message =
+    error instanceof Error && error.message.trim()
+      ? error.message
+      : typeof error === "string" && error.trim()
+        ? error
+        : "写入项目产物失败";
   if (
-    code === "STALE_FILE"
-    || /stale|conflict|changed|read it again|expected_version|edit session.+(?:missing|expired|match)/i
-      .test(message)
+    code === "STALE_FILE" ||
+    /stale|conflict|changed|read it again|expected_version|edit session.+(?:missing|expired|match)/i.test(
+      message,
+    )
   ) {
     return "文件已在磁盘上变化，当前草稿已保留；请重新读取后再保存。";
   }
@@ -184,10 +183,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         if (!exists) return [artifactId, undefined] as const;
         try {
           const result = await api.readProjectArtifact(targetSessionId, artifact.path);
-          return [
-            artifactId,
-            result.type === "file" ? result.content ?? "" : "",
-          ] as const;
+          return [artifactId, result.type === "file" ? (result.content ?? "") : ""] as const;
         } catch (error) {
           console.error(`读取项目产物失败: ${artifact.path}`, error);
           return [artifactId, undefined] as const;
@@ -306,9 +302,9 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       set((state) => {
         if (!state.activeProject || state.activeProject.id !== targetSessionId) return {};
         if (
-          projection
-          && state.activeProject.presentationId
-          && projection.presentationId !== state.activeProject.presentationId
+          projection &&
+          state.activeProject.presentationId &&
+          projection.presentationId !== state.activeProject.presentationId
         ) {
           return {
             pptJobLoading: false,
@@ -316,14 +312,10 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
           };
         }
         if (
-          state.pptJob
-          && (
-            !projection
-            || (
-              projection.presentationId === state.pptJob.presentationId
-              && projection.stateRevision < state.pptJob.stateRevision
-            )
-          )
+          state.pptJob &&
+          (!projection ||
+            (projection.presentationId === state.pptJob.presentationId &&
+              projection.stateRevision < state.pptJob.stateRevision))
         ) {
           return {
             pptJobLoading: false,
@@ -337,9 +329,8 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         };
       });
     } catch (error) {
-      const message = error instanceof Error && error.message.trim()
-        ? error.message
-        : "读取演示文稿生命周期失败";
+      const message =
+        error instanceof Error && error.message.trim() ? error.message : "读取演示文稿生命周期失败";
       set((state) => {
         if (!state.activeProject || state.activeProject.id !== targetSessionId) return {};
         return {

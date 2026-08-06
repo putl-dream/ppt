@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { DESIGN_PRESETS, resolveSlideStyle } from "../src/design-system";
-import { VISUAL_TOKENS, cardShadow, type CardShadow } from "../src/shared/visual-tokens";
+import { type CardShadow, cardShadow, VISUAL_TOKENS } from "../src/shared/visual-tokens";
 
 describe("visual tokens", () => {
   it("defines radii and elevation presets", () => {

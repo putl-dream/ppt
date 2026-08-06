@@ -40,7 +40,7 @@ export function resolveUsagePricing(
 ): ModelTokenPricing | undefined {
   if (usage.configurationId) return index.byConfigurationId.get(usage.configurationId);
   const candidates = index.legacyCandidates.get(legacyModelKey(usage.provider, usage.model)) ?? [];
-  return candidates.length === 1 ? candidates[0].pricing ?? undefined : undefined;
+  return candidates.length === 1 ? (candidates[0].pricing ?? undefined) : undefined;
 }
 
 export function estimateModelCost(
@@ -50,17 +50,16 @@ export function estimateModelCost(
   if (!pricing) return { cost: 0, coveredTokens: 0 };
   const cachedInput = usage.cachedInputTokens;
   const cacheCreationInput = usage.cacheCreationInputTokens;
-  const regularInput = usage.provider === "anthropic"
-    ? usage.inputTokens
-    : Math.max(0, usage.inputTokens - cachedInput - cacheCreationInput);
-  const cost = (
-    regularInput * pricing.inputPerMillion
-    + cachedInput * pricing.cachedInputPerMillion
-    + cacheCreationInput * (
-      pricing.cacheCreationInputPerMillion ?? pricing.inputPerMillion
-    )
-    + usage.outputTokens * pricing.outputPerMillion
-  ) / 1_000_000;
+  const regularInput =
+    usage.provider === "anthropic"
+      ? usage.inputTokens
+      : Math.max(0, usage.inputTokens - cachedInput - cacheCreationInput);
+  const cost =
+    (regularInput * pricing.inputPerMillion +
+      cachedInput * pricing.cachedInputPerMillion +
+      cacheCreationInput * (pricing.cacheCreationInputPerMillion ?? pricing.inputPerMillion) +
+      usage.outputTokens * pricing.outputPerMillion) /
+    1_000_000;
   return { currency: pricing.currency, cost, coveredTokens: usage.totalTokens };
 }
 
@@ -68,10 +67,13 @@ export function estimateModelsCost(
   usageModels: TokenUsageModel[],
   index: ModelPricingIndex,
 ): ModelCostTotals {
-  return usageModels.reduce<ModelCostTotals>((total, usage) => {
-    const estimate = estimateModelCost(usage, resolveUsagePricing(usage, index));
-    if (estimate.currency) total.costs[estimate.currency] += estimate.cost;
-    total.coveredTokens += estimate.coveredTokens;
-    return total;
-  }, { costs: { CNY: 0, USD: 0 }, coveredTokens: 0 });
+  return usageModels.reduce<ModelCostTotals>(
+    (total, usage) => {
+      const estimate = estimateModelCost(usage, resolveUsagePricing(usage, index));
+      if (estimate.currency) total.costs[estimate.currency] += estimate.cost;
+      total.coveredTokens += estimate.coveredTokens;
+      return total;
+    },
+    { costs: { CNY: 0, USD: 0 }, coveredTokens: 0 },
+  );
 }

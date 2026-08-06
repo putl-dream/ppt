@@ -79,7 +79,10 @@ button.chat-session-crumb:hover {
   font-size: 11px;
   font-weight: 600;
   cursor: pointer;
-  transition: border-color 0.16s ease, background 0.16s ease, color 0.16s ease;
+  transition:
+    border-color 0.16s ease,
+    background 0.16s ease,
+    color 0.16s ease;
 }
 
 .team-overview-trigger:hover,
@@ -186,7 +189,11 @@ button.chat-session-crumb:hover {
   text-align: left;
   cursor: pointer;
   box-shadow: none;
-  transition: transform 0.16s ease, border-color 0.16s ease, background 0.16s ease, box-shadow 0.16s ease;
+  transition:
+    transform 0.16s ease,
+    border-color 0.16s ease,
+    background 0.16s ease,
+    box-shadow 0.16s ease;
 }
 
 .team-session-card:hover {
@@ -416,7 +423,11 @@ button.chat-session-crumb:hover {
   border: 1px solid var(--border-default);
   border-radius: var(--card-border-radius);
   background:
-    radial-gradient(circle at 100% 0, color-mix(in srgb, var(--accent-primary) 11%, transparent), transparent 42%),
+    radial-gradient(
+      circle at 100% 0,
+      color-mix(in srgb, var(--accent-primary) 11%, transparent),
+      transparent 42%
+    ),
     var(--surface-sunken);
 }
 
@@ -528,12 +539,24 @@ button.chat-session-crumb:hover {
   animation: lead-waiting-dot 1.2s ease-in-out infinite;
 }
 
-.lead-waiting-state-dots i:nth-child(2) { animation-delay: 0.15s; }
-.lead-waiting-state-dots i:nth-child(3) { animation-delay: 0.3s; }
+.lead-waiting-state-dots i:nth-child(2) {
+  animation-delay: 0.15s;
+}
+.lead-waiting-state-dots i:nth-child(3) {
+  animation-delay: 0.3s;
+}
 
 @keyframes lead-waiting-dot {
-  0%, 70%, 100% { opacity: 0.3; transform: translateY(0); }
-  35% { opacity: 1; transform: translateY(-2px); }
+  0%,
+  70%,
+  100% {
+    opacity: 0.3;
+    transform: translateY(0);
+  }
+  35% {
+    opacity: 1;
+    transform: translateY(-2px);
+  }
 }
 
 .team-focus-composer-note {
@@ -574,7 +597,15 @@ button.chat-session-crumb:hover {
 }
 
 @keyframes cursor-blink {
-  0% { opacity: 0; } 50% { opacity: 1; } 100% { opacity: 0; }
+  0% {
+    opacity: 0;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
 }
 
 /* 线性进度条 */

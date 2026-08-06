@@ -1,12 +1,7 @@
 import type { AgentModelMessage } from "../../gateway";
 import type { ToolContext } from "../../tools/tool-definition";
 import type { AgentRuntimeOptions } from "../runtime-types";
-import type {
-  AgentQueryParams,
-  AgentQuerySource,
-  QueryId,
-  QueryStartMode,
-} from "./query-types";
+import type { AgentQueryParams, AgentQuerySource, QueryId, QueryStartMode } from "./query-types";
 
 export interface AgentQueryAssemblyInput<TDeps> {
   queryId: QueryId;
@@ -22,7 +17,7 @@ export interface AgentQueryAssemblyInput<TDeps> {
 /**
  * The sole adapter from application-level Runtime options to stable query input.
  * Compatibility fields are interpreted here and do not leak into turn runners.
-  */
+ */
 export class AgentQueryAssembler {
   assemble<TDeps>(input: AgentQueryAssemblyInput<TDeps>): AgentQueryParams<TDeps> {
     const startMode = input.options.startMode;

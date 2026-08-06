@@ -1,24 +1,26 @@
-import { mkdir, readFile, readdir, rename, writeFile } from "node:fs/promises";
 import { createHash, randomUUID } from "node:crypto";
+import { mkdir, readdir, readFile, rename, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { basename, join } from "node:path";
 import {
+  type AgentTaskNode,
   agentTaskNodeSchema,
   canStartTask,
   getIncompleteBlockedBy,
   hasDependencyCycle,
-  type AgentTaskNode,
   type TaskCompletionPolicy,
 } from "@shared/agent-task-list";
-import {
-  readJsonFile,
-  writeJsonFileAtomic,
-} from "../persistence/atomic-json-file";
+import { readJsonFile, writeJsonFileAtomic } from "../persistence/atomic-json-file";
 
 export type TaskPermission =
-  | "task:create" | "task:update_own" | "task:update_any"
-  | "task:manage_dependencies" | "task:manage_routing" | "task:assign"
-  | "task:review" | "task:manage_list";
+  | "task:create"
+  | "task:update_own"
+  | "task:update_any"
+  | "task:manage_dependencies"
+  | "task:manage_routing"
+  | "task:assign"
+  | "task:review"
+  | "task:manage_list";
 
 export type TaskCommandPrincipal = {
   actorId: string;
@@ -34,13 +36,25 @@ export type TaskListIdentity = {
 };
 
 export type TaskErrorCode =
-  | "TASK_NOT_FOUND" | "REVISION_CONFLICT" | "OWNER_CONFLICT" | "TASK_BLOCKED"
-  | "OWNER_BUSY" | "TASK_ALREADY_COMPLETED" | "INVALID_STATE_TRANSITION"
-  | "NOT_AUTHORIZED" | "REVIEW_ALREADY_REQUESTED" | "REVIEW_REQUEST_MISMATCH"
-  | "LIST_CLOSED" | "LIST_ARCHIVED" | "MIGRATION_FAILED";
+  | "TASK_NOT_FOUND"
+  | "REVISION_CONFLICT"
+  | "OWNER_CONFLICT"
+  | "TASK_BLOCKED"
+  | "OWNER_BUSY"
+  | "TASK_ALREADY_COMPLETED"
+  | "INVALID_STATE_TRANSITION"
+  | "NOT_AUTHORIZED"
+  | "REVIEW_ALREADY_REQUESTED"
+  | "REVIEW_REQUEST_MISMATCH"
+  | "LIST_CLOSED"
+  | "LIST_ARCHIVED"
+  | "MIGRATION_FAILED";
 
 export class TaskStoreError extends Error {
-  constructor(readonly code: TaskErrorCode, message: string) {
+  constructor(
+    readonly code: TaskErrorCode,
+    message: string,
+  ) {
     super(message);
     this.name = "TaskStoreError";
   }
@@ -64,18 +78,34 @@ export type PersistedTaskList = {
 };
 
 type DependencyChanges = {
-  addBlocks?: string[]; addBlockedBy?: string[];
-  removeBlocks?: string[]; removeBlockedBy?: string[];
+  addBlocks?: string[];
+  addBlockedBy?: string[];
+  removeBlocks?: string[];
+  removeBlockedBy?: string[];
 };
 
 export type TaskCommand =
-  | { type: "create"; subject: string; description: string; activeForm?: string;
-      executionTarget: "lead" | "teammate"; completionPolicy: TaskCompletionPolicy;
-      userMetadata?: Record<string, unknown> }
-  | { type: "update"; taskId: string; expectedRevision: number; subject?: string;
-      description?: string; activeForm?: string; status?: "pending" | "in_progress" | "completed";
-      userMetadata?: Record<string, unknown>; dependencyChanges?: DependencyChanges;
-      expectedListRevision?: number }
+  | {
+      type: "create";
+      subject: string;
+      description: string;
+      activeForm?: string;
+      executionTarget: "lead" | "teammate";
+      completionPolicy: TaskCompletionPolicy;
+      userMetadata?: Record<string, unknown>;
+    }
+  | {
+      type: "update";
+      taskId: string;
+      expectedRevision: number;
+      subject?: string;
+      description?: string;
+      activeForm?: string;
+      status?: "pending" | "in_progress" | "completed";
+      userMetadata?: Record<string, unknown>;
+      dependencyChanges?: DependencyChanges;
+      expectedListRevision?: number;
+    }
   | { type: "delete"; taskId: string; expectedRevision: number; expectedListRevision: number }
   | { type: "claim"; taskId: string; expectedRevision?: number }
   | { type: "assign"; taskId: string; owner: string; expectedRevision: number }
@@ -83,11 +113,22 @@ export type TaskCommand =
   | { type: "transfer"; taskId: string; newOwner: string; expectedRevision: number }
   | { type: "review_request"; taskId: string; requestId: string; expectedRevision: number }
   | { type: "review_approve"; taskId: string; requestId: string; expectedRevision: number }
-  | { type: "review_reject"; taskId: string; requestId: string; reason?: string; expectedRevision: number }
+  | {
+      type: "review_reject";
+      taskId: string;
+      requestId: string;
+      reason?: string;
+      expectedRevision: number;
+    }
   | { type: "reopen"; taskId: string; expectedRevision: number }
   | { type: "close_list"; expectedListRevision: number }
   | { type: "reopen_list"; expectedListRevision: number }
-  | { type: "archive_list"; expectedListRevision: number; outcome: "completed" | "abandoned"; archiveReason?: string };
+  | {
+      type: "archive_list";
+      expectedListRevision: number;
+      outcome: "completed" | "abandoned";
+      archiveReason?: string;
+    };
 
 export type TaskMutationResult = {
   taskListId: string;
@@ -133,8 +174,14 @@ const LOCK_OPTIONS = {
 };
 
 export const LEAD_TASK_PERMISSIONS: ReadonlySet<TaskPermission> = new Set([
-  "task:create", "task:update_own", "task:update_any", "task:manage_dependencies",
-  "task:manage_routing", "task:assign", "task:review", "task:manage_list",
+  "task:create",
+  "task:update_own",
+  "task:update_any",
+  "task:manage_dependencies",
+  "task:manage_routing",
+  "task:assign",
+  "task:review",
+  "task:manage_list",
 ]);
 
 function clone<T>(value: T): T {
@@ -165,8 +212,12 @@ export class TaskStore {
       canonicalKey: workspaceRoot,
     };
     this.storeRoot = join(workspaceRoot, ".tasks");
-    const digest = createHash("sha256").update(this.identity.canonicalKey).digest("hex").slice(0, 16);
-    const prefix = this.identity.taskListId.replace(/[^a-zA-Z0-9_-]+/g, "-").slice(0, 40) || "tasks";
+    const digest = createHash("sha256")
+      .update(this.identity.canonicalKey)
+      .digest("hex")
+      .slice(0, 16);
+    const prefix =
+      this.identity.taskListId.replace(/[^a-zA-Z0-9_-]+/g, "-").slice(0, 40) || "tasks";
     this.listDir = join(this.storeRoot, `${prefix}-${digest}`);
     this.dataPath = join(this.listDir, "tasks.json");
   }
@@ -263,11 +314,16 @@ export class TaskStore {
     }
   }
 
-  private apply(list: PersistedTaskList, command: TaskCommand, principal: TaskCommandPrincipal): AgentTaskNode | undefined {
+  private apply(
+    list: PersistedTaskList,
+    command: TaskCommand,
+    principal: TaskCommandPrincipal,
+  ): AgentTaskNode | undefined {
     if (command.type === "reopen_list") {
       this.requirePermission(principal, "task:manage_list");
       this.listRevision(list, command.expectedListRevision);
-      if (list.state === "archived") throw new TaskStoreError("LIST_ARCHIVED", "Archived lists cannot be reopened");
+      if (list.state === "archived")
+        throw new TaskStoreError("LIST_ARCHIVED", "Archived lists cannot be reopened");
       if (list.state === "open") return undefined;
       list.state = "open";
       return undefined;
@@ -275,10 +331,18 @@ export class TaskStore {
     if (command.type === "archive_list") {
       this.requirePermission(principal, "task:manage_list");
       this.listRevision(list, command.expectedListRevision);
-      if (list.state === "archived") throw new TaskStoreError("LIST_ARCHIVED", "List is already archived");
-      if (list.state !== "closed") throw new TaskStoreError("INVALID_STATE_TRANSITION", "Close the list before archiving");
-      if (command.outcome === "completed" && Object.values(list.tasks).some((task) => task.status !== "completed")) {
-        throw new TaskStoreError("INVALID_STATE_TRANSITION", "Incomplete tasks cannot be archived as completed");
+      if (list.state === "archived")
+        throw new TaskStoreError("LIST_ARCHIVED", "List is already archived");
+      if (list.state !== "closed")
+        throw new TaskStoreError("INVALID_STATE_TRANSITION", "Close the list before archiving");
+      if (
+        command.outcome === "completed" &&
+        Object.values(list.tasks).some((task) => task.status !== "completed")
+      ) {
+        throw new TaskStoreError(
+          "INVALID_STATE_TRANSITION",
+          "Incomplete tasks cannot be archived as completed",
+        );
       }
       if (command.outcome === "abandoned" && !command.archiveReason?.trim()) {
         throw new TaskStoreError("INVALID_STATE_TRANSITION", "Abandoned archive requires a reason");
@@ -292,7 +356,8 @@ export class TaskStore {
       };
       return undefined;
     }
-    if (list.state === "archived") throw new TaskStoreError("LIST_ARCHIVED", "Task list is archived");
+    if (list.state === "archived")
+      throw new TaskStoreError("LIST_ARCHIVED", "Task list is archived");
     if (command.type === "close_list") {
       this.requirePermission(principal, "task:manage_list");
       this.listRevision(list, command.expectedListRevision);
@@ -304,21 +369,32 @@ export class TaskStore {
 
     if (command.type === "create") {
       this.requirePermission(principal, "task:create");
-      if (command.executionTarget === "teammate" && command.completionPolicy !== "review_required") {
+      if (
+        command.executionTarget === "teammate" &&
+        command.completionPolicy !== "review_required"
+      ) {
         throw new TaskStoreError("INVALID_STATE_TRANSITION", "Teammate tasks require review");
       }
       if (command.executionTarget === "lead" && command.completionPolicy !== "direct") {
         throw new TaskStoreError("INVALID_STATE_TRANSITION", "Lead tasks use direct completion");
       }
-      if (principal.role === "teammate" && command.executionTarget !== "teammate") deny("Teammates cannot create lead tasks");
+      if (principal.role === "teammate" && command.executionTarget !== "teammate")
+        deny("Teammates cannot create lead tasks");
       const id = String(++list.highWatermark);
       const now = new Date().toISOString();
       const task: AgentTaskNode = {
-        id, revision: 0, subject: command.subject.trim(), description: command.description.trim(),
+        id,
+        revision: 0,
+        subject: command.subject.trim(),
+        description: command.description.trim(),
         ...(command.activeForm ? { activeForm: command.activeForm } : {}),
-        status: "pending", blocks: [], blockedBy: [],
+        status: "pending",
+        blocks: [],
+        blockedBy: [],
         routing: { executionTarget: command.executionTarget },
-        completionPolicy: command.completionPolicy, review: { state: "none" }, reviewReceipts: [],
+        completionPolicy: command.completionPolicy,
+        review: { state: "none" },
+        reviewReceipts: [],
         ...(command.userMetadata ? { userMetadata: clone(command.userMetadata) } : {}),
         systemMetadata: { createdAt: now, updatedAt: now, createdBy: principal.actorId },
       };
@@ -344,17 +420,24 @@ export class TaskStore {
         deny("Only lead can amend completed task content");
       }
       if (task.status === "completed" && command.dependencyChanges) {
-        throw new TaskStoreError("INVALID_STATE_TRANSITION", "Completed task dependencies are immutable");
+        throw new TaskStoreError(
+          "INVALID_STATE_TRANSITION",
+          "Completed task dependencies are immutable",
+        );
       }
       const beforeTasks = clone(list.tasks);
       const dependencies = command.dependencyChanges;
       if (dependencies) {
         this.requirePermission(principal, "task:manage_dependencies");
-        if (command.expectedListRevision === undefined) throw new TaskStoreError("REVISION_CONFLICT", "expectedListRevision is required");
+        if (command.expectedListRevision === undefined)
+          throw new TaskStoreError("REVISION_CONFLICT", "expectedListRevision is required");
         this.listRevision(list, command.expectedListRevision);
         this.updateDependencies(list, task, dependencies);
       } else if (command.expectedListRevision !== undefined) {
-        throw new TaskStoreError("INVALID_STATE_TRANSITION", "List revision is only valid for dependency updates");
+        throw new TaskStoreError(
+          "INVALID_STATE_TRANSITION",
+          "List revision is only valid for dependency updates",
+        );
       }
       if (command.subject !== undefined) task.subject = command.subject.trim();
       if (command.description !== undefined) task.description = command.description.trim();
@@ -379,7 +462,8 @@ export class TaskStore {
     if (command.type === "delete") {
       this.requirePermission(principal, "task:update_any");
       this.listRevision(list, command.expectedListRevision);
-      if (task.review.state === "requested") throw new TaskStoreError("INVALID_STATE_TRANSITION", "Reject review before delete");
+      if (task.review.state === "requested")
+        throw new TaskStoreError("INVALID_STATE_TRANSITION", "Reject review before delete");
       for (const other of Object.values(list.tasks)) {
         if (other.id === task.id) continue;
         const before = `${other.blocks}|${other.blockedBy}`;
@@ -392,10 +476,11 @@ export class TaskStore {
     }
     if (command.type === "reopen") {
       this.requirePermission(principal, "task:update_any");
-      if (task.status !== "completed") throw new TaskStoreError("INVALID_STATE_TRANSITION", "Only completed tasks can reopen");
+      if (task.status !== "completed")
+        throw new TaskStoreError("INVALID_STATE_TRANSITION", "Only completed tasks can reopen");
       if (task.review.state === "approved") {
         const history = Array.isArray(task.systemMetadata?.reviewHistory)
-          ? task.systemMetadata.reviewHistory as unknown[]
+          ? (task.systemMetadata.reviewHistory as unknown[])
           : [];
         task.systemMetadata = {
           ...task.systemMetadata,
@@ -413,13 +498,16 @@ export class TaskStore {
         deny("Teammate cannot claim lead-routed work");
       }
       if (task.owner) throw new TaskStoreError("OWNER_CONFLICT", `Task is owned by ${task.owner}`);
-      if (task.status === "completed") throw new TaskStoreError("TASK_ALREADY_COMPLETED", "Task is completed");
+      if (task.status === "completed")
+        throw new TaskStoreError("TASK_ALREADY_COMPLETED", "Task is completed");
       if (task.review.state === "requested" || task.review.state === "approved") {
         throw new TaskStoreError("INVALID_STATE_TRANSITION", "Task under review cannot be claimed");
       }
-      if (task.review.state === "changes_requested"
-        && principal.role !== "lead"
-        && task.review.requestedBy !== principal.actorId) {
+      if (
+        task.review.state === "changes_requested" &&
+        principal.role !== "lead" &&
+        task.review.requestedBy !== principal.actorId
+      ) {
         deny("Only the original requester can recover changes-requested work");
       }
       this.assertUnblocked(list, task);
@@ -432,9 +520,12 @@ export class TaskStore {
     }
     if (command.type === "assign" || command.type === "transfer") {
       this.requirePermission(principal, "task:assign");
-      if (task.status === "completed") throw new TaskStoreError("TASK_ALREADY_COMPLETED", "Task is completed");
-      if (command.type === "assign" && task.owner) throw new TaskStoreError("OWNER_CONFLICT", "Assign cannot overwrite owner");
-      if (command.type === "transfer" && !task.owner) throw new TaskStoreError("OWNER_CONFLICT", "Transfer requires current owner");
+      if (task.status === "completed")
+        throw new TaskStoreError("TASK_ALREADY_COMPLETED", "Task is completed");
+      if (command.type === "assign" && task.owner)
+        throw new TaskStoreError("OWNER_CONFLICT", "Assign cannot overwrite owner");
+      if (command.type === "transfer" && !task.owner)
+        throw new TaskStoreError("OWNER_CONFLICT", "Transfer requires current owner");
       const owner = command.type === "assign" ? command.owner : command.newOwner;
       if (this.ownerHasActiveWork(list, owner, task.id)) {
         throw new TaskStoreError("OWNER_BUSY", `${owner} already owns active work`);
@@ -445,8 +536,10 @@ export class TaskStore {
     }
     if (command.type === "release") {
       if (!task.owner) return task;
-      if (task.owner !== principal.actorId && !principal.permissions.has("task:assign")) deny("Cannot release another owner");
-      if (task.status === "completed" && principal.role !== "lead") deny("Only lead can release a completed task");
+      if (task.owner !== principal.actorId && !principal.permissions.has("task:assign"))
+        deny("Cannot release another owner");
+      if (task.status === "completed" && principal.role !== "lead")
+        deny("Only lead can release a completed task");
       task.owner = undefined;
       this.bump(task, principal);
       return task;
@@ -455,15 +548,27 @@ export class TaskStore {
       if (task.completionPolicy !== "review_required") {
         throw new TaskStoreError("INVALID_STATE_TRANSITION", "Direct tasks do not use review");
       }
-      if (task.status !== "in_progress" || (task.review.state !== "none" && task.review.state !== "changes_requested")) {
-        throw new TaskStoreError("INVALID_STATE_TRANSITION", "Review can only be requested for in-progress work");
+      if (
+        task.status !== "in_progress" ||
+        (task.review.state !== "none" && task.review.state !== "changes_requested")
+      ) {
+        throw new TaskStoreError(
+          "INVALID_STATE_TRANSITION",
+          "Review can only be requested for in-progress work",
+        );
       }
       const review = {
-        state: "requested" as const, requestId: command.requestId, requestedBy: principal.actorId,
+        state: "requested" as const,
+        requestId: command.requestId,
+        requestedBy: principal.actorId,
         requestedAt: new Date().toISOString(),
       };
       task.review = review;
-      task.reviewReceipts.push({ command: "request", requestId: command.requestId, result: clone(review) });
+      task.reviewReceipts.push({
+        command: "request",
+        requestId: command.requestId,
+        result: clone(review),
+      });
       this.trimReceipts(task);
       this.bump(task, principal);
       return task;
@@ -474,10 +579,21 @@ export class TaskStore {
       }
       if (command.type === "review_approve") this.assertUnblocked(list, task);
       const now = new Date().toISOString();
-      const review = command.type === "review_approve"
-        ? { ...task.review, state: "approved" as const, reviewedBy: principal.actorId, reviewedAt: now }
-        : { ...task.review, state: "changes_requested" as const, reviewedBy: principal.actorId,
-            reviewedAt: now, ...(command.reason ? { reason: command.reason } : {}) };
+      const review =
+        command.type === "review_approve"
+          ? {
+              ...task.review,
+              state: "approved" as const,
+              reviewedBy: principal.actorId,
+              reviewedAt: now,
+            }
+          : {
+              ...task.review,
+              state: "changes_requested" as const,
+              reviewedBy: principal.actorId,
+              reviewedAt: now,
+              ...(command.reason ? { reason: command.reason } : {}),
+            };
       task.review = review;
       if (command.type === "review_approve") task.status = "completed";
       task.reviewReceipts.push({
@@ -492,14 +608,25 @@ export class TaskStore {
     return task;
   }
 
-  private updateStatus(list: PersistedTaskList, task: AgentTaskNode, status: AgentTaskNode["status"], principal: TaskCommandPrincipal): void {
+  private updateStatus(
+    list: PersistedTaskList,
+    task: AgentTaskNode,
+    status: AgentTaskNode["status"],
+    principal: TaskCommandPrincipal,
+  ): void {
     if (status === task.status) return;
-    if (task.status === "completed") throw new TaskStoreError("INVALID_STATE_TRANSITION", "Use TaskReopen");
-    if (task.review.state === "requested") throw new TaskStoreError("INVALID_STATE_TRANSITION", "Resolve review first");
+    if (task.status === "completed")
+      throw new TaskStoreError("INVALID_STATE_TRANSITION", "Use TaskReopen");
+    if (task.review.state === "requested")
+      throw new TaskStoreError("INVALID_STATE_TRANSITION", "Resolve review first");
     if (status === "in_progress") this.assertUnblocked(list, task);
     if (status === "completed") {
       this.assertUnblocked(list, task);
-      if (task.completionPolicy !== "direct" || task.routing.executionTarget !== "lead" || task.review.state !== "none") {
+      if (
+        task.completionPolicy !== "direct" ||
+        task.routing.executionTarget !== "lead" ||
+        task.review.state !== "none"
+      ) {
         throw new TaskStoreError("INVALID_STATE_TRANSITION", "Task requires review approval");
       }
       if (principal.role !== "lead") deny("Only lead can directly complete");
@@ -507,9 +634,14 @@ export class TaskStore {
     task.status = status;
   }
 
-  private updateDependencies(list: PersistedTaskList, task: AgentTaskNode, changes: DependencyChanges): void {
+  private updateDependencies(
+    list: PersistedTaskList,
+    task: AgentTaskNode,
+    changes: DependencyChanges,
+  ): void {
     const add = (blockerId: string, blockedId: string): void => {
-      if (blockerId === blockedId) throw new TaskStoreError("INVALID_STATE_TRANSITION", "Self dependency");
+      if (blockerId === blockedId)
+        throw new TaskStoreError("INVALID_STATE_TRANSITION", "Self dependency");
       const blocker = this.task(list, blockerId);
       const blocked = this.task(list, blockedId);
       if (!blocker.blocks.includes(blockedId)) blocker.blocks.push(blockedId);
@@ -531,37 +663,56 @@ export class TaskStore {
   }
 
   private reviewReplay(task: AgentTaskNode, command: TaskCommand): AgentTaskNode | undefined {
-    if (command.type !== "review_request"
-      && command.type !== "review_approve"
-      && command.type !== "review_reject") return undefined;
-    const kind = command.type === "review_request" ? "request"
-      : command.type === "review_approve" ? "approve" : "reject";
+    if (
+      command.type !== "review_request" &&
+      command.type !== "review_approve" &&
+      command.type !== "review_reject"
+    )
+      return undefined;
+    const kind =
+      command.type === "review_request"
+        ? "request"
+        : command.type === "review_approve"
+          ? "approve"
+          : "reject";
     if (kind === "request") {
-      if (task.review.state === "requested" && task.review.requestId === command.requestId) return task;
+      if (task.review.state === "requested" && task.review.requestId === command.requestId)
+        return task;
       if (task.review.state === "requested") {
         throw new TaskStoreError("REVIEW_ALREADY_REQUESTED", "A review is already requested");
       }
-      if (task.review.state === "changes_requested" && task.review.requestId === command.requestId) {
-        throw new TaskStoreError("REVIEW_REQUEST_MISMATCH", "A new review round requires a new requestId");
+      if (
+        task.review.state === "changes_requested" &&
+        task.review.requestId === command.requestId
+      ) {
+        throw new TaskStoreError(
+          "REVIEW_REQUEST_MISMATCH",
+          "A new review round requires a new requestId",
+        );
       }
       if (task.review.state === "approved") {
         throw new TaskStoreError("TASK_ALREADY_COMPLETED", "Task review is approved");
       }
       return undefined;
     }
-    const receipt = task.reviewReceipts.find((item) => item.command === kind && item.requestId === command.requestId);
+    const receipt = task.reviewReceipts.find(
+      (item) => item.command === kind && item.requestId === command.requestId,
+    );
     if (receipt) {
       const replay = clone(task);
       replay.review = clone(receipt.result);
       replay.status = receipt.result.state === "approved" ? "completed" : "in_progress";
       return replay;
     }
-    if (task.review.state === "changes_requested"
-      && task.review.requestId === command.requestId
-      && kind === "approve") {
+    if (
+      task.review.state === "changes_requested" &&
+      task.review.requestId === command.requestId &&
+      kind === "approve"
+    ) {
       throw new TaskStoreError("INVALID_STATE_TRANSITION", "Rejected review cannot be approved");
     }
-    if (task.review.state === "approved") throw new TaskStoreError("TASK_ALREADY_COMPLETED", "Task review is approved");
+    if (task.review.state === "approved")
+      throw new TaskStoreError("TASK_ALREADY_COMPLETED", "Task review is approved");
     return undefined;
   }
 
@@ -583,10 +734,12 @@ export class TaskStore {
 
   private validateIdentity(principal: TaskCommandPrincipal): void {
     const supplied = principal.taskListIdentity;
-    if (!supplied
-      || supplied.taskListId !== this.identity.taskListId
-      || supplied.scope !== this.identity.scope
-      || supplied.canonicalKey !== this.identity.canonicalKey) {
+    if (
+      !supplied ||
+      supplied.taskListId !== this.identity.taskListId ||
+      supplied.scope !== this.identity.scope ||
+      supplied.canonicalKey !== this.identity.canonicalKey
+    ) {
       deny("Principal and task list identity do not match");
     }
   }
@@ -612,20 +765,29 @@ export class TaskStore {
 
   private taskRevision(task: AgentTaskNode, expected: number | undefined): void {
     if (expected !== undefined && task.revision !== expected) {
-      throw new TaskStoreError("REVISION_CONFLICT", `Expected task revision ${expected}, got ${task.revision}`);
+      throw new TaskStoreError(
+        "REVISION_CONFLICT",
+        `Expected task revision ${expected}, got ${task.revision}`,
+      );
     }
   }
 
   private listRevision(list: PersistedTaskList, expected: number): void {
     if (list.listRevision !== expected) {
-      throw new TaskStoreError("REVISION_CONFLICT", `Expected list revision ${expected}, got ${list.listRevision}`);
+      throw new TaskStoreError(
+        "REVISION_CONFLICT",
+        `Expected list revision ${expected}, got ${list.listRevision}`,
+      );
     }
   }
 
   private assertUnblocked(list: PersistedTaskList, task: AgentTaskNode): void {
     const byId = new Map(Object.values(list.tasks).map((item) => [item.id, item]));
     if (!canStartTask(task, byId)) {
-      throw new TaskStoreError("TASK_BLOCKED", `Blocked by: ${getIncompleteBlockedBy(task, byId).join(", ")}`);
+      throw new TaskStoreError(
+        "TASK_BLOCKED",
+        `Blocked by: ${getIncompleteBlockedBy(task, byId).join(", ")}`,
+      );
     }
   }
 
@@ -638,11 +800,12 @@ export class TaskStore {
     owner: string,
     exceptTaskId: string,
   ): boolean {
-    return Object.values(list.tasks).some((task) =>
-      task.owner === owner
-      && task.id !== exceptTaskId
-      && task.status !== "completed"
-      && task.review.state !== "requested"
+    return Object.values(list.tasks).some(
+      (task) =>
+        task.owner === owner &&
+        task.id !== exceptTaskId &&
+        task.status !== "completed" &&
+        task.review.state !== "requested",
     );
   }
 
@@ -673,20 +836,28 @@ export class TaskStore {
     const tasks = Object.values(list.tasks).map((task) => agentTaskNodeSchema.parse(task));
     for (const task of tasks) {
       for (const id of task.blocks) {
-        if (!list.tasks[id]?.blockedBy.includes(task.id)) throw new Error(`Broken dependency ${task.id} -> ${id}`);
+        if (!list.tasks[id]?.blockedBy.includes(task.id))
+          throw new Error(`Broken dependency ${task.id} -> ${id}`);
       }
       for (const id of task.blockedBy) {
-        if (!list.tasks[id]?.blocks.includes(task.id)) throw new Error(`Broken dependency ${id} -> ${task.id}`);
+        if (!list.tasks[id]?.blocks.includes(task.id))
+          throw new Error(`Broken dependency ${id} -> ${task.id}`);
       }
     }
     if (hasDependencyCycle(tasks)) throw new Error("Dependency cycle");
   }
 
-  private result(list: PersistedTaskList, task: AgentTaskNode | undefined, changed: boolean): TaskMutationResult {
+  private result(
+    list: PersistedTaskList,
+    task: AgentTaskNode | undefined,
+    changed: boolean,
+  ): TaskMutationResult {
     return {
       taskListId: list.identity.taskListId,
       ...(task ? { task: clone(task) } : {}),
-      tasks: Object.values(list.tasks).sort((a, b) => Number(a.id) - Number(b.id)).map(clone),
+      tasks: Object.values(list.tasks)
+        .sort((a, b) => Number(a.id) - Number(b.id))
+        .map(clone),
       listRevision: list.listRevision,
       state: list.state,
       ...(list.archive ? { archive: clone(list.archive) } : {}),
@@ -712,10 +883,13 @@ export class TaskStore {
         `Task-list directory ${basename(this.listDir)} is missing tasks.json`,
       );
     }
-    if (parsed.format !== "task-list" || parsed.version !== 1
-      || parsed.identity.canonicalKey !== this.identity.canonicalKey
-      || parsed.identity.taskListId !== this.identity.taskListId
-      || parsed.identity.scope !== this.identity.scope) {
+    if (
+      parsed.format !== "task-list" ||
+      parsed.version !== 1 ||
+      parsed.identity.canonicalKey !== this.identity.canonicalKey ||
+      parsed.identity.taskListId !== this.identity.taskListId ||
+      parsed.identity.scope !== this.identity.scope
+    ) {
       throw new TaskStoreError("MIGRATION_FAILED", "Task list identity or format mismatch");
     }
     this.validateList(parsed);
@@ -736,7 +910,10 @@ export class TaskStore {
       await mkdir(this.storeRoot, { recursive: true });
       const marker = join(this.storeRoot, "schema.json");
       try {
-        const schema = JSON.parse(await readFile(marker, "utf8")) as { format?: string; version?: number };
+        const schema = JSON.parse(await readFile(marker, "utf8")) as {
+          format?: string;
+          version?: number;
+        };
         if (schema.format !== "task-store" || schema.version !== 1) {
           throw new TaskStoreError("MIGRATION_FAILED", "Invalid task-store schema marker");
         }
@@ -746,16 +923,22 @@ export class TaskStore {
       }
       const listDirectoryName = basename(this.listDir);
       const rootEntries = await readdir(this.storeRoot, { withFileTypes: true });
-      const existingListDirectory = rootEntries.some((entry) =>
-        entry.isDirectory() && entry.name === listDirectoryName
+      const existingListDirectory = rootEntries.some(
+        (entry) => entry.isDirectory() && entry.name === listDirectoryName,
       );
       if (existingListDirectory) {
         await this.readList();
       } else {
         await mkdir(this.listDir, { recursive: false });
         const initial: PersistedTaskList = {
-          format: "task-list", version: 1, identity: this.identity, state: "open",
-          listRevision: 0, highWatermark: 0, hasEverContainedTasks: false, tasks: {},
+          format: "task-list",
+          version: 1,
+          identity: this.identity,
+          state: "open",
+          listRevision: 0,
+          highWatermark: 0,
+          hasEverContainedTasks: false,
+          tasks: {},
         };
         await writeFile(this.dataPath, `${JSON.stringify(initial, null, 2)}\n`, { flag: "wx" });
       }
@@ -780,7 +963,8 @@ export class TaskStore {
     } catch (error) {
       if (error instanceof TaskStoreError) throw error;
       const code = (error as NodeJS.ErrnoException).code;
-      if (code !== "ENOENT") throw new TaskStoreError("MIGRATION_FAILED", `Legacy migration failed: ${String(error)}`);
+      if (code !== "ENOENT")
+        throw new TaskStoreError("MIGRATION_FAILED", `Legacy migration failed: ${String(error)}`);
     }
   }
 
@@ -788,17 +972,20 @@ export class TaskStore {
     const tasks = await this.listTasks();
     const byId = new Map(tasks.map((task) => [task.id, task]));
     const eligible = (task: AgentTaskNode): boolean =>
-      !task.owner
-      && task.routing.executionTarget === "teammate"
-      && canStartTask(task, byId);
+      !task.owner && task.routing.executionTarget === "teammate" && canStartTask(task, byId);
     const recoverInProgress = tasks
-      .filter((task) => eligible(task) && task.status === "in_progress" && task.review.state === "none")
+      .filter(
+        (task) => eligible(task) && task.status === "in_progress" && task.review.state === "none",
+      )
       .map((task) => ({ task, mode: "recover_in_progress" as const }));
     const recoverChanges = tasks
-      .filter((task) => eligible(task)
-        && task.status === "in_progress"
-        && task.review.state === "changes_requested"
-        && task.review.requestedBy === actorId)
+      .filter(
+        (task) =>
+          eligible(task) &&
+          task.status === "in_progress" &&
+          task.review.state === "changes_requested" &&
+          task.review.requestedBy === actorId,
+      )
       .map((task) => ({ task, mode: "recover_changes" as const }));
     const pending = tasks
       .filter((task) => eligible(task) && task.status === "pending" && task.review.state === "none")
@@ -807,6 +994,9 @@ export class TaskStore {
   }
 }
 
-export function createTaskStore(workspaceRoot: string | undefined, identity?: TaskListIdentity): TaskStore | undefined {
+export function createTaskStore(
+  workspaceRoot: string | undefined,
+  identity?: TaskListIdentity,
+): TaskStore | undefined {
   return workspaceRoot?.trim() ? new TaskStore(workspaceRoot, identity) : undefined;
 }

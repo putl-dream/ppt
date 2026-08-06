@@ -28,9 +28,11 @@ const SEARCH_BINDING: WebSearchCredentialBinding = {
 };
 
 afterEach(async () => {
-  await Promise.all(temporaryDirectories.splice(0).map((directory) =>
-    rm(directory, { recursive: true, force: true })
-  ));
+  await Promise.all(
+    temporaryDirectories
+      .splice(0)
+      .map((directory) => rm(directory, { recursive: true, force: true })),
+  );
 });
 
 describe("CredentialStore", () => {
@@ -45,10 +47,12 @@ describe("CredentialStore", () => {
 
     expect(safeStorage.asyncEncryptCalls).toBe(1);
     expect(safeStorage.syncEncryptCalls).toBe(0);
-    expect(await store.resolveModelCredential({
-      ...MODEL_BINDING,
-      baseURL: "https://api.example.test/v1",
-    })).toBe(secret);
+    expect(
+      await store.resolveModelCredential({
+        ...MODEL_BINDING,
+        baseURL: "https://api.example.test/v1",
+      }),
+    ).toBe(secret);
 
     const persistedText = await readFile(store.filePath, "utf8");
     expect(persistedText).not.toContain(secret);
@@ -56,17 +60,18 @@ describe("CredentialStore", () => {
     expect(Object.keys(persisted).sort()).toEqual(["credentials", "version"]);
     expect(persisted).toMatchObject({
       version: 1,
-      credentials: [{
-        ref: "model:primary-openai",
-        binding: {
-          configurationId: "primary-openai",
-          baseURL: "https://api.example.test/v1",
+      credentials: [
+        {
+          ref: "model:primary-openai",
+          binding: {
+            configurationId: "primary-openai",
+            baseURL: "https://api.example.test/v1",
+          },
         },
-      }],
+      ],
     });
     if (process.platform !== "win32") {
-      expect((await stat(join(directory, "credentials.v1.json"))).mode & 0o777)
-        .toBe(0o600);
+      expect((await stat(join(directory, "credentials.v1.json"))).mode & 0o777).toBe(0o600);
     }
   });
 
@@ -74,22 +79,30 @@ describe("CredentialStore", () => {
     const { store } = await createStore();
     await store.setModelCredentials({ bindings: [MODEL_BINDING], apiKey: "bound-key" });
 
-    await expect(store.resolveModelCredential({
-      ...MODEL_BINDING,
-      model: "gpt-5-mini",
-    })).resolves.toBeUndefined();
-    await expect(store.resolveModelCredential({
-      ...MODEL_BINDING,
-      provider: "anthropic",
-    })).resolves.toBeUndefined();
-    await expect(store.resolveModelCredential({
-      ...MODEL_BINDING,
-      baseURL: "https://attacker.example.test/v1",
-    })).resolves.toBeUndefined();
-    await expect(store.resolveModelCredential({
-      ...MODEL_BINDING,
-      apiMode: "chat-completions",
-    })).resolves.toBeUndefined();
+    await expect(
+      store.resolveModelCredential({
+        ...MODEL_BINDING,
+        model: "gpt-5-mini",
+      }),
+    ).resolves.toBeUndefined();
+    await expect(
+      store.resolveModelCredential({
+        ...MODEL_BINDING,
+        provider: "anthropic",
+      }),
+    ).resolves.toBeUndefined();
+    await expect(
+      store.resolveModelCredential({
+        ...MODEL_BINDING,
+        baseURL: "https://attacker.example.test/v1",
+      }),
+    ).resolves.toBeUndefined();
+    await expect(
+      store.resolveModelCredential({
+        ...MODEL_BINDING,
+        apiMode: "chat-completions",
+      }),
+    ).resolves.toBeUndefined();
   });
 
   it("upgrades legacy raw-api-key ciphertext to the envelope format", async () => {
@@ -131,22 +144,30 @@ describe("CredentialStore", () => {
   it("rejects plaintext credential transport except for loopback development endpoints", async () => {
     const { store } = await createStore();
 
-    await expect(store.setModelCredentials({
-      bindings: [{ ...MODEL_BINDING, baseURL: "http://api.example.test/v1" }],
-      apiKey: "must-use-tls",
-    })).rejects.toMatchObject({ code: "INVALID_INPUT" });
-    await expect(store.setWebSearchCredential({
-      binding: { endpoint: "http://search.example.test/api" },
-      apiKey: "must-use-tls",
-    })).rejects.toMatchObject({ code: "INVALID_INPUT" });
-    await expect(store.setModelCredentials({
-      bindings: [{ ...MODEL_BINDING, baseURL: "http://127.0.0.1:8080/v1" }],
-      apiKey: "local-development-key",
-    })).resolves.toBeUndefined();
-    await expect(store.resolveModelCredential({
-      ...MODEL_BINDING,
-      baseURL: "http://127.0.0.1:8080/v1",
-    })).resolves.toBe("local-development-key");
+    await expect(
+      store.setModelCredentials({
+        bindings: [{ ...MODEL_BINDING, baseURL: "http://api.example.test/v1" }],
+        apiKey: "must-use-tls",
+      }),
+    ).rejects.toMatchObject({ code: "INVALID_INPUT" });
+    await expect(
+      store.setWebSearchCredential({
+        binding: { endpoint: "http://search.example.test/api" },
+        apiKey: "must-use-tls",
+      }),
+    ).rejects.toMatchObject({ code: "INVALID_INPUT" });
+    await expect(
+      store.setModelCredentials({
+        bindings: [{ ...MODEL_BINDING, baseURL: "http://127.0.0.1:8080/v1" }],
+        apiKey: "local-development-key",
+      }),
+    ).resolves.toBeUndefined();
+    await expect(
+      store.resolveModelCredential({
+        ...MODEL_BINDING,
+        baseURL: "http://127.0.0.1:8080/v1",
+      }),
+    ).resolves.toBe("local-development-key");
   });
 
   it("rejects ciphertext moved between otherwise valid credential bindings", async () => {
@@ -185,10 +206,12 @@ describe("CredentialStore", () => {
     const before = await readFile(store.filePath, "utf8");
     safeStorage.failOnAsyncEncryptCall = safeStorage.asyncEncryptCalls + 2;
 
-    await expect(store.setModelCredentials({
-      bindings: [MODEL_BINDING, secondBinding],
-      apiKey: "replacement-key",
-    })).rejects.toMatchObject({
+    await expect(
+      store.setModelCredentials({
+        bindings: [MODEL_BINDING, secondBinding],
+        apiKey: "replacement-key",
+      }),
+    ).rejects.toMatchObject({
       name: "CredentialStoreError",
       code: "ENCRYPTION_FAILED",
     });
@@ -245,10 +268,8 @@ describe("CredentialStore", () => {
     await Promise.all([firstWrite, secondWrite]);
     expect(secondEnteredWhileFirstHeldLock).toBe(false);
 
-    await expect(firstStore.resolveModelCredential(MODEL_BINDING))
-      .resolves.toBe("first-key");
-    await expect(secondStore.resolveModelCredential(secondBinding))
-      .resolves.toBe("second-key");
+    await expect(firstStore.resolveModelCredential(MODEL_BINDING)).resolves.toBe("first-key");
+    await expect(secondStore.resolveModelCredential(secondBinding)).resolves.toBe("second-key");
   });
 
   it("binds, reports, and deletes the Tavily credential by normalized endpoint", async () => {
@@ -258,22 +279,24 @@ describe("CredentialStore", () => {
       apiKey: "tvly-secret",
     });
 
-    await expect(store.resolveWebSearchCredential(SEARCH_BINDING))
-      .resolves.toBe("tvly-secret");
-    await expect(store.resolveWebSearchCredential({
-      endpoint: "https://proxy.example.test/search",
-    })).resolves.toBeUndefined();
-    await expect(store.getStatus({
-      models: [MODEL_BINDING],
-      webSearch: SEARCH_BINDING,
-    })).resolves.toMatchObject({
+    await expect(store.resolveWebSearchCredential(SEARCH_BINDING)).resolves.toBe("tvly-secret");
+    await expect(
+      store.resolveWebSearchCredential({
+        endpoint: "https://proxy.example.test/search",
+      }),
+    ).resolves.toBeUndefined();
+    await expect(
+      store.getStatus({
+        models: [MODEL_BINDING],
+        webSearch: SEARCH_BINDING,
+      }),
+    ).resolves.toMatchObject({
       models: [{ configurationId: "primary-openai", configured: false }],
       webSearchConfigured: true,
     });
 
     await store.deleteWebSearchCredential();
-    await expect(store.resolveWebSearchCredential(SEARCH_BINDING))
-      .resolves.toBeUndefined();
+    await expect(store.resolveWebSearchCredential(SEARCH_BINDING)).resolves.toBeUndefined();
   });
 
   it("allows basic_text with an explicit degraded status", async () => {
@@ -286,10 +309,12 @@ describe("CredentialStore", () => {
       backend: "basic_text",
       warning: "linux-basic-text",
     });
-    await expect(store.setModelCredentials({
-      bindings: [MODEL_BINDING],
-      apiKey: "degraded-but-allowed",
-    })).resolves.toBeUndefined();
+    await expect(
+      store.setModelCredentials({
+        bindings: [MODEL_BINDING],
+        apiKey: "degraded-but-allowed",
+      }),
+    ).resolves.toBeUndefined();
   });
 
   it("refuses to persist secrets when safeStorage is unavailable", async () => {
@@ -304,10 +329,12 @@ describe("CredentialStore", () => {
       warning: "safe-storage-unavailable",
     });
     const secret = "must-not-be-written";
-    await expect(store.setModelCredentials({
-      bindings: [MODEL_BINDING],
-      apiKey: secret,
-    })).rejects.toMatchObject({
+    await expect(
+      store.setModelCredentials({
+        bindings: [MODEL_BINDING],
+        apiKey: secret,
+      }),
+    ).rejects.toMatchObject({
       name: "CredentialStoreError",
       code: "STORAGE_UNAVAILABLE",
     });
@@ -342,9 +369,7 @@ describe("CredentialStore", () => {
   });
 });
 
-async function createStore(
-  safeStorage = new FakeSafeStorage(),
-): Promise<{
+async function createStore(safeStorage = new FakeSafeStorage()): Promise<{
   directory: string;
   store: CredentialStore;
   safeStorage: FakeSafeStorage;

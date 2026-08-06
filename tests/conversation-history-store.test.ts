@@ -2,18 +2,18 @@ import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
-import { ConversationDatabase } from "../src/main/conversation-database";
-import { DurableConversationHistoryStore } from "../src/main/agent/persistence/conversation-history-store";
-import { AgentRuntime } from "../src/main/agent/runtime/agent-runtime";
-import { ToolRegistry } from "../src/main/agent/tools/tool-registry";
-import { readPresentationSnapshotTool } from "../src/main/agent/tools/core/read-presentation-snapshot";
 import type {
   AgentModelContentBlock,
   AgentModelGateway,
   AgentModelRequest,
 } from "../src/main/agent/gateway/types";
-import { createStarterPresentation } from "../src/shared/presentation-fixtures";
+import { DurableConversationHistoryStore } from "../src/main/agent/persistence/conversation-history-store";
 import { DurableRunStore } from "../src/main/agent/persistence/durable-run-store";
+import { AgentRuntime } from "../src/main/agent/runtime/agent-runtime";
+import { readPresentationSnapshotTool } from "../src/main/agent/tools/core/read-presentation-snapshot";
+import { ToolRegistry } from "../src/main/agent/tools/tool-registry";
+import { ConversationDatabase } from "../src/main/conversation-database";
+import { createStarterPresentation } from "../src/shared/presentation-fixtures";
 
 const history = [
   { role: "user" as const, content: [{ type: "text" as const, text: "inspect" }] },
@@ -23,11 +23,13 @@ const history = [
   },
   {
     role: "user" as const,
-    content: [{
-      type: "tool_result" as const,
-      toolUseId: "read-1",
-      content: [{ type: "text" as const, text: "result" }],
-    }],
+    content: [
+      {
+        type: "tool_result" as const,
+        toolUseId: "read-1",
+        content: [{ type: "text" as const, text: "result" }],
+      },
+    ],
   },
 ];
 
@@ -134,7 +136,8 @@ describe("canonical conversation history store", () => {
         yield { type: "complete" as const, content: response.content };
       },
     };
-    const historySave = vi.spyOn(DurableConversationHistoryStore.prototype, "save")
+    const historySave = vi
+      .spyOn(DurableConversationHistoryStore.prototype, "save")
       .mockRejectedValueOnce(new Error("simulated crash before History commit"));
     try {
       await new AgentRuntime(new ToolRegistry(), gateway).run({
@@ -148,16 +151,18 @@ describe("canonical conversation history store", () => {
     } finally {
       historySave.mockRestore();
     }
-    expect(await new DurableConversationHistoryStore(root).load("terminal-history-thread"))
-      .toBeUndefined();
+    expect(
+      await new DurableConversationHistoryStore(root).load("terminal-history-thread"),
+    ).toBeUndefined();
     const checkpoint = await new DurableRunStore(root).load("terminal-history-thread");
-    expect(checkpoint?.version === 2 ? checkpoint.terminalHistory : undefined)
-      .toEqual(expect.arrayContaining([
+    expect(checkpoint?.version === 2 ? checkpoint.terminalHistory : undefined).toEqual(
+      expect.arrayContaining([
         expect.objectContaining({
           role: "assistant",
           content: [expect.objectContaining({ type: "text", text: "durable first answer" })],
         }),
-      ]));
+      ]),
+    );
 
     await new AgentRuntime(new ToolRegistry(), gateway).run({
       threadId: "terminal-history-thread",
@@ -169,8 +174,10 @@ describe("canonical conversation history store", () => {
       workspaceRoot: root,
     });
 
-    expect(requests[1]!.messages!.flatMap((message) => message.content))
-      .toContainEqual({ type: "text", text: "durable first answer" });
+    expect(requests[1]!.messages!.flatMap((message) => message.content)).toContainEqual({
+      type: "text",
+      text: "durable first answer",
+    });
   });
 
   it("prefers a newer terminal checkpoint over an older stored History", async () => {
@@ -206,7 +213,8 @@ describe("canonical conversation history store", () => {
       request: "first question",
     });
 
-    const historySave = vi.spyOn(DurableConversationHistoryStore.prototype, "save")
+    const historySave = vi
+      .spyOn(DurableConversationHistoryStore.prototype, "save")
       .mockRejectedValueOnce(new Error("simulated second History commit loss"));
     try {
       await runtime.run({
@@ -218,29 +226,37 @@ describe("canonical conversation history store", () => {
       historySave.mockRestore();
     }
 
-    const staleHistory = await new DurableConversationHistoryStore(root)
-      .load("stale-history-thread");
-    expect(staleHistory?.flatMap((message) => message.content))
-      .not.toContainEqual({ type: "text", text: "newer checkpoint answer" });
+    const staleHistory = await new DurableConversationHistoryStore(root).load(
+      "stale-history-thread",
+    );
+    expect(staleHistory?.flatMap((message) => message.content)).not.toContainEqual({
+      type: "text",
+      text: "newer checkpoint answer",
+    });
     const checkpoint = await new DurableRunStore(root).load("stale-history-thread");
-    expect(checkpoint?.version === 2 ? checkpoint.terminalHistory : undefined)
-      .toEqual(expect.arrayContaining([
+    expect(checkpoint?.version === 2 ? checkpoint.terminalHistory : undefined).toEqual(
+      expect.arrayContaining([
         expect.objectContaining({
           role: "assistant",
-          content: [expect.objectContaining({
-            type: "text",
-            text: "newer checkpoint answer",
-          })],
+          content: [
+            expect.objectContaining({
+              type: "text",
+              text: "newer checkpoint answer",
+            }),
+          ],
         }),
-      ]));
+      ]),
+    );
 
     await runtime.run({
       ...baseInput,
       runId: "stale-history-third",
       request: "third question",
     });
-    expect(requests[2]!.messages!.flatMap((message) => message.content))
-      .toContainEqual({ type: "text", text: "newer checkpoint answer" });
+    expect(requests[2]!.messages!.flatMap((message) => message.content)).toContainEqual({
+      type: "text",
+      text: "newer checkpoint answer",
+    });
   });
 
   it("reads History after lease handoff instead of using a pre-lease snapshot", async () => {
@@ -252,7 +268,8 @@ describe("canonical conversation history store", () => {
     ]);
 
     const originalOpenLease = DurableRunStore.prototype.openLease;
-    const openLease = vi.spyOn(DurableRunStore.prototype, "openLease")
+    const openLease = vi
+      .spyOn(DurableRunStore.prototype, "openLease")
       .mockImplementationOnce(async function (this: DurableRunStore, input) {
         await historyStore.save("lease-handoff-thread", [
           { role: "user", content: [{ type: "text", text: "first question" }] },
@@ -290,7 +307,9 @@ describe("canonical conversation history store", () => {
       openLease.mockRestore();
     }
 
-    expect(requests[0]!.messages!.flatMap((message) => message.content))
-      .toContainEqual({ type: "text", text: "handoff answer" });
+    expect(requests[0]!.messages!.flatMap((message) => message.content)).toContainEqual({
+      type: "text",
+      text: "handoff answer",
+    });
   });
 });

@@ -40,10 +40,7 @@ export function auditPresentationVisualAssets(
       totalImageCount += resources.length;
       if (resources.length > 0) imageSlideCount += 1;
       for (const resource of resources) {
-        imageUrlCounts.set(
-          resource.sourcePath,
-          (imageUrlCounts.get(resource.sourcePath) ?? 0) + 1,
-        );
+        imageUrlCounts.set(resource.sourcePath, (imageUrlCounts.get(resource.sourcePath) ?? 0) + 1);
       }
       return {
         slideId: slide.id,
@@ -62,7 +59,9 @@ export function auditPresentationVisualAssets(
     .filter(([, count]) => count > 1)
     .map(([url]) => url);
   const missingRequiredCount = slides.filter((slide) => slide.status === "missing-required").length;
-  const missingRecommendedCount = slides.filter((slide) => slide.status === "missing-recommended").length;
+  const missingRecommendedCount = slides.filter(
+    (slide) => slide.status === "missing-recommended",
+  ).length;
 
   return {
     slides,
@@ -71,11 +70,12 @@ export function auditPresentationVisualAssets(
     missingRequiredCount,
     missingRecommendedCount,
     duplicateImageUrls,
-    nextAction: missingRequiredCount + missingRecommendedCount > 0
-      ? "For each missing slide, call SearchSlideImages with slideId, localize a selected candidate into the workspace, and embed it in the page SVG. Do not reuse the same image URL."
-      : duplicateImageUrls.length > 0
-        ? "Replace duplicate image URLs with unique, slide-specific visuals."
-        : "No immediate image-search action is required.",
+    nextAction:
+      missingRequiredCount + missingRecommendedCount > 0
+        ? "For each missing slide, call SearchSlideImages with slideId, localize a selected candidate into the workspace, and embed it in the page SVG. Do not reuse the same image URL."
+        : duplicateImageUrls.length > 0
+          ? "Replace duplicate image URLs with unique, slide-specific visuals."
+          : "No immediate image-search action is required.",
   };
 }
 

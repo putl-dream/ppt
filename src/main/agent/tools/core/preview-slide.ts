@@ -1,8 +1,8 @@
-import { z } from "zod";
-import type { ToolDefinition } from "../tool-definition";
-import type { Slide } from "@shared/presentation";
 import { resolveSlideStyle, type SlideDesignOverride } from "@design-system";
+import type { Slide } from "@shared/presentation";
+import { z } from "zod";
 import { slideThumbnailService } from "../../../deck/slide-thumbnail-service";
+import type { ToolDefinition } from "../tool-definition";
 
 export const previewSlideSchema = z.object({
   slideId: z.string().describe("要预览的幻灯片 ID"),
@@ -11,9 +11,12 @@ export const previewSlideSchema = z.object({
     .optional()
     .default(true)
     .describe("是否生成 PNG 缩略图（640×360 base64）；非 Electron 环境自动跳过"),
-  run_in_background: z.boolean().optional().describe(
-    "Run thumbnail generation in the background; result returns later as task_notification.",
-  ),
+  run_in_background: z
+    .boolean()
+    .optional()
+    .describe(
+      "Run thumbnail generation in the background; result returns later as task_notification.",
+    ),
 });
 
 export interface SlidePreviewThumbnail {
@@ -72,7 +75,8 @@ export const previewSlideTool: ToolDefinition<
   }
 > = {
   name: "PreviewSlide",
-  description: "获取单页 SVG 幻灯片的视觉摘要（visualSource、narrative、背景）及 PNG 缩略图，用于排版后自检。",
+  description:
+    "获取单页 SVG 幻灯片的视觉摘要（visualSource、narrative、背景）及 PNG 缩略图，用于排版后自检。",
   category: "core",
   loadPolicy: "core",
   inputSchema: previewSlideSchema,
@@ -92,11 +96,13 @@ export const previewSlideTool: ToolDefinition<
     return [
       { type: "text", text: JSON.stringify(summary) },
       ...(result.thumbnail
-        ? [{
-            type: "image" as const,
-            mediaType: result.thumbnail.mimeType,
-            data: result.thumbnail.pngBase64,
-          }]
+        ? [
+            {
+              type: "image" as const,
+              mediaType: result.thumbnail.mimeType,
+              data: result.thumbnail.pngBase64,
+            },
+          ]
         : []),
     ];
   },
@@ -151,7 +157,10 @@ export const previewSlideTool: ToolDefinition<
     let thumbnailError: string | undefined;
     if (args.includeThumbnail) {
       try {
-        thumbnail = await slideThumbnailService.captureSlide(slide, context.presentation.designSystem);
+        thumbnail = await slideThumbnailService.captureSlide(
+          slide,
+          context.presentation.designSystem,
+        );
       } catch (error) {
         thumbnail = null;
         thumbnailError = error instanceof Error ? error.message : String(error);

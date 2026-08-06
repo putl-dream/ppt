@@ -115,7 +115,10 @@
   font-size: 12px;
   font-weight: var(--font-weight-medium);
   cursor: pointer;
-  transition: background 0.14s ease, border-color 0.14s ease, color 0.14s ease;
+  transition:
+    background 0.14s ease,
+    border-color 0.14s ease,
+    color 0.14s ease;
 }
 
 .settings-secondary-btn:hover {
@@ -286,7 +289,10 @@
   font-size: 12px;
   font-weight: 500;
   cursor: pointer;
-  transition: background 0.14s ease, border-color 0.14s ease, color 0.14s ease;
+  transition:
+    background 0.14s ease,
+    border-color 0.14s ease,
+    color 0.14s ease;
 }
 
 .settings-choice-card:hover {
@@ -382,7 +388,11 @@
   font-size: 12px;
   font-weight: 500;
   cursor: pointer;
-  transition: background 0.14s ease, border-color 0.14s ease, color 0.14s ease, transform 0.14s ease;
+  transition:
+    background 0.14s ease,
+    border-color 0.14s ease,
+    color 0.14s ease,
+    transform 0.14s ease;
 }
 
 .settings-control-shape-card {
@@ -409,7 +419,9 @@
   height: 18px;
   flex: 0 0 auto;
   border-radius: 50%;
-  box-shadow: inset 0 0 0 1px var(--border-strong), 0 0 0 1px var(--border-default);
+  box-shadow:
+    inset 0 0 0 1px var(--border-strong),
+    0 0 0 1px var(--border-default);
 }
 
 .settings-shape-preview {
