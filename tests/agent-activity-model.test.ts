@@ -91,6 +91,27 @@ describe("agent activity model", () => {
     ]);
   });
 
+  it("merges same modelStep reasoning even when tools already follow it", () => {
+    let trace: AgentActivityItem[] = [];
+    trace = appendReasoningChunk(trace, "先看模板", 0);
+    trace = appendToolStart(trace, "call-1", "ReadFile");
+    trace = appendReasoningChunk(trace, "再补一句", 0);
+
+    expect(trace.filter((item) => item.kind === "reasoning")).toHaveLength(1);
+    expect(trace).toMatchObject([
+      {
+        kind: "reasoning",
+        content: "先看模板再补一句",
+        modelStep: 0,
+        streaming: true,
+      },
+      {
+        kind: "tool",
+        toolName: "ReadFile",
+      },
+    ]);
+  });
+
   it("keeps separate reasoning segments even when a retried turn reuses modelStep", () => {
     const first: AgentActivityItem = {
       id: "attempt-1",

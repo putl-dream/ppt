@@ -23,17 +23,17 @@ stages:
 1. 若本 Query 尚未声明 PPT 工作，先调用一次 `BeginPptCapability({"capability":"create", ...})`。恢复同一 waiting-user Query 时沿用该 request；新的跨请求继续操作会获得新的 QueryId，但推进同一 PptJob。
 2. 建立沟通契约：`audience`、`objective`、`desiredOutcome`、deck-wide `coreMessage`、`deliveryContext`、`afterUse`。只有缺少会改变内容事实或交付目标的信息时才询问。
 3. 需要技能正文时，可同批 `LoadSkill("ppt-design")`（以及已知随后需要时的 `LoadSkill("ppt-design-layout")` / `LoadSkill("ppt-build")`），不要一技能一轮。应用 `ppt-design`：若 workspace 已有 `design/template-pack.json` 或 `template-policy` 为 `custom`，先 `ResolveProjectTemplate`（必要时同批 `GetDesignReference`），沿用 pack 的 designSystem/typography/chrome/assets，**不得另选 builtin 风格**；否则再按沟通信号解析模板。将结果写入 `design/design-spec.json`（`selection` → `resolvedTemplate`）。
-4. 应用 `ppt-design-layout`，为每页冻结 `finalCopy`、`coreMessage`、`audienceMove`、`rhythm`、`layoutIntent` 和素材引用，按顺序写入 `slides/page-plan.json`。若 design-spec 已写完且 layout 技能正文已在上下文中，本步写入不必再单独空转一轮旁白。
+4. 应用 `ppt-design-layout`，为每页冻结 `finalCopy`、`coreMessage`、`audienceMove`、`rhythm`、`layoutIntent` 和素材引用，按顺序写入 `slides/page-plan.json`。若 design-spec 已写完且 layout 技能正文已在上下文中，本步写入可与同批工具一起发出；阶段切换时用 1–2 句说明意图即可，不要为空话单独开一轮。
 5. 应用 `ppt-build`。先用 `WriteFile` 只写 `slides/svg/P01.svg`；同一 assistant 响应中可紧随 `PreviewSvgPage({"path":"slides/svg/P01.svg"})`（写在前、预览在后）。
-6. 查看 P01 PNG：若有越界、缺字、素材失败、视觉层级或 SVG 兼容问题，修改同一个文件并重新预览；P01 未通过前禁止生成 P02。看图校准是必要轮界，不要用过渡旁白填充。
+6. 查看 P01 PNG：若有越界、缺字、素材失败、视觉层级或 SVG 兼容问题，修改同一个文件并重新预览；P01 未通过前禁止生成 P02。看图校准是必要轮界；可简短说明校准结论，不要用“继续推进”类空话填充。
 7. P01 通过后，在尽量少的轮次内用多个 `WriteFile` 同批写 `P02.svg`、`P03.svg`……（不同路径可并行）；不要写一页就预览一页，也不要每页重复读取已完整取得的 page-plan。
 8. 全部写完后进入最终视觉门禁：同一响应中按页发出多个 `PreviewSvgPage`，确保每个新建或改动 SVG 的当前内容与素材都成功产出 PNG。任何修订都会使旧凭据失效，必须重新预览该页。
 9. 最后只调用一次 `SubmitSvgDeck`（`execution.batch=exclusive`，必须独批），显式传入 `"designSpecPath":"design/design-spec.json"`、`"pagePlanPath":"slides/page-plan.json"` 及有序 SVG 页面。`communication`、`designSystem`、每页 `id/path/narrative` 必须原样来自这两个锁文件；提交工具会重新读取并核对，再校验与内联 workspace 相对图片。任何锁漂移或页面失败都不视为完成。
 
 ## 轮次纪律
 
-- 只在开场说明目标、需要用户决策、或收尾交付时输出正文。
-- 工具批次之间禁止“继续推进 / 接着锁定 / 下一步我将…”类过渡旁白。
+- 开场目标、用户决策与收尾交付须写正文；阶段切换（如读工作区/模板、写大纲、进入构图、提交）可用 1–2 句 Markdown 意图，再发本批工具。
+- 禁止“继续推进 / 接着锁定 / 下一步我将…”类空洞套话，也不要逐条复述即将调用的工具名；不要为旁白把可同批的独立工具拆成多轮。
 - 必要轮界主要是：capability 声明、依赖 skill 正文后的首次写入、P01 看图校准、预览失败后的修订、以及独批的 `SubmitSvgDeck`。
 
 ## 作者文件

@@ -182,7 +182,7 @@ export function buildToolsSection(input: ToolsSectionInput): string {
     "- 参数彼此独立的工具调用应在同一个 assistant 响应中一次发出；即使工具标记为 serial，也应通过同批调用减少模型往返。",
     "- 如果某个调用的参数依赖兄弟调用的结果，必须等待结果后在下一轮调用；execution.batch=exclusive 的工具必须单独调用。",
     "- execution.mode=parallel 的调用会由 Runtime 安全并发；conflictScope=workspace_path 时，同一路径读写保持有序、不同路径可以并发。",
-    "- 工具批次之间不要写“继续推进 / 接着我将…”这类过渡旁白；进度由工具结果承担。只在开场说明目标、需要用户决策、或收尾交付时输出正文。",
+    "- 阶段切换时可用 1–2 句 Markdown 说明意图（要查看什么、接着进入哪一阶段），再发本批工具；禁止“继续推进 / 接着我将…”类空话，也不要逐条复述工具名。不要为旁白把可同批的独立工具拆成多轮。开场目标、用户决策与收尾交付仍须写正文。",
   ];
   const batchExamples = buildIndependentBatchExamples(input.enabledTools);
   if (batchExamples) {

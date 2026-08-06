@@ -17,8 +17,6 @@ import { useChatScroll, type FoldToken } from "./useChatScroll";
 interface ProcessTraceItemProps {
   row: ProcessTraceRow;
   defaultExpanded?: boolean;
-  /** Parent panel already shows the live status; render body only. */
-  suppressTitle?: boolean;
 }
 
 type IconComponent = React.FC<{ size?: number; className?: string }>;
@@ -35,15 +33,14 @@ const TOOL_CATEGORY_ICONS: Record<AgentToolDisplayCategory, IconComponent> = {
 export const ProcessTraceItem: React.FC<ProcessTraceItemProps> = ({
   row,
   defaultExpanded = false,
-  suppressTitle = false,
 }) => {
-  const [expanded, setExpanded] = useState(defaultExpanded || suppressTitle);
+  const [expanded, setExpanded] = useState(defaultExpanded);
   const chatScroll = useChatScroll();
   const liveBodyRef = useRef<HTMLDivElement>(null);
   const titleRef = useRef<HTMLButtonElement>(null);
   const pendingFoldRef = useRef<FoldToken | null>(null);
   const hasBody = Boolean(row.content?.trim() || (row.lines && row.lines.length > 0));
-  const effectiveExpanded = hasBody && (suppressTitle || expanded);
+  const effectiveExpanded = hasBody && expanded;
   const CaretIcon = effectiveExpanded ? ChevronDownIcon : ChevronRightIcon;
   const ToolCategoryIcon = row.toolCategory
     ? TOOL_CATEGORY_ICONS[row.toolCategory]
@@ -57,28 +54,34 @@ export const ProcessTraceItem: React.FC<ProcessTraceItemProps> = ({
   }, [chatScroll, expanded]);
 
   useEffect(() => {
-    if (suppressTitle) {
-      setExpanded(true);
+    if (row.kind === "thought") {
+      if (row.streaming) {
+        setExpanded(true);
+        return;
+      }
+      // Completed thoughts stay collapsed unless the user opens them.
+      if (!row.streaming && !defaultExpanded) {
+        setExpanded(false);
+      }
       return;
     }
-    if (row.kind === "thought" || defaultExpanded || !row.active) return;
-    setExpanded(true);
-  }, [defaultExpanded, row.active, row.kind, suppressTitle]);
+    if (defaultExpanded || row.active) {
+      setExpanded(true);
+    }
+  }, [defaultExpanded, row.active, row.kind, row.streaming]);
 
   useEffect(() => {
-    if (!suppressTitle || !row.streaming) return;
+    if (!row.streaming || !effectiveExpanded) return;
     const body = liveBodyRef.current;
     if (!body) return;
     body.scrollTop = body.scrollHeight;
-  }, [row.content, row.streaming, suppressTitle]);
+  }, [row.content, row.streaming, effectiveExpanded]);
 
   const toggleExpanded = () => {
     pendingFoldRef.current = chatScroll.beginFold(titleRef.current);
     setExpanded((value) => !value);
   };
 
-  // The tool icon doubles as the status slot: colour and motion carry the state
-  // so the row never repeats itself with a separate tick or exclamation mark.
   const statusIndicator = row.status ? (
     <span
       className={`process-trace-row-status process-trace-row-status--${row.status}`}
@@ -100,35 +103,6 @@ export const ProcessTraceItem: React.FC<ProcessTraceItemProps> = ({
           content={row.title}
           className="assistant-response process-trace-progress-content"
         />
-      </div>
-    );
-  }
-
-  if (suppressTitle) {
-    if (!hasBody) return null;
-    return (
-      <div
-        className={[
-          "process-trace-row",
-          `process-trace-row--${row.kind}`,
-          "process-trace-row--content-only",
-          row.active ? "process-trace-row--active" : "",
-        ].filter(Boolean).join(" ")}
-      >
-        <div
-          ref={liveBodyRef}
-          className="process-trace-row-body process-trace-row-body--live"
-        >
-          {row.content !== undefined && (
-            <pre className="process-trace-row-text">
-              {row.content}
-              {row.streaming && <span className="reasoning-cursor" aria-hidden="true" />}
-            </pre>
-          )}
-          {row.lines?.map((line, index) => (
-            <div key={index} className="process-trace-row-line">{line}</div>
-          ))}
-        </div>
       </div>
     );
   }
@@ -166,7 +140,13 @@ export const ProcessTraceItem: React.FC<ProcessTraceItemProps> = ({
         </div>
       )}
       {effectiveExpanded && (
-        <div className="process-trace-row-body">
+        <div
+          ref={row.streaming ? liveBodyRef : undefined}
+          className={[
+            "process-trace-row-body",
+            row.streaming ? "process-trace-row-body--live" : "",
+          ].filter(Boolean).join(" ")}
+        >
           {row.content !== undefined && (
             <pre className="process-trace-row-text">
               {row.content}

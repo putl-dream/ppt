@@ -1,6 +1,11 @@
 import { z } from "zod";
 import { agentTaskNodeSchema, TASK_LIST_TRACE_ID, type AgentTaskNode } from "./agent-task-list";
-import type { AgentToolActivityState } from "./agent-activity-display";
+import {
+  formatAgentToolActivity,
+  getAgentToolDisplayCopy,
+  type AgentToolActivityState,
+  type AgentToolDisplayCategory,
+} from "./agent-activity-display";
 import type { TeammateProgressEvent } from "./teammate-progress";
 
 export const agentActivityItemSchema = z.discriminatedUnion("kind", [
@@ -105,13 +110,29 @@ export function appendReasoningChunk(
   modelStep = 0,
 ): AgentActivityItem[] {
   const sealed = sealResponseBlocks(trace);
-  const last = sealed.at(-1);
-  if (
-    last?.kind === "reasoning" &&
-    last.streaming &&
-    (last.modelStep ?? 0) === modelStep
-  ) {
-    return [...sealed.slice(0, -1), { ...last, content: last.content + chunk }];
+  let matchIndex = -1;
+  for (let index = sealed.length - 1; index >= 0; index -= 1) {
+    const item = sealed[index]!;
+    if (item.kind === "reasoning" && (item.modelStep ?? 0) === modelStep) {
+      matchIndex = index;
+      break;
+    }
+  }
+  if (matchIndex >= 0) {
+    const match = sealed[matchIndex] as Extract<AgentActivityItem, { kind: "reasoning" }>;
+    return sealed.map((item, index) => {
+      if (index === matchIndex) {
+        return {
+          ...match,
+          content: match.content + chunk,
+          streaming: true,
+        };
+      }
+      if (item.kind === "reasoning" && item.streaming) {
+        return { ...item, streaming: false };
+      }
+      return item;
+    });
   }
   return [
     ...sealAllReasoning(sealed),
@@ -563,22 +584,86 @@ export function isProcessTraceActive(items: AgentActivityItem[]): boolean {
   });
 }
 
-export function summarizeProcessTrace(items: AgentActivityItem[]): string {
-  const reasoningCount = items.filter((item) => item.kind === "reasoning").length;
-  const toolCount = items.filter((item) => item.kind === "tool").length;
-  const stepCount = items.filter((item) => item.kind === "step").length;
-  const taskCount = items.filter((item) => item.kind === "task").length;
-  const approvalCount = items.filter((item) => item.kind === "tool-approval").length;
+const PROCESS_TRACE_CATEGORY_ORDER: AgentToolDisplayCategory[] = [
+  "read",
+  "search",
+  "inspect",
+  "change",
+  "coordinate",
+  "other",
+];
 
-  const parts: string[] = [];
-  if (reasoningCount > 0) parts.push(`${reasoningCount} 轮思考`);
-  if (toolCount > 0) parts.push(`${toolCount} 项操作`);
-  if (taskCount > 0) parts.push(`${taskCount} 个子任务`);
-  if (stepCount > 0) parts.push(`${stepCount} 个步骤`);
-  if (approvalCount > 0) parts.push(`${approvalCount} 次授权`);
+const PROCESS_TRACE_CATEGORY_LABEL: Record<
+  AgentToolDisplayCategory,
+  (count: number) => string
+> = {
+  read: (count) => `已查看 ${count} 项`,
+  search: (count) => `搜索 ${count} 次`,
+  inspect: (count) => `检查 ${count} 次`,
+  change: (count) => `更新 ${count} 项`,
+  coordinate: (count) => `协调 ${count} 次`,
+  other: (count) => `处理 ${count} 项`,
+};
 
-  if (parts.length === 0) return "执行过程";
-  return parts.join(" · ");
+type ProcessTraceToolRef = {
+  toolName: string;
+  status: AgentToolActivityState;
+};
+
+function collectProcessTraceTools(items: AgentActivityItem[]): ProcessTraceToolRef[] {
+  const tools: ProcessTraceToolRef[] = [];
+  for (const item of items) {
+    if (item.kind === "tool") {
+      tools.push({ toolName: item.toolName, status: item.status });
+      continue;
+    }
+    if (item.kind !== "task") continue;
+    for (const step of item.steps) {
+      if (step.type !== "tool" || !step.toolName) continue;
+      tools.push({ toolName: step.toolName, status: step.status });
+    }
+  }
+  return tools;
+}
+
+export function summarizeProcessTrace(
+  items: AgentActivityItem[],
+  options?: { live?: boolean },
+): string {
+  const tools = collectProcessTraceTools(items);
+
+  if (options?.live) {
+    const running = [...tools].reverse().find((tool) => tool.status === "running");
+    if (running) {
+      return formatAgentToolActivity(running.toolName, "running");
+    }
+  }
+
+  if (tools.length === 0) {
+    if (items.some((item) => item.kind === "reasoning")) return "思考片刻";
+    return "执行过程";
+  }
+
+  const counts: Partial<Record<AgentToolDisplayCategory, number>> = {};
+  for (const tool of tools) {
+    const category = getAgentToolDisplayCopy(tool.toolName).category;
+    counts[category] = (counts[category] ?? 0) + 1;
+  }
+
+  const parts = PROCESS_TRACE_CATEGORY_ORDER
+    .filter((category) => (counts[category] ?? 0) > 0)
+    .map((category) => PROCESS_TRACE_CATEGORY_LABEL[category](counts[category]!));
+
+  const incomplete = tools.filter((tool) =>
+    tool.status === "failed"
+    || tool.status === "denied"
+    || tool.status === "invalid-input"
+  ).length;
+  if (incomplete > 0) {
+    parts.push(`${incomplete} 项未完成`);
+  }
+
+  return parts.join(" · ") || "执行过程";
 }
 
 export function extractLatestTaskList(

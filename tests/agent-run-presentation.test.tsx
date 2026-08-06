@@ -72,8 +72,10 @@ describe("agent run presentation", () => {
     view.rerender(
       <Surface items={withTool} content="我先检查。" busy />,
     );
-    const tool = surface.querySelector('[data-run-block-id="tool-1"]');
+    // Working tool batch stays expanded (Cursor-style).
+    expect(screen.getByRole("button", { name: "收起执行过程" })).not.toBeNull();
     expect(surface.querySelector('[data-run-block-id="response-1"]')).toBe(firstResponse);
+    const tool = surface.querySelector('[data-run-block-id="tool-1"]');
     expect(tool).not.toBeNull();
     expect(surface.querySelectorAll(".process-trace-row-status--running")).toHaveLength(1);
 
@@ -95,13 +97,14 @@ describe("agent run presentation", () => {
         busy
       />,
     );
+    // Tools finished and trailing response started → auto-collapse.
+    expect(screen.getByRole("button", { name: "展开执行过程" })).not.toBeNull();
+    expect(surface.querySelector('[data-run-block-id="tool-1"]')).toBeNull();
     expect(
       [...surface.querySelectorAll("[data-run-block-kind]")]
         .map((element) => element.getAttribute("data-run-block-kind")),
-    ).toEqual(["response", "tool", "response"]);
+    ).toEqual(["response", "tool_batch", "response"]);
     expect(surface.querySelector('[data-run-block-id="response-1"]')).toBe(firstResponse);
-    expect(surface.querySelector('[data-run-block-id="tool-1"]')).toBe(tool);
-    expect(surface.querySelector(".process-trace-row-status--running")).toBeNull();
 
     view.rerender(
       <Surface
@@ -113,7 +116,7 @@ describe("agent run presentation", () => {
       />,
     );
     expect(surface.querySelector('[data-run-block-id="response-1"]')).toBe(firstResponse);
-    expect(surface.querySelector('[data-run-block-id="tool-1"]')).toBe(tool);
+    expect(surface.querySelector('[data-run-block-id="tool-1"]')).toBeNull();
   });
 
   it("uses the active tool as the primary loading message", () => {
@@ -148,7 +151,7 @@ describe("agent run presentation", () => {
     },
   );
 
-  it("keeps timeline process label neutral while dock status owns the step copy", () => {
+  it("keeps timeline thought separate while dock status owns the step copy", () => {
     render(
       <div data-testid="surface">
         <AgentRunTimeline
@@ -174,11 +177,192 @@ describe("agent run presentation", () => {
     );
 
     const surface = screen.getByTestId("surface");
-    expect(surface.querySelector(".process-trace-panel-label")?.textContent).toBe("执行过程");
+    expect(surface.querySelector(".process-trace-panel")).toBeNull();
+    expect(surface.querySelector('[data-run-block-kind="thought"]')).not.toBeNull();
     expect(surface.querySelector(".loading-indicator--sm")).not.toBeNull();
     expect(surface.querySelectorAll(".agent-run-status--shimmer")).toHaveLength(1);
     expect(screen.getByRole("status").textContent).toContain("正在思考页面内容");
-    expect(surface.textContent).not.toContain("思考中");
+  });
+
+  it("final text round collapses prior tool_batch", () => {
+    Object.defineProperty(window, "matchMedia", {
+      configurable: true,
+      value: () => ({
+        matches: true,
+        addEventListener: () => undefined,
+        removeEventListener: () => undefined,
+      }),
+    });
+
+    const tools: AgentActivityItem[] = [
+      {
+        id: "tool-1",
+        kind: "tool",
+        toolCallId: "call-1",
+        toolName: "ReadFile",
+        status: "completed",
+      },
+      {
+        id: "tool-2",
+        kind: "tool",
+        toolCallId: "call-2",
+        toolName: "WriteFile",
+        status: "completed",
+      },
+    ];
+
+    const view = render(
+      <AgentRunTimeline content="" live items={tools} />,
+    );
+    expect(document.querySelector('[data-run-block-id="tool-1"]')).not.toBeNull();
+
+    view.rerender(
+      <AgentRunTimeline
+        content="本轮已完成：已写入设计规格与页面计划。"
+        live
+        items={[
+          ...tools,
+          {
+            id: "response-final",
+            kind: "response",
+            start: 0,
+            end: 20,
+            streaming: false,
+          },
+        ]}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "展开执行过程" })).not.toBeNull();
+    expect(document.querySelector('[data-run-block-id="tool-1"]')).toBeNull();
+    expect(document.querySelector('[data-run-block-id="response-final"]')).not.toBeNull();
+    expect(document.body.textContent).toContain("本轮已完成");
+  });
+
+  it("run end without trailing response still collapses (!live)", () => {
+    Object.defineProperty(window, "matchMedia", {
+      configurable: true,
+      value: () => ({
+        matches: true,
+        addEventListener: () => undefined,
+        removeEventListener: () => undefined,
+      }),
+    });
+
+    const tools: AgentActivityItem[] = [
+      {
+        id: "tool-1",
+        kind: "tool",
+        toolCallId: "call-1",
+        toolName: "PreviewSlide",
+        status: "completed",
+      },
+      {
+        id: "tool-2",
+        kind: "tool",
+        toolCallId: "call-2",
+        toolName: "PreviewSlide",
+        status: "completed",
+      },
+    ];
+
+    const view = render(
+      <AgentRunTimeline content="" live items={tools} />,
+    );
+    expect(document.querySelector('[data-run-block-id="tool-1"]')).not.toBeNull();
+
+    view.rerender(
+      <AgentRunTimeline content="" live={false} items={tools} />,
+    );
+
+    expect(screen.getByRole("button", { name: "展开执行过程" })).not.toBeNull();
+    expect(document.querySelector('[data-run-block-id="tool-1"]')).toBeNull();
+    expect(screen.getByRole("button", { name: "展开执行过程" }).textContent).toContain("检查 2 次");
+  });
+
+  it("pinned batch survives final round", () => {
+    Object.defineProperty(window, "matchMedia", {
+      configurable: true,
+      value: () => ({
+        matches: true,
+        addEventListener: () => undefined,
+        removeEventListener: () => undefined,
+      }),
+    });
+
+    const completedTools: AgentActivityItem[] = [
+      {
+        id: "preview-1",
+        kind: "tool",
+        toolCallId: "preview-call-1",
+        toolName: "PreviewSlide",
+        status: "completed",
+      },
+      {
+        id: "preview-2",
+        kind: "tool",
+        toolCallId: "preview-call-2",
+        toolName: "PreviewSlide",
+        status: "completed",
+      },
+    ];
+
+    const view = render(
+      <AgentRunTimeline content="" live items={completedTools} />,
+    );
+    expect(document.querySelector('[data-run-block-id="preview-1"]')).not.toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "收起执行过程" }));
+    fireEvent.click(screen.getByRole("button", { name: "展开执行过程" }));
+    expect(document.querySelector('[data-run-block-id="preview-1"]')).not.toBeNull();
+
+    view.rerender(
+      <AgentRunTimeline
+        content="任务总结：导出已提交审批。"
+        live={false}
+        items={[
+          ...completedTools,
+          {
+            id: "response-1",
+            kind: "response",
+            start: 0,
+            end: 14,
+          },
+        ]}
+      />,
+    );
+    expect(document.querySelector('[data-run-block-id="preview-1"]')).not.toBeNull();
+    expect(document.querySelector('[data-run-block-id="response-1"]')).not.toBeNull();
+  });
+
+  it("separates thought from tool batch panels", () => {
+    render(
+      <AgentRunTimeline
+        content=""
+        live
+        items={[
+          {
+            id: "reason-1",
+            kind: "reasoning",
+            content: "分析需求",
+            streaming: false,
+          },
+          {
+            id: "tool-1",
+            kind: "tool",
+            toolCallId: "c1",
+            toolName: "ReadFile",
+            status: "running",
+          },
+        ]}
+      />,
+    );
+
+    expect(document.querySelector('[data-run-block-kind="thought"]')).not.toBeNull();
+    expect(document.querySelector('[data-run-block-kind="tool_batch"]')).not.toBeNull();
+    expect(document.querySelector(".process-trace-panel")).not.toBeNull();
+    const panel = document.querySelector(".process-trace-panel");
+    expect(panel?.querySelector('[data-run-block-kind="thought"]')).toBeNull();
   });
 
   it("turns permission waiting into a static glyph instead of a shimmer", () => {
@@ -312,7 +496,7 @@ describe("agent run presentation", () => {
     );
 
     const disclosure = screen.getByRole("button", { name: "展开执行过程" });
-    expect(disclosure.textContent).toContain("2 项操作");
+    expect(disclosure.textContent).toContain("检查 2 次");
     expect(document.querySelector('[data-run-block-id="preview-1"]')).toBeNull();
 
     fireEvent.click(disclosure);

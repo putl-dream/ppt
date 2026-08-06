@@ -61,7 +61,7 @@ stages:
 
 模板解析后立即调用一次 `GetDesignReference`，传入解析结果中的 `argumentMode`、`visualStyle` 和 `readingMode`。当 pack 激活时，该工具会合并 pack 配色/字体/chrome；**不得**用内置样板覆盖 pack 外观。将返回的论证骨架、标题语气、构图纪律、image language 和 `avoid`/`mustUse` 写入设计规格。
 
-`ResolveProjectTemplate` 与 `GetDesignReference` 可在沟通契约就绪后同批发出（后者参数取前者结果时须等返回）；写入 `design/design-spec.json` 须等两工具结果返回后再发。若 Main 已种子化 design-spec 且 axes/`resolvedTemplate` 已匹配 pack，可补全真实 communicationContract 后保留轴与色。不要为“加载参考”单独插入过渡旁白轮。除非用户明确要求比较方案，不展示 safe/shifted/bold 选择题。
+`ResolveProjectTemplate` 与 `GetDesignReference` 可在沟通契约就绪后同批发出（后者参数取前者结果时须等返回）；写入 `design/design-spec.json` 须等两工具结果返回后再发。若 Main 已种子化 design-spec 且 axes/`resolvedTemplate` 已匹配 pack，可补全真实 communicationContract 后保留轴与色。进入模板/参考阶段时可写 1–2 句意图，但不要为“加载参考”单独空转一轮。除非用户明确要求比较方案，不展示 safe/shifted/bold 选择题。
 
 ## 3. 锁定配套视觉事实
 

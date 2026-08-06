@@ -15,8 +15,8 @@ import {
 
 /**
  * Soft create-path habits that inflate turnCount (not hard runtime gates):
- * one LoadSkill per turn, write-one-page-preview-one-page, transition narration.
- * These assertions lock the denser prompt/skill contract that counters them.
+ * one LoadSkill per turn, write-one-page-preview-one-page, empty transition filler.
+ * These assertions lock denser batches plus milestone intent (not empty旁白).
  */
 describe("prompt turn-density guidance", () => {
   it("identity asks for denser independent tool batches", () => {
@@ -26,7 +26,7 @@ describe("prompt turn-density guidance", () => {
     expect(identity).toContain("不要为了“看起来一步一步”而把独立工作拆成多轮");
   });
 
-  it("tool selection lists batchable create-path patterns and bans transition narration", () => {
+  it("tool selection allows milestone intent and bans empty transition filler", () => {
     const section = buildToolsSection({
       stage: "author",
       enabledTools: [
@@ -40,8 +40,10 @@ describe("prompt turn-density guidance", () => {
     expect(section).toContain("多个 LoadSkill");
     expect(section).toContain("同批写剩余 SVG");
     expect(section).toContain("同批多个 PreviewSvgPage");
-    expect(section).toContain("过渡旁白");
-    expect(section).toContain("只在开场说明目标");
+    expect(section).toContain("阶段切换");
+    expect(section).toContain("继续推进");
+    expect(section).toContain("不要为旁白把可同批的独立工具拆成多轮");
+    expect(section).toContain("开场目标、用户决策与收尾交付");
   });
 
   it("omits create-path tool names from batch examples when those tools are absent", () => {
@@ -52,13 +54,17 @@ describe("prompt turn-density guidance", () => {
     expect(section).not.toContain("ReadFile");
     expect(section).not.toContain("WriteFile");
     expect(section).not.toContain("PreviewSvgPage");
-    expect(section).toContain("过渡旁白");
+    expect(section).toContain("阶段切换");
+    expect(section).toContain("继续推进");
   });
 
-  it("response protocol discourages step narration between tool batches", () => {
+  it("response protocol allows milestone intent without step-by-step tool narration", () => {
     const protocol = buildContentBlockResponseGuidance();
-    expect(protocol).toContain("不要用短段落复述即将执行的步骤");
-    expect(protocol).toContain("过渡旁白");
+    expect(protocol).toContain("阶段切换");
+    expect(protocol).toContain("1–2 句 Markdown 意图");
+    expect(protocol).toContain("不要逐条复述即将调用的工具名");
+    expect(protocol).toContain("继续推进");
+    expect(protocol).toContain("不要为旁白把可同批的独立工具拆成多轮");
   });
 
   it("SVG lock contract and bootstrap prefer batched skills and post-P01 bulk writes", () => {

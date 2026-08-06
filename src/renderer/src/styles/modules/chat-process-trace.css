@@ -6,12 +6,13 @@
   border-left: none;
   min-width: 0;
 }
-.process-trace-panel--active .process-trace-panel-label {
+.process-trace-panel--active .process-trace-panel-label,
+.process-trace-panel--active .process-trace-panel-summary {
   color: var(--text-muted);
 }
 .process-trace-panel-header {
   width: 100%;
-  min-height: 26px;
+  min-height: 24px;
   padding: 2px 0;
   display: flex;
   align-items: center;
@@ -28,9 +29,10 @@
 .process-trace-panel-header:hover {
   color: var(--text-secondary);
 }
-.process-trace-panel-header:disabled {
-  color: var(--text-muted);
-  cursor: default;
+.process-trace-panel-header:hover .process-trace-panel-meta,
+.process-trace-panel-header:hover .process-trace-panel-summary,
+.process-trace-panel-header:hover .process-trace-panel-label {
+  color: var(--text-secondary);
 }
 .process-trace-panel-header-left {
   display: inline-flex;
@@ -40,13 +42,28 @@
   max-width: 100%;
   flex: 0 1 auto;
 }
+.process-trace-panel-meta {
+  flex-shrink: 0;
+  color: var(--text-muted);
+  font-weight: var(--font-weight-medium);
+  font-variant-numeric: tabular-nums;
+}
+.process-trace-panel-separator {
+  flex-shrink: 0;
+  color: var(--text-muted);
+  opacity: 0.7;
+}
+.process-trace-panel-summary,
 .process-trace-panel-label {
   min-width: 0;
   overflow: hidden;
   color: var(--text-muted);
-  font-weight: var(--font-weight-medium);
+  font-weight: var(--font-weight-regular);
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.process-trace-panel-label {
+  font-weight: var(--font-weight-medium);
 }
 .process-trace-panel-elapsed {
   flex-shrink: 0;
@@ -66,26 +83,26 @@
 .process-trace-panel-body {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding: 4px 0 8px;
+  gap: 2px;
+  padding: 2px 0 6px;
 }
 .process-trace-row {
-  padding: 2px 0;
+  padding: 0;
   min-width: 0;
 }
 .process-trace-row-title {
   width: 100%;
-  min-height: 30px;
+  min-height: 22px;
   display: flex;
   align-items: center;
-  gap: 7px;
-  padding: 4px 0;
+  gap: 6px;
+  padding: 1px 0;
   font-family: var(--font-body);
-  font-size: var(--text-sm);
+  font-size: var(--text-xs);
   font-weight: var(--font-weight-regular);
-  line-height: 1.75;
-  letter-spacing: 0.02em;
-  color: var(--text-secondary);
+  line-height: 1.5;
+  letter-spacing: 0.01em;
+  color: var(--text-muted);
   background: transparent;
   border: none;
   cursor: text;
@@ -147,7 +164,7 @@
 }
 .process-trace-row-title--interactive:hover .process-trace-row-label,
 .process-trace-row-title--interactive:hover .process-trace-row-toggle {
-  color: var(--text-primary);
+  color: var(--text-secondary);
 }
 .process-trace-row-label {
   min-width: 0;
@@ -157,17 +174,16 @@
   transition: color 0.15s ease, filter 0.15s ease;
 }
 .process-trace-row--active .process-trace-row-label {
-  color: var(--text-primary);
+  color: var(--text-secondary);
+}
+.process-trace-row--tool:not(.process-trace-row--active) .process-trace-row-label {
+  color: var(--text-muted);
 }
 .process-trace-row-body {
-  margin-left: 21px;
-  padding: 3px 0 8px 12px;
+  margin-left: 20px;
+  padding: 2px 0 6px 10px;
   min-width: 0;
   user-select: text;
-}
-.process-trace-row--content-only .process-trace-row-body {
-  margin-left: 0;
-  padding-left: 0;
 }
 /*
  * Fade the live scroll top with an opaque overlay instead of mask-image.
@@ -210,9 +226,9 @@
   font-family: var(--font-body);
   font-size: var(--text-xs);
   font-weight: var(--font-weight-regular);
-  line-height: 1.75;
-  letter-spacing: 0.02em;
-  color: var(--text-secondary);
+  line-height: 1.6;
+  letter-spacing: 0.01em;
+  color: var(--text-muted);
   white-space: pre-wrap;
 }
 .process-trace-row-text {
@@ -220,7 +236,7 @@
   overflow-wrap: anywhere;
 }
 .markdown-body.process-trace-progress-content {
-  color: var(--text-secondary);
+  color: var(--text-muted);
   font-size: var(--text-sm);
   line-height: 1.7;
 }

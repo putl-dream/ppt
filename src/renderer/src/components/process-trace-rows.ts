@@ -40,25 +40,18 @@ export function buildProcessTraceRows(
   live: boolean,
 ): ProcessTraceRow[] {
   const rows: ProcessTraceRow[] = [];
-  const reasoningTotal = items.filter((item) => item.kind === "reasoning").length;
-  let reasoningIndex = 0;
 
   for (let itemIndex = 0; itemIndex < items.length; itemIndex += 1) {
     const item = items[itemIndex]!;
     if (item.kind === "reasoning") {
-      reasoningIndex += 1;
-      const reasoningRound = (item.modelStep ?? reasoningIndex - 1) + 1;
-      const showRound = reasoningTotal > 1 || (item.modelStep ?? 0) > 0;
-      const title = live && item.streaming
-        ? "思考中"
-        : (showRound ? `思考片刻 · 第 ${reasoningRound} 轮` : "思考片刻");
+      const streaming = live && Boolean(item.streaming);
       pushRow(rows, {
         id: item.id,
         kind: "thought",
-        title,
+        title: streaming ? "思考中" : "思考片刻",
         content: item.content,
-        active: live && Boolean(item.streaming),
-        streaming: live && Boolean(item.streaming),
+        active: streaming,
+        streaming,
       });
       continue;
     }

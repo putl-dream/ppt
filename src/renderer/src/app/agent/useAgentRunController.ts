@@ -249,6 +249,8 @@ export function useAgentRunController({
         });
       },
       finalize: async (context, result) => {
+        // Wait for the stream (including final response text) before applying
+        // the result; cleanup then clears busy so UI collapses after summary lands.
         await waitForRunStreamCompletion(context.runId);
         await applyAgentResult(result, activeRunTraceRef.current, context.runId);
       },
