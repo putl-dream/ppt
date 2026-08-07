@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 import type { AgentActivityItem } from "../src/shared/agent-activity";
 
 describe("buildAgentRunTimelineSegments", () => {
-  it("keeps thought and tool batches separate in order", () => {
+  it("groups thought with following tools until a response boundary", () => {
     const items: AgentActivityItem[] = [
       {
         id: "r1",
@@ -50,19 +50,47 @@ describe("buildAgentRunTimelineSegments", () => {
 
     const segments = buildAgentRunTimelineSegments(items);
     expect(segments.map((segment) => segment.kind)).toEqual([
-      "thought",
       "tool_batch",
       "response",
-      "thought",
       "tool_batch",
     ]);
 
-    const firstBatch = segments[1];
+    const firstBatch = segments[0];
     expect(firstBatch?.kind).toBe("tool_batch");
     if (firstBatch?.kind === "tool_batch") {
-      expect(firstBatch.items.map((item) => item.id)).toEqual(["t1", "t2"]);
-      expect(firstBatch.items.every((item) => item.kind !== "reasoning")).toBe(true);
+      expect(firstBatch.items.map((item) => item.id)).toEqual(["r1", "t1", "t2"]);
     }
+
+    const secondBatch = segments[2];
+    expect(secondBatch?.kind).toBe("tool_batch");
+    if (secondBatch?.kind === "tool_batch") {
+      expect(secondBatch.items.map((item) => item.id)).toEqual(["r2", "t3"]);
+    }
+  });
+
+  it("keeps orphan reasoning as thought when no tools follow before response", () => {
+    const segments = buildAgentRunTimelineSegments([
+      {
+        id: "r1",
+        kind: "reasoning",
+        content: "plan",
+      },
+      {
+        id: "resp1",
+        kind: "response",
+        start: 0,
+        end: 4,
+      },
+      {
+        id: "t1",
+        kind: "tool",
+        toolCallId: "c1",
+        toolName: "ReadFile",
+        status: "completed",
+      },
+    ]);
+
+    expect(segments.map((segment) => segment.kind)).toEqual(["thought", "response", "tool_batch"]);
   });
 
   it("groups approvals and steps into the tool batch", () => {

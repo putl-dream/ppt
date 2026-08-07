@@ -26,7 +26,7 @@ describe("prompt turn-density guidance", () => {
     expect(identity).toContain("不要为了“看起来一步一步”而把独立工作拆成多轮");
   });
 
-  it("tool selection allows milestone intent and bans empty transition filler", () => {
+  it("tool selection requires milestone intent and bans empty transition filler", () => {
     const section = buildToolsSection({
       stage: "author",
       enabledTools: [askUserTool, loadSkillTool, readFileTool, writeFileTool, previewSvgPageTool],
@@ -35,6 +35,8 @@ describe("prompt turn-density guidance", () => {
     expect(section).toContain("同批写剩余 SVG");
     expect(section).toContain("同批多个 PreviewSvgPage");
     expect(section).toContain("阶段切换");
+    expect(section).toContain("可见 Markdown 意图");
+    expect(section).toContain("不要把意图只写在思考通道里");
     expect(section).toContain("继续推进");
     expect(section).toContain("不要为旁白把可同批的独立工具拆成多轮");
     expect(section).toContain("开场目标、用户决策与收尾交付");
@@ -52,10 +54,11 @@ describe("prompt turn-density guidance", () => {
     expect(section).toContain("继续推进");
   });
 
-  it("response protocol allows milestone intent without step-by-step tool narration", () => {
+  it("response protocol requires milestone intent before tools without step-by-step tool narration", () => {
     const protocol = buildContentBlockResponseGuidance();
     expect(protocol).toContain("阶段切换");
-    expect(protocol).toContain("1–2 句 Markdown 意图");
+    expect(protocol).toContain("1–2 句可见 Markdown 意图");
+    expect(protocol).toContain("不要把意图只写在思考通道里");
     expect(protocol).toContain("不要逐条复述即将调用的工具名");
     expect(protocol).toContain("继续推进");
     expect(protocol).toContain("不要为旁白把可同批的独立工具拆成多轮");

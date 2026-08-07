@@ -319,7 +319,7 @@ describe("agent run presentation", () => {
     expect(document.querySelector('[data-run-block-id="response-1"]')).not.toBeNull();
   });
 
-  it("separates thought from tool batch panels", () => {
+  it("groups thought into the following tool batch panel", () => {
     render(
       <AgentRunTimeline
         content=""
@@ -342,11 +342,13 @@ describe("agent run presentation", () => {
       />,
     );
 
-    expect(document.querySelector('[data-run-block-kind="thought"]')).not.toBeNull();
+    expect(document.querySelector(".agent-run-block--thought")).toBeNull();
     expect(document.querySelector('[data-run-block-kind="tool_batch"]')).not.toBeNull();
     expect(document.querySelector(".process-trace-panel")).not.toBeNull();
-    const panel = document.querySelector(".process-trace-panel");
-    expect(panel?.querySelector('[data-run-block-kind="thought"]')).toBeNull();
+    expect(
+      document.querySelector('.process-trace-panel [data-run-block-kind="thought"]'),
+    ).not.toBeNull();
+    expect(document.querySelector(".process-trace-panel")?.textContent).toContain("思考");
   });
 
   it("turns permission waiting into a static glyph instead of a shimmer", () => {

@@ -10,10 +10,36 @@ function isToolBatchItem(item: AgentActivityItem): boolean {
   return item.kind === "tool" || item.kind === "tool-approval" || item.kind === "step";
 }
 
-function flushToolBatch(segments: AgentRunTimelineSegment[], batch: AgentActivityItem[]): void {
-  if (batch.length === 0) return;
-  segments.push({ kind: "tool_batch", items: [...batch] });
-  batch.length = 0;
+function flushPendingCluster(
+  segments: AgentRunTimelineSegment[],
+  pending: AgentActivityItem[],
+): void {
+  if (pending.length === 0) return;
+  const hasProcessItems = pending.some(
+    (item) => isToolBatchItem(item) || item.kind === "reasoning",
+  );
+  if (!hasProcessItems) {
+    pending.length = 0;
+    return;
+  }
+
+  // Keep thought+tools in one process cluster so every modelStep of reasoning
+  // does not become a standalone "思考片刻" row between tool summaries.
+  // Response / task segments stay outside and flush this cluster first.
+  if (pending.some(isToolBatchItem) || pending.some((item) => item.kind === "reasoning")) {
+    const onlyThoughts = pending.every((item) => item.kind === "reasoning");
+    if (onlyThoughts) {
+      for (const item of pending) {
+        segments.push({
+          kind: "thought",
+          item: item as Extract<AgentActivityItem, { kind: "reasoning" }>,
+        });
+      }
+    } else {
+      segments.push({ kind: "tool_batch", items: [...pending] });
+    }
+  }
+  pending.length = 0;
 }
 
 /** Split activity items into Cursor-style timeline segments (order preserved). */
@@ -21,35 +47,30 @@ export function buildAgentRunTimelineSegments(
   items: AgentActivityItem[],
 ): AgentRunTimelineSegment[] {
   const segments: AgentRunTimelineSegment[] = [];
-  const toolBatch: AgentActivityItem[] = [];
+  const pending: AgentActivityItem[] = [];
 
   for (const item of items) {
     if (item.kind === "tasklist") continue;
 
     if (item.kind === "response") {
-      flushToolBatch(segments, toolBatch);
+      flushPendingCluster(segments, pending);
       segments.push({ kind: "response", item });
       continue;
     }
 
     if (item.kind === "task") {
-      flushToolBatch(segments, toolBatch);
+      flushPendingCluster(segments, pending);
       segments.push({ kind: "task", item });
       continue;
     }
 
-    if (item.kind === "reasoning") {
-      flushToolBatch(segments, toolBatch);
-      segments.push({ kind: "thought", item });
+    if (item.kind === "reasoning" || isToolBatchItem(item)) {
+      pending.push(item);
       continue;
-    }
-
-    if (isToolBatchItem(item)) {
-      toolBatch.push(item);
     }
   }
 
-  flushToolBatch(segments, toolBatch);
+  flushPendingCluster(segments, pending);
   return segments;
 }
 
