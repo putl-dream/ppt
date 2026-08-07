@@ -2,6 +2,10 @@ import { resolve } from "node:path";
 import { defineConfig } from "vitest/config";
 
 export default defineConfig({
+  // Match tsconfig `jsx: "react-jsx"` so test files do not need a React default import.
+  esbuild: {
+    jsx: "automatic",
+  },
   resolve: {
     alias: {
       "@shared": resolve("src/shared"),
