@@ -7,7 +7,7 @@
   max-width: 100%;
 }
 
-.ui-select--ide {
+.ui-select--settings {
   width: min(320px, 100%);
 }
 
@@ -41,10 +41,10 @@
   transition: var(--transition-color);
 }
 
-.ui-select--ide .ui-select-trigger {
-  height: var(--ide-control-height);
-  border-radius: var(--ide-radius);
-  font-size: var(--ide-font-ui);
+.ui-select--settings .ui-select-trigger {
+  height: var(--settings-control-height);
+  border-radius: var(--settings-radius);
+  font-size: var(--settings-font-ui);
 }
 
 .ui-select--block .ui-select-trigger {

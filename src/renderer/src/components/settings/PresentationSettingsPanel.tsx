@@ -213,13 +213,13 @@ export function PresentationSettingsPanel({
 
   return (
     <SettingsPanel>
-      <SettingsSection title="演示文档默认项">
+      <SettingsSection title="新项目默认">
         <SettingsRow label="画布比例">
-          <span className="ide-hint">16:9 宽屏（当前唯一导出比例）</span>
+          <span className="settings-hint">16:9 宽屏（当前唯一导出比例）</span>
         </SettingsRow>
         <SettingsRow label="新项目默认模板">
           <Select
-            variant="ide"
+            variant="settings"
             ariaLabel="新项目默认模板"
             value={defaultTemplateId}
             onChange={setDefaultTemplateId}
@@ -227,37 +227,37 @@ export function PresentationSettingsPanel({
           />
         </SettingsRow>
         <SettingsRow label="说明">
-          <span className="ide-hint">
+          <span className="settings-hint">
             仅影响之后新建的项目。选择导入的参考模板时，新建对话会自动物化 template-pack + custom
             策略。已打开项目请用下方「应用到当前项目」。
             自动模式低置信度时回退到内置默认模板（非上传模板）。
           </span>
         </SettingsRow>
         <SettingsRow label="本地设计系统预览">
-          <span className="ide-hint">
+          <span className="settings-hint">
             {selectedDesignSystem.argumentMode} · {selectedDesignSystem.visualStyle} ·{" "}
             {selectedDesignSystem.readingMode} · {selectedColorSchemeName}
           </span>
         </SettingsRow>
       </SettingsSection>
 
-      <SettingsSection title="参考模板导入">
+      <SettingsSection title="当前项目">
         <SettingsRow label="模板库（跨项目保留）">
-          <span className="ide-hint">
+          <span className="settings-hint">
             {libraryTemplates.length === 0
               ? "暂无导入模板"
               : libraryTemplates.map((item) => item.name).join("、")}
           </span>
         </SettingsRow>
         <SettingsRow label="当前项目策略">
-          <span className="ide-hint">
+          <span className="settings-hint">
             {projectPolicyLabel(activeSessionId, status, statusError, activeCustomTemplate)}
           </span>
         </SettingsRow>
         <SettingsRow label="应用到当前项目">
-          <div className="ide-choice-group" role="group" aria-label="应用模板库模板">
+          <div className="settings-choice-group" role="group" aria-label="应用模板库模板">
             {libraryTemplates.length === 0 ? (
-              <span className="ide-hint">先导入 PPTX/POTX 后可应用到项目</span>
+              <span className="settings-hint">先导入 PPTX/POTX 后可应用到项目</span>
             ) : (
               libraryTemplates.map((template) => {
                 const active =
@@ -267,10 +267,10 @@ export function PresentationSettingsPanel({
                   Boolean(activePack);
                 const isAppDefault = defaultTemplateId === template.id;
                 return (
-                  <div key={`${template.id}@${template.revisionId}`} className="ide-choice-group">
+                  <div key={`${template.id}@${template.revisionId}`} className="settings-choice-group">
                     <button
                       type="button"
-                      className={cx("ide-choice", active && "is-active")}
+                      className={cx("settings-choice", active && "is-active")}
                       disabled={!activeSessionId}
                       aria-pressed={active}
                       onClick={() => void applyTemplate(template)}
@@ -282,7 +282,7 @@ export function PresentationSettingsPanel({
                     </button>
                     <button
                       type="button"
-                      className={cx("ide-choice", isAppDefault && "is-active")}
+                      className={cx("settings-choice", isAppDefault && "is-active")}
                       aria-pressed={isAppDefault}
                       onClick={() => {
                         setDefaultTemplateId(template.id);
@@ -299,11 +299,11 @@ export function PresentationSettingsPanel({
         </SettingsRow>
         <SettingsRow label="继承预览">
           {!activePack ? (
-            <span className="ide-hint">
+            <span className="settings-hint">
               {activeSessionId ? "当前项目未应用参考模板 pack（仅在模板库或未导入）" : "无活动会话"}
             </span>
           ) : (
-            <div className="ide-hint" style={{ display: "grid", gap: 8 }}>
+            <div className="settings-hint" style={{ display: "grid", gap: 8 }}>
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
                 <span>配色：</span>
                 {packPalette
@@ -356,10 +356,10 @@ export function PresentationSettingsPanel({
           )}
         </SettingsRow>
         <SettingsRow label="策略切换">
-          <div className="ide-choice-group" role="group" aria-label="项目模板策略">
+          <div className="settings-choice-group" role="group" aria-label="项目模板策略">
             <button
               type="button"
-              className={cx("ide-choice", projectPolicyMode === "auto" && "is-active")}
+              className={cx("settings-choice", projectPolicyMode === "auto" && "is-active")}
               disabled={!activeSessionId}
               onClick={() => void switchPolicy("auto")}
               aria-pressed={projectPolicyMode === "auto"}
@@ -368,7 +368,7 @@ export function PresentationSettingsPanel({
             </button>
             <button
               type="button"
-              className={cx("ide-choice", projectPolicyMode === "default" && "is-active")}
+              className={cx("settings-choice", projectPolicyMode === "default" && "is-active")}
               disabled={!activeSessionId}
               onClick={() => void switchPolicy("default")}
               aria-pressed={projectPolicyMode === "default"}
@@ -377,7 +377,7 @@ export function PresentationSettingsPanel({
             </button>
             <button
               type="button"
-              className={cx("ide-choice", projectPolicyMode === "custom" && "is-active")}
+              className={cx("settings-choice", projectPolicyMode === "custom" && "is-active")}
               disabled={
                 !activeSessionId ||
                 (libraryTemplates.length === 0 && uploadedTemplates.length === 0)
@@ -390,16 +390,16 @@ export function PresentationSettingsPanel({
           </div>
         </SettingsRow>
         <SettingsRow label="能力等级">
-          <span className="ide-hint">
+          <span className="settings-hint">
             仅支持 design-reference（参考风格重生 SVG：配色/字体/logo/页眉页脚/标题框）。 不承诺
             PowerPoint 母版/占位符保真（master-backed 尚未启用）。
           </span>
         </SettingsRow>
         <SettingsRow label="导入 PPTX/POTX">
-          <div className="ide-choice-group" role="group" aria-label="导入参考模板">
+          <div className="settings-choice-group" role="group" aria-label="导入参考模板">
             <button
               type="button"
-              className="ide-btn-secondary"
+              className="settings-secondary-btn"
               onClick={() => void importTemplate()}
             >
               选择并导入参考模板
@@ -407,7 +407,7 @@ export function PresentationSettingsPanel({
           </div>
         </SettingsRow>
         <SettingsRow label="说明">
-          <span className="ide-hint">
+          <span className="settings-hint">
             模板存入应用模板库，切换会话不会丢失。应用到项目或设为新项目默认后，会物化
             design/template-pack.json（配色/字体/chrome/assets）并种子化 design-spec。 Agent
             必须沿用 pack，不得另选 builtin 风格。页面仍由 SVG 重生；导出不保留原母版。

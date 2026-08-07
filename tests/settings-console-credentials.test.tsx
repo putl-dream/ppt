@@ -15,7 +15,7 @@ import { MAX_OUTPUT_TOKENS } from "../src/shared/generation-settings-inputs";
 
 function renderSearchSettings(overrides: Partial<ComponentProps<typeof SettingsConsole>> = {}) {
   const props: ComponentProps<typeof SettingsConsole> = {
-    activeCategory: "models-search",
+    activeCategory: "web-search",
     vendors: [],
     models: [],
     selectedModelId: "",
@@ -108,7 +108,7 @@ describe("SettingsConsole credential controls", () => {
 
   it("excludes models without a resolved credential from fallback choices", () => {
     renderSearchSettings({
-      activeCategory: "models-runtime",
+      activeCategory: "models",
       credentialStorageStatus: { state: "secure", backend: "unknown" },
       selectedModelId: "primary",
       models: [
@@ -154,11 +154,11 @@ describe("SettingsConsole credential controls", () => {
       target: { value: "tvly-unsaved" },
     });
 
-    view.rerender(<SettingsConsole {...view.props} activeCategory="agent-approval" />);
-    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("提交与审批");
+    view.rerender(<SettingsConsole {...view.props} activeCategory="agent" />);
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Agent 行为");
     expect(screen.queryByLabelText("Tavily API Key")).toBeNull();
 
-    view.rerender(<SettingsConsole {...view.props} activeCategory="models-search" />);
+    view.rerender(<SettingsConsole {...view.props} activeCategory="web-search" />);
     expect((screen.getByLabelText("Tavily API Key") as HTMLInputElement).value).toBe(
       "tvly-unsaved",
     );
@@ -172,7 +172,7 @@ describe("SettingsConsole credential controls", () => {
       value: { listApplicationTemplates, getApplicationDataPath },
     });
 
-    renderSearchSettings({ activeCategory: "agent-approval", saveStatus: "saving" });
+    renderSearchSettings({ activeCategory: "agent", saveStatus: "saving" });
 
     expect(screen.getByText("保存中…")).toBeTruthy();
     expect(listApplicationTemplates).not.toHaveBeenCalled();
@@ -182,7 +182,7 @@ describe("SettingsConsole credential controls", () => {
   it("normalizes output length and appearance drafts on blur", () => {
     const setAgentGatewayPreferences = vi.fn();
     const runtime = renderSearchSettings({
-      activeCategory: "models-runtime",
+      activeCategory: "models",
       setAgentGatewayPreferences,
     });
     const outputLength = screen.getByRole("spinbutton");
@@ -198,7 +198,7 @@ describe("SettingsConsole credential controls", () => {
     runtime.rerender(
       <SettingsConsole
         {...runtime.props}
-        activeCategory="preferences-appearance"
+        activeCategory="appearance"
         setUiFontSize={setUiFontSize}
       />,
     );
@@ -243,7 +243,7 @@ describe("SettingsConsole presentation settings", () => {
   it("loads template data only when the presentation category is active", async () => {
     const api = installPresentationApi();
     renderSearchSettings({
-      activeCategory: "preferences-presentation",
+      activeCategory: "templates",
       activeSessionId: "session-1",
     });
 
@@ -258,7 +258,7 @@ describe("SettingsConsole presentation settings", () => {
     const api = installPresentationApi();
     const triggerToast = vi.fn();
     renderSearchSettings({
-      activeCategory: "preferences-presentation",
+      activeCategory: "templates",
       activeSessionId: "session-1",
       triggerToast,
     });
@@ -280,7 +280,7 @@ describe("SettingsConsole presentation settings", () => {
     installPresentationApi(vi.fn().mockRejectedValue(new Error("template failed")));
     const triggerToast = vi.fn();
     renderSearchSettings({
-      activeCategory: "preferences-presentation",
+      activeCategory: "templates",
       activeSessionId: "session-1",
       triggerToast,
     });

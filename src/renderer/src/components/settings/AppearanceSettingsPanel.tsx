@@ -92,15 +92,15 @@ export function AppearanceSettingsPanel({
 
   return (
     <SettingsPanel>
-      <p className="ide-hint">只改变软件自身皮肤与控件，不影响导出的演示文档。</p>
+      <p className="settings-hint">只改变软件自身皮肤与控件，不影响导出的演示文档。</p>
       <SettingsSection title="皮肤" hint={selectedThemeLabel}>
         <SettingsRow label="设计语言">
-          <div className="ide-choice-group" role="group" aria-label="皮肤">
+          <div className="settings-choice-group" role="group" aria-label="皮肤">
             {themeOptions.map((option) => (
               <button
                 key={option.value}
                 type="button"
-                className={cx("ide-choice", uiThemeId === option.value && "is-active")}
+                className={cx("settings-choice", uiThemeId === option.value && "is-active")}
                 onClick={() => setUiThemeId(option.value)}
                 aria-pressed={uiThemeId === option.value}
               >
@@ -110,16 +110,16 @@ export function AppearanceSettingsPanel({
           </div>
         </SettingsRow>
         <SettingsRow label="主题根目录">
-          <div className="ide-choice-group" role="group" aria-label="主题根目录操作">
-            <button type="button" className="ide-choice" onClick={onOpenUiThemesDirectory}>
+          <div className="settings-choice-group" role="group" aria-label="主题根目录操作">
+            <button type="button" className="settings-choice" onClick={onOpenUiThemesDirectory}>
               <span>打开主题根目录</span>
             </button>
-            <button type="button" className="ide-choice" onClick={onRefreshUiThemes}>
+            <button type="button" className="settings-choice" onClick={onRefreshUiThemes}>
               <span>刷新列表</span>
             </button>
           </div>
         </SettingsRow>
-        <p className="ide-hint">
+        <p className="settings-hint">
           在固定目录 <code>themes/&lt;主题名&gt;/theme.css</code>{" "}
           放置主题后刷新列表即可切换。推荐覆盖 semantic token；深度定制可用{" "}
           <code>data-ui-region</code>。
@@ -127,12 +127,12 @@ export function AppearanceSettingsPanel({
       </SettingsSection>
       <SettingsSection title="明暗" hint={selectedSchemeLabel}>
         <SettingsRow label="配色方案">
-          <div className="ide-choice-group" role="group" aria-label="配色方案">
+          <div className="settings-choice-group" role="group" aria-label="配色方案">
             {colorSchemeOptions.map((option) => (
               <button
                 key={option.value}
                 type="button"
-                className={cx("ide-choice", colorScheme === option.value && "is-active")}
+                className={cx("settings-choice", colorScheme === option.value && "is-active")}
                 onClick={() => setColorScheme(option.value)}
                 aria-pressed={colorScheme === option.value}
               >
@@ -145,12 +145,12 @@ export function AppearanceSettingsPanel({
       </SettingsSection>
       <SettingsSection title="字体" hint={selectedFontFamilyLabel}>
         <SettingsRow label="界面字体">
-          <div className="ide-choice-group" role="group" aria-label="界面字体">
+          <div className="settings-choice-group" role="group" aria-label="界面字体">
             {fontFamilyOptions.map((option) => (
               <button
                 key={option.value}
                 type="button"
-                className={cx("ide-choice", uiFontFamily === option.value && "is-active")}
+                className={cx("settings-choice", uiFontFamily === option.value && "is-active")}
                 onClick={() => setUiFontFamily(option.value)}
                 aria-pressed={uiFontFamily === option.value}
               >
@@ -163,7 +163,7 @@ export function AppearanceSettingsPanel({
       <SettingsSection title="字号" hint={`${uiFontSize}px · 行高 ${uiLineHeight}`}>
         <SettingsRow label="基准字号（px）">
           <input
-            className="ide-field"
+            className="settings-field"
             type="number"
             min={MIN_UI_FONT_SIZE}
             max={MAX_UI_FONT_SIZE}
@@ -179,7 +179,7 @@ export function AppearanceSettingsPanel({
         </SettingsRow>
         <SettingsRow label="行高（倍）">
           <input
-            className="ide-field"
+            className="settings-field"
             type="number"
             min={MIN_UI_LINE_HEIGHT}
             max={MAX_UI_LINE_HEIGHT}
@@ -193,11 +193,11 @@ export function AppearanceSettingsPanel({
             }}
           />
         </SettingsRow>
-        <p className="ide-hint">
+        <p className="settings-hint">
           基准字号对应正文（默认 13px）；其余字号阶梯按同比例缩放。行高是相对字号的倍数。
         </p>
       </SettingsSection>
-      <p className="ide-hint">
+      <p className="settings-hint">
         当前：{selectedThemeLabel} · {selectedSchemeLabel} · {selectedFontFamilyLabel} ·{" "}
         {uiFontSize}px / {uiLineHeight}
       </p>

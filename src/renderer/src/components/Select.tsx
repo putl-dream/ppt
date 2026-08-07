@@ -13,7 +13,7 @@ export interface SelectProps {
   value: string;
   options: SelectOption[];
   onChange: (value: string) => void;
-  variant?: "ide" | "block";
+  variant?: "settings" | "block" | "ide";
   placeholder?: string;
   disabled?: boolean;
   ariaLabel?: string;
@@ -59,7 +59,7 @@ export function Select({
   value,
   options,
   onChange,
-  variant = "ide",
+  variant = "settings",
   placeholder = "选择…",
   disabled = false,
   ariaLabel,
@@ -76,6 +76,7 @@ export function Select({
 
   const selected = options.find((option) => option.value === value);
   const selectedIndex = options.findIndex((option) => option.value === value);
+  const resolvedVariant = variant === "ide" ? "settings" : variant;
 
   const close = useCallback(() => {
     setOpen(false);
@@ -241,7 +242,7 @@ export function Select({
       ref={rootRef}
       className={cx(
         "ui-select",
-        `ui-select--${variant}`,
+        `ui-select--${resolvedVariant}`,
         open && "is-open",
         disabled && "is-disabled",
         className,

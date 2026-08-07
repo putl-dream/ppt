@@ -1,36 +1,111 @@
 ﻿/*
- * Settings sidebar shell. The nav itself uses the shared `ide-nav-*` vocabulary
- * from components/ide.css — do not reintroduce a parallel `settings-nav-*` set.
- *
- * Cluster layout: no group titles, spacing between
- * groups, slightly taller rows and compound labels for horizontal rhythm.
+ * Settings sidebar navigation — matches workbench sidebar rhythm.
  */
 
 .settings-sidebar .sections-container {
   padding: 10px 8px;
 }
 
-.settings-sidebar .ide-nav {
-  gap: 10px;
+.settings-nav {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
 }
 
-.settings-sidebar .ide-nav-group {
-  gap: 1px;
+.settings-nav-filter {
+  width: 100%;
+  height: var(--settings-control-height);
+  padding: 0 10px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--settings-radius);
+  background: var(--surface-sunken);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  font-size: var(--settings-font-nav);
+  outline: none;
+}
+
+.settings-nav-filter:focus {
+  border-color: var(--border-focused);
+}
+
+.settings-nav-filter::placeholder {
+  color: var(--text-muted);
+}
+
+.settings-nav-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
   padding-bottom: 6px;
 }
 
-.settings-sidebar .ide-nav-group:last-of-type {
+.settings-nav-group:last-of-type {
   padding-bottom: 0;
 }
 
-.settings-sidebar .ide-nav-item {
-  min-height: 28px;
-  padding: 5px 10px;
+.settings-nav-item {
+  display: flex;
+  align-items: center;
   gap: 10px;
-  border-radius: 6px;
+  min-height: 30px;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: var(--control-radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: var(--font-body);
+  font-size: var(--settings-font-nav);
+  text-align: left;
+  cursor: pointer;
+  width: 100%;
+  transition: var(--transition-color);
 }
 
-.settings-sidebar .ide-nav-item-icon {
+.settings-nav-item-icon {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
   width: 16px;
   height: 16px;
+  color: currentColor;
+}
+
+.settings-nav-item:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.settings-nav-item.is-active {
+  background: var(--surface-active);
+  color: var(--text-primary);
+  font-weight: var(--font-weight-medium);
+}
+
+.settings-nav-back {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-height: 28px;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: var(--control-radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: var(--font-body);
+  font-size: var(--settings-font-nav);
+  cursor: pointer;
+  text-align: left;
+  transition: var(--transition-color);
+}
+
+.settings-nav-back:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.settings-sidebar-footer .settings-nav-back svg {
+  transform: rotate(180deg);
 }

@@ -7,13 +7,10 @@ import type { UiThemeSummary } from "@shared/ipc";
 import type { UiFontFamily } from "../app/uiTypography";
 import { cx } from "../lib/cx";
 import type { ManagedModel, ModelVendorConnection } from "../modelCatalog";
-import type { SettingsCategory } from "../settingsCategories";
-import {
-  AgentApprovalSettingsPanel,
-  AgentLimitsSettingsPanel,
-  AgentLogsSettingsPanel,
-} from "./settings/AgentSettingsPanels";
+import { normalizeSettingsCategory, type SettingsCategory } from "../settingsCategories";
+import { AgentBehaviorSettingsPanel } from "./settings/AgentSettingsPanels";
 import { AppearanceSettingsPanel, type UiColorScheme } from "./settings/AppearanceSettingsPanel";
+import { DataSettingsPanel } from "./settings/DataSettingsPanel";
 import {
   ModelListSettingsPanel,
   ModelRuntimeSettingsPanel,
@@ -23,7 +20,6 @@ import {
 } from "./settings/ModelSettingsPanels";
 import { PresentationSettingsPanel } from "./settings/PresentationSettingsPanel";
 import { SettingsPanel } from "./settings/SettingsPrimitives";
-import { StorageSettingsPanel } from "./settings/StorageSettingsPanel";
 import { TokenUsageOverview } from "./TokenUsageOverview";
 
 interface SettingsConsoleProps {
@@ -76,16 +72,13 @@ interface SettingsConsoleProps {
 }
 
 const categoryTitles: Record<SettingsCategory, string> = {
-  "models-list": "模型",
-  "models-search": "搜索与联网",
-  "models-runtime": "运行参数",
-  "preferences-presentation": "演示与品牌",
-  "preferences-storage": "存储",
-  "preferences-appearance": "界面外观",
-  "agent-approval": "提交与审批",
-  "agent-limits": "限流",
-  "agent-logs": "系统日志",
-  "usage-overview": "用量与费用",
+  appearance: "外观",
+  models: "模型",
+  "web-search": "联网搜索",
+  templates: "模板",
+  agent: "Agent 行为",
+  data: "数据与日志",
+  usage: "用量",
 };
 
 function renderCategory(
@@ -93,29 +86,38 @@ function renderCategory(
   webSearchController: WebSearchSettingsController,
 ) {
   switch (props.activeCategory) {
-    case "usage-overview":
+    case "usage":
       return (
         <SettingsPanel>
           <TokenUsageOverview models={props.models} selectedModelId={props.selectedModelId} />
         </SettingsPanel>
       );
-    case "models-list":
+    case "models":
       return (
-        <ModelListSettingsPanel
-          vendors={props.vendors}
-          models={props.models}
-          selectedModelId={props.selectedModelId}
-          onSelectModel={props.onSelectModel}
-          onSaveVendor={props.onSaveVendor}
-          onDeleteVendor={props.onDeleteVendor}
-          onDeleteModel={props.onDeleteModel}
-          onSetVendorEnabled={props.onSetVendorEnabled}
-          onSetModelEnabled={props.onSetModelEnabled}
-          credentialStorageStatus={props.credentialStorageStatus}
-          notify={props.triggerToast}
-        />
+        <div className="settings-panel-stack">
+          <ModelListSettingsPanel
+            vendors={props.vendors}
+            models={props.models}
+            selectedModelId={props.selectedModelId}
+            onSelectModel={props.onSelectModel}
+            onSaveVendor={props.onSaveVendor}
+            onDeleteVendor={props.onDeleteVendor}
+            onDeleteModel={props.onDeleteModel}
+            onSetVendorEnabled={props.onSetVendorEnabled}
+            onSetModelEnabled={props.onSetModelEnabled}
+            credentialStorageStatus={props.credentialStorageStatus}
+            notify={props.triggerToast}
+          />
+          <ModelRuntimeSettingsPanel
+            models={props.models}
+            selectedModelId={props.selectedModelId}
+            credentialStorageStatus={props.credentialStorageStatus}
+            preferences={props.agentGatewayPreferences}
+            setPreferences={props.setAgentGatewayPreferences}
+          />
+        </div>
       );
-    case "models-search":
+    case "web-search":
       return (
         <WebSearchSettingsPanel
           credentialStorageStatus={props.credentialStorageStatus}
@@ -125,41 +127,24 @@ function renderCategory(
           controller={webSearchController}
         />
       );
-    case "models-runtime":
+    case "agent":
       return (
-        <ModelRuntimeSettingsPanel
-          models={props.models}
-          selectedModelId={props.selectedModelId}
-          credentialStorageStatus={props.credentialStorageStatus}
-          preferences={props.agentGatewayPreferences}
-          setPreferences={props.setAgentGatewayPreferences}
-        />
-      );
-    case "agent-approval":
-      return (
-        <AgentApprovalSettingsPanel
+        <AgentBehaviorSettingsPanel
           executionStrategy={props.executionStrategy}
           setExecutionStrategy={props.setExecutionStrategy}
-        />
-      );
-    case "agent-limits":
-      return (
-        <AgentLimitsSettingsPanel
           limits={props.agentStepLimits}
           setLimits={props.setAgentStepLimits}
         />
       );
-    case "agent-logs":
-      return <AgentLogsSettingsPanel notify={props.triggerToast} />;
-    case "preferences-storage":
+    case "data":
       return (
-        <StorageSettingsPanel
+        <DataSettingsPanel
           localStoragePath={props.localStoragePath}
           onOpenWorkspace={props.onOpenWorkspace}
           notify={props.triggerToast}
         />
       );
-    case "preferences-presentation":
+    case "templates":
       return (
         <PresentationSettingsPanel
           selectedDesignSystem={props.selectedDesignSystem}
@@ -169,7 +154,7 @@ function renderCategory(
           notify={props.triggerToast}
         />
       );
-    case "preferences-appearance":
+    case "appearance":
       return (
         <AppearanceSettingsPanel
           colorScheme={props.colorScheme}
@@ -195,6 +180,8 @@ function renderCategory(
 }
 
 export function SettingsConsole(props: SettingsConsoleProps) {
+  const activeCategory = normalizeSettingsCategory(props.activeCategory);
+  const consoleProps: SettingsConsoleProps = { ...props, activeCategory };
   const webSearchController = useWebSearchSettings({
     preferences: props.agentGatewayPreferences,
     setPreferences: props.setAgentGatewayPreferences,
@@ -205,18 +192,18 @@ export function SettingsConsole(props: SettingsConsoleProps) {
   const saveStatus = props.saveStatus ?? "saved";
 
   return (
-    <div className="ide-page settings-console-container" data-ui-region="settings">
-      <div className="ide-page-inner">
-        <header className="ide-page-header">
-          <h1 className="ide-page-title">{categoryTitles[props.activeCategory]}</h1>
-          {props.activeCategory !== "usage-overview" ? (
-            <span className={cx("ide-status", saveStatus === "saving" && "is-saving")}>
+    <div className="settings-page settings-console-container" data-ui-region="settings">
+      <div className="settings-page-inner">
+        <header className="settings-page-header">
+          <h1 className="settings-page-title">{categoryTitles[activeCategory]}</h1>
+          {activeCategory !== "usage" ? (
+            <span className={cx("settings-status", saveStatus === "saving" && "is-saving")}>
               {saveStatus === "saving" ? "保存中…" : "已保存"}
             </span>
           ) : null}
         </header>
-        <div key={props.activeCategory} className="view-enter">
-          {renderCategory(props, webSearchController)}
+        <div key={activeCategory} className="view-enter">
+          {renderCategory(consoleProps, webSearchController)}
         </div>
       </div>
     </div>

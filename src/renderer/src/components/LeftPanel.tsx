@@ -376,7 +376,7 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
       <div className="panel-footer left-footer flex justify-between items-center">
         <button
           type="button"
-          className="ide-nav-back"
+          className="settings-nav-back"
           onClick={onToggleSettings}
           title="设置"
           aria-label="打开设置"

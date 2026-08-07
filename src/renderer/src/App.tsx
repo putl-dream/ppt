@@ -54,7 +54,7 @@ export function App() {
 
   const [activeMode, setActiveMode] = useState<AppMode>("workspace");
   const [projectFilesDirty, setProjectFilesDirty] = useState(false);
-  const [settingsCategory, setSettingsCategory] = useState<SettingsCategory>("models-list");
+  const [settingsCategory, setSettingsCategory] = useState<SettingsCategory>("models");
   const workbenchLayout = useWorkbenchLayout({
     activeMode,
     previewOpen: isMirrorVisible,
@@ -235,7 +235,7 @@ export function App() {
     onToggleSettings: () => {
       if (!confirmLeaveProjectFiles()) return;
       setActiveMode("settings");
-      setSettingsCategory("models-list");
+      setSettingsCategory("models");
     },
     onDeleteSession: (sessionId: string) => {
       if (sessionId === activeSessionId && !confirmLeaveProjectFiles()) return;
@@ -258,7 +258,7 @@ export function App() {
       onOpenTemplateSettings={() => {
         if (!confirmLeaveProjectFiles()) return;
         setActiveMode("settings");
-        setSettingsCategory("preferences-presentation");
+        setSettingsCategory("templates");
       }}
       notify={notify}
     >

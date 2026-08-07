@@ -1,16 +1,154 @@
-﻿.settings-console-container {
+﻿/*
+ * Settings page chrome — aligned with workbench canvas / composer surfaces.
+ */
+
+.settings-page {
+  height: 100%;
+  overflow-y: auto;
+  background: var(--surface-raised);
+  color: var(--text-primary);
+  font-size: var(--settings-font-ui);
+  line-height: 1.45;
+}
+
+.settings-console-container {
   height: 100%;
   overflow-y: auto;
   background: var(--surface-raised);
 }
 
-/* Layout helper; enter motion comes from shared .view-enter */
-.settings-panel-fade {
-  display: grid;
-  gap: 16px;
+.settings-page-inner {
+  width: 100%;
+  max-width: var(--settings-content-width);
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  padding: var(--settings-page-pad);
+  box-sizing: border-box;
 }
 
-/* Consumed by settings-token-usage.css refresh spinner. */
+.settings-page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  min-height: 36px;
+}
+
+.settings-page-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--settings-font-title);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--text-xl-lh);
+  color: var(--text-primary);
+  letter-spacing: var(--letter-tight);
+}
+
+.settings-status {
+  flex: 0 0 auto;
+  padding: 4px 10px;
+  border-radius: var(--control-radius-pill);
+  background: var(--surface-sunken);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-medium);
+}
+
+.settings-status.is-saving {
+  color: var(--accent-primary);
+  border-color: color-mix(in srgb, var(--accent-primary) 35%, transparent);
+  background: var(--accent-primary-glow);
+}
+
+.settings-panel-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.settings-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.settings-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--settings-section-pad);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--card-border-radius);
+  background: var(--surface-overlay);
+}
+
+.settings-section-title {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  min-height: 24px;
+  margin: 0 0 2px;
+}
+
+.settings-section-title h3,
+.settings-section-title > span:first-child {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--settings-font-section);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+  line-height: 1.3;
+}
+
+.settings-row {
+  display: grid;
+  grid-template-columns: minmax(120px, var(--settings-label-width)) minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-3) var(--space-4);
+  min-height: var(--settings-row-height);
+}
+
+.settings-row.is-muted {
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+.settings-row-label {
+  color: var(--text-primary);
+  font-size: var(--settings-font-ui);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.35;
+}
+
+.settings-row-control {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.settings-row-control > * {
+  max-width: 100%;
+}
+
+.settings-hint {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+}
+
+.settings-panel-fade {
+  display: grid;
+  gap: var(--space-4);
+}
+
 @keyframes settingsSavingSpin {
   from {
     transform: rotate(0deg);
@@ -23,16 +161,11 @@
 .settings-card {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 12px 0;
+  gap: var(--space-3);
+  padding: var(--space-3) 0;
   border: 0;
   border-radius: 0;
   background: transparent;
-  transition: none;
-}
-
-.settings-card:hover {
-  border-color: transparent;
 }
 
 .settings-card-header {
@@ -64,4 +197,16 @@
   color: var(--text-muted);
   font-size: var(--text-sm);
   font-weight: var(--font-weight-medium);
+}
+
+@media (max-width: 720px) {
+  .settings-row {
+    grid-template-columns: 1fr;
+    align-items: start;
+    gap: var(--space-2);
+  }
+
+  .settings-row-control {
+    justify-content: flex-start;
+  }
 }

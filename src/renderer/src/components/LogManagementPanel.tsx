@@ -103,13 +103,11 @@ export const LogManagementPanel: React.FC<LogManagementPanelProps> = ({ notify }
   };
 
   return (
-    <div className="settings-panel-fade">
-      <section className="settings-card log-management-summary">
-        <div className="settings-card-header">
-          <div className="settings-card-title-block">
-            <h3>日志采集</h3>
-          </div>
-          <div className="settings-card-meta">{status?.fileEnabled ? "运行中" : "仅控制台"}</div>
+    <div className="settings-panel-stack">
+      <section className="settings-section log-management-summary">
+        <div className="settings-section-title">
+          <h3>日志采集</h3>
+          <span className="settings-hint">{status?.fileEnabled ? "运行中" : "仅控制台"}</span>
         </div>
 
         <div className="log-status-grid">
@@ -172,11 +170,11 @@ export const LogManagementPanel: React.FC<LogManagementPanelProps> = ({ notify }
           <div className="setting-row">
             <span className="setting-row-copy">
               <span className="setting-row-title">保留天数</span>
-              <span className="ide-hint">{retentionDraft} 天</span>
+              <span className="settings-hint">{retentionDraft} 天</span>
             </span>
             <span className="setting-row-control">
               <input
-                className="ide-range"
+                className="settings-range"
                 type="range"
                 min={1}
                 max={90}
@@ -216,12 +214,10 @@ export const LogManagementPanel: React.FC<LogManagementPanelProps> = ({ notify }
         )}
       </section>
 
-      <section className="settings-card">
-        <div className="settings-card-header">
-          <div className="settings-card-title-block">
-            <h3>最近问题</h3>
-          </div>
-          <div className="settings-card-meta">Warn / Error · {entries.length}</div>
+      <section className="settings-section">
+        <div className="settings-section-title">
+          <h3>最近问题</h3>
+          <span className="settings-hint">Warn / Error · {entries.length}</span>
         </div>
         <div className="log-entry-list">
           {entries.length === 0 ? (

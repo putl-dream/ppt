@@ -11,9 +11,10 @@
 | Motion | `tokens/motion.css` | Durations, easing, named transitions |
 | Semantic | `tokens/semantic.css` | Contract names modules may consume |
 | Skins | `tokens/skins/` | Maps primitives → semantic for each skin × color-scheme |
-| Fonts | `tokens/fonts.css` | Inter Variable (UI), Lora (slide serif), JetBrains Mono |
-| Components | `components/` | Shared chrome (`.ide-*`, `.toggle-switch`) |
-| Modules | `modules/` | Area styles; one concern per file |
+| Fonts | `tokens/fonts.css` | System UI fonts + Lora (slide serif) + JetBrains Mono |
+| Tokens | `tokens/settings-density.css` | Settings layout density (`--settings-*`) |
+| Components | `components/` | Shared chrome (`.toggle-switch`, `.ui-select`) |
+| Modules | `modules/` | Area styles; one concern per file (`settings-*`, `chat-*`, …) |
 
 **Dependency direction:** `module → component → semantic ← skin ← primitives`. Modules must not read `--raw-*` or invent per-page theme variables.
 
@@ -90,7 +91,8 @@ Prefer `var(--transition-color)` / `var(--transition-panel)` / property-specific
 
 ## Components
 
-- `components/ide.css` — settings chrome vocabulary
+- `tokens/settings-density.css` — settings layout density
+- `modules/settings-*.css` — settings page chrome
 - `components/controls.css` — shared `.toggle-switch`
 - `components/select.css` — shared portal `.ui-select` menu
 
@@ -109,6 +111,6 @@ Prefer `var(--transition-color)` / `var(--transition-panel)` / property-specific
 
 ## Naming
 
-- Area prefix: `chat-`, `ide-`, `settings-`, `mirror-`, …
+- Area prefix: `chat-`, `settings-`, `mirror-`, …
 - State: `is-*` (prefer over bare `.active`)
 - Variants: `--` modifier (`message-action-btn--primary`)

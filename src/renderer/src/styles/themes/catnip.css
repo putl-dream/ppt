@@ -823,7 +823,7 @@
    -------------------------------------------------------------------------- */
 [data-ui-region="settings"]
 :is(
-  .ide-field,
+  .settings-field,
   .config-input,
   .title-input,
   .cursor-model-search,
@@ -841,7 +841,7 @@
 
 [data-ui-region="settings"]
   :is(
-    .ide-field,
+    .settings-field,
     .config-input,
     .title-input,
     .cursor-model-search,
@@ -853,7 +853,7 @@
 
 [data-ui-region="settings"]
   :is(
-    .ide-field,
+    .settings-field,
     .config-input,
     .title-input,
     .cursor-model-search,
@@ -864,14 +864,14 @@
   box-shadow: 0 0 0 3px var(--accent-primary-glow);
 }
 
-[data-ui-region="settings"] :is(.ide-range, .settings-range) {
+[data-ui-region="settings"] .settings-range {
   accent-color: var(--accent-primary);
 }
 
 [data-ui-region="settings"]
   :is(
-    .ide-nav-item,
-    .ide-choice,
+    .settings-nav-item,
+    .settings-choice,
     .settings-choice-card,
     .settings-accent-card,
     .settings-control-shape-card,
@@ -887,7 +887,7 @@
 
 [data-ui-region="settings"]
   :is(
-    .ide-choice,
+    .settings-choice,
     .settings-choice-card,
     .settings-accent-card,
     .settings-control-shape-card,
@@ -900,8 +900,8 @@
 
 [data-ui-region="settings"]
   :is(
-    .ide-nav-item.is-active,
-    .ide-choice.is-active,
+    .settings-nav-item.is-active,
+    .settings-choice.is-active,
     .settings-choice-card.active,
     .settings-accent-card.active,
     .settings-control-shape-card.active,
@@ -921,7 +921,7 @@
    11. 按钮体系
    按钮可能分布在设置页、画布和弹窗，因此不强制绑定单一区域。
    -------------------------------------------------------------------------- */
-:is(.ide-btn-secondary, .settings-secondary-btn, .secondary-btn) {
+:is(.settings-secondary-btn, .secondary-btn) {
   border-radius: var(--button-border-radius);
   transition:
     border-color var(--duration-fast) var(--ease-out),
@@ -930,7 +930,7 @@
     transform var(--duration-fast) var(--ease-out);
 }
 
-:is(.ide-btn-secondary, .settings-secondary-btn, .secondary-btn):hover {
+:is(.settings-secondary-btn, .secondary-btn):hover {
   color: var(--accent-primary);
   border-color: var(--accent-primary);
   background: color-mix(in srgb, var(--accent-primary) 7%, transparent);
@@ -992,7 +992,6 @@
    12. 浮层、菜单、Toast 和弹窗
    -------------------------------------------------------------------------- */
 :is(
-  .model-tier-menu,
   .custom-context-menu,
   .slash-menu-popup,
   .floating-toast-alert,

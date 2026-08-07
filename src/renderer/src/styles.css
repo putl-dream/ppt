@@ -4,8 +4,7 @@
 @import "./styles/tokens/semantic.css";
 @import "./styles/tokens/skins/studio.css";
 @import "./styles/tokens/fonts.css";
-@import "./styles/tokens/ide-density.css";
-@import "./styles/components/ide.css";
+@import "./styles/tokens/settings-density.css";
 @import "./styles/components/controls.css";
 @import "./styles/components/select.css";
 @import "./styles/components/run-status.css";

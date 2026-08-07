@@ -74,6 +74,20 @@ function validPricing(pricing: ModelCatalogEntry["pricing"]): boolean {
   );
 }
 
+function catalogModelKey(modelId: string): string {
+  return modelId.trim().toLowerCase();
+}
+
+function dedupeCatalogModels(models: readonly ModelCatalogEntry[]): ModelCatalogEntry[] {
+  const seen = new Map<string, ModelCatalogEntry>();
+  for (const model of models) {
+    const key = catalogModelKey(model.model);
+    if (!key || seen.has(key)) continue;
+    seen.set(key, model);
+  }
+  return [...seen.values()];
+}
+
 function protocolLabel(protocol: string): string {
   return protocol === "anthropic" ? "Anthropic" : "OpenAI";
 }
@@ -295,15 +309,23 @@ export function ModelManagement({
   const applyRemoteSelection = (selectedIds: string[]) => {
     if (!draft) return;
     setRemoteSelectedIds(selectedIds);
-    const selected = remoteModels.filter((model) => selectedIds.includes(model.id));
-    const byApiId = new Map(draft.models.map((model) => [model.model, model]));
-    const nextModels: ModelCatalogEntry[] = selected.map((remote) => {
-      const existing = byApiId.get(remote.id);
-      if (existing) return existing;
-      return createCatalogEntriesFromRemoteIds([remote], draft.protocol)[0]!;
-    });
-    // Keep manually added models that are not in the remote list when remote list is empty filter
     if (remoteModels.length === 0) return;
+
+    const byApiId = new Map(
+      draft.models.map((model) => [catalogModelKey(model.model), model] as const),
+    );
+    const nextModels: ModelCatalogEntry[] = [];
+    const seen = new Set<string>();
+    for (const remote of remoteModels) {
+      if (!selectedIds.includes(remote.id)) continue;
+      const key = catalogModelKey(remote.id);
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      const existing = byApiId.get(key);
+      nextModels.push(
+        existing ?? createCatalogEntriesFromRemoteIds([remote], draft.protocol)[0]!,
+      );
+    }
     updateDraft({ models: nextModels });
   };
 
@@ -334,7 +356,10 @@ export function ModelManagement({
 
     setCredentialPending(true);
     try {
-      const vendor = materializeVendorDraft(draft);
+      const vendor = materializeVendorDraft({
+        ...draft,
+        models: dedupeCatalogModels(draft.models),
+      });
       const saved = await onSaveVendor(vendor, apiKey || undefined);
       if (!saved) return;
       if (vendor.models[0] && (!selectedModelId || draft.isNew)) {

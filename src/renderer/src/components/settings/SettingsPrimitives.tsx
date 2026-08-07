@@ -11,9 +11,9 @@ export function SettingsRow({
   children: ReactNode;
 }) {
   return (
-    <div className={cx("ide-row", muted && "is-muted")}>
-      <div className="ide-row-label">{label}</div>
-      <div className="ide-row-control">{children}</div>
+    <div className={cx("settings-row", muted && "is-muted")}>
+      <div className="settings-row-label">{label}</div>
+      <div className="settings-row-control">{children}</div>
     </div>
   );
 }
@@ -28,10 +28,10 @@ export function SettingsSection({
   children: ReactNode;
 }) {
   return (
-    <section className="ide-section">
-      <div className="ide-section-title">
+    <section className="settings-section">
+      <div className="settings-section-title">
         <h3>{title}</h3>
-        {hint ? <span className="ide-hint">{hint}</span> : null}
+        {hint ? <span className="settings-hint">{hint}</span> : null}
       </div>
       {children}
     </section>
@@ -39,5 +39,5 @@ export function SettingsSection({
 }
 
 export function SettingsPanel({ children }: { children: ReactNode }) {
-  return <div className="ide-panel">{children}</div>;
+  return <div className="settings-panel">{children}</div>;
 }

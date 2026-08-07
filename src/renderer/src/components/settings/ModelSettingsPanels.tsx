@@ -144,7 +144,7 @@ export function ModelListSettingsPanel({
 }) {
   return (
     <SettingsPanel>
-      <p className="settings-help-text">
+      <p className="settings-hint">
         {credentialStorageLabel(credentialStorageStatus)}。API Key 不会保存到浏览器存储。
       </p>
       <ModelManagement
@@ -178,19 +178,21 @@ export function WebSearchSettingsPanel({
 }) {
   return (
     <SettingsPanel>
-      <SettingsSection title="搜索与联网" hint="可选">
+      <SettingsSection title="联网搜索" hint="可选">
         <SettingsRow label="凭据存储">
-          <span className="ide-field-value">{credentialStorageLabel(credentialStorageStatus)}</span>
+          <span className="settings-field-value">
+            {credentialStorageLabel(credentialStorageStatus)}
+          </span>
         </SettingsRow>
         <SettingsRow label="Tavily 状态">
-          <span className="ide-field-value">
+          <span className="settings-field-value">
             {credentialConfigured ? "已配置（系统安全存储或环境变量）" : "未配置"}
           </span>
         </SettingsRow>
         <SettingsRow label="Tavily API Key">
           <div className="model-dialog-actions">
             <input
-              className="ide-field"
+              className="settings-field"
               aria-label="Tavily API Key"
               type="password"
               value={controller.apiKeyDraft}
@@ -221,7 +223,7 @@ export function WebSearchSettingsPanel({
         </SettingsRow>
         <SettingsRow label="Search Endpoint">
           <input
-            className="ide-field"
+            className="settings-field"
             value={controller.endpointDraft}
             placeholder={DEFAULT_WEB_SEARCH_ENDPOINT}
             onChange={(event) => controller.setEndpointDraft(event.target.value)}
@@ -229,11 +231,11 @@ export function WebSearchSettingsPanel({
           />
         </SettingsRow>
         <SettingsRow label="搜索超时">
-          <span className="ide-field-value">
+          <span className="settings-field-value">
             {Math.round((preferences.webSearchTimeoutMs ?? 20_000) / 1000)} 秒
           </span>
           <input
-            className="ide-range"
+            className="settings-range"
             type="range"
             min={5}
             max={120}
@@ -290,11 +292,11 @@ export function ModelRuntimeSettingsPanel({
 
   return (
     <SettingsPanel>
-      <SettingsSection title="运行参数" hint={`${availableModels.length} 个模型可用`}>
+      <SettingsSection title="请求与回退" hint={`${availableModels.length} 个模型可用`}>
         <SettingsRow label="最长等待时间">
-          <span className="ide-field-value">{Math.round(preferences.timeoutMs / 1000)} 秒</span>
+          <span className="settings-field-value">{Math.round(preferences.timeoutMs / 1000)} 秒</span>
           <input
-            className="ide-range"
+            className="settings-range"
             type="range"
             min={60}
             max={900}
@@ -310,7 +312,7 @@ export function ModelRuntimeSettingsPanel({
         </SettingsRow>
         <SettingsRow label="单次输出长度上限">
           <input
-            className="ide-field"
+            className="settings-field"
             type="number"
             min={MIN_OUTPUT_TOKENS}
             max={MAX_OUTPUT_TOKENS}
@@ -325,7 +327,7 @@ export function ModelRuntimeSettingsPanel({
         </SettingsRow>
         <SettingsRow label="服务繁忙时备用模型">
           <Select
-            variant="ide"
+            variant="settings"
             ariaLabel="服务繁忙时备用模型"
             value={preferences.fallbackModelId ?? ""}
             onChange={(next) =>
