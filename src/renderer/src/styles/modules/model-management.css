@@ -446,6 +446,93 @@
   gap: 12px;
 }
 
+.model-remote-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+}
+
+.model-remote-picker {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--field-border-radius);
+  background: var(--surface-sunken);
+}
+
+.model-remote-picker-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+}
+
+.model-remote-picker-list {
+  max-height: 220px;
+  overflow: auto;
+  display: grid;
+  gap: 2px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--field-border-radius);
+  background: var(--surface-overlay);
+}
+
+.model-remote-picker-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 0;
+  padding: 8px 10px;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.model-remote-picker-row + .model-remote-picker-row {
+  border-top: 1px solid var(--border-subtle);
+}
+
+.model-remote-picker-row.is-selected {
+  background: color-mix(in srgb, var(--accent-primary) 10%, transparent);
+}
+
+.model-remote-picker-row input {
+  margin-top: 3px;
+  accent-color: var(--accent-primary);
+}
+
+.model-remote-picker-row > span {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.model-remote-picker-row strong {
+  overflow: hidden;
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-medium);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.model-remote-picker-row small {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.model-remote-picker-empty {
+  padding: 14px 12px;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+
 .model-pricing-section {
   display: grid;
   gap: 12px;

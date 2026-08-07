@@ -16,6 +16,7 @@ import type {
   SetModelCredentialsRequest,
   SetWebSearchCredentialRequest,
 } from "./credentials";
+import type { ListRemoteModelsRequest, ListRemoteModelsResult } from "./remote-models";
 import type {
   AppLogEntry,
   AppLogLevel,
@@ -295,6 +296,7 @@ export interface DesktopApi {
   deleteModelCredential(request: DeleteModelCredentialRequest): Promise<void>;
   setWebSearchCredential(request: SetWebSearchCredentialRequest): Promise<void>;
   deleteWebSearchCredential(): Promise<void>;
+  listRemoteModels(request: ListRemoteModelsRequest): Promise<ListRemoteModelsResult>;
   createSession(options?: CreateSessionOptions): Promise<SessionBootstrap>;
   openWorkspace(rootPath: string): Promise<SessionBootstrap>;
   selectSession(sessionId: string): Promise<SessionBootstrap>;

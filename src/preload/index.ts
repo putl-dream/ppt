@@ -35,6 +35,7 @@ const api: DesktopApi = {
   deleteModelCredential: (request) => ipcRenderer.invoke("credentials:delete-model", request),
   setWebSearchCredential: (request) => ipcRenderer.invoke("credentials:set-web-search", request),
   deleteWebSearchCredential: () => ipcRenderer.invoke("credentials:delete-web-search"),
+  listRemoteModels: (request) => ipcRenderer.invoke("models:list-remote", request),
 
   // 项目产物
   listProjectArtifacts: (sessionId) => ipcRenderer.invoke("project:list-artifacts", sessionId),

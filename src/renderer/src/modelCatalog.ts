@@ -315,6 +315,29 @@ export function materializeModelVendorDraft(draft: ModelVendorDraft): ManagedMod
   }));
 }
 
+export function createManagedModelsFromRemoteIds(
+  remoteModels: ReadonlyArray<{ id: string; displayName?: string }>,
+  draft: Pick<ModelVendorDraft, "protocol" | "baseURL">,
+  createId: () => string = () => `custom-${crypto.randomUUID()}`,
+): ManagedModel[] {
+  const baseURL = draft.baseURL.trim().replace(/\/+$/, "");
+  return remoteModels.map((remote) => {
+    const modelId = remote.id.trim();
+    const displayName = remote.displayName?.trim() || modelId;
+    return {
+      id: createId(),
+      name: displayName,
+      provider: draft.protocol,
+      model: modelId,
+      baseURL,
+      openaiApiMode: draft.protocol === "openai" ? "chat-completions" : "responses",
+      supports1MContext: false,
+      enabled: true,
+      pricing: null,
+    };
+  });
+}
+
 interface LegacyUsdPricing {
   inputPerMillionUsd?: unknown;
   cachedInputPerMillionUsd?: unknown;

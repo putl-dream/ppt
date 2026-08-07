@@ -5,6 +5,7 @@ import { CREDENTIAL_REENTRY_NOTICE_STORAGE_KEY } from "../src/renderer/src/crede
 import {
   buildModelVendorDraft,
   changeModelVendorDraftProtocol,
+  createManagedModelsFromRemoteIds,
   LEGACY_MODEL_STORAGE_KEY,
   loadManagedModels,
   MODEL_STORAGE_KEY,
@@ -125,6 +126,45 @@ describe("model catalog", () => {
     });
     expect(draft.models[0]).not.toHaveProperty("builtIn");
     expect(draft.models[0].pricing).toBeNull();
+  });
+
+  it("materializes selectable remote models into draft entries", () => {
+    const models = createManagedModelsFromRemoteIds(
+      [
+        { id: "gpt-5.5", displayName: "GPT-5.5" },
+        { id: "gpt-5-mini" },
+      ],
+      {
+        protocol: "openai",
+        baseURL: "https://api.openai.com/v1/",
+      },
+      () => "custom-fixed-id",
+    );
+
+    expect(models).toEqual([
+      {
+        id: "custom-fixed-id",
+        name: "GPT-5.5",
+        provider: "openai",
+        model: "gpt-5.5",
+        baseURL: "https://api.openai.com/v1",
+        openaiApiMode: "chat-completions",
+        supports1MContext: false,
+        enabled: true,
+        pricing: null,
+      },
+      {
+        id: "custom-fixed-id",
+        name: "gpt-5-mini",
+        provider: "openai",
+        model: "gpt-5-mini",
+        baseURL: "https://api.openai.com/v1",
+        openaiApiMode: "chat-completions",
+        supports1MContext: false,
+        enabled: true,
+        pricing: null,
+      },
+    ]);
   });
 
   it("starts empty instead of injecting the vendor templates", () => {

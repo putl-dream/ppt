@@ -58,6 +58,10 @@ import { CommitGate } from "./agent/gate/commit-gate";
 import { RiskPolicy } from "./agent/gate/risk-policy";
 import { AgentGateway } from "./agent/gateway";
 import {
+  ListRemoteModelsError,
+  listRemoteModels,
+} from "./agent/gateway/list-remote-models";
+import {
   clearLogFiles,
   createModuleLogger,
   diagnosticValuePreview,
@@ -665,6 +669,17 @@ app.whenReady().then(async () => {
   ipcMain.handle("credentials:delete-web-search", async (event) => {
     assertTrustedCredentialIpc(event, trustedRendererWebContentsIds);
     await credentialStore.deleteWebSearchCredential();
+  });
+  ipcMain.handle("models:list-remote", async (event, request: unknown) => {
+    assertTrustedCredentialIpc(event, trustedRendererWebContentsIds);
+    try {
+      return await listRemoteModels(credentialStore, request);
+    } catch (error) {
+      if (error instanceof ListRemoteModelsError) {
+        throw new Error(error.message);
+      }
+      throw error;
+    }
   });
   ipcMain.handle("ui-themes:list", () => listUiThemes());
   ipcMain.handle("ui-themes:read", (_event, themeId: unknown) => {

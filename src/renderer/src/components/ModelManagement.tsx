@@ -1,8 +1,10 @@
-import { normalizeCredentialUrl } from "@shared/credentials";
+import { modelCredentialBindingFromSelection, normalizeCredentialUrl } from "@shared/credentials";
+import type { RemoteModelInfo } from "@shared/remote-models";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   buildModelVendorDraft,
   changeModelVendorDraftProtocol,
+  createManagedModelsFromRemoteIds,
   getModelVendorPreset,
   isModelEnabled,
   type ManagedModel,
@@ -11,6 +13,7 @@ import {
   type ModelVendorDraft,
   type ModelVendorId,
   materializeModelVendorDraft,
+  toAgentModelSelection,
 } from "../modelCatalog";
 import { Edit3Icon, PlusIcon, RefreshIcon, TrashIcon } from "./Icons";
 import { Select } from "./Select";
@@ -94,10 +97,22 @@ export function ModelManagement({
   const [dialogApiKey, setDialogApiKey] = useState("");
   const [credentialPending, setCredentialPending] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [remoteModels, setRemoteModels] = useState<RemoteModelInfo[]>([]);
+  const [remoteSelectedIds, setRemoteSelectedIds] = useState<string[]>([]);
+  const [remoteQuery, setRemoteQuery] = useState("");
+  const [remotePending, setRemotePending] = useState(false);
+  const [remoteListContext, setRemoteListContext] = useState<"add" | "edit" | null>(null);
   const dialogRef = useRef<HTMLElement>(null);
   const returnFocusRef = useRef<HTMLElement | null>(null);
   const normalizedQuery = query.trim().toLowerCase();
   const dialogVisible = addDialogOpen || Boolean(dialogModel);
+  const filteredRemoteModels = useMemo(() => {
+    const normalized = remoteQuery.trim().toLowerCase();
+    if (!normalized) return remoteModels;
+    return remoteModels.filter((model) =>
+      `${model.id} ${model.displayName ?? ""}`.toLowerCase().includes(normalized),
+    );
+  }, [remoteModels, remoteQuery]);
 
   const filteredModels = useMemo(() => {
     if (!normalizedQuery) return models;
@@ -115,6 +130,7 @@ export function ModelManagement({
 
   const openModelDialog = (model: ManagedModel) => {
     rememberDialogFocus();
+    resetRemoteModelState();
     setDialogModel({
       ...model,
       baseURL: model.baseURL ?? "",
@@ -125,9 +141,18 @@ export function ModelManagement({
 
   const openAddDialog = () => {
     rememberDialogFocus();
+    resetRemoteModelState();
     setVendorDraft(null);
     setAdvancedOpen(false);
     setAddDialogOpen(true);
+  };
+
+  const resetRemoteModelState = () => {
+    setRemoteModels([]);
+    setRemoteSelectedIds([]);
+    setRemoteQuery("");
+    setRemotePending(false);
+    setRemoteListContext(null);
   };
 
   const closeDialog = () => {
@@ -137,7 +162,227 @@ export function ModelManagement({
     setDialogApiKey("");
     setCredentialPending(false);
     setAdvancedOpen(false);
+    resetRemoteModelState();
     window.setTimeout(() => returnFocusRef.current?.focus(), 0);
+  };
+
+  const applyRemoteSelectionToVendorDraft = (
+    draft: ModelVendorDraft,
+    selected: RemoteModelInfo[],
+  ) => {
+    if (selected.length === 0) {
+      if (draft.vendorId === "custom") {
+        return {
+          ...draft,
+          models: [
+            {
+              id: `custom-${crypto.randomUUID()}`,
+              name: "自定义模型",
+              provider: draft.protocol,
+              model: "",
+              baseURL: draft.baseURL,
+              openaiApiMode:
+                draft.protocol === "openai"
+                  ? ("chat-completions" as const)
+                  : ("responses" as const),
+              supports1MContext: false,
+              enabled: true,
+              pricing: null,
+            },
+          ],
+        };
+      }
+      const restored = buildModelVendorDraft(draft.vendorId, models);
+      return {
+        ...draft,
+        models: restored.models.map((model) => ({
+          ...model,
+          provider: draft.protocol,
+          baseURL: draft.baseURL,
+        })),
+      };
+    }
+
+    const existingByModelId = new Map(draft.models.map((model) => [model.model, model]));
+    const presetByModelId = new Map(
+      (getModelVendorPreset(draft.vendorId)?.models ?? []).map((model) => [model.model, model]),
+    );
+    return {
+      ...draft,
+      models: selected.map((remote) => {
+        const existing = existingByModelId.get(remote.id) ?? presetByModelId.get(remote.id);
+        if (existing) {
+          return {
+            ...existing,
+            provider: draft.protocol,
+            baseURL: draft.baseURL,
+            model: remote.id,
+            name: existing.name.trim() || remote.displayName || remote.id,
+          };
+        }
+        return createManagedModelsFromRemoteIds([remote], draft)[0]!;
+      }),
+    };
+  };
+
+  const fetchRemoteModels = async (context: "add" | "edit") => {
+    if (remotePending) return;
+
+    if (context === "add") {
+      if (!vendorDraft) {
+        triggerToast("请先选择模型厂商");
+        return;
+      }
+      if (!vendorDraft.apiKey.trim()) {
+        triggerToast("请填写 API Key 后再获取模型列表");
+        return;
+      }
+      if (!vendorDraft.baseURL.trim() || !validHttpURL(vendorDraft.baseURL)) {
+        triggerToast("请填写有效的 Base URL 后再获取模型列表");
+        return;
+      }
+    } else {
+      if (!dialogModel) return;
+      if (!dialogModel.baseURL.trim() || !validHttpURL(dialogModel.baseURL)) {
+        triggerToast("请填写有效的 Base URL 后再获取模型列表");
+        return;
+      }
+      const saved = models.find((model) => model.id === dialogModel.id);
+      if (!dialogApiKey.trim() && !(saved?.credentialConfigured === true)) {
+        triggerToast("请填写 API Key 后再获取模型列表");
+        return;
+      }
+    }
+
+    setRemotePending(true);
+    setRemoteListContext(context);
+    try {
+      const request =
+        context === "add" && vendorDraft
+          ? {
+              provider: vendorDraft.protocol,
+              baseURL: vendorDraft.baseURL.trim(),
+              apiKey: vendorDraft.apiKey.trim(),
+            }
+          : {
+              provider: dialogModel!.provider,
+              baseURL: dialogModel!.baseURL.trim(),
+              ...(dialogApiKey.trim() ? { apiKey: dialogApiKey.trim() } : {}),
+              ...(!dialogApiKey.trim()
+                ? {
+                    credentialBinding: modelCredentialBindingFromSelection(
+                      toAgentModelSelection(
+                        models.find((model) => model.id === dialogModel!.id) ?? dialogModel!,
+                      ),
+                    ),
+                  }
+                : {}),
+            };
+      const result = await window.desktopApi.listRemoteModels(request);
+      setRemoteModels(result.models);
+      setRemoteQuery("");
+      if (context === "edit") {
+        setRemoteSelectedIds(
+          result.models.some((model) => model.id === dialogModel?.model)
+            ? [dialogModel!.model.trim()]
+            : [],
+        );
+      } else if (vendorDraft?.vendorId === "custom") {
+        setRemoteSelectedIds([]);
+      } else {
+        const presetIds = new Set(vendorDraft?.models.map((model) => model.model) ?? []);
+        setRemoteSelectedIds(result.models.filter((model) => presetIds.has(model.id)).map((m) => m.id));
+      }
+      if (result.models.length === 0) {
+        triggerToast("服务未返回可用模型");
+      } else {
+        triggerToast(`已获取 ${result.models.length} 个模型`);
+      }
+    } catch (error) {
+      setRemoteModels([]);
+      setRemoteSelectedIds([]);
+      triggerToast(error instanceof Error ? error.message : "获取模型列表失败");
+    } finally {
+      setRemotePending(false);
+    }
+  };
+
+  const toggleRemoteModelSelection = (modelId: string) => {
+    if (remoteListContext === "edit") {
+      const selected = remoteModels.find((model) => model.id === modelId);
+      if (!selected) return;
+      setRemoteSelectedIds([selected.id]);
+      updateDialogModel({
+        model: selected.id,
+        ...(dialogModel?.name.trim()
+          ? {}
+          : { name: selected.displayName ?? selected.id }),
+      });
+      return;
+    }
+
+    setRemoteSelectedIds((current) => {
+      const next = current.includes(modelId)
+        ? current.filter((id) => id !== modelId)
+        : [...current, modelId];
+      setVendorDraft((draft) => {
+        if (!draft) return draft;
+        const selected = remoteModels.filter((model) => next.includes(model.id));
+        return applyRemoteSelectionToVendorDraft(draft, selected);
+      });
+      return next;
+    });
+  };
+
+  const renderRemoteModelPicker = (context: "add" | "edit") => {
+    if (remoteListContext !== context || (remoteModels.length === 0 && !remotePending)) {
+      return null;
+    }
+
+    return (
+      <div className="model-remote-picker">
+        <div className="model-remote-picker-heading">
+          <span>{context === "edit" ? "选择模型标识" : "从服务选择模型"}</span>
+          <span>{remoteModels.length} 个</span>
+        </div>
+        <input
+          className="config-input"
+          value={remoteQuery}
+          placeholder="筛选模型 id"
+          onChange={(event) => setRemoteQuery(event.target.value)}
+        />
+        <div className="model-remote-picker-list" role="listbox" aria-label="远程模型列表">
+          {filteredRemoteModels.map((model) => {
+            const selected = remoteSelectedIds.includes(model.id);
+            return (
+              <label
+                key={model.id}
+                className={`model-remote-picker-row${selected ? " is-selected" : ""}`}
+              >
+                <input
+                  type={context === "edit" ? "radio" : "checkbox"}
+                  name={context === "edit" ? "remote-model-edit" : undefined}
+                  checked={selected}
+                  onChange={() => toggleRemoteModelSelection(model.id)}
+                />
+                <span>
+                  <strong>{model.displayName ?? model.id}</strong>
+                  {model.displayName ? <small>{model.id}</small> : null}
+                </span>
+              </label>
+            );
+          })}
+          {filteredRemoteModels.length === 0 ? (
+            <div className="model-remote-picker-empty">没有匹配的模型</div>
+          ) : null}
+        </div>
+        {context === "add" ? (
+          <small className="model-pricing-hint">
+            勾选后会写入下方模型配置；仍可在高级设置中手动调整。
+          </small>
+        ) : null}
+      </div>
+    );
   };
 
   useEffect(() => {
@@ -200,6 +445,7 @@ export function ModelManagement({
     const vendorId = value as ModelVendorId;
     setVendorDraft(buildModelVendorDraft(vendorId, models));
     setAdvancedOpen(vendorId === "custom");
+    resetRemoteModelState();
   };
 
   const selectVendorProtocol = (value: string) => {
@@ -586,7 +832,7 @@ export function ModelManagement({
             <header className="model-dialog-header">
               <div>
                 <h3 id="model-vendor-dialog-title">添加厂商模型</h3>
-                <p>选择厂商后只需填写 API Key，其余配置会自动完成</p>
+                <p>填写 API Key 后可从服务获取模型 id，也可以继续使用预设或手动配置</p>
               </div>
               <button
                 type="button"
@@ -624,6 +870,55 @@ export function ModelManagement({
                     />
                   </label>
 
+                  {vendorDraft.vendorId === "custom" ? (
+                    <>
+                      <div className="config-group">
+                        <span className="config-label">服务商协议</span>
+                        <Select
+                          variant="block"
+                          ariaLabel="服务商协议"
+                          value={vendorDraft.protocol}
+                          onChange={selectVendorProtocol}
+                          options={[
+                            { value: "openai", label: "OpenAI 兼容" },
+                            { value: "anthropic", label: "Anthropic 兼容" },
+                          ]}
+                        />
+                      </div>
+                      <label className="config-group">
+                        <span className="config-label">Base URL</span>
+                        <input
+                          className="config-input"
+                          value={vendorDraft.baseURL}
+                          placeholder={
+                            vendorDraft.protocol === "openai"
+                              ? "https://api.example.com/v1"
+                              : "https://api.example.com"
+                          }
+                          onChange={(event) => updateVendorDraft({ baseURL: event.target.value })}
+                        />
+                      </label>
+                    </>
+                  ) : null}
+
+                  <div className="model-remote-actions">
+                    <button
+                      type="button"
+                      className="settings-secondary-btn"
+                      disabled={remotePending || credentialPending}
+                      onClick={() => void fetchRemoteModels("add")}
+                    >
+                      {remotePending && remoteListContext === "add"
+                        ? "获取中…"
+                        : "获取模型列表"}
+                    </button>
+                    <small className="model-pricing-hint">
+                      OpenAI / Anthropic 兼容服务通常支持 Models API
+                    </small>
+                  </div>
+
+                  {renderRemoteModelPicker("add")}
+
                   {vendorDraft.vendorId !== "custom" ? (
                     <div className="model-vendor-summary">
                       <div className="model-vendor-summary-heading">
@@ -656,36 +951,42 @@ export function ModelManagement({
 
                   {advancedOpen ? (
                     <div className="model-vendor-advanced">
-                      <div className="config-group">
-                        <span className="config-label">服务商协议</span>
-                        <Select
-                          variant="block"
-                          ariaLabel="服务商协议"
-                          value={vendorDraft.protocol}
-                          disabled={
-                            (getModelVendorPreset(vendorDraft.vendorId)?.supportedProviders
-                              .length ?? 2) === 1
-                          }
-                          onChange={selectVendorProtocol}
-                          options={[
-                            { value: "openai", label: "OpenAI 兼容" },
-                            { value: "anthropic", label: "Anthropic 兼容" },
-                          ]}
-                        />
-                      </div>
-                      <label className="config-group">
-                        <span className="config-label">Base URL</span>
-                        <input
-                          className="config-input"
-                          value={vendorDraft.baseURL}
-                          placeholder={
-                            vendorDraft.protocol === "openai"
-                              ? "https://api.example.com/v1"
-                              : "https://api.example.com"
-                          }
-                          onChange={(event) => updateVendorDraft({ baseURL: event.target.value })}
-                        />
-                      </label>
+                      {vendorDraft.vendorId !== "custom" ? (
+                        <>
+                          <div className="config-group">
+                            <span className="config-label">服务商协议</span>
+                            <Select
+                              variant="block"
+                              ariaLabel="服务商协议"
+                              value={vendorDraft.protocol}
+                              disabled={
+                                (getModelVendorPreset(vendorDraft.vendorId)?.supportedProviders
+                                  .length ?? 2) === 1
+                              }
+                              onChange={selectVendorProtocol}
+                              options={[
+                                { value: "openai", label: "OpenAI 兼容" },
+                                { value: "anthropic", label: "Anthropic 兼容" },
+                              ]}
+                            />
+                          </div>
+                          <label className="config-group">
+                            <span className="config-label">Base URL</span>
+                            <input
+                              className="config-input"
+                              value={vendorDraft.baseURL}
+                              placeholder={
+                                vendorDraft.protocol === "openai"
+                                  ? "https://api.example.com/v1"
+                                  : "https://api.example.com"
+                              }
+                              onChange={(event) =>
+                                updateVendorDraft({ baseURL: event.target.value })
+                              }
+                            />
+                          </label>
+                        </>
+                      ) : null}
                       <div className="model-vendor-advanced-model-list">
                         {vendorDraft.models.map(renderDraftModelFields)}
                       </div>
@@ -821,6 +1122,20 @@ export function ModelManagement({
                   </small>
                 ) : null}
               </label>
+              <div className="model-remote-actions model-form-span">
+                <button
+                  type="button"
+                  className="settings-secondary-btn"
+                  disabled={remotePending || credentialPending}
+                  onClick={() => void fetchRemoteModels("edit")}
+                >
+                  {remotePending && remoteListContext === "edit" ? "获取中…" : "获取模型列表"}
+                </button>
+                <small className="model-pricing-hint">
+                  已保存凭据时可直接获取；也可临时填写 API Key
+                </small>
+              </div>
+              {renderRemoteModelPicker("edit")}
               {dialogModel.provider === "openai" ? (
                 <div className="config-group model-form-span">
                   <span className="config-label">OpenAI API 模式</span>
