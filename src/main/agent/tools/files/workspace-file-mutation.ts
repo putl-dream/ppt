@@ -8,7 +8,7 @@ import {
   WorkspaceFileError,
   type WorkspacePathGuard,
 } from "./workspace-file-types";
-import { assertContained, samePath } from "./workspace-path-guard";
+import { assertContained, assertSafeDirectory } from "./workspace-path-guard";
 
 const FILE_MUTATION_LOCKS = new Map<string, Promise<void>>();
 
@@ -109,14 +109,10 @@ export async function ensureSafeParentDirectory(
   await mkdir(parentPath, { recursive: true });
   try {
     const canonicalRoot = await realpath(resolve(workspaceRoot));
+    const parentStats = await lstat(parentPath);
+    assertSafeDirectory(parentStats, parentPath, originalPath);
     const canonicalParent = await realpath(parentPath);
     assertContained(canonicalRoot, canonicalParent, originalPath);
-    if (!samePath(canonicalParent, parentPath)) {
-      throw new WorkspaceFileError(
-        "UNSAFE_FILE_TYPE",
-        `Symbolic-link or junction parent is not allowed for workspace writes: ${originalPath}`,
-      );
-    }
   } catch (error) {
     if (!existedBefore && error instanceof WorkspaceFileError) {
       throw new Error(

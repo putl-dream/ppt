@@ -22,13 +22,11 @@ export async function resolveContainedWorkspacePath(
   const candidate = isAbsolute(path) ? resolve(path) : resolve(resolvedRoot, path);
   assertContained(resolvedRoot, candidate, path);
 
+  // Use realpath for containment only. Do not reject when resolve() and realpath()
+  // differ: on Windows, 8.3 short names (e.g. GHA TEMP `...\RUNNER~1\...`) expand
+  // under realpath without the workspace root being a symlink/junction. Symlink or
+  // junction roots are already rejected by assertSafeDirectory via lstat above.
   const canonicalRoot = await realpath(resolvedRoot);
-  if (!samePath(canonicalRoot, resolvedRoot)) {
-    throw new WorkspaceFileError(
-      "UNSAFE_FILE_TYPE",
-      `Symbolic-link or junction workspace roots are not supported: ${workspaceRoot}`,
-    );
-  }
   let cursor = candidate;
   const missingSegments: string[] = [];
   while (true) {
@@ -99,12 +97,8 @@ export async function captureWorkspacePathGuard(
         }
         const canonical = await realpath(expected.path);
         assertContained(canonicalRoot, canonical, originalPath);
-        if (!samePath(canonical, expected.path)) {
-          throw new WorkspaceFileError(
-            "UNSAFE_FILE_TYPE",
-            `Symbolic-link or junction directory is not allowed during commit: ${originalPath}`,
-          );
-        }
+        // Identity is already pinned by dev/ino above. Do not treat resolve/realpath
+        // string inequality as a junction: Windows 8.3 short names expand under realpath.
       }
     },
   };

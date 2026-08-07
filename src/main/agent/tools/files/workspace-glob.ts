@@ -8,7 +8,6 @@ import {
   assertSafeDirectory,
   isOutside,
   sameFileIdentity,
-  samePath,
 } from "./workspace-path-guard";
 
 export async function globWorkspaceFiles(
@@ -27,13 +26,9 @@ export async function globWorkspaceFiles(
   const resolvedRoot = resolve(workspaceRoot);
   const rootStats = await lstat(resolvedRoot);
   assertSafeDirectory(rootStats, resolvedRoot, pattern);
+  // See resolveContainedWorkspacePath: reject symlink/junction roots via lstat only.
+  // resolve() vs realpath() string inequality is not a reliable junction signal on Windows.
   const canonicalRoot = await realpath(resolvedRoot);
-  if (!samePath(canonicalRoot, resolvedRoot)) {
-    throw new WorkspaceFileError(
-      "UNSAFE_FILE_TYPE",
-      `Symbolic-link or junction workspace roots are not supported: ${workspaceRoot}`,
-    );
-  }
 
   async function walk(relativeDir: string, expectedIdentity?: AtomicFileIdentity): Promise<void> {
     const absoluteDir = resolve(canonicalRoot, relativeDir || ".");
@@ -62,12 +57,6 @@ export async function globWorkspaceFiles(
       if (stats.isSymbolicLink()) continue;
       const canonicalPath = await realpath(absolutePath);
       assertContained(canonicalRoot, canonicalPath, pattern);
-      if (!samePath(canonicalPath, absolutePath)) {
-        throw new WorkspaceFileError(
-          "UNSAFE_FILE_TYPE",
-          `Symbolic-link or junction path appeared during glob: ${relativePath}`,
-        );
-      }
       if (stats.isDirectory()) {
         await walk(relativePath, { dev: stats.dev, ino: stats.ino });
         continue;
@@ -116,12 +105,6 @@ async function validateGlobDirectory(
   }
   const canonicalPath = await realpath(directoryPath);
   assertContained(canonicalRoot, canonicalPath, originalPattern);
-  if (!samePath(canonicalPath, directoryPath)) {
-    throw new WorkspaceFileError(
-      "UNSAFE_FILE_TYPE",
-      `Symbolic-link or junction directory appeared during glob: ${directoryPath}`,
-    );
-  }
   return { dev: stats.dev, ino: stats.ino };
 }
 

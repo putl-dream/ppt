@@ -1,3 +1,4 @@
+import { lstatSync, realpathSync } from "node:fs";
 import { relative, resolve } from "node:path";
 import {
   AtomicWriteConflictError,
@@ -75,7 +76,22 @@ export class WorkspaceFileService {
     if (!workspaceRoot.trim()) {
       throw new Error("Workspace root is required.");
     }
-    this.workspaceRoot = resolve(workspaceRoot);
+    const resolved = resolve(workspaceRoot);
+    // Prefer the realpath form so Windows 8.3 short names (e.g. GHA TEMP
+    // `RUNNER~1`) match paths returned by resolveContainedWorkspacePath.
+    // Use realpathSync.native: plain realpathSync does not expand 8.3 names on
+    // Windows, while fs.promises.realpath / realpathSync.native do.
+    // Leave symlink/junction roots unresolved so the path guard can reject them.
+    try {
+      const stats = lstatSync(resolved);
+      if (!stats.isSymbolicLink() && stats.isDirectory()) {
+        this.workspaceRoot = realpathSync.native(resolved);
+        return;
+      }
+    } catch {
+      // Missing or inaccessible roots fail on first file operation.
+    }
+    this.workspaceRoot = resolved;
   }
 
   async read(
