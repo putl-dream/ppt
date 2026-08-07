@@ -8,7 +8,7 @@ import type { AgentStepLimits } from "@shared/agent-step-limits";
 import {
   type CredentialStorageStatus,
   type ModelCredentialBinding,
-  modelCredentialBindingFromSelection,
+  normalizeModelCredentialBinding,
   normalizeWebSearchCredentialBinding,
 } from "@shared/credentials";
 import type { UiThemeSummary } from "@shared/ipc";
@@ -19,11 +19,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { saveAgentGatewayPreferences } from "../agentGatewayConfig";
 import { saveAgentStepLimits } from "../agentStepLimits";
 import {
+  countUsableModels,
+  flattenVendors,
   isModelEnabled,
   type ManagedModel,
+  type ModelVendorConnection,
+  saveManagedVendors,
   SELECTED_MODEL_STORAGE_KEY,
-  saveManagedModels,
-  toAgentModelSelection,
+  vendorCredentialBinding,
 } from "../modelCatalog";
 import {
   type AppBootstrapSnapshot,
@@ -42,15 +45,18 @@ import { getComputedScheme, useAppearanceRuntime } from "./useAppearanceRuntime"
 import { normalizePersistedUiThemeId } from "./userUiTheme";
 
 export interface SettingsController {
+  vendors: ModelVendorConnection[];
   models: ManagedModel[];
   enabledModels: ManagedModel[];
   visibleModels: ManagedModel[];
   selectedModel?: ManagedModel;
   selectedModelId: string;
   selectModel: (id: string) => void;
-  saveModel: (model: ManagedModel, apiKey?: string) => Promise<boolean>;
-  saveModels: (models: ManagedModel[], apiKey: string) => Promise<boolean>;
-  deleteModel: (id: string) => Promise<boolean>;
+  saveVendor: (vendor: ModelVendorConnection, apiKey?: string) => Promise<boolean>;
+  deleteVendor: (vendorId: string) => Promise<boolean>;
+  deleteModel: (modelId: string) => Promise<boolean>;
+  setVendorEnabled: (vendorId: string, enabled: boolean) => Promise<boolean>;
+  setModelEnabled: (modelId: string, enabled: boolean) => Promise<boolean>;
   credentialStorageStatus: CredentialStorageStatus | null;
   webSearchCredentialConfigured: boolean;
   saveWebSearchCredential: (apiKey: string, endpoint?: string) => Promise<boolean>;
@@ -83,6 +89,20 @@ export interface SettingsController {
   setUiLineHeight: (value: number) => void;
   saveStatus: "saved" | "saving";
   markSaving: () => void;
+}
+
+function applyCredentialFlags(
+  vendors: ModelVendorConnection[],
+  configuredByVendorId: Map<string, boolean>,
+): ModelVendorConnection[] {
+  let changed = false;
+  const next = vendors.map((vendor) => {
+    const configured = configuredByVendorId.get(vendor.id) ?? false;
+    if (vendor.credentialConfigured === configured) return vendor;
+    changed = true;
+    return { ...vendor, credentialConfigured: configured };
+  });
+  return changed ? next : vendors;
 }
 
 export function useSettingsController(
@@ -128,9 +148,10 @@ export function useSettingsController(
     if (isUploadedTemplateId(requested)) return requested;
     return getBuiltinTemplate(requested)?.id ?? APPLICATION_DEFAULT_TEMPLATE_ID;
   });
-  const [models, setModels] = useState<ManagedModel[]>(() => bootstrap.models);
-  const modelsRef = useRef(models);
-  modelsRef.current = models;
+  const [vendors, setVendors] = useState<ModelVendorConnection[]>(() => bootstrap.vendors);
+  const vendorsRef = useRef(vendors);
+  vendorsRef.current = vendors;
+  const models = useMemo(() => flattenVendors(vendors), [vendors]);
   const [credentialStorageStatus, setCredentialStorageStatus] =
     useState<CredentialStorageStatus | null>(null);
   const [webSearchCredentialConfigured, setWebSearchCredentialConfigured] = useState(false);
@@ -170,11 +191,11 @@ export function useSettingsController(
   );
 
   useEffect(() => {
-    saveManagedModels(models);
+    saveManagedVendors(vendors);
     if (!visibleModels.some((model) => model.id === selectedModelId) && visibleModels[0]) {
       setSelectedModelId(visibleModels[0].id);
     }
-  }, [models, selectedModelId, visibleModels]);
+  }, [vendors, selectedModelId, visibleModels]);
 
   useEffect(() => {
     window.localStorage.setItem(SELECTED_MODEL_STORAGE_KEY, selectedModelId);
@@ -183,18 +204,27 @@ export function useSettingsController(
   useEffect(() => saveAgentStepLimits(agentStepLimits), [agentStepLimits]);
   useEffect(() => saveAgentGatewayPreferences(agentGatewayPreferences), [agentGatewayPreferences]);
 
-  const modelCredentialBindings = useMemo(
-    () =>
-      models.flatMap((model) => {
-        try {
-          return [modelCredentialBindingFromSelection(toAgentModelSelection(model))];
-        } catch {
-          return [];
-        }
-      }),
-    [models],
-  );
-  const modelCredentialBindingsFingerprint = JSON.stringify(modelCredentialBindings);
+  const clearFallbackIfMissing = useCallback((remainingModelIds: Set<string>) => {
+    setAgentGatewayPreferencesState((current) => {
+      if (!current.fallbackModelId || remainingModelIds.has(current.fallbackModelId)) {
+        return current;
+      }
+      return { ...current, fallbackModelId: undefined };
+    });
+  }, []);
+
+  const vendorCredentialBindings = useMemo(() => {
+    const byVendor = new Map<string, ModelCredentialBinding>();
+    for (const vendor of vendors) {
+      try {
+        byVendor.set(vendor.id, normalizeModelCredentialBinding(vendorCredentialBinding(vendor)));
+      } catch {
+        /* skip invalid vendor connection */
+      }
+    }
+    return [...byVendor.values()];
+  }, [vendors]);
+  const vendorCredentialBindingsFingerprint = JSON.stringify(vendorCredentialBindings);
   const webSearchEndpoint =
     agentGatewayPreferences.webSearchEndpoint?.trim() || DEFAULT_WEB_SEARCH_ENDPOINT;
 
@@ -203,9 +233,10 @@ export function useSettingsController(
     const refreshId = ++credentialRefreshIdRef.current;
     setCredentialStorageStatus(null);
     setWebSearchCredentialConfigured(false);
-    setModels((current) =>
-      current.map((model) =>
-        model.credentialConfigured === false ? model : { ...model, credentialConfigured: false },
+    setVendors((current) =>
+      applyCredentialFlags(
+        current,
+        new Map(current.map((vendor) => [vendor.id, false])),
       ),
     );
     const failClosed = (message: string) => {
@@ -215,9 +246,10 @@ export function useSettingsController(
         warning: "safe-storage-unavailable",
       });
       setWebSearchCredentialConfigured(false);
-      setModels((current) =>
-        current.map((model) =>
-          model.credentialConfigured === false ? model : { ...model, credentialConfigured: false },
+      setVendors((current) =>
+        applyCredentialFlags(
+          current,
+          new Map(current.map((vendor) => [vendor.id, false])),
         ),
       );
       notify(message);
@@ -236,30 +268,21 @@ export function useSettingsController(
 
     try {
       const snapshot = await desktopApi.getCredentialStatus({
-        models: modelCredentialBindings,
+        models: vendorCredentialBindings,
         webSearch,
       });
       if (refreshId !== credentialRefreshIdRef.current) return;
       const configuredById = new Map(
-        snapshot.models.map((model) => [model.configurationId, model.configured]),
+        snapshot.models.map((model) => [model.vendorId, model.configured]),
       );
       setCredentialStorageStatus(snapshot.storage);
       setWebSearchCredentialConfigured(snapshot.webSearchConfigured);
-      setModels((current) => {
-        let changed = false;
-        const next = current.map((model) => {
-          const configured = configuredById.get(model.id) ?? false;
-          if (model.credentialConfigured === configured) return model;
-          changed = true;
-          return { ...model, credentialConfigured: configured };
-        });
-        return changed ? next : current;
-      });
+      setVendors((current) => applyCredentialFlags(current, configuredById));
     } catch (error) {
       if (refreshId !== credentialRefreshIdRef.current) return;
       failClosed(`凭据状态读取失败: ${error instanceof Error ? error.message : String(error)}`);
     }
-  }, [modelCredentialBindingsFingerprint, notify, webSearchEndpoint]);
+  }, [vendorCredentialBindingsFingerprint, notify, webSearchEndpoint]);
 
   useEffect(() => {
     void refreshCredentialStatus();
@@ -348,26 +371,26 @@ export function useSettingsController(
     };
 
   const selectModel = update(setSelectedModelId);
-  const credentialBindingForModel = (model: ManagedModel): ModelCredentialBinding =>
-    modelCredentialBindingFromSelection(toAgentModelSelection(model));
 
-  const saveModel = async (model: ManagedModel, apiKey?: string): Promise<boolean> => {
+  const bindingForVendor = (vendor: ModelVendorConnection): ModelCredentialBinding =>
+    normalizeModelCredentialBinding(vendorCredentialBinding(vendor));
+
+  const saveVendor = async (vendor: ModelVendorConnection, apiKey?: string): Promise<boolean> => {
     markSaving();
     const nextApiKey = apiKey?.trim();
     let binding: ModelCredentialBinding;
     try {
-      binding = credentialBindingForModel(model);
+      binding = bindingForVendor(vendor);
     } catch (error) {
-      notify(`模型连接配置无效: ${error instanceof Error ? error.message : String(error)}`);
+      notify(`厂商连接配置无效: ${error instanceof Error ? error.message : String(error)}`);
       return false;
     }
 
-    const existing = modelsRef.current.find((item) => item.id === model.id);
+    const existing = vendorsRef.current.find((item) => item.id === vendor.id);
     let bindingChanged = !existing;
     if (existing) {
       try {
-        bindingChanged =
-          JSON.stringify(credentialBindingForModel(existing)) !== JSON.stringify(binding);
+        bindingChanged = JSON.stringify(bindingForVendor(existing)) !== JSON.stringify(binding);
       } catch {
         bindingChanged = true;
       }
@@ -381,74 +404,172 @@ export function useSettingsController(
         notify(`API Key 保存失败: ${error instanceof Error ? error.message : String(error)}`);
         return false;
       }
-    } else if (bindingChanged && existing) {
+    } else if (bindingChanged && existing?.credentialConfigured) {
       try {
-        await window.desktopApi.deleteModelCredential({ configurationId: existing.id });
+        await window.desktopApi.deleteModelCredential({ vendorId: existing.id });
         credentialRefreshIdRef.current += 1;
       } catch (error) {
-        notify(`旧模型凭据清除失败: ${error instanceof Error ? error.message : String(error)}`);
+        notify(`旧厂商凭据清除失败: ${error instanceof Error ? error.message : String(error)}`);
         return false;
       }
+    } else if (!nextApiKey && !existing?.credentialConfigured && vendor.models.length > 0) {
+      notify("请填写 API Key");
+      return false;
     }
 
     const credentialConfigured =
       Boolean(nextApiKey) || (!bindingChanged && existing?.credentialConfigured === true);
-    const persistedModel = { ...model, credentialConfigured };
-    setModels((current) =>
-      current.some((item) => item.id === persistedModel.id)
-        ? current.map((item) => (item.id === persistedModel.id ? persistedModel : item))
-        : [...current, persistedModel],
+    const persistedVendor: ModelVendorConnection = {
+      ...vendor,
+      credentialConfigured,
+    };
+
+    setVendors((current) => {
+      const without = current.filter((item) => item.id !== persistedVendor.id);
+      if (persistedVendor.kind !== "custom") {
+        return [
+          ...without.filter((item) => item.kind !== persistedVendor.kind),
+          persistedVendor,
+        ];
+      }
+      return [...without, persistedVendor];
+    });
+
+    if (!selectedModelId && persistedVendor.models[0]) {
+      setSelectedModelId(persistedVendor.models[0].id);
+    }
+    return true;
+  };
+
+  const deleteVendor = async (vendorId: string): Promise<boolean> => {
+    markSaving();
+    const existing = vendorsRef.current.find((item) => item.id === vendorId);
+    if (!existing) return false;
+
+    const remaining = vendorsRef.current.filter((item) => item.id !== vendorId);
+    const remainingModels = flattenVendors(remaining);
+    const usableBefore = countUsableModels(flattenVendors(vendorsRef.current));
+    const usableAfter = countUsableModels(remainingModels);
+    if (usableBefore > 0 && usableAfter === 0) {
+      notify("至少保留一个可用模型");
+      return false;
+    }
+
+    try {
+      await window.desktopApi.deleteModelCredential({ vendorId });
+      credentialRefreshIdRef.current += 1;
+    } catch (error) {
+      notify(`厂商凭据删除失败: ${error instanceof Error ? error.message : String(error)}`);
+      return false;
+    }
+
+    setVendors(remaining);
+    clearFallbackIfMissing(new Set(remainingModels.map((model) => model.id)));
+    if (existing.models.some((model) => model.id === selectedModelId)) {
+      const fallback = remainingModels.find((model) => isModelEnabled(model));
+      setSelectedModelId(fallback?.id ?? "");
+    }
+    return true;
+  };
+
+  const deleteModel = async (modelId: string): Promise<boolean> => {
+    markSaving();
+    const owner = vendorsRef.current.find((vendor) =>
+      vendor.models.some((model) => model.id === modelId),
+    );
+    if (!owner) return false;
+
+    const flat = flattenVendors(vendorsRef.current);
+    const targetFlat = flat.find((model) => model.id === modelId);
+    const usableBefore = countUsableModels(flat);
+    const usableAfter = countUsableModels(flat.filter((model) => model.id !== modelId));
+    if (
+      targetFlat &&
+      isModelEnabled(targetFlat) &&
+      targetFlat.credentialConfigured === true &&
+      usableBefore > 0 &&
+      usableAfter === 0
+    ) {
+      notify("至少保留一个可用模型");
+      return false;
+    }
+
+    const nextVendor: ModelVendorConnection = {
+      ...owner,
+      models: owner.models.filter((model) => model.id !== modelId),
+    };
+    setVendors((current) =>
+      current.map((vendor) => (vendor.id === owner.id ? nextVendor : vendor)),
+    );
+    clearFallbackIfMissing(
+      new Set(
+        flattenVendors(
+          vendorsRef.current.map((vendor) => (vendor.id === owner.id ? nextVendor : vendor)),
+        ).map((model) => model.id),
+      ),
+    );
+    if (selectedModelId === modelId) {
+      const fallback = flat.find((model) => model.id !== modelId && isModelEnabled(model));
+      setSelectedModelId(fallback?.id ?? "");
+    }
+    return true;
+  };
+
+  const setVendorEnabled = async (vendorId: string, enabled: boolean): Promise<boolean> => {
+    markSaving();
+    const existing = vendorsRef.current.find((item) => item.id === vendorId);
+    if (!existing) return false;
+    if (!enabled) {
+      const remaining = vendorsRef.current.map((vendor) =>
+        vendor.id === vendorId ? { ...vendor, enabled: false } : vendor,
+      );
+      const usableAfter = countUsableModels(flattenVendors(remaining));
+      if (countUsableModels(flattenVendors(vendorsRef.current)) > 0 && usableAfter === 0) {
+        notify("至少保留一个可用模型");
+        return false;
+      }
+    }
+    setVendors((current) =>
+      current.map((vendor) => (vendor.id === vendorId ? { ...vendor, enabled } : vendor)),
     );
     return true;
   };
 
-  const saveModels = async (nextModels: ManagedModel[], apiKey: string): Promise<boolean> => {
+  const setModelEnabled = async (modelId: string, enabled: boolean): Promise<boolean> => {
     markSaving();
-    const normalizedApiKey = apiKey.trim();
-    if (!normalizedApiKey) {
-      notify("请填写 API Key");
-      return false;
+    const owner = vendorsRef.current.find((vendor) =>
+      vendor.models.some((model) => model.id === modelId),
+    );
+    if (!owner) return false;
+    if (!enabled) {
+      const remaining = vendorsRef.current.map((vendor) =>
+        vendor.id !== owner.id
+          ? vendor
+          : {
+              ...vendor,
+              models: vendor.models.map((model) =>
+                model.id === modelId ? { ...model, enabled: false } : model,
+              ),
+            },
+      );
+      const usableAfter = countUsableModels(flattenVendors(remaining));
+      if (countUsableModels(flattenVendors(vendorsRef.current)) > 0 && usableAfter === 0) {
+        notify("至少保留一个可用模型");
+        return false;
+      }
     }
-    let bindings: ModelCredentialBinding[];
-    try {
-      bindings = nextModels.map(credentialBindingForModel);
-    } catch (error) {
-      notify(`模型连接配置无效: ${error instanceof Error ? error.message : String(error)}`);
-      return false;
-    }
-    try {
-      await window.desktopApi.setModelCredentials({ bindings, apiKey: normalizedApiKey });
-      credentialRefreshIdRef.current += 1;
-    } catch (error) {
-      notify(`API Key 保存失败: ${error instanceof Error ? error.message : String(error)}`);
-      return false;
-    }
-    const configuredModels = nextModels.map((model) => ({
-      ...model,
-      credentialConfigured: true,
-    }));
-    const replacementIds = new Set(configuredModels.map((model) => model.id));
-    setModels((current) => [
-      ...current.filter((model) => !replacementIds.has(model.id)),
-      ...configuredModels,
-    ]);
-    return true;
-  };
-
-  const deleteModel = async (id: string): Promise<boolean> => {
-    markSaving();
-    try {
-      await window.desktopApi.deleteModelCredential({ configurationId: id });
-      credentialRefreshIdRef.current += 1;
-    } catch (error) {
-      notify(`模型凭据删除失败: ${error instanceof Error ? error.message : String(error)}`);
-      return false;
-    }
-    setModels((current) => current.filter((model) => model.id !== id));
-    if (selectedModelId === id) {
-      const fallback = modelsRef.current.find((model) => model.id !== id && isModelEnabled(model));
-      if (fallback) setSelectedModelId(fallback.id);
-    }
+    setVendors((current) =>
+      current.map((vendor) =>
+        vendor.id !== owner.id
+          ? vendor
+          : {
+              ...vendor,
+              models: vendor.models.map((model) =>
+                model.id === modelId ? { ...model, enabled } : model,
+              ),
+            },
+      ),
+    );
     return true;
   };
 
@@ -487,15 +608,18 @@ export function useSettingsController(
     }
   };
   return {
+    vendors,
     models,
     enabledModels,
     visibleModels,
     selectedModel,
     selectedModelId,
     selectModel,
-    saveModel,
-    saveModels,
+    saveVendor,
+    deleteVendor,
     deleteModel,
+    setVendorEnabled,
+    setModelEnabled,
     credentialStorageStatus,
     webSearchCredentialConfigured,
     saveWebSearchCredential,

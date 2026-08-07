@@ -5,6 +5,8 @@ export const agentExecutionStrategySchema = z.enum(["REQUEST_APPROVAL", "AUTO"])
 
 export const agentModelSettingsSchema = z.object({
   configurationId: z.string().trim().min(1).optional(),
+  /** Vendor connection id used for credential lookup. */
+  vendorId: z.string().trim().min(1).optional(),
   provider: agentProviderSchema,
   model: z.string().trim().min(1),
   apiKey: z.string().trim().min(1).optional(),

@@ -83,6 +83,7 @@ export class AgentGateway implements AgentModelGateway {
     }
     return {
       ...(settings.configurationId ? { configurationId: settings.configurationId } : {}),
+      ...(settings.vendorId ? { vendorId: settings.vendorId } : {}),
       provider: settings.provider,
       model: settings.model,
       ...(settings.supports1MContext ? { supports1MContext: true } : {}),

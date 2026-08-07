@@ -49,12 +49,15 @@ export function SettingsView({
       <div key="settings" className="rounded-canvas view-enter" data-ui-region="canvas">
         <SettingsConsole
           activeCategory={activeCategory}
+          vendors={controller.vendors}
           models={controller.models}
           selectedModelId={controller.selectedModelId}
           onSelectModel={controller.selectModel}
-          onSaveModel={controller.saveModel}
-          onSaveModels={controller.saveModels}
+          onSaveVendor={controller.saveVendor}
+          onDeleteVendor={controller.deleteVendor}
           onDeleteModel={controller.deleteModel}
+          onSetVendorEnabled={controller.setVendorEnabled}
+          onSetModelEnabled={controller.setModelEnabled}
           credentialStorageStatus={controller.credentialStorageStatus}
           webSearchCredentialConfigured={controller.webSearchCredentialConfigured}
           onSaveWebSearchCredential={controller.saveWebSearchCredential}

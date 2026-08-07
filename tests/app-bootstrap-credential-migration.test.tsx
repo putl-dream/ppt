@@ -7,9 +7,12 @@ import {
 } from "../src/renderer/src/agentGatewayConfig";
 import { loadAppBootstrapSnapshot } from "../src/renderer/src/app/appBootstrap";
 import {
+  groupModelsIntoVendors,
   LEGACY_MODEL_STORAGE_KEY,
+  LEGACY_MODEL_STORAGE_KEY_V2,
   MODEL_STORAGE_KEY,
   MODEL_VENDOR_MODELS,
+  serializeManagedVendors,
 } from "../src/renderer/src/modelCatalog";
 
 describe("app bootstrap credential migration", () => {
@@ -37,16 +40,14 @@ describe("app bootstrap credential migration", () => {
     expect(window.localStorage.getItem(MODEL_STORAGE_KEY)).not.toContain("legacy-secret");
   });
 
-  it("keeps v2 metadata while auditing and deleting coexisting v1 secrets", () => {
-    window.localStorage.setItem(
-      MODEL_STORAGE_KEY,
-      JSON.stringify([
-        {
-          ...MODEL_VENDOR_MODELS[0],
-          name: "V2 Model",
-        },
-      ]),
-    );
+  it("keeps v3 metadata while auditing and deleting coexisting v1 secrets", () => {
+    const vendors = groupModelsIntoVendors([
+      {
+        ...MODEL_VENDOR_MODELS[0]!,
+        name: "V3 Model",
+      },
+    ]);
+    window.localStorage.setItem(MODEL_STORAGE_KEY, serializeManagedVendors(vendors));
     window.localStorage.setItem(
       LEGACY_MODEL_STORAGE_KEY,
       JSON.stringify([
@@ -54,6 +55,16 @@ describe("app bootstrap credential migration", () => {
           ...MODEL_VENDOR_MODELS[1],
           name: "Legacy Model",
           apiKey: "legacy-model-secret",
+        },
+      ]),
+    );
+    window.localStorage.setItem(
+      LEGACY_MODEL_STORAGE_KEY_V2,
+      JSON.stringify([
+        {
+          ...MODEL_VENDOR_MODELS[1],
+          name: "V2 Model",
+          apiKey: "v2-model-secret",
         },
       ]),
     );
@@ -78,7 +89,8 @@ describe("app bootstrap credential migration", () => {
     const snapshot = loadAppBootstrapSnapshot();
 
     expect(snapshot.models).toHaveLength(1);
-    expect(snapshot.models[0].name).toBe("V2 Model");
+    expect(snapshot.models[0]!.name).toBe("V3 Model");
+    expect(snapshot.vendors).toHaveLength(1);
     expect(snapshot.agentGatewayPreferences).toMatchObject({
       timeoutMs: 240_000,
       maxOutputTokens: 12_000,
@@ -86,6 +98,7 @@ describe("app bootstrap credential migration", () => {
     });
     expect(snapshot.credentialReentryRequired).toBe(true);
     expect(window.localStorage.getItem(LEGACY_MODEL_STORAGE_KEY)).toBeNull();
+    expect(window.localStorage.getItem(LEGACY_MODEL_STORAGE_KEY_V2)).toBeNull();
     expect(window.localStorage.getItem(LEGACY_AGENT_GATEWAY_CONFIG_STORAGE_KEY)).toBeNull();
     expect(window.localStorage.getItem(MODEL_STORAGE_KEY)).not.toContain("legacy-model-secret");
     expect(window.localStorage.getItem(AGENT_GATEWAY_CONFIG_STORAGE_KEY)).not.toContain(

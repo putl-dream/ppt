@@ -10,7 +10,7 @@ import {
   normalizeOutputTokenDraft,
 } from "@shared/generation-settings-inputs";
 import React from "react";
-import { isModelEnabled, type ManagedModel } from "../../modelCatalog";
+import { isModelEnabled, type ManagedModel, type ModelVendorConnection } from "../../modelCatalog";
 import { ModelManagement } from "../ModelManagement";
 import { Select } from "../Select";
 import { SettingsPanel, SettingsRow, SettingsSection } from "./SettingsPrimitives";
@@ -118,21 +118,27 @@ export function useWebSearchSettings({
 }
 
 export function ModelListSettingsPanel({
+  vendors,
   models,
   selectedModelId,
   onSelectModel,
-  onSaveModel,
-  onSaveModels,
+  onSaveVendor,
+  onDeleteVendor,
   onDeleteModel,
+  onSetVendorEnabled,
+  onSetModelEnabled,
   credentialStorageStatus,
   notify,
 }: {
+  vendors: ModelVendorConnection[];
   models: ManagedModel[];
   selectedModelId: string;
   onSelectModel: (id: string) => void;
-  onSaveModel: (model: ManagedModel, apiKey?: string) => Promise<boolean>;
-  onSaveModels: (models: ManagedModel[], apiKey: string) => Promise<boolean>;
+  onSaveVendor: (vendor: ModelVendorConnection, apiKey?: string) => Promise<boolean>;
+  onDeleteVendor: (vendorId: string) => Promise<boolean>;
   onDeleteModel: (id: string) => Promise<boolean>;
+  onSetVendorEnabled: (vendorId: string, enabled: boolean) => Promise<boolean>;
+  onSetModelEnabled: (modelId: string, enabled: boolean) => Promise<boolean>;
   credentialStorageStatus: CredentialStorageStatus | null;
   notify: (message: string) => void;
 }) {
@@ -142,12 +148,15 @@ export function ModelListSettingsPanel({
         {credentialStorageLabel(credentialStorageStatus)}。API Key 不会保存到浏览器存储。
       </p>
       <ModelManagement
+        vendors={vendors}
         models={models}
         selectedModelId={selectedModelId}
         onSelectModel={onSelectModel}
-        onSaveModel={onSaveModel}
-        onSaveModels={onSaveModels}
+        onSaveVendor={onSaveVendor}
+        onDeleteVendor={onDeleteVendor}
         onDeleteModel={onDeleteModel}
+        onSetVendorEnabled={onSetVendorEnabled}
+        onSetModelEnabled={onSetModelEnabled}
         triggerToast={notify}
       />
     </SettingsPanel>

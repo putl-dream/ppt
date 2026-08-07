@@ -1,7 +1,8 @@
 import { z } from "zod";
 import { type AgentModelSelection, agentProviderSchema } from "./agent";
 
-export const CREDENTIAL_STORE_FILE_NAME = "credentials.v1.json";
+export const CREDENTIAL_STORE_FILE_NAME = "credentials.v2.json";
+export const LEGACY_CREDENTIAL_STORE_FILE_NAME = "credentials.v1.json";
 
 const credentialIdentifierSchema = z
   .string()
@@ -12,18 +13,16 @@ const credentialIdentifierSchema = z
     (value) => !/[\u0000-\u001f\u007f]/.test(value),
     "Credential identifiers must not contain control characters.",
   );
-const credentialModelNameSchema = z.string().trim().min(1).max(512);
 const credentialUrlSchema = z.string().trim().min(1).max(2_048).url();
 
 export const credentialApiKeySchema = z.string().trim().min(1).max(16_384);
 
+/** One API key per vendor connection; model id is not part of the binding. */
 export const modelCredentialBindingSchema = z
   .object({
-    configurationId: credentialIdentifierSchema,
+    vendorId: credentialIdentifierSchema,
     provider: agentProviderSchema,
-    model: credentialModelNameSchema,
     baseURL: credentialUrlSchema.optional(),
-    apiMode: z.enum(["responses", "chat-completions"]).optional(),
   })
   .strict();
 
@@ -49,7 +48,7 @@ export const setWebSearchCredentialRequestSchema = z
 
 export const deleteModelCredentialRequestSchema = z
   .object({
-    configurationId: credentialIdentifierSchema,
+    vendorId: credentialIdentifierSchema,
   })
   .strict();
 
@@ -84,7 +83,7 @@ export interface CredentialStorageStatus {
 export interface CredentialStatusSnapshot {
   storage: CredentialStorageStatus;
   models: Array<{
-    configurationId: string;
+    vendorId: string;
     configured: boolean;
   }>;
   webSearchConfigured: boolean;
@@ -124,11 +123,9 @@ export function normalizeModelCredentialBinding(
 ): ModelCredentialBinding {
   const binding = modelCredentialBindingSchema.parse(input);
   return {
-    configurationId: binding.configurationId,
+    vendorId: binding.vendorId,
     provider: binding.provider,
-    model: binding.model,
     ...(binding.baseURL ? { baseURL: normalizeCredentialUrl(binding.baseURL) } : {}),
-    ...(binding.apiMode ? { apiMode: binding.apiMode } : {}),
   };
 }
 
@@ -143,10 +140,8 @@ export function modelCredentialBindingFromSelection(
   selection: AgentModelSelection,
 ): ModelCredentialBinding {
   return normalizeModelCredentialBinding({
-    configurationId: selection.configurationId ?? "",
+    vendorId: selection.vendorId ?? "",
     provider: selection.provider,
-    model: selection.model,
     ...(selection.baseURL ? { baseURL: selection.baseURL } : {}),
-    ...(selection.openaiApiMode ? { apiMode: selection.openaiApiMode } : {}),
   });
 }

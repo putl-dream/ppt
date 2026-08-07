@@ -1,10 +1,11 @@
 import { createHash } from "node:crypto";
-import { chmod, mkdir } from "node:fs/promises";
+import { chmod, mkdir, unlink } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { z } from "zod";
 import {
   CREDENTIAL_STORE_FILE_NAME,
+  LEGACY_CREDENTIAL_STORE_FILE_NAME,
   type CredentialStatusRequest,
   type CredentialStatusSnapshot,
   type CredentialStorageBackend,
@@ -26,7 +27,7 @@ import {
 } from "../shared/credentials";
 import { readJsonFile, writeTextFileAtomic } from "./agent/persistence/atomic-json-file";
 
-const MODEL_CREDENTIAL_REF_PREFIX = "model:";
+const MODEL_CREDENTIAL_REF_PREFIX = "vendor:";
 const WEB_SEARCH_CREDENTIAL_REF = "web-search:tavily";
 const MAX_PERSISTED_CREDENTIALS = 501;
 
@@ -87,7 +88,7 @@ const persistedCredentialSchema = z
 
 const persistedCredentialFileSchema = z
   .object({
-    version: z.literal(1),
+    version: z.literal(2),
     credentials: z.array(persistedCredentialSchema).max(MAX_PERSISTED_CREDENTIALS),
   })
   .strict();
@@ -165,10 +166,10 @@ export class CredentialStore {
       return {
         storage,
         models: request.models.map((binding) => ({
-          configurationId: binding.configurationId,
+          vendorId: binding.vendorId,
           configured:
             storageUsable &&
-            Boolean(findCredential(state, modelCredentialRef(binding.configurationId), binding)),
+            Boolean(findCredential(state, modelCredentialRef(binding.vendorId), binding)),
         })),
         webSearchConfigured:
           storageUsable &&
@@ -183,13 +184,11 @@ export class CredentialStore {
   async setModelCredentials(input: SetModelCredentialsRequest): Promise<void> {
     await this.exclusive(async () => {
       const request = this.parseSetModelCredentialsRequest(input);
-      const references = request.bindings.map((binding) =>
-        modelCredentialRef(binding.configurationId),
-      );
+      const references = request.bindings.map((binding) => modelCredentialRef(binding.vendorId));
       if (new Set(references).size !== references.length) {
         throw new CredentialStoreError(
           "INVALID_INPUT",
-          "A model credential batch cannot contain duplicate configuration IDs.",
+          "A model credential batch cannot contain duplicate vendor IDs.",
         );
       }
 
@@ -206,14 +205,14 @@ export class CredentialStore {
       const credentials = state.credentials.filter((entry) => !replacedReferences.has(entry.ref));
       credentials.push(
         ...encrypted.map(({ binding, ciphertext }) => ({
-          ref: modelCredentialRef(binding.configurationId),
+          ref: modelCredentialRef(binding.vendorId),
           binding,
           fingerprint: credentialFingerprint(binding),
           ciphertext: ciphertext.toString("base64"),
           updatedAt,
         })),
       );
-      await this.writeState({ version: 1, credentials });
+      await this.writeState({ version: 2, credentials });
     });
   }
 
@@ -221,10 +220,10 @@ export class CredentialStore {
     await this.exclusive(async () => {
       const request = this.parseDeleteModelCredentialRequest(input);
       const state = await this.readState();
-      const ref = modelCredentialRef(request.configurationId);
+      const ref = modelCredentialRef(request.vendorId);
       const credentials = state.credentials.filter((entry) => entry.ref !== ref);
       if (credentials.length !== state.credentials.length) {
-        await this.writeState({ version: 1, credentials });
+        await this.writeState({ version: 2, credentials });
       }
     });
   }
@@ -245,7 +244,7 @@ export class CredentialStore {
         ciphertext: encrypted.toString("base64"),
         updatedAt: this.now().toISOString(),
       });
-      await this.writeState({ version: 1, credentials });
+      await this.writeState({ version: 2, credentials });
     });
   }
 
@@ -256,7 +255,7 @@ export class CredentialStore {
         (entry) => entry.ref !== WEB_SEARCH_CREDENTIAL_REF,
       );
       if (credentials.length !== state.credentials.length) {
-        await this.writeState({ version: 1, credentials });
+        await this.writeState({ version: 2, credentials });
       }
     });
   }
@@ -264,7 +263,7 @@ export class CredentialStore {
   async resolveModelCredential(input: ModelCredentialBinding): Promise<string | undefined> {
     return await this.exclusive(async () => {
       const binding = this.parseModelBinding(input);
-      return await this.resolveCredential(modelCredentialRef(binding.configurationId), binding);
+      return await this.resolveCredential(modelCredentialRef(binding.vendorId), binding);
     });
   }
 
@@ -296,7 +295,7 @@ export class CredentialStore {
             }
           : candidate,
       );
-      await this.writeState({ version: 1, credentials });
+      await this.writeState({ version: 2, credentials });
     }
     return decrypted.apiKey;
   }
@@ -427,7 +426,10 @@ export class CredentialStore {
     let value: unknown;
     try {
       value = await readJsonFile<unknown>(this.filePath);
-      if (value === undefined) return { version: 1, credentials: [] };
+      if (value === undefined) {
+        const migrated = await this.migrateLegacyStoreIfPresent();
+        return migrated ?? { version: 2, credentials: [] };
+      }
       await chmod(this.filePath, 0o600);
     } catch (error) {
       if (error instanceof SyntaxError) {
@@ -450,6 +452,72 @@ export class CredentialStore {
       );
     }
     return parsed.data;
+  }
+
+  /**
+   * Legacy per-model credentials cannot be remapped to vendor bindings without
+   * the catalog. Keep web-search secrets and drop model entries so users re-enter keys.
+   */
+  private async migrateLegacyStoreIfPresent(): Promise<PersistedCredentialFile | undefined> {
+    const legacyPath = join(dirname(this.filePath), LEGACY_CREDENTIAL_STORE_FILE_NAME);
+    let legacyValue: unknown;
+    try {
+      legacyValue = await readJsonFile<unknown>(legacyPath);
+    } catch {
+      return undefined;
+    }
+    if (legacyValue === undefined) return undefined;
+
+    const legacySchema = z
+      .object({
+        version: z.literal(1),
+        credentials: z
+          .array(
+            z
+              .object({
+                ref: z.string().min(1).max(512),
+                binding: z.unknown(),
+                fingerprint: credentialFingerprintSchema,
+                ciphertext: encryptedPayloadSchema,
+                updatedAt: z.string().datetime({ offset: true }),
+              })
+              .strict(),
+          )
+          .max(MAX_PERSISTED_CREDENTIALS),
+      })
+      .strict();
+    const parsed = legacySchema.safeParse(legacyValue);
+    if (!parsed.success) {
+      throw new CredentialStoreError(
+        "CORRUPT_STORE",
+        "The legacy credential store failed integrity validation.",
+      );
+    }
+
+    const webSearchEntries = parsed.data.credentials.flatMap((entry) => {
+      if (entry.ref !== WEB_SEARCH_CREDENTIAL_REF) return [];
+      const binding = webSearchCredentialBindingSchema.safeParse(entry.binding);
+      if (!binding.success) return [];
+      const normalized = normalizeWebSearchCredentialBinding(binding.data);
+      return [
+        {
+          ref: WEB_SEARCH_CREDENTIAL_REF,
+          binding: normalized,
+          fingerprint: credentialFingerprint(normalized),
+          ciphertext: entry.ciphertext,
+          updatedAt: entry.updatedAt,
+        },
+      ];
+    });
+
+    const migrated: PersistedCredentialFile = { version: 2, credentials: webSearchEntries };
+    await this.writeState(migrated);
+    try {
+      await unlink(legacyPath);
+    } catch {
+      // Leaving the legacy file is acceptable; v2 is authoritative.
+    }
+    return migrated;
   }
 
   private async writeState(state: PersistedCredentialFile): Promise<void> {
@@ -500,7 +568,7 @@ export class CredentialStore {
   }
 
   private parseDeleteModelCredentialRequest(input: unknown): DeleteModelCredentialRequest {
-    const request = typeof input === "string" ? { configurationId: input } : input;
+    const request = typeof input === "string" ? { vendorId: input } : input;
     return this.parseInput(
       deleteModelCredentialRequestSchema,
       request,
@@ -590,8 +658,8 @@ export class CredentialStore {
   }
 }
 
-function modelCredentialRef(configurationId: string): string {
-  return `${MODEL_CREDENTIAL_REF_PREFIX}${encodeURIComponent(configurationId)}`;
+function modelCredentialRef(vendorId: string): string {
+  return `${MODEL_CREDENTIAL_REF_PREFIX}${encodeURIComponent(vendorId)}`;
 }
 
 function credentialFingerprint(
@@ -616,8 +684,8 @@ function isConsistentState(state: PersistedCredentialFile): boolean {
     references.add(entry.ref);
     const binding = normalizePersistedBinding(entry.binding);
     const expectedRef =
-      "configurationId" in binding
-        ? modelCredentialRef(binding.configurationId)
+      "vendorId" in binding
+        ? modelCredentialRef(binding.vendorId)
         : WEB_SEARCH_CREDENTIAL_REF;
     return entry.ref === expectedRef && entry.fingerprint === credentialFingerprint(binding);
   });
@@ -634,7 +702,7 @@ function hasConsistentCredentials(state: PersistedCredentialFile): boolean {
 function normalizePersistedBinding(
   binding: ModelCredentialBinding | WebSearchCredentialBinding,
 ): ModelCredentialBinding | WebSearchCredentialBinding {
-  return "configurationId" in binding
+  return "vendorId" in binding
     ? normalizeModelCredentialBinding(binding)
     : normalizeWebSearchCredentialBinding(binding);
 }

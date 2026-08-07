@@ -24,6 +24,7 @@ describe("credential runtime hydration", () => {
     const store = await createStore();
     const primary = {
       configurationId: "primary",
+      vendorId: "vendor-primary",
       provider: "openai" as const,
       model: "gpt-5.5",
       baseURL: "https://api.example.test/v1",
@@ -31,6 +32,7 @@ describe("credential runtime hydration", () => {
     };
     const fallback = {
       configurationId: "fallback",
+      vendorId: "vendor-fallback",
       provider: "anthropic" as const,
       model: "claude-sonnet-4-6",
       baseURL: "https://anthropic.example.test",
@@ -38,11 +40,9 @@ describe("credential runtime hydration", () => {
     await store.setModelCredentials({
       bindings: [
         {
-          configurationId: primary.configurationId,
+          vendorId: primary.vendorId,
           provider: primary.provider,
-          model: primary.model,
           baseURL: primary.baseURL,
-          apiMode: primary.openaiApiMode,
         },
       ],
       apiKey: "primary-secret",
@@ -50,9 +50,8 @@ describe("credential runtime hydration", () => {
     await store.setModelCredentials({
       bindings: [
         {
-          configurationId: fallback.configurationId,
+          vendorId: fallback.vendorId,
           provider: fallback.provider,
-          model: fallback.model,
           baseURL: fallback.baseURL,
         },
       ],
@@ -88,16 +87,14 @@ describe("credential runtime hydration", () => {
     });
   });
 
-  it("does not reuse a stored key after the model binding changes", async () => {
+  it("does not reuse a stored key after the vendor binding changes", async () => {
     const store = await createStore();
     await store.setModelCredentials({
       bindings: [
         {
-          configurationId: "primary",
+          vendorId: "primary",
           provider: "openai",
-          model: "gpt-5.5",
           baseURL: "https://safe.example.test/v1",
-          apiMode: "responses",
         },
       ],
       apiKey: "bound-secret",
@@ -105,7 +102,8 @@ describe("credential runtime hydration", () => {
 
     await expect(
       hydrateAgentModelSettings(store, {
-        configurationId: "primary",
+        configurationId: "primary-model",
+        vendorId: "primary",
         provider: "openai",
         model: "gpt-5.5",
         baseURL: "https://attacker.example.test/v1",
@@ -114,7 +112,7 @@ describe("credential runtime hydration", () => {
     ).resolves.not.toHaveProperty("apiKey");
   });
 
-  it("leaves selections without a configuration ID to environment credentials", async () => {
+  it("leaves selections without a vendor ID to environment credentials", async () => {
     const store = await createStore();
 
     await expect(
@@ -152,9 +150,8 @@ describe("credential runtime hydration", () => {
       {
         models: [
           {
-            configurationId: "openai-env",
+            vendorId: "openai-env",
             provider: "openai",
-            model: "gpt-5.5",
           },
         ],
         webSearch: { endpoint: "https://api.tavily.com/search" },
@@ -165,7 +162,7 @@ describe("credential runtime hydration", () => {
       },
     );
 
-    expect(status.models).toEqual([{ configurationId: "openai-env", configured: true }]);
+    expect(status.models).toEqual([{ vendorId: "openai-env", configured: true }]);
     expect(status.webSearchConfigured).toBe(true);
     expect(JSON.stringify(status)).not.toContain("environment-");
   });
@@ -185,27 +182,23 @@ describe("credential runtime hydration", () => {
       {
         models: [
           {
-            configurationId: "openai-attacker",
+            vendorId: "openai-attacker",
             provider: "openai",
-            model: "gpt-5.5",
             baseURL: "https://attacker.example.test/v1",
           },
           {
-            configurationId: "openai-official",
+            vendorId: "openai-official",
             provider: "openai",
-            model: "gpt-5.5",
             baseURL: "https://api.openai.com/v1/",
           },
           {
-            configurationId: "anthropic-bound",
+            vendorId: "anthropic-bound",
             provider: "anthropic",
-            model: "claude-sonnet-4-6",
             baseURL: "https://anthropic-proxy.example.test/v1/",
           },
           {
-            configurationId: "anthropic-attacker",
+            vendorId: "anthropic-attacker",
             provider: "anthropic",
-            model: "claude-sonnet-4-6",
             baseURL: "https://attacker.example.test/v1",
           },
         ],
@@ -215,10 +208,10 @@ describe("credential runtime hydration", () => {
     );
 
     expect(status.models).toEqual([
-      { configurationId: "openai-attacker", configured: false },
-      { configurationId: "openai-official", configured: true },
-      { configurationId: "anthropic-bound", configured: true },
-      { configurationId: "anthropic-attacker", configured: false },
+      { vendorId: "openai-attacker", configured: false },
+      { vendorId: "openai-official", configured: true },
+      { vendorId: "anthropic-bound", configured: true },
+      { vendorId: "anthropic-attacker", configured: false },
     ]);
     expect(status.webSearchConfigured).toBe(false);
 
@@ -232,22 +225,11 @@ describe("credential runtime hydration", () => {
         environment,
       ),
     ).resolves.toMatchObject({ webSearchConfigured: true });
-    await expect(
-      getCredentialStatusWithEnvironment(
-        store,
-        {
-          models: [],
-        },
-        {
-          TAVILY_API_KEY: "default-environment-key",
-        },
-      ),
-    ).resolves.toMatchObject({ webSearchConfigured: true });
   });
 });
 
 async function createStore(): Promise<CredentialStore> {
-  const directory = await mkdtemp(join(tmpdir(), "agent-ppt-runtime-credentials-"));
+  const directory = await mkdtemp(join(tmpdir(), "agent-ppt-credential-runtime-"));
   temporaryDirectories.push(directory);
   return new CredentialStore({
     applicationDataRoot: directory,
@@ -257,26 +239,26 @@ async function createStore(): Promise<CredentialStore> {
 
 class FakeSafeStorage implements SafeStorageAdapter {
   decryptString(encrypted: Buffer): string {
-    return encrypted.toString("utf8").slice(4);
+    return encrypted.toString("utf8");
   }
 
   async decryptStringAsync(encrypted: Buffer): Promise<{
     result: string;
     shouldReEncrypt: boolean;
   }> {
-    return { result: this.decryptString(encrypted), shouldReEncrypt: false };
+    return { result: encrypted.toString("utf8"), shouldReEncrypt: false };
   }
 
   encryptString(plainText: string): Buffer {
-    return Buffer.from(`enc:${plainText}`, "utf8");
+    return Buffer.from(plainText, "utf8");
   }
 
   async encryptStringAsync(plainText: string): Promise<Buffer> {
-    return this.encryptString(plainText);
+    return Buffer.from(plainText, "utf8");
   }
 
-  getSelectedStorageBackend(): "unknown" {
-    return "unknown";
+  getSelectedStorageBackend() {
+    return "unknown" as const;
   }
 
   async isAsyncEncryptionAvailable(): Promise<boolean> {

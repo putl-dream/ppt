@@ -16,12 +16,15 @@ import { MAX_OUTPUT_TOKENS } from "../src/shared/generation-settings-inputs";
 function renderSearchSettings(overrides: Partial<ComponentProps<typeof SettingsConsole>> = {}) {
   const props: ComponentProps<typeof SettingsConsole> = {
     activeCategory: "models-search",
+    vendors: [],
     models: [],
     selectedModelId: "",
     onSelectModel: vi.fn(),
-    onSaveModel: vi.fn().mockResolvedValue(true),
-    onSaveModels: vi.fn().mockResolvedValue(true),
+    onSaveVendor: vi.fn().mockResolvedValue(true),
+    onDeleteVendor: vi.fn().mockResolvedValue(true),
     onDeleteModel: vi.fn().mockResolvedValue(true),
+    onSetVendorEnabled: vi.fn().mockResolvedValue(true),
+    onSetModelEnabled: vi.fn().mockResolvedValue(true),
     credentialStorageStatus: {
       state: "degraded",
       backend: "basic_text",

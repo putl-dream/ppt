@@ -5,7 +5,13 @@ import type { AgentStepLimits } from "@shared/agent-step-limits";
 import { loadAgentGatewayPreferences } from "../agentGatewayConfig";
 import { loadAgentStepLimits } from "../agentStepLimits";
 import { consumeCredentialReentryNotice } from "../credentialMigration";
-import { loadManagedModels, type ManagedModel, SELECTED_MODEL_STORAGE_KEY } from "../modelCatalog";
+import {
+  flattenVendors,
+  loadManagedVendors,
+  type ManagedModel,
+  type ModelVendorConnection,
+  SELECTED_MODEL_STORAGE_KEY,
+} from "../modelCatalog";
 import type { UiFontFamily } from "./uiTypography";
 
 export const UI_SETTINGS_STORAGE_KEY = "agent-ppt.ui-settings.v2";
@@ -40,6 +46,7 @@ export interface AppBootstrapSnapshot {
   persistedUiSettings: Partial<PersistedUiSettings>;
   initialColorScheme: UiColorScheme;
   initialComputedScheme: ComputedColorScheme;
+  vendors: ModelVendorConnection[];
   models: ManagedModel[];
   selectedModelId: string;
   agentStepLimits: AgentStepLimits;
@@ -170,7 +177,8 @@ export function resolveInitialColorScheme(settings: Partial<PersistedUiSettings>
 export function loadAppBootstrapSnapshot(): AppBootstrapSnapshot {
   const persistedUiSettings = loadPersistedUiSettings();
   const initialColorScheme = resolveInitialColorScheme(persistedUiSettings);
-  const models = loadManagedModels();
+  const vendors = loadManagedVendors();
+  const models = flattenVendors(vendors);
 
   const agentGatewayPreferences = loadAgentGatewayPreferences();
 
@@ -178,6 +186,7 @@ export function loadAppBootstrapSnapshot(): AppBootstrapSnapshot {
     persistedUiSettings,
     initialColorScheme,
     initialComputedScheme: resolveColorScheme(initialColorScheme),
+    vendors,
     models,
     selectedModelId: readStorageItem(SELECTED_MODEL_STORAGE_KEY) ?? models[0]?.id ?? "",
     agentStepLimits: loadAgentStepLimits(),

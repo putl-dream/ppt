@@ -31,9 +31,8 @@ describe("listRemoteModelsRequestSchema", () => {
         provider: "anthropic",
         baseURL: "https://api.anthropic.com",
         credentialBinding: {
-          configurationId: "anthropic-sonnet-4-6",
+          vendorId: "anthropic",
           provider: "anthropic",
-          model: "claude-sonnet-4-6",
           baseURL: "https://api.anthropic.com",
         },
       }),
@@ -41,9 +40,8 @@ describe("listRemoteModelsRequestSchema", () => {
       provider: "anthropic",
       baseURL: "https://api.anthropic.com",
       credentialBinding: {
-        configurationId: "anthropic-sonnet-4-6",
+        vendorId: "anthropic",
         provider: "anthropic",
-        model: "claude-sonnet-4-6",
       },
     });
   });

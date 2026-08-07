@@ -6,7 +6,7 @@ import type { CredentialStorageStatus } from "@shared/credentials";
 import type { UiThemeSummary } from "@shared/ipc";
 import type { UiFontFamily } from "../app/uiTypography";
 import { cx } from "../lib/cx";
-import type { ManagedModel } from "../modelCatalog";
+import type { ManagedModel, ModelVendorConnection } from "../modelCatalog";
 import type { SettingsCategory } from "../settingsCategories";
 import {
   AgentApprovalSettingsPanel,
@@ -28,12 +28,15 @@ import { TokenUsageOverview } from "./TokenUsageOverview";
 
 interface SettingsConsoleProps {
   activeCategory: SettingsCategory;
+  vendors: ModelVendorConnection[];
   models: ManagedModel[];
   selectedModelId: string;
   onSelectModel: (id: string) => void;
-  onSaveModel: (model: ManagedModel, apiKey?: string) => Promise<boolean>;
-  onSaveModels: (models: ManagedModel[], apiKey: string) => Promise<boolean>;
+  onSaveVendor: (vendor: ModelVendorConnection, apiKey?: string) => Promise<boolean>;
+  onDeleteVendor: (vendorId: string) => Promise<boolean>;
   onDeleteModel: (id: string) => Promise<boolean>;
+  onSetVendorEnabled: (vendorId: string, enabled: boolean) => Promise<boolean>;
+  onSetModelEnabled: (modelId: string, enabled: boolean) => Promise<boolean>;
   credentialStorageStatus: CredentialStorageStatus | null;
   webSearchCredentialConfigured: boolean;
   onSaveWebSearchCredential: (apiKey: string, endpoint?: string) => Promise<boolean>;
@@ -99,12 +102,15 @@ function renderCategory(
     case "models-list":
       return (
         <ModelListSettingsPanel
+          vendors={props.vendors}
           models={props.models}
           selectedModelId={props.selectedModelId}
           onSelectModel={props.onSelectModel}
-          onSaveModel={props.onSaveModel}
-          onSaveModels={props.onSaveModels}
+          onSaveVendor={props.onSaveVendor}
+          onDeleteVendor={props.onDeleteVendor}
           onDeleteModel={props.onDeleteModel}
+          onSetVendorEnabled={props.onSetVendorEnabled}
+          onSetModelEnabled={props.onSetModelEnabled}
           credentialStorageStatus={props.credentialStorageStatus}
           notify={props.triggerToast}
         />

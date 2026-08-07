@@ -16,11 +16,9 @@ import type {
 const temporaryDirectories: string[] = [];
 
 const MODEL_BINDING: ModelCredentialBinding = {
-  configurationId: "primary-openai",
+  vendorId: "primary-openai",
   provider: "openai",
-  model: "gpt-5.5",
   baseURL: "https://api.example.test/v1/",
-  apiMode: "responses",
 };
 
 const SEARCH_BINDING: WebSearchCredentialBinding = {
@@ -59,32 +57,26 @@ describe("CredentialStore", () => {
     const persisted = JSON.parse(persistedText) as Record<string, unknown>;
     expect(Object.keys(persisted).sort()).toEqual(["credentials", "version"]);
     expect(persisted).toMatchObject({
-      version: 1,
+      version: 2,
       credentials: [
         {
-          ref: "model:primary-openai",
+          ref: "vendor:primary-openai",
           binding: {
-            configurationId: "primary-openai",
+            vendorId: "primary-openai",
             baseURL: "https://api.example.test/v1",
           },
         },
       ],
     });
     if (process.platform !== "win32") {
-      expect((await stat(join(directory, "credentials.v1.json"))).mode & 0o777).toBe(0o600);
+      expect((await stat(join(directory, "credentials.v2.json"))).mode & 0o777).toBe(0o600);
     }
   });
 
-  it("does not resolve a model secret after any bound configuration changes", async () => {
+  it("does not resolve a model secret after vendor binding changes", async () => {
     const { store } = await createStore();
     await store.setModelCredentials({ bindings: [MODEL_BINDING], apiKey: "bound-key" });
 
-    await expect(
-      store.resolveModelCredential({
-        ...MODEL_BINDING,
-        model: "gpt-5-mini",
-      }),
-    ).resolves.toBeUndefined();
     await expect(
       store.resolveModelCredential({
         ...MODEL_BINDING,
@@ -100,7 +92,7 @@ describe("CredentialStore", () => {
     await expect(
       store.resolveModelCredential({
         ...MODEL_BINDING,
-        apiMode: "chat-completions",
+        vendorId: "other-vendor",
       }),
     ).resolves.toBeUndefined();
   });
@@ -110,7 +102,7 @@ describe("CredentialStore", () => {
     await store.setModelCredentials({ bindings: [MODEL_BINDING], apiKey: "envelope-key" });
 
     const persisted = JSON.parse(await readFile(store.filePath, "utf8")) as {
-      version: 1;
+      version: 2;
       credentials: Array<{
         ref: string;
         binding: ModelCredentialBinding;
@@ -121,7 +113,7 @@ describe("CredentialStore", () => {
     };
     const legacyKey = "sk-legacy-raw-api-key";
     persisted.credentials[0] = {
-      ...persisted.credentials[0],
+      ...persisted.credentials[0]!,
       ciphertext: safeStorage.encryptString(legacyKey).toString("base64"),
     };
     await writeFile(store.filePath, `${JSON.stringify(persisted, null, 2)}\n`, "utf8");
@@ -132,7 +124,7 @@ describe("CredentialStore", () => {
       credentials: Array<{ ciphertext: string }>;
     };
     const upgradedPlainText = safeStorage.decryptString(
-      Buffer.from(upgraded.credentials[0].ciphertext, "base64"),
+      Buffer.from(upgraded.credentials[0]!.ciphertext, "base64"),
     );
     expect(JSON.parse(upgradedPlainText)).toMatchObject({
       version: 1,
@@ -174,19 +166,18 @@ describe("CredentialStore", () => {
     const { store } = await createStore();
     const secondBinding: ModelCredentialBinding = {
       ...MODEL_BINDING,
-      configurationId: "secondary-openai",
-      model: "gpt-5-mini",
+      vendorId: "secondary-openai",
     };
     await store.setModelCredentials({ bindings: [MODEL_BINDING], apiKey: "first-key" });
     await store.setModelCredentials({ bindings: [secondBinding], apiKey: "second-key" });
 
     const persisted = JSON.parse(await readFile(store.filePath, "utf8")) as {
-      version: 1;
+      version: 2;
       credentials: Array<{ ciphertext: string }>;
     };
-    const firstCiphertext = persisted.credentials[0].ciphertext;
-    persisted.credentials[0].ciphertext = persisted.credentials[1].ciphertext;
-    persisted.credentials[1].ciphertext = firstCiphertext;
+    const firstCiphertext = persisted.credentials[0]!.ciphertext;
+    persisted.credentials[0]!.ciphertext = persisted.credentials[1]!.ciphertext;
+    persisted.credentials[1]!.ciphertext = firstCiphertext;
     await writeFile(store.filePath, JSON.stringify(persisted), "utf8");
 
     await expect(store.resolveModelCredential(MODEL_BINDING)).rejects.toMatchObject({
@@ -199,8 +190,7 @@ describe("CredentialStore", () => {
     const { store, safeStorage } = await createStore();
     const secondBinding: ModelCredentialBinding = {
       ...MODEL_BINDING,
-      configurationId: "secondary-openai",
-      model: "gpt-5-mini",
+      vendorId: "secondary-openai",
     };
     await store.setModelCredentials({ bindings: [MODEL_BINDING], apiKey: "old-key" });
     const before = await readFile(store.filePath, "utf8");
@@ -248,8 +238,7 @@ describe("CredentialStore", () => {
     });
     const secondBinding: ModelCredentialBinding = {
       ...MODEL_BINDING,
-      configurationId: "secondary-openai",
-      model: "gpt-5-mini",
+      vendorId: "secondary-openai",
     };
 
     const firstWrite = firstStore.setModelCredentials({
@@ -291,7 +280,7 @@ describe("CredentialStore", () => {
         webSearch: SEARCH_BINDING,
       }),
     ).resolves.toMatchObject({
-      models: [{ configurationId: "primary-openai", configured: false }],
+      models: [{ vendorId: "primary-openai", configured: false }],
       webSearchConfigured: true,
     });
 

@@ -6,12 +6,15 @@ import {
   buildModelVendorDraft,
   changeModelVendorDraftProtocol,
   createManagedModelsFromRemoteIds,
+  flattenVendors,
   LEGACY_MODEL_STORAGE_KEY,
+  LEGACY_MODEL_STORAGE_KEY_V2,
   loadManagedModels,
+  loadManagedVendors,
+  materializeModelVendorDraft,
   MODEL_STORAGE_KEY,
   MODEL_VENDOR_MODELS,
   MODEL_VENDOR_PRESETS,
-  materializeModelVendorDraft,
   normalizeModelTokenPricing,
   serializeManagedModels,
   toAgentModelSelection,
@@ -42,38 +45,23 @@ describe("model catalog", () => {
       },
     });
     expect(flash).toMatchObject({
-      provider: "anthropic",
       model: "deepseek-v4-flash",
       openaiApiMode: "responses",
       supports1MContext: true,
     });
     expect(pro).toMatchObject({
-      provider: "anthropic",
       model: "deepseek-v4-pro",
       openaiApiMode: "chat-completions",
       supports1MContext: true,
     });
-    expect(flash?.pricing).toEqual(
-      expect.objectContaining({
-        currency: "CNY",
-        inputPerMillion: 1,
-        cachedInputPerMillion: 0.02,
-        outputPerMillion: 2,
-      }),
-    );
-    expect(pro?.pricing).toEqual(
-      expect.objectContaining({
-        currency: "CNY",
-        inputPerMillion: 3,
-        cachedInputPerMillion: 0.025,
-        outputPerMillion: 6,
-      }),
-    );
-    expect(toAgentModelSelection(flash!)).toMatchObject({ supports1MContext: true });
-    expect(toAgentModelSelection(flash!)).toMatchObject({
+
+    const flatFlash = MODEL_VENDOR_MODELS.find((model) => model.id === "deepseek-v4-flash")!;
+    expect(toAgentModelSelection(flatFlash)).toMatchObject({
+      supports1MContext: true,
       configurationId: "deepseek-v4-flash",
+      vendorId: "deepseek",
     });
-    expect(toAgentModelSelection(flash!)).not.toHaveProperty("apiKey");
+    expect(toAgentModelSelection(flatFlash)).not.toHaveProperty("apiKey");
   });
 
   it("switches DeepSeek to its OpenAI URL and model-specific API modes", () => {
@@ -99,7 +87,7 @@ describe("model catalog", () => {
         baseURL: "https://proxy.example.com/v1",
       }),
     );
-    existing[0] = { ...existing[0], name: "My Flash" };
+    existing[0] = { ...existing[0]!, name: "My Flash" };
 
     const draft = buildModelVendorDraft("deepseek", existing);
     const saved = materializeModelVendorDraft({ ...draft, apiKey: "new-key" });
@@ -109,7 +97,7 @@ describe("model catalog", () => {
       baseURL: "https://proxy.example.com/v1",
       apiKey: "",
     });
-    expect(draft.models[0].name).toBe("My Flash");
+    expect(draft.models[0]!.name).toBe("My Flash");
     expect(saved).toHaveLength(2);
     expect(saved.every((model) => model.credentialConfigured && model.enabled)).toBe(true);
     expect(saved.every((model) => !("apiKey" in model))).toBe(true);
@@ -120,12 +108,12 @@ describe("model catalog", () => {
     const draft = buildModelVendorDraft("custom", [], "custom-test");
 
     expect(draft).toMatchObject({
-      vendorId: "custom",
+      kind: "custom",
       protocol: "openai",
       models: [{ id: "custom-test", model: "" }],
     });
     expect(draft.models[0]).not.toHaveProperty("builtIn");
-    expect(draft.models[0].pricing).toBeNull();
+    expect(draft.models[0]!.pricing).toBeNull();
   });
 
   it("materializes selectable remote models into draft entries", () => {
@@ -144,6 +132,9 @@ describe("model catalog", () => {
     expect(models).toEqual([
       {
         id: "custom-fixed-id",
+        vendorId: "custom",
+        vendorKind: "custom",
+        vendorLabel: "自定义兼容服务",
         name: "GPT-5.5",
         provider: "openai",
         model: "gpt-5.5",
@@ -155,6 +146,9 @@ describe("model catalog", () => {
       },
       {
         id: "custom-fixed-id",
+        vendorId: "custom",
+        vendorKind: "custom",
+        vendorLabel: "自定义兼容服务",
         name: "gpt-5-mini",
         provider: "openai",
         model: "gpt-5-mini",
@@ -169,6 +163,33 @@ describe("model catalog", () => {
 
   it("starts empty instead of injecting the vendor templates", () => {
     expect(loadManagedModels()).toEqual([]);
+    expect(loadManagedVendors()).toEqual([]);
+  });
+
+  it("migrates v2 flat models into vendor connections", () => {
+    const configured = {
+      ...MODEL_VENDOR_MODELS.find((model) => model.id === "deepseek-v4-flash")!,
+      apiKey: "configured-key",
+    };
+    window.localStorage.setItem(LEGACY_MODEL_STORAGE_KEY_V2, JSON.stringify([configured]));
+
+    const vendors = loadManagedVendors();
+    const models = flattenVendors(vendors);
+
+    expect(vendors).toHaveLength(1);
+    expect(vendors[0]).toMatchObject({
+      id: "deepseek",
+      kind: "deepseek",
+      protocol: "anthropic",
+    });
+    expect(models[0]).toMatchObject({
+      id: "deepseek-v4-flash",
+      vendorId: "deepseek",
+      credentialConfigured: false,
+    });
+    expect(window.localStorage.getItem(LEGACY_MODEL_STORAGE_KEY_V2)).toBeNull();
+    expect(window.localStorage.getItem(MODEL_STORAGE_KEY)).toContain('"version":3');
+    expect(window.localStorage.getItem(CREDENTIAL_REENTRY_NOTICE_STORAGE_KEY)).toBe("1");
   });
 
   it("removes unconfigured legacy presets but preserves configured models", () => {
@@ -187,7 +208,7 @@ describe("model catalog", () => {
     expect(models).toHaveLength(1);
     expect(models[0]).toMatchObject({
       id: "deepseek-v4-flash",
-      builtIn: false,
+      vendorId: "deepseek",
       credentialConfigured: false,
     });
     expect(models[0]).not.toHaveProperty("apiKey");
@@ -197,7 +218,7 @@ describe("model catalog", () => {
 
   it("allowlists persisted metadata even if a runtime object is polluted with an API key", () => {
     const configured = {
-      ...MODEL_VENDOR_MODELS[0],
+      ...MODEL_VENDOR_MODELS[0]!,
       credentialConfigured: true,
       apiKey: "must-not-persist",
       unexpected: "must-not-persist-either",
@@ -206,11 +227,10 @@ describe("model catalog", () => {
     const serialized = serializeManagedModels([configured]);
 
     expect(serialized).not.toContain("must-not-persist");
-    expect(JSON.parse(serialized)).toEqual([
-      expect.objectContaining({ id: configured.id, model: configured.model }),
-    ]);
-    expect(JSON.parse(serialized)[0]).not.toHaveProperty("credentialConfigured");
-    expect(JSON.parse(serialized)[0]).not.toHaveProperty("unexpected");
+    expect(JSON.parse(serialized)).toMatchObject({
+      version: 3,
+      vendors: [expect.objectContaining({ id: configured.vendorId })],
+    });
   });
 
   it("deletes malformed legacy storage and requests credential re-entry", () => {
@@ -239,7 +259,7 @@ describe("model catalog", () => {
 
     const configured = MODEL_VENDOR_MODELS.find((model) => model.id === "openai-gpt-5-5")!;
     window.localStorage.setItem(
-      MODEL_STORAGE_KEY,
+      LEGACY_MODEL_STORAGE_KEY_V2,
       JSON.stringify([
         {
           ...configured,

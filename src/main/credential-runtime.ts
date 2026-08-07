@@ -32,7 +32,7 @@ async function resolveStoredModelKey(
   credentialStore: CredentialStore,
   selection: AgentModelSelection,
 ): Promise<string | undefined> {
-  if (!selection.configurationId) return undefined;
+  if (!selection.vendorId) return undefined;
   try {
     return await credentialStore.resolveModelCredential(
       modelCredentialBindingFromSelection(selection),

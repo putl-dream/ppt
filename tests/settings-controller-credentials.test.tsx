@@ -12,9 +12,33 @@ const bootstrap: AppBootstrapSnapshot = {
   persistedUiSettings: {},
   initialColorScheme: "dark",
   initialComputedScheme: "dark",
+  vendors: [
+    {
+      id: "vendor-one",
+      kind: "custom",
+      label: "Vendor One",
+      protocol: "openai",
+      baseURL: "https://old.example.com/v1",
+      enabled: true,
+      credentialConfigured: false,
+      models: [
+        {
+          id: "model-one",
+          name: "Model One",
+          model: "model-one",
+          openaiApiMode: "responses",
+          enabled: true,
+          pricing: null,
+        },
+      ],
+    },
+  ],
   models: [
     {
       id: "model-one",
+      vendorId: "vendor-one",
+      vendorKind: "custom",
+      vendorLabel: "Vendor One",
       name: "Model One",
       provider: "openai",
       model: "model-one",
@@ -32,19 +56,19 @@ const bootstrap: AppBootstrapSnapshot = {
 
 function SettingsHarness({ notify }: { notify: (message: string) => void }) {
   const controller = useSettingsController(bootstrap, undefined, notify);
-  const model = controller.models[0];
+  const vendor = controller.vendors[0];
   return (
     <>
       <output aria-label="enabled models">
         {controller.enabledModels.map((item) => item.id).join(",")}
       </output>
-      <output aria-label="credential configured">{String(model?.credentialConfigured)}</output>
+      <output aria-label="credential configured">{String(vendor?.credentialConfigured)}</output>
       <button
         type="button"
         onClick={() => {
-          if (model)
-            void controller.saveModel({
-              ...model,
+          if (vendor)
+            void controller.saveVendor({
+              ...vendor,
               baseURL: "https://new.example.com/v1",
             });
         }}
@@ -54,7 +78,7 @@ function SettingsHarness({ notify }: { notify: (message: string) => void }) {
       <button
         type="button"
         onClick={() => {
-          if (model) void controller.saveModel(model, "new-secret");
+          if (vendor) void controller.saveVendor(vendor, "new-secret");
         }}
       >
         save key
@@ -84,8 +108,8 @@ describe("useSettingsController credentials", () => {
       value: {
         getCredentialStatus: vi.fn().mockImplementation(async (request) => ({
           storage: { state: "secure", backend: "unknown" },
-          models: request.models.map((binding: { configurationId: string; baseURL?: string }) => ({
-            configurationId: binding.configurationId,
+          models: request.models.map((binding: { vendorId: string; baseURL?: string }) => ({
+            vendorId: binding.vendorId,
             configured: binding.baseURL === "https://old.example.com/v1",
           })),
           webSearchConfigured: false,
@@ -103,7 +127,7 @@ describe("useSettingsController credentials", () => {
 
     await waitFor(() =>
       expect(deleteModelCredential).toHaveBeenCalledWith({
-        configurationId: "model-one",
+        vendorId: "vendor-one",
       }),
     );
     await waitFor(() =>
@@ -115,7 +139,7 @@ describe("useSettingsController credentials", () => {
   it("ignores a stale status response after a credential write succeeds", async () => {
     let resolveStatus!: (value: {
       storage: { state: "secure"; backend: "unknown" };
-      models: Array<{ configurationId: string; configured: boolean }>;
+      models: Array<{ vendorId: string; configured: boolean }>;
       webSearchConfigured: boolean;
     }) => void;
     const status = new Promise<Parameters<typeof resolveStatus>[0]>((resolve) => {
@@ -140,7 +164,7 @@ describe("useSettingsController credentials", () => {
     await act(async () => {
       resolveStatus({
         storage: { state: "secure", backend: "unknown" },
-        models: [{ configurationId: "model-one", configured: false }],
+        models: [{ vendorId: "vendor-one", configured: false }],
         webSearchConfigured: false,
       });
       await status;
@@ -172,7 +196,7 @@ describe("useSettingsController credentials", () => {
       .fn()
       .mockResolvedValueOnce({
         storage: { state: "secure", backend: "unknown" },
-        models: [{ configurationId: "model-one", configured: true }],
+        models: [{ vendorId: "vendor-one", configured: true }],
         webSearchConfigured: false,
       })
       .mockRejectedValueOnce(new Error("refresh failed"));

@@ -4,113 +4,170 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ModelManagement } from "../src/renderer/src/components/ModelManagement";
+import type { ModelVendorConnection } from "../src/renderer/src/modelCatalog";
+import { flattenVendors } from "../src/renderer/src/modelCatalog";
+
+function deepseekVendor(): ModelVendorConnection {
+  return {
+    id: "deepseek",
+    kind: "deepseek",
+    label: "DeepSeek",
+    protocol: "anthropic",
+    baseURL: "https://api.deepseek.com/anthropic",
+    enabled: true,
+    credentialConfigured: true,
+    models: [
+      {
+        id: "deepseek-v4-flash",
+        name: "DeepSeek V4 Flash",
+        model: "deepseek-v4-flash",
+        openaiApiMode: "responses",
+        supports1MContext: true,
+        enabled: true,
+        pricing: {
+          currency: "CNY",
+          inputPerMillion: 1,
+          cachedInputPerMillion: 0.02,
+          outputPerMillion: 2,
+          updatedAt: "2026-07-31",
+        },
+      },
+      {
+        id: "deepseek-v4-pro",
+        name: "DeepSeek V4 Pro",
+        model: "deepseek-v4-pro",
+        openaiApiMode: "chat-completions",
+        supports1MContext: true,
+        enabled: true,
+        pricing: {
+          currency: "CNY",
+          inputPerMillion: 3,
+          cachedInputPerMillion: 0.025,
+          outputPerMillion: 6,
+          updatedAt: "2026-07-31",
+        },
+      },
+    ],
+  };
+}
 
 describe("ModelManagement vendor onboarding", () => {
   afterEach(cleanup);
 
-  it("submits every DeepSeek binding and one API key as a single batch", async () => {
-    const onSaveModel = vi.fn();
-    const onSaveModels = vi.fn().mockResolvedValue(true);
+  it("saves a DeepSeek vendor with one API key", async () => {
+    const onSaveVendor = vi.fn().mockResolvedValue(true);
     const onSelectModel = vi.fn();
     const triggerToast = vi.fn();
     render(
       <ModelManagement
+        vendors={[]}
         models={[]}
         selectedModelId=""
         onSelectModel={onSelectModel}
-        onSaveModel={onSaveModel}
-        onSaveModels={onSaveModels}
+        onSaveVendor={onSaveVendor}
+        onDeleteVendor={vi.fn().mockResolvedValue(true)}
         onDeleteModel={vi.fn().mockResolvedValue(true)}
+        onSetVendorEnabled={vi.fn().mockResolvedValue(true)}
+        onSetModelEnabled={vi.fn().mockResolvedValue(true)}
         triggerToast={triggerToast}
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "添加厂商模型" }));
-    const dialog = screen.getByRole("dialog", { name: "添加厂商模型" });
-    fireEvent.click(within(dialog).getByRole("combobox", { name: "模型厂商" }));
-    expect(screen.getAllByRole("option")).toHaveLength(4);
-    expect(screen.getByRole("option", { name: /OpenAI/ })).toBeTruthy();
-    expect(screen.getByRole("option", { name: /Anthropic/ })).toBeTruthy();
-    expect(screen.getByRole("option", { name: /自定义兼容服务/ })).toBeTruthy();
-    fireEvent.click(screen.getByRole("option", { name: /DeepSeek/ }));
+    fireEvent.click(screen.getByRole("button", { name: "添加厂商" }));
+    fireEvent.click(screen.getByRole("button", { name: /DeepSeek/ }));
+    const dialog = screen.getByRole("dialog", { name: "添加厂商" });
     fireEvent.change(within(dialog).getByLabelText("API Key"), {
       target: { value: "deepseek-secret" },
     });
-    fireEvent.click(within(dialog).getByRole("button", { name: "添加模型" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "保存" }));
 
-    await waitFor(() => expect(onSaveModels).toHaveBeenCalledTimes(1));
-    const [savedModels, apiKey] = onSaveModels.mock.calls[0];
+    await waitFor(() => expect(onSaveVendor).toHaveBeenCalledTimes(1));
+    const [savedVendor, apiKey] = onSaveVendor.mock.calls[0]!;
     expect(apiKey).toBe("deepseek-secret");
-    expect(savedModels).toEqual(
+    expect(savedVendor).toMatchObject({
+      id: "deepseek",
+      kind: "deepseek",
+      protocol: "anthropic",
+      baseURL: "https://api.deepseek.com/anthropic",
+    });
+    expect(savedVendor.models).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({
-          id: "deepseek-v4-flash",
-          provider: "anthropic",
-          baseURL: "https://api.deepseek.com/anthropic",
-          credentialConfigured: true,
-          supports1MContext: true,
-          pricing: expect.objectContaining({
-            currency: "CNY",
-            inputPerMillion: 1,
-            cachedInputPerMillion: 0.02,
-            outputPerMillion: 2,
-          }),
-        }),
-        expect.objectContaining({
-          id: "deepseek-v4-pro",
-          provider: "anthropic",
-          baseURL: "https://api.deepseek.com/anthropic",
-          credentialConfigured: true,
-          supports1MContext: true,
-          pricing: expect.objectContaining({
-            currency: "CNY",
-            inputPerMillion: 3,
-            cachedInputPerMillion: 0.025,
-            outputPerMillion: 6,
-          }),
-        }),
+        expect.objectContaining({ id: "deepseek-v4-flash" }),
+        expect.objectContaining({ id: "deepseek-v4-pro" }),
       ]),
     );
-    expect(savedModels.every((model: Record<string, unknown>) => !("apiKey" in model))).toBe(true);
-    expect(onSaveModel).not.toHaveBeenCalled();
     expect(onSelectModel).toHaveBeenCalledWith("deepseek-v4-flash");
-    expect(triggerToast).toHaveBeenCalledWith("DeepSeek 模型已配置");
+    expect(triggerToast).toHaveBeenCalledWith("DeepSeek 已保存");
   });
 
-  it("edits pricing and rejects an empty required price", () => {
-    const onSaveModel = vi.fn().mockResolvedValue(true);
-    const triggerToast = vi.fn();
+  it("keeps save visible after expanding advanced settings", () => {
+    const vendor = deepseekVendor();
     render(
       <ModelManagement
-        models={[
-          {
-            id: "custom-priced",
-            name: "Priced Model",
-            provider: "openai",
-            model: "priced-model",
-            baseURL: "https://example.com/v1",
-            openaiApiMode: "responses",
-            enabled: true,
-            pricing: {
-              currency: "USD",
-              inputPerMillion: 5,
-              cachedInputPerMillion: 0.5,
-              outputPerMillion: 30,
-              updatedAt: "2026-08-01",
-            },
+        vendors={[vendor]}
+        models={flattenVendors([vendor])}
+        selectedModelId="deepseek-v4-flash"
+        onSelectModel={vi.fn()}
+        onSaveVendor={vi.fn().mockResolvedValue(true)}
+        onDeleteVendor={vi.fn().mockResolvedValue(true)}
+        onDeleteModel={vi.fn().mockResolvedValue(true)}
+        onSetVendorEnabled={vi.fn().mockResolvedValue(true)}
+        onSetModelEnabled={vi.fn().mockResolvedValue(true)}
+        triggerToast={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "编辑厂商 DeepSeek" }));
+    const dialog = screen.getByRole("dialog", { name: "编辑厂商" });
+    fireEvent.click(within(dialog).getByRole("button", { name: /高级设置/ }));
+    expect(within(dialog).getByRole("button", { name: "保存" })).toBeTruthy();
+  });
+
+  it("edits pricing and rejects an empty required price", async () => {
+    const onSaveVendor = vi.fn().mockResolvedValue(true);
+    const triggerToast = vi.fn();
+    const vendor: ModelVendorConnection = {
+      id: "custom-1",
+      kind: "custom",
+      label: "Custom",
+      protocol: "openai",
+      baseURL: "https://example.com/v1",
+      enabled: true,
+      credentialConfigured: true,
+      models: [
+        {
+          id: "custom-priced",
+          name: "Priced Model",
+          model: "priced-model",
+          openaiApiMode: "responses",
+          enabled: true,
+          pricing: {
+            currency: "USD",
+            inputPerMillion: 5,
+            cachedInputPerMillion: 0.5,
+            outputPerMillion: 30,
+            updatedAt: "2026-08-01",
           },
-        ]}
+        },
+      ],
+    };
+    render(
+      <ModelManagement
+        vendors={[vendor]}
+        models={flattenVendors([vendor])}
         selectedModelId="custom-priced"
         onSelectModel={vi.fn()}
-        onSaveModel={onSaveModel}
-        onSaveModels={vi.fn().mockResolvedValue(true)}
+        onSaveVendor={onSaveVendor}
+        onDeleteVendor={vi.fn().mockResolvedValue(true)}
         onDeleteModel={vi.fn().mockResolvedValue(true)}
+        onSetVendorEnabled={vi.fn().mockResolvedValue(true)}
+        onSetModelEnabled={vi.fn().mockResolvedValue(true)}
         triggerToast={triggerToast}
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "编辑模型 Priced Model" }));
-    const dialog = screen.getByRole("dialog", { name: "编辑模型" });
+    fireEvent.click(screen.getByRole("button", { name: "编辑厂商 Custom" }));
+    const dialog = screen.getByRole("dialog", { name: "编辑厂商" });
     const inputPrice = within(dialog).getByRole("spinbutton", {
       name: "Priced Model 普通输入单价",
     });
@@ -118,46 +175,57 @@ describe("ModelManagement vendor onboarding", () => {
     fireEvent.change(inputPrice, { target: { value: "" } });
     fireEvent.click(within(dialog).getByRole("button", { name: "保存" }));
 
-    expect(onSaveModel).not.toHaveBeenCalled();
+    expect(onSaveVendor).not.toHaveBeenCalled();
     expect(triggerToast).toHaveBeenCalledWith("请填写有效的非负模型单价");
   });
 
-  it("keeps an edited API key separate from persisted model metadata", async () => {
-    const onSaveModel = vi.fn().mockResolvedValue(true);
+  it("keeps an edited API key separate from persisted vendor metadata", async () => {
+    const onSaveVendor = vi.fn().mockResolvedValue(true);
+    const vendor: ModelVendorConnection = {
+      id: "custom-secure",
+      kind: "custom",
+      label: "Secure",
+      protocol: "openai",
+      baseURL: "https://example.com/v1",
+      enabled: true,
+      credentialConfigured: true,
+      models: [
+        {
+          id: "custom-secure-model",
+          name: "Secure Model",
+          model: "secure-model",
+          openaiApiMode: "responses",
+          enabled: true,
+          pricing: null,
+        },
+      ],
+    };
     render(
       <ModelManagement
-        models={[
-          {
-            id: "custom-secure",
-            name: "Secure Model",
-            provider: "openai",
-            model: "secure-model",
-            baseURL: "https://example.com/v1",
-            openaiApiMode: "responses",
-            enabled: true,
-            credentialConfigured: true,
-          },
-        ]}
-        selectedModelId="custom-secure"
+        vendors={[vendor]}
+        models={flattenVendors([vendor])}
+        selectedModelId="custom-secure-model"
         onSelectModel={vi.fn()}
-        onSaveModel={onSaveModel}
-        onSaveModels={vi.fn().mockResolvedValue(true)}
+        onSaveVendor={onSaveVendor}
+        onDeleteVendor={vi.fn().mockResolvedValue(true)}
         onDeleteModel={vi.fn().mockResolvedValue(true)}
+        onSetVendorEnabled={vi.fn().mockResolvedValue(true)}
+        onSetModelEnabled={vi.fn().mockResolvedValue(true)}
         triggerToast={vi.fn()}
       />,
     );
 
     expect(screen.getByText(/凭据已配置/)).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "编辑模型 Secure Model" }));
-    const dialog = screen.getByRole("dialog", { name: "编辑模型" });
+    fireEvent.click(screen.getByRole("button", { name: "编辑厂商 Secure" }));
+    const dialog = screen.getByRole("dialog", { name: "编辑厂商" });
     const keyInput = within(dialog).getByLabelText("API Key");
     expect((keyInput as HTMLInputElement).value).toBe("");
     fireEvent.change(keyInput, { target: { value: "replacement-secret" } });
     fireEvent.click(within(dialog).getByRole("button", { name: "保存" }));
 
-    await waitFor(() => expect(onSaveModel).toHaveBeenCalledTimes(1));
-    const [savedModel, apiKey] = onSaveModel.mock.calls[0];
+    await waitFor(() => expect(onSaveVendor).toHaveBeenCalledTimes(1));
+    const [savedVendor, apiKey] = onSaveVendor.mock.calls[0]!;
     expect(apiKey).toBe("replacement-secret");
-    expect(savedModel).not.toHaveProperty("apiKey");
+    expect(savedVendor).not.toHaveProperty("apiKey");
   });
 });

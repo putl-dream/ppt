@@ -11,6 +11,9 @@ import type { TokenUsageModel } from "../src/shared/token-usage";
 function model(id: string, currency: "CNY" | "USD", inputPerMillion: number): ManagedModel {
   return {
     id,
+    vendorId: `vendor-${id}`,
+    vendorKind: "custom",
+    vendorLabel: id,
     name: id,
     provider: "openai",
     model: "shared-model",

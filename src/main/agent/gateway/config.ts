@@ -180,6 +180,7 @@ export function resolveFallbackModelSelection(
     }
     return {
       ...(configured.configurationId ? { configurationId: configured.configurationId } : {}),
+      ...(configured.vendorId ? { vendorId: configured.vendorId } : {}),
       provider: configured.provider,
       model: configured.model,
       ...(configured.supports1MContext ? { supports1MContext: true } : {}),
@@ -235,6 +236,9 @@ export function resolveAgentModelConfig(
   return {
     ...((selection?.configurationId ?? runtime?.configurationId)
       ? { configurationId: selection?.configurationId ?? runtime?.configurationId }
+      : {}),
+    ...((selection?.vendorId ?? runtime?.vendorId)
+      ? { vendorId: selection?.vendorId ?? runtime?.vendorId }
       : {}),
     provider,
     model,

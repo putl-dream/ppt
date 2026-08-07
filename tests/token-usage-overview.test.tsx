@@ -9,6 +9,9 @@ import type { ManagedModel } from "../src/renderer/src/modelCatalog";
 const models: ManagedModel[] = [
   {
     id: "cny-model",
+    vendorId: "cny-vendor",
+    vendorKind: "custom",
+    vendorLabel: "CNY",
     name: "CNY Model",
     provider: "openai",
     model: "same-model",
@@ -24,6 +27,9 @@ const models: ManagedModel[] = [
   },
   {
     id: "usd-model",
+    vendorId: "usd-vendor",
+    vendorKind: "custom",
+    vendorLabel: "USD",
     name: "USD Model",
     provider: "openai",
     model: "same-model",
