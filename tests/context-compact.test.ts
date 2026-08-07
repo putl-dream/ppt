@@ -424,7 +424,7 @@ describe("prepareContext", () => {
       tokenThreshold: 1_000,
     });
 
-    expect((summaryInput?.messages as unknown[]).length).toBe(messages.length);
+    expect((summaryInput?.messages as unknown[] | undefined)?.length).toBe(messages.length);
     expect(result.payload.transcript).toEqual([]);
     expect(result.messages?.length).toBeLessThan(messages.length);
     expect(JSON.stringify(result.messages?.[0])).toContain("Native history summary.");
@@ -477,7 +477,7 @@ describe("prepareContext", () => {
       },
     };
 
-    const transcript = Array.from({ length: 60 }, (_, index) => ({
+    const transcript = Array.from({ length: 60 }, (_, _index) => ({
       role: "tool",
       toolName: "Read",
       result: "x".repeat(8_000),

@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
 
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AppBootstrapSnapshot } from "../src/renderer/src/app/appBootstrap";
 import { useSettingsController } from "../src/renderer/src/app/useSettingsController";

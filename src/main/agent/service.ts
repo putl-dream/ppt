@@ -785,7 +785,7 @@ export class AgentService {
     }
     return this.presentationLifecycle.withTransaction(() => {
       const state = this.presentationLifecycle!.getState(asPresentationId(before.id));
-      if (!state || !state.currentRequest.queryId) {
+      if (!state?.currentRequest.queryId) {
         throw new Error(
           "Presentation proposal tools require BeginPptCapability in the current Query.",
         );
@@ -831,7 +831,7 @@ export class AgentService {
         validation: passedLifecycleValidation("presentation-command-schema", committedAt),
         completedAt: committedAt,
       });
-      const quality = this.presentationLifecycle!.commitArtifact({
+      const _quality = this.presentationLifecycle!.commitArtifact({
         jobId: state.jobId,
         artifactId: `quality:${state.currentRequest.requestId}`,
         kind: "quality_report",
@@ -917,7 +917,7 @@ export class AgentService {
     if (!this.presentationLifecycle || !candidateAttempt) return;
     const { stageRunId } = candidateAttempt;
     const attempt = this.presentationLifecycle.repository.getStageAttempt(stageRunId);
-    if (!attempt || attempt.status !== "running") return;
+    if (attempt?.status !== "running") return;
     const completedAt = new Date().toISOString();
     this.presentationLifecycle.finishStageAttempt({
       stageRunId,

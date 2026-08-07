@@ -11,10 +11,10 @@ import {
   LEGACY_MODEL_STORAGE_KEY_V2,
   loadManagedModels,
   loadManagedVendors,
-  materializeModelVendorDraft,
   MODEL_STORAGE_KEY,
   MODEL_VENDOR_MODELS,
   MODEL_VENDOR_PRESETS,
+  materializeModelVendorDraft,
   normalizeModelTokenPricing,
   serializeManagedModels,
   toAgentModelSelection,
@@ -118,10 +118,7 @@ describe("model catalog", () => {
 
   it("materializes selectable remote models into draft entries", () => {
     const models = createManagedModelsFromRemoteIds(
-      [
-        { id: "gpt-5.5", displayName: "GPT-5.5" },
-        { id: "gpt-5-mini" },
-      ],
+      [{ id: "gpt-5.5", displayName: "GPT-5.5" }, { id: "gpt-5-mini" }],
       {
         protocol: "openai",
         baseURL: "https://api.openai.com/v1/",

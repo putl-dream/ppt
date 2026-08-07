@@ -1,9 +1,9 @@
 import Anthropic from "@anthropic-ai/sdk";
 import {
   type ListRemoteModelsResult,
+  listRemoteModelsRequestSchema,
   type ParsedListRemoteModelsRequest,
   type RemoteModelInfo,
-  listRemoteModelsRequestSchema,
 } from "@shared/remote-models";
 import OpenAI from "openai";
 import type { CredentialStore } from "../../credential-store";
@@ -129,10 +129,7 @@ async function resolveListApiKey(
   } catch (error) {
     if (error instanceof ListRemoteModelsError) throw error;
     if (error instanceof CredentialStoreError && error.code === "STORAGE_UNAVAILABLE") {
-      throw new ListRemoteModelsError(
-        "Credential storage is unavailable.",
-        "missing-credential",
-      );
+      throw new ListRemoteModelsError("Credential storage is unavailable.", "missing-credential");
     }
     throw error;
   }

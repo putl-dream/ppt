@@ -28,7 +28,7 @@ export class DurableConversationHistoryStore implements ConversationHistoryStore
       return this.storage.loadAgentConversationHistory<AgentModelMessage[]>(threadId);
     }
     const record = await readJsonFile<ConversationHistoryRecord>(this.pathFor(threadId));
-    if (!record || record.version !== 1 || record.threadId !== threadId) return undefined;
+    if (record?.version !== 1 || record.threadId !== threadId) return undefined;
     return structuredClone(record.messages);
   }
 

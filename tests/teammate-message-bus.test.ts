@@ -589,9 +589,10 @@ describe("TeammateManager", () => {
 
     try {
       await waitFor(async () => (fetchImpl.mock.calls.length > 0 ? true : undefined));
-      expect((fetchImpl.mock.calls[0]?.[1]?.headers as Record<string, string>).Authorization).toBe(
-        "Bearer tvly-from-settings",
-      );
+      expect(
+        (fetchImpl.mock.calls[0]?.[1]?.headers as Record<string, string> | undefined)
+          ?.Authorization,
+      ).toBe("Bearer tvly-from-settings");
     } finally {
       await stopTeammate(manager, "image_researcher");
       vi.unstubAllGlobals();
@@ -939,8 +940,8 @@ describe("TeammateManager", () => {
   it("lets two idle teammates atomically split independent board tasks", async () => {
     const workspaceRoot = await mkdtemp(join(tmpdir(), "ppt-auto-claim-parallel-"));
     const store = new TaskStore(workspaceRoot);
-    const first = await createBoardTask(store, "Task A");
-    const second = await createBoardTask(store, "Task B");
+    const _first = await createBoardTask(store, "Task A");
+    const _second = await createBoardTask(store, "Task B");
 
     const bus = new MessageBus(MessageBus.defaultMailboxDir(workspaceRoot));
     const manager = new TeammateManager(bus);

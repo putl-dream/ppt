@@ -15,6 +15,8 @@ interface AgentRunTimelineProps {
   items: AgentActivityItem[];
   content: string;
   live?: boolean;
+  /** Persisted run wall duration; shown once on the last completed tool batch. */
+  durationMs?: number;
   teamGraphTasks?: AgentTaskNode[];
 }
 
@@ -22,6 +24,7 @@ export const AgentRunTimeline: React.FC<AgentRunTimelineProps> = ({
   items,
   content,
   live = false,
+  durationMs,
   teamGraphTasks = [],
 }) => {
   if (items.length === 0) {
@@ -33,6 +36,13 @@ export const AgentRunTimeline: React.FC<AgentRunTimelineProps> = ({
   }
 
   const segments = buildAgentRunTimelineSegments(items);
+  let lastToolBatchIndex = -1;
+  for (let index = segments.length - 1; index >= 0; index -= 1) {
+    if (segments[index]!.kind === "tool_batch") {
+      lastToolBatchIndex = index;
+      break;
+    }
+  }
 
   return (
     <div className="agent-run-timeline">
@@ -112,6 +122,8 @@ export const AgentRunTimeline: React.FC<AgentRunTimelineProps> = ({
           runLive: live,
           hasLaterResponse,
         });
+        const showPersistedDuration =
+          !live && !batchActive && segmentIndex === lastToolBatchIndex ? durationMs : undefined;
 
         return (
           <div
@@ -123,6 +135,7 @@ export const AgentRunTimeline: React.FC<AgentRunTimelineProps> = ({
               items={segment.items}
               live={batchActive}
               shouldAutoCollapse={autoCollapse}
+              durationMs={showPersistedDuration}
             />
           </div>
         );

@@ -45,7 +45,7 @@ function buildPersistedMarker(relativePath: string, toolName: string, preview: s
 
 async function persistToolResult(
   workspaceRoot: string,
-  entry: TranscriptEntry,
+  _entry: TranscriptEntry,
   fullText: string,
 ): Promise<{ relativePath: string; preview: string }> {
   const id = randomUUID();

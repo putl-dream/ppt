@@ -106,7 +106,7 @@ describe("project-store zustand store", () => {
 
   it("hydrates project artifacts correctly from backend", async () => {
     mockDesktopApi.listProjectFiles.mockResolvedValue(ALL_ARTIFACT_FILES);
-    mockDesktopApi.readProjectArtifact.mockImplementation(async (sessionId, path) => {
+    mockDesktopApi.readProjectArtifact.mockImplementation(async (_sessionId, path) => {
       if (path === "brief.md") {
         return { type: "file", content: "# Custom Brief Content" };
       }

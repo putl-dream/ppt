@@ -64,7 +64,9 @@ describe("web search", () => {
     expect(fetchMock).toHaveBeenCalledOnce();
     const [url, request] = fetchMock.mock.calls[0]!;
     expect(url).toBe("https://api.tavily.com/search");
-    expect((request?.headers as Record<string, string>).Authorization).toBe("Bearer tvly-secret");
+    expect((request?.headers as Record<string, string> | undefined)?.Authorization).toBe(
+      "Bearer tvly-secret",
+    );
     expect(JSON.parse(String(request?.body))).toMatchObject({
       query: "agent architecture",
       search_depth: "advanced",
@@ -171,9 +173,9 @@ describe("web search", () => {
     });
 
     expect(fetchImpl.mock.calls[0]?.[0]).toBe("https://api.tavily.com/search");
-    expect((fetchImpl.mock.calls[0]?.[1]?.headers as Record<string, string>).Authorization).toBe(
-      "Bearer environment-key",
-    );
+    expect(
+      (fetchImpl.mock.calls[0]?.[1]?.headers as Record<string, string> | undefined)?.Authorization,
+    ).toBe("Bearer environment-key");
   });
 
   it("uses an environment key only at its normalized explicit endpoint", async () => {
@@ -200,9 +202,9 @@ describe("web search", () => {
 
     expect(fetchImpl).toHaveBeenCalledOnce();
     expect(fetchImpl.mock.calls[0]?.[0]).toBe("https://bound.example.test/search/");
-    expect((fetchImpl.mock.calls[0]?.[1]?.headers as Record<string, string>).Authorization).toBe(
-      "Bearer environment-key",
-    );
+    expect(
+      (fetchImpl.mock.calls[0]?.[1]?.headers as Record<string, string> | undefined)?.Authorization,
+    ).toBe("Bearer environment-key");
   });
 
   it("rejects simultaneous allow and block domain lists", () => {

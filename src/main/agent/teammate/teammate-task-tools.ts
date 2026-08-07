@@ -1,4 +1,3 @@
-import type { AgentTaskNode } from "@shared/agent-task-list";
 import { z } from "zod";
 import type { ToolPermissionProfile } from "../runtime/tools/tool-access-policy";
 import type { SubAgentToolDefinition } from "../subagent/workspace-tools";

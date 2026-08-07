@@ -199,6 +199,16 @@ function unfinishedToolStateForRunStatus(
   return status === "interrupted" ? "denied" : "failed";
 }
 
+/** Stamp wall duration when the run ends and startedAt is known but duration is not. */
+function stampRunDurationIfNeeded(
+  message: SessionChatMessage,
+  endedAtMs: number = Date.now(),
+): void {
+  if (message.runDurationMs !== undefined) return;
+  if (message.runStartedAt === undefined) return;
+  message.runDurationMs = Math.max(0, endedAtMs - message.runStartedAt);
+}
+
 function activityInRemainingTrace(
   needle: AgentActivityItem,
   needleContent: string,
@@ -281,6 +291,7 @@ export class FileSessionStore {
         }
         message.runStatus = "interrupted";
         message.runError = undefined;
+        stampRunDurationIfNeeded(message);
         message.activityTrace = message.activityTrace
           ? markTraceComplete(message.activityTrace, "denied")
           : undefined;
@@ -330,7 +341,7 @@ export class FileSessionStore {
           item.event.kind === "review.command-proposal" &&
           item.event.payload.proposalId === proposalId,
       );
-    if (!card || card.event.kind !== "review.command-proposal") return undefined;
+    if (card?.event.kind !== "review.command-proposal") return undefined;
     return { threadId: card.event.payload.threadId };
   }
 
@@ -595,6 +606,8 @@ export class FileSessionStore {
         ),
         runStatus: authoritativeStatus,
         runError: authoritative.runError,
+        runStartedAt: authoritative.runStartedAt ?? message.runStartedAt,
+        runDurationMs: authoritative.runDurationMs ?? message.runDurationMs,
         threadId: authoritative.threadId,
       };
     });
@@ -674,6 +687,7 @@ export class FileSessionStore {
     message.runError = failed
       ? formatPublicErrorMessage(result.error, "处理请求时遇到问题，请稍后重试。")
       : undefined;
+    stampRunDurationIfNeeded(message);
     sessionChatMessageSchema.parse(structuredClone(message));
 
     const now = new Date().toISOString();
@@ -1147,10 +1161,6 @@ export class FileSessionStore {
       postCommitWarnings.push("workspace-metadata-sync-failed");
     }
     return postCommitWarnings.length > 0 ? { ...result, postCommitWarnings } : result;
-  }
-
-  private createInitialData(): SessionFile {
-    return { version: 1, activeSessionId: "", sessions: [] };
   }
 
   private findActiveSession(data: SessionFile): SessionSnapshot | undefined {

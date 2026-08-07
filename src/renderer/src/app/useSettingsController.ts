@@ -24,8 +24,8 @@ import {
   isModelEnabled,
   type ManagedModel,
   type ModelVendorConnection,
-  saveManagedVendors,
   SELECTED_MODEL_STORAGE_KEY,
+  saveManagedVendors,
   vendorCredentialBinding,
 } from "../modelCatalog";
 import {
@@ -224,6 +224,9 @@ export function useSettingsController(
     }
     return [...byVendor.values()];
   }, [vendors]);
+  // Depend on a content fingerprint, not the bindings array identity: refresh clears
+  // credentialConfigured flags and recreates `vendors`, which would otherwise rebuild
+  // the array every cycle and retrigger this callback forever.
   const vendorCredentialBindingsFingerprint = JSON.stringify(vendorCredentialBindings);
   const webSearchEndpoint =
     agentGatewayPreferences.webSearchEndpoint?.trim() || DEFAULT_WEB_SEARCH_ENDPOINT;
@@ -234,10 +237,7 @@ export function useSettingsController(
     setCredentialStorageStatus(null);
     setWebSearchCredentialConfigured(false);
     setVendors((current) =>
-      applyCredentialFlags(
-        current,
-        new Map(current.map((vendor) => [vendor.id, false])),
-      ),
+      applyCredentialFlags(current, new Map(current.map((vendor) => [vendor.id, false]))),
     );
     const failClosed = (message: string) => {
       setCredentialStorageStatus({
@@ -247,10 +247,7 @@ export function useSettingsController(
       });
       setWebSearchCredentialConfigured(false);
       setVendors((current) =>
-        applyCredentialFlags(
-          current,
-          new Map(current.map((vendor) => [vendor.id, false])),
-        ),
+        applyCredentialFlags(current, new Map(current.map((vendor) => [vendor.id, false]))),
       );
       notify(message);
     };
@@ -282,7 +279,7 @@ export function useSettingsController(
       if (refreshId !== credentialRefreshIdRef.current) return;
       failClosed(`凭据状态读取失败: ${error instanceof Error ? error.message : String(error)}`);
     }
-  }, [vendorCredentialBindingsFingerprint, notify, webSearchEndpoint]);
+  }, [notify, vendorCredentialBindingsFingerprint, webSearchEndpoint]);
 
   useEffect(() => {
     void refreshCredentialStatus();
@@ -427,10 +424,7 @@ export function useSettingsController(
     setVendors((current) => {
       const without = current.filter((item) => item.id !== persistedVendor.id);
       if (persistedVendor.kind !== "custom") {
-        return [
-          ...without.filter((item) => item.kind !== persistedVendor.kind),
-          persistedVendor,
-        ];
+        return [...without.filter((item) => item.kind !== persistedVendor.kind), persistedVendor];
       }
       return [...without, persistedVendor];
     });

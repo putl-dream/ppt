@@ -24,8 +24,8 @@ export const OutlineCard: React.FC<OutlineCardProps> = ({ items, busy, onRevise 
           </div>
           {item.points.length > 0 && (
             <ul className="outline-card-points">
-              {item.points.slice(0, 4).map((point, pointIndex) => (
-                <li key={pointIndex}>{point}</li>
+              {item.points.slice(0, 4).map((point) => (
+                <li key={`${item.id}:${point}`}>{point}</li>
               ))}
               {item.points.length > 4 && (
                 <li className="outline-card-more">… 还有 {item.points.length - 4} 个要点</li>

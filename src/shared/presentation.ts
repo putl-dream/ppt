@@ -1,9 +1,5 @@
 import { z } from "zod";
-import {
-  DEFAULT_DESIGN_SYSTEM,
-  designSystemV2Schema,
-  slideDesignOverrideSchema,
-} from "../design-system";
+import { designSystemV2Schema, slideDesignOverrideSchema } from "../design-system";
 import { SVG_PAGE_HEIGHT, SVG_PAGE_WIDTH } from "./svg-page";
 
 export const hexColorSchema = z

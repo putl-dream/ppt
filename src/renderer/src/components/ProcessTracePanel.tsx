@@ -16,6 +16,8 @@ interface ProcessTracePanelProps {
   /** When true and not user-pinned, force collapsed (Cursor: tools done + text follows). */
   shouldAutoCollapse?: boolean;
   startedAt?: number;
+  /** Persisted wall duration for historical / remounted completed panels. */
+  durationMs?: number;
   /** When true, pin open (e.g. team detail). Disables auto open/close. */
   defaultOpen?: boolean;
   defaultExpandRows?: boolean;
@@ -26,11 +28,16 @@ function resolveAutoOpen(input: { live: boolean; shouldAutoCollapse: boolean }):
   return input.live;
 }
 
+function secondsFromDurationMs(durationMs: number): number {
+  return Math.max(1, Math.round(durationMs / 1_000));
+}
+
 export const ProcessTracePanel: React.FC<ProcessTracePanelProps> = ({
   items,
   live = false,
   shouldAutoCollapse = false,
   startedAt,
+  durationMs,
   defaultOpen = false,
   defaultExpandRows = false,
 }) => {
@@ -40,7 +47,9 @@ export const ProcessTracePanel: React.FC<ProcessTracePanelProps> = ({
     if (defaultOpen) return true;
     return resolveAutoOpen({ live, shouldAutoCollapse });
   });
-  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [elapsedSeconds, setElapsedSeconds] = useState(() =>
+    !live && durationMs !== undefined ? secondsFromDurationMs(durationMs) : 0,
+  );
   const startedAtRef = useRef<number | null>(live ? (startedAt ?? Date.now()) : null);
   const headerRef = useRef<HTMLButtonElement>(null);
   const pendingFoldRef = useRef<FoldToken | null>(null);
@@ -54,16 +63,22 @@ export const ProcessTracePanel: React.FC<ProcessTracePanelProps> = ({
     pendingFoldRef.current = chatScroll.beginFold(headerRef.current);
     setOpen(nextOpen);
   };
+  const setOpenWithScrollRef = useRef(setOpenWithScroll);
+  setOpenWithScrollRef.current = setOpenWithScroll;
 
   useLayoutEffect(() => {
     const pending = pendingFoldRef.current;
     if (!pending) return;
     pendingFoldRef.current = null;
     chatScroll.commitFold(pending);
-  }, [chatScroll, open]);
+  }, [chatScroll]);
 
   useEffect(() => {
     if (!live) {
+      if (durationMs !== undefined) {
+        setElapsedSeconds(secondsFromDurationMs(durationMs));
+        return;
+      }
       if (startedAtRef.current !== null) {
         setElapsedSeconds(Math.max(1, Math.round((Date.now() - startedAtRef.current) / 1_000)));
       }
@@ -82,7 +97,7 @@ export const ProcessTracePanel: React.FC<ProcessTracePanelProps> = ({
     updateElapsed();
     const timer = window.setInterval(updateElapsed, 1_000);
     return () => window.clearInterval(timer);
-  }, [live, startedAt]);
+  }, [live, startedAt, durationMs]);
 
   useEffect(() => {
     if (live && startedAt !== undefined) {
@@ -92,7 +107,7 @@ export const ProcessTracePanel: React.FC<ProcessTracePanelProps> = ({
     }
 
     if (userPinnedRef.current !== null) return;
-    setOpenWithScroll(resolveAutoOpen({ live, shouldAutoCollapse }));
+    setOpenWithScrollRef.current(resolveAutoOpen({ live, shouldAutoCollapse }));
   }, [live, shouldAutoCollapse, startedAt]);
 
   const rows = useMemo(() => buildProcessTraceRows(items, live), [items, live]);

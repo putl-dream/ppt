@@ -83,7 +83,12 @@ export class PreparedAgentRun {
     for (const tool of input.context.registry.getCoreTools(input.context)) {
       if (!exposedToolNames.has(tool.name)) continue;
       for (const capability of tool.behavior?.capabilities ?? []) {
-        (capabilityToolNames[capability] ??= []).push(tool.name);
+        const names = capabilityToolNames[capability];
+        if (names) {
+          names.push(tool.name);
+        } else {
+          capabilityToolNames[capability] = [tool.name];
+        }
       }
     }
     this.params = new AgentQueryAssembler().assemble({

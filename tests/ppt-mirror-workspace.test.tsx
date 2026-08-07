@@ -5,7 +5,7 @@ import {
   ingestDisplayEvent,
 } from "@shared/cards/display-card-managers";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
-import React, { useState } from "react";
+import { useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DEFAULT_DESIGN_SYSTEM } from "../src/design-system";
 import { ArtifactCardHost } from "../src/renderer/src/cards/hosts/ArtifactCardHost";

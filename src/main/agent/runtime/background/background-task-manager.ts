@@ -97,7 +97,7 @@ export class BackgroundTaskManager {
         if (launched) return;
         launched = true;
         const task = this.tasks.get(bgId);
-        if (!task || task.status !== "scheduled") return;
+        if (task?.status !== "scheduled") return;
         task.status = "running";
         task.startedAt = Date.now();
         void this.onStateChange?.();

@@ -7,7 +7,7 @@ export const SLIDE_HEIGHT = 720;
 export const THUMBNAIL_WIDTH = 640;
 export const THUMBNAIL_HEIGHT = 360;
 
-export type DeckHtmlRenderOptions = {};
+export type DeckHtmlRenderOptions = Record<string, never>;
 
 function escapeHtml(text: string): string {
   return text

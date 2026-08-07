@@ -356,7 +356,7 @@ async function prepareDiagnosticCommand(
     return prepareRipgrep(tokens.slice(1));
   }
   throw unsafeCommand(
-    `Executable is not allowlisted: ${tokens[0]}. ` + "Use dedicated file tools for mutations.",
+    `Executable is not allowlisted: ${tokens[0]}. Use dedicated file tools for mutations.`,
   );
 }
 

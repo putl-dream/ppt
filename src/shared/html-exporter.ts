@@ -1,9 +1,5 @@
 import type { Presentation } from "@shared/presentation";
-import {
-  type DeckHtmlRenderOptions,
-  exportDeckContactSheetHtml,
-  exportDeckHtml,
-} from "./slide-html-render";
+import { type DeckHtmlRenderOptions, exportDeckHtml } from "./slide-html-render";
 
 export {
   exportDeckContactSheetHtml,

@@ -829,10 +829,7 @@ export function validateSvgPage(markup: string): SvgPageValidationResult {
       });
     }
     const xlinkNamespace = attributeByName(root.attributes, "xmlns:xlink");
-    if (
-      usesXlinkPrefix &&
-      (!xlinkNamespace || xlinkNamespace.value !== "http://www.w3.org/1999/xlink")
-    ) {
+    if (usesXlinkPrefix && xlinkNamespace?.value !== "http://www.w3.org/1999/xlink") {
       addIssue(issues, {
         code: "invalid-namespace",
         message:

@@ -13,7 +13,6 @@ import {
   repairPresentationIdentities,
 } from "@shared/presentation-repair";
 import {
-  type SessionChatMessage,
   type SessionSnapshot,
   sessionChatMessageSchema,
   sessionSnapshotSchema,

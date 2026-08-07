@@ -149,19 +149,26 @@ function tryLiftText(openAttrs: string, inner: string): LiftedText | null {
 function findTextElements(markup: string): TextCandidate[] {
   const results: TextCandidate[] = [];
   const openRe = /<text\b([^>]*)>/gi;
-  let openMatch: RegExpExecArray | null;
-  while ((openMatch = openRe.exec(markup)) !== null) {
+  let openMatch = openRe.exec(markup);
+  while (openMatch !== null) {
     const start = openMatch.index;
     const openAttrs = openMatch[1] ?? "";
     const afterOpen = start + openMatch[0].length;
-    if (/\/>\s*$/.test(openMatch[0])) continue;
+    if (/\/>\s*$/.test(openMatch[0])) {
+      openMatch = openRe.exec(markup);
+      continue;
+    }
 
     const closeIndex = findMatchingClose(markup, afterOpen, "text");
-    if (closeIndex < 0) continue;
+    if (closeIndex < 0) {
+      openMatch = openRe.exec(markup);
+      continue;
+    }
     const end = closeIndex + "</text>".length;
     const inner = markup.slice(afterOpen, closeIndex);
     results.push({ start, end, openAttrs, inner });
     openRe.lastIndex = end;
+    openMatch = openRe.exec(markup);
   }
   return results;
 }
@@ -193,17 +200,22 @@ function collectSkipRanges(markup: string): Array<{ start: number; end: number }
   const ranges: Array<{ start: number; end: number }> = [];
   for (const tag of SKIP_REGION_TAGS) {
     const openRe = new RegExp(`<${tag}\\b[^>]*>`, "gi");
-    let match: RegExpExecArray | null;
-    while ((match = openRe.exec(markup)) !== null) {
+    let match = openRe.exec(markup);
+    while (match !== null) {
       if (/\/>\s*$/.test(match[0])) {
         ranges.push({ start: match.index, end: match.index + match[0].length });
+        match = openRe.exec(markup);
         continue;
       }
       const closeIndex = findMatchingClose(markup, match.index + match[0].length, tag);
-      if (closeIndex < 0) continue;
+      if (closeIndex < 0) {
+        match = openRe.exec(markup);
+        continue;
+      }
       const end = closeIndex + `</${tag}>`.length;
       ranges.push({ start: match.index, end });
       openRe.lastIndex = end;
+      match = openRe.exec(markup);
     }
   }
   return ranges;
@@ -229,13 +241,14 @@ function extractTextContent(inner: string): { content: string; lineAdvancePx?: n
   // Prefer tspan-aware extraction so dy-separated lines become newlines.
   const tspanRe = /<tspan\b([^>]*)>([\s\S]*?)<\/tspan>/gi;
   const tspans: Array<{ attrs: string; body: string; index: number }> = [];
-  let match: RegExpExecArray | null;
-  while ((match = tspanRe.exec(inner)) !== null) {
+  let match = tspanRe.exec(inner);
+  while (match !== null) {
     tspans.push({
       attrs: match[1] ?? "",
       body: match[2] ?? "",
       index: match.index,
     });
+    match = tspanRe.exec(inner);
   }
 
   if (tspans.length > 0) {
@@ -296,9 +309,10 @@ function decodeXmlEntities(value: string): string {
 function parseXmlAttributes(raw: string): Map<string, string> {
   const attrs = new Map<string, string>();
   const re = /([^\s=/>]+)\s*=\s*(?:"([^"]*)"|'([^']*)')/g;
-  let match: RegExpExecArray | null;
-  while ((match = re.exec(raw)) !== null) {
+  let match = re.exec(raw);
+  while (match !== null) {
     attrs.set(match[1].toLowerCase(), match[2] ?? match[3] ?? "");
+    match = re.exec(raw);
   }
   return attrs;
 }

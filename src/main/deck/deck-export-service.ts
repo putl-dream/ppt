@@ -61,7 +61,7 @@ export class DeckExportService {
 
       if (filePath.endsWith(".html")) {
         const portablePresentation = await inlineHtmlImageAssets(presentation);
-        const html = exportToHtml(portablePresentation, options);
+        const html = exportToHtml(portablePresentation);
         await writeFile(filePath, html, "utf8");
         return {
           filePath,

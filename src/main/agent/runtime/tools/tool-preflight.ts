@@ -63,8 +63,7 @@ export class ToolPreflight {
     if (toolCall.parseError) return undefined;
     const requestedTool = this.registry.get(toolCall.name);
     if (
-      !requestedTool ||
-      requestedTool.category !== "core" ||
+      requestedTool?.category !== "core" ||
       requestedTool.loadPolicy !== "core" ||
       requestedTool.behavior?.completion
     ) {
@@ -142,11 +141,7 @@ export class ToolPreflight {
     }
 
     const requestedTool = this.registry.get(toolCall.name);
-    if (
-      !requestedTool ||
-      requestedTool.category !== "core" ||
-      requestedTool.loadPolicy !== "core"
-    ) {
+    if (requestedTool?.category !== "core" || requestedTool.loadPolicy !== "core") {
       return immediate(
         toolCall,
         "unavailable",

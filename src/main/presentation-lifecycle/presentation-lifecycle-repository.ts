@@ -39,13 +39,6 @@ interface ArtifactRow {
   revision_json: string;
 }
 
-interface DependencyRow {
-  artifact_revision_id: string;
-  dependency_artifact_id: string;
-  dependency_revision_id: string;
-  dependency_content_hash: string;
-}
-
 export type JobCasResult =
   | { type: "updated"; state: PptJobState }
   | { type: "already_applied"; state: PptJobState }

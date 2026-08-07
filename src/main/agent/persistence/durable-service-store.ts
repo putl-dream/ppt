@@ -39,11 +39,11 @@ export class DurableServiceStore {
   async load(threadId: string): Promise<DurableServiceThread | undefined> {
     if (typeof this.storage !== "string") {
       const state = this.storage.loadServiceThread<DurableServiceThread>(threadId);
-      if (!state || state.version !== 1 || state.threadId !== threadId) return undefined;
+      if (state?.version !== 1 || state.threadId !== threadId) return undefined;
       return state;
     }
     const state = await readJsonFile<DurableServiceThread>(this.pathFor(threadId));
-    if (!state || state.version !== 1 || state.threadId !== threadId) return undefined;
+    if (state?.version !== 1 || state.threadId !== threadId) return undefined;
     return state;
   }
 

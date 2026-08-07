@@ -44,7 +44,7 @@ async function expectUsefulStream(
   expect(chunks.filter((chunk) => chunk.type === "complete")).toHaveLength(1);
   const finalChunk = chunks.at(-1);
   expect(finalChunk?.type).toBe("complete");
-  if (!finalChunk || finalChunk.type !== "complete") {
+  if (finalChunk?.type !== "complete") {
     throw new Error(`${provider} stream did not end with a complete chunk.`);
   }
 

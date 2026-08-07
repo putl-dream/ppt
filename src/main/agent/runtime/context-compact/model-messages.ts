@@ -46,7 +46,7 @@ function groupPairedMessages(source: AgentModelMessage[]): MessageGroup[] {
 }
 
 function flattenGroups(groups: MessageGroup[]): AgentModelMessage[] {
-  return groups.flatMap((group) => group);
+  return groups.flat();
 }
 
 function compactBoundary(text: string): AgentModelMessage {

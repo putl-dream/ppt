@@ -8,12 +8,12 @@ import {
   createCatalogEntriesFromRemoteIds,
   getModelVendorPreset,
   type ManagedModel,
-  materializeVendorDraft,
+  MODEL_VENDOR_PRESETS,
   type ModelCatalogEntry,
   type ModelTokenPricing,
   type ModelVendorConnection,
   type ModelVendorDraft,
-  MODEL_VENDOR_PRESETS,
+  materializeVendorDraft,
   type PresetVendorKind,
   toAgentModelSelection,
   type VendorKind,
@@ -123,7 +123,9 @@ export function ModelManagement({
   const filteredVendors = useMemo(() => {
     if (!normalizedQuery) return vendors;
     return vendors.filter((vendor) => {
-      if (`${vendor.label} ${vendor.kind} ${vendor.baseURL}`.toLowerCase().includes(normalizedQuery))
+      if (
+        `${vendor.label} ${vendor.kind} ${vendor.baseURL}`.toLowerCase().includes(normalizedQuery)
+      )
         return true;
       return vendor.models.some((model) =>
         `${model.name} ${model.model}`.toLowerCase().includes(normalizedQuery),
@@ -150,6 +152,8 @@ export function ModelManagement({
     setRemoteQuery("");
     setRemotePending(false);
   };
+  const closeDialogRef = useRef(closeDialog);
+  closeDialogRef.current = closeDialog;
 
   useEffect(() => {
     if (!dialogVisible) {
@@ -168,7 +172,7 @@ export function ModelManagement({
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         event.preventDefault();
-        closeDialog();
+        closeDialogRef.current();
         return;
       }
       if (event.key !== "Tab" || focusables.length === 0) return;
@@ -200,8 +204,7 @@ export function ModelManagement({
       openEditVendor(existingPreset);
       return;
     }
-    const next =
-      kind === "custom" ? buildCustomVendorDraft() : buildVendorDraftFromPreset(kind);
+    const next = kind === "custom" ? buildCustomVendorDraft() : buildVendorDraftFromPreset(kind);
     setDraft(next);
     setDialogApiKey("");
     setAdvancedOpen(kind === "custom");
@@ -322,9 +325,7 @@ export function ModelManagement({
       if (!key || seen.has(key)) continue;
       seen.add(key);
       const existing = byApiId.get(key);
-      nextModels.push(
-        existing ?? createCatalogEntriesFromRemoteIds([remote], draft.protocol)[0]!,
-      );
+      nextModels.push(existing ?? createCatalogEntriesFromRemoteIds([remote], draft.protocol)[0]!);
     }
     updateDraft({ models: nextModels });
   };
@@ -413,7 +414,8 @@ export function ModelManagement({
               updateDraftModel(model.id, {
                 pricing: {
                   ...pricing,
-                  inputPerMillion: event.target.value === "" ? Number.NaN : Number(event.target.value),
+                  inputPerMillion:
+                    event.target.value === "" ? Number.NaN : Number(event.target.value),
                 },
               })
             }
@@ -615,15 +617,19 @@ export function ModelManagement({
                       <Select
                         aria-label="协议"
                         value={draft.protocol}
-                        options={(getModelVendorPreset(draft.kind)?.supportedProviders ?? [
-                          "openai",
-                          "anthropic",
-                        ]).map((provider) => ({
+                        options={(
+                          getModelVendorPreset(draft.kind)?.supportedProviders ?? [
+                            "openai",
+                            "anthropic",
+                          ]
+                        ).map((provider) => ({
                           value: provider,
                           label: protocolLabel(provider),
                         }))}
                         onChange={(value) =>
-                          setDraft(changeModelVendorDraftProtocol(draft, value as "openai" | "anthropic"))
+                          setDraft(
+                            changeModelVendorDraftProtocol(draft, value as "openai" | "anthropic"),
+                          )
                         }
                       />
                     </label>

@@ -296,7 +296,9 @@ export function ModelRuntimeSettingsPanel({
     <SettingsPanel>
       <SettingsSection title="请求与回退" hint={`${availableModels.length} 个模型可用`}>
         <SettingsRow label="最长等待时间">
-          <span className="settings-field-value">{Math.round(preferences.timeoutMs / 1000)} 秒</span>
+          <span className="settings-field-value">
+            {Math.round(preferences.timeoutMs / 1000)} 秒
+          </span>
           <input
             className="settings-range"
             type="range"

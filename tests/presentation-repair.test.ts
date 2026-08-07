@@ -185,7 +185,7 @@ describe("migratePresentationToSvgOnly", () => {
 });
 
 describe("migrateDisplayCardsToSvgOnly", () => {
-  const svgSlide = () => ({
+  const _svgSlide = () => ({
     id: "slide-svg",
     title: "SVG slide",
     visualSource: createSvgVisualSource({ title: "SVG slide" }),

@@ -110,6 +110,37 @@ describe("agent run presentation", () => {
     expect(surface.querySelector('[data-run-block-id="tool-1"]')).toBeNull();
   });
 
+  it("shows persisted 已工作 duration on the last completed tool batch", () => {
+    Object.defineProperty(window, "matchMedia", {
+      configurable: true,
+      value: () => ({
+        matches: true,
+        addEventListener: () => undefined,
+        removeEventListener: () => undefined,
+      }),
+    });
+
+    const items: AgentActivityItem[] = [
+      {
+        id: "tool-1",
+        kind: "tool",
+        toolCallId: "call-1",
+        toolName: "ReadPresentationSnapshot",
+        status: "completed",
+      },
+      {
+        id: "response-1",
+        kind: "response",
+        start: 0,
+        end: 4,
+      },
+    ];
+
+    render(<AgentRunTimeline items={items} content="完成了。" live={false} durationMs={12_400} />);
+
+    expect(screen.getByText("已工作 12 秒")).not.toBeNull();
+  });
+
   it("uses the active tool as the primary loading message", () => {
     const trace: AgentActivityItem[] = [
       {

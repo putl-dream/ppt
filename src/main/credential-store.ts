@@ -5,7 +5,6 @@ import { dirname, join } from "node:path";
 import { z } from "zod";
 import {
   CREDENTIAL_STORE_FILE_NAME,
-  LEGACY_CREDENTIAL_STORE_FILE_NAME,
   type CredentialStatusRequest,
   type CredentialStatusSnapshot,
   type CredentialStorageBackend,
@@ -14,6 +13,7 @@ import {
   credentialStatusRequestSchema,
   type DeleteModelCredentialRequest,
   deleteModelCredentialRequestSchema,
+  LEGACY_CREDENTIAL_STORE_FILE_NAME,
   type ModelCredentialBinding,
   modelCredentialBindingSchema,
   normalizeModelCredentialBinding,
@@ -642,19 +642,29 @@ export class CredentialStore {
         { cause: error },
       );
     }
+
+    let result: T;
     try {
-      return await operation();
-    } finally {
+      result = await operation();
+    } catch (operationError) {
       try {
         await release();
-      } catch (error) {
-        throw new CredentialStoreError(
-          "PERSISTENCE_FAILED",
-          "The credential store transaction lock could not be released.",
-          { cause: error },
-        );
+      } catch {
+        // Prefer the original operation error over a release failure.
       }
+      throw operationError;
     }
+
+    try {
+      await release();
+    } catch (error) {
+      throw new CredentialStoreError(
+        "PERSISTENCE_FAILED",
+        "The credential store transaction lock could not be released.",
+        { cause: error },
+      );
+    }
+    return result;
   }
 }
 
@@ -684,9 +694,7 @@ function isConsistentState(state: PersistedCredentialFile): boolean {
     references.add(entry.ref);
     const binding = normalizePersistedBinding(entry.binding);
     const expectedRef =
-      "vendorId" in binding
-        ? modelCredentialRef(binding.vendorId)
-        : WEB_SEARCH_CREDENTIAL_REF;
+      "vendorId" in binding ? modelCredentialRef(binding.vendorId) : WEB_SEARCH_CREDENTIAL_REF;
     return entry.ref === expectedRef && entry.fingerprint === credentialFingerprint(binding);
   });
 }

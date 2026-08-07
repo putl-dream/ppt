@@ -347,7 +347,7 @@ function write(level: AppLogLevel, event: string, data: AgentLogData = {}): void
     const fileStream = getLogFileStream();
     if (fileStream) {
       const fileJson = JSON.stringify(entry);
-      fileStream.write(fileJson + "\n");
+      fileStream.write(`${fileJson}\n`);
     }
   } catch (error) {
     try {

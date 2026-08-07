@@ -46,6 +46,8 @@ export const PatchReviewCard: React.FC<PatchReviewCardProps> = ({
       <div className={`patch-diff-column patch-diff-column-${variant}`}>
         <h5 className="patch-diff-label">{variant === "before" ? "变更前" : "变更后"}</h5>
         {(previewLimit ? lines.slice(0, previewLimit) : lines).map((line, index) => (
+          // Diff lines are positional; identical blank/repeated lines have no stable id.
+          // biome-ignore lint/suspicious/noArrayIndexKey: ordered line preview
           <div key={index} className={`patch-diff-line patch-diff-line-${variant}`}>
             {variant === "before" ? "- " : "+ "}
             {line || " "}

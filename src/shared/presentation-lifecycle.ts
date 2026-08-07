@@ -6,7 +6,7 @@ type LifecycleIdentity<Name extends string> = string & {
   readonly [presentationLifecycleIdentityBrand]: Name;
 };
 
-function identitySchema<Name extends string>(name: Name) {
+function identitySchema<Name extends string>(_name: Name) {
   return z
     .string()
     .trim()

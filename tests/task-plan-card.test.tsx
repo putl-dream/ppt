@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
 
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { TaskPlanCard } from "../src/renderer/src/components/TaskPlanCard";
 import type { AgentTaskNode } from "../src/shared/agent-task-list";

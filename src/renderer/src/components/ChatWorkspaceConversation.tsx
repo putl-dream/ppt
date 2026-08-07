@@ -191,9 +191,9 @@ export function ChatWorkspaceConversation({
 
   useLayoutEffect(() => {
     chatScroll.stickToBottomIfFollowing();
-  }, [chatScroll, run.activityTrace, run.busy, run.phase, session.messages]);
+  }, [chatScroll]);
 
-  useLayoutEffect(() => chatScroll.bind(), [chatScroll, run.busy]);
+  useLayoutEffect(() => chatScroll.bind(), [chatScroll]);
 
   return (
     <section className="canvas-column chat-workspace-column view-enter">

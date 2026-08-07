@@ -399,7 +399,7 @@ async function inspectPackage(
   const { warnings } = assertSafeZipEntries(zip);
 
   const contentTypes = await zip.file("[Content_Types].xml")?.async("string");
-  if (!contentTypes || !contentTypes.includes("presentationml")) {
+  if (!contentTypes?.includes("presentationml")) {
     throw new Error("File is not a valid OOXML presentation package.");
   }
 

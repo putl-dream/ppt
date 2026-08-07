@@ -62,7 +62,7 @@ export const TaskPlanCard: React.FC<TaskPlanCardProps> = ({
     if (!pending) return;
     pendingFoldRef.current = null;
     chatScroll.commitFold(pending);
-  }, [chatScroll, expanded]);
+  }, [chatScroll]);
 
   const toggleExpanded = () => {
     pendingFoldRef.current = chatScroll.beginFold(headerRef.current);

@@ -576,7 +576,7 @@ function pairPendingToolResults(
 function completedConversationHistory(
   checkpoint: DurableRunCheckpoint | undefined,
 ): AgentModelMessage[] | undefined {
-  if (!checkpoint || checkpoint.status !== "completed") return undefined;
+  if (checkpoint?.status !== "completed") return undefined;
   if (checkpoint.version === 2) {
     return checkpoint.terminalHistory ? structuredClone(checkpoint.terminalHistory) : undefined;
   }
@@ -645,11 +645,11 @@ function legacyIterationWorkspace(
   state: AgentQueryState,
   toolUseContext: AgentQueryState["toolUseContext"],
 ): AgentIterationWorkspace | undefined {
-  if (!checkpoint || checkpoint.version !== 1 || checkpoint.queryLifecycle) return undefined;
+  if (checkpoint?.version !== 1 || checkpoint.queryLifecycle) return undefined;
   const assistantIndex = findLegacyInflightAssistantIndex(checkpoint);
   if (assistantIndex < 0) return undefined;
   const assistant = checkpoint.modelMessages[assistantIndex];
-  if (!assistant || assistant.role !== "assistant") return undefined;
+  if (assistant?.role !== "assistant") return undefined;
   const toolUseBlocks = assistant.content.filter((block) => block.type === "tool_use");
   return {
     messagesForQuery: structuredClone(state.messages),

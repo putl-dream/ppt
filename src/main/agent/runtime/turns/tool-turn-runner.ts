@@ -554,7 +554,7 @@ export class ToolTurnRunner {
     state: AgentQueryState,
   ): Promise<AgentLoopTurnOutcome> {
     const { scope, params } = run;
-    const { session, backgroundTasks, taskStore } = scope;
+    const { session, backgroundTasks } = scope;
     const deps = params.deps;
     const rethrowIfCancelled = (error: unknown): void => {
       rethrowIfRuntimeCancellation(error, scope.signal, deps.externalSignal);

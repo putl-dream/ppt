@@ -674,8 +674,7 @@ async function findOrphanedBackups(
   filePath: string,
   transactionDirectory: string,
 ): Promise<string[]> {
-  const prefix =
-    `${basename(filePath)}.${replacementTargetKey(filePath)}` + REPLACEMENT_BACKUP_MARKER;
+  const prefix = `${basename(filePath)}.${replacementTargetKey(filePath)}${REPLACEMENT_BACKUP_MARKER}`;
   try {
     return (await readdir(transactionDirectory)).filter((entry) => entry.startsWith(prefix)).sort();
   } catch (error) {
@@ -779,8 +778,7 @@ function sameIdentity(expected: AtomicFileIdentity, actual: AtomicFileIdentity):
 function isReplacementManifest(value: unknown, targetPath: string): value is ReplacementManifest {
   if (!value || typeof value !== "object") return false;
   const candidate = value as Partial<ReplacementManifest>;
-  const expectedPrefix =
-    `${basename(targetPath)}.${replacementTargetKey(targetPath)}` + REPLACEMENT_BACKUP_MARKER;
+  const expectedPrefix = `${basename(targetPath)}.${replacementTargetKey(targetPath)}${REPLACEMENT_BACKUP_MARKER}`;
   return (
     candidate.version === 1 &&
     candidate.targetPath === targetPath &&

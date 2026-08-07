@@ -223,10 +223,10 @@ export const LogManagementPanel: React.FC<LogManagementPanelProps> = ({ notify }
           {entries.length === 0 ? (
             <div className="log-empty-state">最近日志中没有捕获到警告或错误</div>
           ) : (
-            entries.map((entry, index) => (
+            entries.map((entry) => (
               <div
                 className={`log-entry log-entry--${entry.level}`}
-                key={`${entry.timestamp}-${entry.event}-${index}`}
+                key={`${entry.timestamp}-${entry.event}-${formatEntryDetail(entry) ?? ""}`}
               >
                 <div className="log-entry-topline">
                   <span className="log-entry-level">{entry.level}</span>

@@ -991,12 +991,7 @@
 /* --------------------------------------------------------------------------
    12. 浮层、菜单、Toast 和弹窗
    -------------------------------------------------------------------------- */
-:is(
-  .custom-context-menu,
-  .slash-menu-popup,
-  .floating-toast-alert,
-  .model-dialog
-) {
+:is(.custom-context-menu, .slash-menu-popup, .floating-toast-alert, .model-dialog) {
   overflow: hidden;
   border-color: var(--border-strong);
   border-radius: var(--panel-border-radius);

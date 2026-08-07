@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
 
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { TokenUsageOverview } from "../src/renderer/src/components/TokenUsageOverview";
 import type { ManagedModel } from "../src/renderer/src/modelCatalog";

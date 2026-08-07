@@ -233,7 +233,7 @@ export const PPTMirror: React.FC<PPTMirrorProps> = ({
     if (isFullscreen && slides[fullscreenIndex]) {
       onSelectSlide(slides[fullscreenIndex].id);
     }
-  }, [fullscreenIndex, isFullscreen]);
+  }, [fullscreenIndex, isFullscreen, slides, onSelectSlide]);
 
   const handleFullscreenOpen = () => {
     const idx = slides.findIndex((s) => s.id === selectedSlideId);

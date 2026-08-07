@@ -243,6 +243,7 @@ function AssistantMessageContent({
         items={trace}
         content={message.content}
         live={useLiveTrace}
+        durationMs={useLiveTrace ? undefined : message.runDurationMs}
         teamGraphTasks={activeTasks}
       />
     );

@@ -8,7 +8,6 @@ import type {
   AgentModelStreamChunk,
   PreparedAgentModelRequest,
   ResolvedAgentModelConfig,
-  StopReason,
 } from "./types";
 
 function protocolError(message: string, config: ResolvedAgentModelConfig): AgentGatewayError {

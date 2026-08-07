@@ -7,7 +7,7 @@ import {
   useReviewCardManager,
 } from "@shared/cards/display-card-managers";
 import { cleanup, render } from "@testing-library/react";
-import React, { act, useRef, useState } from "react";
+import { act, useRef, useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AgentActivityStreamController } from "../src/renderer/src/app/agent/useAgentActivityStream";
 import {

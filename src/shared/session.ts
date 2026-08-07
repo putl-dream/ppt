@@ -28,7 +28,7 @@ export const projectSandboxSchema = z.object({
   artifacts: z.array(projectArtifactSchema),
 });
 
-const persistedOutlineSchema = z.object({
+const _persistedOutlineSchema = z.object({
   threadId: z.string(),
   message: z.string(),
   outline: z
@@ -59,6 +59,10 @@ export const sessionChatMessageSchema = z
     runId: z.string().optional(),
     runStatus: z.enum(["running", "waiting", "completed", "interrupted", "failed"]).optional(),
     runError: z.string().optional(),
+    /** Epoch ms when the assistant run started (renderer wall clock). */
+    runStartedAt: z.number().int().optional(),
+    /** Wall duration of the run; stamped on finalize / interrupt recovery. */
+    runDurationMs: z.number().int().nonnegative().optional(),
     threadId: z.string().optional(),
   })
   .strict()

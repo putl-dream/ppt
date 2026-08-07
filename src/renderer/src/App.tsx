@@ -174,8 +174,7 @@ export function App() {
       .reverse()
       .find((card) => card.status === "active" && card.event.kind === "notification.message");
     if (
-      !latest ||
-      latest.event.kind !== "notification.message" ||
+      latest?.event.kind !== "notification.message" ||
       latest.event.eventId === lastNotificationEventIdRef.current
     )
       return;

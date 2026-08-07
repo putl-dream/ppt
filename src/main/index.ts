@@ -57,10 +57,7 @@ import { toResultDisplayEvents, toStreamDisplayEvent } from "./agent/display/dis
 import { CommitGate } from "./agent/gate/commit-gate";
 import { RiskPolicy } from "./agent/gate/risk-policy";
 import { AgentGateway } from "./agent/gateway";
-import {
-  ListRemoteModelsError,
-  listRemoteModels,
-} from "./agent/gateway/list-remote-models";
+import { ListRemoteModelsError, listRemoteModels } from "./agent/gateway/list-remote-models";
 import {
   clearLogFiles,
   createModuleLogger,
@@ -426,7 +423,7 @@ app.whenReady().then(async () => {
   const ensureRuntime = async (snapshot: SessionSnapshot): Promise<SessionRuntime> => {
     const existing = runtimes.get(snapshot.session.id);
     if (existing && existing.workspaceRoot === snapshot.project?.rootPath) return existing;
-    const runtimeRoot = join(applicationDataRoot, "runtime", snapshot.session.id);
+    const _runtimeRoot = join(applicationDataRoot, "runtime", snapshot.session.id);
     const runtime = createSessionRuntime(snapshot, skillRegistry, applicationDataRoot);
     await runtime.teammateManager?.reconcileInterrupted();
     runtimes.set(snapshot.session.id, runtime);

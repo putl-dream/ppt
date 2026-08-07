@@ -152,6 +152,7 @@ export function useAgentRunController({
         content: "",
         runId,
         runStatus: "running",
+        runStartedAt: Date.now(),
       };
       const preparedMessages = prepareAgentRunMessages({
         sourceMessages,
@@ -276,6 +277,7 @@ export function useAgentRunController({
       setRequest,
       streamMessageIdsRef,
       waitForRunStreamCompletion,
+      executionStrategy,
     ],
   );
 

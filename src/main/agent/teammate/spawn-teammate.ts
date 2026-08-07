@@ -12,7 +12,6 @@ import {
 import { z } from "zod";
 import type {
   AgentModelContentBlock,
-  AgentModelGateway,
   AgentModelMessage,
   AgentModelToolResultBlock,
   AgentModelToolUseBlock,

@@ -4,7 +4,6 @@ import type { SkillRegistry } from "../../skills/loadSkillsDir";
 import type { SkillCard } from "../../skills/skill-types";
 import type { ToolDefinition } from "../../tools/tool-definition";
 import { buildSystemPromptContext, buildSystemPromptContextSync } from "./prompt-context";
-import type { PromptStage } from "./prompt-stage";
 import { type AssembledSystemPrompt, getSystemPrompt } from "./system-prompt-assembler";
 
 export type { SystemPromptContext, SystemPromptContextInput } from "./prompt-context";

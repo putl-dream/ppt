@@ -195,7 +195,7 @@ export function migrateDisplayCardsToSvgOnly(
   for (const card of value) {
     if (!isRecord(card)) continue;
     const event = isRecord(card.event) ? card.event : undefined;
-    if (!event || event.kind !== "review.command-proposal") continue;
+    if (event?.kind !== "review.command-proposal") continue;
     const payload = isRecord(event.payload) ? event.payload : undefined;
     if (!payload) continue;
 

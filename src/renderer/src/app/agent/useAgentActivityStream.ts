@@ -8,7 +8,6 @@ import {
   applyTeammateProgressEvent,
   commitResponseAttempt,
   finishTool,
-  mergeActivityTraces,
   removeResponseAttempt,
   resolveToolApprovalItem,
   sealAllReasoning,

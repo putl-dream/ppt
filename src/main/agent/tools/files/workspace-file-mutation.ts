@@ -8,7 +8,7 @@ import {
   WorkspaceFileError,
   type WorkspacePathGuard,
 } from "./workspace-file-types";
-import { assertContained, assertSafeDirectory, samePath } from "./workspace-path-guard";
+import { assertContained, samePath } from "./workspace-path-guard";
 
 const FILE_MUTATION_LOCKS = new Map<string, Promise<void>>();
 

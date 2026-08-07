@@ -516,7 +516,11 @@ function inferVendorKind(
 function normalizeCatalogEntry(value: unknown): ModelCatalogEntry | undefined {
   if (!value || typeof value !== "object") return undefined;
   const item = value as Partial<ModelCatalogEntry>;
-  if (typeof item.id !== "string" || typeof item.name !== "string" || typeof item.model !== "string")
+  if (
+    typeof item.id !== "string" ||
+    typeof item.name !== "string" ||
+    typeof item.model !== "string"
+  )
     return undefined;
   const storedPricing = normalizeModelTokenPricing(item.pricing);
   return {

@@ -180,7 +180,7 @@ export class PresentationLifecycleOrchestrator {
         artifact.artifactId === `presentation:${state.params.presentationId}`,
     );
     const artifact = pointer ? this.repository.getArtifactRevision(pointer.revisionId) : undefined;
-    if (!artifact || artifact.kind !== "presentation_revision") {
+    if (artifact?.kind !== "presentation_revision") {
       throw new Error("The current PresentationRevision artifact is missing.");
     }
     const value = presentationRevisionArtifactValueSchema.parse(artifact.value);
@@ -281,9 +281,9 @@ export class PresentationLifecycleOrchestrator {
       requestedAt,
     });
 
-    let state: PptJobState;
+    let _state: PptJobState;
     if (!existingJob) {
-      state = this.repository.createOrGetJob({
+      _state = this.repository.createOrGetJob({
         jobId,
         params: {
           projectId: input.projectId,
@@ -307,7 +307,7 @@ export class PresentationLifecycleOrchestrator {
         }
       }
       this.repository.addCapabilityRequest(request);
-      state = this.requireUpdate(
+      _state = this.requireUpdate(
         {
           ...existingJob,
           currentRequest: request,
@@ -330,7 +330,7 @@ export class PresentationLifecycleOrchestrator {
         : input.capability === "restyle"
           ? "restyle_intent"
           : "intent";
-    const intent = this.commitArtifact({
+    const _intent = this.commitArtifact({
       jobId,
       artifactId: `intent:${request.requestId}`,
       kind: intentKind,
@@ -906,8 +906,7 @@ export class PresentationLifecycleOrchestrator {
         presentationPointer.revisionId,
       );
       if (
-        !presentationArtifact ||
-        presentationArtifact.kind !== "presentation_revision" ||
+        presentationArtifact?.kind !== "presentation_revision" ||
         !hasPresentationRevisionId(presentationArtifact.value, state.presentationRevisionId)
       ) {
         throw new Error(
@@ -1016,8 +1015,7 @@ export class PresentationLifecycleOrchestrator {
         presentationPointer.revisionId,
       );
       if (
-        !presentationArtifact ||
-        presentationArtifact.kind !== "presentation_revision" ||
+        presentationArtifact?.kind !== "presentation_revision" ||
         !hasPresentationRevisionId(presentationArtifact.value, input.presentationRevisionId)
       ) {
         throw new Error("Export requires the current non-stale PresentationRevision.");
@@ -1348,7 +1346,7 @@ export class PresentationLifecycleOrchestrator {
     proposal: PptProposal,
   ): ArtifactRevision<CommandProposalArtifactValue> {
     const artifact = this.repository.getArtifactRevision(proposal.artifactRevisionId);
-    if (!artifact || artifact.kind !== "command_proposal") {
+    if (artifact?.kind !== "command_proposal") {
       throw new Error(`Proposal ${proposal.proposalId} has no command_proposal artifact.`);
     }
     const value = commandProposalArtifactValueSchema.parse(artifact.value);

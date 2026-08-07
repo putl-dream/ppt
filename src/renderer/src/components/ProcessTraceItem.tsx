@@ -50,7 +50,7 @@ export const ProcessTraceItem: React.FC<ProcessTraceItemProps> = ({
     if (!pending) return;
     pendingFoldRef.current = null;
     chatScroll.commitFold(pending);
-  }, [chatScroll, expanded]);
+  }, [chatScroll]);
 
   useEffect(() => {
     if (row.kind === "thought") {
@@ -74,7 +74,7 @@ export const ProcessTraceItem: React.FC<ProcessTraceItemProps> = ({
     const body = liveBodyRef.current;
     if (!body) return;
     body.scrollTop = body.scrollHeight;
-  }, [row.content, row.streaming, effectiveExpanded]);
+  }, [row.streaming, effectiveExpanded]);
 
   const toggleExpanded = () => {
     pendingFoldRef.current = chatScroll.beginFold(titleRef.current);
@@ -156,6 +156,8 @@ export const ProcessTraceItem: React.FC<ProcessTraceItemProps> = ({
             </pre>
           )}
           {row.lines?.map((line, index) => (
+            // Process lines are positional; repeated content has no stable id.
+            // biome-ignore lint/suspicious/noArrayIndexKey: ordered process lines
             <div key={index} className="process-trace-row-line">
               {line}
             </div>

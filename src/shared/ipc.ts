@@ -16,7 +16,6 @@ import type {
   SetModelCredentialsRequest,
   SetWebSearchCredentialRequest,
 } from "./credentials";
-import type { ListRemoteModelsRequest, ListRemoteModelsResult } from "./remote-models";
 import type {
   AppLogEntry,
   AppLogLevel,
@@ -26,6 +25,7 @@ import type {
 } from "./logging";
 import type { Presentation } from "./presentation";
 import type { PptJobProjection } from "./presentation-lifecycle";
+import type { ListRemoteModelsRequest, ListRemoteModelsResult } from "./remote-models";
 import type { ProjectArtifact, SessionBootstrap, SessionChatMessage } from "./session";
 import type { TeammateProgressEvent } from "./teammate-progress";
 import type { TokenUsageStats } from "./token-usage";

@@ -72,6 +72,7 @@ describe("SQLite session store", () => {
     const { store, databasePath, directory } = await createStore();
     const created = await store.createSession({ title: "Interrupted project" });
     const sessionId = created.activeSession!.session.id;
+    const runStartedAt = Date.now() - 2_500;
     await store.saveMessages(sessionId, [
       {
         id: "a-running",
@@ -79,6 +80,7 @@ describe("SQLite session store", () => {
         content: "已生成部分内容",
         runId: "run-stale",
         runStatus: "running",
+        runStartedAt,
         activityTrace: [
           {
             id: "response-partial",
@@ -109,11 +111,14 @@ describe("SQLite session store", () => {
     stores.push(restored);
     await restored.initialize();
 
-    expect(restored.getSession(sessionId).messages[0]).toMatchObject({
+    const interrupted = restored.getSession(sessionId).messages[0]!;
+    expect(interrupted).toMatchObject({
       content: "已生成部分内容",
       runStatus: "interrupted",
+      runStartedAt,
       activityTrace: [{ kind: "response" }, { kind: "tool", status: "denied" }],
     });
+    expect(interrupted.runDurationMs).toBeGreaterThanOrEqual(2_500);
     expect(restored.conversationDatabase.listRunEvents("run-stale").at(-1)?.kind).toBe(
       "run_interrupted",
     );
@@ -886,6 +891,103 @@ describe("SQLite session store", () => {
       content: "已完成部分页面",
       runStatus: "interrupted",
       runError: undefined,
+    });
+  });
+
+  it("stamps runDurationMs from runStartedAt on finalize", async () => {
+    const { store } = await createStore();
+    const created = await store.createSession({ title: "Timed run" });
+    const sessionId = created.activeSession!.session.id;
+    const runStartedAt = Date.now() - 4_200;
+    await store.saveMessages(sessionId, [
+      { id: "u1", role: "user", content: "go" },
+      {
+        id: "a1",
+        role: "assistant",
+        content: "",
+        runId: "run-timed",
+        runStatus: "running",
+        runStartedAt,
+      },
+    ]);
+    store.conversationDatabase.beginRun({
+      runId: "run-timed",
+      sessionId,
+      request: "go",
+    });
+    store.conversationDatabase.appendRuntimeEvent("run-timed", "text_chunk", {
+      type: "text-chunk",
+      chunk: "完成",
+    });
+
+    await store.finalizeAgentRunMessage(sessionId, "run-timed", {
+      status: "chat",
+      message: "完成",
+    });
+
+    const assistant = store.getSession(sessionId).messages.at(-1)!;
+    expect(assistant.runStartedAt).toBe(runStartedAt);
+    expect(assistant.runDurationMs).toBeGreaterThanOrEqual(4_200);
+    expect(assistant.runDurationMs).toBeLessThan(60_000);
+  });
+
+  it("preserves authoritative runDurationMs when renderer saveMessages races finalize", async () => {
+    const { store } = await createStore();
+    const created = await store.createSession({ title: "Duration merge" });
+    const sessionId = created.activeSession!.session.id;
+    const runStartedAt = Date.now() - 3_000;
+    await store.saveMessages(sessionId, [
+      { id: "u1", role: "user", content: "go" },
+      {
+        id: "a1",
+        role: "assistant",
+        content: "",
+        runId: "run-merge",
+        runStatus: "running",
+        runStartedAt,
+      },
+    ]);
+    store.conversationDatabase.beginRun({
+      runId: "run-merge",
+      sessionId,
+      request: "go",
+    });
+    store.conversationDatabase.appendRuntimeEvent("run-merge", "text_chunk", {
+      type: "text-chunk",
+      chunk: "好的",
+    });
+    await store.finalizeAgentRunMessage(sessionId, "run-merge", {
+      status: "chat",
+      message: "好的",
+    });
+    const finalized = store.getSession(sessionId).messages.at(-1)!;
+    expect(finalized.runDurationMs).toBeDefined();
+
+    await store.saveMessages(sessionId, [
+      { id: "u1", role: "user", content: "go" },
+      {
+        id: "a1",
+        role: "assistant",
+        content: "好的",
+        activityTrace: [
+          {
+            id: "response-1",
+            kind: "response",
+            start: 0,
+            end: 2,
+          },
+        ],
+        runId: "run-merge",
+        runStatus: "completed",
+        runStartedAt,
+        // Renderer forgot duration after remount of local state
+      },
+    ]);
+
+    expect(store.getSession(sessionId).messages.at(-1)).toMatchObject({
+      runStartedAt,
+      runDurationMs: finalized.runDurationMs,
+      runStatus: "completed",
     });
   });
 

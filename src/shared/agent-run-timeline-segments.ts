@@ -66,7 +66,6 @@ export function buildAgentRunTimelineSegments(
 
     if (item.kind === "reasoning" || isToolBatchItem(item)) {
       pending.push(item);
-      continue;
     }
   }
 

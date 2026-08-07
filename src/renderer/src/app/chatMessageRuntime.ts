@@ -14,7 +14,18 @@ export function findActiveThreadId(
 
 export function toSessionChatMessages(messages: ChatMessage[]): SessionChatMessage[] {
   return messages.map(
-    ({ id, role, content, activityTrace, runId, runStatus, runError, threadId }) => ({
+    ({
+      id,
+      role,
+      content,
+      activityTrace,
+      runId,
+      runStatus,
+      runError,
+      runStartedAt,
+      runDurationMs,
+      threadId,
+    }) => ({
       id,
       role,
       content,
@@ -22,6 +33,8 @@ export function toSessionChatMessages(messages: ChatMessage[]): SessionChatMessa
       runId,
       runStatus,
       runError,
+      runStartedAt,
+      runDurationMs,
       threadId,
     }),
   );

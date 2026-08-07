@@ -2,7 +2,7 @@
 
 import { splitGraphemes } from "@shared/streaming-text";
 import { cleanup, render } from "@testing-library/react";
-import React, { act } from "react";
+import { act } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TypewriterMarkdown } from "../src/renderer/src/components/TypewriterMarkdown";
 

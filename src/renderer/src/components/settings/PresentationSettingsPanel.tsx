@@ -267,7 +267,10 @@ export function PresentationSettingsPanel({
                   Boolean(activePack);
                 const isAppDefault = defaultTemplateId === template.id;
                 return (
-                  <div key={`${template.id}@${template.revisionId}`} className="settings-choice-group">
+                  <div
+                    key={`${template.id}@${template.revisionId}`}
+                    className="settings-choice-group"
+                  >
                     <button
                       type="button"
                       className={cx("settings-choice", active && "is-active")}
