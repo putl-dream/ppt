@@ -184,11 +184,33 @@
   white-space: nowrap;
 }
 
+.settings-inline-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  width: 100%;
+  max-width: 420px;
+  margin-left: auto;
+}
+
+.settings-inline-actions .settings-field {
+  flex: 1 1 auto;
+  min-width: 0;
+  width: auto;
+}
+
+.settings-inline-actions .settings-primary-btn,
+.settings-inline-actions .settings-secondary-btn {
+  flex: 0 0 auto;
+}
+
 .settings-secondary-btn {
   min-height: var(--settings-control-height);
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
   padding: 0 12px;
   border: 1px solid var(--border-default);
   border-radius: var(--settings-radius);
@@ -197,6 +219,7 @@
   font-family: var(--font-body);
   font-size: var(--text-sm);
   font-weight: var(--font-weight-medium);
+  white-space: nowrap;
   cursor: pointer;
   transition: var(--transition-color);
 }
@@ -212,6 +235,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
   padding: 0 12px;
   border: 1px solid var(--accent-primary);
   border-radius: var(--settings-radius);
@@ -220,6 +244,7 @@
   font-family: var(--font-body);
   font-size: var(--text-sm);
   font-weight: var(--font-weight-medium);
+  white-space: nowrap;
   cursor: pointer;
   transition: var(--transition-color);
   box-shadow: none;

@@ -190,7 +190,7 @@ export function WebSearchSettingsPanel({
           </span>
         </SettingsRow>
         <SettingsRow label="Tavily API Key">
-          <div className="model-dialog-actions">
+          <div className="settings-inline-actions">
             <input
               className="settings-field"
               aria-label="Tavily API Key"
@@ -211,14 +211,16 @@ export function WebSearchSettingsPanel({
             >
               保存
             </button>
-            <button
-              type="button"
-              className="settings-secondary-btn"
-              disabled={controller.pending || !credentialConfigured}
-              onClick={() => void controller.clearCredential()}
-            >
-              清除
-            </button>
+            {credentialConfigured ? (
+              <button
+                type="button"
+                className="settings-secondary-btn"
+                disabled={controller.pending}
+                onClick={() => void controller.clearCredential()}
+              >
+                清除
+              </button>
+            ) : null}
           </div>
         </SettingsRow>
         <SettingsRow label="Search Endpoint">
