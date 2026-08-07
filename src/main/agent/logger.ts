@@ -36,13 +36,12 @@ const MAX_DIAGNOSTIC_OBJECT_KEYS = 50;
 const MAX_DIAGNOSTIC_STRING_LENGTH = 16_384;
 const BINARY_FIELD_PATTERN = /(?:base64|binary|blob|image_?data|png_?data|jpe?g_?data|bytes)$/i;
 
-interface DailyLogFileStream {
+interface DailyLogFileState {
   dateKey: string;
-  stream: fs.WriteStream;
 }
 
-// Lazy-initialized log file stream
-let logFileStream: DailyLogFileStream | null | undefined;
+// Tracks the active local day so retention pruning runs once per day switch.
+let logFileState: DailyLogFileState | null | undefined;
 let runtimeSettings: Partial<LogManagerSettings> = {};
 const recentEntries: AppLogEntry[] = [];
 const MAX_RECENT_ENTRIES = 300;
@@ -62,41 +61,36 @@ export function getLogDirectory(): string {
   return path.join(getApplicationDataRoot(), "logs");
 }
 
-function getLogFileStream(now = new Date()): fs.WriteStream | null {
+/**
+ * Append one JSON line to the local-day log file.
+ * Uses appendFileSync so a midnight rotation cannot lose a buffered WriteStream
+ * write (Vitest fake timers / Windows CI previously left the prior-day file empty).
+ */
+function appendDailyLogLine(line: string, now = new Date()): boolean {
   const shouldWriteToFile = runtimeSettings.fileEnabled ?? process.env.AGENT_LOG_FILE !== "false";
   if (!shouldWriteToFile) {
-    logFileStream = null;
-    return null;
+    logFileState = null;
+    return false;
   }
 
   const dateKey = localDateKey(now);
-  if (logFileStream?.dateKey === dateKey) return logFileStream.stream;
-  if (logFileStream) {
-    logFileStream.stream.end();
-    logFileStream = undefined;
-  }
-
   const logDir = getLogDirectory();
+  const logPath = path.join(logDir, `agent-${dateKey}.log`);
 
   try {
     fs.mkdirSync(logDir, { recursive: true });
-    const stream = fs.createWriteStream(path.join(logDir, `agent-${dateKey}.log`), {
-      flags: "a",
-      encoding: "utf8",
-    });
-    logFileStream = { dateKey, stream };
-    stream.on("error", (error) => {
-      console.error("[agent] Failed to write to log file:", error);
-      if (logFileStream?.stream === stream) logFileStream = undefined;
-    });
-    void pruneExpiredLogFiles(now).catch((error) => {
-      console.error("[agent] Failed to prune expired log files:", error);
-    });
-    return stream;
+    fs.appendFileSync(logPath, `${line}\n`, "utf8");
+    if (logFileState?.dateKey !== dateKey) {
+      logFileState = { dateKey };
+      void pruneExpiredLogFiles(now).catch((error) => {
+        console.error("[agent] Failed to prune expired log files:", error);
+      });
+    }
+    return true;
   } catch (error) {
-    console.error("[agent] Failed to initialize log file stream:", error);
-    logFileStream = null;
-    return null;
+    console.error("[agent] Failed to append to log file:", error);
+    logFileState = null;
+    return false;
   }
 }
 
@@ -344,11 +338,8 @@ function write(level: AppLogLevel, event: string, data: AgentLogData = {}): void
 
   // File output (with original Unicode, no escaping needed)
   try {
-    const fileStream = getLogFileStream();
-    if (fileStream) {
-      const fileJson = JSON.stringify(entry);
-      fileStream.write(`${fileJson}\n`);
-    }
+    const fileJson = JSON.stringify(entry);
+    appendDailyLogLine(fileJson);
   } catch (error) {
     try {
       console.error("[agent] Failed to append log entry:", error);
@@ -359,10 +350,7 @@ function write(level: AppLogLevel, event: string, data: AgentLogData = {}): void
 }
 
 async function closeLogFileStream(): Promise<void> {
-  const active = logFileStream;
-  logFileStream = undefined;
-  if (!active || active.stream.destroyed) return;
-  await new Promise<void>((resolve) => active.stream.end(resolve));
+  logFileState = undefined;
 }
 
 function isLogFile(name: string): boolean {
