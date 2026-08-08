@@ -1,6 +1,7 @@
-name: Package desktop app
+name: Build
 
 on:
+  pull_request:
   workflow_dispatch:
   push:
     branches:
@@ -8,24 +9,20 @@ on:
       - master
     tags:
       - "v*.*.*"
-    paths-ignore:
-      - "**.md"
-      - "docs/**"
-      - ".gitignore"
-      - "LICENSE*"
 
 concurrency:
-  group: package-${{ github.ref }}
+  group: build-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 permissions:
   contents: read
 
 jobs:
-  verify:
+  check:
     name: Typecheck & test
     runs-on: ubuntu-latest
     env:
+      # Unit tests never launch Electron; skip the binary download in CI.
       ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
 
     steps:
@@ -50,9 +47,37 @@ jobs:
       - name: Unit tests
         run: npm test
 
+  windows-test:
+    name: Unit tests (Windows)
+    runs-on: windows-latest
+    env:
+      ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm.cmd ci
+
+      - name: Unit tests
+        run: npm.cmd test
+
   package:
     name: Package ${{ matrix.name }}
-    needs: verify
+    needs:
+      - check
+      - windows-test
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      startsWith(github.ref, 'refs/tags/v') ||
+      (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'))
     runs-on: ${{ matrix.os }}
 
     strategy:
@@ -131,6 +156,10 @@ jobs:
   release:
     name: Publish GitHub Release
     needs: package
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      startsWith(github.ref, 'refs/tags/v') ||
+      (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'))
     runs-on: ubuntu-latest
 
     permissions:
