@@ -199,29 +199,6 @@ export class WorkspaceFileService {
       pathGuard.canonicalRoot,
       async (recover) => {
         const recovered = await recover(pathGuard.validate);
-        // #region agent log
-        fetch("http://127.0.0.1:7758/ingest/f715bfbd-c4b3-4d7c-91d3-b40633f1a70c", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "X-Debug-Session-Id": "41b42e",
-          },
-          body: JSON.stringify({
-            sessionId: "41b42e",
-            runId: "post-fix",
-            hypothesisId: "B",
-            location: "workspace-file-service.ts:readSnapshot",
-            message: "recovery during workspace read",
-            data: {
-              path,
-              absolutePath,
-              workspaceRoot: this.workspaceRoot,
-              recovered,
-            },
-            timestamp: Date.now(),
-          }),
-        }).catch(() => {});
-        // #endregion
         if (recovered) {
           try {
             const recoveredPath = await this.resolveContainedPath(path);

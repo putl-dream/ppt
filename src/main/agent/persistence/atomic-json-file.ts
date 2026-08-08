@@ -248,33 +248,7 @@ async function recoverInterruptedReplacementUnlocked(
   validatePath?: () => Promise<void>,
 ): Promise<boolean> {
   const manifestPath = replacementManifestPath(filePath, transactionDirectory);
-  const manifestPresent = await pathExists(manifestPath);
-  // #region agent log
-  fetch("http://127.0.0.1:7758/ingest/f715bfbd-c4b3-4d7c-91d3-b40633f1a70c", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Debug-Session-Id": "41b42e",
-    },
-    body: JSON.stringify({
-      sessionId: "41b42e",
-      runId: "post-fix",
-      hypothesisId: "B",
-      location: "atomic-json-file.ts:recoverInterruptedReplacementUnlocked",
-      message: "lookup replacement manifest",
-      data: {
-        filePath,
-        transactionDirectory,
-        manifestPath,
-        manifestPresent,
-        targetKey: replacementTargetKey(filePath),
-        canonicalPath: canonicalizeAbsolutePath(filePath),
-      },
-      timestamp: Date.now(),
-    }),
-  }).catch(() => {});
-  // #endregion
-  if (!manifestPresent) {
+  if (!(await pathExists(manifestPath))) {
     const orphans = await findOrphanedBackups(filePath, transactionDirectory);
     if (orphans.length > 0) {
       throw recoveryAmbiguity(

@@ -290,7 +290,6 @@ describe("WorkspaceFileService", () => {
       await writeFile(join(longRoot, "notes.txt"), "short-ok\n", "utf8");
 
       let shortRoot: string;
-      const startedAt = Date.now();
       try {
         const escaped = longRoot.replace(/'/g, "''");
         shortRoot = execFileSync(
@@ -302,53 +301,9 @@ describe("WorkspaceFileService", () => {
           ],
           { encoding: "utf8", timeout: 10_000 },
         ).trim();
-      } catch (error) {
-        // #region agent log
-        fetch("http://127.0.0.1:7758/ingest/f715bfbd-c4b3-4d7c-91d3-b40633f1a70c", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "X-Debug-Session-Id": "41b42e",
-          },
-          body: JSON.stringify({
-            sessionId: "41b42e",
-            runId: "pre-fix",
-            hypothesisId: "C",
-            location: "workspace-file-service.test.ts:short-path",
-            message: "short-path PowerShell probe failed",
-            data: {
-              elapsedMs: Date.now() - startedAt,
-              error: error instanceof Error ? error.message : String(error),
-            },
-            timestamp: Date.now(),
-          }),
-        }).catch(() => {});
-        // #endregion
+      } catch {
         return;
       }
-      // #region agent log
-      fetch("http://127.0.0.1:7758/ingest/f715bfbd-c4b3-4d7c-91d3-b40633f1a70c", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Debug-Session-Id": "41b42e",
-        },
-        body: JSON.stringify({
-          sessionId: "41b42e",
-          runId: "pre-fix",
-          hypothesisId: "C",
-          location: "workspace-file-service.test.ts:short-path",
-          message: "short-path PowerShell probe finished",
-          data: {
-            elapsedMs: Date.now() - startedAt,
-            longRoot,
-            shortRoot,
-            distinct: shortRoot.toLowerCase() !== longRoot.toLowerCase(),
-          },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {});
-      // #endregion
       if (!shortRoot || shortRoot.toLowerCase() === longRoot.toLowerCase()) return;
 
       const service = new WorkspaceFileService(shortRoot);
