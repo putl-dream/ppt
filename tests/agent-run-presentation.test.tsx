@@ -3,7 +3,6 @@
 import { deriveAgentRunPresentation } from "@shared/agent-run-presentation";
 import { buildProcessTraceRows } from "@shared/process-trace-rows";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import React from "react";
 import { afterEach, describe, expect, it } from "vitest";
 import { AgentRunTerminalNotice } from "../src/renderer/src/components/AgentRunTerminalNotice";
 import { AgentRunTimeline } from "../src/renderer/src/components/AgentRunTimeline";

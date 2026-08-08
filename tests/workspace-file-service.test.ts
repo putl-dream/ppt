@@ -275,45 +275,41 @@ describe("WorkspaceFileService", () => {
     });
   });
 
-  it(
-    "accepts a Windows 8.3 short-path workspace root that realpath may expand",
-    async () => {
-      if (process.platform !== "win32") return;
+  it("accepts a Windows 8.3 short-path workspace root that realpath may expand", async () => {
+    if (process.platform !== "win32") return;
 
-      const { execFileSync } = await import("node:child_process");
-      const { mkdir } = await import("node:fs/promises");
-      const longRoot = join(
-        await createWorkspace(),
-        "VeryLongDirectoryNameForEightDotThreeCollision",
-      );
-      await mkdir(longRoot);
-      await writeFile(join(longRoot, "notes.txt"), "short-ok\n", "utf8");
+    const { execFileSync } = await import("node:child_process");
+    const { mkdir } = await import("node:fs/promises");
+    const longRoot = join(
+      await createWorkspace(),
+      "VeryLongDirectoryNameForEightDotThreeCollision",
+    );
+    await mkdir(longRoot);
+    await writeFile(join(longRoot, "notes.txt"), "short-ok\n", "utf8");
 
-      let shortRoot: string;
-      try {
-        const escaped = longRoot.replace(/'/g, "''");
-        shortRoot = execFileSync(
-          "powershell",
-          [
-            "-NoProfile",
-            "-Command",
-            `$fso = New-Object -ComObject Scripting.FileSystemObject; Write-Output $fso.GetFolder('${escaped}').ShortPath`,
-          ],
-          { encoding: "utf8", timeout: 10_000 },
-        ).trim();
-      } catch {
-        return;
-      }
-      if (!shortRoot || shortRoot.toLowerCase() === longRoot.toLowerCase()) return;
+    let shortRoot: string;
+    try {
+      const escaped = longRoot.replace(/'/g, "''");
+      shortRoot = execFileSync(
+        "powershell",
+        [
+          "-NoProfile",
+          "-Command",
+          `$fso = New-Object -ComObject Scripting.FileSystemObject; Write-Output $fso.GetFolder('${escaped}').ShortPath`,
+        ],
+        { encoding: "utf8", timeout: 10_000 },
+      ).trim();
+    } catch {
+      return;
+    }
+    if (!shortRoot || shortRoot.toLowerCase() === longRoot.toLowerCase()) return;
 
-      const service = new WorkspaceFileService(shortRoot);
-      await expect(service.read("notes.txt")).resolves.toMatchObject({
-        path: "notes.txt",
-      });
-      await expect(globWorkspaceFiles(shortRoot, "*.txt")).resolves.toEqual(["notes.txt"]);
-    },
-    20_000,
-  );
+    const service = new WorkspaceFileService(shortRoot);
+    await expect(service.read("notes.txt")).resolves.toMatchObject({
+      path: "notes.txt",
+    });
+    await expect(globWorkspaceFiles(shortRoot, "*.txt")).resolves.toEqual(["notes.txt"]);
+  }, 20_000);
 
   it("detects a same-content inode replacement after the read receipt", async () => {
     const root = await createWorkspace();
@@ -957,7 +953,10 @@ async function createRecoveryFixture(
     canonicalTarget = realpathSync.native(canonicalTarget);
   } catch {
     try {
-      canonicalTarget = join(realpathSync.native(dirnamePath(canonicalTarget)), basename(targetPath));
+      canonicalTarget = join(
+        realpathSync.native(dirnamePath(canonicalTarget)),
+        basename(targetPath),
+      );
     } catch {
       // Keep resolve() form when the parent cannot be realpath'd.
     }

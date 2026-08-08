@@ -228,10 +228,14 @@ export function useSettingsController(
   // credentialConfigured flags and recreates `vendors`, which would otherwise rebuild
   // the array every cycle and retrigger this callback forever.
   const vendorCredentialBindingsFingerprint = JSON.stringify(vendorCredentialBindings);
+  const vendorCredentialBindingsRef = useRef(vendorCredentialBindings);
+  vendorCredentialBindingsRef.current = vendorCredentialBindings;
   const webSearchEndpoint =
     agentGatewayPreferences.webSearchEndpoint?.trim() || DEFAULT_WEB_SEARCH_ENDPOINT;
 
   const refreshCredentialStatus = useCallback(async () => {
+    // Keep the callback identity tied to binding *content* (see fingerprint above).
+    void vendorCredentialBindingsFingerprint;
     const desktopApi = window.desktopApi;
     const refreshId = ++credentialRefreshIdRef.current;
     setCredentialStorageStatus(null);
@@ -265,7 +269,7 @@ export function useSettingsController(
 
     try {
       const snapshot = await desktopApi.getCredentialStatus({
-        models: vendorCredentialBindings,
+        models: vendorCredentialBindingsRef.current,
         webSearch,
       });
       if (refreshId !== credentialRefreshIdRef.current) return;

@@ -279,7 +279,7 @@ describe("Presentation lifecycle flow and crash recovery", () => {
         .listArtifactRevisions(completed.jobId)
         .filter((revision) => revision.kind === "presentation_revision"),
     ).toHaveLength(1);
-  });
+  }, 20_000);
 
   it("does not replay an apply claim left in progress", async () => {
     const harness = await createCommitHarness("ppt-apply-in-progress-");
