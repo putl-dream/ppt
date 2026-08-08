@@ -65,6 +65,29 @@ export { countOccurrences } from "./workspace-text-edit";
  * same canonical file. The read receipt and the current on-disk snapshot are
  * compared immediately before every atomic replacement.
  */
+/**
+ * Prefer the realpath form so Windows 8.3 short names (e.g. GHA TEMP
+ * `RUNNER~1`) match paths returned by resolveContainedWorkspacePath.
+ * Use realpathSync.native: plain realpathSync does not expand 8.3 names on
+ * Windows, while fs.promises.realpath / realpathSync.native do.
+ * Leave symlink/junction roots unresolved so the path guard can reject them.
+ */
+export function canonicalizeWorkspaceRoot(workspaceRoot: string): string {
+  if (!workspaceRoot.trim()) {
+    throw new Error("Workspace root is required.");
+  }
+  const resolved = resolve(workspaceRoot);
+  try {
+    const stats = lstatSync(resolved);
+    if (!stats.isSymbolicLink() && stats.isDirectory()) {
+      return realpathSync.native(resolved);
+    }
+  } catch {
+    // Missing or inaccessible roots fail on first file operation.
+  }
+  return resolved;
+}
+
 export class WorkspaceFileService {
   readonly workspaceRoot: string;
 
@@ -73,25 +96,7 @@ export class WorkspaceFileService {
   private readonly observedCoverage = new Map<string, ObservedFileCoverage>();
 
   constructor(workspaceRoot: string) {
-    if (!workspaceRoot.trim()) {
-      throw new Error("Workspace root is required.");
-    }
-    const resolved = resolve(workspaceRoot);
-    // Prefer the realpath form so Windows 8.3 short names (e.g. GHA TEMP
-    // `RUNNER~1`) match paths returned by resolveContainedWorkspacePath.
-    // Use realpathSync.native: plain realpathSync does not expand 8.3 names on
-    // Windows, while fs.promises.realpath / realpathSync.native do.
-    // Leave symlink/junction roots unresolved so the path guard can reject them.
-    try {
-      const stats = lstatSync(resolved);
-      if (!stats.isSymbolicLink() && stats.isDirectory()) {
-        this.workspaceRoot = realpathSync.native(resolved);
-        return;
-      }
-    } catch {
-      // Missing or inaccessible roots fail on first file operation.
-    }
-    this.workspaceRoot = resolved;
+    this.workspaceRoot = canonicalizeWorkspaceRoot(workspaceRoot);
   }
 
   async read(
@@ -194,6 +199,29 @@ export class WorkspaceFileService {
       pathGuard.canonicalRoot,
       async (recover) => {
         const recovered = await recover(pathGuard.validate);
+        // #region agent log
+        fetch("http://127.0.0.1:7758/ingest/f715bfbd-c4b3-4d7c-91d3-b40633f1a70c", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Debug-Session-Id": "41b42e",
+          },
+          body: JSON.stringify({
+            sessionId: "41b42e",
+            runId: "post-fix",
+            hypothesisId: "B",
+            location: "workspace-file-service.ts:readSnapshot",
+            message: "recovery during workspace read",
+            data: {
+              path,
+              absolutePath,
+              workspaceRoot: this.workspaceRoot,
+              recovered,
+            },
+            timestamp: Date.now(),
+          }),
+        }).catch(() => {});
+        // #endregion
         if (recovered) {
           try {
             const recoveredPath = await this.resolveContainedPath(path);

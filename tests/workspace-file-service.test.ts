@@ -275,41 +275,90 @@ describe("WorkspaceFileService", () => {
     });
   });
 
-  it("accepts a Windows 8.3 short-path workspace root that realpath may expand", async () => {
-    if (process.platform !== "win32") return;
+  it(
+    "accepts a Windows 8.3 short-path workspace root that realpath may expand",
+    async () => {
+      if (process.platform !== "win32") return;
 
-    const { execFileSync } = await import("node:child_process");
-    const { mkdir, realpath } = await import("node:fs/promises");
-    const longRoot = join(
-      await createWorkspace(),
-      "VeryLongDirectoryNameForEightDotThreeCollision",
-    );
-    await mkdir(longRoot);
-    await writeFile(join(longRoot, "notes.txt"), "short-ok\n", "utf8");
+      const { execFileSync } = await import("node:child_process");
+      const { mkdir } = await import("node:fs/promises");
+      const longRoot = join(
+        await createWorkspace(),
+        "VeryLongDirectoryNameForEightDotThreeCollision",
+      );
+      await mkdir(longRoot);
+      await writeFile(join(longRoot, "notes.txt"), "short-ok\n", "utf8");
 
-    let shortRoot: string;
-    try {
-      const escaped = longRoot.replace(/'/g, "''");
-      shortRoot = execFileSync(
-        "powershell",
-        [
-          "-NoProfile",
-          "-Command",
-          `$fso = New-Object -ComObject Scripting.FileSystemObject; Write-Output $fso.GetFolder('${escaped}').ShortPath`,
-        ],
-        { encoding: "utf8" },
-      ).trim();
-    } catch {
-      return;
-    }
-    if (!shortRoot || shortRoot.toLowerCase() === longRoot.toLowerCase()) return;
+      let shortRoot: string;
+      const startedAt = Date.now();
+      try {
+        const escaped = longRoot.replace(/'/g, "''");
+        shortRoot = execFileSync(
+          "powershell",
+          [
+            "-NoProfile",
+            "-Command",
+            `$fso = New-Object -ComObject Scripting.FileSystemObject; Write-Output $fso.GetFolder('${escaped}').ShortPath`,
+          ],
+          { encoding: "utf8", timeout: 10_000 },
+        ).trim();
+      } catch (error) {
+        // #region agent log
+        fetch("http://127.0.0.1:7758/ingest/f715bfbd-c4b3-4d7c-91d3-b40633f1a70c", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Debug-Session-Id": "41b42e",
+          },
+          body: JSON.stringify({
+            sessionId: "41b42e",
+            runId: "pre-fix",
+            hypothesisId: "C",
+            location: "workspace-file-service.test.ts:short-path",
+            message: "short-path PowerShell probe failed",
+            data: {
+              elapsedMs: Date.now() - startedAt,
+              error: error instanceof Error ? error.message : String(error),
+            },
+            timestamp: Date.now(),
+          }),
+        }).catch(() => {});
+        // #endregion
+        return;
+      }
+      // #region agent log
+      fetch("http://127.0.0.1:7758/ingest/f715bfbd-c4b3-4d7c-91d3-b40633f1a70c", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Debug-Session-Id": "41b42e",
+        },
+        body: JSON.stringify({
+          sessionId: "41b42e",
+          runId: "pre-fix",
+          hypothesisId: "C",
+          location: "workspace-file-service.test.ts:short-path",
+          message: "short-path PowerShell probe finished",
+          data: {
+            elapsedMs: Date.now() - startedAt,
+            longRoot,
+            shortRoot,
+            distinct: shortRoot.toLowerCase() !== longRoot.toLowerCase(),
+          },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+      // #endregion
+      if (!shortRoot || shortRoot.toLowerCase() === longRoot.toLowerCase()) return;
 
-    const service = new WorkspaceFileService(shortRoot);
-    await expect(service.read("notes.txt")).resolves.toMatchObject({
-      path: "notes.txt",
-    });
-    await expect(globWorkspaceFiles(shortRoot, "*.txt")).resolves.toEqual(["notes.txt"]);
-  });
+      const service = new WorkspaceFileService(shortRoot);
+      await expect(service.read("notes.txt")).resolves.toMatchObject({
+        path: "notes.txt",
+      });
+      await expect(globWorkspaceFiles(shortRoot, "*.txt")).resolves.toEqual(["notes.txt"]);
+    },
+    20_000,
+  );
 
   it("detects a same-content inode replacement after the read receipt", async () => {
     const root = await createWorkspace();
@@ -946,13 +995,26 @@ async function createRecoveryFixture(
   oldContent: string,
   newContent: string,
 ): Promise<{ backupPath: string; manifestPath: string }> {
-  const targetKey = createHash("sha256").update(targetPath, "utf8").digest("hex").slice(0, 20);
-  const backupName = `${basename(targetPath)}.${targetKey}.atomic-old.test`;
+  const { realpathSync } = await import("node:fs");
+  const { dirname: dirnamePath } = await import("node:path");
+  let canonicalTarget = resolve(targetPath);
+  try {
+    canonicalTarget = realpathSync.native(canonicalTarget);
+  } catch {
+    try {
+      canonicalTarget = join(realpathSync.native(dirnamePath(canonicalTarget)), basename(targetPath));
+    } catch {
+      // Keep resolve() form when the parent cannot be realpath'd.
+    }
+  }
+  const targetKey = createHash("sha256").update(canonicalTarget, "utf8").digest("hex").slice(0, 20);
+  const targetName = basename(canonicalTarget);
+  const backupName = `${targetName}.${targetKey}.atomic-old.test`;
   const backupPath = join(transactionDirectory, backupName);
-  const preparedPath = join(transactionDirectory, `.${basename(targetPath)}.prepared.tmp`);
+  const preparedPath = join(transactionDirectory, `.${targetName}.prepared.tmp`);
   const manifestPath = join(
     transactionDirectory,
-    `.${basename(targetPath)}.${targetKey}.atomic-replace.json`,
+    `.${targetName}.${targetKey}.atomic-replace.json`,
   );
   await writeFile(backupPath, oldContent, "utf8");
   await writeFile(preparedPath, newContent, "utf8");
@@ -960,8 +1022,8 @@ async function createRecoveryFixture(
     manifestPath,
     `${JSON.stringify({
       version: 1,
-      targetPath,
-      targetName: basename(targetPath),
+      targetPath: canonicalTarget,
+      targetName,
       backupName,
       oldFingerprint: await testFingerprint(backupPath),
       newFingerprint: await testFingerprint(preparedPath),

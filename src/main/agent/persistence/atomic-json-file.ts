@@ -1,8 +1,8 @@
 import { createHash, randomUUID } from "node:crypto";
-import { constants, type Stats } from "node:fs";
+import { constants, realpathSync, type Stats } from "node:fs";
 import { link, lstat, mkdir, open, readdir, readFile, rename, unlink } from "node:fs/promises";
 import { createRequire } from "node:module";
-import { basename, dirname, join } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 
 const REPLACEMENT_MANIFEST_SUFFIX = ".atomic-replace.json";
 const REPLACEMENT_BACKUP_MARKER = ".atomic-old.";
@@ -248,7 +248,33 @@ async function recoverInterruptedReplacementUnlocked(
   validatePath?: () => Promise<void>,
 ): Promise<boolean> {
   const manifestPath = replacementManifestPath(filePath, transactionDirectory);
-  if (!(await pathExists(manifestPath))) {
+  const manifestPresent = await pathExists(manifestPath);
+  // #region agent log
+  fetch("http://127.0.0.1:7758/ingest/f715bfbd-c4b3-4d7c-91d3-b40633f1a70c", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Debug-Session-Id": "41b42e",
+    },
+    body: JSON.stringify({
+      sessionId: "41b42e",
+      runId: "post-fix",
+      hypothesisId: "B",
+      location: "atomic-json-file.ts:recoverInterruptedReplacementUnlocked",
+      message: "lookup replacement manifest",
+      data: {
+        filePath,
+        transactionDirectory,
+        manifestPath,
+        manifestPresent,
+        targetKey: replacementTargetKey(filePath),
+        canonicalPath: canonicalizeAbsolutePath(filePath),
+      },
+      timestamp: Date.now(),
+    }),
+  }).catch(() => {});
+  // #endregion
+  if (!manifestPresent) {
     const orphans = await findOrphanedBackups(filePath, transactionDirectory);
     if (orphans.length > 0) {
       throw recoveryAmbiguity(
@@ -598,12 +624,13 @@ async function createReplacementTransaction(
   oldFingerprint: AtomicFileFingerprint | undefined,
   newFingerprint: AtomicFileFingerprint,
 ): Promise<ReplacementTransaction> {
+  const canonicalTarget = canonicalizeAbsolutePath(targetPath);
   const targetKey = replacementTargetKey(targetPath);
-  const backupName = `${basename(targetPath)}.${targetKey}${REPLACEMENT_BACKUP_MARKER}${randomUUID()}`;
+  const backupName = `${basename(canonicalTarget)}.${targetKey}${REPLACEMENT_BACKUP_MARKER}${randomUUID()}`;
   const manifest: ReplacementManifest = {
     version: 1,
-    targetPath,
-    targetName: basename(targetPath),
+    targetPath: canonicalTarget,
+    targetName: basename(canonicalTarget),
     backupName,
     oldFingerprint: oldFingerprint ?? null,
     newFingerprint,
@@ -674,7 +701,7 @@ async function findOrphanedBackups(
   filePath: string,
   transactionDirectory: string,
 ): Promise<string[]> {
-  const prefix = `${basename(filePath)}.${replacementTargetKey(filePath)}${REPLACEMENT_BACKUP_MARKER}`;
+  const prefix = `${basename(canonicalizeAbsolutePath(filePath))}.${replacementTargetKey(filePath)}${REPLACEMENT_BACKUP_MARKER}`;
   try {
     return (await readdir(transactionDirectory)).filter((entry) => entry.startsWith(prefix)).sort();
   } catch (error) {
@@ -684,14 +711,35 @@ async function findOrphanedBackups(
 }
 
 function replacementManifestPath(filePath: string, transactionDirectory: string): string {
+  const canonicalPath = canonicalizeAbsolutePath(filePath);
   return join(
     transactionDirectory,
-    `.${basename(filePath)}.${replacementTargetKey(filePath)}${REPLACEMENT_MANIFEST_SUFFIX}`,
+    `.${basename(canonicalPath)}.${replacementTargetKey(filePath)}${REPLACEMENT_MANIFEST_SUFFIX}`,
   );
 }
 
+/**
+ * Hash the realpath form so Windows 8.3 short names and expanded long paths
+ * address the same interrupted-replacement manifest / backup family.
+ */
 function replacementTargetKey(filePath: string): string {
-  return createHash("sha256").update(filePath, "utf8").digest("hex").slice(0, 20);
+  return createHash("sha256")
+    .update(canonicalizeAbsolutePath(filePath), "utf8")
+    .digest("hex")
+    .slice(0, 20);
+}
+
+function canonicalizeAbsolutePath(filePath: string): string {
+  const resolved = resolve(filePath);
+  try {
+    return realpathSync.native(resolved);
+  } catch {
+    try {
+      return join(realpathSync.native(dirname(resolved)), basename(resolved));
+    } catch {
+      return resolved;
+    }
+  }
 }
 
 async function fingerprintIfPresent(filePath: string): Promise<AtomicFileFingerprint | undefined> {
@@ -778,11 +826,13 @@ function sameIdentity(expected: AtomicFileIdentity, actual: AtomicFileIdentity):
 function isReplacementManifest(value: unknown, targetPath: string): value is ReplacementManifest {
   if (!value || typeof value !== "object") return false;
   const candidate = value as Partial<ReplacementManifest>;
-  const expectedPrefix = `${basename(targetPath)}.${replacementTargetKey(targetPath)}${REPLACEMENT_BACKUP_MARKER}`;
+  const canonicalTarget = canonicalizeAbsolutePath(targetPath);
+  const expectedPrefix = `${basename(canonicalTarget)}.${replacementTargetKey(targetPath)}${REPLACEMENT_BACKUP_MARKER}`;
   return (
     candidate.version === 1 &&
-    candidate.targetPath === targetPath &&
-    candidate.targetName === basename(targetPath) &&
+    typeof candidate.targetPath === "string" &&
+    canonicalizeAbsolutePath(candidate.targetPath) === canonicalTarget &&
+    candidate.targetName === basename(canonicalTarget) &&
     typeof candidate.backupName === "string" &&
     candidate.backupName.startsWith(expectedPrefix) &&
     !candidate.backupName.includes("/") &&

@@ -14,7 +14,11 @@ import { executeWebSearch, formatWebSearchOutput, webSearchSchema } from "../sea
 import type { SkillRegistry } from "../skills/loadSkillsDir";
 import type { SkillSession } from "../skills/skill-types";
 import { type LoadSkillResult, loadSkillSchema } from "../tools/core/load-skill";
-import { WorkspaceFileError, WorkspaceFileService } from "../tools/files/workspace-file-service";
+import {
+  canonicalizeWorkspaceRoot,
+  WorkspaceFileError,
+  WorkspaceFileService,
+} from "../tools/files/workspace-file-service";
 import {
   editFileContract,
   globFilesContract,
@@ -198,10 +202,34 @@ export const SUB_AGENT_TOOL_HANDLERS = new Map(
 );
 
 function resolveFileService(context: SubAgentToolContext): WorkspaceFileService {
-  if (
-    !context.fileService ||
-    context.fileService.workspaceRoot !== resolve(context.workspaceRoot)
-  ) {
+  const canonicalRoot = canonicalizeWorkspaceRoot(context.workspaceRoot);
+  const existingRoot = context.fileService?.workspaceRoot;
+  const willRecreate = !context.fileService || existingRoot !== canonicalRoot;
+  // #region agent log
+  fetch("http://127.0.0.1:7758/ingest/f715bfbd-c4b3-4d7c-91d3-b40633f1a70c", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Debug-Session-Id": "41b42e",
+    },
+    body: JSON.stringify({
+      sessionId: "41b42e",
+      runId: "post-fix",
+      hypothesisId: "A",
+      location: "workspace-tools.ts:resolveFileService",
+      message: "resolveFileService identity check",
+      data: {
+        resolvedRoot: resolve(context.workspaceRoot),
+        canonicalRoot,
+        existingRoot: existingRoot ?? null,
+        willRecreate,
+        rootsEqual: existingRoot === canonicalRoot,
+      },
+      timestamp: Date.now(),
+    }),
+  }).catch(() => {});
+  // #endregion
+  if (willRecreate || !context.fileService) {
     context.fileService = new WorkspaceFileService(context.workspaceRoot);
   }
   return context.fileService;

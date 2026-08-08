@@ -1,4 +1,3 @@
-import { resolve } from "node:path";
 import { getEffectiveMainMaxSteps, resolveAgentStepLimits } from "@shared/agent-step-limits";
 import type { TeammateProgressEvent } from "@shared/teammate-progress";
 import type { ConversationDatabase } from "../../conversation-database";
@@ -6,7 +5,10 @@ import type { AgentModelGateway } from "../gateway";
 import { createEmptySkillRegistry, type SkillRegistry } from "../skills/loadSkillsDir";
 import type { SkillSession } from "../skills/skill-types";
 import { LEAD_TASK_PERMISSIONS } from "../task/task-store";
-import { WorkspaceFileService } from "../tools/files/workspace-file-service";
+import {
+  canonicalizeWorkspaceRoot,
+  WorkspaceFileService,
+} from "../tools/files/workspace-file-service";
 import type {
   PptLifecycleToolBridge,
   ToolContext,
@@ -209,11 +211,11 @@ export class PresentationAgentRunFactory {
     workspaceRoot: string | undefined,
   ): WorkspaceFileService | undefined {
     if (!workspaceRoot) return undefined;
-    const normalizedRoot = resolve(workspaceRoot);
+    const normalizedRoot = canonicalizeWorkspaceRoot(workspaceRoot);
     const current = this.fileSessions.get(threadId);
     if (current?.workspaceRoot === normalizedRoot) return current;
     current?.clear();
-    const service = new WorkspaceFileService(normalizedRoot);
+    const service = new WorkspaceFileService(workspaceRoot);
     this.fileSessions.set(threadId, service);
     return service;
   }
